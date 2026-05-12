@@ -3,8 +3,7 @@ import { Line } from '@react-three/drei'
 import * as THREE from 'three'
 import { useModelStore } from '../../store/modelStore'
 
-// Visual scale for displacements — large enough to see the bent shape clearly
-const DEFORM_SCALE = 2000
+const TARGET_DEFORM_FRACTION = 0.20  // max visible displacement = 20% of model size
 
 // CHEXA8 local edge pairs (indices into 8-node connectivity)
 const HEX_EDGES: [number, number][] = [
@@ -29,6 +28,32 @@ export function MeshScene() {
     () => new Map(nodes.map((n, i) => [n.id, { n, i }])),
     [nodes],
   )
+
+  // Model bounding-box longest dimension
+  const modelSize = useMemo(() => {
+    if (nodes.length === 0) return 1
+    let minX = Infinity, maxX = -Infinity
+    let minY = Infinity, maxY = -Infinity
+    let minZ = Infinity, maxZ = -Infinity
+    for (const n of nodes) {
+      if (n.x < minX) minX = n.x; if (n.x > maxX) maxX = n.x
+      if (n.y < minY) minY = n.y; if (n.y > maxY) maxY = n.y
+      if (n.z < minZ) minZ = n.z; if (n.z > maxZ) maxZ = n.z
+    }
+    return Math.max(maxX - minX, maxY - minY, maxZ - minZ, 1e-9)
+  }, [nodes])
+
+  // Auto scale: max(|u|) * scale ≈ TARGET_DEFORM_FRACTION * modelSize
+  const deformScale = useMemo(() => {
+    if (!result) return 1
+    let maxDisp = 0
+    for (let i = 0; i < result.displacements.length; i++) {
+      const v = Math.abs(result.displacements[i])
+      if (v > maxDisp) maxDisp = v
+    }
+    if (maxDisp < 1e-30) return 1
+    return (TARGET_DEFORM_FRACTION * modelSize) / maxDisp
+  }, [result, modelSize])
 
   const hexElements = useMemo(
     () => elements.filter(e => e.type === 'CHEXA' || e.type === 'CTETRA' || e.type === 'CPENTA'),
@@ -56,9 +81,9 @@ export function MeshScene() {
     const coord = (id: number): [number, number, number] => {
       const { n, i } = nodeMap.get(id)!
       return [
-        n.x + (d[i * 6 + 0] ?? 0) * DEFORM_SCALE,
-        n.y + (d[i * 6 + 1] ?? 0) * DEFORM_SCALE,
-        n.z + (d[i * 6 + 2] ?? 0) * DEFORM_SCALE,
+        n.x + (d[i * 6 + 0] ?? 0) * deformScale,
+        n.y + (d[i * 6 + 1] ?? 0) * deformScale,
+        n.z + (d[i * 6 + 2] ?? 0) * deformScale,
       ]
     }
     return hexElements.flatMap(el => hexEdgePoints(el.nodeIds, coord))
@@ -93,9 +118,9 @@ export function MeshScene() {
     const deformedPos = (id: number): [number, number, number] => {
       const { n, i } = nodeMap.get(id)!
       return [
-        n.x + (d[i * 6 + 0] ?? 0) * DEFORM_SCALE,
-        n.y + (d[i * 6 + 1] ?? 0) * DEFORM_SCALE,
-        n.z + (d[i * 6 + 2] ?? 0) * DEFORM_SCALE,
+        n.x + (d[i * 6 + 0] ?? 0) * deformScale,
+        n.y + (d[i * 6 + 1] ?? 0) * deformScale,
+        n.z + (d[i * 6 + 2] ?? 0) * deformScale,
       ]
     }
     const nodeColor = (id: number): [number, number, number] => {
