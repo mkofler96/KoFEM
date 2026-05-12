@@ -262,20 +262,6 @@ impl Element for Chexa8Element {
                                 }
                             }
                             let col_idx = comp * 3 + m;
-                            let cols = node_b_cols(
-                                if comp == 0 { phys[0] } else { 0.0 },
-                                if comp == 1 { phys[1] } else { 0.0 },
-                                if comp == 2 { phys[2] } else { 0.0 },
-                            );
-                            // node_b_cols gives [εxx,εyy,εzz,γxy,γyz,γzx] for 1 node;
-                            // pick the relevant component row.
-                            let nx = if comp == 0 { phys[0] } else { 0.0 };
-                            let ny = if comp == 1 { phys[1] } else { 0.0 };
-                            let nz = if comp == 2 { phys[2] } else { 0.0 };
-                            b_inc[col_idx] = [nx, ny, nz, nx + ny, ny + nz, nz + nx];
-                            // Correct: εxx=∂u/∂x, εyy=∂v/∂y, εzz=∂w/∂z,
-                            //          γxy=∂u/∂y+∂v/∂x, γyz=∂v/∂z+∂w/∂y, γzx=∂w/∂x+∂u/∂z
-                            let _ = cols; // suppress unused warning
                             b_inc[col_idx] = match comp {
                                 0 => [phys[0], 0.0, 0.0, phys[1], 0.0, phys[2]],
                                 1 => [0.0, phys[1], 0.0, phys[0], phys[2], 0.0],
@@ -314,12 +300,13 @@ impl Element for Chexa8Element {
             }
         }
 
-        // Static condensation: K = K_uu - K_uh * K_hh⁻¹ * K_uh^T
-        let k_hh_inv = k_hh
-            .clone()
-            .try_inverse()
-            .unwrap_or_else(|| DMatrix::zeros(9, 9));
-        k_uu - &k_uh * k_hh_inv * k_uh.transpose()
+        // Static condensation: K = K_uu - K_uh * K_hh⁻¹ * K_uh^T.
+        // If k_hh is singular (degenerate/distorted element), skip condensation and
+        // return the standard trilinear HEX8 stiffness rather than silently using zeros.
+        match k_hh.try_inverse() {
+            Some(k_hh_inv) => k_uu - &k_uh * k_hh_inv * k_uh.transpose(),
+            None => k_uu,
+        }
     }
 
     fn consistent_mass_matrix(&self, nodes: &[[f64; 3]], density: f64) -> DMatrix<f64> {

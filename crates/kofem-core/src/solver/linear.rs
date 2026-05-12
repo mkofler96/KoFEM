@@ -97,13 +97,13 @@ impl LinearStaticSolver {
                 }
                 ElementType::CHEXA => {
                     if !matches!(prop, PropertyCard::PSOLID(_)) {
-                        continue;
+                        return Err(SolverError::InvalidProperty(elem.id));
                     }
                     Chexa8Element { material: *mat }.stiffness_matrix(&node_coords)
                 }
                 ElementType::CTETRA => {
                     if !matches!(prop, PropertyCard::PSOLID(_)) {
-                        continue;
+                        return Err(SolverError::InvalidProperty(elem.id));
                     }
                     Ctetra4Element { material: *mat }.stiffness_matrix(&node_coords)
                 }
@@ -134,6 +134,8 @@ impl LinearStaticSolver {
             let dof = load.dof as usize;
             if dof < node_dof[idx] {
                 f_global[dof_offset[idx] + dof] += load.value;
+            } else {
+                return Err(SolverError::InvalidDof(load.node_id, dof));
             }
         }
 
@@ -153,6 +155,8 @@ impl LinearStaticSolver {
                 let row = dof_offset[idx] + dof;
                 k_global[(row, row)] = penalty;
                 f_global[row] = penalty * bc.prescribed_value;
+            } else {
+                return Err(SolverError::InvalidDof(bc.node_id, dof));
             }
         }
 
@@ -345,4 +349,10 @@ pub enum SolverError {
     MissingMaterial(usize),
     #[error("Property {0} not found in mesh")]
     MissingProperty(usize),
+    #[error("Element {0}: property type is incompatible with element type")]
+    InvalidProperty(usize),
+    #[error(
+        "Node {0}, DOF {1}: load or constraint targets a DOF not active for this element type"
+    )]
+    InvalidDof(usize, usize),
 }
