@@ -7,15 +7,27 @@ pub struct IsotropicElastic {
 
 impl IsotropicElastic {
     pub fn new(young: f64, poisson: f64, density: f64) -> Self {
-        Self { young, poisson, density }
+        Self {
+            young,
+            poisson,
+            density,
+        }
     }
 
     pub fn steel() -> Self {
-        Self { young: 210e9, poisson: 0.3, density: 7850.0 }
+        Self {
+            young: 210e9,
+            poisson: 0.3,
+            density: 7850.0,
+        }
     }
 
     pub fn aluminum() -> Self {
-        Self { young: 70e9, poisson: 0.33, density: 2700.0 }
+        Self {
+            young: 70e9,
+            poisson: 0.33,
+            density: 2700.0,
+        }
     }
 
     pub fn shear_modulus(&self) -> f64 {
@@ -50,9 +62,9 @@ impl IsotropicElastic {
         let nu = self.poisson;
         let c = e / (1.0 - nu * nu);
         [
-            [c,       c * nu, 0.0],
-            [c * nu,  c,      0.0],
-            [0.0,     0.0,    c * (1.0 - nu) / 2.0],
+            [c, c * nu, 0.0],
+            [c * nu, c, 0.0],
+            [0.0, 0.0, c * (1.0 - nu) / 2.0],
         ]
     }
 }

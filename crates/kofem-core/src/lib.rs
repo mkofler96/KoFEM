@@ -6,6 +6,7 @@ pub mod boundary;
 pub mod elements;
 pub mod material;
 pub mod mesh;
+pub mod property;
 pub mod solver;
 
 pub use mesh::Mesh;

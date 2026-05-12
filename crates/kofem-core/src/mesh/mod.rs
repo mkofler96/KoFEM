@@ -1,5 +1,5 @@
-use alloc::vec::Vec;
 use crate::elements::ElementType;
+use alloc::vec::Vec;
 
 #[derive(Debug, Clone)]
 pub struct Node {
@@ -28,12 +28,28 @@ impl Mesh {
     }
 
     pub fn add_node(&mut self, id: usize, x: f64, y: f64, z: f64) -> usize {
-        self.nodes.push(Node { id, coords: [x, y, z] });
+        self.nodes.push(Node {
+            id,
+            coords: [x, y, z],
+        });
         id
     }
 
-    pub fn add_element(&mut self, id: usize, element_type: ElementType, node_ids: Vec<usize>, material_id: usize, property_id: usize) -> usize {
-        self.elements.push(Element { id, element_type, node_ids, material_id, property_id });
+    pub fn add_element(
+        &mut self,
+        id: usize,
+        element_type: ElementType,
+        node_ids: Vec<usize>,
+        material_id: usize,
+        property_id: usize,
+    ) -> usize {
+        self.elements.push(Element {
+            id,
+            element_type,
+            node_ids,
+            material_id,
+            property_id,
+        });
         id
     }
 

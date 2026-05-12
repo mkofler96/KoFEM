@@ -1,6 +1,7 @@
 """
 Cantilever beam example: 1m steel beam, fixed left end, point load at right.
 """
+
 import kofem
 
 mesh = kofem.Mesh()
@@ -17,4 +18,4 @@ bcs.fix_node(0)
 bcs.apply_force(1, 1, -1000.0)
 
 displacements = kofem.solve(mesh, bcs)
-print(f"Tip displacement Uy = {displacements[1*6+1]:.6e} m")
+print(f"Tip displacement Uy = {displacements[1 * 6 + 1]:.6e} m")

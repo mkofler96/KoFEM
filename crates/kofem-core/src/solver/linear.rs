@@ -1,10 +1,10 @@
 //! Linear static solver: [K]{u} = {f}
 //! Uses Cholesky decomposition for SPD global stiffness matrix.
 
+use crate::boundary::BoundaryConditions;
+use crate::mesh::Mesh;
 use alloc::vec::Vec;
 use nalgebra::{DMatrix, DVector};
-use crate::mesh::Mesh;
-use crate::boundary::BoundaryConditions;
 
 #[derive(Debug)]
 pub struct LinearStaticResult {
@@ -40,7 +40,9 @@ impl LinearStaticSolver {
         }
 
         // Solve via Cholesky (positive definite after BCs)
-        let chol = k_global.clone().cholesky()
+        let chol = k_global
+            .clone()
+            .cholesky()
             .ok_or(SolverError::NotPositiveDefinite)?;
         let u = chol.solve(&f_global);
 

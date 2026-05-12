@@ -35,21 +35,44 @@ cargo test
 # Build WASM (requires wasm-pack)
 wasm-pack build crates/kofem-wasm --target web --out-dir web/src/wasm/pkg
 
-# Install and run the web frontend
-cd web && npm install && npm run dev
+# Install and run the web frontend (uses bun, not npm)
+cd web && bun install && bun run dev
 
-# Build Python bindings (requires maturin)
-cd python && maturin develop
+# Build Python bindings (uses uv + maturin)
+cd python && uv run maturin develop
 ```
+
+## Element Library (Nastran naming)
+
+All element types use Nastran names. The property card, not the element type, determines the formulation:
+
+| Element | Property | DOF/node | Formulation | Status |
+|---------|----------|----------|-------------|--------|
+| CBAR / CBEAM | PBAR / PBEAM | 6 | Euler-Bernoulli beam | Local K done; global transform TODO |
+| CTRIA3 | PSHELL | 6 | DKT shell | Stub |
+| CTRIA3 | PLPLANE | 2 | CST plane stress/strain | **Full B-matrix, exact integration** |
+| CQUAD4 | PSHELL | 6 | MITC4 shell | Stub |
+| CQUAD4 | PLPLANE | 2 | Bilinear quad, 2×2 Gauss | **Full B-matrix** |
+| CTRIA6, CQUAD8 | PSHELL | 6 | Higher-order shell | Stub |
+| CTETRA (4-node) | PSOLID | 3 | Linear tet, constant strain | **Full B-matrix, exact integration** |
+| CHEXA (8-node) | PSOLID | 3 | Trilinear hex, 2×2×2 Gauss | **Full B-matrix** |
+| CPENTA (6-node) | PSOLID | 3 | Wedge | Stub |
+| CPYRAM (5-node) | PSOLID | 3 | Pyramid | Stub |
 
 ## Current Implementation Status
 
 | Component | Status |
 |-----------|--------|
 | `Mesh` data structure | Done |
+| `PropertyCard` (PBAR/PBEAM/PSHELL/PLPLANE/PSOLID) | Done |
 | `IsotropicElastic` material | Done |
-| `Beam2Element` local stiffness | Done (needs global transform) |
-| `Shell4Element` (MITC4) | Stub — needs Gauss integration |
+| `CbarElement` local stiffness | Done (needs global transform) |
+| `Ctria3PlaneElement` (CST) | **Full stiffness + mass** |
+| `Cquad4PlaneElement` (2×2 Gauss) | **Full stiffness + mass** |
+| `Ctetra4Element` (linear tet) | **Full stiffness + mass** |
+| `Chexa8Element` (2×2×2 Gauss) | **Full stiffness + mass** |
+| `Cquad4ShellElement` (MITC4) | Stub |
+| `Ctria3ShellElement` (DKT) | Stub |
 | `LinearStaticSolver` | Skeleton — element assembly loop missing |
 | Global DOF mapping / scatter | Not started |
 | WASM JSON model deserialization | Not started |
@@ -66,11 +89,14 @@ cd python && maturin develop
 
 ## FEM Conventions
 
-- Gauss integration: use 2×2×2 for volume, 2×2 for surface elements
+- Gauss integration: 2×2×2 for CHEXA, 2×2 for CQUAD4, exact for CTETRA and CTRIA3
 - Element stiffness: `K_e = ∫ Bᵀ D B dV`, assembled via `scatter_add` into global K
+- 2D plane B-matrix has 3 rows [εxx, εyy, γxy]; 3D solid B-matrix has 6 rows [εxx, εyy, εzz, γxy, γyz, γzx]
 - Shell formulation: MITC4 (Bathe & Dvorkin 1985) — mixed interpolation to avoid shear locking
-- Beam formulation: Euler-Bernoulli for slender beams; add Timoshenko shear factor κ for thick beams
+- Beam formulation: Euler-Bernoulli; Timoshenko shear factor κ is on the PBEAM roadmap
 - BCs: penalty method currently (1e14 × max diagonal); switch to elimination for production
+- Dual-use elements (CTRIA3, CQUAD4): the property card (PSHELL vs PLPLANE) determines DOF per node
+  and which element struct to instantiate. This mirrors Nastran's design exactly.
 
 ## Testing
 

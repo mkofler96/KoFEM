@@ -6,9 +6,11 @@
       "Bash(cargo build*)",
       "Bash(cargo clippy*)",
       "Bash(cargo fmt*)",
+      "Bash(rustfmt*)",
       "Bash(wasm-pack build*)",
       "Bash(bun run*)",
       "Bash(bun x*)",
+      "Bash(uvx*)",
       "Bash(uv run*)",
       "Bash(uv sync*)",
       "Bash(maturin develop*)",
@@ -18,7 +20,34 @@
       "Bash(find . *)",
       "Bash(grep *)",
       "Bash(ls *)",
-      "Bash(mkdir *)"
+      "Bash(mkdir *)",
+      "Bash(gh auth status*)",
+      "Bash(gh repo view*)",
+      "Bash(gh issue list*)",
+      "Bash(gh issue view*)",
+      "Bash(gh issue create*)",
+      "Bash(gh pr list*)",
+      "Bash(gh pr view*)",
+      "Bash(gh pr create*)",
+      "Bash(gh pr checks*)",
+      "Bash(gh run list*)",
+      "Bash(gh run view*)",
+      "Bash(gh workflow list*)",
+      "Bash(gh release list*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_input.file_path'); case \"$f\" in *.rs) rustfmt \"$f\" || true ;; *.ts|*.tsx) cd /Users/michaelkofler/KoFEM/web && [ -d node_modules ] && bun run typecheck || true ;; *.py) uvx ruff check --fix \"$f\" 2>/dev/null; uvx ruff format \"$f\" 2>/dev/null || true ;; esac",
+            "statusMessage": "Formatting…"
+          }
+        ]
+      }
     ]
   }
 }
