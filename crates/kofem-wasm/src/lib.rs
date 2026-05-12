@@ -2,7 +2,9 @@ use kofem_core::boundary::{BoundaryConditions, DofIndex};
 use kofem_core::elements::ElementType;
 use kofem_core::material::IsotropicElastic;
 use kofem_core::mesh::Mesh;
-use kofem_core::property::{PbarProps, PbeamProps, PlplaneProps, PropertyCard, PsolidProps, PshellProps, PlaneFormulation};
+use kofem_core::property::{
+    PbarProps, PbeamProps, PlaneFormulation, PlplaneProps, PropertyCard, PshellProps, PsolidProps,
+};
 use kofem_core::LinearStaticSolver;
 use serde::Deserialize;
 use wasm_bindgen::prelude::*;
