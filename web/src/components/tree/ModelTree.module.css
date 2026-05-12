@@ -1,0 +1,5 @@
+.tree { padding: 8px 0; font-size: 13px; }
+.section { margin-bottom: 4px; }
+.header { padding: 4px 12px; font-size: 11px; font-weight: 600; text-transform: uppercase; color: #7b9fff; letter-spacing: 0.08em; }
+.item { padding: 3px 20px; color: #c0c0d8; cursor: pointer; }
+.item:hover { background: #2d2d52; }

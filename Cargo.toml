@@ -1,0 +1,28 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/kofem-core",
+    "crates/kofem-wasm",
+    "crates/kofem-py",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Michael Kofler"]
+license = "MIT"
+
+[workspace.dependencies]
+kofem-core = { path = "crates/kofem-core" }
+nalgebra = { version = "0.33", default-features = false, features = ["alloc"] }
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+log = "0.4"
+
+[profile.release]
+opt-level = 3
+lto = true
+
+[profile.wasm-release]
+inherits = "release"
+opt-level = "z"

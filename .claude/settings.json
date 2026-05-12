@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo check*)",
+      "Bash(cargo test*)",
+      "Bash(cargo build*)",
+      "Bash(cargo clippy*)",
+      "Bash(cargo fmt*)",
+      "Bash(wasm-pack build*)",
+      "Bash(bun run*)",
+      "Bash(bun x*)",
+      "Bash(uv run*)",
+      "Bash(uv sync*)",
+      "Bash(maturin develop*)",
+      "Bash(git status*)",
+      "Bash(git log*)",
+      "Bash(git diff*)",
+      "Bash(find . *)",
+      "Bash(grep *)",
+      "Bash(ls *)",
+      "Bash(mkdir *)"
+    ]
+  }
+}

@@ -1,0 +1,17 @@
+[package]
+name = "kofem-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "no_std-compatible FEM solver core"
+
+[features]
+default = ["std"]
+std = ["nalgebra/std", "thiserror/std"]
+
+[dependencies]
+nalgebra = { workspace = true }
+serde = { workspace = true, optional = true }
+thiserror = { workspace = true }
+log = { workspace = true }
