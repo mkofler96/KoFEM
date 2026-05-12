@@ -37,9 +37,14 @@ jobs:
   web:
     name: Web build
     runs-on: ubuntu-latest
-    needs: wasm
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install wasm-pack --locked
+      - run: wasm-pack build crates/kofem-wasm --target web --out-dir web/src/wasm/pkg
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
