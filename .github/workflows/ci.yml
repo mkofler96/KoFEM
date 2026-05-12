@@ -32,7 +32,7 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
       - run: cargo install wasm-pack --locked
-      - run: wasm-pack build crates/kofem-wasm --target web --out-dir web/src/wasm/pkg
+      - run: wasm-pack build crates/kofem-wasm --target web --out-dir ../../web/src/wasm/pkg
 
   web:
     name: Web build
@@ -44,7 +44,7 @@ jobs:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
       - run: cargo install wasm-pack --locked
-      - run: wasm-pack build crates/kofem-wasm --target web --out-dir web/src/wasm/pkg
+      - run: wasm-pack build crates/kofem-wasm --target web --out-dir ../../web/src/wasm/pkg
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
