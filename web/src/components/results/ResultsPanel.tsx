@@ -17,8 +17,15 @@ export function ResultsPanel() {
 
   const d = result.displacements
   const n = d.length / 6
-  const tipUy = d[(n - 1) * 6 + 1]
+  // Average Uy over last 9 nodes (3×3 right face)
+  const tipUys = Array.from({ length: n }, (_, i) => d[i * 6 + 1])
+  const tipUy = tipUys.slice(-9).reduce((a, b) => a + b, 0) / 9
   const maxAbsDisp = Math.max(...Array.from(d).map(Math.abs))
+
+  // CHEXA cantilever: P=10 kN, L=1 m, h=0.1 m square section → I = h⁴/12
+  const P = 10_000, E = 210e9, h = 0.1
+  const I = h ** 4 / 12
+  const theory = -P / (3 * E * I)
 
   return (
     <div className={styles.panel}>
@@ -30,10 +37,10 @@ export function ResultsPanel() {
         Max |displacement|: {maxAbsDisp.toExponential(3)} m
       </div>
       <div className={styles.stat}>
-        Tip Uy: {tipUy.toExponential(4)} m
+        Avg tip Uy: {tipUy.toExponential(4)} m
       </div>
       <div className={styles.stat}>
-        Theory δ = PL³/3EI: {(-1 / (3 * 210e9 * 8.333e-10)).toExponential(4)} m
+        Theory δ = PL³/3EI: {theory.toExponential(4)} m
       </div>
     </div>
   )

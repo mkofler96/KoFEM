@@ -59,50 +59,62 @@ export interface SolverResult {
   vonMises?: Float64Array
 }
 
-// 10-element cantilever: nodes 0..10 at x = 0,0.1,...,1.0 m
-// Steel square section 10mm × 10mm
-// Fixed at node 0, Fy = -1 N at node 10
+// 10×2×2 CHEXA8 cantilever: 40 elements, 99 nodes
+// Steel 100mm × 100mm cross-section, L=1m
+// Fixed left face, Fy = -10 kN at right face
 function buildCantilever() {
-  const N = 11
-  const L = 1.0
-  const nodes: Node[] = Array.from({ length: N }, (_, i) => ({
-    id: i,
-    x: (i * L) / (N - 1),
-    y: 0,
-    z: 0,
-  }))
+  const nx = 10, ny = 2, nz = 2
+  const L = 1.0, h = 0.1   // beam length, cross-section side (m)
+  const dx = L / nx, dy = h / ny, dz = h / nz
 
-  const elements: Element[] = Array.from({ length: N - 1 }, (_, i) => ({
-    id: i,
-    type: 'CBAR' as ElementType,
-    nodeIds: [i, i + 1],
-    propertyId: 1,
-  }))
+  const strideZ = nz + 1
+  const strideX = (ny + 1) * (nz + 1)
+  const nid = (ix: number, iy: number, iz: number) => ix * strideX + iy * strideZ + iz
+
+  const nodes: Node[] = []
+  for (let ix = 0; ix <= nx; ix++)
+    for (let iy = 0; iy <= ny; iy++)
+      for (let iz = 0; iz <= nz; iz++)
+        nodes.push({ id: nid(ix, iy, iz), x: ix * dx, y: iy * dy, z: iz * dz })
+
+  const elements: Element[] = []
+  let eid = 0
+  for (let ei = 0; ei < nx; ei++)
+    for (let ej = 0; ej < ny; ej++)
+      for (let ek = 0; ek < nz; ek++)
+        elements.push({
+          id: eid++,
+          type: 'CHEXA',
+          nodeIds: [
+            nid(ei,   ej,   ek),   nid(ei+1, ej,   ek),
+            nid(ei+1, ej+1, ek),   nid(ei,   ej+1, ek),
+            nid(ei,   ej,   ek+1), nid(ei+1, ej,   ek+1),
+            nid(ei+1, ej+1, ek+1), nid(ei,   ej+1, ek+1),
+          ],
+          propertyId: 1,
+        })
 
   const materials: Material[] = [
     { id: 1, name: 'Steel', young: 210e9, poisson: 0.3, density: 7850 },
   ]
-
-  // 10 mm × 10 mm square section
-  const a = 0.01
-  const area = a * a                    // 1e-4 m²
-  const i1 = (a ** 4) / 12             // 8.333e-10 m⁴
-  const i2 = i1
-  const j = 0.1406 * a ** 4            // torsional constant for square
-
   const properties: Property[] = [
-    { id: 1, type: 'PBAR', materialId: 1, area, i1, i2, j },
+    { id: 1, type: 'PSOLID', materialId: 1 },
   ]
 
-  // Fix all 6 DOF at node 0
-  const constraints: Constraint[] = [0, 1, 2, 3, 4, 5].map(dof => ({
-    nodeId: 0,
-    dof,
-    prescribedValue: 0,
-  }))
+  // Fix Ux, Uy, Uz at left face (ix=0)
+  const constraints: Constraint[] = []
+  for (let iy = 0; iy <= ny; iy++)
+    for (let iz = 0; iz <= nz; iz++)
+      for (const dof of [0, 1, 2])
+        constraints.push({ nodeId: nid(0, iy, iz), dof, prescribedValue: 0 })
 
-  // Apply Fy = -1 N at tip (node 10)
-  const loads: Load[] = [{ nodeId: N - 1, dof: 1, value: -1 }]
+  // Distribute P = -10 kN equally over (ny+1)*(nz+1) = 9 right-face nodes
+  const nFace = (ny + 1) * (nz + 1)
+  const fNode = -10_000 / nFace
+  const loads: Load[] = []
+  for (let iy = 0; iy <= ny; iy++)
+    for (let iz = 0; iz <= nz; iz++)
+      loads.push({ nodeId: nid(nx, iy, iz), dof: 1, value: fNode })
 
   return { nodes, elements, materials, properties, constraints, loads }
 }
