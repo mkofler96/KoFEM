@@ -1,4 +1,3 @@
-import React from 'react'
 import { Viewport } from './components/viewport/Viewport'
 import { ModelTree } from './components/tree/ModelTree'
 import { PropertiesPanel } from './components/properties/PropertiesPanel'

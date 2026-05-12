@@ -1,4 +1,6 @@
 use crate::elements::ElementType;
+use crate::material::IsotropicElastic;
+use crate::property::PropertyCard;
 use alloc::vec::Vec;
 
 #[derive(Debug, Clone)]
@@ -20,6 +22,8 @@ pub struct Element {
 pub struct Mesh {
     pub nodes: Vec<Node>,
     pub elements: Vec<Element>,
+    pub materials: Vec<(usize, IsotropicElastic)>,
+    pub properties: Vec<(usize, PropertyCard)>,
 }
 
 impl Mesh {
@@ -51,6 +55,26 @@ impl Mesh {
             property_id,
         });
         id
+    }
+
+    pub fn add_material(&mut self, id: usize, material: IsotropicElastic) {
+        self.materials.push((id, material));
+    }
+
+    pub fn add_property(&mut self, id: usize, property: PropertyCard) {
+        self.properties.push((id, property));
+    }
+
+    pub fn find_material(&self, id: usize) -> Option<&IsotropicElastic> {
+        self.materials.iter().find(|(mid, _)| *mid == id).map(|(_, m)| m)
+    }
+
+    pub fn find_property(&self, id: usize) -> Option<&PropertyCard> {
+        self.properties.iter().find(|(pid, _)| *pid == id).map(|(_, p)| p)
+    }
+
+    pub fn find_node_idx(&self, id: usize) -> Option<usize> {
+        self.nodes.iter().position(|n| n.id == id)
     }
 
     pub fn n_dof(&self) -> usize {

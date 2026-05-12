@@ -1,4 +1,3 @@
-import React from 'react'
 import { useModelStore } from '../../store/modelStore'
 import styles from './ModelTree.module.css'
 

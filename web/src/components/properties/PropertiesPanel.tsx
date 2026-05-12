@@ -1,4 +1,3 @@
-import React from 'react'
 import styles from './PropertiesPanel.module.css'
 
 export function PropertiesPanel() {

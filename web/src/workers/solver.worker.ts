@@ -21,7 +21,7 @@ self.onmessage = async (event: MessageEvent) => {
     if (type === 'solve') {
       const modelJson = JSON.stringify(payload)
       const displacements = solve_linear_static(modelJson)
-      self.postMessage({ id, ok: true, displacements })
+      self.postMessage({ id, ok: true, displacements: Array.from(displacements) })
     }
   } catch (err) {
     self.postMessage({ id, ok: false, error: String(err) })
