@@ -1,3 +1,7 @@
+// pyo3's #[pyfunction] macro generates a PyResult::from(result) wrapper that clippy
+// incorrectly flags as a useless same-type conversion.
+#![allow(clippy::useless_conversion)]
+
 use kofem_core::boundary::{BoundaryConditions, DofIndex};
 use kofem_core::{LinearStaticSolver, Mesh};
 use pyo3::prelude::*;

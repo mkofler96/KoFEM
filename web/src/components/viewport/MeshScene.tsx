@@ -12,6 +12,16 @@ const HEX_EDGES: [number, number][] = [
   [0, 4], [1, 5], [2, 6], [3, 7], // verticals
 ]
 
+// CHEXA8 face definitions — local node index quads
+const HEX_FACE_DEFS: [number, number, number, number][] = [
+  [0, 1, 2, 3], // bottom (ζ=-1)
+  [4, 5, 6, 7], // top (ζ=+1)
+  [0, 1, 5, 4], // front (η=-1)
+  [2, 3, 7, 6], // back (η=+1)
+  [0, 3, 7, 4], // left (ξ=-1)
+  [1, 2, 6, 5], // right (ξ=+1)
+]
+
 function hexEdgePoints(
   nodeIds: number[],
   coordOf: (id: number) => [number, number, number],
@@ -19,9 +29,34 @@ function hexEdgePoints(
   return HEX_EDGES.map(([a, b]) => [coordOf(nodeIds[a]), coordOf(nodeIds[b])])
 }
 
+// Returns face node-ID quads that appear in exactly one element (boundary faces).
+// Shared internal faces between adjacent elements are excluded.
+function extractBoundaryFaceIds(
+  hexElems: { nodeIds: number[] }[],
+): [number, number, number, number][] {
+  const faceMap = new Map<string, { face: [number, number, number, number]; count: number }>()
+  for (const el of hexElems) {
+    for (const [a, b, c, d] of HEX_FACE_DEFS) {
+      const face: [number, number, number, number] = [
+        el.nodeIds[a], el.nodeIds[b], el.nodeIds[c], el.nodeIds[d],
+      ]
+      const key = [...face].sort((x, y) => x - y).join(',')
+      const entry = faceMap.get(key)
+      if (entry) {
+        entry.count++
+      } else {
+        faceMap.set(key, { face, count: 1 })
+      }
+    }
+  }
+  return [...faceMap.values()].filter(e => e.count === 1).map(e => e.face)
+}
+
 export function MeshScene() {
   const nodes = useModelStore(s => s.nodes)
   const elements = useModelStore(s => s.elements)
+  const constraints = useModelStore(s => s.constraints)
+  const loads = useModelStore(s => s.loads)
   const result = useModelStore(s => s.result)
 
   const nodeMap = useMemo(
@@ -55,13 +90,20 @@ export function MeshScene() {
     return (TARGET_DEFORM_FRACTION * modelSize) / maxDisp
   }, [result, modelSize])
 
+  // CHEXA only — CTETRA/CPENTA have different connectivity and need separate handling
   const hexElements = useMemo(
-    () => elements.filter(e => e.type === 'CHEXA' || e.type === 'CTETRA' || e.type === 'CPENTA'),
+    () => elements.filter(e => e.type === 'CHEXA'),
     [elements],
   )
   const barElements = useMemo(
     () => elements.filter(e => e.type === 'CBAR' || e.type === 'CBEAM'),
     [elements],
+  )
+
+  // Boundary face node-ID quads (internal shared faces excluded)
+  const boundaryFaceIds = useMemo(
+    () => extractBoundaryFaceIds(hexElements),
+    [hexElements],
   )
 
   // Undeformed hex edges
@@ -87,7 +129,7 @@ export function MeshScene() {
       ]
     }
     return hexElements.flatMap(el => hexEdgePoints(el.nodeIds, coord))
-  }, [result, hexElements, nodeMap])
+  }, [result, hexElements, nodeMap, deformScale])
 
   // Bar element lines (undeformed)
   const barLines = useMemo(() => {
@@ -99,9 +141,9 @@ export function MeshScene() {
     )
   }, [barElements, nodeMap])
 
-  // Deformed solid surface — coloured by Uy magnitude
+  // Deformed solid surface — boundary faces only, coloured by Uy magnitude
   const deformedSurface = useMemo(() => {
-    if (!result || hexElements.length === 0) return null
+    if (!result || boundaryFaceIds.length === 0) return null
     const d = result.displacements
     const positions: number[] = []
     const colors: number[] = []
@@ -132,38 +174,47 @@ export function MeshScene() {
       return [c.r, c.g, c.b]
     }
 
-    // Each hex face as 2 triangles
-    const HEX_FACES: [number, number, number, number][] = [
-      [0, 1, 2, 3], // bottom (ζ=-1)
-      [4, 5, 6, 7], // top (ζ=+1)
-      [0, 1, 5, 4], // front (η=-1)
-      [2, 3, 7, 6], // back (η=+1)
-      [0, 3, 7, 4], // left (ξ=-1)
-      [1, 2, 6, 5], // right (ξ=+1)
-    ]
-
-    for (const el of hexElements) {
-      for (const [a, b, c_, dd] of HEX_FACES) {
-        const nids = el.nodeIds
-        const pa = deformedPos(nids[a])
-        const pb = deformedPos(nids[b])
-        const pc = deformedPos(nids[c_])
-        const pd = deformedPos(nids[dd])
-        const ca = nodeColor(nids[a])
-        const cb = nodeColor(nids[b])
-        const cc = nodeColor(nids[c_])
-        const cd = nodeColor(nids[dd])
-        // Triangle 1: a-b-c
-        positions.push(...pa, ...pb, ...pc)
-        colors.push(...ca, ...cb, ...cc)
-        // Triangle 2: a-c-d
-        positions.push(...pa, ...pc, ...pd)
-        colors.push(...ca, ...cc, ...cd)
-      }
+    for (const [a, b, c_, dd] of boundaryFaceIds) {
+      const pa = deformedPos(a), pb = deformedPos(b)
+      const pc = deformedPos(c_), pd = deformedPos(dd)
+      const ca = nodeColor(a), cb = nodeColor(b)
+      const cc = nodeColor(c_), cd = nodeColor(dd)
+      // Triangle 1: a-b-c
+      positions.push(...pa, ...pb, ...pc)
+      colors.push(...ca, ...cb, ...cc)
+      // Triangle 2: a-c-d
+      positions.push(...pa, ...pc, ...pd)
+      colors.push(...ca, ...cc, ...cd)
     }
 
     return { positions: new Float32Array(positions), colors: new Float32Array(colors) }
-  }, [result, hexElements, nodeMap, nodes])
+  }, [result, boundaryFaceIds, nodeMap, nodes, deformScale])
+
+  // Centroid of constrained nodes — fixed-face marker position
+  const fixedMarkerPos = useMemo((): [number, number, number] | null => {
+    if (constraints.length === 0) return null
+    const ids = new Set(constraints.map(c => c.nodeId))
+    let x = 0, y = 0, z = 0
+    for (const id of ids) {
+      const e = nodeMap.get(id)
+      if (e) { x += e.n.x; y += e.n.y; z += e.n.z }
+    }
+    const n = ids.size
+    return n > 0 ? [x / n, y / n, z / n] : null
+  }, [constraints, nodeMap])
+
+  // Centroid of loaded nodes — load marker position
+  const loadMarkerPos = useMemo((): [number, number, number] | null => {
+    if (loads.length === 0) return null
+    const ids = new Set(loads.map(l => l.nodeId))
+    let x = 0, y = 0, z = 0
+    for (const id of ids) {
+      const e = nodeMap.get(id)
+      if (e) { x += e.n.x; y += e.n.y; z += e.n.z }
+    }
+    const n = ids.size
+    return n > 0 ? [x / n, y / n, z / n] : null
+  }, [loads, nodeMap])
 
   if (nodes.length === 0) {
     return (
@@ -208,17 +259,21 @@ export function MeshScene() {
         <Line key={`d-${i}`} points={pts} color="#ffffff" lineWidth={0.5} opacity={0.3} transparent />
       ))}
 
-      {/* Fixed-face marker — red sphere at origin */}
-      <mesh position={[0, 0.05, 0.05]}>
-        <sphereGeometry args={[0.015, 16, 16]} />
-        <meshStandardMaterial color="#ff4444" />
-      </mesh>
+      {/* Fixed-face marker — red sphere at centroid of constrained nodes */}
+      {fixedMarkerPos && (
+        <mesh position={fixedMarkerPos}>
+          <sphereGeometry args={[0.015, 16, 16]} />
+          <meshStandardMaterial color="#ff4444" />
+        </mesh>
+      )}
 
-      {/* Load marker — yellow sphere at tip centroid */}
-      <mesh position={[1.0, 0.05, 0.05]}>
-        <sphereGeometry args={[0.015, 16, 16]} />
-        <meshStandardMaterial color="#ffcc00" />
-      </mesh>
+      {/* Load marker — yellow sphere at centroid of loaded nodes */}
+      {loadMarkerPos && (
+        <mesh position={loadMarkerPos}>
+          <sphereGeometry args={[0.015, 16, 16]} />
+          <meshStandardMaterial color="#ffcc00" />
+        </mesh>
+      )}
     </group>
   )
 }
