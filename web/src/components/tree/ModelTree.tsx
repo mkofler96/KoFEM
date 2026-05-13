@@ -88,7 +88,7 @@ export function ModelTree() {
         {bcGroups.length === 0
           ? <div className={styles.empty}>None</div>
           : bcGroups.map((g) => (
-            <div key={g.dofLabel} className={styles.item}>
+            <div key={`${g.dofLabel}=${g.value}`} className={styles.item}>
               <span className={styles.bcIcon}>▣</span>
               <span className={styles.label}>{g.dofLabel} = {g.value}</span>
               <span className={styles.detail}>{g.nodeCount} node{g.nodeCount !== 1 ? 's' : ''}</span>

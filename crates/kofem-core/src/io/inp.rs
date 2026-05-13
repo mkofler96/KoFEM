@@ -543,6 +543,8 @@ pub fn parse_inp(text: &str) -> Result<ParsedInp, String> {
                     }
                     set.extend(named_refs);
                 }
+                set.sort_unstable();
+                set.dedup();
             }
 
             "ELSET" => {
@@ -575,6 +577,8 @@ pub fn parse_inp(text: &str) -> Result<ParsedInp, String> {
                         set.push(id);
                     }
                 }
+                set.sort_unstable();
+                set.dedup();
             }
 
             "ELASTIC" => {
