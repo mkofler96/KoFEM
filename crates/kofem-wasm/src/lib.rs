@@ -196,6 +196,16 @@ fn build_mesh_and_bcs(input: ModelInput) -> Result<(Mesh, BoundaryConditions), S
 
 // ── Public WASM API ───────────────────────────────────────────────────────────
 
+/// Parse an Abaqus INP file and return the model as a JSON string.
+///
+/// The JSON matches the `ModelInput` schema (plus a `modelName` field) and
+/// can be fed directly into `solve_linear_static`.
+#[wasm_bindgen]
+pub fn parse_inp_model(inp_text: &str) -> Result<String, JsError> {
+    let parsed = kofem_core::io::inp::parse_inp(inp_text).map_err(|e| JsError::new(&e))?;
+    serde_json::to_string(&parsed).map_err(|e| JsError::new(&e.to_string()))
+}
+
 /// Solve a linear static FEM model.
 ///
 /// `model_json` is a JSON string matching the `ModelInput` schema.

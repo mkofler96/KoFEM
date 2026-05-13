@@ -4,6 +4,7 @@ extern crate alloc;
 
 pub mod boundary;
 pub mod elements;
+pub mod io;
 pub mod material;
 pub mod mesh;
 pub mod property;

@@ -121,13 +121,17 @@ function buildCantilever() {
 
 const cantilever = buildCantilever()
 
-interface ModelState {
+export interface ModelSnapshot {
   nodes: Node[]
   elements: Element[]
   materials: Material[]
   properties: Property[]
   constraints: Constraint[]
   loads: Load[]
+}
+
+interface ModelState extends ModelSnapshot {
+  modelName: string
   result: SolverResult | null
   isRunning: boolean
 
@@ -137,12 +141,14 @@ interface ModelState {
   addProperty: (prop: Property) => void
   setResult: (result: SolverResult) => void
   setRunning: (v: boolean) => void
+  loadModel: (snapshot: ModelSnapshot & { modelName?: string }) => void
   reset: () => void
 }
 
 export const useModelStore = create<ModelState>()(
   immer((set) => ({
     ...cantilever,
+    modelName: 'Cantilever Beam',
     result: null,
     isRunning: false,
 
@@ -152,8 +158,19 @@ export const useModelStore = create<ModelState>()(
     addProperty: (prop) => set(s => { s.properties.push(prop) }),
     setResult: (result) => set(s => { s.result = result }),
     setRunning: (v) => set(s => { s.isRunning = v }),
+    loadModel: (snap) => set(s => {
+      s.nodes = snap.nodes
+      s.elements = snap.elements
+      s.materials = snap.materials
+      s.properties = snap.properties
+      s.constraints = snap.constraints
+      s.loads = snap.loads
+      s.modelName = snap.modelName ?? 'Model'
+      s.result = null
+    }),
     reset: () => set(s => {
       Object.assign(s, buildCantilever())
+      s.modelName = 'Cantilever Beam'
       s.result = null
     }),
   }))

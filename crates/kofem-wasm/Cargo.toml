@@ -10,7 +10,7 @@ description = "WebAssembly bindings for kofem-core"
 crate-type = ["cdylib"]
 
 [dependencies]
-kofem-core = { workspace = true }
+kofem-core = { workspace = true, features = ["std", "serde"] }
 wasm-bindgen = "0.2"
 serde = { workspace = true }
 serde-wasm-bindgen = "0.6"
