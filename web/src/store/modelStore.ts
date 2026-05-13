@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
+import { meshFromBox, geomToBoxParams } from '../lib/meshFromBox'
 
 export interface Node {
   id: number
@@ -59,12 +60,44 @@ export interface SolverResult {
   vonMises?: Float64Array
 }
 
-// 10×2×2 CHEXA8 cantilever: 40 elements, 99 nodes
-// Steel 100mm × 100mm cross-section, L=1m
-// Fixed left face, Fy = -10 kN at right face
+// ── Geometry ──────────────────────────────────────────────────────────────────
+
+export interface BoxGeometry {
+  id: number
+  name: string
+  ox: number; oy: number; oz: number   // origin
+  sketchWidth: number                   // first dimension in sketch plane
+  sketchHeight: number                  // second dimension in sketch plane
+  sketchNormal: 'X' | 'Y' | 'Z'        // normal to sketch plane = extrude axis
+  extrudeSign: 1 | -1                   // +1 or -1 along the normal
+  extrudeLength: number
+  meshNu: number; meshNv: number; meshNw: number
+}
+
+export interface FaceSelection {
+  nodeIds: number[]
+  label: string    // e.g. "Min X face (9 nodes)"
+  axis: 'X' | 'Y' | 'Z'
+  isMax: boolean
+}
+
+// ── Default model ─────────────────────────────────────────────────────────────
+
+const DEFAULT_GEOMETRY: BoxGeometry = {
+  id: 1,
+  name: 'Cantilever Beam',
+  ox: 0, oy: 0, oz: 0,
+  sketchNormal: 'X',
+  sketchWidth: 0.1,
+  sketchHeight: 0.1,
+  extrudeSign: 1,
+  extrudeLength: 1.0,
+  meshNu: 2, meshNv: 2, meshNw: 10,
+}
+
 function buildCantilever() {
   const nx = 10, ny = 2, nz = 2
-  const L = 1.0, h = 0.1   // beam length, cross-section side (m)
+  const L = 1.0, h = 0.1
   const dx = L / nx, dy = h / ny, dz = h / nz
 
   const strideZ = nz + 1
@@ -101,14 +134,12 @@ function buildCantilever() {
     { id: 1, type: 'PSOLID', materialId: 1 },
   ]
 
-  // Fix Ux, Uy, Uz at left face (ix=0)
   const constraints: Constraint[] = []
   for (let iy = 0; iy <= ny; iy++)
     for (let iz = 0; iz <= nz; iz++)
       for (const dof of [0, 1, 2])
         constraints.push({ nodeId: nid(0, iy, iz), dof, prescribedValue: 0 })
 
-  // Distribute P = -10 kN equally over (ny+1)*(nz+1) = 9 right-face nodes
   const nFace = (ny + 1) * (nz + 1)
   const fNode = -10_000 / nFace
   const loads: Load[] = []
@@ -120,6 +151,8 @@ function buildCantilever() {
 }
 
 const cantilever = buildCantilever()
+
+// ── Store types ───────────────────────────────────────────────────────────────
 
 export interface ModelSnapshot {
   nodes: Node[]
@@ -134,16 +167,46 @@ interface ModelState extends ModelSnapshot {
   modelName: string
   result: SolverResult | null
   isRunning: boolean
+  isMeshing: boolean
+  geometries: BoxGeometry[]
+  nextGeomId: number
+  nextMatId: number
+  pickMode: 'bc' | 'load' | null
+  selectedFace: FaceSelection | null
 
-  addNode: (node: Node) => void
-  addElement: (el: Element) => void
-  addMaterial: (mat: Material) => void
-  addProperty: (prop: Property) => void
-  setResult: (result: SolverResult) => void
-  setRunning: (v: boolean) => void
-  loadModel: (snapshot: ModelSnapshot & { modelName?: string }) => void
-  reset: () => void
+  // Solver
+  addNode(node: Node): void
+  addElement(el: Element): void
+  addMaterial(mat: Material): void
+  addProperty(prop: Property): void
+  setResult(result: SolverResult): void
+  setRunning(v: boolean): void
+  setMeshing(v: boolean): void
+  applyMeshResult(nodes: Node[], elements: Element[], modelName: string): void
+  loadModel(snapshot: ModelSnapshot & { modelName?: string }): void
+  reset(): void
+
+  // Geometry CRUD
+  addGeometry(g: Omit<BoxGeometry, 'id'>): void
+  updateGeometry(id: number, patch: Partial<Omit<BoxGeometry, 'id'>>): void
+  deleteGeometry(id: number): void
+  meshGeometry(id: number): void
+
+  // Material CRUD
+  createMaterial(mat: Omit<Material, 'id'>): void
+  updateMaterial(id: number, patch: Partial<Omit<Material, 'id'>>): void
+  deleteMaterial(id: number): void
+
+  // BC / Load via face selection
+  setPickMode(mode: 'bc' | 'load' | null): void
+  setSelectedFace(face: FaceSelection | null): void
+  applyBcToFace(nodeIds: number[], dofs: number[], value: number): void
+  applyLoadToFace(nodeIds: number[], dof: number, totalForce: number): void
+  clearConstraints(): void
+  clearLoads(): void
 }
+
+// ── Store ─────────────────────────────────────────────────────────────────────
 
 export const useModelStore = create<ModelState>()(
   immer((set) => ({
@@ -151,6 +214,12 @@ export const useModelStore = create<ModelState>()(
     modelName: 'Cantilever Beam',
     result: null,
     isRunning: false,
+    isMeshing: false,
+    geometries: [DEFAULT_GEOMETRY],
+    nextGeomId: 2,
+    nextMatId: 2,
+    pickMode: null,
+    selectedFace: null,
 
     addNode: (node) => set(s => { s.nodes.push(node) }),
     addElement: (el) => set(s => { s.elements.push(el) }),
@@ -158,6 +227,23 @@ export const useModelStore = create<ModelState>()(
     addProperty: (prop) => set(s => { s.properties.push(prop) }),
     setResult: (result) => set(s => { s.result = result }),
     setRunning: (v) => set(s => { s.isRunning = v }),
+    setMeshing: (v) => set(s => { s.isMeshing = v }),
+
+    applyMeshResult: (nodes, elements, name) => set(s => {
+      s.nodes = nodes
+      s.elements = elements
+      s.constraints = []
+      s.loads = []
+      s.result = null
+      s.selectedFace = null
+      s.pickMode = null
+      s.modelName = name
+      if (!s.properties.find(p => p.type === 'PSOLID')) {
+        const matId = s.materials[0]?.id ?? 1
+        s.properties = [{ id: 1, type: 'PSOLID', materialId: matId }]
+      }
+    }),
+
     loadModel: (snap) => set(s => {
       s.nodes = snap.nodes
       s.elements = snap.elements
@@ -167,11 +253,102 @@ export const useModelStore = create<ModelState>()(
       s.loads = snap.loads
       s.modelName = snap.modelName ?? 'Model'
       s.result = null
+      s.geometries = []
+      s.selectedFace = null
+      s.pickMode = null
     }),
+
     reset: () => set(s => {
-      Object.assign(s, buildCantilever())
+      const c = buildCantilever()
+      s.nodes = c.nodes; s.elements = c.elements
+      s.materials = c.materials; s.properties = c.properties
+      s.constraints = c.constraints; s.loads = c.loads
       s.modelName = 'Cantilever Beam'
       s.result = null
+      s.geometries = [DEFAULT_GEOMETRY]
+      s.nextGeomId = 2
+      s.nextMatId = 2
+      s.selectedFace = null
+      s.pickMode = null
     }),
+
+    // Geometry CRUD
+    addGeometry: (g) => set(s => {
+      s.geometries.push({ ...g, id: s.nextGeomId++ })
+    }),
+
+    updateGeometry: (id, patch) => set(s => {
+      const idx = s.geometries.findIndex(g => g.id === id)
+      if (idx >= 0) Object.assign(s.geometries[idx], patch)
+    }),
+
+    deleteGeometry: (id) => set(s => {
+      s.geometries = s.geometries.filter(g => g.id !== id)
+    }),
+
+    meshGeometry: (id) => set(s => {
+      const geom = s.geometries.find(g => g.id === id)
+      if (!geom) return
+      const params = geomToBoxParams(geom)
+      const { nodes, elements } = meshFromBox(params)
+      s.nodes = nodes
+      s.elements = elements
+      s.constraints = []
+      s.loads = []
+      s.result = null
+      s.selectedFace = null
+      s.pickMode = null
+      s.modelName = geom.name
+      // Ensure PSOLID property with material 1 exists
+      if (!s.properties.find(p => p.type === 'PSOLID')) {
+        const matId = s.materials[0]?.id ?? 1
+        s.properties = [{ id: 1, type: 'PSOLID', materialId: matId }]
+      }
+    }),
+
+    // Material CRUD
+    createMaterial: (mat) => set(s => {
+      s.materials.push({ ...mat, id: s.nextMatId++ })
+    }),
+
+    updateMaterial: (id, patch) => set(s => {
+      const idx = s.materials.findIndex(m => m.id === id)
+      if (idx >= 0) Object.assign(s.materials[idx], patch)
+    }),
+
+    deleteMaterial: (id) => set(s => {
+      s.materials = s.materials.filter(m => m.id !== id)
+    }),
+
+    // Pick mode / face selection
+    setPickMode: (mode) => set(s => {
+      s.pickMode = mode
+      if (mode === null) s.selectedFace = null
+    }),
+
+    setSelectedFace: (face) => set(s => { s.selectedFace = face }),
+
+    applyBcToFace: (nodeIds, dofs, value) => set(s => {
+      // Remove existing constraints on those nodes+dofs first
+      s.constraints = s.constraints.filter(
+        c => !(nodeIds.includes(c.nodeId) && dofs.includes(c.dof)),
+      )
+      for (const nodeId of nodeIds)
+        for (const dof of dofs)
+          s.constraints.push({ nodeId, dof, prescribedValue: value })
+      s.result = null
+    }),
+
+    applyLoadToFace: (nodeIds, dof, totalForce) => set(s => {
+      // Remove existing loads on those nodes+dof
+      s.loads = s.loads.filter(l => !(nodeIds.includes(l.nodeId) && l.dof === dof))
+      const perNode = totalForce / nodeIds.length
+      for (const nodeId of nodeIds)
+        s.loads.push({ nodeId, dof, value: perNode })
+      s.result = null
+    }),
+
+    clearConstraints: () => set(s => { s.constraints = []; s.result = null }),
+    clearLoads: () => set(s => { s.loads = []; s.result = null }),
   }))
 )

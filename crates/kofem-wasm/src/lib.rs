@@ -1,3 +1,6 @@
+use kofem_mesh::geom::Point2;
+use kofem_mesh::{extrude, refine, triangulate};
+
 use kofem_core::boundary::{BoundaryConditions, DofIndex};
 use kofem_core::elements::ElementType;
 use kofem_core::material::IsotropicElastic;
@@ -218,4 +221,67 @@ pub fn solve_linear_static(model_json: &str) -> Result<Vec<f64>, JsError> {
     LinearStaticSolver::solve(&mesh, &bcs)
         .map(|r| r.displacements)
         .map_err(|e| JsError::new(&e.to_string()))
+}
+
+// ── Mesh generation API ───────────────────────────────────────────────────────
+
+/// Triangulate a 2-D boundary polygon and refine it with Ruppert's algorithm.
+///
+/// `polygon_json` — JSON array of `{x, y}` objects listing the CCW boundary
+/// vertices.  `min_angle_deg` — target minimum angle (20–33° is practical;
+/// pass 0 to skip refinement).  `max_steiner` — hard cap on inserted points.
+///
+/// Returns a JSON object `{ points: [{x,y}, …], triangles: [{v:[a,b,c]}, …] }`.
+#[wasm_bindgen]
+pub fn mesh_polygon(
+    polygon_json: &str,
+    min_angle_deg: f64,
+    max_steiner: usize,
+) -> Result<String, JsError> {
+    let boundary: Vec<Point2> =
+        serde_json::from_str(polygon_json).map_err(|e| JsError::new(&e.to_string()))?;
+
+    if boundary.len() < 3 {
+        return Err(JsError::new("polygon needs at least 3 vertices"));
+    }
+
+    let mut mesh = triangulate(&boundary);
+
+    if min_angle_deg > 0.0 && max_steiner > 0 {
+        refine(
+            &mut mesh.points,
+            &mut mesh.triangles,
+            &boundary,
+            min_angle_deg,
+            max_steiner,
+        );
+    }
+
+    serde_json::to_string(&mesh).map_err(|e| JsError::new(&e.to_string()))
+}
+
+/// Extrude a 2-D triangle mesh into a 3-D tetrahedral mesh.
+///
+/// `mesh2d_json` — JSON produced by [`mesh_polygon`].
+/// `dir_x/y/z` — extrusion direction vector (magnitude = total extrusion length).
+/// `layers` — number of equal slices along the extrusion direction.
+///
+/// Returns a JSON object `{ points: [{x,y,z}, …], tets: [{v:[a,b,c,d]}, …] }`.
+#[wasm_bindgen]
+pub fn extrude_mesh(
+    mesh2d_json: &str,
+    dir_x: f64,
+    dir_y: f64,
+    dir_z: f64,
+    layers: usize,
+) -> Result<String, JsError> {
+    let mesh2d: kofem_mesh::Mesh2D =
+        serde_json::from_str(mesh2d_json).map_err(|e| JsError::new(&e.to_string()))?;
+
+    if layers == 0 {
+        return Err(JsError::new("layers must be ≥ 1"));
+    }
+
+    let mesh3d = extrude(&mesh2d, [dir_x, dir_y, dir_z], layers);
+    serde_json::to_string(&mesh3d).map_err(|e| JsError::new(&e.to_string()))
 }

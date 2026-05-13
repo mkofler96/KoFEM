@@ -1,0 +1,10 @@
+[package]
+name = "kofem-mesh"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "2-D Delaunay / Ruppert mesher + 3-D tet extrusion for KoFEM"
+
+[dependencies]
+serde = { workspace = true }
