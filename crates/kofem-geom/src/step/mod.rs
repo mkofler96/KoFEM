@@ -1,2 +1,2 @@
 pub mod parser;
-pub use parser::{Arg, StepEntity, StepFile, StepError, parse};
+pub use parser::{parse, Arg, StepEntity, StepError, StepFile};
