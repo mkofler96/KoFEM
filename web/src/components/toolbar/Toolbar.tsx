@@ -22,6 +22,12 @@ export function Toolbar() {
         new URL('../../workers/solver.worker.ts', import.meta.url),
         { type: 'module' }
       )
+      workerRef.current.onerror = (e) => {
+        setRunning(false)
+        setIsParsing(false)
+        console.error('Worker crashed:', e)
+        alert(`Solver worker crashed: ${e.message}`)
+      }
       workerRef.current.onmessage = (e) => {
         const { id: _id, ok, type: msgType, displacements, model, error } = e.data
         if (!ok) {

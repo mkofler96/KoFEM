@@ -7,6 +7,7 @@ const RESULT_TYPES = ['Displacement (magnitude)', 'Ux', 'Uy', 'Uz', 'Von Mises s
 
 export function ResultsPanel() {
   const result = useModelStore(s => s.result)
+  const nodes = useModelStore(s => s.nodes)
 
   if (!result) {
     return (
@@ -17,7 +18,7 @@ export function ResultsPanel() {
     )
   }
 
-  const nodes = useModelStore(s => s.nodes)
+
   const d = result.displacements
   const maxAbsDisp = Math.max(...Array.from(d).map(Math.abs))
 

@@ -51,3 +51,22 @@ jobs:
       - run: cd web && bun install
       - run: cd web && bun run typecheck
       - run: cd web && bun run build
+
+  playwright:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo install wasm-pack --locked
+      - run: wasm-pack build crates/kofem-wasm --target web --out-dir ../../web/src/wasm/pkg
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: cd web && bun install
+      - run: cd web && bunx playwright install --with-deps chromium
+      - run: cd web && bun run build
+      - run: cd web && bun run test
