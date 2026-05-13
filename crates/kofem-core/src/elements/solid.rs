@@ -181,16 +181,36 @@ impl Element for Chexa8Element {
         3
     }
 
+    /// Stiffness matrix with Wilson-Taylor incompatible modes (9 internal DOF,
+    /// statically condensed). Eliminates shear locking without extra global DOF.
+    /// Reference: Wilson et al. (1973); Taylor et al. (1976).
     fn stiffness_matrix(&self, nodes: &[[f64; 3]]) -> DMatrix<f64> {
         let d = solid_d(&self.material);
-        let mut k = DMatrix::<f64>::zeros(24, 24);
+
+        // Jacobian at element centre (ξ=η=ζ=0) — used to scale incompatible-mode
+        // gradients so they satisfy the patch test (Taylor correction).
+        let gn0 = hex8_nat_grad(0.0, 0.0, 0.0);
+        let mut jm0 = [[0.0f64; 3]; 3];
+        for i in 0..8 {
+            for r in 0..3 {
+                for c in 0..3 {
+                    jm0[r][c] += gn0[i][r] * nodes[i][c];
+                }
+            }
+        }
+        let det_j0 = det3(&jm0);
+        let ji0 = inv3(&jm0, det_j0);
+
+        // k_uu (24×24), k_uh (24×9), k_hh (9×9)
+        let mut k_uu = DMatrix::<f64>::zeros(24, 24);
+        let mut k_uh = DMatrix::<f64>::zeros(24, 9);
+        let mut k_hh = DMatrix::<f64>::zeros(9, 9);
 
         for &xi in &GP2 {
             for &eta in &GP2 {
                 for &zeta in &GP2 {
                     let gn = hex8_nat_grad(xi, eta, zeta);
 
-                    // 3×3 Jacobian: J[r][c] = sum_i gn[i][r] * nodes[i][c]
                     let mut jm = [[0.0f64; 3]; 3];
                     for i in 0..8 {
                         for r in 0..3 {
@@ -200,9 +220,10 @@ impl Element for Chexa8Element {
                         }
                     }
                     let det_j = det3(&jm);
+                    let w = det_j.abs();
                     let ji = inv3(&jm, det_j);
 
-                    // Physical gradients: ∇_x N_i = J^{-1} ∇_ξ N_i
+                    // Standard B columns (24 DOF)
                     let mut gp = [[0.0f64; 3]; 8];
                     for i in 0..8 {
                         for r in 0..3 {
@@ -211,23 +232,81 @@ impl Element for Chexa8Element {
                             }
                         }
                     }
-
-                    // B columns (24 DOF, 3 per node)
-                    let mut b_cols = [[0.0f64; 6]; 24];
+                    let mut b_std = [[0.0f64; 6]; 24];
                     for i in 0..8 {
                         let [nx, ny, nz] = gp[i];
                         let cols = node_b_cols(nx, ny, nz);
                         for (kk, col) in cols.iter().enumerate() {
-                            b_cols[3 * i + kk] = *col;
+                            b_std[3 * i + kk] = *col;
                         }
                     }
 
-                    // K += |J| * Bᵀ D B  (Gauss weight = 1×1×1)
-                    accumulate_btdb_6(&mut k, &b_cols, &d, det_j.abs());
+                    // Incompatible-mode B columns (9 DOF):
+                    // 3 quadratic bubble modes per displacement component (ξ², η², ζ²).
+                    // Taylor correction: scale by J⁻¹(0) to pass the patch test.
+                    // Each mode α ∈ {ξ², η², ζ²} for component k contributes
+                    // physical gradient via: ∂α/∂x_j = (∂α/∂ξ_r) × (J₀⁻¹)ᵣⱼ
+                    let nat_derivs = [
+                        [2.0 * xi, 0.0, 0.0],   // d(ξ²)/d(ξ,η,ζ)
+                        [0.0, 2.0 * eta, 0.0],  // d(η²)/d(ξ,η,ζ)
+                        [0.0, 0.0, 2.0 * zeta], // d(ζ²)/d(ξ,η,ζ)
+                    ];
+                    let mut b_inc = [[0.0f64; 6]; 9];
+                    for (m, nd) in nat_derivs.iter().enumerate() {
+                        // Physical gradient of mode m for displacement component `comp`
+                        for comp in 0..3usize {
+                            let mut phys = [0.0f64; 3];
+                            for r in 0..3 {
+                                for c in 0..3 {
+                                    phys[c] += ji0[c][r] * nd[r];
+                                }
+                            }
+                            let col_idx = comp * 3 + m;
+                            b_inc[col_idx] = match comp {
+                                0 => [phys[0], 0.0, 0.0, phys[1], 0.0, phys[2]],
+                                1 => [0.0, phys[1], 0.0, phys[0], phys[2], 0.0],
+                                _ => [0.0, 0.0, phys[2], 0.0, phys[1], phys[0]],
+                            };
+                        }
+                    }
+
+                    // Accumulate sub-blocks
+                    accumulate_btdb_6(&mut k_uu, &b_std, &d, w);
+                    // k_uh += w * B_std^T D B_inc
+                    for i in 0..24 {
+                        for j in 0..9 {
+                            let mut v = 0.0;
+                            for p in 0..6 {
+                                for q in 0..6 {
+                                    v += b_std[i][p] * d[p][q] * b_inc[j][q];
+                                }
+                            }
+                            k_uh[(i, j)] += w * v;
+                        }
+                    }
+                    // k_hh += w * B_inc^T D B_inc
+                    for i in 0..9 {
+                        for j in 0..9 {
+                            let mut v = 0.0;
+                            for p in 0..6 {
+                                for q in 0..6 {
+                                    v += b_inc[i][p] * d[p][q] * b_inc[j][q];
+                                }
+                            }
+                            k_hh[(i, j)] += w * v;
+                        }
+                    }
                 }
             }
         }
-        k
+
+        // Static condensation: K = K_uu - K_uh * K_hh⁻¹ * K_uh^T.
+        // If k_hh is singular (degenerate/distorted element), skip condensation and
+        // return the standard trilinear HEX8 stiffness rather than silently using zeros.
+        match k_hh.try_inverse() {
+            Some(k_hh_inv) => k_uu - &k_uh * k_hh_inv * k_uh.transpose(),
+            None => k_uu,
+        }
     }
 
     fn consistent_mass_matrix(&self, nodes: &[[f64; 3]], density: f64) -> DMatrix<f64> {

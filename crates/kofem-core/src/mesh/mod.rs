@@ -66,11 +66,17 @@ impl Mesh {
     }
 
     pub fn find_material(&self, id: usize) -> Option<&IsotropicElastic> {
-        self.materials.iter().find(|(mid, _)| *mid == id).map(|(_, m)| m)
+        self.materials
+            .iter()
+            .find(|(mid, _)| *mid == id)
+            .map(|(_, m)| m)
     }
 
     pub fn find_property(&self, id: usize) -> Option<&PropertyCard> {
-        self.properties.iter().find(|(pid, _)| *pid == id).map(|(_, p)| p)
+        self.properties
+            .iter()
+            .find(|(pid, _)| *pid == id)
+            .map(|(_, p)| p)
     }
 
     pub fn find_node_idx(&self, id: usize) -> Option<usize> {

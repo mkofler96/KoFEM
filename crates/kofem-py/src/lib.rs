@@ -1,6 +1,10 @@
-use pyo3::prelude::*;
-use kofem_core::{Mesh, LinearStaticSolver};
+// pyo3's #[pyfunction] macro generates a PyResult::from(result) wrapper that clippy
+// incorrectly flags as a useless same-type conversion.
+#![allow(clippy::useless_conversion)]
+
 use kofem_core::boundary::{BoundaryConditions, DofIndex};
+use kofem_core::{LinearStaticSolver, Mesh};
+use pyo3::prelude::*;
 
 #[pyclass]
 struct PyMesh {
@@ -32,7 +36,9 @@ struct PyBoundaryConditions {
 impl PyBoundaryConditions {
     #[new]
     fn new() -> Self {
-        Self { inner: BoundaryConditions::default() }
+        Self {
+            inner: BoundaryConditions::default(),
+        }
     }
 
     fn fix_node(&mut self, node_id: usize) {
@@ -41,8 +47,12 @@ impl PyBoundaryConditions {
 
     fn apply_force(&mut self, node_id: usize, dof: usize, value: f64) {
         let dof_idx = match dof {
-            0 => DofIndex::Ux, 1 => DofIndex::Uy, 2 => DofIndex::Uz,
-            3 => DofIndex::Rx, 4 => DofIndex::Ry, 5 => DofIndex::Rz,
+            0 => DofIndex::Ux,
+            1 => DofIndex::Uy,
+            2 => DofIndex::Uz,
+            3 => DofIndex::Rx,
+            4 => DofIndex::Ry,
+            5 => DofIndex::Rz,
             _ => return,
         };
         self.inner.apply_force(node_id, dof_idx, value);
