@@ -330,15 +330,14 @@ pub fn parse_inp(text: &str) -> Result<ParsedInp, String> {
             pending_section = None;
 
             match kw.as_str() {
-                "HEADING" => {
-                    if i < n && !lines[i].trim_start().starts_with('*') {
-                        let h = lines[i].trim();
-                        if !h.is_empty() {
-                            model_name = h.to_owned();
-                        }
-                        i += 1;
+                "HEADING" if i < n && !lines[i].trim_start().starts_with('*') => {
+                    let h = lines[i].trim();
+                    if !h.is_empty() {
+                        model_name = h.to_owned();
                     }
+                    i += 1;
                 }
+                "HEADING" => {}
                 "MATERIAL" => {
                     let name = params
                         .get("NAME")
@@ -432,18 +431,16 @@ pub fn parse_inp(text: &str) -> Result<ParsedInp, String> {
         let parts: Vec<&str> = line.split(',').map(str::trim).collect();
 
         match kw.as_str() {
-            "NODE" => {
-                if parts.len() >= 3 {
-                    if let Some(id) = parse_usize(parts[0]) {
-                        let x = parse_f64(parts[1]).unwrap_or(0.0);
-                        let y = parse_f64(parts[2]).unwrap_or(0.0);
-                        let z = if parts.len() >= 4 {
-                            parse_f64(parts[3]).unwrap_or(0.0)
-                        } else {
-                            0.0
-                        };
-                        nodes.push(InpNode { id, x, y, z });
-                    }
+            "NODE" if parts.len() >= 3 => {
+                if let Some(id) = parse_usize(parts[0]) {
+                    let x = parse_f64(parts[1]).unwrap_or(0.0);
+                    let y = parse_f64(parts[2]).unwrap_or(0.0);
+                    let z = if parts.len() >= 4 {
+                        parse_f64(parts[3]).unwrap_or(0.0)
+                    } else {
+                        0.0
+                    };
+                    nodes.push(InpNode { id, x, y, z });
                 }
             }
 
@@ -635,19 +632,17 @@ pub fn parse_inp(text: &str) -> Result<ParsedInp, String> {
                 }
             }
 
-            "CLOAD" => {
-                if parts.len() >= 3 {
-                    let token = parts[0];
-                    let dof = parse_usize(parts[1]).unwrap_or(1).saturating_sub(1) as u8;
-                    let value = parse_f64(parts[2]).unwrap_or(0.0);
-                    for node_id in resolve_nodes(token, &node_sets) {
-                        if dof <= 5 {
-                            loads.push(InpLoad {
-                                node_id,
-                                dof,
-                                value,
-                            });
-                        }
+            "CLOAD" if parts.len() >= 3 => {
+                let token = parts[0];
+                let dof = parse_usize(parts[1]).unwrap_or(1).saturating_sub(1) as u8;
+                let value = parse_f64(parts[2]).unwrap_or(0.0);
+                for node_id in resolve_nodes(token, &node_sets) {
+                    if dof <= 5 {
+                        loads.push(InpLoad {
+                            node_id,
+                            dof,
+                            value,
+                        });
                     }
                 }
             }
@@ -666,8 +661,7 @@ pub fn parse_inp(text: &str) -> Result<ParsedInp, String> {
     // ── Build materials ───────────────────────────────────────────────────────
     let mut materials: Vec<InpMaterial> = Vec::new();
     let mut mat_name_to_id: BTreeMap<String, usize> = BTreeMap::new();
-    let mut mat_id = 1usize;
-    for (upper, def) in &mat_defs {
+    for (mat_id, (upper, def)) in (1usize..).zip(mat_defs.iter()) {
         materials.push(InpMaterial {
             id: mat_id,
             name: def.name.clone(),
@@ -676,7 +670,6 @@ pub fn parse_inp(text: &str) -> Result<ParsedInp, String> {
             density: def.density,
         });
         mat_name_to_id.insert(upper.clone(), mat_id);
-        mat_id += 1;
     }
 
     // ── Build properties from section defs ────────────────────────────────────
