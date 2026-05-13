@@ -1,19 +1,7 @@
 import { useModelStore } from '../../store/modelStore'
 import { groupConstraints, groupLoads } from '../../lib/parseAbaqus'
+import { fmt, PROP_TYPE_LABEL } from '../../lib/modelDisplay'
 import styles from './ModelTree.module.css'
-
-const PROP_TYPE_LABEL: Record<string, string> = {
-  PSOLID: '3-D Solid',
-  PSHELL: 'Shell',
-  PLPLANE: 'Plane',
-  PBAR: 'Bar/Beam',
-  PBEAM: 'Beam',
-}
-
-function fmt(v: number, digits = 3) {
-  if (Math.abs(v) >= 1e4 || (Math.abs(v) < 1e-2 && v !== 0)) return v.toExponential(digits)
-  return v.toPrecision(digits + 1)
-}
 
 export function ModelTree() {
   const nodes       = useModelStore(s => s.nodes)

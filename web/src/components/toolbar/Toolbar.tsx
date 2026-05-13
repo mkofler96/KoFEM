@@ -1,4 +1,4 @@
-import { useRef, type ChangeEvent } from 'react'
+import { useRef, useState, type ChangeEvent } from 'react'
 import { useModelStore } from '../../store/modelStore'
 import styles from './Toolbar.module.css'
 
@@ -12,6 +12,7 @@ export function Toolbar() {
   const setResult = useModelStore(s => s.setResult)
   const loadModel = useModelStore(s => s.loadModel)
 
+  const [isParsing, setIsParsing] = useState(false)
   const workerRef = useRef<Worker | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -24,12 +25,15 @@ export function Toolbar() {
       workerRef.current.onmessage = (e) => {
         const { id: _id, ok, type: msgType, displacements, model, error } = e.data
         if (!ok) {
+          setIsParsing(false)
           setRunning(false)
           console.error('Worker error:', error)
           alert(`Error: ${error}`)
           return
         }
         if (msgType === 'parse' || model !== undefined) {
+          setIsParsing(false)
+          setRunning(false)
           if (model.nodes?.length === 0) {
             alert('No nodes found in the file. Is this a valid Abaqus INP?')
           } else {
@@ -66,6 +70,8 @@ export function Toolbar() {
     const file = e.target.files?.[0]
     if (!file) return
     e.target.value = ''
+    setIsParsing(true)
+    setRunning(true)
     const text = await file.text()
     getWorker().postMessage({ id: ++msgId, type: 'parse', payload: { text } })
   }
@@ -80,7 +86,7 @@ export function Toolbar() {
         onChange={handleFileChange}
       />
       <button className={styles.btn} onClick={handleImportClick} disabled={isRunning} title="Import Abaqus INP file (*.inp)">
-        Import
+        {isParsing ? 'Parsing…' : 'Import'}
       </button>
       <button className={styles.btn} title="Export results" disabled>
         Export
@@ -88,7 +94,7 @@ export function Toolbar() {
       <span className={styles.modelName}>{modelName}</span>
       <div className={styles.divider} />
       <button className={`${styles.btn} ${styles.primary}`} onClick={handleSolve} disabled={isRunning}>
-        {isRunning ? 'Solving…' : 'Solve'}
+        {isRunning && !isParsing ? 'Solving…' : 'Solve'}
       </button>
       <button className={styles.btn} onClick={reset} disabled={isRunning}>
         Reset

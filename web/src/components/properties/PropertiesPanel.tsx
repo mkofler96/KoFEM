@@ -1,18 +1,6 @@
 import { useModelStore } from '../../store/modelStore'
+import { fmt, PROP_TYPE_LABEL } from '../../lib/modelDisplay'
 import styles from './PropertiesPanel.module.css'
-
-function fmt(v: number, digits = 4) {
-  if (Math.abs(v) >= 1e4 || (Math.abs(v) < 1e-2 && v !== 0)) return v.toExponential(digits)
-  return v.toPrecision(digits + 1)
-}
-
-const PROP_TYPE_LABEL: Record<string, string> = {
-  PSOLID: '3-D Solid',
-  PSHELL: 'Shell',
-  PLPLANE: 'Plane',
-  PBAR: 'Bar/Beam',
-  PBEAM: 'Beam',
-}
 
 export function PropertiesPanel() {
   const nodes      = useModelStore(s => s.nodes)
@@ -52,9 +40,9 @@ export function PropertiesPanel() {
               {materials.map(m => (
                 <tr key={m.id}>
                   <td>{m.name}</td>
-                  <td>{fmt(m.young)}</td>
+                  <td>{fmt(m.young, 4)}</td>
                   <td>{m.poisson}</td>
-                  <td>{m.density > 0 ? fmt(m.density) : '—'}</td>
+                  <td>{m.density > 0 ? fmt(m.density, 4) : '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -80,7 +68,7 @@ export function PropertiesPanel() {
                   <td>{PROP_TYPE_LABEL[p.type] ?? p.type}</td>
                   <td>{matName(p.materialId)}</td>
                   <td>
-                    {p.thickness != null ? `t=${fmt(p.thickness)} m` : ''}
+                    {p.thickness != null ? `t=${fmt(p.thickness, 4)} m` : ''}
                     {p.planeFormulation ? ` (${p.planeFormulation})` : ''}
                   </td>
                 </tr>

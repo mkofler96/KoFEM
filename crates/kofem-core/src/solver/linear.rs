@@ -107,7 +107,14 @@ impl LinearStaticSolver {
                     }
                     Ctetra4Element { material: *mat }.stiffness_matrix(&node_coords)
                 }
-                _ => continue,
+                _ => {
+                    log::warn!(
+                        "Element {}: {:?} has no stiffness implementation — skipped",
+                        elem.id,
+                        elem.element_type
+                    );
+                    continue;
+                }
             };
 
             // Scatter-add: local DOF (ln*e_dof + ld) → global DOF (dof_offset[ni] + ld).
