@@ -9,8 +9,6 @@
 //!     equivalents (C3D10→CTETRA, C3D20→CHEXA, CPS6/CPE6→CTRIA3).
 //!   - DOF numbering: Abaqus 1-based → KoFEM 0-based (subtract 1).
 
-extern crate alloc;
-
 use alloc::borrow::ToOwned;
 use alloc::collections::BTreeMap;
 use alloc::string::String;
@@ -733,7 +731,7 @@ pub fn parse_inp(text: &str) -> Result<ParsedInp, String> {
     // ── Assign property IDs to elements (O(E + total_set_size)) ──────────────
     let mut elem_to_prop: BTreeMap<usize, usize> = BTreeMap::new();
     for (elset_name, pid) in &elset_to_prop_id {
-        for &eid in elem_sets.get(elset_name).unwrap_or(&vec![]) {
+        for &eid in elem_sets.get(elset_name).map_or(&[][..], |v| v.as_slice()) {
             elem_to_prop.insert(eid, *pid);
         }
     }

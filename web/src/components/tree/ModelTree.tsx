@@ -87,8 +87,8 @@ export function ModelTree() {
         <div className={styles.header}>Boundary Conditions</div>
         {bcGroups.length === 0
           ? <div className={styles.empty}>None</div>
-          : bcGroups.map((g, i) => (
-            <div key={i} className={styles.item}>
+          : bcGroups.map((g) => (
+            <div key={g.dofLabel} className={styles.item}>
               <span className={styles.bcIcon}>▣</span>
               <span className={styles.label}>{g.dofLabel} = {g.value}</span>
               <span className={styles.detail}>{g.nodeCount} node{g.nodeCount !== 1 ? 's' : ''}</span>
@@ -102,8 +102,8 @@ export function ModelTree() {
         <div className={styles.header}>Loads</div>
         {loadGroups.length === 0
           ? <div className={styles.empty}>None</div>
-          : loadGroups.map((g, i) => (
-            <div key={i} className={styles.item}>
+          : loadGroups.map((g) => (
+            <div key={g.dofLabel} className={styles.item}>
               <span className={styles.loadIcon}>↗</span>
               <span className={styles.label}>F{g.dofLabel} = {fmt(g.total)} N</span>
               <span className={styles.detail}>{g.nodeCount} node{g.nodeCount !== 1 ? 's' : ''}</span>
