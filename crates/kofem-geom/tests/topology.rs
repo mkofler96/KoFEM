@@ -13,12 +13,11 @@ fn every_face_has_at_least_3_edges() {
     let brep = BRep::extract(&file).unwrap();
     for face in &brep.faces {
         // The bracket has 4 faces with 2-edge outer loops (two semicircular arcs);
-        // the bound is >= 1 to verify every outer loop is non-empty.
+        // the bound is non-empty to verify every outer loop is populated.
         assert!(
-            face.outer_loop.len() >= 1,
-            "face with surface #{} has only {} edges",
+            !face.outer_loop.is_empty(),
+            "face with surface #{} has no edges",
             face.surface_id,
-            face.outer_loop.len()
         );
     }
 }
