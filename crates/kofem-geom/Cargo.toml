@@ -1,0 +1,10 @@
+[package]
+name = "kofem-geom"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Geometry import/export for KoFEM (STEP, IGES, STL)"
+
+[dependencies]
+thiserror = { workspace = true }

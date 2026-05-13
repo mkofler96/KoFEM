@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/kofem-core",
+    "crates/kofem-geom",
     "crates/kofem-mesh",
     "crates/kofem-wasm",
     "crates/kofem-py",
