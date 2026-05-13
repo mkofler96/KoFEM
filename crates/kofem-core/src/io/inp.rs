@@ -272,7 +272,7 @@ fn parse_usize(s: &str) -> Option<usize> {
     s.trim().parse().ok()
 }
 
-fn resolve_nodes<'a>(token: &str, node_sets: &'a BTreeMap<String, Vec<usize>>) -> Vec<usize> {
+fn resolve_nodes(token: &str, node_sets: &BTreeMap<String, Vec<usize>>) -> Vec<usize> {
     if let Some(id) = parse_usize(token) {
         vec![id]
     } else {
