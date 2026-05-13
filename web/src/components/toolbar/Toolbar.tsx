@@ -1,16 +1,20 @@
 import { useRef } from 'react'
 import { useModelStore } from '../../store/modelStore'
+import { parseAbaqus } from '../../lib/parseAbaqus'
 import styles from './Toolbar.module.css'
 
 let msgId = 0
 
 export function Toolbar() {
   const isRunning = useModelStore(s => s.isRunning)
+  const modelName = useModelStore(s => s.modelName)
   const reset = useModelStore(s => s.reset)
   const setRunning = useModelStore(s => s.setRunning)
   const setResult = useModelStore(s => s.setResult)
+  const loadModel = useModelStore(s => s.loadModel)
 
   const workerRef = useRef<Worker | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   function getWorker() {
     if (!workerRef.current) {
@@ -47,14 +51,45 @@ export function Toolbar() {
     getWorker().postMessage({ id, type: 'solve', payload })
   }
 
+  const handleImportClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''   // allow re-selecting the same file
+
+    const text = await file.text()
+    try {
+      const model = parseAbaqus(text)
+      if (model.nodes.length === 0) {
+        alert('No nodes found in the file. Is this a valid Abaqus INP?')
+        return
+      }
+      loadModel(model)
+    } catch (err) {
+      console.error('Parse error:', err)
+      alert(`Failed to parse ${file.name}:\n${err}`)
+    }
+  }
+
   return (
     <div className={styles.toolbar}>
-      <button className={styles.btn} title="Import mesh (*.bdf, *.inp, *.msh)">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".inp"
+        style={{ display: 'none' }}
+        onChange={handleFileChange}
+      />
+      <button className={styles.btn} onClick={handleImportClick} title="Import Abaqus INP file (*.inp)">
         Import
       </button>
-      <button className={styles.btn} title="Export results">
+      <button className={styles.btn} title="Export results" disabled>
         Export
       </button>
+      <span className={styles.modelName}>{modelName}</span>
       <div className={styles.divider} />
       <button className={`${styles.btn} ${styles.primary}`} onClick={handleSolve} disabled={isRunning}>
         {isRunning ? 'Solving…' : 'Solve'}
