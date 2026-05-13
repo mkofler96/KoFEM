@@ -113,6 +113,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "kofem-mesh"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "kofem-py"
 version = "0.1.0"
 dependencies = [
@@ -127,6 +134,7 @@ dependencies = [
  "console_error_panic_hook",
  "js-sys",
  "kofem-core",
+ "kofem-mesh",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",

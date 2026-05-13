@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/kofem-core",
+    "crates/kofem-mesh",
     "crates/kofem-wasm",
     "crates/kofem-py",
 ]
@@ -14,6 +15,7 @@ license = "MIT"
 
 [workspace.dependencies]
 kofem-core = { path = "crates/kofem-core" }
+kofem-mesh = { path = "crates/kofem-mesh" }
 nalgebra = { version = "0.33", default-features = false, features = ["alloc"] }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"

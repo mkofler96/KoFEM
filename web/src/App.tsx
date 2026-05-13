@@ -1,8 +1,9 @@
 import { Viewport } from './components/viewport/Viewport'
-import { ModelTree } from './components/tree/ModelTree'
+import { Sidebar } from './components/sidebar/Sidebar'
 import { PropertiesPanel } from './components/properties/PropertiesPanel'
 import { Toolbar } from './components/toolbar/Toolbar'
 import { ResultsPanel } from './components/results/ResultsPanel'
+import { FacePickPanel } from './components/bc/FacePickPanel'
 import styles from './App.module.css'
 
 export default function App() {
@@ -13,12 +14,13 @@ export default function App() {
         <Toolbar />
       </header>
       <aside className={styles.sidebar}>
-        <ModelTree />
+        <Sidebar />
       </aside>
       <main className={styles.viewport}>
         <Viewport />
       </main>
       <aside className={styles.properties}>
+        <FacePickPanel />
         <PropertiesPanel />
         <ResultsPanel />
       </aside>
