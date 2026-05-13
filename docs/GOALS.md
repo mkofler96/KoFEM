@@ -27,25 +27,41 @@ These two concerns must stay strictly separated. Geometry code never generates m
 - [ ] Colormap legend with min/max probe
 - [ ] Section cuts and hidden-line removal
 
-### Phase 3 — Geometry Kernel
-- [ ] Dedicated geometry crate (`kofem-geom`) separate from the UI store
-- [ ] 2D primitives: point, line segment, arc, rectangle, polygon
+### Phase 3 — Geometry Kernel (`kofem-geom`)
+Goal: a parametric geometry crate that produces B-rep output consumed by the meshing engine.
+No mesh generation in this layer.
+
+- [ ] 2D primitives: point, segment, arc, rectangle, polygon
 - [ ] 2D CSG: union, difference, intersection of closed regions
-- [ ] 2D → 3D: linear extrusion, revolution around axis
+- [ ] 2D → 3D: linear extrusion and revolution around axis
 - [ ] 3D primitives: box, cylinder, sphere, wedge
-- [ ] 3D CSG: union, difference, intersection
-- [ ] Boundary representation (B-rep) output consumed by `kofem-mesh`
+- [ ] 3D CSG on solids
+- [ ] Boundary representation (B-rep) types: `Solid → Shells → Faces → Edges → Vertices`
+- [ ] Surface geometry evaluators: `Plane`, `Cylinder`, `Cone`, `Torus`, `BSplineSurface`
+- [ ] Curve geometry evaluators: `Line`, `Circle`, `Ellipse`, `BSplineCurve`
 - [ ] Python API for parametric models (`kofem-py` binding)
 
-### Phase 4 — Meshing Engine
-- [ ] Mesh sizing fields (uniform, curvature-adaptive, feature-size-adaptive)
-- [ ] Constrained Delaunay triangulation (CDT) preserving internal features / holes
-- [ ] Advancing-front or Delaunay-based 3D tet meshing (not just extrusion)
+### Phase 4 — STEP Import + Volume Meshing
+Goal: import any STEP file and produce a tet mesh. Full pipeline described in
+[`docs/STEP_PIPELINE.md`](STEP_PIPELINE.md).
+
+| Stage | What | Done? |
+|-------|------|-------|
+| 1 | ISO 10303-21 text parser → entity registry | [ ] |
+| 2 | B-rep topology extraction (shells, faces, edge loops) | [ ] |
+| 3 | Geometry evaluators for Plane, Cylinder, Line, Circle, B-spline | [ ] |
+| 4 | Face tessellator: parameter-space triangulation → watertight 3D surface mesh | [ ] |
+| 5 | Volume mesher: 3D Constrained Delaunay Tetrahedralization (CDT) | [ ] |
+| 6 | WASM bindings + UI (file input, progress display, viewport preview) | [ ] |
+
+### Phase 5 — Meshing Engine (advanced)
+- [ ] Constrained Delaunay triangulation (CDT) with internal features / holes
+- [ ] Mesh sizing fields (curvature-adaptive, feature-size-adaptive)
 - [ ] Hex-dominant meshing for structured regions
-- [ ] Mesh quality statistics and refinement controls exposed in UI
+- [ ] Mesh quality statistics and refinement controls in UI
 - [ ] Export to Gmsh `.msh` v4, VTK `.vtu`
 
-### Phase 5 — Production Quality
+### Phase 6 — Production Solver
 - [ ] Large model support (>500k DOF) via iterative solvers (PCG + AMG preconditioner)
 - [ ] Modal analysis (eigenvalue solver via Lanczos)
 - [ ] Python scripting for batch analysis and parametric studies
