@@ -1,6 +1,5 @@
 import { useRef } from 'react'
 import { useModelStore } from '../../store/modelStore'
-import { parseAbaqus } from '../../lib/parseAbaqus'
 import styles from './Toolbar.module.css'
 
 let msgId = 0
@@ -23,13 +22,22 @@ export function Toolbar() {
         { type: 'module' }
       )
       workerRef.current.onmessage = (e) => {
-        const { ok, displacements, error } = e.data
-        setRunning(false)
-        if (ok) {
-          setResult({ displacements: new Float64Array(displacements) })
+        const { id: _id, ok, type: msgType, displacements, model, error } = e.data
+        if (!ok) {
+          setRunning(false)
+          console.error('Worker error:', error)
+          alert(`Error: ${error}`)
+          return
+        }
+        if (msgType === 'parse' || model !== undefined) {
+          if (model.nodes?.length === 0) {
+            alert('No nodes found in the file. Is this a valid Abaqus INP?')
+          } else {
+            loadModel(model)
+          }
         } else {
-          console.error('Solver error:', error)
-          alert(`Solver failed: ${error}`)
+          setRunning(false)
+          setResult({ displacements: new Float64Array(displacements) })
         }
       }
     }
@@ -47,8 +55,7 @@ export function Toolbar() {
       loads: state.loads,
     }
     setRunning(true)
-    const id = ++msgId
-    getWorker().postMessage({ id, type: 'solve', payload })
+    getWorker().postMessage({ id: ++msgId, type: 'solve', payload })
   }
 
   const handleImportClick = () => {
@@ -58,20 +65,9 @@ export function Toolbar() {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    e.target.value = ''   // allow re-selecting the same file
-
+    e.target.value = ''
     const text = await file.text()
-    try {
-      const model = parseAbaqus(text)
-      if (model.nodes.length === 0) {
-        alert('No nodes found in the file. Is this a valid Abaqus INP?')
-        return
-      }
-      loadModel(model)
-    } catch (err) {
-      console.error('Parse error:', err)
-      alert(`Failed to parse ${file.name}:\n${err}`)
-    }
+    getWorker().postMessage({ id: ++msgId, type: 'parse', payload: { text } })
   }
 
   return (

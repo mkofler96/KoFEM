@@ -1,0 +1,56 @@
+*Heading
+KoFEM Simple Cantilever — 2×1×1 CHEXA8 (12 nodes, 2 elements)
+** Steel 100×100 mm square cross-section, L=1 m
+** Fixed left face (x=0), Fy=-10 kN distributed over right face (x=1)
+** Analytical tip deflection: delta = PL^3/(3EI) = -1.587e-4 m
+**
+*Node
+  1, 0.0,  0.0,  0.0
+  2, 0.0,  0.0,  0.1
+  3, 0.0,  0.1,  0.0
+  4, 0.0,  0.1,  0.1
+  5, 0.5,  0.0,  0.0
+  6, 0.5,  0.0,  0.1
+  7, 0.5,  0.1,  0.0
+  8, 0.5,  0.1,  0.1
+  9, 1.0,  0.0,  0.0
+ 10, 1.0,  0.0,  0.1
+ 11, 1.0,  0.1,  0.0
+ 12, 1.0,  0.1,  0.1
+**
+*Element, type=C3D8R, elset=AllElements
+1,  1,  5,  7,  3,  2,  6,  8,  4
+2,  5,  9, 11,  7,  6, 10, 12,  8
+**
+*Nset, Nset=FixedFace
+1, 2, 3, 4
+*Nset, Nset=LoadFace
+9, 10, 11, 12
+**
+*Material, name=Steel
+*Elastic
+** E (Pa), nu
+210000000000., 0.3
+*Density
+** rho (kg/m^3)
+7850.,
+**
+*Solid Section, elset=AllElements, material=Steel
+,
+**
+** ── Boundary conditions ──────────────────────────────────────────────────────
+*Boundary
+FixedFace, 1, 3
+**
+** ── Step ─────────────────────────────────────────────────────────────────────
+*Step, name=Step-1, nlgeom=NO
+*Static
+**
+** Concentrated load: Fy = -10 kN split over 4 nodes = -2500 N each
+*Cload
+9,  2, -2500.
+10, 2, -2500.
+11, 2, -2500.
+12, 2, -2500.
+**
+*End Step
