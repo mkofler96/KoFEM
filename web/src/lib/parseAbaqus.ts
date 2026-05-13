@@ -21,22 +21,40 @@ interface SectionDef {
 
 const DOF_NAMES = ['Ux', 'Uy', 'Uz', 'Rx', 'Ry', 'Rz']
 
-// Maps Abaqus element type strings to KoFEM types
-function mapAbaqusElement(t: string): { kofemType: ElementType; propHint: PropHint } | null {
+interface ElemMapping {
+  kofemType: ElementType
+  propHint: PropHint
+  // cornerNodes: how many nodes the linear KoFEM element expects.
+  // cornerIndices: which indices from the parsed list to pick (default: first cornerNodes).
+  // Used to down-convert higher-order elements (C3D10→4, C3D20→8, etc.).
+  cornerNodes: number
+  cornerIndices?: number[]
+}
+
+// Maps Abaqus element type strings to KoFEM types + node-count for down-conversion
+function mapAbaqusElement(t: string): ElemMapping | null {
   const u = t.toUpperCase().replace(/\s+/g, '')
-  if (/^C3D4H?$/.test(u))                     return { kofemType: 'CTETRA', propHint: 'solid' }
-  if (/^C3D10[HM]?$/.test(u))                 return { kofemType: 'CTETRA', propHint: 'solid' }
-  if (/^C3D8[RIH]?$/.test(u))                 return { kofemType: 'CHEXA',  propHint: 'solid' }
-  if (/^C3D20[RH]?$/.test(u))                 return { kofemType: 'CHEXA',  propHint: 'solid' }
-  if (/^C3D6H?$/.test(u))                     return { kofemType: 'CPENTA', propHint: 'solid' }
-  if (u === 'C3D5')                            return { kofemType: 'CPYRAM', propHint: 'solid' }
-  if (/^CPS[36]$/.test(u))                    return { kofemType: 'CTRIA3', propHint: 'plane_stress' }
-  if (/^CPE[36]H?$/.test(u))                  return { kofemType: 'CTRIA3', propHint: 'plane_strain' }
-  if (/^CPS4R?$/.test(u))                     return { kofemType: 'CQUAD4', propHint: 'plane_stress' }
-  if (/^CPE4[RH]?$/.test(u))                  return { kofemType: 'CQUAD4', propHint: 'plane_strain' }
-  if (/^S3R?$|^STRI3$/.test(u))               return { kofemType: 'CTRIA3', propHint: 'shell' }
-  if (/^S4R?[5]?$/.test(u))                   return { kofemType: 'CQUAD4', propHint: 'shell' }
-  if (/^B3[123]R?$/.test(u))                  return { kofemType: 'CBAR',   propHint: 'beam' }
+  // 3-D solid
+  if (/^C3D4H?$/.test(u))    return { kofemType: 'CTETRA', propHint: 'solid',        cornerNodes: 4 }
+  if (/^C3D10[HM]?$/.test(u))return { kofemType: 'CTETRA', propHint: 'solid',        cornerNodes: 4 }  // quadratic → corner nodes only
+  if (/^C3D8[RIH]?$/.test(u))return { kofemType: 'CHEXA',  propHint: 'solid',        cornerNodes: 8 }
+  if (/^C3D20[RH]?$/.test(u))return { kofemType: 'CHEXA',  propHint: 'solid',        cornerNodes: 8 }  // quadratic → corner nodes only
+  if (/^C3D6H?$/.test(u))    return { kofemType: 'CPENTA', propHint: 'solid',        cornerNodes: 6 }
+  if (u === 'C3D5')           return { kofemType: 'CPYRAM', propHint: 'solid',        cornerNodes: 5 }
+  // 2-D plane (quadratic variants: first 3/4 nodes are corners in Abaqus ordering)
+  if (/^CPS3$/.test(u))      return { kofemType: 'CTRIA3', propHint: 'plane_stress', cornerNodes: 3 }
+  if (/^CPS6$/.test(u))      return { kofemType: 'CTRIA3', propHint: 'plane_stress', cornerNodes: 3 }
+  if (/^CPE3H?$/.test(u))    return { kofemType: 'CTRIA3', propHint: 'plane_strain', cornerNodes: 3 }
+  if (/^CPE6H?$/.test(u))    return { kofemType: 'CTRIA3', propHint: 'plane_strain', cornerNodes: 3 }
+  if (/^CPS4R?$/.test(u))    return { kofemType: 'CQUAD4', propHint: 'plane_stress', cornerNodes: 4 }
+  if (/^CPE4[RH]?$/.test(u)) return { kofemType: 'CQUAD4', propHint: 'plane_strain', cornerNodes: 4 }
+  // Shell
+  if (/^S3R?$|^STRI3$/.test(u)) return { kofemType: 'CTRIA3', propHint: 'shell', cornerNodes: 3 }
+  if (/^S4R?[5]?$/.test(u))     return { kofemType: 'CQUAD4', propHint: 'shell', cornerNodes: 4 }
+  // Beam: B31 = 2-node linear, B32 = 3-node quadratic (endpoints at indices 0 and 2)
+  if (/^B31R?$/.test(u))     return { kofemType: 'CBAR', propHint: 'beam', cornerNodes: 2 }
+  if (/^B32R?$/.test(u))     return { kofemType: 'CBAR', propHint: 'beam', cornerNodes: 2, cornerIndices: [0, 2] }
+  if (/^B33R?$/.test(u))     return { kofemType: 'CBAR', propHint: 'beam', cornerNodes: 2, cornerIndices: [0, 3] }
   return null
 }
 
@@ -170,11 +188,12 @@ export function parseAbaqus(inp: string): ParsedModel {
     const parts = line.split(',').map(s => s.trim())
 
     if (kw === 'NODE') {
-      if (parts.length >= 4) {
+      // Accept 2-D nodes (id,x,y) and 3-D nodes (id,x,y,z); default z=0
+      if (parts.length >= 3) {
         const id = parseInt(parts[0])
         const x = parseFloat(parts[1])
         const y = parseFloat(parts[2])
-        const z = parseFloat(parts[3])
+        const z = parts.length >= 4 ? parseFloat(parts[3]) : 0
         if (!isNaN(id)) nodes.push({ id, x: x || 0, y: y || 0, z: z || 0 })
       }
 
@@ -192,7 +211,11 @@ export function parseAbaqus(inp: string): ParsedModel {
         const mapped = mapAbaqusElement(params['TYPE'] || '')
         if (mapped) {
           const id = parseInt(ps[0])
-          const nodeIds = ps.slice(1).map(Number).filter(n => !isNaN(n))
+          const allNodeIds = ps.slice(1).map(Number).filter(n => !isNaN(n))
+          // Down-convert higher-order elements to their linear counterparts
+          const nodeIds = mapped.cornerIndices
+            ? mapped.cornerIndices.map(ci => allNodeIds[ci]).filter(n => n !== undefined)
+            : allNodeIds.slice(0, mapped.cornerNodes)
           elements.push({ id, type: mapped.kofemType, nodeIds, propertyId: 0 })
           elemHints.set(id, mapped.propHint)
           const elset = (params['ELSET'] || '').toUpperCase()
@@ -298,7 +321,11 @@ export function parseAbaqus(inp: string): ParsedModel {
   const elsetToPropId = new Map<string, number>()
 
   for (const sec of sectionDefs) {
-    const matId = matNameToId.get(sec.matName) || 1
+    const matId = matNameToId.get(sec.matName)
+    if (matId === undefined) {
+      console.warn(`[parseAbaqus] Section references unknown material "${sec.matName}" — skipping section for elset "${sec.elset}"`)
+      continue
+    }
     const propId = propIdCounter++
     elsetToPropId.set(sec.elset, propId)
 
@@ -329,14 +356,16 @@ export function parseAbaqus(inp: string): ParsedModel {
     for (const elset of elemSets.keys()) elsetToPropId.set(elset, 1)
   }
 
-  // Assign property IDs to elements
-  for (const el of elements) {
-    outer: for (const [elsetName, propId] of elsetToPropId) {
-      for (const eid of elemSets.get(elsetName) ?? []) {
-        if (eid === el.id) { el.propertyId = propId; break outer }
-      }
+  // Build a direct eid → propId map (O(total_set_size)) then assign in O(E)
+  const elemToPropId = new Map<number, number>()
+  for (const [elsetName, propId] of elsetToPropId) {
+    for (const eid of elemSets.get(elsetName) ?? []) {
+      elemToPropId.set(eid, propId)
     }
-    if (el.propertyId === 0) el.propertyId = properties[0]?.id ?? 1
+  }
+  const fallbackPropId = properties[0]?.id ?? 1
+  for (const el of elements) {
+    el.propertyId = elemToPropId.get(el.id) ?? fallbackPropId
   }
 
   return { nodes, elements, materials, properties, constraints, loads, modelName }

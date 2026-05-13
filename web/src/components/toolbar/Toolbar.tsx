@@ -83,7 +83,7 @@ export function Toolbar() {
         style={{ display: 'none' }}
         onChange={handleFileChange}
       />
-      <button className={styles.btn} onClick={handleImportClick} title="Import Abaqus INP file (*.inp)">
+      <button className={styles.btn} onClick={handleImportClick} disabled={isRunning} title="Import Abaqus INP file (*.inp)">
         Import
       </button>
       <button className={styles.btn} title="Export results" disabled>
@@ -94,7 +94,7 @@ export function Toolbar() {
       <button className={`${styles.btn} ${styles.primary}`} onClick={handleSolve} disabled={isRunning}>
         {isRunning ? 'Solving…' : 'Solve'}
       </button>
-      <button className={styles.btn} onClick={reset}>
+      <button className={styles.btn} onClick={reset} disabled={isRunning}>
         Reset
       </button>
     </div>
