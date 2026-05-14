@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test'
 import path from 'path'
 
-const STEP_FILE = path.join(__dirname, '../../test_files/new_bracket_2.stp')
+// Playwright is invoked from web/, so cwd is web/ and the STEP file lives one level up
+const STEP_FILE = path.resolve('..', 'test_files', 'new_bracket_2.stp')
 
 test('capture app after loading STEP file with fit view', async ({ page }) => {
   await page.goto('/')
