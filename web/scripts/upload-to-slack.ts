@@ -3,20 +3,22 @@
  * Upload screenshots to Slack
  *
  * Usage:
- *   SLACK_BOT_TOKEN=xoxb-... SLACK_CHANNEL=C0123456789 npx tsx scripts/upload-to-slack.ts [screenshot-path]
+ *   SLACK_BOT_TOKEN=xoxb-... npx tsx scripts/upload-to-slack.ts [screenshot-path]
  *
  * Environment variables:
- *   SLACK_BOT_TOKEN - Bot token with files:write and chat:write scopes
- *   SLACK_CHANNEL   - Channel ID to post to (e.g., C0123456789)
+ *   SLACK_BOT_TOKEN - Bot token with files:write, chat:write, and channels:read scopes
+ *   SLACK_CHANNEL   - (Optional) Channel ID override (e.g., C0123456789)
  *
  * If no screenshot path is provided, reads from screenshots/latest.json
+ * Default channel: product-showcases
  */
 
 import * as fs from 'fs'
 import * as path from 'path'
 
 const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN
-const SLACK_CHANNEL = process.env.SLACK_CHANNEL
+const SLACK_CHANNEL_OVERRIDE = process.env.SLACK_CHANNEL
+const DEFAULT_CHANNEL_NAME = 'product-showcases'
 
 interface LatestManifest {
   fullPage: string
@@ -24,12 +26,53 @@ interface LatestManifest {
   timestamp: string
 }
 
-async function uploadFileToSlack(filePath: string, comment: string): Promise<string> {
+interface SlackChannel {
+  id: string
+  name: string
+}
+
+async function findChannelByName(channelName: string): Promise<string> {
+  let cursor: string | undefined
+
+  do {
+    const params = new URLSearchParams({ types: 'public_channel,private_channel', limit: '200' })
+    if (cursor) params.set('cursor', cursor)
+
+    const response = await fetch(`https://slack.com/api/conversations.list?${params}`, {
+      headers: { 'Authorization': `Bearer ${SLACK_BOT_TOKEN}` },
+    })
+
+    const data = await response.json() as {
+      ok: boolean
+      channels?: SlackChannel[]
+      response_metadata?: { next_cursor?: string }
+      error?: string
+    }
+
+    if (!data.ok) {
+      throw new Error(`Failed to list channels: ${data.error}`)
+    }
+
+    const match = data.channels?.find(c => c.name === channelName)
+    if (match) return match.id
+
+    cursor = data.response_metadata?.next_cursor
+  } while (cursor)
+
+  throw new Error(`Channel "${channelName}" not found. Make sure the bot is added to the channel.`)
+}
+
+async function getChannelId(): Promise<string> {
+  if (SLACK_CHANNEL_OVERRIDE) {
+    return SLACK_CHANNEL_OVERRIDE
+  }
+  console.log(`Looking up channel: ${DEFAULT_CHANNEL_NAME}`)
+  return findChannelByName(DEFAULT_CHANNEL_NAME)
+}
+
+async function uploadFileToSlack(filePath: string, comment: string, channelId: string): Promise<string> {
   if (!SLACK_BOT_TOKEN) {
     throw new Error('SLACK_BOT_TOKEN environment variable is required')
-  }
-  if (!SLACK_CHANNEL) {
-    throw new Error('SLACK_CHANNEL environment variable is required')
   }
 
   const fileContent = fs.readFileSync(filePath)
@@ -72,7 +115,7 @@ async function uploadFileToSlack(filePath: string, comment: string): Promise<str
     },
     body: JSON.stringify({
       files: [{ id: urlData.file_id, title: fileName }],
-      channel_id: SLACK_CHANNEL,
+      channel_id: channelId,
       initial_comment: comment,
     }),
   })
@@ -112,6 +155,9 @@ async function main() {
     comment = `KoFEM Screenshot (${manifest.timestamp})`
   }
 
+  const channelId = await getChannelId()
+  console.log(`Uploading to channel: ${channelId}`)
+
   for (const filePath of filesToUpload) {
     if (!fs.existsSync(filePath)) {
       console.error(`File not found: ${filePath}`)
@@ -120,7 +166,7 @@ async function main() {
 
     console.log(`Uploading ${filePath}...`)
     try {
-      const fileId = await uploadFileToSlack(filePath, comment)
+      const fileId = await uploadFileToSlack(filePath, comment, channelId)
       console.log(`Uploaded successfully! File ID: ${fileId}`)
     } catch (error) {
       console.error(`Failed to upload ${filePath}:`, error)
