@@ -21,6 +21,6 @@ pub use geom::{Point2, Point3};
 pub use quality::refine;
 pub use triangulate::{triangulate, Mesh2D, Triangle};
 pub use volume::{
-    icosphere, tet_circumsphere, tet_signed_volume, tet_signed_volume_mesh, volume_mesh, MeshError,
-    SurfaceMesh, VolumeMeshOptions,
+    bowyer_watson_3d, icosphere, tet_circumsphere, tet_signed_volume, tet_signed_volume_mesh,
+    volume_mesh, MeshError, SurfaceMesh, VolumeMeshOptions,
 };
