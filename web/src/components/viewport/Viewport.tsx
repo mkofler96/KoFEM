@@ -1,6 +1,7 @@
 import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Grid, GizmoHelper, GizmoViewport } from '@react-three/drei'
 import { MeshScene } from './MeshScene'
+import { FitCamera } from './FitCamera'
 import { useModelStore } from '../../store/modelStore'
 
 export function Viewport() {
@@ -24,6 +25,7 @@ export function Viewport() {
         sectionColor="#4a4a80"
       />
       <OrbitControls makeDefault enabled={!pickMode} />
+      <FitCamera />
       <GizmoHelper alignment="bottom-right" margin={[72, 72]}>
         <GizmoViewport labelColor="white" axisHeadScale={1} />
       </GizmoHelper>

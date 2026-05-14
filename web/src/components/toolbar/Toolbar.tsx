@@ -12,6 +12,7 @@ export function Toolbar() {
   const setResult = useModelStore(s => s.setResult)
   const loadModel = useModelStore(s => s.loadModel)
   const setStepSurface = useModelStore(s => s.setStepSurface)
+  const triggerFitView = useModelStore(s => s.triggerFitView)
 
   const [isParsing, setIsParsing] = useState(false)
   const [isImportingStep, setIsImportingStep] = useState(false)
@@ -103,6 +104,9 @@ export function Toolbar() {
       </button>
       <button className={styles.btn} title="Export results" disabled>
         Export
+      </button>
+      <button className={styles.btn} onClick={triggerFitView} title="Fit all geometry into view (isometric)">
+        Fit View
       </button>
       <span className={styles.modelName}>{modelName}</span>
       <div className={styles.divider} />
