@@ -47,6 +47,17 @@
             "statusMessage": "Formatting…"
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "f=$(jq -r '.tool_input.file_path'); case \"$f\" in *crates/kofem-geom*.rs) out=$(cargo clippy -p kofem-geom 2>&1); if echo \"$out\" | grep -qE \"^(warning|error)\"; then printf \"%s\" \"$out\" | jq -Rs '{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":(\"Clippy (kofem-geom):\\n\" + .)}}'; fi ;; esac 2>/dev/null || true",
+            "statusMessage": "Running clippy…",
+            "timeout": 60
+          }
+        ]
       }
     ]
   }
