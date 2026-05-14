@@ -4,7 +4,7 @@ pub mod surface;
 pub use curve::{curve_from_step, BSplineCurveWithKnots, Circle, Curve, Line};
 pub use surface::{
     surface_from_step, BSplineSurfaceWithKnots, ConicalSurface, CylindricalSurface, Plane,
-    SphericalSurface, Surface, SurfaceOfLinearExtrusion, ToroidalSurface,
+    SphericalSurface, Surface, SurfaceOfLinearExtrusion, SurfaceOfRevolution, ToroidalSurface,
 };
 
 use crate::step::parser::{Arg, StepEntity, StepFile};
@@ -39,6 +39,13 @@ impl Axis2 {
     }
 }
 
+/// Axis from AXIS1_PLACEMENT (origin + direction, no x_ref).
+#[derive(Debug, Clone)]
+pub struct Axis1 {
+    pub origin: [f64; 3],
+    pub direction: [f64; 3],
+}
+
 // ── math helpers ──────────────────────────────────────────────────────────────
 
 pub(crate) fn cross(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
@@ -67,6 +74,22 @@ pub(crate) fn sub(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
 
 pub(crate) fn scale(v: [f64; 3], s: f64) -> [f64; 3] {
     [v[0] * s, v[1] * s, v[2] * s]
+}
+
+pub(crate) fn dot(a: [f64; 3], b: [f64; 3]) -> f64 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+
+/// Rodrigues' rotation: rotate vector `v` around unit axis `k` by angle `theta`.
+pub(crate) fn rodrigues(v: [f64; 3], k: [f64; 3], theta: f64) -> [f64; 3] {
+    let c = theta.cos();
+    let s = theta.sin();
+    let k_dot_v = dot(k, v);
+    let k_cross_v = cross(k, v);
+    add(
+        add(scale(v, c), scale(k_cross_v, s)),
+        scale(k, k_dot_v * (1.0 - c)),
+    )
 }
 
 // ── STEP entity helpers ───────────────────────────────────────────────────────
@@ -172,6 +195,22 @@ pub(crate) fn axis2_placement(file: &StepFile, id: u64) -> Result<Axis2, GeomErr
     ]);
 
     Ok(Axis2 { origin, z, x })
+}
+
+/// Parse AXIS1_PLACEMENT into Axis1.
+pub(crate) fn axis1_placement(file: &StepFile, id: u64) -> Result<Axis1, GeomError> {
+    let e = get_entity(file, id)?;
+    // AXIS1_PLACEMENT(label, location_ref, axis_ref)
+    let origin_id = get_ref(e, 1)?;
+    let origin = point3(file, origin_id)?;
+
+    let direction = match get_arg(e, 2)? {
+        Arg::Ref(axis_id) => normalize(point3(file, *axis_id)?),
+        Arg::Omitted => [0.0, 0.0, 1.0],
+        _ => return Err(GeomError::BadArg(id, 2)),
+    };
+
+    Ok(Axis1 { origin, direction })
 }
 
 /// Expand (multiplicities, knot_values) into the full repeated knot vector.
