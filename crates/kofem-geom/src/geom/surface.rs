@@ -2,8 +2,9 @@ use std::f64::consts::PI;
 
 use super::curve::{curve_from_step, Curve};
 use super::{
-    add, arg_as_ref, axis2_placement, cross, de_boor_1d, expand_knots, get_arg, get_entity,
-    get_list, get_real, get_ref, normalize, point3, scale, sub, Axis2, GeomError,
+    add, arg_as_ref, axis1_placement, axis2_placement, cross, de_boor_1d, expand_knots, get_arg,
+    get_entity, get_list, get_real, get_ref, normalize, point3, rodrigues, scale, sub, Axis1,
+    Axis2, GeomError,
 };
 use crate::step::parser::{Arg, StepFile};
 
@@ -283,6 +284,42 @@ impl Surface for SurfaceOfLinearExtrusion {
     }
 }
 
+// ── SurfaceOfRevolution ───────────────────────────────────────────────────────
+
+pub struct SurfaceOfRevolution {
+    pub swept_curve: Box<dyn Curve>,
+    pub axis: Axis1,
+}
+
+impl Surface for SurfaceOfRevolution {
+    fn point(&self, u: f64, v: f64) -> [f64; 3] {
+        // u = angle around axis, v = parameter along swept curve
+        // P(u, v) = rotate(swept_curve.point(v) - axis.origin, axis.direction, u) + axis.origin
+        let curve_pt = self.swept_curve.point(v);
+        let rel = sub(curve_pt, self.axis.origin);
+        let rotated = rodrigues(rel, self.axis.direction, u);
+        add(self.axis.origin, rotated)
+    }
+
+    fn normal(&self, u: f64, v: f64) -> [f64; 3] {
+        // Numerical normal via central finite differences
+        let (v0, v1) = self.v_bounds();
+        let du = 1e-6;
+        let dv = (v1 - v0).abs().max(1.0) * 1e-6;
+        let pu = sub(self.point(u + du, v), self.point(u - du, v));
+        let pv = sub(self.point(u, v + dv), self.point(u, v - dv));
+        normalize(cross(pu, pv))
+    }
+
+    fn u_bounds(&self) -> (f64, f64) {
+        (0.0, 2.0 * PI)
+    }
+
+    fn v_bounds(&self) -> (f64, f64) {
+        self.swept_curve.t_bounds()
+    }
+}
+
 // ── from_step builder ─────────────────────────────────────────────────────────
 
 pub fn surface_from_step(id: u64, file: &StepFile) -> Result<Box<dyn Surface>, GeomError> {
@@ -400,6 +437,15 @@ pub fn surface_from_step(id: u64, file: &StepFile) -> Result<Box<dyn Surface>, G
             }))
         }
 
+        "SURFACE_OF_REVOLUTION" => {
+            // SURFACE_OF_REVOLUTION(label, swept_curve_ref, axis1_placement_ref)
+            let curve_id = get_ref(e, 1)?;
+            let axis_id = get_ref(e, 2)?;
+            let swept_curve = curve_from_step(curve_id, file)?;
+            let axis = axis1_placement(file, axis_id)?;
+            Ok(Box::new(SurfaceOfRevolution { swept_curve, axis }))
+        }
+
         other => Err(GeomError::Unsupported(other.to_string(), id)),
     }
 }
@@ -500,5 +546,56 @@ mod tests {
         assert!((p[0] - 12.).abs() < 1e-12);
         assert!(p[1].abs() < 1e-12);
         assert!(p[2].abs() < 1e-12);
+    }
+
+    #[test]
+    fn revolution_line_around_z_gives_cylinder() {
+        use super::super::curve::Line;
+
+        // Vertical line at x=5 (from z=0 to z=10)
+        let line = Line {
+            origin: [5., 0., 0.],
+            direction: [0., 0., 1.],
+        };
+        let surf = SurfaceOfRevolution {
+            swept_curve: Box::new(line),
+            axis: Axis1 {
+                origin: [0., 0., 0.],
+                direction: [0., 0., 1.],
+            },
+        };
+
+        // At u=0, v=0: point should be at (5, 0, 0)
+        let p0 = surf.point(0., 0.);
+        assert!((p0[0] - 5.).abs() < 1e-12, "p0[0]={}", p0[0]);
+        assert!(p0[1].abs() < 1e-12, "p0[1]={}", p0[1]);
+        assert!(p0[2].abs() < 1e-12, "p0[2]={}", p0[2]);
+
+        // At u=π/2, v=0: point should be at (0, 5, 0) - rotated 90° around Z
+        let p1 = surf.point(PI / 2., 0.);
+        assert!(p1[0].abs() < 1e-12, "p1[0]={}", p1[0]);
+        assert!((p1[1] - 5.).abs() < 1e-12, "p1[1]={}", p1[1]);
+        assert!(p1[2].abs() < 1e-12, "p1[2]={}", p1[2]);
+
+        // At u=π, v=0: point should be at (-5, 0, 0)
+        let p2 = surf.point(PI, 0.);
+        assert!((p2[0] + 5.).abs() < 1e-12, "p2[0]={}", p2[0]);
+        assert!(p2[1].abs() < 1e-12, "p2[1]={}", p2[1]);
+        assert!(p2[2].abs() < 1e-12, "p2[2]={}", p2[2]);
+
+        // At u=0, v=3: point should be at (5, 0, 3) - moved along the line
+        let p3 = surf.point(0., 3.);
+        assert!((p3[0] - 5.).abs() < 1e-12, "p3[0]={}", p3[0]);
+        assert!(p3[1].abs() < 1e-12, "p3[1]={}", p3[1]);
+        assert!((p3[2] - 3.).abs() < 1e-12, "p3[2]={}", p3[2]);
+
+        // All points should be at radius 5 from the Z-axis (cylinder property)
+        for u in [0.0, PI / 4., PI / 2., PI, 3. * PI / 2.] {
+            for v in [0., 2., 5., 10.] {
+                let p = surf.point(u, v);
+                let r = (p[0] * p[0] + p[1] * p[1]).sqrt();
+                assert!((r - 5.).abs() < 1e-12, "radius at u={}, v={}: {}", u, v, r);
+            }
+        }
     }
 }
