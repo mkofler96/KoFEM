@@ -15,7 +15,9 @@
 
 import * as fs from 'fs'
 import * as path from 'path'
+import { fileURLToPath } from 'url'
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN
 const SLACK_CHANNEL_OVERRIDE = process.env.SLACK_CHANNEL
 const DEFAULT_CHANNEL_NAME = 'product-showcases'
@@ -142,17 +144,16 @@ async function main() {
       comment = commentArg.split('=').slice(1).join('=')
     }
   } else {
-    // Read from latest.json manifest
-    const manifestPath = path.resolve(__dirname, '../screenshots/latest.json')
-    if (!fs.existsSync(manifestPath)) {
-      console.error('No screenshot manifest found at screenshots/latest.json')
+    // Look for screenshot directly
+    const screenshotPath = path.resolve(__dirname, '../screenshots/solve-result.png')
+    if (!fs.existsSync(screenshotPath)) {
+      console.error('No screenshot found at screenshots/solve-result.png')
       console.error('Run the screenshot test first: bun run test:screenshot')
       process.exit(1)
     }
 
-    const manifest: LatestManifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'))
-    filesToUpload = [manifest.viewport]
-    comment = `KoFEM Screenshot (${manifest.timestamp})`
+    filesToUpload = [screenshotPath]
+    comment = `KoFEM Screenshot (${new Date().toISOString()})`
   }
 
   const channelId = await getChannelId()
