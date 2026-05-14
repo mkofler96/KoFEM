@@ -60,6 +60,11 @@ export interface SolverResult {
   vonMises?: Float64Array
 }
 
+export interface StepSurfaceMesh {
+  points: [number, number, number][]
+  triangles: [number, number, number][]
+}
+
 // ── Geometry ──────────────────────────────────────────────────────────────────
 
 export interface BoxGeometry {
@@ -166,6 +171,7 @@ export interface ModelSnapshot {
 interface ModelState extends ModelSnapshot {
   modelName: string
   result: SolverResult | null
+  stepSurface: StepSurfaceMesh | null
   isRunning: boolean
   isMeshing: boolean
   geometries: BoxGeometry[]
@@ -173,6 +179,8 @@ interface ModelState extends ModelSnapshot {
   nextMatId: number
   pickMode: 'bc' | 'load' | null
   selectedFace: FaceSelection | null
+
+  setStepSurface(mesh: StepSurfaceMesh | null): void
 
   // Solver
   addNode(node: Node): void
@@ -213,6 +221,7 @@ export const useModelStore = create<ModelState>()(
     ...cantilever,
     modelName: 'Cantilever Beam',
     result: null,
+    stepSurface: null,
     isRunning: false,
     isMeshing: false,
     geometries: [DEFAULT_GEOMETRY],
@@ -220,6 +229,8 @@ export const useModelStore = create<ModelState>()(
     nextMatId: 2,
     pickMode: null,
     selectedFace: null,
+
+    setStepSurface: (mesh) => set(s => { s.stepSurface = mesh }),
 
     addNode: (node) => set(s => { s.nodes.push(node) }),
     addElement: (el) => set(s => { s.elements.push(el) }),
@@ -265,6 +276,7 @@ export const useModelStore = create<ModelState>()(
       s.constraints = c.constraints; s.loads = c.loads
       s.modelName = 'Cantilever Beam'
       s.result = null
+      s.stepSurface = null
       s.geometries = [DEFAULT_GEOMETRY]
       s.nextGeomId = 2
       s.nextMatId = 2

@@ -7,6 +7,8 @@
 
 use std::f64::consts::PI;
 
+use serde::Serialize;
+
 use kofem_mesh::geom::Point2;
 use kofem_mesh::triangulate::triangulate;
 
@@ -19,7 +21,7 @@ use crate::step::topology::{BRep, TopoEdge, TopoFace};
 
 // ── Public types ───────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct SurfaceMesh {
     pub points: Vec<[f64; 3]>,
     pub triangles: Vec<[usize; 3]>,

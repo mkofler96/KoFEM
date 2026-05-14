@@ -1,3 +1,6 @@
+use kofem_geom::step::parser::parse as parse_step_text;
+use kofem_geom::step::topology::BRep;
+use kofem_geom::tess::{tessellate, TessOptions};
 use kofem_mesh::geom::Point2;
 use kofem_mesh::{extrude, refine, triangulate};
 
@@ -257,6 +260,21 @@ pub fn mesh_polygon(
         );
     }
 
+    serde_json::to_string(&mesh).map_err(|e| JsError::new(&e.to_string()))
+}
+
+/// Parse and tessellate a STEP file into a surface triangle mesh.
+///
+/// Returns a JSON object `{ points: [[x,y,z], …], triangles: [[a,b,c], …] }`.
+#[wasm_bindgen]
+pub fn tessellate_step(step_text: &str, max_edge_len: f64) -> Result<String, JsError> {
+    let file = parse_step_text(step_text).map_err(|e| JsError::new(&e.to_string()))?;
+    let brep = BRep::extract(&file).map_err(|e| JsError::new(&e.to_string()))?;
+    let opts = TessOptions {
+        max_edge_len,
+        ..TessOptions::default()
+    };
+    let mesh = tessellate(&brep, &file, opts).map_err(|e| JsError::new(&e.to_string()))?;
     serde_json::to_string(&mesh).map_err(|e| JsError::new(&e.to_string()))
 }
 

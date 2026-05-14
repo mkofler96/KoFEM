@@ -7,7 +7,8 @@ test('page loads with toolbar and viewport', async ({ page }) => {
   await page.goto('/')
 
   await expect(page.getByRole('button', { name: 'Solve' })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Import' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Import INP' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Import STEP' })).toBeVisible()
   expect(errors).toHaveLength(0)
 })
 
