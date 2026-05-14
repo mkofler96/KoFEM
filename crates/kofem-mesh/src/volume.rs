@@ -179,9 +179,7 @@ pub fn bowyer_watson_3d(pts: &[[f64; 3]]) -> Vec<[usize; 4]> {
     let mut tets: Vec<[usize; 4]> = vec![st];
 
     // Insert each input point one at a time.
-    for i in 0..n {
-        let p = pts[i];
-
+    for (i, &p) in pts.iter().enumerate() {
         // Classify: tets whose circumsphere contains p → cavity; rest → outside.
         // The small tolerance robustly captures co-spherical points.
         let mut cavity: Vec<[usize; 4]> = Vec::new();
