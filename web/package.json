@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "playwright test",
     "test:ui": "playwright test --ui",
-    "test:screenshot": "playwright test screenshot.spec.ts",
+    "test:screenshot": "RUN_SCREENSHOT_TESTS=1 playwright test screenshot.spec.ts",
     "upload:slack": "npx tsx scripts/upload-to-slack.ts",
     "screenshot:slack": "bun run test:screenshot && bun run upload:slack"
   },
