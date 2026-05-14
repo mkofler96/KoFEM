@@ -56,6 +56,12 @@ pub enum TessError {
 /// No surface evaluation — just takes the outer-loop start vertices and fans
 /// triangles from vertex 0.  Produces a faceted but always-valid mesh.
 pub fn fan_tessellate(face: &TopoFace) -> SurfaceMesh {
+    let mesh = fan_raw(face);
+    flip_winding_if(mesh, !face.outer_loop_orientation)
+}
+
+/// Raw fan triangulation without orientation correction.
+fn fan_raw(face: &TopoFace) -> SurfaceMesh {
     let points: Vec<[f64; 3]> = face.outer_loop.iter().map(|e| e.start).collect();
     let n = points.len();
     if n < 3 {
@@ -66,6 +72,16 @@ pub fn fan_tessellate(face: &TopoFace) -> SurfaceMesh {
     }
     let triangles = (1..n - 1).map(|i| [0, i, i + 1]).collect();
     SurfaceMesh { points, triangles }
+}
+
+/// Flip `[a,b,c]` → `[a,c,b]` on every triangle when `flip` is true.
+fn flip_winding_if(mut mesh: SurfaceMesh, flip: bool) -> SurfaceMesh {
+    if flip {
+        for tri in &mut mesh.triangles {
+            tri.swap(1, 2);
+        }
+    }
+    mesh
 }
 
 /// Tessellate the complete B-rep into a single (approximately) watertight mesh.
@@ -102,29 +118,34 @@ pub fn tessellate(
 // ── Face tessellation ──────────────────────────────────────────────────────────
 
 fn tessellate_face(face: &TopoFace, file: &StepFile, max_edge_len: f64) -> SurfaceMesh {
+    let raw = tessellate_face_raw(face, file, max_edge_len);
+    flip_winding_if(raw, !face.outer_loop_orientation)
+}
+
+fn tessellate_face_raw(face: &TopoFace, file: &StepFile, max_edge_len: f64) -> SurfaceMesh {
     let boundary = sample_boundary_3d(&face.outer_loop, file, max_edge_len);
 
     if boundary.len() < 3 {
-        return fan_tessellate(face);
+        return fan_raw(face);
     }
 
     let normal = match face_normal(&boundary) {
         Some(n) => n,
-        None => return fan_tessellate(face),
+        None => return fan_raw(face),
     };
 
     let (pts2d, origin, x_axis, y_axis) = project_to_2d(&boundary, normal);
 
     let pts2d = deduplicate_2d(pts2d);
     if pts2d.len() < 3 {
-        return fan_tessellate(face);
+        return fan_raw(face);
     }
 
     let pts2d = ensure_ccw(pts2d);
 
     // Guard: polygon must have non-negligible area.
     if polygon_area_2d(&pts2d).abs() < 1e-20 {
-        return fan_tessellate(face);
+        return fan_raw(face);
     }
 
     let mesh2d = triangulate(&pts2d);
