@@ -9,7 +9,7 @@ use std::f64::consts::PI;
 
 use serde::Serialize;
 
-use kofem_mesh::geom::Point2;
+use kofem_mesh::geom::{point_in_polygon, Point2};
 use kofem_mesh::triangulate::triangulate;
 
 use crate::geom::curve::curve_from_step;
@@ -148,7 +148,37 @@ fn tessellate_face_raw(face: &TopoFace, file: &StepFile, max_edge_len: f64) -> S
         return fan_raw(face);
     }
 
-    let mesh2d = triangulate(&pts2d);
+    // Project each inner loop (hole) onto the same 2D plane.
+    let holes2d: Vec<Vec<Point2>> = face
+        .inner_loops
+        .iter()
+        .filter_map(|inner_edges| {
+            let inner_3d = sample_boundary_3d(inner_edges, file, max_edge_len);
+            if inner_3d.len() < 3 {
+                return None;
+            }
+            Some(
+                inner_3d
+                    .iter()
+                    .map(|&p| {
+                        let d = sub(p, origin);
+                        Point2::new(dot3(d, x_axis), dot3(d, y_axis))
+                    })
+                    .collect(),
+            )
+        })
+        .collect();
+
+    let mut mesh2d = triangulate(&pts2d);
+
+    // Reject triangles whose centroid falls inside a hole polygon.
+    if !holes2d.is_empty() {
+        let pts = mesh2d.points.clone();
+        mesh2d.triangles.retain(|t| {
+            let c = t.centroid(&pts);
+            !holes2d.iter().any(|hole| point_in_polygon(c, hole))
+        });
+    }
 
     let points: Vec<[f64; 3]> = mesh2d
         .points

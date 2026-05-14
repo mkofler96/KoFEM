@@ -323,6 +323,93 @@ fn roundtrip_step_bound_t_normals() {
     }
 }
 
+// ── hole tessellation tests ────────────────────────────────────────────────────
+
+/// 1×1 outer square with a 0.2×0.2 inner square hole centred at (0.5, 0.5).
+/// After tessellation no triangle centroid must fall inside the hole region.
+#[test]
+fn square_with_square_hole_excludes_hole_region() {
+    let hole_min = 0.4_f64;
+    let hole_max = 0.6_f64;
+
+    let face = TopoFace {
+        surface_id: 0,
+        same_sense: true,
+        outer_loop_orientation: true,
+        outer_loop: vec![
+            TopoEdge {
+                curve_id: 0,
+                start: [0.0, 0.0, 0.0],
+                end: [1.0, 0.0, 0.0],
+                reversed: false,
+            },
+            TopoEdge {
+                curve_id: 0,
+                start: [1.0, 0.0, 0.0],
+                end: [1.0, 1.0, 0.0],
+                reversed: false,
+            },
+            TopoEdge {
+                curve_id: 0,
+                start: [1.0, 1.0, 0.0],
+                end: [0.0, 1.0, 0.0],
+                reversed: false,
+            },
+            TopoEdge {
+                curve_id: 0,
+                start: [0.0, 1.0, 0.0],
+                end: [0.0, 0.0, 0.0],
+                reversed: false,
+            },
+        ],
+        inner_loops: vec![vec![
+            TopoEdge {
+                curve_id: 0,
+                start: [hole_min, hole_min, 0.0],
+                end: [hole_min, hole_max, 0.0],
+                reversed: false,
+            },
+            TopoEdge {
+                curve_id: 0,
+                start: [hole_min, hole_max, 0.0],
+                end: [hole_max, hole_max, 0.0],
+                reversed: false,
+            },
+            TopoEdge {
+                curve_id: 0,
+                start: [hole_max, hole_max, 0.0],
+                end: [hole_max, hole_min, 0.0],
+                reversed: false,
+            },
+            TopoEdge {
+                curve_id: 0,
+                start: [hole_max, hole_min, 0.0],
+                end: [hole_min, hole_min, 0.0],
+                reversed: false,
+            },
+        ]],
+    };
+
+    let file = kofem_geom::step::StepFile::new();
+    let brep = kofem_geom::step::BRep { faces: vec![face] };
+    let mesh = tessellate(&brep, &file, TessOptions::default()).unwrap();
+
+    assert!(!mesh.triangles.is_empty(), "mesh must have triangles");
+
+    for &[a, b, c] in &mesh.triangles {
+        let pa = mesh.points[a];
+        let pb = mesh.points[b];
+        let pc = mesh.points[c];
+        let cx = (pa[0] + pb[0] + pc[0]) / 3.0;
+        let cy = (pa[1] + pb[1] + pc[1]) / 3.0;
+        let inside_hole = cx > hole_min && cx < hole_max && cy > hole_min && cy < hole_max;
+        assert!(
+            !inside_hole,
+            "triangle centroid ({cx:.4}, {cy:.4}) is inside the hole [{hole_min},{hole_max}]²"
+        );
+    }
+}
+
 // ── bracket regression tests ───────────────────────────────────────────────────
 
 #[test]
