@@ -8,3 +8,4 @@ description = "Geometry import/export for KoFEM (STEP, IGES, STL)"
 
 [dependencies]
 thiserror = { workspace = true }
+kofem-mesh = { workspace = true }
