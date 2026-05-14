@@ -80,17 +80,13 @@ pub fn fan_tessellate(face: &TopoFace) -> SurfaceMesh {
 pub fn tessellate(
     brep: &BRep,
     file: &StepFile,
-    _opts: TessOptions,
+    opts: TessOptions,
 ) -> Result<SurfaceMesh, TessError> {
-    // Fixed number of intermediate samples per edge; the max_edge_len option
-    // could be used for adaptive sampling, but 4 gives good quality here.
-    let n_per_edge = 4usize;
-
     let mut all_points: Vec<[f64; 3]> = Vec::new();
     let mut all_triangles: Vec<[usize; 3]> = Vec::new();
 
     for face in &brep.faces {
-        let face_mesh = tessellate_face(face, file, n_per_edge);
+        let face_mesh = tessellate_face(face, file, opts.max_edge_len);
         let offset = all_points.len();
         all_points.extend_from_slice(&face_mesh.points);
         for &[a, b, c] in &face_mesh.triangles {
@@ -105,8 +101,8 @@ pub fn tessellate(
 
 // ── Face tessellation ──────────────────────────────────────────────────────────
 
-fn tessellate_face(face: &TopoFace, file: &StepFile, n_per_edge: usize) -> SurfaceMesh {
-    let boundary = sample_boundary_3d(&face.outer_loop, file, n_per_edge);
+fn tessellate_face(face: &TopoFace, file: &StepFile, max_edge_len: f64) -> SurfaceMesh {
+    let boundary = sample_boundary_3d(&face.outer_loop, file, max_edge_len);
 
     if boundary.len() < 3 {
         return fan_tessellate(face);
@@ -148,26 +144,36 @@ fn tessellate_face(face: &TopoFace, file: &StepFile, n_per_edge: usize) -> Surfa
 
 /// Collect all outer-loop edges into a single ordered 3D polygon by sampling
 /// intermediate curve points between each edge's start and end vertices.
-fn sample_boundary_3d(edges: &[TopoEdge], file: &StepFile, n_per_edge: usize) -> Vec<[f64; 3]> {
-    let mut pts = Vec::with_capacity(edges.len() * (n_per_edge + 1));
+///
+/// `max_edge_len` controls density: edges are subdivided so segments stay ≤
+/// `max_edge_len`.  Closed curves (start ≈ end) fall back to 16 samples.
+fn sample_boundary_3d(edges: &[TopoEdge], file: &StepFile, max_edge_len: f64) -> Vec<[f64; 3]> {
+    let mut pts = Vec::with_capacity(edges.len() * 8);
 
     for edge in edges {
         pts.push(edge.start);
 
-        if n_per_edge > 0 {
-            let samples = sample_curve(
-                file,
-                edge.curve_id,
-                edge.start,
-                edge.end,
-                edge.reversed,
-                n_per_edge,
-            );
-            // samples[0] ≈ edge.start (already pushed); samples[last] ≈ edge.end
-            // (will be the next edge's start), so skip both endpoints.
-            if samples.len() > 2 {
-                pts.extend_from_slice(&samples[1..samples.len() - 1]);
-            }
+        let chord = dist3(edge.start, edge.end);
+        // Closed curves have chord ≈ 0; use a fixed minimum for full circles.
+        let n_intermediate = if chord < 1e-10 {
+            16usize
+        } else {
+            (chord / max_edge_len).ceil() as usize
+        }
+        .clamp(4, 64);
+
+        let samples = sample_curve(
+            file,
+            edge.curve_id,
+            edge.start,
+            edge.end,
+            edge.reversed,
+            n_intermediate,
+        );
+        // samples[0] ≈ edge.start (already pushed); samples[last] ≈ edge.end
+        // (will be the next edge's start), so skip both endpoints.
+        if samples.len() > 2 {
+            pts.extend_from_slice(&samples[1..samples.len() - 1]);
         }
     }
 
