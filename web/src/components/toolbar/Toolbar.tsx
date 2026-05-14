@@ -11,9 +11,12 @@ export function Toolbar() {
   const setRunning = useModelStore(s => s.setRunning)
   const setResult = useModelStore(s => s.setResult)
   const loadModel = useModelStore(s => s.loadModel)
+  const setStepSurface = useModelStore(s => s.setStepSurface)
 
   const [isParsing, setIsParsing] = useState(false)
-  const fileInputRef = { current: null as HTMLInputElement | null }
+  const [isImportingStep, setIsImportingStep] = useState(false)
+  const inpFileRef = { current: null as HTMLInputElement | null }
+  const stepFileRef = { current: null as HTMLInputElement | null }
 
   const handleSolve = () => {
     const state = useModelStore.getState()
@@ -31,11 +34,10 @@ export function Toolbar() {
       .finally(() => setRunning(false))
   }
 
-  const handleImportClick = () => {
-    fileInputRef.current?.click()
-  }
+  const handleImportInpClick = () => { inpFileRef.current?.click() }
+  const handleImportStepClick = () => { stepFileRef.current?.click() }
 
-  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+  const handleInpFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     e.target.value = ''
@@ -54,19 +56,50 @@ export function Toolbar() {
       .finally(() => { setIsParsing(false); setRunning(false) })
   }
 
+  const handleStepFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+    setIsImportingStep(true)
+    setRunning(true)
+    const text = await file.text()
+    sendToWorker<{ points: [number, number, number][]; triangles: [number, number, number][] }>(
+      'parse_step', { text }
+    )
+      .then(({ points, triangles }) => {
+        if (points.length === 0) {
+          alert('No geometry found in STEP file.')
+        } else {
+          setStepSurface({ points, triangles })
+        }
+      })
+      .catch(err => alert(`STEP import error: ${err.message}`))
+      .finally(() => { setIsImportingStep(false); setRunning(false) })
+  }
+
   const busy = isRunning || isMeshing
 
   return (
     <div className={styles.toolbar}>
       <input
-        ref={el => { fileInputRef.current = el }}
+        ref={el => { inpFileRef.current = el }}
         type="file"
         accept=".inp"
         style={{ display: 'none' }}
-        onChange={handleFileChange}
+        onChange={handleInpFileChange}
       />
-      <button className={styles.btn} onClick={handleImportClick} disabled={busy} title="Import Abaqus INP file (*.inp)">
-        {isParsing ? 'Parsing…' : 'Import'}
+      <input
+        ref={el => { stepFileRef.current = el }}
+        type="file"
+        accept=".stp,.step"
+        style={{ display: 'none' }}
+        onChange={handleStepFileChange}
+      />
+      <button className={styles.btn} onClick={handleImportInpClick} disabled={busy} title="Import Abaqus INP file (*.inp)">
+        {isParsing ? 'Parsing…' : 'Import INP'}
+      </button>
+      <button className={styles.btn} onClick={handleImportStepClick} disabled={busy} title="Import STEP geometry file (*.stp, *.step)">
+        {isImportingStep ? 'Importing…' : 'Import STEP'}
       </button>
       <button className={styles.btn} title="Export results" disabled>
         Export
@@ -74,7 +107,7 @@ export function Toolbar() {
       <span className={styles.modelName}>{modelName}</span>
       <div className={styles.divider} />
       <button className={`${styles.btn} ${styles.primary}`} onClick={handleSolve} disabled={busy}>
-        {isRunning && !isParsing ? 'Solving…' : 'Solve'}
+        {isRunning && !isParsing && !isImportingStep ? 'Solving…' : 'Solve'}
       </button>
       <button className={styles.btn} onClick={reset} disabled={busy}>
         Reset

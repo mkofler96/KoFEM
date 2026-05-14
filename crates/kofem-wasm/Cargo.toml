@@ -12,6 +12,7 @@ crate-type = ["cdylib"]
 [dependencies]
 kofem-core = { workspace = true, features = ["std", "serde"] }
 kofem-mesh = { workspace = true }
+kofem-geom = { path = "../kofem-geom" }
 wasm-bindgen = "0.2"
 serde = { workspace = true }
 serde-wasm-bindgen = "0.6"
@@ -21,4 +22,4 @@ console_error_panic_hook = "0.1"
 web-sys = { version = "0.3", features = ["console"] }
 
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = ["-Oz", "--enable-mutable-globals"]
+wasm-opt = false

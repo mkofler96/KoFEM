@@ -6,6 +6,7 @@ import init, {
   parse_inp_model,
   mesh_polygon,
   extrude_mesh,
+  tessellate_step,
 } from '../wasm/pkg/kofem_wasm'
 
 let initialized = false
@@ -39,6 +40,14 @@ self.onmessage = async (event: MessageEvent) => {
     } else if (type === 'parse') {
       const modelJson = parse_inp_model(payload.text)
       self.postMessage({ id, ok: true, model: JSON.parse(modelJson) })
+
+    } else if (type === 'parse_step') {
+      const meshJson = tessellate_step(payload.text, payload.maxEdgeLen ?? 5.0)
+      const mesh = JSON.parse(meshJson) as {
+        points: [number, number, number][]
+        triangles: [number, number, number][]
+      }
+      self.postMessage({ id, ok: true, points: mesh.points, triangles: mesh.triangles })
 
     } else if (type === 'mesh') {
       const geom = payload as BoxGeometry

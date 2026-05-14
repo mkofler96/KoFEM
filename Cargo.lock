@@ -117,6 +117,7 @@ name = "kofem-geom"
 version = "0.1.0"
 dependencies = [
  "kofem-mesh",
+ "serde",
  "thiserror",
 ]
 
@@ -142,6 +143,7 @@ dependencies = [
  "console_error_panic_hook",
  "js-sys",
  "kofem-core",
+ "kofem-geom",
  "kofem-mesh",
  "serde",
  "serde-wasm-bindgen",

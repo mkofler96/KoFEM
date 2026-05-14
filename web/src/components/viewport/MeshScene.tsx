@@ -78,6 +78,7 @@ export function MeshScene() {
   const constraints = useModelStore(s => s.constraints)
   const loads = useModelStore(s => s.loads)
   const result = useModelStore(s => s.result)
+  const stepSurface = useModelStore(s => s.stepSurface)
   const pickMode = useModelStore(s => s.pickMode)
   const selectedFace = useModelStore(s => s.selectedFace)
   const setSelectedFace = useModelStore(s => s.setSelectedFace)
@@ -277,7 +278,21 @@ export function MeshScene() {
     return n > 0 ? [x / n, y / n, z / n] : null
   }, [loads, nodeMap])
 
-  if (nodes.length === 0) {
+  const stepGeometry = useMemo(() => {
+    if (!stepSurface || stepSurface.triangles.length === 0) return null
+    const { points, triangles } = stepSurface
+    const positions = new Float32Array(triangles.length * 9)
+    let pi = 0
+    for (const [a, b, c] of triangles) {
+      const pa = points[a], pb = points[b], pc = points[c]
+      positions[pi++] = pa[0]; positions[pi++] = pa[1]; positions[pi++] = pa[2]
+      positions[pi++] = pb[0]; positions[pi++] = pb[1]; positions[pi++] = pb[2]
+      positions[pi++] = pc[0]; positions[pi++] = pc[1]; positions[pi++] = pc[2]
+    }
+    return positions
+  }, [stepSurface])
+
+  if (nodes.length === 0 && !stepGeometry) {
     return (
       <mesh>
         <boxGeometry args={[1, 1, 1]} />
@@ -346,6 +361,16 @@ export function MeshScene() {
         <mesh position={loadMarkerPos}>
           <sphereGeometry args={[modelSize * 0.015, 16, 16]} />
           <meshStandardMaterial color="#ffcc00" />
+        </mesh>
+      )}
+
+      {/* STEP surface mesh — grey shaded */}
+      {stepGeometry && (
+        <mesh>
+          <bufferGeometry>
+            <bufferAttribute attach="attributes-position" args={[stepGeometry, 3]} />
+          </bufferGeometry>
+          <meshStandardMaterial color="#8899bb" side={THREE.DoubleSide} />
         </mesh>
       )}
     </group>
