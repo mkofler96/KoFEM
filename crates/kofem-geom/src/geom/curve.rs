@@ -52,6 +52,31 @@ impl Curve for Circle {
     }
 }
 
+// ── Ellipse ──────────────────────────────────────────────────────────────────
+
+pub struct Ellipse {
+    pub axis: Axis2,
+    pub semi_axis_1: f64,
+    pub semi_axis_2: f64,
+}
+
+impl Curve for Ellipse {
+    fn point(&self, t: f64) -> [f64; 3] {
+        let y = self.axis.y();
+        add(
+            self.axis.origin,
+            add(
+                scale(self.axis.x, self.semi_axis_1 * t.cos()),
+                scale(y, self.semi_axis_2 * t.sin()),
+            ),
+        )
+    }
+
+    fn t_bounds(&self) -> (f64, f64) {
+        (0.0, 2.0 * PI)
+    }
+}
+
 // ── BSplineCurveWithKnots ────────────────────────────────────────────────────
 
 pub struct BSplineCurveWithKnots {
@@ -95,6 +120,19 @@ pub fn curve_from_step(id: u64, file: &StepFile) -> Result<Box<dyn Curve>, GeomE
             let radius = get_real(e, 2)?;
             let axis = axis2_placement(file, ax_id)?;
             Ok(Box::new(Circle { axis, radius }))
+        }
+
+        "ELLIPSE" => {
+            // ELLIPSE(label, axis2_placement_ref, semi_axis_1, semi_axis_2)
+            let ax_id = get_ref(e, 1)?;
+            let semi_axis_1 = get_real(e, 2)?;
+            let semi_axis_2 = get_real(e, 3)?;
+            let axis = axis2_placement(file, ax_id)?;
+            Ok(Box::new(Ellipse {
+                axis,
+                semi_axis_1,
+                semi_axis_2,
+            }))
         }
 
         "B_SPLINE_CURVE_WITH_KNOTS" => {
@@ -183,5 +221,58 @@ mod tests {
         assert!((p[0] - 3.5).abs() < 1e-12);
         assert!((p[1] - 2.).abs() < 1e-12);
         assert!((p[2] - 3.).abs() < 1e-12);
+    }
+
+    #[test]
+    fn ellipse_point_at_0() {
+        let e = Ellipse {
+            axis: Axis2 {
+                origin: [0., 0., 0.],
+                z: [0., 0., 1.],
+                x: [1., 0., 0.],
+            },
+            semi_axis_1: 5.,
+            semi_axis_2: 3.,
+        };
+        let p = e.point(0.);
+        assert!((p[0] - 5.).abs() < 1e-12, "p[0]={}", p[0]);
+        assert!(p[1].abs() < 1e-12, "p[1]={}", p[1]);
+        assert!(p[2].abs() < 1e-12, "p[2]={}", p[2]);
+    }
+
+    #[test]
+    fn ellipse_point_at_pi_over_2() {
+        let e = Ellipse {
+            axis: Axis2 {
+                origin: [0., 0., 0.],
+                z: [0., 0., 1.],
+                x: [1., 0., 0.],
+            },
+            semi_axis_1: 5.,
+            semi_axis_2: 3.,
+        };
+        let p = e.point(PI / 2.);
+        assert!(p[0].abs() < 1e-12, "p[0]={}", p[0]);
+        assert!((p[1] - 3.).abs() < 1e-12, "p[1]={}", p[1]);
+        assert!(p[2].abs() < 1e-12, "p[2]={}", p[2]);
+    }
+
+    #[test]
+    fn ellipse_full_revolution() {
+        let e = Ellipse {
+            axis: Axis2 {
+                origin: [1., 2., 3.],
+                z: [0., 0., 1.],
+                x: [1., 0., 0.],
+            },
+            semi_axis_1: 4.,
+            semi_axis_2: 2.,
+        };
+        let p0 = e.point(0.);
+        let p_half = e.point(PI);
+        assert!((p0[0] - 5.).abs() < 1e-12, "p0[0]={}", p0[0]);
+        assert!((p0[1] - 2.).abs() < 1e-12, "p0[1]={}", p0[1]);
+        assert!((p_half[0] + 3.).abs() < 1e-12, "p_half[0]={}", p_half[0]);
+        assert!((p_half[1] - 2.).abs() < 1e-12, "p_half[1]={}", p_half[1]);
     }
 }
