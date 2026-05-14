@@ -9,6 +9,9 @@ pub struct BRep {
 pub struct TopoFace {
     pub surface_id: u64,
     pub same_sense: bool,
+    /// `FACE_OUTER_BOUND.orientation` — when `false` the stored loop must be
+    /// traversed in reverse to get the outward-facing CCW winding.
+    pub outer_loop_orientation: bool,
     pub outer_loop: Vec<TopoEdge>,
     pub inner_loops: Vec<Vec<TopoEdge>>,
 }
@@ -107,6 +110,8 @@ fn extract_face(file: &StepFile, face_id: u64) -> Result<TopoFace, TopologyError
     let mut outer_loop: Option<Vec<TopoEdge>> = None;
     let mut inner_loops: Vec<Vec<TopoEdge>> = Vec::new();
 
+    let mut outer_loop_orientation = true;
+
     for b_arg in bounds {
         let bound_id = match b_arg {
             Arg::Ref(id) => *id,
@@ -115,10 +120,12 @@ fn extract_face(file: &StepFile, face_id: u64) -> Result<TopoFace, TopologyError
         let bound = entity(file, bound_id)?;
         // FACE_OUTER_BOUND or FACE_BOUND: (label, edge_loop_ref, orientation)
         let loop_id = ref_arg(bound, 1)?;
+        let orientation = enum_arg(bound, 2).map(|s| s == "T").unwrap_or(true);
         let edges = extract_edge_loop(file, loop_id)?;
 
         if bound.type_name == "FACE_OUTER_BOUND" {
             outer_loop = Some(edges);
+            outer_loop_orientation = orientation;
         } else {
             inner_loops.push(edges);
         }
@@ -128,6 +135,7 @@ fn extract_face(file: &StepFile, face_id: u64) -> Result<TopoFace, TopologyError
     Ok(TopoFace {
         surface_id,
         same_sense,
+        outer_loop_orientation,
         outer_loop,
         inner_loops,
     })
