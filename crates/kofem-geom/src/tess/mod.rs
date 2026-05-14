@@ -148,6 +148,21 @@ fn tessellate_face_raw(face: &TopoFace, file: &StepFile, max_edge_len: f64) -> S
         return fan_raw(face);
     }
 
+    // Sample inner loops (holes) and project to the same 2D plane.
+    let holes2d: Vec<Vec<Point2>> = face
+        .inner_loops
+        .iter()
+        .map(|loop_edges| {
+            sample_boundary_3d(loop_edges, file, max_edge_len)
+                .iter()
+                .map(|&p| {
+                    let d = sub(p, origin);
+                    Point2::new(dot3(d, x_axis), dot3(d, y_axis))
+                })
+                .collect()
+        })
+        .collect();
+
     let mesh2d = triangulate(&pts2d);
 
     let points: Vec<[f64; 3]> = mesh2d
@@ -156,7 +171,21 @@ fn tessellate_face_raw(face: &TopoFace, file: &StepFile, max_edge_len: f64) -> S
         .map(|p| add(origin, add(scale(x_axis, p.x), scale(y_axis, p.y))))
         .collect();
 
-    let triangles: Vec<[usize; 3]> = mesh2d.triangles.iter().map(|t| t.v).collect();
+    // Exclude triangles whose centroid falls inside any hole polygon.
+    let triangles: Vec<[usize; 3]> = mesh2d
+        .triangles
+        .iter()
+        .map(|t| t.v)
+        .filter(|&[a, b, c]| {
+            let pa = &mesh2d.points[a];
+            let pb = &mesh2d.points[b];
+            let pc = &mesh2d.points[c];
+            let centroid = Point2::new((pa.x + pb.x + pc.x) / 3.0, (pa.y + pb.y + pc.y) / 3.0);
+            !holes2d
+                .iter()
+                .any(|hole| point_in_polygon_2d(centroid, hole))
+        })
+        .collect();
 
     SurfaceMesh { points, triangles }
 }
@@ -409,6 +438,28 @@ fn polygon_area_2d(pts: &[Point2]) -> f64 {
         area += pts[i].x * pts[j].y - pts[j].x * pts[i].y;
     }
     area / 2.0
+}
+
+/// Ray-casting point-in-polygon test.  Returns `true` when `pt` is strictly
+/// inside `polygon`.  Winding direction does not affect the result.
+fn point_in_polygon_2d(pt: Point2, polygon: &[Point2]) -> bool {
+    if polygon.len() < 3 {
+        return false;
+    }
+    let mut inside = false;
+    let n = polygon.len();
+    let mut j = n - 1;
+    for i in 0..n {
+        let pi = polygon[i];
+        let pj = polygon[j];
+        if ((pi.y > pt.y) != (pj.y > pt.y))
+            && (pt.x < (pj.x - pi.x) * (pt.y - pi.y) / (pj.y - pi.y) + pi.x)
+        {
+            inside = !inside;
+        }
+        j = i;
+    }
+    inside
 }
 
 // ── Stitching ──────────────────────────────────────────────────────────────────

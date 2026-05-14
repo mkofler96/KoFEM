@@ -208,6 +208,67 @@ fn make_square_face_cw_bound_f() -> TopoFace {
     }
 }
 
+/// Unit square with a 0.2×0.2 square hole at its centre (0.4–0.6 in X and Y).
+fn make_square_face_with_hole() -> TopoFace {
+    TopoFace {
+        surface_id: 0,
+        same_sense: true,
+        outer_loop_orientation: true,
+        outer_loop: vec![
+            TopoEdge {
+                curve_id: 0,
+                start: [0.0, 0.0, 0.0],
+                end: [1.0, 0.0, 0.0],
+                reversed: false,
+            },
+            TopoEdge {
+                curve_id: 0,
+                start: [1.0, 0.0, 0.0],
+                end: [1.0, 1.0, 0.0],
+                reversed: false,
+            },
+            TopoEdge {
+                curve_id: 0,
+                start: [1.0, 1.0, 0.0],
+                end: [0.0, 1.0, 0.0],
+                reversed: false,
+            },
+            TopoEdge {
+                curve_id: 0,
+                start: [0.0, 1.0, 0.0],
+                end: [0.0, 0.0, 0.0],
+                reversed: false,
+            },
+        ],
+        inner_loops: vec![vec![
+            TopoEdge {
+                curve_id: 0,
+                start: [0.4, 0.4, 0.0],
+                end: [0.6, 0.4, 0.0],
+                reversed: false,
+            },
+            TopoEdge {
+                curve_id: 0,
+                start: [0.6, 0.4, 0.0],
+                end: [0.6, 0.6, 0.0],
+                reversed: false,
+            },
+            TopoEdge {
+                curve_id: 0,
+                start: [0.6, 0.6, 0.0],
+                end: [0.4, 0.6, 0.0],
+                reversed: false,
+            },
+            TopoEdge {
+                curve_id: 0,
+                start: [0.4, 0.6, 0.0],
+                end: [0.4, 0.4, 0.0],
+                reversed: false,
+            },
+        ]],
+    }
+}
+
 fn load_bracket() -> (kofem_geom::step::StepFile, BRep) {
     let file = parse(include_str!("../../../test_files/new_bracket_2.stp")).unwrap();
     let brep = BRep::extract(&file).unwrap();
@@ -319,6 +380,30 @@ fn roundtrip_step_bound_t_normals() {
         assert!(
             n[2] > 0.9,
             "expected +Z normal (bound.orientation=T), got {n:?}"
+        );
+    }
+}
+
+// ── inner-loop / hole tests ────────────────────────────────────────────────────
+
+/// A 1×1 square with a centred 0.2×0.2 hole must produce no triangles whose
+/// centroid falls inside the hole region.
+#[test]
+fn square_face_with_square_hole_no_triangles_in_hole() {
+    let face = make_square_face_with_hole();
+    let file = kofem_geom::step::StepFile::new();
+    let brep = kofem_geom::step::BRep { faces: vec![face] };
+    let mesh = tessellate(&brep, &file, TessOptions::default()).unwrap();
+    assert!(!mesh.triangles.is_empty(), "mesh must not be empty");
+    for &[a, b, c] in &mesh.triangles {
+        let pa = mesh.points[a];
+        let pb = mesh.points[b];
+        let pc = mesh.points[c];
+        let cx = (pa[0] + pb[0] + pc[0]) / 3.0;
+        let cy = (pa[1] + pb[1] + pc[1]) / 3.0;
+        assert!(
+            !(cx > 0.4 && cx < 0.6 && cy > 0.4 && cy < 0.6),
+            "triangle centroid ({cx:.4}, {cy:.4}) is inside the hole region"
         );
     }
 }
