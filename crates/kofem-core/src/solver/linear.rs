@@ -92,6 +92,7 @@ impl LinearStaticSolver {
                         i1,
                         i2,
                         j_torsion: j,
+                        orientation: None,
                     }
                     .stiffness_matrix(&node_coords)
                 }
