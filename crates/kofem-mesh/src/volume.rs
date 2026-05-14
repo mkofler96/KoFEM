@@ -142,6 +142,140 @@ pub fn tet_circumsphere(pts: &[[f64; 3]], tet: &[usize; 4]) -> ([f64; 3], f64) {
     (center, r2)
 }
 
+// ── Bowyer-Watson 3-D Delaunay tetrahedralization ────────────────────────────
+
+/// Incremental Delaunay tetrahedralization of a point set (3-D Bowyer-Watson).
+///
+/// Returns tets with positive orientation ([`tet_signed_volume`] > 0).
+/// Requires at least 4 non-coplanar input points.
+pub fn bowyer_watson_3d(pts: &[[f64; 3]]) -> Vec<[usize; 4]> {
+    let n = pts.len();
+    if n < 4 {
+        return vec![];
+    }
+
+    // Working point list: input points followed by 4 super-tetrahedron vertices.
+    let mut all_pts: Vec<[f64; 3]> = pts.to_vec();
+    append_super_tet_vertices(&mut all_pts, pts);
+    let super_start = n;
+
+    // Orient the super-tet positively before we begin.
+    let st0 = [
+        super_start,
+        super_start + 1,
+        super_start + 2,
+        super_start + 3,
+    ];
+    let st = if tet_signed_volume(&all_pts, &st0) > 0.0 {
+        st0
+    } else {
+        [
+            super_start,
+            super_start + 2,
+            super_start + 1,
+            super_start + 3,
+        ]
+    };
+    let mut tets: Vec<[usize; 4]> = vec![st];
+
+    // Insert each input point one at a time.
+    for (i, &p) in pts.iter().enumerate() {
+        // Classify: tets whose circumsphere contains p → cavity; rest → outside.
+        // The small tolerance robustly captures co-spherical points.
+        let mut cavity: Vec<[usize; 4]> = Vec::new();
+        let mut outside: Vec<[usize; 4]> = Vec::new();
+        for &tet in &tets {
+            let (cc, r2) = tet_circumsphere(&all_pts, &tet);
+            if bw_inside(p, cc, r2) {
+                cavity.push(tet);
+            } else {
+                outside.push(tet);
+            }
+        }
+
+        // Boundary = faces that appear exactly once across all cavity tets.
+        let boundary = cavity_boundary_faces(&cavity);
+
+        // Re-triangulate: connect each boundary face to the new point.
+        tets = outside;
+        for face in boundary {
+            let [a, b, c] = face;
+            let vol = tet_signed_volume(&all_pts, &[a, b, c, i]);
+            if vol > 0.0 {
+                tets.push([a, b, c, i]);
+            } else if vol < 0.0 {
+                tets.push([a, c, b, i]);
+            }
+            // vol == 0: degenerate — skip (requires degenerate input, not expected)
+        }
+    }
+
+    // Strip any tet that touches a super-tetrahedron vertex.
+    tets.retain(|t| t.iter().all(|&v| v < n));
+    tets
+}
+
+/// Append four vertices that form a super-tetrahedron enclosing all of `pts`.
+fn append_super_tet_vertices(all_pts: &mut Vec<[f64; 3]>, pts: &[[f64; 3]]) {
+    let mut lo = pts[0];
+    let mut hi = pts[0];
+    for &p in pts {
+        for k in 0..3 {
+            lo[k] = lo[k].min(p[k]);
+            hi[k] = hi[k].max(p[k]);
+        }
+    }
+    let cx = (lo[0] + hi[0]) * 0.5;
+    let cy = (lo[1] + hi[1]) * 0.5;
+    let cz = (lo[2] + hi[2]) * 0.5;
+    // Scale: 20× the longest bounding-box side (at least 1) so all points fit inside.
+    let s = (0..3)
+        .map(|k| hi[k] - lo[k])
+        .fold(0.0_f64, f64::max)
+        .max(1.0)
+        * 20.0;
+    all_pts.push([cx, cy + 3.0 * s, cz - s]);
+    all_pts.push([cx - 3.0 * s, cy - s, cz - s]);
+    all_pts.push([cx + 3.0 * s, cy - s, cz - s]);
+    all_pts.push([cx, cy, cz + 3.0 * s]);
+}
+
+/// True when `p` is inside (or on, within floating-point tolerance) the sphere
+/// centred at `cc` with squared radius `r2`.
+#[inline]
+fn bw_inside(p: [f64; 3], cc: [f64; 3], r2: f64) -> bool {
+    let dx = p[0] - cc[0];
+    let dy = p[1] - cc[1];
+    let dz = p[2] - cc[2];
+    let d2 = dx * dx + dy * dy + dz * dz;
+    // Relative + absolute epsilon handles co-spherical points (e.g. cube vertices).
+    d2 < r2 * (1.0 + 1e-10) + 1e-20
+}
+
+/// Return the faces that appear exactly once in `cavity` (the cavity boundary).
+fn cavity_boundary_faces(cavity: &[[usize; 4]]) -> Vec<[usize; 3]> {
+    let mut counts: HashMap<[usize; 3], u32> = HashMap::new();
+    let mut oriented: HashMap<[usize; 3], [usize; 3]> = HashMap::new();
+    for &[a, b, c, d] in cavity {
+        for face in [[a, b, c], [a, b, d], [a, c, d], [b, c, d]] {
+            let key = sorted3(face);
+            *counts.entry(key).or_insert(0) += 1;
+            oriented.entry(key).or_insert(face);
+        }
+    }
+    counts
+        .into_iter()
+        .filter(|(_, cnt)| *cnt == 1)
+        .map(|(key, _)| oriented[&key])
+        .collect()
+}
+
+#[inline]
+fn sorted3(mut f: [usize; 3]) -> [usize; 3] {
+    f.sort_unstable();
+    f
+}
+
 // ── Test fixtures ─────────────────────────────────────────────────────────────
 
 /// Generate a subdivided icosphere of radius 1, centred at the origin.
@@ -288,5 +422,28 @@ mod tests {
         let surface = icosphere(1);
         let result = volume_mesh(&surface, VolumeMeshOptions::default());
         assert!(matches!(result, Err(MeshError::NotImplemented)));
+    }
+
+    #[test]
+    fn bowyer_watson_3d_cube_vertices() {
+        let pts: Vec<[f64; 3]> = vec![
+            [0., 0., 0.],
+            [1., 0., 0.],
+            [1., 1., 0.],
+            [0., 1., 0.],
+            [0., 0., 1.],
+            [1., 0., 1.],
+            [1., 1., 1.],
+            [0., 1., 1.],
+        ];
+        let tets = bowyer_watson_3d(&pts);
+        let vol: f64 = tets.iter().map(|t| tet_signed_volume(&pts, t).abs()).sum();
+        assert!((vol - 1.0).abs() < 1e-10, "expected vol=1.0, got {vol}");
+        for t in &tets {
+            assert!(
+                tet_signed_volume(&pts, t) > 0.,
+                "tet {t:?} has non-positive orientation"
+            );
+        }
     }
 }
