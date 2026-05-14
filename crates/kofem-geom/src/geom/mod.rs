@@ -203,7 +203,7 @@ pub(crate) fn de_boor_1d(pts: &[[f64; 3]], degree: usize, knots: &[f64], t: f64)
         let mut lo = degree;
         let mut hi = n;
         while lo < hi {
-            let mid = (lo + hi + 1) / 2;
+            let mid = (lo + hi).div_ceil(2);
             if knots[mid] <= t {
                 lo = mid;
             } else {
