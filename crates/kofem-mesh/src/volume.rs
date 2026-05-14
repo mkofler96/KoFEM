@@ -1,11 +1,11 @@
 //! 3-D Constrained Delaunay Tetrahedralization (volume mesher).
 //!
-//! This module is being built incrementally:
-//! - Stage 5.1 (this file): types, helpers, and test fixtures
-//! - Stage 5.2: 3-D Bowyer-Watson
-//! - Stage 5.3: constrained face recovery
-//! - Stage 5.4: interior/exterior classification
-//! - Stage 5.5: Delaunay refinement
+//! Implementation status:
+//! - Stage 5.1: types, helpers, and test fixtures ✓
+//! - Stage 5.2: 3-D Bowyer-Watson ✓
+//! - Stage 5.3: constrained face recovery ✓
+//! - Stage 5.4: interior/exterior classification (TODO)
+//! - Stage 5.5: Delaunay refinement (TODO)
 
 use std::collections::HashMap;
 
@@ -276,6 +276,833 @@ fn sorted3(mut f: [usize; 3]) -> [usize; 3] {
     f
 }
 
+#[inline]
+fn sorted2(mut e: [usize; 2]) -> [usize; 2] {
+    if e[0] > e[1] {
+        e.swap(0, 1);
+    }
+    e
+}
+
+// ── Constrained face recovery (Stage 5.3) ────────────────────────────────────
+
+/// Auxiliary tet mesh for incremental face recovery.
+///
+/// Maintains adjacency info needed for flips and Steiner insertion.
+#[derive(Debug, Clone)]
+pub struct TetMesh {
+    /// Vertex coordinates (grows as Steiner points are added).
+    pub pts: Vec<[f64; 3]>,
+    /// Tetrahedra indices into `pts`. Dead tets have `v[0] == usize::MAX`.
+    pub tets: Vec<[usize; 4]>,
+    /// Map from canonical face key to list of (tet_index, local_face_index).
+    /// Interior faces have 2 entries; boundary faces have 1.
+    face_to_tets: HashMap<[usize; 3], Vec<(usize, u8)>>,
+    /// Map from canonical edge key to list of tet indices using that edge.
+    pub edge_to_tets: HashMap<[usize; 2], Vec<usize>>,
+}
+
+impl TetMesh {
+    /// Build from Bowyer-Watson output.
+    pub fn from_tets(pts: Vec<[f64; 3]>, tets: Vec<[usize; 4]>) -> Self {
+        let mut mesh = Self {
+            pts,
+            tets,
+            face_to_tets: HashMap::new(),
+            edge_to_tets: HashMap::new(),
+        };
+        mesh.rebuild_adjacency();
+        mesh
+    }
+
+    /// Rebuild `face_to_tets` and `edge_to_tets` from scratch.
+    fn rebuild_adjacency(&mut self) {
+        self.face_to_tets.clear();
+        self.edge_to_tets.clear();
+        for (ti, &tet) in self.tets.iter().enumerate() {
+            if tet[0] == usize::MAX {
+                continue; // dead tet
+            }
+            for (fi, face) in tet_faces(tet).iter().enumerate() {
+                self.face_to_tets
+                    .entry(sorted3(*face))
+                    .or_default()
+                    .push((ti, fi as u8));
+            }
+            for edge in tet_edges(tet) {
+                self.edge_to_tets.entry(sorted2(edge)).or_default().push(ti);
+            }
+        }
+    }
+
+    /// Check if a face (canonical key) exists in the mesh.
+    pub fn has_face(&self, face: [usize; 3]) -> bool {
+        self.face_to_tets.contains_key(&sorted3(face))
+    }
+
+    /// Get all faces in the mesh.
+    pub fn all_faces(&self) -> impl Iterator<Item = [usize; 3]> + '_ {
+        self.face_to_tets.keys().copied()
+    }
+
+    /// Get tets sharing a face.
+    fn tets_sharing_face(&self, face: [usize; 3]) -> Vec<usize> {
+        self.face_to_tets
+            .get(&sorted3(face))
+            .map(|v| v.iter().map(|(ti, _)| *ti).collect())
+            .unwrap_or_default()
+    }
+
+    /// Extract final tets (skipping dead ones).
+    pub fn live_tets(&self) -> Vec<[usize; 4]> {
+        self.tets
+            .iter()
+            .filter(|t| t[0] != usize::MAX)
+            .copied()
+            .collect()
+    }
+
+    /// Mark a tet as dead.
+    fn kill_tet(&mut self, ti: usize) {
+        self.tets[ti][0] = usize::MAX;
+    }
+
+    /// Add a new tet, returning its index.
+    fn add_tet(&mut self, tet: [usize; 4]) -> usize {
+        let idx = self.tets.len();
+        self.tets.push(tet);
+        idx
+    }
+
+    /// Add a Steiner point, returning its index.
+    fn add_point(&mut self, p: [f64; 3]) -> usize {
+        let idx = self.pts.len();
+        self.pts.push(p);
+        idx
+    }
+}
+
+/// The 4 faces of a tet: opposite vertices 3, 2, 1, 0 respectively.
+fn tet_faces(tet: [usize; 4]) -> [[usize; 3]; 4] {
+    let [a, b, c, d] = tet;
+    [[a, b, c], [a, b, d], [a, c, d], [b, c, d]]
+}
+
+/// The 6 edges of a tet.
+fn tet_edges(tet: [usize; 4]) -> [[usize; 2]; 6] {
+    let [a, b, c, d] = tet;
+    [[a, b], [a, c], [a, d], [b, c], [b, d], [c, d]]
+}
+
+/// Recover all constraint faces from `surface` in the tet mesh.
+///
+/// Uses edge flips where possible; inserts Steiner points when flips fail.
+/// Returns the number of Steiner points inserted.
+pub fn recover_constraint_faces(
+    mesh: &mut TetMesh,
+    surface: &SurfaceMesh,
+    max_steiner: usize,
+) -> Result<usize, MeshError> {
+    let mut steiner_count = 0;
+
+    // Build set of required faces (canonical keys).
+    let required: std::collections::HashSet<[usize; 3]> =
+        surface.triangles.iter().map(|tri| sorted3(*tri)).collect();
+
+    // Multiple passes — each pass may enable more faces to be recovered.
+    for _pass in 0..20 {
+        let mut progress = false;
+
+        for &face_key in &required {
+            if mesh.has_face(face_key) {
+                continue;
+            }
+
+            // Try edge-based recovery: ensure all three edges of the face exist.
+            if try_recover_face_edges(mesh, face_key) {
+                progress = true;
+            }
+
+            // Try to recover via flips on edges crossing the face.
+            if try_recover_face_by_flips(mesh, face_key) {
+                progress = true;
+                continue;
+            }
+        }
+
+        if !progress {
+            break;
+        }
+    }
+
+    // Steiner insertion loop: insert points for missing faces, then retry recovery.
+    loop {
+        let missing: Vec<[usize; 3]> = required
+            .iter()
+            .filter(|f| !mesh.has_face(**f))
+            .copied()
+            .collect();
+
+        if missing.is_empty() {
+            break;
+        }
+
+        if steiner_count >= max_steiner {
+            return Err(MeshError::BudgetExhausted);
+        }
+
+        // Insert Steiner point for the first missing face.
+        let face_key = missing[0];
+        insert_steiner_on_face(mesh, face_key)?;
+        steiner_count += 1;
+
+        // Retry edge and face recovery for all missing faces.
+        for _ in 0..10 {
+            let mut progress = false;
+            for &fk in &required {
+                if mesh.has_face(fk) {
+                    continue;
+                }
+                if try_recover_face_edges(mesh, fk) {
+                    progress = true;
+                }
+                if try_recover_face_by_flips(mesh, fk) {
+                    progress = true;
+                }
+            }
+            if !progress {
+                break;
+            }
+        }
+    }
+
+    Ok(steiner_count)
+}
+
+/// Try to recover a face by ensuring its edges exist (via flips).
+fn try_recover_face_edges(mesh: &mut TetMesh, face_key: [usize; 3]) -> bool {
+    let [a, b, c] = face_key;
+    let edges = [[a, b], [b, c], [c, a]];
+    let mut made_progress = false;
+
+    for edge in edges {
+        let edge_key = sorted2(edge);
+        if mesh.edge_to_tets.contains_key(&edge_key) {
+            continue;
+        }
+
+        // Edge doesn't exist — try to create it via flips.
+        if try_create_edge_by_flips(mesh, edge_key) {
+            made_progress = true;
+        }
+    }
+
+    made_progress
+}
+
+/// Try to create a missing edge by flipping tets or swapping boundary diagonals.
+fn try_create_edge_by_flips(mesh: &mut TetMesh, target_edge: [usize; 2]) -> bool {
+    let [e0, e1] = target_edge;
+
+    // First, try boundary diagonal swap (for flat quad faces).
+    if try_boundary_edge_swap(mesh, target_edge) {
+        return true;
+    }
+
+    // Find tets containing e0 that neighbor tets containing e1.
+    let tets_with_e0: Vec<usize> = mesh
+        .tets
+        .iter()
+        .enumerate()
+        .filter(|(_, t)| t[0] != usize::MAX && t.contains(&e0))
+        .map(|(i, _)| i)
+        .collect();
+
+    for &ti in &tets_with_e0 {
+        let tet = mesh.tets[ti];
+        if tet.contains(&e1) {
+            return false; // Edge should exist.
+        }
+
+        // Check neighbors via shared faces.
+        for face in tet_faces(tet) {
+            let face_key = sorted3(face);
+            let neighbors = mesh.tets_sharing_face(face_key);
+            for neighbor_ti in neighbors {
+                if neighbor_ti != ti {
+                    let neighbor = mesh.tets[neighbor_ti];
+                    if neighbor[0] != usize::MAX && neighbor.contains(&e1) {
+                        // Found adjacent tets spanning e0 and e1.
+                        if try_flip_2_3(mesh, ti, neighbor_ti, target_edge) {
+                            if mesh.edge_to_tets.contains_key(&target_edge) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    false
+}
+
+/// Try to swap a boundary diagonal to create the target edge.
+///
+/// This handles the case where two coplanar boundary triangles use the "wrong"
+/// diagonal. For example, triangles [0,1,3] and [1,2,3] with edge [1,3] can be
+/// swapped to [0,1,2] and [0,2,3] with edge [0,2].
+fn try_boundary_edge_swap(mesh: &mut TetMesh, target_edge: [usize; 2]) -> bool {
+    let [e0, e1] = target_edge;
+
+    // Find boundary faces containing e0 but not e1, and vice versa.
+    // A boundary face has exactly one tet.
+    let mut faces_with_e0: Vec<[usize; 3]> = Vec::new();
+    let mut faces_with_e1: Vec<[usize; 3]> = Vec::new();
+
+    for (&face_key, tets) in &mesh.face_to_tets {
+        if tets.len() != 1 {
+            continue; // Interior face, skip.
+        }
+        if face_key.contains(&e0) && !face_key.contains(&e1) {
+            faces_with_e0.push(face_key);
+        }
+        if face_key.contains(&e1) && !face_key.contains(&e0) {
+            faces_with_e1.push(face_key);
+        }
+    }
+
+    // Look for two boundary faces that together form a quad with the wrong diagonal.
+    for &f0 in &faces_with_e0 {
+        for &f1 in &faces_with_e1 {
+            // Check if they share exactly one edge (the wrong diagonal).
+            let shared = shared_edge(f0, f1);
+            if shared.is_none() {
+                continue;
+            }
+            let wrong_diag = shared.unwrap();
+
+            // The four vertices of the quad.
+            let quad: Vec<usize> = f0
+                .iter()
+                .chain(f1.iter())
+                .copied()
+                .collect::<std::collections::HashSet<_>>()
+                .into_iter()
+                .collect();
+            if quad.len() != 4 {
+                continue;
+            }
+
+            // Verify target edge would connect the quad correctly.
+            if !quad.contains(&e0) || !quad.contains(&e1) {
+                continue;
+            }
+
+            // Find the tets containing these faces.
+            let ti0 = mesh.face_to_tets.get(&f0).map(|v| v[0].0);
+            let ti1 = mesh.face_to_tets.get(&f1).map(|v| v[0].0);
+            if ti0.is_none() || ti1.is_none() {
+                continue;
+            }
+            let ti0 = ti0.unwrap();
+            let ti1 = ti1.unwrap();
+
+            // The tets should share the wrong diagonal edge.
+            let tet0 = mesh.tets[ti0];
+            let tet1 = mesh.tets[ti1];
+            if !has_edge(tet0, wrong_diag) || !has_edge(tet1, wrong_diag) {
+                continue;
+            }
+
+            // Get the apex of each tet (vertex not in the quad).
+            let apex0 = tet0.iter().find(|&&v| !quad.contains(&v)).copied();
+            let apex1 = tet1.iter().find(|&&v| !quad.contains(&v)).copied();
+
+            // For boundary swap, both apexes should be the same (the interior vertex).
+            if apex0 != apex1 || apex0.is_none() {
+                continue;
+            }
+            let apex = apex0.unwrap();
+
+            // Create new tets with the swapped diagonal.
+            // New faces: [e0, wrong_diag[0], e1], [e0, e1, wrong_diag[1]]
+            // But we need tets, not faces. Connect to apex.
+            let [w0, w1] = wrong_diag;
+            let new_tet0 = orient_tet(&mesh.pts, [e0, w0, e1, apex]);
+            let new_tet1 = orient_tet(&mesh.pts, [e0, e1, w1, apex]);
+
+            if new_tet0.is_none() || new_tet1.is_none() {
+                continue; // Would create degenerate tets.
+            }
+
+            // Perform the swap.
+            mesh.kill_tet(ti0);
+            mesh.kill_tet(ti1);
+            mesh.add_tet(new_tet0.unwrap());
+            mesh.add_tet(new_tet1.unwrap());
+            mesh.rebuild_adjacency();
+
+            return mesh.edge_to_tets.contains_key(&target_edge);
+        }
+    }
+
+    false
+}
+
+/// Find the shared edge between two triangles, if any.
+fn shared_edge(f0: [usize; 3], f1: [usize; 3]) -> Option<[usize; 2]> {
+    let edges0 = [[f0[0], f0[1]], [f0[1], f0[2]], [f0[2], f0[0]]];
+    let edges1 = [[f1[0], f1[1]], [f1[1], f1[2]], [f1[2], f1[0]]];
+    for e0 in edges0 {
+        for e1 in edges1 {
+            if sorted2(e0) == sorted2(e1) {
+                return Some(sorted2(e0));
+            }
+        }
+    }
+    None
+}
+
+/// Orient a tet to have positive volume, or return None if degenerate.
+fn orient_tet(pts: &[[f64; 3]], tet: [usize; 4]) -> Option<[usize; 4]> {
+    let vol = tet_signed_volume(pts, &tet);
+    if vol.abs() < 1e-20 {
+        return None;
+    }
+    if vol > 0.0 {
+        Some(tet)
+    } else {
+        Some([tet[0], tet[2], tet[1], tet[3]])
+    }
+}
+
+/// Attempt to recover `face_key` using local edge flips.
+///
+/// Returns `true` if the face is now present in the mesh.
+fn try_recover_face_by_flips(mesh: &mut TetMesh, face_key: [usize; 3]) -> bool {
+    // Find edges crossing the plane of the missing face.
+    // We'll try 2-3 flips on edges that intersect the face interior.
+    let [a, b, c] = face_key;
+    let pa = mesh.pts[a];
+    let pb = mesh.pts[b];
+    let pc = mesh.pts[c];
+
+    // Face normal and plane equation.
+    let ab = [pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]];
+    let ac = [pc[0] - pa[0], pc[1] - pa[1], pc[2] - pa[2]];
+    let n = cross3(ab, ac);
+    let d = -(n[0] * pa[0] + n[1] * pa[1] + n[2] * pa[2]);
+
+    // Look for edges in tets adjacent to the face vertices that cross the face plane.
+    let mut candidate_edges: Vec<[usize; 2]> = Vec::new();
+    for &v in &[a, b, c] {
+        for (_ti, tet) in mesh.tets.iter().enumerate() {
+            if tet[0] == usize::MAX {
+                continue;
+            }
+            if !tet.contains(&v) {
+                continue;
+            }
+            for edge in tet_edges(*tet) {
+                let [e0, e1] = edge;
+                // Skip edges that share a vertex with the face.
+                if [a, b, c].contains(&e0) || [a, b, c].contains(&e1) {
+                    continue;
+                }
+                let p0 = mesh.pts[e0];
+                let p1 = mesh.pts[e1];
+                let s0 = n[0] * p0[0] + n[1] * p0[1] + n[2] * p0[2] + d;
+                let s1 = n[0] * p1[0] + n[1] * p1[1] + n[2] * p1[2] + d;
+                // Check if edge crosses the plane (opposite signs).
+                if s0 * s1 < 0.0 {
+                    let key = sorted2(edge);
+                    if !candidate_edges.contains(&key) {
+                        candidate_edges.push(key);
+                    }
+                }
+            }
+        }
+    }
+
+    // Try flipping each candidate edge.
+    for edge in candidate_edges {
+        if try_flip_edge(mesh, edge, face_key) {
+            if mesh.has_face(face_key) {
+                return true;
+            }
+        }
+    }
+
+    // Multiple flip iterations may be needed — try a few rounds.
+    for _ in 0..10 {
+        if mesh.has_face(face_key) {
+            return true;
+        }
+        // Recollect and retry.
+        let mut made_progress = false;
+        for edge in collect_crossing_edges(mesh, face_key) {
+            if try_flip_edge(mesh, edge, face_key) {
+                made_progress = true;
+                if mesh.has_face(face_key) {
+                    return true;
+                }
+            }
+        }
+        if !made_progress {
+            break;
+        }
+    }
+
+    mesh.has_face(face_key)
+}
+
+/// Collect edges that cross the interior of the face plane.
+fn collect_crossing_edges(mesh: &TetMesh, face_key: [usize; 3]) -> Vec<[usize; 2]> {
+    let [a, b, c] = face_key;
+    let pa = mesh.pts[a];
+    let pb = mesh.pts[b];
+    let pc = mesh.pts[c];
+    let ab = [pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]];
+    let ac = [pc[0] - pa[0], pc[1] - pa[1], pc[2] - pa[2]];
+    let n = cross3(ab, ac);
+    let d = -(n[0] * pa[0] + n[1] * pa[1] + n[2] * pa[2]);
+
+    let mut edges: Vec<[usize; 2]> = Vec::new();
+    for tet in &mesh.tets {
+        if tet[0] == usize::MAX {
+            continue;
+        }
+        for edge in tet_edges(*tet) {
+            let [e0, e1] = edge;
+            if [a, b, c].contains(&e0) || [a, b, c].contains(&e1) {
+                continue;
+            }
+            let p0 = mesh.pts[e0];
+            let p1 = mesh.pts[e1];
+            let s0 = n[0] * p0[0] + n[1] * p0[1] + n[2] * p0[2] + d;
+            let s1 = n[0] * p1[0] + n[1] * p1[1] + n[2] * p1[2] + d;
+            if s0 * s1 < 0.0 {
+                let key = sorted2(edge);
+                if !edges.contains(&key) {
+                    edges.push(key);
+                }
+            }
+        }
+    }
+    edges
+}
+
+/// Try a 2-3 or 3-2 flip on `edge`. Returns true if a flip was performed.
+fn try_flip_edge(mesh: &mut TetMesh, edge: [usize; 2], _target_face: [usize; 3]) -> bool {
+    let edge_key = sorted2(edge);
+
+    // Find all tets sharing this edge.
+    let tet_indices: Vec<usize> = mesh
+        .tets
+        .iter()
+        .enumerate()
+        .filter(|(_, t)| t[0] != usize::MAX && has_edge(**t, edge_key))
+        .map(|(i, _)| i)
+        .collect();
+
+    if tet_indices.len() == 2 {
+        // 2-3 flip: two tets sharing a face → three tets sharing an edge.
+        return try_flip_2_3(mesh, tet_indices[0], tet_indices[1], edge_key);
+    } else if tet_indices.len() == 3 {
+        // 3-2 flip: three tets sharing an edge → two tets sharing a face.
+        return try_flip_3_2(mesh, &tet_indices, edge_key);
+    }
+
+    false
+}
+
+/// Check if tet contains edge (canonical).
+fn has_edge(tet: [usize; 4], edge: [usize; 2]) -> bool {
+    tet.contains(&edge[0]) && tet.contains(&edge[1])
+}
+
+/// 2-3 flip: replace two tets sharing a common face with three tets.
+fn try_flip_2_3(mesh: &mut TetMesh, ti0: usize, ti1: usize, _edge: [usize; 2]) -> bool {
+    let tet0 = mesh.tets[ti0];
+    let tet1 = mesh.tets[ti1];
+
+    // Find the shared face.
+    let shared = find_shared_face(tet0, tet1);
+    if shared.is_none() {
+        return false;
+    }
+    let shared_face = shared.unwrap();
+
+    // The apex in each tet (vertex not on shared face).
+    let apex0 = tet0.iter().find(|&&v| !shared_face.contains(&v)).copied();
+    let apex1 = tet1.iter().find(|&&v| !shared_face.contains(&v)).copied();
+    if apex0.is_none() || apex1.is_none() {
+        return false;
+    }
+    let d0 = apex0.unwrap();
+    let d1 = apex1.unwrap();
+
+    // New edge connects the two apexes.
+    let _new_edge = sorted2([d0, d1]);
+
+    // Verify the three new tets would have positive volume.
+    let [a, b, c] = shared_face;
+    let new_tets = [[a, b, d0, d1], [b, c, d0, d1], [c, a, d0, d1]];
+    for nt in &new_tets {
+        let vol = tet_signed_volume(&mesh.pts, nt);
+        if vol <= 1e-20 {
+            return false; // Would create degenerate or inverted tet.
+        }
+    }
+
+    // Perform the flip.
+    mesh.kill_tet(ti0);
+    mesh.kill_tet(ti1);
+    for nt in new_tets {
+        mesh.add_tet(nt);
+    }
+
+    // Rebuild adjacency (simpler than incremental update for now).
+    mesh.rebuild_adjacency();
+    true
+}
+
+/// 3-2 flip: replace three tets sharing an edge with two tets sharing a face.
+fn try_flip_3_2(mesh: &mut TetMesh, tet_indices: &[usize], edge: [usize; 2]) -> bool {
+    if tet_indices.len() != 3 {
+        return false;
+    }
+
+    let [e0, e1] = edge;
+    let tets: Vec<[usize; 4]> = tet_indices.iter().map(|&i| mesh.tets[i]).collect();
+
+    // Collect the ring of vertices around the edge (should be 3 vertices).
+    let mut ring: Vec<usize> = Vec::new();
+    for tet in &tets {
+        for &v in tet {
+            if v != e0 && v != e1 && !ring.contains(&v) {
+                ring.push(v);
+            }
+        }
+    }
+    if ring.len() != 3 {
+        return false;
+    }
+
+    // New tets: connect each edge endpoint to the triangle ring.
+    let [r0, r1, r2] = [ring[0], ring[1], ring[2]];
+    let new_tets = [[r0, r1, r2, e0], [r0, r2, r1, e1]];
+
+    // Verify positive volume.
+    for nt in &new_tets {
+        let vol = tet_signed_volume(&mesh.pts, nt);
+        if vol <= 1e-20 {
+            // Try swapping orientation.
+            let flipped = [nt[0], nt[2], nt[1], nt[3]];
+            if tet_signed_volume(&mesh.pts, &flipped) <= 1e-20 {
+                return false;
+            }
+        }
+    }
+
+    // Perform the flip.
+    for &ti in tet_indices {
+        mesh.kill_tet(ti);
+    }
+
+    // Add with correct orientation.
+    for nt in new_tets {
+        let vol = tet_signed_volume(&mesh.pts, &nt);
+        if vol > 0.0 {
+            mesh.add_tet(nt);
+        } else {
+            mesh.add_tet([nt[0], nt[2], nt[1], nt[3]]);
+        }
+    }
+
+    mesh.rebuild_adjacency();
+    true
+}
+
+/// Find the face shared by two tets, if any.
+fn find_shared_face(tet0: [usize; 4], tet1: [usize; 4]) -> Option<[usize; 3]> {
+    for face in tet_faces(tet0) {
+        let key = sorted3(face);
+        for face1 in tet_faces(tet1) {
+            if sorted3(face1) == key {
+                return Some(key);
+            }
+        }
+    }
+    None
+}
+
+/// Insert a Steiner point near the missing face to enable its recovery.
+///
+/// The point is placed at the face centroid, offset slightly inward along
+/// the face normal to avoid degenerate tets.
+fn insert_steiner_on_face(mesh: &mut TetMesh, face_key: [usize; 3]) -> Result<(), MeshError> {
+    let [a, b, c] = face_key;
+    let pa = mesh.pts[a];
+    let pb = mesh.pts[b];
+    let pc = mesh.pts[c];
+
+    // Face centroid.
+    let centroid = [
+        (pa[0] + pb[0] + pc[0]) / 3.0,
+        (pa[1] + pb[1] + pc[1]) / 3.0,
+        (pa[2] + pb[2] + pc[2]) / 3.0,
+    ];
+
+    // Face normal (not normalized).
+    let ab = [pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]];
+    let ac = [pc[0] - pa[0], pc[1] - pa[1], pc[2] - pa[2]];
+    let n = cross3(ab, ac);
+    let n_len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
+
+    // Offset: small fraction of face size, along normal (either direction works).
+    let offset = if n_len > 1e-14 {
+        let scale = 0.01 * n_len.sqrt(); // ~1% of face edge length
+        [
+            n[0] / n_len * scale,
+            n[1] / n_len * scale,
+            n[2] / n_len * scale,
+        ]
+    } else {
+        [0.0, 0.0, 0.0]
+    };
+
+    // Try both directions (inward/outward) — use whichever is inside the mesh.
+    let pt_pos = [
+        centroid[0] + offset[0],
+        centroid[1] + offset[1],
+        centroid[2] + offset[2],
+    ];
+    let pt_neg = [
+        centroid[0] - offset[0],
+        centroid[1] - offset[1],
+        centroid[2] - offset[2],
+    ];
+
+    // Check which point is inside a tet.
+    let insertion_pt = if is_inside_mesh(mesh, pt_pos) {
+        pt_pos
+    } else if is_inside_mesh(mesh, pt_neg) {
+        pt_neg
+    } else {
+        centroid // fallback
+    };
+
+    let new_idx = mesh.add_point(insertion_pt);
+
+    // Find tets whose circumsphere contains the new point.
+    let mut cavity: Vec<usize> = Vec::new();
+    for (ti, tet) in mesh.tets.iter().enumerate() {
+        if tet[0] == usize::MAX {
+            continue;
+        }
+        let (cc, r2) = tet_circumsphere(&mesh.pts, tet);
+        if bw_inside(centroid, cc, r2) {
+            cavity.push(ti);
+        }
+    }
+
+    if cavity.is_empty() {
+        // Point is outside all circumspheres — find containing tet instead.
+        for (ti, tet) in mesh.tets.iter().enumerate() {
+            if tet[0] == usize::MAX {
+                continue;
+            }
+            if point_in_tet(&mesh.pts, tet, centroid) {
+                cavity.push(ti);
+                break;
+            }
+        }
+    }
+
+    if cavity.is_empty() {
+        return Err(MeshError::DegenerateInput);
+    }
+
+    // Extract cavity boundary faces.
+    let cavity_tets: Vec<[usize; 4]> = cavity.iter().map(|&ti| mesh.tets[ti]).collect();
+    let boundary = cavity_boundary_faces(&cavity_tets);
+
+    // Remove cavity tets.
+    for ti in cavity {
+        mesh.kill_tet(ti);
+    }
+
+    // Create new tets connecting boundary faces to new point.
+    for face in boundary {
+        let [fa, fb, fc] = face;
+        let vol = tet_signed_volume(&mesh.pts, &[fa, fb, fc, new_idx]);
+        if vol.abs() < 1e-20 {
+            continue; // Degenerate.
+        }
+        if vol > 0.0 {
+            mesh.add_tet([fa, fb, fc, new_idx]);
+        } else {
+            mesh.add_tet([fa, fc, fb, new_idx]);
+        }
+    }
+
+    mesh.rebuild_adjacency();
+    Ok(())
+}
+
+/// Check if a point is inside any tet in the mesh.
+fn is_inside_mesh(mesh: &TetMesh, p: [f64; 3]) -> bool {
+    for tet in &mesh.tets {
+        if tet[0] == usize::MAX {
+            continue;
+        }
+        if point_in_tet(&mesh.pts, tet, p) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Check if point `p` is inside tetrahedron `tet`.
+fn point_in_tet(pts: &[[f64; 3]], tet: &[usize; 4], p: [f64; 3]) -> bool {
+    let [a, b, c, d] = *tet;
+    let pa = pts[a];
+    let pb = pts[b];
+    let pc = pts[c];
+    let pd = pts[d];
+
+    // Check that p is on the same side of each face as the opposite vertex.
+    let same_side =
+        |f0: [f64; 3], f1: [f64; 3], f2: [f64; 3], ref_pt: [f64; 3], test_pt: [f64; 3]| {
+            let v1 = [f1[0] - f0[0], f1[1] - f0[1], f1[2] - f0[2]];
+            let v2 = [f2[0] - f0[0], f2[1] - f0[1], f2[2] - f0[2]];
+            let n = cross3(v1, v2);
+            let d_ref = n[0] * (ref_pt[0] - f0[0])
+                + n[1] * (ref_pt[1] - f0[1])
+                + n[2] * (ref_pt[2] - f0[2]);
+            let d_test = n[0] * (test_pt[0] - f0[0])
+                + n[1] * (test_pt[1] - f0[1])
+                + n[2] * (test_pt[2] - f0[2]);
+            d_ref * d_test >= -1e-14
+        };
+
+    same_side(pa, pb, pc, pd, p)
+        && same_side(pa, pb, pd, pc, p)
+        && same_side(pa, pc, pd, pb, p)
+        && same_side(pb, pc, pd, pa, p)
+}
+
+/// Cross product of two 3-vectors.
+fn cross3(u: [f64; 3], v: [f64; 3]) -> [f64; 3] {
+    [
+        u[1] * v[2] - u[2] * v[1],
+        u[2] * v[0] - u[0] * v[2],
+        u[0] * v[1] - u[1] * v[0],
+    ]
+}
+
 // ── Test fixtures ─────────────────────────────────────────────────────────────
 
 /// Generate a subdivided icosphere of radius 1, centred at the origin.
@@ -445,5 +1272,128 @@ mod tests {
                 "tet {t:?} has non-positive orientation"
             );
         }
+    }
+
+    /// Unit cube surface mesh (12 triangles, 2 per face).
+    fn box_surface_mesh() -> SurfaceMesh {
+        let points = vec![
+            Point3::new(0., 0., 0.), // 0
+            Point3::new(1., 0., 0.), // 1
+            Point3::new(1., 1., 0.), // 2
+            Point3::new(0., 1., 0.), // 3
+            Point3::new(0., 0., 1.), // 4
+            Point3::new(1., 0., 1.), // 5
+            Point3::new(1., 1., 1.), // 6
+            Point3::new(0., 1., 1.), // 7
+        ];
+        let triangles = vec![
+            // Bottom (z=0), normal -Z
+            [0, 2, 1],
+            [0, 3, 2],
+            // Top (z=1), normal +Z
+            [4, 5, 6],
+            [4, 6, 7],
+            // Front (y=0), normal -Y
+            [0, 1, 5],
+            [0, 5, 4],
+            // Back (y=1), normal +Y
+            [2, 3, 7],
+            [2, 7, 6],
+            // Left (x=0), normal -X
+            [0, 4, 7],
+            [0, 7, 3],
+            // Right (x=1), normal +X
+            [1, 2, 6],
+            [1, 6, 5],
+        ];
+        SurfaceMesh { points, triangles }
+    }
+
+    #[test]
+    fn tet_mesh_from_bowyer_watson() {
+        let pts: Vec<[f64; 3]> = vec![
+            [0., 0., 0.],
+            [1., 0., 0.],
+            [1., 1., 0.],
+            [0., 1., 0.],
+            [0., 0., 1.],
+            [1., 0., 1.],
+            [1., 1., 1.],
+            [0., 1., 1.],
+        ];
+        let tets = bowyer_watson_3d(&pts);
+        let mesh = TetMesh::from_tets(pts, tets);
+
+        // Should have multiple tets.
+        let live = mesh.live_tets();
+        assert!(!live.is_empty(), "should have tets");
+
+        // All faces should be tracked.
+        let face_count = mesh.all_faces().count();
+        assert!(face_count > 0, "should have faces");
+    }
+
+    #[test]
+    fn box_surface_all_faces_recovered() {
+        let surface = box_surface_mesh();
+        let pts: Vec<[f64; 3]> = surface.points.iter().map(|p| [p.x, p.y, p.z]).collect();
+        let tets = bowyer_watson_3d(&pts);
+        let mut mesh = TetMesh::from_tets(pts, tets);
+
+        // Run constrained face recovery.
+        let _steiner_count = recover_constraint_faces(&mut mesh, &surface, 100).unwrap();
+
+        // All surface triangles should now be present as tet faces.
+        for tri in &surface.triangles {
+            let key = sorted3(*tri);
+            assert!(
+                mesh.has_face(key),
+                "surface triangle {:?} missing from tet mesh",
+                tri
+            );
+        }
+
+        // No degenerate tets.
+        for tet in mesh.live_tets() {
+            let vol = tet_signed_volume(&mesh.pts, &tet);
+            assert!(
+                vol > 1e-15,
+                "degenerate or inverted tet {:?} with vol {}",
+                tet,
+                vol
+            );
+        }
+    }
+
+    #[test]
+    fn face_recovery_preserves_volume() {
+        let surface = box_surface_mesh();
+        let pts: Vec<[f64; 3]> = surface.points.iter().map(|p| [p.x, p.y, p.z]).collect();
+        let tets = bowyer_watson_3d(&pts);
+        let mut mesh = TetMesh::from_tets(pts, tets);
+
+        // Volume before recovery.
+        let vol_before: f64 = mesh
+            .live_tets()
+            .iter()
+            .map(|t| tet_signed_volume(&mesh.pts, t).abs())
+            .sum();
+
+        recover_constraint_faces(&mut mesh, &surface, 100).unwrap();
+
+        // Volume after recovery.
+        let vol_after: f64 = mesh
+            .live_tets()
+            .iter()
+            .map(|t| tet_signed_volume(&mesh.pts, t).abs())
+            .sum();
+
+        // Volume should be close (Steiner points don't change enclosed volume).
+        assert!(
+            (vol_before - vol_after).abs() < 0.01,
+            "volume changed: before={}, after={}",
+            vol_before,
+            vol_after
+        );
     }
 }
