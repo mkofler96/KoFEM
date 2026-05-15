@@ -37,6 +37,20 @@
     ]
   },
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git commit*)",
+            "command": "cd /home/user/KoFEM && cargo fmt --all --check && cargo clippy --all-targets --all-features -- -D warnings",
+            "statusMessage": "fmt + clippy pre-commit check…",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write",

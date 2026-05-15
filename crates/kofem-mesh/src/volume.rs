@@ -62,13 +62,181 @@ impl Default for VolumeMeshOptions {
     }
 }
 
-// ── Entry point (stub) ────────────────────────────────────────────────────────
+// ── Entry point ───────────────────────────────────────────────────────────────
 
 /// Fill the interior of `surface` with quality tetrahedra.
 ///
-/// Not yet implemented — subsequent stages (5.2–5.5) complete this.
-pub fn volume_mesh(_surface: &SurfaceMesh, _opts: VolumeMeshOptions) -> Result<Mesh3D, MeshError> {
-    Err(MeshError::NotImplemented)
+/// Pipeline: Bowyer-Watson (5.2) → face recovery (5.3) →
+///           interior classification (5.4) → Delaunay refinement (5.5).
+pub fn volume_mesh(surface: &SurfaceMesh, opts: VolumeMeshOptions) -> Result<Mesh3D, MeshError> {
+    let pts: Vec<[f64; 3]> = surface.points.iter().map(|p| [p.x, p.y, p.z]).collect();
+    if pts.len() < 4 {
+        return Err(MeshError::DegenerateInput);
+    }
+
+    // Stage 5.2: Bowyer–Watson Delaunay tetrahedralization of the surface points.
+    let tets = bowyer_watson_3d(&pts);
+    if tets.is_empty() {
+        return Err(MeshError::DegenerateInput);
+    }
+
+    // Stage 5.3: Recover all constrained surface faces.
+    let mut mesh = TetMesh::from_tets(pts, tets);
+    recover_constraint_faces(&mut mesh, surface, 500)?;
+
+    // Stage 5.4: Remove exterior tetrahedra.
+    classify_interior_tets(&mut mesh, surface);
+    if mesh.live_tets().is_empty() {
+        return Err(MeshError::DegenerateInput);
+    }
+
+    // Stage 5.5: Improve quality by eliminating high circumradius/edge-length tets.
+    refine_quality(&mut mesh, surface, &opts);
+
+    let points = mesh
+        .pts
+        .iter()
+        .map(|p| Point3::new(p[0], p[1], p[2]))
+        .collect();
+    let tets = mesh.live_tets().into_iter().map(|v| Tet { v }).collect();
+    Ok(Mesh3D { points, tets })
+}
+
+// ── Stage 5.5: Delaunay refinement ───────────────────────────────────────────
+
+/// Ruppert-style quality improvement loop.
+///
+/// For each tet with circumradius/shortest-edge > `quality_ratio`:
+///   - If its circumcenter lies inside the solid: insert the circumcenter.
+///   - Otherwise: insert the midpoint of the shortest edge.
+///
+/// Stops when no bad tets remain or `max_tets` Steiner points have been inserted.
+fn refine_quality(mesh: &mut TetMesh, surface: &SurfaceMesh, opts: &VolumeMeshOptions) {
+    let surf_pts: Vec<[f64; 3]> = surface.points.iter().map(|p| [p.x, p.y, p.z]).collect();
+    let ray_dir = normalize3([1.0, 1e-4, 1e-8]);
+    let mut steiner = 0usize;
+
+    loop {
+        if steiner >= opts.max_tets {
+            break;
+        }
+
+        // Find the first live tet above the quality threshold.
+        let bad = (0..mesh.tets.len()).find(|&ti| {
+            let t = mesh.tets[ti];
+            t[0] != usize::MAX && tet_quality_ratio(&mesh.pts, &t) > opts.quality_ratio
+        });
+
+        let ti = match bad {
+            None => break,
+            Some(ti) => ti,
+        };
+
+        let tet = mesh.tets[ti];
+        let (cc, _) = tet_circumsphere(&mesh.pts, &tet);
+
+        let p = if cc[0].is_finite()
+            && count_ray_hits(cc, ray_dir, &surf_pts, &surface.triangles) % 2 == 1
+        {
+            cc // circumcenter is inside the solid
+        } else {
+            shortest_edge_midpoint(&mesh.pts, &tet)
+        };
+
+        insert_point_bw(mesh, p);
+        steiner += 1;
+    }
+
+    // Final pass: remove any exterior tets introduced during refinement insertions.
+    classify_interior_tets(mesh, surface);
+}
+
+/// Circumradius-to-shortest-edge ratio; returns `INFINITY` for degenerate tets.
+fn tet_quality_ratio(pts: &[[f64; 3]], tet: &[usize; 4]) -> f64 {
+    let (_, r2) = tet_circumsphere(pts, tet);
+    if !r2.is_finite() || r2 < 0.0 {
+        return f64::INFINITY;
+    }
+    let min_edge_sq = tet_edges(*tet)
+        .iter()
+        .map(|&[a, b]| {
+            let d = [
+                pts[b][0] - pts[a][0],
+                pts[b][1] - pts[a][1],
+                pts[b][2] - pts[a][2],
+            ];
+            d[0] * d[0] + d[1] * d[1] + d[2] * d[2]
+        })
+        .fold(f64::INFINITY, f64::min);
+    if min_edge_sq < 1e-30 {
+        return f64::INFINITY;
+    }
+    r2.sqrt() / min_edge_sq.sqrt()
+}
+
+/// Midpoint of the shortest edge in a tet.
+fn shortest_edge_midpoint(pts: &[[f64; 3]], tet: &[usize; 4]) -> [f64; 3] {
+    let [a, b] = tet_edges(*tet)
+        .into_iter()
+        .min_by(|&[a1, b1], &[a2, b2]| {
+            let sq = |i: usize, j: usize| {
+                let d = [
+                    pts[j][0] - pts[i][0],
+                    pts[j][1] - pts[i][1],
+                    pts[j][2] - pts[i][2],
+                ];
+                d[0] * d[0] + d[1] * d[1] + d[2] * d[2]
+            };
+            sq(a1, b1).partial_cmp(&sq(a2, b2)).unwrap()
+        })
+        .unwrap();
+    [
+        (pts[a][0] + pts[b][0]) * 0.5,
+        (pts[a][1] + pts[b][1]) * 0.5,
+        (pts[a][2] + pts[b][2]) * 0.5,
+    ]
+}
+
+/// Insert point `p` into `mesh` using Bowyer-Watson local re-triangulation.
+fn insert_point_bw(mesh: &mut TetMesh, p: [f64; 3]) {
+    let new_idx = mesh.pts.len();
+    mesh.pts.push(p);
+
+    // Cavity: all live tets whose circumsphere contains `p`.
+    let cavity: Vec<usize> = (0..mesh.tets.len())
+        .filter(|&ti| {
+            let t = mesh.tets[ti];
+            if t[0] == usize::MAX {
+                return false;
+            }
+            let (cc, r2) = tet_circumsphere(&mesh.pts, &t);
+            bw_inside(p, cc, r2)
+        })
+        .collect();
+
+    if cavity.is_empty() {
+        return;
+    }
+
+    let cavity_tets: Vec<[usize; 4]> = cavity.iter().map(|&ti| mesh.tets[ti]).collect();
+    let boundary = cavity_boundary_faces(&cavity_tets);
+
+    for &ti in &cavity {
+        mesh.kill_tet(ti);
+    }
+    for face in boundary {
+        let [fa, fb, fc] = face;
+        let vol = tet_signed_volume(&mesh.pts, &[fa, fb, fc, new_idx]);
+        if vol.abs() < 1e-20 {
+            continue;
+        }
+        if vol > 0.0 {
+            mesh.add_tet([fa, fb, fc, new_idx]);
+        } else {
+            mesh.add_tet([fa, fc, fb, new_idx]);
+        }
+    }
+    mesh.rebuild_adjacency();
 }
 
 // ── Geometric helpers ─────────────────────────────────────────────────────────
@@ -1324,10 +1492,20 @@ mod tests {
     }
 
     #[test]
-    fn volume_mesh_stub_returns_err() {
-        let surface = icosphere(1);
-        let result = volume_mesh(&surface, VolumeMeshOptions::default());
-        assert!(matches!(result, Err(MeshError::NotImplemented)));
+    fn sphere_volume_mesh() {
+        let surface = icosphere(2);
+        let mesh = volume_mesh(&surface, VolumeMeshOptions::default()).unwrap();
+        for tet in &mesh.tets {
+            assert!(tet_signed_volume_mesh(&mesh, tet) > 0.);
+        }
+        let vol: f64 = mesh
+            .tets
+            .iter()
+            .map(|t| tet_signed_volume_mesh(&mesh, t).abs())
+            .sum();
+        // icosphere(2) is a polyhedral approximation; inherent discretisation error
+        // is ~3.4 %, so the practical 5 % (≈ 0.21) bound from the issue applies.
+        assert!((vol - 4.189).abs() < 0.2, "sphere volume {vol:.3} ≠ 4.189");
     }
 
     #[test]

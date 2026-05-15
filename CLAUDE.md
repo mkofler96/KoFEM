@@ -23,6 +23,14 @@ KoFEM/
 - **DOF ordering per node:** `[ux, uy, uz, rx, ry, rz]` (indices 0-5). This is fixed globally.
 - **Global stiffness assembly** uses a COO sparse format before converting to CSC for factorization.
 
+## First-time setup
+
+After cloning, activate the project's git hooks (runs `cargo fmt` and `cargo clippy` before every commit):
+
+```bash
+git config core.hooksPath .githooks
+```
+
 ## Build Commands
 
 ```bash
