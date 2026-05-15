@@ -308,7 +308,7 @@ fn try_tessellate_conical(
 
     let ax_id = get_ref(e, 1).ok()?;
     let radius = get_real(e, 2).ok()?;
-    let semi_angle = get_real(e, 3).ok()?;
+    let semi_angle = get_real(e, 3).ok()?.to_radians();
     let axis = axis2_placement(file, ax_id).ok()?;
     let y = axis.y();
 
