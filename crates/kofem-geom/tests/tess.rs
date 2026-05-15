@@ -479,6 +479,145 @@ fn cylinder_barrel_has_nonzero_height() {
     );
 }
 
+// ── cone regression tests ─────────────────────────────────────────────────────
+
+/// Truncated cone: bottom circle radius=10 at z=0, top circle radius=20 at z=30.
+/// The CONICAL_SURFACE has semi_angle = atan(1/3) ≈ 0.32175 rad.
+/// On the barrel, r(z) = 10 + z/3 (linear taper, tan(φ)=1/3).
+const STEP_CONE: &str = "
+ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION(('KoFEM test cone R_bot=10 R_top=20 H=30'));
+ENDSEC;
+DATA;
+#1=CARTESIAN_POINT('',(10.,0.,0.));
+#2=VERTEX_POINT('',#1);
+#3=CARTESIAN_POINT('',(20.,0.,30.));
+#4=VERTEX_POINT('',#3);
+#5=CARTESIAN_POINT('',(10.,0.,0.));
+#6=DIRECTION('',(0.31623,0.,0.94868));
+#7=VECTOR('',#6,31.62278);
+#8=LINE('',#5,#7);
+#9=EDGE_CURVE('',#2,#4,#8,.T.);
+#10=CARTESIAN_POINT('',(0.,0.,0.));
+#11=DIRECTION('',(0.,0.,-1.));
+#12=DIRECTION('',(1.,0.,0.));
+#13=AXIS2_PLACEMENT_3D('',#10,#11,#12);
+#14=CIRCLE('',#13,10.);
+#15=EDGE_CURVE('',#2,#2,#14,.T.);
+#16=CARTESIAN_POINT('',(0.,0.,30.));
+#17=DIRECTION('',(0.,0.,1.));
+#18=DIRECTION('',(1.,0.,0.));
+#19=AXIS2_PLACEMENT_3D('',#16,#17,#18);
+#20=CIRCLE('',#19,20.);
+#21=EDGE_CURVE('',#4,#4,#20,.T.);
+#22=ORIENTED_EDGE('',*,*,#15,.T.);
+#23=CARTESIAN_POINT('',(0.,0.,0.));
+#24=DIRECTION('',(0.,0.,-1.));
+#25=DIRECTION('',(1.,0.,0.));
+#26=AXIS2_PLACEMENT_3D('',#23,#24,#25);
+#27=PLANE('',#26);
+#28=EDGE_LOOP('',(#22));
+#29=FACE_OUTER_BOUND('',#28,.T.);
+#30=ADVANCED_FACE('',(#29),#27,.T.);
+#31=ORIENTED_EDGE('',*,*,#21,.T.);
+#32=CARTESIAN_POINT('',(0.,0.,30.));
+#33=DIRECTION('',(0.,0.,1.));
+#34=DIRECTION('',(1.,0.,0.));
+#35=AXIS2_PLACEMENT_3D('',#32,#33,#34);
+#36=PLANE('',#35);
+#37=EDGE_LOOP('',(#31));
+#38=FACE_OUTER_BOUND('',#37,.T.);
+#39=ADVANCED_FACE('',(#38),#36,.T.);
+#40=ORIENTED_EDGE('',*,*,#9,.T.);
+#41=ORIENTED_EDGE('',*,*,#21,.T.);
+#42=ORIENTED_EDGE('',*,*,#9,.F.);
+#43=ORIENTED_EDGE('',*,*,#15,.F.);
+#44=CARTESIAN_POINT('',(0.,0.,0.));
+#45=DIRECTION('',(0.,0.,1.));
+#46=DIRECTION('',(1.,0.,0.));
+#47=AXIS2_PLACEMENT_3D('',#44,#45,#46);
+#48=CONICAL_SURFACE('',#47,10.,0.32175);
+#49=EDGE_LOOP('',(#40,#41,#42,#43));
+#50=FACE_OUTER_BOUND('',#49,.T.);
+#51=ADVANCED_FACE('',(#50),#48,.T.);
+#52=CLOSED_SHELL('',(#30,#39,#51));
+#53=MANIFOLD_SOLID_BREP('cone',#52);
+ENDSEC;
+END-ISO-10303-21;
+";
+
+fn load_cone() -> (kofem_geom::step::StepFile, BRep) {
+    let file = parse(STEP_CONE).unwrap();
+    let brep = BRep::extract(&file).unwrap();
+    (file, brep)
+}
+
+/// All barrel points must lie on the cone surface: r(z) = 10 + z/3 (within 0.1%).
+/// Before the fix, conical faces fell through to the flat-projection path and
+/// produced only z=0 barrel points.
+#[test]
+fn cone_barrel_points_lie_on_cone_surface() {
+    let (file, brep) = load_cone();
+    let opts = TessOptions {
+        max_edge_len: 2.0,
+        ..TessOptions::default()
+    };
+    let mesh = tessellate(&brep, &file, opts).unwrap();
+
+    assert!(!mesh.points.is_empty());
+
+    let mut has_barrel = false;
+    for &[x, y, z] in &mesh.points {
+        // Points on either flat cap lie exactly in z=0 or z=30 planes; skip them.
+        let r = (x * x + y * y).sqrt();
+        let r_expected = 10.0 + z / 3.0;
+        // Only check barrel points (those clearly not on the cap discs).
+        if r > 1e-3 && z > 1e-3 && z < 30.0 - 1e-3 {
+            let err = (r - r_expected).abs() / r_expected;
+            assert!(
+                err < 1e-3,
+                "barrel point ({x:.4},{y:.4},{z:.4}) has r={r:.6}, expected {r_expected:.6} (err={err:.2e})"
+            );
+            has_barrel = true;
+        }
+    }
+    assert!(has_barrel, "no intermediate barrel points found — cone may have been tessellated flat");
+}
+
+/// Height range of the merged cone mesh must span [0, 30].
+#[test]
+fn cone_mesh_spans_correct_height() {
+    let (file, brep) = load_cone();
+    let opts = TessOptions {
+        max_edge_len: 5.0,
+        ..TessOptions::default()
+    };
+    let mesh = tessellate(&brep, &file, opts).unwrap();
+
+    let mut z_min = f64::INFINITY;
+    let mut z_max = f64::NEG_INFINITY;
+    for &[_, _, z] in &mesh.points {
+        z_min = z_min.min(z);
+        z_max = z_max.max(z);
+    }
+
+    assert!((z_min - 0.0).abs() < 1e-4, "z_min should be 0, got {z_min}");
+    assert!((z_max - 30.0).abs() < 1e-4, "z_max should be 30, got {z_max}");
+}
+
+/// Tessellation must produce triangles (non-degenerate mesh).
+#[test]
+fn cone_mesh_has_triangles() {
+    let (file, brep) = load_cone();
+    let mesh = tessellate(&brep, &file, TessOptions::default()).unwrap();
+    assert!(
+        mesh.triangles.len() >= 3,
+        "expected at least 3 triangles, got {}",
+        mesh.triangles.len()
+    );
+}
+
 // ── bracket regression tests ───────────────────────────────────────────────────
 
 #[test]

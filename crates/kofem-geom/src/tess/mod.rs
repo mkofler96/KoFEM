@@ -128,6 +128,9 @@ fn tessellate_face_raw(face: &TopoFace, file: &StepFile, max_edge_len: f64) -> S
     if let Some(mesh) = try_tessellate_cylindrical(face, file, max_edge_len) {
         return mesh;
     }
+    if let Some(mesh) = try_tessellate_conical(face, file, max_edge_len) {
+        return mesh;
+    }
     if let Some(mesh) = try_tessellate_toroidal(face, file, max_edge_len) {
         return mesh;
     }
@@ -284,6 +287,144 @@ fn try_tessellate_cylindrical(
     }
 
     Some(SurfaceMesh { points, triangles })
+}
+
+/// Tessellate a `CONICAL_SURFACE` face directly in UV space (u = angle, v = slant distance)
+/// and lift back to 3D. Returns `None` when the surface is not conical.
+///
+/// Full-revolution cones (detected by a closed-circle boundary edge) generate a u×v grid
+/// spanning u ∈ [0, 2π] with v inferred from the boundary axial extents.
+/// Partial cones (chamfers, tapered transitions that do not wrap fully) invert the boundary
+/// to cone UV, determine the u-range, then generate a UV grid over [u_min, u_max] × [v_min, v_max].
+fn try_tessellate_conical(
+    face: &TopoFace,
+    file: &StepFile,
+    max_edge_len: f64,
+) -> Option<SurfaceMesh> {
+    let e = file.get(&face.surface_id)?;
+    if e.type_name != "CONICAL_SURFACE" {
+        return None;
+    }
+
+    let ax_id = get_ref(e, 1).ok()?;
+    let radius = get_real(e, 2).ok()?;
+    let semi_angle = get_real(e, 3).ok()?;
+    let axis = axis2_placement(file, ax_id).ok()?;
+    let y = axis.y();
+
+    let surface = surface_from_step(face.surface_id, file).ok()?;
+
+    let boundary_3d = sample_boundary_3d(&face.outer_loop, file, max_edge_len);
+    if boundary_3d.len() < 3 {
+        return None;
+    }
+
+    // Full-revolution check: a closed-circle edge has start ≈ end (zero chord).
+    let has_closed_circle = face.outer_loop.iter().any(|edge| {
+        let d = sub(edge.start, edge.end);
+        d[0] * d[0] + d[1] * d[1] + d[2] * d[2] < 1e-16
+    });
+
+    // Degenerate flat cone (φ ≈ ±90°): cos(φ) ≈ 0 means v is undefined.
+    let cos_phi = semi_angle.cos();
+    if cos_phi.abs() < 1e-10 {
+        return None;
+    }
+
+    // Invert boundary points to slant parameter v = axial_projection / cos(φ).
+    let mut v_min = f64::INFINITY;
+    let mut v_max = f64::NEG_INFINITY;
+    for &p in &boundary_3d {
+        let d = sub(p, axis.origin);
+        let v = dot3(d, axis.z) / cos_phi;
+        v_min = v_min.min(v);
+        v_max = v_max.max(v);
+    }
+    if (v_max - v_min).abs() < 1e-10 {
+        return None;
+    }
+
+    // Radius at the midpoint v for density estimation.
+    let v_mid = (v_min + v_max) / 2.0;
+    let r_mid = (radius + v_mid * semi_angle.sin()).abs();
+
+    if has_closed_circle {
+        // Full-revolution cone: u sweeps 0..2π, v derived from axial boundary range.
+        let circumference = 2.0 * PI * r_mid;
+        let n_u = ((circumference / max_edge_len).ceil() as usize).clamp(8, 256);
+        let n_v = (((v_max - v_min).abs() / max_edge_len).ceil() as usize).max(1);
+
+        let mut points = Vec::with_capacity(n_u * (n_v + 1));
+        for j in 0..=n_v {
+            let v = v_min + (v_max - v_min) * j as f64 / n_v as f64;
+            for i in 0..n_u {
+                let u = 2.0 * PI * i as f64 / n_u as f64;
+                points.push(surface.point(u, v));
+            }
+        }
+
+        let mut triangles = Vec::with_capacity(n_u * n_v * 2);
+        for j in 0..n_v {
+            for i in 0..n_u {
+                let ni = (i + 1) % n_u;
+                let a = j * n_u + i;
+                let b = j * n_u + ni;
+                let c = (j + 1) * n_u + i;
+                let d = (j + 1) * n_u + ni;
+                // CCW winding when viewed from outside (outward-radial normal).
+                triangles.push([a, b, d]);
+                triangles.push([a, d, c]);
+            }
+        }
+
+        Some(SurfaceMesh { points, triangles })
+    } else {
+        // Partial cone: invert boundary to find the angular u-range.
+        let raw_u: Vec<f64> = boundary_3d
+            .iter()
+            .map(|&p| {
+                let d = sub(p, axis.origin);
+                f64::atan2(dot3(d, y), dot3(d, axis.x))
+            })
+            .collect();
+        let u_vals = unwrap_angles(raw_u);
+
+        let u_min = u_vals.iter().cloned().fold(f64::INFINITY, f64::min);
+        let u_max = u_vals.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+
+        if (u_max - u_min) < 1e-10 {
+            return None;
+        }
+
+        let arc_u = (u_max - u_min) * r_mid;
+        let arc_v = (v_max - v_min).abs();
+        let n_u = ((arc_u / max_edge_len).ceil() as usize).clamp(2, 256);
+        let n_v = ((arc_v / max_edge_len).ceil() as usize).clamp(1, 256);
+
+        let mut points = Vec::with_capacity((n_u + 1) * (n_v + 1));
+        for j in 0..=n_v {
+            let v = v_min + (v_max - v_min) * j as f64 / n_v as f64;
+            for i in 0..=n_u {
+                let u = u_min + (u_max - u_min) * i as f64 / n_u as f64;
+                points.push(surface.point(u, v));
+            }
+        }
+
+        let n_cols = n_u + 1;
+        let mut triangles = Vec::with_capacity(n_u * n_v * 2);
+        for j in 0..n_v {
+            for i in 0..n_u {
+                let a = j * n_cols + i;
+                let b = j * n_cols + (i + 1);
+                let c = (j + 1) * n_cols + i;
+                let d = (j + 1) * n_cols + (i + 1);
+                triangles.push([a, b, d]);
+                triangles.push([a, d, c]);
+            }
+        }
+
+        Some(SurfaceMesh { points, triangles })
+    }
 }
 
 /// Tessellate a `TOROIDAL_SURFACE` face (blend fillet) directly in UV space
