@@ -43,7 +43,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "f=$(jq -r '.tool_input.file_path'); case \"$f\" in *.rs) rustfmt \"$f\" || true ;; *.ts|*.tsx) cd /Users/michaelkofler/KoFEM/web && [ -d node_modules ] && bun run typecheck || true ;; *.py) uvx ruff check --fix \"$f\" 2>/dev/null; uvx ruff format \"$f\" 2>/dev/null || true ;; esac",
+            "command": "input=$(cat); f=$(echo \"$input\" | jq -r '.tool_input.file_path'); case \"$f\" in *.rs) rustfmt \"$f\" || true ;; *.ts|*.tsx) cd web && [ -d node_modules ] && bun run typecheck || true ;; *.py) uvx ruff check --fix \"$f\" 2>/dev/null; uvx ruff format \"$f\" 2>/dev/null || true ;; esac",
             "statusMessage": "Formatting…"
           }
         ]
@@ -53,7 +53,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "f=$(jq -r '.tool_input.file_path'); case \"$f\" in *crates/kofem-geom*.rs) out=$(cargo clippy -p kofem-geom 2>&1); if echo \"$out\" | grep -qE \"^(warning|error)\"; then printf \"%s\" \"$out\" | jq -Rs '{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":(\"Clippy (kofem-geom):\\n\" + .)}}'; fi ;; esac 2>/dev/null || true",
+            "command": "input=$(cat); f=$(echo \"$input\" | jq -r '.tool_input.file_path'); case \"$f\" in *kofem-mesh*.rs) cargo clippy -p kofem-mesh -- -D warnings 2>&1 | head -50 | jq -Rs 'if . != \"\" then {\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":(\"Clippy (kofem-mesh):\\n\" + .)}} else empty end' ;; *kofem-core*.rs) cargo clippy -p kofem-core -- -D warnings 2>&1 | head -50 | jq -Rs 'if . != \"\" then {\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":(\"Clippy (kofem-core):\\n\" + .)}} else empty end' ;; *kofem-geom*.rs) cargo clippy -p kofem-geom -- -D warnings 2>&1 | head -50 | jq -Rs 'if . != \"\" then {\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":(\"Clippy (kofem-geom):\\n\" + .)}} else empty end' ;; esac 2>/dev/null || true",
             "statusMessage": "Running clippy…",
             "timeout": 60
           }
