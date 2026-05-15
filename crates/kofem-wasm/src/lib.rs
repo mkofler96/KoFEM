@@ -343,6 +343,7 @@ pub fn compute_volume_mesh(surface_json: &str) -> Result<String, JsError> {
 
     let out = serde_json::json!({
         "points": pts,
+        "tets": live_tets,
         "edges": edge_set.into_iter().collect::<Vec<_>>()
     });
 

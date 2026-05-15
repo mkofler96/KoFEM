@@ -18,6 +18,7 @@ function GeometrySection() {
   const isMeshing = useModelStore(s => s.isMeshing)
   const nodes = useModelStore(s => s.nodes)
   const elements = useModelStore(s => s.elements)
+  const stepSurface = useModelStore(s => s.stepSurface)
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<BoxGeometry | null>(null)
@@ -52,6 +53,24 @@ function GeometrySection() {
     const newGeom = store.geometries[store.geometries.length - 1]
     if (newGeom) runMesh(newGeom)
     setDialogOpen(false)
+  }
+
+  async function handleMeshVolume() {
+    if (!stepSurface) return
+    setMeshing(true)
+    try {
+      const { nodes: volNodes, elements: volElements } = await sendToWorker<{
+        nodes: Node[]
+        elements: Element[]
+        points: [number, number, number][]
+        edges: [number, number][]
+      }>('volume_mesh', { surface: stepSurface })
+      applyMeshResult(volNodes, volElements, 'STEP Volume Mesh')
+    } catch (err) {
+      alert(`Volume meshing failed: ${err}`)
+    } finally {
+      setMeshing(false)
+    }
   }
 
   return (
@@ -95,6 +114,17 @@ function GeometrySection() {
           </div>
         </div>
       ))}
+
+      {stepSurface && (
+        <button
+          className={styles.pickBtn}
+          disabled={isMeshing}
+          onClick={handleMeshVolume}
+          title="Volume-mesh the imported STEP geometry and load it into the FEM model"
+        >
+          {isMeshing ? 'Meshing…' : 'Mesh volume'}
+        </button>
+      )}
 
       {dialogOpen && (
         <GeometryDialog
