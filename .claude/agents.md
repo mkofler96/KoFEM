@@ -17,4 +17,4 @@ Follow strict red-green TDD for all implementation work:
 
 ## Pull Requests
 
-Always include `closes #<issue-number>` in the PR description body so that merging automatically closes the linked issue on GitHub.
+Always include `closes #N` (where N is the actual issue number, e.g. `closes #37`) in the PR description body so that merging automatically closes the linked issue on GitHub.
