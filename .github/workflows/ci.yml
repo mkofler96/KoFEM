@@ -11,66 +11,42 @@ env:
   SLACK_CHANNEL: ${{ secrets.SLACK_CHANNEL }}
 
 jobs:
-  rust:
-    name: Rust check + test
+  ci:
+    name: CI
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
+          targets: wasm32-unknown-unknown
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
+      - name: Cache wasm-pack binary
+        id: cache-wasm-pack
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/wasm-pack
+          key: wasm-pack-${{ runner.os }}-v1
+      - name: Install wasm-pack
+        if: steps.cache-wasm-pack.outputs.cache-hit != 'true'
+        run: cargo install wasm-pack --locked
       - run: cargo fmt --all --check
       - run: cargo clippy --all-targets --all-features -- -D warnings
       - run: cargo test --all-features
-
-  wasm:
-    name: WASM build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo install wasm-pack --locked
-      - run: wasm-pack build crates/kofem-wasm --target web --out-dir ../../web/src/wasm/pkg
-
-  web:
-    name: Web build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo install wasm-pack --locked
       - run: wasm-pack build crates/kofem-wasm --target web --out-dir ../../web/src/wasm/pkg
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+      - name: Cache bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('web/bun.lockb') }}
+          restore-keys: bun-${{ runner.os }}-
       - run: cd web && bun install
       - run: cd web && bun run typecheck
       - run: cd web && bun run build
-
-  playwright:
-    name: Playwright E2E
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo install wasm-pack --locked
-      - run: wasm-pack build crates/kofem-wasm --target web --out-dir ../../web/src/wasm/pkg
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - run: cd web && bun install
       - run: cd web && bunx playwright install --with-deps chromium
-      - run: cd web && bun run build
       - run: cd web && bun run test
       - run: cd web && bun scripts/generate-mesh-report.ts
       - run: cd web && bun run upload:slack screenshots/step-fit-view.png screenshots/mesh-report.pdf --comment="KoFEM CI — screenshot + mesh capabilities report"
