@@ -212,6 +212,10 @@ interface ModelState extends ModelSnapshot {
   applyLoadToFace(nodeIds: number[], dof: number, totalForce: number): void
   clearConstraints(): void
   clearLoads(): void
+
+  // Viewport
+  fitViewTrigger: number
+  triggerFitView(): void
 }
 
 // ── Store ─────────────────────────────────────────────────────────────────────
@@ -229,8 +233,10 @@ export const useModelStore = create<ModelState>()(
     nextMatId: 2,
     pickMode: null,
     selectedFace: null,
+    fitViewTrigger: 0,
 
-    setStepSurface: (mesh) => set(s => { s.stepSurface = mesh }),
+    setStepSurface: (mesh) => set(s => { s.stepSurface = mesh; if (mesh) s.fitViewTrigger++ }),
+    triggerFitView: () => set(s => { s.fitViewTrigger++ }),
 
     addNode: (node) => set(s => { s.nodes.push(node) }),
     addElement: (el) => set(s => { s.elements.push(el) }),
@@ -249,6 +255,7 @@ export const useModelStore = create<ModelState>()(
       s.selectedFace = null
       s.pickMode = null
       s.modelName = name
+      s.fitViewTrigger++
       if (!s.properties.find(p => p.type === 'PSOLID')) {
         const matId = s.materials[0]?.id ?? 1
         s.properties = [{ id: 1, type: 'PSOLID', materialId: matId }]
@@ -267,6 +274,7 @@ export const useModelStore = create<ModelState>()(
       s.geometries = []
       s.selectedFace = null
       s.pickMode = null
+      s.fitViewTrigger++
     }),
 
     reset: () => set(s => {

@@ -1,20 +1,24 @@
 import { test, expect } from '@playwright/test'
+import path from 'path'
 
-test('capture app after solving', async ({ page }) => {
+// Playwright is invoked from web/, so cwd is web/ and the STEP file lives one level up
+const STEP_FILE = path.resolve('..', 'test_files', 'new_bracket_2.stp')
+
+test('capture app after loading STEP file with fit view', async ({ page }) => {
   await page.goto('/')
-  await expect(page.getByRole('button', { name: 'Solve' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Import STEP' })).toBeVisible()
 
-  // Solve the default model
-  const solveBtn = page.getByRole('button', { name: /Solve|Solving/ })
-  await expect(solveBtn).toBeEnabled()
-  await solveBtn.click()
+  // Upload the example STEP file via the hidden file input
+  await page.locator('input[type="file"][accept=".stp,.step"]').setInputFiles(STEP_FILE)
 
-  // Wait for solve to complete
-  await expect(page.getByRole('button', { name: 'Solve' })).toBeEnabled({ timeout: 60_000 })
+  // Wait for import to finish — button returns to its default label
+  await expect(page.getByRole('button', { name: 'Import STEP' })).toBeEnabled({ timeout: 30_000 })
 
-  // Wait for results to render
+  // Fit all loaded geometry into the isometric view
+  await page.getByRole('button', { name: 'Fit View' }).click()
+
+  // Allow the camera reposition and a render frame to settle
   await page.waitForTimeout(500)
 
-  // Take screenshot - Playwright handles the path
-  await page.screenshot({ path: 'screenshots/solve-result.png', fullPage: true })
+  await page.screenshot({ path: 'screenshots/step-fit-view.png', fullPage: true })
 })
