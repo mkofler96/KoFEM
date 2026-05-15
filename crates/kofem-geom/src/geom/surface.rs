@@ -2,8 +2,8 @@ use std::f64::consts::PI;
 
 use super::curve::{curve_from_step, Curve};
 use super::{
-    add, arg_as_ref, axis1_placement, axis2_placement, cross, de_boor_1d, expand_knots, get_arg,
-    get_entity, get_list, get_real, get_ref, normalize, point3, rodrigues, scale, sub, Axis1,
+    add, arg_as_ref, axis1_placement, axis2_placement, cross, de_boor_1d, expand_knots,
+    get_entity, get_real, get_ref, normalize, point3, rodrigues, scale, sub, Axis1,
     Axis2, GeomError,
 };
 use crate::step::parser::{Arg, StepFile};
@@ -322,8 +322,88 @@ impl Surface for SurfaceOfRevolution {
 
 // ── from_step builder ─────────────────────────────────────────────────────────
 
+/// Parse a B_SPLINE_SURFACE_WITH_KNOTS from a raw arg slice.
+///
+/// Works for both a standalone entity (where `args` = `entity.args`) and a
+/// TypedValue component inside a complex entity instance.
+fn bspline_surface_from_args(
+    id: u64,
+    args: &[Arg],
+    file: &StepFile,
+) -> Result<Box<dyn Surface>, GeomError> {
+    let bad = |idx| GeomError::BadArg(id, idx);
+
+    let u_degree = match args.get(1) {
+        Some(Arg::Integer(v)) => *v as usize,
+        _ => return Err(bad(1)),
+    };
+    let v_degree = match args.get(2) {
+        Some(Arg::Integer(v)) => *v as usize,
+        _ => return Err(bad(2)),
+    };
+    let rows_arg = match args.get(3) {
+        Some(Arg::List(v)) => v,
+        _ => return Err(bad(3)),
+    };
+    let mut control_points: Vec<Vec<[f64; 3]>> = Vec::with_capacity(rows_arg.len());
+    for row_arg in rows_arg {
+        let col_list = match row_arg {
+            Arg::List(v) => v,
+            _ => return Err(bad(3)),
+        };
+        let mut row: Vec<[f64; 3]> = Vec::with_capacity(col_list.len());
+        for a in col_list {
+            let cp_id = arg_as_ref(a, id)?;
+            row.push(point3(file, cp_id)?);
+        }
+        control_points.push(row);
+    }
+    let u_mults = match args.get(8) {
+        Some(Arg::List(v)) => v,
+        _ => return Err(bad(8)),
+    };
+    let v_mults = match args.get(9) {
+        Some(Arg::List(v)) => v,
+        _ => return Err(bad(9)),
+    };
+    let u_knot_vals = match args.get(10) {
+        Some(Arg::List(v)) => v,
+        _ => return Err(bad(10)),
+    };
+    let v_knot_vals = match args.get(11) {
+        Some(Arg::List(v)) => v,
+        _ => return Err(bad(11)),
+    };
+    let u_knots = expand_knots(u_mults, u_knot_vals, id)?;
+    let v_knots = expand_knots(v_mults, v_knot_vals, id)?;
+    Ok(Box::new(BSplineSurfaceWithKnots {
+        u_degree,
+        v_degree,
+        control_points,
+        u_knots,
+        v_knots,
+    }))
+}
+
 pub fn surface_from_step(id: u64, file: &StepFile) -> Result<Box<dyn Surface>, GeomError> {
     let e = get_entity(file, id)?;
+
+    // Complex entity instance: type_name is empty, args are TypedValue components.
+    // Scan for a recognised surface type among them.
+    if e.type_name.is_empty() {
+        for arg in &e.args {
+            if let Arg::TypedValue { name, args: sub_args } = arg {
+                if name == "B_SPLINE_SURFACE_WITH_KNOTS" {
+                    return bspline_surface_from_args(id, sub_args, file);
+                }
+            }
+        }
+        return Err(GeomError::Unsupported(
+            "complex entity with no recognised surface component".to_string(),
+            id,
+        ));
+    }
+
     match e.type_name.as_str() {
         "PLANE" => {
             // PLANE(label, axis2_placement_ref)
@@ -378,46 +458,7 @@ pub fn surface_from_step(id: u64, file: &StepFile) -> Result<Box<dyn Surface>, G
             Ok(Box::new(SphericalSurface { axis, radius }))
         }
 
-        "B_SPLINE_SURFACE_WITH_KNOTS" => {
-            // B_SPLINE_SURFACE_WITH_KNOTS(name, u_degree, v_degree,
-            //   ((cp_refs)), surface_form, u_closed, v_closed, self_intersect,
-            //   u_multiplicities, v_multiplicities, u_knots, v_knots, knot_spec)
-            let u_degree = match get_arg(e, 1)? {
-                Arg::Integer(v) => *v as usize,
-                _ => return Err(GeomError::BadArg(id, 1)),
-            };
-            let v_degree = match get_arg(e, 2)? {
-                Arg::Integer(v) => *v as usize,
-                _ => return Err(GeomError::BadArg(id, 2)),
-            };
-            let rows_arg = get_list(e, 3)?;
-            let mut control_points: Vec<Vec<[f64; 3]>> = Vec::with_capacity(rows_arg.len());
-            for row_arg in rows_arg {
-                let col_list = match row_arg {
-                    Arg::List(v) => v,
-                    _ => return Err(GeomError::BadArg(id, 3)),
-                };
-                let mut row: Vec<[f64; 3]> = Vec::with_capacity(col_list.len());
-                for a in col_list {
-                    let cp_id = arg_as_ref(a, id)?;
-                    row.push(point3(file, cp_id)?);
-                }
-                control_points.push(row);
-            }
-            let u_mults = get_list(e, 8)?;
-            let v_mults = get_list(e, 9)?;
-            let u_knot_vals = get_list(e, 10)?;
-            let v_knot_vals = get_list(e, 11)?;
-            let u_knots = expand_knots(u_mults, u_knot_vals, id)?;
-            let v_knots = expand_knots(v_mults, v_knot_vals, id)?;
-            Ok(Box::new(BSplineSurfaceWithKnots {
-                u_degree,
-                v_degree,
-                control_points,
-                u_knots,
-                v_knots,
-            }))
-        }
+        "B_SPLINE_SURFACE_WITH_KNOTS" => bspline_surface_from_args(id, &e.args, file),
 
         "SURFACE_OF_LINEAR_EXTRUSION" => {
             // SURFACE_OF_LINEAR_EXTRUSION(label, swept_curve_ref, extrusion_axis_ref)
@@ -597,5 +638,56 @@ mod tests {
                 assert!((r - 5.).abs() < 1e-12, "radius at u={}, v={}: {}", u, v, r);
             }
         }
+    }
+
+    /// Verify that `surface_from_step` can build a B-spline surface from a
+    /// STEP complex entity instance (empty `type_name`, args are TypedValues).
+    ///
+    /// The surface is a 3×3 quadratic B-spline tent: all control points have
+    /// z=0 except the centre point at z=1.  At u=v=0.5 the surface evaluates
+    /// to z ≈ 0.25 (tensor-product basis).
+    #[test]
+    fn bspline_from_complex_entity() {
+        use crate::step::parser::{parse, StepFile};
+
+        // Build a minimal STEP file where the B-spline surface is stored as a
+        // complex entity instance:  #100=(BOUNDED_SURFACE()B_SPLINE_SURFACE_WITH_KNOTS(...))
+        let step_text = "
+ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION(('test'));
+ENDSEC;
+DATA;
+#1=CARTESIAN_POINT('',(0.,0.,0.));
+#2=CARTESIAN_POINT('',(0.5,0.,0.));
+#3=CARTESIAN_POINT('',(1.,0.,0.));
+#4=CARTESIAN_POINT('',(0.,0.5,0.));
+#5=CARTESIAN_POINT('',(0.5,0.5,1.));
+#6=CARTESIAN_POINT('',(1.,0.5,0.));
+#7=CARTESIAN_POINT('',(0.,1.,0.));
+#8=CARTESIAN_POINT('',(0.5,1.,0.));
+#9=CARTESIAN_POINT('',(1.,1.,0.));
+#100=(BOUNDED_SURFACE()B_SPLINE_SURFACE_WITH_KNOTS('',2,2,((#1,#2,#3),(#4,#5,#6),(#7,#8,#9)),.UNSPECIFIED.,.F.,.F.,.F.,(3,3),(3,3),(0.,1.),(0.,1.),.UNSPECIFIED.));
+ENDSEC;
+END-ISO-10303-21;
+";
+        let file: StepFile = parse(step_text).unwrap();
+        let surface = surface_from_step(100, &file).expect("should parse complex B-spline entity");
+
+        // At (u=0, v=0) the surface must be at the corner control point (0,0,0).
+        let p00 = surface.point(0.0, 0.0);
+        assert!(
+            p00[2].abs() < 1e-10,
+            "corner z should be 0, got {:.6}",
+            p00[2]
+        );
+
+        // At the centre the tent peaks at z=0.25 (quadratic tensor-product blend).
+        let p_mid = surface.point(0.5, 0.5);
+        assert!(
+            (p_mid[2] - 0.25).abs() < 1e-6,
+            "centre z should be 0.25, got {:.6}",
+            p_mid[2]
+        );
     }
 }
