@@ -14,7 +14,8 @@ use kofem_mesh::triangulate::triangulate;
 
 use crate::geom::curve::curve_from_step;
 use crate::geom::{
-    add, axis2_placement, cross, get_entity, get_ref, normalize, point3, scale, sub, GeomError,
+    add, axis2_placement, cross, get_entity, get_real, get_ref, normalize, point3, scale, sub,
+    GeomError,
 };
 use crate::step::parser::StepFile;
 use crate::step::topology::{BRep, TopoEdge, TopoFace};
@@ -123,6 +124,10 @@ fn tessellate_face(face: &TopoFace, file: &StepFile, max_edge_len: f64) -> Surfa
 }
 
 fn tessellate_face_raw(face: &TopoFace, file: &StepFile, max_edge_len: f64) -> SurfaceMesh {
+    if let Some(mesh) = try_tessellate_cylindrical(face, file, max_edge_len) {
+        return mesh;
+    }
+
     let boundary = sample_boundary_3d(&face.outer_loop, file, max_edge_len);
 
     if boundary.len() < 3 {
@@ -189,6 +194,75 @@ fn tessellate_face_raw(face: &TopoFace, file: &StepFile, max_edge_len: f64) -> S
     let triangles: Vec<[usize; 3]> = mesh2d.triangles.iter().map(|t| t.v).collect();
 
     SurfaceMesh { points, triangles }
+}
+
+// ── Curved-surface tessellation ───────────────────────────────────────────────
+
+/// Tessellate a `CYLINDRICAL_SURFACE` face directly in UV space (u = angle, v = height)
+/// and lift back to 3D. Returns `None` when the surface is not cylindrical.
+///
+/// The flat 2D-projection path in `tessellate_face_raw` fails for cylinder barrels
+/// because the boundary (two circles + two seam lines) projects to a degenerate 2D
+/// polygon: both circles overlap in XY and the seam lines collapse to a single point,
+/// losing all height information.
+fn try_tessellate_cylindrical(
+    face: &TopoFace,
+    file: &StepFile,
+    max_edge_len: f64,
+) -> Option<SurfaceMesh> {
+    let e = file.get(&face.surface_id)?;
+    if e.type_name != "CYLINDRICAL_SURFACE" {
+        return None;
+    }
+
+    let ax_id = get_ref(e, 1).ok()?;
+    let radius = get_real(e, 2).ok()?;
+    let axis = axis2_placement(file, ax_id).ok()?;
+
+    // Sample the boundary to determine the height (v) range.
+    let boundary_3d = sample_boundary_3d(&face.outer_loop, file, max_edge_len);
+    let mut v_min = f64::INFINITY;
+    let mut v_max = f64::NEG_INFINITY;
+    for &p in &boundary_3d {
+        let d = sub(p, axis.origin);
+        let v = dot3(d, axis.z);
+        v_min = v_min.min(v);
+        v_max = v_max.max(v);
+    }
+    if (v_max - v_min).abs() < 1e-10 {
+        return None;
+    }
+
+    let circumference = 2.0 * PI * radius;
+    let n_u = ((circumference / max_edge_len).ceil() as usize).clamp(8, 256);
+    let n_v = (((v_max - v_min).abs() / max_edge_len).ceil() as usize).max(1);
+
+    let y = axis.y();
+    let mut points = Vec::with_capacity(n_u * (n_v + 1));
+    for j in 0..=n_v {
+        let v = v_min + (v_max - v_min) * j as f64 / n_v as f64;
+        for i in 0..n_u {
+            let u = 2.0 * PI * i as f64 / n_u as f64;
+            let radial = add(scale(axis.x, u.cos()), scale(y, u.sin()));
+            points.push(add(axis.origin, add(scale(radial, radius), scale(axis.z, v))));
+        }
+    }
+
+    let mut triangles = Vec::with_capacity(n_u * n_v * 2);
+    for j in 0..n_v {
+        for i in 0..n_u {
+            let ni = (i + 1) % n_u;
+            let a = j * n_u + i;
+            let b = j * n_u + ni;
+            let c = (j + 1) * n_u + i;
+            let d = (j + 1) * n_u + ni;
+            // CCW winding when viewed from outside (outward-radial normal).
+            triangles.push([a, b, d]);
+            triangles.push([a, d, c]);
+        }
+    }
+
+    Some(SurfaceMesh { points, triangles })
 }
 
 // ── Boundary sampling ──────────────────────────────────────────────────────────
