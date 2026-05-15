@@ -93,7 +93,11 @@ pub fn volume_mesh(surface: &SurfaceMesh, opts: VolumeMeshOptions) -> Result<Mes
     // Stage 5.5: Improve quality by eliminating high circumradius/edge-length tets.
     refine_quality(&mut mesh, surface, &opts);
 
-    let points = mesh.pts.iter().map(|p| Point3::new(p[0], p[1], p[2])).collect();
+    let points = mesh
+        .pts
+        .iter()
+        .map(|p| Point3::new(p[0], p[1], p[2]))
+        .collect();
     let tets = mesh.live_tets().into_iter().map(|v| Tet { v }).collect();
     Ok(Mesh3D { points, tets })
 }
@@ -105,6 +109,7 @@ pub fn volume_mesh(surface: &SurfaceMesh, opts: VolumeMeshOptions) -> Result<Mes
 /// For each tet with circumradius/shortest-edge > `quality_ratio`:
 ///   - If its circumcenter lies inside the solid: insert the circumcenter.
 ///   - Otherwise: insert the midpoint of the shortest edge.
+///
 /// Stops when no bad tets remain or `max_tets` Steiner points have been inserted.
 fn refine_quality(mesh: &mut TetMesh, surface: &SurfaceMesh, opts: &VolumeMeshOptions) {
     let surf_pts: Vec<[f64; 3]> = surface.points.iter().map(|p| [p.x, p.y, p.z]).collect();
@@ -1493,7 +1498,11 @@ mod tests {
         for tet in &mesh.tets {
             assert!(tet_signed_volume_mesh(&mesh, tet) > 0.);
         }
-        let vol: f64 = mesh.tets.iter().map(|t| tet_signed_volume_mesh(&mesh, t).abs()).sum();
+        let vol: f64 = mesh
+            .tets
+            .iter()
+            .map(|t| tet_signed_volume_mesh(&mesh, t).abs())
+            .sum();
         // icosphere(2) is a polyhedral approximation; inherent discretisation error
         // is ~3.4 %, so the practical 5 % (≈ 0.21) bound from the issue applies.
         assert!((vol - 4.189).abs() < 0.2, "sphere volume {vol:.3} ≠ 4.189");
