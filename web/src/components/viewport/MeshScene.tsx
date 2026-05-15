@@ -79,6 +79,7 @@ export function MeshScene() {
   const loads = useModelStore(s => s.loads)
   const result = useModelStore(s => s.result)
   const stepSurface = useModelStore(s => s.stepSurface)
+  const stepWireframe = useModelStore(s => s.stepWireframe)
   const pickMode = useModelStore(s => s.pickMode)
   const selectedFace = useModelStore(s => s.selectedFace)
   const setSelectedFace = useModelStore(s => s.setSelectedFace)
@@ -374,14 +375,18 @@ export function MeshScene() {
         </mesh>
       )}
 
-      {/* STEP surface mesh — grey shaded */}
+      {/* STEP surface mesh — solid shaded or wireframe */}
       {stepGeometry && (
         <mesh>
           <bufferGeometry>
             <bufferAttribute attach="attributes-position" args={[stepGeometry.positions, 3]} />
             <bufferAttribute attach="attributes-normal" args={[stepGeometry.normals, 3]} />
           </bufferGeometry>
-          <meshStandardMaterial color="#8899bb" side={THREE.DoubleSide} />
+          <meshStandardMaterial
+            color={stepWireframe ? '#64c864' : '#8899bb'}
+            side={THREE.DoubleSide}
+            wireframe={stepWireframe}
+          />
         </mesh>
       )}
     </group>

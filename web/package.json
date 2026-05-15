@@ -13,18 +13,22 @@
     "test:ui": "playwright test --ui",
     "test:screenshot": "playwright test screenshot.spec.ts",
     "upload:slack": "npx tsx scripts/upload-to-slack.ts",
-    "screenshot:slack": "bun run test:screenshot && bun run upload:slack"
+    "screenshot:slack": "bun run test:screenshot && bun run upload:slack",
+    "test:mesh-report": "playwright test mesh-report.spec.ts",
+    "report:mesh": "bun run test:mesh-report && bun scripts/generate-mesh-report.ts",
+    "report:mesh:slack": "bun run report:mesh && bun run upload:slack screenshots/step-fit-view.png screenshots/mesh-report.pdf --comment=\"KoFEM mesh capabilities report\""
   },
   "packageManager": "bun",
   "dependencies": {
-    "three": "^0.167.0",
-    "zustand": "^5.0.0",
+    "@react-three/drei": "^9.115.0",
+    "@react-three/fiber": "^8.17.0",
+    "immer": "^10.1.1",
+    "jspdf": "^4.2.1",
+    "leva": "^0.9.35",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
-    "@react-three/fiber": "^8.17.0",
-    "@react-three/drei": "^9.115.0",
-    "leva": "^0.9.35",
-    "immer": "^10.1.1"
+    "three": "^0.167.0",
+    "zustand": "^5.0.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",

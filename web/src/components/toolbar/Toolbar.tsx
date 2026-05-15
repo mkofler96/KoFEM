@@ -1,6 +1,7 @@
 import { useState, type ChangeEvent } from 'react'
 import { useModelStore } from '../../store/modelStore'
 import { sendToWorker } from '../../workers/sharedWorker'
+import { ReportProgress } from '../report/ReportProgress'
 import styles from './Toolbar.module.css'
 
 export function Toolbar() {
@@ -13,9 +14,22 @@ export function Toolbar() {
   const loadModel = useModelStore(s => s.loadModel)
   const setStepSurface = useModelStore(s => s.setStepSurface)
   const triggerFitView = useModelStore(s => s.triggerFitView)
+  const stepSurface = useModelStore(s => s.stepSurface)
+  const stepWireframe = useModelStore(s => s.stepWireframe)
+  const setStepWireframe = useModelStore(s => s.setStepWireframe)
 
   const [isParsing, setIsParsing] = useState(false)
   const [isImportingStep, setIsImportingStep] = useState(false)
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false)
+
+  const handleScreenshot = () => {
+    const canvas = document.querySelector('canvas') as HTMLCanvasElement | null
+    if (!canvas) return
+    const link = document.createElement('a')
+    link.download = `kofem-${modelName.replace(/[^a-zA-Z0-9]/g, '-')}.png`
+    link.href = canvas.toDataURL('image/png')
+    link.click()
+  }
   const inpFileRef = { current: null as HTMLInputElement | null }
   const stepFileRef = { current: null as HTMLInputElement | null }
 
@@ -81,6 +95,8 @@ export function Toolbar() {
   const busy = isRunning || isMeshing
 
   return (
+    <>
+    {isGeneratingReport && <ReportProgress onClose={() => setIsGeneratingReport(false)} />}
     <div className={styles.toolbar}>
       <input
         ref={el => { inpFileRef.current = el }}
@@ -105,8 +121,28 @@ export function Toolbar() {
       <button className={styles.btn} title="Export results" disabled>
         Export
       </button>
+      <button
+        className={styles.btn}
+        title="Generate PDF report of mesh capabilities"
+        onClick={() => setIsGeneratingReport(true)}
+        disabled={busy || isGeneratingReport}
+      >
+        Report
+      </button>
+      {stepSurface && (
+        <button
+          className={`${styles.btn} ${stepWireframe ? styles.active : ''}`}
+          onClick={() => setStepWireframe(!stepWireframe)}
+          title="Toggle surface mesh wireframe"
+        >
+          {stepWireframe ? 'Solid' : 'Wireframe'}
+        </button>
+      )}
       <button className={styles.btn} onClick={triggerFitView} title="Fit all geometry into view (isometric)">
         Fit View
+      </button>
+      <button className={styles.btn} onClick={handleScreenshot} title="Export current view as PNG">
+        Screenshot
       </button>
       <span className={styles.modelName}>{modelName}</span>
       <div className={styles.divider} />
@@ -117,5 +153,6 @@ export function Toolbar() {
         Reset
       </button>
     </div>
+    </>
   )
 }

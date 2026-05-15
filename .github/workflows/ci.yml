@@ -72,4 +72,5 @@ jobs:
       - run: cd web && bunx playwright install --with-deps chromium
       - run: cd web && bun run build
       - run: cd web && bun run test
-      - run: cd web && bun run upload:slack
+      - run: cd web && bun scripts/generate-mesh-report.ts
+      - run: cd web && bun run upload:slack screenshots/step-fit-view.png screenshots/mesh-report.pdf --comment="KoFEM CI — screenshot + mesh capabilities report"
