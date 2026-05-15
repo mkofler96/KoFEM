@@ -13,11 +13,12 @@ use kofem_mesh::geom::{point_in_polygon, Point2};
 use kofem_mesh::triangulate::triangulate;
 
 use crate::geom::curve::curve_from_step;
+use crate::geom::surface::surface_from_step;
 use crate::geom::{
     add, axis2_placement, cross, get_entity, get_real, get_ref, normalize, point3, scale, sub,
     GeomError,
 };
-use crate::step::parser::StepFile;
+use crate::step::parser::{Arg, StepFile};
 use crate::step::topology::{BRep, TopoEdge, TopoFace};
 
 // ── Public types ───────────────────────────────────────────────────────────────
@@ -125,6 +126,9 @@ fn tessellate_face(face: &TopoFace, file: &StepFile, max_edge_len: f64) -> Surfa
 
 fn tessellate_face_raw(face: &TopoFace, file: &StepFile, max_edge_len: f64) -> SurfaceMesh {
     if let Some(mesh) = try_tessellate_cylindrical(face, file, max_edge_len) {
+        return mesh;
+    }
+    if let Some(mesh) = try_tessellate_bspline(face, file, max_edge_len) {
         return mesh;
     }
 
@@ -277,6 +281,90 @@ fn try_tessellate_cylindrical(
     }
 
     Some(SurfaceMesh { points, triangles })
+}
+
+/// Tessellate a B-spline surface face by sampling its UV parameter domain
+/// uniformly and evaluating `surface.point(u, v)` at each grid node.
+///
+/// Handles both direct `B_SPLINE_SURFACE_WITH_KNOTS` entities and complex entity
+/// instances (empty `type_name`) that contain a `B_SPLINE_SURFACE_WITH_KNOTS`
+/// component.  Returns `None` when the surface is not a B-spline or its UV
+/// bounds are not finite.
+fn try_tessellate_bspline(
+    face: &TopoFace,
+    file: &StepFile,
+    max_edge_len: f64,
+) -> Option<SurfaceMesh> {
+    let e = file.get(&face.surface_id)?;
+
+    let is_bspline = e.type_name == "B_SPLINE_SURFACE_WITH_KNOTS"
+        || (e.type_name.is_empty()
+            && e.args.iter().any(|a| {
+                matches!(a, Arg::TypedValue { name, .. } if name == "B_SPLINE_SURFACE_WITH_KNOTS")
+            }));
+
+    if !is_bspline {
+        return None;
+    }
+
+    let surface = surface_from_step(face.surface_id, file).ok()?;
+
+    let (u0, u1) = surface.u_bounds();
+    let (v0, v1) = surface.v_bounds();
+    if !u0.is_finite() || !u1.is_finite() || !v0.is_finite() || !v1.is_finite() {
+        return None;
+    }
+
+    // Estimate spatial arc lengths at mid-parameter to choose sample density.
+    let u_mid = (u0 + u1) / 2.0;
+    let v_mid = (v0 + v1) / 2.0;
+    let arc_u = sample_arc_length(|t| surface.point(t, v_mid), u0, u1, 32);
+    let arc_v = sample_arc_length(|t| surface.point(u_mid, t), v0, v1, 32);
+
+    if arc_u < 1e-10 || arc_v < 1e-10 {
+        return None;
+    }
+
+    let n_u = ((arc_u / max_edge_len).ceil() as usize).clamp(2, 256) + 1;
+    let n_v = ((arc_v / max_edge_len).ceil() as usize).clamp(2, 256) + 1;
+
+    let mut points = Vec::with_capacity(n_u * n_v);
+    for j in 0..n_v {
+        let v = v0 + (v1 - v0) * j as f64 / (n_v - 1) as f64;
+        for i in 0..n_u {
+            let u = u0 + (u1 - u0) * i as f64 / (n_u - 1) as f64;
+            points.push(surface.point(u, v));
+        }
+    }
+
+    let mut triangles = Vec::with_capacity((n_u - 1) * (n_v - 1) * 2);
+    for j in 0..(n_v - 1) {
+        for i in 0..(n_u - 1) {
+            let a = j * n_u + i;
+            let b = j * n_u + (i + 1);
+            let c = (j + 1) * n_u + i;
+            let d = (j + 1) * n_u + (i + 1);
+            triangles.push([a, b, d]);
+            triangles.push([a, d, c]);
+        }
+    }
+
+    Some(SurfaceMesh { points, triangles })
+}
+
+/// Approximate arc length of a parametric curve `f(t)` over `[t0, t1]`
+/// by sampling at `n` uniform intervals.
+fn sample_arc_length<F: Fn(f64) -> [f64; 3]>(f: F, t0: f64, t1: f64, n: usize) -> f64 {
+    let mut len = 0.0_f64;
+    let mut prev = f(t0);
+    for i in 1..=n {
+        let t = t0 + (t1 - t0) * i as f64 / n as f64;
+        let curr = f(t);
+        let d = sub(curr, prev);
+        len += (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+        prev = curr;
+    }
+    len
 }
 
 // ── Boundary sampling ──────────────────────────────────────────────────────────
