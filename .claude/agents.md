@@ -14,3 +14,7 @@ Follow strict red-green TDD for all implementation work:
 - Run `cargo test` (or the relevant test command) after every change to confirm the transition red → green.
 - For acceptance criteria given in a GitHub issue, copy the test verbatim into the test module before touching implementation code.
 - Prefer small, focused tests over large integration tests so failures pinpoint the broken unit.
+
+## Pull Requests
+
+Always include `closes #<issue-number>` in the PR description body so that merging automatically closes the linked issue on GitHub.
