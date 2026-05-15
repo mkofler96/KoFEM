@@ -17,9 +17,14 @@ export function Toolbar() {
   const stepSurface = useModelStore(s => s.stepSurface)
   const stepWireframe = useModelStore(s => s.stepWireframe)
   const setStepWireframe = useModelStore(s => s.setStepWireframe)
+  const volMesh = useModelStore(s => s.volMesh)
+  const showVolMesh = useModelStore(s => s.showVolMesh)
+  const setVolMesh = useModelStore(s => s.setVolMesh)
+  const setShowVolMesh = useModelStore(s => s.setShowVolMesh)
 
   const [isParsing, setIsParsing] = useState(false)
   const [isImportingStep, setIsImportingStep] = useState(false)
+  const [isComputingVol, setIsComputingVol] = useState(false)
   const [isGeneratingReport, setIsGeneratingReport] = useState(false)
 
   const handleScreenshot = () => {
@@ -69,6 +74,17 @@ export function Toolbar() {
       })
       .catch(err => alert(`Parse error: ${err.message}`))
       .finally(() => { setIsParsing(false); setRunning(false) })
+  }
+
+  const handleComputeVolMesh = () => {
+    if (!stepSurface) return
+    setIsComputingVol(true)
+    sendToWorker<{ points: [number, number, number][]; edges: [number, number][] }>(
+      'volume_mesh', { surface: stepSurface }
+    )
+      .then(({ points, edges }) => setVolMesh({ points, edges }))
+      .catch(err => alert(`Volume meshing failed: ${err.message}`))
+      .finally(() => setIsComputingVol(false))
   }
 
   const handleStepFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -136,6 +152,25 @@ export function Toolbar() {
           title="Toggle surface mesh wireframe"
         >
           {stepWireframe ? 'Solid' : 'Wireframe'}
+        </button>
+      )}
+      {stepSurface && !volMesh && (
+        <button
+          className={styles.btn}
+          onClick={handleComputeVolMesh}
+          disabled={busy || isComputingVol}
+          title="Compute interior tetrahedral volume mesh"
+        >
+          {isComputingVol ? 'Meshing…' : 'Vol Mesh'}
+        </button>
+      )}
+      {volMesh && (
+        <button
+          className={`${styles.btn} ${showVolMesh ? styles.active : ''}`}
+          onClick={() => setShowVolMesh(!showVolMesh)}
+          title="Toggle volume mesh wireframe"
+        >
+          {showVolMesh ? 'Vol Solid' : 'Vol Mesh'}
         </button>
       )}
       <button className={styles.btn} onClick={triggerFitView} title="Fit all geometry into view (isometric)">

@@ -43,7 +43,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "input=$(cat); f=$(echo \"$input\" | jq -r '.tool_input.file_path'); case \"$f\" in *.rs) rustfmt \"$f\" || true ;; *.ts|*.tsx) cd web && [ -d node_modules ] && bun run typecheck || true ;; *.py) uvx ruff check --fix \"$f\" 2>/dev/null; uvx ruff format \"$f\" 2>/dev/null || true ;; esac",
+            "command": "input=$(cat); f=$(echo \"$input\" | jq -r '.tool_input.file_path'); case \"$f\" in *.rs) cd /home/user/KoFEM && cargo fmt --all 2>/dev/null || true ;; *.ts|*.tsx) cd web && [ -d node_modules ] && bun run typecheck || true ;; *.py) uvx ruff check --fix \"$f\" 2>/dev/null; uvx ruff format \"$f\" 2>/dev/null || true ;; esac",
             "statusMessage": "Formatting…"
           }
         ]

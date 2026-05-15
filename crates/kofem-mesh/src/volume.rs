@@ -4,7 +4,7 @@
 //! - Stage 5.1: types, helpers, and test fixtures ✓
 //! - Stage 5.2: 3-D Bowyer-Watson ✓
 //! - Stage 5.3: constrained face recovery ✓
-//! - Stage 5.4: interior/exterior classification (TODO)
+//! - Stage 5.4: interior/exterior classification ✓
 //! - Stage 5.5: Delaunay refinement (TODO)
 
 use std::collections::HashMap;
@@ -1101,6 +1101,87 @@ fn cross3(u: [f64; 3], v: [f64; 3]) -> [f64; 3] {
     ]
 }
 
+#[inline]
+fn dot3(u: [f64; 3], v: [f64; 3]) -> f64 {
+    u[0] * v[0] + u[1] * v[1] + u[2] * v[2]
+}
+
+#[inline]
+fn sub3(u: [f64; 3], v: [f64; 3]) -> [f64; 3] {
+    [u[0] - v[0], u[1] - v[1], u[2] - v[2]]
+}
+
+// ── Stage 5.4: Interior / exterior classification ─────────────────────────────
+
+/// Remove all tetrahedra whose centroid lies outside `surface`.
+///
+/// Each centroid is tested with a ray cast against the closed surface using
+/// the Möller–Trumbore algorithm.  Odd intersection count → inside, even → outside.
+pub fn classify_interior_tets(mesh: &mut TetMesh, surface: &SurfaceMesh) {
+    let surf_pts: Vec<[f64; 3]> = surface.points.iter().map(|p| [p.x, p.y, p.z]).collect();
+
+    // Slightly non-axis-aligned direction reduces the chance of the ray
+    // grazing a surface edge or vertex (which would give an ambiguous count).
+    let ray_dir = normalize3([1.0, 1e-4, 1e-8]);
+
+    let dead: Vec<usize> = (0..mesh.tets.len())
+        .filter(|&ti| {
+            let tet = mesh.tets[ti];
+            if tet[0] == usize::MAX {
+                return false;
+            }
+            let c = tet_centroid(&mesh.pts, &tet);
+            count_ray_hits(c, ray_dir, &surf_pts, &surface.triangles).is_multiple_of(2)
+        })
+        .collect();
+
+    for ti in dead {
+        mesh.kill_tet(ti);
+    }
+    mesh.rebuild_adjacency();
+}
+
+fn tet_centroid(pts: &[[f64; 3]], tet: &[usize; 4]) -> [f64; 3] {
+    let [a, b, c, d] = *tet;
+    let (pa, pb, pc, pd) = (pts[a], pts[b], pts[c], pts[d]);
+    [
+        (pa[0] + pb[0] + pc[0] + pd[0]) * 0.25,
+        (pa[1] + pb[1] + pc[1] + pd[1]) * 0.25,
+        (pa[2] + pb[2] + pc[2] + pd[2]) * 0.25,
+    ]
+}
+
+/// Count forward (t > 0) intersections of ray `(origin, dir)` with the surface.
+fn count_ray_hits(origin: [f64; 3], dir: [f64; 3], pts: &[[f64; 3]], tris: &[[usize; 3]]) -> usize {
+    tris.iter()
+        .filter(|tri| ray_triangle_hit(origin, dir, pts[tri[0]], pts[tri[1]], pts[tri[2]]))
+        .count()
+}
+
+/// Möller–Trumbore ray-triangle intersection (two-sided, t > 0 only).
+fn ray_triangle_hit(o: [f64; 3], d: [f64; 3], v0: [f64; 3], v1: [f64; 3], v2: [f64; 3]) -> bool {
+    const EPS: f64 = 1e-12;
+    let e1 = sub3(v1, v0);
+    let e2 = sub3(v2, v0);
+    let h = cross3(d, e2);
+    let a = dot3(e1, h);
+    if a.abs() < EPS {
+        return false; // ray parallel to triangle
+    }
+    let f = 1.0 / a;
+    let s = sub3(o, v0);
+    let u = f * dot3(s, h);
+    if !(-EPS..=1.0 + EPS).contains(&u) {
+        return false;
+    }
+    let q = cross3(s, e1);
+    let v = f * dot3(d, q);
+    if v < -EPS || u + v > 1.0 + EPS {
+        return false;
+    }
+    f * dot3(e2, q) > EPS
+}
+
 // ── Test fixtures ─────────────────────────────────────────────────────────────
 
 /// Generate a subdivided icosphere of radius 1, centred at the origin.
@@ -1392,6 +1473,102 @@ mod tests {
             "volume changed: before={}, after={}",
             vol_before,
             vol_after
+        );
+    }
+
+    // ── Stage 5.4 tests ───────────────────────────────────────────────────────
+
+    /// Sphere surface: after classification all remaining tet centroids must be
+    /// strictly inside the unit sphere (radius < 1).
+    ///
+    /// For a convex icosphere the Delaunay tetrahedralization of the surface
+    /// vertices naturally fills only the interior, so the classification may
+    /// remove zero tets — but it must not remove any interior ones.
+    #[test]
+    fn classify_sphere_centroids_inside() {
+        let surface = icosphere(1); // 80 triangles, 42 points
+        let pts: Vec<[f64; 3]> = surface.points.iter().map(|p| [p.x, p.y, p.z]).collect();
+        let tets = bowyer_watson_3d(&pts);
+        let mut mesh = TetMesh::from_tets(pts, tets);
+        recover_constraint_faces(&mut mesh, &surface, 500).unwrap();
+
+        classify_interior_tets(&mut mesh, &surface);
+        let after_tets = mesh.live_tets();
+
+        assert!(
+            !after_tets.is_empty(),
+            "no interior tets remain after classification"
+        );
+
+        for tet in &after_tets {
+            let [cx, cy, cz] = tet_centroid(&mesh.pts, tet);
+            let r = (cx * cx + cy * cy + cz * cz).sqrt();
+            assert!(
+                r < 1.0 + 1e-10,
+                "centroid at radius {r:.6} lies outside unit sphere"
+            );
+        }
+    }
+
+    /// Box surface: after classification tet count is positive and no centroid
+    /// falls outside [0, 1]³.
+    #[test]
+    fn classify_box_interior_tets() {
+        let surface = box_surface_mesh();
+        let pts: Vec<[f64; 3]> = surface.points.iter().map(|p| [p.x, p.y, p.z]).collect();
+        let tets = bowyer_watson_3d(&pts);
+        let mut mesh = TetMesh::from_tets(pts, tets);
+        recover_constraint_faces(&mut mesh, &surface, 100).unwrap();
+
+        classify_interior_tets(&mut mesh, &surface);
+
+        let live = mesh.live_tets();
+        assert!(
+            !live.is_empty(),
+            "no interior tets remain after classification"
+        );
+
+        for tet in &live {
+            let [cx, cy, cz] = tet_centroid(&mesh.pts, tet);
+            assert!(
+                cx > -1e-10 && cx < 1.0 + 1e-10,
+                "centroid x={cx:.6} outside box"
+            );
+            assert!(
+                cy > -1e-10 && cy < 1.0 + 1e-10,
+                "centroid y={cy:.6} outside box"
+            );
+            assert!(
+                cz > -1e-10 && cz < 1.0 + 1e-10,
+                "centroid z={cz:.6} outside box"
+            );
+        }
+    }
+
+    /// Total volume of classified interior tets must be within 5 % of the
+    /// analytical volume of the unit box (1.0 m³).
+    #[test]
+    fn classify_box_volume_within_5_percent() {
+        let surface = box_surface_mesh();
+        let pts: Vec<[f64; 3]> = surface.points.iter().map(|p| [p.x, p.y, p.z]).collect();
+        let tets = bowyer_watson_3d(&pts);
+        let mut mesh = TetMesh::from_tets(pts, tets);
+        recover_constraint_faces(&mut mesh, &surface, 100).unwrap();
+
+        classify_interior_tets(&mut mesh, &surface);
+
+        let volume: f64 = mesh
+            .live_tets()
+            .iter()
+            .map(|t| tet_signed_volume(&mesh.pts, t).abs())
+            .sum();
+
+        let analytical = 1.0_f64;
+        let error = (volume - analytical).abs() / analytical;
+        assert!(
+            error < 0.05,
+            "interior volume {volume:.6} deviates {:.1}% from analytical {analytical}",
+            error * 100.0
         );
     }
 }
