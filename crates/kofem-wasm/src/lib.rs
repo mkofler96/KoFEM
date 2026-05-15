@@ -299,7 +299,9 @@ pub fn compute_volume_mesh(surface_json: &str) -> Result<String, JsError> {
         serde_json::from_str(surface_json).map_err(|e| JsError::new(&e.to_string()))?;
 
     if input.points.len() < 4 {
-        return Err(JsError::new("surface needs at least 4 points for volume meshing"));
+        return Err(JsError::new(
+            "surface needs at least 4 points for volume meshing",
+        ));
     }
 
     let surface = kofem_mesh::SurfaceMesh {
@@ -315,7 +317,9 @@ pub fn compute_volume_mesh(surface_json: &str) -> Result<String, JsError> {
     let tets = kofem_mesh::bowyer_watson_3d(&pts);
 
     if tets.is_empty() {
-        return Err(JsError::new("Delaunay tetrahedralization produced no tetrahedra"));
+        return Err(JsError::new(
+            "Delaunay tetrahedralization produced no tetrahedra",
+        ));
     }
 
     let mut mesh = TetMesh::from_tets(pts.clone(), tets);
@@ -324,7 +328,9 @@ pub fn compute_volume_mesh(surface_json: &str) -> Result<String, JsError> {
 
     let live_tets = mesh.live_tets();
     if live_tets.is_empty() {
-        return Err(JsError::new("no interior tetrahedra found after classification"));
+        return Err(JsError::new(
+            "no interior tetrahedra found after classification",
+        ));
     }
 
     let mut edge_set = std::collections::HashSet::<[usize; 2]>::new();

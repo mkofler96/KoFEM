@@ -1152,25 +1152,14 @@ fn tet_centroid(pts: &[[f64; 3]], tet: &[usize; 4]) -> [f64; 3] {
 }
 
 /// Count forward (t > 0) intersections of ray `(origin, dir)` with the surface.
-fn count_ray_hits(
-    origin: [f64; 3],
-    dir: [f64; 3],
-    pts: &[[f64; 3]],
-    tris: &[[usize; 3]],
-) -> usize {
+fn count_ray_hits(origin: [f64; 3], dir: [f64; 3], pts: &[[f64; 3]], tris: &[[usize; 3]]) -> usize {
     tris.iter()
         .filter(|tri| ray_triangle_hit(origin, dir, pts[tri[0]], pts[tri[1]], pts[tri[2]]))
         .count()
 }
 
 /// Möller–Trumbore ray-triangle intersection (two-sided, t > 0 only).
-fn ray_triangle_hit(
-    o: [f64; 3],
-    d: [f64; 3],
-    v0: [f64; 3],
-    v1: [f64; 3],
-    v2: [f64; 3],
-) -> bool {
+fn ray_triangle_hit(o: [f64; 3], d: [f64; 3], v0: [f64; 3], v1: [f64; 3], v2: [f64; 3]) -> bool {
     const EPS: f64 = 1e-12;
     let e1 = sub3(v1, v0);
     let e2 = sub3(v2, v0);
@@ -1506,7 +1495,10 @@ mod tests {
         classify_interior_tets(&mut mesh, &surface);
         let after_tets = mesh.live_tets();
 
-        assert!(!after_tets.is_empty(), "no interior tets remain after classification");
+        assert!(
+            !after_tets.is_empty(),
+            "no interior tets remain after classification"
+        );
 
         for tet in &after_tets {
             let [cx, cy, cz] = tet_centroid(&mesh.pts, tet);
@@ -1531,7 +1523,10 @@ mod tests {
         classify_interior_tets(&mut mesh, &surface);
 
         let live = mesh.live_tets();
-        assert!(!live.is_empty(), "no interior tets remain after classification");
+        assert!(
+            !live.is_empty(),
+            "no interior tets remain after classification"
+        );
 
         for tet in &live {
             let [cx, cy, cz] = tet_centroid(&mesh.pts, tet);

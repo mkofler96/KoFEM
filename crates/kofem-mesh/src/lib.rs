@@ -22,6 +22,6 @@ pub use quality::refine;
 pub use triangulate::{triangulate, Mesh2D, Triangle};
 pub use volume::{
     bowyer_watson_3d, classify_interior_tets, icosphere, recover_constraint_faces,
-    tet_circumsphere, tet_signed_volume, tet_signed_volume_mesh, volume_mesh,
-    MeshError, SurfaceMesh, TetMesh, VolumeMeshOptions,
+    tet_circumsphere, tet_signed_volume, tet_signed_volume_mesh, volume_mesh, MeshError,
+    SurfaceMesh, TetMesh, VolumeMeshOptions,
 };
