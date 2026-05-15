@@ -211,10 +211,10 @@ fn tessellate_face_raw(face: &TopoFace, file: &StepFile, max_edge_len: f64) -> S
 /// Tessellate a `CYLINDRICAL_SURFACE` face directly in UV space (u = angle, v = height)
 /// and lift back to 3D. Returns `None` when the surface is not cylindrical.
 ///
-/// The flat 2D-projection path in `tessellate_face_raw` fails for cylinder barrels
-/// because the boundary (two circles + two seam lines) projects to a degenerate 2D
-/// polygon: both circles overlap in XY and the seam lines collapse to a single point,
-/// losing all height information.
+/// Full-revolution barrels (detected by a closed-circle boundary edge) generate a u×v
+/// grid spanning u ∈ [0, 2π] with v inferred from the boundary axial extents.
+/// Partial cylinders (hole walls, fillets, chamfer arcs) invert the boundary to cylinder
+/// UV, determine the u-range, then generate a UV grid over [u_min, u_max] × [v_min, v_max].
 fn try_tessellate_cylindrical(
     face: &TopoFace,
     file: &StepFile,
@@ -225,23 +225,23 @@ fn try_tessellate_cylindrical(
         return None;
     }
 
-    // Only handle full-revolution barrels. A full circle edge has start ≈ end
-    // (closed loop). Partial cylinders (fillets, chamfers) have arc edges where
-    // start ≠ end and must fall through to the flat-projection path.
+    let ax_id = get_ref(e, 1).ok()?;
+    let radius = get_real(e, 2).ok()?;
+    let axis = axis2_placement(file, ax_id).ok()?;
+    let y = axis.y();
+
+    let boundary_3d = sample_boundary_3d(&face.outer_loop, file, max_edge_len);
+    if boundary_3d.len() < 3 {
+        return None;
+    }
+
+    // Full-revolution check: a closed-circle edge has start ≈ end (zero chord).
     let has_closed_circle = face.outer_loop.iter().any(|edge| {
         let d = sub(edge.start, edge.end);
         d[0] * d[0] + d[1] * d[1] + d[2] * d[2] < 1e-16
     });
-    if !has_closed_circle {
-        return None;
-    }
 
-    let ax_id = get_ref(e, 1).ok()?;
-    let radius = get_real(e, 2).ok()?;
-    let axis = axis2_placement(file, ax_id).ok()?;
-
-    // Sample the boundary to determine the height (v) range.
-    let boundary_3d = sample_boundary_3d(&face.outer_loop, file, max_edge_len);
+    // Determine the v (axial) range from boundary points.
     let mut v_min = f64::INFINITY;
     let mut v_max = f64::NEG_INFINITY;
     for &p in &boundary_3d {
@@ -254,39 +254,89 @@ fn try_tessellate_cylindrical(
         return None;
     }
 
-    let circumference = 2.0 * PI * radius;
-    let n_u = ((circumference / max_edge_len).ceil() as usize).clamp(8, 256);
-    let n_v = (((v_max - v_min).abs() / max_edge_len).ceil() as usize).max(1);
+    if has_closed_circle {
+        // Full-revolution barrel: u sweeps 0..2π.
+        let circumference = 2.0 * PI * radius;
+        let n_u = ((circumference / max_edge_len).ceil() as usize).clamp(8, 256);
+        let n_v = (((v_max - v_min).abs() / max_edge_len).ceil() as usize).max(1);
 
-    let y = axis.y();
-    let mut points = Vec::with_capacity(n_u * (n_v + 1));
-    for j in 0..=n_v {
-        let v = v_min + (v_max - v_min) * j as f64 / n_v as f64;
-        for i in 0..n_u {
-            let u = 2.0 * PI * i as f64 / n_u as f64;
-            let radial = add(scale(axis.x, u.cos()), scale(y, u.sin()));
-            points.push(add(
-                axis.origin,
-                add(scale(radial, radius), scale(axis.z, v)),
-            ));
+        let mut points = Vec::with_capacity(n_u * (n_v + 1));
+        for j in 0..=n_v {
+            let v = v_min + (v_max - v_min) * j as f64 / n_v as f64;
+            for i in 0..n_u {
+                let u = 2.0 * PI * i as f64 / n_u as f64;
+                let radial = add(scale(axis.x, u.cos()), scale(y, u.sin()));
+                points.push(add(
+                    axis.origin,
+                    add(scale(radial, radius), scale(axis.z, v)),
+                ));
+            }
         }
-    }
 
-    let mut triangles = Vec::with_capacity(n_u * n_v * 2);
-    for j in 0..n_v {
-        for i in 0..n_u {
-            let ni = (i + 1) % n_u;
-            let a = j * n_u + i;
-            let b = j * n_u + ni;
-            let c = (j + 1) * n_u + i;
-            let d = (j + 1) * n_u + ni;
-            // CCW winding when viewed from outside (outward-radial normal).
-            triangles.push([a, b, d]);
-            triangles.push([a, d, c]);
+        let mut triangles = Vec::with_capacity(n_u * n_v * 2);
+        for j in 0..n_v {
+            for i in 0..n_u {
+                let ni = (i + 1) % n_u;
+                let a = j * n_u + i;
+                let b = j * n_u + ni;
+                let c = (j + 1) * n_u + i;
+                let d = (j + 1) * n_u + ni;
+                // CCW winding when viewed from outside (outward-radial normal).
+                triangles.push([a, b, d]);
+                triangles.push([a, d, c]);
+            }
         }
-    }
 
-    Some(SurfaceMesh { points, triangles })
+        Some(SurfaceMesh { points, triangles })
+    } else {
+        // Partial cylinder: invert boundary to find the angular u-range.
+        let surface = surface_from_step(face.surface_id, file).ok()?;
+
+        let raw_u: Vec<f64> = boundary_3d
+            .iter()
+            .map(|&p| {
+                let d = sub(p, axis.origin);
+                f64::atan2(dot3(d, y), dot3(d, axis.x))
+            })
+            .collect();
+        let u_vals = unwrap_angles(raw_u);
+
+        let u_min = u_vals.iter().cloned().fold(f64::INFINITY, f64::min);
+        let u_max = u_vals.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+
+        if (u_max - u_min) < 1e-10 {
+            return None;
+        }
+
+        let arc_u = (u_max - u_min) * radius;
+        let arc_v = (v_max - v_min).abs();
+        let n_u = ((arc_u / max_edge_len).ceil() as usize).clamp(2, 256);
+        let n_v = ((arc_v / max_edge_len).ceil() as usize).clamp(1, 256);
+
+        let mut points = Vec::with_capacity((n_u + 1) * (n_v + 1));
+        for j in 0..=n_v {
+            let v = v_min + (v_max - v_min) * j as f64 / n_v as f64;
+            for i in 0..=n_u {
+                let u = u_min + (u_max - u_min) * i as f64 / n_u as f64;
+                points.push(surface.point(u, v));
+            }
+        }
+
+        let n_cols = n_u + 1;
+        let mut triangles = Vec::with_capacity(n_u * n_v * 2);
+        for j in 0..n_v {
+            for i in 0..n_u {
+                let a = j * n_cols + i;
+                let b = j * n_cols + (i + 1);
+                let c = (j + 1) * n_cols + i;
+                let d = (j + 1) * n_cols + (i + 1);
+                triangles.push([a, b, d]);
+                triangles.push([a, d, c]);
+            }
+        }
+
+        Some(SurfaceMesh { points, triangles })
+    }
 }
 
 /// Tessellate a `CONICAL_SURFACE` face directly in UV space (u = angle, v = slant distance)
