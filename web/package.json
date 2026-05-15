@@ -17,14 +17,15 @@
   },
   "packageManager": "bun",
   "dependencies": {
-    "three": "^0.167.0",
-    "zustand": "^5.0.0",
+    "@react-three/drei": "^9.115.0",
+    "@react-three/fiber": "^8.17.0",
+    "immer": "^10.1.1",
+    "jspdf": "^4.2.1",
+    "leva": "^0.9.35",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
-    "@react-three/fiber": "^8.17.0",
-    "@react-three/drei": "^9.115.0",
-    "leva": "^0.9.35",
-    "immer": "^10.1.1"
+    "three": "^0.167.0",
+    "zustand": "^5.0.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",

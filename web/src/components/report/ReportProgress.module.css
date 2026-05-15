@@ -1,0 +1,161 @@
+.overlay {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 1000;
+  animation: slideIn 0.2s ease-out;
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.card {
+  background: #1c1c3a;
+  border: 1px solid #3a3a68;
+  border-radius: 10px;
+  padding: 14px 16px;
+  width: 290px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.fileIconWrap {
+  position: relative;
+  width: 36px;
+  height: 40px;
+  flex-shrink: 0;
+}
+
+.fileIconBase {
+  width: 36px;
+  height: 40px;
+  background: #2d2d6a;
+  border: 1.5px solid #4a4a90;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fileIconLabel {
+  font-size: 7px;
+  font-weight: 700;
+  color: #6b8ef5;
+  letter-spacing: 0.5px;
+  user-select: none;
+}
+
+.fileIconCorner {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  background: #3b5bdb;
+  border-bottom-left-radius: 4px;
+  clip-path: polygon(0 0, 100% 0, 100% 100%);
+}
+
+.headerText {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.filename {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #e0e0f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status {
+  font-size: 10.5px;
+  color: #8888aa;
+}
+
+.progressTrack {
+  height: 5px;
+  background: #2a2a52;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.progressFill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b5bdb 0%, #6b8ef5 100%);
+  border-radius: 3px;
+  transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.progressFill.complete {
+  background: linear-gradient(90deg, #2e8b57 0%, #4caf7d 100%);
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #44446a;
+  transition: color 0.2s;
+}
+
+.step.done {
+  color: #64c864;
+}
+
+.step.active {
+  color: #d8d8f0;
+}
+
+.icon {
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.iconSpinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid #3b5bdb;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg) } }
+
+.iconCheck {
+  color: #64c864;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.iconDot {
+  width: 5px;
+  height: 5px;
+  background: #44446a;
+  border-radius: 50%;
+}
