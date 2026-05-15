@@ -215,6 +215,17 @@ fn try_tessellate_cylindrical(
         return None;
     }
 
+    // Only handle full-revolution barrels. A full circle edge has start ≈ end
+    // (closed loop). Partial cylinders (fillets, chamfers) have arc edges where
+    // start ≠ end and must fall through to the flat-projection path.
+    let has_closed_circle = face.outer_loop.iter().any(|edge| {
+        let d = sub(edge.start, edge.end);
+        d[0] * d[0] + d[1] * d[1] + d[2] * d[2] < 1e-16
+    });
+    if !has_closed_circle {
+        return None;
+    }
+
     let ax_id = get_ref(e, 1).ok()?;
     let radius = get_real(e, 2).ok()?;
     let axis = axis2_placement(file, ax_id).ok()?;
