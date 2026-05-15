@@ -115,3 +115,7 @@ All element types use Nastran names. The property card, not the element type, de
 - Rust: `rustfmt` defaults, `clippy` clean at `warn` level
 - TypeScript: strict mode, no `any`
 - Comments only for non-obvious physics/math — reference the paper/equation instead of explaining the code
+
+## Pull Request Convention
+
+Always include `closes #<issue-number>` in the PR description body so that merging the PR automatically closes the linked issue on GitHub.
