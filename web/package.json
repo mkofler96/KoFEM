@@ -15,7 +15,8 @@
     "upload:slack": "npx tsx scripts/upload-to-slack.ts",
     "screenshot:slack": "bun run test:screenshot && bun run upload:slack",
     "test:mesh-report": "playwright test mesh-report.spec.ts",
-    "report:mesh": "bun run test:mesh-report && bun scripts/generate-mesh-report.ts"
+    "report:mesh": "bun run test:mesh-report && bun scripts/generate-mesh-report.ts",
+    "report:mesh:slack": "bun run report:mesh && bun run upload:slack screenshots/step-fit-view.png screenshots/mesh-report.pdf --comment=\"KoFEM mesh capabilities report\""
   },
   "packageManager": "bun",
   "dependencies": {
