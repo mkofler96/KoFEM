@@ -145,9 +145,9 @@ async function main() {
     }
   } else {
     // Look for screenshot directly
-    const screenshotPath = path.resolve(__dirname, '../screenshots/solve-result.png')
+    const screenshotPath = path.resolve(__dirname, '../screenshots/step-fit-view.png')
     if (!fs.existsSync(screenshotPath)) {
-      console.error('No screenshot found at screenshots/solve-result.png')
+      console.error('No screenshot found at screenshots/step-fit-view.png')
       console.error('Run the screenshot test first: bun run test:screenshot')
       process.exit(1)
     }
