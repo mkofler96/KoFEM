@@ -715,13 +715,18 @@ fn partial_cylinder_spans_correct_height() {
     };
     let mesh = tessellate(&brep, &file, opts).unwrap();
 
-    let z_min = mesh.points.iter().map(|p| p[2]).fold(f64::INFINITY, f64::min);
-    let z_max = mesh.points.iter().map(|p| p[2]).fold(f64::NEG_INFINITY, f64::max);
+    let z_min = mesh
+        .points
+        .iter()
+        .map(|p| p[2])
+        .fold(f64::INFINITY, f64::min);
+    let z_max = mesh
+        .points
+        .iter()
+        .map(|p| p[2])
+        .fold(f64::NEG_INFINITY, f64::max);
 
-    assert!(
-        (z_min - 0.0).abs() < 1e-6,
-        "z_min should be 0, got {z_min}"
-    );
+    assert!((z_min - 0.0).abs() < 1e-6, "z_min should be 0, got {z_min}");
     assert!(
         (z_max - 10.0).abs() < 1e-6,
         "z_max should be 10, got {z_max}"
