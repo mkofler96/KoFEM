@@ -582,7 +582,10 @@ fn cone_barrel_points_lie_on_cone_surface() {
             has_barrel = true;
         }
     }
-    assert!(has_barrel, "no intermediate barrel points found — cone may have been tessellated flat");
+    assert!(
+        has_barrel,
+        "no intermediate barrel points found — cone may have been tessellated flat"
+    );
 }
 
 /// Height range of the merged cone mesh must span [0, 30].
@@ -603,7 +606,10 @@ fn cone_mesh_spans_correct_height() {
     }
 
     assert!((z_min - 0.0).abs() < 1e-4, "z_min should be 0, got {z_min}");
-    assert!((z_max - 30.0).abs() < 1e-4, "z_max should be 30, got {z_max}");
+    assert!(
+        (z_max - 30.0).abs() < 1e-4,
+        "z_max should be 30, got {z_max}"
+    );
 }
 
 /// Tessellation must produce triangles (non-degenerate mesh).
