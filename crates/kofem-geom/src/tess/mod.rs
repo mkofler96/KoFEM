@@ -128,6 +128,9 @@ fn tessellate_face_raw(face: &TopoFace, file: &StepFile, max_edge_len: f64) -> S
     if let Some(mesh) = try_tessellate_cylindrical(face, file, max_edge_len) {
         return mesh;
     }
+    if let Some(mesh) = try_tessellate_toroidal(face, file, max_edge_len) {
+        return mesh;
+    }
     if let Some(mesh) = try_tessellate_bspline(face, file, max_edge_len) {
         return mesh;
     }
@@ -281,6 +284,111 @@ fn try_tessellate_cylindrical(
     }
 
     Some(SurfaceMesh { points, triangles })
+}
+
+/// Tessellate a `TOROIDAL_SURFACE` face (blend fillet) directly in UV space
+/// (u = angle around the major circle, v = angle around the tube) and lift
+/// back to 3D.  Returns `None` when the surface is not toroidal.
+///
+/// Unlike the cylinder path, toroidal faces are always partial patches:
+/// u and v ranges are inferred from the boundary rather than assumed to be [0, 2π].
+fn try_tessellate_toroidal(
+    face: &TopoFace,
+    file: &StepFile,
+    max_edge_len: f64,
+) -> Option<SurfaceMesh> {
+    let e = file.get(&face.surface_id)?;
+    if e.type_name != "TOROIDAL_SURFACE" {
+        return None;
+    }
+
+    let ax_id = get_ref(e, 1).ok()?;
+    let major_radius = get_real(e, 2).ok()?;
+    let minor_radius = get_real(e, 3).ok()?;
+    let axis = axis2_placement(file, ax_id).ok()?;
+    let y = axis.y();
+
+    let surface = surface_from_step(face.surface_id, file).ok()?;
+
+    let boundary_3d = sample_boundary_3d(&face.outer_loop, file, max_edge_len);
+    if boundary_3d.len() < 3 {
+        return None;
+    }
+
+    // Invert boundary points to (u, v).
+    // u = atan2(dot(p-o, y), dot(p-o, x))   — major angle
+    // v = atan2(dot(p-o, z), |proj_xy| - R) — tube angle
+    let raw_uv: Vec<(f64, f64)> = boundary_3d
+        .iter()
+        .map(|&p| {
+            let d = sub(p, axis.origin);
+            let dx = dot3(d, axis.x);
+            let dy = dot3(d, y);
+            let dz = dot3(d, axis.z);
+            let u = f64::atan2(dy, dx);
+            let p_xy_len = (dx * dx + dy * dy).sqrt();
+            let v = f64::atan2(dz, p_xy_len - major_radius);
+            (u, v)
+        })
+        .collect();
+
+    // Unwrap both angular parameters to a contiguous range.
+    let u_vals = unwrap_angles(raw_uv.iter().map(|&(u, _)| u).collect());
+    let v_vals = unwrap_angles(raw_uv.iter().map(|&(_, v)| v).collect());
+
+    let u_min = u_vals.iter().cloned().fold(f64::INFINITY, f64::min);
+    let u_max = u_vals.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let v_min = v_vals.iter().cloned().fold(f64::INFINITY, f64::min);
+    let v_max = v_vals.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+
+    if (u_max - u_min) < 1e-10 || (v_max - v_min) < 1e-10 {
+        return None;
+    }
+
+    let arc_u = (u_max - u_min) * (major_radius + minor_radius);
+    let arc_v = (v_max - v_min) * minor_radius;
+    let n_u = ((arc_u / max_edge_len).ceil() as usize).clamp(2, 256);
+    let n_v = ((arc_v / max_edge_len).ceil() as usize).clamp(2, 256);
+
+    let mut points = Vec::with_capacity((n_u + 1) * (n_v + 1));
+    for j in 0..=n_v {
+        let v = v_min + (v_max - v_min) * j as f64 / n_v as f64;
+        for i in 0..=n_u {
+            let u = u_min + (u_max - u_min) * i as f64 / n_u as f64;
+            points.push(surface.point(u, v));
+        }
+    }
+
+    let n_cols = n_u + 1;
+    let mut triangles = Vec::with_capacity(n_u * n_v * 2);
+    for j in 0..n_v {
+        for i in 0..n_u {
+            let a = j * n_cols + i;
+            let b = j * n_cols + (i + 1);
+            let c = (j + 1) * n_cols + i;
+            let d = (j + 1) * n_cols + (i + 1);
+            triangles.push([a, b, d]);
+            triangles.push([a, d, c]);
+        }
+    }
+
+    Some(SurfaceMesh { points, triangles })
+}
+
+/// Unwrap a sequence of angles to a contiguous range by minimising inter-sample jumps.
+fn unwrap_angles(angles: Vec<f64>) -> Vec<f64> {
+    if angles.is_empty() {
+        return angles;
+    }
+    let mut out = Vec::with_capacity(angles.len());
+    out.push(angles[0]);
+    for &a in &angles[1..] {
+        let prev = *out.last().unwrap();
+        let mut delta = a - prev;
+        delta -= (delta / (2.0 * PI)).round() * 2.0 * PI;
+        out.push(prev + delta);
+    }
+    out
 }
 
 /// Tessellate a B-spline surface face by sampling its UV parameter domain
