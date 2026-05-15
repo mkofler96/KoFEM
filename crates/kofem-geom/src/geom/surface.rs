@@ -2,9 +2,8 @@ use std::f64::consts::PI;
 
 use super::curve::{curve_from_step, Curve};
 use super::{
-    add, arg_as_ref, axis1_placement, axis2_placement, cross, de_boor_1d, expand_knots,
-    get_entity, get_real, get_ref, normalize, point3, rodrigues, scale, sub, Axis1,
-    Axis2, GeomError,
+    add, arg_as_ref, axis1_placement, axis2_placement, cross, de_boor_1d, expand_knots, get_entity,
+    get_real, get_ref, normalize, point3, rodrigues, scale, sub, Axis1, Axis2, GeomError,
 };
 use crate::step::parser::{Arg, StepFile};
 
@@ -392,7 +391,11 @@ pub fn surface_from_step(id: u64, file: &StepFile) -> Result<Box<dyn Surface>, G
     // Scan for a recognised surface type among them.
     if e.type_name.is_empty() {
         for arg in &e.args {
-            if let Arg::TypedValue { name, args: sub_args } = arg {
+            if let Arg::TypedValue {
+                name,
+                args: sub_args,
+            } = arg
+            {
                 if name == "B_SPLINE_SURFACE_WITH_KNOTS" {
                     return bspline_surface_from_args(id, sub_args, file);
                 }
