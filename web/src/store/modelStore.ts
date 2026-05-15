@@ -180,7 +180,9 @@ interface ModelState extends ModelSnapshot {
   pickMode: 'bc' | 'load' | null
   selectedFace: FaceSelection | null
 
+  stepWireframe: boolean
   setStepSurface(mesh: StepSurfaceMesh | null): void
+  setStepWireframe(v: boolean): void
 
   // Solver
   addNode(node: Node): void
@@ -228,6 +230,7 @@ export const useModelStore = create<ModelState>()(
     stepSurface: null,
     isRunning: false,
     isMeshing: false,
+    stepWireframe: false,
     geometries: [DEFAULT_GEOMETRY],
     nextGeomId: 2,
     nextMatId: 2,
@@ -235,7 +238,8 @@ export const useModelStore = create<ModelState>()(
     selectedFace: null,
     fitViewTrigger: 0,
 
-    setStepSurface: (mesh) => set(s => { s.stepSurface = mesh; if (mesh) s.fitViewTrigger++ }),
+    setStepWireframe: (v) => set(s => { s.stepWireframe = v }),
+    setStepSurface: (mesh) => set(s => { s.stepSurface = mesh; s.stepWireframe = false; if (mesh) s.fitViewTrigger++ }),
     triggerFitView: () => set(s => { s.fitViewTrigger++ }),
 
     addNode: (node) => set(s => { s.nodes.push(node) }),

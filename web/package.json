@@ -13,7 +13,9 @@
     "test:ui": "playwright test --ui",
     "test:screenshot": "playwright test screenshot.spec.ts",
     "upload:slack": "npx tsx scripts/upload-to-slack.ts",
-    "screenshot:slack": "bun run test:screenshot && bun run upload:slack"
+    "screenshot:slack": "bun run test:screenshot && bun run upload:slack",
+    "test:mesh-report": "playwright test mesh-report.spec.ts",
+    "report:mesh": "bun run test:mesh-report && bun scripts/generate-mesh-report.ts"
   },
   "packageManager": "bun",
   "dependencies": {

@@ -10,7 +10,7 @@ export function Viewport() {
   return (
     <Canvas
       camera={{ position: [5, 5, 5], fov: 45 }}
-      gl={{ antialias: true }}
+      gl={{ antialias: true, preserveDrawingBuffer: true }}
       style={{ background: '#12121f', cursor: pickMode ? 'crosshair' : 'default' }}
     >
       <ambientLight intensity={0.4} />
