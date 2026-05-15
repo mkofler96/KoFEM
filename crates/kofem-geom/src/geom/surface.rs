@@ -428,10 +428,10 @@ pub fn surface_from_step(id: u64, file: &StepFile) -> Result<Box<dyn Surface>, G
         }
 
         "CONICAL_SURFACE" => {
-            // CONICAL_SURFACE(label, axis2_placement_ref, radius, semi_angle)
+            // CONICAL_SURFACE(label, axis2_placement_ref, radius, semi_angle_deg)
             let ax_id = get_ref(e, 1)?;
             let radius = get_real(e, 2)?;
-            let semi_angle = get_real(e, 3)?;
+            let semi_angle = get_real(e, 3)?.to_radians();
             let axis = axis2_placement(file, ax_id)?;
             Ok(Box::new(ConicalSurface {
                 axis,

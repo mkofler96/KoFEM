@@ -482,7 +482,7 @@ fn cylinder_barrel_has_nonzero_height() {
 // ── cone regression tests ─────────────────────────────────────────────────────
 
 /// Truncated cone: bottom circle radius=10 at z=0, top circle radius=20 at z=30.
-/// The CONICAL_SURFACE has semi_angle = atan(1/3) ≈ 0.32175 rad.
+/// The CONICAL_SURFACE has semi_angle = atan(1/3) ≈ 18.435° (STEP stores degrees).
 /// On the barrel, r(z) = 10 + z/3 (linear taper, tan(φ)=1/3).
 const STEP_CONE: &str = "
 ISO-10303-21;
@@ -537,7 +537,7 @@ DATA;
 #45=DIRECTION('',(0.,0.,1.));
 #46=DIRECTION('',(1.,0.,0.));
 #47=AXIS2_PLACEMENT_3D('',#44,#45,#46);
-#48=CONICAL_SURFACE('',#47,10.,0.32175);
+#48=CONICAL_SURFACE('',#47,10.,18.43495);
 #49=EDGE_LOOP('',(#40,#41,#42,#43));
 #50=FACE_OUTER_BOUND('',#49,.T.);
 #51=ADVANCED_FACE('',(#50),#48,.T.);
