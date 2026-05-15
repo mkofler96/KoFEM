@@ -54,9 +54,17 @@ self.onmessage = async (event: MessageEvent) => {
       const resultJson = compute_volume_mesh(JSON.stringify(payload.surface))
       const data = JSON.parse(resultJson) as {
         points: [number, number, number][]
+        tets: [number, number, number, number][]
         edges: [number, number][]
       }
-      self.postMessage({ id, ok: true, points: data.points, edges: data.edges })
+      const nodes = data.points.map(([x, y, z], i) => ({ id: i, x, y, z }))
+      const elements = data.tets.map((v, i) => ({
+        id: i,
+        type: 'CTETRA' as const,
+        nodeIds: v,
+        propertyId: 1,
+      }))
+      self.postMessage({ id, ok: true, points: data.points, edges: data.edges, nodes, elements })
 
     } else if (type === 'mesh') {
       const geom = payload as BoxGeometry
