@@ -533,10 +533,10 @@ fn try_create_edge_by_flips(mesh: &mut TetMesh, target_edge: [usize; 2]) -> bool
                     let neighbor = mesh.tets[neighbor_ti];
                     if neighbor[0] != usize::MAX && neighbor.contains(&e1) {
                         // Found adjacent tets spanning e0 and e1.
-                        if try_flip_2_3(mesh, ti, neighbor_ti, target_edge) {
-                            if mesh.edge_to_tets.contains_key(&target_edge) {
-                                return true;
-                            }
+                        if try_flip_2_3(mesh, ti, neighbor_ti, target_edge)
+                            && mesh.edge_to_tets.contains_key(&target_edge)
+                        {
+                            return true;
                         }
                     }
                 }
@@ -697,7 +697,7 @@ fn try_recover_face_by_flips(mesh: &mut TetMesh, face_key: [usize; 3]) -> bool {
     // Look for edges in tets adjacent to the face vertices that cross the face plane.
     let mut candidate_edges: Vec<[usize; 2]> = Vec::new();
     for &v in &[a, b, c] {
-        for (_ti, tet) in mesh.tets.iter().enumerate() {
+        for tet in &mesh.tets {
             if tet[0] == usize::MAX {
                 continue;
             }
@@ -727,10 +727,8 @@ fn try_recover_face_by_flips(mesh: &mut TetMesh, face_key: [usize; 3]) -> bool {
 
     // Try flipping each candidate edge.
     for edge in candidate_edges {
-        if try_flip_edge(mesh, edge, face_key) {
-            if mesh.has_face(face_key) {
-                return true;
-            }
+        if try_flip_edge(mesh, edge, face_key) && mesh.has_face(face_key) {
+            return true;
         }
     }
 
