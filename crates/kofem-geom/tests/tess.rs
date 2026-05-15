@@ -624,6 +624,129 @@ fn cone_mesh_has_triangles() {
     );
 }
 
+// ── partial cylinder tests ────────────────────────────────────────────────────
+
+/// Quarter-cylinder patch: r=5, z in [0,10], u in [0, π/2].
+/// 4 boundary edges: bottom arc, right seam line, top arc (reversed), left seam line.
+/// No closed-circle edge → partial cylinder path must be taken.
+const STEP_QUARTER_CYLINDER: &str = "
+ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION(('KoFEM quarter-cylinder test r=5 h=10'));
+ENDSEC;
+DATA;
+#1=CARTESIAN_POINT('',(5.,0.,0.));
+#2=CARTESIAN_POINT('',(0.,5.,0.));
+#3=CARTESIAN_POINT('',(0.,5.,10.));
+#4=CARTESIAN_POINT('',(5.,0.,10.));
+#5=VERTEX_POINT('',#1);
+#6=VERTEX_POINT('',#2);
+#7=VERTEX_POINT('',#3);
+#8=VERTEX_POINT('',#4);
+#10=CARTESIAN_POINT('',(0.,0.,0.));
+#11=DIRECTION('',(0.,0.,1.));
+#12=DIRECTION('',(1.,0.,0.));
+#13=AXIS2_PLACEMENT_3D('',#10,#11,#12);
+#14=CIRCLE('',#13,5.);
+#15=EDGE_CURVE('',#5,#6,#14,.T.);
+#20=CARTESIAN_POINT('',(0.,5.,0.));
+#21=DIRECTION('',(0.,0.,1.));
+#22=VECTOR('',#21,10.);
+#23=LINE('',#20,#22);
+#24=EDGE_CURVE('',#6,#7,#23,.T.);
+#30=CARTESIAN_POINT('',(0.,0.,10.));
+#31=DIRECTION('',(0.,0.,1.));
+#32=DIRECTION('',(1.,0.,0.));
+#33=AXIS2_PLACEMENT_3D('',#30,#31,#32);
+#34=CIRCLE('',#33,5.);
+#35=EDGE_CURVE('',#8,#7,#34,.T.);
+#40=CARTESIAN_POINT('',(5.,0.,10.));
+#41=DIRECTION('',(0.,0.,-1.));
+#42=VECTOR('',#41,10.);
+#43=LINE('',#40,#42);
+#44=EDGE_CURVE('',#8,#5,#43,.T.);
+#50=ORIENTED_EDGE('',*,*,#15,.T.);
+#51=ORIENTED_EDGE('',*,*,#24,.T.);
+#52=ORIENTED_EDGE('',*,*,#35,.F.);
+#53=ORIENTED_EDGE('',*,*,#44,.T.);
+#54=EDGE_LOOP('',(#50,#51,#52,#53));
+#55=FACE_OUTER_BOUND('',#54,.T.);
+#60=CARTESIAN_POINT('',(0.,0.,0.));
+#61=DIRECTION('',(0.,0.,1.));
+#62=DIRECTION('',(1.,0.,0.));
+#63=AXIS2_PLACEMENT_3D('',#60,#61,#62);
+#64=CYLINDRICAL_SURFACE('',#63,5.);
+#65=ADVANCED_FACE('',(#55),#64,.T.);
+ENDSEC;
+END-ISO-10303-21;
+";
+
+/// All barrel points on a partial cylinder must lie on the cylinder surface (r ≈ 5).
+#[test]
+fn partial_cylinder_points_lie_on_surface() {
+    let file = parse(STEP_QUARTER_CYLINDER).unwrap();
+    let brep = BRep::extract(&file).unwrap();
+    let opts = TessOptions {
+        max_edge_len: 1.0,
+        ..TessOptions::default()
+    };
+    let mesh = tessellate(&brep, &file, opts).unwrap();
+
+    assert!(!mesh.points.is_empty(), "mesh must have points");
+    assert!(!mesh.triangles.is_empty(), "mesh must have triangles");
+
+    for &[x, y, z] in &mesh.points {
+        let r = (x * x + y * y).sqrt();
+        assert!(
+            (r - 5.0).abs() < 1e-3,
+            "point ({x:.4},{y:.4},{z:.4}) has r={r:.6}, expected 5.0"
+        );
+    }
+}
+
+/// The partial cylinder patch must span the correct z range [0, 10].
+#[test]
+fn partial_cylinder_spans_correct_height() {
+    let file = parse(STEP_QUARTER_CYLINDER).unwrap();
+    let brep = BRep::extract(&file).unwrap();
+    let opts = TessOptions {
+        max_edge_len: 1.0,
+        ..TessOptions::default()
+    };
+    let mesh = tessellate(&brep, &file, opts).unwrap();
+
+    let z_min = mesh.points.iter().map(|p| p[2]).fold(f64::INFINITY, f64::min);
+    let z_max = mesh.points.iter().map(|p| p[2]).fold(f64::NEG_INFINITY, f64::max);
+
+    assert!(
+        (z_min - 0.0).abs() < 1e-6,
+        "z_min should be 0, got {z_min}"
+    );
+    assert!(
+        (z_max - 10.0).abs() < 1e-6,
+        "z_max should be 10, got {z_max}"
+    );
+}
+
+/// The partial cylinder patch must stay within the u ∈ [0, π/2] quarter arc.
+#[test]
+fn partial_cylinder_stays_within_angular_range() {
+    let file = parse(STEP_QUARTER_CYLINDER).unwrap();
+    let brep = BRep::extract(&file).unwrap();
+    let opts = TessOptions {
+        max_edge_len: 1.0,
+        ..TessOptions::default()
+    };
+    let mesh = tessellate(&brep, &file, opts).unwrap();
+
+    for &[x, y, _z] in &mesh.points {
+        assert!(
+            x >= -1e-6 && y >= -1e-6,
+            "point ({x:.4},{y:.4}) is outside the first quadrant"
+        );
+    }
+}
+
 // ── bracket regression tests ───────────────────────────────────────────────────
 
 #[test]
