@@ -509,4 +509,3 @@ fn no_degenerate_triangles() {
         assert!(cross_len > 1e-10, "degenerate triangle {a},{b},{c}");
     }
 }
-
