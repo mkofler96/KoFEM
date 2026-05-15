@@ -244,7 +244,10 @@ fn try_tessellate_cylindrical(
         for i in 0..n_u {
             let u = 2.0 * PI * i as f64 / n_u as f64;
             let radial = add(scale(axis.x, u.cos()), scale(y, u.sin()));
-            points.push(add(axis.origin, add(scale(radial, radius), scale(axis.z, v))));
+            points.push(add(
+                axis.origin,
+                add(scale(radial, radius), scale(axis.z, v)),
+            ));
         }
     }
 

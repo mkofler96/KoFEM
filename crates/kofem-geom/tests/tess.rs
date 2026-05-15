@@ -434,7 +434,10 @@ fn cylinder_mesh_has_three_faces() {
 fn cylinder_mesh_spans_correct_height() {
     // R=25mm, H=80mm — all points must satisfy z in [0, 80] and radius ≤ 25 + ε.
     let (file, brep) = load_cylinder();
-    let opts = TessOptions { max_edge_len: 5.0, ..TessOptions::default() };
+    let opts = TessOptions {
+        max_edge_len: 5.0,
+        ..TessOptions::default()
+    };
     let mesh = tessellate(&brep, &file, opts).unwrap();
 
     assert!(!mesh.points.is_empty());
@@ -443,15 +446,15 @@ fn cylinder_mesh_spans_correct_height() {
     let mut z_max = f64::NEG_INFINITY;
     for &[x, y, z] in &mesh.points {
         let r = (x * x + y * y).sqrt();
-        assert!(r <= 25.0 + 1e-6, "point ({x:.3},{y:.3},{z:.3}) has r={r:.6} > 25");
+        assert!(
+            r <= 25.0 + 1e-6,
+            "point ({x:.3},{y:.3},{z:.3}) has r={r:.6} > 25"
+        );
         z_min = z_min.min(z);
         z_max = z_max.max(z);
     }
 
-    assert!(
-        (z_min - 0.0).abs() < 1e-6,
-        "z_min should be 0, got {z_min}"
-    );
+    assert!((z_min - 0.0).abs() < 1e-6, "z_min should be 0, got {z_min}");
     assert!(
         (z_max - 80.0).abs() < 1e-6,
         "z_max should be 80, got {z_max}"
@@ -462,12 +465,18 @@ fn cylinder_mesh_spans_correct_height() {
 fn cylinder_barrel_has_nonzero_height() {
     // Before the fix, the barrel face was projected flat and all z values were 0.
     let (file, brep) = load_cylinder();
-    let opts = TessOptions { max_edge_len: 5.0, ..TessOptions::default() };
+    let opts = TessOptions {
+        max_edge_len: 5.0,
+        ..TessOptions::default()
+    };
     let mesh = tessellate(&brep, &file, opts).unwrap();
 
     // There must be points with z ≈ 80 (top cap / top of barrel).
     let has_top = mesh.points.iter().any(|&[_, _, z]| (z - 80.0).abs() < 1e-6);
-    assert!(has_top, "no points at z=80 — barrel was likely collapsed flat");
+    assert!(
+        has_top,
+        "no points at z=80 — barrel was likely collapsed flat"
+    );
 }
 
 // ── bracket regression tests ───────────────────────────────────────────────────
