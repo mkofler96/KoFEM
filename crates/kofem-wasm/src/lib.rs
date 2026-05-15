@@ -278,6 +278,71 @@ pub fn tessellate_step(step_text: &str, max_edge_len: f64) -> Result<String, JsE
     serde_json::to_string(&mesh).map_err(|e| JsError::new(&e.to_string()))
 }
 
+/// Compute a tetrahedral volume mesh from a surface mesh.
+///
+/// `surface_json` — JSON `{ points: [[x,y,z], …], triangles: [[a,b,c], …] }`
+/// (the same format returned by [`tessellate_step`]).
+///
+/// Returns `{ points: [[x,y,z], …], edges: [[a,b], …] }` where `edges` are
+/// deduplicated tet edges ready for wireframe rendering.
+#[wasm_bindgen]
+pub fn compute_volume_mesh(surface_json: &str) -> Result<String, JsError> {
+    use kofem_mesh::volume::{classify_interior_tets, recover_constraint_faces, TetMesh};
+
+    #[derive(serde::Deserialize)]
+    struct ArraySurface {
+        points: Vec<[f64; 3]>,
+        triangles: Vec<[usize; 3]>,
+    }
+
+    let input: ArraySurface =
+        serde_json::from_str(surface_json).map_err(|e| JsError::new(&e.to_string()))?;
+
+    if input.points.len() < 4 {
+        return Err(JsError::new("surface needs at least 4 points for volume meshing"));
+    }
+
+    let surface = kofem_mesh::SurfaceMesh {
+        points: input
+            .points
+            .iter()
+            .map(|&[x, y, z]| kofem_mesh::Point3::new(x, y, z))
+            .collect(),
+        triangles: input.triangles,
+    };
+
+    let pts = input.points;
+    let tets = kofem_mesh::bowyer_watson_3d(&pts);
+
+    if tets.is_empty() {
+        return Err(JsError::new("Delaunay tetrahedralization produced no tetrahedra"));
+    }
+
+    let mut mesh = TetMesh::from_tets(pts.clone(), tets);
+    let _ = recover_constraint_faces(&mut mesh, &surface, 200);
+    classify_interior_tets(&mut mesh, &surface);
+
+    let live_tets = mesh.live_tets();
+    if live_tets.is_empty() {
+        return Err(JsError::new("no interior tetrahedra found after classification"));
+    }
+
+    let mut edge_set = std::collections::HashSet::<[usize; 2]>::new();
+    for tet in &live_tets {
+        let [a, b, c, d] = *tet;
+        for &[e0, e1] in &[[a, b], [a, c], [a, d], [b, c], [b, d], [c, d]] {
+            edge_set.insert(if e0 < e1 { [e0, e1] } else { [e1, e0] });
+        }
+    }
+
+    let out = serde_json::json!({
+        "points": pts,
+        "edges": edge_set.into_iter().collect::<Vec<_>>()
+    });
+
+    serde_json::to_string(&out).map_err(|e| JsError::new(&e.to_string()))
+}
+
 /// Extrude a 2-D triangle mesh into a 3-D tetrahedral mesh.
 ///
 /// `mesh2d_json` — JSON produced by [`mesh_polygon`].

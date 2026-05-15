@@ -54,8 +54,21 @@ test.describe('Mesh capabilities report', () => {
         clip: await getViewportClip(page),
       })
 
-      // Reset wireframe for next test
       await page.getByRole('button', { name: 'Solid' }).click()
+
+      // ── Volume mesh screenshot ───────────────────────────────────────────────
+      await page.getByRole('button', { name: 'Vol Mesh' }).click()
+      // Volume meshing runs in WASM — wait up to 90 s for the toggle to appear
+      await expect(page.getByRole('button', { name: 'Vol Solid' })).toBeVisible({ timeout: 90_000 })
+      await page.waitForTimeout(300)
+
+      await page.screenshot({
+        path: path.join(OUT_DIR, `${slug}-volume.png`),
+        clip: await getViewportClip(page),
+      })
+
+      // Hide vol mesh for next test
+      await page.getByRole('button', { name: 'Vol Solid' }).click()
     })
   }
 })

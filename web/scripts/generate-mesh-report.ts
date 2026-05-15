@@ -36,8 +36,9 @@ function run() {
   const PW = 297, PH = 210
   const M = 12                 // page margin
   const COL_LABEL = 36         // width of label column
-  const GAP = 6                // gap between image columns
-  const IMG_W = (PW - 2*M - COL_LABEL - GAP) / 2   // ~114 mm each
+  const GAP = 4                // gap between image columns
+  const NUM_COLS = 3
+  const IMG_W = (PW - 2*M - COL_LABEL - (NUM_COLS - 1) * GAP) / NUM_COLS  // ~75 mm each
   const ROW_H = (PH - 2*M - 24) / GEOMETRIES.length // ~40 mm each row
 
   // ── Cover / header ──────────────────────────────────────────────────────────
@@ -57,14 +58,16 @@ function run() {
 
   // Column headers
   const tableTop = M + 22
-  const imgColL = M + COL_LABEL
-  const imgColR = imgColL + IMG_W + GAP
+  const imgCol1 = M + COL_LABEL
+  const imgCol2 = imgCol1 + IMG_W + GAP
+  const imgCol3 = imgCol2 + IMG_W + GAP
 
   doc.setFont('helvetica', 'bold'); doc.setFontSize(8)
   doc.setTextColor(100, 120, 200)
   doc.text('Geometry', M + 2, tableTop - 2)
-  doc.text('Rendered surface', imgColL + IMG_W / 2, tableTop - 2, { align: 'center' })
-  doc.text('Surface mesh (wireframe)', imgColR + IMG_W / 2, tableTop - 2, { align: 'center' })
+  doc.text('Rendered surface', imgCol1 + IMG_W / 2, tableTop - 2, { align: 'center' })
+  doc.text('Surface mesh (wireframe)', imgCol2 + IMG_W / 2, tableTop - 2, { align: 'center' })
+  doc.text('Volume mesh (tets)', imgCol3 + IMG_W / 2, tableTop - 2, { align: 'center' })
 
   doc.setDrawColor(50, 50, 90); doc.setLineWidth(0.3)
   doc.line(M, tableTop, PW - M, tableTop)
@@ -94,22 +97,33 @@ function run() {
     const geoPath = path.join(SHOT_DIR, `${g.file}-geometry.png`)
     const geoUrl = pngToDataUrl(geoPath)
     if (geoUrl) {
-      doc.addImage(geoUrl, 'PNG', imgColL, imgY, IMG_W, imgH)
+      doc.addImage(geoUrl, 'PNG', imgCol1, imgY, IMG_W, imgH)
     } else {
-      doc.setFillColor(30, 30, 55); doc.rect(imgColL, imgY, IMG_W, imgH, 'F')
+      doc.setFillColor(30, 30, 55); doc.rect(imgCol1, imgY, IMG_W, imgH, 'F')
       doc.setFontSize(7); doc.setTextColor(80, 80, 110)
-      doc.text('screenshot missing', imgColL + IMG_W/2, imgY + imgH/2, { align: 'center' })
+      doc.text('screenshot missing', imgCol1 + IMG_W/2, imgY + imgH/2, { align: 'center' })
     }
 
     // Mesh (wireframe) image
     const meshPath = path.join(SHOT_DIR, `${g.file}-mesh.png`)
     const meshUrl = pngToDataUrl(meshPath)
     if (meshUrl) {
-      doc.addImage(meshUrl, 'PNG', imgColR, imgY, IMG_W, imgH)
+      doc.addImage(meshUrl, 'PNG', imgCol2, imgY, IMG_W, imgH)
     } else {
-      doc.setFillColor(30, 30, 55); doc.rect(imgColR, imgY, IMG_W, imgH, 'F')
+      doc.setFillColor(30, 30, 55); doc.rect(imgCol2, imgY, IMG_W, imgH, 'F')
       doc.setFontSize(7); doc.setTextColor(80, 80, 110)
-      doc.text('screenshot missing', imgColR + IMG_W/2, imgY + imgH/2, { align: 'center' })
+      doc.text('screenshot missing', imgCol2 + IMG_W/2, imgY + imgH/2, { align: 'center' })
+    }
+
+    // Volume mesh (tet wireframe) image
+    const volPath = path.join(SHOT_DIR, `${g.file}-volume.png`)
+    const volUrl = pngToDataUrl(volPath)
+    if (volUrl) {
+      doc.addImage(volUrl, 'PNG', imgCol3, imgY, IMG_W, imgH)
+    } else {
+      doc.setFillColor(30, 30, 55); doc.rect(imgCol3, imgY, IMG_W, imgH, 'F')
+      doc.setFontSize(7); doc.setTextColor(80, 80, 110)
+      doc.text('screenshot missing', imgCol3 + IMG_W/2, imgY + imgH/2, { align: 'center' })
     }
 
     // Row separator

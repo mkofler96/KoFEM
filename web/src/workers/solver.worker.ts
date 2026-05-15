@@ -7,6 +7,7 @@ import init, {
   mesh_polygon,
   extrude_mesh,
   tessellate_step,
+  compute_volume_mesh,
 } from '../wasm/pkg/kofem_wasm'
 
 let initialized = false
@@ -48,6 +49,14 @@ self.onmessage = async (event: MessageEvent) => {
         triangles: [number, number, number][]
       }
       self.postMessage({ id, ok: true, points: mesh.points, triangles: mesh.triangles })
+
+    } else if (type === 'volume_mesh') {
+      const resultJson = compute_volume_mesh(JSON.stringify(payload.surface))
+      const data = JSON.parse(resultJson) as {
+        points: [number, number, number][]
+        edges: [number, number][]
+      }
+      self.postMessage({ id, ok: true, points: data.points, edges: data.edges })
 
     } else if (type === 'mesh') {
       const geom = payload as BoxGeometry

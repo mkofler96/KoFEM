@@ -80,6 +80,8 @@ export function MeshScene() {
   const result = useModelStore(s => s.result)
   const stepSurface = useModelStore(s => s.stepSurface)
   const stepWireframe = useModelStore(s => s.stepWireframe)
+  const volMesh = useModelStore(s => s.volMesh)
+  const showVolMesh = useModelStore(s => s.showVolMesh)
   const pickMode = useModelStore(s => s.pickMode)
   const selectedFace = useModelStore(s => s.selectedFace)
   const setSelectedFace = useModelStore(s => s.setSelectedFace)
@@ -279,6 +281,18 @@ export function MeshScene() {
     return n > 0 ? [x / n, y / n, z / n] : null
   }, [loads, nodeMap])
 
+  const volMeshPositions = useMemo(() => {
+    if (!volMesh || !showVolMesh) return null
+    const { points, edges } = volMesh
+    const buf = new Float32Array(edges.length * 6)
+    let i = 0
+    for (const [a, b] of edges) {
+      buf[i++] = points[a][0]; buf[i++] = points[a][1]; buf[i++] = points[a][2]
+      buf[i++] = points[b][0]; buf[i++] = points[b][1]; buf[i++] = points[b][2]
+    }
+    return buf
+  }, [volMesh, showVolMesh])
+
   const stepGeometry = useMemo(() => {
     if (!stepSurface || stepSurface.triangles.length === 0) return null
     const { points, triangles } = stepSurface
@@ -373,6 +387,16 @@ export function MeshScene() {
           <sphereGeometry args={[modelSize * 0.015, 16, 16]} />
           <meshStandardMaterial color="#ffcc00" />
         </mesh>
+      )}
+
+      {/* Volume mesh wireframe */}
+      {volMeshPositions && (
+        <lineSegments>
+          <bufferGeometry>
+            <bufferAttribute attach="attributes-position" args={[volMeshPositions, 3]} />
+          </bufferGeometry>
+          <lineBasicMaterial color="#ff8844" />
+        </lineSegments>
       )}
 
       {/* STEP surface mesh — solid shaded or wireframe */}

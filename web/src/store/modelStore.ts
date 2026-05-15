@@ -65,6 +65,11 @@ export interface StepSurfaceMesh {
   triangles: [number, number, number][]
 }
 
+export interface VolMesh {
+  points: [number, number, number][]
+  edges: [number, number][]
+}
+
 // ── Geometry ──────────────────────────────────────────────────────────────────
 
 export interface BoxGeometry {
@@ -181,8 +186,12 @@ interface ModelState extends ModelSnapshot {
   selectedFace: FaceSelection | null
 
   stepWireframe: boolean
+  volMesh: VolMesh | null
+  showVolMesh: boolean
   setStepSurface(mesh: StepSurfaceMesh | null): void
   setStepWireframe(v: boolean): void
+  setVolMesh(mesh: VolMesh | null): void
+  setShowVolMesh(v: boolean): void
 
   // Solver
   addNode(node: Node): void
@@ -231,6 +240,8 @@ export const useModelStore = create<ModelState>()(
     isRunning: false,
     isMeshing: false,
     stepWireframe: false,
+    volMesh: null,
+    showVolMesh: false,
     geometries: [DEFAULT_GEOMETRY],
     nextGeomId: 2,
     nextMatId: 2,
@@ -239,7 +250,13 @@ export const useModelStore = create<ModelState>()(
     fitViewTrigger: 0,
 
     setStepWireframe: (v) => set(s => { s.stepWireframe = v }),
-    setStepSurface: (mesh) => set(s => { s.stepSurface = mesh; s.stepWireframe = false; if (mesh) s.fitViewTrigger++ }),
+    setVolMesh: (mesh) => set(s => { s.volMesh = mesh; s.showVolMesh = mesh !== null }),
+    setShowVolMesh: (v) => set(s => { s.showVolMesh = v }),
+    setStepSurface: (mesh) => set(s => {
+      s.stepSurface = mesh; s.stepWireframe = false
+      s.volMesh = null; s.showVolMesh = false
+      if (mesh) s.fitViewTrigger++
+    }),
     triggerFitView: () => set(s => { s.fitViewTrigger++ }),
 
     addNode: (node) => set(s => { s.nodes.push(node) }),
@@ -289,6 +306,8 @@ export const useModelStore = create<ModelState>()(
       s.modelName = 'Cantilever Beam'
       s.result = null
       s.stepSurface = null
+      s.volMesh = null
+      s.showVolMesh = false
       s.geometries = [DEFAULT_GEOMETRY]
       s.nextGeomId = 2
       s.nextMatId = 2
