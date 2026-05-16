@@ -137,6 +137,9 @@ fn tessellate_face_raw(face: &TopoFace, file: &StepFile, max_edge_len: f64) -> S
     if let Some(mesh) = try_tessellate_bspline(face, file, max_edge_len) {
         return mesh;
     }
+    if let Some(mesh) = try_tessellate_disc(face, file, max_edge_len) {
+        return mesh;
+    }
 
     let boundary = sample_boundary_3d(&face.outer_loop, file, max_edge_len);
 
@@ -651,6 +654,72 @@ fn try_tessellate_bspline(
     Some(SurfaceMesh { points, triangles })
 }
 
+/// Tessellate a flat circular disc (PLANE surface with a single closed CIRCLE
+/// outer boundary) using a center-fan layout.
+///
+/// This bypasses the general Bowyer-Watson path, which is numerically unstable
+/// for cocircular inputs: all n_u boundary points lie on the same circle, so
+/// every in-circumcircle test is degenerate and the triangulation goes wrong.
+///
+/// The boundary points are generated at uniform angles `2πi/n_u` so that they
+/// coincide exactly with the corresponding ring produced by
+/// `try_tessellate_cylindrical`, enabling `stitch()` to close the seam.
+fn try_tessellate_disc(face: &TopoFace, file: &StepFile, max_edge_len: f64) -> Option<SurfaceMesh> {
+    // Only for PLANE surfaces.
+    let e = file.get(&face.surface_id)?;
+    if e.type_name != "PLANE" {
+        return None;
+    }
+
+    // Only for single-edge outer loops with a closed CIRCLE.
+    if face.outer_loop.len() != 1 {
+        return None;
+    }
+    let edge = &face.outer_loop[0];
+    if dist3(edge.start, edge.end) >= 1e-10 {
+        return None;
+    }
+
+    // Read circle geometry.
+    let curve_e = file.get(&edge.curve_id)?;
+    if curve_e.type_name != "CIRCLE" {
+        return None;
+    }
+    let ax_id = get_ref(curve_e, 1).ok()?;
+    let radius = get_real(curve_e, 2).ok()?;
+    let axis = axis2_placement(file, ax_id).ok()?;
+    let y = axis.y();
+
+    let n_u = ((2.0 * PI * radius / max_edge_len).ceil() as usize).clamp(8, 256);
+
+    // Boundary points at angles 0, 2π/n_u, …, 2π(n_u-1)/n_u.
+    // These are the same positions as the barrel ring (in reverse order for the
+    // bottom cap, same order for the top cap), so stitch() merges them cleanly.
+    let mut points = Vec::with_capacity(n_u + 1);
+    for i in 0..n_u {
+        let t = 2.0 * PI * i as f64 / n_u as f64;
+        let radial = add(scale(axis.x, t.cos()), scale(y, t.sin()));
+        points.push(add(axis.origin, scale(radial, radius)));
+    }
+
+    // Center point (index n_u).
+    points.push(axis.origin);
+    let center = n_u;
+
+    // Fan triangles: [center, i, (i+1)%n_u].
+    // Winding: for the bottom cap (y = −Y, boundary goes CW from above) the
+    // cross product points in −Z, matching the −Z outward normal.  For the top
+    // cap (y = +Y, boundary goes CCW) it points in +Z.  Either way this is the
+    // raw outward-pointing winding and tessellate_face applies flip_winding_if
+    // on top.
+    let mut triangles = Vec::with_capacity(n_u);
+    for i in 0..n_u {
+        triangles.push([center, i, (i + 1) % n_u]);
+    }
+
+    Some(SurfaceMesh { points, triangles })
+}
+
 /// Approximate arc length of a parametric curve `f(t)` over `[t0, t1]`
 /// by sampling at `n` uniform intervals.
 fn sample_arc_length<F: Fn(f64) -> [f64; 3]>(f: F, t0: f64, t1: f64, n: usize) -> f64 {
@@ -680,13 +749,21 @@ fn sample_boundary_3d(edges: &[TopoEdge], file: &StepFile, max_edge_len: f64) ->
         pts.push(edge.start);
 
         let chord = dist3(edge.start, edge.end);
-        // Closed curves have chord ≈ 0; use a fixed minimum for full circles.
+        // Closed curves have chord ≈ 0.  For CIRCLE edges use the
+        // circumference so the boundary ring has the same n_u as the barrel
+        // produced by try_tessellate_cylindrical, which makes stitch() merge
+        // the seam vertices correctly.  Fall back to 16 for other closed
+        // curve types (B-splines, etc.).
         let n_intermediate = if chord < 1e-10 {
-            16usize
+            if let Some(r) = circle_radius_from_curve(file, edge.curve_id) {
+                let n_u = ((2.0 * PI * r / max_edge_len).ceil() as usize).clamp(8, 256);
+                n_u - 1
+            } else {
+                16
+            }
         } else {
-            (chord / max_edge_len).ceil() as usize
-        }
-        .clamp(4, 64);
+            ((chord / max_edge_len).ceil() as usize).clamp(4, 64)
+        };
 
         let samples = sample_curve(
             file,
@@ -817,6 +894,15 @@ fn curve_t_range(
             (0.0, 1.0)
         }
     }
+}
+
+/// Return the radius of a CIRCLE curve entity, or `None` for other curve types.
+fn circle_radius_from_curve(file: &StepFile, curve_id: u64) -> Option<f64> {
+    let entity = file.get(&curve_id)?;
+    if entity.type_name != "CIRCLE" {
+        return None;
+    }
+    get_real(entity, 2).ok()
 }
 
 /// Normalised direction vector for a VECTOR entity (used in LINE inversion).

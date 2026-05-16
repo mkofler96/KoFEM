@@ -479,6 +479,48 @@ fn cylinder_barrel_has_nonzero_height() {
     );
 }
 
+#[test]
+fn cylinder_caps_stitch_to_barrel() {
+    // Every edge on the top cap (z≈80) and bottom cap (z≈0) boundary must be
+    // shared by exactly two triangles once the barrel and caps are stitched.
+    // Before the fix the cap boundary had only 17 points while the barrel had
+    // ceil(2πR / max_edge_len) points, so almost no vertices coincided and the
+    // mesh was open at the seam.
+    let (file, brep) = load_cylinder();
+    let opts = TessOptions {
+        max_edge_len: 5.0,
+        ..TessOptions::default()
+    };
+    let mesh = tessellate(&brep, &file, opts).unwrap();
+
+    // Build an edge→triangle count map.
+    let mut edge_use: std::collections::HashMap<(usize, usize), usize> = Default::default();
+    for &[a, b, c] in &mesh.triangles {
+        for (u, v) in [(a, b), (b, c), (c, a)] {
+            let key = if u < v { (u, v) } else { (v, u) };
+            *edge_use.entry(key).or_insert(0) += 1;
+        }
+    }
+
+    // Collect boundary edges (count == 1) whose midpoint sits on z≈0 or z≈80.
+    let open_seam: Vec<_> = edge_use
+        .iter()
+        .filter(|(_, &cnt)| cnt == 1)
+        .filter(|(&(a, b), _)| {
+            let za = mesh.points[a][2];
+            let zb = mesh.points[b][2];
+            let zmid = (za + zb) / 2.0;
+            !(1.0..=79.0).contains(&zmid)
+        })
+        .collect();
+
+    assert!(
+        open_seam.is_empty(),
+        "{} open edge(s) at the cap–barrel seam — caps did not stitch to barrel",
+        open_seam.len()
+    );
+}
+
 // ── cone regression tests ─────────────────────────────────────────────────────
 
 /// Truncated cone: bottom circle radius=10 at z=0, top circle radius=20 at z=30.
