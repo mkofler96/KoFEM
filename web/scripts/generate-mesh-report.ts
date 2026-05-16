@@ -18,10 +18,12 @@ interface GeomEntry {
 }
 
 const GEOMETRIES: GeomEntry[] = [
-  { file: 'box',           label: 'Simple Box',         desc: '80 × 60 × 40 mm — 6 planar faces' },
-  { file: 'cylinder',      label: 'Cylinder',           desc: 'R = 25 mm, H = 80 mm — cylindrical surface + 2 caps' },
-  { file: 'l_bracket',     label: 'L-Bracket',          desc: '80 × 80 × 20 mm — 8 planar faces, re-entrant corner' },
-  { file: 'new_bracket_2', label: 'Complex Bracket',    desc: 'Imported STEP — curved faces, blends, multiple features' },
+  { file: 'box',              label: 'Simple Box',            desc: '80 × 60 × 40 mm — 6 planar faces' },
+  { file: 'cylinder',         label: 'Cylinder',              desc: 'R = 25 mm, H = 80 mm — cylindrical surface + 2 disc caps' },
+  { file: 'cone',             label: 'Truncated Cone',        desc: 'R_bot = 10, R_top = 20, H = 30 mm — conical surface + 2 disc caps' },
+  { file: 'l_bracket',        label: 'L-Bracket',             desc: '80 × 80 × 20 mm — 8 planar faces, re-entrant corner' },
+  { file: 'quarter_cylinder', label: 'Quarter-Cyl. Patch',   desc: 'r = 5, H = 10 mm, u ∈ [0, π/2] — partial cylindrical surface' },
+  { file: 'new_bracket_2',    label: 'Complex Bracket',       desc: 'Imported STEP — curved faces, blends, multiple features' },
 ]
 
 function pngToDataUrl(filePath: string): string | null {
