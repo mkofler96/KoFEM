@@ -82,9 +82,11 @@ test.describe('Mesh capabilities report', () => {
 })
 
 async function getViewportClip(page: import('@playwright/test').Page) {
-  // Clip to the Three.js canvas area (main viewport panel)
+  // Clip to the Three.js canvas area (main viewport panel).
+  // Use a short explicit timeout so a missing canvas returns null quickly
+  // rather than blocking until the whole test budget is exhausted.
   const canvas = page.locator('canvas').first()
-  const box = await canvas.boundingBox()
+  const box = await canvas.boundingBox({ timeout: 5_000 }).catch(() => null)
   if (!box) return undefined
   return { x: box.x, y: box.y, width: box.width, height: box.height }
 }
