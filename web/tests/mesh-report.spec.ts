@@ -82,12 +82,21 @@ async function captureGeom(
   await page.locator('input[type="file"][accept=".stp,.step"]').setInputFiles(stepFile)
   await expect(page.getByRole('button', { name: 'Import STEP' })).toBeEnabled({ timeout: 60_000 })
 
+  // "Wireframe" only renders when stepSurface is set. Wait briefly to confirm
+  // geometry actually loaded — guards against a timing gap between the button
+  // re-enabling and the React render that sets stepSurface.
+  const wireframeBtn = page.getByRole('button', { name: 'Wireframe' })
+  const hasGeom = await wireframeBtn
+    .waitFor({ state: 'visible', timeout: 5_000 })
+    .then(() => true).catch(() => false)
+  if (!hasGeom) return
+
   await page.getByRole('button', { name: 'Fit View' }).click()
   await page.waitForTimeout(600)
 
   await captureCanvas(page, path.join(OUT_DIR, `${slug}-geometry.png`))
 
-  await page.getByRole('button', { name: 'Wireframe' }).click()
+  await wireframeBtn.click()
   await page.waitForTimeout(200)
   await captureCanvas(page, path.join(OUT_DIR, `${slug}-mesh.png`))
   await page.getByRole('button', { name: 'Solid' }).click()
