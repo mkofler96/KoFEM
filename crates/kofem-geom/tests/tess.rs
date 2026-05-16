@@ -40,6 +40,22 @@ fn mesh_area(pts: &[[f64; 3]], tris: &[[usize; 3]]) -> f64 {
         .sum()
 }
 
+/// Returns a map from undirected edge `(min,max)` to how many triangles share it.
+fn edge_counts(triangles: &[[usize; 3]]) -> std::collections::HashMap<(usize, usize), usize> {
+    let mut map: std::collections::HashMap<(usize, usize), usize> = Default::default();
+    for &[a, b, c] in triangles {
+        for (u, v) in [(a, b), (b, c), (c, a)] {
+            let key = if u < v { (u, v) } else { (v, u) };
+            *map.entry(key).or_insert(0) += 1;
+        }
+    }
+    map
+}
+
+fn count_open_edges(triangles: &[[usize; 3]]) -> usize {
+    edge_counts(triangles).values().filter(|&&c| c == 1).count()
+}
+
 /// Minimal STEP string: unit square in XY, CW stored loop, bound.orientation=F,
 /// same_sense=T.  Matches the convention used by the bracket CAD exporter.
 const STEP_UNIT_SQUARE_BOUND_F: &str = "
@@ -479,6 +495,40 @@ fn cylinder_barrel_has_nonzero_height() {
     );
 }
 
+#[test]
+fn cylinder_caps_stitch_to_barrel() {
+    // Every edge on the top cap (z≈80) and bottom cap (z≈0) boundary must be
+    // shared by exactly two triangles once the barrel and caps are stitched.
+    // Before the fix the cap boundary had only 17 points while the barrel had
+    // ceil(2πR / max_edge_len) points, so almost no vertices coincided and the
+    // mesh was open at the seam.
+    let (file, brep) = load_cylinder();
+    let opts = TessOptions {
+        max_edge_len: 5.0,
+        ..TessOptions::default()
+    };
+    let mesh = tessellate(&brep, &file, opts).unwrap();
+
+    // Collect boundary edges (count == 1) whose midpoint sits on z≈0 or z≈80.
+    let open_seam: Vec<_> = edge_counts(&mesh.triangles)
+        .into_iter()
+        .filter(|(_, cnt)| *cnt == 1)
+        .filter(|((a, b), _)| {
+            let (a, b) = (*a, *b);
+            let za = mesh.points[a][2];
+            let zb = mesh.points[b][2];
+            let zmid = (za + zb) / 2.0;
+            !(1.0..=79.0).contains(&zmid)
+        })
+        .collect();
+
+    assert!(
+        open_seam.is_empty(),
+        "{} open edge(s) at the cap–barrel seam — caps did not stitch to barrel",
+        open_seam.len()
+    );
+}
+
 // ── cone regression tests ─────────────────────────────────────────────────────
 
 /// Truncated cone: bottom circle radius=10 at z=0, top circle radius=20 at z=30.
@@ -781,4 +831,178 @@ fn no_degenerate_triangles() {
         .sqrt();
         assert!(cross_len > 1e-10, "degenerate triangle {a},{b},{c}");
     }
+}
+
+/// Open boundary edges in the bracket must stay below 25 % of total edges.
+///
+/// The bracket is a MANIFOLD_SOLID_BREP, but B-spline UV tessellations sample
+/// the parameter space uniformly without guaranteeing that boundary vertices
+/// match across adjacent faces.  Stitching can therefore only close seams where
+/// face boundaries happen to produce coincident 3D points — which holds for
+/// simple planar/cylindrical/conical geometry but not B-spline faces.
+/// Current observed ratio is ~19 %.  This regression gate catches severe
+/// regressions (ratio doubling) without requiring perfection.
+#[test]
+fn bracket_open_edge_ratio_is_low() {
+    let (file, brep) = load_bracket();
+    let mesh = tessellate(&brep, &file, TessOptions::default()).unwrap();
+    let counts = edge_counts(&mesh.triangles);
+    let total = counts.len();
+    let open = counts.values().filter(|&&c| c == 1).count();
+    let ratio = open as f64 / total as f64;
+    assert!(
+        ratio < 0.25,
+        "{open}/{total} edges are open ({:.1}%) — expected < 25%",
+        ratio * 100.0
+    );
+}
+
+// ── box tests ─────────────────────────────────────────────────────────────────
+
+fn load_box() -> (kofem_geom::step::StepFile, BRep) {
+    let file = parse(include_str!("../../../test_files/box.stp")).unwrap();
+    let brep = BRep::extract(&file).unwrap();
+    (file, brep)
+}
+
+/// 80×60×40 mm box: tessellated area must be within 0.5 % of the
+/// analytical surface area 2(80·60 + 80·40 + 60·40) = 20 800 mm².
+/// Planar-face triangulations are exact so even coarse tessellations pass.
+#[test]
+fn box_surface_area_close_to_analytical() {
+    let (file, brep) = load_box();
+    let opts = TessOptions {
+        max_edge_len: 10.0,
+        ..TessOptions::default()
+    };
+    let mesh = tessellate(&brep, &file, opts).unwrap();
+    let area = mesh_area(&mesh.points, &mesh.triangles);
+    let expected = 2.0 * (80.0 * 60.0 + 80.0 * 40.0 + 60.0 * 40.0);
+    let err = (area - expected).abs() / expected;
+    assert!(
+        err < 0.005,
+        "box area {area:.2} differs from analytical {expected:.2} by {:.2}%",
+        err * 100.0
+    );
+}
+
+/// The box is a MANIFOLD_SOLID_BREP closed shell, so every meshed edge must
+/// be shared by exactly 2 triangles after stitching.
+#[test]
+fn box_mesh_is_manifold() {
+    let (file, brep) = load_box();
+    let opts = TessOptions {
+        max_edge_len: 10.0,
+        ..TessOptions::default()
+    };
+    let mesh = tessellate(&brep, &file, opts).unwrap();
+    let open = count_open_edges(&mesh.triangles);
+    assert!(
+        open == 0,
+        "{open} open boundary edge(s) — closed box must produce a manifold mesh"
+    );
+}
+
+// ── l_bracket tests ────────────────────────────────────────────────────────────
+
+fn load_l_bracket() -> (kofem_geom::step::StepFile, BRep) {
+    let file = parse(include_str!("../../../test_files/l_bracket.stp")).unwrap();
+    let brep = BRep::extract(&file).unwrap();
+    (file, brep)
+}
+
+/// L-bracket 80×80×20 mm: no degenerate triangles (zero-area, colinear vertices).
+#[test]
+fn l_bracket_no_degenerate_triangles() {
+    let (file, brep) = load_l_bracket();
+    let mesh = tessellate(&brep, &file, TessOptions::default()).unwrap();
+    for &[a, b, c] in &mesh.triangles {
+        let pa = mesh.points[a];
+        let pb = mesh.points[b];
+        let pc = mesh.points[c];
+        let ab = [pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]];
+        let ac = [pc[0] - pa[0], pc[1] - pa[1], pc[2] - pa[2]];
+        let cross_len = ((ab[1] * ac[2] - ab[2] * ac[1]).powi(2)
+            + (ab[2] * ac[0] - ab[0] * ac[2]).powi(2)
+            + (ab[0] * ac[1] - ab[1] * ac[0]).powi(2))
+        .sqrt();
+        assert!(cross_len > 1e-10, "degenerate triangle {a},{b},{c}");
+    }
+}
+
+/// L-bracket tessellated area must match analytical area within 0.5 %.
+/// Analytical: 2 × L-face + 6 rectangular sides.
+///   L-face = 80×80 − 50×55 = 6400 − 2750 = 3650 mm²
+///   Sides  = 80×20 + 25×20 + 50×20 + 55×20 + 30×20 + 80×20 = 6400 mm²
+///   Total  = 2×3650 + 6400 = 13700 mm²
+#[test]
+fn l_bracket_surface_area_close_to_analytical() {
+    let (file, brep) = load_l_bracket();
+    let opts = TessOptions {
+        max_edge_len: 10.0,
+        ..TessOptions::default()
+    };
+    let mesh = tessellate(&brep, &file, opts).unwrap();
+    let area = mesh_area(&mesh.points, &mesh.triangles);
+    let expected = 13700.0_f64;
+    let err = (area - expected).abs() / expected;
+    assert!(
+        err < 0.005,
+        "L-bracket area {area:.2} differs from analytical {expected:.2} by {:.2}%",
+        err * 100.0
+    );
+}
+
+/// The L-bracket is a MANIFOLD_SOLID_BREP closed shell: every edge must be
+/// shared by exactly 2 triangles after stitching.
+#[test]
+fn l_bracket_mesh_is_manifold() {
+    let (file, brep) = load_l_bracket();
+    let opts = TessOptions {
+        max_edge_len: 10.0,
+        ..TessOptions::default()
+    };
+    let mesh = tessellate(&brep, &file, opts).unwrap();
+    let open = count_open_edges(&mesh.triangles);
+    assert!(
+        open == 0,
+        "{open} open boundary edge(s) — closed L-bracket must produce a manifold mesh"
+    );
+}
+
+// ── cone manifold test ────────────────────────────────────────────────────────
+
+/// Interior barrel edges of the truncated cone (z strictly between 0 and 30)
+/// must be manifold: shared by exactly 2 triangles.
+///
+/// The seam edges at z≈0 and z≈30 may be open because
+/// `try_tessellate_conical` computes n_u from r_mid while
+/// `try_tessellate_disc` computes n_u from the cap's circle radius —
+/// the two differ for non-cylindrical surfaces (known limitation).
+#[test]
+fn cone_barrel_interior_is_manifold() {
+    let (file, brep) = load_cone();
+    let opts = TessOptions {
+        max_edge_len: 5.0,
+        ..TessOptions::default()
+    };
+    let mesh = tessellate(&brep, &file, opts).unwrap();
+
+    let counts = edge_counts(&mesh.triangles);
+    let bad: Vec<_> = counts
+        .iter()
+        .filter(|(_, &cnt)| cnt != 2)
+        .filter(|(&(a, b), _)| {
+            let za = mesh.points[a][2];
+            let zb = mesh.points[b][2];
+            // Interior: both endpoints strictly away from the seam planes (z=0 and z=30).
+            za > 1.0 && za < 29.0 && zb > 1.0 && zb < 29.0
+        })
+        .collect();
+
+    assert!(
+        bad.is_empty(),
+        "{} non-manifold edge(s) in cone barrel interior",
+        bad.len()
+    );
 }

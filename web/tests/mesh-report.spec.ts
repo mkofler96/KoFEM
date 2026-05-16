@@ -4,10 +4,12 @@ import fs from 'fs'
 
 // Geometries in ascending complexity order
 const GEOMETRIES = [
-  { file: 'box.stp',          label: 'Simple Box (80×60×40 mm)' },
-  { file: 'cylinder.stp',     label: 'Cylinder (R=25, H=80 mm)' },
-  { file: 'l_bracket.stp',    label: 'L-Bracket (80×80×20 mm)' },
-  { file: 'new_bracket_2.stp',label: 'Complex Bracket (STEP)' },
+  { file: 'box.stp',                label: 'Simple Box (80×60×40 mm)' },
+  { file: 'cylinder.stp',           label: 'Cylinder (R=25, H=80 mm)' },
+  { file: 'cone.stp',               label: 'Truncated Cone (R=10→20, H=30 mm)' },
+  { file: 'l_bracket.stp',          label: 'L-Bracket (80×80×20 mm)' },
+  { file: 'quarter_cylinder.stp',   label: 'Quarter-Cylinder patch (R=5, H=10 mm)' },
+  { file: 'new_bracket_2.stp',      label: 'Complex Bracket (STEP)' },
 ]
 
 const STEP_FILES_DIR = path.resolve('..', 'test_files')
