@@ -59,20 +59,11 @@ const OUT_DIR = path.join('screenshots', 'report')
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/**
- * Capture the WebGL canvas by reading its pixel buffer directly via
- * canvas.toDataURL(). This is more reliable than page.screenshot({ clip })
- * because Playwright's compositor does not always flush the WebGL frame
- * before capturing in headless mode.
- */
-async function captureCanvas(page: import('@playwright/test').Page, filePath: string) {
-  const dataUrl = await page.evaluate(() => {
-    const canvas = document.querySelector('canvas')
-    return canvas ? canvas.toDataURL('image/png') : null
-  })
-  if (!dataUrl) return
-  const base64 = dataUrl.replace(/^data:image\/png;base64,/, '')
-  fs.writeFileSync(filePath, Buffer.from(base64, 'base64'))
+async function getViewportClip(page: import('@playwright/test').Page) {
+  const canvas = page.locator('canvas').first()
+  const box = await canvas.boundingBox()
+  if (!box) return undefined
+  return { x: box.x, y: box.y, width: box.width, height: box.height }
 }
 
 async function captureGeom(
@@ -86,44 +77,40 @@ async function captureGeom(
   await expect(page.getByRole('button', { name: 'Import STEP' })).toBeVisible()
 
   await page.locator('input[type="file"][accept=".stp,.step"]').setInputFiles(stepFile)
-
-  // Wait for geometry to load. The "Wireframe" button only renders when
-  // stepSurface is non-null, so its appearance is an unambiguous signal that
-  // the import finished and React has committed the update. We don't try to
-  // detect "Importing…" first — small files parse in <20 ms and Playwright's
-  // polling cycle can miss that state entirely, causing a false early return.
-  // Large NIST files can take >60 s in WASM — don't fail CI, just skip.
-  const imported = await page
-    .getByRole('button', { name: 'Wireframe' })
-    .waitFor({ state: 'visible', timeout: 90_000 })
-    .then(() => true)
-    .catch(() => false)
-  if (!imported) return
+  await expect(page.getByRole('button', { name: 'Import STEP' })).toBeEnabled({ timeout: 60_000 })
 
   await page.getByRole('button', { name: 'Fit View' }).click()
-  // Wait for camera to settle and Three.js to render at least one frame.
-  await page.waitForTimeout(1_000)
+  await page.waitForTimeout(600)
 
-  await captureCanvas(page, path.join(OUT_DIR, `${slug}-geometry.png`))
+  await page.screenshot({
+    path: path.join(OUT_DIR, `${slug}-geometry.png`),
+    clip: await getViewportClip(page),
+  })
 
   await page.getByRole('button', { name: 'Wireframe' }).click()
-  await page.waitForTimeout(400)
-  await captureCanvas(page, path.join(OUT_DIR, `${slug}-mesh.png`))
+  await page.waitForTimeout(200)
+  await page.screenshot({
+    path: path.join(OUT_DIR, `${slug}-mesh.png`),
+    clip: await getViewportClip(page),
+  })
   await page.getByRole('button', { name: 'Solid' }).click()
 
   await page.getByRole('button', { name: 'Vol Mesh' }).click()
   const volSolidBtn = page.getByRole('button', { name: 'Vol Solid' })
   const volReady = await volSolidBtn.waitFor({ state: 'visible', timeout: 30_000 }).then(() => true).catch(() => false)
   if (volReady) {
-    await page.waitForTimeout(400)
-    await captureCanvas(page, path.join(OUT_DIR, `${slug}-volume.png`))
+    await page.waitForTimeout(300)
+    await page.screenshot({
+      path: path.join(OUT_DIR, `${slug}-volume.png`),
+      clip: await getViewportClip(page),
+    })
     await volSolidBtn.click()
   }
 }
 
 // ── Test suites ───────────────────────────────────────────────────────────────
 
-function registerSuite(suiteName: string, geometries: GeomEntry[], testTimeout = 180_000) {
+function registerSuite(suiteName: string, geometries: GeomEntry[]) {
   test.describe(suiteName, () => {
     test.beforeAll(() => { fs.mkdirSync(OUT_DIR, { recursive: true }) })
 
@@ -140,13 +127,11 @@ function registerSuite(suiteName: string, geometries: GeomEntry[], testTimeout =
 
       test(geom.label, async ({ page }) => {
         await captureGeom(page, stepFile, slug)
-      }, { timeout: testTimeout })
+      })
     }
   })
 }
 
 registerSuite('Mesh capabilities report — original geometries', ORIGINAL_GEOMETRIES)
 registerSuite('Mesh capabilities report — new test shapes',      NEW_GEOMETRIES)
-// NIST files can take up to 90 s to tessellate + 30 s for vol mesh = 120 s worst
-// case, which equals the default timeout. Use 240 s to give CI headroom.
-registerSuite('Mesh capabilities report — NIST AP242 cases',     NIST_GEOMETRIES, 240_000)
+registerSuite('Mesh capabilities report — NIST AP242 cases',     NIST_GEOMETRIES)
