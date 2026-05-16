@@ -131,6 +131,11 @@ async function uploadFileToSlack(filePath: string, comment: string, channelId: s
 }
 
 async function main() {
+  if (!SLACK_BOT_TOKEN) {
+    console.log('SLACK_BOT_TOKEN not set — skipping Slack upload')
+    return
+  }
+
   const args = process.argv.slice(2)
 
   let filesToUpload: string[] = []

@@ -149,4 +149,6 @@ function registerSuite(suiteName: string, geometries: GeomEntry[], testTimeout =
 
 registerSuite('Mesh capabilities report — original geometries', ORIGINAL_GEOMETRIES)
 registerSuite('Mesh capabilities report — new test shapes',      NEW_GEOMETRIES)
-registerSuite('Mesh capabilities report — NIST AP242 cases',     NIST_GEOMETRIES)
+// NIST files can take up to 90 s to tessellate + 30 s for vol mesh = 120 s worst
+// case, which equals the default timeout. Use 240 s to give CI headroom.
+registerSuite('Mesh capabilities report — NIST AP242 cases',     NIST_GEOMETRIES, 240_000)
