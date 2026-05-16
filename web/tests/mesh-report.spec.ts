@@ -59,11 +59,20 @@ const OUT_DIR = path.join('screenshots', 'report')
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-async function getViewportClip(page: import('@playwright/test').Page) {
-  const canvas = page.locator('canvas').first()
-  const box = await canvas.boundingBox()
-  if (!box) return undefined
-  return { x: box.x, y: box.y, width: box.width, height: box.height }
+/**
+ * Capture the WebGL canvas by reading its pixel buffer directly via
+ * canvas.toDataURL(). This is more reliable than page.screenshot({ clip })
+ * because Playwright's compositor does not always flush the WebGL frame
+ * before capturing in headless mode.
+ */
+async function captureCanvas(page: import('@playwright/test').Page, filePath: string) {
+  const dataUrl = await page.evaluate(() => {
+    const canvas = document.querySelector('canvas')
+    return canvas ? canvas.toDataURL('image/png') : null
+  })
+  if (!dataUrl) return
+  const base64 = dataUrl.replace(/^data:image\/png;base64,/, '')
+  fs.writeFileSync(filePath, Buffer.from(base64, 'base64'))
 }
 
 async function captureGeom(
@@ -91,34 +100,23 @@ async function captureGeom(
     .catch(() => false)
   if (!imported) return
 
-  // Give Three.js time to draw the geometry on the canvas.
-  await page.waitForTimeout(800)
-
   await page.getByRole('button', { name: 'Fit View' }).click()
-  await page.waitForTimeout(800)
+  // Wait for camera to settle and Three.js to render at least one frame.
+  await page.waitForTimeout(1_000)
 
-  await page.screenshot({
-    path: path.join(OUT_DIR, `${slug}-geometry.png`),
-    clip: await getViewportClip(page),
-  })
+  await captureCanvas(page, path.join(OUT_DIR, `${slug}-geometry.png`))
 
   await page.getByRole('button', { name: 'Wireframe' }).click()
-  await page.waitForTimeout(200)
-  await page.screenshot({
-    path: path.join(OUT_DIR, `${slug}-mesh.png`),
-    clip: await getViewportClip(page),
-  })
+  await page.waitForTimeout(400)
+  await captureCanvas(page, path.join(OUT_DIR, `${slug}-mesh.png`))
   await page.getByRole('button', { name: 'Solid' }).click()
 
   await page.getByRole('button', { name: 'Vol Mesh' }).click()
   const volSolidBtn = page.getByRole('button', { name: 'Vol Solid' })
   const volReady = await volSolidBtn.waitFor({ state: 'visible', timeout: 30_000 }).then(() => true).catch(() => false)
   if (volReady) {
-    await page.waitForTimeout(300)
-    await page.screenshot({
-      path: path.join(OUT_DIR, `${slug}-volume.png`),
-      clip: await getViewportClip(page),
-    })
+    await page.waitForTimeout(400)
+    await captureCanvas(page, path.join(OUT_DIR, `${slug}-volume.png`))
     await volSolidBtn.click()
   }
 }
