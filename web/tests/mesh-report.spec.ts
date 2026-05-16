@@ -28,8 +28,13 @@ test.describe('Mesh capabilities report', () => {
     }
 
     test(geom.label, async ({ page }) => {
-      // Auto-dismiss any alert() dialogs (e.g. from vol-mesh WASM errors)
-      page.on('dialog', d => d.dismiss().catch(() => {}))
+      // Capture any alert that fires (STEP import error, worker crash, etc.)
+      // so the test fails with the real error instead of silently skipping.
+      let importError: string | undefined
+      page.on('dialog', async d => {
+        if (!importError) importError = d.message()
+        await d.dismiss().catch(() => {})
+      })
 
       await page.goto('/')
       await expect(page.getByRole('button', { name: 'Import STEP' })).toBeVisible()
@@ -37,6 +42,8 @@ test.describe('Mesh capabilities report', () => {
       // Import STEP file
       await page.locator('input[type="file"][accept=".stp,.step"]').setInputFiles(stepFile)
       await expect(page.getByRole('button', { name: 'Import STEP' })).toBeEnabled({ timeout: 60_000 })
+
+      if (importError) throw new Error(`STEP import failed for ${geom.label}: ${importError}`)
 
       // Fit and settle
       await page.getByRole('button', { name: 'Fit View' }).click()

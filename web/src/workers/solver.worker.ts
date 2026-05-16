@@ -107,6 +107,11 @@ self.onmessage = async (event: MessageEvent) => {
       self.postMessage({ id, ok: true, nodes, elements })
     }
   } catch (err) {
-    self.postMessage({ id, ok: false, error: String(err) })
+    // Include stack trace so the alert in the UI shows why the worker crashed,
+    // not just "RuntimeError: unreachable".
+    const detail = err instanceof Error
+      ? `${err.name}: ${err.message}\n${err.stack ?? ''}`
+      : String(err)
+    self.postMessage({ id, ok: false, error: detail })
   }
 }

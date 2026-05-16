@@ -1006,3 +1006,93 @@ fn cone_barrel_interior_is_manifold() {
         bad.len()
     );
 }
+
+// ── new shape smoke tests ─────────────────────────────────────────────────────
+
+macro_rules! load_shape {
+    ($name:ident, $file:expr) => {
+        fn $name() -> (kofem_geom::step::StepFile, BRep) {
+            let src = include_str!(concat!("../../../test_files/", $file));
+            let file = parse(src).unwrap();
+            let brep = BRep::extract(&file).unwrap();
+            (file, brep)
+        }
+    };
+}
+
+load_shape!(load_tube, "tube.stp");
+load_shape!(load_elbow, "elbow.stp");
+load_shape!(load_torus_ring, "torus_ring.stp");
+load_shape!(load_stepped_shaft, "stepped_shaft.stp");
+load_shape!(load_hex_prism, "hex_prism.stp");
+load_shape!(load_pyramid, "pyramid.stp");
+load_shape!(load_wedge, "wedge.stp");
+load_shape!(load_i_beam, "i_beam.stp");
+load_shape!(load_t_profile, "t_profile.stp");
+load_shape!(load_u_channel, "u_channel.stp");
+
+/// Verify that each new shape parses, tessellates without panic, and produces
+/// at least one triangle and no degenerate (zero-area) triangles.
+macro_rules! shape_smoke_test {
+    ($test_name:ident, $loader:ident) => {
+        #[test]
+        fn $test_name() {
+            let (file, brep) = $loader();
+            let mesh = tessellate(&brep, &file, TessOptions::default()).unwrap();
+            assert!(!mesh.triangles.is_empty(), "no triangles produced");
+            for &[a, b, c] in &mesh.triangles {
+                let pa = mesh.points[a];
+                let pb = mesh.points[b];
+                let pc = mesh.points[c];
+                let ab = [pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]];
+                let ac = [pc[0] - pa[0], pc[1] - pa[1], pc[2] - pa[2]];
+                let cross_len = ((ab[1] * ac[2] - ab[2] * ac[1]).powi(2)
+                    + (ab[2] * ac[0] - ab[0] * ac[2]).powi(2)
+                    + (ab[0] * ac[1] - ab[1] * ac[0]).powi(2))
+                .sqrt();
+                assert!(cross_len > 1e-10, "degenerate triangle {a},{b},{c}");
+            }
+        }
+    };
+}
+
+shape_smoke_test!(tube_tessellates, load_tube);
+shape_smoke_test!(elbow_tessellates, load_elbow);
+shape_smoke_test!(torus_ring_tessellates, load_torus_ring);
+shape_smoke_test!(stepped_shaft_tessellates, load_stepped_shaft);
+shape_smoke_test!(hex_prism_tessellates, load_hex_prism);
+shape_smoke_test!(pyramid_tessellates, load_pyramid);
+shape_smoke_test!(wedge_tessellates, load_wedge);
+shape_smoke_test!(i_beam_tessellates, load_i_beam);
+shape_smoke_test!(t_profile_tessellates, load_t_profile);
+shape_smoke_test!(u_channel_tessellates, load_u_channel);
+
+/// Hollow tube must have triangles (annular FACE_BOUND holes are handled).
+#[test]
+fn tube_has_multiple_faces_tessellated() {
+    let (_, brep) = load_tube();
+    // 4 faces: outer barrel, inner barrel, bottom annular cap, top annular cap
+    assert_eq!(brep.faces.len(), 4, "tube should have 4 faces");
+    // Annular caps (faces 2 & 3) must have exactly one inner loop each
+    assert_eq!(
+        brep.faces[2].inner_loops.len(),
+        1,
+        "bottom cap missing inner hole"
+    );
+    assert_eq!(
+        brep.faces[3].inner_loops.len(),
+        1,
+        "top cap missing inner hole"
+    );
+}
+
+/// Stepped shaft annular ring must carry an inner hole.
+#[test]
+fn stepped_shaft_ring_has_hole() {
+    let (_, brep) = load_stepped_shaft();
+    let ring = brep.faces.iter().find(|f| !f.inner_loops.is_empty());
+    assert!(
+        ring.is_some(),
+        "stepped shaft ring face must have an inner FACE_BOUND hole"
+    );
+}
