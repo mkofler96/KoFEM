@@ -28,14 +28,6 @@ test.describe('Mesh capabilities report', () => {
     }
 
     test(geom.label, async ({ page }) => {
-      // Capture any alert that fires (STEP import error, worker crash, etc.)
-      // so the test fails with the real error instead of silently skipping.
-      let importError: string | undefined
-      page.on('dialog', async d => {
-        if (!importError) importError = d.message()
-        await d.dismiss().catch(() => {})
-      })
-
       await page.goto('/')
       await expect(page.getByRole('button', { name: 'Import STEP' })).toBeVisible()
 
@@ -43,7 +35,11 @@ test.describe('Mesh capabilities report', () => {
       await page.locator('input[type="file"][accept=".stp,.step"]').setInputFiles(stepFile)
       await expect(page.getByRole('button', { name: 'Import STEP' })).toBeEnabled({ timeout: 60_000 })
 
-      if (importError) throw new Error(`STEP import failed for ${geom.label}: ${importError}`)
+      // Fail fast if the worker surfaced an error in the UI banner.
+      const errorBanner = page.getByTestId('step-error')
+      if (await errorBanner.isVisible()) {
+        throw new Error(`STEP import failed for ${geom.label}: ${await errorBanner.textContent()}`)
+      }
 
       // Fit and settle
       await page.getByRole('button', { name: 'Fit View' }).click()

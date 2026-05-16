@@ -188,10 +188,12 @@ interface ModelState extends ModelSnapshot {
   stepWireframe: boolean
   volMesh: VolMesh | null
   showVolMesh: boolean
+  stepImportError: string | null
   setStepSurface(mesh: StepSurfaceMesh | null): void
   setStepWireframe(v: boolean): void
   setVolMesh(mesh: VolMesh | null): void
   setShowVolMesh(v: boolean): void
+  setStepImportError(msg: string | null): void
 
   // Solver
   addNode(node: Node): void
@@ -242,6 +244,7 @@ export const useModelStore = create<ModelState>()(
     stepWireframe: false,
     volMesh: null,
     showVolMesh: false,
+    stepImportError: null,
     geometries: [DEFAULT_GEOMETRY],
     nextGeomId: 2,
     nextMatId: 2,
@@ -249,12 +252,14 @@ export const useModelStore = create<ModelState>()(
     selectedFace: null,
     fitViewTrigger: 0,
 
+    setStepImportError: (msg) => set(s => { s.stepImportError = msg }),
     setStepWireframe: (v) => set(s => { s.stepWireframe = v }),
     setVolMesh: (mesh) => set(s => { s.volMesh = mesh; s.showVolMesh = mesh !== null }),
     setShowVolMesh: (v) => set(s => { s.showVolMesh = v }),
     setStepSurface: (mesh) => set(s => {
       s.stepSurface = mesh; s.stepWireframe = false
       s.volMesh = null; s.showVolMesh = false
+      s.stepImportError = null
       if (mesh) s.fitViewTrigger++
     }),
     triggerFitView: () => set(s => { s.fitViewTrigger++ }),

@@ -21,6 +21,8 @@ export function Toolbar() {
   const showVolMesh = useModelStore(s => s.showVolMesh)
   const setVolMesh = useModelStore(s => s.setVolMesh)
   const setShowVolMesh = useModelStore(s => s.setShowVolMesh)
+  const stepImportError = useModelStore(s => s.stepImportError)
+  const setStepImportError = useModelStore(s => s.setStepImportError)
 
   const [isParsing, setIsParsing] = useState(false)
   const [isImportingStep, setIsImportingStep] = useState(false)
@@ -91,6 +93,7 @@ export function Toolbar() {
     const file = e.target.files?.[0]
     if (!file) return
     e.target.value = ''
+    setStepImportError(null)
     setIsImportingStep(true)
     setRunning(true)
     const text = await file.text()
@@ -99,12 +102,12 @@ export function Toolbar() {
     )
       .then(({ points, triangles }) => {
         if (points.length === 0) {
-          alert('No geometry found in STEP file.')
+          setStepImportError('No geometry found in STEP file.')
         } else {
           setStepSurface({ points, triangles })
         }
       })
-      .catch(err => alert(`STEP import error: ${err.message}`))
+      .catch(err => setStepImportError(err.message ?? 'STEP import failed'))
       .finally(() => { setIsImportingStep(false); setRunning(false) })
   }
 
@@ -113,6 +116,20 @@ export function Toolbar() {
   return (
     <>
     {isGeneratingReport && <ReportProgress onClose={() => setIsGeneratingReport(false)} />}
+    {stepImportError && (
+      <div
+        role="alert"
+        data-testid="step-error"
+        style={{ background: '#c0392b', color: '#fff', padding: '6px 12px', fontSize: '13px', display: 'flex', gap: 8, alignItems: 'center' }}
+      >
+        <span style={{ flex: 1 }}>STEP import failed: {stepImportError}</span>
+        <button
+          onClick={() => setStepImportError(null)}
+          aria-label="Dismiss error"
+          style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: '16px', lineHeight: 1 }}
+        >×</button>
+      </div>
+    )}
     <div className={styles.toolbar}>
       <input
         ref={el => { inpFileRef.current = el }}
