@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import path from 'path'
+import fs from 'fs'
 
 // Playwright is invoked from web/, so cwd is web/ and the STEP file lives one level up
 const STEP_FILE = path.resolve('..', 'test_files', 'new_bracket_2.stp')
@@ -20,5 +21,12 @@ test('capture app after loading STEP file with fit view', async ({ page }) => {
   // Allow the camera reposition and a render frame to settle
   await page.waitForTimeout(500)
 
-  await page.screenshot({ path: 'screenshots/step-fit-view.png', fullPage: true })
+  const dataUrl = await page.evaluate(() => {
+    const canvas = document.querySelector('canvas')
+    return canvas ? canvas.toDataURL('image/png') : null
+  })
+  if (dataUrl) {
+    const base64 = dataUrl.replace(/^data:image\/png;base64,/, '')
+    fs.writeFileSync('screenshots/step-fit-view.png', Buffer.from(base64, 'base64'))
+  }
 })
