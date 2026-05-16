@@ -78,16 +78,31 @@ async function captureGeom(
 
   await page.locator('input[type="file"][accept=".stp,.step"]').setInputFiles(stepFile)
 
-  // Large NIST files can take >60 s to parse in WASM — don't fail CI, just skip screenshots.
+  // Phase 1: wait for the import to actually START (button label → "Importing…").
+  // Without this, the next check races: the button is still enabled in the brief
+  // window before the async file.text() read fires setRunning(true).
+  const started = await page
+    .getByRole('button', { name: 'Importing…' })
+    .waitFor({ state: 'visible', timeout: 5_000 })
+    .then(() => true)
+    .catch(() => false)
+  if (!started) return
+
+  // Phase 2: wait for import to FINISH — the "Wireframe" button only renders when
+  // stepSurface is set, so its appearance is a reliable "geometry loaded" signal.
+  // Large NIST files can take >60 s in WASM — don't fail CI, just skip.
   const imported = await page
-    .getByRole('button', { name: 'Import STEP' })
-    .waitFor({ state: 'enabled', timeout: 90_000 })
+    .getByRole('button', { name: 'Wireframe' })
+    .waitFor({ state: 'visible', timeout: 90_000 })
     .then(() => true)
     .catch(() => false)
   if (!imported) return
 
+  // Give Three.js a render cycle to draw the geometry on the canvas.
+  await page.waitForTimeout(800)
+
   await page.getByRole('button', { name: 'Fit View' }).click()
-  await page.waitForTimeout(600)
+  await page.waitForTimeout(800)
 
   await page.screenshot({
     path: path.join(OUT_DIR, `${slug}-geometry.png`),
