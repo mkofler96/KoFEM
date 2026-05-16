@@ -108,9 +108,10 @@ fn extract_face(file: &StepFile, face_id: u64) -> Result<TopoFace, TopologyError
     let same_sense = enum_arg(face, 3)? == "T";
 
     let mut outer_loop: Option<Vec<TopoEdge>> = None;
-    let mut inner_loops: Vec<Vec<TopoEdge>> = Vec::new();
-
     let mut outer_loop_orientation = true;
+    // Orientation of the first FACE_BOUND, used as fallback outer orientation.
+    let mut first_bound_orientation = true;
+    let mut inner_loops: Vec<Vec<TopoEdge>> = Vec::new();
 
     for b_arg in bounds {
         let bound_id = match b_arg {
@@ -127,8 +128,18 @@ fn extract_face(file: &StepFile, face_id: u64) -> Result<TopoFace, TopologyError
             outer_loop = Some(edges);
             outer_loop_orientation = orientation;
         } else {
+            if inner_loops.is_empty() {
+                first_bound_orientation = orientation;
+            }
             inner_loops.push(edges);
         }
+    }
+
+    // Some exporters omit FACE_OUTER_BOUND and use plain FACE_BOUND for every
+    // loop.  The AP242 convention is that the first bound is the outer one.
+    if outer_loop.is_none() && !inner_loops.is_empty() {
+        outer_loop = Some(inner_loops.remove(0));
+        outer_loop_orientation = first_bound_orientation;
     }
 
     let outer_loop = outer_loop.ok_or(TopologyError::NoOuterBound(face_id))?;
