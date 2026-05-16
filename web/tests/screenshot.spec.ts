@@ -4,6 +4,8 @@ import path from 'path'
 // Playwright is invoked from web/, so cwd is web/ and the STEP file lives one level up
 const STEP_FILE = path.resolve('..', 'test_files', 'new_bracket_2.stp')
 
+// new_bracket_2.stp is 3.5 MB; parsing can take 30–60 s in CI WASM.
+// Give 90 s so the 60 s wireframe wait + fit-view overhead stays within budget.
 test('capture app after loading STEP file with fit view', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('button', { name: 'Import STEP' })).toBeVisible()
@@ -26,4 +28,4 @@ test('capture app after loading STEP file with fit view', async ({ page }) => {
   }
 
   await page.screenshot({ path: 'screenshots/step-fit-view.png', fullPage: true })
-})
+}, { timeout: 90_000 })
