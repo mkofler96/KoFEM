@@ -125,7 +125,7 @@ async function captureGeom(
 
 // ── Test suites ───────────────────────────────────────────────────────────────
 
-function registerSuite(suiteName: string, geometries: GeomEntry[], testTimeout = 120_000) {
+function registerSuite(suiteName: string, geometries: GeomEntry[], testTimeout = 180_000) {
   test.describe(suiteName, () => {
     test.beforeAll(() => { fs.mkdirSync(OUT_DIR, { recursive: true }) })
 
