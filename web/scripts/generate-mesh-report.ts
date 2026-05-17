@@ -16,6 +16,7 @@ import fs from 'fs'
 import path from 'path'
 
 const JSON_IN = path.join(import.meta.dir, '..', 'test-results', 'mesh-quality.json')
+const SCREENSHOTS_DIR = path.join(import.meta.dir, '..', 'screenshots', 'report')
 const DEFAULT_CHANNEL = 'product-showcases'
 
 interface QualityResult {
@@ -152,7 +153,7 @@ async function findChannel(token: string, name: string): Promise<string> {
   throw new Error(`Channel "${name}" not found — make sure the bot is in that channel`)
 }
 
-async function postMessage(token: string, payload: object): Promise<void> {
+async function postMessage(token: string, payload: object): Promise<string> {
   const res = await fetch('https://slack.com/api/chat.postMessage', {
     method: 'POST',
     headers: {
@@ -161,8 +162,32 @@ async function postMessage(token: string, payload: object): Promise<void> {
     },
     body: JSON.stringify(payload),
   })
-  const data = await res.json() as { ok: boolean; error?: string }
+  const data = await res.json() as { ok: boolean; ts?: string; error?: string }
   if (!data.ok) throw new Error(`chat.postMessage: ${data.error}`)
+  return data.ts!
+}
+
+async function uploadFile(token: string, filePath: string, channelId: string, threadTs: string): Promise<void> {
+  const fileContent = fs.readFileSync(filePath)
+  const fileName = path.basename(filePath)
+
+  const urlRes = await fetch('https://slack.com/api/files.getUploadURLExternal', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ filename: fileName, length: fileContent.length.toString() }),
+  })
+  const urlData = await urlRes.json() as { ok: boolean; upload_url?: string; file_id?: string; error?: string }
+  if (!urlData.ok) throw new Error(`files.getUploadURLExternal: ${urlData.error}`)
+
+  await fetch(urlData.upload_url!, { method: 'POST', body: fileContent })
+
+  const completeRes = await fetch('https://slack.com/api/files.completeUploadExternal', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ files: [{ id: urlData.file_id, title: fileName }], channel_id: channelId, thread_ts: threadTs }),
+  })
+  const completeData = await completeRes.json() as { ok: boolean; error?: string }
+  if (!completeData.ok) throw new Error(`files.completeUploadExternal: ${completeData.error}`)
 }
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -193,8 +218,28 @@ async function run(): Promise<void> {
   console.log(`Posting to channel ${channelId}...`)
 
   const payload = buildSlackPayload(report, channelId)
-  await postMessage(token, payload)
+  const threadTs = await postMessage(token, payload)
   console.log('Posted to Slack.')
+
+  // Upload screenshots from Playwright tests as thread replies
+  if (fs.existsSync(SCREENSHOTS_DIR)) {
+    const files = fs.readdirSync(SCREENSHOTS_DIR).filter(f => f.endsWith('-mesh.png')).sort()
+    const standardShots = files.filter(f => !f.startsWith('nist_')).slice(0, 3)
+    const nistShots = files.filter(f => f.startsWith('nist_')).slice(0, 2)
+    const screenshots = [...standardShots, ...nistShots]
+
+    if (screenshots.length > 0) {
+      console.log(`Uploading ${screenshots.length} screenshots...`)
+      for (const file of screenshots) {
+        try {
+          await uploadFile(token, path.join(SCREENSHOTS_DIR, file), channelId, threadTs)
+          console.log(`  ✓ ${file}`)
+        } catch (err) {
+          console.error(`  ✗ ${file}: ${err}`)
+        }
+      }
+    }
+  }
 }
 
 run().catch(err => { console.error(err); process.exit(1) })
