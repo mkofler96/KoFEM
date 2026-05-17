@@ -10,3 +10,6 @@ description = "Geometry import/export for KoFEM (STEP, IGES, STL)"
 thiserror = { workspace = true }
 kofem-mesh = { workspace = true }
 serde = { workspace = true }
+
+[dev-dependencies]
+serde_json = "1"

@@ -37,7 +37,6 @@ const NIST_GEOMETRIES: Geom[] = [
   { file: 'nist_ctc_05_asme1_ap242-e1.stp',    label: 'NIST CTC-05 (AP242 e1)',    subdir: 'NIST' },
   { file: 'nist_ftc_06_asme1_ap242-e2.stp',    label: 'NIST FTC-06 (AP242 e2)',    subdir: 'NIST' },
   { file: 'nist_ftc_07_asme1_ap242-e2.stp',    label: 'NIST FTC-07 (AP242 e2)',    subdir: 'NIST' },
-  { file: 'nist_ftc_08_asme1_ap242-e1-tg.stp', label: 'NIST FTC-08 (AP242 e1-tg)', subdir: 'NIST' },
   { file: 'nist_ftc_08_asme1_ap242-e2.stp',    label: 'NIST FTC-08 (AP242 e2)',    subdir: 'NIST' },
   { file: 'nist_ftc_09_asme1_ap242-e1.stp',    label: 'NIST FTC-09 (AP242 e1)',    subdir: 'NIST' },
   { file: 'nist_ftc_10_asme1_ap242-e2.stp',    label: 'NIST FTC-10 (AP242 e2)',    subdir: 'NIST' },

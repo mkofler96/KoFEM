@@ -32,6 +32,9 @@ web/test-results/
 web/screenshots/mesh-report.pdf
 web/screenshots/report/
 
+# Large NIST reference STLs (generated locally; too big to commit)
+test_files/reference_stl/nist_*.stl
+
 # Env
 .env
 .env.local
