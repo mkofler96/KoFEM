@@ -45,7 +45,6 @@ const NIST_GEOMETRIES: Geom[] = [
   { file: 'nist_stc_07_asme1_ap242-e3.stp',    label: 'NIST STC-07 (AP242 e3)',    subdir: 'NIST' },
   { file: 'nist_stc_08_asme1_ap242-e3.stp',    label: 'NIST STC-08 (AP242 e3)',    subdir: 'NIST' },
   { file: 'nist_stc_09_asme1_ap242-e3.stp',    label: 'NIST STC-09 (AP242 e3)',    subdir: 'NIST' },
-  { file: 'nist_stc_10_asme1_ap242-e2.stp',    label: 'NIST STC-10 (AP242 e2)',    subdir: 'NIST' },
 ]
 
 const ALL_GEOMETRIES: Geom[] = [...GEOMETRIES, ...NIST_GEOMETRIES]
