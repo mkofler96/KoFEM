@@ -193,6 +193,10 @@ async function uploadFile(token: string, filePath: string, channelId: string, th
 // ── main ──────────────────────────────────────────────────────────────────────
 
 async function run(): Promise<void> {
+  console.log(`Looking for: ${JSON_IN}`)
+  console.log(`import.meta.dir: ${import.meta.dir}`)
+  console.log(`cwd: ${process.cwd()}`)
+
   if (!fs.existsSync(JSON_IN)) {
     console.error(`Quality JSON not found: ${JSON_IN}`)
     console.error('The mesh_quality_report Rust test should generate this file.')
