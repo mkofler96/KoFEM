@@ -113,25 +113,6 @@ test.describe('Mesh capabilities report', () => {
       })
       console.log(`[${geom.label}] ${elapsed()} mesh screenshot done`)
 
-      await page.getByRole('button', { name: 'Solid' }).click()
-
-      // ── Volume mesh screenshot ───────────────────────────────────────────────
-      console.log(`[${geom.label}] ${elapsed()} starting vol mesh`)
-      await page.getByRole('button', { name: 'Vol Mesh' }).click()
-      // Volume meshing runs in WASM — wait up to 10 s; skip gracefully if slow
-      const volSolidBtn = page.getByRole('button', { name: 'Vol Solid' })
-      const volReady = await volSolidBtn.waitFor({ state: 'visible', timeout: 10_000 }).then(() => true).catch(() => false)
-      if (volReady) {
-        await page.waitForTimeout(300)
-        await page.screenshot({
-          path: path.join(OUT_DIR, `${slug}-volume.png`),
-          clip: await getViewportClip(page),
-        })
-        console.log(`[${geom.label}] ${elapsed()} vol mesh screenshot done`)
-        await volSolidBtn.click()
-      } else {
-        console.log(`[${geom.label}] ${elapsed()} vol mesh timed out — skipping volume screenshot`)
-      }
       console.log(`[${geom.label}] ${elapsed()} DONE`)
     })
   }
