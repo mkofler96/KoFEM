@@ -231,8 +231,8 @@ fn parse_stl_centroids_ascii(text: &str) -> Result<Vec<[f32; 3]>, String> {
 
     for line in text.lines() {
         let t = line.trim();
-        if t.starts_with("vertex ") {
-            let mut nums = t[7..].split_ascii_whitespace();
+        if let Some(rest) = t.strip_prefix("vertex ") {
+            let mut nums = rest.split_ascii_whitespace();
             let x: f32 = nums.next().and_then(|s| s.parse().ok()).unwrap_or(0.0);
             let y: f32 = nums.next().and_then(|s| s.parse().ok()).unwrap_or(0.0);
             let z: f32 = nums.next().and_then(|s| s.parse().ok()).unwrap_or(0.0);
@@ -265,7 +265,9 @@ fn parse_stl_centroids_binary(data: &[u8]) -> Result<Vec<[f32; 3]>, String> {
     if data.len() < expected {
         return Err(format!(
             "binary STL truncated: {} bytes, expected {} ({} tris)",
-            data.len(), expected, tri_count
+            data.len(),
+            expected,
+            tri_count
         ));
     }
     if tri_count == 0 {
@@ -354,7 +356,9 @@ fn one_sided(from: &[[f32; 3]], to: &[[f32; 3]]) -> (f64, f64) {
             .fold(f64::INFINITY, f64::min);
         let d = min_d2.sqrt();
         sum += d;
-        if d > max_d { max_d = d; }
+        if d > max_d {
+            max_d = d;
+        }
     }
     (sum / from.len() as f64, max_d)
 }
@@ -383,7 +387,6 @@ struct QualityResult {
     pass: bool,
 }
 
-
 // ── per-geometry runner ───────────────────────────────────────────────────────
 
 fn run_geometry(spec: &GeomSpec, idx: usize, total: usize) -> (QualityResult, bool) {
@@ -395,12 +398,20 @@ fn run_geometry(spec: &GeomSpec, idx: usize, total: usize) -> (QualityResult, bo
         ($err:expr) => {{
             let err: String = $err;
             eprintln!("{tag}  ERROR: {err}");
-            return (QualityResult {
-                name: spec.name.to_string(), label: spec.label.to_string(),
-                kofem_triangles: None, ref_triangles: None,
-                chamfer_mean_mm: None, chamfer_max_mm: None,
-                time_ms: ms() as u64, error: Some(err), pass: false,
-            }, false);
+            return (
+                QualityResult {
+                    name: spec.name.to_string(),
+                    label: spec.label.to_string(),
+                    kofem_triangles: None,
+                    ref_triangles: None,
+                    chamfer_mean_mm: None,
+                    chamfer_max_mm: None,
+                    time_ms: ms() as u64,
+                    error: Some(err),
+                    pass: false,
+                },
+                false,
+            );
         }};
     }
 
@@ -410,7 +421,11 @@ fn run_geometry(spec: &GeomSpec, idx: usize, total: usize) -> (QualityResult, bo
         Err(e) => fail!(format!("read STEP: {e}")),
     };
 
-    eprintln!("{tag}  parsing STEP ({} bytes, {}ms)...", step_text.len(), ms());
+    eprintln!(
+        "{tag}  parsing STEP ({} bytes, {}ms)...",
+        step_text.len(),
+        ms()
+    );
     let step_file = match parse(&step_text) {
         Ok(f) => f,
         Err(e) => fail!(format!("parse STEP: {e}")),
@@ -422,7 +437,11 @@ fn run_geometry(spec: &GeomSpec, idx: usize, total: usize) -> (QualityResult, bo
         Err(e) => fail!(format!("extract BRep: {e}")),
     };
 
-    eprintln!("{tag}  tessellating {} faces ({}ms)...", brep.faces.len(), ms());
+    eprintln!(
+        "{tag}  tessellating {} faces ({}ms)...",
+        brep.faces.len(),
+        ms()
+    );
     let mesh = match tessellate(&brep, &step_file, TessOptions::default()) {
         Ok(m) => m,
         Err(e) => fail!(format!("tessellate: {e}")),
@@ -443,7 +462,10 @@ fn run_geometry(spec: &GeomSpec, idx: usize, total: usize) -> (QualityResult, bo
         Err(e) => fail!(format!("parse ref STL: {e}")),
     };
     let ref_tris = ref_centroids.len();
-    eprintln!("{tag}  ref={ref_tris} tris; computing chamfer (sample≤{MAX_SAMPLE}, {}ms)...", ms());
+    eprintln!(
+        "{tag}  ref={ref_tris} tris; computing chamfer (sample≤{MAX_SAMPLE}, {}ms)...",
+        ms()
+    );
 
     let (mean_mm, max_mm) = chamfer_distance(&kofem_centroids, &ref_centroids);
     let total_ms = ms() as u64;
@@ -454,12 +476,20 @@ fn run_geometry(spec: &GeomSpec, idx: usize, total: usize) -> (QualityResult, bo
         if pass { "PASS" } else { "FAIL" }
     );
 
-    (QualityResult {
-        name: spec.name.to_string(), label: spec.label.to_string(),
-        kofem_triangles: Some(kofem_tris), ref_triangles: Some(ref_tris),
-        chamfer_mean_mm: Some(mean_mm), chamfer_max_mm: Some(max_mm),
-        time_ms: tess_ms, error: None, pass,
-    }, pass)
+    (
+        QualityResult {
+            name: spec.name.to_string(),
+            label: spec.label.to_string(),
+            kofem_triangles: Some(kofem_tris),
+            ref_triangles: Some(ref_tris),
+            chamfer_mean_mm: Some(mean_mm),
+            chamfer_max_mm: Some(max_mm),
+            time_ms: tess_ms,
+            error: None,
+            pass,
+        },
+        pass,
+    )
 }
 
 // ── JSON merge helper ─────────────────────────────────────────────────────────
@@ -503,7 +533,10 @@ fn write_json(new_results: &[QualityResult]) {
     let out = Path::new(JSON_OUT);
     fs::create_dir_all(out.parent().unwrap()).expect("create output dir");
     fs::write(out, &json).expect("write quality JSON");
-    eprintln!("Quality report written → {JSON_OUT}  ({} total entries)", all.len());
+    eprintln!(
+        "Quality report written → {JSON_OUT}  ({} total entries)",
+        all.len()
+    );
 }
 
 // ── tests ─────────────────────────────────────────────────────────────────────
@@ -518,8 +551,12 @@ fn run_suite(label: &str, geoms: &[GeomSpec]) {
     for (i, spec) in geoms.iter().enumerate() {
         let (result, pass) = run_geometry(spec, i + 1, total);
         if !pass {
-            let msg = result.error.clone()
-                .unwrap_or_else(|| format!("chamfer {:.2}mm", result.chamfer_mean_mm.unwrap_or(f64::INFINITY)));
+            let msg = result.error.clone().unwrap_or_else(|| {
+                format!(
+                    "chamfer {:.2}mm",
+                    result.chamfer_mean_mm.unwrap_or(f64::INFINITY)
+                )
+            });
             failures.push(format!("{}: {msg}", spec.name));
         }
         results.push(result);
@@ -528,7 +565,11 @@ fn run_suite(label: &str, geoms: &[GeomSpec]) {
     write_json(&results);
 
     if !failures.is_empty() {
-        panic!("{} quality failure(s):\n{}", failures.len(), failures.join("\n"));
+        panic!(
+            "{} quality failure(s):\n{}",
+            failures.len(),
+            failures.join("\n")
+        );
     }
     eprintln!("{label}: all {total} passed.");
 }
