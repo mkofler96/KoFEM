@@ -1096,3 +1096,63 @@ fn stepped_shaft_ring_has_hole() {
         "stepped shaft ring face must have an inner FACE_BOUND hole"
     );
 }
+
+// ── spherical surface tests ───────────────────────────────────────────────────
+
+fn load_nist_ctc_04() -> (kofem_geom::step::StepFile, BRep) {
+    let file = parse(include_str!("../../../test_files/NIST/nist_ctc_04_asme1_ap242-e1.stp")).unwrap();
+    let brep = BRep::extract(&file).unwrap();
+    (file, brep)
+}
+
+/// NIST CTC-04 contains 22 SPHERICAL_SURFACE faces. Verify tessellation produces
+/// valid non-degenerate triangles for all faces.
+#[test]
+fn nist_ctc_04_spherical_surfaces_tessellate() {
+    let (file, brep) = load_nist_ctc_04();
+    let opts = TessOptions {
+        max_edge_len: 2.0,
+        ..TessOptions::default()
+    };
+    let mesh = tessellate(&brep, &file, opts).unwrap();
+
+    // Must produce triangles
+    assert!(
+        mesh.triangles.len() > 100,
+        "expected many triangles, got {}",
+        mesh.triangles.len()
+    );
+
+    // No degenerate triangles
+    for &[a, b, c] in &mesh.triangles {
+        let pa = mesh.points[a];
+        let pb = mesh.points[b];
+        let pc = mesh.points[c];
+        let ab = [pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]];
+        let ac = [pc[0] - pa[0], pc[1] - pa[1], pc[2] - pa[2]];
+        let cross_len = ((ab[1] * ac[2] - ab[2] * ac[1]).powi(2)
+            + (ab[2] * ac[0] - ab[0] * ac[2]).powi(2)
+            + (ab[0] * ac[1] - ab[1] * ac[0]).powi(2))
+        .sqrt();
+        assert!(cross_len > 1e-10, "degenerate triangle {a},{b},{c}");
+    }
+}
+
+/// Verify all points in the spherical surface tessellation are finite.
+#[test]
+fn nist_ctc_04_all_points_finite() {
+    let (file, brep) = load_nist_ctc_04();
+    let opts = TessOptions {
+        max_edge_len: 2.0,
+        ..TessOptions::default()
+    };
+    let mesh = tessellate(&brep, &file, opts).unwrap();
+
+    for (i, p) in mesh.points.iter().enumerate() {
+        assert!(
+            p[0].is_finite() && p[1].is_finite() && p[2].is_finite(),
+            "point {i} has non-finite coords: {:?}",
+            p
+        );
+    }
+}
