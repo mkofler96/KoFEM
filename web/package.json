@@ -17,7 +17,7 @@
     "screenshot:slack": "bun run test:screenshot && bun run upload:slack",
     "test:mesh-report": "playwright test mesh-report.spec.ts",
     "report:mesh": "bun scripts/generate-mesh-report.ts",
-    "report:slack": "bun scripts/post-mesh-report-to-slack.ts"
+    "report:mesh:slack": "bun scripts/generate-mesh-report.ts"
   },
   "packageManager": "bun",
   "dependencies": {
