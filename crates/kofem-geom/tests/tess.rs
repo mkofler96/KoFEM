@@ -1100,7 +1100,10 @@ fn stepped_shaft_ring_has_hole() {
 // ── spherical surface tests ───────────────────────────────────────────────────
 
 fn load_nist_ctc_04() -> (kofem_geom::step::StepFile, BRep) {
-    let file = parse(include_str!("../../../test_files/NIST/nist_ctc_04_asme1_ap242-e1.stp")).unwrap();
+    let file = parse(include_str!(
+        "../../../test_files/NIST/nist_ctc_04_asme1_ap242-e1.stp"
+    ))
+    .unwrap();
     let brep = BRep::extract(&file).unwrap();
     (file, brep)
 }
