@@ -67,12 +67,23 @@ test.describe('Mesh capabilities report', () => {
     }
 
     test(geom.label, async ({ page }) => {
+      const t0 = Date.now()
+      const elapsed = () => `+${((Date.now() - t0) / 1000).toFixed(1)}s`
+
+      page.on('console', msg => {
+        if (msg.type() === 'error') console.error(`[${geom.label}] browser error: ${msg.text()}`)
+      })
+      page.on('pageerror', err => console.error(`[${geom.label}] page exception: ${err.message}`))
+
+      console.log(`[${geom.label}] navigating to app`)
       await page.goto('/')
       await expect(page.getByRole('button', { name: 'Import STEP' })).toBeVisible()
+      console.log(`[${geom.label}] ${elapsed()} app ready, importing ${stepFile}`)
 
       // Import STEP file
       await page.locator('input[type="file"][accept=".stp,.step"]').setInputFiles(stepFile)
-      await expect(page.getByRole('button', { name: 'Import STEP' })).toBeEnabled({ timeout: 60_000 })
+      await expect(page.getByRole('button', { name: 'Import STEP' })).toBeEnabled({ timeout: 10_000 })
+      console.log(`[${geom.label}] ${elapsed()} import done`)
 
       // Fail fast if the worker surfaced an error in the UI banner.
       const errorBanner = page.getByTestId('step-error')
@@ -91,6 +102,7 @@ test.describe('Mesh capabilities report', () => {
         path: path.join(OUT_DIR, `${slug}-geometry.png`),
         clip: await getViewportClip(page),
       })
+      console.log(`[${geom.label}] ${elapsed()} geometry screenshot done`)
 
       // ── Wireframe (mesh) screenshot ─────────────────────────────────────────
       await page.getByRole('button', { name: 'Wireframe' }).click()
@@ -100,22 +112,28 @@ test.describe('Mesh capabilities report', () => {
         path: path.join(OUT_DIR, `${slug}-mesh.png`),
         clip: await getViewportClip(page),
       })
+      console.log(`[${geom.label}] ${elapsed()} mesh screenshot done`)
 
       await page.getByRole('button', { name: 'Solid' }).click()
 
       // ── Volume mesh screenshot ───────────────────────────────────────────────
+      console.log(`[${geom.label}] ${elapsed()} starting vol mesh`)
       await page.getByRole('button', { name: 'Vol Mesh' }).click()
-      // Volume meshing runs in WASM — wait up to 30 s; skip gracefully if slow
+      // Volume meshing runs in WASM — wait up to 10 s; skip gracefully if slow
       const volSolidBtn = page.getByRole('button', { name: 'Vol Solid' })
-      const volReady = await volSolidBtn.waitFor({ state: 'visible', timeout: 30_000 }).then(() => true).catch(() => false)
+      const volReady = await volSolidBtn.waitFor({ state: 'visible', timeout: 10_000 }).then(() => true).catch(() => false)
       if (volReady) {
         await page.waitForTimeout(300)
         await page.screenshot({
           path: path.join(OUT_DIR, `${slug}-volume.png`),
           clip: await getViewportClip(page),
         })
+        console.log(`[${geom.label}] ${elapsed()} vol mesh screenshot done`)
         await volSolidBtn.click()
+      } else {
+        console.log(`[${geom.label}] ${elapsed()} vol mesh timed out — skipping volume screenshot`)
       }
+      console.log(`[${geom.label}] ${elapsed()} DONE`)
     })
   }
 })

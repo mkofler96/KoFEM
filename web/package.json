@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:dev": "tsc && vite build --mode development",
     "build:wasm": "cd .. && wasm-pack build crates/kofem-wasm --target web --out-dir ../../web/src/wasm/pkg",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
