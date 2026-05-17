@@ -8,7 +8,7 @@
 //!                              `cargo test -- --include-ignored`)
 
 use std::fs;
-use std::path::Path;
+use std::path::PathBuf;
 use std::time::Instant;
 
 use kofem_geom::step::{parse, BRep};
@@ -21,7 +21,9 @@ const MAX_SAMPLE: usize = 5_000;
 /// Tighten per-geometry after baselines are established.
 const CHAMFER_THRESHOLD_MM: f64 = 50.0;
 
-const JSON_OUT: &str = "../../web/test-results/mesh-quality.json";
+fn json_out() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../web/test-results/mesh-quality.json")
+}
 
 struct GeomSpec {
     name: &'static str,
@@ -501,7 +503,7 @@ fn write_json(new_results: &[QualityResult]) {
     let mut existing: std::collections::HashMap<String, usize> = Default::default();
     let mut all: Vec<serde_json::Value> = Vec::new();
 
-    if let Ok(text) = fs::read_to_string(JSON_OUT) {
+    if let Ok(text) = fs::read_to_string(json_out()) {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&text) {
             if let Some(arr) = v.get("results").and_then(|r| r.as_array()) {
                 for entry in arr {
@@ -530,11 +532,14 @@ fn write_json(new_results: &[QualityResult]) {
 
     let report = serde_json::json!({ "generated_at": now, "results": all });
     let json = serde_json::to_string_pretty(&report).expect("JSON serialization");
-    let out = Path::new(JSON_OUT);
+    let out = json_out();
+
     fs::create_dir_all(out.parent().unwrap()).expect("create output dir");
-    fs::write(out, &json).expect("write quality JSON");
+    fs::write(&out, &json).expect("write quality JSON");
+
     eprintln!(
-        "Quality report written → {JSON_OUT}  ({} total entries)",
+        "Quality report written → {}  ({} total entries)",
+        out.display(),
         all.len()
     );
 }
