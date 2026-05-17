@@ -228,7 +228,7 @@ async function run(): Promise<void> {
 
   // Upload screenshots from Playwright tests as thread replies
   if (fs.existsSync(SCREENSHOTS_DIR)) {
-    const files = fs.readdirSync(SCREENSHOTS_DIR).filter(f => f.endsWith('-mesh.png')).sort()
+    const files = fs.readdirSync(SCREENSHOTS_DIR).filter(f => f.endsWith('-geometry.png')).sort()
     const standardShots = files.filter(f => !f.startsWith('nist_')).slice(0, 3)
     const nistShots = files.filter(f => f.startsWith('nist_')).slice(0, 2)
     const screenshots = [...standardShots, ...nistShots]
