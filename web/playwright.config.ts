@@ -2,6 +2,7 @@ import { defineConfig } from '@playwright/test'
 
 export default defineConfig({
   testDir: './tests',
+  outputDir: './playwright-results',
   timeout: 30_000,
   use: {
     baseURL: 'http://localhost:4173',
