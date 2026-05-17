@@ -32,7 +32,7 @@ jobs:
         run: cargo install wasm-pack --locked
       - run: cargo fmt --all --check
       - run: cargo clippy --all-targets --all-features -- -D warnings
-      - run: cargo test --all-features
+      - run: cargo test --all-features -- --nocapture
       - run: wasm-pack build crates/kofem-wasm --target web --out-dir ../../web/src/wasm/pkg
       - uses: oven-sh/setup-bun@v2
         with:
