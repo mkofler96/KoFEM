@@ -16,7 +16,7 @@ import fs from 'fs'
 import path from 'path'
 
 const JSON_IN = path.join('test-results', 'mesh-quality.json')
-const SCREENSHOTS_DIR = path.join('screenshots', 'report')
+const SCREENSHOTS_DIR = path.join('playwright-results', 'screenshots', 'report')
 const DEFAULT_CHANNEL = 'product-showcases'
 
 interface QualityResult {

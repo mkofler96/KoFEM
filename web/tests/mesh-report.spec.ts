@@ -51,7 +51,7 @@ const NIST_GEOMETRIES: Geom[] = [
 const ALL_GEOMETRIES: Geom[] = [...GEOMETRIES, ...NIST_GEOMETRIES]
 
 const STEP_FILES_DIR = path.resolve('..', 'test_files')
-const OUT_DIR = path.join('screenshots', 'report')
+const OUT_DIR = path.join('playwright-results', 'screenshots', 'report')
 
 test.describe('Mesh capabilities report', () => {
   test.beforeAll(() => {
