@@ -2,15 +2,54 @@ import { test, expect } from '@playwright/test'
 import path from 'path'
 import fs from 'fs'
 
+interface Geom {
+  file: string
+  label: string
+  subdir?: string
+}
+
 // Geometries in ascending complexity order
-const GEOMETRIES = [
+const GEOMETRIES: Geom[] = [
   { file: 'box.stp',                label: 'Simple Box (80×60×40 mm)' },
   { file: 'cylinder.stp',           label: 'Cylinder (R=25, H=80 mm)' },
   { file: 'cone.stp',               label: 'Truncated Cone (R=10→20, H=30 mm)' },
   { file: 'l_bracket.stp',          label: 'L-Bracket (80×80×20 mm)' },
   { file: 'quarter_cylinder.stp',   label: 'Quarter-Cylinder patch (R=5, H=10 mm)' },
   { file: 'new_bracket_2.stp',      label: 'Complex Bracket (STEP)' },
+  // New shapes added in last two commits
+  { file: 'elbow.stp',              label: 'Pipe Elbow' },
+  { file: 'hex_prism.stp',          label: 'Hexagonal Prism' },
+  { file: 'i_beam.stp',             label: 'I-Beam Profile' },
+  { file: 'pyramid.stp',            label: 'Square Pyramid' },
+  { file: 'stepped_shaft.stp',      label: 'Stepped Shaft' },
+  { file: 't_profile.stp',          label: 'T-Profile' },
+  { file: 'torus_ring.stp',         label: 'Torus Ring' },
+  { file: 'tube.stp',               label: 'Tube (hollow cylinder)' },
+  { file: 'u_channel.stp',          label: 'U-Channel' },
+  { file: 'wedge.stp',              label: 'Wedge' },
 ]
+
+const NIST_GEOMETRIES: Geom[] = [
+  { file: 'nist_ctc_01_asme1_ap242-e1.stp',    label: 'NIST CTC-01 (AP242 e1)',    subdir: 'NIST' },
+  { file: 'nist_ctc_02_asme1_ap242-e2.stp',    label: 'NIST CTC-02 (AP242 e2)',    subdir: 'NIST' },
+  { file: 'nist_ctc_03_asme1_ap242-e2.stp',    label: 'NIST CTC-03 (AP242 e2)',    subdir: 'NIST' },
+  { file: 'nist_ctc_04_asme1_ap242-e1.stp',    label: 'NIST CTC-04 (AP242 e1)',    subdir: 'NIST' },
+  { file: 'nist_ctc_05_asme1_ap242-e1.stp',    label: 'NIST CTC-05 (AP242 e1)',    subdir: 'NIST' },
+  { file: 'nist_ftc_06_asme1_ap242-e2.stp',    label: 'NIST FTC-06 (AP242 e2)',    subdir: 'NIST' },
+  { file: 'nist_ftc_07_asme1_ap242-e2.stp',    label: 'NIST FTC-07 (AP242 e2)',    subdir: 'NIST' },
+  { file: 'nist_ftc_08_asme1_ap242-e1-tg.stp', label: 'NIST FTC-08 (AP242 e1-tg)', subdir: 'NIST' },
+  { file: 'nist_ftc_08_asme1_ap242-e2.stp',    label: 'NIST FTC-08 (AP242 e2)',    subdir: 'NIST' },
+  { file: 'nist_ftc_09_asme1_ap242-e1.stp',    label: 'NIST FTC-09 (AP242 e1)',    subdir: 'NIST' },
+  { file: 'nist_ftc_10_asme1_ap242-e2.stp',    label: 'NIST FTC-10 (AP242 e2)',    subdir: 'NIST' },
+  { file: 'nist_ftc_11_asme1_ap242-e2.stp',    label: 'NIST FTC-11 (AP242 e2)',    subdir: 'NIST' },
+  { file: 'nist_stc_06_asme1_ap242-e3.stp',    label: 'NIST STC-06 (AP242 e3)',    subdir: 'NIST' },
+  { file: 'nist_stc_07_asme1_ap242-e3.stp',    label: 'NIST STC-07 (AP242 e3)',    subdir: 'NIST' },
+  { file: 'nist_stc_08_asme1_ap242-e3.stp',    label: 'NIST STC-08 (AP242 e3)',    subdir: 'NIST' },
+  { file: 'nist_stc_09_asme1_ap242-e3.stp',    label: 'NIST STC-09 (AP242 e3)',    subdir: 'NIST' },
+  { file: 'nist_stc_10_asme1_ap242-e2.stp',    label: 'NIST STC-10 (AP242 e2)',    subdir: 'NIST' },
+]
+
+const ALL_GEOMETRIES: Geom[] = [...GEOMETRIES, ...NIST_GEOMETRIES]
 
 const STEP_FILES_DIR = path.resolve('..', 'test_files')
 const OUT_DIR = path.join('screenshots', 'report')
@@ -20,8 +59,8 @@ test.describe('Mesh capabilities report', () => {
     fs.mkdirSync(OUT_DIR, { recursive: true })
   })
 
-  for (const geom of GEOMETRIES) {
-    const stepFile = path.join(STEP_FILES_DIR, geom.file)
+  for (const geom of ALL_GEOMETRIES) {
+    const stepFile = path.join(STEP_FILES_DIR, geom.subdir ?? '', geom.file)
     if (!fs.existsSync(stepFile)) {
       test.skip(`${geom.label} — file not found: ${stepFile}`)
       continue
