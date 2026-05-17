@@ -15,8 +15,8 @@
 import fs from 'fs'
 import path from 'path'
 
-const JSON_IN = path.join(import.meta.dir, '..', 'test-results', 'mesh-quality.json')
-const SCREENSHOTS_DIR = path.join(import.meta.dir, '..', 'screenshots', 'report')
+const JSON_IN = path.join('test-results', 'mesh-quality.json')
+const SCREENSHOTS_DIR = path.join('screenshots', 'report')
 const DEFAULT_CHANNEL = 'product-showcases'
 
 interface QualityResult {
@@ -46,8 +46,8 @@ function pad(s: string, w: number, right = false): string {
 function fmtK(v: number | null): string {
   if (v === null) return '—'
   return v >= 10_000 ? `${(v / 1000).toFixed(0)}k`
-       : v >= 1_000  ? `${(v / 1000).toFixed(1)}k`
-       : v.toString()
+    : v >= 1_000 ? `${(v / 1000).toFixed(1)}k`
+      : v.toString()
 }
 
 function fmtMm(v: number | null): string {
