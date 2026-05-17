@@ -32,7 +32,7 @@ jobs:
         run: cargo install wasm-pack --locked
       - run: cargo fmt --all --check
       - run: cargo clippy --all-targets --all-features -- -D warnings
-      - run: cargo test --all-features
+      - run: cargo test --all-features -- --nocapture
       - run: wasm-pack build crates/kofem-wasm --target web --out-dir ../../web/src/wasm/pkg
       - uses: oven-sh/setup-bun@v2
         with:
@@ -48,5 +48,6 @@ jobs:
       - run: cd web && bun run build
       - run: cd web && bunx playwright install --with-deps chromium
       - run: cd web && bun run test
-      - run: cd web && bun scripts/generate-mesh-report.ts
-      - run: cd web && bun run upload:slack screenshots/step-fit-view.png screenshots/mesh-report.pdf --comment="KoFEM CI — screenshot + mesh capabilities report"
+      - name: Post mesh report to Slack
+        if: always()
+        run: cd web && bun scripts/generate-mesh-report.ts

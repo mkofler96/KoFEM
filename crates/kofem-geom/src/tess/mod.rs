@@ -134,6 +134,9 @@ fn tessellate_face_raw(face: &TopoFace, file: &StepFile, max_edge_len: f64) -> S
     if let Some(mesh) = try_tessellate_toroidal(face, file, max_edge_len) {
         return mesh;
     }
+    if let Some(mesh) = try_tessellate_spherical(face, file, max_edge_len) {
+        return mesh;
+    }
     if let Some(mesh) = try_tessellate_bspline(face, file, max_edge_len) {
         return mesh;
     }
@@ -561,6 +564,102 @@ fn try_tessellate_toroidal(
             let b = j * n_cols + (i + 1);
             let c = (j + 1) * n_cols + i;
             let d = (j + 1) * n_cols + (i + 1);
+            triangles.push([a, b, d]);
+            triangles.push([a, d, c]);
+        }
+    }
+
+    Some(SurfaceMesh { points, triangles })
+}
+
+/// Tessellate a `SPHERICAL_SURFACE` face directly in UV space (u = longitude around z,
+/// v = latitude from equator) and lift back to 3D.  Returns `None` when the surface is
+/// not spherical.
+///
+/// Spherical patches are always treated as partial: u and v ranges are inferred from the
+/// boundary rather than assumed to be full [0, 2π] × [-π/2, π/2].  This handles fillets,
+/// ball-end slots, domes, and other partial sphere features common in NIST AP242 models.
+fn try_tessellate_spherical(
+    face: &TopoFace,
+    file: &StepFile,
+    max_edge_len: f64,
+) -> Option<SurfaceMesh> {
+    let e = file.get(&face.surface_id)?;
+    if e.type_name != "SPHERICAL_SURFACE" {
+        return None;
+    }
+
+    let ax_id = get_ref(e, 1).ok()?;
+    let radius = get_real(e, 2).ok()?;
+    let axis = axis2_placement(file, ax_id).ok()?;
+    let y = axis.y();
+
+    let surface = surface_from_step(face.surface_id, file).ok()?;
+
+    let boundary_3d = sample_boundary_3d(&face.outer_loop, file, max_edge_len);
+    if boundary_3d.len() < 3 {
+        return None;
+    }
+
+    // Invert boundary points to spherical (u, v).
+    // u = atan2(dot(p-o, y), dot(p-o, x)) — longitude
+    // v = asin(dot(p-o, z) / R)           — latitude
+    let raw_uv: Vec<(f64, f64)> = boundary_3d
+        .iter()
+        .map(|&p| {
+            let d = sub(p, axis.origin);
+            let dx = dot3(d, axis.x);
+            let dy = dot3(d, y);
+            let dz = dot3(d, axis.z);
+            let u = f64::atan2(dy, dx);
+            // Clamp the asin argument to [-1, 1] to handle numerical noise
+            let sin_v = (dz / radius).clamp(-1.0, 1.0);
+            let v = sin_v.asin();
+            (u, v)
+        })
+        .collect();
+
+    // Unwrap both angular parameters to a contiguous range.
+    let u_vals = unwrap_angles(raw_uv.iter().map(|&(u, _)| u).collect());
+    let v_vals: Vec<f64> = raw_uv.iter().map(|&(_, v)| v).collect();
+
+    let u_min = u_vals.iter().cloned().fold(f64::INFINITY, f64::min);
+    let u_max = u_vals.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+    let v_min = v_vals.iter().cloned().fold(f64::INFINITY, f64::min);
+    let v_max = v_vals.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+
+    if (u_max - u_min) < 1e-10 || (v_max - v_min) < 1e-10 {
+        return None;
+    }
+
+    // Estimate arc lengths at the mid-latitude for grid density.
+    // Longitude arc at v_mid: R * cos(v_mid) * Δu
+    // Latitude arc: R * Δv
+    let v_mid = (v_min + v_max) / 2.0;
+    let arc_u = radius * v_mid.cos().abs() * (u_max - u_min);
+    let arc_v = radius * (v_max - v_min);
+
+    let n_u = ((arc_u / max_edge_len).ceil() as usize).clamp(2, 256);
+    let n_v = ((arc_v / max_edge_len).ceil() as usize).clamp(2, 256);
+
+    let mut points = Vec::with_capacity((n_u + 1) * (n_v + 1));
+    for j in 0..=n_v {
+        let v = v_min + (v_max - v_min) * j as f64 / n_v as f64;
+        for i in 0..=n_u {
+            let u = u_min + (u_max - u_min) * i as f64 / n_u as f64;
+            points.push(surface.point(u, v));
+        }
+    }
+
+    let n_cols = n_u + 1;
+    let mut triangles = Vec::with_capacity(n_u * n_v * 2);
+    for j in 0..n_v {
+        for i in 0..n_u {
+            let a = j * n_cols + i;
+            let b = j * n_cols + (i + 1);
+            let c = (j + 1) * n_cols + i;
+            let d = (j + 1) * n_cols + (i + 1);
+            // CCW winding when viewed from outside (outward-radial normal).
             triangles.push([a, b, d]);
             triangles.push([a, d, c]);
         }

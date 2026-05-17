@@ -153,9 +153,16 @@ fn extract_face(file: &StepFile, face_id: u64) -> Result<TopoFace, TopologyError
 }
 
 fn extract_edge_loop(file: &StepFile, loop_id: u64) -> Result<Vec<TopoEdge>, TopologyError> {
-    let edge_loop = entity(file, loop_id)?;
+    let loop_ent = entity(file, loop_id)?;
+
+    // VERTEX_LOOP(label, vertex_point_ref) — degenerate loop at a single point
+    // (e.g., cone apex, sphere pole). Return empty edge list.
+    if loop_ent.type_name == "VERTEX_LOOP" {
+        return Ok(Vec::new());
+    }
+
     // EDGE_LOOP(label, (oriented_edge_refs…))
-    let oriented_refs = list_arg(edge_loop, 1)?;
+    let oriented_refs = list_arg(loop_ent, 1)?;
 
     let mut edges = Vec::with_capacity(oriented_refs.len());
     for or_arg in oriented_refs {
