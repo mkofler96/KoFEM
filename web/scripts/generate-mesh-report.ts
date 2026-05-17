@@ -194,9 +194,9 @@ async function uploadFile(token: string, filePath: string, channelId: string, th
 
 async function run(): Promise<void> {
   if (!fs.existsSync(JSON_IN)) {
-    console.error(`Quality JSON not found: ${JSON_IN}`)
-    console.error('Run: cargo test -p kofem-geom mesh_quality_report -- --nocapture')
-    process.exit(1)
+    console.warn(`Quality JSON not found: ${JSON_IN}`)
+    console.warn('Skipping mesh report (run cargo test to generate)')
+    return
   }
 
   const report: QualityReport = JSON.parse(fs.readFileSync(JSON_IN, 'utf8'))
