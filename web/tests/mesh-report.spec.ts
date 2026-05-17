@@ -28,15 +28,18 @@ test.describe('Mesh capabilities report', () => {
     }
 
     test(geom.label, async ({ page }) => {
-      // Auto-dismiss any alert() dialogs (e.g. from vol-mesh WASM errors)
-      page.on('dialog', d => d.dismiss().catch(() => {}))
-
       await page.goto('/')
       await expect(page.getByRole('button', { name: 'Import STEP' })).toBeVisible()
 
       // Import STEP file
       await page.locator('input[type="file"][accept=".stp,.step"]').setInputFiles(stepFile)
       await expect(page.getByRole('button', { name: 'Import STEP' })).toBeEnabled({ timeout: 60_000 })
+
+      // Fail fast if the worker surfaced an error in the UI banner.
+      const errorBanner = page.getByTestId('step-error')
+      if (await errorBanner.isVisible()) {
+        throw new Error(`STEP import failed for ${geom.label}: ${await errorBanner.textContent()}`)
+      }
 
       // Fit and settle
       await page.getByRole('button', { name: 'Fit View' }).click()
@@ -79,9 +82,11 @@ test.describe('Mesh capabilities report', () => {
 })
 
 async function getViewportClip(page: import('@playwright/test').Page) {
-  // Clip to the Three.js canvas area (main viewport panel)
+  // Clip to the Three.js canvas area (main viewport panel).
+  // Use a short explicit timeout so a missing canvas returns null quickly
+  // rather than blocking until the whole test budget is exhausted.
   const canvas = page.locator('canvas').first()
-  const box = await canvas.boundingBox()
+  const box = await canvas.boundingBox({ timeout: 5_000 }).catch(() => null)
   if (!box) return undefined
   return { x: box.x, y: box.y, width: box.width, height: box.height }
 }
