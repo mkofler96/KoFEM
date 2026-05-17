@@ -53,10 +53,6 @@ const ALL_GEOMETRIES: Geom[] = [...GEOMETRIES, ...NIST_GEOMETRIES]
 const STEP_FILES_DIR = path.resolve('..', 'test_files')
 const OUT_DIR = path.join('screenshots', 'report')
 
-// NIST files are complex and need longer timeouts
-const NIST_IMPORT_TIMEOUT = 120_000  // 2 minutes for import
-const STANDARD_IMPORT_TIMEOUT = 30_000  // 30s for standard files
-
 test.describe('Mesh capabilities report', () => {
   test.beforeAll(() => {
     fs.mkdirSync(OUT_DIR, { recursive: true })
@@ -69,13 +65,7 @@ test.describe('Mesh capabilities report', () => {
       continue
     }
 
-    const isNist = geom.subdir === 'NIST'
-    const importTimeout = isNist ? NIST_IMPORT_TIMEOUT : STANDARD_IMPORT_TIMEOUT
-
     test(geom.label, async ({ page }) => {
-      // NIST files need longer test timeout
-      if (isNist) test.setTimeout(180_000)  // 3 minutes for NIST tests
-
       const t0 = Date.now()
       const elapsed = () => `+${((Date.now() - t0) / 1000).toFixed(1)}s`
 
@@ -91,7 +81,7 @@ test.describe('Mesh capabilities report', () => {
 
       // Import STEP file
       await page.locator('input[type="file"][accept=".stp,.step"]').setInputFiles(stepFile)
-      await expect(page.getByRole('button', { name: 'Import STEP' })).toBeEnabled({ timeout: importTimeout })
+      await expect(page.getByRole('button', { name: 'Import STEP' })).toBeEnabled({ timeout: 10_000 })
       console.log(`[${geom.label}] ${elapsed()} import done`)
 
       // Fail fast if the worker surfaced an error in the UI banner.
