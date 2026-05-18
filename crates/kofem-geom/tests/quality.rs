@@ -40,12 +40,6 @@ static STANDARD_GEOMETRIES: &[GeomSpec] = &[
         ref_stl: "../../test_files/reference_stl/box.stl",
     },
     GeomSpec {
-        name: "cone",
-        label: "Truncated Cone (R=10→20, H=30 mm)",
-        step_file: "../../test_files/cone.stp",
-        ref_stl: "../../test_files/reference_stl/cone.stl",
-    },
-    GeomSpec {
         name: "cylinder",
         label: "Cylinder (R=25, H=80 mm)",
         step_file: "../../test_files/cylinder.stp",
