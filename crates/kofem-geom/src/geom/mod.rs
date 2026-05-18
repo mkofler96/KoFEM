@@ -1,7 +1,9 @@
+pub mod brep;
 pub mod curve;
 pub mod surface;
 
-pub use curve::{curve_from_step, BSplineCurveWithKnots, Circle, Curve, Line};
+pub use brep::{Edge, Face, Shell, Solid, Vertex, Wire};
+pub use curve::{curve_from_step, BSplineCurveWithKnots, Circle, Curve, Ellipse, Line};
 pub use surface::{
     surface_from_step, BSplineSurfaceWithKnots, ConicalSurface, CylindricalSurface, Plane,
     SphericalSurface, Surface, SurfaceOfLinearExtrusion, SurfaceOfRevolution, ToroidalSurface,

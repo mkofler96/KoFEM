@@ -12,6 +12,7 @@ pub trait Surface: Send + Sync {
     fn normal(&self, u: f64, v: f64) -> [f64; 3];
     fn u_bounds(&self) -> (f64, f64);
     fn v_bounds(&self) -> (f64, f64);
+    fn as_any(&self) -> &dyn std::any::Any;
 }
 
 // ── Plane ─────────────────────────────────────────────────────────────────────
@@ -38,6 +39,10 @@ impl Surface for Plane {
 
     fn v_bounds(&self) -> (f64, f64) {
         (f64::NEG_INFINITY, f64::INFINITY)
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 
@@ -75,6 +80,10 @@ impl Surface for CylindricalSurface {
 
     fn v_bounds(&self) -> (f64, f64) {
         (f64::NEG_INFINITY, f64::INFINITY)
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 
@@ -120,6 +129,10 @@ impl Surface for ConicalSurface {
     fn v_bounds(&self) -> (f64, f64) {
         (f64::NEG_INFINITY, f64::INFINITY)
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
 
 // ── ToroidalSurface ───────────────────────────────────────────────────────────
@@ -157,6 +170,10 @@ impl Surface for ToroidalSurface {
 
     fn v_bounds(&self) -> (f64, f64) {
         (0.0, 2.0 * PI)
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 
@@ -200,6 +217,10 @@ impl Surface for SphericalSurface {
 
     fn v_bounds(&self) -> (f64, f64) {
         (-PI / 2.0, PI / 2.0)
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 
@@ -252,6 +273,10 @@ impl Surface for BSplineSurfaceWithKnots {
         let n = self.control_points[0].len() - 1;
         (self.v_knots[self.v_degree], self.v_knots[n + 1])
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
 
 // ── SurfaceOfLinearExtrusion ──────────────────────────────────────────────────
@@ -280,6 +305,10 @@ impl Surface for SurfaceOfLinearExtrusion {
 
     fn v_bounds(&self) -> (f64, f64) {
         (f64::NEG_INFINITY, f64::INFINITY)
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 
@@ -316,6 +345,10 @@ impl Surface for SurfaceOfRevolution {
 
     fn v_bounds(&self) -> (f64, f64) {
         self.swept_curve.t_bounds()
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 

@@ -1,14 +1,34 @@
 use std::f64::consts::PI;
 
 use super::{
-    add, arg_as_ref, axis2_placement, de_boor_1d, expand_knots, get_arg, get_entity, get_list,
-    get_real, get_ref, normalize, point3, scale, Axis2, GeomError,
+    add, arg_as_ref, axis2_placement, de_boor_1d, dot, expand_knots, get_arg, get_entity, get_list,
+    get_real, get_ref, normalize, point3, scale, sub, Axis2, GeomError,
 };
 use crate::step::parser::{Arg, StepFile};
 
 pub trait Curve: Send + Sync {
     fn point(&self, t: f64) -> [f64; 3];
     fn t_bounds(&self) -> (f64, f64);
+
+    /// Return the parameter interval `[t0, t1]` that traces the curve from
+    /// `start` to `end`, accounting for the `reversed` flag.
+    ///
+    /// The default implementation uses [`Curve::t_bounds`] with optional
+    /// reversal, which is correct for B-splines and other bounded curves.
+    /// `Line` and `Circle` override this with exact geometric inversion.
+    fn t_range(&self, _start: [f64; 3], _end: [f64; 3], reversed: bool) -> (f64, f64) {
+        let (t0, t1) = self.t_bounds();
+        if !t0.is_finite() || !t1.is_finite() {
+            return (0.0, 1.0);
+        }
+        if reversed {
+            (t1, t0)
+        } else {
+            (t0, t1)
+        }
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any;
 }
 
 // ── Line ─────────────────────────────────────────────────────────────────────
@@ -25,6 +45,16 @@ impl Curve for Line {
 
     fn t_bounds(&self) -> (f64, f64) {
         (f64::NEG_INFINITY, f64::INFINITY)
+    }
+
+    fn t_range(&self, start: [f64; 3], end: [f64; 3], _reversed: bool) -> (f64, f64) {
+        let t0 = dot(sub(start, self.origin), self.direction);
+        let t1 = dot(sub(end, self.origin), self.direction);
+        (t0, t1)
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 
@@ -49,6 +79,34 @@ impl Curve for Circle {
 
     fn t_bounds(&self) -> (f64, f64) {
         (0.0, 2.0 * PI)
+    }
+
+    fn t_range(&self, start: [f64; 3], end: [f64; 3], reversed: bool) -> (f64, f64) {
+        let y = self.axis.y();
+        let angle_of = |p: [f64; 3]| -> f64 {
+            let d = sub(p, self.axis.origin);
+            f64::atan2(dot(d, y), dot(d, self.axis.x))
+        };
+        let t_start = angle_of(start);
+        let t_end_raw = angle_of(end);
+        let d = sub(start, end);
+        let dist_sq = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+        if dist_sq < 1e-16 {
+            let span = if reversed { -2.0 * PI } else { 2.0 * PI };
+            return (t_start, t_start + span);
+        }
+        let t_end = if reversed {
+            let delta = ((t_start - t_end_raw).rem_euclid(2.0 * PI)).max(1e-10);
+            t_start - delta
+        } else {
+            let delta = ((t_end_raw - t_start).rem_euclid(2.0 * PI)).max(1e-10);
+            t_start + delta
+        };
+        (t_start, t_end)
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 
@@ -75,6 +133,10 @@ impl Curve for Ellipse {
     fn t_bounds(&self) -> (f64, f64) {
         (0.0, 2.0 * PI)
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
 
 // ── BSplineCurveWithKnots ────────────────────────────────────────────────────
@@ -94,6 +156,10 @@ impl Curve for BSplineCurveWithKnots {
     fn t_bounds(&self) -> (f64, f64) {
         let n = self.control_points.len() - 1;
         (self.knots[self.degree], self.knots[n + 1])
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
 

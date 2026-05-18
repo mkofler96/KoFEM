@@ -439,12 +439,17 @@ fn run_geometry(spec: &GeomSpec, idx: usize, total: usize) -> (QualityResult, bo
         Err(e) => fail!(format!("extract BRep: {e}")),
     };
 
+    let solid = match brep.resolve(&step_file) {
+        Ok(s) => s,
+        Err(e) => fail!(format!("resolve BRep: {e}")),
+    };
+
     eprintln!(
         "{tag}  tessellating {} faces ({}ms)...",
         brep.faces.len(),
         ms()
     );
-    let mesh = match tessellate(&brep, &step_file, TessOptions::default()) {
+    let mesh = match tessellate(&solid, TessOptions::default()) {
         Ok(m) => m,
         Err(e) => fail!(format!("tessellate: {e}")),
     };

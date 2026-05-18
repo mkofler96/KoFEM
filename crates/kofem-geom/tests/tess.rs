@@ -1,4 +1,6 @@
-use kofem_geom::step::topology::{TopoEdge, TopoFace};
+use kofem_geom::geom::brep::{Edge, Face, Shell, Solid, Wire};
+use kofem_geom::geom::curve::{Circle, Line};
+use kofem_geom::geom::surface::Plane;
 use kofem_geom::step::{parse, BRep};
 use kofem_geom::tess::{fan_tessellate, tessellate, TessOptions};
 
@@ -54,6 +56,80 @@ fn edge_counts(triangles: &[[usize; 3]]) -> std::collections::HashMap<(usize, us
 
 fn count_open_edges(triangles: &[[usize; 3]]) -> usize {
     edge_counts(triangles).values().filter(|&&c| c == 1).count()
+}
+
+/// Build a `Line` edge for a unit-speed segment from `start` to `end`.
+fn line_edge(start: [f64; 3], end: [f64; 3]) -> Edge {
+    let d = [end[0] - start[0], end[1] - start[1], end[2] - start[2]];
+    let len = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+    let dir = [d[0] / len, d[1] / len, d[2] / len];
+    Edge {
+        curve: Box::new(Line {
+            origin: start,
+            direction: dir,
+        }),
+        start,
+        end,
+        reversed: false,
+        t0: 0.0,
+        t1: len,
+    }
+}
+
+/// Unit square in XY plane, CCW from +Z, outer_loop_orientation=true → outward normal +Z.
+fn make_square_face() -> Face {
+    Face {
+        surface: Box::new(Plane {
+            origin: [0.0, 0.0, 0.0],
+            normal: [0.0, 0.0, 1.0],
+            x_axis: [1.0, 0.0, 0.0],
+        }),
+        same_sense: true,
+        outer_loop_orientation: true,
+        outer_loop: Wire {
+            edges: vec![
+                line_edge([0.0, 0.0, 0.0], [1.0, 0.0, 0.0]),
+                line_edge([1.0, 0.0, 0.0], [1.0, 1.0, 0.0]),
+                line_edge([1.0, 1.0, 0.0], [0.0, 1.0, 0.0]),
+                line_edge([0.0, 1.0, 0.0], [0.0, 0.0, 0.0]),
+            ],
+        },
+        inner_loops: vec![],
+    }
+}
+
+/// Same unit square but stored CW (outer_loop_orientation=false).
+fn make_square_face_cw_bound_f() -> Face {
+    Face {
+        surface: Box::new(Plane {
+            origin: [0.0, 0.0, 0.0],
+            normal: [0.0, 0.0, 1.0],
+            x_axis: [1.0, 0.0, 0.0],
+        }),
+        same_sense: true,
+        outer_loop_orientation: false,
+        outer_loop: Wire {
+            edges: vec![
+                line_edge([0.0, 0.0, 0.0], [0.0, 1.0, 0.0]),
+                line_edge([0.0, 1.0, 0.0], [1.0, 1.0, 0.0]),
+                line_edge([1.0, 1.0, 0.0], [1.0, 0.0, 0.0]),
+                line_edge([1.0, 0.0, 0.0], [0.0, 0.0, 0.0]),
+            ],
+        },
+        inner_loops: vec![],
+    }
+}
+
+fn make_solid(faces: Vec<Face>) -> Solid {
+    Solid {
+        shells: vec![Shell { faces }],
+    }
+}
+
+fn load_bracket() -> Solid {
+    let file = parse(include_str!("../../../test_files/new_bracket_2.stp")).unwrap();
+    let brep = BRep::extract(&file).unwrap();
+    brep.resolve(&file).unwrap()
 }
 
 /// Minimal STEP string: unit square in XY, CW stored loop, bound.orientation=F,
@@ -151,85 +227,6 @@ ENDSEC;
 END-ISO-10303-21;
 ";
 
-/// Unit square in XY, CCW from +Z, bound.orientation=T → outward normal +Z.
-fn make_square_face() -> TopoFace {
-    TopoFace {
-        surface_id: 0,
-        same_sense: true,
-        outer_loop_orientation: true,
-        outer_loop: vec![
-            TopoEdge {
-                curve_id: 0,
-                start: [0.0, 0.0, 0.0],
-                end: [1.0, 0.0, 0.0],
-                reversed: false,
-            },
-            TopoEdge {
-                curve_id: 0,
-                start: [1.0, 0.0, 0.0],
-                end: [1.0, 1.0, 0.0],
-                reversed: false,
-            },
-            TopoEdge {
-                curve_id: 0,
-                start: [1.0, 1.0, 0.0],
-                end: [0.0, 1.0, 0.0],
-                reversed: false,
-            },
-            TopoEdge {
-                curve_id: 0,
-                start: [0.0, 1.0, 0.0],
-                end: [0.0, 0.0, 0.0],
-                reversed: false,
-            },
-        ],
-        inner_loops: vec![],
-    }
-}
-
-/// Same unit square but stored CW (as exported by the bracket's CAD system)
-/// with bound.orientation=F — after applying the flag the outward normal is still +Z.
-fn make_square_face_cw_bound_f() -> TopoFace {
-    TopoFace {
-        surface_id: 0,
-        same_sense: true,
-        outer_loop_orientation: false,
-        outer_loop: vec![
-            TopoEdge {
-                curve_id: 0,
-                start: [0.0, 0.0, 0.0],
-                end: [0.0, 1.0, 0.0],
-                reversed: false,
-            },
-            TopoEdge {
-                curve_id: 0,
-                start: [0.0, 1.0, 0.0],
-                end: [1.0, 1.0, 0.0],
-                reversed: false,
-            },
-            TopoEdge {
-                curve_id: 0,
-                start: [1.0, 1.0, 0.0],
-                end: [1.0, 0.0, 0.0],
-                reversed: false,
-            },
-            TopoEdge {
-                curve_id: 0,
-                start: [1.0, 0.0, 0.0],
-                end: [0.0, 0.0, 0.0],
-                reversed: false,
-            },
-        ],
-        inner_loops: vec![],
-    }
-}
-
-fn load_bracket() -> (kofem_geom::step::StepFile, BRep) {
-    let file = parse(include_str!("../../../test_files/new_bracket_2.stp")).unwrap();
-    let brep = BRep::extract(&file).unwrap();
-    (file, brep)
-}
-
 // ── winding / normal tests ─────────────────────────────────────────────────────
 
 #[test]
@@ -242,37 +239,35 @@ fn fan_triangulate_planar_face() {
     }
 }
 
-/// CCW loop + bound.orientation=T → all triangle normals must point +Z.
+/// CCW loop + outer_loop_orientation=true → all triangle normals must point +Z.
 #[test]
 fn unit_square_bound_t_normals_point_up() {
     let face = make_square_face();
-    let file = kofem_geom::step::StepFile::new();
-    let brep = kofem_geom::step::BRep { faces: vec![face] };
-    let mesh = tessellate(&brep, &file, TessOptions::default()).unwrap();
+    let solid = make_solid(vec![face]);
+    let mesh = tessellate(&solid, TessOptions::default()).unwrap();
     assert!(!mesh.triangles.is_empty());
     for &tri in &mesh.triangles {
         let n = tri_normal(&mesh.points, tri);
         assert!(
             n[2] > 0.9,
-            "expected +Z normal (bound.orientation=T), got {n:?}"
+            "expected +Z normal (outer_loop_orientation=true), got {n:?}"
         );
     }
 }
 
-/// CW stored loop + bound.orientation=F → after applying the flag, normals
-/// must still point +Z.  This test fails without the orientation fix.
+/// CW stored loop + outer_loop_orientation=false → after applying the flag,
+/// normals must still point +Z.
 #[test]
 fn unit_square_bound_f_normals_point_up() {
     let face = make_square_face_cw_bound_f();
-    let file = kofem_geom::step::StepFile::new();
-    let brep = kofem_geom::step::BRep { faces: vec![face] };
-    let mesh = tessellate(&brep, &file, TessOptions::default()).unwrap();
+    let solid = make_solid(vec![face]);
+    let mesh = tessellate(&solid, TessOptions::default()).unwrap();
     assert!(!mesh.triangles.is_empty());
     for &tri in &mesh.triangles {
         let n = tri_normal(&mesh.points, tri);
         assert!(
             n[2] > 0.9,
-            "expected +Z normal (bound.orientation=F fixed), got {n:?}"
+            "expected +Z normal (outer_loop_orientation=false fixed), got {n:?}"
         );
     }
 }
@@ -296,8 +291,7 @@ fn fan_tessellate_area_is_exact() {
 // ── roundtrip STEP tests ───────────────────────────────────────────────────────
 
 /// Parse a minimal STEP snippet with bound.orientation=F (bracket convention)
-/// and verify the normal direction.  Area test is omitted: Delaunay of collinear
-/// LINE-edge samples is numerically unreliable for area but normals are correct.
+/// and verify the normal direction.
 #[test]
 fn roundtrip_step_bound_f_normals() {
     let file = parse(STEP_UNIT_SQUARE_BOUND_F).unwrap();
@@ -307,7 +301,8 @@ fn roundtrip_step_bound_f_normals() {
         !brep.faces[0].outer_loop_orientation,
         "expected outer_loop_orientation=false"
     );
-    let mesh = tessellate(&brep, &file, TessOptions::default()).unwrap();
+    let solid = brep.resolve(&file).unwrap();
+    let mesh = tessellate(&solid, TessOptions::default()).unwrap();
     assert!(!mesh.triangles.is_empty());
     for &tri in &mesh.triangles {
         let n = tri_normal(&mesh.points, tri);
@@ -328,7 +323,8 @@ fn roundtrip_step_bound_t_normals() {
         brep.faces[0].outer_loop_orientation,
         "expected outer_loop_orientation=true"
     );
-    let mesh = tessellate(&brep, &file, TessOptions::default()).unwrap();
+    let solid = brep.resolve(&file).unwrap();
+    let mesh = tessellate(&solid, TessOptions::default()).unwrap();
     assert!(!mesh.triangles.is_empty());
     for &tri in &mesh.triangles {
         let n = tri_normal(&mesh.points, tri);
@@ -348,67 +344,34 @@ fn square_with_square_hole_excludes_hole_region() {
     let hole_min = 0.4_f64;
     let hole_max = 0.6_f64;
 
-    let face = TopoFace {
-        surface_id: 0,
+    let face = Face {
+        surface: Box::new(Plane {
+            origin: [0.0, 0.0, 0.0],
+            normal: [0.0, 0.0, 1.0],
+            x_axis: [1.0, 0.0, 0.0],
+        }),
         same_sense: true,
         outer_loop_orientation: true,
-        outer_loop: vec![
-            TopoEdge {
-                curve_id: 0,
-                start: [0.0, 0.0, 0.0],
-                end: [1.0, 0.0, 0.0],
-                reversed: false,
-            },
-            TopoEdge {
-                curve_id: 0,
-                start: [1.0, 0.0, 0.0],
-                end: [1.0, 1.0, 0.0],
-                reversed: false,
-            },
-            TopoEdge {
-                curve_id: 0,
-                start: [1.0, 1.0, 0.0],
-                end: [0.0, 1.0, 0.0],
-                reversed: false,
-            },
-            TopoEdge {
-                curve_id: 0,
-                start: [0.0, 1.0, 0.0],
-                end: [0.0, 0.0, 0.0],
-                reversed: false,
-            },
-        ],
-        inner_loops: vec![vec![
-            TopoEdge {
-                curve_id: 0,
-                start: [hole_min, hole_min, 0.0],
-                end: [hole_min, hole_max, 0.0],
-                reversed: false,
-            },
-            TopoEdge {
-                curve_id: 0,
-                start: [hole_min, hole_max, 0.0],
-                end: [hole_max, hole_max, 0.0],
-                reversed: false,
-            },
-            TopoEdge {
-                curve_id: 0,
-                start: [hole_max, hole_max, 0.0],
-                end: [hole_max, hole_min, 0.0],
-                reversed: false,
-            },
-            TopoEdge {
-                curve_id: 0,
-                start: [hole_max, hole_min, 0.0],
-                end: [hole_min, hole_min, 0.0],
-                reversed: false,
-            },
-        ]],
+        outer_loop: Wire {
+            edges: vec![
+                line_edge([0.0, 0.0, 0.0], [1.0, 0.0, 0.0]),
+                line_edge([1.0, 0.0, 0.0], [1.0, 1.0, 0.0]),
+                line_edge([1.0, 1.0, 0.0], [0.0, 1.0, 0.0]),
+                line_edge([0.0, 1.0, 0.0], [0.0, 0.0, 0.0]),
+            ],
+        },
+        inner_loops: vec![Wire {
+            edges: vec![
+                line_edge([hole_min, hole_min, 0.0], [hole_min, hole_max, 0.0]),
+                line_edge([hole_min, hole_max, 0.0], [hole_max, hole_max, 0.0]),
+                line_edge([hole_max, hole_max, 0.0], [hole_max, hole_min, 0.0]),
+                line_edge([hole_max, hole_min, 0.0], [hole_min, hole_min, 0.0]),
+            ],
+        }],
     };
 
-    let file = kofem_geom::step::StepFile::new();
-    let brep = kofem_geom::step::BRep { faces: vec![face] };
-    let mesh = tessellate(&brep, &file, TessOptions::default()).unwrap();
+    let solid = make_solid(vec![face]);
+    let mesh = tessellate(&solid, TessOptions::default()).unwrap();
 
     assert!(!mesh.triangles.is_empty(), "mesh must have triangles");
 
@@ -428,17 +391,16 @@ fn square_with_square_hole_excludes_hole_region() {
 
 // ── cylinder regression tests ─────────────────────────────────────────────────
 
-fn load_cylinder() -> (kofem_geom::step::StepFile, BRep) {
+fn load_cylinder() -> Solid {
     let file = parse(include_str!("../../../test_files/cylinder.stp")).unwrap();
     let brep = BRep::extract(&file).unwrap();
-    (file, brep)
+    brep.resolve(&file).unwrap()
 }
 
 #[test]
 fn cylinder_mesh_has_three_faces() {
-    let (file, brep) = load_cylinder();
-    let mesh = tessellate(&brep, &file, TessOptions::default()).unwrap();
-    // Cylinder has: bottom cap + top cap + barrel
+    let solid = load_cylinder();
+    let mesh = tessellate(&solid, TessOptions::default()).unwrap();
     assert!(
         mesh.triangles.len() >= 3,
         "expected at least 3 triangles, got {}",
@@ -448,13 +410,12 @@ fn cylinder_mesh_has_three_faces() {
 
 #[test]
 fn cylinder_mesh_spans_correct_height() {
-    // R=25mm, H=80mm — all points must satisfy z in [0, 80] and radius ≤ 25 + ε.
-    let (file, brep) = load_cylinder();
+    let solid = load_cylinder();
     let opts = TessOptions {
         max_edge_len: 5.0,
         ..TessOptions::default()
     };
-    let mesh = tessellate(&brep, &file, opts).unwrap();
+    let mesh = tessellate(&solid, opts).unwrap();
 
     assert!(!mesh.points.is_empty());
 
@@ -479,15 +440,13 @@ fn cylinder_mesh_spans_correct_height() {
 
 #[test]
 fn cylinder_barrel_has_nonzero_height() {
-    // Before the fix, the barrel face was projected flat and all z values were 0.
-    let (file, brep) = load_cylinder();
+    let solid = load_cylinder();
     let opts = TessOptions {
         max_edge_len: 5.0,
         ..TessOptions::default()
     };
-    let mesh = tessellate(&brep, &file, opts).unwrap();
+    let mesh = tessellate(&solid, opts).unwrap();
 
-    // There must be points with z ≈ 80 (top cap / top of barrel).
     let has_top = mesh.points.iter().any(|&[_, _, z]| (z - 80.0).abs() < 1e-6);
     assert!(
         has_top,
@@ -497,19 +456,13 @@ fn cylinder_barrel_has_nonzero_height() {
 
 #[test]
 fn cylinder_caps_stitch_to_barrel() {
-    // Every edge on the top cap (z≈80) and bottom cap (z≈0) boundary must be
-    // shared by exactly two triangles once the barrel and caps are stitched.
-    // Before the fix the cap boundary had only 17 points while the barrel had
-    // ceil(2πR / max_edge_len) points, so almost no vertices coincided and the
-    // mesh was open at the seam.
-    let (file, brep) = load_cylinder();
+    let solid = load_cylinder();
     let opts = TessOptions {
         max_edge_len: 5.0,
         ..TessOptions::default()
     };
-    let mesh = tessellate(&brep, &file, opts).unwrap();
+    let mesh = tessellate(&solid, opts).unwrap();
 
-    // Collect boundary edges (count == 1) whose midpoint sits on z≈0 or z≈80.
     let open_seam: Vec<_> = edge_counts(&mesh.triangles)
         .into_iter()
         .filter(|(_, cnt)| *cnt == 1)
@@ -531,9 +484,6 @@ fn cylinder_caps_stitch_to_barrel() {
 
 // ── cone regression tests ─────────────────────────────────────────────────────
 
-/// Truncated cone: bottom circle radius=10 at z=0, top circle radius=20 at z=30.
-/// The CONICAL_SURFACE has semi_angle = atan(1/3) ≈ 18.435° (STEP stores degrees).
-/// On the barrel, r(z) = 10 + z/3 (linear taper, tan(φ)=1/3).
 const STEP_CONE: &str = "
 ISO-10303-21;
 HEADER;
@@ -597,32 +547,27 @@ ENDSEC;
 END-ISO-10303-21;
 ";
 
-fn load_cone() -> (kofem_geom::step::StepFile, BRep) {
+fn load_cone() -> Solid {
     let file = parse(STEP_CONE).unwrap();
     let brep = BRep::extract(&file).unwrap();
-    (file, brep)
+    brep.resolve(&file).unwrap()
 }
 
-/// All barrel points must lie on the cone surface: r(z) = 10 + z/3 (within 0.1%).
-/// Before the fix, conical faces fell through to the flat-projection path and
-/// produced only z=0 barrel points.
 #[test]
 fn cone_barrel_points_lie_on_cone_surface() {
-    let (file, brep) = load_cone();
+    let solid = load_cone();
     let opts = TessOptions {
         max_edge_len: 2.0,
         ..TessOptions::default()
     };
-    let mesh = tessellate(&brep, &file, opts).unwrap();
+    let mesh = tessellate(&solid, opts).unwrap();
 
     assert!(!mesh.points.is_empty());
 
     let mut has_barrel = false;
     for &[x, y, z] in &mesh.points {
-        // Points on either flat cap lie exactly in z=0 or z=30 planes; skip them.
         let r = (x * x + y * y).sqrt();
         let r_expected = 10.0 + z / 3.0;
-        // Only check barrel points (those clearly not on the cap discs).
         if r > 1e-3 && z > 1e-3 && z < 30.0 - 1e-3 {
             let err = (r - r_expected).abs() / r_expected;
             assert!(
@@ -638,15 +583,14 @@ fn cone_barrel_points_lie_on_cone_surface() {
     );
 }
 
-/// Height range of the merged cone mesh must span [0, 30].
 #[test]
 fn cone_mesh_spans_correct_height() {
-    let (file, brep) = load_cone();
+    let solid = load_cone();
     let opts = TessOptions {
         max_edge_len: 5.0,
         ..TessOptions::default()
     };
-    let mesh = tessellate(&brep, &file, opts).unwrap();
+    let mesh = tessellate(&solid, opts).unwrap();
 
     let mut z_min = f64::INFINITY;
     let mut z_max = f64::NEG_INFINITY;
@@ -662,11 +606,10 @@ fn cone_mesh_spans_correct_height() {
     );
 }
 
-/// Tessellation must produce triangles (non-degenerate mesh).
 #[test]
 fn cone_mesh_has_triangles() {
-    let (file, brep) = load_cone();
-    let mesh = tessellate(&brep, &file, TessOptions::default()).unwrap();
+    let solid = load_cone();
+    let mesh = tessellate(&solid, TessOptions::default()).unwrap();
     assert!(
         mesh.triangles.len() >= 3,
         "expected at least 3 triangles, got {}",
@@ -676,9 +619,6 @@ fn cone_mesh_has_triangles() {
 
 // ── partial cylinder tests ────────────────────────────────────────────────────
 
-/// Quarter-cylinder patch: r=5, z in [0,10], u in [0, π/2].
-/// 4 boundary edges: bottom arc, right seam line, top arc (reversed), left seam line.
-/// No closed-circle edge → partial cylinder path must be taken.
 const STEP_QUARTER_CYLINDER: &str = "
 ISO-10303-21;
 HEADER;
@@ -731,16 +671,16 @@ ENDSEC;
 END-ISO-10303-21;
 ";
 
-/// All barrel points on a partial cylinder must lie on the cylinder surface (r ≈ 5).
 #[test]
 fn partial_cylinder_points_lie_on_surface() {
     let file = parse(STEP_QUARTER_CYLINDER).unwrap();
     let brep = BRep::extract(&file).unwrap();
+    let solid = brep.resolve(&file).unwrap();
     let opts = TessOptions {
         max_edge_len: 1.0,
         ..TessOptions::default()
     };
-    let mesh = tessellate(&brep, &file, opts).unwrap();
+    let mesh = tessellate(&solid, opts).unwrap();
 
     assert!(!mesh.points.is_empty(), "mesh must have points");
     assert!(!mesh.triangles.is_empty(), "mesh must have triangles");
@@ -754,16 +694,16 @@ fn partial_cylinder_points_lie_on_surface() {
     }
 }
 
-/// The partial cylinder patch must span the correct z range [0, 10].
 #[test]
 fn partial_cylinder_spans_correct_height() {
     let file = parse(STEP_QUARTER_CYLINDER).unwrap();
     let brep = BRep::extract(&file).unwrap();
+    let solid = brep.resolve(&file).unwrap();
     let opts = TessOptions {
         max_edge_len: 1.0,
         ..TessOptions::default()
     };
-    let mesh = tessellate(&brep, &file, opts).unwrap();
+    let mesh = tessellate(&solid, opts).unwrap();
 
     let z_min = mesh
         .points
@@ -783,16 +723,16 @@ fn partial_cylinder_spans_correct_height() {
     );
 }
 
-/// The partial cylinder patch must stay within the u ∈ [0, π/2] quarter arc.
 #[test]
 fn partial_cylinder_stays_within_angular_range() {
     let file = parse(STEP_QUARTER_CYLINDER).unwrap();
     let brep = BRep::extract(&file).unwrap();
+    let solid = brep.resolve(&file).unwrap();
     let opts = TessOptions {
         max_edge_len: 1.0,
         ..TessOptions::default()
     };
-    let mesh = tessellate(&brep, &file, opts).unwrap();
+    let mesh = tessellate(&solid, opts).unwrap();
 
     for &[x, y, _z] in &mesh.points {
         assert!(
@@ -806,8 +746,8 @@ fn partial_cylinder_stays_within_angular_range() {
 
 #[test]
 fn bracket_tessellation_triangle_count() {
-    let (file, brep) = load_bracket();
-    let mesh = tessellate(&brep, &file, TessOptions::default()).unwrap();
+    let solid = load_bracket();
+    let mesh = tessellate(&solid, TessOptions::default()).unwrap();
     assert!(
         mesh.triangles.len() > 1_000,
         "expected many triangles, got {}",
@@ -817,8 +757,8 @@ fn bracket_tessellation_triangle_count() {
 
 #[test]
 fn no_degenerate_triangles() {
-    let (file, brep) = load_bracket();
-    let mesh = tessellate(&brep, &file, TessOptions::default()).unwrap();
+    let solid = load_bracket();
+    let mesh = tessellate(&solid, TessOptions::default()).unwrap();
     for &[a, b, c] in &mesh.triangles {
         let pa = mesh.points[a];
         let pb = mesh.points[b];
@@ -834,18 +774,10 @@ fn no_degenerate_triangles() {
 }
 
 /// Open boundary edges in the bracket must stay below 25 % of total edges.
-///
-/// The bracket is a MANIFOLD_SOLID_BREP, but B-spline UV tessellations sample
-/// the parameter space uniformly without guaranteeing that boundary vertices
-/// match across adjacent faces.  Stitching can therefore only close seams where
-/// face boundaries happen to produce coincident 3D points — which holds for
-/// simple planar/cylindrical/conical geometry but not B-spline faces.
-/// Current observed ratio is ~19 %.  This regression gate catches severe
-/// regressions (ratio doubling) without requiring perfection.
 #[test]
 fn bracket_open_edge_ratio_is_low() {
-    let (file, brep) = load_bracket();
-    let mesh = tessellate(&brep, &file, TessOptions::default()).unwrap();
+    let solid = load_bracket();
+    let mesh = tessellate(&solid, TessOptions::default()).unwrap();
     let counts = edge_counts(&mesh.triangles);
     let total = counts.len();
     let open = counts.values().filter(|&&c| c == 1).count();
@@ -859,23 +791,20 @@ fn bracket_open_edge_ratio_is_low() {
 
 // ── box tests ─────────────────────────────────────────────────────────────────
 
-fn load_box() -> (kofem_geom::step::StepFile, BRep) {
+fn load_box() -> Solid {
     let file = parse(include_str!("../../../test_files/box.stp")).unwrap();
     let brep = BRep::extract(&file).unwrap();
-    (file, brep)
+    brep.resolve(&file).unwrap()
 }
 
-/// 80×60×40 mm box: tessellated area must be within 0.5 % of the
-/// analytical surface area 2(80·60 + 80·40 + 60·40) = 20 800 mm².
-/// Planar-face triangulations are exact so even coarse tessellations pass.
 #[test]
 fn box_surface_area_close_to_analytical() {
-    let (file, brep) = load_box();
+    let solid = load_box();
     let opts = TessOptions {
         max_edge_len: 10.0,
         ..TessOptions::default()
     };
-    let mesh = tessellate(&brep, &file, opts).unwrap();
+    let mesh = tessellate(&solid, opts).unwrap();
     let area = mesh_area(&mesh.points, &mesh.triangles);
     let expected = 2.0 * (80.0 * 60.0 + 80.0 * 40.0 + 60.0 * 40.0);
     let err = (area - expected).abs() / expected;
@@ -886,16 +815,14 @@ fn box_surface_area_close_to_analytical() {
     );
 }
 
-/// The box is a MANIFOLD_SOLID_BREP closed shell, so every meshed edge must
-/// be shared by exactly 2 triangles after stitching.
 #[test]
 fn box_mesh_is_manifold() {
-    let (file, brep) = load_box();
+    let solid = load_box();
     let opts = TessOptions {
         max_edge_len: 10.0,
         ..TessOptions::default()
     };
-    let mesh = tessellate(&brep, &file, opts).unwrap();
+    let mesh = tessellate(&solid, opts).unwrap();
     let open = count_open_edges(&mesh.triangles);
     assert!(
         open == 0,
@@ -905,17 +832,16 @@ fn box_mesh_is_manifold() {
 
 // ── l_bracket tests ────────────────────────────────────────────────────────────
 
-fn load_l_bracket() -> (kofem_geom::step::StepFile, BRep) {
+fn load_l_bracket() -> Solid {
     let file = parse(include_str!("../../../test_files/l_bracket.stp")).unwrap();
     let brep = BRep::extract(&file).unwrap();
-    (file, brep)
+    brep.resolve(&file).unwrap()
 }
 
-/// L-bracket 80×80×20 mm: no degenerate triangles (zero-area, colinear vertices).
 #[test]
 fn l_bracket_no_degenerate_triangles() {
-    let (file, brep) = load_l_bracket();
-    let mesh = tessellate(&brep, &file, TessOptions::default()).unwrap();
+    let solid = load_l_bracket();
+    let mesh = tessellate(&solid, TessOptions::default()).unwrap();
     for &[a, b, c] in &mesh.triangles {
         let pa = mesh.points[a];
         let pb = mesh.points[b];
@@ -930,19 +856,14 @@ fn l_bracket_no_degenerate_triangles() {
     }
 }
 
-/// L-bracket tessellated area must match analytical area within 0.5 %.
-/// Analytical: 2 × L-face + 6 rectangular sides.
-///   L-face = 80×80 − 50×55 = 6400 − 2750 = 3650 mm²
-///   Sides  = 80×20 + 25×20 + 50×20 + 55×20 + 30×20 + 80×20 = 6400 mm²
-///   Total  = 2×3650 + 6400 = 13700 mm²
 #[test]
 fn l_bracket_surface_area_close_to_analytical() {
-    let (file, brep) = load_l_bracket();
+    let solid = load_l_bracket();
     let opts = TessOptions {
         max_edge_len: 10.0,
         ..TessOptions::default()
     };
-    let mesh = tessellate(&brep, &file, opts).unwrap();
+    let mesh = tessellate(&solid, opts).unwrap();
     let area = mesh_area(&mesh.points, &mesh.triangles);
     let expected = 13700.0_f64;
     let err = (area - expected).abs() / expected;
@@ -953,16 +874,14 @@ fn l_bracket_surface_area_close_to_analytical() {
     );
 }
 
-/// The L-bracket is a MANIFOLD_SOLID_BREP closed shell: every edge must be
-/// shared by exactly 2 triangles after stitching.
 #[test]
 fn l_bracket_mesh_is_manifold() {
-    let (file, brep) = load_l_bracket();
+    let solid = load_l_bracket();
     let opts = TessOptions {
         max_edge_len: 10.0,
         ..TessOptions::default()
     };
-    let mesh = tessellate(&brep, &file, opts).unwrap();
+    let mesh = tessellate(&solid, opts).unwrap();
     let open = count_open_edges(&mesh.triangles);
     assert!(
         open == 0,
@@ -972,21 +891,14 @@ fn l_bracket_mesh_is_manifold() {
 
 // ── cone manifold test ────────────────────────────────────────────────────────
 
-/// Interior barrel edges of the truncated cone (z strictly between 0 and 30)
-/// must be manifold: shared by exactly 2 triangles.
-///
-/// The seam edges at z≈0 and z≈30 may be open because
-/// `try_tessellate_conical` computes n_u from r_mid while
-/// `try_tessellate_disc` computes n_u from the cap's circle radius —
-/// the two differ for non-cylindrical surfaces (known limitation).
 #[test]
 fn cone_barrel_interior_is_manifold() {
-    let (file, brep) = load_cone();
+    let solid = load_cone();
     let opts = TessOptions {
         max_edge_len: 5.0,
         ..TessOptions::default()
     };
-    let mesh = tessellate(&brep, &file, opts).unwrap();
+    let mesh = tessellate(&solid, opts).unwrap();
 
     let counts = edge_counts(&mesh.triangles);
     let bad: Vec<_> = counts
@@ -995,7 +907,6 @@ fn cone_barrel_interior_is_manifold() {
         .filter(|(&(a, b), _)| {
             let za = mesh.points[a][2];
             let zb = mesh.points[b][2];
-            // Interior: both endpoints strictly away from the seam planes (z=0 and z=30).
             za > 1.0 && za < 29.0 && zb > 1.0 && zb < 29.0
         })
         .collect();
@@ -1011,11 +922,11 @@ fn cone_barrel_interior_is_manifold() {
 
 macro_rules! load_shape {
     ($name:ident, $file:expr) => {
-        fn $name() -> (kofem_geom::step::StepFile, BRep) {
+        fn $name() -> Solid {
             let src = include_str!(concat!("../../../test_files/", $file));
             let file = parse(src).unwrap();
             let brep = BRep::extract(&file).unwrap();
-            (file, brep)
+            brep.resolve(&file).unwrap()
         }
     };
 }
@@ -1031,14 +942,12 @@ load_shape!(load_i_beam, "i_beam.stp");
 load_shape!(load_t_profile, "t_profile.stp");
 load_shape!(load_u_channel, "u_channel.stp");
 
-/// Verify that each new shape parses, tessellates without panic, and produces
-/// at least one triangle and no degenerate (zero-area) triangles.
 macro_rules! shape_smoke_test {
     ($test_name:ident, $loader:ident) => {
         #[test]
         fn $test_name() {
-            let (file, brep) = $loader();
-            let mesh = tessellate(&brep, &file, TessOptions::default()).unwrap();
+            let solid = $loader();
+            let mesh = tessellate(&solid, TessOptions::default()).unwrap();
             assert!(!mesh.triangles.is_empty(), "no triangles produced");
             for &[a, b, c] in &mesh.triangles {
                 let pa = mesh.points[a];
@@ -1067,13 +976,12 @@ shape_smoke_test!(i_beam_tessellates, load_i_beam);
 shape_smoke_test!(t_profile_tessellates, load_t_profile);
 shape_smoke_test!(u_channel_tessellates, load_u_channel);
 
-/// Hollow tube must have triangles (annular FACE_BOUND holes are handled).
+/// Hollow tube must have 4 faces and annular caps with inner holes.
 #[test]
 fn tube_has_multiple_faces_tessellated() {
-    let (_, brep) = load_tube();
-    // 4 faces: outer barrel, inner barrel, bottom annular cap, top annular cap
+    let file = parse(include_str!("../../../test_files/tube.stp")).unwrap();
+    let brep = BRep::extract(&file).unwrap();
     assert_eq!(brep.faces.len(), 4, "tube should have 4 faces");
-    // Annular caps (faces 2 & 3) must have exactly one inner loop each
     assert_eq!(
         brep.faces[2].inner_loops.len(),
         1,
@@ -1089,7 +997,8 @@ fn tube_has_multiple_faces_tessellated() {
 /// Stepped shaft annular ring must carry an inner hole.
 #[test]
 fn stepped_shaft_ring_has_hole() {
-    let (_, brep) = load_stepped_shaft();
+    let file = parse(include_str!("../../../test_files/stepped_shaft.stp")).unwrap();
+    let brep = BRep::extract(&file).unwrap();
     let ring = brep.faces.iter().find(|f| !f.inner_loops.is_empty());
     assert!(
         ring.is_some(),
@@ -1099,34 +1008,30 @@ fn stepped_shaft_ring_has_hole() {
 
 // ── spherical surface tests ───────────────────────────────────────────────────
 
-fn load_nist_ctc_04() -> (kofem_geom::step::StepFile, BRep) {
+fn load_nist_ctc_04() -> Solid {
     let file = parse(include_str!(
         "../../../test_files/NIST/nist_ctc_04_asme1_ap242-e1.stp"
     ))
     .unwrap();
     let brep = BRep::extract(&file).unwrap();
-    (file, brep)
+    brep.resolve(&file).unwrap()
 }
 
-/// NIST CTC-04 contains 22 SPHERICAL_SURFACE faces. Verify tessellation produces
-/// valid non-degenerate triangles for all faces.
 #[test]
 fn nist_ctc_04_spherical_surfaces_tessellate() {
-    let (file, brep) = load_nist_ctc_04();
+    let solid = load_nist_ctc_04();
     let opts = TessOptions {
         max_edge_len: 2.0,
         ..TessOptions::default()
     };
-    let mesh = tessellate(&brep, &file, opts).unwrap();
+    let mesh = tessellate(&solid, opts).unwrap();
 
-    // Must produce triangles
     assert!(
         mesh.triangles.len() > 100,
         "expected many triangles, got {}",
         mesh.triangles.len()
     );
 
-    // No degenerate triangles
     for &[a, b, c] in &mesh.triangles {
         let pa = mesh.points[a];
         let pb = mesh.points[b];
@@ -1141,15 +1046,14 @@ fn nist_ctc_04_spherical_surfaces_tessellate() {
     }
 }
 
-/// Verify all points in the spherical surface tessellation are finite.
 #[test]
 fn nist_ctc_04_all_points_finite() {
-    let (file, brep) = load_nist_ctc_04();
+    let solid = load_nist_ctc_04();
     let opts = TessOptions {
         max_edge_len: 2.0,
         ..TessOptions::default()
     };
-    let mesh = tessellate(&brep, &file, opts).unwrap();
+    let mesh = tessellate(&solid, opts).unwrap();
 
     for (i, p) in mesh.points.iter().enumerate() {
         assert!(
@@ -1158,4 +1062,65 @@ fn nist_ctc_04_all_points_finite() {
             p
         );
     }
+}
+
+// ── programmatic Solid construction test ─────────────────────────────────────
+
+/// Build a `Solid` with a single planar triangular `Face` entirely in code
+/// (no STEP file) and verify tessellation succeeds.
+#[test]
+fn programmatic_solid_planar_face_tessellates() {
+    use std::f64::consts::FRAC_PI_2;
+
+    // Equilateral triangle in XY plane with vertices at unit distance from origin.
+    let v0 = [1.0_f64, 0.0, 0.0];
+    let v1 = [FRAC_PI_2.cos(), FRAC_PI_2.sin(), 0.0]; // (0, 1, 0) approx
+    let angles = [
+        0.0_f64,
+        2.0 * std::f64::consts::PI / 3.0,
+        4.0 * std::f64::consts::PI / 3.0,
+    ];
+    let verts: Vec<[f64; 3]> = angles.iter().map(|&a| [a.cos(), a.sin(), 0.0]).collect();
+
+    let solid = Solid {
+        shells: vec![Shell {
+            faces: vec![Face {
+                surface: Box::new(Plane {
+                    origin: [0.0, 0.0, 0.0],
+                    normal: [0.0, 0.0, 1.0],
+                    x_axis: [1.0, 0.0, 0.0],
+                }),
+                same_sense: true,
+                outer_loop_orientation: true,
+                outer_loop: Wire {
+                    edges: vec![
+                        line_edge(verts[0], verts[1]),
+                        line_edge(verts[1], verts[2]),
+                        line_edge(verts[2], verts[0]),
+                    ],
+                },
+                inner_loops: vec![],
+            }],
+        }],
+    };
+
+    let mesh = tessellate(&solid, TessOptions::default()).unwrap();
+    assert!(
+        !mesh.triangles.is_empty(),
+        "programmatic solid must produce triangles"
+    );
+    assert!(
+        !mesh.points.is_empty(),
+        "programmatic solid must have points"
+    );
+
+    // All normals must point +Z.
+    for &tri in &mesh.triangles {
+        let n = tri_normal(&mesh.points, tri);
+        assert!(n[2] > 0.9, "expected +Z normal, got {n:?}");
+    }
+
+    // Suppress unused variable warning
+    let _ = v0;
+    let _ = v1;
 }
