@@ -21,11 +21,6 @@ These two concerns must stay strictly separated. Geometry code never generates m
 ### Phase 2 — Interactive Pre/Postprocessor (current)
 - [x] Geometry builder: parametric box primitive with sketch-plane + extrusion workflow
 - [x] Material editing via sidebar (E, ν, ρ)
-- [x] BC and load application via interactive face picking in the 3D viewport
-- [x] Own meshing library (`kofem-mesh`): Delaunay triangulation, Ruppert quality refinement, tet extrusion
-- [ ] Full MITC4 shell + Beam2 global transform
-- [ ] Colormap legend with min/max probe
-- [ ] Section cuts and hidden-line removal
 
 ### Phase 3 — Geometry Kernel (`kofem-geom`)
 Goal: a parametric geometry crate that produces B-rep output consumed by the meshing engine.
@@ -39,11 +34,10 @@ No mesh generation in this layer.
 - [ ] Boundary representation (B-rep) types: `Solid → Shells → Faces → Edges → Vertices`
 - [ ] Surface geometry evaluators: `Plane`, `Cylinder`, `Cone`, `Torus`, `BSplineSurface`
 - [ ] Curve geometry evaluators: `Line`, `Circle`, `Ellipse`, `BSplineCurve`
-- [ ] Python API for parametric models (`kofem-py` binding)
+
 
 ### Phase 4 — STEP Import + Volume Meshing
-Goal: import any STEP file and produce a tet mesh. Full pipeline described in
-[`docs/STEP_PIPELINE.md`](STEP_PIPELINE.md).
+Goal: import any STEP file and produce a tet mesh.
 
 | Stage | What | Done? |
 |-------|------|-------|
@@ -65,6 +59,10 @@ Goal: import any STEP file and produce a tet mesh. Full pipeline described in
 - [ ] Large model support (>500k DOF) via iterative solvers (PCG + AMG preconditioner)
 - [ ] Modal analysis (eigenvalue solver via Lanczos)
 - [ ] Python scripting for batch analysis and parametric studies
+- [ ] Full MITC4 shell + Beam2 global transform
+- [ ] Colormap legend with min/max probe
+- [ ] Section cuts and hidden-line removal
+- [ ] BC and load application via interactive face picking in the 3D viewport
 
 ## Non-Goals (explicitly out of scope for v1)
 - Full NURBS / B-spline surface kernel

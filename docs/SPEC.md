@@ -102,11 +102,6 @@ Until `kofem-geom` exists, the UI store holds parametric `BoxGeometry` structs a
 - BCs: penalty method (prototype) → Lagrange multipliers (production)
 - DOF ordering per node: `[ux, uy, uz, rx, ry, rz]` (indices 0–5), fixed globally
 
-### Modal (planned)
-- Generalized eigenvalue problem: `K φ = λ M φ`
-- Algorithm: Block Lanczos
-- Output: natural frequencies (Hz) and mode shapes
-
 ## File Formats
 
 ### Import
@@ -115,6 +110,7 @@ Until `kofem-geom` exists, the UI store holds parametric `BoxGeometry` structs a
 | Abaqus INP | `.inp` | Implemented — elements, materials, BCs, loads |
 | Nastran BDF | `.bdf` | Planned |
 | Gmsh MSH v4 | `.msh` | Planned |
+| STEP | `.step`, `.stp` | Supported tessellates STEP → STL for downstream meshing |
 
 ### Export
 | Format | Extension | Purpose |
