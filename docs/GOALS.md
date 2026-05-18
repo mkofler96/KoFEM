@@ -32,8 +32,8 @@ No mesh generation in this layer.
 - [ ] 3D primitives: box, cylinder, sphere, wedge
 - [ ] 3D CSG on solids
 - [ ] Boundary representation (B-rep) types: `Solid → Shells → Faces → Edges → Vertices`
-- [ ] Surface geometry evaluators: `Plane`, `Cylinder`, `Cone`, `Torus`, `BSplineSurface`
-- [ ] Curve geometry evaluators: `Line`, `Circle`, `Ellipse`, `BSplineCurve`
+- [x] Surface geometry evaluators: `Plane`, `Cylinder`, `Cone`, `Torus`, `BSplineSurface` (`geom/surface.rs`)
+- [x] Curve geometry evaluators: `Line`, `Circle`, `Ellipse`, `BSplineCurve` (`geom/curve.rs`)
 
 
 ### Phase 4 — STEP Import + Volume Meshing
@@ -41,10 +41,10 @@ Goal: import any STEP file and produce a tet mesh.
 
 | Stage | What | Done? |
 |-------|------|-------|
-| 1 | ISO 10303-21 text parser → entity registry | [ ] |
-| 2 | B-rep topology extraction (shells, faces, edge loops) | [ ] |
-| 3 | Geometry evaluators for Plane, Cylinder, Line, Circle, B-spline | [ ] |
-| 4 | Face tessellator: parameter-space triangulation → watertight 3D surface mesh | [ ] |
+| 1 | ISO 10303-21 text parser → entity registry | [x] |
+| 2 | B-rep topology extraction (shells, faces, edge loops) | [x] |
+| 3 | Geometry evaluators for Plane, Cylinder, Line, Circle, B-spline | [x] |
+| 4 | Face tessellator: parameter-space triangulation → watertight 3D surface mesh | [x] |
 | 5 | Volume mesher: 3D Constrained Delaunay Tetrahedralization (CDT) | [ ] |
 | 6 | WASM bindings + UI (file input, progress display, viewport preview) | [ ] |
 
