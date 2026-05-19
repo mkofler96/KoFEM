@@ -329,32 +329,49 @@ fn try_tessellate_cylindrical(
             return None;
         }
 
+        // Build UV boundary polygon for triangle clipping.
+        let uv_bnd: Vec<Point2> = u_vals
+            .iter()
+            .zip(boundary_3d.iter())
+            .map(|(&u, &p)| {
+                let d = sub(p, axis.origin);
+                Point2::new(u, dot3(d, axis.z))
+            })
+            .collect();
+
         let arc_u = (u_max - u_min) * radius;
         let arc_v = (v_max - v_min).abs();
         let n_u = ((arc_u / max_edge_len).ceil() as usize).clamp(2, 256);
         let n_v = ((arc_v / max_edge_len).ceil() as usize).clamp(1, 256);
 
         let mut points = Vec::with_capacity((n_u + 1) * (n_v + 1));
+        let mut uv_grid = Vec::with_capacity((n_u + 1) * (n_v + 1));
         for j in 0..=n_v {
             let v = v_min + (v_max - v_min) * j as f64 / n_v as f64;
             for i in 0..=n_u {
                 let u = u_min + (u_max - u_min) * i as f64 / n_u as f64;
                 points.push(surface.point(u, v));
+                uv_grid.push(Point2::new(u, v));
             }
         }
 
         let n_cols = n_u + 1;
-        let mut triangles = Vec::with_capacity(n_u * n_v * 2);
-        for j in 0..n_v {
-            for i in 0..n_u {
-                let a = j * n_cols + i;
-                let b = j * n_cols + (i + 1);
-                let c = (j + 1) * n_cols + i;
-                let d = (j + 1) * n_cols + (i + 1);
-                triangles.push([a, b, d]);
-                triangles.push([a, d, c]);
-            }
-        }
+        let triangles: Vec<[usize; 3]> = (0..n_v)
+            .flat_map(|j| {
+                (0..n_u).flat_map(move |i| {
+                    let a = j * n_cols + i;
+                    let b = j * n_cols + (i + 1);
+                    let c = (j + 1) * n_cols + i;
+                    let d = (j + 1) * n_cols + (i + 1);
+                    [[a, b, d], [a, d, c]]
+                })
+            })
+            .filter(|&[a, b, c]| {
+                let cu = (uv_grid[a].x + uv_grid[b].x + uv_grid[c].x) / 3.0;
+                let cv = (uv_grid[a].y + uv_grid[b].y + uv_grid[c].y) / 3.0;
+                point_in_polygon(Point2::new(cu, cv), &uv_bnd)
+            })
+            .collect();
 
         Some(SurfaceMesh { points, triangles })
     }
@@ -467,32 +484,49 @@ fn try_tessellate_conical(
             return None;
         }
 
+        // Build UV boundary polygon for triangle clipping.
+        let uv_bnd: Vec<Point2> = u_vals
+            .iter()
+            .zip(boundary_3d.iter())
+            .map(|(&u, &p)| {
+                let d = sub(p, axis.origin);
+                Point2::new(u, dot3(d, axis.z) / cos_phi)
+            })
+            .collect();
+
         let arc_u = (u_max - u_min) * r_mid;
         let arc_v = (v_max - v_min).abs();
         let n_u = ((arc_u / max_edge_len).ceil() as usize).clamp(2, 256);
         let n_v = ((arc_v / max_edge_len).ceil() as usize).clamp(1, 256);
 
         let mut points = Vec::with_capacity((n_u + 1) * (n_v + 1));
+        let mut uv_grid = Vec::with_capacity((n_u + 1) * (n_v + 1));
         for j in 0..=n_v {
             let v = v_min + (v_max - v_min) * j as f64 / n_v as f64;
             for i in 0..=n_u {
                 let u = u_min + (u_max - u_min) * i as f64 / n_u as f64;
                 points.push(surface.point(u, v));
+                uv_grid.push(Point2::new(u, v));
             }
         }
 
         let n_cols = n_u + 1;
-        let mut triangles = Vec::with_capacity(n_u * n_v * 2);
-        for j in 0..n_v {
-            for i in 0..n_u {
-                let a = j * n_cols + i;
-                let b = j * n_cols + (i + 1);
-                let c = (j + 1) * n_cols + i;
-                let d = (j + 1) * n_cols + (i + 1);
-                triangles.push([a, b, d]);
-                triangles.push([a, d, c]);
-            }
-        }
+        let triangles: Vec<[usize; 3]> = (0..n_v)
+            .flat_map(|j| {
+                (0..n_u).flat_map(move |i| {
+                    let a = j * n_cols + i;
+                    let b = j * n_cols + (i + 1);
+                    let c = (j + 1) * n_cols + i;
+                    let d = (j + 1) * n_cols + (i + 1);
+                    [[a, b, d], [a, d, c]]
+                })
+            })
+            .filter(|&[a, b, c]| {
+                let cu = (uv_grid[a].x + uv_grid[b].x + uv_grid[c].x) / 3.0;
+                let cv = (uv_grid[a].y + uv_grid[b].y + uv_grid[c].y) / 3.0;
+                point_in_polygon(Point2::new(cu, cv), &uv_bnd)
+            })
+            .collect();
 
         Some(SurfaceMesh { points, triangles })
     }
@@ -794,7 +828,7 @@ fn try_tessellate_bspline(
         }
     }
 
-    let mut triangles = Vec::with_capacity((n_u - 1) * (n_v - 1) * 2);
+    let mut triangles: Vec<[usize; 3]> = Vec::with_capacity((n_u - 1) * (n_v - 1) * 2);
     for j in 0..(n_v - 1) {
         for i in 0..(n_u - 1) {
             let a = j * n_u + i;
@@ -803,6 +837,46 @@ fn try_tessellate_bspline(
             let d = (j + 1) * n_u + (i + 1);
             triangles.push([a, b, d]);
             triangles.push([a, d, c]);
+        }
+    }
+
+    // Clip generated triangles to the actual face boundary by projecting everything
+    // onto a shared tangent plane and testing centroids against the 2D boundary polygon.
+    let boundary_3d = sample_boundary_3d(&face.outer_loop, file, max_edge_len);
+    if boundary_3d.len() >= 3 {
+        if let Some(normal) = face_normal(&boundary_3d) {
+            let (bnd2d, origin, x_axis, y_axis) = project_to_2d(&boundary_3d, normal);
+            let holes2d: Vec<Vec<Point2>> = face
+                .inner_loops
+                .iter()
+                .filter_map(|inner| {
+                    let inner_3d = sample_boundary_3d(inner, file, max_edge_len);
+                    if inner_3d.len() < 3 {
+                        return None;
+                    }
+                    Some(
+                        inner_3d
+                            .iter()
+                            .map(|&p| {
+                                let d = sub(p, origin);
+                                Point2::new(dot3(d, x_axis), dot3(d, y_axis))
+                            })
+                            .collect(),
+                    )
+                })
+                .collect();
+            triangles.retain(|&[a, b, c]| {
+                let cx =
+                    (points[a][0] + points[b][0] + points[c][0]) / 3.0;
+                let cy =
+                    (points[a][1] + points[b][1] + points[c][1]) / 3.0;
+                let cz =
+                    (points[a][2] + points[b][2] + points[c][2]) / 3.0;
+                let d = sub([cx, cy, cz], origin);
+                let c2d = Point2::new(dot3(d, x_axis), dot3(d, y_axis));
+                point_in_polygon(c2d, &bnd2d)
+                    && !holes2d.iter().any(|h| point_in_polygon(c2d, h))
+            });
         }
     }
 
