@@ -1071,19 +1071,15 @@ shape_smoke_test!(u_channel_tessellates, load_u_channel);
 #[test]
 fn tube_has_multiple_faces_tessellated() {
     let (_, brep) = load_tube();
-    // 4 faces: outer barrel, inner barrel, bottom annular cap, top annular cap
+    // 4 faces: 2 cylindrical barrels + 2 annular caps
     assert_eq!(brep.faces.len(), 4, "tube should have 4 faces");
-    // Annular caps (faces 2 & 3) must have exactly one inner loop each
-    assert_eq!(
-        brep.faces[2].inner_loops.len(),
-        1,
-        "bottom cap missing inner hole"
-    );
-    assert_eq!(
-        brep.faces[3].inner_loops.len(),
-        1,
-        "top cap missing inner hole"
-    );
+    // Both annular caps must have exactly one inner loop each.
+    // Face ordering varies by STEP exporter, so check by predicate.
+    let caps: Vec<_> = brep.faces.iter().filter(|f| !f.inner_loops.is_empty()).collect();
+    assert_eq!(caps.len(), 2, "tube should have exactly 2 annular caps with inner holes");
+    for cap in &caps {
+        assert_eq!(cap.inner_loops.len(), 1, "each annular cap must have exactly one inner hole");
+    }
 }
 
 /// Stepped shaft annular ring must carry an inner hole.

@@ -158,6 +158,13 @@ pub fn curve_from_step(id: u64, file: &StepFile) -> Result<Box<dyn Curve>, GeomE
             }))
         }
 
+        "SURFACE_CURVE" | "SEAM_CURVE" => {
+            // SURFACE_CURVE / SEAM_CURVE(label, curve_3d_ref, pcurves, preference)
+            // Delegate to the embedded 3D curve.
+            let inner_id = get_ref(e, 1)?;
+            curve_from_step(inner_id, file)
+        }
+
         other => Err(GeomError::Unsupported(other.to_string(), id)),
     }
 }

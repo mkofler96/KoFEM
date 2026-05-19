@@ -820,8 +820,9 @@ fn try_tessellate_disc(face: &TopoFace, file: &StepFile, max_edge_len: f64) -> O
         return None;
     }
 
-    // Read circle geometry.
-    let curve_e = file.get(&edge.curve_id)?;
+    // Read circle geometry — unwrap SURFACE_CURVE / SEAM_CURVE first.
+    let circle_id = resolve_curve_id(file, edge.curve_id);
+    let curve_e = file.get(&circle_id)?;
     if curve_e.type_name != "CIRCLE" {
         return None;
     }
@@ -1023,6 +1024,14 @@ fn curve_t_range(
             (0.0, 2.0 * PI)
         }
 
+        "SURFACE_CURVE" | "SEAM_CURVE" => {
+            // Delegate to the embedded 3D curve.
+            if let Ok(inner_id) = get_ref(entity, 1) {
+                return curve_t_range(file, inner_id, start, end, reversed);
+            }
+            (0.0, 1.0)
+        }
+
         _ => {
             // B-spline and others: use the curve's own t_bounds.
             if let Ok(curve) = curve_from_step(curve_id, file) {
@@ -1036,9 +1045,23 @@ fn curve_t_range(
     }
 }
 
+/// Follow SURFACE_CURVE / SEAM_CURVE wrappers to the embedded 3D curve entity id.
+fn resolve_curve_id(file: &StepFile, id: u64) -> u64 {
+    if let Some(e) = file.get(&id) {
+        if e.type_name == "SURFACE_CURVE" || e.type_name == "SEAM_CURVE" {
+            if let Ok(inner) = get_ref(e, 1) {
+                return inner;
+            }
+        }
+    }
+    id
+}
+
 /// Return the radius of a CIRCLE curve entity, or `None` for other curve types.
+/// Unwraps SURFACE_CURVE / SEAM_CURVE container entities automatically.
 fn circle_radius_from_curve(file: &StepFile, curve_id: u64) -> Option<f64> {
-    let entity = file.get(&curve_id)?;
+    let resolved = resolve_curve_id(file, curve_id);
+    let entity = file.get(&resolved)?;
     if entity.type_name != "CIRCLE" {
         return None;
     }
