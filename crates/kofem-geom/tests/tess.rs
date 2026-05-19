@@ -1075,10 +1075,22 @@ fn tube_has_multiple_faces_tessellated() {
     assert_eq!(brep.faces.len(), 4, "tube should have 4 faces");
     // Both annular caps must have exactly one inner loop each.
     // Face ordering varies by STEP exporter, so check by predicate.
-    let caps: Vec<_> = brep.faces.iter().filter(|f| !f.inner_loops.is_empty()).collect();
-    assert_eq!(caps.len(), 2, "tube should have exactly 2 annular caps with inner holes");
+    let caps: Vec<_> = brep
+        .faces
+        .iter()
+        .filter(|f| !f.inner_loops.is_empty())
+        .collect();
+    assert_eq!(
+        caps.len(),
+        2,
+        "tube should have exactly 2 annular caps with inner holes"
+    );
     for cap in &caps {
-        assert_eq!(cap.inner_loops.len(), 1, "each annular cap must have exactly one inner hole");
+        assert_eq!(
+            cap.inner_loops.len(),
+            1,
+            "each annular cap must have exactly one inner hole"
+        );
     }
 }
 
