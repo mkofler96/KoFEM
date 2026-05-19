@@ -483,12 +483,13 @@ fn try_tessellate_conical(
     }
 }
 
-/// Tessellate a `TOROIDAL_SURFACE` face (blend fillet) directly in UV space
-/// (u = angle around the major circle, v = angle around the tube) and lift
-/// back to 3D.  Returns `None` when the surface is not toroidal.
+/// Tessellate a `TOROIDAL_SURFACE` face (blend fillet or full ring) directly
+/// in UV space (u = angle around the major circle, v = angle around the tube)
+/// and lift back to 3D.  Returns `None` when the surface is not toroidal.
 ///
-/// Unlike the cylinder path, toroidal faces are always partial patches:
-/// u and v ranges are inferred from the boundary rather than assumed to be [0, 2π].
+/// Full-revolution tori (all boundary edges are degenerate seam edges with
+/// start ≈ end) generate a u×v grid spanning [0, 2π] × [0, 2π].
+/// Partial toroidal patches infer u and v ranges by inverting the boundary.
 fn try_tessellate_toroidal(
     face: &TopoFace,
     file: &StepFile,
@@ -506,6 +507,46 @@ fn try_tessellate_toroidal(
     let y = axis.y();
 
     let surface = surface_from_step(face.surface_id, file).ok()?;
+
+    // Full-revolution check: all boundary edges are degenerate seam edges
+    // (start ≈ end).  OCC exports a full torus with SEAM_CURVE edges only.
+    let all_closed = !face.outer_loop.is_empty()
+        && face.outer_loop.iter().all(|edge| {
+            let d = sub(edge.start, edge.end);
+            d[0] * d[0] + d[1] * d[1] + d[2] * d[2] < 1e-10
+        });
+
+    if all_closed {
+        let circumference_u = 2.0 * PI * (major_radius + minor_radius);
+        let circumference_v = 2.0 * PI * minor_radius;
+        let n_u = ((circumference_u / max_edge_len).ceil() as usize).clamp(8, 256);
+        let n_v = ((circumference_v / max_edge_len).ceil() as usize).clamp(8, 256);
+
+        let mut points = Vec::with_capacity(n_u * n_v);
+        for j in 0..n_v {
+            let v = 2.0 * PI * j as f64 / n_v as f64;
+            for i in 0..n_u {
+                let u = 2.0 * PI * i as f64 / n_u as f64;
+                points.push(surface.point(u, v));
+            }
+        }
+
+        let mut triangles = Vec::with_capacity(n_u * n_v * 2);
+        for j in 0..n_v {
+            let nj = (j + 1) % n_v;
+            for i in 0..n_u {
+                let ni = (i + 1) % n_u;
+                let a = j * n_u + i;
+                let b = j * n_u + ni;
+                let c = nj * n_u + i;
+                let d = nj * n_u + ni;
+                triangles.push([a, b, d]);
+                triangles.push([a, d, c]);
+            }
+        }
+
+        return Some(SurfaceMesh { points, triangles });
+    }
 
     let boundary_3d = sample_boundary_3d(&face.outer_loop, file, max_edge_len);
     if boundary_3d.len() < 3 {
