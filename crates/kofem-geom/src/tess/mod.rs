@@ -483,12 +483,13 @@ fn try_tessellate_conical(
     }
 }
 
-/// Tessellate a `TOROIDAL_SURFACE` face (blend fillet) directly in UV space
-/// (u = angle around the major circle, v = angle around the tube) and lift
-/// back to 3D.  Returns `None` when the surface is not toroidal.
+/// Tessellate a `TOROIDAL_SURFACE` face (blend fillet or full ring) directly
+/// in UV space (u = angle around the major circle, v = angle around the tube)
+/// and lift back to 3D.  Returns `None` when the surface is not toroidal.
 ///
-/// Unlike the cylinder path, toroidal faces are always partial patches:
-/// u and v ranges are inferred from the boundary rather than assumed to be [0, 2π].
+/// Full-revolution tori (all boundary edges are degenerate seam edges with
+/// start ≈ end) generate a u×v grid spanning [0, 2π] × [0, 2π].
+/// Partial toroidal patches infer u and v ranges by inverting the boundary.
 fn try_tessellate_toroidal(
     face: &TopoFace,
     file: &StepFile,
@@ -506,6 +507,46 @@ fn try_tessellate_toroidal(
     let y = axis.y();
 
     let surface = surface_from_step(face.surface_id, file).ok()?;
+
+    // Full-revolution check: all boundary edges are degenerate seam edges
+    // (start ≈ end).  OCC exports a full torus with SEAM_CURVE edges only.
+    let all_closed = !face.outer_loop.is_empty()
+        && face.outer_loop.iter().all(|edge| {
+            let d = sub(edge.start, edge.end);
+            d[0] * d[0] + d[1] * d[1] + d[2] * d[2] < 1e-10
+        });
+
+    if all_closed {
+        let circumference_u = 2.0 * PI * (major_radius + minor_radius);
+        let circumference_v = 2.0 * PI * minor_radius;
+        let n_u = ((circumference_u / max_edge_len).ceil() as usize).clamp(8, 256);
+        let n_v = ((circumference_v / max_edge_len).ceil() as usize).clamp(8, 256);
+
+        let mut points = Vec::with_capacity(n_u * n_v);
+        for j in 0..n_v {
+            let v = 2.0 * PI * j as f64 / n_v as f64;
+            for i in 0..n_u {
+                let u = 2.0 * PI * i as f64 / n_u as f64;
+                points.push(surface.point(u, v));
+            }
+        }
+
+        let mut triangles = Vec::with_capacity(n_u * n_v * 2);
+        for j in 0..n_v {
+            let nj = (j + 1) % n_v;
+            for i in 0..n_u {
+                let ni = (i + 1) % n_u;
+                let a = j * n_u + i;
+                let b = j * n_u + ni;
+                let c = nj * n_u + i;
+                let d = nj * n_u + ni;
+                triangles.push([a, b, d]);
+                triangles.push([a, d, c]);
+            }
+        }
+
+        return Some(SurfaceMesh { points, triangles });
+    }
 
     let boundary_3d = sample_boundary_3d(&face.outer_loop, file, max_edge_len);
     if boundary_3d.len() < 3 {
@@ -779,8 +820,9 @@ fn try_tessellate_disc(face: &TopoFace, file: &StepFile, max_edge_len: f64) -> O
         return None;
     }
 
-    // Read circle geometry.
-    let curve_e = file.get(&edge.curve_id)?;
+    // Read circle geometry — unwrap SURFACE_CURVE / SEAM_CURVE first.
+    let circle_id = resolve_curve_id(file, edge.curve_id);
+    let curve_e = file.get(&circle_id)?;
     if curve_e.type_name != "CIRCLE" {
         return None;
     }
@@ -982,6 +1024,14 @@ fn curve_t_range(
             (0.0, 2.0 * PI)
         }
 
+        "SURFACE_CURVE" | "SEAM_CURVE" => {
+            // Delegate to the embedded 3D curve.
+            if let Ok(inner_id) = get_ref(entity, 1) {
+                return curve_t_range(file, inner_id, start, end, reversed);
+            }
+            (0.0, 1.0)
+        }
+
         _ => {
             // B-spline and others: use the curve's own t_bounds.
             if let Ok(curve) = curve_from_step(curve_id, file) {
@@ -995,9 +1045,23 @@ fn curve_t_range(
     }
 }
 
+/// Follow SURFACE_CURVE / SEAM_CURVE wrappers to the embedded 3D curve entity id.
+fn resolve_curve_id(file: &StepFile, id: u64) -> u64 {
+    if let Some(e) = file.get(&id) {
+        if e.type_name == "SURFACE_CURVE" || e.type_name == "SEAM_CURVE" {
+            if let Ok(inner) = get_ref(e, 1) {
+                return inner;
+            }
+        }
+    }
+    id
+}
+
 /// Return the radius of a CIRCLE curve entity, or `None` for other curve types.
+/// Unwraps SURFACE_CURVE / SEAM_CURVE container entities automatically.
 fn circle_radius_from_curve(file: &StepFile, curve_id: u64) -> Option<f64> {
-    let entity = file.get(&curve_id)?;
+    let resolved = resolve_curve_id(file, curve_id);
+    let entity = file.get(&resolved)?;
     if entity.type_name != "CIRCLE" {
         return None;
     }
