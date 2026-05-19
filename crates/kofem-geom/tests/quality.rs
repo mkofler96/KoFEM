@@ -267,11 +267,11 @@ fn parse_stl_triangles_binary(data: &[u8]) -> Result<Vec<[[f32; 3]; 3]>, String>
     for i in 0..tri_count {
         let base = 84 + i * 50 + 12; // skip 80B header + 4B count + 12B normal
         let mut tri = [[0.0f32; 3]; 3];
-        for v in 0..3 {
+        for (v, vertex) in tri.iter_mut().enumerate() {
             let off = base + v * 12;
-            tri[v][0] = f32::from_le_bytes(data[off..off + 4].try_into().unwrap());
-            tri[v][1] = f32::from_le_bytes(data[off + 4..off + 8].try_into().unwrap());
-            tri[v][2] = f32::from_le_bytes(data[off + 8..off + 12].try_into().unwrap());
+            vertex[0] = f32::from_le_bytes(data[off..off + 4].try_into().unwrap());
+            vertex[1] = f32::from_le_bytes(data[off + 4..off + 8].try_into().unwrap());
+            vertex[2] = f32::from_le_bytes(data[off + 8..off + 12].try_into().unwrap());
         }
         tris.push(tri);
     }
