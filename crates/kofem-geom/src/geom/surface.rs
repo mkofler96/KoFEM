@@ -2,8 +2,9 @@ use std::f64::consts::PI;
 
 use super::curve::{curve_from_step, Curve};
 use super::{
-    add, arg_as_ref, axis1_placement, axis2_placement, cross, de_boor_1d, expand_knots, get_entity,
-    get_real, get_ref, normalize, point3, rodrigues, scale, sub, Axis1, Axis2, GeomError,
+    add, arg_as_ref, axis1_placement, axis2_placement, cross, de_boor_1d, de_boor_1d_4d,
+    expand_knots, get_entity, get_real, get_ref, normalize, point3, rodrigues, scale, sub, Axis1,
+    Axis2, GeomError,
 };
 use crate::step::parser::{Arg, StepFile};
 
@@ -254,6 +255,62 @@ impl Surface for BSplineSurfaceWithKnots {
     }
 }
 
+// ── NurbsSurface ─────────────────────────────────────────────────────────────
+
+/// Rational B-spline (NURBS) surface with explicit per-control-point weights.
+/// Evaluates in homogeneous 4D coordinates for exact rational blending.
+pub struct NurbsSurface {
+    pub u_degree: usize,
+    pub v_degree: usize,
+    /// Indexed [u_index][v_index].  Each entry is [w·x, w·y, w·z, w].
+    pub control_points_h: Vec<Vec<[f64; 4]>>,
+    pub u_knots: Vec<f64>,
+    pub v_knots: Vec<f64>,
+}
+
+impl NurbsSurface {
+    fn eval(&self, u: f64, v: f64) -> [f64; 3] {
+        let u_pts: Vec<[f64; 4]> = self
+            .control_points_h
+            .iter()
+            .map(|row| de_boor_1d_4d(row, self.v_degree, &self.v_knots, v))
+            .collect();
+        let hw = de_boor_1d_4d(&u_pts, self.u_degree, &self.u_knots, u);
+        let w = hw[3];
+        if w.abs() < 1e-15 {
+            [hw[0], hw[1], hw[2]]
+        } else {
+            [hw[0] / w, hw[1] / w, hw[2] / w]
+        }
+    }
+}
+
+impl Surface for NurbsSurface {
+    fn point(&self, u: f64, v: f64) -> [f64; 3] {
+        self.eval(u, v)
+    }
+
+    fn normal(&self, u: f64, v: f64) -> [f64; 3] {
+        let (u0, u1) = self.u_bounds();
+        let (v0, v1) = self.v_bounds();
+        let du = (u1 - u0) * 1e-6;
+        let dv = (v1 - v0) * 1e-6;
+        let pu = sub(self.eval(u + du, v), self.eval(u - du, v));
+        let pv = sub(self.eval(u, v + dv), self.eval(u, v - dv));
+        normalize(cross(pu, pv))
+    }
+
+    fn u_bounds(&self) -> (f64, f64) {
+        let n = self.control_points_h.len() - 1;
+        (self.u_knots[self.u_degree], self.u_knots[n + 1])
+    }
+
+    fn v_bounds(&self) -> (f64, f64) {
+        let n = self.control_points_h[0].len() - 1;
+        (self.v_knots[self.v_degree], self.v_knots[n + 1])
+    }
+}
+
 // ── SurfaceOfLinearExtrusion ──────────────────────────────────────────────────
 
 pub struct SurfaceOfLinearExtrusion {
@@ -320,6 +377,130 @@ impl Surface for SurfaceOfRevolution {
 }
 
 // ── from_step builder ─────────────────────────────────────────────────────────
+
+/// Build a surface from the *split* STEP complex-entity form:
+///
+/// - `base_args`: own attrs of the B_SPLINE_SURFACE component
+///   `(u_degree, v_degree, control_points, surface_form, u_closed, v_closed, self_int)`
+/// - `knot_args`: own attrs of the B_SPLINE_SURFACE_WITH_KNOTS component
+///   `(u_mults, v_mults, u_knots, v_knots, knot_spec)`
+/// - `rational_args`: own attrs of the optional RATIONAL_B_SPLINE_SURFACE component
+///   `(weights_data,)`
+fn bspline_surface_from_split(
+    id: u64,
+    base_args: &[Arg],
+    knot_args: &[Arg],
+    rational_args: Option<&[Arg]>,
+    file: &StepFile,
+) -> Result<Box<dyn Surface>, GeomError> {
+    let bad = |idx| GeomError::BadArg(id, idx);
+
+    // B_SPLINE_SURFACE own attrs (no label in complex entity components).
+    let u_degree = match base_args.first() {
+        Some(Arg::Integer(v)) => *v as usize,
+        _ => return Err(bad(0)),
+    };
+    let v_degree = match base_args.get(1) {
+        Some(Arg::Integer(v)) => *v as usize,
+        _ => return Err(bad(1)),
+    };
+    let rows_arg = match base_args.get(2) {
+        Some(Arg::List(v)) => v,
+        _ => return Err(bad(2)),
+    };
+    let mut control_points: Vec<Vec<[f64; 3]>> = Vec::with_capacity(rows_arg.len());
+    for row_arg in rows_arg {
+        let col_list = match row_arg {
+            Arg::List(v) => v,
+            _ => return Err(bad(2)),
+        };
+        let mut row: Vec<[f64; 3]> = Vec::with_capacity(col_list.len());
+        for a in col_list {
+            let cp_id = arg_as_ref(a, id)?;
+            row.push(point3(file, cp_id)?);
+        }
+        control_points.push(row);
+    }
+
+    // B_SPLINE_SURFACE_WITH_KNOTS own attrs.
+    let u_mults = match knot_args.first() {
+        Some(Arg::List(v)) => v,
+        _ => return Err(bad(0)),
+    };
+    let v_mults = match knot_args.get(1) {
+        Some(Arg::List(v)) => v,
+        _ => return Err(bad(1)),
+    };
+    let u_knot_vals = match knot_args.get(2) {
+        Some(Arg::List(v)) => v,
+        _ => return Err(bad(2)),
+    };
+    let v_knot_vals = match knot_args.get(3) {
+        Some(Arg::List(v)) => v,
+        _ => return Err(bad(3)),
+    };
+    let u_knots = expand_knots(u_mults, u_knot_vals, id)?;
+    let v_knots = expand_knots(v_mults, v_knot_vals, id)?;
+
+    // RATIONAL_B_SPLINE_SURFACE own attrs: weights_data = LIST OF LIST OF REAL.
+    let weights = if let Some(rat) = rational_args {
+        match rat.first() {
+            Some(Arg::List(rows)) => {
+                let mut w: Vec<Vec<f64>> = Vec::with_capacity(rows.len());
+                for row_arg in rows {
+                    match row_arg {
+                        Arg::List(cols) => {
+                            let row: Vec<f64> = cols
+                                .iter()
+                                .map(|a| match a {
+                                    Arg::Real(v) => *v,
+                                    Arg::Integer(v) => *v as f64,
+                                    _ => 1.0,
+                                })
+                                .collect();
+                            w.push(row);
+                        }
+                        _ => return Err(bad(0)),
+                    }
+                }
+                Some(w)
+            }
+            _ => None,
+        }
+    } else {
+        None
+    };
+
+    if let Some(w) = weights {
+        // Build homogeneous control points [w·x, w·y, w·z, w].
+        let n_u = control_points.len();
+        let n_v = if n_u > 0 { control_points[0].len() } else { 0 };
+        let mut h: Vec<Vec<[f64; 4]>> = Vec::with_capacity(n_u);
+        for (i, row) in control_points.iter().enumerate() {
+            let mut hrow: Vec<[f64; 4]> = Vec::with_capacity(n_v);
+            for (j, &p) in row.iter().enumerate() {
+                let wij = w.get(i).and_then(|r| r.get(j)).copied().unwrap_or(1.0);
+                hrow.push([p[0] * wij, p[1] * wij, p[2] * wij, wij]);
+            }
+            h.push(hrow);
+        }
+        Ok(Box::new(NurbsSurface {
+            u_degree,
+            v_degree,
+            control_points_h: h,
+            u_knots,
+            v_knots,
+        }))
+    } else {
+        Ok(Box::new(BSplineSurfaceWithKnots {
+            u_degree,
+            v_degree,
+            control_points,
+            u_knots,
+            v_knots,
+        }))
+    }
+}
 
 /// Parse a B_SPLINE_SURFACE_WITH_KNOTS from a raw arg slice.
 ///
@@ -390,17 +571,48 @@ pub fn surface_from_step(id: u64, file: &StepFile) -> Result<Box<dyn Surface>, G
     // Complex entity instance: type_name is empty, args are TypedValue components.
     // Scan for a recognised surface type among them.
     if e.type_name.is_empty() {
+        // Collect the component pieces we care about.
+        let mut bspline_base_args: Option<&[Arg]> = None; // B_SPLINE_SURFACE own attrs
+        let mut bspline_knot_args: Option<&[Arg]> = None; // B_SPLINE_SURFACE_WITH_KNOTS own attrs
+        let mut rational_args: Option<&[Arg]> = None; // RATIONAL_B_SPLINE_SURFACE own attrs
+        let mut full_bspline_with_knots: Option<&[Arg]> = None; // legacy full-args form
+
         for arg in &e.args {
             if let Arg::TypedValue {
                 name,
                 args: sub_args,
             } = arg
             {
-                if name == "B_SPLINE_SURFACE_WITH_KNOTS" {
-                    return bspline_surface_from_args(id, sub_args, file);
+                match name.as_str() {
+                    "B_SPLINE_SURFACE" => bspline_base_args = Some(sub_args),
+                    "B_SPLINE_SURFACE_WITH_KNOTS" => {
+                        // Detect "full" form (includes label + inherited attrs at index 1/2)
+                        // vs. "split" form (only own attrs: u_mults at index 0).
+                        let is_full = matches!(sub_args.get(1), Some(Arg::Integer(_)));
+                        if is_full {
+                            full_bspline_with_knots = Some(sub_args);
+                        } else {
+                            bspline_knot_args = Some(sub_args);
+                        }
+                    }
+                    "RATIONAL_B_SPLINE_SURFACE" => rational_args = Some(sub_args),
+                    _ => {}
                 }
             }
         }
+
+        // Legacy full-args form: single B_SPLINE_SURFACE_WITH_KNOTS component that
+        // carries all inherited + own attributes.
+        if let Some(full) = full_bspline_with_knots {
+            return bspline_surface_from_args(id, full, file);
+        }
+
+        // Split form: B_SPLINE_SURFACE (base) + B_SPLINE_SURFACE_WITH_KNOTS (knots)
+        // + optional RATIONAL_B_SPLINE_SURFACE (weights).
+        if let (Some(base), Some(knots)) = (bspline_base_args, bspline_knot_args) {
+            return bspline_surface_from_split(id, base, knots, rational_args, file);
+        }
+
         return Err(GeomError::Unsupported(
             "complex entity with no recognised surface component".to_string(),
             id,
