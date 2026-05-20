@@ -19,6 +19,7 @@ pub fn has_edge(triangles: &[Triangle], a: usize, b: usize) -> bool {
 /// "Properly crossed" means the interiors of the two segments intersect — edges
 /// sharing an endpoint with `a` or `b` are excluded.  If `(a, b)` already exists
 /// as a triangle edge the returned vector is empty.
+#[allow(dead_code)]
 pub(crate) fn find_crossing_edges(
     triangles: &[Triangle],
     pts: &[Point2],
@@ -54,6 +55,7 @@ pub(crate) fn find_crossing_edges(
 }
 
 /// `true` iff the open interiors of segments `(p,q)` and `(r,s)` intersect.
+#[allow(dead_code)]
 fn segments_properly_intersect(p: Point2, q: Point2, r: Point2, s: Point2) -> bool {
     let d1 = orient2d(p, q, r);
     let d2 = orient2d(p, q, s);
