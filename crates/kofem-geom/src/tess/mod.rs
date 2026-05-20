@@ -1363,22 +1363,54 @@ fn bounding_box_diagonal(pts: &[[f64; 3]]) -> f64 {
 }
 
 /// Merge 3D vertices within `eps` of each other and remove degenerate triangles.
+///
+/// Uses a spatial grid hash for O(n) average-case performance instead of the
+/// naive O(n²) linear scan.
 fn stitch(points: Vec<[f64; 3]>, triangles: Vec<[usize; 3]>, eps: f64) -> SurfaceMesh {
+    use std::collections::HashMap;
+
     let eps2 = eps * eps;
     let n = points.len();
     let mut remap = vec![0usize; n];
     let mut unique: Vec<[f64; 3]> = Vec::new();
 
+    // Grid cell size equals eps so that two points within eps must share a cell
+    // or be in immediately adjacent cells (at most 3×3×3 = 27 to check).
+    let cell_size = eps.max(1e-15);
+    // Map from grid cell (ix, iy, iz) to the unique-point index stored there.
+    let mut grid: HashMap<(i64, i64, i64), usize> = HashMap::new();
+
+    let cell_coord = |v: f64| (v / cell_size).floor() as i64;
+
     for (i, &p) in points.iter().enumerate() {
-        let found = unique.iter().enumerate().find(|(_, &q)| {
-            let d = sub(p, q);
-            d[0] * d[0] + d[1] * d[1] + d[2] * d[2] <= eps2
-        });
+        let cx = cell_coord(p[0]);
+        let cy = cell_coord(p[1]);
+        let cz = cell_coord(p[2]);
+
+        let mut found = None;
+        // Check the 3×3×3 neighbourhood.
+        'outer: for dz in -1i64..=1 {
+            for dy in -1i64..=1 {
+                for dx in -1i64..=1 {
+                    if let Some(&j) = grid.get(&(cx + dx, cy + dy, cz + dz)) {
+                        let q = unique[j];
+                        let d = sub(p, q);
+                        if d[0] * d[0] + d[1] * d[1] + d[2] * d[2] <= eps2 {
+                            found = Some(j);
+                            break 'outer;
+                        }
+                    }
+                }
+            }
+        }
+
         match found {
-            Some((j, _)) => remap[i] = j,
+            Some(j) => remap[i] = j,
             None => {
-                remap[i] = unique.len();
+                let j = unique.len();
+                remap[i] = j;
                 unique.push(p);
+                grid.insert((cx, cy, cz), j);
             }
         }
     }

@@ -1167,3 +1167,41 @@ fn nist_ctc_04_all_points_finite() {
         );
     }
 }
+
+// ── NIST CTC-02 (AP242 e2, contains NURBS surfaces) ──────────────────────────
+
+fn load_nist_ctc_02() -> (kofem_geom::step::StepFile, BRep) {
+    let file = parse(include_str!(
+        "../../../test_files/NIST/nist_ctc_02_asme1_ap242-e2.stp"
+    ))
+    .unwrap();
+    let brep = BRep::extract(&file).unwrap();
+    (file, brep)
+}
+
+/// NIST CTC-02 tessellates in reasonable time (regression guard for O(n²) stitch).
+#[test]
+fn nist_ctc_02_tessellates_without_panic() {
+    let (file, brep) = load_nist_ctc_02();
+    let mesh = tessellate(
+        &brep,
+        &file,
+        TessOptions {
+            max_edge_len: 5.0,
+            ..TessOptions::default()
+        },
+    )
+    .unwrap();
+    assert!(
+        mesh.triangles.len() > 10,
+        "expected triangles, got {}",
+        mesh.triangles.len()
+    );
+    for (i, p) in mesh.points.iter().enumerate() {
+        assert!(
+            p[0].is_finite() && p[1].is_finite() && p[2].is_finite(),
+            "point {i} has non-finite coords: {:?}",
+            p
+        );
+    }
+}
