@@ -224,7 +224,10 @@ fn tessellate_face_raw(face: &TopoFace, file: &StepFile, max_edge_len: f64) -> S
         .map(|p| add(origin, add(scale(x_axis, p.x), scale(y_axis, p.y))))
         .collect();
 
-    SurfaceMesh { points, triangles: bw_tris }
+    SurfaceMesh {
+        points,
+        triangles: bw_tris,
+    }
 }
 
 // ── Curved-surface tessellation ───────────────────────────────────────────────
@@ -866,16 +869,12 @@ fn try_tessellate_bspline(
                 })
                 .collect();
             triangles.retain(|&[a, b, c]| {
-                let cx =
-                    (points[a][0] + points[b][0] + points[c][0]) / 3.0;
-                let cy =
-                    (points[a][1] + points[b][1] + points[c][1]) / 3.0;
-                let cz =
-                    (points[a][2] + points[b][2] + points[c][2]) / 3.0;
+                let cx = (points[a][0] + points[b][0] + points[c][0]) / 3.0;
+                let cy = (points[a][1] + points[b][1] + points[c][1]) / 3.0;
+                let cz = (points[a][2] + points[b][2] + points[c][2]) / 3.0;
                 let d = sub([cx, cy, cz], origin);
                 let c2d = Point2::new(dot3(d, x_axis), dot3(d, y_axis));
-                point_in_polygon(c2d, &bnd2d)
-                    && !holes2d.iter().any(|h| point_in_polygon(c2d, h))
+                point_in_polygon(c2d, &bnd2d) && !holes2d.iter().any(|h| point_in_polygon(c2d, h))
             });
         }
     }

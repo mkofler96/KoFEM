@@ -230,8 +230,7 @@ pub(crate) fn expand_knots(
     Ok(knots)
 }
 
-/// De Boor evaluation of a 1-D B-spline at parameter `t`.
-/// de Boor evaluation for 4D homogeneous control points (used by NURBS surfaces).
+/// De Boor evaluation for 4D homogeneous control points (used by NURBS surfaces).
 pub(crate) fn de_boor_1d_4d(pts: &[[f64; 4]], degree: usize, knots: &[f64], t: f64) -> [f64; 4] {
     let n = pts.len() - 1;
     let t = t.clamp(knots[degree], knots[n + 1]);
@@ -242,7 +241,11 @@ pub(crate) fn de_boor_1d_4d(pts: &[[f64; 4]], degree: usize, knots: &[f64], t: f
         let mut hi = n;
         while lo < hi {
             let mid = (lo + hi).div_ceil(2);
-            if knots[mid] <= t { lo = mid; } else { hi = mid - 1; }
+            if knots[mid] <= t {
+                lo = mid;
+            } else {
+                hi = mid - 1;
+            }
         }
         lo
     };
@@ -251,7 +254,11 @@ pub(crate) fn de_boor_1d_4d(pts: &[[f64; 4]], degree: usize, knots: &[f64], t: f
         for j in (r..=degree).rev() {
             let idx = j + k - degree;
             let denom = knots[idx + degree - r + 1] - knots[idx];
-            let alpha = if denom.abs() < 1e-15 { 0.0 } else { (t - knots[idx]) / denom };
+            let alpha = if denom.abs() < 1e-15 {
+                0.0
+            } else {
+                (t - knots[idx]) / denom
+            };
             d[j] = [
                 (1.0 - alpha) * d[j - 1][0] + alpha * d[j][0],
                 (1.0 - alpha) * d[j - 1][1] + alpha * d[j][1],
