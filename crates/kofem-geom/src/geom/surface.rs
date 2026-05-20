@@ -396,7 +396,7 @@ fn bspline_surface_from_split(
     let bad = |idx| GeomError::BadArg(id, idx);
 
     // B_SPLINE_SURFACE own attrs (no label in complex entity components).
-    let u_degree = match base_args.get(0) {
+    let u_degree = match base_args.first() {
         Some(Arg::Integer(v)) => *v as usize,
         _ => return Err(bad(0)),
     };
@@ -423,7 +423,7 @@ fn bspline_surface_from_split(
     }
 
     // B_SPLINE_SURFACE_WITH_KNOTS own attrs.
-    let u_mults = match knot_args.get(0) {
+    let u_mults = match knot_args.first() {
         Some(Arg::List(v)) => v,
         _ => return Err(bad(0)),
     };
@@ -444,7 +444,7 @@ fn bspline_surface_from_split(
 
     // RATIONAL_B_SPLINE_SURFACE own attrs: weights_data = LIST OF LIST OF REAL.
     let weights = if let Some(rat) = rational_args {
-        match rat.get(0) {
+        match rat.first() {
             Some(Arg::List(rows)) => {
                 let mut w: Vec<Vec<f64>> = Vec::with_capacity(rows.len());
                 for row_arg in rows {
