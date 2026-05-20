@@ -8,6 +8,7 @@
 //! 4. [`extrude`] sweeps the 2-D mesh into a 3-D [`Mesh3D`] of tetrahedra.
 //! 5. [`volume::volume_mesh`] fills a closed [`volume::SurfaceMesh`] with quality tetrahedra.
 
+pub mod cdt;
 pub mod extrude;
 pub mod geom;
 pub mod quality;
