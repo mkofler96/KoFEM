@@ -94,6 +94,39 @@ pub fn triangulate_constrained(boundary: &[Point2], constraints: &[(usize, usize
     }
 }
 
+/// Returns the index of the first active vertex (other than `a` and `b`) that lies
+/// strictly on the open segment `(a, b)`, or `None`.
+///
+/// Collinearity is tested with `orient2d == 0.0`; the open-interior condition uses
+/// a dot-product parameter `t ∈ (0, 1)`.
+fn find_collinear_interior(
+    triangles: &[Triangle],
+    pts: &[Point2],
+    a: usize,
+    b: usize,
+) -> Option<usize> {
+    let pa = pts[a];
+    let pb = pts[b];
+    let dx = pb.x - pa.x;
+    let dy = pb.y - pa.y;
+    let len_sq = dx * dx + dy * dy;
+
+    let active: HashSet<usize> = triangles.iter().flat_map(|t| t.v).collect();
+    for p in active {
+        if p == a || p == b {
+            continue;
+        }
+        if orient2d(pa, pb, pts[p]) != 0.0 {
+            continue;
+        }
+        let t = ((pts[p].x - pa.x) * dx + (pts[p].y - pa.y) * dy) / len_sq;
+        if t > 0.0 && t < 1.0 {
+            return Some(p);
+        }
+    }
+    None
+}
+
 /// Inserts constraint edge `(a, b)` into an existing triangulation.
 fn enforce_constraint(
     triangles: &mut Vec<Triangle>,
@@ -103,6 +136,14 @@ fn enforce_constraint(
     constraints: &HashSet<(usize, usize)>,
 ) {
     if has_edge(triangles, a, b) {
+        return;
+    }
+
+    // Pre-processing: if any existing vertex lies strictly on segment (a, b),
+    // split the constraint at that vertex and recurse on both halves.
+    if let Some(mid) = find_collinear_interior(triangles, pts, a, b) {
+        enforce_constraint(triangles, pts, a, mid, constraints);
+        enforce_constraint(triangles, pts, mid, b, constraints);
         return;
     }
 
@@ -507,5 +548,120 @@ mod tests {
             Point2::new(0.0, 2.0),
         ];
         let _mesh = triangulate_constrained(&outer, &[]);
+    }
+
+    // ── Unit tests for find_collinear_interior ────────────────────────────────
+
+    #[test]
+    fn collinear_interior_detects_midpoint() {
+        // Hand-built triangulation: two triangles sharing edge (0,2), with vertex 1
+        // at the midpoint of segment 0→2 and vertex 3 off the line.
+        let pts = vec![
+            Point2::new(0.0, 0.0), // 0
+            Point2::new(1.0, 0.0), // 1  strictly between 0 and 2
+            Point2::new(2.0, 0.0), // 2
+            Point2::new(1.0, 1.0), // 3  off the line
+        ];
+        let tris = vec![Triangle { v: [0, 1, 3] }, Triangle { v: [1, 2, 3] }];
+        assert_eq!(find_collinear_interior(&tris, &pts, 0, 2), Some(1));
+    }
+
+    #[test]
+    fn collinear_interior_ignores_endpoints() {
+        let pts = vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(1.0, 0.0),
+            Point2::new(2.0, 0.0),
+            Point2::new(1.0, 1.0),
+        ];
+        let tris = vec![Triangle { v: [0, 1, 3] }, Triangle { v: [1, 2, 3] }];
+        // Endpoints of the tested segment must not be reported.
+        assert_eq!(find_collinear_interior(&tris, &pts, 0, 1), None);
+        assert_eq!(find_collinear_interior(&tris, &pts, 1, 2), None);
+    }
+
+    #[test]
+    fn collinear_interior_ignores_off_line_vertex() {
+        let pts = vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(2.0, 0.0),
+            Point2::new(1.0, 1.0), // not on 0→1 extended line
+        ];
+        let tris = vec![Triangle { v: [0, 1, 2] }];
+        assert_eq!(find_collinear_interior(&tris, &pts, 0, 1), None);
+    }
+
+    // ── Integration tests ─────────────────────────────────────────────────────
+
+    #[test]
+    fn constraint_split_at_collinear_vertex() {
+        // Pentagon: vertex 1 at (1,0) lies on explicit constraint (0, 2).
+        // enforce_constraint must split at vertex 1 and recurse; both sub-edges
+        // must appear as triangle edges and no triangle may be degenerate.
+        let outer = vec![
+            Point2::new(0.0, 0.0), // 0
+            Point2::new(1.0, 0.0), // 1 — lies on segment 0→2
+            Point2::new(2.0, 0.0), // 2
+            Point2::new(2.0, 2.0), // 3
+            Point2::new(0.0, 2.0), // 4
+        ];
+        let mesh = triangulate_constrained(&outer, &[(0, 2)]);
+        assert!(
+            has_edge(&mesh.triangles, 0, 1),
+            "sub-constraint (0,1) missing"
+        );
+        assert!(
+            has_edge(&mesh.triangles, 1, 2),
+            "sub-constraint (1,2) missing"
+        );
+        for t in &mesh.triangles {
+            let [a, b, c] = t.v;
+            let area2 = orient2d(mesh.points[a], mesh.points[b], mesh.points[c]).abs();
+            assert!(area2 > 1e-10, "degenerate triangle: area2={area2}");
+        }
+    }
+
+    #[test]
+    fn constraint_split_multiple_collinear_vertices() {
+        // Two interior vertices on one constraint edge — tests recursive splitting.
+        let outer = vec![
+            Point2::new(0.0, 0.0), // 0
+            Point2::new(1.0, 0.0), // 1 — on segment 0→3
+            Point2::new(2.0, 0.0), // 2 — on segment 0→3
+            Point2::new(3.0, 0.0), // 3
+            Point2::new(3.0, 3.0), // 4
+            Point2::new(0.0, 3.0), // 5
+        ];
+        let mesh = triangulate_constrained(&outer, &[(0, 3)]);
+        assert!(
+            has_edge(&mesh.triangles, 0, 1),
+            "sub-constraint (0,1) missing"
+        );
+        assert!(
+            has_edge(&mesh.triangles, 1, 2),
+            "sub-constraint (1,2) missing"
+        );
+        assert!(
+            has_edge(&mesh.triangles, 2, 3),
+            "sub-constraint (2,3) missing"
+        );
+        for t in &mesh.triangles {
+            let [a, b, c] = t.v;
+            let area2 = orient2d(mesh.points[a], mesh.points[b], mesh.points[c]).abs();
+            assert!(area2 > 1e-10, "degenerate triangle: area2={area2}");
+        }
+    }
+
+    #[test]
+    fn endpoint_vertex_not_split() {
+        // Triangle: every vertex is an endpoint of some edge — no phantom splits.
+        let outer = vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(2.0, 0.0),
+            Point2::new(1.0, 2.0),
+        ];
+        let mesh = triangulate_constrained(&outer, &[]);
+        assert_eq!(mesh.triangles.len(), 1);
+        assert_eq!(mesh.points.len(), 3);
     }
 }
