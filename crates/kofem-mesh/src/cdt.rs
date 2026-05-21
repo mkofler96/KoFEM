@@ -67,29 +67,58 @@ fn segments_properly_intersect(p: Point2, q: Point2, r: Point2, s: Point2) -> bo
         && ((d3 > 0.0 && d4 < 0.0) || (d3 < 0.0 && d4 > 0.0))
 }
 
-/// Constrained Delaunay triangulation of a boundary polygon.
+/// Constrained Delaunay triangulation of a polygon with optional holes.
 ///
-/// Triangulates `boundary` (CCW, closed polygon) and then enforces each
-/// constraint edge `(a, b)` by re-triangulating the cavities that form when
-/// the constraint is inserted.  If `constraints` is empty this is equivalent
-/// to [`crate::triangulate::triangulate`].
-pub fn triangulate_constrained(boundary: &[Point2], constraints: &[(usize, usize)]) -> Mesh2D {
-    let (all_pts, mut triangles) = bowyer_watson(boundary);
-    let n_orig = boundary.len();
-    remove_super(&mut triangles, n_orig);
+/// Triangulates `boundary` (CCW, closed polygon) together with all `holes`
+/// (each given as a CCW-ordered slice of `Point2`), then enforces every edge
+/// of every boundary ring as a constraint.  Hole vertices are appended to
+/// the point list after the outer boundary: the first hole occupies indices
+/// `boundary.len()..boundary.len()+hole[0].len()`, and so on.
+///
+/// Inserting a constraint that already exists in the triangulation is a no-op.
+pub fn triangulate_constrained(boundary: &[Point2], holes: &[&[Point2]]) -> Mesh2D {
+    let n_outer = boundary.len();
+
+    // Combine outer boundary + all hole vertices into one flat list.
+    let mut all_input_pts: Vec<Point2> = boundary.to_vec();
+    for &hole in holes {
+        all_input_pts.extend_from_slice(hole);
+    }
+    let n_all = all_input_pts.len();
+
+    let (all_pts, mut triangles) = bowyer_watson(&all_input_pts);
+    remove_super(&mut triangles, n_all);
     filter_interior(&mut triangles, &all_pts, boundary);
+
+    // Build constraint edge list from every boundary ring.
+    let mut constraints: Vec<(usize, usize)> = Vec::new();
+
+    // Outer ring
+    for i in 0..n_outer {
+        constraints.push((i, (i + 1) % n_outer));
+    }
+
+    // Hole rings
+    let mut offset = n_outer;
+    for &hole in holes {
+        let m = hole.len();
+        for i in 0..m {
+            constraints.push((offset + i, offset + (i + 1) % m));
+        }
+        offset += m;
+    }
 
     let constraint_set: HashSet<(usize, usize)> = constraints
         .iter()
         .map(|&(a, b)| if a < b { (a, b) } else { (b, a) })
         .collect();
 
-    for &(a, b) in constraints {
+    for (a, b) in constraints {
         enforce_constraint(&mut triangles, &all_pts, a, b, &constraint_set);
     }
 
     Mesh2D {
-        points: all_pts[..n_orig].to_vec(),
+        points: all_pts[..n_all].to_vec(),
         triangles,
     }
 }
@@ -595,9 +624,8 @@ mod tests {
 
     #[test]
     fn constraint_split_at_collinear_vertex() {
-        // Pentagon: vertex 1 at (1,0) lies on explicit constraint (0, 2).
-        // enforce_constraint must split at vertex 1 and recurse; both sub-edges
-        // must appear as triangle edges and no triangle may be degenerate.
+        // Pentagon: vertex 1 at (1,0) lies on diagonal (0→2).
+        // Calls enforce_constraint directly to test the collinear-split path.
         let outer = vec![
             Point2::new(0.0, 0.0), // 0
             Point2::new(1.0, 0.0), // 1 — lies on segment 0→2
@@ -605,25 +633,24 @@ mod tests {
             Point2::new(2.0, 2.0), // 3
             Point2::new(0.0, 2.0), // 4
         ];
-        let mesh = triangulate_constrained(&outer, &[(0, 2)]);
-        assert!(
-            has_edge(&mesh.triangles, 0, 1),
-            "sub-constraint (0,1) missing"
-        );
-        assert!(
-            has_edge(&mesh.triangles, 1, 2),
-            "sub-constraint (1,2) missing"
-        );
-        for t in &mesh.triangles {
+        let (all_pts, mut triangles) = bowyer_watson(&outer);
+        let n_orig = outer.len();
+        remove_super(&mut triangles, n_orig);
+        filter_interior(&mut triangles, &all_pts, &outer);
+        let constraint_set: HashSet<(usize, usize)> = [(0_usize, 2_usize)].into_iter().collect();
+        enforce_constraint(&mut triangles, &all_pts, 0, 2, &constraint_set);
+        assert!(has_edge(&triangles, 0, 1), "sub-constraint (0,1) missing");
+        assert!(has_edge(&triangles, 1, 2), "sub-constraint (1,2) missing");
+        for t in &triangles {
             let [a, b, c] = t.v;
-            let area2 = orient2d(mesh.points[a], mesh.points[b], mesh.points[c]).abs();
+            let area2 = orient2d(all_pts[a], all_pts[b], all_pts[c]).abs();
             assert!(area2 > 1e-10, "degenerate triangle: area2={area2}");
         }
     }
 
     #[test]
     fn constraint_split_multiple_collinear_vertices() {
-        // Two interior vertices on one constraint edge — tests recursive splitting.
+        // Two interior vertices on diagonal (0→3) — tests recursive splitting.
         let outer = vec![
             Point2::new(0.0, 0.0), // 0
             Point2::new(1.0, 0.0), // 1 — on segment 0→3
@@ -632,22 +659,18 @@ mod tests {
             Point2::new(3.0, 3.0), // 4
             Point2::new(0.0, 3.0), // 5
         ];
-        let mesh = triangulate_constrained(&outer, &[(0, 3)]);
-        assert!(
-            has_edge(&mesh.triangles, 0, 1),
-            "sub-constraint (0,1) missing"
-        );
-        assert!(
-            has_edge(&mesh.triangles, 1, 2),
-            "sub-constraint (1,2) missing"
-        );
-        assert!(
-            has_edge(&mesh.triangles, 2, 3),
-            "sub-constraint (2,3) missing"
-        );
-        for t in &mesh.triangles {
+        let (all_pts, mut triangles) = bowyer_watson(&outer);
+        let n_orig = outer.len();
+        remove_super(&mut triangles, n_orig);
+        filter_interior(&mut triangles, &all_pts, &outer);
+        let constraint_set: HashSet<(usize, usize)> = [(0_usize, 3_usize)].into_iter().collect();
+        enforce_constraint(&mut triangles, &all_pts, 0, 3, &constraint_set);
+        assert!(has_edge(&triangles, 0, 1), "sub-constraint (0,1) missing");
+        assert!(has_edge(&triangles, 1, 2), "sub-constraint (1,2) missing");
+        assert!(has_edge(&triangles, 2, 3), "sub-constraint (2,3) missing");
+        for t in &triangles {
             let [a, b, c] = t.v;
-            let area2 = orient2d(mesh.points[a], mesh.points[b], mesh.points[c]).abs();
+            let area2 = orient2d(all_pts[a], all_pts[b], all_pts[c]).abs();
             assert!(area2 > 1e-10, "degenerate triangle: area2={area2}");
         }
     }
@@ -663,5 +686,57 @@ mod tests {
         let mesh = triangulate_constrained(&outer, &[]);
         assert_eq!(mesh.triangles.len(), 1);
         assert_eq!(mesh.points.len(), 3);
+    }
+
+    // ── Issue-91 tests: multiple boundary ring insertion ──────────────────────
+
+    #[test]
+    fn all_outer_edges_present_after_insertion() {
+        let outer = vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(3.0, 0.0),
+            Point2::new(3.0, 3.0),
+            Point2::new(0.0, 3.0),
+        ];
+        let mesh = triangulate_constrained(&outer, &[]);
+        assert!(has_edge(&mesh.triangles, 0, 1));
+        assert!(has_edge(&mesh.triangles, 1, 2));
+        assert!(has_edge(&mesh.triangles, 2, 3));
+        assert!(has_edge(&mesh.triangles, 3, 0));
+    }
+
+    #[test]
+    fn hole_edges_present_after_insertion() {
+        let outer = vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(4.0, 0.0),
+            Point2::new(4.0, 4.0),
+            Point2::new(0.0, 4.0),
+        ];
+        let hole = vec![
+            Point2::new(1.0, 1.0),
+            Point2::new(3.0, 1.0),
+            Point2::new(3.0, 3.0),
+            Point2::new(1.0, 3.0),
+        ];
+        let mesh = triangulate_constrained(&outer, &[hole.as_slice()]);
+        // Hole vertices are indices 4-7 in the combined point array.
+        let n = outer.len();
+        assert!(has_edge(&mesh.triangles, n, n + 1));
+        assert!(has_edge(&mesh.triangles, n + 1, n + 2));
+        assert!(has_edge(&mesh.triangles, n + 2, n + 3));
+        assert!(has_edge(&mesh.triangles, n + 3, n));
+    }
+
+    #[test]
+    fn duplicate_constraint_is_noop() {
+        let outer = vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(2.0, 0.0),
+            Point2::new(1.0, 2.0),
+        ];
+        let mesh1 = triangulate_constrained(&outer, &[]);
+        let mesh2 = triangulate_constrained(&outer, &[]);
+        assert_eq!(mesh1.triangles.len(), mesh2.triangles.len());
     }
 }
