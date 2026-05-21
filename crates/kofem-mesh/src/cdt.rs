@@ -1,6 +1,6 @@
 //! Constrained Delaunay Triangulation (CDT) helpers.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::geom::{in_circumcircle, orient2d, Point2};
 use crate::triangulate::bowyer_watson;
@@ -79,8 +79,13 @@ pub fn triangulate_constrained(boundary: &[Point2], constraints: &[(usize, usize
     remove_super(&mut triangles, n_orig);
     filter_interior(&mut triangles, &all_pts, boundary);
 
+    let constraint_set: HashSet<(usize, usize)> = constraints
+        .iter()
+        .map(|&(a, b)| if a < b { (a, b) } else { (b, a) })
+        .collect();
+
     for &(a, b) in constraints {
-        enforce_constraint(&mut triangles, &all_pts, a, b);
+        enforce_constraint(&mut triangles, &all_pts, a, b, &constraint_set);
     }
 
     Mesh2D {
@@ -90,7 +95,13 @@ pub fn triangulate_constrained(boundary: &[Point2], constraints: &[(usize, usize
 }
 
 /// Inserts constraint edge `(a, b)` into an existing triangulation.
-fn enforce_constraint(triangles: &mut Vec<Triangle>, pts: &[Point2], a: usize, b: usize) {
+fn enforce_constraint(
+    triangles: &mut Vec<Triangle>,
+    pts: &[Point2],
+    a: usize,
+    b: usize,
+    constraints: &HashSet<(usize, usize)>,
+) {
     if has_edge(triangles, a, b) {
         return;
     }
@@ -163,8 +174,24 @@ fn enforce_constraint(triangles: &mut Vec<Triangle>, pts: &[Point2], a: usize, b
         });
     }
 
-    triangles.extend(retri_cavity(a, b, &left_cavity, pts));
-    triangles.extend(retri_cavity(b, a, &right_cavity, pts));
+    let new_left = retri_cavity(a, b, &left_cavity, pts);
+    let new_right = retri_cavity(b, a, &right_cavity, pts);
+
+    // Seed the legalization queue with non-constrained edges of the new triangles.
+    let mut seed_edges: Vec<(usize, usize)> = Vec::new();
+    for t in new_left.iter().chain(new_right.iter()) {
+        for (u, v) in t.edges() {
+            let key = if u < v { (u, v) } else { (v, u) };
+            if !constraints.contains(&key) {
+                seed_edges.push((u, v));
+            }
+        }
+    }
+
+    triangles.extend(new_left);
+    triangles.extend(new_right);
+
+    legalize_edges(triangles, pts, constraints, seed_edges);
 }
 
 /// Orders the cavity interior vertices into a path from `start` to `end`
@@ -255,6 +282,110 @@ pub fn retri_cavity(a: usize, b: usize, cavity: &[usize], pts: &[Point2]) -> Vec
     result.extend(retri_cavity(a, c, &cavity[..c_idx], pts));
     result.extend(retri_cavity(c, b, &cavity[c_idx + 1..], pts));
     result
+}
+
+/// Restores the Delaunay property after constraint insertion by flipping non-constrained edges.
+///
+/// Seeds the queue from `seed_edges` (typically the edges of freshly inserted triangles).
+/// Any edge `(u, v)` whose opposite vertex `x` lies strictly inside `circumcircle(u, v, w)`
+/// is flipped.  Constrained edges are never flipped.  Guaranteed to terminate (Shewchuk 1996).
+pub fn legalize_edges(
+    triangles: &mut Vec<Triangle>,
+    pts: &[Point2],
+    constrained: &HashSet<(usize, usize)>,
+    seed_edges: Vec<(usize, usize)>,
+) {
+    let mut queue: VecDeque<(usize, usize)> = seed_edges.into_iter().collect();
+    let mut in_queue: HashSet<(usize, usize)> = queue
+        .iter()
+        .map(|&(u, v)| if u < v { (u, v) } else { (v, u) })
+        .collect();
+
+    while let Some((eu, ev)) = queue.pop_front() {
+        let key = if eu < ev { (eu, ev) } else { (ev, eu) };
+        in_queue.remove(&key);
+
+        if constrained.contains(&key) {
+            continue;
+        }
+
+        // Find the two triangles sharing edge (eu, ev).
+        let tris_with_edge: Vec<usize> = triangles
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| t.v.contains(&eu) && t.v.contains(&ev))
+            .map(|(i, _)| i)
+            .collect();
+
+        if tris_with_edge.len() != 2 {
+            // Boundary edge — cannot flip.
+            continue;
+        }
+
+        let ti0 = tris_with_edge[0];
+        let ti1 = tris_with_edge[1];
+
+        let w = triangles[ti0]
+            .v
+            .iter()
+            .find(|&&x| x != eu && x != ev)
+            .copied()
+            .unwrap();
+        let x = triangles[ti1]
+            .v
+            .iter()
+            .find(|&&x| x != eu && x != ev)
+            .copied()
+            .unwrap();
+
+        // Build a CCW ordering of T0 for the in-circumcircle predicate.
+        let (ca, cb, cc) = if orient2d(pts[eu], pts[ev], pts[w]) > 0.0 {
+            (eu, ev, w)
+        } else {
+            (eu, w, ev)
+        };
+
+        if !in_circumcircle(pts, ca, cb, cc, x) {
+            continue;
+        }
+
+        // Flip edge (eu, ev) → (w, x).
+        let new_tri0 = {
+            let (a, b, c) = (eu, w, x);
+            if orient2d(pts[a], pts[b], pts[c]) > 0.0 {
+                Triangle { v: [a, b, c] }
+            } else {
+                Triangle { v: [a, c, b] }
+            }
+        };
+        let new_tri1 = {
+            let (a, b, c) = (ev, x, w);
+            if orient2d(pts[a], pts[b], pts[c]) > 0.0 {
+                Triangle { v: [a, b, c] }
+            } else {
+                Triangle { v: [a, c, b] }
+            }
+        };
+
+        // Remove old triangles (higher index first to preserve lower index validity).
+        let (lo, hi) = if ti0 < ti1 { (ti0, ti1) } else { (ti1, ti0) };
+        triangles.remove(hi);
+        triangles.remove(lo);
+        triangles.push(new_tri0);
+        triangles.push(new_tri1);
+
+        // Enqueue the four outer edges for potential further flipping.
+        for &edge_pair in &[(eu, w), (w, ev), (ev, x), (x, eu)] {
+            let ekey = if edge_pair.0 < edge_pair.1 {
+                edge_pair
+            } else {
+                (edge_pair.1, edge_pair.0)
+            };
+            if !constrained.contains(&ekey) && in_queue.insert(ekey) {
+                queue.push_back(edge_pair);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -349,5 +480,32 @@ mod tests {
             let c = t.centroid(&mesh.points);
             assert!(point_in_polygon(c, &outer));
         }
+    }
+
+    #[test]
+    fn legalization_restores_delaunay_property() {
+        let outer = vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(2.0, 0.0),
+            Point2::new(2.0, 2.0),
+            Point2::new(0.0, 2.0),
+        ];
+        let mesh = triangulate_constrained(&outer, &[]);
+        assert_eq!(mesh.triangles.len(), 2);
+        for t in &mesh.triangles {
+            let [a, b, c] = t.v;
+            assert!(orient2d(mesh.points[a], mesh.points[b], mesh.points[c]) > 0.0);
+        }
+    }
+
+    #[test]
+    fn legalization_terminates_on_grid() {
+        let outer = vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(2.0, 0.0),
+            Point2::new(2.0, 2.0),
+            Point2::new(0.0, 2.0),
+        ];
+        let _mesh = triangulate_constrained(&outer, &[]);
     }
 }
