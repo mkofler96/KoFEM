@@ -3,8 +3,8 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::geom::{in_circumcircle, orient2d, Point2};
-use crate::triangulate::{filter_interior, remove_super, Mesh2D, Triangle};
 use crate::triangulate::bowyer_watson;
+use crate::triangulate::{filter_interior, remove_super, Mesh2D, Triangle};
 
 /// Returns `true` iff some triangle in `triangles` contains both vertex `a` and vertex `b`.
 ///
@@ -101,7 +101,10 @@ fn enforce_constraint(triangles: &mut Vec<Triangle>, pts: &[Point2], a: usize, b
         .enumerate()
         .filter(|(_, t)| {
             t.edges().iter().any(|&(u, v)| {
-                u != a && u != b && v != a && v != b
+                u != a
+                    && u != b
+                    && v != a
+                    && v != b
                     && segments_properly_intersect(pts[a], pts[b], pts[u], pts[v])
             })
         })
@@ -192,7 +195,10 @@ fn order_cavity(
     loop {
         let next = adj
             .get(&current)
-            .and_then(|ns| ns.iter().find(|&&n| n != prev && (verts.contains(&n) || n == end)))
+            .and_then(|ns| {
+                ns.iter()
+                    .find(|&&n| n != prev && (verts.contains(&n) || n == end))
+            })
             .copied();
 
         match next {
@@ -230,9 +236,10 @@ pub fn retri_cavity(a: usize, b: usize, cavity: &[usize], pts: &[Point2]) -> Vec
             } else {
                 (b, a, c)
             };
-            cavity.iter().enumerate().all(|(j, &d)| {
-                j == i || !in_circumcircle(pts, ta, tb, tc, d)
-            })
+            cavity
+                .iter()
+                .enumerate()
+                .all(|(j, &d)| j == i || !in_circumcircle(pts, ta, tb, tc, d))
         })
         .expect("a valid Delaunay apex must always exist for a convex cavity");
 
@@ -308,10 +315,10 @@ mod tests {
     fn cavity_retri_produces_constraint_edge() {
         use crate::geom::orient2d;
         let pts = vec![
-            Point2::new(0.0, 1.0),   // 0 top
-            Point2::new(1.0, 0.0),   // 1 right
-            Point2::new(0.0, -1.0),  // 2 bottom
-            Point2::new(-1.0, 0.0),  // 3 left
+            Point2::new(0.0, 1.0),  // 0 top
+            Point2::new(1.0, 0.0),  // 1 right
+            Point2::new(0.0, -1.0), // 2 bottom
+            Point2::new(-1.0, 0.0), // 3 left
         ];
         let mesh = triangulate_constrained(&pts, &[]);
         for t in &mesh.triangles {
