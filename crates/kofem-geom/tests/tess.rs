@@ -159,24 +159,28 @@ fn make_square_face() -> TopoFace {
         outer_loop_orientation: true,
         outer_loop: vec![
             TopoEdge {
+                edge_id: 0,
                 curve_id: 0,
                 start: [0.0, 0.0, 0.0],
                 end: [1.0, 0.0, 0.0],
                 reversed: false,
             },
             TopoEdge {
+                edge_id: 0,
                 curve_id: 0,
                 start: [1.0, 0.0, 0.0],
                 end: [1.0, 1.0, 0.0],
                 reversed: false,
             },
             TopoEdge {
+                edge_id: 0,
                 curve_id: 0,
                 start: [1.0, 1.0, 0.0],
                 end: [0.0, 1.0, 0.0],
                 reversed: false,
             },
             TopoEdge {
+                edge_id: 0,
                 curve_id: 0,
                 start: [0.0, 1.0, 0.0],
                 end: [0.0, 0.0, 0.0],
@@ -196,24 +200,28 @@ fn make_square_face_cw_bound_f() -> TopoFace {
         outer_loop_orientation: false,
         outer_loop: vec![
             TopoEdge {
+                edge_id: 0,
                 curve_id: 0,
                 start: [0.0, 0.0, 0.0],
                 end: [0.0, 1.0, 0.0],
                 reversed: false,
             },
             TopoEdge {
+                edge_id: 0,
                 curve_id: 0,
                 start: [0.0, 1.0, 0.0],
                 end: [1.0, 1.0, 0.0],
                 reversed: false,
             },
             TopoEdge {
+                edge_id: 0,
                 curve_id: 0,
                 start: [1.0, 1.0, 0.0],
                 end: [1.0, 0.0, 0.0],
                 reversed: false,
             },
             TopoEdge {
+                edge_id: 0,
                 curve_id: 0,
                 start: [1.0, 0.0, 0.0],
                 end: [0.0, 0.0, 0.0],
@@ -354,24 +362,28 @@ fn square_with_square_hole_excludes_hole_region() {
         outer_loop_orientation: true,
         outer_loop: vec![
             TopoEdge {
+                edge_id: 0,
                 curve_id: 0,
                 start: [0.0, 0.0, 0.0],
                 end: [1.0, 0.0, 0.0],
                 reversed: false,
             },
             TopoEdge {
+                edge_id: 0,
                 curve_id: 0,
                 start: [1.0, 0.0, 0.0],
                 end: [1.0, 1.0, 0.0],
                 reversed: false,
             },
             TopoEdge {
+                edge_id: 0,
                 curve_id: 0,
                 start: [1.0, 1.0, 0.0],
                 end: [0.0, 1.0, 0.0],
                 reversed: false,
             },
             TopoEdge {
+                edge_id: 0,
                 curve_id: 0,
                 start: [0.0, 1.0, 0.0],
                 end: [0.0, 0.0, 0.0],
@@ -380,24 +392,28 @@ fn square_with_square_hole_excludes_hole_region() {
         ],
         inner_loops: vec![vec![
             TopoEdge {
+                edge_id: 0,
                 curve_id: 0,
                 start: [hole_min, hole_min, 0.0],
                 end: [hole_min, hole_max, 0.0],
                 reversed: false,
             },
             TopoEdge {
+                edge_id: 0,
                 curve_id: 0,
                 start: [hole_min, hole_max, 0.0],
                 end: [hole_max, hole_max, 0.0],
                 reversed: false,
             },
             TopoEdge {
+                edge_id: 0,
                 curve_id: 0,
                 start: [hole_max, hole_max, 0.0],
                 end: [hole_max, hole_min, 0.0],
                 reversed: false,
             },
             TopoEdge {
+                edge_id: 0,
                 curve_id: 0,
                 start: [hole_max, hole_min, 0.0],
                 end: [hole_min, hole_min, 0.0],

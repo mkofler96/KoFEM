@@ -5,6 +5,7 @@
 //! 2. `tessellate_plane` / `tessellate_cylinder` — UV triangulation (implemented)
 //! 3. Stitching pass — merge near-duplicate vertices (implemented)
 
+use std::collections::HashMap;
 use std::f64::consts::PI;
 
 use serde::Serialize;
@@ -49,6 +50,102 @@ impl Default for TessOptions {
 pub enum TessError {
     #[error("geometry error on surface #{0}: {1}")]
     Geom(u64, #[source] GeomError),
+}
+
+// ── Edge cache ─────────────────────────────────────────────────────────────────
+
+/// Maps each EDGE_CURVE entity id to its pre-computed vertex sequence in
+/// the EDGE_CURVE's canonical (non-reversed) direction, including both endpoints.
+///
+/// Two adjacent faces that reference the same EDGE_CURVE receive the identical
+/// `Vec<[f64;3]>` pointer (just reversed when traversal direction differs), so
+/// their shared boundary positions are bitwise equal — no stitching heuristic
+/// can fail to merge them.
+type EdgeCache = HashMap<u64, Vec<[f64; 3]>>;
+
+/// Pre-compute boundary vertices for every unique EDGE_CURVE in the B-rep.
+fn build_edge_cache(brep: &BRep, file: &StepFile, max_edge_len: f64) -> EdgeCache {
+    let mut cache = EdgeCache::new();
+    for face in &brep.faces {
+        for loop_edges in std::iter::once(face.outer_loop.as_slice())
+            .chain(face.inner_loops.iter().map(Vec::as_slice))
+        {
+            for edge in loop_edges {
+                cache.entry(edge.edge_id).or_insert_with(|| {
+                    // Canonical = EDGE_CURVE natural direction (reversed == false).
+                    // When this occurrence is reversed, swap start/end before sampling.
+                    let (canonical_start, canonical_end) = if edge.reversed {
+                        (edge.end, edge.start)
+                    } else {
+                        (edge.start, edge.end)
+                    };
+                    discretise_edge(file, edge.curve_id, canonical_start, canonical_end, max_edge_len)
+                });
+            }
+        }
+    }
+    cache
+}
+
+/// Sample all vertices of one edge in [start → end] direction (including endpoints).
+fn discretise_edge(
+    file: &StepFile,
+    curve_id: u64,
+    start: [f64; 3],
+    end: [f64; 3],
+    max_edge_len: f64,
+) -> Vec<[f64; 3]> {
+    let chord = dist3(start, end);
+    let n_intermediate = if chord < 1e-10 {
+        // Closed curve — treat as full circle.
+        if let Some(r) = circle_radius_from_curve(file, curve_id) {
+            let n_u = ((2.0 * PI * r / max_edge_len).ceil() as usize).clamp(8, 256);
+            n_u - 1
+        } else {
+            16
+        }
+    } else if let Some(arc_len) = circle_arc_length(file, curve_id, start, end, false) {
+        let n_u = ((arc_len / max_edge_len).ceil() as usize).clamp(2, 256);
+        n_u.saturating_sub(1).max(1)
+    } else {
+        ((chord / max_edge_len).ceil() as usize).clamp(4, 64)
+    };
+    sample_curve(file, curve_id, start, end, false, n_intermediate)
+}
+
+/// Assemble a closed boundary polygon from pre-computed edge vertices.
+///
+/// For each edge: pushes the traversal-order start vertex and all intermediate
+/// vertices (not the endpoint, which becomes the next edge's start).
+/// Adjacent faces that share an edge receive bitwise-identical vertices here,
+/// so `stitch()` merges them at zero distance rather than relying on an epsilon.
+fn sample_boundary_cached(edges: &[TopoEdge], cache: &EdgeCache) -> Vec<[f64; 3]> {
+    let mut pts = Vec::new();
+    for edge in edges {
+        let Some(canonical) = cache.get(&edge.edge_id) else {
+            pts.push(edge.start);
+            continue;
+        };
+        if canonical.len() < 2 {
+            pts.push(edge.start);
+            continue;
+        }
+        if edge.reversed {
+            // Canonical direction: canonical_start → canonical_end.
+            // Traversal direction: canonical_end → canonical_start.
+            // canonical.last() == canonical_end == edge.start for non-closed edges.
+            pts.push(*canonical.last().unwrap());
+            for &p in canonical[1..canonical.len() - 1].iter().rev() {
+                pts.push(p);
+            }
+        } else {
+            pts.push(canonical[0]);
+            for &p in &canonical[1..canonical.len() - 1] {
+                pts.push(p);
+            }
+        }
+    }
+    pts
 }
 
 // ── Public API ─────────────────────────────────────────────────────────────────
@@ -100,11 +197,17 @@ pub fn tessellate(
     file: &StepFile,
     opts: TessOptions,
 ) -> Result<SurfaceMesh, TessError> {
+    // Phase 1: discretise every unique edge once.
+    // All adjacent faces will pull from this cache, guaranteeing identical positions
+    // on shared boundaries without relying on approximate epsilon-merging.
+    let edge_cache = build_edge_cache(brep, file, opts.max_edge_len);
+
+    // Phase 2: tessellate each face using the pre-computed boundary vertices.
     let mut all_points: Vec<[f64; 3]> = Vec::new();
     let mut all_triangles: Vec<[usize; 3]> = Vec::new();
 
     for face in &brep.faces {
-        let face_mesh = tessellate_face(face, file, opts.max_edge_len);
+        let face_mesh = tessellate_face(face, &edge_cache, file, opts.max_edge_len);
         let offset = all_points.len();
         all_points.extend_from_slice(&face_mesh.points);
         for &[a, b, c] in &face_mesh.triangles {
@@ -119,35 +222,45 @@ pub fn tessellate(
 
 // ── Face tessellation ──────────────────────────────────────────────────────────
 
-fn tessellate_face(face: &TopoFace, file: &StepFile, max_edge_len: f64) -> SurfaceMesh {
-    let raw = tessellate_face_raw(face, file, max_edge_len);
+fn tessellate_face(
+    face: &TopoFace,
+    edge_cache: &EdgeCache,
+    file: &StepFile,
+    max_edge_len: f64,
+) -> SurfaceMesh {
+    let raw = tessellate_face_raw(face, edge_cache, file, max_edge_len);
     flip_winding_if(raw, !face.outer_loop_orientation)
 }
 
-fn tessellate_face_raw(face: &TopoFace, file: &StepFile, max_edge_len: f64) -> SurfaceMesh {
-    if let Some(mesh) = try_tessellate_cylindrical(face, file, max_edge_len) {
+fn tessellate_face_raw(
+    face: &TopoFace,
+    edge_cache: &EdgeCache,
+    file: &StepFile,
+    max_edge_len: f64,
+) -> SurfaceMesh {
+    if let Some(mesh) = try_tessellate_cylindrical(face, edge_cache, file, max_edge_len) {
         return mesh;
     }
-    if let Some(mesh) = try_tessellate_conical(face, file, max_edge_len) {
+    if let Some(mesh) = try_tessellate_conical(face, edge_cache, file, max_edge_len) {
         return mesh;
     }
-    if let Some(mesh) = try_tessellate_toroidal(face, file, max_edge_len) {
+    if let Some(mesh) = try_tessellate_toroidal(face, edge_cache, file, max_edge_len) {
         return mesh;
     }
-    if let Some(mesh) = try_tessellate_spherical(face, file, max_edge_len) {
+    if let Some(mesh) = try_tessellate_spherical(face, edge_cache, file, max_edge_len) {
         return mesh;
     }
-    if let Some(mesh) = try_tessellate_bspline(face, file, max_edge_len) {
+    if let Some(mesh) = try_tessellate_bspline(face, edge_cache, file, max_edge_len) {
         return mesh;
     }
-    if let Some(mesh) = try_tessellate_annular_disc(face, file, max_edge_len) {
+    if let Some(mesh) = try_tessellate_annular_disc(face, edge_cache, file, max_edge_len) {
         return mesh;
     }
-    if let Some(mesh) = try_tessellate_disc(face, file, max_edge_len) {
+    if let Some(mesh) = try_tessellate_disc(face, edge_cache, file, max_edge_len) {
         return mesh;
     }
 
-    let boundary = sample_boundary_3d(&face.outer_loop, file, max_edge_len);
+    let boundary = sample_boundary_cached(&face.outer_loop, edge_cache);
 
     if boundary.len() < 3 {
         return fan_raw(face);
@@ -177,7 +290,7 @@ fn tessellate_face_raw(face: &TopoFace, file: &StepFile, max_edge_len: f64) -> S
         .inner_loops
         .iter()
         .filter_map(|inner_edges| {
-            let inner_3d = sample_boundary_3d(inner_edges, file, max_edge_len);
+            let inner_3d = sample_boundary_cached(inner_edges, edge_cache);
             if inner_3d.len() < 3 {
                 return None;
             }
@@ -223,6 +336,7 @@ fn tessellate_face_raw(face: &TopoFace, file: &StepFile, max_edge_len: f64) -> S
 /// UV, determine the u-range, then generate a UV grid over [u_min, u_max] × [v_min, v_max].
 fn try_tessellate_cylindrical(
     face: &TopoFace,
+    edge_cache: &EdgeCache,
     file: &StepFile,
     max_edge_len: f64,
 ) -> Option<SurfaceMesh> {
@@ -236,7 +350,7 @@ fn try_tessellate_cylindrical(
     let axis = axis2_placement(file, ax_id).ok()?;
     let y = axis.y();
 
-    let boundary_3d = sample_boundary_3d(&face.outer_loop, file, max_edge_len);
+    let boundary_3d = sample_boundary_cached(&face.outer_loop, edge_cache);
     if boundary_3d.len() < 3 {
         return None;
     }
@@ -261,33 +375,89 @@ fn try_tessellate_cylindrical(
     }
 
     if has_closed_circle {
-        // Full-revolution barrel: u sweeps 0..2π.
-        let circumference = 2.0 * PI * radius;
-        let n_u = ((circumference / max_edge_len).ceil() as usize).clamp(8, 256);
+        // Full-revolution barrel.
+        //
+        // Derive n_u and the ring vertex positions from the cached closed-circle
+        // edge rather than recomputing from `2πi/n_u`.  The disc/annular-disc cap
+        // tessellators also read from the same cache entries, so all three faces
+        // (barrel + two caps) get bitwise-identical positions on the shared rings.
+        // Collect all closed-circle edges so we can use their cached rings for
+        // the j=0 and j=n_v rows.
+        let mut cached_rings: Vec<(f64, Vec<[f64; 3]>)> = face
+            .outer_loop
+            .iter()
+            .filter(|e| dist3(e.start, e.end) < 1e-10)
+            .filter_map(|e| {
+                let cached = edge_cache.get(&e.edge_id)?;
+                if cached.len() < 2 {
+                    return None;
+                }
+                // Axial coordinate of this ring.
+                let v_ring = dot3(sub(cached[0], axis.origin), axis.z);
+                // Build the n_u ring points in traversal order (excluding dup end).
+                let nu = cached.len() - 1;
+                let ring: Vec<[f64; 3]> = if e.reversed {
+                    (0..nu).map(|i| cached[nu - i]).collect()
+                } else {
+                    cached[..nu].to_vec()
+                };
+                Some((v_ring, ring))
+            })
+            .collect();
+        // Sort rings by axial coordinate so index 0 = bottom, last = top.
+        cached_rings.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+
         let n_v = (((v_max - v_min).abs() / max_edge_len).ceil() as usize).max(1);
 
-        let mut points = Vec::with_capacity(n_u * (n_v + 1));
+        // Infer u-angles for interior rows from the bottom ring (or compute from scratch).
+        let u_angles: Vec<f64> = if let Some((_, ring)) = cached_rings.first() {
+            ring.iter()
+                .map(|&p| {
+                    let d = sub(p, axis.origin);
+                    f64::atan2(dot3(d, y), dot3(d, axis.x))
+                })
+                .collect()
+        } else {
+            let n_u_fallback =
+                ((2.0 * PI * radius / max_edge_len).ceil() as usize).clamp(8, 256);
+            (0..n_u_fallback)
+                .map(|i| 2.0 * PI * i as f64 / n_u_fallback as f64)
+                .collect()
+        };
+
+        let n_u_actual = u_angles.len().max(8);
+        let mut points = Vec::with_capacity(n_u_actual * (n_v + 1));
+
         for j in 0..=n_v {
             let v = v_min + (v_max - v_min) * j as f64 / n_v as f64;
-            for i in 0..n_u {
-                let u = 2.0 * PI * i as f64 / n_u as f64;
-                let radial = add(scale(axis.x, u.cos()), scale(y, u.sin()));
-                points.push(add(
-                    axis.origin,
-                    add(scale(radial, radius), scale(axis.z, v)),
-                ));
+
+            // Use a cached ring for the boundary rows when one is available at
+            // this axial level; fall back to UV evaluation for interior rows.
+            let cached_ring = cached_rings
+                .iter()
+                .find(|(v_ring, _)| (v_ring - v).abs() < (v_max - v_min) * 1e-4 + 1e-8)
+                .map(|(_, ring)| ring);
+
+            if let Some(ring) = cached_ring {
+                for i in 0..n_u_actual {
+                    points.push(ring[i % ring.len()]);
+                }
+            } else {
+                for &u in &u_angles {
+                    let radial = add(scale(axis.x, u.cos()), scale(y, u.sin()));
+                    points.push(add(axis.origin, add(scale(radial, radius), scale(axis.z, v))));
+                }
             }
         }
 
-        let mut triangles = Vec::with_capacity(n_u * n_v * 2);
+        let mut triangles = Vec::with_capacity(n_u_actual * n_v * 2);
         for j in 0..n_v {
-            for i in 0..n_u {
-                let ni = (i + 1) % n_u;
-                let a = j * n_u + i;
-                let b = j * n_u + ni;
-                let c = (j + 1) * n_u + i;
-                let d = (j + 1) * n_u + ni;
-                // CCW winding when viewed from outside (outward-radial normal).
+            for i in 0..n_u_actual {
+                let ni = (i + 1) % n_u_actual;
+                let a = j * n_u_actual + i;
+                let b = j * n_u_actual + ni;
+                let c = (j + 1) * n_u_actual + i;
+                let d = (j + 1) * n_u_actual + ni;
                 triangles.push([a, b, d]);
                 triangles.push([a, d, c]);
             }
@@ -371,6 +541,7 @@ fn try_tessellate_cylindrical(
 /// to cone UV, determine the u-range, then generate a UV grid over [u_min, u_max] × [v_min, v_max].
 fn try_tessellate_conical(
     face: &TopoFace,
+    edge_cache: &EdgeCache,
     file: &StepFile,
     max_edge_len: f64,
 ) -> Option<SurfaceMesh> {
@@ -387,7 +558,7 @@ fn try_tessellate_conical(
 
     let surface = surface_from_step(face.surface_id, file).ok()?;
 
-    let boundary_3d = sample_boundary_3d(&face.outer_loop, file, max_edge_len);
+    let boundary_3d = sample_boundary_cached(&face.outer_loop, edge_cache);
     if boundary_3d.len() < 3 {
         return None;
     }
@@ -422,17 +593,62 @@ fn try_tessellate_conical(
     let r_mid = (radius + v_mid * semi_angle.sin()).abs();
 
     if has_closed_circle {
-        // Full-revolution cone: u sweeps 0..2π, v derived from axial boundary range.
-        let circumference = 2.0 * PI * r_mid;
-        let n_u = ((circumference / max_edge_len).ceil() as usize).clamp(8, 256);
+        // Full-revolution cone — same ring-from-cache strategy as the cylinder.
+        let mut cached_rings: Vec<(f64, Vec<[f64; 3]>)> = face
+            .outer_loop
+            .iter()
+            .filter(|e| dist3(e.start, e.end) < 1e-10)
+            .filter_map(|e| {
+                let cached = edge_cache.get(&e.edge_id)?;
+                if cached.len() < 2 {
+                    return None;
+                }
+                let v_ring = dot3(sub(cached[0], axis.origin), axis.z) / cos_phi;
+                let nu = cached.len() - 1;
+                let ring: Vec<[f64; 3]> = if e.reversed {
+                    (0..nu).map(|i| cached[nu - i]).collect()
+                } else {
+                    cached[..nu].to_vec()
+                };
+                Some((v_ring, ring))
+            })
+            .collect();
+        cached_rings.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+
+        let n_u = cached_rings
+            .first()
+            .map(|(_, r)| r.len())
+            .unwrap_or_else(|| ((2.0 * PI * r_mid / max_edge_len).ceil() as usize).clamp(8, 256));
         let n_v = (((v_max - v_min).abs() / max_edge_len).ceil() as usize).max(1);
+
+        let u_angles: Vec<f64> = cached_rings
+            .first()
+            .map(|(_, ring)| {
+                ring.iter()
+                    .map(|&p| {
+                        let d = sub(p, axis.origin);
+                        f64::atan2(dot3(d, y), dot3(d, axis.x))
+                    })
+                    .collect()
+            })
+            .unwrap_or_else(|| (0..n_u).map(|i| 2.0 * PI * i as f64 / n_u as f64).collect());
 
         let mut points = Vec::with_capacity(n_u * (n_v + 1));
         for j in 0..=n_v {
             let v = v_min + (v_max - v_min) * j as f64 / n_v as f64;
-            for i in 0..n_u {
-                let u = 2.0 * PI * i as f64 / n_u as f64;
-                points.push(surface.point(u, v));
+            let cached_ring = cached_rings
+                .iter()
+                .find(|(v_ring, _)| (v_ring - v).abs() < (v_max - v_min) * 1e-4 + 1e-8)
+                .map(|(_, ring)| ring);
+
+            if let Some(ring) = cached_ring {
+                for i in 0..n_u {
+                    points.push(ring[i % ring.len()]);
+                }
+            } else {
+                for &u in &u_angles {
+                    points.push(surface.point(u, v));
+                }
             }
         }
 
@@ -444,7 +660,6 @@ fn try_tessellate_conical(
                 let b = j * n_u + ni;
                 let c = (j + 1) * n_u + i;
                 let d = (j + 1) * n_u + ni;
-                // CCW winding when viewed from outside (outward-radial normal).
                 triangles.push([a, b, d]);
                 triangles.push([a, d, c]);
             }
@@ -526,6 +741,7 @@ fn try_tessellate_conical(
 /// Partial toroidal patches infer u and v ranges by inverting the boundary.
 fn try_tessellate_toroidal(
     face: &TopoFace,
+    edge_cache: &EdgeCache,
     file: &StepFile,
     max_edge_len: f64,
 ) -> Option<SurfaceMesh> {
@@ -582,7 +798,7 @@ fn try_tessellate_toroidal(
         return Some(SurfaceMesh { points, triangles });
     }
 
-    let boundary_3d = sample_boundary_3d(&face.outer_loop, file, max_edge_len);
+    let boundary_3d = sample_boundary_cached(&face.outer_loop, edge_cache);
     if boundary_3d.len() < 3 {
         return None;
     }
@@ -656,6 +872,7 @@ fn try_tessellate_toroidal(
 /// ball-end slots, domes, and other partial sphere features common in NIST AP242 models.
 fn try_tessellate_spherical(
     face: &TopoFace,
+    edge_cache: &EdgeCache,
     file: &StepFile,
     max_edge_len: f64,
 ) -> Option<SurfaceMesh> {
@@ -671,7 +888,7 @@ fn try_tessellate_spherical(
 
     let surface = surface_from_step(face.surface_id, file).ok()?;
 
-    let boundary_3d = sample_boundary_3d(&face.outer_loop, file, max_edge_len);
+    let boundary_3d = sample_boundary_cached(&face.outer_loop, edge_cache);
     if boundary_3d.len() < 3 {
         return None;
     }
@@ -768,6 +985,7 @@ fn unwrap_angles(angles: Vec<f64>) -> Vec<f64> {
 /// bounds are not finite.
 fn try_tessellate_bspline(
     face: &TopoFace,
+    edge_cache: &EdgeCache,
     file: &StepFile,
     max_edge_len: f64,
 ) -> Option<SurfaceMesh> {
@@ -827,7 +1045,7 @@ fn try_tessellate_bspline(
 
     // Clip generated triangles to the actual face boundary by projecting everything
     // onto a shared tangent plane and testing centroids against the 2D boundary polygon.
-    let boundary_3d = sample_boundary_3d(&face.outer_loop, file, max_edge_len);
+    let boundary_3d = sample_boundary_cached(&face.outer_loop, edge_cache);
     if boundary_3d.len() >= 3 {
         if let Some(normal) = face_normal(&boundary_3d) {
             let (bnd2d, origin, x_axis, y_axis) = project_to_2d(&boundary_3d, normal);
@@ -835,7 +1053,7 @@ fn try_tessellate_bspline(
                 .inner_loops
                 .iter()
                 .filter_map(|inner| {
-                    let inner_3d = sample_boundary_3d(inner, file, max_edge_len);
+                    let inner_3d = sample_boundary_cached(inner, edge_cache);
                     if inner_3d.len() < 3 {
                         return None;
                     }
@@ -872,6 +1090,7 @@ fn try_tessellate_bspline(
 /// that the general Bowyer-Watson path would produce for this case.
 fn try_tessellate_annular_disc(
     face: &TopoFace,
+    edge_cache: &EdgeCache,
     file: &StepFile,
     max_edge_len: f64,
 ) -> Option<SurfaceMesh> {
@@ -919,21 +1138,53 @@ fn try_tessellate_annular_disc(
     let y = axis.y();
     let inner_radius = get_real(inner_e, 2).ok()?;
 
-    // n_u matched to the outer barrel ring count so stitch() closes the seam.
-    let n_u = ((2.0 * PI * outer_radius / max_edge_len).ceil() as usize).clamp(8, 256);
+    // Build the outer ring from the edge cache so positions are bitwise identical to
+    // any adjacent cylindrical barrel that shares this circle edge.
+    let outer_ring: Vec<[f64; 3]> = if let Some(cached) = edge_cache.get(&outer_edge.edge_id) {
+        let nu = cached.len().saturating_sub(1).max(8);
+        if outer_edge.reversed {
+            (0..nu).map(|i| cached[nu - i]).collect()
+        } else {
+            cached[..nu].to_vec()
+        }
+    } else {
+        let n_u = ((2.0 * PI * outer_radius / max_edge_len).ceil() as usize).clamp(8, 256);
+        (0..n_u)
+            .map(|i| {
+                let u = 2.0 * PI * i as f64 / n_u as f64;
+                let radial = add(scale(axis.x, u.cos()), scale(y, u.sin()));
+                add(axis.origin, scale(radial, outer_radius))
+            })
+            .collect()
+    };
+
+    let inner_ring: Vec<[f64; 3]> = if let Some(cached) = edge_cache.get(&inner_edge.edge_id) {
+        let nu = cached.len().saturating_sub(1).max(8);
+        if inner_edge.reversed {
+            (0..nu).map(|i| cached[nu - i]).collect()
+        } else {
+            cached[..nu].to_vec()
+        }
+    } else {
+        let n_u = outer_ring.len();
+        (0..n_u)
+            .map(|i| {
+                let u = 2.0 * PI * i as f64 / n_u as f64;
+                let radial = add(scale(axis.x, u.cos()), scale(y, u.sin()));
+                add(axis.origin, scale(radial, inner_radius))
+            })
+            .collect()
+    };
+
+    let n_u = outer_ring.len().min(inner_ring.len());
+    if n_u < 3 {
+        return None;
+    }
 
     // Outer ring (0..n_u) then inner ring (n_u..2*n_u).
     let mut points = Vec::with_capacity(n_u * 2);
-    for i in 0..n_u {
-        let u = 2.0 * PI * i as f64 / n_u as f64;
-        let radial = add(scale(axis.x, u.cos()), scale(y, u.sin()));
-        points.push(add(axis.origin, scale(radial, outer_radius)));
-    }
-    for i in 0..n_u {
-        let u = 2.0 * PI * i as f64 / n_u as f64;
-        let radial = add(scale(axis.x, u.cos()), scale(y, u.sin()));
-        points.push(add(axis.origin, scale(radial, inner_radius)));
-    }
+    points.extend_from_slice(&outer_ring[..n_u]);
+    points.extend_from_slice(&inner_ring[..n_u]);
 
     // One radial layer of quads, CCW raw winding (outward normal = +axis.z).
     let mut triangles = Vec::with_capacity(n_u * 2);
@@ -955,10 +1206,15 @@ fn try_tessellate_annular_disc(
 /// for cocircular inputs: all n_u boundary points lie on the same circle, so
 /// every in-circumcircle test is degenerate and the triangulation goes wrong.
 ///
-/// The boundary points are generated at uniform angles `2πi/n_u` so that they
-/// coincide exactly with the corresponding ring produced by
-/// `try_tessellate_cylindrical`, enabling `stitch()` to close the seam.
-fn try_tessellate_disc(face: &TopoFace, file: &StepFile, max_edge_len: f64) -> Option<SurfaceMesh> {
+/// The boundary points are taken directly from the edge cache so they are
+/// bitwise identical to the corresponding ring produced by
+/// `try_tessellate_cylindrical`, guaranteeing zero-distance stitching.
+fn try_tessellate_disc(
+    face: &TopoFace,
+    edge_cache: &EdgeCache,
+    file: &StepFile,
+    max_edge_len: f64,
+) -> Option<SurfaceMesh> {
     // Only for PLANE surfaces with no inner loops.
     let e = file.get(&face.surface_id)?;
     if e.type_name != "PLANE" {
@@ -988,17 +1244,29 @@ fn try_tessellate_disc(face: &TopoFace, file: &StepFile, max_edge_len: f64) -> O
     let axis = axis2_placement(file, ax_id).ok()?;
     let y = axis.y();
 
-    let n_u = ((2.0 * PI * radius / max_edge_len).ceil() as usize).clamp(8, 256);
+    // Use cached ring so positions are bitwise identical to any adjacent barrel.
+    let ring: Vec<[f64; 3]> = if let Some(cached) = edge_cache.get(&edge.edge_id) {
+        let nu = cached.len().saturating_sub(1).max(8);
+        if edge.reversed {
+            (0..nu).map(|i| cached[nu - i]).collect()
+        } else {
+            cached[..nu].to_vec()
+        }
+    } else {
+        let n_u = ((2.0 * PI * radius / max_edge_len).ceil() as usize).clamp(8, 256);
+        (0..n_u)
+            .map(|i| {
+                let t = 2.0 * PI * i as f64 / n_u as f64;
+                let radial = add(scale(axis.x, t.cos()), scale(y, t.sin()));
+                add(axis.origin, scale(radial, radius))
+            })
+            .collect()
+    };
+    let n_u = ring.len();
 
-    // Boundary points at angles 0, 2π/n_u, …, 2π(n_u-1)/n_u.
-    // These are the same positions as the barrel ring (in reverse order for the
-    // bottom cap, same order for the top cap), so stitch() merges them cleanly.
+    // Boundary ring + center point.
     let mut points = Vec::with_capacity(n_u + 1);
-    for i in 0..n_u {
-        let t = 2.0 * PI * i as f64 / n_u as f64;
-        let radial = add(scale(axis.x, t.cos()), scale(y, t.sin()));
-        points.push(add(axis.origin, scale(radial, radius)));
-    }
+    points.extend_from_slice(&ring);
 
     // Center point (index n_u).
     points.push(axis.origin);
@@ -1033,63 +1301,7 @@ fn sample_arc_length<F: Fn(f64) -> [f64; 3]>(f: F, t0: f64, t1: f64, n: usize) -
     len
 }
 
-// ── Boundary sampling ──────────────────────────────────────────────────────────
-
-/// Collect all outer-loop edges into a single ordered 3D polygon by sampling
-/// intermediate curve points between each edge's start and end vertices.
-///
-/// `max_edge_len` controls density: edges are subdivided so segments stay ≤
-/// `max_edge_len`.  Closed curves (start ≈ end) fall back to 16 samples.
-fn sample_boundary_3d(edges: &[TopoEdge], file: &StepFile, max_edge_len: f64) -> Vec<[f64; 3]> {
-    let mut pts = Vec::with_capacity(edges.len() * 8);
-
-    for edge in edges {
-        pts.push(edge.start);
-
-        let chord = dist3(edge.start, edge.end);
-        // Sampling density rules:
-        //  • Closed circles (chord ≈ 0): use circumference → same n_u as the
-        //    cylindrical barrel, so stitch() closes the seam correctly.
-        //  • Non-closed circular arcs: use arc length (radius × |Δθ|) → same
-        //    n_u and the same sample positions as the partial-cylinder UV grid,
-        //    so stitch() closes the seam at curved face boundaries.
-        //  • All other curves: chord-based fallback.
-        let n_intermediate = if chord < 1e-10 {
-            if let Some(r) = circle_radius_from_curve(file, edge.curve_id) {
-                let n_u = ((2.0 * PI * r / max_edge_len).ceil() as usize).clamp(8, 256);
-                n_u - 1
-            } else {
-                16
-            }
-        } else if let Some(arc_len) =
-            circle_arc_length(file, edge.curve_id, edge.start, edge.end, edge.reversed)
-        {
-            // n_u - 1 intermediates produces n_u boundary points at fractions
-            // i/n_u, which matches the partial-cylinder grid's n_u+1 points
-            // (the last point, t=t_end, arrives as the next edge's start push).
-            let n_u = ((arc_len / max_edge_len).ceil() as usize).clamp(2, 256);
-            n_u.saturating_sub(1).max(1)
-        } else {
-            ((chord / max_edge_len).ceil() as usize).clamp(4, 64)
-        };
-
-        let samples = sample_curve(
-            file,
-            edge.curve_id,
-            edge.start,
-            edge.end,
-            edge.reversed,
-            n_intermediate,
-        );
-        // samples[0] ≈ edge.start (already pushed); samples[last] ≈ edge.end
-        // (will be the next edge's start), so skip both endpoints.
-        if samples.len() > 2 {
-            pts.extend_from_slice(&samples[1..samples.len() - 1]);
-        }
-    }
-
-    pts
-}
+// ── Curve sampling ─────────────────────────────────────────────────────────────
 
 /// Sample `n_intermediate + 2` points along a curve from `start` to `end`
 /// (including both endpoints).  Falls back to linear interpolation when the
