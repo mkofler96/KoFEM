@@ -26,9 +26,9 @@ export function StatusBar() {
     <div className={styles.bar}>
       {/* Left */}
       <div className={styles.left}>
-        <span className={styles.stepChip}>
+        {/* <span className={styles.stepChip}>
           Step {MODE_NUMS[mode]} / 05 · {MODE_LABELS[mode]}
-        </span>
+        </span> */}
 
         {pickMode && (
           <span className={styles.pickChip}>

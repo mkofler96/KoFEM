@@ -24,6 +24,62 @@
   gap: 24px;
 }
 
+.cardGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.importCard {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background 100ms ease, border-color 100ms ease, box-shadow 100ms ease;
+}
+
+.importCard:hover:not(:disabled) {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(31, 95, 208, 0.08);
+}
+
+.importCard:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.cardIcon {
+  width: 18px;
+  height: 18px;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+
+.importCard:disabled .cardIcon {
+  color: var(--muted);
+}
+
+.cardTitle {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.cardSub {
+  font-size: 10.5px;
+  color: var(--muted);
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
 /* ── Header ─────────────────────────────────────────────────── */
 
 .header {

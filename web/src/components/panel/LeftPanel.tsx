@@ -309,9 +309,7 @@ function GeometryPanel() {
       </div>
 
       {/* Next CTA */}
-      <button className={styles.nextBtn} onClick={() => setMode('mesh')}>
-        Continue to Mesh →
-      </button>
+
 
       {dialogOpen && (
         <GeometryDialog
