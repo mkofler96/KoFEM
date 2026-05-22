@@ -160,8 +160,6 @@ function buildCantilever() {
   return { nodes, elements, materials, properties, constraints, loads }
 }
 
-const cantilever = buildCantilever()
-
 // ── Store types ───────────────────────────────────────────────────────────────
 
 export interface ModelSnapshot {

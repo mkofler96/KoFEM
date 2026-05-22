@@ -1,6 +1,6 @@
 import { useState, useRef, type ChangeEvent } from 'react'
 import { useModelStore } from '../../store/modelStore'
-import type { AppMode, BoxGeometry, Material, Node, Element } from '../../store/modelStore'
+import type { BoxGeometry, Material, Node, Element } from '../../store/modelStore'
 import { GeometryDialog } from '../geometry/GeometryDialog'
 import { groupConstraints, groupLoads } from '../../lib/parseAbaqus'
 import { fmt } from '../../lib/modelDisplay'

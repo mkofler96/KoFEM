@@ -6,21 +6,24 @@ const STEP_FILE = path.resolve('..', 'test_files', 'new_bracket_2.stp')
 
 test('capture app after loading STEP file with fit view', async ({ page }) => {
   await page.goto('/')
+
+  // Dismiss welcome screen
+  await page.getByRole('button', { name: 'Start with example' }).click()
   await expect(page.getByRole('button', { name: 'Import STEP' })).toBeVisible()
 
   // Upload the example STEP file via the hidden file input
   await page.locator('input[type="file"][accept=".stp,.step"]').setInputFiles(STEP_FILE)
 
-  // Wait for import to finish — button returns to its default label
+  // Wait for import to finish — Import STEP card re-enables
   await expect(page.getByRole('button', { name: 'Import STEP' })).toBeEnabled({ timeout: 30_000 })
 
-  // Fail fast if the worker reported an error in the UI banner (no alert dialog).
+  // Fail fast if the worker reported an error in the UI banner.
   const errorBanner = page.getByTestId('step-error')
   if (await errorBanner.isVisible()) {
     throw new Error(`STEP import failed: ${await errorBanner.textContent()}`)
   }
 
-  // Fit all loaded geometry into the isometric view
+  // Fit all loaded geometry into the isometric view (HUD button in the viewport)
   await page.getByRole('button', { name: 'Fit View' }).click()
 
   // Allow the camera reposition and a render frame to settle
