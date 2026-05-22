@@ -69,8 +69,10 @@ function GeometryPanel() {
   const elements      = useModelStore(s => s.elements)
   const stepSurface   = useModelStore(s => s.stepSurface)
   const setStepSurface = useModelStore(s => s.setStepSurface)
+  const stepImportError    = useModelStore(s => s.stepImportError)
   const setStepImportError = useModelStore(s => s.setStepImportError)
   const loadModel     = useModelStore(s => s.loadModel)
+  const isRunning     = useModelStore(s => s.isRunning)
   const setRunning    = useModelStore(s => s.setRunning)
   const materials     = useModelStore(s => s.materials)
   const createMaterial = useModelStore(s => s.createMaterial)
@@ -82,6 +84,7 @@ function GeometryPanel() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<BoxGeometry | null>(null)
   const [editingMatId, setEditingMatId] = useState<number | 'new' | null>(null)
+  const [isImportingStep, setIsImportingStep] = useState(false)
 
   const inpRef  = useRef<HTMLInputElement | null>(null)
   const stepRef = useRef<HTMLInputElement | null>(null)
@@ -125,6 +128,7 @@ function GeometryPanel() {
     if (!file) return
     e.target.value = ''
     setStepImportError(null)
+    setIsImportingStep(true)
     setRunning(true)
     const text = await file.text()
     sendToWorker<{ points: [number,number,number][]; triangles: [number,number,number][] }>('parse_step', { text })
@@ -133,7 +137,7 @@ function GeometryPanel() {
         else setStepSurface({ points, triangles })
       })
       .catch(err => setStepImportError(err.message ?? 'STEP import failed'))
-      .finally(() => setRunning(false))
+      .finally(() => { setIsImportingStep(false); setRunning(false) })
   }
 
   async function handleVolMesh() {
@@ -174,16 +178,16 @@ function GeometryPanel() {
             <input ref={el => { stepRef.current = el }} type="file" accept=".stp,.step" style={{ display: 'none' }} onChange={handleStepFile} />
 
             <div className={styles.cardGrid}>
-              <button className={styles.importCard} onClick={() => stepRef.current?.click()}>
+              <button className={styles.importCard} disabled={isImportingStep || isRunning} onClick={() => stepRef.current?.click()}>
                 <svg className={styles.cardIcon} viewBox="0 0 20 20" fill="none">
                   <rect x="3" y="2" width="14" height="16" rx="2" stroke="currentColor" strokeWidth="1.4"/>
                   <path d="M7 7h6M7 10h6M7 13h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
                 </svg>
-                <span className={styles.cardTitle}>Import STEP</span>
+                <span className={styles.cardTitle}>{isImportingStep ? 'Importing…' : 'Import STEP'}</span>
                 <span className={styles.cardSub}>.step / .stp</span>
               </button>
 
-              <button className={styles.importCard} onClick={() => inpRef.current?.click()}>
+              <button className={styles.importCard} disabled={isRunning} onClick={() => inpRef.current?.click()}>
                 <svg className={styles.cardIcon} viewBox="0 0 20 20" fill="none">
                   <path d="M4 2h8l4 4v12a2 2 0 01-2 2H4a2 2 0 01-2-2V4a2 2 0 012-2z" stroke="currentColor" strokeWidth="1.4"/>
                   <path d="M12 2v4h4" stroke="currentColor" strokeWidth="1.4"/>
@@ -209,6 +213,12 @@ function GeometryPanel() {
                 <span className={styles.cardSub}>Box · Cyl · Sphere</span>
               </button>
             </div>
+
+            {stepImportError && (
+              <div data-testid="step-error" style={{ color: '#dc2626', fontSize: 12, padding: '4px 0' }}>
+                {stepImportError}
+              </div>
+            )}
 
             {stepSurface && (
               <button className={styles.actionBtn} disabled={isMeshing} onClick={handleVolMesh}>
