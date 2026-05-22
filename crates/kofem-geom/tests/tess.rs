@@ -1346,7 +1346,15 @@ END-ISO-10303-21;
         let b = BRep::extract(&f).unwrap();
         (f, b)
     };
-    let cyl_mesh = tessellate(&cyl_brep, &cyl_file, TessOptions { max_edge_len: 1.0, ..TessOptions::default() }).unwrap();
+    let cyl_mesh = tessellate(
+        &cyl_brep,
+        &cyl_file,
+        TessOptions {
+            max_edge_len: 1.0,
+            ..TessOptions::default()
+        },
+    )
+    .unwrap();
 
     let (flat_file, flat_brep) = {
         let f = parse(STEP_BOTTOM_FLAT).unwrap();
@@ -1370,12 +1378,16 @@ END-ISO-10303-21;
         let mut mx = all_pts[0];
         for &p in &all_pts {
             for k in 0..3 {
-                if p[k] < mn[k] { mn[k] = p[k]; }
-                if p[k] > mx[k] { mx[k] = p[k]; }
+                if p[k] < mn[k] {
+                    mn[k] = p[k];
+                }
+                if p[k] > mx[k] {
+                    mx[k] = p[k];
+                }
             }
         }
-        let d = [mx[0]-mn[0], mx[1]-mn[1], mx[2]-mn[2]];
-        (d[0]*d[0]+d[1]*d[1]+d[2]*d[2]).sqrt()
+        let d = [mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]];
+        (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt()
     };
     let eps = 1e-4 * bbox.max(1e-10);
     let eps2 = eps * eps;
@@ -1383,16 +1395,24 @@ END-ISO-10303-21;
     let mut remap = vec![0usize; all_pts.len()];
     let mut unique: Vec<[f64; 3]> = Vec::new();
     for (i, &p) in all_pts.iter().enumerate() {
-        let found = unique.iter().enumerate().find(|(_, &q)| {
-            let d = [p[0]-q[0], p[1]-q[1], p[2]-q[2]];
-            d[0]*d[0]+d[1]*d[1]+d[2]*d[2] <= eps2
-        }).map(|(j, _)| j);
+        let found = unique
+            .iter()
+            .enumerate()
+            .find(|(_, &q)| {
+                let d = [p[0] - q[0], p[1] - q[1], p[2] - q[2]];
+                d[0] * d[0] + d[1] * d[1] + d[2] * d[2] <= eps2
+            })
+            .map(|(j, _)| j);
         match found {
             Some(j) => remap[i] = j,
-            None => { remap[i] = unique.len(); unique.push(p); }
+            None => {
+                remap[i] = unique.len();
+                unique.push(p);
+            }
         }
     }
-    let stitched: Vec<[usize; 3]> = all_tris.iter()
+    let stitched: Vec<[usize; 3]> = all_tris
+        .iter()
         .map(|&[a, b, c]| [remap[a], remap[b], remap[c]])
         .filter(|&[a, b, c]| a != b && b != c && a != c)
         .collect();
@@ -1406,12 +1426,14 @@ END-ISO-10303-21;
         let pb = unique[b];
         // Arc boundary: both endpoints near r=5, z=0, x≥0, y≥0
         let on_arc = |p: [f64; 3]| {
-            let r = (p[0]*p[0] + p[1]*p[1]).sqrt();
+            let r = (p[0] * p[0] + p[1] * p[1]).sqrt();
             (r - 5.0).abs() < 0.1 && p[2].abs() < 0.1 && p[0] >= -0.1 && p[1] >= -0.1
         };
         if on_arc(pa) && on_arc(pb) {
             arc_total += 1;
-            if cnt == 1 { arc_open += 1; }
+            if cnt == 1 {
+                arc_open += 1;
+            }
         }
     }
 
