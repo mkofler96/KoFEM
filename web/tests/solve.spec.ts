@@ -30,7 +30,7 @@ test('page loads with welcome screen and enters the app', async ({ page }) => {
   expect(errors).toHaveLength(0)
 })
 
-test('solve default model completes and button re-enables', async ({ page }) => {
+test('solve default model completes and navigates to results', async ({ page }) => {
   await startExample(page)
   await goToSolveMode(page)
 
@@ -40,8 +40,8 @@ test('solve default model completes and button re-enables', async ({ page }) => 
   await solveBtn.click()
   // Button becomes disabled while solving
   await expect(solveBtn).toBeDisabled()
-  // Wait for solve to finish — button re-enables
-  await expect(page.getByRole('button', { name: 'Run static solve' })).toBeEnabled({ timeout: 30_000 })
+  // After solve, app auto-navigates to Results mode showing displacement
+  await expect(page.getByText(/Max \|U\|/i)).toBeVisible({ timeout: 30_000 })
 })
 
 test('results panel shows displacement after solve', async ({ page }) => {
@@ -49,9 +49,6 @@ test('results panel shows displacement after solve', async ({ page }) => {
   await goToSolveMode(page)
 
   await page.getByRole('button', { name: 'Run static solve' }).click()
-  // Wait for solve to finish
-  await expect(page.getByRole('button', { name: 'Run static solve' })).toBeEnabled({ timeout: 30_000 })
-
-  // Results mode is shown automatically after solve completes
-  await expect(page.getByText(/Max \|U\|/i)).toBeVisible()
+  // App auto-navigates to Results mode after solve completes
+  await expect(page.getByText(/Max \|U\|/i)).toBeVisible({ timeout: 30_000 })
 })
