@@ -75,6 +75,8 @@ test.describe('Mesh capabilities report', () => {
 
       console.log(`[${geom.label}] navigating to app`)
       await page.goto('/')
+      // Dismiss welcome screen
+      await page.getByRole('button', { name: 'Start with example' }).click()
       await expect(page.getByRole('button', { name: 'Import STEP' })).toBeVisible()
       console.log(`[${geom.label}] ${elapsed()} app ready, importing ${stepFile}`)
 

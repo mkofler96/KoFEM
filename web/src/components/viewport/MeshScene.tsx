@@ -318,36 +318,31 @@ export function MeshScene() {
   }, [stepSurface])
 
   if (nodes.length === 0 && !stepGeometry?.positions) {
-    return (
-      <mesh>
-        <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial color="#4a4a80" wireframe />
-      </mesh>
-    )
+    return null
   }
 
   return (
     <group>
-      {/* Undeformed wireframe — only when no result */}
-      {!result && undeformedEdges.map((pts, i) => (
-        <Line key={`u-${i}`} points={pts} color="#4a4a80" lineWidth={1} />
-      ))}
-
-      {/* Bar elements */}
-      {barLines.map((pts, i) => (
-        <Line key={`b-${i}`} points={pts} color="#5a5a8a" lineWidth={2} />
-      ))}
-
-      {/* Clickable undeformed surface (pick mode, no result yet) */}
-      {!result && undeformedSurface && pickMode && (
-        <mesh onPointerDown={handleFacePick}>
+      {/* Undeformed solid surface — light blue-grey on light background */}
+      {!result && undeformedSurface && (
+        <mesh onPointerDown={pickMode ? handleFacePick : undefined}>
           <bufferGeometry>
             <bufferAttribute attach="attributes-position" args={[undeformedSurface.positions, 3]} />
             <bufferAttribute attach="attributes-normal" args={[undeformedSurface.normals, 3]} />
           </bufferGeometry>
-          <meshStandardMaterial color="#3a3a70" transparent opacity={0.01} side={THREE.DoubleSide} />
+          <meshStandardMaterial color="#b8cce4" transparent opacity={0.92} side={THREE.DoubleSide} />
         </mesh>
       )}
+
+      {/* Undeformed wireframe — dark edges on light bg */}
+      {!result && undeformedEdges.map((pts, i) => (
+        <Line key={`u-${i}`} points={pts} color="#2d4a6b" lineWidth={1.2} />
+      ))}
+
+      {/* Bar elements */}
+      {barLines.map((pts, i) => (
+        <Line key={`b-${i}`} points={pts} color="#1e3a5f" lineWidth={2} />
+      ))}
 
       {/* Deformed solid surface */}
       {deformedSurface && (
@@ -362,30 +357,30 @@ export function MeshScene() {
 
       {/* Deformed wireframe overlay */}
       {deformedEdges && deformedEdges.map((pts, i) => (
-        <Line key={`d-${i}`} points={pts} color="#ffffff" lineWidth={0.5} opacity={0.3} transparent />
+        <Line key={`d-${i}`} points={pts} color="#1e3a5f" lineWidth={0.6} opacity={0.4} transparent />
       ))}
 
-      {/* Selected face highlight */}
+      {/* Selected face highlight — orange-red like the design */}
       {faceHighlight && (
         <mesh position={[faceHighlight.cx, faceHighlight.cy, faceHighlight.cz]}>
-          <boxGeometry args={[faceHighlight.sx + 0.002, faceHighlight.sy + 0.002, faceHighlight.sz + 0.002]} />
-          <meshStandardMaterial color="#ffcc44" transparent opacity={0.35} depthTest={false} side={THREE.DoubleSide} />
+          <boxGeometry args={[faceHighlight.sx + 0.003, faceHighlight.sy + 0.003, faceHighlight.sz + 0.003]} />
+          <meshStandardMaterial color="#e05533" transparent opacity={0.45} depthTest={false} side={THREE.DoubleSide} />
         </mesh>
       )}
 
       {/* Fixed-face marker */}
       {fixedMarkerPos && (
         <mesh position={fixedMarkerPos}>
-          <sphereGeometry args={[modelSize * 0.015, 16, 16]} />
-          <meshStandardMaterial color="#ff4444" />
+          <sphereGeometry args={[modelSize * 0.018, 16, 16]} />
+          <meshStandardMaterial color="#dc2626" />
         </mesh>
       )}
 
       {/* Load marker */}
       {loadMarkerPos && (
         <mesh position={loadMarkerPos}>
-          <sphereGeometry args={[modelSize * 0.015, 16, 16]} />
-          <meshStandardMaterial color="#ffcc00" />
+          <sphereGeometry args={[modelSize * 0.018, 16, 16]} />
+          <meshStandardMaterial color="#d97706" />
         </mesh>
       )}
 
@@ -407,7 +402,7 @@ export function MeshScene() {
             <bufferAttribute attach="attributes-normal" args={[stepGeometry.normals, 3]} />
           </bufferGeometry>
           <meshStandardMaterial
-            color={stepWireframe ? '#64c864' : '#8899bb'}
+            color={stepWireframe ? '#2d7a2d' : '#7a9bbf'}
             side={THREE.DoubleSide}
             wireframe={stepWireframe}
           />

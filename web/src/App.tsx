@@ -1,29 +1,23 @@
+import { useModelStore } from './store/modelStore'
+import { WelcomeScreen } from './components/welcome/WelcomeScreen'
+import { TopBar } from './components/topbar/TopBar'
+import { LeftPanel } from './components/panel/LeftPanel'
 import { Viewport } from './components/viewport/Viewport'
-import { Sidebar } from './components/sidebar/Sidebar'
-import { PropertiesPanel } from './components/properties/PropertiesPanel'
-import { Toolbar } from './components/toolbar/Toolbar'
-import { ResultsPanel } from './components/results/ResultsPanel'
-import { FacePickPanel } from './components/bc/FacePickPanel'
+import { StatusBar } from './components/statusbar/StatusBar'
 import styles from './App.module.css'
 
 export default function App() {
+  const hasStarted = useModelStore(s => s.hasStarted)
+  if (!hasStarted) return <WelcomeScreen />
+
   return (
     <div className={styles.layout}>
-      <header className={styles.header}>
-        <span className={styles.logo}>KoFEM</span>
-        <Toolbar />
-      </header>
-      <aside className={styles.sidebar}>
-        <Sidebar />
-      </aside>
+      <TopBar />
+      <LeftPanel />
       <main className={styles.viewport}>
         <Viewport />
       </main>
-      <aside className={styles.properties}>
-        <FacePickPanel />
-        <PropertiesPanel />
-        <ResultsPanel />
-      </aside>
+      <StatusBar />
     </div>
   )
 }
