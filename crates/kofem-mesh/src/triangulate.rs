@@ -159,24 +159,11 @@ pub fn filter_interior(triangles: &mut Vec<Triangle>, pts: &[Point2], boundary: 
 /// Triangulate a closed `boundary` polygon (vertices in CCW order).
 ///
 /// Returns a [`Mesh2D`] whose triangles cover the polygon interior.
-/// Duplicate boundary-vertex indices in [`Mesh2D::points`] are preserved
-/// (the polygon vertices are the first `boundary.len()` entries).
+/// Delegates to [`crate::cdt::triangulate_constrained`] so all boundary edges
+/// are guaranteed to appear in the output (constrained Delaunay).
 pub fn triangulate(boundary: &[Point2]) -> Mesh2D {
     assert!(boundary.len() >= 3, "polygon needs ≥ 3 vertices");
-
-    let (all_pts, mut triangles) = bowyer_watson(boundary);
-
-    let n_orig = boundary.len();
-    remove_super(&mut triangles, n_orig);
-    filter_interior(&mut triangles, &all_pts, boundary);
-
-    // Re-number: only keep the original boundary points (indices 0..n_orig).
-    // bowyer_watson only inserted the boundary points, so all remaining
-    // triangle indices are < n_orig.
-    Mesh2D {
-        points: all_pts[..n_orig].to_vec(),
-        triangles,
-    }
+    crate::cdt::triangulate_constrained(boundary, &[])
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

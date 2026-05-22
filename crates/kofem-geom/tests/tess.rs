@@ -1205,3 +1205,75 @@ fn nist_ctc_02_tessellates_without_panic() {
         );
     }
 }
+
+// Quick smoke test: tessellate all NIST files without panicking.
+// Tests are independent so failures are easy to isolate.
+macro_rules! nist_smoke {
+    ($name:ident, $file:literal) => {
+        #[test]
+        fn $name() {
+            let text = std::fs::read_to_string(
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join($file),
+            )
+            .expect("NIST file missing");
+            let file = kofem_geom::step::parse(&text).expect("parse");
+            let brep = kofem_geom::step::BRep::extract(&file).expect("extract");
+            let opts = kofem_geom::tess::TessOptions::default();
+            let mesh = kofem_geom::tess::tessellate(&brep, &file, opts);
+            assert!(mesh.is_ok(), "tessellation failed: {:?}", mesh.err());
+        }
+    };
+}
+
+nist_smoke!(
+    nist_ctc_01_smoke,
+    "../../test_files/NIST/nist_ctc_01_asme1_ap242-e1.stp"
+);
+nist_smoke!(
+    nist_ctc_03_smoke,
+    "../../test_files/NIST/nist_ctc_03_asme1_ap242-e2.stp"
+);
+nist_smoke!(
+    nist_ctc_05_smoke,
+    "../../test_files/NIST/nist_ctc_05_asme1_ap242-e1.stp"
+);
+nist_smoke!(
+    nist_ftc_06_smoke,
+    "../../test_files/NIST/nist_ftc_06_asme1_ap242-e2.stp"
+);
+nist_smoke!(
+    nist_ftc_07_smoke,
+    "../../test_files/NIST/nist_ftc_07_asme1_ap242-e2.stp"
+);
+nist_smoke!(
+    nist_ftc_08_smoke,
+    "../../test_files/NIST/nist_ftc_08_asme1_ap242-e2.stp"
+);
+nist_smoke!(
+    nist_ftc_09_smoke,
+    "../../test_files/NIST/nist_ftc_09_asme1_ap242-e1.stp"
+);
+nist_smoke!(
+    nist_ftc_10_smoke,
+    "../../test_files/NIST/nist_ftc_10_asme1_ap242-e2.stp"
+);
+nist_smoke!(
+    nist_ftc_11_smoke,
+    "../../test_files/NIST/nist_ftc_11_asme1_ap242-e2.stp"
+);
+nist_smoke!(
+    nist_stc_06_smoke,
+    "../../test_files/NIST/nist_stc_06_asme1_ap242-e3.stp"
+);
+nist_smoke!(
+    nist_stc_07_smoke,
+    "../../test_files/NIST/nist_stc_07_asme1_ap242-e3.stp"
+);
+nist_smoke!(
+    nist_stc_08_smoke,
+    "../../test_files/NIST/nist_stc_08_asme1_ap242-e3.stp"
+);
+nist_smoke!(
+    nist_stc_09_smoke,
+    "../../test_files/NIST/nist_stc_09_asme1_ap242-e3.stp"
+);

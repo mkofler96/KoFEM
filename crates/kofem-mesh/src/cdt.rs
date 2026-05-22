@@ -172,6 +172,14 @@ pub fn try_triangulate_constrained(
 
     let n_outer = outer.len();
 
+    // Degenerate input: preprocessing removed too many points to triangulate.
+    if n_outer < 3 {
+        return Ok(Mesh2D {
+            points: outer,
+            triangles: vec![],
+        });
+    }
+
     // Combine outer boundary + all hole vertices into one flat list.
     let mut all_input_pts: Vec<Point2> = outer.clone();
     for h in &processed_holes {
@@ -446,6 +454,8 @@ pub fn retri_cavity(a: usize, b: usize, cavity: &[usize], pts: &[Point2]) -> Vec
     }
 
     // Find apex whose circumcircle (with a and b) is empty of other cavity vertices.
+    // Falls back to index 0 for the cocircular degenerate case (all choices are
+    // equivalent when the determinant is zero, so any fan triangulation is valid).
     let c_idx = (0..cavity.len())
         .find(|&i| {
             let c = cavity[i];
@@ -460,7 +470,7 @@ pub fn retri_cavity(a: usize, b: usize, cavity: &[usize], pts: &[Point2]) -> Vec
                 .enumerate()
                 .all(|(j, &d)| j == i || !in_circumcircle(pts, ta, tb, tc, d))
         })
-        .expect("a valid Delaunay apex must always exist for a convex cavity");
+        .unwrap_or(0);
 
     let c = cavity[c_idx];
 
@@ -930,6 +940,33 @@ mod tests {
         ];
         let result = try_triangulate_constrained(&outer, &[]);
         assert!(result.is_ok());
+    }
+
+    // ── Issue-95 tests: integration / tessellator wiring ─────────────────────
+
+    #[test]
+    fn concave_polygon_no_stray_triangles() {
+        let n = 16usize;
+        let mut outer = vec![
+            Point2::new(-10.0, -10.0),
+            Point2::new(10.0, -10.0),
+            Point2::new(10.0, 10.0),
+        ];
+        for i in 0..=n {
+            let t = std::f64::consts::PI * (i as f64) / (n as f64);
+            outer.push(Point2::new(5.0 * t.cos(), 10.0 - 5.0 * (1.0 - t.sin())));
+        }
+        outer.push(Point2::new(-10.0, 10.0));
+        let mesh = triangulate_constrained(&outer, &[]);
+        for t in &mesh.triangles {
+            let c = t.centroid(&mesh.points);
+            assert!(
+                point_in_polygon(c, &outer),
+                "stray triangle at ({:.3},{:.3})",
+                c.x,
+                c.y
+            );
+        }
     }
 
     // ── Issue-92 tests: interior/exterior classification ──────────────────────
