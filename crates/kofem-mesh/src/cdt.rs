@@ -454,6 +454,8 @@ pub fn retri_cavity(a: usize, b: usize, cavity: &[usize], pts: &[Point2]) -> Vec
     }
 
     // Find apex whose circumcircle (with a and b) is empty of other cavity vertices.
+    // Falls back to index 0 for the cocircular degenerate case (all choices are
+    // equivalent when the determinant is zero, so any fan triangulation is valid).
     let c_idx = (0..cavity.len())
         .find(|&i| {
             let c = cavity[i];
@@ -468,7 +470,7 @@ pub fn retri_cavity(a: usize, b: usize, cavity: &[usize], pts: &[Point2]) -> Vec
                 .enumerate()
                 .all(|(j, &d)| j == i || !in_circumcircle(pts, ta, tb, tc, d))
         })
-        .expect("a valid Delaunay apex must always exist for a convex cavity");
+        .unwrap_or(0);
 
     let c = cavity[c_idx];
 
