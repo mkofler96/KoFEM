@@ -172,6 +172,14 @@ pub fn try_triangulate_constrained(
 
     let n_outer = outer.len();
 
+    // Degenerate input: preprocessing removed too many points to triangulate.
+    if n_outer < 3 {
+        return Ok(Mesh2D {
+            points: outer,
+            triangles: vec![],
+        });
+    }
+
     // Combine outer boundary + all hole vertices into one flat list.
     let mut all_input_pts: Vec<Point2> = outer.clone();
     for h in &processed_holes {
