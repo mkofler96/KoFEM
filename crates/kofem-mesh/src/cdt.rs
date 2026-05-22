@@ -67,6 +67,46 @@ fn segments_properly_intersect(p: Point2, q: Point2, r: Point2, s: Point2) -> bo
         && ((d3 > 0.0 && d4 < 0.0) || (d3 < 0.0 && d4 > 0.0))
 }
 
+/// Removes coincident adjacent vertices and collinear runs from a boundary ring.
+///
+/// After this call no two consecutive vertices are identical, and no vertex is
+/// collinear with its immediate neighbours, so `bowyer_watson` never receives
+/// degenerate input from the ring.
+fn preprocess_ring(ring: &[Point2]) -> Vec<Point2> {
+    if ring.len() < 2 {
+        return ring.to_vec();
+    }
+
+    // Pass 1: remove consecutive duplicates (including wrap-around last == first).
+    let mut deduped: Vec<Point2> = Vec::with_capacity(ring.len());
+    for &p in ring {
+        if deduped.last() != Some(&p) {
+            deduped.push(p);
+        }
+    }
+    while deduped.len() >= 2 && deduped.last() == deduped.first() {
+        deduped.pop();
+    }
+
+    if deduped.len() < 3 {
+        return deduped;
+    }
+
+    // Pass 2: remove collinear interior vertices (zero-area-triangle sources).
+    let n = deduped.len();
+    let mut result: Vec<Point2> = Vec::with_capacity(n);
+    for i in 0..n {
+        let prev = deduped[(i + n - 1) % n];
+        let curr = deduped[i];
+        let next = deduped[(i + 1) % n];
+        if orient2d(prev, curr, next) != 0.0 {
+            result.push(curr);
+        }
+    }
+
+    result
+}
+
 /// Retains only triangles whose centroid is strictly inside `outer` and outside
 /// every hole.  Must be called after all constraint edges are inserted — once
 /// boundaries are enforced no triangle straddles a boundary, so the centroid
@@ -93,12 +133,17 @@ fn classify_interior(
 ///
 /// Inserting a constraint that already exists in the triangulation is a no-op.
 pub fn triangulate_constrained(boundary: &[Point2], holes: &[&[Point2]]) -> Mesh2D {
-    let n_outer = boundary.len();
+    // Preprocess rings: remove coincident adjacent vertices and collinear runs.
+    let outer: Vec<Point2> = preprocess_ring(boundary);
+    let processed_holes: Vec<Vec<Point2>> = holes.iter().map(|&h| preprocess_ring(h)).collect();
+    let hole_slices: Vec<&[Point2]> = processed_holes.iter().map(|h| h.as_slice()).collect();
+
+    let n_outer = outer.len();
 
     // Combine outer boundary + all hole vertices into one flat list.
-    let mut all_input_pts: Vec<Point2> = boundary.to_vec();
-    for &hole in holes {
-        all_input_pts.extend_from_slice(hole);
+    let mut all_input_pts: Vec<Point2> = outer.clone();
+    for h in &processed_holes {
+        all_input_pts.extend_from_slice(h);
     }
     let n_all = all_input_pts.len();
 
@@ -115,8 +160,8 @@ pub fn triangulate_constrained(boundary: &[Point2], holes: &[&[Point2]]) -> Mesh
 
     // Hole rings
     let mut offset = n_outer;
-    for &hole in holes {
-        let m = hole.len();
+    for h in &processed_holes {
+        let m = h.len();
         for i in 0..m {
             constraints.push((offset + i, offset + (i + 1) % m));
         }
@@ -129,10 +174,12 @@ pub fn triangulate_constrained(boundary: &[Point2], holes: &[&[Point2]]) -> Mesh
         .collect();
 
     for (a, b) in constraints {
-        enforce_constraint(&mut triangles, &all_pts, a, b, &constraint_set);
+        if a != b {
+            enforce_constraint(&mut triangles, &all_pts, a, b, &constraint_set);
+        }
     }
 
-    classify_interior(&mut triangles, &all_pts, boundary, holes);
+    classify_interior(&mut triangles, &all_pts, &outer, &hole_slices);
 
     Mesh2D {
         points: all_pts[..n_all].to_vec(),
@@ -755,6 +802,45 @@ mod tests {
         let mesh1 = triangulate_constrained(&outer, &[]);
         let mesh2 = triangulate_constrained(&outer, &[]);
         assert_eq!(mesh1.triangles.len(), mesh2.triangles.len());
+    }
+
+    // ── Issue-93 tests: degenerate input handling ─────────────────────────────
+
+    #[test]
+    fn coincident_vertices_deduped() {
+        let outer_with_dup = vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(1.0, 0.0),
+            Point2::new(1.0, 0.0), // duplicate
+            Point2::new(1.0, 1.0),
+            Point2::new(0.0, 1.0),
+        ];
+        let outer_clean = vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(1.0, 0.0),
+            Point2::new(1.0, 1.0),
+            Point2::new(0.0, 1.0),
+        ];
+        let mesh_dup = triangulate_constrained(&outer_with_dup, &[]);
+        let mesh_clean = triangulate_constrained(&outer_clean, &[]);
+        assert_eq!(mesh_dup.triangles.len(), mesh_clean.triangles.len());
+    }
+
+    #[test]
+    fn collinear_boundary_no_degenerate_triangles() {
+        let outer = vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(1.0, 0.0), // collinear midpoint
+            Point2::new(2.0, 0.0),
+            Point2::new(2.0, 1.0),
+            Point2::new(0.0, 1.0),
+        ];
+        let mesh = triangulate_constrained(&outer, &[]);
+        for t in &mesh.triangles {
+            let [a, b, c] = t.v;
+            let area2 = orient2d(mesh.points[a], mesh.points[b], mesh.points[c]).abs();
+            assert!(area2 > 1e-10, "degenerate triangle with area2={area2}");
+        }
     }
 
     // ── Issue-92 tests: interior/exterior classification ──────────────────────
