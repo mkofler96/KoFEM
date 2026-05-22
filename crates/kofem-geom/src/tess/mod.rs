@@ -383,6 +383,12 @@ fn try_tessellate_cylindrical(
         // (barrel + two caps) get bitwise-identical positions on the shared rings.
         // Collect all closed-circle edges so we can use their cached rings for
         // the j=0 and j=n_v rows.
+        //
+        // Always use the CANONICAL (non-reversed) cache direction — every row
+        // (bottom, interior, top) must rotate in the same angular sense so that
+        // the barrel's quad triangles have consistent winding.  The traversal
+        // direction stored in `edge.reversed` is irrelevant here because the
+        // overall face winding is corrected by `flip_winding_if` afterwards.
         let mut cached_rings: Vec<(f64, Vec<[f64; 3]>)> = face
             .outer_loop
             .iter()
@@ -394,13 +400,9 @@ fn try_tessellate_cylindrical(
                 }
                 // Axial coordinate of this ring.
                 let v_ring = dot3(sub(cached[0], axis.origin), axis.z);
-                // Build the n_u ring points in traversal order (excluding dup end).
+                // Canonical: first n_u entries (exclude the duplicated closing point).
                 let nu = cached.len() - 1;
-                let ring: Vec<[f64; 3]> = if e.reversed {
-                    (0..nu).map(|i| cached[nu - i]).collect()
-                } else {
-                    cached[..nu].to_vec()
-                };
+                let ring: Vec<[f64; 3]> = cached[..nu].to_vec();
                 Some((v_ring, ring))
             })
             .collect();
@@ -594,6 +596,8 @@ fn try_tessellate_conical(
 
     if has_closed_circle {
         // Full-revolution cone — same ring-from-cache strategy as the cylinder.
+        // Same canonical-direction rule as the cylinder barrel: all rows must
+        // share a consistent angular sense; flip_winding_if corrects the face.
         let mut cached_rings: Vec<(f64, Vec<[f64; 3]>)> = face
             .outer_loop
             .iter()
@@ -605,11 +609,7 @@ fn try_tessellate_conical(
                 }
                 let v_ring = dot3(sub(cached[0], axis.origin), axis.z) / cos_phi;
                 let nu = cached.len() - 1;
-                let ring: Vec<[f64; 3]> = if e.reversed {
-                    (0..nu).map(|i| cached[nu - i]).collect()
-                } else {
-                    cached[..nu].to_vec()
-                };
+                let ring: Vec<[f64; 3]> = cached[..nu].to_vec();
                 Some((v_ring, ring))
             })
             .collect();
@@ -1138,15 +1138,12 @@ fn try_tessellate_annular_disc(
     let y = axis.y();
     let inner_radius = get_real(inner_e, 2).ok()?;
 
-    // Build the outer ring from the edge cache so positions are bitwise identical to
-    // any adjacent cylindrical barrel that shares this circle edge.
+    // Build rings from the edge cache in canonical (non-reversed) order so
+    // positions are bitwise identical to any adjacent barrel that shares these
+    // circle edges.  Winding is corrected by flip_winding_if afterwards.
     let outer_ring: Vec<[f64; 3]> = if let Some(cached) = edge_cache.get(&outer_edge.edge_id) {
         let nu = cached.len().saturating_sub(1).max(8);
-        if outer_edge.reversed {
-            (0..nu).map(|i| cached[nu - i]).collect()
-        } else {
-            cached[..nu].to_vec()
-        }
+        cached[..nu].to_vec()
     } else {
         let n_u = ((2.0 * PI * outer_radius / max_edge_len).ceil() as usize).clamp(8, 256);
         (0..n_u)
@@ -1160,11 +1157,7 @@ fn try_tessellate_annular_disc(
 
     let inner_ring: Vec<[f64; 3]> = if let Some(cached) = edge_cache.get(&inner_edge.edge_id) {
         let nu = cached.len().saturating_sub(1).max(8);
-        if inner_edge.reversed {
-            (0..nu).map(|i| cached[nu - i]).collect()
-        } else {
-            cached[..nu].to_vec()
-        }
+        cached[..nu].to_vec()
     } else {
         let n_u = outer_ring.len();
         (0..n_u)
@@ -1244,14 +1237,12 @@ fn try_tessellate_disc(
     let axis = axis2_placement(file, ax_id).ok()?;
     let y = axis.y();
 
-    // Use cached ring so positions are bitwise identical to any adjacent barrel.
+    // Use cached ring in canonical (non-reversed) order so positions are
+    // bitwise identical to the adjacent barrel's boundary row.  The fan
+    // winding is corrected by flip_winding_if at the end of tessellate_face.
     let ring: Vec<[f64; 3]> = if let Some(cached) = edge_cache.get(&edge.edge_id) {
         let nu = cached.len().saturating_sub(1).max(8);
-        if edge.reversed {
-            (0..nu).map(|i| cached[nu - i]).collect()
-        } else {
-            cached[..nu].to_vec()
-        }
+        cached[..nu].to_vec()
     } else {
         let n_u = ((2.0 * PI * radius / max_edge_len).ceil() as usize).clamp(8, 256);
         (0..n_u)
