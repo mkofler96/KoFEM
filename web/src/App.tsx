@@ -4,9 +4,17 @@ import { PropertiesPanel } from './components/properties/PropertiesPanel'
 import { Toolbar } from './components/toolbar/Toolbar'
 import { ResultsPanel } from './components/results/ResultsPanel'
 import { FacePickPanel } from './components/bc/FacePickPanel'
+import { WelcomeScreen } from './components/welcome/WelcomeScreen'
+import { useModelStore } from './store/modelStore'
 import styles from './App.module.css'
 
 export default function App() {
+  const hasStarted = useModelStore(s => s.hasStarted)
+
+  if (!hasStarted) {
+    return <WelcomeScreen />
+  }
+
   return (
     <div className={styles.layout}>
       <header className={styles.header}>

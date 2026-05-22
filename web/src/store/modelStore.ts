@@ -173,8 +173,15 @@ export interface ModelSnapshot {
   loads: Load[]
 }
 
+export interface StartCustomParams {
+  name: string
+  lx: number; ly: number; lz: number
+  nx: number; ny: number; nz: number
+}
+
 interface ModelState extends ModelSnapshot {
   modelName: string
+  hasStarted: boolean
   result: SolverResult | null
   stepSurface: StepSurfaceMesh | null
   isRunning: boolean
@@ -194,6 +201,10 @@ interface ModelState extends ModelSnapshot {
   setVolMesh(mesh: VolMesh | null): void
   setShowVolMesh(v: boolean): void
   setStepImportError(msg: string | null): void
+
+  // Welcome screen entry points
+  startWithExample(): void
+  startCustom(params: StartCustomParams): void
 
   // Solver
   addNode(node: Node): void
@@ -233,10 +244,20 @@ interface ModelState extends ModelSnapshot {
 
 // ── Store ─────────────────────────────────────────────────────────────────────
 
+const EMPTY_MODEL = {
+  nodes: [] as Node[],
+  elements: [] as Element[],
+  materials: [{ id: 1, name: 'Steel', young: 210e9, poisson: 0.3, density: 7850 }] as Material[],
+  properties: [{ id: 1, type: 'PSOLID' as const, materialId: 1 }] as Property[],
+  constraints: [] as Constraint[],
+  loads: [] as Load[],
+}
+
 export const useModelStore = create<ModelState>()(
   immer((set) => ({
-    ...cantilever,
-    modelName: 'Cantilever Beam',
+    ...EMPTY_MODEL,
+    modelName: '',
+    hasStarted: false,
     result: null,
     stepSurface: null,
     isRunning: false,
@@ -245,7 +266,7 @@ export const useModelStore = create<ModelState>()(
     volMesh: null,
     showVolMesh: false,
     stepImportError: null,
-    geometries: [DEFAULT_GEOMETRY],
+    geometries: [],
     nextGeomId: 2,
     nextMatId: 2,
     pickMode: null,
@@ -263,6 +284,40 @@ export const useModelStore = create<ModelState>()(
       if (mesh) s.fitViewTrigger++
     }),
     triggerFitView: () => set(s => { s.fitViewTrigger++ }),
+
+    startWithExample: () => set(s => {
+      const c = buildCantilever()
+      s.nodes = c.nodes; s.elements = c.elements
+      s.materials = c.materials; s.properties = c.properties
+      s.constraints = c.constraints; s.loads = c.loads
+      s.modelName = 'Cantilever Beam'
+      s.geometries = [DEFAULT_GEOMETRY]
+      s.result = null; s.stepSurface = null; s.volMesh = null
+      s.showVolMesh = false; s.selectedFace = null; s.pickMode = null
+      s.hasStarted = true
+      s.fitViewTrigger++
+    }),
+
+    startCustom: ({ name, lx, ly, lz, nx, ny, nz }) => set(s => {
+      const { nodes, elements } = meshFromBox({ ox: 0, oy: 0, oz: 0, lx, ly, lz, nx, ny, nz })
+      s.nodes = nodes; s.elements = elements
+      s.materials = [{ id: 1, name: 'Steel', young: 210e9, poisson: 0.3, density: 7850 }]
+      s.properties = [{ id: 1, type: 'PSOLID', materialId: 1 }]
+      s.constraints = []; s.loads = []
+      s.modelName = name || 'Model'
+      s.geometries = [{
+        id: 1, name: name || 'Model',
+        ox: 0, oy: 0, oz: 0,
+        sketchNormal: 'X', sketchWidth: ly, sketchHeight: lz,
+        extrudeSign: 1, extrudeLength: lx,
+        meshNu: ny, meshNv: nz, meshNw: nx,
+      }]
+      s.nextGeomId = 2
+      s.result = null; s.stepSurface = null; s.volMesh = null
+      s.showVolMesh = false; s.selectedFace = null; s.pickMode = null
+      s.hasStarted = true
+      s.fitViewTrigger++
+    }),
 
     addNode: (node) => set(s => { s.nodes.push(node) }),
     addElement: (el) => set(s => { s.elements.push(el) }),
@@ -300,24 +355,26 @@ export const useModelStore = create<ModelState>()(
       s.geometries = []
       s.selectedFace = null
       s.pickMode = null
+      s.hasStarted = true
       s.fitViewTrigger++
     }),
 
     reset: () => set(s => {
-      const c = buildCantilever()
-      s.nodes = c.nodes; s.elements = c.elements
-      s.materials = c.materials; s.properties = c.properties
-      s.constraints = c.constraints; s.loads = c.loads
-      s.modelName = 'Cantilever Beam'
+      s.nodes = []; s.elements = []
+      s.materials = [{ id: 1, name: 'Steel', young: 210e9, poisson: 0.3, density: 7850 }]
+      s.properties = [{ id: 1, type: 'PSOLID', materialId: 1 }]
+      s.constraints = []; s.loads = []
+      s.modelName = ''
       s.result = null
       s.stepSurface = null
       s.volMesh = null
       s.showVolMesh = false
-      s.geometries = [DEFAULT_GEOMETRY]
+      s.geometries = []
       s.nextGeomId = 2
       s.nextMatId = 2
       s.selectedFace = null
       s.pickMode = null
+      s.hasStarted = false
     }),
 
     // Geometry CRUD
