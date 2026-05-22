@@ -6,8 +6,6 @@ import { sendToWorker } from "../../workers/sharedWorker";
 export function WelcomeScreen() {
   const startWithExample = useModelStore((s) => s.startWithExample);
 
-  const isMeshing = useModelStore((s) => s.isMeshing);
-  const stepSurface = useModelStore((s) => s.stepSurface);
   const setStepSurface = useModelStore((s) => s.setStepSurface);
   const stepImportError = useModelStore((s) => s.stepImportError);
   const setStepImportError = useModelStore((s) => s.setStepImportError);
@@ -186,16 +184,6 @@ export function WelcomeScreen() {
           >
             {stepImportError}
           </div>
-        )}
-
-        {stepSurface && (
-          <button
-            className={styles.actionBtn}
-            disabled={isMeshing}
-            onClick={handleVolMesh}
-          >
-            {isMeshing ? "Meshing…" : "Mesh STEP volume"}
-          </button>
         )}
       </div>
     </div>
