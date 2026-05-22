@@ -114,7 +114,11 @@ fn discretise_edge(
         let n_u = ((arc_len / max_edge_len).ceil() as usize).clamp(2, 256);
         n_u.saturating_sub(1).max(1)
     } else {
-        ((chord / max_edge_len).ceil() as usize).clamp(4, 64)
+        // Straight-line (and other non-circular) edges: no intermediate points
+        // when the edge fits within one segment; subdivide only for long edges.
+        // A minimum of zero is correct — the CDT only needs the two endpoints
+        // for a straight constraint, and extra collinear points slow it down.
+        ((chord / max_edge_len).ceil() as usize).saturating_sub(1)
     };
     sample_curve(file, curve_id, start, end, false, n_intermediate)
 }
