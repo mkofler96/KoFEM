@@ -932,6 +932,33 @@ mod tests {
         assert!(result.is_ok());
     }
 
+    // ── Issue-95 tests: integration / tessellator wiring ─────────────────────
+
+    #[test]
+    fn concave_polygon_no_stray_triangles() {
+        let n = 16usize;
+        let mut outer = vec![
+            Point2::new(-10.0, -10.0),
+            Point2::new(10.0, -10.0),
+            Point2::new(10.0, 10.0),
+        ];
+        for i in 0..=n {
+            let t = std::f64::consts::PI * (i as f64) / (n as f64);
+            outer.push(Point2::new(5.0 * t.cos(), 10.0 - 5.0 * (1.0 - t.sin())));
+        }
+        outer.push(Point2::new(-10.0, 10.0));
+        let mesh = triangulate_constrained(&outer, &[]);
+        for t in &mesh.triangles {
+            let c = t.centroid(&mesh.points);
+            assert!(
+                point_in_polygon(c, &outer),
+                "stray triangle at ({:.3},{:.3})",
+                c.x,
+                c.y
+            );
+        }
+    }
+
     // ── Issue-92 tests: interior/exterior classification ──────────────────────
 
     #[test]

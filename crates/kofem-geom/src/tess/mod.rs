@@ -9,8 +9,8 @@ use std::f64::consts::PI;
 
 use serde::Serialize;
 
+use kofem_mesh::cdt::try_triangulate_constrained;
 use kofem_mesh::geom::{point_in_polygon, Point2};
-use kofem_mesh::triangulate::{bowyer_watson, filter_interior, remove_super, triangulate};
 
 use crate::geom::curve::curve_from_step;
 use crate::geom::surface::surface_from_step;
@@ -193,31 +193,13 @@ fn tessellate_face_raw(face: &TopoFace, file: &StepFile, max_edge_len: f64) -> S
         })
         .collect();
 
-    // For faces with holes, include inner loop points in the Bowyer-Watson
-    // triangulation so that small triangles form near hole boundaries.  This
-    // makes centroid rejection accurate even for holes that are small relative
-    // to the outer polygon, avoiding stray geometry inside holes.
-    let (bw_pts2d, bw_tris) = if holes2d.is_empty() {
-        let mesh2d = triangulate(&pts2d);
-        let tris = mesh2d.triangles.iter().map(|t| t.v).collect();
-        (mesh2d.points, tris)
-    } else {
-        let mut all_pts = pts2d.clone();
-        for hole in &holes2d {
-            all_pts.extend_from_slice(hole);
-        }
-        let n_all = all_pts.len();
-        let (bw_pts, mut tris) = bowyer_watson(&all_pts);
-        remove_super(&mut tris, n_all);
-        filter_interior(&mut tris, &bw_pts, &pts2d);
-        tris.retain(|t| {
-            let c = t.centroid(&bw_pts);
-            !holes2d.iter().any(|hole| point_in_polygon(c, hole))
-        });
-        let pts = bw_pts[..n_all].to_vec();
-        let tris_idx = tris.iter().map(|t| t.v).collect();
-        (pts, tris_idx)
+    let hole_slices: Vec<&[Point2]> = holes2d.iter().map(|h| h.as_slice()).collect();
+    let mesh2d = match try_triangulate_constrained(&pts2d, &hole_slices) {
+        Ok(m) => m,
+        Err(_) => return fan_raw(face),
     };
+    let bw_pts2d = mesh2d.points;
+    let bw_tris: Vec<[usize; 3]> = mesh2d.triangles.iter().map(|t| t.v).collect();
 
     let points: Vec<[f64; 3]> = bw_pts2d
         .iter()
