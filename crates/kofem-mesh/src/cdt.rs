@@ -2,9 +2,9 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::geom::{in_circumcircle, orient2d, Point2};
+use crate::geom::{in_circumcircle, orient2d, point_in_polygon, Point2};
 use crate::triangulate::bowyer_watson;
-use crate::triangulate::{filter_interior, remove_super, Mesh2D, Triangle};
+use crate::triangulate::{remove_super, Mesh2D, Triangle};
 
 /// Returns `true` iff some triangle in `triangles` contains both vertex `a` and vertex `b`.
 ///
@@ -67,6 +67,22 @@ fn segments_properly_intersect(p: Point2, q: Point2, r: Point2, s: Point2) -> bo
         && ((d3 > 0.0 && d4 < 0.0) || (d3 < 0.0 && d4 > 0.0))
 }
 
+/// Retains only triangles whose centroid is strictly inside `outer` and outside
+/// every hole.  Must be called after all constraint edges are inserted — once
+/// boundaries are enforced no triangle straddles a boundary, so the centroid
+/// test is sufficient and correct.
+fn classify_interior(
+    triangles: &mut Vec<Triangle>,
+    pts: &[Point2],
+    outer: &[Point2],
+    holes: &[&[Point2]],
+) {
+    triangles.retain(|t| {
+        let c = t.centroid(pts);
+        point_in_polygon(c, outer) && !holes.iter().any(|&h| point_in_polygon(c, h))
+    });
+}
+
 /// Constrained Delaunay triangulation of a polygon with optional holes.
 ///
 /// Triangulates `boundary` (CCW, closed polygon) together with all `holes`
@@ -88,7 +104,6 @@ pub fn triangulate_constrained(boundary: &[Point2], holes: &[&[Point2]]) -> Mesh
 
     let (all_pts, mut triangles) = bowyer_watson(&all_input_pts);
     remove_super(&mut triangles, n_all);
-    filter_interior(&mut triangles, &all_pts, boundary);
 
     // Build constraint edge list from every boundary ring.
     let mut constraints: Vec<(usize, usize)> = Vec::new();
@@ -116,6 +131,8 @@ pub fn triangulate_constrained(boundary: &[Point2], holes: &[&[Point2]]) -> Mesh
     for (a, b) in constraints {
         enforce_constraint(&mut triangles, &all_pts, a, b, &constraint_set);
     }
+
+    classify_interior(&mut triangles, &all_pts, boundary, holes);
 
     Mesh2D {
         points: all_pts[..n_all].to_vec(),
@@ -461,7 +478,7 @@ pub fn legalize_edges(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::triangulate::bowyer_watson;
+    use crate::triangulate::{bowyer_watson, filter_interior};
 
     #[test]
     fn has_edge_finds_existing() {
@@ -738,5 +755,46 @@ mod tests {
         let mesh1 = triangulate_constrained(&outer, &[]);
         let mesh2 = triangulate_constrained(&outer, &[]);
         assert_eq!(mesh1.triangles.len(), mesh2.triangles.len());
+    }
+
+    // ── Issue-92 tests: interior/exterior classification ──────────────────────
+
+    #[test]
+    fn square_with_square_hole() {
+        let outer = vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(4.0, 0.0),
+            Point2::new(4.0, 4.0),
+            Point2::new(0.0, 4.0),
+        ];
+        let hole = vec![
+            Point2::new(1.0, 1.0),
+            Point2::new(3.0, 1.0),
+            Point2::new(3.0, 3.0),
+            Point2::new(1.0, 3.0),
+        ];
+        let mesh = triangulate_constrained(&outer, &[hole.as_slice()]);
+        for t in &mesh.triangles {
+            let c = t.centroid(&mesh.points);
+            assert!(
+                point_in_polygon(c, &outer),
+                "centroid outside outer boundary"
+            );
+            assert!(!point_in_polygon(c, &hole), "centroid inside hole");
+        }
+        assert!(mesh.triangles.len() >= 8);
+    }
+
+    #[test]
+    fn no_triangles_outside_outer_boundary() {
+        let outer = vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(1.0, 0.0),
+            Point2::new(0.5, 1.0),
+        ];
+        let mesh = triangulate_constrained(&outer, &[]);
+        assert_eq!(mesh.triangles.len(), 1);
+        let c = mesh.triangles[0].centroid(&mesh.points);
+        assert!(point_in_polygon(c, &outer));
     }
 }
