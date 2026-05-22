@@ -6,6 +6,31 @@ use crate::geom::{in_circumcircle, orient2d, point_in_polygon, Point2};
 use crate::triangulate::bowyer_watson;
 use crate::triangulate::{remove_super, Mesh2D, Triangle};
 
+/// Errors returned by [`try_triangulate_constrained`].
+#[derive(Debug, PartialEq)]
+pub enum CdtError {
+    /// Two constraint edges from the input polygon (or its holes) properly
+    /// cross each other, indicating a self-intersecting boundary ring.
+    IntersectingConstraints {
+        edge_a: (usize, usize),
+        edge_b: (usize, usize),
+    },
+}
+
+impl std::fmt::Display for CdtError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CdtError::IntersectingConstraints { edge_a, edge_b } => write!(
+                f,
+                "self-intersecting polygon: constraint edges ({},{}) and ({},{}) cross",
+                edge_a.0, edge_a.1, edge_b.0, edge_b.1
+            ),
+        }
+    }
+}
+
+impl std::error::Error for CdtError {}
+
 /// Returns `true` iff some triangle in `triangles` contains both vertex `a` and vertex `b`.
 ///
 /// Order of `a` and `b` does not matter.
@@ -125,6 +150,10 @@ fn classify_interior(
 
 /// Constrained Delaunay triangulation of a polygon with optional holes.
 ///
+/// Returns `Err(CdtError::IntersectingConstraints)` if any two constraint
+/// edges from the boundary rings properly cross each other (self-intersecting
+/// polygon).  On success returns the interior triangulation.
+///
 /// Triangulates `boundary` (CCW, closed polygon) together with all `holes`
 /// (each given as a CCW-ordered slice of `Point2`), then enforces every edge
 /// of every boundary ring as a constraint.  Hole vertices are appended to
@@ -132,7 +161,10 @@ fn classify_interior(
 /// `boundary.len()..boundary.len()+hole[0].len()`, and so on.
 ///
 /// Inserting a constraint that already exists in the triangulation is a no-op.
-pub fn triangulate_constrained(boundary: &[Point2], holes: &[&[Point2]]) -> Mesh2D {
+pub fn try_triangulate_constrained(
+    boundary: &[Point2],
+    holes: &[&[Point2]],
+) -> Result<Mesh2D, CdtError> {
     // Preprocess rings: remove coincident adjacent vertices and collinear runs.
     let outer: Vec<Point2> = preprocess_ring(boundary);
     let processed_holes: Vec<Vec<Point2>> = holes.iter().map(|&h| preprocess_ring(h)).collect();
@@ -147,18 +179,13 @@ pub fn triangulate_constrained(boundary: &[Point2], holes: &[&[Point2]]) -> Mesh
     }
     let n_all = all_input_pts.len();
 
-    let (all_pts, mut triangles) = bowyer_watson(&all_input_pts);
-    remove_super(&mut triangles, n_all);
-
     // Build constraint edge list from every boundary ring.
     let mut constraints: Vec<(usize, usize)> = Vec::new();
 
-    // Outer ring
     for i in 0..n_outer {
         constraints.push((i, (i + 1) % n_outer));
     }
 
-    // Hole rings
     let mut offset = n_outer;
     for h in &processed_holes {
         let m = h.len();
@@ -168,12 +195,34 @@ pub fn triangulate_constrained(boundary: &[Point2], holes: &[&[Point2]]) -> Mesh
         offset += m;
     }
 
+    // Reject self-intersecting polygons before doing any triangulation.
+    for i in 0..constraints.len() {
+        for j in (i + 1)..constraints.len() {
+            let (a, b) = constraints[i];
+            let (c, d) = constraints[j];
+            if segments_properly_intersect(
+                all_input_pts[a],
+                all_input_pts[b],
+                all_input_pts[c],
+                all_input_pts[d],
+            ) {
+                return Err(CdtError::IntersectingConstraints {
+                    edge_a: (a, b),
+                    edge_b: (c, d),
+                });
+            }
+        }
+    }
+
+    let (all_pts, mut triangles) = bowyer_watson(&all_input_pts);
+    remove_super(&mut triangles, n_all);
+
     let constraint_set: HashSet<(usize, usize)> = constraints
         .iter()
         .map(|&(a, b)| if a < b { (a, b) } else { (b, a) })
         .collect();
 
-    for (a, b) in constraints {
+    for &(a, b) in &constraints {
         if a != b {
             enforce_constraint(&mut triangles, &all_pts, a, b, &constraint_set);
         }
@@ -181,10 +230,19 @@ pub fn triangulate_constrained(boundary: &[Point2], holes: &[&[Point2]]) -> Mesh
 
     classify_interior(&mut triangles, &all_pts, &outer, &hole_slices);
 
-    Mesh2D {
+    Ok(Mesh2D {
         points: all_pts[..n_all].to_vec(),
         triangles,
-    }
+    })
+}
+
+/// Infallible wrapper around [`try_triangulate_constrained`].
+///
+/// Panics if the input polygon is self-intersecting.  Use
+/// [`try_triangulate_constrained`] directly to handle that case.
+pub fn triangulate_constrained(boundary: &[Point2], holes: &[&[Point2]]) -> Mesh2D {
+    try_triangulate_constrained(boundary, holes)
+        .expect("CDT: self-intersecting polygon — constraint edges cross")
 }
 
 /// Returns the index of the first active vertex (other than `a` and `b`) that lies
@@ -841,6 +899,37 @@ mod tests {
             let area2 = orient2d(mesh.points[a], mesh.points[b], mesh.points[c]).abs();
             assert!(area2 > 1e-10, "degenerate triangle with area2={area2}");
         }
+    }
+
+    // ── Issue-94 tests: intersecting constraints detection ────────────────────
+
+    #[test]
+    fn self_intersecting_polygon_returns_error() {
+        // Bowtie / figure-8: edges (0→1) and (2→3) cross each other.
+        let outer = vec![
+            Point2::new(0.0, 0.0), // 0
+            Point2::new(2.0, 2.0), // 1
+            Point2::new(2.0, 0.0), // 2
+            Point2::new(0.0, 2.0), // 3
+        ];
+        let result = try_triangulate_constrained(&outer, &[]);
+        assert!(
+            result.is_err(),
+            "expected Err for self-intersecting polygon"
+        );
+    }
+
+    #[test]
+    fn shared_endpoint_not_an_error() {
+        // Consecutive edges of a square share endpoints — must not error.
+        let outer = vec![
+            Point2::new(0.0, 0.0),
+            Point2::new(4.0, 0.0),
+            Point2::new(4.0, 4.0),
+            Point2::new(0.0, 4.0),
+        ];
+        let result = try_triangulate_constrained(&outer, &[]);
+        assert!(result.is_ok());
     }
 
     // ── Issue-92 tests: interior/exterior classification ──────────────────────
