@@ -79,7 +79,13 @@ fn build_edge_cache(brep: &BRep, file: &StepFile, max_edge_len: f64) -> EdgeCach
                     } else {
                         (edge.start, edge.end)
                     };
-                    discretise_edge(file, edge.curve_id, canonical_start, canonical_end, max_edge_len)
+                    discretise_edge(
+                        file,
+                        edge.curve_id,
+                        canonical_start,
+                        canonical_end,
+                        max_edge_len,
+                    )
                 });
             }
         }
@@ -420,8 +426,7 @@ fn try_tessellate_cylindrical(
                 })
                 .collect()
         } else {
-            let n_u_fallback =
-                ((2.0 * PI * radius / max_edge_len).ceil() as usize).clamp(8, 256);
+            let n_u_fallback = ((2.0 * PI * radius / max_edge_len).ceil() as usize).clamp(8, 256);
             (0..n_u_fallback)
                 .map(|i| 2.0 * PI * i as f64 / n_u_fallback as f64)
                 .collect()
@@ -447,7 +452,10 @@ fn try_tessellate_cylindrical(
             } else {
                 for &u in &u_angles {
                     let radial = add(scale(axis.x, u.cos()), scale(y, u.sin()));
-                    points.push(add(axis.origin, add(scale(radial, radius), scale(axis.z, v))));
+                    points.push(add(
+                        axis.origin,
+                        add(scale(radial, radius), scale(axis.z, v)),
+                    ));
                 }
             }
         }
