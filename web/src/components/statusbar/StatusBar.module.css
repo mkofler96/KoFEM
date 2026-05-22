@@ -1,0 +1,77 @@
+.bar {
+  grid-area: status;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  background: #ffffff;
+  border-top: 1px solid #e2e5ea;
+  font-size: 11.5px;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  color: #6b7280;
+  gap: 8px;
+}
+
+.left  { display: flex; align-items: center; gap: 6px; overflow: hidden; }
+.right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+
+.stepChip {
+  background: #f0f2f5;
+  border: 1px solid #e2e5ea;
+  border-radius: 4px;
+  padding: 2px 8px;
+  color: #3a4150;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.pickChip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #1f5fd0;
+  white-space: nowrap;
+}
+
+.pickDot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #1f5fd0;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.selChip {
+  color: #3a4150;
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  border-radius: 4px;
+  padding: 2px 7px;
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sep   { color: #cdd2d9; }
+.stat  { color: #6b7280; white-space: nowrap; }
+.muted { color: #9aa1ad; }
+
+.meshChip, .resultChip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #15803d;
+  white-space: nowrap;
+}
+
+.okDot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: #15803d;
+  flex-shrink: 0;
+}
