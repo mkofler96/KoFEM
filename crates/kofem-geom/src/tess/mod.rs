@@ -1047,11 +1047,13 @@ fn sample_boundary_3d(edges: &[TopoEdge], file: &StepFile, max_edge_len: f64) ->
         pts.push(edge.start);
 
         let chord = dist3(edge.start, edge.end);
-        // Closed curves have chord ≈ 0.  For CIRCLE edges use the
-        // circumference so the boundary ring has the same n_u as the barrel
-        // produced by try_tessellate_cylindrical, which makes stitch() merge
-        // the seam vertices correctly.  Fall back to 16 for other closed
-        // curve types (B-splines, etc.).
+        // Sampling density rules:
+        //  • Closed circles (chord ≈ 0): use circumference → same n_u as the
+        //    cylindrical barrel, so stitch() closes the seam correctly.
+        //  • Non-closed circular arcs: use arc length (radius × |Δθ|) → same
+        //    n_u and the same sample positions as the partial-cylinder UV grid,
+        //    so stitch() closes the seam at curved face boundaries.
+        //  • All other curves: chord-based fallback.
         let n_intermediate = if chord < 1e-10 {
             if let Some(r) = circle_radius_from_curve(file, edge.curve_id) {
                 let n_u = ((2.0 * PI * r / max_edge_len).ceil() as usize).clamp(8, 256);
@@ -1059,6 +1061,14 @@ fn sample_boundary_3d(edges: &[TopoEdge], file: &StepFile, max_edge_len: f64) ->
             } else {
                 16
             }
+        } else if let Some(arc_len) =
+            circle_arc_length(file, edge.curve_id, edge.start, edge.end, edge.reversed)
+        {
+            // n_u - 1 intermediates produces n_u boundary points at fractions
+            // i/n_u, which matches the partial-cylinder grid's n_u+1 points
+            // (the last point, t=t_end, arrives as the next edge's start push).
+            let n_u = ((arc_len / max_edge_len).ceil() as usize).clamp(2, 256);
+            n_u.saturating_sub(1).max(1)
         } else {
             ((chord / max_edge_len).ceil() as usize).clamp(4, 64)
         };
@@ -1223,6 +1233,29 @@ fn circle_radius_from_curve(file: &StepFile, curve_id: u64) -> Option<f64> {
         return None;
     }
     get_real(entity, 2).ok()
+}
+
+/// Arc length of a non-closed circular arc edge, or `None` for non-circle curves.
+///
+/// Uses `curve_t_range` to obtain the angular span and multiplies by the radius.
+/// This is the quantity that `try_tessellate_cylindrical` uses (as `arc_u`) to
+/// choose `n_u`, so matching on arc length ensures identical sample counts and
+/// positions between the flat-face CDT boundary and the cylinder UV grid.
+fn circle_arc_length(
+    file: &StepFile,
+    curve_id: u64,
+    start: [f64; 3],
+    end: [f64; 3],
+    reversed: bool,
+) -> Option<f64> {
+    let resolved = resolve_curve_id(file, curve_id);
+    let entity = file.get(&resolved)?;
+    if entity.type_name != "CIRCLE" {
+        return None;
+    }
+    let radius = get_real(entity, 2).ok()?;
+    let (t0, t1) = curve_t_range(file, curve_id, start, end, reversed);
+    Some(radius * (t1 - t0).abs())
 }
 
 /// Normalised direction vector for a VECTOR entity (used in LINE inversion).
