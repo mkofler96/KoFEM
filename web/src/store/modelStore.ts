@@ -179,9 +179,12 @@ export interface StartCustomParams {
   nx: number; ny: number; nz: number
 }
 
+export type AppMode = 'geometry' | 'mesh' | 'constraints' | 'solve' | 'results'
+
 interface ModelState extends ModelSnapshot {
   modelName: string
   hasStarted: boolean
+  mode: AppMode
   result: SolverResult | null
   stepSurface: StepSurfaceMesh | null
   isRunning: boolean
@@ -205,6 +208,9 @@ interface ModelState extends ModelSnapshot {
   // Welcome screen entry points
   startWithExample(): void
   startCustom(params: StartCustomParams): void
+
+  // Mode navigation
+  setMode(mode: AppMode): void
 
   // Solver
   addNode(node: Node): void
@@ -258,6 +264,7 @@ export const useModelStore = create<ModelState>()(
     ...EMPTY_MODEL,
     modelName: '',
     hasStarted: false,
+    mode: 'geometry' as AppMode,
     result: null,
     stepSurface: null,
     isRunning: false,
@@ -285,6 +292,8 @@ export const useModelStore = create<ModelState>()(
     }),
     triggerFitView: () => set(s => { s.fitViewTrigger++ }),
 
+    setMode: (mode) => set(s => { s.mode = mode }),
+
     startWithExample: () => set(s => {
       const c = buildCantilever()
       s.nodes = c.nodes; s.elements = c.elements
@@ -294,7 +303,7 @@ export const useModelStore = create<ModelState>()(
       s.geometries = [DEFAULT_GEOMETRY]
       s.result = null; s.stepSurface = null; s.volMesh = null
       s.showVolMesh = false; s.selectedFace = null; s.pickMode = null
-      s.hasStarted = true
+      s.hasStarted = true; s.mode = 'geometry'
       s.fitViewTrigger++
     }),
 
@@ -315,7 +324,7 @@ export const useModelStore = create<ModelState>()(
       s.nextGeomId = 2
       s.result = null; s.stepSurface = null; s.volMesh = null
       s.showVolMesh = false; s.selectedFace = null; s.pickMode = null
-      s.hasStarted = true
+      s.hasStarted = true; s.mode = 'geometry'
       s.fitViewTrigger++
     }),
 
@@ -356,6 +365,7 @@ export const useModelStore = create<ModelState>()(
       s.selectedFace = null
       s.pickMode = null
       s.hasStarted = true
+      s.mode = 'geometry'
       s.fitViewTrigger++
     }),
 
