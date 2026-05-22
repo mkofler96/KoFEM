@@ -1277,3 +1277,147 @@ nist_smoke!(
     nist_stc_09_smoke,
     "../../test_files/NIST/nist_stc_09_asme1_ap242-e3.stp"
 );
+
+/// A quarter-cylinder (r=5, z in [0,10], u in [0,π/2]) adjacent to two flat
+/// rectangular faces (the bottom quad and the left-side quad) forms a minimal
+/// shape where a CDT flat face shares arc boundaries with a partial cylinder.
+/// After stitching, the shared arc edges must be manifold (shared by exactly 2
+/// triangles) — this verifies that arc-length-based boundary sampling matches
+/// the partial-cylinder UV grid positions.
+#[test]
+fn partial_cylinder_arc_boundary_stitches_to_flat_face() {
+    // Quarter-cylinder barrel face (CYLINDRICAL_SURFACE).
+    // Outer loop: bottom arc (5,0,0)→(0,5,0), left gen (0,5,0)→(0,5,10),
+    //             top arc rev (5,0,10)→(0,5,10), right gen rev (5,0,10)→(5,0,0).
+    let cyl_step = STEP_QUARTER_CYLINDER;
+
+    // Flat bottom face: the square x∈[0,5] y∈[0,5] at z=0, with the arc
+    // boundary from (5,0,0) to (0,5,0) as one edge.
+    const STEP_BOTTOM_FLAT: &str = "
+ISO-10303-21;
+HEADER;FILE_DESCRIPTION(('bottom flat'));
+ENDSEC;
+DATA;
+#1=CARTESIAN_POINT('',(0.,0.,0.));
+#2=CARTESIAN_POINT('',(5.,0.,0.));
+#3=CARTESIAN_POINT('',(0.,5.,0.));
+#5=VERTEX_POINT('',#1);
+#6=VERTEX_POINT('',#2);
+#7=VERTEX_POINT('',#3);
+#10=CARTESIAN_POINT('',(0.,0.,0.));
+#11=DIRECTION('',(0.,0.,1.));
+#12=DIRECTION('',(1.,0.,0.));
+#13=AXIS2_PLACEMENT_3D('',#10,#11,#12);
+#14=CIRCLE('',#13,5.);
+#15=EDGE_CURVE('',#6,#7,#14,.T.);
+#20=CARTESIAN_POINT('',(5.,0.,0.));
+#21=DIRECTION('',(-1.,0.,0.));
+#22=VECTOR('',#21,5.);
+#23=LINE('',#20,#22);
+#24=EDGE_CURVE('',#5,#6,#23,.T.);
+#30=CARTESIAN_POINT('',(0.,5.,0.));
+#31=DIRECTION('',(0.,-1.,0.));
+#32=VECTOR('',#31,5.);
+#33=LINE('',#30,#32);
+#34=EDGE_CURVE('',#7,#5,#33,.T.);
+#40=ORIENTED_EDGE('',*,*,#24,.T.);
+#41=ORIENTED_EDGE('',*,*,#15,.T.);
+#42=ORIENTED_EDGE('',*,*,#34,.T.);
+#43=EDGE_LOOP('',( #40,#41,#42));
+#44=FACE_OUTER_BOUND('',#43,.T.);
+#50=CARTESIAN_POINT('',(0.,0.,0.));
+#51=DIRECTION('',(0.,0.,-1.));
+#52=DIRECTION('',(1.,0.,0.));
+#53=AXIS2_PLACEMENT_3D('',#50,#51,#52);
+#54=PLANE('',#53);
+#55=ADVANCED_FACE('',( #44),#54,.T.);
+ENDSEC;
+END-ISO-10303-21;
+";
+
+    let opts = TessOptions {
+        max_edge_len: 1.0,
+        ..TessOptions::default()
+    };
+
+    // Tessellate the two faces independently and combine.
+    let (cyl_file, cyl_brep) = {
+        let f = parse(cyl_step).unwrap();
+        let b = BRep::extract(&f).unwrap();
+        (f, b)
+    };
+    let cyl_mesh = tessellate(&cyl_brep, &cyl_file, TessOptions { max_edge_len: 1.0, ..TessOptions::default() }).unwrap();
+
+    let (flat_file, flat_brep) = {
+        let f = parse(STEP_BOTTOM_FLAT).unwrap();
+        let b = BRep::extract(&f).unwrap();
+        (f, b)
+    };
+    let flat_mesh = tessellate(&flat_brep, &flat_file, opts).unwrap();
+
+    // Combine and stitch at a tight tolerance.
+    let mut all_pts: Vec<[f64; 3]> = cyl_mesh.points.clone();
+    let offset = all_pts.len();
+    all_pts.extend_from_slice(&flat_mesh.points);
+    let mut all_tris: Vec<[usize; 3]> = cyl_mesh.triangles.clone();
+    for &[a, b, c] in &flat_mesh.triangles {
+        all_tris.push([a + offset, b + offset, c + offset]);
+    }
+
+    // Re-stitch at a fine tolerance.
+    let bbox = {
+        let mut mn = all_pts[0];
+        let mut mx = all_pts[0];
+        for &p in &all_pts {
+            for k in 0..3 {
+                if p[k] < mn[k] { mn[k] = p[k]; }
+                if p[k] > mx[k] { mx[k] = p[k]; }
+            }
+        }
+        let d = [mx[0]-mn[0], mx[1]-mn[1], mx[2]-mn[2]];
+        (d[0]*d[0]+d[1]*d[1]+d[2]*d[2]).sqrt()
+    };
+    let eps = 1e-4 * bbox.max(1e-10);
+    let eps2 = eps * eps;
+
+    let mut remap = vec![0usize; all_pts.len()];
+    let mut unique: Vec<[f64; 3]> = Vec::new();
+    for (i, &p) in all_pts.iter().enumerate() {
+        let found = unique.iter().enumerate().find(|(_, &q)| {
+            let d = [p[0]-q[0], p[1]-q[1], p[2]-q[2]];
+            d[0]*d[0]+d[1]*d[1]+d[2]*d[2] <= eps2
+        }).map(|(j, _)| j);
+        match found {
+            Some(j) => remap[i] = j,
+            None => { remap[i] = unique.len(); unique.push(p); }
+        }
+    }
+    let stitched: Vec<[usize; 3]> = all_tris.iter()
+        .map(|&[a, b, c]| [remap[a], remap[b], remap[c]])
+        .filter(|&[a, b, c]| a != b && b != c && a != c)
+        .collect();
+
+    // Count open edges on the arc boundary (z=0, r≈5 region).
+    let mut arc_open = 0usize;
+    let mut arc_total = 0usize;
+    let ecounts = edge_counts(&stitched);
+    for (&(a, b), &cnt) in &ecounts {
+        let pa = unique[a];
+        let pb = unique[b];
+        // Arc boundary: both endpoints near r=5, z=0, x≥0, y≥0
+        let on_arc = |p: [f64; 3]| {
+            let r = (p[0]*p[0] + p[1]*p[1]).sqrt();
+            (r - 5.0).abs() < 0.1 && p[2].abs() < 0.1 && p[0] >= -0.1 && p[1] >= -0.1
+        };
+        if on_arc(pa) && on_arc(pb) {
+            arc_total += 1;
+            if cnt == 1 { arc_open += 1; }
+        }
+    }
+
+    assert_eq!(
+        arc_open, 0,
+        "{arc_open}/{arc_total} open edge(s) on the arc boundary between \
+         the quarter-cylinder and the flat face — arc positions did not match"
+    );
+}
