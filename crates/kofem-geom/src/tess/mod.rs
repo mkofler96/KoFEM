@@ -1152,9 +1152,7 @@ fn try_tessellate_bspline(
             let p3d = surface.point(u, v);
             let d = sub(p3d, origin);
             let p2d = Point2::new(dot3(d, x_axis), dot3(d, y_axis));
-            if point_in_polygon(p2d, &bnd2d)
-                && !holes2d.iter().any(|h| point_in_polygon(p2d, h))
-            {
+            if point_in_polygon(p2d, &bnd2d) && !holes2d.iter().any(|h| point_in_polygon(p2d, h)) {
                 interior_3d.push(p3d);
                 interior_2d.push(p2d);
             }
@@ -1311,9 +1309,7 @@ fn try_tessellate_linear_extrusion(
             let p3d = surface.point(u, v);
             let d = sub(p3d, origin);
             let p2d = Point2::new(dot3(d, x_axis), dot3(d, y_axis));
-            if point_in_polygon(p2d, &bnd2d)
-                && !holes2d.iter().any(|h| point_in_polygon(p2d, h))
-            {
+            if point_in_polygon(p2d, &bnd2d) && !holes2d.iter().any(|h| point_in_polygon(p2d, h)) {
                 interior_3d.push(p3d);
                 interior_2d.push(p2d);
             }
