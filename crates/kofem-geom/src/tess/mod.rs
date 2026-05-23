@@ -42,8 +42,13 @@ pub struct SurfaceMesh {
 }
 
 pub struct TessOptions {
-    /// Maximum edge length in model units (controls sampling density).
+    /// Maximum edge length in model units — controls straight-edge and non-circular
+    /// surface grid density. For circular arcs, `chord_height_tol` takes precedence.
     pub max_edge_len: f64,
+    /// Sagitta (chord-height) tolerance for circular arcs in model units.
+    /// The deviation between a chord and the true arc is kept ≤ this value.
+    /// Typical CAD default: 0.2 mm.  Set to 0.0 to disable (fall back to `max_edge_len`).
+    pub chord_height_tol: f64,
     /// Minimum angle passed to Ruppert refinement.
     pub min_angle_deg: f64,
 }
@@ -52,9 +57,33 @@ impl Default for TessOptions {
     fn default() -> Self {
         Self {
             max_edge_len: 1.0,
+            chord_height_tol: 0.2,
             min_angle_deg: 20.0,
         }
     }
+}
+
+/// Number of segments needed to tessellate a circular arc of `radius` spanning `angle`
+/// radians such that the sagitta (chord-height) does not exceed `opts.chord_height_tol`.
+///
+/// Falls back to the arc-length criterion when `chord_height_tol` is zero or when
+/// the radius is at or below the tolerance.
+fn n_segs_for_arc(radius: f64, angle: f64, opts: &TessOptions) -> usize {
+    if radius <= 0.0 || angle <= 0.0 {
+        return 2;
+    }
+    let tol = opts.chord_height_tol;
+    if tol <= 0.0 || tol >= radius {
+        // Chord-height disabled or degenerate tiny circle: arc-length fallback.
+        let arc_len = radius * angle;
+        return ((arc_len / opts.max_edge_len).ceil() as usize).max(2);
+    }
+    // h = R(1 − cos(θ/2)) ≤ tol  →  θ/2 ≤ acos(1 − tol/R)  →  n ≥ angle / (2·acos(1 − tol/R))
+    let half_max = (1.0 - tol / radius).clamp(-1.0, 1.0).acos();
+    if half_max < 1e-12 {
+        return 512;
+    }
+    ((angle / (2.0 * half_max)).ceil() as usize).max(2)
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -75,7 +104,7 @@ pub enum TessError {
 type EdgeCache = HashMap<u64, Vec<[f64; 3]>>;
 
 /// Pre-compute boundary vertices for every unique EDGE_CURVE in the B-rep.
-fn build_edge_cache(brep: &BRep, file: &StepFile, max_edge_len: f64) -> EdgeCache {
+fn build_edge_cache(brep: &BRep, file: &StepFile, opts: &TessOptions) -> EdgeCache {
     let mut cache = EdgeCache::new();
     for face in &brep.faces {
         for loop_edges in std::iter::once(face.outer_loop.as_slice())
@@ -95,7 +124,7 @@ fn build_edge_cache(brep: &BRep, file: &StepFile, max_edge_len: f64) -> EdgeCach
                         edge.curve_id,
                         canonical_start,
                         canonical_end,
-                        max_edge_len,
+                        opts,
                     )
                 });
             }
@@ -110,26 +139,26 @@ fn discretise_edge(
     curve_id: u64,
     start: [f64; 3],
     end: [f64; 3],
-    max_edge_len: f64,
+    opts: &TessOptions,
 ) -> Vec<[f64; 3]> {
     let chord = dist3(start, end);
     let n_intermediate = if chord < 1e-10 {
-        // Closed curve — treat as full circle.
+        // Closed curve — treat as full circle: use chord-height criterion.
         if let Some(r) = circle_radius_from_curve(file, curve_id) {
-            let n_u = ((2.0 * PI * r / max_edge_len).ceil() as usize).clamp(8, 256);
+            let n_u = n_segs_for_arc(r, 2.0 * PI, opts).clamp(8, 512);
             n_u - 1
         } else {
             16
         }
     } else if let Some(arc_len) = circle_arc_length(file, curve_id, start, end, false) {
-        let n_u = ((arc_len / max_edge_len).ceil() as usize).clamp(2, 256);
+        // Circular arc: prefer chord-height over arc-length.
+        let r = circle_radius_from_curve(file, curve_id).unwrap_or(1.0);
+        let angle = arc_len / r;
+        let n_u = n_segs_for_arc(r, angle, opts).clamp(2, 512);
         n_u.saturating_sub(1).max(1)
     } else {
-        // Straight-line (and other non-circular) edges: no intermediate points
-        // when the edge fits within one segment; subdivide only for long edges.
-        // A minimum of zero is correct — the CDT only needs the two endpoints
-        // for a straight constraint, and extra collinear points slow it down.
-        ((chord / max_edge_len).ceil() as usize).saturating_sub(1)
+        // Straight-line (and other non-circular) edges: use max_edge_len.
+        ((chord / opts.max_edge_len).ceil() as usize).saturating_sub(1)
     };
     sample_curve(file, curve_id, start, end, false, n_intermediate)
 }
@@ -221,14 +250,14 @@ pub fn tessellate(
     // Phase 1: discretise every unique edge once.
     // All adjacent faces will pull from this cache, guaranteeing identical positions
     // on shared boundaries without relying on approximate epsilon-merging.
-    let edge_cache = build_edge_cache(brep, file, opts.max_edge_len);
+    let edge_cache = build_edge_cache(brep, file, &opts);
 
     // Phase 2: tessellate each face using the pre-computed boundary vertices.
     let mut all_points: Vec<[f64; 3]> = Vec::new();
     let mut all_triangles: Vec<[usize; 3]> = Vec::new();
 
     for face in &brep.faces {
-        let face_mesh = tessellate_face(face, &edge_cache, file, opts.max_edge_len);
+        let face_mesh = tessellate_face(face, &edge_cache, file, &opts);
         let offset = all_points.len();
         all_points.extend_from_slice(&face_mesh.points);
         for &[a, b, c] in &face_mesh.triangles {
@@ -247,9 +276,9 @@ fn tessellate_face(
     face: &TopoFace,
     edge_cache: &EdgeCache,
     file: &StepFile,
-    max_edge_len: f64,
+    opts: &TessOptions,
 ) -> SurfaceMesh {
-    let raw = tessellate_face_raw(face, edge_cache, file, max_edge_len);
+    let raw = tessellate_face_raw(face, edge_cache, file, opts);
     // UV-grid surfaces (cylinder, cone, torus, sphere, B-spline, linear extrusion)
     // generate CCW triangles aligned with ∂P/∂u × ∂P/∂v, so the flip follows same_sense.
     // All other surfaces (PLANE, SURFACE_OF_REVOLUTION, unknown/missing) are tessellated
@@ -283,30 +312,30 @@ fn tessellate_face_raw(
     face: &TopoFace,
     edge_cache: &EdgeCache,
     file: &StepFile,
-    max_edge_len: f64,
+    opts: &TessOptions,
 ) -> SurfaceMesh {
-    if let Some(mesh) = try_tessellate_cylindrical(face, edge_cache, file, max_edge_len) {
+    if let Some(mesh) = try_tessellate_cylindrical(face, edge_cache, file, opts) {
         return mesh;
     }
-    if let Some(mesh) = try_tessellate_conical(face, edge_cache, file, max_edge_len) {
+    if let Some(mesh) = try_tessellate_conical(face, edge_cache, file, opts) {
         return mesh;
     }
-    if let Some(mesh) = try_tessellate_toroidal(face, edge_cache, file, max_edge_len) {
+    if let Some(mesh) = try_tessellate_toroidal(face, edge_cache, file, opts) {
         return mesh;
     }
-    if let Some(mesh) = try_tessellate_spherical(face, edge_cache, file, max_edge_len) {
+    if let Some(mesh) = try_tessellate_spherical(face, edge_cache, file, opts) {
         return mesh;
     }
-    if let Some(mesh) = try_tessellate_bspline(face, edge_cache, file, max_edge_len) {
+    if let Some(mesh) = try_tessellate_bspline(face, edge_cache, file, opts) {
         return mesh;
     }
-    if let Some(mesh) = try_tessellate_linear_extrusion(face, edge_cache, file, max_edge_len) {
+    if let Some(mesh) = try_tessellate_linear_extrusion(face, edge_cache, file, opts) {
         return mesh;
     }
-    if let Some(mesh) = try_tessellate_annular_disc(face, edge_cache, file, max_edge_len) {
+    if let Some(mesh) = try_tessellate_annular_disc(face, edge_cache, file, opts) {
         return mesh;
     }
-    if let Some(mesh) = try_tessellate_disc(face, edge_cache, file, max_edge_len) {
+    if let Some(mesh) = try_tessellate_disc(face, edge_cache, file, opts) {
         return mesh;
     }
 
@@ -388,7 +417,7 @@ fn try_tessellate_cylindrical(
     face: &TopoFace,
     edge_cache: &EdgeCache,
     file: &StepFile,
-    max_edge_len: f64,
+    opts: &TessOptions,
 ) -> Option<SurfaceMesh> {
     let e = file.get(&face.surface_id)?;
     if e.type_name != "CYLINDRICAL_SURFACE" {
@@ -459,7 +488,7 @@ fn try_tessellate_cylindrical(
         // Sort rings by axial coordinate so index 0 = bottom, last = top.
         cached_rings.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
 
-        let n_v = (((v_max - v_min).abs() / max_edge_len).ceil() as usize).max(1);
+        let n_v = (((v_max - v_min).abs() / opts.max_edge_len).ceil() as usize).max(1);
 
         // Infer u-angles for interior rows from the bottom ring (or compute from scratch).
         let u_angles: Vec<f64> = if let Some((_, ring)) = cached_rings.first() {
@@ -470,7 +499,7 @@ fn try_tessellate_cylindrical(
                 })
                 .collect()
         } else {
-            let n_u_fallback = ((2.0 * PI * radius / max_edge_len).ceil() as usize).clamp(8, 256);
+            let n_u_fallback = n_segs_for_arc(radius, 2.0 * PI, opts).clamp(8, 512);
             (0..n_u_fallback)
                 .map(|i| 2.0 * PI * i as f64 / n_u_fallback as f64)
                 .collect()
@@ -548,10 +577,9 @@ fn try_tessellate_cylindrical(
             })
             .collect();
 
-        let arc_u = (u_max - u_min) * radius;
         let arc_v = (v_max - v_min).abs();
-        let n_u = ((arc_u / max_edge_len).ceil() as usize).clamp(2, 256);
-        let n_v = ((arc_v / max_edge_len).ceil() as usize).clamp(1, 256);
+        let n_u = n_segs_for_arc(radius, u_max - u_min, opts).clamp(2, 512);
+        let n_v = ((arc_v / opts.max_edge_len).ceil() as usize).clamp(1, 512);
 
         let mut points = Vec::with_capacity((n_u + 1) * (n_v + 1));
         let mut uv_grid = Vec::with_capacity((n_u + 1) * (n_v + 1));
@@ -597,7 +625,7 @@ fn try_tessellate_conical(
     face: &TopoFace,
     edge_cache: &EdgeCache,
     file: &StepFile,
-    max_edge_len: f64,
+    opts: &TessOptions,
 ) -> Option<SurfaceMesh> {
     let e = file.get(&face.surface_id)?;
     if e.type_name != "CONICAL_SURFACE" {
@@ -670,8 +698,8 @@ fn try_tessellate_conical(
         let n_u = cached_rings
             .first()
             .map(|(_, r)| r.len())
-            .unwrap_or_else(|| ((2.0 * PI * r_mid / max_edge_len).ceil() as usize).clamp(8, 256));
-        let n_v = (((v_max - v_min).abs() / max_edge_len).ceil() as usize).max(1);
+            .unwrap_or_else(|| n_segs_for_arc(r_mid, 2.0 * PI, opts).clamp(8, 512));
+        let n_v = (((v_max - v_min).abs() / opts.max_edge_len).ceil() as usize).max(1);
 
         let u_angles: Vec<f64> = cached_rings
             .first()
@@ -746,10 +774,9 @@ fn try_tessellate_conical(
             })
             .collect();
 
-        let arc_u = (u_max - u_min) * r_mid;
         let arc_v = (v_max - v_min).abs();
-        let n_u = ((arc_u / max_edge_len).ceil() as usize).clamp(2, 256);
-        let n_v = ((arc_v / max_edge_len).ceil() as usize).clamp(1, 256);
+        let n_u = n_segs_for_arc(r_mid, u_max - u_min, opts).clamp(2, 512);
+        let n_v = ((arc_v / opts.max_edge_len).ceil() as usize).clamp(1, 512);
 
         let mut points = Vec::with_capacity((n_u + 1) * (n_v + 1));
         let mut uv_grid = Vec::with_capacity((n_u + 1) * (n_v + 1));
@@ -795,7 +822,7 @@ fn try_tessellate_toroidal(
     face: &TopoFace,
     edge_cache: &EdgeCache,
     file: &StepFile,
-    max_edge_len: f64,
+    opts: &TessOptions,
 ) -> Option<SurfaceMesh> {
     let e = file.get(&face.surface_id)?;
     if e.type_name != "TOROIDAL_SURFACE" {
@@ -819,10 +846,9 @@ fn try_tessellate_toroidal(
         });
 
     if all_closed {
-        let circumference_u = 2.0 * PI * (major_radius + minor_radius);
-        let circumference_v = 2.0 * PI * minor_radius;
-        let n_u = ((circumference_u / max_edge_len).ceil() as usize).clamp(8, 256);
-        let n_v = ((circumference_v / max_edge_len).ceil() as usize).clamp(8, 256);
+        // Full torus: chord-height criterion on the outer equator (u) and tube (v).
+        let n_u = n_segs_for_arc(major_radius + minor_radius, 2.0 * PI, opts).clamp(8, 512);
+        let n_v = n_segs_for_arc(minor_radius, 2.0 * PI, opts).clamp(8, 512);
 
         let mut points = Vec::with_capacity(n_u * n_v);
         for j in 0..n_v {
@@ -885,10 +911,8 @@ fn try_tessellate_toroidal(
         return None;
     }
 
-    let arc_u = (u_max - u_min) * (major_radius + minor_radius);
-    let arc_v = (v_max - v_min) * minor_radius;
-    let n_u = ((arc_u / max_edge_len).ceil() as usize).clamp(2, 256);
-    let n_v = ((arc_v / max_edge_len).ceil() as usize).clamp(2, 256);
+    let n_u = n_segs_for_arc(major_radius + minor_radius, u_max - u_min, opts).clamp(2, 512);
+    let n_v = n_segs_for_arc(minor_radius, v_max - v_min, opts).clamp(2, 512);
 
     let mut points = Vec::with_capacity((n_u + 1) * (n_v + 1));
     for j in 0..=n_v {
@@ -928,7 +952,7 @@ fn try_tessellate_spherical(
     face: &TopoFace,
     edge_cache: &EdgeCache,
     file: &StepFile,
-    max_edge_len: f64,
+    opts: &TessOptions,
 ) -> Option<SurfaceMesh> {
     let e = file.get(&face.surface_id)?;
     if e.type_name != "SPHERICAL_SURFACE" {
@@ -978,15 +1002,11 @@ fn try_tessellate_spherical(
         return None;
     }
 
-    // Estimate arc lengths at the mid-latitude for grid density.
-    // Longitude arc at v_mid: R * cos(v_mid) * Δu
-    // Latitude arc: R * Δv
+    // Chord-height criterion: longitude circles have effective radius R*cos(v_mid).
     let v_mid = (v_min + v_max) / 2.0;
-    let arc_u = radius * v_mid.cos().abs() * (u_max - u_min);
-    let arc_v = radius * (v_max - v_min);
-
-    let n_u = ((arc_u / max_edge_len).ceil() as usize).clamp(2, 256);
-    let n_v = ((arc_v / max_edge_len).ceil() as usize).clamp(2, 256);
+    let r_u = radius * v_mid.cos().abs();
+    let n_u = n_segs_for_arc(r_u.max(1e-10), u_max - u_min, opts).clamp(2, 512);
+    let n_v = n_segs_for_arc(radius, v_max - v_min, opts).clamp(2, 512);
 
     let mut points = Vec::with_capacity((n_u + 1) * (n_v + 1));
     let mut uv_grid = Vec::with_capacity((n_u + 1) * (n_v + 1));
@@ -1066,7 +1086,7 @@ fn try_tessellate_bspline(
     face: &TopoFace,
     edge_cache: &EdgeCache,
     file: &StepFile,
-    max_edge_len: f64,
+    opts: &TessOptions,
 ) -> Option<SurfaceMesh> {
     let e = file.get(&face.surface_id)?;
 
@@ -1140,8 +1160,8 @@ fn try_tessellate_bspline(
         return None;
     }
 
-    let n_u = ((arc_u / max_edge_len).ceil() as usize).clamp(2, 256) + 1;
-    let n_v = ((arc_v / max_edge_len).ceil() as usize).clamp(2, 256) + 1;
+    let n_u = ((arc_u / opts.max_edge_len).ceil() as usize).clamp(2, 256) + 1;
+    let n_v = ((arc_v / opts.max_edge_len).ceil() as usize).clamp(2, 256) + 1;
 
     let mut interior_3d: Vec<[f64; 3]> = Vec::new();
     let mut interior_2d: Vec<Point2> = Vec::new();
@@ -1208,7 +1228,7 @@ fn try_tessellate_linear_extrusion(
     face: &TopoFace,
     edge_cache: &EdgeCache,
     file: &StepFile,
-    max_edge_len: f64,
+    opts: &TessOptions,
 ) -> Option<SurfaceMesh> {
     let e = file.get(&face.surface_id)?;
     if e.type_name != "SURFACE_OF_LINEAR_EXTRUSION" {
@@ -1297,8 +1317,8 @@ fn try_tessellate_linear_extrusion(
         return None;
     }
 
-    let n_u = ((arc_u / max_edge_len).ceil() as usize).clamp(2, 256) + 1;
-    let n_v = ((arc_v / max_edge_len).ceil() as usize).clamp(2, 256) + 1;
+    let n_u = ((arc_u / opts.max_edge_len).ceil() as usize).clamp(2, 256) + 1;
+    let n_v = ((arc_v / opts.max_edge_len).ceil() as usize).clamp(2, 256) + 1;
 
     let mut interior_3d: Vec<[f64; 3]> = Vec::new();
     let mut interior_2d: Vec<Point2> = Vec::new();
@@ -1365,7 +1385,7 @@ fn try_tessellate_annular_disc(
     face: &TopoFace,
     edge_cache: &EdgeCache,
     file: &StepFile,
-    max_edge_len: f64,
+    opts: &TessOptions,
 ) -> Option<SurfaceMesh> {
     // Only for PLANE surfaces with exactly one inner loop.
     let e = file.get(&face.surface_id)?;
@@ -1418,7 +1438,7 @@ fn try_tessellate_annular_disc(
         let nu = cached.len().saturating_sub(1).max(8);
         cached[..nu].to_vec()
     } else {
-        let n_u = ((2.0 * PI * outer_radius / max_edge_len).ceil() as usize).clamp(8, 256);
+        let n_u = n_segs_for_arc(outer_radius, 2.0 * PI, opts).clamp(8, 512);
         (0..n_u)
             .map(|i| {
                 let u = 2.0 * PI * i as f64 / n_u as f64;
@@ -1507,7 +1527,7 @@ fn try_tessellate_disc(
     face: &TopoFace,
     edge_cache: &EdgeCache,
     file: &StepFile,
-    max_edge_len: f64,
+    opts: &TessOptions,
 ) -> Option<SurfaceMesh> {
     // Only for PLANE surfaces with no inner loops.
     let e = file.get(&face.surface_id)?;
@@ -1545,7 +1565,7 @@ fn try_tessellate_disc(
         let nu = cached.len().saturating_sub(1).max(8);
         cached[..nu].to_vec()
     } else {
-        let n_u = ((2.0 * PI * radius / max_edge_len).ceil() as usize).clamp(8, 256);
+        let n_u = n_segs_for_arc(radius, 2.0 * PI, opts).clamp(8, 512);
         (0..n_u)
             .map(|i| {
                 let t = 2.0 * PI * i as f64 / n_u as f64;
