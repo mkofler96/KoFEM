@@ -8,9 +8,20 @@
 use std::collections::HashMap;
 use std::f64::consts::PI;
 
+/// Build a map from 2D point bits `(x.to_bits(), y.to_bits())` → original 3D position.
+/// Used by CDT-based tessellators to recover exact edge-cache 3D positions for boundary
+/// vertices after CDT works in the projected 2D tangent plane.
+fn build_bnd2d_map(pts2d: &[Point2], pts3d: &[[f64; 3]]) -> HashMap<(u64, u64), [f64; 3]> {
+    pts2d
+        .iter()
+        .zip(pts3d.iter())
+        .map(|(p2d, &p3d)| ((p2d.x.to_bits(), p2d.y.to_bits()), p3d))
+        .collect()
+}
+
 use serde::Serialize;
 
-use kofem_mesh::cdt::try_triangulate_constrained;
+use kofem_mesh::cdt::{try_triangulate_constrained, try_triangulate_with_interior};
 use kofem_mesh::geom::{point_in_polygon, Point2};
 
 use crate::geom::curve::curve_from_step;
@@ -1041,13 +1052,16 @@ fn unwrap_angles(angles: Vec<f64>) -> Vec<f64> {
     out
 }
 
-/// Tessellate a B-spline surface face by sampling its UV parameter domain
-/// uniformly and evaluating `surface.point(u, v)` at each grid node.
+/// Tessellate a B-spline surface face using CDT constrained to the edge-cached
+/// boundary, with UV-grid Steiner points providing interior density.
 ///
-/// Handles both direct `B_SPLINE_SURFACE_WITH_KNOTS` entities and complex entity
-/// instances (empty `type_name`) that contain a `B_SPLINE_SURFACE_WITH_KNOTS`
-/// component.  Returns `None` when the surface is not a B-spline or its UV
-/// bounds are not finite.
+/// This replaces the previous centroid-filter approach, which produced triangles
+/// that extended beyond the actual face boundary ("triangles going over edges").
+/// Now the edge-cached boundary ring is a hard CDT constraint, and UV-grid points
+/// that project strictly inside the boundary become Steiner interior nodes.
+/// Boundary CDT vertices recover their exact edge-cache 3D positions via a
+/// bit-exact 2D→3D map, preserving the "individual edge meshing" invariant
+/// that adjacent faces stitch at zero distance.
 fn try_tessellate_bspline(
     face: &TopoFace,
     edge_cache: &EdgeCache,
@@ -1074,12 +1088,54 @@ fn try_tessellate_bspline(
         return None;
     }
 
-    // Estimate spatial arc lengths at mid-parameter to choose sample density.
+    // ── Boundary setup ──────────────────────────────────────────────────────
+    let boundary_3d = sample_boundary_cached(&face.outer_loop, edge_cache);
+    if boundary_3d.len() < 3 {
+        return None;
+    }
+    let normal = face_normal(&boundary_3d)?;
+    let (bnd2d_raw, origin, x_axis, y_axis) = project_to_2d(&boundary_3d, normal);
+
+    // Build bit-exact map: 2D projection → original edge-cache 3D position.
+    // Used to recover exact boundary vertex positions after CDT works in 2D.
+    let bnd_map = build_bnd2d_map(&bnd2d_raw, &boundary_3d);
+
+    let bnd2d = ensure_ccw(deduplicate_2d(bnd2d_raw));
+    if bnd2d.len() < 3 || polygon_area_2d(&bnd2d).abs() < 1e-20 {
+        return None;
+    }
+
+    // ── Holes ───────────────────────────────────────────────────────────────
+    let holes_data: Vec<(Vec<[f64; 3]>, Vec<Point2>)> = face
+        .inner_loops
+        .iter()
+        .filter_map(|inner| {
+            let inner_3d = sample_boundary_cached(inner, edge_cache);
+            if inner_3d.len() < 3 {
+                return None;
+            }
+            let inner_2d: Vec<Point2> = inner_3d
+                .iter()
+                .map(|&p| {
+                    let d = sub(p, origin);
+                    Point2::new(dot3(d, x_axis), dot3(d, y_axis))
+                })
+                .collect();
+            Some((inner_3d, inner_2d))
+        })
+        .collect();
+    let hole_maps: Vec<HashMap<(u64, u64), [f64; 3]>> = holes_data
+        .iter()
+        .map(|(h3d, h2d)| build_bnd2d_map(h2d, h3d))
+        .collect();
+    let holes2d: Vec<Vec<Point2>> = holes_data.iter().map(|(_, h2d)| h2d.clone()).collect();
+    let hole_slices: Vec<&[Point2]> = holes2d.iter().map(|h| h.as_slice()).collect();
+
+    // ── Interior Steiner points from UV grid ────────────────────────────────
     let u_mid = (u0 + u1) / 2.0;
     let v_mid = (v0 + v1) / 2.0;
     let arc_u = sample_arc_length(|t| surface.point(t, v_mid), u0, u1, 32);
     let arc_v = sample_arc_length(|t| surface.point(u_mid, t), v0, v1, 32);
-
     if arc_u < 1e-10 || arc_v < 1e-10 {
         return None;
     }
@@ -1087,74 +1143,67 @@ fn try_tessellate_bspline(
     let n_u = ((arc_u / max_edge_len).ceil() as usize).clamp(2, 256) + 1;
     let n_v = ((arc_v / max_edge_len).ceil() as usize).clamp(2, 256) + 1;
 
-    let mut points = Vec::with_capacity(n_u * n_v);
+    let mut interior_3d: Vec<[f64; 3]> = Vec::new();
+    let mut interior_2d: Vec<Point2> = Vec::new();
     for j in 0..n_v {
         let v = v0 + (v1 - v0) * j as f64 / (n_v - 1) as f64;
         for i in 0..n_u {
             let u = u0 + (u1 - u0) * i as f64 / (n_u - 1) as f64;
-            points.push(surface.point(u, v));
+            let p3d = surface.point(u, v);
+            let d = sub(p3d, origin);
+            let p2d = Point2::new(dot3(d, x_axis), dot3(d, y_axis));
+            if point_in_polygon(p2d, &bnd2d) && !holes2d.iter().any(|h| point_in_polygon(p2d, h)) {
+                interior_3d.push(p3d);
+                interior_2d.push(p2d);
+            }
         }
     }
 
-    let mut triangles: Vec<[usize; 3]> = Vec::with_capacity((n_u - 1) * (n_v - 1) * 2);
-    for j in 0..(n_v - 1) {
-        for i in 0..(n_u - 1) {
-            let a = j * n_u + i;
-            let b = j * n_u + (i + 1);
-            let c = (j + 1) * n_u + i;
-            let d = (j + 1) * n_u + (i + 1);
-            triangles.push([a, b, d]);
-            triangles.push([a, d, c]);
-        }
+    // ── CDT triangulation ───────────────────────────────────────────────────
+    let (mesh2d, n_outer, n_holes) =
+        match try_triangulate_with_interior(&bnd2d, &hole_slices, &interior_2d) {
+            Ok(r) => r,
+            Err(_) => return None,
+        };
+
+    if mesh2d.triangles.is_empty() {
+        return None;
     }
 
-    // Clip generated triangles to the actual face boundary by projecting everything
-    // onto a shared tangent plane and testing centroids against the 2D boundary polygon.
-    let boundary_3d = sample_boundary_cached(&face.outer_loop, edge_cache);
-    if boundary_3d.len() >= 3 {
-        if let Some(normal) = face_normal(&boundary_3d) {
-            let (bnd2d, origin, x_axis, y_axis) = project_to_2d(&boundary_3d, normal);
-            let holes2d: Vec<Vec<Point2>> = face
-                .inner_loops
-                .iter()
-                .filter_map(|inner| {
-                    let inner_3d = sample_boundary_cached(inner, edge_cache);
-                    if inner_3d.len() < 3 {
-                        return None;
-                    }
-                    Some(
-                        inner_3d
-                            .iter()
-                            .map(|&p| {
-                                let d = sub(p, origin);
-                                Point2::new(dot3(d, x_axis), dot3(d, y_axis))
-                            })
-                            .collect(),
-                    )
-                })
-                .collect();
-            triangles.retain(|&[a, b, c]| {
-                let cx = (points[a][0] + points[b][0] + points[c][0]) / 3.0;
-                let cy = (points[a][1] + points[b][1] + points[c][1]) / 3.0;
-                let cz = (points[a][2] + points[b][2] + points[c][2]) / 3.0;
-                let d = sub([cx, cy, cz], origin);
-                let c2d = Point2::new(dot3(d, x_axis), dot3(d, y_axis));
-                point_in_polygon(c2d, &bnd2d) && !holes2d.iter().any(|h| point_in_polygon(c2d, h))
-            });
-        }
-    }
+    // ── Lift CDT points back to 3D ──────────────────────────────────────────
+    // Boundary/hole points: recover exact edge-cache 3D position from the map.
+    // Interior points: use the pre-computed surface.point(u,v) evaluation.
+    let n_bnd_total = n_outer + n_holes;
+    let points: Vec<[f64; 3]> = mesh2d
+        .points
+        .iter()
+        .enumerate()
+        .map(|(i, p2d)| {
+            let key = (p2d.x.to_bits(), p2d.y.to_bits());
+            if i < n_outer {
+                bnd_map
+                    .get(&key)
+                    .copied()
+                    .unwrap_or_else(|| add(origin, add(scale(x_axis, p2d.x), scale(y_axis, p2d.y))))
+            } else if i < n_bnd_total {
+                // Hole boundary point — search all hole maps.
+                hole_maps
+                    .iter()
+                    .find_map(|m| m.get(&key).copied())
+                    .unwrap_or_else(|| add(origin, add(scale(x_axis, p2d.x), scale(y_axis, p2d.y))))
+            } else {
+                interior_3d[i - n_bnd_total]
+            }
+        })
+        .collect();
 
+    let triangles: Vec<[usize; 3]> = mesh2d.triangles.iter().map(|t| t.v).collect();
     Some(SurfaceMesh { points, triangles })
 }
 
-/// Tessellate a `SURFACE_OF_LINEAR_EXTRUSION` face by sweeping the profile curve
-/// along a fixed extrusion vector.  P(u, v) = C(u) + v·V where C is the swept
-/// curve and V is the extrusion vector.
-///
-/// u-range comes from the curve's own knot bounds; v-range is inferred by
-/// projecting the boundary onto the extrusion direction.  Triangles outside the
-/// actual face boundary are removed by the same 3D centroid projection / point-
-/// in-polygon test used by the B-spline tessellator.
+/// Tessellate a `SURFACE_OF_LINEAR_EXTRUSION` face using CDT with interior Steiner
+/// points.  Boundary vertices come from the edge cache (hard constraints), so adjacent
+/// faces share bitwise-identical positions and stitch perfectly.
 fn try_tessellate_linear_extrusion(
     face: &TopoFace,
     edge_cache: &EdgeCache,
@@ -1166,10 +1215,9 @@ fn try_tessellate_linear_extrusion(
         return None;
     }
 
-    // Parse the extrusion vector from STEP to compute v-range.
+    // Parse the extrusion vector — needed to infer the v-range.
     // SURFACE_OF_LINEAR_EXTRUSION(label, swept_curve_ref, extrusion_axis_ref)
     let vec_id = get_ref(e, 2).ok()?;
-    // VECTOR(label, direction_ref, magnitude)
     let vec_e = file.get(&vec_id)?;
     let dir_id = get_ref(vec_e, 1).ok()?;
     let magnitude = get_real(vec_e, 2).ok()?;
@@ -1180,19 +1228,55 @@ fn try_tessellate_linear_extrusion(
         return None;
     }
 
-    // Load surface for P(u, v) evaluation.
     let surface = surface_from_step(face.surface_id, file).ok()?;
     let (u0, u1) = surface.u_bounds();
     if !u0.is_finite() || !u1.is_finite() {
-        // Infinite u-bounds (e.g. LINE-swept) — fall through to CDT.
         return None;
     }
 
-    // Infer v range from boundary: v = dot(P - C(u0), extrusion) / |extrusion|²
+    // ── Boundary setup ──────────────────────────────────────────────────────
     let boundary_3d = sample_boundary_cached(&face.outer_loop, edge_cache);
     if boundary_3d.len() < 3 {
         return None;
     }
+    let normal = face_normal(&boundary_3d)?;
+    let (bnd2d_raw, origin, x_axis, y_axis) = project_to_2d(&boundary_3d, normal);
+
+    let bnd_map = build_bnd2d_map(&bnd2d_raw, &boundary_3d);
+
+    let bnd2d = ensure_ccw(deduplicate_2d(bnd2d_raw));
+    if bnd2d.len() < 3 || polygon_area_2d(&bnd2d).abs() < 1e-20 {
+        return None;
+    }
+
+    // ── Holes ───────────────────────────────────────────────────────────────
+    let holes_data: Vec<(Vec<[f64; 3]>, Vec<Point2>)> = face
+        .inner_loops
+        .iter()
+        .filter_map(|inner| {
+            let inner_3d = sample_boundary_cached(inner, edge_cache);
+            if inner_3d.len() < 3 {
+                return None;
+            }
+            let inner_2d: Vec<Point2> = inner_3d
+                .iter()
+                .map(|&p| {
+                    let d = sub(p, origin);
+                    Point2::new(dot3(d, x_axis), dot3(d, y_axis))
+                })
+                .collect();
+            Some((inner_3d, inner_2d))
+        })
+        .collect();
+    let hole_maps: Vec<HashMap<(u64, u64), [f64; 3]>> = holes_data
+        .iter()
+        .map(|(h3d, h2d)| build_bnd2d_map(h2d, h3d))
+        .collect();
+    let holes2d: Vec<Vec<Point2>> = holes_data.iter().map(|(_, h2d)| h2d.clone()).collect();
+    let hole_slices: Vec<&[Point2]> = holes2d.iter().map(|h| h.as_slice()).collect();
+
+    // ── Interior Steiner points from UV grid ────────────────────────────────
+    // Infer v range from boundary projection onto the extrusion direction.
     let c_u0 = surface.point(u0, 0.0);
     let v_min = boundary_3d
         .iter()
@@ -1206,7 +1290,6 @@ fn try_tessellate_linear_extrusion(
         return None;
     }
 
-    // Grid density: arc length along curve at v_mid, and physical extrusion height.
     let v_mid = (v_min + v_max) / 2.0;
     let arc_u = sample_arc_length(|t| surface.point(t, v_mid), u0, u1, 32);
     let arc_v = magnitude * (v_max - v_min).abs();
@@ -1217,59 +1300,58 @@ fn try_tessellate_linear_extrusion(
     let n_u = ((arc_u / max_edge_len).ceil() as usize).clamp(2, 256) + 1;
     let n_v = ((arc_v / max_edge_len).ceil() as usize).clamp(2, 256) + 1;
 
-    let mut points = Vec::with_capacity(n_u * n_v);
+    let mut interior_3d: Vec<[f64; 3]> = Vec::new();
+    let mut interior_2d: Vec<Point2> = Vec::new();
     for j in 0..n_v {
         let v = v_min + (v_max - v_min) * j as f64 / (n_v - 1) as f64;
         for i in 0..n_u {
             let u = u0 + (u1 - u0) * i as f64 / (n_u - 1) as f64;
-            points.push(surface.point(u, v));
+            let p3d = surface.point(u, v);
+            let d = sub(p3d, origin);
+            let p2d = Point2::new(dot3(d, x_axis), dot3(d, y_axis));
+            if point_in_polygon(p2d, &bnd2d) && !holes2d.iter().any(|h| point_in_polygon(p2d, h)) {
+                interior_3d.push(p3d);
+                interior_2d.push(p2d);
+            }
         }
     }
 
-    let mut triangles: Vec<[usize; 3]> = Vec::with_capacity((n_u - 1) * (n_v - 1) * 2);
-    for j in 0..(n_v - 1) {
-        for i in 0..(n_u - 1) {
-            let a = j * n_u + i;
-            let b = j * n_u + (i + 1);
-            let c = (j + 1) * n_u + i;
-            let d = (j + 1) * n_u + (i + 1);
-            triangles.push([a, b, d]);
-            triangles.push([a, d, c]);
-        }
+    // ── CDT triangulation ───────────────────────────────────────────────────
+    let (mesh2d, n_outer, n_holes) =
+        match try_triangulate_with_interior(&bnd2d, &hole_slices, &interior_2d) {
+            Ok(r) => r,
+            Err(_) => return None,
+        };
+
+    if mesh2d.triangles.is_empty() {
+        return None;
     }
 
-    // Clip to face boundary: project centroids to 2D and test against boundary polygon.
-    if let Some(normal) = face_normal(&boundary_3d) {
-        let (bnd2d, origin, x_axis, y_axis) = project_to_2d(&boundary_3d, normal);
-        let holes2d: Vec<Vec<Point2>> = face
-            .inner_loops
-            .iter()
-            .filter_map(|inner| {
-                let inner_3d = sample_boundary_cached(inner, edge_cache);
-                if inner_3d.len() < 3 {
-                    return None;
-                }
-                Some(
-                    inner_3d
-                        .iter()
-                        .map(|&p| {
-                            let d = sub(p, origin);
-                            Point2::new(dot3(d, x_axis), dot3(d, y_axis))
-                        })
-                        .collect(),
-                )
-            })
-            .collect();
-        triangles.retain(|&[a, b, c]| {
-            let cx = (points[a][0] + points[b][0] + points[c][0]) / 3.0;
-            let cy = (points[a][1] + points[b][1] + points[c][1]) / 3.0;
-            let cz = (points[a][2] + points[b][2] + points[c][2]) / 3.0;
-            let d = sub([cx, cy, cz], origin);
-            let c2d = Point2::new(dot3(d, x_axis), dot3(d, y_axis));
-            point_in_polygon(c2d, &bnd2d) && !holes2d.iter().any(|h| point_in_polygon(c2d, h))
-        });
-    }
+    // ── Lift CDT points back to 3D ──────────────────────────────────────────
+    let n_bnd_total = n_outer + n_holes;
+    let points: Vec<[f64; 3]> = mesh2d
+        .points
+        .iter()
+        .enumerate()
+        .map(|(i, p2d)| {
+            let key = (p2d.x.to_bits(), p2d.y.to_bits());
+            if i < n_outer {
+                bnd_map
+                    .get(&key)
+                    .copied()
+                    .unwrap_or_else(|| add(origin, add(scale(x_axis, p2d.x), scale(y_axis, p2d.y))))
+            } else if i < n_bnd_total {
+                hole_maps
+                    .iter()
+                    .find_map(|m| m.get(&key).copied())
+                    .unwrap_or_else(|| add(origin, add(scale(x_axis, p2d.x), scale(y_axis, p2d.y))))
+            } else {
+                interior_3d[i - n_bnd_total]
+            }
+        })
+        .collect();
 
+    let triangles: Vec<[usize; 3]> = mesh2d.triangles.iter().map(|t| t.v).collect();
     Some(SurfaceMesh { points, triangles })
 }
 

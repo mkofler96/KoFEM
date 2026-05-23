@@ -253,6 +253,107 @@ pub fn triangulate_constrained(boundary: &[Point2], holes: &[&[Point2]]) -> Mesh
         .expect("CDT: self-intersecting polygon — constraint edges cross")
 }
 
+/// CDT with unconstrained interior (Steiner) points.
+///
+/// Like [`try_triangulate_constrained`] but also accepts `interior` points that
+/// participate in the Delaunay triangulation without forming constraint edges.
+/// Interior points provide density inside the face (e.g. UV-grid samples for
+/// curved surfaces) while the boundary ring remains the hard constraint that
+/// no triangle may cross.
+///
+/// Returns `(mesh, n_outer, n_holes)` where:
+/// - `mesh.points[0..n_outer]`               are the (preprocessed) outer boundary vertices
+/// - `mesh.points[n_outer..n_outer+n_holes]`  are the (preprocessed) hole vertices (all holes combined)
+/// - `mesh.points[n_outer+n_holes..]`         are the interior points (in the same order as `interior`)
+pub fn try_triangulate_with_interior(
+    boundary: &[Point2],
+    holes: &[&[Point2]],
+    interior: &[Point2],
+) -> Result<(Mesh2D, usize, usize), CdtError> {
+    let outer: Vec<Point2> = preprocess_ring(boundary);
+    let processed_holes: Vec<Vec<Point2>> = holes.iter().map(|&h| preprocess_ring(h)).collect();
+    let hole_slices: Vec<&[Point2]> = processed_holes.iter().map(|h| h.as_slice()).collect();
+
+    let n_outer = outer.len();
+    if n_outer < 3 {
+        return Ok((
+            Mesh2D {
+                points: outer,
+                triangles: vec![],
+            },
+            n_outer,
+            0,
+        ));
+    }
+
+    let n_holes: usize = processed_holes.iter().map(|h| h.len()).sum();
+
+    let mut all_input_pts: Vec<Point2> = outer.clone();
+    for h in &processed_holes {
+        all_input_pts.extend_from_slice(h);
+    }
+    // Interior (Steiner) points appended after boundary + holes.
+    all_input_pts.extend_from_slice(interior);
+    let n_all = all_input_pts.len();
+
+    // Constraint edges only for boundary and holes — not for interior points.
+    let mut constraints: Vec<(usize, usize)> = Vec::new();
+    for i in 0..n_outer {
+        constraints.push((i, (i + 1) % n_outer));
+    }
+    let mut offset = n_outer;
+    for h in &processed_holes {
+        let m = h.len();
+        for i in 0..m {
+            constraints.push((offset + i, offset + (i + 1) % m));
+        }
+        offset += m;
+    }
+
+    for i in 0..constraints.len() {
+        for j in (i + 1)..constraints.len() {
+            let (a, b) = constraints[i];
+            let (c, d) = constraints[j];
+            if segments_properly_intersect(
+                all_input_pts[a],
+                all_input_pts[b],
+                all_input_pts[c],
+                all_input_pts[d],
+            ) {
+                return Err(CdtError::IntersectingConstraints {
+                    edge_a: (a, b),
+                    edge_b: (c, d),
+                });
+            }
+        }
+    }
+
+    let (all_pts, mut triangles) = bowyer_watson(&all_input_pts);
+    remove_super(&mut triangles, n_all);
+
+    let constraint_set: HashSet<(usize, usize)> = constraints
+        .iter()
+        .map(|&(a, b)| if a < b { (a, b) } else { (b, a) })
+        .collect();
+
+    for &(a, b) in &constraints {
+        if a != b {
+            enforce_constraint(&mut triangles, &all_pts, a, b, &constraint_set);
+        }
+    }
+
+    classify_interior(&mut triangles, &all_pts, &outer, &hole_slices);
+
+    Ok((
+        Mesh2D {
+            points: all_pts[..n_all].to_vec(),
+            triangles,
+        },
+        n_outer,
+        n_holes,
+    ))
+}
+
 /// Returns the index of the first active vertex (other than `a` and `b`) that lies
 /// strictly on the open segment `(a, b)`, or `None`.
 ///
