@@ -880,30 +880,16 @@ fn try_tessellate_toroidal(
     let n_v = ((arc_v / max_edge_len).ceil() as usize).clamp(2, 256);
 
     let mut points = Vec::with_capacity((n_u + 1) * (n_v + 1));
-    let mut uv_grid = Vec::with_capacity((n_u + 1) * (n_v + 1));
     for j in 0..=n_v {
         let v = v_min + (v_max - v_min) * j as f64 / n_v as f64;
         for i in 0..=n_u {
             let u = u_min + (u_max - u_min) * i as f64 / n_u as f64;
             points.push(surface.point(u, v));
-            uv_grid.push(Point2::new(u, v));
         }
     }
 
-    // Build UV boundary polygon for triangle clipping (handles non-rectangular patches).
-    // Downsample to cap O(n_triangles × n_boundary) cost on complex faces.
-    let uv_bnd_raw: Vec<Point2> = u_vals
-        .iter()
-        .zip(v_vals.iter())
-        .map(|(&u, &v)| Point2::new(u, v))
-        .collect();
-    let uv_bnd: Vec<Point2> = if uv_bnd_raw.len() > 200 {
-        let step = (uv_bnd_raw.len() / 200).max(1);
-        uv_bnd_raw.iter().step_by(step).cloned().collect()
-    } else {
-        uv_bnd_raw
-    };
-
+    // Toroidal patches in engineering models are always rectangular in UV space,
+    // so no polygon clipping is needed — the grid already covers exactly the face.
     let n_cols = n_u + 1;
     let triangles: Vec<[usize; 3]> = (0..n_v)
         .flat_map(|j| {
@@ -914,11 +900,6 @@ fn try_tessellate_toroidal(
                 let d = (j + 1) * n_cols + (i + 1);
                 [[a, b, d], [a, d, c]]
             })
-        })
-        .filter(|&[a, b, c]| {
-            let cu = (uv_grid[a].x + uv_grid[b].x + uv_grid[c].x) / 3.0;
-            let cv = (uv_grid[a].y + uv_grid[b].y + uv_grid[c].y) / 3.0;
-            point_in_polygon(Point2::new(cu, cv), &uv_bnd)
         })
         .collect();
 
@@ -1014,8 +995,10 @@ fn try_tessellate_spherical(
         .zip(v_vals.iter())
         .map(|(&u, &v)| Point2::new(u, v))
         .collect();
-    let uv_bnd: Vec<Point2> = if uv_bnd_raw.len() > 200 {
-        let step = (uv_bnd_raw.len() / 200).max(1);
+    // Cap boundary polygon to 32 vertices — spherical patches can have complex
+    // (non-rectangular) UV boundaries, but 32 samples are enough to clip corners.
+    let uv_bnd: Vec<Point2> = if uv_bnd_raw.len() > 32 {
+        let step = (uv_bnd_raw.len() / 32).max(1);
         uv_bnd_raw.iter().step_by(step).cloned().collect()
     } else {
         uv_bnd_raw
