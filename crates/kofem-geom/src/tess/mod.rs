@@ -239,7 +239,33 @@ fn tessellate_face(
     max_edge_len: f64,
 ) -> SurfaceMesh {
     let raw = tessellate_face_raw(face, edge_cache, file, max_edge_len);
-    flip_winding_if(raw, !face.outer_loop_orientation)
+    // UV-grid surfaces (cylinder, cone, torus, sphere, B-spline, linear extrusion)
+    // generate CCW triangles aligned with ∂P/∂u × ∂P/∂v, so the flip follows same_sense.
+    // All other surfaces (PLANE, SURFACE_OF_REVOLUTION, unknown/missing) are tessellated
+    // from the boundary polygon (CDT or fan), so the flip follows outer_loop_orientation.
+    let is_uv_surface = file
+        .get(&face.surface_id)
+        .map(|e| {
+            matches!(
+                e.type_name.as_str(),
+                "CYLINDRICAL_SURFACE"
+                    | "CONICAL_SURFACE"
+                    | "TOROIDAL_SURFACE"
+                    | "SPHERICAL_SURFACE"
+                    | "B_SPLINE_SURFACE_WITH_KNOTS"
+                    | "SURFACE_OF_LINEAR_EXTRUSION"
+            ) || (e.type_name.is_empty()
+                && e.args.iter().any(|a| {
+                    matches!(a, Arg::TypedValue { name, .. } if name == "B_SPLINE_SURFACE_WITH_KNOTS")
+                }))
+        })
+        .unwrap_or(false);
+    let flip = if is_uv_surface {
+        !face.same_sense
+    } else {
+        !face.outer_loop_orientation
+    };
+    flip_winding_if(raw, flip)
 }
 
 fn tessellate_face_raw(
@@ -261,6 +287,9 @@ fn tessellate_face_raw(
         return mesh;
     }
     if let Some(mesh) = try_tessellate_bspline(face, edge_cache, file, max_edge_len) {
+        return mesh;
+    }
+    if let Some(mesh) = try_tessellate_linear_extrusion(face, edge_cache, file, max_edge_len) {
         return mesh;
     }
     if let Some(mesh) = try_tessellate_annular_disc(face, edge_cache, file, max_edge_len) {
@@ -851,26 +880,40 @@ fn try_tessellate_toroidal(
     let n_v = ((arc_v / max_edge_len).ceil() as usize).clamp(2, 256);
 
     let mut points = Vec::with_capacity((n_u + 1) * (n_v + 1));
+    let mut uv_grid = Vec::with_capacity((n_u + 1) * (n_v + 1));
     for j in 0..=n_v {
         let v = v_min + (v_max - v_min) * j as f64 / n_v as f64;
         for i in 0..=n_u {
             let u = u_min + (u_max - u_min) * i as f64 / n_u as f64;
             points.push(surface.point(u, v));
+            uv_grid.push(Point2::new(u, v));
         }
     }
 
+    // Build UV boundary polygon for triangle clipping (handles non-rectangular patches).
+    let uv_bnd: Vec<Point2> = u_vals
+        .iter()
+        .zip(v_vals.iter())
+        .map(|(&u, &v)| Point2::new(u, v))
+        .collect();
+
     let n_cols = n_u + 1;
-    let mut triangles = Vec::with_capacity(n_u * n_v * 2);
-    for j in 0..n_v {
-        for i in 0..n_u {
-            let a = j * n_cols + i;
-            let b = j * n_cols + (i + 1);
-            let c = (j + 1) * n_cols + i;
-            let d = (j + 1) * n_cols + (i + 1);
-            triangles.push([a, b, d]);
-            triangles.push([a, d, c]);
-        }
-    }
+    let triangles: Vec<[usize; 3]> = (0..n_v)
+        .flat_map(|j| {
+            (0..n_u).flat_map(move |i| {
+                let a = j * n_cols + i;
+                let b = j * n_cols + (i + 1);
+                let c = (j + 1) * n_cols + i;
+                let d = (j + 1) * n_cols + (i + 1);
+                [[a, b, d], [a, d, c]]
+            })
+        })
+        .filter(|&[a, b, c]| {
+            let cu = (uv_grid[a].x + uv_grid[b].x + uv_grid[c].x) / 3.0;
+            let cv = (uv_grid[a].y + uv_grid[b].y + uv_grid[c].y) / 3.0;
+            point_in_polygon(Point2::new(cu, cv), &uv_bnd)
+        })
+        .collect();
 
     Some(SurfaceMesh { points, triangles })
 }
@@ -947,27 +990,40 @@ fn try_tessellate_spherical(
     let n_v = ((arc_v / max_edge_len).ceil() as usize).clamp(2, 256);
 
     let mut points = Vec::with_capacity((n_u + 1) * (n_v + 1));
+    let mut uv_grid = Vec::with_capacity((n_u + 1) * (n_v + 1));
     for j in 0..=n_v {
         let v = v_min + (v_max - v_min) * j as f64 / n_v as f64;
         for i in 0..=n_u {
             let u = u_min + (u_max - u_min) * i as f64 / n_u as f64;
             points.push(surface.point(u, v));
+            uv_grid.push(Point2::new(u, v));
         }
     }
 
+    // Build UV boundary polygon for clipping (handles non-rectangular spherical patches).
+    let uv_bnd: Vec<Point2> = u_vals
+        .iter()
+        .zip(v_vals.iter())
+        .map(|(&u, &v)| Point2::new(u, v))
+        .collect();
+
     let n_cols = n_u + 1;
-    let mut triangles = Vec::with_capacity(n_u * n_v * 2);
-    for j in 0..n_v {
-        for i in 0..n_u {
-            let a = j * n_cols + i;
-            let b = j * n_cols + (i + 1);
-            let c = (j + 1) * n_cols + i;
-            let d = (j + 1) * n_cols + (i + 1);
-            // CCW winding when viewed from outside (outward-radial normal).
-            triangles.push([a, b, d]);
-            triangles.push([a, d, c]);
-        }
-    }
+    let triangles: Vec<[usize; 3]> = (0..n_v)
+        .flat_map(|j| {
+            (0..n_u).flat_map(move |i| {
+                let a = j * n_cols + i;
+                let b = j * n_cols + (i + 1);
+                let c = (j + 1) * n_cols + i;
+                let d = (j + 1) * n_cols + (i + 1);
+                [[a, b, d], [a, d, c]]
+            })
+        })
+        .filter(|&[a, b, c]| {
+            let cu = (uv_grid[a].x + uv_grid[b].x + uv_grid[c].x) / 3.0;
+            let cv = (uv_grid[a].y + uv_grid[b].y + uv_grid[c].y) / 3.0;
+            point_in_polygon(Point2::new(cu, cv), &uv_bnd)
+        })
+        .collect();
 
     Some(SurfaceMesh { points, triangles })
 }
@@ -1094,6 +1150,132 @@ fn try_tessellate_bspline(
     Some(SurfaceMesh { points, triangles })
 }
 
+/// Tessellate a `SURFACE_OF_LINEAR_EXTRUSION` face by sweeping the profile curve
+/// along a fixed extrusion vector.  P(u, v) = C(u) + v·V where C is the swept
+/// curve and V is the extrusion vector.
+///
+/// u-range comes from the curve's own knot bounds; v-range is inferred by
+/// projecting the boundary onto the extrusion direction.  Triangles outside the
+/// actual face boundary are removed by the same 3D centroid projection / point-
+/// in-polygon test used by the B-spline tessellator.
+fn try_tessellate_linear_extrusion(
+    face: &TopoFace,
+    edge_cache: &EdgeCache,
+    file: &StepFile,
+    max_edge_len: f64,
+) -> Option<SurfaceMesh> {
+    let e = file.get(&face.surface_id)?;
+    if e.type_name != "SURFACE_OF_LINEAR_EXTRUSION" {
+        return None;
+    }
+
+    // Parse the extrusion vector from STEP to compute v-range.
+    // SURFACE_OF_LINEAR_EXTRUSION(label, swept_curve_ref, extrusion_axis_ref)
+    let vec_id = get_ref(e, 2).ok()?;
+    // VECTOR(label, direction_ref, magnitude)
+    let vec_e = file.get(&vec_id)?;
+    let dir_id = get_ref(vec_e, 1).ok()?;
+    let magnitude = get_real(vec_e, 2).ok()?;
+    let dir = normalize(point3(file, dir_id).ok()?);
+    let extrusion = scale(dir, magnitude);
+    let ext_len_sq = dot3(extrusion, extrusion);
+    if ext_len_sq < 1e-20 {
+        return None;
+    }
+
+    // Load surface for P(u, v) evaluation.
+    let surface = surface_from_step(face.surface_id, file).ok()?;
+    let (u0, u1) = surface.u_bounds();
+    if !u0.is_finite() || !u1.is_finite() {
+        // Infinite u-bounds (e.g. LINE-swept) — fall through to CDT.
+        return None;
+    }
+
+    // Infer v range from boundary: v = dot(P - C(u0), extrusion) / |extrusion|²
+    let boundary_3d = sample_boundary_cached(&face.outer_loop, edge_cache);
+    if boundary_3d.len() < 3 {
+        return None;
+    }
+    let c_u0 = surface.point(u0, 0.0);
+    let v_min = boundary_3d
+        .iter()
+        .map(|&p| dot3(sub(p, c_u0), extrusion) / ext_len_sq)
+        .fold(f64::INFINITY, f64::min);
+    let v_max = boundary_3d
+        .iter()
+        .map(|&p| dot3(sub(p, c_u0), extrusion) / ext_len_sq)
+        .fold(f64::NEG_INFINITY, f64::max);
+    if (v_max - v_min).abs() < 1e-10 {
+        return None;
+    }
+
+    // Grid density: arc length along curve at v_mid, and physical extrusion height.
+    let v_mid = (v_min + v_max) / 2.0;
+    let arc_u = sample_arc_length(|t| surface.point(t, v_mid), u0, u1, 32);
+    let arc_v = magnitude * (v_max - v_min).abs();
+    if arc_u < 1e-10 || arc_v < 1e-10 {
+        return None;
+    }
+
+    let n_u = ((arc_u / max_edge_len).ceil() as usize).clamp(2, 256) + 1;
+    let n_v = ((arc_v / max_edge_len).ceil() as usize).clamp(2, 256) + 1;
+
+    let mut points = Vec::with_capacity(n_u * n_v);
+    for j in 0..n_v {
+        let v = v_min + (v_max - v_min) * j as f64 / (n_v - 1) as f64;
+        for i in 0..n_u {
+            let u = u0 + (u1 - u0) * i as f64 / (n_u - 1) as f64;
+            points.push(surface.point(u, v));
+        }
+    }
+
+    let mut triangles: Vec<[usize; 3]> = Vec::with_capacity((n_u - 1) * (n_v - 1) * 2);
+    for j in 0..(n_v - 1) {
+        for i in 0..(n_u - 1) {
+            let a = j * n_u + i;
+            let b = j * n_u + (i + 1);
+            let c = (j + 1) * n_u + i;
+            let d = (j + 1) * n_u + (i + 1);
+            triangles.push([a, b, d]);
+            triangles.push([a, d, c]);
+        }
+    }
+
+    // Clip to face boundary: project centroids to 2D and test against boundary polygon.
+    if let Some(normal) = face_normal(&boundary_3d) {
+        let (bnd2d, origin, x_axis, y_axis) = project_to_2d(&boundary_3d, normal);
+        let holes2d: Vec<Vec<Point2>> = face
+            .inner_loops
+            .iter()
+            .filter_map(|inner| {
+                let inner_3d = sample_boundary_cached(inner, edge_cache);
+                if inner_3d.len() < 3 {
+                    return None;
+                }
+                Some(
+                    inner_3d
+                        .iter()
+                        .map(|&p| {
+                            let d = sub(p, origin);
+                            Point2::new(dot3(d, x_axis), dot3(d, y_axis))
+                        })
+                        .collect(),
+                )
+            })
+            .collect();
+        triangles.retain(|&[a, b, c]| {
+            let cx = (points[a][0] + points[b][0] + points[c][0]) / 3.0;
+            let cy = (points[a][1] + points[b][1] + points[c][1]) / 3.0;
+            let cz = (points[a][2] + points[b][2] + points[c][2]) / 3.0;
+            let d = sub([cx, cy, cz], origin);
+            let c2d = Point2::new(dot3(d, x_axis), dot3(d, y_axis));
+            point_in_polygon(c2d, &bnd2d) && !holes2d.iter().any(|h| point_in_polygon(c2d, h))
+        });
+    }
+
+    Some(SurfaceMesh { points, triangles })
+}
+
 /// Tessellate a flat annular disc (PLANE surface, single closed-circle outer loop,
 /// single closed-circle inner loop) using a structured O-grid.
 ///
@@ -1181,24 +1363,52 @@ fn try_tessellate_annular_disc(
             .collect()
     };
 
-    let n_u = outer_ring.len().min(inner_ring.len());
-    if n_u < 3 {
+    let n_outer = outer_ring.len();
+    let n_inner = inner_ring.len();
+    if n_outer < 3 || n_inner < 3 {
         return None;
     }
 
-    // Outer ring (0..n_u) then inner ring (n_u..2*n_u).
-    let mut points = Vec::with_capacity(n_u * 2);
-    points.extend_from_slice(&outer_ring[..n_u]);
-    points.extend_from_slice(&inner_ring[..n_u]);
+    // Outer ring: indices 0..n_outer; inner ring: indices n_outer..n_outer+n_inner.
+    let mut points = Vec::with_capacity(n_outer + n_inner);
+    points.extend_from_slice(&outer_ring);
+    points.extend_from_slice(&inner_ring);
 
-    // One radial layer of quads, CCW raw winding (outward normal = +axis.z).
-    let mut triangles = Vec::with_capacity(n_u * 2);
-    for i in 0..n_u {
-        let ni = (i + 1) % n_u;
-        let (oa, ob) = (i, ni);
-        let (ia, ib) = (n_u + i, n_u + ni);
-        triangles.push([oa, ob, ib]);
-        triangles.push([oa, ib, ia]);
+    // Zipper triangulation: advance along whichever ring has its next vertex at a
+    // smaller angular fraction of the full circle.  Produces n_outer + n_inner CCW
+    // triangles that cover the full 360° annulus even when the two rings have
+    // different vertex counts (different radii → different arc-length densities).
+    //
+    // Winding proof (both rings canonical CCW from above):
+    //   Advance outer:  [outer[i], outer[i+1], inner[j]]  — cross-product +z  ✓
+    //   Advance inner:  [outer[i], inner[j+1], inner[j]]  — cross-product +z  ✓
+    let mut triangles = Vec::with_capacity(n_outer + n_inner);
+    let mut i = 0usize; // outer advances completed
+    let mut j = 0usize; // inner advances completed
+
+    while i < n_outer || j < n_inner {
+        let oi = i % n_outer;
+        let oi_next = (i + 1) % n_outer;
+        let ii = n_outer + j % n_inner;
+        let ii_next = n_outer + (j + 1) % n_inner;
+
+        let advance_outer = if i >= n_outer {
+            false
+        } else if j >= n_inner {
+            true
+        } else {
+            // Advance outer when its next vertex arrives at a smaller angular fraction:
+            // (i+1)/n_outer <= (j+1)/n_inner  ⟺  (i+1)*n_inner <= (j+1)*n_outer
+            (i + 1) * n_inner <= (j + 1) * n_outer
+        };
+
+        if advance_outer {
+            triangles.push([oi, oi_next, ii]);
+            i += 1;
+        } else {
+            triangles.push([oi, ii_next, ii]);
+            j += 1;
+        }
     }
 
     Some(SurfaceMesh { points, triangles })
