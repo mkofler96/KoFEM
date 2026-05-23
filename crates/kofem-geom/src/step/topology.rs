@@ -18,6 +18,10 @@ pub struct TopoFace {
 
 #[derive(Debug)]
 pub struct TopoEdge {
+    /// EDGE_CURVE entity id — unique per physical edge in the B-rep.
+    /// Two ORIENTED_EDGEs on adjacent faces pointing to the same EDGE_CURVE share this id,
+    /// which is the cache key used to guarantee identical boundary vertex positions.
+    pub edge_id: u64,
     pub curve_id: u64,
     pub start: [f64; 3],
     pub end: [f64; 3],
@@ -197,6 +201,7 @@ fn extract_oriented_edge(file: &StepFile, oe_id: u64) -> Result<TopoEdge, Topolo
     };
 
     Ok(TopoEdge {
+        edge_id: ec_id,
         curve_id,
         start,
         end,
