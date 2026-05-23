@@ -891,11 +891,18 @@ fn try_tessellate_toroidal(
     }
 
     // Build UV boundary polygon for triangle clipping (handles non-rectangular patches).
-    let uv_bnd: Vec<Point2> = u_vals
+    // Downsample to cap O(n_triangles × n_boundary) cost on complex faces.
+    let uv_bnd_raw: Vec<Point2> = u_vals
         .iter()
         .zip(v_vals.iter())
         .map(|(&u, &v)| Point2::new(u, v))
         .collect();
+    let uv_bnd: Vec<Point2> = if uv_bnd_raw.len() > 200 {
+        let step = (uv_bnd_raw.len() / 200).max(1);
+        uv_bnd_raw.iter().step_by(step).cloned().collect()
+    } else {
+        uv_bnd_raw
+    };
 
     let n_cols = n_u + 1;
     let triangles: Vec<[usize; 3]> = (0..n_v)
@@ -1001,11 +1008,18 @@ fn try_tessellate_spherical(
     }
 
     // Build UV boundary polygon for clipping (handles non-rectangular spherical patches).
-    let uv_bnd: Vec<Point2> = u_vals
+    // Downsample to cap O(n_triangles × n_boundary) cost on complex faces.
+    let uv_bnd_raw: Vec<Point2> = u_vals
         .iter()
         .zip(v_vals.iter())
         .map(|(&u, &v)| Point2::new(u, v))
         .collect();
+    let uv_bnd: Vec<Point2> = if uv_bnd_raw.len() > 200 {
+        let step = (uv_bnd_raw.len() / 200).max(1);
+        uv_bnd_raw.iter().step_by(step).cloned().collect()
+    } else {
+        uv_bnd_raw
+    };
 
     let n_cols = n_u + 1;
     let triangles: Vec<[usize; 3]> = (0..n_v)
