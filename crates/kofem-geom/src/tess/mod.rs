@@ -119,13 +119,7 @@ fn build_edge_cache(brep: &BRep, file: &StepFile, opts: &TessOptions) -> EdgeCac
                     } else {
                         (edge.start, edge.end)
                     };
-                    discretise_edge(
-                        file,
-                        edge.curve_id,
-                        canonical_start,
-                        canonical_end,
-                        opts,
-                    )
+                    discretise_edge(file, edge.curve_id, canonical_start, canonical_end, opts)
                 });
             }
         }
