@@ -276,7 +276,14 @@ pub fn try_triangulate_with_interior(
 
     let n_outer = outer.len();
     if n_outer < 3 {
-        return Ok((Mesh2D { points: outer, triangles: vec![] }, n_outer, 0));
+        return Ok((
+            Mesh2D {
+                points: outer,
+                triangles: vec![],
+            },
+            n_outer,
+            0,
+        ));
     }
 
     let n_holes: usize = processed_holes.iter().map(|h| h.len()).sum();
