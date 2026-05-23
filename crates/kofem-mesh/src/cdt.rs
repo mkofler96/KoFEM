@@ -503,7 +503,24 @@ pub fn legalize_edges(
         .map(|&(u, v)| if u < v { (u, v) } else { (v, u) })
         .collect();
 
+    // Safety cap: Lawson's termination proof requires exact arithmetic.
+    // in_circumcircle now uses a robust epsilon, so cycling should not occur,
+    // but keep this guard to catch regressions and report them.
+    let max_iters = (pts.len() * pts.len()).max(4096);
+    let mut iters = 0usize;
+
     while let Some((eu, ev)) = queue.pop_front() {
+        if iters >= max_iters {
+            eprintln!(
+                "legalize_edges: iteration cap hit ({} iters, {} pts, {} tris) — \
+                 possible near-cocircular cycle; mesh may not be fully Delaunay",
+                iters,
+                pts.len(),
+                triangles.len()
+            );
+            break;
+        }
+        iters += 1;
         let key = if eu < ev { (eu, ev) } else { (ev, eu) };
         in_queue.remove(&key);
 

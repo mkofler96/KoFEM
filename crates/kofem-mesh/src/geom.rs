@@ -58,6 +58,11 @@ pub fn orient2d(a: Point2, b: Point2, c: Point2) -> f64 {
 /// |bx-dx  by-dy  (bx-dx)²+(by-dy)²|  > 0
 /// |cx-dx  cy-dy  (cx-dx)²+(cy-dy)²|
 /// ```
+///
+/// A relative epsilon guards against IEEE 754 inconsistencies for near-cocircular
+/// points: if `det` is positive but smaller than the floating-point error bound,
+/// the point is treated as "on the circle" (= not inside), preventing infinite
+/// flip cycles in Lawson's Delaunay legalisation algorithm.
 #[inline]
 pub fn in_circumcircle(pts: &[Point2], a: usize, b: usize, c: usize, d: usize) -> bool {
     let p = pts[d];
@@ -67,10 +72,16 @@ pub fn in_circumcircle(pts: &[Point2], a: usize, b: usize, c: usize, d: usize) -
     let by = pts[b].y - p.y;
     let cx = pts[c].x - p.x;
     let cy = pts[c].y - p.y;
-    let det = ax * (by * (cx * cx + cy * cy) - cy * (bx * bx + by * by))
-        - ay * (bx * (cx * cx + cy * cy) - cx * (bx * bx + by * by))
-        + (ax * ax + ay * ay) * (bx * cy - by * cx);
-    det > 0.0
+    let r_a = ax * ax + ay * ay;
+    let r_b = bx * bx + by * by;
+    let r_c = cx * cx + cy * cy;
+    let det = ax * (by * r_c - cy * r_b) - ay * (bx * r_c - cx * r_b) + r_a * (bx * cy - by * cx);
+    // Error bound: det is a degree-4 polynomial in the inputs; the absolute
+    // rounding error is ≤ 8·ε·max(r_a,r_b,r_c)² where ε = f64::EPSILON.
+    // Points within this tolerance are cocircular to machine precision and must
+    // not be flipped, otherwise Lawson's algorithm can cycle indefinitely.
+    let eps = 8.0 * f64::EPSILON * r_a.max(r_b).max(r_c).powi(2).max(f64::EPSILON);
+    det > eps
 }
 
 /// Circumcenter of triangle (a, b, c).  Returns `None` for degenerate triangles.
