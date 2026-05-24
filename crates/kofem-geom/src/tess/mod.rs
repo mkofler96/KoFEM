@@ -1784,8 +1784,13 @@ fn try_tessellate_bspline(
     if arc_u < 1e-10 || arc_v < 1e-10 {
         return None;
     }
-    let n_u = ((arc_u / opts.max_edge_len).ceil() as usize).clamp(2, 256) + 1;
-    let n_v = ((arc_v / opts.max_edge_len).ceil() as usize).clamp(2, 256) + 1;
+    let n_u_raw = (arc_u / opts.max_edge_len).ceil() as usize;
+    let n_v_raw = (arc_v / opts.max_edge_len).ceil() as usize;
+    let n_u = n_u_raw.clamp(2, 64) + 1;
+    let n_v = n_v_raw.clamp(2, 64) + 1;
+    // For large faces skip interior Steiner points: boundary-only CDT avoids
+    // O(n²) grid cost when either dimension exceeds 64 divisions.
+    let use_steiner = n_u_raw <= 64 && n_v_raw <= 64;
 
     // ── Try UV-space triangulation ──────────────────────────────────────────
     // Invert each boundary 3D point to its (u,v) parameter on the surface.
@@ -1836,16 +1841,18 @@ fn try_tessellate_bspline(
         // Interior UV grid points — tested in UV space (correct for any curvature).
         let mut interior_3d: Vec<[f64; 3]> = Vec::new();
         let mut interior_2d: Vec<Point2> = Vec::new();
-        for j in 0..n_v {
-            let v = v0 + (v1 - v0) * j as f64 / (n_v - 1) as f64;
-            for i in 0..n_u {
-                let u = u0 + (u1 - u0) * i as f64 / (n_u - 1) as f64;
-                let p2d = Point2::new(u, v);
-                if point_in_polygon(p2d, &bnd2d)
-                    && !holes2d.iter().any(|h| point_in_polygon(p2d, h))
-                {
-                    interior_3d.push(surface.point(u, v));
-                    interior_2d.push(p2d);
+        if use_steiner {
+            for j in 0..n_v {
+                let v = v0 + (v1 - v0) * j as f64 / (n_v - 1) as f64;
+                for i in 0..n_u {
+                    let u = u0 + (u1 - u0) * i as f64 / (n_u - 1) as f64;
+                    let p2d = Point2::new(u, v);
+                    if point_in_polygon(p2d, &bnd2d)
+                        && !holes2d.iter().any(|h| point_in_polygon(p2d, h))
+                    {
+                        interior_3d.push(surface.point(u, v));
+                        interior_2d.push(p2d);
+                    }
                 }
             }
         }
@@ -1930,16 +1937,20 @@ fn try_tessellate_bspline(
 
     let mut interior_3d: Vec<[f64; 3]> = Vec::new();
     let mut interior_2d: Vec<Point2> = Vec::new();
-    for j in 0..n_v {
-        let v = v0 + (v1 - v0) * j as f64 / (n_v - 1) as f64;
-        for i in 0..n_u {
-            let u = u0 + (u1 - u0) * i as f64 / (n_u - 1) as f64;
-            let p3d = surface.point(u, v);
-            let d = sub(p3d, origin);
-            let p2d = Point2::new(dot3(d, x_axis), dot3(d, y_axis));
-            if point_in_polygon(p2d, &bnd2d) && !holes2d.iter().any(|h| point_in_polygon(p2d, h)) {
-                interior_3d.push(p3d);
-                interior_2d.push(p2d);
+    if use_steiner {
+        for j in 0..n_v {
+            let v = v0 + (v1 - v0) * j as f64 / (n_v - 1) as f64;
+            for i in 0..n_u {
+                let u = u0 + (u1 - u0) * i as f64 / (n_u - 1) as f64;
+                let p3d = surface.point(u, v);
+                let d = sub(p3d, origin);
+                let p2d = Point2::new(dot3(d, x_axis), dot3(d, y_axis));
+                if point_in_polygon(p2d, &bnd2d)
+                    && !holes2d.iter().any(|h| point_in_polygon(p2d, h))
+                {
+                    interior_3d.push(p3d);
+                    interior_2d.push(p2d);
+                }
             }
         }
     }
