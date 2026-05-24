@@ -603,7 +603,13 @@ pub fn surface_from_step(id: u64, file: &StepFile) -> Result<Box<dyn Surface>, G
 
         // Legacy full-args form: single B_SPLINE_SURFACE_WITH_KNOTS component that
         // carries all inherited + own attributes.
+        // Layout: [label, u_deg, v_deg, ctrl_pts, form, u_closed, v_closed, self_int,
+        //          u_mults, v_mults, u_knots, v_knots, knot_spec]
+        // Map to split form so that any RATIONAL_B_SPLINE_SURFACE weights are honoured.
         if let Some(full) = full_bspline_with_knots {
+            if full.len() >= 13 {
+                return bspline_surface_from_split(id, &full[1..], &full[8..], rational_args, file);
+            }
             return bspline_surface_from_args(id, full, file);
         }
 

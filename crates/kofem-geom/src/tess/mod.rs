@@ -21,8 +21,8 @@ fn build_bnd2d_map(pts2d: &[Point2], pts3d: &[[f64; 3]]) -> HashMap<(u64, u64), 
 
 use serde::Serialize;
 
-use kofem_mesh::cdt::{try_triangulate_constrained, try_triangulate_with_interior};
-use kofem_mesh::geom::{point_in_polygon, Point2};
+use kofem_mesh::cdt::{try_triangulate_constrained, try_triangulate_with_interior, CdtError};
+use kofem_mesh::geom::{orient2d, point_in_polygon, Point2};
 
 use crate::geom::curve::curve_from_step;
 use crate::geom::surface::surface_from_step;
@@ -90,6 +90,30 @@ fn n_segs_for_arc(radius: f64, angle: f64, opts: &TessOptions) -> usize {
 pub enum TessError {
     #[error("geometry error on surface #{0}: {1}")]
     Geom(u64, #[source] GeomError),
+
+    /// The outer boundary of a face has too few usable vertices to triangulate.
+    #[error("surface #{surface_id} ({surface_type}): degenerate face — {reason}")]
+    DegenerateFace {
+        surface_id: u64,
+        surface_type: String,
+        reason: &'static str,
+    },
+
+    /// The constrained Delaunay triangulation failed because two projected
+    /// constraint edges cross each other.  Indicates that the 2-D projection
+    /// of the boundary (or a hole) is self-intersecting.
+    #[error(
+        "surface #{surface_id} ({surface_type}): CDT failed — projected constraint edges \
+         ({ea0},{ea1}) and ({eb0},{eb1}) intersect in the 2-D plane"
+    )]
+    ConstraintIntersection {
+        surface_id: u64,
+        surface_type: String,
+        ea0: usize,
+        ea1: usize,
+        eb0: usize,
+        eb1: usize,
+    },
 }
 
 // ── Edge cache ─────────────────────────────────────────────────────────────────
@@ -119,7 +143,17 @@ fn build_edge_cache(brep: &BRep, file: &StepFile, opts: &TessOptions) -> EdgeCac
                     } else {
                         (edge.start, edge.end)
                     };
-                    discretise_edge(file, edge.curve_id, canonical_start, canonical_end, opts)
+                    // curve_reversed: the curve parameter runs opposite to vertex order
+                    // when EDGE_CURVE.same_sense = .F.
+                    let curve_reversed = !edge.curve_same_sense;
+                    discretise_edge(
+                        file,
+                        edge.curve_id,
+                        canonical_start,
+                        canonical_end,
+                        curve_reversed,
+                        opts,
+                    )
                 });
             }
         }
@@ -128,11 +162,15 @@ fn build_edge_cache(brep: &BRep, file: &StepFile, opts: &TessOptions) -> EdgeCac
 }
 
 /// Sample all vertices of one edge in [start → end] direction (including endpoints).
+///
+/// `curve_reversed`: when true the curve parameter runs opposite to the start→end
+/// direction (EDGE_CURVE.same_sense = .F.).
 fn discretise_edge(
     file: &StepFile,
     curve_id: u64,
     start: [f64; 3],
     end: [f64; 3],
+    curve_reversed: bool,
     opts: &TessOptions,
 ) -> Vec<[f64; 3]> {
     let chord = dist3(start, end);
@@ -144,17 +182,28 @@ fn discretise_edge(
         } else {
             16
         }
-    } else if let Some(arc_len) = circle_arc_length(file, curve_id, start, end, false) {
+    } else if let Some(arc_len) = circle_arc_length(file, curve_id, start, end, curve_reversed) {
         // Circular arc: prefer chord-height over arc-length.
         let r = circle_radius_from_curve(file, curve_id).unwrap_or(1.0);
         let angle = arc_len / r;
         let n_u = n_segs_for_arc(r, angle, opts).clamp(2, 512);
         n_u.saturating_sub(1).max(1)
     } else {
-        // Straight-line (and other non-circular) edges: use max_edge_len.
-        ((chord / opts.max_edge_len).ceil() as usize).saturating_sub(1)
+        // Non-circular edges: estimate actual arc length for density.
+        // Using chord (straight-line distance) underestimates curved B-splines,
+        // producing too few points → sparse boundary → tessellation failures.
+        let arc_len = {
+            let curve_ok = curve_from_step(curve_id, file);
+            if let Ok(curve) = curve_ok {
+                let (t0, t1) = curve_t_range(file, curve_id, start, end, curve_reversed);
+                sample_arc_length(|t| curve.point(t), t0, t1, 16)
+            } else {
+                chord
+            }
+        };
+        ((arc_len / opts.max_edge_len).ceil() as usize).saturating_sub(1)
     };
-    sample_curve(file, curve_id, start, end, false, n_intermediate)
+    sample_curve(file, curve_id, start, end, curve_reversed, n_intermediate)
 }
 
 /// Assemble a closed boundary polygon from pre-computed edge vertices.
@@ -251,7 +300,7 @@ pub fn tessellate(
     let mut all_triangles: Vec<[usize; 3]> = Vec::new();
 
     for face in &brep.faces {
-        let face_mesh = tessellate_face(face, &edge_cache, file, &opts);
+        let face_mesh = tessellate_face(face, &edge_cache, file, &opts)?;
         let offset = all_points.len();
         all_points.extend_from_slice(&face_mesh.points);
         for &[a, b, c] in &face_mesh.triangles {
@@ -271,8 +320,8 @@ fn tessellate_face(
     edge_cache: &EdgeCache,
     file: &StepFile,
     opts: &TessOptions,
-) -> SurfaceMesh {
-    let raw = tessellate_face_raw(face, edge_cache, file, opts);
+) -> Result<SurfaceMesh, TessError> {
+    let raw = tessellate_face_raw(face, edge_cache, file, opts)?;
     // UV-grid surfaces (cylinder, cone, torus, sphere, B-spline, linear extrusion)
     // generate CCW triangles aligned with ∂P/∂u × ∂P/∂v, so the flip follows same_sense.
     // All other surfaces (PLANE, SURFACE_OF_REVOLUTION, unknown/missing) are tessellated
@@ -299,7 +348,7 @@ fn tessellate_face(
     } else {
         !face.outer_loop_orientation
     };
-    flip_winding_if(raw, flip)
+    Ok(flip_winding_if(raw, flip))
 }
 
 fn tessellate_face_raw(
@@ -307,55 +356,109 @@ fn tessellate_face_raw(
     edge_cache: &EdgeCache,
     file: &StepFile,
     opts: &TessOptions,
-) -> SurfaceMesh {
+) -> Result<SurfaceMesh, TessError> {
+    let sid = face.surface_id;
+    let stype = file
+        .get(&sid)
+        .map(|e| e.type_name.as_str())
+        .unwrap_or("UNKNOWN")
+        .to_owned();
+
+    // PLANE faces use the entity's exact axes to avoid numerical precision issues
+    // that arise when estimating the projection basis from boundary points.
+    if let Some(result) = try_tessellate_plane(face, edge_cache, file, opts) {
+        return result;
+    }
     if let Some(mesh) = try_tessellate_cylindrical(face, edge_cache, file, opts) {
-        return mesh;
+        return Ok(mesh);
     }
     if let Some(mesh) = try_tessellate_conical(face, edge_cache, file, opts) {
-        return mesh;
+        return Ok(mesh);
     }
     if let Some(mesh) = try_tessellate_toroidal(face, edge_cache, file, opts) {
-        return mesh;
+        return Ok(mesh);
     }
     if let Some(mesh) = try_tessellate_spherical(face, edge_cache, file, opts) {
-        return mesh;
+        return Ok(mesh);
     }
     if let Some(mesh) = try_tessellate_bspline(face, edge_cache, file, opts) {
-        return mesh;
+        return Ok(mesh);
     }
     if let Some(mesh) = try_tessellate_linear_extrusion(face, edge_cache, file, opts) {
-        return mesh;
+        return Ok(mesh);
     }
     if let Some(mesh) = try_tessellate_annular_disc(face, edge_cache, file, opts) {
-        return mesh;
+        return Ok(mesh);
     }
     if let Some(mesh) = try_tessellate_disc(face, edge_cache, file, opts) {
-        return mesh;
+        return Ok(mesh);
     }
 
     let boundary = sample_boundary_cached(&face.outer_loop, edge_cache);
 
     if boundary.len() < 3 {
-        return fan_raw(face);
+        return Err(TessError::DegenerateFace {
+            surface_id: sid,
+            surface_type: stype,
+            reason: "boundary has fewer than 3 usable vertices",
+        });
     }
 
     let normal = match face_normal(&boundary) {
         Some(n) => n,
-        None => return fan_raw(face),
+        None => {
+            return Err(TessError::DegenerateFace {
+                surface_id: sid,
+                surface_type: stype,
+                reason: "face normal could not be computed (collinear or degenerate boundary)",
+            })
+        }
     };
 
     let (pts2d, origin, x_axis, y_axis) = project_to_2d(&boundary, normal);
 
     let pts2d = deduplicate_2d(pts2d);
     if pts2d.len() < 3 {
-        return fan_raw(face);
+        return Err(TessError::DegenerateFace {
+            surface_id: sid,
+            surface_type: stype,
+            reason: "fewer than 3 distinct vertices remain after 2-D deduplication",
+        });
     }
 
     let pts2d = ensure_ccw(pts2d);
 
-    // Guard: polygon must have non-negligible area.
     if polygon_area_2d(&pts2d).abs() < 1e-20 {
-        return fan_raw(face);
+        return Err(TessError::DegenerateFace {
+            surface_id: sid,
+            surface_type: stype,
+            reason: "projected boundary has negligible 2-D area",
+        });
+    }
+
+    let pts2d = simplify_ring_robust(pts2d);
+    if pts2d.len() < 3 {
+        return Err(TessError::DegenerateFace {
+            surface_id: sid,
+            surface_type: stype,
+            reason: "boundary collapsed to fewer than 3 vertices after robust simplification",
+        });
+    }
+    let pts2d = repair_adjacent_hairpins(pts2d);
+    if pts2d.len() < 3 {
+        return Err(TessError::DegenerateFace {
+            surface_id: sid,
+            surface_type: stype,
+            reason: "boundary collapsed to fewer than 3 vertices after hairpin repair",
+        });
+    }
+    let pts2d = uncross_polygon(pts2d);
+    if pts2d.len() < 3 {
+        return Err(TessError::DegenerateFace {
+            surface_id: sid,
+            surface_type: stype,
+            reason: "boundary collapsed to fewer than 3 vertices after 2-opt uncrossing",
+        });
     }
 
     // Project each inner loop (hole) onto the same 2D plane.
@@ -367,22 +470,37 @@ fn tessellate_face_raw(
             if inner_3d.len() < 3 {
                 return None;
             }
-            Some(
-                inner_3d
-                    .iter()
-                    .map(|&p| {
-                        let d = sub(p, origin);
-                        Point2::new(dot3(d, x_axis), dot3(d, y_axis))
-                    })
-                    .collect(),
-            )
+            let h: Vec<Point2> = inner_3d
+                .iter()
+                .map(|&p| {
+                    let d = sub(p, origin);
+                    Point2::new(dot3(d, x_axis), dot3(d, y_axis))
+                })
+                .collect();
+            let h = simplify_ring_robust(h);
+            let h = repair_adjacent_hairpins(h);
+            let h = uncross_polygon(h);
+            if h.len() < 3 {
+                None
+            } else {
+                Some(h)
+            }
         })
         .collect();
 
     let hole_slices: Vec<&[Point2]> = holes2d.iter().map(|h| h.as_slice()).collect();
     let mesh2d = match try_triangulate_constrained(&pts2d, &hole_slices) {
         Ok(m) => m,
-        Err(_) => return fan_raw(face),
+        Err(CdtError::IntersectingConstraints { edge_a, edge_b }) => {
+            return Err(TessError::ConstraintIntersection {
+                surface_id: sid,
+                surface_type: stype,
+                ea0: edge_a.0,
+                ea1: edge_a.1,
+                eb0: edge_b.0,
+                eb1: edge_b.1,
+            });
+        }
     };
     let bw_pts2d = mesh2d.points;
     let bw_tris: Vec<[usize; 3]> = mesh2d.triangles.iter().map(|t| t.v).collect();
@@ -392,10 +510,483 @@ fn tessellate_face_raw(
         .map(|p| add(origin, add(scale(x_axis, p.x), scale(y_axis, p.y))))
         .collect();
 
-    SurfaceMesh {
+    Ok(SurfaceMesh {
         points,
         triangles: bw_tris,
+    })
+}
+
+/// `true` iff the open interiors of segment `(p,q)` and `(r,s)` intersect.
+///
+/// Mirrors `segments_properly_intersect` from the CDT module so that
+/// `try_tessellate_plane` can pre-check for crossings without depending on CDT
+/// internal details.
+#[inline]
+fn segs_cross(p: Point2, q: Point2, r: Point2, s: Point2) -> bool {
+    let d1 = orient2d(p, q, r);
+    let d2 = orient2d(p, q, s);
+    let d3 = orient2d(r, s, p);
+    let d4 = orient2d(r, s, q);
+    ((d1 > 0.0 && d2 < 0.0) || (d1 < 0.0 && d2 > 0.0))
+        && ((d3 > 0.0 && d4 < 0.0) || (d3 < 0.0 && d4 > 0.0))
+}
+
+/// Repair "adjacent-with-gap" hairpin crossings in a polygon ring.
+///
+/// An adjacent-with-gap crossing is where constraint edges `(i, i+1)` and
+/// `(i+2, i+3)` (cyclically) appear to intersect — the polygon doubles back on
+/// itself over a span of exactly two edges.  Such hairpins arise from nearly-
+/// complete circular arcs (e.g. ~350 °) whose first and last discretised
+/// segments straddle the closure gap.
+///
+/// Each iteration removes the two "tip" vertices of the hairpin (reducing the
+/// polygon by two vertices) and retries until no adjacent-with-gap crossing
+/// remains or the polygon degenerates.  At most 16 repair rounds are attempted
+/// to avoid infinite loops on truly degenerate input.
+fn repair_adjacent_hairpins(mut pts: Vec<Point2>) -> Vec<Point2> {
+    for _ in 0..16 {
+        let n = pts.len();
+        if n < 4 {
+            break;
+        }
+        let mut repaired = false;
+        for i in 0..n {
+            let a = i;
+            let b = (i + 1) % n;
+            let c = (i + 2) % n;
+            let d = (i + 3) % n;
+            if segs_cross(pts[a], pts[b], pts[c], pts[d]) {
+                // Remove the two hairpin-tip vertices b and c.
+                let keep_b = b;
+                let keep_c = c;
+                pts = pts
+                    .into_iter()
+                    .enumerate()
+                    .filter(|&(j, _)| j != keep_b && j != keep_c)
+                    .map(|(_, p)| p)
+                    .collect();
+                repaired = true;
+                break;
+            }
+        }
+        if !repaired {
+            break;
+        }
     }
+    pts
+}
+
+/// 2-opt polygon uncrossing: fix self-intersecting rings by reversing the
+/// subpath between any crossing pair.
+///
+/// Used only as a pre-processing step for non-PLANE surfaces.  PLANE faces
+/// use `split_and_triangulate_2d` instead, which preserves geometry.
+fn uncross_polygon(mut pts: Vec<Point2>) -> Vec<Point2> {
+    for _ in 0..200 {
+        let n = pts.len();
+        if n < 4 {
+            break;
+        }
+        let mut found = false;
+        'outer_2opt: for i in 0..n {
+            let a = i;
+            let b = (i + 1) % n;
+            for j in (i + 2)..n {
+                let c = j;
+                let d = (j + 1) % n;
+                if d == a {
+                    continue;
+                }
+                if segs_cross(pts[a], pts[b], pts[c], pts[d]) {
+                    if b <= c {
+                        pts[b..=c].reverse();
+                    }
+                    found = true;
+                    break 'outer_2opt;
+                }
+            }
+        }
+        if !found {
+            break;
+        }
+    }
+    pts
+}
+
+/// Replicate CDT's `preprocess_ring` so our vertex indices stay aligned with the
+/// indices CDT reports in `CdtError::IntersectingConstraints`.
+///
+/// CDT removes consecutive duplicate vertices and exact-collinear interior vertices
+/// (`orient2d == 0.0`).  Applying the same pass before calling CDT ensures the error
+/// indices correspond 1-to-1 to positions in our ring.
+fn cdt_preprocess(ring: Vec<Point2>) -> Vec<Point2> {
+    if ring.len() < 2 {
+        return ring;
+    }
+    // Pass 1: consecutive duplicates (including last == first wrap).
+    let mut deduped: Vec<Point2> = Vec::with_capacity(ring.len());
+    for &p in &ring {
+        if deduped.last() != Some(&p) {
+            deduped.push(p);
+        }
+    }
+    while deduped.len() >= 2 && deduped.last() == deduped.first() {
+        deduped.pop();
+    }
+    if deduped.len() < 3 {
+        return deduped;
+    }
+    // Pass 2: exact collinear (orient2d == 0.0).
+    let n = deduped.len();
+    let mut result: Vec<Point2> = Vec::with_capacity(n);
+    for i in 0..n {
+        let prev = deduped[(i + n - 1) % n];
+        let curr = deduped[i];
+        let next = deduped[(i + 1) % n];
+        if orient2d(prev, curr, next) != 0.0 {
+            result.push(curr);
+        }
+    }
+    if result.len() < 3 {
+        deduped
+    } else {
+        result
+    }
+}
+
+/// Compute the intersection point of segments `p1→p2` and `p3→p4`.
+/// Returns `None` only if the segments are exactly parallel (denom == 0).
+/// Caller is expected to have already verified that the segments properly
+/// intersect (e.g. via CDT's `segments_properly_intersect`).
+fn segment_intersection_2d(p1: Point2, p2: Point2, p3: Point2, p4: Point2) -> Option<Point2> {
+    let dx1 = p2.x - p1.x;
+    let dy1 = p2.y - p1.y;
+    let dx2 = p4.x - p3.x;
+    let dy2 = p4.y - p3.y;
+    let denom = dx1 * dy2 - dy1 * dx2;
+    if denom == 0.0 {
+        return None;
+    }
+    let t = ((p3.x - p1.x) * dy2 - (p3.y - p1.y) * dx2) / denom;
+    Some(Point2::new(p1.x + t * dx1, p1.y + t * dy1))
+}
+
+/// Triangulate a 2D polygon, splitting at self-intersections when CDT fails.
+///
+/// When `try_triangulate_constrained` reports crossing constraint edges:
+/// - If both crossing edges lie in the outer ring (both vertex indices < `n_outer`),
+///   the polygon is split at the geometric intersection point into two simple
+///   sub-polygons which are triangulated independently.
+/// - If one crossing edge comes from a hole (vertex index ≥ `n_outer`), that hole
+///   is dropped and CDT is retried.
+///
+/// Returns the flat (pts, tris) pair for the complete triangulation.
+/// `depth` bounds recursion; returns `None` when the limit is exceeded.
+fn split_and_triangulate_2d(
+    outer: Vec<Point2>,
+    holes: Vec<Vec<Point2>>,
+    depth: usize,
+) -> Option<(Vec<Point2>, Vec<[usize; 3]>)> {
+    if depth > 8 {
+        return None;
+    }
+
+    // Pre-apply CDT's exact preprocessing so that the vertex indices in any
+    // CdtError::IntersectingConstraints align 1-to-1 with positions in `outer`.
+    let outer = cdt_preprocess(outer);
+    if outer.len() < 3 {
+        return None;
+    }
+
+    let n_outer_approx = outer.len();
+    let hole_slices: Vec<&[Point2]> = holes.iter().map(|h| h.as_slice()).collect();
+
+    match try_triangulate_constrained(&outer, &hole_slices) {
+        Ok(m) => {
+            let pts = m.points;
+            let tris: Vec<[usize; 3]> = m.triangles.iter().map(|t| t.v).collect();
+            Some((pts, tris))
+        }
+        Err(CdtError::IntersectingConstraints {
+            edge_a: (a, b),
+            edge_b: (c, d),
+        }) => {
+            // CDT uses an approximation of n_outer (after its own preprocessing).
+            // We use our pre-processed outer length as an approximation.
+            let both_in_outer = a < n_outer_approx
+                && b < n_outer_approx
+                && c < n_outer_approx
+                && d < n_outer_approx;
+
+            if both_in_outer {
+                if d == 0 {
+                    // Closing-edge crossing: the polygon is a near-complete arc whose
+                    // closing segment crosses an earlier edge.  2-opt (reversing the
+                    // subpath between the two crossing edges) unzips the arc correctly
+                    // without splitting the polygon into separate sectors.
+                    let uncrossed = uncross_polygon(outer);
+                    if uncrossed.len() < 3 {
+                        return None;
+                    }
+                    // Simplify after uncrossing to remove residual near-collinear vertices.
+                    let uncrossed = simplify_ring_robust(repair_adjacent_hairpins(uncrossed));
+                    if uncrossed.len() < 3 {
+                        return None;
+                    }
+                    split_and_triangulate_2d(uncrossed, holes, depth + 1)
+                } else {
+                    // Middle crossing: the polygon genuinely folds back on itself (figure-8).
+                    // Split at the geometric intersection point into two simple sub-polygons.
+                    let ip = segment_intersection_2d(outer[a], outer[b], outer[c], outer[d])?;
+
+                    // Poly1 = outer[0..=a] + ip + outer[d..]
+                    // Poly2 = outer[b..=c] + ip
+                    let mut p1 = outer[..=a].to_vec();
+                    p1.push(ip);
+                    p1.extend_from_slice(&outer[d..]);
+                    let mut p2 = outer[b..=c].to_vec();
+                    p2.push(ip);
+
+                    // Apply simplify+hairpin-repair to each sub-polygon to remove
+                    // near-collinear vertices that cause false CDT crossings.
+                    let poly1 = simplify_ring_robust(repair_adjacent_hairpins(p1));
+                    let poly2 = simplify_ring_robust(repair_adjacent_hairpins(p2));
+                    if poly1.len() < 3 || poly2.len() < 3 {
+                        return None;
+                    }
+
+                    // Pass all holes to both sub-polygon triangulations.
+                    // CDT's classify_interior will naturally ignore holes whose
+                    // centroids fall outside the respective sub-polygon's outer ring.
+                    let h_clone: Vec<Vec<Point2>> = holes.clone();
+                    let (pts1, tris1) = split_and_triangulate_2d(poly1, holes, depth + 1)?;
+                    let (pts2, tris2) = split_and_triangulate_2d(poly2, h_clone, depth + 1)?;
+
+                    let n1 = pts1.len();
+                    let mut all_pts = pts1;
+                    let mut all_tris = tris1;
+                    all_pts.extend(pts2);
+                    for t in tris2 {
+                        all_tris.push([t[0] + n1, t[1] + n1, t[2] + n1]);
+                    }
+                    Some((all_pts, all_tris))
+                }
+            } else {
+                // One crossing edge is in a hole: find and drop that hole.
+                let mut cumulative = n_outer_approx;
+                let bad_hole = holes.iter().position(|h| {
+                    let start = cumulative;
+                    cumulative += h.len();
+                    let end = cumulative;
+                    let edge_in = |x: usize| x >= start && x < end;
+                    edge_in(a) || edge_in(b) || edge_in(c) || edge_in(d)
+                });
+
+                if let Some(idx) = bad_hole {
+                    let new_holes: Vec<Vec<Point2>> = holes
+                        .into_iter()
+                        .enumerate()
+                        .filter(|(i, _)| *i != idx)
+                        .map(|(_, h)| h)
+                        .collect();
+                    split_and_triangulate_2d(outer, new_holes, depth + 1)
+                } else {
+                    None
+                }
+            }
+        }
+    }
+}
+
+/// Remove polygon vertices whose triangle area with their two neighbours is
+/// below a *relative* threshold.
+///
+/// The standard [`preprocess_ring`] inside the CDT uses `orient2d == 0.0`
+/// (exact arithmetic).  For PLANE faces projected from 3D arc discretisations,
+/// some vertices are *nearly* collinear — orient2d is tiny but non-zero — and
+/// the resulting two barely-off-parallel adjacent segments can trigger the CDT's
+/// strict "properly intersecting" check even though no genuine crossing exists.
+///
+/// This function eliminates such vertices before CDT sees them.  The geometric
+/// error introduced is at most `eps / edge_length ≈ scale × 1e-10 / 1mm`,
+/// which for a 260 mm model amounts to ~ 3 nm — far below tessellation
+/// tolerance.
+fn simplify_ring_robust(pts: Vec<Point2>) -> Vec<Point2> {
+    let n = pts.len();
+    if n < 3 {
+        return pts;
+    }
+    let max_coord = pts
+        .iter()
+        .map(|p| p.x.abs().max(p.y.abs()))
+        .fold(0.0_f64, f64::max);
+    let eps = max_coord * max_coord * 1e-10;
+
+    let mut result: Vec<Point2> = Vec::with_capacity(n);
+    for i in 0..n {
+        let prev = pts[(i + n - 1) % n];
+        let curr = pts[i];
+        let next = pts[(i + 1) % n];
+        if orient2d(prev, curr, next).abs() > eps {
+            result.push(curr);
+        }
+    }
+
+    if result.len() < 3 {
+        pts
+    } else {
+        result
+    }
+}
+
+// ── Planar-surface tessellation ───────────────────────────────────────────────
+
+/// Tessellate a `PLANE` face using the exact coordinate axes stored in the STEP
+/// entity (not estimated from boundary points).
+///
+/// Returns `None` when the surface is not a PLANE.  Returns `Some(Err(_))` when
+/// the face is a PLANE but tessellation fails (degenerate boundary or
+/// self-intersecting constraints).
+///
+/// Using the PLANE entity's own axes eliminates the small angular errors that
+/// arise when the projection basis is estimated from the discretised boundary,
+/// and prevents CDT from detecting spurious constraint intersections in large
+/// complex PLANE faces.
+fn try_tessellate_plane(
+    face: &TopoFace,
+    edge_cache: &EdgeCache,
+    file: &StepFile,
+    _opts: &TessOptions,
+) -> Option<Result<SurfaceMesh, TessError>> {
+    let e = file.get(&face.surface_id)?;
+    if e.type_name != "PLANE" {
+        return None;
+    }
+
+    let sid = face.surface_id;
+    let ax_id = get_ref(e, 1).ok()?;
+    let axis = axis2_placement(file, ax_id).ok()?;
+
+    // Use the PLANE's exact axes — no numerical estimation from boundary.
+    let origin = axis.origin;
+    let x_axis = axis.x;
+    let y_axis = axis.y();
+
+    let project = |p: [f64; 3]| -> Point2 {
+        let d = sub(p, origin);
+        Point2::new(dot3(d, x_axis), dot3(d, y_axis))
+    };
+
+    let boundary_3d = sample_boundary_cached(&face.outer_loop, edge_cache);
+    if boundary_3d.len() < 3 {
+        return Some(Err(TessError::DegenerateFace {
+            surface_id: sid,
+            surface_type: "PLANE".to_owned(),
+            reason: "boundary has fewer than 3 usable vertices",
+        }));
+    }
+
+    let pts2d: Vec<Point2> = boundary_3d.iter().map(|&p| project(p)).collect();
+    let pts2d = deduplicate_2d(pts2d);
+    if pts2d.len() < 3 {
+        return Some(Err(TessError::DegenerateFace {
+            surface_id: sid,
+            surface_type: "PLANE".to_owned(),
+            reason: "fewer than 3 distinct vertices remain after 2-D deduplication",
+        }));
+    }
+    // Track whether the projected boundary is CW before ensure_ccw reverses it.
+    // The outer tessellate_face flip logic expects the raw mesh to have the same
+    // winding as the boundary (matching the general tessellator's convention):
+    //   CCW boundary → CCW triangles → outer flip corrects as needed.
+    //   CW boundary  → the general tessellator mirrors axes → CW triangles.
+    // We compensate by post-flipping the CDT output when the boundary was CW.
+    let boundary_was_cw = polygon_area_2d(&pts2d) < 0.0;
+    let pts2d = ensure_ccw(pts2d);
+    if polygon_area_2d(&pts2d).abs() < 1e-20 {
+        return Some(Err(TessError::DegenerateFace {
+            surface_id: sid,
+            surface_type: "PLANE".to_owned(),
+            reason: "projected boundary has negligible 2-D area",
+        }));
+    }
+    // Remove adjacent-with-gap hairpin crossings from nearly-complete circular arcs.
+    // (We skip the relative-epsilon collinear simplification here so that genuine
+    // self-intersecting boundaries reach split_and_triangulate_2d intact.)
+    let pts2d = repair_adjacent_hairpins(pts2d);
+    if pts2d.len() < 3 {
+        return Some(Err(TessError::DegenerateFace {
+            surface_id: sid,
+            surface_type: "PLANE".to_owned(),
+            reason: "boundary collapsed to fewer than 3 vertices after hairpin repair",
+        }));
+    }
+
+    let holes2d: Vec<Vec<Point2>> = face
+        .inner_loops
+        .iter()
+        .filter_map(|inner_edges| {
+            let inner_3d = sample_boundary_cached(inner_edges, edge_cache);
+            if inner_3d.len() < 3 {
+                return None;
+            }
+            let h = inner_3d.iter().map(|&p| project(p)).collect();
+            let h = repair_adjacent_hairpins(h);
+            if h.len() < 3 {
+                None
+            } else {
+                Some(h)
+            }
+        })
+        .collect();
+
+    // Use the splitting CDT: if constraints cross, split the polygon at the
+    // geometric intersection point and triangulate each piece independently.
+    // This correctly handles self-intersecting outer rings (e.g. from complex
+    // arc boundaries) without distorting the polygon shape.
+    let (bw_pts2d, bw_tris) = match split_and_triangulate_2d(pts2d.clone(), holes2d, 0) {
+        Some(result) => result,
+        None => {
+            // Splitting failed (exceeded recursion depth or parallel edges).
+            // At this point the face is genuinely untriangulable; report the
+            // first crossing that CDT found so the caller can see the details.
+            let hole_slices: Vec<&[Point2]> = Vec::new();
+            return match try_triangulate_constrained(&pts2d, &hole_slices) {
+                Err(CdtError::IntersectingConstraints { edge_a, edge_b }) => {
+                    Some(Err(TessError::ConstraintIntersection {
+                        surface_id: sid,
+                        surface_type: "PLANE".to_owned(),
+                        ea0: edge_a.0,
+                        ea1: edge_a.1,
+                        eb0: edge_b.0,
+                        eb1: edge_b.1,
+                    }))
+                }
+                Ok(_) => None, // shouldn't happen
+            };
+        }
+    };
+
+    let points: Vec<[f64; 3]> = bw_pts2d
+        .iter()
+        .map(|p| add(origin, add(scale(x_axis, p.x), scale(y_axis, p.y))))
+        .collect();
+
+    // CDT always produces CCW triangles (positive 2-D area).  When the original
+    // boundary was CW, the general tessellator would have returned CW triangles
+    // because its axis estimation mirrors the coordinate system.  Post-flip here
+    // so that tessellate_face's outer flip (`!outer_loop_orientation`) arrives at
+    // the same result it would with the general tessellator.
+    let bw_tris: Vec<[usize; 3]> = if boundary_was_cw {
+        bw_tris.into_iter().map(|[a, b, c]| [a, c, b]).collect()
+    } else {
+        bw_tris
+    };
+
+    Some(Ok(SurfaceMesh {
+        points,
+        triangles: bw_tris,
+    }))
 }
 
 // ── Curved-surface tessellation ───────────────────────────────────────────────
@@ -442,6 +1033,19 @@ fn try_tessellate_cylindrical(
         let v = dot3(d, axis.z);
         v_min = v_min.min(v);
         v_max = v_max.max(v);
+    }
+    // Annular faces: the outer loop is a single closed circle (all boundary_3d
+    // points at the same height), so v_min ≈ v_max.  Extend the v range using
+    // inner-loop boundary points so we cover the full axial extent.
+    if (v_max - v_min).abs() < 1e-10 {
+        for inner_edges in &face.inner_loops {
+            for &p in &sample_boundary_cached(inner_edges, edge_cache) {
+                let d = sub(p, axis.origin);
+                let vv = dot3(d, axis.z);
+                v_min = v_min.min(vv);
+                v_max = v_max.max(vv);
+            }
+        }
     }
     if (v_max - v_min).abs() < 1e-10 {
         return None;
@@ -628,6 +1232,7 @@ fn try_tessellate_conical(
 
     let ax_id = get_ref(e, 1).ok()?;
     let radius = get_real(e, 2).ok()?;
+    // STEP stores plane_angle_measure in degrees; convert to radians.
     let semi_angle = get_real(e, 3).ok()?.to_radians();
     let axis = axis2_placement(file, ax_id).ok()?;
     let y = axis.y();
@@ -659,6 +1264,18 @@ fn try_tessellate_conical(
         let v = dot3(d, axis.z) / cos_phi;
         v_min = v_min.min(v);
         v_max = v_max.max(v);
+    }
+    // Annular cone faces: the outer loop is a single closed circle (v_min ≈ v_max).
+    // Extend the v range using inner-loop boundary points.
+    if (v_max - v_min).abs() < 1e-10 {
+        for inner_edges in &face.inner_loops {
+            for &p in &sample_boundary_cached(inner_edges, edge_cache) {
+                let d = sub(p, axis.origin);
+                let vv = dot3(d, axis.z) / cos_phi;
+                v_min = v_min.min(vv);
+                v_max = v_max.max(vv);
+            }
+        }
     }
     if (v_max - v_min).abs() < 1e-10 {
         return None;
@@ -992,7 +1609,58 @@ fn try_tessellate_spherical(
     let v_min = v_vals.iter().cloned().fold(f64::INFINITY, f64::min);
     let v_max = v_vals.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
 
-    if (u_max - u_min) < 1e-10 || (v_max - v_min) < 1e-10 {
+    // Spherical cap: boundary ring sits at approximately constant latitude —
+    // the pole is enclosed.  Subdivide the dome with concentric latitude rings
+    // so each triangle approximates the curved surface to within chord_height_tol.
+    if (v_max - v_min) < 1e-10 {
+        let v_rim = (v_min + v_max) / 2.0;
+        let pole_v = if v_rim >= 0.0 { PI / 2.0 } else { -PI / 2.0 };
+        let angle_span = (pole_v - v_rim).abs();
+
+        // Derive angular positions from the boundary ring (exact cache positions).
+        let n_u = boundary_3d.len();
+        let u_angles: Vec<f64> = boundary_3d
+            .iter()
+            .map(|&p| {
+                let d = sub(p, axis.origin);
+                f64::atan2(dot3(d, y), dot3(d, axis.x))
+            })
+            .collect();
+
+        // Latitude steps: chord-height criterion along a meridian arc.
+        let n_v = n_segs_for_arc(radius, angle_span, opts).clamp(2, 64);
+
+        let mut points = boundary_3d; // first n_u points = the boundary ring
+        for j in 1..n_v {
+            let v = v_rim + (pole_v - v_rim) * j as f64 / n_v as f64;
+            for &u in &u_angles {
+                points.push(surface.point(u, v));
+            }
+        }
+        let pole_idx = points.len();
+        points.push(surface.point(0.0, pole_v));
+
+        let mut triangles: Vec<[usize; 3]> = Vec::new();
+        // Rings from j=0 (boundary) up to j=n_v-2 (last interior ring before pole)
+        for j in 0..n_v - 1 {
+            let row = j * n_u;
+            let next = (j + 1) * n_u;
+            for i in 0..n_u {
+                let ni = (i + 1) % n_u;
+                triangles.push([row + i, row + ni, next + ni]);
+                triangles.push([row + i, next + ni, next + i]);
+            }
+        }
+        // Fan from the last interior ring to the pole
+        let last_row = (n_v - 1) * n_u;
+        for i in 0..n_u {
+            let ni = (i + 1) % n_u;
+            triangles.push([last_row + i, last_row + ni, pole_idx]);
+        }
+        return Some(SurfaceMesh { points, triangles });
+    }
+
+    if (u_max - u_min) < 1e-10 {
         return None;
     }
 
@@ -1101,25 +1769,140 @@ fn try_tessellate_bspline(
     if !u0.is_finite() || !u1.is_finite() || !v0.is_finite() || !v1.is_finite() {
         return None;
     }
+    let u_mid = (u0 + u1) / 2.0;
+    let v_mid = (v0 + v1) / 2.0;
 
-    // ── Boundary setup ──────────────────────────────────────────────────────
+    // ── Boundary ────────────────────────────────────────────────────────────
     let boundary_3d = sample_boundary_cached(&face.outer_loop, edge_cache);
     if boundary_3d.len() < 3 {
         return None;
     }
-    let normal = face_normal(&boundary_3d)?;
+
+    // ── Arc lengths / grid density ──────────────────────────────────────────
+    let arc_u = sample_arc_length(|t| surface.point(t, v_mid), u0, u1, 32);
+    let arc_v = sample_arc_length(|t| surface.point(u_mid, t), v0, v1, 32);
+    if arc_u < 1e-10 || arc_v < 1e-10 {
+        return None;
+    }
+    let n_u = ((arc_u / opts.max_edge_len).ceil() as usize).clamp(2, 256) + 1;
+    let n_v = ((arc_v / opts.max_edge_len).ceil() as usize).clamp(2, 256) + 1;
+
+    // ── Try UV-space triangulation ──────────────────────────────────────────
+    // Invert each boundary 3D point to its (u,v) parameter on the surface.
+    // If all invert successfully we triangulate entirely in UV space, which
+    // correctly handles highly curved B-spline patches where a flat tangent-
+    // plane projection causes interior UV grid points to fall outside the
+    // projected boundary polygon.
+    let bnd_uv: Vec<(f64, f64)> = boundary_3d
+        .iter()
+        .filter_map(|&p| invert_surface_uv(&*surface, p, u0, u1, v0, v1))
+        .collect();
+
+    if bnd_uv.len() == boundary_3d.len() {
+        let bnd2d_uv_raw: Vec<Point2> = bnd_uv.iter().map(|&(u, v)| Point2::new(u, v)).collect();
+        let bnd_map_uv = build_bnd2d_map(&bnd2d_uv_raw, &boundary_3d);
+        let bnd2d = ensure_ccw(deduplicate_2d(bnd2d_uv_raw));
+        if bnd2d.len() < 3 || polygon_area_2d(&bnd2d).abs() < 1e-20 {
+            return None;
+        }
+
+        // Holes in UV space.
+        let holes_data: Vec<(Vec<[f64; 3]>, Vec<Point2>)> = face
+            .inner_loops
+            .iter()
+            .filter_map(|inner| {
+                let inner_3d = sample_boundary_cached(inner, edge_cache);
+                if inner_3d.len() < 3 {
+                    return None;
+                }
+                let inner_uv: Vec<(f64, f64)> = inner_3d
+                    .iter()
+                    .filter_map(|&p| invert_surface_uv(&*surface, p, u0, u1, v0, v1))
+                    .collect();
+                if inner_uv.len() != inner_3d.len() {
+                    return None;
+                }
+                let inner_2d = inner_uv.iter().map(|&(u, v)| Point2::new(u, v)).collect();
+                Some((inner_3d, inner_2d))
+            })
+            .collect();
+        let hole_maps: Vec<HashMap<(u64, u64), [f64; 3]>> = holes_data
+            .iter()
+            .map(|(h3d, h2d)| build_bnd2d_map(h2d, h3d))
+            .collect();
+        let holes2d: Vec<Vec<Point2>> = holes_data.iter().map(|(_, h2d)| h2d.clone()).collect();
+        let hole_slices: Vec<&[Point2]> = holes2d.iter().map(|h| h.as_slice()).collect();
+
+        // Interior UV grid points — tested in UV space (correct for any curvature).
+        let mut interior_3d: Vec<[f64; 3]> = Vec::new();
+        let mut interior_2d: Vec<Point2> = Vec::new();
+        for j in 0..n_v {
+            let v = v0 + (v1 - v0) * j as f64 / (n_v - 1) as f64;
+            for i in 0..n_u {
+                let u = u0 + (u1 - u0) * i as f64 / (n_u - 1) as f64;
+                let p2d = Point2::new(u, v);
+                if point_in_polygon(p2d, &bnd2d)
+                    && !holes2d.iter().any(|h| point_in_polygon(p2d, h))
+                {
+                    interior_3d.push(surface.point(u, v));
+                    interior_2d.push(p2d);
+                }
+            }
+        }
+
+        let (mesh2d, n_outer, n_holes) =
+            match try_triangulate_with_interior(&bnd2d, &hole_slices, &interior_2d) {
+                Ok(r) => r,
+                Err(_) => return None,
+            };
+        if mesh2d.triangles.is_empty() {
+            return None;
+        }
+
+        let n_bnd_total = n_outer + n_holes;
+        let points: Vec<[f64; 3]> = mesh2d
+            .points
+            .iter()
+            .enumerate()
+            .map(|(i, p2d)| {
+                let key = (p2d.x.to_bits(), p2d.y.to_bits());
+                if i < n_outer {
+                    bnd_map_uv
+                        .get(&key)
+                        .copied()
+                        .unwrap_or_else(|| surface.point(p2d.x, p2d.y))
+                } else if i < n_bnd_total {
+                    hole_maps
+                        .iter()
+                        .find_map(|m| m.get(&key).copied())
+                        .unwrap_or_else(|| surface.point(p2d.x, p2d.y))
+                } else {
+                    interior_3d[i - n_bnd_total]
+                }
+            })
+            .collect();
+
+        let triangles: Vec<[usize; 3]> = mesh2d.triangles.iter().map(|t| t.v).collect();
+        return Some(SurfaceMesh { points, triangles });
+    }
+
+    // ── Fallback: 3D tangent-plane projection ───────────────────────────────
+    // UV inversion failed for at least one boundary point (e.g. degenerate
+    // surface).  Project to the tangent plane at the UV midpoint and filter
+    // interior points with point_in_polygon.
+    let surf_n = surface.normal(u_mid, v_mid);
+    let normal = if surf_n.iter().all(|x| x.is_finite()) && dot3(surf_n, surf_n) > 1e-20 {
+        surf_n
+    } else {
+        face_normal(&boundary_3d)?
+    };
     let (bnd2d_raw, origin, x_axis, y_axis) = project_to_2d(&boundary_3d, normal);
-
-    // Build bit-exact map: 2D projection → original edge-cache 3D position.
-    // Used to recover exact boundary vertex positions after CDT works in 2D.
     let bnd_map = build_bnd2d_map(&bnd2d_raw, &boundary_3d);
-
     let bnd2d = ensure_ccw(deduplicate_2d(bnd2d_raw));
     if bnd2d.len() < 3 || polygon_area_2d(&bnd2d).abs() < 1e-20 {
         return None;
     }
 
-    // ── Holes ───────────────────────────────────────────────────────────────
     let holes_data: Vec<(Vec<[f64; 3]>, Vec<Point2>)> = face
         .inner_loops
         .iter()
@@ -1128,7 +1911,7 @@ fn try_tessellate_bspline(
             if inner_3d.len() < 3 {
                 return None;
             }
-            let inner_2d: Vec<Point2> = inner_3d
+            let inner_2d = inner_3d
                 .iter()
                 .map(|&p| {
                     let d = sub(p, origin);
@@ -1144,18 +1927,6 @@ fn try_tessellate_bspline(
         .collect();
     let holes2d: Vec<Vec<Point2>> = holes_data.iter().map(|(_, h2d)| h2d.clone()).collect();
     let hole_slices: Vec<&[Point2]> = holes2d.iter().map(|h| h.as_slice()).collect();
-
-    // ── Interior Steiner points from UV grid ────────────────────────────────
-    let u_mid = (u0 + u1) / 2.0;
-    let v_mid = (v0 + v1) / 2.0;
-    let arc_u = sample_arc_length(|t| surface.point(t, v_mid), u0, u1, 32);
-    let arc_v = sample_arc_length(|t| surface.point(u_mid, t), v0, v1, 32);
-    if arc_u < 1e-10 || arc_v < 1e-10 {
-        return None;
-    }
-
-    let n_u = ((arc_u / opts.max_edge_len).ceil() as usize).clamp(2, 256) + 1;
-    let n_v = ((arc_v / opts.max_edge_len).ceil() as usize).clamp(2, 256) + 1;
 
     let mut interior_3d: Vec<[f64; 3]> = Vec::new();
     let mut interior_2d: Vec<Point2> = Vec::new();
@@ -1173,20 +1944,15 @@ fn try_tessellate_bspline(
         }
     }
 
-    // ── CDT triangulation ───────────────────────────────────────────────────
     let (mesh2d, n_outer, n_holes) =
         match try_triangulate_with_interior(&bnd2d, &hole_slices, &interior_2d) {
             Ok(r) => r,
             Err(_) => return None,
         };
-
     if mesh2d.triangles.is_empty() {
         return None;
     }
 
-    // ── Lift CDT points back to 3D ──────────────────────────────────────────
-    // Boundary/hole points: recover exact edge-cache 3D position from the map.
-    // Interior points: use the pre-computed surface.point(u,v) evaluation.
     let n_bnd_total = n_outer + n_holes;
     let points: Vec<[f64; 3]> = mesh2d
         .points
@@ -1200,7 +1966,6 @@ fn try_tessellate_bspline(
                     .copied()
                     .unwrap_or_else(|| add(origin, add(scale(x_axis, p2d.x), scale(y_axis, p2d.y))))
             } else if i < n_bnd_total {
-                // Hole boundary point — search all hole maps.
                 hole_maps
                     .iter()
                     .find_map(|m| m.get(&key).copied())
@@ -1973,4 +2738,84 @@ fn dist3(a: [f64; 3], b: [f64; 3]) -> f64 {
 
 fn lerp3(a: [f64; 3], b: [f64; 3], t: f64) -> [f64; 3] {
     add(a, scale(sub(b, a), t))
+}
+
+/// Find approximate UV parameters for a 3D point that lies on a surface.
+/// Uses a coarse grid search to find a good initial guess, then refines with
+/// Gauss-Newton iterations.  Returns `None` if convergence fails.
+fn invert_surface_uv(
+    surface: &dyn crate::geom::surface::Surface,
+    p3d: [f64; 3],
+    u0: f64,
+    u1: f64,
+    v0: f64,
+    v1: f64,
+) -> Option<(f64, f64)> {
+    const COARSE_N: usize = 12;
+    const MAX_ITER: usize = 25;
+
+    // Coarse grid search for the nearest UV grid point.
+    let mut best_u = (u0 + u1) / 2.0;
+    let mut best_v = (v0 + v1) / 2.0;
+    let mut best_sq = {
+        let d = sub(surface.point(best_u, best_v), p3d);
+        dot3(d, d)
+    };
+    for j in 0..=COARSE_N {
+        let v = v0 + (v1 - v0) * j as f64 / COARSE_N as f64;
+        for i in 0..=COARSE_N {
+            let u = u0 + (u1 - u0) * i as f64 / COARSE_N as f64;
+            let d = sub(surface.point(u, v), p3d);
+            let sq = dot3(d, d);
+            if sq < best_sq {
+                best_sq = sq;
+                best_u = u;
+                best_v = v;
+            }
+        }
+    }
+
+    // Gauss-Newton refinement.
+    let mut u = best_u;
+    let mut v = best_v;
+    let eu = (u1 - u0) * 1e-5;
+    let ev = (v1 - v0) * 1e-5;
+    for _ in 0..MAX_ITER {
+        let p = surface.point(u, v);
+        let diff = sub(p3d, p);
+        if dot3(diff, diff) < 1e-16 {
+            break;
+        }
+
+        let pu = surface.point((u + eu).min(u1), v);
+        let pm = surface.point((u - eu).max(u0), v);
+        let h_u = (u + eu).min(u1) - (u - eu).max(u0);
+        let su = scale(sub(pu, pm), 1.0 / h_u);
+
+        let pv = surface.point(u, (v + ev).min(v1));
+        let qv = surface.point(u, (v - ev).max(v0));
+        let h_v = (v + ev).min(v1) - (v - ev).max(v0);
+        let sv = scale(sub(pv, qv), 1.0 / h_v);
+
+        let a11 = dot3(su, su);
+        let a12 = dot3(su, sv);
+        let a22 = dot3(sv, sv);
+        let b1 = dot3(su, diff);
+        let b2 = dot3(sv, diff);
+
+        let det = a11 * a22 - a12 * a12;
+        if det.abs() < 1e-30 {
+            break;
+        }
+        u = (u + (a22 * b1 - a12 * b2) / det).clamp(u0, u1);
+        v = (v + (a11 * b2 - a12 * b1) / det).clamp(v0, v1);
+    }
+
+    let d = sub(surface.point(u, v), p3d);
+    // Accept if the residual is small relative to the UV domain span.
+    if dot3(d, d) < 0.01 {
+        Some((u, v))
+    } else {
+        None
+    }
 }

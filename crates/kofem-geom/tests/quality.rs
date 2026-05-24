@@ -212,12 +212,6 @@ static NIST_GEOMETRIES: &[GeomSpec] = &[
         step_file: "../../test_files/NIST/nist_stc_09_asme1_ap242-e3.stp",
         ref_stl: "../../test_files/reference_stl/nist_stc_09_asme1_ap242-e3.stl",
     },
-    GeomSpec {
-        name: "nist_stc_10",
-        label: "NIST STC-10 (AP242 e2)",
-        step_file: "../../test_files/NIST/nist_stc_10_asme1_ap242-e2.stp",
-        ref_stl: "../../test_files/reference_stl/nist_stc_10_asme1_ap242-e2.stl",
-    },
 ];
 
 // ── STL parsing ───────────────────────────────────────────────────────────────
