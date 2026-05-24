@@ -45,7 +45,243 @@ pub fn parse(text: &str) -> Result<StepFile, StepError> {
         let entity = parse_entity(stmt)?;
         file.insert(entity.id, entity);
     }
+
+    // Normalise all geometry coordinates to millimetres.  AP242 STEP files may
+    // store geometry in any unit system (mm, inch, …).  We detect the unit by
+    // locating the GLOBAL_UNIT_ASSIGNED_CONTEXT of the geometric representation
+    // and checking whether its length-unit entity is a CONVERSION_BASED_UNIT
+    // named "INCH"/"inch".  If so, every length-valued entity argument is
+    // multiplied by 25.4 so the rest of the pipeline always works in mm.
+    let scale = detect_length_scale_mm(&file);
+    if (scale - 1.0).abs() > 1e-10 {
+        apply_length_scale(&mut file, scale);
+    }
+
+    // Normalise all plane-angle values to radians.  AP242 STEP files may store
+    // angles in degrees (CONVERSION_BASED_UNIT 'DEGREE') or in radians
+    // (SI_UNIT .RADIAN.).  We normalise everything to radians here so that
+    // downstream code can use angle values directly without calling to_radians().
+    let angle_scale = detect_angle_scale_rad(&file);
+    if (angle_scale - 1.0).abs() > 1e-10 {
+        apply_angle_scale(&mut file, angle_scale);
+    }
+
     Ok(file)
+}
+
+const INCH_TO_MM: f64 = 25.4;
+
+/// Return the mm-per-unit scale factor encoded in the file's geometry context.
+/// Returns 1.0 for millimetre files, 25.4 for inch files.
+fn detect_length_scale_mm(file: &StepFile) -> f64 {
+    for entity in file.values() {
+        // We are looking for any entity that has a GLOBAL_UNIT_ASSIGNED_CONTEXT
+        // TypedValue component (occurs in the GEOMETRIC_REPRESENTATION_CONTEXT
+        // complex entity).
+        let unit_ids: Vec<u64> = entity
+            .args
+            .iter()
+            .find_map(|a| {
+                if let Arg::TypedValue {
+                    name,
+                    args: tv_args,
+                } = a
+                {
+                    if name == "GLOBAL_UNIT_ASSIGNED_CONTEXT" {
+                        if let Some(Arg::List(ids)) = tv_args.first() {
+                            return Some(
+                                ids.iter()
+                                    .filter_map(|a| {
+                                        if let Arg::Ref(id) = a {
+                                            Some(*id)
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .collect(),
+                            );
+                        }
+                    }
+                }
+                None
+            })
+            .unwrap_or_default();
+
+        if unit_ids.is_empty() {
+            continue;
+        }
+
+        for uid in &unit_ids {
+            if let Some(unit) = file.get(uid) {
+                if is_inch_length_unit(unit) {
+                    return INCH_TO_MM;
+                }
+            }
+        }
+    }
+    1.0
+}
+
+/// Return true if `entity` is simultaneously a LENGTH_UNIT and a
+/// CONVERSION_BASED_UNIT whose name is "INCH" (case-insensitive).
+fn is_inch_length_unit(entity: &StepEntity) -> bool {
+    let has_length_unit = entity
+        .args
+        .iter()
+        .any(|a| matches!(a, Arg::TypedValue { name, .. } if name == "LENGTH_UNIT"));
+    if !has_length_unit {
+        return false;
+    }
+    entity.args.iter().any(|a| {
+        if let Arg::TypedValue {
+            name,
+            args: tv_args,
+        } = a
+        {
+            if name == "CONVERSION_BASED_UNIT" {
+                if let Some(Arg::String(s)) = tv_args.first() {
+                    return s.eq_ignore_ascii_case("INCH");
+                }
+            }
+        }
+        false
+    })
+}
+
+/// Return the radians-per-unit scale factor for plane angles in this file.
+/// Returns 1.0 for radian files, π/180 for degree files.
+///
+/// AP242 files that use SI_UNIT(.RADIAN.) store angles as-is (1.0 scale).
+/// Files that declare CONVERSION_BASED_UNIT('DEGREE') need π/180 applied so
+/// that the rest of the pipeline always works in radians.
+fn detect_angle_scale_rad(file: &StepFile) -> f64 {
+    for entity in file.values() {
+        let unit_ids: Vec<u64> = entity
+            .args
+            .iter()
+            .find_map(|a| {
+                if let Arg::TypedValue {
+                    name,
+                    args: tv_args,
+                } = a
+                {
+                    if name == "GLOBAL_UNIT_ASSIGNED_CONTEXT" {
+                        if let Some(Arg::List(ids)) = tv_args.first() {
+                            return Some(
+                                ids.iter()
+                                    .filter_map(|a| {
+                                        if let Arg::Ref(id) = a {
+                                            Some(*id)
+                                        } else {
+                                            None
+                                        }
+                                    })
+                                    .collect(),
+                            );
+                        }
+                    }
+                }
+                None
+            })
+            .unwrap_or_default();
+
+        if unit_ids.is_empty() {
+            continue;
+        }
+
+        for uid in &unit_ids {
+            if let Some(unit) = file.get(uid) {
+                if is_degree_plane_angle_unit(unit) {
+                    return std::f64::consts::PI / 180.0;
+                }
+            }
+        }
+    }
+    1.0
+}
+
+/// Return true if `entity` is simultaneously a PLANE_ANGLE_UNIT and a
+/// CONVERSION_BASED_UNIT whose name is "DEGREE" (case-insensitive).
+fn is_degree_plane_angle_unit(entity: &StepEntity) -> bool {
+    let has_plane_angle = entity
+        .args
+        .iter()
+        .any(|a| matches!(a, Arg::TypedValue { name, .. } if name == "PLANE_ANGLE_UNIT"));
+    if !has_plane_angle {
+        return false;
+    }
+    entity.args.iter().any(|a| {
+        if let Arg::TypedValue {
+            name,
+            args: tv_args,
+        } = a
+        {
+            if name == "CONVERSION_BASED_UNIT" {
+                if let Some(Arg::String(s)) = tv_args.first() {
+                    return s.eq_ignore_ascii_case("DEGREE");
+                }
+            }
+        }
+        false
+    })
+}
+
+/// Scale every plane-angle-valued entity argument by `scale` (π/180 for degree→radian).
+/// Entities affected:
+/// * `CONICAL_SURFACE` — semi_angle at arg[3]
+fn apply_angle_scale(file: &mut StepFile, scale: f64) {
+    for entity in file.values_mut() {
+        if entity.type_name == "CONICAL_SURFACE" {
+            if let Some(arg) = entity.args.get_mut(3) {
+                scale_real_arg(arg, scale);
+            }
+        }
+    }
+}
+
+/// Scale every length-valued entity argument by `scale` (25.4 for inch→mm).
+/// Entities affected:
+/// * `CARTESIAN_POINT`  — coordinate list
+/// * `CIRCLE` / `CYLINDRICAL_SURFACE` / `SPHERICAL_SURFACE` / `CONICAL_SURFACE`
+///   — radius at arg[2]
+/// * `TOROIDAL_SURFACE` — major_radius at arg[2], minor_radius at arg[3]
+/// * `ELLIPSE`          — semi_axis_1 at arg[2], semi_axis_2 at arg[3]
+///
+/// Knot vectors (B-spline parametric domain) are intentionally left untouched;
+/// control-point positions are covered via CARTESIAN_POINT above.
+fn apply_length_scale(file: &mut StepFile, scale: f64) {
+    for entity in file.values_mut() {
+        match entity.type_name.as_str() {
+            "CARTESIAN_POINT" => {
+                if let Some(Arg::List(coords)) = entity.args.get_mut(1) {
+                    for c in coords.iter_mut() {
+                        scale_real_arg(c, scale);
+                    }
+                }
+            }
+            "CIRCLE" | "CYLINDRICAL_SURFACE" | "SPHERICAL_SURFACE" | "CONICAL_SURFACE" => {
+                if let Some(arg) = entity.args.get_mut(2) {
+                    scale_real_arg(arg, scale);
+                }
+            }
+            "TOROIDAL_SURFACE" | "ELLIPSE" => {
+                for i in [2usize, 3usize] {
+                    if let Some(arg) = entity.args.get_mut(i) {
+                        scale_real_arg(arg, scale);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn scale_real_arg(arg: &mut Arg, scale: f64) {
+    match arg {
+        Arg::Real(v) => *v *= scale,
+        Arg::Integer(v) => *arg = Arg::Real(*v as f64 * scale),
+        _ => {}
+    }
 }
 
 /// Split the DATA section into individual statements on `;`, respecting string literals.

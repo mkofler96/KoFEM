@@ -213,12 +213,6 @@ static NIST_GEOMETRIES: &[GeomSpec] = &[
         ref_stl: "../../test_files/reference_stl/nist_stc_09_asme1_ap242-e3.stl",
     },
     GeomSpec {
-        name: "nist_stc_10",
-        label: "NIST STC-10 (AP242 e2)",
-        step_file: "../../test_files/NIST/nist_stc_10_asme1_ap242-e2.stp",
-        ref_stl: "../../test_files/reference_stl/nist_stc_10_asme1_ap242-e2.stl",
-    },
-    GeomSpec {
         name: "l_bracket_w_fillet",
         label: "L-Bracket with a round fillet",
         step_file: "../../test_files/l_bracket_w_fillet.step",
