@@ -78,6 +78,7 @@ export function MeshScene() {
   const constraints = useModelStore(s => s.constraints)
   const loads = useModelStore(s => s.loads)
   const result = useModelStore(s => s.result)
+  const mode = useModelStore(s => s.mode)
   const stepSurface = useModelStore(s => s.stepSurface)
   const stepWireframe = useModelStore(s => s.stepWireframe)
   const volMesh = useModelStore(s => s.volMesh)
@@ -321,6 +322,11 @@ export function MeshScene() {
     return null
   }
 
+  // In geometry mode show STEP surface; hide it once we're on the mesh tab or beyond
+  const showStepSurface = mode === 'geometry' || nodes.length === 0
+  // Show element edges only from mesh mode onward (geometry mode stays smooth)
+  const showFemEdges = mode !== 'geometry'
+
   return (
     <group>
       {/* Undeformed solid surface — light blue-grey on light background */}
@@ -334,8 +340,8 @@ export function MeshScene() {
         </mesh>
       )}
 
-      {/* Undeformed wireframe — dark edges on light bg */}
-      {!result && undeformedEdges.map((pts, i) => (
+      {/* Element edges — shown from mesh mode onward for the classic FEM wireframe look */}
+      {!result && showFemEdges && undeformedEdges.map((pts, i) => (
         <Line key={`u-${i}`} points={pts} color="#2d4a6b" lineWidth={1.2} />
       ))}
 
@@ -394,8 +400,8 @@ export function MeshScene() {
         </lineSegments>
       )}
 
-      {/* STEP surface mesh — solid shaded or wireframe */}
-      {stepGeometry && (
+      {/* STEP surface mesh — visible in geometry mode only; replaced by FEM mesh in mesh mode */}
+      {showStepSurface && stepGeometry && (
         <mesh>
           <bufferGeometry>
             <bufferAttribute attach="attributes-position" args={[stepGeometry.positions, 3]} />
