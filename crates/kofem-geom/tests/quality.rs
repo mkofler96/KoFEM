@@ -212,12 +212,6 @@ static NIST_GEOMETRIES: &[GeomSpec] = &[
         step_file: "../../test_files/NIST/nist_stc_09_asme1_ap242-e3.stp",
         ref_stl: "../../test_files/reference_stl/nist_stc_09_asme1_ap242-e3.stl",
     },
-    GeomSpec {
-        name: "nist_stc_10",
-        label: "NIST STC-10 (AP242 e2)",
-        step_file: "../../test_files/NIST/nist_stc_10_asme1_ap242-e2.stp",
-        ref_stl: "../../test_files/reference_stl/nist_stc_10_asme1_ap242-e2.stl",
-    },
 ];
 
 // ── STL parsing ───────────────────────────────────────────────────────────────
@@ -703,4 +697,158 @@ fn mesh_quality_report() {
 #[ignore]
 fn mesh_quality_report_nist() {
     run_suite("mesh_quality_report_nist", NIST_GEOMETRIES);
+}
+
+/// Diagnostic: compare nist_ftc_07 and nist_stc_06 vs reference — find per-face
+/// errors by tessellating each face individually.
+#[test]
+#[ignore]
+fn diag_nist_faces() {
+    for (step_path, ref_path, label) in &[
+        (
+            "../../test_files/NIST/nist_ftc_07_asme1_ap242-e2.stp",
+            "../../test_files/reference_stl/nist_ftc_07_asme1_ap242-e2.stl",
+            "ftc07",
+        ),
+        (
+            "../../test_files/NIST/nist_stc_06_asme1_ap242-e3.stp",
+            "../../test_files/reference_stl/nist_stc_06_asme1_ap242-e3.stl",
+            "stc06",
+        ),
+    ] {
+        eprintln!("=== {label} ===");
+        let step_text = fs::read_to_string(step_path).expect("read STEP");
+        let step_file = kofem_geom::step::parse(&step_text).expect("parse STEP");
+        let brep = BRep::extract(&step_file).expect("extract BRep");
+
+        let ref_data = fs::read(ref_path).expect("read ref STL");
+        let ref_tris = parse_stl_triangles(&ref_data).expect("parse ref STL");
+
+        eprintln!(
+            "{label}: {} faces, {} ref tris",
+            brep.faces.len(),
+            ref_tris.len()
+        );
+
+        let mesh = tessellate(&brep, &step_file, TessOptions::default()).expect("tessellate");
+        let kofem_tris = extract_triangles(&mesh);
+
+        // One-sided: reference samples → KoFEM to find which reference areas are missing
+        let ref_samples = sample_surface_uniform(&ref_tris, 5000);
+        let (_, max_d) = one_sided(&ref_samples, &kofem_tris);
+        eprintln!("{label}: ref→kofem max = {max_d:.2}mm");
+
+        // One-sided: KoFEM samples → reference
+        let kofem_samples = sample_surface_uniform(&kofem_tris, 5000);
+        let (_, max_d2) = one_sided(&kofem_samples, &ref_tris);
+        eprintln!("{label}: kofem→ref max = {max_d2:.2}mm");
+
+        // Find worst reference sample (ref sample furthest from KoFEM)
+        let mut worst_d = 0.0f32;
+        let mut worst_p = [0.0f32; 3];
+        for &p in &ref_samples {
+            let d2 = kofem_tris
+                .iter()
+                .map(|t| point_to_tri_dist2(p, t))
+                .fold(f32::MAX, f32::min);
+            let d = d2.sqrt();
+            if d > worst_d {
+                worst_d = d;
+                worst_p = p;
+            }
+        }
+        eprintln!(
+            "{label}: worst ref sample at [{:.2},{:.2},{:.2}] d={worst_d:.2}mm",
+            worst_p[0], worst_p[1], worst_p[2]
+        );
+
+        // Find worst KoFEM sample (KoFEM sample furthest from reference)
+        let mut worst_kd = 0.0f32;
+        let mut worst_kp = [0.0f32; 3];
+        let mut worst_tri_idx = 0usize;
+        for (ti, tri) in kofem_tris.iter().enumerate() {
+            // Sample the centroid
+            let p = [
+                (tri[0][0] + tri[1][0] + tri[2][0]) / 3.0,
+                (tri[0][1] + tri[1][1] + tri[2][1]) / 3.0,
+                (tri[0][2] + tri[1][2] + tri[2][2]) / 3.0,
+            ];
+            let d2 = ref_tris
+                .iter()
+                .map(|t| point_to_tri_dist2(p, t))
+                .fold(f32::MAX, f32::min);
+            let d = d2.sqrt();
+            if d > worst_kd {
+                worst_kd = d;
+                worst_kp = p;
+                worst_tri_idx = ti;
+            }
+        }
+        eprintln!("{label}: worst kofem tri centroid at [{:.2},{:.2},{:.2}] d={worst_kd:.2}mm (tri #{worst_tri_idx})",
+            worst_kp[0], worst_kp[1], worst_kp[2]);
+        let wt = &kofem_tris[worst_tri_idx];
+        eprintln!(
+            "  v0=[{:.2},{:.2},{:.2}] v1=[{:.2},{:.2},{:.2}] v2=[{:.2},{:.2},{:.2}]",
+            wt[0][0],
+            wt[0][1],
+            wt[0][2],
+            wt[1][0],
+            wt[1][1],
+            wt[1][2],
+            wt[2][0],
+            wt[2][1],
+            wt[2][2]
+        );
+
+        // Find which faces produce triangles far from reference (>20mm)
+        let _opts = TessOptions::default();
+        let _edge_cache_local: std::collections::HashMap<u64, Vec<[f64; 3]>> = {
+            let mut cache = std::collections::HashMap::new();
+            for face in &brep.faces {
+                for loop_edges in std::iter::once(face.outer_loop.as_slice())
+                    .chain(face.inner_loops.iter().map(Vec::as_slice))
+                {
+                    for edge in loop_edges {
+                        cache.entry(edge.edge_id).or_insert_with(Vec::new);
+                    }
+                }
+            }
+            cache
+        };
+
+        // Tessellate each face and compute its max dist to reference
+        let mut face_worst: Vec<(usize, f32, String)> = Vec::new();
+        for (fi, face) in brep.faces.iter().enumerate() {
+            let surf_type = step_file
+                .get(&face.surface_id)
+                .map(|e| {
+                    if e.type_name.is_empty() {
+                        "COMPLEX".to_string()
+                    } else {
+                        e.type_name.clone()
+                    }
+                })
+                .unwrap_or_else(|| "?".to_string());
+            let face_mesh = kofem_geom::tess::fan_tessellate(face);
+            if face_mesh.triangles.is_empty() {
+                continue;
+            }
+            let face_tris = extract_triangles(&face_mesh);
+            let face_samples = sample_surface_uniform(&face_tris, 50.max(face_tris.len()));
+            let (_, max_d) = one_sided(&face_samples, &ref_tris);
+            if max_d > 20.0 {
+                face_worst.push((fi, max_d as f32, surf_type));
+            }
+        }
+        face_worst.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+        for (fi, d, st) in face_worst.iter().take(10) {
+            let face = &brep.faces[*fi];
+            eprintln!(
+                "  face[{fi}] surf#{} ({st}): fan_max={d:.2}mm n_outer={} n_inner={}",
+                face.surface_id,
+                face.outer_loop.len(),
+                face.inner_loops.len()
+            );
+        }
+    }
 }

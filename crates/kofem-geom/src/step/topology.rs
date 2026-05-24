@@ -26,6 +26,9 @@ pub struct TopoEdge {
     pub start: [f64; 3],
     pub end: [f64; 3],
     pub reversed: bool,
+    /// EDGE_CURVE.same_sense: when `false`, the curve parameter direction runs
+    /// opposite to the start→end vertex direction (e.g. clockwise circles).
+    pub curve_same_sense: bool,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -190,6 +193,7 @@ fn extract_oriented_edge(file: &StepFile, oe_id: u64) -> Result<TopoEdge, Topolo
     let curve_id = ref_arg(ec, 3)?;
     let start_vp_id = ref_arg(ec, 1)?;
     let end_vp_id = ref_arg(ec, 2)?;
+    let curve_same_sense = enum_arg(ec, 4).map(|s| s == "T").unwrap_or(true);
 
     let start_coords = extract_vertex_coords(file, start_vp_id)?;
     let end_coords = extract_vertex_coords(file, end_vp_id)?;
@@ -206,6 +210,7 @@ fn extract_oriented_edge(file: &StepFile, oe_id: u64) -> Result<TopoEdge, Topolo
         start,
         end,
         reversed,
+        curve_same_sense,
     })
 }
 
