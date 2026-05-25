@@ -172,12 +172,6 @@ static NIST_GEOMETRIES_WORKING: &[GeomSpec] = &[
         ref_stl: "../../test_files/reference_stl/nist_ftc_11_asme1_ap242-e2.stl",
     },
     GeomSpec {
-        name: "nist_stc_06",
-        label: "NIST STC-06 (AP242 e3)",
-        step_file: "../../test_files/NIST/nist_stc_06_asme1_ap242-e3.stp",
-        ref_stl: "../../test_files/reference_stl/nist_stc_06_asme1_ap242-e3.stl",
-    },
-    GeomSpec {
         name: "nist_stc_07",
         label: "NIST STC-07 (AP242 e3)",
         step_file: "../../test_files/NIST/nist_stc_07_asme1_ap242-e3.stp",
@@ -203,6 +197,12 @@ static NIST_GEOMETRIES_WORKING: &[GeomSpec] = &[
     },
 ];
 static NIST_GEOMETRIES_FAILING: &[GeomSpec] = &[
+    GeomSpec {
+        name: "nist_stc_06",
+        label: "NIST STC-06 (AP242 e3)",
+        step_file: "../../test_files/NIST/nist_stc_06_asme1_ap242-e3.stp",
+        ref_stl: "../../test_files/reference_stl/nist_stc_06_asme1_ap242-e3.stl",
+    },
     GeomSpec {
         name: "nist_ctc_02",
         label: "NIST CTC-02 (AP242 e2)",

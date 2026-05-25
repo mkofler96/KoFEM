@@ -1788,9 +1788,10 @@ fn try_tessellate_bspline(
     let n_v_raw = (arc_v / opts.max_edge_len).ceil() as usize;
     let n_u = n_u_raw.clamp(2, 64) + 1;
     let n_v = n_v_raw.clamp(2, 64) + 1;
-    // For large faces skip interior Steiner points: boundary-only CDT avoids
-    // O(n²) grid cost when either dimension exceeds 64 divisions.
-    let use_steiner = n_u_raw <= 64 && n_v_raw <= 64;
+    // Skip interior Steiner points only when BOTH dimensions are large (roughly
+    // square faces ≥ 64 mm²-ish at 1 mm resolution).  Thin-but-long faces still
+    // need Steiner points for quality; square large faces are the expensive case.
+    let use_steiner = !(n_u_raw > 64 && n_v_raw > 64);
 
     // ── Try UV-space triangulation ──────────────────────────────────────────
     // Invert each boundary 3D point to its (u,v) parameter on the surface.
