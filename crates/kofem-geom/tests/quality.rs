@@ -122,18 +122,12 @@ static STANDARD_GEOMETRIES: &[GeomSpec] = &[
     },
 ];
 
-static NIST_GEOMETRIES: &[GeomSpec] = &[
+static NIST_GEOMETRIES_WORKING: &[GeomSpec] = &[
     GeomSpec {
         name: "nist_ctc_01",
         label: "NIST CTC-01 (AP242 e1)",
         step_file: "../../test_files/NIST/nist_ctc_01_asme1_ap242-e1.stp",
         ref_stl: "../../test_files/reference_stl/nist_ctc_01_asme1_ap242-e1.stl",
-    },
-    GeomSpec {
-        name: "nist_ctc_02",
-        label: "NIST CTC-02 (AP242 e2)",
-        step_file: "../../test_files/NIST/nist_ctc_02_asme1_ap242-e2.stp",
-        ref_stl: "../../test_files/reference_stl/nist_ctc_02_asme1_ap242-e2.stl",
     },
     GeomSpec {
         name: "nist_ctc_03",
@@ -142,22 +136,10 @@ static NIST_GEOMETRIES: &[GeomSpec] = &[
         ref_stl: "../../test_files/reference_stl/nist_ctc_03_asme1_ap242-e2.stl",
     },
     GeomSpec {
-        name: "nist_ctc_04",
-        label: "NIST CTC-04 (AP242 e1)",
-        step_file: "../../test_files/NIST/nist_ctc_04_asme1_ap242-e1.stp",
-        ref_stl: "../../test_files/reference_stl/nist_ctc_04_asme1_ap242-e1.stl",
-    },
-    GeomSpec {
         name: "nist_ctc_05",
         label: "NIST CTC-05 (AP242 e1)",
         step_file: "../../test_files/NIST/nist_ctc_05_asme1_ap242-e1.stp",
         ref_stl: "../../test_files/reference_stl/nist_ctc_05_asme1_ap242-e1.stl",
-    },
-    GeomSpec {
-        name: "nist_ftc_06",
-        label: "NIST FTC-06 (AP242 e2)",
-        step_file: "../../test_files/NIST/nist_ftc_06_asme1_ap242-e2.stp",
-        ref_stl: "../../test_files/reference_stl/nist_ftc_06_asme1_ap242-e2.stl",
     },
     GeomSpec {
         name: "nist_ftc_07",
@@ -220,7 +202,26 @@ static NIST_GEOMETRIES: &[GeomSpec] = &[
         ref_stl: "../../test_files/reference_stl/l_bracket_w_fillet.stl",
     },
 ];
-
+static NIST_GEOMETRIES_FAILING: &[GeomSpec] = &[
+    GeomSpec {
+        name: "nist_ctc_02",
+        label: "NIST CTC-02 (AP242 e2)",
+        step_file: "../../test_files/NIST/nist_ctc_02_asme1_ap242-e2.stp",
+        ref_stl: "../../test_files/reference_stl/nist_ctc_02_asme1_ap242-e2.stl",
+    },
+    GeomSpec {
+        name: "nist_ctc_04",
+        label: "NIST CTC-04 (AP242 e1)",
+        step_file: "../../test_files/NIST/nist_ctc_04_asme1_ap242-e1.stp",
+        ref_stl: "../../test_files/reference_stl/nist_ctc_04_asme1_ap242-e1.stl",
+    },
+    GeomSpec {
+        name: "nist_ftc_06",
+        label: "NIST FTC-06 (AP242 e2)",
+        step_file: "../../test_files/NIST/nist_ftc_06_asme1_ap242-e2.stp",
+        ref_stl: "../../test_files/reference_stl/nist_ftc_06_asme1_ap242-e2.stl",
+    },
+];
 // ── STL parsing ───────────────────────────────────────────────────────────────
 
 fn parse_stl_triangles_ascii(text: &str) -> Result<Vec<[[f32; 3]; 3]>, String> {
@@ -790,10 +791,15 @@ fn mesh_quality_report() {
     run_suite("mesh_quality_report", STANDARD_GEOMETRIES);
 }
 
+#[test]
+fn mesh_quality_report_nist_working() {
+    run_suite("mesh_quality_report_nist", NIST_GEOMETRIES_WORKING);
+}
+
 /// 16 NIST AP242 models — slow in debug mode; run explicitly with
 /// `cargo test -- --include-ignored mesh_quality_report_nist`.
 #[test]
 #[ignore]
-fn mesh_quality_report_nist() {
-    run_suite("mesh_quality_report_nist", NIST_GEOMETRIES);
+fn mesh_quality_report_nist_failing() {
+    run_suite("mesh_quality_report_nist", NIST_GEOMETRIES_FAILING);
 }
