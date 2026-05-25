@@ -7,6 +7,7 @@
 //! `mesh_quality_report_nist` — 16 NIST geometries     (#[ignore]; run with
 //!                              `cargo test -- --include-ignored`)
 
+use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -121,18 +122,12 @@ static STANDARD_GEOMETRIES: &[GeomSpec] = &[
     },
 ];
 
-static NIST_GEOMETRIES: &[GeomSpec] = &[
+static NIST_GEOMETRIES_WORKING: &[GeomSpec] = &[
     GeomSpec {
         name: "nist_ctc_01",
         label: "NIST CTC-01 (AP242 e1)",
         step_file: "../../test_files/NIST/nist_ctc_01_asme1_ap242-e1.stp",
         ref_stl: "../../test_files/reference_stl/nist_ctc_01_asme1_ap242-e1.stl",
-    },
-    GeomSpec {
-        name: "nist_ctc_02",
-        label: "NIST CTC-02 (AP242 e2)",
-        step_file: "../../test_files/NIST/nist_ctc_02_asme1_ap242-e2.stp",
-        ref_stl: "../../test_files/reference_stl/nist_ctc_02_asme1_ap242-e2.stl",
     },
     GeomSpec {
         name: "nist_ctc_03",
@@ -141,22 +136,10 @@ static NIST_GEOMETRIES: &[GeomSpec] = &[
         ref_stl: "../../test_files/reference_stl/nist_ctc_03_asme1_ap242-e2.stl",
     },
     GeomSpec {
-        name: "nist_ctc_04",
-        label: "NIST CTC-04 (AP242 e1)",
-        step_file: "../../test_files/NIST/nist_ctc_04_asme1_ap242-e1.stp",
-        ref_stl: "../../test_files/reference_stl/nist_ctc_04_asme1_ap242-e1.stl",
-    },
-    GeomSpec {
         name: "nist_ctc_05",
         label: "NIST CTC-05 (AP242 e1)",
         step_file: "../../test_files/NIST/nist_ctc_05_asme1_ap242-e1.stp",
         ref_stl: "../../test_files/reference_stl/nist_ctc_05_asme1_ap242-e1.stl",
-    },
-    GeomSpec {
-        name: "nist_ftc_06",
-        label: "NIST FTC-06 (AP242 e2)",
-        step_file: "../../test_files/NIST/nist_ftc_06_asme1_ap242-e2.stp",
-        ref_stl: "../../test_files/reference_stl/nist_ftc_06_asme1_ap242-e2.stl",
     },
     GeomSpec {
         name: "nist_ftc_07",
@@ -189,12 +172,6 @@ static NIST_GEOMETRIES: &[GeomSpec] = &[
         ref_stl: "../../test_files/reference_stl/nist_ftc_11_asme1_ap242-e2.stl",
     },
     GeomSpec {
-        name: "nist_stc_06",
-        label: "NIST STC-06 (AP242 e3)",
-        step_file: "../../test_files/NIST/nist_stc_06_asme1_ap242-e3.stp",
-        ref_stl: "../../test_files/reference_stl/nist_stc_06_asme1_ap242-e3.stl",
-    },
-    GeomSpec {
         name: "nist_stc_07",
         label: "NIST STC-07 (AP242 e3)",
         step_file: "../../test_files/NIST/nist_stc_07_asme1_ap242-e3.stp",
@@ -219,7 +196,32 @@ static NIST_GEOMETRIES: &[GeomSpec] = &[
         ref_stl: "../../test_files/reference_stl/l_bracket_w_fillet.stl",
     },
 ];
-
+static NIST_GEOMETRIES_FAILING: &[GeomSpec] = &[
+    GeomSpec {
+        name: "nist_stc_06",
+        label: "NIST STC-06 (AP242 e3)",
+        step_file: "../../test_files/NIST/nist_stc_06_asme1_ap242-e3.stp",
+        ref_stl: "../../test_files/reference_stl/nist_stc_06_asme1_ap242-e3.stl",
+    },
+    GeomSpec {
+        name: "nist_ctc_02",
+        label: "NIST CTC-02 (AP242 e2)",
+        step_file: "../../test_files/NIST/nist_ctc_02_asme1_ap242-e2.stp",
+        ref_stl: "../../test_files/reference_stl/nist_ctc_02_asme1_ap242-e2.stl",
+    },
+    GeomSpec {
+        name: "nist_ctc_04",
+        label: "NIST CTC-04 (AP242 e1)",
+        step_file: "../../test_files/NIST/nist_ctc_04_asme1_ap242-e1.stp",
+        ref_stl: "../../test_files/reference_stl/nist_ctc_04_asme1_ap242-e1.stl",
+    },
+    GeomSpec {
+        name: "nist_ftc_06",
+        label: "NIST FTC-06 (AP242 e2)",
+        step_file: "../../test_files/NIST/nist_ftc_06_asme1_ap242-e2.stp",
+        ref_stl: "../../test_files/reference_stl/nist_ftc_06_asme1_ap242-e2.stl",
+    },
+];
 // ── STL parsing ───────────────────────────────────────────────────────────────
 
 fn parse_stl_triangles_ascii(text: &str) -> Result<Vec<[[f32; 3]; 3]>, String> {
@@ -455,17 +457,109 @@ fn sample_surface_uniform(tris: &[[[f32; 3]; 3]], n: usize) -> Vec<[f32; 3]> {
         .collect()
 }
 
+/// Spatial hash grid for O(n_samples × avg_cell_tris) nearest-triangle queries.
+///
+/// Triangles are inserted into every cell their AABB overlaps.  Query uses an
+/// expanding Chebyshev-shell search: after shell r the minimum distance to any
+/// unvisited cell is ≥ r × cell_size, so we stop when best ≤ (r × cell_size)².
+struct TriGrid<'a> {
+    cells: HashMap<(i32, i32, i32), Vec<usize>>,
+    tris: &'a [[[f32; 3]; 3]],
+    cell_size: f32,
+}
+
+impl<'a> TriGrid<'a> {
+    fn build(tris: &'a [[[f32; 3]; 3]]) -> Self {
+        let sample_n = tris.len().min(500);
+        let avg_edge = if sample_n == 0 {
+            1.0f32
+        } else {
+            tris[..sample_n]
+                .iter()
+                .map(|t| {
+                    let e01 = len2(sub3(t[1], t[0])).sqrt();
+                    let e12 = len2(sub3(t[2], t[1])).sqrt();
+                    let e20 = len2(sub3(t[0], t[2])).sqrt();
+                    e01.max(e12).max(e20)
+                })
+                .sum::<f32>()
+                / sample_n as f32
+        };
+        let cell_size = (avg_edge * 2.0).max(1e-4);
+        let inv = 1.0 / cell_size;
+
+        let mut cells: HashMap<(i32, i32, i32), Vec<usize>> = HashMap::new();
+        for (i, tri) in tris.iter().enumerate() {
+            let min_x = tri[0][0].min(tri[1][0]).min(tri[2][0]);
+            let min_y = tri[0][1].min(tri[1][1]).min(tri[2][1]);
+            let min_z = tri[0][2].min(tri[1][2]).min(tri[2][2]);
+            let max_x = tri[0][0].max(tri[1][0]).max(tri[2][0]);
+            let max_y = tri[0][1].max(tri[1][1]).max(tri[2][1]);
+            let max_z = tri[0][2].max(tri[1][2]).max(tri[2][2]);
+            let cx0 = (min_x * inv).floor() as i32;
+            let cy0 = (min_y * inv).floor() as i32;
+            let cz0 = (min_z * inv).floor() as i32;
+            let cx1 = (max_x * inv).floor() as i32;
+            let cy1 = (max_y * inv).floor() as i32;
+            let cz1 = (max_z * inv).floor() as i32;
+            for cz in cz0..=cz1 {
+                for cy in cy0..=cy1 {
+                    for cx in cx0..=cx1 {
+                        cells.entry((cx, cy, cz)).or_default().push(i);
+                    }
+                }
+            }
+        }
+        Self {
+            cells,
+            tris,
+            cell_size,
+        }
+    }
+
+    fn nearest_dist2(&self, p: [f32; 3]) -> f32 {
+        let inv = 1.0 / self.cell_size;
+        let cx = (p[0] * inv).floor() as i32;
+        let cy = (p[1] * inv).floor() as i32;
+        let cz = (p[2] * inv).floor() as i32;
+        let cs = self.cell_size;
+
+        let mut best = f32::MAX;
+        for r in 0i32.. {
+            for dz in -r..=r {
+                for dy in -r..=r {
+                    for dx in -r..=r {
+                        if r > 0 && dx.abs() < r && dy.abs() < r && dz.abs() < r {
+                            continue;
+                        }
+                        if let Some(idxs) = self.cells.get(&(cx + dx, cy + dy, cz + dz)) {
+                            for &ti in idxs {
+                                let d2 = point_to_tri_dist2(p, &self.tris[ti]);
+                                if d2 < best {
+                                    best = d2;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // After shell r, all unvisited cells are at Euclidean distance ≥ r*cs.
+            if (r as f32 * cs) * (r as f32 * cs) >= best {
+                break;
+            }
+        }
+        best
+    }
+}
+
 /// One-sided: mean and max point-to-surface distance from `from` sample points
 /// to the triangle mesh `to`.
 fn one_sided(from: &[[f32; 3]], to: &[[[f32; 3]; 3]]) -> (f64, f64) {
+    let grid = TriGrid::build(to);
     let mut sum = 0.0f64;
     let mut max_d = 0.0f64;
     for &p in from {
-        let min_d2 = to
-            .iter()
-            .map(|tri| point_to_tri_dist2(p, tri))
-            .fold(f32::MAX, f32::min);
-        let d = (min_d2 as f64).sqrt();
+        let d = (grid.nearest_dist2(p) as f64).sqrt();
         sum += d;
         if d > max_d {
             max_d = d;
@@ -697,10 +791,15 @@ fn mesh_quality_report() {
     run_suite("mesh_quality_report", STANDARD_GEOMETRIES);
 }
 
+#[test]
+fn mesh_quality_report_nist_working() {
+    run_suite("mesh_quality_report_nist", NIST_GEOMETRIES_WORKING);
+}
+
 /// 16 NIST AP242 models — slow in debug mode; run explicitly with
 /// `cargo test -- --include-ignored mesh_quality_report_nist`.
 #[test]
 #[ignore]
-fn mesh_quality_report_nist() {
-    run_suite("mesh_quality_report_nist", NIST_GEOMETRIES);
+fn mesh_quality_report_nist_failing() {
+    run_suite("mesh_quality_report_nist", NIST_GEOMETRIES_FAILING);
 }
