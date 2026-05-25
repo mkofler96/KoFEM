@@ -1,6 +1,9 @@
 use kofem_geom::step::topology::{TopoEdge, TopoFace};
 use kofem_geom::step::{parse, BRep};
-use kofem_geom::tess::{fan_tessellate, tessellate, TessOptions};
+use kofem_geom::tess::{
+    bspline_path_per_face, fan_tessellate, tessellate, tessellate_per_face, BsplinePath,
+    TessOptions,
+};
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -886,6 +889,322 @@ fn bracket_open_edge_ratio_is_low() {
         ratio < 0.25,
         "{open}/{total} edges are open ({:.1}%) — expected < 25%",
         ratio * 100.0
+    );
+}
+
+/// Report how many B-spline faces use UV-space inversion vs. tangent-plane fallback.
+/// Faces that fall back to tangent-plane projection are the primary source of flying-triangle
+/// artifacts because the flat projection may misclassify interior Steiner points.
+#[test]
+fn bracket_bspline_path_coverage() {
+    let (file, brep) = load_bracket();
+    let paths = bspline_path_per_face(&brep, &file, &TessOptions::default());
+    let uv = paths.iter().filter(|p| **p == BsplinePath::UvSpace).count();
+    let tan = paths
+        .iter()
+        .filter(|p| **p == BsplinePath::TangentPlane)
+        .count();
+    let degen = paths
+        .iter()
+        .filter(|p| **p == BsplinePath::Degenerate)
+        .count();
+    let not_bspline = paths
+        .iter()
+        .filter(|p| **p == BsplinePath::NotBspline)
+        .count();
+    eprintln!(
+        "B-spline tessellation paths: UV-space={uv}, tangent-plane fallback={tan}, degenerate={degen}, non-bspline={not_bspline}"
+    );
+    // Tangent-plane fallback is the primary bug vector — report and fail if any exist.
+    assert!(
+        tan == 0,
+        "{tan} B-spline face(s) fell back to tangent-plane projection; these are likely \
+         sources of spurious interior triangles. Investigate why invert_surface_uv failed."
+    );
+}
+
+/// Print which surface types in the bracket aren't handled by any specialised tessellator
+/// and must fall back to the generic CDT path.
+#[test]
+fn bracket_surface_type_coverage() {
+    use kofem_geom::step::parser::StepFile;
+    use kofem_geom::tess::tessellate_per_face;
+
+    let (file, brep) = load_bracket();
+    let mut unknown: Vec<(usize, u64, String)> = Vec::new();
+    for (i, face) in brep.faces.iter().enumerate() {
+        let stype = file
+            .get(&face.surface_id)
+            .map(|e| e.type_name.as_str())
+            .unwrap_or("MISSING")
+            .to_owned();
+        let known = matches!(
+            stype.as_str(),
+            "PLANE"
+                | "CYLINDRICAL_SURFACE"
+                | "CONICAL_SURFACE"
+                | "TOROIDAL_SURFACE"
+                | "SPHERICAL_SURFACE"
+                | "B_SPLINE_SURFACE_WITH_KNOTS"
+                | "SURFACE_OF_LINEAR_EXTRUSION"
+                | "" // B-spline wrapped in IFCBOUNDEDPLANE or similar
+        );
+        if !known {
+            unknown.push((i, face.surface_id, stype));
+        }
+    }
+    if !unknown.is_empty() {
+        for (i, sid, stype) in &unknown {
+            eprintln!("face #{i} surface #{sid}: UNKNOWN TYPE '{stype}'");
+        }
+    }
+    // Count all surface types for a coverage overview.
+    let mut counts: std::collections::HashMap<String, usize> = Default::default();
+    for face in &brep.faces {
+        let stype = file
+            .get(&face.surface_id)
+            .map(|e| {
+                if e.type_name.is_empty() {
+                    "B_SPLINE(wrapped)".to_owned()
+                } else {
+                    e.type_name.clone()
+                }
+            })
+            .unwrap_or_else(|| "MISSING".to_owned());
+        *counts.entry(stype).or_insert(0) += 1;
+    }
+    let mut sorted: Vec<_> = counts.iter().collect();
+    sorted.sort_by_key(|(t, _)| t.clone());
+    for (t, n) in &sorted {
+        eprintln!("  {n:4} × {t}");
+    }
+    // Don't fail — just inform. All "unknown" types use the generic CDT fallback.
+    eprintln!("{} face(s) use the generic CDT fallback", unknown.len());
+}
+
+/// Find faces that produce triangles with extreme aspect ratios (thin spikes).
+/// Checks both per-face meshes (pre-stitch) and the final stitched mesh.
+#[test]
+fn bracket_no_extreme_aspect_ratio_triangles() {
+    let (file, brep) = load_bracket();
+    // Check per-face meshes for detailed diagnostics.
+    let per_face = tessellate_per_face(&brep, &file, TessOptions::default());
+
+    let aspect_ratio = |pts: &[[f64; 3]], tri: [usize; 3]| -> f64 {
+        let a = pts[tri[0]];
+        let b = pts[tri[1]];
+        let c = pts[tri[2]];
+        let ab = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2) + (b[2] - a[2]).powi(2)).sqrt();
+        let bc = ((c[0] - b[0]).powi(2) + (c[1] - b[1]).powi(2) + (c[2] - b[2]).powi(2)).sqrt();
+        let ca = ((a[0] - c[0]).powi(2) + (a[1] - c[1]).powi(2) + (a[2] - c[2]).powi(2)).sqrt();
+        let longest = ab.max(bc).max(ca);
+        let d_ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+        let d_ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+        let cross = [
+            d_ab[1] * d_ac[2] - d_ab[2] * d_ac[1],
+            d_ab[2] * d_ac[0] - d_ab[0] * d_ac[2],
+            d_ab[0] * d_ac[1] - d_ab[1] * d_ac[0],
+        ];
+        let area2 = (cross[0] * cross[0] + cross[1] * cross[1] + cross[2] * cross[2]).sqrt();
+        if area2 < 1e-30 {
+            return f64::INFINITY;
+        }
+        longest * longest / area2
+    };
+
+    // Aspect ratio > 100 is visually "spike-like" (a long thin sliver)
+    const THRESHOLD: f64 = 100.0;
+    let mut worst: Vec<(usize, u64, f64, usize)> = Vec::new();
+    for (face_idx, surf_id, result) in &per_face {
+        if let Ok(mesh) = result {
+            let mut face_worst = 0.0f64;
+            let mut face_worst_tri = 0;
+            for (ti, &tri) in mesh.triangles.iter().enumerate() {
+                let ar = aspect_ratio(&mesh.points, tri);
+                if ar > face_worst {
+                    face_worst = ar;
+                    face_worst_tri = ti;
+                }
+            }
+            if face_worst > THRESHOLD {
+                worst.push((*face_idx, *surf_id, face_worst, face_worst_tri));
+            }
+        }
+    }
+    worst.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+    let total = worst.len();
+    for (fi, sid, ar, ti) in worst.iter().take(10) {
+        eprintln!("face #{fi} (surf #{sid}): worst triangle #{ti} aspect ratio {ar:.1}");
+    }
+    assert!(
+        total == 0,
+        "{total} face(s) have triangles with aspect ratio > {THRESHOLD}"
+    );
+}
+
+/// Diagnose face #465 (worst remaining spike after the proximity fix).
+#[test]
+fn bracket_face36_spike_diagnosis() {
+    let (file, brep) = load_bracket();
+    let per_face = tessellate_per_face(&brep, &file, TessOptions::default());
+    let (_, surf_id, result) = &per_face[465];
+    let mesh = result
+        .as_ref()
+        .expect("face 465 must tessellate without error");
+
+    let stype = file
+        .get(surf_id)
+        .map(|e| e.type_name.as_str())
+        .unwrap_or("?");
+    eprintln!(
+        "face #465: surface #{surf_id} type '{stype}', {} pts, {} tris",
+        mesh.points.len(),
+        mesh.triangles.len()
+    );
+
+    // Find and print the 5 worst-aspect-ratio triangles.
+    let aspect_ratio = |tri: [usize; 3]| -> f64 {
+        let a = mesh.points[tri[0]];
+        let b = mesh.points[tri[1]];
+        let c = mesh.points[tri[2]];
+        let ab = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2) + (b[2] - a[2]).powi(2)).sqrt();
+        let bc = ((c[0] - b[0]).powi(2) + (c[1] - b[1]).powi(2) + (c[2] - b[2]).powi(2)).sqrt();
+        let ca = ((a[0] - c[0]).powi(2) + (a[1] - c[1]).powi(2) + (a[2] - c[2]).powi(2)).sqrt();
+        let longest = ab.max(bc).max(ca);
+        let d_ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+        let d_ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+        let cross = [
+            d_ab[1] * d_ac[2] - d_ab[2] * d_ac[1],
+            d_ab[2] * d_ac[0] - d_ab[0] * d_ac[2],
+            d_ab[0] * d_ac[1] - d_ab[1] * d_ac[0],
+        ];
+        let area2 = (cross[0] * cross[0] + cross[1] * cross[1] + cross[2] * cross[2]).sqrt();
+        if area2 < 1e-30 {
+            return f64::INFINITY;
+        }
+        longest * longest / area2
+    };
+
+    let mut ars: Vec<(usize, f64)> = mesh
+        .triangles
+        .iter()
+        .enumerate()
+        .map(|(i, &t)| (i, aspect_ratio(t)))
+        .collect();
+    ars.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+    for (ti, ar) in ars.iter().take(5) {
+        let tri = mesh.triangles[*ti];
+        let pa = mesh.points[tri[0]];
+        let pb = mesh.points[tri[1]];
+        let pc = mesh.points[tri[2]];
+        let ab =
+            ((pb[0] - pa[0]).powi(2) + (pb[1] - pa[1]).powi(2) + (pb[2] - pa[2]).powi(2)).sqrt();
+        let bc =
+            ((pc[0] - pb[0]).powi(2) + (pc[1] - pb[1]).powi(2) + (pc[2] - pb[2]).powi(2)).sqrt();
+        let ca =
+            ((pa[0] - pc[0]).powi(2) + (pa[1] - pc[1]).powi(2) + (pa[2] - pc[2]).powi(2)).sqrt();
+        eprintln!(
+            "  tri #{ti} AR={ar:.1}: idx={:?} edges {ab:.4}, {bc:.4}, {ca:.4}",
+            tri
+        );
+        eprintln!("    A={pa:.4?}  B={pb:.4?}  C={pc:.4?}");
+    }
+
+    // Print the spike triangle indices.
+    eprintln!("  tri #104 = {:?}", mesh.triangles.get(104));
+
+    // Check the face topology.
+    let face465 = &brep.faces[465];
+    let n_outer_edges: usize = face465.outer_loop.len();
+    eprintln!("  outer_loop edge count: {n_outer_edges}");
+    eprintln!(
+        "  same_sense={} outer_loop_orientation={}",
+        face465.same_sense, face465.outer_loop_orientation
+    );
+    eprintln!("  inner_loops: {}", face465.inner_loops.len());
+
+    // Print first 5 and last 5 points for context.
+    eprintln!("  first 5 pts:");
+    for i in 0..5.min(mesh.points.len()) {
+        eprintln!("    pts[{i}] = {:?}", mesh.points[i]);
+    }
+    if mesh.points.len() > 5 {
+        let n = mesh.points.len();
+        eprintln!("  last 5 pts:");
+        for i in (n.saturating_sub(5))..n {
+            eprintln!("    pts[{i}] = {:?}", mesh.points[i]);
+        }
+    }
+
+    // Print UV domain.
+    use kofem_geom::geom::surface::surface_from_step;
+    if let Ok(surf) = surface_from_step(face465.surface_id, &file) {
+        let (u0, u1) = surf.u_bounds();
+        let (v0, v1) = surf.v_bounds();
+        eprintln!("  UV domain: u=[{u0:.6},{u1:.6}] v=[{v0:.6},{v1:.6}]");
+    }
+}
+
+/// Identify faces that produce triangles with vertices outside the overall bounding box.
+/// Prints face index, surface id, and worst-case exceedance for debugging.
+#[test]
+fn bracket_no_outlier_triangles() {
+    let (file, brep) = load_bracket();
+    let per_face = tessellate_per_face(&brep, &file, TessOptions::default());
+
+    // First pass: compute overall bounding box from all successful face meshes.
+    let mut bbox_min = [f64::MAX; 3];
+    let mut bbox_max = [f64::MIN; 3];
+    for (_, _, result) in &per_face {
+        if let Ok(mesh) = result {
+            for &p in &mesh.points {
+                for k in 0..3 {
+                    if p[k] < bbox_min[k] {
+                        bbox_min[k] = p[k];
+                    }
+                    if p[k] > bbox_max[k] {
+                        bbox_max[k] = p[k];
+                    }
+                }
+            }
+        }
+    }
+    let diag = ((bbox_max[0] - bbox_min[0]).powi(2)
+        + (bbox_max[1] - bbox_min[1]).powi(2)
+        + (bbox_max[2] - bbox_min[2]).powi(2))
+    .sqrt();
+    // Allow a 5% margin beyond the bbox to account for floating-point rounding.
+    let margin = diag * 0.05;
+
+    // Second pass: find any face with vertices outside the padded bbox.
+    let mut total_outlier_tris = 0usize;
+    for (face_idx, surf_id, result) in &per_face {
+        if let Ok(mesh) = result {
+            let mut outlier_tris = 0usize;
+            for &[a, b, c] in &mesh.triangles {
+                'tri: for &vi in &[a, b, c] {
+                    let p = mesh.points[vi];
+                    for k in 0..3 {
+                        if p[k] < bbox_min[k] - margin || p[k] > bbox_max[k] + margin {
+                            outlier_tris += 1;
+                            break 'tri;
+                        }
+                    }
+                }
+            }
+            if outlier_tris > 0 {
+                eprintln!(
+                    "face #{face_idx} (surface #{surf_id}): {outlier_tris} outlier triangles \
+                     — bbox [{bbox_min:?}..{bbox_max:?}], diag {diag:.1}"
+                );
+                total_outlier_tris += outlier_tris;
+            }
+        }
+    }
+    assert!(
+        total_outlier_tris == 0,
+        "{total_outlier_tris} triangles have vertices outside the geometry bounding box"
     );
 }
 

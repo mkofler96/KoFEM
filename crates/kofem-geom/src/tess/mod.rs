@@ -8,6 +8,24 @@
 use std::collections::HashMap;
 use std::f64::consts::PI;
 
+/// Squared distance from point `p` to the closest point on segment `(a, b)`.
+#[inline]
+fn point_to_segment_dist_sq(p: Point2, a: Point2, b: Point2) -> f64 {
+    let abx = b.x - a.x;
+    let aby = b.y - a.y;
+    let ab_sq = abx * abx + aby * aby;
+    if ab_sq < 1e-30 {
+        let dx = p.x - a.x;
+        let dy = p.y - a.y;
+        return dx * dx + dy * dy;
+    }
+    let t = ((p.x - a.x) * abx + (p.y - a.y) * aby) / ab_sq;
+    let t = t.clamp(0.0, 1.0);
+    let px = a.x + t * abx - p.x;
+    let py = a.y + t * aby - p.y;
+    px * px + py * py
+}
+
 /// Build a map from 2D point bits `(x.to_bits(), y.to_bits())` → original 3D position.
 /// Used by CDT-based tessellators to recover exact edge-cache 3D positions for boundary
 /// vertices after CDT works in the projected 2D tangent plane.
@@ -311,6 +329,91 @@ pub fn tessellate(
     let bbox_diag = bounding_box_diagonal(&all_points);
     let eps = 1e-4 * bbox_diag.max(1e-10);
     Ok(stitch(all_points, all_triangles, eps))
+}
+
+/// Tessellate each face separately, returning `(face_index, surface_id, SurfaceMesh)` for
+/// each face.  Used for diagnostics to trace which face produces outlier geometry.
+#[doc(hidden)]
+pub fn tessellate_per_face(
+    brep: &BRep,
+    file: &StepFile,
+    opts: TessOptions,
+) -> Vec<(usize, u64, Result<SurfaceMesh, TessError>)> {
+    let edge_cache = build_edge_cache(brep, file, &opts);
+    brep.faces
+        .iter()
+        .enumerate()
+        .map(|(i, face)| {
+            (
+                i,
+                face.surface_id,
+                tessellate_face(face, &edge_cache, file, &opts),
+            )
+        })
+        .collect()
+}
+
+/// Which code path the B-spline tessellator used for a given face.
+#[doc(hidden)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BsplinePath {
+    /// UV-space CDT: all boundary points were successfully inverted to (u,v).
+    UvSpace,
+    /// 3D tangent-plane fallback: at least one inversion failed.
+    TangentPlane,
+    /// Not a B-spline face (skipped).
+    NotBspline,
+    /// B-spline tessellator returned None (degenerate).
+    Degenerate,
+}
+
+/// For each face, report which path `try_tessellate_bspline` took.
+#[doc(hidden)]
+pub fn bspline_path_per_face(brep: &BRep, file: &StepFile, opts: &TessOptions) -> Vec<BsplinePath> {
+    let edge_cache = build_edge_cache(brep, file, opts);
+    brep.faces
+        .iter()
+        .map(|face| {
+            let e = match file.get(&face.surface_id) {
+                Some(e) => e,
+                None => return BsplinePath::NotBspline,
+            };
+            let is_bspline = e.type_name == "B_SPLINE_SURFACE_WITH_KNOTS"
+                || (e.type_name.is_empty()
+                    && e.args.iter().any(|a| {
+                        matches!(a, crate::step::parser::Arg::TypedValue { name, .. } if name == "B_SPLINE_SURFACE_WITH_KNOTS")
+                    }));
+            if !is_bspline {
+                return BsplinePath::NotBspline;
+            }
+
+            let surface = match crate::geom::surface::surface_from_step(face.surface_id, file) {
+                Ok(s) => s,
+                Err(_) => return BsplinePath::Degenerate,
+            };
+            let (u0, u1) = surface.u_bounds();
+            let (v0, v1) = surface.v_bounds();
+            if !u0.is_finite() || !u1.is_finite() || !v0.is_finite() || !v1.is_finite() {
+                return BsplinePath::Degenerate;
+            }
+
+            let boundary_3d = sample_boundary_cached(&face.outer_loop, &edge_cache);
+            if boundary_3d.len() < 3 {
+                return BsplinePath::Degenerate;
+            }
+
+            let bnd_uv: Vec<(f64, f64)> = boundary_3d
+                .iter()
+                .filter_map(|&p| invert_surface_uv(&*surface, p, u0, u1, v0, v1))
+                .collect();
+
+            if bnd_uv.len() == boundary_3d.len() {
+                BsplinePath::UvSpace
+            } else {
+                BsplinePath::TangentPlane
+            }
+        })
+        .collect()
 }
 
 // ── Face tessellation ──────────────────────────────────────────────────────────
@@ -1805,14 +1908,63 @@ fn try_tessellate_bspline(
         .collect();
 
     if bnd_uv.len() == boundary_3d.len() {
-        let bnd2d_uv_raw: Vec<Point2> = bnd_uv.iter().map(|&(u, v)| Point2::new(u, v)).collect();
+        // ── Arc-length-scaled UV coordinates for isotropic CDT ─────────────────
+        // Raw UV space is highly anisotropic on surfaces with a thin UV domain
+        // in one direction (e.g. v=[0.0002, 0.08] while u=[0,1]).  When the
+        // Delaunay criterion runs in raw UV, it picks long-spanning triangles
+        // that would be rejected in arc-length space because an intermediate
+        // Steiner point lies inside their circumcircle in mm-space.
+        //
+        // Fix: scale UV → arc-length mm before the CDT.
+        //   u_s = (u − u0) · arc_u / (u1 − u0)  ∈ [0, arc_u]
+        //   v_s = (v − v0) · arc_v / (v1 − v0)  ∈ [0, arc_v]
+        // The Steiner grid steps are then ≈ max_edge_len in both directions,
+        // and the Delaunay criterion produces near-equilateral triangles in 3D.
+        let scale_u = arc_u / (u1 - u0);
+        let scale_v = arc_v / (v1 - v0);
+        let to_scaled = |u: f64, v: f64| ((u - u0) * scale_u, (v - v0) * scale_v);
+
+        // Proximity epsilon in arc-length mm.  Set to 5 % of max_edge_len:
+        // - used to deduplicate near-identical boundary vertices (removes pairs
+        //   < 0.05 mm apart at the default 1 mm resolution)
+        // - used to reject Steiner grid points too close to any boundary vertex
+        //   or boundary edge segment, preventing near-degenerate CDT triangles
+        let eps_3d = opts.max_edge_len * 0.05;
+
+        // Near-duplicate boundary point removal in scaled UV space.
+        let (bnd_uv_s, boundary_3d): (Vec<(f64, f64)>, Vec<[f64; 3]>) = {
+            let bnd_scaled: Vec<(f64, f64)> =
+                bnd_uv.iter().map(|&(u, v)| to_scaled(u, v)).collect();
+            let mut seen: Vec<(f64, f64)> = Vec::with_capacity(bnd_scaled.len());
+            bnd_scaled
+                .into_iter()
+                .zip(boundary_3d.iter().copied())
+                .filter(|&(uv, _)| {
+                    let is_dup = seen.iter().any(|&(su, sv)| {
+                        let du = (uv.0 - su) / eps_3d;
+                        let dv = (uv.1 - sv) / eps_3d;
+                        du * du + dv * dv < 1.0
+                    });
+                    if !is_dup {
+                        seen.push(uv);
+                    }
+                    !is_dup
+                })
+                .unzip()
+        };
+
+        if bnd_uv_s.len() < 3 {
+            return None;
+        }
+
+        let bnd2d_uv_raw: Vec<Point2> = bnd_uv_s.iter().map(|&(u, v)| Point2::new(u, v)).collect();
         let bnd_map_uv = build_bnd2d_map(&bnd2d_uv_raw, &boundary_3d);
         let bnd2d = ensure_ccw(deduplicate_2d(bnd2d_uv_raw));
         if bnd2d.len() < 3 || polygon_area_2d(&bnd2d).abs() < 1e-20 {
             return None;
         }
 
-        // Holes in UV space.
+        // Holes in scaled UV space.
         let holes_data: Vec<(Vec<[f64; 3]>, Vec<Point2>)> = face
             .inner_loops
             .iter()
@@ -1828,7 +1980,13 @@ fn try_tessellate_bspline(
                 if inner_uv.len() != inner_3d.len() {
                     return None;
                 }
-                let inner_2d = inner_uv.iter().map(|&(u, v)| Point2::new(u, v)).collect();
+                let inner_2d = inner_uv
+                    .iter()
+                    .map(|&(u, v)| {
+                        let (us, vs) = to_scaled(u, v);
+                        Point2::new(us, vs)
+                    })
+                    .collect();
                 Some((inner_3d, inner_2d))
             })
             .collect();
@@ -1839,7 +1997,31 @@ fn try_tessellate_bspline(
         let holes2d: Vec<Vec<Point2>> = holes_data.iter().map(|(_, h2d)| h2d.clone()).collect();
         let hole_slices: Vec<&[Point2]> = holes2d.iter().map(|h| h.as_slice()).collect();
 
-        // Interior UV grid points — tested in UV space (correct for any curvature).
+        // Interior UV grid points, converted to scaled UV for the CDT.
+        // Reject Steiner candidates that are too close to a boundary vertex OR
+        // to a boundary edge segment: such near-boundary points create
+        // near-degenerate CDT triangles with very high aspect ratio.
+        let all_bnd_pts: Vec<Point2> = bnd2d
+            .iter()
+            .chain(holes2d.iter().flat_map(|h| h.iter()))
+            .copied()
+            .collect();
+
+        // Pre-collect all boundary edge segments (closed ring pairs) for the
+        // segment-proximity filter.
+        let bnd_segs: Vec<(Point2, Point2)> = {
+            let n = bnd2d.len();
+            (0..n).map(|i| (bnd2d[i], bnd2d[(i + 1) % n])).collect()
+        };
+        let hole_segs: Vec<(Point2, Point2)> = holes2d
+            .iter()
+            .flat_map(|h| {
+                let n = h.len();
+                (0..n).map(move |i| (h[i], h[(i + 1) % n]))
+            })
+            .collect();
+        let eps_sq = eps_3d * eps_3d;
+
         let mut interior_3d: Vec<[f64; 3]> = Vec::new();
         let mut interior_2d: Vec<Point2> = Vec::new();
         if use_steiner {
@@ -1847,8 +2029,18 @@ fn try_tessellate_bspline(
                 let v = v0 + (v1 - v0) * j as f64 / (n_v - 1) as f64;
                 for i in 0..n_u {
                     let u = u0 + (u1 - u0) * i as f64 / (n_u - 1) as f64;
-                    let p2d = Point2::new(u, v);
-                    if point_in_polygon(p2d, &bnd2d)
+                    let (us, vs) = to_scaled(u, v);
+                    let p2d = Point2::new(us, vs);
+                    let too_close = all_bnd_pts.iter().any(|&q| {
+                        let du = (p2d.x - q.x) / eps_3d;
+                        let dv = (p2d.y - q.y) / eps_3d;
+                        du * du + dv * dv < 1.0
+                    }) || bnd_segs
+                        .iter()
+                        .chain(hole_segs.iter())
+                        .any(|&(a, b)| point_to_segment_dist_sq(p2d, a, b) < eps_sq);
+                    if !too_close
+                        && point_in_polygon(p2d, &bnd2d)
                         && !holes2d.iter().any(|h| point_in_polygon(p2d, h))
                     {
                         interior_3d.push(surface.point(u, v));
@@ -1874,16 +2066,15 @@ fn try_tessellate_bspline(
             .enumerate()
             .map(|(i, p2d)| {
                 let key = (p2d.x.to_bits(), p2d.y.to_bits());
+                // Fallback: unscale back to raw UV for the surface evaluator.
+                let raw_uv = || surface.point(p2d.x / scale_u + u0, p2d.y / scale_v + v0);
                 if i < n_outer {
-                    bnd_map_uv
-                        .get(&key)
-                        .copied()
-                        .unwrap_or_else(|| surface.point(p2d.x, p2d.y))
+                    bnd_map_uv.get(&key).copied().unwrap_or_else(raw_uv)
                 } else if i < n_bnd_total {
                     hole_maps
                         .iter()
                         .find_map(|m| m.get(&key).copied())
-                        .unwrap_or_else(|| surface.point(p2d.x, p2d.y))
+                        .unwrap_or_else(raw_uv)
                 } else {
                     interior_3d[i - n_bnd_total]
                 }
