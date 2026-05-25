@@ -24,7 +24,7 @@ use serde::Serialize;
 use kofem_mesh::cdt::{try_triangulate_constrained, try_triangulate_with_interior, CdtError};
 use kofem_mesh::geom::{orient2d, point_in_polygon, Point2};
 
-use crate::geom::curve::curve_from_step;
+use crate::geom::curve::{curve_from_step, Curve};
 use crate::geom::surface::surface_from_step;
 use crate::geom::{
     add, axis2_placement, cross, get_entity, get_real, get_ref, normalize, point3, scale, sub,
@@ -2402,12 +2402,22 @@ fn sample_curve(
     let (t0, t1) = curve_t_range(file, curve_id, start, end, reversed);
 
     if let Ok(curve) = curve_from_step(curve_id, file) {
-        return (0..n)
+        let mut pts: Vec<[f64; 3]> = (0..n)
             .map(|i| {
                 let t = t0 + (t1 - t0) * (i as f64) / ((n - 1) as f64);
                 curve.point(t)
             })
             .collect();
+        // Snap endpoints to exact STEP vertex positions so that all edges
+        // incident on the same STEP vertex share bit-identical coordinates,
+        // closing any micro-gap that would otherwise require stitch() epsilon.
+        if let Some(first) = pts.first_mut() {
+            *first = start;
+        }
+        if let Some(last) = pts.last_mut() {
+            *last = end;
+        }
+        return pts;
     }
 
     // Fallback: chord interpolation.
@@ -2486,6 +2496,43 @@ fn curve_t_range(
             (0.0, 2.0 * PI)
         }
 
+        "ELLIPSE" => {
+            // ELLIPSE(label, axis2_placement_ref, semi_axis_1, semi_axis_2)
+            // Map 3-D position to angle via the ellipse's local frame.
+            if let Ok(ax_id) = get_ref(entity, 1) {
+                if let (Ok(axis), Ok(a), Ok(b)) = (
+                    axis2_placement(file, ax_id),
+                    get_real(entity, 2),
+                    get_real(entity, 3),
+                ) {
+                    let y = axis.y();
+                    let angle_of = |p: [f64; 3]| -> f64 {
+                        let d = sub(p, axis.origin);
+                        f64::atan2(dot3(d, y) / b, dot3(d, axis.x) / a)
+                    };
+
+                    let t_start = angle_of(start);
+                    let t_end_raw = angle_of(end);
+
+                    if dist3(start, end) < 1e-8 {
+                        let span = if reversed { -2.0 * PI } else { 2.0 * PI };
+                        return (t_start, t_start + span);
+                    }
+
+                    let t_end = if reversed {
+                        let delta = ((t_start - t_end_raw).rem_euclid(2.0 * PI)).max(1e-10);
+                        t_start - delta
+                    } else {
+                        let delta = ((t_end_raw - t_start).rem_euclid(2.0 * PI)).max(1e-10);
+                        t_start + delta
+                    };
+
+                    return (t_start, t_end);
+                }
+            }
+            (0.0, 2.0 * PI)
+        }
+
         "SURFACE_CURVE" | "SEAM_CURVE" => {
             // Delegate to the embedded 3D curve.
             if let Ok(inner_id) = get_ref(entity, 1) {
@@ -2495,16 +2542,81 @@ fn curve_t_range(
         }
 
         _ => {
-            // B-spline and others: use the curve's own t_bounds.
+            // B-spline and others: t_bounds() covers the full knot domain, which
+            // is wider than the actual trimmed edge.  Project start/end onto the
+            // curve to find the actual parameter interval.
             if let Ok(curve) = curve_from_step(curve_id, file) {
-                let (t0, t1) = curve.t_bounds();
-                if t0.is_finite() && t1.is_finite() {
-                    return if reversed { (t1, t0) } else { (t0, t1) };
+                let (tb0, tb1) = curve.t_bounds();
+                if tb0.is_finite() && tb1.is_finite() {
+                    // Closed edge on a periodic curve: keep the full parameter range.
+                    if dist3(start, end) < 1e-8 {
+                        return if reversed { (tb1, tb0) } else { (tb0, tb1) };
+                    }
+                    let ts = project_point_onto_curve(curve.as_ref(), start, tb0, tb1);
+                    let te = project_point_onto_curve(curve.as_ref(), end, tb0, tb1);
+                    return (ts, te);
                 }
             }
             (0.0, 1.0)
         }
     }
+}
+
+/// Project point `p` onto `curve` in `[t_min, t_max]` by minimising `‖C(t) − p‖²`.
+///
+/// Uses a coarse scan to bracket the minimum, then golden-section search to refine.
+fn project_point_onto_curve(curve: &dyn Curve, p: [f64; 3], t_min: f64, t_max: f64) -> f64 {
+    const COARSE_N: usize = 32;
+    const REFINE_ITERS: usize = 30;
+
+    let dist_sq = |t: f64| -> f64 {
+        let q = curve.point(t);
+        let d = sub(q, p);
+        d[0] * d[0] + d[1] * d[1] + d[2] * d[2]
+    };
+
+    // Coarse scan: locate the segment containing the nearest point.
+    let mut best_t = t_min;
+    let mut best_d = dist_sq(t_min);
+    for i in 1..=COARSE_N {
+        let t = t_min + (t_max - t_min) * (i as f64) / (COARSE_N as f64);
+        let d = dist_sq(t);
+        if d < best_d {
+            best_d = d;
+            best_t = t;
+        }
+    }
+
+    let step = (t_max - t_min) / (COARSE_N as f64);
+    let lo = (best_t - step).max(t_min);
+    let hi = (best_t + step).min(t_max);
+
+    // Golden-section search in [lo, hi].
+    let phi = (5.0_f64.sqrt() - 1.0) / 2.0;
+    let mut a = lo;
+    let mut b = hi;
+    let mut c = b - phi * (b - a);
+    let mut d_pt = a + phi * (b - a);
+    let mut fc = dist_sq(c);
+    let mut fd = dist_sq(d_pt);
+
+    for _ in 0..REFINE_ITERS {
+        if fc < fd {
+            b = d_pt;
+            d_pt = c;
+            fd = fc;
+            c = b - phi * (b - a);
+            fc = dist_sq(c);
+        } else {
+            a = c;
+            c = d_pt;
+            fc = fd;
+            d_pt = a + phi * (b - a);
+            fd = dist_sq(d_pt);
+        }
+    }
+
+    (a + b) / 2.0
 }
 
 /// Follow SURFACE_CURVE / SEAM_CURVE wrappers to the embedded 3D curve entity id.
