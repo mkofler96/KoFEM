@@ -252,14 +252,9 @@ echo ""
 echo "==> Done — output: web/src/wasm/pkg/"
 INNER_SCRIPT
 
-# Substitute version variables into the inner script (safe: only alphanumeric + dots/v)
-sed -i \
-    -e "s|\${OCCT_VERSION}|${OCCT_VERSION}|g" \
-    -e "s|\${NETGEN_TAG}|${NETGEN_TAG}|g" \
-    -e "s|\${MFEM_TAG}|${MFEM_TAG}|g" \
-    "$INNER"
-
 # ── Run the build container ───────────────────────────────────────────────────
+# Version variables are passed via -e so the inner script reads them from env.
+# (No sed needed — avoids the macOS vs GNU sed -i incompatibility.)
 
 echo "==> Launching build container..."
 echo "    C++ libs cache : ${CACHE_DIR}"
@@ -268,6 +263,9 @@ echo ""
 
 docker run --rm \
     --platform "${PLATFORM}" \
+    -e "OCCT_VERSION=${OCCT_VERSION}" \
+    -e "NETGEN_TAG=${NETGEN_TAG}" \
+    -e "MFEM_TAG=${MFEM_TAG}" \
     -e "FORCE_REBUILD=${FORCE_REBUILD}" \
     -v "${REPO_ROOT}:/repo" \
     -v "${CACHE_DIR}:/cache" \
