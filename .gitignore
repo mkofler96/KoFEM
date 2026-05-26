@@ -6,8 +6,9 @@ web/node_modules/
 web/dist/
 web/.vite/
 
-# WASM build output (generated, not committed)
-web/src/wasm/pkg/
+# WASM build output (generated, not committed) — stub *.js and *.d.ts are committed
+web/src/wasm/pkg/*.wasm
+web/src/wasm/pkg/package.json
 
 # Python
 python/.venv/
