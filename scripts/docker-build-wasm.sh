@@ -89,9 +89,10 @@ fi
 # ── Write the inner build script to a temp file ───────────────────────────────
 # Using a temp file avoids heredoc quoting issues with $() and double-quotes.
 
-INNER=$(mktemp /tmp/kofem-wasm-inner-XXXXXX.sh)
+# Write the inner script inside the repo root, which Docker already mounts.
+# A /tmp path on macOS can't be reliably bind-mounted as a file by Docker Desktop.
+INNER="${REPO_ROOT}/.docker-wasm-inner.sh"
 trap 'rm -f "$INNER"' EXIT
-chmod +x "$INNER"
 
 cat > "$INNER" << 'INNER_SCRIPT'
 #!/usr/bin/env bash
@@ -269,11 +270,10 @@ docker run --rm \
     -e "FORCE_REBUILD=${FORCE_REBUILD}" \
     -v "${REPO_ROOT}:/repo" \
     -v "${CACHE_DIR}:/cache" \
-    -v "${INNER}:/inner.sh:ro" \
     -v "${CARGO_TARGET_VOL}:/repo/target" \
     -v "${CARGO_REGISTRY_VOL}:/usr/local/cargo/registry" \
     "${IMAGE_TAG}" \
-    bash /inner.sh
+    bash /repo/.docker-wasm-inner.sh
 
 echo ""
 echo "Build complete."

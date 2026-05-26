@@ -38,3 +38,6 @@ web/screenshots/report/
 # Env
 .env
 .env.local
+
+# Temp file written by scripts/docker-build-wasm.sh
+.docker-wasm-inner.sh
