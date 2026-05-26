@@ -1,28 +1,13 @@
-//! `kofem-mesh` — 2-D Delaunay meshing + 3-D tetrahedral extrusion.
+//! `kofem-mesh` — volumetric mesh types and Netgen-based quality meshing.
 //!
 //! # Workflow
 //!
-//! 1. Describe a closed boundary polygon as `Vec<Point2>` (CCW order).
-//! 2. [`triangulate`] produces a coarse Delaunay [`Mesh2D`].
-//! 3. [`refine`] improves minimum angles via Ruppert's algorithm.
-//! 4. [`extrude`] sweeps the 2-D mesh into a 3-D [`Mesh3D`] of tetrahedra.
-//! 5. [`volume::volume_mesh`] fills a closed [`volume::SurfaceMesh`] with quality tetrahedra.
+//! 1. Obtain a [`SurfaceMesh`] from `kofem-geom` (OCCT tessellation of a STEP file).
+//! 2. Call [`mesh_volume`] to fill the closed surface with quality tetrahedra via Netgen.
+//! 3. Pass the resulting [`VolumeMesh`] to `kofem-core` for FEM solving.
 
-pub mod cdt;
-pub mod extrude;
-pub mod geom;
-pub mod quality;
-pub mod triangulate;
-pub mod volume;
+pub mod netgen;
+pub mod types;
 
-// ── Convenient re-exports ─────────────────────────────────────────────────────
-
-pub use extrude::{extrude, Mesh3D, Tet};
-pub use geom::{Point2, Point3};
-pub use quality::refine;
-pub use triangulate::{triangulate, Mesh2D, Triangle};
-pub use volume::{
-    bowyer_watson_3d, classify_interior_tets, icosphere, recover_constraint_faces,
-    tet_circumsphere, tet_signed_volume, tet_signed_volume_mesh, volume_mesh, MeshError,
-    SurfaceMesh, TetMesh, VolumeMeshOptions,
-};
+pub use netgen::mesh_volume;
+pub use types::{MeshOptions, SurfaceMesh, VolumeMesh};

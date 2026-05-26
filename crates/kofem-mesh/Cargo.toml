@@ -4,7 +4,12 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
-description = "2-D Delaunay / Ruppert mesher + 3-D tet extrusion for KoFEM"
+description = "Volumetric mesh types and Netgen-based quality meshing for KoFEM"
 
 [dependencies]
 serde = { workspace = true }
+thiserror = { workspace = true }
+log = { workspace = true }
+
+[build-dependencies]
+cc = "1"
