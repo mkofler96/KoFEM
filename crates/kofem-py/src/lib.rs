@@ -1,3 +1,5 @@
+#![allow(clippy::useless_conversion)] // pyo3's PyResult alias triggers false positives
+
 use kofem_core::{
     solver::mfem::{MfemParams, MfemSolver},
     solver::FemSolver,

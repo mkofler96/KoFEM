@@ -11,12 +11,13 @@ fn main() {
     } else if let Ok(root) = std::env::var("MFEM_DIR") {
         Some(PathBuf::from(root).join("include"))
     } else {
-        let candidate = PathBuf::from("/usr/local/include/mfem");
-        if candidate.exists() {
-            Some(PathBuf::from("/usr/local/include"))
-        } else {
-            None
-        }
+        // mfem.hpp lives directly under the include dir (not in a subdirectory)
+        [
+            PathBuf::from("/usr/include"),
+            PathBuf::from("/usr/local/include"),
+        ]
+        .into_iter()
+        .find(|p| p.join("mfem.hpp").exists())
     };
 
     if let Some(inc) = &include_dir {
@@ -27,6 +28,17 @@ fn main() {
             .include("include")
             .include(inc)
             .flag_if_supported("-std=c++14"); // MFEM requires C++14
+
+        // MFEM on Ubuntu is built with MPI + HYPRE; add their include dirs.
+        for extra_inc in &[
+            "/usr/lib/x86_64-linux-gnu/openmpi/include", // mpi.h
+            "/usr/include/hypre",                        // HYPRE_config.h
+            "/usr/include/mpi",
+        ] {
+            if std::path::Path::new(extra_inc).exists() {
+                build.include(extra_inc);
+            }
+        }
 
         if is_wasm {
             let root = std::env::var("MFEM_WASM_ROOT").unwrap();
@@ -43,6 +55,13 @@ fn main() {
     }
 
     println!("cargo:rustc-link-lib=mfem");
+
+    // On Ubuntu, libmfem-dev is built with MPI + HYPRE; link their runtimes.
+    // The openmpi libs live in a non-default search path on Ubuntu 24.04.
+    println!("cargo:rustc-link-search=/usr/lib/x86_64-linux-gnu/openmpi/lib");
+    println!("cargo:rustc-link-lib=mpi");
+    println!("cargo:rustc-link-lib=mpi_cxx");
+    println!("cargo:rustc-link-lib=HYPRE");
     println!("cargo:rerun-if-changed=cpp/mfem_bridge.cpp");
     println!("cargo:rerun-if-changed=include/mfem_bridge.h");
     println!("cargo:rerun-if-env-changed=MFEM_DIR");

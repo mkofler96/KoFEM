@@ -13,7 +13,6 @@ struct MfemMeshState {
 };
 
 struct MfemSolutionState {
-    // Displacement GridFunction lives on the FE space; we cache flattened arrays.
     std::vector<double> displacements; // 3 * n_vertices
     std::vector<double> von_mises;     // n_elements
     int n_vertices;
@@ -30,13 +29,17 @@ MfemMeshHandle mfem_create_mesh(
     *err = nullptr;
     constexpr int dim = 3;
 
+    // Mesh(Dim, NVert, NElem, NBdrElem, spaceDim)
     auto* state = new MfemMeshState();
-    // Build mesh manually: 3-D, n_vertices vertices, n_tets elements, no boundary elements
-    state->mesh = std::make_unique<Mesh>(dim, (int)n_vertices, (int)n_tets);
+    state->mesh = std::make_unique<Mesh>(
+        dim,
+        static_cast<int>(n_vertices),
+        static_cast<int>(n_tets),
+        /*NBdrElem=*/0,
+        /*spaceDim=*/dim);
 
     for (size_t i = 0; i < n_vertices; ++i) {
-        double coords[3] = {vertices[3*i], vertices[3*i+1], vertices[3*i+2]};
-        state->mesh->AddVertex(coords);
+        state->mesh->AddVertex(vertices + 3*i);
     }
 
     for (size_t i = 0; i < n_tets; ++i) {
@@ -62,49 +65,40 @@ MfemSolutionHandle mfem_solve_linear_elastic(
     auto* ms = static_cast<MfemMeshState*>(raw_mesh);
     Mesh& mesh = *ms->mesh;
 
-    const int dim = mesh.Dimension();
+    const int dim   = mesh.Dimension();
     const int order = std::max(1, params->order);
 
-    // Lamé parameters from Young's modulus and Poisson ratio
+    // Lamé parameters
     const double E  = params->young_modulus;
     const double nu = params->poisson_ratio;
     const double lam = E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu));
     const double mu  = E / (2.0 * (1.0 + nu));
 
     H1_FECollection fec(order, dim);
-    FiniteElementSpace fespace(&mesh, &fec, dim); // vector-valued
+    FiniteElementSpace fespace(&mesh, &fec, dim);
 
-    // Mark essential (fixed) DOFs
+    // Collect essential (Dirichlet) DOFs directly from fixed vertex indices.
+    // In a serial H1 space, local DOF == true DOF.
     Array<int> ess_tdof_list;
-    {
-        // Tag fixed vertices with a boundary attribute and collect their DOFs.
-        // MFEM's MarkBoundaryAttributeFixed works on boundary elements; for
-        // interior-vertex fixing we target DOFs directly.
-        Array<int> ess_bdr(mesh.bdr_attribute_max());
-        ess_bdr = 0;
-        if (n_fixed > 0) {
-            ess_bdr = 1; // fix all boundary attributes (simplified)
-        }
-        fespace.GetEssentialTrueDofs(ess_bdr, ess_tdof_list);
+    for (size_t i = 0; i < n_fixed; ++i) {
+        Array<int> vdofs;
+        fespace.GetVertexVDofs(fixed[i].vertex_index, vdofs);
+        for (int j = 0; j < vdofs.Size(); ++j)
+            ess_tdof_list.Append(vdofs[j]);
     }
+    ess_tdof_list.Sort();
+    ess_tdof_list.Unique();
 
-    // Bilinear form: elasticity
-    BilinearForm a(&fespace);
-    ConstantCoefficient lambda_coef(lam), mu_coef(mu);
-    a.AddDomainIntegrator(new ElasticityIntegrator(lambda_coef, mu_coef));
-    a.Assemble();
+    // Zero-initialised solution vector (satisfies u=0 at fixed vertices)
+    GridFunction x(&fespace);
+    x = 0.0;
 
-    // Linear form: point loads
+    // Linear form: start from zero, then add point loads at specific DOFs
     LinearForm b(&fespace);
-    // Body forces (zero by default)
-    VectorConstantCoefficient zero_force(Vector(dim));
-    b.AddDomainIntegrator(new VectorDomainLFIntegrator(zero_force));
-    b.Assemble();
+    b.Assemble(); // initialises to zero
 
-    // Apply concentrated forces by directly setting the RHS at DOFs
     for (size_t i = 0; i < n_loads; ++i) {
         const auto& load = loads[i];
-        // Map vertex index → DOF indices
         Array<int> vdofs;
         fespace.GetVertexVDofs(load.vertex_index, vdofs);
         if (vdofs.Size() >= 3) {
@@ -114,23 +108,26 @@ MfemSolutionHandle mfem_solve_linear_elastic(
         }
     }
 
-    // Solution vector
-    GridFunction x(&fespace);
-    x = 0.0;
+    // Bilinear form: linear elasticity
+    BilinearForm a(&fespace);
+    ConstantCoefficient lambda_coef(lam), mu_coef(mu);
+    a.AddDomainIntegrator(new ElasticityIntegrator(lambda_coef, mu_coef));
+    a.Assemble();
 
-    // Eliminate essential DOFs
+    // Apply essential BCs and form the reduced system
     OperatorPtr A;
     Vector B, X;
     a.FormLinearSystem(ess_tdof_list, x, b, A, X, B);
 
-    // Conjugate gradient with GS smoother preconditioner
-    GSSmoother prec;
+    // Solve with preconditioned CG
+    SparseMatrix& A_mat = *A.As<SparseMatrix>();
+    GSSmoother prec(A_mat);
     CGSolver cg;
     cg.SetRelTol(1e-8);
-    cg.SetMaxIter(2000);
+    cg.SetMaxIter(3000);
     cg.SetPrintLevel(0);
     cg.SetPreconditioner(prec);
-    cg.SetOperator(*A);
+    cg.SetOperator(A_mat);
     cg.Mult(B, X);
 
     a.RecoverFEMSolution(X, b, x);
@@ -140,55 +137,49 @@ MfemSolutionHandle mfem_solve_linear_elastic(
     sol->n_vertices = mesh.GetNV();
     sol->n_elements = mesh.GetNE();
 
-    // Displacements: evaluate GridFunction at mesh vertices
-    sol->displacements.resize(3 * (size_t)sol->n_vertices, 0.0);
+    // Displacements at mesh vertices
+    sol->displacements.resize(3 * static_cast<size_t>(sol->n_vertices), 0.0);
     for (int vi = 0; vi < sol->n_vertices; ++vi) {
         Array<int> vdofs;
         fespace.GetVertexVDofs(vi, vdofs);
-        for (int c = 0; c < dim && c < vdofs.Size(); ++c) {
+        for (int c = 0; c < dim && c < vdofs.Size(); ++c)
             sol->displacements[3*vi + c] = x[vdofs[c]];
-        }
     }
 
-    // Von-Mises stress: computed per element via L2 projection
-    sol->von_mises.resize((size_t)sol->n_elements, 0.0);
-    {
-        L2_FECollection l2fec(order - 1, dim);
-        FiniteElementSpace l2fespace(&mesh, &l2fec);
-        GridFunction sigma_vm(&l2fespace);
+    // Von-Mises stress: evaluated at element barycentre via displacement gradient
+    sol->von_mises.resize(static_cast<size_t>(sol->n_elements), 0.0);
+    for (int e = 0; e < sol->n_elements; ++e) {
+        ElementTransformation* T = mesh.GetElementTransformation(e);
 
-        // ElasticEnergyDensityCoefficient is not standard; compute stress manually
-        // by evaluating the strain energy density at element centres.
-        for (int e = 0; e < sol->n_elements; ++e) {
-            ElementTransformation* T = mesh.GetElementTransformation(e);
-            T->SetIntPoint(&Geometries.GetCenter(mesh.GetElementBaseGeometry(e)));
+        // Integration point at the reference-element barycentre (order-1 rule)
+        const IntegrationRule& ir = IntRules.Get(mesh.GetElementGeometry(e), 1);
+        T->SetIntPoint(&ir.IntPoint(0));
 
-            DenseMatrix grad_u;
-            x.GetVectorGradient(*T, grad_u); // 3×3 displacement gradient
+        DenseMatrix grad_u;
+        x.GetVectorGradient(*T, grad_u); // 3×3 displacement gradient
 
-            // Strain tensor ε = 0.5*(∇u + ∇uᵀ)
-            double eps[3][3];
-            for (int i = 0; i < 3; ++i)
-                for (int j = 0; j < 3; ++j)
-                    eps[i][j] = 0.5 * (grad_u(i,j) + grad_u(j,i));
+        // Symmetric strain ε = 0.5(∇u + ∇uᵀ)
+        double eps[3][3];
+        for (int i = 0; i < 3; ++i)
+            for (int j = 0; j < 3; ++j)
+                eps[i][j] = 0.5 * (grad_u(i,j) + grad_u(j,i));
 
-            // Cauchy stress σ = λ tr(ε) I + 2μ ε
-            double tr_eps = eps[0][0] + eps[1][1] + eps[2][2];
-            double s[3][3];
-            for (int i = 0; i < 3; ++i)
-                for (int j = 0; j < 3; ++j)
-                    s[i][j] = (i == j ? lam * tr_eps : 0.0) + 2.0 * mu * eps[i][j];
+        // Cauchy stress σ = λ tr(ε) I + 2μ ε
+        double tr_eps = eps[0][0] + eps[1][1] + eps[2][2];
+        double s[3][3];
+        for (int i = 0; i < 3; ++i)
+            for (int j = 0; j < 3; ++j)
+                s[i][j] = (i == j ? lam * tr_eps : 0.0) + 2.0 * mu * eps[i][j];
 
-            // Von-Mises: √(3/2 * s_ij * s_ij) where s_ij = σ_ij − (tr σ / 3) δ_ij
-            double tr_s = s[0][0] + s[1][1] + s[2][2];
-            double vm2 = 0.0;
-            for (int i = 0; i < 3; ++i)
-                for (int j = 0; j < 3; ++j) {
-                    double dev = s[i][j] - (i == j ? tr_s / 3.0 : 0.0);
-                    vm2 += dev * dev;
-                }
-            sol->von_mises[e] = std::sqrt(1.5 * vm2);
-        }
+        // Von-Mises = √(3/2 · sᵢⱼ sᵢⱼ) where s is the deviatoric stress
+        double tr_s = s[0][0] + s[1][1] + s[2][2];
+        double vm2  = 0.0;
+        for (int i = 0; i < 3; ++i)
+            for (int j = 0; j < 3; ++j) {
+                double dev = s[i][j] - (i == j ? tr_s / 3.0 : 0.0);
+                vm2 += dev * dev;
+            }
+        sol->von_mises[e] = std::sqrt(1.5 * vm2);
     }
 
     return static_cast<MfemSolutionHandle>(sol);

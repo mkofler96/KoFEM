@@ -8,7 +8,7 @@
 
 mod occt;
 
-pub use occt::{tessellate, GeomError, TessOptions};
+pub use occt::{GeomError, TessOptions};
 
 use kofem_mesh::SurfaceMesh;
 
@@ -30,5 +30,5 @@ pub fn load_step(data: &[u8]) -> Result<BRepModel, GeomError> {
 ///
 /// The mesh can then be passed to [`kofem_mesh::mesh_volume`].
 pub fn tessellate_model(model: &BRepModel, opts: &TessOptions) -> Result<SurfaceMesh, GeomError> {
-    tessellate(model.0.as_ptr(), opts)
+    occt::tessellate(model.0.as_ptr(), opts)
 }

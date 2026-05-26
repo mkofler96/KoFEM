@@ -12,13 +12,13 @@ fn main() {
     } else if let Ok(root) = std::env::var("NETGEN_ROOT") {
         Some(PathBuf::from(root).join("include"))
     } else {
-        // Try standard system paths
-        let candidate = PathBuf::from("/usr/local/include/netgen");
-        if candidate.exists() {
-            Some(candidate)
-        } else {
-            None
-        }
+        // Try standard system paths in priority order
+        [
+            PathBuf::from("/usr/include/netgen"),
+            PathBuf::from("/usr/local/include/netgen"),
+        ]
+        .into_iter()
+        .find(|p| p.exists())
     };
 
     // Only compile the C++ bridge when headers are available.

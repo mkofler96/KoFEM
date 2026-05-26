@@ -1,20 +1,21 @@
 #include "occt_bridge.h"
 
-// OCCT headers
 #include <BRep_Tool.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
-#include <BRepTools.hxx>
 #include <IFSelect_ReturnStatus.hxx>
 #include <Poly_Triangulation.hxx>
 #include <STEPControl_Reader.hxx>
-#include <TopAbs_ShapeEnum.hxx>
+#include <TopAbs_Orientation.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopLoc_Location.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
 
+#include <algorithm>
+#include <cstdio>
 #include <cstring>
+#include <unistd.h>
 #include <vector>
 
 extern "C" {
@@ -23,23 +24,32 @@ OcctShape occt_load_step(const uint8_t* data, size_t len, const char** err)
 {
     *err = nullptr;
 
-    // Write to a temp file so STEPControl_Reader can open it.
-    // OCCT 7.6+ exposes ReadStream; we use the tmpfile approach for compatibility.
+    // OCCT 7.6 ReadFile requires a filesystem path; write bytes to a temp file.
+    char tmppath[] = "/tmp/kofem_XXXXXX.stp";
+    int fd = mkstemps(tmppath, 4);
+    if (fd < 0) {
+        *err = "failed to create temporary STEP file";
+        return nullptr;
+    }
+    if (write(fd, data, len) != static_cast<ssize_t>(len)) {
+        close(fd);
+        unlink(tmppath);
+        *err = "failed to write STEP data to temp file";
+        return nullptr;
+    }
+    close(fd);
+
     STEPControl_Reader reader;
+    IFSelect_ReturnStatus status = reader.ReadFile(tmppath);
+    unlink(tmppath);
 
-    // ReadBuf is available in OCCT ≥ 7.7; for older versions write to tmpfile.
-    // We use ReadBuf when available via the Standard_ReadBuffer override.
-    std::string buf(reinterpret_cast<const char*>(data), len);
-    Standard_IStream sstream(buf.c_str(), buf.size());
-
-    IFSelect_ReturnStatus status = reader.ReadStream("mem", sstream);
     if (status != IFSelect_RetDone) {
-        *err = "STEPControl_Reader::ReadStream failed";
+        *err = "STEPControl_Reader::ReadFile failed — check file is valid STEP";
         return nullptr;
     }
 
-    reader.TransferRoots();
-    if (reader.NbShapes() == 0) {
+    Standard_Integer n = reader.TransferRoots();
+    if (n == 0 || reader.NbShapes() == 0) {
         *err = "STEP file contains no transferable shapes";
         return nullptr;
     }
@@ -78,9 +88,6 @@ int occt_tessellate(
         return -1;
     }
 
-    // Collect all triangle data from all faces into a single flat mesh.
-    // Vertices are deduplicated per-face only; the caller (Rust) can run a
-    // global dedup pass if needed.
     std::vector<double>  verts;
     std::vector<int32_t> tris;
 
@@ -92,7 +99,6 @@ int occt_tessellate(
 
         int32_t base = static_cast<int32_t>(verts.size() / 3);
 
-        // Nodes
         for (int i = 1; i <= tri->NbNodes(); ++i) {
             gp_Pnt pt = tri->Node(i).Transformed(loc);
             verts.push_back(pt.X());
@@ -100,7 +106,6 @@ int occt_tessellate(
             verts.push_back(pt.Z());
         }
 
-        // Triangles (OCCT 1-based → 0-based, respect face orientation)
         const bool reversed = (face.Orientation() == TopAbs_REVERSED);
         for (int i = 1; i <= tri->NbTriangles(); ++i) {
             int n1, n2, n3;
@@ -113,11 +118,10 @@ int occt_tessellate(
     }
 
     if (verts.empty()) {
-        *err = "shape produced no triangles — check linear_deflection";
+        *err = "shape produced no triangles — try a smaller linear_deflection value";
         return -2;
     }
 
-    // Allocate output buffers owned by the caller
     size_t nv = verts.size() / 3;
     size_t nt = tris.size()  / 3;
 

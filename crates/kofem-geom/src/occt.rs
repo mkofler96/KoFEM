@@ -71,7 +71,7 @@ pub fn load_step(data: &[u8]) -> Result<OcctShapeHandle, GeomError> {
 }
 
 /// Tessellate a raw OCCT shape pointer.
-pub fn tessellate(
+pub(crate) fn tessellate(
     shape: *mut std::ffi::c_void,
     opts: &TessOptions,
 ) -> Result<SurfaceMesh, GeomError> {
