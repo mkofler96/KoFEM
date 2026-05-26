@@ -56,12 +56,15 @@ fn main() {
 
     println!("cargo:rustc-link-lib=mfem");
 
-    // On Ubuntu, libmfem-dev is built with MPI + HYPRE; link their runtimes.
-    // The openmpi libs live in a non-default search path on Ubuntu 24.04.
-    println!("cargo:rustc-link-search=/usr/lib/x86_64-linux-gnu/openmpi/lib");
-    println!("cargo:rustc-link-lib=mpi");
-    println!("cargo:rustc-link-lib=mpi_cxx");
-    println!("cargo:rustc-link-lib=HYPRE");
+    // The Ubuntu system libmfem-dev is built with MPI + HYPRE; link those
+    // runtimes on native targets only.  The WASM build uses a sequential
+    // MFEM without MPI or HYPRE, so these are absent.
+    if !is_wasm {
+        println!("cargo:rustc-link-search=/usr/lib/x86_64-linux-gnu/openmpi/lib");
+        println!("cargo:rustc-link-lib=mpi");
+        println!("cargo:rustc-link-lib=mpi_cxx");
+        println!("cargo:rustc-link-lib=HYPRE");
+    }
     println!("cargo:rerun-if-changed=cpp/mfem_bridge.cpp");
     println!("cargo:rerun-if-changed=include/mfem_bridge.h");
     println!("cargo:rerun-if-env-changed=MFEM_DIR");
