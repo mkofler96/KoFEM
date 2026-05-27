@@ -168,7 +168,16 @@ if [ ! -f "${OCCT_ROOT}/lib/libTKernel.a" ]; then
         -DUSE_OPENVR=OFF \
         -DBUILD_SHARED_LIBS=OFF
 
-    ninja -j"${JOBS}" install
+    ninja -j"${JOBS}"
+    # Install step: ExpToCasExe is a host-side Express-schema dev tool that
+    # Emscripten can't fully link.  Its .wasm is never produced, causing the
+    # install to fail at the very last step.  All library .a files are already
+    # written to the prefix at that point, so we allow the error and verify.
+    ninja install 2>&1 || true
+    if [ ! -f "${OCCT_ROOT}/lib/libTKernel.a" ]; then
+        echo "ERROR: OCCT install failed — libTKernel.a not found"
+        exit 1
+    fi
     echo "  OCCT done."
 else
     echo "==> OCCT: using cached build."
