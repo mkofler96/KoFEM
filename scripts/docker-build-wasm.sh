@@ -194,7 +194,7 @@ if [ ! -f "${NETGEN_ROOT}/lib/libnglib.a" ]; then
     # its own even though the header is found via the EM sysroot.
     echo "  Building Emscripten zlib port..."
     embuilder --pic build zlib
-    EM_SYSROOT="$(/emsdk/upstream/emscripten/emcc --print-sysroot)"
+    EM_SYSROOT="${EMSDK}/upstream/emscripten/cache/sysroot"
     ZLIB_LIB="${EM_SYSROOT}/lib/wasm32-emscripten/pic/libz.a"
     ZLIB_INC="${EM_SYSROOT}/include"
 
