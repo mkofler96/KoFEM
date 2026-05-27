@@ -188,11 +188,19 @@ fi
 if [ ! -f "${NETGEN_ROOT}/lib/libnglib.a" ]; then
     echo ""
     echo "==> Building Netgen ${NETGEN_TAG} — ~10-20 minutes"
+
+    # Netgen requires zlib.  Build Emscripten's bundled zlib port so that
+    # FindZLIB can locate headers and the static archive in the EM sysroot.
+    echo "  Building Emscripten zlib port..."
+    embuilder --pic build zlib
+
     fetch_and_extract \
         "netgen-${NETGEN_TAG}" \
         "https://github.com/NGSolve/netgen/archive/refs/tags/${NETGEN_TAG}.tar.gz" \
         "${SOURCES}/netgen-${NETGEN_TAG}"
 
+    # Netgen's top-level CMakeLists.txt is a superbuild wrapper; passing
+    # USE_SUPERBUILD=OFF builds Netgen directly from the source tree.
     BUILD_DIR="${SOURCES}/build-netgen"
     rm -rf "${BUILD_DIR}" && mkdir -p "${BUILD_DIR}"
     cd "${BUILD_DIR}"
@@ -201,12 +209,16 @@ if [ ! -f "${NETGEN_ROOT}/lib/libnglib.a" ]; then
         -G Ninja \
         -DCMAKE_INSTALL_PREFIX="${NETGEN_ROOT}" \
         -DCMAKE_BUILD_TYPE=Release \
+        -DUSE_SUPERBUILD=OFF \
         -DUSE_GUI=OFF \
         -DUSE_PYTHON=OFF \
         -DUSE_MPI=OFF \
         -DUSE_OCC=OFF \
+        -DUSE_NUMA=OFF \
+        -DUSE_NATIVE_ARCH=OFF \
         -DBUILD_SHARED_LIBS=OFF \
-        -DBUILD_TESTS=OFF
+        -DBUILD_TESTS=OFF \
+        -DENABLE_UNIT_TESTS=OFF
 
     ninja -j"${JOBS}" install
     echo "  Netgen done."
