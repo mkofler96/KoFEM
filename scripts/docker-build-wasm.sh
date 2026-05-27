@@ -183,7 +183,27 @@ else
     echo "==> OCCT: using cached build."
 fi
 
-# ── Build Netgen ─────────────────────────────────────────────────────────────
+# ── OCCT library name compatibility (runs every time, even when cached) ───────
+# OCCT 7.7+ consolidated TKSTEP / TKSTEP209 / TKSTEPAttr / TKSTEPBase into
+# TKDESTEP.  build.rs uses the classic names; create symlinks so wasm-ld finds
+# them.  This is harmless if the classic names already exist (pre-7.7 build).
+echo "==> Patching OCCT DataExchange library names..."
+cd "${OCCT_ROOT}/lib"
+echo "  OCCT libs present: $(ls libTKDE*.a libTKSTEP*.a libTKXSBase.a 2>/dev/null | xargs -I{} basename {} | tr '\n' ' ')"
+for OLD in TKSTEP TKSTEP209 TKSTEPAttr TKSTEPBase; do
+    if [ ! -f "lib${OLD}.a" ]; then
+        if [ -f "libTKDESTEP.a" ]; then
+            ln -sf libTKDESTEP.a "lib${OLD}.a"
+            echo "  lib${OLD}.a -> libTKDESTEP.a"
+        else
+            echo "  WARNING: lib${OLD}.a not found and libTKDESTEP.a not found either"
+            echo "  Available TKDE* libs: $(ls libTKDE*.a 2>/dev/null | xargs -I{} basename {})"
+        fi
+    fi
+done
+cd /
+
+
 
 if [ ! -f "${NETGEN_ROOT}/lib/libnglib.a" ]; then
     echo ""
