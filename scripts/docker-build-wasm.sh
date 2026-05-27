@@ -189,10 +189,14 @@ if [ ! -f "${NETGEN_ROOT}/lib/libnglib.a" ]; then
     echo ""
     echo "==> Building Netgen ${NETGEN_TAG} — ~10-20 minutes"
 
-    # Netgen requires zlib.  Build Emscripten's bundled zlib port so that
-    # FindZLIB can locate headers and the static archive in the EM sysroot.
+    # Netgen requires zlib.  Build Emscripten's bundled zlib port and pass the
+    # exact library path to cmake — FindZLIB won't search the pic/ subdir on
+    # its own even though the header is found via the EM sysroot.
     echo "  Building Emscripten zlib port..."
     embuilder --pic build zlib
+    EM_SYSROOT="$(/emsdk/upstream/emscripten/emcc --print-sysroot)"
+    ZLIB_LIB="${EM_SYSROOT}/lib/wasm32-emscripten/pic/libz.a"
+    ZLIB_INC="${EM_SYSROOT}/include"
 
     fetch_and_extract \
         "netgen-${NETGEN_TAG}" \
@@ -218,7 +222,9 @@ if [ ! -f "${NETGEN_ROOT}/lib/libnglib.a" ]; then
         -DUSE_NATIVE_ARCH=OFF \
         -DBUILD_SHARED_LIBS=OFF \
         -DBUILD_TESTS=OFF \
-        -DENABLE_UNIT_TESTS=OFF
+        -DENABLE_UNIT_TESTS=OFF \
+        -DZLIB_LIBRARY="${ZLIB_LIB}" \
+        -DZLIB_INCLUDE_DIR="${ZLIB_INC}"
 
     ninja -j"${JOBS}" install
     echo "  Netgen done."
