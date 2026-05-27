@@ -242,6 +242,13 @@ if [ ! -f "${MFEM_ROOT}/lib/libmfem.a" ]; then
         "https://github.com/mfem/mfem/archive/refs/tags/${MFEM_TAG}.tar.gz" \
         "${SOURCES}/mfem-${MFEM_TAG}"
 
+    # isockstream.cpp calls the POSIX socket bind() unqualified; Emscripten's
+    # libc++ resolves it as std::bind via ADL (std::bind is in scope from MFEM
+    # headers that include <functional>).  Qualify it to avoid the collision.
+    # Socket I/O is irrelevant in a browser WASM context anyway.
+    sed -i 's/if (bind(sfd,/if (::bind(sfd,/g' \
+        "${SOURCES}/mfem-${MFEM_TAG}/general/isockstream.cpp"
+
     BUILD_DIR="${SOURCES}/build-mfem"
     rm -rf "${BUILD_DIR}" && mkdir -p "${BUILD_DIR}"
     cd "${BUILD_DIR}"
