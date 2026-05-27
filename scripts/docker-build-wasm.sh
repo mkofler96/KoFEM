@@ -105,11 +105,10 @@ FORCE_REBUILD="${FORCE_REBUILD:-0}"
 
 CACHE=/cache
 SOURCES="${CACHE}/sources"
-# Cache dirs include "-pic" suffix: all three libs must be built with -fPIC
-# so wasm-ld can link them into a SIDE_MODULE.  Old non-PIC cached builds
-# live in occt/netgen/mfem and will not be picked up.
-OCCT_ROOT="${CACHE}/occt-pic"
-NETGEN_ROOT="${CACHE}/netgen-pic"
+OCCT_ROOT="${CACHE}/occt"
+NETGEN_ROOT="${CACHE}/netgen"
+# mfem-pic: MFEM's cmake does not add -fPIC by default; wasm-ld rejects non-PIC
+# objects in a SIDE_MODULE build.  Separate cache dir forces a fresh PIC build.
 MFEM_ROOT="${CACHE}/mfem-pic"
 JOBS=$(nproc)
 
@@ -155,8 +154,6 @@ if [ ! -f "${OCCT_ROOT}/lib/libTKernel.a" ]; then
         -G Ninja \
         -DCMAKE_INSTALL_PREFIX="${OCCT_ROOT}" \
         -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_CXX_FLAGS="-fPIC" \
-        -DCMAKE_C_FLAGS="-fPIC" \
         -DBUILD_MODULE_Draw=OFF \
         -DBUILD_MODULE_Visualization=OFF \
         -DBUILD_MODULE_ApplicationFramework=OFF \
@@ -238,8 +235,6 @@ if [ ! -f "${NETGEN_ROOT}/lib/libnglib.a" ]; then
         -G Ninja \
         -DCMAKE_INSTALL_PREFIX="${NETGEN_ROOT}" \
         -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_CXX_FLAGS="-fPIC" \
-        -DCMAKE_C_FLAGS="-fPIC" \
         -DUSE_SUPERBUILD=OFF \
         -DUSE_GUI=OFF \
         -DUSE_PYTHON=OFF \
