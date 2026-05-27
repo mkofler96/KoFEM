@@ -28,6 +28,11 @@ fn main() {
             .include(inc)
             .flag_if_supported("-std=c++17");
 
+        // SIDE_MODULE WASM links require every object to be position-independent.
+        if is_wasm {
+            build.flag("-fPIC");
+        }
+
         if is_wasm {
             let root = std::env::var("OCCT_WASM_ROOT").unwrap();
             println!("cargo:rustc-link-search={}/lib", root);

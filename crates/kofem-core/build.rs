@@ -29,6 +29,10 @@ fn main() {
             .include(inc)
             .flag_if_supported("-std=c++14"); // MFEM requires C++14
 
+        if is_wasm {
+            build.flag("-fPIC");
+        }
+
         // MFEM on Ubuntu is built with MPI + HYPRE; add their include dirs.
         for extra_inc in &[
             "/usr/lib/x86_64-linux-gnu/openmpi/include", // mpi.h

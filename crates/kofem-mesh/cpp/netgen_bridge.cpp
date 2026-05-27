@@ -61,7 +61,7 @@ namespace nglib {
     extern void       Ng_AddSurfaceElement(Ng_Mesh* mesh, Ng_Surface_Element_Type et, int* pi);
     extern Ng_Result  Ng_GenerateVolumeMesh(Ng_Mesh* mesh, Ng_Meshing_Parameters* mp);
     extern void       Ng_GetPoint(Ng_Mesh* mesh, int num, double* x);
-    extern void       Ng_GetVolumeElement(Ng_Mesh* mesh, int num, int* pi);
+    extern Ng_Result  Ng_GetVolumeElement(Ng_Mesh* mesh, int num, int* pi);
     extern int        Ng_GetNP(Ng_Mesh* mesh);
     extern int        Ng_GetNE(Ng_Mesh* mesh);
 }

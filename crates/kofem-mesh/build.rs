@@ -34,6 +34,10 @@ fn main() {
             .flag_if_supported("-std=c++17");
 
         if is_wasm {
+            build.flag("-fPIC");
+        }
+
+        if is_wasm {
             let root = std::env::var("NETGEN_WASM_ROOT").unwrap();
             println!("cargo:rustc-link-search={}/lib", root);
         } else if let Ok(root) = std::env::var("NETGEN_ROOT") {
