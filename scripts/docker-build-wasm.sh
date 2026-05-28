@@ -23,11 +23,12 @@ CACHE_DIR="${KFW_CACHE_DIR:-${HOME}/.cache/kofem-wasm-libs}"
 FORCE_REBUILD="${KFW_FORCE_REBUILD:-0}"
 
 EMSDK_VERSION="3.1.64"
+BINARYEN_VERSION="121"       # must be >= 121 for --enable-bulk-memory-opt
 OCCT_VERSION="7.8.0"
 NETGEN_TAG="v6.2.2401"
 MFEM_TAG="v4.7"
 
-IMAGE_TAG="kofem-wasm-builder:emsdk-${EMSDK_VERSION}"
+IMAGE_TAG="kofem-wasm-builder:emsdk-${EMSDK_VERSION}-wopt${BINARYEN_VERSION}"
 PLATFORM="linux/amd64"
 
 # Named Docker volumes so that Cargo's registry and build artifacts survive
@@ -39,12 +40,13 @@ echo "╔═══════════════════════�
 echo "║       KoFEM WASM Docker Build                        ║"
 echo "╚══════════════════════════════════════════════════════╝"
 echo ""
-echo "  Repo   : ${REPO_ROOT}"
-echo "  Cache  : ${CACHE_DIR}"
-echo "  Image  : ${IMAGE_TAG}"
-echo "  OCCT   : ${OCCT_VERSION}"
-echo "  Netgen : ${NETGEN_TAG}"
-echo "  MFEM   : ${MFEM_TAG}"
+echo "  Repo     : ${REPO_ROOT}"
+echo "  Cache    : ${CACHE_DIR}"
+echo "  Image    : ${IMAGE_TAG}"
+echo "  OCCT     : ${OCCT_VERSION}"
+echo "  Netgen   : ${NETGEN_TAG}"
+echo "  MFEM     : ${MFEM_TAG}"
+echo "  wasm-opt : binaryen-${BINARYEN_VERSION}"
 echo ""
 
 # ── Pre-flight checks ────────────────────────────────────────────────────────
@@ -72,6 +74,11 @@ FROM emscripten/emsdk:${EMSDK_VERSION}
 RUN apt-get update && apt-get install -y --no-install-recommends \\
         cmake ninja-build curl git python3 xz-utils \\
     && rm -rf /var/lib/apt/lists/*
+
+# Replace bundled wasm-opt: emsdk ${EMSDK_VERSION}'s version doesn't support
+# --enable-bulk-memory-opt, which emcc generates when linking recent Rust WASM.
+RUN curl -fsSL https://github.com/WebAssembly/binaryen/releases/download/version_${BINARYEN_VERSION}/binaryen-version_${BINARYEN_VERSION}-x86_64-linux.tar.gz \\
+    | tar -xzf - --strip-components=2 -C /emsdk/upstream binaryen-version_${BINARYEN_VERSION}/bin/wasm-opt
 
 # Install Rust and the Emscripten WASM target
 ENV RUSTUP_HOME=/usr/local/rustup \\
