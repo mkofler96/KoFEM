@@ -113,9 +113,10 @@ FORCE_REBUILD="${FORCE_REBUILD:-0}"
 CACHE=/cache
 SOURCES="${CACHE}/sources"
 OCCT_ROOT="${CACHE}/occt"
-NETGEN_ROOT="${CACHE}/netgen"
-# mfem-pic: MFEM's cmake does not add -fPIC by default; wasm-ld rejects non-PIC
-# objects in a SIDE_MODULE build.  Separate cache dir forces a fresh PIC build.
+# netgen-pic / mfem-pic: Netgen and MFEM do not add -fPIC themselves; wasm-ld
+# rejects non-PIC objects in a SIDE_MODULE build.  Separate cache dirs force
+# fresh PIC builds.  OCCT adds -fPIC unconditionally so it keeps the plain dir.
+NETGEN_ROOT="${CACHE}/netgen-pic"
 MFEM_ROOT="${CACHE}/mfem-pic"
 JOBS=$(nproc)
 
@@ -242,6 +243,8 @@ if [ ! -f "${NETGEN_ROOT}/lib/libnglib.a" ]; then
         -G Ninja \
         -DCMAKE_INSTALL_PREFIX="${NETGEN_ROOT}" \
         -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_CXX_FLAGS="-fPIC" \
+        -DCMAKE_C_FLAGS="-fPIC" \
         -DUSE_SUPERBUILD=OFF \
         -DUSE_GUI=OFF \
         -DUSE_PYTHON=OFF \
