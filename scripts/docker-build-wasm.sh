@@ -181,7 +181,7 @@ fi
 echo "==> Patching OCCT DataExchange library names..."
 cd "${OCCT_ROOT}/lib"
 echo "  OCCT libs: $(ls libTKDE*.a libTKSTEP*.a libTKXSBase.a 2>/dev/null | xargs -I{} basename {} | tr '\n' ' ')"
-for OLD in TKSTEP TKSTEP209 TKSTEPAttr TKSTEPBase; do
+for OLD in TKSTEP TKSTEP209 TKSTEPAttr TKSTEPBase TKXSBase; do
     if [ ! -f "lib${OLD}.a" ]; then
         if [ -f "libTKDESTEP.a" ]; then
             ln -sf libTKDESTEP.a "lib${OLD}.a"

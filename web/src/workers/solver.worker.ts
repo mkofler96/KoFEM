@@ -1,17 +1,27 @@
 /// <reference lib="webworker" />
 // Runs kofem-wasm off the main thread so heavy solves don't freeze the UI.
 
-import init, {
-  tessellate_step,
-  generate_volume_mesh,
-  solve_linear_elastic,
-} from '../wasm/pkg/kofem_wasm'
+// import init, {
+//   tessellate_step,
+//   generate_volume_mesh,
+//   solve_linear_elastic,
+// } from '/wasm/pkg/kofem_wasm.js'
+import createModule from '../wasm/pkg/kofem_wasm.js'
+
 
 let initialized = false
-
+let Module: any = null
 async function ensureInit() {
-  if (!initialized) {
-    await init()
+  if (!Module) {
+    Module = await createModule({
+      locateFile: (path: string) => {
+        if (path.endsWith('.wasm')) {
+          return new URL('../wasm/pkg/kofem_wasm.wasm', import.meta.url).toString()
+        }
+        return path
+      }
+    })
+
     initialized = true
   }
 }
@@ -35,20 +45,20 @@ self.onmessage = async (event: MessageEvent) => {
     if (type === 'parse_step') {
       // payload.bytes: Uint8Array
       const opts = JSON.stringify({ linear_deflection: 0.1, angular_deflection: 0.5 })
-      const json = tessellate_step(payload.bytes as Uint8Array, opts)
-      const dto = JSON.parse(json) as { vertices: [number,number,number][]; triangles: [number,number,number][] }
+      const json = Module.tessellate_step(payload.bytes as Uint8Array, opts)
+      const dto = JSON.parse(json) as { vertices: [number, number, number][]; triangles: [number, number, number][] }
       // Return as {points, triangles} to match the StepSurfaceMesh type used by the store
       self.postMessage({ id, ok: true, points: dto.vertices, triangles: dto.triangles })
 
     } else if (type === 'volume_mesh') {
       // payload.surface: { points: [number,number,number][], triangles: [number,number,number][] }
       const surface = {
-        vertices: payload.surface.points as [number,number,number][],
-        triangles: payload.surface.triangles as [number,number,number][],
+        vertices: payload.surface.points as [number, number, number][],
+        triangles: payload.surface.triangles as [number, number, number][],
       }
       const opts = JSON.stringify({ max_element_size: 10.0, min_element_size: 0.1, grading: 0.3, second_order: false })
-      const json = generate_volume_mesh(JSON.stringify(surface), opts)
-      const dto = JSON.parse(json) as { vertices: [number,number,number][]; tetrahedra: [number,number,number,number][] }
+      const json = Module.generate_volume_mesh(JSON.stringify(surface), opts)
+      const dto = JSON.parse(json) as { vertices: [number, number, number][]; tetrahedra: [number, number, number, number][] }
 
       const nodes: Node[] = dto.vertices.map(([x, y, z], i) => ({ id: i, x, y, z }))
       const elements: Element[] = dto.tetrahedra.map((v, i) => ({
@@ -59,7 +69,7 @@ self.onmessage = async (event: MessageEvent) => {
       const edgeSet = new Set<string>()
       const edges: [number, number][] = []
       for (const [a, b, c, d] of dto.tetrahedra) {
-        for (const [u, v] of [[a,b],[a,c],[a,d],[b,c],[b,d],[c,d]] as [number,number][]) {
+        for (const [u, v] of [[a, b], [a, c], [a, d], [b, c], [b, d], [c, d]] as [number, number][]) {
           const key = u < v ? `${u}-${v}` : `${v}-${u}`
           if (!edgeSet.has(key)) { edgeSet.add(key); edges.push([u, v]) }
         }
@@ -101,7 +111,7 @@ self.onmessage = async (event: MessageEvent) => {
       const point_loads = [...loadMap.entries()].map(([vertex, force]) => ({ vertex, force }))
 
       const bcs = { fixed_vertices, point_loads }
-      const json = solve_linear_elastic(
+      const json = Module.solve_linear_elastic(
         JSON.stringify(mesh),
         JSON.stringify(material),
         JSON.stringify(bcs),

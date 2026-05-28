@@ -37,13 +37,31 @@ target_link_directories(kofem_wasm_emcc PRIVATE
     ${MFEM_ROOT}/lib
 )
 
+
+
 # OCCT: docker-build-wasm.sh creates TKSTEP*/TKXSBase symlinks → TKDESTEP (7.8+).
 # Using the classic names keeps this list compatible with both 7.6 and 7.8.
 target_link_libraries(kofem_wasm_emcc PRIVATE
-    TKernel TKMath TKG2d TKG3d TKGeomBase TKBRep
-    TKGeomAlgo TKTopAlgo TKMesh TKShHealing
-    TKSTEP TKSTEP209 TKSTEPAttr TKSTEPBase
+    TKernel
+    TKMath
+    TKG2d
+    TKG3d
+    TKGeomBase
+    TKBRep
+    TKGeomAlgo
+    TKTopAlgo
+    TKMesh
+    TKShHealing
+
+    TKXSBase      
+
+    TKSTEP
+    TKSTEP209
+    TKSTEPAttr
+    TKSTEPBase
+
     nglib
+    ngcore
     mfem
 )
 
@@ -65,6 +83,7 @@ target_link_options(kofem_wasm_emcc PRIVATE
     -sALLOW_MEMORY_GROWTH=1
     -sMAXIMUM_MEMORY=2147483648     # 2 GB cap
     -sSTACK_SIZE=8388608            # 8 MB stack for MFEM recursion
+    -sUSE_ZLIB=1
 )
 
 # emcc adds .wasm automatically; only set the JS extension here
