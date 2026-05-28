@@ -11,7 +11,7 @@ env:
   SLACK_CHANNEL: ${{ secrets.SLACK_CHANNEL }}
   # Bump this (and re-run upload_wasms.sh) whenever Emscripten or the
   # C++ library versions change.
-  WASM_LIBS_VERSION: v1
+  WASM_LIBS_VERSION: v2
 
 jobs:
   rust:
