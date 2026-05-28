@@ -6,11 +6,6 @@ web/node_modules/
 web/dist/
 web/.vite/
 
-# WASM build output (generated, not committed) — kofem_wasm.js adapter and .d.ts are committed
-web/src/wasm/pkg/*.wasm
-web/src/wasm/pkg/kofem_wasm_emcc.js
-web/src/wasm/pkg/package.json
-
 # Python
 python/.venv/
 python/__pycache__/

@@ -1,0 +1,20 @@
+{
+  "name": "kofem-wasm",
+  "type": "module",
+  "collaborators": [
+    "Michael Kofler"
+  ],
+  "description": "WebAssembly bindings for kofem-core",
+  "version": "0.1.0",
+  "license": "MIT",
+  "files": [
+    "kofem_wasm_bg.wasm",
+    "kofem_wasm.js",
+    "kofem_wasm.d.ts"
+  ],
+  "main": "kofem_wasm.js",
+  "types": "kofem_wasm.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

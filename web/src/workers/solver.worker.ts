@@ -9,20 +9,10 @@
 import createModule from '../wasm/pkg/kofem_wasm.js'
 
 
-let initialized = false
 let Module: any = null
 async function ensureInit() {
   if (!Module) {
-    Module = await createModule({
-      locateFile: (path: string) => {
-        if (path.endsWith('.wasm')) {
-          return new URL('../wasm/pkg/kofem_wasm.wasm', import.meta.url).toString()
-        }
-        return path
-      }
-    })
-
-    initialized = true
+    Module = await createModule()
   }
 }
 

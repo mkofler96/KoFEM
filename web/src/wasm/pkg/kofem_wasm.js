@@ -5,17 +5,24 @@
 // scripts/build-wasm.sh — run that script (or scripts/docker-build-wasm.sh)
 // before starting the dev server.
 
-import createModule from './kofem_wasm_emcc.js'
+import _createModule from './kofem_wasm_emcc.js'
+
+// Vite can statically hash the wasm only when referenced via a static URL import.
+// We pre-fetch the binary to avoid relying on emcc's locateFile (which uses
+// dynamic new URL paths that Vite cannot hash).
+import wasmUrl from './kofem_wasm.wasm?url'
 
 let _m = null
 
 /** Load and initialise the WASM module.  Must be awaited before any other call. */
-export default async function init() {
-    _m = await createModule({
-        // Resolve the .wasm file relative to this module so Vite's asset
-        // pipeline can hash/serve it correctly in both dev and production.
-        locateFile: (f) => new URL(f, import.meta.url).href,
+export default async function init(moduleOverrides = {}) {
+    const res = await fetch(wasmUrl)
+    const wasmBinary = await res.arrayBuffer()
+    _m = await _createModule({
+        ...moduleOverrides,
+        wasmBinary,
     })
+    return _m
 }
 
 function m() {
