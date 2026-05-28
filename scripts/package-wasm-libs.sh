@@ -28,17 +28,23 @@ STAGING="$(mktemp -d)"
 echo "Staging libs into $STAGING ..."
 mkdir -p "$STAGING/occt" "$STAGING/netgen" "$STAGING/mfem"
 
-# Only copy the headers and static libs needed for the Rust build — skip
-# docs, examples, and other large trees to keep the archive small.
-rsync -a --include='*.a' --include='*.h' --include='*.hxx' \
-      --include='*/' --exclude='*' \
-      "$OCCT_WASM_ROOT/"  "$STAGING/occt/"
-rsync -a --include='*.a' --include='*.h' --include='*.hxx' \
-      --include='*/' --exclude='*' \
-      "$NETGEN_WASM_ROOT/" "$STAGING/netgen/"
-rsync -a --include='*.a' --include='*.h' --include='*.hxx' \
-      --include='*/' --exclude='*' \
-      "$MFEM_WASM_ROOT/"  "$STAGING/mfem/"
+# Copy static libs and all header variants needed by each library:
+#   OCCT:   .hxx (headers), .lxx (inline impls), .gxx (template impls)
+#   Netgen: .h / .hxx
+#   MFEM:   .hpp (all MFEM public headers use this extension)
+# Docs, examples, and cmake config files are excluded to keep the archive small.
+rsync -a --include='*.a' \
+         --include='*.h' --include='*.hxx' --include='*.lxx' --include='*.gxx' \
+         --include='*/' --exclude='*' \
+         "$OCCT_WASM_ROOT/"  "$STAGING/occt/"
+rsync -a --include='*.a' \
+         --include='*.h' --include='*.hxx' \
+         --include='*/' --exclude='*' \
+         "$NETGEN_WASM_ROOT/" "$STAGING/netgen/"
+rsync -a --include='*.a' \
+         --include='*.h' --include='*.hpp' \
+         --include='*/' --exclude='*' \
+         "$MFEM_WASM_ROOT/"  "$STAGING/mfem/"
 
 echo "Creating $ARCHIVE ..."
 tar -czf "$ARCHIVE" -C "$STAGING" occt netgen mfem
