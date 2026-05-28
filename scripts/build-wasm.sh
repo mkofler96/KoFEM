@@ -58,7 +58,15 @@ cargo build \
   --target-dir "$REPO_ROOT/target"
 
 mkdir -p "$OUT_DIR"
-cp "$REPO_ROOT/target/wasm32-unknown-emscripten/release/kofem_wasm.wasm" "$OUT_DIR/"
-cp "$REPO_ROOT/target/wasm32-unknown-emscripten/release/kofem_wasm.js"   "$OUT_DIR/"
+
+# Generate JS bindings + copy WASM.  wasm-bindgen produces:
+#   kofem_wasm.js       — ES-module glue (imported by the Vite worker)
+#   kofem_wasm_bg.wasm  — stripped WASM binary (handled by vite-plugin-wasm)
+# --no-typescript preserves the hand-written kofem_wasm.d.ts in the tree.
+wasm-bindgen \
+  --target bundler \
+  --no-typescript \
+  --out-dir "$OUT_DIR" \
+  "$REPO_ROOT/target/wasm32-unknown-emscripten/release/kofem_wasm.wasm"
 
 echo "Done — WASM module written to $OUT_DIR"
