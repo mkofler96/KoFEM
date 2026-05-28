@@ -24,18 +24,12 @@ FORCE_REBUILD="${KFW_FORCE_REBUILD:-0}"
 
 EMSDK_VERSION="3.1.64"
 BINARYEN_VERSION="124"       # must be >= 122 for --enable-bulk-memory-opt
-WBG_VERSION="0.2.121"        # must match wasm-bindgen version in Cargo.lock
 OCCT_VERSION="7.8.0"
 NETGEN_TAG="v6.2.2401"
 MFEM_TAG="v4.7"
 
-IMAGE_TAG="kofem-wasm-builder:emsdk-${EMSDK_VERSION}-wopt${BINARYEN_VERSION}-wbg${WBG_VERSION}"
+IMAGE_TAG="kofem-wasm-builder:emsdk-${EMSDK_VERSION}-wopt${BINARYEN_VERSION}"
 PLATFORM="linux/amd64"
-
-# Named Docker volumes so that Cargo's registry and build artifacts survive
-# across container runs without being exposed on the slow macOS bind-mount layer.
-CARGO_TARGET_VOL="kofem-wasm-cargo-target"
-CARGO_REGISTRY_VOL="kofem-wasm-cargo-registry"
 
 echo "╔══════════════════════════════════════════════════════╗"
 echo "║       KoFEM WASM Docker Build                        ║"
@@ -48,7 +42,6 @@ echo "  OCCT     : ${OCCT_VERSION}"
 echo "  Netgen   : ${NETGEN_TAG}"
 echo "  MFEM     : ${MFEM_TAG}"
 echo "  wasm-opt : binaryen-${BINARYEN_VERSION}"
-echo "  wasm-bindgen : ${WBG_VERSION}"
 echo ""
 
 # ── Pre-flight checks ────────────────────────────────────────────────────────
@@ -78,33 +71,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \\
     && rm -rf /var/lib/apt/lists/*
 
 # Replace bundled wasm-opt: emsdk ${EMSDK_VERSION}'s version doesn't support
-# --enable-bulk-memory-opt, which emcc generates when linking recent Rust WASM.
+# --enable-bulk-memory-opt, which emcc uses when linking with newer toolchains.
 RUN curl -fsSL https://github.com/WebAssembly/binaryen/releases/download/version_${BINARYEN_VERSION}/binaryen-version_${BINARYEN_VERSION}-x86_64-linux.tar.gz \\
     | tar -xzf - --strip-components=1 -C /emsdk/upstream binaryen-version_${BINARYEN_VERSION}/bin/wasm-opt
-
-# Install wasm-bindgen-cli (version must match wasm-bindgen in Cargo.lock)
-RUN curl -fsSL https://github.com/rustwasm/wasm-bindgen/releases/download/${WBG_VERSION}/wasm-bindgen-${WBG_VERSION}-x86_64-unknown-linux-musl.tar.gz \\
-    | tar -xzf - --strip-components=1 -C /usr/local/bin \\
-      wasm-bindgen-${WBG_VERSION}-x86_64-unknown-linux-musl/wasm-bindgen
-
-# Install Rust and the Emscripten WASM target
-ENV RUSTUP_HOME=/usr/local/rustup \\
-    CARGO_HOME=/usr/local/cargo \\
-    PATH=/usr/local/cargo/bin:\$PATH
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \\
-    | sh -s -- -y --default-toolchain stable --no-modify-path \\
- && rustup target add wasm32-unknown-emscripten
 
 WORKDIR /build
 DOCKERFILE
     echo "    Image built."
 fi
 
-# ── Write the inner build script to a temp file ───────────────────────────────
-# Using a temp file avoids heredoc quoting issues with $() and double-quotes.
+# ── Write the inner build script ──────────────────────────────────────────────
 
-# Write the inner script inside the repo root, which Docker already mounts.
-# A /tmp path on macOS can't be reliably bind-mounted as a file by Docker Desktop.
 INNER="${REPO_ROOT}/.docker-wasm-inner.sh"
 trap 'rm -f "$INNER"' EXIT
 
@@ -120,9 +97,9 @@ FORCE_REBUILD="${FORCE_REBUILD:-0}"
 CACHE=/cache
 SOURCES="${CACHE}/sources"
 OCCT_ROOT="${CACHE}/occt"
-# netgen-pic / mfem-pic: Netgen and MFEM do not add -fPIC themselves; wasm-ld
-# rejects non-PIC objects in a SIDE_MODULE build.  Separate cache dirs force
-# fresh PIC builds.  OCCT adds -fPIC unconditionally so it keeps the plain dir.
+# Separate -pic dirs: Netgen and MFEM don't add -fPIC in their own build
+# systems; the SIDE_MODULE linker rejects non-PIC objects.  Distinct cache
+# dirs force fresh PIC builds when needed.
 NETGEN_ROOT="${CACHE}/netgen-pic"
 MFEM_ROOT="${CACHE}/mfem-pic"
 JOBS=$(nproc)
@@ -186,10 +163,8 @@ if [ ! -f "${OCCT_ROOT}/lib/libTKernel.a" ]; then
         -DBUILD_SHARED_LIBS=OFF
 
     ninja -j"${JOBS}"
-    # Install step: ExpToCasExe is a host-side Express-schema dev tool that
-    # Emscripten can't fully link.  Its .wasm is never produced, causing the
-    # install to fail at the very last step.  All library .a files are already
-    # written to the prefix at that point, so we allow the error and verify.
+    # ExpToCasExe is a host-side tool that Emscripten can't fully link; the
+    # install fails at the very last step but all .a files are already written.
     ninja install 2>&1 || true
     if [ ! -f "${OCCT_ROOT}/lib/libTKernel.a" ]; then
         echo "ERROR: OCCT install failed — libTKernel.a not found"
@@ -200,13 +175,12 @@ else
     echo "==> OCCT: using cached build."
 fi
 
-# ── OCCT library name compatibility (runs every time, even when cached) ───────
-# OCCT 7.7+ consolidated TKSTEP / TKSTEP209 / TKSTEPAttr / TKSTEPBase into
-# TKDESTEP.  build.rs uses the classic names; create symlinks so wasm-ld finds
-# them.  This is harmless if the classic names already exist (pre-7.7 build).
+# ── OCCT library name compatibility (runs every time) ─────────────────────────
+# OCCT 7.7+ consolidated TKSTEP* into TKDESTEP.  Create symlinks so the
+# CMakeLists.txt can use the classic names without version checks.
 echo "==> Patching OCCT DataExchange library names..."
 cd "${OCCT_ROOT}/lib"
-echo "  OCCT libs present: $(ls libTKDE*.a libTKSTEP*.a libTKXSBase.a 2>/dev/null | xargs -I{} basename {} | tr '\n' ' ')"
+echo "  OCCT libs: $(ls libTKDE*.a libTKSTEP*.a libTKXSBase.a 2>/dev/null | xargs -I{} basename {} | tr '\n' ' ')"
 for OLD in TKSTEP TKSTEP209 TKSTEPAttr TKSTEPBase; do
     if [ ! -f "lib${OLD}.a" ]; then
         if [ -f "libTKDESTEP.a" ]; then
@@ -214,21 +188,17 @@ for OLD in TKSTEP TKSTEP209 TKSTEPAttr TKSTEPBase; do
             echo "  lib${OLD}.a -> libTKDESTEP.a"
         else
             echo "  WARNING: lib${OLD}.a not found and libTKDESTEP.a not found either"
-            echo "  Available TKDE* libs: $(ls libTKDE*.a 2>/dev/null | xargs -I{} basename {})"
         fi
     fi
 done
 cd /
 
-
+# ── Build Netgen ──────────────────────────────────────────────────────────────
 
 if [ ! -f "${NETGEN_ROOT}/lib/libnglib.a" ]; then
     echo ""
     echo "==> Building Netgen ${NETGEN_TAG} — ~10-20 minutes"
 
-    # Netgen requires zlib.  Build Emscripten's bundled zlib port and pass the
-    # exact library path to cmake — FindZLIB won't search the pic/ subdir on
-    # its own even though the header is found via the EM sysroot.
     echo "  Building Emscripten zlib port..."
     embuilder --pic build zlib
     EM_SYSROOT="${EMSDK}/upstream/emscripten/cache/sysroot"
@@ -240,8 +210,6 @@ if [ ! -f "${NETGEN_ROOT}/lib/libnglib.a" ]; then
         "https://github.com/NGSolve/netgen/archive/refs/tags/${NETGEN_TAG}.tar.gz" \
         "${SOURCES}/netgen-${NETGEN_TAG}"
 
-    # Netgen's top-level CMakeLists.txt is a superbuild wrapper; passing
-    # USE_SUPERBUILD=OFF builds Netgen directly from the source tree.
     BUILD_DIR="${SOURCES}/build-netgen"
     rm -rf "${BUILD_DIR}" && mkdir -p "${BUILD_DIR}"
     cd "${BUILD_DIR}"
@@ -281,10 +249,8 @@ if [ ! -f "${MFEM_ROOT}/lib/libmfem.a" ]; then
         "https://github.com/mfem/mfem/archive/refs/tags/${MFEM_TAG}.tar.gz" \
         "${SOURCES}/mfem-${MFEM_TAG}"
 
-    # isockstream.cpp calls the POSIX socket bind() unqualified; Emscripten's
-    # libc++ resolves it as std::bind via ADL (std::bind is in scope from MFEM
-    # headers that include <functional>).  Qualify it to avoid the collision.
-    # Socket I/O is irrelevant in a browser WASM context anyway.
+    # isockstream.cpp calls bind() unqualified; emcc's libc++ resolves it as
+    # std::bind via ADL.  Qualify to avoid the collision.
     sed -i 's/if (bind(sfd,/if (::bind(sfd,/g' \
         "${SOURCES}/mfem-${MFEM_TAG}/general/isockstream.cpp"
 
@@ -312,10 +278,10 @@ else
     echo "==> MFEM: using cached build."
 fi
 
-# ── Build KoFEM WASM ─────────────────────────────────────────────────────────
+# ── Build KoFEM WASM engine ───────────────────────────────────────────────────
 
 echo ""
-echo "==> Building KoFEM WASM module..."
+echo "==> Building KoFEM WASM engine..."
 
 export OCCT_WASM_ROOT="${OCCT_ROOT}"
 export NETGEN_WASM_ROOT="${NETGEN_ROOT}"
@@ -329,12 +295,10 @@ echo "==> Done — output: web/src/wasm/pkg/"
 INNER_SCRIPT
 
 # ── Run the build container ───────────────────────────────────────────────────
-# Version variables are passed via -e so the inner script reads them from env.
-# (No sed needed — avoids the macOS vs GNU sed -i incompatibility.)
 
 echo "==> Launching build container..."
 echo "    C++ libs cache : ${CACHE_DIR}"
-echo "    (First run will take several hours; grab a coffee.)"
+echo "    (First run takes several hours; subsequent runs ~5-10 min.)"
 echo ""
 
 docker run --rm \
@@ -345,12 +309,10 @@ docker run --rm \
     -e "FORCE_REBUILD=${FORCE_REBUILD}" \
     -v "${REPO_ROOT}:/repo" \
     -v "${CACHE_DIR}:/cache" \
-    -v "${CARGO_TARGET_VOL}:/repo/target" \
-    -v "${CARGO_REGISTRY_VOL}:/usr/local/cargo/registry" \
     "${IMAGE_TAG}" \
     bash /repo/.docker-wasm-inner.sh
 
 echo ""
 echo "Build complete."
-echo "  ${REPO_ROOT}/web/src/wasm/pkg/kofem_wasm.js"
+echo "  ${REPO_ROOT}/web/src/wasm/pkg/kofem_wasm_emcc.js"
 echo "  ${REPO_ROOT}/web/src/wasm/pkg/kofem_wasm.wasm"

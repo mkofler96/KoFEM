@@ -8,23 +8,49 @@ The pipeline is: **STEP geometry → OCCT tessellation → Netgen volume mesh �
 
 ```
 KoFEM/
+├── engine/             # C++ WASM engine (browser entry-point)
+│   ├── cpp/engine.cpp  # Full pipeline via Emscripten Embind
+│   └── CMakeLists.txt  # emcmake build → kofem_wasm_emcc.js + .wasm
 ├── crates/
-│   ├── kofem-geom/     # OCCT wrapper: STEP import + surface tessellation
-│   ├── kofem-mesh/     # Netgen wrapper: quality tetrahedral volume meshing
+│   ├── kofem-geom/     # OCCT wrapper: STEP import + surface tessellation (native / Python)
+│   ├── kofem-mesh/     # Netgen wrapper: quality tetrahedral volume meshing (native / Python)
 │   │                   # also defines the shared SurfaceMesh / VolumeMesh types
-│   ├── kofem-core/     # MFEM wrapper: linear-elastic FEM via FemSolver trait
+│   ├── kofem-core/     # MFEM wrapper: linear-elastic FEM via FemSolver trait (native / Python)
 │   ├── kofem-py/       # Python bindings (PyO3 / maturin)
-│   └── kofem-wasm/     # WASM bindings (wasm-bindgen, Emscripten target)
+│   └── kofem-wasm/     # Legacy Rust WASM bindings (unused for browser build)
 ├── web/                # React + Three.js frontend (Vite)
 ├── scripts/
-│   └── build-wasm.sh  # Emscripten WASM build script
+│   ├── build-wasm.sh        # CMake/Emscripten WASM build
+│   └── docker-build-wasm.sh # Docker wrapper (Mac / CI)
 ├── python/             # Python package (maturin build)
 └── docs/               # Project specs, roadmap, ADRs
 ```
 
-### C++ bridge layout
+### WASM build flow
 
-Each crate that wraps a C++ library has:
+```
+OCCT / Netgen / MFEM  (.a, compiled with emcc)
+         ↓
+engine/cpp/engine.cpp  (C++17, calls libs directly, Embind API)
+         ↓  emcmake cmake + ninja
+kofem_wasm_emcc.js + kofem_wasm.wasm
+         ↓
+web/src/wasm/pkg/kofem_wasm.js  (thin adapter, committed)
+         ↓
+solver.worker.ts  (unchanged API: init() + named exports)
+```
+
+### Incremental Rust migration
+
+When a piece of the pipeline is re-implemented in Rust, compile the relevant
+crate as `crate-type = ["staticlib"]` targeting `wasm32-unknown-emscripten`,
+expose the new logic via `extern "C"`, and call it from `engine.cpp`.  The
+CMakeLists.txt gets one extra `target_link_libraries` entry — nothing else
+changes.
+
+### C++ bridge layout (native / Python builds)
+
+Each Rust crate that wraps a C++ library has:
 ```
 crates/kofem-{geom,mesh,core}/
 ├── build.rs            # detects installed libs, compiles bridge, emits link flags
@@ -36,7 +62,7 @@ crates/kofem-{geom,mesh,core}/
 
 `kofem-core` exposes a `FemSolver` trait.  `MfemSolver` is the default implementation.
 To swap MFEM for a different solver, implement `FemSolver` in a new module and wire it
-into `kofem-wasm`/`kofem-py` — no other crate changes are needed.
+into `kofem-py` — no other crate changes are needed.
 
 ## Native prerequisites
 

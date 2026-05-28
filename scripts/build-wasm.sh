@@ -1,39 +1,18 @@
 #!/usr/bin/env bash
-# Build the KoFEM WASM module.
+# Build the KoFEM WASM module (C++ engine → Emscripten → JS + WASM).
 #
 # Prerequisites (all compiled with Emscripten):
 #   OCCT_WASM_ROOT   — OpenCASCADE install prefix
 #   NETGEN_WASM_ROOT — Netgen (nglib) install prefix
 #   MFEM_WASM_ROOT   — MFEM install prefix
 #
-# Quick-start to build the prerequisites:
-#
-#   # 1. Activate Emscripten
+# Quick-start (after activating emsdk):
 #   source /path/to/emsdk/emsdk_env.sh
+#   OCCT_WASM_ROOT=... NETGEN_WASM_ROOT=... MFEM_WASM_ROOT=... bash scripts/build-wasm.sh
 #
-#   # 2. Build OCCT
-#   mkdir occt-build && cd occt-build
-#   emcmake cmake ../opencascade-7.8.0 \
-#     -DCMAKE_INSTALL_PREFIX="$OCCT_WASM_ROOT" \
-#     -DBUILD_MODULE_Draw=OFF -DBUILD_MODULE_Visualization=OFF \
-#     -DBUILD_MODULE_ApplicationFramework=OFF
-#   emmake make -j$(nproc) install
-#
-#   # 3. Build Netgen
-#   mkdir netgen-build && cd netgen-build
-#   emcmake cmake ../netgen \
-#     -DCMAKE_INSTALL_PREFIX="$NETGEN_WASM_ROOT" \
-#     -DUSE_GUI=OFF -DUSE_PYTHON=OFF
-#   emmake make -j$(nproc) install
-#
-#   # 4. Build MFEM
-#   mkdir mfem-build && cd mfem-build
-#   emcmake cmake ../mfem \
-#     -DCMAKE_INSTALL_PREFIX="$MFEM_WASM_ROOT" \
-#     -DMFEM_USE_OPENMP=OFF -DMFEM_USE_MPI=OFF
-#   emmake make -j$(nproc) install
-#
-#   # 5. Run this script
+# Inside Docker:
+#   bash scripts/docker-build-wasm.sh   (handles everything automatically)
+
 set -euo pipefail
 
 : "${OCCT_WASM_ROOT:?OCCT_WASM_ROOT must be set}"
@@ -41,9 +20,11 @@ set -euo pipefail
 : "${MFEM_WASM_ROOT:?MFEM_WASM_ROOT must be set}"
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ENGINE_DIR="$REPO_ROOT/engine"
+BUILD_DIR="$REPO_ROOT/target/wasm-build"
 OUT_DIR="$REPO_ROOT/web/src/wasm/pkg"
 
-echo "Building KoFEM WASM..."
+echo "Building KoFEM WASM engine (C++ / Embind)..."
 echo "  OCCT   : $OCCT_WASM_ROOT"
 echo "  Netgen : $NETGEN_WASM_ROOT"
 echo "  MFEM   : $MFEM_WASM_ROOT"
@@ -51,22 +32,20 @@ echo "  Out    : $OUT_DIR"
 
 export OCCT_WASM_ROOT NETGEN_WASM_ROOT MFEM_WASM_ROOT
 
-cargo build \
-  --target wasm32-unknown-emscripten \
-  --release \
-  -p kofem-wasm \
-  --target-dir "$REPO_ROOT/target"
+mkdir -p "$BUILD_DIR"
+
+emcmake cmake "$ENGINE_DIR" \
+    -B "$BUILD_DIR" \
+    -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release
+
+cmake --build "$BUILD_DIR" --parallel "$(nproc)"
 
 mkdir -p "$OUT_DIR"
 
-# Generate JS bindings + copy WASM.  wasm-bindgen produces:
-#   kofem_wasm.js       — ES-module glue (imported by the Vite worker)
-#   kofem_wasm_bg.wasm  — stripped WASM binary (handled by vite-plugin-wasm)
-# --no-typescript preserves the hand-written kofem_wasm.d.ts in the tree.
-wasm-bindgen \
-  --target bundler \
-  --no-typescript \
-  --out-dir "$OUT_DIR" \
-  "$REPO_ROOT/target/wasm32-unknown-emscripten/release/kofem_wasm.wasm"
+cp "$BUILD_DIR/kofem_wasm_emcc.js"   "$OUT_DIR/kofem_wasm_emcc.js"
+cp "$BUILD_DIR/kofem_wasm_emcc.wasm" "$OUT_DIR/kofem_wasm.wasm"
 
-echo "Done — WASM module written to $OUT_DIR"
+echo "Done."
+echo "  $OUT_DIR/kofem_wasm_emcc.js"
+echo "  $OUT_DIR/kofem_wasm.wasm"
