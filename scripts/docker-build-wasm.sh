@@ -23,7 +23,7 @@ CACHE_DIR="${KFW_CACHE_DIR:-${HOME}/.cache/kofem-wasm-libs}"
 FORCE_REBUILD="${KFW_FORCE_REBUILD:-0}"
 
 EMSDK_VERSION="3.1.64"
-BINARYEN_VERSION="121"       # must be >= 121 for --enable-bulk-memory-opt
+BINARYEN_VERSION="124"       # must be >= 122 for --enable-bulk-memory-opt
 OCCT_VERSION="7.8.0"
 NETGEN_TAG="v6.2.2401"
 MFEM_TAG="v4.7"
@@ -78,7 +78,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \\
 # Replace bundled wasm-opt: emsdk ${EMSDK_VERSION}'s version doesn't support
 # --enable-bulk-memory-opt, which emcc generates when linking recent Rust WASM.
 RUN curl -fsSL https://github.com/WebAssembly/binaryen/releases/download/version_${BINARYEN_VERSION}/binaryen-version_${BINARYEN_VERSION}-x86_64-linux.tar.gz \\
-    | tar -xzf - --strip-components=2 -C /emsdk/upstream binaryen-version_${BINARYEN_VERSION}/bin/wasm-opt
+    | tar -xzf - --strip-components=1 -C /emsdk/upstream binaryen-version_${BINARYEN_VERSION}/bin/wasm-opt
 
 # Install Rust and the Emscripten WASM target
 ENV RUSTUP_HOME=/usr/local/rustup \\
