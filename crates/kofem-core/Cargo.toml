@@ -4,14 +4,17 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
-description = "no_std-compatible FEM solver core"
+description = "MFEM-backed FEM solver core for KoFEM"
 
 [features]
 default = ["std"]
-std = ["nalgebra/std", "thiserror/std"]
+std = []
 
 [dependencies]
-nalgebra = { workspace = true }
-serde = { workspace = true, optional = true }
+kofem-mesh = { workspace = true }
+serde = { workspace = true }
 thiserror = { workspace = true }
 log = { workspace = true }
+
+[build-dependencies]
+cc = "1"

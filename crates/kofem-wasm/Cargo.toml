@@ -4,15 +4,23 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
-description = "WebAssembly bindings for kofem-core"
+description = "WebAssembly bindings for the KoFEM pipeline (OCCT → Netgen → MFEM)"
+
+# IMPORTANT: the WASM target for this crate is wasm32-unknown-emscripten, NOT
+# wasm32-unknown-unknown.  Build with:
+#
+#   OCCT_WASM_ROOT=...  NETGEN_WASM_ROOT=...  MFEM_WASM_ROOT=...
+#   cargo build --target wasm32-unknown-emscripten --release
+#
+# See scripts/build-wasm.sh for the full build procedure.
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
-kofem-core = { workspace = true, features = ["std", "serde"] }
+kofem-core = { workspace = true, features = ["std"] }
 kofem-mesh = { workspace = true }
-kofem-geom = { path = "../kofem-geom" }
+kofem-geom = { workspace = true }
 wasm-bindgen = "0.2"
 serde = { workspace = true }
 serde-wasm-bindgen = "0.6"

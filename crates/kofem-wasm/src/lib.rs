@@ -1,18 +1,29 @@
-use kofem_geom::step::parser::parse as parse_step_text;
-use kofem_geom::step::topology::BRep;
-use kofem_geom::tess::{tessellate, TessOptions};
-use kofem_mesh::geom::Point2;
-use kofem_mesh::{extrude, refine, triangulate};
+//! WebAssembly bindings for the KoFEM pipeline:
+//!   STEP → OCCT tessellation → Netgen volume mesh → MFEM linear-elastic solve
+//!
+//! # Build requirements
+//!
+//! This crate links OCCT, Netgen, and MFEM through their C bridges.  For the
+//! WASM target (`wasm32-unknown-emscripten`) all three libraries must be
+//! pre-compiled with Emscripten.  Set the environment variables:
+//!
+//! ```text
+//! OCCT_WASM_ROOT   — Emscripten install prefix of OpenCASCADE
+//! NETGEN_WASM_ROOT — Emscripten install prefix of Netgen (nglib)
+//! MFEM_WASM_ROOT   — Emscripten install prefix of MFEM
+//! ```
+//!
+//! Then run `scripts/build-wasm.sh` which invokes cargo with the correct
+//! target and flags.
 
-use kofem_core::boundary::{BoundaryConditions, DofIndex};
-use kofem_core::elements::ElementType;
-use kofem_core::material::IsotropicElastic;
-use kofem_core::mesh::Mesh;
-use kofem_core::property::{
-    PbarProps, PbeamProps, PlaneFormulation, PlplaneProps, PropertyCard, PshellProps, PsolidProps,
+use kofem_core::{
+    solver::mfem::{MfemParams, MfemSolver},
+    solver::FemSolver,
+    BoundaryConditions, LinearElasticMaterial,
 };
-use kofem_core::LinearStaticSolver;
-use serde::Deserialize;
+use kofem_geom::{load_step, tessellate_model, TessOptions};
+use kofem_mesh::{mesh_volume, MeshOptions, SurfaceMesh, VolumeMesh};
+use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen(start)]
@@ -20,358 +31,189 @@ pub fn init() {
     console_error_panic_hook::set_once();
 }
 
-// ── Input DTOs ────────────────────────────────────────────────────────────────
+// ── JSON data-transfer types ─────────────────────────────────────────────────
 
-#[derive(Deserialize)]
-struct ModelInput {
-    nodes: Vec<NodeInput>,
-    elements: Vec<ElementInput>,
-    materials: Vec<MaterialInput>,
-    properties: Vec<PropertyInput>,
-    constraints: Vec<ConstraintInput>,
-    loads: Vec<LoadInput>,
+#[derive(Serialize, Deserialize)]
+pub struct SurfaceMeshDto {
+    pub vertices: Vec<[f64; 3]>,
+    pub triangles: Vec<[usize; 3]>,
 }
 
-#[derive(Deserialize)]
-struct NodeInput {
-    id: usize,
-    x: f64,
-    y: f64,
-    z: f64,
+#[derive(Serialize, Deserialize)]
+pub struct VolumeMeshDto {
+    pub vertices: Vec<[f64; 3]>,
+    pub tetrahedra: Vec<[usize; 4]>,
 }
 
-#[derive(Deserialize)]
-struct ElementInput {
-    id: usize,
-    #[serde(rename = "type")]
-    kind: String,
-    #[serde(rename = "nodeIds")]
-    node_ids: Vec<usize>,
-    #[serde(rename = "propertyId")]
-    property_id: usize,
+#[derive(Serialize, Deserialize)]
+pub struct TessOptionsDto {
+    /// Chord-height tolerance (mm).
+    pub linear_deflection: f64,
+    pub angular_deflection: f64,
 }
 
-#[derive(Deserialize)]
-struct MaterialInput {
-    id: usize,
-    young: f64,
-    poisson: f64,
-    density: f64,
+#[derive(Serialize, Deserialize)]
+pub struct MeshOptionsDto {
+    pub max_element_size: f64,
+    pub min_element_size: f64,
+    pub grading: f64,
+    pub second_order: bool,
 }
 
-#[derive(Deserialize)]
-struct PropertyInput {
-    id: usize,
-    #[serde(rename = "type")]
-    kind: String,
-    #[serde(rename = "materialId")]
-    material_id: usize,
-    // PBAR / PBEAM
-    area: Option<f64>,
-    i1: Option<f64>,
-    i2: Option<f64>,
-    j: Option<f64>,
-    // PSHELL / PLPLANE
-    thickness: Option<f64>,
-    #[serde(rename = "planeFormulation")]
-    plane_formulation: Option<String>,
+#[derive(Serialize, Deserialize)]
+pub struct MaterialDto {
+    pub young_modulus: f64,
+    pub poisson_ratio: f64,
+    pub density: f64,
 }
 
-#[derive(Deserialize)]
-struct ConstraintInput {
-    #[serde(rename = "nodeId")]
-    node_id: usize,
-    dof: u8,
-    #[serde(rename = "prescribedValue", default)]
-    prescribed_value: f64,
+#[derive(Serialize, Deserialize)]
+pub struct BoundaryConditionsDto {
+    pub fixed_vertices: Vec<usize>,
+    pub point_loads: Vec<PointLoadDto>,
 }
 
-#[derive(Deserialize)]
-struct LoadInput {
-    #[serde(rename = "nodeId")]
-    node_id: usize,
-    dof: u8,
-    value: f64,
+#[derive(Serialize, Deserialize)]
+pub struct PointLoadDto {
+    pub vertex: usize,
+    pub force: [f64; 3],
 }
 
-// ── Conversion helpers ────────────────────────────────────────────────────────
-
-fn dof_from_u8(d: u8) -> DofIndex {
-    match d {
-        0 => DofIndex::Ux,
-        1 => DofIndex::Uy,
-        2 => DofIndex::Uz,
-        3 => DofIndex::Rx,
-        4 => DofIndex::Ry,
-        _ => DofIndex::Rz,
-    }
+#[derive(Serialize, Deserialize)]
+pub struct SolveResultDto {
+    /// Flat array: [ux0, uy0, uz0, ux1, …]
+    pub displacements: Vec<f64>,
+    /// One von-Mises value per tetrahedral element.
+    pub von_mises: Vec<f64>,
 }
 
-fn element_type_from_str(s: &str) -> Option<ElementType> {
-    match s {
-        "CBAR" => Some(ElementType::CBAR),
-        "CBEAM" => Some(ElementType::CBEAM),
-        "CTRIA3" => Some(ElementType::CTRIA3),
-        "CTRIA6" => Some(ElementType::CTRIA6),
-        "CQUAD4" => Some(ElementType::CQUAD4),
-        "CQUAD8" => Some(ElementType::CQUAD8),
-        "CTETRA" => Some(ElementType::CTETRA),
-        "CPENTA" => Some(ElementType::CPENTA),
-        "CHEXA" => Some(ElementType::CHEXA),
-        "CPYRAM" => Some(ElementType::CPYRAM),
-        _ => None,
-    }
-}
+// ── WASM-exported functions ──────────────────────────────────────────────────
 
-fn build_mesh_and_bcs(input: ModelInput) -> Result<(Mesh, BoundaryConditions), String> {
-    let mut mesh = Mesh::new();
-
-    for n in input.nodes {
-        mesh.add_node(n.id, n.x, n.y, n.z);
-    }
-
-    for m in input.materials {
-        mesh.add_material(m.id, IsotropicElastic::new(m.young, m.poisson, m.density));
-    }
-
-    for p in input.properties {
-        let card = match p.kind.as_str() {
-            "PBAR" => PropertyCard::PBAR(PbarProps {
-                material_id: p.material_id,
-                area: p.area.unwrap_or(1e-4),
-                i1: p.i1.unwrap_or(8.333e-10),
-                i2: p.i2.unwrap_or(8.333e-10),
-                j: p.j.unwrap_or(1.406e-9),
-            }),
-            "PBEAM" => PropertyCard::PBEAM(PbeamProps {
-                material_id: p.material_id,
-                area: p.area.unwrap_or(1e-4),
-                i1: p.i1.unwrap_or(8.333e-10),
-                i2: p.i2.unwrap_or(8.333e-10),
-                j: p.j.unwrap_or(1.406e-9),
-                i12: 0.0,
-                k1: 0.0,
-                k2: 0.0,
-            }),
-            "PSHELL" => PropertyCard::PSHELL(PshellProps {
-                material_id: p.material_id,
-                thickness: p.thickness.unwrap_or(0.01),
-                bending_material_id: None,
-                shear_material_id: None,
-            }),
-            "PLPLANE" => {
-                let formulation = match p.plane_formulation.as_deref() {
-                    Some("PlaneStrain") => PlaneFormulation::PlaneStrain,
-                    _ => PlaneFormulation::PlaneStress,
-                };
-                PropertyCard::PLPLANE(PlplaneProps {
-                    material_id: p.material_id,
-                    thickness: p.thickness.unwrap_or(0.01),
-                    formulation,
-                })
-            }
-            "PSOLID" => PropertyCard::PSOLID(PsolidProps {
-                material_id: p.material_id,
-            }),
-            other => return Err(format!("Unknown property type: {other}")),
-        };
-        mesh.add_property(p.id, card);
-    }
-
-    for e in input.elements {
-        let etype = element_type_from_str(&e.kind)
-            .ok_or_else(|| format!("Unknown element type: {}", e.kind))?;
-        // material_id is derived from property; use 0 as placeholder here
-        mesh.add_element(e.id, etype, e.node_ids, 0, e.property_id);
-    }
-
-    let mut bcs = BoundaryConditions::default();
-    for c in input.constraints {
-        bcs.constraints.push(kofem_core::boundary::NodalConstraint {
-            node_id: c.node_id,
-            dof: dof_from_u8(c.dof),
-            prescribed_value: c.prescribed_value,
-        });
-    }
-    for l in input.loads {
-        bcs.apply_force(l.node_id, dof_from_u8(l.dof), l.value);
-    }
-
-    Ok((mesh, bcs))
-}
-
-// ── Public WASM API ───────────────────────────────────────────────────────────
-
-/// Parse an Abaqus INP file and return the model as a JSON string.
+/// Load a STEP file and tessellate it into a surface triangle mesh.
 ///
-/// The JSON matches the `ModelInput` schema (plus a `modelName` field) and
-/// can be fed directly into `solve_linear_static`.
+/// @param step_bytes  raw STEP file content as a Uint8Array
+/// @param opts_json   JSON-serialised TessOptionsDto
+/// @returns JSON-serialised SurfaceMeshDto
 #[wasm_bindgen]
-pub fn parse_inp_model(inp_text: &str) -> Result<String, JsError> {
-    let parsed = kofem_core::io::inp::parse_inp(inp_text).map_err(|e| JsError::new(&e))?;
-    serde_json::to_string(&parsed).map_err(|e| JsError::new(&e.to_string()))
-}
+pub fn tessellate_step(step_bytes: &[u8], opts_json: &str) -> Result<String, JsValue> {
+    let opts: TessOptionsDto = serde_json::from_str(opts_json)
+        .map_err(|e| JsValue::from_str(&format!("invalid opts: {e}")))?;
 
-/// Solve a linear static FEM model.
-///
-/// `model_json` is a JSON string matching the `ModelInput` schema.
-/// Returns a flat Float64Array of nodal displacements (6 values per node).
-#[wasm_bindgen]
-pub fn solve_linear_static(model_json: &str) -> Result<Vec<f64>, JsError> {
-    let input: ModelInput =
-        serde_json::from_str(model_json).map_err(|e| JsError::new(&e.to_string()))?;
-    let (mesh, bcs) = build_mesh_and_bcs(input).map_err(|e| JsError::new(&e))?;
-    LinearStaticSolver::solve(&mesh, &bcs)
-        .map(|r| r.displacements)
-        .map_err(|e| JsError::new(&e.to_string()))
-}
+    let model = load_step(step_bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
 
-// ── Mesh generation API ───────────────────────────────────────────────────────
-
-/// Triangulate a 2-D boundary polygon and refine it with Ruppert's algorithm.
-///
-/// `polygon_json` — JSON array of `{x, y}` objects listing the CCW boundary
-/// vertices.  `min_angle_deg` — target minimum angle (20–33° is practical;
-/// pass 0 to skip refinement).  `max_steiner` — hard cap on inserted points.
-///
-/// Returns a JSON object `{ points: [{x,y}, …], triangles: [{v:[a,b,c]}, …] }`.
-#[wasm_bindgen]
-pub fn mesh_polygon(
-    polygon_json: &str,
-    min_angle_deg: f64,
-    max_steiner: usize,
-) -> Result<String, JsError> {
-    let boundary: Vec<Point2> =
-        serde_json::from_str(polygon_json).map_err(|e| JsError::new(&e.to_string()))?;
-
-    if boundary.len() < 3 {
-        return Err(JsError::new("polygon needs at least 3 vertices"));
-    }
-
-    let mut mesh = triangulate(&boundary);
-
-    if min_angle_deg > 0.0 && max_steiner > 0 {
-        refine(
-            &mut mesh.points,
-            &mut mesh.triangles,
-            &boundary,
-            min_angle_deg,
-            max_steiner,
-        );
-    }
-
-    serde_json::to_string(&mesh).map_err(|e| JsError::new(&e.to_string()))
-}
-
-/// Parse and tessellate a STEP file into a surface triangle mesh.
-///
-/// Returns a JSON object `{ points: [[x,y,z], …], triangles: [[a,b,c], …] }`.
-#[wasm_bindgen]
-pub fn tessellate_step(step_text: &str, max_edge_len: f64) -> Result<String, JsError> {
-    let file = parse_step_text(step_text).map_err(|e| JsError::new(&e.to_string()))?;
-    let brep = BRep::extract(&file).map_err(|e| JsError::new(&e.to_string()))?;
-    let opts = TessOptions {
-        max_edge_len,
+    let tess_opts = TessOptions {
+        linear_deflection: opts.linear_deflection,
+        angular_deflection: opts.angular_deflection,
         ..TessOptions::default()
     };
-    let mesh = tessellate(&brep, &file, opts).map_err(|e| JsError::new(&e.to_string()))?;
-    serde_json::to_string(&mesh).map_err(|e| JsError::new(&e.to_string()))
+
+    let surface =
+        tessellate_model(&model, &tess_opts).map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let dto = SurfaceMeshDto {
+        vertices: surface.vertices,
+        triangles: surface.triangles,
+    };
+    serde_json::to_string(&dto).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
-/// Compute a tetrahedral volume mesh from a surface mesh.
+/// Generate a quality tetrahedral volume mesh from a closed surface mesh.
 ///
-/// `surface_json` — JSON `{ points: [[x,y,z], …], triangles: [[a,b,c], …] }`
-/// (the same format returned by [`tessellate_step`]).
-///
-/// Returns `{ points: [[x,y,z], …], edges: [[a,b], …] }` where `edges` are
-/// deduplicated tet edges ready for wireframe rendering.
+/// @param surface_json  JSON-serialised SurfaceMeshDto
+/// @param opts_json     JSON-serialised MeshOptionsDto
+/// @returns JSON-serialised VolumeMeshDto
 #[wasm_bindgen]
-pub fn compute_volume_mesh(surface_json: &str) -> Result<String, JsError> {
-    use kofem_mesh::volume::{classify_interior_tets, recover_constraint_faces, TetMesh};
+pub fn generate_volume_mesh(surface_json: &str, opts_json: &str) -> Result<String, JsValue> {
+    let dto: SurfaceMeshDto = serde_json::from_str(surface_json)
+        .map_err(|e| JsValue::from_str(&format!("invalid surface: {e}")))?;
+    let opts: MeshOptionsDto = serde_json::from_str(opts_json)
+        .map_err(|e| JsValue::from_str(&format!("invalid opts: {e}")))?;
 
-    #[derive(serde::Deserialize)]
-    struct ArraySurface {
-        points: Vec<[f64; 3]>,
-        triangles: Vec<[usize; 3]>,
-    }
-
-    let input: ArraySurface =
-        serde_json::from_str(surface_json).map_err(|e| JsError::new(&e.to_string()))?;
-
-    if input.points.len() < 4 {
-        return Err(JsError::new(
-            "surface needs at least 4 points for volume meshing",
-        ));
-    }
-
-    let surface = kofem_mesh::SurfaceMesh {
-        points: input
-            .points
-            .iter()
-            .map(|&[x, y, z]| kofem_mesh::Point3::new(x, y, z))
-            .collect(),
-        triangles: input.triangles,
+    let surface = SurfaceMesh {
+        vertices: dto.vertices,
+        triangles: dto.triangles,
+    };
+    let mesh_opts = MeshOptions {
+        max_element_size: opts.max_element_size,
+        min_element_size: opts.min_element_size,
+        grading: opts.grading,
+        second_order: opts.second_order,
     };
 
-    let pts = input.points;
-    let tets = kofem_mesh::bowyer_watson_3d(&pts);
+    let volume =
+        mesh_volume(&surface, &mesh_opts).map_err(|e| JsValue::from_str(&e.to_string()))?;
 
-    if tets.is_empty() {
-        return Err(JsError::new(
-            "Delaunay tetrahedralization produced no tetrahedra",
-        ));
-    }
-
-    let mut mesh = TetMesh::from_tets(pts.clone(), tets);
-    let _ = recover_constraint_faces(&mut mesh, &surface, 200);
-    classify_interior_tets(&mut mesh, &surface);
-
-    let live_tets = mesh.live_tets();
-    if live_tets.is_empty() {
-        return Err(JsError::new(
-            "no interior tetrahedra found after classification",
-        ));
-    }
-
-    let mut edge_set = std::collections::HashSet::<[usize; 2]>::new();
-    for tet in &live_tets {
-        let [a, b, c, d] = *tet;
-        for &[e0, e1] in &[[a, b], [a, c], [a, d], [b, c], [b, d], [c, d]] {
-            edge_set.insert(if e0 < e1 { [e0, e1] } else { [e1, e0] });
-        }
-    }
-
-    let out = serde_json::json!({
-        "points": pts,
-        "tets": live_tets,
-        "edges": edge_set.into_iter().collect::<Vec<_>>()
-    });
-
-    serde_json::to_string(&out).map_err(|e| JsError::new(&e.to_string()))
+    let result = VolumeMeshDto {
+        vertices: volume.vertices,
+        tetrahedra: volume.tetrahedra,
+    };
+    serde_json::to_string(&result).map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
-/// Extrude a 2-D triangle mesh into a 3-D tetrahedral mesh.
+/// Run a linear-elastic FEM solve using MFEM.
 ///
-/// `mesh2d_json` — JSON produced by [`mesh_polygon`].
-/// `dir_x/y/z` — extrusion direction vector (magnitude = total extrusion length).
-/// `layers` — number of equal slices along the extrusion direction.
-///
-/// Returns a JSON object `{ points: [{x,y,z}, …], tets: [{v:[a,b,c,d]}, …] }`.
+/// @param mesh_json  JSON-serialised VolumeMeshDto
+/// @param mat_json   JSON-serialised MaterialDto
+/// @param bcs_json   JSON-serialised BoundaryConditionsDto
+/// @param order      FE polynomial order (1 = linear, 2 = quadratic)
+/// @returns JSON-serialised SolveResultDto
 #[wasm_bindgen]
-pub fn extrude_mesh(
-    mesh2d_json: &str,
-    dir_x: f64,
-    dir_y: f64,
-    dir_z: f64,
-    layers: usize,
-) -> Result<String, JsError> {
-    let mesh2d: kofem_mesh::Mesh2D =
-        serde_json::from_str(mesh2d_json).map_err(|e| JsError::new(&e.to_string()))?;
+pub fn solve_linear_elastic(
+    mesh_json: &str,
+    mat_json: &str,
+    bcs_json: &str,
+    order: i32,
+) -> Result<String, JsValue> {
+    let mesh_dto: VolumeMeshDto = serde_json::from_str(mesh_json)
+        .map_err(|e| JsValue::from_str(&format!("invalid mesh: {e}")))?;
+    let mat_dto: MaterialDto = serde_json::from_str(mat_json)
+        .map_err(|e| JsValue::from_str(&format!("invalid material: {e}")))?;
+    let bcs_dto: BoundaryConditionsDto = serde_json::from_str(bcs_json)
+        .map_err(|e| JsValue::from_str(&format!("invalid BCs: {e}")))?;
 
-    if layers == 0 {
-        return Err(JsError::new("layers must be ≥ 1"));
+    let mesh = VolumeMesh {
+        vertices: mesh_dto.vertices,
+        tetrahedra: mesh_dto.tetrahedra,
+    };
+    let material = LinearElasticMaterial {
+        young_modulus: mat_dto.young_modulus,
+        poisson_ratio: mat_dto.poisson_ratio,
+        density: mat_dto.density,
+    };
+    let mut bcs = BoundaryConditions::default();
+    for v in bcs_dto.fixed_vertices {
+        bcs.fix_vertex(v);
+    }
+    for l in bcs_dto.point_loads {
+        bcs.apply_force(l.vertex, l.force);
     }
 
-    let mesh3d = extrude(&mesh2d, [dir_x, dir_y, dir_z], layers);
-    serde_json::to_string(&mesh3d).map_err(|e| JsError::new(&e.to_string()))
+    let solver = MfemSolver::new(MfemParams { order });
+    let result = solver
+        .solve_linear_elastic(&mesh, &material, &bcs)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let dto = SolveResultDto {
+        displacements: result.displacements,
+        von_mises: result.von_mises,
+    };
+    serde_json::to_string(&dto).map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+/// Convenience: full pipeline from STEP bytes to solve result in one call.
+///
+/// Production use should call each stage separately so the surface and volume
+/// meshes can be inspected and visualised between steps.
+#[wasm_bindgen]
+pub fn step_to_fem_result(
+    step_bytes: &[u8],
+    tess_opts_json: &str,
+    mesh_opts_json: &str,
+    mat_json: &str,
+    bcs_json: &str,
+    order: i32,
+) -> Result<String, JsValue> {
+    let surface_json = tessellate_step(step_bytes, tess_opts_json)?;
+    let volume_json = generate_volume_mesh(&surface_json, mesh_opts_json)?;
+    solve_linear_elastic(&volume_json, mat_json, bcs_json, order)
 }

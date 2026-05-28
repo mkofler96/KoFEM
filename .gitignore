@@ -6,9 +6,6 @@ web/node_modules/
 web/dist/
 web/.vite/
 
-# WASM build output (generated, not committed)
-web/src/wasm/pkg/
-
 # Python
 python/.venv/
 python/__pycache__/
@@ -37,3 +34,6 @@ web/screenshots/report/
 # Env
 .env
 .env.local
+
+# Temp file written by scripts/docker-build-wasm.sh
+.docker-wasm-inner.sh

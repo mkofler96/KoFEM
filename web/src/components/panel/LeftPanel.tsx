@@ -188,11 +188,11 @@ function GeometryPanel() {
     setStepImportError(null);
     setIsImportingStep(true);
     setRunning(true);
-    const text = await file.text();
+    const bytes = new Uint8Array(await file.arrayBuffer());
     sendToWorker<{
       points: [number, number, number][];
       triangles: [number, number, number][];
-    }>("parse_step", { text })
+    }>("parse_step", { bytes })
       .then(({ points, triangles }) => {
         if (points.length === 0) setStepImportError("No geometry found.");
         else setStepSurface({ points, triangles });

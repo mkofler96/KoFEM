@@ -1,31 +1,30 @@
 /// <reference lib="webworker" />
 // Runs kofem-wasm off the main thread so heavy solves don't freeze the UI.
 
-import init, {
-  solve_linear_static,
-  parse_inp_model,
-  mesh_polygon,
-  extrude_mesh,
-  tessellate_step,
-  compute_volume_mesh,
-} from '../wasm/pkg/kofem_wasm'
+// import init, {
+//   tessellate_step,
+//   generate_volume_mesh,
+//   solve_linear_elastic,
+// } from '/wasm/pkg/kofem_wasm.js'
+import createModule from '../wasm/pkg/kofem_wasm.js'
 
-let initialized = false
 
+let Module: any = null
 async function ensureInit() {
-  if (!initialized) {
-    await init()
-    initialized = true
+  if (!Module) {
+    Module = await createModule()
   }
 }
 
-interface BoxGeometry {
-  ox: number; oy: number; oz: number
-  sketchWidth: number; sketchHeight: number
-  sketchNormal: 'X' | 'Y' | 'Z'
-  extrudeSign: 1 | -1; extrudeLength: number
-  meshNu: number; meshNv: number; meshNw: number
-}
+// ── Payload types ─────────────────────────────────────────────────────────────
+
+interface Node { id: number; x: number; y: number; z: number }
+interface Element { id: number; type: string; nodeIds: [number, number, number, number]; propertyId: number }
+interface Material { id: number; name: string; young: number; poisson: number; density: number }
+interface Constraint { nodeId: number; dof: number; prescribedValue?: number }
+interface Load { nodeId: number; dof: number; value: number }
+
+// ── Message handler ───────────────────────────────────────────────────────────
 
 self.onmessage = async (event: MessageEvent) => {
   const { id, type, payload } = event.data
@@ -33,82 +32,98 @@ self.onmessage = async (event: MessageEvent) => {
   try {
     await ensureInit()
 
-    if (type === 'solve') {
-      const modelJson = JSON.stringify(payload)
-      const displacements = solve_linear_static(modelJson)
-      self.postMessage({ id, ok: true, displacements: Array.from(displacements) })
-
-    } else if (type === 'parse') {
-      const modelJson = parse_inp_model(payload.text)
-      self.postMessage({ id, ok: true, model: JSON.parse(modelJson) })
-
-    } else if (type === 'parse_step') {
-      const meshJson = tessellate_step(payload.text, payload.maxEdgeLen ?? 5.0)
-      const mesh = JSON.parse(meshJson) as {
-        points: [number, number, number][]
-        triangles: [number, number, number][]
-      }
-      self.postMessage({ id, ok: true, points: mesh.points, triangles: mesh.triangles })
+    if (type === 'parse_step') {
+      // payload.bytes: Uint8Array
+      const opts = JSON.stringify({ linear_deflection: 0.1, angular_deflection: 0.5 })
+      const json = Module.tessellate_step(payload.bytes as Uint8Array, opts)
+      const dto = JSON.parse(json) as { vertices: [number, number, number][]; triangles: [number, number, number][] }
+      // Return as {points, triangles} to match the StepSurfaceMesh type used by the store
+      self.postMessage({ id, ok: true, points: dto.vertices, triangles: dto.triangles })
 
     } else if (type === 'volume_mesh') {
-      const resultJson = compute_volume_mesh(JSON.stringify(payload.surface))
-      const data = JSON.parse(resultJson) as {
-        points: [number, number, number][]
-        tets: [number, number, number, number][]
-        edges: [number, number][]
+      // payload.surface: { points: [number,number,number][], triangles: [number,number,number][] }
+      const surface = {
+        vertices: payload.surface.points as [number, number, number][],
+        triangles: payload.surface.triangles as [number, number, number][],
       }
-      const nodes = data.points.map(([x, y, z], i) => ({ id: i, x, y, z }))
-      const elements = data.tets.map((v, i) => ({
-        id: i,
-        type: 'CTETRA' as const,
-        nodeIds: v,
-        propertyId: 1,
+      const opts = JSON.stringify({ max_element_size: 10.0, min_element_size: 0.1, grading: 0.3, second_order: false })
+      const json = Module.generate_volume_mesh(JSON.stringify(surface), opts)
+      const dto = JSON.parse(json) as { vertices: [number, number, number][]; tetrahedra: [number, number, number, number][] }
+
+      const nodes: Node[] = dto.vertices.map(([x, y, z], i) => ({ id: i, x, y, z }))
+      const elements: Element[] = dto.tetrahedra.map((v, i) => ({
+        id: i, type: 'CTETRA', nodeIds: v, propertyId: 1,
       }))
-      self.postMessage({ id, ok: true, points: data.points, edges: data.edges, nodes, elements })
+
+      // Derive unique edges from tetrahedra for wireframe display
+      const edgeSet = new Set<string>()
+      const edges: [number, number][] = []
+      for (const [a, b, c, d] of dto.tetrahedra) {
+        for (const [u, v] of [[a, b], [a, c], [a, d], [b, c], [b, d], [c, d]] as [number, number][]) {
+          const key = u < v ? `${u}-${v}` : `${v}-${u}`
+          if (!edgeSet.has(key)) { edgeSet.add(key); edges.push([u, v]) }
+        }
+      }
+
+      self.postMessage({ id, ok: true, points: dto.vertices, edges, nodes, elements })
+
+    } else if (type === 'solve') {
+      const { nodes, elements, materials, constraints, loads } = payload as {
+        nodes: Node[]
+        elements: Element[]
+        materials: Material[]
+        properties: unknown[]
+        constraints: Constraint[]
+        loads: Load[]
+      }
+
+      // Map store model format → MFEM bridge format
+      const mesh = {
+        vertices: nodes.map(n => [n.x, n.y, n.z]),
+        tetrahedra: elements.map(e => e.nodeIds),
+      }
+
+      const mat = materials[0] ?? { young: 210e9, poisson: 0.3, density: 7850 }
+      const material = { young_modulus: mat.young, poisson_ratio: mat.poisson, density: mat.density }
+
+      // A node is fully fixed if it has any translational DOF constraint (DOFs 0–2).
+      // The MFEM bridge fixes all 3 translational DOFs for each listed vertex.
+      const fixedNodeIds = new Set(constraints.filter(c => c.dof <= 2).map(c => c.nodeId))
+      const fixed_vertices = [...fixedNodeIds]
+
+      // Group translational force loads by node, accumulating into [fx, fy, fz]
+      const loadMap = new Map<number, [number, number, number]>()
+      for (const load of loads) {
+        if (load.dof > 2) continue
+        if (!loadMap.has(load.nodeId)) loadMap.set(load.nodeId, [0, 0, 0])
+        loadMap.get(load.nodeId)![load.dof] += load.value
+      }
+      const point_loads = [...loadMap.entries()].map(([vertex, force]) => ({ vertex, force }))
+
+      const bcs = { fixed_vertices, point_loads }
+      const json = Module.solve_linear_elastic(
+        JSON.stringify(mesh),
+        JSON.stringify(material),
+        JSON.stringify(bcs),
+        1,
+      )
+      const result = JSON.parse(json) as { displacements: number[]; von_mises: number[] }
+      self.postMessage({ id, ok: true, displacements: result.displacements, vonMises: result.von_mises })
+
+    } else if (type === 'parse') {
+      throw new Error(
+        '.inp file import is not supported in the OCCT-based pipeline. Please import a STEP file instead.'
+      )
 
     } else if (type === 'mesh') {
-      const geom = payload as BoxGeometry
-      const { ox, oy, oz, sketchWidth: W, sketchHeight: H,
-              extrudeLength: L, extrudeSign, sketchNormal, meshNw } = geom
+      throw new Error(
+        'Parametric mesh generation is not available in the new pipeline. Import a STEP file instead.'
+      )
 
-      // CCW rectangle in canonical UV space (always extrude along +Z internally)
-      const polygon = [
-        { x: 0, y: 0 }, { x: W, y: 0 }, { x: W, y: H }, { x: 0, y: H },
-      ]
-
-      const mesh2dJson = mesh_polygon(JSON.stringify(polygon), 25, 5000)
-      const mesh3dJson = extrude_mesh(mesh2dJson, 0, 0, L, meshNw)
-      const mesh3d = JSON.parse(mesh3dJson) as {
-        points: { x: number; y: number; z: number }[]
-        tets: { v: [number, number, number, number] }[]
-      }
-
-      // Remap canonical (u, v, w) → world (x, y, z) based on sketch plane
-      const nodes = mesh3d.points.map((p, i) => {
-        const [u, v, w] = [p.x, p.y, p.z]
-        let x: number, y: number, z: number
-        if (sketchNormal === 'Z') {
-          x = ox + u; y = oy + v; z = oz + extrudeSign * w
-        } else if (sketchNormal === 'X') {
-          x = ox + extrudeSign * w; y = oy + u; z = oz + v
-        } else {
-          x = ox + u; y = oy + extrudeSign * w; z = oz + v
-        }
-        return { id: i, x, y, z }
-      })
-
-      const elements = mesh3d.tets.map((t, i) => ({
-        id: i,
-        type: 'CTETRA' as const,
-        nodeIds: t.v,
-        propertyId: 1,
-      }))
-
-      self.postMessage({ id, ok: true, nodes, elements })
+    } else {
+      throw new Error(`Unknown worker message type: ${type}`)
     }
   } catch (err) {
-    // Include stack trace so the alert in the UI shows why the worker crashed,
-    // not just "RuntimeError: unreachable".
     const detail = err instanceof Error
       ? `${err.name}: ${err.message}\n${err.stack ?? ''}`
       : String(err)

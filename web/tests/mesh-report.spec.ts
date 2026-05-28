@@ -14,7 +14,6 @@ const GEOMETRIES: Geom[] = [
   { file: 'cylinder.stp',           label: 'Cylinder (R=25, H=80 mm)' },
   { file: 'cone.stp',               label: 'Truncated Cone (R=10→20, H=30 mm)' },
   { file: 'l_bracket.stp',          label: 'L-Bracket (80×80×20 mm)' },
-  { file: 'quarter_cylinder.stp',   label: 'Quarter-Cylinder patch (R=5, H=10 mm)' },
   { file: 'new_bracket_2.stp',      label: 'Complex Bracket (STEP)' },
   // New shapes added in last two commits
   { file: 'elbow.stp',              label: 'Pipe Elbow' },

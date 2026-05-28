@@ -11,43 +11,65 @@ env:
   SLACK_CHANNEL: ${{ secrets.SLACK_CHANNEL }}
 
 jobs:
-  ci:
-    name: CI
-    runs-on: ubuntu-latest
+  rust:
+    name: Rust (native)
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install native C++ libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libocct-data-exchange-dev \
+            libocct-foundation-dev \
+            libocct-modeling-algorithms-dev \
+            libocct-modeling-data-dev \
+            netgen-headers \
+            libnglib-dev \
+            libmfem-dev \
+            libhypre-dev \
+            libopenmpi-dev
+
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: wasm32-unknown-unknown
           components: clippy, rustfmt
+
       - uses: Swatinem/rust-cache@v2
-      - name: Cache wasm-pack binary
-        id: cache-wasm-pack
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/bin/wasm-pack
-          key: wasm-pack-${{ runner.os }}-v1
-      - name: Install wasm-pack
-        if: steps.cache-wasm-pack.outputs.cache-hit != 'true'
-        run: cargo install wasm-pack --locked
-      - run: cargo fmt --all --check
-      - run: cargo clippy --all-targets --all-features -- -D warnings
-      - run: cargo test --all-features -- --nocapture
-      - run: wasm-pack build crates/kofem-wasm --target web --out-dir ../../web/src/wasm/pkg
+
+      - name: Format check
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Tests
+        # Netgen and MFEM have non-thread-safe global state; run all tests single-threaded.
+        run: cargo test --workspace --exclude kofem-wasm -- --test-threads=1 --nocapture
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+
       - name: Cache bun dependencies
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('web/bun.lockb') }}
           restore-keys: bun-${{ runner.os }}-
+
       - run: cd web && bun install
       - run: cd web && bun run typecheck
       - run: cd web && bun run build
       - run: cd web && bunx playwright install --with-deps chromium
       - run: cd web && bun run test
+
       - name: Post mesh report to Slack
         if: always()
         run: cd web && bun scripts/generate-mesh-report.ts

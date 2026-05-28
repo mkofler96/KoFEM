@@ -17,7 +17,7 @@ license = "MIT"
 [workspace.dependencies]
 kofem-core = { path = "crates/kofem-core" }
 kofem-mesh = { path = "crates/kofem-mesh" }
-nalgebra = { version = "0.33", default-features = false, features = ["alloc"] }
+kofem-geom = { path = "crates/kofem-geom" }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 log = "0.4"
