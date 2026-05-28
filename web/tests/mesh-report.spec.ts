@@ -79,9 +79,9 @@ test.describe('Mesh capabilities report', () => {
       await expect(page.getByRole('button', { name: 'Import STEP' })).toBeVisible()
       console.log(`[${geom.label}] ${elapsed()} app ready, importing ${stepFile}`)
 
-      // Import STEP file
+      // Import STEP file — complex geometries can take >10 s in CI
       await page.locator('input[type="file"][accept=".stp,.step"]').setInputFiles(stepFile)
-      await expect(page.getByRole('button', { name: 'Import STEP' })).toBeEnabled({ timeout: 10_000 })
+      await expect(page.getByRole('button', { name: 'Import STEP' })).toBeEnabled({ timeout: 60_000 })
       console.log(`[${geom.label}] ${elapsed()} import done`)
 
       // Fail fast if the worker surfaced an error in the UI banner.

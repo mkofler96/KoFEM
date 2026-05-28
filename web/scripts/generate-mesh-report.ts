@@ -1,133 +1,19 @@
 #!/usr/bin/env -S bun run
 /**
- * Post the KoFEM mesh quality report to Slack as a formatted text table.
+ * Upload KoFEM Playwright render screenshots to Slack.
  *
- * Reads:  web/test-results/mesh-quality.json  (written by Rust quality test)
- * Posts:  chat.postMessage to #product-showcases
- *
- * Run after:  cargo test -p kofem-geom mesh_quality_report -- --nocapture
- * Usage:      bun scripts/generate-mesh-report.ts
+ * Reads:  web/playwright-results/screenshots/report/  (written by mesh-report.spec.ts)
+ * Posts:  one message + screenshot attachments to the configured channel
  *
  * Env vars:
- *   SLACK_BOT_TOKEN  (required) — bot token with chat:write scope
- *   SLACK_CHANNEL    (optional) — channel ID override
+ *   SLACK_BOT_TOKEN  — bot token with chat:write + files:write scope
+ *   SLACK_CHANNEL    — channel ID (optional, defaults to #product-showcases lookup)
  */
 import fs from 'fs'
 import path from 'path'
 
-const JSON_IN = path.join('test-results', 'mesh-quality.json')
 const SCREENSHOTS_DIR = path.join('playwright-results', 'screenshots', 'report')
 const DEFAULT_CHANNEL = 'product-showcases'
-
-interface QualityResult {
-  name: string
-  label: string
-  kofem_triangles: number | null
-  ref_triangles: number | null
-  chamfer_mean_mm: number | null
-  chamfer_max_mm: number | null
-  time_ms: number
-  error: string | null
-  pass: boolean
-}
-
-interface QualityReport {
-  generated_at: number
-  results: QualityResult[]
-}
-
-// ── formatting ────────────────────────────────────────────────────────────────
-
-function pad(s: string, w: number, right = false): string {
-  const str = s.length > w ? s.slice(0, w) : s
-  return right ? str.padStart(w) : str.padEnd(w)
-}
-
-function fmtK(v: number | null): string {
-  if (v === null) return '—'
-  return v >= 10_000 ? `${(v / 1000).toFixed(0)}k`
-    : v >= 1_000 ? `${(v / 1000).toFixed(1)}k`
-      : v.toString()
-}
-
-function fmtMm(v: number | null): string {
-  if (v === null) return '—'
-  return v.toFixed(2)
-}
-
-function buildTable(results: QualityResult[]): string {
-  // Column widths
-  const W = { label: 30, kt: 7, rt: 7, mean: 8, max: 8, ms: 7, st: 6 }
-  const SEP = '  '
-
-  const header =
-    pad('Geometry', W.label) + SEP +
-    pad('KoFEM△', W.kt, true) + SEP +
-    pad('Ref△', W.rt, true) + SEP +
-    pad('Mean mm', W.mean, true) + SEP +
-    pad('Max mm', W.max, true) + SEP +
-    pad('ms', W.ms, true) + SEP +
-    pad('Status', W.st)
-
-  const divider = '─'.repeat(header.length)
-
-  const rows = results.map(r => {
-    const status = r.pass ? '✅' : (r.error ? '❌ ERR' : '❌ FAIL')
-    return (
-      pad(r.label, W.label) + SEP +
-      pad(fmtK(r.kofem_triangles), W.kt, true) + SEP +
-      pad(fmtK(r.ref_triangles), W.rt, true) + SEP +
-      pad(fmtMm(r.chamfer_mean_mm), W.mean, true) + SEP +
-      pad(fmtMm(r.chamfer_max_mm), W.max, true) + SEP +
-      pad(r.time_ms.toString(), W.ms, true) + SEP +
-      status
-    )
-  })
-
-  return [header, divider, ...rows].join('\n')
-}
-
-function buildSlackPayload(report: QualityReport, channelId: string): object {
-  const results = report.results
-  const passed = results.filter(r => r.pass).length
-  const failed = results.length - passed
-  const dateStr = new Date(report.generated_at * 1000).toLocaleDateString('en-US', {
-    year: 'numeric', month: 'long', day: 'numeric',
-  })
-
-  const summary = failed === 0
-    ? `✅ All ${results.length} geometries passed`
-    : `❌ ${failed}/${results.length} failed`
-
-  const table = buildTable(results)
-
-  return {
-    channel: channelId,
-    text: `KoFEM Mesh Quality — ${summary}`,
-    blocks: [
-      {
-        type: 'header',
-        text: { type: 'plain_text', text: 'KoFEM Mesh Quality Report', emoji: false },
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `${summary}  ·  ${dateStr}\n_Symmetric chamfer distance on triangle centroids vs. gmsh reference (≤5 000 samples)_`,
-        },
-      },
-      {
-        type: 'rich_text',
-        elements: [
-          {
-            type: 'rich_text_preformatted',
-            elements: [{ type: 'text', text: table }],
-          },
-        ],
-      },
-    ],
-  }
-}
 
 // ── Slack helpers ─────────────────────────────────────────────────────────────
 
@@ -153,14 +39,11 @@ async function findChannel(token: string, name: string): Promise<string> {
   throw new Error(`Channel "${name}" not found — make sure the bot is in that channel`)
 }
 
-async function postMessage(token: string, payload: object): Promise<string> {
+async function postMessage(token: string, channelId: string, text: string): Promise<string> {
   const res = await fetch('https://slack.com/api/chat.postMessage', {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ channel: channelId, text }),
   })
   const data = await res.json() as { ok: boolean; ts?: string; error?: string }
   if (!data.ok) throw new Error(`chat.postMessage: ${data.error}`)
@@ -193,53 +76,38 @@ async function uploadFile(token: string, filePath: string, channelId: string, th
 // ── main ──────────────────────────────────────────────────────────────────────
 
 async function run(): Promise<void> {
-  console.log(`Looking for: ${JSON_IN}`)
-  console.log(`import.meta.dir: ${import.meta.dir}`)
-  console.log(`cwd: ${process.cwd()}`)
-
-  if (!fs.existsSync(JSON_IN)) {
-    console.error(`Quality JSON not found: ${JSON_IN}`)
-    console.error('The mesh_quality_report Rust test should generate this file.')
-    console.error('Run: cargo test -p kofem-geom mesh_quality_report -- --nocapture')
-    process.exit(1)
-  }
-
-  const report: QualityReport = JSON.parse(fs.readFileSync(JSON_IN, 'utf8'))
-  const results = report.results
-  const passed = results.filter(r => r.pass).length
-
-  // Print table locally regardless of Slack
-  console.log(buildTable(results))
-  console.log(`\n${passed}/${results.length} passed`)
-
   const token = process.env.SLACK_BOT_TOKEN
   if (!token) {
-    console.warn('SLACK_BOT_TOKEN not set — skipping Slack post')
+    console.log('SLACK_BOT_TOKEN not set — skipping Slack upload')
     return
   }
 
-  const channelId = process.env.SLACK_CHANNEL
-    ?? await findChannel(token, DEFAULT_CHANNEL)
-  console.log(`Posting to channel ${channelId}...`)
+  if (!fs.existsSync(SCREENSHOTS_DIR)) {
+    console.log(`No screenshots directory found at ${SCREENSHOTS_DIR} — nothing to upload`)
+    return
+  }
 
-  const payload = buildSlackPayload(report, channelId)
-  const threadTs = await postMessage(token, payload)
-  console.log('Posted to Slack.')
+  const screenshots = fs.readdirSync(SCREENSHOTS_DIR)
+    .filter(f => f.endsWith('.png'))
+    .sort()
 
-  // Upload screenshots from Playwright tests as thread replies
-  if (fs.existsSync(SCREENSHOTS_DIR)) {
-    const screenshots = fs.readdirSync(SCREENSHOTS_DIR)
+  if (screenshots.length === 0) {
+    console.log('No screenshots found — nothing to upload')
+    return
+  }
 
-    if (screenshots.length > 0) {
-      console.log(`Uploading ${screenshots.length} screenshots...`)
-      for (const file of screenshots) {
-        try {
-          await uploadFile(token, path.join(SCREENSHOTS_DIR, file), channelId, threadTs)
-          console.log(`  ✓ ${file}`)
-        } catch (err) {
-          console.error(`  ✗ ${file}: ${err}`)
-        }
-      }
+  const channelId = process.env.SLACK_CHANNEL ?? await findChannel(token, DEFAULT_CHANNEL)
+  const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+
+  const threadTs = await postMessage(token, channelId, `KoFEM render report — ${screenshots.length} screenshots — ${dateStr}`)
+  console.log(`Posted thread to Slack, uploading ${screenshots.length} screenshots...`)
+
+  for (const file of screenshots) {
+    try {
+      await uploadFile(token, path.join(SCREENSHOTS_DIR, file), channelId, threadTs)
+      console.log(`  ✓ ${file}`)
+    } catch (err) {
+      console.error(`  ✗ ${file}: ${err}`)
     }
   }
 }
