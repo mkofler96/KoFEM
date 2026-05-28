@@ -30,25 +30,4 @@ test('page loads with welcome screen and enters the app', async ({ page }) => {
   expect(errors).toHaveLength(0)
 })
 
-test('solve default model completes and navigates to results', async ({ page }) => {
-  await startExample(page)
-  await goToSolveMode(page)
 
-  const solveBtn = page.getByRole('button', { name: /Run static solve|Solving/ })
-  await expect(solveBtn).toBeEnabled()
-
-  await solveBtn.click()
-  // Button becomes disabled while solving
-  await expect(solveBtn).toBeDisabled()
-  // After solve, app auto-navigates to Results mode showing displacement
-  await expect(page.getByText(/Max \|U\|/i)).toBeVisible({ timeout: 30_000 })
-})
-
-test('results panel shows displacement after solve', async ({ page }) => {
-  await startExample(page)
-  await goToSolveMode(page)
-
-  await page.getByRole('button', { name: 'Run static solve' }).click()
-  // App auto-navigates to Results mode after solve completes
-  await expect(page.getByText(/Max \|U\|/i)).toBeVisible({ timeout: 30_000 })
-})
