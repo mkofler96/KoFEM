@@ -78,8 +78,6 @@ jobs:
             | tar -xzf - --strip-components=1 -C "$EMSDK/upstream" \
               "binaryen-version_${BINARYEN_VERSION}/bin/wasm-opt"
 
-      - name: Install ninja
-        run: sudo apt-get install -y --no-install-recommends ninja-build
 
       - name: Cache CMake build directory
         uses: actions/cache@v4
