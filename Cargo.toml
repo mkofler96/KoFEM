@@ -4,8 +4,6 @@ members = [
     "crates/kofem-core",
     "crates/kofem-geom",
     "crates/kofem-mesh",
-    "crates/kofem-wasm",
-    "crates/kofem-py",
 ]
 
 [workspace.package]

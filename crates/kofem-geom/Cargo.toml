@@ -4,13 +4,7 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
-description = "OCCT-based geometry import and tessellation for KoFEM (STEP, IGES)"
+description = "Geometry types for the KoFEM pipeline (STEP import, tessellation options)"
 
 [dependencies]
-kofem-mesh = { workspace = true }
 thiserror = { workspace = true }
-serde = { workspace = true }
-log = { workspace = true }
-
-[build-dependencies]
-cc = "1"

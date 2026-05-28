@@ -4,12 +4,7 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
-description = "Volumetric mesh types and Netgen-based quality meshing for KoFEM"
+description = "Shared mesh types for the KoFEM pipeline (SurfaceMesh, VolumeMesh)"
 
 [dependencies]
 serde = { workspace = true }
-thiserror = { workspace = true }
-log = { workspace = true }
-
-[build-dependencies]
-cc = "1"
