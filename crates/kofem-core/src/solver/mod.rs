@@ -1,5 +1,3 @@
-pub mod mfem;
-
 use crate::{BoundaryConditions, LinearElasticMaterial};
 use kofem_mesh::VolumeMesh;
 use thiserror::Error;
@@ -21,14 +19,11 @@ pub enum SolverError {
     BadBoundaryConditions(String),
     #[error("solver did not converge: {0}")]
     DidNotConverge(String),
-    #[error("MFEM internal error: {0}")]
-    MfemError(String),
+    #[error("internal solver error: {0}")]
+    Internal(String),
 }
 
 /// Trait that decouples the FEM solver backend from the rest of the pipeline.
-///
-/// Implement this trait to swap MFEM for a different solver without touching
-/// `kofem-wasm`, `kofem-geom`, or `kofem-mesh`.
 pub trait FemSolver: Send + Sync {
     fn solve_linear_elastic(
         &self,

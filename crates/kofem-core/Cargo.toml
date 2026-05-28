@@ -4,17 +4,10 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
-description = "MFEM-backed FEM solver core for KoFEM"
-
-[features]
-default = ["std"]
-std = []
+description = "Core FEM types and solver trait for KoFEM"
 
 [dependencies]
 kofem-mesh = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 log = { workspace = true }
-
-[build-dependencies]
-cc = "1"
