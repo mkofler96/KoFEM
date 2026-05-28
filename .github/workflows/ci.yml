@@ -9,6 +9,9 @@ env:
   CARGO_TERM_COLOR: always
   SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
   SLACK_CHANNEL: ${{ secrets.SLACK_CHANNEL }}
+  # Bump this (and re-run upload_wasms.sh) whenever Emscripten or the
+  # C++ library versions change.
+  WASM_LIBS_VERSION: v1
 
 jobs:
   rust:
@@ -16,20 +19,6 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install native C++ libraries
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
-            libocct-data-exchange-dev \
-            libocct-foundation-dev \
-            libocct-modeling-algorithms-dev \
-            libocct-modeling-data-dev \
-            netgen-headers \
-            libnglib-dev \
-            libmfem-dev \
-            libhypre-dev \
-            libopenmpi-dev
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -44,14 +33,89 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Tests
-        # Netgen and MFEM have non-thread-safe global state; run all tests single-threaded.
-        run: cargo test --workspace --exclude kofem-wasm -- --test-threads=1 --nocapture
+        run: cargo test --workspace
+
+  wasm:
+    name: WASM (Emscripten)
+    runs-on: ubuntu-24.04
+    env:
+      EMSDK_VERSION: "3.1.64"
+      BINARYEN_VERSION: "124"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache WASM libs
+        id: cache-wasm-libs
+        uses: actions/cache@v4
+        with:
+          path: wasm-libs
+          key: wasm-libs-${{ env.WASM_LIBS_VERSION }}
+
+      - name: Download pre-built WASM libs
+        if: steps.cache-wasm-libs.outputs.cache-hit != 'true'
+        run: |
+          gh release download "wasm-libs-${WASM_LIBS_VERSION}" \
+            --repo mkofler96/KoFEM \
+            --pattern 'wasm-libs.tar.gz' \
+            --output wasm-libs.tar.gz
+          mkdir -p wasm-libs
+          tar -xzf wasm-libs.tar.gz -C wasm-libs
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Set up Emscripten ${{ env.EMSDK_VERSION }}
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: ${{ env.EMSDK_VERSION }}
+          actions-cache-folder: .emsdk-cache
+
+      - name: Update wasm-opt to binaryen ${{ env.BINARYEN_VERSION }}
+        # emsdk 3.1.64's bundled wasm-opt lacks --enable-bulk-memory-opt;
+        # replace it with the same binaryen version used by docker-build-wasm.sh.
+        run: |
+          curl -fsSL \
+            "https://github.com/WebAssembly/binaryen/releases/download/version_${BINARYEN_VERSION}/binaryen-version_${BINARYEN_VERSION}-x86_64-linux.tar.gz" \
+            | tar -xzf - --strip-components=1 -C "$EMSDK/upstream" \
+              "binaryen-version_${BINARYEN_VERSION}/bin/wasm-opt"
+
+      - name: Install ninja
+        run: sudo apt-get install -y --no-install-recommends ninja-build
+
+      - name: Cache CMake build directory
+        uses: actions/cache@v4
+        with:
+          path: target/wasm-build
+          key: wasm-build-${{ env.WASM_LIBS_VERSION }}-${{ env.EMSDK_VERSION }}-${{ hashFiles('engine/**') }}
+          restore-keys: wasm-build-${{ env.WASM_LIBS_VERSION }}-${{ env.EMSDK_VERSION }}-
+
+      - name: Build WASM engine
+        run: |
+          export OCCT_WASM_ROOT=$PWD/wasm-libs/occt
+          export NETGEN_WASM_ROOT=$PWD/wasm-libs/netgen
+          export MFEM_WASM_ROOT=$PWD/wasm-libs/mfem
+          bash scripts/build-wasm.sh
+
+      - name: Upload WASM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kofem-wasm-pkg
+          path: |
+            web/src/wasm/pkg/kofem_wasm_emcc.js
+            web/src/wasm/pkg/kofem_wasm.wasm
+          retention-days: 7
 
   frontend:
     name: Frontend
+    needs: [wasm]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+
+      - name: Download WASM artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: kofem-wasm-pkg
+          path: web/src/wasm/pkg/
 
       - uses: oven-sh/setup-bun@v2
         with:
