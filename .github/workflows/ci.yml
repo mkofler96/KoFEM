@@ -1,38 +1,59 @@
 name: CI
+
 on:
   push:
     branches: [main, develop]
   pull_request:
+
 env:
   CARGO_TERM_COLOR: always
   SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
   SLACK_CHANNEL: ${{ secrets.SLACK_CHANNEL }}
+
+  # bump manually whenever wasm-libs release changes
   WASM_LIBS_VERSION: v2
+
 jobs:
   rust:
     name: Rust (native)
     runs-on: ubuntu-24.04
+
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
-          components: clippy, rustfmt
-      - uses: Swatinem/rust-cache@v2
+          components: clippy,rustfmt
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: native-rust
+
       - name: Format check
         run: cargo fmt --all --check
+
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
+
       - name: Tests
         run: cargo test --workspace
 
   wasm:
     name: WASM (Emscripten)
     runs-on: ubuntu-24.04
+
     env:
       EMSDK_VERSION: "3.1.64"
       BINARYEN_VERSION: "124"
+
     steps:
       - uses: actions/checkout@v4
+
+      ######################################################################
+      # WASM dependency cache (prebuilt OCCT / Netgen / MFEM)
+      ######################################################################
 
       - name: Cache WASM libs
         id: cache-wasm-libs
@@ -40,13 +61,6 @@ jobs:
         with:
           path: wasm-libs
           key: wasm-libs-${{ env.WASM_LIBS_VERSION }}
-      - name: WASM libs cache status
-        run: |
-          if [ "${{ steps.cache-wasm-libs.outputs.cache-hit }}" == "true" ]; then
-            echo "WASM libs cache: HIT - skipping download"
-          else
-            echo "WASM libs cache: MISS - will download from release"
-          fi
 
       - name: Download pre-built WASM libs
         if: steps.cache-wasm-libs.outputs.cache-hit != 'true'
@@ -55,49 +69,84 @@ jobs:
             --repo mkofler96/KoFEM \
             --pattern 'wasm-libs.tar.gz' \
             --output wasm-libs.tar.gz
+
           mkdir -p wasm-libs
           tar -xzf wasm-libs.tar.gz -C wasm-libs
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - name: Set stable Emscripten cache path
+      ######################################################################
+      # EMSDK
+      ######################################################################
+
+      - name: Set stable emscripten cache path
         run: echo "EM_CACHE=$HOME/.emscripten_cache" >> $GITHUB_ENV
 
-      - name: Set up Emscripten ${{ env.EMSDK_VERSION }}
+      - name: Setup Emscripten
         uses: mymindstorm/setup-emsdk@v14
         with:
           version: ${{ env.EMSDK_VERSION }}
           actions-cache-folder: .emsdk-cache
 
-      - name: Cache Emscripten compiled ports
-        id: cache-emscripten
+      ######################################################################
+      # Cache compiled emscripten ports/system libs
+      ######################################################################
+
+      - name: Cache emscripten ports
         uses: actions/cache@v4
         with:
           path: ~/.emscripten_cache
-          key: emscripten-cache-${{ env.EMSDK_VERSION }}-${{ env.BINARYEN_VERSION }}
-      - name: Emscripten cache status
-        run: |
-          if [ "${{ steps.cache-emscripten.outputs.cache-hit }}" == "true" ]; then
-            echo "Emscripten ports cache: HIT - zlib and system libs already compiled"
-          else
-            echo "Emscripten ports cache: MISS - will compile zlib and system libs"
-          fi
+          key: >
+            emscripten-cache-
+            ${{ runner.os }}-
+            ${{ env.EMSDK_VERSION }}-
+            ${{ env.BINARYEN_VERSION }}
 
-      - name: Cache WASM build directory
-        id: cache-wasm-build
+      ######################################################################
+      # Rust cache for wasm target
+      ######################################################################
+
+      - name: Cache Rust (wasm)
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: wasm-rust
+          cache-targets: true
+          cache-all-crates: true
+
+      ######################################################################
+      # ccache (VERY effective for C/C++)
+      ######################################################################
+
+      - name: Install ccache
+        run: sudo apt-get update && sudo apt-get install -y ccache
+
+      - name: Configure ccache
+        run: |
+          mkdir -p ~/.ccache
+
+          {
+            echo "CC=ccache emcc"
+            echo "CXX=ccache em++"
+          } >> $GITHUB_ENV
+
+          ccache --set-config=max_size=2G
+          ccache --zero-stats
+
+      - name: Cache ccache
         uses: actions/cache@v4
         with:
-          path: target/wasm-build
-          key: wasm-build-${{ env.EMSDK_VERSION }}-${{ hashFiles('engine/cpp/**', 'engine/CMakeLists.txt') }}
-          restore-keys: wasm-build-${{ env.EMSDK_VERSION }}-
-      - name: WASM build directory cache status
-        run: |
-          if [ "${{ steps.cache-wasm-build.outputs.cache-hit }}" == "true" ]; then
-            echo "WASM build cache: HIT - Ninja will skip recompilation"
-          else
-            echo "WASM build cache: MISS - engine.cpp will be recompiled"
-            echo "Note: a restore-keys partial hit may still restore old object files"
-          fi
+          path: ~/.ccache
+          key: >
+            ccache-
+            ${{ runner.os }}-
+            ${{ env.EMSDK_VERSION }}-
+            ${{ hashFiles('engine/**/*.cpp', 'engine/**/*.hpp', 'engine/CMakeLists.txt') }}
+          restore-keys: |
+            ccache-${{ runner.os }}-${{ env.EMSDK_VERSION }}-
+
+      ######################################################################
+      # Update wasm-opt
+      ######################################################################
 
       - name: Update wasm-opt to binaryen ${{ env.BINARYEN_VERSION }}
         run: |
@@ -106,28 +155,56 @@ jobs:
             | tar -xzf - --strip-components=1 -C "$EMSDK/upstream" \
               "binaryen-version_${BINARYEN_VERSION}/bin/wasm-opt"
 
+      ######################################################################
+      # IMPORTANT:
+      # Never cache target/wasm-build
+      # CMake stores absolute EMSDK paths and breaks across CI runs
+      ######################################################################
+
+      - name: Clean stale cmake cache
+        run: |
+          rm -f target/wasm-build/CMakeCache.txt
+          rm -rf target/wasm-build/CMakeFiles
+
+      ######################################################################
+      # Build
+      ######################################################################
+
       - name: Build WASM engine
         run: |
           export OCCT_WASM_ROOT=$PWD/wasm-libs/occt
           export NETGEN_WASM_ROOT=$PWD/wasm-libs/netgen
           export MFEM_WASM_ROOT=$PWD/wasm-libs/mfem
+
           bash scripts/build-wasm.sh
+
+      - name: ccache stats
+        run: ccache --show-stats
+
+      ######################################################################
+      # Upload artifacts
+      ######################################################################
 
       - name: Upload WASM artifacts
         uses: actions/upload-artifact@v4
         with:
           name: kofem-wasm-pkg
+          retention-days: 7
           path: |
             web/src/wasm/pkg/kofem_wasm_emcc.js
             web/src/wasm/pkg/kofem_wasm.wasm
-          retention-days: 7
 
   frontend:
     name: Frontend
     needs: [wasm]
     runs-on: ubuntu-24.04
+
     steps:
       - uses: actions/checkout@v4
+
+      ######################################################################
+      # Download wasm output
+      ######################################################################
 
       - name: Download WASM artifacts
         uses: actions/download-artifact@v4
@@ -135,45 +212,74 @@ jobs:
           name: kofem-wasm-pkg
           path: web/src/wasm/pkg/
 
-      - uses: oven-sh/setup-bun@v2
+      ######################################################################
+      # Bun
+      ######################################################################
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
-      - name: Cache bun dependencies
-        id: cache-bun
+      - name: Cache Bun dependencies
         uses: actions/cache@v4
         with:
-          path: ~/.bun/install/cache
-          key: bun-${{ runner.os }}-${{ hashFiles('web/bun.lockb') }}
-          restore-keys: bun-${{ runner.os }}-
-      - name: Bun cache status
-        run: |
-          if [ "${{ steps.cache-bun.outputs.cache-hit }}" == "true" ]; then
-            echo "Bun cache: HIT - dependencies already cached"
-          else
-            echo "Bun cache: MISS - will download dependencies"
-          fi
+          path: |
+            ~/.bun/install/cache
+            web/node_modules
+          key: >
+            bun-
+            ${{ runner.os }}-
+            ${{ hashFiles('web/bun.lockb') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      ######################################################################
+      # Playwright
+      ######################################################################
 
       - name: Cache Playwright browsers
-        id: cache-playwright
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('web/package.json') }}
-          restore-keys: playwright-chromium-${{ runner.os }}-
-      - name: Playwright cache status
-        run: |
-          if [ "${{ steps.cache-playwright.outputs.cache-hit }}" == "true" ]; then
-            echo "Playwright cache: HIT - Chromium already installed"
-          else
-            echo "Playwright cache: MISS - will download Chromium"
-          fi
+          key: >
+            playwright-
+            ${{ runner.os }}-
+            ${{ hashFiles('web/package.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
 
-      - run: cd web && bun install --frozen-lockfile
-      - run: cd web && bun run typecheck
-      - run: cd web && bun run build
-      - run: cd web && bunx playwright install --with-deps chromium
-      - run: cd web && bun run test
+      ######################################################################
+      # Install dependencies
+      ######################################################################
+
+      - name: Install web dependencies
+        run: cd web && bun install --frozen-lockfile
+
+      ######################################################################
+      # Checks
+      ######################################################################
+
+      - name: Typecheck
+        run: cd web && bun run typecheck
+
+      - name: Build frontend
+        run: cd web && bun run build
+
+      ######################################################################
+      # Playwright
+      ######################################################################
+
+      - name: Install Playwright Chromium
+        run: cd web && bunx playwright install --with-deps chromium
+
+      - name: Run frontend tests
+        run: cd web && bun run test
+
+      ######################################################################
+      # Slack report
+      ######################################################################
+
       - name: Post mesh report to Slack
         if: always()
         run: cd web && bun scripts/generate-mesh-report.ts
