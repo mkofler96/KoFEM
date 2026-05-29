@@ -238,12 +238,15 @@ static std::string generate_volume_mesh(
     val surface = parse_json(surface_json);
     val opts    = parse_json(opts_json);
 
-    double max_size    = jdouble(opts, "max_element_size", 10.0);
-    double min_size    = jdouble(opts, "min_element_size",  0.1);
-    double grading     = jdouble(opts, "grading",           0.3);
-    bool   second_ord  = jbool  (opts, "second_order",     false);
-    int    optsteps_2d = jint   (opts, "optsteps_2d",        3);
-    int    optsteps_3d = jint   (opts, "optsteps_3d",        3);
+    double max_size        = jdouble(opts, "max_element_size",   10.0);
+    double min_size        = jdouble(opts, "min_element_size",    0.1);
+    double grading         = jdouble(opts, "grading",             0.3);
+    bool   second_ord      = jbool  (opts, "second_order",       false);
+    int    uselocalh       = jint   (opts, "uselocalh",             1);
+    double elems_per_edge  = jdouble(opts, "elementsperedge",     2.0);
+    double elems_per_curve = jdouble(opts, "elementspercurve",    2.0);
+    int    optsteps_2d     = jint   (opts, "optsteps_2d",           3);
+    int    optsteps_3d     = jint   (opts, "optsteps_3d",           3);
 
     val verts_js = surface["vertices"];
     val tris_js  = surface["triangles"];
@@ -265,12 +268,15 @@ static std::string generate_volume_mesh(
     }
 
     nglib::Ng_Meshing_Parameters mp;
-    mp.maxh         = max_size;
-    mp.minh         = min_size;
-    mp.grading      = grading;
-    mp.second_order = second_ord ? 1 : 0;
-    mp.optsteps_2d  = optsteps_2d;
-    mp.optsteps_3d  = optsteps_3d;
+    mp.uselocalh        = uselocalh;
+    mp.maxh             = max_size;
+    mp.minh             = min_size;
+    mp.grading          = grading;
+    mp.elementsperedge  = elems_per_edge;
+    mp.elementspercurve = elems_per_curve;
+    mp.second_order     = second_ord ? 1 : 0;
+    mp.optsteps_2d      = optsteps_2d;
+    mp.optsteps_3d      = optsteps_3d;
 
     nglib::Ng_Result res = nglib::Ng_GenerateVolumeMesh(mesh, &mp);
     if (res != nglib::NG_OK) {
