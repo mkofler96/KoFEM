@@ -380,7 +380,15 @@ static std::string solve_linear_elastic(
         for (int k = 0; k < 8; ++k) vi[k] = hexs[8*i + k];
         mfem_mesh.AddHex(vi, /*attr=*/1);
     }
-    mfem_mesh.Finalize(/*refine=*/0, /*fix_orientation=*/1);
+    // FinalizeHexMesh / FinalizeTetMesh generate boundary elements and edges,
+    // which MFEM requires for FE space setup.  Finalize() is for general use
+    // but skips GenerateBoundaryElements(), so use the type-specific methods.
+    if (nh == 0)
+        mfem_mesh.FinalizeTetMesh(/*gen_edges=*/1, /*refine=*/0, /*fix_orient=*/true);
+    else if (nt == 0)
+        mfem_mesh.FinalizeHexMesh(/*gen_edges=*/1, /*refine=*/0, /*fix_orient=*/true);
+    else
+        mfem_mesh.Finalize(/*refine=*/0, /*fix_orientation=*/1);
 
     order = std::max(1, order);
     double lam = E * nu / ((1.0 + nu) * (1.0 - 2.0*nu));
