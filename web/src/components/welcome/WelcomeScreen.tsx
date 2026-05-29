@@ -14,6 +14,7 @@ export function WelcomeScreen() {
   const setRunning = useModelStore((s) => s.setRunning);
 
   const [isImportingStep, setIsImportingStep] = useState(false);
+  const [inpError, setInpError] = useState<string | null>(null);
 
   const inpRef = useRef<HTMLInputElement | null>(null);
   const stepRef = useRef<HTMLInputElement | null>(null);
@@ -27,9 +28,9 @@ export function WelcomeScreen() {
     sendToWorker<{ model: Parameters<typeof loadModel>[0] }>("parse", { text })
       .then(({ model }) => {
         if (model.nodes?.length) loadModel(model);
-        else alert("No nodes found.");
+        else setInpError("No nodes found.");
       })
-      .catch((err) => alert(`Parse error: ${err.message}`))
+      .catch((err) => setInpError(`Parse error: ${err.message}`))
       .finally(() => setRunning(false));
   }
 
@@ -183,6 +184,14 @@ export function WelcomeScreen() {
             style={{ color: "#dc2626", fontSize: 12, padding: "4px 0" }}
           >
             {stepImportError}
+          </div>
+        )}
+        {inpError && (
+          <div
+            data-testid="inp-error"
+            style={{ color: "#dc2626", fontSize: 12, padding: "4px 0" }}
+          >
+            {inpError}
           </div>
         )}
       </div>

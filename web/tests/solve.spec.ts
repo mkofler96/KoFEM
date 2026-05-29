@@ -34,29 +34,17 @@ test('page loads with welcome screen and enters the app', async ({ page }) => {
 
 // ── Solver integration tests ──────────────────────────────────────────────────
 
-test('solve on hex mesh shows clear CTETRA error', async ({ page }) => {
-  let alertMessage = ''
-  page.on('dialog', async dialog => {
-    alertMessage = dialog.message()
-    await dialog.dismiss()
-  })
-
+test('solve on hex mesh completes and shows results', async ({ page }) => {
   await startExample(page)
   await goToSolvePanel(page)
 
-  // The built-in cantilever uses CHEXA elements. MFEM only handles CTETRA.
-  // All pre-flight checks pass (cantilever has nodes, material, BCs, loads),
-  // so the button is enabled and the worker is actually invoked.
+  // The built-in cantilever uses CHEXA elements — the solver now handles them natively.
   const solveBtn = page.getByRole('button').filter({ hasText: 'Run static solve' })
   await expect(solveBtn).toBeEnabled()
   await solveBtn.click()
 
-  // Wait for the rejected solve to complete and the button to re-enable
-  await expect(solveBtn).toBeEnabled({ timeout: 15_000 })
-
-  // The error must be actionable, not a raw MFEM crash
-  expect(alertMessage).toContain('CTETRA')
-  expect(alertMessage).toContain('Vol Mesh')
+  // After a successful solve the panel switches to "Results" and shows displacement
+  await expect(page.getByText(/Max \|U\|/)).toBeVisible({ timeout: 30_000 })
 })
 
 // ── STEP → Volume mesh pipeline ───────────────────────────────────────────────

@@ -136,6 +136,7 @@ function GeometryPanel() {
   const [editing, setEditing] = useState<BoxGeometry | null>(null);
   const [editingMatId, setEditingMatId] = useState<number | "new" | null>(null);
   const [isImportingStep, setIsImportingStep] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const inpRef = useRef<HTMLInputElement | null>(null);
   const stepRef = useRef<HTMLInputElement | null>(null);
@@ -152,7 +153,7 @@ function GeometryPanel() {
       }>("mesh", geom);
       applyMeshResult(n, e, geom.name);
     } catch (err) {
-      alert(`Meshing failed: ${err}`);
+      setError(`Meshing failed: ${err}`);
     } finally {
       setMeshing(false);
     }
@@ -175,9 +176,9 @@ function GeometryPanel() {
     sendToWorker<{ model: Parameters<typeof loadModel>[0] }>("parse", { text })
       .then(({ model }) => {
         if (model.nodes?.length) loadModel(model);
-        else alert("No nodes found.");
+        else setError("No nodes found.");
       })
-      .catch((err) => alert(`Parse error: ${err.message}`))
+      .catch((err) => setError(`Parse error: ${err.message}`))
       .finally(() => setRunning(false));
   }
 
@@ -214,7 +215,7 @@ function GeometryPanel() {
       }>("volume_mesh", { surface: stepSurface });
       applyMeshResult(n, e, "STEP Volume Mesh");
     } catch (err) {
-      alert(`Volume meshing failed: ${err}`);
+      setError(`Volume meshing failed: ${err}`);
     } finally {
       setMeshing(false);
     }
@@ -248,6 +249,12 @@ function GeometryPanel() {
       </div>
 
       <div className={styles.tabContent}>
+        {error && (
+          <div className={styles.errorBanner}>
+            <span>{error}</span>
+            <button onClick={() => setError(null)}>×</button>
+          </div>
+        )}
         {/* ── Inputs tab ─────────────────────────────────────────── */}
         {geomTab === "inputs" && (
           <>
@@ -554,6 +561,7 @@ function MeshPanel() {
   const setMeshing = useModelStore((s) => s.setMeshing);
   const applyMeshResult = useModelStore((s) => s.applyMeshResult);
   const setMode = useModelStore((s) => s.setMode);
+  const [error, setError] = useState<string | null>(null);
 
   async function remesh() {
     const g = geometries[0];
@@ -566,7 +574,7 @@ function MeshPanel() {
       }>("mesh", g);
       applyMeshResult(n, e, g.name);
     } catch (err) {
-      alert(`Meshing failed: ${err}`);
+      setError(`Meshing failed: ${err}`);
     } finally {
       setMeshing(false);
     }
@@ -584,6 +592,12 @@ function MeshPanel() {
       </div>
 
       <div className={styles.tabContent}>
+        {error && (
+          <div className={styles.errorBanner}>
+            <span>{error}</span>
+            <button onClick={() => setError(null)}>×</button>
+          </div>
+        )}
         {nodes.length === 0 ? (
           <div className={styles.empty}>
             No mesh — go back to Geometry and add a primitive or import.
@@ -872,6 +886,7 @@ function SolvePanel() {
   const setRunning = useModelStore((s) => s.setRunning);
   const setResult = useModelStore((s) => s.setResult);
   const setMode = useModelStore((s) => s.setMode);
+  const [error, setError] = useState<string | null>(null);
 
   const meshOk = nodes.length > 0;
   const matOk = materials.length > 0;
@@ -893,7 +908,7 @@ function SolvePanel() {
         setResult({ displacements: new Float64Array(displacements) });
         setMode("results");
       })
-      .catch((err) => alert(`Solver error: ${err.message}`))
+      .catch((err) => setError(`Solver error: ${err.message}`))
       .finally(() => setRunning(false));
   }
 
@@ -929,6 +944,12 @@ function SolvePanel() {
       </div>
 
       <div className={styles.tabContent}>
+        {error && (
+          <div className={styles.errorBanner}>
+            <span>{error}</span>
+            <button onClick={() => setError(null)}>×</button>
+          </div>
+        )}
         <div className={styles.sectionLabel}>Pre-flight check</div>
         {checks.map(([ok, label], i) => (
           <div key={i} className={styles.checkRow}>
@@ -998,7 +1019,7 @@ function ResultsPanel() {
     .filter(({ n }) => n.x >= maxX - MAX_X_TOL);
   const tipUy =
     tipNodes.length > 0
-      ? tipNodes.reduce((sum, { i }) => sum + (d[i * 6 + 1] ?? 0), 0) /
+      ? tipNodes.reduce((sum, { i }) => sum + (d[i * 3 + 1] ?? 0), 0) /
         tipNodes.length
       : 0;
   const P = 10_000,

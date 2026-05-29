@@ -643,6 +643,34 @@
   line-height: 1.5;
 }
 
+/* ── Error banner ───────────────────────────────────────────── */
+
+.errorBanner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-radius: var(--r-md);
+  font-size: 12px;
+  line-height: 1.4;
+  margin-bottom: 8px;
+}
+
+.errorBanner span { flex: 1; }
+
+.errorBanner button {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--warn);
+  font-size: 14px;
+  padding: 0;
+  line-height: 1;
+}
+
 /* ── Empty state ────────────────────────────────────────────── */
 
 .empty {

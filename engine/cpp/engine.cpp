@@ -321,8 +321,14 @@ static std::string solve_linear_elastic(
 
     val verts_js = mesh_js["vertices"];
     val tets_js  = mesh_js["tetrahedra"];
+    val hexs_js  = mesh_js["hexahedra"];
     unsigned nv  = verts_js["length"].as<unsigned>();
     unsigned nt  = tets_js ["length"].as<unsigned>();
+    unsigned nh  = hexs_js ["length"].as<unsigned>();
+
+    if (nt == 0 && nh == 0)
+        throw std::runtime_error(
+            "Mesh has no elements. Send at least one CTETRA or CHEXA element.");
 
     std::vector<double> vertices;
     vertices.reserve(3 * nv);
@@ -343,6 +349,14 @@ static std::string solve_linear_elastic(
         tets.push_back(t[3].as<int>());
     }
 
+    std::vector<int> hexs;
+    hexs.reserve(8 * nh);
+    for (unsigned i = 0; i < nh; ++i) {
+        val h = hexs_js[i];
+        for (int k = 0; k < 8; ++k)
+            hexs.push_back(h[k].as<int>());
+    }
+
     double E  = jdouble(mat_js, "young_modulus", 210e9);
     double nu = jdouble(mat_js, "poisson_ratio",   0.3);
 
@@ -352,16 +366,21 @@ static std::string solve_linear_elastic(
     val loads_js  = bcs_js["point_loads"];
     unsigned n_loads = loads_js["length"].as<unsigned>();
 
-    // Build MFEM mesh
+    // Build MFEM mesh — supports pure-tet, pure-hex, or mixed meshes
     constexpr int dim = 3;
-    Mesh mfem_mesh(dim, (int)nv, (int)nt, 0, dim);
+    Mesh mfem_mesh(dim, (int)nv, (int)(nt + nh), 0, dim);
     for (unsigned i = 0; i < nv; ++i)
         mfem_mesh.AddVertex(vertices.data() + 3*i);
     for (unsigned i = 0; i < nt; ++i) {
         int vi[4] = { tets[4*i], tets[4*i+1], tets[4*i+2], tets[4*i+3] };
         mfem_mesh.AddTet(vi, /*attr=*/1);
     }
-    mfem_mesh.FinalizeTetMesh(/*gen_edges=*/1, /*refine=*/0, /*fix_orient=*/true);
+    for (unsigned i = 0; i < nh; ++i) {
+        int vi[8];
+        for (int k = 0; k < 8; ++k) vi[k] = hexs[8*i + k];
+        mfem_mesh.AddHex(vi, /*attr=*/1);
+    }
+    mfem_mesh.Finalize(/*refine=*/0, /*fix_orientation=*/1);
 
     order = std::max(1, order);
     double lam = E * nu / ((1.0 + nu) * (1.0 - 2.0*nu));
