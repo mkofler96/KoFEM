@@ -1,5 +1,5 @@
 import { useState, type ChangeEvent } from 'react'
-import { useModelStore } from '../../store/modelStore'
+import { useModelStore, type Node, type Element } from '../../store/modelStore'
 import { sendToWorker } from '../../workers/sharedWorker'
 import { ReportProgress } from '../report/ReportProgress'
 import styles from './Toolbar.module.css'
@@ -21,6 +21,7 @@ export function Toolbar() {
   const showVolMesh = useModelStore(s => s.showVolMesh)
   const setVolMesh = useModelStore(s => s.setVolMesh)
   const setShowVolMesh = useModelStore(s => s.setShowVolMesh)
+  const applyMeshResult = useModelStore(s => s.applyMeshResult)
   const stepImportError = useModelStore(s => s.stepImportError)
   const setStepImportError = useModelStore(s => s.setStepImportError)
 
@@ -81,10 +82,16 @@ export function Toolbar() {
   const handleComputeVolMesh = () => {
     if (!stepSurface) return
     setIsComputingVol(true)
-    sendToWorker<{ points: [number, number, number][]; edges: [number, number][] }>(
-      'volume_mesh', { surface: stepSurface }
-    )
-      .then(({ points, edges }) => setVolMesh({ points, edges }))
+    sendToWorker<{
+      points: [number, number, number][]
+      edges: [number, number][]
+      nodes: Node[]
+      elements: Element[]
+    }>('volume_mesh', { surface: stepSurface })
+      .then(({ points, edges, nodes, elements }) => {
+        setVolMesh({ points, edges })
+        applyMeshResult(nodes, elements, modelName || 'STEP Mesh')
+      })
       .catch(err => alert(`Volume meshing failed: ${err.message}`))
       .finally(() => setIsComputingVol(false))
   }

@@ -77,10 +77,18 @@ self.onmessage = async (event: MessageEvent) => {
         loads: Load[]
       }
 
-      // Map store model format → MFEM bridge format
+      // Map store model format → MFEM bridge format (tet-only solver)
+      const ctetra = elements.filter(e => e.type === 'CTETRA')
+      if (ctetra.length === 0) {
+        throw new Error(
+          'No tetrahedral elements (CTETRA) found. ' +
+          'The MFEM solver requires a tetrahedral mesh — ' +
+          'import a STEP file and click "Vol Mesh" first.'
+        )
+      }
       const mesh = {
         vertices: nodes.map(n => [n.x, n.y, n.z]),
-        tetrahedra: elements.map(e => e.nodeIds),
+        tetrahedra: ctetra.map(e => e.nodeIds),
       }
 
       const mat = materials[0] ?? { young: 210e9, poisson: 0.3, density: 7850 }
