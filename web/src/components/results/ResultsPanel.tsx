@@ -28,7 +28,7 @@ export function ResultsPanel() {
     .map((n, i) => ({ i, n }))
     .filter(({ n }) => n.x >= maxX - MAX_X_TOL)
   const tipUy = tipNodes.length > 0
-    ? tipNodes.reduce((sum, { i }) => sum + (d[i * 6 + 1] ?? 0), 0) / tipNodes.length
+    ? tipNodes.reduce((sum, { i }) => sum + (d[i * 3 + 1] ?? 0), 0) / tipNodes.length
     : 0
 
   // CHEXA cantilever: P=10 kN, L=1 m, h=0.1 m square section → I = h⁴/12

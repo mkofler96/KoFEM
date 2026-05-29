@@ -19,7 +19,7 @@ async function ensureInit() {
 // ── Payload types ─────────────────────────────────────────────────────────────
 
 interface Node { id: number; x: number; y: number; z: number }
-interface Element { id: number; type: string; nodeIds: [number, number, number, number]; propertyId: number }
+interface Element { id: number; type: string; nodeIds: number[]; propertyId: number }
 interface Material { id: number; name: string; young: number; poisson: number; density: number }
 interface Constraint { nodeId: number; dof: number; prescribedValue?: number }
 interface Load { nodeId: number; dof: number; value: number }
@@ -77,10 +77,18 @@ self.onmessage = async (event: MessageEvent) => {
         loads: Load[]
       }
 
-      // Map store model format → MFEM bridge format
+      const tetrahedra = elements.filter(e => e.type === 'CTETRA').map(e => e.nodeIds)
+      const hexahedra  = elements.filter(e => e.type === 'CHEXA').map(e => e.nodeIds)
+      if (tetrahedra.length === 0 && hexahedra.length === 0) {
+        throw new Error(
+          'No supported elements found. MFEM requires CTETRA or CHEXA elements — ' +
+          'import a STEP file and click "Mesh STEP volume" first.'
+        )
+      }
       const mesh = {
         vertices: nodes.map(n => [n.x, n.y, n.z]),
-        tetrahedra: elements.map(e => e.nodeIds),
+        tetrahedra,
+        hexahedra,
       }
 
       const mat = materials[0] ?? { young: 210e9, poisson: 0.3, density: 7850 }

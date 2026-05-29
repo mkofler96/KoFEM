@@ -1,4 +1,9 @@
 import { defineConfig } from '@playwright/test'
+import fs from 'fs'
+
+// Fall back to the pre-installed chromium when the headless-shell isn't available
+const FALLBACK_CHROME = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'
+const executablePath = fs.existsSync(FALLBACK_CHROME) ? FALLBACK_CHROME : undefined
 
 export default defineConfig({
   testDir: './tests',
@@ -7,6 +12,7 @@ export default defineConfig({
   use: {
     baseURL: 'http://localhost:4173',
     headless: true,
+    ...(executablePath ? { launchOptions: { executablePath } } : {}),
   },
   webServer: {
     command: 'bun run build:dev && bun run preview',
