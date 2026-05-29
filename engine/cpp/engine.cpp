@@ -242,6 +242,8 @@ static std::string generate_volume_mesh(
     double min_size    = jdouble(opts, "min_element_size",  0.1);
     double grading     = jdouble(opts, "grading",           0.3);
     bool   second_ord  = jbool  (opts, "second_order",     false);
+    int    optsteps_2d = jint   (opts, "optsteps_2d",        3);
+    int    optsteps_3d = jint   (opts, "optsteps_3d",        3);
 
     val verts_js = surface["vertices"];
     val tris_js  = surface["triangles"];
@@ -267,6 +269,8 @@ static std::string generate_volume_mesh(
     mp.minh         = min_size;
     mp.grading      = grading;
     mp.second_order = second_ord ? 1 : 0;
+    mp.optsteps_2d  = optsteps_2d;
+    mp.optsteps_3d  = optsteps_3d;
 
     nglib::Ng_Result res = nglib::Ng_GenerateVolumeMesh(mesh, &mp);
     if (res != nglib::NG_OK) {

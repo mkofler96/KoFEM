@@ -49,7 +49,7 @@ self.onmessage = async (event: MessageEvent) => {
 
       self.postMessage({ id, log: `Surface: ${surface.vertices.length} vertices, ${surface.triangles.length} triangles` })
 
-      const opts = JSON.stringify({ max_element_size: 10.0, min_element_size: 2.0, grading: 0.5, second_order: false })
+      const opts = JSON.stringify({ max_element_size: 10.0, min_element_size: 2.0, grading: 0.5, second_order: false, optsteps_2d: 0, optsteps_3d: 1 })
 
       self.postMessage({ id, log: 'Calling Netgen volume mesher…' })
 
