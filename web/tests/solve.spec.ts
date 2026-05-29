@@ -49,9 +49,10 @@ test('solve on hex mesh completes and shows results', async ({ page }) => {
 
 // ── STEP → Volume mesh pipeline ───────────────────────────────────────────────
 
-const STEP_FILE = path.resolve('..', 'test_files', 'box.stp')
+const STEP_FILE = path.resolve('..', 'test_files', 'tube.stp')
 
 test('vol mesh stores FEM nodes in the store for solving', async ({ page }) => {
+  test.setTimeout(180_000)
   test.skip(!fs.existsSync(STEP_FILE), `STEP fixture not found: ${STEP_FILE}`)
 
   const pageErrors: string[] = []
@@ -67,17 +68,20 @@ test('vol mesh stores FEM nodes in the store for solving', async ({ page }) => {
   ).toBeEnabled({ timeout: 60_000 })
   await expect(page.getByTestId('step-error')).not.toBeVisible()
 
-  // ── 2. Compute volume mesh ────────────────────────────────────────────────
+  // ── 2. Navigate to Mesh panel where the volume mesh button lives ─────────
+  await page.locator('nav').getByRole('button').filter({ hasText: 'Mesh' }).click()
+
+  // ── 3. Compute volume mesh ────────────────────────────────────────────────
   await page.getByRole('button').filter({ hasText: 'Mesh STEP volume' }).click()
   // Button changes to "Meshing…" while running, then back when done
   await expect(page.getByText('Meshing…')).toBeVisible({ timeout: 10_000 })
-  await expect(page.getByText('Meshing…')).not.toBeVisible({ timeout: 60_000 })
+  await expect(page.getByText('Meshing…')).not.toBeVisible({ timeout: 120_000 })
 
-  // ── 3. Verify FEM data landed in the store ────────────────────────────────
+  // ── 4. Verify FEM data landed in the store ────────────────────────────────
   // Navigate to the Solve panel — pre-flight shows mesh-ready with node count
   await goToSolvePanel(page)
   // "Mesh ready · X nodes · Y elements" is shown only when nodes.length > 0
   await expect(page.getByText(/Mesh ready/)).toBeVisible()
 
   expect(pageErrors).toHaveLength(0)
-}, 90_000)   // extended timeout: WASM init + tessellation + Netgen vol mesh
+})

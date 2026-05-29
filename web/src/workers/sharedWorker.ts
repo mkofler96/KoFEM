@@ -5,6 +5,11 @@
 let _worker: Worker | null = null
 let _msgId = 0
 const _pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>()
+let _logCallback: ((message: string) => void) | null = null
+
+export function setLogCallback(cb: ((message: string) => void) | null) {
+  _logCallback = cb
+}
 
 function createWorker(): Worker {
   const w = new Worker(
@@ -13,7 +18,11 @@ function createWorker(): Worker {
   )
 
   w.onmessage = (e: MessageEvent) => {
-    const { id, ok, ...rest } = e.data as { id: number; ok: boolean; [k: string]: unknown }
+    const { id, ok, log, ...rest } = e.data as { id: number; ok?: boolean; log?: string; [k: string]: unknown }
+    if (log !== undefined) {
+      _logCallback?.(log)
+      return
+    }
     const p = _pending.get(id)
     if (!p) return
     _pending.delete(id)

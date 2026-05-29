@@ -286,6 +286,9 @@ export const useModelStore = create<ModelState>()(
       s.stepSurface = mesh; s.stepWireframe = false
       s.volMesh = null; s.showVolMesh = false
       s.stepImportError = null
+      s.nodes = []; s.elements = []
+      s.constraints = []; s.loads = []
+      s.result = null
       if (mesh) s.fitViewTrigger++
     }),
     triggerFitView: () => set(s => { s.fitViewTrigger++ }),
