@@ -49,7 +49,7 @@ test('solve on hex mesh completes and shows results', async ({ page }) => {
 
 // ── STEP → Volume mesh pipeline ───────────────────────────────────────────────
 
-const STEP_FILE = path.resolve('..', 'test_files', 'box.stp')
+const STEP_FILE = path.resolve('..', 'test_files', 'tube.stp')
 
 test('vol mesh stores FEM nodes in the store for solving', async ({ page }) => {
   test.skip(!fs.existsSync(STEP_FILE), `STEP fixture not found: ${STEP_FILE}`)
