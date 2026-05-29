@@ -52,6 +52,26 @@ self.onmessage = async (event: MessageEvent) => {
 
       self.postMessage({ id, log: `Surface: ${surface.vertices.length} vertices, ${surface.triangles.length} triangles` })
 
+      // OCCT tessellates each face independently, emitting duplicate vertices at shared
+      // edges. The resulting non-manifold surface causes Netgen's advancing-front to hang.
+      // Deduplicate by snapping to a 1e-4 grid and remapping triangle indices.
+      const PREC = 1e-4
+      const keyFor = ([x, y, z]: [number, number, number]) =>
+        `${Math.round(x / PREC)},${Math.round(y / PREC)},${Math.round(z / PREC)}`
+      const vertMap = new Map<string, number>()
+      const dedupVerts: [number, number, number][] = []
+      const remap = new Int32Array(surface.vertices.length)
+      for (let i = 0; i < surface.vertices.length; i++) {
+        const k = keyFor(surface.vertices[i])
+        if (!vertMap.has(k)) { vertMap.set(k, dedupVerts.length); dedupVerts.push(surface.vertices[i]) }
+        remap[i] = vertMap.get(k)!
+      }
+      const dedupTris = surface.triangles
+        .map(([a, b, c]) => [remap[a], remap[b], remap[c]] as [number, number, number])
+        .filter(([a, b, c]) => a !== b && b !== c && a !== c)
+      self.postMessage({ id, log: `Deduped: ${surface.vertices.length}→${dedupVerts.length} vertices, ${surface.triangles.length}→${dedupTris.length} triangles` })
+      const manifoldSurface = { vertices: dedupVerts, triangles: dedupTris }
+
       const opts = JSON.stringify({
         max_element_size: 20.0, min_element_size: 3.0, grading: 0.5, second_order: false,
         uselocalh: 0, elementsperedge: 1.0, elementspercurve: 1.0,
@@ -60,7 +80,7 @@ self.onmessage = async (event: MessageEvent) => {
 
       self.postMessage({ id, log: 'Calling Netgen volume mesher…' })
 
-      const json = Module.generate_volume_mesh(JSON.stringify(surface), opts)
+      const json = Module.generate_volume_mesh(JSON.stringify(manifoldSurface), opts)
       const dto = JSON.parse(json) as { vertices: [number, number, number][]; tetrahedra: [number, number, number, number][] }
 
       self.postMessage({ id, log: `Volume mesh complete: ${dto.vertices.length} nodes, ${dto.tetrahedra.length} tetrahedra` })
