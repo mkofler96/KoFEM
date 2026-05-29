@@ -392,7 +392,8 @@
   flex-shrink: 0;
 }
 
-.nextBtn:hover { background: #1f2937; }
+.nextBtn:hover:not(:disabled) { background: #1f2937; }
+.nextBtn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .solveBtn {
   width: 100%;
@@ -678,4 +679,135 @@
   color: var(--muted);
   font-style: italic;
   padding: 8px 0;
+}
+
+/* ── STEP surface ready hint ────────────────────────────────── */
+
+.stepSurfaceReady {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 7px 10px;
+  background: var(--ok-soft);
+  border: 1px solid #86efac;
+  border-radius: var(--r-md);
+  font-size: 12px;
+  color: var(--ok);
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+
+.stepSurfaceReady span:first-child {
+  flex-shrink: 0;
+  font-size: 13px;
+  margin-top: 1px;
+}
+
+/* ── Mesh volume button ─────────────────────────────────────── */
+
+.meshVolBtn {
+  width: 100%;
+  margin-top: 4px;
+  padding: 11px 0;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--r-md);
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 100ms, box-shadow 100ms;
+}
+
+.meshVolBtn:hover:not(:disabled) {
+  background: #1750b3;
+  box-shadow: 0 4px 12px rgba(31, 95, 208, 0.3);
+}
+
+.meshVolBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Log panel (VSCode-style collapsable) ───────────────────── */
+
+.logSection {
+  margin-top: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+
+.logHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 10px;
+  background: var(--surface-3);
+  border: none;
+  cursor: pointer;
+  user-select: none;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  text-align: left;
+  transition: background 100ms;
+}
+
+.logHeader:hover { background: var(--hover); }
+
+.logChevron {
+  font-size: 7px;
+  display: inline-block;
+  transition: transform 150ms ease;
+  color: var(--muted-2);
+  flex-shrink: 0;
+}
+
+.logChevronOpen { transform: rotate(90deg); }
+
+.logSpinner {
+  margin-left: 2px;
+  color: var(--accent);
+  animation: logPulse 1s ease-in-out infinite;
+}
+
+@keyframes logPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+.logBadge {
+  margin-left: auto;
+  background: var(--border);
+  color: var(--muted);
+  border-radius: 10px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.logBody {
+  background: #161b22;
+  padding: 8px 10px;
+  max-height: 180px;
+  overflow-y: auto;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 11.5px;
+  line-height: 1.7;
+}
+
+.logLine {
+  color: #6e7681;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.logLineLast { color: #c9d1d9; }
+
+.logEmpty {
+  color: #3d444d;
+  font-style: italic;
 }

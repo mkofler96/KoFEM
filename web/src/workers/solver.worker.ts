@@ -46,9 +46,17 @@ self.onmessage = async (event: MessageEvent) => {
         vertices: payload.surface.points as [number, number, number][],
         triangles: payload.surface.triangles as [number, number, number][],
       }
+
+      self.postMessage({ id, log: `Surface: ${surface.vertices.length} vertices, ${surface.triangles.length} triangles` })
+
       const opts = JSON.stringify({ max_element_size: 10.0, min_element_size: 0.1, grading: 0.3, second_order: false })
+
+      self.postMessage({ id, log: 'Calling Netgen volume mesher…' })
+
       const json = Module.generate_volume_mesh(JSON.stringify(surface), opts)
       const dto = JSON.parse(json) as { vertices: [number, number, number][]; tetrahedra: [number, number, number, number][] }
+
+      self.postMessage({ id, log: `Volume mesh complete: ${dto.vertices.length} nodes, ${dto.tetrahedra.length} tetrahedra` })
 
       const nodes: Node[] = dto.vertices.map(([x, y, z], i) => ({ id: i, x, y, z }))
       const elements: Element[] = dto.tetrahedra.map((v, i) => ({
@@ -64,6 +72,8 @@ self.onmessage = async (event: MessageEvent) => {
           if (!edgeSet.has(key)) { edgeSet.add(key); edges.push([u, v]) }
         }
       }
+
+      self.postMessage({ id, log: `Wireframe: ${edges.length} edges built` })
 
       self.postMessage({ id, ok: true, points: dto.vertices, edges, nodes, elements })
 

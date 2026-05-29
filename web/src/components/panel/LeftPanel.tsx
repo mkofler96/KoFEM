@@ -1,4 +1,4 @@
-import { useState, useRef, type ChangeEvent } from "react";
+import { useState, useRef, useEffect, type ChangeEvent } from "react";
 import { useModelStore } from "../../store/modelStore";
 import type {
   BoxGeometry,
@@ -9,7 +9,7 @@ import type {
 import { GeometryDialog } from "../geometry/GeometryDialog";
 import { groupConstraints, groupLoads } from "../../lib/parseAbaqus";
 import { fmt } from "../../lib/modelDisplay";
-import { sendToWorker } from "../../workers/sharedWorker";
+import { sendToWorker, setLogCallback } from "../../workers/sharedWorker";
 import styles from "./LeftPanel.module.css";
 
 // ── Shared step header ────────────────────────────────────────────────────────
@@ -115,7 +115,7 @@ function GeometryPanel() {
   const updateGeometry = useModelStore((s) => s.updateGeometry);
   const deleteGeometry = useModelStore((s) => s.deleteGeometry);
   const setMeshing = useModelStore((s) => s.setMeshing);
-  const applyMeshResult = useModelStore((s) => s.applyMeshResult);
+  const meshGeometry = useModelStore((s) => s.meshGeometry);
   const isMeshing = useModelStore((s) => s.isMeshing);
   const nodes = useModelStore((s) => s.nodes);
   const elements = useModelStore((s) => s.elements);
@@ -144,14 +144,10 @@ function GeometryPanel() {
   const treeCount =
     geometries.length + (nodes.length > 0 ? 1 : 0) + materials.length;
 
-  async function runMesh(geom: BoxGeometry) {
+  function runMesh(geom: BoxGeometry) {
     setMeshing(true);
     try {
-      const { nodes: n, elements: e } = await sendToWorker<{
-        nodes: Node[];
-        elements: Element[];
-      }>("mesh", geom);
-      applyMeshResult(n, e, geom.name);
+      meshGeometry(geom.id);
     } catch (err) {
       setError(`Meshing failed: ${err}`);
     } finally {
@@ -203,22 +199,6 @@ function GeometryPanel() {
         setIsImportingStep(false);
         setRunning(false);
       });
-  }
-
-  async function handleVolMesh() {
-    if (!stepSurface) return;
-    setMeshing(true);
-    try {
-      const { nodes: n, elements: e } = await sendToWorker<{
-        nodes: Node[];
-        elements: Element[];
-      }>("volume_mesh", { surface: stepSurface });
-      applyMeshResult(n, e, "STEP Volume Mesh");
-    } catch (err) {
-      setError(`Volume meshing failed: ${err}`);
-    } finally {
-      setMeshing(false);
-    }
   }
 
   return (
@@ -390,13 +370,13 @@ function GeometryPanel() {
             )}
 
             {stepSurface && (
-              <button
-                className={styles.actionBtn}
-                disabled={isMeshing}
-                onClick={handleVolMesh}
-              >
-                {isMeshing ? "Meshing…" : "Mesh STEP volume"}
-              </button>
+              <div className={styles.stepSurfaceReady}>
+                <span>✓</span>
+                <span>
+                  Surface ready · {stepSurface.points.length} vertices —
+                  go to <strong>Mesh</strong> to generate volume mesh
+                </span>
+              </div>
             )}
 
             <div className={styles.sectionLabel}>Healing tolerances</div>
@@ -559,20 +539,50 @@ function MeshPanel() {
   const isMeshing = useModelStore((s) => s.isMeshing);
   const geometries = useModelStore((s) => s.geometries);
   const setMeshing = useModelStore((s) => s.setMeshing);
+  const meshGeometry = useModelStore((s) => s.meshGeometry);
   const applyMeshResult = useModelStore((s) => s.applyMeshResult);
   const setMode = useModelStore((s) => s.setMode);
-  const [error, setError] = useState<string | null>(null);
+  const stepSurface = useModelStore((s) => s.stepSurface);
 
-  async function remesh() {
-    const g = geometries[0];
-    if (!g) return;
+  const [error, setError] = useState<string | null>(null);
+  const [logs, setLogs] = useState<string[]>([]);
+  const [logsOpen, setLogsOpen] = useState(true);
+  const logsEndRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setLogCallback((msg) => setLogs((prev) => [...prev, msg]));
+    return () => setLogCallback(null);
+  }, []);
+
+  useEffect(() => {
+    logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [logs]);
+
+  async function handleVolMesh() {
+    if (!stepSurface) return;
     setMeshing(true);
+    setLogs([]);
     try {
       const { nodes: n, elements: e } = await sendToWorker<{
         nodes: Node[];
         elements: Element[];
-      }>("mesh", g);
-      applyMeshResult(n, e, g.name);
+      }>("volume_mesh", { surface: stepSurface });
+      applyMeshResult(n, e, "STEP Volume Mesh");
+    } catch (err) {
+      setError(`Volume meshing failed: ${err}`);
+    } finally {
+      setMeshing(false);
+    }
+  }
+
+  function remesh() {
+    const g = geometries[0];
+    if (!g) return;
+    setMeshing(true);
+    setLogs(["Regenerating box mesh…"]);
+    try {
+      meshGeometry(g.id);
+      setLogs((prev) => [...prev, "Mesh regenerated"]);
     } catch (err) {
       setError(`Meshing failed: ${err}`);
     } finally {
@@ -582,6 +592,7 @@ function MeshPanel() {
 
   const hexCount = elements.filter((e) => e.type === "CHEXA").length;
   const tetCount = elements.filter((e) => e.type === "CTETRA").length;
+  const showLogs = logs.length > 0 || isMeshing;
 
   return (
     <div className={styles.panel}>
@@ -598,10 +609,37 @@ function MeshPanel() {
             <button onClick={() => setError(null)}>×</button>
           </div>
         )}
+
         {nodes.length === 0 ? (
-          <div className={styles.empty}>
-            No mesh — go back to Geometry and add a primitive or import.
-          </div>
+          <>
+            {stepSurface ? (
+              <>
+                <div className={styles.sectionLabel}>STEP Surface</div>
+                <div className={styles.statGroup}>
+                  <div className={styles.statRow}>
+                    <span className={styles.statKey}>Vertices</span>
+                    <span className={styles.statVal}>{stepSurface.points.length}</span>
+                  </div>
+                  <div className={styles.statRow}>
+                    <span className={styles.statKey}>Triangles</span>
+                    <span className={styles.statVal}>{stepSurface.triangles.length}</span>
+                  </div>
+                </div>
+                <button
+                  className={styles.meshVolBtn}
+                  disabled={isMeshing}
+                  onClick={handleVolMesh}
+                >
+                  {isMeshing ? "Meshing…" : "▶  Mesh STEP volume"}
+                </button>
+              </>
+            ) : (
+              <div className={styles.empty}>
+                No mesh — import a STEP file on the Geometry page, or add a
+                primitive.
+              </div>
+            )}
+          </>
         ) : (
           <>
             <div className={styles.statGroup}>
@@ -643,9 +681,51 @@ function MeshPanel() {
             )}
           </>
         )}
+
+        {/* VSCode-style collapsable log panel */}
+        {showLogs && (
+          <div className={styles.logSection}>
+            <button
+              className={styles.logHeader}
+              onClick={() => setLogsOpen((v) => !v)}
+            >
+              <span
+                className={`${styles.logChevron} ${logsOpen ? styles.logChevronOpen : ""}`}
+              >
+                ▶
+              </span>
+              <span>LOGS</span>
+              {isMeshing && <span className={styles.logSpinner}>●</span>}
+              {logs.length > 0 && (
+                <span className={styles.logBadge}>{logs.length}</span>
+              )}
+            </button>
+            {logsOpen && (
+              <div className={styles.logBody}>
+                {logs.length === 0 ? (
+                  <div className={styles.logEmpty}>Waiting…</div>
+                ) : (
+                  logs.map((line, i) => (
+                    <div
+                      key={i}
+                      className={`${styles.logLine} ${i === logs.length - 1 ? styles.logLineLast : ""}`}
+                    >
+                      {line}
+                    </div>
+                  ))
+                )}
+                <div ref={logsEndRef} />
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
-      <button className={styles.nextBtn} onClick={() => setMode("constraints")}>
+      <button
+        className={styles.nextBtn}
+        onClick={() => setMode("constraints")}
+        disabled={nodes.length === 0}
+      >
         Continue to Constraints →
       </button>
     </div>
