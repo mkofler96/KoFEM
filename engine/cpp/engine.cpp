@@ -220,6 +220,8 @@ namespace nglib {
         Ng_Meshing_Parameters();
     };
 
+    extern void      Ng_Init();
+    extern void      Ng_Exit();
     extern Ng_Mesh*  Ng_NewMesh();
     extern void      Ng_DeleteMesh(Ng_Mesh*);
     extern void      Ng_AddPoint(Ng_Mesh*, double*);
@@ -229,6 +231,12 @@ namespace nglib {
     extern Ng_Result Ng_GetVolumeElement(Ng_Mesh*, int, int*);
     extern int       Ng_GetNP(Ng_Mesh*);
     extern int       Ng_GetNE(Ng_Mesh*);
+}
+
+// Ng_Init() must be called once before any Netgen API usage.
+namespace {
+    struct KofemNetgenInit { KofemNetgenInit() { nglib::Ng_Init(); } };
+    static KofemNetgenInit _netgen_init;
 }
 
 static std::string generate_volume_mesh(
