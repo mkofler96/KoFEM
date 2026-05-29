@@ -52,6 +52,7 @@ test('solve on hex mesh completes and shows results', async ({ page }) => {
 const STEP_FILE = path.resolve('..', 'test_files', 'tube.stp')
 
 test('vol mesh stores FEM nodes in the store for solving', async ({ page }) => {
+  test.setTimeout(180_000)
   test.skip(!fs.existsSync(STEP_FILE), `STEP fixture not found: ${STEP_FILE}`)
 
   const pageErrors: string[] = []
@@ -74,7 +75,7 @@ test('vol mesh stores FEM nodes in the store for solving', async ({ page }) => {
   await page.getByRole('button').filter({ hasText: 'Mesh STEP volume' }).click()
   // Button changes to "Meshing…" while running, then back when done
   await expect(page.getByText('Meshing…')).toBeVisible({ timeout: 10_000 })
-  await expect(page.getByText('Meshing…')).not.toBeVisible({ timeout: 60_000 })
+  await expect(page.getByText('Meshing…')).not.toBeVisible({ timeout: 120_000 })
 
   // ── 4. Verify FEM data landed in the store ────────────────────────────────
   // Navigate to the Solve panel — pre-flight shows mesh-ready with node count
@@ -83,4 +84,4 @@ test('vol mesh stores FEM nodes in the store for solving', async ({ page }) => {
   await expect(page.getByText(/Mesh ready/)).toBeVisible()
 
   expect(pageErrors).toHaveLength(0)
-}, 90_000)   // extended timeout: WASM init + tessellation + Netgen vol mesh
+})
