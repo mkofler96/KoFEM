@@ -137,7 +137,7 @@ export function MeshScene() {
     const d = result.displacements
     const coord = (id: number): [number, number, number] => {
       const { n, i } = nodeMap.get(id)!
-      return [n.x + (d[i * 6] ?? 0) * deformScale, n.y + (d[i * 6 + 1] ?? 0) * deformScale, n.z + (d[i * 6 + 2] ?? 0) * deformScale]
+      return [n.x + (d[i * 3] ?? 0) * deformScale, n.y + (d[i * 3 + 1] ?? 0) * deformScale, n.z + (d[i * 3 + 2] ?? 0) * deformScale]
     }
     return [
       ...hexElements.flatMap(el => hexEdgePoints(el.nodeIds, coord)),
@@ -159,16 +159,16 @@ export function MeshScene() {
     const positions: number[] = []
     const colors: number[] = []
     let minUy = Infinity, maxUy = -Infinity
-    nodes.forEach((_, i) => { const uy = d[i * 6 + 1] ?? 0; if (uy < minUy) minUy = uy; if (uy > maxUy) maxUy = uy })
+    nodes.forEach((_, i) => { const uy = d[i * 3 + 1] ?? 0; if (uy < minUy) minUy = uy; if (uy > maxUy) maxUy = uy })
     const range = maxUy - minUy || 1
 
     const deformedPos = (id: number): [number, number, number] => {
       const { n, i } = nodeMap.get(id)!
-      return [n.x + (d[i * 6] ?? 0) * deformScale, n.y + (d[i * 6 + 1] ?? 0) * deformScale, n.z + (d[i * 6 + 2] ?? 0) * deformScale]
+      return [n.x + (d[i * 3] ?? 0) * deformScale, n.y + (d[i * 3 + 1] ?? 0) * deformScale, n.z + (d[i * 3 + 2] ?? 0) * deformScale]
     }
     const nodeColor = (id: number): [number, number, number] => {
       const { i } = nodeMap.get(id)!
-      const t = ((d[i * 6 + 1] ?? 0) - minUy) / range
+      const t = ((d[i * 3 + 1] ?? 0) - minUy) / range
       const c = new THREE.Color(); c.setHSL(0.667 * (1 - t), 1, 0.5)
       return [c.r, c.g, c.b]
     }
