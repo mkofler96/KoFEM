@@ -1,9 +1,12 @@
 #!/usr/bin/env -S bun run
 /**
- * Upload KoFEM Playwright render screenshots to Slack.
+ * Upload KoFEM Playwright render screenshots + test failure screenshots to Slack.
  *
- * Reads:  web/playwright-results/screenshots/report/  (written by mesh-report.spec.ts)
- * Posts:  one message + screenshot attachments to the configured channel
+ * Reads:
+ *   web/playwright-results/screenshots/report/   — geometry renders (mesh-report.spec.ts)
+ *   web/playwright-results/<test-name>/           — failure screenshots from any failing test
+ *
+ * Posts one message per section (failures first, then renders) to the configured channel.
  *
  * Env vars:
  *   SLACK_BOT_TOKEN  — bot token with chat:write + files:write scope
@@ -12,7 +15,8 @@
 import fs from 'fs'
 import path from 'path'
 
-const SCREENSHOTS_DIR = path.join('playwright-results', 'screenshots', 'report')
+const RESULTS_DIR = path.join('playwright-results')
+const SCREENSHOTS_DIR = path.join(RESULTS_DIR, 'screenshots', 'report')
 const DEFAULT_CHANNEL = 'product-showcases'
 
 // ── Slack helpers ─────────────────────────────────────────────────────────────
@@ -50,7 +54,7 @@ async function postMessage(token: string, channelId: string, text: string): Prom
   return data.ts!
 }
 
-async function uploadFile(token: string, filePath: string, channelId: string, threadTs: string): Promise<void> {
+async function uploadFile(token: string, filePath: string, channelId: string, threadTs: string, title?: string): Promise<void> {
   const fileContent = fs.readFileSync(filePath)
   const fileName = path.basename(filePath)
 
@@ -67,10 +71,48 @@ async function uploadFile(token: string, filePath: string, channelId: string, th
   const completeRes = await fetch('https://slack.com/api/files.completeUploadExternal', {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ files: [{ id: urlData.file_id, title: fileName }], channel_id: channelId, thread_ts: threadTs }),
+    body: JSON.stringify({
+      files: [{ id: urlData.file_id, title: title ?? fileName }],
+      channel_id: channelId,
+      thread_ts: threadTs,
+    }),
   })
   const completeData = await completeRes.json() as { ok: boolean; error?: string }
   if (!completeData.ok) throw new Error(`files.completeUploadExternal: ${completeData.error}`)
+}
+
+// ── Failure screenshot discovery ──────────────────────────────────────────────
+
+interface FailureResult {
+  testDir: string      // e.g. "solve-vol-mesh-stores-FEM-nodes-in-the-store-for-solving"
+  screenshot: string   // absolute path to .png
+  context: string | null  // text from error-context.md if present
+}
+
+function findFailureScreenshots(): FailureResult[] {
+  if (!fs.existsSync(RESULTS_DIR)) return []
+
+  const results: FailureResult[] = []
+
+  for (const entry of fs.readdirSync(RESULTS_DIR, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    if (entry.name === 'screenshots') continue   // skip geometry renders dir
+
+    const dir = path.join(RESULTS_DIR, entry.name)
+    const pngs = fs.readdirSync(dir).filter(f => f.endsWith('.png'))
+    if (pngs.length === 0) continue
+
+    const contextFile = path.join(dir, 'error-context.md')
+    const context = fs.existsSync(contextFile)
+      ? fs.readFileSync(contextFile, 'utf8').slice(0, 2000)  // cap at 2 KB for Slack
+      : null
+
+    for (const png of pngs) {
+      results.push({ testDir: entry.name, screenshot: path.join(dir, png), context })
+    }
+  }
+
+  return results
 }
 
 // ── main ──────────────────────────────────────────────────────────────────────
@@ -82,29 +124,61 @@ async function run(): Promise<void> {
     return
   }
 
-  if (!fs.existsSync(SCREENSHOTS_DIR)) {
-    console.log(`No screenshots directory found at ${SCREENSHOTS_DIR} — nothing to upload`)
-    return
-  }
-
-  const screenshots = fs.readdirSync(SCREENSHOTS_DIR)
-    .filter(f => f.endsWith('.png'))
-    .sort()
-
-  if (screenshots.length === 0) {
-    console.log('No screenshots found — nothing to upload')
-    return
-  }
-
   const channelId = process.env.SLACK_CHANNEL ?? await findChannel(token, DEFAULT_CHANNEL)
   const dateStr = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 
-  const threadTs = await postMessage(token, channelId, `KoFEM render report — ${screenshots.length} screenshots — ${dateStr}`)
-  console.log(`Posted thread to Slack, uploading ${screenshots.length} screenshots...`)
+  // ── 1. Post failure screenshots ───────────────────────────────────────────
+  const failures = findFailureScreenshots()
+  if (failures.length > 0) {
+    const failureTs = await postMessage(
+      token, channelId,
+      `:red_circle: *KoFEM test failures* — ${failures.length} screenshot(s) — ${dateStr}`,
+    )
+    console.log(`Posted failure thread, uploading ${failures.length} failure screenshot(s)…`)
+
+    const seenContexts = new Set<string>()
+    for (const { testDir, screenshot, context } of failures) {
+      const label = testDir.replace(/-/g, ' ')
+      try {
+        await uploadFile(token, screenshot, channelId, failureTs, label)
+        console.log(`  ✓ ${path.basename(screenshot)} (${testDir})`)
+      } catch (err) {
+        console.error(`  ✗ ${path.basename(screenshot)}: ${err}`)
+      }
+
+      // Post error-context.md text once per test directory
+      if (context && !seenContexts.has(testDir)) {
+        seenContexts.add(testDir)
+        try {
+          await postMessage(token, channelId, `\`\`\`\n${context}\n\`\`\``)
+        } catch (err) {
+          console.error(`  ✗ could not post context for ${testDir}: ${err}`)
+        }
+      }
+    }
+  }
+
+  // ── 2. Post geometry render screenshots ──────────────────────────────────
+  if (!fs.existsSync(SCREENSHOTS_DIR)) {
+    console.log(`No geometry screenshots at ${SCREENSHOTS_DIR} — skipping render report`)
+    return
+  }
+
+  const screenshots = fs.readdirSync(SCREENSHOTS_DIR).filter(f => f.endsWith('.png')).sort()
+  if (screenshots.length === 0) {
+    console.log('No geometry screenshots found — skipping render report')
+    return
+  }
+
+  const renderTs = await postMessage(
+    token, channelId,
+    `KoFEM render report — ${screenshots.length} screenshots — ${dateStr}`,
+  )
+  console.log(`Posted render thread, uploading ${screenshots.length} screenshot(s)…`)
 
   for (const file of screenshots) {
     try {
-      await uploadFile(token, path.join(SCREENSHOTS_DIR, file), channelId, threadTs)
+      await uploadFile(token, path.join(SCREENSHOTS_DIR, file), channelId, renderTs)
       console.log(`  ✓ ${file}`)
     } catch (err) {
       console.error(`  ✗ ${file}: ${err}`)
