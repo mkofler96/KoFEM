@@ -1,37 +1,27 @@
 name: CI
-
 on:
   push:
     branches: [main, develop]
   pull_request:
-
 env:
   CARGO_TERM_COLOR: always
   SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
   SLACK_CHANNEL: ${{ secrets.SLACK_CHANNEL }}
-  # Bump this (and re-run upload_wasms.sh) whenever Emscripten or the
-  # C++ library versions change.
   WASM_LIBS_VERSION: v2
-
 jobs:
   rust:
     name: Rust (native)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
-
       - uses: Swatinem/rust-cache@v2
-
       - name: Format check
         run: cargo fmt --all --check
-
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
-
       - name: Tests
         run: cargo test --workspace
 
@@ -50,6 +40,13 @@ jobs:
         with:
           path: wasm-libs
           key: wasm-libs-${{ env.WASM_LIBS_VERSION }}
+      - name: WASM libs cache status
+        run: |
+          if [ "${{ steps.cache-wasm-libs.outputs.cache-hit }}" == "true" ]; then
+            echo "WASM libs cache: HIT - skipping download"
+          else
+            echo "WASM libs cache: MISS - will download from release"
+          fi
 
       - name: Download pre-built WASM libs
         if: steps.cache-wasm-libs.outputs.cache-hit != 'true'
@@ -63,21 +60,51 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+      - name: Set stable Emscripten cache path
+        run: echo "EM_CACHE=$HOME/.emscripten_cache" >> $GITHUB_ENV
+
       - name: Set up Emscripten ${{ env.EMSDK_VERSION }}
         uses: mymindstorm/setup-emsdk@v14
         with:
           version: ${{ env.EMSDK_VERSION }}
           actions-cache-folder: .emsdk-cache
 
+      - name: Cache Emscripten compiled ports
+        id: cache-emscripten
+        uses: actions/cache@v4
+        with:
+          path: ~/.emscripten_cache
+          key: emscripten-cache-${{ env.EMSDK_VERSION }}-${{ env.BINARYEN_VERSION }}
+      - name: Emscripten cache status
+        run: |
+          if [ "${{ steps.cache-emscripten.outputs.cache-hit }}" == "true" ]; then
+            echo "Emscripten ports cache: HIT - zlib and system libs already compiled"
+          else
+            echo "Emscripten ports cache: MISS - will compile zlib and system libs"
+          fi
+
+      - name: Cache WASM build directory
+        id: cache-wasm-build
+        uses: actions/cache@v4
+        with:
+          path: target/wasm-build
+          key: wasm-build-${{ env.EMSDK_VERSION }}-${{ hashFiles('engine/cpp/**', 'engine/CMakeLists.txt') }}
+          restore-keys: wasm-build-${{ env.EMSDK_VERSION }}-
+      - name: WASM build directory cache status
+        run: |
+          if [ "${{ steps.cache-wasm-build.outputs.cache-hit }}" == "true" ]; then
+            echo "WASM build cache: HIT - Ninja will skip recompilation"
+          else
+            echo "WASM build cache: MISS - engine.cpp will be recompiled"
+            echo "Note: a restore-keys partial hit may still restore old object files"
+          fi
+
       - name: Update wasm-opt to binaryen ${{ env.BINARYEN_VERSION }}
-        # emsdk 3.1.64's bundled wasm-opt lacks --enable-bulk-memory-opt;
-        # replace it with the same binaryen version used by docker-build-wasm.sh.
         run: |
           curl -fsSL \
             "https://github.com/WebAssembly/binaryen/releases/download/version_${BINARYEN_VERSION}/binaryen-version_${BINARYEN_VERSION}-x86_64-linux.tar.gz" \
             | tar -xzf - --strip-components=1 -C "$EMSDK/upstream" \
               "binaryen-version_${BINARYEN_VERSION}/bin/wasm-opt"
-
 
       - name: Build WASM engine
         run: |
@@ -113,18 +140,40 @@ jobs:
           bun-version: latest
 
       - name: Cache bun dependencies
+        id: cache-bun
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
           key: bun-${{ runner.os }}-${{ hashFiles('web/bun.lockb') }}
           restore-keys: bun-${{ runner.os }}-
+      - name: Bun cache status
+        run: |
+          if [ "${{ steps.cache-bun.outputs.cache-hit }}" == "true" ]; then
+            echo "Bun cache: HIT - dependencies already cached"
+          else
+            echo "Bun cache: MISS - will download dependencies"
+          fi
 
-      - run: cd web && bun install
+      - name: Cache Playwright browsers
+        id: cache-playwright
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('web/package.json') }}
+          restore-keys: playwright-chromium-${{ runner.os }}-
+      - name: Playwright cache status
+        run: |
+          if [ "${{ steps.cache-playwright.outputs.cache-hit }}" == "true" ]; then
+            echo "Playwright cache: HIT - Chromium already installed"
+          else
+            echo "Playwright cache: MISS - will download Chromium"
+          fi
+
+      - run: cd web && bun install --frozen-lockfile
       - run: cd web && bun run typecheck
       - run: cd web && bun run build
       - run: cd web && bunx playwright install --with-deps chromium
       - run: cd web && bun run test
-
       - name: Post mesh report to Slack
         if: always()
         run: cd web && bun scripts/generate-mesh-report.ts
