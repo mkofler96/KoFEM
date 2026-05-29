@@ -221,7 +221,6 @@ namespace nglib {
     };
 
     extern void      Ng_Init();
-    extern void      Ng_Exit();
     extern Ng_Mesh*  Ng_NewMesh();
     extern void      Ng_DeleteMesh(Ng_Mesh*);
     extern void      Ng_AddPoint(Ng_Mesh*, double*);
@@ -233,16 +232,19 @@ namespace nglib {
     extern int       Ng_GetNE(Ng_Mesh*);
 }
 
-// Ng_Init() must be called once before any Netgen API usage.
-namespace {
-    struct KofemNetgenInit { KofemNetgenInit() { nglib::Ng_Init(); } };
-    static KofemNetgenInit _netgen_init;
-}
-
 static std::string generate_volume_mesh(
     const std::string& surface_json,
     const std::string& opts_json)
 {
+    // Ng_Init() must be called once before any Netgen API usage.
+    // Called lazily here rather than as a static initializer to avoid
+    // potential crashes during WASM module startup.
+    static bool ng_initialized = false;
+    if (!ng_initialized) {
+        nglib::Ng_Init();
+        ng_initialized = true;
+    }
+
     val surface = parse_json(surface_json);
     val opts    = parse_json(opts_json);
 
