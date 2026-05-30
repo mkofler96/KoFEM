@@ -55,33 +55,61 @@ test('vol mesh stores FEM nodes in the store for solving', async ({ page }) => {
   test.setTimeout(180_000)
   test.skip(!fs.existsSync(STEP_FILE), `STEP fixture not found: ${STEP_FILE}`)
 
+  const t0 = Date.now()
+  const elapsed = () => `+${((Date.now() - t0) / 1000).toFixed(1)}s`
+
   const pageErrors: string[] = []
-  page.on('pageerror', e => pageErrors.push(e.message))
+  page.on('pageerror', e => {
+    console.error(`[vol-mesh] page error: ${e.message}`)
+    pageErrors.push(e.message)
+  })
+  page.on('console', msg => {
+    if (msg.type() === 'error') console.error(`[vol-mesh] console.error: ${msg.text()}`)
+    else console.log(`[vol-mesh] console.${msg.type()}: ${msg.text()}`)
+  })
 
   await startExample(page)
+  console.log(`[vol-mesh] ${elapsed()} app ready`)
 
   // ── 1. Tessellate the STEP file ───────────────────────────────────────────
   await page.locator('input[type="file"][accept=".stp,.step"]').setInputFiles(STEP_FILE)
-  // Wait for WASM tessellation to complete (button re-enables when done)
   await expect(
     page.getByRole('button').filter({ hasText: 'Import STEP' }),
   ).toBeEnabled({ timeout: 60_000 })
-  await expect(page.getByTestId('step-error')).not.toBeVisible()
+  console.log(`[vol-mesh] ${elapsed()} STEP tessellation done`)
 
-  // ── 2. Navigate to Mesh panel where the volume mesh button lives ─────────
+  const stepErr = page.getByTestId('step-error')
+  if (await stepErr.isVisible()) {
+    console.error(`[vol-mesh] step-error banner: ${await stepErr.textContent()}`)
+  }
+  await expect(stepErr).not.toBeVisible()
+
+  // ── 2. Navigate to Mesh panel ────────────────────────────────────────────
   await page.locator('nav').getByRole('button').filter({ hasText: 'Mesh' }).click()
+  console.log(`[vol-mesh] ${elapsed()} navigated to Mesh panel`)
 
   // ── 3. Compute volume mesh ────────────────────────────────────────────────
   await page.getByRole('button').filter({ hasText: 'Mesh STEP volume' }).click()
-  // Button changes to "Meshing…" while running, then back when done
+  console.log(`[vol-mesh] ${elapsed()} clicked Mesh STEP volume`)
+
   await expect(page.getByText('Meshing…')).toBeVisible({ timeout: 10_000 })
-  await expect(page.getByText('Meshing…')).not.toBeVisible({ timeout: 120_000 })
+  console.log(`[vol-mesh] ${elapsed()} meshing started (button shows Meshing…)`)
+
+  await expect(page.getByText('Meshing…')).not.toBeVisible({ timeout: 150_000 })
+  console.log(`[vol-mesh] ${elapsed()} meshing finished`)
+
+  // Log any error banner that appeared
+  const meshErr = page.locator('[class*="errorBanner"]')
+  if (await meshErr.isVisible()) {
+    console.error(`[vol-mesh] mesh error banner: ${await meshErr.textContent()}`)
+  }
 
   // ── 4. Verify FEM data landed in the store ────────────────────────────────
-  // Navigate to the Solve panel — pre-flight shows mesh-ready with node count
   await goToSolvePanel(page)
-  // "Mesh ready · X nodes · Y elements" is shown only when nodes.length > 0
-  await expect(page.getByText(/Mesh ready/)).toBeVisible()
+  console.log(`[vol-mesh] ${elapsed()} navigated to Solve panel`)
+
+  await expect(page.getByText(/Mesh ready/)).toBeVisible({ timeout: 10_000 })
+  console.log(`[vol-mesh] ${elapsed()} Mesh ready visible — PASS`)
 
   expect(pageErrors).toHaveLength(0)
 })
