@@ -17,6 +17,7 @@ import path from 'path'
 
 const RESULTS_DIR = path.join('playwright-results')
 const SCREENSHOTS_DIR = path.join(RESULTS_DIR, 'screenshots', 'report')
+const SHOWCASE_DIR = path.join(RESULTS_DIR, 'screenshots', 'showcase')
 const DEFAULT_CHANNEL = 'product-showcases'
 
 // ── Slack helpers ─────────────────────────────────────────────────────────────
@@ -158,7 +159,37 @@ async function run(): Promise<void> {
     }
   }
 
-  // ── 2. Post geometry render screenshots ──────────────────────────────────
+  // ── 2. Post workflow showcase screenshots ────────────────────────────────
+  if (fs.existsSync(SHOWCASE_DIR)) {
+    const showcaseFiles = fs.readdirSync(SHOWCASE_DIR).filter(f => f.endsWith('.png')).sort()
+    if (showcaseFiles.length > 0) {
+      const showcaseTs = await postMessage(
+        token, channelId,
+        `:sparkles: *KoFEM workflow showcase* — ${showcaseFiles.length} stages — ${dateStr}`,
+      )
+      console.log(`Posted showcase thread, uploading ${showcaseFiles.length} screenshot(s)…`)
+
+      const STAGE_TITLES: Record<string, string> = {
+        '01-welcome.png':   '1 · Select geometry (upload STEP or import INP)',
+        '02-geometry.png':  '2 · Geometry & options',
+        '03-mesh.png':      '3 · Mesh generation',
+        '04-loads.png':     '4 · Boundary conditions & loads',
+        '05-results.png':   '5 · FEM results',
+      }
+
+      for (const file of showcaseFiles) {
+        const title = STAGE_TITLES[file] ?? file
+        try {
+          await uploadFile(token, path.join(SHOWCASE_DIR, file), channelId, showcaseTs, title)
+          console.log(`  ✓ ${file} (${title})`)
+        } catch (err) {
+          console.error(`  ✗ ${file}: ${err}`)
+        }
+      }
+    }
+  }
+
+  // ── 3. Post geometry render screenshots ──────────────────────────────────
   if (!fs.existsSync(SCREENSHOTS_DIR)) {
     console.log(`No geometry screenshots at ${SCREENSHOTS_DIR} — skipping render report`)
     return

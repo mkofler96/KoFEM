@@ -14,6 +14,7 @@
     "test:ui": "playwright test --ui",
     "test:screenshot": "playwright test screenshot.spec.ts",
     "test:mesh-report": "playwright test mesh-report.spec.ts",
+    "test:showcase": "playwright test showcase.spec.ts",
     "report:mesh": "bun scripts/generate-mesh-report.ts"
   },
   "packageManager": "bun",
