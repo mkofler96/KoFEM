@@ -289,7 +289,7 @@ export const useModelStore = create<ModelState>()(
       s.nodes = []; s.elements = []
       s.constraints = []; s.loads = []
       s.result = null
-      if (mesh) s.fitViewTrigger++
+      if (mesh) { s.fitViewTrigger++; s.hasStarted = true; s.mode = 'geometry' }
     }),
     triggerFitView: () => set(s => { s.fitViewTrigger++ }),
 
