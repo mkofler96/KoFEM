@@ -3,10 +3,11 @@
  * Upload KoFEM Playwright render screenshots + test failure screenshots to Slack.
  *
  * Reads:
- *   web/playwright-results/screenshots/report/   — geometry renders (mesh-report.spec.ts)
- *   web/playwright-results/<test-name>/           — failure screenshots from any failing test
+ *   web/playwright-results/screenshots/report/    — geometry renders (mesh-report.spec.ts)
+ *   web/playwright-results/screenshots/showcase/  — full workflow showcase (showcase.spec.ts)
+ *   web/playwright-results/<test-name>/            — failure screenshots from any failing test
  *
- * Posts one message per section (failures first, then renders) to the configured channel.
+ * Posts one message per section (failures, renders, showcase) to the configured channel.
  *
  * Env vars:
  *   SLACK_BOT_TOKEN  — bot token with chat:write + files:write scope
@@ -17,7 +18,16 @@ import path from 'path'
 
 const RESULTS_DIR = path.join('playwright-results')
 const SCREENSHOTS_DIR = path.join(RESULTS_DIR, 'screenshots', 'report')
+const SHOWCASE_DIR = path.join(RESULTS_DIR, 'screenshots', 'showcase')
 const DEFAULT_CHANNEL = 'product-showcases'
+
+const SHOWCASE_TITLES: Record<string, string> = {
+  '01-select-geometry.png':  'Step 1 · Select geometry window',
+  '02-geometry-options.png': 'Step 2 · Geometry & options',
+  '03-mesh-generation.png':  'Step 3 · Mesh generation',
+  '04-load-application.png': 'Step 4 · Load application',
+  '05-results.png':          'Step 5 · Analysis results',
+}
 
 // ── Slack helpers ─────────────────────────────────────────────────────────────
 
@@ -180,6 +190,34 @@ async function run(): Promise<void> {
     try {
       await uploadFile(token, path.join(SCREENSHOTS_DIR, file), channelId, renderTs)
       console.log(`  ✓ ${file}`)
+    } catch (err) {
+      console.error(`  ✗ ${file}: ${err}`)
+    }
+  }
+
+  // ── 3. Post full workflow showcase screenshots ──────────────────────────────
+  if (!fs.existsSync(SHOWCASE_DIR)) {
+    console.log(`No showcase screenshots at ${SHOWCASE_DIR} — skipping showcase report`)
+    return
+  }
+
+  const showcaseFiles = fs.readdirSync(SHOWCASE_DIR).filter(f => f.endsWith('.png')).sort()
+  if (showcaseFiles.length === 0) {
+    console.log('No showcase screenshots found — skipping showcase report')
+    return
+  }
+
+  const showcaseTs = await postMessage(
+    token, channelId,
+    `:sparkles: *KoFEM full workflow showcase* — ${showcaseFiles.length} steps — ${dateStr}`,
+  )
+  console.log(`Posted showcase thread, uploading ${showcaseFiles.length} screenshot(s)…`)
+
+  for (const file of showcaseFiles) {
+    const title = SHOWCASE_TITLES[file] ?? file
+    try {
+      await uploadFile(token, path.join(SHOWCASE_DIR, file), channelId, showcaseTs, title)
+      console.log(`  ✓ ${file} → "${title}"`)
     } catch (err) {
       console.error(`  ✗ ${file}: ${err}`)
     }
