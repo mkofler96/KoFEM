@@ -12,6 +12,8 @@ test.describe('Full workflow showcase', () => {
   })
 
   test('wall bracket: welcome → geometry → mesh → constraints → solve → results', async ({ page }) => {
+    test.setTimeout(300_000)  // volume mesh + solve can take several minutes
+
     if (!fs.existsSync(WALL_BRACKET)) {
       test.skip()
       return
