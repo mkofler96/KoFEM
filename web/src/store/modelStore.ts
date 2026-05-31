@@ -469,8 +469,6 @@ export const useModelStore = create<ModelState>()(
   }))
 )
 
-// Expose the store in dev mode so Playwright showcase tests can inject BCs/loads
+// Expose store on window so Playwright tests can inject BCs/loads
 // without requiring 3D face-picking interactions.
-if (import.meta.env.DEV) {
-  ;(window as Window & { __kofemStore?: typeof useModelStore }).__kofemStore = useModelStore
-}
+;(window as Window & { __kofemStore?: typeof useModelStore }).__kofemStore = useModelStore
