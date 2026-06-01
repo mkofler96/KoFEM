@@ -11,6 +11,10 @@ export function FitCamera() {
   const fitViewTrigger = useModelStore(s => s.fitViewTrigger)
 
   useEffect(() => {
+    // Controls may not be registered yet on the initial mount — skip and wait
+    // for the effect to re-fire once OrbitControls registers via makeDefault.
+    if (!controls) return
+
     const { nodes, stepSurface } = useModelStore.getState()
 
     const pts: [number, number, number][] = []
@@ -48,13 +52,10 @@ export function FitCamera() {
     cam.far = distance * 100
     cam.updateProjectionMatrix()
 
-    if (controls) {
-      // OrbitControls registered via makeDefault
-      const oc = controls as unknown as { target: THREE.Vector3; update(): void }
-      oc.target.copy(center)
-      oc.update()
-    }
-  }, [fitViewTrigger]) // eslint-disable-line react-hooks/exhaustive-deps
+    const oc = controls as unknown as { target: THREE.Vector3; update(): void }
+    oc.target.copy(center)
+    oc.update()
+  }, [fitViewTrigger, controls]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return null
 }
