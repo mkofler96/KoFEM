@@ -11,8 +11,8 @@ test.describe('Full workflow showcase', () => {
     fs.mkdirSync(OUT_DIR, { recursive: true })
   })
 
-  test('wall bracket: welcome → geometry → mesh panel → constraints → results', async ({ page }) => {
-    test.setTimeout(120_000)
+  test('wall bracket: welcome → geometry → mesh → constraints → results', async ({ page }) => {
+    test.setTimeout(180_000)
 
     if (!fs.existsSync(WALL_BRACKET)) {
       test.skip()
@@ -27,17 +27,14 @@ test.describe('Full workflow showcase', () => {
     })
     page.on('pageerror', err => console.error(`[showcase] page exception: ${err.message}`))
 
-    // ── Phase 1: Wall Bracket — screenshots 1–4 ──────────────────────────────
+    // ── 1. Welcome screen ────────────────────────────────────────────────────
     console.log(`[showcase] ${elapsed()} navigating to app`)
     await page.goto('/')
-
-    // 1. Welcome screen — geometry selection / import window
     await expect(page.getByRole('button', { name: 'Start with example' })).toBeVisible()
     await page.screenshot({ path: path.join(OUT_DIR, '01-select-geometry.png') })
     console.log(`[showcase] ${elapsed()} 01 screenshot done`)
 
-    // Import wall bracket STEP from the welcome screen.
-    // setStepSurface auto-transitions to geometry mode (hasStarted = true).
+    // ── 2. Geometry panel — Wall Bracket surface ─────────────────────────────
     console.log(`[showcase] ${elapsed()} importing Wall Bracket.stp`)
     await page.locator('input[type="file"][accept=".stp,.step"]').setInputFiles(WALL_BRACKET)
     await expect(page.getByText('Model geometry')).toBeVisible({ timeout: 60_000 })
@@ -49,43 +46,74 @@ test.describe('Full workflow showcase', () => {
     }
 
     await page.waitForTimeout(600)
-
-    // 2. Geometry panel — wall bracket surface loaded with options panel visible
     await page.screenshot({ path: path.join(OUT_DIR, '02-geometry-options.png') })
     console.log(`[showcase] ${elapsed()} 02 screenshot done`)
 
-    // Navigate to Mesh panel via TopBar and show the mesh-generation interface
+    // ── 3. Mesh panel — generate volume mesh and show statistics ─────────────
     await page.locator('nav').getByRole('button').filter({ hasText: 'Mesh' }).click()
     await expect(page.getByRole('button').filter({ hasText: 'Mesh STEP volume' })).toBeVisible()
 
-    // 3. Mesh panel — wall bracket surface stats and volume-mesh controls
+    await page.getByRole('button').filter({ hasText: 'Mesh STEP volume' }).click()
+    await expect(page.getByText('Meshing…')).toBeVisible({ timeout: 10_000 })
+    console.log(`[showcase] ${elapsed()} meshing started…`)
+    await expect(page.getByText('Meshing…')).not.toBeVisible({ timeout: 120_000 })
+    console.log(`[showcase] ${elapsed()} meshing complete`)
+
+    const meshErr = page.locator('[class*="errorBanner"]')
+    if (await meshErr.isVisible()) {
+      throw new Error(`Meshing failed: ${await meshErr.textContent()}`)
+    }
+
     await page.screenshot({ path: path.join(OUT_DIR, '03-mesh-generation.png') })
     console.log(`[showcase] ${elapsed()} 03 screenshot done`)
 
-    // Navigate to Constraints panel
+    // ── Inject BCs and loads via the exposed Zustand store ───────────────────
+    // Fix the face at the minimum extent of the longest bounding-box axis (wall
+    // mount). Apply a force perpendicular to that axis at the opposite face (arm tip).
+    await page.evaluate(() => {
+      const store = (window as any).__kofemStore
+      const state = store.getState()
+      const nodes: Array<{ id: number; x: number; y: number; z: number }> = state.nodes
+
+      if (nodes.length === 0) throw new Error('No FEM nodes in store after meshing')
+
+      const axes = ['x', 'y', 'z'] as const
+      const extents = axes.map(ax => {
+        const vals = nodes.map(n => n[ax])
+        const min = Math.min(...vals)
+        const max = Math.max(...vals)
+        return { ax, min, max, span: max - min }
+      })
+      extents.sort((a, b) => b.span - a.span)
+
+      const { ax, min, max } = extents[0]
+      const tol = (max - min) * 0.05
+
+      const fixedIds = nodes.filter(n => Math.abs(n[ax] - min) < tol).map(n => n.id)
+      const loadedIds = nodes.filter(n => Math.abs(n[ax] - max) < tol).map(n => n.id)
+
+      // Load DOF perpendicular to the longest axis
+      const loadDof = ax === 'x' ? 1 : ax === 'y' ? 2 : 1
+
+      state.applyBcToFace(fixedIds, [0, 1, 2], 0)
+      state.applyLoadToFace(loadedIds, loadDof, -500)
+    })
+    console.log(`[showcase] ${elapsed()} BCs and loads applied`)
+
+    // ── 4. Constraints panel — applied BCs and loads ─────────────────────────
     await page.locator('nav').getByRole('button').filter({ hasText: 'Constraints' }).click()
     await expect(page.getByText('Boundary conditions')).toBeVisible()
-
-    // 4. Constraints panel — boundary condition and load interface
     await page.screenshot({ path: path.join(OUT_DIR, '04-load-application.png') })
     console.log(`[showcase] ${elapsed()} 04 screenshot done`)
 
-    // ── Phase 2: Cantilever example — screenshot 5 (actual results) ──────────
-    // Reload and use the pre-configured cantilever beam (BCs + loads already set)
-    // to demonstrate the solver and results panel with real displacement data.
-    await page.goto('/')
-    await page.getByRole('button', { name: 'Start with example' }).click()
-    await expect(page.getByText('Model geometry')).toBeVisible()
-
+    // ── 5. Solve and results — Wall Bracket displacement ─────────────────────
     await page.locator('nav').getByRole('button').filter({ hasText: 'Solve' }).click()
     await expect(page.getByRole('button').filter({ hasText: 'Run static solve' })).toBeEnabled()
     await page.getByRole('button').filter({ hasText: 'Run static solve' }).click()
     console.log(`[showcase] ${elapsed()} solver started…`)
 
-    // Solver auto-navigates to Results on completion
-    await expect(page.getByText('Result summary')).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByText('Result summary')).toBeVisible({ timeout: 60_000 })
 
-    // 5. Results panel — displacement and stress post-processing
     await page.screenshot({ path: path.join(OUT_DIR, '05-results.png') })
     console.log(`[showcase] ${elapsed()} 05 screenshot done`)
 
