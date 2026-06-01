@@ -23,6 +23,7 @@ const hudBtnStyle: React.CSSProperties = {
 
 export function Viewport() {
   const pickMode        = useModelStore(s => s.pickMode)
+  const triggerFitView  = useModelStore(s => s.triggerFitView)
   const stepSurface     = useModelStore(s => s.stepSurface)
   const stepWireframe   = useModelStore(s => s.stepWireframe)
   const setStepWireframe = useModelStore(s => s.setStepWireframe)
@@ -36,6 +37,7 @@ export function Viewport() {
             {stepWireframe ? 'Solid' : 'Wireframe'}
           </button>
         )}
+        <button style={hudBtnStyle} onClick={triggerFitView}>Fit View</button>
       </div>
 
       <Canvas

@@ -21,6 +21,7 @@ export function Toolbar() {
   const setVolMesh = useModelStore(s => s.setVolMesh)
   const setShowVolMesh = useModelStore(s => s.setShowVolMesh)
   const applyMeshResult = useModelStore(s => s.applyMeshResult)
+  const triggerFitView = useModelStore(s => s.triggerFitView)
   const stepImportError = useModelStore(s => s.stepImportError)
   const setStepImportError = useModelStore(s => s.setStepImportError)
 
@@ -196,6 +197,9 @@ export function Toolbar() {
           {showVolMesh ? 'Vol Solid' : 'Vol Mesh'}
         </button>
       )}
+      <button className={styles.btn} onClick={triggerFitView} title="Fit all geometry into view (isometric)">
+        Fit View
+      </button>
       <button className={styles.btn} onClick={handleScreenshot} title="Export current view as PNG">
         Screenshot
       </button>
