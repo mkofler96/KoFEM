@@ -13,7 +13,6 @@ export function Toolbar() {
   const setResult = useModelStore(s => s.setResult)
   const loadModel = useModelStore(s => s.loadModel)
   const setStepSurface = useModelStore(s => s.setStepSurface)
-  const triggerFitView = useModelStore(s => s.triggerFitView)
   const stepSurface = useModelStore(s => s.stepSurface)
   const stepWireframe = useModelStore(s => s.stepWireframe)
   const setStepWireframe = useModelStore(s => s.setStepWireframe)
@@ -22,6 +21,7 @@ export function Toolbar() {
   const setVolMesh = useModelStore(s => s.setVolMesh)
   const setShowVolMesh = useModelStore(s => s.setShowVolMesh)
   const applyMeshResult = useModelStore(s => s.applyMeshResult)
+  const triggerFitView = useModelStore(s => s.triggerFitView)
   const stepImportError = useModelStore(s => s.stepImportError)
   const setStepImportError = useModelStore(s => s.setStepImportError)
 

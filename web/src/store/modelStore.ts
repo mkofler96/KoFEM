@@ -468,3 +468,7 @@ export const useModelStore = create<ModelState>()(
     clearLoads: () => set(s => { s.loads = []; s.result = null }),
   }))
 )
+
+// Expose store on window so Playwright tests can inject BCs/loads
+// without requiring 3D face-picking interactions.
+;(window as Window & { __kofemStore?: typeof useModelStore }).__kofemStore = useModelStore
