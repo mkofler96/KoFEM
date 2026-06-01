@@ -278,15 +278,35 @@ static std::string generate_volume_mesh(
     }
 
     nglib::Ng_Meshing_Parameters mp;
-    mp.uselocalh        = uselocalh;
-    mp.maxh             = max_size;
-    mp.minh             = min_size;
-    mp.grading          = grading;
-    mp.elementsperedge  = elems_per_edge;
-    mp.elementspercurve = elems_per_curve;
-    mp.second_order     = second_ord ? 1 : 0;
-    mp.optsteps_2d      = optsteps_2d;
-    mp.optsteps_3d      = optsteps_3d;
+    // Initialise every field explicitly.  In the WASM build Netgen exports symbols
+    // in the global namespace while the re-declaration below is in namespace nglib::,
+    // so Ng_Meshing_Parameters() may fail to link and leave fields uninitialised.
+    // Explicit assignment is safe regardless of whether the constructor ran.
+    // check_overlap / check_overlapping_boundary are intentionally 0: the
+    // Netgen default (1) can crash on complex STEP geometry with near-touching
+    // surfaces, and our JS deduplication step already produces a manifold mesh.
+    mp.uselocalh                  = uselocalh;
+    mp.maxh                       = max_size;
+    mp.minh                       = min_size;
+    mp.fineness                   = 0.5;
+    mp.grading                    = grading;
+    mp.elementsperedge            = elems_per_edge;
+    mp.elementspercurve           = elems_per_curve;
+    mp.closeedgeenable            = 0;
+    mp.closeedgefact              = 2.0;
+    mp.minedgelenenable           = 0;
+    mp.minedgelen                 = 1e-4;
+    mp.second_order               = second_ord ? 1 : 0;
+    mp.quad_dominated             = 0;
+    mp.meshsize_filename          = nullptr;
+    mp.optsurfmeshenable          = 1;
+    mp.optvolmeshenable           = 1;
+    mp.optsteps_3d                = optsteps_3d;
+    mp.optsteps_2d                = optsteps_2d;
+    mp.invert_tets                = 0;
+    mp.invert_trigs               = 0;
+    mp.check_overlap              = 0;
+    mp.check_overlapping_boundary = 0;
 
     nglib::Ng_Result res = nglib::Ng_GenerateVolumeMesh(mesh, &mp);
     if (res != nglib::NG_OK) {

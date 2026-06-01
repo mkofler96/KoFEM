@@ -12,7 +12,7 @@ test.describe('Full workflow showcase', () => {
   })
 
   test('wall bracket: welcome → geometry → mesh → constraints → results', async ({ page }) => {
-    test.setTimeout(120_000)
+    test.setTimeout(360_000)
 
     if (!fs.existsSync(WALL_BRACKET)) {
       test.skip()
@@ -28,10 +28,9 @@ test.describe('Full workflow showcase', () => {
     page.on('pageerror', err => console.error(`[showcase] page exception: ${err.message}`))
 
     // ── Phase 1: Wall Bracket STEP — screenshots 1–4 ─────────────────────────
-    // Screenshots 1–4 use the real wall bracket geometry so the showcase shows
-    // an actual imported part. Volume meshing is intentionally skipped here
-    // because Netgen WASM takes several minutes on this geometry in CI; the mesh
-    // panel is captured showing the "Mesh STEP volume" control instead.
+    // Screenshots 1–4 use the real wall bracket geometry. Screenshot 03 now
+    // triggers volume meshing so the showcase shows the completed tet mesh.
+    // The test file guard above skips this test in CI where the STEP file is absent.
 
     await page.goto('/')
 
@@ -57,9 +56,13 @@ test.describe('Full workflow showcase', () => {
     await page.screenshot({ path: path.join(OUT_DIR, '02-geometry-options.png') })
     console.log(`[showcase] ${elapsed()} 02 screenshot done`)
 
-    // 3. Mesh panel — volume mesh controls (not triggered)
+    // 3. Mesh panel — trigger volume meshing and wait for completion
     await page.locator('nav').getByRole('button').filter({ hasText: 'Mesh' }).click()
     await expect(page.getByRole('button').filter({ hasText: 'Mesh STEP volume' })).toBeVisible()
+    console.log(`[showcase] ${elapsed()} 03 clicking Mesh STEP volume…`)
+    await page.getByRole('button').filter({ hasText: 'Mesh STEP volume' }).click()
+    await expect(page.getByText('Mesh is solver-ready')).toBeVisible({ timeout: 240_000 })
+    console.log(`[showcase] ${elapsed()} 03 volume mesh complete`)
     await page.screenshot({ path: path.join(OUT_DIR, '03-mesh-generation.png') })
     console.log(`[showcase] ${elapsed()} 03 screenshot done`)
 
