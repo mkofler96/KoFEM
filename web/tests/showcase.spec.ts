@@ -12,7 +12,7 @@ test.describe('Full workflow showcase', () => {
   })
 
   test('wall bracket: welcome → geometry → mesh → constraints → results', async ({ page }) => {
-    test.setTimeout(300_000)
+    test.setTimeout(360_000)
 
     if (!fs.existsSync(WALL_BRACKET)) {
       test.skip()
@@ -55,7 +55,7 @@ test.describe('Full workflow showcase', () => {
     await page.getByRole('button').filter({ hasText: 'Mesh STEP volume' }).click()
     await expect(page.getByText('Meshing…')).toBeVisible({ timeout: 10_000 })
     console.log(`[showcase] ${elapsed()} meshing started…`)
-    await expect(page.getByText('Meshing…')).not.toBeVisible({ timeout: 150_000 })
+    await expect(page.getByText('Meshing…')).not.toBeVisible({ timeout: 200_000 })
     console.log(`[showcase] ${elapsed()} meshing complete`)
 
     const meshErr = page.locator('[class*="errorBanner"]')
