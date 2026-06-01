@@ -40,8 +40,7 @@ export function FitCamera() {
     const radius = Math.max(diagonal / 2, 1e-6)
 
     const fovRad = ((camera as THREE.PerspectiveCamera).fov * Math.PI) / 180
-    // Extra 1.5× padding so geometry sits comfortably inside the frustum
-    const distance = (radius / Math.tan(fovRad / 2)) * 1.5
+    const distance = radius / Math.tan(fovRad / 2)
 
     camera.position.copy(center).addScaledVector(ISO_DIR, distance)
     const cam = camera as THREE.PerspectiveCamera
