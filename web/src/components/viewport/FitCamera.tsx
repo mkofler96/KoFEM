@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useModelStore } from '../../store/modelStore'
@@ -9,15 +9,8 @@ const ISO_DIR = new THREE.Vector3(1, 1, 1).normalize()
 export function FitCamera() {
   const { camera, controls } = useThree()
   const fitViewTrigger = useModelStore(s => s.fitViewTrigger)
-  const mounted = useRef(false)
 
   useEffect(() => {
-    // Skip the initial mount so the default camera position is preserved
-    if (!mounted.current) {
-      mounted.current = true
-      return
-    }
-
     const { nodes, stepSurface } = useModelStore.getState()
 
     const pts: [number, number, number][] = []
