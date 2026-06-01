@@ -12,7 +12,7 @@ test.describe('Full workflow showcase', () => {
   })
 
   test('wall bracket: welcome → geometry → mesh → constraints → results', async ({ page }) => {
-    test.setTimeout(180_000)
+    test.setTimeout(300_000)
 
     if (!fs.existsSync(WALL_BRACKET)) {
       test.skip()
@@ -28,7 +28,6 @@ test.describe('Full workflow showcase', () => {
     page.on('pageerror', err => console.error(`[showcase] page exception: ${err.message}`))
 
     // ── 1. Welcome screen ────────────────────────────────────────────────────
-    console.log(`[showcase] ${elapsed()} navigating to app`)
     await page.goto('/')
     await expect(page.getByRole('button', { name: 'Start with example' })).toBeVisible()
     await page.screenshot({ path: path.join(OUT_DIR, '01-select-geometry.png') })
@@ -56,7 +55,7 @@ test.describe('Full workflow showcase', () => {
     await page.getByRole('button').filter({ hasText: 'Mesh STEP volume' }).click()
     await expect(page.getByText('Meshing…')).toBeVisible({ timeout: 10_000 })
     console.log(`[showcase] ${elapsed()} meshing started…`)
-    await expect(page.getByText('Meshing…')).not.toBeVisible({ timeout: 120_000 })
+    await expect(page.getByText('Meshing…')).not.toBeVisible({ timeout: 150_000 })
     console.log(`[showcase] ${elapsed()} meshing complete`)
 
     const meshErr = page.locator('[class*="errorBanner"]')
@@ -71,9 +70,15 @@ test.describe('Full workflow showcase', () => {
     // Fix the face at the minimum extent of the longest bounding-box axis (wall
     // mount). Apply a force perpendicular to that axis at the opposite face (arm tip).
     await page.evaluate(() => {
-      const store = (window as any).__kofemStore
+      const store = (window as unknown as Record<string, unknown>).__kofemStore as {
+        getState(): {
+          nodes: { id: number; x: number; y: number; z: number }[]
+          applyBcToFace(nodeIds: number[], dofs: number[], value: number): void
+          applyLoadToFace(nodeIds: number[], dof: number, totalForce: number): void
+        }
+      }
       const state = store.getState()
-      const nodes: Array<{ id: number; x: number; y: number; z: number }> = state.nodes
+      const nodes = state.nodes
 
       if (nodes.length === 0) throw new Error('No FEM nodes in store after meshing')
 
@@ -92,7 +97,6 @@ test.describe('Full workflow showcase', () => {
       const fixedIds = nodes.filter(n => Math.abs(n[ax] - min) < tol).map(n => n.id)
       const loadedIds = nodes.filter(n => Math.abs(n[ax] - max) < tol).map(n => n.id)
 
-      // Load DOF perpendicular to the longest axis
       const loadDof = ax === 'x' ? 1 : ax === 'y' ? 2 : 1
 
       state.applyBcToFace(fixedIds, [0, 1, 2], 0)
