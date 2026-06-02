@@ -233,7 +233,6 @@ namespace nglib {
     // regardless of USE_OCC.
     typedef void* Ng_STL_Geometry;
     extern Ng_STL_Geometry* Ng_STL_NewGeometry();
-    extern void             Ng_STL_DeleteGeometry(Ng_STL_Geometry*);
     extern void             Ng_STL_AddTriangle(Ng_STL_Geometry*, double*, double*, double*, double*);
     extern Ng_Result        Ng_STL_InitSTLGeometry(Ng_STL_Geometry*);
     extern Ng_Result        Ng_STL_MakeEdges(Ng_STL_Geometry*, Ng_Mesh*, Ng_Meshing_Parameters*);
@@ -314,22 +313,16 @@ static std::string generate_volume_mesh(
     mp.check_overlapping_boundary = 0;
 
     nglib::Ng_Result res = nglib::Ng_STL_InitSTLGeometry(stl_geom);
-    if (res != nglib::NG_OK) {
-        nglib::Ng_STL_DeleteGeometry(stl_geom);
+    if (res != nglib::NG_OK)
         throw std::runtime_error(
             "Ng_STL_InitSTLGeometry failed (code " + std::to_string((int)res) + ")");
-    }
 
     nglib::Ng_Mesh* mesh = nglib::Ng_NewMesh();
-    if (!mesh) {
-        nglib::Ng_STL_DeleteGeometry(stl_geom);
-        throw std::runtime_error("Ng_NewMesh() returned null");
-    }
+    if (!mesh) throw std::runtime_error("Ng_NewMesh() returned null");
 
     res = nglib::Ng_STL_MakeEdges(stl_geom, mesh, &mp);
     if (res != nglib::NG_OK) {
         nglib::Ng_DeleteMesh(mesh);
-        nglib::Ng_STL_DeleteGeometry(stl_geom);
         throw std::runtime_error(
             "Ng_STL_MakeEdges failed (code " + std::to_string((int)res) + ")");
     }
@@ -337,12 +330,9 @@ static std::string generate_volume_mesh(
     res = nglib::Ng_STL_GenerateSurfaceMesh(stl_geom, mesh, &mp);
     if (res != nglib::NG_OK) {
         nglib::Ng_DeleteMesh(mesh);
-        nglib::Ng_STL_DeleteGeometry(stl_geom);
         throw std::runtime_error(
             "Ng_STL_GenerateSurfaceMesh failed (code " + std::to_string((int)res) + ")");
     }
-
-    nglib::Ng_STL_DeleteGeometry(stl_geom);
 
     // check_overlap forced to 0: the Netgen default (1) crashes on complex STEP
     // geometry with near-touching surfaces.
