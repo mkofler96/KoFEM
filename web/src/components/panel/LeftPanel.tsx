@@ -604,7 +604,7 @@ function MeshPanel() {
 
       <div className={styles.tabContent}>
         {error && (
-          <div className={styles.errorBanner}>
+          <div className={styles.errorBanner} data-testid="meshing-error">
             <span>{error}</span>
             <button onClick={() => setError(null)}>×</button>
           </div>

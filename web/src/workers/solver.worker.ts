@@ -44,17 +44,26 @@ self.onmessage = async (event: MessageEvent) => {
       self.postMessage({ id, ok: true, points: dto.vertices, triangles: dto.triangles })
 
     } else if (type === 'volume_mesh') {
-      // payload.surface: { points: [number,number,number][], triangles: [number,number,number][] }
-      const surface = {
-        vertices: payload.surface.points as [number, number, number][],
-        triangles: payload.surface.triangles as [number, number, number][],
-      }
+      const opts = JSON.stringify({
+        max_element_size: 20.0, min_element_size: 3.0, grading: 0.5, second_order: false,
+        uselocalh: 0, elementsperedge: 1.0, elementspercurve: 1.0,
+        optsteps_2d: 0, optsteps_3d: 0,
+      })
 
-      self.postMessage({ id, log: `Surface: ${surface.vertices.length} vertices, ${surface.triangles.length} triangles` })
+      // Re-tessellate the stored STEP shape with parameters tuned to the
+      // target element size (linear_defl ≈ max_element_size/4).  The
+      // visualization tessellation (linear_deflection=0.1) produces many tiny
+      // triangles that are orders of magnitude smaller than the volume elements;
+      // this size mismatch triggers memory-access crashes in Netgen's
+      // advancing-front mesher on complex geometry.
+      self.postMessage({ id, log: 'Re-tessellating STEP shape for mesh quality…' })
+      const qualityJson = Module.tessellate_for_meshing(opts)
+      const qualityDto = JSON.parse(qualityJson) as { vertices: [number,number,number][]; triangles: [number,number,number][] }
+      const surface = { vertices: qualityDto.vertices, triangles: qualityDto.triangles }
+      self.postMessage({ id, log: `Quality surface: ${surface.vertices.length} vertices, ${surface.triangles.length} triangles` })
 
-      // OCCT tessellates each face independently, emitting duplicate vertices at shared
-      // edges. The resulting non-manifold surface causes Netgen's advancing-front to hang.
-      // Deduplicate by snapping to a 1e-4 grid and remapping triangle indices.
+      // OCCT tessellates each face independently, emitting duplicate vertices at
+      // shared edges.  Deduplicate by snapping to a 1e-4 grid.
       const PREC = 1e-4
       const keyFor = ([x, y, z]: [number, number, number]) =>
         `${Math.round(x / PREC)},${Math.round(y / PREC)},${Math.round(z / PREC)}`
@@ -71,12 +80,6 @@ self.onmessage = async (event: MessageEvent) => {
         .filter(([a, b, c]) => a !== b && b !== c && a !== c)
       self.postMessage({ id, log: `Deduped: ${surface.vertices.length}→${dedupVerts.length} vertices, ${surface.triangles.length}→${dedupTris.length} triangles` })
       const manifoldSurface = { vertices: dedupVerts, triangles: dedupTris }
-
-      const opts = JSON.stringify({
-        max_element_size: 20.0, min_element_size: 3.0, grading: 0.5, second_order: false,
-        uselocalh: 0, elementsperedge: 1.0, elementspercurve: 1.0,
-        optsteps_2d: 0, optsteps_3d: 0,
-      })
 
       self.postMessage({ id, log: 'Calling Netgen volume mesher…' })
 

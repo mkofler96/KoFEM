@@ -12,7 +12,7 @@ test.describe('Full workflow showcase', () => {
   })
 
   test('wall bracket: welcome → geometry → mesh → constraints → results', async ({ page }) => {
-    test.setTimeout(120_000)
+    test.setTimeout(360_000)
 
     if (!fs.existsSync(WALL_BRACKET)) {
       test.skip()
@@ -27,12 +27,6 @@ test.describe('Full workflow showcase', () => {
     })
     page.on('pageerror', err => console.error(`[showcase] page exception: ${err.message}`))
 
-    // ── Phase 1: Wall Bracket STEP — screenshots 1–4 ─────────────────────────
-    // Screenshots 1–4 use the real wall bracket geometry so the showcase shows
-    // an actual imported part. Volume meshing is intentionally skipped here
-    // because Netgen WASM takes several minutes on this geometry in CI; the mesh
-    // panel is captured showing the "Mesh STEP volume" control instead.
-
     await page.goto('/')
 
     // 1. Welcome screen
@@ -40,15 +34,15 @@ test.describe('Full workflow showcase', () => {
     await page.screenshot({ path: path.join(OUT_DIR, '01-select-geometry.png') })
     console.log(`[showcase] ${elapsed()} 01 screenshot done`)
 
-    // Import wall bracket — OCCT tessellation only, no volume mesh
+    // Import wall bracket
     console.log(`[showcase] ${elapsed()} importing Wall Bracket.stp`)
     await page.locator('input[type="file"][accept=".stp,.step"]').setInputFiles(WALL_BRACKET)
     await expect(page.getByText('Model geometry')).toBeVisible({ timeout: 60_000 })
     console.log(`[showcase] ${elapsed()} tessellation done`)
 
-    const errorBanner = page.getByTestId('step-error')
-    if (await errorBanner.isVisible()) {
-      throw new Error(`STEP import failed: ${await errorBanner.textContent()}`)
+    const stepErrorBanner = page.getByTestId('step-error')
+    if (await stepErrorBanner.isVisible()) {
+      throw new Error(`STEP import failed: ${await stepErrorBanner.textContent()}`)
     }
 
     await page.waitForTimeout(600)
@@ -57,57 +51,58 @@ test.describe('Full workflow showcase', () => {
     await page.screenshot({ path: path.join(OUT_DIR, '02-geometry-options.png') })
     console.log(`[showcase] ${elapsed()} 02 screenshot done`)
 
-    // 3. Mesh panel — volume mesh controls (not triggered)
+    // 3. Mesh panel — trigger volume meshing and wait for completion
     await page.locator('nav').getByRole('button').filter({ hasText: 'Mesh' }).click()
     await expect(page.getByRole('button').filter({ hasText: 'Mesh STEP volume' })).toBeVisible()
+    console.log(`[showcase] ${elapsed()} 03 clicking Mesh STEP volume…`)
+    await page.getByRole('button').filter({ hasText: 'Mesh STEP volume' }).click()
+
+    // Wait for either success ("Mesh is solver-ready") or a visible error banner.
+    // Race both so a failure fails the test immediately rather than timing out.
+    const meshingErrorBanner = page.getByTestId('meshing-error')
+    await Promise.race([
+      expect(page.getByText('Mesh is solver-ready')).toBeVisible({ timeout: 300_000 }),
+      meshingErrorBanner.waitFor({ state: 'visible', timeout: 300_000 })
+        .then(async () => {
+          throw new Error(`Volume meshing failed: ${await meshingErrorBanner.textContent()}`)
+        }),
+    ])
+    console.log(`[showcase] ${elapsed()} 03 volume mesh complete`)
     await page.screenshot({ path: path.join(OUT_DIR, '03-mesh-generation.png') })
     console.log(`[showcase] ${elapsed()} 03 screenshot done`)
 
-    // 4. Constraints panel
+    // 4. Apply BCs to the STEP volume mesh and show constraints panel.
+    // Find the mesh's long axis by bounding-box extents; fix the near face, load the far face.
+    await page.evaluate(() => {
+      type CoordNode = { id: number; x: number; y: number; z: number }
+      const store = (window as unknown as {
+        __kofemStore: {
+          getState(): {
+            nodes: CoordNode[]
+            applyBcToFace(ids: number[], dofs: number[], val: number): void
+            applyLoadToFace(ids: number[], dof: number, force: number): void
+          }
+        }
+      }).__kofemStore
+      const { nodes } = store.getState()
+
+      const axes = ['x', 'y', 'z'] as const
+      const ranges = axes.map(ax => {
+        const vals = nodes.map(n => n[ax])
+        return { ax, min: Math.min(...vals), max: Math.max(...vals) }
+      })
+      const { ax, min, max } = ranges.reduce((a, b) => (b.max - b.min > a.max - a.min ? b : a))
+      const tol = (max - min) * 0.01
+      const fixedIds = nodes.filter(n => n[ax] < min + tol).map(n => n.id)
+      const loadedIds = nodes.filter(n => n[ax] > max - tol).map(n => n.id)
+      store.getState().applyBcToFace(fixedIds, [0, 1, 2], 0)
+      store.getState().applyLoadToFace(loadedIds, 1, -2000)
+    })
+
     await page.locator('nav').getByRole('button').filter({ hasText: 'Constraints' }).click()
     await expect(page.getByText('Boundary conditions')).toBeVisible()
     await page.screenshot({ path: path.join(OUT_DIR, '04-load-application.png') })
     console.log(`[showcase] ${elapsed()} 04 screenshot done`)
-
-    // ── Phase 2: Wall Bracket simplified FEM — screenshot 5 ──────────────────
-    // Reload and inject a structured hex mesh with wall-bracket proportions
-    // (150 × 60 × 40 mm). BCs and loads are applied programmatically:
-    // min-X face fixed (wall mount), max-X face loaded in -Y (tip force).
-    // This avoids Netgen WASM while still demonstrating the full solve pipeline.
-
-    await page.goto('/')
-    await expect(page.getByRole('button', { name: 'Start with example' })).toBeVisible()
-
-    await page.evaluate(() => {
-      const store = (window as unknown as Record<string, unknown>).__kofemStore as {
-        getState(): {
-          nodes: { id: number; x: number; y: number; z: number }[]
-          startCustom(params: {
-            name: string; lx: number; ly: number; lz: number
-            nx: number; ny: number; nz: number
-          }): void
-          applyBcToFace(nodeIds: number[], dofs: number[], value: number): void
-          applyLoadToFace(nodeIds: number[], dof: number, totalForce: number): void
-        }
-      }
-      const state = store.getState()
-
-      // Build a wall-bracket proportioned hex mesh
-      state.startCustom({ name: 'Wall Bracket', lx: 0.15, ly: 0.06, lz: 0.04, nx: 6, ny: 3, nz: 2 })
-
-      const { nodes } = store.getState()
-      const xs = nodes.map(n => n.x)
-      const minX = Math.min(...xs), maxX = Math.max(...xs)
-      const tol = (maxX - minX) * 0.01
-
-      const fixedIds = nodes.filter(n => n.x < minX + tol).map(n => n.id)
-      const loadedIds = nodes.filter(n => n.x > maxX - tol).map(n => n.id)
-
-      state.applyBcToFace(fixedIds, [0, 1, 2], 0)
-      state.applyLoadToFace(loadedIds, 1, -2000)
-    })
-
-    await expect(page.getByText('Model geometry')).toBeVisible()
 
     // 5. Solve and results
     await page.locator('nav').getByRole('button').filter({ hasText: 'Solve' }).click()
