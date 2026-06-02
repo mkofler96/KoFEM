@@ -44,8 +44,8 @@ self.onmessage = async (event: MessageEvent) => {
       self.postMessage({ id, ok: true, points: dto.vertices, triangles: dto.triangles })
 
     } else if (type === 'volume_mesh') {
-      const { surface: stepSurface, maxElementSize = 20.0 } = payload as {
-        surface: { points: [number, number, number][]; triangles: [number, number, number][] }
+      const { maxElementSize = 20.0 } = payload as {
+        surface?: unknown
         maxElementSize?: number
       }
 
