@@ -30,6 +30,7 @@ export function Toolbar() {
   const [isComputingVol, setIsComputingVol] = useState(false)
   const [isGeneratingReport, setIsGeneratingReport] = useState(false)
   const [meshingError, setMeshingError] = useState<string | null>(null)
+  const [maxElementSize, setMaxElementSize] = useState(20)
 
   const handleScreenshot = () => {
     const canvas = document.querySelector('canvas') as HTMLCanvasElement | null
@@ -89,7 +90,7 @@ export function Toolbar() {
       edges: [number, number][]
       nodes: Node[]
       elements: Element[]
-    }>('volume_mesh', { surface: stepSurface })
+    }>('volume_mesh', { surface: stepSurface, maxElementSize })
       .then(({ points, edges, nodes, elements }) => {
         setVolMesh({ points, edges })
         applyMeshResult(nodes, elements, modelName || 'STEP Mesh')
@@ -195,14 +196,30 @@ export function Toolbar() {
         </button>
       )}
       {stepSurface && !volMesh && (
-        <button
-          className={styles.btn}
-          onClick={handleComputeVolMesh}
-          disabled={busy || isComputingVol}
-          title="Compute interior tetrahedral volume mesh"
-        >
-          {isComputingVol ? 'Meshing…' : 'Vol Mesh'}
-        </button>
+        <>
+          <label className={styles.meshSizeLabel} title="Maximum FEM element size in mm">
+            Size:
+            <input
+              type="number"
+              min={0.5}
+              max={500}
+              step={0.5}
+              value={maxElementSize}
+              onChange={e => setMaxElementSize(Math.max(0.5, Number(e.target.value)))}
+              className={styles.meshSizeInput}
+              disabled={busy || isComputingVol}
+            />
+            mm
+          </label>
+          <button
+            className={styles.btn}
+            onClick={handleComputeVolMesh}
+            disabled={busy || isComputingVol}
+            title={`Compute tetrahedral volume mesh (max element size: ${maxElementSize} mm)`}
+          >
+            {isComputingVol ? 'Meshing…' : 'Vol Mesh'}
+          </button>
+        </>
       )}
       {volMesh && (
         <button

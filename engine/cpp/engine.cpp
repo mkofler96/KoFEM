@@ -16,7 +16,6 @@
 // OCCT
 #include <BRep_Tool.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
-#include <BRepTools.hxx>
 #include <IFSelect_ReturnStatus.hxx>
 #include <Poly_Triangulation.hxx>
 #include <STEPControl_Reader.hxx>
@@ -119,11 +118,6 @@ static bool jbool(const val& o, const char* k, bool def) {
 
 // ── OCCT: STEP → surface mesh ─────────────────────────────────────────────────
 
-// Retained after tessellate_step so tessellate_for_meshing can re-tessellate
-// with quality parameters tuned to the requested element size.
-static TopoDS_Shape g_step_shape;
-static bool         g_has_step_shape = false;
-
 static std::string tessellate_step(val bytes_val, const std::string& opts_json) {
     val opts = parse_json(opts_json);
     double linear_defl  = jdouble(opts, "linear_deflection",  0.1);
@@ -153,8 +147,6 @@ static std::string tessellate_step(val bytes_val, const std::string& opts_json) 
         throw std::runtime_error("STEP file contains no transferable shapes");
 
     TopoDS_Shape shape = reader.OneShape();
-    g_step_shape     = shape;
-    g_has_step_shape = true;
 
     BRepMesh_IncrementalMesh mesher(shape, linear_defl, /*relative=*/false, angular_defl);
     mesher.Perform();
@@ -196,73 +188,6 @@ static std::string tessellate_step(val bytes_val, const std::string& opts_json) 
     return "{\"vertices\":" + json_vec3(verts) + ",\"triangles\":" + json_ivec3(tris) + "}";
 }
 
-// Re-tessellate the stored STEP shape with parameters tied to the target
-// element size.  The visualization tessellation (linear_deflection=0.1)
-// produces very many small triangles; passing that directly to Netgen's
-// advancing-front mesher can trigger memory-access crashes on complex geometry
-// because the size mismatch between surface triangles and volume elements
-// confuses Netgen's internal bookkeeping.
-//
-// Using linear_defl ≈ max_element_size/4 gives surface triangles roughly
-// the same scale as the volume elements, which is what Netgen expects.
-static std::string tessellate_for_meshing(const std::string& opts_json) {
-    if (!g_has_step_shape)
-        throw std::runtime_error(
-            "tessellate_for_meshing: no STEP shape loaded — call tessellate_step first");
-
-    val opts = parse_json(opts_json);
-    double max_size = jdouble(opts, "max_element_size", 10.0);
-
-    // Surface triangles at ~1/4 of the target element size; floor at 1.0 to
-    // avoid producing a surface finer than the viz tessellation.
-    double linear_defl  = std::max(1.0, max_size / 4.0);
-    double angular_defl = 0.3;
-
-    // BRepMesh_IncrementalMesh will skip faces whose stored deflection already
-    // satisfies the request.  Since we first tessellated with 0.1 (finer than
-    // max_size/4 for typical element sizes), we must clear first to force a
-    // coarser, more uniform re-tessellation.
-    BRepTools::Clean(g_step_shape);
-    BRepMesh_IncrementalMesh mesher(g_step_shape, linear_defl, /*relative=*/false, angular_defl);
-    mesher.Perform();
-    if (!mesher.IsDone())
-        throw std::runtime_error("BRepMesh_IncrementalMesh (mesh-quality) failed");
-
-    std::vector<double> verts;
-    std::vector<int>    tris;
-
-    for (TopExp_Explorer exp(g_step_shape, TopAbs_FACE); exp.More(); exp.Next()) {
-        TopoDS_Face face = TopoDS::Face(exp.Current());
-        TopLoc_Location loc;
-        Handle(Poly_Triangulation) tri = BRep_Tool::Triangulation(face, loc);
-        if (tri.IsNull()) continue;
-
-        int base = (int)(verts.size() / 3);
-
-        for (int i = 1; i <= tri->NbNodes(); ++i) {
-            gp_Pnt pt = tri->Node(i).Transformed(loc);
-            verts.push_back(pt.X());
-            verts.push_back(pt.Y());
-            verts.push_back(pt.Z());
-        }
-
-        bool rev = (face.Orientation() == TopAbs_REVERSED);
-        for (int i = 1; i <= tri->NbTriangles(); ++i) {
-            int n1, n2, n3;
-            tri->Triangle(i).Get(n1, n2, n3);
-            if (rev) std::swap(n2, n3);
-            tris.push_back(base + n1 - 1);
-            tris.push_back(base + n2 - 1);
-            tris.push_back(base + n3 - 1);
-        }
-    }
-
-    if (verts.empty())
-        throw std::runtime_error("mesh-quality tessellation produced no triangles");
-
-    return "{\"vertices\":" + json_vec3(verts) + ",\"triangles\":" + json_ivec3(tris) + "}";
-}
-
 // ── Netgen: surface mesh → tetrahedral volume mesh ────────────────────────────
 //
 // Netgen on some platforms compiles its C API inside namespace nglib; on others
@@ -277,7 +202,6 @@ namespace nglib {
         NG_VOLUME_FAILURE = 2, NG_STL_INPUT_ERROR = 3,
         NG_SURFACE_FAILURE = 4, NG_FILE_NOT_FOUND = 5,
     };
-    enum Ng_Surface_Element_Type { NG_TRIG = 1 };
 
     class Ng_Meshing_Parameters {
     public:
@@ -298,13 +222,22 @@ namespace nglib {
     extern void      Ng_Init();
     extern Ng_Mesh*  Ng_NewMesh();
     extern void      Ng_DeleteMesh(Ng_Mesh*);
-    extern void      Ng_AddPoint(Ng_Mesh*, double*);
-    extern void      Ng_AddSurfaceElement(Ng_Mesh*, Ng_Surface_Element_Type, int*);
     extern Ng_Result Ng_GenerateVolumeMesh(Ng_Mesh*, Ng_Meshing_Parameters*);
     extern void      Ng_GetPoint(Ng_Mesh*, int, double*);
     extern Ng_Result Ng_GetVolumeElement(Ng_Mesh*, int, int*);
     extern int       Ng_GetNP(Ng_Mesh*);
     extern int       Ng_GetNE(Ng_Mesh*);
+
+    // STL surface mesher — generates a quality surface mesh from an STL geometry,
+    // which is then filled by the volume mesher.  Available in all nglib builds
+    // regardless of USE_OCC.
+    typedef void* Ng_STL_Geometry;
+    extern Ng_STL_Geometry* Ng_STL_NewGeometry();
+    extern void             Ng_STL_DeleteGeometry(Ng_STL_Geometry*);
+    extern void             Ng_STL_AddTriangle(Ng_STL_Geometry*, double*, double*, double*, double*);
+    extern Ng_Result        Ng_STL_InitSTLGeometry(Ng_STL_Geometry*);
+    extern Ng_Result        Ng_STL_MakeEdges(Ng_STL_Geometry*, Ng_Mesh*, Ng_Meshing_Parameters*);
+    extern Ng_Result        Ng_STL_GenerateSurfaceMesh(Ng_STL_Geometry*, Ng_Mesh*, Ng_Meshing_Parameters*);
 }
 
 static std::string generate_volume_mesh(
@@ -324,7 +257,7 @@ static std::string generate_volume_mesh(
     val opts    = parse_json(opts_json);
 
     double max_size        = jdouble(opts, "max_element_size",   10.0);
-    double min_size        = jdouble(opts, "min_element_size",    0.1);
+    double min_size        = jdouble(opts, "min_element_size",    0.0);
     double grading         = jdouble(opts, "grading",             0.3);
     bool   second_ord      = jbool  (opts, "second_order",       false);
     int    uselocalh       = jint   (opts, "uselocalh",             1);
@@ -335,32 +268,28 @@ static std::string generate_volume_mesh(
 
     val verts_js = surface["vertices"];
     val tris_js  = surface["triangles"];
-    unsigned nv  = verts_js["length"].as<unsigned>();
-    unsigned nt  = tris_js ["length"].as<unsigned>();
+    unsigned nt  = tris_js["length"].as<unsigned>();
 
-    nglib::Ng_Mesh* mesh = nglib::Ng_NewMesh();
-    if (!mesh) throw std::runtime_error("Ng_NewMesh() returned null");
+    // Build an STL geometry from the input surface triangles.  Netgen's STL
+    // mesher re-meshes the surface at max_element_size, producing a quality
+    // FEM surface mesh rather than inheriting the (potentially very fine or
+    // very coarse) OCCT tessellation directly.  The input triangles only
+    // describe the geometry; Netgen generates all mesh connectivity itself.
+    nglib::Ng_STL_Geometry* stl_geom = nglib::Ng_STL_NewGeometry();
+    if (!stl_geom) throw std::runtime_error("Ng_STL_NewGeometry() returned null");
 
-    for (unsigned i = 0; i < nv; ++i) {
-        val v = verts_js[i];
-        double pt[3] = { v[0].as<double>(), v[1].as<double>(), v[2].as<double>() };
-        nglib::Ng_AddPoint(mesh, pt);
-    }
     for (unsigned i = 0; i < nt; ++i) {
         val t = tris_js[i];
-        int tri[3] = { t[0].as<int>()+1, t[1].as<int>()+1, t[2].as<int>()+1 };
-        nglib::Ng_AddSurfaceElement(mesh, nglib::NG_TRIG, tri);
+        int ia = t[0].as<int>(), ib = t[1].as<int>(), ic = t[2].as<int>();
+        val va = verts_js[ia], vb = verts_js[ib], vc = verts_js[ic];
+        double p1[3] = { va[0].as<double>(), va[1].as<double>(), va[2].as<double>() };
+        double p2[3] = { vb[0].as<double>(), vb[1].as<double>(), vb[2].as<double>() };
+        double p3[3] = { vc[0].as<double>(), vc[1].as<double>(), vc[2].as<double>() };
+        nglib::Ng_STL_AddTriangle(stl_geom, p1, p2, p3, nullptr);
     }
 
+    // Initialise every field explicitly — see comment on Ng_Meshing_Parameters below.
     nglib::Ng_Meshing_Parameters mp;
-    // Initialise every field explicitly.  In the WASM build Netgen exports
-    // symbols in the global namespace while the re-declaration above is inside
-    // namespace nglib::, so Ng_Meshing_Parameters() may not link and leaves
-    // fields uninitialised.  Explicit assignment is correct regardless.
-    //
-    // check_overlap / check_overlapping_boundary are forced to 0: the Netgen
-    // default (1) crashes on complex STEP geometry with near-touching surfaces,
-    // and the JS deduplication step already produces a manifold mesh.
     mp.uselocalh                  = uselocalh;
     mp.maxh                       = max_size;
     mp.minh                       = min_size;
@@ -384,7 +313,40 @@ static std::string generate_volume_mesh(
     mp.check_overlap              = 0;
     mp.check_overlapping_boundary = 0;
 
-    nglib::Ng_Result res = nglib::Ng_GenerateVolumeMesh(mesh, &mp);
+    nglib::Ng_Result res = nglib::Ng_STL_InitSTLGeometry(stl_geom);
+    if (res != nglib::NG_OK) {
+        nglib::Ng_STL_DeleteGeometry(stl_geom);
+        throw std::runtime_error(
+            "Ng_STL_InitSTLGeometry failed (code " + std::to_string((int)res) + ")");
+    }
+
+    nglib::Ng_Mesh* mesh = nglib::Ng_NewMesh();
+    if (!mesh) {
+        nglib::Ng_STL_DeleteGeometry(stl_geom);
+        throw std::runtime_error("Ng_NewMesh() returned null");
+    }
+
+    res = nglib::Ng_STL_MakeEdges(stl_geom, mesh, &mp);
+    if (res != nglib::NG_OK) {
+        nglib::Ng_DeleteMesh(mesh);
+        nglib::Ng_STL_DeleteGeometry(stl_geom);
+        throw std::runtime_error(
+            "Ng_STL_MakeEdges failed (code " + std::to_string((int)res) + ")");
+    }
+
+    res = nglib::Ng_STL_GenerateSurfaceMesh(stl_geom, mesh, &mp);
+    if (res != nglib::NG_OK) {
+        nglib::Ng_DeleteMesh(mesh);
+        nglib::Ng_STL_DeleteGeometry(stl_geom);
+        throw std::runtime_error(
+            "Ng_STL_GenerateSurfaceMesh failed (code " + std::to_string((int)res) + ")");
+    }
+
+    nglib::Ng_STL_DeleteGeometry(stl_geom);
+
+    // check_overlap forced to 0: the Netgen default (1) crashes on complex STEP
+    // geometry with near-touching surfaces.
+    res = nglib::Ng_GenerateVolumeMesh(mesh, &mp);
     if (res != nglib::NG_OK) {
         nglib::Ng_DeleteMesh(mesh);
         throw std::runtime_error(
@@ -629,9 +591,8 @@ static std::string step_to_fem_result(
 // ── Embind registrations ──────────────────────────────────────────────────────
 
 EMSCRIPTEN_BINDINGS(kofem) {
-    emscripten::function("tessellate_step",        &tessellate_step);
-    emscripten::function("tessellate_for_meshing", &tessellate_for_meshing);
-    emscripten::function("generate_volume_mesh",   &generate_volume_mesh);
+    emscripten::function("tessellate_step",      &tessellate_step);
+    emscripten::function("generate_volume_mesh", &generate_volume_mesh);
     emscripten::function("solve_linear_elastic",   &solve_linear_elastic);
     emscripten::function("step_to_fem_result",     &step_to_fem_result);
 }

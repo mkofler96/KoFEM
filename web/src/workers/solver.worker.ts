@@ -44,49 +44,28 @@ self.onmessage = async (event: MessageEvent) => {
       self.postMessage({ id, ok: true, points: dto.vertices, triangles: dto.triangles })
 
     } else if (type === 'volume_mesh') {
+      const { surface: stepSurface, maxElementSize = 20.0 } = payload as {
+        surface: { points: [number, number, number][]; triangles: [number, number, number][] }
+        maxElementSize?: number
+      }
+
       const opts = JSON.stringify({
-        max_element_size: 20.0, min_element_size: 3.0, grading: 0.5, second_order: false,
-        uselocalh: 0, elementsperedge: 1.0, elementspercurve: 1.0,
-        optsteps_2d: 0, optsteps_3d: 0,
+        max_element_size: maxElementSize, min_element_size: 0.0, grading: 0.3, second_order: false,
+        uselocalh: 1, elementsperedge: 2.0, elementspercurve: 2.0,
+        optsteps_2d: 3, optsteps_3d: 3,
       })
 
-      // Re-tessellate the stored STEP shape with parameters tuned to the
-      // target element size (linear_defl ≈ max_element_size/4).  The
-      // visualization tessellation (linear_deflection=0.1) produces many tiny
-      // triangles that are orders of magnitude smaller than the volume elements;
-      // this size mismatch triggers memory-access crashes in Netgen's
-      // advancing-front mesher on complex geometry.
-      self.postMessage({ id, log: 'Re-tessellating STEP shape for mesh quality…' })
-      const qualityJson = Module.tessellate_for_meshing(opts)
-      const qualityDto = JSON.parse(qualityJson) as { vertices: [number,number,number][]; triangles: [number,number,number][] }
-      const surface = { vertices: qualityDto.vertices, triangles: qualityDto.triangles }
-      self.postMessage({ id, log: `Quality surface: ${surface.vertices.length} vertices, ${surface.triangles.length} triangles` })
+      // The fine OCCT visualization tessellation is passed directly to Netgen's
+      // STL surface mesher, which re-meshes the surface at max_element_size before
+      // filling the volume.  Vertex topology and deduplication are handled by
+      // Ng_STL_InitSTLGeometry internally.
+      self.postMessage({ id, log: `Calling Netgen STL surface + volume mesher (max size: ${maxElementSize} mm)…` })
+      const surfaceForNetgen = { vertices: stepSurface.points, triangles: stepSurface.triangles }
 
-      // OCCT tessellates each face independently, emitting duplicate vertices at
-      // shared edges.  Deduplicate by snapping to a 1e-4 grid.
-      const PREC = 1e-4
-      const keyFor = ([x, y, z]: [number, number, number]) =>
-        `${Math.round(x / PREC)},${Math.round(y / PREC)},${Math.round(z / PREC)}`
-      const vertMap = new Map<string, number>()
-      const dedupVerts: [number, number, number][] = []
-      const remap = new Int32Array(surface.vertices.length)
-      for (let i = 0; i < surface.vertices.length; i++) {
-        const k = keyFor(surface.vertices[i])
-        if (!vertMap.has(k)) { vertMap.set(k, dedupVerts.length); dedupVerts.push(surface.vertices[i]) }
-        remap[i] = vertMap.get(k)!
-      }
-      const dedupTris = surface.triangles
-        .map(([a, b, c]) => [remap[a], remap[b], remap[c]] as [number, number, number])
-        .filter(([a, b, c]) => a !== b && b !== c && a !== c)
-      self.postMessage({ id, log: `Deduped: ${surface.vertices.length}→${dedupVerts.length} vertices, ${surface.triangles.length}→${dedupTris.length} triangles` })
-      const manifoldSurface = { vertices: dedupVerts, triangles: dedupTris }
-
-      self.postMessage({ id, log: 'Calling Netgen volume mesher…' })
-
-      const json = Module.generate_volume_mesh(JSON.stringify(manifoldSurface), opts)
+      const json = Module.generate_volume_mesh(JSON.stringify(surfaceForNetgen), opts)
       const dto = JSON.parse(json) as { vertices: [number, number, number][]; tetrahedra: [number, number, number, number][] }
 
-      self.postMessage({ id, log: `Volume mesh complete: ${dto.vertices.length} nodes, ${dto.tetrahedra.length} tetrahedra` })
+      self.postMessage({ id, log: `Volume mesh: ${dto.vertices.length} nodes, ${dto.tetrahedra.length} tetrahedra` })
 
       const nodes: Node[] = dto.vertices.map(([x, y, z], i) => ({ id: i, x, y, z }))
       const elements: Element[] = dto.tetrahedra.map((v, i) => ({
