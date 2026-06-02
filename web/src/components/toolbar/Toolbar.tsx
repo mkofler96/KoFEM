@@ -29,6 +29,7 @@ export function Toolbar() {
   const [isImportingStep, setIsImportingStep] = useState(false)
   const [isComputingVol, setIsComputingVol] = useState(false)
   const [isGeneratingReport, setIsGeneratingReport] = useState(false)
+  const [meshingError, setMeshingError] = useState<string | null>(null)
 
   const handleScreenshot = () => {
     const canvas = document.querySelector('canvas') as HTMLCanvasElement | null
@@ -82,6 +83,7 @@ export function Toolbar() {
   const handleComputeVolMesh = () => {
     if (!stepSurface) return
     setIsComputingVol(true)
+    setMeshingError(null)
     sendToWorker<{
       points: [number, number, number][]
       edges: [number, number][]
@@ -92,7 +94,7 @@ export function Toolbar() {
         setVolMesh({ points, edges })
         applyMeshResult(nodes, elements, modelName || 'STEP Mesh')
       })
-      .catch(err => alert(`Volume meshing failed: ${err.message}`))
+      .catch(err => setMeshingError(err instanceof Error ? err.message : String(err)))
       .finally(() => setIsComputingVol(false))
   }
 
@@ -132,6 +134,20 @@ export function Toolbar() {
         <span style={{ flex: 1 }}>STEP import failed: {stepImportError}</span>
         <button
           onClick={() => setStepImportError(null)}
+          aria-label="Dismiss error"
+          style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: '16px', lineHeight: 1 }}
+        >×</button>
+      </div>
+    )}
+    {meshingError && (
+      <div
+        role="alert"
+        data-testid="toolbar-meshing-error"
+        style={{ background: '#c0392b', color: '#fff', padding: '6px 12px', fontSize: '13px', display: 'flex', gap: 8, alignItems: 'center' }}
+      >
+        <span style={{ flex: 1 }}>Volume meshing failed: {meshingError}</span>
+        <button
+          onClick={() => setMeshingError(null)}
           aria-label="Dismiss error"
           style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer', fontSize: '16px', lineHeight: 1 }}
         >×</button>
