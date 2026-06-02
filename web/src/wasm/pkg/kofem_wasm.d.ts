@@ -13,13 +13,16 @@ export default function init(
  */
 export function tessellate_step(step_bytes: Uint8Array, opts_json: string): string
 
+/** Re-tessellate the last loaded STEP shape with parameters scaled to the
+ *  target element size.  Must be called after tessellate_step.
+ *  @param opts_json JSON-serialised `{ max_element_size: number, … }` (same as generate_volume_mesh).
+ *  @returns JSON-serialised `{ vertices: [number,number,number][], triangles: [number,number,number][] }`.
+ */
+export function tessellate_for_meshing(opts_json: string): string
+
 /** Generate a quality tetrahedral volume mesh from a closed surface mesh.
- *
- *  Uses Netgen's STL surface mesher: the input triangles describe the geometry;
- *  Netgen re-meshes the surface at `max_element_size` and then fills the volume.
- *
  *  @param surface_json JSON-serialised `{ vertices: [number,number,number][], triangles: [number,number,number][] }`.
- *  @param opts_json    JSON-serialised `{ max_element_size: number, min_element_size: number, grading: number, second_order: boolean, … }`.
+ *  @param opts_json    JSON-serialised `{ max_element_size: number, min_element_size: number, grading: number, second_order: boolean }`.
  *  @returns JSON-serialised `{ vertices: [number,number,number][], tetrahedra: [number,number,number,number][] }`.
  */
 export function generate_volume_mesh(surface_json: string, opts_json: string): string
