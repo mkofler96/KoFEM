@@ -50,9 +50,9 @@ self.onmessage = async (event: MessageEvent) => {
       }
 
       const opts = JSON.stringify({
-        max_element_size: maxElementSize, min_element_size: 0.0, grading: 0.3, second_order: false,
-        uselocalh: 1, elementsperedge: 2.0, elementspercurve: 2.0,
-        optsteps_2d: 3, optsteps_3d: 3,
+        max_element_size: maxElementSize, min_element_size: 0.0, grading: 0.5, second_order: false,
+        uselocalh: 0, elementsperedge: 1.0, elementspercurve: 1.0,
+        optsteps_2d: 0, optsteps_3d: 0,
       })
 
       // Re-tessellate the stored STEP shape with parameters tuned to the
