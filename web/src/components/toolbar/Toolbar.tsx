@@ -195,8 +195,8 @@ export function Toolbar() {
           {stepWireframe ? 'Solid' : 'Wireframe'}
         </button>
       )}
-      {stepSurface && (
-        <div className={styles.meshGroup}>
+      {stepSurface && !volMesh && (
+        <>
           <label className={styles.meshSizeLabel} title="Maximum FEM element size in mm">
             Size:
             <input
@@ -217,9 +217,9 @@ export function Toolbar() {
             disabled={busy || isComputingVol}
             title={`Compute tetrahedral volume mesh (max element size: ${maxElementSize} mm)`}
           >
-            {isComputingVol ? 'Meshing…' : volMesh ? 'Re-mesh' : 'Vol Mesh'}
+            {isComputingVol ? 'Meshing…' : 'Vol Mesh'}
           </button>
-        </div>
+        </>
       )}
       {volMesh && (
         <button

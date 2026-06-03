@@ -7,7 +7,6 @@
 .primary:hover:not(:disabled) { background: #4c6ef5; }
 .divider { width: 1px; height: 20px; background: #2d2d52; margin: 0 4px; }
 .modelName { font-size: 13px; color: #8888aa; font-style: italic; margin-left: 4px; }
-.meshSizeLabel { font-size: 12px; color: #8888aa; display: flex; align-items: center; gap: 4px; }
-.meshSizeInput { width: 52px; background: #1a1a30; color: #e0e0e0; border: 1px solid #4a4a80; border-radius: 4px; padding: 2px 4px; font-size: 12px; }
+.meshSizeLabel { font-size: 13px; color: #8888aa; display: flex; align-items: center; gap: 4px; }
+.meshSizeInput { width: 52px; background: #1a1a30; color: #e0e0e0; border: 1px solid #4a4a80; border-radius: 4px; padding: 3px 4px; font-size: 13px; }
 .meshSizeInput:disabled { opacity: 0.5; }
-.meshGroup { display: flex; flex-direction: column; gap: 2px; align-items: stretch; }
