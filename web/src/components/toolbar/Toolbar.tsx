@@ -196,7 +196,7 @@ export function Toolbar() {
         </button>
       )}
       {stepSurface && (
-        <>
+        <div className={styles.meshGroup}>
           <label className={styles.meshSizeLabel} title="Maximum FEM element size in mm">
             Size:
             <input
@@ -219,7 +219,7 @@ export function Toolbar() {
           >
             {isComputingVol ? 'Meshing…' : volMesh ? 'Re-mesh' : 'Vol Mesh'}
           </button>
-        </>
+        </div>
       )}
       {volMesh && (
         <button
