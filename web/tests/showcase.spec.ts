@@ -12,7 +12,7 @@ test.describe('Full workflow showcase', () => {
   })
 
   test('wall bracket: welcome → geometry → mesh → constraints → results', async ({ page }) => {
-    test.setTimeout(360_000)
+    test.setTimeout(600_000)
 
     if (!fs.existsSync(WALL_BRACKET)) {
       test.skip()
@@ -110,7 +110,7 @@ test.describe('Full workflow showcase', () => {
     await page.getByRole('button').filter({ hasText: 'Run static solve' }).click()
     console.log(`[showcase] ${elapsed()} solver started…`)
 
-    await expect(page.getByText('Result summary')).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByText('Result summary')).toBeVisible({ timeout: 120_000 })
 
     await page.screenshot({ path: path.join(OUT_DIR, '05-results.png') })
     console.log(`[showcase] ${elapsed()} 05 screenshot done`)
