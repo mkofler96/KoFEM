@@ -324,7 +324,7 @@ static std::string generate_volume_mesh(
     val opts    = parse_json(opts_json);
 
     double max_size        = jdouble(opts, "max_element_size",   10.0);
-    double min_size        = jdouble(opts, "min_element_size",    0.1);
+    double min_size        = jdouble(opts, "min_element_size",    0.0);
     double grading         = jdouble(opts, "grading",             0.3);
     bool   second_ord      = jbool  (opts, "second_order",       false);
     int    uselocalh       = jint   (opts, "uselocalh",             1);
@@ -352,7 +352,6 @@ static std::string generate_volume_mesh(
         nglib::Ng_AddSurfaceElement(mesh, nglib::NG_TRIG, tri);
     }
 
-    nglib::Ng_Meshing_Parameters mp;
     // Initialise every field explicitly.  In the WASM build Netgen exports
     // symbols in the global namespace while the re-declaration above is inside
     // namespace nglib::, so Ng_Meshing_Parameters() may not link and leaves
@@ -361,6 +360,7 @@ static std::string generate_volume_mesh(
     // check_overlap / check_overlapping_boundary are forced to 0: the Netgen
     // default (1) crashes on complex STEP geometry with near-touching surfaces,
     // and the JS deduplication step already produces a manifold mesh.
+    nglib::Ng_Meshing_Parameters mp;
     mp.uselocalh                  = uselocalh;
     mp.maxh                       = max_size;
     mp.minh                       = min_size;

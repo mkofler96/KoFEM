@@ -44,8 +44,13 @@ self.onmessage = async (event: MessageEvent) => {
       self.postMessage({ id, ok: true, points: dto.vertices, triangles: dto.triangles })
 
     } else if (type === 'volume_mesh') {
+      const { maxElementSize = 20.0 } = payload as {
+        surface?: unknown
+        maxElementSize?: number
+      }
+
       const opts = JSON.stringify({
-        max_element_size: 20.0, min_element_size: 3.0, grading: 0.5, second_order: false,
+        max_element_size: maxElementSize, min_element_size: 0.0, grading: 0.5, second_order: false,
         uselocalh: 0, elementsperedge: 1.0, elementspercurve: 1.0,
         optsteps_2d: 0, optsteps_3d: 0,
       })
@@ -56,7 +61,7 @@ self.onmessage = async (event: MessageEvent) => {
       // triangles that are orders of magnitude smaller than the volume elements;
       // this size mismatch triggers memory-access crashes in Netgen's
       // advancing-front mesher on complex geometry.
-      self.postMessage({ id, log: 'Re-tessellating STEP shape for mesh quality…' })
+      self.postMessage({ id, log: `Re-tessellating STEP shape for mesh quality (max size: ${maxElementSize} mm)…` })
       const qualityJson = Module.tessellate_for_meshing(opts)
       const qualityDto = JSON.parse(qualityJson) as { vertices: [number,number,number][]; triangles: [number,number,number][] }
       const surface = { vertices: qualityDto.vertices, triangles: qualityDto.triangles }
