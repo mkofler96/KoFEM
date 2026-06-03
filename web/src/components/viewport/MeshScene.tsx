@@ -20,12 +20,6 @@ const HEX_FACE_DEFS: [number, number, number, number][] = [
   [0, 3, 7, 4], [1, 2, 6, 5],
 ]
 
-function hexEdgePoints(
-  nodeIds: number[],
-  coordOf: (id: number) => [number, number, number],
-): [number, number, number][][] {
-  return HEX_EDGES.map(([a, b]) => [coordOf(nodeIds[a]), coordOf(nodeIds[b])])
-}
 
 function extractBoundaryQuadFaceIds(hexElems: { nodeIds: number[] }[]): [number, number, number, number][] {
   const faceMap = new Map<string, { face: [number, number, number, number]; count: number }>()
@@ -50,12 +44,6 @@ const TET_FACE_DEFS: [number, number, number][] = [
   [0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3],
 ]
 
-function tetEdgePoints(
-  nodeIds: number[],
-  coordOf: (id: number) => [number, number, number],
-): [number, number, number][][] {
-  return TET_EDGES.map(([a, b]) => [coordOf(nodeIds[a]), coordOf(nodeIds[b])])
-}
 
 function extractBoundaryTriFaceIds(tetElems: { nodeIds: number[] }[]): [number, number, number][] {
   const faceMap = new Map<string, { face: [number, number, number]; count: number }>()
@@ -121,28 +109,33 @@ export function MeshScene() {
   const boundaryQuadFaceIds = useMemo(() => extractBoundaryQuadFaceIds(hexElements), [hexElements])
   const boundaryTriFaceIds = useMemo(() => extractBoundaryTriFaceIds(tetElements), [tetElements])
 
-  const undeformedEdges = useMemo(() => {
-    const coord = (id: number): [number, number, number] => {
-      const e = nodeMap.get(id)!
-      return [e.n.x, e.n.y, e.n.z]
+  const undeformedEdgePositions = useMemo(() => {
+    const segs: number[] = []
+    const coord = (id: number) => { const e = nodeMap.get(id)!; return [e.n.x, e.n.y, e.n.z] }
+    for (const el of hexElements) {
+      for (const [a, b] of HEX_EDGES) { segs.push(...coord(el.nodeIds[a]), ...coord(el.nodeIds[b])) }
     }
-    return [
-      ...hexElements.flatMap(el => hexEdgePoints(el.nodeIds, coord)),
-      ...tetElements.flatMap(el => tetEdgePoints(el.nodeIds, coord)),
-    ]
+    for (const el of tetElements) {
+      for (const [a, b] of TET_EDGES) { segs.push(...coord(el.nodeIds[a]), ...coord(el.nodeIds[b])) }
+    }
+    return segs.length > 0 ? new Float32Array(segs) : null
   }, [hexElements, tetElements, nodeMap])
 
-  const deformedEdges = useMemo(() => {
+  const deformedEdgePositions = useMemo(() => {
     if (!result) return null
     const d = result.displacements
-    const coord = (id: number): [number, number, number] => {
+    const coord = (id: number) => {
       const { n, i } = nodeMap.get(id)!
       return [n.x + (d[i * 3] ?? 0) * deformScale, n.y + (d[i * 3 + 1] ?? 0) * deformScale, n.z + (d[i * 3 + 2] ?? 0) * deformScale]
     }
-    return [
-      ...hexElements.flatMap(el => hexEdgePoints(el.nodeIds, coord)),
-      ...tetElements.flatMap(el => tetEdgePoints(el.nodeIds, coord)),
-    ]
+    const segs: number[] = []
+    for (const el of hexElements) {
+      for (const [a, b] of HEX_EDGES) { segs.push(...coord(el.nodeIds[a]), ...coord(el.nodeIds[b])) }
+    }
+    for (const el of tetElements) {
+      for (const [a, b] of TET_EDGES) { segs.push(...coord(el.nodeIds[a]), ...coord(el.nodeIds[b])) }
+    }
+    return segs.length > 0 ? new Float32Array(segs) : null
   }, [result, hexElements, tetElements, nodeMap, deformScale])
 
   const barLines = useMemo(() => barElements.map(el =>
@@ -341,9 +334,14 @@ export function MeshScene() {
       )}
 
       {/* Element edges — shown from mesh mode onward for the classic FEM wireframe look */}
-      {!result && showFemEdges && undeformedEdges.map((pts, i) => (
-        <Line key={`u-${i}`} points={pts} color="#2d4a6b" lineWidth={1.2} />
-      ))}
+      {!result && showFemEdges && undeformedEdgePositions && (
+        <lineSegments>
+          <bufferGeometry>
+            <bufferAttribute attach="attributes-position" args={[undeformedEdgePositions, 3]} />
+          </bufferGeometry>
+          <lineBasicMaterial color="#2d4a6b" />
+        </lineSegments>
+      )}
 
       {/* Bar elements */}
       {barLines.map((pts, i) => (
@@ -362,9 +360,14 @@ export function MeshScene() {
       )}
 
       {/* Deformed wireframe overlay */}
-      {deformedEdges && deformedEdges.map((pts, i) => (
-        <Line key={`d-${i}`} points={pts} color="#1e3a5f" lineWidth={0.6} opacity={0.4} transparent />
-      ))}
+      {deformedEdgePositions && (
+        <lineSegments>
+          <bufferGeometry>
+            <bufferAttribute attach="attributes-position" args={[deformedEdgePositions, 3]} />
+          </bufferGeometry>
+          <lineBasicMaterial color="#1e3a5f" transparent opacity={0.4} />
+        </lineSegments>
+      )}
 
       {/* Selected face highlight — orange-red like the design */}
       {faceHighlight && (
