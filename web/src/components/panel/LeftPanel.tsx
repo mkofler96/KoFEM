@@ -544,6 +544,7 @@ function MeshPanel() {
   const setMode = useModelStore((s) => s.setMode);
   const stepSurface = useModelStore((s) => s.stepSurface);
 
+  const [maxElementSize, setMaxElementSize] = useState(20);
   const [error, setError] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [logsOpen, setLogsOpen] = useState(true);
@@ -566,7 +567,7 @@ function MeshPanel() {
       const { nodes: n, elements: e } = await sendToWorker<{
         nodes: Node[];
         elements: Element[];
-      }>("volume_mesh", { surface: stepSurface });
+      }>("volume_mesh", { surface: stepSurface, maxElementSize });
       applyMeshResult(n, e, "STEP Volume Mesh");
     } catch (err) {
       setError(`Volume meshing failed: ${err}`);
@@ -625,6 +626,21 @@ function MeshPanel() {
                     <span className={styles.statVal}>{stepSurface.triangles.length}</span>
                   </div>
                 </div>
+                <div className={styles.sectionLabel}>Mesh controls</div>
+                <div className={styles.formRow}>
+                  <span className={styles.formLabel}>Max element size</span>
+                  <input
+                    className={styles.formInput}
+                    type="number"
+                    min={0.5}
+                    max={500}
+                    step={0.5}
+                    value={maxElementSize}
+                    disabled={isMeshing}
+                    onChange={(e) => setMaxElementSize(Math.max(0.5, Number(e.target.value)))}
+                  />
+                  <span className={styles.toleranceUnit}>mm</span>
+                </div>
                 <button
                   className={styles.meshVolBtn}
                   disabled={isMeshing}
@@ -670,6 +686,32 @@ function MeshPanel() {
               Mesh is solver-ready
             </div>
 
+            {stepSurface && (
+              <>
+                <div className={styles.sectionLabel} style={{ marginTop: 12 }}>Mesh controls</div>
+                <div className={styles.formRow}>
+                  <span className={styles.formLabel}>Max element size</span>
+                  <input
+                    className={styles.formInput}
+                    type="number"
+                    min={0.5}
+                    max={500}
+                    step={0.5}
+                    value={maxElementSize}
+                    disabled={isMeshing}
+                    onChange={(e) => setMaxElementSize(Math.max(0.5, Number(e.target.value)))}
+                  />
+                  <span className={styles.toleranceUnit}>mm</span>
+                </div>
+                <button
+                  className={styles.outlineBtn}
+                  disabled={isMeshing}
+                  onClick={handleVolMesh}
+                >
+                  {isMeshing ? "Meshing…" : "⟳ Re-mesh STEP volume"}
+                </button>
+              </>
+            )}
             {geometries.length > 0 && (
               <button
                 className={styles.outlineBtn}
