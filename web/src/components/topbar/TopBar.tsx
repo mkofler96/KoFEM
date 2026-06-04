@@ -2,12 +2,12 @@ import { useModelStore } from '../../store/modelStore'
 import type { AppMode } from '../../store/modelStore'
 import styles from './TopBar.module.css'
 
-const MODES: { id: AppMode; num: string; label: string }[] = [
-  { id: 'geometry',    num: '01', label: 'Geometry'    },
-  { id: 'mesh',        num: '02', label: 'Mesh'        },
-  { id: 'constraints', num: '03', label: 'Constraints' },
-  { id: 'solve',       num: '04', label: 'Solve'       },
-  { id: 'results',     num: '05', label: 'Results'     },
+const MODES: { id: AppMode; label: string }[] = [
+  { id: 'geometry',    label: 'Geometry'    },
+  { id: 'mesh',        label: 'Mesh'        },
+  { id: 'constraints', label: 'Constraints' },
+  { id: 'solve',       label: 'Solve'       },
+  { id: 'results',     label: 'Results'     },
 ]
 
 export function TopBar() {
@@ -19,19 +19,16 @@ export function TopBar() {
   const loads      = useModelStore(s => s.loads)
   const result     = useModelStore(s => s.result)
 
-  function statusFor(m: AppMode): 'active' | 'done' | 'future' {
+  function statusFor(m: AppMode): 'active' | 'future' {
     if (m === mode) return 'active'
-    const order = MODES.map(x => x.id)
-    const mIdx  = order.indexOf(m)
-    const cur   = order.indexOf(mode)
-    if (mIdx < cur) {
-      if (m === 'geometry'    && nodes.length > 0) return 'done'
-      if (m === 'mesh'        && nodes.length > 0) return 'done'
-      if (m === 'constraints' && (constraints.length > 0 || loads.length > 0)) return 'done'
-      if (m === 'solve'       && result !== null) return 'done'
-      return 'done'
-    }
     return 'future'
+  }
+
+  function isValid(m: AppMode): boolean {
+    if (m === 'geometry' || m === 'mesh') return nodes.length > 0
+    if (m === 'constraints') return constraints.length > 0 || loads.length > 0
+    if (m === 'solve' || m === 'results') return result !== null
+    return false
   }
 
   return (
@@ -49,24 +46,24 @@ export function TopBar() {
 
       {/* Mode tabs */}
       <nav className={styles.modes}>
-        {MODES.map(({ id, num, label }) => {
+        {MODES.map(({ id, label }) => {
           const status = statusFor(id)
+          const valid  = isValid(id)
           return (
             <button
               key={id}
-              className={`${styles.tab} ${status === 'active' ? styles.tabActive : ''} ${status === 'future' ? styles.tabFuture : ''}`}
+              className={`${styles.tab} ${status === 'active' ? styles.tabActive : styles.tabFuture}`}
               onClick={() => setMode(id)}
             >
-              {status === 'done' ? (
-                <span className={styles.dot} data-done>
-                  <svg viewBox="0 0 8 8" width="7" height="7">
+              {valid ? (
+                <span className={`${styles.dot} ${styles.dotDone}`}>
+                  <svg viewBox="0 0 8 8" width="5" height="5">
                     <path d="M1.5 4L3 5.5L6.5 2" stroke="currentColor" strokeWidth="1.8" fill="none" strokeLinecap="round"/>
                   </svg>
                 </span>
-              ) : status === 'active' ? (
-                <span className={styles.dot} data-active />
-              ) : null}
-              <span className={styles.tabNum}>{num}</span>
+              ) : (
+                <span className={styles.dot} />
+              )}
               <span className={styles.tabLabel}>{label}</span>
             </button>
           )

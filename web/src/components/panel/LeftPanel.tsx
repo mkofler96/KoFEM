@@ -481,7 +481,6 @@ function MeshPanel() {
   const setMeshing = useModelStore((s) => s.setMeshing);
   const meshGeometry = useModelStore((s) => s.meshGeometry);
   const applyMeshResult = useModelStore((s) => s.applyMeshResult);
-  const setMode = useModelStore((s) => s.setMode);
   const stepSurface = useModelStore((s) => s.stepSurface);
 
   const [maxElementSize, setMaxElementSize] = useState(20);
@@ -702,13 +701,6 @@ function MeshPanel() {
         )}
       </div>
 
-      <button
-        className={styles.nextBtn}
-        onClick={() => setMode("constraints")}
-        disabled={nodes.length === 0}
-      >
-        Continue to Constraints →
-      </button>
     </div>
   );
 }
@@ -726,7 +718,6 @@ function ConstraintsPanel() {
   const applyLoadToFace = useModelStore((s) => s.applyLoadToFace);
   const clearConstraints = useModelStore((s) => s.clearConstraints);
   const clearLoads = useModelStore((s) => s.clearLoads);
-  const setMode = useModelStore((s) => s.setMode);
 
   const [checkedDofs, setCheckedDofs] = useState([
     true,
@@ -926,9 +917,6 @@ function ConstraintsPanel() {
         )}
       </div>
 
-      <button className={styles.nextBtn} onClick={() => setMode("solve")}>
-        Continue to Solve →
-      </button>
     </div>
   );
 }
