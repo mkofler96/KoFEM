@@ -7,9 +7,9 @@
 //   solve_linear_elastic,
 // } from '/wasm/pkg/kofem_wasm.js'
 import createModule from '../wasm/pkg/kofem_wasm.js'
+import type { KofemModule } from '../wasm/pkg/kofem_wasm.js'
 
-
-let Module: any = null
+let Module: KofemModule | null = null
 async function ensureInit() {
   if (!Module) {
     Module = await createModule({
@@ -17,6 +17,10 @@ async function ensureInit() {
       printErr: (text: string) => self.postMessage({ id: 0, log: `[wasm:err] ${text}` }),
     })
   }
+}
+function m(): KofemModule {
+  if (!Module) throw new Error('WASM module not initialised — await ensureInit() first')
+  return Module
 }
 
 // ── Payload types ─────────────────────────────────────────────────────────────
@@ -38,7 +42,7 @@ self.onmessage = async (event: MessageEvent) => {
     if (type === 'parse_step') {
       // payload.bytes: Uint8Array
       const opts = JSON.stringify({ linear_deflection: 0.1, angular_deflection: 0.5 })
-      const json = Module.tessellate_step(payload.bytes as Uint8Array, opts)
+      const json = m().tessellate_step(payload.bytes as Uint8Array, opts)
       const dto = JSON.parse(json) as { vertices: [number, number, number][]; triangles: [number, number, number][] }
       // Return as {points, triangles} to match the StepSurfaceMesh type used by the store
       self.postMessage({ id, ok: true, points: dto.vertices, triangles: dto.triangles })
@@ -62,7 +66,7 @@ self.onmessage = async (event: MessageEvent) => {
       // this size mismatch triggers memory-access crashes in Netgen's
       // advancing-front mesher on complex geometry.
       self.postMessage({ id, log: `Re-tessellating STEP shape for mesh quality (max size: ${maxElementSize} mm)…` })
-      const qualityJson = Module.tessellate_for_meshing(opts)
+      const qualityJson = m().tessellate_for_meshing(opts)
       const qualityDto = JSON.parse(qualityJson) as { vertices: [number,number,number][]; triangles: [number,number,number][] }
       const surface = { vertices: qualityDto.vertices, triangles: qualityDto.triangles }
       self.postMessage({ id, log: `Quality surface: ${surface.vertices.length} vertices, ${surface.triangles.length} triangles` })
@@ -88,7 +92,7 @@ self.onmessage = async (event: MessageEvent) => {
 
       self.postMessage({ id, log: 'Calling Netgen volume mesher…' })
 
-      const json = Module.generate_volume_mesh(JSON.stringify(manifoldSurface), opts)
+      const json = m().generate_volume_mesh(JSON.stringify(manifoldSurface), opts)
       const dto = JSON.parse(json) as { vertices: [number, number, number][]; tetrahedra: [number, number, number, number][] }
 
       self.postMessage({ id, log: `Volume mesh complete: ${dto.vertices.length} nodes, ${dto.tetrahedra.length} tetrahedra` })
@@ -154,7 +158,7 @@ self.onmessage = async (event: MessageEvent) => {
       const point_loads = [...loadMap.entries()].map(([vertex, force]) => ({ vertex, force }))
 
       const bcs = { fixed_vertices, point_loads }
-      const json = Module.solve_linear_elastic(
+      const json = m().solve_linear_elastic(
         JSON.stringify(mesh),
         JSON.stringify(material),
         JSON.stringify(bcs),
@@ -175,7 +179,7 @@ self.onmessage = async (event: MessageEvent) => {
         max_element_size: 20.0, min_element_size: 2.0, grading: 0.5, second_order: false,
         uselocalh: 0, elementsperedge: 1.0, elementspercurve: 1.0, optsteps_2d: 0, optsteps_3d: 0,
       })
-      const json = Module.generate_volume_mesh(JSON.stringify(surface), opts)
+      const json = m().generate_volume_mesh(JSON.stringify(surface), opts)
       const durationMs = Date.now() - t0
       const dto = JSON.parse(json) as { vertices: unknown[]; tetrahedra: unknown[] }
       self.postMessage({ id, ok: true, nodes: dto.vertices.length, elements: dto.tetrahedra.length, durationMs })
