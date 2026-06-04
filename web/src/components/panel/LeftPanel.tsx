@@ -12,27 +12,8 @@ import { fmt } from "../../lib/modelDisplay";
 import { sendToWorker, setLogCallback } from "../../workers/sharedWorker";
 import styles from "./LeftPanel.module.css";
 
-// ── Shared step header ────────────────────────────────────────────────────────
-
-function StepHeader({
-  num,
-  total,
-  modeLabel,
-}: {
-  num: number;
-  total: number;
-  modeLabel: string;
-}) {
-  return (
-    <div className={styles.stepMeta}>
-      Step {String(num).padStart(2, "0")} of {total} · {modeLabel.toUpperCase()}
-    </div>
-  );
-}
-
 // ── Geometry mode ─────────────────────────────────────────────────────────────
 
-type GeomTab = "inputs" | "tree" | "materials";
 
 function MaterialForm({
   mat,
@@ -119,7 +100,6 @@ function GeometryPanel() {
   const isMeshing = useModelStore((s) => s.isMeshing);
   const nodes = useModelStore((s) => s.nodes);
   const elements = useModelStore((s) => s.elements);
-  const stepSurface = useModelStore((s) => s.stepSurface);
   const setStepSurface = useModelStore((s) => s.setStepSurface);
   const stepImportError = useModelStore((s) => s.stepImportError);
   const setStepImportError = useModelStore((s) => s.setStepImportError);
@@ -131,7 +111,6 @@ function GeometryPanel() {
   const updateMaterial = useModelStore((s) => s.updateMaterial);
   const deleteMaterial = useModelStore((s) => s.deleteMaterial);
 
-  const [geomTab, setGeomTab] = useState<GeomTab>("inputs");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<BoxGeometry | null>(null);
   const [editingMatId, setEditingMatId] = useState<number | "new" | null>(null);
@@ -140,9 +119,6 @@ function GeometryPanel() {
 
   const inpRef = useRef<HTMLInputElement | null>(null);
   const stepRef = useRef<HTMLInputElement | null>(null);
-
-  const treeCount =
-    geometries.length + (nodes.length > 0 ? 1 : 0) + materials.length;
 
   function runMesh(geom: BoxGeometry) {
     setMeshing(true);
@@ -203,29 +179,9 @@ function GeometryPanel() {
 
   return (
     <div className={styles.panel}>
-      <StepHeader num={1} total={5} modeLabel="Geometry" />
       <div className={styles.panelTitle}>
         <span>Model geometry</span>
         <span className={styles.panelSubtitle}>parts &amp; bodies</span>
-      </div>
-
-      {/* Tabs */}
-      <div className={styles.tabs}>
-        {(
-          [
-            ["inputs", "Inputs"],
-            ["tree", `Tree ${treeCount}`],
-            ["materials", `Materials ${materials.length}`],
-          ] as [GeomTab, string][]
-        ).map(([id, label]) => (
-          <button
-            key={id}
-            className={`${styles.tab} ${geomTab === id ? styles.tabActive : ""}`}
-            onClick={() => setGeomTab(id)}
-          >
-            {label}
-          </button>
-        ))}
       </div>
 
       <div className={styles.tabContent}>
@@ -235,9 +191,8 @@ function GeometryPanel() {
             <button onClick={() => setError(null)}>×</button>
           </div>
         )}
-        {/* ── Inputs tab ─────────────────────────────────────────── */}
-        {geomTab === "inputs" && (
-          <>
+        {/* ── Inputs ─────────────────────────────────────────── */}
+        <>
             <input
               ref={(el) => {
                 inpRef.current = el;
@@ -369,16 +324,6 @@ function GeometryPanel() {
               </div>
             )}
 
-            {stepSurface && (
-              <div className={styles.stepSurfaceReady}>
-                <span>✓</span>
-                <span>
-                  Surface ready · {stepSurface.points.length} vertices —
-                  go to <strong>Mesh</strong> to generate volume mesh
-                </span>
-              </div>
-            )}
-
             <div className={styles.sectionLabel}>Healing tolerances</div>
             <div className={styles.toleranceRow}>
               <span className={styles.toleranceKey}>Sew faces</span>
@@ -390,13 +335,11 @@ function GeometryPanel() {
               <input className={styles.toleranceInput} defaultValue="1e-5" />
               <span className={styles.toleranceUnit}>m</span>
             </div>
-          </>
-        )}
+        </>
 
-        {/* ── Tree tab ─────────────────────────────────────────────── */}
-        {geomTab === "tree" && (
-          <>
-            {geometries.length === 0 && nodes.length === 0 && (
+        {/* ── Tree ─────────────────────────────────────────────── */}
+        <>
+          {geometries.length === 0 && nodes.length === 0 && (
               <div className={styles.empty}>
                 No geometry — add a primitive or import
               </div>
@@ -447,13 +390,11 @@ function GeometryPanel() {
                 </div>
               </div>
             )}
-          </>
-        )}
+        </>
 
-        {/* ── Materials tab ─────────────────────────────────────────── */}
-        {geomTab === "materials" && (
-          <>
-            {materials.length === 0 && (
+        {/* ── Materials ─────────────────────────────────────────── */}
+        <>
+          {materials.length === 0 && (
               <div className={styles.empty}>No materials</div>
             )}
             {materials.map((m) => (
@@ -507,8 +448,7 @@ function GeometryPanel() {
             >
               + Add material
             </button>
-          </>
-        )}
+        </>
       </div>
 
       {/* Next CTA */}
@@ -597,7 +537,6 @@ function MeshPanel() {
 
   return (
     <div className={styles.panel}>
-      <StepHeader num={2} total={5} modeLabel="Mesh" />
       <div className={styles.panelTitle}>
         <span>Mesh</span>
         <span className={styles.panelSubtitle}>seed &amp; controls</span>
@@ -823,7 +762,6 @@ function ConstraintsPanel() {
 
   return (
     <div className={styles.panel}>
-      <StepHeader num={3} total={5} modeLabel="Constraints" />
       <div className={styles.panelTitle}>
         <span>Boundary conditions</span>
         <span className={styles.panelSubtitle}>&amp; loads</span>
@@ -1059,7 +997,6 @@ function SolvePanel() {
 
   return (
     <div className={styles.panel}>
-      <StepHeader num={4} total={5} modeLabel="Solve" />
       <div className={styles.panelTitle}>
         <span>Run analysis</span>
         <span className={styles.panelSubtitle}>job settings</span>
@@ -1121,7 +1058,6 @@ function ResultsPanel() {
   if (!result) {
     return (
       <div className={styles.panel}>
-        <StepHeader num={5} total={5} modeLabel="Results" />
         <div className={styles.panelTitle}>
           <span>Results</span>
           <span className={styles.panelSubtitle}>post-processing</span>
@@ -1152,7 +1088,6 @@ function ResultsPanel() {
 
   return (
     <div className={styles.panel}>
-      <StepHeader num={5} total={5} modeLabel="Results" />
       <div className={styles.panelTitle}>
         <span>Results</span>
         <span className={styles.panelSubtitle}>post-processing</span>
