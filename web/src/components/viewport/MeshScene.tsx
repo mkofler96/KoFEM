@@ -254,21 +254,20 @@ export function MeshScene() {
     return { positions: new Float32Array(positions), normals: new Float32Array(normals) }
   }, [boundaryQuadFaceIds, boundaryTriFaceIds, nodeMap])
 
-  // Selected face highlight box
-  const faceHighlight = useMemo(() => {
-    if (!selectedFace || nodes.length === 0) return null
+  // Selected face highlight — build a triangle mesh from boundary triangles
+  // whose vertices are all in the selection, then render as a colour overlay.
+  const selectedFacePositions = useMemo(() => {
+    if (!selectedFace || !boundaryMeshTopo) return null
     const nodeIdSet = new Set(selectedFace.nodeIds)
-    const faceNodes = nodes.filter(n => nodeIdSet.has(n.id))
-    if (faceNodes.length === 0) return null
-    const xs = faceNodes.map(n => n.x), ys = faceNodes.map(n => n.y), zs = faceNodes.map(n => n.z)
-    const minX = Math.min(...xs), maxX = Math.max(...xs)
-    const minY = Math.min(...ys), maxY = Math.max(...ys)
-    const minZ = Math.min(...zs), maxZ = Math.max(...zs)
-    return {
-      cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, cz: (minZ + maxZ) / 2,
-      sx: Math.max(maxX - minX, 1e-4), sy: Math.max(maxY - minY, 1e-4), sz: Math.max(maxZ - minZ, 1e-4),
+    const positions: number[] = []
+    for (const [a, b, c] of boundaryMeshTopo.triangles) {
+      if (!nodeIdSet.has(a) || !nodeIdSet.has(b) || !nodeIdSet.has(c)) continue
+      const na = nodeMap.get(a)?.n, nb = nodeMap.get(b)?.n, nc = nodeMap.get(c)?.n
+      if (!na || !nb || !nc) continue
+      positions.push(na.x, na.y, na.z, nb.x, nb.y, nb.z, nc.x, nc.y, nc.z)
     }
-  }, [selectedFace, nodes])
+    return positions.length > 0 ? new Float32Array(positions) : null
+  }, [selectedFace, boundaryMeshTopo, nodeMap])
 
   // Face picking handler — BFS flood-fill along boundary mesh topology.
   // Starting from the clicked triangle (e.faceIndex), expands to all adjacent
@@ -467,11 +466,13 @@ export function MeshScene() {
         </lineSegments>
       )}
 
-      {/* Selected face highlight — orange-red like the design */}
-      {faceHighlight && (
-        <mesh position={[faceHighlight.cx, faceHighlight.cy, faceHighlight.cz]}>
-          <boxGeometry args={[faceHighlight.sx + 0.003, faceHighlight.sy + 0.003, faceHighlight.sz + 0.003]} />
-          <meshStandardMaterial color="#e05533" transparent opacity={0.45} depthTest={false} side={THREE.DoubleSide} />
+      {/* Selected face highlight — colour overlay on the exact picked triangles */}
+      {selectedFacePositions && (
+        <mesh renderOrder={1}>
+          <bufferGeometry>
+            <bufferAttribute attach="attributes-position" args={[selectedFacePositions, 3]} />
+          </bufferGeometry>
+          <meshBasicMaterial color="#e05533" transparent opacity={0.55} depthTest={false} side={THREE.DoubleSide} />
         </mesh>
       )}
 
