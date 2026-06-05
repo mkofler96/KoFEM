@@ -42,11 +42,17 @@ target_link_directories(kofem_wasm_emcc PRIVATE
 # OCCT: docker-build-wasm.sh creates TKSTEP*/TKXSBase symlinks → TKDESTEP (7.8+).
 # Using the classic names keeps this list compatible with both 7.6 and 7.8.
 # ── Optional Netgen OCC geometry mesher ───────────────────────────────────────
-# Set USE_NETGEN_OCC=ON when Netgen is compiled with -DUSE_OCC=ON (i.e. when
-# libngocc.a is present in NETGEN_ROOT/lib).  Default OFF so the CI build
-# succeeds with the standard Netgen build; the OCC mesher falls back to the
-# OCCT tessellation path when disabled.
-option(USE_NETGEN_OCC "Enable Netgen OCC geometry meshing (requires libngocc)" OFF)
+# Auto-detected from NETGEN_ROOT/lib/libngocc.a — present when Netgen is built
+# with -DUSE_OCC=ON (e.g. the kofem-dependencies Docker image).  Override with
+# -DUSE_NETGEN_OCC=ON/OFF if auto-detection gives the wrong result.
+if(EXISTS "${NETGEN_ROOT}/lib/libngocc.a")
+    set(_netgen_occ_default ON)
+    message(STATUS "libngocc.a found at ${NETGEN_ROOT}/lib — enabling Netgen OCC mesher")
+else()
+    set(_netgen_occ_default OFF)
+    message(STATUS "libngocc.a not found — Netgen OCC mesher disabled (fallback path active)")
+endif()
+option(USE_NETGEN_OCC "Enable Netgen OCC geometry meshing (requires libngocc)" ${_netgen_occ_default})
 
 target_link_libraries(kofem_wasm_emcc PRIVATE
     TKernel
