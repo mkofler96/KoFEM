@@ -10,7 +10,7 @@ const TARGET_DEFORM_FRACTION = 0.20
 //   Curved surface → step-to-step comparison (loose, traverses cylinders/fillets)
 // "Flat" means all immediate edge-neighbors of the seed share the same normal (< FLAT_ANGLE).
 const FLAT_ANGLE  = 15 * Math.PI / 180   // flat: normals must be within 15° of seed
-const CURVE_ANGLE = 85 * Math.PI / 180   // curved: stop only at near-perpendicular feature edges
+const CURVE_ANGLE = 89 * Math.PI / 180   // curved: stop only at near-perpendicular feature edges
 
 // ── CHEXA geometry ────────────────────────────────────────────────────────────
 
@@ -285,19 +285,21 @@ export function MeshScene() {
 
     const seedNormal = triNormals[startIdx]
 
-    // Detect surface type: flat if all edge-adjacent neighbors share the seed's normal direction.
+    // Detect surface type: flat if the majority of edge-adjacent neighbors share the
+    // seed's normal (< FLAT_ANGLE). Using a majority vote prevents a single curved
+    // neighbor at the face boundary from misclassifying the seed as curved.
     const [sa, sb, sc] = triangles[startIdx]
-    let maxNeighborAngle = 0
+    let flatCount = 0, curvedCount = 0
     for (const [x, y] of [[sa, sb], [sb, sc], [sc, sa]] as [number, number][]) {
       const key = x < y ? `${x},${y}` : `${y},${x}`
       for (const ni of edgeToTris.get(key) ?? []) {
         if (ni !== startIdx) {
-          const a = seedNormal.angleTo(triNormals[ni])
-          if (a > maxNeighborAngle) maxNeighborAngle = a
+          if (seedNormal.angleTo(triNormals[ni]) < FLAT_ANGLE) flatCount++
+          else curvedCount++
         }
       }
     }
-    const isFlat = maxNeighborAngle < FLAT_ANGLE
+    const isFlat = flatCount > 0 && flatCount >= curvedCount
 
     const visited = new Set<number>([startIdx])
     const queue = [startIdx]
