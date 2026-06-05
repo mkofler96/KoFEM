@@ -310,14 +310,16 @@ namespace nglib {
     extern int       Ng_GetNE(Ng_Mesh*);
 }
 
-// OCC meshing API — compiled in global namespace (not inside nglib::)
-// Ng_OCC_* functions are defined outside the nglib namespace in Netgen's OCC module.
+// OCC meshing API — Netgen compiles these with extern "C" (C linkage, no name mangling).
+// Using extern "C" here ensures the linker matches the plain C symbol names in libnglib.
 #ifdef KOFEM_NETGEN_OCC
 typedef void* Ng_OCC_Geometry;
-extern Ng_OCC_Geometry* Ng_OCC_Load_STEP(const char* filename);
-extern nglib::Ng_Result Ng_OCC_GenerateMesh(Ng_OCC_Geometry*, nglib::Ng_Mesh**,
-                                            nglib::Ng_Meshing_Parameters*, int, int);
-extern void             Ng_OCC_DeleteGeometry(Ng_OCC_Geometry*);
+extern "C" {
+    Ng_OCC_Geometry* Ng_OCC_Load_STEP(const char* filename);
+    nglib::Ng_Result Ng_OCC_GenerateMesh(Ng_OCC_Geometry*, nglib::Ng_Mesh**,
+                                         nglib::Ng_Meshing_Parameters*, int, int);
+    void             Ng_OCC_DeleteGeometry(Ng_OCC_Geometry*);
+}
 #endif
 
 // ── Netgen: STEP → FEM surface mesh + tetrahedral volume mesh ────────────────
