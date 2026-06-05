@@ -274,7 +274,7 @@ export function MeshScene() {
   // triangles whose normal differs by less than FEATURE_ANGLE_RAD. This selects
   // entire flat faces AND cylindrical / filleted surfaces in one click, while
   // stopping at sharp feature edges (e.g. where a cylinder meets its end cap).
-  function handleFacePick(e: ThreeEvent<PointerEvent>) {
+  function handleFacePick(e: ThreeEvent<MouseEvent>) {
     if (!pickMode || e.faceIndex == null || !boundaryMeshTopo) return
     e.stopPropagation()
 
