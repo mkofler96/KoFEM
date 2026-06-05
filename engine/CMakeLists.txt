@@ -133,8 +133,10 @@ target_link_libraries(kofem_wasm_emcc PRIVATE
     TKSTEPAttr
     TKSTEPBase
 
-    # XCAF libraries required by TKDESTEP (OCCT 7.8+).
-    # TKDESTEP is symlinked as TKSTEP above and references TDF_Label / XCAFDoc.
+    # XCAF/CDM libraries required by TKDESTEP (OCCT 7.8+).
+    # TKLCAF/TKXCAF provide TDF_Label/XCAFDoc; TKCDL provides CDM_Document/CDM_Application
+    # which TKLCAF depends on.
+    TKCDL
     TKLCAF
     TKXCAF
 

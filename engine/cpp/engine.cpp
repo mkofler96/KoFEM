@@ -308,16 +308,17 @@ namespace nglib {
     extern Ng_Result Ng_GetVolumeElement(Ng_Mesh*, int, int*);
     extern int       Ng_GetNP(Ng_Mesh*);
     extern int       Ng_GetNE(Ng_Mesh*);
-
-#ifdef KOFEM_NETGEN_OCC
-    // OCC geometry mesher (available when Netgen is built with USE_OCC=ON)
-    typedef void* Ng_OCC_Geometry;
-    extern Ng_OCC_Geometry* Ng_OCC_Load_STEP(const char* filename);
-    extern Ng_Result        Ng_OCC_GenerateMesh(Ng_OCC_Geometry*, Ng_Mesh**,
-                                                Ng_Meshing_Parameters*, int, int);
-    extern void             Ng_OCC_DeleteGeometry(Ng_OCC_Geometry*);
-#endif
 }
+
+// OCC meshing API — compiled in global namespace (not inside nglib::)
+// Ng_OCC_* functions are defined outside the nglib namespace in Netgen's OCC module.
+#ifdef KOFEM_NETGEN_OCC
+typedef void* Ng_OCC_Geometry;
+extern Ng_OCC_Geometry* Ng_OCC_Load_STEP(const char* filename);
+extern nglib::Ng_Result Ng_OCC_GenerateMesh(Ng_OCC_Geometry*, nglib::Ng_Mesh**,
+                                            nglib::Ng_Meshing_Parameters*, int, int);
+extern void             Ng_OCC_DeleteGeometry(Ng_OCC_Geometry*);
+#endif
 
 // ── Netgen: STEP → FEM surface mesh + tetrahedral volume mesh ────────────────
 //
@@ -353,7 +354,7 @@ static std::string generate_fem_mesh(const std::string& opts_json)
     fwrite(g_step_bytes.data(), 1, g_step_bytes.size(), f);
     fclose(f);
 
-    nglib::Ng_OCC_Geometry* geom = nglib::Ng_OCC_Load_STEP(steppath);
+    Ng_OCC_Geometry* geom = Ng_OCC_Load_STEP(steppath);
     unlink(steppath);
     if (!geom)
         throw std::runtime_error("Ng_OCC_Load_STEP failed — check STEP geometry validity");
@@ -385,8 +386,8 @@ static std::string generate_fem_mesh(const std::string& opts_json)
     // Generate surface mesh (steps 1–3) then volume mesh (steps 4–6).
     // Steps: 1=analyse, 2=mesh edges, 3=mesh surfaces, 4–6=volume+optimization.
     nglib::Ng_Mesh* mesh = nullptr;
-    nglib::Ng_Result res = nglib::Ng_OCC_GenerateMesh(geom, &mesh, &mp, 1, 6);
-    nglib::Ng_OCC_DeleteGeometry(geom);
+    nglib::Ng_Result res = Ng_OCC_GenerateMesh(geom, &mesh, &mp, 1, 6);
+    Ng_OCC_DeleteGeometry(geom);
 
     if (res != nglib::NG_OK || !mesh) {
         if (mesh) nglib::Ng_DeleteMesh(mesh);
