@@ -310,17 +310,19 @@ namespace nglib {
     extern int       Ng_GetNE(Ng_Mesh*);
 }
 
-// OCC meshing API — Netgen compiles these with extern "C" (C linkage, no name mangling).
-// Using extern "C" here ensures the linker matches the plain C symbol names in libnglib.
+// OCC meshing API (Netgen v6.2.2401, nglib/nglib_occ.cpp, namespace nglib).
+// Ng_OCC_GenerateMesh does not exist — meshing is split into four steps:
+// SetLocalMeshSize → GenerateEdgeMesh → GenerateSurfaceMesh → GenerateVolumeMesh.
+namespace nglib {
 #ifdef KOFEM_NETGEN_OCC
-typedef void* Ng_OCC_Geometry;
-extern "C" {
-    Ng_OCC_Geometry* Ng_OCC_Load_STEP(const char* filename);
-    nglib::Ng_Result Ng_OCC_GenerateMesh(Ng_OCC_Geometry*, nglib::Ng_Mesh**,
-                                         nglib::Ng_Meshing_Parameters*, int, int);
-    void             Ng_OCC_DeleteGeometry(Ng_OCC_Geometry*);
-}
+    typedef void* Ng_OCC_Geometry;
+    extern Ng_OCC_Geometry* Ng_OCC_Load_STEP(const char* filename);
+    extern Ng_Result         Ng_OCC_DeleteGeometry(Ng_OCC_Geometry*);
+    extern Ng_Result         Ng_OCC_SetLocalMeshSize(Ng_OCC_Geometry*, Ng_Mesh*, Ng_Meshing_Parameters*);
+    extern Ng_Result         Ng_OCC_GenerateEdgeMesh(Ng_OCC_Geometry*, Ng_Mesh*, Ng_Meshing_Parameters*);
+    extern Ng_Result         Ng_OCC_GenerateSurfaceMesh(Ng_OCC_Geometry*, Ng_Mesh*, Ng_Meshing_Parameters*);
 #endif
+}
 
 // ── Netgen: STEP → FEM surface mesh + tetrahedral volume mesh ────────────────
 //
@@ -348,15 +350,21 @@ static std::string generate_fem_mesh(const std::string& opts_json)
 
 #ifdef KOFEM_NETGEN_OCC
     // ── OCC path: Netgen reads the CAD geometry directly ─────────────────────
+    // Netgen v6.2.2401 four-step pipeline (nglib_occ.cpp, namespace nglib):
+    //   1. Ng_OCC_SetLocalMeshSize  — size field from CAD curvature
+    //   2. Ng_OCC_GenerateEdgeMesh  — mesh feature edges
+    //   3. Ng_OCC_GenerateSurfaceMesh — mesh boundary faces
+    //   4. Ng_GenerateVolumeMesh    — fill volume with tetrahedra
 
-    // Write stored STEP bytes to the virtual filesystem so Netgen can open them.
     const char* steppath = "/tmp/kofem_fem.stp";
-    FILE* f = fopen(steppath, "wb");
-    if (!f) throw std::runtime_error("generate_fem_mesh: cannot open /tmp/kofem_fem.stp");
-    fwrite(g_step_bytes.data(), 1, g_step_bytes.size(), f);
-    fclose(f);
+    {
+        FILE* f = fopen(steppath, "wb");
+        if (!f) throw std::runtime_error("generate_fem_mesh: cannot open /tmp/kofem_fem.stp");
+        fwrite(g_step_bytes.data(), 1, g_step_bytes.size(), f);
+        fclose(f);
+    }
 
-    Ng_OCC_Geometry* geom = Ng_OCC_Load_STEP(steppath);
+    nglib::Ng_OCC_Geometry* geom = nglib::Ng_OCC_Load_STEP(steppath);
     unlink(steppath);
     if (!geom)
         throw std::runtime_error("Ng_OCC_Load_STEP failed — check STEP geometry validity");
@@ -385,16 +393,39 @@ static std::string generate_fem_mesh(const std::string& opts_json)
     mp.check_overlap              = 0;
     mp.check_overlapping_boundary = 0;
 
-    // Generate surface mesh (steps 1–3) then volume mesh (steps 4–6).
-    // Steps: 1=analyse, 2=mesh edges, 3=mesh surfaces, 4–6=volume+optimization.
-    nglib::Ng_Mesh* mesh = nullptr;
-    nglib::Ng_Result res = Ng_OCC_GenerateMesh(geom, &mesh, &mp, 1, 6);
-    Ng_OCC_DeleteGeometry(geom);
+    nglib::Ng_Mesh* mesh = nglib::Ng_NewMesh();
+    if (!mesh) {
+        nglib::Ng_OCC_DeleteGeometry(geom);
+        throw std::runtime_error("Ng_NewMesh returned null");
+    }
 
-    if (res != nglib::NG_OK || !mesh) {
-        if (mesh) nglib::Ng_DeleteMesh(mesh);
+    // Step 1: set size field from CAD curvature
+    nglib::Ng_OCC_SetLocalMeshSize(geom, mesh, &mp);
+
+    // Step 2: mesh feature edges
+    nglib::Ng_Result res = nglib::Ng_OCC_GenerateEdgeMesh(geom, mesh, &mp);
+    if (res != nglib::NG_OK) {
+        nglib::Ng_DeleteMesh(mesh);
+        nglib::Ng_OCC_DeleteGeometry(geom);
         throw std::runtime_error(
-            "Ng_OCC_GenerateMesh failed (code " + std::to_string((int)res) + ")");
+            "Ng_OCC_GenerateEdgeMesh failed (code " + std::to_string((int)res) + ")");
+    }
+
+    // Step 3: mesh boundary surfaces
+    res = nglib::Ng_OCC_GenerateSurfaceMesh(geom, mesh, &mp);
+    nglib::Ng_OCC_DeleteGeometry(geom);
+    if (res != nglib::NG_OK) {
+        nglib::Ng_DeleteMesh(mesh);
+        throw std::runtime_error(
+            "Ng_OCC_GenerateSurfaceMesh failed (code " + std::to_string((int)res) + ")");
+    }
+
+    // Step 4: fill volume
+    res = nglib::Ng_GenerateVolumeMesh(mesh, &mp);
+    if (res != nglib::NG_OK) {
+        nglib::Ng_DeleteMesh(mesh);
+        throw std::runtime_error(
+            "Ng_GenerateVolumeMesh failed (code " + std::to_string((int)res) + ")");
     }
 
     int np = nglib::Ng_GetNP(mesh);
