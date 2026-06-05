@@ -41,6 +41,13 @@ target_link_directories(kofem_wasm_emcc PRIVATE
 
 # OCCT: docker-build-wasm.sh creates TKSTEP*/TKXSBase symlinks → TKDESTEP (7.8+).
 # Using the classic names keeps this list compatible with both 7.6 and 7.8.
+# ── Optional Netgen OCC geometry mesher ───────────────────────────────────────
+# Set USE_NETGEN_OCC=ON when Netgen is compiled with -DUSE_OCC=ON (i.e. when
+# libngocc.a is present in NETGEN_ROOT/lib).  Default OFF so the CI build
+# succeeds with the standard Netgen build; the OCC mesher falls back to the
+# OCCT tessellation path when disabled.
+option(USE_NETGEN_OCC "Enable Netgen OCC geometry meshing (requires libngocc)" OFF)
+
 target_link_libraries(kofem_wasm_emcc PRIVATE
     TKernel
     TKMath
@@ -53,17 +60,27 @@ target_link_libraries(kofem_wasm_emcc PRIVATE
     TKMesh
     TKShHealing
 
-    TKXSBase      
+    TKXSBase
 
     TKSTEP
     TKSTEP209
     TKSTEPAttr
     TKSTEPBase
 
+    # XCAF libraries required by TKDESTEP (OCCT 7.8+).
+    # TKDESTEP is symlinked as TKSTEP above and references TDF_Label / XCAFDoc.
+    TKLCAF
+    TKXCAF
+
     nglib
     ngcore
     mfem
 )
+
+if(USE_NETGEN_OCC)
+    target_compile_definitions(kofem_wasm_emcc PRIVATE KOFEM_NETGEN_OCC=1)
+    target_link_libraries(kofem_wasm_emcc PRIVATE ngocc)
+endif()
 
 target_compile_options(kofem_wasm_emcc PRIVATE
     -O2
