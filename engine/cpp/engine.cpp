@@ -295,6 +295,7 @@ namespace nglib {
         Ng_Meshing_Parameters();
     };
 
+    // STL path (always available)
     extern void      Ng_Init();
     extern Ng_Mesh*  Ng_NewMesh();
     extern void      Ng_DeleteMesh(Ng_Mesh*);
@@ -305,6 +306,15 @@ namespace nglib {
     extern Ng_Result Ng_GetVolumeElement(Ng_Mesh*, int, int*);
     extern int       Ng_GetNP(Ng_Mesh*);
     extern int       Ng_GetNE(Ng_Mesh*);
+
+    // OCC path — only present when Netgen is built with USE_OCC=ON.
+    // Ng_OCC_Geometry is an opaque pointer; declare as void to match size.
+    typedef void Ng_OCC_Geometry;
+    extern Ng_OCC_Geometry* Ng_OCC_Load_BREP(const char* filename);
+    extern Ng_Result         Ng_OCC_GenerateMesh(Ng_OCC_Geometry* geom,
+                                                  Ng_Mesh**        mesh,
+                                                  Ng_Meshing_Parameters* mp);
+    extern void              Ng_OCC_DeleteGeometry(Ng_OCC_Geometry* geom);
 }
 
 static std::string generate_volume_mesh(
@@ -389,6 +399,126 @@ static std::string generate_volume_mesh(
         nglib::Ng_DeleteMesh(mesh);
         throw std::runtime_error(
             "Ng_GenerateVolumeMesh failed (code " + std::to_string((int)res) + ")");
+    }
+
+    int np = nglib::Ng_GetNP(mesh);
+    int ne = nglib::Ng_GetNE(mesh);
+
+    std::vector<double> out_verts;
+    out_verts.reserve(3 * np);
+    for (int i = 1; i <= np; ++i) {
+        double pt[3];
+        nglib::Ng_GetPoint(mesh, i, pt);
+        out_verts.push_back(pt[0]);
+        out_verts.push_back(pt[1]);
+        out_verts.push_back(pt[2]);
+    }
+
+    std::vector<int> out_tets;
+    out_tets.reserve(4 * ne);
+    for (int i = 1; i <= ne; ++i) {
+        int tet[4];
+        nglib::Ng_GetVolumeElement(mesh, i, tet);
+        out_tets.push_back(tet[0] - 1);
+        out_tets.push_back(tet[1] - 1);
+        out_tets.push_back(tet[2] - 1);
+        out_tets.push_back(tet[3] - 1);
+    }
+
+    nglib::Ng_DeleteMesh(mesh);
+
+    return "{\"vertices\":" + json_vec3(out_verts) +
+           ",\"tetrahedra\":" + json_ivec4(out_tets) + "}";
+}
+
+// ── Netgen OCC path: BRep geometry → quality surface + volume mesh ───────────
+//
+// Requires Netgen built with USE_OCC=ON (docker-build-wasm.sh).  The stored
+// g_step_shape is serialised to BRep in /tmp so Ng_OCC_Load_BREP can hand
+// Netgen the exact CAD topology — no intermediate triangle approximation.
+//
+// Quality difference vs. generate_volume_mesh (STL path):
+//   STL: OCCT triangle soup → Netgen advancing-front — feature edges and
+//        curvature are only as accurate as the tessellation deflection.
+//   OCC: Netgen queries the BRep directly during surface meshing — correct
+//        edge curves, curvature-adaptive sizing, and proper feature detection.
+//
+// The function accepts the same opts_json as generate_volume_mesh and returns
+// the same {"vertices": ..., "tetrahedra": ...} JSON, so solver.worker.ts
+// needs no changes to support the OCC path.
+
+static std::string generate_volume_mesh_occ(const std::string& opts_json) {
+    if (!g_has_step_shape)
+        throw std::runtime_error(
+            "generate_volume_mesh_occ: no STEP shape loaded — call tessellate_step first");
+
+    static bool ng_initialized = false;
+    if (!ng_initialized) {
+        nglib::Ng_Init();
+        ng_initialized = true;
+    }
+
+    val opts = parse_json(opts_json);
+    double max_size        = jdouble(opts, "max_element_size",   10.0);
+    double min_size        = jdouble(opts, "min_element_size",    0.0);
+    double grading         = jdouble(opts, "grading",             0.3);
+    bool   second_ord      = jbool  (opts, "second_order",       false);
+    int    uselocalh       = jint   (opts, "uselocalh",             1);
+    double elems_per_edge  = jdouble(opts, "elementsperedge",     2.0);
+    double elems_per_curve = jdouble(opts, "elementspercurve",    2.0);
+    int    optsteps_2d     = jint   (opts, "optsteps_2d",           3);
+    int    optsteps_3d     = jint   (opts, "optsteps_3d",           3);
+
+    // Serialise the BRep to /tmp — Netgen's C API is file-based.
+    // BRepTools::Write is a lightweight text dump; it does not re-tessellate.
+    char tmppath[] = "/tmp/kofem_occ_XXXXXX.brep";
+    int fd = mkstemps(tmppath, 5);
+    if (fd < 0)
+        throw std::runtime_error("generate_volume_mesh_occ: failed to create /tmp BRep file");
+    close(fd);
+
+    if (!BRepTools::Write(g_step_shape, tmppath))
+        throw std::runtime_error("generate_volume_mesh_occ: BRepTools::Write failed");
+
+    nglib::Ng_OCC_Geometry* geom = nglib::Ng_OCC_Load_BREP(tmppath);
+    unlink(tmppath);
+    if (!geom)
+        throw std::runtime_error("generate_volume_mesh_occ: Ng_OCC_Load_BREP returned null");
+
+    nglib::Ng_Meshing_Parameters mp;
+    mp.uselocalh                  = uselocalh;
+    mp.maxh                       = max_size;
+    mp.minh                       = min_size;
+    mp.fineness                   = 0.5;
+    mp.grading                    = grading;
+    mp.elementsperedge            = elems_per_edge;
+    mp.elementspercurve           = elems_per_curve;
+    mp.closeedgeenable            = 0;
+    mp.closeedgefact              = 2.0;
+    mp.minedgelenenable           = 0;
+    mp.minedgelen                 = 1e-4;
+    mp.second_order               = second_ord ? 1 : 0;
+    mp.quad_dominated             = 0;
+    mp.meshsize_filename          = nullptr;
+    mp.optsurfmeshenable          = 1;
+    mp.optvolmeshenable           = 1;
+    mp.optsteps_3d                = optsteps_3d;
+    mp.optsteps_2d                = optsteps_2d;
+    mp.invert_tets                = 0;
+    mp.invert_trigs               = 0;
+    mp.check_overlap              = 0;
+    mp.check_overlapping_boundary = 0;
+
+    // Ng_OCC_GenerateMesh allocates a new Ng_Mesh and writes its address via
+    // the mesh** out-parameter.  Ownership transfers to the caller.
+    nglib::Ng_Mesh* mesh = nullptr;
+    nglib::Ng_Result res = nglib::Ng_OCC_GenerateMesh(geom, &mesh, &mp);
+    nglib::Ng_OCC_DeleteGeometry(geom);
+
+    if (res != nglib::NG_OK || !mesh) {
+        if (mesh) nglib::Ng_DeleteMesh(mesh);
+        throw std::runtime_error(
+            "Ng_OCC_GenerateMesh failed (code " + std::to_string((int)res) + ")");
     }
 
     int np = nglib::Ng_GetNP(mesh);
@@ -629,9 +759,10 @@ static std::string step_to_fem_result(
 // ── Embind registrations ──────────────────────────────────────────────────────
 
 EMSCRIPTEN_BINDINGS(kofem) {
-    emscripten::function("tessellate_step",        &tessellate_step);
-    emscripten::function("tessellate_for_meshing", &tessellate_for_meshing);
-    emscripten::function("generate_volume_mesh",   &generate_volume_mesh);
-    emscripten::function("solve_linear_elastic",   &solve_linear_elastic);
-    emscripten::function("step_to_fem_result",     &step_to_fem_result);
+    emscripten::function("tessellate_step",           &tessellate_step);
+    emscripten::function("tessellate_for_meshing",    &tessellate_for_meshing);
+    emscripten::function("generate_volume_mesh",      &generate_volume_mesh);
+    emscripten::function("generate_volume_mesh_occ",  &generate_volume_mesh_occ);
+    emscripten::function("solve_linear_elastic",      &solve_linear_elastic);
+    emscripten::function("step_to_fem_result",        &step_to_fem_result);
 }

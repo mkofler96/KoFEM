@@ -224,7 +224,8 @@ if [ ! -f "${NETGEN_ROOT}/lib/libnglib.a" ]; then
         -DUSE_GUI=OFF \
         -DUSE_PYTHON=OFF \
         -DUSE_MPI=OFF \
-        -DUSE_OCC=OFF \
+        -DUSE_OCC=ON \
+        -DOpenCASCADE_DIR="${OCCT_ROOT}/lib/cmake/opencascade" \
         -DUSE_NUMA=OFF \
         -DUSE_NATIVE_ARCH=OFF \
         -DBUILD_SHARED_LIBS=OFF \
