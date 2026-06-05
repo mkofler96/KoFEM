@@ -2,6 +2,7 @@ import { useModelStore } from '../../store/modelStore'
 import type { AppMode } from '../../store/modelStore'
 import styles from './TopBar.module.css'
 
+
 const MODES: { id: AppMode; label: string }[] = [
   { id: 'geometry',    label: 'Geometry'    },
   { id: 'mesh',        label: 'Mesh'        },
@@ -13,11 +14,11 @@ const MODES: { id: AppMode; label: string }[] = [
 export function TopBar() {
   const mode    = useModelStore(s => s.mode)
   const setMode = useModelStore(s => s.setMode)
-  const modelName  = useModelStore(s => s.modelName)
-  const nodes      = useModelStore(s => s.nodes)
+  const modelName   = useModelStore(s => s.modelName)
+  const nodes       = useModelStore(s => s.nodes)
   const constraints = useModelStore(s => s.constraints)
-  const loads      = useModelStore(s => s.loads)
-  const result     = useModelStore(s => s.result)
+  const loads       = useModelStore(s => s.loads)
+  const result      = useModelStore(s => s.result)
 
   function statusFor(m: AppMode): 'active' | 'future' {
     if (m === mode) return 'active'

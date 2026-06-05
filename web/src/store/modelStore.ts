@@ -193,14 +193,12 @@ interface ModelState extends ModelSnapshot {
   pickMode: 'bc' | 'load' | null
   selectedFace: FaceSelection | null
 
-  stepWireframe: boolean
   volMesh: VolMesh | null
-  showVolMesh: boolean
+  viewRepr: 'geometry' | 'surface' | 'volume' | 'wireframe'
   stepImportError: string | null
   setStepSurface(mesh: StepSurfaceMesh | null): void
-  setStepWireframe(v: boolean): void
   setVolMesh(mesh: VolMesh | null): void
-  setShowVolMesh(v: boolean): void
+  setViewRepr(v: 'geometry' | 'surface' | 'volume' | 'wireframe'): void
   setStepImportError(msg: string | null): void
 
   // Welcome screen entry points
@@ -267,9 +265,8 @@ export const useModelStore = create<ModelState>()(
     stepSurface: null,
     isRunning: false,
     isMeshing: false,
-    stepWireframe: false,
     volMesh: null,
-    showVolMesh: false,
+    viewRepr: 'surface' as const,
     stepImportError: null,
     geometries: [],
     nextGeomId: 2,
@@ -279,12 +276,11 @@ export const useModelStore = create<ModelState>()(
     fitViewTrigger: 0,
 
     setStepImportError: (msg) => set(s => { s.stepImportError = msg }),
-    setStepWireframe: (v) => set(s => { s.stepWireframe = v }),
-    setVolMesh: (mesh) => set(s => { s.volMesh = mesh; s.showVolMesh = mesh !== null }),
-    setShowVolMesh: (v) => set(s => { s.showVolMesh = v }),
+    setViewRepr: (v) => set(s => { s.viewRepr = v }),
+    setVolMesh: (mesh) => set(s => { s.volMesh = mesh; if (mesh) s.viewRepr = 'volume' }),
     setStepSurface: (mesh) => set(s => {
-      s.stepSurface = mesh; s.stepWireframe = false
-      s.volMesh = null; s.showVolMesh = false
+      s.stepSurface = mesh
+      s.volMesh = null; s.viewRepr = 'geometry'
       s.stepImportError = null
       s.nodes = []; s.elements = []
       s.constraints = []; s.loads = []
@@ -303,7 +299,7 @@ export const useModelStore = create<ModelState>()(
       s.modelName = 'Cantilever Beam'
       s.geometries = [DEFAULT_GEOMETRY]
       s.result = null; s.stepSurface = null; s.volMesh = null
-      s.showVolMesh = false; s.selectedFace = null; s.pickMode = null
+      s.viewRepr = 'surface'; s.selectedFace = null; s.pickMode = null
       s.hasStarted = true; s.mode = 'geometry'
       s.fitViewTrigger++
     }),
@@ -324,7 +320,7 @@ export const useModelStore = create<ModelState>()(
       }]
       s.nextGeomId = 2
       s.result = null; s.stepSurface = null; s.volMesh = null
-      s.showVolMesh = false; s.selectedFace = null; s.pickMode = null
+      s.viewRepr = 'surface'; s.selectedFace = null; s.pickMode = null
       s.hasStarted = true; s.mode = 'geometry'
       s.fitViewTrigger++
     }),
@@ -346,6 +342,7 @@ export const useModelStore = create<ModelState>()(
       s.selectedFace = null
       s.pickMode = null
       s.modelName = name
+      s.viewRepr = 'surface'
       s.fitViewTrigger++
       if (!s.properties.find(p => p.type === 'PSOLID')) {
         const matId = s.materials[0]?.id ?? 1
@@ -379,7 +376,7 @@ export const useModelStore = create<ModelState>()(
       s.result = null
       s.stepSurface = null
       s.volMesh = null
-      s.showVolMesh = false
+      s.viewRepr = 'surface'
       s.geometries = []
       s.nextGeomId = 2
       s.nextMatId = 2

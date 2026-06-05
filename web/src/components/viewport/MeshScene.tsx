@@ -66,11 +66,9 @@ export function MeshScene() {
   const constraints = useModelStore(s => s.constraints)
   const loads = useModelStore(s => s.loads)
   const result = useModelStore(s => s.result)
-  const mode = useModelStore(s => s.mode)
   const stepSurface = useModelStore(s => s.stepSurface)
-  const stepWireframe = useModelStore(s => s.stepWireframe)
   const volMesh = useModelStore(s => s.volMesh)
-  const showVolMesh = useModelStore(s => s.showVolMesh)
+  const viewRepr = useModelStore(s => s.viewRepr)
   const pickMode = useModelStore(s => s.pickMode)
   const selectedFace = useModelStore(s => s.selectedFace)
   const setSelectedFace = useModelStore(s => s.setSelectedFace)
@@ -276,7 +274,7 @@ export function MeshScene() {
   }, [loads, nodeMap])
 
   const volMeshPositions = useMemo(() => {
-    if (!volMesh || !showVolMesh) return null
+    if (!volMesh || viewRepr !== 'volume') return null
     const { points, edges } = volMesh
     const buf = new Float32Array(edges.length * 6)
     let i = 0
@@ -285,7 +283,7 @@ export function MeshScene() {
       buf[i++] = points[b][0]; buf[i++] = points[b][1]; buf[i++] = points[b][2]
     }
     return buf
-  }, [volMesh, showVolMesh])
+  }, [volMesh, viewRepr])
 
   const stepGeometry = useMemo(() => {
     if (!stepSurface || stepSurface.triangles.length === 0) return null
@@ -315,10 +313,9 @@ export function MeshScene() {
     return null
   }
 
-  // In geometry mode show STEP surface; hide it once we're on the mesh tab or beyond
-  const showStepSurface = mode === 'geometry' || nodes.length === 0
-  // Show element edges only from mesh mode onward (geometry mode stays smooth)
-  const showFemEdges = mode !== 'geometry'
+  const showStepSurface = (viewRepr === 'geometry' || nodes.length === 0) && !!stepGeometry
+  const showFemEdges = viewRepr === 'surface' || viewRepr === 'wireframe'
+  const solidFill = viewRepr !== 'wireframe'
 
   return (
     <group>
@@ -329,7 +326,7 @@ export function MeshScene() {
             <bufferAttribute attach="attributes-position" args={[undeformedSurface.positions, 3]} />
             <bufferAttribute attach="attributes-normal" args={[undeformedSurface.normals, 3]} />
           </bufferGeometry>
-          <meshStandardMaterial color="#b8cce4" transparent opacity={0.92} side={THREE.DoubleSide} />
+          <meshStandardMaterial color="#b8cce4" side={THREE.DoubleSide} wireframe={!solidFill} />
         </mesh>
       )}
 
@@ -411,9 +408,9 @@ export function MeshScene() {
             <bufferAttribute attach="attributes-normal" args={[stepGeometry.normals, 3]} />
           </bufferGeometry>
           <meshStandardMaterial
-            color={stepWireframe ? '#2d7a2d' : '#7a9bbf'}
+            color="#7a9bbf"
             side={THREE.DoubleSide}
-            wireframe={stepWireframe}
+            wireframe={!solidFill}
           />
         </mesh>
       )}
