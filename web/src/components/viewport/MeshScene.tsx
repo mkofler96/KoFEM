@@ -286,30 +286,30 @@ export function MeshScene() {
     return { pos: [cx, cy, cz] as [number, number, number], quaternion: q }
   }, [constraints, nodeMap, nodes])
 
-  // Load arrows: one arrow per force DOF, pointing in the signed force direction
+  // Load arrow: single resultant of all force DOFs, placed at centroid of loaded nodes
   const loadArrowData = useMemo(() => {
-    if (loads.length === 0) return []
-    const DOF_AXES: [number, number, number][] = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
-    const byDof = new Map<number, { x: number; y: number; z: number; count: number; total: number }>()
+    if (loads.length === 0) return null
+    let cx = 0, cy = 0, cz = 0, nodeCount = 0
+    let fx = 0, fy = 0, fz = 0
+    const seen = new Set<number>()
     for (const l of loads) {
-      if (l.dof > 2) continue
-      if (!byDof.has(l.dof)) byDof.set(l.dof, { x: 0, y: 0, z: 0, count: 0, total: 0 })
-      const g = byDof.get(l.dof)!
-      const e = nodeMap.get(l.nodeId)
-      if (e) { g.x += e.n.x; g.y += e.n.y; g.z += e.n.z; g.count++ }
-      g.total += l.value
+      if (l.dof === 0) fx += l.value
+      else if (l.dof === 1) fy += l.value
+      else if (l.dof === 2) fz += l.value
+      else continue
+      if (!seen.has(l.nodeId)) {
+        const e = nodeMap.get(l.nodeId)
+        if (e) { cx += e.n.x; cy += e.n.y; cz += e.n.z; nodeCount++ }
+        seen.add(l.nodeId)
+      }
     }
-    const arrows: { pos: [number, number, number]; quaternion: THREE.Quaternion }[] = []
-    for (const [dof, g] of byDof) {
-      if (g.count === 0) continue
-      const ax = DOF_AXES[dof]
-      const sign = g.total < 0 ? -1 : 1
-      const dir = new THREE.Vector3(ax[0] * sign, ax[1] * sign, ax[2] * sign)
-      const q = new THREE.Quaternion()
-      q.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir)
-      arrows.push({ pos: [g.x / g.count, g.y / g.count, g.z / g.count], quaternion: q })
-    }
-    return arrows
+    if (nodeCount === 0) return null
+    const len = Math.sqrt(fx * fx + fy * fy + fz * fz)
+    if (len < 1e-30) return null
+    const dir = new THREE.Vector3(fx / len, fy / len, fz / len)
+    const q = new THREE.Quaternion()
+    q.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir)
+    return { pos: [cx / nodeCount, cy / nodeCount, cz / nodeCount] as [number, number, number], quaternion: q }
   }, [loads, nodeMap])
 
   const volMeshPositions = useMemo(() => {
@@ -428,14 +428,14 @@ export function MeshScene() {
         </group>
       )}
 
-      {/* Load arrows — cylinder shaft + cone head, one per force DOF */}
-      {loadArrowData.map((arrow, i) => {
+      {/* Load arrow — resultant of all force DOFs, cylinder shaft + cone head */}
+      {loadArrowData && (() => {
         const shaftLen = modelSize * 0.22
         const headLen = modelSize * 0.09
         const shaftR = modelSize * 0.012
         const headR = modelSize * 0.038
         return (
-          <group key={`la-${i}`} position={arrow.pos} quaternion={arrow.quaternion}>
+          <group position={loadArrowData.pos} quaternion={loadArrowData.quaternion}>
             <mesh position={[0, shaftLen / 2, 0]}>
               <cylinderGeometry args={[shaftR, shaftR, shaftLen, 8]} />
               <meshStandardMaterial color="#d97706" />
@@ -446,7 +446,7 @@ export function MeshScene() {
             </mesh>
           </group>
         )
-      })}
+      })()}
 
       {/* Volume mesh wireframe */}
       {volMeshPositions && (
