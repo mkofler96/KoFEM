@@ -10,9 +10,6 @@ env:
   SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
   SLACK_CHANNEL: ${{ secrets.SLACK_CHANNEL }}
 
-  # bump manually whenever wasm-libs release changes
-  WASM_LIBS_VERSION: v2
-
 jobs:
   rust:
     name: Rust (native)
@@ -43,147 +40,21 @@ jobs:
   wasm:
     name: WASM (Emscripten)
     runs-on: ubuntu-24.04
-
-    env:
-      EMSDK_VERSION: "3.1.64"
-      BINARYEN_VERSION: "124"
+    container:
+      image: ghcr.io/mkofler96/kofem-dependencies:main
 
     steps:
       - uses: actions/checkout@v4
 
-      ######################################################################
-      # WASM dependency cache (prebuilt OCCT / Netgen / MFEM)
-      ######################################################################
-
-      - name: Cache WASM libs
-        id: cache-wasm-libs
-        uses: actions/cache@v4
-        with:
-          path: wasm-libs
-          key: wasm-libs-${{ env.WASM_LIBS_VERSION }}
-
-      - name: Download pre-built WASM libs
-        if: steps.cache-wasm-libs.outputs.cache-hit != 'true'
-        run: |
-          gh release download "wasm-libs-${WASM_LIBS_VERSION}" \
-            --repo mkofler96/KoFEM \
-            --pattern 'wasm-libs.tar.gz' \
-            --output wasm-libs.tar.gz
-
-          mkdir -p wasm-libs
-          tar -xzf wasm-libs.tar.gz -C wasm-libs
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      ######################################################################
-      # EMSDK
-      ######################################################################
-
-      - name: Set stable emscripten cache path
-        run: echo "EM_CACHE=$HOME/.emscripten_cache" >> $GITHUB_ENV
-
-      - name: Setup Emscripten
-        uses: mymindstorm/setup-emsdk@v14
-        with:
-          version: ${{ env.EMSDK_VERSION }}
-          actions-cache-folder: .emsdk-cache
-
-      ######################################################################
-      # Cache compiled emscripten ports/system libs
-      ######################################################################
-
-      - name: Cache emscripten ports
-        uses: actions/cache@v4
-        with:
-          path: ~/.emscripten_cache
-          key: >
-            emscripten-cache-
-            ${{ runner.os }}-
-            ${{ env.EMSDK_VERSION }}-
-            ${{ env.BINARYEN_VERSION }}
-
-      ######################################################################
-      # Rust cache for wasm target
-      ######################################################################
-
-      - name: Cache Rust (wasm)
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: wasm-rust
-          cache-targets: true
-          cache-all-crates: true
-
-      ######################################################################
-      # ccache (VERY effective for C/C++)
-      ######################################################################
-
-      - name: Install ccache
-        run: sudo apt-get update && sudo apt-get install -y ccache
-
-      - name: Configure ccache
-        run: |
-          mkdir -p ~/.ccache
-
-          {
-            echo "CC=ccache emcc"
-            echo "CXX=ccache em++"
-          } >> $GITHUB_ENV
-
-          ccache --set-config=max_size=2G
-          ccache --zero-stats
-
-      - name: Cache ccache
-        uses: actions/cache@v4
-        with:
-          path: ~/.ccache
-          key: >
-            ccache-
-            ${{ runner.os }}-
-            ${{ env.EMSDK_VERSION }}-
-            ${{ hashFiles('engine/**/*.cpp', 'engine/**/*.hpp', 'engine/CMakeLists.txt') }}
-          restore-keys: |
-            ccache-${{ runner.os }}-${{ env.EMSDK_VERSION }}-
-
-      ######################################################################
-      # Update wasm-opt
-      ######################################################################
-
-      - name: Update wasm-opt to binaryen ${{ env.BINARYEN_VERSION }}
-        run: |
-          curl -fsSL \
-            "https://github.com/WebAssembly/binaryen/releases/download/version_${BINARYEN_VERSION}/binaryen-version_${BINARYEN_VERSION}-x86_64-linux.tar.gz" \
-            | tar -xzf - --strip-components=1 -C "$EMSDK/upstream" \
-              "binaryen-version_${BINARYEN_VERSION}/bin/wasm-opt"
-
-      ######################################################################
-      # IMPORTANT:
-      # Never cache target/wasm-build
-      # CMake stores absolute EMSDK paths and breaks across CI runs
-      ######################################################################
-
-      - name: Clean stale cmake cache
+      # CMake stores absolute EMSDK paths in CMakeCache.txt and breaks across runs
+      - name: Clean stale CMake cache
         run: |
           rm -f target/wasm-build/CMakeCache.txt
           rm -rf target/wasm-build/CMakeFiles
 
-      ######################################################################
-      # Build
-      ######################################################################
-
       - name: Build WASM engine
         run: |
-          export OCCT_WASM_ROOT=$PWD/wasm-libs/occt
-          export NETGEN_WASM_ROOT=$PWD/wasm-libs/netgen
-          export MFEM_WASM_ROOT=$PWD/wasm-libs/mfem
-
           bash scripts/build-wasm.sh
-
-      - name: ccache stats
-        run: ccache --show-stats
-
-      ######################################################################
-      # Upload artifacts
-      ######################################################################
 
       - name: Upload WASM artifacts
         uses: actions/upload-artifact@v4
@@ -202,19 +73,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      ######################################################################
-      # Download wasm output
-      ######################################################################
-
       - name: Download WASM artifacts
         uses: actions/download-artifact@v4
         with:
           name: kofem-wasm-pkg
           path: web/src/wasm/pkg/
-
-      ######################################################################
-      # Bun
-      ######################################################################
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -234,10 +97,6 @@ jobs:
           restore-keys: |
             bun-${{ runner.os }}-
 
-      ######################################################################
-      # Playwright
-      ######################################################################
-
       - name: Cache Playwright browsers
         uses: actions/cache@v4
         with:
@@ -249,16 +108,8 @@ jobs:
           restore-keys: |
             playwright-${{ runner.os }}-
 
-      ######################################################################
-      # Install dependencies
-      ######################################################################
-
       - name: Install web dependencies
         run: cd web && bun install --frozen-lockfile
-
-      ######################################################################
-      # Checks
-      ######################################################################
 
       - name: Typecheck
         run: cd web && bun run typecheck
@@ -266,19 +117,11 @@ jobs:
       - name: Build frontend
         run: cd web && bun run build
 
-      ######################################################################
-      # Playwright
-      ######################################################################
-
       - name: Install Playwright Chromium
         run: cd web && bunx playwright install --with-deps chromium
 
       - name: Run frontend tests
         run: cd web && bun run test
-
-      ######################################################################
-      # Slack report
-      ######################################################################
 
       - name: Post mesh report to Slack
         if: always()
