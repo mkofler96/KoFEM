@@ -5,11 +5,12 @@ import type { ThreeEvent } from '@react-three/fiber'
 import { useModelStore } from '../../store/modelStore'
 
 const TARGET_DEFORM_FRACTION = 0.20
-// Transitions between adjacent boundary triangles smoother than this angle
-// belong to the same surface feature (flat face or cylinder/fillet).
-// 75° handles typical cylinders in tet meshes while still stopping at true
-// sharp edges between perpendicular faces.
-const FEATURE_ANGLE_RAD = 75 * Math.PI / 180
+// Face-picking uses two thresholds chosen by surface type (detected from the seed triangle):
+//   Flat surface  → compare each candidate against the seed normal (tight, stops at any corner)
+//   Curved surface → step-to-step comparison (loose, traverses cylinders/fillets)
+// "Flat" means all immediate edge-neighbors of the seed share the same normal (< FLAT_ANGLE).
+const FLAT_ANGLE  = 15 * Math.PI / 180   // flat: normals must be within 15° of seed
+const CURVE_ANGLE = 85 * Math.PI / 180   // curved: stop only at near-perpendicular feature edges
 
 // ── CHEXA geometry ────────────────────────────────────────────────────────────
 
@@ -282,6 +283,22 @@ export function MeshScene() {
     const startIdx = e.faceIndex
     if (startIdx >= triangles.length) return
 
+    const seedNormal = triNormals[startIdx]
+
+    // Detect surface type: flat if all edge-adjacent neighbors share the seed's normal direction.
+    const [sa, sb, sc] = triangles[startIdx]
+    let maxNeighborAngle = 0
+    for (const [x, y] of [[sa, sb], [sb, sc], [sc, sa]] as [number, number][]) {
+      const key = x < y ? `${x},${y}` : `${y},${x}`
+      for (const ni of edgeToTris.get(key) ?? []) {
+        if (ni !== startIdx) {
+          const a = seedNormal.angleTo(triNormals[ni])
+          if (a > maxNeighborAngle) maxNeighborAngle = a
+        }
+      }
+    }
+    const isFlat = maxNeighborAngle < FLAT_ANGLE
+
     const visited = new Set<number>([startIdx])
     const queue = [startIdx]
     const nodeIds = new Set<number>()
@@ -296,7 +313,12 @@ export function MeshScene() {
         const key = x < y ? `${x},${y}` : `${y},${x}`
         for (const ni of edgeToTris.get(key) ?? []) {
           if (visited.has(ni)) continue
-          if (n.angleTo(triNormals[ni]) < FEATURE_ANGLE_RAD) {
+          // Flat surface: keep candidates close to the seed normal (stops at any corner)
+          // Curved surface: step-to-step check only (handles cylinders and fillets)
+          const passes = isFlat
+            ? seedNormal.angleTo(triNormals[ni]) < FLAT_ANGLE
+            : n.angleTo(triNormals[ni]) < CURVE_ANGLE
+          if (passes) {
             visited.add(ni)
             queue.push(ni)
           }
