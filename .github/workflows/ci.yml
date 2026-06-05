@@ -54,9 +54,6 @@ jobs:
 
       - name: Build WASM engine
         run: |
-          export OCCT_WASM_ROOT=/cache/occt
-          export NETGEN_WASM_ROOT=/cache/netgen-pic
-          export MFEM_WASM_ROOT=/cache/mfem-pic
           bash scripts/build-wasm.sh
 
       - name: Upload WASM artifacts
