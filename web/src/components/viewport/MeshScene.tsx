@@ -5,6 +5,11 @@ import type { ThreeEvent } from '@react-three/fiber'
 import { useModelStore } from '../../store/modelStore'
 
 const TARGET_DEFORM_FRACTION = 0.20
+// Transitions between adjacent boundary triangles smoother than this angle
+// belong to the same surface feature (flat face or cylinder/fillet).
+// 50° handles cylinders with as few as 8 circumferential elements while still
+// stopping at sharp 90° edges (e.g. cylinder wall meeting its end cap).
+const FEATURE_ANGLE_RAD = 50 * Math.PI / 180
 
 // ── CHEXA geometry ────────────────────────────────────────────────────────────
 
@@ -106,6 +111,43 @@ export function MeshScene() {
 
   const boundaryQuadFaceIds = useMemo(() => extractBoundaryQuadFaceIds(hexElements), [hexElements])
   const boundaryTriFaceIds = useMemo(() => extractBoundaryTriFaceIds(tetElements), [tetElements])
+
+  // Boundary mesh topology for flood-fill face picking.
+  // Triangle order matches the undeformedSurface BufferGeometry exactly so that
+  // e.faceIndex from raycasting maps directly into this triangles array.
+  const boundaryMeshTopo = useMemo(() => {
+    const triangles: [number, number, number][] = []
+    for (const [a, b, c, d] of boundaryQuadFaceIds) {
+      triangles.push([a, b, c], [a, c, d])
+    }
+    for (const [a, b, c] of boundaryTriFaceIds) {
+      triangles.push([a, b, c])
+    }
+    if (triangles.length === 0) return null
+
+    // Edge → triangle indices for adjacency lookup
+    const edgeToTris = new Map<string, number[]>()
+    for (let i = 0; i < triangles.length; i++) {
+      const [a, b, c] = triangles[i]
+      for (const [x, y] of [[a, b], [b, c], [c, a]] as [number, number][]) {
+        const key = x < y ? `${x},${y}` : `${y},${x}`
+        const list = edgeToTris.get(key)
+        if (list) list.push(i)
+        else edgeToTris.set(key, [i])
+      }
+    }
+
+    // Per-triangle face normals
+    const triNormals = triangles.map(([a, b, c]) => {
+      const na = nodeMap.get(a)?.n, nb = nodeMap.get(b)?.n, nc = nodeMap.get(c)?.n
+      if (!na || !nb || !nc) return new THREE.Vector3(0, 1, 0)
+      const AB = new THREE.Vector3(nb.x - na.x, nb.y - na.y, nb.z - na.z)
+      const AC = new THREE.Vector3(nc.x - na.x, nc.y - na.y, nc.z - na.z)
+      return AB.cross(AC).normalize()
+    })
+
+    return { triangles, edgeToTris, triNormals }
+  }, [boundaryQuadFaceIds, boundaryTriFaceIds, nodeMap])
 
   const undeformedEdgePositions = useMemo(() => {
     const segs: number[] = []
@@ -228,11 +270,43 @@ export function MeshScene() {
     }
   }, [selectedFace, nodes])
 
-  // Face picking handler — works for both tri and quad surface meshes
+  // Face picking handler — BFS flood-fill along boundary mesh topology.
+  // Starting from the clicked triangle (e.faceIndex), expands to all adjacent
+  // triangles whose normal differs by less than FEATURE_ANGLE_RAD. This selects
+  // entire flat faces AND cylindrical / filleted surfaces in one click, while
+  // stopping at sharp feature edges (e.g. where a cylinder meets its end cap).
   function handleFacePick(e: ThreeEvent<PointerEvent>) {
-    if (!pickMode || !e.face) return
+    if (!pickMode || e.faceIndex == null || !boundaryMeshTopo) return
     e.stopPropagation()
-    const normal = e.face.normal
+
+    const { triangles, edgeToTris, triNormals } = boundaryMeshTopo
+    const startIdx = e.faceIndex
+    if (startIdx >= triangles.length) return
+
+    const visited = new Set<number>([startIdx])
+    const queue = [startIdx]
+    const nodeIds = new Set<number>()
+
+    while (queue.length > 0) {
+      const triIdx = queue.shift()!
+      const [a, b, c] = triangles[triIdx]
+      nodeIds.add(a); nodeIds.add(b); nodeIds.add(c)
+
+      const n = triNormals[triIdx]
+      for (const [x, y] of [[a, b], [b, c], [c, a]] as [number, number][]) {
+        const key = x < y ? `${x},${y}` : `${y},${x}`
+        for (const ni of edgeToTris.get(key) ?? []) {
+          if (visited.has(ni)) continue
+          if (n.angleTo(triNormals[ni]) < FEATURE_ANGLE_RAD) {
+            visited.add(ni)
+            queue.push(ni)
+          }
+        }
+      }
+    }
+
+    const faceNodeIds = [...nodeIds]
+    const normal = e.face?.normal.clone().normalize() ?? new THREE.Vector3(0, 1, 0)
     const ax = Math.abs(normal.x), ay = Math.abs(normal.y), az = Math.abs(normal.z)
     let axis: 'X' | 'Y' | 'Z'
     let isMax: boolean
@@ -240,37 +314,64 @@ export function MeshScene() {
     else if (ay >= ax && ay >= az) { axis = 'Y'; isMax = normal.y > 0 }
     else { axis = 'Z'; isMax = normal.z > 0 }
 
-    const coords = nodes.map(n => axis === 'X' ? n.x : axis === 'Y' ? n.y : n.z)
-    const extremeVal = isMax ? Math.max(...coords) : Math.min(...coords)
-    const tol = modelSize * 0.01
-    const faceNodeIds = nodes
-      .filter(n => Math.abs((axis === 'X' ? n.x : axis === 'Y' ? n.y : n.z) - extremeVal) < tol)
-      .map(n => n.id)
-
     setSelectedFace({
       nodeIds: faceNodeIds,
-      label: `${isMax ? 'Max' : 'Min'} ${axis} face (${faceNodeIds.length} nodes)`,
+      label: `face (${faceNodeIds.length} nodes)`,
       axis,
       isMax,
     })
   }
 
-  const fixedMarkerPos = useMemo((): [number, number, number] | null => {
-    if (constraints.length === 0) return null
+  // BC marker: centroid + quaternion that orients triangles outward from the model
+  const bcMarkerData = useMemo(() => {
+    if (constraints.length === 0 || nodes.length === 0) return null
     const ids = new Set(constraints.map(c => c.nodeId))
-    let x = 0, y = 0, z = 0
-    for (const id of ids) { const e = nodeMap.get(id); if (e) { x += e.n.x; y += e.n.y; z += e.n.z } }
-    const n = ids.size
-    return n > 0 ? [x / n, y / n, z / n] : null
-  }, [constraints, nodeMap])
+    let cx = 0, cy = 0, cz = 0, count = 0
+    for (const id of ids) {
+      const e = nodeMap.get(id)
+      if (e) { cx += e.n.x; cy += e.n.y; cz += e.n.z; count++ }
+    }
+    if (count === 0) return null
+    cx /= count; cy /= count; cz /= count
 
-  const loadMarkerPos = useMemo((): [number, number, number] | null => {
+    // Outward normal: direction from model centroid toward BC face centroid
+    let mx = 0, my = 0, mz = 0
+    for (const n of nodes) { mx += n.x; my += n.y; mz += n.z }
+    mx /= nodes.length; my /= nodes.length; mz /= nodes.length
+    const dx = cx - mx, dy = cy - my, dz = cz - mz
+    const len = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1
+    const outward = new THREE.Vector3(dx / len, dy / len, dz / len)
+
+    // Rotate group so that -Y (cone base direction) aligns with outward normal
+    const q = new THREE.Quaternion()
+    q.setFromUnitVectors(new THREE.Vector3(0, -1, 0), outward)
+    return { pos: [cx, cy, cz] as [number, number, number], quaternion: q }
+  }, [constraints, nodeMap, nodes])
+
+  // Load arrow: single resultant of all force DOFs, placed at centroid of loaded nodes
+  const loadArrowData = useMemo(() => {
     if (loads.length === 0) return null
-    const ids = new Set(loads.map(l => l.nodeId))
-    let x = 0, y = 0, z = 0
-    for (const id of ids) { const e = nodeMap.get(id); if (e) { x += e.n.x; y += e.n.y; z += e.n.z } }
-    const n = ids.size
-    return n > 0 ? [x / n, y / n, z / n] : null
+    let cx = 0, cy = 0, cz = 0, nodeCount = 0
+    let fx = 0, fy = 0, fz = 0
+    const seen = new Set<number>()
+    for (const l of loads) {
+      if (l.dof === 0) fx += l.value
+      else if (l.dof === 1) fy += l.value
+      else if (l.dof === 2) fz += l.value
+      else continue
+      if (!seen.has(l.nodeId)) {
+        const e = nodeMap.get(l.nodeId)
+        if (e) { cx += e.n.x; cy += e.n.y; cz += e.n.z; nodeCount++ }
+        seen.add(l.nodeId)
+      }
+    }
+    if (nodeCount === 0) return null
+    const len = Math.sqrt(fx * fx + fy * fy + fz * fz)
+    if (len < 1e-30) return null
+    const dir = new THREE.Vector3(fx / len, fy / len, fz / len)
+    const q = new THREE.Quaternion()
+    q.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir)
+    return { pos: [cx / nodeCount, cy / nodeCount, cz / nodeCount] as [number, number, number], quaternion: q }
   }, [loads, nodeMap])
 
   const volMeshPositions = useMemo(() => {
@@ -374,21 +475,40 @@ export function MeshScene() {
         </mesh>
       )}
 
-      {/* Fixed-face marker */}
-      {fixedMarkerPos && (
-        <mesh position={fixedMarkerPos}>
-          <sphereGeometry args={[modelSize * 0.018, 16, 16]} />
-          <meshStandardMaterial color="#dc2626" />
-        </mesh>
+      {/* BC markers — triangular fixed-support symbols (3-sided cone, apex at face, base outward) */}
+      {bcMarkerData && (
+        <group position={bcMarkerData.pos} quaternion={bcMarkerData.quaternion}>
+          <mesh position={[0, -modelSize * 0.075, 0]}>
+            <coneGeometry args={[modelSize * 0.09, modelSize * 0.15, 3]} />
+            <meshStandardMaterial color="#dc2626" />
+          </mesh>
+          {/* Backing strip representing the fixed wall */}
+          <mesh position={[0, -modelSize * 0.165, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <planeGeometry args={[modelSize * 0.22, modelSize * 0.03]} />
+            <meshStandardMaterial color="#dc2626" side={THREE.DoubleSide} />
+          </mesh>
+        </group>
       )}
 
-      {/* Load marker */}
-      {loadMarkerPos && (
-        <mesh position={loadMarkerPos}>
-          <sphereGeometry args={[modelSize * 0.018, 16, 16]} />
-          <meshStandardMaterial color="#d97706" />
-        </mesh>
-      )}
+      {/* Load arrow — resultant of all force DOFs, cylinder shaft + cone head */}
+      {loadArrowData && (() => {
+        const shaftLen = modelSize * 0.22
+        const headLen = modelSize * 0.09
+        const shaftR = modelSize * 0.012
+        const headR = modelSize * 0.038
+        return (
+          <group position={loadArrowData.pos} quaternion={loadArrowData.quaternion}>
+            <mesh position={[0, shaftLen / 2, 0]}>
+              <cylinderGeometry args={[shaftR, shaftR, shaftLen, 8]} />
+              <meshStandardMaterial color="#d97706" />
+            </mesh>
+            <mesh position={[0, shaftLen + headLen / 2, 0]}>
+              <coneGeometry args={[headR, headLen, 8]} />
+              <meshStandardMaterial color="#d97706" />
+            </mesh>
+          </group>
+        )
+      })()}
 
       {/* Volume mesh wireframe */}
       {volMeshPositions && (
