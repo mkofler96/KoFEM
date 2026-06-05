@@ -41,7 +41,7 @@ jobs:
     name: WASM (Emscripten)
     runs-on: ubuntu-24.04
     container:
-      image: ghcr.io/mkofler96/kofem-dependencies:buildcache
+      image: ghcr.io/mkofler96/kofem-dependencies:main
 
     steps:
       - uses: actions/checkout@v4
