@@ -41,18 +41,78 @@ target_link_directories(kofem_wasm_emcc PRIVATE
 
 # OCCT: docker-build-wasm.sh creates TKSTEP*/TKXSBase symlinks → TKDESTEP (7.8+).
 # Using the classic names keeps this list compatible with both 7.6 and 7.8.
-# ── Optional Netgen OCC geometry mesher ───────────────────────────────────────
-# Auto-detected from NETGEN_ROOT/lib/libngocc.a — present when Netgen is built
-# with -DUSE_OCC=ON (e.g. the kofem-dependencies Docker image).  Override with
-# -DUSE_NETGEN_OCC=ON/OFF if auto-detection gives the wrong result.
+# ── Netgen OCC geometry mesher (required) ─────────────────────────────────────
+# KoFEM requires Netgen built with -DUSE_OCC=ON.
+# Auto-detection uses three strategies in order:
+#   1. libngocc.a       — separate OCC lib (some Netgen builds)
+#   2. occgeom.hpp      — OCC header installed alongside nglib.h with USE_OCC=ON
+#   3. llvm-nm symbol   — Ng_OCC_Load_STEP compiled directly into libnglib.a
+# Override with -DUSE_NETGEN_OCC=ON/OFF if auto-detection gives the wrong result.
+
+set(_netgen_occ_found OFF)
+set(_netgen_occ_separate_lib OFF)
+
+# Strategy 1: separate libngocc.a
 if(EXISTS "${NETGEN_ROOT}/lib/libngocc.a")
-    set(_netgen_occ_default ON)
-    message(STATUS "libngocc.a found at ${NETGEN_ROOT}/lib — enabling Netgen OCC mesher")
+    set(_netgen_occ_found ON)
+    set(_netgen_occ_separate_lib ON)
+    message(STATUS "Netgen OCC [1/3]: libngocc.a found — OCC enabled (separate lib)")
 else()
-    set(_netgen_occ_default OFF)
-    message(STATUS "libngocc.a not found — Netgen OCC mesher disabled (fallback path active)")
+    message(STATUS "Netgen OCC [1/3]: libngocc.a not found at ${NETGEN_ROOT}/lib")
 endif()
-option(USE_NETGEN_OCC "Enable Netgen OCC geometry meshing (requires libngocc)" ${_netgen_occ_default})
+
+# Strategy 2: OCC-specific header installed by Netgen when USE_OCC=ON
+foreach(_occ_hdr
+        "${NETGEN_ROOT}/include/occgeom.hpp"
+        "${NETGEN_ROOT}/include/netgen/occgeom.hpp"
+        "${NETGEN_ROOT}/include/occ/occgeom.hpp")
+    if(NOT _netgen_occ_found AND EXISTS "${_occ_hdr}")
+        set(_netgen_occ_found ON)
+        message(STATUS "Netgen OCC [2/3]: ${_occ_hdr} found — OCC enabled (symbols in libnglib)")
+    endif()
+endforeach()
+if(NOT _netgen_occ_found)
+    message(STATUS "Netgen OCC [2/3]: occgeom.hpp not found under ${NETGEN_ROOT}/include")
+endif()
+
+# Strategy 3: Ng_OCC_Load_STEP symbol in libnglib.a (OCC compiled into main lib)
+if(NOT _netgen_occ_found AND EXISTS "${NETGEN_ROOT}/lib/libnglib.a")
+    find_program(_llvm_nm NAMES llvm-nm)
+    if(_llvm_nm)
+        execute_process(
+            COMMAND ${_llvm_nm} --defined-only "${NETGEN_ROOT}/lib/libnglib.a"
+            OUTPUT_VARIABLE _nm_out
+            ERROR_QUIET
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+        if(_nm_out MATCHES "Ng_OCC_Load_STEP")
+            set(_netgen_occ_found ON)
+            message(STATUS "Netgen OCC [3/3]: Ng_OCC_Load_STEP symbol found in libnglib.a — OCC enabled")
+        else()
+            message(STATUS "Netgen OCC [3/3]: Ng_OCC_Load_STEP NOT found in libnglib.a")
+        endif()
+    else()
+        message(STATUS "Netgen OCC [3/3]: llvm-nm not found, skipping symbol check")
+    endif()
+else()
+    if(NOT _netgen_occ_found)
+        message(STATUS "Netgen OCC [3/3]: libnglib.a not found at ${NETGEN_ROOT}/lib")
+    endif()
+endif()
+
+option(USE_NETGEN_OCC "Enable Netgen OCC geometry meshing (requires Netgen with USE_OCC=ON)" ${_netgen_occ_found})
+
+if(NOT USE_NETGEN_OCC)
+    message(FATAL_ERROR
+        "Netgen OCC support is required but was not detected in:\n"
+        "  ${NETGEN_ROOT}\n"
+        "Three checks failed:\n"
+        "  1. ${NETGEN_ROOT}/lib/libngocc.a\n"
+        "  2. occgeom.hpp under ${NETGEN_ROOT}/include\n"
+        "  3. Ng_OCC_Load_STEP symbol in libnglib.a\n"
+        "Rebuild Netgen with -DUSE_OCC=ON, or pass -DUSE_NETGEN_OCC=ON to force\n"
+        "(the kofem-dependencies Docker image builds Netgen with USE_OCC=ON).")
+endif()
 
 target_link_libraries(kofem_wasm_emcc PRIVATE
     TKernel
@@ -83,9 +143,12 @@ target_link_libraries(kofem_wasm_emcc PRIVATE
     mfem
 )
 
-if(USE_NETGEN_OCC)
-    target_compile_definitions(kofem_wasm_emcc PRIVATE KOFEM_NETGEN_OCC=1)
+target_compile_definitions(kofem_wasm_emcc PRIVATE KOFEM_NETGEN_OCC=1)
+if(_netgen_occ_separate_lib)
+    message(STATUS "Netgen OCC: linking ngocc as a separate library")
     target_link_libraries(kofem_wasm_emcc PRIVATE ngocc)
+else()
+    message(STATUS "Netgen OCC: OCC symbols are in libnglib — no separate ngocc needed")
 endif()
 
 target_compile_options(kofem_wasm_emcc PRIVATE

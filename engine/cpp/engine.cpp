@@ -41,7 +41,6 @@
 #include <stdexcept>
 #include <string>
 #include <unistd.h>
-#include <unordered_map>
 #include <vector>
 
 using emscripten::val;
@@ -322,14 +321,9 @@ namespace nglib {
 
 // ── Netgen: STEP → FEM surface mesh + tetrahedral volume mesh ────────────────
 //
-// When compiled with KOFEM_NETGEN_OCC (Netgen built with USE_OCC=ON):
-//   Uses Netgen's native OCC geometry integration.  Netgen reads the CAD
-//   topology directly, meshes edges and surfaces respecting feature lines,
-//   then fills the volume — one call, proper FEM surface mesh.
-//
-// Fallback (no OCC support):
-//   Re-tessellates the stored STEP shape via OCCT BRepMesh, deduplicates
-//   vertices, then calls Ng_GenerateVolumeMesh — the original pipeline.
+// Uses Netgen's native OCC geometry integration (KOFEM_NETGEN_OCC required).
+// Netgen reads the CAD topology directly, meshes edges and surfaces respecting
+// feature lines, then fills the volume — one call, proper FEM surface mesh.
 static std::string generate_fem_mesh(const std::string& opts_json)
 {
     if (!g_has_step_shape || g_step_bytes.empty())
@@ -430,144 +424,8 @@ static std::string generate_fem_mesh(const std::string& opts_json)
            ",\"tetrahedra\":" + json_ivec4(out_tets) + "}";
 
 #else
-    // ── Fallback: OCCT tessellation → Netgen volume mesher ───────────────────
-    // Used when Netgen is compiled without OCC support (USE_NETGEN_OCC=OFF).
-    // Re-tessellates the stored STEP shape at the target element scale, deduplicates
-    // shared vertices, then hands the closed surface to Ng_GenerateVolumeMesh.
-
-    double linear_defl = std::max(1.0, max_size / 4.0);
-    BRepTools::Clean(g_step_shape);
-    BRepMesh_IncrementalMesh mesher(g_step_shape, linear_defl, false, 0.3);
-    mesher.Perform();
-    if (!mesher.IsDone())
-        throw std::runtime_error("generate_fem_mesh fallback: BRepMesh_IncrementalMesh failed");
-
-    std::vector<double> verts;
-    std::vector<int>    tris;
-    for (TopExp_Explorer exp(g_step_shape, TopAbs_FACE); exp.More(); exp.Next()) {
-        TopoDS_Face face = TopoDS::Face(exp.Current());
-        TopLoc_Location loc;
-        Handle(Poly_Triangulation) tri = BRep_Tool::Triangulation(face, loc);
-        if (tri.IsNull()) continue;
-        int base = (int)(verts.size() / 3);
-        for (int i = 1; i <= tri->NbNodes(); ++i) {
-            gp_Pnt pt = tri->Node(i).Transformed(loc);
-            verts.push_back(pt.X()); verts.push_back(pt.Y()); verts.push_back(pt.Z());
-        }
-        bool rev = (face.Orientation() == TopAbs_REVERSED);
-        for (int i = 1; i <= tri->NbTriangles(); ++i) {
-            int n1, n2, n3;
-            tri->Triangle(i).Get(n1, n2, n3);
-            if (rev) std::swap(n2, n3);
-            tris.push_back(base + n1 - 1);
-            tris.push_back(base + n2 - 1);
-            tris.push_back(base + n3 - 1);
-        }
-    }
-    if (verts.empty())
-        throw std::runtime_error("generate_fem_mesh fallback: tessellation produced no triangles");
-
-    // Deduplicate vertices at a 1e-4 precision grid.
-    const double PREC = 1e-4;
-    std::unordered_map<std::string, int> vertMap;
-    std::vector<double> dedupV;
-    std::vector<int>    remap(verts.size() / 3);
-    for (int i = 0; i < (int)(verts.size() / 3); ++i) {
-        char key[96];
-        snprintf(key, sizeof(key), "%.0f,%.0f,%.0f",
-                 std::round(verts[3*i]   / PREC),
-                 std::round(verts[3*i+1] / PREC),
-                 std::round(verts[3*i+2] / PREC));
-        auto it = vertMap.find(key);
-        if (it == vertMap.end()) {
-            remap[i] = (int)(dedupV.size() / 3);
-            vertMap[key] = remap[i];
-            dedupV.push_back(verts[3*i]);
-            dedupV.push_back(verts[3*i+1]);
-            dedupV.push_back(verts[3*i+2]);
-        } else {
-            remap[i] = it->second;
-        }
-    }
-    std::vector<int> dedupT;
-    for (int i = 0; i < (int)(tris.size() / 3); ++i) {
-        int a = remap[tris[3*i]], b = remap[tris[3*i+1]], c = remap[tris[3*i+2]];
-        if (a == b || b == c || a == c) continue;
-        dedupT.push_back(a); dedupT.push_back(b); dedupT.push_back(c);
-    }
-
-    unsigned nv = (unsigned)(dedupV.size() / 3);
-    unsigned nt = (unsigned)(dedupT.size() / 3);
-
-    // Conservative parameters that match the old tessellate_for_meshing + generate_volume_mesh
-    // pipeline.  The surface mesh from OCCT tessellation is not suitable for Netgen's
-    // surface/volume optimization passes on complex geometry — they hang.
-    nglib::Ng_Meshing_Parameters mp;
-    mp.uselocalh                  = 0;
-    mp.maxh                       = max_size;
-    mp.minh                       = min_size;
-    mp.fineness                   = 0.5;
-    mp.grading                    = 0.5;
-    mp.elementsperedge            = 1.0;
-    mp.elementspercurve           = 1.0;
-    mp.closeedgeenable            = 0;
-    mp.closeedgefact              = 2.0;
-    mp.minedgelenenable           = 0;
-    mp.minedgelen                 = 1e-4;
-    mp.second_order               = second_ord ? 1 : 0;
-    mp.quad_dominated             = 0;
-    mp.meshsize_filename          = nullptr;
-    mp.optsurfmeshenable          = 1;
-    mp.optvolmeshenable           = 1;
-    mp.optsteps_2d                = 0;
-    mp.optsteps_3d                = 0;
-    mp.invert_tets                = 0;
-    mp.invert_trigs               = 0;
-    mp.check_overlap              = 0;
-    mp.check_overlapping_boundary = 0;
-
-    nglib::Ng_Mesh* mesh = nglib::Ng_NewMesh();
-    if (!mesh) throw std::runtime_error("generate_fem_mesh fallback: Ng_NewMesh returned null");
-
-    for (unsigned i = 0; i < nv; ++i) {
-        double pt[3] = { dedupV[3*i], dedupV[3*i+1], dedupV[3*i+2] };
-        nglib::Ng_AddPoint(mesh, pt);
-    }
-    for (unsigned i = 0; i < nt; ++i) {
-        int tri[3] = { dedupT[3*i]+1, dedupT[3*i+1]+1, dedupT[3*i+2]+1 };
-        nglib::Ng_AddSurfaceElement(mesh, nglib::NG_TRIG, tri);
-    }
-
-    nglib::Ng_Result res = nglib::Ng_GenerateVolumeMesh(mesh, &mp);
-    if (res != nglib::NG_OK) {
-        nglib::Ng_DeleteMesh(mesh);
-        throw std::runtime_error(
-            "generate_fem_mesh fallback: Ng_GenerateVolumeMesh failed (code "
-            + std::to_string((int)res) + ")");
-    }
-
-    int np = nglib::Ng_GetNP(mesh);
-    int ne = nglib::Ng_GetNE(mesh);
-
-    std::vector<double> out_verts;
-    out_verts.reserve(3 * np);
-    for (int i = 1; i <= np; ++i) {
-        double pt[3];
-        nglib::Ng_GetPoint(mesh, i, pt);
-        out_verts.push_back(pt[0]); out_verts.push_back(pt[1]); out_verts.push_back(pt[2]);
-    }
-    std::vector<int> out_tets;
-    out_tets.reserve(4 * ne);
-    for (int i = 1; i <= ne; ++i) {
-        int tet[4];
-        nglib::Ng_GetVolumeElement(mesh, i, tet);
-        out_tets.push_back(tet[0]-1); out_tets.push_back(tet[1]-1);
-        out_tets.push_back(tet[2]-1); out_tets.push_back(tet[3]-1);
-    }
-    nglib::Ng_DeleteMesh(mesh);
-
-    return "{\"vertices\":" + json_vec3(out_verts) +
-           ",\"tetrahedra\":" + json_ivec4(out_tets) + "}";
+#error "KoFEM requires Netgen built with -DUSE_OCC=ON (KOFEM_NETGEN_OCC is not defined). " \
+       "Rebuild the kofem-dependencies Docker image or pass -DUSE_NETGEN_OCC=ON to CMake."
 #endif
 }
 
