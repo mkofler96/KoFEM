@@ -1,3 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+  SLACK_CHANNEL: ${{ secrets.SLACK_CHANNEL }}
+
+jobs:
+  rust:
+    name: Rust (native)
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy,rustfmt
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: native-rust
+
+      - name: Format check
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Tests
+        run: cargo test --workspace
+
   wasm:
     name: WASM (Emscripten)
     runs-on: ubuntu-24.04
@@ -28,3 +67,65 @@
           path: |
             web/src/wasm/pkg/kofem_wasm_emcc.js
             web/src/wasm/pkg/kofem_wasm.wasm
+
+  frontend:
+    name: Frontend
+    needs: [wasm]
+    runs-on: ubuntu-24.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download WASM artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: kofem-wasm-pkg
+          path: web/src/wasm/pkg/
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            web/node_modules
+          key: >
+            bun-
+            ${{ runner.os }}-
+            ${{ hashFiles('web/bun.lockb') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: >
+            playwright-
+            ${{ runner.os }}-
+            ${{ hashFiles('web/package.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+
+      - name: Install web dependencies
+        run: cd web && bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: cd web && bun run typecheck
+
+      - name: Build frontend
+        run: cd web && bun run build
+
+      - name: Install Playwright Chromium
+        run: cd web && bunx playwright install --with-deps chromium
+
+      - name: Run frontend tests
+        run: cd web && bun run test
+
+      - name: Post mesh report to Slack
+        if: always()
+        run: cd web && bun scripts/generate-mesh-report.ts
