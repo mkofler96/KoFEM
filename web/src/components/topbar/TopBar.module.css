@@ -104,31 +104,29 @@
   cursor: default;
 }
 
-.tabNum {
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
-  font-size: 9.5px;
-  color: inherit;
-  opacity: 0.7;
-  letter-spacing: 0.06em;
-}
-
-.tabActive .tabNum { opacity: 1; }
-
 .tabLabel { font-size: 12.5px; }
 
 .dot {
-  width: 10px;
-  height: 10px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: #6b7280;
+  border: 1.5px solid #1f5fd0;
+  background: transparent;
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  color: #fff;
+  color: #1f5fd0;
 }
 
-.dot[data-active] { background: #1f5fd0; }
-.dot[data-done]   { background: #15803d; }
+.tabFuture .dot {
+  border-color: #cdd2d9;
+  color: #cdd2d9;
+}
+
+.dotDone {
+  border-color: #15803d;
+  color: #15803d;
+}
 
 /* ── Right ─────────────────────────────────────────────────── */
 

@@ -103,6 +103,25 @@ OCCT_WASM_ROOT=... NETGEN_WASM_ROOT=... MFEM_WASM_ROOT=... ./scripts/build-wasm.
 cd web && bun install && bun run dev
 ```
 
+## Geometry vs. Mesh — Critical Terminology
+
+There are three distinct representations in this codebase. Using the wrong word is a bug in the code and the UI.
+
+| Concept | What it is | Produced by | Used for |
+|---------|-----------|-------------|----------|
+| **Geometry tessellation** | Triangles approximating the CAD surface for display only | OCCT (`kofem-geom`) | Viewport rendering of the STEP shape (Geometry repr) |
+| **Surface mesh** | Quality triangulation of the CAD boundary surfaces | OCCT tessellation **or** Netgen's direct OCCT integration | Input to the volume mesher + display (Surface Mesh repr) |
+| **Volume mesh** | Tetrahedral elements filling the solid body | Netgen (`kofem-mesh`) | FEM analysis — nodes + elements for stiffness matrix and solve |
+
+The surface mesh comes from the **geometry**, not from the volume mesh. It is either the OCCT tessellation repurposed as meshing input, or (preferred) a proper boundary mesh produced by Netgen's built-in OCCT integration, which respects CAD topology and feature edges.
+
+**Rules — never violate these:**
+
+- **Geometry tessellation triangles are NOT a mesh.** They are a visual approximation of the CAD surface. Never call them "mesh", "surface mesh", or use mesh-related variable names (`mesh`, `meshTriangles`, etc.) for them. Correct names: `tessellation`, `stepTessellation`, `stepSurface`, `geomTriangles`.
+- **"Mesh" always means FEM mesh** — nodes + elements produced by Netgen and used for analysis. The words `mesh`, `meshing`, `meshResult` are reserved for Netgen output and FEM data.
+- **The pipeline:** geometry → tessellation (display) → surface mesh (from geometry, input to Netgen) → volume mesh (FEM) → solve. Tessellation serves display; the volume mesh is what the solver operates on.
+- In the UI the three viewport representations map to: **Geometry** shows the OCCT tessellation, **Surface Mesh** shows the boundary triangulation of the FEM model, **Volume Mesh** shows all tetrahedral edges.
+
 ## Code Style
 
 - Before committing, always run `cargo fmt` and `cargo clippy`
