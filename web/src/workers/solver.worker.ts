@@ -54,45 +54,16 @@ self.onmessage = async (event: MessageEvent) => {
       }
 
       const opts = JSON.stringify({
-        max_element_size: maxElementSize, min_element_size: 0.0, grading: 0.5, second_order: false,
-        uselocalh: 0, elementsperedge: 1.0, elementspercurve: 1.0,
-        optsteps_2d: 0, optsteps_3d: 0,
+        max_element_size: maxElementSize, min_element_size: 0.0, grading: 0.3,
+        second_order: false, elementsperedge: 2.0, elementspercurve: 2.0,
+        optsteps_2d: 3, optsteps_3d: 3,
       })
 
-      // Re-tessellate the stored STEP shape with parameters tuned to the
-      // target element size (linear_defl ≈ max_element_size/4).  The
-      // visualization tessellation (linear_deflection=0.1) produces many tiny
-      // triangles that are orders of magnitude smaller than the volume elements;
-      // this size mismatch triggers memory-access crashes in Netgen's
-      // advancing-front mesher on complex geometry.
-      self.postMessage({ id, log: `Re-tessellating STEP shape for mesh quality (max size: ${maxElementSize} mm)…` })
-      const qualityJson = m().tessellate_for_meshing(opts)
-      const qualityDto = JSON.parse(qualityJson) as { vertices: [number,number,number][]; triangles: [number,number,number][] }
-      const surface = { vertices: qualityDto.vertices, triangles: qualityDto.triangles }
-      self.postMessage({ id, log: `Quality surface: ${surface.vertices.length} vertices, ${surface.triangles.length} triangles` })
-
-      // OCCT tessellates each face independently, emitting duplicate vertices at
-      // shared edges.  Deduplicate by snapping to a 1e-4 grid.
-      const PREC = 1e-4
-      const keyFor = ([x, y, z]: [number, number, number]) =>
-        `${Math.round(x / PREC)},${Math.round(y / PREC)},${Math.round(z / PREC)}`
-      const vertMap = new Map<string, number>()
-      const dedupVerts: [number, number, number][] = []
-      const remap = new Int32Array(surface.vertices.length)
-      for (let i = 0; i < surface.vertices.length; i++) {
-        const k = keyFor(surface.vertices[i])
-        if (!vertMap.has(k)) { vertMap.set(k, dedupVerts.length); dedupVerts.push(surface.vertices[i]) }
-        remap[i] = vertMap.get(k)!
-      }
-      const dedupTris = surface.triangles
-        .map(([a, b, c]) => [remap[a], remap[b], remap[c]] as [number, number, number])
-        .filter(([a, b, c]) => a !== b && b !== c && a !== c)
-      self.postMessage({ id, log: `Deduped: ${surface.vertices.length}→${dedupVerts.length} vertices, ${surface.triangles.length}→${dedupTris.length} triangles` })
-      const manifoldSurface = { vertices: dedupVerts, triangles: dedupTris }
-
-      self.postMessage({ id, log: 'Calling Netgen volume mesher…' })
-
-      const json = m().generate_volume_mesh(JSON.stringify(manifoldSurface), opts)
+      // Use Netgen's native OCC mesher: reads the stored STEP geometry directly,
+      // generates a proper FEM surface mesh respecting CAD topology (edges, faces,
+      // feature lines), then fills the volume — all in one pass.
+      self.postMessage({ id, log: `Generating FEM mesh via Netgen OCC (max element size: ${maxElementSize} mm)…` })
+      const json = m().generate_fem_mesh(opts)
       const dto = JSON.parse(json) as { vertices: [number, number, number][]; tetrahedra: [number, number, number, number][] }
 
       self.postMessage({ id, log: `Volume mesh complete: ${dto.vertices.length} nodes, ${dto.tetrahedra.length} tetrahedra` })

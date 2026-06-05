@@ -1,6 +1,6 @@
 // KoFEM WASM engine — C++ pipeline exposed to JavaScript via Emscripten Embind.
 //
-// Pipeline:  STEP bytes → OCCT tessellation → Netgen volume mesh → MFEM FEM solve
+// Pipeline:  STEP bytes → OCCT tessellation (display) → Netgen OCC surface+volume mesh → MFEM FEM solve
 //
 // All four stages are exposed as individual JS functions plus a convenience
 // full-pipeline function.  Every function takes / returns JSON strings so the
@@ -119,10 +119,12 @@ static bool jbool(const val& o, const char* k, bool def) {
 
 // ── OCCT: STEP → surface mesh ─────────────────────────────────────────────────
 
-// Retained after tessellate_step so tessellate_for_meshing can re-tessellate
-// with quality parameters tuned to the requested element size.
-static TopoDS_Shape g_step_shape;
-static bool         g_has_step_shape = false;
+// Stored after tessellate_step for reuse by generate_fem_mesh.
+// g_step_bytes holds the raw STEP file so Netgen can re-read it via its own
+// STEP reader (Netgen's OCC integration requires a file path, not an in-memory shape).
+static TopoDS_Shape              g_step_shape;
+static bool                      g_has_step_shape = false;
+static std::vector<uint8_t>      g_step_bytes;
 
 static std::string tessellate_step(val bytes_val, const std::string& opts_json) {
     val opts = parse_json(opts_json);
@@ -130,6 +132,7 @@ static std::string tessellate_step(val bytes_val, const std::string& opts_json) 
     double angular_defl = jdouble(opts, "angular_deflection", 0.5);
 
     std::vector<uint8_t> bytes = emscripten::vecFromJSArray<uint8_t>(bytes_val);
+    g_step_bytes = bytes;   // keep for Netgen OCC re-read in generate_fem_mesh
 
     // OCCT ReadFile requires a filesystem path; write to Emscripten's in-memory /tmp.
     char tmppath[] = "/tmp/kofem_XXXXXX.stp";
@@ -305,6 +308,116 @@ namespace nglib {
     extern Ng_Result Ng_GetVolumeElement(Ng_Mesh*, int, int*);
     extern int       Ng_GetNP(Ng_Mesh*);
     extern int       Ng_GetNE(Ng_Mesh*);
+
+    // OCC geometry mesher (available when Netgen is built with USE_OCC=ON)
+    typedef void* Ng_OCC_Geometry;
+    extern Ng_OCC_Geometry* Ng_OCC_Load_STEP(const char* filename);
+    extern Ng_Result        Ng_OCC_GenerateMesh(Ng_OCC_Geometry*, Ng_Mesh**,
+                                                Ng_Meshing_Parameters*, int, int);
+    extern void             Ng_OCC_DeleteGeometry(Ng_OCC_Geometry*);
+}
+
+// ── Netgen OCC: STEP → FEM surface mesh + tetrahedral volume mesh ─────────────
+//
+// Uses Netgen's native OCC geometry integration instead of a manual
+// OCCT tessellation.  Netgen reads the CAD topology directly, meshes
+// the edges and surfaces respecting feature lines and CAD face boundaries,
+// then fills the volume — all in one call.
+static std::string generate_fem_mesh(const std::string& opts_json)
+{
+    if (!g_has_step_shape || g_step_bytes.empty())
+        throw std::runtime_error(
+            "generate_fem_mesh: no STEP shape loaded — call tessellate_step first");
+
+    static bool ng_initialized = false;
+    if (!ng_initialized) { nglib::Ng_Init(); ng_initialized = true; }
+
+    val opts = parse_json(opts_json);
+    double max_size        = jdouble(opts, "max_element_size",   10.0);
+    double min_size        = jdouble(opts, "min_element_size",    0.0);
+    double grading         = jdouble(opts, "grading",             0.3);
+    bool   second_ord      = jbool  (opts, "second_order",       false);
+    double elems_per_edge  = jdouble(opts, "elementsperedge",     2.0);
+    double elems_per_curve = jdouble(opts, "elementspercurve",    2.0);
+    int    optsteps_2d     = jint   (opts, "optsteps_2d",           3);
+    int    optsteps_3d     = jint   (opts, "optsteps_3d",           3);
+
+    // Write stored STEP bytes to the virtual filesystem so Netgen can open them.
+    const char* steppath = "/tmp/kofem_fem.stp";
+    FILE* f = fopen(steppath, "wb");
+    if (!f) throw std::runtime_error("generate_fem_mesh: cannot open /tmp/kofem_fem.stp");
+    fwrite(g_step_bytes.data(), 1, g_step_bytes.size(), f);
+    fclose(f);
+
+    nglib::Ng_OCC_Geometry* geom = nglib::Ng_OCC_Load_STEP(steppath);
+    unlink(steppath);
+    if (!geom)
+        throw std::runtime_error("Ng_OCC_Load_STEP failed — check STEP geometry validity");
+
+    nglib::Ng_Meshing_Parameters mp;
+    mp.uselocalh                  = 1;
+    mp.maxh                       = max_size;
+    mp.minh                       = min_size;
+    mp.fineness                   = 0.5;
+    mp.grading                    = grading;
+    mp.elementsperedge            = elems_per_edge;
+    mp.elementspercurve           = elems_per_curve;
+    mp.closeedgeenable            = 0;
+    mp.closeedgefact              = 2.0;
+    mp.minedgelenenable           = 0;
+    mp.minedgelen                 = 1e-4;
+    mp.second_order               = second_ord ? 1 : 0;
+    mp.quad_dominated             = 0;
+    mp.meshsize_filename          = nullptr;
+    mp.optsurfmeshenable          = 1;
+    mp.optvolmeshenable           = 1;
+    mp.optsteps_2d                = optsteps_2d;
+    mp.optsteps_3d                = optsteps_3d;
+    mp.invert_tets                = 0;
+    mp.invert_trigs               = 0;
+    mp.check_overlap              = 0;
+    mp.check_overlapping_boundary = 0;
+
+    // Generate surface mesh (steps 1–3) then volume mesh (steps 4–6).
+    // Steps: 1=analyse, 2=mesh edges, 3=mesh surfaces, 4–6=volume+optimization.
+    nglib::Ng_Mesh* mesh = nullptr;
+    nglib::Ng_Result res = nglib::Ng_OCC_GenerateMesh(geom, &mesh, &mp, 1, 6);
+    nglib::Ng_OCC_DeleteGeometry(geom);
+
+    if (res != nglib::NG_OK || !mesh) {
+        if (mesh) nglib::Ng_DeleteMesh(mesh);
+        throw std::runtime_error(
+            "Ng_OCC_GenerateMesh failed (code " + std::to_string((int)res) + ")");
+    }
+
+    int np = nglib::Ng_GetNP(mesh);
+    int ne = nglib::Ng_GetNE(mesh);
+
+    std::vector<double> out_verts;
+    out_verts.reserve(3 * np);
+    for (int i = 1; i <= np; ++i) {
+        double pt[3];
+        nglib::Ng_GetPoint(mesh, i, pt);
+        out_verts.push_back(pt[0]);
+        out_verts.push_back(pt[1]);
+        out_verts.push_back(pt[2]);
+    }
+
+    std::vector<int> out_tets;
+    out_tets.reserve(4 * ne);
+    for (int i = 1; i <= ne; ++i) {
+        int tet[4];
+        nglib::Ng_GetVolumeElement(mesh, i, tet);
+        out_tets.push_back(tet[0] - 1);
+        out_tets.push_back(tet[1] - 1);
+        out_tets.push_back(tet[2] - 1);
+        out_tets.push_back(tet[3] - 1);
+    }
+
+    nglib::Ng_DeleteMesh(mesh);
+
+    return "{\"vertices\":" + json_vec3(out_verts) +
+           ",\"tetrahedra\":" + json_ivec4(out_tets) + "}";
 }
 
 static std::string generate_volume_mesh(
@@ -632,6 +745,7 @@ EMSCRIPTEN_BINDINGS(kofem) {
     emscripten::function("tessellate_step",        &tessellate_step);
     emscripten::function("tessellate_for_meshing", &tessellate_for_meshing);
     emscripten::function("generate_volume_mesh",   &generate_volume_mesh);
+    emscripten::function("generate_fem_mesh",      &generate_fem_mesh);
     emscripten::function("solve_linear_elastic",   &solve_linear_elastic);
     emscripten::function("step_to_fem_result",     &step_to_fem_result);
 }
