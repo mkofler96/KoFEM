@@ -75,12 +75,13 @@ test.describe('Full workflow showcase', () => {
     // Find the mesh's long axis by bounding-box extents; fix the near face, load the far face.
     await page.evaluate(() => {
       type CoordNode = { id: number; x: number; y: number; z: number }
+      type FaceEntry = { label: string; nodeIds: number[] }
       const store = (window as unknown as {
         __kofemStore: {
           getState(): {
             nodes: CoordNode[]
-            applyBcToFace(ids: number[], dofs: number[], val: number): void
-            applyLoadToFace(ids: number[], dof: number, force: number): void
+            createBcGroup(face: FaceEntry, dofs: number[], val: number): void
+            createLoadGroup(face: FaceEntry, dof: number, force: number): void
           }
         }
       }).__kofemStore
@@ -95,8 +96,8 @@ test.describe('Full workflow showcase', () => {
       const tol = (max - min) * 0.01
       const fixedIds = nodes.filter(n => n[ax] < min + tol).map(n => n.id)
       const loadedIds = nodes.filter(n => n[ax] > max - tol).map(n => n.id)
-      store.getState().applyBcToFace(fixedIds, [0, 1, 2], 0)
-      store.getState().applyLoadToFace(loadedIds, 1, -2000)
+      store.getState().createBcGroup({ label: 'Face 1', nodeIds: fixedIds }, [0, 1, 2], 0)
+      store.getState().createLoadGroup({ label: 'Face 1', nodeIds: loadedIds }, 1, -2000)
     })
 
     await page.locator('nav').getByRole('button').filter({ hasText: 'Constraints' }).click()
