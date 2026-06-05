@@ -91,6 +91,101 @@ export interface FaceSelection {
   isMax: boolean
 }
 
+// ── Named BC / Load groups ────────────────────────────────────────────────────
+
+export interface BcFaceEntry {
+  id: number
+  label: string    // e.g. "Face 1"
+  nodeIds: number[]
+}
+
+export interface NamedBcGroup {
+  id: number
+  name: string     // e.g. "BC1"
+  dofs: number[]
+  value: number
+  faces: BcFaceEntry[]
+}
+
+export interface NamedLoadGroup {
+  id: number
+  name: string     // e.g. "Load1"
+  dof: number
+  totalForce: number   // applied per face, divided equally among the face's nodes
+  faces: BcFaceEntry[]
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function rebuildConstraints(bcGroups: NamedBcGroup[]): Constraint[] {
+  const result: Constraint[] = []
+  for (const g of bcGroups)
+    for (const f of g.faces)
+      for (const nodeId of f.nodeIds)
+        for (const dof of g.dofs)
+          result.push({ nodeId, dof, prescribedValue: g.value })
+  return result
+}
+
+function rebuildLoads(loadGroups: NamedLoadGroup[]): Load[] {
+  const result: Load[] = []
+  for (const g of loadGroups)
+    for (const f of g.faces) {
+      const perNode = g.totalForce / f.nodeIds.length
+      for (const nodeId of f.nodeIds)
+        result.push({ nodeId, dof: g.dof, value: perNode })
+    }
+  return result
+}
+
+function flatConstraintsToGroups(
+  constraints: Constraint[],
+  startGroupId: number,
+  startFaceId: number,
+): { groups: NamedBcGroup[]; nextGroupId: number; nextFaceId: number } {
+  const nodeDofsMap = new Map<number, Map<number, number>>()
+  for (const c of constraints) {
+    if (!nodeDofsMap.has(c.nodeId)) nodeDofsMap.set(c.nodeId, new Map())
+    nodeDofsMap.get(c.nodeId)!.set(c.dof, c.prescribedValue ?? 0)
+  }
+  const patternGroups = new Map<string, { dofs: number[]; value: number; nodeIds: number[] }>()
+  for (const [nodeId, dofMap] of nodeDofsMap.entries()) {
+    const sorted = [...dofMap.entries()].sort((a, b) => a[0] - b[0])
+    const key = sorted.map(([d, v]) => `${d}=${v}`).join(',')
+    if (!patternGroups.has(key))
+      patternGroups.set(key, { dofs: sorted.map(([d]) => d), value: sorted[0]?.[1] ?? 0, nodeIds: [] })
+    patternGroups.get(key)!.nodeIds.push(nodeId)
+  }
+  let nextGroupId = startGroupId, nextFaceId = startFaceId
+  const groups: NamedBcGroup[] = []
+  for (const { dofs, value, nodeIds } of patternGroups.values()) {
+    groups.push({ id: nextGroupId, name: `BC${nextGroupId}`, dofs, value, faces: [{ id: nextFaceId, label: 'Face 1', nodeIds }] })
+    nextGroupId++; nextFaceId++
+  }
+  return { groups, nextGroupId, nextFaceId }
+}
+
+function flatLoadsToGroups(
+  loads: Load[],
+  startGroupId: number,
+  startFaceId: number,
+): { groups: NamedLoadGroup[]; nextGroupId: number; nextFaceId: number } {
+  const dofGroups = new Map<number, { nodeIds: number[]; totalForce: number }>()
+  for (const l of loads) {
+    if (!dofGroups.has(l.dof)) dofGroups.set(l.dof, { nodeIds: [], totalForce: 0 })
+    const g = dofGroups.get(l.dof)!
+    if (!g.nodeIds.includes(l.nodeId)) g.nodeIds.push(l.nodeId)
+    g.totalForce += l.value
+  }
+  let nextGroupId = startGroupId, nextFaceId = startFaceId
+  const groups: NamedLoadGroup[] = []
+  for (const [dof, { nodeIds, totalForce }] of dofGroups.entries()) {
+    groups.push({ id: nextGroupId, name: `Load${nextGroupId}`, dof, totalForce, faces: [{ id: nextFaceId, label: 'Face 1', nodeIds }] })
+    nextGroupId++; nextFaceId++
+  }
+  return { groups, nextGroupId, nextFaceId }
+}
+
 // ── Default model ─────────────────────────────────────────────────────────────
 
 const DEFAULT_GEOMETRY: BoxGeometry = {
@@ -144,20 +239,33 @@ function buildCantilever() {
     { id: 1, type: 'PSOLID', materialId: 1 },
   ]
 
-  const constraints: Constraint[] = []
+  // Fixed support at x=0
+  const bcNodeIds: number[] = []
   for (let iy = 0; iy <= ny; iy++)
     for (let iz = 0; iz <= nz; iz++)
-      for (const dof of [0, 1, 2])
-        constraints.push({ nodeId: nid(0, iy, iz), dof, prescribedValue: 0 })
+      bcNodeIds.push(nid(0, iy, iz))
 
   const nFace = (ny + 1) * (nz + 1)
   const fNode = -10_000 / nFace
-  const loads: Load[] = []
+  const loadNodeIds: number[] = []
   for (let iy = 0; iy <= ny; iy++)
     for (let iz = 0; iz <= nz; iz++)
-      loads.push({ nodeId: nid(nx, iy, iz), dof: 1, value: fNode })
+      loadNodeIds.push(nid(nx, iy, iz))
 
-  return { nodes, elements, materials, properties, constraints, loads }
+  const bcGroups: NamedBcGroup[] = [{
+    id: 1, name: 'BC1',
+    dofs: [0, 1, 2],
+    value: 0,
+    faces: [{ id: 1, label: 'Face 1', nodeIds: bcNodeIds }],
+  }]
+  const loadGroups: NamedLoadGroup[] = [{
+    id: 1, name: 'Load1',
+    dof: 1,
+    totalForce: fNode * nFace,
+    faces: [{ id: 2, label: 'Face 1', nodeIds: loadNodeIds }],
+  }]
+
+  return { nodes, elements, materials, properties, bcGroups, loadGroups }
 }
 
 // ── Store types ───────────────────────────────────────────────────────────────
@@ -179,7 +287,15 @@ export interface StartCustomParams {
 
 export type AppMode = 'geometry' | 'mesh' | 'constraints' | 'solve' | 'results'
 
-interface ModelState extends ModelSnapshot {
+interface ModelState {
+  nodes: Node[]
+  elements: Element[]
+  materials: Material[]
+  properties: Property[]
+  // flat arrays derived from bcGroups / loadGroups — used by solver and visualization
+  constraints: Constraint[]
+  loads: Load[]
+
   modelName: string
   hasStarted: boolean
   mode: AppMode
@@ -191,7 +307,15 @@ interface ModelState extends ModelSnapshot {
   nextGeomId: number
   nextMatId: number
   pickMode: 'bc' | 'load' | null
+  pickTargetGroupId: number | null   // null = creating new group; id = adding to existing
   selectedFace: FaceSelection | null
+
+  // Named BC / Load groups (primary source of truth for constraints & loads)
+  bcGroups: NamedBcGroup[]
+  loadGroups: NamedLoadGroup[]
+  nextBcGroupId: number
+  nextLoadGroupId: number
+  nextFaceEntryId: number
 
   volMesh: VolMesh | null
   viewRepr: 'geometry' | 'surface' | 'volume' | 'wireframe'
@@ -231,12 +355,22 @@ interface ModelState extends ModelSnapshot {
   updateMaterial(id: number, patch: Partial<Omit<Material, 'id'>>): void
   deleteMaterial(id: number): void
 
-  // BC / Load via face selection
-  setPickMode(mode: 'bc' | 'load' | null): void
+  // Pick mode / face selection
+  setPickMode(mode: 'bc' | 'load' | null, targetGroupId?: number | null): void
   setSelectedFace(face: FaceSelection | null): void
-  applyBcToFace(nodeIds: number[], dofs: number[], value: number): void
-  applyLoadToFace(nodeIds: number[], dof: number, totalForce: number): void
+
+  // BC group actions
+  createBcGroup(face: Omit<BcFaceEntry, 'id'>, dofs: number[], value: number): void
+  addFaceToBcGroup(groupId: number, face: Omit<BcFaceEntry, 'id'>): void
+  removeFaceFromBcGroup(groupId: number, faceId: number): void
+  deleteBcGroup(id: number): void
   clearConstraints(): void
+
+  // Load group actions
+  createLoadGroup(face: Omit<BcFaceEntry, 'id'>, dof: number, totalForce: number): void
+  addFaceToLoadGroup(groupId: number, face: Omit<BcFaceEntry, 'id'>): void
+  removeFaceFromLoadGroup(groupId: number, faceId: number): void
+  deleteLoadGroup(id: number): void
   clearLoads(): void
 
   // Viewport
@@ -253,6 +387,11 @@ const EMPTY_MODEL = {
   properties: [{ id: 1, type: 'PSOLID' as const, materialId: 1 }] as Property[],
   constraints: [] as Constraint[],
   loads: [] as Load[],
+  bcGroups: [] as NamedBcGroup[],
+  loadGroups: [] as NamedLoadGroup[],
+  nextBcGroupId: 1,
+  nextLoadGroupId: 1,
+  nextFaceEntryId: 1,
 }
 
 export const useModelStore = create<ModelState>()(
@@ -272,6 +411,7 @@ export const useModelStore = create<ModelState>()(
     nextGeomId: 2,
     nextMatId: 2,
     pickMode: null,
+    pickTargetGroupId: null,
     selectedFace: null,
     fitViewTrigger: 0,
 
@@ -283,7 +423,9 @@ export const useModelStore = create<ModelState>()(
       s.volMesh = null; s.viewRepr = 'geometry'
       s.stepImportError = null
       s.nodes = []; s.elements = []
+      s.bcGroups = []; s.loadGroups = []
       s.constraints = []; s.loads = []
+      s.nextBcGroupId = 1; s.nextLoadGroupId = 1; s.nextFaceEntryId = 1
       s.result = null
       if (mesh) { s.fitViewTrigger++; s.hasStarted = true; s.mode = 'geometry' }
     }),
@@ -295,11 +437,14 @@ export const useModelStore = create<ModelState>()(
       const c = buildCantilever()
       s.nodes = c.nodes; s.elements = c.elements
       s.materials = c.materials; s.properties = c.properties
-      s.constraints = c.constraints; s.loads = c.loads
+      s.bcGroups = c.bcGroups; s.loadGroups = c.loadGroups
+      s.constraints = rebuildConstraints(c.bcGroups)
+      s.loads = rebuildLoads(c.loadGroups)
+      s.nextBcGroupId = 2; s.nextLoadGroupId = 2; s.nextFaceEntryId = 3
       s.modelName = 'Cantilever Beam'
       s.geometries = [DEFAULT_GEOMETRY]
       s.result = null; s.stepSurface = null; s.volMesh = null
-      s.viewRepr = 'surface'; s.selectedFace = null; s.pickMode = null
+      s.viewRepr = 'surface'; s.selectedFace = null; s.pickMode = null; s.pickTargetGroupId = null
       s.hasStarted = true; s.mode = 'geometry'
       s.fitViewTrigger++
     }),
@@ -309,7 +454,9 @@ export const useModelStore = create<ModelState>()(
       s.nodes = nodes; s.elements = elements
       s.materials = [{ id: 1, name: 'Steel', young: 210e9, poisson: 0.3, density: 7850 }]
       s.properties = [{ id: 1, type: 'PSOLID', materialId: 1 }]
+      s.bcGroups = []; s.loadGroups = []
       s.constraints = []; s.loads = []
+      s.nextBcGroupId = 1; s.nextLoadGroupId = 1; s.nextFaceEntryId = 1
       s.modelName = name || 'Model'
       s.geometries = [{
         id: 1, name: name || 'Model',
@@ -320,7 +467,7 @@ export const useModelStore = create<ModelState>()(
       }]
       s.nextGeomId = 2
       s.result = null; s.stepSurface = null; s.volMesh = null
-      s.viewRepr = 'surface'; s.selectedFace = null; s.pickMode = null
+      s.viewRepr = 'surface'; s.selectedFace = null; s.pickMode = null; s.pickTargetGroupId = null
       s.hasStarted = true; s.mode = 'geometry'
       s.fitViewTrigger++
     }),
@@ -336,11 +483,12 @@ export const useModelStore = create<ModelState>()(
     applyMeshResult: (nodes, elements, name) => set(s => {
       s.nodes = nodes
       s.elements = elements
-      s.constraints = []
-      s.loads = []
+      s.bcGroups = []; s.loadGroups = []
+      s.constraints = []; s.loads = []
+      s.nextBcGroupId = 1; s.nextLoadGroupId = 1; s.nextFaceEntryId = 1
       s.result = null
       s.selectedFace = null
-      s.pickMode = null
+      s.pickMode = null; s.pickTargetGroupId = null
       s.modelName = name
       s.viewRepr = 'surface'
       s.fitViewTrigger++
@@ -355,13 +503,23 @@ export const useModelStore = create<ModelState>()(
       s.elements = snap.elements
       s.materials = snap.materials
       s.properties = snap.properties
-      s.constraints = snap.constraints
-      s.loads = snap.loads
+
+      // Convert flat constraints/loads to named groups
+      const bcResult = flatConstraintsToGroups(snap.constraints, 1, 1)
+      const loadResult = flatLoadsToGroups(snap.loads, bcResult.nextGroupId, bcResult.nextFaceId)
+      s.bcGroups = bcResult.groups
+      s.loadGroups = loadResult.groups
+      s.nextBcGroupId = loadResult.nextGroupId
+      s.nextLoadGroupId = loadResult.nextGroupId
+      s.nextFaceEntryId = loadResult.nextFaceId
+      s.constraints = rebuildConstraints(s.bcGroups)
+      s.loads = rebuildLoads(s.loadGroups)
+
       s.modelName = snap.modelName ?? 'Model'
       s.result = null
       s.geometries = []
       s.selectedFace = null
-      s.pickMode = null
+      s.pickMode = null; s.pickTargetGroupId = null
       s.hasStarted = true
       s.mode = 'geometry'
       s.fitViewTrigger++
@@ -371,7 +529,9 @@ export const useModelStore = create<ModelState>()(
       s.nodes = []; s.elements = []
       s.materials = [{ id: 1, name: 'Steel', young: 210e9, poisson: 0.3, density: 7850 }]
       s.properties = [{ id: 1, type: 'PSOLID', materialId: 1 }]
+      s.bcGroups = []; s.loadGroups = []
       s.constraints = []; s.loads = []
+      s.nextBcGroupId = 1; s.nextLoadGroupId = 1; s.nextFaceEntryId = 1
       s.modelName = ''
       s.result = null
       s.stepSurface = null
@@ -381,7 +541,7 @@ export const useModelStore = create<ModelState>()(
       s.nextGeomId = 2
       s.nextMatId = 2
       s.selectedFace = null
-      s.pickMode = null
+      s.pickMode = null; s.pickTargetGroupId = null
       s.hasStarted = false
     }),
 
@@ -406,13 +566,13 @@ export const useModelStore = create<ModelState>()(
       const { nodes, elements } = meshFromBox(params)
       s.nodes = nodes
       s.elements = elements
-      s.constraints = []
-      s.loads = []
+      s.bcGroups = []; s.loadGroups = []
+      s.constraints = []; s.loads = []
+      s.nextBcGroupId = 1; s.nextLoadGroupId = 1; s.nextFaceEntryId = 1
       s.result = null
       s.selectedFace = null
-      s.pickMode = null
+      s.pickMode = null; s.pickTargetGroupId = null
       s.modelName = geom.name
-      // Ensure PSOLID property with material 1 exists
       if (!s.properties.find(p => p.type === 'PSOLID')) {
         const matId = s.materials[0]?.id ?? 1
         s.properties = [{ id: 1, type: 'PSOLID', materialId: matId }]
@@ -434,35 +594,103 @@ export const useModelStore = create<ModelState>()(
     }),
 
     // Pick mode / face selection
-    setPickMode: (mode) => set(s => {
+    setPickMode: (mode: 'bc' | 'load' | null, targetGroupId: number | null = null) => set(s => {
       s.pickMode = mode
+      s.pickTargetGroupId = mode !== null ? (targetGroupId ?? null) : null
       if (mode === null) s.selectedFace = null
     }),
 
-    setSelectedFace: (face) => set(s => { s.selectedFace = face }),
+    setSelectedFace: (face: FaceSelection | null) => set(s => { s.selectedFace = face }),
 
-    applyBcToFace: (nodeIds, dofs, value) => set(s => {
-      // Remove existing constraints on those nodes+dofs first
-      s.constraints = s.constraints.filter(
-        c => !(nodeIds.includes(c.nodeId) && dofs.includes(c.dof)),
-      )
-      for (const nodeId of nodeIds)
-        for (const dof of dofs)
-          s.constraints.push({ nodeId, dof, prescribedValue: value })
+    // BC group actions
+    createBcGroup: (face: Omit<BcFaceEntry, 'id'>, dofs: number[], value: number) => set(s => {
+      const faceId = s.nextFaceEntryId++
+      s.bcGroups.push({
+        id: s.nextBcGroupId,
+        name: `BC${s.nextBcGroupId}`,
+        dofs,
+        value,
+        faces: [{ id: faceId, label: face.label, nodeIds: face.nodeIds }],
+      })
+      s.nextBcGroupId++
+      s.constraints = rebuildConstraints(s.bcGroups)
       s.result = null
     }),
 
-    applyLoadToFace: (nodeIds, dof, totalForce) => set(s => {
-      // Remove existing loads on those nodes+dof
-      s.loads = s.loads.filter(l => !(nodeIds.includes(l.nodeId) && l.dof === dof))
-      const perNode = totalForce / nodeIds.length
-      for (const nodeId of nodeIds)
-        s.loads.push({ nodeId, dof, value: perNode })
+    addFaceToBcGroup: (groupId: number, face: Omit<BcFaceEntry, 'id'>) => set(s => {
+      const g = s.bcGroups.find(g => g.id === groupId)
+      if (!g) return
+      const faceId = s.nextFaceEntryId++
+      g.faces.push({ id: faceId, label: face.label, nodeIds: face.nodeIds })
+      s.constraints = rebuildConstraints(s.bcGroups)
       s.result = null
     }),
 
-    clearConstraints: () => set(s => { s.constraints = []; s.result = null }),
-    clearLoads: () => set(s => { s.loads = []; s.result = null }),
+    removeFaceFromBcGroup: (groupId: number, faceId: number) => set(s => {
+      const g = s.bcGroups.find(g => g.id === groupId)
+      if (!g) return
+      g.faces = g.faces.filter(f => f.id !== faceId)
+      if (g.faces.length === 0) s.bcGroups = s.bcGroups.filter(g => g.id !== groupId)
+      s.constraints = rebuildConstraints(s.bcGroups)
+      s.result = null
+    }),
+
+    deleteBcGroup: (id: number) => set(s => {
+      s.bcGroups = s.bcGroups.filter(g => g.id !== id)
+      s.constraints = rebuildConstraints(s.bcGroups)
+      s.result = null
+    }),
+
+    clearConstraints: () => set(s => {
+      s.bcGroups = []
+      s.constraints = []
+      s.result = null
+    }),
+
+    // Load group actions
+    createLoadGroup: (face: Omit<BcFaceEntry, 'id'>, dof: number, totalForce: number) => set(s => {
+      const faceId = s.nextFaceEntryId++
+      s.loadGroups.push({
+        id: s.nextLoadGroupId,
+        name: `Load${s.nextLoadGroupId}`,
+        dof,
+        totalForce,
+        faces: [{ id: faceId, label: face.label, nodeIds: face.nodeIds }],
+      })
+      s.nextLoadGroupId++
+      s.loads = rebuildLoads(s.loadGroups)
+      s.result = null
+    }),
+
+    addFaceToLoadGroup: (groupId: number, face: Omit<BcFaceEntry, 'id'>) => set(s => {
+      const g = s.loadGroups.find(g => g.id === groupId)
+      if (!g) return
+      const faceId = s.nextFaceEntryId++
+      g.faces.push({ id: faceId, label: face.label, nodeIds: face.nodeIds })
+      s.loads = rebuildLoads(s.loadGroups)
+      s.result = null
+    }),
+
+    removeFaceFromLoadGroup: (groupId: number, faceId: number) => set(s => {
+      const g = s.loadGroups.find(g => g.id === groupId)
+      if (!g) return
+      g.faces = g.faces.filter(f => f.id !== faceId)
+      if (g.faces.length === 0) s.loadGroups = s.loadGroups.filter(g => g.id !== groupId)
+      s.loads = rebuildLoads(s.loadGroups)
+      s.result = null
+    }),
+
+    deleteLoadGroup: (id: number) => set(s => {
+      s.loadGroups = s.loadGroups.filter(g => g.id !== id)
+      s.loads = rebuildLoads(s.loadGroups)
+      s.result = null
+    }),
+
+    clearLoads: () => set(s => {
+      s.loadGroups = []
+      s.loads = []
+      s.result = null
+    }),
   }))
 )
 

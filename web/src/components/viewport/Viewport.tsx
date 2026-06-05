@@ -47,7 +47,7 @@ export function Viewport() {
           cellColor="#d1d5db"
           sectionColor="#9ca3af"
         />
-        <OrbitControls makeDefault enabled={!pickMode} />
+        <OrbitControls makeDefault />
         <FitCamera />
         <GizmoHelper alignment="bottom-right" margin={[72, 72]}>
           <GizmoViewport labelColor="#374151" axisHeadScale={1} />

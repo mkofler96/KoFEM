@@ -7,9 +7,9 @@ import { useModelStore } from '../../store/modelStore'
 const TARGET_DEFORM_FRACTION = 0.20
 // Transitions between adjacent boundary triangles smoother than this angle
 // belong to the same surface feature (flat face or cylinder/fillet).
-// 50° handles cylinders with as few as 8 circumferential elements while still
+// 80° handles cylinders with as few as 5 circumferential elements while still
 // stopping at sharp 90° edges (e.g. cylinder wall meeting its end cap).
-const FEATURE_ANGLE_RAD = 50 * Math.PI / 180
+const FEATURE_ANGLE_RAD = 80 * Math.PI / 180
 
 // ── CHEXA geometry ────────────────────────────────────────────────────────────
 
@@ -422,7 +422,7 @@ export function MeshScene() {
     <group>
       {/* Undeformed solid surface — light blue-grey on light background */}
       {!result && undeformedSurface && (
-        <mesh onPointerDown={pickMode ? handleFacePick : undefined}>
+        <mesh onClick={pickMode ? handleFacePick : undefined}>
           <bufferGeometry>
             <bufferAttribute attach="attributes-position" args={[undeformedSurface.positions, 3]} />
             <bufferAttribute attach="attributes-normal" args={[undeformedSurface.normals, 3]} />
@@ -448,7 +448,7 @@ export function MeshScene() {
 
       {/* Deformed solid surface */}
       {deformedSurface && (
-        <mesh onPointerDown={pickMode ? handleFacePick : undefined}>
+        <mesh onClick={pickMode ? handleFacePick : undefined}>
           <bufferGeometry>
             <bufferAttribute attach="attributes-position" args={[deformedSurface.positions, 3]} />
             <bufferAttribute attach="attributes-color" args={[deformedSurface.colors, 3]} />
