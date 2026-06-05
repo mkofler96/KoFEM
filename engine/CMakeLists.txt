@@ -133,12 +133,13 @@ target_link_libraries(kofem_wasm_emcc PRIVATE
     TKSTEPAttr
     TKSTEPBase
 
-    # XCAF/CDF libraries required by TKDESTEP (OCCT 7.8+).
-    # TKLCAF/TKXCAF provide TDF_Label/XCAFDoc; TKCDF provides CDM_Document/CDM_Application
-    # (CDF = Collaborative Data Framework) which TKLCAF depends on.
+    # XCAF/CDF/TNaming libraries required by TKDESTEP (OCCT 7.8+).
+    # TKLCAF/TKXCAF provide TDF_Label/XCAFDoc; TKCDF provides CDM_Document;
+    # TKTNAMING provides TNaming_Builder/TNaming_Tool used by XCAFDoc_ShapeTool.
     TKCDF
     TKLCAF
     TKXCAF
+    TKTNAMING
 
     nglib
     ngcore
