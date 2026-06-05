@@ -7,9 +7,10 @@ import { useModelStore } from '../../store/modelStore'
 const TARGET_DEFORM_FRACTION = 0.20
 // Transitions between adjacent boundary triangles smoother than this angle
 // belong to the same surface feature (flat face or cylinder/fillet).
-// 80° handles cylinders with as few as 5 circumferential elements while still
-// stopping at sharp 90° edges (e.g. cylinder wall meeting its end cap).
-const FEATURE_ANGLE_RAD = 80 * Math.PI / 180
+// 89° handles any cylinder (including coarse tet meshes where adjacent boundary
+// triangles on the same curved surface can differ by up to ~88°) while still
+// stopping at true sharp 90° edges (e.g. cylinder wall meeting its end cap).
+const FEATURE_ANGLE_RAD = 89 * Math.PI / 180
 
 // ── CHEXA geometry ────────────────────────────────────────────────────────────
 
