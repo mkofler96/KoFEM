@@ -499,14 +499,17 @@ static std::string generate_fem_mesh(const std::string& opts_json)
     unsigned nv = (unsigned)(dedupV.size() / 3);
     unsigned nt = (unsigned)(dedupT.size() / 3);
 
+    // Conservative parameters that match the old tessellate_for_meshing + generate_volume_mesh
+    // pipeline.  The surface mesh from OCCT tessellation is not suitable for Netgen's
+    // surface/volume optimization passes on complex geometry — they hang.
     nglib::Ng_Meshing_Parameters mp;
     mp.uselocalh                  = 0;
     mp.maxh                       = max_size;
     mp.minh                       = min_size;
     mp.fineness                   = 0.5;
-    mp.grading                    = grading;
-    mp.elementsperedge            = elems_per_edge;
-    mp.elementspercurve           = elems_per_curve;
+    mp.grading                    = 0.5;
+    mp.elementsperedge            = 1.0;
+    mp.elementspercurve           = 1.0;
     mp.closeedgeenable            = 0;
     mp.closeedgefact              = 2.0;
     mp.minedgelenenable           = 0;
@@ -516,8 +519,8 @@ static std::string generate_fem_mesh(const std::string& opts_json)
     mp.meshsize_filename          = nullptr;
     mp.optsurfmeshenable          = 1;
     mp.optvolmeshenable           = 1;
-    mp.optsteps_2d                = optsteps_2d;
-    mp.optsteps_3d                = optsteps_3d;
+    mp.optsteps_2d                = 0;
+    mp.optsteps_3d                = 0;
     mp.invert_tets                = 0;
     mp.invert_trigs               = 0;
     mp.check_overlap              = 0;
