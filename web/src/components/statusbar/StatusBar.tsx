@@ -3,9 +3,10 @@ import styles from "./StatusBar.module.css";
 
 type ViewRepr = "geometry" | "surface" | "volume" | "wireframe";
 
-const REPR_BUTTONS: { id: ViewRepr; tooltip: string; icon: React.ReactNode }[] = [
+const REPR_BUTTONS: { id: ViewRepr; label: string; tooltip: string; icon: React.ReactNode }[] = [
   {
     id: "geometry",
+    label: "Geometry",
     tooltip: "Shaded — smooth surface, no mesh edges",
     icon: (
       <svg viewBox="0 0 16 16" fill="none" width="13" height="13">
@@ -16,6 +17,7 @@ const REPR_BUTTONS: { id: ViewRepr; tooltip: string; icon: React.ReactNode }[] =
   },
   {
     id: "surface",
+    label: "Surface",
     tooltip: "Surface mesh — shaded with element edges",
     icon: (
       <svg viewBox="0 0 16 16" fill="none" width="13" height="13">
@@ -26,6 +28,7 @@ const REPR_BUTTONS: { id: ViewRepr; tooltip: string; icon: React.ReactNode }[] =
   },
   {
     id: "volume",
+    label: "Volume",
     tooltip: "Volume mesh — all tetrahedral edges",
     icon: (
       <svg viewBox="0 0 16 16" fill="none" width="13" height="13">
@@ -36,6 +39,7 @@ const REPR_BUTTONS: { id: ViewRepr; tooltip: string; icon: React.ReactNode }[] =
   },
   {
     id: "wireframe",
+    label: "Wireframe",
     tooltip: "Wireframe — edges only, no fill",
     icon: (
       <svg viewBox="0 0 16 16" fill="none" width="13" height="13">
@@ -135,12 +139,13 @@ export function StatusBar() {
 
       {/* Center — repr toolbar */}
       <div className={styles.reprGroup}>
-        {REPR_BUTTONS.map(({ id, tooltip, icon }, i) => (
+        {REPR_BUTTONS.map(({ id, label, tooltip, icon }, i) => (
           <button
             key={id}
             disabled={isDisabled(id)}
             onClick={() => setViewRepr(id)}
             className={`${styles.reprBtn} ${viewRepr === id ? styles.reprBtnActive : ""}`}
+            aria-label={label}
             data-tooltip={tooltip}
             style={{ borderLeft: i > 0 ? "1px solid #e2e5ea" : "none" }}
           >
