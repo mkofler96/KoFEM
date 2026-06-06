@@ -699,8 +699,8 @@ static void _kofem_mfem_element_keepalive() {
         IntegrationPoint ip;
         ip.x = 0.25; ip.y = 0.25; ip.z = 0.25; ip.weight = 1.0;
         tr.SetIntPoint(&ip);  // devirtualised → anchors ElementTransformation::SetIntPoint
-        volatile const IntegrationPoint* pp = tr.GetIntPoint();
-        (void)pp;
+        volatile bool set = (tr.GetIntPoint() != nullptr);
+        (void)set;
     }
 
     // H1_TetrahedronElement::CalcShape and CalcDShape are the concrete FiniteElement
