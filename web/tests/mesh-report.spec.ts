@@ -37,6 +37,7 @@ test.describe('Mesh capabilities report', () => {
     }
 
     test(geom.label, async ({ page }) => {
+      test.setTimeout(90_000)  // complex STEP imports can take >20 s in CI
       const t0 = Date.now()
       const elapsed = () => `+${((Date.now() - t0) / 1000).toFixed(1)}s`
 
