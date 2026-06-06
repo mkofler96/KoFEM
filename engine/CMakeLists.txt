@@ -134,43 +134,26 @@ target_link_libraries(kofem_wasm_emcc PRIVATE
     TKSTEPBase
 
     # XCAF/CAF/CDF libraries required by TKDESTEP (OCCT 7.8+).
+    # TKDESTEP (symlinked as TKSTEP) pulls in TKXCAF, which in turn references
+    # the full OCCT visualization stack: TKV3d, TKService, TKHLR, TKVCAF, etc.
+    # Those visualization libraries carry C++ global constructors that corrupt
+    # the WASM indirect-function table at module init, causing spurious vtable
+    # crashes (invalid address >> table size) deep inside Netgen volume meshing.
+    # They are intentionally omitted; -sERROR_ON_UNDEFINED_SYMBOLS=0 below
+    # accepts their symbols as JS stubs that throw only if ever invoked.
+    # The engine never exercises the IGES I/O or AIS rendering code paths that
+    # reference those symbols, so no runtime error occurs.
+    #
     # TKCDF    → CDM_Document/CDM_Application (CDF framework)
     # TKLCAF   → TDF_Label, TDocStd (Labeled Application Framework)
-    # TKCAF    → TNaming_Builder/Tool/NamedShape, TDataXtd (used by XCAFDoc_ShapeTool)
-    # TKXCAF   → XCAFDoc_* (Extended CAF, DataExchange module)
-    # The following are transitively required because TKDESTEP (symlinked as TKSTEP)
-    # pulls in TKXCAF, which bundles XCAFPrs (visualization) alongside XCAFDoc.
-    # That cascades through the entire OCCT vis stack even though the engine
-    # never uses any AIS/rendering code.
-    #
-    # TKCDF    → CDM_Document/CDM_Application
-    # TKLCAF   → TDF_Label, TDocStd
-    # TKCAF    → TNaming_*, TDataXtd_*
-    # TKXCAF   → XCAFDoc_*, XCAFPrs_*
-    # TKVCAF   → TPrsStd_Driver/DriverTable (visual OCAF, initialised by XCAFApp)
-    # TKService → Graphic3d_* (XCAFPrs_Texture, XCAFDoc_VisMaterial)
-    # TKV3d    → AIS_*, SelectMgr_*, Prs3d_* (XCAFPrs_AISObject)
-    # TKHLR    → HLRBRep_*/HLRAlgo_* (StdPrs_HLR* in TKV3d)
+    # TKCAF    → TNaming_*, TDataXtd_* (used by XCAFDoc_ShapeTool)
+    # TKXCAF   → XCAFDoc_* (needed by the TKDESTEP STEP reader)
     # TKDE     → DataExchange base framework (OCCT 7.8+)
-    # TKDEIGES → IGESControl_Writer (Netgen occgeom.cpp; replaces TKIGES in 7.8)
-    # TKDESTL  → StlAPI_Writer     (Netgen occgeom.cpp; replaces TKSTL  in 7.8)
-    # TKPrim   → BRepPrimAPI_MakeRevol/MakePrism, BRepSweep_* (IGESToBRep_TopoSurface)
-    # TKFillet → BRepFill::Face/Shell (in TKFillet in this OCCT 7.8 build, not TKOffset)
-    # TKOffset → BRepOffset_* (transitively needed by TKFillet)
     TKCDF
     TKLCAF
     TKCAF
     TKXCAF
-    TKVCAF
-    TKService
-    TKV3d
-    TKHLR
     TKDE
-    TKDEIGES
-    TKDESTL
-    TKPrim
-    TKFillet
-    TKOffset
 
     nglib
     ngcore
@@ -204,6 +187,8 @@ target_link_options(kofem_wasm_emcc PRIVATE
     -sMAXIMUM_MEMORY=2147483648     # 2 GB cap
     -sSTACK_SIZE=8388608            # 8 MB stack for MFEM recursion
     -sUSE_ZLIB=1
+    -sERROR_ON_UNDEFINED_SYMBOLS=0  # OCCT vis libs omitted; their symbols are never
+                                    # called at runtime (IGES/AIS code paths)
 )
 
 # emcc adds .wasm automatically; only set the JS extension here
