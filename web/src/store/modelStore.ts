@@ -309,6 +309,7 @@ interface ModelState {
   pickMode: 'bc' | 'load' | null
   pickTargetGroupId: number | null   // null = creating new group; id = adding to existing
   selectedFace: FaceSelection | null
+  pendingFaces: FaceSelection[]      // faces accumulated via shift-click within a pick session
 
   // Named BC / Load groups (primary source of truth for constraints & loads)
   bcGroups: NamedBcGroup[]
@@ -358,16 +359,17 @@ interface ModelState {
   // Pick mode / face selection
   setPickMode(mode: 'bc' | 'load' | null, targetGroupId?: number | null): void
   setSelectedFace(face: FaceSelection | null): void
+  setPendingFaces(faces: FaceSelection[]): void
 
   // BC group actions
-  createBcGroup(face: Omit<BcFaceEntry, 'id'>, dofs: number[], value: number): void
+  createBcGroup(faces: Omit<BcFaceEntry, 'id'>[], dofs: number[], value: number): void
   addFaceToBcGroup(groupId: number, face: Omit<BcFaceEntry, 'id'>): void
   removeFaceFromBcGroup(groupId: number, faceId: number): void
   deleteBcGroup(id: number): void
   clearConstraints(): void
 
   // Load group actions
-  createLoadGroup(face: Omit<BcFaceEntry, 'id'>, dof: number, totalForce: number): void
+  createLoadGroup(faces: Omit<BcFaceEntry, 'id'>[], dof: number, totalForce: number): void
   addFaceToLoadGroup(groupId: number, face: Omit<BcFaceEntry, 'id'>): void
   removeFaceFromLoadGroup(groupId: number, faceId: number): void
   deleteLoadGroup(id: number): void
@@ -413,6 +415,7 @@ export const useModelStore = create<ModelState>()(
     pickMode: null,
     pickTargetGroupId: null,
     selectedFace: null,
+    pendingFaces: [] as FaceSelection[],
     fitViewTrigger: 0,
 
     setStepImportError: (msg) => set(s => { s.stepImportError = msg }),
@@ -444,7 +447,7 @@ export const useModelStore = create<ModelState>()(
       s.modelName = 'Cantilever Beam'
       s.geometries = [DEFAULT_GEOMETRY]
       s.result = null; s.stepSurface = null; s.volMesh = null
-      s.viewRepr = 'surface'; s.selectedFace = null; s.pickMode = null; s.pickTargetGroupId = null
+      s.viewRepr = 'surface'; s.selectedFace = null; s.pendingFaces = []; s.pickMode = null; s.pickTargetGroupId = null
       s.hasStarted = true; s.mode = 'geometry'
       s.fitViewTrigger++
     }),
@@ -467,7 +470,7 @@ export const useModelStore = create<ModelState>()(
       }]
       s.nextGeomId = 2
       s.result = null; s.stepSurface = null; s.volMesh = null
-      s.viewRepr = 'surface'; s.selectedFace = null; s.pickMode = null; s.pickTargetGroupId = null
+      s.viewRepr = 'surface'; s.selectedFace = null; s.pendingFaces = []; s.pickMode = null; s.pickTargetGroupId = null
       s.hasStarted = true; s.mode = 'geometry'
       s.fitViewTrigger++
     }),
@@ -487,7 +490,7 @@ export const useModelStore = create<ModelState>()(
       s.constraints = []; s.loads = []
       s.nextBcGroupId = 1; s.nextLoadGroupId = 1; s.nextFaceEntryId = 1
       s.result = null
-      s.selectedFace = null
+      s.selectedFace = null; s.pendingFaces = []
       s.pickMode = null; s.pickTargetGroupId = null
       s.modelName = name
       s.viewRepr = 'surface'
@@ -597,20 +600,22 @@ export const useModelStore = create<ModelState>()(
     setPickMode: (mode: 'bc' | 'load' | null, targetGroupId: number | null = null) => set(s => {
       s.pickMode = mode
       s.pickTargetGroupId = mode !== null ? (targetGroupId ?? null) : null
-      if (mode === null) s.selectedFace = null
+      if (mode === null) { s.selectedFace = null; s.pendingFaces = [] }
     }),
 
     setSelectedFace: (face: FaceSelection | null) => set(s => { s.selectedFace = face }),
 
+    setPendingFaces: (faces: FaceSelection[]) => set(s => { s.pendingFaces = faces }),
+
     // BC group actions
-    createBcGroup: (face: Omit<BcFaceEntry, 'id'>, dofs: number[], value: number) => set(s => {
-      const faceId = s.nextFaceEntryId++
+    createBcGroup: (faces: Omit<BcFaceEntry, 'id'>[], dofs: number[], value: number) => set(s => {
+      const faceEntries = faces.map(f => ({ id: s.nextFaceEntryId++, label: f.label, nodeIds: f.nodeIds }))
       s.bcGroups.push({
         id: s.nextBcGroupId,
         name: `BC${s.nextBcGroupId}`,
         dofs,
         value,
-        faces: [{ id: faceId, label: face.label, nodeIds: face.nodeIds }],
+        faces: faceEntries,
       })
       s.nextBcGroupId++
       s.constraints = rebuildConstraints(s.bcGroups)
@@ -648,14 +653,14 @@ export const useModelStore = create<ModelState>()(
     }),
 
     // Load group actions
-    createLoadGroup: (face: Omit<BcFaceEntry, 'id'>, dof: number, totalForce: number) => set(s => {
-      const faceId = s.nextFaceEntryId++
+    createLoadGroup: (faces: Omit<BcFaceEntry, 'id'>[], dof: number, totalForce: number) => set(s => {
+      const faceEntries = faces.map(f => ({ id: s.nextFaceEntryId++, label: f.label, nodeIds: f.nodeIds }))
       s.loadGroups.push({
         id: s.nextLoadGroupId,
         name: `Load${s.nextLoadGroupId}`,
         dof,
         totalForce,
-        faces: [{ id: faceId, label: face.label, nodeIds: face.nodeIds }],
+        faces: faceEntries,
       })
       s.nextLoadGroupId++
       s.loads = rebuildLoads(s.loadGroups)

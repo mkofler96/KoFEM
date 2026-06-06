@@ -3,6 +3,7 @@ import { Line } from '@react-three/drei'
 import * as THREE from 'three'
 import type { ThreeEvent } from '@react-three/fiber'
 import { useModelStore } from '../../store/modelStore'
+import type { Node } from '../../store/modelStore'
 
 const TARGET_DEFORM_FRACTION = 0.20
 // Face-picking uses two thresholds chosen by surface type (detected from the seed triangle):
@@ -11,6 +12,10 @@ const TARGET_DEFORM_FRACTION = 0.20
 // "Flat" means all immediate edge-neighbors of the seed share the same normal (< FLAT_ANGLE).
 const FLAT_ANGLE  = 15 * Math.PI / 180   // flat: normals must be within 15° of seed
 const CURVE_ANGLE = 89 * Math.PI / 180   // curved: stop only at near-perpendicular feature edges
+
+// Precomputed thresholds as cos values (absolute dot product >= threshold means "same surface").
+const COS_FLAT  = Math.cos(FLAT_ANGLE)
+const COS_CURVE = Math.cos(CURVE_ANGLE)
 
 // ── CHEXA geometry ────────────────────────────────────────────────────────────
 
@@ -64,6 +69,24 @@ function extractBoundaryTriFaceIds(tetElems: { nodeIds: number[] }[]): [number, 
   return [...faceMap.values()].filter(e => e.count === 1).map(e => e.face)
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function buildFacePositions(
+  nodeIds: number[],
+  triangles: [number, number, number][],
+  nodeMap: Map<number, { n: Node; i: number }>,
+): Float32Array | null {
+  const nodeIdSet = new Set(nodeIds)
+  const positions: number[] = []
+  for (const [a, b, c] of triangles) {
+    if (!nodeIdSet.has(a) || !nodeIdSet.has(b) || !nodeIdSet.has(c)) continue
+    const na = nodeMap.get(a)?.n, nb = nodeMap.get(b)?.n, nc = nodeMap.get(c)?.n
+    if (!na || !nb || !nc) continue
+    positions.push(na.x, na.y, na.z, nb.x, nb.y, nb.z, nc.x, nc.y, nc.z)
+  }
+  return positions.length > 0 ? new Float32Array(positions) : null
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function MeshScene() {
@@ -76,8 +99,13 @@ export function MeshScene() {
   const volMesh = useModelStore(s => s.volMesh)
   const viewRepr = useModelStore(s => s.viewRepr)
   const pickMode = useModelStore(s => s.pickMode)
+  const pickTargetGroupId = useModelStore(s => s.pickTargetGroupId)
   const selectedFace = useModelStore(s => s.selectedFace)
+  const pendingFaces = useModelStore(s => s.pendingFaces)
   const setSelectedFace = useModelStore(s => s.setSelectedFace)
+  const setPendingFaces = useModelStore(s => s.setPendingFaces)
+  const bcGroups = useModelStore(s => s.bcGroups)
+  const loadGroups = useModelStore(s => s.loadGroups)
 
   const nodeMap = useMemo(
     () => new Map(nodes.map((n, i) => [n.id, { n, i }])),
@@ -138,7 +166,7 @@ export function MeshScene() {
       }
     }
 
-    // Per-triangle face normals
+    // Per-triangle face normals (using absolute direction — winding may be inconsistent)
     const triNormals = triangles.map(([a, b, c]) => {
       const na = nodeMap.get(a)?.n, nb = nodeMap.get(b)?.n, nc = nodeMap.get(c)?.n
       if (!na || !nb || !nc) return new THREE.Vector3(0, 1, 0)
@@ -255,26 +283,49 @@ export function MeshScene() {
     return { positions: new Float32Array(positions), normals: new Float32Array(normals) }
   }, [boundaryQuadFaceIds, boundaryTriFaceIds, nodeMap])
 
-  // Selected face highlight — build a triangle mesh from boundary triangles
-  // whose vertices are all in the selection, then render as a colour overlay.
+  // Selected face highlight — the current (latest) picked face in the active pick session.
   const selectedFacePositions = useMemo(() => {
     if (!selectedFace || !boundaryMeshTopo) return null
-    const nodeIdSet = new Set(selectedFace.nodeIds)
-    const positions: number[] = []
-    for (const [a, b, c] of boundaryMeshTopo.triangles) {
-      if (!nodeIdSet.has(a) || !nodeIdSet.has(b) || !nodeIdSet.has(c)) continue
-      const na = nodeMap.get(a)?.n, nb = nodeMap.get(b)?.n, nc = nodeMap.get(c)?.n
-      if (!na || !nb || !nc) continue
-      positions.push(na.x, na.y, na.z, nb.x, nb.y, nb.z, nc.x, nc.y, nc.z)
-    }
-    return positions.length > 0 ? new Float32Array(positions) : null
+    return buildFacePositions(selectedFace.nodeIds, boundaryMeshTopo.triangles, nodeMap)
   }, [selectedFace, boundaryMeshTopo, nodeMap])
+
+  // Pending faces — accumulated via shift-click during this pick session.
+  const pendingFacePositions = useMemo(() => {
+    if (pendingFaces.length === 0 || !boundaryMeshTopo) return null
+    const allNodeIds = pendingFaces.flatMap(f => f.nodeIds)
+    return buildFacePositions(allNodeIds, boundaryMeshTopo.triangles, nodeMap)
+  }, [pendingFaces, boundaryMeshTopo, nodeMap])
+
+  // BC face highlights — all committed faces across all BC groups.
+  // When in pick mode targeting a specific group, that group is highlighted separately (below).
+  const bcFaceHighlights = useMemo(() => {
+    if (!boundaryMeshTopo) return null
+    return bcGroups.flatMap(g =>
+      g.faces.map(f => ({
+        groupId: g.id,
+        positions: buildFacePositions(f.nodeIds, boundaryMeshTopo.triangles, nodeMap),
+      }))
+    ).filter(h => h.positions !== null) as { groupId: number; positions: Float32Array }[]
+  }, [bcGroups, boundaryMeshTopo, nodeMap])
+
+  // Load face highlights — all committed faces across all load groups.
+  const loadFaceHighlights = useMemo(() => {
+    if (!boundaryMeshTopo) return null
+    return loadGroups.flatMap(g =>
+      g.faces.map(f => ({
+        groupId: g.id,
+        positions: buildFacePositions(f.nodeIds, boundaryMeshTopo.triangles, nodeMap),
+      }))
+    ).filter(h => h.positions !== null) as { groupId: number; positions: Float32Array }[]
+  }, [loadGroups, boundaryMeshTopo, nodeMap])
 
   // Face picking handler — BFS flood-fill along boundary mesh topology.
   // Starting from the clicked triangle (e.faceIndex), expands to all adjacent
   // triangles whose normal differs by less than FEATURE_ANGLE_RAD. This selects
   // entire flat faces AND cylindrical / filleted surfaces in one click, while
   // stopping at sharp feature edges (e.g. where a cylinder meets its end cap).
+  // Uses absolute dot product for normal comparison to tolerate inconsistent
+  // winding order from the tet mesher.
   function handleFacePick(e: ThreeEvent<MouseEvent>) {
     if (!pickMode || e.faceIndex == null || !boundaryMeshTopo) return
     e.stopPropagation()
@@ -286,15 +337,15 @@ export function MeshScene() {
     const seedNormal = triNormals[startIdx]
 
     // Detect surface type: flat if the majority of edge-adjacent neighbors share the
-    // seed's normal (< FLAT_ANGLE). Using a majority vote prevents a single curved
-    // neighbor at the face boundary from misclassifying the seed as curved.
+    // seed's normal (abs dot product > cos(FLAT_ANGLE)). Using absolute dot product
+    // handles tet meshes where some boundary triangles may have reversed winding.
     const [sa, sb, sc] = triangles[startIdx]
     let flatCount = 0, curvedCount = 0
     for (const [x, y] of [[sa, sb], [sb, sc], [sc, sa]] as [number, number][]) {
       const key = x < y ? `${x},${y}` : `${y},${x}`
       for (const ni of edgeToTris.get(key) ?? []) {
         if (ni !== startIdx) {
-          if (seedNormal.angleTo(triNormals[ni]) < FLAT_ANGLE) flatCount++
+          if (Math.abs(seedNormal.dot(triNormals[ni])) > COS_FLAT) flatCount++
           else curvedCount++
         }
       }
@@ -315,12 +366,12 @@ export function MeshScene() {
         const key = x < y ? `${x},${y}` : `${y},${x}`
         for (const ni of edgeToTris.get(key) ?? []) {
           if (visited.has(ni)) continue
-          // Flat surface: keep candidates close to the seed normal (stops at any corner)
-          // Curved surface: step-to-step check only (handles cylinders and fillets)
-          const passes = isFlat
-            ? seedNormal.angleTo(triNormals[ni]) < FLAT_ANGLE
-            : n.angleTo(triNormals[ni]) < CURVE_ANGLE
-          if (passes) {
+          // Absolute dot product: handles both same and opposite winding.
+          // Flat: keep candidates close to the seed normal (stops at any corner).
+          // Curved: step-to-step check only (handles cylinders and fillets).
+          const absDot = Math.abs(isFlat ? seedNormal.dot(triNormals[ni]) : n.dot(triNormals[ni]))
+          const threshold = isFlat ? COS_FLAT : COS_CURVE
+          if (absDot > threshold) {
             visited.add(ni)
             queue.push(ni)
           }
@@ -337,12 +388,21 @@ export function MeshScene() {
     else if (ay >= ax && ay >= az) { axis = 'Y'; isMax = normal.y > 0 }
     else { axis = 'Z'; isMax = normal.z > 0 }
 
-    setSelectedFace({
+    const newFace = {
       nodeIds: faceNodeIds,
-      label: `face (${faceNodeIds.length} nodes)`,
+      label: `Face ${pendingFaces.length + 1} (${faceNodeIds.length} nodes)`,
       axis,
       isMax,
-    })
+    }
+
+    // Shift-click: move the current selectedFace into pendingFaces, then set new pick.
+    // Regular click: start fresh (clear pending).
+    if (e.nativeEvent.shiftKey && selectedFace) {
+      setPendingFaces([...pendingFaces, selectedFace])
+    } else if (!e.nativeEvent.shiftKey) {
+      setPendingFaces([])
+    }
+    setSelectedFace(newFace)
   }
 
   // BC marker: centroid + quaternion that orients triangles outward from the model
@@ -490,13 +550,55 @@ export function MeshScene() {
         </lineSegments>
       )}
 
-      {/* Selected face highlight — colour overlay on the exact picked triangles */}
+      {/* BC face highlights — persistent coloured overlay for all committed BC faces */}
+      {bcFaceHighlights?.map((h, i) => (
+        <mesh key={`bc-face-${h.groupId}-${i}`} renderOrder={1}>
+          <bufferGeometry>
+            <bufferAttribute attach="attributes-position" args={[h.positions, 3]} />
+          </bufferGeometry>
+          <meshBasicMaterial
+            color="#dc2626"
+            transparent
+            opacity={pickTargetGroupId === h.groupId ? 0.45 : 0.25}
+            depthTest={false}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      ))}
+
+      {/* Load face highlights — persistent coloured overlay for all committed load faces */}
+      {loadFaceHighlights?.map((h, i) => (
+        <mesh key={`load-face-${h.groupId}-${i}`} renderOrder={1}>
+          <bufferGeometry>
+            <bufferAttribute attach="attributes-position" args={[h.positions, 3]} />
+          </bufferGeometry>
+          <meshBasicMaterial
+            color="#d97706"
+            transparent
+            opacity={pickTargetGroupId === h.groupId ? 0.45 : 0.25}
+            depthTest={false}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      ))}
+
+      {/* Pending faces — accumulated via shift-click, same colour as selection but slightly dimmer */}
+      {pendingFacePositions && (
+        <mesh renderOrder={2}>
+          <bufferGeometry>
+            <bufferAttribute attach="attributes-position" args={[pendingFacePositions, 3]} />
+          </bufferGeometry>
+          <meshBasicMaterial color="#e05533" transparent opacity={0.45} depthTest={false} side={THREE.DoubleSide} />
+        </mesh>
+      )}
+
+      {/* Selected face highlight — the latest picked face (brightest) */}
       {selectedFacePositions && (
-        <mesh renderOrder={1}>
+        <mesh renderOrder={3}>
           <bufferGeometry>
             <bufferAttribute attach="attributes-position" args={[selectedFacePositions, 3]} />
           </bufferGeometry>
-          <meshBasicMaterial color="#e05533" transparent opacity={0.55} depthTest={false} side={THREE.DoubleSide} />
+          <meshBasicMaterial color="#e05533" transparent opacity={0.65} depthTest={false} side={THREE.DoubleSide} />
         </mesh>
       )}
 
