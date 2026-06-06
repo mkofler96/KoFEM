@@ -30,22 +30,6 @@ echo "  Netgen : $NETGEN_WASM_ROOT"
 echo "  MFEM   : $MFEM_WASM_ROOT"
 echo "  Out    : $OUT_DIR"
 
-# Locate which OCCT archive defines BRepFill::Face (helps resolve linker cascade).
-echo "--- OCCT lib inventory ---"
-ls "$OCCT_WASM_ROOT/lib"/libTK*.a 2>/dev/null | sort | sed 's|.*/||'
-echo "--- BRepFill::Face location ---"
-NM=$(command -v llvm-nm || command -v nm || true)
-if [ -n "$NM" ]; then
-    for f in "$OCCT_WASM_ROOT/lib"/libTK*.a; do
-        if "$NM" --defined-only "$f" 2>/dev/null | grep -q "BRepFill.*Face\|BRepFillFace"; then
-            echo "  FOUND: $(basename "$f")"
-        fi
-    done
-else
-    echo "  (nm not available)"
-fi
-echo "---"
-
 export OCCT_WASM_ROOT NETGEN_WASM_ROOT MFEM_WASM_ROOT
 
 mkdir -p "$BUILD_DIR"

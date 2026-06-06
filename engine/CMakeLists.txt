@@ -23,7 +23,7 @@ foreach(V OCCT_ROOT NETGEN_ROOT MFEM_ROOT)
 endforeach()
 
 # ── Engine target ─────────────────────────────────────────────────────────────
-add_executable(kofem_wasm_emcc cpp/engine.cpp)
+add_executable(kofem_wasm_emcc cpp/engine.cpp cpp/brepfill_stubs.cpp)
 
 target_include_directories(kofem_wasm_emcc PRIVATE
     ${OCCT_ROOT}/include/opencascade
