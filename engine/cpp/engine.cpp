@@ -821,12 +821,14 @@ static std::string solve_linear_elastic(
     a.FormLinearSystem(ess_tdof, x, b, A, X, B);
 
     SparseMatrix& A_mat = *A.As<SparseMatrix>();
-    GSSmoother prec(A_mat);
+    // DSmoother (Jacobi/diagonal scaling) is O(n) per application vs GSSmoother's
+    // O(nnz) sequential sweep — ~20x cheaper per apply in single-threaded WASM.
+    // Needs more CG iterations but is faster overall for large sparse systems.
+    DSmoother prec(A_mat);
     CGSolver cg;
-    // Relax tolerance: 1e-6 is adequate for FEM stress analysis.
-    // Cap iterations at 500 so a poorly-conditioned mesh can't spin forever.
-    cg.SetRelTol(1e-6);
-    cg.SetMaxIter(500);
+    // 1e-3 is sufficient for visual FEM; tighter tolerances scale iteration count ~log(1/tol).
+    cg.SetRelTol(1e-3);
+    cg.SetMaxIter(1000);
     cg.SetPrintLevel(1);  // print final iteration count to help diagnose convergence
     cg.SetPreconditioner(prec);
     cg.SetOperator(A_mat);

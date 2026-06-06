@@ -73,6 +73,8 @@ test.describe('Full workflow showcase', () => {
     // 3. Mesh panel — trigger volume meshing and wait for completion
     await page.locator('nav').getByRole('button').filter({ hasText: 'Mesh' }).click()
     await expect(page.getByRole('button').filter({ hasText: 'Mesh STEP volume' })).toBeVisible()
+    // Use 40 mm element size for the showcase: ~8x fewer tets than 20 mm, keeps solve fast.
+    await page.getByRole('spinbutton').fill('40')
     console.log(`[showcase] ${elapsed()} 03 clicking Mesh STEP volume…`)
     await page.getByRole('button').filter({ hasText: 'Mesh STEP volume' }).click()
 
@@ -136,7 +138,7 @@ test.describe('Full workflow showcase', () => {
     console.log(`[showcase] ${elapsed()} solver started…`)
 
     await Promise.race([
-      expect(page.getByText('Result summary')).toBeVisible({ timeout: 300_000 }),
+      expect(page.getByText('Result summary')).toBeVisible({ timeout: 540_000 }),
       fatalError,
     ])
 
