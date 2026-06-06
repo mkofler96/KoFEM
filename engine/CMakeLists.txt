@@ -151,8 +151,9 @@ target_link_libraries(kofem_wasm_emcc PRIVATE
     # TKService → Graphic3d_* (XCAFPrs_Texture, XCAFDoc_VisMaterial)
     # TKV3d    → AIS_*, SelectMgr_*, Prs3d_* (XCAFPrs_AISObject)
     # TKHLR    → HLRBRep_*/HLRAlgo_* (StdPrs_HLR* in TKV3d)
-    # TKIGES   → IGESControl_Writer (Netgen occgeom.cpp)
-    # TKSTL    → StlAPI_Writer (Netgen occgeom.cpp)
+    # TKDE     → DataExchange base framework (OCCT 7.8+)
+    # TKDEIGES → IGESControl_Writer (Netgen occgeom.cpp; replaces TKIGES in 7.8)
+    # TKDESTL  → StlAPI_Writer     (Netgen occgeom.cpp; replaces TKSTL  in 7.8)
     TKCDF
     TKLCAF
     TKCAF
@@ -161,8 +162,9 @@ target_link_libraries(kofem_wasm_emcc PRIVATE
     TKService
     TKV3d
     TKHLR
-    TKIGES
-    TKSTL
+    TKDE
+    TKDEIGES
+    TKDESTL
 
     nglib
     ngcore
