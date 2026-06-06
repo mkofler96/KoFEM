@@ -372,10 +372,7 @@ static std::string generate_fem_mesh(const std::string& opts_json)
     nglib::Ng_Meshing_Parameters mp;
     mp.uselocalh                  = 1;
     mp.maxh                       = max_size;
-    // Floor minh at 5 % of maxh: with minh=0 Netgen generates arbitrarily tiny
-    // elements at high-curvature CAD features, which can make volume meshing
-    // take minutes or longer for complex geometry.
-    mp.minh                       = (min_size > 0.0) ? min_size : max_size * 0.05;
+    mp.minh                       = min_size;
     mp.fineness                   = 0.5;
     mp.grading                    = grading;
     mp.elementsperedge            = elems_per_edge;
@@ -416,22 +413,25 @@ static std::string generate_fem_mesh(const std::string& opts_json)
 
     // Step 3: mesh boundary surfaces
     res = nglib::Ng_OCC_GenerateSurfaceMesh(geom, mesh, &mp);
-    nglib::Ng_OCC_DeleteGeometry(geom);
     if (res != nglib::NG_OK) {
         nglib::Ng_DeleteMesh(mesh);
+        nglib::Ng_OCC_DeleteGeometry(geom);
         throw std::runtime_error(
             "Ng_OCC_GenerateSurfaceMesh failed (code " + std::to_string((int)res) + ")");
     }
 
     // Step 4: fill volume.
-    // Volume optimisation (optsteps_3d > 0) tries to project surface nodes onto
-    // the OCC geometry via references stored in the mesh during step 3.  The geom
-    // object was freed above, so any such access would dereference a dangling
-    // pointer and corrupt the WASM heap (vtable trap inside invoke_ii).  Forcing
-    // optsteps_3d = 0 skips the optimiser entirely: the initial Delaunay
-    // insertion is safe because it only reads the surface mesh, not OCC topology.
+    // Keep geom alive: Netgen stores OCC geometry references in the mesh during
+    // step 3 and accesses them during BOTH Delaunay insertion and mesh
+    // optimisation (surface node projection).  Freeing geom before this call
+    // causes dangling-pointer reads that corrupt the WASM vtable (invoke_ii
+    // trap with a heap address instead of a function table index).
+    // optsteps_3d=0: the optimisation re-projects nodes onto OCC surfaces; for
+    // complex geometry (many faces) this loop runs for several minutes.  The
+    // initial Delaunay mesh is already adequate quality without it.
     mp.optsteps_3d = 0;
     res = nglib::Ng_GenerateVolumeMesh(mesh, &mp);
+    nglib::Ng_OCC_DeleteGeometry(geom);  // safe: volume fill complete
     if (res != nglib::NG_OK) {
         nglib::Ng_DeleteMesh(mesh);
         throw std::runtime_error(
