@@ -4,17 +4,20 @@ import fs from 'fs'
 
 const OUT_DIR = path.join('playwright-results', 'screenshots', 'showcase')
 const STEP_FILES_DIR = path.resolve('..', 'test_files')
-const WALL_BRACKET = path.join(STEP_FILES_DIR, 'Wall Bracket.stp')
+// tube.stp produces ~760 tets / 274 nodes — small enough for a fast CI solve.
+// Wall Bracket produces ~50K tets regardless of element size (geometry-driven)
+// which overloads the CI runner's disk and memory budget.
+const TUBE = path.join(STEP_FILES_DIR, 'tube.stp')
 
 test.describe('Full workflow showcase', () => {
   test.beforeAll(() => {
     fs.mkdirSync(OUT_DIR, { recursive: true })
   })
 
-  test('wall bracket: welcome → geometry → mesh → constraints → results', async ({ page }) => {
-    test.setTimeout(600_000)
+  test('tube: welcome → geometry → mesh → constraints → results', async ({ page }) => {
+    test.setTimeout(120_000)
 
-    if (!fs.existsSync(WALL_BRACKET)) {
+    if (!fs.existsSync(TUBE)) {
       test.skip()
       return
     }
@@ -50,9 +53,9 @@ test.describe('Full workflow showcase', () => {
     await page.screenshot({ path: path.join(OUT_DIR, '01-select-geometry.png') })
     console.log(`[showcase] ${elapsed()} 01 screenshot done`)
 
-    // Import wall bracket
-    console.log(`[showcase] ${elapsed()} importing Wall Bracket.stp`)
-    await page.locator('input[type="file"][accept=".stp,.step"]').setInputFiles(WALL_BRACKET)
+    // Import tube
+    console.log(`[showcase] ${elapsed()} importing tube.stp`)
+    await page.locator('input[type="file"][accept=".stp,.step"]').setInputFiles(TUBE)
     await Promise.race([
       expect(page.getByText('Model geometry')).toBeVisible({ timeout: 60_000 }),
       fatalError,
@@ -66,22 +69,20 @@ test.describe('Full workflow showcase', () => {
 
     await page.waitForTimeout(600)
 
-    // 2. Geometry panel — wall bracket surface
+    // 2. Geometry panel
     await page.screenshot({ path: path.join(OUT_DIR, '02-geometry-options.png') })
     console.log(`[showcase] ${elapsed()} 02 screenshot done`)
 
     // 3. Mesh panel — trigger volume meshing and wait for completion
     await page.locator('nav').getByRole('button').filter({ hasText: 'Mesh' }).click()
     await expect(page.getByRole('button').filter({ hasText: 'Mesh STEP volume' })).toBeVisible()
-    // Use 40 mm element size for the showcase: ~8x fewer tets than 20 mm, keeps solve fast.
-    await page.getByRole('spinbutton').fill('40')
     console.log(`[showcase] ${elapsed()} 03 clicking Mesh STEP volume…`)
     await page.getByRole('button').filter({ hasText: 'Mesh STEP volume' }).click()
 
     const meshingErrorBanner = page.getByTestId('meshing-error')
     await Promise.race([
-      expect(page.getByText('Mesh is solver-ready')).toBeVisible({ timeout: 480_000 }),
-      meshingErrorBanner.waitFor({ state: 'visible', timeout: 480_000 })
+      expect(page.getByText('Mesh is solver-ready')).toBeVisible({ timeout: 60_000 }),
+      meshingErrorBanner.waitFor({ state: 'visible', timeout: 60_000 })
         .then(async () => {
           throw new Error(`Volume meshing failed: ${await meshingErrorBanner.textContent()}`)
         }),
@@ -91,7 +92,7 @@ test.describe('Full workflow showcase', () => {
     await page.screenshot({ path: path.join(OUT_DIR, '03-mesh-generation.png') })
     console.log(`[showcase] ${elapsed()} 03 screenshot done`)
 
-    // 4. Apply BCs to the STEP volume mesh and show constraints panel.
+    // 4. Apply BCs and show constraints panel.
     // Find the mesh's long axis by bounding-box extents; fix the near face, load the far face.
     await page.evaluate(() => {
       type CoordNode = { id: number; x: number; y: number; z: number }
@@ -138,7 +139,7 @@ test.describe('Full workflow showcase', () => {
     console.log(`[showcase] ${elapsed()} solver started…`)
 
     await Promise.race([
-      expect(page.getByText('Result summary')).toBeVisible({ timeout: 540_000 }),
+      expect(page.getByText('Result summary')).toBeVisible({ timeout: 60_000 }),
       fatalError,
     ])
 
