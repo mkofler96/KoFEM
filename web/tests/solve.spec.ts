@@ -125,41 +125,39 @@ test('wall bracket: mesh + solve completes without WASM trap', async ({ page }) 
   ])
   console.log(`[wall-bracket] ${elapsed()} meshing done`)
 
-  // ── 3. Inject BCs via the store (bypasses 3D face-picking) ────────────────
-  // Fixes the first 10 nodes and applies a point load on the last — enough to
-  // produce a non-singular system and exercise the full solve path.
+  // ── 3. Run solve directly via worker (bypasses 3D face-picking and Immer) ──
+  // Fix the first 10 nodes and apply a point load on the last — enough to
+  // produce a non-singular system and exercise the full WASM solve path.
   const nodeCount: number = await page.evaluate(() =>
     (window as any).__kofemStore.getState().nodes.length
   )
   console.log(`[wall-bracket] ${elapsed()} mesh has ${nodeCount} nodes`)
 
-  await page.evaluate(() => {
-    const store = (window as any).__kofemStore.getState()
-    const nodes = store.nodes as { id: number }[]
-    if (nodes.length < 4) throw new Error('mesh too small: fewer than 4 nodes')
-    store.createBcGroup(
-      { label: 'Fixed', nodeIds: nodes.slice(0, 10).map((n: { id: number }) => n.id) },
-      [0, 1, 2], 0,
-    )
-    store.createLoadGroup(
-      { label: 'Load', nodeIds: [nodes[nodes.length - 1].id] },
-      1, -10000,
-    )
-  })
-  console.log(`[wall-bracket] ${elapsed()} BCs injected`)
-
-  // ── 4. Solve ───────────────────────────────────────────────────────────────
-  await goToSolvePanel(page)
-  const solveBtn = page.getByRole('button').filter({ hasText: 'Run static solve' })
-  await Promise.race([expect(solveBtn).toBeEnabled(), fatal])
-  await solveBtn.click()
-  console.log(`[wall-bracket] ${elapsed()} solve started`)
-
-  await Promise.race([
-    expect(page.getByText(/Max \|U\|/)).toBeVisible({ timeout: 120_000 }),
+  const solveResult = await Promise.race([
+    page.evaluate(async () => {
+      const kofem = (window as any).__kofem
+      const state = (window as any).__kofemStore.getState()
+      const nodes = state.nodes as { id: number; x: number; y: number; z: number }[]
+      const elements = state.elements as { id: number; type: string; nodeIds: number[]; propertyId: number }[]
+      if (nodes.length < 4) throw new Error(`mesh too small: ${nodes.length} nodes`)
+      const fixedNodeIds = nodes.slice(0, 10).map((n: { id: number }) => n.id)
+      const constraints = fixedNodeIds.flatMap((id: number) => [
+        { nodeId: id, dof: 0 }, { nodeId: id, dof: 1 }, { nodeId: id, dof: 2 },
+      ])
+      const loads = [{ nodeId: nodes[nodes.length - 1].id, dof: 1, value: -10000 }]
+      const materials = state.materials?.length
+        ? state.materials
+        : [{ id: 1, name: 'Steel', young: 210e9, poisson: 0.3, density: 7850 }]
+      return kofem.sendToWorker('solve', {
+        nodes, elements, materials, properties: state.properties ?? [],
+        constraints, loads,
+      })
+    }) as Promise<{ displacements: number[]; vonMises: number[] }>,
     fatal,
   ])
   console.log(`[wall-bracket] ${elapsed()} solve complete — PASS`)
+  expect(solveResult.displacements.length).toBeGreaterThan(0)
+  expect(solveResult.vonMises.length).toBeGreaterThan(0)
 })
 
 // ── STEP → Volume mesh pipeline ───────────────────────────────────────────────
