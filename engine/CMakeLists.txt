@@ -155,7 +155,8 @@ target_link_libraries(kofem_wasm_emcc PRIVATE
     # TKDEIGES → IGESControl_Writer (Netgen occgeom.cpp; replaces TKIGES in 7.8)
     # TKDESTL  → StlAPI_Writer     (Netgen occgeom.cpp; replaces TKSTL  in 7.8)
     # TKPrim   → BRepPrimAPI_MakeRevol/MakePrism, BRepSweep_* (IGESToBRep_TopoSurface)
-    # TKOffset → BRepFill::Face/Shell (IGESToBRep_TopoSurface)
+    # TKFillet → BRepFill::Face/Shell (in TKFillet in this OCCT 7.8 build, not TKOffset)
+    # TKOffset → BRepOffset_* (transitively needed by TKFillet)
     TKCDF
     TKLCAF
     TKCAF
@@ -168,6 +169,7 @@ target_link_libraries(kofem_wasm_emcc PRIVATE
     TKDEIGES
     TKDESTL
     TKPrim
+    TKFillet
     TKOffset
 
     nglib
