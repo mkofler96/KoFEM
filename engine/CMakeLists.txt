@@ -193,6 +193,7 @@ target_compile_options(kofem_wasm_emcc PRIVATE
 
 # Embind (--bind) + modularised ES6 output + exception support
 target_link_options(kofem_wasm_emcc PRIVATE
+    -O2   # cap at O2: Release default (-O3) OOMs wasm-opt on the combined OCCT+Netgen+MFEM binary
     --bind
     -fexceptions
     -sDISABLE_EXCEPTION_CATCHING=0

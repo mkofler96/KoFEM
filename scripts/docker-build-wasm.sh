@@ -220,11 +220,12 @@ if [ ! -f "${NETGEN_ROOT}/lib/libnglib.a" ]; then
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_CXX_FLAGS="-fPIC" \
         -DCMAKE_C_FLAGS="-fPIC" \
+        -DCMAKE_PREFIX_PATH="${OCCT_ROOT}" \
         -DUSE_SUPERBUILD=OFF \
         -DUSE_GUI=OFF \
         -DUSE_PYTHON=OFF \
         -DUSE_MPI=OFF \
-        -DUSE_OCC=OFF \
+        -DUSE_OCC=ON \
         -DUSE_NUMA=OFF \
         -DUSE_NATIVE_ARCH=OFF \
         -DBUILD_SHARED_LIBS=OFF \
