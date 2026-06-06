@@ -386,8 +386,11 @@ static std::string generate_fem_mesh(const std::string& opts_json)
     mp.meshsize_filename          = nullptr;
     mp.optsurfmeshenable          = 1;
     mp.optvolmeshenable           = 1;
-    mp.optsteps_2d                = optsteps_2d;
-    mp.optsteps_3d                = optsteps_3d;
+    // Skip both surface and volume optimisation: for complex CAD (many faces,
+    // short edges) the optimiser reprojects nodes onto OCC surfaces in a loop
+    // that runs for minutes.  The unoptimised mesh is adequate for FEM analysis.
+    mp.optsteps_2d                = 0;
+    mp.optsteps_3d                = 0;
     mp.invert_tets                = 0;
     mp.invert_trigs               = 0;
     mp.check_overlap              = 0;
@@ -399,10 +402,12 @@ static std::string generate_fem_mesh(const std::string& opts_json)
         throw std::runtime_error("Ng_NewMesh returned null");
     }
 
-    // Step 1: set size field from CAD curvature
+    printf("[netgen] step 1/4: computing local mesh size from CAD curvature (maxh=%.2f)\n", max_size);
+    fflush(stdout);
     nglib::Ng_OCC_SetLocalMeshSize(geom, mesh, &mp);
 
-    // Step 2: mesh feature edges
+    printf("[netgen] step 2/4: meshing feature edges\n");
+    fflush(stdout);
     nglib::Ng_Result res = nglib::Ng_OCC_GenerateEdgeMesh(geom, mesh, &mp);
     if (res != nglib::NG_OK) {
         nglib::Ng_DeleteMesh(mesh);
@@ -410,8 +415,11 @@ static std::string generate_fem_mesh(const std::string& opts_json)
         throw std::runtime_error(
             "Ng_OCC_GenerateEdgeMesh failed (code " + std::to_string((int)res) + ")");
     }
+    printf("[netgen] step 2/4: edge mesh done\n");
+    fflush(stdout);
 
-    // Step 3: mesh boundary surfaces
+    printf("[netgen] step 3/4: meshing boundary surfaces (optsteps_2d=%d)\n", mp.optsteps_2d);
+    fflush(stdout);
     res = nglib::Ng_OCC_GenerateSurfaceMesh(geom, mesh, &mp);
     if (res != nglib::NG_OK) {
         nglib::Ng_DeleteMesh(mesh);
@@ -419,6 +427,8 @@ static std::string generate_fem_mesh(const std::string& opts_json)
         throw std::runtime_error(
             "Ng_OCC_GenerateSurfaceMesh failed (code " + std::to_string((int)res) + ")");
     }
+    printf("[netgen] step 3/4: surface mesh done — %d surface nodes\n", nglib::Ng_GetNP(mesh));
+    fflush(stdout);
 
     // Step 4: fill volume.
     // Keep geom alive: Netgen stores OCC geometry references in the mesh during
@@ -426,10 +436,8 @@ static std::string generate_fem_mesh(const std::string& opts_json)
     // optimisation (surface node projection).  Freeing geom before this call
     // causes dangling-pointer reads that corrupt the WASM vtable (invoke_ii
     // trap with a heap address instead of a function table index).
-    // optsteps_3d=0: the optimisation re-projects nodes onto OCC surfaces; for
-    // complex geometry (many faces) this loop runs for several minutes.  The
-    // initial Delaunay mesh is already adequate quality without it.
-    mp.optsteps_3d = 0;
+    printf("[netgen] step 4/4: Delaunay volume fill (optsteps_3d=%d)\n", mp.optsteps_3d);
+    fflush(stdout);
     res = nglib::Ng_GenerateVolumeMesh(mesh, &mp);
     nglib::Ng_OCC_DeleteGeometry(geom);  // safe: volume fill complete
     if (res != nglib::NG_OK) {
@@ -440,6 +448,8 @@ static std::string generate_fem_mesh(const std::string& opts_json)
 
     int np = nglib::Ng_GetNP(mesh);
     int ne = nglib::Ng_GetNE(mesh);
+    printf("[netgen] step 4/4: volume mesh done — %d nodes, %d tetrahedra\n", np, ne);
+    fflush(stdout);
 
     std::vector<double> out_verts;
     out_verts.reserve(3 * np);

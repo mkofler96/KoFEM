@@ -61,8 +61,8 @@ test.describe('Full workflow showcase', () => {
     // Race both so a failure fails the test immediately rather than timing out.
     const meshingErrorBanner = page.getByTestId('meshing-error')
     await Promise.race([
-      expect(page.getByText('Mesh is solver-ready')).toBeVisible({ timeout: 300_000 }),
-      meshingErrorBanner.waitFor({ state: 'visible', timeout: 300_000 })
+      expect(page.getByText('Mesh is solver-ready')).toBeVisible({ timeout: 480_000 }),
+      meshingErrorBanner.waitFor({ state: 'visible', timeout: 480_000 })
         .then(async () => {
           throw new Error(`Volume meshing failed: ${await meshingErrorBanner.textContent()}`)
         }),

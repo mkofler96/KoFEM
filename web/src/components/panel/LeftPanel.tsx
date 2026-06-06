@@ -489,7 +489,10 @@ function MeshPanel() {
   const logsEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    setLogCallback((msg) => setLogs((prev) => [...prev, msg]));
+    setLogCallback((msg) => {
+      console.log('[mesh-log]', msg)
+      setLogs((prev) => [...prev, msg])
+    })
     return () => setLogCallback(null);
   }, []);
 
