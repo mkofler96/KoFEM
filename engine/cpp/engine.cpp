@@ -744,9 +744,11 @@ static std::string solve_linear_elastic(
     SparseMatrix& A_mat = *A.As<SparseMatrix>();
     GSSmoother prec(A_mat);
     CGSolver cg;
-    cg.SetRelTol(1e-8);
-    cg.SetMaxIter(3000);
-    cg.SetPrintLevel(0);
+    // Relax tolerance: 1e-6 is adequate for FEM stress analysis.
+    // Cap iterations at 500 so a poorly-conditioned mesh can't spin forever.
+    cg.SetRelTol(1e-6);
+    cg.SetMaxIter(500);
+    cg.SetPrintLevel(1);  // print final iteration count to help diagnose convergence
     cg.SetPreconditioner(prec);
     cg.SetOperator(A_mat);
     printf("[mfem] starting CG solve (%d rows)…\n", A_mat.Height()); fflush(stdout);

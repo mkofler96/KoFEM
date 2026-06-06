@@ -20,6 +20,9 @@ function createWorker(): Worker {
   w.onmessage = (e: MessageEvent) => {
     const { id, ok, log, ...rest } = e.data as { id: number; ok?: boolean; log?: string; [k: string]: unknown }
     if (log !== undefined) {
+      // Always emit to browser console so Playwright and DevTools see it
+      // regardless of which panel is active (log callback may be null).
+      console.log('[wasm]', log)
       _logCallback?.(log)
       return
     }

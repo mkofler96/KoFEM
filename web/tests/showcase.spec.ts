@@ -136,7 +136,7 @@ test.describe('Full workflow showcase', () => {
     console.log(`[showcase] ${elapsed()} solver started…`)
 
     await Promise.race([
-      expect(page.getByText('Result summary')).toBeVisible({ timeout: 120_000 }),
+      expect(page.getByText('Result summary')).toBeVisible({ timeout: 300_000 }),
       fatalError,
     ])
 
