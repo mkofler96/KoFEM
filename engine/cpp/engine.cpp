@@ -685,12 +685,20 @@ static std::string solve_linear_elastic(
         mfem_mesh.GenerateBoundaryElements();
     }
 
+    printf("[mfem] mesh ready: %d vertices, %d tets, %d hexs, %d boundary elems\n",
+           mfem_mesh.GetNV(), mfem_mesh.GetNE(), 0 /*nh counted separately*/, mfem_mesh.GetNBE());
+    fflush(stdout);
+
     order = std::max(1, order);
     double lam = E * nu / ((1.0 + nu) * (1.0 - 2.0*nu));
     double mu  = E / (2.0 * (1.0 + nu));
 
+    printf("[mfem] setting up H1 FE space (order=%d, dim=%d)…\n", order, dim);
+    fflush(stdout);
     H1_FECollection fec(order, dim);
     FiniteElementSpace fespace(&mfem_mesh, &fec, dim);
+    printf("[mfem] FE space: %d dofs\n", fespace.GetTrueVSize());
+    fflush(stdout);
 
     // Essential (Dirichlet) DOFs from fixed vertices
     Array<int> ess_tdof;
@@ -725,7 +733,9 @@ static std::string solve_linear_elastic(
     BilinearForm a(&fespace);
     ConstantCoefficient lam_c(lam), mu_c(mu);
     a.AddDomainIntegrator(new ElasticityIntegrator(lam_c, mu_c));
+    printf("[mfem] assembling stiffness matrix…\n"); fflush(stdout);
     a.Assemble();
+    printf("[mfem] assembly done\n"); fflush(stdout);
 
     OperatorPtr A;
     Vector B, X;
@@ -739,8 +749,10 @@ static std::string solve_linear_elastic(
     cg.SetPrintLevel(0);
     cg.SetPreconditioner(prec);
     cg.SetOperator(A_mat);
+    printf("[mfem] starting CG solve (%d rows)…\n", A_mat.Height()); fflush(stdout);
     cg.Mult(B, X);
     a.RecoverFEMSolution(X, b, x);
+    printf("[mfem] CG done — computing von Mises stress…\n"); fflush(stdout);
 
     int n_verts = mfem_mesh.GetNV();
     int n_elems = mfem_mesh.GetNE();
@@ -782,6 +794,10 @@ static std::string solve_linear_elastic(
             }
         von_mises[e] = std::sqrt(1.5 * vm2);
     }
+
+    printf("[mfem] solve complete: %d vertex displacements, %d element stresses\n",
+           n_verts, n_elems);
+    fflush(stdout);
 
     return "{\"displacements\":" + json_doubles(displacements) +
            ",\"von_mises\":"     + json_doubles(von_mises)     + "}";

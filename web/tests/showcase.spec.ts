@@ -22,22 +22,41 @@ test.describe('Full workflow showcase', () => {
     const t0 = Date.now()
     const elapsed = () => `+${((Date.now() - t0) / 1000).toFixed(1)}s`
 
+    // Any browser console.error or uncaught page exception fails the test immediately.
+    let _rejectOnError: ((err: Error) => void) | null = null
+    const fatalError = new Promise<never>((_, rej) => { _rejectOnError = rej })
+
     page.on('console', msg => {
-      if (msg.type() === 'error') console.error(`[showcase] browser error: ${msg.text()}`)
+      if (msg.type() === 'error') {
+        const text = msg.text()
+        console.error(`[showcase] browser error: ${text}`)
+        _rejectOnError?.(new Error(`Browser console.error: ${text}`))
+      } else {
+        console.log(`[showcase] browser ${msg.type()}: ${msg.text()}`)
+      }
     })
-    page.on('pageerror', err => console.error(`[showcase] page exception: ${err.message}`))
+    page.on('pageerror', err => {
+      console.error(`[showcase] page exception: ${err.message}`)
+      _rejectOnError?.(err)
+    })
 
     await page.goto('/')
 
     // 1. Welcome screen
-    await expect(page.getByRole('button', { name: 'Start with example' })).toBeVisible()
+    await Promise.race([
+      expect(page.getByRole('button', { name: 'Start with example' })).toBeVisible(),
+      fatalError,
+    ])
     await page.screenshot({ path: path.join(OUT_DIR, '01-select-geometry.png') })
     console.log(`[showcase] ${elapsed()} 01 screenshot done`)
 
     // Import wall bracket
     console.log(`[showcase] ${elapsed()} importing Wall Bracket.stp`)
     await page.locator('input[type="file"][accept=".stp,.step"]').setInputFiles(WALL_BRACKET)
-    await expect(page.getByText('Model geometry')).toBeVisible({ timeout: 60_000 })
+    await Promise.race([
+      expect(page.getByText('Model geometry')).toBeVisible({ timeout: 60_000 }),
+      fatalError,
+    ])
     console.log(`[showcase] ${elapsed()} tessellation done`)
 
     const stepErrorBanner = page.getByTestId('step-error')
@@ -57,8 +76,6 @@ test.describe('Full workflow showcase', () => {
     console.log(`[showcase] ${elapsed()} 03 clicking Mesh STEP volume…`)
     await page.getByRole('button').filter({ hasText: 'Mesh STEP volume' }).click()
 
-    // Wait for either success ("Mesh is solver-ready") or a visible error banner.
-    // Race both so a failure fails the test immediately rather than timing out.
     const meshingErrorBanner = page.getByTestId('meshing-error')
     await Promise.race([
       expect(page.getByText('Mesh is solver-ready')).toBeVisible({ timeout: 480_000 }),
@@ -66,6 +83,7 @@ test.describe('Full workflow showcase', () => {
         .then(async () => {
           throw new Error(`Volume meshing failed: ${await meshingErrorBanner.textContent()}`)
         }),
+      fatalError,
     ])
     console.log(`[showcase] ${elapsed()} 03 volume mesh complete`)
     await page.screenshot({ path: path.join(OUT_DIR, '03-mesh-generation.png') })
@@ -101,17 +119,26 @@ test.describe('Full workflow showcase', () => {
     })
 
     await page.locator('nav').getByRole('button').filter({ hasText: 'Constraints' }).click()
-    await expect(page.getByText('Boundary conditions')).toBeVisible()
+    await Promise.race([
+      expect(page.getByText('Boundary conditions')).toBeVisible(),
+      fatalError,
+    ])
     await page.screenshot({ path: path.join(OUT_DIR, '04-load-application.png') })
     console.log(`[showcase] ${elapsed()} 04 screenshot done`)
 
     // 5. Solve and results
     await page.locator('nav').getByRole('button').filter({ hasText: 'Solve' }).click()
-    await expect(page.getByRole('button').filter({ hasText: 'Run static solve' })).toBeEnabled()
+    await Promise.race([
+      expect(page.getByRole('button').filter({ hasText: 'Run static solve' })).toBeEnabled(),
+      fatalError,
+    ])
     await page.getByRole('button').filter({ hasText: 'Run static solve' }).click()
     console.log(`[showcase] ${elapsed()} solver started…`)
 
-    await expect(page.getByText('Result summary')).toBeVisible({ timeout: 120_000 })
+    await Promise.race([
+      expect(page.getByText('Result summary')).toBeVisible({ timeout: 120_000 }),
+      fatalError,
+    ])
 
     await page.screenshot({ path: path.join(OUT_DIR, '05-results.png') })
     console.log(`[showcase] ${elapsed()} 05 screenshot done`)
