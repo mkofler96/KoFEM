@@ -140,12 +140,14 @@ target_link_libraries(kofem_wasm_emcc PRIVATE
     # TKXCAF   → XCAFDoc_* (Extended CAF, DataExchange module)
     # TKService → Graphic3d_* (needed by XCAFPrs_Texture, XCAFDoc_VisMaterial in TKXCAF)
     # TKV3d    → AIS_*, SelectMgr_*, Prs3d_* (needed by XCAFPrs_AISObject in TKXCAF)
+    # TKHLR    → HLRBRep_*/HLRAlgo_* (needed by StdPrs_HLR* in TKV3d)
     TKCDF
     TKLCAF
     TKCAF
     TKXCAF
     TKService
     TKV3d
+    TKHLR
 
     nglib
     ngcore
