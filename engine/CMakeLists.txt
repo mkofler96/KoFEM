@@ -138,16 +138,31 @@ target_link_libraries(kofem_wasm_emcc PRIVATE
     # TKLCAF   → TDF_Label, TDocStd (Labeled Application Framework)
     # TKCAF    → TNaming_Builder/Tool/NamedShape, TDataXtd (used by XCAFDoc_ShapeTool)
     # TKXCAF   → XCAFDoc_* (Extended CAF, DataExchange module)
-    # TKService → Graphic3d_* (needed by XCAFPrs_Texture, XCAFDoc_VisMaterial in TKXCAF)
-    # TKV3d    → AIS_*, SelectMgr_*, Prs3d_* (needed by XCAFPrs_AISObject in TKXCAF)
-    # TKHLR    → HLRBRep_*/HLRAlgo_* (needed by StdPrs_HLR* in TKV3d)
+    # The following are transitively required because TKDESTEP (symlinked as TKSTEP)
+    # pulls in TKXCAF, which bundles XCAFPrs (visualization) alongside XCAFDoc.
+    # That cascades through the entire OCCT vis stack even though the engine
+    # never uses any AIS/rendering code.
+    #
+    # TKCDF    → CDM_Document/CDM_Application
+    # TKLCAF   → TDF_Label, TDocStd
+    # TKCAF    → TNaming_*, TDataXtd_*
+    # TKXCAF   → XCAFDoc_*, XCAFPrs_*
+    # TKVCAF   → TPrsStd_Driver/DriverTable (visual OCAF, initialised by XCAFApp)
+    # TKService → Graphic3d_* (XCAFPrs_Texture, XCAFDoc_VisMaterial)
+    # TKV3d    → AIS_*, SelectMgr_*, Prs3d_* (XCAFPrs_AISObject)
+    # TKHLR    → HLRBRep_*/HLRAlgo_* (StdPrs_HLR* in TKV3d)
+    # TKIGES   → IGESControl_Writer (Netgen occgeom.cpp)
+    # TKSTL    → StlAPI_Writer (Netgen occgeom.cpp)
     TKCDF
     TKLCAF
     TKCAF
     TKXCAF
+    TKVCAF
     TKService
     TKV3d
     TKHLR
+    TKIGES
+    TKSTL
 
     nglib
     ngcore
