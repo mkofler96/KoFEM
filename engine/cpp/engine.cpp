@@ -597,6 +597,59 @@ static std::string generate_volume_mesh(
            ",\"tetrahedra\":" + json_ivec4(out_tets) + "}";
 }
 
+// ── MFEM element-type keepalive ───────────────────────────────────────────────
+//
+// Emscripten dead-code elimination can strip inline virtual-method overrides
+// from the WASM indirect-function table even when the class is instantiated,
+// because the override is defined in the header (weak symbol) and is never
+// referenced by a direct (non-virtual) call site.  The table entry then ends
+// up as index 0 (null), and the first virtual dispatch on a Tetrahedron or
+// Triangle element traps with "RuntimeError: null function".
+//
+// The pattern below makes a DIRECT (statically dispatched) call to each
+// virtual method we need.  When the concrete type is known at the call site
+// (plain local, not pointer/reference), the compiler devirtualises the call
+// and emits a direct instruction.  The linker must include the function body
+// to satisfy the call, and — crucially — the vtable referencing that function
+// forces its function-table index to be correctly populated for virtual
+// dispatch.
+//
+// `volatile` on the return value prevents the optimiser from eliding the call.
+// `__attribute__((used))` on the wrapper prevents the wrapper itself from
+// being dead-code-eliminated before it can anchor the callees.
+__attribute__((used))
+static void _kofem_mfem_element_keepalive() {
+    using namespace mfem;
+    {
+        int vi[4] = {0,1,2,3};
+        Tetrahedron t(vi, 1);
+        volatile int g = t.GetGeometryType();   // direct call → keeps vtable entry live
+        volatile int n = t.GetNVertices();
+        (void)g; (void)n;
+    }
+    {
+        int vi[3] = {0,1,2};
+        Triangle tri(vi, 1);
+        volatile int g = tri.GetGeometryType();
+        volatile int n = tri.GetNVertices();
+        (void)g; (void)n;
+    }
+    {
+        int vi[8] = {0,1,2,3,4,5,6,7};
+        Hexahedron hex(vi, 1);
+        volatile int g = hex.GetGeometryType();
+        volatile int n = hex.GetNVertices();
+        (void)g; (void)n;
+    }
+    {
+        int vi[4] = {0,1,2,3};
+        Quadrilateral quad(vi, 1);
+        volatile int g = quad.GetGeometryType();
+        volatile int n = quad.GetNVertices();
+        (void)g; (void)n;
+    }
+}
+
 // ── MFEM: linear-elastic FEM solve ────────────────────────────────────────────
 
 static std::string solve_linear_elastic(
@@ -606,6 +659,10 @@ static std::string solve_linear_elastic(
     int order)
 {
     using namespace mfem;
+
+    // Anchor MFEM element virtual methods in the WASM function table.
+    // See _kofem_mfem_element_keepalive for why this is needed.
+    _kofem_mfem_element_keepalive();
 
     printf("[mfem] solve_linear_elastic: parsing inputs\n"); fflush(stdout);
     val mesh_js = parse_json(mesh_json);
