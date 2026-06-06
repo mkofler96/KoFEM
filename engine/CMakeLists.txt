@@ -154,6 +154,8 @@ target_link_libraries(kofem_wasm_emcc PRIVATE
     # TKDE     → DataExchange base framework (OCCT 7.8+)
     # TKDEIGES → IGESControl_Writer (Netgen occgeom.cpp; replaces TKIGES in 7.8)
     # TKDESTL  → StlAPI_Writer     (Netgen occgeom.cpp; replaces TKSTL  in 7.8)
+    # TKPrim   → BRepPrimAPI_MakeRevol/MakePrism, BRepSweep_* (IGESToBRep_TopoSurface)
+    # TKOffset → BRepFill::Face/Shell (IGESToBRep_TopoSurface)
     TKCDF
     TKLCAF
     TKCAF
@@ -165,6 +167,8 @@ target_link_libraries(kofem_wasm_emcc PRIVATE
     TKDE
     TKDEIGES
     TKDESTL
+    TKPrim
+    TKOffset
 
     nglib
     ngcore
