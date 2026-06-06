@@ -718,6 +718,7 @@ function ConstraintsPanel() {
   const setPickMode = useModelStore((s) => s.setPickMode);
   const selectedFace = useModelStore((s) => s.selectedFace);
   const setSelectedFace = useModelStore((s) => s.setSelectedFace);
+  const pendingFaces = useModelStore((s) => s.pendingFaces);
   const createBcGroup = useModelStore((s) => s.createBcGroup);
   const addFaceToBcGroup = useModelStore((s) => s.addFaceToBcGroup);
   const removeFaceFromBcGroup = useModelStore((s) => s.removeFaceFromBcGroup);
@@ -738,33 +739,42 @@ function ConstraintsPanel() {
   const targetBcGroup = pickTargetGroupId !== null ? bcGroups.find(g => g.id === pickTargetGroupId) ?? null : null;
   const targetLoadGroup = pickTargetGroupId !== null ? loadGroups.find(g => g.id === pickTargetGroupId) ?? null : null;
 
+  // All faces picked in this session: pending (shift-clicked) + the current selection.
+  const allPickedFaces = selectedFace ? [...pendingFaces, selectedFace] : pendingFaces;
+
   function cancelPick() {
     setPickMode(null);
     setSelectedFace(null);
   }
 
   function applyBc() {
-    if (!selectedFace) return;
-    const faceLabel = `Face ${(targetBcGroup?.faces.length ?? 0) + 1}`;
-    const face = { label: faceLabel, nodeIds: selectedFace.nodeIds };
+    if (allPickedFaces.length === 0) return;
+    const existingCount = targetBcGroup?.faces.length ?? 0;
+    const faceEntries = allPickedFaces.map((f, i) => ({
+      label: `Face ${existingCount + i + 1}`,
+      nodeIds: f.nodeIds,
+    }));
     if (targetBcGroup) {
-      addFaceToBcGroup(targetBcGroup.id, face);
+      for (const fe of faceEntries) addFaceToBcGroup(targetBcGroup.id, fe);
     } else {
       const dofs = checkedDofs.map((c, i) => (c ? i : -1)).filter((i) => i >= 0);
-      createBcGroup(face, dofs, parseFloat(bcValue) || 0);
+      createBcGroup(faceEntries, dofs, parseFloat(bcValue) || 0);
     }
     setPickMode(null);
     setSelectedFace(null);
   }
 
   function applyLoad() {
-    if (!selectedFace) return;
-    const faceLabel = `Face ${(targetLoadGroup?.faces.length ?? 0) + 1}`;
-    const face = { label: faceLabel, nodeIds: selectedFace.nodeIds };
+    if (allPickedFaces.length === 0) return;
+    const existingCount = targetLoadGroup?.faces.length ?? 0;
+    const faceEntries = allPickedFaces.map((f, i) => ({
+      label: `Face ${existingCount + i + 1}`,
+      nodeIds: f.nodeIds,
+    }));
     if (targetLoadGroup) {
-      addFaceToLoadGroup(targetLoadGroup.id, face);
+      for (const fe of faceEntries) addFaceToLoadGroup(targetLoadGroup.id, fe);
     } else {
-      createLoadGroup(face, loadDof, parseFloat(loadForce) || 0);
+      createLoadGroup(faceEntries, loadDof, parseFloat(loadForce) || 0);
     }
     setPickMode(null);
     setSelectedFace(null);
@@ -799,13 +809,20 @@ function ConstraintsPanel() {
               <button className={styles.iconBtn} onClick={cancelPick} title="Cancel">✕</button>
             </div>
 
-            {!selectedFace ? (
+            {allPickedFaces.length === 0 ? (
               <div className={styles.pickHint}>Click a face in the 3D viewport</div>
             ) : (
-              <div className={styles.selectedFace}>{selectedFace.label}</div>
+              <div className={styles.selectedFace}>
+                {allPickedFaces.length === 1
+                  ? selectedFace?.label
+                  : `${allPickedFaces.length} faces selected`}
+              </div>
+            )}
+            {allPickedFaces.length > 0 && (
+              <div className={styles.pickHint}>Shift-click to add more faces</div>
             )}
 
-            {selectedFace && !targetBcGroup && (
+            {allPickedFaces.length > 0 && !targetBcGroup && (
               <>
                 <div className={styles.dofGrid}>
                   {DOF_LABELS.map((d, i) => (
@@ -833,8 +850,10 @@ function ConstraintsPanel() {
               </>
             )}
 
-            {selectedFace && targetBcGroup && (
-              <button className={styles.primaryBtn} onClick={applyBc}>Add Face</button>
+            {allPickedFaces.length > 0 && targetBcGroup && (
+              <button className={styles.primaryBtn} onClick={applyBc}>
+                {allPickedFaces.length === 1 ? "Add Face" : `Add ${allPickedFaces.length} Faces`}
+              </button>
             )}
           </div>
         )}
@@ -896,13 +915,20 @@ function ConstraintsPanel() {
               <button className={styles.iconBtn} onClick={cancelPick} title="Cancel">✕</button>
             </div>
 
-            {!selectedFace ? (
+            {allPickedFaces.length === 0 ? (
               <div className={styles.pickHint}>Click a face in the 3D viewport</div>
             ) : (
-              <div className={styles.selectedFace}>{selectedFace.label}</div>
+              <div className={styles.selectedFace}>
+                {allPickedFaces.length === 1
+                  ? selectedFace?.label
+                  : `${allPickedFaces.length} faces selected`}
+              </div>
+            )}
+            {allPickedFaces.length > 0 && (
+              <div className={styles.pickHint}>Shift-click to add more faces</div>
             )}
 
-            {selectedFace && !targetLoadGroup && (
+            {allPickedFaces.length > 0 && !targetLoadGroup && (
               <>
                 <div className={styles.formRow}>
                   <span className={styles.formLabel}>DOF</span>
@@ -927,15 +953,17 @@ function ConstraintsPanel() {
                   />
                 </div>
                 <div className={styles.pickNote}>
-                  {selectedFace.nodeIds.length} nodes →{" "}
-                  {(parseFloat(loadForce) / selectedFace.nodeIds.length).toFixed(1)} N/node
+                  {allPickedFaces.reduce((s, f) => s + f.nodeIds.length, 0)} nodes →{" "}
+                  {(parseFloat(loadForce) / allPickedFaces.reduce((s, f) => s + f.nodeIds.length, 0)).toFixed(1)} N/node
                 </div>
                 <button className={styles.loadBtn} onClick={applyLoad}>Apply Load</button>
               </>
             )}
 
-            {selectedFace && targetLoadGroup && (
-              <button className={styles.loadBtn} onClick={applyLoad}>Add Face</button>
+            {allPickedFaces.length > 0 && targetLoadGroup && (
+              <button className={styles.loadBtn} onClick={applyLoad}>
+                {allPickedFaces.length === 1 ? "Add Face" : `Add ${allPickedFaces.length} Faces`}
+              </button>
             )}
           </div>
         )}
