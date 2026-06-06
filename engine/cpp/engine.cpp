@@ -413,15 +413,20 @@ static std::string generate_fem_mesh(const std::string& opts_json)
 
     // Step 3: mesh boundary surfaces
     res = nglib::Ng_OCC_GenerateSurfaceMesh(geom, mesh, &mp);
-    nglib::Ng_OCC_DeleteGeometry(geom);
     if (res != nglib::NG_OK) {
         nglib::Ng_DeleteMesh(mesh);
+        nglib::Ng_OCC_DeleteGeometry(geom);
         throw std::runtime_error(
             "Ng_OCC_GenerateSurfaceMesh failed (code " + std::to_string((int)res) + ")");
     }
 
-    // Step 4: fill volume
+    // Step 4: fill volume.  Defer geometry deletion until after volume meshing:
+    // Netgen stores OCC geometry references inside the mesh object for surface
+    // node snapping during optimisation.  Deleting geom before this call leaves
+    // those references dangling and corrupts the heap (manifests as a WASM
+    // indirect-function-table out-of-bounds trap inside invoke_ii).
     res = nglib::Ng_GenerateVolumeMesh(mesh, &mp);
+    nglib::Ng_OCC_DeleteGeometry(geom);   // safe now — volume mesh is complete
     if (res != nglib::NG_OK) {
         nglib::Ng_DeleteMesh(mesh);
         throw std::runtime_error(
