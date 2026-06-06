@@ -101,8 +101,8 @@ test.describe('Full workflow showcase', () => {
         __kofemStore: {
           getState(): {
             nodes: CoordNode[]
-            createBcGroup(face: FaceEntry, dofs: number[], val: number): void
-            createLoadGroup(face: FaceEntry, dof: number, force: number): void
+            createBcGroup(faces: FaceEntry[], dofs: number[], val: number): void
+            createLoadGroup(faces: FaceEntry[], dof: number, force: number): void
           }
         }
       }).__kofemStore
@@ -117,8 +117,8 @@ test.describe('Full workflow showcase', () => {
       const tol = (max - min) * 0.01
       const fixedIds = nodes.filter(n => n[ax] < min + tol).map(n => n.id)
       const loadedIds = nodes.filter(n => n[ax] > max - tol).map(n => n.id)
-      store.getState().createBcGroup({ label: 'Face 1', nodeIds: fixedIds }, [0, 1, 2], 0)
-      store.getState().createLoadGroup({ label: 'Face 1', nodeIds: loadedIds }, 1, -2000)
+      store.getState().createBcGroup([{ label: 'Face 1', nodeIds: fixedIds }], [0, 1, 2], 0)
+      store.getState().createLoadGroup([{ label: 'Face 1', nodeIds: loadedIds }], 1, -2000)
     })
 
     await page.locator('nav').getByRole('button').filter({ hasText: 'Constraints' }).click()
