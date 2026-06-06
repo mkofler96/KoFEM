@@ -1015,7 +1015,10 @@ function SolvePanel() {
         setResult({ displacements: new Float64Array(displacements) });
         setMode("results");
       })
-      .catch((err) => setError(`Solver error: ${err.message}`))
+      .catch((err) => {
+        console.error('[solve] solver failed:', err.message)
+        setError(`Solver error: ${err.message}`)
+      })
       .finally(() => setRunning(false));
   }
 

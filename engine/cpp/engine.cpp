@@ -607,6 +607,7 @@ static std::string solve_linear_elastic(
 {
     using namespace mfem;
 
+    printf("[mfem] solve_linear_elastic: parsing inputs\n"); fflush(stdout);
     val mesh_js = parse_json(mesh_json);
     val mat_js  = parse_json(mat_json);
     val bcs_js  = parse_json(bcs_json);
@@ -618,10 +619,13 @@ static std::string solve_linear_elastic(
     unsigned nt  = tets_js ["length"].as<unsigned>();
     unsigned nh  = hexs_js ["length"].as<unsigned>();
 
+    printf("[mfem] mesh counts: nv=%u nt=%u nh=%u\n", nv, nt, nh); fflush(stdout);
+
     if (nt == 0 && nh == 0)
         throw std::runtime_error(
             "Mesh has no elements. Send at least one CTETRA or CHEXA element.");
 
+    printf("[mfem] extracting %u vertices\n", nv); fflush(stdout);
     std::vector<double> vertices;
     vertices.reserve(3 * nv);
     for (unsigned i = 0; i < nv; ++i) {
@@ -631,6 +635,7 @@ static std::string solve_linear_elastic(
         vertices.push_back(v[2].as<double>());
     }
 
+    printf("[mfem] extracting %u tets\n", nt); fflush(stdout);
     std::vector<int> tets;
     tets.reserve(4 * nt);
     for (unsigned i = 0; i < nt; ++i) {
@@ -641,6 +646,7 @@ static std::string solve_linear_elastic(
         tets.push_back(t[3].as<int>());
     }
 
+    printf("[mfem] extracting %u hexs\n", nh); fflush(stdout);
     std::vector<int> hexs;
     hexs.reserve(8 * nh);
     for (unsigned i = 0; i < nh; ++i) {
@@ -658,32 +664,48 @@ static std::string solve_linear_elastic(
     val loads_js  = bcs_js["point_loads"];
     unsigned n_loads = loads_js["length"].as<unsigned>();
 
-    // Build MFEM mesh — supports pure-tet, pure-hex, or mixed meshes
+    printf("[mfem] BCs: %u fixed vertices, %u point loads\n", n_fixed, n_loads); fflush(stdout);
+
+    // Build MFEM mesh — write to MFEM native format and read back.
+    // This uses MFEM's well-tested file reader rather than the incremental API
+    // (AddTet + FinalizeTetMesh), which has virtual-dispatch issues in the
+    // WASM build when the mesh has many tetrahedra.
+    //
+    // MFEM mesh v1.0 format: 1-indexed vertices, element type 4=tet 5=hex.
+    // Boundary section: 0 entries (MFEM generates them automatically from the
+    // element connectivity, which is correct for a watertight volume mesh).
+    printf("[mfem] writing mesh file (%u verts, %u tets, %u hexs)\n", nv, nt, nh); fflush(stdout);
+    char mesh_tmppath[] = "/tmp/kofem_solve_XXXXXX.mesh";
+    {
+        int fd = mkstemps(mesh_tmppath, 5);
+        if (fd < 0) throw std::runtime_error("solve_linear_elastic: cannot create temp mesh file");
+        FILE* f = fdopen(fd, "w");
+        if (!f) { close(fd); unlink(mesh_tmppath);
+                  throw std::runtime_error("solve_linear_elastic: fdopen failed"); }
+
+        // MFEM mesh v1.0 uses 0-based vertex indices.
+        fprintf(f, "MFEM mesh v1.0\n\ndimension\n3\n\nelements\n%u\n", nt + nh);
+        for (unsigned i = 0; i < nt; ++i)
+            fprintf(f, "1 4 %d %d %d %d\n",
+                    tets[4*i], tets[4*i+1], tets[4*i+2], tets[4*i+3]);
+        for (unsigned i = 0; i < nh; ++i)
+            fprintf(f, "1 5 %d %d %d %d %d %d %d %d\n",
+                    hexs[8*i], hexs[8*i+1], hexs[8*i+2], hexs[8*i+3],
+                    hexs[8*i+4], hexs[8*i+5], hexs[8*i+6], hexs[8*i+7]);
+
+        fprintf(f, "\nboundary\n0\n\nvertices\n%u\n3\n", nv);
+        for (unsigned i = 0; i < nv; ++i)
+            fprintf(f, "%.17g %.17g %.17g\n",
+                    vertices[3*i], vertices[3*i+1], vertices[3*i+2]);
+        fclose(f);
+    }
+    printf("[mfem] reading mesh file\n"); fflush(stdout);
+    // gen_edges=1 so MFEM builds the edge table (needed for FE space connectivity).
+    // refine=0 so mesh is used as-is without any red-refinement.
+    // fix_orientation=true so degenerate/inverted tets are corrected.
     constexpr int dim = 3;
-    Mesh mfem_mesh(dim, (int)nv, (int)(nt + nh), 0, dim);
-    for (unsigned i = 0; i < nv; ++i)
-        mfem_mesh.AddVertex(vertices.data() + 3*i);
-    for (unsigned i = 0; i < nt; ++i) {
-        int vi[4] = { tets[4*i], tets[4*i+1], tets[4*i+2], tets[4*i+3] };
-        mfem_mesh.AddTet(vi, /*attr=*/1);
-    }
-    for (unsigned i = 0; i < nh; ++i) {
-        int vi[8];
-        for (int k = 0; k < 8; ++k) vi[k] = hexs[8*i + k];
-        mfem_mesh.AddHex(vi, /*attr=*/1);
-    }
-    // FinalizeHexMesh / FinalizeTetMesh both call GenerateBoundaryElements()
-    // internally.  Finalize() (the general method) does not — so for mixed
-    // meshes we call it explicitly afterwards.  Without boundary elements,
-    // MFEM's FE space setup aborts.
-    if (nh == 0)
-        mfem_mesh.FinalizeTetMesh(/*gen_edges=*/1, /*refine=*/0, /*fix_orient=*/true);
-    else if (nt == 0)
-        mfem_mesh.FinalizeHexMesh(/*gen_edges=*/1, /*refine=*/0, /*fix_orient=*/true);
-    else {
-        mfem_mesh.Finalize(/*refine=*/0, /*fix_orientation=*/1);
-        mfem_mesh.GenerateBoundaryElements();
-    }
+    Mesh mfem_mesh(mesh_tmppath, /*gen_edges=*/1, /*refine=*/0, /*fix_orient=*/true);
+    unlink(mesh_tmppath);
 
     printf("[mfem] mesh ready: %d vertices, %d tets, %d hexs, %d boundary elems\n",
            mfem_mesh.GetNV(), mfem_mesh.GetNE(), 0 /*nh counted separately*/, mfem_mesh.GetNBE());
