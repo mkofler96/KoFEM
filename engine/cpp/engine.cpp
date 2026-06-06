@@ -687,6 +687,35 @@ static void _kofem_mfem_element_keepalive() {
         volatile int n = quad.GetNVertices();
         (void)g; (void)n;
     }
+
+    // ElementTransformation::SetIntPoint is inline virtual in eltrans.hpp:
+    //   virtual void SetIntPoint(const IntegrationPoint *ip) { IntPoint = ip; Wght = 0.; }
+    // It is called as T->SetIntPoint(&ir.IntPoint(0)) in the von Mises stress loop.
+    // Emscripten DCE removes the body (no direct call site exists) → vtable slot becomes
+    // null → invoke_vii trap at runtime.  A direct call on a concrete local instance
+    // devirtualises and anchors the body.
+    {
+        IsoparametricTransformation tr;
+        IntegrationPoint ip;
+        ip.x = 0.25; ip.y = 0.25; ip.z = 0.25; ip.weight = 1.0;
+        tr.SetIntPoint(&ip);  // devirtualised → anchors ElementTransformation::SetIntPoint
+        volatile const IntegrationPoint* pp = tr.GetIntPoint();
+        (void)pp;
+    }
+
+    // H1_TetrahedronElement::CalcShape and CalcDShape are the concrete FiniteElement
+    // virtuals called inside GridFunction::GetVectorGradient.  Anchor them too.
+    {
+        H1_TetrahedronElement h1tet(1);
+        IntegrationPoint ip;
+        ip.x = 0.25; ip.y = 0.25; ip.z = 0.25; ip.weight = 1.0;
+        Vector shape(h1tet.GetDof());
+        h1tet.CalcShape(ip, shape);         // devirtualised → anchors CalcShape vtable entry
+        DenseMatrix dshape(h1tet.GetDof(), 3);
+        h1tet.CalcDShape(ip, dshape);       // devirtualised → anchors CalcDShape vtable entry
+        volatile int dof = h1tet.GetDof();
+        (void)dof;
+    }
 }
 
 // ── MFEM: linear-elastic FEM solve ────────────────────────────────────────────
