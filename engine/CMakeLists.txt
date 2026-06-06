@@ -134,14 +134,16 @@ target_link_libraries(kofem_wasm_emcc PRIVATE
     TKSTEPBase
 
     # XCAF/CAF/CDF libraries required by TKDESTEP (OCCT 7.8+).
-    # TKCDF  → CDM_Document/CDM_Application (CDF framework)
-    # TKLCAF → TDF_Label, TDocStd (Labeled Application Framework)
-    # TKCAF  → TNaming_Builder/Tool/NamedShape, TDataXtd (used by XCAFDoc_ShapeTool)
-    # TKXCAF → XCAFDoc_* (Extended CAF, DataExchange module)
+    # TKCDF    → CDM_Document/CDM_Application (CDF framework)
+    # TKLCAF   → TDF_Label, TDocStd (Labeled Application Framework)
+    # TKCAF    → TNaming_Builder/Tool/NamedShape, TDataXtd (used by XCAFDoc_ShapeTool)
+    # TKXCAF   → XCAFDoc_* (Extended CAF, DataExchange module)
+    # TKService → Graphic3d_* (needed by XCAFPrs_Texture, XCAFDoc_VisMaterial in TKXCAF)
     TKCDF
     TKLCAF
     TKCAF
     TKXCAF
+    TKService
 
     nglib
     ngcore
