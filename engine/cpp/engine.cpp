@@ -372,7 +372,10 @@ static std::string generate_fem_mesh(const std::string& opts_json)
     nglib::Ng_Meshing_Parameters mp;
     mp.uselocalh                  = 1;
     mp.maxh                       = max_size;
-    mp.minh                       = min_size;
+    // Floor minh at 5 % of maxh: with minh=0 Netgen generates arbitrarily tiny
+    // elements at high-curvature CAD features, which can make volume meshing
+    // take minutes or longer for complex geometry.
+    mp.minh                       = (min_size > 0.0) ? min_size : max_size * 0.05;
     mp.fineness                   = 0.5;
     mp.grading                    = grading;
     mp.elementsperedge            = elems_per_edge;
@@ -413,20 +416,22 @@ static std::string generate_fem_mesh(const std::string& opts_json)
 
     // Step 3: mesh boundary surfaces
     res = nglib::Ng_OCC_GenerateSurfaceMesh(geom, mesh, &mp);
+    nglib::Ng_OCC_DeleteGeometry(geom);
     if (res != nglib::NG_OK) {
         nglib::Ng_DeleteMesh(mesh);
-        nglib::Ng_OCC_DeleteGeometry(geom);
         throw std::runtime_error(
             "Ng_OCC_GenerateSurfaceMesh failed (code " + std::to_string((int)res) + ")");
     }
 
-    // Step 4: fill volume.  Defer geometry deletion until after volume meshing:
-    // Netgen stores OCC geometry references inside the mesh object for surface
-    // node snapping during optimisation.  Deleting geom before this call leaves
-    // those references dangling and corrupts the heap (manifests as a WASM
-    // indirect-function-table out-of-bounds trap inside invoke_ii).
+    // Step 4: fill volume.
+    // Volume optimisation (optsteps_3d > 0) tries to project surface nodes onto
+    // the OCC geometry via references stored in the mesh during step 3.  The geom
+    // object was freed above, so any such access would dereference a dangling
+    // pointer and corrupt the WASM heap (vtable trap inside invoke_ii).  Forcing
+    // optsteps_3d = 0 skips the optimiser entirely: the initial Delaunay
+    // insertion is safe because it only reads the surface mesh, not OCC topology.
+    mp.optsteps_3d = 0;
     res = nglib::Ng_GenerateVolumeMesh(mesh, &mp);
-    nglib::Ng_OCC_DeleteGeometry(geom);   // safe now — volume mesh is complete
     if (res != nglib::NG_OK) {
         nglib::Ng_DeleteMesh(mesh);
         throw std::runtime_error(

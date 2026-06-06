@@ -508,6 +508,7 @@ function MeshPanel() {
       }>("volume_mesh", { surface: stepSurface, maxElementSize });
       applyMeshResult(n, e, "STEP Volume Mesh");
     } catch (err) {
+      console.error('[meshing] volume mesh failed:', err)
       setError(`Volume meshing failed: ${err}`);
     } finally {
       setMeshing(false);

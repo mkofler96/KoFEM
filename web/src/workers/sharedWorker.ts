@@ -26,11 +26,17 @@ function createWorker(): Worker {
     const p = _pending.get(id)
     if (!p) return
     _pending.delete(id)
-    if (ok) p.resolve(rest)
-    else p.reject(new Error((rest.error as string | undefined) ?? 'Worker error'))
+    if (ok) {
+      p.resolve(rest)
+    } else {
+      const msg = (rest.error as string | undefined) ?? 'Worker error'
+      console.error('[worker] task failed:', msg)
+      p.reject(new Error(msg))
+    }
   }
 
   w.onerror = (e: ErrorEvent) => {
+    console.error('[worker] crashed:', e.message, e)
     const err = new Error(e.message ?? 'Worker crashed')
     for (const p of _pending.values()) p.reject(err)
     _pending.clear()

@@ -172,6 +172,7 @@ self.onmessage = async (event: MessageEvent) => {
     const detail = err instanceof Error
       ? `${err.name}: ${err.message}\n${err.stack ?? ''}`
       : String(err)
+    console.error(`[solver.worker] ${type} failed:`, detail)
     self.postMessage({ id, ok: false, error: detail })
   }
 }
