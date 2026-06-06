@@ -33,5 +33,6 @@ function m() {
 export const tessellate_step      = (...a) => m().tessellate_step(...a)
 export const generate_volume_mesh = (...a) => m().generate_volume_mesh(...a)
 export const generate_fem_mesh    = (...a) => m().generate_fem_mesh(...a)
+export const free_geometry_cache  = ()     => m().free_geometry_cache()
 export const solve_linear_elastic = (...a) => m().solve_linear_elastic(...a)
 export const step_to_fem_result   = (...a) => m().step_to_fem_result(...a)

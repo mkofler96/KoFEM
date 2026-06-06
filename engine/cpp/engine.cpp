@@ -37,13 +37,29 @@
 #include <array>
 #include <cmath>
 #include <cstring>
+#include <malloc.h>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <unistd.h>
 #include <vector>
 
+#include <emscripten.h>
+
 using emscripten::val;
+
+// ── Memory diagnostics ────────────────────────────────────────────────────────
+// Reports total WASM linear-memory size (grows with ALLOW_MEMORY_GROWTH) and
+// the approximate amount of that memory currently in-use by malloc.
+static void log_mem(const char* label) {
+    struct mallinfo mi = mallinfo();
+    // HEAP8.length == current WASM linear-memory size in bytes.
+    int wasm_mb = EM_ASM_INT({ return HEAP8.length >> 20; });
+    // uordblks is bytes allocated by malloc (does not include mmap'd regions).
+    int used_mb = (int)((unsigned)mi.uordblks >> 20);
+    printf("[mem] %-44s  wasm=%d MB  alloc~%d MB\n", label, wasm_mb, used_mb);
+    fflush(stdout);
+}
 
 // ── Minimal JSON output helpers ───────────────────────────────────────────────
 // We build JSON manually to avoid a third-party parser dependency.  The output
@@ -125,6 +141,19 @@ static bool jbool(const val& o, const char* k, bool def) {
 static TopoDS_Shape              g_step_shape;
 static bool                      g_has_step_shape = false;
 static std::vector<uint8_t>      g_step_bytes;
+
+// Release OCCT shape + STEP byte cache.  Call this from JS after meshing is
+// done so the memory is available for the MFEM solve.
+static void free_geometry_cache() {
+    log_mem("free_geometry_cache: before");
+    BRepTools::Clean(g_step_shape);  // detach BRepMesh triangulations from faces
+    g_step_shape     = TopoDS_Shape();
+    g_has_step_shape = false;
+    std::vector<uint8_t>().swap(g_step_bytes);  // swap-with-empty releases capacity
+    printf("[kofem] geometry cache freed\n");
+    fflush(stdout);
+    log_mem("free_geometry_cache: after");
+}
 
 static std::string tessellate_step(val bytes_val, const std::string& opts_json) {
     val opts = parse_json(opts_json);
@@ -364,10 +393,12 @@ static std::string generate_fem_mesh(const std::string& opts_json)
         fclose(f);
     }
 
+    log_mem("generate_fem_mesh: before Ng_OCC_Load_STEP");
     nglib::Ng_OCC_Geometry* geom = nglib::Ng_OCC_Load_STEP(steppath);
     unlink(steppath);
     if (!geom)
         throw std::runtime_error("Ng_OCC_Load_STEP failed — check STEP geometry validity");
+    log_mem("generate_fem_mesh: after Ng_OCC_Load_STEP");
 
     nglib::Ng_Meshing_Parameters mp;
     mp.uselocalh                  = 1;
@@ -404,10 +435,12 @@ static std::string generate_fem_mesh(const std::string& opts_json)
 
     printf("[netgen] step 1/4: computing local mesh size from CAD curvature (maxh=%.2f)\n", max_size);
     fflush(stdout);
+    log_mem("generate_fem_mesh: step 1 SetLocalMeshSize");
     nglib::Ng_OCC_SetLocalMeshSize(geom, mesh, &mp);
 
     printf("[netgen] step 2/4: meshing feature edges\n");
     fflush(stdout);
+    log_mem("generate_fem_mesh: step 2 GenerateEdgeMesh");
     nglib::Ng_Result res = nglib::Ng_OCC_GenerateEdgeMesh(geom, mesh, &mp);
     if (res != nglib::NG_OK) {
         nglib::Ng_DeleteMesh(mesh);
@@ -417,9 +450,11 @@ static std::string generate_fem_mesh(const std::string& opts_json)
     }
     printf("[netgen] step 2/4: edge mesh done\n");
     fflush(stdout);
+    log_mem("generate_fem_mesh: step 2 done");
 
     printf("[netgen] step 3/4: meshing boundary surfaces (optsteps_2d=%d)\n", mp.optsteps_2d);
     fflush(stdout);
+    log_mem("generate_fem_mesh: step 3 GenerateSurfaceMesh");
     res = nglib::Ng_OCC_GenerateSurfaceMesh(geom, mesh, &mp);
     if (res != nglib::NG_OK) {
         nglib::Ng_DeleteMesh(mesh);
@@ -429,6 +464,7 @@ static std::string generate_fem_mesh(const std::string& opts_json)
     }
     printf("[netgen] step 3/4: surface mesh done — %d surface nodes\n", nglib::Ng_GetNP(mesh));
     fflush(stdout);
+    log_mem("generate_fem_mesh: step 3 done");
 
     // Step 4: fill volume.
     // Keep geom alive: Netgen stores OCC geometry references in the mesh during
@@ -438,6 +474,7 @@ static std::string generate_fem_mesh(const std::string& opts_json)
     // trap with a heap address instead of a function table index).
     printf("[netgen] step 4/4: Delaunay volume fill (optsteps_3d=%d)\n", mp.optsteps_3d);
     fflush(stdout);
+    log_mem("generate_fem_mesh: step 4 GenerateVolumeMesh");
     res = nglib::Ng_GenerateVolumeMesh(mesh, &mp);
     nglib::Ng_OCC_DeleteGeometry(geom);  // safe: volume fill complete
     if (res != nglib::NG_OK) {
@@ -445,6 +482,7 @@ static std::string generate_fem_mesh(const std::string& opts_json)
         throw std::runtime_error(
             "Ng_GenerateVolumeMesh failed (code " + std::to_string((int)res) + ")");
     }
+    log_mem("generate_fem_mesh: step 4 done");
 
     int np = nglib::Ng_GetNP(mesh);
     int ne = nglib::Ng_GetNE(mesh);
@@ -473,6 +511,7 @@ static std::string generate_fem_mesh(const std::string& opts_json)
     }
 
     nglib::Ng_DeleteMesh(mesh);
+    log_mem("generate_fem_mesh: after Ng_DeleteMesh");
 
     return "{\"vertices\":" + json_vec3(out_verts) +
            ",\"tetrahedra\":" + json_ivec4(out_tets) + "}";
@@ -664,6 +703,7 @@ static std::string solve_linear_elastic(
     // See _kofem_mfem_element_keepalive for why this is needed.
     _kofem_mfem_element_keepalive();
 
+    log_mem("solve: start");
     printf("[mfem] solve_linear_elastic: parsing inputs\n"); fflush(stdout);
     val mesh_js = parse_json(mesh_json);
     val mat_js  = parse_json(mat_json);
@@ -682,6 +722,7 @@ static std::string solve_linear_elastic(
         throw std::runtime_error(
             "Mesh has no elements. Send at least one CTETRA or CHEXA element.");
 
+    log_mem("solve: after JSON parse");
     printf("[mfem] extracting %u vertices\n", nv); fflush(stdout);
     std::vector<double> vertices;
     vertices.reserve(3 * nv);
@@ -722,6 +763,7 @@ static std::string solve_linear_elastic(
     unsigned n_loads = loads_js["length"].as<unsigned>();
 
     printf("[mfem] BCs: %u fixed vertices, %u point loads\n", n_fixed, n_loads); fflush(stdout);
+    log_mem("solve: after extracting mesh data");
 
     // Build MFEM mesh — write to MFEM native format and read back.
     // This uses MFEM's well-tested file reader rather than the incremental API
@@ -756,6 +798,7 @@ static std::string solve_linear_elastic(
                     vertices[3*i], vertices[3*i+1], vertices[3*i+2]);
         fclose(f);
     }
+    log_mem("solve: after writing mesh file");
     printf("[mfem] reading mesh file\n"); fflush(stdout);
     // gen_edges=1 so MFEM builds the edge table (needed for FE space connectivity).
     // refine=0 so mesh is used as-is without any red-refinement.
@@ -767,6 +810,7 @@ static std::string solve_linear_elastic(
     printf("[mfem] mesh ready: %d vertices, %d tets, %d hexs, %d boundary elems\n",
            mfem_mesh.GetNV(), mfem_mesh.GetNE(), 0 /*nh counted separately*/, mfem_mesh.GetNBE());
     fflush(stdout);
+    log_mem("solve: after MFEM read mesh");
 
     order = std::max(1, order);
     double lam = E * nu / ((1.0 + nu) * (1.0 - 2.0*nu));
@@ -778,6 +822,7 @@ static std::string solve_linear_elastic(
     FiniteElementSpace fespace(&mfem_mesh, &fec, dim);
     printf("[mfem] FE space: %d dofs\n", fespace.GetTrueVSize());
     fflush(stdout);
+    log_mem("solve: after FE space setup");
 
     // Essential (Dirichlet) DOFs from fixed vertices
     Array<int> ess_tdof;
@@ -815,6 +860,7 @@ static std::string solve_linear_elastic(
     printf("[mfem] assembling stiffness matrix…\n"); fflush(stdout);
     a.Assemble();
     printf("[mfem] assembly done\n"); fflush(stdout);
+    log_mem("solve: after stiffness assembly");
 
     OperatorPtr A;
     Vector B, X;
@@ -834,9 +880,11 @@ static std::string solve_linear_elastic(
     cg.SetPreconditioner(prec);
     cg.SetOperator(A_mat);
     printf("[mfem] starting CG solve (%d rows)…\n", A_mat.Height()); fflush(stdout);
+    log_mem("solve: before CG solve");
     cg.Mult(B, X);
     a.RecoverFEMSolution(X, b, x);
     printf("[mfem] CG done — computing von Mises stress…\n"); fflush(stdout);
+    log_mem("solve: after CG solve");
 
     int n_verts = mfem_mesh.GetNV();
     int n_elems = mfem_mesh.GetNE();
@@ -882,6 +930,7 @@ static std::string solve_linear_elastic(
     printf("[mfem] solve complete: %d vertex displacements, %d element stresses\n",
            n_verts, n_elems);
     fflush(stdout);
+    log_mem("solve: complete");
 
     return "{\"displacements\":" + json_doubles(displacements) +
            ",\"von_mises\":"     + json_doubles(von_mises)     + "}";
@@ -909,6 +958,7 @@ EMSCRIPTEN_BINDINGS(kofem) {
     emscripten::function("tessellate_for_meshing", &tessellate_for_meshing);
     emscripten::function("generate_volume_mesh",   &generate_volume_mesh);
     emscripten::function("generate_fem_mesh",      &generate_fem_mesh);
+    emscripten::function("free_geometry_cache",    &free_geometry_cache);
     emscripten::function("solve_linear_elastic",   &solve_linear_elastic);
     emscripten::function("step_to_fem_result",     &step_to_fem_result);
 }

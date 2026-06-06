@@ -68,6 +68,11 @@ self.onmessage = async (event: MessageEvent) => {
 
       self.postMessage({ id, log: `Volume mesh complete: ${dto.vertices.length} nodes, ${dto.tetrahedra.length} tetrahedra` })
 
+      // Release OCCT shape + STEP bytes from WASM heap — they are no longer
+      // needed once meshing is done, and freeing them before the solve gives
+      // MFEM more headroom for stiffness-matrix assembly.
+      m().free_geometry_cache()
+
       const nodes: Node[] = dto.vertices.map(([x, y, z], i) => ({ id: i, x, y, z }))
       const elements: Element[] = dto.tetrahedra.map((v, i) => ({
         id: i, type: 'CTETRA', nodeIds: v, propertyId: 1,
@@ -169,10 +174,26 @@ self.onmessage = async (event: MessageEvent) => {
       throw new Error(`Unknown worker message type: ${type}`)
     }
   } catch (err) {
+    const isRuntimeError = err instanceof Error && err.name === 'RuntimeError'
+    const isWasmTrap     = isRuntimeError && (
+      err.message.includes('memory access out of bounds') ||
+      err.message.includes('integer overflow') ||
+      err.message.includes('integer divide by zero') ||
+      err.message.includes('unreachable') ||
+      err.message.includes('null function or function signature mismatch') ||
+      err.message.includes('table index is out of bounds')
+    )
     const detail = err instanceof Error
       ? `${err.name}: ${err.message}\n${err.stack ?? ''}`
       : String(err)
-    console.error(`[solver.worker] ${type} failed:`, detail)
-    self.postMessage({ id, ok: false, error: detail })
+    const errorMessage = isWasmTrap
+      ? `WASM trap (code bug, not OOM): ${detail}`
+      : detail
+    if (isWasmTrap) {
+      console.error(`[solver.worker] WASM trap in ${type}:`, detail)
+    } else {
+      console.error(`[solver.worker] ${type} failed:`, detail)
+    }
+    self.postMessage({ id, ok: false, error: errorMessage })
   }
 }
