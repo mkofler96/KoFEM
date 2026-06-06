@@ -5,11 +5,12 @@ import type { ThreeEvent } from '@react-three/fiber'
 import { useModelStore } from '../../store/modelStore'
 
 const TARGET_DEFORM_FRACTION = 0.20
-// Transitions between adjacent boundary triangles smoother than this angle
-// belong to the same surface feature (flat face or cylinder/fillet).
-// 50° handles cylinders with as few as 8 circumferential elements while still
-// stopping at sharp 90° edges (e.g. cylinder wall meeting its end cap).
-const FEATURE_ANGLE_RAD = 50 * Math.PI / 180
+// Face-picking uses two thresholds chosen by surface type (detected from the seed triangle):
+//   Flat surface  → compare each candidate against the seed normal (tight, stops at any corner)
+//   Curved surface → step-to-step comparison (loose, traverses cylinders/fillets)
+// "Flat" means all immediate edge-neighbors of the seed share the same normal (< FLAT_ANGLE).
+const FLAT_ANGLE  = 15 * Math.PI / 180   // flat: normals must be within 15° of seed
+const CURVE_ANGLE = 89 * Math.PI / 180   // curved: stop only at near-perpendicular feature edges
 
 // ── CHEXA geometry ────────────────────────────────────────────────────────────
 
@@ -254,34 +255,51 @@ export function MeshScene() {
     return { positions: new Float32Array(positions), normals: new Float32Array(normals) }
   }, [boundaryQuadFaceIds, boundaryTriFaceIds, nodeMap])
 
-  // Selected face highlight box
-  const faceHighlight = useMemo(() => {
-    if (!selectedFace || nodes.length === 0) return null
+  // Selected face highlight — build a triangle mesh from boundary triangles
+  // whose vertices are all in the selection, then render as a colour overlay.
+  const selectedFacePositions = useMemo(() => {
+    if (!selectedFace || !boundaryMeshTopo) return null
     const nodeIdSet = new Set(selectedFace.nodeIds)
-    const faceNodes = nodes.filter(n => nodeIdSet.has(n.id))
-    if (faceNodes.length === 0) return null
-    const xs = faceNodes.map(n => n.x), ys = faceNodes.map(n => n.y), zs = faceNodes.map(n => n.z)
-    const minX = Math.min(...xs), maxX = Math.max(...xs)
-    const minY = Math.min(...ys), maxY = Math.max(...ys)
-    const minZ = Math.min(...zs), maxZ = Math.max(...zs)
-    return {
-      cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, cz: (minZ + maxZ) / 2,
-      sx: Math.max(maxX - minX, 1e-4), sy: Math.max(maxY - minY, 1e-4), sz: Math.max(maxZ - minZ, 1e-4),
+    const positions: number[] = []
+    for (const [a, b, c] of boundaryMeshTopo.triangles) {
+      if (!nodeIdSet.has(a) || !nodeIdSet.has(b) || !nodeIdSet.has(c)) continue
+      const na = nodeMap.get(a)?.n, nb = nodeMap.get(b)?.n, nc = nodeMap.get(c)?.n
+      if (!na || !nb || !nc) continue
+      positions.push(na.x, na.y, na.z, nb.x, nb.y, nb.z, nc.x, nc.y, nc.z)
     }
-  }, [selectedFace, nodes])
+    return positions.length > 0 ? new Float32Array(positions) : null
+  }, [selectedFace, boundaryMeshTopo, nodeMap])
 
   // Face picking handler — BFS flood-fill along boundary mesh topology.
   // Starting from the clicked triangle (e.faceIndex), expands to all adjacent
   // triangles whose normal differs by less than FEATURE_ANGLE_RAD. This selects
   // entire flat faces AND cylindrical / filleted surfaces in one click, while
   // stopping at sharp feature edges (e.g. where a cylinder meets its end cap).
-  function handleFacePick(e: ThreeEvent<PointerEvent>) {
+  function handleFacePick(e: ThreeEvent<MouseEvent>) {
     if (!pickMode || e.faceIndex == null || !boundaryMeshTopo) return
     e.stopPropagation()
 
     const { triangles, edgeToTris, triNormals } = boundaryMeshTopo
     const startIdx = e.faceIndex
     if (startIdx >= triangles.length) return
+
+    const seedNormal = triNormals[startIdx]
+
+    // Detect surface type: flat if the majority of edge-adjacent neighbors share the
+    // seed's normal (< FLAT_ANGLE). Using a majority vote prevents a single curved
+    // neighbor at the face boundary from misclassifying the seed as curved.
+    const [sa, sb, sc] = triangles[startIdx]
+    let flatCount = 0, curvedCount = 0
+    for (const [x, y] of [[sa, sb], [sb, sc], [sc, sa]] as [number, number][]) {
+      const key = x < y ? `${x},${y}` : `${y},${x}`
+      for (const ni of edgeToTris.get(key) ?? []) {
+        if (ni !== startIdx) {
+          if (seedNormal.angleTo(triNormals[ni]) < FLAT_ANGLE) flatCount++
+          else curvedCount++
+        }
+      }
+    }
+    const isFlat = flatCount > 0 && flatCount >= curvedCount
 
     const visited = new Set<number>([startIdx])
     const queue = [startIdx]
@@ -297,7 +315,12 @@ export function MeshScene() {
         const key = x < y ? `${x},${y}` : `${y},${x}`
         for (const ni of edgeToTris.get(key) ?? []) {
           if (visited.has(ni)) continue
-          if (n.angleTo(triNormals[ni]) < FEATURE_ANGLE_RAD) {
+          // Flat surface: keep candidates close to the seed normal (stops at any corner)
+          // Curved surface: step-to-step check only (handles cylinders and fillets)
+          const passes = isFlat
+            ? seedNormal.angleTo(triNormals[ni]) < FLAT_ANGLE
+            : n.angleTo(triNormals[ni]) < CURVE_ANGLE
+          if (passes) {
             visited.add(ni)
             queue.push(ni)
           }
@@ -422,7 +445,7 @@ export function MeshScene() {
     <group>
       {/* Undeformed solid surface — light blue-grey on light background */}
       {!result && undeformedSurface && (
-        <mesh onPointerDown={pickMode ? handleFacePick : undefined}>
+        <mesh onClick={pickMode ? handleFacePick : undefined}>
           <bufferGeometry>
             <bufferAttribute attach="attributes-position" args={[undeformedSurface.positions, 3]} />
             <bufferAttribute attach="attributes-normal" args={[undeformedSurface.normals, 3]} />
@@ -448,7 +471,7 @@ export function MeshScene() {
 
       {/* Deformed solid surface */}
       {deformedSurface && (
-        <mesh onPointerDown={pickMode ? handleFacePick : undefined}>
+        <mesh onClick={pickMode ? handleFacePick : undefined}>
           <bufferGeometry>
             <bufferAttribute attach="attributes-position" args={[deformedSurface.positions, 3]} />
             <bufferAttribute attach="attributes-color" args={[deformedSurface.colors, 3]} />
@@ -467,11 +490,13 @@ export function MeshScene() {
         </lineSegments>
       )}
 
-      {/* Selected face highlight — orange-red like the design */}
-      {faceHighlight && (
-        <mesh position={[faceHighlight.cx, faceHighlight.cy, faceHighlight.cz]}>
-          <boxGeometry args={[faceHighlight.sx + 0.003, faceHighlight.sy + 0.003, faceHighlight.sz + 0.003]} />
-          <meshStandardMaterial color="#e05533" transparent opacity={0.45} depthTest={false} side={THREE.DoubleSide} />
+      {/* Selected face highlight — colour overlay on the exact picked triangles */}
+      {selectedFacePositions && (
+        <mesh renderOrder={1}>
+          <bufferGeometry>
+            <bufferAttribute attach="attributes-position" args={[selectedFacePositions, 3]} />
+          </bufferGeometry>
+          <meshBasicMaterial color="#e05533" transparent opacity={0.55} depthTest={false} side={THREE.DoubleSide} />
         </mesh>
       )}
 

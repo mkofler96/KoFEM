@@ -7,7 +7,6 @@ import type {
   Element,
 } from "../../store/modelStore";
 import { GeometryDialog } from "../geometry/GeometryDialog";
-import { groupConstraints, groupLoads } from "../../lib/parseAbaqus";
 import { fmt } from "../../lib/modelDisplay";
 import { sendToWorker, setLogCallback } from "../../workers/sharedWorker";
 import styles from "./LeftPanel.module.css";
@@ -490,7 +489,10 @@ function MeshPanel() {
   const logsEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    setLogCallback((msg) => setLogs((prev) => [...prev, msg]));
+    setLogCallback((msg) => {
+      console.log('[mesh-log]', msg)
+      setLogs((prev) => [...prev, msg])
+    })
     return () => setLogCallback(null);
   }, []);
 
@@ -509,6 +511,7 @@ function MeshPanel() {
       }>("volume_mesh", { surface: stepSurface, maxElementSize });
       applyMeshResult(n, e, "STEP Volume Mesh");
     } catch (err) {
+      console.error('[meshing] volume mesh failed:', err)
       setError(`Volume meshing failed: ${err}`);
     } finally {
       setMeshing(false);
@@ -708,45 +711,61 @@ function MeshPanel() {
 // ── Constraints mode ──────────────────────────────────────────────────────────
 
 function ConstraintsPanel() {
-  const constraints = useModelStore((s) => s.constraints);
-  const loads = useModelStore((s) => s.loads);
+  const bcGroups = useModelStore((s) => s.bcGroups);
+  const loadGroups = useModelStore((s) => s.loadGroups);
   const pickMode = useModelStore((s) => s.pickMode);
+  const pickTargetGroupId = useModelStore((s) => s.pickTargetGroupId);
   const setPickMode = useModelStore((s) => s.setPickMode);
   const selectedFace = useModelStore((s) => s.selectedFace);
   const setSelectedFace = useModelStore((s) => s.setSelectedFace);
-  const applyBcToFace = useModelStore((s) => s.applyBcToFace);
-  const applyLoadToFace = useModelStore((s) => s.applyLoadToFace);
-  const clearConstraints = useModelStore((s) => s.clearConstraints);
-  const clearLoads = useModelStore((s) => s.clearLoads);
+  const createBcGroup = useModelStore((s) => s.createBcGroup);
+  const addFaceToBcGroup = useModelStore((s) => s.addFaceToBcGroup);
+  const removeFaceFromBcGroup = useModelStore((s) => s.removeFaceFromBcGroup);
+  const deleteBcGroup = useModelStore((s) => s.deleteBcGroup);
+  const createLoadGroup = useModelStore((s) => s.createLoadGroup);
+  const addFaceToLoadGroup = useModelStore((s) => s.addFaceToLoadGroup);
+  const removeFaceFromLoadGroup = useModelStore((s) => s.removeFaceFromLoadGroup);
+  const deleteLoadGroup = useModelStore((s) => s.deleteLoadGroup);
 
-  const [checkedDofs, setCheckedDofs] = useState([
-    true,
-    true,
-    true,
-    false,
-    false,
-    false,
-  ]);
+  const [checkedDofs, setCheckedDofs] = useState([true, true, true, false, false, false]);
   const [loadDof, setLoadDof] = useState(1);
   const [loadForce, setLoadForce] = useState("-10000");
   const [bcValue, setBcValue] = useState("0");
 
-  const bcGroups = groupConstraints(constraints);
-  const loadGroups = groupLoads(loads);
   const DOF_LABELS = ["Ux", "Uy", "Uz", "Rx", "Ry", "Rz"];
   const LOAD_LABELS = ["Fx", "Fy", "Fz", "Mx", "My", "Mz"];
 
+  const targetBcGroup = pickTargetGroupId !== null ? bcGroups.find(g => g.id === pickTargetGroupId) ?? null : null;
+  const targetLoadGroup = pickTargetGroupId !== null ? loadGroups.find(g => g.id === pickTargetGroupId) ?? null : null;
+
+  function cancelPick() {
+    setPickMode(null);
+    setSelectedFace(null);
+  }
+
   function applyBc() {
     if (!selectedFace) return;
-    const dofs = checkedDofs.map((c, i) => (c ? i : -1)).filter((i) => i >= 0);
-    applyBcToFace(selectedFace.nodeIds, dofs, parseFloat(bcValue) || 0);
+    const faceLabel = `Face ${(targetBcGroup?.faces.length ?? 0) + 1}`;
+    const face = { label: faceLabel, nodeIds: selectedFace.nodeIds };
+    if (targetBcGroup) {
+      addFaceToBcGroup(targetBcGroup.id, face);
+    } else {
+      const dofs = checkedDofs.map((c, i) => (c ? i : -1)).filter((i) => i >= 0);
+      createBcGroup(face, dofs, parseFloat(bcValue) || 0);
+    }
     setPickMode(null);
     setSelectedFace(null);
   }
 
   function applyLoad() {
     if (!selectedFace) return;
-    applyLoadToFace(selectedFace.nodeIds, loadDof, parseFloat(loadForce) || 0);
+    const faceLabel = `Face ${(targetLoadGroup?.faces.length ?? 0) + 1}`;
+    const face = { label: faceLabel, nodeIds: selectedFace.nodeIds };
+    if (targetLoadGroup) {
+      addFaceToLoadGroup(targetLoadGroup.id, face);
+    } else {
+      createLoadGroup(face, loadDof, parseFloat(loadForce) || 0);
+    }
     setPickMode(null);
     setSelectedFace(null);
   }
@@ -759,25 +778,34 @@ function ConstraintsPanel() {
       </div>
 
       <div className={styles.tabContent}>
-        {/* BC section */}
+        {/* ── BC section ────────────────────────────────────── */}
         <div className={styles.sectionLabel}>Fixed displacement</div>
-        <button
-          className={`${styles.pickBtn} ${pickMode === "bc" ? styles.pickBtnActive : ""}`}
-          onClick={() => setPickMode(pickMode === "bc" ? null : "bc")}
-        >
-          {pickMode === "bc" ? "✕ Cancel" : "▣ Pick face to fix…"}
-        </button>
+
+        {pickMode !== "bc" && (
+          <button
+            className={styles.pickBtn}
+            onClick={() => setPickMode("bc", null)}
+          >
+            + Add BC
+          </button>
+        )}
 
         {pickMode === "bc" && (
           <div className={styles.pickPanel}>
+            <div className={styles.pickPanelHeader}>
+              <span className={styles.pickPanelTitle}>
+                {targetBcGroup ? `Add face to ${targetBcGroup.name}` : "New BC"}
+              </span>
+              <button className={styles.iconBtn} onClick={cancelPick} title="Cancel">✕</button>
+            </div>
+
             {!selectedFace ? (
-              <div className={styles.pickHint}>
-                Click a face in the 3D viewport
-              </div>
+              <div className={styles.pickHint}>Click a face in the 3D viewport</div>
             ) : (
               <div className={styles.selectedFace}>{selectedFace.label}</div>
             )}
-            {selectedFace && (
+
+            {selectedFace && !targetBcGroup && (
               <>
                 <div className={styles.dofGrid}>
                   {DOF_LABELS.map((d, i) => (
@@ -785,11 +813,7 @@ function ConstraintsPanel() {
                       <input
                         type="checkbox"
                         checked={checkedDofs[i]}
-                        onChange={() =>
-                          setCheckedDofs((p) =>
-                            p.map((v, j) => (j === i ? !v : v)),
-                          )
-                        }
+                        onChange={() => setCheckedDofs((p) => p.map((v, j) => (j === i ? !v : v)))}
                       />
                       {d}
                     </label>
@@ -805,56 +829,80 @@ function ConstraintsPanel() {
                     onChange={(e) => setBcValue(e.target.value)}
                   />
                 </div>
-                <button className={styles.primaryBtn} onClick={applyBc}>
-                  Apply BC
-                </button>
+                <button className={styles.primaryBtn} onClick={applyBc}>Apply BC</button>
               </>
+            )}
+
+            {selectedFace && targetBcGroup && (
+              <button className={styles.primaryBtn} onClick={applyBc}>Add Face</button>
             )}
           </div>
         )}
 
-        {bcGroups.length > 0 && (
-          <>
-            {bcGroups.map((g) => (
-              <div key={`${g.dofLabel}=${g.value}`} className={styles.bcItem}>
-                <span className={styles.bcDot} />
-                <div>
-                  <div className={styles.treeItemName}>
-                    {g.dofLabel} = {g.value}
-                  </div>
-                  <div className={styles.treeItemDetail}>
-                    {g.nodeCount} nodes
-                  </div>
-                </div>
+        {/* BC group list */}
+        {bcGroups.map((g) => (
+          <div key={g.id} className={styles.bcGroup}>
+            <div className={styles.bcGroupHeader}>
+              <span className={styles.bcDot} />
+              <span className={styles.bcGroupName}>{g.name}</span>
+              <span className={styles.bcGroupMeta}>
+                {g.dofs.map(d => DOF_LABELS[d]).join(", ")} = {g.value}
+              </span>
+              <div className={styles.treeItemActions}>
+                <button
+                  className={styles.iconBtn}
+                  title="Add face"
+                  onClick={() => { setPickMode("bc", g.id); setSelectedFace(null); }}
+                >✏</button>
+                <button
+                  className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
+                  title="Delete BC"
+                  onClick={() => deleteBcGroup(g.id)}
+                >✕</button>
+              </div>
+            </div>
+            {g.faces.map((f) => (
+              <div key={f.id} className={styles.bcFaceRow}>
+                <span className={styles.bcFaceIndent}>└</span>
+                <span className={styles.bcFaceName}>{f.label}</span>
+                <button
+                  className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
+                  title="Remove face"
+                  onClick={() => removeFaceFromBcGroup(g.id, f.id)}
+                >×</button>
               </div>
             ))}
-            <button className={styles.dangerBtn} onClick={clearConstraints}>
-              Clear all BCs
-            </button>
-          </>
-        )}
+          </div>
+        ))}
 
-        {/* Load section */}
-        <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
-          Applied loads
-        </div>
-        <button
-          className={`${styles.pickBtn} ${pickMode === "load" ? styles.pickBtnActiveLoad : ""}`}
-          onClick={() => setPickMode(pickMode === "load" ? null : "load")}
-        >
-          {pickMode === "load" ? "✕ Cancel" : "↗ Pick face to load…"}
-        </button>
+        {/* ── Load section ───────────────────────────────────── */}
+        <div className={styles.sectionLabel} style={{ marginTop: 16 }}>Applied loads</div>
+
+        {pickMode !== "load" && (
+          <button
+            className={styles.pickBtn}
+            onClick={() => setPickMode("load", null)}
+          >
+            + Add Load
+          </button>
+        )}
 
         {pickMode === "load" && (
           <div className={styles.pickPanel}>
+            <div className={styles.pickPanelHeader}>
+              <span className={styles.pickPanelTitle}>
+                {targetLoadGroup ? `Add face to ${targetLoadGroup.name}` : "New Load"}
+              </span>
+              <button className={styles.iconBtn} onClick={cancelPick} title="Cancel">✕</button>
+            </div>
+
             {!selectedFace ? (
-              <div className={styles.pickHint}>
-                Click a face in the 3D viewport
-              </div>
+              <div className={styles.pickHint}>Click a face in the 3D viewport</div>
             ) : (
               <div className={styles.selectedFace}>{selectedFace.label}</div>
             )}
-            {selectedFace && (
+
+            {selectedFace && !targetLoadGroup && (
               <>
                 <div className={styles.formRow}>
                   <span className={styles.formLabel}>DOF</span>
@@ -864,9 +912,7 @@ function ConstraintsPanel() {
                     onChange={(e) => setLoadDof(Number(e.target.value))}
                   >
                     {LOAD_LABELS.map((d, i) => (
-                      <option key={d} value={i}>
-                        {d}
-                      </option>
+                      <option key={d} value={i}>{d}</option>
                     ))}
                   </select>
                 </div>
@@ -882,41 +928,54 @@ function ConstraintsPanel() {
                 </div>
                 <div className={styles.pickNote}>
                   {selectedFace.nodeIds.length} nodes →{" "}
-                  {(
-                    parseFloat(loadForce) / selectedFace.nodeIds.length
-                  ).toFixed(1)}{" "}
-                  N/node
+                  {(parseFloat(loadForce) / selectedFace.nodeIds.length).toFixed(1)} N/node
                 </div>
-                <button className={styles.loadBtn} onClick={applyLoad}>
-                  Apply Load
-                </button>
+                <button className={styles.loadBtn} onClick={applyLoad}>Apply Load</button>
               </>
+            )}
+
+            {selectedFace && targetLoadGroup && (
+              <button className={styles.loadBtn} onClick={applyLoad}>Add Face</button>
             )}
           </div>
         )}
 
-        {loadGroups.length > 0 && (
-          <>
-            {loadGroups.map((g) => (
-              <div key={g.dofLabel} className={styles.bcItem}>
-                <span className={styles.loadDot} />
-                <div>
-                  <div className={styles.treeItemName}>
-                    F{g.dofLabel} = {fmt(g.total)} N
-                  </div>
-                  <div className={styles.treeItemDetail}>
-                    {g.nodeCount} nodes
-                  </div>
-                </div>
+        {/* Load group list */}
+        {loadGroups.map((g) => (
+          <div key={g.id} className={styles.bcGroup}>
+            <div className={styles.bcGroupHeader}>
+              <span className={styles.loadDot} />
+              <span className={styles.bcGroupName}>{g.name}</span>
+              <span className={styles.bcGroupMeta}>
+                F{DOF_LABELS[g.dof]} = {fmt(g.totalForce)} N
+              </span>
+              <div className={styles.treeItemActions}>
+                <button
+                  className={styles.iconBtn}
+                  title="Add face"
+                  onClick={() => { setPickMode("load", g.id); setSelectedFace(null); }}
+                >✏</button>
+                <button
+                  className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
+                  title="Delete Load"
+                  onClick={() => deleteLoadGroup(g.id)}
+                >✕</button>
+              </div>
+            </div>
+            {g.faces.map((f) => (
+              <div key={f.id} className={styles.bcFaceRow}>
+                <span className={styles.bcFaceIndent}>└</span>
+                <span className={styles.bcFaceName}>{f.label}</span>
+                <button
+                  className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
+                  title="Remove face"
+                  onClick={() => removeFaceFromLoadGroup(g.id, f.id)}
+                >×</button>
               </div>
             ))}
-            <button className={styles.dangerBtn} onClick={clearLoads}>
-              Clear all loads
-            </button>
-          </>
-        )}
+          </div>
+        ))}
       </div>
-
     </div>
   );
 }
@@ -956,7 +1015,10 @@ function SolvePanel() {
         setResult({ displacements: new Float64Array(displacements) });
         setMode("results");
       })
-      .catch((err) => setError(`Solver error: ${err.message}`))
+      .catch((err) => {
+        console.error('[solve] solver failed:', err.message)
+        setError(`Solver error: ${err.message}`)
+      })
       .finally(() => setRunning(false));
   }
 

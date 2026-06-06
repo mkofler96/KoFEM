@@ -6,6 +6,12 @@ export interface KofemModule {
   tessellate_step(step_bytes: Uint8Array, opts_json: string): string
   tessellate_for_meshing(opts_json: string): string
   generate_volume_mesh(surface_json: string, opts_json: string): string
+  /** Generate a FEM surface mesh + volume mesh directly from the stored STEP geometry
+   *  using Netgen's native OCC integration.  Must call tessellate_step first.
+   *  @param opts_json JSON `{ max_element_size, min_element_size, grading, second_order, elementsperedge, elementspercurve, optsteps_2d, optsteps_3d }`
+   *  @returns JSON `{ vertices: [number,number,number][], tetrahedra: [number,number,number,number][] }`
+   */
+  generate_fem_mesh(opts_json: string): string
   solve_linear_elastic(mesh_json: string, mat_json: string, bcs_json: string, order: number): string
   step_to_fem_result(
     step_bytes: Uint8Array,

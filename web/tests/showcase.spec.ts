@@ -4,17 +4,20 @@ import fs from 'fs'
 
 const OUT_DIR = path.join('playwright-results', 'screenshots', 'showcase')
 const STEP_FILES_DIR = path.resolve('..', 'test_files')
-const WALL_BRACKET = path.join(STEP_FILES_DIR, 'Wall Bracket.stp')
+// tube.stp produces ~760 tets / 274 nodes — small enough for a fast CI solve.
+// Wall Bracket produces ~50K tets regardless of element size (geometry-driven)
+// which overloads the CI runner's disk and memory budget.
+const TUBE = path.join(STEP_FILES_DIR, 'tube.stp')
 
 test.describe('Full workflow showcase', () => {
   test.beforeAll(() => {
     fs.mkdirSync(OUT_DIR, { recursive: true })
   })
 
-  test('wall bracket: welcome → geometry → mesh → constraints → results', async ({ page }) => {
-    test.setTimeout(600_000)
+  test('tube: welcome → geometry → mesh → constraints → results', async ({ page }) => {
+    test.setTimeout(120_000)
 
-    if (!fs.existsSync(WALL_BRACKET)) {
+    if (!fs.existsSync(TUBE)) {
       test.skip()
       return
     }
@@ -22,22 +25,41 @@ test.describe('Full workflow showcase', () => {
     const t0 = Date.now()
     const elapsed = () => `+${((Date.now() - t0) / 1000).toFixed(1)}s`
 
+    // Any browser console.error or uncaught page exception fails the test immediately.
+    let _rejectOnError: ((err: Error) => void) | null = null
+    const fatalError = new Promise<never>((_, rej) => { _rejectOnError = rej })
+
     page.on('console', msg => {
-      if (msg.type() === 'error') console.error(`[showcase] browser error: ${msg.text()}`)
+      if (msg.type() === 'error') {
+        const text = msg.text()
+        console.error(`[showcase] browser error: ${text}`)
+        _rejectOnError?.(new Error(`Browser console.error: ${text}`))
+      } else {
+        console.log(`[showcase] browser ${msg.type()}: ${msg.text()}`)
+      }
     })
-    page.on('pageerror', err => console.error(`[showcase] page exception: ${err.message}`))
+    page.on('pageerror', err => {
+      console.error(`[showcase] page exception: ${err.message}`)
+      _rejectOnError?.(err)
+    })
 
     await page.goto('/')
 
     // 1. Welcome screen
-    await expect(page.getByRole('button', { name: 'Start with example' })).toBeVisible()
+    await Promise.race([
+      expect(page.getByRole('button', { name: 'Start with example' })).toBeVisible(),
+      fatalError,
+    ])
     await page.screenshot({ path: path.join(OUT_DIR, '01-select-geometry.png') })
     console.log(`[showcase] ${elapsed()} 01 screenshot done`)
 
-    // Import wall bracket
-    console.log(`[showcase] ${elapsed()} importing Wall Bracket.stp`)
-    await page.locator('input[type="file"][accept=".stp,.step"]').setInputFiles(WALL_BRACKET)
-    await expect(page.getByText('Model geometry')).toBeVisible({ timeout: 60_000 })
+    // Import tube
+    console.log(`[showcase] ${elapsed()} importing tube.stp`)
+    await page.locator('input[type="file"][accept=".stp,.step"]').setInputFiles(TUBE)
+    await Promise.race([
+      expect(page.getByText('Model geometry')).toBeVisible({ timeout: 60_000 }),
+      fatalError,
+    ])
     console.log(`[showcase] ${elapsed()} tessellation done`)
 
     const stepErrorBanner = page.getByTestId('step-error')
@@ -47,7 +69,7 @@ test.describe('Full workflow showcase', () => {
 
     await page.waitForTimeout(600)
 
-    // 2. Geometry panel — wall bracket surface
+    // 2. Geometry panel
     await page.screenshot({ path: path.join(OUT_DIR, '02-geometry-options.png') })
     console.log(`[showcase] ${elapsed()} 02 screenshot done`)
 
@@ -57,30 +79,30 @@ test.describe('Full workflow showcase', () => {
     console.log(`[showcase] ${elapsed()} 03 clicking Mesh STEP volume…`)
     await page.getByRole('button').filter({ hasText: 'Mesh STEP volume' }).click()
 
-    // Wait for either success ("Mesh is solver-ready") or a visible error banner.
-    // Race both so a failure fails the test immediately rather than timing out.
     const meshingErrorBanner = page.getByTestId('meshing-error')
     await Promise.race([
-      expect(page.getByText('Mesh is solver-ready')).toBeVisible({ timeout: 300_000 }),
-      meshingErrorBanner.waitFor({ state: 'visible', timeout: 300_000 })
+      expect(page.getByText('Mesh is solver-ready')).toBeVisible({ timeout: 60_000 }),
+      meshingErrorBanner.waitFor({ state: 'visible', timeout: 60_000 })
         .then(async () => {
           throw new Error(`Volume meshing failed: ${await meshingErrorBanner.textContent()}`)
         }),
+      fatalError,
     ])
     console.log(`[showcase] ${elapsed()} 03 volume mesh complete`)
     await page.screenshot({ path: path.join(OUT_DIR, '03-mesh-generation.png') })
     console.log(`[showcase] ${elapsed()} 03 screenshot done`)
 
-    // 4. Apply BCs to the STEP volume mesh and show constraints panel.
+    // 4. Apply BCs and show constraints panel.
     // Find the mesh's long axis by bounding-box extents; fix the near face, load the far face.
     await page.evaluate(() => {
       type CoordNode = { id: number; x: number; y: number; z: number }
+      type FaceEntry = { label: string; nodeIds: number[] }
       const store = (window as unknown as {
         __kofemStore: {
           getState(): {
             nodes: CoordNode[]
-            applyBcToFace(ids: number[], dofs: number[], val: number): void
-            applyLoadToFace(ids: number[], dof: number, force: number): void
+            createBcGroup(face: FaceEntry, dofs: number[], val: number): void
+            createLoadGroup(face: FaceEntry, dof: number, force: number): void
           }
         }
       }).__kofemStore
@@ -95,22 +117,31 @@ test.describe('Full workflow showcase', () => {
       const tol = (max - min) * 0.01
       const fixedIds = nodes.filter(n => n[ax] < min + tol).map(n => n.id)
       const loadedIds = nodes.filter(n => n[ax] > max - tol).map(n => n.id)
-      store.getState().applyBcToFace(fixedIds, [0, 1, 2], 0)
-      store.getState().applyLoadToFace(loadedIds, 1, -2000)
+      store.getState().createBcGroup({ label: 'Face 1', nodeIds: fixedIds }, [0, 1, 2], 0)
+      store.getState().createLoadGroup({ label: 'Face 1', nodeIds: loadedIds }, 1, -2000)
     })
 
     await page.locator('nav').getByRole('button').filter({ hasText: 'Constraints' }).click()
-    await expect(page.getByText('Boundary conditions')).toBeVisible()
+    await Promise.race([
+      expect(page.getByText('Boundary conditions')).toBeVisible(),
+      fatalError,
+    ])
     await page.screenshot({ path: path.join(OUT_DIR, '04-load-application.png') })
     console.log(`[showcase] ${elapsed()} 04 screenshot done`)
 
     // 5. Solve and results
     await page.locator('nav').getByRole('button').filter({ hasText: 'Solve' }).click()
-    await expect(page.getByRole('button').filter({ hasText: 'Run static solve' })).toBeEnabled()
+    await Promise.race([
+      expect(page.getByRole('button').filter({ hasText: 'Run static solve' })).toBeEnabled(),
+      fatalError,
+    ])
     await page.getByRole('button').filter({ hasText: 'Run static solve' }).click()
     console.log(`[showcase] ${elapsed()} solver started…`)
 
-    await expect(page.getByText('Result summary')).toBeVisible({ timeout: 120_000 })
+    await Promise.race([
+      expect(page.getByText('Result summary')).toBeVisible({ timeout: 60_000 }),
+      fatalError,
+    ])
 
     await page.screenshot({ path: path.join(OUT_DIR, '05-results.png') })
     console.log(`[showcase] ${elapsed()} 05 screenshot done`)
