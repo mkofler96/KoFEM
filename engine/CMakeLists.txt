@@ -139,11 +139,13 @@ target_link_libraries(kofem_wasm_emcc PRIVATE
     # TKCAF    → TNaming_Builder/Tool/NamedShape, TDataXtd (used by XCAFDoc_ShapeTool)
     # TKXCAF   → XCAFDoc_* (Extended CAF, DataExchange module)
     # TKService → Graphic3d_* (needed by XCAFPrs_Texture, XCAFDoc_VisMaterial in TKXCAF)
+    # TKV3d    → AIS_*, SelectMgr_*, Prs3d_* (needed by XCAFPrs_AISObject in TKXCAF)
     TKCDF
     TKLCAF
     TKCAF
     TKXCAF
     TKService
+    TKV3d
 
     nglib
     ngcore
