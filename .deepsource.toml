@@ -4,10 +4,6 @@ version = 1
 name = "rust"
 enabled = true
 
-  [analyzers.meta]
-  # Workspace root — DeepSource will pick up all workspace members automatically
-  manifest_path = "Cargo.toml"
-
 [[analyzers]]
 name = "javascript"
 enabled = true
@@ -23,24 +19,17 @@ enabled = true
   runtime_version = "3.x.x"
 
 [[analyzers]]
-name = "c-cpp"
+name = "cxx"
 enabled = true
 
-  [analyzers.meta]
-  compilation_database_path = "engine/compile_commands.json"
-
-[[transformers]]
+[[code_formatters]]
 name = "rustfmt"
 enabled = true
 
-[[transformers]]
+[[code_formatters]]
 name = "prettier"
 enabled = true
 
-[[transformers]]
+[[code_formatters]]
 name = "black"
 enabled = true
-
-[test_coverage]
-# Coverage reports can be uploaded via the deepsource CLI after `cargo test`
-# using the `cargo-llvm-cov` or `tarpaulin` output formats.
