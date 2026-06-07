@@ -671,11 +671,15 @@ static void _kofem_mfem_element_keepalive() {
     //   GetNVertices       — used in various mesh queries
     //   GetNEdges          — GetElementToEdgeTable() iterates edges
     //   GetEdgeVertices(i) — GetElementToEdgeTable() looks up edge vertex pairs
-    //   GetNFaces()        — GetElementToFaceTable() iterates faces
-    //   GetNFaceVertices   — GetElementToFaceTable() sizes face vertex arrays
-    //   GetFaceVertices    — GetElementToFaceTable() fills STable3D
+    //   GetNFaces()        — GetElementToFaceTable() iterates faces (3D elements only)
+    //   GetNFaceVertices   — GetElementToFaceTable() sizes face vertex arrays (3D only)
+    //   GetFaceVertices    — GetElementToFaceTable() fills STable3D (3D only)
     //   GetVertices()      — int* overload, used during boundary element setup
     //   GetVertices(arr)   — Array<int>& overload, used in refinement checks
+    // NOTE: GetNFaces/GetNFaceVertices/GetFaceVertices are NOT anchored for
+    // Triangle and Quadrilateral because those are 2D surface elements whose
+    // GetFaceVertices implementation calls MFEM_ABORT("not implemented").
+    // FinalizeTopology only dispatches GetFaceVertices on volume elements.
     {
         int vi[4] = {0,1,2,3};
         Tetrahedron t(vi, 1);
@@ -698,13 +702,12 @@ static void _kofem_mfem_element_keepalive() {
         volatile int nv2 = tri.GetNVertices();
         volatile int ne = tri.GetNEdges();
         const int *ev = tri.GetEdgeVertices(0);
-        volatile int nf = tri.GetNFaces();
-        volatile int nfv = tri.GetNFaceVertices(0);
-        const int *fv = tri.GetFaceVertices(0);
         int *vi_ret = tri.GetVertices();
         Array<int> varr; tri.GetVertices(varr);
-        (void)tp; (void)nv2; (void)ne; (void)ev; (void)nf;
-        (void)nfv; (void)fv; (void)vi_ret; (void)varr;
+        // GetNFaces / GetNFaceVertices / GetFaceVertices intentionally omitted:
+        // Triangle is a 2D surface element; these methods call MFEM_ABORT.
+        // FinalizeTopology only calls GetFaceVertices on volume elements.
+        (void)tp; (void)nv2; (void)ne; (void)ev; (void)vi_ret; (void)varr;
     }
     {
         int vi[8] = {0,1,2,3,4,5,6,7};
@@ -728,13 +731,11 @@ static void _kofem_mfem_element_keepalive() {
         volatile int nv2 = quad.GetNVertices();
         volatile int ne = quad.GetNEdges();
         const int *ev = quad.GetEdgeVertices(0);
-        volatile int nf = quad.GetNFaces();
-        volatile int nfv = quad.GetNFaceVertices(0);
-        const int *fv = quad.GetFaceVertices(0);
         int *vi_ret = quad.GetVertices();
         Array<int> varr; quad.GetVertices(varr);
-        (void)tp; (void)nv2; (void)ne; (void)ev; (void)nf;
-        (void)nfv; (void)fv; (void)vi_ret; (void)varr;
+        // GetNFaces / GetNFaceVertices / GetFaceVertices intentionally omitted:
+        // Quadrilateral is a 2D surface element; these methods call MFEM_ABORT.
+        (void)tp; (void)nv2; (void)ne; (void)ev; (void)vi_ret; (void)varr;
     }
 
     // ElementTransformation::SetIntPoint is inline virtual in eltrans.hpp:
