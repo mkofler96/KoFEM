@@ -13,7 +13,6 @@ import styles from "./LeftPanel.module.css";
 
 // ── Geometry mode ─────────────────────────────────────────────────────────────
 
-
 function MaterialForm({
   mat,
   onSave,
@@ -192,261 +191,245 @@ function GeometryPanel() {
         )}
         {/* ── Inputs ─────────────────────────────────────────── */}
         <>
-            <input
-              ref={(el) => {
-                inpRef.current = el;
+          <input
+            ref={(el) => {
+              inpRef.current = el;
+            }}
+            type="file"
+            accept=".inp"
+            style={{ display: "none" }}
+            onChange={handleInpFile}
+          />
+          <input
+            ref={(el) => {
+              stepRef.current = el;
+            }}
+            type="file"
+            accept=".stp,.step"
+            style={{ display: "none" }}
+            onChange={handleStepFile}
+          />
+
+          <div className={styles.cardGrid}>
+            <button
+              className={styles.importCard}
+              disabled={isImportingStep || isRunning}
+              onClick={() => stepRef.current?.click()}
+            >
+              <svg className={styles.cardIcon} viewBox="0 0 20 20" fill="none">
+                <rect
+                  x="3"
+                  y="2"
+                  width="14"
+                  height="16"
+                  rx="2"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                />
+                <path
+                  d="M7 7h6M7 10h6M7 13h4"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                  strokeLinecap="round"
+                />
+              </svg>
+              <span className={styles.cardTitle}>
+                {isImportingStep ? "Importing…" : "Import STEP"}
+              </span>
+              <span className={styles.cardSub}>.step / .stp</span>
+            </button>
+
+            <button
+              className={styles.importCard}
+              disabled={isRunning}
+              onClick={() => inpRef.current?.click()}
+            >
+              <svg className={styles.cardIcon} viewBox="0 0 20 20" fill="none">
+                <path
+                  d="M4 2h8l4 4v12a2 2 0 01-2 2H4a2 2 0 01-2-2V4a2 2 0 012-2z"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                />
+                <path d="M12 2v4h4" stroke="currentColor" strokeWidth="1.4" />
+              </svg>
+              <span className={styles.cardTitle}>Import INP</span>
+              <span className={styles.cardSub}>Abaqus / CalculiX</span>
+            </button>
+
+            <button className={styles.importCard} disabled>
+              <svg className={styles.cardIcon} viewBox="0 0 20 20" fill="none">
+                <path
+                  d="M10 2l2.4 5H18l-4.2 3.1 1.6 5L10 12.2 4.6 15.1l1.6-5L2 7h5.6z"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                />
+              </svg>
+              <span className={styles.cardTitle}>Import IGES</span>
+              <span className={styles.cardSub}>.igs / .iges</span>
+            </button>
+
+            <button
+              className={styles.importCard}
+              onClick={() => {
+                setEditing(null);
+                setDialogOpen(true);
               }}
-              type="file"
-              accept=".inp"
-              style={{ display: "none" }}
-              onChange={handleInpFile}
-            />
-            <input
-              ref={(el) => {
-                stepRef.current = el;
-              }}
-              type="file"
-              accept=".stp,.step"
-              style={{ display: "none" }}
-              onChange={handleStepFile}
-            />
+            >
+              <svg className={styles.cardIcon} viewBox="0 0 20 20" fill="none">
+                <rect
+                  x="3"
+                  y="3"
+                  width="14"
+                  height="14"
+                  rx="2"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                />
+                <path
+                  d="M10 7v6M7 10h6"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                />
+              </svg>
+              <span className={styles.cardTitle}>New primitive</span>
+              <span className={styles.cardSub}>Box · Cyl · Sphere</span>
+            </button>
+          </div>
 
-            <div className={styles.cardGrid}>
-              <button
-                className={styles.importCard}
-                disabled={isImportingStep || isRunning}
-                onClick={() => stepRef.current?.click()}
-              >
-                <svg
-                  className={styles.cardIcon}
-                  viewBox="0 0 20 20"
-                  fill="none"
-                >
-                  <rect
-                    x="3"
-                    y="2"
-                    width="14"
-                    height="16"
-                    rx="2"
-                    stroke="currentColor"
-                    strokeWidth="1.4"
-                  />
-                  <path
-                    d="M7 7h6M7 10h6M7 13h4"
-                    stroke="currentColor"
-                    strokeWidth="1.4"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <span className={styles.cardTitle}>
-                  {isImportingStep ? "Importing…" : "Import STEP"}
-                </span>
-                <span className={styles.cardSub}>.step / .stp</span>
-              </button>
-
-              <button
-                className={styles.importCard}
-                disabled={isRunning}
-                onClick={() => inpRef.current?.click()}
-              >
-                <svg
-                  className={styles.cardIcon}
-                  viewBox="0 0 20 20"
-                  fill="none"
-                >
-                  <path
-                    d="M4 2h8l4 4v12a2 2 0 01-2 2H4a2 2 0 01-2-2V4a2 2 0 012-2z"
-                    stroke="currentColor"
-                    strokeWidth="1.4"
-                  />
-                  <path d="M12 2v4h4" stroke="currentColor" strokeWidth="1.4" />
-                </svg>
-                <span className={styles.cardTitle}>Import INP</span>
-                <span className={styles.cardSub}>Abaqus / CalculiX</span>
-              </button>
-
-              <button className={styles.importCard} disabled>
-                <svg
-                  className={styles.cardIcon}
-                  viewBox="0 0 20 20"
-                  fill="none"
-                >
-                  <path
-                    d="M10 2l2.4 5H18l-4.2 3.1 1.6 5L10 12.2 4.6 15.1l1.6-5L2 7h5.6z"
-                    stroke="currentColor"
-                    strokeWidth="1.4"
-                  />
-                </svg>
-                <span className={styles.cardTitle}>Import IGES</span>
-                <span className={styles.cardSub}>.igs / .iges</span>
-              </button>
-
-              <button
-                className={styles.importCard}
-                onClick={() => {
-                  setEditing(null);
-                  setDialogOpen(true);
-                }}
-              >
-                <svg
-                  className={styles.cardIcon}
-                  viewBox="0 0 20 20"
-                  fill="none"
-                >
-                  <rect
-                    x="3"
-                    y="3"
-                    width="14"
-                    height="14"
-                    rx="2"
-                    stroke="currentColor"
-                    strokeWidth="1.4"
-                  />
-                  <path
-                    d="M10 7v6M7 10h6"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <span className={styles.cardTitle}>New primitive</span>
-                <span className={styles.cardSub}>Box · Cyl · Sphere</span>
-              </button>
+          {stepImportError && (
+            <div
+              data-testid="step-error"
+              style={{ color: "#dc2626", fontSize: 12, padding: "4px 0" }}
+            >
+              {stepImportError}
             </div>
+          )}
 
-            {stepImportError && (
-              <div
-                data-testid="step-error"
-                style={{ color: "#dc2626", fontSize: 12, padding: "4px 0" }}
-              >
-                {stepImportError}
-              </div>
-            )}
-
-            <div className={styles.sectionLabel}>Healing tolerances</div>
-            <div className={styles.toleranceRow}>
-              <span className={styles.toleranceKey}>Sew faces</span>
-              <input className={styles.toleranceInput} defaultValue="1e-6" />
-              <span className={styles.toleranceUnit}>m</span>
-            </div>
-            <div className={styles.toleranceRow}>
-              <span className={styles.toleranceKey}>Merge edges</span>
-              <input className={styles.toleranceInput} defaultValue="1e-5" />
-              <span className={styles.toleranceUnit}>m</span>
-            </div>
+          <div className={styles.sectionLabel}>Healing tolerances</div>
+          <div className={styles.toleranceRow}>
+            <span className={styles.toleranceKey}>Sew faces</span>
+            <input className={styles.toleranceInput} defaultValue="1e-6" />
+            <span className={styles.toleranceUnit}>m</span>
+          </div>
+          <div className={styles.toleranceRow}>
+            <span className={styles.toleranceKey}>Merge edges</span>
+            <input className={styles.toleranceInput} defaultValue="1e-5" />
+            <span className={styles.toleranceUnit}>m</span>
+          </div>
         </>
 
         {/* ── Tree ─────────────────────────────────────────────── */}
         <>
           {geometries.length === 0 && nodes.length === 0 && (
-              <div className={styles.empty}>
-                No geometry — add a primitive or import
-              </div>
-            )}
-            {geometries.map((g) => (
-              <div key={g.id} className={styles.treeItem}>
-                <div className={styles.treeItemIcon}>□</div>
-                <div className={styles.treeItemBody}>
-                  <div className={styles.treeItemName}>{g.name}</div>
-                  <div className={styles.treeItemDetail}>
-                    {g.extrudeLength} × {g.sketchWidth} × {g.sketchHeight} m
-                  </div>
-                </div>
-                <div className={styles.treeItemActions}>
-                  <button
-                    className={styles.iconBtn}
-                    onClick={() => {
-                      setEditing(g);
-                      setDialogOpen(true);
-                    }}
-                  >
-                    ✎
-                  </button>
-                  <button
-                    className={styles.iconBtn}
-                    onClick={() => runMesh(g)}
-                    disabled={isMeshing}
-                  >
-                    ⟳
-                  </button>
-                  <button
-                    className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
-                    onClick={() => deleteGeometry(g.id)}
-                  >
-                    ×
-                  </button>
+            <div className={styles.empty}>
+              No geometry — add a primitive or import
+            </div>
+          )}
+          {geometries.map((g) => (
+            <div key={g.id} className={styles.treeItem}>
+              <div className={styles.treeItemIcon}>□</div>
+              <div className={styles.treeItemBody}>
+                <div className={styles.treeItemName}>{g.name}</div>
+                <div className={styles.treeItemDetail}>
+                  {g.extrudeLength} × {g.sketchWidth} × {g.sketchHeight} m
                 </div>
               </div>
-            ))}
-            {nodes.length > 0 && (
-              <div className={styles.treeItem}>
-                <div className={styles.treeItemIcon}>⬢</div>
-                <div className={styles.treeItemBody}>
-                  <div className={styles.treeItemName}>Mesh</div>
-                  <div className={styles.treeItemDetail}>
-                    {nodes.length} nodes · {elements.length} elements
-                  </div>
+              <div className={styles.treeItemActions}>
+                <button
+                  className={styles.iconBtn}
+                  onClick={() => {
+                    setEditing(g);
+                    setDialogOpen(true);
+                  }}
+                >
+                  ✎
+                </button>
+                <button
+                  className={styles.iconBtn}
+                  onClick={() => runMesh(g)}
+                  disabled={isMeshing}
+                >
+                  ⟳
+                </button>
+                <button
+                  className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
+                  onClick={() => deleteGeometry(g.id)}
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+          ))}
+          {nodes.length > 0 && (
+            <div className={styles.treeItem}>
+              <div className={styles.treeItemIcon}>⬢</div>
+              <div className={styles.treeItemBody}>
+                <div className={styles.treeItemName}>Mesh</div>
+                <div className={styles.treeItemDetail}>
+                  {nodes.length} nodes · {elements.length} elements
                 </div>
               </div>
-            )}
+            </div>
+          )}
         </>
 
         {/* ── Materials ─────────────────────────────────────────── */}
         <>
           {materials.length === 0 && (
-              <div className={styles.empty}>No materials</div>
-            )}
-            {materials.map((m) => (
-              <div key={m.id}>
-                <div className={styles.treeItem}>
-                  <div className={styles.treeItemBody}>
-                    <div className={styles.treeItemName}>{m.name}</div>
-                    <div className={styles.treeItemDetail}>
-                      E = {fmt(m.young, 3)} Pa · ν = {m.poisson}
-                    </div>
-                  </div>
-                  <div className={styles.treeItemActions}>
-                    <button
-                      className={styles.iconBtn}
-                      onClick={() => setEditingMatId(m.id)}
-                    >
-                      ✎
-                    </button>
-                    <button
-                      className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
-                      onClick={() => deleteMaterial(m.id)}
-                    >
-                      ×
-                    </button>
+            <div className={styles.empty}>No materials</div>
+          )}
+          {materials.map((m) => (
+            <div key={m.id}>
+              <div className={styles.treeItem}>
+                <div className={styles.treeItemBody}>
+                  <div className={styles.treeItemName}>{m.name}</div>
+                  <div className={styles.treeItemDetail}>
+                    E = {fmt(m.young, 3)} Pa · ν = {m.poisson}
                   </div>
                 </div>
-                {editingMatId === m.id && (
-                  <MaterialForm
-                    mat={m}
-                    onSave={(v) => {
-                      updateMaterial(m.id, v);
-                      setEditingMatId(null);
-                    }}
-                    onCancel={() => setEditingMatId(null)}
-                  />
-                )}
+                <div className={styles.treeItemActions}>
+                  <button
+                    className={styles.iconBtn}
+                    onClick={() => setEditingMatId(m.id)}
+                  >
+                    ✎
+                  </button>
+                  <button
+                    className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
+                    onClick={() => deleteMaterial(m.id)}
+                  >
+                    ×
+                  </button>
+                </div>
               </div>
-            ))}
-            {editingMatId === "new" && (
-              <MaterialForm
-                onSave={(v) => {
-                  createMaterial(v);
-                  setEditingMatId(null);
-                }}
-                onCancel={() => setEditingMatId(null)}
-              />
-            )}
-            <button
-              className={styles.outlineBtn}
-              onClick={() => setEditingMatId("new")}
-            >
-              + Add material
-            </button>
+              {editingMatId === m.id && (
+                <MaterialForm
+                  mat={m}
+                  onSave={(v) => {
+                    updateMaterial(m.id, v);
+                    setEditingMatId(null);
+                  }}
+                  onCancel={() => setEditingMatId(null)}
+                />
+              )}
+            </div>
+          ))}
+          {editingMatId === "new" && (
+            <MaterialForm
+              onSave={(v) => {
+                createMaterial(v);
+                setEditingMatId(null);
+              }}
+              onCancel={() => setEditingMatId(null)}
+            />
+          )}
+          <button
+            className={styles.outlineBtn}
+            onClick={() => setEditingMatId("new")}
+          >
+            + Add material
+          </button>
         </>
       </div>
 
@@ -490,9 +473,9 @@ function MeshPanel() {
 
   useEffect(() => {
     setLogCallback((msg) => {
-      console.log('[mesh-log]', msg)
-      setLogs((prev) => [...prev, msg])
-    })
+      console.log("[mesh-log]", msg);
+      setLogs((prev) => [...prev, msg]);
+    });
     return () => setLogCallback(null);
   }, []);
 
@@ -505,14 +488,18 @@ function MeshPanel() {
     setMeshing(true);
     setLogs([]);
     try {
-      const { nodes: n, elements: e, surfaceFaceIds } = await sendToWorker<{
+      const {
+        nodes: n,
+        elements: e,
+        surfaceFaceIds,
+      } = await sendToWorker<{
         nodes: Node[];
         elements: Element[];
         surfaceFaceIds: number[] | null;
       }>("volume_mesh", { surface: stepSurface, maxElementSize });
       applyMeshResult(n, e, "STEP Volume Mesh", surfaceFaceIds);
     } catch (err) {
-      console.error('[meshing] volume mesh failed:', err)
+      console.error("[meshing] volume mesh failed:", err);
       setError(`Volume meshing failed: ${err}`);
     } finally {
       setMeshing(false);
@@ -561,11 +548,15 @@ function MeshPanel() {
                 <div className={styles.statGroup}>
                   <div className={styles.statRow}>
                     <span className={styles.statKey}>Vertices</span>
-                    <span className={styles.statVal}>{stepSurface.points.length}</span>
+                    <span className={styles.statVal}>
+                      {stepSurface.points.length}
+                    </span>
                   </div>
                   <div className={styles.statRow}>
                     <span className={styles.statKey}>Triangles</span>
-                    <span className={styles.statVal}>{stepSurface.triangles.length}</span>
+                    <span className={styles.statVal}>
+                      {stepSurface.triangles.length}
+                    </span>
                   </div>
                 </div>
                 <div className={styles.sectionLabel}>Mesh controls</div>
@@ -579,7 +570,9 @@ function MeshPanel() {
                     step={0.5}
                     value={maxElementSize}
                     disabled={isMeshing}
-                    onChange={(e) => setMaxElementSize(Math.max(0.5, Number(e.target.value)))}
+                    onChange={(e) =>
+                      setMaxElementSize(Math.max(0.5, Number(e.target.value)))
+                    }
                   />
                   <span className={styles.toleranceUnit}>mm</span>
                 </div>
@@ -630,7 +623,9 @@ function MeshPanel() {
 
             {stepSurface && (
               <>
-                <div className={styles.sectionLabel} style={{ marginTop: 12 }}>Mesh controls</div>
+                <div className={styles.sectionLabel} style={{ marginTop: 12 }}>
+                  Mesh controls
+                </div>
                 <div className={styles.formRow}>
                   <span className={styles.formLabel}>Max element size</span>
                   <input
@@ -641,7 +636,9 @@ function MeshPanel() {
                     step={0.5}
                     value={maxElementSize}
                     disabled={isMeshing}
-                    onChange={(e) => setMaxElementSize(Math.max(0.5, Number(e.target.value)))}
+                    onChange={(e) =>
+                      setMaxElementSize(Math.max(0.5, Number(e.target.value)))
+                    }
                   />
                   <span className={styles.toleranceUnit}>mm</span>
                 </div>
@@ -704,7 +701,6 @@ function MeshPanel() {
           </div>
         )}
       </div>
-
     </div>
   );
 }
@@ -726,10 +722,19 @@ function ConstraintsPanel() {
   const deleteBcGroup = useModelStore((s) => s.deleteBcGroup);
   const createLoadGroup = useModelStore((s) => s.createLoadGroup);
   const addFaceToLoadGroup = useModelStore((s) => s.addFaceToLoadGroup);
-  const removeFaceFromLoadGroup = useModelStore((s) => s.removeFaceFromLoadGroup);
+  const removeFaceFromLoadGroup = useModelStore(
+    (s) => s.removeFaceFromLoadGroup,
+  );
   const deleteLoadGroup = useModelStore((s) => s.deleteLoadGroup);
 
-  const [checkedDofs, setCheckedDofs] = useState([true, true, true, false, false, false]);
+  const [checkedDofs, setCheckedDofs] = useState([
+    true,
+    true,
+    true,
+    false,
+    false,
+    false,
+  ]);
   const [loadDof, setLoadDof] = useState(1);
   const [loadForce, setLoadForce] = useState("-10000");
   const [bcValue, setBcValue] = useState("0");
@@ -737,11 +742,19 @@ function ConstraintsPanel() {
   const DOF_LABELS = ["Ux", "Uy", "Uz", "Rx", "Ry", "Rz"];
   const LOAD_LABELS = ["Fx", "Fy", "Fz", "Mx", "My", "Mz"];
 
-  const targetBcGroup = pickTargetGroupId !== null ? bcGroups.find(g => g.id === pickTargetGroupId) ?? null : null;
-  const targetLoadGroup = pickTargetGroupId !== null ? loadGroups.find(g => g.id === pickTargetGroupId) ?? null : null;
+  const targetBcGroup =
+    pickTargetGroupId !== null
+      ? (bcGroups.find((g) => g.id === pickTargetGroupId) ?? null)
+      : null;
+  const targetLoadGroup =
+    pickTargetGroupId !== null
+      ? (loadGroups.find((g) => g.id === pickTargetGroupId) ?? null)
+      : null;
 
   // All faces picked in this session: pending (shift-clicked) + the current selection.
-  const allPickedFaces = selectedFace ? [...pendingFaces, selectedFace] : pendingFaces;
+  const allPickedFaces = selectedFace
+    ? [...pendingFaces, selectedFace]
+    : pendingFaces;
 
   function cancelPick() {
     setPickMode(null);
@@ -758,7 +771,9 @@ function ConstraintsPanel() {
     if (targetBcGroup) {
       for (const fe of faceEntries) addFaceToBcGroup(targetBcGroup.id, fe);
     } else {
-      const dofs = checkedDofs.map((c, i) => (c ? i : -1)).filter((i) => i >= 0);
+      const dofs = checkedDofs
+        .map((c, i) => (c ? i : -1))
+        .filter((i) => i >= 0);
       createBcGroup(faceEntries, dofs, parseFloat(bcValue) || 0);
     }
     setPickMode(null);
@@ -807,11 +822,19 @@ function ConstraintsPanel() {
               <span className={styles.pickPanelTitle}>
                 {targetBcGroup ? `Add face to ${targetBcGroup.name}` : "New BC"}
               </span>
-              <button className={styles.iconBtn} onClick={cancelPick} title="Cancel">✕</button>
+              <button
+                className={styles.iconBtn}
+                onClick={cancelPick}
+                title="Cancel"
+              >
+                ✕
+              </button>
             </div>
 
             {allPickedFaces.length === 0 ? (
-              <div className={styles.pickHint}>Click a face in the 3D viewport</div>
+              <div className={styles.pickHint}>
+                Click a face in the 3D viewport
+              </div>
             ) : (
               <div className={styles.selectedFace}>
                 {allPickedFaces.length === 1
@@ -820,7 +843,9 @@ function ConstraintsPanel() {
               </div>
             )}
             {allPickedFaces.length > 0 && (
-              <div className={styles.pickHint}>Shift-click to add more faces</div>
+              <div className={styles.pickHint}>
+                Shift-click to add more faces
+              </div>
             )}
 
             {allPickedFaces.length > 0 && !targetBcGroup && (
@@ -831,7 +856,11 @@ function ConstraintsPanel() {
                       <input
                         type="checkbox"
                         checked={checkedDofs[i]}
-                        onChange={() => setCheckedDofs((p) => p.map((v, j) => (j === i ? !v : v)))}
+                        onChange={() =>
+                          setCheckedDofs((p) =>
+                            p.map((v, j) => (j === i ? !v : v)),
+                          )
+                        }
                       />
                       {d}
                     </label>
@@ -847,13 +876,17 @@ function ConstraintsPanel() {
                     onChange={(e) => setBcValue(e.target.value)}
                   />
                 </div>
-                <button className={styles.primaryBtn} onClick={applyBc}>Apply BC</button>
+                <button className={styles.primaryBtn} onClick={applyBc}>
+                  Apply BC
+                </button>
               </>
             )}
 
             {allPickedFaces.length > 0 && targetBcGroup && (
               <button className={styles.primaryBtn} onClick={applyBc}>
-                {allPickedFaces.length === 1 ? "Add Face" : `Add ${allPickedFaces.length} Faces`}
+                {allPickedFaces.length === 1
+                  ? "Add Face"
+                  : `Add ${allPickedFaces.length} Faces`}
               </button>
             )}
           </div>
@@ -866,19 +899,26 @@ function ConstraintsPanel() {
               <span className={styles.bcDot} />
               <span className={styles.bcGroupName}>{g.name}</span>
               <span className={styles.bcGroupMeta}>
-                {g.dofs.map(d => DOF_LABELS[d]).join(", ")} = {g.value}
+                {g.dofs.map((d) => DOF_LABELS[d]).join(", ")} = {g.value}
               </span>
               <div className={styles.treeItemActions}>
                 <button
                   className={styles.iconBtn}
                   title="Add face"
-                  onClick={() => { setPickMode("bc", g.id); setSelectedFace(null); }}
-                >✏</button>
+                  onClick={() => {
+                    setPickMode("bc", g.id);
+                    setSelectedFace(null);
+                  }}
+                >
+                  ✏
+                </button>
                 <button
                   className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
                   title="Delete BC"
                   onClick={() => deleteBcGroup(g.id)}
-                >✕</button>
+                >
+                  ✕
+                </button>
               </div>
             </div>
             {g.faces.map((f) => (
@@ -889,14 +929,18 @@ function ConstraintsPanel() {
                   className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
                   title="Remove face"
                   onClick={() => removeFaceFromBcGroup(g.id, f.id)}
-                >×</button>
+                >
+                  ×
+                </button>
               </div>
             ))}
           </div>
         ))}
 
         {/* ── Load section ───────────────────────────────────── */}
-        <div className={styles.sectionLabel} style={{ marginTop: 16 }}>Applied loads</div>
+        <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
+          Applied loads
+        </div>
 
         {pickMode !== "load" && (
           <button
@@ -911,13 +955,23 @@ function ConstraintsPanel() {
           <div className={styles.pickPanel}>
             <div className={styles.pickPanelHeader}>
               <span className={styles.pickPanelTitle}>
-                {targetLoadGroup ? `Add face to ${targetLoadGroup.name}` : "New Load"}
+                {targetLoadGroup
+                  ? `Add face to ${targetLoadGroup.name}`
+                  : "New Load"}
               </span>
-              <button className={styles.iconBtn} onClick={cancelPick} title="Cancel">✕</button>
+              <button
+                className={styles.iconBtn}
+                onClick={cancelPick}
+                title="Cancel"
+              >
+                ✕
+              </button>
             </div>
 
             {allPickedFaces.length === 0 ? (
-              <div className={styles.pickHint}>Click a face in the 3D viewport</div>
+              <div className={styles.pickHint}>
+                Click a face in the 3D viewport
+              </div>
             ) : (
               <div className={styles.selectedFace}>
                 {allPickedFaces.length === 1
@@ -926,7 +980,9 @@ function ConstraintsPanel() {
               </div>
             )}
             {allPickedFaces.length > 0 && (
-              <div className={styles.pickHint}>Shift-click to add more faces</div>
+              <div className={styles.pickHint}>
+                Shift-click to add more faces
+              </div>
             )}
 
             {allPickedFaces.length > 0 && !targetLoadGroup && (
@@ -939,7 +995,9 @@ function ConstraintsPanel() {
                     onChange={(e) => setLoadDof(Number(e.target.value))}
                   >
                     {LOAD_LABELS.map((d, i) => (
-                      <option key={d} value={i}>{d}</option>
+                      <option key={d} value={i}>
+                        {d}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -954,16 +1012,25 @@ function ConstraintsPanel() {
                   />
                 </div>
                 <div className={styles.pickNote}>
-                  {allPickedFaces.reduce((s, f) => s + f.nodeIds.length, 0)} nodes →{" "}
-                  {(parseFloat(loadForce) / allPickedFaces.reduce((s, f) => s + f.nodeIds.length, 0)).toFixed(1)} N/node
+                  {allPickedFaces.reduce((s, f) => s + f.nodeIds.length, 0)}{" "}
+                  nodes →{" "}
+                  {(
+                    parseFloat(loadForce) /
+                    allPickedFaces.reduce((s, f) => s + f.nodeIds.length, 0)
+                  ).toFixed(1)}{" "}
+                  N/node
                 </div>
-                <button className={styles.loadBtn} onClick={applyLoad}>Apply Load</button>
+                <button className={styles.loadBtn} onClick={applyLoad}>
+                  Apply Load
+                </button>
               </>
             )}
 
             {allPickedFaces.length > 0 && targetLoadGroup && (
               <button className={styles.loadBtn} onClick={applyLoad}>
-                {allPickedFaces.length === 1 ? "Add Face" : `Add ${allPickedFaces.length} Faces`}
+                {allPickedFaces.length === 1
+                  ? "Add Face"
+                  : `Add ${allPickedFaces.length} Faces`}
               </button>
             )}
           </div>
@@ -982,13 +1049,20 @@ function ConstraintsPanel() {
                 <button
                   className={styles.iconBtn}
                   title="Add face"
-                  onClick={() => { setPickMode("load", g.id); setSelectedFace(null); }}
-                >✏</button>
+                  onClick={() => {
+                    setPickMode("load", g.id);
+                    setSelectedFace(null);
+                  }}
+                >
+                  ✏
+                </button>
                 <button
                   className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
                   title="Delete Load"
                   onClick={() => deleteLoadGroup(g.id)}
-                >✕</button>
+                >
+                  ✕
+                </button>
               </div>
             </div>
             {g.faces.map((f) => (
@@ -999,7 +1073,9 @@ function ConstraintsPanel() {
                   className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
                   title="Remove face"
                   onClick={() => removeFaceFromLoadGroup(g.id, f.id)}
-                >×</button>
+                >
+                  ×
+                </button>
               </div>
             ))}
           </div>
@@ -1045,8 +1121,8 @@ function SolvePanel() {
         setMode("results");
       })
       .catch((err) => {
-        console.error('[solve] solver failed:', err.message)
-        setError(`Solver error: ${err.message}`)
+        console.error("[solve] solver failed:", err.message);
+        setError(`Solver error: ${err.message}`);
       })
       .finally(() => setRunning(false));
   }
