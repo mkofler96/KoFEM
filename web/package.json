@@ -10,7 +10,7 @@
     "build:wasm": "cd .. && wasm-pack build crates/kofem-wasm --target web --out-dir ../../web/src/wasm/pkg",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "node ../test_wall_bracket.mjs 20.0 && playwright test",
+    "test": "bun ../test_wall_bracket.mjs 20.0 && playwright test",
     "test:ui": "playwright test --ui",
     "test:screenshot": "playwright test screenshot.spec.ts",
     "test:mesh-report": "playwright test mesh-report.spec.ts",
