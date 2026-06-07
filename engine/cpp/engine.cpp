@@ -862,21 +862,28 @@ static std::string solve_linear_elastic(
     constexpr int dim = 3;
     Mesh mfem_mesh(dim, (int)nv, (int)(nt + nh), /*NBdrElem=*/0, /*spaceDim=*/dim);
 
+    printf("[mfem] mesh shell ok\n"); fflush(stdout);
     for (unsigned i = 0; i < nv; ++i)
         mfem_mesh.AddVertex(vertices[3*i], vertices[3*i+1], vertices[3*i+2]);
+    printf("[mfem] vertices added\n"); fflush(stdout);
 
     for (unsigned i = 0; i < nt; ++i)
         mfem_mesh.AddTet(tets[4*i], tets[4*i+1], tets[4*i+2], tets[4*i+3], /*attr=*/1);
+    printf("[mfem] tets added\n"); fflush(stdout);
 
     for (unsigned i = 0; i < nh; ++i)
         mfem_mesh.AddHex(hexs[8*i], hexs[8*i+1], hexs[8*i+2], hexs[8*i+3],
                          hexs[8*i+4], hexs[8*i+5], hexs[8*i+6], hexs[8*i+7], /*attr=*/1);
+    printf("[mfem] hexs added\n"); fflush(stdout);
 
     // generate_bdr=true: boundary Triangle/Quad elements auto-generated from
     // exposed faces of volume elements (correct for a watertight Netgen mesh).
     mfem_mesh.FinalizeTopology(/*generate_bdr=*/true);
+    printf("[mfem] FinalizeTopology done\n"); fflush(stdout);
+
     // Netgen output has correct orientation; skip the orientation-fix pass.
     mfem_mesh.Finalize(/*refine=*/false, /*fix_orientation=*/false);
+    printf("[mfem] Finalize done\n"); fflush(stdout);
 
     printf("[mfem] mesh ready: %d vertices, %d elements, %d boundary elems\n",
            mfem_mesh.GetNV(), mfem_mesh.GetNE(), mfem_mesh.GetNBE());
