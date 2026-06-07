@@ -829,11 +829,26 @@ static std::string solve_linear_elastic(
     }
     log_mem("solve: after writing mesh file");
     printf("[mfem] reading mesh file\n"); fflush(stdout);
-    // gen_edges=1 so MFEM builds the edge table (needed for FE space connectivity).
-    // refine=0 so mesh is used as-is without any red-refinement.
-    // fix_orientation=true so degenerate/inverted tets are corrected.
+    // ── Mesh constructor flags — DO NOT CHANGE without reading this ─────────────
+    // gen_edges=1  Required. Tells MFEM to build the edge connectivity table.
+    //              H1_FECollection needs edges for the FE space degree-of-freedom
+    //              numbering; the solver silently produces wrong results without it.
+    //              Changing to 0 breaks the solve.
+    //
+    // refine=0     Mesh is used exactly as produced by Netgen.  Passing 1 triggers
+    //              MFEM's red-refinement which subdivides every tet, multiplying
+    //              DoF count and solve time with no accuracy benefit here.
+    //
+    // fix_orient=false  Netgen always produces correctly-oriented tetrahedra (all
+    //              volumes positive), so orientation correction is a no-op — but
+    //              passing true is NOT safe here.  In Mesh::Finalize, the condition
+    //                  fix_orientation && Dim==3 && (meshgen & 1)
+    //              triggers a second FinalizeTopology() call which dispatches a
+    //              virtual method whose function-table entry is eliminated by
+    //              Emscripten DCE.  This causes an invoke_iiiiii WASM trap at
+    //              runtime.  Leave this false.
     constexpr int dim = 3;
-    Mesh mfem_mesh(mesh_tmppath, /*gen_edges=*/1, /*refine=*/0, /*fix_orient=*/true);
+    Mesh mfem_mesh(mesh_tmppath, /*gen_edges=*/1, /*refine=*/0, /*fix_orient=*/false);
     unlink(mesh_tmppath);
 
     printf("[mfem] mesh ready: %d vertices, %d tets, %d hexs, %d boundary elems\n",
