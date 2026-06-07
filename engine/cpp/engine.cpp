@@ -659,33 +659,82 @@ static std::string generate_volume_mesh(
 __attribute__((used))
 static void _kofem_mfem_element_keepalive() {
     using namespace mfem;
+    // Anchor ALL virtual methods on Element subclasses that FinalizeTopology()
+    // dispatches through.  Without direct calls the Emscripten DCE pass strips
+    // the function bodies and leaves stale (or zero) WASM function-table entries,
+    // causing invoke_* traps at runtime.  A direct call on a concrete stack
+    // instance devirtualises to a static call, which forces the function body
+    // into the binary and correctly populates the vtable slot.
+    //
+    // Methods anchored per element type:
+    //   GetType            — GenerateFaces() switches on element type
+    //   GetNVertices       — used in various mesh queries
+    //   GetNEdges          — GetElementToEdgeTable() iterates edges
+    //   GetEdgeVertices(i) — GetElementToEdgeTable() looks up edge vertex pairs
+    //   GetNFaces()        — GetElementToFaceTable() iterates faces
+    //   GetNFaceVertices   — GetElementToFaceTable() sizes face vertex arrays
+    //   GetFaceVertices    — GetElementToFaceTable() fills STable3D
+    //   GetVertices()      — int* overload, used during boundary element setup
+    //   GetVertices(arr)   — Array<int>& overload, used in refinement checks
     {
         int vi[4] = {0,1,2,3};
         Tetrahedron t(vi, 1);
-        volatile int g = t.GetGeometryType();   // direct call → keeps vtable entry live
-        volatile int n = t.GetNVertices();
-        (void)g; (void)n;
+        volatile Element::Type tp = t.GetType();
+        volatile int nv2 = t.GetNVertices();
+        volatile int ne = t.GetNEdges();
+        const int *ev = t.GetEdgeVertices(0);
+        volatile int nf = t.GetNFaces();
+        volatile int nfv = t.GetNFaceVertices(0);
+        const int *fv = t.GetFaceVertices(0);
+        int *vi_ret = t.GetVertices();
+        Array<int> varr; t.GetVertices(varr);
+        (void)tp; (void)nv2; (void)ne; (void)ev; (void)nf;
+        (void)nfv; (void)fv; (void)vi_ret; (void)varr;
     }
     {
         int vi[3] = {0,1,2};
         Triangle tri(vi, 1);
-        volatile int g = tri.GetGeometryType();
-        volatile int n = tri.GetNVertices();
-        (void)g; (void)n;
+        volatile Element::Type tp = tri.GetType();
+        volatile int nv2 = tri.GetNVertices();
+        volatile int ne = tri.GetNEdges();
+        const int *ev = tri.GetEdgeVertices(0);
+        volatile int nf = tri.GetNFaces();
+        volatile int nfv = tri.GetNFaceVertices(0);
+        const int *fv = tri.GetFaceVertices(0);
+        int *vi_ret = tri.GetVertices();
+        Array<int> varr; tri.GetVertices(varr);
+        (void)tp; (void)nv2; (void)ne; (void)ev; (void)nf;
+        (void)nfv; (void)fv; (void)vi_ret; (void)varr;
     }
     {
         int vi[8] = {0,1,2,3,4,5,6,7};
         Hexahedron hex(vi, 1);
-        volatile int g = hex.GetGeometryType();
-        volatile int n = hex.GetNVertices();
-        (void)g; (void)n;
+        volatile Element::Type tp = hex.GetType();
+        volatile int nv2 = hex.GetNVertices();
+        volatile int ne = hex.GetNEdges();
+        const int *ev = hex.GetEdgeVertices(0);
+        volatile int nf = hex.GetNFaces();
+        volatile int nfv = hex.GetNFaceVertices(0);
+        const int *fv = hex.GetFaceVertices(0);
+        int *vi_ret = hex.GetVertices();
+        Array<int> varr; hex.GetVertices(varr);
+        (void)tp; (void)nv2; (void)ne; (void)ev; (void)nf;
+        (void)nfv; (void)fv; (void)vi_ret; (void)varr;
     }
     {
         int vi[4] = {0,1,2,3};
         Quadrilateral quad(vi, 1);
-        volatile int g = quad.GetGeometryType();
-        volatile int n = quad.GetNVertices();
-        (void)g; (void)n;
+        volatile Element::Type tp = quad.GetType();
+        volatile int nv2 = quad.GetNVertices();
+        volatile int ne = quad.GetNEdges();
+        const int *ev = quad.GetEdgeVertices(0);
+        volatile int nf = quad.GetNFaces();
+        volatile int nfv = quad.GetNFaceVertices(0);
+        const int *fv = quad.GetFaceVertices(0);
+        int *vi_ret = quad.GetVertices();
+        Array<int> varr; quad.GetVertices(varr);
+        (void)tp; (void)nv2; (void)ne; (void)ev; (void)nf;
+        (void)nfv; (void)fv; (void)vi_ret; (void)varr;
     }
 
     // ElementTransformation::SetIntPoint is inline virtual in eltrans.hpp:
@@ -794,67 +843,44 @@ static std::string solve_linear_elastic(
     printf("[mfem] BCs: %u fixed vertices, %u point loads\n", n_fixed, n_loads); fflush(stdout);
     log_mem("solve: after extracting mesh data");
 
-    // Build MFEM mesh — write to MFEM native format and read back.
-    // This uses MFEM's well-tested file reader rather than the incremental API
-    // (AddTet + FinalizeTetMesh), which has virtual-dispatch issues in the
-    // WASM build when the mesh has many tetrahedra.
+    // Build MFEM mesh programmatically to avoid C++ iostream file I/O.
     //
-    // MFEM mesh v1.0 format: 1-indexed vertices, element type 4=tet 5=hex.
-    // Boundary section: 0 entries (MFEM generates them automatically from the
-    // element connectivity, which is correct for a watertight volume mesh).
-    printf("[mfem] writing mesh file (%u verts, %u tets, %u hexs)\n", nv, nt, nh); fflush(stdout);
-    char mesh_tmppath[] = "/tmp/kofem_solve_XXXXXX.mesh";
-    {
-        int fd = mkstemps(mesh_tmppath, 5);
-        if (fd < 0) throw std::runtime_error("solve_linear_elastic: cannot create temp mesh file");
-        FILE* f = fdopen(fd, "w");
-        if (!f) { close(fd); unlink(mesh_tmppath);
-                  throw std::runtime_error("solve_linear_elastic: fdopen failed"); }
-
-        // MFEM mesh v1.0 uses 0-based vertex indices.
-        fprintf(f, "MFEM mesh v1.0\n\ndimension\n3\n\nelements\n%u\n", nt + nh);
-        for (unsigned i = 0; i < nt; ++i)
-            fprintf(f, "1 4 %d %d %d %d\n",
-                    tets[4*i], tets[4*i+1], tets[4*i+2], tets[4*i+3]);
-        for (unsigned i = 0; i < nh; ++i)
-            fprintf(f, "1 5 %d %d %d %d %d %d %d %d\n",
-                    hexs[8*i], hexs[8*i+1], hexs[8*i+2], hexs[8*i+3],
-                    hexs[8*i+4], hexs[8*i+5], hexs[8*i+6], hexs[8*i+7]);
-
-        fprintf(f, "\nboundary\n0\n\nvertices\n%u\n3\n", nv);
-        for (unsigned i = 0; i < nv; ++i)
-            fprintf(f, "%.17g %.17g %.17g\n",
-                    vertices[3*i], vertices[3*i+1], vertices[3*i+2]);
-        fclose(f);
-    }
-    log_mem("solve: after writing mesh file");
-    printf("[mfem] reading mesh file\n"); fflush(stdout);
-    // ── Mesh constructor flags — DO NOT CHANGE without reading this ─────────────
-    // gen_edges=1  Required. Tells MFEM to build the edge connectivity table.
-    //              H1_FECollection needs edges for the FE space degree-of-freedom
-    //              numbering; the solver silently produces wrong results without it.
-    //              Changing to 0 breaks the solve.
+    // The file-based path (Mesh(filename, ...)) opens an ifstream and reads
+    // through basic_filebuf / basic_streambuf virtual dispatch.  In the WASM
+    // (Emscripten) build the locale/codec facet pointer inside the streambuf
+    // object is null, so the first virtual call through it traps with
+    // "Out of bounds memory access" via invoke_iiiiii.
     //
-    // refine=0     Mesh is used exactly as produced by Netgen.  Passing 1 triggers
-    //              MFEM's red-refinement which subdivides every tet, multiplying
-    //              DoF count and solve time with no accuracy benefit here.
-    //
-    // fix_orient=false  Netgen always produces correctly-oriented tetrahedra (all
-    //              volumes positive), so orientation correction is a no-op — but
-    //              passing true is NOT safe here.  In Mesh::Finalize, the condition
-    //                  fix_orientation && Dim==3 && (meshgen & 1)
-    //              triggers a second FinalizeTopology() call which dispatches a
-    //              virtual method whose function-table entry is eliminated by
-    //              Emscripten DCE.  This causes an invoke_iiiiii WASM trap at
-    //              runtime.  Leave this false.
+    // The programmatic path calls no iostream code at all: AddVertex / AddTet /
+    // AddHex populate in-memory arrays directly, and FinalizeTopology builds all
+    // connectivity (faces, boundary elements, edge table) without file I/O.
+    // In 3D, FinalizeTopology always builds the edge table, which is required by
+    // H1_FECollection for DOF numbering.
+    printf("[mfem] building mesh (%u verts, %u tets, %u hexs)\n", nv, nt, nh); fflush(stdout);
+    log_mem("solve: before MFEM mesh build");
     constexpr int dim = 3;
-    Mesh mfem_mesh(mesh_tmppath, /*gen_edges=*/1, /*refine=*/0, /*fix_orient=*/false);
-    unlink(mesh_tmppath);
+    Mesh mfem_mesh(dim, (int)nv, (int)(nt + nh), /*NBdrElem=*/0, /*spaceDim=*/dim);
 
-    printf("[mfem] mesh ready: %d vertices, %d tets, %d hexs, %d boundary elems\n",
-           mfem_mesh.GetNV(), mfem_mesh.GetNE(), 0 /*nh counted separately*/, mfem_mesh.GetNBE());
+    for (unsigned i = 0; i < nv; ++i)
+        mfem_mesh.AddVertex(vertices[3*i], vertices[3*i+1], vertices[3*i+2]);
+
+    for (unsigned i = 0; i < nt; ++i)
+        mfem_mesh.AddTet(tets[4*i], tets[4*i+1], tets[4*i+2], tets[4*i+3], /*attr=*/1);
+
+    for (unsigned i = 0; i < nh; ++i)
+        mfem_mesh.AddHex(hexs[8*i], hexs[8*i+1], hexs[8*i+2], hexs[8*i+3],
+                         hexs[8*i+4], hexs[8*i+5], hexs[8*i+6], hexs[8*i+7], /*attr=*/1);
+
+    // generate_bdr=true: boundary Triangle/Quad elements auto-generated from
+    // exposed faces of volume elements (correct for a watertight Netgen mesh).
+    mfem_mesh.FinalizeTopology(/*generate_bdr=*/true);
+    // Netgen output has correct orientation; skip the orientation-fix pass.
+    mfem_mesh.Finalize(/*refine=*/false, /*fix_orientation=*/false);
+
+    printf("[mfem] mesh ready: %d vertices, %d elements, %d boundary elems\n",
+           mfem_mesh.GetNV(), mfem_mesh.GetNE(), mfem_mesh.GetNBE());
     fflush(stdout);
-    log_mem("solve: after MFEM read mesh");
+    log_mem("solve: after MFEM mesh build");
 
     order = std::max(1, order);
     double lam = E * nu / ((1.0 + nu) * (1.0 - 2.0*nu));
