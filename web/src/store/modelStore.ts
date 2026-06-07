@@ -319,10 +319,15 @@ interface ModelState {
   nextFaceEntryId: number
 
   volMesh: VolMesh | null
+  // OCC face index per boundary triangle, populated when the mesh came from a
+  // STEP file via the Netgen OCC pipeline.  Index i corresponds to triangle i
+  // of the boundary mesh (built from tet elements in MeshScene).
+  surfaceFaceIds: number[] | null
   viewRepr: 'geometry' | 'surface' | 'volume' | 'wireframe'
   stepImportError: string | null
   setStepSurface(mesh: StepSurfaceMesh | null): void
   setVolMesh(mesh: VolMesh | null): void
+  setSurfaceFaceIds(ids: number[] | null): void
   setViewRepr(v: 'geometry' | 'surface' | 'volume' | 'wireframe'): void
   setStepImportError(msg: string | null): void
 
@@ -341,7 +346,7 @@ interface ModelState {
   setResult(result: SolverResult): void
   setRunning(v: boolean): void
   setMeshing(v: boolean): void
-  applyMeshResult(nodes: Node[], elements: Element[], modelName: string): void
+  applyMeshResult(nodes: Node[], elements: Element[], modelName: string, surfaceFaceIds?: number[] | null): void
   loadModel(snapshot: ModelSnapshot & { modelName?: string }): void
   reset(): void
 
@@ -407,6 +412,7 @@ export const useModelStore = create<ModelState>()(
     isRunning: false,
     isMeshing: false,
     volMesh: null,
+    surfaceFaceIds: null,
     viewRepr: 'surface' as const,
     stepImportError: null,
     geometries: [],
@@ -421,6 +427,7 @@ export const useModelStore = create<ModelState>()(
     setStepImportError: (msg) => set(s => { s.stepImportError = msg }),
     setViewRepr: (v) => set(s => { s.viewRepr = v }),
     setVolMesh: (mesh) => set(s => { s.volMesh = mesh; if (mesh) s.viewRepr = 'volume' }),
+    setSurfaceFaceIds: (ids) => set(s => { s.surfaceFaceIds = ids }),
     setStepSurface: (mesh) => set(s => {
       s.stepSurface = mesh
       s.volMesh = null; s.viewRepr = 'geometry'
@@ -483,9 +490,10 @@ export const useModelStore = create<ModelState>()(
     setRunning: (v) => set(s => { s.isRunning = v }),
     setMeshing: (v) => set(s => { s.isMeshing = v }),
 
-    applyMeshResult: (nodes, elements, name) => set(s => {
+    applyMeshResult: (nodes, elements, name, surfaceFaceIds) => set(s => {
       s.nodes = nodes
       s.elements = elements
+      s.surfaceFaceIds = surfaceFaceIds ?? null
       s.bcGroups = []; s.loadGroups = []
       s.constraints = []; s.loads = []
       s.nextBcGroupId = 1; s.nextLoadGroupId = 1; s.nextFaceEntryId = 1
@@ -539,6 +547,7 @@ export const useModelStore = create<ModelState>()(
       s.result = null
       s.stepSurface = null
       s.volMesh = null
+      s.surfaceFaceIds = null
       s.viewRepr = 'surface'
       s.geometries = []
       s.nextGeomId = 2

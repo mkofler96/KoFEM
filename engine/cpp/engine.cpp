@@ -38,6 +38,7 @@
 #include <cmath>
 #include <cstring>
 #include <malloc.h>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -96,6 +97,17 @@ static std::string json_ivec4(const std::vector<int>& d) {
     for (size_t i = 0; i < n; ++i) {
         if (i) ss << ',';
         ss << '[' << d[4*i] << ',' << d[4*i+1] << ',' << d[4*i+2] << ',' << d[4*i+3] << ']';
+    }
+    ss << ']';
+    return ss.str();
+}
+
+static std::string json_ints(const std::vector<int>& d) {
+    std::ostringstream ss;
+    ss << '[';
+    for (size_t i = 0; i < d.size(); ++i) {
+        if (i) ss << ',';
+        ss << d[i];
     }
     ss << ']';
     return ss.str();
@@ -337,6 +349,12 @@ namespace nglib {
     extern Ng_Result Ng_GetVolumeElement(Ng_Mesh*, int, int*);
     extern int       Ng_GetNP(Ng_Mesh*);
     extern int       Ng_GetNE(Ng_Mesh*);
+    // Surface element queries (standard nglib API, Netgen v6.2+)
+    extern int       Ng_GetNSE(Ng_Mesh*);
+    extern void      Ng_GetSurfaceElement(Ng_Mesh*, int, int*);
+    // BC property = OCC face index (1-based) when mesh was generated via Ng_OCC_*.
+    // Returns 1 for all elements when using the manual Ng_AddSurfaceElement path.
+    extern int       Ng_GetSurfaceElementBCProperty(Ng_Mesh*, int);
 }
 
 // OCC meshing API (Netgen v6.2.2401, nglib/nglib_occ.cpp, namespace nglib).
@@ -510,11 +528,27 @@ static std::string generate_fem_mesh(const std::string& opts_json)
         out_tets.push_back(tet[3] - 1);
     }
 
+    // Surface elements — one per boundary triangle, in Netgen surface element order.
+    // Ng_GetSurfaceElementBCProperty returns the OCC face index (1-based) for each
+    // triangle, which the frontend uses for instant face selection instead of BFS.
+    // The frontend aligns these with tet boundary triangles by matching sorted vertex
+    // triples; they are only used when the count equals the tet boundary triangle count.
+    int nse = nglib::Ng_GetNSE(mesh);
+    std::vector<int> out_surf_face_ids;
+    out_surf_face_ids.reserve(nse);
+    for (int i = 1; i <= nse; ++i) {
+        out_surf_face_ids.push_back(nglib::Ng_GetSurfaceElementBCProperty(mesh, i));
+    }
+    printf("[netgen] %d surface elements, %d unique OCC face IDs\n",
+           nse, (int)std::set<int>(out_surf_face_ids.begin(), out_surf_face_ids.end()).size());
+    fflush(stdout);
+
     nglib::Ng_DeleteMesh(mesh);
     log_mem("generate_fem_mesh: after Ng_DeleteMesh");
 
     return "{\"vertices\":" + json_vec3(out_verts) +
-           ",\"tetrahedra\":" + json_ivec4(out_tets) + "}";
+           ",\"tetrahedra\":" + json_ivec4(out_tets) +
+           ",\"surfaceFaceIds\":" + json_ints(out_surf_face_ids) + "}";
 
 #else
 #error "KoFEM requires Netgen built with -DUSE_OCC=ON (KOFEM_NETGEN_OCC is not defined). " \

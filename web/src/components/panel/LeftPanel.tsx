@@ -505,11 +505,12 @@ function MeshPanel() {
     setMeshing(true);
     setLogs([]);
     try {
-      const { nodes: n, elements: e } = await sendToWorker<{
+      const { nodes: n, elements: e, surfaceFaceIds } = await sendToWorker<{
         nodes: Node[];
         elements: Element[];
+        surfaceFaceIds: number[] | null;
       }>("volume_mesh", { surface: stepSurface, maxElementSize });
-      applyMeshResult(n, e, "STEP Volume Mesh");
+      applyMeshResult(n, e, "STEP Volume Mesh", surfaceFaceIds);
     } catch (err) {
       console.error('[meshing] volume mesh failed:', err)
       setError(`Volume meshing failed: ${err}`);

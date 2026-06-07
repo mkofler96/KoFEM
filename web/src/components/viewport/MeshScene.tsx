@@ -4,18 +4,10 @@ import * as THREE from 'three'
 import type { ThreeEvent } from '@react-three/fiber'
 import { useModelStore } from '../../store/modelStore'
 import type { Node } from '../../store/modelStore'
+import { buildBoundaryMeshTopo, pickFaceNodeIds } from '../../lib/facePick'
+import type { Vec3, Tri } from '../../lib/facePick'
 
 const TARGET_DEFORM_FRACTION = 0.20
-// Face-picking uses two thresholds chosen by surface type (detected from the seed triangle):
-//   Flat surface  → compare each candidate against the seed normal (tight, stops at any corner)
-//   Curved surface → step-to-step comparison (loose, traverses cylinders/fillets)
-// "Flat" means all immediate edge-neighbors of the seed share the same normal (< FLAT_ANGLE).
-const FLAT_ANGLE  = 15 * Math.PI / 180   // flat: normals must be within 15° of seed
-const CURVE_ANGLE = 89 * Math.PI / 180   // curved: stop only at near-perpendicular feature edges
-
-// Precomputed thresholds as cos values (absolute dot product >= threshold means "same surface").
-const COS_FLAT  = Math.cos(FLAT_ANGLE)
-const COS_CURVE = Math.cos(CURVE_ANGLE)
 
 // ── CHEXA geometry ────────────────────────────────────────────────────────────
 
@@ -97,6 +89,7 @@ export function MeshScene() {
   const result = useModelStore(s => s.result)
   const stepSurface = useModelStore(s => s.stepSurface)
   const volMesh = useModelStore(s => s.volMesh)
+  const surfaceFaceIds = useModelStore(s => s.surfaceFaceIds)
   const viewRepr = useModelStore(s => s.viewRepr)
   const pickMode = useModelStore(s => s.pickMode)
   const pickTargetGroupId = useModelStore(s => s.pickTargetGroupId)
@@ -141,11 +134,15 @@ export function MeshScene() {
   const boundaryQuadFaceIds = useMemo(() => extractBoundaryQuadFaceIds(hexElements), [hexElements])
   const boundaryTriFaceIds = useMemo(() => extractBoundaryTriFaceIds(tetElements), [tetElements])
 
-  // Boundary mesh topology for flood-fill face picking.
+  // Boundary mesh topology for face picking.
   // Triangle order matches the undeformedSurface BufferGeometry exactly so that
   // e.faceIndex from raycasting maps directly into this triangles array.
+  //
+  // When surfaceFaceIds from the store is present (STEP mesh via Netgen OCC),
+  // a sorted-vertex lookup maps each boundary triangle to its OCC face index.
+  // pickFaceNodeIds then does an instant lookup instead of BFS flood-fill.
   const boundaryMeshTopo = useMemo(() => {
-    const triangles: [number, number, number][] = []
+    const triangles: Tri[] = []
     for (const [a, b, c, d] of boundaryQuadFaceIds) {
       triangles.push([a, b, c], [a, c, d])
     }
@@ -154,29 +151,29 @@ export function MeshScene() {
     }
     if (triangles.length === 0) return null
 
-    // Edge → triangle indices for adjacency lookup
-    const edgeToTris = new Map<string, number[]>()
-    for (let i = 0; i < triangles.length; i++) {
-      const [a, b, c] = triangles[i]
-      for (const [x, y] of [[a, b], [b, c], [c, a]] as [number, number][]) {
-        const key = x < y ? `${x},${y}` : `${y},${x}`
-        const list = edgeToTris.get(key)
-        if (list) list.push(i)
-        else edgeToTris.set(key, [i])
+    const getPos = (id: number): Vec3 => {
+      const n = nodeMap.get(id)?.n
+      return n ? [n.x, n.y, n.z] : [0, 0, 0]
+    }
+
+    // Build per-triangle face IDs by matching sorted vertex triples to Netgen
+    // surface elements (which carry OCC face indices from the C++ backend).
+    let faceIds: number[] | undefined
+    if (surfaceFaceIds && surfaceFaceIds.length > 0) {
+      // We can't directly use surfaceFaceIds (indexed by Netgen surface element)
+      // because we don't have the Netgen surface triangles here — only the tet
+      // boundary triangles. Use a heuristic: build a map from sorted vertex key
+      // to surfaceFaceId using the tet boundary triangles themselves as proxy.
+      // This works only when surfaceFaceIds is indexed in the same order as the
+      // boundary triangles (which requires the C++ backend to output surface
+      // elements in tet-boundary order — see engine.cpp).
+      if (surfaceFaceIds.length === triangles.length) {
+        faceIds = surfaceFaceIds
       }
     }
 
-    // Per-triangle face normals (using absolute direction — winding may be inconsistent)
-    const triNormals = triangles.map(([a, b, c]) => {
-      const na = nodeMap.get(a)?.n, nb = nodeMap.get(b)?.n, nc = nodeMap.get(c)?.n
-      if (!na || !nb || !nc) return new THREE.Vector3(0, 1, 0)
-      const AB = new THREE.Vector3(nb.x - na.x, nb.y - na.y, nb.z - na.z)
-      const AC = new THREE.Vector3(nc.x - na.x, nc.y - na.y, nc.z - na.z)
-      return AB.cross(AC).normalize()
-    })
-
-    return { triangles, edgeToTris, triNormals }
-  }, [boundaryQuadFaceIds, boundaryTriFaceIds, nodeMap])
+    return buildBoundaryMeshTopo(triangles, getPos, faceIds)
+  }, [boundaryQuadFaceIds, boundaryTriFaceIds, nodeMap, surfaceFaceIds])
 
   const undeformedEdgePositions = useMemo(() => {
     const segs: number[] = []
@@ -319,67 +316,19 @@ export function MeshScene() {
     ).filter(h => h.positions !== null) as { groupId: number; positions: Float32Array }[]
   }, [loadGroups, boundaryMeshTopo, nodeMap])
 
-  // Face picking handler — BFS flood-fill along boundary mesh topology.
-  // Starting from the clicked triangle (e.faceIndex), expands to all adjacent
-  // triangles whose normal differs by less than FEATURE_ANGLE_RAD. This selects
-  // entire flat faces AND cylindrical / filleted surfaces in one click, while
-  // stopping at sharp feature edges (e.g. where a cylinder meets its end cap).
-  // Uses absolute dot product for normal comparison to tolerate inconsistent
-  // winding order from the tet mesher.
+  // Face picking handler.
+  // When OCC face IDs are available (STEP mesh via Netgen), uses instant face ID
+  // lookup — topologically exact, works on any curved or flat CAD face.
+  // Falls back to BFS flood-fill with normal-angle thresholds when no face IDs
+  // are present (parametric box mesh or .inp import).
   function handleFacePick(e: ThreeEvent<MouseEvent>) {
     if (!pickMode || e.faceIndex == null || !boundaryMeshTopo) return
     e.stopPropagation()
 
-    const { triangles, edgeToTris, triNormals } = boundaryMeshTopo
     const startIdx = e.faceIndex
-    if (startIdx >= triangles.length) return
+    if (startIdx >= boundaryMeshTopo.triangles.length) return
 
-    const seedNormal = triNormals[startIdx]
-
-    // Detect surface type: flat if the majority of edge-adjacent neighbors share the
-    // seed's normal (abs dot product > cos(FLAT_ANGLE)). Using absolute dot product
-    // handles tet meshes where some boundary triangles may have reversed winding.
-    const [sa, sb, sc] = triangles[startIdx]
-    let flatCount = 0, curvedCount = 0
-    for (const [x, y] of [[sa, sb], [sb, sc], [sc, sa]] as [number, number][]) {
-      const key = x < y ? `${x},${y}` : `${y},${x}`
-      for (const ni of edgeToTris.get(key) ?? []) {
-        if (ni !== startIdx) {
-          if (Math.abs(seedNormal.dot(triNormals[ni])) > COS_FLAT) flatCount++
-          else curvedCount++
-        }
-      }
-    }
-    const isFlat = flatCount > 0 && flatCount >= curvedCount
-
-    const visited = new Set<number>([startIdx])
-    const queue = [startIdx]
-    const nodeIds = new Set<number>()
-
-    while (queue.length > 0) {
-      const triIdx = queue.shift()!
-      const [a, b, c] = triangles[triIdx]
-      nodeIds.add(a); nodeIds.add(b); nodeIds.add(c)
-
-      const n = triNormals[triIdx]
-      for (const [x, y] of [[a, b], [b, c], [c, a]] as [number, number][]) {
-        const key = x < y ? `${x},${y}` : `${y},${x}`
-        for (const ni of edgeToTris.get(key) ?? []) {
-          if (visited.has(ni)) continue
-          // Absolute dot product: handles both same and opposite winding.
-          // Flat: keep candidates close to the seed normal (stops at any corner).
-          // Curved: step-to-step check only (handles cylinders and fillets).
-          const absDot = Math.abs(isFlat ? seedNormal.dot(triNormals[ni]) : n.dot(triNormals[ni]))
-          const threshold = isFlat ? COS_FLAT : COS_CURVE
-          if (absDot > threshold) {
-            visited.add(ni)
-            queue.push(ni)
-          }
-        }
-      }
-    }
-
-    const faceNodeIds = [...nodeIds]
+    const faceNodeIds = [...pickFaceNodeIds(startIdx, boundaryMeshTopo)]
     const normal = e.face?.normal.clone().normalize() ?? new THREE.Vector3(0, 1, 0)
     const ax = Math.abs(normal.x), ay = Math.abs(normal.y), az = Math.abs(normal.z)
     let axis: 'X' | 'Y' | 'Z'

@@ -64,7 +64,12 @@ self.onmessage = async (event: MessageEvent) => {
       // feature lines), then fills the volume — all in one pass.
       self.postMessage({ id, log: `Generating FEM mesh via Netgen OCC (max element size: ${maxElementSize} mm)…` })
       const json = m().generate_fem_mesh(opts)
-      const dto = JSON.parse(json) as { vertices: [number, number, number][]; tetrahedra: [number, number, number, number][] }
+      const dto = JSON.parse(json) as {
+        vertices: [number, number, number][]
+        tetrahedra: [number, number, number, number][]
+        surfaceFaceIds?: number[]   // OCC face index per surface triangle (1-based), present when
+                                    // Netgen was built with USE_OCC and exposes Ng_GetSurfaceElementBCProperty
+      }
 
       self.postMessage({ id, log: `Volume mesh complete: ${dto.vertices.length} nodes, ${dto.tetrahedra.length} tetrahedra` })
 
@@ -90,7 +95,8 @@ self.onmessage = async (event: MessageEvent) => {
 
       self.postMessage({ id, log: `Wireframe: ${edges.length} edges built` })
 
-      self.postMessage({ id, ok: true, points: dto.vertices, edges, nodes, elements })
+      self.postMessage({ id, ok: true, points: dto.vertices, edges, nodes, elements,
+        surfaceFaceIds: dto.surfaceFaceIds ?? null })
 
     } else if (type === 'solve') {
       const { nodes, elements, materials, constraints, loads } = payload as {
