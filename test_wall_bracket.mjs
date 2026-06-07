@@ -1,9 +1,7 @@
-// Reproduces the memory error seen on the wall bracket STEP file.
-// Runs the full pipeline: tessellate → tessellate_for_meshing → generate_volume_mesh → solve
-// using the existing compiled WASM (Node.js v18+ required).
-// Note: existing WASM uses the older surface-mesh path; the OCC path (generate_fem_mesh)
-// is only available after rebuilding with docker-build-wasm.sh.
+// Wall Bracket solve test — runs the full WASM pipeline in Node.js.
+// STEP → tessellate (OCC) → FEM mesh (Netgen) → linear-elastic solve (MFEM)
 //
+// No error handling: any failure surfaces immediately as a raw Node.js error.
 // Usage:  node test_wall_bracket.mjs [max_element_size]
 
 import { readFileSync } from 'fs'
@@ -11,13 +9,12 @@ import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const maxElementSize = parseFloat(process.argv[2] ?? '10.0')
+const maxElementSize = parseFloat(process.argv[2] ?? '20.0')
 
-const wasmPkg = join(__dirname, 'web/src/wasm/pkg')
+const wasmPkg    = join(__dirname, 'web/src/wasm/pkg')
 const wasmBinary = readFileSync(join(wasmPkg, 'kofem_wasm.wasm')).buffer
 
 const { default: createModule } = await import(join(wasmPkg, 'kofem_wasm_emcc.js'))
-
 const Module = await createModule({
   wasmBinary,
   print:    (t) => console.log('[wasm]', t),
@@ -27,86 +24,33 @@ const Module = await createModule({
 const stepBytes = new Uint8Array(readFileSync(join(__dirname, 'test_files/Wall Bracket.stp')))
 console.log(`\nWall bracket: ${stepBytes.length} bytes, max_element_size=${maxElementSize}\n`)
 
-const hasFn = (name) => typeof Module[name] === 'function'
-console.log('Pipeline mode:', hasFn('generate_fem_mesh') ? 'OCC (generate_fem_mesh)' : 'surface (tessellate_for_meshing)')
-console.log()
+// 1. Tessellate (stores OCC shape in WASM for the mesher)
+const tess = JSON.parse(Module.tessellate_step(
+  stepBytes,
+  JSON.stringify({ linear_deflection: 0.1, angular_deflection: 0.5 }),
+))
+console.log(`tessellate_step:  ${tess.vertices.length} vertices, ${tess.triangles.length} triangles`)
 
-// ── Step 1: Tessellate STEP ───────────────────────────────────────────────────
-console.log('=== tessellate_step ===')
-const tessOpts = JSON.stringify({ linear_deflection: 0.1, angular_deflection: 0.5 })
-const tessJson = Module.tessellate_step(stepBytes, tessOpts)
-const tess = JSON.parse(tessJson)
-console.log(`  ${tess.vertices.length} vertices, ${tess.triangles.length} triangles\n`)
+// 2. FEM mesh via Netgen OCC
+const mesh = JSON.parse(Module.generate_fem_mesh(JSON.stringify({
+  max_element_size: maxElementSize, min_element_size: 0.0, grading: 0.3,
+  second_order: false, elementsperedge: 2.0, elementspercurve: 2.0,
+  optsteps_2d: 3, optsteps_3d: 3,
+})))
+console.log(`generate_fem_mesh: ${mesh.vertices.length} nodes, ${mesh.tetrahedra.length} tetrahedra`)
+Module.free_geometry_cache()
 
-let mesh
+// 3. Solve — no try/catch; WASM traps and solver errors propagate as-is
+const result = JSON.parse(Module.solve_linear_elastic(
+  JSON.stringify({ vertices: mesh.vertices, tetrahedra: mesh.tetrahedra, hexahedra: [] }),
+  JSON.stringify({ young_modulus: 210e9, poisson_ratio: 0.3 }),
+  JSON.stringify({
+    fixed_vertices: Array.from({ length: Math.min(10, mesh.vertices.length) }, (_, i) => i),
+    point_loads: [{ vertex: mesh.vertices.length - 1, force: [0, -10000, 0] }],
+  }),
+  1,
+))
 
-if (hasFn('generate_fem_mesh')) {
-  // ── OCC path (new) ──────────────────────────────────────────────────────────
-  console.log('=== generate_fem_mesh (OCC) ===')
-  const meshOpts = JSON.stringify({
-    max_element_size: maxElementSize, min_element_size: 0.0, grading: 0.3,
-    second_order: false, elementsperedge: 2.0, elementspercurve: 2.0,
-    optsteps_2d: 3, optsteps_3d: 3,
-  })
-  const meshJson = Module.generate_fem_mesh(meshOpts)
-  mesh = JSON.parse(meshJson)
-
-  if (hasFn('free_geometry_cache')) {
-    console.log('  (freeing geometry cache before solve)')
-    Module.free_geometry_cache()
-  }
-} else {
-  // ── Surface path (old, present in pre-built WASM) ───────────────────────────
-  console.log('=== tessellate_for_meshing ===')
-  const tessForMeshOpts = JSON.stringify({ max_element_size: maxElementSize })
-  const surfJson = Module.tessellate_for_meshing(tessForMeshOpts)
-  const surf = JSON.parse(surfJson)
-  console.log(`  ${surf.vertices.length} vertices, ${surf.triangles.length} triangles\n`)
-
-  console.log('=== generate_volume_mesh ===')
-  const volOpts = JSON.stringify({
-    max_element_size: maxElementSize, min_element_size: 0.0, grading: 0.3,
-    second_order: false, elementsperedge: 2.0, elementspercurve: 2.0,
-    optsteps_2d: 3, optsteps_3d: 3,
-  })
-  const meshJson = Module.generate_volume_mesh(surfJson, volOpts)
-  mesh = JSON.parse(meshJson)
-}
-
-console.log(`  ${mesh.vertices.length} nodes, ${mesh.tetrahedra.length} tetrahedra\n`)
-
-// ── Step 3: Solve ─────────────────────────────────────────────────────────────
-console.log('=== solve_linear_elastic ===')
-const solveInput = JSON.stringify({
-  vertices:   mesh.vertices,
-  tetrahedra: mesh.tetrahedra,
-  hexahedra:  [],
-})
-
-// Fix the first 10 nodes as a stand-in for mounting surface.
-const fixedVertices = Array.from({ length: Math.min(10, mesh.vertices.length) }, (_, i) => i)
-const lastNode = mesh.vertices.length - 1
-const bcs = JSON.stringify({
-  fixed_vertices: fixedVertices,
-  point_loads: [{ vertex: lastNode, force: [0, -10000, 0] }],
-})
-const mat = JSON.stringify({ young_modulus: 210e9, poisson_ratio: 0.3 })
-
-try {
-  const resultJson = Module.solve_linear_elastic(solveInput, mat, bcs, 1)
-  const result = JSON.parse(resultJson)
-  const vm = result.von_mises
-  console.log(`  Solve OK — ${result.displacements.length / 3} displacements, ${vm.length} stresses`)
-  console.log(`  Max von Mises: ${Math.max(...vm).toExponential(3)} Pa`)
-} catch (e) {
-  const isWasmTrap = e.name === 'RuntimeError' && (
-    e.message.includes('memory access out of bounds') ||
-    e.message.includes('null function') ||
-    e.message.includes('unreachable') ||
-    e.message.includes('table index is out of bounds')
-  )
-  console.error(`\n  FAILED: ${e.name}: ${e.message}`)
-  if (isWasmTrap) console.error('  → WASM trap (code bug, not OOM)')
-  else            console.error('  → runtime error (may be OOM or logic error)')
-  process.exit(1)
-}
+console.log(`solve_linear_elastic: ${result.displacements.length / 3} nodes solved`)
+console.log(`max von Mises: ${Math.max(...result.von_mises).toExponential(3)} Pa`)
+console.log('\nPASS')
