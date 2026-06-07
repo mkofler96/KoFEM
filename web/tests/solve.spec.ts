@@ -81,6 +81,9 @@ test('solve on hex mesh completes and shows results', async ({ page }) => {
 })
 
 // ── STEP → Volume mesh pipeline ───────────────────────────────────────────────
+// Wall Bracket solve regression (WASM trap / SetIntPoint DCE) is covered by
+// the Node.js script test_wall_bracket.mjs, which runs synchronously with no
+// browser async layer and surfaces raw WASM errors directly.
 
 const STEP_FILE = path.resolve('..', 'test_files', 'tube.stp')
 

@@ -37,13 +37,29 @@
 #include <array>
 #include <cmath>
 #include <cstring>
+#include <malloc.h>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <unistd.h>
 #include <vector>
 
+#include <emscripten.h>
+
 using emscripten::val;
+
+// ── Memory diagnostics ────────────────────────────────────────────────────────
+// Reports total WASM linear-memory size (grows with ALLOW_MEMORY_GROWTH) and
+// the approximate amount of that memory currently in-use by malloc.
+static void log_mem(const char* label) {
+    struct mallinfo mi = mallinfo();
+    // HEAP8.length == current WASM linear-memory size in bytes.
+    int wasm_mb = EM_ASM_INT({ return HEAP8.length >> 20; });
+    // uordblks is bytes allocated by malloc (does not include mmap'd regions).
+    int used_mb = (int)((unsigned)mi.uordblks >> 20);
+    printf("[mem] %-44s  wasm=%d MB  alloc~%d MB\n", label, wasm_mb, used_mb);
+    fflush(stdout);
+}
 
 // ── Minimal JSON output helpers ───────────────────────────────────────────────
 // We build JSON manually to avoid a third-party parser dependency.  The output
@@ -125,6 +141,19 @@ static bool jbool(const val& o, const char* k, bool def) {
 static TopoDS_Shape              g_step_shape;
 static bool                      g_has_step_shape = false;
 static std::vector<uint8_t>      g_step_bytes;
+
+// Release OCCT shape + STEP byte cache.  Call this from JS after meshing is
+// done so the memory is available for the MFEM solve.
+static void free_geometry_cache() {
+    log_mem("free_geometry_cache: before");
+    BRepTools::Clean(g_step_shape);  // detach BRepMesh triangulations from faces
+    g_step_shape     = TopoDS_Shape();
+    g_has_step_shape = false;
+    std::vector<uint8_t>().swap(g_step_bytes);  // swap-with-empty releases capacity
+    printf("[kofem] geometry cache freed\n");
+    fflush(stdout);
+    log_mem("free_geometry_cache: after");
+}
 
 static std::string tessellate_step(val bytes_val, const std::string& opts_json) {
     val opts = parse_json(opts_json);
@@ -364,10 +393,12 @@ static std::string generate_fem_mesh(const std::string& opts_json)
         fclose(f);
     }
 
+    log_mem("generate_fem_mesh: before Ng_OCC_Load_STEP");
     nglib::Ng_OCC_Geometry* geom = nglib::Ng_OCC_Load_STEP(steppath);
     unlink(steppath);
     if (!geom)
         throw std::runtime_error("Ng_OCC_Load_STEP failed — check STEP geometry validity");
+    log_mem("generate_fem_mesh: after Ng_OCC_Load_STEP");
 
     nglib::Ng_Meshing_Parameters mp;
     mp.uselocalh                  = 1;
@@ -404,10 +435,12 @@ static std::string generate_fem_mesh(const std::string& opts_json)
 
     printf("[netgen] step 1/4: computing local mesh size from CAD curvature (maxh=%.2f)\n", max_size);
     fflush(stdout);
+    log_mem("generate_fem_mesh: step 1 SetLocalMeshSize");
     nglib::Ng_OCC_SetLocalMeshSize(geom, mesh, &mp);
 
     printf("[netgen] step 2/4: meshing feature edges\n");
     fflush(stdout);
+    log_mem("generate_fem_mesh: step 2 GenerateEdgeMesh");
     nglib::Ng_Result res = nglib::Ng_OCC_GenerateEdgeMesh(geom, mesh, &mp);
     if (res != nglib::NG_OK) {
         nglib::Ng_DeleteMesh(mesh);
@@ -417,9 +450,11 @@ static std::string generate_fem_mesh(const std::string& opts_json)
     }
     printf("[netgen] step 2/4: edge mesh done\n");
     fflush(stdout);
+    log_mem("generate_fem_mesh: step 2 done");
 
     printf("[netgen] step 3/4: meshing boundary surfaces (optsteps_2d=%d)\n", mp.optsteps_2d);
     fflush(stdout);
+    log_mem("generate_fem_mesh: step 3 GenerateSurfaceMesh");
     res = nglib::Ng_OCC_GenerateSurfaceMesh(geom, mesh, &mp);
     if (res != nglib::NG_OK) {
         nglib::Ng_DeleteMesh(mesh);
@@ -429,6 +464,7 @@ static std::string generate_fem_mesh(const std::string& opts_json)
     }
     printf("[netgen] step 3/4: surface mesh done — %d surface nodes\n", nglib::Ng_GetNP(mesh));
     fflush(stdout);
+    log_mem("generate_fem_mesh: step 3 done");
 
     // Step 4: fill volume.
     // Keep geom alive: Netgen stores OCC geometry references in the mesh during
@@ -438,6 +474,7 @@ static std::string generate_fem_mesh(const std::string& opts_json)
     // trap with a heap address instead of a function table index).
     printf("[netgen] step 4/4: Delaunay volume fill (optsteps_3d=%d)\n", mp.optsteps_3d);
     fflush(stdout);
+    log_mem("generate_fem_mesh: step 4 GenerateVolumeMesh");
     res = nglib::Ng_GenerateVolumeMesh(mesh, &mp);
     nglib::Ng_OCC_DeleteGeometry(geom);  // safe: volume fill complete
     if (res != nglib::NG_OK) {
@@ -445,6 +482,7 @@ static std::string generate_fem_mesh(const std::string& opts_json)
         throw std::runtime_error(
             "Ng_GenerateVolumeMesh failed (code " + std::to_string((int)res) + ")");
     }
+    log_mem("generate_fem_mesh: step 4 done");
 
     int np = nglib::Ng_GetNP(mesh);
     int ne = nglib::Ng_GetNE(mesh);
@@ -473,6 +511,7 @@ static std::string generate_fem_mesh(const std::string& opts_json)
     }
 
     nglib::Ng_DeleteMesh(mesh);
+    log_mem("generate_fem_mesh: after Ng_DeleteMesh");
 
     return "{\"vertices\":" + json_vec3(out_verts) +
            ",\"tetrahedra\":" + json_ivec4(out_tets) + "}";
@@ -620,33 +659,112 @@ static std::string generate_volume_mesh(
 __attribute__((used))
 static void _kofem_mfem_element_keepalive() {
     using namespace mfem;
+    // Anchor ALL virtual methods on Element subclasses that FinalizeTopology()
+    // dispatches through.  Without direct calls the Emscripten DCE pass strips
+    // the function bodies and leaves stale (or zero) WASM function-table entries,
+    // causing invoke_* traps at runtime.  A direct call on a concrete stack
+    // instance devirtualises to a static call, which forces the function body
+    // into the binary and correctly populates the vtable slot.
+    //
+    // Methods anchored per element type:
+    //   GetType            — GenerateFaces() switches on element type
+    //   GetNVertices       — used in various mesh queries
+    //   GetNEdges          — GetElementToEdgeTable() iterates edges
+    //   GetEdgeVertices(i) — GetElementToEdgeTable() looks up edge vertex pairs
+    //   GetNFaces()        — GetElementToFaceTable() iterates faces (3D elements only)
+    //   GetNFaceVertices   — GetElementToFaceTable() sizes face vertex arrays (3D only)
+    //   GetFaceVertices    — GetElementToFaceTable() fills STable3D (3D only)
+    //   GetVertices()      — int* overload, used during boundary element setup
+    //   GetVertices(arr)   — Array<int>& overload, used in refinement checks
+    // NOTE: GetNFaces/GetNFaceVertices/GetFaceVertices are NOT anchored for
+    // Triangle and Quadrilateral because those are 2D surface elements whose
+    // GetFaceVertices implementation calls MFEM_ABORT("not implemented").
+    // FinalizeTopology only dispatches GetFaceVertices on volume elements.
     {
         int vi[4] = {0,1,2,3};
         Tetrahedron t(vi, 1);
-        volatile int g = t.GetGeometryType();   // direct call → keeps vtable entry live
-        volatile int n = t.GetNVertices();
-        (void)g; (void)n;
+        volatile Element::Type tp = t.GetType();
+        volatile int nv2 = t.GetNVertices();
+        volatile int ne = t.GetNEdges();
+        const int *ev = t.GetEdgeVertices(0);
+        volatile int nf = t.GetNFaces();
+        volatile int nfv = t.GetNFaceVertices(0);
+        const int *fv = t.GetFaceVertices(0);
+        int *vi_ret = t.GetVertices();
+        Array<int> varr; t.GetVertices(varr);
+        (void)tp; (void)nv2; (void)ne; (void)ev; (void)nf;
+        (void)nfv; (void)fv; (void)vi_ret; (void)varr;
     }
     {
         int vi[3] = {0,1,2};
         Triangle tri(vi, 1);
-        volatile int g = tri.GetGeometryType();
-        volatile int n = tri.GetNVertices();
-        (void)g; (void)n;
+        volatile Element::Type tp = tri.GetType();
+        volatile int nv2 = tri.GetNVertices();
+        volatile int ne = tri.GetNEdges();
+        const int *ev = tri.GetEdgeVertices(0);
+        int *vi_ret = tri.GetVertices();
+        Array<int> varr; tri.GetVertices(varr);
+        // GetNFaces / GetNFaceVertices / GetFaceVertices intentionally omitted:
+        // Triangle is a 2D surface element; these methods call MFEM_ABORT.
+        // FinalizeTopology only calls GetFaceVertices on volume elements.
+        (void)tp; (void)nv2; (void)ne; (void)ev; (void)vi_ret; (void)varr;
     }
     {
         int vi[8] = {0,1,2,3,4,5,6,7};
         Hexahedron hex(vi, 1);
-        volatile int g = hex.GetGeometryType();
-        volatile int n = hex.GetNVertices();
-        (void)g; (void)n;
+        volatile Element::Type tp = hex.GetType();
+        volatile int nv2 = hex.GetNVertices();
+        volatile int ne = hex.GetNEdges();
+        const int *ev = hex.GetEdgeVertices(0);
+        volatile int nf = hex.GetNFaces();
+        volatile int nfv = hex.GetNFaceVertices(0);
+        const int *fv = hex.GetFaceVertices(0);
+        int *vi_ret = hex.GetVertices();
+        Array<int> varr; hex.GetVertices(varr);
+        (void)tp; (void)nv2; (void)ne; (void)ev; (void)nf;
+        (void)nfv; (void)fv; (void)vi_ret; (void)varr;
     }
     {
         int vi[4] = {0,1,2,3};
         Quadrilateral quad(vi, 1);
-        volatile int g = quad.GetGeometryType();
-        volatile int n = quad.GetNVertices();
-        (void)g; (void)n;
+        volatile Element::Type tp = quad.GetType();
+        volatile int nv2 = quad.GetNVertices();
+        volatile int ne = quad.GetNEdges();
+        const int *ev = quad.GetEdgeVertices(0);
+        int *vi_ret = quad.GetVertices();
+        Array<int> varr; quad.GetVertices(varr);
+        // GetNFaces / GetNFaceVertices / GetFaceVertices intentionally omitted:
+        // Quadrilateral is a 2D surface element; these methods call MFEM_ABORT.
+        (void)tp; (void)nv2; (void)ne; (void)ev; (void)vi_ret; (void)varr;
+    }
+
+    // ElementTransformation::SetIntPoint is inline virtual in eltrans.hpp:
+    //   virtual void SetIntPoint(const IntegrationPoint *ip) { IntPoint = ip; Wght = 0.; }
+    // It is called as T->SetIntPoint(&ir.IntPoint(0)) in the von Mises stress loop.
+    // Emscripten DCE removes the body (no direct call site exists) → vtable slot becomes
+    // null → invoke_vii trap at runtime.  A direct call on a concrete local instance
+    // devirtualises and anchors the body.
+    {
+        IsoparametricTransformation tr;
+        IntegrationPoint ip;
+        ip.x = 0.25; ip.y = 0.25; ip.z = 0.25; ip.weight = 1.0;
+        tr.SetIntPoint(&ip);  // devirtualised → anchors ElementTransformation::SetIntPoint
+        volatile double w = tr.GetIntPoint().weight;  // read forces SetIntPoint to stay live
+        (void)w;
+    }
+
+    // H1_TetrahedronElement::CalcShape and CalcDShape are the concrete FiniteElement
+    // virtuals called inside GridFunction::GetVectorGradient.  Anchor them too.
+    {
+        H1_TetrahedronElement h1tet(1);
+        IntegrationPoint ip;
+        ip.x = 0.25; ip.y = 0.25; ip.z = 0.25; ip.weight = 1.0;
+        Vector shape(h1tet.GetDof());
+        h1tet.CalcShape(ip, shape);         // devirtualised → anchors CalcShape vtable entry
+        DenseMatrix dshape(h1tet.GetDof(), 3);
+        h1tet.CalcDShape(ip, dshape);       // devirtualised → anchors CalcDShape vtable entry
+        volatile int dof = h1tet.GetDof();
+        (void)dof;
     }
 }
 
@@ -664,6 +782,7 @@ static std::string solve_linear_elastic(
     // See _kofem_mfem_element_keepalive for why this is needed.
     _kofem_mfem_element_keepalive();
 
+    log_mem("solve: start");
     printf("[mfem] solve_linear_elastic: parsing inputs\n"); fflush(stdout);
     val mesh_js = parse_json(mesh_json);
     val mat_js  = parse_json(mat_json);
@@ -682,6 +801,7 @@ static std::string solve_linear_elastic(
         throw std::runtime_error(
             "Mesh has no elements. Send at least one CTETRA or CHEXA element.");
 
+    log_mem("solve: after JSON parse");
     printf("[mfem] extracting %u vertices\n", nv); fflush(stdout);
     std::vector<double> vertices;
     vertices.reserve(3 * nv);
@@ -722,51 +842,61 @@ static std::string solve_linear_elastic(
     unsigned n_loads = loads_js["length"].as<unsigned>();
 
     printf("[mfem] BCs: %u fixed vertices, %u point loads\n", n_fixed, n_loads); fflush(stdout);
+    log_mem("solve: after extracting mesh data");
 
-    // Build MFEM mesh — write to MFEM native format and read back.
-    // This uses MFEM's well-tested file reader rather than the incremental API
-    // (AddTet + FinalizeTetMesh), which has virtual-dispatch issues in the
-    // WASM build when the mesh has many tetrahedra.
+    // Build MFEM mesh programmatically to avoid C++ iostream file I/O.
     //
-    // MFEM mesh v1.0 format: 1-indexed vertices, element type 4=tet 5=hex.
-    // Boundary section: 0 entries (MFEM generates them automatically from the
-    // element connectivity, which is correct for a watertight volume mesh).
-    printf("[mfem] writing mesh file (%u verts, %u tets, %u hexs)\n", nv, nt, nh); fflush(stdout);
-    char mesh_tmppath[] = "/tmp/kofem_solve_XXXXXX.mesh";
-    {
-        int fd = mkstemps(mesh_tmppath, 5);
-        if (fd < 0) throw std::runtime_error("solve_linear_elastic: cannot create temp mesh file");
-        FILE* f = fdopen(fd, "w");
-        if (!f) { close(fd); unlink(mesh_tmppath);
-                  throw std::runtime_error("solve_linear_elastic: fdopen failed"); }
-
-        // MFEM mesh v1.0 uses 0-based vertex indices.
-        fprintf(f, "MFEM mesh v1.0\n\ndimension\n3\n\nelements\n%u\n", nt + nh);
-        for (unsigned i = 0; i < nt; ++i)
-            fprintf(f, "1 4 %d %d %d %d\n",
-                    tets[4*i], tets[4*i+1], tets[4*i+2], tets[4*i+3]);
-        for (unsigned i = 0; i < nh; ++i)
-            fprintf(f, "1 5 %d %d %d %d %d %d %d %d\n",
-                    hexs[8*i], hexs[8*i+1], hexs[8*i+2], hexs[8*i+3],
-                    hexs[8*i+4], hexs[8*i+5], hexs[8*i+6], hexs[8*i+7]);
-
-        fprintf(f, "\nboundary\n0\n\nvertices\n%u\n3\n", nv);
-        for (unsigned i = 0; i < nv; ++i)
-            fprintf(f, "%.17g %.17g %.17g\n",
-                    vertices[3*i], vertices[3*i+1], vertices[3*i+2]);
-        fclose(f);
-    }
-    printf("[mfem] reading mesh file\n"); fflush(stdout);
-    // gen_edges=1 so MFEM builds the edge table (needed for FE space connectivity).
-    // refine=0 so mesh is used as-is without any red-refinement.
-    // fix_orientation=true so degenerate/inverted tets are corrected.
+    // The file-based path (Mesh(filename, ...)) opens an ifstream and reads
+    // through basic_filebuf / basic_streambuf virtual dispatch.  In the WASM
+    // (Emscripten) build the locale/codec facet pointer inside the streambuf
+    // object is null, so the first virtual call through it traps with
+    // "Out of bounds memory access" via invoke_iiiiii.
+    //
+    // The programmatic path calls no iostream code at all: AddVertex / AddTet /
+    // AddHex populate in-memory arrays directly, and FinalizeTopology builds all
+    // connectivity (faces, boundary elements, edge table) without file I/O.
+    // In 3D, FinalizeTopology always builds the edge table, which is required by
+    // H1_FECollection for DOF numbering.
+    printf("[mfem] building mesh (%u verts, %u tets, %u hexs)\n", nv, nt, nh); fflush(stdout);
+    log_mem("solve: before MFEM mesh build");
     constexpr int dim = 3;
-    Mesh mfem_mesh(mesh_tmppath, /*gen_edges=*/1, /*refine=*/0, /*fix_orient=*/true);
-    unlink(mesh_tmppath);
+    Mesh mfem_mesh(dim, (int)nv, (int)(nt + nh), /*NBdrElem=*/0, /*spaceDim=*/dim);
 
-    printf("[mfem] mesh ready: %d vertices, %d tets, %d hexs, %d boundary elems\n",
-           mfem_mesh.GetNV(), mfem_mesh.GetNE(), 0 /*nh counted separately*/, mfem_mesh.GetNBE());
+    printf("[mfem] mesh shell ok\n"); fflush(stdout);
+    for (unsigned i = 0; i < nv; ++i)
+        mfem_mesh.AddVertex(vertices[3*i], vertices[3*i+1], vertices[3*i+2]);
+    printf("[mfem] vertices added\n"); fflush(stdout);
+
+    for (unsigned i = 0; i < nt; ++i)
+        mfem_mesh.AddTet(tets[4*i], tets[4*i+1], tets[4*i+2], tets[4*i+3], /*attr=*/1);
+    printf("[mfem] tets added\n"); fflush(stdout);
+
+    for (unsigned i = 0; i < nh; ++i)
+        mfem_mesh.AddHex(hexs[8*i], hexs[8*i+1], hexs[8*i+2], hexs[8*i+3],
+                         hexs[8*i+4], hexs[8*i+5], hexs[8*i+6], hexs[8*i+7], /*attr=*/1);
+    printf("[mfem] hexs added\n"); fflush(stdout);
+
+    // generate_bdr=true: boundary Triangle/Quad elements auto-generated from
+    // exposed faces of volume elements (correct for a watertight Netgen mesh).
+    mfem_mesh.FinalizeTopology(/*generate_bdr=*/true);
+    printf("[mfem] FinalizeTopology done\n"); fflush(stdout);
+
+    // Netgen uses the opposite tet vertex-winding convention from MFEM.
+    // Without fixing orientation every tet has a negative Jacobian, making
+    // the assembled stiffness matrix non-positive-definite.  CG then fails
+    // at iteration 0 ("preconditioner not positive definite") and returns the
+    // zero initial guess, giving physically meaningless results.
+    // fix_orientation=true calls CheckElementOrientation(true) which swaps
+    // two vertices per tet to correct the sign — this uses only GetVertices()
+    // (int* overload, already anchored) and direct array swaps, no new virtual
+    // calls.
+    mfem_mesh.Finalize(/*refine=*/false, /*fix_orientation=*/true);
+    printf("[mfem] Finalize done\n"); fflush(stdout);
+
+    printf("[mfem] mesh ready: %d vertices, %d elements, %d boundary elems\n",
+           mfem_mesh.GetNV(), mfem_mesh.GetNE(), mfem_mesh.GetNBE());
     fflush(stdout);
+    log_mem("solve: after MFEM mesh build");
 
     order = std::max(1, order);
     double lam = E * nu / ((1.0 + nu) * (1.0 - 2.0*nu));
@@ -778,6 +908,7 @@ static std::string solve_linear_elastic(
     FiniteElementSpace fespace(&mfem_mesh, &fec, dim);
     printf("[mfem] FE space: %d dofs\n", fespace.GetTrueVSize());
     fflush(stdout);
+    log_mem("solve: after FE space setup");
 
     // Essential (Dirichlet) DOFs from fixed vertices
     Array<int> ess_tdof;
@@ -815,6 +946,7 @@ static std::string solve_linear_elastic(
     printf("[mfem] assembling stiffness matrix…\n"); fflush(stdout);
     a.Assemble();
     printf("[mfem] assembly done\n"); fflush(stdout);
+    log_mem("solve: after stiffness assembly");
 
     OperatorPtr A;
     Vector B, X;
@@ -834,9 +966,11 @@ static std::string solve_linear_elastic(
     cg.SetPreconditioner(prec);
     cg.SetOperator(A_mat);
     printf("[mfem] starting CG solve (%d rows)…\n", A_mat.Height()); fflush(stdout);
+    log_mem("solve: before CG solve");
     cg.Mult(B, X);
     a.RecoverFEMSolution(X, b, x);
     printf("[mfem] CG done — computing von Mises stress…\n"); fflush(stdout);
+    log_mem("solve: after CG solve");
 
     int n_verts = mfem_mesh.GetNV();
     int n_elems = mfem_mesh.GetNE();
@@ -882,6 +1016,7 @@ static std::string solve_linear_elastic(
     printf("[mfem] solve complete: %d vertex displacements, %d element stresses\n",
            n_verts, n_elems);
     fflush(stdout);
+    log_mem("solve: complete");
 
     return "{\"displacements\":" + json_doubles(displacements) +
            ",\"von_mises\":"     + json_doubles(von_mises)     + "}";
@@ -909,6 +1044,7 @@ EMSCRIPTEN_BINDINGS(kofem) {
     emscripten::function("tessellate_for_meshing", &tessellate_for_meshing);
     emscripten::function("generate_volume_mesh",   &generate_volume_mesh);
     emscripten::function("generate_fem_mesh",      &generate_fem_mesh);
+    emscripten::function("free_geometry_cache",    &free_geometry_cache);
     emscripten::function("solve_linear_elastic",   &solve_linear_elastic);
     emscripten::function("step_to_fem_result",     &step_to_fem_result);
 }
