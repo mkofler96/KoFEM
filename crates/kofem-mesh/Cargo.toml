@@ -8,3 +8,4 @@ description = "Shared mesh types for the KoFEM pipeline (SurfaceMesh, VolumeMesh
 
 [dependencies]
 serde = { workspace = true }
+thiserror = { workspace = true }
