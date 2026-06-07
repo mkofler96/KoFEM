@@ -881,8 +881,16 @@ static std::string solve_linear_elastic(
     mfem_mesh.FinalizeTopology(/*generate_bdr=*/true);
     printf("[mfem] FinalizeTopology done\n"); fflush(stdout);
 
-    // Netgen output has correct orientation; skip the orientation-fix pass.
-    mfem_mesh.Finalize(/*refine=*/false, /*fix_orientation=*/false);
+    // Netgen uses the opposite tet vertex-winding convention from MFEM.
+    // Without fixing orientation every tet has a negative Jacobian, making
+    // the assembled stiffness matrix non-positive-definite.  CG then fails
+    // at iteration 0 ("preconditioner not positive definite") and returns the
+    // zero initial guess, giving physically meaningless results.
+    // fix_orientation=true calls CheckElementOrientation(true) which swaps
+    // two vertices per tet to correct the sign — this uses only GetVertices()
+    // (int* overload, already anchored) and direct array swaps, no new virtual
+    // calls.
+    mfem_mesh.Finalize(/*refine=*/false, /*fix_orientation=*/true);
     printf("[mfem] Finalize done\n"); fflush(stdout);
 
     printf("[mfem] mesh ready: %d vertices, %d elements, %d boundary elems\n",
