@@ -1,5 +1,42 @@
 use thiserror::Error;
 
+// Native OCCT bridge — not implemented yet.
+// The production pipeline runs via the WASM build: see engine/cpp/engine.cpp.
+
+/// Opaque handle to a loaded CAD model. Not usable in native builds.
+pub struct OcctModel;
+
+/// Surface tessellation produced by OCCT — vertices + triangle indices.
+pub struct Tessellation {
+    pub vertices: Vec<[f64; 3]>,
+    pub triangles: Vec<[usize; 3]>,
+}
+
+/// Load a STEP file into an [`OcctModel`].
+///
+/// # Panics
+/// Always panics on native targets. Use the WASM build via `scripts/build-wasm.sh`.
+pub fn load_step(_bytes: &[u8]) -> Result<OcctModel, GeomError> {
+    unimplemented!(
+        "Native OCCT bridge is not implemented. \
+         Use the WASM build produced by engine/cpp/engine.cpp via scripts/build-wasm.sh."
+    )
+}
+
+/// Tessellate an [`OcctModel`] into a surface triangle mesh.
+///
+/// # Panics
+/// Always panics on native targets. Use the WASM build via `scripts/build-wasm.sh`.
+pub fn tessellate_model(
+    _model: &OcctModel,
+    _opts: &TessOptions,
+) -> Result<Tessellation, GeomError> {
+    unimplemented!(
+        "Native OCCT bridge is not implemented. \
+         Use the WASM build produced by engine/cpp/engine.cpp via scripts/build-wasm.sh."
+    )
+}
+
 #[derive(Debug, Error)]
 pub enum GeomError {
     #[error("failed to load geometry: {0}")]

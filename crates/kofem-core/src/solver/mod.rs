@@ -1,3 +1,5 @@
+pub mod mfem;
+
 use crate::{BoundaryConditions, LinearElasticMaterial};
 use kofem_mesh::VolumeMesh;
 use thiserror::Error;
