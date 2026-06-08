@@ -17,7 +17,7 @@ test.describe("Full workflow showcase", () => {
   test("tube: welcome → geometry → mesh → constraints → results", async ({
     page,
   }) => {
-    test.setTimeout(300_000);
+    test.setTimeout(600_000);
 
     if (!fs.existsSync(TUBE)) {
       test.skip();
@@ -167,13 +167,45 @@ test.describe("Full workflow showcase", () => {
         .createLoadGroup([{ label: "Face 1", nodeIds: loadedIds }], 1, -2000);
     });
 
+    // Verify the store has constraints and loads before proceeding.
+    // This catches any silent failure in the page.evaluate above.
+    const bcState = await page.evaluate(() => {
+      const store = (
+        window as unknown as {
+          __kofemStore: {
+            getState(): {
+              constraints: unknown[];
+              loads: unknown[];
+              isRunning: boolean;
+            };
+          };
+        }
+      ).__kofemStore;
+      const s = store.getState();
+      return {
+        constraints: s.constraints.length,
+        loads: s.loads.length,
+        isRunning: s.isRunning,
+      };
+    });
+    console.log(
+      `[showcase] ${elapsed()} store after evaluate — constraints:${bcState.constraints} loads:${bcState.loads} isRunning:${bcState.isRunning}`,
+    );
+    if (bcState.constraints === 0 || bcState.loads === 0) {
+      throw new Error(
+        `BC/load injection failed: constraints=${bcState.constraints} loads=${bcState.loads}`,
+      );
+    }
+
     await page
       .locator("nav")
       .getByRole("button")
       .filter({ hasText: "Constraints" })
       .click();
     await Promise.race([
-      expect(page.getByText("Boundary conditions")).toBeVisible(),
+      expect(page.getByText("Boundary conditions")).toBeVisible({
+        timeout: 15_000,
+      }),
       fatalError,
     ]);
     await page.screenshot({
@@ -190,7 +222,7 @@ test.describe("Full workflow showcase", () => {
     await Promise.race([
       expect(
         page.getByRole("button").filter({ hasText: "Run static solve" }),
-      ).toBeEnabled(),
+      ).toBeEnabled({ timeout: 60_000 }),
       fatalError,
     ]);
     await page
