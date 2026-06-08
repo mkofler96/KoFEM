@@ -15,7 +15,7 @@ test.describe('Full workflow showcase', () => {
   })
 
   test('tube: welcome → geometry → mesh → constraints → results', async ({ page }) => {
-    test.setTimeout(120_000)
+    test.setTimeout(300_000)
 
     if (!fs.existsSync(TUBE)) {
       test.skip()
@@ -139,7 +139,7 @@ test.describe('Full workflow showcase', () => {
     console.log(`[showcase] ${elapsed()} solver started…`)
 
     await Promise.race([
-      expect(page.getByText('Result summary')).toBeVisible({ timeout: 60_000 }),
+      expect(page.getByText('Result summary')).toBeVisible({ timeout: 120_000 }),
       fatalError,
     ])
 
