@@ -15,6 +15,8 @@
 
 // OCCT
 #include <BRep_Tool.hxx>
+#include <BRepBuilderAPI_MakeVertex.hxx>
+#include <BRepExtrema_DistShapeShape.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRepTools.hxx>
 #include <IFSelect_ReturnStatus.hxx>
@@ -352,11 +354,6 @@ namespace nglib {
     // Surface element queries (standard nglib API, Netgen v6.2+)
     extern int       Ng_GetNSE(Ng_Mesh*);
     extern void      Ng_GetSurfaceElement(Ng_Mesh*, int, int*);
-    // Returns the face descriptor index of surface element num (1-based).
-    // For OCC-generated meshes this is the OCC face number, giving a unique
-    // identifier per CAD face — all surface elements on the same CAD face share
-    // the same index.
-    extern int       Ng_GetSurfaceElementIndex(Ng_Mesh*, int);
 }
 
 // OCC meshing API (Netgen v6.2.2401, nglib/nglib_occ.cpp, namespace nglib).
@@ -531,11 +528,16 @@ static std::string generate_fem_mesh(const std::string& opts_json)
     }
 
     // Surface elements — boundary triangles from the Netgen surface mesh.
-    // Exported alongside vertex indices so the frontend can build a sorted-key
-    // lookup (vertex set → face ID) that is order-independent with respect to
-    // the tet boundary triangle extraction.
-    // Ng_GetSurfaceElementBCProperty returns the OCC face index (1-based) for
-    // each triangle; this is what the frontend uses for instant face selection.
+    // We need the OCC face index (1-based) per surface element so the frontend
+    // can do instant face selection.  Ng_GetSurfaceElementIndex is not exported
+    // by all Netgen builds, so we derive face IDs via OCCT instead: project each
+    // surface element's centroid onto every bounded CAD face and pick the nearest.
+    // Points meshed on a given face have distance ≈ 0 to that face and non-zero
+    // distance to all others, so the minimum-distance face is unambiguous.
+    std::vector<TopoDS_Face> occ_faces;
+    for (TopExp_Explorer exp(g_step_shape, TopAbs_FACE); exp.More(); exp.Next())
+        occ_faces.push_back(TopoDS::Face(exp.Current()));
+
     int nse = nglib::Ng_GetNSE(mesh);
     std::vector<int> out_surf_tris;
     std::vector<int> out_surf_face_ids;
@@ -544,10 +546,31 @@ static std::string generate_fem_mesh(const std::string& opts_json)
     for (int i = 1; i <= nse; ++i) {
         int tri[3];
         nglib::Ng_GetSurfaceElement(mesh, i, tri);
-        out_surf_tris.push_back(tri[0] - 1);   // convert to 0-based node IDs
+        out_surf_tris.push_back(tri[0] - 1);
         out_surf_tris.push_back(tri[1] - 1);
         out_surf_tris.push_back(tri[2] - 1);
-        out_surf_face_ids.push_back(nglib::Ng_GetSurfaceElementIndex(mesh, i));
+
+        // Centroid of this surface triangle
+        double cx = 0, cy = 0, cz = 0;
+        for (int j = 0; j < 3; ++j) {
+            double pt[3];
+            nglib::Ng_GetPoint(mesh, tri[j], pt);
+            cx += pt[0]; cy += pt[1]; cz += pt[2];
+        }
+        gp_Pnt centroid(cx / 3.0, cy / 3.0, cz / 3.0);
+
+        // Find the OCC face with minimum distance to centroid
+        TopoDS_Vertex v = BRepBuilderAPI_MakeVertex(centroid);
+        int best_face = 1;
+        double best_dist = 1e30;
+        for (int f = 0; f < (int)occ_faces.size(); ++f) {
+            BRepExtrema_DistShapeShape dist(v, occ_faces[f], Extrema_ExtFlag_MIN);
+            if (dist.IsDone()) {
+                double d = dist.Value();
+                if (d < best_dist) { best_dist = d; best_face = f + 1; }
+            }
+        }
+        out_surf_face_ids.push_back(best_face);
     }
     printf("[netgen] %d surface elements, %d unique OCC face IDs\n",
            nse, (int)std::set<int>(out_surf_face_ids.begin(), out_surf_face_ids.end()).size());
