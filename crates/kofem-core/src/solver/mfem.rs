@@ -28,9 +28,10 @@ impl FemSolver for MfemSolver {
         _bcs: &BoundaryConditions,
     ) -> Result<FemResult, SolverError> {
         let _ = &self.params;
-        unimplemented!(
-            "Native MFEM solver is not implemented. \
+        Err(SolverError::Internal(
+            "Native MFEM solver is not yet implemented. \
              Use the WASM build produced by engine/cpp/engine.cpp via scripts/build-wasm.sh."
-        )
+                .to_string(),
+        ))
     }
 }
