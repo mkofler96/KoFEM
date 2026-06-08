@@ -15,7 +15,6 @@
 
 // OCCT
 #include <BRep_Tool.hxx>
-#include <GeomAPI_ProjectPointOnSurf.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRepTools.hxx>
 #include <IFSelect_ReturnStatus.hxx>
@@ -527,21 +526,55 @@ static std::string generate_fem_mesh(const std::string& opts_json)
     }
 
     // Surface elements — boundary triangles from the Netgen surface mesh.
-    // We need the OCC face index (1-based) per surface element so the frontend
-    // can do instant face selection.  Ng_GetSurfaceElementIndex is not exported
-    // by all Netgen builds, so we derive face IDs via OCCT instead: project each
-    // surface element's centroid onto every CAD face's underlying (infinite) surface
-    // and pick the nearest.  Centroids lie on exactly one face at distance ≈ 0;
-    // we exit the inner loop early when distance falls below 1e-6.
-    // Using the infinite surface (GeomAPI_ProjectPointOnSurf) rather than a bounded
-    // shape (BRepExtrema_DistShapeShape) is O(1) for analytical surfaces (planes,
-    // cylinders, cones, spheres) and avoids the heavy boundary-projection work.
-    std::vector<Handle(Geom_Surface)> occ_surfs;
+    // We need the OCC face index (1-based) per surface element for fast face selection.
+    // Ng_GetSurfaceElementIndex is absent from many Netgen builds, so we derive face
+    // IDs from the OCCT tessellation: build a centroid→face_id lookup from
+    // BRep_Tool::Triangulation (the same API used by tessellate_step, proven WASM-safe),
+    // then for each Netgen surface element find the nearest tessellation centroid.
+    // Netgen nodes lie on the OCCT surfaces with sub-micron precision, so the nearest
+    // tessellation centroid is always on the correct face.  No high-level OCCT projection
+    // APIs (GeomAPI_*, BRepExtrema_*) are used — only plain gp_Pnt arithmetic.
+    struct TessCentroid { double x, y, z; int face_id; };
+    std::vector<TessCentroid> tess_centroids;
     {
-        int f = 0;
-        for (TopExp_Explorer exp(g_step_shape, TopAbs_FACE); exp.More(); exp.Next(), ++f)
-            occ_surfs.push_back(BRep_Tool::Surface(TopoDS::Face(exp.Current())));
+        // Tessellation is normally already attached (tessellate_step runs first).
+        // Guard against direct calls: create a coarse tessellation if needed.
+        bool has_tess = false;
+        for (TopExp_Explorer exp(g_step_shape, TopAbs_FACE); exp.More(); exp.Next()) {
+            TopLoc_Location loc;
+            if (!BRep_Tool::Triangulation(TopoDS::Face(exp.Current()), loc).IsNull()) {
+                has_tess = true; break;
+            }
+        }
+        if (!has_tess) {
+            BRepMesh_IncrementalMesh mesher(g_step_shape, 1.0, /*relative=*/false, 0.5);
+            mesher.Perform();
+        }
+
+        int fid = 1;
+        for (TopExp_Explorer exp(g_step_shape, TopAbs_FACE); exp.More(); exp.Next(), ++fid) {
+            TopLoc_Location loc;
+            Handle(Poly_Triangulation) tri =
+                BRep_Tool::Triangulation(TopoDS::Face(exp.Current()), loc);
+            if (tri.IsNull()) continue;
+            for (int t = 1; t <= tri->NbTriangles(); ++t) {
+                int n1, n2, n3;
+                tri->Triangle(t).Get(n1, n2, n3);
+                gp_Pnt p1 = tri->Node(n1).Transformed(loc);
+                gp_Pnt p2 = tri->Node(n2).Transformed(loc);
+                gp_Pnt p3 = tri->Node(n3).Transformed(loc);
+                tess_centroids.push_back({
+                    (p1.X() + p2.X() + p3.X()) / 3.0,
+                    (p1.Y() + p2.Y() + p3.Y()) / 3.0,
+                    (p1.Z() + p2.Z() + p3.Z()) / 3.0,
+                    fid
+                });
+            }
+        }
     }
+    printf("[netgen] %zu OCCT tessellation centroids for face-ID lookup\n",
+           tess_centroids.size());
+    fflush(stdout);
 
     int nse = nglib::Ng_GetNSE(mesh);
     std::vector<int> out_surf_tris;
@@ -555,32 +588,27 @@ static std::string generate_fem_mesh(const std::string& opts_json)
         out_surf_tris.push_back(tri[1] - 1);
         out_surf_tris.push_back(tri[2] - 1);
 
-        // Centroid of this surface triangle
         double cx = 0, cy = 0, cz = 0;
         for (int j = 0; j < 3; ++j) {
             double pt[3];
             nglib::Ng_GetPoint(mesh, tri[j], pt);
             cx += pt[0]; cy += pt[1]; cz += pt[2];
         }
-        gp_Pnt centroid(cx / 3.0, cy / 3.0, cz / 3.0);
+        cx /= 3.0; cy /= 3.0; cz /= 3.0;
 
-        // Project centroid onto each face's underlying surface; take the face
-        // with minimum projection distance.  Exit early when distance < 1e-6
-        // (sub-micron: the centroid is definitively on that face's surface).
-        int best_face = 1;
-        double best_dist = 1e30;
-        for (int f = 0; f < (int)occ_surfs.size(); ++f) {
-            GeomAPI_ProjectPointOnSurf proj(centroid, occ_surfs[f]);
-            if (proj.NbPoints() > 0) {
-                double d = proj.LowerDistance();
-                if (d < best_dist) {
-                    best_dist = d;
-                    best_face = f + 1;
-                    if (d < 1e-6) break;
-                }
+        // Nearest OCCT tessellation centroid → face ID.
+        int best_fid = 1;
+        double best_d2 = 1e30;
+        for (const auto& tc : tess_centroids) {
+            double dx = tc.x - cx, dy = tc.y - cy, dz = tc.z - cz;
+            double d2 = dx*dx + dy*dy + dz*dz;
+            if (d2 < best_d2) {
+                best_d2 = d2;
+                best_fid = tc.face_id;
+                if (d2 < 1e-8) break;
             }
         }
-        out_surf_face_ids.push_back(best_face);
+        out_surf_face_ids.push_back(best_fid);
     }
     printf("[netgen] %d surface elements, %d unique OCC face IDs\n",
            nse, (int)std::set<int>(out_surf_face_ids.begin(), out_surf_face_ids.end()).size());
