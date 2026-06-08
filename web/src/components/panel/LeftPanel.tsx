@@ -499,7 +499,13 @@ function MeshPanel() {
         surfaceTriangles: [number, number, number][] | null;
         surfaceFaceIds: number[] | null;
       }>("volume_mesh", { surface: stepSurface, maxElementSize });
-      applyMeshResult(n, e, "STEP Volume Mesh", surfaceTriangles, surfaceFaceIds);
+      applyMeshResult(
+        n,
+        e,
+        "STEP Volume Mesh",
+        surfaceTriangles,
+        surfaceFaceIds,
+      );
     } catch (err) {
       console.error("[meshing] volume mesh failed:", err);
       setError(`Volume meshing failed: ${err}`);

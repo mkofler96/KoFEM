@@ -252,7 +252,13 @@ export function MeshScene() {
     }
 
     return buildBoundaryMeshTopo(triangles, getPos, faceIds);
-  }, [boundaryQuadFaceIds, boundaryTriFaceIds, nodeMap, surfaceTriangles, surfaceFaceIds]);
+  }, [
+    boundaryQuadFaceIds,
+    boundaryTriFaceIds,
+    nodeMap,
+    surfaceTriangles,
+    surfaceFaceIds,
+  ]);
 
   const undeformedEdgePositions = useMemo(() => {
     const segs: number[] = [];

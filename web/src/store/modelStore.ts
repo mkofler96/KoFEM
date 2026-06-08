@@ -667,7 +667,13 @@ export const useModelStore = create<ModelState>()(
         s.isMeshing = v;
       }),
 
-    applyMeshResult: (nodes, elements, name, surfaceTriangles, surfaceFaceIds) =>
+    applyMeshResult: (
+      nodes,
+      elements,
+      name,
+      surfaceTriangles,
+      surfaceFaceIds,
+    ) =>
       set((s) => {
         s.nodes = nodes;
         s.elements = elements;
