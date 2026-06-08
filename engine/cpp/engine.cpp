@@ -15,8 +15,7 @@
 
 // OCCT
 #include <BRep_Tool.hxx>
-#include <BRepBuilderAPI_MakeVertex.hxx>
-#include <BRepExtrema_DistShapeShape.hxx>
+#include <GeomAPI_ProjectPointOnSurf.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRepTools.hxx>
 #include <IFSelect_ReturnStatus.hxx>
@@ -531,12 +530,18 @@ static std::string generate_fem_mesh(const std::string& opts_json)
     // We need the OCC face index (1-based) per surface element so the frontend
     // can do instant face selection.  Ng_GetSurfaceElementIndex is not exported
     // by all Netgen builds, so we derive face IDs via OCCT instead: project each
-    // surface element's centroid onto every bounded CAD face and pick the nearest.
-    // Points meshed on a given face have distance ≈ 0 to that face and non-zero
-    // distance to all others, so the minimum-distance face is unambiguous.
-    std::vector<TopoDS_Face> occ_faces;
-    for (TopExp_Explorer exp(g_step_shape, TopAbs_FACE); exp.More(); exp.Next())
-        occ_faces.push_back(TopoDS::Face(exp.Current()));
+    // surface element's centroid onto every CAD face's underlying (infinite) surface
+    // and pick the nearest.  Centroids lie on exactly one face at distance ≈ 0;
+    // we exit the inner loop early when distance falls below 1e-6.
+    // Using the infinite surface (GeomAPI_ProjectPointOnSurf) rather than a bounded
+    // shape (BRepExtrema_DistShapeShape) is O(1) for analytical surfaces (planes,
+    // cylinders, cones, spheres) and avoids the heavy boundary-projection work.
+    std::vector<Handle(Geom_Surface)> occ_surfs;
+    {
+        int f = 0;
+        for (TopExp_Explorer exp(g_step_shape, TopAbs_FACE); exp.More(); exp.Next(), ++f)
+            occ_surfs.push_back(BRep_Tool::Surface(TopoDS::Face(exp.Current())));
+    }
 
     int nse = nglib::Ng_GetNSE(mesh);
     std::vector<int> out_surf_tris;
@@ -559,15 +564,20 @@ static std::string generate_fem_mesh(const std::string& opts_json)
         }
         gp_Pnt centroid(cx / 3.0, cy / 3.0, cz / 3.0);
 
-        // Find the OCC face with minimum distance to centroid
-        TopoDS_Vertex v = BRepBuilderAPI_MakeVertex(centroid);
+        // Project centroid onto each face's underlying surface; take the face
+        // with minimum projection distance.  Exit early when distance < 1e-6
+        // (sub-micron: the centroid is definitively on that face's surface).
         int best_face = 1;
         double best_dist = 1e30;
-        for (int f = 0; f < (int)occ_faces.size(); ++f) {
-            BRepExtrema_DistShapeShape dist(v, occ_faces[f], Extrema_ExtFlag_MIN);
-            if (dist.IsDone()) {
-                double d = dist.Value();
-                if (d < best_dist) { best_dist = d; best_face = f + 1; }
+        for (int f = 0; f < (int)occ_surfs.size(); ++f) {
+            GeomAPI_ProjectPointOnSurf proj(centroid, occ_surfs[f]);
+            if (proj.NbPoints() > 0) {
+                double d = proj.LowerDistance();
+                if (d < best_dist) {
+                    best_dist = d;
+                    best_face = f + 1;
+                    if (d < 1e-6) break;
+                }
             }
         }
         out_surf_face_ids.push_back(best_face);
