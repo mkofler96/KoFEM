@@ -12,8 +12,6 @@
 import {
   buildBoundaryMeshTopo,
   pickFaceNodeIds,
-  COS_FLAT,
-  COS_CURVE,
 } from "./web/src/lib/facePick.ts";
 
 // ── Geometry helpers ─────────────────────────────────────────────────────────
@@ -47,7 +45,7 @@ function quad(a, b, c, d) {
 const N = 8; // circumferential segments
 const Ri = 5; // inner radius
 const Ro = 10; // outer radius
-const H = 20; // height
+const HEIGHT = 20; // height
 
 // Vertex layout (32 vertices total):
 //   0..N-1    inner bottom ring
@@ -57,9 +55,9 @@ const H = 20; // height
 
 const verts = [
   ...ringVerts(Ri, 0, N), // inner bottom
-  ...ringVerts(Ri, H, N), // inner top
+  ...ringVerts(Ri, HEIGHT, N), // inner top
   ...ringVerts(Ro, 0, N), // outer bottom
-  ...ringVerts(Ro, H, N), // outer top
+  ...ringVerts(Ro, HEIGHT, N), // outer top
 ];
 
 const triangles = [];
@@ -204,7 +202,7 @@ assert(
 
 console.log("\nTest 3: BFS mode (no face IDs) — inner cylinder surface");
 
-const topoNoIds = buildBoundaryMeshTopo(triangles, getPos, undefined);
+const topoNoIds = buildBoundaryMeshTopo(triangles, getPos);
 const pickedBFS = pickFaceNodeIds(
   innerTriIndices[Math.floor(N / 2)],
   topoNoIds,
