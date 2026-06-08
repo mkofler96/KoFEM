@@ -136,6 +136,7 @@ export function MeshScene() {
   const result = useModelStore((s) => s.result);
   const stepSurface = useModelStore((s) => s.stepSurface);
   const volMesh = useModelStore((s) => s.volMesh);
+  const surfaceTriangles = useModelStore((s) => s.surfaceTriangles);
   const surfaceFaceIds = useModelStore((s) => s.surfaceFaceIds);
   const viewRepr = useModelStore((s) => s.viewRepr);
   const pickMode = useModelStore((s) => s.pickMode);
@@ -226,24 +227,32 @@ export function MeshScene() {
       return n ? [n.x, n.y, n.z] : [0, 0, 0];
     };
 
-    // Build per-triangle face IDs by matching sorted vertex triples to Netgen
-    // surface elements (which carry OCC face indices from the C++ backend).
+    // Build per-boundary-triangle face IDs by matching sorted vertex triples.
+    // surfaceTriangles / surfaceFaceIds come from Netgen in surface-element order
+    // which differs from the tet boundary extraction order, so a direct index
+    // mapping would be wrong.  Sorting the three vertex IDs of each triangle
+    // produces an order-independent key that matches across both orderings.
     let faceIds: number[] | undefined;
-    if (surfaceFaceIds && surfaceFaceIds.length > 0) {
-      // We can't directly use surfaceFaceIds (indexed by Netgen surface element)
-      // because we don't have the Netgen surface triangles here — only the tet
-      // boundary triangles. Use a heuristic: build a map from sorted vertex key
-      // to surfaceFaceId using the tet boundary triangles themselves as proxy.
-      // This works only when surfaceFaceIds is indexed in the same order as the
-      // boundary triangles (which requires the C++ backend to output surface
-      // elements in tet-boundary order — see engine.cpp).
-      if (surfaceFaceIds.length === triangles.length) {
-        faceIds = surfaceFaceIds;
+    if (
+      surfaceTriangles &&
+      surfaceFaceIds &&
+      surfaceTriangles.length === surfaceFaceIds.length
+    ) {
+      const sk = (p: number, q: number, r: number): string =>
+        [p, q, r].sort((x, y) => x - y).join(",");
+      const keyToFaceId = new Map<string, number>();
+      for (let i = 0; i < surfaceTriangles.length; i++) {
+        const [a, b, c] = surfaceTriangles[i];
+        keyToFaceId.set(sk(a, b, c), surfaceFaceIds[i]);
+      }
+      const mapped = triangles.map(([a, b, c]) => keyToFaceId.get(sk(a, b, c)));
+      if (mapped.every((id) => id !== undefined)) {
+        faceIds = mapped as number[];
       }
     }
 
     return buildBoundaryMeshTopo(triangles, getPos, faceIds);
-  }, [boundaryQuadFaceIds, boundaryTriFaceIds, nodeMap, surfaceFaceIds]);
+  }, [boundaryQuadFaceIds, boundaryTriFaceIds, nodeMap, surfaceTriangles, surfaceFaceIds]);
 
   const undeformedEdgePositions = useMemo(() => {
     const segs: number[] = [];

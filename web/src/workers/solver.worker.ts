@@ -112,8 +112,13 @@ self.onmessage = async (event: MessageEvent) => {
       const dto = JSON.parse(json) as {
         vertices: [number, number, number][];
         tetrahedra: [number, number, number, number][];
-        surfaceFaceIds?: number[]; // OCC face index per surface triangle (1-based), present when
-        // Netgen was built with USE_OCC and exposes Ng_GetSurfaceElementBCProperty
+        // Surface element data from Netgen — present when Netgen was built with
+        // USE_OCC and exposes Ng_GetSurfaceElement / Ng_GetSurfaceElementIndex.
+        // surfaceTriangles: vertex indices (0-based, same node IDs as volume mesh)
+        // surfaceFaceIds:   OCC face index (1-based) per surface triangle
+        // Both arrays are in Netgen surface-element order, NOT tet boundary order.
+        surfaceTriangles?: [number, number, number][];
+        surfaceFaceIds?: number[];
       };
 
       self.postMessage({
@@ -168,6 +173,7 @@ self.onmessage = async (event: MessageEvent) => {
         edges,
         nodes,
         elements,
+        surfaceTriangles: dto.surfaceTriangles ?? null,
         surfaceFaceIds: dto.surfaceFaceIds ?? null,
       });
     } else if (type === "solve") {

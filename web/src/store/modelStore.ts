@@ -377,9 +377,12 @@ interface ModelState {
   nextFaceEntryId: number;
 
   volMesh: VolMesh | null;
-  // OCC face index per boundary triangle, populated when the mesh came from a
-  // STEP file via the Netgen OCC pipeline.  Index i corresponds to triangle i
-  // of the boundary mesh (built from tet elements in MeshScene).
+  // Netgen surface element vertex indices (0-based, same node IDs as the volume
+  // mesh) and their OCC face indices (1-based).  Both arrays have one entry per
+  // surface triangle and are in Netgen surface-element order — NOT in the order
+  // produced by the frontend's tet boundary extraction.  MeshScene builds a
+  // sorted-vertex-key lookup to match them to tet boundary triangles correctly.
+  surfaceTriangles: [number, number, number][] | null;
   surfaceFaceIds: number[] | null;
   viewRepr: "geometry" | "surface" | "volume" | "wireframe";
   stepImportError: string | null;
@@ -408,6 +411,7 @@ interface ModelState {
     nodes: Node[],
     elements: Element[],
     modelName: string,
+    surfaceTriangles?: [number, number, number][] | null,
     surfaceFaceIds?: number[] | null,
   ): void;
   loadModel(snapshot: ModelSnapshot & { modelName?: string }): void;
@@ -485,6 +489,7 @@ export const useModelStore = create<ModelState>()(
     isRunning: false,
     isMeshing: false,
     volMesh: null,
+    surfaceTriangles: null,
     surfaceFaceIds: null,
     viewRepr: "surface" as const,
     stepImportError: null,
@@ -662,10 +667,11 @@ export const useModelStore = create<ModelState>()(
         s.isMeshing = v;
       }),
 
-    applyMeshResult: (nodes, elements, name, surfaceFaceIds) =>
+    applyMeshResult: (nodes, elements, name, surfaceTriangles, surfaceFaceIds) =>
       set((s) => {
         s.nodes = nodes;
         s.elements = elements;
+        s.surfaceTriangles = surfaceTriangles ?? null;
         s.surfaceFaceIds = surfaceFaceIds ?? null;
         s.bcGroups = [];
         s.loadGroups = [];
@@ -740,6 +746,7 @@ export const useModelStore = create<ModelState>()(
         s.result = null;
         s.stepSurface = null;
         s.volMesh = null;
+        s.surfaceTriangles = null;
         s.surfaceFaceIds = null;
         s.viewRepr = "surface";
         s.geometries = [];

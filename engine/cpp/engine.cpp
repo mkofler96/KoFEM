@@ -106,7 +106,7 @@ static std::string json_ints(const std::vector<int>& d) {
     std::ostringstream ss;
     ss << '[';
     for (size_t i = 0; i < d.size(); ++i) {
-        if (i) ss << ',';
+        if (i != 0) ss << ',';
         ss << d[i];
     }
     ss << ']';
@@ -352,9 +352,11 @@ namespace nglib {
     // Surface element queries (standard nglib API, Netgen v6.2+)
     extern int       Ng_GetNSE(Ng_Mesh*);
     extern void      Ng_GetSurfaceElement(Ng_Mesh*, int, int*);
-    // BC property = OCC face index (1-based) when mesh was generated via Ng_OCC_*.
-    // Returns 1 for all elements when using the manual Ng_AddSurfaceElement path.
-    extern int       Ng_GetSurfaceElementBCProperty(Ng_Mesh*, int);
+    // Returns the face descriptor index of surface element num (1-based).
+    // For OCC-generated meshes this is the OCC face number, giving a unique
+    // identifier per CAD face — all surface elements on the same CAD face share
+    // the same index.
+    extern int       Ng_GetSurfaceElementIndex(Ng_Mesh*, int);
 }
 
 // OCC meshing API (Netgen v6.2.2401, nglib/nglib_occ.cpp, namespace nglib).
@@ -528,16 +530,24 @@ static std::string generate_fem_mesh(const std::string& opts_json)
         out_tets.push_back(tet[3] - 1);
     }
 
-    // Surface elements — one per boundary triangle, in Netgen surface element order.
-    // Ng_GetSurfaceElementBCProperty returns the OCC face index (1-based) for each
-    // triangle, which the frontend uses for instant face selection instead of BFS.
-    // The frontend aligns these with tet boundary triangles by matching sorted vertex
-    // triples; they are only used when the count equals the tet boundary triangle count.
+    // Surface elements — boundary triangles from the Netgen surface mesh.
+    // Exported alongside vertex indices so the frontend can build a sorted-key
+    // lookup (vertex set → face ID) that is order-independent with respect to
+    // the tet boundary triangle extraction.
+    // Ng_GetSurfaceElementBCProperty returns the OCC face index (1-based) for
+    // each triangle; this is what the frontend uses for instant face selection.
     int nse = nglib::Ng_GetNSE(mesh);
+    std::vector<int> out_surf_tris;
     std::vector<int> out_surf_face_ids;
+    out_surf_tris.reserve(3 * nse);
     out_surf_face_ids.reserve(nse);
     for (int i = 1; i <= nse; ++i) {
-        out_surf_face_ids.push_back(nglib::Ng_GetSurfaceElementBCProperty(mesh, i));
+        int tri[3];
+        nglib::Ng_GetSurfaceElement(mesh, i, tri);
+        out_surf_tris.push_back(tri[0] - 1);   // convert to 0-based node IDs
+        out_surf_tris.push_back(tri[1] - 1);
+        out_surf_tris.push_back(tri[2] - 1);
+        out_surf_face_ids.push_back(nglib::Ng_GetSurfaceElementIndex(mesh, i));
     }
     printf("[netgen] %d surface elements, %d unique OCC face IDs\n",
            nse, (int)std::set<int>(out_surf_face_ids.begin(), out_surf_face_ids.end()).size());
@@ -548,6 +558,7 @@ static std::string generate_fem_mesh(const std::string& opts_json)
 
     return "{\"vertices\":" + json_vec3(out_verts) +
            ",\"tetrahedra\":" + json_ivec4(out_tets) +
+           ",\"surfaceTriangles\":" + json_ivec3(out_surf_tris) +
            ",\"surfaceFaceIds\":" + json_ints(out_surf_face_ids) + "}";
 
 #else
