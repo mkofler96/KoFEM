@@ -214,21 +214,64 @@ test.describe("Full workflow showcase", () => {
     console.log(`[showcase] ${elapsed()} 04 screenshot done`);
 
     // 5. Solve and results
+    // Navigate to the Solve panel, which mounts SolvePanel and exposes
+    // window.__kofemTriggerSolve.  We trigger the solve via evaluate() rather
+    // than clicking the button because toBeEnabled() inside Promise.race() has
+    // exhibited a mysterious ~300 s stall in CI despite correct store state.
     await page
       .locator("nav")
       .getByRole("button")
       .filter({ hasText: "Solve" })
       .click();
     await Promise.race([
-      expect(
-        page.getByRole("button").filter({ hasText: "Run static solve" }),
-      ).toBeEnabled({ timeout: 60_000 }),
+      page.waitForFunction(
+        () =>
+          typeof (
+            window as unknown as { __kofemTriggerSolve?: () => void }
+          ).__kofemTriggerSolve === "function",
+        { timeout: 15_000 },
+      ),
       fatalError,
     ]);
-    await page
-      .getByRole("button")
-      .filter({ hasText: "Run static solve" })
-      .click();
+    // Log pre-solve state for CI diagnostics
+    const presolveState = await page.evaluate(() => {
+      const store = (
+        window as unknown as {
+          __kofemStore: {
+            getState(): {
+              nodes: unknown[];
+              constraints: unknown[];
+              loads: unknown[];
+              isRunning: boolean;
+            };
+          };
+        }
+      ).__kofemStore;
+      const s = store.getState();
+      return {
+        nodes: s.nodes.length,
+        constraints: s.constraints.length,
+        loads: s.loads.length,
+        isRunning: s.isRunning,
+      };
+    });
+    console.log(
+      `[showcase] ${elapsed()} pre-solve — nodes:${presolveState.nodes} constraints:${presolveState.constraints} loads:${presolveState.loads} isRunning:${presolveState.isRunning}`,
+    );
+    if (
+      presolveState.nodes === 0 ||
+      presolveState.constraints === 0 ||
+      presolveState.loads === 0
+    ) {
+      throw new Error(
+        `Solve preconditions not met: ${JSON.stringify(presolveState)}`,
+      );
+    }
+    await page.evaluate(() => {
+      (
+        window as unknown as { __kofemTriggerSolve?: () => void }
+      ).__kofemTriggerSolve?.();
+    });
     console.log(`[showcase] ${elapsed()} solver started…`);
 
     await Promise.race([

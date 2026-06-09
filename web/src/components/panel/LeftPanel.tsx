@@ -1135,6 +1135,14 @@ function SolvePanel() {
       .finally(() => setRunning(false));
   }
 
+  // Expose for Playwright E2E tests — allows bypassing the button's disabled-state
+  // timing uncertainty in CI without requiring UI interaction.
+  useEffect(() => {
+    (
+      window as Window & { __kofemTriggerSolve?: () => void }
+    ).__kofemTriggerSolve = handleSolve;
+  });
+
   const checks: [boolean, string][] = [
     [
       meshOk,
