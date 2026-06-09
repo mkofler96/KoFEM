@@ -117,6 +117,11 @@ jobs:
       - name: Build frontend
         run: cd web && bun run build
 
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup
+          df -h
+
       - name: Install Playwright Chromium
         run: cd web && bunx playwright install --with-deps chromium
 

@@ -38,6 +38,7 @@
 #include <cmath>
 #include <cstring>
 #include <malloc.h>
+#include <set>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -96,6 +97,17 @@ static std::string json_ivec4(const std::vector<int>& d) {
     for (size_t i = 0; i < n; ++i) {
         if (i) ss << ',';
         ss << '[' << d[4*i] << ',' << d[4*i+1] << ',' << d[4*i+2] << ',' << d[4*i+3] << ']';
+    }
+    ss << ']';
+    return ss.str();
+}
+
+static std::string json_ints(const std::vector<int>& d) {
+    std::ostringstream ss;
+    ss << '[';
+    for (size_t i = 0; i < d.size(); ++i) {
+        if (i != 0) ss << ',';
+        ss << d[i];
     }
     ss << ']';
     return ss.str();
@@ -337,6 +349,9 @@ namespace nglib {
     extern Ng_Result Ng_GetVolumeElement(Ng_Mesh*, int, int*);
     extern int       Ng_GetNP(Ng_Mesh*);
     extern int       Ng_GetNE(Ng_Mesh*);
+    // Surface element queries (standard nglib API, Netgen v6.2+)
+    extern int       Ng_GetNSE(Ng_Mesh*);
+    extern void      Ng_GetSurfaceElement(Ng_Mesh*, int, int*);
 }
 
 // OCC meshing API (Netgen v6.2.2401, nglib/nglib_occ.cpp, namespace nglib).
@@ -510,11 +525,102 @@ static std::string generate_fem_mesh(const std::string& opts_json)
         out_tets.push_back(tet[3] - 1);
     }
 
+    // Surface elements — boundary triangles from the Netgen surface mesh.
+    // We need the OCC face index (1-based) per surface element for fast face selection.
+    // Ng_GetSurfaceElementIndex is absent from many Netgen builds, so we derive face
+    // IDs from the OCCT tessellation: build a centroid→face_id lookup from
+    // BRep_Tool::Triangulation (the same API used by tessellate_step, proven WASM-safe),
+    // then for each Netgen surface element find the nearest tessellation centroid.
+    // Netgen nodes lie on the OCCT surfaces with sub-micron precision, so the nearest
+    // tessellation centroid is always on the correct face.  No high-level OCCT projection
+    // APIs (GeomAPI_*, BRepExtrema_*) are used — only plain gp_Pnt arithmetic.
+    struct TessCentroid { double x, y, z; int face_id; };
+    std::vector<TessCentroid> tess_centroids;
+    {
+        // Tessellation is normally already attached (tessellate_step runs first).
+        // Guard against direct calls: create a coarse tessellation if needed.
+        bool has_tess = false;
+        for (TopExp_Explorer exp(g_step_shape, TopAbs_FACE); exp.More(); exp.Next()) {
+            TopLoc_Location loc;
+            if (!BRep_Tool::Triangulation(TopoDS::Face(exp.Current()), loc).IsNull()) {
+                has_tess = true; break;
+            }
+        }
+        if (!has_tess) {
+            BRepMesh_IncrementalMesh mesher(g_step_shape, 1.0, /*relative=*/false, 0.5);
+            mesher.Perform();
+        }
+
+        int fid = 1;
+        for (TopExp_Explorer exp(g_step_shape, TopAbs_FACE); exp.More(); exp.Next(), ++fid) {
+            TopLoc_Location loc;
+            Handle(Poly_Triangulation) tri =
+                BRep_Tool::Triangulation(TopoDS::Face(exp.Current()), loc);
+            if (tri.IsNull()) continue;
+            for (int t = 1; t <= tri->NbTriangles(); ++t) {
+                int n1, n2, n3;
+                tri->Triangle(t).Get(n1, n2, n3);
+                gp_Pnt p1 = tri->Node(n1).Transformed(loc);
+                gp_Pnt p2 = tri->Node(n2).Transformed(loc);
+                gp_Pnt p3 = tri->Node(n3).Transformed(loc);
+                tess_centroids.push_back({
+                    (p1.X() + p2.X() + p3.X()) / 3.0,
+                    (p1.Y() + p2.Y() + p3.Y()) / 3.0,
+                    (p1.Z() + p2.Z() + p3.Z()) / 3.0,
+                    fid
+                });
+            }
+        }
+    }
+    printf("[netgen] %zu OCCT tessellation centroids for face-ID lookup\n",
+           tess_centroids.size());
+    fflush(stdout);
+
+    int nse = nglib::Ng_GetNSE(mesh);
+    std::vector<int> out_surf_tris;
+    std::vector<int> out_surf_face_ids;
+    out_surf_tris.reserve(3 * nse);
+    out_surf_face_ids.reserve(nse);
+    for (int i = 1; i <= nse; ++i) {
+        int tri[3];
+        nglib::Ng_GetSurfaceElement(mesh, i, tri);
+        out_surf_tris.push_back(tri[0] - 1);
+        out_surf_tris.push_back(tri[1] - 1);
+        out_surf_tris.push_back(tri[2] - 1);
+
+        double cx = 0, cy = 0, cz = 0;
+        for (int j = 0; j < 3; ++j) {
+            double pt[3];
+            nglib::Ng_GetPoint(mesh, tri[j], pt);
+            cx += pt[0]; cy += pt[1]; cz += pt[2];
+        }
+        cx /= 3.0; cy /= 3.0; cz /= 3.0;
+
+        // Nearest OCCT tessellation centroid → face ID.
+        int best_fid = 1;
+        double best_d2 = 1e30;
+        for (const auto& tc : tess_centroids) {
+            double dx = tc.x - cx, dy = tc.y - cy, dz = tc.z - cz;
+            double d2 = dx*dx + dy*dy + dz*dz;
+            if (d2 < best_d2) {
+                best_d2 = d2;
+                best_fid = tc.face_id;
+                if (d2 < 1e-8) break;
+            }
+        }
+        out_surf_face_ids.push_back(best_fid);
+    }
+    printf("[netgen] %d surface elements, %d unique OCC face IDs\n",
+           nse, (int)std::set<int>(out_surf_face_ids.begin(), out_surf_face_ids.end()).size());
+    fflush(stdout);
+
     nglib::Ng_DeleteMesh(mesh);
     log_mem("generate_fem_mesh: after Ng_DeleteMesh");
 
     return "{\"vertices\":" + json_vec3(out_verts) +
-           ",\"tetrahedra\":" + json_ivec4(out_tets) + "}";
+           ",\"tetrahedra\":" + json_ivec4(out_tets) +
+           ",\"surfaceTriangles\":" + json_ivec3(out_surf_tris) +
+           ",\"surfaceFaceIds\":" + json_ints(out_surf_face_ids) + "}";
 
 #else
 #error "KoFEM requires Netgen built with -DUSE_OCC=ON (KOFEM_NETGEN_OCC is not defined). " \
