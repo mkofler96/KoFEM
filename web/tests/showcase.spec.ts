@@ -226,9 +226,8 @@ test.describe("Full workflow showcase", () => {
     await Promise.race([
       page.waitForFunction(
         () =>
-          typeof (
-            window as unknown as { __kofemTriggerSolve?: () => void }
-          ).__kofemTriggerSolve === "function",
+          typeof (window as unknown as { __kofemTriggerSolve?: () => void })
+            .__kofemTriggerSolve === "function",
         { timeout: 15_000 },
       ),
       fatalError,
