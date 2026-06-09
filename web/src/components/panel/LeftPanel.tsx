@@ -8,7 +8,7 @@ import type {
 } from "../../store/modelStore";
 import { GeometryDialog } from "../geometry/GeometryDialog";
 import { fmt } from "../../lib/modelDisplay";
-import { sendToWorker, setLogCallback } from "../../workers/sharedWorker";
+import { sendToWorker, setLogCallback, resetWorker } from "../../workers/sharedWorker";
 import styles from "./LeftPanel.module.css";
 
 // ── Geometry mode ─────────────────────────────────────────────────────────────
@@ -506,6 +506,10 @@ function MeshPanel() {
         surfaceTriangles,
         surfaceFaceIds,
       );
+      // Netgen's Ng_Init() installs global C++ state that contaminates the WASM
+      // runtime for subsequent MFEM solves.  Resetting the worker here gives the
+      // solve a clean module instance, preventing an infinite loop on first call.
+      resetWorker();
     } catch (err) {
       console.error("[meshing] volume mesh failed:", err);
       setError(`Volume meshing failed: ${err}`);

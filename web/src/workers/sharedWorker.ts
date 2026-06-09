@@ -61,3 +61,16 @@ export function sendToWorker<T = unknown>(type: string, payload: unknown): Promi
     getWorker().postMessage({ id, type, payload })
   })
 }
+
+// Terminate and recreate the worker.  Call this after volume meshing so that
+// Netgen's Ng_Init() global C++ state does not contaminate the WASM runtime
+// for the subsequent MFEM solve.  Any in-flight requests are rejected.
+export function resetWorker(): void {
+  if (_worker) {
+    _worker.terminate()
+    _worker = null
+  }
+  for (const p of _pending.values())
+    p.reject(new Error('Worker reset — restart your operation'))
+  _pending.clear()
+}
