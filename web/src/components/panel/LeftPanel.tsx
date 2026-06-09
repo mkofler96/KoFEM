@@ -8,7 +8,11 @@ import type {
 } from "../../store/modelStore";
 import { GeometryDialog } from "../geometry/GeometryDialog";
 import { fmt } from "../../lib/modelDisplay";
-import { sendToWorker, setLogCallback, resetWorker } from "../../workers/sharedWorker";
+import {
+  sendToWorker,
+  setLogCallback,
+  resetWorker,
+} from "../../workers/sharedWorker";
 import styles from "./LeftPanel.module.css";
 
 // ── Geometry mode ─────────────────────────────────────────────────────────────
