@@ -14,11 +14,13 @@ pub enum MeshError {
 
 /// Generate a tetrahedral volume mesh from a closed surface mesh using Netgen.
 ///
-/// # Panics
-/// Always panics on native targets. Use the WASM build via `scripts/build-wasm.sh`.
+/// # Errors
+/// Always returns [`MeshError::MeshingFailed`] on native targets — the Netgen bridge is not yet
+/// implemented. Use the WASM build via `scripts/build-wasm.sh`.
 pub fn mesh_volume(_surface: &SurfaceMesh, _opts: &MeshOptions) -> Result<VolumeMesh, MeshError> {
-    unimplemented!(
-        "Native Netgen bridge is not implemented. \
+    Err(MeshError::MeshingFailed(
+        "Native Netgen bridge is not yet implemented. \
          Use the WASM build produced by engine/cpp/engine.cpp via scripts/build-wasm.sh."
-    )
+            .to_string(),
+    ))
 }

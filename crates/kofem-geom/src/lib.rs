@@ -14,27 +14,31 @@ pub struct Tessellation {
 
 /// Load a STEP file into an [`OcctModel`].
 ///
-/// # Panics
-/// Always panics on native targets. Use the WASM build via `scripts/build-wasm.sh`.
+/// # Errors
+/// Always returns [`GeomError::LoadFailed`] on native targets — the OCCT bridge is not yet
+/// implemented. Use the WASM build via `scripts/build-wasm.sh`.
 pub fn load_step(_bytes: &[u8]) -> Result<OcctModel, GeomError> {
-    unimplemented!(
-        "Native OCCT bridge is not implemented. \
+    Err(GeomError::LoadFailed(
+        "Native OCCT bridge is not yet implemented. \
          Use the WASM build produced by engine/cpp/engine.cpp via scripts/build-wasm.sh."
-    )
+            .to_string(),
+    ))
 }
 
 /// Tessellate an [`OcctModel`] into a surface triangle mesh.
 ///
-/// # Panics
-/// Always panics on native targets. Use the WASM build via `scripts/build-wasm.sh`.
+/// # Errors
+/// Always returns [`GeomError::TessFailed`] on native targets — the OCCT bridge is not yet
+/// implemented. Use the WASM build via `scripts/build-wasm.sh`.
 pub fn tessellate_model(
     _model: &OcctModel,
     _opts: &TessOptions,
 ) -> Result<Tessellation, GeomError> {
-    unimplemented!(
-        "Native OCCT bridge is not implemented. \
+    Err(GeomError::TessFailed(
+        "Native OCCT bridge is not yet implemented. \
          Use the WASM build produced by engine/cpp/engine.cpp via scripts/build-wasm.sh."
-    )
+            .to_string(),
+    ))
 }
 
 #[derive(Debug, Error)]
