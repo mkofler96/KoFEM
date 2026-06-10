@@ -3,7 +3,7 @@ import { Line } from "@react-three/drei";
 import * as THREE from "three";
 import type { ThreeEvent } from "@react-three/fiber";
 import { useModelStore } from "../../store/modelStore";
-import type { Node } from "../../store/modelStore";
+import type { Node, ResultType } from "../../store/modelStore";
 import { buildBoundaryMeshTopo, pickFaceNodeIds } from "../../lib/facePick";
 import type { Vec3, Tri } from "../../lib/facePick";
 
@@ -134,6 +134,7 @@ export function MeshScene() {
   const constraints = useModelStore((s) => s.constraints);
   const loads = useModelStore((s) => s.loads);
   const result = useModelStore((s) => s.result);
+  const resultType = useModelStore((s) => s.resultType);
   const stepSurface = useModelStore((s) => s.stepSurface);
   const volMesh = useModelStore((s) => s.volMesh);
   const surfaceTriangles = useModelStore((s) => s.surfaceTriangles);
@@ -315,6 +316,29 @@ export function MeshScene() {
     [barElements, nodeMap],
   );
 
+  // Per-node von Mises: average element-level stresses to nodes.
+  const nodeVonMises = useMemo(() => {
+    if (!result?.vonMises || elements.length === 0 || nodes.length === 0) return null;
+    const vm = result.vonMises;
+    const sums = new Float64Array(nodes.length);
+    const counts = new Int32Array(nodes.length);
+    for (let ei = 0; ei < elements.length; ei++) {
+      const vmVal = vm[ei] ?? 0;
+      for (const nodeId of elements[ei].nodeIds) {
+        const entry = nodeMap.get(nodeId);
+        if (entry) {
+          sums[entry.i] += vmVal;
+          counts[entry.i]++;
+        }
+      }
+    }
+    const avg = new Float64Array(nodes.length);
+    for (let i = 0; i < nodes.length; i++) {
+      avg[i] = counts[i] > 0 ? sums[i] / counts[i] : 0;
+    }
+    return avg;
+  }, [result, elements, nodes, nodeMap]);
+
   const deformedSurface = useMemo(() => {
     if (!result) return null;
     const hasQuads = boundaryQuadFaceIds.length > 0;
@@ -322,16 +346,31 @@ export function MeshScene() {
     if (!hasQuads && !hasTris) return null;
 
     const d = result.displacements;
+
+    // Compute per-node scalar value for the selected result type
+    const nodeValue = (i: number, rt: ResultType): number => {
+      switch (rt) {
+        case 'Ux': return d[i * 3] ?? 0;
+        case 'Uy': return d[i * 3 + 1] ?? 0;
+        case 'Uz': return d[i * 3 + 2] ?? 0;
+        case 'Von Mises stress': return nodeVonMises?.[i] ?? 0;
+        default: {
+          const ux = d[i * 3] ?? 0, uy = d[i * 3 + 1] ?? 0, uz = d[i * 3 + 2] ?? 0;
+          return Math.sqrt(ux * ux + uy * uy + uz * uz);
+        }
+      }
+    };
+
+    let minVal = Infinity, maxVal = -Infinity;
+    for (let i = 0; i < nodes.length; i++) {
+      const v = nodeValue(i, resultType);
+      if (v < minVal) minVal = v;
+      if (v > maxVal) maxVal = v;
+    }
+    const range = maxVal - minVal || 1;
+
     const positions: number[] = [];
     const colors: number[] = [];
-    let minUy = Infinity,
-      maxUy = -Infinity;
-    nodes.forEach((_, i) => {
-      const uy = d[i * 3 + 1] ?? 0;
-      if (uy < minUy) minUy = uy;
-      if (uy > maxUy) maxUy = uy;
-    });
-    const range = maxUy - minUy || 1;
 
     const deformedPos = (id: number): [number, number, number] => {
       const { n, i } = nodeMap.get(id)!;
@@ -343,7 +382,7 @@ export function MeshScene() {
     };
     const nodeColor = (id: number): [number, number, number] => {
       const { i } = nodeMap.get(id)!;
-      const t = ((d[i * 3 + 1] ?? 0) - minUy) / range;
+      const t = (nodeValue(i, resultType) - minVal) / range;
       const c = new THREE.Color();
       c.setHSL(0.667 * (1 - t), 1, 0.5);
       return [c.r, c.g, c.b];
@@ -378,6 +417,8 @@ export function MeshScene() {
     };
   }, [
     result,
+    resultType,
+    nodeVonMises,
     boundaryQuadFaceIds,
     boundaryTriFaceIds,
     nodeMap,

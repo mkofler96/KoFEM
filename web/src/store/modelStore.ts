@@ -67,6 +67,15 @@ export interface SolverResult {
   vonMises?: Float64Array;
 }
 
+export const RESULT_TYPES = [
+  'Displacement (magnitude)',
+  'Ux',
+  'Uy',
+  'Uz',
+  'Von Mises stress',
+] as const;
+export type ResultType = typeof RESULT_TYPES[number];
+
 export interface StepSurfaceMesh {
   points: [number, number, number][];
   triangles: [number, number, number][];
@@ -358,6 +367,7 @@ interface ModelState {
   hasStarted: boolean;
   mode: AppMode;
   result: SolverResult | null;
+  resultType: ResultType;
   stepSurface: StepSurfaceMesh | null;
   isRunning: boolean;
   isMeshing: boolean;
@@ -405,6 +415,7 @@ interface ModelState {
   addMaterial(mat: Material): void;
   addProperty(prop: Property): void;
   setResult(result: SolverResult): void;
+  setResultType(t: ResultType): void;
   setRunning(v: boolean): void;
   setMeshing(v: boolean): void;
   applyMeshResult(
@@ -485,6 +496,7 @@ export const useModelStore = create<ModelState>()(
     hasStarted: false,
     mode: "geometry" as AppMode,
     result: null,
+    resultType: 'Displacement (magnitude)' as ResultType,
     stepSurface: null,
     isRunning: false,
     isMeshing: false,
@@ -657,6 +669,11 @@ export const useModelStore = create<ModelState>()(
     setResult: (result) =>
       set((s) => {
         s.result = result;
+        s.resultType = 'Displacement (magnitude)';
+      }),
+    setResultType: (t) =>
+      set((s) => {
+        s.resultType = t;
       }),
     setRunning: (v) =>
       set((s) => {
