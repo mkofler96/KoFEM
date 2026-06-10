@@ -1124,7 +1124,7 @@ function SolvePanel() {
 
   function handleSolve() {
     setRunning(true);
-    sendToWorker<{ displacements: number[] }>("solve", {
+    sendToWorker<{ displacements: number[]; vonMises: number[] }>("solve", {
       nodes,
       elements,
       materials,
@@ -1132,8 +1132,11 @@ function SolvePanel() {
       constraints,
       loads,
     })
-      .then(({ displacements }) => {
-        setResult({ displacements: new Float64Array(displacements) });
+      .then(({ displacements, vonMises }) => {
+        setResult({
+          displacements: new Float64Array(displacements),
+          vonMises: vonMises ? new Float64Array(vonMises) : undefined,
+        });
         setMode("results");
       })
       .catch((err) => {
