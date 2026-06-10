@@ -23,13 +23,24 @@ foreach(V OCCT_ROOT NETGEN_ROOT MFEM_ROOT)
 endforeach()
 
 # ── Engine target ─────────────────────────────────────────────────────────────
-add_executable(kofem_wasm_emcc cpp/engine.cpp cpp/brepfill_stubs.cpp)
+add_executable(kofem_wasm_emcc cpp/engine.cpp cpp/netgen_glue.cpp cpp/brepfill_stubs.cpp)
 
 target_include_directories(kofem_wasm_emcc PRIVATE
     ${OCCT_ROOT}/include/opencascade
     ${NETGEN_ROOT}/include
     ${MFEM_ROOT}/include
 )
+
+# Netgen internal headers (netgen_glue.cpp uses netgen::Mesh / netgen::OCCGeometry).
+# Install layouts vary: flat (include/*.hpp), nested (include/netgen/<subdir>/),
+# or umbrella (include/netgen/include/meshing.hpp).  Add every variant that exists.
+foreach(_ng_inc
+        "${NETGEN_ROOT}/include/netgen"
+        "${NETGEN_ROOT}/include/netgen/include")
+    if(EXISTS "${_ng_inc}")
+        target_include_directories(kofem_wasm_emcc PRIVATE "${_ng_inc}")
+    endif()
+endforeach()
 
 target_link_directories(kofem_wasm_emcc PRIVATE
     ${OCCT_ROOT}/lib
@@ -177,7 +188,8 @@ target_link_libraries(kofem_wasm_emcc PRIVATE
     mfem
 )
 
-target_compile_definitions(kofem_wasm_emcc PRIVATE KOFEM_NETGEN_OCC=1)
+# OCCGEOMETRY gates the OCC parts of Netgen's internal headers (occgeom.hpp).
+target_compile_definitions(kofem_wasm_emcc PRIVATE KOFEM_NETGEN_OCC=1 OCCGEOMETRY=1)
 if(_netgen_occ_separate_lib)
     message(STATUS "Netgen OCC: linking ngocc as a separate library")
     target_link_libraries(kofem_wasm_emcc PRIVATE ngocc)

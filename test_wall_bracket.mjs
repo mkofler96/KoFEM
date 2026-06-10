@@ -33,7 +33,8 @@ console.log(`tessellate_step:  ${tess.vertices.length} vertices, ${tess.triangle
 
 // 2. FEM mesh via Netgen OCC
 const mesh = JSON.parse(Module.generate_fem_mesh(JSON.stringify({
-  max_element_size: maxElementSize, min_element_size: 0.0, grading: 0.3,
+  // min_element_size floors curvature refinement — same default as solver.worker.ts
+  max_element_size: maxElementSize, min_element_size: maxElementSize / 10, grading: 0.3,
   second_order: false, elementsperedge: 2.0, elementspercurve: 2.0,
   optsteps_2d: 3, optsteps_3d: 3,
 })))

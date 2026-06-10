@@ -30,6 +30,9 @@
 // Netgen (C API)
 #include <nglib.h>
 
+// Netgen internal-API glue (face indices, geometry from shape) — see netgen_glue.h
+#include "netgen_glue.h"
+
 // MFEM
 #include <mfem.hpp>
 
@@ -147,21 +150,18 @@ static bool jbool(const val& o, const char* k, bool def) {
 
 // ── OCCT: STEP → surface mesh ─────────────────────────────────────────────────
 
-// Stored after tessellate_step for reuse by generate_fem_mesh.
-// g_step_bytes holds the raw STEP file so Netgen can re-read it via its own
-// STEP reader (Netgen's OCC integration requires a file path, not an in-memory shape).
+// Stored after tessellate_step for reuse by generate_fem_mesh, which builds
+// the Netgen OCC geometry directly from this shape (no STEP re-read).
 static TopoDS_Shape              g_step_shape;
 static bool                      g_has_step_shape = false;
-static std::vector<uint8_t>      g_step_bytes;
 
-// Release OCCT shape + STEP byte cache.  Call this from JS after meshing is
+// Release the OCCT shape cache.  Call this from JS after meshing is
 // done so the memory is available for the MFEM solve.
 static void free_geometry_cache() {
     log_mem("free_geometry_cache: before");
     BRepTools::Clean(g_step_shape);  // detach BRepMesh triangulations from faces
     g_step_shape     = TopoDS_Shape();
     g_has_step_shape = false;
-    std::vector<uint8_t>().swap(g_step_bytes);  // swap-with-empty releases capacity
     printf("[kofem] geometry cache freed\n");
     fflush(stdout);
     log_mem("free_geometry_cache: after");
@@ -173,7 +173,6 @@ static std::string tessellate_step(val bytes_val, const std::string& opts_json) 
     double angular_defl = jdouble(opts, "angular_deflection", 0.5);
 
     std::vector<uint8_t> bytes = emscripten::vecFromJSArray<uint8_t>(bytes_val);
-    g_step_bytes = bytes;   // keep for Netgen OCC re-read in generate_fem_mesh
 
     // OCCT ReadFile requires a filesystem path; write to Emscripten's in-memory /tmp.
     char tmppath[] = "/tmp/kofem_XXXXXX.stp";
@@ -360,8 +359,6 @@ namespace nglib {
 namespace nglib {
 #ifdef KOFEM_NETGEN_OCC
     typedef void* Ng_OCC_Geometry;
-    extern Ng_OCC_Geometry* Ng_OCC_Load_STEP(const char* filename);
-    extern Ng_Result         Ng_OCC_DeleteGeometry(Ng_OCC_Geometry*);
     extern Ng_Result         Ng_OCC_SetLocalMeshSize(Ng_OCC_Geometry*, Ng_Mesh*, Ng_Meshing_Parameters*);
     extern Ng_Result         Ng_OCC_GenerateEdgeMesh(Ng_OCC_Geometry*, Ng_Mesh*, Ng_Meshing_Parameters*);
     extern Ng_Result         Ng_OCC_GenerateSurfaceMesh(Ng_OCC_Geometry*, Ng_Mesh*, Ng_Meshing_Parameters*);
@@ -375,7 +372,7 @@ namespace nglib {
 // feature lines, then fills the volume — one call, proper FEM surface mesh.
 static std::string generate_fem_mesh(const std::string& opts_json)
 {
-    if (!g_has_step_shape || g_step_bytes.empty())
+    if (!g_has_step_shape)
         throw std::runtime_error(
             "generate_fem_mesh: no STEP shape loaded — call tessellate_step first");
 
@@ -393,27 +390,24 @@ static std::string generate_fem_mesh(const std::string& opts_json)
     int    optsteps_3d     = jint   (opts, "optsteps_3d",           3);
 
 #ifdef KOFEM_NETGEN_OCC
-    // ── OCC path: Netgen reads the CAD geometry directly ─────────────────────
+    // ── OCC path: Netgen meshes the CAD geometry directly ────────────────────
     // Netgen v6.2.2401 four-step pipeline (nglib_occ.cpp, namespace nglib):
     //   1. Ng_OCC_SetLocalMeshSize  — size field from CAD curvature
     //   2. Ng_OCC_GenerateEdgeMesh  — mesh feature edges
     //   3. Ng_OCC_GenerateSurfaceMesh — mesh boundary faces
     //   4. Ng_GenerateVolumeMesh    — fill volume with tetrahedra
+    //
+    // The Netgen geometry is built straight from the OCCT shape that
+    // tessellate_step already transferred — re-reading the STEP file through
+    // Netgen's own reader (Ng_OCC_Load_STEP) parsed the whole file a second
+    // time and doubled peak geometry memory.
 
-    const char* steppath = "/tmp/kofem_fem.stp";
-    {
-        FILE* f = fopen(steppath, "wb");
-        if (!f) throw std::runtime_error("generate_fem_mesh: cannot open /tmp/kofem_fem.stp");
-        fwrite(g_step_bytes.data(), 1, g_step_bytes.size(), f);
-        fclose(f);
-    }
-
-    log_mem("generate_fem_mesh: before Ng_OCC_Load_STEP");
-    nglib::Ng_OCC_Geometry* geom = nglib::Ng_OCC_Load_STEP(steppath);
-    unlink(steppath);
+    log_mem("generate_fem_mesh: before OCC geometry build");
+    nglib::Ng_OCC_Geometry* geom =
+        (nglib::Ng_OCC_Geometry*)kofem_occ_geometry_from_shape(g_step_shape);
     if (!geom)
-        throw std::runtime_error("Ng_OCC_Load_STEP failed — check STEP geometry validity");
-    log_mem("generate_fem_mesh: after Ng_OCC_Load_STEP");
+        throw std::runtime_error("OCCGeometry construction failed — check STEP geometry validity");
+    log_mem("generate_fem_mesh: after OCC geometry build");
 
     nglib::Ng_Meshing_Parameters mp;
     mp.uselocalh                  = 1;
@@ -444,7 +438,7 @@ static std::string generate_fem_mesh(const std::string& opts_json)
 
     nglib::Ng_Mesh* mesh = nglib::Ng_NewMesh();
     if (!mesh) {
-        nglib::Ng_OCC_DeleteGeometry(geom);
+        kofem_occ_geometry_delete(geom);
         throw std::runtime_error("Ng_NewMesh returned null");
     }
 
@@ -459,7 +453,7 @@ static std::string generate_fem_mesh(const std::string& opts_json)
     nglib::Ng_Result res = nglib::Ng_OCC_GenerateEdgeMesh(geom, mesh, &mp);
     if (res != nglib::NG_OK) {
         nglib::Ng_DeleteMesh(mesh);
-        nglib::Ng_OCC_DeleteGeometry(geom);
+        kofem_occ_geometry_delete(geom);
         throw std::runtime_error(
             "Ng_OCC_GenerateEdgeMesh failed (code " + std::to_string((int)res) + ")");
     }
@@ -473,7 +467,7 @@ static std::string generate_fem_mesh(const std::string& opts_json)
     res = nglib::Ng_OCC_GenerateSurfaceMesh(geom, mesh, &mp);
     if (res != nglib::NG_OK) {
         nglib::Ng_DeleteMesh(mesh);
-        nglib::Ng_OCC_DeleteGeometry(geom);
+        kofem_occ_geometry_delete(geom);
         throw std::runtime_error(
             "Ng_OCC_GenerateSurfaceMesh failed (code " + std::to_string((int)res) + ")");
     }
@@ -491,7 +485,7 @@ static std::string generate_fem_mesh(const std::string& opts_json)
     fflush(stdout);
     log_mem("generate_fem_mesh: step 4 GenerateVolumeMesh");
     res = nglib::Ng_GenerateVolumeMesh(mesh, &mp);
-    nglib::Ng_OCC_DeleteGeometry(geom);  // safe: volume fill complete
+    kofem_occ_geometry_delete(geom);     // safe: volume fill complete
     if (res != nglib::NG_OK) {
         nglib::Ng_DeleteMesh(mesh);
         throw std::runtime_error(
@@ -526,56 +520,12 @@ static std::string generate_fem_mesh(const std::string& opts_json)
     }
 
     // Surface elements — boundary triangles from the Netgen surface mesh.
-    // We need the OCC face index (1-based) per surface element for fast face selection.
-    // Ng_GetSurfaceElementIndex is absent from many Netgen builds, so we derive face
-    // IDs from the OCCT tessellation: build a centroid→face_id lookup from
-    // BRep_Tool::Triangulation (the same API used by tessellate_step, proven WASM-safe),
-    // then for each Netgen surface element find the nearest tessellation centroid.
-    // Netgen nodes lie on the OCCT surfaces with sub-micron precision, so the nearest
-    // tessellation centroid is always on the correct face.  No high-level OCCT projection
-    // APIs (GeomAPI_*, BRepExtrema_*) are used — only plain gp_Pnt arithmetic.
-    struct TessCentroid { double x, y, z; int face_id; };
-    std::vector<TessCentroid> tess_centroids;
-    {
-        // Tessellation is normally already attached (tessellate_step runs first).
-        // Guard against direct calls: create a coarse tessellation if needed.
-        bool has_tess = false;
-        for (TopExp_Explorer exp(g_step_shape, TopAbs_FACE); exp.More(); exp.Next()) {
-            TopLoc_Location loc;
-            if (!BRep_Tool::Triangulation(TopoDS::Face(exp.Current()), loc).IsNull()) {
-                has_tess = true; break;
-            }
-        }
-        if (!has_tess) {
-            BRepMesh_IncrementalMesh mesher(g_step_shape, 1.0, /*relative=*/false, 0.5);
-            mesher.Perform();
-        }
-
-        int fid = 1;
-        for (TopExp_Explorer exp(g_step_shape, TopAbs_FACE); exp.More(); exp.Next(), ++fid) {
-            TopLoc_Location loc;
-            Handle(Poly_Triangulation) tri =
-                BRep_Tool::Triangulation(TopoDS::Face(exp.Current()), loc);
-            if (tri.IsNull()) continue;
-            for (int t = 1; t <= tri->NbTriangles(); ++t) {
-                int n1, n2, n3;
-                tri->Triangle(t).Get(n1, n2, n3);
-                gp_Pnt p1 = tri->Node(n1).Transformed(loc);
-                gp_Pnt p2 = tri->Node(n2).Transformed(loc);
-                gp_Pnt p3 = tri->Node(n3).Transformed(loc);
-                tess_centroids.push_back({
-                    (p1.X() + p2.X() + p3.X()) / 3.0,
-                    (p1.Y() + p2.Y() + p3.Y()) / 3.0,
-                    (p1.Z() + p2.Z() + p3.Z()) / 3.0,
-                    fid
-                });
-            }
-        }
-    }
-    printf("[netgen] %zu OCCT tessellation centroids for face-ID lookup\n",
-           tess_centroids.size());
-    fflush(stdout);
-
+    // Netgen records the owning CAD face of every surface element it generates
+    // during Ng_OCC_GenerateSurfaceMesh; kofem_surface_element_face_index reads
+    // that index (1-based) straight from the mesh.  The previous implementation
+    // matched each element against the nearest OCCT tessellation centroid, which
+    // was O(elements × tessellation triangles) — minutes on complex parts — and
+    // mis-assigned elements near face boundaries.
     int nse = nglib::Ng_GetNSE(mesh);
     std::vector<int> out_surf_tris;
     std::vector<int> out_surf_face_ids;
@@ -587,28 +537,7 @@ static std::string generate_fem_mesh(const std::string& opts_json)
         out_surf_tris.push_back(tri[0] - 1);
         out_surf_tris.push_back(tri[1] - 1);
         out_surf_tris.push_back(tri[2] - 1);
-
-        double cx = 0, cy = 0, cz = 0;
-        for (int j = 0; j < 3; ++j) {
-            double pt[3];
-            nglib::Ng_GetPoint(mesh, tri[j], pt);
-            cx += pt[0]; cy += pt[1]; cz += pt[2];
-        }
-        cx /= 3.0; cy /= 3.0; cz /= 3.0;
-
-        // Nearest OCCT tessellation centroid → face ID.
-        int best_fid = 1;
-        double best_d2 = 1e30;
-        for (const auto& tc : tess_centroids) {
-            double dx = tc.x - cx, dy = tc.y - cy, dz = tc.z - cz;
-            double d2 = dx*dx + dy*dy + dz*dz;
-            if (d2 < best_d2) {
-                best_d2 = d2;
-                best_fid = tc.face_id;
-                if (d2 < 1e-8) break;
-            }
-        }
-        out_surf_face_ids.push_back(best_fid);
+        out_surf_face_ids.push_back(kofem_surface_element_face_index(mesh, i));
     }
     printf("[netgen] %d surface elements, %d unique OCC face IDs\n",
            nse, (int)std::set<int>(out_surf_face_ids.begin(), out_surf_face_ids.end()).size());
