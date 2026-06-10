@@ -505,7 +505,11 @@ function MeshPanel() {
         elements: Element[];
         surfaceTriangles: [number, number, number][] | null;
         surfaceFaceIds: number[] | null;
-      }>("volume_mesh", { surface: stepSurface, maxElementSize, minElementSize });
+      }>("volume_mesh", {
+        surface: stepSurface,
+        maxElementSize,
+        minElementSize,
+      });
       applyMeshResult(
         n,
         e,
