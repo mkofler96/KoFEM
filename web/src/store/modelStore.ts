@@ -68,13 +68,13 @@ export interface SolverResult {
 }
 
 export const RESULT_TYPES = [
-  'Displacement (magnitude)',
-  'Ux',
-  'Uy',
-  'Uz',
-  'Von Mises stress',
+  "Displacement (magnitude)",
+  "Ux",
+  "Uy",
+  "Uz",
+  "Von Mises stress",
 ] as const;
-export type ResultType = typeof RESULT_TYPES[number];
+export type ResultType = (typeof RESULT_TYPES)[number];
 
 export interface StepSurfaceMesh {
   points: [number, number, number][];
@@ -496,7 +496,7 @@ export const useModelStore = create<ModelState>()(
     hasStarted: false,
     mode: "geometry" as AppMode,
     result: null,
-    resultType: 'Displacement (magnitude)' as ResultType,
+    resultType: "Displacement (magnitude)" as ResultType,
     stepSurface: null,
     isRunning: false,
     isMeshing: false,
@@ -669,7 +669,7 @@ export const useModelStore = create<ModelState>()(
     setResult: (result) =>
       set((s) => {
         s.result = result;
-        s.resultType = 'Displacement (magnitude)';
+        s.resultType = "Displacement (magnitude)";
       }),
     setResultType: (t) =>
       set((s) => {

@@ -318,7 +318,8 @@ export function MeshScene() {
 
   // Per-node von Mises: average element-level stresses to nodes.
   const nodeVonMises = useMemo(() => {
-    if (!result?.vonMises || elements.length === 0 || nodes.length === 0) return null;
+    if (!result?.vonMises || elements.length === 0 || nodes.length === 0)
+      return null;
     const vm = result.vonMises;
     const sums = new Float64Array(nodes.length);
     const counts = new Int32Array(nodes.length);
@@ -350,18 +351,25 @@ export function MeshScene() {
     // Compute per-node scalar value for the selected result type
     const nodeValue = (i: number, rt: ResultType): number => {
       switch (rt) {
-        case 'Ux': return d[i * 3] ?? 0;
-        case 'Uy': return d[i * 3 + 1] ?? 0;
-        case 'Uz': return d[i * 3 + 2] ?? 0;
-        case 'Von Mises stress': return nodeVonMises?.[i] ?? 0;
+        case "Ux":
+          return d[i * 3] ?? 0;
+        case "Uy":
+          return d[i * 3 + 1] ?? 0;
+        case "Uz":
+          return d[i * 3 + 2] ?? 0;
+        case "Von Mises stress":
+          return nodeVonMises?.[i] ?? 0;
         default: {
-          const ux = d[i * 3] ?? 0, uy = d[i * 3 + 1] ?? 0, uz = d[i * 3 + 2] ?? 0;
+          const ux = d[i * 3] ?? 0,
+            uy = d[i * 3 + 1] ?? 0,
+            uz = d[i * 3 + 2] ?? 0;
           return Math.sqrt(ux * ux + uy * uy + uz * uz);
         }
       }
     };
 
-    let minVal = Infinity, maxVal = -Infinity;
+    let minVal = Infinity,
+      maxVal = -Infinity;
     for (let i = 0; i < nodes.length; i++) {
       const v = nodeValue(i, resultType);
       if (v < minVal) minVal = v;
