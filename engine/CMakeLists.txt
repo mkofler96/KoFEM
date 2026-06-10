@@ -32,9 +32,12 @@ target_include_directories(kofem_wasm_emcc PRIVATE
 )
 
 # Netgen internal headers (netgen_glue.cpp uses netgen::Mesh / netgen::OCCGeometry).
-# Install layouts vary: flat (include/*.hpp), nested (include/netgen/<subdir>/),
-# or umbrella (include/netgen/include/meshing.hpp).  Add every variant that exists.
+# Install layouts vary: the kofem-dependencies image has include/{occ,meshing,include,...}
+# directly, other installs nest the same tree under include/netgen/.  occ/occgeom.hpp
+# does `#include <meshing.hpp>`, which lives in the umbrella dir (libsrc/include) —
+# include/include resp. include/netgen/include.  Add every variant that exists.
 foreach(_ng_inc
+        "${NETGEN_ROOT}/include/include"
         "${NETGEN_ROOT}/include/netgen"
         "${NETGEN_ROOT}/include/netgen/include")
     if(EXISTS "${_ng_inc}")
