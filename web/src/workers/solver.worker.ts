@@ -85,14 +85,21 @@ self.onmessage = async (event: MessageEvent) => {
         triangles: dto.triangles,
       });
     } else if (type === "volume_mesh") {
-      const { maxElementSize = 20.0 } = payload as {
+      const { maxElementSize = 20.0, minElementSize } = payload as {
         surface?: unknown;
         maxElementSize?: number;
+        minElementSize?: number;
       };
+
+      // Floor the curvature-driven local element size at maxElementSize/10 by
+      // default.  Without a floor, Netgen refines every fillet to ~radius/2
+      // (elementspercurve) — on fillet-heavy CAD this produces >10x more
+      // elements than the max size suggests and meshing takes minutes.
+      const minSize = minElementSize ?? maxElementSize / 10;
 
       const opts = JSON.stringify({
         max_element_size: maxElementSize,
-        min_element_size: 0.0,
+        min_element_size: minSize,
         grading: 0.3,
         second_order: false,
         elementsperedge: 2.0,
@@ -106,7 +113,7 @@ self.onmessage = async (event: MessageEvent) => {
       // feature lines), then fills the volume — all in one pass.
       self.postMessage({
         id,
-        log: `Generating FEM mesh via Netgen OCC (max element size: ${maxElementSize} mm)…`,
+        log: `Generating FEM mesh via Netgen OCC (element size: ${minSize}–${maxElementSize} mm)…`,
       });
       const json = m().generate_fem_mesh(opts);
       const dto = JSON.parse(json) as {
@@ -144,8 +151,12 @@ self.onmessage = async (event: MessageEvent) => {
         propertyId: 1,
       }));
 
-      // Derive unique edges from tetrahedra for wireframe display
-      const edgeSet = new Set<string>();
+      // Derive unique edges from tetrahedra for wireframe display.
+      // Numeric keys (lo * nVerts + hi): string keys cost seconds of hashing
+      // and GC at >100k-node mesh sizes.  Max key is nVerts² < 2^53 for any
+      // mesh that fits in WASM memory.
+      const nVerts = dto.vertices.length;
+      const edgeSet = new Set<number>();
       const edges: [number, number][] = [];
       for (const [a, b, c, d] of dto.tetrahedra) {
         for (const [u, v] of [
@@ -156,7 +167,7 @@ self.onmessage = async (event: MessageEvent) => {
           [b, d],
           [c, d],
         ] as [number, number][]) {
-          const key = u < v ? `${u}-${v}` : `${v}-${u}`;
+          const key = u < v ? u * nVerts + v : v * nVerts + u;
           if (!edgeSet.has(key)) {
             edgeSet.add(key);
             edges.push([u, v]);

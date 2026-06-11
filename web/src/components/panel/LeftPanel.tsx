@@ -470,6 +470,9 @@ function MeshPanel() {
   const stepSurface = useModelStore((s) => s.stepSurface);
 
   const [maxElementSize, setMaxElementSize] = useState(20);
+  // Floor for curvature-driven refinement; 0 lets Netgen refine fillets without
+  // limit, which can produce >10x more elements than the max size suggests.
+  const [minElementSize, setMinElementSize] = useState(2);
   const [error, setError] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [logsOpen, setLogsOpen] = useState(true);
@@ -502,7 +505,11 @@ function MeshPanel() {
         elements: Element[];
         surfaceTriangles: [number, number, number][] | null;
         surfaceFaceIds: number[] | null;
-      }>("volume_mesh", { surface: stepSurface, maxElementSize });
+      }>("volume_mesh", {
+        surface: stepSurface,
+        maxElementSize,
+        minElementSize,
+      });
       applyMeshResult(
         n,
         e,
@@ -592,6 +599,22 @@ function MeshPanel() {
                   />
                   <span className={styles.toleranceUnit}>mm</span>
                 </div>
+                <div className={styles.formRow}>
+                  <span className={styles.formLabel}>Min element size</span>
+                  <input
+                    className={styles.formInput}
+                    type="number"
+                    min={0}
+                    max={500}
+                    step={0.5}
+                    value={minElementSize}
+                    disabled={isMeshing}
+                    onChange={(e) =>
+                      setMinElementSize(Math.max(0, Number(e.target.value)))
+                    }
+                  />
+                  <span className={styles.toleranceUnit}>mm</span>
+                </div>
                 <button
                   className={styles.meshVolBtn}
                   disabled={isMeshing}
@@ -654,6 +677,22 @@ function MeshPanel() {
                     disabled={isMeshing}
                     onChange={(e) =>
                       setMaxElementSize(Math.max(0.5, Number(e.target.value)))
+                    }
+                  />
+                  <span className={styles.toleranceUnit}>mm</span>
+                </div>
+                <div className={styles.formRow}>
+                  <span className={styles.formLabel}>Min element size</span>
+                  <input
+                    className={styles.formInput}
+                    type="number"
+                    min={0}
+                    max={500}
+                    step={0.5}
+                    value={minElementSize}
+                    disabled={isMeshing}
+                    onChange={(e) =>
+                      setMinElementSize(Math.max(0, Number(e.target.value)))
                     }
                   />
                   <span className={styles.toleranceUnit}>mm</span>
