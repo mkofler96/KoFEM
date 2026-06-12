@@ -51,11 +51,15 @@ test("page loads with welcome screen and enters the app", async ({ page }) => {
 
   await page.goto("/");
 
-  // Welcome screen is shown first
+  // Welcome screen is shown first, with the "Open analysis" (.vtu) card
   await Promise.race([
     expect(
       page.getByRole("button", { name: "Start with example" }),
     ).toBeVisible(),
+    fatal,
+  ]);
+  await Promise.race([
+    expect(page.getByRole("button", { name: "Open analysis" })).toBeVisible(),
     fatal,
   ]);
 

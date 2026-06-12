@@ -1,5 +1,6 @@
 import { useState, useRef, type ChangeEvent } from "react";
 import { useModelStore } from "../../store/modelStore";
+import { parseAnalysisFile } from "../../lib/analysisFile";
 import styles from "./WelcomeScreen.module.css";
 import { sendToWorker } from "../../workers/sharedWorker";
 
@@ -9,29 +10,26 @@ export function WelcomeScreen() {
   const setStepSurface = useModelStore((s) => s.setStepSurface);
   const stepImportError = useModelStore((s) => s.stepImportError);
   const setStepImportError = useModelStore((s) => s.setStepImportError);
-  const loadModel = useModelStore((s) => s.loadModel);
+  const loadAnalysis = useModelStore((s) => s.loadAnalysis);
   const isRunning = useModelStore((s) => s.isRunning);
   const setRunning = useModelStore((s) => s.setRunning);
 
   const [isImportingStep, setIsImportingStep] = useState(false);
-  const [inpError, setInpError] = useState<string | null>(null);
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
 
-  const inpRef = useRef<HTMLInputElement | null>(null);
   const stepRef = useRef<HTMLInputElement | null>(null);
+  const analysisRef = useRef<HTMLInputElement | null>(null);
 
-  async function handleInpFile(e: ChangeEvent<HTMLInputElement>) {
+  async function handleAnalysisFile(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
-    setRunning(true);
-    const text = await file.text();
-    sendToWorker<{ model: Parameters<typeof loadModel>[0] }>("parse", { text })
-      .then(({ model }) => {
-        if (model.nodes?.length) loadModel(model);
-        else setInpError("No nodes found.");
-      })
-      .catch((err) => setInpError(`Parse error: ${err.message}`))
-      .finally(() => setRunning(false));
+    setAnalysisError(null);
+    try {
+      loadAnalysis(parseAnalysisFile(await file.text()));
+    } catch (err) {
+      setAnalysisError((err as Error).message);
+    }
   }
 
   async function handleStepFile(e: ChangeEvent<HTMLInputElement>) {
@@ -101,21 +99,21 @@ export function WelcomeScreen() {
 
         <input
           ref={(el) => {
-            inpRef.current = el;
-          }}
-          type="file"
-          accept=".inp"
-          style={{ display: "none" }}
-          onChange={handleInpFile}
-        />
-        <input
-          ref={(el) => {
             stepRef.current = el;
           }}
           type="file"
           accept=".stp,.step"
           style={{ display: "none" }}
           onChange={handleStepFile}
+        />
+        <input
+          ref={(el) => {
+            analysisRef.current = el;
+          }}
+          type="file"
+          accept=".vtu"
+          style={{ display: "none" }}
+          onChange={handleAnalysisFile}
         />
 
         <div className={styles.cardGrid}>
@@ -150,7 +148,7 @@ export function WelcomeScreen() {
           <button
             className={styles.importCard}
             disabled={isRunning}
-            onClick={() => inpRef.current?.click()}
+            onClick={() => analysisRef.current?.click()}
           >
             <svg className={styles.cardIcon} viewBox="0 0 20 20" fill="none">
               <path
@@ -158,10 +156,16 @@ export function WelcomeScreen() {
                 stroke="currentColor"
                 strokeWidth="1.4"
               />
-              <path d="M12 2v4h4" stroke="currentColor" strokeWidth="1.4" />
+              <path
+                d="M10 9v6M10 15l-2.5-2.5M10 15l2.5-2.5"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             </svg>
-            <span className={styles.cardTitle}>Import INP</span>
-            <span className={styles.cardSub}>Abaqus / CalculiX</span>
+            <span className={styles.cardTitle}>Open analysis</span>
+            <span className={styles.cardSub}>.vtu (KoFEM)</span>
           </button>
 
           <button className={styles.importCard} disabled>
@@ -175,7 +179,6 @@ export function WelcomeScreen() {
             <span className={styles.cardTitle}>Import IGES</span>
             <span className={styles.cardSub}>.igs / .iges</span>
           </button>
-          {/* setEditing(null); */}
         </div>
 
         {stepImportError && (
@@ -186,12 +189,12 @@ export function WelcomeScreen() {
             {stepImportError}
           </div>
         )}
-        {inpError && (
+        {analysisError && (
           <div
-            data-testid="inp-error"
+            data-testid="analysis-error"
             style={{ color: "#dc2626", fontSize: 12, padding: "4px 0" }}
           >
-            {inpError}
+            {analysisError}
           </div>
         )}
       </div>
