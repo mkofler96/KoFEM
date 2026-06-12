@@ -122,7 +122,7 @@ jobs:
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('web/bun.lockb') }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('web/bun.lock') }}
       
       - name: Install Playwright Chromium
         run: cd web && bunx playwright install --with-deps chromium
