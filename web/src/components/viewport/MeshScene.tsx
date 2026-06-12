@@ -577,12 +577,9 @@ export function MeshScene() {
       isMax,
     };
 
-    // Shift-click: move the current selectedFace into pendingFaces, then set new pick.
-    // Regular click: start fresh (clear pending).
-    if (e.nativeEvent.shiftKey && selectedFace) {
+    // Every click adds to the selection; accumulate into pendingFaces.
+    if (selectedFace) {
       setPendingFaces([...pendingFaces, selectedFace]);
-    } else if (!e.nativeEvent.shiftKey) {
-      setPendingFaces([]);
     }
     setSelectedFace(newFace);
   }

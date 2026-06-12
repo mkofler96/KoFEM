@@ -772,6 +772,7 @@ function ConstraintsPanel() {
   const selectedFace = useModelStore((s) => s.selectedFace);
   const setSelectedFace = useModelStore((s) => s.setSelectedFace);
   const pendingFaces = useModelStore((s) => s.pendingFaces);
+  const setPendingFaces = useModelStore((s) => s.setPendingFaces);
   const createBcGroup = useModelStore((s) => s.createBcGroup);
   const addFaceToBcGroup = useModelStore((s) => s.addFaceToBcGroup);
   const removeFaceFromBcGroup = useModelStore((s) => s.removeFaceFromBcGroup);
@@ -807,14 +808,22 @@ function ConstraintsPanel() {
       ? (loadGroups.find((g) => g.id === pickTargetGroupId) ?? null)
       : null;
 
-  // All faces picked in this session: pending (shift-clicked) + the current selection.
   const allPickedFaces = selectedFace
     ? [...pendingFaces, selectedFace]
     : pendingFaces;
 
+  function removePickedFace(index: number) {
+    if (index < pendingFaces.length) {
+      setPendingFaces(pendingFaces.filter((_, i) => i !== index));
+    } else {
+      setSelectedFace(null);
+    }
+  }
+
   function cancelPick() {
     setPickMode(null);
     setSelectedFace(null);
+    setPendingFaces([]);
   }
 
   function applyBc() {
@@ -834,6 +843,7 @@ function ConstraintsPanel() {
     }
     setPickMode(null);
     setSelectedFace(null);
+    setPendingFaces([]);
   }
 
   function applyLoad() {
@@ -850,6 +860,7 @@ function ConstraintsPanel() {
     }
     setPickMode(null);
     setSelectedFace(null);
+    setPendingFaces([]);
   }
 
   return (
@@ -892,15 +903,19 @@ function ConstraintsPanel() {
                 Click a face in the 3D viewport
               </div>
             ) : (
-              <div className={styles.selectedFace}>
-                {allPickedFaces.length === 1
-                  ? selectedFace?.label
-                  : `${allPickedFaces.length} faces selected`}
-              </div>
-            )}
-            {allPickedFaces.length > 0 && (
-              <div className={styles.pickHint}>
-                Shift-click to add more faces
+              <div>
+                {allPickedFaces.map((f, i) => (
+                  <div key={i} className={styles.bcFaceRow}>
+                    <span className={styles.bcFaceName}>{f.label}</span>
+                    <button
+                      className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
+                      title="Remove face"
+                      onClick={() => removePickedFace(i)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -964,6 +979,7 @@ function ConstraintsPanel() {
                   onClick={() => {
                     setPickMode("bc", g.id);
                     setSelectedFace(null);
+                    setPendingFaces([]);
                   }}
                 >
                   ✏
@@ -1029,15 +1045,19 @@ function ConstraintsPanel() {
                 Click a face in the 3D viewport
               </div>
             ) : (
-              <div className={styles.selectedFace}>
-                {allPickedFaces.length === 1
-                  ? selectedFace?.label
-                  : `${allPickedFaces.length} faces selected`}
-              </div>
-            )}
-            {allPickedFaces.length > 0 && (
-              <div className={styles.pickHint}>
-                Shift-click to add more faces
+              <div>
+                {allPickedFaces.map((f, i) => (
+                  <div key={i} className={styles.bcFaceRow}>
+                    <span className={styles.bcFaceName}>{f.label}</span>
+                    <button
+                      className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
+                      title="Remove face"
+                      onClick={() => removePickedFace(i)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -1108,6 +1128,7 @@ function ConstraintsPanel() {
                   onClick={() => {
                     setPickMode("load", g.id);
                     setSelectedFace(null);
+                    setPendingFaces([]);
                   }}
                 >
                   ✏
