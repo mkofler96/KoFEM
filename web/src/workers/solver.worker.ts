@@ -258,40 +258,21 @@ self.onmessage = async (event: MessageEvent) => {
         displacements: result.displacements,
         vonMises: result.von_mises,
       });
-    } else if (type === "test_netgen") {
-      // Minimal 4-triangle tetrahedron surface — quick smoke test for Netgen WASM.
-      const surface = {
-        vertices: [
-          [0, 0, 0],
-          [10, 0, 0],
-          [5, 8.66, 0],
-          [5, 2.89, 8.165],
-        ] as [number, number, number][],
-        triangles: [
-          [0, 2, 1],
-          [0, 1, 3],
-          [1, 2, 3],
-          [0, 3, 2],
-        ] as [number, number, number][],
-      };
-      self.postMessage({
-        id,
-        log: "test_netgen: meshing 4-triangle tetrahedron…",
-      });
+    } else if (type === "test_generate_fem_mesh") {
+      // Smoke test for the production OCC meshing path. Requires tessellate_step
+      // to have been called first so the STEP geometry is loaded in WASM memory.
       const t0 = Date.now();
       const opts = JSON.stringify({
         max_element_size: 20.0,
         min_element_size: 2.0,
-        grading: 0.5,
+        grading: 0.3,
         second_order: false,
-        uselocalh: 0,
-        elementsperedge: 1.0,
-        elementspercurve: 1.0,
+        elementsperedge: 2.0,
+        elementspercurve: 2.0,
         optsteps_2d: 0,
         optsteps_3d: 0,
       });
-      const json = m().generate_volume_mesh(JSON.stringify(surface), opts);
-      const durationMs = Date.now() - t0;
+      const json = m().generate_fem_mesh(opts);
       const dto = JSON.parse(json) as {
         vertices: unknown[];
         tetrahedra: unknown[];
@@ -301,7 +282,7 @@ self.onmessage = async (event: MessageEvent) => {
         ok: true,
         nodes: dto.vertices.length,
         elements: dto.tetrahedra.length,
-        durationMs,
+        durationMs: Date.now() - t0,
       });
     } else if (type === "parse") {
       throw new Error(

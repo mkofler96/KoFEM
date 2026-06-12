@@ -1,9 +1,9 @@
 import { test, expect } from "./coverage";
 
-test("WASM Netgen: tetrahedron smoke test completes in < 30s", async ({
+test("WASM OCC generate_fem_mesh: end-to-end smoke test on built-in example", async ({
   page,
 }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(120_000);
 
   const logs: string[] = [];
   page.on("console", (msg) => {
@@ -19,11 +19,13 @@ test("WASM Netgen: tetrahedron smoke test completes in < 30s", async ({
   await page.getByRole("button", { name: "Start with example" }).click();
   await expect(page.getByRole("button", { name: "Import STEP" })).toBeVisible();
 
-  // Wait for __kofem to be available (set synchronously in main.tsx)
+  // Wait for __kofem to be available (set synchronously in main.tsx).
+  // "Start with example" already calls tessellate_step, so the STEP geometry
+  // is loaded in WASM memory and generate_fem_mesh can run immediately.
   await page.waitForFunction(() => !!(window as any).__kofem);
 
   const result = (await page.evaluate(async () => {
-    return (window as any).__kofem.sendToWorker("test_netgen", {});
+    return (window as any).__kofem.sendToWorker("test_generate_fem_mesh", {});
   })) as { nodes: number; elements: number; durationMs: number };
 
   console.log(
@@ -31,5 +33,5 @@ test("WASM Netgen: tetrahedron smoke test completes in < 30s", async ({
   );
   expect(result.nodes).toBeGreaterThan(0);
   expect(result.elements).toBeGreaterThan(0);
-  expect(result.durationMs).toBeLessThan(30_000);
+  expect(result.durationMs).toBeLessThan(60_000);
 });
