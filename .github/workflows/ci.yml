@@ -127,6 +127,25 @@ jobs:
 
       - name: Run frontend tests
         run: cd web && bun run test
+        env:
+          # Builds the app instrumented with Istanbul so Playwright collects
+          # runtime coverage (tests/coverage.ts) — no second test run needed.
+          COVERAGE: 1
+
+      # Prints per-file coverage and flags src files never loaded by any test
+      # (dead-code candidates).  `if: always()` so a failing test still yields
+      # the coverage gathered up to that point.
+      - name: Coverage report
+        if: always()
+        run: cd web && bun run coverage:report
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-coverage
+          retention-days: 7
+          path: web/coverage/
 
       - name: Post mesh report to Slack
         if: always()
