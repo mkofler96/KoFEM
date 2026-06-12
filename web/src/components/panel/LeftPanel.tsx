@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect, type ChangeEvent } from "react";
-import { useModelStore } from "../../store/modelStore";
+import { useModelStore, RESULT_TYPES } from "../../store/modelStore";
 import type {
   BoxGeometry,
   Material,
   Node,
   Element,
+  ResultType,
 } from "../../store/modelStore";
 import { GeometryDialog } from "../geometry/GeometryDialog";
 import { fmt } from "../../lib/modelDisplay";
@@ -1270,11 +1271,12 @@ function SolvePanel() {
 
 // ── Results mode ──────────────────────────────────────────────────────────────
 
-const MAX_X_TOL = 1e-6;
-
 function ResultsPanel() {
   const result = useModelStore((s) => s.result);
+  const resultType = useModelStore((s) => s.resultType);
+  const setResultType = useModelStore((s) => s.setResultType);
   const nodes = useModelStore((s) => s.nodes);
+  const elements = useModelStore((s) => s.elements);
 
   if (!result) {
     return (
@@ -1291,21 +1293,66 @@ function ResultsPanel() {
   }
 
   const d = result.displacements;
-  const maxAbsDisp = Math.max(...Array.from(d).map(Math.abs));
-  const maxX = nodes.reduce((m, n) => Math.max(m, n.x), -Infinity);
-  const tipNodes = nodes
-    .map((n, i) => ({ i, n }))
-    .filter(({ n }) => n.x >= maxX - MAX_X_TOL);
-  const tipUy =
-    tipNodes.length > 0
-      ? tipNodes.reduce((sum, { i }) => sum + (d[i * 3 + 1] ?? 0), 0) /
-        tipNodes.length
-      : 0;
-  const P = 10_000,
-    E = 210e9,
-    h = 0.1,
-    I = h ** 4 / 12;
-  const theory = -P / (3 * E * I);
+
+  // Min/max of the selected scalar field over all nodes.  Von Mises is
+  // element-level data, so it is first averaged to nodes — the same
+  // averaging MeshScene uses for vertex coloring.
+  const stats = (() => {
+    if (nodes.length === 0) return null;
+
+    let nodeVm: Float64Array | null = null;
+    if (resultType === "Von Mises stress") {
+      if (!result.vonMises || elements.length === 0) return null;
+      const vm = result.vonMises;
+      const nodeIndex = new Map<number, number>();
+      for (let i = 0; i < nodes.length; i++) nodeIndex.set(nodes[i].id, i);
+      const sums = new Float64Array(nodes.length);
+      const counts = new Int32Array(nodes.length);
+      for (let ei = 0; ei < elements.length; ei++) {
+        const vmVal = vm[ei] ?? 0;
+        for (const nodeId of elements[ei].nodeIds) {
+          const ni = nodeIndex.get(nodeId);
+          if (ni !== undefined) {
+            sums[ni] += vmVal;
+            counts[ni]++;
+          }
+        }
+      }
+      nodeVm = new Float64Array(nodes.length);
+      for (let i = 0; i < nodes.length; i++)
+        nodeVm[i] = counts[i] > 0 ? sums[i] / counts[i] : 0;
+    }
+
+    const nodeValue = (i: number): number => {
+      switch (resultType) {
+        case "Ux":
+          return d[i * 3] ?? 0;
+        case "Uy":
+          return d[i * 3 + 1] ?? 0;
+        case "Uz":
+          return d[i * 3 + 2] ?? 0;
+        case "Von Mises stress":
+          return nodeVm?.[i] ?? 0;
+        default: {
+          const ux = d[i * 3] ?? 0,
+            uy = d[i * 3 + 1] ?? 0,
+            uz = d[i * 3 + 2] ?? 0;
+          return Math.sqrt(ux * ux + uy * uy + uz * uz);
+        }
+      }
+    };
+
+    let min = Infinity,
+      max = -Infinity;
+    for (let i = 0; i < nodes.length; i++) {
+      const v = nodeValue(i);
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+    return { min, max };
+  })();
+
+  const unit = resultType === "Von Mises stress" ? "Pa" : "m";
 
   return (
     <div className={styles.panel}>
@@ -1315,33 +1362,40 @@ function ResultsPanel() {
       </div>
       <div className={styles.tabContent}>
         <div className={styles.sectionLabel}>Field</div>
-        <select className={styles.formSelect} style={{ marginBottom: 12 }}>
-          <option>Displacement magnitude |U|</option>
-          <option>Ux</option>
-          <option>Uy</option>
-          <option>Uz</option>
-          <option>Von Mises stress σvm</option>
+        <select
+          className={styles.formSelect}
+          style={{ marginBottom: 12 }}
+          value={resultType}
+          onChange={(e) => setResultType(e.target.value as ResultType)}
+        >
+          {RESULT_TYPES.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
         </select>
 
         <div className={styles.sectionLabel}>Result summary</div>
-        <div className={styles.statRow}>
-          <span className={styles.statKey}>Max |U|</span>
-          <span className={styles.statVal}>
-            {maxAbsDisp.toExponential(3)} m
-          </span>
-        </div>
-        <div className={styles.statRow}>
-          <span className={styles.statKey}>Avg tip Uy</span>
-          <span className={styles.statVal}>{tipUy.toExponential(4)} m</span>
-        </div>
-        <div className={styles.statRow}>
-          <span className={styles.statKey}>Theory δ</span>
-          <span className={styles.statVal}>{theory.toExponential(4)} m</span>
-        </div>
-
-        {Math.abs((tipUy - theory) / theory) < 0.01 && (
-          <div className={styles.meshOkBadge} style={{ marginTop: 8 }}>
-            <span className={styles.okDot} /> Error &lt; 1% — solution verified
+        {stats ? (
+          <>
+            <div className={styles.statRow}>
+              <span className={styles.statKey}>Min</span>
+              <span className={styles.statVal}>
+                {stats.min.toExponential(3)} {unit}
+              </span>
+            </div>
+            <div className={styles.statRow}>
+              <span className={styles.statKey}>Max</span>
+              <span className={styles.statVal}>
+                {stats.max.toExponential(3)} {unit}
+              </span>
+            </div>
+          </>
+        ) : (
+          <div className={styles.empty}>
+            {resultType === "Von Mises stress"
+              ? "Von Mises data not available — re-run the solver"
+              : "No nodal data"}
           </div>
         )}
       </div>
