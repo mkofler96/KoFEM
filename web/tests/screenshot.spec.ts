@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './coverage'
 import path from 'path'
 
 // Playwright is invoked from web/, so cwd is web/ and the STEP file lives one level up

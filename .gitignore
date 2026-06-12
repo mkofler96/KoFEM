@@ -30,6 +30,10 @@ web/playwright-results/
 web/screenshots/mesh-report.pdf
 web/screenshots/report/
 
+# Code coverage output (bun run test:coverage)
+web/.nyc_output/
+web/coverage/
+
 
 # Env
 .env

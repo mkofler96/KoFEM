@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './coverage'
 
 test('WASM Netgen: tetrahedron smoke test completes in < 30s', async ({ page }) => {
   test.setTimeout(60_000)
