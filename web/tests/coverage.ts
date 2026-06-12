@@ -6,29 +6,29 @@
 // test writes one JSON file into .nyc_output/; `nyc report` merges them.
 //
 // Run via:  bun run test:coverage
-import { test as base, expect } from '@playwright/test'
-import fs from 'fs'
-import path from 'path'
-import crypto from 'crypto'
+import { test as base, expect } from "@playwright/test";
+import fs from "fs";
+import path from "path";
+import crypto from "crypto";
 
-type CoverageMap = Record<string, unknown>
+type CoverageMap = Record<string, unknown>;
 
 // Playwright runs from web/, so .nyc_output lands next to package.json
-const NYC_OUTPUT_DIR = path.resolve('.nyc_output')
+const NYC_OUTPUT_DIR = path.resolve(".nyc_output");
 
 function writeCoverage(coverage: CoverageMap, label: string): void {
-  if (Object.keys(coverage).length === 0) return
-  fs.mkdirSync(NYC_OUTPUT_DIR, { recursive: true })
+  if (Object.keys(coverage).length === 0) return;
+  fs.mkdirSync(NYC_OUTPUT_DIR, { recursive: true });
   const file = path.join(
     NYC_OUTPUT_DIR,
     `coverage-${label}-${crypto.randomUUID()}.json`,
-  )
-  fs.writeFileSync(file, JSON.stringify(coverage))
+  );
+  fs.writeFileSync(file, JSON.stringify(coverage));
 }
 
 export const test = base.extend({
   page: async ({ page }, use) => {
-    await use(page)
+    await use(page);
 
     // Dedicated workers (solver.worker) keep their own Istanbul counters in
     // the worker global scope.  Workers terminated mid-test (resetWorker)
@@ -37,11 +37,10 @@ export const test = base.extend({
       const cov = await worker
         .evaluate(
           () =>
-            (globalThis as { __coverage__?: CoverageMap }).__coverage__ ??
-            null,
+            (globalThis as { __coverage__?: CoverageMap }).__coverage__ ?? null,
         )
-        .catch(() => null)
-      if (cov) writeCoverage(cov, 'worker')
+        .catch(() => null);
+      if (cov) writeCoverage(cov, "worker");
     }
 
     const pageCov = await page
@@ -49,9 +48,9 @@ export const test = base.extend({
         () =>
           (globalThis as { __coverage__?: CoverageMap }).__coverage__ ?? null,
       )
-      .catch(() => null)
-    if (pageCov) writeCoverage(pageCov, 'page')
+      .catch(() => null);
+    if (pageCov) writeCoverage(pageCov, "page");
   },
-})
+});
 
-export { expect }
+export { expect };

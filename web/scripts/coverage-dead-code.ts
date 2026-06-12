@@ -56,8 +56,10 @@ const loadedButNeverRun = Object.entries(coverage)
   })
   .map(([f]) => f);
 
-console.log(`\nDead-code check: ${srcFiles.length} src files, ` +
-  `${coveredFiles.size} appear in coverage\n`);
+console.log(
+  `\nDead-code check: ${srcFiles.length} src files, ` +
+    `${coveredFiles.size} appear in coverage\n`,
+);
 
 if (neverLoaded.length > 0) {
   console.log("Files never loaded by any test (possible dead code):");
