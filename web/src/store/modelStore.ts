@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { meshFromBox, geomToBoxParams } from "../lib/meshFromBox";
+import type { AnalysisState } from "../lib/analysisFile";
 
 export interface Node {
   id: number;
@@ -426,6 +427,7 @@ interface ModelState {
     surfaceFaceIds?: number[] | null,
   ): void;
   loadModel(snapshot: ModelSnapshot & { modelName?: string }): void;
+  loadAnalysis(analysis: AnalysisState): void;
   reset(): void;
 
   // Geometry CRUD
@@ -747,6 +749,45 @@ export const useModelStore = create<ModelState>()(
         s.pickTargetGroupId = null;
         s.hasStarted = true;
         s.mode = "geometry";
+        s.fitViewTrigger++;
+      }),
+
+    // Restore a complete analysis parsed from a saved .vtu file — the inverse
+    // of serializeAnalysis. Unlike loadModel, this keeps the saved named
+    // groups, geometries, results, and view/mode state instead of rebuilding.
+    loadAnalysis: (a) =>
+      set((s) => {
+        s.nodes = a.nodes;
+        s.elements = a.elements;
+        s.materials = a.materials;
+        s.properties = a.properties;
+        s.bcGroups = a.bcGroups;
+        s.loadGroups = a.loadGroups;
+        s.constraints = rebuildConstraints(a.bcGroups);
+        s.loads = rebuildLoads(a.loadGroups);
+        s.nextBcGroupId = a.nextBcGroupId;
+        s.nextLoadGroupId = a.nextLoadGroupId;
+        s.nextFaceEntryId = a.nextFaceEntryId;
+        s.geometries = a.geometries;
+        s.nextGeomId = a.nextGeomId;
+        s.nextMatId = a.nextMatId;
+        s.stepSurface = a.stepSurface;
+        s.volMesh = a.volMesh;
+        s.surfaceTriangles = a.surfaceTriangles;
+        s.surfaceFaceIds = a.surfaceFaceIds;
+        s.modelName = a.modelName;
+        s.result = a.result;
+        s.resultType = a.resultType;
+        s.viewRepr = a.viewRepr;
+        s.mode = a.mode;
+        s.stepImportError = null;
+        s.isRunning = false;
+        s.isMeshing = false;
+        s.selectedFace = null;
+        s.pendingFaces = [];
+        s.pickMode = null;
+        s.pickTargetGroupId = null;
+        s.hasStarted = true;
         s.fitViewTrigger++;
       }),
 

@@ -66,7 +66,7 @@ test("page loads with welcome screen and enters the app", async ({ page }) => {
     fatal,
   ]);
   await Promise.race([
-    expect(page.getByRole("button", { name: "Import INP" })).toBeVisible(),
+    expect(page.getByRole("button", { name: "Open analysis" })).toBeVisible(),
     fatal,
   ]);
 });
