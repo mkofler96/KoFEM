@@ -1,0 +1,3 @@
+# Generated artifacts — never reformat
+src/wasm/pkg/
+dist/
