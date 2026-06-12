@@ -47,14 +47,32 @@ jobs:
       - uses: actions/checkout@v4
 
       # CMake stores absolute EMSDK paths in CMakeCache.txt and breaks across runs
+      - name: Cache WASM build output
+        id: wasm-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            web/src/wasm/pkg/kofem_wasm_emcc.js
+            web/src/wasm/pkg/kofem_wasm.wasm
+          key: wasm-${{ runner.os }}-${{ hashFiles('engine/**', 'scripts/build-wasm.sh') }}
+
+      - name: WASM cache status
+        run: |
+          if [ "${{ steps.wasm-cache.outputs.cache-hit }}" = "true" ]; then
+            echo "WASM cache HIT — skipping build"
+          else
+            echo "WASM cache MISS — full build will run"
+          fi
+          
       - name: Clean stale CMake cache
+        if: steps.wasm-cache.outputs.cache-hit != 'true'
         run: |
           rm -f target/wasm-build/CMakeCache.txt
           rm -rf target/wasm-build/CMakeFiles
 
       - name: Build WASM engine
-        run: |
-          bash scripts/build-wasm.sh
+        if: steps.wasm-cache.outputs.cache-hit != 'true'
+        run: bash scripts/build-wasm.sh
 
       - name: Upload WASM artifacts
         uses: actions/upload-artifact@v4
