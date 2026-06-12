@@ -11,6 +11,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "bun ../test_wall_bracket.mjs 20.0 && playwright test",
+    "test:coverage": "rm -rf .nyc_output coverage && COVERAGE=1 playwright test && bun run coverage:report",
+    "coverage:report": "nyc report && bun scripts/coverage-dead-code.ts",
     "test:ui": "playwright test --ui",
     "test:screenshot": "playwright test screenshot.spec.ts",
     "test:mesh-report": "playwright test mesh-report.spec.ts",
@@ -34,9 +36,11 @@
     "@types/react-dom": "^18.3.0",
     "@types/three": "^0.167.0",
     "@vitejs/plugin-react": "^4.3.0",
+    "nyc": "^18.0.0",
     "tsx": "^4.21.0",
     "typescript": "^5.5.0",
     "vite": "^5.4.0",
+    "vite-plugin-istanbul": "^9.0.1",
     "vite-plugin-top-level-await": "^1.4.0",
     "vite-plugin-wasm": "^3.3.0"
   }

@@ -1,0 +1,7 @@
+{
+  "temp-dir": ".nyc_output",
+  "report-dir": "coverage",
+  "reporter": ["text", "html", "lcov", "json"],
+  "include": ["src/**/*.ts", "src/**/*.tsx"],
+  "exclude": ["src/wasm/pkg/**", "**/*.d.ts"]
+}

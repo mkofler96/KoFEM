@@ -47,14 +47,32 @@ jobs:
       - uses: actions/checkout@v4
 
       # CMake stores absolute EMSDK paths in CMakeCache.txt and breaks across runs
+      - name: Cache WASM build output
+        id: wasm-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            web/src/wasm/pkg/kofem_wasm_emcc.js
+            web/src/wasm/pkg/kofem_wasm.wasm
+          key: wasm-${{ runner.os }}-${{ hashFiles('engine/**', 'scripts/build-wasm.sh') }}
+
+      - name: WASM cache status
+        run: |
+          if [ "${{ steps.wasm-cache.outputs.cache-hit }}" = "true" ]; then
+            echo "WASM cache HIT — skipping build"
+          else
+            echo "WASM cache MISS — full build will run"
+          fi
+
       - name: Clean stale CMake cache
+        if: steps.wasm-cache.outputs.cache-hit != 'true'
         run: |
           rm -f target/wasm-build/CMakeCache.txt
           rm -rf target/wasm-build/CMakeFiles
 
       - name: Build WASM engine
-        run: |
-          bash scripts/build-wasm.sh
+        if: steps.wasm-cache.outputs.cache-hit != 'true'
+        run: bash scripts/build-wasm.sh
 
       - name: Upload WASM artifacts
         uses: actions/upload-artifact@v4
@@ -72,6 +90,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Download WASM artifacts
         uses: actions/download-artifact@v4
@@ -90,21 +110,16 @@ jobs:
           path: |
             ~/.bun/install/cache
             web/node_modules
-          key: >
-            bun-
-            ${{ runner.os }}-
-            ${{ hashFiles('web/bun.lockb') }}
+          key: bun-${{ runner.os }}-${{ hashFiles('web/bun.lock') }}
           restore-keys: |
             bun-${{ runner.os }}-
 
       - name: Cache Playwright browsers
         uses: actions/cache@v4
+        id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
-          key: >
-            playwright-
-            ${{ runner.os }}-
-            ${{ hashFiles('web/package.json') }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('web/bun.lock') }}
           restore-keys: |
             playwright-${{ runner.os }}-
 
@@ -117,16 +132,37 @@ jobs:
       - name: Build frontend
         run: cd web && bun run build
 
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup
-          df -h
-
       - name: Install Playwright Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: cd web && bunx playwright install --with-deps chromium
+
+      - name: Install Playwright system deps
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: cd web && bunx playwright install-deps chromium
 
       - name: Run frontend tests
         run: cd web && bun run test
+        env:
+          # Builds the app instrumented with Istanbul so Playwright collects
+          # runtime coverage (tests/coverage.ts) — no second test run needed.
+          COVERAGE: 1
+
+      # Prints per-file coverage and flags src files never loaded by any test
+      # (dead-code candidates).  `if: always()` so a failing test still yields
+      # the coverage gathered up to that point.
+      - name: Coverage report
+        if: always()
+        run: cd web && bun run coverage:report
+
+      - name: Report coverage to DeepSource
+        if: always()
+        run: |
+          curl -sSf https://deepsource.io/cli | sh
+          sed 's|^SF:|SF:web/|' web/coverage/lcov.info > web/coverage/lcov.deepsource.info
+          ./bin/deepsource report --analyzer test-coverage --key javascript \
+            --value-file web/coverage/lcov.deepsource.info
+        env:
+          DEEPSOURCE_DSN: ${{ secrets.DEEPSOURCE_DSN }}
 
       - name: Post mesh report to Slack
         if: always()
