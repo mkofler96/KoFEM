@@ -69,6 +69,52 @@ test("save → load → re-save round-trips the analysis losslessly", async ({
   const file2 = path.join(tmpDir, "second.vtu");
   const saved2 = await saveAnalysis(page, file2);
   expect(saved2).toBe(saved1);
+
+  // ── 5. Re-solve the restored session ─────────────────────────────────────
+  // The strongest proof that BCs, loads, materials, and mesh were restored
+  // (not just the result fields): running the solver again on the loaded
+  // state must reproduce the saved displacement / von Mises fields.
+  const readResult = () =>
+    page.evaluate(() => {
+      const s = (
+        window as unknown as {
+          __kofemStore: {
+            getState(): {
+              result: {
+                displacements: Float64Array;
+                vonMises?: Float64Array;
+              } | null;
+            };
+          };
+        }
+      ).__kofemStore.getState();
+      if (!s.result) throw new Error("no result in store");
+      return {
+        displacements: Array.from(s.result.displacements),
+        vonMises: s.result.vonMises ? Array.from(s.result.vonMises) : null,
+      };
+    });
+
+  const loaded = await readResult();
+  await page
+    .locator("nav")
+    .getByRole("button")
+    .filter({ hasText: "Solve" })
+    .click();
+  const reSolveBtn = page
+    .getByRole("button")
+    .filter({ hasText: "Run static solve" });
+  await expect(reSolveBtn).toBeEnabled();
+  await reSolveBtn.click();
+  await expect(page.getByText(/Max \|U\|/)).toBeVisible({ timeout: 30_000 });
+
+  const reSolved = await readResult();
+  expect(reSolved.displacements.length).toBe(loaded.displacements.length);
+  expect(reSolved.vonMises?.length).toBe(loaded.vonMises?.length);
+  for (let i = 0; i < loaded.displacements.length; i++)
+    expect(reSolved.displacements[i]).toBeCloseTo(loaded.displacements[i], 12);
+  for (let i = 0; i < (loaded.vonMises?.length ?? 0); i++)
+    expect(reSolved.vonMises![i]).toBeCloseTo(loaded.vonMises![i], 3);
 });
 
 test("loading a non-KoFEM file shows a clear error", async ({ page }) => {
