@@ -60,6 +60,8 @@ export function StatusBar() {
   const pickMode = useModelStore((s) => s.pickMode);
   const viewRepr = useModelStore((s) => s.viewRepr);
   const setViewRepr = useModelStore((s) => s.setViewRepr);
+  const showUndeformedOverlay = useModelStore((s) => s.showUndeformedOverlay);
+  const setShowUndeformedOverlay = useModelStore((s) => s.setShowUndeformedOverlay);
   const volMesh = useModelStore((s) => s.volMesh);
   const stepSurface = useModelStore((s) => s.stepSurface);
 
@@ -137,21 +139,37 @@ export function StatusBar() {
         )}
       </div>
 
-      {/* Center — repr toolbar */}
-      <div className={styles.reprGroup}>
-        {REPR_BUTTONS.map(({ id, label, tooltip, icon }, i) => (
+      {/* Center — repr toolbar + undeformed overlay toggle */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <div className={styles.reprGroup}>
+          {REPR_BUTTONS.map(({ id, label, tooltip, icon }, i) => (
+            <button
+              key={id}
+              disabled={isDisabled(id)}
+              onClick={() => setViewRepr(id)}
+              className={`${styles.reprBtn} ${viewRepr === id ? styles.reprBtnActive : ""}`}
+              aria-label={label}
+              data-tooltip={tooltip}
+              style={{ borderLeft: i > 0 ? "1px solid #e2e5ea" : "none" }}
+            >
+              {icon}
+            </button>
+          ))}
+        </div>
+        {result && (
           <button
-            key={id}
-            disabled={isDisabled(id)}
-            onClick={() => setViewRepr(id)}
-            className={`${styles.reprBtn} ${viewRepr === id ? styles.reprBtnActive : ""}`}
-            aria-label={label}
-            data-tooltip={tooltip}
-            style={{ borderLeft: i > 0 ? "1px solid #e2e5ea" : "none" }}
+            onClick={() => setShowUndeformedOverlay(!showUndeformedOverlay)}
+            className={`${styles.reprBtn} ${showUndeformedOverlay ? styles.reprBtnActive : ""}`}
+            aria-label="Toggle undeformed overlay"
+            data-tooltip="Show undeformed geometry as overlay"
+            style={{ width: "auto", padding: "0 7px", borderRadius: 5, border: "1px solid #e2e5ea" }}
           >
-            {icon}
+            <svg viewBox="0 0 16 16" fill="none" width="13" height="13" style={{ marginRight: 4 }}>
+              <path d="M8 2L13 5v6L8 14L3 11V5z" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" strokeDasharray="2.5 1.5"/>
+            </svg>
+            Undeformed
           </button>
-        ))}
+        )}
       </div>
 
       {/* Right */}

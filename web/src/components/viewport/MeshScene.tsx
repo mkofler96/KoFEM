@@ -148,6 +148,7 @@ export function MeshScene() {
   const setPendingFaces = useModelStore((s) => s.setPendingFaces);
   const bcGroups = useModelStore((s) => s.bcGroups);
   const loadGroups = useModelStore((s) => s.loadGroups);
+  const showUndeformedOverlay = useModelStore((s) => s.showUndeformedOverlay);
 
   const nodeMap = useMemo(
     () => new Map(nodes.map((n, i) => [n.id, { n, i }])),
@@ -279,31 +280,6 @@ export function MeshScene() {
     }
     return segs.length > 0 ? new Float32Array(segs) : null;
   }, [hexElements, tetElements, nodeMap]);
-
-  const deformedEdgePositions = useMemo(() => {
-    if (!result) return null;
-    const d = result.displacements;
-    const coord = (id: number) => {
-      const { n, i } = nodeMap.get(id)!;
-      return [
-        n.x + (d[i * 3] ?? 0) * deformScale,
-        n.y + (d[i * 3 + 1] ?? 0) * deformScale,
-        n.z + (d[i * 3 + 2] ?? 0) * deformScale,
-      ];
-    };
-    const segs: number[] = [];
-    for (const el of hexElements) {
-      for (const [a, b] of HEX_EDGES) {
-        segs.push(...coord(el.nodeIds[a]), ...coord(el.nodeIds[b]));
-      }
-    }
-    for (const el of tetElements) {
-      for (const [a, b] of TET_EDGES) {
-        segs.push(...coord(el.nodeIds[a]), ...coord(el.nodeIds[b]));
-      }
-    }
-    return segs.length > 0 ? new Float32Array(segs) : null;
-  }, [result, hexElements, tetElements, nodeMap, deformScale]);
 
   const barLines = useMemo(
     () =>
@@ -802,16 +778,16 @@ export function MeshScene() {
         </mesh>
       )}
 
-      {/* Deformed wireframe overlay */}
-      {deformedEdgePositions && (
+      {/* Undeformed geometry overlay — shows original shape as reference over deformed result */}
+      {result && showUndeformedOverlay && undeformedEdgePositions && (
         <lineSegments>
           <bufferGeometry>
             <bufferAttribute
               attach="attributes-position"
-              args={[deformedEdgePositions, 3]}
+              args={[undeformedEdgePositions, 3]}
             />
           </bufferGeometry>
-          <lineBasicMaterial color="#1e3a5f" transparent opacity={0.4} />
+          <lineBasicMaterial color="#1e3a5f" transparent opacity={0.25} />
         </lineSegments>
       )}
 

@@ -396,11 +396,13 @@ interface ModelState {
   surfaceTriangles: [number, number, number][] | null;
   surfaceFaceIds: number[] | null;
   viewRepr: "geometry" | "surface" | "volume" | "wireframe";
+  showUndeformedOverlay: boolean;
   stepImportError: string | null;
   setStepSurface(mesh: StepSurfaceMesh | null): void;
   setVolMesh(mesh: VolMesh | null): void;
   setSurfaceFaceIds(ids: number[] | null): void;
   setViewRepr(v: "geometry" | "surface" | "volume" | "wireframe"): void;
+  setShowUndeformedOverlay(v: boolean): void;
   setStepImportError(msg: string | null): void;
 
   // Welcome screen entry points
@@ -506,6 +508,7 @@ export const useModelStore = create<ModelState>()(
     surfaceTriangles: null,
     surfaceFaceIds: null,
     viewRepr: "surface" as const,
+    showUndeformedOverlay: true,
     stepImportError: null,
     geometries: [],
     nextGeomId: 2,
@@ -523,6 +526,10 @@ export const useModelStore = create<ModelState>()(
     setViewRepr: (v) =>
       set((s) => {
         s.viewRepr = v;
+      }),
+    setShowUndeformedOverlay: (v) =>
+      set((s) => {
+        s.showUndeformedOverlay = v;
       }),
     setVolMesh: (mesh) =>
       set((s) => {
