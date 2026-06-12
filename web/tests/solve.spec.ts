@@ -91,6 +91,15 @@ test("solve on hex mesh completes and shows results", async ({ page }) => {
     expect(page.getByText(/Max \|U\|/)).toBeVisible({ timeout: 30_000 }),
     fatal,
   ]);
+
+  // Regression test for #157: selecting Von Mises stress in the field
+  // dropdown must show stress statistics (the selector was previously
+  // unwired, so the von Mises view could never be reached).
+  const fieldSelect = page.locator("select", {
+    has: page.locator('option[value="Von Mises stress"]'),
+  });
+  await fieldSelect.selectOption("Von Mises stress");
+  await Promise.race([expect(page.getByText(/Max σ_vm/)).toBeVisible(), fatal]);
 });
 
 // ── STEP → Volume mesh pipeline ───────────────────────────────────────────────

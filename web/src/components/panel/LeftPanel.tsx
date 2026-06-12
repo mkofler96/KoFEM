@@ -1352,6 +1352,12 @@ function ResultsPanel() {
     return { min, max };
   })();
 
+  const fieldSymbol =
+    resultType === "Von Mises stress"
+      ? "σ_vm"
+      : resultType === "Displacement (magnitude)"
+        ? "|U|"
+        : resultType;
   const unit = resultType === "Von Mises stress" ? "Pa" : "m";
 
   return (
@@ -1379,13 +1385,13 @@ function ResultsPanel() {
         {stats ? (
           <>
             <div className={styles.statRow}>
-              <span className={styles.statKey}>Min</span>
+              <span className={styles.statKey}>Min {fieldSymbol}</span>
               <span className={styles.statVal}>
                 {stats.min.toExponential(3)} {unit}
               </span>
             </div>
             <div className={styles.statRow}>
-              <span className={styles.statKey}>Max</span>
+              <span className={styles.statKey}>Max {fieldSymbol}</span>
               <span className={styles.statVal}>
                 {stats.max.toExponential(3)} {unit}
               </span>
