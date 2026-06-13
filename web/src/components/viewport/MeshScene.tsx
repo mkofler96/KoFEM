@@ -281,6 +281,31 @@ export function MeshScene() {
     return segs.length > 0 ? new Float32Array(segs) : null;
   }, [hexElements, tetElements, nodeMap]);
 
+  const deformedEdgePositions = useMemo(() => {
+    if (!result) return null;
+    const d = result.displacements;
+    const coord = (id: number) => {
+      const { n, i } = nodeMap.get(id)!;
+      return [
+        n.x + (d[i * 3] ?? 0) * deformScale,
+        n.y + (d[i * 3 + 1] ?? 0) * deformScale,
+        n.z + (d[i * 3 + 2] ?? 0) * deformScale,
+      ];
+    };
+    const segs: number[] = [];
+    for (const el of hexElements) {
+      for (const [a, b] of HEX_EDGES) {
+        segs.push(...coord(el.nodeIds[a]), ...coord(el.nodeIds[b]));
+      }
+    }
+    for (const el of tetElements) {
+      for (const [a, b] of TET_EDGES) {
+        segs.push(...coord(el.nodeIds[a]), ...coord(el.nodeIds[b]));
+      }
+    }
+    return segs.length > 0 ? new Float32Array(segs) : null;
+  }, [result, hexElements, tetElements, nodeMap, deformScale]);
+
   const barLines = useMemo(
     () =>
       barElements.map((el) =>
@@ -778,6 +803,19 @@ export function MeshScene() {
         </mesh>
       )}
 
+      {/* Deformed wireframe overlay */}
+      {deformedEdgePositions && (
+        <lineSegments>
+          <bufferGeometry>
+            <bufferAttribute
+              attach="attributes-position"
+              args={[deformedEdgePositions, 3]}
+            />
+          </bufferGeometry>
+          <lineBasicMaterial color="#1e3a5f" transparent opacity={0.4} />
+        </lineSegments>
+      )}
+
       {/* Undeformed geometry overlay — shows original shape as reference over deformed result */}
       {result && showUndeformedOverlay && undeformedEdgePositions && (
         <lineSegments>
@@ -787,12 +825,12 @@ export function MeshScene() {
               args={[undeformedEdgePositions, 3]}
             />
           </bufferGeometry>
-          <lineBasicMaterial color="#1e3a5f" transparent opacity={0.25} />
+          <lineBasicMaterial color="#6b8cad" transparent opacity={0.35} />
         </lineSegments>
       )}
 
       {/* BC face highlights — persistent coloured overlay for all committed BC faces */}
-      {bcFaceHighlights?.map((h, i) => (
+      {!result && bcFaceHighlights?.map((h, i) => (
         <mesh key={`bc-face-${h.groupId}-${i}`} renderOrder={1}>
           <bufferGeometry>
             <bufferAttribute
@@ -811,7 +849,7 @@ export function MeshScene() {
       ))}
 
       {/* Load face highlights — persistent coloured overlay for all committed load faces */}
-      {loadFaceHighlights?.map((h, i) => (
+      {!result && loadFaceHighlights?.map((h, i) => (
         <mesh key={`load-face-${h.groupId}-${i}`} renderOrder={1}>
           <bufferGeometry>
             <bufferAttribute
@@ -868,7 +906,7 @@ export function MeshScene() {
       )}
 
       {/* BC markers — triangular fixed-support symbols (3-sided cone, apex at face, base outward) */}
-      {bcMarkerData && (
+      {!result && bcMarkerData && (
         <group position={bcMarkerData.pos} quaternion={bcMarkerData.quaternion}>
           <mesh position={[0, -modelSize * 0.075, 0]}>
             <coneGeometry args={[modelSize * 0.09, modelSize * 0.15, 3]} />
@@ -886,7 +924,7 @@ export function MeshScene() {
       )}
 
       {/* Load arrow — resultant of all force DOFs, cylinder shaft + cone head */}
-      {loadArrowData &&
+      {!result && loadArrowData &&
         (() => {
           const shaftLen = modelSize * 0.22;
           const headLen = modelSize * 0.09;
