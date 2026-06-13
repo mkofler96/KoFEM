@@ -281,6 +281,26 @@ export function MeshScene() {
     return segs.length > 0 ? new Float32Array(segs) : null;
   }, [hexElements, tetElements, nodeMap]);
 
+  const undeformedSurfaceEdgePositions = useMemo(() => {
+    const seen = new Set<string>();
+    const segs: number[] = [];
+    const addEdge = (a: number, b: number) => {
+      const key = a < b ? `${a},${b}` : `${b},${a}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      const na = nodeMap.get(a)?.n, nb = nodeMap.get(b)?.n;
+      if (!na || !nb) return;
+      segs.push(na.x, na.y, na.z, nb.x, nb.y, nb.z);
+    };
+    for (const [a, b, c, d] of boundaryQuadFaceIds) {
+      addEdge(a, b); addEdge(b, c); addEdge(c, d); addEdge(d, a);
+    }
+    for (const [a, b, c] of boundaryTriFaceIds) {
+      addEdge(a, b); addEdge(b, c); addEdge(c, a);
+    }
+    return segs.length > 0 ? new Float32Array(segs) : null;
+  }, [boundaryQuadFaceIds, boundaryTriFaceIds, nodeMap]);
+
   const deformedEdgePositions = useMemo(() => {
     if (!result) return null;
     const d = result.displacements;
@@ -816,16 +836,16 @@ export function MeshScene() {
         </lineSegments>
       )}
 
-      {/* Undeformed geometry overlay — shows original shape as reference over deformed result */}
-      {result && showUndeformedOverlay && undeformedEdgePositions && (
+      {/* Undeformed geometry overlay — shows original surface edges as reference over deformed result */}
+      {result && showUndeformedOverlay && undeformedSurfaceEdgePositions && (
         <lineSegments>
           <bufferGeometry>
             <bufferAttribute
               attach="attributes-position"
-              args={[undeformedEdgePositions, 3]}
+              args={[undeformedSurfaceEdgePositions, 3]}
             />
           </bufferGeometry>
-          <lineBasicMaterial color="#6b8cad" transparent opacity={0.35} />
+          <lineBasicMaterial color="#6b8cad" transparent opacity={0.5} />
         </lineSegments>
       )}
 
