@@ -288,15 +288,21 @@ export function MeshScene() {
       const key = a < b ? `${a},${b}` : `${b},${a}`;
       if (seen.has(key)) return;
       seen.add(key);
-      const na = nodeMap.get(a)?.n, nb = nodeMap.get(b)?.n;
+      const na = nodeMap.get(a)?.n,
+        nb = nodeMap.get(b)?.n;
       if (!na || !nb) return;
       segs.push(na.x, na.y, na.z, nb.x, nb.y, nb.z);
     };
     for (const [a, b, c, d] of boundaryQuadFaceIds) {
-      addEdge(a, b); addEdge(b, c); addEdge(c, d); addEdge(d, a);
+      addEdge(a, b);
+      addEdge(b, c);
+      addEdge(c, d);
+      addEdge(d, a);
     }
     for (const [a, b, c] of boundaryTriFaceIds) {
-      addEdge(a, b); addEdge(b, c); addEdge(c, a);
+      addEdge(a, b);
+      addEdge(b, c);
+      addEdge(c, a);
     }
     return segs.length > 0 ? new Float32Array(segs) : null;
   }, [boundaryQuadFaceIds, boundaryTriFaceIds, nodeMap]);
@@ -850,42 +856,44 @@ export function MeshScene() {
       )}
 
       {/* BC face highlights — persistent coloured overlay for all committed BC faces */}
-      {!result && bcFaceHighlights?.map((h, i) => (
-        <mesh key={`bc-face-${h.groupId}-${i}`} renderOrder={1}>
-          <bufferGeometry>
-            <bufferAttribute
-              attach="attributes-position"
-              args={[h.positions, 3]}
+      {!result &&
+        bcFaceHighlights?.map((h, i) => (
+          <mesh key={`bc-face-${h.groupId}-${i}`} renderOrder={1}>
+            <bufferGeometry>
+              <bufferAttribute
+                attach="attributes-position"
+                args={[h.positions, 3]}
+              />
+            </bufferGeometry>
+            <meshBasicMaterial
+              color="#dc2626"
+              transparent
+              opacity={pickTargetGroupId === h.groupId ? 0.45 : 0.25}
+              depthTest={false}
+              side={THREE.DoubleSide}
             />
-          </bufferGeometry>
-          <meshBasicMaterial
-            color="#dc2626"
-            transparent
-            opacity={pickTargetGroupId === h.groupId ? 0.45 : 0.25}
-            depthTest={false}
-            side={THREE.DoubleSide}
-          />
-        </mesh>
-      ))}
+          </mesh>
+        ))}
 
       {/* Load face highlights — persistent coloured overlay for all committed load faces */}
-      {!result && loadFaceHighlights?.map((h, i) => (
-        <mesh key={`load-face-${h.groupId}-${i}`} renderOrder={1}>
-          <bufferGeometry>
-            <bufferAttribute
-              attach="attributes-position"
-              args={[h.positions, 3]}
+      {!result &&
+        loadFaceHighlights?.map((h, i) => (
+          <mesh key={`load-face-${h.groupId}-${i}`} renderOrder={1}>
+            <bufferGeometry>
+              <bufferAttribute
+                attach="attributes-position"
+                args={[h.positions, 3]}
+              />
+            </bufferGeometry>
+            <meshBasicMaterial
+              color="#d97706"
+              transparent
+              opacity={pickTargetGroupId === h.groupId ? 0.45 : 0.25}
+              depthTest={false}
+              side={THREE.DoubleSide}
             />
-          </bufferGeometry>
-          <meshBasicMaterial
-            color="#d97706"
-            transparent
-            opacity={pickTargetGroupId === h.groupId ? 0.45 : 0.25}
-            depthTest={false}
-            side={THREE.DoubleSide}
-          />
-        </mesh>
-      ))}
+          </mesh>
+        ))}
 
       {/* Pending faces — accumulated via shift-click, same colour as selection but slightly dimmer */}
       {pendingFacePositions && (
@@ -944,7 +952,8 @@ export function MeshScene() {
       )}
 
       {/* Load arrow — resultant of all force DOFs, cylinder shaft + cone head */}
-      {!result && loadArrowData &&
+      {!result &&
+        loadArrowData &&
         (() => {
           const shaftLen = modelSize * 0.22;
           const headLen = modelSize * 0.09;
