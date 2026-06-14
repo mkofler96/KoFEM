@@ -1078,7 +1078,9 @@ function ConstraintsPanel() {
                   </select>
                 </div>
                 <div className={styles.formRow}>
-                  <span className={styles.formLabel}>Total (N)</span>
+                  <span className={styles.formLabel}>
+                    {loadDof <= 2 ? "Total (N)" : "Total (N·m)"}
+                  </span>
                   <input
                     className={styles.formInput}
                     type="number"
@@ -1090,11 +1092,9 @@ function ConstraintsPanel() {
                 <div className={styles.pickNote}>
                   {allPickedFaces.reduce((s, f) => s + f.nodeIds.length, 0)}{" "}
                   nodes →{" "}
-                  {(
-                    parseFloat(loadForce) /
-                    allPickedFaces.reduce((s, f) => s + f.nodeIds.length, 0)
-                  ).toFixed(1)}{" "}
-                  N/node
+                  {loadDof <= 2
+                    ? `${(parseFloat(loadForce) / allPickedFaces.reduce((s, f) => s + f.nodeIds.length, 0)).toFixed(1)} N/node`
+                    : "distributed as equivalent nodal forces"}
                 </div>
                 <button className={styles.loadBtn} onClick={applyLoad}>
                   Apply Load
@@ -1119,7 +1119,8 @@ function ConstraintsPanel() {
               <span className={styles.loadDot} />
               <span className={styles.bcGroupName}>{g.name}</span>
               <span className={styles.bcGroupMeta}>
-                F{DOF_LABELS[g.dof]} = {fmt(g.totalForce)} N
+                {LOAD_LABELS[g.dof]} = {fmt(g.totalForce)}{" "}
+                {g.dof <= 2 ? "N" : "N·m"}
               </span>
               <div className={styles.treeItemActions}>
                 <button
