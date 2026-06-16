@@ -226,81 +226,6 @@ function rebuildLoads(loadGroups: NamedLoadGroup[], nodes: Node[]): Load[] {
   return result;
 }
 
-function flatConstraintsToGroups(
-  constraints: Constraint[],
-  startGroupId: number,
-  startFaceId: number,
-): { groups: NamedBcGroup[]; nextGroupId: number; nextFaceId: number } {
-  const nodeDofsMap = new Map<number, Map<number, number>>();
-  for (const c of constraints) {
-    if (!nodeDofsMap.has(c.nodeId)) nodeDofsMap.set(c.nodeId, new Map());
-    nodeDofsMap.get(c.nodeId)!.set(c.dof, c.prescribedValue ?? 0);
-  }
-  const patternGroups = new Map<
-    string,
-    { dofs: number[]; value: number; nodeIds: number[] }
-  >();
-  for (const [nodeId, dofMap] of nodeDofsMap.entries()) {
-    const sorted = [...dofMap.entries()].sort((a, b) => a[0] - b[0]);
-    const key = sorted.map(([d, v]) => `${d}=${v}`).join(",");
-    if (!patternGroups.has(key))
-      patternGroups.set(key, {
-        dofs: sorted.map(([d]) => d),
-        value: sorted[0]?.[1] ?? 0,
-        nodeIds: [],
-      });
-    patternGroups.get(key)!.nodeIds.push(nodeId);
-  }
-  let nextGroupId = startGroupId,
-    nextFaceId = startFaceId;
-  const groups: NamedBcGroup[] = [];
-  for (const { dofs, value, nodeIds } of patternGroups.values()) {
-    groups.push({
-      id: nextGroupId,
-      name: `BC${nextGroupId}`,
-      dofs,
-      value,
-      faces: [{ id: nextFaceId, label: "Face 1", nodeIds }],
-    });
-    nextGroupId++;
-    nextFaceId++;
-  }
-  return { groups, nextGroupId, nextFaceId };
-}
-
-function flatLoadsToGroups(
-  loads: Load[],
-  startGroupId: number,
-  startFaceId: number,
-): { groups: NamedLoadGroup[]; nextGroupId: number; nextFaceId: number } {
-  const dofGroups = new Map<
-    number,
-    { nodeIds: number[]; totalForce: number }
-  >();
-  for (const l of loads) {
-    if (!dofGroups.has(l.dof))
-      dofGroups.set(l.dof, { nodeIds: [], totalForce: 0 });
-    const g = dofGroups.get(l.dof)!;
-    if (!g.nodeIds.includes(l.nodeId)) g.nodeIds.push(l.nodeId);
-    g.totalForce += l.value;
-  }
-  let nextGroupId = startGroupId,
-    nextFaceId = startFaceId;
-  const groups: NamedLoadGroup[] = [];
-  for (const [dof, { nodeIds, totalForce }] of dofGroups.entries()) {
-    groups.push({
-      id: nextGroupId,
-      name: `Load${nextGroupId}`,
-      dof,
-      totalForce,
-      faces: [{ id: nextFaceId, label: "Face 1", nodeIds }],
-    });
-    nextGroupId++;
-    nextFaceId++;
-  }
-  return { groups, nextGroupId, nextFaceId };
-}
-
 // ── Default model ─────────────────────────────────────────────────────────────
 
 const DEFAULT_GEOMETRY: BoxGeometry = {
@@ -401,15 +326,6 @@ function buildCantilever() {
 
 // ── Store types ───────────────────────────────────────────────────────────────
 
-export interface ModelSnapshot {
-  nodes: Node[];
-  elements: Element[];
-  materials: Material[];
-  properties: Property[];
-  constraints: Constraint[];
-  loads: Load[];
-}
-
 export interface StartCustomParams {
   name: string;
   lx: number;
@@ -495,7 +411,6 @@ interface ModelState {
     surfaceTriangles?: [number, number, number][] | null,
     surfaceFaceIds?: number[] | null,
   ): void;
-  loadModel(snapshot: ModelSnapshot & { modelName?: string }): void;
   loadAnalysis(analysis: AnalysisState): void;
   reset(): void;
 
@@ -793,42 +708,9 @@ export const useModelStore = create<ModelState>()(
         }
       }),
 
-    loadModel: (snap) =>
-      set((s) => {
-        s.nodes = snap.nodes;
-        s.elements = snap.elements;
-        s.materials = snap.materials;
-        s.properties = snap.properties;
-
-        // Convert flat constraints/loads to named groups
-        const bcResult = flatConstraintsToGroups(snap.constraints, 1, 1);
-        const loadResult = flatLoadsToGroups(
-          snap.loads,
-          bcResult.nextGroupId,
-          bcResult.nextFaceId,
-        );
-        s.bcGroups = bcResult.groups;
-        s.loadGroups = loadResult.groups;
-        s.nextBcGroupId = loadResult.nextGroupId;
-        s.nextLoadGroupId = loadResult.nextGroupId;
-        s.nextFaceEntryId = loadResult.nextFaceId;
-        s.constraints = rebuildConstraints(s.bcGroups);
-        s.loads = rebuildLoads(s.loadGroups, s.nodes);
-
-        s.modelName = snap.modelName ?? "Model";
-        s.result = null;
-        s.geometries = [];
-        s.selectedFace = null;
-        s.pickMode = null;
-        s.pickTargetGroupId = null;
-        s.hasStarted = true;
-        s.mode = "geometry";
-        s.fitViewTrigger++;
-      }),
-
     // Restore a complete analysis parsed from a saved .vtu file — the inverse
-    // of serializeAnalysis. Unlike loadModel, this keeps the saved named
-    // groups, geometries, results, and view/mode state instead of rebuilding.
+    // of serializeAnalysis. Keeps the saved named groups, geometries, results,
+    // and view/mode state instead of rebuilding.
     loadAnalysis: (a) =>
       set((s) => {
         s.nodes = a.nodes;
