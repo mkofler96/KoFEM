@@ -106,7 +106,6 @@ function GeometryPanel() {
   const setStepSurface = useModelStore((s) => s.setStepSurface);
   const stepImportError = useModelStore((s) => s.stepImportError);
   const setStepImportError = useModelStore((s) => s.setStepImportError);
-  const loadModel = useModelStore((s) => s.loadModel);
   const isRunning = useModelStore((s) => s.isRunning);
   const setRunning = useModelStore((s) => s.setRunning);
   const materials = useModelStore((s) => s.materials);
@@ -120,7 +119,6 @@ function GeometryPanel() {
   const [isImportingStep, setIsImportingStep] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const inpRef = useRef<HTMLInputElement | null>(null);
   const stepRef = useRef<HTMLInputElement | null>(null);
 
   function runMesh(geom: BoxGeometry) {
@@ -140,21 +138,6 @@ function GeometryPanel() {
     const newGeom = store.geometries[store.geometries.length - 1];
     if (newGeom) runMesh(newGeom);
     setDialogOpen(false);
-  }
-
-  async function handleInpFile(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    e.target.value = "";
-    setRunning(true);
-    const text = await file.text();
-    sendToWorker<{ model: Parameters<typeof loadModel>[0] }>("parse", { text })
-      .then(({ model }) => {
-        if (model.nodes?.length) loadModel(model);
-        else setError("No nodes found.");
-      })
-      .catch((err) => setError(`Parse error: ${err.message}`))
-      .finally(() => setRunning(false));
   }
 
   async function handleStepFile(e: ChangeEvent<HTMLInputElement>) {
@@ -198,15 +181,6 @@ function GeometryPanel() {
         <>
           <input
             ref={(el) => {
-              inpRef.current = el;
-            }}
-            type="file"
-            accept=".inp"
-            style={{ display: "none" }}
-            onChange={handleInpFile}
-          />
-          <input
-            ref={(el) => {
               stepRef.current = el;
             }}
             type="file"
@@ -242,23 +216,6 @@ function GeometryPanel() {
                 {isImportingStep ? "Importing…" : "Import STEP"}
               </span>
               <span className={styles.cardSub}>.step / .stp</span>
-            </button>
-
-            <button
-              className={styles.importCard}
-              disabled={isRunning}
-              onClick={() => inpRef.current?.click()}
-            >
-              <svg className={styles.cardIcon} viewBox="0 0 20 20" fill="none">
-                <path
-                  d="M4 2h8l4 4v12a2 2 0 01-2 2H4a2 2 0 01-2-2V4a2 2 0 012-2z"
-                  stroke="currentColor"
-                  strokeWidth="1.4"
-                />
-                <path d="M12 2v4h4" stroke="currentColor" strokeWidth="1.4" />
-              </svg>
-              <span className={styles.cardTitle}>Import INP</span>
-              <span className={styles.cardSub}>Abaqus / CalculiX</span>
             </button>
 
             <button className={styles.importCard} disabled>

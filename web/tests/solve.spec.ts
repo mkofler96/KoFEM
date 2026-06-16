@@ -69,10 +69,6 @@ test("page loads with welcome screen and enters the app", async ({ page }) => {
     expect(page.getByRole("button", { name: "Import STEP" })).toBeVisible(),
     fatal,
   ]);
-  await Promise.race([
-    expect(page.getByRole("button", { name: "Import INP" })).toBeVisible(),
-    fatal,
-  ]);
 });
 
 // ── Solver integration tests ──────────────────────────────────────────────────

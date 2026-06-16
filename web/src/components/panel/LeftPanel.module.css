@@ -605,17 +605,6 @@
   flex: 1;
 }
 
-/* legacy .bcItem still referenced by Sidebar (dead code), keep for safety */
-.bcItem {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.bcItem:last-of-type { border-bottom: none; }
-
 .bcDot {
   width: 8px; height: 8px;
   border-radius: 50%;

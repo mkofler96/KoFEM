@@ -284,10 +284,6 @@ self.onmessage = async (event: MessageEvent) => {
         elements: dto.tetrahedra.length,
         durationMs: Date.now() - t0,
       });
-    } else if (type === "parse") {
-      throw new Error(
-        ".inp file import is not supported in the OCCT-based pipeline. Please import a STEP file instead.",
-      );
     } else if (type === "mesh") {
       throw new Error(
         "Parametric mesh generation is not available in the new pipeline. Import a STEP file instead.",
