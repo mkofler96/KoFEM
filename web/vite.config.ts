@@ -24,9 +24,6 @@ export default defineConfig(({ mode }) => ({
     format: "es",
     plugins: () => [wasm(), topLevelAwait(), ...coveragePlugins],
   },
-  optimizeDeps: {
-    exclude: ["kofem-wasm"],
-  },
   build: {
     target: "esnext",
     sourcemap: mode !== "production",
