@@ -1,23 +1,23 @@
 /* ── Variables ─────────────────────────────────────────────── */
 :root {
-  --ink:        #0d1117;
-  --ink-2:      #3a4150;
-  --muted:      #6b7280;
-  --muted-2:    #9aa1ad;
-  --bg:         #f4f5f7;
-  --surface:    #ffffff;
-  --surface-2:  #fafbfc;
-  --surface-3:  #f0f2f5;
-  --border:     #e2e5ea;
-  --border-2:   #cdd2d9;
-  --hover:      #eef0f4;
-  --accent:     #1f5fd0;
-  --accent-soft:#e6edfb;
-  --ok:         #15803d;
-  --ok-soft:    #d6efdd;
-  --warn:       #c2410c;
-  --warn-soft:  #fde7d5;
-  --r-md:       6px;
+  --ink: #0d1117;
+  --ink-2: #3a4150;
+  --muted: #6b7280;
+  --muted-2: #9aa1ad;
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --surface-2: #fafbfc;
+  --surface-3: #f0f2f5;
+  --border: #e2e5ea;
+  --border-2: #cdd2d9;
+  --hover: #eef0f4;
+  --accent: #1f5fd0;
+  --accent-soft: #e6edfb;
+  --ok: #15803d;
+  --ok-soft: #d6efdd;
+  --warn: #c2410c;
+  --warn-soft: #fde7d5;
+  --r-md: 6px;
 }
 
 /* ── Layout ─────────────────────────────────────────────────── */
@@ -29,7 +29,7 @@
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  font-family: 'IBM Plex Sans', 'Helvetica Neue', sans-serif;
+  font-family: "IBM Plex Sans", "Helvetica Neue", sans-serif;
   font-size: 13px;
   color: var(--ink);
 }
@@ -82,16 +82,20 @@
   white-space: nowrap;
 }
 
-.tab:hover { color: var(--ink); }
+.tab:hover {
+  color: var(--ink);
+}
 
 .tabActive {
   color: var(--accent);
 }
 
 .tabActive::after {
-  content: '';
+  content: "";
   position: absolute;
-  left: 4px; right: 4px; bottom: -1px;
+  left: 4px;
+  right: 4px;
+  bottom: -1px;
   height: 2px;
   background: var(--accent);
   border-radius: 2px 2px 0 0;
@@ -126,7 +130,10 @@
   cursor: pointer;
   text-align: left;
   font-family: inherit;
-  transition: background 100ms ease, border-color 100ms ease, box-shadow 100ms ease;
+  transition:
+    background 100ms ease,
+    border-color 100ms ease,
+    box-shadow 100ms ease;
 }
 
 .importCard:hover:not(:disabled) {
@@ -160,7 +167,7 @@
 .cardSub {
   font-size: 10.5px;
   color: var(--muted);
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
 }
 
 /* ── Tolerances ─────────────────────────────────────────────── */
@@ -198,7 +205,7 @@
   border-radius: 4px;
   color: var(--ink);
   font-size: 12px;
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
   padding: 4px 8px;
 }
 
@@ -211,7 +218,7 @@
 .toleranceUnit {
   font-size: 11px;
   color: var(--muted-2);
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
   width: 14px;
 }
 
@@ -225,7 +232,9 @@
   border-bottom: 1px solid var(--border);
 }
 
-.treeItem:last-child { border-bottom: none; }
+.treeItem:last-child {
+  border-bottom: none;
+}
 
 .treeItemIcon {
   color: var(--accent);
@@ -235,11 +244,26 @@
   text-align: center;
 }
 
-.treeItemBody { flex: 1; min-width: 0; }
-.treeItemName { font-weight: 500; font-size: 13px; color: var(--ink); }
-.treeItemDetail { font-size: 11px; color: var(--muted); font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+.treeItemBody {
+  flex: 1;
+  min-width: 0;
+}
+.treeItemName {
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--ink);
+}
+.treeItemDetail {
+  font-size: 11px;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+}
 
-.treeItemActions { display: flex; gap: 2px; flex-shrink: 0; }
+.treeItemActions {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
 
 /* ── Form elements ──────────────────────────────────────────── */
 
@@ -298,7 +322,12 @@
   gap: 6px;
 }
 
-.formBtns { display: flex; gap: 6px; justify-content: flex-end; margin-top: 4px; }
+.formBtns {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
 
 /* ── Buttons ────────────────────────────────────────────────── */
 
@@ -311,12 +340,22 @@
   padding: 3px 5px;
   border-radius: 4px;
   line-height: 1;
-  transition: color 100ms, background 100ms;
+  transition:
+    color 100ms,
+    background 100ms;
 }
 
-.iconBtn:hover:not(:disabled) { color: var(--ink); background: var(--hover); }
-.iconBtn:disabled { opacity: 0.4; cursor: not-allowed; }
-.iconBtnDanger:hover { color: var(--warn) !important; }
+.iconBtn:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--hover);
+}
+.iconBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.iconBtnDanger:hover {
+  color: var(--warn) !important;
+}
 
 .primaryBtn {
   background: var(--accent);
@@ -331,7 +370,9 @@
   transition: background 100ms;
 }
 
-.primaryBtn:hover { background: #1750b3; }
+.primaryBtn:hover {
+  background: #1750b3;
+}
 
 .outlineBtn {
   display: block;
@@ -346,11 +387,19 @@
   cursor: pointer;
   text-align: left;
   margin-top: 8px;
-  transition: background 100ms, border-color 100ms;
+  transition:
+    background 100ms,
+    border-color 100ms;
 }
 
-.outlineBtn:hover:not(:disabled) { background: var(--hover); border-color: var(--border-2); }
-.outlineBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.outlineBtn:hover:not(:disabled) {
+  background: var(--hover);
+  border-color: var(--border-2);
+}
+.outlineBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
 .cancelBtn {
   background: none;
@@ -363,7 +412,10 @@
   cursor: pointer;
 }
 
-.cancelBtn:hover { color: var(--ink); border-color: var(--border-2); }
+.cancelBtn:hover {
+  color: var(--ink);
+  border-color: var(--border-2);
+}
 
 .nextBtn {
   margin: auto 18px 18px;
@@ -380,8 +432,13 @@
   flex-shrink: 0;
 }
 
-.nextBtn:hover:not(:disabled) { background: #1f2937; }
-.nextBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+.nextBtn:hover:not(:disabled) {
+  background: #1f2937;
+}
+.nextBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
 
 .solveBtn {
   width: 100%;
@@ -395,7 +452,9 @@
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
-  transition: background 100ms, box-shadow 100ms;
+  transition:
+    background 100ms,
+    box-shadow 100ms;
 }
 
 .solveBtn:hover:not(:disabled) {
@@ -403,7 +462,10 @@
   box-shadow: 0 4px 12px rgba(31, 95, 208, 0.3);
 }
 
-.solveBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.solveBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
 .loadBtn {
   background: #d97706;
@@ -418,7 +480,9 @@
   transition: background 100ms;
 }
 
-.loadBtn:hover { background: #b45309; }
+.loadBtn:hover {
+  background: #b45309;
+}
 
 .dangerBtn {
   display: block;
@@ -435,7 +499,9 @@
   transition: background 100ms;
 }
 
-.dangerBtn:hover { background: var(--warn-soft); }
+.dangerBtn:hover {
+  background: var(--warn-soft);
+}
 
 .actionBtn {
   display: block;
@@ -452,7 +518,9 @@
   transition: background 100ms;
 }
 
-.actionBtn:hover:not(:disabled) { background: var(--hover); }
+.actionBtn:hover:not(:disabled) {
+  background: var(--hover);
+}
 
 /* ── Pick mode ──────────────────────────────────────────────── */
 
@@ -470,10 +538,17 @@
   cursor: pointer;
   width: 100%;
   margin-bottom: 8px;
-  transition: border-color 100ms, color 100ms, background 100ms;
+  transition:
+    border-color 100ms,
+    color 100ms,
+    background 100ms;
 }
 
-.pickBtn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.pickBtn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
 
 .pickBtnActive {
   border-style: solid;
@@ -509,7 +584,7 @@
 .pickNote {
   font-size: 11px;
   color: var(--muted);
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
 }
 
 .selectedFace {
@@ -577,7 +652,7 @@
 .bcGroupMeta {
   font-size: 11px;
   color: var(--muted);
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -606,14 +681,16 @@
 }
 
 .bcDot {
-  width: 8px; height: 8px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: #ef4444;
   flex-shrink: 0;
 }
 
 .loadDot {
-  width: 8px; height: 8px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: #f59e0b;
   flex-shrink: 0;
@@ -643,7 +720,7 @@
 
 .statVal {
   font-size: 12px;
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
   color: var(--ink-2);
   font-weight: 500;
 }
@@ -665,7 +742,8 @@
 }
 
 .okDot {
-  width: 7px; height: 7px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: var(--ok);
   flex-shrink: 0;
@@ -680,8 +758,18 @@
   padding: 4px 0;
 }
 
-.checkOk  { color: var(--ok);   font-weight: 600; font-size: 13px; flex-shrink: 0; }
-.checkFail { color: var(--warn); font-weight: 600; font-size: 13px; flex-shrink: 0; }
+.checkOk {
+  color: var(--ok);
+  font-weight: 600;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.checkFail {
+  color: var(--warn);
+  font-weight: 600;
+  font-size: 13px;
+  flex-shrink: 0;
+}
 
 .checkLabel {
   font-size: 12px;
@@ -704,7 +792,9 @@
   margin-bottom: 8px;
 }
 
-.errorBanner span { flex: 1; }
+.errorBanner span {
+  flex: 1;
+}
 
 .errorBanner button {
   flex-shrink: 0;
@@ -762,7 +852,9 @@
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
-  transition: background 100ms, box-shadow 100ms;
+  transition:
+    background 100ms,
+    box-shadow 100ms;
 }
 
 .meshVolBtn:hover:not(:disabled) {
@@ -770,7 +862,10 @@
   box-shadow: 0 4px 12px rgba(31, 95, 208, 0.3);
 }
 
-.meshVolBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+.meshVolBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
 /* ── Log panel (VSCode-style collapsable) ───────────────────── */
 
@@ -796,12 +891,14 @@
   text-transform: uppercase;
   letter-spacing: 0.07em;
   color: var(--muted);
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
   text-align: left;
   transition: background 100ms;
 }
 
-.logHeader:hover { background: var(--hover); }
+.logHeader:hover {
+  background: var(--hover);
+}
 
 .logChevron {
   font-size: 7px;
@@ -811,7 +908,9 @@
   flex-shrink: 0;
 }
 
-.logChevronOpen { transform: rotate(90deg); }
+.logChevronOpen {
+  transform: rotate(90deg);
+}
 
 .logSpinner {
   margin-left: 2px;
@@ -820,8 +919,13 @@
 }
 
 @keyframes logPulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.3; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
 }
 
 .logBadge {
@@ -839,7 +943,7 @@
   padding: 8px 10px;
   max-height: 180px;
   overflow-y: auto;
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 11.5px;
   line-height: 1.7;
 }
@@ -850,7 +954,9 @@
   word-break: break-all;
 }
 
-.logLineLast { color: #c9d1d9; }
+.logLineLast {
+  color: #c9d1d9;
+}
 
 .logEmpty {
   color: #3d444d;
