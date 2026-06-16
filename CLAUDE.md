@@ -16,8 +16,7 @@ KoFEM/
 │   ├── kofem-mesh/     # Netgen wrapper: quality tetrahedral volume meshing (native / Python)
 │   │                   # also defines the shared SurfaceMesh / VolumeMesh types
 │   ├── kofem-core/     # MFEM wrapper: linear-elastic FEM via FemSolver trait (native / Python)
-│   ├── kofem-py/       # Python bindings (PyO3 / maturin)
-│   └── kofem-wasm/     # Legacy Rust WASM bindings (unused for browser build)
+│   └── kofem-py/       # Python bindings (PyO3 / maturin)
 ├── web/                # React + Three.js frontend (Vite)
 ├── scripts/
 │   ├── build-wasm.sh        # CMake/Emscripten WASM build
