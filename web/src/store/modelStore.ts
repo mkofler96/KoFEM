@@ -148,14 +148,81 @@ function rebuildConstraints(bcGroups: NamedBcGroup[]): Constraint[] {
   return result;
 }
 
-function rebuildLoads(loadGroups: NamedLoadGroup[]): Load[] {
+function rebuildLoads(loadGroups: NamedLoadGroup[], nodes: Node[]): Load[] {
+  const nodeById = new Map<number, Node>();
+  for (const n of nodes) nodeById.set(n.id, n);
+
   const result: Load[] = [];
-  for (const g of loadGroups)
-    for (const f of g.faces) {
-      const perNode = g.totalForce / f.nodeIds.length;
-      for (const nodeId of f.nodeIds)
-        result.push({ nodeId, dof: g.dof, value: perNode });
+  for (const g of loadGroups) {
+    if (g.dof <= 2) {
+      // Force load — distribute total evenly across face nodes
+      for (const f of g.faces) {
+        const perNode = g.totalForce / f.nodeIds.length;
+        for (const nodeId of f.nodeIds)
+          result.push({ nodeId, dof: g.dof, value: perNode });
+      }
+    } else {
+      // Moment load (dof 3=Mx, 4=My, 5=Mz) — convert to equivalent nodal forces.
+      // For each face, find the centroid, then apply tangential forces F_i = M/S·(n̂×r_i)
+      // where S = Σ|r_i⊥|² (perpendicular distance squared from moment axis).
+      // This satisfies Σ(r_i × F_i) = M exactly with zero net force.
+      const momentAxis = g.dof - 3; // 0=x, 1=y, 2=z
+      for (const f of g.faces) {
+        let cx = 0,
+          cy = 0,
+          cz = 0,
+          count = 0;
+        for (const nodeId of f.nodeIds) {
+          const n = nodeById.get(nodeId);
+          if (n) {
+            cx += n.x;
+            cy += n.y;
+            cz += n.z;
+            count++;
+          }
+        }
+        if (count === 0) continue;
+        cx /= count;
+        cy /= count;
+        cz /= count;
+
+        let S = 0;
+        for (const nodeId of f.nodeIds) {
+          const n = nodeById.get(nodeId);
+          if (!n) continue;
+          const rx = n.x - cx,
+            ry = n.y - cy,
+            rz = n.z - cz;
+          if (momentAxis === 0) S += ry * ry + rz * rz;
+          else if (momentAxis === 1) S += rx * rx + rz * rz;
+          else S += rx * rx + ry * ry;
+        }
+        if (S === 0) continue; // all nodes on the moment axis — undefined
+
+        const scale = g.totalForce / S;
+        for (const nodeId of f.nodeIds) {
+          const n = nodeById.get(nodeId);
+          if (!n) continue;
+          const rx = n.x - cx,
+            ry = n.y - cy,
+            rz = n.z - cz;
+          if (momentAxis === 0) {
+            // Mx → F = scale·(0, −rz, ry)
+            result.push({ nodeId, dof: 1, value: -scale * rz });
+            result.push({ nodeId, dof: 2, value: scale * ry });
+          } else if (momentAxis === 1) {
+            // My → F = scale·(rz, 0, −rx)
+            result.push({ nodeId, dof: 0, value: scale * rz });
+            result.push({ nodeId, dof: 2, value: -scale * rx });
+          } else {
+            // Mz → F = scale·(−ry, rx, 0)
+            result.push({ nodeId, dof: 0, value: -scale * ry });
+            result.push({ nodeId, dof: 1, value: scale * rx });
+          }
+        }
+      }
     }
+  }
   return result;
 }
 
@@ -582,7 +649,7 @@ export const useModelStore = create<ModelState>()(
         s.bcGroups = c.bcGroups;
         s.loadGroups = c.loadGroups;
         s.constraints = rebuildConstraints(c.bcGroups);
-        s.loads = rebuildLoads(c.loadGroups);
+        s.loads = rebuildLoads(c.loadGroups, c.nodes);
         s.nextBcGroupId = 2;
         s.nextLoadGroupId = 2;
         s.nextFaceEntryId = 3;
@@ -746,7 +813,7 @@ export const useModelStore = create<ModelState>()(
         s.nextLoadGroupId = loadResult.nextGroupId;
         s.nextFaceEntryId = loadResult.nextFaceId;
         s.constraints = rebuildConstraints(s.bcGroups);
-        s.loads = rebuildLoads(s.loadGroups);
+        s.loads = rebuildLoads(s.loadGroups, s.nodes);
 
         s.modelName = snap.modelName ?? "Model";
         s.result = null;
@@ -771,7 +838,7 @@ export const useModelStore = create<ModelState>()(
         s.bcGroups = a.bcGroups;
         s.loadGroups = a.loadGroups;
         s.constraints = rebuildConstraints(a.bcGroups);
-        s.loads = rebuildLoads(a.loadGroups);
+        s.loads = rebuildLoads(a.loadGroups, s.nodes);
         s.nextBcGroupId = a.nextBcGroupId;
         s.nextLoadGroupId = a.nextLoadGroupId;
         s.nextFaceEntryId = a.nextFaceEntryId;
@@ -992,7 +1059,7 @@ export const useModelStore = create<ModelState>()(
           faces: faceEntries,
         });
         s.nextLoadGroupId++;
-        s.loads = rebuildLoads(s.loadGroups);
+        s.loads = rebuildLoads(s.loadGroups, s.nodes);
         s.result = null;
       }),
 
@@ -1002,7 +1069,7 @@ export const useModelStore = create<ModelState>()(
         if (!g) return;
         const faceId = s.nextFaceEntryId++;
         g.faces.push({ id: faceId, label: face.label, nodeIds: face.nodeIds });
-        s.loads = rebuildLoads(s.loadGroups);
+        s.loads = rebuildLoads(s.loadGroups, s.nodes);
         s.result = null;
       }),
 
@@ -1013,14 +1080,14 @@ export const useModelStore = create<ModelState>()(
         g.faces = g.faces.filter((f) => f.id !== faceId);
         if (g.faces.length === 0)
           s.loadGroups = s.loadGroups.filter((g) => g.id !== groupId);
-        s.loads = rebuildLoads(s.loadGroups);
+        s.loads = rebuildLoads(s.loadGroups, s.nodes);
         s.result = null;
       }),
 
     deleteLoadGroup: (id: number) =>
       set((s) => {
         s.loadGroups = s.loadGroups.filter((g) => g.id !== id);
-        s.loads = rebuildLoads(s.loadGroups);
+        s.loads = rebuildLoads(s.loadGroups, s.nodes);
         s.result = null;
       }),
 
