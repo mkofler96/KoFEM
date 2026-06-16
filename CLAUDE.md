@@ -43,13 +43,14 @@ solver.worker.ts  (unchanged API: init() + named exports)
 
 When a piece of the pipeline is re-implemented in Rust, compile the relevant
 crate as `crate-type = ["staticlib"]` targeting `wasm32-unknown-emscripten`,
-expose the new logic via `extern "C"`, and call it from `engine.cpp`.  The
+expose the new logic via `extern "C"`, and call it from `engine.cpp`. The
 CMakeLists.txt gets one extra `target_link_libraries` entry — nothing else
 changes.
 
 ### C++ bridge layout (native / Python builds)
 
 Each Rust crate that wraps a C++ library has:
+
 ```
 crates/kofem-{geom,mesh,core}/
 ├── build.rs            # detects installed libs, compiles bridge, emits link flags
@@ -59,7 +60,7 @@ crates/kofem-{geom,mesh,core}/
 
 ### Solver abstraction
 
-`kofem-core` exposes a `FemSolver` trait.  `MfemSolver` is the default implementation.
+`kofem-core` exposes a `FemSolver` trait. `MfemSolver` is the default implementation.
 To swap MFEM for a different solver, implement `FemSolver` in a new module and wire it
 into `kofem-py` — no other crate changes are needed.
 
@@ -67,13 +68,14 @@ into `kofem-py` — no other crate changes are needed.
 
 Install the three C++ libraries before building natively:
 
-| Library | Version | Install hint |
-|---------|---------|--------------|
-| OpenCASCADE (OCCT) | ≥ 7.6 | `apt install libocct-*-dev` or build from source |
-| Netgen | ≥ 6.2 | build from source, installs `libnglib` |
-| MFEM | ≥ 4.6 | `apt install libmfem-dev` or build from source |
+| Library            | Version | Install hint                                     |
+| ------------------ | ------- | ------------------------------------------------ |
+| OpenCASCADE (OCCT) | ≥ 7.6   | `apt install libocct-*-dev` or build from source |
+| Netgen             | ≥ 6.2   | build from source, installs `libnglib`           |
+| MFEM               | ≥ 4.6   | `apt install libmfem-dev` or build from source   |
 
 Point the build system at non-standard install prefixes via environment variables:
+
 ```bash
 export OCCT_ROOT=/opt/occt
 export NETGEN_ROOT=/opt/netgen
@@ -106,11 +108,11 @@ cd web && bun install && bun run dev
 
 There are three distinct representations in this codebase. Using the wrong word is a bug in the code and the UI.
 
-| Concept | What it is | Produced by | Used for |
-|---------|-----------|-------------|----------|
-| **Geometry tessellation** | Triangles approximating the CAD surface for display only | OCCT (`kofem-geom`) | Viewport rendering of the STEP shape (Geometry repr) |
-| **Surface mesh** | Quality triangulation of the CAD boundary surfaces | OCCT tessellation **or** Netgen's direct OCCT integration | Input to the volume mesher + display (Surface Mesh repr) |
-| **Volume mesh** | Tetrahedral elements filling the solid body | Netgen (`kofem-mesh`) | FEM analysis — nodes + elements for stiffness matrix and solve |
+| Concept                   | What it is                                               | Produced by                                               | Used for                                                       |
+| ------------------------- | -------------------------------------------------------- | --------------------------------------------------------- | -------------------------------------------------------------- |
+| **Geometry tessellation** | Triangles approximating the CAD surface for display only | OCCT (`kofem-geom`)                                       | Viewport rendering of the STEP shape (Geometry repr)           |
+| **Surface mesh**          | Quality triangulation of the CAD boundary surfaces       | OCCT tessellation **or** Netgen's direct OCCT integration | Input to the volume mesher + display (Surface Mesh repr)       |
+| **Volume mesh**           | Tetrahedral elements filling the solid body              | Netgen (`kofem-mesh`)                                     | FEM analysis — nodes + elements for stiffness matrix and solve |
 
 The surface mesh comes from the **geometry**, not from the volume mesh. It is either the OCCT tessellation repurposed as meshing input, or (preferred) a proper boundary mesh produced by Netgen's built-in OCCT integration, which respects CAD topology and feature edges.
 
