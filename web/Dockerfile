@@ -1,7 +1,17 @@
-# Build context is ./web (see .github/workflows/docker-image.yml).
+# Build context is ./web (see .github/workflows/ci.yml, "docker" steps).
 #
-# Stage 1: Build the static frontend bundle with Bun.
-FROM oven/bun:latest AS builder
+# Stage 1: Build the static frontend bundle.
+#
+# Base image is Node with the Bun binary copied in. Bun drives the
+# frozen-lockfile install, but `vite` must run under Node: the bun-only image
+# has no Node, so vite would run on Bun's runtime, which is incompatible with
+# vite-plugin-top-level-await (TypeError: virtualModule.require is not a
+# function). With Node present, the `#!/usr/bin/env node` shebang on the vite
+# binary resolves to Node and the build succeeds. This is an isolated,
+# production-mode build (no source maps), independent of whatever the CI test
+# step left in web/dist.
+FROM node:20-bookworm-slim AS builder
+COPY --from=oven/bun:latest /usr/local/bin/bun /usr/local/bin/bun
 
 WORKDIR /app
 
@@ -21,6 +31,9 @@ ARG VITE_GIT_VERSION=local
 ENV VITE_GIT_VERSION=$VITE_GIT_VERSION
 
 RUN bun run build
+
+# Defensive: production images must never contain source maps.
+RUN find dist -name '*.map' -type f -delete
 
 
 # Stage 2: Serve the static bundle with Nginx.
