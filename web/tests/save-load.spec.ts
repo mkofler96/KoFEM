@@ -2,16 +2,12 @@ import { test, expect } from "./coverage";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { bootstrapCantilever } from "./fixtures/cantilever";
+import { gotoApp } from "./fixtures/app";
 
 // End-to-end coverage for issue #179: save the full analysis (setup +
 // results) to a ParaView-readable .vtu file, restore it into a fresh
 // session, and verify the round-trip is byte-identical.
-
-async function startExample(page: import("@playwright/test").Page) {
-  await page.goto("/");
-  await page.getByRole("button", { name: "Start with example" }).click();
-  await expect(page.getByRole("button", { name: "Import STEP" })).toBeVisible();
-}
 
 async function saveAnalysis(
   page: import("@playwright/test").Page,
@@ -30,8 +26,8 @@ test("save → load → re-save round-trips the analysis losslessly", async ({
   test.setTimeout(120_000);
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "kofem-save-load-"));
 
-  // ── 1. Solve the built-in example so the saved file contains results ──────
-  await startExample(page);
+  // ── 1. Solve the cantilever fixture so the saved file contains results ────
+  await bootstrapCantilever(page);
   await page
     .locator("nav")
     .getByRole("button")
@@ -54,10 +50,10 @@ test("save → load → re-save round-trips the analysis losslessly", async ({
   expect(saved1).toContain('Name="VonMises"');
   expect(saved1).toContain('Name="KoFEM"');
 
-  // ── 3. Restore into a fresh session from the welcome screen ──────────────
-  await page.goto("/");
+  // ── 3. Restore into a fresh app session via the top-bar load button ──────
+  await gotoApp(page);
   await expect(
-    page.getByRole("button", { name: "Open analysis" }),
+    page.getByRole("button", { name: "Load analysis" }),
   ).toBeVisible();
   await page.locator('input[type="file"][accept=".vtu"]').setInputFiles(file1);
 
@@ -122,13 +118,15 @@ test("loading a non-KoFEM file shows a clear error", async ({ page }) => {
   const bogus = path.join(tmpDir, "bogus.vtu");
   fs.writeFileSync(bogus, "<NotVtk></NotVtk>");
 
-  await page.goto("/");
-  await expect(
-    page.getByRole("button", { name: "Open analysis" }),
-  ).toBeVisible();
+  // The top-bar load surfaces parse errors via a native alert dialog.
+  let dialogMessage = "";
+  page.on("dialog", (d) => {
+    dialogMessage = d.message();
+    void d.dismiss();
+  });
+
+  await gotoApp(page);
   await page.locator('input[type="file"][accept=".vtu"]').setInputFiles(bogus);
 
-  await expect(page.getByTestId("analysis-error")).toContainText(
-    "Not a KoFEM analysis file",
-  );
+  await expect.poll(() => dialogMessage).toContain("Not a KoFEM analysis file");
 });

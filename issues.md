@@ -1,7 +1,7 @@
 # face selection
 
-i like the current way of selecting the faces for boundary conditions where in the left panel i see the currently selected faces. right now the behavior is that when the user holds shift, a new face is added and when the user clicks the seelction is dropped completely. this is a bit annoying because if you misclick, all the selection is gone. i wnat to change the behavior to left click adding and not removing the complete selection. faces should only be removed when the user explicitely clicks on the left hand side on the x next to the face
+selecting a face for the second time should not add it a second time, but deleting it instead
 
-# save/load analyses
+# remeshing currently does not work
 
-the user should be able to save and load an analysis (setup + results). right now it should only be trough download and upload, but later we could add this as a premium option to store it online. possibly we could also make a share public option where the user can very quickly share some results.
+when i click remesh, i get `Volume meshing failed: Error: 20038520`

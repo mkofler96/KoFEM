@@ -41,22 +41,82 @@
   min-height: 0;
 }
 
-.panelTitle {
-  padding: 4px 18px 12px;
+/* ── Mode nav (Geometry / Constraints / Solve / Results) ───────────── */
+
+.modeNav {
   display: flex;
-  flex-direction: column;
-  gap: 1px;
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--ink);
-  letter-spacing: -0.02em;
+  align-items: stretch;
+  padding: 0 8px;
   border-bottom: 1px solid var(--border);
 }
 
-.panelSubtitle {
-  font-size: 12px;
-  font-weight: 400;
+.navTab {
+  flex: 1;
+  padding: 11px 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  cursor: pointer;
+  border: none;
+  background: none;
   color: var(--muted);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  position: relative;
+  white-space: nowrap;
+  transition: color 100ms ease;
+}
+
+.navTab:hover:not(.navTabFuture) {
+  color: var(--ink);
+}
+
+.navTabActive {
+  color: #1f5fd0;
+}
+
+.navTabActive::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: -1px;
+  height: 2px;
+  background: #1f5fd0;
+  border-radius: 2px 2px 0 0;
+}
+
+.navTabFuture {
+  color: #cdd2d9;
+}
+
+.navTabLabel {
+  font-size: 12px;
+}
+
+.navDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  border: 1.5px solid #1f5fd0;
+  background: transparent;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: #1f5fd0;
+}
+
+.navTabFuture .navDot {
+  border-color: #cdd2d9;
+  color: #cdd2d9;
+}
+
+.navDotDone {
+  border-color: #15803d;
+  color: #15803d;
 }
 
 /* ── Tabs ───────────────────────────────────────────────────── */
@@ -179,40 +239,6 @@
   letter-spacing: 0.07em;
   color: var(--muted-2);
   margin: 12px 0 8px;
-}
-
-.toleranceRow {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-
-.toleranceKey {
-  font-size: 12px;
-  color: var(--muted);
-  width: 90px;
-  flex-shrink: 0;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-size: 10.5px;
-}
-
-.toleranceInput {
-  flex: 1;
-  background: var(--surface-3);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--ink);
-  font-size: 12px;
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  padding: 4px 8px;
-}
-
-.toleranceInput:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px rgba(31, 95, 208, 0.1);
 }
 
 .toleranceUnit {

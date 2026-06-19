@@ -1,6 +1,7 @@
 import { test, expect } from "./coverage";
 import path from "path";
 import fs from "fs";
+import { gotoApp } from "./fixtures/app";
 
 const OUT_DIR = path.join("playwright-results", "screenshots", "showcase");
 const STEP_FILES_DIR = path.resolve("..", "test_files");
@@ -14,7 +15,7 @@ test.describe("Full workflow showcase", () => {
     fs.mkdirSync(OUT_DIR, { recursive: true });
   });
 
-  test("tube: welcome → geometry → mesh → constraints → results", async ({
+  test("tube: import → geometry → mesh → constraints → results", async ({
     page,
   }) => {
     test.setTimeout(600_000);
@@ -47,13 +48,11 @@ test.describe("Full workflow showcase", () => {
       _rejectOnError?.(err);
     });
 
-    await page.goto("/");
+    await gotoApp(page);
 
-    // 1. Welcome screen
+    // 1. Empty app — geometry import card
     await Promise.race([
-      expect(
-        page.getByRole("button", { name: "Start with example" }),
-      ).toBeVisible(),
+      expect(page.getByRole("button", { name: "Import STEP" })).toBeVisible(),
       fatalError,
     ]);
     await page.screenshot({
@@ -67,7 +66,9 @@ test.describe("Full workflow showcase", () => {
       .locator('input[type="file"][accept=".stp,.step"]')
       .setInputFiles(TUBE);
     await Promise.race([
-      expect(page.getByText("Model geometry")).toBeVisible({ timeout: 60_000 }),
+      expect(
+        page.getByRole("button").filter({ hasText: "Mesh STEP volume" }),
+      ).toBeVisible({ timeout: 60_000 }),
       fatalError,
     ]);
     console.log(`[showcase] ${elapsed()} tessellation done`);
@@ -87,12 +88,7 @@ test.describe("Full workflow showcase", () => {
     });
     console.log(`[showcase] ${elapsed()} 02 screenshot done`);
 
-    // 3. Mesh panel — trigger volume meshing and wait for completion
-    await page
-      .locator("nav")
-      .getByRole("button")
-      .filter({ hasText: "Mesh" })
-      .click();
+    // 3. Mesh — trigger volume meshing (controls live in the Geometry panel)
     await expect(
       page.getByRole("button").filter({ hasText: "Mesh STEP volume" }),
     ).toBeVisible();
@@ -203,7 +199,7 @@ test.describe("Full workflow showcase", () => {
       .filter({ hasText: "Constraints" })
       .click();
     await Promise.race([
-      expect(page.getByText("Boundary conditions")).toBeVisible({
+      expect(page.getByText("Fixed displacement")).toBeVisible({
         timeout: 15_000,
       }),
       fatalError,

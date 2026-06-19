@@ -1,6 +1,7 @@
 import { test, expect } from "./coverage";
 import path from "path";
 import fs from "fs";
+import { importStep } from "./fixtures/app";
 
 interface Geom {
   file: string;
@@ -49,24 +50,10 @@ test.describe("Mesh capabilities report", () => {
         console.error(`[${geom.label}] page exception: ${err.message}`),
       );
 
-      console.log(`[${geom.label}] navigating to app`);
-      await page.goto("/");
-      // Dismiss welcome screen
-      await page.getByRole("button", { name: "Start with example" }).click();
-      await expect(
-        page.getByRole("button", { name: "Import STEP" }),
-      ).toBeVisible();
-      console.log(
-        `[${geom.label}] ${elapsed()} app ready, importing ${stepFile}`,
-      );
-
-      // Import STEP file — complex geometries can take >10 s in CI
-      await page
-        .locator('input[type="file"][accept=".stp,.step"]')
-        .setInputFiles(stepFile);
-      await expect(
-        page.getByRole("button", { name: "Import STEP" }),
-      ).toBeEnabled({ timeout: 60_000 });
+      console.log(`[${geom.label}] importing ${stepFile}`);
+      // Open the app and import the STEP file. Complex geometries can take
+      // >10 s in CI.
+      await importStep(page, stepFile, 60_000);
       console.log(`[${geom.label}] ${elapsed()} import done`);
 
       // Fail fast if the worker surfaced an error in the UI banner.
