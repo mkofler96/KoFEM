@@ -32,7 +32,7 @@ OCCT / Netgen / MFEM  (.a, compiled with emcc)
          ↓
 engine/cpp/engine.cpp  (C++17, calls libs directly, Embind API)
          ↓  emcmake cmake + ninja
-kofem_wasm_emcc.js + kofem_wasm.wasm
+kofem_wasm_emcc.js + kofem_wasm_emcc.wasm
          ↓
 web/src/wasm/pkg/kofem_wasm.js  (thin adapter, committed)
          ↓

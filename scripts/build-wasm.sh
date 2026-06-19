@@ -43,9 +43,14 @@ cmake --build "$BUILD_DIR" --parallel "$(nproc)"
 
 mkdir -p "$OUT_DIR"
 
+# Copy both outputs verbatim — keep the .wasm name as emitted. The emcc loader
+# self-references its sibling as new URL("kofem_wasm_emcc.wasm", import.meta.url);
+# renaming the binary here would break that static reference and force Vite to
+# leave the URL unresolved (a "resolved at runtime" warning). Same name = Vite
+# hashes it at build time.
 cp "$BUILD_DIR/kofem_wasm_emcc.js"   "$OUT_DIR/kofem_wasm_emcc.js"
-cp "$BUILD_DIR/kofem_wasm_emcc.wasm" "$OUT_DIR/kofem_wasm.wasm"
+cp "$BUILD_DIR/kofem_wasm_emcc.wasm" "$OUT_DIR/kofem_wasm_emcc.wasm"
 
 echo "Done."
 echo "  $OUT_DIR/kofem_wasm_emcc.js"
-echo "  $OUT_DIR/kofem_wasm.wasm"
+echo "  $OUT_DIR/kofem_wasm_emcc.wasm"

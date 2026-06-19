@@ -1,16 +1,17 @@
 // Adapter: wraps the Emscripten/Embind module (kofem_wasm_emcc.js) to present
 // the same named-export API that solver.worker.ts expects.
 //
-// kofem_wasm_emcc.js and kofem_wasm.wasm are build outputs written by
+// kofem_wasm_emcc.js and kofem_wasm_emcc.wasm are build outputs written by
 // scripts/build-wasm.sh — run that script (or scripts/docker-build-wasm.sh)
 // before starting the dev server.
 
 import _createModule from './kofem_wasm_emcc.js'
 
-// Vite can statically hash the wasm only when referenced via a static URL import.
-// We pre-fetch the binary to avoid relying on emcc's locateFile (which uses
-// dynamic new URL paths that Vite cannot hash).
-import wasmUrl from './kofem_wasm.wasm?url'
+// Vite hashes the wasm via this static URL import. The filename matches the one
+// the emcc loader self-references (new URL("kofem_wasm_emcc.wasm", ...)), so both
+// references resolve to the same hashed asset at build time. We pre-fetch and pass
+// the bytes as `wasmBinary` so emcc never has to locate the file itself at runtime.
+import wasmUrl from './kofem_wasm_emcc.wasm?url'
 
 let _m = null
 
