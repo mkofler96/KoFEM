@@ -1,6 +1,7 @@
 import { test, expect } from "./coverage";
 import path from "path";
 import fs from "fs";
+import { importStep } from "./fixtures/app";
 
 const STEP_FILE = path.resolve("..", "test_files", "tube.stp");
 
@@ -20,17 +21,9 @@ test("WASM OCC generate_fem_mesh: end-to-end smoke test on built-in example", as
     console.error(`[wasm-unit] page error: ${e.message}`),
   );
 
-  await page.goto("/");
-  await page.getByRole("button", { name: "Start with example" }).click();
-  await expect(page.getByRole("button", { name: "Import STEP" })).toBeVisible();
-
-  // Load a STEP file so tessellate_step runs and geometry is in WASM memory.
-  await page
-    .locator('input[type="file"][accept=".stp,.step"]')
-    .setInputFiles(STEP_FILE);
-  await expect(
-    page.getByRole("button").filter({ hasText: "Import STEP" }),
-  ).toBeEnabled({ timeout: 60_000 });
+  // Open the app and import a STEP file so tessellate_step runs and the
+  // geometry is in WASM memory.
+  await importStep(page, STEP_FILE);
 
   // Wait for __kofem (set synchronously in main.tsx)
   await page.waitForFunction(() => !!(window as any).__kofem);

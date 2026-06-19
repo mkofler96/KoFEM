@@ -1,13 +1,12 @@
 import { useState, useRef, useEffect, type ChangeEvent } from "react";
 import { useModelStore, RESULT_TYPES } from "../../store/modelStore";
 import type {
-  BoxGeometry,
+  AppMode,
   Material,
   Node,
   Element,
   ResultType,
 } from "../../store/modelStore";
-import { GeometryDialog } from "../geometry/GeometryDialog";
 import { fmt } from "../../lib/modelDisplay";
 import {
   sendToWorker,
@@ -94,13 +93,6 @@ function MaterialForm({
 }
 
 function GeometryPanel() {
-  const geometries = useModelStore((s) => s.geometries);
-  const addGeometry = useModelStore((s) => s.addGeometry);
-  const updateGeometry = useModelStore((s) => s.updateGeometry);
-  const deleteGeometry = useModelStore((s) => s.deleteGeometry);
-  const setMeshing = useModelStore((s) => s.setMeshing);
-  const meshGeometry = useModelStore((s) => s.meshGeometry);
-  const isMeshing = useModelStore((s) => s.isMeshing);
   const nodes = useModelStore((s) => s.nodes);
   const elements = useModelStore((s) => s.elements);
   const setStepSurface = useModelStore((s) => s.setStepSurface);
@@ -112,33 +104,35 @@ function GeometryPanel() {
   const createMaterial = useModelStore((s) => s.createMaterial);
   const updateMaterial = useModelStore((s) => s.updateMaterial);
   const deleteMaterial = useModelStore((s) => s.deleteMaterial);
+  const stepSurface = useModelStore((s) => s.stepSurface);
+  const isMeshing = useModelStore((s) => s.isMeshing);
+  const setMeshing = useModelStore((s) => s.setMeshing);
+  const applyMeshResult = useModelStore((s) => s.applyMeshResult);
 
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editing, setEditing] = useState<BoxGeometry | null>(null);
   const [editingMatId, setEditingMatId] = useState<number | "new" | null>(null);
   const [isImportingStep, setIsImportingStep] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [maxElementSize, setMaxElementSize] = useState(20);
+  // Floor for curvature-driven refinement; 0 lets Netgen refine fillets without
+  // limit, which can produce >10x more elements than the max size suggests.
+  const [minElementSize, setMinElementSize] = useState(2);
+  const [meshError, setMeshError] = useState<string | null>(null);
+  const [logs, setLogs] = useState<string[]>([]);
+  const [logsOpen, setLogsOpen] = useState(true);
+  const logsEndRef = useRef<HTMLDivElement | null>(null);
 
   const stepRef = useRef<HTMLInputElement | null>(null);
 
-  function runMesh(geom: BoxGeometry) {
-    setMeshing(true);
-    try {
-      meshGeometry(geom.id);
-    } catch (err) {
-      setError(`Meshing failed: ${err}`);
-    } finally {
-      setMeshing(false);
-    }
-  }
+  useEffect(() => {
+    setLogCallback((msg) => {
+      console.log("[mesh-log]", msg);
+      setLogs((prev) => [...prev, msg]);
+    });
+    return () => setLogCallback(null);
+  }, []);
 
-  function handleCreateAndMesh(params: Omit<BoxGeometry, "id">) {
-    addGeometry(params);
-    const store = useModelStore.getState();
-    const newGeom = store.geometries[store.geometries.length - 1];
-    if (newGeom) runMesh(newGeom);
-    setDialogOpen(false);
-  }
+  useEffect(() => {
+    logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [logs]);
 
   async function handleStepFile(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -163,20 +157,47 @@ function GeometryPanel() {
       });
   }
 
+  async function handleVolMesh() {
+    if (!stepSurface) return;
+    setMeshing(true);
+    setLogs([]);
+    try {
+      const {
+        nodes: n,
+        elements: e,
+        surfaceTriangles,
+        surfaceFaceIds,
+      } = await sendToWorker<{
+        nodes: Node[];
+        elements: Element[];
+        surfaceTriangles: [number, number, number][] | null;
+        surfaceFaceIds: number[] | null;
+      }>("volume_mesh", {
+        surface: stepSurface,
+        maxElementSize,
+        minElementSize,
+      });
+      applyMeshResult(n, e, "STEP Volume Mesh", surfaceTriangles, surfaceFaceIds);
+      // Netgen's Ng_Init() installs global C++ state that contaminates the WASM
+      // runtime for subsequent MFEM solves.  Resetting the worker here gives the
+      // solve a clean module instance, preventing an infinite loop on first call.
+      resetWorker();
+    } catch (err) {
+      console.error("[meshing] volume mesh failed:", err);
+      setMeshError(`Volume meshing failed: ${err}`);
+    } finally {
+      setMeshing(false);
+    }
+  }
+
+  const hexCount = elements.filter((e) => e.type === "CHEXA").length;
+  const tetCount = elements.filter((e) => e.type === "CTETRA").length;
+  const showLogs = logs.length > 0 || isMeshing;
+
   return (
     <div className={styles.panel}>
-      <div className={styles.panelTitle}>
-        <span>Model geometry</span>
-        <span className={styles.panelSubtitle}>parts &amp; bodies</span>
-      </div>
 
       <div className={styles.tabContent}>
-        {error && (
-          <div className={styles.errorBanner}>
-            <span>{error}</span>
-            <button onClick={() => setError(null)}>×</button>
-          </div>
-        )}
         {/* ── Inputs ─────────────────────────────────────────── */}
         <>
           <input
@@ -229,34 +250,6 @@ function GeometryPanel() {
               <span className={styles.cardTitle}>Import IGES</span>
               <span className={styles.cardSub}>.igs / .iges</span>
             </button>
-
-            <button
-              className={styles.importCard}
-              onClick={() => {
-                setEditing(null);
-                setDialogOpen(true);
-              }}
-            >
-              <svg className={styles.cardIcon} viewBox="0 0 20 20" fill="none">
-                <rect
-                  x="3"
-                  y="3"
-                  width="14"
-                  height="14"
-                  rx="2"
-                  stroke="currentColor"
-                  strokeWidth="1.4"
-                />
-                <path
-                  d="M10 7v6M7 10h6"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                />
-              </svg>
-              <span className={styles.cardTitle}>New primitive</span>
-              <span className={styles.cardSub}>Box · Cyl · Sphere</span>
-            </button>
           </div>
 
           {stepImportError && (
@@ -267,77 +260,188 @@ function GeometryPanel() {
               {stepImportError}
             </div>
           )}
-
-          <div className={styles.sectionLabel}>Healing tolerances</div>
-          <div className={styles.toleranceRow}>
-            <span className={styles.toleranceKey}>Sew faces</span>
-            <input className={styles.toleranceInput} defaultValue="1e-6" />
-            <span className={styles.toleranceUnit}>m</span>
-          </div>
-          <div className={styles.toleranceRow}>
-            <span className={styles.toleranceKey}>Merge edges</span>
-            <input className={styles.toleranceInput} defaultValue="1e-5" />
-            <span className={styles.toleranceUnit}>m</span>
-          </div>
         </>
 
-        {/* ── Tree ─────────────────────────────────────────────── */}
+        {/* ── Mesh ─────────────────────────────────────────────── */}
         <>
-          {geometries.length === 0 && nodes.length === 0 && (
-            <div className={styles.empty}>
-              No geometry — add a primitive or import
+          {meshError && (
+            <div className={styles.errorBanner} data-testid="meshing-error">
+              <span>{meshError}</span>
+              <button onClick={() => setMeshError(null)}>×</button>
             </div>
           )}
-          {geometries.map((g) => (
-            <div key={g.id} className={styles.treeItem}>
-              <div className={styles.treeItemIcon}>□</div>
-              <div className={styles.treeItemBody}>
-                <div className={styles.treeItemName}>{g.name}</div>
-                <div className={styles.treeItemDetail}>
-                  {g.extrudeLength} × {g.sketchWidth} × {g.sketchHeight} m
+
+          {nodes.length === 0 ? (
+            stepSurface ? (
+              <>
+                <div className={styles.sectionLabel}>Mesh controls</div>
+                <div className={styles.formRow}>
+                  <span className={styles.formLabel}>Max element size</span>
+                  <input
+                    className={styles.formInput}
+                    type="number"
+                    min={0.5}
+                    max={500}
+                    step={0.5}
+                    value={maxElementSize}
+                    disabled={isMeshing}
+                    onChange={(e) =>
+                      setMaxElementSize(Math.max(0.5, Number(e.target.value)))
+                    }
+                  />
+                  <span className={styles.toleranceUnit}>mm</span>
                 </div>
-              </div>
-              <div className={styles.treeItemActions}>
+                <div className={styles.formRow}>
+                  <span className={styles.formLabel}>Min element size</span>
+                  <input
+                    className={styles.formInput}
+                    type="number"
+                    min={0}
+                    max={500}
+                    step={0.5}
+                    value={minElementSize}
+                    disabled={isMeshing}
+                    onChange={(e) =>
+                      setMinElementSize(Math.max(0, Number(e.target.value)))
+                    }
+                  />
+                  <span className={styles.toleranceUnit}>mm</span>
+                </div>
                 <button
-                  className={styles.iconBtn}
-                  onClick={() => {
-                    setEditing(g);
-                    setDialogOpen(true);
-                  }}
-                >
-                  ✎
-                </button>
-                <button
-                  className={styles.iconBtn}
-                  onClick={() => runMesh(g)}
+                  className={styles.meshVolBtn}
                   disabled={isMeshing}
+                  onClick={handleVolMesh}
                 >
-                  ⟳
+                  {isMeshing ? "Meshing…" : "▶  Mesh STEP volume"}
                 </button>
-                <button
-                  className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
-                  onClick={() => deleteGeometry(g.id)}
-                >
-                  ×
-                </button>
+              </>
+            ) : (
+              <div className={styles.empty}>
+                No mesh — import a STEP file to mesh.
               </div>
-            </div>
-          ))}
-          {nodes.length > 0 && (
-            <div className={styles.treeItem}>
-              <div className={styles.treeItemIcon}>⬢</div>
-              <div className={styles.treeItemBody}>
-                <div className={styles.treeItemName}>Mesh</div>
-                <div className={styles.treeItemDetail}>
-                  {nodes.length} nodes · {elements.length} elements
+            )
+          ) : (
+            <>
+              <div className={styles.sectionLabel}>Mesh</div>
+              <div className={styles.statGroup}>
+                <div className={styles.statRow}>
+                  <span className={styles.statKey}>Nodes</span>
+                  <span className={styles.statVal}>{nodes.length}</span>
                 </div>
+                <div className={styles.statRow}>
+                  <span className={styles.statKey}>Elements</span>
+                  <span className={styles.statVal}>{elements.length}</span>
+                </div>
+                {hexCount > 0 && (
+                  <div className={styles.statRow}>
+                    <span className={styles.statKey}>CHEXA</span>
+                    <span className={styles.statVal}>{hexCount}</span>
+                  </div>
+                )}
+                {tetCount > 0 && (
+                  <div className={styles.statRow}>
+                    <span className={styles.statKey}>CTETRA</span>
+                    <span className={styles.statVal}>{tetCount}</span>
+                  </div>
+                )}
               </div>
+
+              <div className={styles.meshOkBadge}>
+                <span className={styles.okDot} />
+                Mesh is solver-ready
+              </div>
+
+              {stepSurface && (
+                <>
+                  <div className={styles.sectionLabel} style={{ marginTop: 12 }}>
+                    Mesh controls
+                  </div>
+                  <div className={styles.formRow}>
+                    <span className={styles.formLabel}>Max element size</span>
+                    <input
+                      className={styles.formInput}
+                      type="number"
+                      min={0.5}
+                      max={500}
+                      step={0.5}
+                      value={maxElementSize}
+                      disabled={isMeshing}
+                      onChange={(e) =>
+                        setMaxElementSize(Math.max(0.5, Number(e.target.value)))
+                      }
+                    />
+                    <span className={styles.toleranceUnit}>mm</span>
+                  </div>
+                  <div className={styles.formRow}>
+                    <span className={styles.formLabel}>Min element size</span>
+                    <input
+                      className={styles.formInput}
+                      type="number"
+                      min={0}
+                      max={500}
+                      step={0.5}
+                      value={minElementSize}
+                      disabled={isMeshing}
+                      onChange={(e) =>
+                        setMinElementSize(Math.max(0, Number(e.target.value)))
+                      }
+                    />
+                    <span className={styles.toleranceUnit}>mm</span>
+                  </div>
+                  <button
+                    className={styles.outlineBtn}
+                    disabled={isMeshing}
+                    onClick={handleVolMesh}
+                  >
+                    {isMeshing ? "Meshing…" : "⟳ Re-mesh STEP volume"}
+                  </button>
+                </>
+              )}
+            </>
+          )}
+
+          {/* VSCode-style collapsable log panel */}
+          {showLogs && (
+            <div className={styles.logSection}>
+              <button
+                className={styles.logHeader}
+                onClick={() => setLogsOpen((v) => !v)}
+              >
+                <span
+                  className={`${styles.logChevron} ${logsOpen ? styles.logChevronOpen : ""}`}
+                >
+                  ▶
+                </span>
+                <span>LOGS</span>
+                {isMeshing && <span className={styles.logSpinner}>●</span>}
+                {logs.length > 0 && (
+                  <span className={styles.logBadge}>{logs.length}</span>
+                )}
+              </button>
+              {logsOpen && (
+                <div className={styles.logBody}>
+                  {logs.length === 0 ? (
+                    <div className={styles.logEmpty}>Waiting…</div>
+                  ) : (
+                    logs.map((line, i) => (
+                      <div
+                        key={i}
+                        className={`${styles.logLine} ${i === logs.length - 1 ? styles.logLineLast : ""}`}
+                      >
+                        {line}
+                      </div>
+                    ))
+                  )}
+                  <div ref={logsEndRef} />
+                </div>
+              )}
             </div>
           )}
         </>
 
         {/* ── Materials ─────────────────────────────────────────── */}
         <>
+          <div className={styles.sectionLabel}>Materials</div>
           {materials.length === 0 && (
             <div className={styles.empty}>No materials</div>
           )}
@@ -395,325 +499,6 @@ function GeometryPanel() {
         </>
       </div>
 
-      {/* Next CTA */}
-
-      {dialogOpen && (
-        <GeometryDialog
-          geometry={editing ?? undefined}
-          onClose={() => setDialogOpen(false)}
-          onSave={
-            editing
-              ? (p) => {
-                  updateGeometry(editing.id, p);
-                  setDialogOpen(false);
-                }
-              : handleCreateAndMesh
-          }
-        />
-      )}
-    </div>
-  );
-}
-
-// ── Mesh mode ─────────────────────────────────────────────────────────────────
-
-function MeshPanel() {
-  const nodes = useModelStore((s) => s.nodes);
-  const elements = useModelStore((s) => s.elements);
-  const isMeshing = useModelStore((s) => s.isMeshing);
-  const geometries = useModelStore((s) => s.geometries);
-  const setMeshing = useModelStore((s) => s.setMeshing);
-  const meshGeometry = useModelStore((s) => s.meshGeometry);
-  const applyMeshResult = useModelStore((s) => s.applyMeshResult);
-  const stepSurface = useModelStore((s) => s.stepSurface);
-
-  const [maxElementSize, setMaxElementSize] = useState(20);
-  // Floor for curvature-driven refinement; 0 lets Netgen refine fillets without
-  // limit, which can produce >10x more elements than the max size suggests.
-  const [minElementSize, setMinElementSize] = useState(2);
-  const [error, setError] = useState<string | null>(null);
-  const [logs, setLogs] = useState<string[]>([]);
-  const [logsOpen, setLogsOpen] = useState(true);
-  const logsEndRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    setLogCallback((msg) => {
-      console.log("[mesh-log]", msg);
-      setLogs((prev) => [...prev, msg]);
-    });
-    return () => setLogCallback(null);
-  }, []);
-
-  useEffect(() => {
-    logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [logs]);
-
-  async function handleVolMesh() {
-    if (!stepSurface) return;
-    setMeshing(true);
-    setLogs([]);
-    try {
-      const {
-        nodes: n,
-        elements: e,
-        surfaceTriangles,
-        surfaceFaceIds,
-      } = await sendToWorker<{
-        nodes: Node[];
-        elements: Element[];
-        surfaceTriangles: [number, number, number][] | null;
-        surfaceFaceIds: number[] | null;
-      }>("volume_mesh", {
-        surface: stepSurface,
-        maxElementSize,
-        minElementSize,
-      });
-      applyMeshResult(
-        n,
-        e,
-        "STEP Volume Mesh",
-        surfaceTriangles,
-        surfaceFaceIds,
-      );
-      // Netgen's Ng_Init() installs global C++ state that contaminates the WASM
-      // runtime for subsequent MFEM solves.  Resetting the worker here gives the
-      // solve a clean module instance, preventing an infinite loop on first call.
-      resetWorker();
-    } catch (err) {
-      console.error("[meshing] volume mesh failed:", err);
-      setError(`Volume meshing failed: ${err}`);
-    } finally {
-      setMeshing(false);
-    }
-  }
-
-  function remesh() {
-    const g = geometries[0];
-    if (!g) return;
-    setMeshing(true);
-    setLogs(["Regenerating box mesh…"]);
-    try {
-      meshGeometry(g.id);
-      setLogs((prev) => [...prev, "Mesh regenerated"]);
-    } catch (err) {
-      setError(`Meshing failed: ${err}`);
-    } finally {
-      setMeshing(false);
-    }
-  }
-
-  const hexCount = elements.filter((e) => e.type === "CHEXA").length;
-  const tetCount = elements.filter((e) => e.type === "CTETRA").length;
-  const showLogs = logs.length > 0 || isMeshing;
-
-  return (
-    <div className={styles.panel}>
-      <div className={styles.panelTitle}>
-        <span>Mesh</span>
-        <span className={styles.panelSubtitle}>seed &amp; controls</span>
-      </div>
-
-      <div className={styles.tabContent}>
-        {error && (
-          <div className={styles.errorBanner} data-testid="meshing-error">
-            <span>{error}</span>
-            <button onClick={() => setError(null)}>×</button>
-          </div>
-        )}
-
-        {nodes.length === 0 ? (
-          <>
-            {stepSurface ? (
-              <>
-                <div className={styles.sectionLabel}>STEP Surface</div>
-                <div className={styles.statGroup}>
-                  <div className={styles.statRow}>
-                    <span className={styles.statKey}>Vertices</span>
-                    <span className={styles.statVal}>
-                      {stepSurface.points.length}
-                    </span>
-                  </div>
-                  <div className={styles.statRow}>
-                    <span className={styles.statKey}>Triangles</span>
-                    <span className={styles.statVal}>
-                      {stepSurface.triangles.length}
-                    </span>
-                  </div>
-                </div>
-                <div className={styles.sectionLabel}>Mesh controls</div>
-                <div className={styles.formRow}>
-                  <span className={styles.formLabel}>Max element size</span>
-                  <input
-                    className={styles.formInput}
-                    type="number"
-                    min={0.5}
-                    max={500}
-                    step={0.5}
-                    value={maxElementSize}
-                    disabled={isMeshing}
-                    onChange={(e) =>
-                      setMaxElementSize(Math.max(0.5, Number(e.target.value)))
-                    }
-                  />
-                  <span className={styles.toleranceUnit}>mm</span>
-                </div>
-                <div className={styles.formRow}>
-                  <span className={styles.formLabel}>Min element size</span>
-                  <input
-                    className={styles.formInput}
-                    type="number"
-                    min={0}
-                    max={500}
-                    step={0.5}
-                    value={minElementSize}
-                    disabled={isMeshing}
-                    onChange={(e) =>
-                      setMinElementSize(Math.max(0, Number(e.target.value)))
-                    }
-                  />
-                  <span className={styles.toleranceUnit}>mm</span>
-                </div>
-                <button
-                  className={styles.meshVolBtn}
-                  disabled={isMeshing}
-                  onClick={handleVolMesh}
-                >
-                  {isMeshing ? "Meshing…" : "▶  Mesh STEP volume"}
-                </button>
-              </>
-            ) : (
-              <div className={styles.empty}>
-                No mesh — import a STEP file on the Geometry page, or add a
-                primitive.
-              </div>
-            )}
-          </>
-        ) : (
-          <>
-            <div className={styles.statGroup}>
-              <div className={styles.statRow}>
-                <span className={styles.statKey}>Nodes</span>
-                <span className={styles.statVal}>{nodes.length}</span>
-              </div>
-              <div className={styles.statRow}>
-                <span className={styles.statKey}>Elements</span>
-                <span className={styles.statVal}>{elements.length}</span>
-              </div>
-              {hexCount > 0 && (
-                <div className={styles.statRow}>
-                  <span className={styles.statKey}>CHEXA</span>
-                  <span className={styles.statVal}>{hexCount}</span>
-                </div>
-              )}
-              {tetCount > 0 && (
-                <div className={styles.statRow}>
-                  <span className={styles.statKey}>CTETRA</span>
-                  <span className={styles.statVal}>{tetCount}</span>
-                </div>
-              )}
-            </div>
-
-            <div className={styles.meshOkBadge}>
-              <span className={styles.okDot} />
-              Mesh is solver-ready
-            </div>
-
-            {stepSurface && (
-              <>
-                <div className={styles.sectionLabel} style={{ marginTop: 12 }}>
-                  Mesh controls
-                </div>
-                <div className={styles.formRow}>
-                  <span className={styles.formLabel}>Max element size</span>
-                  <input
-                    className={styles.formInput}
-                    type="number"
-                    min={0.5}
-                    max={500}
-                    step={0.5}
-                    value={maxElementSize}
-                    disabled={isMeshing}
-                    onChange={(e) =>
-                      setMaxElementSize(Math.max(0.5, Number(e.target.value)))
-                    }
-                  />
-                  <span className={styles.toleranceUnit}>mm</span>
-                </div>
-                <div className={styles.formRow}>
-                  <span className={styles.formLabel}>Min element size</span>
-                  <input
-                    className={styles.formInput}
-                    type="number"
-                    min={0}
-                    max={500}
-                    step={0.5}
-                    value={minElementSize}
-                    disabled={isMeshing}
-                    onChange={(e) =>
-                      setMinElementSize(Math.max(0, Number(e.target.value)))
-                    }
-                  />
-                  <span className={styles.toleranceUnit}>mm</span>
-                </div>
-                <button
-                  className={styles.outlineBtn}
-                  disabled={isMeshing}
-                  onClick={handleVolMesh}
-                >
-                  {isMeshing ? "Meshing…" : "⟳ Re-mesh STEP volume"}
-                </button>
-              </>
-            )}
-            {geometries.length > 0 && (
-              <button
-                className={styles.outlineBtn}
-                disabled={isMeshing}
-                onClick={remesh}
-              >
-                {isMeshing ? "Regenerating…" : "⟳ Regenerate mesh"}
-              </button>
-            )}
-          </>
-        )}
-
-        {/* VSCode-style collapsable log panel */}
-        {showLogs && (
-          <div className={styles.logSection}>
-            <button
-              className={styles.logHeader}
-              onClick={() => setLogsOpen((v) => !v)}
-            >
-              <span
-                className={`${styles.logChevron} ${logsOpen ? styles.logChevronOpen : ""}`}
-              >
-                ▶
-              </span>
-              <span>LOGS</span>
-              {isMeshing && <span className={styles.logSpinner}>●</span>}
-              {logs.length > 0 && (
-                <span className={styles.logBadge}>{logs.length}</span>
-              )}
-            </button>
-            {logsOpen && (
-              <div className={styles.logBody}>
-                {logs.length === 0 ? (
-                  <div className={styles.logEmpty}>Waiting…</div>
-                ) : (
-                  logs.map((line, i) => (
-                    <div
-                      key={i}
-                      className={`${styles.logLine} ${i === logs.length - 1 ? styles.logLineLast : ""}`}
-                    >
-                      {line}
-                    </div>
-                  ))
-                )}
-                <div ref={logsEndRef} />
-              </div>
-            )}
-          </div>
-        )}
-      </div>
     </div>
   );
 }
@@ -822,10 +607,6 @@ function ConstraintsPanel() {
 
   return (
     <div className={styles.panel}>
-      <div className={styles.panelTitle}>
-        <span>Boundary conditions</span>
-        <span className={styles.panelSubtitle}>&amp; loads</span>
-      </div>
 
       <div className={styles.tabContent}>
         {/* ── BC section ────────────────────────────────────── */}
@@ -1198,10 +979,6 @@ function SolvePanel() {
 
   return (
     <div className={styles.panel}>
-      <div className={styles.panelTitle}>
-        <span>Run analysis</span>
-        <span className={styles.panelSubtitle}>job settings</span>
-      </div>
 
       <div className={styles.tabContent}>
         {error && (
@@ -1260,10 +1037,6 @@ function ResultsPanel() {
   if (!result) {
     return (
       <div className={styles.panel}>
-        <div className={styles.panelTitle}>
-          <span>Results</span>
-          <span className={styles.panelSubtitle}>post-processing</span>
-        </div>
         <div className={styles.tabContent}>
           <div className={styles.empty}>No results — run the solver first</div>
         </div>
@@ -1341,10 +1114,6 @@ function ResultsPanel() {
 
   return (
     <div className={styles.panel}>
-      <div className={styles.panelTitle}>
-        <span>Results</span>
-        <span className={styles.panelSubtitle}>post-processing</span>
-      </div>
       <div className={styles.tabContent}>
         <div className={styles.sectionLabel}>Field</div>
         <select
@@ -1388,14 +1157,72 @@ function ResultsPanel() {
   );
 }
 
+// ── Nav ───────────────────────────────────────────────────────────────────────
+
+const MODES: { id: AppMode; label: string }[] = [
+  { id: "geometry", label: "Geometry" },
+  { id: "constraints", label: "Constraints" },
+  { id: "solve", label: "Solve" },
+  { id: "results", label: "Results" },
+];
+
+function PanelNav() {
+  const mode = useModelStore((s) => s.mode);
+  const setMode = useModelStore((s) => s.setMode);
+  const nodes = useModelStore((s) => s.nodes);
+  const constraints = useModelStore((s) => s.constraints);
+  const loads = useModelStore((s) => s.loads);
+  const result = useModelStore((s) => s.result);
+
+  function isValid(m: AppMode): boolean {
+    if (m === "geometry") return nodes.length > 0;
+    if (m === "constraints") return constraints.length > 0 || loads.length > 0;
+    if (m === "solve" || m === "results") return result !== null;
+    return false;
+  }
+
+  return (
+    <nav className={styles.modeNav}>
+      {MODES.map(({ id, label }) => {
+        const active = id === mode;
+        const valid = isValid(id);
+        return (
+          <button
+            key={id}
+            className={`${styles.navTab} ${active ? styles.navTabActive : styles.navTabFuture}`}
+            onClick={() => setMode(id)}
+          >
+            {valid ? (
+              <span className={`${styles.navDot} ${styles.navDotDone}`}>
+                <svg viewBox="0 0 8 8" width="5" height="5">
+                  <path
+                    d="M1.5 4L3 5.5L6.5 2"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    fill="none"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </span>
+            ) : (
+              <span className={styles.navDot} />
+            )}
+            <span className={styles.navTabLabel}>{label}</span>
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
 // ── Root ──────────────────────────────────────────────────────────────────────
 
 export function LeftPanel() {
   const mode = useModelStore((s) => s.mode);
   return (
     <aside className={styles.aside}>
+      <PanelNav />
       {mode === "geometry" && <GeometryPanel />}
-      {mode === "mesh" && <MeshPanel />}
       {mode === "constraints" && <ConstraintsPanel />}
       {mode === "solve" && <SolvePanel />}
       {mode === "results" && <ResultsPanel />}

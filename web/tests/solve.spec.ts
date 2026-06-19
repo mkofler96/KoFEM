@@ -1,14 +1,8 @@
 import { test, expect } from "./coverage";
 import path from "path";
 import fs from "fs";
-
-// Helper: dismiss the welcome screen by loading the built-in example
-async function startExample(page: import("@playwright/test").Page) {
-  await page.goto("/");
-  await page.getByRole("button", { name: "Start with example" }).click();
-  // Wait for the main app layout (geometry inputs visible)
-  await expect(page.getByRole("button", { name: "Import STEP" })).toBeVisible();
-}
+import { bootstrapCantilever } from "./fixtures/cantilever";
+import { gotoApp, importStep } from "./fixtures/app";
 
 // Navigate to the "04 Solve" mode tab in the top navigation bar
 async function goToSolvePanel(page: import("@playwright/test").Page) {
@@ -46,55 +40,80 @@ function watchForErrors(
   return p;
 }
 
-test("page loads with welcome screen and enters the app", async ({ page }) => {
+test("app loads with import and load options", async ({ page }) => {
   const fatal = watchForErrors(page, "load");
 
-  await page.goto("/");
+  await gotoApp(page);
 
-  // Welcome screen is shown first, with the "Open analysis" (.vtu) card
-  await Promise.race([
-    expect(
-      page.getByRole("button", { name: "Start with example" }),
-    ).toBeVisible(),
-    fatal,
-  ]);
-  await Promise.race([
-    expect(page.getByRole("button", { name: "Open analysis" })).toBeVisible(),
-    fatal,
-  ]);
-
-  // After clicking "Start with example", geometry inputs are shown
-  await page.getByRole("button", { name: "Start with example" }).click();
+  // The Geometry panel offers STEP import; the top bar offers loading a .vtu.
   await Promise.race([
     expect(page.getByRole("button", { name: "Import STEP" })).toBeVisible(),
+    fatal,
+  ]);
+  await Promise.race([
+    expect(page.getByRole("button", { name: "Load analysis" })).toBeVisible(),
     fatal,
   ]);
 });
 
 // ── Solver integration tests ──────────────────────────────────────────────────
 
-test("solve on hex mesh completes and shows results", async ({ page }) => {
-  const fatal = watchForErrors(page, "hex-solve");
+// Regression test for #157: the Results-panel field selector must reach the
+// von Mises view. The cantilever fixture is solved via the worker and the
+// result is pushed into the store, so this exercises the Results UI only —
+// solver correctness itself is covered by cantilever-solve.spec.ts.
+test("results panel switches to von Mises stress", async ({ page }) => {
+  const fatal = watchForErrors(page, "results-ui");
 
-  await startExample(page);
-  await goToSolvePanel(page);
+  await bootstrapCantilever(page);
 
-  // The built-in cantilever uses CHEXA elements — the solver now handles them natively.
-  const solveBtn = page
-    .getByRole("button")
-    .filter({ hasText: "Run static solve" });
-  await Promise.race([expect(solveBtn).toBeEnabled(), fatal]);
-  await solveBtn.click();
+  await page.evaluate(async () => {
+    const store = (
+      window as unknown as {
+        __kofemStore: {
+          getState(): {
+            nodes: unknown[];
+            elements: unknown[];
+            materials: unknown[];
+            properties: unknown[];
+            constraints: unknown[];
+            loads: unknown[];
+            setResult(r: {
+              displacements: Float64Array;
+              vonMises?: Float64Array;
+            }): void;
+            setMode(m: string): void;
+          };
+        };
+      }
+    ).__kofemStore;
+    const s = store.getState();
+    const { displacements, vonMises } = (await (
+      window as unknown as {
+        __kofem: {
+          sendToWorker(name: string, payload: object): Promise<unknown>;
+        };
+      }
+    ).__kofem.sendToWorker("solve", {
+      nodes: s.nodes,
+      elements: s.elements,
+      materials: s.materials,
+      properties: s.properties,
+      constraints: s.constraints,
+      loads: s.loads,
+    })) as { displacements: number[]; vonMises: number[] };
+    store.getState().setResult({
+      displacements: new Float64Array(displacements),
+      vonMises: vonMises ? new Float64Array(vonMises) : undefined,
+    });
+    store.getState().setMode("results");
+  });
 
-  // After a successful solve the panel switches to "Results" and shows displacement
   await Promise.race([
     expect(page.getByText(/Max \|U\|/)).toBeVisible({ timeout: 30_000 }),
     fatal,
   ]);
 
-  // Regression test for #157: selecting Von Mises stress in the field
-  // dropdown must show stress statistics (the selector was previously
-  // unwired, so the von Mises view could never be reached).
   const fieldSelect = page.locator("select", {
     has: page.locator('option[value="Von Mises stress"]'),
   });
@@ -118,35 +137,11 @@ test("vol mesh stores FEM nodes in the store for solving", async ({ page }) => {
 
   const fatal = watchForErrors(page, "vol-mesh");
 
-  await startExample(page);
-  console.log(`[vol-mesh] ${elapsed()} app ready`);
-
-  // ── 1. Tessellate the STEP file ───────────────────────────────────────────
-  await page
-    .locator('input[type="file"][accept=".stp,.step"]')
-    .setInputFiles(STEP_FILE);
-  await Promise.race([
-    expect(
-      page.getByRole("button").filter({ hasText: "Import STEP" }),
-    ).toBeEnabled({ timeout: 60_000 }),
-    fatal,
-  ]);
+  // ── 1. Enter the app by importing (tessellating) the STEP file ────────────
+  await importStep(page, STEP_FILE);
   console.log(`[vol-mesh] ${elapsed()} STEP tessellation done`);
 
-  const stepErr = page.getByTestId("step-error");
-  if (await stepErr.isVisible()) {
-    throw new Error(`step-error banner: ${await stepErr.textContent()}`);
-  }
-
-  // ── 2. Navigate to Mesh panel ────────────────────────────────────────────
-  await page
-    .locator("nav")
-    .getByRole("button")
-    .filter({ hasText: "Mesh" })
-    .click();
-  console.log(`[vol-mesh] ${elapsed()} navigated to Mesh panel`);
-
-  // ── 3. Compute volume mesh ────────────────────────────────────────────────
+  // ── 2. Compute volume mesh (controls live in the Geometry panel) ──────────
   await page
     .getByRole("button")
     .filter({ hasText: "Mesh STEP volume" })

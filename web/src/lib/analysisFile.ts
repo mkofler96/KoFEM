@@ -1,6 +1,5 @@
 import type {
   AppMode,
-  BoxGeometry,
   Element,
   ElementType,
   Material,
@@ -36,8 +35,8 @@ import { RESULT_TYPES } from "../store/modelStore";
 //       result arrays are present only when the analysis was solved
 //
 // Everything ParaView has no native representation for — materials,
-// properties, named BC / load groups, box geometries, the tessellated STEP
-// surface, view / mode state — travels as a UTF-8 JSON document in the
+// properties, named BC / load groups, the tessellated STEP surface, view /
+// mode state — travels as a UTF-8 JSON document in the
 // "KoFEM" FieldData array.  It is a plain UInt8 DataArray (base64 "binary"
 // VTK encoding: little-endian UInt32 byte count followed by the payload)
 // rather than a VTK string array, because strict readers like meshio reject
@@ -71,8 +70,6 @@ export interface AnalysisState {
   nextBcGroupId: number;
   nextLoadGroupId: number;
   nextFaceEntryId: number;
-  geometries: BoxGeometry[];
-  nextGeomId: number;
   nextMatId: number;
   stepSurface: StepSurfaceMesh | null;
   volMesh: VolMesh | null;
@@ -101,8 +98,6 @@ interface KofemFieldDataV1 {
   nextBcGroupId: number;
   nextLoadGroupId: number;
   nextFaceEntryId: number;
-  geometries: BoxGeometry[];
-  nextGeomId: number;
   nextMatId: number;
   stepSurface: StepSurfaceMesh | null;
   volMesh: VolMesh | null;
@@ -248,8 +243,6 @@ export function serializeAnalysis(state: AnalysisState): string {
     nextBcGroupId: state.nextBcGroupId,
     nextLoadGroupId: state.nextLoadGroupId,
     nextFaceEntryId: state.nextFaceEntryId,
-    geometries: state.geometries,
-    nextGeomId: state.nextGeomId,
     nextMatId: state.nextMatId,
     stepSurface: state.stepSurface,
     volMesh: state.volMesh,
@@ -325,13 +318,7 @@ export function analysisFileName(modelName: string): string {
 
 // ── Parsing ───────────────────────────────────────────────────────────────────
 
-const APP_MODES: AppMode[] = [
-  "geometry",
-  "mesh",
-  "constraints",
-  "solve",
-  "results",
-];
+const APP_MODES: AppMode[] = ["geometry", "constraints", "solve", "results"];
 const VIEW_REPRS = ["geometry", "surface", "volume", "wireframe"] as const;
 const ELEMENT_TYPES: ElementType[] = [
   "CBAR",
@@ -410,7 +397,6 @@ function parseMetadata(xml: string): KofemFieldDataV1 {
     "properties",
     "bcGroups",
     "loadGroups",
-    "geometries",
   ])
     if (!Array.isArray(meta[field]))
       throw new Error(
@@ -419,6 +405,8 @@ function parseMetadata(xml: string): KofemFieldDataV1 {
 
   if (typeof meta.modelName !== "string")
     throw new Error('Invalid analysis file: "modelName" must be a string');
+  // Legacy: the standalone "Mesh" mode was merged into "geometry".
+  if (meta.mode === "mesh") meta.mode = "geometry";
   if (!APP_MODES.includes(meta.mode as AppMode))
     throw new Error(`Invalid analysis file: unknown mode "${meta.mode}"`);
   if (!VIEW_REPRS.includes(meta.viewRepr as (typeof VIEW_REPRS)[number]))
@@ -540,8 +528,6 @@ export function parseAnalysisFile(text: string): AnalysisState {
     nextBcGroupId: meta.nextBcGroupId,
     nextLoadGroupId: meta.nextLoadGroupId,
     nextFaceEntryId: meta.nextFaceEntryId,
-    geometries: meta.geometries,
-    nextGeomId: meta.nextGeomId,
     nextMatId: meta.nextMatId,
     stepSurface: meta.stepSurface,
     volMesh: meta.volMesh,

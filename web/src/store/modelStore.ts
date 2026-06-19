@@ -1,6 +1,5 @@
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
-import { meshFromBox, geomToBoxParams } from "../lib/meshFromBox";
 import type { AnalysisState } from "../lib/analysisFile";
 
 export interface Node {
@@ -85,24 +84,6 @@ export interface StepSurfaceMesh {
 export interface VolMesh {
   points: [number, number, number][];
   edges: [number, number][];
-}
-
-// ── Geometry ──────────────────────────────────────────────────────────────────
-
-export interface BoxGeometry {
-  id: number;
-  name: string;
-  ox: number;
-  oy: number;
-  oz: number; // origin
-  sketchWidth: number; // first dimension in sketch plane
-  sketchHeight: number; // second dimension in sketch plane
-  sketchNormal: "X" | "Y" | "Z"; // normal to sketch plane = extrude axis
-  extrudeSign: 1 | -1; // +1 or -1 along the normal
-  extrudeLength: number;
-  meshNu: number;
-  meshNv: number;
-  meshNw: number;
 }
 
 export interface FaceSelection {
@@ -226,117 +207,9 @@ function rebuildLoads(loadGroups: NamedLoadGroup[], nodes: Node[]): Load[] {
   return result;
 }
 
-// ── Default model ─────────────────────────────────────────────────────────────
-
-const DEFAULT_GEOMETRY: BoxGeometry = {
-  id: 1,
-  name: "Cantilever Beam",
-  ox: 0,
-  oy: 0,
-  oz: 0,
-  sketchNormal: "X",
-  sketchWidth: 0.1,
-  sketchHeight: 0.1,
-  extrudeSign: 1,
-  extrudeLength: 1.0,
-  meshNu: 2,
-  meshNv: 2,
-  meshNw: 10,
-};
-
-function buildCantilever() {
-  const nx = 10,
-    ny = 2,
-    nz = 2;
-  const L = 1.0,
-    h = 0.1;
-  const dx = L / nx,
-    dy = h / ny,
-    dz = h / nz;
-
-  const strideZ = nz + 1;
-  const strideX = (ny + 1) * (nz + 1);
-  const nid = (ix: number, iy: number, iz: number) =>
-    ix * strideX + iy * strideZ + iz;
-
-  const nodes: Node[] = [];
-  for (let ix = 0; ix <= nx; ix++)
-    for (let iy = 0; iy <= ny; iy++)
-      for (let iz = 0; iz <= nz; iz++)
-        nodes.push({ id: nid(ix, iy, iz), x: ix * dx, y: iy * dy, z: iz * dz });
-
-  const elements: Element[] = [];
-  let eid = 0;
-  for (let ei = 0; ei < nx; ei++)
-    for (let ej = 0; ej < ny; ej++)
-      for (let ek = 0; ek < nz; ek++)
-        elements.push({
-          id: eid++,
-          type: "CHEXA",
-          nodeIds: [
-            nid(ei, ej, ek),
-            nid(ei + 1, ej, ek),
-            nid(ei + 1, ej + 1, ek),
-            nid(ei, ej + 1, ek),
-            nid(ei, ej, ek + 1),
-            nid(ei + 1, ej, ek + 1),
-            nid(ei + 1, ej + 1, ek + 1),
-            nid(ei, ej + 1, ek + 1),
-          ],
-          propertyId: 1,
-        });
-
-  const materials: Material[] = [
-    { id: 1, name: "Steel", young: 210e9, poisson: 0.3, density: 7850 },
-  ];
-  const properties: Property[] = [{ id: 1, type: "PSOLID", materialId: 1 }];
-
-  // Fixed support at x=0
-  const bcNodeIds: number[] = [];
-  for (let iy = 0; iy <= ny; iy++)
-    for (let iz = 0; iz <= nz; iz++) bcNodeIds.push(nid(0, iy, iz));
-
-  const nFace = (ny + 1) * (nz + 1);
-  const fNode = -10_000 / nFace;
-  const loadNodeIds: number[] = [];
-  for (let iy = 0; iy <= ny; iy++)
-    for (let iz = 0; iz <= nz; iz++) loadNodeIds.push(nid(nx, iy, iz));
-
-  const bcGroups: NamedBcGroup[] = [
-    {
-      id: 1,
-      name: "BC1",
-      dofs: [0, 1, 2],
-      value: 0,
-      faces: [{ id: 1, label: "Face 1", nodeIds: bcNodeIds }],
-    },
-  ];
-  const loadGroups: NamedLoadGroup[] = [
-    {
-      id: 1,
-      name: "Load1",
-      dof: 1,
-      totalForce: fNode * nFace,
-      faces: [{ id: 2, label: "Face 1", nodeIds: loadNodeIds }],
-    },
-  ];
-
-  return { nodes, elements, materials, properties, bcGroups, loadGroups };
-}
-
 // ── Store types ───────────────────────────────────────────────────────────────
 
-export interface StartCustomParams {
-  name: string;
-  lx: number;
-  ly: number;
-  lz: number;
-  nx: number;
-  ny: number;
-  nz: number;
-}
-
-export type AppMode = "geometry" | "mesh" | "constraints" | "solve" | "results";
+export type AppMode = "geometry" | "constraints" | "solve" | "results";
 
 interface ModelState {
   nodes: Node[];
@@ -355,8 +228,6 @@ interface ModelState {
   stepSurface: StepSurfaceMesh | null;
   isRunning: boolean;
   isMeshing: boolean;
-  geometries: BoxGeometry[];
-  nextGeomId: number;
   nextMatId: number;
   pickMode: "bc" | "load" | null;
   pickTargetGroupId: number | null; // null = creating new group; id = adding to existing
@@ -388,10 +259,6 @@ interface ModelState {
   setShowUndeformedOverlay(v: boolean): void;
   setStepImportError(msg: string | null): void;
 
-  // Welcome screen entry points
-  startWithExample(): void;
-  startCustom(params: StartCustomParams): void;
-
   // Mode navigation
   setMode(mode: AppMode): void;
 
@@ -413,12 +280,6 @@ interface ModelState {
   ): void;
   loadAnalysis(analysis: AnalysisState): void;
   reset(): void;
-
-  // Geometry CRUD
-  addGeometry(g: Omit<BoxGeometry, "id">): void;
-  updateGeometry(id: number, patch: Partial<Omit<BoxGeometry, "id">>): void;
-  deleteGeometry(id: number): void;
-  meshGeometry(id: number): void;
 
   // Material CRUD
   createMaterial(mat: Omit<Material, "id">): void;
@@ -492,8 +353,6 @@ export const useModelStore = create<ModelState>()(
     viewRepr: "surface" as const,
     showUndeformedOverlay: true,
     stepImportError: null,
-    geometries: [],
-    nextGeomId: 2,
     nextMatId: 2,
     pickMode: null,
     pickTargetGroupId: null,
@@ -552,93 +411,6 @@ export const useModelStore = create<ModelState>()(
     setMode: (mode) =>
       set((s) => {
         s.mode = mode;
-      }),
-
-    startWithExample: () =>
-      set((s) => {
-        const c = buildCantilever();
-        s.nodes = c.nodes;
-        s.elements = c.elements;
-        s.materials = c.materials;
-        s.properties = c.properties;
-        s.bcGroups = c.bcGroups;
-        s.loadGroups = c.loadGroups;
-        s.constraints = rebuildConstraints(c.bcGroups);
-        s.loads = rebuildLoads(c.loadGroups, c.nodes);
-        s.nextBcGroupId = 2;
-        s.nextLoadGroupId = 2;
-        s.nextFaceEntryId = 3;
-        s.modelName = "Cantilever Beam";
-        s.geometries = [DEFAULT_GEOMETRY];
-        s.result = null;
-        s.stepSurface = null;
-        s.volMesh = null;
-        s.viewRepr = "surface";
-        s.selectedFace = null;
-        s.pendingFaces = [];
-        s.pickMode = null;
-        s.pickTargetGroupId = null;
-        s.hasStarted = true;
-        s.mode = "geometry";
-        s.fitViewTrigger++;
-      }),
-
-    startCustom: ({ name, lx, ly, lz, nx, ny, nz }) =>
-      set((s) => {
-        const { nodes, elements } = meshFromBox({
-          ox: 0,
-          oy: 0,
-          oz: 0,
-          lx,
-          ly,
-          lz,
-          nx,
-          ny,
-          nz,
-        });
-        s.nodes = nodes;
-        s.elements = elements;
-        s.materials = [
-          { id: 1, name: "Steel", young: 210e9, poisson: 0.3, density: 7850 },
-        ];
-        s.properties = [{ id: 1, type: "PSOLID", materialId: 1 }];
-        s.bcGroups = [];
-        s.loadGroups = [];
-        s.constraints = [];
-        s.loads = [];
-        s.nextBcGroupId = 1;
-        s.nextLoadGroupId = 1;
-        s.nextFaceEntryId = 1;
-        s.modelName = name || "Model";
-        s.geometries = [
-          {
-            id: 1,
-            name: name || "Model",
-            ox: 0,
-            oy: 0,
-            oz: 0,
-            sketchNormal: "X",
-            sketchWidth: ly,
-            sketchHeight: lz,
-            extrudeSign: 1,
-            extrudeLength: lx,
-            meshNu: ny,
-            meshNv: nz,
-            meshNw: nx,
-          },
-        ];
-        s.nextGeomId = 2;
-        s.result = null;
-        s.stepSurface = null;
-        s.volMesh = null;
-        s.viewRepr = "surface";
-        s.selectedFace = null;
-        s.pendingFaces = [];
-        s.pickMode = null;
-        s.pickTargetGroupId = null;
-        s.hasStarted = true;
-        s.mode = "geometry";
-        s.fitViewTrigger++;
       }),
 
     addNode: (node) =>
@@ -709,8 +481,8 @@ export const useModelStore = create<ModelState>()(
       }),
 
     // Restore a complete analysis parsed from a saved .vtu file — the inverse
-    // of serializeAnalysis. Keeps the saved named groups, geometries, results,
-    // and view/mode state instead of rebuilding.
+    // of serializeAnalysis. Keeps the saved named groups, results, and
+    // view/mode state instead of rebuilding.
     loadAnalysis: (a) =>
       set((s) => {
         s.nodes = a.nodes;
@@ -724,8 +496,6 @@ export const useModelStore = create<ModelState>()(
         s.nextBcGroupId = a.nextBcGroupId;
         s.nextLoadGroupId = a.nextLoadGroupId;
         s.nextFaceEntryId = a.nextFaceEntryId;
-        s.geometries = a.geometries;
-        s.nextGeomId = a.nextGeomId;
         s.nextMatId = a.nextMatId;
         s.stepSurface = a.stepSurface;
         s.volMesh = a.volMesh;
@@ -769,56 +539,11 @@ export const useModelStore = create<ModelState>()(
         s.surfaceTriangles = null;
         s.surfaceFaceIds = null;
         s.viewRepr = "surface";
-        s.geometries = [];
-        s.nextGeomId = 2;
         s.nextMatId = 2;
         s.selectedFace = null;
         s.pickMode = null;
         s.pickTargetGroupId = null;
         s.hasStarted = false;
-      }),
-
-    // Geometry CRUD
-    addGeometry: (g) =>
-      set((s) => {
-        s.geometries.push({ ...g, id: s.nextGeomId++ });
-      }),
-
-    updateGeometry: (id, patch) =>
-      set((s) => {
-        const idx = s.geometries.findIndex((g) => g.id === id);
-        if (idx >= 0) Object.assign(s.geometries[idx], patch);
-      }),
-
-    deleteGeometry: (id) =>
-      set((s) => {
-        s.geometries = s.geometries.filter((g) => g.id !== id);
-      }),
-
-    meshGeometry: (id) =>
-      set((s) => {
-        const geom = s.geometries.find((g) => g.id === id);
-        if (!geom) return;
-        const params = geomToBoxParams(geom);
-        const { nodes, elements } = meshFromBox(params);
-        s.nodes = nodes;
-        s.elements = elements;
-        s.bcGroups = [];
-        s.loadGroups = [];
-        s.constraints = [];
-        s.loads = [];
-        s.nextBcGroupId = 1;
-        s.nextLoadGroupId = 1;
-        s.nextFaceEntryId = 1;
-        s.result = null;
-        s.selectedFace = null;
-        s.pickMode = null;
-        s.pickTargetGroupId = null;
-        s.modelName = geom.name;
-        if (!s.properties.find((p) => p.type === "PSOLID")) {
-          const matId = s.materials[0]?.id ?? 1;
-          s.properties = [{ id: 1, type: "PSOLID", materialId: matId }];
-        }
       }),
 
     // Material CRUD
