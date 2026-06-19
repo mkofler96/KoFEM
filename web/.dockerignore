@@ -1,0 +1,9 @@
+node_modules
+dist
+.vite
+test-results
+playwright-results
+coverage
+.nyc_output
+screenshots/mesh-report.pdf
+screenshots/report

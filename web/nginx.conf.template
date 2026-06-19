@@ -1,0 +1,27 @@
+# Rendered by the nginx image entrypoint (envsubst) at container start.
+# Only env vars present in the environment are substituted, so nginx
+# runtime variables like $uri are left untouched — $PORT is filled in.
+server {
+    listen       ${PORT};
+    server_name  _;
+
+    root   /usr/share/nginx/html;
+    index  index.html;
+
+    # nginx:alpine's mime.types already maps .wasm -> application/wasm.
+    gzip on;
+    gzip_types text/plain text/css application/javascript application/json application/wasm image/svg+xml;
+    gzip_min_length 1024;
+
+    # Fingerprinted Vite assets are immutable — cache them aggressively.
+    location /assets/ {
+        try_files $uri =404;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # Single-page-app fallback: unknown routes serve index.html.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
