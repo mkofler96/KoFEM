@@ -63,4 +63,4 @@ docker run --rm \
 echo ""
 echo "Build complete."
 echo "  ${REPO_ROOT}/web/src/wasm/pkg/kofem_wasm_emcc.js"
-echo "  ${REPO_ROOT}/web/src/wasm/pkg/kofem_wasm.wasm"
+echo "  ${REPO_ROOT}/web/src/wasm/pkg/kofem_wasm_emcc.wasm"

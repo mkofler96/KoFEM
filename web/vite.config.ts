@@ -1,11 +1,30 @@
 import { defineConfig, type PluginOption } from "vite";
 import { fileURLToPath } from "node:url";
+import { copyFileSync } from "node:fs";
 import react from "@vitejs/plugin-react";
 import wasm from "vite-plugin-wasm";
 import topLevelAwait from "vite-plugin-top-level-await";
 import istanbul from "vite-plugin-istanbul";
 
 const htmlEntry = (p: string) => fileURLToPath(new URL(p, import.meta.url));
+
+// The marketing landing (index.html) is fully static — Vite emits it byte-for-byte,
+// it imports no hashed assets. Feeding it as a second MPA rollup input is flaky
+// (in some environments rollup crosses the landing/app chunk names and drops the
+// landing HTML entirely, leaving "/" on nginx's default page). So the build has a
+// single entry (the app) and we copy the static landing into dist/ deterministically.
+// Dev is unaffected: rollupOptions is build-only, and the dev server still serves
+// index.html at "/" from the filesystem.
+const copyLandingHtml = (): PluginOption => ({
+  name: "copy-landing-html",
+  apply: "build",
+  closeBundle() {
+    copyFileSync(
+      htmlEntry("./index.html"),
+      htmlEntry("./dist/index.html"),
+    );
+  },
+});
 
 // COVERAGE=1 instruments all src/ modules with Istanbul counters so Playwright
 // can collect runtime coverage (see tests/coverage.ts).  Off by default: the
@@ -26,7 +45,13 @@ export default defineConfig(({ mode }) => ({
   // solver app lives at "/app/" (app/index.html). MPA mode disables the SPA
   // history fallback so the two entries are served independently.
   appType: "mpa",
-  plugins: [react(), wasm(), topLevelAwait(), ...coveragePlugins],
+  plugins: [
+    react(),
+    wasm(),
+    topLevelAwait(),
+    copyLandingHtml(),
+    ...coveragePlugins,
+  ],
   worker: {
     format: "es",
     plugins: () => [wasm(), topLevelAwait(), ...coveragePlugins],
@@ -37,7 +62,6 @@ export default defineConfig(({ mode }) => ({
     minify: mode === "production" ? "esbuild" : false,
     rollupOptions: {
       input: {
-        landing: htmlEntry("./index.html"),
         app: htmlEntry("./app/index.html"),
       },
     },
