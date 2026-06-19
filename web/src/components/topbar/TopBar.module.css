@@ -5,7 +5,7 @@
   background: #ffffff;
   border-bottom: 1px solid #e2e5ea;
   padding: 0 18px;
-  font-family: 'IBM Plex Sans', 'Helvetica Neue', sans-serif;
+  font-family: "IBM Plex Sans", "Helvetica Neue", sans-serif;
   position: relative;
   z-index: 20;
 }
@@ -28,7 +28,7 @@
   border-radius: 5px;
   display: grid;
   place-items: center;
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 11px;
   font-weight: 600;
   flex-shrink: 0;
@@ -48,10 +48,16 @@
   font-size: 12.5px;
 }
 
-.crumbMuted { color: #9aa1ad; }
-.crumbSep   { color: #cdd2d9; }
-.crumbPage  { color: #3a4150; font-weight: 500; }
-
+.crumbMuted {
+  color: #9aa1ad;
+}
+.crumbSep {
+  color: #cdd2d9;
+}
+.crumbPage {
+  color: #3a4150;
+  font-weight: 500;
+}
 
 /* ── Right ─────────────────────────────────────────────────── */
 
@@ -72,13 +78,16 @@
   background: #f0f2f5;
   border: 1px solid #e2e5ea;
   border-radius: 5px;
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 11px;
   color: #3a4150;
   white-space: nowrap;
 }
 
-.units b { color: #0d1117; font-weight: 600; }
+.units b {
+  color: #0d1117;
+  font-weight: 600;
+}
 
 .iconBtn {
   display: grid;
@@ -90,7 +99,9 @@
   border: none;
   color: #6b7280;
   cursor: pointer;
-  transition: background 100ms ease, color 100ms ease;
+  transition:
+    background 100ms ease,
+    color 100ms ease;
 }
 
 .iconBtn:hover {
@@ -106,7 +117,7 @@
   color: #fff;
   display: grid;
   place-items: center;
-  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
   font-size: 11px;
   font-weight: 600;
 }

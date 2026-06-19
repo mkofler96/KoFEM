@@ -1,9 +1,9 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import { TopBar } from './components/topbar/TopBar'
-import { LeftPanel } from './components/panel/LeftPanel'
-import { Viewport } from './components/viewport/Viewport'
-import { StatusBar } from './components/statusbar/StatusBar'
-import styles from './App.module.css'
+import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { TopBar } from "./components/topbar/TopBar";
+import { LeftPanel } from "./components/panel/LeftPanel";
+import { Viewport } from "./components/viewport/Viewport";
+import { StatusBar } from "./components/statusbar/StatusBar";
+import styles from "./App.module.css";
 
 function Workspace() {
   return (
@@ -15,7 +15,7 @@ function Workspace() {
       </main>
       <StatusBar />
     </div>
-  )
+  );
 }
 
 // The solver app is mounted at /app/ (see app/index.html + vite.config.ts).
@@ -27,5 +27,5 @@ export default function App() {
         <Route path="/" element={<Workspace />} />
       </Routes>
     </BrowserRouter>
-  )
+  );
 }

@@ -177,7 +177,13 @@ function GeometryPanel() {
         maxElementSize,
         minElementSize,
       });
-      applyMeshResult(n, e, "STEP Volume Mesh", surfaceTriangles, surfaceFaceIds);
+      applyMeshResult(
+        n,
+        e,
+        "STEP Volume Mesh",
+        surfaceTriangles,
+        surfaceFaceIds,
+      );
       // Netgen's Ng_Init() installs global C++ state that contaminates the WASM
       // runtime for subsequent MFEM solves.  Resetting the worker here gives the
       // solve a clean module instance, preventing an infinite loop on first call.
@@ -196,7 +202,6 @@ function GeometryPanel() {
 
   return (
     <div className={styles.panel}>
-
       <div className={styles.tabContent}>
         {/* ── Inputs ─────────────────────────────────────────── */}
         <>
@@ -353,7 +358,10 @@ function GeometryPanel() {
 
               {stepSurface && (
                 <>
-                  <div className={styles.sectionLabel} style={{ marginTop: 12 }}>
+                  <div
+                    className={styles.sectionLabel}
+                    style={{ marginTop: 12 }}
+                  >
                     Mesh controls
                   </div>
                   <div className={styles.formRow}>
@@ -498,7 +506,6 @@ function GeometryPanel() {
           </button>
         </>
       </div>
-
     </div>
   );
 }
@@ -607,7 +614,6 @@ function ConstraintsPanel() {
 
   return (
     <div className={styles.panel}>
-
       <div className={styles.tabContent}>
         {/* ── BC section ────────────────────────────────────── */}
         <div className={styles.sectionLabel}>Fixed displacement</div>
@@ -979,7 +985,6 @@ function SolvePanel() {
 
   return (
     <div className={styles.panel}>
-
       <div className={styles.tabContent}>
         {error && (
           <div className={styles.errorBanner}>

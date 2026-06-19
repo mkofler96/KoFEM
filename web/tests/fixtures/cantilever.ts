@@ -89,9 +89,7 @@ export function buildCantilever(): CantileverModel {
   const materials = [
     { id: 1, name: "Steel", young: 210e9, poisson: 0.3, density: 7850 },
   ];
-  const properties = [
-    { id: 1, type: "PSOLID" as const, materialId: 1 },
-  ];
+  const properties = [{ id: 1, type: "PSOLID" as const, materialId: 1 }];
 
   // Fixed support at x=0
   const bcNodeIds: number[] = [];
@@ -128,7 +126,11 @@ export function buildCantilever(): CantileverModel {
     [0, 1, 2].map((dof) => ({ nodeId, dof, prescribedValue: 0 })),
   );
   const perNode = totalForce / loadNodeIds.length;
-  const loads = loadNodeIds.map((nodeId) => ({ nodeId, dof: 1, value: perNode }));
+  const loads = loadNodeIds.map((nodeId) => ({
+    nodeId,
+    dof: 1,
+    value: perNode,
+  }));
 
   return {
     nodes,
@@ -147,7 +149,9 @@ export function buildCantilever(): CantileverModel {
 // the app in geometry mode with a solver-ready CHEXA8 mesh.
 export async function bootstrapCantilever(page: Page): Promise<void> {
   await page.goto("/app/");
-  await page.waitForFunction(() => !!(window as unknown as { __kofemStore?: unknown }).__kofemStore);
+  await page.waitForFunction(
+    () => !!(window as unknown as { __kofemStore?: unknown }).__kofemStore,
+  );
   await page.evaluate((model) => {
     const store = (
       window as unknown as { __kofemStore: { setState(s: object): void } }

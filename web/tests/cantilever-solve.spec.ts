@@ -21,7 +21,9 @@ test("solve worker returns displacements and von Mises for the cantilever", asyn
   const result = (await page.evaluate(async (m) => {
     const kofem = (
       window as unknown as {
-        __kofem: { sendToWorker(name: string, payload: object): Promise<unknown> };
+        __kofem: {
+          sendToWorker(name: string, payload: object): Promise<unknown>;
+        };
       }
     ).__kofem;
     return kofem.sendToWorker("solve", {
@@ -45,8 +47,10 @@ test("solve worker returns displacements and von Mises for the cantilever", asyn
     .map((n) => n.id);
   const idIndex = new Map(model.nodes.map((n, i) => [n.id, i]));
   const tipUy =
-    tipIds.reduce((s, id) => s + result.displacements[idIndex.get(id)! * 3 + 1], 0) /
-    tipIds.length;
+    tipIds.reduce(
+      (s, id) => s + result.displacements[idIndex.get(id)! * 3 + 1],
+      0,
+    ) / tipIds.length;
 
   // Analytical Euler–Bernoulli tip deflection for a cantilever with an end load:
   //   δ = P·L³ / (3·E·I),   I = b·h³/12
@@ -65,6 +69,8 @@ test("solve worker returns displacements and von Mises for the cantilever", asyn
   // deflection sits below analytical. The observed value for this 10×2×2 mesh is
   // ~30.5% under Euler–Bernoulli; allow a 35% band so the check stays a
   // meaningful order-of-magnitude assertion without being flaky.
-  const relErr = Math.abs((Math.abs(tipUy) - deltaAnalytical) / deltaAnalytical);
+  const relErr = Math.abs(
+    (Math.abs(tipUy) - deltaAnalytical) / deltaAnalytical,
+  );
   expect(relErr).toBeLessThan(0.35);
 });
