@@ -19,10 +19,7 @@ const copyLandingHtml = (): PluginOption => ({
   name: "copy-landing-html",
   apply: "build",
   closeBundle() {
-    copyFileSync(
-      htmlEntry("./index.html"),
-      htmlEntry("./dist/index.html"),
-    );
+    copyFileSync(htmlEntry("./index.html"), htmlEntry("./dist/index.html"));
   },
 });
 
