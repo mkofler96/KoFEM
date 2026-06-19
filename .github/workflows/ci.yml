@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, production]
   pull_request:
 
 env:
@@ -88,10 +88,16 @@ jobs:
     needs: [wasm]
     runs-on: ubuntu-24.04
 
+    permissions:
+      contents: read
+      packages: write
+
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
+          # Full history + tags so `git describe --tags` can stamp the image.
+          fetch-depth: 0
 
       - name: Download WASM artifacts
         uses: actions/download-artifact@v4
@@ -167,3 +173,48 @@ jobs:
       - name: Post mesh report to Slack
         if: always()
         run: cd web && bun scripts/generate-mesh-report.ts
+
+      # --- Docker image -----------------------------------------------------
+      # Runs in the frontend job to reuse its checkout. No `if: always()`, so a
+      # failing test above skips the build — a broken commit never ships an
+      # image. production = build + push to GHCR; every other branch/PR builds
+      # only as a smoke test. The image is built map-free in production mode by
+      # web/Dockerfile.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.ref == 'refs/heads/production'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build web image (production = push, otherwise build only)
+        run: |
+          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE_PREFIX="ghcr.io/${OWNER_LC}"
+          VERSION=$(git describe --tags --abbrev=0 || echo 'no-tags-found')
+          IMAGE_TAG="${VERSION}-$(git rev-parse --short HEAD)"
+
+          if [ "${GITHUB_REF}" = "refs/heads/production" ]; then
+            echo "Production build: pushing images"
+            PUSH_FLAG="--push"
+            TAG_ARGS="--tag ${IMAGE_PREFIX}/kofem-web:latest \
+                      --tag ${IMAGE_PREFIX}/kofem-web:${IMAGE_TAG}"
+          else
+            echo "Development build: build only, no push"
+            PUSH_FLAG=""
+            TAG_ARGS=""
+          fi
+
+          docker buildx build \
+            --platform linux/amd64 \
+            --file ./web/Dockerfile \
+            --build-arg VITE_GIT_VERSION=${VERSION} \
+            --cache-from=type=gha \
+            --cache-to=type=gha,mode=max \
+            $TAG_ARGS \
+            $PUSH_FLAG \
+            ./web
