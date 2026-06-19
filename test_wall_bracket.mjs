@@ -12,7 +12,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const maxElementSize = parseFloat(process.argv[2] ?? "20.0");
 
 const wasmPkg = join(__dirname, "web/src/wasm/pkg");
-const wasmBinary = readFileSync(join(wasmPkg, "kofem_wasm.wasm")).buffer;
+const wasmBinary = readFileSync(join(wasmPkg, "kofem_wasm_emcc.wasm")).buffer;
 
 const { default: createModule } = await import(
   join(wasmPkg, "kofem_wasm_emcc.js")
