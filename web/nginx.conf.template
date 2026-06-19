@@ -20,7 +20,20 @@ server {
         add_header Cache-Control "public, immutable";
     }
 
-    # Single-page-app fallback: unknown routes serve index.html.
+    # Vite source URLs are dev-only. In production they should not be masked by
+    # the HTML fallback, otherwise a stale /src/main.tsx request gets a 200 HTML
+    # response and hides the real deployment issue.
+    location /src/ {
+        return 404;
+    }
+
+    # The React solver is mounted below /app/. Deep links under that prefix must
+    # serve the app entry; the marketing landing page remains the root fallback.
+    location /app/ {
+        try_files $uri $uri/ /app/index.html;
+    }
+
+    # Static marketing landing fallback.
     location / {
         try_files $uri $uri/ /index.html;
     }
