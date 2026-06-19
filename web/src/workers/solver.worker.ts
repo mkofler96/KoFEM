@@ -222,12 +222,23 @@ self.onmessage = async (event: MessageEvent) => {
         density: mat.density,
       };
 
-      // A node is fully fixed if it has any translational DOF constraint (DOFs 0–2).
-      // The MFEM bridge fixes all 3 translational DOFs for each listed vertex.
-      const fixedNodeIds = new Set(
-        constraints.filter((c) => c.dof <= 2).map((c) => c.nodeId),
-      );
-      const fixed_vertices = [...fixedNodeIds];
+      // Group translational constraints (DOFs 0–2) per node. A node constrained
+      // in all three components is a full fix (fixed_vertices); a node constrained
+      // in only some becomes a per-DOF constraint (fixed_dofs) so the unconstrained
+      // directions stay free — e.g. a symmetry-plane roller. Rotational DOFs (3–5)
+      // carry no stiffness for solid (H1 displacement) elements and are ignored.
+      const dofsByNode = new Map<number, Set<number>>();
+      for (const c of constraints) {
+        if (c.dof > 2) continue;
+        if (!dofsByNode.has(c.nodeId)) dofsByNode.set(c.nodeId, new Set());
+        dofsByNode.get(c.nodeId)!.add(c.dof);
+      }
+      const fixed_vertices: number[] = [];
+      const fixed_dofs: { vertex: number; dofs: number[] }[] = [];
+      for (const [nodeId, dofSet] of dofsByNode) {
+        if (dofSet.size === 3) fixed_vertices.push(nodeId);
+        else fixed_dofs.push({ vertex: nodeId, dofs: [...dofSet].sort() });
+      }
 
       // Group translational force loads by node, accumulating into [fx, fy, fz]
       const loadMap = new Map<number, [number, number, number]>();
@@ -241,7 +252,7 @@ self.onmessage = async (event: MessageEvent) => {
         force,
       }));
 
-      const bcs = { fixed_vertices, point_loads };
+      const bcs = { fixed_vertices, point_loads, fixed_dofs };
       const json = m().solve_linear_elastic(
         JSON.stringify(mesh),
         JSON.stringify(material),

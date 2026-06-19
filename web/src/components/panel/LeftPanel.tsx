@@ -666,7 +666,10 @@ function ConstraintsPanel() {
             {allPickedFaces.length > 0 && !targetBcGroup && (
               <>
                 <div className={styles.dofGrid}>
-                  {DOF_LABELS.map((d, i) => (
+                  {/* Solid (H1 displacement) elements have only translational
+                      DOFs — Ux, Uy, Uz. Rotational constraints carry no
+                      stiffness and are not offered. */}
+                  {DOF_LABELS.slice(0, 3).map((d, i) => (
                     <label key={d} className={styles.dofCheck}>
                       <input
                         type="checkbox"
