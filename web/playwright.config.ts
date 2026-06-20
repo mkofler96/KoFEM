@@ -7,6 +7,10 @@ const executablePath = fs.existsSync(FALLBACK_CHROME) ? FALLBACK_CHROME : undefi
 
 export default defineConfig({
   testDir: './tests',
+  // tutorial-capture writes committed figures into public/tutorial/; keep it out
+  // of the routine suite so `bun run test` doesn't churn them. Run it explicitly
+  // with `bun run capture:tutorial`.
+  testIgnore: '**/tutorial-capture.spec.ts',
   outputDir: './playwright-results',
   timeout: 30_000,
   use: {

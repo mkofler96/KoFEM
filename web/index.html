@@ -248,6 +248,33 @@
         padding: 1px 6px;
         border-radius: 5px;
       }
+      .step-shot {
+        display: block;
+        width: 100%;
+        margin-top: 14px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: #f3f5f9;
+      }
+
+      /* Result figure (examples section) */
+      figure.result-shot {
+        margin: 0 0 22px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        background: var(--bg-2);
+      }
+      figure.result-shot img {
+        display: block;
+        width: 100%;
+      }
+      figure.result-shot figcaption {
+        padding: 12px 18px;
+        color: var(--muted);
+        font-size: 13px;
+        border-top: 1px solid var(--border);
+      }
 
       /* Validation table */
       .table-wrap {
@@ -368,11 +395,14 @@
 
         <section class="block" id="tutorial">
           <div class="section-head">
-            <h2>Tutorial: plate with a hole</h2>
+            <h2>Tutorial: from CAD to results</h2>
             <p>
-              Walk through a complete analysis end to end — from CAD geometry to
-              a result you can check against textbook theory. The classic
-              stress-concentration problem takes about a minute in the browser.
+              Walk through a complete analysis end to end — from a STEP file to a
+              colour-mapped result — in about a minute in the browser. Every
+              figure below is a real screenshot of the solver, captured
+              automatically by driving the app through this exact workflow (see
+              <code>web/tests/tutorial-capture.spec.ts</code>), so it always
+              matches the current UI.
             </p>
           </div>
           <div class="steps">
@@ -380,61 +410,92 @@
               <div>
                 <h3>Import the geometry</h3>
                 <p>
-                  Launch the solver and drag in a STEP file of a plate with a
-                  central hole. KoFEM tessellates the CAD surface with
-                  OpenCASCADE so you see the real shape in the viewport.
+                  Launch the solver and drag in a STEP file — here a hollow
+                  tube. <code>.step</code> and <code>.stp</code> are both
+                  accepted from the import card.
                 </p>
+                <img
+                  class="step-shot"
+                  src="/tutorial/01-import.png"
+                  width="1280"
+                  height="820"
+                  loading="lazy"
+                  alt="Empty KoFEM workspace with the Import STEP card in the Geometry panel"
+                />
               </div>
             </div>
             <div class="step">
               <div>
-                <h3>Constrain one edge</h3>
+                <h3>See the CAD surface</h3>
                 <p>
-                  In <em>Constraints</em>, pick the left face and fix it. You
-                  can hold all three directions, or just one — a single-DOF
-                  roller for a symmetry plane is fully supported.
+                  KoFEM tessellates the boundary with OpenCASCADE, so the real
+                  shape appears in the viewport. Pick a material — steel is the
+                  default — and set the mesh element-size bounds.
                 </p>
-              </div>
-            </div>
-            <div class="step">
-              <div>
-                <h3>Apply the tension load</h3>
-                <p>
-                  Select the opposite face and add a load pulling the plate in
-                  tension. Enter the total force; KoFEM distributes it across
-                  the face nodes.
-                </p>
+                <img
+                  class="step-shot"
+                  src="/tutorial/02-geometry.png"
+                  width="1280"
+                  height="820"
+                  loading="lazy"
+                  alt="The imported tube rendered in the viewport with mesh and material controls"
+                />
               </div>
             </div>
             <div class="step">
               <div>
                 <h3>Mesh the volume</h3>
                 <p>
-                  Click <em>Mesh</em> to fill the solid with tetrahedra using
-                  Netgen's OpenCASCADE integration, refining automatically
-                  around the hole where the stress gradient is steep.
+                  Click <em>Mesh STEP volume</em> to fill the solid with
+                  tetrahedra using Netgen's OpenCASCADE integration. The status
+                  bar reports the node and element counts once it is
+                  solver-ready.
                 </p>
+                <img
+                  class="step-shot"
+                  src="/tutorial/03-mesh.png"
+                  width="1280"
+                  height="820"
+                  loading="lazy"
+                  alt="The tube filled with a tetrahedral volume mesh"
+                />
               </div>
             </div>
             <div class="step">
               <div>
-                <h3>Solve</h3>
+                <h3>Constrain and load</h3>
+                <p>
+                  In <em>Constraints</em>, fix one face (held in all three
+                  directions, or just one — a single-DOF roller for a symmetry
+                  plane is supported) and add a load on another. The fixed face
+                  and the load arrow are highlighted on the model.
+                </p>
+                <img
+                  class="step-shot"
+                  src="/tutorial/04-constraints.png"
+                  width="1280"
+                  height="820"
+                  loading="lazy"
+                  alt="One face fixed and a transverse load applied to the opposite face"
+                />
+              </div>
+            </div>
+            <div class="step">
+              <div>
+                <h3>Solve and read the results</h3>
                 <p>
                   Run the MFEM linear-elastic solve. Displacements and von Mises
-                  stress come back in seconds and colour the model — the peak
-                  ring sits right at the edge of the hole.
+                  stress come back in seconds and colour the model; switch the
+                  result field and read the min/max in the summary panel.
                 </p>
-              </div>
-            </div>
-            <div class="step">
-              <div>
-                <h3>Check against theory</h3>
-                <p>
-                  Read the peak stress and divide by the applied tension. For a
-                  wide plate the analytical concentration factor is
-                  <code>Kt = 3</code> (Kirsch) — KoFEM lands within ~10% on a
-                  coarse mesh, and closer as you refine.
-                </p>
+                <img
+                  class="step-shot"
+                  src="/tutorial/05-results.png"
+                  width="1280"
+                  height="820"
+                  loading="lazy"
+                  alt="The solved tube coloured by displacement magnitude with a result summary"
+                />
               </div>
             </div>
           </div>
@@ -445,11 +506,25 @@
             <h2>Validated examples</h2>
             <p>
               Every release is checked against problems with known closed-form
-              or published answers. The figures below come straight from the
-              solver running each case — see
+              or published answers. The figure is the solver's own output; each
+              row below is solved by the same WASM engine the app runs and
+              compared against its reference — see
               <code>examples/validation</code> in the repository.
             </p>
           </div>
+          <figure class="result-shot">
+            <img
+              src="/tutorial/05-results.png"
+              width="1280"
+              height="820"
+              loading="lazy"
+              alt="A solved model in KoFEM coloured by displacement magnitude"
+            />
+            <figcaption>
+              Solver output rendered in the browser — the displacement field
+              from the tutorial model above.
+            </figcaption>
+          </figure>
           <div class="table-wrap">
             <table class="validation">
               <thead>
