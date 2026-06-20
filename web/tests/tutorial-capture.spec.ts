@@ -9,13 +9,19 @@ import { gotoApp } from "./fixtures/app";
 // web/public/tutorial/ and embedded in index.html, so the tutorial is graphical
 // and always reflects the current UI. Regenerate with:
 //
-//   bun playwright test tutorial-capture.spec.ts
+//   bun run capture:tutorial
 //
-// The tube produces ~760 tets / 274 nodes — small enough for a fast solve and a
-// clean, legible figure.
+// Models the Wall Bracket: the three mounting-bolt holes are fixed and a
+// downward load is applied to the cylindrical hub ("the tube"). Faces are
+// selected by their OCC face index (1-based, from Netgen's STEP integration),
+// which is stable across mesh densities for a given STEP file:
+//   HOLE_FACES — the three bolt-hole bores (radius ~8 mm, on the mounting plate)
+//   TUBE_FACES — the coaxial bore cylinders of the hub at the far end
 const OUT_DIR = path.resolve("public", "tutorial");
 const STEP_FILES_DIR = path.resolve("..", "test_files");
-const TUBE = path.join(STEP_FILES_DIR, "tube.stp");
+const BRACKET = path.join(STEP_FILES_DIR, "Wall Bracket.stp");
+const HOLE_FACES = [34, 35, 36];
+const TUBE_FACES = [3, 37];
 
 test.describe("Tutorial figure capture", () => {
   test.beforeAll(() => {
@@ -24,10 +30,12 @@ test.describe("Tutorial figure capture", () => {
 
   test.use({ viewport: { width: 1280, height: 820 } });
 
-  test("full workflow → committed tutorial figures", async ({ page }) => {
+  test("full workflow → committed tutorial figures @capture", async ({
+    page,
+  }) => {
     test.setTimeout(600_000);
 
-    if (!fs.existsSync(TUBE)) {
+    if (!fs.existsSync(BRACKET)) {
       test.skip();
       return;
     }
@@ -61,7 +69,7 @@ test.describe("Tutorial figure capture", () => {
 
     await page
       .locator('input[type="file"][accept=".stp,.step"]')
-      .setInputFiles(TUBE);
+      .setInputFiles(BRACKET);
     await Promise.race([
       expect(
         page.getByRole("button").filter({ hasText: "Mesh STEP volume" }),
@@ -85,9 +93,9 @@ test.describe("Tutorial figure capture", () => {
     const meshErr = page.getByTestId("meshing-error");
     await Promise.race([
       expect(page.getByText("Mesh is solver-ready")).toBeVisible({
-        timeout: 60_000,
+        timeout: 180_000,
       }),
-      meshErr.waitFor({ state: "visible", timeout: 60_000 }).then(async () => {
+      meshErr.waitFor({ state: "visible", timeout: 180_000 }).then(async () => {
         throw new Error(
           `Volume meshing failed: ${await meshErr.textContent()}`,
         );
@@ -97,42 +105,61 @@ test.describe("Tutorial figure capture", () => {
     await page.waitForTimeout(400);
     await shot("03-mesh.png");
 
-    // 4. Constraints & loads — fix the near face, pull the far face. Injected
+    // 4. Constraints & loads — fix the three bolt holes, load the hub. Injected
     // through the store (the same path the showcase uses) so the capture does
-    // not depend on interactive face-picking.
-    await page.evaluate(() => {
-      type CoordNode = { id: number; x: number; y: number; z: number };
-      type FaceEntry = { label: string; nodeIds: number[] };
-      const store = (
-        window as unknown as {
-          __kofemStore: {
-            getState(): {
-              nodes: CoordNode[];
-              createBcGroup(f: FaceEntry[], dofs: number[], v: number): void;
-              createLoadGroup(f: FaceEntry[], dof: number, force: number): void;
+    // not depend on interactive face-picking. Nodes are gathered per OCC face
+    // from the surface triangulation the mesher tags with face indices.
+    await page.evaluate(
+      ({ holeFaces, tubeFaces }) => {
+        type FaceEntry = { label: string; nodeIds: number[] };
+        const store = (
+          window as unknown as {
+            __kofemStore: {
+              getState(): {
+                surfaceTriangles: [number, number, number][] | null;
+                surfaceFaceIds: number[] | null;
+                createBcGroup(f: FaceEntry[], dofs: number[], v: number): void;
+                createLoadGroup(
+                  f: FaceEntry[],
+                  dof: number,
+                  force: number,
+                ): void;
+              };
             };
-          };
+          }
+        ).__kofemStore;
+        const { surfaceTriangles, surfaceFaceIds } = store.getState();
+        if (!surfaceTriangles || !surfaceFaceIds) {
+          throw new Error("surface face data missing — STEP mesh required");
         }
-      ).__kofemStore;
-      const { nodes } = store.getState();
-      const axes = ["x", "y", "z"] as const;
-      const ranges = axes.map((ax) => {
-        const vals = nodes.map((n) => n[ax]);
-        return { ax, min: Math.min(...vals), max: Math.max(...vals) };
-      });
-      const { ax, min, max } = ranges.reduce((a, b) =>
-        b.max - b.min > a.max - a.min ? b : a,
-      );
-      const tol = (max - min) * 0.01;
-      const fixedIds = nodes.filter((n) => n[ax] < min + tol).map((n) => n.id);
-      const loadedIds = nodes.filter((n) => n[ax] > max - tol).map((n) => n.id);
-      store
-        .getState()
-        .createBcGroup([{ label: "Face 1", nodeIds: fixedIds }], [0, 1, 2], 0);
-      store
-        .getState()
-        .createLoadGroup([{ label: "Face 2", nodeIds: loadedIds }], 1, -2000);
-    });
+        const nodesOf = (faces: number[]): number[] => {
+          const want = new Set(faces);
+          const ids = new Set<number>();
+          for (let t = 0; t < surfaceTriangles.length; t++) {
+            if (want.has(surfaceFaceIds[t]))
+              for (const v of surfaceTriangles[t]) ids.add(v);
+          }
+          return [...ids];
+        };
+        store.getState().createBcGroup(
+          holeFaces.map((f, i) => ({
+            label: `Hole ${i + 1}`,
+            nodeIds: nodesOf([f]),
+          })),
+          [0, 1, 2],
+          0,
+        );
+        // dof 1 = Uy; negative force pulls the hub down.
+        store
+          .getState()
+          .createLoadGroup(
+            [{ label: "Hub bore", nodeIds: nodesOf(tubeFaces) }],
+            1,
+            -5000,
+          );
+      },
+      { holeFaces: HOLE_FACES, tubeFaces: TUBE_FACES },
+    );
 
     const bc = await page.evaluate(() => {
       const s = (
@@ -187,7 +214,7 @@ test.describe("Tutorial figure capture", () => {
     });
     await Promise.race([
       expect(page.getByText("Result summary")).toBeVisible({
-        timeout: 120_000,
+        timeout: 240_000,
       }),
       fatalError,
     ]);

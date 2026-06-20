@@ -9,12 +9,12 @@ const executablePath = fs.existsSync(FALLBACK_CHROME)
 
 export default defineConfig({
   testDir: "./tests",
-  // tutorial-capture writes committed figures into public/tutorial/; keep it out
-  // of the routine suite so `bun run test` doesn't churn them. Run it explicitly
-  // with `bun run capture:tutorial`.
-  testIgnore: "**/tutorial-capture.spec.ts",
   outputDir: "./playwright-results",
   timeout: 30_000,
+  // Default suite runs everything except the on-demand figure capture (tagged
+  // @capture), which writes committed PNGs and would otherwise churn them on a
+  // routine `bun run test`. Run it with `bun run capture:tutorial`.
+  grepInvert: /@capture/,
   use: {
     baseURL: "http://localhost:4173",
     headless: true,

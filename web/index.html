@@ -395,12 +395,14 @@
 
         <section class="block" id="tutorial">
           <div class="section-head">
-            <h2>Tutorial: from CAD to results</h2>
+            <h2>Tutorial: load a wall bracket</h2>
             <p>
               Walk through a complete analysis end to end — from a STEP file to
-              a colour-mapped result — in about a minute in the browser. Every
-              figure below is a real screenshot of the solver, captured
-              automatically by driving the app through this exact workflow (see
+              a colour-mapped result — in about a minute in the browser. We bolt
+              a steel wall bracket to a wall through its three holes and hang a
+              load off the cylindrical hub. Every figure below is a real
+              screenshot of the solver, captured automatically by driving the
+              app through this exact workflow (see
               <code>web/tests/tutorial-capture.spec.ts</code>), so it always
               matches the current UI.
             </p>
@@ -410,8 +412,8 @@
               <div>
                 <h3>Import the geometry</h3>
                 <p>
-                  Launch the solver and drag in a STEP file — here a hollow
-                  tube. <code>.step</code> and <code>.stp</code> are both
+                  Launch the solver and drag in a STEP file — here a wall
+                  bracket. <code>.step</code> and <code>.stp</code> are both
                   accepted from the import card.
                 </p>
                 <img
@@ -429,8 +431,9 @@
                 <h3>See the CAD surface</h3>
                 <p>
                   KoFEM tessellates the boundary with OpenCASCADE, so the real
-                  shape appears in the viewport. Pick a material — steel is the
-                  default — and set the mesh element-size bounds.
+                  shape appears in the viewport — a mounting plate with three
+                  bolt holes and a cylindrical hub. Pick a material (steel is
+                  the default) and set the mesh element-size bounds.
                 </p>
                 <img
                   class="step-shot"
@@ -438,7 +441,7 @@
                   width="1280"
                   height="820"
                   loading="lazy"
-                  alt="The imported tube rendered in the viewport with mesh and material controls"
+                  alt="The imported wall bracket rendered in the viewport with mesh and material controls"
                 />
               </div>
             </div>
@@ -447,9 +450,9 @@
                 <h3>Mesh the volume</h3>
                 <p>
                   Click <em>Mesh STEP volume</em> to fill the solid with
-                  tetrahedra using Netgen's OpenCASCADE integration. The status
-                  bar reports the node and element counts once it is
-                  solver-ready.
+                  tetrahedra using Netgen's OpenCASCADE integration, refining
+                  automatically around the holes and fillets. The status bar
+                  reports the node and element counts once it is solver-ready.
                 </p>
                 <img
                   class="step-shot"
@@ -457,7 +460,7 @@
                   width="1280"
                   height="820"
                   loading="lazy"
-                  alt="The tube filled with a tetrahedral volume mesh"
+                  alt="The wall bracket filled with a tetrahedral volume mesh"
                 />
               </div>
             </div>
@@ -465,10 +468,11 @@
               <div>
                 <h3>Constrain and load</h3>
                 <p>
-                  In <em>Constraints</em>, fix one face (held in all three
-                  directions, or just one — a single-DOF roller for a symmetry
-                  plane is supported) and add a load on another. The fixed face
-                  and the load arrow are highlighted on the model.
+                  In <em>Constraints</em>, fix the three bolt holes — held in
+                  all three directions, as if bolted to the wall — and apply a
+                  downward load on the hub. The fixed faces are highlighted and
+                  the load arrow is drawn on the model. Single-DOF rollers for a
+                  symmetry plane are supported too.
                 </p>
                 <img
                   class="step-shot"
@@ -476,7 +480,7 @@
                   width="1280"
                   height="820"
                   loading="lazy"
-                  alt="One face fixed and a transverse load applied to the opposite face"
+                  alt="The three bolt holes fixed and a downward load applied to the hub"
                 />
               </div>
             </div>
@@ -485,8 +489,10 @@
                 <h3>Solve and read the results</h3>
                 <p>
                   Run the MFEM linear-elastic solve. Displacements and von Mises
-                  stress come back in seconds and colour the model; switch the
-                  result field and read the min/max in the summary panel.
+                  stress come back in seconds and colour the model; the hub
+                  deflects under the load while the bolted plate stays put.
+                  Switch the result field and read the min/max in the summary
+                  panel.
                 </p>
                 <img
                   class="step-shot"
@@ -494,7 +500,7 @@
                   width="1280"
                   height="820"
                   loading="lazy"
-                  alt="The solved tube coloured by displacement magnitude with a result summary"
+                  alt="The solved wall bracket coloured by displacement magnitude with a result summary"
                 />
               </div>
             </div>
