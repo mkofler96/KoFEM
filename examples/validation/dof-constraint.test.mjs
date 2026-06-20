@@ -5,107 +5,118 @@
 // to a full pin of all three components. This test proves a node constrained in
 // ONLY Ux is still free to move in Y and Z.
 //
-// How: a single unit cube held by a statically-determinate 3-2-1 restraint made
-// entirely of single-DOF constraints, pulled in +x. Under Poisson's effect a
-// node fixed in Ux alone must contract in −y and −z. If the engine wrongly
-// full-fixes it, that contraction is zero and the test fails.
+// Setup: an eighth-symmetry model of uniaxial tension. Single-DOF rollers on the
+// three symmetry planes — Ux=0 on x=0, Uy=0 on y=0, Uz=0 on z=0 — and a tension
+// load on the x=L face. The exact solution is a linear displacement field
+//   ux = εx·x,  uy = −ν·εx·y,  uz = −ν·εx·z,   εx = σ/E,
+// which trilinear hexes reproduce. The (0,W,H) corner lies on the x=0 plane
+// ONLY, so it is constrained in Ux alone and must contract by −ν·εx·W in y and
+// −ν·εx·H in z. A full-fixity bug would pin it and leave both at zero.
 //
 // Runs against the freshly built WASM in CI. On the committed binary (before a
 // rebuild with the engine.cpp `fixed_dofs` support) it is EXPECTED to fail —
-// that is the signal to run scripts/build-wasm.sh.
+// fixed_dofs is ignored, the model is unconstrained, and the solve blows up.
+// That failure is the signal to run scripts/build-wasm.sh.
 
 import { loadSolver } from "./lib/solver.mjs";
+import { boxHexMesh, nodesWhere, distributeForce } from "./lib/mesh.mjs";
 
 const E = 200e9;
 const nu = 0.3;
-const sigma = 2e8; // applied tension (Pa) on a 1 m unit cube ⇒ A = 1 m²
-const P = sigma; // total force = σ·A
+const L = 4,
+  W = 1,
+  H = 1;
+const sigma = 2e8; // applied tension (Pa)
+const P = sigma * W * H;
+const epsX = sigma / E;
+const expUy = -nu * epsX * W; // Poisson contraction at y = W
+const expUz = -nu * epsX * H; // Poisson contraction at z = H
 
-// Unit cube. Bottom face CCW then top face — MFEM AddHex order.
-const N = {
-  n0: [0, 0, 0],
-  n1: [1, 0, 0],
-  n2: [1, 1, 0],
-  n3: [0, 1, 0],
-  n4: [0, 0, 1],
-  n5: [1, 0, 1],
-  n6: [1, 1, 1],
-  n7: [0, 1, 1],
-};
-const vertices = [N.n0, N.n1, N.n2, N.n3, N.n4, N.n5, N.n6, N.n7];
-const hexahedra = [[0, 1, 2, 3, 4, 5, 6, 7]];
+const m = boxHexMesh(L, W, H, 4, 2, 2);
 
-// 3-2-1 restraint on the x=0 face, all single-DOF:
-//   Ux=0 on all four x=0 nodes (symmetry plane) → kills Tx, Ry, Rz
-//   n0 also Uy,Uz → kills Ty, Tz;  n3 also Uz → kills Rx
-// Nodes 4 and 7 are held in Ux ONLY: they must stay free in y and z.
-const fixed_dofs = [
-  { vertex: 0, dofs: [0, 1, 2] },
-  { vertex: 3, dofs: [0, 2] },
-  { vertex: 4, dofs: [0] }, // Ux only
-  { vertex: 7, dofs: [0] }, // Ux only ← discriminator node
-];
-
-// Pull the x=1 face in +x.
-const point_loads = [1, 2, 5, 6].map((vertex) => ({
+// Symmetry-plane rollers, all single-DOF. Union the components per node so the
+// shared edges/corners carry several (e.g. the origin gets Ux+Uy+Uz).
+const dofsByNode = new Map();
+const addDof = (ids, dof) =>
+  ids.forEach((i) => {
+    if (!dofsByNode.has(i)) dofsByNode.set(i, new Set());
+    dofsByNode.get(i).add(dof);
+  });
+addDof(
+  nodesWhere(m.vertices, (x) => x <= 1e-9),
+  0,
+); // x=0 → Ux
+addDof(
+  nodesWhere(m.vertices, (x, y) => y <= 1e-9),
+  1,
+); // y=0 → Uy
+addDof(
+  nodesWhere(m.vertices, (x, y, z) => z <= 1e-9),
+  2,
+); // z=0 → Uz
+const fixed_dofs = [...dofsByNode].map(([vertex, s]) => ({
   vertex,
-  force: [P / 4, 0, 0],
+  dofs: [...s].sort(),
 }));
+
+const loaded = nodesWhere(m.vertices, (x) => x >= L - 1e-9);
+const point_loads = distributeForce(loaded, [P, 0, 0]);
 
 const solve = await loadSolver();
 const r = solve(
-  { vertices, hexahedra },
+  { vertices: m.vertices, hexahedra: m.hexahedra },
   { young_modulus: E, poisson_ratio: nu, density: 7850 },
   { fixed_vertices: [], fixed_dofs, point_loads },
   1,
 );
 
 const d = (v, c) => r.displacements[v * 3 + c];
-const checks = [];
-function check(name, ok, detail) {
-  checks.push({ name, ok, detail });
-}
+// Discriminator: the (0, W, H) corner — on the x=0 plane only ⇒ Ux-only.
+const disc = nodesWhere(
+  m.vertices,
+  (x, y, z) => x <= 1e-9 && y >= W - 1e-9 && z >= H - 1e-9,
+)[0];
+const uxFace =
+  loaded.reduce((s, v) => s + d(v, 0), 0) / loaded.length; // ≈ εx·L
 
-// Sanity: solve produced finite numbers (a singular/unconstrained system —
-// what you get if fixed_dofs is ignored — yields NaN or garbage here).
+const checks = [];
+const check = (name, ok, detail) => checks.push({ name, ok, detail });
+
 const finite = r.displacements.every(Number.isFinite);
 check("solve produced finite displacements", finite, "");
 
 if (finite) {
-  const uxFace = (d(1, 0) + d(2, 0) + d(5, 0) + d(6, 0)) / 4;
-  const uxExpected = sigma / E; // ε_x · L = σ/E (L = 1)
-  const poissonExpected = -nu * (sigma / E);
-
-  // 1. The Ux-only node is actually held in x.
+  // The Ux-only node is actually held in x.
   check(
-    "node 7 is constrained in Ux (ux ≈ 0)",
-    Math.abs(d(7, 0)) < 1e-3 * Math.abs(uxFace),
-    `ux(n7)=${d(7, 0).toExponential(3)}`,
+    "discriminator node is constrained in Ux (ux ≈ 0)",
+    Math.abs(d(disc, 0)) < 1e-3 * Math.abs(uxFace),
+    `ux=${d(disc, 0).toExponential(3)}`,
   );
 
-  // 2. THE DISCRIMINATOR: node 7, constrained in Ux only, is free in Y and Z and
-  //    contracts under Poisson. A full-fixity bug would leave these at zero.
+  // THE DISCRIMINATOR: it is FREE in y and z and contracts under Poisson. A
+  // full-fixity bug leaves these at zero, so "more than half the expected
+  // contraction, with the right sign" cleanly separates fixed from free.
   check(
-    "node 7 is FREE in Uy (Poisson contraction, not pinned)",
-    d(7, 1) < 0.5 * poissonExpected,
-    `uy(n7)=${d(7, 1).toExponential(3)} (expected ≈ ${poissonExpected.toExponential(3)})`,
+    "discriminator node is FREE in Uy (Poisson contraction, not pinned)",
+    d(disc, 1) < 0.5 * expUy,
+    `uy=${d(disc, 1).toExponential(3)} (expected ≈ ${expUy.toExponential(3)})`,
   );
   check(
-    "node 7 is FREE in Uz (Poisson contraction, not pinned)",
-    d(7, 2) < 0.5 * poissonExpected,
-    `uz(n7)=${d(7, 2).toExponential(3)} (expected ≈ ${poissonExpected.toExponential(3)})`,
+    "discriminator node is FREE in Uz (Poisson contraction, not pinned)",
+    d(disc, 2) < 0.5 * expUz,
+    `uz=${d(disc, 2).toExponential(3)} (expected ≈ ${expUz.toExponential(3)})`,
   );
 
-  // 3. Physics sanity: uniaxial extension and Poisson contraction are right.
+  // Physics sanity: the linear field matches theory.
   check(
-    "uniaxial extension ux ≈ σ/E (±5%)",
-    Math.abs((uxFace - uxExpected) / uxExpected) < 0.05,
-    `ux=${uxFace.toExponential(3)} vs ${uxExpected.toExponential(3)}`,
+    "uniaxial extension ux ≈ εx·L (±5%)",
+    Math.abs((uxFace - epsX * L) / (epsX * L)) < 0.05,
+    `ux=${uxFace.toExponential(3)} vs ${(epsX * L).toExponential(3)}`,
   );
   check(
-    "Poisson contraction uy(n7) ≈ −ν·σ/E (±15%)",
-    Math.abs((d(7, 1) - poissonExpected) / poissonExpected) < 0.15,
-    `uy=${d(7, 1).toExponential(3)} vs ${poissonExpected.toExponential(3)}`,
+    "Poisson contraction uy ≈ −ν·εx·W (±15%)",
+    Math.abs((d(disc, 1) - expUy) / expUy) < 0.15,
+    `uy=${d(disc, 1).toExponential(3)} vs ${expUy.toExponential(3)}`,
   );
 }
 
