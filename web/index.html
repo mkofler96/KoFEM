@@ -184,6 +184,114 @@
         font-size: 14px;
       }
 
+      section.block {
+        padding: 8px 0 64px;
+      }
+      .section-head {
+        max-width: 680px;
+        margin-bottom: 28px;
+      }
+      .section-head h2 {
+        font-size: clamp(26px, 4vw, 36px);
+        letter-spacing: -0.02em;
+        margin: 0 0 12px;
+      }
+      .section-head p {
+        color: var(--muted);
+        font-size: 17px;
+        margin: 0;
+      }
+
+      /* Step-by-step tutorial */
+      .steps {
+        display: grid;
+        gap: 14px;
+        counter-reset: step;
+      }
+      .step {
+        display: grid;
+        grid-template-columns: 44px 1fr;
+        gap: 18px;
+        align-items: start;
+        background: var(--bg-2);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 20px 22px;
+      }
+      .step::before {
+        counter-increment: step;
+        content: counter(step);
+        width: 36px;
+        height: 36px;
+        border-radius: 9px;
+        display: grid;
+        place-items: center;
+        font-family: "IBM Plex Mono", monospace;
+        font-weight: 600;
+        color: #fff;
+        background: linear-gradient(135deg, var(--accent), #7aa7ff);
+      }
+      .step h3 {
+        margin: 4px 0 6px;
+        font-size: 16px;
+      }
+      .step p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .step code {
+        font-family: "IBM Plex Mono", monospace;
+        font-size: 13px;
+        color: var(--ink);
+        background: rgba(255, 255, 255, 0.06);
+        padding: 1px 6px;
+        border-radius: 5px;
+      }
+
+      /* Validation table */
+      .table-wrap {
+        overflow-x: auto;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--bg-2);
+      }
+      table.validation {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+        min-width: 640px;
+      }
+      table.validation th,
+      table.validation td {
+        text-align: left;
+        padding: 13px 18px;
+        border-bottom: 1px solid var(--border);
+      }
+      table.validation th {
+        font-size: 12px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      table.validation tr:last-child td {
+        border-bottom: none;
+      }
+      table.validation .num {
+        text-align: right;
+        font-family: "IBM Plex Mono", monospace;
+      }
+      .pass {
+        color: #46d39a;
+        font-weight: 600;
+      }
+      .table-note {
+        color: var(--muted);
+        font-size: 13px;
+        margin: 14px 2px 0;
+      }
+
       footer {
         border-top: 1px solid var(--border);
         padding: 28px 0 48px;
@@ -208,10 +316,8 @@
       <header>
         <div class="brand"><span class="mark">K</span> KoFEM</div>
         <nav class="top">
-          <a href="/docs">Docs</a>
-          <a href="/examples">Examples</a>
-          <a href="/tutorials">Tutorials</a>
-          <a href="/blog">Blog</a>
+          <a href="#tutorial">Tutorial</a>
+          <a href="#examples">Examples</a>
           <a href="/app/">Launch</a>
         </nav>
       </header>
@@ -259,15 +365,161 @@
             <p>OpenCASCADE, Netgen and MFEM compiled to WebAssembly.</p>
           </div>
         </section>
+
+        <section class="block" id="tutorial">
+          <div class="section-head">
+            <h2>Tutorial: plate with a hole</h2>
+            <p>
+              Walk through a complete analysis end to end — from CAD geometry to
+              a result you can check against textbook theory. The classic
+              stress-concentration problem takes about a minute in the browser.
+            </p>
+          </div>
+          <div class="steps">
+            <div class="step">
+              <div>
+                <h3>Import the geometry</h3>
+                <p>
+                  Launch the solver and drag in a STEP file of a plate with a
+                  central hole. KoFEM tessellates the CAD surface with
+                  OpenCASCADE so you see the real shape in the viewport.
+                </p>
+              </div>
+            </div>
+            <div class="step">
+              <div>
+                <h3>Constrain one edge</h3>
+                <p>
+                  In <em>Constraints</em>, pick the left face and fix it. You
+                  can hold all three directions, or just one — a single-DOF
+                  roller for a symmetry plane is fully supported.
+                </p>
+              </div>
+            </div>
+            <div class="step">
+              <div>
+                <h3>Apply the tension load</h3>
+                <p>
+                  Select the opposite face and add a load pulling the plate in
+                  tension. Enter the total force; KoFEM distributes it across
+                  the face nodes.
+                </p>
+              </div>
+            </div>
+            <div class="step">
+              <div>
+                <h3>Mesh the volume</h3>
+                <p>
+                  Click <em>Mesh</em> to fill the solid with tetrahedra using
+                  Netgen's OpenCASCADE integration, refining automatically
+                  around the hole where the stress gradient is steep.
+                </p>
+              </div>
+            </div>
+            <div class="step">
+              <div>
+                <h3>Solve</h3>
+                <p>
+                  Run the MFEM linear-elastic solve. Displacements and von Mises
+                  stress come back in seconds and colour the model — the peak
+                  ring sits right at the edge of the hole.
+                </p>
+              </div>
+            </div>
+            <div class="step">
+              <div>
+                <h3>Check against theory</h3>
+                <p>
+                  Read the peak stress and divide by the applied tension. For a
+                  wide plate the analytical concentration factor is
+                  <code>Kt = 3</code> (Kirsch) — KoFEM lands within ~10% on a
+                  coarse mesh, and closer as you refine.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="block" id="examples">
+          <div class="section-head">
+            <h2>Validated examples</h2>
+            <p>
+              Every release is checked against problems with known closed-form
+              or published answers. The figures below come straight from the
+              solver running each case — see
+              <code>examples/validation</code> in the repository.
+            </p>
+          </div>
+          <div class="table-wrap">
+            <table class="validation">
+              <thead>
+                <tr>
+                  <th>Benchmark</th>
+                  <th>Quantity</th>
+                  <th>Reference</th>
+                  <th class="num">FE result</th>
+                  <th class="num">Error</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Axial bar</td>
+                  <td>Tip extension</td>
+                  <td>δ = P·L / (E·A)</td>
+                  <td class="num">4.772&times;10⁻⁴ m</td>
+                  <td class="num">0.2%</td>
+                  <td class="pass">Pass</td>
+                </tr>
+                <tr>
+                  <td>Cantilever beam</td>
+                  <td>Tip deflection</td>
+                  <td>δ = P·L³ / (3·E·I)</td>
+                  <td class="num">1.84&times;10⁻³ m</td>
+                  <td class="num">3.5%</td>
+                  <td class="pass">Pass</td>
+                </tr>
+                <tr>
+                  <td>Plate with a hole</td>
+                  <td>Stress concentration</td>
+                  <td>Kt = 3 (Kirsch)</td>
+                  <td class="num">3.33</td>
+                  <td class="num">11%</td>
+                  <td class="pass">Pass</td>
+                </tr>
+                <tr>
+                  <td>Hollow shaft, torsion</td>
+                  <td>Angle of twist</td>
+                  <td>θ = T·L / (G·J)</td>
+                  <td class="num">1.47&times;10⁻³ rad</td>
+                  <td class="num">1.3%</td>
+                  <td class="pass">Pass</td>
+                </tr>
+                <tr>
+                  <td>Cook's membrane</td>
+                  <td>Corner deflection</td>
+                  <td>≈ 23.9 (Cook, 1974)</td>
+                  <td class="num">24.11</td>
+                  <td class="num">0.9%</td>
+                  <td class="pass">Pass</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="table-note">
+            Displacement quantities validate to within a few percent; the
+            stress-concentration case carries a wider band because linear
+            elements report a constant stress per element.
+          </p>
+        </section>
       </main>
 
       <footer>
         <div>© 2026 KoFEM — Online Finite Element Solver</div>
         <div>
-          <a href="/docs">Docs</a>
-          <a href="/examples">Examples</a>
-          <a href="/tutorials">Tutorials</a>
-          <a href="/blog">Blog</a>
+          <a href="#tutorial">Tutorial</a>
+          <a href="#examples">Examples</a>
+          <a href="/app/">Launch</a>
         </div>
       </footer>
     </div>

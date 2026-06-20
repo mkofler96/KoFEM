@@ -945,7 +945,9 @@ static std::string solve_linear_elastic(
     fflush(stdout);
     log_mem("solve: after FE space setup");
 
-    // Essential (Dirichlet) DOFs from fixed vertices
+    // Essential (Dirichlet) DOFs from fixed vertices.
+    // fixed_vertices is the full-fixity shorthand: every translational component
+    // (Ux, Uy, Uz) of the listed vertex is pinned.
     Array<int> ess_tdof;
     for (unsigned i = 0; i < n_fixed; ++i) {
         int vi = fixed_js[i].as<int>();
@@ -954,6 +956,30 @@ static std::string solve_linear_elastic(
         for (int j = 0; j < vdofs.Size(); ++j)
             ess_tdof.Append(vdofs[j]);
     }
+
+    // fixed_dofs pins only the listed components of a vertex, leaving the others
+    // free — a single-DOF constraint. This is what a symmetry-plane roller or a
+    // statically-determinate 3-2-1 restraint needs. Each entry is
+    // { vertex: int, dofs: int[] } with dofs ⊂ {0=Ux, 1=Uy, 2=Uz}. Optional:
+    // absent on the full-fixity path, so older payloads keep working unchanged.
+    val fdofs_js = bcs_js["fixed_dofs"];
+    if (!fdofs_js.isUndefined() && !fdofs_js.isNull()) {
+        unsigned n_fdofs = fdofs_js["length"].as<unsigned>();
+        for (unsigned i = 0; i < n_fdofs; ++i) {
+            val entry = fdofs_js[i];
+            int vi = entry["vertex"].as<int>();
+            val comps = entry["dofs"];
+            unsigned nc = comps["length"].as<unsigned>();
+            Array<int> vdofs;
+            fespace.GetVertexVDofs(vi, vdofs);
+            for (unsigned c = 0; c < nc; ++c) {
+                int d = comps[c].as<int>();
+                if (d >= 0 && d < vdofs.Size())
+                    ess_tdof.Append(vdofs[d]);
+            }
+        }
+    }
+
     ess_tdof.Sort();
     ess_tdof.Unique();
 
