@@ -55,8 +55,14 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     target: "esnext",
-    sourcemap: mode !== "production",
-    minify: mode === "production" ? "esbuild" : false,
+    // Fail closed: source maps and unminified output are an explicit
+    // `--mode development` opt-in (see the build:dev script). Every other
+    // invocation — the default production build, CI, or any custom/empty mode
+    // a deploy host might pass — ships minified and map-free. Keying these off
+    // `mode === "production"` instead leaks readable, mapped source whenever
+    // the mode is anything but that exact string.
+    sourcemap: mode === "development",
+    minify: mode === "development" ? false : "esbuild",
     rollupOptions: {
       input: {
         app: htmlEntry("./app/index.html"),
