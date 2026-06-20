@@ -19,13 +19,13 @@ single-DOF test below) via `bun run test` in `web/`.
 
 ## Cases
 
-| Case | Validates | Reference |
-| --- | --- | --- |
-| Axial bar | tip extension δ = P·L/(E·A) | mechanics of materials |
-| Cantilever beam | tip deflection δ = P·L³/(3·E·I) | Euler–Bernoulli |
-| Plate with a hole | stress-concentration Kt ≈ 3 | Kirsch / Timoshenko & Goodier |
-| Hollow shaft torsion | angle of twist θ = T·L/(G·J) | Saint-Venant torsion |
-| Cook's membrane | top-corner deflection ≈ 23.9 | Cook (1974) |
+| Case                 | Validates                       | Reference                     |
+| -------------------- | ------------------------------- | ----------------------------- |
+| Axial bar            | tip extension δ = P·L/(E·A)     | mechanics of materials        |
+| Cantilever beam      | tip deflection δ = P·L³/(3·E·I) | Euler–Bernoulli               |
+| Plate with a hole    | stress-concentration Kt ≈ 3     | Kirsch / Timoshenko & Goodier |
+| Hollow shaft torsion | angle of twist θ = T·L/(G·J)    | Saint-Venant torsion          |
+| Cook's membrane      | top-corner deflection ≈ 23.9    | Cook (1974)                   |
 
 See `REPORT.md` for the latest FE-vs-reference numbers.
 
