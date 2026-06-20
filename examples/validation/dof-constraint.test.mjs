@@ -76,8 +76,7 @@ const disc = nodesWhere(
   m.vertices,
   (x, y, z) => x <= 1e-9 && y >= W - 1e-9 && z >= H - 1e-9,
 )[0];
-const uxFace =
-  loaded.reduce((s, v) => s + d(v, 0), 0) / loaded.length; // ≈ εx·L
+const uxFace = loaded.reduce((s, v) => s + d(v, 0), 0) / loaded.length; // ≈ εx·L
 
 const checks = [];
 const check = (name, ok, detail) => checks.push({ name, ok, detail });
