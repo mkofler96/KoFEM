@@ -88,7 +88,9 @@ test.describe("Tutorial figure capture", () => {
         timeout: 60_000,
       }),
       meshErr.waitFor({ state: "visible", timeout: 60_000 }).then(async () => {
-        throw new Error(`Volume meshing failed: ${await meshErr.textContent()}`);
+        throw new Error(
+          `Volume meshing failed: ${await meshErr.textContent()}`,
+        );
       }),
       fatalError,
     ]);
@@ -184,7 +186,9 @@ test.describe("Tutorial figure capture", () => {
       ).__kofemTriggerSolve?.();
     });
     await Promise.race([
-      expect(page.getByText("Result summary")).toBeVisible({ timeout: 120_000 }),
+      expect(page.getByText("Result summary")).toBeVisible({
+        timeout: 120_000,
+      }),
       fatalError,
     ]);
     await page.waitForTimeout(600);
