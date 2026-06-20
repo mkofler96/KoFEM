@@ -102,6 +102,22 @@
       nav.top a:hover {
         color: var(--ink);
       }
+      nav.top a.nav-cta {
+        color: #fff;
+        background: linear-gradient(135deg, var(--accent), #7aa7ff);
+        padding: 9px 18px;
+        border-radius: 9px;
+        font-weight: 600;
+        box-shadow: 0 6px 18px rgba(79, 140, 255, 0.3);
+        transition:
+          transform 120ms ease,
+          box-shadow 120ms ease;
+      }
+      nav.top a.nav-cta:hover {
+        color: #fff;
+        transform: translateY(-1px);
+        box-shadow: 0 9px 24px rgba(79, 140, 255, 0.42);
+      }
 
       .page-head {
         max-width: 720px;
@@ -239,7 +255,7 @@
         <a class="brand" href="/"><span class="mark">K</span> KoFEM</a>
         <nav class="top">
           <a href="/">Home</a>
-          <a href="/app/">Launch</a>
+          <a class="nav-cta" href="/app/">Launch</a>
         </nav>
       </header>
 
