@@ -1,301 +1,304 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <title>
-      Online Finite Element Solver — Browser-Based FEM Analysis | KoFEM
-    </title>
-    <meta
-      name="description"
-      content="KoFEM is a free online finite element solver that runs entirely in your browser. Import STEP and STL files and run linear static structural and thermal simulations — no installation required."
-    />
-    <link rel="canonical" href="https://solver.example.com/" />
-    <meta name="robots" content="index, follow" />
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <!-- Open Graph / social -->
-    <meta property="og:type" content="website" />
-    <meta property="og:title" content="Online Finite Element Solver — KoFEM" />
-    <meta
-      property="og:description"
-      content="Browser-based FEM analysis. Import STEP and STL files and run linear static simulations in your browser. No installation required."
-    />
-    <meta property="og:url" content="https://solver.example.com/" />
+  <title>
+    Online Finite Element Solver — Browser-Based FEM Analysis | KoFEM
+  </title>
+  <meta name="description"
+    content="KoFEM is a free online finite element solver that runs entirely in your browser. Import STEP files and run linear static structural — no installation required." />
+  <link rel="canonical" href="https://solver.example.com/" />
+  <meta name="robots" content="index, follow" />
 
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
+  <!-- Open Graph / social -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Online Finite Element Solver — KoFEM" />
+  <meta property="og:description"
+    content="Browser-based FEM analysis. Import STEP files and run linear static simulations in your browser. No installation required." />
+  <meta property="og:url" content="https://solver.example.com/" />
 
-    <!-- Structured data for rich results -->
-    <script type="application/ld+json">
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
+    rel="stylesheet" />
+
+  <!-- Structured data for rich results -->
+  <script type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
         "name": "KoFEM",
         "applicationCategory": "EngineeringApplication",
         "operatingSystem": "Any (web browser)",
-        "description": "Browser-based finite element solver for linear static structural and thermal simulations. Import STEP and STL files and run analyses in your browser.",
+        "description": "Browser-based finite element solver for linear static structural simulations. Import STEP files and run analyses in your browser.",
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
       }
     </script>
 
-    <style>
-      :root {
-        --bg: #0e1726;
-        --bg-2: #131f33;
-        --ink: #eef2f8;
-        --muted: #9fb0c6;
-        --accent: #4f8cff;
-        --border: rgba(255, 255, 255, 0.08);
-      }
-      *,
-      *::before,
-      *::after {
-        box-sizing: border-box;
-      }
-      html {
-        scroll-behavior: smooth;
-      }
-      body {
-        margin: 0;
-        font-family: "IBM Plex Sans", system-ui, sans-serif;
-        background:
-          radial-gradient(
-            1200px 600px at 70% -10%,
-            #1c2c4a 0%,
-            transparent 60%
-          ),
-          var(--bg);
-        color: var(--ink);
-        line-height: 1.55;
-        -webkit-font-smoothing: antialiased;
-      }
-      a {
-        color: inherit;
-        text-decoration: none;
-      }
-      .wrap {
-        max-width: 1080px;
-        margin: 0 auto;
-        padding: 0 24px;
-      }
+  <style>
+    :root {
+      --bg: #0e1726;
+      --bg-2: #131f33;
+      --ink: #eef2f8;
+      --muted: #9fb0c6;
+      --accent: #4f8cff;
+      --border: rgba(255, 255, 255, 0.08);
+    }
 
-      header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 22px 0;
-      }
-      .brand {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        font-weight: 700;
-        font-size: 18px;
-        letter-spacing: -0.01em;
-      }
-      .mark {
-        width: 30px;
-        height: 30px;
-        border-radius: 7px;
-        background: linear-gradient(135deg, var(--accent), #7aa7ff);
-        display: grid;
-        place-items: center;
-        color: #fff;
-        font-weight: 700;
-      }
-      nav.top a {
-        color: var(--muted);
-        font-size: 14px;
-        margin-left: 22px;
-        font-weight: 500;
-      }
-      nav.top a:hover {
-        color: var(--ink);
-      }
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+    }
 
-      .hero {
-        padding: 72px 0 56px;
-        max-width: 760px;
-      }
-      .eyebrow {
-        font-family: "IBM Plex Mono", monospace;
-        font-size: 13px;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: var(--accent);
-        margin-bottom: 18px;
-      }
-      h1 {
-        font-size: clamp(34px, 6vw, 56px);
-        line-height: 1.05;
-        letter-spacing: -0.02em;
-        margin: 0 0 20px;
-      }
-      .sub {
-        font-size: 19px;
-        color: var(--muted);
-        margin: 0 0 32px;
-        max-width: 620px;
-      }
-      .cta {
-        display: inline-flex;
-        align-items: center;
-        gap: 10px;
-        background: linear-gradient(135deg, var(--accent), #7aa7ff);
-        color: #fff;
-        font-weight: 600;
-        font-size: 16px;
-        padding: 14px 26px;
-        border-radius: 10px;
-        box-shadow: 0 8px 30px rgba(79, 140, 255, 0.35);
-        transition:
-          transform 120ms ease,
-          box-shadow 120ms ease;
-      }
-      .cta:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 12px 36px rgba(79, 140, 255, 0.45);
-      }
+    html {
+      scroll-behavior: smooth;
+    }
 
-      /* Demo video, sitting just below the hero intro */
-      .hero-video {
-        margin: 0 0 72px;
-        border: 1px solid var(--border);
-        border-radius: 14px;
-        overflow: hidden;
-        background: var(--bg-2);
-        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
-      }
-      .hero-video video {
-        display: block;
-        width: 100%;
-        height: auto;
-      }
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", system-ui, sans-serif;
+      background:
+        radial-gradient(1200px 600px at 70% -10%,
+          #1c2c4a 0%,
+          transparent 60%),
+        var(--bg);
+      color: var(--ink);
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+    }
 
-      .features {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-        gap: 18px;
-        padding: 16px 0 80px;
-      }
-      .feature {
-        background: var(--bg-2);
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 22px;
-      }
-      .feature h3 {
-        margin: 0 0 8px;
-        font-size: 16px;
-      }
-      .feature p {
-        margin: 0;
-        color: var(--muted);
-        font-size: 14px;
-      }
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
 
-      footer {
-        border-top: 1px solid var(--border);
-        padding: 28px 0 48px;
-        color: var(--muted);
-        font-size: 14px;
-        display: flex;
-        justify-content: space-between;
-        flex-wrap: wrap;
-        gap: 12px;
-      }
-      footer a {
-        color: var(--muted);
-        margin-right: 18px;
-      }
-      footer a:hover {
-        color: var(--ink);
-      }
-    </style>
-  </head>
-  <body>
-    <div class="wrap">
-      <header>
-        <div class="brand"><span class="mark">K</span> KoFEM</div>
-        <nav class="top">
-          <a href="/examples/">Examples</a>
-          <a href="/app/">Launch</a>
-        </nav>
-      </header>
+    .wrap {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
 
-      <main>
-        <section class="hero">
-          <div class="eyebrow">Online Finite Element Solver</div>
-          <h1>Browser-based FEM analysis</h1>
-          <p class="sub">
-            Structural and thermal simulations that run entirely in your
-            browser. Import STEP and STL files and run linear static analyses —
-            no installation required.
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 22px 0;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 18px;
+      letter-spacing: -0.01em;
+    }
+
+    .mark {
+      width: 30px;
+      height: 30px;
+      border-radius: 7px;
+      background: linear-gradient(135deg, var(--accent), #7aa7ff);
+      display: grid;
+      place-items: center;
+      color: #fff;
+      font-weight: 700;
+    }
+
+    nav.top a {
+      color: var(--muted);
+      font-size: 14px;
+      margin-left: 22px;
+      font-weight: 500;
+    }
+
+    nav.top a:hover {
+      color: var(--ink);
+    }
+
+    .hero {
+      padding: 72px 0 56px;
+      max-width: 760px;
+    }
+
+    .eyebrow {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      font-size: clamp(34px, 6vw, 56px);
+      line-height: 1.05;
+      letter-spacing: -0.02em;
+      margin: 0 0 20px;
+    }
+
+    .sub {
+      font-size: 19px;
+      color: var(--muted);
+      margin: 0 0 32px;
+      max-width: 620px;
+    }
+
+    .cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: linear-gradient(135deg, var(--accent), #7aa7ff);
+      color: #fff;
+      font-weight: 600;
+      font-size: 16px;
+      padding: 14px 26px;
+      border-radius: 10px;
+      box-shadow: 0 8px 30px rgba(79, 140, 255, 0.35);
+      transition:
+        transform 120ms ease,
+        box-shadow 120ms ease;
+    }
+
+    .cta:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 12px 36px rgba(79, 140, 255, 0.45);
+    }
+
+    /* Demo video, sitting just below the hero intro */
+    .hero-video {
+      margin: 0 0 72px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      background: var(--bg-2);
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+    }
+
+    .hero-video video {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 18px;
+      padding: 16px 0 80px;
+    }
+
+    .feature {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 22px;
+    }
+
+    .feature h3 {
+      margin: 0 0 8px;
+      font-size: 16px;
+    }
+
+    .feature p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 28px 0 48px;
+      color: var(--muted);
+      font-size: 14px;
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    footer a {
+      color: var(--muted);
+      margin-right: 18px;
+    }
+
+    footer a:hover {
+      color: var(--ink);
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand"><span class="mark">K</span> KoFEM</div>
+      <nav class="top">
+        <a href="/examples/">Examples</a>
+        <a href="/app/">Launch</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <h1>Browser-based FEM analysis</h1>
+        <p class="sub">
+          Structural simulations that run entirely in your
+          browser. Import STEP files and run linear static analyses —
+          no installation required.
+        </p>
+        <a class="cta" href="/app/">
+          Launch Solver
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <path d="M4 9h9M9 4.5L13.5 9 9 13.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round" />
+          </svg>
+        </a>
+      </section>
+
+      <figure class="hero-video">
+        <video autoplay loop muted playsinline preload="auto" poster="/kofem-demo-poster.jpg"
+          aria-label="KoFEM walkthrough: importing a STEP file, meshing the volume, applying constraints, and viewing the solved result">
+          <source src="/kofem-demo.webm" type="video/webm" />
+          <source src="/kofem-demo.mp4" type="video/mp4" />
+        </video>
+      </figure>
+
+      <section class="features" aria-label="Features">
+        <div class="feature">
+          <h3>Runs in your browser</h3>
+          <p>
+            No installation, no license server — open a tab and start solving.
           </p>
-          <a class="cta" href="/app/">
-            Launch Solver
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-              <path
-                d="M4 9h9M9 4.5L13.5 9 9 13.5"
-                stroke="currentColor"
-                stroke-width="2"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-          </a>
-        </section>
-
-        <figure class="hero-video">
-          <video
-            autoplay
-            loop
-            muted
-            playsinline
-            preload="auto"
-            poster="/kofem-demo-poster.jpg"
-            aria-label="KoFEM walkthrough: importing a STEP file, meshing the volume, applying constraints, and viewing the solved result"
-          >
-            <source src="/kofem-demo.webm" type="video/webm" />
-            <source src="/kofem-demo.mp4" type="video/mp4" />
-          </video>
-        </figure>
-
-        <section class="features" aria-label="Features">
-          <div class="feature">
-            <h3>Runs in your browser</h3>
-            <p>
-              No installation, no license server — open a tab and start solving.
-            </p>
-          </div>
-          <div class="feature">
-            <h3>Structural &amp; thermal</h3>
-            <p>Linear static structural analysis and thermal simulations.</p>
-          </div>
-          <div class="feature">
-            <h3>Import STEP &amp; STL</h3>
-            <p>Bring in CAD geometry directly and mesh it in the browser.</p>
-          </div>
-          <div class="feature">
-            <h3>Real FEM core</h3>
-            <p>OpenCASCADE, Netgen and MFEM compiled to WebAssembly.</p>
-          </div>
-        </section>
-
-      </main>
-
-      <footer>
-        <div>© 2026 KoFEM — Online Finite Element Solver</div>
-        <div>
-          <a href="/examples/">Examples</a>
-          <a href="/app/">Launch</a>
         </div>
-      </footer>
-    </div>
-  </body>
+        <div class="feature">
+          <h3>Structural</h3>
+          <p>Linear static structural analysis simulations.</p>
+        </div>
+        <div class="feature">
+          <h3>Import STEP</h3>
+          <p>Bring in CAD geometry directly and mesh it in the browser.</p>
+        </div>
+        <div class="feature">
+          <h3>Real FEM core</h3>
+          <p>OpenCASCADE, Netgen and MFEM compiled to WebAssembly.</p>
+        </div>
+      </section>
+
+    </main>
+
+    <footer>
+      <div>© 2026 KoFEM — Online Finite Element Solver</div>
+      <div>
+        <a href="/examples/">Examples</a>
+        <a href="/app/">Launch</a>
+      </div>
+    </footer>
+  </div>
+</body>
+
 </html>
