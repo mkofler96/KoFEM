@@ -162,6 +162,21 @@
         box-shadow: 0 12px 36px rgba(79, 140, 255, 0.45);
       }
 
+      /* Demo video, sitting just below the hero intro */
+      .hero-video {
+        margin: 0 0 72px;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        overflow: hidden;
+        background: var(--bg-2);
+        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+      }
+      .hero-video video {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
       .features {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -200,61 +215,6 @@
         color: var(--muted);
         font-size: 17px;
         margin: 0;
-      }
-
-      /* Step-by-step tutorial */
-      .steps {
-        display: grid;
-        gap: 14px;
-        counter-reset: step;
-      }
-      .step {
-        display: grid;
-        grid-template-columns: 44px 1fr;
-        gap: 18px;
-        align-items: start;
-        background: var(--bg-2);
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 20px 22px;
-      }
-      .step::before {
-        counter-increment: step;
-        content: counter(step);
-        width: 36px;
-        height: 36px;
-        border-radius: 9px;
-        display: grid;
-        place-items: center;
-        font-family: "IBM Plex Mono", monospace;
-        font-weight: 600;
-        color: #fff;
-        background: linear-gradient(135deg, var(--accent), #7aa7ff);
-      }
-      .step h3 {
-        margin: 4px 0 6px;
-        font-size: 16px;
-      }
-      .step p {
-        margin: 0;
-        color: var(--muted);
-        font-size: 14px;
-      }
-      .step code {
-        font-family: "IBM Plex Mono", monospace;
-        font-size: 13px;
-        color: var(--ink);
-        background: rgba(255, 255, 255, 0.06);
-        padding: 1px 6px;
-        border-radius: 5px;
-      }
-      .step-shot {
-        display: block;
-        width: 100%;
-        margin-top: 14px;
-        border-radius: 10px;
-        border: 1px solid var(--border);
-        background: #f3f5f9;
       }
 
       /* Result figure (examples section) */
@@ -343,7 +303,6 @@
       <header>
         <div class="brand"><span class="mark">K</span> KoFEM</div>
         <nav class="top">
-          <a href="#tutorial">Tutorial</a>
           <a href="#examples">Examples</a>
           <a href="/app/">Launch</a>
         </nav>
@@ -372,6 +331,21 @@
           </a>
         </section>
 
+        <figure class="hero-video">
+          <video
+            autoplay
+            loop
+            muted
+            playsinline
+            preload="auto"
+            poster="/kofem-demo-poster.jpg"
+            aria-label="KoFEM walkthrough: importing a STEP file, meshing the volume, applying constraints, and viewing the solved result"
+          >
+            <source src="/kofem-demo.webm" type="video/webm" />
+            <source src="/kofem-demo.mp4" type="video/mp4" />
+          </video>
+        </figure>
+
         <section class="features" aria-label="Features">
           <div class="feature">
             <h3>Runs in your browser</h3>
@@ -390,120 +364,6 @@
           <div class="feature">
             <h3>Real FEM core</h3>
             <p>OpenCASCADE, Netgen and MFEM compiled to WebAssembly.</p>
-          </div>
-        </section>
-
-        <section class="block" id="tutorial">
-          <div class="section-head">
-            <h2>Tutorial: load a wall bracket</h2>
-            <p>
-              Walk through a complete analysis end to end — from a STEP file to
-              a colour-mapped result — in about a minute in the browser. We bolt
-              a steel wall bracket to a wall through its three holes and hang a
-              load off the cylindrical hub. Every figure below is a real
-              screenshot of the solver, captured automatically by driving the
-              app through this exact workflow (see
-              <code>web/tests/tutorial-capture.spec.ts</code>), so it always
-              matches the current UI.
-            </p>
-          </div>
-          <div class="steps">
-            <div class="step">
-              <div>
-                <h3>Import the geometry</h3>
-                <p>
-                  Launch the solver and drag in a STEP file — here a wall
-                  bracket. <code>.step</code> and <code>.stp</code> are both
-                  accepted from the import card.
-                </p>
-                <img
-                  class="step-shot"
-                  src="/tutorial/01-import.png"
-                  width="1280"
-                  height="820"
-                  loading="lazy"
-                  alt="Empty KoFEM workspace with the Import STEP card in the Geometry panel"
-                />
-              </div>
-            </div>
-            <div class="step">
-              <div>
-                <h3>See the CAD surface</h3>
-                <p>
-                  KoFEM tessellates the boundary with OpenCASCADE, so the real
-                  shape appears in the viewport — a mounting plate with three
-                  bolt holes and a cylindrical hub. Pick a material (steel is
-                  the default) and set the mesh element-size bounds.
-                </p>
-                <img
-                  class="step-shot"
-                  src="/tutorial/02-geometry.png"
-                  width="1280"
-                  height="820"
-                  loading="lazy"
-                  alt="The imported wall bracket rendered in the viewport with mesh and material controls"
-                />
-              </div>
-            </div>
-            <div class="step">
-              <div>
-                <h3>Mesh the volume</h3>
-                <p>
-                  Click <em>Mesh STEP volume</em> to fill the solid with
-                  tetrahedra using Netgen's OpenCASCADE integration, refining
-                  automatically around the holes and fillets. The status bar
-                  reports the node and element counts once it is solver-ready.
-                </p>
-                <img
-                  class="step-shot"
-                  src="/tutorial/03-mesh.png"
-                  width="1280"
-                  height="820"
-                  loading="lazy"
-                  alt="The wall bracket filled with a tetrahedral volume mesh"
-                />
-              </div>
-            </div>
-            <div class="step">
-              <div>
-                <h3>Constrain and load</h3>
-                <p>
-                  In <em>Constraints</em>, fix the three bolt holes — held in
-                  all three directions, as if bolted to the wall — and apply a
-                  downward load on the hub. The fixed faces are highlighted and
-                  the load arrow is drawn on the model. Single-DOF rollers for a
-                  symmetry plane are supported too.
-                </p>
-                <img
-                  class="step-shot"
-                  src="/tutorial/04-constraints.png"
-                  width="1280"
-                  height="820"
-                  loading="lazy"
-                  alt="The three bolt holes fixed and a downward load applied to the hub"
-                />
-              </div>
-            </div>
-            <div class="step">
-              <div>
-                <h3>Solve and read the results</h3>
-                <p>
-                  Run the MFEM linear-elastic solve. Displacements and von Mises
-                  stress come back in seconds and colour the model; the hub
-                  deflects under the load while the bolted plate stays put.
-                  Switch the result field and read the min/max in the summary
-                  panel.
-                </p>
-                <img
-                  class="step-shot"
-                  src="/tutorial/05-results.png"
-                  width="1280"
-                  height="820"
-                  loading="lazy"
-                  alt="The solved wall bracket coloured by displacement magnitude with a result summary"
-                />
-              </div>
-            </div>
           </div>
         </section>
 
@@ -527,8 +387,8 @@
               alt="A solved model in KoFEM coloured by displacement magnitude"
             />
             <figcaption>
-              Solver output rendered in the browser — the displacement field
-              from the tutorial model above.
+              Solver output rendered in the browser — a displacement field from
+              a solved model.
             </figcaption>
           </figure>
           <div class="table-wrap">
@@ -598,7 +458,6 @@
       <footer>
         <div>© 2026 KoFEM — Online Finite Element Solver</div>
         <div>
-          <a href="#tutorial">Tutorial</a>
           <a href="#examples">Examples</a>
           <a href="/app/">Launch</a>
         </div>
