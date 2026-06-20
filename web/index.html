@@ -248,13 +248,24 @@
         padding: 1px 6px;
         border-radius: 5px;
       }
-      .step-shot {
+      /* Tutorial walkthrough video */
+      figure.tutorial-video {
+        margin: 0 0 22px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        background: var(--bg-2);
+      }
+      figure.tutorial-video video {
         display: block;
         width: 100%;
-        margin-top: 14px;
-        border-radius: 10px;
-        border: 1px solid var(--border);
         background: #f3f5f9;
+      }
+      figure.tutorial-video figcaption {
+        padding: 12px 18px;
+        color: var(--muted);
+        font-size: 13px;
+        border-top: 1px solid var(--border);
       }
 
       /* Result figure (examples section) */
@@ -400,13 +411,31 @@
               Walk through a complete analysis end to end — from a STEP file to
               a colour-mapped result — in about a minute in the browser. We bolt
               a steel wall bracket to a wall through its three holes and hang a
-              load off the cylindrical hub. Every figure below is a real
-              screenshot of the solver, captured automatically by driving the
-              app through this exact workflow (see
-              <code>web/tests/tutorial-capture.spec.ts</code>), so it always
-              matches the current UI.
+              load off the cylindrical hub. The walkthrough below is a real,
+              unedited recording of the solver: every click and the meshing and
+              MFEM solve play out in realtime, captured automatically by driving
+              the app through this exact workflow (see
+              <code>web/tests/tutorial-video.spec.ts</code>), so it always
+              matches the current UI. The numbered steps recap what happens.
             </p>
           </div>
+          <figure class="tutorial-video">
+            <video
+              src="/tutorial/walkthrough.webm"
+              poster="/tutorial/05-results.png"
+              width="1280"
+              height="820"
+              controls
+              muted
+              loop
+              playsinline
+              preload="metadata"
+            ></video>
+            <figcaption>
+              Import → mesh → constrain &amp; load → solve, recorded in realtime
+              in the browser. The on-screen cursor shows each click.
+            </figcaption>
+          </figure>
           <div class="steps">
             <div class="step">
               <div>
@@ -416,14 +445,6 @@
                   bracket. <code>.step</code> and <code>.stp</code> are both
                   accepted from the import card.
                 </p>
-                <img
-                  class="step-shot"
-                  src="/tutorial/01-import.png"
-                  width="1280"
-                  height="820"
-                  loading="lazy"
-                  alt="Empty KoFEM workspace with the Import STEP card in the Geometry panel"
-                />
               </div>
             </div>
             <div class="step">
@@ -435,14 +456,6 @@
                   bolt holes and a cylindrical hub. Pick a material (steel is
                   the default) and set the mesh element-size bounds.
                 </p>
-                <img
-                  class="step-shot"
-                  src="/tutorial/02-geometry.png"
-                  width="1280"
-                  height="820"
-                  loading="lazy"
-                  alt="The imported wall bracket rendered in the viewport with mesh and material controls"
-                />
               </div>
             </div>
             <div class="step">
@@ -454,14 +467,6 @@
                   automatically around the holes and fillets. The status bar
                   reports the node and element counts once it is solver-ready.
                 </p>
-                <img
-                  class="step-shot"
-                  src="/tutorial/03-mesh.png"
-                  width="1280"
-                  height="820"
-                  loading="lazy"
-                  alt="The wall bracket filled with a tetrahedral volume mesh"
-                />
               </div>
             </div>
             <div class="step">
@@ -474,14 +479,6 @@
                   the load arrow is drawn on the model. Single-DOF rollers for a
                   symmetry plane are supported too.
                 </p>
-                <img
-                  class="step-shot"
-                  src="/tutorial/04-constraints.png"
-                  width="1280"
-                  height="820"
-                  loading="lazy"
-                  alt="The three bolt holes fixed and a downward load applied to the hub"
-                />
               </div>
             </div>
             <div class="step">
@@ -494,14 +491,6 @@
                   Switch the result field and read the min/max in the summary
                   panel.
                 </p>
-                <img
-                  class="step-shot"
-                  src="/tutorial/05-results.png"
-                  width="1280"
-                  height="820"
-                  loading="lazy"
-                  alt="The solved wall bracket coloured by displacement magnitude with a result summary"
-                />
               </div>
             </div>
           </div>

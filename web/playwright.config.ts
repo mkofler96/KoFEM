@@ -11,10 +11,11 @@ export default defineConfig({
   testDir: "./tests",
   outputDir: "./playwright-results",
   timeout: 30_000,
-  // Default suite runs everything except the on-demand figure capture (tagged
-  // @capture), which writes committed PNGs and would otherwise churn them on a
-  // routine `bun run test`. Run it with `bun run capture:tutorial`.
-  grepInvert: /@capture/,
+  // Default suite runs everything except the on-demand capture tests, which
+  // write committed assets and would otherwise churn them on a routine
+  // `bun run test`: @capture writes the tutorial PNGs (`bun run capture:tutorial`)
+  // and @video writes the walkthrough video (`bun run capture:video`).
+  grepInvert: /@capture|@video/,
   use: {
     baseURL: "http://localhost:4173",
     headless: true,

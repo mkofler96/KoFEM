@@ -16,6 +16,7 @@
     "test:ui": "playwright test --ui",
     "test:screenshot": "playwright test screenshot.spec.ts",
     "capture:tutorial": "playwright test -c playwright.capture.config.ts",
+    "capture:video": "playwright test -c playwright.video.config.ts",
     "test:mesh-report": "playwright test mesh-report.spec.ts",
     "report:mesh": "bun scripts/generate-mesh-report.ts"
   },
