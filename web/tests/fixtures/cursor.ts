@@ -86,11 +86,72 @@ declare global {
       click(): Promise<void>;
       pos(): { x: number; y: number };
     };
+    __liveCursor?: boolean;
   }
 }
 
 export async function installCursor(page: Page): Promise<void> {
   await page.addInitScript(CURSOR_SCRIPT);
+}
+
+// A live cursor overlay for manual screen recordings: the same dot, but it
+// tracks the user's real mouse and pulses on every real click. Playwright's
+// recordVideo captures the page surface without the OS pointer, so this makes
+// the user's own clicks visible in a hand-driven recording (see
+// scripts/record-walkthrough.ts).
+const LIVE_CURSOR_SCRIPT = `
+(() => {
+  const install = () => {
+    if (window.__liveCursor) return;
+    window.__liveCursor = true;
+    const wrap = document.createElement("div");
+    wrap.style.cssText =
+      "position:fixed;left:-100px;top:-100px;z-index:2147483647;" +
+      "pointer-events:none;transform:translate(-50%,-50%);will-change:left,top;";
+    const dot = document.createElement("div");
+    dot.style.cssText =
+      "width:20px;height:20px;border-radius:50%;" +
+      "background:rgba(74,124,255,0.35);border:2px solid #4a7cff;" +
+      "box-shadow:0 0 0 4px rgba(74,124,255,0.18),0 2px 6px rgba(0,0,0,0.4);";
+    wrap.appendChild(dot);
+    const mount = () => document.body.appendChild(wrap);
+    mount();
+    window.addEventListener(
+      "mousemove",
+      (e) => {
+        wrap.style.left = e.clientX + "px";
+        wrap.style.top = e.clientY + "px";
+      },
+      true,
+    );
+    window.addEventListener(
+      "mousedown",
+      (e) => {
+        const ring = document.createElement("div");
+        ring.style.cssText =
+          "position:fixed;left:" + e.clientX + "px;top:" + e.clientY + "px;" +
+          "z-index:2147483647;pointer-events:none;width:20px;height:20px;" +
+          "border-radius:50%;border:2px solid #4a7cff;" +
+          "transform:translate(-50%,-50%) scale(1);";
+        document.body.appendChild(ring);
+        ring.animate(
+          [
+            { transform: "translate(-50%,-50%) scale(1)", opacity: 0.9 },
+            { transform: "translate(-50%,-50%) scale(3.4)", opacity: 0 },
+          ],
+          { duration: 520, easing: "ease-out" },
+        ).onfinish = () => ring.remove();
+      },
+      true,
+    );
+  };
+  if (document.body) install();
+  else document.addEventListener("DOMContentLoaded", install);
+})();
+`;
+
+export async function installLiveCursor(page: Page): Promise<void> {
+  await page.addInitScript(LIVE_CURSOR_SCRIPT);
 }
 
 // Glide the synthetic cursor to a point (does not interact).
