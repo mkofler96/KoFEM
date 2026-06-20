@@ -24,7 +24,7 @@ test.describe("Tutorial figure capture", () => {
 
   test.use({ viewport: { width: 1280, height: 820 } });
 
-  test("plate workflow → committed tutorial figures", async ({ page }) => {
+  test("full workflow → committed tutorial figures", async ({ page }) => {
     test.setTimeout(600_000);
 
     if (!fs.existsSync(TUBE)) {
