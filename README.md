@@ -37,7 +37,7 @@ detached with `-d`).
 
 The container's internal port is configurable via the `PORT` environment
 variable (default `10000`). Only change this if something else is already using
-10000 *inside* the container — for normal use, just change the host side of the
+10000 _inside_ the container — for normal use, just change the host side of the
 `-p` mapping:
 
 ```bash
