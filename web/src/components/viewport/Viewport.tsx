@@ -1,28 +1,34 @@
-import { Canvas } from '@react-three/fiber'
-import { OrbitControls, Grid, GizmoHelper, GizmoViewport } from '@react-three/drei'
-import { MeshScene } from './MeshScene'
-import { FitCamera } from './FitCamera'
-import { useModelStore } from '../../store/modelStore'
+import { Canvas } from "@react-three/fiber";
+import {
+  OrbitControls,
+  Grid,
+  GizmoHelper,
+  GizmoViewport,
+} from "@react-three/drei";
+import { MeshScene } from "./MeshScene";
+import { FitCamera } from "./FitCamera";
+import { ColorBar } from "./ColorBar";
+import { useModelStore } from "../../store/modelStore";
 
 export function Viewport() {
-  const pickMode       = useModelStore(s => s.pickMode)
-  const triggerFitView = useModelStore(s => s.triggerFitView)
+  const pickMode = useModelStore((s) => s.pickMode);
+  const triggerFitView = useModelStore((s) => s.triggerFitView);
 
   return (
-    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+    <div style={{ position: "relative", width: "100%", height: "100%" }}>
       {/* Top-right HUD */}
-      <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 10 }}>
+      <div style={{ position: "absolute", top: 10, right: 10, zIndex: 10 }}>
         <button
           style={{
-            padding: '4px 10px',
-            background: 'rgba(255,255,255,0.85)',
-            border: '1px solid #d1d5db',
+            padding: "4px 10px",
+            background: "rgba(255,255,255,0.85)",
+            border: "1px solid #d1d5db",
             borderRadius: 5,
             fontSize: 12,
-            color: '#374151',
-            cursor: 'pointer',
-            backdropFilter: 'blur(4px)',
-            fontFamily: 'inherit',
+            color: "#374151",
+            cursor: "pointer",
+            backdropFilter: "blur(4px)",
+            fontFamily: "inherit",
           }}
           onClick={triggerFitView}
         >
@@ -30,10 +36,16 @@ export function Viewport() {
         </button>
       </div>
 
+      {/* Result field legend */}
+      <ColorBar />
+
       <Canvas
         camera={{ position: [5, 5, 5], fov: 45 }}
         gl={{ antialias: true, preserveDrawingBuffer: true }}
-        style={{ background: '#f0f2f5', cursor: pickMode ? 'crosshair' : 'default' }}
+        style={{
+          background: "#f0f2f5",
+          cursor: pickMode ? "crosshair" : "default",
+        }}
       >
         <ambientLight intensity={0.7} />
         <directionalLight position={[8, 10, 8]} intensity={0.9} castShadow />
@@ -54,5 +66,5 @@ export function Viewport() {
         </GizmoHelper>
       </Canvas>
     </div>
-  )
+  );
 }

@@ -9,6 +9,11 @@ import type {
 } from "../../store/modelStore";
 import { fmt } from "../../lib/modelDisplay";
 import {
+  computeResultRange,
+  resultFieldSymbol,
+  resultUnit,
+} from "../../lib/resultField";
+import {
   sendToWorker,
   setLogCallback,
   resetWorker,
@@ -1052,73 +1057,12 @@ function ResultsPanel() {
     );
   }
 
-  const d = result.displacements;
+  // Min/max of the selected scalar field over all nodes — the same field and
+  // node averaging used for the viewport coloring and colorbar legend.
+  const stats = computeResultRange(result, resultType, nodes, elements);
 
-  // Min/max of the selected scalar field over all nodes.  Von Mises is
-  // element-level data, so it is first averaged to nodes — the same
-  // averaging MeshScene uses for vertex coloring.
-  const stats = (() => {
-    if (nodes.length === 0) return null;
-
-    let nodeVm: Float64Array | null = null;
-    if (resultType === "Von Mises stress") {
-      if (!result.vonMises || elements.length === 0) return null;
-      const vm = result.vonMises;
-      const nodeIndex = new Map<number, number>();
-      for (let i = 0; i < nodes.length; i++) nodeIndex.set(nodes[i].id, i);
-      const sums = new Float64Array(nodes.length);
-      const counts = new Int32Array(nodes.length);
-      for (let ei = 0; ei < elements.length; ei++) {
-        const vmVal = vm[ei] ?? 0;
-        for (const nodeId of elements[ei].nodeIds) {
-          const ni = nodeIndex.get(nodeId);
-          if (ni !== undefined) {
-            sums[ni] += vmVal;
-            counts[ni]++;
-          }
-        }
-      }
-      nodeVm = new Float64Array(nodes.length);
-      for (let i = 0; i < nodes.length; i++)
-        nodeVm[i] = counts[i] > 0 ? sums[i] / counts[i] : 0;
-    }
-
-    const nodeValue = (i: number): number => {
-      switch (resultType) {
-        case "Ux":
-          return d[i * 3] ?? 0;
-        case "Uy":
-          return d[i * 3 + 1] ?? 0;
-        case "Uz":
-          return d[i * 3 + 2] ?? 0;
-        case "Von Mises stress":
-          return nodeVm?.[i] ?? 0;
-        default: {
-          const ux = d[i * 3] ?? 0,
-            uy = d[i * 3 + 1] ?? 0,
-            uz = d[i * 3 + 2] ?? 0;
-          return Math.sqrt(ux * ux + uy * uy + uz * uz);
-        }
-      }
-    };
-
-    let min = Infinity,
-      max = -Infinity;
-    for (let i = 0; i < nodes.length; i++) {
-      const v = nodeValue(i);
-      if (v < min) min = v;
-      if (v > max) max = v;
-    }
-    return { min, max };
-  })();
-
-  const fieldSymbol =
-    resultType === "Von Mises stress"
-      ? "σ_vm"
-      : resultType === "Displacement (magnitude)"
-        ? "|U|"
-        : resultType;
-  const unit = resultType === "Von Mises stress" ? "Pa" : "m";
+  const fieldSymbol = resultFieldSymbol(resultType);
+  const unit = resultUnit(resultType);
 
   return (
     <div className={styles.panel}>
