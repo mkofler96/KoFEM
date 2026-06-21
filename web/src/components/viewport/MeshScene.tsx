@@ -135,6 +135,7 @@ export function MeshScene() {
   const loads = useModelStore((s) => s.loads);
   const result = useModelStore((s) => s.result);
   const resultType = useModelStore((s) => s.resultType);
+  const mode = useModelStore((s) => s.mode);
   const stepSurface = useModelStore((s) => s.stepSurface);
   const volMesh = useModelStore((s) => s.volMesh);
   const surfaceTriangles = useModelStore((s) => s.surfaceTriangles);
@@ -766,6 +767,12 @@ export function MeshScene() {
     return null;
   }
 
+  // Results are only displayed in the Results tab.  Navigating back to an
+  // earlier step (e.g. Constraints) must show that step's visualization —
+  // the undeformed mesh with BC/load overlays — not the deformed result,
+  // even though the solved `result` is still held in the store.
+  const showResult = !!result && mode === "results";
+
   const showStepSurface =
     (viewRepr === "geometry" || nodes.length === 0) && !!stepGeometry;
   const showFemEdges = viewRepr === "surface" || viewRepr === "wireframe";
@@ -774,7 +781,7 @@ export function MeshScene() {
   return (
     <group>
       {/* Undeformed solid surface — light blue-grey on light background */}
-      {!result && undeformedSurface && (
+      {!showResult && undeformedSurface && (
         <mesh onClick={pickMode ? handleFacePick : undefined}>
           <bufferGeometry>
             <bufferAttribute
@@ -795,7 +802,7 @@ export function MeshScene() {
       )}
 
       {/* Element edges — shown from mesh mode onward for the classic FEM wireframe look */}
-      {!result && showFemEdges && undeformedEdgePositions && (
+      {!showResult && showFemEdges && undeformedEdgePositions && (
         <lineSegments>
           <bufferGeometry>
             <bufferAttribute
@@ -813,7 +820,7 @@ export function MeshScene() {
       ))}
 
       {/* Deformed solid surface */}
-      {deformedSurface && (
+      {showResult && deformedSurface && (
         <mesh onClick={pickMode ? handleFacePick : undefined}>
           <bufferGeometry>
             <bufferAttribute
@@ -830,7 +837,7 @@ export function MeshScene() {
       )}
 
       {/* Deformed wireframe overlay */}
-      {deformedEdgePositions && (
+      {showResult && deformedEdgePositions && (
         <lineSegments>
           <bufferGeometry>
             <bufferAttribute
@@ -843,7 +850,7 @@ export function MeshScene() {
       )}
 
       {/* Undeformed geometry overlay — shows original surface edges as reference over deformed result */}
-      {result && showUndeformedOverlay && undeformedSurfaceEdgePositions && (
+      {showResult && showUndeformedOverlay && undeformedSurfaceEdgePositions && (
         <lineSegments>
           <bufferGeometry>
             <bufferAttribute
@@ -856,7 +863,7 @@ export function MeshScene() {
       )}
 
       {/* BC face highlights — persistent coloured overlay for all committed BC faces */}
-      {!result &&
+      {!showResult &&
         bcFaceHighlights?.map((h, i) => (
           <mesh key={`bc-face-${h.groupId}-${i}`} renderOrder={1}>
             <bufferGeometry>
@@ -876,7 +883,7 @@ export function MeshScene() {
         ))}
 
       {/* Load face highlights — persistent coloured overlay for all committed load faces */}
-      {!result &&
+      {!showResult &&
         loadFaceHighlights?.map((h, i) => (
           <mesh key={`load-face-${h.groupId}-${i}`} renderOrder={1}>
             <bufferGeometry>
@@ -934,7 +941,7 @@ export function MeshScene() {
       )}
 
       {/* BC markers — triangular fixed-support symbols (3-sided cone, apex at face, base outward) */}
-      {!result && bcMarkerData && (
+      {!showResult && bcMarkerData && (
         <group position={bcMarkerData.pos} quaternion={bcMarkerData.quaternion}>
           <mesh position={[0, -modelSize * 0.075, 0]}>
             <coneGeometry args={[modelSize * 0.09, modelSize * 0.15, 3]} />
@@ -952,7 +959,7 @@ export function MeshScene() {
       )}
 
       {/* Load arrow — resultant of all force DOFs, cylinder shaft + cone head */}
-      {!result &&
+      {!showResult &&
         loadArrowData &&
         (() => {
           const shaftLen = modelSize * 0.22;
