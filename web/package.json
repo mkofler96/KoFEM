@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "validate": "bun ../examples/validation/run.mjs",
+    "examples:generate": "bun ../examples/web-examples/generate.mjs",
     "test": "bun ../examples/validation/run.mjs && bun ../examples/validation/dof-constraint.test.mjs && bun ../test_wall_bracket.mjs 20.0 && playwright test",
     "test:coverage": "rm -rf .nyc_output coverage && COVERAGE=1 playwright test && bun run coverage:report",
     "coverage:report": "nyc report && bun scripts/coverage-dead-code.ts",
