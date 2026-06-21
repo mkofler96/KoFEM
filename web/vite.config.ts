@@ -1,6 +1,6 @@
 import { defineConfig, type PluginOption } from "vite";
 import { fileURLToPath } from "node:url";
-import { copyFileSync } from "node:fs";
+import { copyFileSync, mkdirSync } from "node:fs";
 import react from "@vitejs/plugin-react";
 import wasm from "vite-plugin-wasm";
 import topLevelAwait from "vite-plugin-top-level-await";
@@ -8,18 +8,23 @@ import istanbul from "vite-plugin-istanbul";
 
 const htmlEntry = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 
-// The marketing landing (index.html) is fully static — Vite emits it byte-for-byte,
-// it imports no hashed assets. Feeding it as a second MPA rollup input is flaky
-// (in some environments rollup crosses the landing/app chunk names and drops the
-// landing HTML entirely, leaving "/" on nginx's default page). So the build has a
-// single entry (the app) and we copy the static landing into dist/ deterministically.
-// Dev is unaffected: rollupOptions is build-only, and the dev server still serves
-// index.html at "/" from the filesystem.
-const copyLandingHtml = (): PluginOption => ({
-  name: "copy-landing-html",
+// The marketing pages (index.html, examples/index.html) are fully static — Vite
+// emits them byte-for-byte, they import no hashed assets. Feeding them as extra
+// MPA rollup inputs is flaky (in some environments rollup crosses the landing/app
+// chunk names and drops the landing HTML entirely, leaving "/" on nginx's default
+// page). So the build has a single entry (the app) and we copy the static pages
+// into dist/ deterministically. Dev is unaffected: rollupOptions is build-only,
+// and the dev server still serves the pages from the filesystem.
+const copyStaticPages = (): PluginOption => ({
+  name: "copy-static-pages",
   apply: "build",
   closeBundle() {
     copyFileSync(htmlEntry("./index.html"), htmlEntry("./dist/index.html"));
+    mkdirSync(htmlEntry("./dist/examples"), { recursive: true });
+    copyFileSync(
+      htmlEntry("./examples/index.html"),
+      htmlEntry("./dist/examples/index.html"),
+    );
   },
 });
 
@@ -46,7 +51,7 @@ export default defineConfig(({ mode }) => ({
     react(),
     wasm(),
     topLevelAwait(),
-    copyLandingHtml(),
+    copyStaticPages(),
     ...coveragePlugins,
   ],
   worker: {
