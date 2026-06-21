@@ -2,6 +2,7 @@ import { Canvas } from '@react-three/fiber'
 import { OrbitControls, Grid, GizmoHelper, GizmoViewport } from '@react-three/drei'
 import { MeshScene } from './MeshScene'
 import { FitCamera } from './FitCamera'
+import { ColorBar } from './ColorBar'
 import { useModelStore } from '../../store/modelStore'
 
 export function Viewport() {
@@ -29,6 +30,9 @@ export function Viewport() {
           Fit View
         </button>
       </div>
+
+      {/* Result field legend */}
+      <ColorBar />
 
       <Canvas
         camera={{ position: [5, 5, 5], fov: 45 }}
