@@ -850,17 +850,19 @@ export function MeshScene() {
       )}
 
       {/* Undeformed geometry overlay — shows original surface edges as reference over deformed result */}
-      {showResult && showUndeformedOverlay && undeformedSurfaceEdgePositions && (
-        <lineSegments>
-          <bufferGeometry>
-            <bufferAttribute
-              attach="attributes-position"
-              args={[undeformedSurfaceEdgePositions, 3]}
-            />
-          </bufferGeometry>
-          <lineBasicMaterial color="#6b8cad" transparent opacity={0.5} />
-        </lineSegments>
-      )}
+      {showResult &&
+        showUndeformedOverlay &&
+        undeformedSurfaceEdgePositions && (
+          <lineSegments>
+            <bufferGeometry>
+              <bufferAttribute
+                attach="attributes-position"
+                args={[undeformedSurfaceEdgePositions, 3]}
+              />
+            </bufferGeometry>
+            <lineBasicMaterial color="#6b8cad" transparent opacity={0.5} />
+          </lineSegments>
+        )}
 
       {/* BC face highlights — persistent coloured overlay for all committed BC faces */}
       {!showResult &&
