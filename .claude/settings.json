@@ -10,10 +10,6 @@
       "Bash(wasm-pack build*)",
       "Bash(bun run*)",
       "Bash(bun x*)",
-      "Bash(uvx*)",
-      "Bash(uv run*)",
-      "Bash(uv sync*)",
-      "Bash(maturin develop*)",
       "Bash(git status*)",
       "Bash(git log*)",
       "Bash(git diff*)",
@@ -57,7 +53,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "input=$(cat); f=$(echo \"$input\" | jq -r '.tool_input.file_path'); case \"$f\" in *.rs) cd /home/user/KoFEM && cargo fmt --all 2>/dev/null || true ;; *.ts|*.tsx) cd web && [ -d node_modules ] && bun run typecheck || true ;; *.py) uvx ruff check --fix \"$f\" 2>/dev/null; uvx ruff format \"$f\" 2>/dev/null || true ;; esac",
+            "command": "input=$(cat); f=$(echo \"$input\" | jq -r '.tool_input.file_path'); case \"$f\" in *.rs) cd /home/user/KoFEM && cargo fmt --all 2>/dev/null || true ;; *.ts|*.tsx) cd web && [ -d node_modules ] && bun run typecheck || true ;; esac",
             "statusMessage": "Formatting…"
           }
         ]

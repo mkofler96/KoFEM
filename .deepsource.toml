@@ -24,13 +24,6 @@ enabled = true
   plugins = ["react"]
 
 [[analyzers]]
-name = "python"
-enabled = true
-
-  [analyzers.meta]
-  runtime_version = "3.x.x"
-
-[[analyzers]]
 name = "cxx"
 enabled = true
 
@@ -40,8 +33,4 @@ enabled = true
 
 [[code_formatters]]
 name = "prettier"
-enabled = true
-
-[[code_formatters]]
-name = "black"
 enabled = true

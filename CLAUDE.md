@@ -12,16 +12,14 @@ KoFEM/
 │   ├── cpp/engine.cpp  # Full pipeline via Emscripten Embind
 │   └── CMakeLists.txt  # emcmake build → kofem_wasm_emcc.js + .wasm
 ├── crates/
-│   ├── kofem-geom/     # OCCT wrapper: STEP import + surface tessellation (native / Python)
-│   ├── kofem-mesh/     # Netgen wrapper: quality tetrahedral volume meshing (native / Python)
+│   ├── kofem-geom/     # OCCT wrapper: STEP import + surface tessellation (native)
+│   ├── kofem-mesh/     # Netgen wrapper: quality tetrahedral volume meshing (native)
 │   │                   # also defines the shared SurfaceMesh / VolumeMesh types
-│   ├── kofem-core/     # MFEM wrapper: linear-elastic FEM via FemSolver trait (native / Python)
-│   └── kofem-py/       # Python bindings (PyO3 / maturin)
+│   └── kofem-core/     # MFEM wrapper: linear-elastic FEM via FemSolver trait (native)
 ├── web/                # React + Three.js frontend (Vite)
 ├── scripts/
 │   ├── build-wasm.sh        # CMake/Emscripten WASM build
 │   └── docker-build-wasm.sh # Docker wrapper (Mac / CI)
-├── python/             # Python package (maturin build)
 └── docs/               # Project specs, roadmap, ADRs
 ```
 
@@ -47,7 +45,7 @@ expose the new logic via `extern "C"`, and call it from `engine.cpp`. The
 CMakeLists.txt gets one extra `target_link_libraries` entry — nothing else
 changes.
 
-### C++ bridge layout (native / Python builds)
+### C++ bridge layout (native builds)
 
 Each Rust crate that wraps a C++ library has:
 
@@ -61,8 +59,8 @@ crates/kofem-{geom,mesh,core}/
 ### Solver abstraction
 
 `kofem-core` exposes a `FemSolver` trait. `MfemSolver` is the default implementation.
-To swap MFEM for a different solver, implement `FemSolver` in a new module and wire it
-into `kofem-py` — no other crate changes are needed.
+To swap MFEM for a different solver, implement `FemSolver` in a new module — no other
+crate changes are needed.
 
 ## Native prerequisites
 
