@@ -14,7 +14,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-IMAGE="ghcr.io/mkofler96/kofem-dependencies:main"
+IMAGE="ghcr.io/mkofler96/kofem-dependencies:0.0.2"
 PLATFORM="linux/amd64"
 
 echo "╔══════════════════════════════════════════════════════╗"
