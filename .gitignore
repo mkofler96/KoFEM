@@ -6,16 +6,6 @@ web/node_modules/
 web/dist/
 web/.vite/
 
-# Python
-python/.venv/
-python/__pycache__/
-*.pyc
-*.pyd
-*.so
-*.dist-info/
-dist/
-*.egg-info/
-
 # macOS
 .DS_Store
 
