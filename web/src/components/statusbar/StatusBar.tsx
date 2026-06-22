@@ -1,4 +1,5 @@
 import { useModelStore } from "../../store/modelStore";
+import { APP_VERSION } from "../../lib/version";
 import styles from "./StatusBar.module.css";
 
 type ViewRepr = "geometry" | "surface" | "volume" | "wireframe";
@@ -257,7 +258,7 @@ export function StatusBar() {
             Mesh OK
           </span>
         ) : null}
-        <span className={styles.muted}>m · N · Pa · v0.4.1</span>
+        <span className={styles.muted}>m · N · Pa · {APP_VERSION}</span>
       </div>
     </div>
   );
