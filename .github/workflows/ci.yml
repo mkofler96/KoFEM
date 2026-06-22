@@ -41,7 +41,7 @@ jobs:
     name: WASM (Emscripten)
     runs-on: ubuntu-24.04
     container:
-      image: ghcr.io/mkofler96/kofem-dependencies:main
+      image: ghcr.io/mkofler96/kofem-dependencies:0.0.2
 
     steps:
       - uses: actions/checkout@v4
@@ -54,7 +54,9 @@ jobs:
           path: |
             web/src/wasm/pkg/kofem_wasm_emcc.js
             web/src/wasm/pkg/kofem_wasm_emcc.wasm
-          key: wasm-${{ runner.os }}-${{ hashFiles('engine/**', 'scripts/build-wasm.sh') }}
+          # deps tag is part of the key so bumping the toolchain image invalidates
+          # any artifact built with the previous emscripten/Binaryen pair.
+          key: wasm-${{ runner.os }}-deps0.0.2-${{ hashFiles('engine/**', 'scripts/build-wasm.sh') }}
 
       - name: WASM cache status
         run: |
