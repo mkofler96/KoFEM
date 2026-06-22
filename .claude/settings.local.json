@@ -13,7 +13,9 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code} %{content_type}\\\\n\" http://localhost:18080/app/)",
       "Bash(curl -s -o /dev/null -w \"%{http_code} %{content_type}\\\\n\" http://localhost:18080/assets/app-BxWrlPYj.js)",
       "Bash(curl -s -o /dev/null -w \"%{http_code} %{content_type}\\\\n\" http://localhost:18080/assets/solver.worker-CahTF93F.js)",
-      "Bash(curl -s -o /dev/null -w \"%{http_code} %{content_type}\\\\n\" http://localhost:18080/assets/kofem_wasm-JomaJdsT.wasm)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code} %{content_type}\\\\n\" http://localhost:18080/assets/kofem_wasm-JomaJdsT.wasm)",
+      "mcp__Linear__get_issue",
+      "mcp__Linear__save_issue"
     ]
   }
 }
