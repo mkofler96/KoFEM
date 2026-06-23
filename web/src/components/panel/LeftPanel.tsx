@@ -35,8 +35,38 @@ function MaterialForm({
   const [young, setYoung] = useState(String(mat?.young ?? 210e9));
   const [poisson, setPoisson] = useState(String(mat?.poisson ?? 0.3));
   const [density, setDensity] = useState(String(mat?.density ?? 7850));
+  const [error, setError] = useState<string | null>(null);
+
+  function handleSave() {
+    const e = parseFloat(young);
+    const nu = parseFloat(poisson);
+    const rho = parseFloat(density);
+
+    if (!isFinite(e) || e <= 0) {
+      setError("Young's modulus must be a positive number");
+      return;
+    }
+    // ν must lie in (-1, 0.5); ν = 0 is physically valid (e.g. auxetic foams,
+    // cork) and must not be silently replaced by the steel default.
+    if (!isFinite(nu) || nu <= -1 || nu >= 0.5) {
+      setError("Poisson's ratio must be in the range (-1, 0.5)");
+      return;
+    }
+    if (!isFinite(rho) || rho < 0) {
+      setError("Density must be a non-negative number");
+      return;
+    }
+    onSave({ name: name || "Material", young: e, poisson: nu, density: rho });
+  }
+
   return (
     <div className={styles.inlineForm}>
+      {error && (
+        <div className={styles.errorBanner} data-testid="material-error">
+          <span>{error}</span>
+          <button onClick={() => setError(null)}>×</button>
+        </div>
+      )}
       <div className={styles.formRow}>
         <span className={styles.formLabel}>Name</span>
         <input
@@ -79,17 +109,7 @@ function MaterialForm({
         <button className={styles.cancelBtn} onClick={onCancel}>
           Cancel
         </button>
-        <button
-          className={styles.primaryBtn}
-          onClick={() =>
-            onSave({
-              name: name || "Material",
-              young: parseFloat(young) || 210e9,
-              poisson: parseFloat(poisson) || 0.3,
-              density: parseFloat(density) || 7850,
-            })
-          }
-        >
+        <button className={styles.primaryBtn} onClick={handleSave}>
           Save
         </button>
       </div>
