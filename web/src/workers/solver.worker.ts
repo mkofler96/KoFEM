@@ -215,7 +215,12 @@ self.onmessage = async (event: MessageEvent) => {
         hexahedra,
       };
 
-      const mat = materials[0] ?? { young: 210e9, poisson: 0.3, density: 7850 };
+      const mat = materials[0];
+      if (!mat) {
+        throw new Error(
+          "solve: no material assigned — assign a material before running the solver",
+        );
+      }
       const material = {
         young_modulus: mat.young,
         poisson_ratio: mat.poisson,
