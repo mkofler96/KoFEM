@@ -525,7 +525,13 @@ export const useModelStore = create<ModelState>()(
         s.nodes = [];
         s.elements = [];
         s.materials = [
-          { id: 1, name: "Steel", young: 210000, poisson: 0.3, density: 7.85e-9 },
+          {
+            id: 1,
+            name: "Steel",
+            young: 210000,
+            poisson: 0.3,
+            density: 7.85e-9,
+          },
         ];
         s.properties = [{ id: 1, type: "PSOLID", materialId: 1 }];
         s.bcGroups = [];
