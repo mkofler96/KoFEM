@@ -32,9 +32,9 @@ function MaterialForm({
   onCancel(): void;
 }) {
   const [name, setName] = useState(mat?.name ?? "Material");
-  const [young, setYoung] = useState(String(mat?.young ?? 210e9));
+  const [young, setYoung] = useState(String(mat?.young ?? 210000));
   const [poisson, setPoisson] = useState(String(mat?.poisson ?? 0.3));
-  const [density, setDensity] = useState(String(mat?.density ?? 7850));
+  const [density, setDensity] = useState(String(mat?.density ?? 7.85e-9));
   return (
     <div className={styles.inlineForm}>
       <div className={styles.formRow}>
@@ -46,12 +46,12 @@ function MaterialForm({
         />
       </div>
       <div className={styles.formRow}>
-        <span className={styles.formLabel}>E (Pa)</span>
+        <span className={styles.formLabel}>E (MPa)</span>
         <input
           className={styles.formInput}
           type="number"
           value={young}
-          step="1e9"
+          step="1000"
           onChange={(e) => setYoung(e.target.value)}
         />
       </div>
@@ -66,12 +66,12 @@ function MaterialForm({
         />
       </div>
       <div className={styles.formRow}>
-        <span className={styles.formLabel}>ρ (kg/m³)</span>
+        <span className={styles.formLabel}>ρ (t/mm³)</span>
         <input
           className={styles.formInput}
           type="number"
           value={density}
-          step="100"
+          step="1e-9"
           onChange={(e) => setDensity(e.target.value)}
         />
       </div>
@@ -84,9 +84,9 @@ function MaterialForm({
           onClick={() =>
             onSave({
               name: name || "Material",
-              young: parseFloat(young) || 210e9,
+              young: parseFloat(young) || 210000,
               poisson: parseFloat(poisson) || 0.3,
-              density: parseFloat(density) || 7850,
+              density: parseFloat(density) || 7.85e-9,
             })
           }
         >
@@ -464,7 +464,7 @@ function GeometryPanel() {
                 <div className={styles.treeItemBody}>
                   <div className={styles.treeItemName}>{m.name}</div>
                   <div className={styles.treeItemDetail}>
-                    E = {fmt(m.young, 3)} Pa · ν = {m.poisson}
+                    E = {fmt(m.young, 3)} MPa · ν = {m.poisson}
                   </div>
                 </div>
                 <div className={styles.treeItemActions}>
@@ -976,7 +976,7 @@ function SolvePanel() {
     [
       matOk,
       materials.length > 0
-        ? `Material assigned · ${materials[0].name} · E=${fmt(materials[0].young, 3)} Pa`
+        ? `Material assigned · ${materials[0].name} · E=${fmt(materials[0].young, 3)} MPa`
         : "No material assigned",
     ],
     [
