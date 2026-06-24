@@ -1010,7 +1010,12 @@ function SolvePanel() {
   const matOk = materials.length > 0;
   const bcOk = constraints.length > 0;
   const loadOk = loads.length > 0;
-  const allOk = meshOk && matOk && bcOk && loadOk;
+  // A non-zero prescribed displacement drives the deformation on its own, so the
+  // model is solvable without an applied load. Without either, the solve returns
+  // the trivial zero field, so at least one driving action is still required.
+  const prescribedOk = constraints.some((c) => (c.prescribedValue ?? 0) !== 0);
+  const drivingOk = loadOk || prescribedOk;
+  const allOk = meshOk && matOk && bcOk && drivingOk;
 
   function handleSolve() {
     setRunning(true);
@@ -1062,8 +1067,12 @@ function SolvePanel() {
         : "No boundary conditions",
     ],
     [
-      loadOk,
-      loadOk ? `Loads applied · ${loads.length} load DOFs` : "No loads applied",
+      drivingOk,
+      loadOk
+        ? `Loads applied · ${loads.length} load DOFs`
+        : prescribedOk
+          ? "Prescribed displacement drives the model"
+          : "No loads or prescribed displacement",
     ],
   ];
 

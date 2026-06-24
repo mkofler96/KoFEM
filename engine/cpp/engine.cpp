@@ -46,6 +46,7 @@
 #include <stdexcept>
 #include <string>
 #include <unistd.h>
+#include <utility>
 #include <vector>
 
 #include <emscripten.h>
@@ -844,11 +845,41 @@ static std::string solve_linear_elastic(
         }
     }
 
+    // prescribed_dofs pins a single component of a vertex to a NON-ZERO value —
+    // an inhomogeneous Dirichlet condition (e.g. a prescribed-displacement
+    // support that drives the deformation on its own). Each entry is
+    // { vertex: int, dof: int (0=Ux,1=Uy,2=Uz), value: double }. The DOF is added
+    // to the essential set like any other fixed DOF, but the value is written
+    // into the solution GridFunction below so FormLinearSystem eliminates it and
+    // moves its contribution to the load vector. Optional: absent payloads keep
+    // the all-zero Dirichlet behaviour unchanged.
+    std::vector<std::pair<int, double>> prescribed_vals;
+    val pdofs_js = bcs_js["prescribed_dofs"];
+    if (!pdofs_js.isUndefined() && !pdofs_js.isNull()) {
+        unsigned n_pdofs = pdofs_js["length"].as<unsigned>();
+        for (unsigned i = 0; i < n_pdofs; ++i) {
+            val entry = pdofs_js[i];
+            int vi = entry["vertex"].as<int>();
+            int d  = entry["dof"].as<int>();
+            double value = entry["value"].as<double>();
+            Array<int> vdofs;
+            fespace.GetVertexVDofs(vi, vdofs);
+            if (d >= 0 && d < vdofs.Size()) {
+                ess_tdof.Append(vdofs[d]);
+                prescribed_vals.emplace_back(vdofs[d], value);
+            }
+        }
+    }
+
     ess_tdof.Sort();
     ess_tdof.Unique();
 
     GridFunction x(&fespace);
     x = 0.0;
+    // Seed the prescribed components before FormLinearSystem so the eliminated
+    // essential DOFs carry the requested displacement instead of zero.
+    for (const auto& pv : prescribed_vals)
+        x[pv.first] = pv.second;
 
     LinearForm b(&fespace);
     b.Assemble();

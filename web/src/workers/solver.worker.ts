@@ -297,11 +297,23 @@ self.onmessage = async (event: MessageEvent) => {
       // in only some becomes a per-DOF constraint (fixed_dofs) so the unconstrained
       // directions stay free — e.g. a symmetry-plane roller. Rotational DOFs (3–5)
       // carry no stiffness for solid (H1 displacement) elements and are ignored.
+      //
+      // A non-zero prescribed displacement is also a Dirichlet condition, but it
+      // must reach the solver as an inhomogeneous essential BC (prescribed_dofs):
+      // folding it into fixed_vertices/fixed_dofs would silently pin the DOF to
+      // zero and discard the requested value (issue #216).
       const dofsByNode = new Map<number, Set<number>>();
+      const prescribed_dofs: { vertex: number; dof: number; value: number }[] =
+        [];
       for (const c of constraints) {
         if (c.dof > 2) continue;
-        if (!dofsByNode.has(c.nodeId)) dofsByNode.set(c.nodeId, new Set());
-        dofsByNode.get(c.nodeId)!.add(c.dof);
+        const value = c.prescribedValue ?? 0;
+        if (value === 0) {
+          if (!dofsByNode.has(c.nodeId)) dofsByNode.set(c.nodeId, new Set());
+          dofsByNode.get(c.nodeId)!.add(c.dof);
+        } else {
+          prescribed_dofs.push({ vertex: c.nodeId, dof: c.dof, value });
+        }
       }
       const fixed_vertices: number[] = [];
       const fixed_dofs: { vertex: number; dofs: number[] }[] = [];
@@ -322,7 +334,7 @@ self.onmessage = async (event: MessageEvent) => {
         force,
       }));
 
-      const bcs = { fixed_vertices, point_loads, fixed_dofs };
+      const bcs = { fixed_vertices, point_loads, fixed_dofs, prescribed_dofs };
       const json = m().solve_linear_elastic(
         JSON.stringify(mesh),
         JSON.stringify(material),
