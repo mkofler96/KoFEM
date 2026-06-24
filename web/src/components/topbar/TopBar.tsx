@@ -51,9 +51,6 @@ export function TopBar() {
 
       {/* Right */}
       <div className={styles.right}>
-        <span className={styles.units}>
-          <b>SI</b> · m, N, Pa
-        </span>
         <input
           ref={loadInputRef}
           type="file"
