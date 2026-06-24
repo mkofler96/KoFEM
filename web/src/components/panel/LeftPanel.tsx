@@ -538,6 +538,7 @@ function GeometryPanel() {
 // ── Constraints mode ──────────────────────────────────────────────────────────
 
 function ConstraintsPanel() {
+  const nodes = useModelStore((s) => s.nodes);
   const bcGroups = useModelStore((s) => s.bcGroups);
   const loadGroups = useModelStore((s) => s.loadGroups);
   const pickMode = useModelStore((s) => s.pickMode);
@@ -573,6 +574,10 @@ function ConstraintsPanel() {
 
   const DOF_LABELS = ["Ux", "Uy", "Uz", "Rx", "Ry", "Rz"];
   const LOAD_LABELS = ["Fx", "Fy", "Fz", "Mx", "My", "Mz"];
+
+  // Boundary conditions and loads reference mesh nodes, so they can only be
+  // defined once a volume mesh exists.
+  const meshOk = nodes.length > 0;
 
   const targetBcGroup =
     pickTargetGroupId !== null
@@ -665,296 +670,308 @@ function ConstraintsPanel() {
             <button onClick={() => setError(null)}>×</button>
           </div>
         )}
-        {/* ── BC section ────────────────────────────────────── */}
-        <div className={styles.sectionLabel}>Fixed displacement</div>
-
-        {pickMode !== "bc" && (
-          <button
-            className={styles.pickBtn}
-            onClick={() => setPickMode("bc", null)}
-          >
-            + Add BC
-          </button>
+        {!meshOk && (
+          <div className={styles.empty} data-testid="no-mesh-hint">
+            Generate a mesh before adding boundary conditions.
+          </div>
         )}
 
-        {pickMode === "bc" && (
-          <div className={styles.pickPanel}>
-            <div className={styles.pickPanelHeader}>
-              <span className={styles.pickPanelTitle}>
-                {targetBcGroup ? `Add face to ${targetBcGroup.name}` : "New BC"}
-              </span>
-              <button
-                className={styles.iconBtn}
-                onClick={cancelPick}
-                title="Cancel"
-              >
-                ✕
-              </button>
-            </div>
+        {meshOk && (
+          <>
+            {/* ── BC section ────────────────────────────────────── */}
+            <div className={styles.sectionLabel}>Fixed displacement</div>
 
-            {allPickedFaces.length === 0 ? (
-              <div className={styles.pickHint}>
-                Click a face in the 3D viewport
-              </div>
-            ) : (
-              <div>
-                {allPickedFaces.map((f, i) => (
-                  <div key={i} className={styles.bcFaceRow}>
-                    <span className={styles.bcFaceName}>{f.label}</span>
-                    <button
-                      className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
-                      title="Remove face"
-                      onClick={() => removePickedFace(i)}
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-              </div>
+            {pickMode !== "bc" && (
+              <button
+                className={styles.pickBtn}
+                onClick={() => setPickMode("bc", null)}
+              >
+                + Add BC
+              </button>
             )}
 
-            {allPickedFaces.length > 0 && !targetBcGroup && (
-              <>
-                <div className={styles.dofGrid}>
-                  {/* Solid (H1 displacement) elements have only translational
+            {pickMode === "bc" && (
+              <div className={styles.pickPanel}>
+                <div className={styles.pickPanelHeader}>
+                  <span className={styles.pickPanelTitle}>
+                    {targetBcGroup
+                      ? `Add face to ${targetBcGroup.name}`
+                      : "New BC"}
+                  </span>
+                  <button
+                    className={styles.iconBtn}
+                    onClick={cancelPick}
+                    title="Cancel"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {allPickedFaces.length === 0 ? (
+                  <div className={styles.pickHint}>
+                    Click a face in the 3D viewport
+                  </div>
+                ) : (
+                  <div>
+                    {allPickedFaces.map((f, i) => (
+                      <div key={i} className={styles.bcFaceRow}>
+                        <span className={styles.bcFaceName}>{f.label}</span>
+                        <button
+                          className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
+                          title="Remove face"
+                          onClick={() => removePickedFace(i)}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {allPickedFaces.length > 0 && !targetBcGroup && (
+                  <>
+                    <div className={styles.dofGrid}>
+                      {/* Solid (H1 displacement) elements have only translational
                       DOFs — Ux, Uy, Uz. Rotational constraints carry no
                       stiffness and are not offered. */}
-                  {DOF_LABELS.slice(0, 3).map((d, i) => (
-                    <label key={d} className={styles.dofCheck}>
+                      {DOF_LABELS.slice(0, 3).map((d, i) => (
+                        <label key={d} className={styles.dofCheck}>
+                          <input
+                            type="checkbox"
+                            checked={checkedDofs[i]}
+                            onChange={() =>
+                              setCheckedDofs((p) =>
+                                p.map((v, j) => (j === i ? !v : v)),
+                              )
+                            }
+                          />
+                          {d}
+                        </label>
+                      ))}
+                    </div>
+                    <div className={styles.formRow}>
+                      <span className={styles.formLabel}>Value</span>
                       <input
-                        type="checkbox"
-                        checked={checkedDofs[i]}
-                        onChange={() =>
-                          setCheckedDofs((p) =>
-                            p.map((v, j) => (j === i ? !v : v)),
-                          )
-                        }
+                        className={styles.formInput}
+                        type="number"
+                        value={bcValue}
+                        step="0.001"
+                        onChange={(e) => setBcValue(e.target.value)}
                       />
-                      {d}
-                    </label>
-                  ))}
-                </div>
-                <div className={styles.formRow}>
-                  <span className={styles.formLabel}>Value</span>
-                  <input
-                    className={styles.formInput}
-                    type="number"
-                    value={bcValue}
-                    step="0.001"
-                    onChange={(e) => setBcValue(e.target.value)}
-                  />
-                </div>
-                <button className={styles.primaryBtn} onClick={applyBc}>
-                  Apply BC
-                </button>
-              </>
+                    </div>
+                    <button className={styles.primaryBtn} onClick={applyBc}>
+                      Apply BC
+                    </button>
+                  </>
+                )}
+
+                {allPickedFaces.length > 0 && targetBcGroup && (
+                  <button className={styles.primaryBtn} onClick={applyBc}>
+                    {allPickedFaces.length === 1
+                      ? "Add Face"
+                      : `Add ${allPickedFaces.length} Faces`}
+                  </button>
+                )}
+              </div>
             )}
 
-            {allPickedFaces.length > 0 && targetBcGroup && (
-              <button className={styles.primaryBtn} onClick={applyBc}>
-                {allPickedFaces.length === 1
-                  ? "Add Face"
-                  : `Add ${allPickedFaces.length} Faces`}
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* BC group list */}
-        {bcGroups.map((g) => (
-          <div key={g.id} className={styles.bcGroup}>
-            <div className={styles.bcGroupHeader}>
-              <span className={styles.bcDot} />
-              <span className={styles.bcGroupName}>{g.name}</span>
-              <span className={styles.bcGroupMeta}>
-                {g.dofs.map((d) => DOF_LABELS[d]).join(", ")} = {g.value}
-              </span>
-              <div className={styles.treeItemActions}>
-                <button
-                  className={styles.iconBtn}
-                  title="Add face"
-                  onClick={() => {
-                    setPickMode("bc", g.id);
-                    setSelectedFace(null);
-                    setPendingFaces([]);
-                  }}
-                >
-                  ✏
-                </button>
-                <button
-                  className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
-                  title="Delete BC"
-                  onClick={() => deleteBcGroup(g.id)}
-                >
-                  ✕
-                </button>
-              </div>
-            </div>
-            {g.faces.map((f) => (
-              <div key={f.id} className={styles.bcFaceRow}>
-                <span className={styles.bcFaceIndent}>└</span>
-                <span className={styles.bcFaceName}>{f.label}</span>
-                <button
-                  className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
-                  title="Remove face"
-                  onClick={() => removeFaceFromBcGroup(g.id, f.id)}
-                >
-                  ×
-                </button>
-              </div>
-            ))}
-          </div>
-        ))}
-
-        {/* ── Load section ───────────────────────────────────── */}
-        <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
-          Applied loads
-        </div>
-
-        {pickMode !== "load" && (
-          <button
-            className={styles.pickBtn}
-            onClick={() => setPickMode("load", null)}
-          >
-            + Add Load
-          </button>
-        )}
-
-        {pickMode === "load" && (
-          <div className={styles.pickPanel}>
-            <div className={styles.pickPanelHeader}>
-              <span className={styles.pickPanelTitle}>
-                {targetLoadGroup
-                  ? `Add face to ${targetLoadGroup.name}`
-                  : "New Load"}
-              </span>
-              <button
-                className={styles.iconBtn}
-                onClick={cancelPick}
-                title="Cancel"
-              >
-                ✕
-              </button>
-            </div>
-
-            {allPickedFaces.length === 0 ? (
-              <div className={styles.pickHint}>
-                Click a face in the 3D viewport
-              </div>
-            ) : (
-              <div>
-                {allPickedFaces.map((f, i) => (
-                  <div key={i} className={styles.bcFaceRow}>
+            {/* BC group list */}
+            {bcGroups.map((g) => (
+              <div key={g.id} className={styles.bcGroup}>
+                <div className={styles.bcGroupHeader}>
+                  <span className={styles.bcDot} />
+                  <span className={styles.bcGroupName}>{g.name}</span>
+                  <span className={styles.bcGroupMeta}>
+                    {g.dofs.map((d) => DOF_LABELS[d]).join(", ")} = {g.value}
+                  </span>
+                  <div className={styles.treeItemActions}>
+                    <button
+                      className={styles.iconBtn}
+                      title="Add face"
+                      onClick={() => {
+                        setPickMode("bc", g.id);
+                        setSelectedFace(null);
+                        setPendingFaces([]);
+                      }}
+                    >
+                      ✏
+                    </button>
+                    <button
+                      className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
+                      title="Delete BC"
+                      onClick={() => deleteBcGroup(g.id)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+                {g.faces.map((f) => (
+                  <div key={f.id} className={styles.bcFaceRow}>
+                    <span className={styles.bcFaceIndent}>└</span>
                     <span className={styles.bcFaceName}>{f.label}</span>
                     <button
                       className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
                       title="Remove face"
-                      onClick={() => removePickedFace(i)}
+                      onClick={() => removeFaceFromBcGroup(g.id, f.id)}
                     >
                       ×
                     </button>
                   </div>
                 ))}
               </div>
-            )}
+            ))}
 
-            {allPickedFaces.length > 0 && !targetLoadGroup && (
-              <>
-                <div className={styles.formRow}>
-                  <span className={styles.formLabel}>DOF</span>
-                  <select
-                    className={styles.formSelect}
-                    value={loadDof}
-                    onChange={(e) => setLoadDof(Number(e.target.value))}
-                  >
-                    {LOAD_LABELS.map((d, i) => (
-                      <option key={d} value={i}>
-                        {d}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className={styles.formRow}>
-                  <span className={styles.formLabel}>
-                    {loadDof <= 2 ? "Total (N)" : "Total (N·m)"}
-                  </span>
-                  <input
-                    className={styles.formInput}
-                    type="number"
-                    value={loadForce}
-                    step="100"
-                    onChange={(e) => setLoadForce(e.target.value)}
-                  />
-                </div>
-                <div className={styles.pickNote}>
-                  {allPickedFaces.reduce((s, f) => s + f.nodeIds.length, 0)}{" "}
-                  nodes →{" "}
-                  {loadDof <= 2
-                    ? `${(parseFloat(loadForce) / allPickedFaces.reduce((s, f) => s + f.nodeIds.length, 0)).toFixed(1)} N/node`
-                    : "distributed as equivalent nodal forces"}
-                </div>
-                <button className={styles.loadBtn} onClick={applyLoad}>
-                  Apply Load
-                </button>
-              </>
-            )}
+            {/* ── Load section ───────────────────────────────────── */}
+            <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
+              Applied loads
+            </div>
 
-            {allPickedFaces.length > 0 && targetLoadGroup && (
-              <button className={styles.loadBtn} onClick={applyLoad}>
-                {allPickedFaces.length === 1
-                  ? "Add Face"
-                  : `Add ${allPickedFaces.length} Faces`}
+            {pickMode !== "load" && (
+              <button
+                className={styles.pickBtn}
+                onClick={() => setPickMode("load", null)}
+              >
+                + Add Load
               </button>
             )}
-          </div>
-        )}
 
-        {/* Load group list */}
-        {loadGroups.map((g) => (
-          <div key={g.id} className={styles.bcGroup}>
-            <div className={styles.bcGroupHeader}>
-              <span className={styles.loadDot} />
-              <span className={styles.bcGroupName}>{g.name}</span>
-              <span className={styles.bcGroupMeta}>
-                {LOAD_LABELS[g.dof]} = {fmt(g.totalForce)}{" "}
-                {g.dof <= 2 ? "N" : "N·m"}
-              </span>
-              <div className={styles.treeItemActions}>
-                <button
-                  className={styles.iconBtn}
-                  title="Add face"
-                  onClick={() => {
-                    setPickMode("load", g.id);
-                    setSelectedFace(null);
-                    setPendingFaces([]);
-                  }}
-                >
-                  ✏
-                </button>
-                <button
-                  className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
-                  title="Delete Load"
-                  onClick={() => deleteLoadGroup(g.id)}
-                >
-                  ✕
-                </button>
+            {pickMode === "load" && (
+              <div className={styles.pickPanel}>
+                <div className={styles.pickPanelHeader}>
+                  <span className={styles.pickPanelTitle}>
+                    {targetLoadGroup
+                      ? `Add face to ${targetLoadGroup.name}`
+                      : "New Load"}
+                  </span>
+                  <button
+                    className={styles.iconBtn}
+                    onClick={cancelPick}
+                    title="Cancel"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {allPickedFaces.length === 0 ? (
+                  <div className={styles.pickHint}>
+                    Click a face in the 3D viewport
+                  </div>
+                ) : (
+                  <div>
+                    {allPickedFaces.map((f, i) => (
+                      <div key={i} className={styles.bcFaceRow}>
+                        <span className={styles.bcFaceName}>{f.label}</span>
+                        <button
+                          className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
+                          title="Remove face"
+                          onClick={() => removePickedFace(i)}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {allPickedFaces.length > 0 && !targetLoadGroup && (
+                  <>
+                    <div className={styles.formRow}>
+                      <span className={styles.formLabel}>DOF</span>
+                      <select
+                        className={styles.formSelect}
+                        value={loadDof}
+                        onChange={(e) => setLoadDof(Number(e.target.value))}
+                      >
+                        {LOAD_LABELS.map((d, i) => (
+                          <option key={d} value={i}>
+                            {d}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className={styles.formRow}>
+                      <span className={styles.formLabel}>
+                        {loadDof <= 2 ? "Total (N)" : "Total (N·m)"}
+                      </span>
+                      <input
+                        className={styles.formInput}
+                        type="number"
+                        value={loadForce}
+                        step="100"
+                        onChange={(e) => setLoadForce(e.target.value)}
+                      />
+                    </div>
+                    <div className={styles.pickNote}>
+                      {allPickedFaces.reduce((s, f) => s + f.nodeIds.length, 0)}{" "}
+                      nodes →{" "}
+                      {loadDof <= 2
+                        ? `${(parseFloat(loadForce) / allPickedFaces.reduce((s, f) => s + f.nodeIds.length, 0)).toFixed(1)} N/node`
+                        : "distributed as equivalent nodal forces"}
+                    </div>
+                    <button className={styles.loadBtn} onClick={applyLoad}>
+                      Apply Load
+                    </button>
+                  </>
+                )}
+
+                {allPickedFaces.length > 0 && targetLoadGroup && (
+                  <button className={styles.loadBtn} onClick={applyLoad}>
+                    {allPickedFaces.length === 1
+                      ? "Add Face"
+                      : `Add ${allPickedFaces.length} Faces`}
+                  </button>
+                )}
               </div>
-            </div>
-            {g.faces.map((f) => (
-              <div key={f.id} className={styles.bcFaceRow}>
-                <span className={styles.bcFaceIndent}>└</span>
-                <span className={styles.bcFaceName}>{f.label}</span>
-                <button
-                  className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
-                  title="Remove face"
-                  onClick={() => removeFaceFromLoadGroup(g.id, f.id)}
-                >
-                  ×
-                </button>
+            )}
+
+            {/* Load group list */}
+            {loadGroups.map((g) => (
+              <div key={g.id} className={styles.bcGroup}>
+                <div className={styles.bcGroupHeader}>
+                  <span className={styles.loadDot} />
+                  <span className={styles.bcGroupName}>{g.name}</span>
+                  <span className={styles.bcGroupMeta}>
+                    {LOAD_LABELS[g.dof]} = {fmt(g.totalForce)}{" "}
+                    {g.dof <= 2 ? "N" : "N·m"}
+                  </span>
+                  <div className={styles.treeItemActions}>
+                    <button
+                      className={styles.iconBtn}
+                      title="Add face"
+                      onClick={() => {
+                        setPickMode("load", g.id);
+                        setSelectedFace(null);
+                        setPendingFaces([]);
+                      }}
+                    >
+                      ✏
+                    </button>
+                    <button
+                      className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
+                      title="Delete Load"
+                      onClick={() => deleteLoadGroup(g.id)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+                {g.faces.map((f) => (
+                  <div key={f.id} className={styles.bcFaceRow}>
+                    <span className={styles.bcFaceIndent}>└</span>
+                    <span className={styles.bcFaceName}>{f.label}</span>
+                    <button
+                      className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
+                      title="Remove face"
+                      onClick={() => removeFaceFromLoadGroup(g.id, f.id)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
               </div>
             ))}
-          </div>
-        ))}
+          </>
+        )}
       </div>
     </div>
   );
