@@ -10,6 +10,41 @@ import createModule from "../wasm/pkg/kofem_wasm.js";
 import type { KofemModule } from "../wasm/pkg/kofem_wasm.js";
 
 let Module: KofemModule | null = null;
+
+// True once tessellate_step has loaded the OCCT STEP shape into THIS worker's
+// WASM module. The worker is torn down after every mesh (resetWorker in
+// LeftPanel) to keep Netgen's global state out of the MFEM solve, so a re-mesh
+// starts in a fresh module where this is false and the geometry must be
+// reloaded from the original STEP bytes before meshing.
+let geometryLoaded = false;
+
+// Emscripten (-fexceptions) surfaces an uncaught C++ exception to JS as the raw
+// heap pointer of the exception object — a bare number such as 12190840. Decode
+// it to the real what() text via getExceptionMessage, exported by the build flag
+// EXPORT_EXCEPTION_HANDLING_HELPERS. Degrades gracefully (labelled pointer) when
+// the helper is absent, e.g. an older wasm binary built before the flag was added.
+function describeError(err: unknown): string {
+  if (err instanceof Error)
+    return `${err.name}: ${err.message}\n${err.stack ?? ""}`;
+  if (typeof err === "number") {
+    const getMsg = (
+      Module as unknown as {
+        getExceptionMessage?: (ptr: number) => [string, string];
+      } | null
+    )?.getExceptionMessage;
+    if (getMsg) {
+      try {
+        const [type, message] = getMsg(err);
+        return message ? `${type}: ${message}` : type;
+      } catch {
+        // decoding failed — fall through to the labelled raw pointer
+      }
+    }
+    return `C++ exception (undecoded, ptr ${err})`;
+  }
+  return String(err);
+}
+
 async function ensureInit() {
   if (!Module) {
     Module = await createModule({
@@ -73,6 +108,9 @@ self.onmessage = async (event: MessageEvent) => {
         angular_deflection: 0.5,
       });
       const json = m().tessellate_step(payload.bytes as Uint8Array, opts);
+      // tessellate_step stores the OCCT shape in the module — record that so a
+      // subsequent volume_mesh in this same worker can skip the reload.
+      geometryLoaded = true;
       const dto = JSON.parse(json) as {
         vertices: [number, number, number][];
         triangles: [number, number, number][];
@@ -85,11 +123,37 @@ self.onmessage = async (event: MessageEvent) => {
         triangles: dto.triangles,
       });
     } else if (type === "volume_mesh") {
-      const { maxElementSize = 20.0, minElementSize } = payload as {
-        surface?: unknown;
+      const {
+        bytes,
+        maxElementSize = 20.0,
+        minElementSize,
+      } = payload as {
+        bytes?: Uint8Array;
         maxElementSize?: number;
         minElementSize?: number;
       };
+
+      // A re-mesh runs in a fresh worker (the previous mesh tore this worker's
+      // predecessor down), so the OCCT shape generate_fem_mesh needs is gone.
+      // Reload it from the original STEP bytes first. This makes every mesh
+      // reproduce the known-good import→mesh sequence — tessellate_step (loads
+      // the shape) then generate_fem_mesh — rather than meshing twice inside one
+      // Netgen-contaminated module.
+      if (!geometryLoaded) {
+        if (!bytes)
+          throw new Error(
+            "volume_mesh: no STEP geometry is loaded and no STEP bytes were provided to reload it — re-import the STEP file before meshing",
+          );
+        self.postMessage({
+          id,
+          log: "Reloading STEP geometry into the mesher…",
+        });
+        m().tessellate_step(
+          bytes,
+          JSON.stringify({ linear_deflection: 0.1, angular_deflection: 0.5 }),
+        );
+        geometryLoaded = true;
+      }
 
       // Floor the curvature-driven local element size at maxElementSize/10 by
       // default.  Without a floor, Netgen refines every fillet to ~radius/2
@@ -137,6 +201,7 @@ self.onmessage = async (event: MessageEvent) => {
       // needed once meshing is done, and freeing them before the solve gives
       // MFEM more headroom for stiffness-matrix assembly.
       m().free_geometry_cache();
+      geometryLoaded = false;
 
       const nodes: Node[] = dto.vertices.map(([x, y, z], i) => ({
         id: i,
@@ -317,10 +382,7 @@ self.onmessage = async (event: MessageEvent) => {
         err.message.includes("unreachable") ||
         err.message.includes("null function or function signature mismatch") ||
         err.message.includes("table index is out of bounds"));
-    const detail =
-      err instanceof Error
-        ? `${err.name}: ${err.message}\n${err.stack ?? ""}`
-        : String(err);
+    const detail = describeError(err);
     const errorMessage = isWasmTrap
       ? `WASM trap (code bug, not OOM): ${detail}`
       : detail;

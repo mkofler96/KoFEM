@@ -211,6 +211,10 @@ target_link_options(kofem_wasm_emcc PRIVATE
     --bind
     -fexceptions
     -sDISABLE_EXCEPTION_CATCHING=0
+    # Export getExceptionMessage so the JS worker can decode a thrown C++
+    # exception (surfaced as a raw heap pointer under -fexceptions) into its
+    # what() text instead of showing an opaque number like "Error: 12190840".
+    -sEXPORT_EXCEPTION_HANDLING_HELPERS=1
     -sMODULARIZE=1
     -sEXPORT_ES6=1
     -sENVIRONMENT=web,worker

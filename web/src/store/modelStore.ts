@@ -226,6 +226,11 @@ interface ModelState {
   result: SolverResult | null;
   resultType: ResultType;
   stepSurface: StepSurfaceMesh | null;
+  // Raw bytes of the imported STEP file, retained so the geometry can be
+  // reloaded into the mesher for a re-mesh. The worker is torn down after every
+  // mesh (resetWorker), discarding the OCCT shape it held, so re-meshing must
+  // re-supply the original file. Not persisted in saved analyses (no STEP there).
+  stepBytes: Uint8Array | null;
   isRunning: boolean;
   isMeshing: boolean;
   nextMatId: number;
@@ -253,6 +258,7 @@ interface ModelState {
   showUndeformedOverlay: boolean;
   stepImportError: string | null;
   setStepSurface(mesh: StepSurfaceMesh | null): void;
+  setStepBytes(bytes: Uint8Array | null): void;
   setVolMesh(mesh: VolMesh | null): void;
   setSurfaceFaceIds(ids: number[] | null): void;
   setViewRepr(v: "geometry" | "surface" | "volume" | "wireframe"): void;
@@ -348,6 +354,7 @@ export const useModelStore = create<ModelState>()(
     result: null,
     resultType: "Displacement (magnitude)" as ResultType,
     stepSurface: null,
+    stepBytes: null,
     isRunning: false,
     isMeshing: false,
     volMesh: null,
@@ -384,9 +391,16 @@ export const useModelStore = create<ModelState>()(
       set((s) => {
         s.surfaceFaceIds = ids;
       }),
+    setStepBytes: (bytes) =>
+      set((s) => {
+        s.stepBytes = bytes;
+      }),
     setStepSurface: (mesh) =>
       set((s) => {
         s.stepSurface = mesh;
+        // Clearing the geometry also drops the retained STEP bytes — keeping the
+        // invariant "no surface ⇒ nothing left to re-mesh from".
+        if (!mesh) s.stepBytes = null;
         s.volMesh = null;
         s.viewRepr = "geometry";
         s.stepImportError = null;
@@ -501,6 +515,9 @@ export const useModelStore = create<ModelState>()(
         s.nextFaceEntryId = a.nextFaceEntryId;
         s.nextMatId = a.nextMatId;
         s.stepSurface = a.stepSurface;
+        // Saved analyses carry the tessellated surface but not the original STEP
+        // file, so re-meshing a loaded analysis requires re-importing the STEP.
+        s.stepBytes = null;
         s.volMesh = a.volMesh;
         s.surfaceTriangles = a.surfaceTriangles;
         s.surfaceFaceIds = a.surfaceFaceIds;
@@ -544,6 +561,7 @@ export const useModelStore = create<ModelState>()(
         s.modelName = "";
         s.result = null;
         s.stepSurface = null;
+        s.stepBytes = null;
         s.volMesh = null;
         s.surfaceTriangles = null;
         s.surfaceFaceIds = null;

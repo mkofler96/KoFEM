@@ -130,6 +130,8 @@ function GeometryPanel() {
   const updateMaterial = useModelStore((s) => s.updateMaterial);
   const deleteMaterial = useModelStore((s) => s.deleteMaterial);
   const stepSurface = useModelStore((s) => s.stepSurface);
+  const stepBytes = useModelStore((s) => s.stepBytes);
+  const setStepBytes = useModelStore((s) => s.setStepBytes);
   const isMeshing = useModelStore((s) => s.isMeshing);
   const setMeshing = useModelStore((s) => s.setMeshing);
   const applyMeshResult = useModelStore((s) => s.applyMeshResult);
@@ -173,7 +175,12 @@ function GeometryPanel() {
     }>("parse_step", { bytes })
       .then(({ points, triangles }) => {
         if (points.length === 0) setStepImportError("No geometry found.");
-        else setStepSurface({ points, triangles });
+        else {
+          // Retain the raw STEP so the geometry can be reloaded for a re-mesh
+          // (the worker is reset after each mesh and loses the loaded shape).
+          setStepBytes(bytes);
+          setStepSurface({ points, triangles });
+        }
       })
       .catch((err) => setStepImportError(err.message ?? "STEP import failed"))
       .finally(() => {
@@ -184,6 +191,12 @@ function GeometryPanel() {
 
   async function handleVolMesh() {
     if (!stepSurface) return;
+    if (!stepBytes) {
+      setMeshError(
+        "Cannot mesh: the original STEP file is no longer available (e.g. after loading a saved analysis). Re-import the STEP file to mesh.",
+      );
+      return;
+    }
     setMeshing(true);
     setLogs([]);
     try {
@@ -198,7 +211,7 @@ function GeometryPanel() {
         surfaceTriangles: [number, number, number][] | null;
         surfaceFaceIds: number[] | null;
       }>("volume_mesh", {
-        surface: stepSurface,
+        bytes: stepBytes,
         maxElementSize,
         minElementSize,
       });
@@ -215,7 +228,8 @@ function GeometryPanel() {
       resetWorker();
     } catch (err) {
       console.error("[meshing] volume mesh failed:", err);
-      setMeshError(`Volume meshing failed: ${err}`);
+      const detail = err instanceof Error ? err.message : String(err);
+      setMeshError(`Volume meshing failed: ${detail}`);
     } finally {
       setMeshing(false);
     }
