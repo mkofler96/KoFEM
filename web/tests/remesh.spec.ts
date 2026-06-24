@@ -60,3 +60,77 @@ test("re-mesh succeeds after the worker is reset (issue #250)", async ({
   expect(result.first).toBeGreaterThan(0);
   expect(result.second).toBeGreaterThan(0);
 });
+
+// Guard path: meshing with no geometry loaded and no STEP bytes to reload from
+// (e.g. re-meshing a loaded analysis) must fail with an actionable message, not
+// an opaque pointer. A fresh worker has no geometry, so volume_mesh without
+// bytes hits the reload guard directly.
+test("volume_mesh without STEP bytes fails with an actionable message", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+
+  await page.goto("/app/", { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(
+    () => !!(window as Window & { __kofem?: unknown }).__kofem,
+    { timeout: 30_000 },
+  );
+
+  const message = await page.evaluate(async () => {
+    const k = (
+      window as Window & {
+        __kofem: { sendToWorker: (t: string, p: unknown) => Promise<unknown> };
+      }
+    ).__kofem;
+    try {
+      await k.sendToWorker("volume_mesh", {
+        maxElementSize: 20,
+        minElementSize: 2,
+      });
+      return null;
+    } catch (err) {
+      return err instanceof Error ? err.message : String(err);
+    }
+  });
+
+  expect(message).not.toBeNull();
+  expect(message).toContain("no STEP geometry");
+  expect(message).toContain("re-import");
+});
+
+// A C++ engine error (here: feeding the OCCT reader invalid STEP bytes) used to
+// reach JS as a bare heap pointer, rendering as the meaningless "Error: 12190840"
+// from issue #250. describeError must now produce human-readable text. The
+// assertion holds whether or not the wasm exports getExceptionMessage: decoded
+// what() text and the "C++ exception (undecoded, ptr N)" fallback both contain
+// letters — a bare pointer number does not.
+test("a C++ engine error surfaces as readable text, not a bare pointer (issue #250)", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+
+  await page.goto("/app/", { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(
+    () => !!(window as Window & { __kofem?: unknown }).__kofem,
+    { timeout: 30_000 },
+  );
+
+  const message = await page.evaluate(async () => {
+    const k = (
+      window as Window & {
+        __kofem: { sendToWorker: (t: string, p: unknown) => Promise<unknown> };
+      }
+    ).__kofem;
+    const garbage = new TextEncoder().encode("this is not a STEP file");
+    try {
+      await k.sendToWorker("parse_step", { bytes: garbage });
+      return null;
+    } catch (err) {
+      return err instanceof Error ? err.message : String(err);
+    }
+  });
+
+  expect(message).not.toBeNull();
+  expect(message).toMatch(/[a-zA-Z]/);
+  expect(message?.trim()).not.toMatch(/^\d+$/);
+});
