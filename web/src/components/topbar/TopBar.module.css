@@ -70,25 +70,6 @@
   font-size: 12.5px;
 }
 
-.units {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 9px;
-  background: #f0f2f5;
-  border: 1px solid #e2e5ea;
-  border-radius: 5px;
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 11px;
-  color: #3a4150;
-  white-space: nowrap;
-}
-
-.units b {
-  color: #0d1117;
-  font-weight: 600;
-}
-
 .iconBtn {
   display: grid;
   place-items: center;
