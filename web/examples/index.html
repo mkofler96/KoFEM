@@ -24,7 +24,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;600&family=Geist:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
 
@@ -37,16 +37,44 @@
       }
     </script>
 
+    <!-- Apply the saved theme before first paint to avoid a flash. -->
+    <script>
+      try {
+        if (localStorage.getItem("kofem_theme") === "light")
+          document.documentElement.setAttribute("data-theme", "light");
+      } catch (e) {}
+    </script>
+
     <style>
       :root {
-        --bg: #0e1726;
-        --bg-2: #131f33;
-        --ink: #eef2f8;
-        --muted: #9fb0c6;
-        --accent: #4f8cff;
-        --border: rgba(255, 255, 255, 0.08);
-        --pass: #46d39a;
+        --bg: #0a0b0f;
+        --bg2: #0c0e13;
+        --panel: #13151c;
+        --panel2: #171a22;
+        --border: #23262f;
+        --border2: #2d313b;
+        --text: #eceef3;
+        --muted: #9aa0ad;
+        --faint: #6b7280;
+        --accent: #5b7cff;
+        --pass: #34d399;
+        --shadow: rgba(0, 0, 0, 0.55);
+        --mono: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
       }
+      :root[data-theme="light"] {
+        --bg: #ffffff;
+        --bg2: #f7f8fa;
+        --panel: #ffffff;
+        --panel2: #f5f6f8;
+        --border: #e7e9ee;
+        --border2: #d8dbe2;
+        --text: #0d1117;
+        --muted: #5b616e;
+        --faint: #868d99;
+        --accent: #2f54eb;
+        --shadow: rgba(20, 30, 60, 0.12);
+      }
+
       *,
       *::before,
       *::after {
@@ -57,116 +85,187 @@
       }
       body {
         margin: 0;
-        font-family: "Geist", system-ui, sans-serif;
-        background:
-          radial-gradient(
-            1200px 600px at 70% -10%,
-            #1c2c4a 0%,
-            transparent 60%
-          ),
-          var(--bg);
-        color: var(--ink);
-        line-height: 1.55;
+        font-family:
+          "Geist",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.5;
+        min-height: 100vh;
         -webkit-font-smoothing: antialiased;
+        transition:
+          background 0.35s ease,
+          color 0.35s ease;
       }
       a {
-        color: inherit;
         text-decoration: none;
+        color: inherit;
       }
-      .wrap {
-        max-width: 1080px;
-        margin: 0 auto;
-        padding: 0 24px;
+      ::selection {
+        background: var(--accent);
+        color: #fff;
       }
 
-      header {
+      /* ===================== NAV ===================== */
+      .site-header {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        background: color-mix(in srgb, var(--bg) 76%, transparent);
+        border-bottom: 1px solid var(--border);
+      }
+      .header-inner {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 13px 32px;
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        padding: 22px 0;
+        gap: 30px;
       }
       .brand {
         display: flex;
         align-items: center;
         gap: 10px;
-        font-weight: 700;
-        font-size: 18px;
-        letter-spacing: -0.01em;
       }
-      .mark {
-        width: 30px;
-        height: 30px;
-        border-radius: 7px;
-        background: linear-gradient(135deg, var(--accent), #7aa7ff);
-        display: grid;
-        place-items: center;
+      .brand-mark {
+        width: 29px;
+        height: 29px;
+        border-radius: 8px;
+        background: var(--accent);
+        display: flex;
+        align-items: center;
+        justify-content: center;
         color: #fff;
         font-weight: 700;
+        font-size: 16px;
+        box-shadow: 0 4px 14px -4px var(--accent);
       }
-      nav.top a {
-        color: var(--muted);
-        font-size: 14px;
-        margin-left: 22px;
-        font-weight: 500;
-      }
-      nav.top a:hover {
-        color: var(--ink);
-      }
-      nav.top a.nav-cta {
-        color: #fff;
-        background: linear-gradient(135deg, var(--accent), #7aa7ff);
-        padding: 9px 18px;
-        border-radius: 9px;
+      .brand-name {
         font-weight: 600;
-        box-shadow: 0 6px 18px rgba(79, 140, 255, 0.3);
-        transition:
-          transform 120ms ease,
-          box-shadow 120ms ease;
+        font-size: 17px;
+        letter-spacing: -0.015em;
       }
-      nav.top a.nav-cta:hover {
-        color: #fff;
-        transform: translateY(-1px);
-        box-shadow: 0 9px 24px rgba(79, 140, 255, 0.42);
+      .nav-links {
+        display: flex;
+        gap: 26px;
+        font-size: 14px;
+        color: var(--muted);
+      }
+      .nav-links a {
+        transition: color 0.15s;
+      }
+      .nav-links a:hover,
+      .nav-links a[aria-current="page"] {
+        color: var(--text);
+      }
+      .header-actions {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .icon-btn {
+        width: 34px;
+        height: 34px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: var(--panel);
+        color: var(--text);
+        cursor: pointer;
+        transition:
+          border-color 0.15s,
+          background 0.15s;
+      }
+      .icon-btn:hover {
+        border-color: var(--border2);
+      }
+      .icon-moon {
+        display: none;
+      }
+      :root[data-theme="light"] .icon-sun {
+        display: none;
+      }
+      :root[data-theme="light"] .icon-moon {
+        display: block;
       }
 
+      .btn-primary {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        background: var(--accent);
+        color: #fff;
+        font-weight: 600;
+        font-size: 14px;
+        padding: 8px 15px;
+        border-radius: 9px;
+        box-shadow: 0 6px 18px -8px var(--accent);
+        transition:
+          transform 0.12s,
+          filter 0.15s;
+      }
+      .btn-primary:hover {
+        filter: brightness(1.08);
+        transform: translateY(-1px);
+      }
+
+      /* ===================== PAGE HEAD ===================== */
+      .section {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 0 32px;
+      }
       .page-head {
         max-width: 720px;
-        padding: 56px 0 28px;
+        padding: 72px 0 36px;
       }
       .eyebrow {
-        font-family: "Geist Mono", monospace;
-        font-size: 13px;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
+        font-family: var(--mono);
+        font-size: 12.5px;
+        letter-spacing: 0.16em;
         color: var(--accent);
-        margin-bottom: 16px;
+        text-transform: uppercase;
+        margin-bottom: 18px;
       }
       .page-head h1 {
         font-size: clamp(30px, 5vw, 44px);
         line-height: 1.08;
-        letter-spacing: -0.02em;
-        margin: 0 0 16px;
+        letter-spacing: -0.028em;
+        font-weight: 600;
+        margin: 0 0 18px;
+        text-wrap: balance;
       }
       .page-head p {
         color: var(--muted);
         font-size: 17px;
+        line-height: 1.6;
         margin: 0;
+        text-wrap: pretty;
       }
       .page-head code {
-        font-family: "Geist Mono", monospace;
+        font-family: var(--mono);
         font-size: 13px;
-        color: var(--ink);
-        background: rgba(255, 255, 255, 0.06);
+        color: var(--text);
+        background: var(--panel2);
+        border: 1px solid var(--border);
         padding: 1px 6px;
         border-radius: 5px;
       }
 
-      /* Example grid */
+      /* ===================== EXAMPLE GRID ===================== */
       .grid {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 22px;
-        padding: 12px 0 56px;
+        gap: 20px;
+        padding: 8px 0 56px;
       }
       @media (max-width: 720px) {
         .grid {
@@ -178,17 +277,29 @@
         border: 1px solid var(--border);
         border-radius: 14px;
         overflow: hidden;
-        background: var(--bg-2);
+        background: var(--panel);
         display: flex;
         flex-direction: column;
+        transition:
+          border-color 0.18s,
+          transform 0.18s;
+      }
+      .card:hover {
+        border-color: var(--border2);
+        transform: translateY(-2px);
       }
       .viewer {
         position: relative;
         width: 100%;
         aspect-ratio: 16 / 10;
         background:
-          radial-gradient(520px 300px at 60% 0%, #1b2942 0%, transparent 70%),
-          #0c1422;
+          radial-gradient(
+            520px 300px at 60% 0%,
+            color-mix(in srgb, var(--accent) 13%, transparent) 0%,
+            transparent 70%
+          ),
+          var(--panel2);
+        border-bottom: 1px solid var(--border);
         cursor: grab;
         touch-action: none;
       }
@@ -205,21 +316,21 @@
         left: 12px;
         bottom: 10px;
         font-size: 11px;
-        font-family: "Geist Mono", monospace;
+        font-family: var(--mono);
         letter-spacing: 0.03em;
         color: var(--muted);
-        background: rgba(8, 14, 24, 0.55);
+        background: color-mix(in srgb, var(--bg) 55%, transparent);
         padding: 3px 8px;
         border-radius: 6px;
         pointer-events: none;
-        opacity: 0.85;
+        opacity: 0.9;
       }
       .viewer .legend {
         position: absolute;
         right: 12px;
         top: 12px;
         font-size: 10px;
-        font-family: "Geist Mono", monospace;
+        font-family: var(--mono);
         color: var(--muted);
         text-align: right;
         pointer-events: none;
@@ -241,19 +352,51 @@
       }
 
       .card-body {
-        padding: 18px 20px 20px;
+        padding: 20px 22px 22px;
         display: flex;
         flex-direction: column;
         flex: 1;
       }
-      .card-body h2 {
-        font-size: 19px;
-        letter-spacing: -0.01em;
-        margin: 0 0 8px;
+      .card-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 8px;
+      }
+      .card-head h2 {
+        font-size: 18px;
+        font-weight: 600;
+        letter-spacing: -0.015em;
+        margin: 0;
+      }
+      /* "Open in KoFEM web" is a quiet inline link beside the title, not a
+         heavy call-to-action button — the gallery itself is the focus. */
+      .open-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        flex: none;
+        font-size: 13px;
+        font-weight: 550;
+        color: var(--accent);
+        white-space: nowrap;
+        transition:
+          color 0.15s,
+          gap 0.15s;
+      }
+      .open-link:hover {
+        filter: brightness(1.12);
+        gap: 7px;
+      }
+      .open-link svg {
+        width: 13px;
+        height: 13px;
       }
       .card-body p.blurb {
         color: var(--muted);
         font-size: 14px;
+        line-height: 1.55;
         margin: 0 0 16px;
       }
       .metrics {
@@ -262,13 +405,13 @@
         gap: 1px;
         background: var(--border);
         border: 1px solid var(--border);
-        border-radius: 9px;
+        border-radius: 10px;
         overflow: hidden;
-        margin-bottom: 16px;
+        margin-bottom: 14px;
       }
       .metrics .cell {
-        background: var(--bg-2);
-        padding: 9px 12px;
+        background: var(--panel2);
+        padding: 10px 13px;
       }
       .metrics .k {
         font-size: 11px;
@@ -277,39 +420,18 @@
         color: var(--muted);
       }
       .metrics .v {
-        font-family: "Geist Mono", monospace;
+        font-family: var(--mono);
         font-size: 14px;
-        color: var(--ink);
+        color: var(--text);
       }
       .metrics .v.pass {
         color: var(--pass);
       }
-      .card-actions {
-        margin-top: auto;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-      }
-      a.open-btn {
-        color: #fff;
-        background: linear-gradient(135deg, var(--accent), #7aa7ff);
-        padding: 10px 16px;
-        border-radius: 9px;
-        font-weight: 600;
-        font-size: 14px;
-        box-shadow: 0 6px 18px rgba(79, 140, 255, 0.28);
-        transition:
-          transform 120ms ease,
-          box-shadow 120ms ease;
-      }
-      a.open-btn:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 9px 24px rgba(79, 140, 255, 0.4);
-      }
       .ref-note {
-        font-family: "Geist Mono", monospace;
+        margin-top: auto;
+        font-family: var(--mono);
         font-size: 12px;
-        color: var(--muted);
+        color: var(--faint);
       }
 
       .load-error {
@@ -323,44 +445,109 @@
         align-items: center;
         gap: 8px;
         color: var(--accent);
-        font-weight: 600;
+        font-weight: 550;
         font-size: 15px;
-        margin: 8px 0 64px;
+        margin: 4px 0 64px;
+        transition: filter 0.15s;
       }
       .back-link:hover {
-        color: #7aa7ff;
+        filter: brightness(1.12);
       }
 
-      footer {
+      /* ===================== FOOTER ===================== */
+      .site-footer {
         border-top: 1px solid var(--border);
-        padding: 28px 0 48px;
-        color: var(--muted);
-        font-size: 14px;
+        background: var(--bg2);
+      }
+      .footer-bottom-inner {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 22px 32px;
         display: flex;
+        align-items: center;
         justify-content: space-between;
+        gap: 16px;
         flex-wrap: wrap;
-        gap: 12px;
+        font-size: 13px;
+        color: var(--faint);
       }
-      footer a {
-        color: var(--muted);
-        margin-right: 18px;
+      .footer-bottom-inner .legal {
+        display: flex;
+        gap: 20px;
       }
-      footer a:hover {
-        color: var(--ink);
+      .footer-bottom-inner a {
+        transition: color 0.15s;
+      }
+      .footer-bottom-inner a:hover {
+        color: var(--text);
+      }
+
+      @media (max-width: 760px) {
+        .nav-links {
+          display: none;
+        }
+        .header-inner,
+        .section,
+        .footer-bottom-inner {
+          padding-left: 20px;
+          padding-right: 20px;
+        }
       }
     </style>
   </head>
-  <body>
-    <div class="wrap">
-      <header>
-        <a class="brand" href="/"><span class="mark">K</span> KoFEM</a>
-        <nav class="top">
-          <a href="/">Home</a>
-          <a class="nav-cta" href="/app/">Launch</a>
-        </nav>
-      </header>
 
-      <main>
+  <body>
+    <!-- ===================== NAV ===================== -->
+    <header class="site-header">
+      <div class="header-inner">
+        <a class="brand" href="/">
+          <span class="brand-mark">K</span>
+          <span class="brand-name">KoFEM</span>
+        </a>
+        <nav class="nav-links">
+          <a href="/#workflow">Workflow</a>
+          <a href="/examples/" aria-current="page">Examples</a>
+          <a href="/#app">Solver</a>
+        </nav>
+        <div class="header-actions">
+          <button class="icon-btn" id="theme-toggle" aria-label="Toggle theme">
+            <svg
+              class="icon-sun"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <circle cx="12" cy="12" r="4"></circle>
+              <path
+                d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"
+              ></path>
+            </svg>
+            <svg
+              class="icon-moon"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+            >
+              <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path>
+            </svg>
+          </button>
+          <a class="btn-primary" href="/app/">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M8 5v14l11-7z"></path>
+            </svg>
+            Start Solver
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="section">
         <div class="page-head">
           <div class="eyebrow">Examples</div>
           <h1>Solved, and yours to explore</h1>
@@ -373,20 +560,47 @@
           </p>
         </div>
 
-        <section class="grid" id="grid"></section>
+        <div class="grid" id="grid"></div>
 
         <a class="back-link" href="/">&larr; Back to home</a>
-      </main>
+      </section>
+    </main>
 
-      <footer>
-        <div>© 2026 KoFEM — Online Finite Element Solver</div>
-        <div>
+    <!-- ===================== FOOTER ===================== -->
+    <footer class="site-footer">
+      <div class="footer-bottom-inner">
+        <span>© 2026 KoFEM — Online Finite Element Solver</span>
+        <div class="legal">
           <a href="/">Home</a>
           <a href="/examples/">Examples</a>
           <a href="/app/">Launch</a>
         </div>
-      </footer>
-    </div>
+      </div>
+    </footer>
+
+    <script>
+      // Theme toggle — flips the CSS custom-property set on <html> and persists.
+      // Shared with the landing page via the "kofem_theme" localStorage key.
+      (function () {
+        var btn = document.getElementById("theme-toggle");
+        if (!btn) return;
+        btn.addEventListener("click", function () {
+          var root = document.documentElement;
+          var light = root.getAttribute("data-theme") === "light";
+          if (light) {
+            root.removeAttribute("data-theme");
+            try {
+              localStorage.setItem("kofem_theme", "dark");
+            } catch (e) {}
+          } else {
+            root.setAttribute("data-theme", "light");
+            try {
+              localStorage.setItem("kofem_theme", "light");
+            } catch (e) {}
+          }
+        });
+      })();
+    </script>
 
     <script type="module">
       // The cards, metrics and "Open in KoFEM web" links are rendered from
@@ -545,7 +759,17 @@
             <div class="hint">drag to rotate · scroll to zoom</div>
           </div>
           <div class="card-body">
-            <h2>${ex.title}</h2>
+            <div class="card-head">
+              <h2>${ex.title}</h2>
+              <a class="open-link" href="/app/?example=${encodeURIComponent(ex.id)}">
+                Open in KoFEM web
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                  <polyline points="15 3 21 3 21 9"></polyline>
+                  <line x1="10" y1="14" x2="21" y2="3"></line>
+                </svg>
+              </a>
+            </div>
             <p class="blurb">${ex.blurb}</p>
             <div class="metrics">
               <div class="cell">
@@ -557,10 +781,7 @@
                 <div class="v ${within ? "pass" : ""}">${ex.errPct.toFixed(1)}% err</div>
               </div>
             </div>
-            <div class="card-actions">
-              <a class="open-btn" href="/app/?example=${encodeURIComponent(ex.id)}">Open in KoFEM web →</a>
-              <span class="ref-note">${ex.referenceLabel}</span>
-            </div>
+            <div class="ref-note">${ex.referenceLabel}</div>
           </div>`;
         grid.appendChild(el);
         return el.querySelector(".viewer");
