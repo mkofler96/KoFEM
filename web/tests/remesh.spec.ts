@@ -1,4 +1,9 @@
-import { test, expect } from "@playwright/test";
+// Import from ./coverage (not @playwright/test) so the fixture harvests the
+// solver.worker Istanbul counters after each test — these tests exercise the
+// worker directly, so without this their coverage (describeError, the reload
+// guard) is never collected.
+import { test, expect } from "./coverage";
+import { gotoApp } from "./fixtures/app";
 import fs from "fs";
 import { fileURLToPath } from "url";
 
@@ -133,4 +138,42 @@ test("a C++ engine error surfaces as readable text, not a bare pointer (issue #2
   expect(message).not.toBeNull();
   expect(message).toMatch(/[a-zA-Z]/);
   expect(message?.trim()).not.toMatch(/^\d+$/);
+});
+
+// Main-thread guard (LeftPanel.handleVolMesh): a loaded analysis carries a mesh
+// and a tessellated surface but no original STEP bytes, so clicking Re-mesh must
+// show an actionable banner rather than dispatching a doomed mesh. Driven through
+// the rendered UI so the guard is exercised where it lives.
+test("re-meshing without the original STEP shows an actionable banner (issue #250)", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+
+  await gotoApp(page);
+
+  // Reproduce the post-"open saved analysis" state: nodes + surface present,
+  // stepBytes absent.
+  await page.evaluate(() => {
+    const store = (
+      window as unknown as {
+        __kofemStore: { setState(partial: Record<string, unknown>): void };
+      }
+    ).__kofemStore;
+    store.setState({
+      mode: "geometry",
+      nodes: [
+        { id: 0, x: 0, y: 0, z: 0 },
+        { id: 1, x: 1, y: 0, z: 0 },
+      ],
+      elements: [],
+      stepSurface: { points: [[0, 0, 0]], triangles: [[0, 0, 0]] },
+      stepBytes: null,
+    });
+  });
+
+  await page.getByRole("button", { name: /Re-mesh STEP volume/ }).click();
+
+  await expect(page.getByTestId("meshing-error")).toContainText(
+    "original STEP file is no longer available",
+  );
 });
