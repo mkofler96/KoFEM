@@ -102,6 +102,8 @@ export function resultFieldSymbol(resultType: ResultType): string {
       : resultType;
 }
 
+// Canonical unit system is N · mm · MPa: displacements come out in mm and
+// stresses in MPa (force/area = N/mm²).
 export function resultUnit(resultType: ResultType): string {
-  return resultType === "Von Mises stress" ? "Pa" : "m";
+  return resultType === "Von Mises stress" ? "MPa" : "mm";
 }

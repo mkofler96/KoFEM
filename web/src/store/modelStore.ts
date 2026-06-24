@@ -324,7 +324,10 @@ const EMPTY_MODEL = {
   nodes: [] as Node[],
   elements: [] as Element[],
   materials: [
-    { id: 1, name: "Steel", young: 210e9, poisson: 0.3, density: 7850 },
+    // Canonical unit system: N · mm · MPa · tonne. Steel: E = 210 GPa = 210000 MPa,
+    // ρ = 7850 kg/m³ = 7.85e-9 t/mm³. STEP geometry imports in mm, so materials,
+    // loads (N), and results (mm, MPa) must share this system to stay consistent.
+    { id: 1, name: "Steel", young: 210000, poisson: 0.3, density: 7.85e-9 },
   ] as Material[],
   properties: [{ id: 1, type: "PSOLID" as const, materialId: 1 }] as Property[],
   constraints: [] as Constraint[],
@@ -522,7 +525,13 @@ export const useModelStore = create<ModelState>()(
         s.nodes = [];
         s.elements = [];
         s.materials = [
-          { id: 1, name: "Steel", young: 210e9, poisson: 0.3, density: 7850 },
+          {
+            id: 1,
+            name: "Steel",
+            young: 210000,
+            poisson: 0.3,
+            density: 7.85e-9,
+          },
         ];
         s.properties = [{ id: 1, type: "PSOLID", materialId: 1 }];
         s.bcGroups = [];
