@@ -569,6 +569,7 @@ function ConstraintsPanel() {
   const [loadDof, setLoadDof] = useState(1);
   const [loadForce, setLoadForce] = useState("-10000");
   const [bcValue, setBcValue] = useState("0");
+  const [error, setError] = useState<string | null>(null);
 
   const DOF_LABELS = ["Ux", "Uy", "Uz", "Rx", "Ry", "Rz"];
   const LOAD_LABELS = ["Fx", "Fy", "Fz", "Mx", "My", "Mz"];
@@ -595,6 +596,7 @@ function ConstraintsPanel() {
   }
 
   function cancelPick() {
+    setError(null);
     setPickMode(null);
     setSelectedFace(null);
     setPendingFaces([]);
@@ -610,11 +612,19 @@ function ConstraintsPanel() {
     if (targetBcGroup) {
       for (const fe of faceEntries) addFaceToBcGroup(targetBcGroup.id, fe);
     } else {
+      // A prescribed displacement of 0 is physically valid (fixed support), so
+      // only reject non-finite input — never silently coerce "abc" to 0.
+      const value = parseFloat(bcValue);
+      if (!isFinite(value)) {
+        setError("Prescribed displacement must be a finite number");
+        return;
+      }
       const dofs = checkedDofs
         .map((c, i) => (c ? i : -1))
         .filter((i) => i >= 0);
-      createBcGroup(faceEntries, dofs, parseFloat(bcValue) || 0);
+      createBcGroup(faceEntries, dofs, value);
     }
+    setError(null);
     setPickMode(null);
     setSelectedFace(null);
     setPendingFaces([]);
@@ -630,8 +640,17 @@ function ConstraintsPanel() {
     if (targetLoadGroup) {
       for (const fe of faceEntries) addFaceToLoadGroup(targetLoadGroup.id, fe);
     } else {
-      createLoadGroup(faceEntries, loadDof, parseFloat(loadForce) || 0);
+      // A zero force is a no-op load: it contributes nothing to the RHS and the
+      // solver returns a plausible-looking field with the input silently
+      // discarded. Reject it (and non-finite input) instead of coercing to 0.
+      const value = parseFloat(loadForce);
+      if (!isFinite(value) || value === 0) {
+        setError("Load force must be a non-zero finite number");
+        return;
+      }
+      createLoadGroup(faceEntries, loadDof, value);
     }
+    setError(null);
     setPickMode(null);
     setSelectedFace(null);
     setPendingFaces([]);
@@ -640,6 +659,12 @@ function ConstraintsPanel() {
   return (
     <div className={styles.panel}>
       <div className={styles.tabContent}>
+        {error && (
+          <div className={styles.errorBanner} data-testid="constraints-error">
+            <span>{error}</span>
+            <button onClick={() => setError(null)}>×</button>
+          </div>
+        )}
         {/* ── BC section ────────────────────────────────────── */}
         <div className={styles.sectionLabel}>Fixed displacement</div>
 
