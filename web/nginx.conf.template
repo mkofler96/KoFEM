@@ -29,8 +29,11 @@ server {
 
     # The React solver is mounted below /app/. Deep links under that prefix must
     # serve the app entry; the marketing landing page remains the root fallback.
+    # The body is rendered at container start from KOFEM_LOCKED (see
+    # docker-entrypoint.d/40-kofem-lock.sh): live -> serve the app, locked ->
+    # redirect to the landing page so the solver is unreachable.
     location /app/ {
-        try_files $uri $uri/ /app/index.html;
+        include /etc/nginx/conf.d/kofem-app.inc;
     }
 
     # Static marketing landing fallback.

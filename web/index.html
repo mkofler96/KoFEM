@@ -51,6 +51,14 @@
       } catch (e) {}
     </script>
 
+    <!-- Lock state (coming-soon mode). lock-state.js is overwritten at
+         container start from KOFEM_LOCKED; the class is applied before first
+         paint so the launch buttons never flash the wrong label. -->
+    <script src="/lock-state.js"></script>
+    <script>
+      if (window.KOFEM_LOCKED) document.documentElement.classList.add("locked");
+    </script>
+
     <style>
       :root {
         --bg: #0a0b0f;
@@ -225,6 +233,24 @@
         padding: 13px 22px;
         border-radius: 11px;
         box-shadow: 0 12px 30px -12px var(--accent);
+      }
+
+      /* Coming-soon ("locked") mode. The launch buttons carry both labels; CSS
+         swaps them with no flash (lock state is applied in <head>). Every link
+         to /app/ is disabled — nginx also redirects /app/ as the hard backstop. */
+      .cta-soon {
+        display: none;
+      }
+      html.locked .cta-live {
+        display: none;
+      }
+      html.locked .cta-soon {
+        display: inline;
+      }
+      html.locked a[href="/app/"] {
+        pointer-events: none;
+        opacity: 0.55;
+        cursor: default;
       }
       .btn-secondary {
         display: inline-flex;
@@ -662,7 +688,8 @@
             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
               <path d="M8 5v14l11-7z"></path>
             </svg>
-            Start Solver
+            <span class="cta-live">Start Solver</span>
+            <span class="cta-soon">Coming soon</span>
           </a>
         </div>
       </div>
@@ -682,7 +709,8 @@
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
             <path d="M8 5v14l11-7z"></path>
           </svg>
-          Start Solver
+          <span class="cta-live">Start Solver</span>
+          <span class="cta-soon">Coming soon</span>
         </a>
         <a class="btn-secondary" href="/examples/"
           >Browse examples <span style="color: var(--muted)">↗</span></a
@@ -795,7 +823,8 @@
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
               <path d="M8 5v14l11-7z"></path>
             </svg>
-            Start Solver
+            <span class="cta-live">Start Solver</span>
+            <span class="cta-soon">Coming soon</span>
           </a>
           <a class="btn-text" href="/examples/">View validated examples ↗</a>
         </div>

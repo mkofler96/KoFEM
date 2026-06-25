@@ -3,6 +3,9 @@ services:
     image: ghcr.io/mkofler96/kofem-web:latest
     container_name: kofem-web
     restart: always
+    environment:
+      # 1 = locked (coming-soon, solver disabled), 0 = live. Set by update-prod.sh.
+      KOFEM_LOCKED: "${KOFEM_LOCKED:-0}"
     expose:
       - "10000"
     networks:
