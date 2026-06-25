@@ -1,37 +1,33 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <title>
-      Online Finite Element Solver — Browser-Based FEM Analysis | KoFEM
-    </title>
-    <meta
-      name="description"
-      content="KoFEM is a free online finite element solver that runs entirely in your browser. Import STEP geometry, apply loads and boundary conditions, and run a direct static solve — no installation required."
-    />
-    <link rel="canonical" href="https://solver.example.com/" />
-    <meta name="robots" content="index, follow" />
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <!-- Open Graph / social -->
-    <meta property="og:type" content="website" />
-    <meta property="og:title" content="Online Finite Element Solver — KoFEM" />
-    <meta
-      property="og:description"
-      content="Browser-based FEM analysis. Import STEP geometry and run a direct static solve in your browser. No installation required."
-    />
-    <meta property="og:url" content="https://solver.example.com/" />
+  <title>
+    Online Finite Element Solver — Browser-Based FEM Analysis | KoFEM
+  </title>
+  <meta name="description"
+    content="KoFEM is a free online finite element solver that runs entirely in your browser. Import STEP geometry, apply loads and boundary conditions, and run a direct static solve — no installation required." />
+  <link rel="canonical" href="https://solver.example.com/" />
+  <meta name="robots" content="index, follow" />
 
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap"
-      rel="stylesheet"
-    />
+  <!-- Open Graph / social -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Online Finite Element Solver — KoFEM" />
+  <meta property="og:description"
+    content="Browser-based FEM analysis. Import STEP geometry and run a direct static solve in your browser. No installation required." />
+  <meta property="og:url" content="https://solver.example.com/" />
 
-    <!-- Structured data for rich results -->
-    <script type="application/ld+json">
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap"
+    rel="stylesheet" />
+
+  <!-- Structured data for rich results -->
+  <script type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
@@ -43,854 +39,886 @@
       }
     </script>
 
-    <!-- Apply the saved theme before first paint to avoid a flash. -->
-    <script>
-      try {
-        if (localStorage.getItem("kofem_theme") === "light")
-          document.documentElement.setAttribute("data-theme", "light");
-      } catch (e) {}
-    </script>
+  <!-- Apply the saved theme before first paint to avoid a flash. -->
+  <script>
+    try {
+      if (localStorage.getItem("kofem_theme") === "light")
+        document.documentElement.setAttribute("data-theme", "light");
+    } catch (e) { }
+  </script>
 
-    <style>
-      :root {
-        --bg: #0a0b0f;
-        --bg2: #0c0e13;
-        --panel: #13151c;
-        --panel2: #171a22;
-        --border: #23262f;
-        --border2: #2d313b;
-        --text: #eceef3;
-        --muted: #9aa0ad;
-        --faint: #6b7280;
-        --accent: #5b7cff;
-        --shadow: rgba(0, 0, 0, 0.55);
-        --mono: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
-      }
-      :root[data-theme="light"] {
-        --bg: #ffffff;
-        --bg2: #f7f8fa;
-        --panel: #ffffff;
-        --panel2: #f5f6f8;
-        --border: #e7e9ee;
-        --border2: #d8dbe2;
-        --text: #0d1117;
-        --muted: #5b616e;
-        --faint: #868d99;
-        --accent: #2f54eb;
-        --shadow: rgba(20, 30, 60, 0.12);
-      }
+  <style>
+    :root {
+      --bg: #0a0b0f;
+      --bg2: #0c0e13;
+      --panel: #13151c;
+      --panel2: #171a22;
+      --border: #23262f;
+      --border2: #2d313b;
+      --text: #eceef3;
+      --muted: #9aa0ad;
+      --faint: #6b7280;
+      --accent: #5b7cff;
+      --shadow: rgba(0, 0, 0, 0.55);
+      --mono: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+    }
 
-      *,
-      *::before,
-      *::after {
-        box-sizing: border-box;
-      }
-      html {
-        scroll-behavior: smooth;
-      }
-      body {
-        margin: 0;
-        font-family:
-          "Geist",
-          -apple-system,
-          BlinkMacSystemFont,
-          "Segoe UI",
-          sans-serif;
-        background: var(--bg);
-        color: var(--text);
-        line-height: 1.5;
-        min-height: 100vh;
-        -webkit-font-smoothing: antialiased;
-        transition:
-          background 0.35s ease,
-          color 0.35s ease;
-      }
-      a {
-        text-decoration: none;
-        color: inherit;
-      }
-      ::selection {
-        background: var(--accent);
-        color: #fff;
-      }
+    :root[data-theme="light"] {
+      --bg: #ffffff;
+      --bg2: #f7f8fa;
+      --panel: #ffffff;
+      --panel2: #f5f6f8;
+      --border: #e7e9ee;
+      --border2: #d8dbe2;
+      --text: #0d1117;
+      --muted: #5b616e;
+      --faint: #868d99;
+      --accent: #2f54eb;
+      --shadow: rgba(20, 30, 60, 0.12);
+    }
 
-      /* ===================== NAV ===================== */
-      .site-header {
-        position: sticky;
-        top: 0;
-        z-index: 50;
-        backdrop-filter: blur(14px);
-        -webkit-backdrop-filter: blur(14px);
-        background: color-mix(in srgb, var(--bg) 76%, transparent);
-        border-bottom: 1px solid var(--border);
-      }
-      .header-inner {
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 13px 32px;
-        display: flex;
-        align-items: center;
-        gap: 30px;
-      }
-      .brand {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
-      .brand-mark {
-        width: 29px;
-        height: 29px;
-        border-radius: 8px;
-        background: var(--accent);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #fff;
-        font-weight: 700;
-        font-size: 16px;
-        box-shadow: 0 4px 14px -4px var(--accent);
-      }
-      .brand-name {
-        font-weight: 600;
-        font-size: 17px;
-        letter-spacing: -0.015em;
-      }
-      .nav-links {
-        display: flex;
-        gap: 26px;
-        font-size: 14px;
-        color: var(--muted);
-      }
-      .nav-links a {
-        transition: color 0.15s;
-      }
-      .nav-links a:hover {
-        color: var(--text);
-      }
-      .header-actions {
-        margin-left: auto;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-      }
-      .icon-btn {
-        width: 34px;
-        height: 34px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 8px;
-        border: 1px solid var(--border);
-        background: var(--panel);
-        color: var(--text);
-        cursor: pointer;
-        transition:
-          border-color 0.15s,
-          background 0.15s;
-      }
-      .icon-btn:hover {
-        border-color: var(--border2);
-      }
-      .icon-moon {
-        display: none;
-      }
-      :root[data-theme="light"] .icon-sun {
-        display: none;
-      }
-      :root[data-theme="light"] .icon-moon {
-        display: block;
-      }
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+    }
 
-      .btn-primary {
-        display: inline-flex;
-        align-items: center;
-        gap: 7px;
-        background: var(--accent);
-        color: #fff;
-        font-weight: 600;
-        font-size: 14px;
-        padding: 8px 15px;
-        border-radius: 9px;
-        box-shadow: 0 6px 18px -8px var(--accent);
-        transition:
-          transform 0.12s,
-          filter 0.15s;
-      }
-      .btn-primary:hover {
-        filter: brightness(1.08);
-        transform: translateY(-1px);
-      }
-      .btn-primary.lg {
-        font-size: 15.5px;
-        padding: 13px 22px;
-        border-radius: 11px;
-        box-shadow: 0 12px 30px -12px var(--accent);
-      }
-      .btn-secondary {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        background: var(--panel);
-        color: var(--text);
-        font-weight: 550;
-        font-size: 15.5px;
-        padding: 13px 20px;
-        border-radius: 11px;
-        border: 1px solid var(--border);
-        transition:
-          border-color 0.15s,
-          background 0.15s;
-      }
-      .btn-secondary:hover {
-        border-color: var(--border2);
-      }
-      .btn-text {
-        font-size: 15px;
-        color: var(--muted);
-        padding: 13px 6px;
-        transition: color 0.15s;
-      }
-      .btn-text:hover {
-        color: var(--text);
-      }
+    html {
+      scroll-behavior: smooth;
+    }
 
-      /* ===================== HERO ===================== */
-      .hero {
-        max-width: 1100px;
-        margin: 0 auto;
-        padding: 92px 32px 50px;
-        text-align: center;
-      }
-      .eyebrow {
-        font-family: var(--mono);
-        font-size: 12.5px;
-        letter-spacing: 0.16em;
-        color: var(--accent);
-        text-transform: uppercase;
-        margin-bottom: 22px;
-      }
-      .hero h1 {
-        font-size: clamp(38px, 6.2vw, 68px);
-        line-height: 1.03;
-        letter-spacing: -0.035em;
-        font-weight: 600;
-        margin: 0 auto;
-        max-width: 14ch;
-        text-wrap: balance;
-      }
-      .hero-sub {
-        margin: 26px auto 0;
-        max-width: 600px;
-        font-size: 18px;
-        line-height: 1.6;
-        color: var(--muted);
-        text-wrap: pretty;
-      }
-      .hero-actions {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 14px;
-        margin-top: 34px;
-        flex-wrap: wrap;
-      }
-      .hero-pills {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 10px;
-        margin-top: 38px;
-        flex-wrap: wrap;
-        font-family: var(--mono);
-        font-size: 12.5px;
-        color: var(--muted);
-      }
-      .pill {
-        border: 1px solid var(--border);
-        border-radius: 99px;
-        padding: 5px 12px;
-      }
+    body {
+      margin: 0;
+      font-family:
+        "Geist",
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      transition:
+        background 0.35s ease,
+        color 0.35s ease;
+    }
 
-      /* ===================== VIDEO CENTERPIECE ===================== */
-      .video-section {
-        max-width: 1060px;
-        margin: 0 auto;
-        padding: 18px 32px 12px;
-      }
-      .window {
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        overflow: hidden;
-        background: var(--panel);
-        box-shadow:
-          0 40px 100px -40px var(--shadow),
-          0 0 0 1px color-mix(in srgb, var(--accent) 8%, transparent);
-      }
-      .window-bar {
-        display: flex;
-        align-items: center;
-        gap: 11px;
-        padding: 11px 16px;
-        border-bottom: 1px solid var(--border);
-        background: var(--panel2);
-      }
-      .window-mark {
-        width: 21px;
-        height: 21px;
-        border-radius: 6px;
-        background: var(--accent);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #fff;
-        font-weight: 700;
-        font-size: 12px;
-      }
-      .window-path {
-        font-family: var(--mono);
-        font-size: 12.5px;
-        color: var(--muted);
-      }
-      .window-path b {
-        color: var(--text);
-        font-weight: 500;
-      }
-      .window-status {
-        margin-left: auto;
-        display: flex;
-        align-items: center;
-        gap: 7px;
-        font-family: var(--mono);
-        font-size: 11.5px;
-        color: var(--muted);
-      }
-      .status-dot {
-        width: 7px;
-        height: 7px;
-        border-radius: 99px;
-        background: #34d399;
-        box-shadow: 0 0 0 3px color-mix(in srgb, #34d399 22%, transparent);
-      }
-      .video-wrap {
-        position: relative;
-        aspect-ratio: 16 / 9;
-        background: #000;
-      }
-      .video-wrap video {
-        width: 100%;
-        height: 100%;
-        display: block;
-        object-fit: cover;
-      }
-      .play-overlay {
-        position: absolute;
-        inset: 0;
-        margin: auto;
-        width: 74px;
-        height: 74px;
-        border-radius: 99px;
-        border: none;
-        cursor: pointer;
-        background: color-mix(in srgb, var(--accent) 90%, #000);
-        color: #fff;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        box-shadow: 0 18px 50px -10px rgba(0, 0, 0, 0.6);
-        transition: transform 0.12s;
-      }
-      .play-overlay:hover {
-        transform: scale(1.06);
-      }
-      .play-overlay[hidden] {
-        display: none;
-      }
-      .video-caption {
-        text-align: center;
-        margin: 16px auto 0;
-        font-family: var(--mono);
-        font-size: 12px;
-        color: var(--faint);
-      }
+    a {
+      text-decoration: none;
+      color: inherit;
+    }
 
-      /* ===================== WORKFLOW ===================== */
-      .section {
-        max-width: 1200px;
-        margin: 0 auto;
-      }
-      .workflow {
-        padding: 88px 32px 20px;
-      }
-      .section-head {
-        max-width: 620px;
-        margin-bottom: 42px;
-      }
-      .section-head h2 {
-        font-size: clamp(28px, 3.6vw, 40px);
-        line-height: 1.08;
-        letter-spacing: -0.028em;
-        font-weight: 600;
-        margin: 0;
-        text-wrap: balance;
-      }
-      .cards {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(238px, 1fr));
-        gap: 16px;
-      }
-      .card {
-        border: 1px solid var(--border);
-        border-radius: 14px;
-        padding: 24px;
-        background: var(--panel);
-        transition:
-          border-color 0.18s,
-          transform 0.18s;
-      }
-      .card:hover {
-        border-color: var(--border2);
-        transform: translateY(-2px);
-      }
-      .card-step {
-        font-family: var(--mono);
-        font-size: 12.5px;
-        color: var(--accent);
-        margin-bottom: 34px;
-      }
-      .card h3 {
-        font-size: 17px;
-        font-weight: 600;
-        letter-spacing: -0.01em;
-        margin: 0 0 8px;
-      }
-      .card p {
-        margin: 0;
-        font-size: 14px;
-        line-height: 1.55;
-        color: var(--muted);
-      }
+    ::selection {
+      background: var(--accent);
+      color: #fff;
+    }
 
-      /* ===================== CLOSING CTA ===================== */
-      .cta-section {
-        padding: 64px 32px 80px;
-      }
-      .cta-card {
-        border: 1px solid var(--border);
-        border-radius: 18px;
-        padding: 54px 40px;
-        text-align: center;
-        background: radial-gradient(
-          120% 140% at 50% 0%,
+    /* ===================== NAV ===================== */
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      background: color-mix(in srgb, var(--bg) 76%, transparent);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .header-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 13px 32px;
+      display: flex;
+      align-items: center;
+      gap: 30px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-mark {
+      width: 29px;
+      height: 29px;
+      border-radius: 8px;
+      background: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: 700;
+      font-size: 16px;
+      box-shadow: 0 4px 14px -4px var(--accent);
+    }
+
+    .brand-name {
+      font-weight: 600;
+      font-size: 17px;
+      letter-spacing: -0.015em;
+    }
+
+    .nav-links {
+      display: flex;
+      gap: 26px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .nav-links a {
+      transition: color 0.15s;
+    }
+
+    .nav-links a:hover {
+      color: var(--text);
+    }
+
+    .header-actions {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .icon-btn {
+      width: 34px;
+      height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      cursor: pointer;
+      transition:
+        border-color 0.15s,
+        background 0.15s;
+    }
+
+    .icon-btn:hover {
+      border-color: var(--border2);
+    }
+
+    .icon-moon {
+      display: none;
+    }
+
+    :root[data-theme="light"] .icon-sun {
+      display: none;
+    }
+
+    :root[data-theme="light"] .icon-moon {
+      display: block;
+    }
+
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+      font-size: 14px;
+      padding: 8px 15px;
+      border-radius: 9px;
+      box-shadow: 0 6px 18px -8px var(--accent);
+      transition:
+        transform 0.12s,
+        filter 0.15s;
+    }
+
+    .btn-primary:hover {
+      filter: brightness(1.08);
+      transform: translateY(-1px);
+    }
+
+    .btn-primary.lg {
+      font-size: 15.5px;
+      padding: 13px 22px;
+      border-radius: 11px;
+      box-shadow: 0 12px 30px -12px var(--accent);
+    }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--panel);
+      color: var(--text);
+      font-weight: 550;
+      font-size: 15.5px;
+      padding: 13px 20px;
+      border-radius: 11px;
+      border: 1px solid var(--border);
+      transition:
+        border-color 0.15s,
+        background 0.15s;
+    }
+
+    .btn-secondary:hover {
+      border-color: var(--border2);
+    }
+
+    .btn-text {
+      font-size: 15px;
+      color: var(--muted);
+      padding: 13px 6px;
+      transition: color 0.15s;
+    }
+
+    .btn-text:hover {
+      color: var(--text);
+    }
+
+    /* ===================== HERO ===================== */
+    .hero {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 92px 32px 50px;
+      text-align: center;
+    }
+
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      letter-spacing: 0.16em;
+      color: var(--accent);
+      text-transform: uppercase;
+      margin-bottom: 22px;
+    }
+
+    .hero h1 {
+      font-size: clamp(38px, 6.2vw, 68px);
+      line-height: 1.03;
+      letter-spacing: -0.035em;
+      font-weight: 600;
+      margin: 0 auto;
+      max-width: 14ch;
+      text-wrap: balance;
+    }
+
+    .hero-sub {
+      margin: 26px auto 0;
+      max-width: 600px;
+      font-size: 18px;
+      line-height: 1.6;
+      color: var(--muted);
+      text-wrap: pretty;
+    }
+
+    .hero-actions {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      margin-top: 34px;
+      flex-wrap: wrap;
+    }
+
+    .hero-pills {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 38px;
+      flex-wrap: wrap;
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--muted);
+    }
+
+    .pill {
+      border: 1px solid var(--border);
+      border-radius: 99px;
+      padding: 5px 12px;
+    }
+
+    /* ===================== VIDEO CENTERPIECE ===================== */
+    .video-section {
+      max-width: 1060px;
+      margin: 0 auto;
+      padding: 18px 32px 12px;
+    }
+
+    .window {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      background: var(--panel);
+      box-shadow:
+        0 40px 100px -40px var(--shadow),
+        0 0 0 1px color-mix(in srgb, var(--accent) 8%, transparent);
+    }
+
+    .window-bar {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel2);
+    }
+
+    .window-mark {
+      width: 21px;
+      height: 21px;
+      border-radius: 6px;
+      background: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: 700;
+      font-size: 12px;
+    }
+
+    .window-path {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--muted);
+    }
+
+    .window-path b {
+      color: var(--text);
+      font-weight: 500;
+    }
+
+    .window-status {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--muted);
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 99px;
+      background: #34d399;
+      box-shadow: 0 0 0 3px color-mix(in srgb, #34d399 22%, transparent);
+    }
+
+    .video-wrap {
+      position: relative;
+      aspect-ratio: 16 / 9;
+      background: #000;
+    }
+
+    .video-wrap video {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+    }
+
+    .play-overlay {
+      position: absolute;
+      inset: 0;
+      margin: auto;
+      width: 74px;
+      height: 74px;
+      border-radius: 99px;
+      border: none;
+      cursor: pointer;
+      background: color-mix(in srgb, var(--accent) 90%, #000);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 18px 50px -10px rgba(0, 0, 0, 0.6);
+      transition: transform 0.12s;
+    }
+
+    .play-overlay:hover {
+      transform: scale(1.06);
+    }
+
+    .play-overlay[hidden] {
+      display: none;
+    }
+
+    .video-caption {
+      text-align: center;
+      margin: 16px auto 0;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--faint);
+    }
+
+    /* ===================== WORKFLOW ===================== */
+    .section {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .workflow {
+      padding: 88px 32px 20px;
+    }
+
+    .section-head {
+      max-width: 620px;
+      margin-bottom: 42px;
+    }
+
+    .section-head h2 {
+      font-size: clamp(28px, 3.6vw, 40px);
+      line-height: 1.08;
+      letter-spacing: -0.028em;
+      font-weight: 600;
+      margin: 0;
+      text-wrap: balance;
+    }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(238px, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 24px;
+      background: var(--panel);
+      transition:
+        border-color 0.18s,
+        transform 0.18s;
+    }
+
+    .card:hover {
+      border-color: var(--border2);
+      transform: translateY(-2px);
+    }
+
+    .card-step {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--accent);
+      margin-bottom: 34px;
+    }
+
+    .card h3 {
+      font-size: 17px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      margin: 0 0 8px;
+    }
+
+    .card p {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.55;
+      color: var(--muted);
+    }
+
+    /* ===================== CLOSING CTA ===================== */
+    .cta-section {
+      padding: 64px 32px 80px;
+    }
+
+    .cta-card {
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 54px 40px;
+      text-align: center;
+      background: radial-gradient(120% 140% at 50% 0%,
           color-mix(in srgb, var(--accent) 14%, var(--panel)) 0%,
-          var(--panel) 60%
-        );
-      }
-      .cta-card h2 {
-        font-size: clamp(26px, 3.4vw, 38px);
-        line-height: 1.08;
-        letter-spacing: -0.028em;
-        font-weight: 600;
-        margin: 0;
-        text-wrap: balance;
-      }
-      .cta-card p {
-        margin: 16px auto 0;
-        max-width: 480px;
-        font-size: 16px;
-        color: var(--muted);
-        text-wrap: pretty;
-      }
-      .cta-actions {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 14px;
-        margin-top: 30px;
-        flex-wrap: wrap;
+          var(--panel) 60%);
+    }
+
+    .cta-card h2 {
+      font-size: clamp(26px, 3.4vw, 38px);
+      line-height: 1.08;
+      letter-spacing: -0.028em;
+      font-weight: 600;
+      margin: 0;
+      text-wrap: balance;
+    }
+
+    .cta-card p {
+      margin: 16px auto 0;
+      max-width: 480px;
+      font-size: 16px;
+      color: var(--muted);
+      text-wrap: pretty;
+    }
+
+    .cta-actions {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      margin-top: 30px;
+      flex-wrap: wrap;
+    }
+
+    /* ===================== FOOTER ===================== */
+    .site-footer {
+      border-top: 1px solid var(--border);
+      background: var(--bg2);
+    }
+
+    .footer-top {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 56px 32px 40px;
+      display: grid;
+      grid-template-columns: 1.6fr 1fr 1fr 1fr;
+      gap: 40px;
+    }
+
+    .footer-brand p {
+      margin: 0 0 16px;
+      font-size: 13.5px;
+      line-height: 1.55;
+      color: var(--muted);
+      max-width: 240px;
+    }
+
+    .footer-brand .brand {
+      margin-bottom: 16px;
+    }
+
+    .footer-tags {
+      display: flex;
+      gap: 10px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--faint);
+    }
+
+    .footer-tags span {
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 8px;
+    }
+
+    .footer-col-head {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--faint);
+      margin-bottom: 16px;
+    }
+
+    .footer-col-links {
+      display: flex;
+      flex-direction: column;
+      gap: 11px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    .footer-col-links a {
+      transition: color 0.15s;
+    }
+
+    .footer-col-links a:hover {
+      color: var(--text);
+    }
+
+    .footer-bottom {
+      border-top: 1px solid var(--border);
+    }
+
+    .footer-bottom-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 18px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+      font-size: 13px;
+      color: var(--faint);
+    }
+
+    .footer-bottom-inner .legal {
+      display: flex;
+      gap: 20px;
+    }
+
+    .footer-bottom-inner a {
+      transition: color 0.15s;
+    }
+
+    .footer-bottom-inner a:hover {
+      color: var(--text);
+    }
+
+    @media (max-width: 760px) {
+      .nav-links {
+        display: none;
       }
 
-      /* ===================== FOOTER ===================== */
-      .site-footer {
-        border-top: 1px solid var(--border);
-        background: var(--bg2);
-      }
-      .footer-top {
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 56px 32px 40px;
-        display: grid;
-        grid-template-columns: 1.6fr 1fr 1fr 1fr;
-        gap: 40px;
-      }
-      .footer-brand p {
-        margin: 0 0 16px;
-        font-size: 13.5px;
-        line-height: 1.55;
-        color: var(--muted);
-        max-width: 240px;
-      }
-      .footer-brand .brand {
-        margin-bottom: 16px;
-      }
-      .footer-tags {
-        display: flex;
-        gap: 10px;
-        font-family: var(--mono);
-        font-size: 11px;
-        color: var(--faint);
-      }
-      .footer-tags span {
-        border: 1px solid var(--border);
-        border-radius: 6px;
-        padding: 4px 8px;
-      }
-      .footer-col-head {
-        font-family: var(--mono);
-        font-size: 11.5px;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        color: var(--faint);
-        margin-bottom: 16px;
-      }
-      .footer-col-links {
-        display: flex;
-        flex-direction: column;
-        gap: 11px;
-        font-size: 14px;
-        color: var(--muted);
-      }
-      .footer-col-links a {
-        transition: color 0.15s;
-      }
-      .footer-col-links a:hover {
-        color: var(--text);
-      }
-      .footer-bottom {
-        border-top: 1px solid var(--border);
-      }
+      .header-inner,
+      .hero,
+      .video-section,
+      .workflow,
+      .cta-section,
+      .footer-top,
       .footer-bottom-inner {
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 18px 32px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 16px;
-        flex-wrap: wrap;
-        font-size: 13px;
-        color: var(--faint);
-      }
-      .footer-bottom-inner .legal {
-        display: flex;
-        gap: 20px;
-      }
-      .footer-bottom-inner a {
-        transition: color 0.15s;
-      }
-      .footer-bottom-inner a:hover {
-        color: var(--text);
+        padding-left: 20px;
+        padding-right: 20px;
       }
 
-      @media (max-width: 760px) {
-        .nav-links {
-          display: none;
-        }
-        .header-inner,
-        .hero,
-        .video-section,
-        .workflow,
-        .cta-section,
-        .footer-top,
-        .footer-bottom-inner {
-          padding-left: 20px;
-          padding-right: 20px;
-        }
-        .footer-top {
-          grid-template-columns: 1fr 1fr;
-          gap: 28px;
-        }
+      .footer-top {
+        grid-template-columns: 1fr 1fr;
+        gap: 28px;
       }
-      @media (max-width: 520px) {
-        .footer-top {
-          grid-template-columns: 1fr;
-        }
-      }
-    </style>
-  </head>
+    }
 
-  <body>
-    <!-- ===================== NAV ===================== -->
-    <header class="site-header">
-      <div class="header-inner">
-        <a class="brand" href="/">
-          <span class="brand-mark">K</span>
-          <span class="brand-name">KoFEM</span>
+    @media (max-width: 520px) {
+      .footer-top {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <!-- ===================== NAV ===================== -->
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="/">
+        <span class="brand-mark">K</span>
+        <span class="brand-name">KoFEM</span>
+      </a>
+      <nav class="nav-links">
+        <a href="#workflow">Workflow</a>
+        <a href="/examples/">Examples</a>
+        <a href="#app">Solver</a>
+      </nav>
+      <div class="header-actions">
+        <button class="icon-btn" id="theme-toggle" aria-label="Toggle theme">
+          <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round">
+            <circle cx="12" cy="12" r="4"></circle>
+            <path
+              d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4">
+            </path>
+          </svg>
+          <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path>
+          </svg>
+        </button>
+        <a class="btn-primary" href="/app/">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M8 5v14l11-7z"></path>
+          </svg>
+          Start Solver
         </a>
-        <nav class="nav-links">
-          <a href="#workflow">Workflow</a>
-          <a href="/examples/">Examples</a>
-          <a href="#app">Solver</a>
-        </nav>
-        <div class="header-actions">
-          <button class="icon-btn" id="theme-toggle" aria-label="Toggle theme">
-            <svg
-              class="icon-sun"
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-            >
-              <circle cx="12" cy="12" r="4"></circle>
-              <path
-                d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"
-              ></path>
-            </svg>
-            <svg
-              class="icon-moon"
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-            >
-              <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path>
-            </svg>
-          </button>
-          <a class="btn-primary" href="/app/">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M8 5v14l11-7z"></path>
-            </svg>
-            Start Solver
-          </a>
-        </div>
       </div>
-    </header>
+    </div>
+  </header>
 
-    <!-- ===================== HERO ===================== -->
-    <section class="hero">
-      <div class="eyebrow">Browser-native FEA</div>
-      <h1>Finite element analysis, right in your browser.</h1>
-      <p class="hero-sub">
-        Import STEP geometry, apply real loads and boundary conditions, and run
-        a direct static solve — then explore Von Mises stress and displacement
-        fields. No install, no license server.
-      </p>
-      <div class="hero-actions">
+  <!-- ===================== HERO ===================== -->
+  <section class="hero">
+    <div class="eyebrow">Browser-native FEA</div>
+    <h1>Finite element analysis, right in your browser.</h1>
+    <p class="hero-sub">
+      Import STEP geometry, apply real loads and boundary conditions, and run
+      a direct static solve — then explore stress and displacement
+      fields.
+    </p>
+    <p class="hero-sub">
+      No install, no license server.
+    </p>
+    <div class="hero-actions">
+      <a class="btn-primary lg" href="/app/">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M8 5v14l11-7z"></path>
+        </svg>
+        Start Solver
+      </a>
+      <a class="btn-secondary" href="/examples/">Browse examples <span style="color: var(--muted)">↗</span></a>
+    </div>
+    <div class="hero-pills">
+      <span class="pill">STEP import</span>
+      <span class="pill">Auto tet meshing</span>
+      <span class="pill">FEM solver</span>
+      <span class="pill">Result viewer</span>
+    </div>
+  </section>
+
+  <!-- ===================== VIDEO CENTERPIECE ===================== -->
+  <section class="video-section">
+    <div class="window">
+      <div class="window-bar">
+        <span class="window-mark">K</span>
+        <span class="window-path"><b>Workspace</b> / STEP Volume Mesh</span>
+        <span class="window-status"><span class="status-dot"></span>Solved · converged</span>
+      </div>
+      <div class="video-wrap">
+        <video id="demo-video" muted autoplay loop playsinline preload="auto" poster="/kofem-demo-poster.jpg"
+          aria-label="KoFEM walkthrough: importing a STEP file, meshing the volume, applying constraints, and viewing the solved result">
+          <source src="/kofem-demo.webm" type="video/webm" />
+          <source src="/kofem-demo.mp4" type="video/mp4" />
+        </video>
+        <button class="play-overlay" id="play-overlay" aria-label="Play" hidden>
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" style="margin-left: 3px">
+            <path d="M8 5v14l11-7z"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <p class="video-caption">
+      Real capture · 9,281 nodes · 43,344 CTETRA elements · solved client-side
+    </p>
+  </section>
+
+  <!-- ===================== WORKFLOW ===================== -->
+  <section class="section workflow" id="workflow">
+    <div class="section-head">
+      <div class="eyebrow">The workflow</div>
+      <h2>From CAD part to stress field, without leaving the tab.</h2>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <div class="card-step">01 · IMPORT</div>
+        <h3>STEP geometry</h3>
+        <p>
+          Drop in CAD parts and assign materials.
+        </p>
+      </div>
+      <div class="card">
+        <div class="card-step">02 · MESH</div>
+        <h3>Automatic tet meshing</h3>
+        <p>
+          In-browser CTETRA volume meshes.
+        </p>
+      </div>
+      <div class="card">
+        <div class="card-step">03 · CONSTRAIN</div>
+        <h3>Loads &amp; BC's</h3>
+        <p>
+          Fix displacements and apply loads directly on faces.
+        </p>
+      </div>
+      <div class="card">
+        <div class="card-step">04 · SOLVE</div>
+        <h3>FE static solver</h3>
+        <p>
+          Visualized on deformed or
+          undeformed geometry.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== CLOSING CTA ===================== -->
+  <section class="section cta-section" id="app">
+    <div class="cta-card">
+      <h2>Spin up a solver in your browser.</h2>
+      <p>From STEP file to Von Mises field — no setup, nothing to install.</p>
+      <div class="cta-actions">
         <a class="btn-primary lg" href="/app/">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
             <path d="M8 5v14l11-7z"></path>
           </svg>
           Start Solver
         </a>
-        <a class="btn-secondary" href="/examples/"
-          >Browse examples <span style="color: var(--muted)">↗</span></a
-        >
+        <a class="btn-text" href="/examples/">View validated examples ↗</a>
       </div>
-      <div class="hero-pills">
-        <span class="pill">STEP import</span>
-        <span class="pill">Auto tet meshing</span>
-        <span class="pill">Direct solver</span>
-        <span class="pill">Von Mises results</span>
-      </div>
-    </section>
+    </div>
+  </section>
 
-    <!-- ===================== VIDEO CENTERPIECE ===================== -->
-    <section class="video-section">
-      <div class="window">
-        <div class="window-bar">
-          <span class="window-mark">K</span>
-          <span class="window-path"><b>Workspace</b> / STEP Volume Mesh</span>
-          <span class="window-status"
-            ><span class="status-dot"></span>Solved · converged</span
-          >
+  <!-- ===================== FOOTER ===================== -->
+  <footer class="site-footer">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <div class="brand">
+          <span class="brand-mark">K</span>
+          <span class="brand-name">KoFEM</span>
         </div>
-        <div class="video-wrap">
-          <video
-            id="demo-video"
-            muted
-            autoplay
-            loop
-            playsinline
-            preload="auto"
-            poster="/kofem-demo-poster.jpg"
-            aria-label="KoFEM walkthrough: importing a STEP file, meshing the volume, applying constraints, and viewing the solved result"
-          >
-            <source src="/kofem-demo.webm" type="video/webm" />
-            <source src="/kofem-demo.mp4" type="video/mp4" />
-          </video>
-          <button
-            class="play-overlay"
-            id="play-overlay"
-            aria-label="Play"
-            hidden
-          >
-            <svg
-              width="28"
-              height="28"
-              viewBox="0 0 24 24"
-              fill="currentColor"
-              style="margin-left: 3px"
-            >
-              <path d="M8 5v14l11-7z"></path>
-            </svg>
-          </button>
+        <p>
+          Browser-native finite element analysis for engineers. Mesh, solve,
+          and visualize without leaving the tab.
+        </p>
+      </div>
+      <div>
+        <div class="footer-col-head">Product</div>
+        <div class="footer-col-links">
+          <a href="/app/">Launch solver</a>
+          <a href="#workflow">Workflow</a>
+          <a href="/examples/">Examples</a>
         </div>
       </div>
-      <p class="video-caption">
-        Real capture · 9,281 nodes · 43,344 CTETRA elements · solved client-side
-      </p>
-    </section>
+      <div>
+        <div class="footer-col-head">Reference</div>
+        <div class="footer-col-links">
+          <a href="/examples/">Validated examples</a>
+          <a href="#workflow">How it works</a>
+        </div>
+      </div>
+      <div>
+        <div class="footer-col-head">Engine</div>
+        <div class="footer-col-links">
+          <a href="/app/">OpenCASCADE</a>
+          <a href="/app/">Netgen</a>
+          <a href="/app/">MFEM</a>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <div class="footer-bottom-inner">
+        <span>© 2026 KoFEM. Built for engineers.</span>
+        <div class="legal">
+          <a href="/">Home</a>
+          <a href="/examples/">Examples</a>
+        </div>
+      </div>
+    </div>
+  </footer>
 
-    <!-- ===================== WORKFLOW ===================== -->
-    <section class="section workflow" id="workflow">
-      <div class="section-head">
-        <div class="eyebrow">The workflow</div>
-        <h2>From CAD part to stress field, without leaving the tab.</h2>
-      </div>
-      <div class="cards">
-        <div class="card">
-          <div class="card-step">01 · IMPORT</div>
-          <h3>STEP geometry</h3>
-          <p>
-            Drop in CAD parts and assign materials with real SI properties —
-            steel at E = 2.1·10¹¹ Pa, ν = 0.3.
-          </p>
-        </div>
-        <div class="card">
-          <div class="card-step">02 · MESH</div>
-          <h3>Automatic tet meshing</h3>
-          <p>
-            In-browser CTETRA volume meshes — tens of thousands of elements
-            generated in seconds.
-          </p>
-        </div>
-        <div class="card">
-          <div class="card-step">03 · CONSTRAIN</div>
-          <h3>Loads &amp; boundary conditions</h3>
-          <p>
-            Fix displacements and apply loads directly on faces, with live
-            feedback on the mesh.
-          </p>
-        </div>
-        <div class="card">
-          <div class="card-step">04 · SOLVE</div>
-          <h3>Direct static solver</h3>
-          <p>
-            Von Mises stress and displacement — visualized on deformed or
-            undeformed geometry.
-          </p>
-        </div>
-      </div>
-    </section>
-
-    <!-- ===================== CLOSING CTA ===================== -->
-    <section class="section cta-section" id="app">
-      <div class="cta-card">
-        <h2>Spin up a solver in your browser.</h2>
-        <p>From STEP file to Von Mises field — no setup, nothing to install.</p>
-        <div class="cta-actions">
-          <a class="btn-primary lg" href="/app/">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M8 5v14l11-7z"></path>
-            </svg>
-            Start Solver
-          </a>
-          <a class="btn-text" href="/examples/">View validated examples ↗</a>
-        </div>
-      </div>
-    </section>
-
-    <!-- ===================== FOOTER ===================== -->
-    <footer class="site-footer">
-      <div class="footer-top">
-        <div class="footer-brand">
-          <div class="brand">
-            <span class="brand-mark">K</span>
-            <span class="brand-name">KoFEM</span>
-          </div>
-          <p>
-            Browser-native finite element analysis for engineers. Mesh, solve,
-            and visualize without leaving the tab.
-          </p>
-          <div class="footer-tags">
-            <span>v0.4.1</span>
-          </div>
-        </div>
-        <div>
-          <div class="footer-col-head">Product</div>
-          <div class="footer-col-links">
-            <a href="/app/">Launch solver</a>
-            <a href="#workflow">Workflow</a>
-            <a href="/examples/">Examples</a>
-          </div>
-        </div>
-        <div>
-          <div class="footer-col-head">Reference</div>
-          <div class="footer-col-links">
-            <a href="/examples/">Validated examples</a>
-            <a href="#workflow">How it works</a>
-          </div>
-        </div>
-        <div>
-          <div class="footer-col-head">Engine</div>
-          <div class="footer-col-links">
-            <a href="/app/">OpenCASCADE</a>
-            <a href="/app/">Netgen</a>
-            <a href="/app/">MFEM</a>
-          </div>
-        </div>
-      </div>
-      <div class="footer-bottom">
-        <div class="footer-bottom-inner">
-          <span>© 2026 KoFEM. Built for engineers.</span>
-          <div class="legal">
-            <a href="/">Home</a>
-            <a href="/examples/">Examples</a>
-          </div>
-        </div>
-      </div>
-    </footer>
-
-    <script>
-      // Theme toggle — flips the CSS custom-property set on <html> and persists.
-      (function () {
-        var btn = document.getElementById("theme-toggle");
-        if (!btn) return;
-        btn.addEventListener("click", function () {
-          var root = document.documentElement;
-          var light = root.getAttribute("data-theme") === "light";
-          if (light) {
-            root.removeAttribute("data-theme");
-            try {
-              localStorage.setItem("kofem_theme", "dark");
-            } catch (e) {}
-          } else {
-            root.setAttribute("data-theme", "light");
-            try {
-              localStorage.setItem("kofem_theme", "light");
-            } catch (e) {}
-          }
-        });
-      })();
-
-      // The video autoplays muted and loops. The only control is a fallback
-      // play button shown if the browser ever blocks autoplay.
-      (function () {
-        var v = document.getElementById("demo-video");
-        if (!v) return;
-        var overlay = document.getElementById("play-overlay");
-        function sync() {
-          overlay.hidden = !v.paused;
+  <script>
+    // Theme toggle — flips the CSS custom-property set on <html> and persists.
+    (function () {
+      var btn = document.getElementById("theme-toggle");
+      if (!btn) return;
+      btn.addEventListener("click", function () {
+        var root = document.documentElement;
+        var light = root.getAttribute("data-theme") === "light";
+        if (light) {
+          root.removeAttribute("data-theme");
+          try {
+            localStorage.setItem("kofem_theme", "dark");
+          } catch (e) { }
+        } else {
+          root.setAttribute("data-theme", "light");
+          try {
+            localStorage.setItem("kofem_theme", "light");
+          } catch (e) { }
         }
-        overlay.addEventListener("click", function () {
-          v.play().catch(function () {});
-        });
-        v.addEventListener("play", sync);
-        v.addEventListener("pause", sync);
-        sync();
-      })();
-    </script>
-  </body>
+      });
+    })();
+
+    // The video autoplays muted and loops. The only control is a fallback
+    // play button shown if the browser ever blocks autoplay.
+    (function () {
+      var v = document.getElementById("demo-video");
+      if (!v) return;
+      var overlay = document.getElementById("play-overlay");
+      function sync() {
+        overlay.hidden = !v.paused;
+      }
+      overlay.addEventListener("click", function () {
+        v.play().catch(function () { });
+      });
+      v.addEventListener("play", sync);
+      v.addEventListener("pause", sync);
+      sync();
+    })();
+  </script>
+</body>
+
 </html>
