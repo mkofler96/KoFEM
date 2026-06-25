@@ -20,6 +20,7 @@ const pkg = join(here, "../../../web/src/wasm/pkg");
  *   material: { young_modulus, poisson_ratio, density? }
  *   bcs:      { fixed_vertices:[v...],
  *               fixed_dofs:[{vertex,dofs:[0|1|2,...]}...],   // single-DOF (new)
+ *               prescribed_dofs:[{vertex,dof:0|1|2,value}...], // non-zero Dirichlet
  *               point_loads:[{vertex, force:[fx,fy,fz]}...] }
  *   order:    FE polynomial order (default 1; order 2 is unreliable with the
  *             engine's loose CG tolerance — keep validation cases at order 1).
@@ -45,6 +46,7 @@ export async function loadSolver() {
     const bcsJson = JSON.stringify({
       fixed_vertices: bcs.fixed_vertices ?? [],
       fixed_dofs: bcs.fixed_dofs ?? [],
+      prescribed_dofs: bcs.prescribed_dofs ?? [],
       point_loads: bcs.point_loads ?? [],
     });
     return JSON.parse(

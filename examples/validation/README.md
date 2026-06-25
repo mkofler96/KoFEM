@@ -61,3 +61,19 @@ This requires the `fixed_dofs` support in `engine/cpp/engine.cpp`, so it only
 passes against a **freshly built** WASM. On the committed binary (before
 `scripts/build-wasm.sh`) it fails on purpose — that failure is the reminder to
 rebuild. CI rebuilds the WASM, so it gates the fix there.
+
+## `prescribed-displacement.test.mjs` — non-zero Dirichlet regression
+
+Guards the fix for issue #216: a face given a **non-zero** prescribed
+displacement (e.g. Ux = δ) must actually deform to that value instead of being
+silently pinned to zero. A box is stretched in x by a prescribed displacement on
+one face — with **no applied load** — and the loaded face must reach ux ≈ δ while
+the free transverse directions show Poisson contraction.
+
+```bash
+node examples/validation/prescribed-displacement.test.mjs
+```
+
+Like the single-DOF test, this needs the `prescribed_dofs` support compiled into
+`engine/cpp/engine.cpp`, so it only passes against a **freshly built** WASM and
+fails on purpose on the committed binary until `scripts/build-wasm.sh` runs.

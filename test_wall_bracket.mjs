@@ -17,11 +17,21 @@ const wasmBinary = readFileSync(join(wasmPkg, "kofem_wasm_emcc.wasm")).buffer;
 const { default: createModule } = await import(
   join(wasmPkg, "kofem_wasm_emcc.js")
 );
-const Module = await createModule({
-  wasmBinary,
-  print: (t) => console.log("[wasm]", t),
-  printErr: (t) => console.error("[wasm:err]", t),
-});
+const makeModule = () =>
+  createModule({
+    wasmBinary,
+    print: (t) => console.log("[wasm]", t),
+    printErr: (t) => console.error("[wasm:err]", t),
+  });
+
+// Meshing and solving run in SEPARATE module instances, mirroring production:
+// Netgen's Ng_Init installs global C++ state that contaminates the WASM runtime
+// for a subsequent MFEM solve in the same module, so the browser tears the
+// worker down between mesh and solve (resetWorker in
+// web/src/components/panel/LeftPanel.tsx). Sharing one module here left the
+// Netgen→MFEM hand-off sensitive to the binary's memory layout — an unrelated
+// engine.cpp change could shift it enough to trap in FinalizeTopology.
+const Module = await makeModule();
 
 const stepBytes = new Uint8Array(
   readFileSync(join(__dirname, "test_files/Wall Bracket.stp")),
@@ -62,9 +72,11 @@ console.log(
 );
 Module.free_geometry_cache();
 
-// 3. Solve — no try/catch; WASM traps and solver errors propagate as-is
+// 3. Solve in a fresh module — a clean WASM instance with no Netgen global
+// state, exactly as the browser does after resetWorker().
+const SolveModule = await makeModule();
 const result = JSON.parse(
-  Module.solve_linear_elastic(
+  SolveModule.solve_linear_elastic(
     JSON.stringify({
       vertices: mesh.vertices,
       tetrahedra: mesh.tetrahedra,
