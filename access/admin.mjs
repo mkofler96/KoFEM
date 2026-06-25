@@ -55,7 +55,9 @@ function grant(email) {
   console.log("");
   console.log(`  Access code: ${code}`);
   console.log("");
-  console.log("Send this code to the tester (it is shown only once). They enter");
+  console.log(
+    "Send this code to the tester (it is shown only once). They enter",
+  );
   console.log("it at  https://<your-domain>/beta/  to unlock the app.");
 }
 
@@ -79,7 +81,9 @@ function revoke(arg) {
 function list() {
   const active = loadCodes().codes.filter((c) => !c.revoked);
   if (!active.length) return console.log("No active codes.");
-  console.log("Active beta codes (the code itself is not stored — only its hash):");
+  console.log(
+    "Active beta codes (the code itself is not stored — only its hash):",
+  );
   for (const c of active) console.log(`  ${c.email}\t${c.createdAt}`);
 }
 
@@ -91,7 +95,9 @@ function requests() {
   console.log("Access requests:");
   for (const line of lines) {
     const { email, ts } = JSON.parse(line);
-    console.log(`  ${granted.has(email) ? "[granted]" : "[pending]"} ${email}\t${ts}`);
+    console.log(
+      `  ${granted.has(email) ? "[granted]" : "[pending]"} ${email}\t${ts}`,
+    );
   }
 }
 

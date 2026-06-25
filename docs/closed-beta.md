@@ -2,10 +2,10 @@
 
 KoFEM can run in two deploy modes, toggled by `update-prod.sh`:
 
-| Mode   | Command                    | `/app/` solver            | Landing CTA      |
-| ------ | -------------------------- | ------------------------- | ---------------- |
-| live   | `bash update-prod.sh`      | open to everyone          | "Start Solver"   |
-| beta   | `bash update-prod.sh --beta` | gated behind a password | "Request access" |
+| Mode | Command                      | `/app/` solver          | Landing CTA      |
+| ---- | ---------------------------- | ----------------------- | ---------------- |
+| live | `bash update-prod.sh`        | open to everyone        | "Start Solver"   |
+| beta | `bash update-prod.sh --beta` | gated behind a password | "Request access" |
 
 The mode is a **runtime** switch (env `KOFEM_MODE`), read by the pre-built web
 image at container start — no rebuild needed to flip between live and beta.
@@ -22,7 +22,7 @@ nginx on every /app/ hit ──▶ auth_request ──▶ GET /api/beta/verify �
   service (a tiny zero-dependency Node container, built locally from `./access`,
   never published). It accepts the **master password** or any active
   **individual code**.
-- The cookie value *is* the code and is re-validated on every request, so
+- The cookie value _is_ the code and is re-validated on every request, so
   **revoking a code locks that person out immediately**.
 - Access requests from the landing form are appended to a file on a Docker
   volume; you approve them manually and email out codes yourself (no SMTP).

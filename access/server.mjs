@@ -48,7 +48,10 @@ function loadCodes() {
     const { mtimeMs } = statSync(CODES_FILE);
     if (mtimeMs !== codesCache.mtimeMs) {
       const parsed = JSON.parse(readFileSync(CODES_FILE, "utf8"));
-      codesCache = { mtimeMs, codes: Array.isArray(parsed.codes) ? parsed.codes : [] };
+      codesCache = {
+        mtimeMs,
+        codes: Array.isArray(parsed.codes) ? parsed.codes : [],
+      };
     }
   } catch (err) {
     console.error(`[access] failed to read ${CODES_FILE}: ${err.message}`);
@@ -77,7 +80,9 @@ function isValidCode(code) {
 function getIp(req) {
   return (
     req.headers["cf-connecting-ip"] ||
-    String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() ||
+    String(req.headers["x-forwarded-for"] || "")
+      .split(",")[0]
+      .trim() ||
     req.socket.remoteAddress ||
     "unknown"
   );
@@ -87,7 +92,10 @@ function parseCookies(req) {
   const out = {};
   for (const part of String(req.headers.cookie || "").split(";")) {
     const i = part.indexOf("=");
-    if (i > -1) out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim());
+    if (i > -1)
+      out[part.slice(0, i).trim()] = decodeURIComponent(
+        part.slice(i + 1).trim(),
+      );
   }
   return out;
 }
@@ -144,29 +152,38 @@ function rateLimited(name, ip, max, windowMs) {
 
 async function handleRequestAccess(req, res) {
   const ip = getIp(req);
-  if (rateLimited("request", ip, 5, 10 * 60 * 1000)) return json(res, 429, { ok: false, error: "rate_limited" });
+  if (rateLimited("request", ip, 5, 10 * 60 * 1000))
+    return json(res, 429, { ok: false, error: "rate_limited" });
 
   const fields = parseFields(await readBody(req), req.headers["content-type"]);
   // Honeypot: bots fill hidden fields. Pretend success, store nothing.
   if (fields.website || fields.company) return json(res, 200, { ok: true });
 
-  const email = String(fields.email || "").trim().toLowerCase();
-  if (!EMAIL_RE.test(email) || email.length > 254) return json(res, 400, { ok: false, error: "invalid_email" });
+  const email = String(fields.email || "")
+    .trim()
+    .toLowerCase();
+  if (!EMAIL_RE.test(email) || email.length > 254)
+    return json(res, 400, { ok: false, error: "invalid_email" });
 
   const seen = readFileSync(REQUESTS_FILE, "utf8");
   if (!seen.includes(`"${email}"`)) {
-    appendFileSync(REQUESTS_FILE, JSON.stringify({ email, ts: new Date().toISOString() }) + "\n");
+    appendFileSync(
+      REQUESTS_FILE,
+      JSON.stringify({ email, ts: new Date().toISOString() }) + "\n",
+    );
   }
   return json(res, 200, { ok: true });
 }
 
 async function handleLogin(req, res) {
   const ip = getIp(req);
-  if (rateLimited("login", ip, 10, 10 * 60 * 1000)) return json(res, 429, { ok: false, error: "rate_limited" });
+  if (rateLimited("login", ip, 10, 10 * 60 * 1000))
+    return json(res, 429, { ok: false, error: "rate_limited" });
 
   const fields = parseFields(await readBody(req), req.headers["content-type"]);
   const code = String(fields.code || "").trim();
-  if (!isValidCode(code)) return json(res, 401, { ok: false, error: "invalid_code" });
+  if (!isValidCode(code))
+    return json(res, 401, { ok: false, error: "invalid_code" });
 
   const cookie = `${COOKIE}=${encodeURIComponent(code)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${COOKIE_MAX_AGE}`;
   return json(res, 200, { ok: true }, { "set-cookie": cookie });
@@ -193,18 +210,25 @@ function handleLogout(req, res) {
 
 ensureStorage();
 if (!MASTER) {
-  console.warn("[access] KOFEM_BETA_MASTER is not set — master login disabled; only individual codes will work");
+  console.warn(
+    "[access] KOFEM_BETA_MASTER is not set — master login disabled; only individual codes will work",
+  );
 }
 
 const server = createServer(async (req, res) => {
   const { method } = req;
   const path = req.url.split("?")[0];
   try {
-    if (method === "GET" && path === "/healthz") return json(res, 200, { ok: true });
-    if (method === "POST" && path === "/api/request-access") return await handleRequestAccess(req, res);
-    if (method === "POST" && path === "/api/beta/login") return await handleLogin(req, res);
-    if (method === "GET" && path === "/api/beta/verify") return handleVerify(req, res);
-    if (method === "POST" && path === "/api/beta/logout") return handleLogout(req, res);
+    if (method === "GET" && path === "/healthz")
+      return json(res, 200, { ok: true });
+    if (method === "POST" && path === "/api/request-access")
+      return await handleRequestAccess(req, res);
+    if (method === "POST" && path === "/api/beta/login")
+      return await handleLogin(req, res);
+    if (method === "GET" && path === "/api/beta/verify")
+      return handleVerify(req, res);
+    if (method === "POST" && path === "/api/beta/logout")
+      return handleLogout(req, res);
     return json(res, 404, { ok: false, error: "not_found" });
   } catch (err) {
     const status = err.message === "body too large" ? 413 : 500;
