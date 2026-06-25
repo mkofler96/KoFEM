@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>Closed beta — KoFEM</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #0a0b0f;
+        --panel: #13151c;
+        --border: #23262f;
+        --text: #eceef3;
+        --muted: #9aa0ad;
+        --accent: #5b7cff;
+        --danger: #ff6b6b;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          "Geist",
+          -apple-system,
+          BlinkMacSystemFont,
+          sans-serif;
+        padding: 24px;
+      }
+      .card {
+        width: 100%;
+        max-width: 400px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 32px;
+        box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.6);
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 22px;
+      }
+      .brand-mark {
+        width: 30px;
+        height: 30px;
+        border-radius: 8px;
+        background: var(--accent);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-weight: 700;
+      }
+      .brand-name {
+        font-weight: 600;
+        font-size: 17px;
+      }
+      h1 {
+        font-size: 20px;
+        margin: 0 0 6px;
+      }
+      p {
+        color: var(--muted);
+        font-size: 14px;
+        margin: 0 0 20px;
+      }
+      label {
+        display: block;
+        font-size: 13px;
+        color: var(--muted);
+        margin-bottom: 7px;
+      }
+      input {
+        width: 100%;
+        padding: 12px 14px;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: var(--bg);
+        color: var(--text);
+        font-size: 15px;
+      }
+      input:focus {
+        outline: none;
+        border-color: var(--accent);
+      }
+      button {
+        width: 100%;
+        margin-top: 16px;
+        padding: 12px;
+        border: none;
+        border-radius: 10px;
+        background: var(--accent);
+        color: #fff;
+        font-size: 15px;
+        font-weight: 600;
+        font-family: inherit;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: default;
+      }
+      .msg {
+        margin: 16px 0 0;
+        font-size: 14px;
+        min-height: 1em;
+      }
+      .msg.error {
+        color: var(--danger);
+      }
+      .foot {
+        margin: 20px 0 0;
+        font-size: 13px;
+      }
+      .foot a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <div class="brand">
+        <span class="brand-mark">K</span>
+        <span class="brand-name">KoFEM</span>
+      </div>
+      <h1>Closed beta</h1>
+      <p>Enter your access code to open the solver.</p>
+      <form id="gate-form">
+        <label for="code">Access code</label>
+        <input
+          id="code"
+          name="code"
+          type="text"
+          autocomplete="off"
+          autocapitalize="off"
+          spellcheck="false"
+          placeholder="KOFEM-XXXX-XXXX-XXXX-XXXX-XXXX"
+          required
+        />
+        <button type="submit">Unlock</button>
+        <p class="msg" id="msg"></p>
+      </form>
+      <p class="foot">
+        No code yet? <a href="/">Request access on the homepage →</a>
+      </p>
+    </main>
+
+    <script>
+      (function () {
+        var form = document.getElementById("gate-form");
+        var msg = document.getElementById("msg");
+        var btn = form.querySelector("button");
+        form.addEventListener("submit", function (e) {
+          e.preventDefault();
+          msg.className = "msg";
+          msg.textContent = "Checking…";
+          btn.disabled = true;
+          fetch("/api/beta/login", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ code: form.code.value.trim() }),
+          })
+            .then(function (r) {
+              if (r.ok) {
+                msg.textContent = "Unlocked — loading…";
+                window.location.href = "/app/";
+              } else {
+                msg.className = "msg error";
+                msg.textContent =
+                  r.status === 429
+                    ? "Too many attempts — try again later."
+                    : "Invalid or revoked code.";
+                btn.disabled = false;
+              }
+            })
+            .catch(function () {
+              msg.className = "msg error";
+              msg.textContent = "Something went wrong. Please try again.";
+              btn.disabled = false;
+            });
+        });
+      })();
+    </script>
+  </body>
+</html>

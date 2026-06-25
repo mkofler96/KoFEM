@@ -51,12 +51,13 @@
       } catch (e) {}
     </script>
 
-    <!-- Lock state (coming-soon mode). lock-state.js is overwritten at
-         container start from KOFEM_LOCKED; the class is applied before first
-         paint so the launch buttons never flash the wrong label. -->
-    <script src="/lock-state.js"></script>
+    <!-- Deploy mode. mode-state.js is overwritten at container start from
+         KOFEM_MODE; the class is applied before first paint so the launch
+         buttons never flash the wrong label. -->
+    <script src="/mode-state.js"></script>
     <script>
-      if (window.KOFEM_LOCKED) document.documentElement.classList.add("locked");
+      if (window.KOFEM_MODE)
+        document.documentElement.classList.add("mode-" + window.KOFEM_MODE);
     </script>
 
     <style>
@@ -235,22 +236,78 @@
         box-shadow: 0 12px 30px -12px var(--accent);
       }
 
-      /* Coming-soon ("locked") mode. The launch buttons carry both labels; CSS
-         swaps them with no flash (lock state is applied in <head>). Every link
-         to /app/ is disabled — nginx also redirects /app/ as the hard backstop. */
-      .cta-soon {
+      /* Closed-beta mode. The primary launch buttons carry both labels; CSS
+         swaps them with no flash (the mode class is set in <head>). In beta the
+         buttons read "Request access" and open the request dialog (see the
+         inline script); the app gate itself is enforced server-side by nginx. */
+      .cta-beta {
         display: none;
       }
-      html.locked .cta-live {
+      html.mode-beta .cta-live {
         display: none;
       }
-      html.locked .cta-soon {
+      html.mode-beta .cta-beta {
         display: inline;
       }
-      html.locked a[href="/app/"] {
-        pointer-events: none;
-        opacity: 0.55;
-        cursor: default;
+
+      /* Request-access dialog (beta mode). */
+      .request-dialog {
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: var(--panel);
+        color: var(--text);
+        padding: 26px;
+        max-width: 420px;
+        width: calc(100% - 32px);
+        box-shadow: 0 30px 80px -20px var(--shadow);
+      }
+      .request-dialog::backdrop {
+        background: rgba(0, 0, 0, 0.6);
+      }
+      .request-dialog h3 {
+        margin: 0 0 8px;
+        font-size: 19px;
+      }
+      .request-dialog p {
+        margin: 0 0 16px;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      .request-dialog input[type="email"] {
+        width: 100%;
+        padding: 11px 13px;
+        border-radius: 9px;
+        border: 1px solid var(--border);
+        background: var(--bg2);
+        color: var(--text);
+        font-size: 15px;
+      }
+      .request-dialog input[type="email"]:focus {
+        outline: none;
+        border-color: var(--accent);
+      }
+      .request-dialog button {
+        font: inherit;
+        cursor: pointer;
+      }
+      .request-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+        margin-top: 16px;
+      }
+      .request-msg {
+        margin: 14px 0 0;
+        font-size: 14px;
+        color: var(--accent);
+      }
+      /* Honeypot — visually hidden, off-screen, skipped by tab order. */
+      .hp {
+        position: absolute;
+        left: -9999px;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
       }
       .btn-secondary {
         display: inline-flex;
@@ -689,7 +746,7 @@
               <path d="M8 5v14l11-7z"></path>
             </svg>
             <span class="cta-live">Start Solver</span>
-            <span class="cta-soon">Coming soon</span>
+            <span class="cta-beta">Request access</span>
           </a>
         </div>
       </div>
@@ -710,7 +767,7 @@
             <path d="M8 5v14l11-7z"></path>
           </svg>
           <span class="cta-live">Start Solver</span>
-          <span class="cta-soon">Coming soon</span>
+          <span class="cta-beta">Request access</span>
         </a>
         <a class="btn-secondary" href="/examples/"
           >Browse examples <span style="color: var(--muted)">↗</span></a
@@ -824,7 +881,7 @@
               <path d="M8 5v14l11-7z"></path>
             </svg>
             <span class="cta-live">Start Solver</span>
-            <span class="cta-soon">Coming soon</span>
+            <span class="cta-beta">Request access</span>
           </a>
           <a class="btn-text" href="/examples/">View validated examples ↗</a>
         </div>
@@ -882,7 +939,95 @@
       </div>
     </footer>
 
+    <!-- Request-access dialog (beta mode only). -->
+    <dialog id="request-dialog" class="request-dialog">
+      <form id="request-form">
+        <h3>Request beta access</h3>
+        <p>
+          KoFEM is in closed beta. Leave your email and we'll send you an access
+          code.
+        </p>
+        <input
+          type="email"
+          name="email"
+          placeholder="you@example.com"
+          autocomplete="email"
+          required
+        />
+        <!-- Honeypot: hidden from people, tempting to bots. -->
+        <input
+          type="text"
+          name="website"
+          class="hp"
+          tabindex="-1"
+          autocomplete="off"
+          aria-hidden="true"
+        />
+        <div class="request-actions">
+          <button type="button" class="btn-secondary" id="request-cancel">
+            Cancel
+          </button>
+          <button type="submit" class="btn-primary">Request access</button>
+        </div>
+        <p class="request-msg" id="request-msg" hidden></p>
+      </form>
+    </dialog>
+
     <script>
+      // Request-access flow (beta mode). The prominent launch buttons open the
+      // dialog instead of navigating to the gated app; the form POSTs the email
+      // to the kofem-access service.
+      (function () {
+        if (window.KOFEM_MODE !== "beta") return;
+        var dialog = document.getElementById("request-dialog");
+        var form = document.getElementById("request-form");
+        var msg = document.getElementById("request-msg");
+        if (!dialog || !form) return;
+
+        document
+          .querySelectorAll('a.btn-primary[href="/app/"]')
+          .forEach(function (a) {
+            a.addEventListener("click", function (e) {
+              e.preventDefault();
+              msg.hidden = true;
+              dialog.showModal();
+            });
+          });
+        document
+          .getElementById("request-cancel")
+          .addEventListener("click", function () {
+            dialog.close();
+          });
+
+        form.addEventListener("submit", function (e) {
+          e.preventDefault();
+          msg.hidden = false;
+          msg.textContent = "Sending…";
+          fetch("/api/request-access", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              email: form.email.value.trim(),
+              website: form.website.value,
+            }),
+          })
+            .then(function (r) {
+              if (r.ok) {
+                form.reset();
+                msg.textContent =
+                  "Thanks! We'll email you an access code soon.";
+              } else if (r.status === 429) {
+                msg.textContent = "Too many requests — please try again later.";
+              } else {
+                msg.textContent = "Please enter a valid email address.";
+              }
+            })
+            .catch(function () {
+              msg.textContent = "Something went wrong. Please try again.";
+            });
+        });
+      })();
+
       // Theme toggle — flips the CSS custom-property set on <html> and persists.
       (function () {
         var btn = document.getElementById("theme-toggle");

@@ -4,14 +4,39 @@ services:
     container_name: kofem-web
     restart: always
     environment:
-      # 1 = locked (coming-soon, solver disabled), 0 = live. Set by update-prod.sh.
-      KOFEM_LOCKED: "${KOFEM_LOCKED:-0}"
+      # live | beta. Set by update-prod.sh (--beta). In beta the nginx image
+      # gates /app/ behind the password and routes /api/* to kofem-access.
+      KOFEM_MODE: "${KOFEM_MODE:-live}"
     expose:
       - "10000"
     networks:
       - cloudflare
+      - internal
+
+  # Closed-beta gate + "Request access" waitlist. Only starts in beta mode
+  # (compose profile), and is built locally from ./access — never published.
+  # Not exposed publicly: nginx (kofem-web) is the only thing that reaches it.
+  kofem-access:
+    build: ./access
+    image: kofem-access:local
+    container_name: kofem-access
+    restart: always
+    profiles: ["beta"]
+    environment:
+      # Master password for the beta. Required for beta mode; put it in .env.
+      # update-prod.sh refuses to start beta without it.
+      KOFEM_BETA_MASTER: "${KOFEM_BETA_MASTER:-}"
+    volumes:
+      - kofem-access-data:/data
+    networks:
+      - internal
 
 networks:
   cloudflare:
     external: true
     name: dashboard_mybasil-network
+  internal:
+    internal: true
+
+volumes:
+  kofem-access-data:

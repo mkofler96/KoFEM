@@ -47,9 +47,9 @@ ENV PORT=10000
 
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 
-# Runtime lock toggle: rendered from KOFEM_LOCKED at container start.
-COPY docker-entrypoint.d/40-kofem-lock.sh /docker-entrypoint.d/40-kofem-lock.sh
-RUN chmod +x /docker-entrypoint.d/40-kofem-lock.sh
+# Runtime mode toggle (live | beta): rendered from KOFEM_MODE at container start.
+COPY docker-entrypoint.d/40-kofem-mode.sh /docker-entrypoint.d/40-kofem-mode.sh
+RUN chmod +x /docker-entrypoint.d/40-kofem-mode.sh
 
 EXPOSE 10000
 

@@ -13,6 +13,12 @@ server {
     gzip_types text/plain text/css application/javascript application/json application/wasm image/svg+xml;
     gzip_min_length 1024;
 
+    # Server-level block rendered at container start from KOFEM_MODE (see
+    # docker-entrypoint.d/40-kofem-mode.sh): empty for live; in beta it adds the
+    # /api proxy to kofem-access, the auth_request verify endpoint, and the
+    # @kofem_beta_gate redirect.
+    include /etc/nginx/conf.d/kofem-server.inc;
+
     # Fingerprinted Vite assets are immutable — cache them aggressively.
     location /assets/ {
         try_files $uri =404;
@@ -29,9 +35,9 @@ server {
 
     # The React solver is mounted below /app/. Deep links under that prefix must
     # serve the app entry; the marketing landing page remains the root fallback.
-    # The body is rendered at container start from KOFEM_LOCKED (see
-    # docker-entrypoint.d/40-kofem-lock.sh): live -> serve the app, locked ->
-    # redirect to the landing page so the solver is unreachable.
+    # The body is rendered at container start from KOFEM_MODE (see
+    # docker-entrypoint.d/40-kofem-mode.sh): live -> serve the app, beta -> gate
+    # it behind the password via auth_request.
     location /app/ {
         include /etc/nginx/conf.d/kofem-app.inc;
     }
