@@ -978,21 +978,6 @@ static std::string solve_linear_elastic(
            ",\"von_mises\":"     + json_doubles(von_mises)     + "}";
 }
 
-// ── Convenience: full pipeline in one call ────────────────────────────────────
-
-static std::string step_to_fem_result(
-    val bytes_val,
-    const std::string& tess_opts,
-    const std::string& mesh_opts,
-    const std::string& mat_json,
-    const std::string& bcs_json,
-    int order)
-{
-    std::string surface_json = tessellate_step(bytes_val, tess_opts);
-    std::string volume_json  = generate_volume_mesh(surface_json, mesh_opts);
-    return solve_linear_elastic(volume_json, mat_json, bcs_json, order);
-}
-
 // ── Embind registrations ──────────────────────────────────────────────────────
 
 EMSCRIPTEN_BINDINGS(kofem) {
@@ -1002,5 +987,4 @@ EMSCRIPTEN_BINDINGS(kofem) {
     emscripten::function("generate_fem_mesh",      &generate_fem_mesh);
     emscripten::function("free_geometry_cache",    &free_geometry_cache);
     emscripten::function("solve_linear_elastic",   &solve_linear_elastic);
-    emscripten::function("step_to_fem_result",     &step_to_fem_result);
 }

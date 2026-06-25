@@ -18,14 +18,6 @@ export interface KofemModule {
    */
   free_geometry_cache(): void
   solve_linear_elastic(mesh_json: string, mat_json: string, bcs_json: string, order: number): string
-  step_to_fem_result(
-    step_bytes: Uint8Array,
-    tess_opts_json: string,
-    mesh_opts_json: string,
-    mat_json: string,
-    bcs_json: string,
-    order: number
-  ): string
 }
 
 export interface ModuleOverrides {
@@ -60,16 +52,6 @@ export function generate_volume_mesh(surface_json: string, opts_json: string): s
  */
 export function solve_linear_elastic(
   mesh_json: string,
-  mat_json: string,
-  bcs_json: string,
-  order: number
-): string
-
-/** Full pipeline: STEP bytes → tessellate → volume mesh → FEM solve. */
-export function step_to_fem_result(
-  step_bytes: Uint8Array,
-  tess_opts_json: string,
-  mesh_opts_json: string,
   mat_json: string,
   bcs_json: string,
   order: number
