@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Michael Kofler
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Pure face-picking algorithm — no React / Three.js dependency.
 // Used by MeshScene.tsx and by unit tests.
 

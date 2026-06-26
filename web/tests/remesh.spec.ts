@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Michael Kofler
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Import from ./coverage (not @playwright/test) so the fixture harvests the
 // solver.worker Istanbul counters after each test — these tests exercise the
 // worker directly, so without this their coverage (describeError, the reload

@@ -10,7 +10,7 @@ members = [
 version = "0.1.0"
 edition = "2021"
 authors = ["Michael Kofler"]
-license = "MIT"
+license = "AGPL-3.0-or-later"
 
 [workspace.dependencies]
 kofem-core = { path = "crates/kofem-core" }

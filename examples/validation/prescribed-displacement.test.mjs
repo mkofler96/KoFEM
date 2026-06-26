@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Michael Kofler
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Idiot-proof regression test for non-zero prescribed displacements (issue #216).
 //
 // THE BUG THIS GUARDS: the UI lets you prescribe a non-zero displacement on a

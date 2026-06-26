@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Michael Kofler
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Thin wrappers around Netgen internal APIs that nglib does not expose.
 // Implemented in netgen_glue.cpp, which is the only translation unit that
 // includes Netgen's internal headers (keeping them out of engine.cpp, which

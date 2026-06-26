@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Michael Kofler
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 # Build the KoFEM WASM module (C++ engine → Emscripten → JS + WASM).
 #
 # Prerequisites (all compiled with Emscripten):

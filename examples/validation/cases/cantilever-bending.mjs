@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Michael Kofler
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Cantilever beam with an end load — classic Euler–Bernoulli bending check.
 //
 //   Beam fixed at x=0, transverse tip load P over the x=L face.

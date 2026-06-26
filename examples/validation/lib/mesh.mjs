@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Michael Kofler
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Structured hex-mesh generators and node selectors for the validation cases.
 //
 // Every generator returns { vertices: [[x,y,z]...], hexahedra: [[..8]...] } plus

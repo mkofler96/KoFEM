@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Michael Kofler
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Wall Bracket solve test — runs the full WASM pipeline in Node.js.
 // STEP → tessellate (OCC) → FEM mesh (Netgen) → linear-elastic solve (MFEM)
 //

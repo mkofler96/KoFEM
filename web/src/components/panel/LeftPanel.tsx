@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Michael Kofler
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { useState, useRef, useEffect, type ChangeEvent } from "react";
 import { useModelStore, RESULT_TYPES } from "../../store/modelStore";
 import type {

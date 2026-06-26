@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Michael Kofler
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Cantilever-beam test fixture.
 //
 // This model used to be the welcome-screen "Start with example" button. It is

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Michael Kofler
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { expect, type Page } from "@playwright/test";
 
 // The solver app is served at /app/ (the marketing landing lives at "/").

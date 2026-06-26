@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Michael Kofler
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Idiot-proof regression test for single-DOF (per-component) constraints.
 //
 // THE BUG THIS GUARDS: the UI lets you constrain a node in just one direction

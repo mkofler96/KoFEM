@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Michael Kofler
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Loads the committed KoFEM WASM engine and exposes a thin solve() wrapper.
 //
 // This is the same module the browser worker (web/src/workers/solver.worker.ts)

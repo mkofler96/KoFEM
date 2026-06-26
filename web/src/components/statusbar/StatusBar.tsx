@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Michael Kofler
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { useModelStore } from "../../store/modelStore";
 import { APP_VERSION } from "../../lib/version";
 import styles from "./StatusBar.module.css";
@@ -259,6 +262,15 @@ export function StatusBar() {
           </span>
         ) : null}
         <span className={styles.muted}>m · N · Pa · {APP_VERSION}</span>
+        <a
+          className={styles.discLink}
+          href="https://github.com/mkofler96/KoFEM/blob/main/DISCLAIMER.md"
+          target="_blank"
+          rel="noopener"
+          title="No warranty — FEM results are approximations. Verify independently before relying on them."
+        >
+          No warranty
+        </a>
       </div>
     </div>
   );

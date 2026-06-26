@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Michael Kofler
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // BRepFill::Face and BRepFill::Shell are referenced by Netgen's
 // IGESToBRep_TopoSurface (IGES import) but are absent from the installed
 // OCCT libraries in the kofem-dependencies Docker image.  KoFEM never

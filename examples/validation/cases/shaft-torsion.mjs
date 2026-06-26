@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Michael Kofler
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Hollow circular shaft under torsion — Saint-Venant torsion of a tube.
 //
 //   A hollow shaft (inner radius ri, outer ro, length L) clamped at z=0 with a

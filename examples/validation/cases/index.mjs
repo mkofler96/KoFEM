@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Michael Kofler
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Registry of validation cases. Each default-exports a descriptor:
 //   { name, quantity, unit, reference, referenceLabel, tolPct, run(solve) }
 // run(solve) returns the finite-element value for `quantity`.
