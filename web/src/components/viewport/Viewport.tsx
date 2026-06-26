@@ -2,12 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { Canvas } from "@react-three/fiber";
-import {
-  OrbitControls,
-  Grid,
-  GizmoHelper,
-  GizmoViewport,
-} from "@react-three/drei";
+import { OrbitControls, GizmoHelper, GizmoViewport } from "@react-three/drei";
 import { MeshScene } from "./MeshScene";
 import { FitCamera } from "./FitCamera";
 import { ColorBar } from "./ColorBar";
@@ -54,14 +49,6 @@ export function Viewport() {
         <directionalLight position={[8, 10, 8]} intensity={0.9} castShadow />
         <directionalLight position={[-5, 5, -5]} intensity={0.3} />
         <MeshScene />
-        <Grid
-          infiniteGrid
-          cellSize={0.5}
-          sectionSize={2}
-          fadeDistance={50}
-          cellColor="#d1d5db"
-          sectionColor="#9ca3af"
-        />
         <OrbitControls makeDefault />
         <FitCamera />
         <GizmoHelper alignment="bottom-right" margin={[72, 72]}>
