@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Michael Kofler
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { defineConfig, type PluginOption } from "vite";
 import { fileURLToPath } from "node:url";
 import { copyFileSync, mkdirSync } from "node:fs";

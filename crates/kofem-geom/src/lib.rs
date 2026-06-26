@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Michael Kofler
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 use thiserror::Error;
 
 // Native OCCT bridge — not implemented yet.

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Michael Kofler
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Plate with a central circular hole — the Kirsch stress-concentration problem.
 //
 //   A wide plate (half-width b ≫ hole radius a) in uniaxial tension σ. At the

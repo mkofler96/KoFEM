@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Michael Kofler
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { useEffect } from 'react'
 import { useThree } from '@react-three/fiber'
 import * as THREE from 'three'

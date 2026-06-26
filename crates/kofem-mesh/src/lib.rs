@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Michael Kofler
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 pub mod types;
 pub use types::{MeshOptions, SurfaceMesh, VolumeMesh};
 

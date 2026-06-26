@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Michael Kofler
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // KoFEM WASM engine — C++ pipeline exposed to JavaScript via Emscripten Embind.
 //
 // Pipeline:  STEP bytes → OCCT tessellation (display) → Netgen OCC surface+volume mesh → MFEM FEM solve

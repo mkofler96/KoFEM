@@ -1,4 +1,7 @@
 #!/usr/bin/env bun
+// SPDX-FileCopyrightText: 2026 Michael Kofler
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Unit test for the face-picking algorithm.
 //
 // Geometry: a hollow tube with inner radius 5, outer radius 10, height 20.

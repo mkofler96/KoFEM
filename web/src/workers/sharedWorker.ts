@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Michael Kofler
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Singleton WASM worker shared across all components.
 // Each call gets a unique message ID; the onmessage handler routes
 // responses back to the correct Promise via a pending-call map.

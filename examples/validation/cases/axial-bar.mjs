@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Michael Kofler
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Axial bar in uniaxial tension — the simplest sanity benchmark.
 //
 //   A prismatic bar, fixed at x=0, pulled by a total axial force P over the x=L

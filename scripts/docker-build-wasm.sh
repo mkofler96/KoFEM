@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Michael Kofler
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
 # scripts/docker-build-wasm.sh
 #
 # Build the KoFEM WASM module on any Docker-capable host (Mac, Linux, Windows/WSL).

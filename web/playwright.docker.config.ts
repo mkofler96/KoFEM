@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Michael Kofler
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 import { defineConfig } from "@playwright/test";
 
 // Config for the production-image smoke test. It does NOT start its own server:

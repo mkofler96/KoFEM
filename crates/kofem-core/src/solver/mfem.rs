@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Michael Kofler
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 // Native MFEM bridge — not implemented yet.
 // The production solver runs via the WASM build: see engine/cpp/engine.cpp.
 use super::{FemResult, FemSolver, SolverError};

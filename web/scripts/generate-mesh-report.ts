@@ -1,4 +1,7 @@
 #!/usr/bin/env -S bun run
+// SPDX-FileCopyrightText: 2026 Michael Kofler
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
 /**
  * Upload KoFEM Playwright render screenshots + test failure screenshots to Slack.
  *
