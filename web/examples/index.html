@@ -4,6 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/svg+xml" href="/kofem_logo.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
     <title>Examples — KoFEM Online Finite Element Solver</title>
     <meta
       name="description"
@@ -20,6 +25,14 @@
       content="Interactive, solved KoFEM examples you can rotate in the browser and open in the app."
     />
     <meta property="og:url" content="https://solver.example.com/examples/" />
+    <meta property="og:image" content="https://solver.example.com/kofem_logo.svg" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Examples — KoFEM" />
+    <meta
+      name="twitter:description"
+      content="Interactive, solved KoFEM examples you can rotate in the browser and open in the app."
+    />
+    <meta name="twitter:image" content="https://solver.example.com/kofem_logo.svg" />
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -136,13 +149,8 @@
         width: 29px;
         height: 29px;
         border-radius: 8px;
-        background: var(--accent);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #fff;
-        font-weight: 700;
-        font-size: 16px;
+        display: block;
+        object-fit: contain;
         box-shadow: 0 4px 14px -4px var(--accent);
       }
       .brand-name {
@@ -501,7 +509,7 @@
     <header class="site-header">
       <div class="header-inner">
         <a class="brand" href="/">
-          <span class="brand-mark">K</span>
+          <img class="brand-mark" src="/kofem_logo.svg" alt="KoFEM logo" width="29" height="29" />
           <span class="brand-name">KoFEM</span>
         </a>
         <nav class="nav-links">
