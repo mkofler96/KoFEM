@@ -11,7 +11,12 @@ export interface StepTessellation {
 
 /** Runtime interface of the initialised Emscripten/Embind module. */
 export interface KofemModule {
-  tessellate_step(step_bytes: Uint8Array, opts_json: string): StepTessellation
+  /** Load a STEP or IGES file and tessellate it for display.
+   *  @param cad_bytes Raw STEP/IGES file bytes.
+   *  @param opts_json JSON `{ deflection_relative?, linear_deflection?, angular_deflection?, format?: "step" | "iges" }`.
+   *                   `format` selects the reader (defaults to "step").
+   */
+  tessellate_step(cad_bytes: Uint8Array, opts_json: string): StepTessellation
   tessellate_for_meshing(opts_json: string): string
   generate_volume_mesh(surface_json: string, opts_json: string): string
   /** Generate a FEM surface mesh + volume mesh directly from the stored STEP geometry
@@ -37,14 +42,15 @@ export interface ModuleOverrides {
 /** Initialise the WASM module and return it. Must be awaited before using any function. */
 export default function init(overrides?: ModuleOverrides): Promise<KofemModule>
 
-/** Load a STEP file and tessellate it into a closed surface triangle mesh.
- *  @param step_bytes Raw STEP file bytes.
- *  @param opts_json  JSON-serialised `{ deflection_relative?: number, linear_deflection?: number, angular_deflection?: number }`.
+/** Load a STEP or IGES file and tessellate it into a closed surface triangle mesh.
+ *  @param cad_bytes Raw STEP/IGES file bytes.
+ *  @param opts_json  JSON-serialised `{ deflection_relative?: number, linear_deflection?: number, angular_deflection?: number, format?: "step" | "iges" }`.
  *    `deflection_relative` is the chord tolerance as a fraction of the bounding-box
  *    diagonal (default 0.001); `linear_deflection` overrides it with an absolute mm value.
+ *    `format` selects the reader (default "step").
  *  @returns Flat typed arrays — see {@link StepTessellation}.
  */
-export function tessellate_step(step_bytes: Uint8Array, opts_json: string): StepTessellation
+export function tessellate_step(cad_bytes: Uint8Array, opts_json: string): StepTessellation
 
 /** Generate a quality tetrahedral volume mesh from a closed surface mesh.
  *  @param surface_json JSON-serialised `{ vertices: [number,number,number][], triangles: [number,number,number][] }`.

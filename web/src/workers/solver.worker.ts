@@ -119,13 +119,14 @@ self.onmessage = async (event: MessageEvent) => {
     await ensureInit();
 
     if (type === "parse_step") {
-      // payload.bytes: Uint8Array
+      // payload.bytes: Uint8Array, payload.format: "step" | "iges"
       // deflection_relative: chord tolerance as a fraction of the model's
       // bounding-box diagonal, so a large part isn't tessellated into millions of
       // needless triangles. ~0.1% matches the fast browser STEP viewers.
       const opts = JSON.stringify({
         deflection_relative: 0.001,
         angular_deflection: 0.5,
+        format: (payload.format as string) ?? "step",
       });
       const { vertices, triangles } = m().tessellate_step(
         payload.bytes as Uint8Array,
@@ -145,10 +146,12 @@ self.onmessage = async (event: MessageEvent) => {
     } else if (type === "volume_mesh") {
       const {
         bytes,
+        format = "step",
         maxElementSize = 20.0,
         minElementSize,
       } = payload as {
         bytes?: Uint8Array;
+        format?: string;
         maxElementSize?: number;
         minElementSize?: number;
       };
@@ -173,6 +176,7 @@ self.onmessage = async (event: MessageEvent) => {
           JSON.stringify({
             deflection_relative: 0.001,
             angular_deflection: 0.5,
+            format,
           }),
         );
         geometryLoaded = true;
