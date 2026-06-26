@@ -66,4 +66,4 @@ full attribution and compatibility notes.
 
 ## Funding
 
-If you enjoyed what I built, consider [buying me a coffee ☕](buymeacoffee.com/mkofler). Thanks for your support!
+If you enjoyed what I built, consider [buying me a coffee ☕](https://buymeacoffee.com/mkofler). Thanks for your support!
