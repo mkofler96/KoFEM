@@ -64,6 +64,20 @@ function m(): KofemModule {
   return Module;
 }
 
+// Group a flat typed array (xyz / abc interleaved) into [a, b, c] tuples.
+// tessellate_step now returns binary typed arrays instead of a JSON string;
+// the store's StepSurfaceMesh holds nested tuples, so unpack at this boundary —
+// far cheaper than the previous JSON.parse of a multi-MB text payload.
+function chunk3(flat: Float32Array | Uint32Array): [number, number, number][] {
+  const n = (flat.length / 3) | 0;
+  const out = new Array<[number, number, number]>(n);
+  for (let i = 0; i < n; i++) {
+    const j = 3 * i;
+    out[i] = [flat[j], flat[j + 1], flat[j + 2]];
+  }
+  return out;
+}
+
 // ── Payload types ─────────────────────────────────────────────────────────────
 
 interface Node {
@@ -106,24 +120,27 @@ self.onmessage = async (event: MessageEvent) => {
 
     if (type === "parse_step") {
       // payload.bytes: Uint8Array
+      // deflection_relative: chord tolerance as a fraction of the model's
+      // bounding-box diagonal, so a large part isn't tessellated into millions of
+      // needless triangles. ~0.1% matches the fast browser STEP viewers.
       const opts = JSON.stringify({
-        linear_deflection: 0.1,
+        deflection_relative: 0.001,
         angular_deflection: 0.5,
       });
-      const json = m().tessellate_step(payload.bytes as Uint8Array, opts);
+      const { vertices, triangles } = m().tessellate_step(
+        payload.bytes as Uint8Array,
+        opts,
+      );
       // tessellate_step stores the OCCT shape in the module — record that so a
       // subsequent volume_mesh in this same worker can skip the reload.
       geometryLoaded = true;
-      const dto = JSON.parse(json) as {
-        vertices: [number, number, number][];
-        triangles: [number, number, number][];
-      };
-      // Return as {points, triangles} to match the StepSurfaceMesh type used by the store
+      // Return as {points, triangles} to match the StepSurfaceMesh type used by
+      // the store; tessellate_step returns flat Float32/Uint32 typed arrays.
       self.postMessage({
         id,
         ok: true,
-        points: dto.vertices,
-        triangles: dto.triangles,
+        points: chunk3(vertices),
+        triangles: chunk3(triangles),
       });
     } else if (type === "volume_mesh") {
       const {
@@ -153,7 +170,7 @@ self.onmessage = async (event: MessageEvent) => {
         });
         m().tessellate_step(
           bytes,
-          JSON.stringify({ linear_deflection: 0.1, angular_deflection: 0.5 }),
+          JSON.stringify({ deflection_relative: 0.001, angular_deflection: 0.5 }),
         );
         geometryLoaded = true;
       }

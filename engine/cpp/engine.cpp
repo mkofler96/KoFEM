@@ -18,8 +18,10 @@
 
 // OCCT
 #include <BRep_Tool.hxx>
+#include <BRepBndLib.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRepTools.hxx>
+#include <Bnd_Box.hxx>
 #include <IFSelect_ReturnStatus.hxx>
 #include <Poly_Triangulation.hxx>
 #include <STEPControl_Reader.hxx>
@@ -152,6 +154,35 @@ static bool jbool(const val& o, const char* k, bool def) {
     return (v.isNull() || v.isUndefined()) ? def : v.as<bool>();
 }
 
+// ── Binary output helpers ─────────────────────────────────────────────────────
+// Return tessellation data as JS typed arrays instead of a JSON text string.
+// The string path built a multi-MB buffer with ostringstream — formatting every
+// coordinate to decimal text — which JS then re-parsed with JSON.parse.  Both are
+// O(triangles) and dominated STEP-load time on large parts.  new Float32Array(view)
+// copies the WASM-heap view into a JS-owned buffer synchronously (no intervening
+// allocation under ALLOW_MEMORY_GROWTH), so the data survives the source vector's
+// destruction when the function returns.
+
+static val float32_array(const std::vector<float>& v) {
+    return val::global("Float32Array")
+        .new_(val(emscripten::typed_memory_view(v.size(), v.data())));
+}
+
+static val uint32_array(const std::vector<uint32_t>& v) {
+    return val::global("Uint32Array")
+        .new_(val(emscripten::typed_memory_view(v.size(), v.data())));
+}
+
+// Longest diagonal of the shape's axis-aligned bounding box (mm), or 0 if empty.
+// Used to scale the tessellation chord tolerance with model size.
+static double shape_bbox_diagonal(const TopoDS_Shape& shape) {
+    Bnd_Box box;
+    BRepBndLib::Add(shape, box);
+    if (box.IsVoid())
+        return 0.0;
+    return std::sqrt(box.SquareExtent());
+}
+
 // ── OCCT: STEP → surface mesh ─────────────────────────────────────────────────
 
 // Stored after tessellate_step for reuse by generate_fem_mesh, which builds
@@ -171,10 +202,17 @@ static void free_geometry_cache() {
     log_mem("free_geometry_cache: after");
 }
 
-static std::string tessellate_step(val bytes_val, const std::string& opts_json) {
+static val tessellate_step(val bytes_val, const std::string& opts_json) {
     val opts = parse_json(opts_json);
-    double linear_defl  = jdouble(opts, "linear_deflection",  0.1);
-    double angular_defl = jdouble(opts, "angular_deflection", 0.5);
+    // The display chord tolerance must scale with model size: a fixed absolute
+    // deflection makes a 900 mm casting ~45x finer than a 20 mm part, producing
+    // millions of needless triangles and a multi-second load.  deflection_relative
+    // is the chord height as a fraction of the bounding-box diagonal (~0.1% matches
+    // the fast browser STEP viewers).  linear_deflection (absolute mm) overrides it
+    // when > 0, for callers that want an explicit tolerance.
+    double rel_defl     = jdouble(opts, "deflection_relative", 0.001);
+    double abs_defl_opt = jdouble(opts, "linear_deflection",   0.0);
+    double angular_defl = jdouble(opts, "angular_deflection",  0.5);
 
     std::vector<uint8_t> bytes = emscripten::vecFromJSArray<uint8_t>(bytes_val);
 
@@ -203,13 +241,26 @@ static std::string tessellate_step(val bytes_val, const std::string& opts_json) 
     g_step_shape     = shape;
     g_has_step_shape = true;
 
+    double diag = shape_bbox_diagonal(shape);
+    double linear_defl;
+    if (abs_defl_opt > 0.0)
+        linear_defl = abs_defl_opt;          // explicit absolute tolerance
+    else if (diag > 0.0)
+        linear_defl = diag * rel_defl;       // scale with model size (~0.1% of diagonal)
+    else
+        linear_defl = 0.1;                   // degenerate/empty bbox — fixed fallback
+    printf("[occt] tessellate: bbox diag=%.3f mm -> linear_defl=%.4f mm\n", diag, linear_defl);
+    fflush(stdout);
+
     BRepMesh_IncrementalMesh mesher(shape, linear_defl, /*relative=*/false, angular_defl);
     mesher.Perform();
     if (!mesher.IsDone())
         throw std::runtime_error("BRepMesh_IncrementalMesh failed");
 
-    std::vector<double> verts;
-    std::vector<int>    tris;
+    // Float32 positions + Uint32 indices: half the bytes of a JSON double array,
+    // ample precision for display (~1e-4 mm relative), and zero text formatting.
+    std::vector<float>    verts;
+    std::vector<uint32_t> tris;
 
     for (TopExp_Explorer exp(shape, TopAbs_FACE); exp.More(); exp.Next()) {
         TopoDS_Face face = TopoDS::Face(exp.Current());
@@ -217,13 +268,13 @@ static std::string tessellate_step(val bytes_val, const std::string& opts_json) 
         Handle(Poly_Triangulation) tri = BRep_Tool::Triangulation(face, loc);
         if (tri.IsNull()) continue;
 
-        int base = (int)(verts.size() / 3);
+        uint32_t base = (uint32_t)(verts.size() / 3);
 
         for (int i = 1; i <= tri->NbNodes(); ++i) {
             gp_Pnt pt = tri->Node(i).Transformed(loc);
-            verts.push_back(pt.X());
-            verts.push_back(pt.Y());
-            verts.push_back(pt.Z());
+            verts.push_back((float)pt.X());
+            verts.push_back((float)pt.Y());
+            verts.push_back((float)pt.Z());
         }
 
         bool rev = (face.Orientation() == TopAbs_REVERSED);
@@ -231,16 +282,20 @@ static std::string tessellate_step(val bytes_val, const std::string& opts_json) 
             int n1, n2, n3;
             tri->Triangle(i).Get(n1, n2, n3);
             if (rev) std::swap(n2, n3);
-            tris.push_back(base + n1 - 1);
-            tris.push_back(base + n2 - 1);
-            tris.push_back(base + n3 - 1);
+            tris.push_back(base + (uint32_t)(n1 - 1));
+            tris.push_back(base + (uint32_t)(n2 - 1));
+            tris.push_back(base + (uint32_t)(n3 - 1));
         }
     }
 
     if (verts.empty())
-        throw std::runtime_error("shape produced no triangles — try a smaller linear_deflection");
+        throw std::runtime_error("shape produced no triangles — try a smaller deflection_relative");
 
-    return "{\"vertices\":" + json_vec3(verts) + ",\"triangles\":" + json_ivec3(tris) + "}";
+    // {vertices: Float32Array (xyz interleaved), triangles: Uint32Array (3 idx/tri)}
+    val result = val::object();
+    result.set("vertices",  float32_array(verts));
+    result.set("triangles", uint32_array(tris));
+    return result;
 }
 
 // Re-tessellate the stored STEP shape with parameters tied to the target
