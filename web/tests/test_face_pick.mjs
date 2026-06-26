@@ -9,10 +9,7 @@
 //
 // Run: bun tests/test_face_pick.mjs   (from the web/ directory)
 
-import {
-  buildBoundaryMeshTopo,
-  pickFaceNodeIds,
-} from "../src/lib/facePick.ts";
+import { buildBoundaryMeshTopo, pickFaceNodeIds } from "../src/lib/facePick.ts";
 
 // ── Geometry helpers ─────────────────────────────────────────────────────────
 

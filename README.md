@@ -39,13 +39,16 @@ docker run kofem-web
 ```
 
 ## Development
+
 To rebuild the WASM engine from C++ source first, run
 `bash scripts/docker-build-wasm.sh` — it compiles the engine inside a Docker
 container and regenerates `web/src/wasm/pkg/`. The committed engine is already
 up to date, so this is only needed if you change the C++ sources.
 Afterwards, the web frontend can be run by
+
 ```bash
 cd web && bun install && bun run dev
 ```
+
 > [!NOTE]
 > The wasm docker build is layered on top of [KoFEM-Dependencies](https://github.com/mkofler96/KoFEM-Dependencies), which contains the precompiled wasm OCCT, Netgen and MFEM libraries. KoFEM can be compiled without docker using the script `scripts/build-wasm.sh`, but then the OCCT, Netgen and MFEM source code must be downloaded and will be compiled during the KoFEM compilation. This will take some time.
