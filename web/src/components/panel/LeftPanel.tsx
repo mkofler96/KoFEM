@@ -194,7 +194,9 @@ function GeometryPanel() {
           setStepSurface({ points, triangles });
         }
       })
-      .catch((err) => setStepImportError(err.message ?? `${label} import failed`))
+      .catch((err) =>
+        setStepImportError(err.message ?? `${label} import failed`),
+      )
       .finally(() => {
         setIsImportingStep(false);
         setRunning(false);
