@@ -170,7 +170,10 @@ self.onmessage = async (event: MessageEvent) => {
         });
         m().tessellate_step(
           bytes,
-          JSON.stringify({ deflection_relative: 0.001, angular_deflection: 0.5 }),
+          JSON.stringify({
+            deflection_relative: 0.001,
+            angular_deflection: 0.5,
+          }),
         );
         geometryLoaded = true;
       }
