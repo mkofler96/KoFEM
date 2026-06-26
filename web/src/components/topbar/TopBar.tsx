@@ -43,7 +43,13 @@ export function TopBar() {
     <header className={styles.bar}>
       {/* Brand */}
       <div className={styles.brand}>
-        <div className={styles.mark}>K</div>
+        <img
+          className={styles.mark}
+          src="/kofem_logo.svg"
+          alt="KoFEM logo"
+          width={24}
+          height={24}
+        />
         <span className={styles.name}>KoFEM</span>
         <span className={styles.crumb}>
           <span className={styles.crumbMuted}>Workspace</span>
