@@ -43,15 +43,15 @@ console.log(
   `\nWall bracket: ${stepBytes.length} bytes, max_element_size=${maxElementSize}\n`,
 );
 
-// 1. Tessellate (stores OCC shape in WASM for the mesher)
-const tess = JSON.parse(
-  Module.tessellate_step(
-    stepBytes,
-    JSON.stringify({ linear_deflection: 0.1, angular_deflection: 0.5 }),
-  ),
+// 1. Tessellate (stores OCC shape in WASM for the mesher).
+// Returns flat typed arrays (Float32 vertices xyz-interleaved, Uint32 indices),
+// not a JSON string; deflection_relative mirrors solver.worker.ts.
+const tess = Module.tessellate_step(
+  stepBytes,
+  JSON.stringify({ deflection_relative: 0.001, angular_deflection: 0.5 }),
 );
 console.log(
-  `tessellate_step:  ${tess.vertices.length} vertices, ${tess.triangles.length} triangles`,
+  `tessellate_step:  ${tess.vertices.length / 3} vertices, ${tess.triangles.length / 3} triangles`,
 );
 
 // 2. FEM mesh via Netgen OCC
