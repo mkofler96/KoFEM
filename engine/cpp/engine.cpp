@@ -3,7 +3,7 @@
 
 // KoFEM WASM engine — C++ pipeline exposed to JavaScript via Emscripten Embind.
 //
-// Pipeline:  STEP bytes → OCCT tessellation (display) → Netgen OCC surface+volume mesh → MFEM FEM solve
+// Pipeline:  STEP/IGES bytes → OCCT tessellation (display) → Netgen OCC surface+volume mesh → MFEM FEM solve
 //
 // All four stages are exposed as individual JS functions plus a convenience
 // full-pipeline function.  Every function takes / returns JSON strings so the
@@ -21,6 +21,7 @@
 #include <BRepMesh_IncrementalMesh.hxx>
 #include <BRepTools.hxx>
 #include <IFSelect_ReturnStatus.hxx>
+#include <IGESControl_Reader.hxx>
 #include <Poly_Triangulation.hxx>
 #include <STEPControl_Reader.hxx>
 #include <TopAbs_Orientation.hxx>
@@ -152,12 +153,65 @@ static bool jbool(const val& o, const char* k, bool def) {
     return (v.isNull() || v.isUndefined()) ? def : v.as<bool>();
 }
 
-// ── OCCT: STEP → surface mesh ─────────────────────────────────────────────────
+static std::string jstring(const val& o, const char* k, const char* def) {
+    val v = o[k];
+    return (v.isNull() || v.isUndefined()) ? std::string(def) : v.as<std::string>();
+}
+
+// ── OCCT: STEP / IGES → surface mesh ──────────────────────────────────────────
 
 // Stored after tessellate_step for reuse by generate_fem_mesh, which builds
-// the Netgen OCC geometry directly from this shape (no STEP re-read).
+// the Netgen OCC geometry directly from this shape (no CAD re-read).
 static TopoDS_Shape              g_step_shape;
 static bool                      g_has_step_shape = false;
+
+// Read a CAD file (STEP or IGES) from raw bytes into an OCCT shape.
+//
+// OCCT provides a separate data-exchange reader per format, but both produce a
+// TopoDS_Shape; everything downstream — tessellation for display and Netgen's
+// OCC volume meshing — operates on the shape alone, so only the reader differs.
+// `format` is "step" (default) or "iges".
+static TopoDS_Shape read_cad_shape(const std::vector<uint8_t>& bytes,
+                                   const std::string& format) {
+    const bool is_iges = (format == "iges" || format == "igs");
+
+    // OCCT's ReadFile requires a filesystem path; write to Emscripten's in-memory
+    // /tmp.  The extension is cosmetic (both readers detect the format from file
+    // contents) but kept accurate for clarity.  Both suffixes are 4 chars, the
+    // length mkstemps splices the random component before.
+    char tmppath[32];
+    std::strcpy(tmppath, is_iges ? "/tmp/kofem_XXXXXX.igs" : "/tmp/kofem_XXXXXX.stp");
+    int fd = mkstemps(tmppath, 4);
+    if (fd < 0)
+        throw std::runtime_error("failed to create /tmp CAD file");
+    if (write(fd, bytes.data(), bytes.size()) != (ssize_t)bytes.size()) {
+        close(fd); unlink(tmppath);
+        throw std::runtime_error("failed to write CAD bytes to /tmp");
+    }
+    close(fd);
+
+    if (is_iges) {
+        IGESControl_Reader reader;
+        IFSelect_ReturnStatus status = reader.ReadFile(tmppath);
+        unlink(tmppath);
+        if (status != IFSelect_RetDone)
+            throw std::runtime_error("IGESControl_Reader::ReadFile failed — invalid IGES file");
+        if (reader.TransferRoots() == 0 || reader.NbShapes() == 0)
+            throw std::runtime_error(
+                "IGES file contains no transferable shapes. IGES often stores only "
+                "free surfaces; a closed solid is required for volume meshing.");
+        return reader.OneShape();
+    }
+
+    STEPControl_Reader reader;
+    IFSelect_ReturnStatus status = reader.ReadFile(tmppath);
+    unlink(tmppath);
+    if (status != IFSelect_RetDone)
+        throw std::runtime_error("STEPControl_Reader::ReadFile failed — invalid STEP file");
+    if (reader.TransferRoots() == 0 || reader.NbShapes() == 0)
+        throw std::runtime_error("STEP file contains no transferable shapes");
+    return reader.OneShape();
+}
 
 // Release the OCCT shape cache.  Call this from JS after meshing is
 // done so the memory is available for the MFEM solve.
@@ -175,31 +229,11 @@ static std::string tessellate_step(val bytes_val, const std::string& opts_json) 
     val opts = parse_json(opts_json);
     double linear_defl  = jdouble(opts, "linear_deflection",  0.1);
     double angular_defl = jdouble(opts, "angular_deflection", 0.5);
+    std::string format  = jstring(opts, "format", "step");
 
     std::vector<uint8_t> bytes = emscripten::vecFromJSArray<uint8_t>(bytes_val);
 
-    // OCCT ReadFile requires a filesystem path; write to Emscripten's in-memory /tmp.
-    char tmppath[] = "/tmp/kofem_XXXXXX.stp";
-    int fd = mkstemps(tmppath, 4);
-    if (fd < 0)
-        throw std::runtime_error("failed to create /tmp STEP file");
-    if (write(fd, bytes.data(), bytes.size()) != (ssize_t)bytes.size()) {
-        close(fd); unlink(tmppath);
-        throw std::runtime_error("failed to write STEP bytes to /tmp");
-    }
-    close(fd);
-
-    STEPControl_Reader reader;
-    IFSelect_ReturnStatus status = reader.ReadFile(tmppath);
-    unlink(tmppath);
-
-    if (status != IFSelect_RetDone)
-        throw std::runtime_error("STEPControl_Reader::ReadFile failed — invalid STEP file");
-
-    if (reader.TransferRoots() == 0 || reader.NbShapes() == 0)
-        throw std::runtime_error("STEP file contains no transferable shapes");
-
-    TopoDS_Shape shape = reader.OneShape();
+    TopoDS_Shape shape = read_cad_shape(bytes, format);
     g_step_shape     = shape;
     g_has_step_shape = true;
 

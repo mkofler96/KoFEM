@@ -135,6 +135,8 @@ function GeometryPanel() {
   const stepSurface = useModelStore((s) => s.stepSurface);
   const stepBytes = useModelStore((s) => s.stepBytes);
   const setStepBytes = useModelStore((s) => s.setStepBytes);
+  const geometryFormat = useModelStore((s) => s.geometryFormat);
+  const setGeometryFormat = useModelStore((s) => s.setGeometryFormat);
   const isMeshing = useModelStore((s) => s.isMeshing);
   const setMeshing = useModelStore((s) => s.setMeshing);
   const applyMeshResult = useModelStore((s) => s.applyMeshResult);
@@ -151,6 +153,7 @@ function GeometryPanel() {
   const logsEndRef = useRef<HTMLDivElement | null>(null);
 
   const stepRef = useRef<HTMLInputElement | null>(null);
+  const igesRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     setLogCallback((msg) => {
@@ -164,10 +167,15 @@ function GeometryPanel() {
     logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [logs]);
 
-  async function handleStepFile(e: ChangeEvent<HTMLInputElement>) {
+  async function handleCadFile(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
+    // Derive the reader from the extension so the same handler serves both the
+    // STEP and IGES file inputs (and a file picked through the "wrong" one).
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    const format = ext === "igs" || ext === "iges" ? "iges" : "step";
+    const label = format === "iges" ? "IGES" : "STEP";
     setStepImportError(null);
     setIsImportingStep(true);
     setRunning(true);
@@ -175,17 +183,18 @@ function GeometryPanel() {
     sendToWorker<{
       points: [number, number, number][];
       triangles: [number, number, number][];
-    }>("parse_step", { bytes })
+    }>("parse_step", { bytes, format })
       .then(({ points, triangles }) => {
         if (points.length === 0) setStepImportError("No geometry found.");
         else {
-          // Retain the raw STEP so the geometry can be reloaded for a re-mesh
-          // (the worker is reset after each mesh and loses the loaded shape).
+          // Retain the raw bytes + format so the geometry can be reloaded for a
+          // re-mesh (the worker is reset after each mesh and loses the shape).
           setStepBytes(bytes);
+          setGeometryFormat(format);
           setStepSurface({ points, triangles });
         }
       })
-      .catch((err) => setStepImportError(err.message ?? "STEP import failed"))
+      .catch((err) => setStepImportError(err.message ?? `${label} import failed`))
       .finally(() => {
         setIsImportingStep(false);
         setRunning(false);
@@ -215,6 +224,7 @@ function GeometryPanel() {
         surfaceFaceIds: number[] | null;
       }>("volume_mesh", {
         bytes: stepBytes,
+        format: geometryFormat,
         maxElementSize,
         minElementSize,
       });
@@ -254,7 +264,16 @@ function GeometryPanel() {
             type="file"
             accept=".stp,.step"
             style={{ display: "none" }}
-            onChange={handleStepFile}
+            onChange={handleCadFile}
+          />
+          <input
+            ref={(el) => {
+              igesRef.current = el;
+            }}
+            type="file"
+            accept=".igs,.iges"
+            style={{ display: "none" }}
+            onChange={handleCadFile}
           />
 
           <div className={styles.cardGrid}>
@@ -286,7 +305,11 @@ function GeometryPanel() {
               <span className={styles.cardSub}>.step / .stp</span>
             </button>
 
-            <button className={styles.importCard} disabled>
+            <button
+              className={styles.importCard}
+              disabled={isImportingStep || isRunning}
+              onClick={() => igesRef.current?.click()}
+            >
               <svg className={styles.cardIcon} viewBox="0 0 20 20" fill="none">
                 <path
                   d="M10 2l2.4 5H18l-4.2 3.1 1.6 5L10 12.2 4.6 15.1l1.6-5L2 7h5.6z"
@@ -294,7 +317,9 @@ function GeometryPanel() {
                   strokeWidth="1.4"
                 />
               </svg>
-              <span className={styles.cardTitle}>Import IGES</span>
+              <span className={styles.cardTitle}>
+                {isImportingStep ? "Importing…" : "Import IGES"}
+              </span>
               <span className={styles.cardSub}>.igs / .iges</span>
             </button>
           </div>

@@ -105,10 +105,11 @@ self.onmessage = async (event: MessageEvent) => {
     await ensureInit();
 
     if (type === "parse_step") {
-      // payload.bytes: Uint8Array
+      // payload.bytes: Uint8Array, payload.format: "step" | "iges"
       const opts = JSON.stringify({
         linear_deflection: 0.1,
         angular_deflection: 0.5,
+        format: (payload.format as string) ?? "step",
       });
       const json = m().tessellate_step(payload.bytes as Uint8Array, opts);
       // tessellate_step stores the OCCT shape in the module — record that so a
@@ -128,10 +129,12 @@ self.onmessage = async (event: MessageEvent) => {
     } else if (type === "volume_mesh") {
       const {
         bytes,
+        format = "step",
         maxElementSize = 20.0,
         minElementSize,
       } = payload as {
         bytes?: Uint8Array;
+        format?: string;
         maxElementSize?: number;
         minElementSize?: number;
       };
@@ -153,7 +156,11 @@ self.onmessage = async (event: MessageEvent) => {
         });
         m().tessellate_step(
           bytes,
-          JSON.stringify({ linear_deflection: 0.1, angular_deflection: 0.5 }),
+          JSON.stringify({
+            linear_deflection: 0.1,
+            angular_deflection: 0.5,
+            format,
+          }),
         );
         geometryLoaded = true;
       }

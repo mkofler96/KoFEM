@@ -79,6 +79,11 @@ export const RESULT_TYPES = [
 ] as const;
 export type ResultType = (typeof RESULT_TYPES)[number];
 
+// CAD geometry source format. The import pipeline reads STEP and IGES into the
+// same OCCT shape, but a re-mesh reloads the file (the worker is torn down after
+// each mesh), so the reader needs to know which format the retained bytes are.
+export type GeometryFormat = "step" | "iges";
+
 export interface StepSurfaceMesh {
   points: [number, number, number][];
   triangles: [number, number, number][];
@@ -234,6 +239,8 @@ interface ModelState {
   // mesh (resetWorker), discarding the OCCT shape it held, so re-meshing must
   // re-supply the original file. Not persisted in saved analyses (no STEP there).
   stepBytes: Uint8Array | null;
+  // Format of the retained stepBytes — selects the OCCT reader on re-mesh.
+  geometryFormat: GeometryFormat;
   isRunning: boolean;
   isMeshing: boolean;
   nextMatId: number;
@@ -262,6 +269,7 @@ interface ModelState {
   stepImportError: string | null;
   setStepSurface(mesh: StepSurfaceMesh | null): void;
   setStepBytes(bytes: Uint8Array | null): void;
+  setGeometryFormat(format: GeometryFormat): void;
   setVolMesh(mesh: VolMesh | null): void;
   setSurfaceFaceIds(ids: number[] | null): void;
   setViewRepr(v: "geometry" | "surface" | "volume" | "wireframe"): void;
@@ -358,6 +366,7 @@ export const useModelStore = create<ModelState>()(
     resultType: "Displacement (magnitude)" as ResultType,
     stepSurface: null,
     stepBytes: null,
+    geometryFormat: "step" as GeometryFormat,
     isRunning: false,
     isMeshing: false,
     volMesh: null,
@@ -398,12 +407,19 @@ export const useModelStore = create<ModelState>()(
       set((s) => {
         s.stepBytes = bytes;
       }),
+    setGeometryFormat: (format) =>
+      set((s) => {
+        s.geometryFormat = format;
+      }),
     setStepSurface: (mesh) =>
       set((s) => {
         s.stepSurface = mesh;
         // Clearing the geometry also drops the retained STEP bytes — keeping the
         // invariant "no surface ⇒ nothing left to re-mesh from".
-        if (!mesh) s.stepBytes = null;
+        if (!mesh) {
+          s.stepBytes = null;
+          s.geometryFormat = "step";
+        }
         s.volMesh = null;
         s.viewRepr = "geometry";
         s.stepImportError = null;
@@ -521,6 +537,7 @@ export const useModelStore = create<ModelState>()(
         // Saved analyses carry the tessellated surface but not the original STEP
         // file, so re-meshing a loaded analysis requires re-importing the STEP.
         s.stepBytes = null;
+        s.geometryFormat = "step";
         s.volMesh = a.volMesh;
         s.surfaceTriangles = a.surfaceTriangles;
         s.surfaceFaceIds = a.surfaceFaceIds;
@@ -565,6 +582,7 @@ export const useModelStore = create<ModelState>()(
         s.result = null;
         s.stepSurface = null;
         s.stepBytes = null;
+        s.geometryFormat = "step";
         s.volMesh = null;
         s.surfaceTriangles = null;
         s.surfaceFaceIds = null;

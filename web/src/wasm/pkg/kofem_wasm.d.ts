@@ -3,7 +3,12 @@
 
 /** Runtime interface of the initialised Emscripten/Embind module. */
 export interface KofemModule {
-  tessellate_step(step_bytes: Uint8Array, opts_json: string): string
+  /** Load a STEP or IGES file and tessellate it for display.
+   *  @param cad_bytes Raw STEP/IGES file bytes.
+   *  @param opts_json JSON `{ linear_deflection, angular_deflection, format?: "step" | "iges" }`.
+   *                   `format` defaults to "step".
+   */
+  tessellate_step(cad_bytes: Uint8Array, opts_json: string): string
   tessellate_for_meshing(opts_json: string): string
   generate_volume_mesh(surface_json: string, opts_json: string): string
   /** Generate a FEM surface mesh + volume mesh directly from the stored STEP geometry
@@ -29,12 +34,12 @@ export interface ModuleOverrides {
 /** Initialise the WASM module and return it. Must be awaited before using any function. */
 export default function init(overrides?: ModuleOverrides): Promise<KofemModule>
 
-/** Load a STEP file and tessellate it into a closed surface triangle mesh.
- *  @param step_bytes Raw STEP file bytes.
- *  @param opts_json  JSON-serialised `{ linear_deflection: number, angular_deflection: number }`.
+/** Load a STEP or IGES file and tessellate it into a closed surface triangle mesh.
+ *  @param cad_bytes Raw STEP/IGES file bytes.
+ *  @param opts_json JSON-serialised `{ linear_deflection: number, angular_deflection: number, format?: "step" | "iges" }`.
  *  @returns JSON-serialised `{ vertices: [number,number,number][], triangles: [number,number,number][] }`.
  */
-export function tessellate_step(step_bytes: Uint8Array, opts_json: string): string
+export function tessellate_step(cad_bytes: Uint8Array, opts_json: string): string
 
 /** Generate a quality tetrahedral volume mesh from a closed surface mesh.
  *  @param surface_json JSON-serialised `{ vertices: [number,number,number][], triangles: [number,number,number][] }`.
