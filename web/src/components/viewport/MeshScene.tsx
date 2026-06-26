@@ -993,11 +993,7 @@ export function MeshScene() {
           const shaftR = modelSize * 0.012;
           const headR = modelSize * 0.038;
           return (
-            <group
-              key={i}
-              position={arrow.pos}
-              quaternion={arrow.quaternion}
-            >
+            <group key={i} position={arrow.pos} quaternion={arrow.quaternion}>
               <mesh position={[0, shaftLen / 2, 0]}>
                 <cylinderGeometry args={[shaftR, shaftR, shaftLen, 8]} />
                 <meshStandardMaterial color="#d97706" />

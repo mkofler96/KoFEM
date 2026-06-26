@@ -2,11 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useState, useRef, useEffect, type ChangeEvent } from "react";
-import {
-  useModelStore,
-  RESULT_TYPES,
-  loadKind,
-} from "../../store/modelStore";
+import { useModelStore, RESULT_TYPES, loadKind } from "../../store/modelStore";
 import type {
   AppMode,
   Material,

@@ -51,7 +51,8 @@ export default {
       1,
     );
     return (
-      loaded.reduce((s, v) => s + result.displacements[v * 3], 0) / loaded.length
+      loaded.reduce((s, v) => s + result.displacements[v * 3], 0) /
+      loaded.length
     );
   },
 };
