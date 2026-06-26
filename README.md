@@ -63,3 +63,7 @@ KoFEM builds on third-party libraries — **OpenCASCADE** (LGPL-2.1 with an
 exception), **Netgen** (LGPL-2.1), and **MFEM** (BSD-3-Clause) — each retaining
 its own license. See [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) for the
 full attribution and compatibility notes.
+
+## Funding
+
+If you enjoyed what I built, consider [buying me a coffee ☕](buymeacoffee.com/mkofler). Thanks for your support!
