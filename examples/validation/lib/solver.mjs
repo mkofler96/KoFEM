@@ -24,7 +24,10 @@ const pkg = join(here, "../../../web/src/wasm/pkg");
  *   bcs:      { fixed_vertices:[v...],
  *               fixed_dofs:[{vertex,dofs:[0|1|2,...]}...],   // single-DOF (new)
  *               prescribed_dofs:[{vertex,dof:0|1|2,value}...], // non-zero Dirichlet
- *               point_loads:[{vertex, force:[fx,fy,fz]}...] }
+ *               point_loads:[{vertex, force:[fx,fy,fz]}...],
+ *               surface_loads:[{ type:"force"|"pressure"|"traction",
+ *                                triangles:[[a,b,c]...],
+ *                                force?:[fx,fy,fz], pressure?:p }...] }
  *   order:    FE polynomial order (default 1; order 2 is unreliable with the
  *             engine's loose CG tolerance — keep validation cases at order 1).
  * Returns { displacements:number[] (3/node), von_mises:number[] (1/elem) }.
@@ -51,6 +54,7 @@ export async function loadSolver() {
       fixed_dofs: bcs.fixed_dofs ?? [],
       prescribed_dofs: bcs.prescribed_dofs ?? [],
       point_loads: bcs.point_loads ?? [],
+      surface_loads: bcs.surface_loads ?? [],
     });
     return JSON.parse(
       Module.solve_linear_elastic(

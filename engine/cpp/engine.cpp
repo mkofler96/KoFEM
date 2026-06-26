@@ -45,7 +45,9 @@
 #include <array>
 #include <cmath>
 #include <cstring>
+#include <deque>
 #include <malloc.h>
+#include <map>
 #include <set>
 #include <sstream>
 #include <stdexcept>
@@ -732,6 +734,33 @@ static std::string generate_volume_mesh(
 
 // ── MFEM: linear-elastic FEM solve ────────────────────────────────────────────
 
+// Traction coefficient for a uniform pressure load: returns -p·n̂ at each
+// boundary quadrature point, where n̂ is the unit outward normal. The integrator
+// (VectorBoundaryLFIntegrator) already multiplies by the surface measure, so the
+// coefficient must return the *unit* normal scaled by the pressure, not the
+// area-weighted one. Positive pressure pushes into the surface (compression).
+class PressureCoefficient : public mfem::VectorCoefficient {
+    double pressure_;
+
+public:
+    PressureCoefficient(int dim, double pressure)
+        : mfem::VectorCoefficient(dim), pressure_(pressure) {}
+
+    void Eval(mfem::Vector& V, mfem::ElementTransformation& T,
+              const mfem::IntegrationPoint& ip) override {
+        V.SetSize(vdim);
+        mfem::Vector nor(vdim);
+        T.SetIntPoint(&ip);
+        // CalcOrtho yields the outward normal of a boundary ElementTransformation
+        // with magnitude equal to the surface Jacobian; normalize to a unit vector.
+        mfem::CalcOrtho(T.Jacobian(), nor);
+        double len = nor.Norml2();
+        if (len > 0.0)
+            nor /= len;
+        V.Set(-pressure_, nor);
+    }
+};
+
 static std::string solve_linear_elastic(
     const std::string& mesh_json,
     const std::string& mat_json,
@@ -940,7 +969,145 @@ static std::string solve_linear_elastic(
         x[pv.first] = pv.second;
 
     LinearForm b(&fespace);
+
+    // ── Surface (traction / pressure) loads ──────────────────────────────────
+    // Work-equivalent surface loads applied through MFEM's boundary linear-form
+    // integrator: f_i = ∫_S N_i · t dS. Unlike splitting a face's total force
+    // equally across its nodes, this weights each node by the shape-function
+    // integral of its tributary surface, so (a) corner/edge nodes get the right
+    // share and (b) the resultant passes through the face's area-centroid no
+    // matter how non-uniformly the face is meshed — no spurious moment.
+    //
+    // Each entry tags the boundary elements covering a set of surface faces
+    // (matched by sorted node-index list) with a unique boundary attribute,
+    // then a VectorBoundaryLFIntegrator restricted to that attribute applies:
+    //   type "force"    — total force F spread as a uniform traction F / A_total
+    //   type "traction" — a traction vector applied directly
+    //   type "pressure" — scalar p applied as -p·n̂ (outward normal; + pushes in)
+    //
+    // The integrators take ownership of their coefficient by reference and the
+    // marker arrays by pointer, so both must outlive b.Assemble(); they are held
+    // in stable-address containers below.
+    std::deque<std::unique_ptr<VectorCoefficient>> surf_coeffs;
+    std::deque<Array<int>> surf_markers;
+
+    val surf_js = bcs_js["surface_loads"];
+    if (!surf_js.isUndefined() && !surf_js.isNull()) {
+        unsigned n_surf = surf_js["length"].as<unsigned>();
+
+        // sorted boundary-face vertex list → boundary element index, over the
+        // auto-generated boundary mesh (its vertex indices equal the input node
+        // IDs). Keyed by a sorted vertex vector so it matches both triangular
+        // (tet) and quadrilateral (hex) boundary faces.
+        std::map<std::vector<int>, int> face_to_be;
+        for (int be = 0; be < mfem_mesh.GetNBE(); ++be) {
+            Array<int> bv;
+            mfem_mesh.GetBdrElementVertices(be, bv);
+            std::vector<int> key(bv.begin(), bv.end());
+            std::sort(key.begin(), key.end());
+            face_to_be[key] = be;
+        }
+
+        struct PendingLoad { int attr; std::unique_ptr<VectorCoefficient> coeff; };
+        std::vector<PendingLoad> pending;
+        int next_attr = 2;  // attribute 1 stays the default (un-loaded) value
+
+        for (unsigned i = 0; i < n_surf; ++i) {
+            val entry = surf_js[i];
+            std::string type = entry["type"].as<std::string>();
+            val faces = entry["triangles"];  // node-index lists (3 = tri, 4 = quad)
+            unsigned n_faces = faces["length"].as<unsigned>();
+
+            int attr = next_attr;
+            int matched = 0;
+            for (unsigned t = 0; t < n_faces; ++t) {
+                val face = faces[t];
+                unsigned fn = face["length"].as<unsigned>();
+                std::vector<int> key(fn);
+                for (unsigned k = 0; k < fn; ++k)
+                    key[k] = face[k].as<int>();
+                std::sort(key.begin(), key.end());
+                auto it = face_to_be.find(key);
+                if (it == face_to_be.end()) continue;
+                mfem_mesh.GetBdrElement(it->second)->SetAttribute(attr);
+                ++matched;
+            }
+            if (matched == 0) {
+                printf("[mfem] surface_load %u (%s): no boundary elements matched "
+                       "%u faces — skipped\n", i, type.c_str(), n_faces);
+                continue;
+            }
+            // This load owns `attr` (its elements are now tagged); reserve the
+            // next number so a later skip can't make two loads share an attribute.
+            ++next_attr;
+
+            std::unique_ptr<VectorCoefficient> coeff;
+            if (type == "pressure") {
+                double p = entry["pressure"].as<double>();
+                coeff = std::make_unique<PressureCoefficient>(dim, p);
+                printf("[mfem] surface_load %u: pressure %g over %d bdr elems\n",
+                       i, p, matched);
+            } else {  // "force" or "traction"
+                Vector tvec(3);
+                tvec[0] = entry["force"][0].as<double>();
+                tvec[1] = entry["force"][1].as<double>();
+                tvec[2] = entry["force"][2].as<double>();
+                if (type == "force") {
+                    // Total force → uniform traction: divide by the integrated area
+                    // of the matched boundary elements — the same surface measure
+                    // the integrator uses, so it is exact for straight-sided faces.
+                    double area = 0.0;
+                    for (int be = 0; be < mfem_mesh.GetNBE(); ++be) {
+                        if (mfem_mesh.GetBdrAttribute(be) != attr) continue;
+                        ElementTransformation* T =
+                            mfem_mesh.GetBdrElementTransformation(be);
+                        const IntegrationRule& ir =
+                            IntRules.Get(mfem_mesh.GetBdrElementGeometry(be), 4);
+                        for (int q = 0; q < ir.GetNPoints(); ++q) {
+                            const IntegrationPoint& ip = ir.IntPoint(q);
+                            T->SetIntPoint(&ip);
+                            area += ip.weight * T->Weight();
+                        }
+                    }
+                    if (area <= 0.0) {
+                        printf("[mfem] surface_load %u: zero matched area — skipped\n", i);
+                        continue;
+                    }
+                    tvec /= area;
+                    printf("[mfem] surface_load %u: force → traction [%g %g %g] over "
+                           "%d bdr elems (A=%g)\n",
+                           i, tvec[0], tvec[1], tvec[2], matched, area);
+                } else {
+                    printf("[mfem] surface_load %u: traction [%g %g %g] over %d bdr elems\n",
+                           i, tvec[0], tvec[1], tvec[2], matched);
+                }
+                coeff = std::make_unique<VectorConstantCoefficient>(tvec);
+            }
+            pending.push_back({ attr, std::move(coeff) });
+        }
+
+        // Refresh the mesh attribute tables now that boundary attributes changed,
+        // so marker arrays can be sized to bdr_attributes.Max().
+        mfem_mesh.SetAttributes();
+        int max_attr = mfem_mesh.bdr_attributes.Size()
+                           ? mfem_mesh.bdr_attributes.Max() : 0;
+        for (auto& pl : pending) {
+            surf_coeffs.push_back(std::move(pl.coeff));
+            surf_markers.emplace_back(max_attr);
+            Array<int>& marker = surf_markers.back();
+            marker = 0;
+            if (pl.attr >= 1 && pl.attr <= max_attr)
+                marker[pl.attr - 1] = 1;
+            b.AddBoundaryIntegrator(
+                new VectorBoundaryLFIntegrator(*surf_coeffs.back()), marker);
+        }
+    }
+
     b.Assemble();
+
+    // Concentrated point loads — applied straight to the assembled load vector.
+    // Still used for explicit nodal forces and for the equivalent nodal forces of
+    // a moment load. Surface (face) forces now flow through surface_loads above.
     for (unsigned i = 0; i < n_loads; ++i) {
         val load  = loads_js[i];
         int vi    = load["vertex"].as<int>();

@@ -56,7 +56,7 @@ export function generate_volume_mesh(surface_json: string, opts_json: string): s
 /** Run a linear-elastic FEM solve using MFEM.
  *  @param mesh_json JSON-serialised `{ vertices: [number,number,number][], tetrahedra: [number,number,number,number][], hexahedra: [number,number,number,number,number,number,number,number][] }`.
  *  @param mat_json  JSON-serialised `{ young_modulus: number, poisson_ratio: number, density: number }`.
- *  @param bcs_json  JSON-serialised `{ fixed_vertices: number[], point_loads: { vertex: number, force: [number,number,number] }[] }`.
+ *  @param bcs_json  JSON-serialised `{ fixed_vertices: number[], point_loads: { vertex: number, force: [number,number,number] }[], surface_loads?: { type: "force"|"pressure"|"traction", triangles: [number,number,number][], force?: [number,number,number], pressure?: number }[] }`.
  *  @param order     FE polynomial order (1 = linear, 2 = quadratic).
  *  @returns JSON-serialised `{ displacements: number[], von_mises: number[] }`.
  */

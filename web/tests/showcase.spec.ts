@@ -175,6 +175,7 @@ test.describe("Full workflow showcase", () => {
             getState(): {
               constraints: unknown[];
               loads: unknown[];
+              surfaceLoads: unknown[];
               isRunning: boolean;
             };
           };
@@ -183,7 +184,9 @@ test.describe("Full workflow showcase", () => {
       const s = store.getState();
       return {
         constraints: s.constraints.length,
-        loads: s.loads.length,
+        // Force/pressure loads reach the solver as surface tractions; moments as
+        // nodal forces. Count both so the gate holds for either kind.
+        loads: s.loads.length + s.surfaceLoads.length,
         isRunning: s.isRunning,
       };
     });
@@ -240,6 +243,7 @@ test.describe("Full workflow showcase", () => {
               nodes: unknown[];
               constraints: unknown[];
               loads: unknown[];
+              surfaceLoads: unknown[];
               isRunning: boolean;
             };
           };
@@ -249,7 +253,7 @@ test.describe("Full workflow showcase", () => {
       return {
         nodes: s.nodes.length,
         constraints: s.constraints.length,
-        loads: s.loads.length,
+        loads: s.loads.length + s.surfaceLoads.length,
         isRunning: s.isRunning,
       };
     });

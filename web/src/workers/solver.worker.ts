@@ -109,6 +109,17 @@ interface Load {
   dof: number;
   value: number;
 }
+// A work-equivalent surface load applied by the engine's boundary integrator
+// over the boundary elements covering `triangles` (node-index triples).
+//   force    — total force vector spread as a uniform traction over the face
+//   pressure — scalar magnitude applied as -p·n̂ (outward normal; + pushes in)
+//   traction — traction vector applied directly
+interface SurfaceLoad {
+  type: "force" | "pressure" | "traction";
+  triangles: [number, number, number][];
+  force?: [number, number, number];
+  pressure?: number;
+}
 
 // ── Message handler ───────────────────────────────────────────────────────────
 
@@ -276,14 +287,16 @@ self.onmessage = async (event: MessageEvent) => {
         surfaceFaceIds: dto.surfaceFaceIds ?? null,
       });
     } else if (type === "solve") {
-      const { nodes, elements, materials, constraints, loads } = payload as {
-        nodes: Node[];
-        elements: Element[];
-        materials: Material[];
-        properties: unknown[];
-        constraints: Constraint[];
-        loads: Load[];
-      };
+      const { nodes, elements, materials, constraints, loads, surfaceLoads } =
+        payload as {
+          nodes: Node[];
+          elements: Element[];
+          materials: Material[];
+          properties: unknown[];
+          constraints: Constraint[];
+          loads: Load[];
+          surfaceLoads?: SurfaceLoad[];
+        };
 
       const tetrahedra = elements
         .filter((e) => e.type === "CTETRA")
@@ -357,7 +370,14 @@ self.onmessage = async (event: MessageEvent) => {
         force,
       }));
 
-      const bcs = { fixed_vertices, point_loads, fixed_dofs, prescribed_dofs };
+      const surface_loads = surfaceLoads ?? [];
+      const bcs = {
+        fixed_vertices,
+        point_loads,
+        fixed_dofs,
+        prescribed_dofs,
+        surface_loads,
+      };
       const json = m().solve_linear_elastic(
         JSON.stringify(mesh),
         JSON.stringify(material),

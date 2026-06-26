@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import { Line } from "@react-three/drei";
 import * as THREE from "three";
 import type { ThreeEvent } from "@react-three/fiber";
-import { useModelStore } from "../../store/modelStore";
+import { useModelStore, loadKind } from "../../store/modelStore";
 import type { Node, ResultType } from "../../store/modelStore";
 import { buildBoundaryMeshTopo, pickFaceNodeIds } from "../../lib/facePick";
 import type { Vec3, Tri } from "../../lib/facePick";
@@ -135,7 +135,6 @@ export function MeshScene() {
   const nodes = useModelStore((s) => s.nodes);
   const elements = useModelStore((s) => s.elements);
   const constraints = useModelStore((s) => s.constraints);
-  const loads = useModelStore((s) => s.loads);
   const result = useModelStore((s) => s.result);
   const resultType = useModelStore((s) => s.resultType);
   const mode = useModelStore((s) => s.mode);
@@ -661,48 +660,71 @@ export function MeshScene() {
     return { pos: [cx, cy, cz] as [number, number, number], quaternion: q };
   }, [constraints, nodeMap, nodes]);
 
-  // Load arrow: single resultant of all force DOFs, placed at centroid of loaded nodes
-  const loadArrowData = useMemo(() => {
-    if (loads.length === 0) return null;
-    let cx = 0,
-      cy = 0,
-      cz = 0,
-      nodeCount = 0;
-    let fx = 0,
-      fy = 0,
-      fz = 0;
-    const seen = new Set<number>();
-    for (const l of loads) {
-      if (l.dof === 0) fx += l.value;
-      else if (l.dof === 1) fy += l.value;
-      else if (l.dof === 2) fz += l.value;
-      else continue;
-      if (!seen.has(l.nodeId)) {
-        const e = nodeMap.get(l.nodeId);
-        if (e) {
-          cx += e.n.x;
-          cy += e.n.y;
-          cz += e.n.z;
-          nodeCount++;
-        }
-        seen.add(l.nodeId);
-      }
+  // Load glyphs — one arrow per force/pressure group, at the centroid of its
+  // loaded nodes. Force arrows point along the applied force; pressure arrows
+  // point into the loaded face (positive pressure pushes inward). Driven by
+  // loadGroups because force/pressure loads reach the solver as surface tractions
+  // rather than nodal forces. Moments carry no single resultant, so they are
+  // skipped.
+  const loadArrows = useMemo(() => {
+    if (loadGroups.length === 0 || nodes.length === 0) return [];
+    // Model centroid — used to orient pressure arrows inward.
+    let mx = 0,
+      my = 0,
+      mz = 0;
+    for (const n of nodes) {
+      mx += n.x;
+      my += n.y;
+      mz += n.z;
     }
-    if (nodeCount === 0) return null;
-    const len = Math.sqrt(fx * fx + fy * fy + fz * fz);
-    if (len < 1e-30) return null;
-    const dir = new THREE.Vector3(fx / len, fy / len, fz / len);
-    const q = new THREE.Quaternion();
-    q.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
-    return {
-      pos: [cx / nodeCount, cy / nodeCount, cz / nodeCount] as [
-        number,
-        number,
-        number,
-      ],
-      quaternion: q,
-    };
-  }, [loads, nodeMap]);
+    mx /= nodes.length;
+    my /= nodes.length;
+    mz /= nodes.length;
+
+    const up = new THREE.Vector3(0, 1, 0);
+    const arrows: {
+      pos: [number, number, number];
+      quaternion: THREE.Quaternion;
+    }[] = [];
+    for (const g of loadGroups) {
+      const kind = loadKind(g);
+      if (kind === "moment") continue;
+      let cx = 0,
+        cy = 0,
+        cz = 0,
+        count = 0;
+      for (const f of g.faces) {
+        for (const id of f.nodeIds) {
+          const e = nodeMap.get(id);
+          if (e) {
+            cx += e.n.x;
+            cy += e.n.y;
+            cz += e.n.z;
+            count++;
+          }
+        }
+      }
+      if (count === 0) continue;
+      cx /= count;
+      cy /= count;
+      cz /= count;
+
+      let dir: THREE.Vector3;
+      if (kind === "pressure") {
+        dir = new THREE.Vector3(mx - cx, my - cy, mz - cz);
+      } else {
+        const d = [0, 0, 0];
+        d[g.dof] = g.totalForce;
+        dir = new THREE.Vector3(d[0], d[1], d[2]);
+      }
+      if (dir.lengthSq() < 1e-30) continue;
+      dir.normalize();
+      const q = new THREE.Quaternion();
+      q.setFromUnitVectors(up, dir);
+      arrows.push({ pos: [cx, cy, cz], quaternion: q });
+    }
+    return arrows;
+  }, [loadGroups, nodes, nodeMap]);
 
   const volMeshPositions = useMemo(() => {
     if (!volMesh || viewRepr !== "volume") return null;
@@ -963,18 +985,18 @@ export function MeshScene() {
         </group>
       )}
 
-      {/* Load arrow — resultant of all force DOFs, cylinder shaft + cone head */}
+      {/* Load arrows — one per force/pressure group, cylinder shaft + cone head */}
       {!showResult &&
-        loadArrowData &&
-        (() => {
+        loadArrows.map((arrow, i) => {
           const shaftLen = modelSize * 0.22;
           const headLen = modelSize * 0.09;
           const shaftR = modelSize * 0.012;
           const headR = modelSize * 0.038;
           return (
             <group
-              position={loadArrowData.pos}
-              quaternion={loadArrowData.quaternion}
+              key={i}
+              position={arrow.pos}
+              quaternion={arrow.quaternion}
             >
               <mesh position={[0, shaftLen / 2, 0]}>
                 <cylinderGeometry args={[shaftR, shaftR, shaftLen, 8]} />
@@ -986,7 +1008,7 @@ export function MeshScene() {
               </mesh>
             </group>
           );
-        })()}
+        })}
 
       {/* Volume mesh wireframe */}
       {volMeshPositions && (

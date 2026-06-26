@@ -167,6 +167,25 @@ export function nodesWhere(vertices, pred) {
   return out;
 }
 
+/**
+ * Quad boundary faces (4 node ids each) on the x = max face of a
+ * boxHexMesh(…, nx, ny, nz). Vertex order is irrelevant to the engine — it
+ * matches faces by sorted vertex set and integrates area from the element
+ * transformation — so these are handed over as-is for surface_loads.
+ */
+export function boxMaxXQuads(nid, nx, ny, nz) {
+  const quads = [];
+  for (let j = 0; j < ny; j++)
+    for (let k = 0; k < nz; k++)
+      quads.push([
+        nid(nx, j, k),
+        nid(nx, j + 1, k),
+        nid(nx, j + 1, k + 1),
+        nid(nx, j, k + 1),
+      ]);
+  return quads;
+}
+
 /** Distribute a total force vector evenly over the given nodes. */
 export function distributeForce(nodeIds, force) {
   const per = [

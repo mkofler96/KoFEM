@@ -10,6 +10,8 @@ import cantilever from "./cantilever-bending.mjs";
 import plateWithHole from "./plate-with-hole.mjs";
 import shaftTorsion from "./shaft-torsion.mjs";
 import cooksMembrane from "./cooks-membrane.mjs";
+import surfaceTraction from "./surface-traction.mjs";
+import surfacePressure from "./surface-pressure.mjs";
 
 export default [
   axialBar,
@@ -17,4 +19,6 @@ export default [
   plateWithHole,
   shaftTorsion,
   cooksMembrane,
+  surfaceTraction,
+  surfacePressure,
 ];

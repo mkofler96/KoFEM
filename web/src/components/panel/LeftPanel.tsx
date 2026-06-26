@@ -2,7 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useState, useRef, useEffect, type ChangeEvent } from "react";
-import { useModelStore, RESULT_TYPES } from "../../store/modelStore";
+import {
+  useModelStore,
+  RESULT_TYPES,
+  loadKind,
+} from "../../store/modelStore";
 import type {
   AppMode,
   Material,
@@ -590,7 +594,11 @@ function ConstraintsPanel() {
   const [error, setError] = useState<string | null>(null);
 
   const DOF_LABELS = ["Ux", "Uy", "Uz", "Rx", "Ry", "Rz"];
-  const LOAD_LABELS = ["Fx", "Fy", "Fz", "Mx", "My", "Mz"];
+  // Indices 0–5 are direction DOFs (Fx…Mz); index 6 is the directionless pressure
+  // load. Force/pressure loads are applied as work-equivalent surface tractions.
+  const LOAD_LABELS = ["Fx", "Fy", "Fz", "Mx", "My", "Mz", "Pressure"];
+  const PRESSURE_OPTION = 6;
+  const isPressureLoad = loadDof === PRESSURE_OPTION;
 
   // Boundary conditions and loads reference mesh nodes, so they can only be
   // defined once a volume mesh exists.
@@ -667,10 +675,19 @@ function ConstraintsPanel() {
       // discarded. Reject it (and non-finite input) instead of coercing to 0.
       const value = parseFloat(loadForce);
       if (!isFinite(value) || value === 0) {
-        setError("Load force must be a non-zero finite number");
+        setError(
+          isPressureLoad
+            ? "Pressure must be a non-zero finite number"
+            : "Load force must be a non-zero finite number",
+        );
         return;
       }
-      createLoadGroup(faceEntries, loadDof, value);
+      createLoadGroup(
+        faceEntries,
+        isPressureLoad ? 0 : loadDof,
+        value,
+        isPressureLoad ? "pressure" : loadDof <= 2 ? "force" : "moment",
+      );
     }
     setError(null);
     setPickMode(null);
@@ -908,7 +925,11 @@ function ConstraintsPanel() {
                     </div>
                     <div className={styles.formRow}>
                       <span className={styles.formLabel}>
-                        {loadDof <= 2 ? "Total (N)" : "Total (N·m)"}
+                        {isPressureLoad
+                          ? "Pressure (MPa)"
+                          : loadDof <= 2
+                            ? "Total (N)"
+                            : "Total (N·m)"}
                       </span>
                       <input
                         className={styles.formInput}
@@ -919,11 +940,11 @@ function ConstraintsPanel() {
                       />
                     </div>
                     <div className={styles.pickNote}>
-                      {allPickedFaces.reduce((s, f) => s + f.nodeIds.length, 0)}{" "}
-                      nodes →{" "}
-                      {loadDof <= 2
-                        ? `${(parseFloat(loadForce) / allPickedFaces.reduce((s, f) => s + f.nodeIds.length, 0)).toFixed(1)} N/node`
-                        : "distributed as equivalent nodal forces"}
+                      {isPressureLoad
+                        ? "applied as p·n̂ over each face (work-equivalent)"
+                        : loadDof <= 2
+                          ? "applied as a work-equivalent surface traction"
+                          : "distributed as equivalent nodal forces"}
                     </div>
                     <button className={styles.loadBtn} onClick={applyLoad}>
                       Apply Load
@@ -948,8 +969,11 @@ function ConstraintsPanel() {
                   <span className={styles.loadDot} />
                   <span className={styles.bcGroupName}>{g.name}</span>
                   <span className={styles.bcGroupMeta}>
-                    {LOAD_LABELS[g.dof]} = {fmt(g.totalForce)}{" "}
-                    {g.dof <= 2 ? "N" : "N·m"}
+                    {loadKind(g) === "pressure"
+                      ? `p = ${fmt(g.totalForce)} MPa`
+                      : `${LOAD_LABELS[g.dof]} = ${fmt(g.totalForce)} ${
+                          g.dof <= 2 ? "N" : "N·m"
+                        }`}
                   </span>
                   <div className={styles.treeItemActions}>
                     <button
@@ -1003,6 +1027,7 @@ function SolvePanel() {
   const properties = useModelStore((s) => s.properties);
   const constraints = useModelStore((s) => s.constraints);
   const loads = useModelStore((s) => s.loads);
+  const surfaceLoads = useModelStore((s) => s.surfaceLoads);
   const isRunning = useModelStore((s) => s.isRunning);
   const setRunning = useModelStore((s) => s.setRunning);
   const setResult = useModelStore((s) => s.setResult);
@@ -1012,7 +1037,9 @@ function SolvePanel() {
   const meshOk = nodes.length > 0;
   const matOk = materials.length > 0;
   const bcOk = constraints.length > 0;
-  const loadOk = loads.length > 0;
+  // Force/pressure loads now reach the solver as surface tractions, moments as
+  // nodal forces — either kind makes the model loaded.
+  const loadOk = loads.length > 0 || surfaceLoads.length > 0;
   // A non-zero prescribed displacement drives the deformation on its own, so the
   // model is solvable without an applied load. Without either, the solve returns
   // the trivial zero field, so at least one driving action is still required.
@@ -1029,6 +1056,7 @@ function SolvePanel() {
       properties,
       constraints,
       loads,
+      surfaceLoads,
     })
       .then(({ displacements, vonMises }) => {
         setResult({
