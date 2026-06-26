@@ -1015,7 +1015,7 @@ static std::string solve_linear_elastic(
         for (unsigned i = 0; i < n_surf; ++i) {
             val entry = surf_js[i];
             std::string type = entry["type"].as<std::string>();
-            val faces = entry["triangles"];  // node-index lists (3 = tri, 4 = quad)
+            val faces = entry["faces"];  // node-index lists (3 = tri, 4 = quad)
             unsigned n_faces = faces["length"].as<unsigned>();
 
             int attr = next_attr;

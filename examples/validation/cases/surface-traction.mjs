@@ -44,7 +44,7 @@ export default {
           {
             type: "force",
             force: [P, 0, 0],
-            triangles: boxMaxXQuads(m.nid, nx, ny, nz),
+            faces: boxMaxXQuads(m.nid, nx, ny, nz),
           },
         ],
       },

@@ -110,13 +110,14 @@ interface Load {
   value: number;
 }
 // A work-equivalent surface load applied by the engine's boundary integrator
-// over the boundary elements covering `triangles` (node-index triples).
+// over the boundary elements covering `faces` (node-index lists — triangles for
+// tets, quads for hexes).
 //   force    — total force vector spread as a uniform traction over the face
 //   pressure — scalar magnitude applied as -p·n̂ (outward normal; + pushes in)
 //   traction — traction vector applied directly
 interface SurfaceLoad {
   type: "force" | "pressure" | "traction";
-  triangles: [number, number, number][];
+  faces: number[][];
   force?: [number, number, number];
   pressure?: number;
 }

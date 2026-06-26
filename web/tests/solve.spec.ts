@@ -81,6 +81,7 @@ test("results panel switches to von Mises stress", async ({ page }) => {
             properties: unknown[];
             constraints: unknown[];
             loads: unknown[];
+            surfaceLoads: unknown[];
             setResult(r: {
               displacements: Float64Array;
               vonMises?: Float64Array;
@@ -104,6 +105,7 @@ test("results panel switches to von Mises stress", async ({ page }) => {
       properties: s.properties,
       constraints: s.constraints,
       loads: s.loads,
+      surfaceLoads: s.surfaceLoads,
     })) as { displacements: number[]; vonMises: number[] };
     store.getState().setResult({
       displacements: new Float64Array(displacements),

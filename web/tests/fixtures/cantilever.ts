@@ -148,33 +148,77 @@ export function buildCantilever(): CantileverModel {
 }
 
 // Open the app and inject the cantilever fixture straight into the store (the
-// model is invisible to real users, so there is no UI button to click). Leaves
-// the app in geometry mode with a solver-ready CHEXA8 mesh.
+// model is invisible to real users, so there is no UI button to click). The mesh
+// and materials go in via setState, but the BC and load are built through the
+// real store actions so the load derives exactly as it does after a save→load
+// round-trip (a work-equivalent surface traction over the hex end face), keeping
+// the initial and re-solved fields identical. Leaves the app in geometry mode
+// with a solver-ready CHEXA8 mesh.
 export async function bootstrapCantilever(page: Page): Promise<void> {
   await page.goto("/app/");
   await page.waitForFunction(
     () => !!(window as unknown as { __kofemStore?: unknown }).__kofemStore,
   );
   await page.evaluate((model) => {
+    type FaceArg = { label: string; nodeIds: number[] };
     const store = (
-      window as unknown as { __kofemStore: { setState(s: object): void } }
+      window as unknown as {
+        __kofemStore: {
+          setState(s: object): void;
+          getState(): {
+            createBcGroup(
+              faces: FaceArg[],
+              dofs: number[],
+              value: number,
+            ): void;
+            createLoadGroup(
+              faces: FaceArg[],
+              dof: number,
+              totalForce: number,
+            ): void;
+          };
+        };
+      }
     ).__kofemStore;
     store.setState({
-      ...model,
+      nodes: model.nodes,
+      elements: model.elements,
+      materials: model.materials,
+      properties: model.properties,
       modelName: "Cantilever Beam",
       result: null,
       stepSurface: null,
       volMesh: null,
+      surfaceTriangles: null,
+      surfaceFaceIds: null,
+      bcGroups: [],
+      loadGroups: [],
+      constraints: [],
+      loads: [],
+      surfaceLoads: [],
+      nextBcGroupId: 1,
+      nextLoadGroupId: 1,
+      nextFaceEntryId: 1,
       viewRepr: "surface",
       selectedFace: null,
       pendingFaces: [],
       pickMode: null,
       pickTargetGroupId: null,
-      nextBcGroupId: 2,
-      nextLoadGroupId: 2,
-      nextFaceEntryId: 3,
       hasStarted: true,
       mode: "geometry",
     });
+    const s = store.getState();
+    const bc = model.bcGroups[0];
+    const load = model.loadGroups[0];
+    s.createBcGroup(
+      bc.faces.map((f) => ({ label: f.label, nodeIds: f.nodeIds })),
+      bc.dofs,
+      bc.value,
+    );
+    s.createLoadGroup(
+      load.faces.map((f) => ({ label: f.label, nodeIds: f.nodeIds })),
+      load.dof,
+      load.totalForce,
+    );
   }, buildCantilever());
 }

@@ -43,7 +43,7 @@ export default {
           {
             type: "pressure",
             pressure: p,
-            triangles: boxMaxXQuads(m.nid, nx, ny, nz),
+            faces: boxMaxXQuads(m.nid, nx, ny, nz),
           },
         ],
       },

@@ -26,7 +26,7 @@ const pkg = join(here, "../../../web/src/wasm/pkg");
  *               prescribed_dofs:[{vertex,dof:0|1|2,value}...], // non-zero Dirichlet
  *               point_loads:[{vertex, force:[fx,fy,fz]}...],
  *               surface_loads:[{ type:"force"|"pressure"|"traction",
- *                                triangles:[[a,b,c]...],
+ *                                faces:[[a,b,c(,d)]...],
  *                                force?:[fx,fy,fz], pressure?:p }...] }
  *   order:    FE polynomial order (default 1; order 2 is unreliable with the
  *             engine's loose CG tolerance — keep validation cases at order 1).
