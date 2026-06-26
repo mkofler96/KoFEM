@@ -453,7 +453,7 @@ static std::string generate_fem_mesh(const std::string& opts_json)
     log_mem("generate_fem_mesh: step 2 GenerateEdgeMesh");
     nglib::Ng_Result res = nglib::Ng_OCC_GenerateEdgeMesh(geom, mesh, &mp);
     if (res != nglib::NG_OK) {
-        nglib::Ng_DeleteMesh(mesh);
+        kofem_delete_mesh(mesh);
         kofem_occ_geometry_delete(geom);
         throw std::runtime_error(
             "Ng_OCC_GenerateEdgeMesh failed (code " + std::to_string((int)res) + ")");
@@ -467,7 +467,7 @@ static std::string generate_fem_mesh(const std::string& opts_json)
     log_mem("generate_fem_mesh: step 3 GenerateSurfaceMesh");
     res = nglib::Ng_OCC_GenerateSurfaceMesh(geom, mesh, &mp);
     if (res != nglib::NG_OK) {
-        nglib::Ng_DeleteMesh(mesh);
+        kofem_delete_mesh(mesh);
         kofem_occ_geometry_delete(geom);
         throw std::runtime_error(
             "Ng_OCC_GenerateSurfaceMesh failed (code " + std::to_string((int)res) + ")");
@@ -488,7 +488,7 @@ static std::string generate_fem_mesh(const std::string& opts_json)
     res = nglib::Ng_GenerateVolumeMesh(mesh, &mp);
     kofem_occ_geometry_delete(geom);     // safe: volume fill complete
     if (res != nglib::NG_OK) {
-        nglib::Ng_DeleteMesh(mesh);
+        kofem_delete_mesh(mesh);
         throw std::runtime_error(
             "Ng_GenerateVolumeMesh failed (code " + std::to_string((int)res) + ")");
     }
@@ -544,7 +544,7 @@ static std::string generate_fem_mesh(const std::string& opts_json)
            nse, (int)std::set<int>(out_surf_face_ids.begin(), out_surf_face_ids.end()).size());
     fflush(stdout);
 
-    nglib::Ng_DeleteMesh(mesh);
+    kofem_delete_mesh(mesh);
     log_mem("generate_fem_mesh: after Ng_DeleteMesh");
 
     return "{\"vertices\":" + json_vec3(out_verts) +
@@ -637,7 +637,7 @@ static std::string generate_volume_mesh(
 
     nglib::Ng_Result res = nglib::Ng_GenerateVolumeMesh(mesh, &mp);
     if (res != nglib::NG_OK) {
-        nglib::Ng_DeleteMesh(mesh);
+        kofem_delete_mesh(mesh);
         throw std::runtime_error(
             "Ng_GenerateVolumeMesh failed (code " + std::to_string((int)res) + ")");
     }
@@ -666,7 +666,7 @@ static std::string generate_volume_mesh(
         out_tets.push_back(tet[3] - 1);
     }
 
-    nglib::Ng_DeleteMesh(mesh);
+    kofem_delete_mesh(mesh);
 
     return "{\"vertices\":" + json_vec3(out_verts) +
            ",\"tetrahedra\":" + json_ivec4(out_tets) + "}";
