@@ -7,12 +7,12 @@
 // selects ALL inner mantle triangles — and no triangles from the outer mantle
 // or the end caps.
 //
-// Run: bun test_face_pick.mjs
+// Run: bun tests/test_face_pick.mjs   (from the web/ directory)
 
 import {
   buildBoundaryMeshTopo,
   pickFaceNodeIds,
-} from "./web/src/lib/facePick.ts";
+} from "../src/lib/facePick.ts";
 
 // ── Geometry helpers ─────────────────────────────────────────────────────────
 

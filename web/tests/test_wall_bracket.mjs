@@ -2,7 +2,7 @@
 // STEP → tessellate (OCC) → FEM mesh (Netgen) → linear-elastic solve (MFEM)
 //
 // No error handling: any failure surfaces immediately as a raw Node.js error.
-// Usage:  node test_wall_bracket.mjs [max_element_size]
+// Usage:  bun tests/test_wall_bracket.mjs [max_element_size]   (from the web/ directory)
 
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
@@ -11,7 +11,7 @@ import { dirname, join } from "path";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const maxElementSize = parseFloat(process.argv[2] ?? "20.0");
 
-const wasmPkg = join(__dirname, "web/src/wasm/pkg");
+const wasmPkg = join(__dirname, "../src/wasm/pkg");
 const wasmBinary = readFileSync(join(wasmPkg, "kofem_wasm_emcc.wasm")).buffer;
 
 const { default: createModule } = await import(
@@ -34,7 +34,7 @@ const makeModule = () =>
 const Module = await makeModule();
 
 const stepBytes = new Uint8Array(
-  readFileSync(join(__dirname, "test_files/Wall Bracket.stp")),
+  readFileSync(join(__dirname, "../../test_files/Wall Bracket.stp")),
 );
 console.log(
   `\nWall bracket: ${stepBytes.length} bytes, max_element_size=${maxElementSize}\n`,
