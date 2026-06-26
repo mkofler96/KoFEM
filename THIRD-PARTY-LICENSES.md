@@ -47,12 +47,3 @@ lockfile; their license texts are installed under `web/node_modules/<pkg>/`.
 The native crates (`kofem-core`, `kofem-geom`, `kofem-mesh`) are part of KoFEM
 and are licensed under AGPL-3.0-or-later. Their Cargo dependencies (`serde`,
 `thiserror`, `log`) are dual MIT/Apache-2.0 licensed.
-
----
-
-> **Note:** This file is a good-faith summary provided for convenience and is
-> **not legal advice**. License terms and versions of upstream projects can
-> change over time; always consult the license shipped with the specific version
-> of each library you build or distribute. If you redistribute KoFEM or a
-> modified version, you are responsible for complying with the AGPL-3.0 and with
-> the licenses of all third-party components.
