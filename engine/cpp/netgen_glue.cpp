@@ -33,3 +33,11 @@ int kofem_surface_element_face_index(void* mesh, int i) {
     // face map (TopExp order over the shape).
     return static_cast<netgen::Mesh*>(mesh)->SurfaceElement(i).GetIndex();
 }
+
+void kofem_delete_mesh(void* mesh) {
+    // Ng_Mesh* is a netgen::Mesh* internally. ~Mesh() frees every owned
+    // resource (including the bcnames/materials/cd2names string*); we skip
+    // nglib::Ng_DeleteMesh because it additionally calls Mesh::DeleteMesh()
+    // first, double-freeing those strings. See netgen_glue.h.
+    delete static_cast<netgen::Mesh*>(mesh);
+}
