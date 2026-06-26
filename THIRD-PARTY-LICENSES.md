@@ -14,11 +14,11 @@ links the following C++ libraries. Pre-compiled WASM builds of these libraries l
 in the companion repository
 [KoFEM-Dependencies](https://github.com/mkofler96/KoFEM-Dependencies).
 
-| Library                            | Role in KoFEM                                    | License                              | Project                                                  |
-| ---------------------------------- | ------------------------------------------------ | ------------------------------------ | -------------------------------------------------------- |
-| **OpenCASCADE Technology (OCCT)**  | STEP geometry import and surface tessellation    | LGPL-2.1 with an additional exception | <https://dev.opencascade.org/>                          |
-| **Netgen / nglib**                 | Tetrahedral volume mesh generation               | LGPL-2.1                             | <https://ngsolve.org/>                                   |
-| **MFEM**                           | Linear-elastic finite element assembly and solve | BSD-3-Clause                         | <https://mfem.org/>                                      |
+| Library                           | Role in KoFEM                                    | License                               | Project                        |
+| --------------------------------- | ------------------------------------------------ | ------------------------------------- | ------------------------------ |
+| **OpenCASCADE Technology (OCCT)** | STEP geometry import and surface tessellation    | LGPL-2.1 with an additional exception | <https://dev.opencascade.org/> |
+| **Netgen / nglib**                | Tetrahedral volume mesh generation               | LGPL-2.1                              | <https://ngsolve.org/>         |
+| **MFEM**                          | Linear-elastic finite element assembly and solve | BSD-3-Clause                          | <https://mfem.org/>            |
 
 For the exact license terms of each library, refer to the `LICENSE`/`COPYING` file
 shipped in that library's own source distribution (and in the
