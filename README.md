@@ -45,6 +45,7 @@ cd web && bun install && bun run dev
 > The wasm docker build is layered on top of [KoFEM-Dependencies](https://github.com/mkofler96/KoFEM-Dependencies), which contains the precompiled wasm OCCT, Netgen and MFEM libraries. KoFEM can be compiled without docker using the script `scripts/build-wasm.sh`, but then the OCCT, Netgen and MFEM source code must be downloaded and will be compiled during the KoFEM compilation. This will take some time.
 
 ## Disclaimer
+
 KoFEM is research-grade software provided for education and exploration. It is
 **not** a certified engineering tool. Finite element results are approximations
 and may be wrong; **no result should be relied upon without independent
