@@ -132,6 +132,17 @@
 .stat  { color: #6b7280; white-space: nowrap; }
 .muted { color: #9aa1ad; }
 
+.discLink {
+  color: #9aa1ad;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.discLink:hover {
+  color: #6b7280;
+  text-decoration: underline;
+}
+
 .meshChip, .resultChip {
   display: flex;
   align-items: center;
