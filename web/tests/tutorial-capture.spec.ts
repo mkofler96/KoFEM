@@ -168,11 +168,19 @@ test.describe("Tutorial figure capture", () => {
       const s = (
         window as unknown as {
           __kofemStore: {
-            getState(): { constraints: unknown[]; loads: unknown[] };
+            getState(): {
+              constraints: unknown[];
+              loads: unknown[];
+              surfaceLoads: unknown[];
+            };
           };
         }
       ).__kofemStore.getState();
-      return { constraints: s.constraints.length, loads: s.loads.length };
+      // Force loads now reach the solver as surface tractions, so count both.
+      return {
+        constraints: s.constraints.length,
+        loads: s.loads.length + s.surfaceLoads.length,
+      };
     });
     if (bc.constraints === 0 || bc.loads === 0) {
       throw new Error(

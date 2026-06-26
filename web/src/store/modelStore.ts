@@ -117,12 +117,40 @@ export interface NamedBcGroup {
   faces: BcFaceEntry[];
 }
 
+// A load group's physical kind. "force" and "pressure" are applied to the solver
+// as work-equivalent surface tractions (SurfaceLoad); "moment" is still lumped to
+// equivalent nodal forces (rebuildLoads). For backward-compat with saved analyses
+// that predate this field, `kind` is optional and inferred from `dof` via
+// loadKind().
+export type LoadKind = "force" | "moment" | "pressure";
+
 export interface NamedLoadGroup {
   id: number;
   name: string; // e.g. "Load1"
-  dof: number;
-  totalForce: number; // applied per face, divided equally among the face's nodes
+  dof: number; // force: 0=Fx,1=Fy,2=Fz · moment: 3=Mx,4=My,5=Mz · pressure: unused
+  totalForce: number; // force/moment magnitude (N, N·mm), or pressure magnitude (MPa)
   faces: BcFaceEntry[];
+  kind?: LoadKind;
+}
+
+// Physical kind of a load group, defaulting from `dof` for older payloads that
+// have no explicit `kind` (dof ≤ 2 ⇒ force, dof ≥ 3 ⇒ moment).
+export function loadKind(g: NamedLoadGroup): LoadKind {
+  return g.kind ?? (g.dof <= 2 ? "force" : "moment");
+}
+
+// A work-equivalent surface load handed to the engine's boundary integrator.
+// `faces` are the element boundary faces of one loaded face — triangles (tets) or
+// quads (hexes) — each a list of node indices the engine matches to its generated
+// boundary elements by vertex set.
+//   force    — total force vector, spread by the engine as a uniform traction
+//   pressure — scalar magnitude, applied as -p·n̂ (outward normal; + pushes in)
+//   traction — traction vector applied directly (not surfaced in the UI yet)
+export interface SurfaceLoad {
+  type: "force" | "pressure" | "traction";
+  faces: number[][];
+  force?: [number, number, number];
+  pressure?: number;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -137,20 +165,67 @@ function rebuildConstraints(bcGroups: NamedBcGroup[]): Constraint[] {
   return result;
 }
 
+// Local vertex indices of each boundary face of a solid element, in the node
+// ordering used by both the .inp/fixture meshes and MFEM's AddTet/AddHex (and so
+// by the boundary elements the engine generates). Matching is by vertex set, so
+// only the grouping matters, not the winding.
+const TET_FACE_INDICES = [
+  [0, 1, 2],
+  [0, 1, 3],
+  [0, 2, 3],
+  [1, 2, 3],
+];
+const HEX_FACE_INDICES = [
+  [0, 1, 2, 3],
+  [4, 5, 6, 7],
+  [0, 1, 5, 4],
+  [1, 2, 6, 5],
+  [2, 3, 7, 6],
+  [3, 0, 4, 7],
+];
+
+// The element boundary faces lying on one loaded face: every solid-element face
+// whose nodes all belong to the face's node set — triangles for tets, quads for
+// hexes. The engine matches these to its generated boundary elements by vertex
+// set (and ignores any interior faces that aren't boundaries), so the load is
+// integrated over the real surface, mesh type regardless.
+function loadedFaces(
+  face: { nodeIds: number[] },
+  elements: Element[],
+): number[][] {
+  const nodeSet = new Set(face.nodeIds);
+  const seen = new Set<string>();
+  const faces: number[][] = [];
+  for (const el of elements) {
+    const local =
+      el.type === "CTETRA"
+        ? TET_FACE_INDICES
+        : el.type === "CHEXA"
+          ? HEX_FACE_INDICES
+          : null;
+    if (!local) continue;
+    for (const lf of local) {
+      const verts = lf.map((i) => el.nodeIds[i]);
+      if (!verts.every((v) => nodeSet.has(v))) continue;
+      const key = [...verts].sort((a, b) => a - b).join(",");
+      if (seen.has(key)) continue; // a boundary face is owned by one element
+      seen.add(key);
+      faces.push(verts);
+    }
+  }
+  return faces;
+}
+
 function rebuildLoads(loadGroups: NamedLoadGroup[], nodes: Node[]): Load[] {
   const nodeById = new Map<number, Node>();
   for (const n of nodes) nodeById.set(n.id, n);
 
   const result: Load[] = [];
   for (const g of loadGroups) {
-    if (g.dof <= 2) {
-      // Force load — distribute total evenly across face nodes
-      for (const f of g.faces) {
-        const perNode = g.totalForce / f.nodeIds.length;
-        for (const nodeId of f.nodeIds)
-          result.push({ nodeId, dof: g.dof, value: perNode });
-      }
-    } else {
+    // Force and pressure loads are applied as work-equivalent surface tractions
+    // (rebuildSurfaceLoads), not lumped nodal forces — they are skipped here.
+    if (loadKind(g) !== "moment") continue;
+    {
       // Moment load (dof 3=Mx, 4=My, 5=Mz) — convert to equivalent nodal forces.
       // For each face, find the centroid, then apply tangential forces F_i = M/S·(n̂×r_i)
       // where S = Σ|r_i⊥|² (perpendicular distance squared from moment axis).
@@ -215,6 +290,37 @@ function rebuildLoads(loadGroups: NamedLoadGroup[], nodes: Node[]): Load[] {
   return result;
 }
 
+// Build the work-equivalent surface loads (one per loaded face) for force and
+// pressure groups. The engine integrates these over the face's boundary elements
+// (f_i = ∫ N_i·t dS), which is both shape-function-correct and immune to the
+// spurious moment that equal nodal splitting introduces on a non-uniform mesh.
+//
+// The loaded faces are derived from the element connectivity (loadedFaces), so a
+// load works on tet meshes (triangle faces) and hex meshes (quad faces) alike,
+// with no dependency on a separately-stored surface triangulation.
+function rebuildSurfaceLoads(
+  loadGroups: NamedLoadGroup[],
+  elements: Element[],
+): SurfaceLoad[] {
+  const result: SurfaceLoad[] = [];
+  for (const g of loadGroups) {
+    const kind = loadKind(g);
+    if (kind === "moment") continue; // moments stay as equivalent point loads
+    for (const f of g.faces) {
+      const faces = loadedFaces(f, elements);
+      if (faces.length === 0) continue;
+      if (kind === "pressure") {
+        result.push({ type: "pressure", pressure: g.totalForce, faces });
+      } else {
+        const force: [number, number, number] = [0, 0, 0];
+        force[g.dof] = g.totalForce;
+        result.push({ type: "force", force, faces });
+      }
+    }
+  }
+  return result;
+}
+
 // ── Store types ───────────────────────────────────────────────────────────────
 
 export type AppMode = "geometry" | "constraints" | "solve" | "results";
@@ -227,6 +333,8 @@ interface ModelState {
   // flat arrays derived from bcGroups / loadGroups — used by solver and visualization
   constraints: Constraint[];
   loads: Load[];
+  // work-equivalent surface tractions (force/pressure groups) handed to the solver
+  surfaceLoads: SurfaceLoad[];
 
   modelName: string;
   hasStarted: boolean;
@@ -324,6 +432,7 @@ interface ModelState {
     faces: Omit<BcFaceEntry, "id">[],
     dof: number,
     totalForce: number,
+    kind?: LoadKind,
   ): void;
   addFaceToLoadGroup(groupId: number, face: Omit<BcFaceEntry, "id">): void;
   removeFaceFromLoadGroup(groupId: number, faceId: number): void;
@@ -349,6 +458,7 @@ const EMPTY_MODEL = {
   properties: [{ id: 1, type: "PSOLID" as const, materialId: 1 }] as Property[],
   constraints: [] as Constraint[],
   loads: [] as Load[],
+  surfaceLoads: [] as SurfaceLoad[],
   bcGroups: [] as NamedBcGroup[],
   loadGroups: [] as NamedLoadGroup[],
   nextBcGroupId: 1,
@@ -429,6 +539,7 @@ export const useModelStore = create<ModelState>()(
         s.loadGroups = [];
         s.constraints = [];
         s.loads = [];
+        s.surfaceLoads = [];
         s.nextBcGroupId = 1;
         s.nextLoadGroupId = 1;
         s.nextFaceEntryId = 1;
@@ -499,6 +610,7 @@ export const useModelStore = create<ModelState>()(
         s.loadGroups = [];
         s.constraints = [];
         s.loads = [];
+        s.surfaceLoads = [];
         s.nextBcGroupId = 1;
         s.nextLoadGroupId = 1;
         s.nextFaceEntryId = 1;
@@ -529,6 +641,7 @@ export const useModelStore = create<ModelState>()(
         s.loadGroups = a.loadGroups;
         s.constraints = rebuildConstraints(a.bcGroups);
         s.loads = rebuildLoads(a.loadGroups, s.nodes);
+        s.surfaceLoads = rebuildSurfaceLoads(a.loadGroups, a.elements);
         s.nextBcGroupId = a.nextBcGroupId;
         s.nextLoadGroupId = a.nextLoadGroupId;
         s.nextFaceEntryId = a.nextFaceEntryId;
@@ -575,6 +688,7 @@ export const useModelStore = create<ModelState>()(
         s.loadGroups = [];
         s.constraints = [];
         s.loads = [];
+        s.surfaceLoads = [];
         s.nextBcGroupId = 1;
         s.nextLoadGroupId = 1;
         s.nextFaceEntryId = 1;
@@ -699,6 +813,7 @@ export const useModelStore = create<ModelState>()(
       faces: Omit<BcFaceEntry, "id">[],
       dof: number,
       totalForce: number,
+      kind: LoadKind = dof <= 2 ? "force" : "moment",
     ) =>
       set((s) => {
         const faceEntries = faces.map((f) => ({
@@ -712,9 +827,11 @@ export const useModelStore = create<ModelState>()(
           dof,
           totalForce,
           faces: faceEntries,
+          kind,
         });
         s.nextLoadGroupId++;
         s.loads = rebuildLoads(s.loadGroups, s.nodes);
+        s.surfaceLoads = rebuildSurfaceLoads(s.loadGroups, s.elements);
         s.result = null;
       }),
 
@@ -725,6 +842,7 @@ export const useModelStore = create<ModelState>()(
         const faceId = s.nextFaceEntryId++;
         g.faces.push({ id: faceId, label: face.label, nodeIds: face.nodeIds });
         s.loads = rebuildLoads(s.loadGroups, s.nodes);
+        s.surfaceLoads = rebuildSurfaceLoads(s.loadGroups, s.elements);
         s.result = null;
       }),
 
@@ -736,6 +854,7 @@ export const useModelStore = create<ModelState>()(
         if (g.faces.length === 0)
           s.loadGroups = s.loadGroups.filter((g) => g.id !== groupId);
         s.loads = rebuildLoads(s.loadGroups, s.nodes);
+        s.surfaceLoads = rebuildSurfaceLoads(s.loadGroups, s.elements);
         s.result = null;
       }),
 
@@ -743,6 +862,7 @@ export const useModelStore = create<ModelState>()(
       set((s) => {
         s.loadGroups = s.loadGroups.filter((g) => g.id !== id);
         s.loads = rebuildLoads(s.loadGroups, s.nodes);
+        s.surfaceLoads = rebuildSurfaceLoads(s.loadGroups, s.elements);
         s.result = null;
       }),
 
@@ -750,6 +870,7 @@ export const useModelStore = create<ModelState>()(
       set((s) => {
         s.loadGroups = [];
         s.loads = [];
+        s.surfaceLoads = [];
         s.result = null;
       }),
   })),
