@@ -65,4 +65,5 @@ its own license. See [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) for the
 full attribution and compatibility notes.
 
 ## Funding
-If you enjoyed what I built, consider [buying me a coffee ☕](buymeacoffee.com/mkofler). Thanks for your support! 
+
+If you enjoyed what I built, consider [buying me a coffee ☕](buymeacoffee.com/mkofler). Thanks for your support!
