@@ -351,6 +351,10 @@ interface ModelState {
   geometryFormat: GeometryFormat;
   isRunning: boolean;
   isMeshing: boolean;
+  // FE polynomial order for the solve: 1 = linear, 2 = quadratic (second-order).
+  // Quadratic elements resolve bending and stress gradients far better at the
+  // cost of more DOFs and a slower solve (issue #215).
+  elementOrder: number;
   nextMatId: number;
   pickMode: "bc" | "load" | null;
   pickTargetGroupId: number | null; // null = creating new group; id = adding to existing
@@ -394,6 +398,7 @@ interface ModelState {
   addProperty(prop: Property): void;
   setResult(result: SolverResult): void;
   setResultType(t: ResultType): void;
+  setElementOrder(order: number): void;
   setRunning(v: boolean): void;
   setMeshing(v: boolean): void;
   applyMeshResult(
@@ -479,6 +484,9 @@ export const useModelStore = create<ModelState>()(
     geometryFormat: "step" as GeometryFormat,
     isRunning: false,
     isMeshing: false,
+    // Default to linear: it's fast and reliable for every mesh size. Quadratic is
+    // an opt-in upgrade (Solver settings) — far more accurate but ~8× the DOFs.
+    elementOrder: 1,
     volMesh: null,
     surfaceTriangles: null,
     surfaceFaceIds: null,
@@ -584,6 +592,10 @@ export const useModelStore = create<ModelState>()(
     setResultType: (t) =>
       set((s) => {
         s.resultType = t;
+      }),
+    setElementOrder: (order) =>
+      set((s) => {
+        s.elementOrder = order;
       }),
     setRunning: (v) =>
       set((s) => {

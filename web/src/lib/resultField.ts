@@ -16,9 +16,53 @@ export function resultColor(t: number): THREE.Color {
   return new THREE.Color().setHSL(0.667 * (1 - t), 1, 0.5);
 }
 
-// Element-level von Mises stress averaged to nodes, the same averaging used for
-// vertex coloring in MeshScene.
-function nodeVonMisesField(
+// Volume of a 4-node tetrahedron from its node positions: |(b−a)·((c−a)×(d−a))|/6.
+function tetVolume(a: Node, b: Node, c: Node, d: Node): number {
+  const bx = b.x - a.x,
+    by = b.y - a.y,
+    bz = b.z - a.z;
+  const cx = c.x - a.x,
+    cy = c.y - a.y,
+    cz = c.z - a.z;
+  const dx = d.x - a.x,
+    dy = d.y - a.y,
+    dz = d.z - a.z;
+  const det =
+    bx * (cy * dz - cz * dy) -
+    by * (cx * dz - cz * dx) +
+    bz * (cx * dy - cy * dx);
+  return Math.abs(det) / 6;
+}
+
+// Averaging weight for one element: its volume, so a node's averaged stress is
+// dominated by the elements that actually fill the space around it. Tetrahedra
+// use the signed-volume formula; any other element type falls back to unit
+// weight (still counted, just unweighted).
+function elementWeight(
+  el: Element,
+  nodeIndex: Map<number, number>,
+  nodes: Node[],
+): number {
+  if (el.nodeIds.length !== 4) return 1;
+  const a = nodeIndex.get(el.nodeIds[0]);
+  const b = nodeIndex.get(el.nodeIds[1]);
+  const c = nodeIndex.get(el.nodeIds[2]);
+  const d = nodeIndex.get(el.nodeIds[3]);
+  if (a === undefined || b === undefined || c === undefined || d === undefined)
+    return 1;
+  return tetVolume(nodes[a], nodes[b], nodes[c], nodes[d]);
+}
+
+// The solver returns one constant von Mises value per element (evaluated at the
+// element center). This recovers a smooth C⁰ per-node field by volume-weighted
+// averaging: each node takes the volume-weighted mean of the von Mises of the
+// elements touching it. Weighting by volume (rather than a plain element count)
+// down-weights the tiny sliver tetrahedra Netgen leaves at sharp features —
+// those slivers carry extreme, noisy stresses that a plain average lets speckle
+// the colormap at stress concentrations (issue #215). Returned in node-array
+// order; the same field drives the colorbar range here and the vertex coloring
+// in MeshScene, so the two must stay identical.
+export function nodeVonMisesField(
   result: SolverResult,
   nodes: Node[],
   elements: Element[],
@@ -29,20 +73,21 @@ function nodeVonMisesField(
   const nodeIndex = new Map<number, number>();
   for (let i = 0; i < nodes.length; i++) nodeIndex.set(nodes[i].id, i);
   const sums = new Float64Array(nodes.length);
-  const counts = new Int32Array(nodes.length);
+  const weights = new Float64Array(nodes.length);
   for (let ei = 0; ei < elements.length; ei++) {
     const vmVal = vm[ei] ?? 0;
+    const w = elementWeight(elements[ei], nodeIndex, nodes);
     for (const nodeId of elements[ei].nodeIds) {
       const ni = nodeIndex.get(nodeId);
       if (ni !== undefined) {
-        sums[ni] += vmVal;
-        counts[ni]++;
+        sums[ni] += w * vmVal;
+        weights[ni] += w;
       }
     }
   }
   const avg = new Float64Array(nodes.length);
   for (let i = 0; i < nodes.length; i++)
-    avg[i] = counts[i] > 0 ? sums[i] / counts[i] : 0;
+    avg[i] = weights[i] > 0 ? sums[i] / weights[i] : 0;
   return avg;
 }
 

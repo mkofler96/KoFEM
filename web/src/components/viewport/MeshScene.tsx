@@ -9,6 +9,7 @@ import { useModelStore, loadKind } from "../../store/modelStore";
 import type { Node, ResultType } from "../../store/modelStore";
 import { buildBoundaryMeshTopo, pickFaceNodeIds } from "../../lib/facePick";
 import type { Vec3, Tri } from "../../lib/facePick";
+import { nodeVonMisesField } from "../../lib/resultField";
 
 const TARGET_DEFORM_FRACTION = 0.2;
 
@@ -346,29 +347,12 @@ export function MeshScene() {
     [barElements, nodeMap],
   );
 
-  // Per-node von Mises: average element-level stresses to nodes.
-  const nodeVonMises = useMemo(() => {
-    if (!result?.vonMises || elements.length === 0 || nodes.length === 0)
-      return null;
-    const vm = result.vonMises;
-    const sums = new Float64Array(nodes.length);
-    const counts = new Int32Array(nodes.length);
-    for (let ei = 0; ei < elements.length; ei++) {
-      const vmVal = vm[ei] ?? 0;
-      for (const nodeId of elements[ei].nodeIds) {
-        const entry = nodeMap.get(nodeId);
-        if (entry) {
-          sums[entry.i] += vmVal;
-          counts[entry.i]++;
-        }
-      }
-    }
-    const avg = new Float64Array(nodes.length);
-    for (let i = 0; i < nodes.length; i++) {
-      avg[i] = counts[i] > 0 ? sums[i] / counts[i] : 0;
-    }
-    return avg;
-  }, [result, elements, nodes, nodeMap]);
+  // Per-node von Mises: volume-weighted average of the element-level stresses,
+  // shared with the colorbar range in resultField so the two stay identical.
+  const nodeVonMises = useMemo(
+    () => (result ? nodeVonMisesField(result, nodes, elements) : null),
+    [result, nodes, elements],
+  );
 
   const deformedSurface = useMemo(() => {
     if (!result) return null;
