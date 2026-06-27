@@ -140,7 +140,7 @@ export function MeshScene() {
   const resultType = useModelStore((s) => s.resultType);
   const mode = useModelStore((s) => s.mode);
   const stepSurface = useModelStore((s) => s.stepSurface);
-  const volMesh = useModelStore((s) => s.volMesh);
+  const deformScaleFactor = useModelStore((s) => s.deformScale);
   const surfaceTriangles = useModelStore((s) => s.surfaceTriangles);
   const surfaceFaceIds = useModelStore((s) => s.surfaceFaceIds);
   const viewRepr = useModelStore((s) => s.viewRepr);
@@ -178,6 +178,9 @@ export function MeshScene() {
     return Math.max(maxX - minX, maxY - minY, maxZ - minZ, 1e-9);
   }, [nodes]);
 
+  // Automatic fit-to-view scale (max displacement → TARGET_DEFORM_FRACTION of the
+  // model size) multiplied by the user-controlled deformScaleFactor. A factor of
+  // 0 yields the undeformed shape coloured by the result field.
   const deformScale = useMemo(() => {
     if (!result) return 1;
     let maxDisp = 0;
@@ -185,9 +188,9 @@ export function MeshScene() {
       const v = Math.abs(result.displacements[i]);
       if (v > maxDisp) maxDisp = v;
     }
-    if (maxDisp < 1e-30) return 1;
-    return (TARGET_DEFORM_FRACTION * modelSize) / maxDisp;
-  }, [result, modelSize]);
+    if (maxDisp < 1e-30) return deformScaleFactor;
+    return ((TARGET_DEFORM_FRACTION * modelSize) / maxDisp) * deformScaleFactor;
+  }, [result, modelSize, deformScaleFactor]);
 
   const hexElements = useMemo(
     () => elements.filter((e) => e.type === "CHEXA"),
@@ -335,6 +338,43 @@ export function MeshScene() {
     }
     return segs.length > 0 ? new Float32Array(segs) : null;
   }, [result, hexElements, tetElements, nodeMap, deformScale]);
+
+  // Boundary (surface) edges of the deformed mesh — the Surface representation in
+  // results mode. Mirrors undeformedSurfaceEdgePositions but on deformed coords.
+  const deformedSurfaceEdgePositions = useMemo(() => {
+    if (!result) return null;
+    const d = result.displacements;
+    const seen = new Set<string>();
+    const segs: number[] = [];
+    const addEdge = (a: number, b: number) => {
+      const key = a < b ? `${a},${b}` : `${b},${a}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      const na = nodeMap.get(a),
+        nb = nodeMap.get(b);
+      if (!na || !nb) return;
+      segs.push(
+        na.n.x + (d[na.i * 3] ?? 0) * deformScale,
+        na.n.y + (d[na.i * 3 + 1] ?? 0) * deformScale,
+        na.n.z + (d[na.i * 3 + 2] ?? 0) * deformScale,
+        nb.n.x + (d[nb.i * 3] ?? 0) * deformScale,
+        nb.n.y + (d[nb.i * 3 + 1] ?? 0) * deformScale,
+        nb.n.z + (d[nb.i * 3 + 2] ?? 0) * deformScale,
+      );
+    };
+    for (const [a, b, c, dd] of boundaryQuadFaceIds) {
+      addEdge(a, b);
+      addEdge(b, c);
+      addEdge(c, dd);
+      addEdge(dd, a);
+    }
+    for (const [a, b, c] of boundaryTriFaceIds) {
+      addEdge(a, b);
+      addEdge(b, c);
+      addEdge(c, a);
+    }
+    return segs.length > 0 ? new Float32Array(segs) : null;
+  }, [result, boundaryQuadFaceIds, boundaryTriFaceIds, nodeMap, deformScale]);
 
   const barLines = useMemo(
     () =>
@@ -710,22 +750,6 @@ export function MeshScene() {
     return arrows;
   }, [loadGroups, nodes, nodeMap]);
 
-  const volMeshPositions = useMemo(() => {
-    if (!volMesh || viewRepr !== "volume") return null;
-    const { points, edges } = volMesh;
-    const buf = new Float32Array(edges.length * 6);
-    let i = 0;
-    for (const [a, b] of edges) {
-      buf[i++] = points[a][0];
-      buf[i++] = points[a][1];
-      buf[i++] = points[a][2];
-      buf[i++] = points[b][0];
-      buf[i++] = points[b][1];
-      buf[i++] = points[b][2];
-    }
-    return buf;
-  }, [volMesh, viewRepr]);
-
   const stepGeometry = useMemo(() => {
     if (!stepSurface || stepSurface.triangles.length === 0) return null;
     const { points, triangles } = stepSurface;
@@ -782,10 +806,18 @@ export function MeshScene() {
   // even though the solved `result` is still held in the store.
   const showResult = !!result && mode === "results";
 
+  // The CAD tessellation stands in for the geometry representation (and is the
+  // only thing to show before a mesh exists). It must never paint over a solved
+  // result, so it is suppressed in results mode.
   const showStepSurface =
-    (viewRepr === "geometry" || nodes.length === 0) && !!stepGeometry;
-  const showFemEdges = viewRepr === "surface" || viewRepr === "wireframe";
-  const solidFill = viewRepr !== "wireframe";
+    !showResult &&
+    (viewRepr === "geometry" || nodes.length === 0) &&
+    !!stepGeometry;
+  // Edge overlays per representation: Geometry → none, Surface → boundary edges,
+  // Volume → every element edge, Wireframe → every element edge with no fill.
+  const showSolid = viewRepr !== "wireframe";
+  const showSurfaceEdges = viewRepr === "surface";
+  const showAllEdges = viewRepr === "volume" || viewRepr === "wireframe";
 
   return (
     <group>
@@ -805,13 +837,26 @@ export function MeshScene() {
           <meshStandardMaterial
             color="#b8cce4"
             side={THREE.DoubleSide}
-            wireframe={!solidFill}
+            wireframe={!showSolid}
           />
         </mesh>
       )}
 
-      {/* Element edges — shown from mesh mode onward for the classic FEM wireframe look */}
-      {!showResult && showFemEdges && undeformedEdgePositions && (
+      {/* Surface (boundary) edges — Surface representation */}
+      {!showResult && showSurfaceEdges && undeformedSurfaceEdgePositions && (
+        <lineSegments>
+          <bufferGeometry>
+            <bufferAttribute
+              attach="attributes-position"
+              args={[undeformedSurfaceEdgePositions, 3]}
+            />
+          </bufferGeometry>
+          <lineBasicMaterial color="#2d4a6b" />
+        </lineSegments>
+      )}
+
+      {/* All element edges — Volume and Wireframe representations */}
+      {!showResult && showAllEdges && undeformedEdgePositions && (
         <lineSegments>
           <bufferGeometry>
             <bufferAttribute
@@ -845,8 +890,21 @@ export function MeshScene() {
         </mesh>
       )}
 
-      {/* Deformed wireframe overlay */}
-      {showResult && deformedEdgePositions && (
+      {/* Deformed surface (boundary) edges — Surface representation */}
+      {showResult && showSurfaceEdges && deformedSurfaceEdgePositions && (
+        <lineSegments>
+          <bufferGeometry>
+            <bufferAttribute
+              attach="attributes-position"
+              args={[deformedSurfaceEdgePositions, 3]}
+            />
+          </bufferGeometry>
+          <lineBasicMaterial color="#1e3a5f" transparent opacity={0.4} />
+        </lineSegments>
+      )}
+
+      {/* Deformed element edges — Volume and Wireframe representations */}
+      {showResult && showAllEdges && deformedEdgePositions && (
         <lineSegments>
           <bufferGeometry>
             <bufferAttribute
@@ -990,19 +1048,6 @@ export function MeshScene() {
           );
         })}
 
-      {/* Volume mesh wireframe */}
-      {volMeshPositions && (
-        <lineSegments>
-          <bufferGeometry>
-            <bufferAttribute
-              attach="attributes-position"
-              args={[volMeshPositions, 3]}
-            />
-          </bufferGeometry>
-          <lineBasicMaterial color="#ff8844" />
-        </lineSegments>
-      )}
-
       {/* STEP surface mesh — visible in geometry mode only; replaced by FEM mesh in mesh mode */}
       {showStepSurface && stepGeometry && (
         <mesh>
@@ -1019,7 +1064,7 @@ export function MeshScene() {
           <meshStandardMaterial
             color="#7a9bbf"
             side={THREE.DoubleSide}
-            wireframe={!solidFill}
+            wireframe={!showSolid}
           />
         </mesh>
       )}

@@ -378,6 +378,9 @@ interface ModelState {
   surfaceFaceIds: number[] | null;
   viewRepr: "geometry" | "surface" | "volume" | "wireframe";
   showUndeformedOverlay: boolean;
+  // Deformation magnification applied to the result on top of the automatic
+  // fit-to-view scale. 1 = the default visible deformation, 0 = undeformed.
+  deformScale: number;
   stepImportError: string | null;
   setStepSurface(mesh: StepSurfaceMesh | null): void;
   setStepBytes(bytes: Uint8Array | null): void;
@@ -386,6 +389,7 @@ interface ModelState {
   setSurfaceFaceIds(ids: number[] | null): void;
   setViewRepr(v: "geometry" | "surface" | "volume" | "wireframe"): void;
   setShowUndeformedOverlay(v: boolean): void;
+  setDeformScale(v: number): void;
   setStepImportError(msg: string | null): void;
 
   // Mode navigation
@@ -492,6 +496,7 @@ export const useModelStore = create<ModelState>()(
     surfaceFaceIds: null,
     viewRepr: "surface" as const,
     showUndeformedOverlay: true,
+    deformScale: 1,
     stepImportError: null,
     nextMatId: 2,
     pickMode: null,
@@ -511,6 +516,10 @@ export const useModelStore = create<ModelState>()(
     setShowUndeformedOverlay: (v) =>
       set((s) => {
         s.showUndeformedOverlay = v;
+      }),
+    setDeformScale: (v) =>
+      set((s) => {
+        s.deformScale = v;
       }),
     setVolMesh: (mesh) =>
       set((s) => {
@@ -670,6 +679,7 @@ export const useModelStore = create<ModelState>()(
         s.result = a.result;
         s.resultType = a.resultType;
         s.viewRepr = a.viewRepr;
+        s.deformScale = 1;
         s.mode = a.mode;
         s.stepImportError = null;
         s.isRunning = false;
@@ -713,6 +723,7 @@ export const useModelStore = create<ModelState>()(
         s.surfaceTriangles = null;
         s.surfaceFaceIds = null;
         s.viewRepr = "surface";
+        s.deformScale = 1;
         s.nextMatId = 2;
         s.selectedFace = null;
         s.pickMode = null;
