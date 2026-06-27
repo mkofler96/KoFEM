@@ -311,12 +311,30 @@ self.onmessage = async (event: MessageEvent) => {
         elementOrder?: number;
       };
 
+      // The engine indexes vertices 0-based in the order they are added (mesh
+      // vertices below are emitted in node-array order). Stored node .id values
+      // are NOT those indices — saved analyses number nodes 1-based and .inp
+      // imports use arbitrary ids — so every node reference (element
+      // connectivity, constraints, loads, surface-load faces) must be remapped
+      // to its vertex index before reaching the engine. Passing a raw node id
+      // where the engine expects a vertex index reads past the vertex array and
+      // traps with "memory access out of bounds" (issue #288).
+      const vertexIndexById = new Map(nodes.map((n, i) => [n.id, i]));
+      const vid = (nodeId: number, context: string): number => {
+        const i = vertexIndexById.get(nodeId);
+        if (i === undefined)
+          throw new Error(
+            `${context} references unknown node id ${nodeId} — the model is inconsistent`,
+          );
+        return i;
+      };
+
       const tetrahedra = elements
         .filter((e) => e.type === "CTETRA")
-        .map((e) => e.nodeIds);
+        .map((e) => e.nodeIds.map((id) => vid(id, "CTETRA element")));
       const hexahedra = elements
         .filter((e) => e.type === "CHEXA")
-        .map((e) => e.nodeIds);
+        .map((e) => e.nodeIds.map((id) => vid(id, "CHEXA element")));
       if (tetrahedra.length === 0 && hexahedra.length === 0) {
         throw new Error(
           "No supported elements found. MFEM requires CTETRA or CHEXA elements — " +
@@ -351,39 +369,50 @@ self.onmessage = async (event: MessageEvent) => {
       // must reach the solver as an inhomogeneous essential BC (prescribed_dofs):
       // folding it into fixed_vertices/fixed_dofs would silently pin the DOF to
       // zero and discard the requested value (issue #216).
+      // Keyed by vertex index (vid), so the essential-DOF sets the engine
+      // receives line up with the remapped mesh connectivity above.
       const dofsByNode = new Map<number, Set<number>>();
       const prescribed_dofs: { vertex: number; dof: number; value: number }[] =
         [];
       for (const c of constraints) {
         if (c.dof > 2) continue;
+        const v = vid(c.nodeId, "constraint");
         const value = c.prescribedValue ?? 0;
         if (value === 0) {
-          if (!dofsByNode.has(c.nodeId)) dofsByNode.set(c.nodeId, new Set());
-          dofsByNode.get(c.nodeId)!.add(c.dof);
+          if (!dofsByNode.has(v)) dofsByNode.set(v, new Set());
+          dofsByNode.get(v)!.add(c.dof);
         } else {
-          prescribed_dofs.push({ vertex: c.nodeId, dof: c.dof, value });
+          prescribed_dofs.push({ vertex: v, dof: c.dof, value });
         }
       }
       const fixed_vertices: number[] = [];
       const fixed_dofs: { vertex: number; dofs: number[] }[] = [];
-      for (const [nodeId, dofSet] of dofsByNode) {
-        if (dofSet.size === 3) fixed_vertices.push(nodeId);
-        else fixed_dofs.push({ vertex: nodeId, dofs: [...dofSet].sort() });
+      for (const [vertex, dofSet] of dofsByNode) {
+        if (dofSet.size === 3) fixed_vertices.push(vertex);
+        else fixed_dofs.push({ vertex, dofs: [...dofSet].sort() });
       }
 
-      // Group translational force loads by node, accumulating into [fx, fy, fz]
+      // Group translational force loads by vertex index, accumulating [fx,fy,fz]
       const loadMap = new Map<number, [number, number, number]>();
       for (const load of loads) {
         if (load.dof > 2) continue;
-        if (!loadMap.has(load.nodeId)) loadMap.set(load.nodeId, [0, 0, 0]);
-        loadMap.get(load.nodeId)![load.dof] += load.value;
+        const v = vid(load.nodeId, "load");
+        if (!loadMap.has(v)) loadMap.set(v, [0, 0, 0]);
+        loadMap.get(v)![load.dof] += load.value;
       }
       const point_loads = [...loadMap.entries()].map(([vertex, force]) => ({
         vertex,
         force,
       }));
 
-      const surface_loads = surfaceLoads ?? [];
+      // Surface-load faces are node-id lists from the store; remap each to the
+      // engine's vertex indices so the boundary-element matcher finds them.
+      const surface_loads = (surfaceLoads ?? []).map((sl) => ({
+        ...sl,
+        faces: sl.faces.map((face) =>
+          face.map((id) => vid(id, "surface load face")),
+        ),
+      }));
       const bcs = {
         fixed_vertices,
         point_loads,

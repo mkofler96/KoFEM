@@ -70,6 +70,64 @@ test("?example= loads a pre-solved example into the app", async ({ page }) => {
   await expect(page.getByText(/Max \|U\|/)).toBeVisible({ timeout: 10_000 });
 });
 
+test("re-solving a loaded example does not trap on its node ids (#288)", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+
+  // The example .vtu numbers nodes 1-based, so a node id is NOT its 0-based
+  // vertex index. Re-running the solve used to hand those ids to the engine as
+  // vertex indices, reading past the vertex array and trapping with "memory
+  // access out of bounds". Load the example, then drive a fresh solve straight
+  // from the restored store state exactly as the Solve button does.
+  await page.goto("/app/?example=cantilever-beam");
+  await expect(page.locator("nav")).toBeVisible();
+  await page.waitForFunction(
+    () => !!(window as unknown as { __kofem?: unknown }).__kofem,
+  );
+  await expect
+    .poll(async () => (await readStore(page)).nodes, { timeout: 15_000 })
+    .toBeGreaterThan(0);
+
+  const outcome = await page.evaluate(async () => {
+    const win = window as unknown as {
+      __kofem: {
+        sendToWorker(name: string, payload: object): Promise<unknown>;
+      };
+      __kofemStore: { getState(): Record<string, unknown> };
+    };
+    const st = win.__kofemStore.getState();
+    try {
+      const r = (await win.__kofem.sendToWorker("solve", {
+        nodes: st.nodes,
+        elements: st.elements,
+        materials: st.materials,
+        properties: st.properties,
+        constraints: st.constraints,
+        loads: st.loads,
+        surfaceLoads: st.surfaceLoads,
+      })) as { displacements: number[]; vonMises: number[] };
+      return {
+        ok: true as const,
+        nNodes: (st.nodes as unknown[]).length,
+        nElems: (st.elements as unknown[]).length,
+        nDisp: r.displacements.length,
+        nVm: r.vonMises.length,
+      };
+    } catch (err) {
+      return { ok: false as const, error: (err as Error).message };
+    }
+  });
+
+  // The solve must complete — no WASM trap — and return one displacement vector
+  // per node and one von Mises scalar per element.
+  expect(outcome.ok).toBe(true);
+  if (outcome.ok) {
+    expect(outcome.nDisp).toBe(outcome.nNodes * 3);
+    expect(outcome.nVm).toBe(outcome.nElems);
+  }
+});
+
 test("?example= with an invalid id is rejected without a fetch", async ({
   page,
 }) => {
