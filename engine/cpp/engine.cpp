@@ -272,16 +272,18 @@ static TopoDS_Shape sew_faces_into_solid(const TopoDS_Shape& shape) {
     }
 
     if (nsolids == 0) {
-        printf("[occt] sew_faces_into_solid: sewed %d surface faces but found no "
-               "watertight shell — geometry is surface-only and not closed; "
-               "volume meshing cannot fill it (tol=%.4g mm)\n", nfaces, tol);
-        fflush(stdout);
+        // Diagnostic output: the printf/fflush return values are intentionally
+        // discarded (void cast) — a failed log write must not abort meshing.
+        (void)printf("[occt] sew_faces_into_solid: sewed %d surface faces but found no "
+                     "watertight shell — geometry is surface-only and not closed; "
+                     "volume meshing cannot fill it (tol=%.4g mm)\n", nfaces, tol);
+        (void)fflush(stdout);
         return shape;
     }
 
-    printf("[occt] sew_faces_into_solid: built %d solid(s) from %d surface faces "
-           "(sew tol=%.4g mm)\n", nsolids, nfaces, tol);
-    fflush(stdout);
+    (void)printf("[occt] sew_faces_into_solid: built %d solid(s) from %d surface faces "
+                 "(sew tol=%.4g mm)\n", nsolids, nfaces, tol);
+    (void)fflush(stdout);
 
     if (nsolids == 1)
         return TopoDS::Solid(TopExp_Explorer(solids, TopAbs_SOLID).Current());
