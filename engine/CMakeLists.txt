@@ -23,7 +23,20 @@ foreach(V OCCT_ROOT NETGEN_ROOT MFEM_ROOT)
 endforeach()
 
 # ── Engine target ─────────────────────────────────────────────────────────────
-add_executable(kofem_wasm_emcc cpp/engine.cpp cpp/netgen_glue.cpp cpp/brepfill_stubs.cpp)
+# engine.cpp is a thin Embind entry point; each pipeline stage is a focused
+# translation unit (issue #290).
+add_executable(kofem_wasm_emcc
+    cpp/engine.cpp
+    cpp/cad_io.cpp
+    cpp/tessellate.cpp
+    cpp/geometry_cache.cpp
+    cpp/mesh_netgen.cpp
+    cpp/solve_mfem.cpp
+    cpp/json_util.cpp
+    cpp/wasm_util.cpp
+    cpp/netgen_glue.cpp
+    cpp/brepfill_stubs.cpp
+)
 
 target_include_directories(kofem_wasm_emcc PRIVATE
     ${OCCT_ROOT}/include/opencascade
