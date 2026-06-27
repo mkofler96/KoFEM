@@ -1198,6 +1198,8 @@ function ResultsPanel() {
   const result = useModelStore((s) => s.result);
   const resultType = useModelStore((s) => s.resultType);
   const setResultType = useModelStore((s) => s.setResultType);
+  const deformScale = useModelStore((s) => s.deformScale);
+  const setDeformScale = useModelStore((s) => s.setDeformScale);
   const nodes = useModelStore((s) => s.nodes);
   const elements = useModelStore((s) => s.elements);
 
@@ -1234,6 +1236,33 @@ function ResultsPanel() {
             </option>
           ))}
         </select>
+
+        <div className={styles.sectionLabel}>Deformation scale</div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            marginBottom: 12,
+          }}
+        >
+          <input
+            type="range"
+            min={0}
+            max={3}
+            step={0.05}
+            value={deformScale}
+            onChange={(e) => setDeformScale(parseFloat(e.target.value))}
+            style={{ flex: 1 }}
+            aria-label="Deformation scale"
+          />
+          <span
+            className={styles.statVal}
+            style={{ minWidth: 38, textAlign: "right" }}
+          >
+            {deformScale.toFixed(2)}×
+          </span>
+        </div>
 
         <div className={styles.sectionLabel}>Result summary</div>
         {stats ? (

@@ -120,12 +120,15 @@ export function StatusBar() {
   const setShowUndeformedOverlay = useModelStore(
     (s) => s.setShowUndeformedOverlay,
   );
-  const volMesh = useModelStore((s) => s.volMesh);
   const stepSurface = useModelStore((s) => s.stepSurface);
 
   const hasGeometry = nodes.length > 0 || !!stepSurface;
   const hasSurface = nodes.length > 0;
-  const hasVolume = !!volMesh;
+  // A volume mesh exists whenever the model has 3D solid elements — their edges
+  // are what the "all tetrahedral" representation draws.
+  const hasVolume = elements.some(
+    (e) => e.type === "CTETRA" || e.type === "CHEXA",
+  );
 
   function isDisabled(id: ViewRepr) {
     if (id === "geometry" || id === "wireframe") return !hasGeometry;
