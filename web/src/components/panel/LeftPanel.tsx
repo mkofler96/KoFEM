@@ -1055,6 +1055,8 @@ function SolvePanel() {
   const setRunning = useModelStore((s) => s.setRunning);
   const setResult = useModelStore((s) => s.setResult);
   const setMode = useModelStore((s) => s.setMode);
+  const elementOrder = useModelStore((s) => s.elementOrder);
+  const setElementOrder = useModelStore((s) => s.setElementOrder);
   const [error, setError] = useState<string | null>(null);
 
   const meshOk = nodes.length > 0;
@@ -1080,6 +1082,7 @@ function SolvePanel() {
       constraints,
       loads,
       surfaceLoads,
+      elementOrder,
     })
       .then(({ displacements, vonMises }) => {
         setResult({
@@ -1163,6 +1166,18 @@ function SolvePanel() {
         <div className={styles.statRow}>
           <span className={styles.statKey}>Output</span>
           <span className={styles.statVal}>U, S, RF</span>
+        </div>
+        <div className={styles.statRow}>
+          <span className={styles.statKey}>Element order</span>
+          <select
+            className={styles.formSelect}
+            style={{ flex: "0 0 auto", width: 168 }}
+            value={elementOrder}
+            onChange={(e) => setElementOrder(Number(e.target.value))}
+          >
+            <option value={1}>Linear (1st order)</option>
+            <option value={2}>Quadratic (2nd order)</option>
+          </select>
         </div>
 
         <button

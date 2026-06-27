@@ -935,12 +935,26 @@ static std::string solve_linear_elastic(
     // fixed_vertices is the full-fixity shorthand: every translational component
     // (Ux, Uy, Uz) of the listed vertex is pinned.
     Array<int> ess_tdof;
+    // Per-vertex Dirichlet record (component mask + value). Used after the
+    // vertex-based loops below to extend each condition to the edge-midpoint DOFs
+    // that order ≥ 2 elements add, so a clamped/prescribed face stays fully
+    // constrained and not just at its corner nodes.
+    struct VDir {
+        std::array<bool, 3>   set{false, false, false};
+        std::array<double, 3> val{0.0, 0.0, 0.0};
+    };
+    std::map<int, VDir> vdir;
     for (unsigned i = 0; i < n_fixed; ++i) {
         int vi = fixed_js[i].as<int>();
         Array<int> vdofs;
         fespace.GetVertexVDofs(vi, vdofs);
         for (int j = 0; j < vdofs.Size(); ++j)
             ess_tdof.Append(vdofs[j]);
+        VDir& vd = vdir[vi];
+        for (int d = 0; d < dim && d < vdofs.Size(); ++d) {
+            vd.set[d] = true;
+            vd.val[d] = 0.0;
+        }
     }
 
     // fixed_dofs pins only the listed components of a vertex, leaving the others
@@ -960,8 +974,12 @@ static std::string solve_linear_elastic(
             fespace.GetVertexVDofs(vi, vdofs);
             for (unsigned c = 0; c < nc; ++c) {
                 int d = comps[c].as<int>();
-                if (d >= 0 && d < vdofs.Size())
+                if (d >= 0 && d < vdofs.Size()) {
                     ess_tdof.Append(vdofs[d]);
+                    VDir& vd = vdir[vi];
+                    vd.set[d] = true;
+                    vd.val[d] = 0.0;
+                }
             }
         }
     }
@@ -988,7 +1006,42 @@ static std::string solve_linear_elastic(
             if (d >= 0 && d < vdofs.Size()) {
                 ess_tdof.Append(vdofs[d]);
                 prescribed_vals.emplace_back(vdofs[d], value);
+                VDir& vd = vdir[vi];
+                vd.set[d] = true;
+                vd.val[d] = value;
             }
+        }
+    }
+
+    // Order-2 elements introduce one interior DOF per edge that the vertex-based
+    // loops above don't reach. Extend each Dirichlet condition to an edge's
+    // interior DOF when BOTH its endpoints carry that condition (in the same
+    // component): the midpoint value is the average of the endpoint values —
+    // exact for a clamped face (0) or a uniform/linear prescribed displacement.
+    // Edges straddling the border of a constrained region (only one endpoint
+    // constrained) stay free, the correct treatment of that border. Tetrahedral
+    // P2 faces carry no face-interior DOF, so this fully constrains a clamped
+    // face on the tet meshes the mesher produces. (A Q2 hex face's center DOF
+    // would be left free — negligible here and avoided in practice.)
+    if (order >= 2) {
+        int n_edges = mfem_mesh.GetNEdges();
+        for (int e = 0; e < n_edges; ++e) {
+            Array<int> ev;
+            mfem_mesh.GetEdgeVertices(e, ev);
+            auto it0 = vdir.find(ev[0]);
+            auto it1 = vdir.find(ev[1]);
+            if (it0 == vdir.end() || it1 == vdir.end()) continue;
+            Array<int> edofs;
+            fespace.GetEdgeInteriorDofs(e, edofs);
+            for (int k = 0; k < edofs.Size(); ++k)
+                for (int d = 0; d < dim; ++d) {
+                    if (!it0->second.set[d] || !it1->second.set[d]) continue;
+                    int vdof = fespace.DofToVDof(edofs[k], d);
+                    ess_tdof.Append(vdof);
+                    double avg = 0.5 * (it0->second.val[d] + it1->second.val[d]);
+                    if (avg != 0.0)
+                        prescribed_vals.emplace_back(vdof, avg);
+                }
         }
     }
 
@@ -1173,10 +1226,19 @@ static std::string solve_linear_elastic(
     // tet systems, producing NaN residuals that crash the WASM worker.
     GSSmoother prec(A_mat);
     CGSolver cg;
-    // 1e-1 tolerance is sufficient for visual FEM and converges in ~20 iterations
-    // (vs ~1000+ for 1e-6), keeping showcase solves under 60 s in WASM.
-    cg.SetRelTol(1e-1);
-    cg.SetMaxIter(1000);
+    // Order 1: a loose 1e-1 tolerance is enough for a visual linear-FEM field and
+    // converges in ~20 iterations (vs ~1000+ for 1e-6), keeping showcase solves
+    // under 60 s in WASM. Order ≥ 2: the quadratic field is only worth its extra
+    // DOFs if it's actually converged — a loose tolerance leaves visible noise in
+    // the recovered stress — so tighten to 1e-6 and allow more iterations. The
+    // user opts into this slower, more accurate solve via the element-order setting.
+    if (order >= 2) {
+        cg.SetRelTol(1e-6);
+        cg.SetMaxIter(5000);
+    } else {
+        cg.SetRelTol(1e-1);
+        cg.SetMaxIter(1000);
+    }
     cg.SetPrintLevel(1);  // print final iteration count to help diagnose convergence
     cg.SetPreconditioner(prec);
     cg.SetOperator(A_mat);

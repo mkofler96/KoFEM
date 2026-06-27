@@ -292,16 +292,24 @@ self.onmessage = async (event: MessageEvent) => {
         surfaceFaceIds: dto.surfaceFaceIds ?? null,
       });
     } else if (type === "solve") {
-      const { nodes, elements, materials, constraints, loads, surfaceLoads } =
-        payload as {
-          nodes: Node[];
-          elements: Element[];
-          materials: Material[];
-          properties: unknown[];
-          constraints: Constraint[];
-          loads: Load[];
-          surfaceLoads?: SurfaceLoad[];
-        };
+      const {
+        nodes,
+        elements,
+        materials,
+        constraints,
+        loads,
+        surfaceLoads,
+        elementOrder,
+      } = payload as {
+        nodes: Node[];
+        elements: Element[];
+        materials: Material[];
+        properties: unknown[];
+        constraints: Constraint[];
+        loads: Load[];
+        surfaceLoads?: SurfaceLoad[];
+        elementOrder?: number;
+      };
 
       const tetrahedra = elements
         .filter((e) => e.type === "CTETRA")
@@ -383,11 +391,19 @@ self.onmessage = async (event: MessageEvent) => {
         prescribed_dofs,
         surface_loads,
       };
+      // FE polynomial order, chosen in the frontend (Solver settings). Order 2
+      // (quadratic / second-order) adds edge-midpoint DOFs that resolve bending
+      // and stress gradients far better than linear tets, which lock in bending
+      // and smear stress concentrations to a single constant value per element
+      // (issue #215), at the cost of a slower solve. The engine extends the
+      // vertex Dirichlet BCs to the new edge DOFs so clamped/prescribed faces
+      // stay fully constrained. Defaults to 1 (linear) when the payload omits it.
+      const order = elementOrder ?? 1;
       const json = m().solve_linear_elastic(
         JSON.stringify(mesh),
         JSON.stringify(material),
         JSON.stringify(bcs),
-        1,
+        order,
       );
       const result = JSON.parse(json) as {
         displacements: number[];
