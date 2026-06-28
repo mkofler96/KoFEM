@@ -37,6 +37,47 @@ export interface BoundaryMeshTopo {
   faceIds?: number[]; // OCC face index per triangle (1-based); present when mesh came from STEP
 }
 
+export interface PickedFace {
+  nodeIds: number[];
+  axis: "X" | "Y" | "Z";
+  isMax: boolean;
+  label: string;
+}
+
+// Two picked faces are the same when they reference the same set of nodes.
+// pickFaceNodeIds returns a deterministic node-id set for a given CAD face, so a
+// set comparison is enough to detect re-selecting an already-picked face.
+export function sameFaceNodes(a: number[], b: number[]): boolean {
+  if (a.length !== b.length) return false;
+  const set = new Set(a);
+  return b.every((id) => set.has(id));
+}
+
+/**
+ * Fold a freshly picked face into the current selection.
+ *
+ * Re-selecting a face that is already in the selection removes it instead of
+ * adding a duplicate (#264); otherwise the face is appended. Faces are
+ * identified by their node-id set (see `sameFaceNodes`). The result is
+ * relabeled "Face 1..N" by position so labels stay contiguous after a toggle.
+ */
+export function toggleFaceSelection(
+  current: PickedFace[],
+  picked: PickedFace,
+): PickedFace[] {
+  const existingIdx = current.findIndex((f) =>
+    sameFaceNodes(f.nodeIds, picked.nodeIds),
+  );
+  const next =
+    existingIdx >= 0
+      ? current.filter((_, i) => i !== existingIdx)
+      : [...current, picked];
+  return next.map((f, i) => ({
+    ...f,
+    label: `Face ${i + 1} (${f.nodeIds.length} nodes)`,
+  }));
+}
+
 export function buildEdgeToTris(triangles: Tri[]): Map<string, number[]> {
   const edgeToTris = new Map<string, number[]>();
   for (let i = 0; i < triangles.length; i++) {

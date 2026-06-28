@@ -12,7 +12,11 @@
 //
 // Run: bun tests/test_face_pick.mjs   (from the web/ directory)
 
-import { buildBoundaryMeshTopo, pickFaceNodeIds } from "../src/lib/facePick.ts";
+import {
+  buildBoundaryMeshTopo,
+  pickFaceNodeIds,
+  toggleFaceSelection,
+} from "../src/lib/facePick.ts";
 
 // ── Geometry helpers ─────────────────────────────────────────────────────────
 
@@ -241,6 +245,44 @@ assert(
   "BFS: top cap does not bleed onto inner mantle nodes",
   innerOnlyNodes.every((v) => !pickedTop.has(v)),
 );
+
+// ── Test 5: toggleFaceSelection adds, toggles off, and relabels (#264) ────────
+
+console.log("\nTest 5: toggleFaceSelection (#264)");
+
+const faceA = { nodeIds: [1, 2, 3], axis: "X", isMax: true, label: "" };
+const faceB = { nodeIds: [4, 5, 6], axis: "Y", isMax: false, label: "" };
+
+// Picking two distinct faces accumulates both.
+let sel = toggleFaceSelection([], faceA);
+sel = toggleFaceSelection(sel, faceB);
+assert("two distinct picks accumulate", sel.length === 2);
+assert(
+  "faces relabeled by position",
+  sel[0].label === "Face 1 (3 nodes)" && sel[1].label === "Face 2 (3 nodes)",
+);
+
+// Re-picking the first face (same node set, any node order) removes it.
+const faceAReordered = {
+  nodeIds: [3, 1, 2],
+  axis: "X",
+  isMax: true,
+  label: "",
+};
+sel = toggleFaceSelection(sel, faceAReordered);
+assert("re-selecting a face removes it", sel.length === 1);
+assert(
+  "remaining face is the other one",
+  setsEqual(new Set(sel[0].nodeIds), new Set(faceB.nodeIds)),
+);
+assert(
+  "remaining face relabeled to Face 1",
+  sel[0].label === "Face 1 (3 nodes)",
+);
+
+// Toggling the last remaining face off empties the selection.
+sel = toggleFaceSelection(sel, faceB);
+assert("toggling the last face off clears selection", sel.length === 0);
 
 // ── Summary ───────────────────────────────────────────────────────────────────
 

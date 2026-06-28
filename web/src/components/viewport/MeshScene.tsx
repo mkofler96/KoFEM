@@ -7,7 +7,11 @@ import * as THREE from "three";
 import type { ThreeEvent } from "@react-three/fiber";
 import { useModelStore, loadKind } from "../../store/modelStore";
 import type { Node, ResultType } from "../../store/modelStore";
-import { buildBoundaryMeshTopo, pickFaceNodeIds } from "../../lib/facePick";
+import {
+  buildBoundaryMeshTopo,
+  pickFaceNodeIds,
+  toggleFaceSelection,
+} from "../../lib/facePick";
 import type { Vec3, Tri } from "../../lib/facePick";
 import { nodeVonMisesField } from "../../lib/resultField";
 
@@ -625,18 +629,22 @@ export function MeshScene() {
       isMax = normal.z > 0;
     }
 
-    const newFace = {
+    // Current selection = accumulated pending faces plus the active one.
+    // Re-selecting an already-picked face toggles it off instead of adding a
+    // duplicate (#264).
+    const current = selectedFace
+      ? [...pendingFaces, selectedFace]
+      : pendingFaces;
+    const next = toggleFaceSelection(current, {
       nodeIds: faceNodeIds,
-      label: `Face ${pendingFaces.length + 1} (${faceNodeIds.length} nodes)`,
       axis,
       isMax,
-    };
+      label: "",
+    });
 
-    // Every click adds to the selection; accumulate into pendingFaces.
-    if (selectedFace) {
-      setPendingFaces([...pendingFaces, selectedFace]);
-    }
-    setSelectedFace(newFace);
+    // Re-split into pending faces + the active (last) selection.
+    setPendingFaces(next.slice(0, -1));
+    setSelectedFace(next.length > 0 ? next[next.length - 1] : null);
   }
 
   // BC marker: centroid + quaternion that orients triangles outward from the model
