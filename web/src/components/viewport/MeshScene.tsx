@@ -4,7 +4,11 @@
 import { useMemo } from "react";
 import * as THREE from "three";
 import type { ThreeEvent } from "@react-three/fiber";
-import { useModelStore, loadKind } from "../../store/modelStore";
+import {
+  useModelStore,
+  loadKind,
+  loadComponents,
+} from "../../store/modelStore";
 import type { Node, ResultType } from "../../store/modelStore";
 import {
   buildBoundaryMeshTopo,
@@ -730,9 +734,8 @@ export function MeshScene() {
       if (kind === "pressure") {
         dir = new THREE.Vector3(mx - cx, my - cy, mz - cz);
       } else {
-        const d = [0, 0, 0];
-        d[g.dof] = g.totalForce;
-        dir = new THREE.Vector3(d[0], d[1], d[2]);
+        const vec = loadComponents(g);
+        dir = new THREE.Vector3(vec[0], vec[1], vec[2]);
       }
       if (dir.lengthSq() < 1e-30) continue;
       dir.normalize();
@@ -842,26 +845,26 @@ export function MeshScene() {
       if (totalArea < 1e-30) continue;
 
       // Force direction is shared by every node; pressure direction is per-node.
+      const force = loadComponents(g);
+      const forceMag = Math.hypot(force[0], force[1], force[2]);
       const forceDir = new THREE.Vector3();
       if (kind === "force") {
-        const d = [0, 0, 0];
-        d[g.dof] = g.totalForce;
-        forceDir.set(d[0], d[1], d[2]);
-        if (forceDir.lengthSq() < 1e-30) continue;
-        forceDir.normalize();
+        if (forceMag < 1e-30) continue;
+        forceDir.set(force[0], force[1], force[2]).normalize();
       }
-      const sign = g.totalForce < 0 ? -1 : 1;
+      // Pressure stores its (signed) magnitude in totalForce; positive pushes in.
+      const pressureSign = g.totalForce < 0 ? -1 : 1;
 
       for (const [id, a] of tribArea) {
         let dir: THREE.Vector3;
         let mag: number;
         if (kind === "force") {
           dir = forceDir;
-          mag = Math.abs(g.totalForce) * (a / totalArea);
+          mag = forceMag * (a / totalArea);
         } else {
           const acc = inward.get(id);
           if (!acc || acc.lengthSq() < 1e-30) continue;
-          dir = acc.clone().normalize().multiplyScalar(sign);
+          dir = acc.clone().normalize().multiplyScalar(pressureSign);
           mag = Math.abs(g.totalForce) * a; // p · Aᵢ
         }
         if (mag < 1e-30) continue;

@@ -121,6 +121,13 @@ export interface NamedLoadGroup {
   name: string; // e.g. "Load1"
   dof: number; // force: 0=Fx,1=Fy,2=Fz · moment: 3=Mx,4=My,5=Mz · pressure: unused
   totalForce: number; // force/moment magnitude (N, N·mm), or pressure magnitude (MPa)
+  // Componentwise force [Fx,Fy,Fz] (N) or moment [Mx,My,Mz] (N·mm) vector
+  // (issues #219, #190). Present on force/moment groups created via the
+  // componentwise UI, where it is the source of truth and supersedes
+  // dof/totalForce. Absent on pressure groups and on payloads saved before
+  // componentwise input existed — those reconstruct the vector from dof +
+  // totalForce via loadComponents().
+  components?: [number, number, number];
   faces: BcFaceEntry[];
   kind?: LoadKind;
 }
@@ -129,6 +136,37 @@ export interface NamedLoadGroup {
 // have no explicit `kind` (dof ≤ 2 ⇒ force, dof ≥ 3 ⇒ moment).
 export function loadKind(g: NamedLoadGroup): LoadKind {
   return g.kind ?? (g.dof <= 2 ? "force" : "moment");
+}
+
+// The force [Fx,Fy,Fz] (N) or moment [Mx,My,Mz] (N·mm) vector of a load group.
+// Uses the explicit componentwise vector when present, else reconstructs the
+// single-axis vector from the legacy dof + totalForce (force: axis 0–2; moment:
+// axis dof−3). Pressure groups have no vector and return zeros.
+export function loadComponents(g: NamedLoadGroup): [number, number, number] {
+  if (g.components) return g.components;
+  const vec: [number, number, number] = [0, 0, 0];
+  const kind = loadKind(g);
+  if (kind === "force" && g.dof >= 0 && g.dof <= 2) vec[g.dof] = g.totalForce;
+  else if (kind === "moment" && g.dof >= 3 && g.dof <= 5)
+    vec[g.dof - 3] = g.totalForce;
+  return vec;
+}
+
+// Legacy single-axis summary (primary axis + signed magnitude) of a componentwise
+// vector, stored alongside `components` so older readers and the pre-flight
+// fallback still see a sensible dof/totalForce. For a single non-zero component
+// this reproduces the vector exactly; for a general vector it names the first
+// non-zero axis. `components` remains the source of truth.
+function summarizeComponents(
+  components: [number, number, number],
+  kind: LoadKind,
+): { dof: number; totalForce: number } {
+  const found = components.findIndex((value) => value !== 0);
+  const axis = found < 0 ? 0 : found;
+  return {
+    dof: kind === "moment" ? axis + 3 : axis,
+    totalForce: components[axis],
+  };
 }
 
 // A work-equivalent surface load handed to the engine's boundary integrator.
@@ -217,12 +255,16 @@ function rebuildLoads(loadGroups: NamedLoadGroup[], nodes: Node[]): Load[] {
     // Force and pressure loads are applied as work-equivalent surface tractions
     // (rebuildSurfaceLoads), not lumped nodal forces — they are skipped here.
     if (loadKind(g) !== "moment") continue;
-    {
-      // Moment load (dof 3=Mx, 4=My, 5=Mz) — convert to equivalent nodal forces.
-      // For each face, find the centroid, then apply tangential forces F_i = M/S·(n̂×r_i)
+    // A moment may be specified componentwise [Mx,My,Mz]; each non-zero axis is
+    // converted independently and its nodal forces summed (superposition).
+    const moment = loadComponents(g);
+    for (let momentAxis = 0; momentAxis < 3; momentAxis++) {
+      const momentMag = moment[momentAxis]; // about x (0), y (1) or z (2)
+      if (momentMag === 0) continue;
+      // Moment about one axis — convert to equivalent nodal forces. For each
+      // face, find the centroid, then apply tangential forces F_i = M/S·(n̂×r_i)
       // where S = Σ|r_i⊥|² (perpendicular distance squared from moment axis).
       // This satisfies Σ(r_i × F_i) = M exactly with zero net force.
-      const momentAxis = g.dof - 3; // 0=x, 1=y, 2=z
       let skippedFaces = 0;
       for (const f of g.faces) {
         let cx = 0,
@@ -261,7 +303,7 @@ function rebuildLoads(loadGroups: NamedLoadGroup[], nodes: Node[]): Load[] {
           continue;
         }
 
-        const scale = g.totalForce / S;
+        const scale = momentMag / S;
         for (const nodeId of f.nodeIds) {
           const n = nodeById.get(nodeId);
           if (!n) continue;
@@ -284,11 +326,12 @@ function rebuildLoads(loadGroups: NamedLoadGroup[], nodes: Node[]): Load[] {
         }
       }
       if (skippedFaces > 0) {
+        const axisName = ["Mx", "My", "Mz"][momentAxis];
         console.warn(
-          `[moment load] "${g.name}": ${skippedFaces} of ${g.faces.length} ` +
-            "face(s) skipped — all of their nodes lie on the moment axis, so " +
-            "the applied moment is incomplete. Choose a different moment axis " +
-            "or face selection.",
+          `[moment load] "${g.name}" (${axisName}): ${skippedFaces} of ` +
+            `${g.faces.length} face(s) skipped — all of their nodes lie on the ` +
+            "moment axis, so the applied moment is incomplete. Choose a " +
+            "different moment axis or face selection.",
         );
       }
     }
@@ -318,9 +361,7 @@ function rebuildSurfaceLoads(
       if (kind === "pressure") {
         result.push({ type: "pressure", pressure: g.totalForce, faces });
       } else {
-        const force: [number, number, number] = [0, 0, 0];
-        force[g.dof] = g.totalForce;
-        result.push({ type: "force", force, faces });
+        result.push({ type: "force", force: loadComponents(g), faces });
       }
     }
   }
@@ -452,6 +493,7 @@ interface ModelState {
     dof: number,
     totalForce: number,
     kind?: LoadKind,
+    components?: [number, number, number],
   ): void;
   addFaceToLoadGroup(groupId: number, face: Omit<BcFaceEntry, "id">): void;
   removeFaceFromLoadGroup(groupId: number, faceId: number): void;
@@ -849,9 +891,10 @@ export const useModelStore = create<ModelState>()(
     // Load group actions
     createLoadGroup: (
       faces: Omit<BcFaceEntry, "id">[],
-      dof: number,
-      totalForce: number,
-      kind: LoadKind = dof <= 2 ? "force" : "moment",
+      dofArg: number,
+      totalForceArg: number,
+      kind: LoadKind = dofArg <= 2 ? "force" : "moment",
+      components?: [number, number, number],
     ) =>
       set((s) => {
         const faceEntries = faces.map((f) => ({
@@ -859,11 +902,17 @@ export const useModelStore = create<ModelState>()(
           label: f.label,
           nodeIds: f.nodeIds,
         }));
+        // A componentwise force/moment carries its vector in `components` (the
+        // source of truth); dof/totalForce are derived as a legacy summary.
+        const { dof, totalForce } = components
+          ? summarizeComponents(components, kind)
+          : { dof: dofArg, totalForce: totalForceArg };
         s.loadGroups.push({
           id: s.nextLoadGroupId,
           name: `Load${s.nextLoadGroupId}`,
           dof,
           totalForce,
+          ...(components ? { components } : {}),
           faces: faceEntries,
           kind,
         });
