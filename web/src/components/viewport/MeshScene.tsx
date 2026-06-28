@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useMemo } from "react";
-import { Line } from "@react-three/drei";
 import * as THREE from "three";
 import type { ThreeEvent } from "@react-three/fiber";
 import { useModelStore, loadKind } from "../../store/modelStore";
@@ -205,10 +204,6 @@ export function MeshScene() {
     () => elements.filter((e) => e.type === "CTETRA"),
     [elements],
   );
-  const barElements = useMemo(
-    () => elements.filter((e) => e.type === "CBAR" || e.type === "CBEAM"),
-    [elements],
-  );
 
   const boundaryQuadFaceIds = useMemo(
     () => extractBoundaryQuadFaceIds(hexElements),
@@ -380,17 +375,6 @@ export function MeshScene() {
     }
     return segs.length > 0 ? new Float32Array(segs) : null;
   }, [result, boundaryQuadFaceIds, boundaryTriFaceIds, nodeMap, deformScale]);
-
-  const barLines = useMemo(
-    () =>
-      barElements.map((el) =>
-        el.nodeIds.map((id) => {
-          const e = nodeMap.get(id)!;
-          return [e.n.x, e.n.y, e.n.z] as [number, number, number];
-        }),
-      ),
-    [barElements, nodeMap],
-  );
 
   // Per-node von Mises: volume-weighted average of the element-level stresses,
   // shared with the colorbar range in resultField so the two stay identical.
@@ -1027,11 +1011,6 @@ export function MeshScene() {
           <lineBasicMaterial color="#2d4a6b" />
         </lineSegments>
       )}
-
-      {/* Bar elements */}
-      {barLines.map((pts, i) => (
-        <Line key={`b-${i}`} points={pts} color="#1e3a5f" lineWidth={2} />
-      ))}
 
       {/* Deformed solid surface */}
       {showResult && deformedSurface && (

@@ -26,7 +26,7 @@ export interface CantileverModel {
     poisson: number;
     density: number;
   }[];
-  properties: { id: number; type: "PSOLID"; materialId: number }[];
+  properties: { id: number; materialId: number }[];
   bcGroups: {
     id: number;
     name: string;
@@ -92,7 +92,7 @@ export function buildCantilever(): CantileverModel {
   const materials = [
     { id: 1, name: "Steel", young: 210e9, poisson: 0.3, density: 7850 },
   ];
-  const properties = [{ id: 1, type: "PSOLID" as const, materialId: 1 }];
+  const properties = [{ id: 1, materialId: 1 }];
 
   // Fixed support at x=0
   const bcNodeIds: number[] = [];

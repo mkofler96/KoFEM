@@ -106,8 +106,13 @@ function MaterialForm({
           value={density}
           step="1e-9"
           onChange={(e) => setDensity(e.target.value)}
+          title="Stored with the material but not used by the current static solver (reserved for future gravity / inertial loads)."
         />
       </div>
+      <p className={styles.formNote}>
+        Not used by the current static solver — reserved for future gravity /
+        inertial loads.
+      </p>
       <div className={styles.formBtns}>
         <button className={styles.cancelBtn} onClick={onCancel}>
           Cancel
