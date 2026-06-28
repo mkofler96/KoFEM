@@ -7,6 +7,7 @@
 
 import axialBar from "./axial-bar.mjs";
 import cantilever from "./cantilever-bending.mjs";
+import cantileverP2 from "./cantilever-bending-p2.mjs";
 import beamTorsion from "./beam-torsion.mjs";
 import plateWithHole from "./plate-with-hole.mjs";
 import shaftTorsion from "./shaft-torsion.mjs";
@@ -17,6 +18,7 @@ import surfacePressure from "./surface-pressure.mjs";
 export default [
   axialBar,
   cantilever,
+  cantileverP2,
   beamTorsion,
   plateWithHole,
   shaftTorsion,

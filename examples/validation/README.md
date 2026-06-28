@@ -23,6 +23,7 @@ single-DOF test below) via `bun run test` in `web/`.
 | -------------------- | ------------------------------- | ----------------------------- |
 | Axial bar            | tip extension δ = P·L/(E·A)     | mechanics of materials        |
 | Cantilever beam      | tip deflection δ = P·L³/(3·E·I) | Euler–Bernoulli               |
+| Cantilever beam (P2) | δ on a coarse mesh, order 2     | Euler–Bernoulli               |
 | Square beam torsion  | angle of twist θ = T·L/(G·K)    | Saint-Venant torsion (square) |
 | Plate with a hole    | stress-concentration Kt ≈ 3     | Kirsch / Timoshenko & Goodier |
 | Hollow shaft torsion | angle of twist θ = T·L/(G·J)    | Saint-Venant torsion          |
@@ -35,9 +36,12 @@ See `REPORT.md` for the latest FE-vs-reference numbers.
 The engine targets interactive, in-browser solves, which sets two limits the
 cases are designed around:
 
-- **Order 1 only.** The CG solver uses a loose relative tolerance for speed; the
-  larger order-2 system does not converge under it, so all cases use linear
-  elements and refine the mesh instead.
+- **Mostly order 1.** Most cases use linear elements and refine the mesh, which
+  matches the fast interactive default. The **Cantilever beam (P2)** case opts
+  into order-2 elements, which the engine solves with a tighter 1e-6 CG
+  tolerance — on its deliberately coarse mesh, P1 shear-locks to ~30% error
+  while P2 lands under 2%, exercising the quadratic DOF path (edge-midpoint
+  Dirichlet extension) that the order-1 cases never reach.
 - **Displacement validates tighter than stress.** Displacements are the primary
   CG unknowns and land within a few percent (often < 1%). Element-wise stress is
   noisier, so the one stress case (plate with a hole) carries a wider band.
