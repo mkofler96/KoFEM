@@ -120,6 +120,7 @@ function buildVtu(example, result) {
         name: "Load1",
         dof: example.load.dof,
         totalForce: example.load.totalForce,
+        kind: example.load.dof <= 2 ? "force" : "moment",
         faces: [
           {
             id: 2,
@@ -273,21 +274,48 @@ function buildViewer(example, result) {
   };
 }
 
-// ── Load → nodal forces ───────────────────────────────────────────────────────
-// Mirrors web/src/store/modelStore.ts rebuildLoads so the solved field here is
-// identical to what the app shows when it reopens the .vtu:
-//   dof 0–2 (force)  — total force spread equally over the loaded face nodes
-//   dof 3–5 (moment) — tangential couple F = (M/S)·(axis × r) about the face
-//                      centroid, S = Σ|r⊥|² (zero net force, net moment = M)
-function pointLoadsFor(example) {
-  const { vertices } = example.mesh;
+// The element boundary faces (quads) of one loaded face: every hex face whose
+// four nodes all belong to the loaded node set. Mirrors loadedFaces() in
+// web/src/store/modelStore.ts — the engine matches these to its generated
+// boundary elements by sorted vertex set, so winding is irrelevant.
+function loadedQuads(hexahedra, nodeIds) {
+  const nodeSet = new Set(nodeIds);
+  const seen = new Set();
+  const faces = [];
+  for (const hex of hexahedra) {
+    for (const [a, b, c, d] of HEX_FACE_DEFS) {
+      const face = [hex[a], hex[b], hex[c], hex[d]];
+      if (!face.every((v) => nodeSet.has(v))) continue;
+      const key = [...face].sort((x, y) => x - y).join(",");
+      if (seen.has(key)) continue; // a boundary face is owned by one element
+      seen.add(key);
+      faces.push(face);
+    }
+  }
+  return faces;
+}
+
+// ── Load → solver loads ────────────────────────────────────────────────────────
+// Mirrors web/src/store/modelStore.ts so the solved field here is identical to
+// what the app shows when it reopens the .vtu:
+//   dof 0–2 (force)  — work-equivalent surface traction over the loaded face
+//                      (rebuildSurfaceLoads): f_i = ∫ N_i·t dS, resultant = F.
+//                      This replaced the old equal nodal split.
+//   dof 3–5 (moment) — tangential couple F = (M/S)·(axis × r) lumped to nodes
+//                      about the face centroid, S = Σ|r⊥|² (rebuildLoads):
+//                      zero net force, net moment = M.
+function solverLoadsFor(example) {
+  const { vertices, hexahedra } = example.mesh;
   const { dof, totalForce, nodes } = example.load;
   if (dof <= 2) {
-    return nodes.map((vertex) => {
-      const f = [0, 0, 0];
-      f[dof] = totalForce / nodes.length;
-      return { vertex, force: f };
-    });
+    const force = [0, 0, 0];
+    force[dof] = totalForce;
+    return {
+      point_loads: [],
+      surface_loads: [
+        { type: "force", force, faces: loadedQuads(hexahedra, nodes) },
+      ],
+    };
   }
   const axis = dof - 3; // 0=x, 1=y, 2=z
   const c = [0, 1, 2].map(
@@ -304,7 +332,7 @@ function pointLoadsFor(example) {
           : rx * rx + ry * ry;
   }
   const scale = totalForce / S;
-  return nodes.map((vertex) => {
+  const point_loads = nodes.map((vertex) => {
     const [rx, ry, rz] = [0, 1, 2].map((k) => vertices[vertex][k] - c[k]);
     const f =
       axis === 0
@@ -314,6 +342,7 @@ function pointLoadsFor(example) {
           : [-scale * ry, scale * rx, 0]; // Mz → (−ry, rx, 0)
     return { vertex, force: f };
   });
+  return { point_loads, surface_loads: [] };
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -323,9 +352,11 @@ mkdirSync(outDir, { recursive: true });
 
 const manifest = [];
 for (const ex of examples) {
+  const loads = solverLoadsFor(ex);
   const result = solve(ex.mesh, ex.material, {
     fixed_vertices: ex.fixed,
-    point_loads: pointLoadsFor(ex),
+    point_loads: loads.point_loads,
+    surface_loads: loads.surface_loads,
   });
 
   writeFileSync(join(outDir, `${ex.id}.vtu`), buildVtu(ex, result));

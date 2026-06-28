@@ -4,14 +4,20 @@
 // Definitions for the interactive examples shown at /examples/.
 //
 // Each example is a complete, self-contained KoFEM model: a structured hex
-// mesh, one fixed face, and one single-direction force applied over another
-// face. Because the load is a single force over a face, it maps exactly onto a
-// KoFEM "load group" (total force divided equally among the face nodes — the
-// same distribution rebuildLoads performs in the app), so the .vtu we emit
-// reopens in KoFEM web with identical boundary conditions.
+// mesh, one fixed face, and one single-direction force (or moment) applied over
+// another face. Forces map onto a KoFEM "load group" and are solved exactly as
+// the app does — a work-equivalent surface traction over the loaded face
+// (rebuildSurfaceLoads), not an equal nodal split — so the .vtu we emit reopens
+// in KoFEM web with an identical solved field.
+//
+// Units follow KoFEM's canonical system: N · mm · MPa · tonne. Lengths are in
+// mm, forces in N, moments in N·mm, stresses / E in MPa, density in t/mm³.
+// Steel: E = 210 GPa = 210000 MPa, ρ = 7850 kg/m³ = 7.85e-9 t/mm³ — the same
+// material the app seeds by default (web/src/store/modelStore.ts).
 //
 // These reuse the validation mesh generators so the geometry and physics match
-// the benchmarks in examples/validation/.
+// the benchmarks in examples/validation/ (those cases are stated in SI; here the
+// identical problems are expressed in the app's mm/MPa system).
 
 import {
   boxHexMesh,
@@ -20,7 +26,7 @@ import {
   nodesWhere,
 } from "../validation/lib/mesh.mjs";
 
-const STEEL = { young_modulus: 210e9, poisson_ratio: 0.3, density: 7850 };
+const STEEL = { young_modulus: 210000, poisson_ratio: 0.3, density: 7.85e-9 };
 
 function avg(values) {
   return values.reduce((s, v) => s + v, 0) / values.length;
@@ -29,10 +35,10 @@ function avg(values) {
 // ── Axial bar ─────────────────────────────────────────────────────────────────
 const axialBar = (() => {
   const E = STEEL.young_modulus,
-    L = 1.0,
-    W = 0.1,
-    H = 0.1,
-    P = 1.0e6;
+    L = 1000, // mm
+    W = 100,
+    H = 100, // mm
+    P = 1.0e6; // N
   const m = boxHexMesh(L, W, H, 20, 4, 4);
   return {
     id: "axial-bar",
@@ -49,7 +55,7 @@ const axialBar = (() => {
       label: "Axial load (+X)",
     },
     quantity: "tip extension δ",
-    unit: "m",
+    unit: "mm",
     reference: (P * L) / (E * (W * H)),
     referenceLabel: "δ = P·L / (E·A)",
     feValue: (r, loaded) => avg(loaded.map((v) => r.displacements[v * 3])),
@@ -59,10 +65,10 @@ const axialBar = (() => {
 // ── Cantilever beam ───────────────────────────────────────────────────────────
 const cantilever = (() => {
   const E = STEEL.young_modulus,
-    L = 1.0,
-    b = 0.1,
-    h = 0.1,
-    P = 1.0e4;
+    L = 1000, // mm
+    b = 100,
+    h = 100, // mm
+    P = 1.0e4; // N
   const I = (b * h ** 3) / 12;
   const m = boxHexMesh(L, b, h, 40, 4, 4);
   return {
@@ -80,7 +86,7 @@ const cantilever = (() => {
       label: "Tip load (−Y)",
     },
     quantity: "tip deflection δ",
-    unit: "m",
+    unit: "mm",
     reference: -(P * L ** 3) / (3 * E * I),
     referenceLabel: "δ = P·L³ / (3·E·I)",
     feValue: (r, loaded) => avg(loaded.map((v) => r.displacements[v * 3 + 1])),
@@ -91,9 +97,9 @@ const cantilever = (() => {
 const beamTorsion = (() => {
   const E = STEEL.young_modulus,
     nu = STEEL.poisson_ratio,
-    L = 1.0,
-    b = 0.1, // square side
-    T = 1000; // N·m about the beam axis (x)
+    L = 1000, // mm
+    b = 100, // square side (mm)
+    T = 1.0e6; // N·mm about the beam axis (x) — 1000 N·m
   const G = E / (2 * (1 + nu));
   // Square-section torsion constant K = β·b⁴ (Roark's b/a→1 limit, β ≈ 0.1408).
   const beta = 1 / 3 - 0.21 * (1 - 1 / 12);
@@ -144,10 +150,10 @@ const beamTorsion = (() => {
 
 // ── Plate with a hole ─────────────────────────────────────────────────────────
 const plateWithHole = (() => {
-  const a = 1.0,
-    b = 10.0,
-    t = 0.5,
-    sigma = 100e6;
+  const a = 1000, // hole radius (mm)
+    b = 10000, // plate half-width (mm)
+    t = 500, // thickness (mm)
+    sigma = 100; // remote tension (MPa)
   const m = plateWithHoleMesh(a, b, t, 12, 64, 2);
   const P = sigma * (2 * b * t);
   return {
@@ -179,6 +185,10 @@ const plateWithHole = (() => {
 })();
 
 // ── Cook's membrane ───────────────────────────────────────────────────────────
+// A normalized benchmark: geometry (48/44/60), E = 1 and F = 1 are the canonical
+// dimensionless values, and the converged tip deflection ≈ 23.9 is tied to them.
+// It stays unitless rather than being rescaled into mm/MPa — the result is the
+// same dimensionless 23.9 regardless of how the units are read.
 const cooksMembrane = (() => {
   const t = 1.0,
     F = 1.0;
