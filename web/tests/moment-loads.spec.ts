@@ -183,6 +183,45 @@ test("My moment produces correct net moment about y and zero net force", async (
   expect(result.netMy).toBeCloseTo(750, 6);
 });
 
+test("moment over a face whose nodes all lie on the moment axis is skipped with a warning", async ({
+  page,
+}) => {
+  await bootstrapCantilever(page);
+
+  const result = await page.evaluate(() => {
+    const warnings: string[] = [];
+    const origWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.map(String).join(" "));
+    };
+
+    const store = (window as unknown as { __kofemStore: Store }).__kofemStore;
+
+    // The y=0, z=0 edge of the cantilever: a line of nodes collinear with the
+    // global x axis. An Mx moment about that axis has zero perpendicular arm at
+    // every node (S = 0), so the face contributes no nodal forces.
+    const axisNodes = store
+      .getState()
+      .nodes.filter((n) => Math.abs(n.y) < 1e-9 && Math.abs(n.z) < 1e-9);
+    store.getState().clearLoads();
+    store.getState().createLoadGroup(
+      [{ label: "x-axis edge", nodeIds: axisNodes.map((n) => n.id) }],
+      3, // Mx — about the very axis the selected edge lies on
+      1000,
+    );
+
+    const loads = store.getState().loads;
+    console.warn = origWarn;
+    return { nodeCount: axisNodes.length, loads, warnings };
+  });
+
+  expect(result.nodeCount).toBeGreaterThan(1); // a real edge, not a single node
+  // A degenerate face yields no nodal forces …
+  expect(result.loads.length).toBe(0);
+  // … but the skip is surfaced, not silent.
+  expect(result.warnings.some((w) => w.includes("skipped"))).toBe(true);
+});
+
 // ── Solve integration ─────────────────────────────────────────────────────────
 
 test("solve worker completes when loads include a moment (Mz)", async ({
