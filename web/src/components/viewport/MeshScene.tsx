@@ -734,8 +734,8 @@ export function MeshScene() {
       if (kind === "pressure") {
         dir = new THREE.Vector3(mx - cx, my - cy, mz - cz);
       } else {
-        const f = loadComponents(g);
-        dir = new THREE.Vector3(f[0], f[1], f[2]);
+        const vec = loadComponents(g);
+        dir = new THREE.Vector3(vec[0], vec[1], vec[2]);
       }
       if (dir.lengthSq() < 1e-30) continue;
       dir.normalize();

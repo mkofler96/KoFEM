@@ -55,11 +55,11 @@ test("a componentwise force builds surface loads carrying the full vector", asyn
         "force",
         [100, -200, 300],
       );
-    const s = store.getState();
+    const state = store.getState();
     return {
-      group: s.loadGroups[0],
-      surfaceLoads: s.surfaceLoads,
-      nodalLoads: s.loads.length,
+      group: state.loadGroups[0],
+      surfaceLoads: state.surfaceLoads,
+      nodalLoads: state.loads.length,
     };
   });
 
@@ -139,7 +139,8 @@ test("a componentwise moment sums per-axis couples with zero net force", async (
       netMx = 0,
       netMz = 0;
     for (const l of loads) {
-      const n = nodeById.get(l.nodeId)!;
+      const n = nodeById.get(l.nodeId);
+      if (!n) throw new Error(`load references unknown node ${l.nodeId}`);
       const rx = n.x - cx,
         ry = n.y - cy,
         rz = n.z - cz;
@@ -176,7 +177,7 @@ test("a componentwise moment sums per-axis couples with zero net force", async (
 test("solve completes with a componentwise force load", async ({ page }) => {
   await bootstrapCantilever(page);
 
-  const result = (await page.evaluate(async () => {
+  const result = (await page.evaluate(() => {
     const store = (window as unknown as { __kofemStore: Store }).__kofemStore;
     const endNodes = store
       .getState()
@@ -192,7 +193,7 @@ test("solve completes with a componentwise force load", async ({ page }) => {
         [3000, -10000, 0],
       );
 
-    const s = store.getState() as unknown as {
+    const state = store.getState() as unknown as {
       nodes: unknown[];
       elements: unknown[];
       materials: unknown[];
@@ -209,13 +210,13 @@ test("solve completes with a componentwise force load", async ({ page }) => {
       }
     ).__kofem;
     return kofem.sendToWorker("solve", {
-      nodes: s.nodes,
-      elements: s.elements,
-      materials: s.materials,
-      properties: s.properties,
-      constraints: s.constraints,
-      loads: s.loads,
-      surfaceLoads: s.surfaceLoads,
+      nodes: state.nodes,
+      elements: state.elements,
+      materials: state.materials,
+      properties: state.properties,
+      constraints: state.constraints,
+      loads: state.loads,
+      surfaceLoads: state.surfaceLoads,
     });
   })) as { displacements: number[] };
 

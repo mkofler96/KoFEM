@@ -742,13 +742,13 @@ function ConstraintsPanel() {
       // and the all-zero vector (a no-op load that would be silently discarded).
       const noun = loadKindSel === "moment" ? "moment" : "force";
       const parsed = (loadKindSel === "moment" ? momentVec : forceVec).map(
-        (v) => parseFloat(v),
+        (comp) => parseFloat(comp),
       );
-      if (parsed.some((v) => !isFinite(v))) {
+      if (parsed.some((comp) => !isFinite(comp))) {
         setError(`Each ${noun} component must be a finite number`);
         return;
       }
-      if (parsed.every((v) => v === 0)) {
+      if (parsed.every((comp) => comp === 0)) {
         setError(`Specify a non-zero ${noun} component`);
         return;
       }

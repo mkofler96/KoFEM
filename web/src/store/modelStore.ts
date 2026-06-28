@@ -144,12 +144,12 @@ export function loadKind(g: NamedLoadGroup): LoadKind {
 // axis dof−3). Pressure groups have no vector and return zeros.
 export function loadComponents(g: NamedLoadGroup): [number, number, number] {
   if (g.components) return g.components;
-  const v: [number, number, number] = [0, 0, 0];
+  const vec: [number, number, number] = [0, 0, 0];
   const kind = loadKind(g);
-  if (kind === "force" && g.dof >= 0 && g.dof <= 2) v[g.dof] = g.totalForce;
+  if (kind === "force" && g.dof >= 0 && g.dof <= 2) vec[g.dof] = g.totalForce;
   else if (kind === "moment" && g.dof >= 3 && g.dof <= 5)
-    v[g.dof - 3] = g.totalForce;
-  return v;
+    vec[g.dof - 3] = g.totalForce;
+  return vec;
 }
 
 // Legacy single-axis summary (primary axis + signed magnitude) of a componentwise
@@ -161,9 +161,12 @@ function summarizeComponents(
   components: [number, number, number],
   kind: LoadKind,
 ): { dof: number; totalForce: number } {
-  const axis = components.findIndex((v) => v !== 0);
-  const a = axis < 0 ? 0 : axis;
-  return { dof: kind === "moment" ? a + 3 : a, totalForce: components[a] };
+  const found = components.findIndex((value) => value !== 0);
+  const axis = found < 0 ? 0 : found;
+  return {
+    dof: kind === "moment" ? axis + 3 : axis,
+    totalForce: components[axis],
+  };
 }
 
 // A work-equivalent surface load handed to the engine's boundary integrator.
