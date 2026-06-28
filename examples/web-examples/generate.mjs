@@ -273,6 +273,49 @@ function buildViewer(example, result) {
   };
 }
 
+// ── Load → nodal forces ───────────────────────────────────────────────────────
+// Mirrors web/src/store/modelStore.ts rebuildLoads so the solved field here is
+// identical to what the app shows when it reopens the .vtu:
+//   dof 0–2 (force)  — total force spread equally over the loaded face nodes
+//   dof 3–5 (moment) — tangential couple F = (M/S)·(axis × r) about the face
+//                      centroid, S = Σ|r⊥|² (zero net force, net moment = M)
+function pointLoadsFor(example) {
+  const { vertices } = example.mesh;
+  const { dof, totalForce, nodes } = example.load;
+  if (dof <= 2) {
+    return nodes.map((vertex) => {
+      const f = [0, 0, 0];
+      f[dof] = totalForce / nodes.length;
+      return { vertex, force: f };
+    });
+  }
+  const axis = dof - 3; // 0=x, 1=y, 2=z
+  const c = [0, 1, 2].map(
+    (k) => nodes.reduce((s, v) => s + vertices[v][k], 0) / nodes.length,
+  );
+  let S = 0;
+  for (const v of nodes) {
+    const [rx, ry, rz] = [0, 1, 2].map((k) => vertices[v][k] - c[k]);
+    S +=
+      axis === 0
+        ? ry * ry + rz * rz
+        : axis === 1
+          ? rx * rx + rz * rz
+          : rx * rx + ry * ry;
+  }
+  const scale = totalForce / S;
+  return nodes.map((vertex) => {
+    const [rx, ry, rz] = [0, 1, 2].map((k) => vertices[vertex][k] - c[k]);
+    const f =
+      axis === 0
+        ? [0, -scale * rz, scale * ry] // Mx → (0, −rz, ry)
+        : axis === 1
+          ? [scale * rz, 0, -scale * rx] // My → (rz, 0, −rx)
+          : [-scale * ry, scale * rx, 0]; // Mz → (−ry, rx, 0)
+    return { vertex, force: f };
+  });
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 const solve = await loadSolver();
@@ -282,11 +325,7 @@ const manifest = [];
 for (const ex of examples) {
   const result = solve(ex.mesh, ex.material, {
     fixed_vertices: ex.fixed,
-    point_loads: ex.load.nodes.map((vertex) => {
-      const f = [0, 0, 0];
-      f[ex.load.dof] = ex.load.totalForce / ex.load.nodes.length;
-      return { vertex, force: f };
-    }),
+    point_loads: pointLoadsFor(ex),
   });
 
   writeFileSync(join(outDir, `${ex.id}.vtu`), buildVtu(ex, result));

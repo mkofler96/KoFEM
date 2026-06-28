@@ -23,6 +23,7 @@ single-DOF test below) via `bun run test` in `web/`.
 | -------------------- | ------------------------------- | ----------------------------- |
 | Axial bar            | tip extension δ = P·L/(E·A)     | mechanics of materials        |
 | Cantilever beam      | tip deflection δ = P·L³/(3·E·I) | Euler–Bernoulli               |
+| Square beam torsion  | angle of twist θ = T·L/(G·K)    | Saint-Venant torsion (square) |
 | Plate with a hole    | stress-concentration Kt ≈ 3     | Kirsch / Timoshenko & Goodier |
 | Hollow shaft torsion | angle of twist θ = T·L/(G·J)    | Saint-Venant torsion          |
 | Cook's membrane      | top-corner deflection ≈ 23.9    | Cook (1974)                   |
