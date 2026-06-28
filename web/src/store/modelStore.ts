@@ -231,6 +231,7 @@ function rebuildLoads(loadGroups: NamedLoadGroup[], nodes: Node[]): Load[] {
       // where S = Σ|r_i⊥|² (perpendicular distance squared from moment axis).
       // This satisfies Σ(r_i × F_i) = M exactly with zero net force.
       const momentAxis = g.dof - 3; // 0=x, 1=y, 2=z
+      let skippedFaces = 0;
       for (const f of g.faces) {
         let cx = 0,
           cy = 0,
@@ -261,7 +262,12 @@ function rebuildLoads(loadGroups: NamedLoadGroup[], nodes: Node[]): Load[] {
           else if (momentAxis === 1) S += rx * rx + rz * rz;
           else S += rx * rx + ry * ry;
         }
-        if (S === 0) continue; // all nodes on the moment axis — undefined
+        if (S === 0) {
+          // All face nodes lie on the moment axis — the tangential force
+          // direction is undefined, so this face contributes no moment.
+          skippedFaces++;
+          continue;
+        }
 
         const scale = g.totalForce / S;
         for (const nodeId of f.nodeIds) {
@@ -284,6 +290,14 @@ function rebuildLoads(loadGroups: NamedLoadGroup[], nodes: Node[]): Load[] {
             result.push({ nodeId, dof: 1, value: scale * rx });
           }
         }
+      }
+      if (skippedFaces > 0) {
+        console.warn(
+          `[moment load] "${g.name}": ${skippedFaces} of ${g.faces.length} ` +
+            `face(s) skipped — all of their nodes lie on the moment axis, so ` +
+            `the applied moment is incomplete. Choose a different moment axis ` +
+            `or face selection.`,
+        );
       }
     }
   }
