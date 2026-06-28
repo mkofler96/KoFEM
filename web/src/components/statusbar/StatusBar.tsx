@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useModelStore } from "../../store/modelStore";
+import { useModelStore, loadKind } from "../../store/modelStore";
 import { APP_VERSION } from "../../lib/version";
 import styles from "./StatusBar.module.css";
 
@@ -112,6 +112,7 @@ export function StatusBar() {
   const constraints = useModelStore((s) => s.constraints);
   const loads = useModelStore((s) => s.loads);
   const result = useModelStore((s) => s.result);
+  const mode = useModelStore((s) => s.mode);
   const selectedFace = useModelStore((s) => s.selectedFace);
   const pickMode = useModelStore((s) => s.pickMode);
   const viewRepr = useModelStore((s) => s.viewRepr);
@@ -120,6 +121,9 @@ export function StatusBar() {
   const setShowUndeformedOverlay = useModelStore(
     (s) => s.setShowUndeformedOverlay,
   );
+  const loadGroups = useModelStore((s) => s.loadGroups);
+  const loadDisplay = useModelStore((s) => s.loadDisplay);
+  const setLoadDisplay = useModelStore((s) => s.setLoadDisplay);
   const stepSurface = useModelStore((s) => s.stepSurface);
 
   const hasGeometry = nodes.length > 0 || !!stepSurface;
@@ -140,6 +144,13 @@ export function StatusBar() {
   const hexCount = elements.filter((e) => e.type === "CHEXA").length;
   const tetCount = elements.filter((e) => e.type === "CTETRA").length;
   const meshOk = nodes.length > 0;
+
+  // Load glyphs are only drawn outside the deformed-result view, and only
+  // force/pressure groups produce them (moments carry no resultant arrow), so
+  // the resultant/nodal toggle is offered only when such an arrow is on screen.
+  const showingResult = !!result && mode === "results";
+  const showLoadDisplayToggle =
+    !showingResult && loadGroups.some((g) => loadKind(g) !== "moment");
 
   return (
     <div className={styles.bar}>
@@ -247,6 +258,40 @@ export function StatusBar() {
               />
             </svg>
             Undeformed
+          </button>
+        )}
+        {showLoadDisplayToggle && (
+          <button
+            onClick={() =>
+              setLoadDisplay(loadDisplay === "nodal" ? "resultant" : "nodal")
+            }
+            className={`${styles.reprBtn} ${loadDisplay === "nodal" ? styles.reprBtnActive : ""}`}
+            aria-label="Toggle per-node load display"
+            data-tooltip="Show the load on each node instead of a single resultant arrow"
+            style={{
+              width: "auto",
+              padding: "0 7px",
+              borderRadius: 5,
+              border: "1px solid #e2e5ea",
+            }}
+          >
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              width="13"
+              height="13"
+              style={{ marginRight: 4 }}
+            >
+              {/* three small down-arrows — the per-node load field */}
+              <path
+                d="M3 2v8M3 10l-1.6-1.8M3 10l1.6-1.8M8 2v9M8 11l-1.6-1.8M8 11l1.6-1.8M13 2v8M13 10l-1.6-1.8M13 10l1.6-1.8"
+                stroke="currentColor"
+                strokeWidth="1.1"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            Nodal loads
           </button>
         )}
       </div>

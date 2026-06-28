@@ -124,6 +124,13 @@ export interface NamedBcGroup {
 // loadKind().
 export type LoadKind = "force" | "moment" | "pressure";
 
+// How load glyphs are drawn in the viewport. "resultant" shows one arrow per
+// force/pressure group at the centroid of its loaded nodes (the statically
+// equivalent load the user specifies). "nodal" shows the work-equivalent load
+// each individual node carries — the per-node tributary share of the group total
+// — which is what actually reaches the solver as a surface traction (issue #196).
+export type LoadDisplay = "resultant" | "nodal";
+
 export interface NamedLoadGroup {
   id: number;
   name: string; // e.g. "Load1"
@@ -392,6 +399,9 @@ interface ModelState {
   surfaceFaceIds: number[] | null;
   viewRepr: "geometry" | "surface" | "volume" | "wireframe";
   showUndeformedOverlay: boolean;
+  // Whether load glyphs are drawn as a single resultant per group or as one
+  // arrow per loaded node (issue #196). A transient view setting, not persisted.
+  loadDisplay: LoadDisplay;
   // Deformation magnification applied to the result on top of the automatic
   // fit-to-view scale. 1 = the default visible deformation, 0 = undeformed.
   deformScale: number;
@@ -403,6 +413,7 @@ interface ModelState {
   setSurfaceFaceIds(ids: number[] | null): void;
   setViewRepr(v: "geometry" | "surface" | "volume" | "wireframe"): void;
   setShowUndeformedOverlay(v: boolean): void;
+  setLoadDisplay(v: LoadDisplay): void;
   setDeformScale(v: number): void;
   setStepImportError(msg: string | null): void;
 
@@ -510,6 +521,7 @@ export const useModelStore = create<ModelState>()(
     surfaceFaceIds: null,
     viewRepr: "surface" as const,
     showUndeformedOverlay: true,
+    loadDisplay: "resultant" as LoadDisplay,
     deformScale: 1,
     stepImportError: null,
     nextMatId: 2,
@@ -530,6 +542,10 @@ export const useModelStore = create<ModelState>()(
     setShowUndeformedOverlay: (v) =>
       set((s) => {
         s.showUndeformedOverlay = v;
+      }),
+    setLoadDisplay: (v) =>
+      set((s) => {
+        s.loadDisplay = v;
       }),
     setDeformScale: (v) =>
       set((s) => {
