@@ -12,30 +12,15 @@ export interface Node {
   z: number;
 }
 
-export type ElementType =
-  | "CBAR"
-  | "CBEAM"
-  | "CTRIA3"
-  | "CTRIA6"
-  | "CQUAD4"
-  | "CQUAD8"
-  | "CTETRA"
-  | "CPENTA"
-  | "CHEXA"
-  | "CPYRAM";
-
-export type PropertyType = "PBAR" | "PBEAM" | "PSHELL" | "PLPLANE" | "PSOLID";
+// The live OCCT → Netgen → MFEM pipeline only ever produces solid elements:
+// tetrahedra (CTETRA) and hexahedra (CHEXA). 1D (beam) and 2D (shell/plane)
+// element types are not modelled — restore the relevant variants here when
+// such support is actually added.
+export type ElementType = "CTETRA" | "CHEXA";
 
 export interface Property {
   id: number;
-  type: PropertyType;
   materialId: number;
-  thickness?: number;
-  planeFormulation?: "PlaneStress" | "PlaneStrain";
-  area?: number;
-  i1?: number;
-  i2?: number;
-  j?: number;
 }
 
 export interface Element {
@@ -489,7 +474,7 @@ const EMPTY_MODEL = {
     // loads (N), and results (mm, MPa) must share this system to stay consistent.
     { id: 1, name: "Steel", young: 210000, poisson: 0.3, density: 7.85e-9 },
   ] as Material[],
-  properties: [{ id: 1, type: "PSOLID" as const, materialId: 1 }] as Property[],
+  properties: [{ id: 1, materialId: 1 }] as Property[],
   constraints: [] as Constraint[],
   loads: [] as Load[],
   surfaceLoads: [] as SurfaceLoad[],
@@ -673,9 +658,9 @@ export const useModelStore = create<ModelState>()(
         s.modelName = name;
         s.viewRepr = "surface";
         s.fitViewTrigger++;
-        if (!s.properties.find((p) => p.type === "PSOLID")) {
+        if (s.properties.length === 0) {
           const matId = s.materials[0]?.id ?? 1;
-          s.properties = [{ id: 1, type: "PSOLID", materialId: matId }];
+          s.properties = [{ id: 1, materialId: matId }];
         }
       }),
 
@@ -735,7 +720,7 @@ export const useModelStore = create<ModelState>()(
             density: 7.85e-9,
           },
         ];
-        s.properties = [{ id: 1, type: "PSOLID", materialId: 1 }];
+        s.properties = [{ id: 1, materialId: 1 }];
         s.bcGroups = [];
         s.loadGroups = [];
         s.constraints = [];

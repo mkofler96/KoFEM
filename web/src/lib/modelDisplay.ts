@@ -6,11 +6,3 @@ export function fmt(v: number, digits = 3) {
     return v.toExponential(digits);
   return v.toPrecision(digits + 1);
 }
-
-export const PROP_TYPE_LABEL: Record<string, string> = {
-  PSOLID: "3-D Solid",
-  PSHELL: "Shell",
-  PLPLANE: "Plane",
-  PBAR: "Bar/Beam",
-  PBEAM: "Beam",
-};

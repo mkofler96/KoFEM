@@ -83,9 +83,9 @@ export interface AnalysisState {
 }
 
 // Setup state embedded as JSON in the "KoFEM" FieldData string array.
-// `elementTypes` disambiguates element types that share a VTK cell type
-// (e.g. CBAR vs CBEAM are both VTK_LINE); the mesh itself lives in the
-// native VTU sections.
+// `elementTypes` records the source element type of each cell so the
+// round-trip preserves it independently of the VTK cell-type number; the
+// mesh itself lives in the native VTU sections.
 interface KofemFieldDataV1 {
   format: typeof ANALYSIS_FILE_FORMAT;
   version: 1;
@@ -112,23 +112,8 @@ interface KofemFieldDataV1 {
 
 function vtkCellType(type: ElementType, nNodes: number): number {
   switch (type) {
-    case "CBAR":
-    case "CBEAM":
-      return 3; // VTK_LINE
-    case "CTRIA3":
-      return 5; // VTK_TRIANGLE
-    case "CTRIA6":
-      return 22; // VTK_QUADRATIC_TRIANGLE
-    case "CQUAD4":
-      return 9; // VTK_QUAD
-    case "CQUAD8":
-      return 23; // VTK_QUADRATIC_QUAD
     case "CTETRA":
       return nNodes === 10 ? 24 : 10; // VTK_(QUADRATIC_)TETRA
-    case "CPYRAM":
-      return nNodes === 13 ? 27 : 14; // VTK_(QUADRATIC_)PYRAMID
-    case "CPENTA":
-      return nNodes === 15 ? 26 : 13; // VTK_(QUADRATIC_)WEDGE
     case "CHEXA":
       return nNodes === 20 ? 25 : 12; // VTK_(QUADRATIC_)HEXAHEDRON
   }
@@ -323,18 +308,7 @@ export function analysisFileName(modelName: string): string {
 
 const APP_MODES: AppMode[] = ["geometry", "constraints", "solve", "results"];
 const VIEW_REPRS = ["geometry", "surface", "volume", "wireframe"] as const;
-const ELEMENT_TYPES: ElementType[] = [
-  "CBAR",
-  "CBEAM",
-  "CTRIA3",
-  "CTRIA6",
-  "CQUAD4",
-  "CQUAD8",
-  "CTETRA",
-  "CPENTA",
-  "CHEXA",
-  "CPYRAM",
-];
+const ELEMENT_TYPES: ElementType[] = ["CTETRA", "CHEXA"];
 
 function dataArrayContent(xml: string, name: string): string {
   const m = xml.match(
