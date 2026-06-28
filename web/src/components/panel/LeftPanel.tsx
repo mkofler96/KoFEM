@@ -2,10 +2,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useState, useRef, useEffect, type ChangeEvent } from "react";
-import { useModelStore, RESULT_TYPES, loadKind } from "../../store/modelStore";
+import {
+  useModelStore,
+  RESULT_TYPES,
+  loadKind,
+  loadComponents,
+} from "../../store/modelStore";
 import type {
   AppMode,
+  LoadKind,
   Material,
+  NamedLoadGroup,
   Node,
   Element,
   ResultType,
@@ -586,6 +593,19 @@ function GeometryPanel() {
 
 // ── Constraints mode ──────────────────────────────────────────────────────────
 
+// One-line summary of a load group for the group list: pressure magnitude, or
+// the non-zero force/moment components (e.g. "Fx = 100, Fz = -50 N").
+function loadGroupMeta(g: NamedLoadGroup): string {
+  const kind = loadKind(g);
+  if (kind === "pressure") return `p = ${fmt(g.totalForce)} MPa`;
+  const labels = kind === "moment" ? ["Mx", "My", "Mz"] : ["Fx", "Fy", "Fz"];
+  const unit = kind === "moment" ? "N·mm" : "N";
+  const parts = loadComponents(g)
+    .map((v, i) => (v !== 0 ? `${labels[i]} = ${fmt(v)}` : null))
+    .filter((p): p is string => p !== null);
+  return `${parts.join(", ")} ${unit}`;
+}
+
 function ConstraintsPanel() {
   const nodes = useModelStore((s) => s.nodes);
   const bcGroups = useModelStore((s) => s.bcGroups);
@@ -616,17 +636,27 @@ function ConstraintsPanel() {
     false,
     false,
   ]);
-  const [loadDof, setLoadDof] = useState(1);
-  const [loadForce, setLoadForce] = useState("-10000");
+  // A load is defined in two steps (issues #219, #190): pick the kind, then
+  // prescribe each component on its own — like the displacement BC above. Force
+  // and moment carry a [x,y,z] vector; pressure is a single scalar.
+  const [loadKindSel, setLoadKindSel] = useState<LoadKind>("force");
+  const [forceVec, setForceVec] = useState<[string, string, string]>([
+    "0",
+    "-10000",
+    "0",
+  ]);
+  const [momentVec, setMomentVec] = useState<[string, string, string]>([
+    "0",
+    "0",
+    "1000",
+  ]);
+  const [pressureVal, setPressureVal] = useState("10");
   const [bcValue, setBcValue] = useState("0");
   const [error, setError] = useState<string | null>(null);
 
   const DOF_LABELS = ["Ux", "Uy", "Uz", "Rx", "Ry", "Rz"];
-  // Indices 0–5 are direction DOFs (Fx…Mz); index 6 is the directionless pressure
-  // load. Force/pressure loads are applied as work-equivalent surface tractions.
-  const LOAD_LABELS = ["Fx", "Fy", "Fz", "Mx", "My", "Mz", "Pressure"];
-  const PRESSURE_OPTION = 6;
-  const isPressureLoad = loadDof === PRESSURE_OPTION;
+  const FORCE_LABELS = ["Fx", "Fy", "Fz"];
+  const MOMENT_LABELS = ["Mx", "My", "Mz"];
 
   // Boundary conditions and loads reference mesh nodes, so they can only be
   // defined once a volume mesh exists.
@@ -697,25 +727,36 @@ function ConstraintsPanel() {
     }));
     if (targetLoadGroup) {
       for (const fe of faceEntries) addFaceToLoadGroup(targetLoadGroup.id, fe);
-    } else {
-      // A zero force is a no-op load: it contributes nothing to the RHS and the
-      // solver returns a plausible-looking field with the input silently
+    } else if (loadKindSel === "pressure") {
+      // A zero pressure is a no-op load: it contributes nothing to the RHS and
+      // the solver returns a plausible-looking field with the input silently
       // discarded. Reject it (and non-finite input) instead of coercing to 0.
-      const value = parseFloat(loadForce);
-      if (!isFinite(value) || value === 0) {
-        setError(
-          isPressureLoad
-            ? "Pressure must be a non-zero finite number"
-            : "Load force must be a non-zero finite number",
-        );
+      const p = parseFloat(pressureVal);
+      if (!isFinite(p) || p === 0) {
+        setError("Pressure must be a non-zero finite number");
         return;
       }
-      createLoadGroup(
-        faceEntries,
-        isPressureLoad ? 0 : loadDof,
-        value,
-        isPressureLoad ? "pressure" : loadDof <= 2 ? "force" : "moment",
+      createLoadGroup(faceEntries, 0, p, "pressure");
+    } else {
+      // Force / moment, prescribed componentwise. Reject non-finite components
+      // and the all-zero vector (a no-op load that would be silently discarded).
+      const noun = loadKindSel === "moment" ? "moment" : "force";
+      const parsed = (loadKindSel === "moment" ? momentVec : forceVec).map(
+        (v) => parseFloat(v),
       );
+      if (parsed.some((v) => !isFinite(v))) {
+        setError(`Each ${noun} component must be a finite number`);
+        return;
+      }
+      if (parsed.every((v) => v === 0)) {
+        setError(`Specify a non-zero ${noun} component`);
+        return;
+      }
+      createLoadGroup(faceEntries, 0, 0, loadKindSel, [
+        parsed[0],
+        parsed[1],
+        parsed[2],
+      ]);
     }
     setError(null);
     setPickMode(null);
@@ -937,40 +978,75 @@ function ConstraintsPanel() {
 
                 {allPickedFaces.length > 0 && !targetLoadGroup && (
                   <>
+                    {/* Step 1 — pick the load kind. */}
                     <div className={styles.formRow}>
-                      <span className={styles.formLabel}>DOF</span>
+                      <span className={styles.formLabel}>Type</span>
                       <select
                         className={styles.formSelect}
-                        value={loadDof}
-                        onChange={(e) => setLoadDof(Number(e.target.value))}
+                        value={loadKindSel}
+                        onChange={(e) =>
+                          setLoadKindSel(e.target.value as LoadKind)
+                        }
                       >
-                        {LOAD_LABELS.map((d, i) => (
-                          <option key={d} value={i}>
-                            {d}
-                          </option>
-                        ))}
+                        <option value="force">Force</option>
+                        <option value="moment">Moment</option>
+                        <option value="pressure">Pressure</option>
                       </select>
                     </div>
-                    <div className={styles.formRow}>
-                      <span className={styles.formLabel}>
-                        {isPressureLoad
-                          ? "Pressure (MPa)"
-                          : loadDof <= 2
-                            ? "Total (N)"
-                            : "Total (N·m)"}
-                      </span>
-                      <input
-                        className={styles.formInput}
-                        type="number"
-                        value={loadForce}
-                        step="100"
-                        onChange={(e) => setLoadForce(e.target.value)}
-                      />
-                    </div>
+
+                    {/* Step 2 — prescribe each component on its own. */}
+                    {loadKindSel === "pressure" ? (
+                      <div className={styles.formRow}>
+                        <span className={styles.formLabel}>Pressure (MPa)</span>
+                        <input
+                          className={styles.formInput}
+                          type="number"
+                          value={pressureVal}
+                          step="1"
+                          onChange={(e) => setPressureVal(e.target.value)}
+                        />
+                      </div>
+                    ) : (
+                      (loadKindSel === "moment"
+                        ? MOMENT_LABELS
+                        : FORCE_LABELS
+                      ).map((label, i) => {
+                        const vec =
+                          loadKindSel === "moment" ? momentVec : forceVec;
+                        const setVec =
+                          loadKindSel === "moment" ? setMomentVec : setForceVec;
+                        const unit = loadKindSel === "moment" ? "N·mm" : "N";
+                        return (
+                          <div className={styles.formRow} key={label}>
+                            <span className={styles.formLabel}>
+                              {label} ({unit})
+                            </span>
+                            <input
+                              className={styles.formInput}
+                              type="number"
+                              value={vec[i]}
+                              step="100"
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setVec((p) => {
+                                  const next = [...p] as [
+                                    string,
+                                    string,
+                                    string,
+                                  ];
+                                  next[i] = value;
+                                  return next;
+                                });
+                              }}
+                            />
+                          </div>
+                        );
+                      })
+                    )}
                     <div className={styles.pickNote}>
-                      {isPressureLoad
+                      {loadKindSel === "pressure"
                         ? "applied as p·n̂ over each face (work-equivalent)"
-                        : loadDof <= 2
+                        : loadKindSel === "force"
                           ? "applied as a work-equivalent surface traction"
                           : "distributed as equivalent nodal forces"}
                     </div>
@@ -996,13 +1072,7 @@ function ConstraintsPanel() {
                 <div className={styles.bcGroupHeader}>
                   <span className={styles.loadDot} />
                   <span className={styles.bcGroupName}>{g.name}</span>
-                  <span className={styles.bcGroupMeta}>
-                    {loadKind(g) === "pressure"
-                      ? `p = ${fmt(g.totalForce)} MPa`
-                      : `${LOAD_LABELS[g.dof]} = ${fmt(g.totalForce)} ${
-                          g.dof <= 2 ? "N" : "N·m"
-                        }`}
-                  </span>
+                  <span className={styles.bcGroupMeta}>{loadGroupMeta(g)}</span>
                   <div className={styles.treeItemActions}>
                     <button
                       className={styles.iconBtn}
