@@ -28,8 +28,9 @@ const pkg = join(here, "../../../web/src/wasm/pkg");
  *               surface_loads:[{ type:"force"|"pressure"|"traction",
  *                                faces:[[a,b,c(,d)]...],
  *                                force?:[fx,fy,fz], pressure?:p }...] }
- *   order:    FE polynomial order (default 1; order 2 is unreliable with the
- *             engine's loose CG tolerance — keep validation cases at order 1).
+ *   order:    FE polynomial order (default 1). Order 2 (quadratic) elements use
+ *             the engine's tight 1e-6 CG tolerance and are exercised by the
+ *             cantilever-bending-p2 case (see solve_mfem.cpp, order ≥ 2 path).
  * Returns { displacements:number[] (3/node), von_mises:number[] (1/elem) }.
  */
 export async function loadSolver() {
