@@ -294,9 +294,9 @@ function rebuildLoads(loadGroups: NamedLoadGroup[], nodes: Node[]): Load[] {
       if (skippedFaces > 0) {
         console.warn(
           `[moment load] "${g.name}": ${skippedFaces} of ${g.faces.length} ` +
-            `face(s) skipped — all of their nodes lie on the moment axis, so ` +
-            `the applied moment is incomplete. Choose a different moment axis ` +
-            `or face selection.`,
+            "face(s) skipped — all of their nodes lie on the moment axis, so " +
+            "the applied moment is incomplete. Choose a different moment axis " +
+            "or face selection.",
         );
       }
     }
