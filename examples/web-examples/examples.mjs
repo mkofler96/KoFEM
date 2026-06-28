@@ -87,6 +87,61 @@ const cantilever = (() => {
   };
 })();
 
+// ── Square beam under torsion ─────────────────────────────────────────────────
+const beamTorsion = (() => {
+  const E = STEEL.young_modulus,
+    nu = STEEL.poisson_ratio,
+    L = 1.0,
+    b = 0.1, // square side
+    T = 1000; // N·m about the beam axis (x)
+  const G = E / (2 * (1 + nu));
+  // Square-section torsion constant K = β·b⁴ (Roark's b/a→1 limit, β ≈ 0.1408).
+  const beta = 1 / 3 - 0.21 * (1 - 1 / 12);
+  const K = beta * b ** 4;
+  const m = boxHexMesh(L, b, b, 20, 6, 6);
+  const tip = nodesWhere(m.vertices, (x) => x >= L - 1e-9);
+  // Cross-section centroid of the loaded face = the torsion axis.
+  const cy = avg(tip.map((v) => m.vertices[v][1]));
+  const cz = avg(tip.map((v) => m.vertices[v][2]));
+  return {
+    id: "beam-torsion",
+    title: "Square beam under torsion",
+    blurb:
+      "The same cantilever beam, now twisted by a torque about its own axis instead of bent. The free-end rotation matches Saint-Venant torsion of a square section, θ = T·L / (G·K).",
+    mesh: { vertices: m.vertices, hexahedra: m.hexahedra },
+    material: { name: "Steel", ...STEEL },
+    fixed: nodesWhere(m.vertices, (x) => x <= 1e-9),
+    // dof 3 = moment about x (Mx); the app's rebuildLoads turns this into the
+    // tangential ∝ r couple, and the generator applies the same conversion.
+    load: {
+      dof: 3,
+      totalForce: T,
+      nodes: tip,
+      label: "Torque (about X)",
+    },
+    quantity: "angle of twist θ",
+    unit: "rad",
+    reference: (T * L) / (G * K),
+    referenceLabel: "θ = T·L / (G·K)",
+    // θ = mean of (r × u)_x / r² over the free-end face.
+    feValue: (r, loaded) => {
+      let s = 0,
+        n = 0;
+      for (const v of loaded) {
+        const y = m.vertices[v][1] - cy,
+          z = m.vertices[v][2] - cz;
+        const r2 = y * y + z * z;
+        if (r2 < 1e-12) continue;
+        const uy = r.displacements[v * 3 + 1],
+          uz = r.displacements[v * 3 + 2];
+        s += (y * uz - z * uy) / r2;
+        n++;
+      }
+      return s / n;
+    },
+  };
+})();
+
 // ── Plate with a hole ─────────────────────────────────────────────────────────
 const plateWithHole = (() => {
   const a = 1.0,
@@ -161,4 +216,10 @@ const cooksMembrane = (() => {
   };
 })();
 
-export default [axialBar, cantilever, plateWithHole, cooksMembrane];
+export default [
+  axialBar,
+  cantilever,
+  beamTorsion,
+  plateWithHole,
+  cooksMembrane,
+];
