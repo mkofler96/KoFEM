@@ -116,6 +116,10 @@ function vtkCellType(type: ElementType, nNodes: number): number {
       return nNodes === 10 ? 24 : 10; // VTK_(QUADRATIC_)TETRA
     case "CHEXA":
       return nNodes === 20 ? 25 : 12; // VTK_(QUADRATIC_)HEXAHEDRON
+    default:
+      throw new Error(
+        `Cannot serialize analysis: unknown element type "${type}"`,
+      );
   }
 }
 
