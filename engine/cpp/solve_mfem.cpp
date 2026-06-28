@@ -492,7 +492,7 @@ std::string solve_linear_elastic(
         cg.SetRelTol(1e-6);
         cg.SetMaxIter(5000);
     } else {
-        cg.SetRelTol(1e-1);
+        cg.SetRelTol(1e-6);
         cg.SetMaxIter(1000);
     }
     cg.SetPrintLevel(1);  // print final iteration count to help diagnose convergence
