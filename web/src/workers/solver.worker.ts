@@ -353,6 +353,12 @@ self.onmessage = async (event: MessageEvent) => {
           "solve: no material assigned — assign a material before running the solver",
         );
       }
+      if (materials.length > 1) {
+        throw new Error(
+          `Multi-material models are not yet supported: ${materials.length} materials defined. ` +
+            "Only a single material can be assigned. Remove all but one material before solving.",
+        );
+      }
       const material = {
         young_modulus: mat.young,
         poisson_ratio: mat.poisson,
