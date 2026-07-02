@@ -482,25 +482,32 @@ std::string solve_linear_elastic(
     // tet systems, producing NaN residuals that crash the WASM worker.
     GSSmoother prec(A_mat);
     CGSolver cg;
-    // Order 1: a loose 1e-1 tolerance is enough for a visual linear-FEM field and
-    // converges in ~20 iterations (vs ~1000+ for 1e-6), keeping showcase solves
-    // under 60 s in WASM. Order ≥ 2: the quadratic field is only worth its extra
-    // DOFs if it's actually converged — a loose tolerance leaves visible noise in
-    // the recovered stress — so tighten to 1e-6 and allow more iterations. The
-    // user opts into this slower, more accurate solve via the element-order setting.
-    if (order >= 2) {
-        cg.SetRelTol(1e-6);
-        cg.SetMaxIter(5000);
-    } else {
-        cg.SetRelTol(1e-6);
-        cg.SetMaxIter(1000);
-    }
+    // 1e-6 for both element orders: anything looser leaves visible noise in the
+    // recovered stress field (#192, #306). MaxIter 5000 gives large or
+    // ill-conditioned meshes room to actually reach that tolerance; hitting the
+    // cap without converging is an error (checked after Mult below), not a
+    // silently returned best iterate (#313).
+    cg.SetRelTol(1e-6);
+    cg.SetMaxIter(5000);
     cg.SetPrintLevel(1);  // print final iteration count to help diagnose convergence
     cg.SetPreconditioner(prec);
     cg.SetOperator(A_mat);
     printf("[mfem] starting CG solve (%d rows)…\n", A_mat.Height()); fflush(stdout);
     log_mem("solve: before CG solve");
     cg.Mult(B, X);
+    // MFEM's CGSolver does not throw on hitting MaxIter — it returns the best
+    // iterate. Using that under-converged field would silently show wrong
+    // displacements/stresses, so fail the solve instead (#192, #313). The
+    // worker decodes this exception and the UI shows it in the error banner.
+    if (!cg.GetConverged()) {
+        char msg[192];
+        snprintf(msg, sizeof msg,
+                 "CG solver did not converge: relative residual %g after %d "
+                 "iterations (target 1e-6). The partial result was discarded — "
+                 "check that the model is fully constrained, or refine the mesh.",
+                 (double)cg.GetFinalRelNorm(), cg.GetNumIterations());
+        throw std::runtime_error(msg);
+    }
     a.RecoverFEMSolution(X, b, x);
     printf("[mfem] CG done — computing von Mises stress…\n"); fflush(stdout);
     log_mem("solve: after CG solve");
