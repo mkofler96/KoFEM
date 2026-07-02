@@ -532,13 +532,13 @@ std::string solve_linear_elastic(
         DenseMatrix grad_u;
         x.GetVectorGradient(*T, grad_u);
 
-        double eps[3][3];
+        std::array<std::array<double, 3>, 3> eps;
         for (int i = 0; i < 3; ++i)
             for (int j = 0; j < 3; ++j)
                 eps[i][j] = 0.5 * (grad_u(i,j) + grad_u(j,i));
 
         double tr_eps = eps[0][0] + eps[1][1] + eps[2][2];
-        double s[3][3];
+        std::array<std::array<double, 3>, 3> s;
         for (int i = 0; i < 3; ++i)
             for (int j = 0; j < 3; ++j)
                 s[i][j] = (i == j ? lam * tr_eps : 0.0) + 2.0 * mu * eps[i][j];

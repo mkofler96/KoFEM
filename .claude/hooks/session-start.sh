@@ -22,6 +22,14 @@ git -C "$REPO" config core.hooksPath .githooks
 
 bash "$REPO/scripts/fetch-wasm-deps.sh"
 
+# clang-tidy >= 20 for scripts/clang-tidy.sh (the C++ engine linter, mirroring
+# the DeepSource rules — see .clang-tidy). The sandbox's default clang-tidy-18
+# cannot parse the emsdk clang-22-era headers.
+if ! command -v clang-tidy-20 >/dev/null 2>&1; then
+    echo "[clang-tidy] installing clang-tidy-20…"
+    apt-get update -qq && apt-get install -y -qq clang-tidy-20
+fi
+
 # Persist the build environment for the whole session so `bash scripts/build-wasm.sh`
 # works without re-exporting anything. The node bin dir is globbed so it survives
 # emsdk version bumps in the dependency image.

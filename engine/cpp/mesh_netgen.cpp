@@ -17,6 +17,7 @@
 
 #include <TopoDS_Shape.hxx>
 
+#include <array>
 #include <cstdio>
 #include <set>
 #include <stdexcept>
@@ -158,7 +159,7 @@ std::string generate_fem_mesh(const std::string& opts_json)
 
     nglib::Ng_Mesh* mesh = nglib::Ng_NewMesh();
     if (!mesh) {
-        kofem_occ_geometry_delete(geom);
+        kofem_occ_geometry_delete(static_cast<void*>(geom));
         throw std::runtime_error("Ng_NewMesh returned null");
     }
 
@@ -172,8 +173,8 @@ std::string generate_fem_mesh(const std::string& opts_json)
     log_mem("generate_fem_mesh: step 2 GenerateEdgeMesh");
     nglib::Ng_Result res = nglib::Ng_OCC_GenerateEdgeMesh(geom, mesh, &mp);
     if (res != nglib::NG_OK) {
-        kofem_delete_mesh(mesh);
-        kofem_occ_geometry_delete(geom);
+        kofem_delete_mesh(static_cast<void*>(mesh));
+        kofem_occ_geometry_delete(static_cast<void*>(geom));
         throw std::runtime_error(
             "Ng_OCC_GenerateEdgeMesh failed (code " + std::to_string((int)res) + ")");
     }
@@ -186,8 +187,8 @@ std::string generate_fem_mesh(const std::string& opts_json)
     log_mem("generate_fem_mesh: step 3 GenerateSurfaceMesh");
     res = nglib::Ng_OCC_GenerateSurfaceMesh(geom, mesh, &mp);
     if (res != nglib::NG_OK) {
-        kofem_delete_mesh(mesh);
-        kofem_occ_geometry_delete(geom);
+        kofem_delete_mesh(static_cast<void*>(mesh));
+        kofem_occ_geometry_delete(static_cast<void*>(geom));
         throw std::runtime_error(
             "Ng_OCC_GenerateSurfaceMesh failed (code " + std::to_string((int)res) + ")");
     }
@@ -205,9 +206,9 @@ std::string generate_fem_mesh(const std::string& opts_json)
     fflush(stdout);
     log_mem("generate_fem_mesh: step 4 GenerateVolumeMesh");
     res = nglib::Ng_GenerateVolumeMesh(mesh, &mp);
-    kofem_occ_geometry_delete(geom);     // safe: volume fill complete
+    kofem_occ_geometry_delete(static_cast<void*>(geom));     // safe: volume fill complete
     if (res != nglib::NG_OK) {
-        kofem_delete_mesh(mesh);
+        kofem_delete_mesh(static_cast<void*>(mesh));
         throw std::runtime_error(
             "Ng_GenerateVolumeMesh failed (code " + std::to_string((int)res) + ")");
     }
@@ -223,7 +224,7 @@ std::string generate_fem_mesh(const std::string& opts_json)
     // surface-only IGES — issue #276). Fail loudly rather than handing a
     // tetrahedron-free mesh to the solver, which can't analyse it.
     if (ne == 0) {
-        kofem_delete_mesh(mesh);
+        kofem_delete_mesh(static_cast<void*>(mesh));
         throw std::runtime_error(
             "Volume meshing produced 0 tetrahedra: the geometry has surfaces but "
             "no closed solid to fill. This usually means the CAD file (often IGES) "
@@ -234,8 +235,8 @@ std::string generate_fem_mesh(const std::string& opts_json)
     std::vector<double> out_verts;
     out_verts.reserve(3 * np);
     for (int i = 1; i <= np; ++i) {
-        double pt[3];
-        nglib::Ng_GetPoint(mesh, i, pt);
+        std::array<double, 3> pt;
+        nglib::Ng_GetPoint(mesh, i, pt.data());
         out_verts.push_back(pt[0]);
         out_verts.push_back(pt[1]);
         out_verts.push_back(pt[2]);
@@ -244,8 +245,8 @@ std::string generate_fem_mesh(const std::string& opts_json)
     std::vector<int> out_tets;
     out_tets.reserve(4 * ne);
     for (int i = 1; i <= ne; ++i) {
-        int tet[4];
-        nglib::Ng_GetVolumeElement(mesh, i, tet);
+        std::array<int, 4> tet;
+        nglib::Ng_GetVolumeElement(mesh, i, tet.data());
         out_tets.push_back(tet[0] - 1);
         out_tets.push_back(tet[1] - 1);
         out_tets.push_back(tet[2] - 1);
@@ -265,18 +266,18 @@ std::string generate_fem_mesh(const std::string& opts_json)
     out_surf_tris.reserve(3 * nse);
     out_surf_face_ids.reserve(nse);
     for (int i = 1; i <= nse; ++i) {
-        int tri[3];
-        nglib::Ng_GetSurfaceElement(mesh, i, tri);
+        std::array<int, 3> tri;
+        nglib::Ng_GetSurfaceElement(mesh, i, tri.data());
         out_surf_tris.push_back(tri[0] - 1);
         out_surf_tris.push_back(tri[1] - 1);
         out_surf_tris.push_back(tri[2] - 1);
-        out_surf_face_ids.push_back(kofem_surface_element_face_index(mesh, i));
+        out_surf_face_ids.push_back(kofem_surface_element_face_index(static_cast<void*>(mesh), i));
     }
     printf("[netgen] %d surface elements, %d unique OCC face IDs\n",
            nse, (int)std::set<int>(out_surf_face_ids.begin(), out_surf_face_ids.end()).size());
     fflush(stdout);
 
-    kofem_delete_mesh(mesh);
+    kofem_delete_mesh(static_cast<void*>(mesh));
     log_mem("generate_fem_mesh: after Ng_DeleteMesh");
 
     return "{\"vertices\":" + json_vec3(out_verts) +
@@ -326,13 +327,13 @@ std::string generate_volume_mesh(
 
     for (unsigned i = 0; i < nv; ++i) {
         val v = verts_js[i];
-        double pt[3] = { v[0].as<double>(), v[1].as<double>(), v[2].as<double>() };
-        nglib::Ng_AddPoint(mesh, pt);
+        std::array<double, 3> pt = { v[0].as<double>(), v[1].as<double>(), v[2].as<double>() };
+        nglib::Ng_AddPoint(mesh, pt.data());
     }
     for (unsigned i = 0; i < nt; ++i) {
         val t = tris_js[i];
-        int tri[3] = { t[0].as<int>()+1, t[1].as<int>()+1, t[2].as<int>()+1 };
-        nglib::Ng_AddSurfaceElement(mesh, nglib::NG_TRIG, tri);
+        std::array<int, 3> tri = { t[0].as<int>()+1, t[1].as<int>()+1, t[2].as<int>()+1 };
+        nglib::Ng_AddSurfaceElement(mesh, nglib::NG_TRIG, tri.data());
     }
 
     // Initialise every field explicitly.  In the WASM build Netgen exports
@@ -369,7 +370,7 @@ std::string generate_volume_mesh(
 
     nglib::Ng_Result res = nglib::Ng_GenerateVolumeMesh(mesh, &mp);
     if (res != nglib::NG_OK) {
-        kofem_delete_mesh(mesh);
+        kofem_delete_mesh(static_cast<void*>(mesh));
         throw std::runtime_error(
             "Ng_GenerateVolumeMesh failed (code " + std::to_string((int)res) + ")");
     }
@@ -380,8 +381,8 @@ std::string generate_volume_mesh(
     std::vector<double> out_verts;
     out_verts.reserve(3 * np);
     for (int i = 1; i <= np; ++i) {
-        double pt[3];
-        nglib::Ng_GetPoint(mesh, i, pt);
+        std::array<double, 3> pt;
+        nglib::Ng_GetPoint(mesh, i, pt.data());
         out_verts.push_back(pt[0]);
         out_verts.push_back(pt[1]);
         out_verts.push_back(pt[2]);
@@ -390,15 +391,15 @@ std::string generate_volume_mesh(
     std::vector<int> out_tets;
     out_tets.reserve(4 * ne);
     for (int i = 1; i <= ne; ++i) {
-        int tet[4];
-        nglib::Ng_GetVolumeElement(mesh, i, tet);
+        std::array<int, 4> tet;
+        nglib::Ng_GetVolumeElement(mesh, i, tet.data());
         out_tets.push_back(tet[0] - 1);
         out_tets.push_back(tet[1] - 1);
         out_tets.push_back(tet[2] - 1);
         out_tets.push_back(tet[3] - 1);
     }
 
-    kofem_delete_mesh(mesh);
+    kofem_delete_mesh(static_cast<void*>(mesh));
 
     return "{\"vertices\":" + json_vec3(out_verts) +
            ",\"tetrahedra\":" + json_ivec4(out_tets) + "}";

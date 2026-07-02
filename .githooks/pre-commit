@@ -29,4 +29,12 @@ if echo "$STAGED" | grep -q '^web/'; then
     (cd web && bun run typecheck)
 fi
 
+# C++ engine lint — mirrors the DeepSource rules (see .clang-tidy) the same way
+# eslint mirrors them for web/. Anyone editing engine/ needs the WASM toolchain
+# to compile anyway, so requiring it here matches the web/node_modules check.
+if echo "$STAGED" | grep -q '^engine/'; then
+    echo "▶ clang-tidy…"
+    bash scripts/clang-tidy.sh
+fi
+
 echo "✓ pre-commit checks passed"
