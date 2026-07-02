@@ -304,6 +304,7 @@ export function serializeAnalysis(state: AnalysisState): string {
 }
 
 export function analysisFileName(modelName: string): string {
+  // eslint-disable-next-line kofem/no-silent-fallback -- download filename for an unnamed model; cosmetic, never fed back into the analysis
   const base = (modelName || "analysis").replace(/[^\w-]+/g, "_");
   return `${base}.vtu`;
 }

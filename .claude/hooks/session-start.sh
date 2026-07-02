@@ -15,6 +15,11 @@ fi
 
 REPO="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
 
+# The container clones fresh, so the first-time setup from CLAUDE.md never ran
+# here — without it the .githooks/pre-commit checks (fmt + clippy) are
+# silently skipped on every commit made in a remote session.
+git -C "$REPO" config core.hooksPath .githooks
+
 bash "$REPO/scripts/fetch-wasm-deps.sh"
 
 # Persist the build environment for the whole session so `bash scripts/build-wasm.sh`

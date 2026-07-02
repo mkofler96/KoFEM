@@ -70,12 +70,16 @@ export function nodeVonMisesField(
   if (!result.vonMises || elements.length === 0 || nodes.length === 0)
     return null;
   const vm = result.vonMises;
+  if (vm.length !== elements.length)
+    throw new Error(
+      `von Mises result carries ${vm.length} values for ${elements.length} elements — the result is stale or belongs to a different mesh`,
+    );
   const nodeIndex = new Map<number, number>();
   for (let i = 0; i < nodes.length; i++) nodeIndex.set(nodes[i].id, i);
   const sums = new Float64Array(nodes.length);
   const weights = new Float64Array(nodes.length);
   for (let ei = 0; ei < elements.length; ei++) {
-    const vmVal = vm[ei] ?? 0;
+    const vmVal = vm[ei];
     const w = elementWeight(elements[ei], nodeIndex, nodes);
     for (const nodeId of elements[ei].nodeIds) {
       const ni = nodeIndex.get(nodeId);
@@ -106,6 +110,10 @@ export function computeResultRange(
 ): ResultRange | null {
   if (nodes.length === 0) return null;
   const d = result.displacements;
+  if (d.length !== nodes.length * 3)
+    throw new Error(
+      `displacement result carries ${d.length} values for ${nodes.length} nodes (expected ${nodes.length * 3}) — the result is stale or belongs to a different mesh`,
+    );
 
   let nodeVm: Float64Array | null = null;
   if (resultType === "Von Mises stress") {
@@ -116,17 +124,21 @@ export function computeResultRange(
   const nodeValue = (i: number): number => {
     switch (resultType) {
       case "Ux":
-        return d[i * 3] ?? 0;
+        return d[i * 3];
       case "Uy":
-        return d[i * 3 + 1] ?? 0;
+        return d[i * 3 + 1];
       case "Uz":
-        return d[i * 3 + 2] ?? 0;
+        return d[i * 3 + 2];
       case "Von Mises stress":
-        return nodeVm?.[i] ?? 0;
+        if (!nodeVm)
+          throw new Error(
+            "von Mises node field is unavailable although it was requested",
+          );
+        return nodeVm[i];
       default: {
-        const ux = d[i * 3] ?? 0,
-          uy = d[i * 3 + 1] ?? 0,
-          uz = d[i * 3 + 2] ?? 0;
+        const ux = d[i * 3],
+          uy = d[i * 3 + 1],
+          uz = d[i * 3 + 2];
         return Math.sqrt(ux * ux + uy * uy + uz * uz);
       }
     }

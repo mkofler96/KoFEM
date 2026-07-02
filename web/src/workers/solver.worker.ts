@@ -138,6 +138,7 @@ self.onmessage = async (event: MessageEvent) => {
       const opts = JSON.stringify({
         deflection_relative: 0.001,
         angular_deflection: 0.5,
+        // eslint-disable-next-line kofem/no-silent-fallback -- format is optional in the parse_step message; absent means STEP, the primary import path
         format: (payload.format as string) ?? "step",
       });
       const { vertices, triangles } = m().tessellate_step(
@@ -383,6 +384,7 @@ self.onmessage = async (event: MessageEvent) => {
       for (const c of constraints) {
         if (c.dof > 2) continue;
         const v = vid(c.nodeId, "constraint");
+        // eslint-disable-next-line kofem/no-silent-fallback -- a constraint without prescribedValue is a homogeneous fixed BC, i.e. u = 0 by definition
         const value = c.prescribedValue ?? 0;
         if (value === 0) {
           if (!dofsByNode.has(v)) dofsByNode.set(v, new Set());
@@ -433,6 +435,7 @@ self.onmessage = async (event: MessageEvent) => {
       // (issue #215), at the cost of a slower solve. The engine extends the
       // vertex Dirichlet BCs to the new edge DOFs so clamped/prescribed faces
       // stay fully constrained. Defaults to 1 (linear) when the payload omits it.
+      // eslint-disable-next-line kofem/no-silent-fallback -- elementOrder is optional in the solve message; the documented default is linear elements
       const order = elementOrder ?? 1;
       const json = m().solve_linear_elastic(
         JSON.stringify(mesh),
