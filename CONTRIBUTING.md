@@ -9,7 +9,7 @@ conventions checked in review, starting with the one that matters most.
 **This is the most common bug class in this codebase** (11 confirmed instances
 in three weeks — see issue #322). The shape is always the same: when data is
 missing, invalid, or mismatched, the code substitutes a plausible default and
-keeps going, so the user gets a *wrong answer that looks right* instead of an
+keeps going, so the user gets a _wrong answer that looks right_ instead of an
 error. In an FEA tool that is the worst possible failure mode.
 
 Real examples that shipped and were later fixed:
@@ -33,7 +33,7 @@ messages over silent fall-throughs.** Concretely:
 - Parse, then **validate and throw**: `Number.isFinite(v)` after `parseFloat`,
   length checks on result arrays, existence checks on referenced ids. The
   error message must say what was expected and what was found.
-- `?? null`, `?? []`, `?? ""` as *absence markers* that downstream code
+- `?? null`, `?? []`, `?? ""` as _absence markers_ that downstream code
   explicitly checks are fine. `?? 0`, `?? 1`, `?? "step"`, `?? DEFAULT_X` on
   data that feeds the solver or the displayed results are not.
 - The same applies in C++ and Rust: no empty catch blocks, no stubs that
@@ -53,7 +53,7 @@ messages over silent fall-throughs.** Concretely:
   string, object/array literal, or a `default`/`fallback`-named identifier)
   is an error.
 
-If a field is *genuinely* optional — a display-only default, a documented
+If a field is _genuinely_ optional — a display-only default, a documented
 protocol default, error-path message text — allow-list it explicitly and say
 why:
 
