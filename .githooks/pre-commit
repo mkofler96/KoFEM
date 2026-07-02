@@ -7,15 +7,21 @@ cargo fmt --all --check
 echo "▶ cargo clippy…"
 cargo clippy --all-targets --all-features -- -D warnings
 
-# Web checks only when the commit touches web/ — Rust-only commits stay fast.
-if ! git diff --cached --quiet -- web; then
+# Web checks only when the commit touches what they cover — Rust-only commits
+# stay fast. Prettier also owns the repo's markdown (DeepSource enforces it
+# repo-wide, so the hook must match or its autofix bot reformats after merge).
+STAGED="$(git diff --cached --name-only)"
+
+if echo "$STAGED" | grep -qE '^web/|\.md$'; then
     if [ ! -d web/node_modules ]; then
-        echo "✗ commit touches web/ but web/node_modules is missing — run: cd web && bun install" >&2
+        echo "✗ commit needs the web toolchain but web/node_modules is missing — run: cd web && bun install" >&2
         exit 1
     fi
     echo "▶ prettier check…"
     (cd web && bun run format:check)
+fi
 
+if echo "$STAGED" | grep -q '^web/'; then
     echo "▶ eslint…"
     (cd web && bun run lint)
 
