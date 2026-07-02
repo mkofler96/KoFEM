@@ -132,12 +132,12 @@ export function MeshPanel() {
               {logs.length === 0 ? (
                 <div className={styles.logEmpty}>Waiting…</div>
               ) : (
-                logs.map((line, i) => (
+                logs.map((entry, i) => (
                   <div
-                    key={i}
+                    key={entry.id}
                     className={`${styles.logLine} ${i === logs.length - 1 ? styles.logLineLast : ""}`}
                   >
-                    {line}
+                    {entry.text}
                   </div>
                 ))
               )}

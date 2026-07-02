@@ -25,25 +25,30 @@ function MaterialForm({
   const [error, setError] = useState<string | null>(null);
 
   function handleSave() {
-    const e = parseFloat(young);
-    const nu = parseFloat(poisson);
-    const rho = parseFloat(density);
+    const youngModulus = parseFloat(young);
+    const poissonRatio = parseFloat(poisson);
+    const densityValue = parseFloat(density);
 
-    if (!isFinite(e) || e <= 0) {
+    if (!isFinite(youngModulus) || youngModulus <= 0) {
       setError("Young's modulus must be a positive number");
       return;
     }
     // ν must lie in (-1, 0.5); ν = 0 is physically valid (e.g. auxetic foams,
     // cork) and must not be silently replaced by the steel default.
-    if (!isFinite(nu) || nu <= -1 || nu >= 0.5) {
+    if (!isFinite(poissonRatio) || poissonRatio <= -1 || poissonRatio >= 0.5) {
       setError("Poisson's ratio must be in the range (-1, 0.5)");
       return;
     }
-    if (!isFinite(rho) || rho < 0) {
+    if (!isFinite(densityValue) || densityValue < 0) {
       setError("Density must be a non-negative number");
       return;
     }
-    onSave({ name: name || "Material", young: e, poisson: nu, density: rho });
+    onSave({
+      name: name || "Material",
+      young: youngModulus,
+      poisson: poissonRatio,
+      density: densityValue,
+    });
   }
 
   return (
@@ -137,20 +142,20 @@ function MaterialSection() {
           </span>
         </div>
       )}
-      {materials.map((m) => (
-        <div key={m.id}>
+      {materials.map((mat) => (
+        <div key={mat.id}>
           <div className={styles.treeItem}>
             <div className={styles.treeItemBody}>
-              <div className={styles.treeItemName}>{m.name}</div>
+              <div className={styles.treeItemName}>{mat.name}</div>
               <div className={styles.treeItemDetail}>
-                E = {fmt(m.young, 3)} MPa · ν = {m.poisson}
+                E = {fmt(mat.young, 3)} MPa · ν = {mat.poisson}
               </div>
             </div>
             <div className={styles.treeItemActions}>
               <button
                 className={styles.iconBtn}
                 title="Edit material"
-                onClick={() => setEditingMatId(m.id)}
+                onClick={() => setEditingMatId(mat.id)}
               >
                 ✎
               </button>
@@ -158,18 +163,18 @@ function MaterialSection() {
                 <button
                   className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
                   title="Remove material"
-                  onClick={() => deleteMaterial(m.id)}
+                  onClick={() => deleteMaterial(mat.id)}
                 >
                   ×
                 </button>
               )}
             </div>
           </div>
-          {editingMatId === m.id && (
+          {editingMatId === mat.id && (
             <MaterialForm
-              mat={m}
-              onSave={(v) => {
-                updateMaterial(m.id, v);
+              mat={mat}
+              onSave={(values) => {
+                updateMaterial(mat.id, values);
                 setEditingMatId(null);
               }}
               onCancel={() => setEditingMatId(null)}
@@ -184,7 +189,38 @@ function MaterialSection() {
   );
 }
 
-export function GeometryPanel() {
+const STEP_CARD_ICON = (
+  <svg className={styles.cardIcon} viewBox="0 0 20 20" fill="none">
+    <rect
+      x="3"
+      y="2"
+      width="14"
+      height="16"
+      rx="2"
+      stroke="currentColor"
+      strokeWidth="1.4"
+    />
+    <path
+      d="M7 7h6M7 10h6M7 13h4"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+    />
+  </svg>
+);
+
+const IGES_CARD_ICON = (
+  <svg className={styles.cardIcon} viewBox="0 0 20 20" fill="none">
+    <path
+      d="M10 2l2.4 5H18l-4.2 3.1 1.6 5L10 12.2 4.6 15.1l1.6-5L2 7h5.6z"
+      stroke="currentColor"
+      strokeWidth="1.4"
+    />
+  </svg>
+);
+
+// STEP / IGES import cards with their hidden file inputs.
+function ImportSection() {
   const { isImporting, isRunning, stepImportError, importCadFile } =
     useGeometry();
 
@@ -199,91 +235,70 @@ export function GeometryPanel() {
   }
 
   return (
+    <>
+      <input
+        ref={(el) => {
+          stepRef.current = el;
+        }}
+        type="file"
+        accept=".stp,.step"
+        style={{ display: "none" }}
+        onChange={handleCadFile}
+      />
+      <input
+        ref={(el) => {
+          igesRef.current = el;
+        }}
+        type="file"
+        accept=".igs,.iges"
+        style={{ display: "none" }}
+        onChange={handleCadFile}
+      />
+
+      <div className={styles.cardGrid}>
+        <button
+          className={styles.importCard}
+          disabled={isImporting || isRunning}
+          onClick={() => stepRef.current?.click()}
+        >
+          {STEP_CARD_ICON}
+          <span className={styles.cardTitle}>
+            {isImporting ? "Importing…" : "Import STEP"}
+          </span>
+          <span className={styles.cardSub}>.step / .stp</span>
+        </button>
+
+        <button
+          className={styles.importCard}
+          disabled={isImporting || isRunning}
+          onClick={() => igesRef.current?.click()}
+        >
+          {IGES_CARD_ICON}
+          <span className={styles.cardTitle}>
+            {isImporting ? "Importing…" : "Import IGES"}
+          </span>
+          <span className={styles.cardSub}>.igs / .iges</span>
+        </button>
+      </div>
+
+      {stepImportError && (
+        <div
+          data-testid="step-error"
+          style={{ color: "#dc2626", fontSize: 12, padding: "4px 0" }}
+        >
+          {stepImportError}
+        </div>
+      )}
+    </>
+  );
+}
+
+export function GeometryPanel() {
+  return (
     <div className={styles.panel}>
       <div className={styles.tabContent}>
-        {/* ── Inputs ─────────────────────────────────────────── */}
-        <>
-          <input
-            ref={(el) => {
-              stepRef.current = el;
-            }}
-            type="file"
-            accept=".stp,.step"
-            style={{ display: "none" }}
-            onChange={handleCadFile}
-          />
-          <input
-            ref={(el) => {
-              igesRef.current = el;
-            }}
-            type="file"
-            accept=".igs,.iges"
-            style={{ display: "none" }}
-            onChange={handleCadFile}
-          />
-
-          <div className={styles.cardGrid}>
-            <button
-              className={styles.importCard}
-              disabled={isImporting || isRunning}
-              onClick={() => stepRef.current?.click()}
-            >
-              <svg className={styles.cardIcon} viewBox="0 0 20 20" fill="none">
-                <rect
-                  x="3"
-                  y="2"
-                  width="14"
-                  height="16"
-                  rx="2"
-                  stroke="currentColor"
-                  strokeWidth="1.4"
-                />
-                <path
-                  d="M7 7h6M7 10h6M7 13h4"
-                  stroke="currentColor"
-                  strokeWidth="1.4"
-                  strokeLinecap="round"
-                />
-              </svg>
-              <span className={styles.cardTitle}>
-                {isImporting ? "Importing…" : "Import STEP"}
-              </span>
-              <span className={styles.cardSub}>.step / .stp</span>
-            </button>
-
-            <button
-              className={styles.importCard}
-              disabled={isImporting || isRunning}
-              onClick={() => igesRef.current?.click()}
-            >
-              <svg className={styles.cardIcon} viewBox="0 0 20 20" fill="none">
-                <path
-                  d="M10 2l2.4 5H18l-4.2 3.1 1.6 5L10 12.2 4.6 15.1l1.6-5L2 7h5.6z"
-                  stroke="currentColor"
-                  strokeWidth="1.4"
-                />
-              </svg>
-              <span className={styles.cardTitle}>
-                {isImporting ? "Importing…" : "Import IGES"}
-              </span>
-              <span className={styles.cardSub}>.igs / .iges</span>
-            </button>
-          </div>
-
-          {stepImportError && (
-            <div
-              data-testid="step-error"
-              style={{ color: "#dc2626", fontSize: 12, padding: "4px 0" }}
-            >
-              {stepImportError}
-            </div>
-          )}
-        </>
-
-        {/* ── Mesh ─────────────────────────────────────────────── */}
+        <ImportSection />
         <MeshPanel />
-
-        {/* ── Material ──────────────────────────────────────────── */}
         <MaterialSection />
       </div>
     </div>

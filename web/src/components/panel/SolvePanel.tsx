@@ -18,8 +18,8 @@ export function SolvePanel() {
           </div>
         )}
         <div className={styles.sectionLabel}>Pre-flight check</div>
-        {checks.map(([ok, label], i) => (
-          <div key={i} className={styles.checkRow}>
+        {checks.map(([ok, label]) => (
+          <div key={label} className={styles.checkRow}>
             <span className={ok ? styles.checkOk : styles.checkFail}>
               {ok ? "✓" : "✗"}
             </span>
