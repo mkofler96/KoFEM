@@ -105,8 +105,8 @@ std::string generate_fem_mesh(const std::string& opts_json)
     bool   second_ord      = jbool  (opts, "second_order",       false);
     double elems_per_edge  = jdouble(opts, "elementsperedge",     2.0);
     double elems_per_curve = jdouble(opts, "elementspercurve",    2.0);
-    int    optsteps_2d     = jint   (opts, "optsteps_2d",           3);
-    int    optsteps_3d     = jint   (opts, "optsteps_3d",           3);
+    int    optsteps_2d     = jint   (opts, "optsteps_2d",           0);
+    int    optsteps_3d     = jint   (opts, "optsteps_3d",           0);
 
 #ifdef KOFEM_NETGEN_OCC
     // ── OCC path: Netgen meshes the CAD geometry directly ────────────────────
@@ -145,11 +145,12 @@ std::string generate_fem_mesh(const std::string& opts_json)
     mp.meshsize_filename          = nullptr;
     mp.optsurfmeshenable          = 1;
     mp.optvolmeshenable           = 1;
-    // Skip both surface and volume optimisation: for complex CAD (many faces,
-    // short edges) the optimiser reprojects nodes onto OCC surfaces in a loop
-    // that runs for minutes.  The unoptimised mesh is adequate for FEM analysis.
-    mp.optsteps_2d                = 0;
-    mp.optsteps_3d                = 0;
+    // Optimisation defaults to 0 (skipped): for complex CAD (many faces, short
+    // edges) the optimiser reprojects nodes onto OCC surfaces in a loop that
+    // can run for minutes. Callers can opt in via optsteps_2d/optsteps_3d for
+    // a higher-quality (slower) mesh.
+    mp.optsteps_2d                = optsteps_2d;
+    mp.optsteps_3d                = optsteps_3d;
     mp.invert_tets                = 0;
     mp.invert_trigs               = 0;
     mp.check_overlap              = 0;
