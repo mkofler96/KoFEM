@@ -69,12 +69,12 @@ test("editing a load group's force components updates the surface loads", async 
 
   await expect(form).not.toBeVisible();
   const state = await page.evaluate(() => {
-    const s = (
+    const storeState = (
       window as unknown as { __kofemStore: Store }
     ).__kofemStore.getState();
     return {
-      group: s.loadGroups[0],
-      surfaceLoads: s.surfaceLoads,
+      group: storeState.loadGroups[0],
+      surfaceLoads: storeState.surfaceLoads,
     };
   });
   expect(state.group.components).toEqual([100, -200, 300]);
@@ -98,10 +98,13 @@ test("editing a load group can switch its kind to pressure", async ({
   await form.getByRole("button", { name: "Save" }).click();
 
   const state = await page.evaluate(() => {
-    const s = (
+    const storeState = (
       window as unknown as { __kofemStore: Store }
     ).__kofemStore.getState();
-    return { group: s.loadGroups[0], surfaceLoads: s.surfaceLoads };
+    return {
+      group: storeState.loadGroups[0],
+      surfaceLoads: storeState.surfaceLoads,
+    };
   });
   expect(state.group.kind).toBe("pressure");
   expect(state.group.totalForce).toBe(25);
@@ -156,10 +159,13 @@ test("editing a BC group's DOFs and value rebuilds the constraints", async ({
 
   await expect(form).not.toBeVisible();
   const state = await page.evaluate(() => {
-    const s = (
+    const storeState = (
       window as unknown as { __kofemStore: Store }
     ).__kofemStore.getState();
-    return { group: s.bcGroups[0], constraints: s.constraints };
+    return {
+      group: storeState.bcGroups[0],
+      constraints: storeState.constraints,
+    };
   });
   expect(state.group.dofs).toEqual([0, 1]);
   expect(state.group.value).toBe(0.5);

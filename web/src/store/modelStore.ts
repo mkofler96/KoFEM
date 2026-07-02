@@ -876,10 +876,10 @@ export const useModelStore = create<ModelState>()(
 
     updateBcGroup: (id: number, dofs: number[], value: number) =>
       set((s) => {
-        const g = s.bcGroups.find((g) => g.id === id);
-        if (!g) return;
-        g.dofs = dofs;
-        g.value = value;
+        const group = s.bcGroups.find((g) => g.id === id);
+        if (!group) return;
+        group.dofs = dofs;
+        group.value = value;
         s.constraints = rebuildConstraints(s.bcGroups);
         s.result = null;
       }),
@@ -965,16 +965,16 @@ export const useModelStore = create<ModelState>()(
       components?: [number, number, number],
     ) =>
       set((s) => {
-        const g = s.loadGroups.find((g) => g.id === id);
-        if (!g) return;
+        const group = s.loadGroups.find((g) => g.id === id);
+        if (!group) return;
         const { dof, totalForce } = components
           ? summarizeComponents(components, kind)
           : { dof: 0, totalForce: totalForceArg };
-        g.kind = kind;
-        g.dof = dof;
-        g.totalForce = totalForce;
-        if (components) g.components = components;
-        else delete g.components;
+        group.kind = kind;
+        group.dof = dof;
+        group.totalForce = totalForce;
+        if (components) group.components = components;
+        else delete group.components;
         s.loads = rebuildLoads(s.loadGroups, s.nodes);
         s.surfaceLoads = rebuildSurfaceLoads(s.loadGroups, s.elements);
         s.result = null;

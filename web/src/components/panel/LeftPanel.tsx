@@ -574,8 +574,8 @@ function BcValueForm({
   function handleSave() {
     // A prescribed displacement of 0 is physically valid (fixed support), so
     // only reject non-finite input — never silently coerce "abc" to 0.
-    const v = parseFloat(value);
-    if (!isFinite(v)) {
+    const parsedValue = parseFloat(value);
+    if (!isFinite(parsedValue)) {
       setError("Prescribed displacement must be a finite number");
       return;
     }
@@ -584,7 +584,7 @@ function BcValueForm({
       setError("Constrain at least one DOF");
       return;
     }
-    onSave(dofs, v);
+    onSave(dofs, parsedValue);
   }
 
   return (
@@ -668,12 +668,12 @@ function LoadValueForm({
       // A zero pressure is a no-op load: it contributes nothing to the RHS and
       // the solver returns a plausible-looking field with the input silently
       // discarded. Reject it (and non-finite input) instead of coercing to 0.
-      const p = parseFloat(pressureVal);
-      if (!isFinite(p) || p === 0) {
+      const pressure = parseFloat(pressureVal);
+      if (!isFinite(pressure) || pressure === 0) {
         setError("Pressure must be a non-zero finite number");
         return;
       }
-      onSave("pressure", p);
+      onSave("pressure", pressure);
       return;
     }
     // Force / moment, prescribed componentwise. Reject non-finite components
