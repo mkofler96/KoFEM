@@ -24,6 +24,7 @@
         "@vitejs/plugin-react": "^4.3.0",
         "eslint": "^9.39.0",
         "nyc": "^18.0.0",
+        "prettier": "^3.6.0",
         "tsx": "^4.21.0",
         "typescript": "^5.5.0",
         "typescript-eslint": "^8.46.0",
@@ -738,6 +739,8 @@
     "potpack": ["potpack@1.0.2", "", {}, "sha512-choctRBIV9EMT9WGAZHn3V7t0Z2pMQyl0EZE6pFc/6ml3ssw7Dlf/oAOvFwjm1HVsqfQN8GfeFyJ+d8tRzqueQ=="],
 
     "prelude-ls": ["prelude-ls@1.2.1", "", {}, "sha512-vkcDPrRZo1QZLbn5RLGPpg/WmIQ65qoWWhcGKf/b5eplkkarX0m9z8ppCat4mlOqUsWpyNuYgO3VRyrYHSzX5g=="],
+
+    "prettier": ["prettier@3.9.4", "", { "bin": { "prettier": "bin/prettier.cjs" } }, "sha512-yWG/o/4oJfo036EKAfK6ACAoDOfHeRHx4tuxkfBZiauURiaSmYwlpOr5LQqKtIkRD2z1PLteme2WoxEnj4tHTg=="],
 
     "process-on-spawn": ["process-on-spawn@1.1.0", "", { "dependencies": { "fromentries": "^1.2.0" } }, "sha512-JOnOPQ/8TZgjs1JIH/m9ni7FfimjNa/PRx7y/Wb5qdItsnhO0jE4AT7fC0HjC28DUQWDr50dwSYZLdRMlqDq3Q=="],
 
