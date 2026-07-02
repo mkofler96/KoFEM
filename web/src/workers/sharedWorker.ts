@@ -42,6 +42,7 @@ function createWorker(): Worker {
     if (ok) {
       p.resolve(rest);
     } else {
+      // eslint-disable-next-line kofem/no-silent-fallback -- fallback text for a failure that arrived without a message; this is the error path itself, not solver data
       const msg = (rest.error as string | undefined) ?? "Worker error";
       console.error("[worker] task failed:", msg);
       p.reject(new Error(msg));
@@ -50,6 +51,7 @@ function createWorker(): Worker {
 
   w.onerror = (e: ErrorEvent) => {
     console.error("[worker] crashed:", e.message, e);
+    // eslint-disable-next-line kofem/no-silent-fallback -- fallback text for a worker that died without a message; this is the error path itself, not solver data
     const err = new Error(e.message ?? "Worker crashed");
     for (const p of _pending.values()) p.reject(err);
     _pending.clear();

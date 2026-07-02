@@ -64,7 +64,7 @@ export function FitCamera() {
     const oc = controls as unknown as { target: THREE.Vector3; update(): void };
     oc.target.copy(center);
     oc.update();
-  }, [fitViewTrigger, controls]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fitViewTrigger, controls]); // deps intentionally omit scene state — refit only on trigger
 
   return null;
 }

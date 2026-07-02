@@ -5,4 +5,5 @@
 // (the output of `git describe --tags`, e.g. "v0.0.1-beta1") at build time via
 // web/Dockerfile, so the displayed version always matches the published commit.
 // In local dev the var is unset, so we fall back to "dev".
+// eslint-disable-next-line kofem/no-silent-fallback -- VITE_GIT_VERSION is only injected by CI builds; local dev has no version stamp
 export const APP_VERSION = import.meta.env.VITE_GIT_VERSION ?? "dev";

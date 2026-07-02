@@ -701,8 +701,12 @@ export const useModelStore = create<ModelState>()(
         s.viewRepr = "surface";
         s.fitViewTrigger++;
         if (s.properties.length === 0) {
-          const matId = s.materials[0]?.id ?? 1;
-          s.properties = [{ id: 1, materialId: matId }];
+          const mat = s.materials[0];
+          if (!mat)
+            throw new Error(
+              "Cannot create a default property: the model has no materials",
+            );
+          s.properties = [{ id: 1, materialId: mat.id }];
         }
       }),
 
