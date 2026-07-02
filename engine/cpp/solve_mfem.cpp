@@ -500,13 +500,13 @@ std::string solve_linear_elastic(
     // displacements/stresses, so fail the solve instead (#192, #313). The
     // worker decodes this exception and the UI shows it in the error banner.
     if (!cg.GetConverged()) {
-        char msg[192];
-        snprintf(msg, sizeof msg,
+        std::array<char, 192> msg;
+        snprintf(msg.data(), msg.size(),
                  "CG solver did not converge: relative residual %g after %d "
                  "iterations (target 1e-6). The partial result was discarded — "
                  "check that the model is fully constrained, or refine the mesh.",
                  (double)cg.GetFinalRelNorm(), cg.GetNumIterations());
-        throw std::runtime_error(msg);
+        throw std::runtime_error(msg.data());
     }
     a.RecoverFEMSolution(X, b, x);
     printf("[mfem] CG done — computing von Mises stress…\n"); fflush(stdout);
