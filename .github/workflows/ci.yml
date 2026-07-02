@@ -139,6 +139,9 @@ jobs:
 
       - name: Lint
         run: cd web && bun run lint
+      
+      - name: Format
+        run: cd web && bun run format:check
 
       - name: Build frontend
         run: cd web && bun run build
