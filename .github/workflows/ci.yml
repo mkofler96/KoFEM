@@ -137,6 +137,9 @@ jobs:
       - name: Typecheck
         run: cd web && bun run typecheck
 
+      - name: Lint
+        run: cd web && bun run lint
+
       - name: Build frontend
         run: cd web && bun run build
 
