@@ -732,14 +732,6 @@
 
 /* ── Stats ──────────────────────────────────────────────────── */
 
-.statGroup {
-  background: var(--surface-3);
-  border: 1px solid var(--border);
-  border-radius: var(--r-md);
-  padding: 10px 12px;
-  margin-bottom: 12px;
-}
-
 .statRow {
   display: flex;
   align-items: center;
@@ -757,30 +749,6 @@
   font-family: "IBM Plex Mono", ui-monospace, monospace;
   color: var(--ink-2);
   font-weight: 500;
-}
-
-/* ── Status badges ──────────────────────────────────────────── */
-
-.meshOkBadge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 10px;
-  background: var(--ok-soft);
-  border: 1px solid #86efac;
-  border-radius: var(--r-md);
-  font-size: 12px;
-  color: var(--ok);
-  font-weight: 500;
-  margin-bottom: 10px;
-}
-
-.okDot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--ok);
-  flex-shrink: 0;
 }
 
 /* ── Pre-flight ─────────────────────────────────────────────── */

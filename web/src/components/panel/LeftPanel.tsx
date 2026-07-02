@@ -134,16 +134,16 @@ function MaterialForm({
 
 function GeometryPanel() {
   const nodes = useModelStore((s) => s.nodes);
-  const elements = useModelStore((s) => s.elements);
   const setStepSurface = useModelStore((s) => s.setStepSurface);
   const stepImportError = useModelStore((s) => s.stepImportError);
   const setStepImportError = useModelStore((s) => s.setStepImportError);
   const isRunning = useModelStore((s) => s.isRunning);
   const setRunning = useModelStore((s) => s.setRunning);
   const materials = useModelStore((s) => s.materials);
-  const createMaterial = useModelStore((s) => s.createMaterial);
   const updateMaterial = useModelStore((s) => s.updateMaterial);
   const deleteMaterial = useModelStore((s) => s.deleteMaterial);
+  const elementOrder = useModelStore((s) => s.elementOrder);
+  const setElementOrder = useModelStore((s) => s.setElementOrder);
   const stepSurface = useModelStore((s) => s.stepSurface);
   const stepBytes = useModelStore((s) => s.stepBytes);
   const setStepBytes = useModelStore((s) => s.setStepBytes);
@@ -153,7 +153,7 @@ function GeometryPanel() {
   const setMeshing = useModelStore((s) => s.setMeshing);
   const applyMeshResult = useModelStore((s) => s.applyMeshResult);
 
-  const [editingMatId, setEditingMatId] = useState<number | "new" | null>(null);
+  const [editingMatId, setEditingMatId] = useState<number | null>(null);
   const [isImportingStep, setIsImportingStep] = useState(false);
   const [maxElementSize, setMaxElementSize] = useState(20);
   // Floor for curvature-driven refinement; 0 lets Netgen refine fillets without
@@ -262,8 +262,9 @@ function GeometryPanel() {
     }
   }
 
-  const hexCount = elements.filter((e) => e.type === "CHEXA").length;
-  const tetCount = elements.filter((e) => e.type === "CTETRA").length;
+  // Mesh stats (node/element counts, solver-ready state) live in the status
+  // bar at the bottom — the panel only carries the meshing controls.
+  const hasMesh = nodes.length > 0;
   const showLogs = logs.length > 0 || isMeshing;
 
   return (
@@ -357,136 +358,70 @@ function GeometryPanel() {
             </div>
           )}
 
-          {nodes.length === 0 ? (
-            stepSurface ? (
-              <>
-                <div className={styles.sectionLabel}>Mesh controls</div>
-                <div className={styles.formRow}>
-                  <span className={styles.formLabel}>Max element size</span>
-                  <input
-                    className={styles.formInput}
-                    type="number"
-                    min={0.5}
-                    max={500}
-                    step={0.5}
-                    value={maxElementSize}
-                    disabled={isMeshing}
-                    onChange={(e) =>
-                      setMaxElementSize(Math.max(0.5, Number(e.target.value)))
-                    }
-                  />
-                  <span className={styles.toleranceUnit}>mm</span>
-                </div>
-                <div className={styles.formRow}>
-                  <span className={styles.formLabel}>Min element size</span>
-                  <input
-                    className={styles.formInput}
-                    type="number"
-                    min={0}
-                    max={500}
-                    step={0.5}
-                    value={minElementSize}
-                    disabled={isMeshing}
-                    onChange={(e) =>
-                      setMinElementSize(Math.max(0, Number(e.target.value)))
-                    }
-                  />
-                  <span className={styles.toleranceUnit}>mm</span>
-                </div>
-                <button
-                  className={styles.meshVolBtn}
+          {stepSurface ? (
+            <>
+              <div className={styles.sectionLabel}>Mesh controls</div>
+              <div className={styles.formRow}>
+                <span className={styles.formLabel}>Max element size</span>
+                <input
+                  className={styles.formInput}
+                  type="number"
+                  min={0.5}
+                  max={500}
+                  step={0.5}
+                  value={maxElementSize}
                   disabled={isMeshing}
-                  onClick={handleVolMesh}
+                  onChange={(e) =>
+                    setMaxElementSize(Math.max(0.5, Number(e.target.value)))
+                  }
+                />
+                <span className={styles.toleranceUnit}>mm</span>
+              </div>
+              <div className={styles.formRow}>
+                <span className={styles.formLabel}>Min element size</span>
+                <input
+                  className={styles.formInput}
+                  type="number"
+                  min={0}
+                  max={500}
+                  step={0.5}
+                  value={minElementSize}
+                  disabled={isMeshing}
+                  onChange={(e) =>
+                    setMinElementSize(Math.max(0, Number(e.target.value)))
+                  }
+                />
+                <span className={styles.toleranceUnit}>mm</span>
+              </div>
+              <div className={styles.formRow}>
+                <span className={styles.formLabel}>Element order</span>
+                <select
+                  className={styles.formSelect}
+                  value={elementOrder}
+                  onChange={(e) => setElementOrder(Number(e.target.value))}
                 >
-                  {isMeshing ? "Meshing…" : "▶  Mesh STEP volume"}
-                </button>
-              </>
-            ) : (
+                  <option value={1}>Linear (1st order)</option>
+                  <option value={2}>Quadratic (2nd order)</option>
+                </select>
+              </div>
+              <button
+                className={hasMesh ? styles.outlineBtn : styles.meshVolBtn}
+                disabled={isMeshing}
+                onClick={handleVolMesh}
+              >
+                {isMeshing
+                  ? "Meshing…"
+                  : hasMesh
+                    ? "⟳ Re-mesh STEP volume"
+                    : "▶  Mesh STEP volume"}
+              </button>
+            </>
+          ) : (
+            !hasMesh && (
               <div className={styles.empty}>
                 No mesh — import a STEP file to mesh.
               </div>
             )
-          ) : (
-            <>
-              <div className={styles.sectionLabel}>Mesh</div>
-              <div className={styles.statGroup}>
-                <div className={styles.statRow}>
-                  <span className={styles.statKey}>Nodes</span>
-                  <span className={styles.statVal}>{nodes.length}</span>
-                </div>
-                <div className={styles.statRow}>
-                  <span className={styles.statKey}>Elements</span>
-                  <span className={styles.statVal}>{elements.length}</span>
-                </div>
-                {hexCount > 0 && (
-                  <div className={styles.statRow}>
-                    <span className={styles.statKey}>CHEXA</span>
-                    <span className={styles.statVal}>{hexCount}</span>
-                  </div>
-                )}
-                {tetCount > 0 && (
-                  <div className={styles.statRow}>
-                    <span className={styles.statKey}>CTETRA</span>
-                    <span className={styles.statVal}>{tetCount}</span>
-                  </div>
-                )}
-              </div>
-
-              <div className={styles.meshOkBadge}>
-                <span className={styles.okDot} />
-                Mesh is solver-ready
-              </div>
-
-              {stepSurface && (
-                <>
-                  <div
-                    className={styles.sectionLabel}
-                    style={{ marginTop: 12 }}
-                  >
-                    Mesh controls
-                  </div>
-                  <div className={styles.formRow}>
-                    <span className={styles.formLabel}>Max element size</span>
-                    <input
-                      className={styles.formInput}
-                      type="number"
-                      min={0.5}
-                      max={500}
-                      step={0.5}
-                      value={maxElementSize}
-                      disabled={isMeshing}
-                      onChange={(e) =>
-                        setMaxElementSize(Math.max(0.5, Number(e.target.value)))
-                      }
-                    />
-                    <span className={styles.toleranceUnit}>mm</span>
-                  </div>
-                  <div className={styles.formRow}>
-                    <span className={styles.formLabel}>Min element size</span>
-                    <input
-                      className={styles.formInput}
-                      type="number"
-                      min={0}
-                      max={500}
-                      step={0.5}
-                      value={minElementSize}
-                      disabled={isMeshing}
-                      onChange={(e) =>
-                        setMinElementSize(Math.max(0, Number(e.target.value)))
-                      }
-                    />
-                    <span className={styles.toleranceUnit}>mm</span>
-                  </div>
-                  <button
-                    className={styles.outlineBtn}
-                    disabled={isMeshing}
-                    onClick={handleVolMesh}
-                  >
-                    {isMeshing ? "Meshing…" : "⟳ Re-mesh STEP volume"}
-                  </button>
-                </>
-              )}
-            </>
           )}
 
           {/* VSCode-style collapsable log panel */}
@@ -528,11 +463,26 @@ function GeometryPanel() {
           )}
         </>
 
-        {/* ── Materials ─────────────────────────────────────────── */}
+        {/* ── Material ──────────────────────────────────────────── */}
+        {/* Single-part models carry exactly one material, applied to the whole
+            part (issue #275). Per-body materials arrive with multibody support
+            (issue #317), so materials cannot be added here; delete is offered
+            only to trim legacy analyses saved with several. */}
         <>
-          <div className={styles.sectionLabel}>Materials</div>
+          <div className={styles.sectionLabel}>Material</div>
           {materials.length === 0 && (
-            <div className={styles.empty}>No materials</div>
+            <div className={styles.empty}>No material</div>
+          )}
+          {materials.length > 1 && (
+            <div
+              className={styles.errorBanner}
+              data-testid="material-count-warning"
+            >
+              <span>
+                Only one material is supported — it is applied to the whole
+                part. Remove the extra materials before solving.
+              </span>
+            </div>
           )}
           {materials.map((m) => (
             <div key={m.id}>
@@ -546,16 +496,20 @@ function GeometryPanel() {
                 <div className={styles.treeItemActions}>
                   <button
                     className={styles.iconBtn}
+                    title="Edit material"
                     onClick={() => setEditingMatId(m.id)}
                   >
                     ✎
                   </button>
-                  <button
-                    className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
-                    onClick={() => deleteMaterial(m.id)}
-                  >
-                    ×
-                  </button>
+                  {materials.length > 1 && (
+                    <button
+                      className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
+                      title="Remove material"
+                      onClick={() => deleteMaterial(m.id)}
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
               </div>
               {editingMatId === m.id && (
@@ -570,21 +524,9 @@ function GeometryPanel() {
               )}
             </div>
           ))}
-          {editingMatId === "new" && (
-            <MaterialForm
-              onSave={(v) => {
-                createMaterial(v);
-                setEditingMatId(null);
-              }}
-              onCancel={() => setEditingMatId(null)}
-            />
+          {materials.length === 1 && (
+            <div className={styles.empty}>Applied to the whole part.</div>
           )}
-          <button
-            className={styles.outlineBtn}
-            onClick={() => setEditingMatId("new")}
-          >
-            + Add material
-          </button>
         </>
       </div>
     </div>
@@ -1131,7 +1073,6 @@ function SolvePanel() {
   const setResult = useModelStore((s) => s.setResult);
   const setMode = useModelStore((s) => s.setMode);
   const elementOrder = useModelStore((s) => s.elementOrder);
-  const setElementOrder = useModelStore((s) => s.setElementOrder);
   const [error, setError] = useState<string | null>(null);
 
   const meshOk = nodes.length > 0;
@@ -1242,17 +1183,16 @@ function SolvePanel() {
           <span className={styles.statKey}>Output</span>
           <span className={styles.statVal}>U, S, RF</span>
         </div>
+        {/* The element order is set with the mesh controls on the Geometry
+            tab (issue #286) — echoed here read-only so the pre-solve summary
+            stays complete. */}
         <div className={styles.statRow}>
           <span className={styles.statKey}>Element order</span>
-          <select
-            className={styles.formSelect}
-            style={{ flex: "0 0 auto", width: 168 }}
-            value={elementOrder}
-            onChange={(e) => setElementOrder(Number(e.target.value))}
-          >
-            <option value={1}>Linear (1st order)</option>
-            <option value={2}>Quadratic (2nd order)</option>
-          </select>
+          <span className={styles.statVal}>
+            {elementOrder === 2
+              ? "Quadratic (2nd order)"
+              : "Linear (1st order)"}
+          </span>
         </div>
 
         <button

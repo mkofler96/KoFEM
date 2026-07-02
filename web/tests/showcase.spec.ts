@@ -103,7 +103,7 @@ test.describe("Full workflow showcase", () => {
 
     const meshingErrorBanner = page.getByTestId("meshing-error");
     await Promise.race([
-      expect(page.getByText("Mesh is solver-ready")).toBeVisible({
+      expect(page.getByText("Mesh OK")).toBeVisible({
         timeout: 60_000,
       }),
       meshingErrorBanner
