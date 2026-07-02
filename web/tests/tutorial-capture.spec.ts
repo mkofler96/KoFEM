@@ -95,7 +95,7 @@ test.describe("Tutorial figure capture", () => {
       .click();
     const meshErr = page.getByTestId("meshing-error");
     await Promise.race([
-      expect(page.getByText("Mesh is solver-ready")).toBeVisible({
+      expect(page.getByText("Mesh OK")).toBeVisible({
         timeout: 180_000,
       }),
       meshErr.waitFor({ state: "visible", timeout: 180_000 }).then(async () => {

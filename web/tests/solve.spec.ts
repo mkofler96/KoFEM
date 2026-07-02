@@ -155,10 +155,10 @@ test("vol mesh stores FEM nodes in the store for solving", async ({ page }) => {
 
   // "Meshing…" is a transient label that can vanish before Playwright polls for
   // it when the WASM worker completes very quickly.  Wait for the stable
-  // post-mesh state instead: "Mesh is solver-ready" only appears once the store
-  // has nodes (nodes.length > 0), regardless of how fast meshing ran.
+  // post-mesh state instead: the status bar's "Mesh OK" chip only appears once
+  // the store has nodes (nodes.length > 0), regardless of how fast meshing ran.
   await Promise.race([
-    expect(page.getByText("Mesh is solver-ready")).toBeVisible({
+    expect(page.getByText("Mesh OK")).toBeVisible({
       timeout: 150_000,
     }),
     fatal,
