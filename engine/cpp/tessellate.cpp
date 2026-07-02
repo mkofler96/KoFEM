@@ -63,7 +63,7 @@ val tessellate_step(val bytes_val, const std::string& opts_json) {
     printf("[occt] tessellate: bbox diag=%.3f mm -> linear_defl=%.4f mm\n", diag, linear_defl);
     fflush(stdout);
 
-    BRepMesh_IncrementalMesh mesher(shape, linear_defl, /*relative=*/false, angular_defl);
+    BRepMesh_IncrementalMesh mesher(shape, linear_defl, /*isRelative=*/false, angular_defl);
     mesher.Perform();
     if (!mesher.IsDone())
         throw std::runtime_error("BRepMesh_IncrementalMesh failed");
@@ -137,7 +137,7 @@ std::string tessellate_for_meshing(const std::string& opts_json) {
     // max_size/4 for typical element sizes), we must clear first to force a
     // coarser, more uniform re-tessellation.
     BRepTools::Clean(shape);
-    BRepMesh_IncrementalMesh mesher(shape, linear_defl, /*relative=*/false, angular_defl);
+    BRepMesh_IncrementalMesh mesher(shape, linear_defl, /*isRelative=*/false, angular_defl);
     mesher.Perform();
     if (!mesher.IsDone())
         throw std::runtime_error("BRepMesh_IncrementalMesh (mesh-quality) failed");

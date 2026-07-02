@@ -1,0 +1,15 @@
+# clang-tidy configuration for the C++ engine (engine/cpp).
+#
+# Mirrors the DeepSource C++ rules that gate PRs, so violations surface locally
+# (scripts/clang-tidy.sh) and in CI instead of as review comments (#294):
+#   modernize-avoid-c-arrays                            — "do not declare C-style arrays"
+#   cppcoreguidelines-pro-bounds-array-to-pointer-decay — "array is implicitly decaying into a pointer"
+# bugprone-* backs the repo convention of loud failures over silent fallbacks.
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+  modernize-avoid-c-arrays
+WarningsAsErrors: "*"
+HeaderFilterRegex: ".*/engine/cpp/.*"

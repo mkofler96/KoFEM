@@ -124,6 +124,7 @@ The surface mesh comes from the **geometry**, not from the volume mesh. It is ei
 ## Code Style
 
 - Before committing, always run `cargo fmt` and `cargo clippy`
+- C++ (`engine/cpp`): run `bash scripts/clang-tidy.sh` after changes — the checks in `.clang-tidy` mirror the DeepSource rules that gate PRs (no C-style arrays: use `std::array` and pass `.data()` at C-API boundaries, plus the `bugprone-*` family)
 - TypeScript: strict mode, no `any`
 - Comments only for non-obvious physics/math — reference the paper/equation instead of explaining the code
 - ALWAYS prefer clear and information-rich error messages over silent fall-throughs. Avoid defensive try/catch blocks to make debugging easier.

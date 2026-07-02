@@ -23,6 +23,7 @@
 #include <TopoDS_Shell.hxx>
 #include <TopoDS_Solid.hxx>
 
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -143,21 +144,21 @@ TopoDS_Shape read_cad_shape(const std::vector<uint8_t>& bytes,
     // /tmp.  The extension is cosmetic (both readers detect the format from file
     // contents) but kept accurate for clarity.  Both suffixes are 4 chars, the
     // length mkstemps splices the random component before.
-    char tmppath[32];
-    std::strcpy(tmppath, is_iges ? "/tmp/kofem_XXXXXX.igs" : "/tmp/kofem_XXXXXX.stp");
-    int fd = mkstemps(tmppath, 4);
+    std::array<char, 32> tmppath;
+    std::strcpy(tmppath.data(), is_iges ? "/tmp/kofem_XXXXXX.igs" : "/tmp/kofem_XXXXXX.stp");
+    int fd = mkstemps(tmppath.data(), 4);
     if (fd < 0)
         throw std::runtime_error("failed to create /tmp CAD file");
     if (write(fd, bytes.data(), bytes.size()) != (ssize_t)bytes.size()) {
-        close(fd); unlink(tmppath);
+        close(fd); unlink(tmppath.data());
         throw std::runtime_error("failed to write CAD bytes to /tmp");
     }
     close(fd);
 
     if (is_iges) {
         IGESControl_Reader reader;
-        IFSelect_ReturnStatus status = reader.ReadFile(tmppath);
-        unlink(tmppath);
+        IFSelect_ReturnStatus status = reader.ReadFile(tmppath.data());
+        unlink(tmppath.data());
         if (status != IFSelect_RetDone)
             throw std::runtime_error("IGESControl_Reader::ReadFile failed — invalid IGES file");
         if (reader.TransferRoots() == 0 || reader.NbShapes() == 0)
@@ -168,8 +169,8 @@ TopoDS_Shape read_cad_shape(const std::vector<uint8_t>& bytes,
     }
 
     STEPControl_Reader reader;
-    IFSelect_ReturnStatus status = reader.ReadFile(tmppath);
-    unlink(tmppath);
+    IFSelect_ReturnStatus status = reader.ReadFile(tmppath.data());
+    unlink(tmppath.data());
     if (status != IFSelect_RetDone)
         throw std::runtime_error("STEPControl_Reader::ReadFile failed — invalid STEP file");
     if (reader.TransferRoots() == 0 || reader.NbShapes() == 0)

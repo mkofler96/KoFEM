@@ -4,6 +4,10 @@ project(kofem-wasm CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# compile_commands.json drives clang-tidy (scripts/clang-tidy.sh and the CI
+# clang-tidy job); exporting it here means any configured build tree works.
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 if(NOT EMSCRIPTEN)
     message(FATAL_ERROR
         "This project must be configured through emcmake:\n"
