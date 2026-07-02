@@ -483,6 +483,7 @@ interface ModelState {
     value: number,
   ): void;
   addFaceToBcGroup(groupId: number, face: Omit<BcFaceEntry, "id">): void;
+  updateBcGroup(id: number, dofs: number[], value: number): void;
   removeFaceFromBcGroup(groupId: number, faceId: number): void;
   deleteBcGroup(id: number): void;
   clearConstraints(): void;
@@ -496,6 +497,12 @@ interface ModelState {
     components?: [number, number, number],
   ): void;
   addFaceToLoadGroup(groupId: number, face: Omit<BcFaceEntry, "id">): void;
+  updateLoadGroup(
+    id: number,
+    kind: LoadKind,
+    totalForce: number,
+    components?: [number, number, number],
+  ): void;
   removeFaceFromLoadGroup(groupId: number, faceId: number): void;
   deleteLoadGroup(id: number): void;
   clearLoads(): void;
@@ -867,6 +874,16 @@ export const useModelStore = create<ModelState>()(
         s.result = null;
       }),
 
+    updateBcGroup: (id: number, dofs: number[], value: number) =>
+      set((s) => {
+        const group = s.bcGroups.find((g) => g.id === id);
+        if (!group) return;
+        group.dofs = dofs;
+        group.value = value;
+        s.constraints = rebuildConstraints(s.bcGroups);
+        s.result = null;
+      }),
+
     removeFaceFromBcGroup: (groupId: number, faceId: number) =>
       set((s) => {
         const g = s.bcGroups.find((g) => g.id === groupId);
@@ -932,6 +949,32 @@ export const useModelStore = create<ModelState>()(
         if (!g) return;
         const faceId = s.nextFaceEntryId++;
         g.faces.push({ id: faceId, label: face.label, nodeIds: face.nodeIds });
+        s.loads = rebuildLoads(s.loadGroups, s.nodes);
+        s.surfaceLoads = rebuildSurfaceLoads(s.loadGroups, s.elements);
+        s.result = null;
+      }),
+
+    // Replace a load group's values in place, keeping its faces. Mirrors
+    // createLoadGroup: force/moment carry their vector in `components` (the
+    // source of truth, with dof/totalForce derived as the legacy summary);
+    // pressure carries its magnitude in totalForce and has no vector.
+    updateLoadGroup: (
+      id: number,
+      kind: LoadKind,
+      totalForceArg: number,
+      components?: [number, number, number],
+    ) =>
+      set((s) => {
+        const group = s.loadGroups.find((g) => g.id === id);
+        if (!group) return;
+        const { dof, totalForce } = components
+          ? summarizeComponents(components, kind)
+          : { dof: 0, totalForce: totalForceArg };
+        group.kind = kind;
+        group.dof = dof;
+        group.totalForce = totalForce;
+        if (components) group.components = components;
+        else delete group.components;
         s.loads = rebuildLoads(s.loadGroups, s.nodes);
         s.surfaceLoads = rebuildSurfaceLoads(s.loadGroups, s.elements);
         s.result = null;

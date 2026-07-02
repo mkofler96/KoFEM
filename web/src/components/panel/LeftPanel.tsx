@@ -12,6 +12,7 @@ import type {
   AppMode,
   LoadKind,
   Material,
+  NamedBcGroup,
   NamedLoadGroup,
   Node,
   Element,
@@ -535,6 +536,10 @@ function GeometryPanel() {
 
 // ── Constraints mode ──────────────────────────────────────────────────────────
 
+const DOF_LABELS = ["Ux", "Uy", "Uz", "Rx", "Ry", "Rz"];
+const FORCE_LABELS = ["Fx", "Fy", "Fz"];
+const MOMENT_LABELS = ["Mx", "My", "Mz"];
+
 // One-line summary of a load group for the group list: pressure magnitude, or
 // the non-zero force/moment components (e.g. "Fx = 100, Fz = -50 N").
 function loadGroupMeta(g: NamedLoadGroup): string {
@@ -546,6 +551,213 @@ function loadGroupMeta(g: NamedLoadGroup): string {
     .map((v, i) => (v !== 0 ? `${labels[i]} = ${fmt(v)}` : null))
     .filter((p): p is string => p !== null);
   return `${parts.join(", ")} ${unit}`;
+}
+
+// Inline editor for a BC group's constrained DOFs and prescribed value —
+// opened by the group's ✎ button (issue #258: the values, not just the faces,
+// must be editable after creation).
+function BcValueForm({
+  group,
+  onSave,
+  onCancel,
+}: {
+  group: NamedBcGroup;
+  onSave(dofs: number[], value: number): void;
+  onCancel(): void;
+}) {
+  const [checkedDofs, setCheckedDofs] = useState<boolean[]>(
+    DOF_LABELS.map((_, i) => group.dofs.includes(i)),
+  );
+  const [value, setValue] = useState(String(group.value));
+  const [error, setError] = useState<string | null>(null);
+
+  function handleSave() {
+    // A prescribed displacement of 0 is physically valid (fixed support), so
+    // only reject non-finite input — never silently coerce "abc" to 0.
+    const parsedValue = parseFloat(value);
+    if (!isFinite(parsedValue)) {
+      setError("Prescribed displacement must be a finite number");
+      return;
+    }
+    const dofs = checkedDofs.map((c, i) => (c ? i : -1)).filter((i) => i >= 0);
+    if (dofs.length === 0) {
+      setError("Constrain at least one DOF");
+      return;
+    }
+    onSave(dofs, parsedValue);
+  }
+
+  return (
+    <div className={styles.inlineForm} data-testid="bc-edit-form">
+      {error && (
+        <div className={styles.errorBanner} data-testid="bc-edit-error">
+          <span>{error}</span>
+          <button onClick={() => setError(null)}>×</button>
+        </div>
+      )}
+      <div className={styles.dofGrid}>
+        {/* Solid (H1 displacement) elements have only translational DOFs —
+        Ux, Uy, Uz. Rotational constraints carry no stiffness and are not
+        offered. */}
+        {DOF_LABELS.slice(0, 3).map((d, i) => (
+          <label key={d} className={styles.dofCheck}>
+            <input
+              type="checkbox"
+              checked={checkedDofs[i]}
+              onChange={() =>
+                setCheckedDofs((p) => p.map((v, j) => (j === i ? !v : v)))
+              }
+            />
+            {d}
+          </label>
+        ))}
+      </div>
+      <div className={styles.formRow}>
+        <span className={styles.formLabel}>Value</span>
+        <input
+          className={styles.formInput}
+          type="number"
+          value={value}
+          step="0.001"
+          onChange={(e) => setValue(e.target.value)}
+        />
+      </div>
+      <div className={styles.formBtns}>
+        <button className={styles.cancelBtn} onClick={onCancel}>
+          Cancel
+        </button>
+        <button className={styles.primaryBtn} onClick={handleSave}>
+          Save
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Inline editor for a load group's kind and values — componentwise force /
+// moment vector or pressure magnitude — opened by the group's ✎ button
+// (issue #258).
+function LoadValueForm({
+  group,
+  onSave,
+  onCancel,
+}: {
+  group: NamedLoadGroup;
+  onSave(
+    kind: LoadKind,
+    totalForce: number,
+    components?: [number, number, number],
+  ): void;
+  onCancel(): void;
+}) {
+  const initialKind = loadKind(group);
+  const initialVec = loadComponents(group);
+  const [kindSel, setKindSel] = useState<LoadKind>(initialKind);
+  const [vec, setVec] = useState<[string, string, string]>([
+    String(initialVec[0]),
+    String(initialVec[1]),
+    String(initialVec[2]),
+  ]);
+  const [pressureVal, setPressureVal] = useState(
+    initialKind === "pressure" ? String(group.totalForce) : "10",
+  );
+  const [error, setError] = useState<string | null>(null);
+
+  function handleSave() {
+    if (kindSel === "pressure") {
+      // A zero pressure is a no-op load: it contributes nothing to the RHS and
+      // the solver returns a plausible-looking field with the input silently
+      // discarded. Reject it (and non-finite input) instead of coercing to 0.
+      const pressure = parseFloat(pressureVal);
+      if (!isFinite(pressure) || pressure === 0) {
+        setError("Pressure must be a non-zero finite number");
+        return;
+      }
+      onSave("pressure", pressure);
+      return;
+    }
+    // Force / moment, prescribed componentwise. Reject non-finite components
+    // and the all-zero vector (a no-op load that would be silently discarded).
+    const noun = kindSel === "moment" ? "moment" : "force";
+    const parsed = vec.map((comp) => parseFloat(comp));
+    if (parsed.some((comp) => !isFinite(comp))) {
+      setError(`Each ${noun} component must be a finite number`);
+      return;
+    }
+    if (parsed.every((comp) => comp === 0)) {
+      setError(`Specify a non-zero ${noun} component`);
+      return;
+    }
+    onSave(kindSel, 0, [parsed[0], parsed[1], parsed[2]]);
+  }
+
+  const labels = kindSel === "moment" ? MOMENT_LABELS : FORCE_LABELS;
+  const unit = kindSel === "moment" ? "N·mm" : "N";
+
+  return (
+    <div className={styles.inlineForm} data-testid="load-edit-form">
+      {error && (
+        <div className={styles.errorBanner} data-testid="load-edit-error">
+          <span>{error}</span>
+          <button onClick={() => setError(null)}>×</button>
+        </div>
+      )}
+      <div className={styles.formRow}>
+        <span className={styles.formLabel}>Type</span>
+        <select
+          className={styles.formSelect}
+          value={kindSel}
+          onChange={(e) => setKindSel(e.target.value as LoadKind)}
+        >
+          <option value="force">Force</option>
+          <option value="moment">Moment</option>
+          <option value="pressure">Pressure</option>
+        </select>
+      </div>
+      {kindSel === "pressure" ? (
+        <div className={styles.formRow}>
+          <span className={styles.formLabel}>Pressure (MPa)</span>
+          <input
+            className={styles.formInput}
+            type="number"
+            value={pressureVal}
+            step="1"
+            onChange={(e) => setPressureVal(e.target.value)}
+          />
+        </div>
+      ) : (
+        labels.map((label, i) => (
+          <div className={styles.formRow} key={label}>
+            <span className={styles.formLabel}>
+              {label} ({unit})
+            </span>
+            <input
+              className={styles.formInput}
+              type="number"
+              value={vec[i]}
+              step="100"
+              onChange={(e) => {
+                const value = e.target.value;
+                setVec((p) => {
+                  const next = [...p] as [string, string, string];
+                  next[i] = value;
+                  return next;
+                });
+              }}
+            />
+          </div>
+        ))
+      )}
+      <div className={styles.formBtns}>
+        <button className={styles.cancelBtn} onClick={onCancel}>
+          Cancel
+        </button>
+        <button className={styles.primaryBtn} onClick={handleSave}>
+          Save
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function ConstraintsPanel() {
@@ -569,6 +781,12 @@ function ConstraintsPanel() {
     (s) => s.removeFaceFromLoadGroup,
   );
   const deleteLoadGroup = useModelStore((s) => s.deleteLoadGroup);
+  const updateBcGroup = useModelStore((s) => s.updateBcGroup);
+  const updateLoadGroup = useModelStore((s) => s.updateLoadGroup);
+
+  // Group whose values are being edited inline (✎), if any.
+  const [editingBcId, setEditingBcId] = useState<number | null>(null);
+  const [editingLoadId, setEditingLoadId] = useState<number | null>(null);
 
   const [checkedDofs, setCheckedDofs] = useState([
     true,
@@ -595,10 +813,6 @@ function ConstraintsPanel() {
   const [pressureVal, setPressureVal] = useState("10");
   const [bcValue, setBcValue] = useState("0");
   const [error, setError] = useState<string | null>(null);
-
-  const DOF_LABELS = ["Ux", "Uy", "Uz", "Rx", "Ry", "Rz"];
-  const FORCE_LABELS = ["Fx", "Fy", "Fz"];
-  const MOMENT_LABELS = ["Mx", "My", "Mz"];
 
   // Boundary conditions and loads reference mesh nodes, so they can only be
   // defined once a volume mesh exists.
@@ -839,7 +1053,16 @@ function ConstraintsPanel() {
                         setPendingFaces([]);
                       }}
                     >
-                      ✏
+                      +
+                    </button>
+                    <button
+                      className={styles.iconBtn}
+                      title="Edit BC"
+                      onClick={() =>
+                        setEditingBcId(editingBcId === g.id ? null : g.id)
+                      }
+                    >
+                      ✎
                     </button>
                     <button
                       className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
@@ -850,6 +1073,16 @@ function ConstraintsPanel() {
                     </button>
                   </div>
                 </div>
+                {editingBcId === g.id && (
+                  <BcValueForm
+                    group={g}
+                    onSave={(dofs, value) => {
+                      updateBcGroup(g.id, dofs, value);
+                      setEditingBcId(null);
+                    }}
+                    onCancel={() => setEditingBcId(null)}
+                  />
+                )}
                 {g.faces.map((f) => (
                   <div key={f.id} className={styles.bcFaceRow}>
                     <span className={styles.bcFaceIndent}>└</span>
@@ -1025,7 +1258,16 @@ function ConstraintsPanel() {
                         setPendingFaces([]);
                       }}
                     >
-                      ✏
+                      +
+                    </button>
+                    <button
+                      className={styles.iconBtn}
+                      title="Edit load"
+                      onClick={() =>
+                        setEditingLoadId(editingLoadId === g.id ? null : g.id)
+                      }
+                    >
+                      ✎
                     </button>
                     <button
                       className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
@@ -1036,6 +1278,16 @@ function ConstraintsPanel() {
                     </button>
                   </div>
                 </div>
+                {editingLoadId === g.id && (
+                  <LoadValueForm
+                    group={g}
+                    onSave={(kind, totalForce, components) => {
+                      updateLoadGroup(g.id, kind, totalForce, components);
+                      setEditingLoadId(null);
+                    }}
+                    onCancel={() => setEditingLoadId(null)}
+                  />
+                )}
                 {g.faces.map((f) => (
                   <div key={f.id} className={styles.bcFaceRow}>
                     <span className={styles.bcFaceIndent}>└</span>
