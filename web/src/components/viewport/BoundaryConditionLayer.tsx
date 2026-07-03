@@ -168,6 +168,7 @@ export function BoundaryConditionLayer({
 
     const up = new THREE.Vector3(0, 1, 0);
     const arrows: {
+      groupId: number;
       pos: [number, number, number];
       quaternion: THREE.Quaternion;
     }[] = [];
@@ -205,7 +206,7 @@ export function BoundaryConditionLayer({
       dir.normalize();
       const q = new THREE.Quaternion();
       q.setFromUnitVectors(up, dir);
-      arrows.push({ pos: [cx, cy, cz], quaternion: q });
+      arrows.push({ groupId: g.id, pos: [cx, cy, cz], quaternion: q });
     }
     return arrows;
   }, [loadGroups, nodes, nodeMap]);
@@ -344,6 +345,7 @@ export function BoundaryConditionLayer({
 
     const up = new THREE.Vector3(0, 1, 0);
     const arrows: {
+      nodeId: number;
       pos: [number, number, number];
       quaternion: THREE.Quaternion;
       frac: number;
@@ -353,6 +355,7 @@ export function BoundaryConditionLayer({
       if (!e) continue;
       const q = new THREE.Quaternion().setFromUnitVectors(up, dir);
       arrows.push({
+        nodeId: id,
         pos: [e.n.x, e.n.y, e.n.z],
         quaternion: q,
         frac: mag / maxMag,
@@ -462,13 +465,17 @@ export function BoundaryConditionLayer({
       {/* Resultant load arrows — one per force/pressure group, cylinder shaft + cone head */}
       {!showResult &&
         loadDisplay === "resultant" &&
-        loadArrows.map((arrow, i) => {
+        loadArrows.map((arrow) => {
           const shaftLen = modelSize * 0.22;
           const headLen = modelSize * 0.09;
           const shaftR = modelSize * 0.012;
           const headR = modelSize * 0.038;
           return (
-            <group key={i} position={arrow.pos} quaternion={arrow.quaternion}>
+            <group
+              key={`arrow-${arrow.groupId}`}
+              position={arrow.pos}
+              quaternion={arrow.quaternion}
+            >
               <mesh position={[0, shaftLen / 2, 0]}>
                 <cylinderGeometry args={[shaftR, shaftR, shaftLen, 8]} />
                 <meshStandardMaterial color="#d97706" />
@@ -485,7 +492,7 @@ export function BoundaryConditionLayer({
           that node carries (relative to the largest in the model) */}
       {!showResult &&
         loadDisplay === "nodal" &&
-        nodalLoadArrows.map((arrow, i) => {
+        nodalLoadArrows.map((arrow) => {
           // Shortest arrows stay at 35% of the full length so light-loaded
           // nodes remain visible; radii are fixed so arrows read as a field.
           const len = modelSize * 0.13 * (0.35 + 0.65 * arrow.frac);
@@ -494,7 +501,11 @@ export function BoundaryConditionLayer({
           const shaftR = modelSize * 0.006;
           const headR = modelSize * 0.018;
           return (
-            <group key={i} position={arrow.pos} quaternion={arrow.quaternion}>
+            <group
+              key={`nodal-arrow-${arrow.nodeId}`}
+              position={arrow.pos}
+              quaternion={arrow.quaternion}
+            >
               <mesh position={[0, shaftLen / 2, 0]}>
                 <cylinderGeometry args={[shaftR, shaftR, shaftLen, 6]} />
                 <meshStandardMaterial color="#d97706" />
