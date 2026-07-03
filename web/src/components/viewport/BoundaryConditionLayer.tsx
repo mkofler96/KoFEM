@@ -145,12 +145,13 @@ export function BoundaryConditionLayer({
     return { pos: [cx, cy, cz] as [number, number, number], quaternion: q };
   }, [constraints, nodeMap, nodes]);
 
-  // Load glyphs — one arrow per force/pressure group, at the centroid of its
-  // loaded nodes. Force arrows point along the applied force; pressure arrows
-  // point into the loaded face (positive pressure pushes inward). Driven by
-  // loadGroups because force/pressure loads reach the solver as surface tractions
-  // rather than nodal forces. Moments carry no single resultant, so they are
-  // skipped.
+  // Load glyphs — one arrow per load group, at the centroid of its loaded
+  // nodes. Force arrows point along the applied force; pressure arrows point
+  // into the loaded face (positive pressure pushes inward); moment arrows point
+  // along the moment vector [Mx,My,Mz] (right-hand rule) and are drawn with a
+  // double head, the standard couple symbol (issue #277). Driven by loadGroups
+  // because force/pressure loads reach the solver as surface tractions rather
+  // than nodal forces.
   const loadArrows = useMemo(() => {
     if (loadGroups.length === 0 || nodes.length === 0) return [];
     // Model centroid — used to orient pressure arrows inward.
@@ -171,10 +172,10 @@ export function BoundaryConditionLayer({
       groupId: number;
       pos: [number, number, number];
       quaternion: THREE.Quaternion;
+      isMoment: boolean;
     }[] = [];
     for (const g of loadGroups) {
       const kind = loadKind(g);
-      if (kind === "moment") continue;
       let cx = 0,
         cy = 0,
         cz = 0,
@@ -199,6 +200,8 @@ export function BoundaryConditionLayer({
       if (kind === "pressure") {
         dir = new THREE.Vector3(mx - cx, my - cy, mz - cz);
       } else {
+        // Force [Fx,Fy,Fz] or moment [Mx,My,Mz] vector — a moment arrow points
+        // along its axis (right-hand rule), e.g. Mz along +z.
         const vec = loadComponents(g);
         dir = new THREE.Vector3(vec[0], vec[1], vec[2]);
       }
@@ -206,7 +209,12 @@ export function BoundaryConditionLayer({
       dir.normalize();
       const q = new THREE.Quaternion();
       q.setFromUnitVectors(up, dir);
-      arrows.push({ groupId: g.id, pos: [cx, cy, cz], quaternion: q });
+      arrows.push({
+        groupId: g.id,
+        pos: [cx, cy, cz],
+        quaternion: q,
+        isMoment: kind === "moment",
+      });
     }
     return arrows;
   }, [loadGroups, nodes, nodeMap]);
@@ -217,8 +225,9 @@ export function BoundaryConditionLayer({
   // what actually reaches the solver as a surface traction, in contrast to the
   // single statically-equivalent resultant. Shown when loadDisplay === "nodal".
   // Force arrows point along the applied force; pressure arrows point into the
-  // surface along the per-node inward normal. Moments carry no resultant force
-  // and are skipped, matching the resultant view (issue #196).
+  // surface along the per-node inward normal. Moments carry no per-node force
+  // decomposition here — they are represented by the group-level double-headed
+  // axis arrow, which is drawn in both display modes (issues #196, #277).
   const nodalLoadArrows = useMemo(() => {
     if (loadGroups.length === 0 || nodes.length === 0) return [];
 
@@ -462,31 +471,40 @@ export function BoundaryConditionLayer({
         </group>
       )}
 
-      {/* Resultant load arrows — one per force/pressure group, cylinder shaft + cone head */}
+      {/* Resultant load arrows — one per group, cylinder shaft + cone head.
+          Moment arrows get a second head (couple symbol) and, having no
+          per-node form, appear in both display modes. */}
       {!showResult &&
-        loadDisplay === "resultant" &&
-        loadArrows.map((arrow) => {
-          const shaftLen = modelSize * 0.22;
-          const headLen = modelSize * 0.09;
-          const shaftR = modelSize * 0.012;
-          const headR = modelSize * 0.038;
-          return (
-            <group
-              key={`arrow-${arrow.groupId}`}
-              position={arrow.pos}
-              quaternion={arrow.quaternion}
-            >
-              <mesh position={[0, shaftLen / 2, 0]}>
-                <cylinderGeometry args={[shaftR, shaftR, shaftLen, 8]} />
-                <meshStandardMaterial color="#d97706" />
-              </mesh>
-              <mesh position={[0, shaftLen + headLen / 2, 0]}>
-                <coneGeometry args={[headR, headLen, 8]} />
-                <meshStandardMaterial color="#d97706" />
-              </mesh>
-            </group>
-          );
-        })}
+        loadArrows
+          .filter((arrow) => arrow.isMoment || loadDisplay === "resultant")
+          .map((arrow) => {
+            const shaftLen = modelSize * 0.22;
+            const headLen = modelSize * 0.09;
+            const shaftR = modelSize * 0.012;
+            const headR = modelSize * 0.038;
+            return (
+              <group
+                key={`arrow-${arrow.groupId}`}
+                position={arrow.pos}
+                quaternion={arrow.quaternion}
+              >
+                <mesh position={[0, shaftLen / 2, 0]}>
+                  <cylinderGeometry args={[shaftR, shaftR, shaftLen, 8]} />
+                  <meshStandardMaterial color="#d97706" />
+                </mesh>
+                <mesh position={[0, shaftLen + headLen / 2, 0]}>
+                  <coneGeometry args={[headR, headLen, 8]} />
+                  <meshStandardMaterial color="#d97706" />
+                </mesh>
+                {arrow.isMoment && (
+                  <mesh position={[0, shaftLen - headLen / 2, 0]}>
+                    <coneGeometry args={[headR, headLen, 8]} />
+                    <meshStandardMaterial color="#d97706" />
+                  </mesh>
+                )}
+              </group>
+            );
+          })}
 
       {/* Per-node load arrows — one per loaded node, length scaled by the load
           that node carries (relative to the largest in the model) */}
