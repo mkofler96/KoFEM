@@ -85,12 +85,17 @@ export function FemMeshLayer({
   const deformedEdgePositions = useMemo(() => {
     if (!result) return null;
     const d = result.displacements;
+    // A remesh can change the node count/ids after a solve completes but
+    // before `result` is invalidated. Rendering `d` against a mismatched
+    // nodeMap would silently zero-fill out-of-range nodes and draw a
+    // plausible-looking but wrong deformed shape — bail instead.
+    if (d.length !== nodeMap.size * 3) return null;
     const coord = (id: number) => {
       const { n, i } = nodeMap.get(id)!;
       return [
-        n.x + (d[i * 3] ?? 0) * deformScale,
-        n.y + (d[i * 3 + 1] ?? 0) * deformScale,
-        n.z + (d[i * 3 + 2] ?? 0) * deformScale,
+        n.x + d[i * 3] * deformScale,
+        n.y + d[i * 3 + 1] * deformScale,
+        n.z + d[i * 3 + 2] * deformScale,
       ];
     };
     const segs: number[] = [];
@@ -112,6 +117,7 @@ export function FemMeshLayer({
   const deformedSurfaceEdgePositions = useMemo(() => {
     if (!result) return null;
     const d = result.displacements;
+    if (d.length !== nodeMap.size * 3) return null;
     const seen = new Set<string>();
     const segs: number[] = [];
     const addEdge = (a: number, b: number) => {
@@ -122,12 +128,12 @@ export function FemMeshLayer({
         nb = nodeMap.get(b);
       if (!na || !nb) return;
       segs.push(
-        na.n.x + (d[na.i * 3] ?? 0) * deformScale,
-        na.n.y + (d[na.i * 3 + 1] ?? 0) * deformScale,
-        na.n.z + (d[na.i * 3 + 2] ?? 0) * deformScale,
-        nb.n.x + (d[nb.i * 3] ?? 0) * deformScale,
-        nb.n.y + (d[nb.i * 3 + 1] ?? 0) * deformScale,
-        nb.n.z + (d[nb.i * 3 + 2] ?? 0) * deformScale,
+        na.n.x + d[na.i * 3] * deformScale,
+        na.n.y + d[na.i * 3 + 1] * deformScale,
+        na.n.z + d[na.i * 3 + 2] * deformScale,
+        nb.n.x + d[nb.i * 3] * deformScale,
+        nb.n.y + d[nb.i * 3 + 1] * deformScale,
+        nb.n.z + d[nb.i * 3 + 2] * deformScale,
       );
     };
     for (const [a, b, c, dd] of boundaryQuadFaceIds) {

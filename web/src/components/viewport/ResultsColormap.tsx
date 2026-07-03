@@ -45,22 +45,27 @@ export function ResultsColormap({
     if (!hasQuads && !hasTris) return null;
 
     const d = result.displacements;
+    // A remesh can change the node count/ids after a solve completes but
+    // before `result` is invalidated. Rendering `d` against a mismatched
+    // nodeMap would silently zero-fill out-of-range nodes and draw a
+    // plausible-looking but wrong colormap/deformed shape — bail instead.
+    if (d.length !== nodeMap.size * 3) return null;
 
     // Compute per-node scalar value for the selected result type
     const nodeValue = (i: number, rt: ResultType): number => {
       switch (rt) {
         case "Ux":
-          return d[i * 3] ?? 0;
+          return d[i * 3];
         case "Uy":
-          return d[i * 3 + 1] ?? 0;
+          return d[i * 3 + 1];
         case "Uz":
-          return d[i * 3 + 2] ?? 0;
+          return d[i * 3 + 2];
         case "Von Mises stress":
           return nodeVonMises?.[i] ?? 0;
         default: {
-          const ux = d[i * 3] ?? 0,
-            uy = d[i * 3 + 1] ?? 0,
-            uz = d[i * 3 + 2] ?? 0;
+          const ux = d[i * 3],
+            uy = d[i * 3 + 1],
+            uz = d[i * 3 + 2];
           return Math.sqrt(ux * ux + uy * uy + uz * uz);
         }
       }
@@ -81,9 +86,9 @@ export function ResultsColormap({
     const deformedPos = (id: number): [number, number, number] => {
       const { n, i } = nodeMap.get(id)!;
       return [
-        n.x + (d[i * 3] ?? 0) * deformScale,
-        n.y + (d[i * 3 + 1] ?? 0) * deformScale,
-        n.z + (d[i * 3 + 2] ?? 0) * deformScale,
+        n.x + d[i * 3] * deformScale,
+        n.y + d[i * 3 + 1] * deformScale,
+        n.z + d[i * 3 + 2] * deformScale,
       ];
     };
     const nodeColor = (id: number): [number, number, number] => {
