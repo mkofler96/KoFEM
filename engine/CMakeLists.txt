@@ -39,7 +39,6 @@ add_executable(kofem_wasm_emcc
     cpp/json_util.cpp
     cpp/wasm_util.cpp
     cpp/netgen_glue.cpp
-    cpp/brepfill_stubs.cpp
 )
 
 target_include_directories(kofem_wasm_emcc PRIVATE
@@ -186,7 +185,9 @@ target_link_libraries(kofem_wasm_emcc PRIVATE
     # TKDEIGES → IGESControl_Writer (Netgen occgeom.cpp; replaces TKIGES in 7.8)
     # TKDESTL  → StlAPI_Writer     (Netgen occgeom.cpp; replaces TKSTL  in 7.8)
     # TKPrim   → BRepPrimAPI_MakeRevol/MakePrism, BRepSweep_* (IGESToBRep_TopoSurface)
-    # TKFillet → BRepFill::Face/Shell (in TKFillet in this OCCT 7.8 build, not TKOffset)
+    # TKBool   → BRepFill::Face/Shell (IGESToBRep_TopoSurface: IGES ruled-surface
+    #            and tabulated-cylinder entities, types 118/122 — issue #319)
+    # TKFillet → BRepFilletAPI_* (pulled in transitively by TKBool sweeps)
     # TKOffset → BRepOffset_* (transitively needed by TKFillet)
     TKCDF
     TKLCAF
@@ -200,6 +201,7 @@ target_link_libraries(kofem_wasm_emcc PRIVATE
     TKDEIGES
     TKDESTL
     TKPrim
+    TKBool
     TKFillet
     TKOffset
 
