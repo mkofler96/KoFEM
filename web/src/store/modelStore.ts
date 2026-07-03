@@ -76,7 +76,7 @@ export type ResultType = (typeof RESULT_TYPES)[number];
 // each mesh), so the reader needs to know which format the retained bytes are.
 export type GeometryFormat = "step" | "iges";
 
-export interface StepSurfaceMesh {
+export interface StepTessellation {
   points: [number, number, number][];
   triangles: [number, number, number][];
 }
@@ -395,7 +395,7 @@ interface ModelState {
   mode: AppMode;
   result: SolverResult | null;
   resultType: ResultType;
-  stepSurface: StepSurfaceMesh | null;
+  stepSurface: StepTessellation | null;
   // Raw bytes of the imported STEP file, retained so the geometry can be
   // reloaded into the mesher for a re-mesh. The worker is torn down after every
   // mesh (resetWorker), discarding the OCCT shape it held, so re-meshing must
@@ -439,7 +439,7 @@ interface ModelState {
   // fit-to-view scale. 1 = the default visible deformation, 0 = undeformed.
   deformScale: number;
   stepImportError: string | null;
-  setStepSurface(mesh: StepSurfaceMesh | null): void;
+  setStepSurface(tessellation: StepTessellation | null): void;
   setStepBytes(bytes: Uint8Array | null): void;
   setGeometryFormat(format: GeometryFormat): void;
   setVolMesh(mesh: VolMesh | null): void;
@@ -609,12 +609,12 @@ export const useModelStore = create<ModelState>()(
       set((s) => {
         s.geometryFormat = format;
       }),
-    setStepSurface: (mesh) =>
+    setStepSurface: (tessellation) =>
       set((s) => {
-        s.stepSurface = mesh;
+        s.stepSurface = tessellation;
         // Clearing the geometry also drops the retained STEP bytes — keeping the
         // invariant "no surface ⇒ nothing left to re-mesh from".
-        if (!mesh) {
+        if (!tessellation) {
           s.stepBytes = null;
           s.geometryFormat = "step";
         }
@@ -632,7 +632,7 @@ export const useModelStore = create<ModelState>()(
         s.nextLoadGroupId = 1;
         s.nextFaceEntryId = 1;
         s.result = null;
-        if (mesh) {
+        if (tessellation) {
           s.fitViewTrigger++;
           s.hasStarted = true;
           s.mode = "geometry";

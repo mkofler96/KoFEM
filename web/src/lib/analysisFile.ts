@@ -11,7 +11,7 @@ import type {
   Node,
   Property,
   ResultType,
-  StepSurfaceMesh,
+  StepTessellation,
   VolMesh,
 } from "../store/modelStore";
 import { RESULT_TYPES } from "../store/modelStore";
@@ -74,7 +74,7 @@ export interface AnalysisState {
   nextLoadGroupId: number;
   nextFaceEntryId: number;
   nextMatId: number;
-  stepSurface: StepSurfaceMesh | null;
+  stepSurface: StepTessellation | null;
   volMesh: VolMesh | null;
   surfaceTriangles: [number, number, number][] | null;
   surfaceFaceIds: number[] | null;
@@ -102,7 +102,7 @@ interface KofemFieldDataV1 {
   nextLoadGroupId: number;
   nextFaceEntryId: number;
   nextMatId: number;
-  stepSurface: StepSurfaceMesh | null;
+  stepSurface: StepTessellation | null;
   volMesh: VolMesh | null;
   surfaceTriangles: [number, number, number][] | null;
   surfaceFaceIds: number[] | null;
