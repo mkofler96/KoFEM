@@ -9,9 +9,11 @@
 #include <BRep_Tool.hxx>
 #include <BRepBndLib.hxx>
 #include <BRepBuilderAPI_Sewing.hxx>
+#include <BRepCheck_Analyzer.hxx>
 #include <Bnd_Box.hxx>
 #include <IFSelect_ReturnStatus.hxx>
 #include <IGESControl_Reader.hxx>
+#include <ShapeFix_Shape.hxx>
 #include <ShapeFix_Solid.hxx>
 #include <STEPControl_Reader.hxx>
 #include <TopExp.hxx>
@@ -128,6 +130,51 @@ TopoDS_Shape sew_faces_into_solid(const TopoDS_Shape& shape) {
     if (nsolids == 1)
         return TopoDS::Solid(TopExp_Explorer(solids, TopAbs_SOLID).Current());
     return solids;
+}
+
+// Diagnose and repair the imported shape (see cad_io.h). CAD exports routinely
+// carry defects — sliver faces, near-degenerate edges, self-intersecting wires
+// at trim boundaries — that survive import as valid-looking topology. Netgen
+// then generates near-zero-area surface elements on them, which its overlap
+// detection reads as intersecting geometry (issue #214). Repairing the shape
+// here, once at import, fixes that at the source for both display tessellation
+// and meshing.
+TopoDS_Shape heal_shape(const TopoDS_Shape& shape) {
+    BRepCheck_Analyzer analyzer(shape);
+    if (analyzer.IsValid())
+        return shape;
+
+    (void)printf("[occt] heal_shape: imported geometry has invalid subshapes — "
+                 "running ShapeFix_Shape\n");
+    (void)fflush(stdout);
+
+    Handle(ShapeFix_Shape) fixer = new ShapeFix_Shape(shape);
+    // Bound how far healing may move geometry to the same model-size-relative
+    // scale used for sewing: unbounded, ShapeFix can merge features that are
+    // legitimately close together.
+    const double diag = shape_bbox_diagonal(shape);
+    if (diag > 0.0)
+        fixer->SetMaxTolerance(diag * 1e-4);
+    fixer->Perform();
+
+    TopoDS_Shape healed = fixer->Shape();
+    if (healed.IsNull()) {
+        (void)printf("[occt] heal_shape: ShapeFix_Shape returned no shape — "
+                     "keeping the original geometry\n");
+        (void)fflush(stdout);
+        return shape;
+    }
+
+    // A residual defect is not fatal here: meshing may still succeed, and if it
+    // does not, the mesher fails with its own explicit error. Report the
+    // outcome either way so the log tells the whole story.
+    const bool valid_now = BRepCheck_Analyzer(healed).IsValid();
+    (void)printf("[occt] heal_shape: %s\n",
+                 valid_now ? "geometry repaired — all subshapes valid"
+                           : "geometry partially repaired — some defects remain; "
+                             "meshing will fail loudly if they matter");
+    (void)fflush(stdout);
+    return healed;
 }
 
 // Read a CAD file (STEP or IGES) from raw bytes into an OCCT shape.

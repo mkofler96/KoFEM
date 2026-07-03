@@ -154,8 +154,14 @@ std::string generate_fem_mesh(const std::string& opts_json)
     mp.optsteps_3d                = optsteps_3d;
     mp.invert_tets                = 0;
     mp.invert_trigs               = 0;
-    mp.check_overlap              = 0;
-    mp.check_overlapping_boundary = 0;
+    // Overlap detection stays enabled (issue #214): imported geometry is
+    // healed at load (heal_shape in cad_io.cpp), which repairs the defects
+    // that used to make the check fail on valid parts. A mesh that still
+    // trips it contains genuinely intersecting elements — the stiffness
+    // matrix assembled from it would be silently wrong, so meshing fails
+    // loudly below instead.
+    mp.check_overlap              = 1;
+    mp.check_overlapping_boundary = 1;
 
     nglib::Ng_Mesh* mesh = nglib::Ng_NewMesh();
     if (!mesh) {
@@ -202,7 +208,8 @@ std::string generate_fem_mesh(const std::string& opts_json)
     // optimisation (surface node projection).  Freeing geom before this call
     // causes dangling-pointer reads that corrupt the WASM vtable (invoke_ii
     // trap with a heap address instead of a function table index).
-    printf("[netgen] step 4/4: Delaunay volume fill (optsteps_3d=%d)\n", mp.optsteps_3d);
+    printf("[netgen] step 4/4: Delaunay volume fill with overlap checking "
+           "(optsteps_3d=%d)\n", mp.optsteps_3d);
     fflush(stdout);
     log_mem("generate_fem_mesh: step 4 GenerateVolumeMesh");
     res = nglib::Ng_GenerateVolumeMesh(mesh, &mp);
@@ -210,7 +217,11 @@ std::string generate_fem_mesh(const std::string& opts_json)
     if (res != nglib::NG_OK) {
         kofem_delete_mesh(static_cast<void*>(mesh));
         throw std::runtime_error(
-            "Ng_GenerateVolumeMesh failed (code " + std::to_string((int)res) + ")");
+            "Ng_GenerateVolumeMesh failed (code " + std::to_string((int)res) + "). "
+            "The boundary mesh contains overlapping or self-intersecting elements "
+            "that geometry healing could not repair — an analysis on such a mesh "
+            "would be silently wrong. Check the CAD model for near-touching or "
+            "self-intersecting surfaces and re-export.");
     }
     log_mem("generate_fem_mesh: step 4 done");
 
@@ -341,9 +352,11 @@ std::string generate_volume_mesh(
     // namespace nglib::, so Ng_Meshing_Parameters() may not link and leaves
     // fields uninitialised.  Explicit assignment is correct regardless.
     //
-    // check_overlap / check_overlapping_boundary are forced to 0: the Netgen
-    // default (1) crashes on complex STEP geometry with near-touching surfaces,
-    // and the JS deduplication step already produces a manifold mesh.
+    // check_overlap / check_overlapping_boundary are 0 on this legacy path
+    // only: its input is a raw display-tessellation triangle soup whose
+    // near-zero-area triangles the check reads as overlaps. There is no CAD
+    // shape here to heal. The live pipeline (generate_fem_mesh above) meshes
+    // healed CAD geometry and keeps both checks enabled (issue #214).
     nglib::Ng_Meshing_Parameters mp;
     mp.uselocalh                  = uselocalh;
     mp.maxh                       = max_size;
