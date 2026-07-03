@@ -66,7 +66,7 @@ function m(): KofemModule {
 
 // Group a flat typed array (xyz / abc interleaved) into [a, b, c] tuples.
 // tessellate_step now returns binary typed arrays instead of a JSON string;
-// the store's StepSurfaceMesh holds nested tuples, so unpack at this boundary —
+// the store's StepTessellation holds nested tuples, so unpack at this boundary —
 // far cheaper than the previous JSON.parse of a multi-MB text payload.
 function chunk3(flat: Float32Array | Uint32Array): [number, number, number][] {
   const n = (flat.length / 3) | 0;
@@ -148,7 +148,7 @@ self.onmessage = async (event: MessageEvent) => {
       // tessellate_step stores the OCCT shape in the module — record that so a
       // subsequent volume_mesh in this same worker can skip the reload.
       geometryLoaded = true;
-      // Return as {points, triangles} to match the StepSurfaceMesh type used by
+      // Return as {points, triangles} to match the StepTessellation type used by
       // the store; tessellate_step returns flat Float32/Uint32 typed arrays.
       self.postMessage({
         id,
