@@ -20,6 +20,14 @@ TopoDS_Shape read_cad_shape(const std::vector<uint8_t>& bytes, const std::string
 // shape unchanged when it already contains a solid or when no closed shell forms.
 TopoDS_Shape sew_faces_into_solid(const TopoDS_Shape& shape);
 
+// Diagnose the imported shape with BRepCheck_Analyzer and, when defects are
+// found, repair them with ShapeFix_Shape (small/degenerate edges, wire gaps
+// and self-intersections, face orientation). Healing at import is what lets
+// Netgen's mesh overlap detection stay enabled (issue #214): the defects it
+// repairs are the source of the near-degenerate surface elements that used to
+// crash the check. Returns the shape unchanged when it is already valid.
+TopoDS_Shape heal_shape(const TopoDS_Shape& shape);
+
 // Longest diagonal of the shape's axis-aligned bounding box (mm), or 0 if empty.
 // Used to scale the tessellation chord tolerance with model size.
 double shape_bbox_diagonal(const TopoDS_Shape& shape);

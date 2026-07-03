@@ -49,7 +49,10 @@ val tessellate_step(val bytes_val, const std::string& opts_json) {
     // read_cad_shape returns whatever the CAD file stores. IGES (and some STEP)
     // files store only free surfaces, so sew them into a solid here — once, on
     // load — and cache the result for both display and meshing (issue #276).
-    TopoDS_Shape shape = sew_faces_into_solid(read_cad_shape(bytes, format));
+    // heal_shape then repairs import defects (sliver faces, degenerate edges,
+    // self-intersecting trim wires) so downstream meshing can keep Netgen's
+    // overlap detection enabled (issue #214).
+    TopoDS_Shape shape = heal_shape(sew_faces_into_solid(read_cad_shape(bytes, format)));
     set_cached_shape(shape);
 
     double diag = shape_bbox_diagonal(shape);
