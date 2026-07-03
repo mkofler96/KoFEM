@@ -33,3 +33,24 @@ export async function importStep(
     throw new Error(`STEP import failed: ${await stepErr.textContent()}`);
   }
 }
+
+// Open the app and import an IGES file via the Geometry panel's import card.
+export async function importIges(
+  page: Page,
+  igesFile: string,
+  timeout = 60_000,
+): Promise<void> {
+  await gotoApp(page);
+  await page
+    .locator('input[type="file"][accept=".igs,.iges"]')
+    .setInputFiles(igesFile);
+  // Tessellation done → the mesh controls (and "Mesh STEP volume") appear.
+  await expect(
+    page.getByRole("button").filter({ hasText: "Mesh STEP volume" }),
+  ).toBeVisible({ timeout });
+
+  const stepErr = page.getByTestId("step-error");
+  if (await stepErr.isVisible()) {
+    throw new Error(`IGES import failed: ${await stepErr.textContent()}`);
+  }
+}
