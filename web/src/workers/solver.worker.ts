@@ -305,6 +305,9 @@ self.onmessage = async (event: MessageEvent) => {
         nodes: Node[];
         elements: Element[];
         materials: Material[];
+        // Reserved for #317 (per-body materials) — the single-material solve
+        // below reads materials[0] directly and does not resolve elements
+        // through propertyId/materialId (see #320).
         properties: unknown[];
         constraints: Constraint[];
         loads: Load[];

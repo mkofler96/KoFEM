@@ -18,6 +18,13 @@ export interface Node {
 // such support is actually added.
 export type ElementType = "CTETRA" | "CHEXA";
 
+// Reserved seam for #317 (multibody: per-body materials). Currently
+// write-only — the solver reads `materials[0]` directly (solver.worker.ts)
+// and does not consult `propertyId`/`materialId` to resolve an element's
+// material. Every model still carries exactly one auto-created Property
+// referencing the model's sole material; do not treat this as the current
+// material-assignment mechanism until #317 wires per-element regions
+// through it (see #320).
 export interface Property {
   id: number;
   materialId: number;
