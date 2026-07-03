@@ -32,11 +32,17 @@ test("WASM OCC generate_fem_mesh: end-to-end smoke test on surface-only IGES fix
   await importIges(page, IGES_FILE);
 
   // Wait for __kofem (set synchronously in main.tsx)
-  await page.waitForFunction(() => !!(window as any).__kofem);
+  await page.waitForFunction(() =>
+    Boolean((window as unknown as { __kofem?: unknown }).__kofem),
+  );
 
-  const result = (await page.evaluate(async () => {
-    return (window as any).__kofem.sendToWorker("test_generate_fem_mesh", {});
-  })) as { nodes: number; elements: number; durationMs: number };
+  const result = (await page.evaluate(() =>
+    (
+      window as unknown as {
+        __kofem: { sendToWorker: (t: string, p: unknown) => Promise<unknown> };
+      }
+    ).__kofem.sendToWorker("test_generate_fem_mesh", {}),
+  )) as { nodes: number; elements: number; durationMs: number };
 
   console.log(
     `[wasm-unit-iges] nodes=${result.nodes} elements=${result.elements} durationMs=${result.durationMs}`,
