@@ -658,10 +658,10 @@ std::string solve_linear_elastic(
     val nu_val = mat_js["poisson_ratio"];
 
     if (E_val.isNull() || E_val.isUndefined()) {
-        return "{\"error\":\"material is missing young_modulus\"}";
+        return R"({"error":"material is missing young_modulus"})";
     }
     if (nu_val.isNull() || nu_val.isUndefined()) {
-        return "{\"error\":\"material is missing poisson_ratio\"}";
+        return R"({"error":"material is missing poisson_ratio"})";
     }
 
     double E  = E_val.as<double>();
