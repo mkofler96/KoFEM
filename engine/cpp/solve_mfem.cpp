@@ -654,8 +654,18 @@ std::string solve_linear_elastic(
 
     MeshArrays mesh_arrays = parse_mesh(mesh_js);
 
-    double E  = jdouble(mat_js, "young_modulus", 210e9);
-    double nu = jdouble(mat_js, "poisson_ratio",   0.3);
+    val E_val  = mat_js["young_modulus"];
+    val nu_val = mat_js["poisson_ratio"];
+
+    if (E_val.isNull() || E_val.isUndefined()) {
+        return "{\"error\":\"material is missing young_modulus\"}";
+    }
+    if (nu_val.isNull() || nu_val.isUndefined()) {
+        return "{\"error\":\"material is missing poisson_ratio\"}";
+    }
+
+    double E  = E_val.as<double>();
+    double nu = nu_val.as<double>();
 
     val loads_js = bcs_js["point_loads"];
     printf("[mfem] BCs: %u fixed vertices, %u point loads\n",

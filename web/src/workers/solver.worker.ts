@@ -453,10 +453,13 @@ self.onmessage = async (event: MessageEvent) => {
         JSON.stringify(bcs),
         order,
       );
-      const result = JSON.parse(json) as {
-        displacements: number[];
-        von_mises: number[];
-      };
+      const result = JSON.parse(json) as
+        { displacements: number[]; von_mises: number[] } | { error: string };
+
+      if ("error" in result) {
+        throw new Error(result.error);
+      }
+
       self.postMessage({
         id,
         log: `Solve complete: ${result.displacements.length / 3} vertex displacements, ${result.von_mises.length} element stresses`,
