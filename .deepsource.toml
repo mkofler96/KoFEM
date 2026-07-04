@@ -31,6 +31,7 @@ enabled = true
 name = "rustfmt"
 enabled = true
 
-[[code_formatters]]
-name = "prettier"
-enabled = true
+# No prettier formatter: DeepSource's bundled Prettier disagrees with the
+# lockfile-pinned version the pre-commit hook and Frontend CI enforce, so the
+# autofix bot and CI reformatted the same lines in opposite directions in an
+# endless loop (see PR #348). Formatting is already gated locally and in CI.
