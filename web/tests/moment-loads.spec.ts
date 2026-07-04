@@ -242,7 +242,9 @@ test("solve worker completes when loads include a moment (Mz)", async ({
       1000,
     );
 
-    const s = store.getState() as unknown as {
+    // Re-read after clearLoads/createLoadGroup so the payload carries the
+    // mutated load set, not the snapshot taken above.
+    const freshState = store.getState() as unknown as {
       nodes: unknown[];
       elements: unknown[];
       materials: unknown[];
@@ -258,12 +260,12 @@ test("solve worker completes when loads include a moment (Mz)", async ({
       }
     ).__kofem;
     return kofem.sendToWorker("solve", {
-      nodes: s.nodes,
-      elements: s.elements,
-      materials: s.materials,
-      properties: s.properties,
-      constraints: s.constraints,
-      loads: s.loads,
+      nodes: freshState.nodes,
+      elements: freshState.elements,
+      materials: freshState.materials,
+      properties: freshState.properties,
+      constraints: freshState.constraints,
+      loads: freshState.loads,
     });
   })) as { displacements: number[] };
 

@@ -39,8 +39,8 @@ export function MeshScene() {
     if (!result) return 1;
     let maxDisp = 0;
     for (let i = 0; i < result.displacements.length; i++) {
-      const v = Math.abs(result.displacements[i]);
-      if (v > maxDisp) maxDisp = v;
+      const mag = Math.abs(result.displacements[i]);
+      if (mag > maxDisp) maxDisp = mag;
     }
     if (maxDisp < 1e-30) return deformScaleFactor;
     return ((TARGET_DEFORM_FRACTION * modelSize) / maxDisp) * deformScaleFactor;

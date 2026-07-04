@@ -64,6 +64,21 @@ const order = elementOrder ?? 1;
 
 A disable comment without a `-- justification` is treated as a bug in review.
 
+### Variable names
+
+`web/` also mirrors DeepSource JS-C1003 ("Variable name is too small") locally
+as `kofem/min-identifier-length` (`web/eslint-rules/min-identifier-length.js`),
+so single-letter `const`/`let`/`var` names fail `bun run lint` (over `src` and
+`tests`) before DeepSource flags them on the PR. Loop declarations and
+function/callback parameters are exempt, as are the conventional counters
+`i`, `j`, `k`, `n`, and `_`. Rename the variable, or — for a genuine
+physics/math symbol documented by an equation comment — disable with a
+justification:
+
+```ts
+/* eslint-disable kofem/min-identifier-length -- symbols from the Euler–Bernoulli formula above: δ = P·L³/(3·E·I), I = b·h³/12 */
+```
+
 ## Pull requests
 
 - The PR template asks you to confirm, per changed code path, that missing or

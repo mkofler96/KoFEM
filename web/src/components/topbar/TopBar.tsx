@@ -32,15 +32,15 @@ export function TopBar() {
   }
 
   function handleSave() {
-    const s = useModelStore.getState();
-    const xml = serializeAnalysis(s);
+    const state = useModelStore.getState();
+    const xml = serializeAnalysis(state);
     const url = URL.createObjectURL(
       new Blob([xml], { type: "application/xml" }),
     );
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = analysisFileName(s.modelName);
-    a.click();
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = analysisFileName(state.modelName);
+    anchor.click();
     URL.revokeObjectURL(url);
   }
 

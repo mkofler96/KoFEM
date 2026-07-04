@@ -46,22 +46,22 @@ function quad(a, b, c, d) {
 //   faceId 3 — top cap       (normal points up, +z)
 //   faceId 4 — bottom cap    (normal points down, -z)
 
-const N = 8; // circumferential segments
+const SEGS = 8; // circumferential segments
 const Ri = 5; // inner radius
 const Ro = 10; // outer radius
 const HEIGHT = 20; // height
 
 // Vertex layout (32 vertices total):
-//   0..N-1    inner bottom ring
-//   N..2N-1   inner top ring
-//   2N..3N-1  outer bottom ring
-//   3N..4N-1  outer top ring
+//   0..SEGS-1          inner bottom ring
+//   SEGS..2*SEGS-1     inner top ring
+//   2*SEGS..3*SEGS-1   outer bottom ring
+//   3*SEGS..4*SEGS-1   outer top ring
 
 const verts = [
-  ...ringVerts(Ri, 0, N), // inner bottom
-  ...ringVerts(Ri, HEIGHT, N), // inner top
-  ...ringVerts(Ro, 0, N), // outer bottom
-  ...ringVerts(Ro, HEIGHT, N), // outer top
+  ...ringVerts(Ri, 0, SEGS), // inner bottom
+  ...ringVerts(Ri, HEIGHT, SEGS), // inner top
+  ...ringVerts(Ro, 0, SEGS), // outer bottom
+  ...ringVerts(Ro, HEIGHT, SEGS), // outer top
 ];
 
 const triangles = [];
@@ -69,10 +69,10 @@ const faceIds = [];
 
 // Inner mantle — quads go ccw when viewed from OUTSIDE the tube (which is
 // inside the tube opening, so normals point toward the axis = inward).
-for (let i = 0; i < N; i++) {
-  const j = (i + 1) % N;
+for (let i = 0; i < SEGS; i++) {
+  const j = (i + 1) % SEGS;
   // inner bottom[i], inner bottom[j], inner top[j], inner top[i]
-  const tris = quad(i, j, N + j, N + i);
+  const tris = quad(i, j, SEGS + j, SEGS + i);
   for (const t of tris) {
     triangles.push(t);
     faceIds.push(1);
@@ -80,10 +80,10 @@ for (let i = 0; i < N; i++) {
 }
 
 // Outer mantle — normals point outward.
-for (let i = 0; i < N; i++) {
-  const j = (i + 1) % N;
+for (let i = 0; i < SEGS; i++) {
+  const j = (i + 1) % SEGS;
   // outer bottom[i], outer top[i], outer top[j], outer bottom[j]
-  const tris = quad(2 * N + i, 3 * N + i, 3 * N + j, 2 * N + j);
+  const tris = quad(2 * SEGS + i, 3 * SEGS + i, 3 * SEGS + j, 2 * SEGS + j);
   for (const t of tris) {
     triangles.push(t);
     faceIds.push(2);
@@ -91,10 +91,10 @@ for (let i = 0; i < N; i++) {
 }
 
 // Top cap — connects inner top ring to outer top ring. Normals point up.
-for (let i = 0; i < N; i++) {
-  const j = (i + 1) % N;
+for (let i = 0; i < SEGS; i++) {
+  const j = (i + 1) % SEGS;
   // inner top[i], outer top[i], outer top[j], inner top[j]
-  const tris = quad(N + i, 3 * N + i, 3 * N + j, N + j);
+  const tris = quad(SEGS + i, 3 * SEGS + i, 3 * SEGS + j, SEGS + j);
   for (const t of tris) {
     triangles.push(t);
     faceIds.push(3);
@@ -102,10 +102,10 @@ for (let i = 0; i < N; i++) {
 }
 
 // Bottom cap — connects inner bottom ring to outer bottom ring. Normals point down.
-for (let i = 0; i < N; i++) {
-  const j = (i + 1) % N;
+for (let i = 0; i < SEGS; i++) {
+  const j = (i + 1) % SEGS;
   // inner bottom[i], inner bottom[j], outer bottom[j], outer bottom[i]
-  const tris = quad(i, j, 2 * N + j, 2 * N + i);
+  const tris = quad(i, j, 2 * SEGS + j, 2 * SEGS + i);
   for (const t of tris) {
     triangles.push(t);
     faceIds.push(4);
@@ -208,7 +208,7 @@ console.log("\nTest 3: BFS mode (no face IDs) — inner cylinder surface");
 
 const topoNoIds = buildBoundaryMeshTopo(triangles, getPos);
 const pickedBFS = pickFaceNodeIds(
-  innerTriIndices[Math.floor(N / 2)],
+  innerTriIndices[Math.floor(SEGS / 2)],
   topoNoIds,
 );
 

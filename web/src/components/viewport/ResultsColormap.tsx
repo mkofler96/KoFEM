@@ -44,28 +44,28 @@ export function ResultsColormap({
     const hasTris = boundaryTriFaceIds.length > 0;
     if (!hasQuads && !hasTris) return null;
 
-    const d = result.displacements;
+    const disp = result.displacements;
     // A remesh can change the node count/ids after a solve completes but
-    // before `result` is invalidated. Rendering `d` against a mismatched
+    // before `result` is invalidated. Rendering `disp` against a mismatched
     // nodeMap would silently zero-fill out-of-range nodes and draw a
     // plausible-looking but wrong colormap/deformed shape — bail instead.
-    if (d.length !== nodeMap.size * 3) return null;
+    if (disp.length !== nodeMap.size * 3) return null;
 
     // Compute per-node scalar value for the selected result type
     const nodeValue = (i: number, rt: ResultType): number => {
       switch (rt) {
         case "Ux":
-          return d[i * 3];
+          return disp[i * 3];
         case "Uy":
-          return d[i * 3 + 1];
+          return disp[i * 3 + 1];
         case "Uz":
-          return d[i * 3 + 2];
+          return disp[i * 3 + 2];
         case "Von Mises stress":
           return nodeVonMises?.[i] ?? 0;
         default: {
-          const ux = d[i * 3],
-            uy = d[i * 3 + 1],
-            uz = d[i * 3 + 2];
+          const ux = disp[i * 3],
+            uy = disp[i * 3 + 1],
+            uz = disp[i * 3 + 2];
           return Math.sqrt(ux * ux + uy * uy + uz * uz);
         }
       }
@@ -74,9 +74,9 @@ export function ResultsColormap({
     let minVal = Infinity,
       maxVal = -Infinity;
     for (let i = 0; i < nodes.length; i++) {
-      const v = nodeValue(i, resultType);
-      if (v < minVal) minVal = v;
-      if (v > maxVal) maxVal = v;
+      const val = nodeValue(i, resultType);
+      if (val < minVal) minVal = val;
+      if (val > maxVal) maxVal = val;
     }
     const range = maxVal - minVal || 1;
 
@@ -86,17 +86,17 @@ export function ResultsColormap({
     const deformedPos = (id: number): [number, number, number] => {
       const { n, i } = nodeMap.get(id)!;
       return [
-        n.x + d[i * 3] * deformScale,
-        n.y + d[i * 3 + 1] * deformScale,
-        n.z + d[i * 3 + 2] * deformScale,
+        n.x + disp[i * 3] * deformScale,
+        n.y + disp[i * 3 + 1] * deformScale,
+        n.z + disp[i * 3 + 2] * deformScale,
       ];
     };
     const nodeColor = (id: number): [number, number, number] => {
       const { i } = nodeMap.get(id)!;
-      const t = (nodeValue(i, resultType) - minVal) / range;
-      const c = new THREE.Color();
-      c.setHSL(0.667 * (1 - t), 1, 0.5);
-      return [c.r, c.g, c.b];
+      const frac = (nodeValue(i, resultType) - minVal) / range;
+      const color = new THREE.Color();
+      color.setHSL(0.667 * (1 - frac), 1, 0.5);
+      return [color.r, color.g, color.b];
     };
 
     for (const [a, b, c_, dd] of boundaryQuadFaceIds) {

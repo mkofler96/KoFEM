@@ -75,7 +75,7 @@ test("save → load → re-save round-trips the analysis losslessly", async ({
   // state must reproduce the saved displacement / von Mises fields.
   const readResult = () =>
     page.evaluate(() => {
-      const s = (
+      const state = (
         window as unknown as {
           __kofemStore: {
             getState(): {
@@ -87,10 +87,12 @@ test("save → load → re-save round-trips the analysis losslessly", async ({
           };
         }
       ).__kofemStore.getState();
-      if (!s.result) throw new Error("no result in store");
+      if (!state.result) throw new Error("no result in store");
       return {
-        displacements: Array.from(s.result.displacements),
-        vonMises: s.result.vonMises ? Array.from(s.result.vonMises) : null,
+        displacements: Array.from(state.result.displacements),
+        vonMises: state.result.vonMises
+          ? Array.from(state.result.vonMises)
+          : null,
       };
     });
 

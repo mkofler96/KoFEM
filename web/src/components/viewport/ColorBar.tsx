@@ -17,8 +17,8 @@ const TICKS = 5;
 const gradient = (() => {
   const stops: string[] = [];
   for (let i = 0; i <= GRADIENT_STOPS; i++) {
-    const t = i / GRADIENT_STOPS;
-    stops.push(`${resultColor(t).getStyle()} ${t * 100}%`);
+    const frac = i / GRADIENT_STOPS;
+    stops.push(`${resultColor(frac).getStyle()} ${frac * 100}%`);
   }
   return `linear-gradient(to top, ${stops.join(", ")})`;
 })();
@@ -38,8 +38,8 @@ export function ColorBar() {
   const { min, max } = range;
   // Tick values from top (max) to bottom (min).
   const ticks = Array.from({ length: TICKS }, (_, i) => {
-    const t = 1 - i / (TICKS - 1);
-    return min + t * (max - min);
+    const frac = 1 - i / (TICKS - 1);
+    return min + frac * (max - min);
   });
 
   return (

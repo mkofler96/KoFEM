@@ -10,7 +10,7 @@
     "build:dev": "tsc && vite build --mode development",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src",
+    "lint": "eslint src tests",
     "format": "prettier --write src tests eslint-rules eslint.config.js \"../*.md\" \"../.github/**/*.md\"",
     "format:check": "prettier --check src tests eslint-rules eslint.config.js \"../*.md\" \"../.github/**/*.md\"",
     "validate": "bun ../examples/validation/run.mjs",

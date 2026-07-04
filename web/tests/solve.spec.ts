@@ -24,7 +24,7 @@ function watchForErrors(
   tag: string,
 ): Promise<never> {
   let _reject: ((err: Error) => void) | null = null;
-  const p = new Promise<never>((_, rej) => {
+  const failure = new Promise<never>((_, rej) => {
     _reject = rej;
   });
   page.on("console", (msg) => {
@@ -40,7 +40,7 @@ function watchForErrors(
     console.error(`[${tag}] page exception: ${err.message}`);
     _reject?.(err);
   });
-  return p;
+  return failure;
 }
 
 test("app loads with import and load options", async ({ page }) => {
@@ -91,7 +91,7 @@ test("results panel switches to von Mises stress", async ({ page }) => {
         };
       }
     ).__kofemStore;
-    const s = store.getState();
+    const state = store.getState();
     const { displacements, vonMises } = (await (
       window as unknown as {
         __kofem: {
@@ -99,13 +99,13 @@ test("results panel switches to von Mises stress", async ({ page }) => {
         };
       }
     ).__kofem.sendToWorker("solve", {
-      nodes: s.nodes,
-      elements: s.elements,
-      materials: s.materials,
-      properties: s.properties,
-      constraints: s.constraints,
-      loads: s.loads,
-      surfaceLoads: s.surfaceLoads,
+      nodes: state.nodes,
+      elements: state.elements,
+      materials: state.materials,
+      properties: state.properties,
+      constraints: state.constraints,
+      loads: state.loads,
+      surfaceLoads: state.surfaceLoads,
     })) as { displacements: number[]; vonMises: number[] };
     store.getState().setResult({
       displacements: new Float64Array(displacements),

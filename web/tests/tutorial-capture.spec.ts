@@ -165,7 +165,7 @@ test.describe("Tutorial figure capture", () => {
     );
 
     const bc = await page.evaluate(() => {
-      const s = (
+      const state = (
         window as unknown as {
           __kofemStore: {
             getState(): {
@@ -178,8 +178,8 @@ test.describe("Tutorial figure capture", () => {
       ).__kofemStore.getState();
       // Force loads now reach the solver as surface tractions, so count both.
       return {
-        constraints: s.constraints.length,
-        loads: s.loads.length + s.surfaceLoads.length,
+        constraints: state.constraints.length,
+        loads: state.loads.length + state.surfaceLoads.length,
       };
     });
     if (bc.constraints === 0 || bc.loads === 0) {
