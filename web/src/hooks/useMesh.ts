@@ -25,7 +25,7 @@ export function useMesh() {
   // limit, which can produce >10x more elements than the max size suggests.
   const [minElementSize, setMinElementSize] = useState(2);
   const [meshError, setMeshError] = useState<string | null>(null);
-  const { logs, clearLogs } = useWorkerLogs();
+  const { logs, clearLogs } = useWorkerLogs("mesh");
 
   async function meshVolume() {
     if (!stepSurface) return;

@@ -25,7 +25,7 @@ export function useSolver() {
   const setMode = useModelStore((s) => s.setMode);
   const elementOrder = useModelStore((s) => s.elementOrder);
   const [error, setError] = useState<string | null>(null);
-  const { logs, clearLogs } = useWorkerLogs();
+  const { logs, clearLogs } = useWorkerLogs("solve");
 
   const meshOk = nodes.length > 0;
   const matOk = materials.length > 0;
