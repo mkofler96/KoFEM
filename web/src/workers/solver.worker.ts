@@ -4,11 +4,6 @@
 
 // Runs kofem-wasm off the main thread so heavy solves don't freeze the UI.
 
-// import init, {
-//   tessellate_step,
-//   generate_volume_mesh,
-//   solve_linear_elastic,
-// } from '/wasm/pkg/kofem_wasm.js'
 import createModule from "../wasm/pkg/kofem_wasm.js";
 import type { KofemModule } from "../wasm/pkg/kofem_wasm.js";
 

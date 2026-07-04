@@ -41,34 +41,3 @@ export interface ModuleOverrides {
 
 /** Initialise the WASM module and return it. Must be awaited before using any function. */
 export default function init(overrides?: ModuleOverrides): Promise<KofemModule>
-
-/** Load a STEP or IGES file and tessellate it into a closed surface triangle mesh.
- *  @param cad_bytes Raw STEP/IGES file bytes.
- *  @param opts_json  JSON-serialised `{ deflection_relative?: number, linear_deflection?: number, angular_deflection?: number, format?: "step" | "iges" }`.
- *    `deflection_relative` is the chord tolerance as a fraction of the bounding-box
- *    diagonal (default 0.001); `linear_deflection` overrides it with an absolute mm value.
- *    `format` selects the reader (default "step").
- *  @returns Flat typed arrays — see {@link StepTessellation}.
- */
-export function tessellate_step(cad_bytes: Uint8Array, opts_json: string): StepTessellation
-
-/** Generate a quality tetrahedral volume mesh from a closed surface mesh.
- *  @param surface_json JSON-serialised `{ vertices: [number,number,number][], triangles: [number,number,number][] }`.
- *  @param opts_json    JSON-serialised `{ max_element_size: number, min_element_size: number, grading: number, second_order: boolean }`.
- *  @returns JSON-serialised `{ vertices: [number,number,number][], tetrahedra: [number,number,number,number][] }`.
- */
-export function generate_volume_mesh(surface_json: string, opts_json: string): string
-
-/** Run a linear-elastic FEM solve using MFEM.
- *  @param mesh_json JSON-serialised `{ vertices: [number,number,number][], tetrahedra: [number,number,number,number][], hexahedra: [number,number,number,number,number,number,number,number][] }`.
- *  @param mat_json  JSON-serialised `{ young_modulus: number, poisson_ratio: number, density: number }`.
- *  @param bcs_json  JSON-serialised `{ fixed_vertices: number[], point_loads: { vertex: number, force: [number,number,number] }[], surface_loads?: { type: "force"|"pressure"|"traction", faces: number[][], force?: [number,number,number], pressure?: number }[] }`.
- *  @param order     FE polynomial order (1 = linear, 2 = quadratic).
- *  @returns JSON-serialised `{ displacements: number[], von_mises: number[] }`.
- */
-export function solve_linear_elastic(
-  mesh_json: string,
-  mat_json: string,
-  bcs_json: string,
-  order: number
-): string
