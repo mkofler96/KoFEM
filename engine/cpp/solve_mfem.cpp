@@ -2,6 +2,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // MFEM: linear-elastic FEM solve. See solve_mfem.h.
+//
+// solve_linear_elastic is a thin orchestrator over the pipeline stages below
+// (issue #293): parse mesh JSON → build the MFEM mesh → collect essential
+// (Dirichlet) DOFs → assemble loads → CG solve → recover displacements and
+// von Mises stress. Two orderings are load-bearing and owned by the
+// orchestrator, not the helpers: the surface-load coefficient/marker storage
+// must outlive b.Assemble(), and prescribed displacement values must be seeded
+// into the solution GridFunction before FormLinearSystem.
 
 #include "solve_mfem.h"
 
@@ -24,6 +32,10 @@
 
 using emscripten::val;
 
+namespace {
+
+constexpr int dim = 3;
+
 // Traction coefficient for a uniform pressure load: returns -p·n̂ at each
 // boundary quadrature point, where n̂ is the unit outward normal. The integrator
 // (VectorBoundaryLFIntegrator) already multiplies by the surface measure, so the
@@ -33,8 +45,8 @@ class PressureCoefficient : public mfem::VectorCoefficient {
     double pressure_;
 
 public:
-    PressureCoefficient(int dim, double pressure)
-        : mfem::VectorCoefficient(dim), pressure_(pressure) {}
+    PressureCoefficient(int vdim, double pressure)
+        : mfem::VectorCoefficient(vdim), pressure_(pressure) {}
 
     void Eval(mfem::Vector& V, mfem::ElementTransformation& T,
               const mfem::IntegrationPoint& ip) override {
@@ -79,20 +91,17 @@ public:
     }
 };
 
-std::string solve_linear_elastic(
-    const std::string& mesh_json,
-    const std::string& mat_json,
-    const std::string& bcs_json,
-    int order)
-{
-    using namespace mfem;
+// ── Mesh parsing / construction ───────────────────────────────────────────────
 
-    log_mem("solve: start");
-    printf("[mfem] solve_linear_elastic: parsing inputs\n"); fflush(stdout);
-    val mesh_js = parse_json(mesh_json);
-    val mat_js  = parse_json(mat_json);
-    val bcs_js  = parse_json(bcs_json);
+// Flat volume-mesh arrays extracted from the mesh JSON: xyz per vertex, four
+// vertex indices per tet, eight per hex.
+struct MeshArrays {
+    std::vector<double> vertices;
+    std::vector<int> tets;
+    std::vector<int> hexs;
+};
 
+MeshArrays parse_mesh(const val& mesh_js) {
     val verts_js = mesh_js["vertices"];
     val tets_js  = mesh_js["tetrahedra"];
     val hexs_js  = mesh_js["hexahedra"];
@@ -108,82 +117,74 @@ std::string solve_linear_elastic(
 
     log_mem("solve: after JSON parse");
     printf("[mfem] extracting %u vertices\n", nv); fflush(stdout);
-    std::vector<double> vertices;
-    vertices.reserve(3 * nv);
+    MeshArrays m;
+    m.vertices.reserve(3 * nv);
     for (unsigned i = 0; i < nv; ++i) {
         val v = verts_js[i];
-        vertices.push_back(v[0].as<double>());
-        vertices.push_back(v[1].as<double>());
-        vertices.push_back(v[2].as<double>());
+        m.vertices.push_back(v[0].as<double>());
+        m.vertices.push_back(v[1].as<double>());
+        m.vertices.push_back(v[2].as<double>());
     }
 
     printf("[mfem] extracting %u tets\n", nt); fflush(stdout);
-    std::vector<int> tets;
-    tets.reserve(4 * nt);
+    m.tets.reserve(4 * nt);
     for (unsigned i = 0; i < nt; ++i) {
         val t = tets_js[i];
-        tets.push_back(t[0].as<int>());
-        tets.push_back(t[1].as<int>());
-        tets.push_back(t[2].as<int>());
-        tets.push_back(t[3].as<int>());
+        m.tets.push_back(t[0].as<int>());
+        m.tets.push_back(t[1].as<int>());
+        m.tets.push_back(t[2].as<int>());
+        m.tets.push_back(t[3].as<int>());
     }
 
     printf("[mfem] extracting %u hexs\n", nh); fflush(stdout);
-    std::vector<int> hexs;
-    hexs.reserve(8 * nh);
+    m.hexs.reserve(8 * nh);
     for (unsigned i = 0; i < nh; ++i) {
         val h = hexs_js[i];
         for (int k = 0; k < 8; ++k)
-            hexs.push_back(h[k].as<int>());
+            m.hexs.push_back(h[k].as<int>());
     }
+    return m;
+}
 
-    double E  = jdouble(mat_js, "young_modulus", 210e9);
-    double nu = jdouble(mat_js, "poisson_ratio",   0.3);
+// Build MFEM mesh programmatically to avoid C++ iostream file I/O.
+//
+// The file-based path (Mesh(filename, ...)) opens an ifstream and reads
+// through basic_filebuf / basic_streambuf virtual dispatch.  In the WASM
+// (Emscripten) build the locale/codec facet pointer inside the streambuf
+// object is null, so the first virtual call through it traps with
+// "Out of bounds memory access" via invoke_iiiiii.
+//
+// The programmatic path calls no iostream code at all: AddVertex / AddTet /
+// AddHex populate in-memory arrays directly, and FinalizeTopology builds all
+// connectivity (faces, boundary elements, edge table) without file I/O.
+// In 3D, FinalizeTopology always builds the edge table, which is required by
+// H1_FECollection for DOF numbering.
+mfem::Mesh build_mfem_mesh(const MeshArrays& m) {
+    unsigned nv = (unsigned)(m.vertices.size() / 3);
+    unsigned nt = (unsigned)(m.tets.size() / 4);
+    unsigned nh = (unsigned)(m.hexs.size() / 8);
 
-    val fixed_js = bcs_js["fixed_vertices"];
-    unsigned n_fixed = fixed_js["length"].as<unsigned>();
-
-    val loads_js  = bcs_js["point_loads"];
-    unsigned n_loads = loads_js["length"].as<unsigned>();
-
-    printf("[mfem] BCs: %u fixed vertices, %u point loads\n", n_fixed, n_loads); fflush(stdout);
-    log_mem("solve: after extracting mesh data");
-
-    // Build MFEM mesh programmatically to avoid C++ iostream file I/O.
-    //
-    // The file-based path (Mesh(filename, ...)) opens an ifstream and reads
-    // through basic_filebuf / basic_streambuf virtual dispatch.  In the WASM
-    // (Emscripten) build the locale/codec facet pointer inside the streambuf
-    // object is null, so the first virtual call through it traps with
-    // "Out of bounds memory access" via invoke_iiiiii.
-    //
-    // The programmatic path calls no iostream code at all: AddVertex / AddTet /
-    // AddHex populate in-memory arrays directly, and FinalizeTopology builds all
-    // connectivity (faces, boundary elements, edge table) without file I/O.
-    // In 3D, FinalizeTopology always builds the edge table, which is required by
-    // H1_FECollection for DOF numbering.
     printf("[mfem] building mesh (%u verts, %u tets, %u hexs)\n", nv, nt, nh); fflush(stdout);
     log_mem("solve: before MFEM mesh build");
-    constexpr int dim = 3;
-    Mesh mfem_mesh(dim, (int)nv, (int)(nt + nh), /*NBdrElem=*/0, /*spaceDim=*/dim);
+    mfem::Mesh mesh(dim, (int)nv, (int)(nt + nh), /*NBdrElem=*/0, /*spaceDim=*/dim);
 
     printf("[mfem] mesh shell ok\n"); fflush(stdout);
     for (unsigned i = 0; i < nv; ++i)
-        mfem_mesh.AddVertex(vertices[3*i], vertices[3*i+1], vertices[3*i+2]);
+        mesh.AddVertex(m.vertices[3*i], m.vertices[3*i+1], m.vertices[3*i+2]);
     printf("[mfem] vertices added\n"); fflush(stdout);
 
     for (unsigned i = 0; i < nt; ++i)
-        mfem_mesh.AddTet(tets[4*i], tets[4*i+1], tets[4*i+2], tets[4*i+3], /*attr=*/1);
+        mesh.AddTet(m.tets[4*i], m.tets[4*i+1], m.tets[4*i+2], m.tets[4*i+3], /*attr=*/1);
     printf("[mfem] tets added\n"); fflush(stdout);
 
     for (unsigned i = 0; i < nh; ++i)
-        mfem_mesh.AddHex(hexs[8*i], hexs[8*i+1], hexs[8*i+2], hexs[8*i+3],
-                         hexs[8*i+4], hexs[8*i+5], hexs[8*i+6], hexs[8*i+7], /*attr=*/1);
+        mesh.AddHex(m.hexs[8*i], m.hexs[8*i+1], m.hexs[8*i+2], m.hexs[8*i+3],
+                    m.hexs[8*i+4], m.hexs[8*i+5], m.hexs[8*i+6], m.hexs[8*i+7], /*attr=*/1);
     printf("[mfem] hexs added\n"); fflush(stdout);
 
     // generate_bdr=true: boundary Triangle/Quad elements auto-generated from
     // exposed faces of volume elements (correct for a watertight Netgen mesh).
-    mfem_mesh.FinalizeTopology(/*generate_bdr=*/true);
+    mesh.FinalizeTopology(/*generate_bdr=*/true);
     printf("[mfem] FinalizeTopology done\n"); fflush(stdout);
 
     // Netgen uses the opposite tet vertex-winding convention from MFEM.
@@ -195,42 +196,42 @@ std::string solve_linear_elastic(
     // two vertices per tet to correct the sign — this uses only GetVertices()
     // (int* overload, already anchored) and direct array swaps, no new virtual
     // calls.
-    mfem_mesh.Finalize(/*refine=*/false, /*fix_orientation=*/true);
+    mesh.Finalize(/*refine=*/false, /*fix_orientation=*/true);
     printf("[mfem] Finalize done\n"); fflush(stdout);
 
     printf("[mfem] mesh ready: %d vertices, %d elements, %d boundary elems\n",
-           mfem_mesh.GetNV(), mfem_mesh.GetNE(), mfem_mesh.GetNBE());
+           mesh.GetNV(), mesh.GetNE(), mesh.GetNBE());
     fflush(stdout);
     log_mem("solve: after MFEM mesh build");
+    return mesh;
+}
 
-    order = std::max(1, order);
-    double lam = E * nu / ((1.0 + nu) * (1.0 - 2.0*nu));
-    double mu  = E / (2.0 * (1.0 + nu));
+// ── Essential (Dirichlet) DOFs ────────────────────────────────────────────────
 
-    printf("[mfem] setting up H1 FE space (order=%d, dim=%d)…\n", order, dim);
-    fflush(stdout);
-    H1_FECollection fec(order, dim);
-    FiniteElementSpace fespace(&mfem_mesh, &fec, dim);
-    printf("[mfem] FE space: %d dofs\n", fespace.GetTrueVSize());
-    fflush(stdout);
-    log_mem("solve: after FE space setup");
+// Per-vertex Dirichlet record (component mask + value). Used after the
+// vertex-based loops below to extend each condition to the edge-midpoint DOFs
+// that order ≥ 2 elements add, so a clamped/prescribed face stays fully
+// constrained and not just at its corner nodes.
+struct VDir {
+    std::array<bool, 3>   set{false, false, false};
+    std::array<double, 3> val{0.0, 0.0, 0.0};
+};
 
-    // Essential (Dirichlet) DOFs from fixed vertices.
-    // fixed_vertices is the full-fixity shorthand: every translational component
-    // (Ux, Uy, Uz) of the listed vertex is pinned.
-    Array<int> ess_tdof;
-    // Per-vertex Dirichlet record (component mask + value). Used after the
-    // vertex-based loops below to extend each condition to the edge-midpoint DOFs
-    // that order ≥ 2 elements add, so a clamped/prescribed face stays fully
-    // constrained and not just at its corner nodes.
-    struct VDir {
-        std::array<bool, 3>   set{false, false, false};
-        std::array<double, 3> val{0.0, 0.0, 0.0};
-    };
-    std::map<int, VDir> vdir;
+struct EssentialBcs {
+    mfem::Array<int> ess_tdof;
+    // vdof → prescribed displacement, seeded into the solution GridFunction by
+    // the orchestrator before FormLinearSystem.
+    std::vector<std::pair<int, double>> prescribed_vals;
+};
+
+// fixed_vertices is the full-fixity shorthand: every translational component
+// (Ux, Uy, Uz) of the listed vertex is pinned.
+void add_fixed_vertices(const val& fixed_js, mfem::FiniteElementSpace& fespace,
+                        mfem::Array<int>& ess_tdof, std::map<int, VDir>& vdir) {
+    unsigned n_fixed = fixed_js["length"].as<unsigned>();
     for (unsigned i = 0; i < n_fixed; ++i) {
         int vi = fixed_js[i].as<int>();
-        Array<int> vdofs;
+        mfem::Array<int> vdofs;
         fespace.GetVertexVDofs(vi, vdofs);
         for (int j = 0; j < vdofs.Size(); ++j)
             ess_tdof.Append(vdofs[j]);
@@ -240,250 +241,297 @@ std::string solve_linear_elastic(
             vd.val[d] = 0.0;
         }
     }
+}
 
-    // fixed_dofs pins only the listed components of a vertex, leaving the others
-    // free — a single-DOF constraint. This is what a symmetry-plane roller or a
-    // statically-determinate 3-2-1 restraint needs. Each entry is
-    // { vertex: int, dofs: int[] } with dofs ⊂ {0=Ux, 1=Uy, 2=Uz}. Optional:
-    // absent on the full-fixity path, so older payloads keep working unchanged.
-    val fdofs_js = bcs_js["fixed_dofs"];
-    if (!fdofs_js.isUndefined() && !fdofs_js.isNull()) {
-        unsigned n_fdofs = fdofs_js["length"].as<unsigned>();
-        for (unsigned i = 0; i < n_fdofs; ++i) {
-            val entry = fdofs_js[i];
-            int vi = entry["vertex"].as<int>();
-            val comps = entry["dofs"];
-            unsigned nc = comps["length"].as<unsigned>();
-            Array<int> vdofs;
-            fespace.GetVertexVDofs(vi, vdofs);
-            for (unsigned c = 0; c < nc; ++c) {
-                int d = comps[c].as<int>();
-                if (d >= 0 && d < vdofs.Size()) {
-                    ess_tdof.Append(vdofs[d]);
-                    VDir& vd = vdir[vi];
-                    vd.set[d] = true;
-                    vd.val[d] = 0.0;
-                }
-            }
-        }
-    }
-
-    // prescribed_dofs pins a single component of a vertex to a NON-ZERO value —
-    // an inhomogeneous Dirichlet condition (e.g. a prescribed-displacement
-    // support that drives the deformation on its own). Each entry is
-    // { vertex: int, dof: int (0=Ux,1=Uy,2=Uz), value: double }. The DOF is added
-    // to the essential set like any other fixed DOF, but the value is written
-    // into the solution GridFunction below so FormLinearSystem eliminates it and
-    // moves its contribution to the load vector. Optional: absent payloads keep
-    // the all-zero Dirichlet behaviour unchanged.
-    std::vector<std::pair<int, double>> prescribed_vals;
-    val pdofs_js = bcs_js["prescribed_dofs"];
-    if (!pdofs_js.isUndefined() && !pdofs_js.isNull()) {
-        unsigned n_pdofs = pdofs_js["length"].as<unsigned>();
-        for (unsigned i = 0; i < n_pdofs; ++i) {
-            val entry = pdofs_js[i];
-            int vi = entry["vertex"].as<int>();
-            int d  = entry["dof"].as<int>();
-            double value = entry["value"].as<double>();
-            Array<int> vdofs;
-            fespace.GetVertexVDofs(vi, vdofs);
+// fixed_dofs pins only the listed components of a vertex, leaving the others
+// free — a single-DOF constraint. This is what a symmetry-plane roller or a
+// statically-determinate 3-2-1 restraint needs. Each entry is
+// { vertex: int, dofs: int[] } with dofs ⊂ {0=Ux, 1=Uy, 2=Uz}. Optional:
+// absent on the full-fixity path, so older payloads keep working unchanged.
+void add_fixed_dofs(const val& fdofs_js, mfem::FiniteElementSpace& fespace,
+                    mfem::Array<int>& ess_tdof, std::map<int, VDir>& vdir) {
+    if (fdofs_js.isUndefined() || fdofs_js.isNull())
+        return;
+    unsigned n_fdofs = fdofs_js["length"].as<unsigned>();
+    for (unsigned i = 0; i < n_fdofs; ++i) {
+        val entry = fdofs_js[i];
+        int vi = entry["vertex"].as<int>();
+        val comps = entry["dofs"];
+        unsigned nc = comps["length"].as<unsigned>();
+        mfem::Array<int> vdofs;
+        fespace.GetVertexVDofs(vi, vdofs);
+        for (unsigned c = 0; c < nc; ++c) {
+            int d = comps[c].as<int>();
             if (d >= 0 && d < vdofs.Size()) {
                 ess_tdof.Append(vdofs[d]);
-                prescribed_vals.emplace_back(vdofs[d], value);
                 VDir& vd = vdir[vi];
                 vd.set[d] = true;
-                vd.val[d] = value;
+                vd.val[d] = 0.0;
             }
         }
     }
+}
 
-    // Order-2 elements introduce one interior DOF per edge that the vertex-based
-    // loops above don't reach. Extend each Dirichlet condition to an edge's
-    // interior DOF when BOTH its endpoints carry that condition (in the same
-    // component): the midpoint value is the average of the endpoint values —
-    // exact for a clamped face (0) or a uniform/linear prescribed displacement.
-    // Edges straddling the border of a constrained region (only one endpoint
-    // constrained) stay free, the correct treatment of that border. Tetrahedral
-    // P2 faces carry no face-interior DOF, so this fully constrains a clamped
-    // face on the tet meshes the mesher produces. (A Q2 hex face's center DOF
-    // would be left free — negligible here and avoided in practice.)
-    if (order >= 2) {
-        int n_edges = mfem_mesh.GetNEdges();
-        for (int e = 0; e < n_edges; ++e) {
-            Array<int> ev;
-            mfem_mesh.GetEdgeVertices(e, ev);
-            auto it0 = vdir.find(ev[0]);
-            auto it1 = vdir.find(ev[1]);
-            if (it0 == vdir.end() || it1 == vdir.end()) continue;
-            Array<int> edofs;
-            fespace.GetEdgeInteriorDofs(e, edofs);
-            for (int k = 0; k < edofs.Size(); ++k)
-                for (int d = 0; d < dim; ++d) {
-                    if (!it0->second.set[d] || !it1->second.set[d]) continue;
-                    int vdof = fespace.DofToVDof(edofs[k], d);
-                    ess_tdof.Append(vdof);
-                    double avg = 0.5 * (it0->second.val[d] + it1->second.val[d]);
-                    if (avg != 0.0)
-                        prescribed_vals.emplace_back(vdof, avg);
-                }
+// prescribed_dofs pins a single component of a vertex to a NON-ZERO value —
+// an inhomogeneous Dirichlet condition (e.g. a prescribed-displacement
+// support that drives the deformation on its own). Each entry is
+// { vertex: int, dof: int (0=Ux,1=Uy,2=Uz), value: double }. The DOF is added
+// to the essential set like any other fixed DOF, but the value is written
+// into the solution GridFunction by the orchestrator so FormLinearSystem
+// eliminates it and moves its contribution to the load vector. Optional:
+// absent payloads keep the all-zero Dirichlet behaviour unchanged.
+void add_prescribed_dofs(const val& pdofs_js, mfem::FiniteElementSpace& fespace,
+                         mfem::Array<int>& ess_tdof,
+                         std::vector<std::pair<int, double>>& prescribed_vals,
+                         std::map<int, VDir>& vdir) {
+    if (pdofs_js.isUndefined() || pdofs_js.isNull())
+        return;
+    unsigned n_pdofs = pdofs_js["length"].as<unsigned>();
+    for (unsigned i = 0; i < n_pdofs; ++i) {
+        val entry = pdofs_js[i];
+        int vi = entry["vertex"].as<int>();
+        int d  = entry["dof"].as<int>();
+        double value = entry["value"].as<double>();
+        mfem::Array<int> vdofs;
+        fespace.GetVertexVDofs(vi, vdofs);
+        if (d >= 0 && d < vdofs.Size()) {
+            ess_tdof.Append(vdofs[d]);
+            prescribed_vals.emplace_back(vdofs[d], value);
+            VDir& vd = vdir[vi];
+            vd.set[d] = true;
+            vd.val[d] = value;
         }
     }
+}
 
-    ess_tdof.Sort();
-    ess_tdof.Unique();
-
-    GridFunction x(&fespace);
-    x = 0.0;
-    // Seed the prescribed components before FormLinearSystem so the eliminated
-    // essential DOFs carry the requested displacement instead of zero.
-    for (const auto& pv : prescribed_vals)
-        x[pv.first] = pv.second;
-
-    LinearForm b(&fespace);
-
-    // ── Surface (traction / pressure) loads ──────────────────────────────────
-    // Work-equivalent surface loads applied through MFEM's boundary linear-form
-    // integrator: f_i = ∫_S N_i · t dS. Unlike splitting a face's total force
-    // equally across its nodes, this weights each node by the shape-function
-    // integral of its tributary surface, so (a) corner/edge nodes get the right
-    // share and (b) the resultant passes through the face's area-centroid no
-    // matter how non-uniformly the face is meshed — no spurious moment.
-    //
-    // Each entry tags the boundary elements covering a set of surface faces
-    // (matched by sorted node-index list) with a unique boundary attribute,
-    // then a VectorBoundaryLFIntegrator restricted to that attribute applies:
-    //   type "force"    — total force F spread as a uniform traction F / A_total
-    //   type "traction" — a traction vector applied directly
-    //   type "pressure" — scalar p applied as -p·n̂ (outward normal; + pushes in)
-    //
-    // The integrators take ownership of their coefficient by reference and the
-    // marker arrays by pointer, so both must outlive b.Assemble(); they are held
-    // in stable-address containers below.
-    std::deque<std::unique_ptr<VectorCoefficient>> surf_coeffs;
-    std::deque<Array<int>> surf_markers;
-
-    val surf_js = bcs_js["surface_loads"];
-    if (!surf_js.isUndefined() && !surf_js.isNull()) {
-        unsigned n_surf = surf_js["length"].as<unsigned>();
-
-        // sorted boundary-face vertex list → boundary element index, over the
-        // auto-generated boundary mesh (its vertex indices equal the input node
-        // IDs). Keyed by a sorted vertex vector so it matches both triangular
-        // (tet) and quadrilateral (hex) boundary faces.
-        std::map<std::vector<int>, int> face_to_be;
-        for (int be = 0; be < mfem_mesh.GetNBE(); ++be) {
-            Array<int> bv;
-            mfem_mesh.GetBdrElementVertices(be, bv);
-            std::vector<int> key(bv.begin(), bv.end());
-            std::sort(key.begin(), key.end());
-            face_to_be[key] = be;
-        }
-
-        struct PendingLoad { int attr; std::unique_ptr<VectorCoefficient> coeff; };
-        std::vector<PendingLoad> pending;
-        int next_attr = 2;  // attribute 1 stays the default (un-loaded) value
-
-        for (unsigned i = 0; i < n_surf; ++i) {
-            val entry = surf_js[i];
-            std::string type = entry["type"].as<std::string>();
-            val faces = entry["faces"];  // node-index lists (3 = tri, 4 = quad)
-            unsigned n_faces = faces["length"].as<unsigned>();
-
-            int attr = next_attr;
-            int matched = 0;
-            for (unsigned t = 0; t < n_faces; ++t) {
-                val face = faces[t];
-                unsigned fn = face["length"].as<unsigned>();
-                std::vector<int> key(fn);
-                for (unsigned k = 0; k < fn; ++k)
-                    key[k] = face[k].as<int>();
-                std::sort(key.begin(), key.end());
-                auto it = face_to_be.find(key);
-                if (it == face_to_be.end()) continue;
-                mfem_mesh.GetBdrElement(it->second)->SetAttribute(attr);
-                ++matched;
+// Order-2 elements introduce one interior DOF per edge that the vertex-based
+// loops above don't reach. Extend each Dirichlet condition to an edge's
+// interior DOF when BOTH its endpoints carry that condition (in the same
+// component): the midpoint value is the average of the endpoint values —
+// exact for a clamped face (0) or a uniform/linear prescribed displacement.
+// Edges straddling the border of a constrained region (only one endpoint
+// constrained) stay free, the correct treatment of that border. Tetrahedral
+// P2 faces carry no face-interior DOF, so this fully constrains a clamped
+// face on the tet meshes the mesher produces. (A Q2 hex face's center DOF
+// would be left free — negligible here and avoided in practice.)
+void extend_dirichlet_to_edge_dofs(mfem::Mesh& mesh, mfem::FiniteElementSpace& fespace,
+                                   const std::map<int, VDir>& vdir,
+                                   mfem::Array<int>& ess_tdof,
+                                   std::vector<std::pair<int, double>>& prescribed_vals) {
+    int n_edges = mesh.GetNEdges();
+    for (int e = 0; e < n_edges; ++e) {
+        mfem::Array<int> ev;
+        mesh.GetEdgeVertices(e, ev);
+        auto it0 = vdir.find(ev[0]);
+        auto it1 = vdir.find(ev[1]);
+        if (it0 == vdir.end() || it1 == vdir.end()) continue;
+        mfem::Array<int> edofs;
+        fespace.GetEdgeInteriorDofs(e, edofs);
+        for (int k = 0; k < edofs.Size(); ++k)
+            for (int d = 0; d < dim; ++d) {
+                if (!it0->second.set[d] || !it1->second.set[d]) continue;
+                int vdof = fespace.DofToVDof(edofs[k], d);
+                ess_tdof.Append(vdof);
+                double avg = 0.5 * (it0->second.val[d] + it1->second.val[d]);
+                if (avg != 0.0)
+                    prescribed_vals.emplace_back(vdof, avg);
             }
-            if (matched == 0) {
-                printf("[mfem] surface_load %u (%s): no boundary elements matched "
-                       "%u faces — skipped\n", i, type.c_str(), n_faces);
-                continue;
-            }
-            // This load owns `attr` (its elements are now tagged); reserve the
-            // next number so a later skip can't make two loads share an attribute.
-            ++next_attr;
+    }
+}
 
-            std::unique_ptr<VectorCoefficient> coeff;
-            if (type == "pressure") {
-                double p = entry["pressure"].as<double>();
-                coeff = std::make_unique<PressureCoefficient>(dim, p);
-                printf("[mfem] surface_load %u: pressure %g over %d bdr elems\n",
-                       i, p, matched);
-            } else {  // "force" or "traction"
-                Vector tvec(3);
-                tvec[0] = entry["force"][0].as<double>();
-                tvec[1] = entry["force"][1].as<double>();
-                tvec[2] = entry["force"][2].as<double>();
-                if (type == "force") {
-                    // Total force → uniform traction: divide by the integrated area
-                    // of the matched boundary elements — the same surface measure
-                    // the integrator uses, so it is exact for straight-sided faces.
-                    double area = 0.0;
-                    for (int be = 0; be < mfem_mesh.GetNBE(); ++be) {
-                        if (mfem_mesh.GetBdrAttribute(be) != attr) continue;
-                        ElementTransformation* T =
-                            mfem_mesh.GetBdrElementTransformation(be);
-                        const IntegrationRule& ir =
-                            IntRules.Get(mfem_mesh.GetBdrElementGeometry(be), 4);
-                        for (int q = 0; q < ir.GetNPoints(); ++q) {
-                            const IntegrationPoint& ip = ir.IntPoint(q);
-                            T->SetIntPoint(&ip);
-                            area += ip.weight * T->Weight();
-                        }
-                    }
-                    if (area <= 0.0) {
-                        printf("[mfem] surface_load %u: zero matched area — skipped\n", i);
-                        continue;
-                    }
-                    tvec /= area;
-                    printf("[mfem] surface_load %u: force → traction [%g %g %g] over "
-                           "%d bdr elems (A=%g)\n",
-                           i, tvec[0], tvec[1], tvec[2], matched, area);
-                } else {
-                    printf("[mfem] surface_load %u: traction [%g %g %g] over %d bdr elems\n",
-                           i, tvec[0], tvec[1], tvec[2], matched);
-                }
-                coeff = std::make_unique<VectorConstantCoefficient>(tvec);
-            }
-            pending.push_back({ attr, std::move(coeff) });
-        }
+EssentialBcs collect_essential_dofs(const val& bcs_js, mfem::Mesh& mesh,
+                                    mfem::FiniteElementSpace& fespace, int order) {
+    EssentialBcs bcs;
+    std::map<int, VDir> vdir;
+    add_fixed_vertices(bcs_js["fixed_vertices"], fespace, bcs.ess_tdof, vdir);
+    add_fixed_dofs(bcs_js["fixed_dofs"], fespace, bcs.ess_tdof, vdir);
+    add_prescribed_dofs(bcs_js["prescribed_dofs"], fespace, bcs.ess_tdof,
+                        bcs.prescribed_vals, vdir);
+    if (order >= 2)
+        extend_dirichlet_to_edge_dofs(mesh, fespace, vdir, bcs.ess_tdof,
+                                      bcs.prescribed_vals);
+    bcs.ess_tdof.Sort();
+    bcs.ess_tdof.Unique();
+    return bcs;
+}
 
-        // Refresh the mesh attribute tables now that boundary attributes changed,
-        // so marker arrays can be sized to bdr_attributes.Max().
-        mfem_mesh.SetAttributes();
-        int max_attr = mfem_mesh.bdr_attributes.Size()
-                           ? mfem_mesh.bdr_attributes.Max() : 0;
-        for (auto& pl : pending) {
-            surf_coeffs.push_back(std::move(pl.coeff));
-            surf_markers.emplace_back(max_attr);
-            Array<int>& marker = surf_markers.back();
-            marker = 0;
-            if (pl.attr >= 1 && pl.attr <= max_attr)
-                marker[pl.attr - 1] = 1;
-            b.AddBoundaryIntegrator(
-                new VectorBoundaryLFIntegrator(*surf_coeffs.back()), marker);
+// ── Surface (traction / pressure) loads ───────────────────────────────────────
+
+// The integrators take ownership of their coefficient by reference and the
+// marker arrays by pointer, so both must outlive b.Assemble(); they are held
+// in these stable-address containers, owned by the orchestrator.
+struct SurfaceLoadStorage {
+    std::deque<std::unique_ptr<mfem::VectorCoefficient>> coeffs;
+    std::deque<mfem::Array<int>> markers;
+};
+
+// sorted boundary-face vertex list → boundary element index, over the
+// auto-generated boundary mesh (its vertex indices equal the input node
+// IDs). Keyed by a sorted vertex vector so it matches both triangular
+// (tet) and quadrilateral (hex) boundary faces.
+std::map<std::vector<int>, int> build_boundary_face_map(const mfem::Mesh& mesh) {
+    std::map<std::vector<int>, int> face_to_be;
+    for (int be = 0; be < mesh.GetNBE(); ++be) {
+        mfem::Array<int> bv;
+        mesh.GetBdrElementVertices(be, bv);
+        std::vector<int> key(bv.begin(), bv.end());
+        std::sort(key.begin(), key.end());
+        face_to_be[key] = be;
+    }
+    return face_to_be;
+}
+
+// Tag the boundary elements covering the given faces (node-index lists,
+// 3 = tri, 4 = quad) with the boundary attribute `attr`; returns how many
+// boundary elements matched.
+int tag_load_faces(mfem::Mesh& mesh, const val& faces,
+                   const std::map<std::vector<int>, int>& face_to_be, int attr) {
+    unsigned n_faces = faces["length"].as<unsigned>();
+    int matched = 0;
+    for (unsigned t = 0; t < n_faces; ++t) {
+        val face = faces[t];
+        unsigned fn = face["length"].as<unsigned>();
+        std::vector<int> key(fn);
+        for (unsigned k = 0; k < fn; ++k)
+            key[k] = face[k].as<int>();
+        std::sort(key.begin(), key.end());
+        auto it = face_to_be.find(key);
+        if (it == face_to_be.end()) continue;
+        mesh.GetBdrElement(it->second)->SetAttribute(attr);
+        ++matched;
+    }
+    return matched;
+}
+
+// Integrated area of the boundary elements tagged with `attr` — the same
+// surface measure the integrator uses, so dividing a total force by it is
+// exact for straight-sided faces.
+double integrate_tagged_area(mfem::Mesh& mesh, int attr) {
+    double area = 0.0;
+    for (int be = 0; be < mesh.GetNBE(); ++be) {
+        if (mesh.GetBdrAttribute(be) != attr) continue;
+        mfem::ElementTransformation* T = mesh.GetBdrElementTransformation(be);
+        const mfem::IntegrationRule& ir =
+            mfem::IntRules.Get(mesh.GetBdrElementGeometry(be), 4);
+        for (int q = 0; q < ir.GetNPoints(); ++q) {
+            const mfem::IntegrationPoint& ip = ir.IntPoint(q);
+            T->SetIntPoint(&ip);
+            area += ip.weight * T->Weight();
         }
     }
+    return area;
+}
 
-    b.Assemble();
+// Build the traction coefficient for one surface-load entry:
+//   type "force"    — total force F spread as a uniform traction F / A_total
+//   type "traction" — a traction vector applied directly
+//   type "pressure" — scalar p applied as -p·n̂ (outward normal; + pushes in)
+// Returns nullptr for a "force" load whose matched area is zero (skipped).
+std::unique_ptr<mfem::VectorCoefficient> make_surface_load_coefficient(
+    const val& entry, const std::string& type, mfem::Mesh& mesh,
+    int attr, unsigned load_idx, int matched) {
+    if (type == "pressure") {
+        double p = entry["pressure"].as<double>();
+        printf("[mfem] surface_load %u: pressure %g over %d bdr elems\n",
+               load_idx, p, matched);
+        return std::make_unique<PressureCoefficient>(dim, p);
+    }
+    // "force" or "traction"
+    mfem::Vector tvec(3);
+    tvec[0] = entry["force"][0].as<double>();
+    tvec[1] = entry["force"][1].as<double>();
+    tvec[2] = entry["force"][2].as<double>();
+    if (type == "force") {
+        double area = integrate_tagged_area(mesh, attr);
+        if (area <= 0.0) {
+            printf("[mfem] surface_load %u: zero matched area — skipped\n", load_idx);
+            return nullptr;
+        }
+        tvec /= area;
+        printf("[mfem] surface_load %u: force → traction [%g %g %g] over "
+               "%d bdr elems (A=%g)\n",
+               load_idx, tvec[0], tvec[1], tvec[2], matched, area);
+    } else {
+        printf("[mfem] surface_load %u: traction [%g %g %g] over %d bdr elems\n",
+               load_idx, tvec[0], tvec[1], tvec[2], matched);
+    }
+    return std::make_unique<mfem::VectorConstantCoefficient>(tvec);
+}
 
-    // Concentrated point loads — applied straight to the assembled load vector.
-    // Still used for explicit nodal forces and for the equivalent nodal forces of
-    // a moment load. Surface (face) forces now flow through surface_loads above.
+// Work-equivalent surface loads applied through MFEM's boundary linear-form
+// integrator: f_i = ∫_S N_i · t dS. Unlike splitting a face's total force
+// equally across its nodes, this weights each node by the shape-function
+// integral of its tributary surface, so (a) corner/edge nodes get the right
+// share and (b) the resultant passes through the face's area-centroid no
+// matter how non-uniformly the face is meshed — no spurious moment.
+//
+// Each entry tags the boundary elements covering a set of surface faces
+// (matched by sorted node-index list) with a unique boundary attribute, then a
+// VectorBoundaryLFIntegrator restricted to that attribute applies the
+// coefficient built by make_surface_load_coefficient above.
+void apply_surface_loads(const val& surf_js, mfem::Mesh& mesh, mfem::LinearForm& b,
+                         SurfaceLoadStorage& storage) {
+    if (surf_js.isUndefined() || surf_js.isNull())
+        return;
+    unsigned n_surf = surf_js["length"].as<unsigned>();
+
+    std::map<std::vector<int>, int> face_to_be = build_boundary_face_map(mesh);
+
+    struct PendingLoad { int attr; std::unique_ptr<mfem::VectorCoefficient> coeff; };
+    std::vector<PendingLoad> pending;
+    int next_attr = 2;  // attribute 1 stays the default (un-loaded) value
+
+    for (unsigned i = 0; i < n_surf; ++i) {
+        val entry = surf_js[i];
+        std::string type = entry["type"].as<std::string>();
+        val faces = entry["faces"];  // node-index lists (3 = tri, 4 = quad)
+
+        int attr = next_attr;
+        int matched = tag_load_faces(mesh, faces, face_to_be, attr);
+        if (matched == 0) {
+            printf("[mfem] surface_load %u (%s): no boundary elements matched "
+                   "%u faces — skipped\n",
+                   i, type.c_str(), faces["length"].as<unsigned>());
+            continue;
+        }
+        // This load owns `attr` (its elements are now tagged); reserve the
+        // next number so a later skip can't make two loads share an attribute.
+        ++next_attr;
+
+        std::unique_ptr<mfem::VectorCoefficient> coeff =
+            make_surface_load_coefficient(entry, type, mesh, attr, i, matched);
+        if (!coeff)
+            continue;
+        pending.push_back({ attr, std::move(coeff) });
+    }
+
+    // Refresh the mesh attribute tables now that boundary attributes changed,
+    // so marker arrays can be sized to bdr_attributes.Max().
+    mesh.SetAttributes();
+    int max_attr = mesh.bdr_attributes.Size() ? mesh.bdr_attributes.Max() : 0;
+    for (auto& pl : pending) {
+        storage.coeffs.push_back(std::move(pl.coeff));
+        storage.markers.emplace_back(max_attr);
+        mfem::Array<int>& marker = storage.markers.back();
+        marker = 0;
+        if (pl.attr >= 1 && pl.attr <= max_attr)
+            marker[pl.attr - 1] = 1;
+        b.AddBoundaryIntegrator(
+            new mfem::VectorBoundaryLFIntegrator(*storage.coeffs.back()), marker);
+    }
+}
+
+// Concentrated point loads — applied straight to the assembled load vector.
+// Still used for explicit nodal forces and for the equivalent nodal forces of
+// a moment load. Surface (face) forces flow through apply_surface_loads above.
+void apply_point_loads(const val& loads_js, mfem::FiniteElementSpace& fespace,
+                       mfem::LinearForm& b) {
+    unsigned n_loads = loads_js["length"].as<unsigned>();
     for (unsigned i = 0; i < n_loads; ++i) {
         val load  = loads_js[i];
         int vi    = load["vertex"].as<int>();
         val force = load["force"];
-        Array<int> vdofs;
+        mfem::Array<int> vdofs;
         fespace.GetVertexVDofs(vi, vdofs);
         if (vdofs.Size() >= 3) {
             b[vdofs[0]] += force[0].as<double>();
@@ -491,25 +539,16 @@ std::string solve_linear_elastic(
             b[vdofs[2]] += force[2].as<double>();
         }
     }
+}
 
-    BilinearForm a(&fespace);
-    ConstantCoefficient lam_c(lam), mu_c(mu);
-    a.AddDomainIntegrator(new ElasticityIntegrator(lam_c, mu_c));
-    printf("[mfem] assembling stiffness matrix…\n"); fflush(stdout);
-    a.Assemble();
-    printf("[mfem] assembly done\n"); fflush(stdout);
-    log_mem("solve: after stiffness assembly");
+// ── Solve / post-processing ───────────────────────────────────────────────────
 
-    OperatorPtr A;
-    Vector B, X;
-    a.FormLinearSystem(ess_tdof, x, b, A, X, B);
-
-    SparseMatrix& A_mat = *A.As<SparseMatrix>();
+void run_cg_solve(mfem::SparseMatrix& A_mat, const mfem::Vector& B, mfem::Vector& X) {
     // GSSmoother (Gauss-Seidel) is numerically robust for 3D elasticity after
     // Dirichlet BC elimination.  DSmoother (Jacobi) diverges on ill-conditioned
     // tet systems, producing NaN residuals that crash the WASM worker.
-    GSSmoother prec(A_mat);
-    CGSolver cg;
+    mfem::GSSmoother prec(A_mat);
+    mfem::CGSolver cg;
     // 1e-6 for both element orders: anything looser leaves visible noise in the
     // recovered stress field (#192, #306). MaxIter 5000 gives large or
     // ill-conditioned meshes room to actually reach that tolerance; hitting the
@@ -544,28 +583,34 @@ std::string solve_linear_elastic(
     printf("[mfem] CG converged: %d iterations, relative residual %.3e\n",
            cg.GetNumIterations(), (double)cg.GetFinalRelNorm());
     fflush(stdout);
-    a.RecoverFEMSolution(X, b, x);
-    printf("[mfem] CG done — computing von Mises stress…\n"); fflush(stdout);
-    log_mem("solve: after CG solve");
+}
 
-    int n_verts = mfem_mesh.GetNV();
-    int n_elems = mfem_mesh.GetNE();
-
-    std::vector<double> displacements(3 * n_verts, 0.0);
+std::vector<double> extract_displacements(mfem::FiniteElementSpace& fespace,
+                                          const mfem::GridFunction& x, int n_verts) {
+    std::vector<double> displacements(3 * (size_t)n_verts, 0.0);
     for (int vi = 0; vi < n_verts; ++vi) {
-        Array<int> vdofs;
+        mfem::Array<int> vdofs;
         fespace.GetVertexVDofs(vi, vdofs);
         for (int c = 0; c < dim && c < vdofs.Size(); ++c)
             displacements[3*vi + c] = x[vdofs[c]];
     }
+    return displacements;
+}
 
+// Per-element von Mises stress at the element center: strain from the
+// displacement gradient, Cauchy stress via the Lamé constants, then the
+// deviatoric second invariant √(3/2 s:s).
+std::vector<double> compute_von_mises(mfem::Mesh& mesh, const mfem::GridFunction& x,
+                                      double lam, double mu) {
+    int n_elems = mesh.GetNE();
     std::vector<double> von_mises(n_elems);
     for (int e = 0; e < n_elems; ++e) {
-        ElementTransformation* T = mfem_mesh.GetElementTransformation(e);
-        const IntegrationRule& ir = IntRules.Get(mfem_mesh.GetElementGeometry(e), 1);
+        mfem::ElementTransformation* T = mesh.GetElementTransformation(e);
+        const mfem::IntegrationRule& ir =
+            mfem::IntRules.Get(mesh.GetElementGeometry(e), 1);
         T->SetIntPoint(&ir.IntPoint(0));
 
-        DenseMatrix grad_u;
+        mfem::DenseMatrix grad_u;
         x.GetVectorGradient(*T, grad_u);
 
         std::array<std::array<double, 3>, 3> eps;
@@ -588,9 +633,93 @@ std::string solve_linear_elastic(
             }
         von_mises[e] = std::sqrt(1.5 * vm2);
     }
+    return von_mises;
+}
+
+}  // namespace
+
+std::string solve_linear_elastic(
+    const std::string& mesh_json,
+    const std::string& mat_json,
+    const std::string& bcs_json,
+    int order)
+{
+    using namespace mfem;
+
+    log_mem("solve: start");
+    printf("[mfem] solve_linear_elastic: parsing inputs\n"); fflush(stdout);
+    val mesh_js = parse_json(mesh_json);
+    val mat_js  = parse_json(mat_json);
+    val bcs_js  = parse_json(bcs_json);
+
+    MeshArrays mesh_arrays = parse_mesh(mesh_js);
+
+    double E  = jdouble(mat_js, "young_modulus", 210e9);
+    double nu = jdouble(mat_js, "poisson_ratio",   0.3);
+
+    val loads_js = bcs_js["point_loads"];
+    printf("[mfem] BCs: %u fixed vertices, %u point loads\n",
+           bcs_js["fixed_vertices"]["length"].as<unsigned>(),
+           loads_js["length"].as<unsigned>());
+    fflush(stdout);
+    log_mem("solve: after extracting mesh data");
+
+    Mesh mfem_mesh = build_mfem_mesh(mesh_arrays);
+
+    order = std::max(1, order);
+    double lam = E * nu / ((1.0 + nu) * (1.0 - 2.0*nu));
+    double mu  = E / (2.0 * (1.0 + nu));
+
+    printf("[mfem] setting up H1 FE space (order=%d, dim=%d)…\n", order, dim);
+    fflush(stdout);
+    H1_FECollection fec(order, dim);
+    FiniteElementSpace fespace(&mfem_mesh, &fec, dim);
+    printf("[mfem] FE space: %d dofs\n", fespace.GetTrueVSize());
+    fflush(stdout);
+    log_mem("solve: after FE space setup");
+
+    EssentialBcs ess = collect_essential_dofs(bcs_js, mfem_mesh, fespace, order);
+
+    GridFunction x(&fespace);
+    x = 0.0;
+    // Seed the prescribed components before FormLinearSystem so the eliminated
+    // essential DOFs carry the requested displacement instead of zero.
+    for (const auto& pv : ess.prescribed_vals)
+        x[pv.first] = pv.second;
+
+    LinearForm b(&fespace);
+    // Coefficients/markers referenced by b's integrators — must outlive
+    // b.Assemble(), hence owned here rather than inside apply_surface_loads.
+    SurfaceLoadStorage surf_storage;
+    apply_surface_loads(bcs_js["surface_loads"], mfem_mesh, b, surf_storage);
+
+    b.Assemble();
+
+    apply_point_loads(loads_js, fespace, b);
+
+    BilinearForm a(&fespace);
+    ConstantCoefficient lam_c(lam), mu_c(mu);
+    a.AddDomainIntegrator(new ElasticityIntegrator(lam_c, mu_c));
+    printf("[mfem] assembling stiffness matrix…\n"); fflush(stdout);
+    a.Assemble();
+    printf("[mfem] assembly done\n"); fflush(stdout);
+    log_mem("solve: after stiffness assembly");
+
+    OperatorPtr A;
+    Vector B, X;
+    a.FormLinearSystem(ess.ess_tdof, x, b, A, X, B);
+
+    run_cg_solve(*A.As<SparseMatrix>(), B, X);
+    a.RecoverFEMSolution(X, b, x);
+    printf("[mfem] CG done — computing von Mises stress…\n"); fflush(stdout);
+    log_mem("solve: after CG solve");
+
+    std::vector<double> displacements =
+        extract_displacements(fespace, x, mfem_mesh.GetNV());
+    std::vector<double> von_mises = compute_von_mises(mfem_mesh, x, lam, mu);
 
     printf("[mfem] solve complete: %d vertex displacements, %d element stresses\n",
-           n_verts, n_elems);
+           mfem_mesh.GetNV(), mfem_mesh.GetNE());
     fflush(stdout);
     log_mem("solve: complete");
 
