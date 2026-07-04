@@ -454,7 +454,8 @@ self.onmessage = async (event: MessageEvent) => {
         order,
       );
       const result = JSON.parse(json) as
-        { displacements: number[]; von_mises: number[] } | { error: string };
+        | { displacements: number[]; von_mises: number[] }
+        | { error: string };
 
       if ("error" in result) {
         throw new Error(result.error);
