@@ -145,9 +145,10 @@ export function StatusBar() {
   const tetCount = elements.filter((e) => e.type === "CTETRA").length;
   const meshOk = nodes.length > 0;
 
-  // Load glyphs are only drawn outside the deformed-result view, and only
-  // force/pressure groups produce them (moments carry no resultant arrow), so
-  // the resultant/nodal toggle is offered only when such an arrow is on screen.
+  // Load glyphs are only drawn outside the deformed-result view. Moment arrows
+  // look identical in both display modes (they have no per-node form), so the
+  // resultant/nodal toggle is offered only when a force/pressure arrow — the
+  // kind the toggle actually changes — is on screen.
   const showingResult = !!result && mode === "results";
   const showLoadDisplayToggle =
     !showingResult && loadGroups.some((g) => loadKind(g) !== "moment");
