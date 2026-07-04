@@ -791,6 +791,7 @@ export const useModelStore = create<ModelState>()(
         s.nextFaceEntryId = 1;
         s.modelName = "";
         s.result = null;
+        s.resultType = "Displacement (magnitude)";
         s.stepSurface = null;
         s.stepBytes = null;
         s.geometryFormat = "step";
@@ -799,10 +800,16 @@ export const useModelStore = create<ModelState>()(
         s.surfaceFaceIds = null;
         s.viewRepr = "surface";
         s.deformScale = 1;
+        s.elementOrder = 1;
         s.nextMatId = 2;
         s.selectedFace = null;
+        s.pendingFaces = [];
         s.pickMode = null;
         s.pickTargetGroupId = null;
+        s.mode = "geometry";
+        s.stepImportError = null;
+        s.isRunning = false;
+        s.isMeshing = false;
         s.hasStarted = false;
       }),
 

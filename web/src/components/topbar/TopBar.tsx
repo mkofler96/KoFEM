@@ -8,12 +8,28 @@ import {
   parseAnalysisFile,
   serializeAnalysis,
 } from "../../lib/analysisFile";
+import { resetWorker } from "../../workers/sharedWorker";
 import styles from "./TopBar.module.css";
 
 export function TopBar() {
   const modelName = useModelStore((s) => s.modelName);
   const loadAnalysis = useModelStore((s) => s.loadAnalysis);
   const loadInputRef = useRef<HTMLInputElement | null>(null);
+
+  function handleNewAnalysis() {
+    const store = useModelStore.getState();
+    if (
+      store.hasStarted &&
+      !window.confirm(
+        "Start a new analysis? Unsaved changes will be lost — save the current analysis first if you want to keep it.",
+      )
+    )
+      return;
+    // Drop the worker too: it may still hold the imported OCCT shape, and any
+    // in-flight mesh/solve belongs to the analysis being discarded.
+    resetWorker();
+    store.reset();
+  }
 
   function handleSave() {
     const s = useModelStore.getState();
@@ -67,6 +83,33 @@ export function TopBar() {
           style={{ display: "none" }}
           onChange={handleLoadFile}
         />
+        <button
+          className={styles.iconBtn}
+          title="New analysis"
+          aria-label="New analysis"
+          onClick={handleNewAnalysis}
+        >
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+            <path
+              d="M9 2H4a1 1 0 00-1 1v10a1 1 0 001 1h8a1 1 0 001-1V6L9 2z"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M9 2v4h4"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinejoin="round"
+            />
+            <path
+              d="M8 8.5v3M6.5 10h3"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
         <button
           className={styles.iconBtn}
           title="Save analysis (.vtu)"
