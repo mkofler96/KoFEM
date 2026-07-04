@@ -20,7 +20,7 @@ type StoreSnapshot = {
 
 function readStore(page: import("@playwright/test").Page) {
   return page.evaluate(() => {
-    const s = (
+    const state = (
       window as unknown as {
         __kofemStore: {
           getState(): {
@@ -37,14 +37,14 @@ function readStore(page: import("@playwright/test").Page) {
       }
     ).__kofemStore.getState();
     return {
-      modelName: s.modelName,
-      nodes: s.nodes.length,
-      elements: s.elements.length,
-      hasResult: s.result !== null,
-      hasStarted: s.hasStarted,
-      mode: s.mode,
-      bcGroups: s.bcGroups.length,
-      loadGroups: s.loadGroups.length,
+      modelName: state.modelName,
+      nodes: state.nodes.length,
+      elements: state.elements.length,
+      hasResult: state.result !== null,
+      hasStarted: state.hasStarted,
+      mode: state.mode,
+      bcGroups: state.bcGroups.length,
+      loadGroups: state.loadGroups.length,
     } satisfies StoreSnapshot;
   });
 }
@@ -65,16 +65,16 @@ test("New analysis confirms, then clears the loaded analysis", async ({
   await loadExample(page);
 
   let dialogMessage = "";
-  page.on("dialog", (d) => {
-    dialogMessage = d.message();
-    void d.accept();
+  page.on("dialog", async (dialog) => {
+    dialogMessage = dialog.message();
+    await dialog.accept();
   });
 
   await page.getByRole("button", { name: "New analysis" }).click();
 
   expect(dialogMessage).toContain("Start a new analysis?");
-  const s = await readStore(page);
-  expect(s).toEqual({
+  const snapshot = await readStore(page);
+  expect(snapshot).toEqual({
     modelName: "",
     nodes: 0,
     elements: 0,
@@ -96,22 +96,24 @@ test("dismissing the confirm keeps the current analysis", async ({ page }) => {
   test.setTimeout(60_000);
   await loadExample(page);
 
-  page.on("dialog", (d) => void d.dismiss());
+  page.on("dialog", async (dialog) => {
+    await dialog.dismiss();
+  });
   await page.getByRole("button", { name: "New analysis" }).click();
 
-  const s = await readStore(page);
-  expect(s.nodes).toBeGreaterThan(0);
-  expect(s.modelName).toBe("Cantilever beam under tip load");
-  expect(s.hasResult).toBe(true);
+  const snapshot = await readStore(page);
+  expect(snapshot.nodes).toBeGreaterThan(0);
+  expect(snapshot.modelName).toBe("Cantilever beam under tip load");
+  expect(snapshot.hasResult).toBe(true);
 });
 
 test("with an empty workspace no confirmation is asked", async ({ page }) => {
   await gotoApp(page);
 
   let dialogFired = false;
-  page.on("dialog", (d) => {
+  page.on("dialog", async (dialog) => {
     dialogFired = true;
-    void d.accept();
+    await dialog.accept();
   });
 
   await page.getByRole("button", { name: "New analysis" }).click();

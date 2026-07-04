@@ -17,9 +17,9 @@ export function TopBar() {
   const loadInputRef = useRef<HTMLInputElement | null>(null);
 
   function handleNewAnalysis() {
-    const s = useModelStore.getState();
+    const store = useModelStore.getState();
     if (
-      s.hasStarted &&
+      store.hasStarted &&
       !window.confirm(
         "Start a new analysis? Unsaved changes will be lost — save the current analysis first if you want to keep it.",
       )
@@ -28,7 +28,7 @@ export function TopBar() {
     // Drop the worker too: it may still hold the imported OCCT shape, and any
     // in-flight mesh/solve belongs to the analysis being discarded.
     resetWorker();
-    s.reset();
+    store.reset();
   }
 
   function handleSave() {
