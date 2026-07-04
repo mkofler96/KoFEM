@@ -386,14 +386,14 @@ self.onmessage = async (event: MessageEvent) => {
         [];
       for (const c of constraints) {
         if (c.dof > 2) continue;
-        const v = vid(c.nodeId, "constraint");
+        const vertex = vid(c.nodeId, "constraint");
         // eslint-disable-next-line kofem/no-silent-fallback -- a constraint without prescribedValue is a homogeneous fixed BC, i.e. u = 0 by definition
         const value = c.prescribedValue ?? 0;
         if (value === 0) {
-          if (!dofsByNode.has(v)) dofsByNode.set(v, new Set());
-          dofsByNode.get(v)!.add(c.dof);
+          if (!dofsByNode.has(vertex)) dofsByNode.set(vertex, new Set());
+          dofsByNode.get(vertex)!.add(c.dof);
         } else {
-          prescribed_dofs.push({ vertex: v, dof: c.dof, value });
+          prescribed_dofs.push({ vertex, dof: c.dof, value });
         }
       }
       const fixed_vertices: number[] = [];
@@ -407,9 +407,9 @@ self.onmessage = async (event: MessageEvent) => {
       const loadMap = new Map<number, [number, number, number]>();
       for (const load of loads) {
         if (load.dof > 2) continue;
-        const v = vid(load.nodeId, "load");
-        if (!loadMap.has(v)) loadMap.set(v, [0, 0, 0]);
-        loadMap.get(v)![load.dof] += load.value;
+        const vertex = vid(load.nodeId, "load");
+        if (!loadMap.has(vertex)) loadMap.set(vertex, [0, 0, 0]);
+        loadMap.get(vertex)![load.dof] += load.value;
       }
       const point_loads = [...loadMap.entries()].map(([vertex, force]) => ({
         vertex,

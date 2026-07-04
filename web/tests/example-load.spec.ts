@@ -20,7 +20,7 @@ type StoreSnapshot = {
 
 function readStore(page: import("@playwright/test").Page) {
   return page.evaluate(() => {
-    const s = (
+    const state = (
       window as unknown as {
         __kofemStore: {
           getState(): {
@@ -36,13 +36,13 @@ function readStore(page: import("@playwright/test").Page) {
       }
     ).__kofemStore.getState();
     return {
-      modelName: s.modelName,
-      nodes: s.nodes.length,
-      elements: s.elements.length,
-      hasResult: s.result !== null,
-      mode: s.mode,
-      bcGroups: s.bcGroups.length,
-      loadGroups: s.loadGroups.length,
+      modelName: state.modelName,
+      nodes: state.nodes.length,
+      elements: state.elements.length,
+      hasResult: state.result !== null,
+      mode: state.mode,
+      bcGroups: state.bcGroups.length,
+      loadGroups: state.loadGroups.length,
     } satisfies StoreSnapshot;
   });
 }
@@ -58,13 +58,13 @@ test("?example= loads a pre-solved example into the app", async ({ page }) => {
     .poll(async () => (await readStore(page)).nodes, { timeout: 15_000 })
     .toBeGreaterThan(0);
 
-  const s = await readStore(page);
-  expect(s.modelName).toBe("Cantilever beam under tip load");
-  expect(s.elements).toBeGreaterThan(0);
-  expect(s.hasResult).toBe(true); // saved in results mode with displacements
-  expect(s.mode).toBe("results");
-  expect(s.bcGroups).toBe(1); // fixed face restored as a BC group
-  expect(s.loadGroups).toBe(1); // tip load restored as a load group
+  const snapshot = await readStore(page);
+  expect(snapshot.modelName).toBe("Cantilever beam under tip load");
+  expect(snapshot.elements).toBeGreaterThan(0);
+  expect(snapshot.hasResult).toBe(true); // saved in results mode with displacements
+  expect(snapshot.mode).toBe("results");
+  expect(snapshot.bcGroups).toBe(1); // fixed face restored as a BC group
+  expect(snapshot.loadGroups).toBe(1); // tip load restored as a load group
 
   // The restored result renders the results read-out.
   await expect(page.getByText(/Max \|U\|/)).toBeVisible({ timeout: 10_000 });
@@ -98,7 +98,7 @@ test("re-solving a loaded example does not trap on its node ids (#288)", async (
     };
     const st = win.__kofemStore.getState();
     try {
-      const r = (await win.__kofem.sendToWorker("solve", {
+      const res = (await win.__kofem.sendToWorker("solve", {
         nodes: st.nodes,
         elements: st.elements,
         materials: st.materials,
@@ -111,8 +111,8 @@ test("re-solving a loaded example does not trap on its node ids (#288)", async (
         ok: true as const,
         nNodes: (st.nodes as unknown[]).length,
         nElems: (st.elements as unknown[]).length,
-        nDisp: r.displacements.length,
-        nVm: r.vonMises.length,
+        nDisp: res.displacements.length,
+        nVm: res.vonMises.length,
       };
     } catch (err) {
       return { ok: false as const, error: (err as Error).message };

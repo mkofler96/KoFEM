@@ -3,9 +3,13 @@
 // general style — tsc --strict covers the rest.
 import tseslint from "typescript-eslint";
 import noSilentFallback from "./eslint-rules/no-silent-fallback.js";
+import minIdentifierLength from "./eslint-rules/min-identifier-length.js";
 
 const kofem = {
-  rules: { "no-silent-fallback": noSilentFallback },
+  rules: {
+    "no-silent-fallback": noSilentFallback,
+    "min-identifier-length": minIdentifierLength,
+  },
 };
 
 export default [
@@ -22,6 +26,16 @@ export default [
       "no-empty": "error",
       // Everywhere: parseFloat(x) || default and friends (NaN masking).
       "kofem/no-silent-fallback": "error",
+    },
+  },
+  {
+    // Mirrors DeepSource JS-C1003 (issue #341). Covers tests/ as well —
+    // 3 of the 10 findings on #340 were in specs.
+    files: ["src/**/*.{ts,tsx}", "tests/**/*.{ts,mjs}"],
+    languageOptions: { parser: tseslint.parser },
+    plugins: { kofem },
+    rules: {
+      "kofem/min-identifier-length": "error",
     },
   },
   {

@@ -181,13 +181,13 @@ test.describe("Full workflow showcase", () => {
           };
         }
       ).__kofemStore;
-      const s = store.getState();
+      const state = store.getState();
       return {
-        constraints: s.constraints.length,
+        constraints: state.constraints.length,
         // Force/pressure loads reach the solver as surface tractions; moments as
         // nodal forces. Count both so the gate holds for either kind.
-        loads: s.loads.length + s.surfaceLoads.length,
-        isRunning: s.isRunning,
+        loads: state.loads.length + state.surfaceLoads.length,
+        isRunning: state.isRunning,
       };
     });
     console.log(
@@ -249,12 +249,12 @@ test.describe("Full workflow showcase", () => {
           };
         }
       ).__kofemStore;
-      const s = store.getState();
+      const state = store.getState();
       return {
-        nodes: s.nodes.length,
-        constraints: s.constraints.length,
-        loads: s.loads.length + s.surfaceLoads.length,
-        isRunning: s.isRunning,
+        nodes: state.nodes.length,
+        constraints: state.constraints.length,
+        loads: state.loads.length + state.surfaceLoads.length,
+        isRunning: state.isRunning,
       };
     });
     console.log(

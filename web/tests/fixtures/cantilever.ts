@@ -51,11 +51,11 @@ export function buildCantilever(): CantileverModel {
   const nx = 10,
     ny = 2,
     nz = 2;
-  const L = 1.0,
-    h = 0.1;
-  const dx = L / nx,
-    dy = h / ny,
-    dz = h / nz;
+  const length = 1.0,
+    height = 0.1;
+  const dx = length / nx,
+    dy = height / ny,
+    dz = height / nz;
 
   const strideZ = nz + 1;
   const strideX = (ny + 1) * (nz + 1);
@@ -207,15 +207,15 @@ export async function bootstrapCantilever(page: Page): Promise<void> {
       hasStarted: true,
       mode: "geometry",
     });
-    const s = store.getState();
+    const state = store.getState();
     const bc = model.bcGroups[0];
     const load = model.loadGroups[0];
-    s.createBcGroup(
+    state.createBcGroup(
       bc.faces.map((f) => ({ label: f.label, nodeIds: f.nodeIds })),
       bc.dofs,
       bc.value,
     );
-    s.createLoadGroup(
+    state.createLoadGroup(
       load.faces.map((f) => ({ label: f.label, nodeIds: f.nodeIds })),
       load.dof,
       load.totalForce,

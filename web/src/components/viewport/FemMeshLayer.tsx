@@ -40,8 +40,8 @@ export function FemMeshLayer({
   const undeformedEdgePositions = useMemo(() => {
     const segs: number[] = [];
     const coord = (id: number) => {
-      const e = nodeMap.get(id)!;
-      return [e.n.x, e.n.y, e.n.z];
+      const entry = nodeMap.get(id)!;
+      return [entry.n.x, entry.n.y, entry.n.z];
     };
     for (const el of hexElements) {
       for (const [a, b] of HEX_EDGES) {
@@ -84,18 +84,18 @@ export function FemMeshLayer({
 
   const deformedEdgePositions = useMemo(() => {
     if (!result) return null;
-    const d = result.displacements;
+    const disp = result.displacements;
     // A remesh can change the node count/ids after a solve completes but
-    // before `result` is invalidated. Rendering `d` against a mismatched
+    // before `result` is invalidated. Rendering `disp` against a mismatched
     // nodeMap would silently zero-fill out-of-range nodes and draw a
     // plausible-looking but wrong deformed shape — bail instead.
-    if (d.length !== nodeMap.size * 3) return null;
+    if (disp.length !== nodeMap.size * 3) return null;
     const coord = (id: number) => {
       const { n, i } = nodeMap.get(id)!;
       return [
-        n.x + d[i * 3] * deformScale,
-        n.y + d[i * 3 + 1] * deformScale,
-        n.z + d[i * 3 + 2] * deformScale,
+        n.x + disp[i * 3] * deformScale,
+        n.y + disp[i * 3 + 1] * deformScale,
+        n.z + disp[i * 3 + 2] * deformScale,
       ];
     };
     const segs: number[] = [];
@@ -116,8 +116,8 @@ export function FemMeshLayer({
   // results mode. Mirrors undeformedSurfaceEdgePositions but on deformed coords.
   const deformedSurfaceEdgePositions = useMemo(() => {
     if (!result) return null;
-    const d = result.displacements;
-    if (d.length !== nodeMap.size * 3) return null;
+    const disp = result.displacements;
+    if (disp.length !== nodeMap.size * 3) return null;
     const seen = new Set<string>();
     const segs: number[] = [];
     const addEdge = (a: number, b: number) => {
@@ -128,12 +128,12 @@ export function FemMeshLayer({
         nb = nodeMap.get(b);
       if (!na || !nb) return;
       segs.push(
-        na.n.x + d[na.i * 3] * deformScale,
-        na.n.y + d[na.i * 3 + 1] * deformScale,
-        na.n.z + d[na.i * 3 + 2] * deformScale,
-        nb.n.x + d[nb.i * 3] * deformScale,
-        nb.n.y + d[nb.i * 3 + 1] * deformScale,
-        nb.n.z + d[nb.i * 3 + 2] * deformScale,
+        na.n.x + disp[na.i * 3] * deformScale,
+        na.n.y + disp[na.i * 3 + 1] * deformScale,
+        na.n.z + disp[na.i * 3 + 2] * deformScale,
+        nb.n.x + disp[nb.i * 3] * deformScale,
+        nb.n.y + disp[nb.i * 3 + 1] * deformScale,
+        nb.n.z + disp[nb.i * 3 + 2] * deformScale,
       );
     };
     for (const [a, b, c, dd] of boundaryQuadFaceIds) {
@@ -159,7 +159,7 @@ export function FemMeshLayer({
     const positions: number[] = [];
     const normals: number[] = [];
 
-    const p = (n: { x: number; y: number; z: number }) =>
+    const xyz = (n: { x: number; y: number; z: number }) =>
       [n.x, n.y, n.z] as [number, number, number];
 
     for (const [a, b, c_, dd] of boundaryQuadFaceIds) {
@@ -168,12 +168,12 @@ export function FemMeshLayer({
       const pc = nodeMap.get(c_)!.n,
         pd = nodeMap.get(dd)!.n;
       positions.push(
-        ...p(pa),
-        ...p(pb),
-        ...p(pc),
-        ...p(pa),
-        ...p(pc),
-        ...p(pd),
+        ...xyz(pa),
+        ...xyz(pb),
+        ...xyz(pc),
+        ...xyz(pa),
+        ...xyz(pc),
+        ...xyz(pd),
       );
       const AB = new THREE.Vector3(pb.x - pa.x, pb.y - pa.y, pb.z - pa.z);
       const AC = new THREE.Vector3(pc.x - pa.x, pc.y - pa.y, pc.z - pa.z);
@@ -184,7 +184,7 @@ export function FemMeshLayer({
       const pa = nodeMap.get(a)!.n,
         pb = nodeMap.get(b)!.n,
         pc = nodeMap.get(c_)!.n;
-      positions.push(...p(pa), ...p(pb), ...p(pc));
+      positions.push(...xyz(pa), ...xyz(pb), ...xyz(pc));
       const AB = new THREE.Vector3(pb.x - pa.x, pb.y - pa.y, pb.z - pa.z);
       const AC = new THREE.Vector3(pc.x - pa.x, pc.y - pa.y, pc.z - pa.z);
       const norm = AB.cross(AC).normalize();

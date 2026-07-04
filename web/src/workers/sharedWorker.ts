@@ -18,11 +18,11 @@ export function setLogCallback(cb: ((message: string) => void) | null) {
 }
 
 function createWorker(): Worker {
-  const w = new Worker(new URL("./solver.worker.ts", import.meta.url), {
+  const worker = new Worker(new URL("./solver.worker.ts", import.meta.url), {
     type: "module",
   });
 
-  w.onmessage = (e: MessageEvent) => {
+  worker.onmessage = (e: MessageEvent) => {
     const { id, ok, log, ...rest } = e.data as {
       id: number;
       ok?: boolean;
@@ -36,20 +36,20 @@ function createWorker(): Worker {
       _logCallback?.(log);
       return;
     }
-    const p = _pending.get(id);
-    if (!p) return;
+    const pending = _pending.get(id);
+    if (!pending) return;
     _pending.delete(id);
     if (ok) {
-      p.resolve(rest);
+      pending.resolve(rest);
     } else {
       // eslint-disable-next-line kofem/no-silent-fallback -- fallback text for a failure that arrived without a message; this is the error path itself, not solver data
       const msg = (rest.error as string | undefined) ?? "Worker error";
       console.error("[worker] task failed:", msg);
-      p.reject(new Error(msg));
+      pending.reject(new Error(msg));
     }
   };
 
-  w.onerror = (e: ErrorEvent) => {
+  worker.onerror = (e: ErrorEvent) => {
     console.error("[worker] crashed:", e.message, e);
     // eslint-disable-next-line kofem/no-silent-fallback -- fallback text for a worker that died without a message; this is the error path itself, not solver data
     const err = new Error(e.message ?? "Worker crashed");
@@ -58,7 +58,7 @@ function createWorker(): Worker {
     _worker = null;
   };
 
-  return w;
+  return worker;
 }
 
 function getWorker(): Worker {

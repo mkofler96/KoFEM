@@ -44,13 +44,18 @@ function elementWeight(
   nodes: Node[],
 ): number {
   if (el.nodeIds.length !== 4) return 1;
-  const a = nodeIndex.get(el.nodeIds[0]);
-  const b = nodeIndex.get(el.nodeIds[1]);
-  const c = nodeIndex.get(el.nodeIds[2]);
-  const d = nodeIndex.get(el.nodeIds[3]);
-  if (a === undefined || b === undefined || c === undefined || d === undefined)
+  const i0 = nodeIndex.get(el.nodeIds[0]);
+  const i1 = nodeIndex.get(el.nodeIds[1]);
+  const i2 = nodeIndex.get(el.nodeIds[2]);
+  const i3 = nodeIndex.get(el.nodeIds[3]);
+  if (
+    i0 === undefined ||
+    i1 === undefined ||
+    i2 === undefined ||
+    i3 === undefined
+  )
     return 1;
-  return tetVolume(nodes[a], nodes[b], nodes[c], nodes[d]);
+  return tetVolume(nodes[i0], nodes[i1], nodes[i2], nodes[i3]);
 }
 
 // The solver returns one constant von Mises value per element (evaluated at the
@@ -80,12 +85,12 @@ export function nodeVonMisesField(
   const weights = new Float64Array(nodes.length);
   for (let ei = 0; ei < elements.length; ei++) {
     const vmVal = vm[ei];
-    const w = elementWeight(elements[ei], nodeIndex, nodes);
+    const weight = elementWeight(elements[ei], nodeIndex, nodes);
     for (const nodeId of elements[ei].nodeIds) {
       const ni = nodeIndex.get(nodeId);
       if (ni !== undefined) {
-        sums[ni] += w * vmVal;
-        weights[ni] += w;
+        sums[ni] += weight * vmVal;
+        weights[ni] += weight;
       }
     }
   }
@@ -109,10 +114,10 @@ export function computeResultRange(
   elements: Element[],
 ): ResultRange | null {
   if (nodes.length === 0) return null;
-  const d = result.displacements;
-  if (d.length !== nodes.length * 3)
+  const disp = result.displacements;
+  if (disp.length !== nodes.length * 3)
     throw new Error(
-      `displacement result carries ${d.length} values for ${nodes.length} nodes (expected ${nodes.length * 3}) — the result is stale or belongs to a different mesh`,
+      `displacement result carries ${disp.length} values for ${nodes.length} nodes (expected ${nodes.length * 3}) — the result is stale or belongs to a different mesh`,
     );
 
   let nodeVm: Float64Array | null = null;
@@ -124,11 +129,11 @@ export function computeResultRange(
   const nodeValue = (i: number): number => {
     switch (resultType) {
       case "Ux":
-        return d[i * 3];
+        return disp[i * 3];
       case "Uy":
-        return d[i * 3 + 1];
+        return disp[i * 3 + 1];
       case "Uz":
-        return d[i * 3 + 2];
+        return disp[i * 3 + 2];
       case "Von Mises stress":
         if (!nodeVm)
           throw new Error(
@@ -136,9 +141,9 @@ export function computeResultRange(
           );
         return nodeVm[i];
       default: {
-        const ux = d[i * 3],
-          uy = d[i * 3 + 1],
-          uz = d[i * 3 + 2];
+        const ux = disp[i * 3],
+          uy = disp[i * 3 + 1],
+          uz = disp[i * 3 + 2];
         return Math.sqrt(ux * ux + uy * uy + uz * uz);
       }
     }
@@ -147,9 +152,9 @@ export function computeResultRange(
   let min = Infinity,
     max = -Infinity;
   for (let i = 0; i < nodes.length; i++) {
-    const v = nodeValue(i);
-    if (v < min) min = v;
-    if (v > max) max = v;
+    const val = nodeValue(i);
+    if (val < min) min = val;
+    if (val > max) max = val;
   }
   return { min, max };
 }

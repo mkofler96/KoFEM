@@ -68,12 +68,14 @@ test("solve worker returns displacements and von Mises for the cantilever", asyn
   //   δ = P·L³ / (3·E·I),   I = b·h³/12
   // The transverse-shear contribution (Timoshenko) is <1% for this L/h = 10
   // beam, so Euler–Bernoulli is the right reference here.
+  /* eslint-disable kofem/min-identifier-length -- symbols from the Euler–Bernoulli formula above: δ = P·L³/(3·E·I), I = b·h³/12 */
   const P = 10_000; // |tip load| (N)
   const L = 1.0; // length (m)
   const E = model.materials[0].young;
   const b = 0.1,
     h = 0.1; // cross-section (m)
   const I = (b * h ** 3) / 12;
+  /* eslint-enable kofem/min-identifier-length */
   const deltaAnalytical = (P * L ** 3) / (3 * E * I); // ≈ 1.905 mm
 
   expect(tipUy).toBeLessThan(0);

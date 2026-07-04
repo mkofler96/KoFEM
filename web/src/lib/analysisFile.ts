@@ -316,22 +316,23 @@ const VIEW_REPRS = ["geometry", "surface", "volume", "wireframe"] as const;
 const ELEMENT_TYPES: ElementType[] = ["CTETRA", "CHEXA"];
 
 function dataArrayContent(xml: string, name: string): string {
-  const m = xml.match(
+  const match = xml.match(
     new RegExp(`<DataArray[^>]*Name="${name}"[^>]*>([\\s\\S]*?)</DataArray>`),
   );
-  if (!m) throw new Error(`Invalid analysis file: missing DataArray "${name}"`);
-  return m[1].trim();
+  if (!match)
+    throw new Error(`Invalid analysis file: missing DataArray "${name}"`);
+  return match[1].trim();
 }
 
 function parseNumbers(text: string, context: string): number[] {
   if (!text) return [];
   return text.split(/\s+/).map((token) => {
-    const v = Number(token);
-    if (Number.isNaN(v) && token !== "NaN")
+    const value = Number(token);
+    if (Number.isNaN(value) && token !== "NaN")
       throw new Error(
         `Invalid analysis file: non-numeric value "${token}" in "${context}"`,
       );
-    return v;
+    return value;
   });
 }
 
@@ -343,16 +344,16 @@ function expectLength(actual: number, expected: number, context: string): void {
 }
 
 function parseMetadata(xml: string): KofemFieldDataV1 {
-  const m = xml.match(
+  const match = xml.match(
     /<DataArray[^>]*Name="KoFEM"[^>]*>([\s\S]*?)<\/DataArray>/,
   );
-  if (!m)
+  if (!match)
     throw new Error(
       'Not a KoFEM analysis file: missing the "KoFEM" FieldData entry — only .vtu files saved by KoFEM can be loaded',
     );
   let raw: unknown;
   try {
-    raw = JSON.parse(decodeVtkBinary(m[1].trim()));
+    raw = JSON.parse(decodeVtkBinary(match[1].trim()));
   } catch (err) {
     throw new Error(
       `Invalid analysis file: KoFEM FieldData is not valid JSON: ${(err as Error).message}`,

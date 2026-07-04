@@ -126,35 +126,35 @@ export function BoundaryConditionLayer({
     const modelCentroid = new THREE.Vector3(mx, my, mz);
 
     const posOf = (id: number): THREE.Vector3 | null => {
-      const e = nodeMap.get(id);
-      return e ? new THREE.Vector3(e.n.x, e.n.y, e.n.z) : null;
+      const entry = nodeMap.get(id);
+      return entry ? new THREE.Vector3(entry.n.x, entry.n.y, entry.n.z) : null;
     };
 
     const outward = new Map<number, THREE.Vector3>();
     const addFace = (faceIds: number[]) => {
       if (!faceIds.every((id) => ids.has(id))) return;
       const pts = faceIds.map(posOf);
-      if (pts.some((p) => p === null)) return;
-      const p = pts as THREE.Vector3[];
+      if (pts.some((pt) => pt === null)) return;
+      const corners = pts as THREE.Vector3[];
 
       // Area-weighted normal: triangle directly, quad via its diagonals.
       const normal = new THREE.Vector3();
-      if (p.length === 3) {
+      if (corners.length === 3) {
         normal
-          .copy(p[1])
-          .sub(p[0])
-          .cross(new THREE.Vector3().copy(p[2]).sub(p[0]));
+          .copy(corners[1])
+          .sub(corners[0])
+          .cross(new THREE.Vector3().copy(corners[2]).sub(corners[0]));
       } else {
         normal
-          .copy(p[2])
-          .sub(p[0])
-          .cross(new THREE.Vector3().copy(p[3]).sub(p[1]));
+          .copy(corners[2])
+          .sub(corners[0])
+          .cross(new THREE.Vector3().copy(corners[3]).sub(corners[1]));
       }
       if (normal.lengthSq() < 1e-30) return;
 
       const fc = new THREE.Vector3();
-      for (const v of p) fc.add(v);
-      fc.divideScalar(p.length);
+      for (const v of corners) fc.add(v);
+      fc.divideScalar(corners.length);
       if (normal.dot(new THREE.Vector3().copy(modelCentroid).sub(fc)) > 0)
         normal.negate();
 
@@ -173,16 +173,16 @@ export function BoundaryConditionLayer({
       quaternion: THREE.Quaternion;
     }[] = [];
     for (const id of ids) {
-      const p = posOf(id);
-      if (!p) continue;
+      const pos = posOf(id);
+      if (!pos) continue;
       let dir = outward.get(id);
       if (!dir || dir.lengthSq() < 1e-30)
-        dir = new THREE.Vector3().copy(p).sub(modelCentroid);
+        dir = new THREE.Vector3().copy(pos).sub(modelCentroid);
       if (dir.lengthSq() < 1e-30) continue;
       dir.normalize();
       // Rotate so that -Y (cone base direction) aligns with the outward normal
-      const q = new THREE.Quaternion().setFromUnitVectors(down, dir);
-      markers.push({ nodeId: id, pos: [p.x, p.y, p.z], quaternion: q });
+      const quaternion = new THREE.Quaternion().setFromUnitVectors(down, dir);
+      markers.push({ nodeId: id, pos: [pos.x, pos.y, pos.z], quaternion });
     }
     return markers;
   }, [constraints, nodeMap, nodes, boundaryTriFaceIds, boundaryQuadFaceIds]);
@@ -224,11 +224,11 @@ export function BoundaryConditionLayer({
         count = 0;
       for (const f of g.faces) {
         for (const id of f.nodeIds) {
-          const e = nodeMap.get(id);
-          if (e) {
-            cx += e.n.x;
-            cy += e.n.y;
-            cz += e.n.z;
+          const entry = nodeMap.get(id);
+          if (entry) {
+            cx += entry.n.x;
+            cy += entry.n.y;
+            cz += entry.n.z;
             count++;
           }
         }
@@ -249,12 +249,12 @@ export function BoundaryConditionLayer({
       }
       if (dir.lengthSq() < 1e-30) continue;
       dir.normalize();
-      const q = new THREE.Quaternion();
-      q.setFromUnitVectors(up, dir);
+      const quaternion = new THREE.Quaternion();
+      quaternion.setFromUnitVectors(up, dir);
       arrows.push({
         groupId: g.id,
         pos: [cx, cy, cz],
-        quaternion: q,
+        quaternion,
         isMoment: kind === "moment",
       });
     }
@@ -288,8 +288,8 @@ export function BoundaryConditionLayer({
     const modelCentroid = new THREE.Vector3(mx, my, mz);
 
     const posOf = (id: number): THREE.Vector3 | null => {
-      const e = nodeMap.get(id);
-      return e ? new THREE.Vector3(e.n.x, e.n.y, e.n.z) : null;
+      const entry = nodeMap.get(id);
+      return entry ? new THREE.Vector3(entry.n.x, entry.n.y, entry.n.z) : null;
     };
 
     // Accumulated per node across all groups: load direction (unit) and
@@ -316,23 +316,23 @@ export function BoundaryConditionLayer({
       const addFace = (ids: number[]) => {
         if (!ids.every((id) => nodeSet.has(id))) return;
         const pts = ids.map(posOf);
-        if (pts.some((p) => p === null)) return;
-        const p = pts as THREE.Vector3[];
+        if (pts.some((pt) => pt === null)) return;
+        const corners = pts as THREE.Vector3[];
 
         // Area + outward normal: triangle directly, quad via its diagonals.
         let area: number;
         const normal = new THREE.Vector3();
-        if (p.length === 3) {
+        if (corners.length === 3) {
           normal
-            .copy(p[1])
-            .sub(p[0])
-            .cross(new THREE.Vector3().copy(p[2]).sub(p[0]));
+            .copy(corners[1])
+            .sub(corners[0])
+            .cross(new THREE.Vector3().copy(corners[2]).sub(corners[0]));
           area = 0.5 * normal.length();
         } else {
           normal
-            .copy(p[2])
-            .sub(p[0])
-            .cross(new THREE.Vector3().copy(p[3]).sub(p[1]));
+            .copy(corners[2])
+            .sub(corners[0])
+            .cross(new THREE.Vector3().copy(corners[3]).sub(corners[1]));
           area = 0.5 * normal.length();
         }
         if (area < 1e-30) return;
@@ -341,12 +341,12 @@ export function BoundaryConditionLayer({
 
         // Orient the face normal inward (positive pressure pushes in).
         const fc = new THREE.Vector3();
-        for (const v of p) fc.add(v);
-        fc.divideScalar(p.length);
+        for (const v of corners) fc.add(v);
+        fc.divideScalar(corners.length);
         if (normal.dot(new THREE.Vector3().copy(modelCentroid).sub(fc)) < 0)
           normal.negate();
 
-        const share = area / p.length;
+        const share = area / corners.length;
         for (const id of ids) {
           tribArea.set(id, (tribArea.get(id) ?? 0) + share);
           if (kind === "pressure") {
@@ -402,13 +402,13 @@ export function BoundaryConditionLayer({
       frac: number;
     }[] = [];
     for (const [id, { dir, mag }] of byNode) {
-      const e = nodeMap.get(id);
-      if (!e) continue;
-      const q = new THREE.Quaternion().setFromUnitVectors(up, dir);
+      const entry = nodeMap.get(id);
+      if (!entry) continue;
+      const quaternion = new THREE.Quaternion().setFromUnitVectors(up, dir);
       arrows.push({
         nodeId: id,
-        pos: [e.n.x, e.n.y, e.n.z],
-        quaternion: q,
+        pos: [entry.n.x, entry.n.y, entry.n.z],
+        quaternion,
         frac: mag / maxMag,
       });
     }
