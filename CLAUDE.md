@@ -34,7 +34,7 @@ kofem_wasm_emcc.js + kofem_wasm_emcc.wasm
          ↓
 web/src/wasm/pkg/kofem_wasm.js  (thin adapter, committed)
          ↓
-solver.worker.ts  (unchanged API: init() + named exports)
+solver.worker.ts  (awaits init(), calls methods on the KofemModule instance)
 ```
 
 ### Incremental Rust migration
