@@ -126,6 +126,41 @@ test("results panel switches to von Mises stress", async ({ page }) => {
   await Promise.race([expect(page.getByText(/Max σ_vm/)).toBeVisible(), fatal]);
 });
 
+// The solve streams its progress — including the CG residual minimization —
+// into a LOGS panel like the mesher's (issue #278). A successful solve
+// auto-switches to Results, unmounting the SolvePanel, so the log must live
+// outside component state and still be shown when the user returns to the
+// Solve tab.
+test("solver log panel streams CG residuals and survives tab switches", async ({
+  page,
+}) => {
+  const fatal = watchForErrors(page, "solve-logs");
+
+  await bootstrapCantilever(page);
+  await goToSolvePanel(page);
+  await page.getByRole("button", { name: /Run static solve/ }).click();
+
+  // A successful solve hands off to Results mode automatically.
+  await Promise.race([
+    expect(page.getByText(/Max \|U\|/)).toBeVisible({ timeout: 30_000 }),
+    fatal,
+  ]);
+
+  // Back on the Solve tab, the full solve log is still there.
+  await goToSolvePanel(page);
+  await Promise.race([expect(page.getByText("LOGS")).toBeVisible(), fatal]);
+  await Promise.race([
+    expect(
+      page.getByText(/CG iteration\s+\d+: relative residual/).first(),
+    ).toBeVisible(),
+    fatal,
+  ]);
+  await Promise.race([
+    expect(page.getByText(/CG converged: \d+ iterations/)).toBeVisible(),
+    fatal,
+  ]);
+});
+
 // ── STEP → Volume mesh pipeline ───────────────────────────────────────────────
 // Wall Bracket solve regression (WASM trap / SetIntPoint DCE) is covered by
 // the Node.js script test_wall_bracket.mjs, which runs synchronously with no

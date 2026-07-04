@@ -19,6 +19,15 @@ test("solve worker returns displacements and von Mises for the cantilever", asyn
     () => !!(window as unknown as { __kofem?: unknown }).__kofem,
   );
 
+  // Collect the worker log stream that feeds the UI log panels (issue #278):
+  // sharedWorker echoes every worker log line to the browser console as
+  // "[wasm] <line>", so the console is a faithful copy of what the panel gets.
+  const wasmLogs: string[] = [];
+  page.on("console", (msg) => {
+    const text = msg.text();
+    if (text.startsWith("[wasm]")) wasmLogs.push(text);
+  });
+
   const model = buildCantilever();
 
   const result = (await page.evaluate(async (m) => {
@@ -76,4 +85,15 @@ test("solve worker returns displacements and von Mises for the cantilever", asyn
     (Math.abs(tipUy) - deltaAnalytical) / deltaAnalytical,
   );
   expect(relErr).toBeLessThan(0.35);
+
+  // The solve must stream its CG residual minimization like the mesher streams
+  // meshing progress (issue #278): the CGLogMonitor prints every 10th iteration
+  // plus a converged summary through the worker's log channel.
+  expect(
+    wasmLogs.filter((l) => /CG iteration\s+\d+: relative residual/.test(l))
+      .length,
+  ).toBeGreaterThan(1);
+  expect(wasmLogs.some((l) => /CG converged: \d+ iterations/.test(l))).toBe(
+    true,
+  );
 });
