@@ -116,6 +116,13 @@ interface SurfaceLoad {
   force?: [number, number, number];
   pressure?: number;
 }
+// JSON returned by the engine's solve_linear_elastic: results on success, or
+// an explicit error object when the solver rejects its inputs (issue #344).
+interface StaticSolveSuccess {
+  displacements: number[];
+  von_mises: number[];
+}
+type StaticSolveResult = StaticSolveSuccess | { error: string };
 
 // ── Message handler ───────────────────────────────────────────────────────────
 
@@ -453,9 +460,7 @@ self.onmessage = async (event: MessageEvent) => {
         JSON.stringify(bcs),
         order,
       );
-      const result = JSON.parse(json) as
-        | { displacements: number[]; von_mises: number[] }
-        | { error: string };
+      const result = JSON.parse(json) as StaticSolveResult;
 
       if ("error" in result) {
         throw new Error(result.error);
