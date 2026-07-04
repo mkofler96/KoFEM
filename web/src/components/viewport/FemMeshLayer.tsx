@@ -40,7 +40,11 @@ export function FemMeshLayer({
   const undeformedEdgePositions = useMemo(() => {
     const segs: number[] = [];
     const coord = (id: number) => {
-      const entry = nodeMap.get(id)!;
+      const entry = nodeMap.get(id);
+      if (!entry)
+        throw new Error(
+          `element references node ${id} which is not in the mesh node list`,
+        );
       return [entry.n.x, entry.n.y, entry.n.z];
     };
     for (const el of hexElements) {

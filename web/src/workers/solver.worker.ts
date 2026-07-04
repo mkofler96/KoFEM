@@ -390,8 +390,12 @@ self.onmessage = async (event: MessageEvent) => {
         // eslint-disable-next-line kofem/no-silent-fallback -- a constraint without prescribedValue is a homogeneous fixed BC, i.e. u = 0 by definition
         const value = c.prescribedValue ?? 0;
         if (value === 0) {
-          if (!dofsByNode.has(vertex)) dofsByNode.set(vertex, new Set());
-          dofsByNode.get(vertex)!.add(c.dof);
+          let dofs = dofsByNode.get(vertex);
+          if (!dofs) {
+            dofs = new Set();
+            dofsByNode.set(vertex, dofs);
+          }
+          dofs.add(c.dof);
         } else {
           prescribed_dofs.push({ vertex, dof: c.dof, value });
         }
@@ -408,8 +412,12 @@ self.onmessage = async (event: MessageEvent) => {
       for (const load of loads) {
         if (load.dof > 2) continue;
         const vertex = vid(load.nodeId, "load");
-        if (!loadMap.has(vertex)) loadMap.set(vertex, [0, 0, 0]);
-        loadMap.get(vertex)![load.dof] += load.value;
+        let force = loadMap.get(vertex);
+        if (!force) {
+          force = [0, 0, 0];
+          loadMap.set(vertex, force);
+        }
+        force[load.dof] += load.value;
       }
       const point_loads = [...loadMap.entries()].map(([vertex, force]) => ({
         vertex,
