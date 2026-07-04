@@ -14,9 +14,9 @@ export interface MomentFace {
 // Equivalent nodal forces of a moment vector [Mx, My, Mz] (N·mm) applied over
 // the given faces. Each non-zero axis is converted independently and its nodal
 // forces summed (superposition). For each face, find the centroid, then apply
-// tangential forces F_i = M/S·(n̂×r_i) where S = Σ|r_i⊥|² (perpendicular
-// distance squared from the moment axis). This satisfies Σ(r_i × F_i) = M
-// exactly with zero net force.
+// tangential forces F_i = M/S·(n̂×r_i) where S = Σ|r_i⊥|² (`sumPerpSq`, the
+// summed perpendicular distance squared from the moment axis). This satisfies
+// Σ(r_i × F_i) = M exactly with zero net force.
 export function momentToNodalForces(
   moment: [number, number, number],
   faces: MomentFace[],
@@ -47,25 +47,25 @@ export function momentToNodalForces(
       cy /= count;
       cz /= count;
 
-      let S = 0;
+      let sumPerpSq = 0;
       for (const nodeId of f.nodeIds) {
         const n = nodeById.get(nodeId);
         if (!n) continue;
         const rx = n.x - cx,
           ry = n.y - cy,
           rz = n.z - cz;
-        if (momentAxis === 0) S += ry * ry + rz * rz;
-        else if (momentAxis === 1) S += rx * rx + rz * rz;
-        else S += rx * rx + ry * ry;
+        if (momentAxis === 0) sumPerpSq += ry * ry + rz * rz;
+        else if (momentAxis === 1) sumPerpSq += rx * rx + rz * rz;
+        else sumPerpSq += rx * rx + ry * ry;
       }
-      if (S === 0) {
+      if (sumPerpSq === 0) {
         // All face nodes lie on the moment axis — the tangential force
         // direction is undefined, so this face contributes no moment.
         skippedFaces++;
         continue;
       }
 
-      const scale = momentMag / S;
+      const scale = momentMag / sumPerpSq;
       for (const nodeId of f.nodeIds) {
         const n = nodeById.get(nodeId);
         if (!n) continue;

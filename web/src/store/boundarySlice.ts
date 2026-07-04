@@ -351,10 +351,14 @@ export const createBoundarySlice: SliceCreator<BoundarySlice> = (set) => ({
 
   addFaceToBcGroup: (groupId: number, face: Omit<BcFaceEntry, "id">) =>
     set((s) => {
-      const g = s.bcGroups.find((g) => g.id === groupId);
-      if (!g) return;
+      const group = s.bcGroups.find((g) => g.id === groupId);
+      if (!group) return;
       const faceId = s.nextFaceEntryId++;
-      g.faces.push({ id: faceId, label: face.label, nodeIds: face.nodeIds });
+      group.faces.push({
+        id: faceId,
+        label: face.label,
+        nodeIds: face.nodeIds,
+      });
       s.constraints = rebuildConstraints(s.bcGroups);
       s.result = null;
     }),
@@ -371,10 +375,10 @@ export const createBoundarySlice: SliceCreator<BoundarySlice> = (set) => ({
 
   removeFaceFromBcGroup: (groupId: number, faceId: number) =>
     set((s) => {
-      const g = s.bcGroups.find((g) => g.id === groupId);
-      if (!g) return;
-      g.faces = g.faces.filter((f) => f.id !== faceId);
-      if (g.faces.length === 0)
+      const group = s.bcGroups.find((g) => g.id === groupId);
+      if (!group) return;
+      group.faces = group.faces.filter((f) => f.id !== faceId);
+      if (group.faces.length === 0)
         s.bcGroups = s.bcGroups.filter((g) => g.id !== groupId);
       s.constraints = rebuildConstraints(s.bcGroups);
       s.result = null;
@@ -430,10 +434,14 @@ export const createBoundarySlice: SliceCreator<BoundarySlice> = (set) => ({
 
   addFaceToLoadGroup: (groupId: number, face: Omit<BcFaceEntry, "id">) =>
     set((s) => {
-      const g = s.loadGroups.find((g) => g.id === groupId);
-      if (!g) return;
+      const group = s.loadGroups.find((g) => g.id === groupId);
+      if (!group) return;
       const faceId = s.nextFaceEntryId++;
-      g.faces.push({ id: faceId, label: face.label, nodeIds: face.nodeIds });
+      group.faces.push({
+        id: faceId,
+        label: face.label,
+        nodeIds: face.nodeIds,
+      });
       s.loads = rebuildLoads(s.loadGroups, s.nodes);
       s.surfaceLoads = rebuildSurfaceLoads(s.loadGroups, s.elements);
       s.result = null;
@@ -467,10 +475,10 @@ export const createBoundarySlice: SliceCreator<BoundarySlice> = (set) => ({
 
   removeFaceFromLoadGroup: (groupId: number, faceId: number) =>
     set((s) => {
-      const g = s.loadGroups.find((g) => g.id === groupId);
-      if (!g) return;
-      g.faces = g.faces.filter((f) => f.id !== faceId);
-      if (g.faces.length === 0)
+      const group = s.loadGroups.find((g) => g.id === groupId);
+      if (!group) return;
+      group.faces = group.faces.filter((f) => f.id !== faceId);
+      if (group.faces.length === 0)
         s.loadGroups = s.loadGroups.filter((g) => g.id !== groupId);
       s.loads = rebuildLoads(s.loadGroups, s.nodes);
       s.surfaceLoads = rebuildSurfaceLoads(s.loadGroups, s.elements);

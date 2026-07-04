@@ -34,30 +34,34 @@ function near(a, b, tol = 1e-9) {
 // about the centroid of the given nodes.
 function resultants(loads, nodeById) {
   let n = 0;
-  const c = [0, 0, 0];
+  const centroid = [0, 0, 0];
   for (const node of nodeById.values()) {
-    c[0] += node.x;
-    c[1] += node.y;
-    c[2] += node.z;
+    centroid[0] += node.x;
+    centroid[1] += node.y;
+    centroid[2] += node.z;
     n++;
   }
-  c[0] /= n;
-  c[1] /= n;
-  c[2] /= n;
+  centroid[0] /= n;
+  centroid[1] /= n;
+  centroid[2] /= n;
 
   const force = [0, 0, 0];
   const moment = [0, 0, 0];
   for (const l of loads) {
     const node = nodeById.get(l.nodeId);
-    const F = [0, 0, 0];
-    F[l.dof] = l.value;
-    const r = [node.x - c[0], node.y - c[1], node.z - c[2]];
-    force[0] += F[0];
-    force[1] += F[1];
-    force[2] += F[2];
-    moment[0] += r[1] * F[2] - r[2] * F[1];
-    moment[1] += r[2] * F[0] - r[0] * F[2];
-    moment[2] += r[0] * F[1] - r[1] * F[0];
+    const nodalForce = [0, 0, 0];
+    nodalForce[l.dof] = l.value;
+    const arm = [
+      node.x - centroid[0],
+      node.y - centroid[1],
+      node.z - centroid[2],
+    ];
+    force[0] += nodalForce[0];
+    force[1] += nodalForce[1];
+    force[2] += nodalForce[2];
+    moment[0] += arm[1] * nodalForce[2] - arm[2] * nodalForce[1];
+    moment[1] += arm[2] * nodalForce[0] - arm[0] * nodalForce[2];
+    moment[2] += arm[0] * nodalForce[1] - arm[1] * nodalForce[0];
   }
   return { force, moment };
 }
@@ -79,8 +83,13 @@ const square = nodeMap([
 const squareFace = [{ nodeIds: [1, 2, 3, 4] }];
 
 {
-  const M = 500;
-  const loads = momentToNodalForces([0, 0, M], squareFace, square, "Load1");
+  const appliedMoment = 500;
+  const loads = momentToNodalForces(
+    [0, 0, appliedMoment],
+    squareFace,
+    square,
+    "Load1",
+  );
   const { force, moment } = resultants(loads, square);
   assert("produces nodal loads", loads.length > 0);
   assert(
@@ -89,7 +98,7 @@ const squareFace = [{ nodeIds: [1, 2, 3, 4] }];
   );
   assert(
     "net moment equals applied Mz",
-    near(moment[0], 0) && near(moment[1], 0) && near(moment[2], M),
+    near(moment[0], 0) && near(moment[1], 0) && near(moment[2], appliedMoment),
   );
   assert(
     "forces are tangential (no z components)",
@@ -184,14 +193,22 @@ console.log("\nTest 5: each face carries the full applied moment");
     { id: 8, x: 0, y: 10, z: 10 },
   ]);
   const faces = [{ nodeIds: [1, 2, 3, 4] }, { nodeIds: [5, 6, 7, 8] }];
-  const M = 240;
-  const loads = momentToNodalForces([0, 0, M], faces, nodes, "Load1");
+  const appliedMoment = 240;
+  const loads = momentToNodalForces(
+    [0, 0, appliedMoment],
+    faces,
+    nodes,
+    "Load1",
+  );
   const { force, moment } = resultants(loads, nodes);
   assert(
     "zero net force",
     near(force[0], 0) && near(force[1], 0) && near(force[2], 0),
   );
-  assert("net moment is M per face (2·M total)", near(moment[2], 2 * M));
+  assert(
+    "net moment is M per face (2·M total)",
+    near(moment[2], 2 * appliedMoment),
+  );
 }
 
 // ── Summary ───────────────────────────────────────────────────────────────────
