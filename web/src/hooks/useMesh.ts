@@ -1,21 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useModelStore } from "../store/modelStore";
 import type { Node, Element } from "../store/modelStore";
-import {
-  sendToWorker,
-  setLogCallback,
-  resetWorker,
-} from "../workers/sharedWorker";
-
-// A meshing log line with a monotonically increasing id, so log lists can use
-// a stable React key even though the text itself may repeat.
-export interface MeshLogEntry {
-  id: number;
-  text: string;
-}
+import { sendToWorker, resetWorker } from "../workers/sharedWorker";
+import { useWorkerLogs } from "./useWorkerLogs";
 
 // Volume meshing: owns the mesh sizing parameters, the meshing-in-flight and
 // log state, and the worker's volume_mesh protocol (including the mandatory
@@ -35,16 +25,7 @@ export function useMesh() {
   // limit, which can produce >10x more elements than the max size suggests.
   const [minElementSize, setMinElementSize] = useState(2);
   const [meshError, setMeshError] = useState<string | null>(null);
-  const [logs, setLogs] = useState<MeshLogEntry[]>([]);
-  const nextLogId = useRef(0);
-
-  useEffect(() => {
-    setLogCallback((msg) => {
-      console.log("[mesh-log]", msg);
-      setLogs((prev) => [...prev, { id: nextLogId.current++, text: msg }]);
-    });
-    return () => setLogCallback(null);
-  }, []);
+  const { logs, clearLogs } = useWorkerLogs();
 
   async function meshVolume() {
     if (!stepSurface) return;
@@ -55,7 +36,7 @@ export function useMesh() {
       return;
     }
     setMeshing(true);
-    setLogs([]);
+    clearLogs();
     try {
       const {
         nodes: meshNodes,

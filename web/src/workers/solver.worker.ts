@@ -440,6 +440,10 @@ self.onmessage = async (event: MessageEvent) => {
       // stay fully constrained. Defaults to 1 (linear) when the payload omits it.
       // eslint-disable-next-line kofem/no-silent-fallback -- elementOrder is optional in the solve message; the documented default is linear elements
       const order = elementOrder ?? 1;
+      self.postMessage({
+        id,
+        log: `Starting static solve: ${nodes.length} nodes, ${elements.length} elements (order ${order})…`,
+      });
       const json = m().solve_linear_elastic(
         JSON.stringify(mesh),
         JSON.stringify(material),
@@ -450,6 +454,10 @@ self.onmessage = async (event: MessageEvent) => {
         displacements: number[];
         von_mises: number[];
       };
+      self.postMessage({
+        id,
+        log: `Solve complete: ${result.displacements.length / 3} vertex displacements, ${result.von_mises.length} element stresses`,
+      });
       self.postMessage({
         id,
         ok: true,

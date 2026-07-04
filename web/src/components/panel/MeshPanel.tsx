@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useState, useRef, useEffect } from "react";
 import { useModelStore } from "../../store/modelStore";
 import { useMesh } from "../../hooks/useMesh";
+import { LogSection } from "./LogSection";
 import styles from "./LeftPanel.module.css";
 
 // Mesh sizing controls, the mesh/re-mesh action and the meshing log — rendered
@@ -24,15 +24,6 @@ export function MeshPanel() {
     logs,
     meshVolume,
   } = useMesh();
-
-  const [logsOpen, setLogsOpen] = useState(true);
-  const logsEndRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [logs]);
-
-  const showLogs = logs.length > 0 || isMeshing;
 
   return (
     <>
@@ -109,43 +100,7 @@ export function MeshPanel() {
         )
       )}
 
-      {/* VSCode-style collapsable log panel */}
-      {showLogs && (
-        <div className={styles.logSection}>
-          <button
-            className={styles.logHeader}
-            onClick={() => setLogsOpen((v) => !v)}
-          >
-            <span
-              className={`${styles.logChevron} ${logsOpen ? styles.logChevronOpen : ""}`}
-            >
-              ▶
-            </span>
-            <span>LOGS</span>
-            {isMeshing && <span className={styles.logSpinner}>●</span>}
-            {logs.length > 0 && (
-              <span className={styles.logBadge}>{logs.length}</span>
-            )}
-          </button>
-          {logsOpen && (
-            <div className={styles.logBody}>
-              {logs.length === 0 ? (
-                <div className={styles.logEmpty}>Waiting…</div>
-              ) : (
-                logs.map((entry, i) => (
-                  <div
-                    key={entry.id}
-                    className={`${styles.logLine} ${i === logs.length - 1 ? styles.logLineLast : ""}`}
-                  >
-                    {entry.text}
-                  </div>
-                ))
-              )}
-              <div ref={logsEndRef} />
-            </div>
-          )}
-        </div>
-      )}
+      <LogSection logs={logs} busy={isMeshing} />
     </>
   );
 }

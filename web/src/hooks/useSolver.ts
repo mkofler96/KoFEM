@@ -5,10 +5,12 @@ import { useEffect, useState } from "react";
 import { useModelStore } from "../store/modelStore";
 import { fmt } from "../lib/modelDisplay";
 import { sendToWorker } from "../workers/sharedWorker";
+import { useWorkerLogs } from "./useWorkerLogs";
 
 // Static solve: owns the pre-flight readiness checks, the worker's solve
-// protocol and result storage (displacements + von Mises), and the hand-off
-// to results mode.
+// protocol and result storage (displacements + von Mises), the solver log
+// stream (issue #278 — same live progress feed as the mesher, including the
+// CG residual minimization), and the hand-off to results mode.
 export function useSolver() {
   const nodes = useModelStore((s) => s.nodes);
   const elements = useModelStore((s) => s.elements);
@@ -23,6 +25,7 @@ export function useSolver() {
   const setMode = useModelStore((s) => s.setMode);
   const elementOrder = useModelStore((s) => s.elementOrder);
   const [error, setError] = useState<string | null>(null);
+  const { logs, clearLogs } = useWorkerLogs();
 
   const meshOk = nodes.length > 0;
   const matOk = materials.length > 0;
@@ -39,6 +42,7 @@ export function useSolver() {
 
   function solve() {
     setRunning(true);
+    clearLogs();
     sendToWorker<{ displacements: number[]; vonMises: number[] }>("solve", {
       nodes,
       elements,
@@ -98,5 +102,14 @@ export function useSolver() {
     ],
   ];
 
-  return { solve, error, setError, isRunning, allOk, checks, elementOrder };
+  return {
+    solve,
+    error,
+    setError,
+    isRunning,
+    allOk,
+    checks,
+    elementOrder,
+    logs,
+  };
 }

@@ -51,6 +51,34 @@ public:
     }
 };
 
+// Streams CG convergence to the browser log panel (issue #278), giving the
+// solve the same live progress feed the mesher has. MFEM's own per-iteration
+// report goes to mfem::out (C++ iostreams), which this build avoids (see the
+// mesh-construction note below) — printf matches the rest of the pipeline and
+// reliably reaches the worker's log stream. The norm MFEM hands the monitor is
+// (B·r, r), the squared preconditioned residual, so the relative residual
+// shown is √(norm / norm₀).
+class CGLogMonitor : public mfem::IterativeSolverMonitor {
+    double norm0_ = 0.0;
+    int stride_;
+
+public:
+    explicit CGLogMonitor(int stride) : stride_(stride) {}
+
+    void MonitorResidual(int it, mfem::real_t norm, const mfem::Vector& /*r*/,
+                         bool final) override {
+        if (it == 0)
+            norm0_ = (double)norm;
+        // The final call repeats the last in-loop iteration; the summary
+        // printed after cg.Mult reports it instead.
+        if (final || it % stride_ != 0)
+            return;
+        double rel = norm0_ > 0.0 ? std::sqrt((double)norm / norm0_) : 0.0;
+        printf("[mfem] CG iteration %4d: relative residual %.3e\n", it, rel);
+        fflush(stdout);
+    }
+};
+
 std::string solve_linear_elastic(
     const std::string& mesh_json,
     const std::string& mat_json,
@@ -489,7 +517,12 @@ std::string solve_linear_elastic(
     // silently returned best iterate (#313).
     cg.SetRelTol(1e-6);
     cg.SetMaxIter(5000);
-    cg.SetPrintLevel(1);  // print final iteration count to help diagnose convergence
+    // Errors/warnings only: iteration progress is streamed by CGLogMonitor via
+    // printf so it reaches the browser log panel (mfem::out iostream output
+    // does not survive this WASM build — see the mesh-construction note above).
+    cg.SetPrintLevel(0);
+    CGLogMonitor cg_monitor(/*stride=*/10);
+    cg.SetMonitor(cg_monitor);
     cg.SetPreconditioner(prec);
     cg.SetOperator(A_mat);
     printf("[mfem] starting CG solve (%d rows)…\n", A_mat.Height()); fflush(stdout);
@@ -508,6 +541,9 @@ std::string solve_linear_elastic(
                  (double)cg.GetFinalRelNorm(), cg.GetNumIterations());
         throw std::runtime_error(msg.data());
     }
+    printf("[mfem] CG converged: %d iterations, relative residual %.3e\n",
+           cg.GetNumIterations(), (double)cg.GetFinalRelNorm());
+    fflush(stdout);
     a.RecoverFEMSolution(X, b, x);
     printf("[mfem] CG done — computing von Mises stress…\n"); fflush(stdout);
     log_mem("solve: after CG solve");

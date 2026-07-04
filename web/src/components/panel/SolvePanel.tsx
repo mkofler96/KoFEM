@@ -2,11 +2,20 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useSolver } from "../../hooks/useSolver";
+import { LogSection } from "./LogSection";
 import styles from "./LeftPanel.module.css";
 
 export function SolvePanel() {
-  const { solve, error, setError, isRunning, allOk, checks, elementOrder } =
-    useSolver();
+  const {
+    solve,
+    error,
+    setError,
+    isRunning,
+    allOk,
+    checks,
+    elementOrder,
+    logs,
+  } = useSolver();
 
   return (
     <div className={styles.panel}>
@@ -61,6 +70,8 @@ export function SolvePanel() {
         >
           {isRunning ? "Solving…" : "▶  Run static solve"}
         </button>
+
+        <LogSection logs={logs} busy={isRunning} />
       </div>
     </div>
   );
