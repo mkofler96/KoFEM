@@ -99,29 +99,19 @@ export function BoundaryConditionLayer({
     }[];
   }, [loadGroups, boundaryMeshTopo, nodeMap]);
 
-  // BC marker: centroid + quaternion that orients triangles outward from the model
-  const bcMarkerData = useMemo(() => {
-    if (constraints.length === 0 || nodes.length === 0) return null;
+  // BC markers — one small triangular cone per constrained node (apex at the
+  // node, base outward), replacing the former single centroid marker. Each
+  // marker is oriented along the outward normal of the constrained surface,
+  // accumulated area-weighted over the boundary faces whose nodes are all
+  // constrained (the same membership test the surface loads use) — so markers
+  // on a flat fixed face all point along its normal instead of fanning out at
+  // edges and corners, while nodes on a curved face get averaged directions.
+  const bcNodeMarkers = useMemo(() => {
+    if (constraints.length === 0 || nodes.length === 0) return [];
     const ids = new Set(constraints.map((c) => c.nodeId));
-    let cx = 0,
-      cy = 0,
-      cz = 0,
-      count = 0;
-    for (const id of ids) {
-      const e = nodeMap.get(id);
-      if (e) {
-        cx += e.n.x;
-        cy += e.n.y;
-        cz += e.n.z;
-        count++;
-      }
-    }
-    if (count === 0) return null;
-    cx /= count;
-    cy /= count;
-    cz /= count;
 
-    // Outward normal: direction from model centroid toward BC face centroid
+    // Model centroid — orients face normals outward, and is the fallback
+    // direction for a constrained node on no boundary face.
     let mx = 0,
       my = 0,
       mz = 0;
@@ -133,17 +123,69 @@ export function BoundaryConditionLayer({
     mx /= nodes.length;
     my /= nodes.length;
     mz /= nodes.length;
-    const dx = cx - mx,
-      dy = cy - my,
-      dz = cz - mz;
-    const len = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
-    const outward = new THREE.Vector3(dx / len, dy / len, dz / len);
+    const modelCentroid = new THREE.Vector3(mx, my, mz);
 
-    // Rotate group so that -Y (cone base direction) aligns with outward normal
-    const q = new THREE.Quaternion();
-    q.setFromUnitVectors(new THREE.Vector3(0, -1, 0), outward);
-    return { pos: [cx, cy, cz] as [number, number, number], quaternion: q };
-  }, [constraints, nodeMap, nodes]);
+    const posOf = (id: number): THREE.Vector3 | null => {
+      const e = nodeMap.get(id);
+      return e ? new THREE.Vector3(e.n.x, e.n.y, e.n.z) : null;
+    };
+
+    const outward = new Map<number, THREE.Vector3>();
+    const addFace = (faceIds: number[]) => {
+      if (!faceIds.every((id) => ids.has(id))) return;
+      const pts = faceIds.map(posOf);
+      if (pts.some((p) => p === null)) return;
+      const p = pts as THREE.Vector3[];
+
+      // Area-weighted normal: triangle directly, quad via its diagonals.
+      const normal = new THREE.Vector3();
+      if (p.length === 3) {
+        normal
+          .copy(p[1])
+          .sub(p[0])
+          .cross(new THREE.Vector3().copy(p[2]).sub(p[0]));
+      } else {
+        normal
+          .copy(p[2])
+          .sub(p[0])
+          .cross(new THREE.Vector3().copy(p[3]).sub(p[1]));
+      }
+      if (normal.lengthSq() < 1e-30) return;
+
+      const fc = new THREE.Vector3();
+      for (const v of p) fc.add(v);
+      fc.divideScalar(p.length);
+      if (normal.dot(new THREE.Vector3().copy(modelCentroid).sub(fc)) > 0)
+        normal.negate();
+
+      for (const id of faceIds) {
+        const acc = outward.get(id) ?? new THREE.Vector3();
+        outward.set(id, acc.add(normal));
+      }
+    };
+    for (const tri of boundaryTriFaceIds) addFace(tri);
+    for (const quad of boundaryQuadFaceIds) addFace(quad);
+
+    const down = new THREE.Vector3(0, -1, 0);
+    const markers: {
+      nodeId: number;
+      pos: [number, number, number];
+      quaternion: THREE.Quaternion;
+    }[] = [];
+    for (const id of ids) {
+      const p = posOf(id);
+      if (!p) continue;
+      let dir = outward.get(id);
+      if (!dir || dir.lengthSq() < 1e-30)
+        dir = new THREE.Vector3().copy(p).sub(modelCentroid);
+      if (dir.lengthSq() < 1e-30) continue;
+      dir.normalize();
+      // Rotate so that -Y (cone base direction) aligns with the outward normal
+      const q = new THREE.Quaternion().setFromUnitVectors(down, dir);
+      markers.push({ nodeId: id, pos: [p.x, p.y, p.z], quaternion: q });
+    }
+    return markers;
+  }, [constraints, nodeMap, nodes, boundaryTriFaceIds, boundaryQuadFaceIds]);
 
   // Load glyphs — one arrow per load group, at the centroid of its loaded
   // nodes. Force arrows point along the applied force; pressure arrows point
@@ -453,23 +495,21 @@ export function BoundaryConditionLayer({
         </mesh>
       )}
 
-      {/* BC markers — triangular fixed-support symbols (3-sided cone, apex at face, base outward) */}
-      {!showResult && bcMarkerData && (
-        <group position={bcMarkerData.pos} quaternion={bcMarkerData.quaternion}>
-          <mesh position={[0, -modelSize * 0.075, 0]}>
-            <coneGeometry args={[modelSize * 0.09, modelSize * 0.15, 3]} />
-            <meshStandardMaterial color="#dc2626" />
-          </mesh>
-          {/* Backing strip representing the fixed wall */}
-          <mesh
-            position={[0, -modelSize * 0.165, 0]}
-            rotation={[Math.PI / 2, 0, 0]}
+      {/* BC markers — a small triangular fixed-support symbol at every
+          constrained node (3-sided cone, apex at the node, base outward) */}
+      {!showResult &&
+        bcNodeMarkers.map((m) => (
+          <group
+            key={`bc-node-${m.nodeId}`}
+            position={m.pos}
+            quaternion={m.quaternion}
           >
-            <planeGeometry args={[modelSize * 0.22, modelSize * 0.03]} />
-            <meshStandardMaterial color="#dc2626" side={THREE.DoubleSide} />
-          </mesh>
-        </group>
-      )}
+            <mesh position={[0, -modelSize * 0.025, 0]}>
+              <coneGeometry args={[modelSize * 0.02, modelSize * 0.05, 3]} />
+              <meshStandardMaterial color="#dc2626" />
+            </mesh>
+          </group>
+        ))}
 
       {/* Resultant load arrows — one per group, cylinder shaft + cone head.
           Moment arrows get a second head (couple symbol) and, having no
