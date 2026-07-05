@@ -24,6 +24,7 @@ export function useSolver() {
   const setResult = useModelStore((s) => s.setResult);
   const setMode = useModelStore((s) => s.setMode);
   const elementOrder = useModelStore((s) => s.elementOrder);
+  const tieDistance = useModelStore((s) => s.tieDistance);
   const [error, setError] = useState<string | null>(null);
   const { logs, clearLogs } = useWorkerLogs("solve");
 
@@ -60,6 +61,7 @@ export function useSolver() {
         loads,
         surfaceLoads,
         elementOrder,
+        tieDistance,
       },
     )
       .then(({ displacements, vonMises }) => {

@@ -238,6 +238,8 @@ function BodiesSection() {
   const setHighlightBodyId = useModelStore((s) => s.setHighlightBodyId);
   const hiddenBodyIds = useModelStore((s) => s.hiddenBodyIds);
   const toggleBodyVisibility = useModelStore((s) => s.toggleBodyVisibility);
+  const tieDistance = useModelStore((s) => s.tieDistance);
+  const setTieDistance = useModelStore((s) => s.setTieDistance);
 
   if (properties.length <= 1) return null;
 
@@ -307,6 +309,26 @@ function BodiesSection() {
         Hover a body to highlight it; use the eye to hide it. Touching bodies
         are bonded at their shared faces — a body that touches nothing floats,
         so constrain it or check the assembly.
+      </div>
+
+      <div className={styles.formRow}>
+        <span className={styles.formLabel}>Tie distance</span>
+        <input
+          className={styles.formInput}
+          type="number"
+          min={0}
+          step={0.5}
+          value={tieDistance}
+          data-testid="tie-distance"
+          onChange={(e) => setTieDistance(Number(e.target.value))}
+        />
+        <span className={styles.toleranceUnit}>mm</span>
+      </div>
+      <div className={styles.empty}>
+        Bonded tie for parts that touch without a shared face (e.g. a pin in a
+        hook eye — a line contact). Nodes of different bodies within this
+        distance are welded so load transfers. 0 = off. Keep it below the
+        element size to avoid distorting the mesh.
       </div>
     </>
   );

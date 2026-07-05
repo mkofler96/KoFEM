@@ -15,6 +15,7 @@ interface Store {
     materials: { id: number; name: string; color: string }[];
     highlightBodyId: number | null;
     hiddenBodyIds: number[];
+    tieDistance: number;
   };
 }
 const store = (page: import("@playwright/test").Page) =>
@@ -56,6 +57,19 @@ test("hovering a body highlights it; the eye hides it", async ({ page }) => {
   await expect.poll(async () => (await store(page)).hiddenBodyIds).toEqual([2]);
   await page.getByTestId("body-visibility-2").click();
   await expect.poll(async () => (await store(page)).hiddenBodyIds).toEqual([]);
+});
+
+test("the bonded tie distance is editable for multibody assemblies", async ({
+  page,
+}) => {
+  await importStep(page, TWO_BOXES);
+
+  const tie = page.getByTestId("tie-distance");
+  await expect(tie).toBeVisible();
+  await expect.poll(async () => (await store(page)).tieDistance).toBe(0);
+
+  await tie.fill("2");
+  await expect.poll(async () => (await store(page)).tieDistance).toBe(2);
 });
 
 test("adding a material auto-assigns a distinct colour", async ({ page }) => {

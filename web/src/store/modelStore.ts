@@ -160,6 +160,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.viewRepr = "surface";
       s.deformScale = 1;
       s.elementOrder = 1;
+      s.tieDistance = 0;
       s.nextMatId = 2;
       s.selectedFace = null;
       s.pendingFaces = [];

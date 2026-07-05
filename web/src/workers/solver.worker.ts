@@ -6,6 +6,13 @@
 
 import createModule from "../wasm/pkg/kofem_wasm.js";
 import type { KofemModule, SolveMesh } from "../wasm/pkg/kofem_wasm.js";
+import {
+  buildTie,
+  remapElement,
+  assertNoCollapsedElements,
+  tiedId,
+  expandToOriginalNodes,
+} from "./tie.js";
 
 let Module: KofemModule | null = null;
 
@@ -144,6 +151,9 @@ interface SolvePayload {
   loads: Load[];
   surfaceLoads?: SurfaceLoad[];
   elementOrder?: number;
+  // Bonded-tie detection distance (mm): weld near-contact nodes of different
+  // bodies so parts that touch without a shared face are joined (#359). 0 = off.
+  tieDistance?: number;
 }
 
 // ── parse_step ────────────────────────────────────────────────────────────────
@@ -472,12 +482,38 @@ function handleSolve(id: number, payload: SolvePayload) {
     surfaceLoads,
   } = payload;
 
-  const vid = buildVertexIndexer(nodes);
+  // Bonded tie (#359): weld near-contact nodes of different bodies so parts
+  // that touch without a shared face are joined for the solve. A no-op when
+  // tieDistance is 0/absent, in which case solveNodes/tiedElements are the
+  // originals and every step below is unchanged.
+  // eslint-disable-next-line kofem/no-silent-fallback -- tieDistance is optional; the documented default is 0 (tie off)
+  const tieDistance = payload.tieDistance ?? 0;
+  const tie = buildTie(nodes, elements, tieDistance);
+  const solveNodes = tie.nodes;
+  const tiedElements =
+    tie.repOf.size > 0
+      ? elements.map((el) => remapElement(el, tie.repOf))
+      : elements;
+  if (tie.repOf.size > 0) assertNoCollapsedElements(tiedElements);
+  if (tie.nWelded > 0) {
+    self.postMessage({
+      id,
+      log: `Bonded tie: welded ${tie.nWelded} node(s) across bodies (≤ ${tieDistance} mm), ${solveNodes.length} nodes remain`,
+    });
+  }
+
+  const vid = buildVertexIndexer(solveNodes);
+  // Every stored node reference (constraints, loads, surface-load faces) is an
+  // ORIGINAL node id; map it through the tie to its representative before
+  // resolving to a solve vertex index.
+  const vidTied: VertexIndexer = (nodeId, context) =>
+    vid(tiedId(tie.repOf, nodeId), context);
+
   // Tets and hexs cross the WASM boundary as separate arrays (tets first) —
   // the per-element material attributes must follow the same order.
-  const tetElements = elements.filter((e) => e.type === "CTETRA");
-  const hexElements = elements.filter((e) => e.type === "CHEXA");
-  const mesh = packSolveMesh(nodes, tetElements, hexElements, vid);
+  const tetElements = tiedElements.filter((e) => e.type === "CTETRA");
+  const hexElements = tiedElements.filter((e) => e.type === "CHEXA");
+  const mesh = packSolveMesh(solveNodes, tetElements, hexElements, vid);
   const { materials: engineMaterials, attributes } = resolveMaterials(
     [...tetElements, ...hexElements],
     materials,
@@ -490,12 +526,12 @@ function handleSolve(id: number, payload: SolvePayload) {
   const surface_loads = (surfaceLoads ?? []).map((sl) => ({
     ...sl,
     faces: sl.faces.map((face) =>
-      face.map((nodeId) => vid(nodeId, "surface load face")),
+      face.map((nodeId) => vidTied(nodeId, "surface load face")),
     ),
   }));
   const bcs = {
-    ...groupDirichlet(constraints, vid),
-    point_loads: groupPointLoads(loads, vid),
+    ...groupDirichlet(constraints, vidTied),
+    point_loads: groupPointLoads(loads, vidTied),
     surface_loads,
   };
 
@@ -526,18 +562,35 @@ function handleSolve(id: number, payload: SolvePayload) {
     throw new Error(result.error);
   }
 
+  // The engine returns one displacement per SOLVE node (tied set). Expand back
+  // to one per ORIGINAL store node — a merged-away node takes its
+  // representative's displacement — so the result overlays the original mesh.
+  // von Mises is per element; welding preserves element count and order, so it
+  // passes through unchanged. When the tie is off this is a straight pass-through
+  // (zero-copy).
+  const displacements =
+    tie.nWelded > 0
+      ? expandToOriginalNodes(
+          nodes,
+          solveNodes,
+          tie.repOf,
+          result.displacements,
+          3,
+        )
+      : result.displacements;
+
   self.postMessage({
     id,
-    log: `Solve complete: ${result.displacements.length / 3} vertex displacements, ${result.von_mises.length} element stresses`,
+    log: `Solve complete: ${displacements.length / 3} vertex displacements, ${result.von_mises.length} element stresses`,
   });
   self.postMessage(
     {
       id,
       ok: true,
-      displacements: result.displacements,
+      displacements,
       vonMises: result.von_mises,
     },
-    [result.displacements.buffer, result.von_mises.buffer],
+    [displacements.buffer, result.von_mises.buffer],
   );
 }
 
