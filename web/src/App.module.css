@@ -1,21 +1,27 @@
 .layout {
-  display: grid;
-  grid-template-columns: 340px 1fr;
-  grid-template-rows: 44px 1fr 28px;
-  grid-template-areas:
-    "topbar  topbar"
-    "panel   viewport"
-    "status  status";
+  display: flex;
+  flex-direction: column;
   width: 100%;
   height: 100vh;
+  height: 100dvh;
   background: #f4f5f7;
   color: #0d1117;
   font-family: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
+/* Middle row: sidebar + viewport. position: relative anchors the sidebar's
+   small-screen overlay mode and its collapsed expand button. */
+.main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  position: relative;
+}
+
 .viewport {
-  grid-area: viewport;
+  flex: 1;
+  min-width: 0;
   position: relative;
   overflow: hidden;
 }

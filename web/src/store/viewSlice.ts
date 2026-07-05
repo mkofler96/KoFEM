@@ -15,6 +15,28 @@ export type LoadDisplay = "resultant" | "nodal";
 
 export type ViewRepr = "geometry" | "surface" | "volume" | "wireframe";
 
+// Sidebar sizing (issue #339). Width is persisted so the user's preferred
+// split survives reloads; the open/closed state is derived from screen size
+// on startup (collapsed on small screens, expanded on desktop).
+export const SIDEBAR_DEFAULT_WIDTH = 340;
+export const SIDEBAR_MIN_WIDTH = 260;
+export const SIDEBAR_MAX_WIDTH = 560;
+// Must match the @media breakpoints in Sidebar.module.css.
+export const SMALL_SCREEN_QUERY = "(max-width: 768px)";
+
+const SIDEBAR_WIDTH_KEY = "kofem.sidebarWidth";
+
+function clampSidebarWidth(w: number): number {
+  return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, w));
+}
+
+function initialSidebarWidth(): number {
+  const stored = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
+  return Number.isFinite(stored) && stored > 0
+    ? clampSidebarWidth(stored)
+    : SIDEBAR_DEFAULT_WIDTH;
+}
+
 export interface ViewSlice {
   viewRepr: ViewRepr;
   showUndeformedOverlay: boolean;
@@ -25,12 +47,18 @@ export interface ViewSlice {
   // fit-to-view scale. 1 = the default visible deformation, 0 = undeformed.
   deformScale: number;
   fitViewTrigger: number;
+  // Sidebar layout (issue #339): collapsed on small screens so the viewport
+  // gets the full width, resizable on desktop.
+  sidebarOpen: boolean;
+  sidebarWidth: number;
 
   setViewRepr(v: ViewRepr): void;
   setShowUndeformedOverlay(v: boolean): void;
   setLoadDisplay(v: LoadDisplay): void;
   setDeformScale(v: number): void;
   triggerFitView(): void;
+  setSidebarOpen(v: boolean): void;
+  setSidebarWidth(v: number): void;
 }
 
 export const createViewSlice: SliceCreator<ViewSlice> = (set) => ({
@@ -39,6 +67,8 @@ export const createViewSlice: SliceCreator<ViewSlice> = (set) => ({
   loadDisplay: "resultant",
   deformScale: 1,
   fitViewTrigger: 0,
+  sidebarOpen: !window.matchMedia(SMALL_SCREEN_QUERY).matches,
+  sidebarWidth: initialSidebarWidth(),
 
   setViewRepr: (v) =>
     set((s) => {
@@ -59,5 +89,14 @@ export const createViewSlice: SliceCreator<ViewSlice> = (set) => ({
   triggerFitView: () =>
     set((s) => {
       s.fitViewTrigger++;
+    }),
+  setSidebarOpen: (v) =>
+    set((s) => {
+      s.sidebarOpen = v;
+    }),
+  setSidebarWidth: (v) =>
+    set((s) => {
+      s.sidebarWidth = clampSidebarWidth(v);
+      localStorage.setItem(SIDEBAR_WIDTH_KEY, String(s.sidebarWidth));
     }),
 });
