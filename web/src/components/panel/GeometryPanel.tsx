@@ -114,33 +114,28 @@ function MaterialForm({
   );
 }
 
-// Single-part models carry exactly one material, applied to the whole part
-// (issue #275). Per-body materials arrive with multibody support (issue #317),
-// so materials cannot be added here; delete is offered only to trim legacy
-// analyses saved with several.
+// Material definitions with per-body assignment (#317/#353). A single-body
+// part keeps the old behaviour — one material, applied to the whole part; a
+// multibody assembly lists every body with a material dropdown (the body ↔
+// material mapping made explicit — the confusion behind #275).
 function MaterialSection() {
   const materials = useModelStore((s) => s.materials);
+  const properties = useModelStore((s) => s.properties);
   const updateMaterial = useModelStore((s) => s.updateMaterial);
   const deleteMaterial = useModelStore((s) => s.deleteMaterial);
+  const createMaterial = useModelStore((s) => s.createMaterial);
 
   const [editingMatId, setEditingMatId] = useState<number | null>(null);
+  const [isAdding, setIsAdding] = useState(false);
+
+  const isAssigned = (matId: number) =>
+    properties.some((p) => p.materialId === matId);
 
   return (
     <>
-      <div className={styles.sectionLabel}>Material</div>
+      <div className={styles.sectionLabel}>Materials</div>
       {materials.length === 0 && (
         <div className={styles.empty}>No material</div>
-      )}
-      {materials.length > 1 && (
-        <div
-          className={styles.errorBanner}
-          data-testid="material-count-warning"
-        >
-          <span>
-            Only one material is supported — it is applied to the whole part.
-            Remove the extra materials before solving.
-          </span>
-        </div>
       )}
       {materials.map((mat) => (
         <div key={mat.id}>
@@ -159,7 +154,7 @@ function MaterialSection() {
               >
                 ✎
               </button>
-              {materials.length > 1 && (
+              {materials.length > 1 && !isAssigned(mat.id) && (
                 <button
                   className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
                   title="Remove material"
@@ -182,9 +177,67 @@ function MaterialSection() {
           )}
         </div>
       ))}
-      {materials.length === 1 && (
+      {isAdding ? (
+        <MaterialForm
+          onSave={(values) => {
+            createMaterial(values);
+            setIsAdding(false);
+          }}
+          onCancel={() => setIsAdding(false)}
+        />
+      ) : (
+        <button
+          className={styles.outlineBtn}
+          data-testid="add-material"
+          onClick={() => setIsAdding(true)}
+        >
+          + Add material
+        </button>
+      )}
+      {materials.length === 1 && properties.length <= 1 && (
         <div className={styles.empty}>Applied to the whole part.</div>
       )}
+      <BodiesSection />
+    </>
+  );
+}
+
+// Body ↔ material assignment for multibody assemblies (#353): one row per
+// body of the imported CAD file, each with a material dropdown. Hidden for
+// single-body parts, where the sole material applies to the whole part.
+function BodiesSection() {
+  const materials = useModelStore((s) => s.materials);
+  const properties = useModelStore((s) => s.properties);
+  const assignBodyMaterial = useModelStore((s) => s.assignBodyMaterial);
+
+  if (properties.length <= 1) return null;
+
+  return (
+    <>
+      <div className={styles.sectionLabel}>Bodies</div>
+      {properties.map((prop) => (
+        <div className={styles.formRow} key={prop.id}>
+          <span className={styles.formLabel}>Body {prop.id}</span>
+          <select
+            className={styles.formSelect}
+            data-testid={`body-material-${prop.id}`}
+            value={prop.materialId}
+            onChange={(e) =>
+              assignBodyMaterial(prop.id, Number(e.target.value))
+            }
+          >
+            {materials.map((mat) => (
+              <option key={mat.id} value={mat.id}>
+                {mat.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      ))}
+      <div className={styles.empty}>
+        Touching bodies are bonded at their shared faces. A body that touches
+        nothing floats — constrain it or check the assembly.
+      </div>
     </>
   );
 }

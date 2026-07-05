@@ -51,9 +51,13 @@ val tessellate_step(val bytes_val, const std::string& opts_json) {
     // load — and cache the result for both display and meshing (issue #276).
     // heal_shape then repairs import defects (sliver faces, degenerate edges,
     // self-intersecting trim wires) so downstream meshing can keep Netgen's
-    // overlap detection enabled (issue #214).
-    TopoDS_Shape shape = heal_shape(sew_faces_into_solid(read_cad_shape(bytes, format)));
+    // overlap detection enabled (issue #214). Multibody assemblies finally get
+    // their touching faces imprinted into shared faces (issue #353), so the
+    // mesher produces conforming — bonded — meshes across body interfaces.
+    TopoDS_Shape shape = imprint_touching_solids(
+        heal_shape(sew_faces_into_solid(read_cad_shape(bytes, format))));
     set_cached_shape(shape);
+    const int n_bodies = count_solids(shape);
 
     double diag = shape_bbox_diagonal(shape);
     double linear_defl;
@@ -105,10 +109,14 @@ val tessellate_step(val bytes_val, const std::string& opts_json) {
     if (verts.empty())
         throw std::runtime_error("shape produced no triangles — try a smaller deflection_relative");
 
-    // {vertices: Float32Array (xyz interleaved), triangles: Uint32Array (3 idx/tri)}
+    // {vertices: Float32Array (xyz interleaved), triangles: Uint32Array (3 idx/tri),
+    //  bodyCount: number of solids} — bodyCount lets the UI offer per-body
+    // material assignment (issue #353) before any mesh exists. 0 means the file
+    // held no closed solid (surface-only geometry that failed sewing).
     val result = val::object();
     result.set("vertices",  float32_array(verts));
     result.set("triangles", uint32_array(tris));
+    result.set("bodyCount", n_bodies);
     return result;
 }
 

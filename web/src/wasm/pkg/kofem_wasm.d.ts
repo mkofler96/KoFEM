@@ -3,30 +3,39 @@
 
 /** Tessellated STEP surface returned as flat typed arrays (binary, no JSON text).
  *  `vertices` is xyz interleaved (length 3·nVerts); `triangles` is three 0-based
- *  vertex indices per triangle (length 3·nTris). */
+ *  vertex indices per triangle (length 3·nTris). `bodyCount` is the number of
+ *  solids in the imported shape (issue #353) — 0 when the file held no closed
+ *  solid (surface-only geometry that failed sewing). */
 export interface StepTessellation {
   vertices: Float32Array
   triangles: Uint32Array
+  bodyCount: number
 }
 
 /** FEM volume mesh returned as flat typed arrays (binary, no JSON text — issue #166).
  *  `vertices` is xyz interleaved (length 3·nNodes); `tetrahedra` is four 0-based
- *  vertex indices per tet (length 4·nTets); `surfaceTriangles` is three 0-based
- *  vertex indices per boundary triangle; `surfaceFaceIds` is the 1-based OCC face
- *  index of each boundary triangle (one entry per triangle). */
+ *  vertex indices per tet (length 4·nTets); `bodyIds` is the 1-based body
+ *  (CAD solid) index of each tet (issue #353); `surfaceTriangles` is three
+ *  0-based vertex indices per boundary triangle; `surfaceFaceIds` is the 1-based
+ *  OCC face index of each boundary triangle (one entry per triangle). */
 export interface FemMesh {
   vertices: Float64Array
   tetrahedra: Int32Array
+  bodyIds: Int32Array
   surfaceTriangles: Int32Array
   surfaceFaceIds: Int32Array
 }
 
 /** Volume-mesh input to the solver: flat typed arrays, same layout as FemMesh.
- *  `hexahedra` is eight 0-based vertex indices per hex and may be omitted. */
+ *  `hexahedra` is eight 0-based vertex indices per hex and may be omitted.
+ *  `attributes` is one 1-based material index per element (tets first, then
+ *  hexs) for multi-material models (issue #353); omitted means every element
+ *  uses material 1. */
 export interface SolveMesh {
   vertices: Float64Array
   tetrahedra: Int32Array
   hexahedra?: Int32Array
+  attributes?: Int32Array
 }
 
 /** Solve output as flat typed arrays: three displacement components per vertex
@@ -57,7 +66,9 @@ export interface KofemModule {
    */
   free_geometry_cache(): void
   /** Linear-elastic solve. The mesh crosses the boundary as flat typed arrays;
-   *  material and boundary conditions stay JSON (small payloads). */
+   *  materials and boundary conditions stay JSON (small payloads). `mat_json`
+   *  is an array of materials — `mesh.attributes` selects per element, 1-based —
+   *  or a single material object (legacy single-material contract). */
   solve_linear_elastic(
     mesh: SolveMesh,
     mat_json: string,

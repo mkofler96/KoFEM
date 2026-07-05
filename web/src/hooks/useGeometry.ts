@@ -16,6 +16,7 @@ export function useGeometry() {
   const setRunning = useModelStore((s) => s.setRunning);
   const setStepBytes = useModelStore((s) => s.setStepBytes);
   const setGeometryFormat = useModelStore((s) => s.setGeometryFormat);
+  const setBodies = useModelStore((s) => s.setBodies);
 
   const [isImporting, setIsImporting] = useState(false);
 
@@ -32,8 +33,9 @@ export function useGeometry() {
     sendToWorker<{
       points: [number, number, number][];
       triangles: [number, number, number][];
+      bodyCount: number;
     }>("parse_step", { bytes, format })
-      .then(({ points, triangles }) => {
+      .then(({ points, triangles, bodyCount }) => {
         if (points.length === 0) setStepImportError("No geometry found.");
         else {
           // Retain the raw bytes + format so the geometry can be reloaded for a
@@ -41,6 +43,8 @@ export function useGeometry() {
           setStepBytes(bytes);
           setGeometryFormat(format);
           setStepSurface({ points, triangles });
+          // One material assignment per body of the assembly (#353).
+          setBodies(bodyCount);
         }
       })
       .catch((err) =>

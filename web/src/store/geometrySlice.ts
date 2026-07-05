@@ -19,13 +19,11 @@ export interface Node {
 // such support is actually added.
 export type ElementType = "CTETRA" | "CHEXA";
 
-// Reserved seam for #317 (multibody: per-body materials). Currently
-// write-only — the solver reads `materials[0]` directly (solver.worker.ts)
-// and does not consult `propertyId`/`materialId` to resolve an element's
-// material. Every model still carries exactly one auto-created Property
-// referencing the model's sole material; do not treat this as the current
-// material-assignment mechanism until #317 wires per-element regions
-// through it (see #320).
+// Body → material mapping (#317/#353). One property per body of the imported
+// assembly: the property id is the 1-based body (CAD solid) index — the same
+// index Netgen assigns the body's tets as their mesh domain, carried on each
+// element as `propertyId` — and `materialId` names the material the body is
+// made of. The solver resolves every element's material through this mapping.
 export interface Property {
   id: number;
   materialId: number;
@@ -80,6 +78,11 @@ export interface GeometrySlice {
   addNode(node: Node): void;
   addElement(el: Element): void;
   addProperty(prop: Property): void;
+  // Rebuild the body list after a CAD import: one property per body, all
+  // defaulting to the first material (#353). Assignments are per-import —
+  // body indices from different files don't correspond.
+  setBodies(count: number): void;
+  assignBodyMaterial(propertyId: number, materialId: number): void;
   setStepSurface(tessellation: StepTessellation | null): void;
   setStepBytes(bytes: Uint8Array | null): void;
   setGeometryFormat(format: GeometryFormat): void;
@@ -121,6 +124,32 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
   addProperty: (prop) =>
     set((s) => {
       s.properties.push(prop);
+    }),
+  setBodies: (count) =>
+    set((s) => {
+      const mat = s.materials[0];
+      if (!mat)
+        throw new Error("Cannot list bodies: the model has no materials");
+      // A surface-only import reports 0 bodies; keep one property so the
+      // material UI stays functional (meshing fails loudly on its own).
+      const n = Math.max(1, count);
+      s.properties = Array.from({ length: n }, (_, i) => ({
+        id: i + 1,
+        materialId: mat.id,
+      }));
+    }),
+  assignBodyMaterial: (propertyId, materialId) =>
+    set((s) => {
+      const prop = s.properties.find((p) => p.id === propertyId);
+      if (!prop)
+        throw new Error(
+          `Cannot assign material: body ${propertyId} does not exist`,
+        );
+      if (!s.materials.some((m) => m.id === materialId))
+        throw new Error(
+          `Cannot assign material: material ${materialId} does not exist`,
+        );
+      prop.materialId = materialId;
     }),
   setStepBytes: (bytes) =>
     set((s) => {
@@ -199,13 +228,20 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       s.modelName = name;
       s.viewRepr = "surface";
       s.fitViewTrigger++;
-      if (s.properties.length === 0) {
+      // Every body present in the mesh needs a material assignment. The bodies
+      // were listed at import (setBodies), so this only fills gaps — e.g. a
+      // model built without a CAD import, or a body count that changed because
+      // meshing split/merged domains unexpectedly.
+      const knownBodies = new Set(s.properties.map((p) => p.id));
+      const meshBodies = new Set(elements.map((e) => e.propertyId));
+      for (const bodyId of [...meshBodies].sort((a, b) => a - b)) {
+        if (knownBodies.has(bodyId)) continue;
         const mat = s.materials[0];
         if (!mat)
           throw new Error(
-            "Cannot create a default property: the model has no materials",
+            `Cannot create a material assignment for body ${bodyId}: the model has no materials`,
           );
-        s.properties = [{ id: 1, materialId: mat.id }];
+        s.properties.push({ id: bodyId, materialId: mat.id });
       }
     }),
 });

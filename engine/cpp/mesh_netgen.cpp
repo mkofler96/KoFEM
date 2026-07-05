@@ -264,6 +264,18 @@ val generate_fem_mesh(const std::string& opts_json)
         out_tets.push_back(tet[3] - 1);
     }
 
+    // Body index per tetrahedron — Netgen's 1-based subdomain number, one
+    // subdomain per solid of the CAD shape (issue #353). This is what lets the
+    // solver apply per-body materials to a multibody assembly.
+    std::vector<int> out_body_ids;
+    out_body_ids.reserve(ne);
+    for (int i = 1; i <= ne; ++i)
+        out_body_ids.push_back(
+            kofem_volume_element_domain_index(static_cast<void*>(mesh), i));
+    printf("[netgen] %d bodies in volume mesh\n",
+           (int)std::set<int>(out_body_ids.begin(), out_body_ids.end()).size());
+    fflush(stdout);
+
     // Surface elements — boundary triangles from the Netgen surface mesh.
     // Netgen records the owning CAD face of every surface element it generates
     // during Ng_OCC_GenerateSurfaceMesh; kofem_surface_element_face_index reads
@@ -292,11 +304,13 @@ val generate_fem_mesh(const std::string& opts_json)
     log_mem("generate_fem_mesh: after Ng_DeleteMesh");
 
     // Flat typed arrays instead of JSON text (issue #166): xyz-interleaved
-    // Float64 coordinates, four Int32 vertex indices per tet, three per
-    // surface triangle, one Int32 OCC face id per surface triangle.
+    // Float64 coordinates, four Int32 vertex indices per tet, one Int32 body id
+    // per tet, three Int32 vertex indices per surface triangle, one Int32 OCC
+    // face id per surface triangle.
     val result = val::object();
     result.set("vertices",         float64_array(out_verts));
     result.set("tetrahedra",       int32_array(out_tets));
+    result.set("bodyIds",          int32_array(out_body_ids));
     result.set("surfaceTriangles", int32_array(out_surf_tris));
     result.set("surfaceFaceIds",   int32_array(out_surf_face_ids));
     return result;

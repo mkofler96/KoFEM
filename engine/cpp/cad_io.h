@@ -28,6 +28,17 @@ TopoDS_Shape sew_faces_into_solid(const TopoDS_Shape& shape);
 // crash the check. Returns the shape unchanged when it is already valid.
 TopoDS_Shape heal_shape(const TopoDS_Shape& shape);
 
+// Imprint the touching faces of a multibody assembly with BOPAlgo_MakeConnected
+// so coincident faces become a single TopoDS_Face shared by both solids
+// (issue #353). Netgen then meshes each shared face once, giving both bodies
+// identical nodes on the interface — the bodies are bonded through mesh
+// topology alone, with no constraint equations in the solve. Returns the shape
+// unchanged when it holds fewer than two solids.
+TopoDS_Shape imprint_touching_solids(const TopoDS_Shape& shape);
+
+// Number of solids (bodies) in the shape.
+int count_solids(const TopoDS_Shape& shape);
+
 // Longest diagonal of the shape's axis-aligned bounding box (mm), or 0 if empty.
 // Used to scale the tessellation chord tolerance with model size.
 double shape_bbox_diagonal(const TopoDS_Shape& shape);

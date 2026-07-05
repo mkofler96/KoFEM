@@ -22,6 +22,13 @@ void kofem_occ_geometry_delete(void* geom);
 // nglib has no accessor for it, but Ng_Mesh* is a netgen::Mesh* internally.
 int kofem_surface_element_face_index(void* mesh, int i);
 
+// Domain (subdomain) index (1-based) of volume element i (1-based) of an
+// Ng_Mesh. For OCC-meshed geometry each solid of the shape is one meshing
+// domain in TopExp order, so this is the body the tetrahedron belongs to
+// (issue #353). Sibling of kofem_surface_element_face_index: nglib exposes no
+// accessor for it either.
+int kofem_volume_element_domain_index(void* mesh, int i);
+
 // Destroy an Ng_Mesh. Use this instead of nglib::Ng_DeleteMesh, which calls
 // Mesh::DeleteMesh() AND then ~Mesh(): both loops `delete` every bcnames /
 // materials / cd2names string* (NgArray<string*> holds raw pointers), so the
