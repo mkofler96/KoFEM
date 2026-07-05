@@ -10,6 +10,37 @@ import {
 import { LeftPanel } from "./LeftPanel";
 import styles from "./Sidebar.module.css";
 
+// Slim bottom bar with the collapse button — arrow pointing left, bar on the
+// right, mirroring the expand button's icon.
+function SidebarFooter({ onCollapse }: { onCollapse: () => void }) {
+  return (
+    <div className={styles.footer}>
+      <button
+        className={styles.collapseBtn}
+        title="Hide panel"
+        aria-label="Hide panel"
+        onClick={onCollapse}
+      >
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+          <path
+            d="M13 3v10"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          />
+          <path
+            d="M9.5 8H3M6 5L3 8l3 3"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
 // Resizable / collapsible shell around LeftPanel (issue #339). On desktop the
 // right edge drags to resize (double-click resets); on small screens the
 // sidebar starts collapsed and, when opened, overlays the viewport with a
@@ -84,31 +115,7 @@ export function Sidebar() {
         style={{ "--sidebar-width": `${width}px` } as CSSProperties}
       >
         <LeftPanel />
-        <div className={styles.footer}>
-          {/* Collapse: arrow pointing left, bar on the right. */}
-          <button
-            className={styles.collapseBtn}
-            title="Hide panel"
-            aria-label="Hide panel"
-            onClick={() => setOpen(false)}
-          >
-            <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-              <path
-                d="M13 3v10"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
-              <path
-                d="M9.5 8H3M6 5L3 8l3 3"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </button>
-        </div>
+        <SidebarFooter onCollapse={() => setOpen(false)} />
         <div
           className={`${styles.resizeHandle} ${dragging ? styles.resizeHandleActive : ""}`}
           role="separator"
