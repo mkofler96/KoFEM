@@ -3,6 +3,7 @@
 
 import { test, expect } from "./coverage";
 import { gotoApp } from "./fixtures/app";
+import { readFile } from "node:fs/promises";
 
 // Coverage for the `?example=<id>` deep-link (App.tsx useExampleFromUrl), the
 // target of the "Open in KoFEM web" buttons on the examples gallery. Exercises
@@ -170,4 +171,35 @@ test("the app opens normally when no ?example= is present", async ({
   // Guards the early-return branch of useExampleFromUrl.
   await gotoApp(page);
   expect((await readStore(page)).nodes).toBe(0);
+});
+
+let EXAMPLE_ANALYSES: { id: number }[];
+
+test.beforeAll(async () => {
+  EXAMPLE_ANALYSES = JSON.parse(
+    await readFile("public/examples/examples.json", "utf8"),
+  );
+});
+test("capture screenshots of all examples", async ({ page }) => {
+  // Open the app and import the STEP file via the Geometry panel.
+  for (const analysis of EXAMPLE_ANALYSES) {
+    await page.goto(`/app/?example=${analysis.id}`);
+
+    // Allow the camera reposition and a render frame to settle
+    await page.waitForTimeout(100);
+    await page
+      .getByRole("button", {
+        name: "Toggle undeformed overlay",
+      })
+      .click();
+    await page.mouse.move(0, 0);
+    await page.evaluate(() => {
+      const store = (window as any).__kofemStore;
+      store.getState().setDeformScale(0);
+    });
+    await page.waitForTimeout(500);
+    await page.screenshot({
+      path: `screenshots/${analysis.id}_screenshot.png`,
+    });
+  }
 });

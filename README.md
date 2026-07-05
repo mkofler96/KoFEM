@@ -8,6 +8,17 @@ KoFEM is Finite element analysis tool made to run in your browser, without insta
 volume mesh → MFEM FEM solve** — directly in the browser via a C++ engine
 compiled to WebAssembly, with a React + Three.js frontend. The software can be launched from the official website [kofem.org](https://kofem.org/) or run locally via docker.
 
+## Examples
+
+![](web/screenshots/plate-with-hole_screenshot.png)
+
+Click here to view this example on KoFEM web [Plate with Hole](https://kofem.org/app/?example=plate-with-hole)
+
+![](web/screenshots/beam-torsion_screenshot.png)
+Click here to view this example on KoFEM web [Beam Torsion](https://kofem.org/app/?example=beam-torsion)
+
+For more examples visit [KoFEM Examples](https://kofem.org/examples/)
+
 ## Run it with Docker
 
 The app is a static frontend (pre-built WASM engine + React UI) served by Nginx.
