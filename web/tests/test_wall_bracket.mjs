@@ -54,55 +54,51 @@ console.log(
   `tessellate_step:  ${tess.vertices.length / 3} vertices, ${tess.triangles.length / 3} triangles`,
 );
 
-// 2. FEM mesh via Netgen OCC
-const mesh = JSON.parse(
-  Module.generate_fem_mesh(
-    JSON.stringify({
-      // min_element_size floors curvature refinement — same default as solver.worker.ts
-      max_element_size: maxElementSize,
-      min_element_size: maxElementSize / 10,
-      grading: 0.3,
-      second_order: false,
-      elementsperedge: 2.0,
-      elementspercurve: 2.0,
-      optsteps_2d: 3,
-      optsteps_3d: 3,
-    }),
-  ),
+// 2. FEM mesh via Netgen OCC.
+// Returns flat typed arrays (Float64 vertices xyz-interleaved, Int32 indices),
+// not a JSON string (issue #166).
+const mesh = Module.generate_fem_mesh(
+  JSON.stringify({
+    // min_element_size floors curvature refinement — same default as solver.worker.ts
+    max_element_size: maxElementSize,
+    min_element_size: maxElementSize / 10,
+    grading: 0.3,
+    second_order: false,
+    elementsperedge: 2.0,
+    elementspercurve: 2.0,
+    optsteps_2d: 3,
+    optsteps_3d: 3,
+  }),
 );
+const nNodes = mesh.vertices.length / 3;
 console.log(
-  `generate_fem_mesh: ${mesh.vertices.length} nodes, ${mesh.tetrahedra.length} tetrahedra`,
+  `generate_fem_mesh: ${nNodes} nodes, ${mesh.tetrahedra.length / 4} tetrahedra`,
 );
 Module.free_geometry_cache();
 
 // 3. Solve in a fresh module — a clean WASM instance with no Netgen global
-// state, exactly as the browser does after resetWorker().
+// state, exactly as the browser does after resetWorker(). The mesh crosses
+// the boundary as flat typed arrays; the result comes back the same way.
 const SolveModule = await makeModule();
-const result = JSON.parse(
-  SolveModule.solve_linear_elastic(
-    JSON.stringify({
-      vertices: mesh.vertices,
-      tetrahedra: mesh.tetrahedra,
-      hexahedra: [],
-    }),
-    JSON.stringify({ young_modulus: 210e9, poisson_ratio: 0.3 }),
-    JSON.stringify({
-      fixed_vertices: Array.from(
-        { length: Math.min(10, mesh.vertices.length) },
-        (_, i) => i,
-      ),
-      point_loads: [
-        { vertex: mesh.vertices.length - 1, force: [0, -10000, 0] },
-      ],
-    }),
-    1,
-  ),
+const result = SolveModule.solve_linear_elastic(
+  {
+    vertices: mesh.vertices,
+    tetrahedra: mesh.tetrahedra,
+    hexahedra: new Int32Array(0),
+  },
+  JSON.stringify({ young_modulus: 210e9, poisson_ratio: 0.3 }),
+  JSON.stringify({
+    fixed_vertices: Array.from({ length: Math.min(10, nNodes) }, (_, i) => i),
+    point_loads: [{ vertex: nNodes - 1, force: [0, -10000, 0] }],
+  }),
+  1,
 );
+if ("error" in result) throw new Error(result.error);
 
 console.log(
   `solve_linear_elastic: ${result.displacements.length / 3} nodes solved`,
 );
-console.log(
-  `max von Mises: ${Math.max(...result.von_mises).toExponential(3)} Pa`,
-);
+let maxVm = 0;
+for (const vm of result.von_mises) maxVm = Math.max(maxVm, vm);
+console.log(`max von Mises: ${maxVm.toExponential(3)} Pa`);
 console.log("\nPASS");

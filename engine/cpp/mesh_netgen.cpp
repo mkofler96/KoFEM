@@ -90,7 +90,7 @@ namespace nglib {
 // Uses Netgen's native OCC geometry integration (KOFEM_NETGEN_OCC required).
 // Netgen reads the CAD topology directly, meshes edges and surfaces respecting
 // feature lines, then fills the volume — one call, proper FEM surface mesh.
-std::string generate_fem_mesh(const std::string& opts_json)
+val generate_fem_mesh(const std::string& opts_json)
 {
     if (!has_cached_shape())
         throw std::runtime_error(
@@ -291,10 +291,15 @@ std::string generate_fem_mesh(const std::string& opts_json)
     kofem_delete_mesh(static_cast<void*>(mesh));
     log_mem("generate_fem_mesh: after Ng_DeleteMesh");
 
-    return "{\"vertices\":" + json_vec3(out_verts) +
-           ",\"tetrahedra\":" + json_ivec4(out_tets) +
-           ",\"surfaceTriangles\":" + json_ivec3(out_surf_tris) +
-           ",\"surfaceFaceIds\":" + json_ints(out_surf_face_ids) + "}";
+    // Flat typed arrays instead of JSON text (issue #166): xyz-interleaved
+    // Float64 coordinates, four Int32 vertex indices per tet, three per
+    // surface triangle, one Int32 OCC face id per surface triangle.
+    val result = val::object();
+    result.set("vertices",         float64_array(out_verts));
+    result.set("tetrahedra",       int32_array(out_tets));
+    result.set("surfaceTriangles", int32_array(out_surf_tris));
+    result.set("surfaceFaceIds",   int32_array(out_surf_face_ids));
+    return result;
 
 #else
 #error "KoFEM requires Netgen built with -DUSE_OCC=ON (KOFEM_NETGEN_OCC is not defined). " \

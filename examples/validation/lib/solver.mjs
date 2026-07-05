@@ -18,7 +18,8 @@ const pkg = join(here, "../../../web/src/wasm/pkg");
 /**
  * Initialise the WASM engine once and return a solve() closure.
  *
- * solve(mesh, material, bcs, order?) mirrors solve_linear_elastic:
+ * solve(mesh, material, bcs, order?) mirrors solve_linear_elastic
+ * (nested tuples here are flattened to the engine's typed arrays):
  *   mesh:     { vertices:[[x,y,z]...], tetrahedra:[[..4]...], hexahedra:[[..8]...] }
  *   material: { young_modulus, poisson_ratio, density? }
  *   bcs:      { fixed_vertices:[v...],
@@ -45,11 +46,14 @@ export async function loadSolver() {
   });
 
   return function solve(mesh, material, bcs, order = 1) {
-    const meshJson = JSON.stringify({
-      vertices: mesh.vertices,
-      tetrahedra: mesh.tetrahedra ?? [],
-      hexahedra: mesh.hexahedra ?? [],
-    });
+    // The engine takes the mesh as flat typed arrays (issue #166); the
+    // validation cases author nested tuples, so flatten at this boundary.
+    // Material and BCs stay JSON (small payloads).
+    const meshArrays = {
+      vertices: Float64Array.from(mesh.vertices.flat()),
+      tetrahedra: Int32Array.from((mesh.tetrahedra ?? []).flat()),
+      hexahedra: Int32Array.from((mesh.hexahedra ?? []).flat()),
+    };
     const bcsJson = JSON.stringify({
       fixed_vertices: bcs.fixed_vertices ?? [],
       fixed_dofs: bcs.fixed_dofs ?? [],
@@ -57,13 +61,17 @@ export async function loadSolver() {
       point_loads: bcs.point_loads ?? [],
       surface_loads: bcs.surface_loads ?? [],
     });
-    return JSON.parse(
-      Module.solve_linear_elastic(
-        meshJson,
-        JSON.stringify(material),
-        bcsJson,
-        order,
-      ),
+    const result = Module.solve_linear_elastic(
+      meshArrays,
+      JSON.stringify(material),
+      bcsJson,
+      order,
     );
+    if ("error" in result) throw new Error(result.error);
+    // Plain arrays keep the documented number[] contract for the cases.
+    return {
+      displacements: Array.from(result.displacements),
+      von_mises: Array.from(result.von_mises),
+    };
   };
 }

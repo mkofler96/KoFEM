@@ -9,6 +9,33 @@ export interface StepTessellation {
   triangles: Uint32Array
 }
 
+/** FEM volume mesh returned as flat typed arrays (binary, no JSON text — issue #166).
+ *  `vertices` is xyz interleaved (length 3·nNodes); `tetrahedra` is four 0-based
+ *  vertex indices per tet (length 4·nTets); `surfaceTriangles` is three 0-based
+ *  vertex indices per boundary triangle; `surfaceFaceIds` is the 1-based OCC face
+ *  index of each boundary triangle (one entry per triangle). */
+export interface FemMesh {
+  vertices: Float64Array
+  tetrahedra: Int32Array
+  surfaceTriangles: Int32Array
+  surfaceFaceIds: Int32Array
+}
+
+/** Volume-mesh input to the solver: flat typed arrays, same layout as FemMesh.
+ *  `hexahedra` is eight 0-based vertex indices per hex and may be omitted. */
+export interface SolveMesh {
+  vertices: Float64Array
+  tetrahedra: Int32Array
+  hexahedra?: Int32Array
+}
+
+/** Solve output as flat typed arrays: three displacement components per vertex
+ *  (length 3·nNodes) and one von Mises value per element (length nElems).
+ *  Incomplete material inputs yield `{error}` instead (issue #344). */
+export type StaticSolveResult =
+  | { displacements: Float64Array; von_mises: Float64Array }
+  | { error: string }
+
 /** Runtime interface of the initialised Emscripten/Embind module. */
 export interface KofemModule {
   /** Load a STEP or IGES file and tessellate it for display.
@@ -22,15 +49,21 @@ export interface KofemModule {
   /** Generate a FEM surface mesh + volume mesh directly from the stored STEP geometry
    *  using Netgen's native OCC integration.  Must call tessellate_step first.
    *  @param opts_json JSON `{ max_element_size, min_element_size, grading, second_order, elementsperedge, elementspercurve, optsteps_2d, optsteps_3d }`
-   *  @returns JSON `{ vertices: [number,number,number][], tetrahedra: [number,number,number,number][] }`
    */
-  generate_fem_mesh(opts_json: string): string
+  generate_fem_mesh(opts_json: string): FemMesh
   /** Release the OCCT shape + STEP byte cache from WASM heap.
    *  Call this after meshing is complete and before solving to free ~10–30 MB
    *  of WASM memory that is no longer needed.
    */
   free_geometry_cache(): void
-  solve_linear_elastic(mesh_json: string, mat_json: string, bcs_json: string, order: number): string
+  /** Linear-elastic solve. The mesh crosses the boundary as flat typed arrays;
+   *  material and boundary conditions stay JSON (small payloads). */
+  solve_linear_elastic(
+    mesh: SolveMesh,
+    mat_json: string,
+    bcs_json: string,
+    order: number,
+  ): StaticSolveResult
 }
 
 export interface ModuleOverrides {

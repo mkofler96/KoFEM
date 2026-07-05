@@ -17,8 +17,6 @@
 std::string json_vec3(const std::vector<double>& d);
 std::string json_ivec3(const std::vector<int>& d);
 std::string json_ivec4(const std::vector<int>& d);
-std::string json_ints(const std::vector<int>& d);
-std::string json_doubles(const std::vector<double>& d);
 
 // ── JSON input (delegate parsing to the JS engine via emscripten::val) ─────────
 emscripten::val parse_json(const std::string& s);

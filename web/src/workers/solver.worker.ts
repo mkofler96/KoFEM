@@ -60,10 +60,12 @@ function m(): KofemModule {
 }
 
 // Group a flat typed array (xyz / abc interleaved) into [a, b, c] tuples.
-// tessellate_step now returns binary typed arrays instead of a JSON string;
-// the store's StepTessellation holds nested tuples, so unpack at this boundary —
+// The engine returns binary typed arrays instead of JSON strings (issue #166);
+// the store's types hold nested tuples, so unpack at this boundary —
 // far cheaper than the previous JSON.parse of a multi-MB text payload.
-function chunk3(flat: Float32Array | Uint32Array): [number, number, number][] {
+function chunk3(
+  flat: Float32Array | Uint32Array | Int32Array,
+): [number, number, number][] {
   const n = (flat.length / 3) | 0;
   const out = new Array<[number, number, number]>(n);
   for (let i = 0; i < n; i++) {
@@ -116,14 +118,6 @@ interface SurfaceLoad {
   force?: [number, number, number];
   pressure?: number;
 }
-// JSON returned by the engine's solve_linear_elastic: results on success, or
-// an explicit error object when the solver rejects its inputs (issue #344).
-interface StaticSolveSuccess {
-  displacements: number[];
-  von_mises: number[];
-}
-type StaticSolveResult = StaticSolveSuccess | { error: string };
-
 // ── Message handler ───────────────────────────────────────────────────────────
 
 self.onmessage = async (event: MessageEvent) => {
@@ -221,22 +215,18 @@ self.onmessage = async (event: MessageEvent) => {
         id,
         log: `Generating FEM mesh via Netgen OCC (element size: ${minSize}–${maxElementSize} mm)…`,
       });
-      const json = m().generate_fem_mesh(opts);
-      const dto = JSON.parse(json) as {
-        vertices: [number, number, number][];
-        tetrahedra: [number, number, number, number][];
-        // Surface element data from Netgen — present when Netgen was built with
-        // USE_OCC and exposes Ng_GetSurfaceElement / Ng_GetSurfaceElementIndex.
-        // surfaceTriangles: vertex indices (0-based, same node IDs as volume mesh)
-        // surfaceFaceIds:   OCC face index (1-based) per surface triangle
-        // Both arrays are in Netgen surface-element order, NOT tet boundary order.
-        surfaceTriangles?: [number, number, number][];
-        surfaceFaceIds?: number[];
-      };
+      // Binary typed-array transfer (issue #166): flat Float64 coordinates and
+      // Int32 index arrays straight from the WASM heap — no JSON string, no
+      // JSON.parse. surfaceTriangles/surfaceFaceIds are in Netgen
+      // surface-element order (NOT tet boundary order); surfaceFaceIds holds
+      // the 1-based OCC face index per surface triangle.
+      const dto = m().generate_fem_mesh(opts);
+      const nNodes = dto.vertices.length / 3;
+      const nTets = dto.tetrahedra.length / 4;
 
       self.postMessage({
         id,
-        log: `Volume mesh complete: ${dto.vertices.length} nodes, ${dto.tetrahedra.length} tetrahedra`,
+        log: `Volume mesh complete: ${nNodes} nodes, ${nTets} tetrahedra`,
       });
 
       // Release OCCT shape + STEP bytes from WASM heap — they are no longer
@@ -245,54 +235,39 @@ self.onmessage = async (event: MessageEvent) => {
       m().free_geometry_cache();
       geometryLoaded = false;
 
-      const nodes: Node[] = dto.vertices.map(([x, y, z], i) => ({
-        id: i,
-        x,
-        y,
-        z,
-      }));
-      const elements: Element[] = dto.tetrahedra.map((v, i) => ({
-        id: i,
-        type: "CTETRA",
-        nodeIds: v,
-        propertyId: 1,
-      }));
-
-      // Derive unique edges from tetrahedra for wireframe display.
-      // Numeric keys (lo * nVerts + hi): string keys cost seconds of hashing
-      // and GC at >100k-node mesh sizes.  Max key is nVerts² < 2^53 for any
-      // mesh that fits in WASM memory.
-      const nVerts = dto.vertices.length;
-      const edgeSet = new Set<number>();
-      const edges: [number, number][] = [];
-      for (const [a, b, c, d] of dto.tetrahedra) {
-        for (const [u, v] of [
-          [a, b],
-          [a, c],
-          [a, d],
-          [b, c],
-          [b, d],
-          [c, d],
-        ] as [number, number][]) {
-          const key = u < v ? u * nVerts + v : v * nVerts + u;
-          if (!edgeSet.has(key)) {
-            edgeSet.add(key);
-            edges.push([u, v]);
-          }
-        }
+      // The store models nodes/elements as object lists; build them here from
+      // the flat arrays (plain JS, no parsing — cheap relative to meshing).
+      const nodes: Node[] = new Array<Node>(nNodes);
+      for (let i = 0; i < nNodes; i++) {
+        nodes[i] = {
+          id: i,
+          x: dto.vertices[3 * i],
+          y: dto.vertices[3 * i + 1],
+          z: dto.vertices[3 * i + 2],
+        };
       }
-
-      self.postMessage({ id, log: `Wireframe: ${edges.length} edges built` });
+      const elements: Element[] = new Array<Element>(nTets);
+      for (let i = 0; i < nTets; i++) {
+        elements[i] = {
+          id: i,
+          type: "CTETRA",
+          nodeIds: [
+            dto.tetrahedra[4 * i],
+            dto.tetrahedra[4 * i + 1],
+            dto.tetrahedra[4 * i + 2],
+            dto.tetrahedra[4 * i + 3],
+          ],
+          propertyId: 1,
+        };
+      }
 
       self.postMessage({
         id,
         ok: true,
-        points: dto.vertices,
-        edges,
         nodes,
         elements,
-        surfaceTriangles: dto.surfaceTriangles ?? null,
-        surfaceFaceIds: dto.surfaceFaceIds ?? null,
+        surfaceTriangles: chunk3(dto.surfaceTriangles),
+        surfaceFaceIds: Array.from(dto.surfaceFaceIds),
       });
     } else if (type === "solve") {
       const {
@@ -335,22 +310,44 @@ self.onmessage = async (event: MessageEvent) => {
         return i;
       };
 
-      const tetrahedra = elements
-        .filter((e) => e.type === "CTETRA")
-        .map((e) => e.nodeIds.map((id) => vid(id, "CTETRA element")));
-      const hexahedra = elements
-        .filter((e) => e.type === "CHEXA")
-        .map((e) => e.nodeIds.map((id) => vid(id, "CHEXA element")));
-      if (tetrahedra.length === 0 && hexahedra.length === 0) {
+      // The mesh crosses the WASM boundary as flat typed arrays (issue #166):
+      // no multi-MB JSON.stringify here and no JSON.parse inside the engine —
+      // the engine bulk-copies these buffers onto its heap in one call each.
+      const tetElements = elements.filter((e) => e.type === "CTETRA");
+      const hexElements = elements.filter((e) => e.type === "CHEXA");
+      if (tetElements.length === 0 && hexElements.length === 0) {
         throw new Error(
           "No supported elements found. MFEM requires CTETRA or CHEXA elements — " +
             'import a STEP file and click "Mesh STEP volume" first.',
         );
       }
+      const vertices = new Float64Array(3 * nodes.length);
+      for (let i = 0; i < nodes.length; i++) {
+        vertices[3 * i] = nodes[i].x;
+        vertices[3 * i + 1] = nodes[i].y;
+        vertices[3 * i + 2] = nodes[i].z;
+      }
+      const packConnectivity = (
+        els: Element[],
+        nodesPerElement: number,
+        context: string,
+      ): Int32Array => {
+        const out = new Int32Array(nodesPerElement * els.length);
+        for (let i = 0; i < els.length; i++) {
+          const { nodeIds } = els[i];
+          if (nodeIds.length !== nodesPerElement)
+            throw new Error(
+              `${context} ${els[i].id} has ${nodeIds.length} nodes — expected ${nodesPerElement}`,
+            );
+          for (let k = 0; k < nodesPerElement; k++)
+            out[nodesPerElement * i + k] = vid(nodeIds[k], context);
+        }
+        return out;
+      };
       const mesh = {
-        vertices: nodes.map((n) => [n.x, n.y, n.z]),
-        tetrahedra,
-        hexahedra,
+        vertices,
+        tetrahedra: packConnectivity(tetElements, 4, "CTETRA element"),
+        hexahedra: packConnectivity(hexElements, 8, "CHEXA element"),
       };
 
       const mat = materials[0];
@@ -454,13 +451,15 @@ self.onmessage = async (event: MessageEvent) => {
         id,
         log: `Starting static solve: ${nodes.length} nodes, ${elements.length} elements (order ${order})…`,
       });
-      const json = m().solve_linear_elastic(
-        JSON.stringify(mesh),
+      // Mesh as typed arrays; material/BCs stay JSON (small). The result comes
+      // back as Float64Arrays whose buffers are handed to the main thread via
+      // the postMessage transfer list — zero-copy, no JSON round-trip.
+      const result = m().solve_linear_elastic(
+        mesh,
         JSON.stringify(material),
         JSON.stringify(bcs),
         order,
       );
-      const result = JSON.parse(json) as StaticSolveResult;
 
       if ("error" in result) {
         throw new Error(result.error);
@@ -470,12 +469,15 @@ self.onmessage = async (event: MessageEvent) => {
         id,
         log: `Solve complete: ${result.displacements.length / 3} vertex displacements, ${result.von_mises.length} element stresses`,
       });
-      self.postMessage({
-        id,
-        ok: true,
-        displacements: result.displacements,
-        vonMises: result.von_mises,
-      });
+      self.postMessage(
+        {
+          id,
+          ok: true,
+          displacements: result.displacements,
+          vonMises: result.von_mises,
+        },
+        [result.displacements.buffer, result.von_mises.buffer],
+      );
     } else if (type === "test_generate_fem_mesh") {
       // Smoke test for the production OCC meshing path. Requires tessellate_step
       // to have been called first so the STEP geometry is loaded in WASM memory.
@@ -490,16 +492,12 @@ self.onmessage = async (event: MessageEvent) => {
         optsteps_2d: 0,
         optsteps_3d: 0,
       });
-      const json = m().generate_fem_mesh(opts);
-      const dto = JSON.parse(json) as {
-        vertices: unknown[];
-        tetrahedra: unknown[];
-      };
+      const dto = m().generate_fem_mesh(opts);
       self.postMessage({
         id,
         ok: true,
-        nodes: dto.vertices.length,
-        elements: dto.tetrahedra.length,
+        nodes: dto.vertices.length / 3,
+        elements: dto.tetrahedra.length / 4,
         durationMs: Date.now() - t0,
       });
     } else if (type === "mesh") {

@@ -6,9 +6,9 @@
 // Pipeline:  STEP/IGES bytes → OCCT tessellation (display) → Netgen OCC surface+volume mesh → MFEM FEM solve
 //
 // Each pipeline stage lives in its own translation unit (issue #290); this file
-// only wires those functions into the JS API. Every function takes / returns
-// JSON strings (or typed arrays) so the interface is identical to the previous
-// wasm-bindgen build — solver.worker.ts needs no changes.
+// only wires those functions into the JS API. Bulk data (coordinates, indices,
+// results) crosses the boundary as flat typed arrays — binary, no JSON text
+// (issue #166); small option/BC payloads stay JSON strings.
 //
 //   cad_io.cpp        — STEP/IGES import + surface-only-geometry repair (OCCT)
 //   tessellate.cpp    — OCCT surface tessellation (display + meshing input)

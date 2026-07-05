@@ -47,28 +47,6 @@ std::string json_ivec4(const std::vector<int>& d) {
     return ss.str();
 }
 
-std::string json_ints(const std::vector<int>& d) {
-    std::ostringstream ss;
-    ss << '[';
-    for (size_t i = 0; i < d.size(); ++i) {
-        if (i != 0) ss << ',';
-        ss << d[i];
-    }
-    ss << ']';
-    return ss.str();
-}
-
-std::string json_doubles(const std::vector<double>& d) {
-    std::ostringstream ss;
-    ss << '[';
-    for (size_t i = 0; i < d.size(); ++i) {
-        if (i != 0) ss << ',';
-        ss << d[i];
-    }
-    ss << ']';
-    return ss.str();
-}
-
 // ── JSON input helpers (delegate parsing to the JS engine via emscripten::val) ─
 
 val parse_json(const std::string& s) {

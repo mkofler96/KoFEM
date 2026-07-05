@@ -43,21 +43,23 @@ export function useSolver() {
   function solve() {
     setRunning(true);
     clearLogs();
-    sendToWorker<{ displacements: number[]; vonMises: number[] }>("solve", {
-      nodes,
-      elements,
-      materials,
-      properties,
-      constraints,
-      loads,
-      surfaceLoads,
-      elementOrder,
-    })
+    // The worker transfers the solver's Float64Array buffers here zero-copy
+    // (issue #166) — store them as-is, no per-element copy.
+    sendToWorker<{ displacements: Float64Array; vonMises: Float64Array }>(
+      "solve",
+      {
+        nodes,
+        elements,
+        materials,
+        properties,
+        constraints,
+        loads,
+        surfaceLoads,
+        elementOrder,
+      },
+    )
       .then(({ displacements, vonMises }) => {
-        setResult({
-          displacements: new Float64Array(displacements),
-          vonMises: vonMises ? new Float64Array(vonMises) : undefined,
-        });
+        setResult({ displacements, vonMises });
         setMode("results");
       })
       .catch((err) => {
