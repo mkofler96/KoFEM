@@ -331,6 +331,31 @@
   flex-shrink: 0;
 }
 
+/* Per-body visibility toggle: a quiet eye glyph sitting right of the name. */
+.visBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    color 100ms,
+    background 100ms;
+}
+.visBtn:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
+/* Hidden body: dim the toggle so the row reads as "off" at a glance. */
+.visBtnOff {
+  color: var(--border-2);
+}
+
 /* ── Form elements ──────────────────────────────────────────── */
 
 .formRow {
