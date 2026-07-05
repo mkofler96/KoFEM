@@ -44,22 +44,16 @@ export function tiedId(repOf: Map<number, number>, nodeId: number): number {
   return repOf.get(nodeId) ?? nodeId;
 }
 
-// Weld near-contact nodes from different bodies. `tieDistance` ≤ 0 is a no-op
-// (returns the mesh unchanged), so the tie is strictly opt-in.
-export function buildTie(
+// Bodies (property ids) that reference each node index. A node shared by a
+// conforming interface belongs to several bodies; a plain surface node to one.
+function bodyMembership(
   nodes: TieNode[],
   elements: TieElement[],
-  tieDistance: number,
-): TieResult {
-  if (!(tieDistance > 0)) return { nodes, repOf: new Map(), nWelded: 0 };
-
-  const n = nodes.length;
+): (Set<number> | undefined)[] {
   const idxOfId = new Map<number, number>();
-  for (let i = 0; i < n; i++) idxOfId.set(nodes[i].id, i);
+  for (let i = 0; i < nodes.length; i++) idxOfId.set(nodes[i].id, i);
 
-  // Bodies (property ids) that reference each node. A node shared by a
-  // conforming interface belongs to several bodies; a plain surface node to one.
-  const bodiesOf: (Set<number> | undefined)[] = new Array(n);
+  const bodiesOf: (Set<number> | undefined)[] = new Array(nodes.length);
   for (const el of elements) {
     for (const nid of el.nodeIds) {
       const i = idxOfId.get(nid);
@@ -67,6 +61,19 @@ export function buildTie(
       (bodiesOf[i] ??= new Set()).add(el.propertyId);
     }
   }
+  return bodiesOf;
+}
+
+// Nearest cross-body neighbour index of each node within `tieDistance` (-1 if
+// none). A uniform grid with cell = tieDistance keeps this near-linear: any pair
+// within the distance shares a cell or an adjacent one, so a 3×3×3 scan finds
+// every candidate.
+function nearestCrossBodyNeighbours(
+  nodes: TieNode[],
+  bodiesOf: (Set<number> | undefined)[],
+  tieDistance: number,
+): Int32Array {
+  const n = nodes.length;
   const differentBodies = (a: number, b: number): boolean => {
     const sa = bodiesOf[a];
     const sb = bodiesOf[b];
@@ -75,30 +82,30 @@ export function buildTie(
     return true;
   };
 
-  // Uniform grid with cell = tieDistance, so any pair within the distance falls
-  // in the same or an adjacent cell — a 3×3×3 neighbour scan finds every pair.
   const cell = (v: number) => Math.floor(v / tieDistance);
   const key = (cx: number, cy: number, cz: number) => `${cx},${cy},${cz}`;
   const grid = new Map<string, number[]>();
   for (let i = 0; i < n; i++) {
     const k = key(cell(nodes[i].x), cell(nodes[i].y), cell(nodes[i].z));
-    let bucket = grid.get(k);
-    if (!bucket) {
-      bucket = [];
-      grid.set(k, bucket);
-    }
-    bucket.push(i);
+    const bucket = grid.get(k);
+    if (bucket) bucket.push(i);
+    else grid.set(k, [i]);
   }
 
-  // Nearest cross-body neighbour within the distance, per node. Welding by
-  // MUTUAL nearest neighbours (i↔j only when each is the other's nearest) makes
-  // every weld a disjoint 1:1 pair — never a chain — so two nodes of the same
-  // element can never collapse onto one representative. (A union-find over all
-  // in-range pairs would chain a node reachable from two others of one element
-  // into a zero-volume tet.)
   const d2 = tieDistance * tieDistance;
   const nearest = new Int32Array(n).fill(-1);
   const nearestD2 = new Float64Array(n).fill(Infinity);
+  const consider = (i: number, j: number) => {
+    if (j === i || !differentBodies(i, j)) return;
+    const ex = nodes[i].x - nodes[j].x;
+    const ey = nodes[i].y - nodes[j].y;
+    const ez = nodes[i].z - nodes[j].z;
+    const dist2 = ex * ex + ey * ey + ez * ez;
+    if (dist2 <= d2 && dist2 < nearestD2[i]) {
+      nearestD2[i] = dist2;
+      nearest[i] = j;
+    }
+  };
   for (let i = 0; i < n; i++) {
     const cx = cell(nodes[i].x);
     const cy = cell(nodes[i].y);
@@ -107,39 +114,20 @@ export function buildTie(
       for (let dy = -1; dy <= 1; dy++)
         for (let dz = -1; dz <= 1; dz++) {
           const bucket = grid.get(key(cx + dx, cy + dy, cz + dz));
-          if (!bucket) continue;
-          for (const j of bucket) {
-            if (j === i || !differentBodies(i, j)) continue;
-            const ex = nodes[i].x - nodes[j].x;
-            const ey = nodes[i].y - nodes[j].y;
-            const ez = nodes[i].z - nodes[j].z;
-            const dist2 = ex * ex + ey * ey + ez * ez;
-            if (dist2 <= d2 && dist2 < nearestD2[i]) {
-              nearestD2[i] = dist2;
-              nearest[i] = j;
-            }
-          }
+          if (bucket) for (const j of bucket) consider(i, j);
         }
   }
+  return nearest;
+}
 
-  // Union-find over node indices, joining only mutual-nearest pairs.
-  const parent = new Int32Array(n);
-  for (let i = 0; i < n; i++) parent[i] = i;
-  const find = (a: number): number => {
-    while (parent[a] !== a) {
-      parent[a] = parent[parent[a]];
-      a = parent[a];
-    }
-    return a;
-  };
-  for (let i = 0; i < n; i++) {
-    const j = nearest[i];
-    if (j > i && nearest[j] === i) parent[j] = i; // mutual nearest → weld pair
-  }
-
-  // Collapse each cluster to its root, averaging the member positions.
+// Collapse each union-find cluster to one representative node at the average of
+// its members' positions, and record the original → representative id remap.
+function collapseWeldedClusters(
+  nodes: TieNode[],
+  find: (i: number) => number,
+): TieResult {
   const acc = new Map<number, { x: number; y: number; z: number; c: number }>();
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < nodes.length; i++) {
     const root = find(i);
     let agg = acc.get(root);
     if (!agg) {
@@ -162,12 +150,49 @@ export function buildTie(
     });
 
   const repOf = new Map<number, number>();
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < nodes.length; i++) {
     const root = find(i);
     if (root !== i) repOf.set(nodes[i].id, nodes[root].id);
   }
 
-  return { nodes: outNodes, repOf, nWelded: n - outNodes.length };
+  return { nodes: outNodes, repOf, nWelded: nodes.length - outNodes.length };
+}
+
+// Weld near-contact nodes from different bodies. `tieDistance` ≤ 0 is a no-op
+// (returns the mesh unchanged), so the tie is strictly opt-in.
+//
+// Welding by MUTUAL nearest neighbours (i↔j only when each is the other's
+// nearest) makes every weld a disjoint 1:1 pair — never a chain — so two nodes
+// of the same element can never collapse onto one representative. (A union-find
+// over all in-range pairs would chain a node reachable from two others of one
+// element into a zero-volume tet.)
+export function buildTie(
+  nodes: TieNode[],
+  elements: TieElement[],
+  tieDistance: number,
+): TieResult {
+  if (!(tieDistance > 0)) return { nodes, repOf: new Map(), nWelded: 0 };
+
+  const n = nodes.length;
+  const bodiesOf = bodyMembership(nodes, elements);
+  const nearest = nearestCrossBodyNeighbours(nodes, bodiesOf, tieDistance);
+
+  // Union-find over node indices, joining only mutual-nearest pairs.
+  const parent = new Int32Array(n);
+  for (let i = 0; i < n; i++) parent[i] = i;
+  const find = (a: number): number => {
+    while (parent[a] !== a) {
+      parent[a] = parent[parent[a]];
+      a = parent[a];
+    }
+    return a;
+  };
+  for (let i = 0; i < n; i++) {
+    const j = nearest[i];
+    if (j > i && nearest[j] === i) parent[j] = i; // mutual nearest → weld pair
+  }
+
+  return collapseWeldedClusters(nodes, find);
 }
 
 // Remap an element's connectivity onto the tied (representative) node ids.
