@@ -4,7 +4,7 @@
 // MFEM: linear-elastic FEM solve. See solve_mfem.h.
 //
 // solve_linear_elastic is a thin orchestrator over the pipeline stages below
-// (issue #293): parse mesh JSON → build the MFEM mesh → collect essential
+// (issue #293): copy in the mesh typed arrays → build the MFEM mesh → collect essential
 // (Dirichlet) DOFs → assemble loads → CG solve → recover displacements and
 // von Mises stress. Two orderings are load-bearing and owned by the
 // orchestrator, not the helpers: the surface-load coefficient/marker storage
@@ -93,56 +93,54 @@ public:
 
 // ── Mesh parsing / construction ───────────────────────────────────────────────
 
-// Flat volume-mesh arrays extracted from the mesh JSON: xyz per vertex, four
-// vertex indices per tet, eight per hex.
+// Flat volume-mesh arrays copied out of the JS mesh object: xyz per vertex,
+// four vertex indices per tet, eight per hex.
 struct MeshArrays {
     std::vector<double> vertices;
     std::vector<int> tets;
     std::vector<int> hexs;
 };
 
+// The mesh arrives as flat typed arrays ({vertices: Float64Array, tetrahedra:
+// Int32Array, hexahedra?: Int32Array}) and is bulk-copied onto the WASM heap
+// (issue #166) — no JSON text and no per-element JS↔WASM crossings.
 MeshArrays parse_mesh(const val& mesh_js) {
-    val verts_js = mesh_js["vertices"];
-    val tets_js  = mesh_js["tetrahedra"];
-    val hexs_js  = mesh_js["hexahedra"];
-    unsigned nv  = verts_js["length"].as<unsigned>();
-    unsigned nt  = tets_js ["length"].as<unsigned>();
-    unsigned nh  = hexs_js ["length"].as<unsigned>();
+    MeshArrays m;
+    m.vertices = f64_vector(mesh_js["vertices"], "mesh.vertices");
 
-    printf("[mfem] mesh counts: nv=%u nt=%u nh=%u\n", nv, nt, nh); fflush(stdout);
+    // hexahedra is optional: the Netgen pipeline produces tets only, so most
+    // callers never build the array. tetrahedra is likewise absent-tolerant —
+    // the "no elements" check below reports that case properly.
+    val tets_js = mesh_js["tetrahedra"];
+    if (!tets_js.isUndefined() && !tets_js.isNull())
+        m.tets = i32_vector(tets_js, "mesh.tetrahedra");
+    val hexs_js = mesh_js["hexahedra"];
+    if (!hexs_js.isUndefined() && !hexs_js.isNull())
+        m.hexs = i32_vector(hexs_js, "mesh.hexahedra");
 
-    if (nt == 0 && nh == 0)
+    if (m.vertices.size() % 3 != 0)
+        throw std::runtime_error(
+            "mesh.vertices length " + std::to_string(m.vertices.size()) +
+            " is not divisible by 3 — expected flat xyz-interleaved coordinates");
+    if (m.tets.size() % 4 != 0)
+        throw std::runtime_error(
+            "mesh.tetrahedra length " + std::to_string(m.tets.size()) +
+            " is not divisible by 4 — expected four flat vertex indices per tet");
+    if (m.hexs.size() % 8 != 0)
+        throw std::runtime_error(
+            "mesh.hexahedra length " + std::to_string(m.hexs.size()) +
+            " is not divisible by 8 — expected eight flat vertex indices per hex");
+
+    printf("[mfem] mesh counts: nv=%u nt=%u nh=%u\n",
+           (unsigned)(m.vertices.size() / 3), (unsigned)(m.tets.size() / 4),
+           (unsigned)(m.hexs.size() / 8));
+    fflush(stdout);
+
+    if (m.tets.empty() && m.hexs.empty())
         throw std::runtime_error(
             "Mesh has no elements. Send at least one CTETRA or CHEXA element.");
 
-    log_mem("solve: after JSON parse");
-    printf("[mfem] extracting %u vertices\n", nv); fflush(stdout);
-    MeshArrays m;
-    m.vertices.reserve(3 * nv);
-    for (unsigned i = 0; i < nv; ++i) {
-        val v = verts_js[i];
-        m.vertices.push_back(v[0].as<double>());
-        m.vertices.push_back(v[1].as<double>());
-        m.vertices.push_back(v[2].as<double>());
-    }
-
-    printf("[mfem] extracting %u tets\n", nt); fflush(stdout);
-    m.tets.reserve(4 * nt);
-    for (unsigned i = 0; i < nt; ++i) {
-        val t = tets_js[i];
-        m.tets.push_back(t[0].as<int>());
-        m.tets.push_back(t[1].as<int>());
-        m.tets.push_back(t[2].as<int>());
-        m.tets.push_back(t[3].as<int>());
-    }
-
-    printf("[mfem] extracting %u hexs\n", nh); fflush(stdout);
-    m.hexs.reserve(8 * nh);
-    for (unsigned i = 0; i < nh; ++i) {
-        val h = hexs_js[i];
-        for (int k = 0; k < 8; ++k)
-            m.hexs.push_back(h[k].as<int>());
-    }
+    log_mem("solve: after mesh copy-in");
     return m;
 }
 
@@ -638,8 +636,19 @@ std::vector<double> compute_von_mises(mfem::Mesh& mesh, const mfem::GridFunction
 
 }  // namespace
 
-std::string solve_linear_elastic(
-    const std::string& mesh_json,
+namespace {
+// Explicit error object for input validation, mirroring the previous JSON
+// {"error": ...} contract (issue #344) — the worker checks for the key and
+// surfaces the message without tripping the C++-exception decode path.
+val error_result(const char* message) {
+    val err = val::object();
+    err.set("error", std::string(message));
+    return err;
+}
+}  // namespace
+
+val solve_linear_elastic(
+    val mesh_js,
     const std::string& mat_json,
     const std::string& bcs_json,
     int order)
@@ -648,7 +657,6 @@ std::string solve_linear_elastic(
 
     log_mem("solve: start");
     printf("[mfem] solve_linear_elastic: parsing inputs\n"); fflush(stdout);
-    val mesh_js = parse_json(mesh_json);
     val mat_js  = parse_json(mat_json);
     val bcs_js  = parse_json(bcs_json);
 
@@ -658,10 +666,10 @@ std::string solve_linear_elastic(
     val nu_val = mat_js["poisson_ratio"];
 
     if (E_val.isNull() || E_val.isUndefined()) {
-        return R"({"error":"material is missing young_modulus"})";
+        return error_result("material is missing young_modulus");
     }
     if (nu_val.isNull() || nu_val.isUndefined()) {
-        return R"({"error":"material is missing poisson_ratio"})";
+        return error_result("material is missing poisson_ratio");
     }
 
     double E  = E_val.as<double>();
@@ -733,6 +741,11 @@ std::string solve_linear_elastic(
     fflush(stdout);
     log_mem("solve: complete");
 
-    return "{\"displacements\":" + json_doubles(displacements) +
-           ",\"von_mises\":"     + json_doubles(von_mises)     + "}";
+    // Flat typed arrays instead of JSON text (issue #166): three Float64
+    // displacement components per vertex, one Float64 von Mises value per
+    // element. The worker transfers both buffers to the main thread zero-copy.
+    val result = val::object();
+    result.set("displacements", float64_array(displacements));
+    result.set("von_mises",     float64_array(von_mises));
+    return result;
 }
