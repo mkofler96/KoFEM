@@ -5,7 +5,7 @@
 // Runs kofem-wasm off the main thread so heavy solves don't freeze the UI.
 
 import createModule from "../wasm/pkg/kofem_wasm.js";
-import type { KofemModule } from "../wasm/pkg/kofem_wasm.js";
+import type { KofemModule, SolveMesh } from "../wasm/pkg/kofem_wasm.js";
 
 let Module: KofemModule | null = null;
 
@@ -118,6 +118,403 @@ interface SurfaceLoad {
   force?: [number, number, number];
   pressure?: number;
 }
+interface ParseStepPayload {
+  bytes: Uint8Array;
+  format?: string;
+}
+interface VolumeMeshPayload {
+  bytes?: Uint8Array;
+  format?: string;
+  maxElementSize?: number;
+  minElementSize?: number;
+}
+interface SolvePayload {
+  nodes: Node[];
+  elements: Element[];
+  materials: Material[];
+  // Reserved for #317 (per-body materials) — the single-material solve
+  // reads materials[0] directly and does not resolve elements through
+  // propertyId/materialId (see #320).
+  properties: unknown[];
+  constraints: Constraint[];
+  loads: Load[];
+  surfaceLoads?: SurfaceLoad[];
+  elementOrder?: number;
+}
+
+// ── parse_step ────────────────────────────────────────────────────────────────
+
+function handleParseStep(id: number, payload: ParseStepPayload) {
+  // deflection_relative: chord tolerance as a fraction of the model's
+  // bounding-box diagonal, so a large part isn't tessellated into millions of
+  // needless triangles. ~0.1% matches the fast browser STEP viewers.
+  const opts = JSON.stringify({
+    deflection_relative: 0.001,
+    angular_deflection: 0.5,
+    // eslint-disable-next-line kofem/no-silent-fallback -- format is optional in the parse_step message; absent means STEP, the primary import path
+    format: payload.format ?? "step",
+  });
+  const { vertices, triangles } = m().tessellate_step(payload.bytes, opts);
+  // tessellate_step stores the OCCT shape in the module — record that so a
+  // subsequent volume_mesh in this same worker can skip the reload.
+  geometryLoaded = true;
+  // Return as {points, triangles} to match the StepTessellation type used by
+  // the store; tessellate_step returns flat Float32/Uint32 typed arrays.
+  self.postMessage({
+    id,
+    ok: true,
+    points: chunk3(vertices),
+    triangles: chunk3(triangles),
+  });
+}
+
+// ── volume_mesh ───────────────────────────────────────────────────────────────
+
+function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
+  const { bytes, format = "step", maxElementSize = 20.0 } = payload;
+
+  // A re-mesh runs in a fresh worker (the previous mesh tore this worker's
+  // predecessor down), so the OCCT shape generate_fem_mesh needs is gone.
+  // Reload it from the original STEP bytes first. This makes every mesh
+  // reproduce the known-good import→mesh sequence — tessellate_step (loads
+  // the shape) then generate_fem_mesh — rather than meshing twice inside one
+  // Netgen-contaminated module.
+  if (!geometryLoaded) {
+    if (!bytes)
+      throw new Error(
+        "volume_mesh: no STEP geometry is loaded and no STEP bytes were provided to reload it — re-import the STEP file before meshing",
+      );
+    self.postMessage({
+      id,
+      log: "Reloading STEP geometry into the mesher…",
+    });
+    m().tessellate_step(
+      bytes,
+      JSON.stringify({
+        deflection_relative: 0.001,
+        angular_deflection: 0.5,
+        format,
+      }),
+    );
+    geometryLoaded = true;
+  }
+
+  // Floor the curvature-driven local element size at maxElementSize/10 by
+  // default.  Without a floor, Netgen refines every fillet to ~radius/2
+  // (elementspercurve) — on fillet-heavy CAD this produces >10x more
+  // elements than the max size suggests and meshing takes minutes.
+  const minSize = payload.minElementSize ?? maxElementSize / 10;
+
+  const opts = JSON.stringify({
+    max_element_size: maxElementSize,
+    min_element_size: minSize,
+    grading: 0.3,
+    second_order: false,
+    elementsperedge: 2.0,
+    elementspercurve: 2.0,
+    optsteps_2d: 3,
+    optsteps_3d: 3,
+  });
+
+  // Use Netgen's native OCC mesher: reads the stored STEP geometry directly,
+  // generates a proper FEM surface mesh respecting CAD topology (edges, faces,
+  // feature lines), then fills the volume — all in one pass.
+  self.postMessage({
+    id,
+    log: `Generating FEM mesh via Netgen OCC (element size: ${minSize}–${maxElementSize} mm)…`,
+  });
+  // Binary typed-array transfer (issue #166): flat Float64 coordinates and
+  // Int32 index arrays straight from the WASM heap — no JSON string, no
+  // JSON.parse. surfaceTriangles/surfaceFaceIds are in Netgen
+  // surface-element order (NOT tet boundary order); surfaceFaceIds holds
+  // the 1-based OCC face index per surface triangle.
+  const dto = m().generate_fem_mesh(opts);
+  const nNodes = dto.vertices.length / 3;
+  const nTets = dto.tetrahedra.length / 4;
+
+  self.postMessage({
+    id,
+    log: `Volume mesh complete: ${nNodes} nodes, ${nTets} tetrahedra`,
+  });
+
+  // Release OCCT shape + STEP bytes from WASM heap — they are no longer
+  // needed once meshing is done, and freeing them before the solve gives
+  // MFEM more headroom for stiffness-matrix assembly.
+  m().free_geometry_cache();
+  geometryLoaded = false;
+
+  // The store models nodes/elements as object lists; build them here from
+  // the flat arrays (plain JS, no parsing — cheap relative to meshing).
+  const nodes: Node[] = new Array<Node>(nNodes);
+  for (let i = 0; i < nNodes; i++) {
+    nodes[i] = {
+      id: i,
+      x: dto.vertices[3 * i],
+      y: dto.vertices[3 * i + 1],
+      z: dto.vertices[3 * i + 2],
+    };
+  }
+  const elements: Element[] = new Array<Element>(nTets);
+  for (let i = 0; i < nTets; i++) {
+    elements[i] = {
+      id: i,
+      type: "CTETRA",
+      nodeIds: [
+        dto.tetrahedra[4 * i],
+        dto.tetrahedra[4 * i + 1],
+        dto.tetrahedra[4 * i + 2],
+        dto.tetrahedra[4 * i + 3],
+      ],
+      propertyId: 1,
+    };
+  }
+
+  self.postMessage({
+    id,
+    ok: true,
+    nodes,
+    elements,
+    surfaceTriangles: chunk3(dto.surfaceTriangles),
+    surfaceFaceIds: Array.from(dto.surfaceFaceIds),
+  });
+}
+
+// ── solve ─────────────────────────────────────────────────────────────────────
+
+// The engine indexes vertices 0-based in the order they are added (mesh
+// vertices are emitted in node-array order). Stored node .id values are NOT
+// those indices — saved analyses number nodes 1-based and .inp imports use
+// arbitrary ids — so every node reference (element connectivity, constraints,
+// loads, surface-load faces) must be remapped to its vertex index before
+// reaching the engine. Passing a raw node id where the engine expects a vertex
+// index reads past the vertex array and traps with "memory access out of
+// bounds" (issue #288).
+type VertexIndexer = (nodeId: number, context: string) => number;
+
+function buildVertexIndexer(nodes: Node[]): VertexIndexer {
+  const vertexIndexById = new Map(nodes.map((n, i) => [n.id, i]));
+  return (nodeId, context) => {
+    const i = vertexIndexById.get(nodeId);
+    if (i === undefined)
+      throw new Error(
+        `${context} references unknown node id ${nodeId} — the model is inconsistent`,
+      );
+    return i;
+  };
+}
+
+// The mesh crosses the WASM boundary as flat typed arrays (issue #166):
+// no multi-MB JSON.stringify here and no JSON.parse inside the engine —
+// the engine bulk-copies these buffers onto its heap in one call each.
+function packSolveMesh(
+  nodes: Node[],
+  elements: Element[],
+  vid: VertexIndexer,
+): SolveMesh {
+  const tetElements = elements.filter((e) => e.type === "CTETRA");
+  const hexElements = elements.filter((e) => e.type === "CHEXA");
+  if (tetElements.length === 0 && hexElements.length === 0) {
+    throw new Error(
+      "No supported elements found. MFEM requires CTETRA or CHEXA elements — " +
+        'import a STEP file and click "Mesh STEP volume" first.',
+    );
+  }
+  const vertices = new Float64Array(3 * nodes.length);
+  for (let i = 0; i < nodes.length; i++) {
+    vertices[3 * i] = nodes[i].x;
+    vertices[3 * i + 1] = nodes[i].y;
+    vertices[3 * i + 2] = nodes[i].z;
+  }
+  const packConnectivity = (
+    els: Element[],
+    nodesPerElement: number,
+    context: string,
+  ): Int32Array => {
+    const out = new Int32Array(nodesPerElement * els.length);
+    for (let i = 0; i < els.length; i++) {
+      const { nodeIds } = els[i];
+      if (nodeIds.length !== nodesPerElement)
+        throw new Error(
+          `${context} ${els[i].id} has ${nodeIds.length} nodes — expected ${nodesPerElement}`,
+        );
+      for (let k = 0; k < nodesPerElement; k++)
+        out[nodesPerElement * i + k] = vid(nodeIds[k], context);
+    }
+    return out;
+  };
+  return {
+    vertices,
+    tetrahedra: packConnectivity(tetElements, 4, "CTETRA element"),
+    hexahedra: packConnectivity(hexElements, 8, "CHEXA element"),
+  };
+}
+
+function singleMaterial(materials: Material[]) {
+  const mat = materials[0];
+  if (!mat) {
+    throw new Error(
+      "solve: no material assigned — assign a material before running the solver",
+    );
+  }
+  if (materials.length > 1) {
+    throw new Error(
+      `Multi-material models are not yet supported: ${materials.length} materials defined. ` +
+        "Only a single material can be assigned. Remove all but one material before solving.",
+    );
+  }
+  return {
+    young_modulus: mat.young,
+    poisson_ratio: mat.poisson,
+    density: mat.density,
+  };
+}
+
+// Group translational constraints (DOFs 0–2) per node. A node constrained
+// in all three components is a full fix (fixed_vertices); a node constrained
+// in only some becomes a per-DOF constraint (fixed_dofs) so the unconstrained
+// directions stay free — e.g. a symmetry-plane roller. Rotational DOFs (3–5)
+// carry no stiffness for solid (H1 displacement) elements and are ignored.
+//
+// A non-zero prescribed displacement is also a Dirichlet condition, but it
+// must reach the solver as an inhomogeneous essential BC (prescribed_dofs):
+// folding it into fixed_vertices/fixed_dofs would silently pin the DOF to
+// zero and discard the requested value (issue #216).
+// Keyed by vertex index (vid), so the essential-DOF sets the engine
+// receives line up with the remapped mesh connectivity.
+function groupDirichlet(constraints: Constraint[], vid: VertexIndexer) {
+  const dofsByNode = new Map<number, Set<number>>();
+  const prescribed_dofs: { vertex: number; dof: number; value: number }[] = [];
+  for (const c of constraints) {
+    if (c.dof > 2) continue;
+    const vertex = vid(c.nodeId, "constraint");
+    // eslint-disable-next-line kofem/no-silent-fallback -- a constraint without prescribedValue is a homogeneous fixed BC, i.e. u = 0 by definition
+    const value = c.prescribedValue ?? 0;
+    if (value === 0) {
+      let dofs = dofsByNode.get(vertex);
+      if (!dofs) {
+        dofs = new Set();
+        dofsByNode.set(vertex, dofs);
+      }
+      dofs.add(c.dof);
+    } else {
+      prescribed_dofs.push({ vertex, dof: c.dof, value });
+    }
+  }
+  const fixed_vertices: number[] = [];
+  const fixed_dofs: { vertex: number; dofs: number[] }[] = [];
+  for (const [vertex, dofSet] of dofsByNode) {
+    if (dofSet.size === 3) fixed_vertices.push(vertex);
+    else fixed_dofs.push({ vertex, dofs: [...dofSet].sort() });
+  }
+  return { fixed_vertices, fixed_dofs, prescribed_dofs };
+}
+
+// Group translational force loads by vertex index, accumulating [fx,fy,fz]
+function groupPointLoads(loads: Load[], vid: VertexIndexer) {
+  const loadMap = new Map<number, [number, number, number]>();
+  for (const load of loads) {
+    if (load.dof > 2) continue;
+    const vertex = vid(load.nodeId, "load");
+    let force = loadMap.get(vertex);
+    if (!force) {
+      force = [0, 0, 0];
+      loadMap.set(vertex, force);
+    }
+    force[load.dof] += load.value;
+  }
+  return [...loadMap.entries()].map(([vertex, force]) => ({ vertex, force }));
+}
+
+function handleSolve(id: number, payload: SolvePayload) {
+  const { nodes, elements, materials, constraints, loads, surfaceLoads } =
+    payload;
+
+  const vid = buildVertexIndexer(nodes);
+  const mesh = packSolveMesh(nodes, elements, vid);
+  const material = singleMaterial(materials);
+
+  // Surface-load faces are node-id lists from the store; remap each to the
+  // engine's vertex indices so the boundary-element matcher finds them.
+  const surface_loads = (surfaceLoads ?? []).map((sl) => ({
+    ...sl,
+    faces: sl.faces.map((face) =>
+      face.map((nodeId) => vid(nodeId, "surface load face")),
+    ),
+  }));
+  const bcs = {
+    ...groupDirichlet(constraints, vid),
+    point_loads: groupPointLoads(loads, vid),
+    surface_loads,
+  };
+
+  // FE polynomial order, chosen in the frontend (Solver settings). Order 2
+  // (quadratic / second-order) adds edge-midpoint DOFs that resolve bending
+  // and stress gradients far better than linear tets, which lock in bending
+  // and smear stress concentrations to a single constant value per element
+  // (issue #215), at the cost of a slower solve. The engine extends the
+  // vertex Dirichlet BCs to the new edge DOFs so clamped/prescribed faces
+  // stay fully constrained. Defaults to 1 (linear) when the payload omits it.
+  // eslint-disable-next-line kofem/no-silent-fallback -- elementOrder is optional in the solve message; the documented default is linear elements
+  const order = payload.elementOrder ?? 1;
+  self.postMessage({
+    id,
+    log: `Starting static solve: ${nodes.length} nodes, ${elements.length} elements (order ${order})…`,
+  });
+  // Mesh as typed arrays; material/BCs stay JSON (small). The result comes
+  // back as Float64Arrays whose buffers are handed to the main thread via
+  // the postMessage transfer list — zero-copy, no JSON round-trip.
+  const result = m().solve_linear_elastic(
+    mesh,
+    JSON.stringify(material),
+    JSON.stringify(bcs),
+    order,
+  );
+
+  if ("error" in result) {
+    throw new Error(result.error);
+  }
+
+  self.postMessage({
+    id,
+    log: `Solve complete: ${result.displacements.length / 3} vertex displacements, ${result.von_mises.length} element stresses`,
+  });
+  self.postMessage(
+    {
+      id,
+      ok: true,
+      displacements: result.displacements,
+      vonMises: result.von_mises,
+    },
+    [result.displacements.buffer, result.von_mises.buffer],
+  );
+}
+
+// ── test_generate_fem_mesh ────────────────────────────────────────────────────
+
+// Smoke test for the production OCC meshing path. Requires tessellate_step
+// to have been called first so the STEP geometry is loaded in WASM memory.
+function handleTestGenerateFemMesh(id: number) {
+  const t0 = Date.now();
+  const opts = JSON.stringify({
+    max_element_size: 20.0,
+    min_element_size: 2.0,
+    grading: 0.3,
+    second_order: false,
+    elementsperedge: 2.0,
+    elementspercurve: 2.0,
+    optsteps_2d: 0,
+    optsteps_3d: 0,
+  });
+  const dto = m().generate_fem_mesh(opts);
+  self.postMessage({
+    id,
+    ok: true,
+    nodes: dto.vertices.length / 3,
+    elements: dto.tetrahedra.length / 4,
+    durationMs: Date.now() - t0,
+  });
+}
+
 // ── Message handler ───────────────────────────────────────────────────────────
 
 self.onmessage = async (event: MessageEvent) => {
@@ -127,379 +524,13 @@ self.onmessage = async (event: MessageEvent) => {
     await ensureInit();
 
     if (type === "parse_step") {
-      // payload.bytes: Uint8Array, payload.format: "step" | "iges"
-      // deflection_relative: chord tolerance as a fraction of the model's
-      // bounding-box diagonal, so a large part isn't tessellated into millions of
-      // needless triangles. ~0.1% matches the fast browser STEP viewers.
-      const opts = JSON.stringify({
-        deflection_relative: 0.001,
-        angular_deflection: 0.5,
-        // eslint-disable-next-line kofem/no-silent-fallback -- format is optional in the parse_step message; absent means STEP, the primary import path
-        format: (payload.format as string) ?? "step",
-      });
-      const { vertices, triangles } = m().tessellate_step(
-        payload.bytes as Uint8Array,
-        opts,
-      );
-      // tessellate_step stores the OCCT shape in the module — record that so a
-      // subsequent volume_mesh in this same worker can skip the reload.
-      geometryLoaded = true;
-      // Return as {points, triangles} to match the StepTessellation type used by
-      // the store; tessellate_step returns flat Float32/Uint32 typed arrays.
-      self.postMessage({
-        id,
-        ok: true,
-        points: chunk3(vertices),
-        triangles: chunk3(triangles),
-      });
+      handleParseStep(id, payload as ParseStepPayload);
     } else if (type === "volume_mesh") {
-      const {
-        bytes,
-        format = "step",
-        maxElementSize = 20.0,
-        minElementSize,
-      } = payload as {
-        bytes?: Uint8Array;
-        format?: string;
-        maxElementSize?: number;
-        minElementSize?: number;
-      };
-
-      // A re-mesh runs in a fresh worker (the previous mesh tore this worker's
-      // predecessor down), so the OCCT shape generate_fem_mesh needs is gone.
-      // Reload it from the original STEP bytes first. This makes every mesh
-      // reproduce the known-good import→mesh sequence — tessellate_step (loads
-      // the shape) then generate_fem_mesh — rather than meshing twice inside one
-      // Netgen-contaminated module.
-      if (!geometryLoaded) {
-        if (!bytes)
-          throw new Error(
-            "volume_mesh: no STEP geometry is loaded and no STEP bytes were provided to reload it — re-import the STEP file before meshing",
-          );
-        self.postMessage({
-          id,
-          log: "Reloading STEP geometry into the mesher…",
-        });
-        m().tessellate_step(
-          bytes,
-          JSON.stringify({
-            deflection_relative: 0.001,
-            angular_deflection: 0.5,
-            format,
-          }),
-        );
-        geometryLoaded = true;
-      }
-
-      // Floor the curvature-driven local element size at maxElementSize/10 by
-      // default.  Without a floor, Netgen refines every fillet to ~radius/2
-      // (elementspercurve) — on fillet-heavy CAD this produces >10x more
-      // elements than the max size suggests and meshing takes minutes.
-      const minSize = minElementSize ?? maxElementSize / 10;
-
-      const opts = JSON.stringify({
-        max_element_size: maxElementSize,
-        min_element_size: minSize,
-        grading: 0.3,
-        second_order: false,
-        elementsperedge: 2.0,
-        elementspercurve: 2.0,
-        optsteps_2d: 3,
-        optsteps_3d: 3,
-      });
-
-      // Use Netgen's native OCC mesher: reads the stored STEP geometry directly,
-      // generates a proper FEM surface mesh respecting CAD topology (edges, faces,
-      // feature lines), then fills the volume — all in one pass.
-      self.postMessage({
-        id,
-        log: `Generating FEM mesh via Netgen OCC (element size: ${minSize}–${maxElementSize} mm)…`,
-      });
-      // Binary typed-array transfer (issue #166): flat Float64 coordinates and
-      // Int32 index arrays straight from the WASM heap — no JSON string, no
-      // JSON.parse. surfaceTriangles/surfaceFaceIds are in Netgen
-      // surface-element order (NOT tet boundary order); surfaceFaceIds holds
-      // the 1-based OCC face index per surface triangle.
-      const dto = m().generate_fem_mesh(opts);
-      const nNodes = dto.vertices.length / 3;
-      const nTets = dto.tetrahedra.length / 4;
-
-      self.postMessage({
-        id,
-        log: `Volume mesh complete: ${nNodes} nodes, ${nTets} tetrahedra`,
-      });
-
-      // Release OCCT shape + STEP bytes from WASM heap — they are no longer
-      // needed once meshing is done, and freeing them before the solve gives
-      // MFEM more headroom for stiffness-matrix assembly.
-      m().free_geometry_cache();
-      geometryLoaded = false;
-
-      // The store models nodes/elements as object lists; build them here from
-      // the flat arrays (plain JS, no parsing — cheap relative to meshing).
-      const nodes: Node[] = new Array<Node>(nNodes);
-      for (let i = 0; i < nNodes; i++) {
-        nodes[i] = {
-          id: i,
-          x: dto.vertices[3 * i],
-          y: dto.vertices[3 * i + 1],
-          z: dto.vertices[3 * i + 2],
-        };
-      }
-      const elements: Element[] = new Array<Element>(nTets);
-      for (let i = 0; i < nTets; i++) {
-        elements[i] = {
-          id: i,
-          type: "CTETRA",
-          nodeIds: [
-            dto.tetrahedra[4 * i],
-            dto.tetrahedra[4 * i + 1],
-            dto.tetrahedra[4 * i + 2],
-            dto.tetrahedra[4 * i + 3],
-          ],
-          propertyId: 1,
-        };
-      }
-
-      self.postMessage({
-        id,
-        ok: true,
-        nodes,
-        elements,
-        surfaceTriangles: chunk3(dto.surfaceTriangles),
-        surfaceFaceIds: Array.from(dto.surfaceFaceIds),
-      });
+      handleVolumeMesh(id, payload as VolumeMeshPayload);
     } else if (type === "solve") {
-      const {
-        nodes,
-        elements,
-        materials,
-        constraints,
-        loads,
-        surfaceLoads,
-        elementOrder,
-      } = payload as {
-        nodes: Node[];
-        elements: Element[];
-        materials: Material[];
-        // Reserved for #317 (per-body materials) — the single-material solve
-        // below reads materials[0] directly and does not resolve elements
-        // through propertyId/materialId (see #320).
-        properties: unknown[];
-        constraints: Constraint[];
-        loads: Load[];
-        surfaceLoads?: SurfaceLoad[];
-        elementOrder?: number;
-      };
-
-      // The engine indexes vertices 0-based in the order they are added (mesh
-      // vertices below are emitted in node-array order). Stored node .id values
-      // are NOT those indices — saved analyses number nodes 1-based and .inp
-      // imports use arbitrary ids — so every node reference (element
-      // connectivity, constraints, loads, surface-load faces) must be remapped
-      // to its vertex index before reaching the engine. Passing a raw node id
-      // where the engine expects a vertex index reads past the vertex array and
-      // traps with "memory access out of bounds" (issue #288).
-      const vertexIndexById = new Map(nodes.map((n, i) => [n.id, i]));
-      const vid = (nodeId: number, context: string): number => {
-        const i = vertexIndexById.get(nodeId);
-        if (i === undefined)
-          throw new Error(
-            `${context} references unknown node id ${nodeId} — the model is inconsistent`,
-          );
-        return i;
-      };
-
-      // The mesh crosses the WASM boundary as flat typed arrays (issue #166):
-      // no multi-MB JSON.stringify here and no JSON.parse inside the engine —
-      // the engine bulk-copies these buffers onto its heap in one call each.
-      const tetElements = elements.filter((e) => e.type === "CTETRA");
-      const hexElements = elements.filter((e) => e.type === "CHEXA");
-      if (tetElements.length === 0 && hexElements.length === 0) {
-        throw new Error(
-          "No supported elements found. MFEM requires CTETRA or CHEXA elements — " +
-            'import a STEP file and click "Mesh STEP volume" first.',
-        );
-      }
-      const vertices = new Float64Array(3 * nodes.length);
-      for (let i = 0; i < nodes.length; i++) {
-        vertices[3 * i] = nodes[i].x;
-        vertices[3 * i + 1] = nodes[i].y;
-        vertices[3 * i + 2] = nodes[i].z;
-      }
-      const packConnectivity = (
-        els: Element[],
-        nodesPerElement: number,
-        context: string,
-      ): Int32Array => {
-        const out = new Int32Array(nodesPerElement * els.length);
-        for (let i = 0; i < els.length; i++) {
-          const { nodeIds } = els[i];
-          if (nodeIds.length !== nodesPerElement)
-            throw new Error(
-              `${context} ${els[i].id} has ${nodeIds.length} nodes — expected ${nodesPerElement}`,
-            );
-          for (let k = 0; k < nodesPerElement; k++)
-            out[nodesPerElement * i + k] = vid(nodeIds[k], context);
-        }
-        return out;
-      };
-      const mesh = {
-        vertices,
-        tetrahedra: packConnectivity(tetElements, 4, "CTETRA element"),
-        hexahedra: packConnectivity(hexElements, 8, "CHEXA element"),
-      };
-
-      const mat = materials[0];
-      if (!mat) {
-        throw new Error(
-          "solve: no material assigned — assign a material before running the solver",
-        );
-      }
-      if (materials.length > 1) {
-        throw new Error(
-          `Multi-material models are not yet supported: ${materials.length} materials defined. ` +
-            "Only a single material can be assigned. Remove all but one material before solving.",
-        );
-      }
-      const material = {
-        young_modulus: mat.young,
-        poisson_ratio: mat.poisson,
-        density: mat.density,
-      };
-
-      // Group translational constraints (DOFs 0–2) per node. A node constrained
-      // in all three components is a full fix (fixed_vertices); a node constrained
-      // in only some becomes a per-DOF constraint (fixed_dofs) so the unconstrained
-      // directions stay free — e.g. a symmetry-plane roller. Rotational DOFs (3–5)
-      // carry no stiffness for solid (H1 displacement) elements and are ignored.
-      //
-      // A non-zero prescribed displacement is also a Dirichlet condition, but it
-      // must reach the solver as an inhomogeneous essential BC (prescribed_dofs):
-      // folding it into fixed_vertices/fixed_dofs would silently pin the DOF to
-      // zero and discard the requested value (issue #216).
-      // Keyed by vertex index (vid), so the essential-DOF sets the engine
-      // receives line up with the remapped mesh connectivity above.
-      const dofsByNode = new Map<number, Set<number>>();
-      const prescribed_dofs: { vertex: number; dof: number; value: number }[] =
-        [];
-      for (const c of constraints) {
-        if (c.dof > 2) continue;
-        const vertex = vid(c.nodeId, "constraint");
-        // eslint-disable-next-line kofem/no-silent-fallback -- a constraint without prescribedValue is a homogeneous fixed BC, i.e. u = 0 by definition
-        const value = c.prescribedValue ?? 0;
-        if (value === 0) {
-          let dofs = dofsByNode.get(vertex);
-          if (!dofs) {
-            dofs = new Set();
-            dofsByNode.set(vertex, dofs);
-          }
-          dofs.add(c.dof);
-        } else {
-          prescribed_dofs.push({ vertex, dof: c.dof, value });
-        }
-      }
-      const fixed_vertices: number[] = [];
-      const fixed_dofs: { vertex: number; dofs: number[] }[] = [];
-      for (const [vertex, dofSet] of dofsByNode) {
-        if (dofSet.size === 3) fixed_vertices.push(vertex);
-        else fixed_dofs.push({ vertex, dofs: [...dofSet].sort() });
-      }
-
-      // Group translational force loads by vertex index, accumulating [fx,fy,fz]
-      const loadMap = new Map<number, [number, number, number]>();
-      for (const load of loads) {
-        if (load.dof > 2) continue;
-        const vertex = vid(load.nodeId, "load");
-        let force = loadMap.get(vertex);
-        if (!force) {
-          force = [0, 0, 0];
-          loadMap.set(vertex, force);
-        }
-        force[load.dof] += load.value;
-      }
-      const point_loads = [...loadMap.entries()].map(([vertex, force]) => ({
-        vertex,
-        force,
-      }));
-
-      // Surface-load faces are node-id lists from the store; remap each to the
-      // engine's vertex indices so the boundary-element matcher finds them.
-      const surface_loads = (surfaceLoads ?? []).map((sl) => ({
-        ...sl,
-        faces: sl.faces.map((face) =>
-          face.map((id) => vid(id, "surface load face")),
-        ),
-      }));
-      const bcs = {
-        fixed_vertices,
-        point_loads,
-        fixed_dofs,
-        prescribed_dofs,
-        surface_loads,
-      };
-      // FE polynomial order, chosen in the frontend (Solver settings). Order 2
-      // (quadratic / second-order) adds edge-midpoint DOFs that resolve bending
-      // and stress gradients far better than linear tets, which lock in bending
-      // and smear stress concentrations to a single constant value per element
-      // (issue #215), at the cost of a slower solve. The engine extends the
-      // vertex Dirichlet BCs to the new edge DOFs so clamped/prescribed faces
-      // stay fully constrained. Defaults to 1 (linear) when the payload omits it.
-      // eslint-disable-next-line kofem/no-silent-fallback -- elementOrder is optional in the solve message; the documented default is linear elements
-      const order = elementOrder ?? 1;
-      self.postMessage({
-        id,
-        log: `Starting static solve: ${nodes.length} nodes, ${elements.length} elements (order ${order})…`,
-      });
-      // Mesh as typed arrays; material/BCs stay JSON (small). The result comes
-      // back as Float64Arrays whose buffers are handed to the main thread via
-      // the postMessage transfer list — zero-copy, no JSON round-trip.
-      const result = m().solve_linear_elastic(
-        mesh,
-        JSON.stringify(material),
-        JSON.stringify(bcs),
-        order,
-      );
-
-      if ("error" in result) {
-        throw new Error(result.error);
-      }
-
-      self.postMessage({
-        id,
-        log: `Solve complete: ${result.displacements.length / 3} vertex displacements, ${result.von_mises.length} element stresses`,
-      });
-      self.postMessage(
-        {
-          id,
-          ok: true,
-          displacements: result.displacements,
-          vonMises: result.von_mises,
-        },
-        [result.displacements.buffer, result.von_mises.buffer],
-      );
+      handleSolve(id, payload as SolvePayload);
     } else if (type === "test_generate_fem_mesh") {
-      // Smoke test for the production OCC meshing path. Requires tessellate_step
-      // to have been called first so the STEP geometry is loaded in WASM memory.
-      const t0 = Date.now();
-      const opts = JSON.stringify({
-        max_element_size: 20.0,
-        min_element_size: 2.0,
-        grading: 0.3,
-        second_order: false,
-        elementsperedge: 2.0,
-        elementspercurve: 2.0,
-        optsteps_2d: 0,
-        optsteps_3d: 0,
-      });
-      const dto = m().generate_fem_mesh(opts);
-      self.postMessage({
-        id,
-        ok: true,
-        nodes: dto.vertices.length / 3,
-        elements: dto.tetrahedra.length / 4,
-        durationMs: Date.now() - t0,
-      });
+      handleTestGenerateFemMesh(id);
     } else if (type === "mesh") {
       throw new Error(
         "Parametric mesh generation is not available in the new pipeline. Import a STEP file instead.",
