@@ -1,0 +1,96 @@
+/* Resizable / collapsible sidebar shell (issue #339).
+   The 768px breakpoint must match SMALL_SCREEN_QUERY in store/viewSlice.ts. */
+
+.sidebar {
+  position: relative;
+  width: var(--sidebar-width);
+  height: 100%;
+  flex-shrink: 0;
+  display: flex;
+  min-width: 0;
+}
+
+/* Drag strip straddling the panel/viewport border. The visible feedback is a
+   2px accent line that appears on hover or while dragging. */
+.resizeHandle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -4px;
+  width: 8px;
+  cursor: col-resize;
+  z-index: 25;
+  touch-action: none;
+}
+
+.resizeHandle::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 2px;
+  background: transparent;
+  transition: background 100ms ease;
+}
+
+.resizeHandle:hover::after,
+.resizeHandleActive::after {
+  background: #1f5fd0;
+}
+
+/* Floating button over the viewport when the sidebar is collapsed — styled
+   like the viewport's Fit View HUD button. */
+.expandBtn {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 25;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid #d1d5db;
+  border-radius: 5px;
+  color: #374151;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+}
+
+.expandBtn:hover {
+  background: #ffffff;
+  color: #0d1117;
+}
+
+.backdrop {
+  display: none;
+}
+
+/* Small screens: the sidebar overlays the viewport instead of squeezing it,
+   with a backdrop that closes it on tap. Drag-resize is disabled — the
+   overlay width is fixed by the screen size. */
+@media (max-width: 768px) {
+  .sidebar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    height: auto;
+    z-index: 30;
+    width: min(85vw, 360px);
+    box-shadow: 8px 0 24px rgba(13, 17, 23, 0.18);
+  }
+
+  .resizeHandle {
+    display: none;
+  }
+
+  .backdrop {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 29;
+    background: rgba(13, 17, 23, 0.25);
+  }
+}

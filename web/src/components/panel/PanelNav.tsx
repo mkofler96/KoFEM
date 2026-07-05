@@ -19,6 +19,7 @@ export function PanelNav() {
   const constraints = useModelStore((s) => s.constraints);
   const loads = useModelStore((s) => s.loads);
   const result = useModelStore((s) => s.result);
+  const setSidebarOpen = useModelStore((s) => s.setSidebarOpen);
 
   function isValid(m: AppMode): boolean {
     if (m === "geometry") return nodes.length > 0;
@@ -57,6 +58,22 @@ export function PanelNav() {
           </button>
         );
       })}
+      <button
+        className={styles.collapseBtn}
+        title="Hide panel"
+        aria-label="Hide panel"
+        onClick={() => setSidebarOpen(false)}
+      >
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
+          <path
+            d="M10 3L5.5 8 10 13"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </button>
     </nav>
   );
 }

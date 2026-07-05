@@ -4,7 +4,7 @@
 import { useEffect } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { TopBar } from "./components/topbar/TopBar";
-import { LeftPanel } from "./components/panel/LeftPanel";
+import { Sidebar } from "./components/panel/Sidebar";
 import { Viewport } from "./components/viewport/Viewport";
 import { StatusBar } from "./components/statusbar/StatusBar";
 import { useModelStore } from "./store/modelStore";
@@ -44,10 +44,12 @@ function Workspace() {
   return (
     <div className={styles.layout}>
       <TopBar />
-      <LeftPanel />
-      <main className={styles.viewport}>
-        <Viewport />
-      </main>
+      <div className={styles.main}>
+        <Sidebar />
+        <main className={styles.viewport}>
+          <Viewport />
+        </main>
+      </div>
       <StatusBar />
     </div>
   );
