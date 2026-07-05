@@ -52,6 +52,14 @@ export interface ViewSlice {
   sidebarOpen: boolean;
   sidebarWidth: number;
 
+  // Body (CAD solid) presentation in the geometry view (issue #353). Both are
+  // transient — not persisted. highlightBodyId is the body whose material is
+  // being assigned right now: when set, every OTHER body is dimmed so the one
+  // in question stands out. hiddenBodyIds are bodies toggled off via the eye
+  // control and not drawn at all.
+  highlightBodyId: number | null;
+  hiddenBodyIds: number[];
+
   setViewRepr(v: ViewRepr): void;
   setShowUndeformedOverlay(v: boolean): void;
   setLoadDisplay(v: LoadDisplay): void;
@@ -59,6 +67,9 @@ export interface ViewSlice {
   triggerFitView(): void;
   setSidebarOpen(v: boolean): void;
   setSidebarWidth(v: number): void;
+  setHighlightBodyId(id: number | null): void;
+  toggleBodyVisibility(id: number): void;
+  setAllBodiesVisible(): void;
 }
 
 export const createViewSlice: SliceCreator<ViewSlice> = (set) => ({
@@ -69,6 +80,8 @@ export const createViewSlice: SliceCreator<ViewSlice> = (set) => ({
   fitViewTrigger: 0,
   sidebarOpen: !window.matchMedia(SMALL_SCREEN_QUERY).matches,
   sidebarWidth: initialSidebarWidth(),
+  highlightBodyId: null,
+  hiddenBodyIds: [],
 
   setViewRepr: (v) =>
     set((s) => {
@@ -98,5 +111,19 @@ export const createViewSlice: SliceCreator<ViewSlice> = (set) => ({
     set((s) => {
       s.sidebarWidth = clampSidebarWidth(v);
       localStorage.setItem(SIDEBAR_WIDTH_KEY, String(s.sidebarWidth));
+    }),
+  setHighlightBodyId: (id) =>
+    set((s) => {
+      s.highlightBodyId = id;
+    }),
+  toggleBodyVisibility: (id) =>
+    set((s) => {
+      s.hiddenBodyIds = s.hiddenBodyIds.includes(id)
+        ? s.hiddenBodyIds.filter((b) => b !== id)
+        : [...s.hiddenBodyIds, id];
+    }),
+  setAllBodiesVisible: () =>
+    set((s) => {
+      s.hiddenBodyIds = [];
     }),
 });

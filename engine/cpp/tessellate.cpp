@@ -16,8 +16,12 @@
 #include <BRepTools.hxx>
 #include <Poly_Triangulation.hxx>
 #include <TopAbs_Orientation.hxx>
+#include <TopExp.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopLoc_Location.hxx>
+#include <TopTools_IndexedDataMapOfShapeListOfShape.hxx>
+#include <TopTools_IndexedMapOfShape.hxx>
+#include <TopTools_ListOfShape.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
@@ -75,16 +79,36 @@ val tessellate_step(val bytes_val, const std::string& opts_json) {
     if (!mesher.IsDone())
         throw std::runtime_error("BRepMesh_IncrementalMesh failed");
 
+    // Map every face to its owning body (1-based solid index in TopExp order —
+    // the same order generate_fem_mesh numbers bodies, so a triangle's body id
+    // matches its tets' body id). A face shared by two solids (an imprinted
+    // interface, issue #353) is attributed to the first — it is internal and
+    // hidden between the bodies, so the choice has no visible effect. Faces
+    // under no solid (surface-only geometry, bodyCount 0) default to body 1.
+    TopTools_IndexedMapOfShape solids;
+    TopExp::MapShapes(shape, TopAbs_SOLID, solids);
+    TopTools_IndexedDataMapOfShapeListOfShape face_solids;
+    TopExp::MapShapesAndAncestors(shape, TopAbs_FACE, TopAbs_SOLID, face_solids);
+
     // Float32 positions + Uint32 indices: half the bytes of a JSON double array,
     // ample precision for display (~1e-4 mm relative), and zero text formatting.
     std::vector<float>    verts;
     std::vector<uint32_t> tris;
+    std::vector<uint32_t> tri_bodies;  // one 1-based body id per triangle
 
     for (TopExp_Explorer exp(shape, TopAbs_FACE); exp.More(); exp.Next()) {
         TopoDS_Face face = TopoDS::Face(exp.Current());
         TopLoc_Location loc;
         Handle(Poly_Triangulation) tri = BRep_Tool::Triangulation(face, loc);
         if (tri.IsNull()) continue;
+
+        uint32_t body = 1;
+        if (face_solids.Contains(face)) {
+            const TopTools_ListOfShape& owners = face_solids.FindFromKey(face);
+            if (!owners.IsEmpty())
+                body = (uint32_t)solids.FindIndex(owners.First());
+        }
+        if (body < 1) body = 1;
 
         uint32_t base = (uint32_t)(verts.size() / 3);
 
@@ -103,6 +127,7 @@ val tessellate_step(val bytes_val, const std::string& opts_json) {
             tris.push_back(base + (uint32_t)(n1 - 1));
             tris.push_back(base + (uint32_t)(n2 - 1));
             tris.push_back(base + (uint32_t)(n3 - 1));
+            tri_bodies.push_back(body);
         }
     }
 
@@ -110,13 +135,17 @@ val tessellate_step(val bytes_val, const std::string& opts_json) {
         throw std::runtime_error("shape produced no triangles — try a smaller deflection_relative");
 
     // {vertices: Float32Array (xyz interleaved), triangles: Uint32Array (3 idx/tri),
+    //  triangleBodyIds: Uint32Array (1-based body id per triangle),
     //  bodyCount: number of solids} — bodyCount lets the UI offer per-body
-    // material assignment (issue #353) before any mesh exists. 0 means the file
-    // held no closed solid (surface-only geometry that failed sewing).
+    // material assignment (issue #353) before any mesh exists, and
+    // triangleBodyIds lets it colour / highlight / hide each body in the
+    // geometry view. 0 bodyCount means the file held no closed solid
+    // (surface-only geometry that failed sewing).
     val result = val::object();
-    result.set("vertices",  float32_array(verts));
-    result.set("triangles", uint32_array(tris));
-    result.set("bodyCount", n_bodies);
+    result.set("vertices",        float32_array(verts));
+    result.set("triangles",       uint32_array(tris));
+    result.set("triangleBodyIds", uint32_array(tri_bodies));
+    result.set("bodyCount",       n_bodies);
     return result;
 }
 

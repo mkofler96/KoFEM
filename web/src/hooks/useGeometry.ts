@@ -33,16 +33,17 @@ export function useGeometry() {
     sendToWorker<{
       points: [number, number, number][];
       triangles: [number, number, number][];
+      bodyIds: number[];
       bodyCount: number;
     }>("parse_step", { bytes, format })
-      .then(({ points, triangles, bodyCount }) => {
+      .then(({ points, triangles, bodyIds, bodyCount }) => {
         if (points.length === 0) setStepImportError("No geometry found.");
         else {
           // Retain the raw bytes + format so the geometry can be reloaded for a
           // re-mesh (the worker is reset after each mesh and loses the shape).
           setStepBytes(bytes);
           setGeometryFormat(format);
-          setStepSurface({ points, triangles });
+          setStepSurface({ points, triangles, bodyIds });
           // One material assignment per body of the assembly (#353).
           setBodies(bodyCount);
         }

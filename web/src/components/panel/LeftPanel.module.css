@@ -293,6 +293,44 @@
   flex-shrink: 0;
 }
 
+/* Body colour chip shown next to a material or a body row (issue #353). */
+.materialSwatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  border: 1px solid var(--border-2);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+}
+
+/* Native colour picker trimmed to a compact swatch matching the form inputs. */
+.colorInput {
+  flex: 1;
+  height: 28px;
+  padding: 2px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* One body of a multibody assembly: eye · swatch · label · material select. */
+.bodyRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border);
+}
+.bodyRow:hover {
+  background: var(--hover);
+}
+.bodyLabel {
+  font-size: 12.5px;
+  color: var(--ink);
+  flex-shrink: 0;
+}
+
 /* ── Form elements ──────────────────────────────────────────── */
 
 .formRow {

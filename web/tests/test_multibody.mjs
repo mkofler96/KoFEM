@@ -52,10 +52,26 @@ const tess = Module.tessellate_step(
   stepBytes,
   JSON.stringify({ deflection_relative: 0.001, angular_deflection: 0.5 }),
 );
+const nTris = tess.triangles.length / 3;
 console.log(
-  `tessellate_step:  ${tess.vertices.length / 3} vertices, ${tess.triangles.length / 3} triangles, ${tess.bodyCount} bodies`,
+  `tessellate_step:  ${tess.vertices.length / 3} vertices, ${nTris} triangles, ${tess.bodyCount} bodies`,
 );
 assert(tess.bodyCount === 2, `expected bodyCount 2, got ${tess.bodyCount}`);
+
+// Per-triangle body ids drive per-body colour/highlight/hide in the geometry
+// view — one 1-based id per display triangle, both bodies represented.
+assert(
+  tess.triangleBodyIds.length === nTris,
+  `triangleBodyIds length ${tess.triangleBodyIds.length} != triangle count ${nTris}`,
+);
+const tessBodies = new Set(tess.triangleBodyIds);
+console.log(
+  `triangle body ids: {${[...tessBodies].sort((a, b) => a - b).join(", ")}}`,
+);
+assert(
+  tessBodies.size === 2 && tessBodies.has(1) && tessBodies.has(2),
+  `expected triangle body ids {1, 2}, got {${[...tessBodies].sort().join(", ")}}`,
+);
 
 // 2. Mesh: conforming across the imprinted interface, per-tet body ids.
 const mesh = Module.generate_fem_mesh(

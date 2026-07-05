@@ -4,6 +4,7 @@
 import { useState, useRef, type ChangeEvent } from "react";
 import { useModelStore } from "../../store/modelStore";
 import type { Material } from "../../store/modelStore";
+import { pickMaterialColor } from "../../store/materialSlice";
 import { fmt } from "../../lib/modelDisplay";
 import { useGeometry } from "../../hooks/useGeometry";
 import { MeshPanel } from "./MeshPanel";
@@ -11,10 +12,12 @@ import styles from "./LeftPanel.module.css";
 
 function MaterialForm({
   mat,
+  defaultColor,
   onSave,
   onCancel,
 }: {
   mat?: Material;
+  defaultColor?: string;
   onSave(v: Omit<Material, "id">): void;
   onCancel(): void;
 }) {
@@ -22,6 +25,7 @@ function MaterialForm({
   const [young, setYoung] = useState(String(mat?.young ?? 210000));
   const [poisson, setPoisson] = useState(String(mat?.poisson ?? 0.3));
   const [density, setDensity] = useState(String(mat?.density ?? 7.85e-9));
+  const [color, setColor] = useState(mat?.color ?? defaultColor ?? "#4e79a7");
   const [error, setError] = useState<string | null>(null);
 
   function handleSave() {
@@ -48,6 +52,7 @@ function MaterialForm({
       young: youngModulus,
       poisson: poissonRatio,
       density: densityValue,
+      color,
     });
   }
 
@@ -65,6 +70,17 @@ function MaterialForm({
           className={styles.formInput}
           value={name}
           onChange={(e) => setName(e.target.value)}
+        />
+      </div>
+      <div className={styles.formRow}>
+        <span className={styles.formLabel}>Colour</span>
+        <input
+          className={styles.colorInput}
+          type="color"
+          value={color}
+          data-testid="material-color"
+          onChange={(e) => setColor(e.target.value)}
+          title="Colour used to paint the bodies made of this material"
         />
       </div>
       <div className={styles.formRow}>
@@ -140,6 +156,11 @@ function MaterialSection() {
       {materials.map((mat) => (
         <div key={mat.id}>
           <div className={styles.treeItem}>
+            <span
+              className={styles.materialSwatch}
+              style={{ background: mat.color }}
+              title={`Body colour ${mat.color}`}
+            />
             <div className={styles.treeItemBody}>
               <div className={styles.treeItemName}>{mat.name}</div>
               <div className={styles.treeItemDetail}>
@@ -179,6 +200,7 @@ function MaterialSection() {
       ))}
       {isAdding ? (
         <MaterialForm
+          defaultColor={pickMaterialColor(materials)}
           onSave={(values) => {
             createMaterial(values);
             setIsAdding(false);
@@ -203,40 +225,88 @@ function MaterialSection() {
 }
 
 // Body ↔ material assignment for multibody assemblies (#353): one row per
-// body of the imported CAD file, each with a material dropdown. Hidden for
-// single-body parts, where the sole material applies to the whole part.
+// body of the imported CAD file, each with an eye (show/hide), a material-colour
+// swatch and a material dropdown. Hovering or focusing a row highlights that
+// body in the viewport (others dim). Hidden for single-body parts, where the
+// sole material applies to the whole part.
 function BodiesSection() {
   const materials = useModelStore((s) => s.materials);
   const properties = useModelStore((s) => s.properties);
   const assignBodyMaterial = useModelStore((s) => s.assignBodyMaterial);
+  const setViewRepr = useModelStore((s) => s.setViewRepr);
+  const viewRepr = useModelStore((s) => s.viewRepr);
+  const setHighlightBodyId = useModelStore((s) => s.setHighlightBodyId);
+  const hiddenBodyIds = useModelStore((s) => s.hiddenBodyIds);
+  const toggleBodyVisibility = useModelStore((s) => s.toggleBodyVisibility);
 
   if (properties.length <= 1) return null;
+
+  const matColor = (materialId: number) =>
+    materials.find((mat) => mat.id === materialId)?.color ?? "#7a9bbf";
+
+  // Highlight/hide only affect the geometry view. Nudge the user there the
+  // moment they interact so the effect is visible even after meshing switched
+  // the viewport to the surface representation.
+  const focusGeometryView = () => {
+    if (viewRepr !== "geometry" && viewRepr !== "wireframe")
+      setViewRepr("geometry");
+  };
 
   return (
     <>
       <div className={styles.sectionLabel}>Bodies</div>
-      {properties.map((prop) => (
-        <div className={styles.formRow} key={prop.id}>
-          <span className={styles.formLabel}>Body {prop.id}</span>
-          <select
-            className={styles.formSelect}
-            data-testid={`body-material-${prop.id}`}
-            value={prop.materialId}
-            onChange={(e) =>
-              assignBodyMaterial(prop.id, Number(e.target.value))
-            }
+      {properties.map((prop) => {
+        const hidden = hiddenBodyIds.includes(prop.id);
+        return (
+          <div
+            className={styles.bodyRow}
+            key={prop.id}
+            onMouseEnter={() => setHighlightBodyId(prop.id)}
+            onMouseLeave={() => setHighlightBodyId(null)}
           >
-            {materials.map((mat) => (
-              <option key={mat.id} value={mat.id}>
-                {mat.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      ))}
+            <button
+              className={styles.iconBtn}
+              data-testid={`body-visibility-${prop.id}`}
+              title={hidden ? "Show body" : "Hide body"}
+              aria-pressed={hidden}
+              onClick={() => {
+                toggleBodyVisibility(prop.id);
+                focusGeometryView();
+              }}
+            >
+              {hidden ? "🚫" : "👁"}
+            </button>
+            <span
+              className={styles.materialSwatch}
+              style={{ background: matColor(prop.materialId) }}
+            />
+            <span className={styles.bodyLabel}>Body {prop.id}</span>
+            <select
+              className={styles.formSelect}
+              data-testid={`body-material-${prop.id}`}
+              value={prop.materialId}
+              onFocus={() => {
+                setHighlightBodyId(prop.id);
+                focusGeometryView();
+              }}
+              onBlur={() => setHighlightBodyId(null)}
+              onChange={(e) =>
+                assignBodyMaterial(prop.id, Number(e.target.value))
+              }
+            >
+              {materials.map((mat) => (
+                <option key={mat.id} value={mat.id}>
+                  {mat.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        );
+      })}
       <div className={styles.empty}>
-        Touching bodies are bonded at their shared faces. A body that touches
-        nothing floats — constrain it or check the assembly.
+        Hover a body to highlight it; use the eye to hide it. Touching bodies
+        are bonded at their shared faces — a body that touches nothing floats,
+        so constrain it or check the assembly.
       </div>
     </>
   );

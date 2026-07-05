@@ -44,6 +44,11 @@ export type GeometryFormat = "step" | "iges";
 export interface StepTessellation {
   points: [number, number, number][];
   triangles: [number, number, number][];
+  // 1-based body (CAD solid) index of each triangle, aligned with `triangles`
+  // (issue #353) — lets the geometry view colour, highlight and hide each body.
+  // Absent on analyses saved before per-body colours; the viewer then treats
+  // every triangle as body 1.
+  bodyIds?: number[];
 }
 
 export interface VolMesh {
@@ -171,6 +176,10 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       s.volMesh = null;
       s.viewRepr = "geometry";
       s.stepImportError = null;
+      // New (or cleared) geometry: body ids no longer apply, drop the transient
+      // per-body view state (issue #353).
+      s.highlightBodyId = null;
+      s.hiddenBodyIds = [];
       s.nodes = [];
       s.elements = [];
       s.bcGroups = [];

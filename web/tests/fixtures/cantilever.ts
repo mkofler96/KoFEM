@@ -25,6 +25,7 @@ export interface CantileverModel {
     young: number;
     poisson: number;
     density: number;
+    color: string;
   }[];
   properties: { id: number; materialId: number }[];
   bcGroups: {
@@ -90,7 +91,14 @@ export function buildCantilever(): CantileverModel {
         });
 
   const materials = [
-    { id: 1, name: "Steel", young: 210e9, poisson: 0.3, density: 7850 },
+    {
+      id: 1,
+      name: "Steel",
+      young: 210e9,
+      poisson: 0.3,
+      density: 7850,
+      color: "#4e79a7",
+    },
   ];
   const properties = [{ id: 1, materialId: 1 }];
 

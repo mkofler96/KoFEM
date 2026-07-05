@@ -158,21 +158,21 @@ function handleParseStep(id: number, payload: ParseStepPayload) {
     // eslint-disable-next-line kofem/no-silent-fallback -- format is optional in the parse_step message; absent means STEP, the primary import path
     format: payload.format ?? "step",
   });
-  const { vertices, triangles, bodyCount } = m().tessellate_step(
-    payload.bytes,
-    opts,
-  );
+  const { vertices, triangles, triangleBodyIds, bodyCount } =
+    m().tessellate_step(payload.bytes, opts);
   // tessellate_step stores the OCCT shape in the module — record that so a
   // subsequent volume_mesh in this same worker can skip the reload.
   geometryLoaded = true;
   // Return as {points, triangles} to match the StepTessellation type used by
   // the store; tessellate_step returns flat Float32/Uint32 typed arrays.
-  // bodyCount (#353) drives the per-body material assignment UI.
+  // bodyCount (#353) drives the per-body material assignment UI; bodyIds
+  // (one per triangle) drives per-body colour / highlight / hide.
   self.postMessage({
     id,
     ok: true,
     points: chunk3(vertices),
     triangles: chunk3(triangles),
+    bodyIds: Array.from(triangleBodyIds),
     bodyCount,
   });
 }

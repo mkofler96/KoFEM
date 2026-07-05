@@ -3,12 +3,16 @@
 
 /** Tessellated STEP surface returned as flat typed arrays (binary, no JSON text).
  *  `vertices` is xyz interleaved (length 3·nVerts); `triangles` is three 0-based
- *  vertex indices per triangle (length 3·nTris). `bodyCount` is the number of
- *  solids in the imported shape (issue #353) — 0 when the file held no closed
- *  solid (surface-only geometry that failed sewing). */
+ *  vertex indices per triangle (length 3·nTris); `triangleBodyIds` is the
+ *  1-based body (CAD solid) index of each triangle (length nTris), matching the
+ *  body ids of the volume mesh (issue #353) for per-body colour / highlight /
+ *  hide in the geometry view. `bodyCount` is the number of solids in the
+ *  imported shape — 0 when the file held no closed solid (surface-only
+ *  geometry that failed sewing). */
 export interface StepTessellation {
   vertices: Float32Array
   triangles: Uint32Array
+  triangleBodyIds: Uint32Array
   bodyCount: number
 }
 
