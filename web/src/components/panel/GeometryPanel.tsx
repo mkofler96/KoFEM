@@ -275,11 +275,23 @@ function BodiesSection() {
   const toggleBodyVisibility = useModelStore((s) => s.toggleBodyVisibility);
   const tieDistance = useModelStore((s) => s.tieDistance);
   const setTieDistance = useModelStore((s) => s.setTieDistance);
+  const viewRepr = useModelStore((s) => s.viewRepr);
+  const setViewRepr = useModelStore((s) => s.setViewRepr);
 
   if (properties.length <= 1) return null;
 
   const matColor = (materialId: number) =>
     materials.find((mat) => mat.id === materialId)?.color ?? "#7a9bbf";
+
+  // Highlighting a body dims the others in the geometry (coloured-tessellation)
+  // view; the FEM mesh views are a single neutral colour and can't show it. So
+  // when the user reaches for a body, switch to the geometry view where the
+  // highlight is visible. (The FEM surface is suppressed there, so no overlap.)
+  const highlight = (id: number) => {
+    setHighlightBodyId(id);
+    if (viewRepr !== "geometry" && viewRepr !== "wireframe")
+      setViewRepr("geometry");
+  };
 
   return (
     <>
@@ -292,7 +304,7 @@ function BodiesSection() {
           <div
             className={styles.bodyRow}
             key={prop.id}
-            onMouseEnter={() => setHighlightBodyId(prop.id)}
+            onMouseEnter={() => highlight(prop.id)}
             onMouseLeave={() => setHighlightBodyId(null)}
           >
             <span
@@ -313,7 +325,7 @@ function BodiesSection() {
               className={styles.formSelect}
               data-testid={`body-material-${prop.id}`}
               value={prop.materialId}
-              onFocus={() => setHighlightBodyId(prop.id)}
+              onFocus={() => highlight(prop.id)}
               onBlur={() => setHighlightBodyId(null)}
               onChange={(e) =>
                 assignBodyMaterial(prop.id, Number(e.target.value))
