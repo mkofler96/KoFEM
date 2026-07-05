@@ -30,6 +30,12 @@ COPY . .
 ARG VITE_GIT_VERSION=local
 ENV VITE_GIT_VERSION=$VITE_GIT_VERSION
 
+# Optional Google Analytics (GA4) measurement ID, e.g. G-XXXXXXXXXX. When empty
+# (the default) analytics and the cookie-consent banner are omitted from the
+# build. When set, GA4 loads only after the visitor accepts the consent banner.
+ARG VITE_GA_ID=
+ENV VITE_GA_ID=$VITE_GA_ID
+
 RUN bun run build
 
 # Defensive: production images must never contain source maps.
@@ -45,7 +51,17 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 # template is rendered with envsubst at container start.
 ENV PORT=10000
 
+# Google Analytics measurement ID, applied to the served HTML at container start
+# (see docker-entrypoint.d/40-kofem-ga-config.sh). Set at `docker run` time, e.g.
+# `-e VITE_GA_ID=G-XXXXXXXXXX`. Empty (the default) leaves analytics disabled, so
+# the same image works with or without analytics — no rebuild required.
+ENV VITE_GA_ID=""
+
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
+
+# Runs before nginx starts (the base image executes /docker-entrypoint.d/*.sh).
+COPY docker-entrypoint.d/40-kofem-ga-config.sh /docker-entrypoint.d/40-kofem-ga-config.sh
+RUN chmod +x /docker-entrypoint.d/40-kofem-ga-config.sh
 
 EXPOSE 10000
 
