@@ -7,7 +7,41 @@
   height: 100%;
   flex-shrink: 0;
   display: flex;
+  flex-direction: column;
   min-width: 0;
+}
+
+/* Slim bottom bar holding the collapse button, kept out of the mode nav so
+   it isn't mistaken for a tab. */
+.footer {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px 8px;
+  background: #ffffff;
+  border-top: 1px solid #e2e5ea;
+  border-right: 1px solid #e2e5ea;
+}
+
+.collapseBtn {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: #6b7280;
+  cursor: pointer;
+  transition:
+    color 100ms ease,
+    background 100ms ease;
+}
+
+.collapseBtn:hover {
+  color: #0d1117;
+  background: #f0f2f5;
 }
 
 /* Drag strip straddling the panel/viewport border. The visible feedback is a
@@ -40,10 +74,11 @@
 }
 
 /* Floating button over the viewport when the sidebar is collapsed — styled
-   like the viewport's Fit View HUD button. */
+   like the viewport's Fit View HUD button, at the same corner the collapse
+   button lives in when the sidebar is open. */
 .expandBtn {
   position: absolute;
-  top: 10px;
+  bottom: 10px;
   left: 10px;
   z-index: 25;
   width: 30px;

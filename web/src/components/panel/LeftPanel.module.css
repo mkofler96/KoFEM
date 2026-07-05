@@ -25,6 +25,7 @@
 .aside {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   background: var(--surface);
   border-right: 1px solid var(--border);
   overflow-y: auto;
@@ -118,30 +119,6 @@
 .navDotDone {
   border-color: #15803d;
   color: #15803d;
-}
-
-.collapseBtn {
-  flex-shrink: 0;
-  align-self: center;
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  margin-left: 2px;
-  border: none;
-  border-radius: 4px;
-  background: none;
-  color: var(--muted-2);
-  cursor: pointer;
-  transition:
-    color 100ms ease,
-    background 100ms ease;
-}
-
-.collapseBtn:hover {
-  color: var(--ink);
-  background: var(--hover);
 }
 
 /* ── Tabs ───────────────────────────────────────────────────── */

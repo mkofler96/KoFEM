@@ -49,6 +49,7 @@ export function Sidebar() {
   }
 
   if (!open) {
+    // Expand: bar on the left (the collapsed panel), arrow pointing right.
     return (
       <button
         className={styles.expandBtn}
@@ -56,11 +57,17 @@ export function Sidebar() {
         aria-label="Show panel"
         onClick={() => setOpen(true)}
       >
-        <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
           <path
-            d="M6 3l4.5 5L6 13"
+            d="M3 3v10"
             stroke="currentColor"
-            strokeWidth="1.6"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          />
+          <path
+            d="M6.5 8H13M10 5l3 3-3 3"
+            stroke="currentColor"
+            strokeWidth="1.5"
             strokeLinecap="round"
             strokeLinejoin="round"
           />
@@ -77,6 +84,31 @@ export function Sidebar() {
         style={{ "--sidebar-width": `${width}px` } as CSSProperties}
       >
         <LeftPanel />
+        <div className={styles.footer}>
+          {/* Collapse: arrow pointing left, bar on the right. */}
+          <button
+            className={styles.collapseBtn}
+            title="Hide panel"
+            aria-label="Hide panel"
+            onClick={() => setOpen(false)}
+          >
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+              <path
+                d="M13 3v10"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+              <path
+                d="M9.5 8H3M6 5L3 8l3 3"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+        </div>
         <div
           className={`${styles.resizeHandle} ${dragging ? styles.resizeHandleActive : ""}`}
           role="separator"
