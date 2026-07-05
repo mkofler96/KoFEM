@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/svg+xml" href="/kofem_logo.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <title>Privacy &amp; Cookies | KoFEM</title>
+    <meta
+      name="description"
+      content="How KoFEM handles data and cookies. KoFEM runs your FEM analysis entirely in the browser and uses Google Analytics only with your consent."
+    />
+    <link rel="canonical" href="https://solver.example.com/privacy/" />
+    <meta name="robots" content="index, follow" />
+
+    <!-- Self-hosted fonts (SIL OFL) — see public/fonts/README.md -->
+    <link href="/fonts/geist.css" rel="stylesheet" />
+
+    <!-- Apply the saved theme before first paint to avoid a flash. -->
+    <script>
+      try {
+        if (localStorage.getItem("kofem_theme") === "light")
+          document.documentElement.setAttribute("data-theme", "light");
+      } catch (e) {}
+    </script>
+
+    <style>
+      :root {
+        --bg: #0a0b0f;
+        --bg2: #0c0e13;
+        --panel: #13151c;
+        --border: #23262f;
+        --border2: #2d313b;
+        --text: #eceef3;
+        --muted: #9aa0ad;
+        --faint: #6b7280;
+        --accent: #5b7cff;
+        --mono: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+      }
+
+      :root[data-theme="light"] {
+        --bg: #ffffff;
+        --bg2: #f7f8fa;
+        --panel: #ffffff;
+        --border: #e7e9ee;
+        --border2: #d8dbe2;
+        --text: #0d1117;
+        --muted: #5b616e;
+        --faint: #868d99;
+        --accent: #2f54eb;
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family:
+          "Geist",
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        background: var(--bg);
+        color: var(--text);
+        line-height: 1.6;
+        min-height: 100vh;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      a {
+        color: var(--accent);
+        text-decoration: none;
+      }
+
+      a:hover {
+        text-decoration: underline;
+      }
+
+      .site-header {
+        border-bottom: 1px solid var(--border);
+        background: var(--bg2);
+      }
+
+      .header-inner {
+        max-width: 820px;
+        margin: 0 auto;
+        padding: 16px 24px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: var(--text);
+      }
+
+      .brand-mark {
+        width: 28px;
+        height: 28px;
+        border-radius: 8px;
+      }
+
+      .brand-name {
+        font-weight: 600;
+        font-size: 16px;
+        letter-spacing: -0.015em;
+      }
+
+      main {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 56px 24px 80px;
+      }
+
+      .eyebrow {
+        font-family: var(--mono);
+        font-size: 12px;
+        letter-spacing: 0.16em;
+        color: var(--accent);
+        text-transform: uppercase;
+        margin-bottom: 14px;
+      }
+
+      h1 {
+        font-size: clamp(30px, 5vw, 42px);
+        line-height: 1.1;
+        letter-spacing: -0.03em;
+        font-weight: 600;
+        margin: 0 0 6px;
+      }
+
+      .updated {
+        color: var(--faint);
+        font-size: 13.5px;
+        font-family: var(--mono);
+        margin: 0 0 38px;
+      }
+
+      h2 {
+        font-size: 21px;
+        letter-spacing: -0.02em;
+        font-weight: 600;
+        margin: 40px 0 12px;
+      }
+
+      p {
+        color: var(--muted);
+        margin: 0 0 16px;
+      }
+
+      ul {
+        color: var(--muted);
+        padding-left: 20px;
+        margin: 0 0 16px;
+      }
+
+      li {
+        margin-bottom: 8px;
+      }
+
+      code {
+        font-family: var(--mono);
+        font-size: 0.9em;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 5px;
+        padding: 1px 6px;
+      }
+
+      .note {
+        border: 1px solid var(--border);
+        background: var(--panel);
+        border-radius: 12px;
+        padding: 18px 20px;
+        margin: 24px 0;
+      }
+
+      .note p:last-child {
+        margin-bottom: 0;
+      }
+
+      .back {
+        display: inline-block;
+        margin-top: 40px;
+        font-size: 14px;
+      }
+
+      .site-footer {
+        border-top: 1px solid var(--border);
+        background: var(--bg2);
+      }
+
+      .footer-bottom-inner {
+        max-width: 820px;
+        margin: 0 auto;
+        padding: 18px 24px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+        font-size: 13px;
+        color: var(--faint);
+      }
+
+      .footer-bottom-inner .legal {
+        display: flex;
+        gap: 20px;
+        flex-wrap: wrap;
+      }
+
+      .footer-bottom-inner a {
+        color: var(--muted);
+      }
+    </style>
+  </head>
+
+  <body>
+    <header class="site-header">
+      <div class="header-inner">
+        <a class="brand" href="/">
+          <img
+            class="brand-mark"
+            src="/kofem_logo.svg"
+            alt="KoFEM logo"
+            width="28"
+            height="28"
+          />
+          <span class="brand-name">KoFEM</span>
+        </a>
+      </div>
+    </header>
+
+    <main>
+      <div class="eyebrow">Legal</div>
+      <h1>Privacy &amp; Cookies</h1>
+      <p class="updated">Last updated: July 2026</p>
+
+      <p>
+        KoFEM is a browser-based finite element solver. Your geometry, meshes,
+        and analysis all run <strong>locally in your browser</strong> — STEP
+        files, meshes, loads, and results are never uploaded to a server. This
+        page explains the limited data KoFEM does collect and the cookies it may
+        set.
+      </p>
+
+      <h2>Analytics cookies</h2>
+      <p>
+        With your consent, KoFEM uses
+        <a
+          href="https://marketingplatform.google.com/about/analytics/"
+          rel="noopener"
+          target="_blank"
+          >Google Analytics</a
+        >
+        (GA4) to understand how the site is used — for example which pages are
+        visited and roughly how many people use the solver. This helps us decide
+        what to improve.
+      </p>
+      <p>
+        Google Analytics sets first-party cookies (typically named
+        <code>_ga</code> and <code>_ga_&lt;id&gt;</code>) that store a randomly
+        generated identifier and are used to distinguish visitors and sessions.
+        These cookies are <strong>not strictly necessary</strong> for the site
+        to work.
+      </p>
+
+      <div class="note">
+        <p>
+          <strong>Consent first.</strong> The analytics script is not loaded and
+          no analytics cookies are set until you choose <em>Accept</em> in the
+          cookie banner. If you choose <em>Decline</em>, Google Analytics stays
+          disabled.
+        </p>
+        <p>
+          You can change your choice at any time using the
+          <a href="#" id="kofem-cookie-settings">Cookie settings</a> link (also
+          in the site footer). Declining opts you out via Google's documented
+          <code>ga-disable</code> flag.
+        </p>
+      </div>
+
+      <h2>What is collected</h2>
+      <p>If you accept analytics, Google Analytics may process:</p>
+      <ul>
+        <li>Pages viewed and events such as starting the solver.</li>
+        <li>
+          Approximate location (country / region), derived by Google from your
+          IP address. IP addresses are not stored by GA4.
+        </li>
+        <li>
+          Device and browser information (screen size, browser, operating
+          system).
+        </li>
+      </ul>
+      <p>
+        Data is processed by Google on our behalf. See
+        <a
+          href="https://policies.google.com/privacy"
+          rel="noopener"
+          target="_blank"
+          >Google's Privacy Policy</a
+        >
+        for details on how Google handles this data. You can also install the
+        <a
+          href="https://tools.google.com/dlpage/gaoptout"
+          rel="noopener"
+          target="_blank"
+          >Google Analytics opt-out browser add-on</a
+        >.
+      </p>
+
+      <h2>Other storage</h2>
+      <p>
+        KoFEM stores a couple of small values in your browser's
+        <code>localStorage</code> that are strictly functional and never leave
+        your device: your light/dark theme preference and your cookie-consent
+        choice. These are not tracking cookies.
+      </p>
+
+      <h2>Self-hosted assets</h2>
+      <p>
+        Fonts and the 3D engine are served from KoFEM itself, not third-party
+        CDNs. The only third-party request KoFEM makes is loading Google
+        Analytics — and only after you consent.
+      </p>
+
+      <h2>Contact</h2>
+      <p>
+        Questions about this notice? Reach out via the
+        <a
+          href="https://github.com/mkofler96/KoFEM"
+          rel="noopener"
+          target="_blank"
+          >project on GitHub</a
+        >.
+      </p>
+
+      <a class="back" href="/">← Back to KoFEM</a>
+    </main>
+
+    <footer class="site-footer">
+      <div class="footer-bottom-inner">
+        <span>© 2026 KoFEM · AGPL-3.0</span>
+        <div class="legal">
+          <a href="/">Home</a>
+          <a href="/examples/">Examples</a>
+          <a href="/app/">Launch</a>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

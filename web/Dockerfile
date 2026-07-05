@@ -30,6 +30,12 @@ COPY . .
 ARG VITE_GIT_VERSION=local
 ENV VITE_GIT_VERSION=$VITE_GIT_VERSION
 
+# Optional Google Analytics (GA4) measurement ID, e.g. G-XXXXXXXXXX. When empty
+# (the default) analytics and the cookie-consent banner are omitted from the
+# build. When set, GA4 loads only after the visitor accepts the consent banner.
+ARG VITE_GA_ID=
+ENV VITE_GA_ID=$VITE_GA_ID
+
 RUN bun run build
 
 # Defensive: production images must never contain source maps.
