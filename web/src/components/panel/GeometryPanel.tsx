@@ -255,12 +255,21 @@ const EYE_OFF_ICON = (
 // swatch and a material dropdown. Hovering or focusing a row highlights that
 // body in the viewport (others dim). Hidden for single-body parts, where the
 // sole material applies to the whole part.
+const BODIES_TIP =
+  "Hover a body to highlight it in the geometry view; use the eye to hide it. " +
+  "Touching bodies are bonded at their shared faces — a body that touches " +
+  "nothing floats, so constrain it or check the assembly.";
+
+const TIE_TIP =
+  "Bonded tie for parts that touch without a shared face (e.g. a pin in a hook " +
+  "eye — a line contact). Nodes of different bodies within this distance are " +
+  "welded so load transfers. 0 = off. Keep it below the element size to avoid " +
+  "distorting the mesh.";
+
 function BodiesSection() {
   const materials = useModelStore((s) => s.materials);
   const properties = useModelStore((s) => s.properties);
   const assignBodyMaterial = useModelStore((s) => s.assignBodyMaterial);
-  const setViewRepr = useModelStore((s) => s.setViewRepr);
-  const viewRepr = useModelStore((s) => s.viewRepr);
   const setHighlightBodyId = useModelStore((s) => s.setHighlightBodyId);
   const hiddenBodyIds = useModelStore((s) => s.hiddenBodyIds);
   const toggleBodyVisibility = useModelStore((s) => s.toggleBodyVisibility);
@@ -272,17 +281,11 @@ function BodiesSection() {
   const matColor = (materialId: number) =>
     materials.find((mat) => mat.id === materialId)?.color ?? "#7a9bbf";
 
-  // Highlight/hide only affect the geometry view. Nudge the user there the
-  // moment they interact so the effect is visible even after meshing switched
-  // the viewport to the surface representation.
-  const focusGeometryView = () => {
-    if (viewRepr !== "geometry" && viewRepr !== "wireframe")
-      setViewRepr("geometry");
-  };
-
   return (
     <>
-      <div className={styles.sectionLabel}>Bodies</div>
+      <div className={styles.sectionLabel} title={BODIES_TIP}>
+        Bodies
+      </div>
       {properties.map((prop) => {
         const hidden = hiddenBodyIds.includes(prop.id);
         return (
@@ -302,10 +305,7 @@ function BodiesSection() {
               data-testid={`body-visibility-${prop.id}`}
               title={hidden ? "Show body" : "Hide body"}
               aria-pressed={hidden}
-              onClick={() => {
-                toggleBodyVisibility(prop.id);
-                focusGeometryView();
-              }}
+              onClick={() => toggleBodyVisibility(prop.id)}
             >
               {hidden ? EYE_OFF_ICON : EYE_ICON}
             </button>
@@ -313,10 +313,7 @@ function BodiesSection() {
               className={styles.formSelect}
               data-testid={`body-material-${prop.id}`}
               value={prop.materialId}
-              onFocus={() => {
-                setHighlightBodyId(prop.id);
-                focusGeometryView();
-              }}
+              onFocus={() => setHighlightBodyId(prop.id)}
               onBlur={() => setHighlightBodyId(null)}
               onChange={(e) =>
                 assignBodyMaterial(prop.id, Number(e.target.value))
@@ -331,13 +328,8 @@ function BodiesSection() {
           </div>
         );
       })}
-      <div className={styles.empty}>
-        Hover a body to highlight it; use the eye to hide it. Touching bodies
-        are bonded at their shared faces — a body that touches nothing floats,
-        so constrain it or check the assembly.
-      </div>
 
-      <div className={styles.formRow}>
+      <div className={styles.formRow} title={TIE_TIP}>
         <span className={styles.formLabel}>Tie distance</span>
         <input
           className={styles.formInput}
@@ -349,12 +341,6 @@ function BodiesSection() {
           onChange={(e) => setTieDistance(Number(e.target.value))}
         />
         <span className={styles.toleranceUnit}>mm</span>
-      </div>
-      <div className={styles.empty}>
-        Bonded tie for parts that touch without a shared face (e.g. a pin in a
-        hook eye — a line contact). Nodes of different bodies within this
-        distance are welded so load transfers. 0 = off. Keep it below the
-        element size to avoid distorting the mesh.
       </div>
     </>
   );

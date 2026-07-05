@@ -349,7 +349,6 @@
 }
 .visBtn:hover {
   color: var(--ink);
-  background: var(--hover);
 }
 /* Hidden body: dim the toggle so the row reads as "off" at a glance. */
 .visBtnOff {

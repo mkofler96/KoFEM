@@ -173,13 +173,26 @@ export function useMeshTopology(): MeshTopology {
     return Math.max(maxX - minX, maxY - minY, maxZ - minZ, 1e-9);
   }, [nodes]);
 
+  // Bodies hidden via the Bodies panel eye toggle (#353) are dropped from the
+  // mesh here, so the eye hides a body in the FEM surface / volume views just
+  // as it does in the geometry tessellation. Nodes and modelSize stay whole
+  // (fit-to-view and the deformed-result node count must not change).
+  const hiddenBodyIds = useModelStore((s) => s.hiddenBodyIds);
+  const visibleElements = useMemo(
+    () =>
+      hiddenBodyIds.length === 0
+        ? elements
+        : elements.filter((e) => !hiddenBodyIds.includes(e.propertyId)),
+    [elements, hiddenBodyIds],
+  );
+
   const hexElements = useMemo(
-    () => elements.filter((e) => e.type === "CHEXA"),
-    [elements],
+    () => visibleElements.filter((e) => e.type === "CHEXA"),
+    [visibleElements],
   );
   const tetElements = useMemo(
-    () => elements.filter((e) => e.type === "CTETRA"),
-    [elements],
+    () => visibleElements.filter((e) => e.type === "CTETRA"),
+    [visibleElements],
   );
 
   const boundaryQuadFaceIds = useMemo(
