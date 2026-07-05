@@ -1,2 +1,4 @@
 *.png
 latest.json
+!beam-torsion_screenshot.png
+!plate-with-hole_screenshot.png
