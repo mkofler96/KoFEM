@@ -62,8 +62,10 @@ const coveragePlugins: PluginOption[] = process.env.COVERAGE
   : [];
 
 export default defineConfig(({ mode }) => {
-  // VITE_GA_ID (empty prefix loads it from .env files and the process env, e.g.
-  // the Docker build's ENV). Empty/unset => no analytics, no consent banner.
+  // VITE_GA_ID (empty prefix loads it from .env files and the process env). When
+  // set at build time it is baked in; when unset the snippet ships a placeholder
+  // for runtime substitution by the Docker entrypoint (or stays inert on other
+  // static hosts). See vite-analytics.ts.
   const gaSnippet = analyticsSnippet(
     loadEnv(mode, process.cwd(), "").VITE_GA_ID,
   );

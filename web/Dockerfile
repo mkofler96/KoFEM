@@ -51,7 +51,17 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 # template is rendered with envsubst at container start.
 ENV PORT=10000
 
+# Google Analytics measurement ID, applied to the served HTML at container start
+# (see docker-entrypoint.d/40-kofem-ga-config.sh). Set at `docker run` time, e.g.
+# `-e VITE_GA_ID=G-XXXXXXXXXX`. Empty (the default) leaves analytics disabled, so
+# the same image works with or without analytics — no rebuild required.
+ENV VITE_GA_ID=""
+
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
+
+# Runs before nginx starts (the base image executes /docker-entrypoint.d/*.sh).
+COPY docker-entrypoint.d/40-kofem-ga-config.sh /docker-entrypoint.d/40-kofem-ga-config.sh
+RUN chmod +x /docker-entrypoint.d/40-kofem-ga-config.sh
 
 EXPOSE 10000
 

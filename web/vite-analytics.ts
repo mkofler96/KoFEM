@@ -5,10 +5,16 @@ import type { PluginOption } from "vite";
 
 // Google Analytics (GA4 / gtag.js), gated behind explicit opt-in consent.
 //
-// The measurement ID comes from the VITE_GA_ID build-time env var (see
-// vite.config.ts, .env.example and the Dockerfile). When it is unset the
-// snippet is empty, so nothing about analytics ships and no consent banner
-// appears — local and CI builds stay clean.
+// The measurement ID can be supplied two ways:
+//   1. Build time — the VITE_GA_ID env var is baked into the HTML by Vite
+//      (handy for local dev and fully-static hosts).
+//   2. Run time — when VITE_GA_ID is NOT set at build time, the HTML ships the
+//      GA_PLACEHOLDER token instead, and the Docker image fills it in at
+//      container start from the runtime VITE_GA_ID env var (see
+//      docker-entrypoint.d/40-kofem-ga-config.sh). This lets one prebuilt image
+//      be configured — or left disabled — without a rebuild.
+// If neither supplies an ID, the placeholder is never replaced and the loader
+// stays inert: no banner, no gtag.js, no cookies.
 //
 // GA4 sets first-party cookies (_ga, _ga_<id>) that are NOT strictly
 // necessary, so under GDPR / the ePrivacy directive they require prior
@@ -17,22 +23,26 @@ import type { PluginOption } from "vite";
 // Google's documented window['ga-disable-<ID>'] flag. The choice is persisted
 // in localStorage under "kofem_analytics_consent".
 
+// Token baked into the HTML when no build-time ID is given; replaced at runtime
+// by the Docker entrypoint. Kept in sync with docker-entrypoint.d/40-kofem-ga-config.sh.
+export const GA_PLACEHOLDER = "__KOFEM_GA_ID__";
+
 const GA_ID_RE = /^[A-Za-z0-9_-]+$/;
 
 /**
- * Build the consent banner + gated gtag.js loader for a given measurement ID.
- * Returns "" when no (valid) ID is configured, which disables analytics
- * entirely. The returned block is injected verbatim before `</body>` on every
- * page (see `injectAnalytics`).
+ * Build the consent banner + gated gtag.js loader. When `gaId` is provided it
+ * is baked in; otherwise the placeholder is emitted for runtime substitution.
+ * The block is injected verbatim before `</body>` on every page (see
+ * `injectAnalytics`) and stays inert until a real measurement ID is present.
  */
 export function analyticsSnippet(gaId: string | undefined): string {
-  const id = (gaId ?? "").trim();
-  if (!id) return "";
-  if (!GA_ID_RE.test(id)) {
+  const raw = (gaId ?? "").trim();
+  if (raw && !GA_ID_RE.test(raw)) {
     throw new Error(
-      `VITE_GA_ID="${id}" is not a valid GA measurement ID (expected characters [A-Za-z0-9_-], e.g. G-XXXXXXXXXX).`,
+      `VITE_GA_ID="${raw}" is not a valid GA measurement ID (expected characters [A-Za-z0-9_-], e.g. G-XXXXXXXXXX).`,
     );
   }
+  const id = raw || GA_PLACEHOLDER;
 
   // The script uses string concatenation (no template literals) so it survives
   // esbuild's HTML minifier untouched and never collides with this TS template.
@@ -114,6 +124,9 @@ export function analyticsSnippet(gaId: string | undefined): string {
     <script>
       (function () {
         var GA_ID = "${id}";
+        // Inert until a real measurement ID is present. An unreplaced runtime
+        // placeholder starts with "_"; real IDs (G-…, UA-…) never do.
+        if (!GA_ID || GA_ID.charAt(0) === "_") return;
         var KEY = "kofem_analytics_consent";
         var disableFlag = "ga-disable-" + GA_ID;
 
