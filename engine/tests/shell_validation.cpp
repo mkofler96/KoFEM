@@ -115,6 +115,85 @@ double membrane_tip_u() {
     return u / (n + 1);
 }
 
+// structured tet mesh of a box (6 tets/cell) — for the coupled solid tests.
+void box_tets(double L, double W, double H, int nx, int ny, int nz,
+              std::vector<double>& V, std::vector<int>& T) {
+    auto id = [&](int i, int j, int k) { return i * (ny + 1) * (nz + 1) + j * (nz + 1) + k; };
+    for (int i = 0; i <= nx; ++i)
+        for (int j = 0; j <= ny; ++j)
+            for (int k = 0; k <= nz; ++k) {
+                V.push_back(L * i / nx); V.push_back(W * j / ny); V.push_back(H * k / nz);
+            }
+    for (int i = 0; i < nx; ++i)
+        for (int j = 0; j < ny; ++j)
+            for (int k = 0; k < nz; ++k) {
+                const int a = id(i,j,k), b = id(i+1,j,k), c = id(i+1,j+1,k), d = id(i,j+1,k),
+                          e = id(i,j,k+1), f = id(i+1,j,k+1), g = id(i+1,j+1,k+1), h = id(i,j+1,k+1);
+                const int q[6][4] = {{a,b,c,g},{a,c,d,g},{a,d,h,g},{a,h,e,g},{a,e,f,g},{a,f,b,g}};
+                for (const auto& tt : q) for (int m = 0; m < 4; ++m) T.push_back(tt[m]);
+            }
+}
+
+// Linear-tet solid in uniaxial tension — interior elongation is exact (constant
+// strain), validating tet_solid_stiffness inside the coupled assembler.
+double coupled_tet_tension() {
+    const double L = 4, b = 1, E = 210e9, nu = 0.3, P = 1e4;
+    const int nx = 16, ny = 4, nz = 4;
+    std::vector<double> V; std::vector<int> T;
+    box_tets(L, b, b, nx, ny, nz, V, T);
+    CoupledInput in;
+    in.n_nodes = (nx + 1) * (ny + 1) * (nz + 1);
+    in.vertices = V;
+    in.solid_stiffness = tet_solid_stiffness(V, T, E, nu);
+    auto id = [&](int i, int j, int k) { return i * (ny + 1) * (nz + 1) + j * (nz + 1) + k; };
+    for (int j = 0; j <= ny; ++j)
+        for (int k = 0; k <= nz; ++k) in.fixed_dofs.push_back(6 * id(0, j, k) + 0);
+    in.fixed_dofs.push_back(6 * id(0, 0, 0) + 1);
+    in.fixed_dofs.push_back(6 * id(0, 0, 0) + 2);
+    in.fixed_dofs.push_back(6 * id(0, ny, 0) + 2);
+    const int nface = (ny + 1) * (nz + 1);
+    for (int j = 0; j <= ny; ++j)
+        for (int k = 0; k <= nz; ++k) in.loads.emplace_back(6 * id(nx, j, k) + 0, P / nface);
+    ShellResult r = solve_solid_shell_core(in);
+    auto planeU = [&](int i) { double u = 0; for (int j = 0; j <= ny; ++j) for (int k = 0; k <= nz; ++k) u += r.dofs[6 * id(i, j, k)]; return u / nface; };
+    const double du = planeU(nx * 3 / 4) - planeU(nx / 4);
+    const double ref = (P / (b * b)) * (L * (nx * 3 / 4 - nx / 4) / (double)nx) / E;
+    printf("  [coupled] tet interior Δu %.4e vs %.4e\n", du, ref);
+    return du / ref;
+}
+
+// Distributing coupling moment transfer: a shell cantilever whose root is
+// RBE3-coupled to fixed anchors behaves as a CLAMPED cantilever. A hinge coupling
+// would be off by an order of magnitude, so this decisively checks moment
+// transfer through the coupling.
+double coupled_moment_transfer() {
+    const double L = 2.0, b = 0.3, t = 0.01, E = 2.1e11, nu = 0.3, P = 100.0;
+    const int nx = 20, ny = 4;
+    auto id = [&](int i, int j) { return i * (ny + 1) + j; };
+    std::vector<double> V; std::vector<int> Tr; std::vector<int> root, tip;
+    for (int i = 0; i <= nx; ++i)
+        for (int j = 0; j <= ny; ++j) { V.push_back(L * i / nx); V.push_back(b * j / ny); V.push_back(0); }
+    for (int i = 0; i < nx; ++i)
+        for (int j = 0; j < ny; ++j) {
+            const int a = id(i,j), c = id(i+1,j), d = id(i+1,j+1), e = id(i,j+1);
+            Tr.push_back(a); Tr.push_back(c); Tr.push_back(d); Tr.push_back(a); Tr.push_back(d); Tr.push_back(e);
+        }
+    for (int j = 0; j <= ny; ++j) { root.push_back(id(0, j)); tip.push_back(id(nx, j)); }
+    const int aBase = (nx + 1) * (ny + 1);
+    V.insert(V.end(), {-0.1, 0.0, 0.0,  -0.1, b, 0.0,  -0.1, b / 2, 0.1});  // 3 anchors
+    CoupledInput in;
+    in.n_nodes = aBase + 3; in.vertices = V; in.triangles = Tr;
+    in.shell_young = E; in.shell_poisson = nu; in.thickness = t;
+    for (int rn : root) { Coupling cp; cp.ref_node = rn; cp.solid_nodes = {aBase, aBase + 1, aBase + 2}; in.couplings.push_back(cp); }
+    for (int aa = 0; aa < 3; ++aa) for (int c = 0; c < 3; ++c) in.fixed_dofs.push_back(6 * (aBase + aa) + c);
+    for (int tn : tip) in.loads.emplace_back(6 * tn + 2, P / (double)tip.size());
+    ShellResult r = solve_solid_shell_core(in);
+    double w = 0; for (int tn : tip) w += r.dofs[6 * tn + 2]; w /= tip.size();
+    const double I = b * t * t * t / 12.0, ref = P * L * L * L / (3 * E * I);
+    printf("  [coupled] clamped-cantilever w %.4e vs %.4e\n", w, ref);
+    return w / ref;
+}
+
 }  // namespace
 
 int main() {
@@ -129,6 +208,10 @@ int main() {
     check("simply-supported-plate", plate_center_w(a, t, E, nu, q, 32, false),
           0.00406 * q * std::pow(a, 4) / D, 1.0);
     check("membrane-tension", membrane_tip_u(), 1.0 * 1.0 / 1000.0, 0.5);
+
+    printf("Coupled solid + shell (distributing coupling):\n");
+    check("coupled-tet-tension", coupled_tet_tension(), 1.0, 0.2);
+    check("coupled-moment-transfer", coupled_moment_transfer(), 1.0, 6.0);
 
     printf(failures ? "\n%d check(s) FAILED\n" : "\nall checks passed\n", failures);
     return failures ? 1 : 0;

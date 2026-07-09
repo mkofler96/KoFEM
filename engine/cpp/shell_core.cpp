@@ -262,6 +262,114 @@ ShellResult cg_solve(const Sparse& K, const std::vector<double>& F) {
     return res;
 }
 
+// Assemble one DKT+CST shell facet into the global 6-DOF/node system.
+void assemble_shell_element(Sparse& K, const std::vector<double>& V, int n0, int n1,
+                            int n2, double t, double E, double nu) {
+    auto vtx = [&](int n) -> Vec3 { return {V[3 * n], V[3 * n + 1], V[3 * n + 2]}; };
+    const Vec3 P0 = vtx(n0), P1 = vtx(n1), P2 = vtx(n2);
+
+    // Local orthonormal frame: e1 along P0→P1, e3 = normal, e2 = e3×e1.
+    const Vec3 v1 = sub(P1, P0), v2 = sub(P2, P0);
+    const double l1 = norm(v1);
+    if (l1 == 0.0) throw std::runtime_error("shell: degenerate triangle (coincident nodes)");
+    const Vec3 e1 = scale(v1, 1.0 / l1);
+    Vec3 e3 = cross(v1, v2);
+    const double twoA = norm(e3);
+    if (twoA == 0.0) throw std::runtime_error("shell: degenerate triangle (zero area)");
+    e3 = scale(e3, 1.0 / twoA);
+    const Vec3 e2 = cross(e3, e1);
+    const double area = 0.5 * twoA;
+
+    const std::array<double, 3> lx = {0.0, l1, dot(v2, e1)};
+    const std::array<double, 3> ly = {0.0, 0.0, dot(v2, e2)};
+
+    const auto Km = membrane_stiffness(lx, ly, area, t, E, nu);
+    const auto Kb = bending_stiffness(lx, ly, area, t, E, nu);
+
+    std::array<std::array<double, 18>, 18> Kl{};
+    static constexpr std::array<int, 6> mdof = {0, 1, 6, 7, 12, 13};
+    for (int a = 0; a < 6; ++a)
+        for (int b = 0; b < 6; ++b) Kl[mdof[a]][mdof[b]] += Km[a][b];
+    static constexpr std::array<int, 9> bdof = {2, 3, 4, 8, 9, 10, 14, 15, 16};
+    for (int a = 0; a < 9; ++a)
+        for (int b = 0; b < 9; ++b) Kl[bdof[a]][bdof[b]] += Kb[a][b];
+    // drilling θz: tiny fictitious stiffness (removes the coplanar in-plane
+    // rotation singularity; no load excites it on a flat facet).
+    double kdiag = 0.0;
+    for (int a = 0; a < 9; ++a) kdiag += Kb[a][a];
+    const double kdrill = 1e-4 * kdiag / 9.0;
+    for (int i = 0; i < 3; ++i) Kl[6 * i + 5][6 * i + 5] += kdrill;
+
+    // Transform to global: local vector = Q·global, Q rows = (e1,e2,e3).
+    const std::array<std::array<double, 3>, 3> Q = {{e1, e2, e3}};
+    std::array<std::array<double, 18>, 18> T{};
+    for (int i = 0; i < 3; ++i)
+        for (int blk = 0; blk < 2; ++blk)
+            for (int r = 0; r < 3; ++r)
+                for (int c = 0; c < 3; ++c)
+                    T[6 * i + 3 * blk + r][6 * i + 3 * blk + c] = Q[r][c];
+
+    std::array<std::array<double, 18>, 18> KlT{};
+    for (int i = 0; i < 18; ++i)
+        for (int j = 0; j < 18; ++j) {
+            double s = 0.0;
+            for (int k = 0; k < 18; ++k) s += Kl[i][k] * T[k][j];
+            KlT[i][j] = s;
+        }
+    const std::array<int, 3> nodes = {n0, n1, n2};
+    for (int a = 0; a < 18; ++a)
+        for (int b = 0; b < 18; ++b) {
+            double s = 0.0;
+            for (int k = 0; k < 18; ++k) s += T[k][a] * KlT[k][b];
+            if (s == 0.0) continue;
+            K.add(6 * nodes[a / 6] + a % 6, 6 * nodes[b / 6] + b % 6, s);
+        }
+}
+
+// 3×3 inverse (for tet shape-function gradients and the RBE3 inertia solve).
+std::array<std::array<double, 3>, 3> mat3_inv(const std::array<std::array<double, 3>, 3>& m) {
+    const double det =
+        m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) -
+        m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) +
+        m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+    if (det == 0.0) throw std::runtime_error("shell: singular 3×3 matrix");
+    const double id = 1.0 / det;
+    std::array<std::array<double, 3>, 3> r{};
+    r[0][0] = (m[1][1] * m[2][2] - m[1][2] * m[2][1]) * id;
+    r[0][1] = (m[0][2] * m[2][1] - m[0][1] * m[2][2]) * id;
+    r[0][2] = (m[0][1] * m[1][2] - m[0][2] * m[1][1]) * id;
+    r[1][0] = (m[1][2] * m[2][0] - m[1][0] * m[2][2]) * id;
+    r[1][1] = (m[0][0] * m[2][2] - m[0][2] * m[2][0]) * id;
+    r[1][2] = (m[0][2] * m[1][0] - m[0][0] * m[1][2]) * id;
+    r[2][0] = (m[1][0] * m[2][1] - m[1][1] * m[2][0]) * id;
+    r[2][1] = (m[0][1] * m[2][0] - m[0][0] * m[2][1]) * id;
+    r[2][2] = (m[0][0] * m[1][1] - m[0][1] * m[1][0]) * id;
+    return r;
+}
+
+// Skew-symmetric cross-product matrix [a]× (so [a]×·b = a×b).
+std::array<std::array<double, 3>, 3> skew(const Vec3& a) {
+    return {{{0.0, -a[2], a[1]}, {a[2], 0.0, -a[0]}, {-a[1], a[0], 0.0}}};
+}
+
+void apply_homogeneous_bc(Sparse& K, std::vector<double>& F, const std::vector<char>& fixed) {
+    const int n = static_cast<int>(F.size());
+    for (int i = 0; i < n; ++i) {
+        if (fixed[i]) {
+            K.rows[i].clear();
+            K.rows[i][i] = 1.0;
+            F[i] = 0.0;
+        } else {
+            for (auto it = K.rows[i].begin(); it != K.rows[i].end();) {
+                if (fixed[it->first])
+                    it = K.rows[i].erase(it);
+                else
+                    ++it;
+            }
+        }
+    }
+}
+
 }  // namespace
 
 ShellResult solve_shell_core(const ShellInput& in) {
@@ -278,122 +386,258 @@ ShellResult solve_shell_core(const ShellInput& in) {
     const int nDof = 6 * nNodes;
 
     Sparse K(nDof);
-    auto vtx = [&](int n) -> Vec3 {
-        return {in.vertices[3 * n], in.vertices[3 * n + 1], in.vertices[3 * n + 2]};
-    };
+    for (int e = 0; e < nTris; ++e)
+        assemble_shell_element(K, in.vertices, in.triangles[3 * e], in.triangles[3 * e + 1],
+                               in.triangles[3 * e + 2], in.thickness, in.young, in.poisson);
 
-    for (int e = 0; e < nTris; ++e) {
-        const int n0 = in.triangles[3 * e], n1 = in.triangles[3 * e + 1],
-                  n2 = in.triangles[3 * e + 2];
-        const Vec3 P0 = vtx(n0), P1 = vtx(n1), P2 = vtx(n2);
-
-        // Local orthonormal frame: e1 along P0→P1, e3 = normal, e2 = e3×e1.
-        const Vec3 v1 = sub(P1, P0), v2 = sub(P2, P0);
-        const double l1 = norm(v1);
-        if (l1 == 0.0) throw std::runtime_error("shell: degenerate triangle (coincident nodes)");
-        const Vec3 e1 = scale(v1, 1.0 / l1);
-        Vec3 e3 = cross(v1, v2);
-        const double twoA = norm(e3);
-        if (twoA == 0.0) throw std::runtime_error("shell: degenerate triangle (zero area)");
-        e3 = scale(e3, 1.0 / twoA);
-        const Vec3 e2 = cross(e3, e1);
-        const double area = 0.5 * twoA;
-
-        // Local 2D coordinates.
-        const std::array<double, 3> lx = {0.0, l1, dot(v2, e1)};
-        const std::array<double, 3> ly = {0.0, 0.0, dot(v2, e2)};
-
-        const auto Km = membrane_stiffness(lx, ly, area, in.thickness, in.young, in.poisson);
-        const auto Kb = bending_stiffness(lx, ly, area, in.thickness, in.young, in.poisson);
-
-        // Local 18×18 in per-node DOF order (u,v,w,θx,θy,θz).
-        std::array<std::array<double, 18>, 18> Kl{};
-        // membrane → (u,v): local dof 6i+0, 6i+1; Km order (u0,v0,u1,v1,u2,v2)
-        static constexpr std::array<int, 6> mdof = {0, 1, 6, 7, 12, 13};
-        for (int a = 0; a < 6; ++a)
-            for (int b = 0; b < 6; ++b) Kl[mdof[a]][mdof[b]] += Km[a][b];
-        // bending → (w,θx,θy): local dof 6i+2,6i+3,6i+4; Kb order (w0,θx0,θy0,…)
-        static constexpr std::array<int, 9> bdof = {2, 3, 4, 8, 9, 10, 14, 15, 16};
-        for (int a = 0; a < 9; ++a)
-            for (int b = 0; b < 9; ++b) Kl[bdof[a]][bdof[b]] += Kb[a][b];
-        // drilling θz (local dof 6i+5): tiny fictitious stiffness to remove the
-        // in-plane-rotation singularity of coplanar facets. Scaled off the mean
-        // bending diagonal so it is negligible vs real stiffness (no load
-        // excites it on a flat plate; neighbouring facets constrain it on a
-        // curved shell).
-        double kdiag = 0.0;
-        for (int a = 0; a < 9; ++a) kdiag += Kb[a][a];
-        const double kdrill = 1e-4 * kdiag / 9.0;
-        for (int i = 0; i < 3; ++i) Kl[6 * i + 5][6 * i + 5] += kdrill;
-
-        // Transform to global: local vector = Q·global, Q rows = (e1,e2,e3).
-        const std::array<std::array<double, 3>, 3> Q = {{e1, e2, e3}};
-        // Build the 18×18 T (block-diag of Q for translations and rotations per
-        // node), then Kg = Tᵀ·Kl·T.
-        std::array<std::array<double, 18>, 18> T{};
-        for (int i = 0; i < 3; ++i)          // node
-            for (int blk = 0; blk < 2; ++blk)  // 0 = translation, 1 = rotation
-                for (int r = 0; r < 3; ++r)
-                    for (int c = 0; c < 3; ++c)
-                        T[6 * i + 3 * blk + r][6 * i + 3 * blk + c] = Q[r][c];
-
-        // Kg = Tᵀ Kl T (18×18).
-        std::array<std::array<double, 18>, 18> KlT{};
-        for (int i = 0; i < 18; ++i)
-            for (int j = 0; j < 18; ++j) {
-                double s = 0.0;
-                for (int k = 0; k < 18; ++k) s += Kl[i][k] * T[k][j];
-                KlT[i][j] = s;
-            }
-        std::array<std::array<double, 18>, 18> Kg{};
-        for (int i = 0; i < 18; ++i)
-            for (int j = 0; j < 18; ++j) {
-                double s = 0.0;
-                for (int k = 0; k < 18; ++k) s += T[k][i] * KlT[k][j];
-                Kg[i][j] = s;
-            }
-
-        const std::array<int, 3> nodes = {n0, n1, n2};
-        for (int a = 0; a < 18; ++a)
-            for (int b = 0; b < 18; ++b) {
-                if (Kg[a][b] == 0.0) continue;
-                const int gi = 6 * nodes[a / 6] + a % 6;
-                const int gj = 6 * nodes[b / 6] + b % 6;
-                K.add(gi, gj, Kg[a][b]);
-            }
-    }
-
-    // Load vector.
     std::vector<double> F(nDof, 0.0);
     for (const auto& [dof, val] : in.loads) {
         if (dof < 0 || dof >= nDof) throw std::runtime_error("shell: load DOF out of range");
         F[dof] += val;
     }
 
-    // Essential BCs (homogeneous): zero the fixed rows/cols, unit diagonal.
     std::vector<char> fixed(nDof, 0);
     for (int d : in.fixed_dofs) {
         if (d < 0 || d >= nDof) throw std::runtime_error("shell: fixed DOF out of range");
         fixed[d] = 1;
     }
-    for (int i = 0; i < nDof; ++i) {
-        if (fixed[i]) {
-            K.rows[i].clear();
-            K.rows[i][i] = 1.0;
-            F[i] = 0.0;
-        } else {
-            for (auto it = K.rows[i].begin(); it != K.rows[i].end();) {
-                if (fixed[it->first])
-                    it = K.rows[i].erase(it);
-                else
-                    ++it;
-            }
-        }
-    }
+    apply_homogeneous_bc(K, F, fixed);
 
     ShellResult res = cg_solve(K, F);
     if (res.dofs.empty()) res.dofs.assign(nDof, 0.0);
     return res;
+}
+
+// ── Coupled solid + shell ─────────────────────────────────────────────────────
+
+std::vector<SolidTriplet> tet_solid_stiffness(const std::vector<double>& V,
+                                              const std::vector<int>& tets,
+                                              double E, double nu) {
+    const double lam = E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu));
+    const double mu = E / (2.0 * (1.0 + nu));
+    // Isotropic 3D elasticity (Voigt: xx,yy,zz,xy,yz,zx).
+    std::array<std::array<double, 6>, 6> D{};
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) D[i][j] = lam;
+        D[i][i] = lam + 2.0 * mu;
+        D[3 + i][3 + i] = mu;
+    }
+    auto vtx = [&](int n) -> Vec3 { return {V[3 * n], V[3 * n + 1], V[3 * n + 2]}; };
+
+    std::vector<SolidTriplet> out;
+    const int nTets = static_cast<int>(tets.size() / 4);
+    out.reserve((size_t)nTets * 144);
+    for (int e = 0; e < nTets; ++e) {
+        const std::array<int, 4> nd = {tets[4 * e], tets[4 * e + 1], tets[4 * e + 2],
+                                       tets[4 * e + 3]};
+        const Vec3 p0 = vtx(nd[0]), p1 = vtx(nd[1]), p2 = vtx(nd[2]), p3 = vtx(nd[3]);
+        // Jacobian columns = edge vectors; V = det(J)/6.
+        const std::array<std::array<double, 3>, 3> J = {{
+            {p1[0] - p0[0], p2[0] - p0[0], p3[0] - p0[0]},
+            {p1[1] - p0[1], p2[1] - p0[1], p3[1] - p0[1]},
+            {p1[2] - p0[2], p2[2] - p0[2], p3[2] - p0[2]},
+        }};
+        const double det = J[0][0] * (J[1][1] * J[2][2] - J[1][2] * J[2][1]) -
+                           J[0][1] * (J[1][0] * J[2][2] - J[1][2] * J[2][0]) +
+                           J[0][2] * (J[1][0] * J[2][1] - J[1][1] * J[2][0]);
+        const double vol = std::fabs(det) / 6.0;
+        if (vol == 0.0) throw std::runtime_error("coupled: degenerate (zero-volume) tet");
+        const auto Jinv = mat3_inv(J);
+        // Local shape-function derivatives (columns = nodes 0..3).
+        static constexpr std::array<std::array<double, 4>, 3> dNl = {{
+            {-1.0, 1.0, 0.0, 0.0}, {-1.0, 0.0, 1.0, 0.0}, {-1.0, 0.0, 0.0, 1.0}}};
+        // grad N_i in global coords: gradN[i][k] = Σ_m Jinv[m][k]·dNl[m][i].
+        std::array<std::array<double, 3>, 4> g{};
+        for (int i = 0; i < 4; ++i)
+            for (int k = 0; k < 3; ++k) {
+                double s = 0.0;
+                for (int m = 0; m < 3; ++m) s += Jinv[m][k] * dNl[m][i];
+                g[i][k] = s;
+            }
+        // B (6×12).
+        std::array<std::array<double, 12>, 6> B{};
+        for (int i = 0; i < 4; ++i) {
+            const double gx = g[i][0], gy = g[i][1], gz = g[i][2];
+            B[0][3 * i] = gx;
+            B[1][3 * i + 1] = gy;
+            B[2][3 * i + 2] = gz;
+            B[3][3 * i] = gy; B[3][3 * i + 1] = gx;
+            B[4][3 * i + 1] = gz; B[4][3 * i + 2] = gy;
+            B[5][3 * i] = gz; B[5][3 * i + 2] = gx;
+        }
+        // Ke = vol·Bᵀ·D·B (12×12).
+        std::array<std::array<double, 12>, 6> DB{};
+        for (int i = 0; i < 6; ++i)
+            for (int j = 0; j < 12; ++j) {
+                double s = 0.0;
+                for (int k = 0; k < 6; ++k) s += D[i][k] * B[k][j];
+                DB[i][j] = s;
+            }
+        for (int a = 0; a < 12; ++a)
+            for (int b = 0; b < 12; ++b) {
+                double s = 0.0;
+                for (int k = 0; k < 6; ++k) s += B[k][a] * DB[k][b];
+                if (s == 0.0) continue;
+                out.push_back({3 * nd[a / 3] + a % 3, 3 * nd[b / 3] + b % 3, vol * s});
+            }
+    }
+    return out;
+}
+
+namespace {
+
+// 3×3 product.
+std::array<std::array<double, 3>, 3> mat3_mul(const std::array<std::array<double, 3>, 3>& a,
+                                             const std::array<std::array<double, 3>, 3>& b) {
+    std::array<std::array<double, 3>, 3> r{};
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j)
+            for (int k = 0; k < 3; ++k) r[i][j] += a[i][k] * b[k][j];
+    return r;
+}
+
+}  // namespace
+
+ShellResult solve_solid_shell_core(const CoupledInput& in) {
+    const int nNodes = in.n_nodes;
+    if (nNodes <= 0) throw std::runtime_error("coupled: n_nodes must be positive");
+    if ((int)in.vertices.size() != 3 * nNodes)
+        throw std::runtime_error("coupled: vertices length does not match n_nodes");
+    const int nDof = 6 * nNodes;
+    auto vtx = [&](int n) -> Vec3 { return {in.vertices[3 * n], in.vertices[3 * n + 1],
+                                            in.vertices[3 * n + 2]}; };
+
+    Sparse K(nDof);
+    // Solid stiffness (triplets over 3·node+comp) → translational DOFs.
+    for (const auto& tr : in.solid_stiffness) {
+        const int gi = 6 * (tr.i / 3) + tr.i % 3;
+        const int gj = 6 * (tr.j / 3) + tr.j % 3;
+        K.add(gi, gj, tr.v);
+    }
+    // Shell facets → all 6 DOFs; record which nodes carry rotational stiffness.
+    std::vector<char> is_shell(nNodes, 0);
+    const int nTris = static_cast<int>(in.triangles.size() / 3);
+    for (int e = 0; e < nTris; ++e) {
+        const int a = in.triangles[3 * e], b = in.triangles[3 * e + 1], c = in.triangles[3 * e + 2];
+        assemble_shell_element(K, in.vertices, a, b, c, in.thickness, in.shell_young, in.shell_poisson);
+        is_shell[a] = is_shell[b] = is_shell[c] = 1;
+    }
+
+    std::vector<double> F(nDof, 0.0);
+    for (const auto& [dof, val] : in.loads) {
+        if (dof < 0 || dof >= nDof) throw std::runtime_error("coupled: load DOF out of range");
+        F[dof] += val;
+    }
+
+    std::vector<char> fixed(nDof, 0);
+    for (int d : in.fixed_dofs) {
+        if (d < 0 || d >= nDof) throw std::runtime_error("coupled: fixed DOF out of range");
+        fixed[d] = 1;
+    }
+    // Solid-only nodes have no rotational stiffness → auto-fix their rotations.
+    for (int n = 0; n < nNodes; ++n)
+        if (!is_shell[n])
+            for (int c = 3; c < 6; ++c) fixed[6 * n + c] = 1;
+
+    // ── Distributing (RBE3) coupling: express each reference node's 6 DOFs as a
+    //    linear combination of its solid nodes' translations. ────────────────────
+    std::vector<char> dep(nDof, 0);
+    std::vector<std::vector<std::pair<int, double>>> Cmap(nDof);
+    for (const auto& cp : in.couplings) {
+        const int R = cp.ref_node;
+        if (R < 0 || R >= nNodes) throw std::runtime_error("coupled: coupling ref_node out of range");
+        const int N = static_cast<int>(cp.solid_nodes.size());
+        if (N < 3) throw std::runtime_error("coupled: a distributing coupling needs ≥3 solid nodes");
+        const Vec3 pR = vtx(R);
+        std::vector<double> w(N, 1.0);
+        if (!cp.weights.empty()) {
+            if ((int)cp.weights.size() != N) throw std::runtime_error("coupled: weights size mismatch");
+            w = cp.weights;
+        }
+        double W = 0.0;
+        for (double wi : w) W += wi;
+        Vec3 S = {0.0, 0.0, 0.0};
+        std::array<std::array<double, 3>, 3> H{};
+        std::vector<Vec3> r(N);
+        for (int i = 0; i < N; ++i) {
+            const Vec3 pi = vtx(cp.solid_nodes[i]);
+            r[i] = {pi[0] - pR[0], pi[1] - pR[1], pi[2] - pR[2]};
+            for (int k = 0; k < 3; ++k) S[k] += w[i] * r[i][k];
+            const double rr = dot(r[i], r[i]);
+            for (int a = 0; a < 3; ++a)
+                for (int b = 0; b < 3; ++b)
+                    H[a][b] += w[i] * ((a == b ? rr : 0.0) - r[i][a] * r[i][b]);
+        }
+        const auto Hinv = mat3_inv(H);
+        const auto skewS = skew(S);
+        for (int k = 0; k < 6; ++k) dep[6 * R + k] = 1;
+        for (int i = 0; i < N; ++i) {
+            const int sn = cp.solid_nodes[i];
+            // U_R = Σ (w_i/W) u_i  (component-diagonal).
+            for (int c = 0; c < 3; ++c) Cmap[6 * R + c].push_back({6 * sn + c, w[i] / W});
+            // Θ_R = Hinv·Σ (w_i[r_i]× − (w_i/W)[S]×) u_i.
+            const auto sr = skew(r[i]);
+            std::array<std::array<double, 3>, 3> inner{};
+            for (int a = 0; a < 3; ++a)
+                for (int b = 0; b < 3; ++b)
+                    inner[a][b] = w[i] * sr[a][b] - (w[i] / W) * skewS[a][b];
+            const auto M = mat3_mul(Hinv, inner);
+            for (int a = 0; a < 3; ++a)
+                for (int c = 0; c < 3; ++c)
+                    Cmap[6 * R + 3 + a].push_back({6 * sn + c, M[a][c]});
+        }
+    }
+
+    // ── Master-slave reduction: K_red = Tᵀ K T with T carrying C on dependent
+    //    rows, then solve over the independent DOFs, then recover dependents. ─────
+    std::vector<int> red(nDof, -1);
+    int nIndep = 0;
+    for (int i = 0; i < nDof; ++i)
+        if (!dep[i]) red[i] = nIndep++;
+
+    auto expand = [&](int dof) -> std::vector<std::pair<int, double>> {
+        if (!dep[dof]) return {{dof, 1.0}};
+        return Cmap[dof];  // entries reference independent (solid) DOFs
+    };
+
+    Sparse Kr(nIndep);
+    for (int i = 0; i < nDof; ++i) {
+        if (K.rows[i].empty()) continue;
+        const auto ei = expand(i);
+        for (const auto& [j, v] : K.rows[i]) {
+            const auto ej = expand(j);
+            for (const auto& [pi, ci] : ei)
+                for (const auto& [pj, cj] : ej) Kr.add(red[pi], red[pj], ci * cj * v);
+        }
+    }
+    std::vector<double> Fr(nIndep, 0.0);
+    for (int i = 0; i < nDof; ++i)
+        if (F[i] != 0.0)
+            for (const auto& [pi, ci] : expand(i)) Fr[red[pi]] += ci * F[i];
+
+    std::vector<char> fr(nIndep, 0);
+    for (int i = 0; i < nDof; ++i)
+        if (fixed[i] && !dep[i]) fr[red[i]] = 1;
+    apply_homogeneous_bc(Kr, Fr, fr);
+
+    ShellResult rr = cg_solve(Kr, Fr);
+    if (rr.dofs.empty()) rr.dofs.assign(nIndep, 0.0);
+
+    ShellResult full;
+    full.converged = rr.converged;
+    full.iterations = rr.iterations;
+    full.rel_residual = rr.rel_residual;
+    full.dofs.assign(nDof, 0.0);
+    for (int i = 0; i < nDof; ++i) {
+        if (!dep[i]) {
+            full.dofs[i] = rr.dofs[red[i]];
+        } else {
+            double s = 0.0;
+            for (const auto& [q, c] : Cmap[i]) s += c * rr.dofs[red[q]];
+            full.dofs[i] = s;
+        }
+    }
+    return full;
 }
 
 }  // namespace kofem::shell
