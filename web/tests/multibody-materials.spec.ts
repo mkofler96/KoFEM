@@ -5,7 +5,7 @@
 // lists one body per solid, each with a material colour swatch, a material
 // dropdown, and an eye control to hide it; hovering a body highlights it.
 
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./coverage";
 import path from "path";
 import { importStep } from "./fixtures/app";
 
