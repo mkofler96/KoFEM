@@ -26,6 +26,7 @@
 #include "geometry_cache.h"
 #include "mesh_netgen.h"
 #include "solve_mfem.h"
+#include "solve_shell.h"
 #include "tessellate.h"
 
 // ── Embind registrations ──────────────────────────────────────────────────────
@@ -37,4 +38,5 @@ EMSCRIPTEN_BINDINGS(kofem) {
     emscripten::function("generate_fem_mesh",      &generate_fem_mesh);
     emscripten::function("free_geometry_cache",    &free_geometry_cache);
     emscripten::function("solve_linear_elastic",   &solve_linear_elastic);
+    emscripten::function("solve_shell",            &solve_shell);
 }

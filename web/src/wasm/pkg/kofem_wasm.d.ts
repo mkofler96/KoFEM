@@ -49,6 +49,20 @@ export type StaticSolveResult =
   | { displacements: Float64Array; von_mises: Float64Array }
   | { error: string }
 
+/** Triangle SURFACE mesh input to the Kirchhoff shell solver: `vertices` is xyz
+ *  interleaved (length 3·nNodes); `triangles` is three 0-based vertex indices
+ *  per triangle (length 3·nTris). */
+export interface ShellMesh {
+  vertices: Float64Array
+  triangles: Int32Array
+}
+
+/** Shell solve output: three translation components (u,v,w) per vertex
+ *  (length 3·nNodes). Bad input / non-convergence yields `{error}` instead. */
+export type ShellSolveResult =
+  | { displacements: Float64Array }
+  | { error: string }
+
 /** Runtime interface of the initialised Emscripten/Embind module. */
 export interface KofemModule {
   /** Load a STEP or IGES file and tessellate it for display.
@@ -79,6 +93,15 @@ export interface KofemModule {
     bcs_json: string,
     order: number,
   ): StaticSolveResult
+  /** Kirchhoff flat-facet shell solve on a triangle surface mesh. `mat_json` is
+   *  `{ young_modulus, poisson_ratio, thickness }`; `bcs_json` is
+   *  `{ fixed_vertices?, fixed_dofs?, point_loads? }` with DOF components
+   *  0..5 = (u,v,w,θx,θy,θz). Returns three translations per node. */
+  solve_shell(
+    mesh: ShellMesh,
+    mat_json: string,
+    bcs_json: string,
+  ): ShellSolveResult
 }
 
 export interface ModuleOverrides {
