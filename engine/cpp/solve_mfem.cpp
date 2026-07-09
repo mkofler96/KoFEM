@@ -94,11 +94,13 @@ public:
 // ── Mesh parsing / construction ───────────────────────────────────────────────
 
 // Flat volume-mesh arrays copied out of the JS mesh object: xyz per vertex,
-// four vertex indices per tet, eight per hex.
+// four vertex indices per tet, eight per hex, one material attribute per
+// element (tets first, then hexs; empty = every element is material 1).
 struct MeshArrays {
     std::vector<double> vertices;
     std::vector<int> tets;
     std::vector<int> hexs;
+    std::vector<int> attrs;
 };
 
 // The mesh arrives as flat typed arrays ({vertices: Float64Array, tetrahedra:
@@ -118,6 +120,14 @@ MeshArrays parse_mesh(const val& mesh_js) {
     if (!hexs_js.isUndefined() && !hexs_js.isNull())
         m.hexs = i32_vector(hexs_js, "mesh.hexahedra");
 
+    // attributes is optional: one 1-based material index per element (tets
+    // first, then hexs — the order the elements are added to the MFEM mesh
+    // below). Absent means the single-material case: every element keeps the
+    // default attribute 1 and materials[0] applies to the whole model.
+    val attrs_js = mesh_js["attributes"];
+    if (!attrs_js.isUndefined() && !attrs_js.isNull())
+        m.attrs = i32_vector(attrs_js, "mesh.attributes");
+
     if (m.vertices.size() % 3 != 0)
         throw std::runtime_error(
             "mesh.vertices length " + std::to_string(m.vertices.size()) +
@@ -130,6 +140,17 @@ MeshArrays parse_mesh(const val& mesh_js) {
         throw std::runtime_error(
             "mesh.hexahedra length " + std::to_string(m.hexs.size()) +
             " is not divisible by 8 — expected eight flat vertex indices per hex");
+    const size_t n_elems = m.tets.size() / 4 + m.hexs.size() / 8;
+    if (!m.attrs.empty() && m.attrs.size() != n_elems)
+        throw std::runtime_error(
+            "mesh.attributes length " + std::to_string(m.attrs.size()) +
+            " does not match the element count " + std::to_string(n_elems) +
+            " — expected one material index per element (tets first, then hexs)");
+    for (int a : m.attrs)
+        if (a < 1)
+            throw std::runtime_error(
+                "mesh.attributes contains the invalid material index " +
+                std::to_string(a) + " — indices are 1-based");
 
     printf("[mfem] mesh counts: nv=%u nt=%u nh=%u\n",
            (unsigned)(m.vertices.size() / 3), (unsigned)(m.tets.size() / 4),
@@ -171,13 +192,18 @@ mfem::Mesh build_mfem_mesh(const MeshArrays& m) {
         mesh.AddVertex(m.vertices[3*i], m.vertices[3*i+1], m.vertices[3*i+2]);
     printf("[mfem] vertices added\n"); fflush(stdout);
 
+    // Element attribute = 1-based material index (from mesh.attributes; 1 for
+    // every element when absent). PWConstCoefficient in the assembly below maps
+    // attribute k to the k-th material's Lamé constants.
     for (unsigned i = 0; i < nt; ++i)
-        mesh.AddTet(m.tets[4*i], m.tets[4*i+1], m.tets[4*i+2], m.tets[4*i+3], /*attr=*/1);
+        mesh.AddTet(m.tets[4*i], m.tets[4*i+1], m.tets[4*i+2], m.tets[4*i+3],
+                    m.attrs.empty() ? 1 : m.attrs[i]);
     printf("[mfem] tets added\n"); fflush(stdout);
 
     for (unsigned i = 0; i < nh; ++i)
         mesh.AddHex(m.hexs[8*i], m.hexs[8*i+1], m.hexs[8*i+2], m.hexs[8*i+3],
-                    m.hexs[8*i+4], m.hexs[8*i+5], m.hexs[8*i+6], m.hexs[8*i+7], /*attr=*/1);
+                    m.hexs[8*i+4], m.hexs[8*i+5], m.hexs[8*i+6], m.hexs[8*i+7],
+                    m.attrs.empty() ? 1 : m.attrs[nt + i]);
     printf("[mfem] hexs added\n"); fflush(stdout);
 
     // generate_bdr=true: boundary Triangle/Quad elements auto-generated from
@@ -596,13 +622,17 @@ std::vector<double> extract_displacements(mfem::FiniteElementSpace& fespace,
 }
 
 // Per-element von Mises stress at the element center: strain from the
-// displacement gradient, Cauchy stress via the Lamé constants, then the
-// deviatoric second invariant √(3/2 s:s).
+// displacement gradient, Cauchy stress via the Lamé constants of the element's
+// material (attribute = 1-based index into lam/mu), then the deviatoric second
+// invariant √(3/2 s:s).
 std::vector<double> compute_von_mises(mfem::Mesh& mesh, const mfem::GridFunction& x,
-                                      double lam, double mu) {
+                                      const mfem::Vector& lam_by_mat,
+                                      const mfem::Vector& mu_by_mat) {
     int n_elems = mesh.GetNE();
     std::vector<double> von_mises(n_elems);
     for (int e = 0; e < n_elems; ++e) {
+        const double lam = lam_by_mat(mesh.GetAttribute(e) - 1);
+        const double mu  = mu_by_mat(mesh.GetAttribute(e) - 1);
         mfem::ElementTransformation* T = mesh.GetElementTransformation(e);
         const mfem::IntegrationRule& ir =
             mfem::IntRules.Get(mesh.GetElementGeometry(e), 1);
@@ -662,18 +692,40 @@ val solve_linear_elastic(
 
     MeshArrays mesh_arrays = parse_mesh(mesh_js);
 
-    val E_val  = mat_js["young_modulus"];
-    val nu_val = mat_js["poisson_ratio"];
-
-    if (E_val.isNull() || E_val.isUndefined()) {
-        return error_result("material is missing young_modulus");
+    // mat_json is either an array of materials — element attribute k selects
+    // the k-th entry (multibody per-body materials, issue #353) — or a single
+    // material object, the pre-#353 contract still used by direct callers.
+    const bool is_mat_array =
+        val::global("Array").call<bool>("isArray", mat_js);
+    const unsigned n_mats =
+        is_mat_array ? mat_js["length"].as<unsigned>() : 1U;
+    if (n_mats == 0) {
+        return error_result("materials array is empty — at least one material is required");
     }
-    if (nu_val.isNull() || nu_val.isUndefined()) {
-        return error_result("material is missing poisson_ratio");
+    std::vector<double> E_by_mat(n_mats);
+    std::vector<double> nu_by_mat(n_mats);
+    for (unsigned k = 0; k < n_mats; ++k) {
+        val mat    = is_mat_array ? mat_js[k] : mat_js;
+        val E_val  = mat["young_modulus"];
+        val nu_val = mat["poisson_ratio"];
+        if (E_val.isNull() || E_val.isUndefined()) {
+            return error_result(
+                ("material " + std::to_string(k + 1) + " is missing young_modulus").c_str());
+        }
+        if (nu_val.isNull() || nu_val.isUndefined()) {
+            return error_result(
+                ("material " + std::to_string(k + 1) + " is missing poisson_ratio").c_str());
+        }
+        E_by_mat[k]  = E_val.as<double>();
+        nu_by_mat[k] = nu_val.as<double>();
     }
-
-    double E  = E_val.as<double>();
-    double nu = nu_val.as<double>();
+    for (int a : mesh_arrays.attrs) {
+        if ((unsigned)a > n_mats) {
+            return error_result(
+                ("mesh.attributes references material " + std::to_string(a) +
+                 " but only " + std::to_string(n_mats) + " material(s) were provided").c_str());
+        }
+    }
 
     val loads_js = bcs_js["point_loads"];
     printf("[mfem] BCs: %u fixed vertices, %u point loads\n",
@@ -685,8 +737,19 @@ val solve_linear_elastic(
     Mesh mfem_mesh = build_mfem_mesh(mesh_arrays);
 
     order = std::max(1, order);
-    double lam = E * nu / ((1.0 + nu) * (1.0 - 2.0*nu));
-    double mu  = E / (2.0 * (1.0 + nu));
+    // Lamé constants per material, indexed by (element attribute − 1) — the
+    // layout PWConstCoefficient expects.
+    Vector lam_by_mat((int)n_mats), mu_by_mat((int)n_mats);
+    for (unsigned k = 0; k < n_mats; ++k) {
+        const double E  = E_by_mat[k];
+        const double nu = nu_by_mat[k];
+        lam_by_mat((int)k) = E * nu / ((1.0 + nu) * (1.0 - 2.0*nu));
+        mu_by_mat((int)k)  = E / (2.0 * (1.0 + nu));
+    }
+    if (n_mats > 1) {
+        printf("[mfem] %u materials (per-element attributes)\n", n_mats);
+        fflush(stdout);
+    }
 
     printf("[mfem] setting up H1 FE space (order=%d, dim=%d)…\n", order, dim);
     fflush(stdout);
@@ -716,7 +779,10 @@ val solve_linear_elastic(
     apply_point_loads(loads_js, fespace, b);
 
     BilinearForm a(&fespace);
-    ConstantCoefficient lam_c(lam), mu_c(mu);
+    // Piecewise-constant over element attributes: attribute k reads entry k−1.
+    // With a single material every element has attribute 1, reproducing the
+    // former ConstantCoefficient behaviour exactly.
+    PWConstCoefficient lam_c(lam_by_mat), mu_c(mu_by_mat);
     a.AddDomainIntegrator(new ElasticityIntegrator(lam_c, mu_c));
     printf("[mfem] assembling stiffness matrix…\n"); fflush(stdout);
     a.Assemble();
@@ -734,7 +800,8 @@ val solve_linear_elastic(
 
     std::vector<double> displacements =
         extract_displacements(fespace, x, mfem_mesh.GetNV());
-    std::vector<double> von_mises = compute_von_mises(mfem_mesh, x, lam, mu);
+    std::vector<double> von_mises =
+        compute_von_mises(mfem_mesh, x, lam_by_mat, mu_by_mat);
 
     printf("[mfem] solve complete: %d vertex displacements, %d element stresses\n",
            mfem_mesh.GetNV(), mfem_mesh.GetNE());

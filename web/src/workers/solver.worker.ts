@@ -6,6 +6,13 @@
 
 import createModule from "../wasm/pkg/kofem_wasm.js";
 import type { KofemModule, SolveMesh } from "../wasm/pkg/kofem_wasm.js";
+import {
+  buildTie,
+  remapElement,
+  assertNoCollapsedElements,
+  tiedId,
+  expandToOriginalNodes,
+} from "./tie.js";
 
 let Module: KofemModule | null = null;
 
@@ -96,6 +103,13 @@ interface Material {
   poisson: number;
   density: number;
 }
+// Body → material mapping (#317/#353): each body of the assembly is one
+// property (property id = 1-based body index from Netgen's mesh domains), and
+// the property names the material the body is made of.
+interface Property {
+  id: number;
+  materialId: number;
+}
 interface Constraint {
   nodeId: number;
   dof: number;
@@ -132,14 +146,14 @@ interface SolvePayload {
   nodes: Node[];
   elements: Element[];
   materials: Material[];
-  // Reserved for #317 (per-body materials) — the single-material solve
-  // reads materials[0] directly and does not resolve elements through
-  // propertyId/materialId (see #320).
-  properties: unknown[];
+  properties: Property[];
   constraints: Constraint[];
   loads: Load[];
   surfaceLoads?: SurfaceLoad[];
   elementOrder?: number;
+  // Bonded-tie detection distance (mm): weld near-contact nodes of different
+  // bodies so parts that touch without a shared face are joined (#359). 0 = off.
+  tieDistance?: number;
 }
 
 // ── parse_step ────────────────────────────────────────────────────────────────
@@ -154,17 +168,22 @@ function handleParseStep(id: number, payload: ParseStepPayload) {
     // eslint-disable-next-line kofem/no-silent-fallback -- format is optional in the parse_step message; absent means STEP, the primary import path
     format: payload.format ?? "step",
   });
-  const { vertices, triangles } = m().tessellate_step(payload.bytes, opts);
+  const { vertices, triangles, triangleBodyIds, bodyCount } =
+    m().tessellate_step(payload.bytes, opts);
   // tessellate_step stores the OCCT shape in the module — record that so a
   // subsequent volume_mesh in this same worker can skip the reload.
   geometryLoaded = true;
   // Return as {points, triangles} to match the StepTessellation type used by
   // the store; tessellate_step returns flat Float32/Uint32 typed arrays.
+  // bodyCount (#353) drives the per-body material assignment UI; bodyIds
+  // (one per triangle) drives per-body colour / highlight / hide.
   self.postMessage({
     id,
     ok: true,
     points: chunk3(vertices),
     triangles: chunk3(triangles),
+    bodyIds: Array.from(triangleBodyIds),
+    bodyCount,
   });
 }
 
@@ -265,7 +284,9 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
         dto.tetrahedra[4 * i + 2],
         dto.tetrahedra[4 * i + 3],
       ],
-      propertyId: 1,
+      // The tet's body (1-based CAD solid index) — resolved to a material via
+      // the store's properties at solve time (#353).
+      propertyId: dto.bodyIds[i],
     };
   }
 
@@ -308,11 +329,10 @@ function buildVertexIndexer(nodes: Node[]): VertexIndexer {
 // the engine bulk-copies these buffers onto its heap in one call each.
 function packSolveMesh(
   nodes: Node[],
-  elements: Element[],
+  tetElements: Element[],
+  hexElements: Element[],
   vid: VertexIndexer,
 ): SolveMesh {
-  const tetElements = elements.filter((e) => e.type === "CTETRA");
-  const hexElements = elements.filter((e) => e.type === "CHEXA");
   if (tetElements.length === 0 && hexElements.length === 0) {
     throw new Error(
       "No supported elements found. MFEM requires CTETRA or CHEXA elements — " +
@@ -349,23 +369,49 @@ function packSolveMesh(
   };
 }
 
-function singleMaterial(materials: Material[]) {
-  const mat = materials[0];
-  if (!mat) {
+// Per-body materials (#317/#353): each element's propertyId is its body, and
+// the property maps the body to a material. Returns the materials payload for
+// the engine plus one 1-based index into it per element, in the order the
+// elements cross the WASM boundary (mesh.attributes contract).
+function resolveMaterials(
+  orderedElements: Element[],
+  materials: Material[],
+  properties: Property[],
+) {
+  if (materials.length === 0) {
     throw new Error(
       "solve: no material assigned — assign a material before running the solver",
     );
   }
-  if (materials.length > 1) {
-    throw new Error(
-      `Multi-material models are not yet supported: ${materials.length} materials defined. ` +
-        "Only a single material can be assigned. Remove all but one material before solving.",
-    );
+  const matIndexById = new Map(materials.map((mat, i) => [mat.id, i + 1]));
+  const matIndexByProperty = new Map<number, number>();
+  for (const prop of properties) {
+    const idx = matIndexById.get(prop.materialId);
+    if (idx === undefined)
+      throw new Error(
+        `solve: body ${prop.id} is assigned material id ${prop.materialId}, ` +
+          "which does not exist — assign an existing material to every body",
+      );
+    matIndexByProperty.set(prop.id, idx);
+  }
+  const attributes = new Int32Array(orderedElements.length);
+  for (let i = 0; i < orderedElements.length; i++) {
+    const idx = matIndexByProperty.get(orderedElements[i].propertyId);
+    if (idx === undefined)
+      throw new Error(
+        `solve: element ${orderedElements[i].id} belongs to body ` +
+          `${orderedElements[i].propertyId}, which has no material assignment — ` +
+          "the model is inconsistent",
+      );
+    attributes[i] = idx;
   }
   return {
-    young_modulus: mat.young,
-    poisson_ratio: mat.poisson,
-    density: mat.density,
+    materials: materials.map((mat) => ({
+      young_modulus: mat.young,
+      poisson_ratio: mat.poisson,
+      density: mat.density,
+    })),
+    attributes,
   };
 }
 
@@ -426,24 +472,66 @@ function groupPointLoads(loads: Load[], vid: VertexIndexer) {
 }
 
 function handleSolve(id: number, payload: SolvePayload) {
-  const { nodes, elements, materials, constraints, loads, surfaceLoads } =
-    payload;
+  const {
+    nodes,
+    elements,
+    materials,
+    properties,
+    constraints,
+    loads,
+    surfaceLoads,
+  } = payload;
 
-  const vid = buildVertexIndexer(nodes);
-  const mesh = packSolveMesh(nodes, elements, vid);
-  const material = singleMaterial(materials);
+  // Bonded tie (#359): weld near-contact nodes of different bodies so parts
+  // that touch without a shared face are joined for the solve. A no-op when
+  // tieDistance is 0/absent, in which case solveNodes/tiedElements are the
+  // originals and every step below is unchanged.
+  // eslint-disable-next-line kofem/no-silent-fallback -- tieDistance is optional; the documented default is 0 (tie off)
+  const tieDistance = payload.tieDistance ?? 0;
+  const tie = buildTie(nodes, elements, tieDistance);
+  const solveNodes = tie.nodes;
+  const tiedElements =
+    tie.repOf.size > 0
+      ? elements.map((el) => remapElement(el, tie.repOf))
+      : elements;
+  if (tie.repOf.size > 0) assertNoCollapsedElements(tiedElements);
+  if (tie.nWelded > 0) {
+    self.postMessage({
+      id,
+      log: `Bonded tie: welded ${tie.nWelded} node(s) across bodies (≤ ${tieDistance} mm), ${solveNodes.length} nodes remain`,
+    });
+  }
+
+  const vid = buildVertexIndexer(solveNodes);
+  // Every stored node reference (constraints, loads, surface-load faces) is an
+  // ORIGINAL node id; map it through the tie to its representative before
+  // resolving to a solve vertex index.
+  const vidTied: VertexIndexer = (nodeId, context) =>
+    vid(tiedId(tie.repOf, nodeId), context);
+
+  // Tets and hexs cross the WASM boundary as separate arrays (tets first) —
+  // the per-element material attributes must follow the same order.
+  const tetElements = tiedElements.filter((e) => e.type === "CTETRA");
+  const hexElements = tiedElements.filter((e) => e.type === "CHEXA");
+  const mesh = packSolveMesh(solveNodes, tetElements, hexElements, vid);
+  const { materials: engineMaterials, attributes } = resolveMaterials(
+    [...tetElements, ...hexElements],
+    materials,
+    properties,
+  );
+  mesh.attributes = attributes;
 
   // Surface-load faces are node-id lists from the store; remap each to the
   // engine's vertex indices so the boundary-element matcher finds them.
   const surface_loads = (surfaceLoads ?? []).map((sl) => ({
     ...sl,
     faces: sl.faces.map((face) =>
-      face.map((nodeId) => vid(nodeId, "surface load face")),
+      face.map((nodeId) => vidTied(nodeId, "surface load face")),
     ),
   }));
   const bcs = {
-    ...groupDirichlet(constraints, vid),
-    point_loads: groupPointLoads(loads, vid),
+    ...groupDirichlet(constraints, vidTied),
+    point_loads: groupPointLoads(loads, vidTied),
     surface_loads,
   };
 
@@ -460,12 +548,12 @@ function handleSolve(id: number, payload: SolvePayload) {
     id,
     log: `Starting static solve: ${nodes.length} nodes, ${elements.length} elements (order ${order})…`,
   });
-  // Mesh as typed arrays; material/BCs stay JSON (small). The result comes
+  // Mesh as typed arrays; materials/BCs stay JSON (small). The result comes
   // back as Float64Arrays whose buffers are handed to the main thread via
   // the postMessage transfer list — zero-copy, no JSON round-trip.
   const result = m().solve_linear_elastic(
     mesh,
-    JSON.stringify(material),
+    JSON.stringify(engineMaterials),
     JSON.stringify(bcs),
     order,
   );
@@ -474,18 +562,35 @@ function handleSolve(id: number, payload: SolvePayload) {
     throw new Error(result.error);
   }
 
+  // The engine returns one displacement per SOLVE node (tied set). Expand back
+  // to one per ORIGINAL store node — a merged-away node takes its
+  // representative's displacement — so the result overlays the original mesh.
+  // von Mises is per element; welding preserves element count and order, so it
+  // passes through unchanged. When the tie is off this is a straight pass-through
+  // (zero-copy).
+  const displacements =
+    tie.nWelded > 0
+      ? expandToOriginalNodes(
+          nodes,
+          solveNodes,
+          tie.repOf,
+          result.displacements,
+          3,
+        )
+      : result.displacements;
+
   self.postMessage({
     id,
-    log: `Solve complete: ${result.displacements.length / 3} vertex displacements, ${result.von_mises.length} element stresses`,
+    log: `Solve complete: ${displacements.length / 3} vertex displacements, ${result.von_mises.length} element stresses`,
   });
   self.postMessage(
     {
       id,
       ok: true,
-      displacements: result.displacements,
+      displacements,
       vonMises: result.von_mises,
     },
-    [result.displacements.buffer, result.von_mises.buffer],
+    [displacements.buffer, result.von_mises.buffer],
   );
 }
 

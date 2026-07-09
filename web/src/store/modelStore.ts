@@ -23,6 +23,7 @@ import { createGeometrySlice, type GeometrySlice } from "./geometrySlice";
 import {
   createMaterialSlice,
   DEFAULT_MATERIAL,
+  MATERIAL_PALETTE,
   type MaterialSlice,
 } from "./materialSlice";
 import {
@@ -92,7 +93,12 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
     set((s) => {
       s.nodes = a.nodes;
       s.elements = a.elements;
-      s.materials = a.materials;
+      // Analyses saved before per-body colours (issue #353) carry no material
+      // colour — backfill from the palette so the geometry view can paint them.
+      s.materials = a.materials.map((m, i) => ({
+        ...m,
+        color: m.color ?? MATERIAL_PALETTE[i % MATERIAL_PALETTE.length],
+      }));
       s.properties = a.properties;
       s.bcGroups = a.bcGroups;
       s.loadGroups = a.loadGroups;
@@ -154,6 +160,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.viewRepr = "surface";
       s.deformScale = 1;
       s.elementOrder = 1;
+      s.tieDistance = 0;
       s.nextMatId = 2;
       s.selectedFace = null;
       s.pendingFaces = [];
@@ -164,6 +171,8 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.isRunning = false;
       s.isMeshing = false;
       s.hasStarted = false;
+      s.highlightBodyId = null;
+      s.hiddenBodyIds = [];
     }),
 });
 

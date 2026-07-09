@@ -37,6 +37,12 @@ int kofem_surface_element_face_index(void* mesh, int i) {
     return static_cast<netgen::Mesh*>(mesh)->SurfaceElement(i).GetIndex();
 }
 
+int kofem_volume_element_domain_index(void* mesh, int i) {
+    // Element::GetIndex() is the 1-based subdomain number the volume filler
+    // assigned; for OCC geometry the subdomains are the solids of the shape.
+    return static_cast<netgen::Mesh*>(mesh)->VolumeElement(i).GetIndex();
+}
+
 void kofem_delete_mesh(void* mesh) {
     // Ng_Mesh* is a netgen::Mesh* internally. ~Mesh() frees every owned
     // resource (including the bcnames/materials/cd2names string*); we skip

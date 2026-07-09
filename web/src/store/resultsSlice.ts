@@ -30,6 +30,11 @@ export interface ResultsSlice {
   // Quadratic elements resolve bending and stress gradients far better at the
   // cost of more DOFs and a slower solve (issue #215).
   elementOrder: number;
+  // Bonded-tie detection distance (mm) for multibody assemblies (#359): parts
+  // that touch without a shared face (e.g. a pin in a hook eye — a line
+  // contact) are joined by welding near-contact nodes of different bodies
+  // within this distance. 0 disables the tie.
+  tieDistance: number;
   mode: AppMode;
   hasStarted: boolean;
 
@@ -37,6 +42,7 @@ export interface ResultsSlice {
   setResultType(t: ResultType): void;
   setRunning(v: boolean): void;
   setElementOrder(order: number): void;
+  setTieDistance(distance: number): void;
 
   // Mode navigation
   setMode(mode: AppMode): void;
@@ -49,6 +55,7 @@ export const createResultsSlice: SliceCreator<ResultsSlice> = (set) => ({
   // Default to linear: it's fast and reliable for every mesh size. Quadratic is
   // an opt-in upgrade (Solver settings) — far more accurate but ~8× the DOFs.
   elementOrder: 1,
+  tieDistance: 0,
   mode: "geometry",
   hasStarted: false,
 
@@ -68,6 +75,10 @@ export const createResultsSlice: SliceCreator<ResultsSlice> = (set) => ({
   setElementOrder: (order) =>
     set((s) => {
       s.elementOrder = order;
+    }),
+  setTieDistance: (distance) =>
+    set((s) => {
+      s.tieDistance = Math.max(0, distance);
     }),
 
   setMode: (mode) =>

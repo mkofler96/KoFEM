@@ -24,11 +24,16 @@ export function useSolver() {
   const setResult = useModelStore((s) => s.setResult);
   const setMode = useModelStore((s) => s.setMode);
   const elementOrder = useModelStore((s) => s.elementOrder);
+  const tieDistance = useModelStore((s) => s.tieDistance);
   const [error, setError] = useState<string | null>(null);
   const { logs, clearLogs } = useWorkerLogs("solve");
 
   const meshOk = nodes.length > 0;
-  const matOk = materials.length > 0;
+  // Every body must resolve to an existing material — a body left pointing at
+  // a deleted material would fail in the solver with the same message.
+  const matOk =
+    materials.length > 0 &&
+    properties.every((p) => materials.some((m) => m.id === p.materialId));
   const bcOk = constraints.length > 0;
   // Force/pressure loads now reach the solver as surface tractions, moments as
   // nodal forces — either kind makes the model loaded.
@@ -56,6 +61,7 @@ export function useSolver() {
         loads,
         surfaceLoads,
         elementOrder,
+        tieDistance,
       },
     )
       .then(({ displacements, vonMises }) => {
@@ -84,9 +90,13 @@ export function useSolver() {
     ],
     [
       matOk,
-      materials.length > 0
-        ? `Material assigned · ${materials[0].name} · E=${fmt(materials[0].young, 3)} MPa`
-        : "No material assigned",
+      materials.length === 0
+        ? "No material assigned"
+        : !matOk
+          ? "A body references a deleted material — reassign body materials"
+          : properties.length > 1
+            ? `Materials assigned · ${properties.length} bodies · ${materials.length} material${materials.length > 1 ? "s" : ""}`
+            : `Material assigned · ${materials[0].name} · E=${fmt(materials[0].young, 3)} MPa`,
     ],
     [
       bcOk,

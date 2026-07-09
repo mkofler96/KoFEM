@@ -187,6 +187,7 @@ target_link_libraries(kofem_wasm_emcc PRIVATE
     # TKPrim   → BRepPrimAPI_MakeRevol/MakePrism, BRepSweep_* (IGESToBRep_TopoSurface)
     # TKBool   → BRepFill::Face/Shell (IGESToBRep_TopoSurface: IGES ruled-surface
     #            and tabulated-cylinder entities, types 118/122 — issue #319)
+    # TKBO     → BOPAlgo_MakeConnected (multibody interface imprinting — issue #353)
     # TKFillet → BRepFilletAPI_* (pulled in transitively by TKBool sweeps)
     # TKOffset → BRepOffset_* (transitively needed by TKFillet)
     TKCDF
@@ -202,6 +203,7 @@ target_link_libraries(kofem_wasm_emcc PRIVATE
     TKDESTL
     TKPrim
     TKBool
+    TKBO
     TKFillet
     TKOffset
 

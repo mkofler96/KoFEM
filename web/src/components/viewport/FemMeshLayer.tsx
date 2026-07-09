@@ -207,10 +207,16 @@ export function FemMeshLayer({
   const showSurfaceEdges = viewRepr === "surface";
   const showAllEdges = viewRepr === "volume" || viewRepr === "wireframe";
 
+  // In the Geometry representation the CAD tessellation (GeometryLayer) stands
+  // in for the part, so the FEM boundary surface must not also draw — otherwise
+  // the two overlap and z-fight. The edge overlays are already representation-
+  // gated below; this gates the solid fill to match.
+  const showFemSurface = viewRepr !== "geometry";
+
   return (
     <group>
       {/* Undeformed solid surface — light blue-grey on light background */}
-      {!showResult && undeformedSurface && (
+      {!showResult && showFemSurface && undeformedSurface && (
         <mesh onClick={onFacePick}>
           <bufferGeometry>
             <bufferAttribute

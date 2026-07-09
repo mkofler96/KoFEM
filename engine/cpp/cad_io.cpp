@@ -5,6 +5,7 @@
 
 #include "cad_io.h"
 
+#include <BOPAlgo_MakeConnected.hxx>
 #include <BRep_Builder.hxx>
 #include <BRep_Tool.hxx>
 #include <BRepBndLib.hxx>
@@ -175,6 +176,80 @@ TopoDS_Shape heal_shape(const TopoDS_Shape& shape) {
                              "meshing will fail loudly if they matter");
     (void)fflush(stdout);
     return healed;
+}
+
+int count_solids(const TopoDS_Shape& shape) {
+    return count_subshapes(shape, TopAbs_SOLID);
+}
+
+// Imprint the touching faces of a multibody assembly (see cad_io.h). After
+// BOPAlgo_MakeConnected, a face where two solids touch exists once and is
+// referenced by both solids, so Netgen's OCC mesher generates one triangulation
+// for it and the volume meshes of both bodies share those nodes — the bonded
+// (tie) interface of issue #353 falls out of mesh topology with no solver
+// coupling. Faces that only partially overlap are split first, so the shared
+// part is still a single common face.
+TopoDS_Shape imprint_touching_solids(const TopoDS_Shape& shape) {
+    const int nsolids = count_subshapes(shape, TopAbs_SOLID);
+    if (nsolids < 2)
+        return shape;
+
+    BOPAlgo_MakeConnected connector;
+    for (TopExp_Explorer e(shape, TopAbs_SOLID); e.More(); e.Next())
+        connector.AddArgument(e.Current());
+    connector.SetRunParallel(false);  // single-threaded WASM build
+    // Fuzzy tolerance absorbs sub-modeling-tolerance sloppiness between mating
+    // faces of separately modeled bodies. Deliberately much tighter than the
+    // sewing/healing tolerance (diag·1e-4): a large fuzzy value in a Boolean
+    // operation merges legitimately distinct geometry (thin walls, small
+    // clearances) instead of just coincident faces.
+    const double diag = shape_bbox_diagonal(shape);
+    if (diag > 0.0)
+        connector.SetFuzzyValue(diag * 1e-6);
+    connector.Perform();
+    if (connector.HasErrors())
+        throw std::runtime_error(
+            "BOPAlgo_MakeConnected failed to imprint the assembly's touching "
+            "faces — the bodies cannot be bonded for meshing. Check the CAD "
+            "model for overlapping (interpenetrating) solids and re-export.");
+
+    const TopoDS_Shape& connected = connector.Shape();
+    if (connected.IsNull() || count_subshapes(connected, TopAbs_SOLID) == 0)
+        throw std::runtime_error(
+            "BOPAlgo_MakeConnected produced no solids from a multibody assembly "
+            "— the imported geometry is inconsistent");
+
+    // Interface census: a face is an interface when two solids reference it.
+    // Bodies with no interface float freely unless individually constrained —
+    // their solve would be singular — so name them in the log now, where the
+    // cause is still obvious.
+    TopTools_IndexedDataMapOfShapeListOfShape face_solids;
+    TopExp::MapShapesAndAncestors(connected, TopAbs_FACE, TopAbs_SOLID, face_solids);
+    int n_interfaces = 0;
+    for (int i = 1; i <= face_solids.Extent(); ++i)
+        if (face_solids.FindFromIndex(i).Extent() >= 2)
+            ++n_interfaces;
+
+    int body_idx = 0;
+    for (TopExp_Explorer e(connected, TopAbs_SOLID); e.More(); e.Next()) {
+        ++body_idx;
+        bool touches_another = false;
+        for (TopExp_Explorer f(e.Current(), TopAbs_FACE);
+             f.More() && !touches_another; f.Next())
+            touches_another = face_solids.FindFromKey(f.Current()).Extent() >= 2;
+        if (!touches_another) {
+            (void)printf("[occt] imprint: WARNING body %d touches no other body — "
+                         "it is unconnected and will float unless it is "
+                         "individually constrained\n", body_idx);
+            (void)fflush(stdout);
+        }
+    }
+
+    (void)printf("[occt] imprint: %d bodies made connected — %d shared "
+                 "interface face(s) (fuzzy tol=%.4g mm)\n",
+                 nsolids, n_interfaces, diag > 0.0 ? diag * 1e-6 : 0.0);
+    (void)fflush(stdout);
+    return connected;
 }
 
 // Read a CAD file (STEP or IGES) from raw bytes into an OCCT shape.
