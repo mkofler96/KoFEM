@@ -377,7 +377,10 @@ export function buildCoupledModel(
   m: ShellizeMesh,
   shells: ShellExtraction,
   tieRep: Map<number, number>,
-  { couplingRadius = 10 }: { couplingRadius?: number } = {},
+  {
+    couplingRadius = 10,
+    maxCoupledNodes = 16,
+  }: { couplingRadius?: number; maxCoupledNodes?: number } = {},
 ): CoupledModel {
   const tied = (n: number) => tieRep.get(n) ?? n;
   const solidTets: number[] = [];
@@ -433,7 +436,7 @@ export function buildCoupledModel(
     const cx = Math.floor(p[0] / R),
       cy = Math.floor(p[1] / R),
       cz = Math.floor(p[2] / R);
-    const near: number[] = [];
+    const near: { pi: number; d2: number }[] = [];
     for (let dx = -1; dx <= 1; dx++)
       for (let dy = -1; dy <= 1; dy++)
         for (let dz = -1; dz <= 1; dz++) {
@@ -441,13 +444,20 @@ export function buildCoupledModel(
           if (!b) continue;
           for (const pi of b) {
             const q = ppt(pi);
-            if (Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]) <= R)
-              near.push(pi);
+            const d2 =
+              (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2;
+            if (d2 <= R * R) near.push({ pi, d2 });
           }
         }
     if (near.length >= 3) {
+      // Keep only the k NEAREST candidates: on a fine mesh a radius alone picks
+      // hundreds of solid nodes per coupling, and the RBE3 master-slave
+      // expansion is quadratic in that count — the reduction then dominates the
+      // whole solve. ~16 well-spread nodes transmit force and moment just as
+      // well, and bound the cost independently of mesh density.
+      near.sort((a, b) => a.d2 - b.d2);
       ref.push(gi);
-      solid.push(...near);
+      for (const { pi } of near.slice(0, maxCoupledNodes)) solid.push(pi);
       offsets.push(solid.length);
     }
   }

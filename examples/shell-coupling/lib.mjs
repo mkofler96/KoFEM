@@ -238,8 +238,10 @@ export function buildCoupledModel(mesh, shells, tie, { couplingRadius = 10 } = {
   const triangles = shells.shellTris.map((s) => shellPool[s]);
   const ppt = (i) => [pool[3 * i], pool[3 * i + 1], pool[3 * i + 2]];
 
-  // auto-couple: each shell node near ≥3 solid nodes → one distributing coupling
-  const R = couplingRadius;
+  // auto-couple: each shell node near ≥3 solid nodes → one distributing coupling.
+  // Capped at the 16 NEAREST candidates: the RBE3 expansion is quadratic in the
+  // per-coupling node count, and a radius alone picks hundreds on a fine mesh.
+  const R = couplingRadius, MAX_COUPLED = 16;
   const grid = new Map(), gk = (x, y, z) => `${Math.floor(x / R)},${Math.floor(y / R)},${Math.floor(z / R)}`;
   for (const [, pi] of solidPool) (grid.get(gk(...ppt(pi))) ?? grid.set(gk(...ppt(pi)), []).get(gk(...ppt(pi)))).push(pi);
   const ref = [], offsets = [0], solid = [];
@@ -250,9 +252,18 @@ export function buildCoupledModel(mesh, shells, tie, { couplingRadius = 10 } = {
     for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) {
       const b = grid.get(`${cx + dx},${cy + dy},${cz + dz}`);
       if (!b) continue;
-      for (const pi of b) if (Math.hypot(p[0] - ppt(pi)[0], p[1] - ppt(pi)[1], p[2] - ppt(pi)[2]) <= R) near.push(pi);
+      for (const pi of b) {
+        const q = ppt(pi);
+        const d2 = (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2;
+        if (d2 <= R * R) near.push({ pi, d2 });
+      }
     }
-    if (near.length >= 3) { ref.push(gi); solid.push(...near); offsets.push(solid.length); }
+    if (near.length >= 3) {
+      near.sort((a, b) => a.d2 - b.d2);
+      ref.push(gi);
+      for (const { pi } of near.slice(0, MAX_COUPLED)) solid.push(pi);
+      offsets.push(solid.length);
+    }
   }
 
   return {
