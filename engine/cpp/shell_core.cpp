@@ -209,33 +209,57 @@ struct Sparse {
     void add(int i, int j, double v) { rows[i][j] += v; }
 };
 
-// Diagonal-preconditioned CG. The system is SPD after essential BCs.
+// CG preconditioned by symmetric Gauss-Seidel (SSOR, ω=1) — the same smoother
+// class the MFEM solid path uses (GSSmoother): plain Jacobi needs several-fold
+// more iterations on these shell/coupled elasticity systems and stalls the
+// large fine-mesh models. The system is SPD after essential BCs.
 ShellResult cg_solve(const Sparse& K, const std::vector<double>& F) {
     const int n = static_cast<int>(F.size());
     // Flatten the assembly row-maps into CSR once: the CG matvec then scans
     // contiguous arrays instead of chasing std::map trees, which dominates the
     // runtime on the large coupled systems (thousands of iterations × ~10⁵ nnz).
+    // The map rows are column-ordered, so each CSR row is sorted and diagPos
+    // splits it into strict lower / diagonal / strict upper for the GS sweeps.
     std::vector<int> rowptr(n + 1, 0);
     for (int i = 0; i < n; ++i) rowptr[i + 1] = rowptr[i] + static_cast<int>(K.rows[i].size());
     const int nnz = rowptr[n];
     std::vector<int> col(nnz);
     std::vector<double> val(nnz);
-    std::vector<double> invM(n);
+    std::vector<int> diagPos(n, -1);
+    std::vector<double> dinv(n, 1.0);
     for (int i = 0, p = 0; i < n; ++i) {
-        double diag = 1.0;
         for (const auto& [j, v] : K.rows[i]) {
             col[p] = j;
             val[p] = v;
+            if (j == i && v != 0.0) {
+                diagPos[i] = p;
+                dinv[i] = 1.0 / v;
+            }
             ++p;
-            if (j == i && v != 0.0) diag = v;
         }
-        invM[i] = 1.0 / diag;
     }
     auto matvec = [&](const std::vector<double>& xv, std::vector<double>& yv) {
         for (int i = 0; i < n; ++i) {
             double s = 0.0;
             for (int k = rowptr[i]; k < rowptr[i + 1]; ++k) s += val[k] * xv[col[k]];
             yv[i] = s;
+        }
+    };
+    // z = M⁻¹ r with M = (D+L)·D⁻¹·(D+U): forward substitution, diagonal scale,
+    // backward substitution. Rows without a diagonal degrade to Jacobi on that row.
+    auto apply_prec = [&](const std::vector<double>& r, std::vector<double>& z) {
+        for (int i = 0; i < n; ++i) {  // (D+L)·u = r
+            double s = r[i];
+            const int dp = diagPos[i] >= 0 ? diagPos[i] : rowptr[i + 1];
+            for (int k = rowptr[i]; k < dp; ++k) s -= val[k] * z[col[k]];
+            z[i] = s * dinv[i];
+        }
+        for (int i = 0; i < n; ++i) z[i] *= (diagPos[i] >= 0 ? val[diagPos[i]] : 1.0);  // w = D·u
+        for (int i = n - 1; i >= 0; --i) {  // (D+U)·z = w
+            double s = z[i];
+            const int dp = diagPos[i] >= 0 ? diagPos[i] : rowptr[i] - 1;
+            for (int k = dp + 1; k < rowptr[i + 1]; ++k) s -= val[k] * z[col[k]];
+            z[i] = s * dinv[i];
         }
     };
 
@@ -245,7 +269,8 @@ ShellResult cg_solve(const Sparse& K, const std::vector<double>& F) {
     bnorm = std::sqrt(bnorm);
     if (bnorm == 0.0) return {std::vector<double>(n, 0.0), true, 0, 0.0};
 
-    for (int i = 0; i < n; ++i) { z[i] = invM[i] * r[i]; p[i] = z[i]; }
+    apply_prec(r, z);
+    p = z;
     double rz = 0.0;
     for (int i = 0; i < n; ++i) rz += r[i] * z[i];
 
@@ -267,7 +292,7 @@ ShellResult cg_solve(const Sparse& K, const std::vector<double>& F) {
         res.iterations = it + 1;
         res.rel_residual = rnorm / bnorm;
         if (res.rel_residual < tol) { res.converged = true; break; }
-        for (int i = 0; i < n; ++i) z[i] = invM[i] * r[i];
+        apply_prec(r, z);
         double rz_new = 0.0;
         for (int i = 0; i < n; ++i) rz_new += r[i] * z[i];
         const double beta = rz_new / rz;
