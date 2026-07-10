@@ -5,9 +5,9 @@
 
 #include "shell_core.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
-#include <map>
 #include <stdexcept>
 #include <string>
 
@@ -201,25 +201,45 @@ std::array<std::array<double, 9>, 9> bending_stiffness(
     return K;
 }
 
-// ── Sparse SPD system: ordered row maps for assembly; cg_solve flattens these
-//    to CSR before iterating. ────────────────────────────────────────────────
+// ── Sparse SPD system: sorted-vector rows for assembly; cg_solve flattens these
+//    to CSR before iterating. Rows were std::map originally, but at ~40–50 bytes
+//    per node-based entry the big coupled systems (~10⁷ entries, two matrices
+//    alive at once) exhausted the 2 GB WASM heap — a sorted vector is 16 B/entry
+//    and cache-friendly for both the O(row-width) insert and the CSR flatten. ──
 struct Sparse {
-    std::vector<std::map<int, double>> rows;
+    using Row = std::vector<std::pair<int, double>>;
+    std::vector<Row> rows;
     explicit Sparse(int n) : rows(n) {}
-    void add(int i, int j, double v) { rows[i][j] += v; }
+    void add(int i, int j, double v) {
+        Row& row = rows[i];
+        auto it = std::lower_bound(
+            row.begin(), row.end(), j,
+            [](const std::pair<int, double>& e, int c) { return e.first < c; });
+        if (it != row.end() && it->first == j)
+            it->second += v;
+        else
+            row.insert(it, {j, v});
+    }
+    // Release all row storage (the CSR copy or the reduced system owns the data
+    // from here on) — keeps peak memory to one matrix at a time.
+    void free_rows() {
+        std::vector<Row>().swap(rows);
+    }
 };
 
 // CG preconditioned by symmetric Gauss-Seidel (SSOR, ω=1) — the same smoother
 // class the MFEM solid path uses (GSSmoother): plain Jacobi needs several-fold
 // more iterations on these shell/coupled elasticity systems and stalls the
 // large fine-mesh models. The system is SPD after essential BCs.
-ShellResult cg_solve(const Sparse& K, const std::vector<double>& F) {
+//
+// Consumes K: each assembly row is released as soon as it is copied into the
+// CSR arrays, so the assembly storage and the CSR copy never coexist in full —
+// this matters on the ~10⁷-entry coupled systems inside the WASM heap cap.
+ShellResult cg_solve(Sparse& K, const std::vector<double>& F) {
     const int n = static_cast<int>(F.size());
-    // Flatten the assembly row-maps into CSR once: the CG matvec then scans
-    // contiguous arrays instead of chasing std::map trees, which dominates the
-    // runtime on the large coupled systems (thousands of iterations × ~10⁵ nnz).
-    // The map rows are column-ordered, so each CSR row is sorted and diagPos
-    // splits it into strict lower / diagonal / strict upper for the GS sweeps.
+    // Flatten the sorted assembly rows into CSR once: the CG matvec then scans
+    // contiguous arrays. Rows are column-sorted, so diagPos splits each CSR row
+    // into strict lower / diagonal / strict upper for the GS sweeps.
     std::vector<int> rowptr(n + 1, 0);
     for (int i = 0; i < n; ++i) rowptr[i + 1] = rowptr[i] + static_cast<int>(K.rows[i].size());
     const int nnz = rowptr[n];
@@ -237,7 +257,9 @@ ShellResult cg_solve(const Sparse& K, const std::vector<double>& F) {
             }
             ++p;
         }
+        Sparse::Row().swap(K.rows[i]);  // release this row's assembly storage
     }
+    K.free_rows();
     auto matvec = [&](const std::vector<double>& xv, std::vector<double>& yv) {
         for (int i = 0; i < n; ++i) {
             double s = 0.0;
@@ -397,16 +419,15 @@ void apply_homogeneous_bc(Sparse& K, std::vector<double>& F, const std::vector<c
     const int n = static_cast<int>(F.size());
     for (int i = 0; i < n; ++i) {
         if (fixed[i]) {
-            K.rows[i].clear();
-            K.rows[i][i] = 1.0;
+            K.rows[i].assign(1, {i, 1.0});
             F[i] = 0.0;
         } else {
-            for (auto it = K.rows[i].begin(); it != K.rows[i].end();) {
-                if (fixed[it->first])
-                    it = K.rows[i].erase(it);
-                else
-                    ++it;
-            }
+            auto& row = K.rows[i];
+            row.erase(std::remove_if(row.begin(), row.end(),
+                                     [&](const std::pair<int, double>& e) {
+                                         return fixed[e.first] != 0;
+                                     }),
+                      row.end());
         }
     }
 }
@@ -658,7 +679,11 @@ ShellResult solve_solid_shell_core(const CoupledInput& in) {
             for (const auto& [pi, ci] : ei)
                 for (const auto& [pj, cj] : ej) Kr.add(red[pi], red[pj], ci * cj * v);
         }
+        // This row is fully transformed into Kr — release it now so the full and
+        // reduced systems never coexist in full (WASM heap headroom).
+        Sparse::Row().swap(K.rows[i]);
     }
+    K.free_rows();
     std::vector<double> Fr(nIndep, 0.0);
     for (int i = 0; i < nDof; ++i)
         if (F[i] != 0.0)
