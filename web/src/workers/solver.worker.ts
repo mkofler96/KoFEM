@@ -13,6 +13,14 @@ import {
   tiedId,
   expandToOriginalNodes,
 } from "./tie.js";
+import {
+  extractThinWallShells,
+  tieSolidBodies,
+  buildCoupledModel,
+  shellNodeLocator,
+  isShellPoolIndex,
+  type ShellizeMesh,
+} from "../lib/shellize.js";
 
 let Module: KofemModule | null = null;
 
@@ -154,6 +162,10 @@ interface SolvePayload {
   // Bonded-tie detection distance (mm): weld near-contact nodes of different
   // bodies so parts that touch without a shared face are joined (#359). 0 = off.
   tieDistance?: number;
+  // Surface mesh + per-triangle CAD face id (from meshing / the analysis file):
+  // needed to detect thin-walled bodies and idealise them as shells (auto-shell).
+  surfaceTriangles?: [number, number, number][] | null;
+  surfaceFaceIds?: number[] | null;
 }
 
 // ── parse_step ────────────────────────────────────────────────────────────────
@@ -471,7 +483,225 @@ function groupPointLoads(loads: Load[], vid: VertexIndexer) {
   return [...loadMap.entries()].map(([vertex, force]) => ({ vertex, force }));
 }
 
+// ── Auto-shell coupled solve ────────────────────────────────────────────────
+
+// Flat 0-based mesh for the shellize pipeline, built from the store model.
+function buildShellizeMesh(
+  nodes: Node[],
+  tetElements: Element[],
+  surfaceTriangles: [number, number, number][],
+  surfaceFaceIds: number[],
+  vid: VertexIndexer,
+): ShellizeMesh {
+  const verts = new Array<number>(3 * nodes.length);
+  for (let i = 0; i < nodes.length; i++) {
+    verts[3 * i] = nodes[i].x;
+    verts[3 * i + 1] = nodes[i].y;
+    verts[3 * i + 2] = nodes[i].z;
+  }
+  const tet: number[] = [];
+  const body: number[] = [];
+  for (const el of tetElements) {
+    for (const nid of el.nodeIds) tet.push(vid(nid, "shellize tet"));
+    body.push(el.propertyId);
+  }
+  const surfTri: number[] = [];
+  const surfFace: number[] = [];
+  for (let t = 0; t < surfaceTriangles.length; t++) {
+    const [triA, triB, triC] = surfaceTriangles[t];
+    surfTri.push(
+      vid(triA, "surface tri"),
+      vid(triB, "surface tri"),
+      vid(triC, "surface tri"),
+    );
+    surfFace.push(surfaceFaceIds[t]);
+  }
+  return { V: verts, tet, body, surfTri, surfFace };
+}
+
+// Solid and shell material for the coupled solve (single each). The shell uses
+// the thin body's material; the solid uses any other body's. Multi-material
+// solids collapse to the first solid body's material for now.
+function coupledMaterials(
+  materials: Material[],
+  properties: Property[],
+  shellBody: number,
+) {
+  const matOf = (propId: number) => {
+    const prop = properties.find((p) => p.id === propId);
+    const mat = prop && materials.find((mm) => mm.id === prop.materialId);
+    return mat ?? materials[0];
+  };
+  const shellMat = matOf(shellBody);
+  const solidProp = properties.find((p) => p.id !== shellBody) ?? properties[0];
+  const solidMat = matOf(solidProp.id);
+  return {
+    solid: { young_modulus: solidMat.young, poisson_ratio: solidMat.poisson },
+    shell: { young_modulus: shellMat.young, poisson_ratio: shellMat.poisson },
+  };
+}
+
+// Returns the coupled displacement/von-Mises result, or null when the model has
+// no thin-walled body to shell (→ the caller runs the all-solid path).
+function tryCoupledSolve(
+  payload: SolvePayload,
+): { displacements: Float64Array; vonMises: Float64Array } | null {
+  const {
+    nodes,
+    elements,
+    materials,
+    properties,
+    constraints,
+    loads,
+    surfaceLoads,
+  } = payload;
+  const surfaceTriangles = payload.surfaceTriangles;
+  const surfaceFaceIds = payload.surfaceFaceIds;
+  if (!surfaceTriangles || !surfaceFaceIds || surfaceTriangles.length === 0)
+    return null;
+  if (surfaceFaceIds.length !== surfaceTriangles.length) return null;
+  const tetElements = elements.filter((e) => e.type === "CTETRA");
+  if (tetElements.length !== elements.length) return null; // coupled path is tets-only for now
+  if (new Set(elements.map((e) => e.propertyId)).size < 2) return null; // need a multibody assembly
+
+  const vid = buildVertexIndexer(nodes);
+  const mesh = buildShellizeMesh(
+    nodes,
+    tetElements,
+    surfaceTriangles,
+    surfaceFaceIds,
+    vid,
+  );
+  const shells = extractThinWallShells(mesh);
+  if (shells.shellBody < 0) return null; // no thin walls → all-solid path
+
+  const tieRep = tieSolidBodies(mesh, shells.shellBody);
+  const model = buildCoupledModel(mesh, shells, tieRep);
+  if (model.coupling.ref.length === 0) return null; // shell doesn't couple to the solid
+
+  const nearestShell = shellNodeLocator(model);
+  const poolOf = (nodeId: number): number => {
+    const vi = vid(nodeId, "coupled bc");
+    const sp = model.solidPool.get(model.tied(vi));
+    if (sp !== undefined) return sp;
+    return nearestShell([
+      mesh.V[3 * vi],
+      mesh.V[3 * vi + 1],
+      mesh.V[3 * vi + 2],
+    ]);
+  };
+
+  // Essential BCs: a translation maps to its pool node; a shelled node clamped in
+  // all three translations is also clamped in rotation.
+  const fixedByPool = new Map<number, Set<number>>();
+  for (const c of constraints) {
+    if (c.dof > 2) continue;
+    const pi = poolOf(c.nodeId);
+    (fixedByPool.get(pi) ?? fixedByPool.set(pi, new Set()).get(pi)!).add(c.dof);
+  }
+  const fixed_dofs: number[] = [];
+  for (const [pi, dofs] of fixedByPool) {
+    for (const d of dofs) fixed_dofs.push(6 * pi + d);
+    if (
+      isShellPoolIndex(model, pi) &&
+      dofs.has(0) &&
+      dofs.has(1) &&
+      dofs.has(2)
+    )
+      for (const d of [3, 4, 5]) fixed_dofs.push(6 * pi + d);
+  }
+
+  // Loads → equivalent nodal forces on the pool.
+  const load_dofs: number[] = [];
+  const load_vals: number[] = [];
+  for (const l of loads) {
+    if (l.dof > 2) continue;
+    load_dofs.push(6 * poolOf(l.nodeId) + l.dof);
+    load_vals.push(l.value);
+  }
+  for (const sl of surfaceLoads ?? []) {
+    if ((sl.type !== "force" && sl.type !== "traction") || !sl.force) continue; // pressure not mapped yet
+    const nodeSet = new Set<number>();
+    for (const f of sl.faces) for (const n of f) nodeSet.add(n);
+    if (nodeSet.size === 0) continue;
+    const per = sl.force.map((v) => v / nodeSet.size);
+    for (const nid of nodeSet) {
+      const pi = poolOf(nid);
+      for (let d = 0; d < 3; d++)
+        if (per[d] !== 0) {
+          load_dofs.push(6 * pi + d);
+          load_vals.push(per[d]);
+        }
+    }
+  }
+
+  self.postMessage({
+    id: 0,
+    log: `[auto-shell] body ${shells.shellBody}: ${shells.walls.length} thin walls → ${model.shellPool.length} shell nodes, ${model.tets.length / 4} solid tets, ${model.coupling.ref.length} couplings`,
+  });
+
+  const result = m().solve_coupled(
+    {
+      vertices: Float64Array.from(model.pool),
+      tets: Int32Array.from(model.tets),
+      triangles: Int32Array.from(model.triangles),
+      thicknesses: Float64Array.from(model.thicknesses),
+    },
+    {
+      ref: Int32Array.from(model.coupling.ref),
+      offsets: Int32Array.from(model.coupling.offsets),
+      solid: Int32Array.from(model.coupling.solid),
+    },
+    {
+      fixed_dofs: Int32Array.from(fixed_dofs),
+      load_dofs: Int32Array.from(load_dofs),
+      load_vals: Float64Array.from(load_vals),
+    },
+    JSON.stringify(coupledMaterials(materials, properties, shells.shellBody)),
+  );
+  if ("error" in result) throw new Error(result.error);
+
+  // Map displacements onto every original store node: solid nodes directly, the
+  // shelled body's nodes from their nearest mid-surface node. von Mises for the
+  // coupled path is a follow-up, so it is reported as zeros.
+  const rd = result.displacements;
+  const displacements = new Float64Array(3 * nodes.length);
+  for (let i = 0; i < nodes.length; i++) {
+    const sp = model.solidPool.get(model.tied(i));
+    const pi =
+      sp !== undefined
+        ? sp
+        : nearestShell([nodes[i].x, nodes[i].y, nodes[i].z]);
+    displacements[3 * i] = rd[3 * pi];
+    displacements[3 * i + 1] = rd[3 * pi + 1];
+    displacements[3 * i + 2] = rd[3 * pi + 2];
+  }
+  return { displacements, vonMises: new Float64Array(elements.length) };
+}
+
 function handleSolve(id: number, payload: SolvePayload) {
+  // Auto-shell: a thin-walled body of a multibody assembly is idealised as shells
+  // and solved coupled to the solid bodies — this converges where the all-solid
+  // solve of the thin part stalls (#358). Falls back to the all-solid path below
+  // when there is no thin-walled body to shell.
+  const coupled = tryCoupledSolve(payload);
+  if (coupled) {
+    self.postMessage({
+      id,
+      log: `Coupled solve complete: ${coupled.displacements.length / 3} vertex displacements`,
+    });
+    self.postMessage(
+      {
+        id,
+        ok: true,
+        displacements: coupled.displacements,
+        vonMises: coupled.vonMises,
+      },
+      [coupled.displacements.buffer, coupled.vonMises.buffer],
+    );
+    return;
+  }
+
   const {
     nodes,
     elements,
