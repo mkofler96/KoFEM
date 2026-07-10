@@ -201,29 +201,45 @@ std::array<std::array<double, 9>, 9> bending_stiffness(
     return K;
 }
 
-// ── Sparse SPD system (row maps for assembly, CSR-free CG) ─────────────────────
+// ── Sparse SPD system: ordered row maps for assembly; cg_solve flattens these
+//    to CSR before iterating. ────────────────────────────────────────────────
 struct Sparse {
     std::vector<std::map<int, double>> rows;
     explicit Sparse(int n) : rows(n) {}
     void add(int i, int j, double v) { rows[i][j] += v; }
-    void matvec(const std::vector<double>& x, std::vector<double>& y) const {
-        for (size_t i = 0; i < rows.size(); ++i) {
-            double s = 0.0;
-            for (const auto& [j, v] : rows[i]) s += v * x[j];
-            y[i] = s;
-        }
-    }
 };
 
 // Diagonal-preconditioned CG. The system is SPD after essential BCs.
 ShellResult cg_solve(const Sparse& K, const std::vector<double>& F) {
     const int n = static_cast<int>(F.size());
-    std::vector<double> x(n, 0.0), r = F, z(n), p(n), Ap(n), invM(n);
-    for (int i = 0; i < n; ++i) {
-        auto it = K.rows[i].find(i);
-        const double diag = (it != K.rows[i].end() && it->second != 0.0) ? it->second : 1.0;
+    // Flatten the assembly row-maps into CSR once: the CG matvec then scans
+    // contiguous arrays instead of chasing std::map trees, which dominates the
+    // runtime on the large coupled systems (thousands of iterations × ~10⁵ nnz).
+    std::vector<int> rowptr(n + 1, 0);
+    for (int i = 0; i < n; ++i) rowptr[i + 1] = rowptr[i] + static_cast<int>(K.rows[i].size());
+    const int nnz = rowptr[n];
+    std::vector<int> col(nnz);
+    std::vector<double> val(nnz);
+    std::vector<double> invM(n);
+    for (int i = 0, p = 0; i < n; ++i) {
+        double diag = 1.0;
+        for (const auto& [j, v] : K.rows[i]) {
+            col[p] = j;
+            val[p] = v;
+            ++p;
+            if (j == i && v != 0.0) diag = v;
+        }
         invM[i] = 1.0 / diag;
     }
+    auto matvec = [&](const std::vector<double>& xv, std::vector<double>& yv) {
+        for (int i = 0; i < n; ++i) {
+            double s = 0.0;
+            for (int k = rowptr[i]; k < rowptr[i + 1]; ++k) s += val[k] * xv[col[k]];
+            yv[i] = s;
+        }
+    };
+
+    std::vector<double> x(n, 0.0), r = F, z(n), p(n), Ap(n);
     double bnorm = 0.0;
     for (double f : F) bnorm += f * f;
     bnorm = std::sqrt(bnorm);
@@ -237,7 +253,7 @@ ShellResult cg_solve(const Sparse& K, const std::vector<double>& F) {
     const double tol = 1e-10;
     ShellResult res;
     for (int it = 0; it < maxit; ++it) {
-        K.matvec(p, Ap);
+        matvec(p, Ap);
         double pAp = 0.0;
         for (int i = 0; i < n; ++i) pAp += p[i] * Ap[i];
         const double alpha = rz / pAp;
