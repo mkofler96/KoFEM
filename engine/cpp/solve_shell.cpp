@@ -88,6 +88,11 @@ val solve_shell(val mesh, const std::string& mat_json, const std::string& bcs_js
     kofem::shell::ShellInput in;
     in.vertices = f64_vector(mesh["vertices"], "mesh.vertices");
     in.triangles = i32_vector(mesh["triangles"], "mesh.triangles");
+    // Optional per-triangle thickness (thin walls of differing gauge become one
+    // shell mesh with a thickness field); falls back to the scalar in mat_json.
+    val thick_js = mesh["thicknesses"];
+    if (!thick_js.isUndefined() && !thick_js.isNull())
+        in.thicknesses = f64_vector(thick_js, "mesh.thicknesses");
 
     if (in.vertices.size() % 3 != 0)
         return error_result("mesh.vertices length " + std::to_string(in.vertices.size()) +
@@ -107,13 +112,20 @@ val solve_shell(val mesh, const std::string& mat_json, const std::string& bcs_js
         return error_result("material is missing young_modulus");
     if (nu.isNull() || nu.isUndefined())
         return error_result("material is missing poisson_ratio");
-    if (th.isNull() || th.isUndefined())
-        return error_result("material is missing thickness (required for shell elements)");
     in.young = E.as<double>();
     in.poisson = nu.as<double>();
-    in.thickness = th.as<double>();
-    if (in.thickness <= 0.0)
-        return error_result("shell thickness must be positive");
+    const int n_tris = static_cast<int>(in.triangles.size() / 3);
+    const bool has_per_facet = static_cast<int>(in.thicknesses.size()) == n_tris;
+    // A uniform thickness is required unless a valid per-triangle field is given.
+    if (!has_per_facet) {
+        if (th.isNull() || th.isUndefined())
+            return error_result("material is missing thickness (required for shell elements)");
+        in.thickness = th.as<double>();
+        if (in.thickness <= 0.0)
+            return error_result("shell thickness must be positive");
+    } else if (!th.isNull() && !th.isUndefined()) {
+        in.thickness = th.as<double>();  // kept as a fallback; per-facet field wins
+    }
 
     val bcs = parse_json(bcs_json);
     add_fixed_vertices(bcs["fixed_vertices"], n_nodes, in.fixed_dofs);

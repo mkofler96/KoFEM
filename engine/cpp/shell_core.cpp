@@ -377,18 +377,24 @@ ShellResult solve_shell_core(const ShellInput& in) {
         throw std::runtime_error("shell: vertices length not divisible by 3");
     if (in.triangles.size() % 3 != 0)
         throw std::runtime_error("shell: triangles length not divisible by 3");
-    if (in.thickness <= 0.0)
-        throw std::runtime_error("shell: thickness must be positive");
     const int nNodes = static_cast<int>(in.vertices.size() / 3);
     const int nTris = static_cast<int>(in.triangles.size() / 3);
     if (nNodes == 0 || nTris == 0)
         throw std::runtime_error("shell: mesh has no nodes or no triangles");
     const int nDof = 6 * nNodes;
 
+    // Thickness is either a valid per-facet field or a positive uniform scalar.
+    const bool per_facet = static_cast<int>(in.thicknesses.size()) == nTris;
+    if (!per_facet && in.thickness <= 0.0)
+        throw std::runtime_error("shell: thickness must be positive");
+    if (per_facet)
+        for (double tk : in.thicknesses)
+            if (tk <= 0.0) throw std::runtime_error("shell: per-facet thickness must be positive");
     Sparse K(nDof);
     for (int e = 0; e < nTris; ++e)
         assemble_shell_element(K, in.vertices, in.triangles[3 * e], in.triangles[3 * e + 1],
-                               in.triangles[3 * e + 2], in.thickness, in.young, in.poisson);
+                               in.triangles[3 * e + 2], per_facet ? in.thicknesses[e] : in.thickness,
+                               in.young, in.poisson);
 
     std::vector<double> F(nDof, 0.0);
     for (const auto& [dof, val] : in.loads) {
@@ -517,9 +523,11 @@ ShellResult solve_solid_shell_core(const CoupledInput& in) {
     // Shell facets → all 6 DOFs; record which nodes carry rotational stiffness.
     std::vector<char> is_shell(nNodes, 0);
     const int nTris = static_cast<int>(in.triangles.size() / 3);
+    const bool per_facet = static_cast<int>(in.thicknesses.size()) == nTris;
     for (int e = 0; e < nTris; ++e) {
         const int a = in.triangles[3 * e], b = in.triangles[3 * e + 1], c = in.triangles[3 * e + 2];
-        assemble_shell_element(K, in.vertices, a, b, c, in.thickness, in.shell_young, in.shell_poisson);
+        assemble_shell_element(K, in.vertices, a, b, c, per_facet ? in.thicknesses[e] : in.thickness,
+                               in.shell_young, in.shell_poisson);
         is_shell[a] = is_shell[b] = is_shell[c] = 1;
     }
 

@@ -51,10 +51,13 @@ export type StaticSolveResult =
 
 /** Triangle SURFACE mesh input to the Kirchhoff shell solver: `vertices` is xyz
  *  interleaved (length 3·nNodes); `triangles` is three 0-based vertex indices
- *  per triangle (length 3·nTris). */
+ *  per triangle (length 3·nTris). `thicknesses` is an optional per-triangle
+ *  thickness field (length nTris) for walls of differing gauge; when omitted the
+ *  scalar thickness in the material JSON is used. */
 export interface ShellMesh {
   vertices: Float64Array
   triangles: Int32Array
+  thicknesses?: Float64Array
 }
 
 /** Shell solve output: three translation components (u,v,w) per vertex

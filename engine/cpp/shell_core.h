@@ -32,7 +32,8 @@ namespace kofem::shell {
 struct ShellInput {
     std::vector<double> vertices;   // 3·nNodes, xyz interleaved
     std::vector<int> triangles;     // 3·nTris, three 0-based vertex indices/tri
-    double thickness = 0.0;         // shell thickness t (uniform)
+    double thickness = 0.0;         // uniform thickness (fallback when per-facet empty)
+    std::vector<double> thicknesses;  // optional per-triangle thickness (length nTris)
     double young = 0.0;             // Young's modulus E
     double poisson = 0.0;           // Poisson ratio ν
     std::vector<int> fixed_dofs;    // global DOF indices constrained to zero
@@ -90,7 +91,8 @@ struct CoupledInput {
     std::vector<int> triangles;          // 3·nTris, 0-based node indices (shell)
     double shell_young = 0.0;
     double shell_poisson = 0.0;
-    double thickness = 0.0;              // shell thickness
+    double thickness = 0.0;              // uniform thickness (fallback)
+    std::vector<double> thicknesses;     // optional per-triangle thickness
     std::vector<Coupling> couplings;
     std::vector<int> fixed_dofs;         // global DOF (6·node+comp) fixed to zero
     std::vector<std::pair<int, double>> loads;  // global DOF → force/moment
