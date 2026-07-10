@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdio>
 #include <stdexcept>
 #include <string>
 
@@ -296,6 +297,9 @@ ShellResult cg_solve(Sparse& K, const std::vector<double>& F) {
     double rz = 0.0;
     for (int i = 0; i < n; ++i) rz += r[i] * z[i];
 
+    printf("[shell] starting CG: %d unknowns, %d nonzeros\n", n, nnz);
+    fflush(stdout);
+
     const int maxit = 20000;
     const double tol = 1e-10;
     ShellResult res;
@@ -313,6 +317,12 @@ ShellResult cg_solve(Sparse& K, const std::vector<double>& F) {
         rnorm = std::sqrt(rnorm);
         res.iterations = it + 1;
         res.rel_residual = rnorm / bnorm;
+        // Progress feed for the browser log panel — same role as the solid
+        // path's CGLogMonitor, so a long coupled solve is visibly alive.
+        if (it % 100 == 0) {
+            printf("[shell] CG iteration %5d: relative residual %.3e\n", it, res.rel_residual);
+            fflush(stdout);
+        }
         if (res.rel_residual < tol) { res.converged = true; break; }
         apply_prec(r, z);
         double rz_new = 0.0;
