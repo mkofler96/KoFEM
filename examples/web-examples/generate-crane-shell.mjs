@@ -113,6 +113,9 @@ const entry = {
     "the pin and hook stay solid, and the two are joined by a distributing (RBE3) " +
     "coupling. This coupled model converges where the all-solid mesh stalls (#358).",
   showcase: true,
+  // "Open in KoFEM web" opens the underlying crane assembly (the app can't
+  // re-solve the coupled shell model yet — that's the app-integration follow-up).
+  appId: "full-crane-hook",
   metrics: [
     { k: "max displacement", v: `${magMax.toPrecision(3)} mm` },
     { k: "coupled solve", v: `converged · ${r.iterations} it`, pass: true },

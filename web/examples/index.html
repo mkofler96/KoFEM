@@ -768,12 +768,14 @@
       function card(ex) {
         const el = document.createElement("article");
         el.className = "card";
-        // "Open in KoFEM web" links to the editable analysis; showcase cards
-        // (e.g. the coupled shell+solid crane, which the app can't yet re-solve)
-        // are viewer-only and omit it.
-        const openLink = ex.showcase
+        // "Open in KoFEM web" opens the editable analysis. Benchmark cards open
+        // their own id; a showcase card (e.g. the coupled crane, which the app
+        // can't re-solve as shells) can point `appId` at a related openable model
+        // — the crane assembly — or omit the link entirely.
+        const appId = ex.appId ?? (ex.showcase ? null : ex.id);
+        const openLink = !appId
           ? ""
-          : `<a class="open-link" href="/app/?example=${encodeURIComponent(ex.id)}">
+          : `<a class="open-link" href="/app/?example=${encodeURIComponent(appId)}">
                 Open in KoFEM web
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
