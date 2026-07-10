@@ -25,6 +25,7 @@
 
 #include "geometry_cache.h"
 #include "mesh_netgen.h"
+#include "solve_coupled.h"
 #include "solve_mfem.h"
 #include "solve_shell.h"
 #include "tessellate.h"
@@ -39,4 +40,5 @@ EMSCRIPTEN_BINDINGS(kofem) {
     emscripten::function("free_geometry_cache",    &free_geometry_cache);
     emscripten::function("solve_linear_elastic",   &solve_linear_elastic);
     emscripten::function("solve_shell",            &solve_shell);
+    emscripten::function("solve_coupled",          &solve_coupled);
 }
