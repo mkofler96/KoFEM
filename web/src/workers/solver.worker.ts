@@ -662,8 +662,7 @@ function tryCoupledSolve(
   if ("error" in result) throw new Error(result.error);
 
   // Map displacements onto every original store node: solid nodes directly, the
-  // shelled body's nodes from their nearest mid-surface node. von Mises for the
-  // coupled path is a follow-up, so it is reported as zeros.
+  // shelled body's nodes from their nearest mid-surface node.
   const rd = result.displacements;
   const displacements = new Float64Array(3 * nodes.length);
   for (let i = 0; i < nodes.length; i++) {
@@ -676,7 +675,45 @@ function tryCoupledSolve(
     displacements[3 * i + 1] = rd[3 * pi + 1];
     displacements[3 * i + 2] = rd[3 * pi + 2];
   }
-  return { displacements, vonMises: new Float64Array(elements.length) };
+
+  // Von Mises per ORIGINAL element. Solid-body elements map 1:1 (the coupled
+  // tets were appended in element order, skipping the shelled body). Elements
+  // of the shelled body take the stress of the shell node nearest their
+  // centroid — per shell node, the worst adjacent facet's surface stress.
+  const vmByShellNode = new Map<number, number>();
+  for (let t = 0; t < model.triangles.length / 3; t++) {
+    const facetVm = result.von_mises_tris[t];
+    for (const pi of [
+      model.triangles[3 * t],
+      model.triangles[3 * t + 1],
+      model.triangles[3 * t + 2],
+    ])
+      // eslint-disable-next-line kofem/no-silent-fallback -- running max over adjacent facets; 0 is the identity for a node seen for the first time
+      vmByShellNode.set(pi, Math.max(vmByShellNode.get(pi) ?? 0, facetVm));
+  }
+  const nodeById = new Map(nodes.map((n) => [n.id, n]));
+  const vonMises = new Float64Array(elements.length);
+  let solidIdx = 0;
+  for (let e = 0; e < elements.length; e++) {
+    if (elements[e].propertyId !== shells.shellBody) {
+      vonMises[e] = result.von_mises_tets[solidIdx++];
+    } else {
+      let cx = 0,
+        cy = 0,
+        cz = 0;
+      for (const nid of elements[e].nodeIds) {
+        const nd = nodeById.get(nid)!;
+        cx += nd.x;
+        cy += nd.y;
+        cz += nd.z;
+      }
+      const k = elements[e].nodeIds.length;
+      const pi = nearestShell([cx / k, cy / k, cz / k]);
+      // eslint-disable-next-line kofem/no-silent-fallback -- a mid-surface node not touched by any facet (isolated weld artefact) carries no recovered stress
+      vonMises[e] = vmByShellNode.get(pi) ?? 0;
+    }
+  }
+  return { displacements, vonMises };
 }
 
 function handleSolve(id: number, payload: SolvePayload) {

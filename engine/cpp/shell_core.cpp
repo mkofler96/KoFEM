@@ -142,9 +142,7 @@ void dkt_H_derivs(const DktGeom& g, double xi, double eta,
     build(dNeta, Hx_eta, Hy_eta);
 }
 
-std::array<std::array<double, 9>, 9> bending_stiffness(
-    const std::array<double, 3>& x, const std::array<double, 3>& y, double area,
-    double t, double E, double nu) {
+DktGeom make_dkt_geom(const std::array<double, 3>& x, const std::array<double, 3>& y) {
     DktGeom g{};
     // side vectors: k=0 side 2-3, k=1 side 3-1, k=2 side 1-2
     const std::array<double, 3> xij = {x[1] - x[2], x[2] - x[0], x[0] - x[1]};
@@ -157,14 +155,37 @@ std::array<std::array<double, 9>, 9> bending_stiffness(
         g.d[k] = -yij[k] / l2;
         g.e[k] = (0.25 * yij[k] * yij[k] - 0.5 * xij[k] * xij[k]) / l2;
     }
+    return g;
+}
 
-    // Inverse-Jacobian entries (constant over the linear triangle map):
-    //   x = x0 + (x1−x0)ξ + (x2−x0)η,  detJ = 2A.
+// DKT curvature-displacement matrix κ = B·u_b at one parametric point.
+std::array<std::array<double, 9>, 3> dkt_curvature_B(
+    const DktGeom& g, const std::array<double, 3>& x, const std::array<double, 3>& y,
+    double area, double xi, double eta) {
     const double det = 2.0 * area;
     const double dxi_dx = (y[2] - y[0]) / det;
     const double dxi_dy = -(x[2] - x[0]) / det;
     const double deta_dx = -(y[1] - y[0]) / det;
     const double deta_dy = (x[1] - x[0]) / det;
+    std::array<double, 9> Hx_xi{}, Hx_eta{}, Hy_xi{}, Hy_eta{};
+    dkt_H_derivs(g, xi, eta, Hx_xi, Hx_eta, Hy_xi, Hy_eta);
+    std::array<std::array<double, 9>, 3> B{};
+    for (int i = 0; i < 9; ++i) {
+        const double Hx_x = Hx_xi[i] * dxi_dx + Hx_eta[i] * deta_dx;
+        const double Hx_y = Hx_xi[i] * dxi_dy + Hx_eta[i] * deta_dy;
+        const double Hy_x = Hy_xi[i] * dxi_dx + Hy_eta[i] * deta_dx;
+        const double Hy_y = Hy_xi[i] * dxi_dy + Hy_eta[i] * deta_dy;
+        B[0][i] = Hx_x;
+        B[1][i] = Hy_y;
+        B[2][i] = Hx_y + Hy_x;
+    }
+    return B;
+}
+
+std::array<std::array<double, 9>, 9> bending_stiffness(
+    const std::array<double, 3>& x, const std::array<double, 3>& y, double area,
+    double t, double E, double nu) {
+    const DktGeom g = make_dkt_geom(x, y);
 
     const double factor = E * t * t * t / (12.0 * (1.0 - nu * nu));  // flexural D
     const auto D = constitutive(factor, nu);
@@ -174,19 +195,7 @@ std::array<std::array<double, 9>, 9> bending_stiffness(
 
     std::array<std::array<double, 9>, 9> K{};
     for (const auto& p : gp) {
-        std::array<double, 9> Hx_xi{}, Hx_eta{}, Hy_xi{}, Hy_eta{};
-        dkt_H_derivs(g, p[0], p[1], Hx_xi, Hx_eta, Hy_xi, Hy_eta);
-        // B (3×9): [Hx,x ; Hy,y ; Hx,y + Hy,x]
-        std::array<std::array<double, 9>, 3> B{};
-        for (int i = 0; i < 9; ++i) {
-            const double Hx_x = Hx_xi[i] * dxi_dx + Hx_eta[i] * deta_dx;
-            const double Hx_y = Hx_xi[i] * dxi_dy + Hx_eta[i] * deta_dy;
-            const double Hy_x = Hy_xi[i] * dxi_dx + Hy_eta[i] * deta_dx;
-            const double Hy_y = Hy_xi[i] * dxi_dy + Hy_eta[i] * deta_dy;
-            B[0][i] = Hx_x;
-            B[1][i] = Hy_y;
-            B[2][i] = Hx_y + Hy_x;
-        }
+        const auto B = dkt_curvature_B(g, x, y, area, p[0], p[1]);
         std::array<std::array<double, 9>, 3> DB{};
         for (int i = 0; i < 3; ++i)
             for (int j = 0; j < 9; ++j)
@@ -722,6 +731,142 @@ ShellResult solve_solid_shell_core(const CoupledInput& in) {
         }
     }
     return full;
+}
+
+// ── Stress recovery ───────────────────────────────────────────────────────────
+
+std::vector<double> tet_von_mises(const std::vector<double>& V,
+                                  const std::vector<int>& tets, double E,
+                                  double nu, const std::vector<double>& dofs) {
+    const double lam = E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu));
+    const double mu = E / (2.0 * (1.0 + nu));
+    auto vtx = [&](int n) -> Vec3 { return {V[3 * n], V[3 * n + 1], V[3 * n + 2]}; };
+    const int nTets = static_cast<int>(tets.size() / 4);
+    std::vector<double> out(nTets);
+    for (int e = 0; e < nTets; ++e) {
+        const std::array<int, 4> nd = {tets[4 * e], tets[4 * e + 1], tets[4 * e + 2],
+                                       tets[4 * e + 3]};
+        const Vec3 p0 = vtx(nd[0]), p1 = vtx(nd[1]), p2 = vtx(nd[2]), p3 = vtx(nd[3]);
+        const std::array<std::array<double, 3>, 3> J = {{
+            {p1[0] - p0[0], p2[0] - p0[0], p3[0] - p0[0]},
+            {p1[1] - p0[1], p2[1] - p0[1], p3[1] - p0[1]},
+            {p1[2] - p0[2], p2[2] - p0[2], p3[2] - p0[2]},
+        }};
+        const auto Jinv = mat3_inv(J);
+        static constexpr std::array<std::array<double, 4>, 3> dNl = {{
+            {-1.0, 1.0, 0.0, 0.0}, {-1.0, 0.0, 1.0, 0.0}, {-1.0, 0.0, 0.0, 1.0}}};
+        // constant displacement gradient: grad_u[a][k] = Σ_i u_i[a]·(∂N_i/∂x_k)
+        std::array<std::array<double, 3>, 3> grad{};
+        for (int i = 0; i < 4; ++i) {
+            std::array<double, 3> gN{};
+            for (int k = 0; k < 3; ++k)
+                for (int m = 0; m < 3; ++m) gN[k] += Jinv[m][k] * dNl[m][i];
+            for (int a = 0; a < 3; ++a)
+                for (int k = 0; k < 3; ++k) grad[a][k] += dofs[6 * nd[i] + a] * gN[k];
+        }
+        std::array<std::array<double, 3>, 3> eps{};
+        for (int a = 0; a < 3; ++a)
+            for (int k = 0; k < 3; ++k) eps[a][k] = 0.5 * (grad[a][k] + grad[k][a]);
+        const double tr = eps[0][0] + eps[1][1] + eps[2][2];
+        std::array<std::array<double, 3>, 3> sig{};
+        for (int a = 0; a < 3; ++a)
+            for (int k = 0; k < 3; ++k)
+                sig[a][k] = (a == k ? lam * tr : 0.0) + 2.0 * mu * eps[a][k];
+        const double trs = sig[0][0] + sig[1][1] + sig[2][2];
+        double vm2 = 0.0;
+        for (int a = 0; a < 3; ++a)
+            for (int k = 0; k < 3; ++k) {
+                const double dev = sig[a][k] - (a == k ? trs / 3.0 : 0.0);
+                vm2 += dev * dev;
+            }
+        out[e] = std::sqrt(1.5 * vm2);
+    }
+    return out;
+}
+
+std::vector<double> shell_von_mises(const std::vector<double>& V,
+                                    const std::vector<int>& triangles,
+                                    double thickness,
+                                    const std::vector<double>& thicknesses,
+                                    double E, double nu,
+                                    const std::vector<double>& dofs) {
+    auto vtx = [&](int n) -> Vec3 { return {V[3 * n], V[3 * n + 1], V[3 * n + 2]}; };
+    const int nTris = static_cast<int>(triangles.size() / 3);
+    const bool per_facet = static_cast<int>(thicknesses.size()) == nTris;
+    // plane-stress von Mises of (σx, σy, τ)
+    auto vm = [](double sx, double sy, double txy) {
+        return std::sqrt(sx * sx - sx * sy + sy * sy + 3.0 * txy * txy);
+    };
+    const auto Dpl = constitutive(E / (1.0 - nu * nu), nu);
+    auto stress = [&](const std::array<double, 3>& strain) -> std::array<double, 3> {
+        std::array<double, 3> s{};
+        for (int a = 0; a < 3; ++a)
+            for (int b = 0; b < 3; ++b) s[a] += Dpl[a][b] * strain[b];
+        return s;
+    };
+
+    std::vector<double> out(nTris);
+    for (int e = 0; e < nTris; ++e) {
+        const std::array<int, 3> nd = {triangles[3 * e], triangles[3 * e + 1],
+                                       triangles[3 * e + 2]};
+        const Vec3 P0 = vtx(nd[0]), P1 = vtx(nd[1]), P2 = vtx(nd[2]);
+        const Vec3 v1 = sub(P1, P0), v2 = sub(P2, P0);
+        const double l1 = norm(v1);
+        const Vec3 e1 = scale(v1, 1.0 / l1);
+        Vec3 e3 = cross(v1, v2);
+        const double twoA = norm(e3);
+        e3 = scale(e3, 1.0 / twoA);
+        const Vec3 e2 = cross(e3, e1);
+        const double area = 0.5 * twoA;
+        const std::array<double, 3> lx = {0.0, l1, dot(v2, e1)};
+        const std::array<double, 3> ly = {0.0, 0.0, dot(v2, e2)};
+
+        // local nodal DOFs: translations and rotations rotated into (e1,e2,e3)
+        std::array<double, 6> um{};   // (u0,v0,u1,v1,u2,v2)
+        std::array<double, 9> ub{};   // (w0,θx0,θy0, …)
+        for (int i = 0; i < 3; ++i) {
+            const int n6 = 6 * nd[i];
+            const Vec3 tg = {dofs[n6], dofs[n6 + 1], dofs[n6 + 2]};
+            const Vec3 rg = {dofs[n6 + 3], dofs[n6 + 4], dofs[n6 + 5]};
+            um[2 * i] = dot(e1, tg);
+            um[2 * i + 1] = dot(e2, tg);
+            ub[3 * i] = dot(e3, tg);
+            ub[3 * i + 1] = dot(e1, rg);
+            ub[3 * i + 2] = dot(e2, rg);
+        }
+
+        // membrane strain (constant): ε = B_m·u_m with the CST coefficients
+        const std::array<double, 3> b = {ly[1] - ly[2], ly[2] - ly[0], ly[0] - ly[1]};
+        const std::array<double, 3> c = {lx[2] - lx[1], lx[0] - lx[2], lx[1] - lx[0]};
+        const double inv2A = 1.0 / (2.0 * area);
+        std::array<double, 3> em{};
+        for (int i = 0; i < 3; ++i) {
+            em[0] += inv2A * b[i] * um[2 * i];
+            em[1] += inv2A * c[i] * um[2 * i + 1];
+            em[2] += inv2A * (c[i] * um[2 * i] + b[i] * um[2 * i + 1]);
+        }
+
+        // bending curvature at the centroid: κ = B_b(⅓,⅓)·u_b
+        const DktGeom g = make_dkt_geom(lx, ly);
+        const auto Bb = dkt_curvature_B(g, lx, ly, area, 1.0 / 3.0, 1.0 / 3.0);
+        std::array<double, 3> kap{};
+        for (int a = 0; a < 3; ++a)
+            for (int i = 0; i < 9; ++i) kap[a] += Bb[a][i] * ub[i];
+
+        // σ(z) = D_pl·(ε_m + z·κ) at z = ±t/2 — report the worse surface. Taking
+        // the max over both surfaces makes the result independent of the DKT
+        // curvature sign convention.
+        const double t = per_facet ? thicknesses[e] : thickness;
+        double worst = 0.0;
+        for (const double z : {+0.5 * t, -0.5 * t}) {
+            const std::array<double, 3> strain = {em[0] + z * kap[0], em[1] + z * kap[1],
+                                                  em[2] + z * kap[2]};
+            const auto s = stress(strain);
+            worst = std::max(worst, vm(s[0], s[1], s[2]));
+        }
+        out[e] = worst;
+    }
+    return out;
 }
 
 }  // namespace kofem::shell

@@ -169,17 +169,35 @@ export function extractThinWallShells(
         big[i].n[1] * big[j].n[1] +
         big[i].n[2] * big[j].n[2];
       if (d > -0.85) continue;
-      const off = Math.hypot(
-        big[i].c[0] - big[j].c[0],
-        big[i].c[1] - big[j].c[1],
-        big[i].c[2] - big[j].c[2],
+      const dc: [number, number, number] = [
+        big[j].c[0] - big[i].c[0],
+        big[j].c[1] - big[i].c[1],
+        big[j].c[2] - big[i].c[2],
+      ];
+      // Wall thickness is the centroid offset ALONG the face normal. The raw
+      // euclidean centroid distance also picks up any lateral shift between the
+      // two faces, and since bending stiffness scales with t³ that inflation
+      // made the shell several-fold too stiff. A large lateral shift relative
+      // to the face extent means the faces don't actually overlap — not a wall.
+      const along = Math.abs(
+        big[i].n[0] * dc[0] + big[i].n[1] * dc[1] + big[i].n[2] * dc[2],
       );
+      const lateral = Math.sqrt(
+        Math.max(0, dc[0] ** 2 + dc[1] ** 2 + dc[2] ** 2 - along ** 2),
+      );
+      const extent = Math.sqrt(Math.min(big[i].area, big[j].area));
       const ar =
         Math.abs(big[i].area - big[j].area) /
         Math.max(big[i].area, big[j].area);
-      if (ar > 0.4 || off > maxWall) continue;
-      if (off < bo) {
-        bo = off;
+      if (
+        ar > 0.4 ||
+        along < 0.05 ||
+        along > maxWall ||
+        lateral > 0.35 * extent
+      )
+        continue;
+      if (along < bo) {
+        bo = along;
         best = j;
       }
     }

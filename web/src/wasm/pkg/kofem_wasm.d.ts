@@ -122,7 +122,14 @@ export interface KofemModule {
     coupling: { ref: Int32Array; offsets: Int32Array; solid: Int32Array },
     bcs: { fixed_dofs: Int32Array; load_dofs: Int32Array; load_vals: Float64Array },
     mat_json: string,
-  ): { displacements: Float64Array; iterations: number } | { error: string }
+  ):
+    | {
+        displacements: Float64Array
+        von_mises_tets: Float64Array
+        von_mises_tris: Float64Array
+        iterations: number
+      }
+    | { error: string }
 }
 
 export interface ModuleOverrides {

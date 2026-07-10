@@ -110,14 +110,26 @@ export function extractThinWallShells(mesh, { maxWall = 15, weldTol = 3 } = {}) 
       if (i === j || used.has(big[j].id) || big[i].body !== big[j].body) continue;
       const d = big[i].n[0] * big[j].n[0] + big[i].n[1] * big[j].n[1] + big[i].n[2] * big[j].n[2];
       if (d > -0.85) continue; // faces must be near-opposite
-      const off = Math.hypot(big[i].c[0] - big[j].c[0], big[i].c[1] - big[j].c[1], big[i].c[2] - big[j].c[2]);
+      // Wall thickness is the centroid offset ALONG the normal; the euclidean
+      // distance also picks up lateral shift, and t³ bending stiffness makes
+      // that inflation several-fold too stiff. Large lateral shift relative to
+      // the face extent ⇒ the faces don't overlap ⇒ not a wall.
+      const dc = [big[j].c[0] - big[i].c[0], big[j].c[1] - big[i].c[1], big[j].c[2] - big[i].c[2]];
+      const along = Math.abs(big[i].n[0] * dc[0] + big[i].n[1] * dc[1] + big[i].n[2] * dc[2]);
+      const lateral = Math.sqrt(Math.max(0, dc[0] ** 2 + dc[1] ** 2 + dc[2] ** 2 - along ** 2));
+      const extent = Math.sqrt(Math.min(big[i].area, big[j].area));
       const ar = Math.abs(big[i].area - big[j].area) / Math.max(big[i].area, big[j].area);
-      if (ar > 0.4 || off > maxWall) continue; // similar area, plausible wall gap
-      if (off < bo) { bo = off; best = j; }
+      if (ar > 0.4 || along < 0.05 || along > maxWall || lateral > 0.35 * extent) continue;
+      if (along < bo) { bo = along; best = j; }
     }
     if (best >= 0) {
       used.add(big[i].id); used.add(big[best].id);
-      walls.push({ keep: big[i].id, n: big[i].n, thk: bo, body: big[i].body });
+      // keep the OUTER face (normal points away from its partner) so adjacent
+      // walls share Netgen edge nodes at convex junctions for the weld below
+      const fa = big[i], fb = big[best];
+      const dcx = fa.c[0] - fb.c[0], dcy = fa.c[1] - fb.c[1], dcz = fa.c[2] - fb.c[2];
+      const outer = fa.n[0] * dcx + fa.n[1] * dcy + fa.n[2] * dcz > 0 ? fa : fb;
+      walls.push({ keep: outer.id, n: outer.n, thk: bo, body: fa.body });
     }
   }
   const shellBody = walls.length ? walls[0].body : -1;

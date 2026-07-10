@@ -106,6 +106,27 @@ std::vector<SolidTriplet> tet_solid_stiffness(const std::vector<double>& vertice
                                               const std::vector<int>& tets,
                                               double young, double poisson);
 
+// ── Stress recovery ───────────────────────────────────────────────────────────
+//
+// Von Mises stress from a coupled solution vector (6 DOFs per node, the
+// ShellResult::dofs layout).
+
+// One value per tet: constant-strain element stress from the displacement
+// gradient (translational DOFs only).
+std::vector<double> tet_von_mises(const std::vector<double>& vertices,
+                                  const std::vector<int>& tets, double young,
+                                  double poisson, const std::vector<double>& dofs);
+
+// One value per shell triangle: plane-stress von Mises at the worse of the two
+// surfaces z = ±t/2, combining the CST membrane strain with the DKT bending
+// curvature at the facet centroid (σ(z) = D·(ε_m + z·κ)).
+std::vector<double> shell_von_mises(const std::vector<double>& vertices,
+                                    const std::vector<int>& triangles,
+                                    double thickness,
+                                    const std::vector<double>& thicknesses,
+                                    double young, double poisson,
+                                    const std::vector<double>& dofs);
+
 }  // namespace kofem::shell
 
 #endif  // KOFEM_SHELL_CORE_H

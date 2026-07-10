@@ -57,7 +57,10 @@ double tri_area(const std::vector<double>& V, int n0, int n1, int n2) {
 }
 
 // center deflection of a square plate under uniform pressure q, clamped or SS.
-double plate_center_w(double a, double t, double E, double nu, double q, int n, bool clamped) {
+// When vm_center is given, also recovers the von Mises stress of the facet
+// nearest the plate center (surface stress from membrane + bending recovery).
+double plate_center_w(double a, double t, double E, double nu, double q, int n, bool clamped,
+                      double* vm_center = nullptr) {
     std::vector<double> V; std::vector<int> T;
     plate_mesh(a, n, V, T);
     const int nNodes = (n + 1) * (n + 1);
@@ -88,6 +91,19 @@ double plate_center_w(double a, double t, double E, double nu, double q, int n, 
         if (Fz[nd] != 0.0) in.loads.emplace_back(6 * nd + 2, Fz[nd]);
     ShellResult r = solve_shell_core(in);
     if (!r.converged) { printf("  [FAIL] CG did not converge\n"); ++failures; }
+    if (vm_center) {
+        const std::vector<double> vm =
+            shell_von_mises(V, T, t, {}, E, nu, r.dofs);
+        // von Mises of the facet whose centroid is nearest the plate center
+        double best = 1e30;
+        for (size_t e = 0; e < T.size() / 3; ++e) {
+            const int n0 = T[3*e], n1 = T[3*e+1], n2 = T[3*e+2];
+            const double cx = (V[3*n0] + V[3*n1] + V[3*n2]) / 3.0 - a / 2.0;
+            const double cy = (V[3*n0+1] + V[3*n1+1] + V[3*n2+1]) / 3.0 - a / 2.0;
+            const double d2 = cx * cx + cy * cy;
+            if (d2 < best) { best = d2; *vm_center = vm[e]; }
+        }
+    }
     return r.dofs[6 * id(n / 2, n / 2) + 2];
 }
 
@@ -205,8 +221,13 @@ int main() {
     // must land inside a tight band; coarse meshes carry more error by design.
     check("clamped-plate", plate_center_w(a, t, E, nu, q, 32, true),
           0.00126 * q * std::pow(a, 4) / D, 1.5);
-    check("simply-supported-plate", plate_center_w(a, t, E, nu, q, 32, false),
+    double vm_center = 0.0;
+    check("simply-supported-plate", plate_center_w(a, t, E, nu, q, 32, false, &vm_center),
           0.00406 * q * std::pow(a, 4) / D, 1.0);
+    // Center bending stress of the SS plate: M = 0.0479·q·a² (ν = 0.3), and the
+    // equal-biaxial state makes von Mises equal σ = 6M/t². Element-constant
+    // recovery at the nearest facet centroid carries a few % discretisation.
+    check("ss-plate-von-mises", vm_center, 6.0 * 0.0479 * q * a * a / (t * t), 8.0);
     check("membrane-tension", membrane_tip_u(), 1.0 * 1.0 / 1000.0, 0.5);
 
     printf("Coupled solid + shell (distributing coupling):\n");

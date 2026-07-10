@@ -115,6 +115,9 @@ for (let i = 0; i < nPool; i++) {
 }
 console.log(`\n✓ CONVERGED in ${r.iterations} iterations, ${secs}s`);
 console.log(`  max |u| = ${maxU.toExponential(4)} mm at node ${maxNode}`);
+const vmSolid = Math.max(0, ...r.von_mises_tets);
+const vmShell = Math.max(0, ...r.von_mises_tris);
+console.log(`  max von Mises: solid ${vmSolid.toFixed(1)} MPa · shell ${vmShell.toFixed(1)} MPa`);
 
 // ── 7. optional VTU of the deformed shell surface (ParaView) ───────────────────
 if (vtuPath) {

@@ -148,8 +148,20 @@ val solve_coupled(val mesh, val coupling, val bcs, const std::string& mat_json) 
     std::vector<double> disp(3 * (size_t)in.n_nodes, 0.0);
     for (int v = 0; v < in.n_nodes; ++v)
         for (int c = 0; c < 3; ++c) disp[3 * v + c] = r.dofs[6 * v + c];
+
+    // Von Mises stress: one value per solid tet (constant-strain recovery) and
+    // one per shell facet (surface stress from membrane + bending, worse of the
+    // two surfaces z = ±t/2) — the caller maps these onto its element list.
+    const std::vector<double> vm_tets =
+        kofem::shell::tet_von_mises(in.vertices, tets, solidE, solidNu, r.dofs);
+    const std::vector<double> vm_tris = kofem::shell::shell_von_mises(
+        in.vertices, in.triangles, in.thickness, in.thicknesses, in.shell_young,
+        in.shell_poisson, r.dofs);
+
     val result = val::object();
     result.set("displacements", float64_array(disp));
+    result.set("von_mises_tets", float64_array(vm_tets));
+    result.set("von_mises_tris", float64_array(vm_tris));
     result.set("iterations", r.iterations);
     return result;
 }
