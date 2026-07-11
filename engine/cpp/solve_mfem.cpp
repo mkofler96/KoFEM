@@ -13,6 +13,7 @@
 
 #include "solve_mfem.h"
 
+#include "bc_validation.h"
 #include "json_util.h"
 #include "wasm_util.h"
 
@@ -253,8 +254,10 @@ struct EssentialBcs {
 void add_fixed_vertices(const val& fixed_js, mfem::FiniteElementSpace& fespace,
                         mfem::Array<int>& ess_tdof, std::map<int, VDir>& vdir) {
     unsigned n_fixed = fixed_js["length"].as<unsigned>();
+    const int nv = fespace.GetMesh()->GetNV();
     for (unsigned i = 0; i < n_fixed; ++i) {
         int vi = fixed_js[i].as<int>();
+        kofem::bc::require_valid_vertex(vi, nv, "add_fixed_vertices");
         mfem::Array<int> vdofs;
         fespace.GetVertexVDofs(vi, vdofs);
         for (int j = 0; j < vdofs.Size(); ++j)
@@ -277,21 +280,22 @@ void add_fixed_dofs(const val& fdofs_js, mfem::FiniteElementSpace& fespace,
     if (fdofs_js.isUndefined() || fdofs_js.isNull())
         return;
     unsigned n_fdofs = fdofs_js["length"].as<unsigned>();
+    const int nv = fespace.GetMesh()->GetNV();
     for (unsigned i = 0; i < n_fdofs; ++i) {
         val entry = fdofs_js[i];
         int vi = entry["vertex"].as<int>();
         val comps = entry["dofs"];
         unsigned nc = comps["length"].as<unsigned>();
+        kofem::bc::require_valid_vertex(vi, nv, "add_fixed_dofs");
         mfem::Array<int> vdofs;
         fespace.GetVertexVDofs(vi, vdofs);
         for (unsigned c = 0; c < nc; ++c) {
             int d = comps[c].as<int>();
-            if (d >= 0 && d < vdofs.Size()) {
-                ess_tdof.Append(vdofs[d]);
-                VDir& vd = vdir[vi];
-                vd.set[d] = true;
-                vd.val[d] = 0.0;
-            }
+            kofem::bc::require_valid_component(d, vdofs.Size(), vi, "add_fixed_dofs");
+            ess_tdof.Append(vdofs[d]);
+            VDir& vd = vdir[vi];
+            vd.set[d] = true;
+            vd.val[d] = 0.0;
         }
     }
 }
@@ -311,20 +315,21 @@ void add_prescribed_dofs(const val& pdofs_js, mfem::FiniteElementSpace& fespace,
     if (pdofs_js.isUndefined() || pdofs_js.isNull())
         return;
     unsigned n_pdofs = pdofs_js["length"].as<unsigned>();
+    const int nv = fespace.GetMesh()->GetNV();
     for (unsigned i = 0; i < n_pdofs; ++i) {
         val entry = pdofs_js[i];
         int vi = entry["vertex"].as<int>();
         int d  = entry["dof"].as<int>();
         double value = entry["value"].as<double>();
+        kofem::bc::require_valid_vertex(vi, nv, "add_prescribed_dofs");
         mfem::Array<int> vdofs;
         fespace.GetVertexVDofs(vi, vdofs);
-        if (d >= 0 && d < vdofs.Size()) {
-            ess_tdof.Append(vdofs[d]);
-            prescribed_vals.emplace_back(vdofs[d], value);
-            VDir& vd = vdir[vi];
-            vd.set[d] = true;
-            vd.val[d] = value;
-        }
+        kofem::bc::require_valid_component(d, vdofs.Size(), vi, "add_prescribed_dofs");
+        ess_tdof.Append(vdofs[d]);
+        prescribed_vals.emplace_back(vdofs[d], value);
+        VDir& vd = vdir[vi];
+        vd.set[d] = true;
+        vd.val[d] = value;
     }
 }
 
@@ -551,17 +556,18 @@ void apply_surface_loads(const val& surf_js, mfem::Mesh& mesh, mfem::LinearForm&
 void apply_point_loads(const val& loads_js, mfem::FiniteElementSpace& fespace,
                        mfem::LinearForm& b) {
     unsigned n_loads = loads_js["length"].as<unsigned>();
+    const int nv = fespace.GetMesh()->GetNV();
     for (unsigned i = 0; i < n_loads; ++i) {
         val load  = loads_js[i];
         int vi    = load["vertex"].as<int>();
         val force = load["force"];
+        kofem::bc::require_valid_vertex(vi, nv, "apply_point_loads");
         mfem::Array<int> vdofs;
         fespace.GetVertexVDofs(vi, vdofs);
-        if (vdofs.Size() >= 3) {
-            b[vdofs[0]] += force[0].as<double>();
-            b[vdofs[1]] += force[1].as<double>();
-            b[vdofs[2]] += force[2].as<double>();
-        }
+        kofem::bc::require_min_dofs(vdofs.Size(), 3, vi, "apply_point_loads");
+        b[vdofs[0]] += force[0].as<double>();
+        b[vdofs[1]] += force[1].as<double>();
+        b[vdofs[2]] += force[2].as<double>();
     }
 }
 
