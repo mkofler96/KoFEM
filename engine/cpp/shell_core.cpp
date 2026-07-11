@@ -700,8 +700,25 @@ ShellResult solve_reduced_system(Sparse& K, const std::vector<double>& F,
             for (const auto& [pi, ci] : expand(i)) Fr[red[pi]] += ci * F[i];
 
     std::vector<char> fr(nIndep, 0);
-    for (int i = 0; i < nDof; ++i)
-        if (fixed[i] != 0 && C.dep[i] == 0) fr[red[i]] = 1;
+    for (int i = 0; i < nDof; ++i) {
+        if (fixed[i] == 0) continue;
+        // A fixed DOF on a dependent (RBE3 distributing-coupling reference) node
+        // has no reduced-system column of its own — its motion is a weighted
+        // average of the coupled solid nodes — so it cannot be constrained here.
+        // Silently skipping it (the old `&& C.dep[i] == 0` guard) dropped the
+        // user's constraint and still let CG converge on an under-restrained
+        // model (issue #377). Refuse loudly instead.
+        if (C.dep[i] != 0)
+            throw std::runtime_error(
+                "solve_reduced_system: fixed DOF " + std::to_string(i) + " (node " +
+                std::to_string(i / 6) + ", component " + std::to_string(i % 6) +
+                ") lies on a coupling-dependent node — its motion is governed by "
+                "the RBE3 distributing coupling to the solid, so a direct "
+                "constraint on it cannot be honoured and would otherwise be "
+                "silently dropped. Constrain the coupled solid node(s) instead of "
+                "the shell coupling reference node.");
+        fr[red[i]] = 1;
+    }
     apply_homogeneous_bc(Kr, Fr, fr);
 
     ShellResult rr = cg_solve(Kr, Fr);

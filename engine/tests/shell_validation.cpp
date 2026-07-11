@@ -222,6 +222,40 @@ double coupled_moment_transfer() {
     return w / ref;
 }
 
+// A fixed-DOF constraint that lands on an RBE3 coupling reference node (a
+// dependent, shell-side DOF) must be rejected loudly, not silently dropped
+// (issue #377). Reuses the cantilever-on-anchors coupling: every root node is a
+// coupling reference node, so clamping one is exactly the offending case.
+bool coupled_fixed_dependent_throws() {
+    const double L = 2.0, b = 0.3, t = 0.01, E = 2.1e11, nu = 0.3;
+    const int nx = 4, ny = 2;
+    auto id = [&](int i, int j) { return i * (ny + 1) + j; };
+    std::vector<double> V; std::vector<int> Tr; std::vector<int> root;
+    for (int i = 0; i <= nx; ++i)
+        for (int j = 0; j <= ny; ++j) { V.push_back(L * i / nx); V.push_back(b * j / ny); V.push_back(0); }
+    for (int i = 0; i < nx; ++i)
+        for (int j = 0; j < ny; ++j) {
+            const int a = id(i,j), c = id(i+1,j), d = id(i+1,j+1), e = id(i,j+1);
+            Tr.push_back(a); Tr.push_back(c); Tr.push_back(d); Tr.push_back(a); Tr.push_back(d); Tr.push_back(e);
+        }
+    for (int j = 0; j <= ny; ++j) root.push_back(id(0, j));
+    const int aBase = (nx + 1) * (ny + 1);
+    V.insert(V.end(), {-0.1, 0.0, 0.0,  -0.1, b, 0.0,  -0.1, b / 2, 0.1});  // 3 anchors
+    CoupledInput in;
+    in.n_nodes = aBase + 3; in.vertices = V; in.triangles = Tr;
+    in.shell_young = E; in.shell_poisson = nu; in.thickness = t;
+    for (int rn : root) { Coupling cp; cp.ref_node = rn; cp.solid_nodes = {aBase, aBase + 1, aBase + 2}; in.couplings.push_back(cp); }
+    for (int aa = 0; aa < 3; ++aa) for (int c = 0; c < 3; ++c) in.fixed_dofs.push_back(6 * (aBase + aa) + c);
+    // Offending constraint: clamp a translation on a coupling reference node.
+    in.fixed_dofs.push_back(6 * root[0] + 0);
+    try {
+        solve_solid_shell_core(in);
+    } catch (const std::exception&) {
+        return true;
+    }
+    return false;
+}
+
 }  // namespace
 
 int main() {
@@ -247,6 +281,15 @@ int main() {
     printf("Coupled solid + shell (distributing coupling):\n");
     check(failures, "coupled-tet-tension", coupled_tet_tension(), 1.0, 0.2);
     check(failures, "coupled-moment-transfer", coupled_moment_transfer(), 1.0, 6.0);
+
+    printf("Constraint-on-dependent-node rejection (issue #377):\n");
+    {
+        const bool threw = coupled_fixed_dependent_throws();
+        if (!threw) ++failures;
+        printf("  [%s] %-28s %s\n", threw ? "PASS" : "FAIL",
+               "fixed-dof-on-dependent throws",
+               threw ? "rejected as expected" : "did NOT throw");
+    }
 
     printf(failures != 0 ? "\n%d check(s) FAILED\n" : "\nall checks passed\n", failures);
     return failures != 0 ? 1 : 0;
