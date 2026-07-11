@@ -34,7 +34,7 @@ using emscripten::val;
 // regardless — this matches what netgen_bridge.cpp in kofem-mesh does.
 
 namespace nglib {
-    typedef void* Ng_Mesh;
+    using Ng_Mesh = void*;
     enum Ng_Result {
         NG_ERROR = -1, NG_OK = 0, NG_SURFACE_INPUT_ERROR = 1,
         NG_VOLUME_FAILURE = 2, NG_STL_INPUT_ERROR = 3,
@@ -78,7 +78,7 @@ namespace nglib {
 // SetLocalMeshSize → GenerateEdgeMesh → GenerateSurfaceMesh → GenerateVolumeMesh.
 namespace nglib {
 #ifdef KOFEM_NETGEN_OCC
-    typedef void* Ng_OCC_Geometry;
+    using Ng_OCC_Geometry = void*;
     extern Ng_Result         Ng_OCC_SetLocalMeshSize(Ng_OCC_Geometry*, Ng_Mesh*, Ng_Meshing_Parameters*);
     extern Ng_Result         Ng_OCC_GenerateEdgeMesh(Ng_OCC_Geometry*, Ng_Mesh*, Ng_Meshing_Parameters*);
     extern Ng_Result         Ng_OCC_GenerateSurfaceMesh(Ng_OCC_Geometry*, Ng_Mesh*, Ng_Meshing_Parameters*);
@@ -164,7 +164,7 @@ val generate_fem_mesh(const std::string& opts_json)
     mp.check_overlapping_boundary = 1;
 
     nglib::Ng_Mesh* mesh = nglib::Ng_NewMesh();
-    if (!mesh) {
+    if (mesh == nullptr) {
         kofem_occ_geometry_delete(static_cast<void*>(geom));
         throw std::runtime_error("Ng_NewMesh returned null");
     }
@@ -353,7 +353,7 @@ std::string generate_volume_mesh(
     unsigned nt  = tris_js ["length"].as<unsigned>();
 
     nglib::Ng_Mesh* mesh = nglib::Ng_NewMesh();
-    if (!mesh) throw std::runtime_error("Ng_NewMesh() returned null");
+    if (mesh == nullptr) throw std::runtime_error("Ng_NewMesh() returned null");
 
     for (unsigned i = 0; i < nv; ++i) {
         val v = verts_js[i];

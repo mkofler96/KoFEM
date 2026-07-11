@@ -19,6 +19,7 @@ import {
   buildCoupledModel,
   shellNodeLocator,
   isShellPoolIndex,
+  type CoupledModel,
   type ShellizeMesh,
 } from "../lib/shellize.js";
 
@@ -541,6 +542,145 @@ function coupledMaterials(
   };
 }
 
+// Essential BCs for the coupled solve: a translation constraint maps to its
+// pool node, and a shelled node clamped in all three translations is also
+// clamped in rotation.
+function coupledFixedDofs(
+  constraints: Constraint[],
+  model: CoupledModel,
+  poolOf: (nodeId: number) => number,
+): number[] {
+  const fixedByPool = new Map<number, Set<number>>();
+  for (const c of constraints) {
+    if (c.dof > 2) continue;
+    const pi = poolOf(c.nodeId);
+    let dofs = fixedByPool.get(pi);
+    if (!dofs) {
+      dofs = new Set();
+      fixedByPool.set(pi, dofs);
+    }
+    dofs.add(c.dof);
+  }
+  const fixed_dofs: number[] = [];
+  for (const [pi, dofs] of fixedByPool) {
+    for (const d of dofs) fixed_dofs.push(6 * pi + d);
+    if (
+      isShellPoolIndex(model, pi) &&
+      dofs.has(0) &&
+      dofs.has(1) &&
+      dofs.has(2)
+    )
+      for (const d of [3, 4, 5]) fixed_dofs.push(6 * pi + d);
+  }
+  return fixed_dofs;
+}
+
+// Point + surface loads → equivalent nodal forces on the pool.
+function coupledLoads(
+  loads: Load[],
+  surfaceLoads: SurfaceLoad[] | undefined,
+  poolOf: (nodeId: number) => number,
+): { load_dofs: number[]; load_vals: number[] } {
+  const load_dofs: number[] = [];
+  const load_vals: number[] = [];
+  for (const l of loads) {
+    if (l.dof > 2) continue;
+    load_dofs.push(6 * poolOf(l.nodeId) + l.dof);
+    load_vals.push(l.value);
+  }
+  for (const sl of surfaceLoads ?? []) {
+    if ((sl.type !== "force" && sl.type !== "traction") || !sl.force) continue; // pressure not mapped yet
+    const nodeSet = new Set<number>();
+    for (const f of sl.faces) for (const n of f) nodeSet.add(n);
+    if (nodeSet.size === 0) continue;
+    const per = sl.force.map((v) => v / nodeSet.size);
+    for (const nid of nodeSet) {
+      const pi = poolOf(nid);
+      for (let d = 0; d < 3; d++)
+        if (per[d] !== 0) {
+          load_dofs.push(6 * pi + d);
+          load_vals.push(per[d]);
+        }
+    }
+  }
+  return { load_dofs, load_vals };
+}
+
+// Map pool displacements onto every original store node: solid nodes directly,
+// the shelled body's nodes from their nearest mid-surface node.
+function mapCoupledDisplacements(
+  rd: Float64Array,
+  nodes: Node[],
+  model: CoupledModel,
+  nearestShell: (p: [number, number, number]) => number,
+): Float64Array {
+  const displacements = new Float64Array(3 * nodes.length);
+  for (let i = 0; i < nodes.length; i++) {
+    const sp = model.solidPool.get(model.tied(i));
+    const pi =
+      sp !== undefined
+        ? sp
+        : nearestShell([nodes[i].x, nodes[i].y, nodes[i].z]);
+    displacements[3 * i] = rd[3 * pi];
+    displacements[3 * i + 1] = rd[3 * pi + 1];
+    displacements[3 * i + 2] = rd[3 * pi + 2];
+  }
+  return displacements;
+}
+
+// Von Mises per ORIGINAL element. Solid-body elements map 1:1 (the coupled
+// tets were appended in element order, skipping the shelled body). Elements
+// of the shelled body take the stress of the shell node nearest their
+// centroid — per shell node, the worst adjacent facet's surface stress.
+function mapCoupledVonMises(
+  vmTets: Float64Array,
+  vmTris: Float64Array,
+  nodes: Node[],
+  elements: Element[],
+  model: CoupledModel,
+  nearestShell: (p: [number, number, number]) => number,
+  shellBody: number,
+): Float64Array {
+  const vmByShellNode = new Map<number, number>();
+  for (let t = 0; t < model.triangles.length / 3; t++) {
+    const facetVm = vmTris[t];
+    for (const pi of [
+      model.triangles[3 * t],
+      model.triangles[3 * t + 1],
+      model.triangles[3 * t + 2],
+    ])
+      // eslint-disable-next-line kofem/no-silent-fallback -- running max over adjacent facets; 0 is the identity for a node seen for the first time
+      vmByShellNode.set(pi, Math.max(vmByShellNode.get(pi) ?? 0, facetVm));
+  }
+  const nodeById = new Map(nodes.map((n) => [n.id, n]));
+  const vonMises = new Float64Array(elements.length);
+  let solidIdx = 0;
+  for (let e = 0; e < elements.length; e++) {
+    if (elements[e].propertyId !== shellBody) {
+      vonMises[e] = vmTets[solidIdx++];
+    } else {
+      let cx = 0,
+        cy = 0,
+        cz = 0;
+      for (const nid of elements[e].nodeIds) {
+        const nd = nodeById.get(nid);
+        if (!nd)
+          throw new Error(
+            `stress mapping: element ${elements[e].id} references unknown node id ${nid}`,
+          );
+        cx += nd.x;
+        cy += nd.y;
+        cz += nd.z;
+      }
+      const k = elements[e].nodeIds.length;
+      const pi = nearestShell([cx / k, cy / k, cz / k]);
+      // eslint-disable-next-line kofem/no-silent-fallback -- a mid-surface node not touched by any facet (isolated weld artefact) carries no recovered stress
+      vonMises[e] = vmByShellNode.get(pi) ?? 0;
+    }
+  }
+  return vonMises;
+}
+
 // Returns the coupled displacement/von-Mises result, or null when the model has
 // no thin-walled body to shell (→ the caller runs the all-solid path).
 function tryCoupledSolve(
@@ -591,49 +731,8 @@ function tryCoupledSolve(
     ]);
   };
 
-  // Essential BCs: a translation maps to its pool node; a shelled node clamped in
-  // all three translations is also clamped in rotation.
-  const fixedByPool = new Map<number, Set<number>>();
-  for (const c of constraints) {
-    if (c.dof > 2) continue;
-    const pi = poolOf(c.nodeId);
-    (fixedByPool.get(pi) ?? fixedByPool.set(pi, new Set()).get(pi)!).add(c.dof);
-  }
-  const fixed_dofs: number[] = [];
-  for (const [pi, dofs] of fixedByPool) {
-    for (const d of dofs) fixed_dofs.push(6 * pi + d);
-    if (
-      isShellPoolIndex(model, pi) &&
-      dofs.has(0) &&
-      dofs.has(1) &&
-      dofs.has(2)
-    )
-      for (const d of [3, 4, 5]) fixed_dofs.push(6 * pi + d);
-  }
-
-  // Loads → equivalent nodal forces on the pool.
-  const load_dofs: number[] = [];
-  const load_vals: number[] = [];
-  for (const l of loads) {
-    if (l.dof > 2) continue;
-    load_dofs.push(6 * poolOf(l.nodeId) + l.dof);
-    load_vals.push(l.value);
-  }
-  for (const sl of surfaceLoads ?? []) {
-    if ((sl.type !== "force" && sl.type !== "traction") || !sl.force) continue; // pressure not mapped yet
-    const nodeSet = new Set<number>();
-    for (const f of sl.faces) for (const n of f) nodeSet.add(n);
-    if (nodeSet.size === 0) continue;
-    const per = sl.force.map((v) => v / nodeSet.size);
-    for (const nid of nodeSet) {
-      const pi = poolOf(nid);
-      for (let d = 0; d < 3; d++)
-        if (per[d] !== 0) {
-          load_dofs.push(6 * pi + d);
-          load_vals.push(per[d]);
-        }
-    }
-  }
+  const fixed_dofs = coupledFixedDofs(constraints, model, poolOf);
+  const { load_dofs, load_vals } = coupledLoads(loads, surfaceLoads, poolOf);
 
   self.postMessage({
     id: 0,
@@ -661,58 +760,21 @@ function tryCoupledSolve(
   );
   if ("error" in result) throw new Error(result.error);
 
-  // Map displacements onto every original store node: solid nodes directly, the
-  // shelled body's nodes from their nearest mid-surface node.
-  const rd = result.displacements;
-  const displacements = new Float64Array(3 * nodes.length);
-  for (let i = 0; i < nodes.length; i++) {
-    const sp = model.solidPool.get(model.tied(i));
-    const pi =
-      sp !== undefined
-        ? sp
-        : nearestShell([nodes[i].x, nodes[i].y, nodes[i].z]);
-    displacements[3 * i] = rd[3 * pi];
-    displacements[3 * i + 1] = rd[3 * pi + 1];
-    displacements[3 * i + 2] = rd[3 * pi + 2];
-  }
-
-  // Von Mises per ORIGINAL element. Solid-body elements map 1:1 (the coupled
-  // tets were appended in element order, skipping the shelled body). Elements
-  // of the shelled body take the stress of the shell node nearest their
-  // centroid — per shell node, the worst adjacent facet's surface stress.
-  const vmByShellNode = new Map<number, number>();
-  for (let t = 0; t < model.triangles.length / 3; t++) {
-    const facetVm = result.von_mises_tris[t];
-    for (const pi of [
-      model.triangles[3 * t],
-      model.triangles[3 * t + 1],
-      model.triangles[3 * t + 2],
-    ])
-      // eslint-disable-next-line kofem/no-silent-fallback -- running max over adjacent facets; 0 is the identity for a node seen for the first time
-      vmByShellNode.set(pi, Math.max(vmByShellNode.get(pi) ?? 0, facetVm));
-  }
-  const nodeById = new Map(nodes.map((n) => [n.id, n]));
-  const vonMises = new Float64Array(elements.length);
-  let solidIdx = 0;
-  for (let e = 0; e < elements.length; e++) {
-    if (elements[e].propertyId !== shells.shellBody) {
-      vonMises[e] = result.von_mises_tets[solidIdx++];
-    } else {
-      let cx = 0,
-        cy = 0,
-        cz = 0;
-      for (const nid of elements[e].nodeIds) {
-        const nd = nodeById.get(nid)!;
-        cx += nd.x;
-        cy += nd.y;
-        cz += nd.z;
-      }
-      const k = elements[e].nodeIds.length;
-      const pi = nearestShell([cx / k, cy / k, cz / k]);
-      // eslint-disable-next-line kofem/no-silent-fallback -- a mid-surface node not touched by any facet (isolated weld artefact) carries no recovered stress
-      vonMises[e] = vmByShellNode.get(pi) ?? 0;
-    }
-  }
+  const displacements = mapCoupledDisplacements(
+    result.displacements,
+    nodes,
+    model,
+    nearestShell,
+  );
+  const vonMises = mapCoupledVonMises(
+    result.von_mises_tets,
+    result.von_mises_tris,
+    nodes,
+    elements,
+    model,
+    nearestShell,
+    shells.shellBody,
+  );
   return { displacements, vonMises };
 }
 

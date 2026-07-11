@@ -11,11 +11,6 @@
 // Flat mesh over a 0-based vertex numbering (the worker builds this from the
 // store model via its vertex indexer).
 
-/* eslint-disable kofem/min-identifier-length -- dense vector/geometry math: a,b,c
-   are triangle vertices, A,B,C their positions, u,v edge vectors, n a normal, p,q
-   points, r/R radii — short names match the mathematical notation and the
-   reference pipeline in examples/shell-coupling/lib.mjs */
-
 export interface ShellizeMesh {
   V: number[]; // 3·nNodes, xyz interleaved
   tet: number[]; // 4·nTets, vertex indices
@@ -33,13 +28,15 @@ interface FaceProp {
   c: [number, number, number];
 }
 
+interface Wall {
+  keep: number;
+  n: [number, number, number];
+  thk: number;
+  body: number;
+}
+
 export interface ShellExtraction {
-  walls: {
-    keep: number;
-    n: [number, number, number];
-    thk: number;
-    body: number;
-  }[];
+  walls: Wall[];
   shellBody: number;
   shellVerts: number[]; // 3·nShellNodes
   shellTris: number[]; // 3·nShellTris (local shell indices)
@@ -58,21 +55,34 @@ function pt(V: number[], i: number): [number, number, number] {
   return [V[3 * i], V[3 * i + 1], V[3 * i + 2]];
 }
 
+// Map get-or-insert without non-null assertions: returns the existing value or
+// stores and returns a freshly made one.
+function getOrInit<K, T>(map: Map<K, T>, key: K, make: () => T): T {
+  let value = map.get(key);
+  if (value === undefined) {
+    value = make();
+    map.set(key, value);
+  }
+  return value;
+}
+
 function faceProps(m: ShellizeMesh): FaceProp[] {
   const faceBody = new Map<string, number>();
   for (let e = 0; e < m.tet.length / 4; e++) {
-    const p = [
+    const tetNodes = [
       m.tet[4 * e],
       m.tet[4 * e + 1],
       m.tet[4 * e + 2],
       m.tet[4 * e + 3],
     ];
-    for (const f of TET_FACES) {
-      const k = [p[f[0]], p[f[1]], p[f[2]]].sort((a, b) => a - b).join(",");
-      faceBody.set(k, m.body[e]);
+    for (const face of TET_FACES) {
+      const key = [tetNodes[face[0]], tetNodes[face[1]], tetNodes[face[2]]]
+        .sort((a, b) => a - b)
+        .join(",");
+      faceBody.set(key, m.body[e]);
     }
   }
-  const F = new Map<
+  const acc = new Map<
     number,
     {
       area: number;
@@ -86,35 +96,44 @@ function faceProps(m: ShellizeMesh): FaceProp[] {
     }
   >();
   for (let t = 0; t < m.surfFace.length; t++) {
-    const a = m.surfTri[3 * t],
-      b = m.surfTri[3 * t + 1],
-      c = m.surfTri[3 * t + 2];
-    const A = pt(m.V, a),
-      B = pt(m.V, b),
-      C = pt(m.V, c);
-    const u = [B[0] - A[0], B[1] - A[1], B[2] - A[2]];
-    const v = [C[0] - A[0], C[1] - A[1], C[2] - A[2]];
-    const nx = u[1] * v[2] - u[2] * v[1],
-      ny = u[2] * v[0] - u[0] * v[2],
-      nz = u[0] * v[1] - u[1] * v[0];
+    const idxA = m.surfTri[3 * t],
+      idxB = m.surfTri[3 * t + 1],
+      idxC = m.surfTri[3 * t + 2];
+    const posA = pt(m.V, idxA),
+      posB = pt(m.V, idxB),
+      posC = pt(m.V, idxC);
+    const edgeU = [posB[0] - posA[0], posB[1] - posA[1], posB[2] - posA[2]];
+    const edgeV = [posC[0] - posA[0], posC[1] - posA[1], posC[2] - posA[2]];
+    const nx = edgeU[1] * edgeV[2] - edgeU[2] * edgeV[1],
+      ny = edgeU[2] * edgeV[0] - edgeU[0] * edgeV[2],
+      nz = edgeU[0] * edgeV[1] - edgeU[1] * edgeV[0];
     const area = 0.5 * Math.hypot(nx, ny, nz);
-    let f = F.get(m.surfFace[t]);
-    if (!f) {
-      const faceKey = [a, b, c].sort((x, y) => x - y).join(",");
+    let entry = acc.get(m.surfFace[t]);
+    if (!entry) {
+      const faceKey = [idxA, idxB, idxC].sort((x, y) => x - y).join(",");
       // eslint-disable-next-line kofem/no-silent-fallback -- a surface triangle with no owning tet face gets body -1 and is excluded from wall detection; it never reaches the solver
       const bodyOf = faceBody.get(faceKey) ?? -1;
-      f = { area: 0, nx: 0, ny: 0, nz: 0, cx: 0, cy: 0, cz: 0, body: bodyOf };
-      F.set(m.surfFace[t], f);
+      entry = {
+        area: 0,
+        nx: 0,
+        ny: 0,
+        nz: 0,
+        cx: 0,
+        cy: 0,
+        cz: 0,
+        body: bodyOf,
+      };
+      acc.set(m.surfFace[t], entry);
     }
-    f.area += area;
-    f.nx += nx / 2;
-    f.ny += ny / 2;
-    f.nz += nz / 2;
-    f.cx += ((A[0] + B[0] + C[0]) / 3) * area;
-    f.cy += ((A[1] + B[1] + C[1]) / 3) * area;
-    f.cz += ((A[2] + B[2] + C[2]) / 3) * area;
+    entry.area += area;
+    entry.nx += nx / 2;
+    entry.ny += ny / 2;
+    entry.nz += nz / 2;
+    entry.cx += ((posA[0] + posB[0] + posC[0]) / 3) * area;
+    entry.cy += ((posA[1] + posB[1] + posC[1]) / 3) * area;
+    entry.cz += ((posA[2] + posB[2] + posC[2]) / 3) * area;
   }
-  return [...F.entries()]
+  return [...acc.entries()]
     .map(([id, f]) => {
       // eslint-disable-next-line kofem/no-silent-fallback -- div-by-zero guard: a degenerate (zero-area) face has no defined normal
       const nl = Math.hypot(f.nx, f.ny, f.nz) || 1;
@@ -134,29 +153,16 @@ function faceProps(m: ShellizeMesh): FaceProp[] {
     .sort((a, b) => b.area - a.area);
 }
 
-// Detect thin walls (opposite planar CAD-face pairs) and collapse each to a
-// mid-surface facet with its wall thickness; weld walls at their junctions.
-// Returns an empty extraction (shellBody = -1) when no thin walls are found, so
-// the caller can fall back to the all-solid solve.
-export function extractThinWallShells(
-  m: ShellizeMesh,
-  { maxWall = 15 }: { maxWall?: number } = {},
-): ShellExtraction {
-  const faces = faceProps(m);
-  if (faces.length === 0)
-    return {
-      walls: [],
-      shellBody: -1,
-      shellVerts: [],
-      shellTris: [],
-      shellThk: [],
-      shellSrc: [],
-    };
+// Pair up opposite planar faces of the same body into thin walls, keeping the
+// OUTER face of each pair (its normal points away from the other face):
+// adjacent walls' outer faces meet at convex CAD edges and share Netgen's edge
+// nodes, which the junction weld relies on.
+function detectWallPairs(faces: FaceProp[], maxWall: number): Wall[] {
   const big = faces.filter(
     (f) => f.area > 0.01 * faces[0].area && f.flat > 0.9,
   );
   const used = new Set<number>();
-  const walls: ShellExtraction["walls"] = [];
+  const walls: Wall[] = [];
   for (let i = 0; i < big.length; i++) {
     if (used.has(big[i].id)) continue;
     let best = -1,
@@ -164,11 +170,11 @@ export function extractThinWallShells(
     for (let j = 0; j < big.length; j++) {
       if (i === j || used.has(big[j].id) || big[i].body !== big[j].body)
         continue;
-      const d =
+      const dot =
         big[i].n[0] * big[j].n[0] +
         big[i].n[1] * big[j].n[1] +
         big[i].n[2] * big[j].n[2];
-      if (d > -0.85) continue;
+      if (dot > -0.85) continue;
       const dc: [number, number, number] = [
         big[j].c[0] - big[i].c[0],
         big[j].c[1] - big[i].c[1],
@@ -204,9 +210,6 @@ export function extractThinWallShells(
     if (best >= 0) {
       used.add(big[i].id);
       used.add(big[best].id);
-      // Keep the OUTER face of the pair (its normal points away from the other
-      // face): adjacent walls' outer faces meet at convex CAD edges and share
-      // Netgen's edge nodes, which the junction weld below relies on.
       const fa = big[i],
         fb = big[best];
       const dcx = fa.c[0] - fb.c[0],
@@ -216,16 +219,18 @@ export function extractThinWallShells(
       walls.push({ keep: outer.id, n: outer.n, thk: bo, body: fa.body });
     }
   }
-  if (walls.length === 0)
-    return {
-      walls: [],
-      shellBody: -1,
-      shellVerts: [],
-      shellTris: [],
-      shellThk: [],
-      shellSrc: [],
-    };
-  const shellBody = walls[0].body;
+  return walls;
+}
+
+// Collapse the kept wall faces to mid-surface facets (offset t/2 inward) and
+// weld mid-surface nodes that came from the SAME original mesh node. Where two
+// walls meet at a CAD edge they share Netgen's edge nodes, so joining nodes by
+// original id fuses the walls exactly — independent of mesh resolution (a
+// spatial tolerance over-welds a fine mesh and under-welds a coarse one).
+function collapseWallsToMidSurface(
+  m: ShellizeMesh,
+  walls: Wall[],
+): Pick<ShellExtraction, "shellVerts" | "shellTris" | "shellThk" | "shellSrc"> {
   const keep = new Map(walls.map((w) => [w.keep, w]));
 
   const rawV: number[] = [],
@@ -246,29 +251,25 @@ export function extractThinWallShells(
     return id;
   };
   for (let t = 0; t < m.surfFace.length; t++) {
-    const w = keep.get(m.surfFace[t]);
-    if (!w) continue;
-    const o = w.thk / 2;
+    const wall = keep.get(m.surfFace[t]);
+    if (!wall) continue;
+    const offset = wall.thk / 2;
     const nn = [
       m.surfTri[3 * t],
       m.surfTri[3 * t + 1],
       m.surfTri[3 * t + 2],
     ].map((oi) => {
-      const p = pt(m.V, oi);
-      return addN(w.keep, oi, [
-        p[0] - w.n[0] * o,
-        p[1] - w.n[1] * o,
-        p[2] - w.n[2] * o,
+      const pos = pt(m.V, oi);
+      return addN(wall.keep, oi, [
+        pos[0] - wall.n[0] * offset,
+        pos[1] - wall.n[1] * offset,
+        pos[2] - wall.n[2] * offset,
       ]);
     });
     rawT.push(nn[0], nn[1], nn[2]);
-    rawThk.push(w.thk);
+    rawThk.push(wall.thk);
   }
 
-  // Weld mid-surface nodes that came from the SAME original mesh node. Where two
-  // walls meet at a CAD edge they share Netgen's edge nodes, so joining nodes by
-  // original id fuses the walls exactly — independent of mesh resolution (a
-  // spatial tolerance over-welds a fine mesh and under-welds a coarse one).
   const nR = rawV.length / 3;
   const rep = new Int32Array(nR).map((_, i) => i);
   const find = (x: number): number => {
@@ -279,41 +280,65 @@ export function extractThinWallShells(
     return x;
   };
   const byOrig = new Map<number, number[]>();
-  for (let i = 0; i < nR; i++)
-    (
-      byOrig.get(rawOrig[i]) ?? byOrig.set(rawOrig[i], []).get(rawOrig[i])!
-    ).push(i);
+  for (let i = 0; i < nR; i++) getOrInit(byOrig, rawOrig[i], () => []).push(i);
   for (const [, group] of byOrig)
     for (let k = 1; k < group.length; k++) {
-      const a = find(group[0]),
-        c = find(group[k]);
-      if (a !== c) rep[Math.max(a, c)] = Math.min(a, c);
+      const rootA = find(group[0]),
+        rootB = find(group[k]);
+      if (rootA !== rootB) rep[Math.max(rootA, rootB)] = Math.min(rootA, rootB);
     }
   const comp = new Map<number, number>();
   const shellVerts: number[] = [],
     shellSrc: number[] = [];
   const cid = (i: number) => {
-    const r = find(i);
-    let c = comp.get(r);
-    if (c === undefined) {
-      c = shellVerts.length / 3;
-      comp.set(r, c);
-      shellVerts.push(rawV[3 * r], rawV[3 * r + 1], rawV[3 * r + 2]);
-      shellSrc.push(rawSrc[r]);
+    const root = find(i);
+    let compact = comp.get(root);
+    if (compact === undefined) {
+      compact = shellVerts.length / 3;
+      comp.set(root, compact);
+      shellVerts.push(rawV[3 * root], rawV[3 * root + 1], rawV[3 * root + 2]);
+      shellSrc.push(rawSrc[root]);
     }
-    return c;
+    return compact;
   };
   const shellTris: number[] = [],
     shellThk: number[] = [];
   for (let t = 0; t < rawT.length / 3; t++) {
-    const a = cid(rawT[3 * t]),
-      b = cid(rawT[3 * t + 1]),
-      c = cid(rawT[3 * t + 2]);
-    if (a === b || b === c || a === c) continue;
-    shellTris.push(a, b, c);
+    const triA = cid(rawT[3 * t]),
+      triB = cid(rawT[3 * t + 1]),
+      triC = cid(rawT[3 * t + 2]);
+    if (triA === triB || triB === triC || triA === triC) continue;
+    shellTris.push(triA, triB, triC);
     shellThk.push(rawThk[t]);
   }
-  return { walls, shellBody, shellVerts, shellTris, shellThk, shellSrc };
+  return { shellVerts, shellTris, shellThk, shellSrc };
+}
+
+// Detect thin walls (opposite planar CAD-face pairs) and collapse each to a
+// mid-surface facet with its wall thickness; weld walls at their junctions.
+// Returns an empty extraction (shellBody = -1) when no thin walls are found, so
+// the caller can fall back to the all-solid solve.
+export function extractThinWallShells(
+  m: ShellizeMesh,
+  { maxWall = 15 }: { maxWall?: number } = {},
+): ShellExtraction {
+  const empty: ShellExtraction = {
+    walls: [],
+    shellBody: -1,
+    shellVerts: [],
+    shellTris: [],
+    shellThk: [],
+    shellSrc: [],
+  };
+  const faces = faceProps(m);
+  if (faces.length === 0) return empty;
+  const walls = detectWallPairs(faces, maxWall);
+  if (walls.length === 0) return empty;
+  return {
+    walls,
+    shellBody: walls[0].body,
+    ...collapseWallsToMidSurface(m, walls),
+  };
 }
 
 // Mutual-nearest weld of different-body solid nodes within tieDist (heals a
@@ -327,52 +352,56 @@ export function tieSolidBodies(
   for (let e = 0; e < m.tet.length / 4; e++) {
     if (m.body[e] === shellBody) continue;
     for (let k = 0; k < 4; k++) {
-      const n = m.tet[4 * e + k];
-      (bodiesOf.get(n) ?? bodiesOf.set(n, new Set()).get(n)!).add(m.body[e]);
+      const node = m.tet[4 * e + k];
+      getOrInit(bodiesOf, node, () => new Set<number>()).add(m.body[e]);
     }
   }
-  const nodes = [...bodiesOf.keys()];
   const grid = new Map<string, number[]>();
   const gk = (x: number, y: number, z: number) =>
     `${Math.floor(x / tieDist)},${Math.floor(y / tieDist)},${Math.floor(z / tieDist)}`;
-  for (const n of nodes) {
-    const p = pt(m.V, n);
-    (grid.get(gk(...p)) ?? grid.set(gk(...p), []).get(gk(...p))!).push(n);
+  for (const node of bodiesOf.keys()) {
+    const pos = pt(m.V, node);
+    getOrInit(grid, gk(...pos), () => []).push(node);
   }
   const nearest = new Map<number, number>();
-  for (const n of nodes) {
-    const p = pt(m.V, n);
-    const cx = Math.floor(p[0] / tieDist),
-      cy = Math.floor(p[1] / tieDist),
-      cz = Math.floor(p[2] / tieDist);
+  for (const [node, nodeBodies] of bodiesOf) {
+    const pos = pt(m.V, node);
+    const cx = Math.floor(pos[0] / tieDist),
+      cy = Math.floor(pos[1] / tieDist),
+      cz = Math.floor(pos[2] / tieDist);
     let bn = -1,
       bd = tieDist * tieDist;
     for (let dx = -1; dx <= 1; dx++)
       for (let dy = -1; dy <= 1; dy++)
         for (let dz = -1; dz <= 1; dz++) {
-          const b = grid.get(`${cx + dx},${cy + dy},${cz + dz}`);
-          if (!b) continue;
-          for (const mm of b) {
-            if (mm === n) continue;
+          const bucket = grid.get(`${cx + dx},${cy + dy},${cz + dz}`);
+          if (!bucket) continue;
+          for (const mm of bucket) {
+            if (mm === node) continue;
+            const otherBodies = bodiesOf.get(mm);
+            if (otherBodies === undefined)
+              throw new Error(`tie grid holds unknown node ${mm}`);
             let same = false;
-            for (const x of bodiesOf.get(n)!)
-              if (bodiesOf.get(mm)!.has(x)) same = true;
+            for (const bodyId of nodeBodies)
+              if (otherBodies.has(bodyId)) same = true;
             if (same) continue;
-            const q = pt(m.V, mm);
+            const posOther = pt(m.V, mm);
             const dd =
-              (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2;
+              (pos[0] - posOther[0]) ** 2 +
+              (pos[1] - posOther[1]) ** 2 +
+              (pos[2] - posOther[2]) ** 2;
             if (dd < bd) {
               bd = dd;
               bn = mm;
             }
           }
         }
-    nearest.set(n, bn);
+    nearest.set(node, bn);
   }
   const rep = new Map<number, number>();
-  for (const n of nodes) {
-    const mm = nearest.get(n)!;
-    if (mm >= 0 && nearest.get(mm) === n && n < mm) rep.set(mm, n);
+  for (const [node, mate] of nearest) {
+    if (mate >= 0 && nearest.get(mate) === node && node < mate)
+      rep.set(mate, node);
   }
   return rep;
 }
@@ -430,7 +459,12 @@ export function buildCoupledModel(
       ),
     );
 
-  const tets = solidTets.map((n) => solidPool.get(tied(n))!);
+  const tets = solidTets.map((n) => {
+    const poolIndex = solidPool.get(tied(n));
+    if (poolIndex === undefined)
+      throw new Error(`solid node ${n} missing from the coupled pool`);
+    return poolIndex;
+  });
   const triangles = shells.shellTris.map((s) => shellPool[s]);
   const ppt = (i: number): [number, number, number] => [
     pool[3 * i],
@@ -438,33 +472,35 @@ export function buildCoupledModel(
     pool[3 * i + 2],
   ];
 
-  const R = couplingRadius;
+  const radius = couplingRadius;
   const grid = new Map<string, number[]>();
   const gk = (x: number, y: number, z: number) =>
-    `${Math.floor(x / R)},${Math.floor(y / R)},${Math.floor(z / R)}`;
+    `${Math.floor(x / radius)},${Math.floor(y / radius)},${Math.floor(z / radius)}`;
   for (const [, pi] of solidPool) {
-    const p = ppt(pi);
-    (grid.get(gk(...p)) ?? grid.set(gk(...p), []).get(gk(...p))!).push(pi);
+    const pos = ppt(pi);
+    getOrInit(grid, gk(...pos), () => []).push(pi);
   }
   const ref: number[] = [],
     offsets = [0],
     solid: number[] = [];
   for (const gi of shellPool) {
-    const p = ppt(gi);
-    const cx = Math.floor(p[0] / R),
-      cy = Math.floor(p[1] / R),
-      cz = Math.floor(p[2] / R);
+    const pos = ppt(gi);
+    const cx = Math.floor(pos[0] / radius),
+      cy = Math.floor(pos[1] / radius),
+      cz = Math.floor(pos[2] / radius);
     const near: { pi: number; d2: number }[] = [];
     for (let dx = -1; dx <= 1; dx++)
       for (let dy = -1; dy <= 1; dy++)
         for (let dz = -1; dz <= 1; dz++) {
-          const b = grid.get(`${cx + dx},${cy + dy},${cz + dz}`);
-          if (!b) continue;
-          for (const pi of b) {
-            const q = ppt(pi);
+          const bucket = grid.get(`${cx + dx},${cy + dy},${cz + dz}`);
+          if (!bucket) continue;
+          for (const pi of bucket) {
+            const posSolid = ppt(pi);
             const d2 =
-              (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2;
-            if (d2 <= R * R) near.push({ pi, d2 });
+              (pos[0] - posSolid[0]) ** 2 +
+              (pos[1] - posSolid[1]) ** 2 +
+              (pos[2] - posSolid[2]) ** 2;
+            if (d2 <= radius * radius) near.push({ pi, d2 });
           }
         }
     if (near.length >= 3) {
@@ -518,7 +554,7 @@ export function shellNodeLocator(
       model.pool[3 * pi + 1],
       model.pool[3 * pi + 2],
     );
-    (grid.get(key) ?? grid.set(key, []).get(key)!).push(pi);
+    getOrInit(grid, key, () => []).push(pi);
   }
   return (p) => {
     const cx = Math.floor(p[0] / cell),
@@ -535,9 +571,9 @@ export function shellNodeLocator(
               Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz)) !== r
             )
               continue; // ring shell only
-            const b = grid.get(`${cx + dx},${cy + dy},${cz + dz}`);
-            if (!b) continue;
-            for (const pi of b) {
+            const bucket = grid.get(`${cx + dx},${cy + dy},${cz + dz}`);
+            if (!bucket) continue;
+            for (const pi of bucket) {
               const dd =
                 (p[0] - model.pool[3 * pi]) ** 2 +
                 (p[1] - model.pool[3 * pi + 1]) ** 2 +
