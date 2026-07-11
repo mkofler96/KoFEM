@@ -37,16 +37,30 @@ const a = 1000, // hole radius (mm)
 const m = plateWithHoleShellMesh(a, b, 12, 64, 2);
 const nNodes = m.vertices.length;
 
-// Fix the left edge (all 6 DOF); pull the right edge in +x with a resultant equal
-// to the gross axial force P = σ·(2b·t), so the far-field membrane stress is σ.
-// The exact right-edge distribution is immaterial to the hole stress (St. Venant);
-// an equal nodal split gives the correct resultant.
+// Fix the left edge (all 6 DOF); pull the right edge in +x with the remote tension
+// σ applied as work-equivalent (consistent) nodal loads — NOT an equal split. The
+// straight right edge (x = b) carries a uniform traction σ over its cross-section,
+// i.e. a line load q = σ·t; the consistent nodal force is q times each node's
+// tributary edge length, so the graded node spacing along the edge is honoured and
+// the far-field membrane stress is exactly σ. (The solid twin gets the same physics
+// from MFEM's surface traction f_i = ∫ N_i·t dS; the shell solver takes only nodal
+// loads, so we lump the edge traction to the equivalent nodes here.) An equal split
+// gets only the resultant right, not the distribution.
 const left = nodesWhere(m.vertices, (x) => x <= -b + 1e-6);
-const right = nodesWhere(m.vertices, (x) => x >= b - 1e-6);
-const P = sigma * (2 * b * t);
-const point_loads = right.map((vertex) => ({
+const right = nodesWhere(m.vertices, (x) => x >= b - 1e-6).sort(
+  (i, j) => m.vertices[i][1] - m.vertices[j][1],
+);
+const q = sigma * t; // line load along the edge (force per unit length)
+const tributary = new Array(right.length).fill(0);
+for (let k = 0; k + 1 < right.length; k++) {
+  const half = (m.vertices[right[k + 1]][1] - m.vertices[right[k]][1]) / 2;
+  tributary[k] += half;
+  tributary[k + 1] += half;
+}
+// Σ tributary = full edge length 2b ⇒ Σ force = q·2b = σ·(2b·t) = gross axial P.
+const point_loads = right.map((vertex, k) => ({
   vertex,
-  force: [P / right.length, 0, 0],
+  force: [q * tributary[k], 0, 0],
 }));
 
 const Module = await loadEngine();
@@ -108,9 +122,11 @@ const entry = {
     "Kirchhoff shell (DKT + CST). Loaded in its own plane it is plane stress, and " +
     "the peak facet stress at the hole still approaches Kt = 3.",
   showcase: true,
-  // "Open in KoFEM web" opens the solid twin — the app solves solids, not pure
-  // shells (same reason the crane showcase points at its solid assembly).
-  appId: "plate-with-hole",
+  // No "Open in KoFEM web" link (appId omitted ⇒ showcase card renders none). The
+  // app's analysis format models solids only — CTETRA / CHEXA, see analysisFile.ts
+  // — so it cannot open this pure-shell triangle model. Pointing the link at the
+  // solid twin would silently open a *different* model, so the card is display-only
+  // until the app gains shell elements.
   metrics: [
     { k: "stress concentration Kt", v: Kt.toFixed(2) },
     {
