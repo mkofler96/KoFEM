@@ -2,11 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Native validation of the BC/load index checks (engine/cpp/bc_validation.h)
-// that solve_mfem.cpp's ingestion functions use to reject out-of-range vertex
-// and DOF-component indices instead of silently dropping the constraint/load
-// (issue #362). The header is pure C++ — no MFEM, OCCT, Netgen or Emscripten —
-// so it compiles with a plain host compiler; see scripts/test-bc-validation.sh.
-// Exits non-zero if any case behaves wrong, so it can gate CI.
+// that solve_mfem.cpp's (issue #362) and solve_shell.cpp's (issue #379) ingestion
+// functions use to reject out-of-range vertex and DOF-component indices instead of
+// silently dropping the constraint/load. The header is pure C++ — no MFEM, OCCT,
+// Netgen or Emscripten — so it compiles with a plain host compiler; see
+// scripts/test-bc-validation.sh. Exits non-zero if any case behaves wrong, so it
+// can gate CI.
 
 #include "bc_validation.h"
 
@@ -91,6 +92,21 @@ int main() {
               [&] { require_min_dofs(3, 3, 5, "apply_point_loads"); });
     expect_throws(failures, "0 DOFs (empty lookup) rejected",
                   [&] { require_min_dofs(0, 3, 5, "apply_point_loads"); }, "apply_point_loads");
+
+    // ── Shell DOF-component range check (0..5: 3 translations + 3 rotations) ───
+    // solve_shell.cpp accepts six DOFs per node, so the valid band is wider than
+    // the solid path's 0..2 — but still bounded (issue #379).
+    printf("\nShell DOF-component validation (issue #379):\n");
+    expect_ok(failures, "shell component 0 (Ux) accepted",
+              [&] { require_valid_shell_component(0, 7, "add_fixed_dofs"); });
+    expect_ok(failures, "shell component 5 (Rz, last) accepted",
+              [&] { require_valid_shell_component(5, 7, "add_fixed_dofs"); });
+    expect_throws(failures, "shell component 6 (one past end) rejected",
+                  [&] { require_valid_shell_component(6, 7, "add_fixed_dofs"); }, "6");
+    expect_throws(failures, "negative shell component rejected",
+                  [&] { require_valid_shell_component(-1, 7, "add_fixed_dofs"); }, "-1");
+    expect_throws(failures, "shell component error names the vertex",
+                  [&] { require_valid_shell_component(9, 42, "add_fixed_dofs"); }, "42");
 
     printf(failures != 0 ? "\n%d check(s) FAILED\n" : "\nall checks passed\n", failures);
     return failures != 0 ? 1 : 0;
