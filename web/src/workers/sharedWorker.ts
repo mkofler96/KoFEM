@@ -37,7 +37,14 @@ function createWorker(): Worker {
       return;
     }
     const pending = _pending.get(id);
-    if (!pending) return;
+    if (!pending) {
+      console.warn(
+        `[worker] dropped response for unknown id ${id} — no pending request` +
+          ` (pending ids: [${[..._pending.keys()].join(", ")}]).` +
+          " Likely a response that arrived after resetWorker() or a duplicate resolution.",
+      );
+      return;
+    }
     _pending.delete(id);
     if (ok) {
       pending.resolve(rest);
