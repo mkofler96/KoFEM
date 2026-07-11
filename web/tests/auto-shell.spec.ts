@@ -36,8 +36,8 @@ test("auto-shell: thin plate on a block solves through the coupled path", async 
 
   await page.goto("/app/");
   await expect(page.locator("nav")).toBeVisible();
-  await page.waitForFunction(
-    () => !!(window as unknown as { __kofem?: unknown }).__kofem,
+  await page.waitForFunction(() =>
+    Boolean((window as unknown as { __kofem?: unknown }).__kofem),
   );
 
   const summary = await page.evaluate(async (): Promise<Summary> => {
@@ -164,32 +164,34 @@ test("auto-shell: thin plate on a block solves through the coupled path", async 
     ];
     const surfaceTriangles: [number, number, number][] = [];
     const surfaceFaceIds: number[] = [];
+    const nodeById = (id: number): Node => {
+      const found = byId.get(id);
+      if (!found) throw new Error(`fixture references unknown node id ${id}`);
+      return found;
+    };
     for (const { tri, opp, body } of faceCount.values()) {
-      const [pA, pB, pC, pO] = [tri[0], tri[1], tri[2], opp].map((id) =>
-        byId.get(id)!,
-      );
-      // eslint-disable-next-line kofem/min-identifier-length -- u,v: triangle edge vectors, n = u×v the face normal
-      const u = [pB.x - pA.x, pB.y - pA.y, pB.z - pA.z];
-      // eslint-disable-next-line kofem/min-identifier-length -- see u above
-      const v = [pC.x - pA.x, pC.y - pA.y, pC.z - pA.z];
-      const n = [
-        u[1] * v[2] - u[2] * v[1],
-        u[2] * v[0] - u[0] * v[2],
-        u[0] * v[1] - u[1] * v[0],
+      const [pA, pB, pC, pO] = [tri[0], tri[1], tri[2], opp].map(nodeById);
+      const edgeAB = [pB.x - pA.x, pB.y - pA.y, pB.z - pA.z];
+      const edgeAC = [pC.x - pA.x, pC.y - pA.y, pC.z - pA.z];
+      const normal = [
+        edgeAB[1] * edgeAC[2] - edgeAB[2] * edgeAC[1],
+        edgeAB[2] * edgeAC[0] - edgeAB[0] * edgeAC[2],
+        edgeAB[0] * edgeAC[1] - edgeAB[1] * edgeAC[0],
       ];
       const toOpp = [
         pO.x - (pA.x + pB.x + pC.x) / 3,
         pO.y - (pA.y + pB.y + pC.y) / 3,
         pO.z - (pA.z + pB.z + pC.z) / 3,
       ];
-      const inward = n[0] * toOpp[0] + n[1] * toOpp[1] + n[2] * toOpp[2] > 0;
+      const inward =
+        normal[0] * toOpp[0] + normal[1] * toOpp[1] + normal[2] * toOpp[2] > 0;
       const wound: [number, number, number] = inward
         ? [tri[0], tri[2], tri[1]]
         : [tri[0], tri[1], tri[2]];
       const fid = planes.findIndex(
         (pl) =>
           pl.body === body &&
-          tri.every((id) => Math.abs(byId.get(id)![pl.axis] - pl.at) < 1e-6),
+          tri.every((id) => Math.abs(nodeById(id)[pl.axis] - pl.at) < 1e-6),
       );
       if (fid < 0) throw new Error("boundary face lies on no box plane");
       surfaceTriangles.push(wound);
