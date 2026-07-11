@@ -6,6 +6,9 @@ version = 1
 exclude_patterns = [
   "web/src/wasm/pkg/**",
   "web/dist/**",
+  # CLI demo/validation scripts: terminal output and process.exit ARE the
+  # product here, so the JS analyzer's antipattern checks don't apply.
+  "examples/**",
 ]
 
 [[analyzers]]

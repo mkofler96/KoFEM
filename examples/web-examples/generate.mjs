@@ -15,7 +15,7 @@
 //
 // Run with:  bun examples/web-examples/generate.mjs   (or `bun run examples:generate`)
 
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { loadSolver } from "../validation/lib/solver.mjs";
@@ -382,5 +382,11 @@ for (const ex of examples) {
   );
 }
 
-writeFileSync(join(outDir, "examples.json"), JSON.stringify(manifest));
-console.log(`\nWrote ${manifest.length} examples to ${outDir}`);
+// Preserve showcase entries (e.g. the coupled crane written by
+// generate-crane-shell.mjs) so regenerating the benchmarks doesn't drop them.
+const manifestPath = join(outDir, "examples.json");
+const showcase = existsSync(manifestPath)
+  ? JSON.parse(readFileSync(manifestPath, "utf8")).filter((e) => e.showcase)
+  : [];
+writeFileSync(join(outDir, "examples.json"), JSON.stringify([...manifest, ...showcase]));
+console.log(`\nWrote ${manifest.length} examples (+${showcase.length} showcase) to ${outDir}`);

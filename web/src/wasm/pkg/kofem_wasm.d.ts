@@ -49,6 +49,23 @@ export type StaticSolveResult =
   | { displacements: Float64Array; von_mises: Float64Array }
   | { error: string }
 
+/** Triangle SURFACE mesh input to the Kirchhoff shell solver: `vertices` is xyz
+ *  interleaved (length 3·nNodes); `triangles` is three 0-based vertex indices
+ *  per triangle (length 3·nTris). `thicknesses` is an optional per-triangle
+ *  thickness field (length nTris) for walls of differing gauge; when omitted the
+ *  scalar thickness in the material JSON is used. */
+export interface ShellMesh {
+  vertices: Float64Array
+  triangles: Int32Array
+  thicknesses?: Float64Array
+}
+
+/** Shell solve output: three translation components (u,v,w) per vertex
+ *  (length 3·nNodes). Bad input / non-convergence yields `{error}` instead. */
+export type ShellSolveResult =
+  | { displacements: Float64Array }
+  | { error: string }
+
 /** Runtime interface of the initialised Emscripten/Embind module. */
 export interface KofemModule {
   /** Load a STEP or IGES file and tessellate it for display.
@@ -79,6 +96,40 @@ export interface KofemModule {
     bcs_json: string,
     order: number,
   ): StaticSolveResult
+  /** Kirchhoff flat-facet shell solve on a triangle surface mesh. `mat_json` is
+   *  `{ young_modulus, poisson_ratio, thickness }`; `bcs_json` is
+   *  `{ fixed_vertices?, fixed_dofs?, point_loads? }` with DOF components
+   *  0..5 = (u,v,w,θx,θy,θz). Returns three translations per node. */
+  solve_shell(
+    mesh: ShellMesh,
+    mat_json: string,
+    bcs_json: string,
+  ): ShellSolveResult
+  /** Coupled solid(tet)+shell solve. MFEM assembles the solid; DKT shells and
+   *  RBE3 distributing couplings are added and solved together.
+   *   mesh:     { vertices, tets, triangles, thicknesses? }
+   *   coupling: { ref, offsets, solid }  CSR-style: reference node ref[k] ties to
+   *             solid[offsets[k]..offsets[k+1]).
+   *   bcs:      { fixed_dofs, load_dofs, load_vals }  (DOF = 6·node+component)
+   *   mat_json: { solid:{young_modulus,poisson_ratio}, shell:{…} } */
+  solve_coupled(
+    mesh: {
+      vertices: Float64Array
+      tets: Int32Array
+      triangles: Int32Array
+      thicknesses?: Float64Array
+    },
+    coupling: { ref: Int32Array; offsets: Int32Array; solid: Int32Array },
+    bcs: { fixed_dofs: Int32Array; load_dofs: Int32Array; load_vals: Float64Array },
+    mat_json: string,
+  ):
+    | {
+        displacements: Float64Array
+        von_mises_tets: Float64Array
+        von_mises_tris: Float64Array
+        iterations: number
+      }
+    | { error: string }
 }
 
 export interface ModuleOverrides {

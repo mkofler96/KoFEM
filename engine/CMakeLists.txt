@@ -36,6 +36,9 @@ add_executable(kofem_wasm_emcc
     cpp/geometry_cache.cpp
     cpp/mesh_netgen.cpp
     cpp/solve_mfem.cpp
+    cpp/solve_shell.cpp
+    cpp/solve_coupled.cpp
+    cpp/shell_core.cpp
     cpp/json_util.cpp
     cpp/wasm_util.cpp
     cpp/netgen_glue.cpp
@@ -241,7 +244,9 @@ target_link_options(kofem_wasm_emcc PRIVATE
     -sENVIRONMENT=web,worker
     -sINITIAL_MEMORY=134217728      # 128 MB starting heap
     -sALLOW_MEMORY_GROWTH=1
-    -sMAXIMUM_MEMORY=2147483648     # 2 GB cap
+    # 4 GB (the wasm32 limit): the coupled solid+shell solve of a fine assembly
+    # mesh peaks well past 2 GB during assembly + master-slave reduction.
+    -sMAXIMUM_MEMORY=4294967296
     -sSTACK_SIZE=8388608            # 8 MB stack for MFEM recursion
     -sUSE_ZLIB=1
 )

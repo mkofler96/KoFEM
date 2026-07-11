@@ -768,8 +768,44 @@
       function card(ex) {
         const el = document.createElement("article");
         el.className = "card";
-        const within = ex.errPct <= 15;
-        const feStr = fmt(ex.feValue) + (ex.unit ? " " + ex.unit : "");
+        // "Open in KoFEM web" opens the editable analysis. Benchmark cards open
+        // their own id; a showcase card (e.g. the coupled crane, which the app
+        // can't re-solve as shells) can point `appId` at a related openable model
+        // — the crane assembly — or omit the link entirely.
+        const appId = ex.appId ?? (ex.showcase ? null : ex.id);
+        const openLink = !appId
+          ? ""
+          : `<a class="open-link" href="/app/?example=${encodeURIComponent(appId)}">
+                Open in KoFEM web
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                  <polyline points="15 3 21 3 21 9"></polyline>
+                  <line x1="10" y1="14" x2="21" y2="3"></line>
+                </svg>
+              </a>`;
+        // Metrics: benchmark cards show FE value vs. closed-form reference;
+        // showcase cards provide their own metric cells (no reference).
+        let metricsHtml;
+        if (ex.metrics) {
+          metricsHtml = ex.metrics
+            .map(
+              (m) =>
+                `<div class="cell"><div class="k">${m.k}</div><div class="v ${m.pass ? "pass" : ""}">${m.v}</div></div>`,
+            )
+            .join("");
+        } else {
+          const within = ex.errPct <= 15;
+          const feStr = fmt(ex.feValue) + (ex.unit ? " " + ex.unit : "");
+          metricsHtml = `
+              <div class="cell">
+                <div class="k">${ex.quantity}</div>
+                <div class="v">${feStr}</div>
+              </div>
+              <div class="cell">
+                <div class="k">vs. reference</div>
+                <div class="v ${within ? "pass" : ""}">${ex.errPct.toFixed(1)}% err</div>
+              </div>`;
+        }
         el.innerHTML = `
           <div class="viewer">
             <canvas></canvas>
@@ -779,26 +815,10 @@
           <div class="card-body">
             <div class="card-head">
               <h2>${ex.title}</h2>
-              <a class="open-link" href="/app/?example=${encodeURIComponent(ex.id)}">
-                Open in KoFEM web
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                  <polyline points="15 3 21 3 21 9"></polyline>
-                  <line x1="10" y1="14" x2="21" y2="3"></line>
-                </svg>
-              </a>
+              ${openLink}
             </div>
             <p class="blurb">${ex.blurb}</p>
-            <div class="metrics">
-              <div class="cell">
-                <div class="k">${ex.quantity}</div>
-                <div class="v">${feStr}</div>
-              </div>
-              <div class="cell">
-                <div class="k">vs. reference</div>
-                <div class="v ${within ? "pass" : ""}">${ex.errPct.toFixed(1)}% err</div>
-              </div>
-            </div>
+            <div class="metrics">${metricsHtml}</div>
             <div class="ref-note">${ex.referenceLabel}</div>
           </div>`;
         grid.appendChild(el);

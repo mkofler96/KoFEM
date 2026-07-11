@@ -25,6 +25,10 @@ export function useSolver() {
   const setMode = useModelStore((s) => s.setMode);
   const elementOrder = useModelStore((s) => s.elementOrder);
   const tieDistance = useModelStore((s) => s.tieDistance);
+  // Surface mesh + CAD face ids drive auto-shell idealisation of thin bodies
+  // in the worker's coupled solve.
+  const surfaceTriangles = useModelStore((s) => s.surfaceTriangles);
+  const surfaceFaceIds = useModelStore((s) => s.surfaceFaceIds);
   const [error, setError] = useState<string | null>(null);
   const { logs, clearLogs } = useWorkerLogs("solve");
 
@@ -62,6 +66,8 @@ export function useSolver() {
         surfaceLoads,
         elementOrder,
         tieDistance,
+        surfaceTriangles,
+        surfaceFaceIds,
       },
     )
       .then(({ displacements, vonMises }) => {
