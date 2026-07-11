@@ -556,13 +556,14 @@ export function shellNodeLocator(
     );
     getOrInit(grid, key, () => []).push(pi);
   }
+  const maxRings = 6;
   return (p) => {
     const cx = Math.floor(p[0] / cell),
       cy = Math.floor(p[1] / cell),
       cz = Math.floor(p[2] / cell);
-    let best = model.shellPool[0],
+    let best = -1,
       bd = Infinity;
-    for (let r = 0; r <= 6 && bd === Infinity; r++) {
+    for (let r = 0; r <= maxRings && bd === Infinity; r++) {
       for (let dx = -r; dx <= r; dx++)
         for (let dy = -r; dy <= r; dy++)
           for (let dz = -r; dz <= r; dz++) {
@@ -585,6 +586,17 @@ export function shellNodeLocator(
             }
           }
     }
+    // No candidate within the searched radius: the query point (a BC/load on the
+    // shelled body) is farther from every shell mid-surface node than the grid
+    // sweep reaches. Returning the seed node would silently map the constraint or
+    // load onto an arbitrary, unrelated node — throw instead (issue #378).
+    if (best < 0 || bd === Infinity)
+      throw new Error(
+        `shellNodeLocator: no shell mid-surface node found within ${maxRings * cell} units of ` +
+          `query point (${p[0]}, ${p[1]}, ${p[2]}) — a boundary condition or load on the shelled ` +
+          `body could not be mapped onto the shell mesh. The node may lie farther from any thin ` +
+          `wall than the search radius, or the model may be mis-scaled.`,
+      );
     return best;
   };
 }
