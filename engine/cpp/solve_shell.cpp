@@ -168,7 +168,17 @@ val solve_shell(const val& mesh, const std::string& mat_json, const std::string&
         for (int c = 0; c < 3; ++c)
             displacements[3 * v + c] = r.dofs[6 * v + c];
 
+    // Von Mises per facet: surface stress at the worse of the two shell surfaces
+    // z = ±t/2, combining CST membrane strain with DKT bending curvature (see
+    // shell_von_mises). Named "von_mises" to match solve_linear_elastic's
+    // per-element contract, so the same result pipeline consumes both.
+    const std::vector<double> von_mises = kofem::shell::shell_von_mises(
+        in.vertices, in.triangles, in.thickness, in.thicknesses, in.young,
+        in.poisson, r.dofs);
+
     val result = val::object();
     result.set("displacements", float64_array(displacements));
+    result.set("von_mises", float64_array(von_mises));
+    result.set("iterations", r.iterations);
     return result;
 }

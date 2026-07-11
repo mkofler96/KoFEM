@@ -61,9 +61,15 @@ export interface ShellMesh {
 }
 
 /** Shell solve output: three translation components (u,v,w) per vertex
- *  (length 3·nNodes). Bad input / non-convergence yields `{error}` instead. */
+ *  (length 3·nNodes), one von Mises surface stress per triangle (length nTris),
+ *  and the CG iteration count. Bad input / non-convergence yields `{error}`
+ *  instead. */
 export type ShellSolveResult =
-  | { displacements: Float64Array }
+  | {
+      displacements: Float64Array
+      von_mises: Float64Array
+      iterations: number
+    }
   | { error: string }
 
 /** Runtime interface of the initialised Emscripten/Embind module. */
@@ -99,7 +105,8 @@ export interface KofemModule {
   /** Kirchhoff flat-facet shell solve on a triangle surface mesh. `mat_json` is
    *  `{ young_modulus, poisson_ratio, thickness }`; `bcs_json` is
    *  `{ fixed_vertices?, fixed_dofs?, point_loads? }` with DOF components
-   *  0..5 = (u,v,w,θx,θy,θz). Returns three translations per node. */
+   *  0..5 = (u,v,w,θx,θy,θz). Returns three translations per node plus one von
+   *  Mises surface stress per triangle. */
   solve_shell(
     mesh: ShellMesh,
     mat_json: string,
