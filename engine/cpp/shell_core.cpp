@@ -503,11 +503,11 @@ ShellResult solve_shell_core(const ShellInput& in) {
 
 // ── Coupled solid + shell ─────────────────────────────────────────────────────
 
-std::vector<SolidTriplet> tet_solid_stiffness(const std::vector<double>& V,
+std::vector<SolidTriplet> tet_solid_stiffness(const std::vector<double>& vertices,
                                               const std::vector<int>& tets,
-                                              double E, double nu) {
-    const double lam = E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu));
-    const double mu = E / (2.0 * (1.0 + nu));
+                                              double young, double poisson) {
+    const double lam = young * poisson / ((1.0 + poisson) * (1.0 - 2.0 * poisson));
+    const double mu = young / (2.0 * (1.0 + poisson));
     // Isotropic 3D elasticity (Voigt: xx,yy,zz,xy,yz,zx).
     std::array<std::array<double, 6>, 6> D{};
     for (int i = 0; i < 3; ++i) {
@@ -517,7 +517,7 @@ std::vector<SolidTriplet> tet_solid_stiffness(const std::vector<double>& V,
     }
     auto vtx = [&](int n) -> Vec3 {
         const size_t b3 = 3 * static_cast<size_t>(n);
-        return {V[b3], V[b3 + 1], V[b3 + 2]};
+        return {vertices[b3], vertices[b3 + 1], vertices[b3 + 2]};
     };
 
     std::vector<SolidTriplet> out;
@@ -776,14 +776,14 @@ ShellResult solve_solid_shell_core(const CoupledInput& in) {
 
 // ── Stress recovery ───────────────────────────────────────────────────────────
 
-std::vector<double> tet_von_mises(const std::vector<double>& V,
-                                  const std::vector<int>& tets, double E,
-                                  double nu, const std::vector<double>& dofs) {
-    const double lam = E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu));
-    const double mu = E / (2.0 * (1.0 + nu));
+std::vector<double> tet_von_mises(const std::vector<double>& vertices,
+                                  const std::vector<int>& tets, double young,
+                                  double poisson, const std::vector<double>& dofs) {
+    const double lam = young * poisson / ((1.0 + poisson) * (1.0 - 2.0 * poisson));
+    const double mu = young / (2.0 * (1.0 + poisson));
     auto vtx = [&](int n) -> Vec3 {
         const size_t b3 = 3 * static_cast<size_t>(n);
-        return {V[b3], V[b3 + 1], V[b3 + 2]};
+        return {vertices[b3], vertices[b3 + 1], vertices[b3 + 2]};
     };
     const int nTets = static_cast<int>(tets.size() / 4);
     std::vector<double> out(nTets);
@@ -830,15 +830,15 @@ std::vector<double> tet_von_mises(const std::vector<double>& V,
     return out;
 }
 
-std::vector<double> shell_von_mises(const std::vector<double>& V,
+std::vector<double> shell_von_mises(const std::vector<double>& vertices,
                                     const std::vector<int>& triangles,
                                     double thickness,
                                     const std::vector<double>& thicknesses,
-                                    double E, double nu,
+                                    double young, double poisson,
                                     const std::vector<double>& dofs) {
     auto vtx = [&](int n) -> Vec3 {
         const size_t b3 = 3 * static_cast<size_t>(n);
-        return {V[b3], V[b3 + 1], V[b3 + 2]};
+        return {vertices[b3], vertices[b3 + 1], vertices[b3 + 2]};
     };
     const int nTris = static_cast<int>(triangles.size() / 3);
     const bool per_facet = static_cast<int>(thicknesses.size()) == nTris;
@@ -846,7 +846,7 @@ std::vector<double> shell_von_mises(const std::vector<double>& V,
     auto vm = [](double sx, double sy, double txy) {
         return std::sqrt(sx * sx - sx * sy + sy * sy + 3.0 * txy * txy);
     };
-    const auto Dpl = constitutive(E / (1.0 - nu * nu), nu);
+    const auto Dpl = constitutive(young / (1.0 - poisson * poisson), poisson);
     auto stress = [&](const std::array<double, 3>& strain) -> std::array<double, 3> {
         std::array<double, 3> s{};
         for (int a = 0; a < 3; ++a)

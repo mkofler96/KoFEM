@@ -84,7 +84,7 @@ void add_point_loads(const val& loads_js, int n_nodes,
 
 }  // namespace
 
-val solve_shell(val mesh, const std::string& mat_json, const std::string& bcs_json) {
+val solve_shell(const val& mesh, const std::string& mat_json, const std::string& bcs_json) {
     kofem::shell::ShellInput in;
     in.vertices = f64_vector(mesh["vertices"], "mesh.vertices");
     in.triangles = i32_vector(mesh["triangles"], "mesh.triangles");

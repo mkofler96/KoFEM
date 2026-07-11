@@ -18,6 +18,6 @@
 //  point_loads?: [{vertex, force:[fx,fy,fz], moment?:[mx,my,mz]}]} where DOF
 // components are 0..5 = (u,v,w,θx,θy,θz). Returns {displacements: Float64Array}
 // (three translations per node, node order) or {error: string} on bad input.
-emscripten::val solve_shell(emscripten::val mesh,
+emscripten::val solve_shell(const emscripten::val& mesh,
                             const std::string& mat_json,
                             const std::string& bcs_json);

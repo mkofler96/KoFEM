@@ -82,7 +82,8 @@ std::vector<kofem::shell::SolidTriplet> assemble_solid_stiffness_mfem(
 
 }  // namespace
 
-val solve_coupled(val mesh, val coupling, val bcs, const std::string& mat_json) {
+val solve_coupled(const val& mesh, const val& coupling, const val& bcs,
+                  const std::string& mat_json) {
     kofem::shell::CoupledInput in;
     in.vertices = f64_vector(mesh["vertices"], "mesh.vertices");
     in.n_nodes = static_cast<int>(in.vertices.size() / 3);

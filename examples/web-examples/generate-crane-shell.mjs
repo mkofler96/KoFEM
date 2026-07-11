@@ -68,7 +68,6 @@ if ("error" in r) throw new Error(r.error);
 // ── Build the gallery viewer surface: shell triangles + solid boundary faces ───
 const disp = r.displacements;
 const pool = model.pool;
-const nPool = pool.length / 3;
 
 // solid boundary = tet faces used by exactly one solid tet
 const TF = [[0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3]];

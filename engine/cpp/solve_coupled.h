@@ -20,5 +20,5 @@
 //              DOF indices are 6·node+component (0..5 = u,v,w,θx,θy,θz).
 //   mat_json: {solid:{young_modulus,poisson_ratio}, shell:{young_modulus,poisson_ratio}}
 // Returns {displacements: Float64Array} (three translations per node) or {error}.
-emscripten::val solve_coupled(emscripten::val mesh, emscripten::val coupling,
-                              emscripten::val bcs, const std::string& mat_json);
+emscripten::val solve_coupled(const emscripten::val& mesh, const emscripten::val& coupling,
+                              const emscripten::val& bcs, const std::string& mat_json);
