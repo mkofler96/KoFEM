@@ -226,7 +226,7 @@ export function useMeshTopology(): MeshTopology {
       if (!n)
         throw new Error(
           `Boundary triangle references node id ${id} missing from nodeMap ` +
-            `while building face-picking topology — mesh/topology desync`,
+            "while building face-picking topology — mesh/topology desync",
         );
       return [n.x, n.y, n.z];
     };

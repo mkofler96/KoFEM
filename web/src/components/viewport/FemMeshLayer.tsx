@@ -171,7 +171,7 @@ export function FemMeshLayer({
       if (!entry)
         throw new Error(
           `Boundary face references node id ${id} missing from nodeMap ` +
-            `while building the undeformed surface — mesh/topology desync`,
+            "while building the undeformed surface — mesh/topology desync",
         );
       return entry.n;
     };
