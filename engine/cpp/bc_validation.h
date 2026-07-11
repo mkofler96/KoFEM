@@ -58,6 +58,19 @@ inline void require_min_dofs(int ndof, int need, int vi, const char* fn) {
             " are required");
 }
 
+// Throw if `d` is not a valid Kirchhoff shell DOF component index (0..5). Unlike
+// the solid path's 3-component vector space, a shell node carries six DOFs — three
+// translations and three rotations — so solve_shell.cpp's fixed-DOF ingestion
+// validates against 0..5 (0=Ux, 1=Uy, 2=Uz, 3=Rx, 4=Ry, 5=Rz) instead of silently
+// dropping an out-of-range component (issue #379). `vi` and `fn` build the message.
+inline void require_valid_shell_component(int d, int vi, const char* fn) {
+    if (d < 0 || d >= 6)
+        throw std::runtime_error(
+            std::string(fn) + ": vertex " + std::to_string(vi) +
+            " was given the invalid shell DOF component index " + std::to_string(d) +
+            " — expected 0..5 (0=Ux, 1=Uy, 2=Uz, 3=Rx, 4=Ry, 5=Rz)");
+}
+
 }  // namespace kofem::bc
 
 #endif  // KOFEM_BC_VALIDATION_H

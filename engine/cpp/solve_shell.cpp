@@ -12,6 +12,7 @@
 
 #include "solve_shell.h"
 
+#include "bc_validation.h"
 #include "json_util.h"
 #include "shell_core.h"
 #include "wasm_util.h"
@@ -30,6 +31,9 @@ val error_result(const std::string& message) {
 }
 
 // Append every DOF listed for a vertex (component 0..5) to the fixed set.
+// An out-of-range vertex or component is a loud error, not a silent skip:
+// dropping the constraint would let the shell CG still "converge" on a model
+// missing a BC the user configured (issue #379).
 void add_fixed_dofs(const val& fdofs_js, int n_nodes, std::vector<int>& fixed) {
     if (fdofs_js.isUndefined() || fdofs_js.isNull())
         return;
@@ -39,10 +43,11 @@ void add_fixed_dofs(const val& fdofs_js, int n_nodes, std::vector<int>& fixed) {
         int v = entry["vertex"].as<int>();
         val comps = entry["dofs"];
         unsigned nc = comps["length"].as<unsigned>();
+        kofem::bc::require_valid_vertex(v, n_nodes, "add_fixed_dofs");
         for (unsigned c = 0; c < nc; ++c) {
             int d = comps[c].as<int>();
-            if (v >= 0 && v < n_nodes && d >= 0 && d < 6)
-                fixed.push_back(6 * v + d);
+            kofem::bc::require_valid_shell_component(d, v, "add_fixed_dofs");
+            fixed.push_back(6 * v + d);
         }
     }
 }
@@ -54,9 +59,9 @@ void add_fixed_vertices(const val& fv_js, int n_nodes, std::vector<int>& fixed) 
     unsigned n = fv_js["length"].as<unsigned>();
     for (unsigned i = 0; i < n; ++i) {
         int v = fv_js[i].as<int>();
-        if (v >= 0 && v < n_nodes)
-            for (int d = 0; d < 6; ++d)
-                fixed.push_back(6 * v + d);
+        kofem::bc::require_valid_vertex(v, n_nodes, "add_fixed_vertices");
+        for (int d = 0; d < 6; ++d)
+            fixed.push_back(6 * v + d);
     }
 }
 
@@ -69,8 +74,7 @@ void add_point_loads(const val& loads_js, int n_nodes,
     for (unsigned i = 0; i < n; ++i) {
         val entry = loads_js[i];
         int v = entry["vertex"].as<int>();
-        if (v < 0 || v >= n_nodes)
-            continue;
+        kofem::bc::require_valid_vertex(v, n_nodes, "add_point_loads");
         val force = entry["force"];
         if (!force.isUndefined() && !force.isNull())
             for (int d = 0; d < 3; ++d)
