@@ -521,21 +521,53 @@ function buildShellizeMesh(
 }
 
 // Solid and shell material for the coupled solve (single each). The shell uses
-// the thin body's material; the solid uses any other body's. Multi-material
-// solids collapse to the first solid body's material for now.
+// the thin body's material; the solid uses the single material shared by every
+// solid body. The coupled solid-shell assembler (engine/cpp/solve_coupled.cpp →
+// assemble_solid_stiffness_mfem) takes one (E, nu) pair for the whole solid
+// domain — it has no per-body material plumbing — so a solid domain that spans
+// two different materials cannot be honoured here. Rather than silently pick one
+// and solve part of the model with the wrong stiffness (issue #376), refuse
+// loudly and name the ambiguity. `solidBodyIds` are the property ids of the
+// solid bodies actually present in the coupled tet mesh (shell body excluded).
 function coupledMaterials(
   materials: Material[],
   properties: Property[],
   shellBody: number,
+  solidBodyIds: number[],
 ) {
-  const matOf = (propId: number) => {
+  const matOf = (propId: number): Material => {
     const prop = properties.find((p) => p.id === propId);
-    const mat = prop && materials.find((mm) => mm.id === prop.materialId);
-    return mat ?? materials[0];
+    if (!prop)
+      throw new Error(
+        `coupledMaterials: no property with id ${propId} in the model`,
+      );
+    const mat = materials.find((mm) => mm.id === prop.materialId);
+    if (!mat)
+      throw new Error(
+        `coupledMaterials: property ${propId} references material ${prop.materialId}, which does not exist`,
+      );
+    return mat;
   };
   const shellMat = matOf(shellBody);
-  const solidProp = properties.find((p) => p.id !== shellBody) ?? properties[0];
-  const solidMat = matOf(solidProp.id);
+  const solidMats = new Map<number, Material>();
+  for (const pid of solidBodyIds) {
+    const mat = matOf(pid);
+    solidMats.set(mat.id, mat);
+  }
+  if (solidMats.size === 0)
+    throw new Error(
+      "coupledMaterials: the coupled solve has no solid body — a shell body must be coupled to at least one solid body",
+    );
+  if (solidMats.size > 1) {
+    const names = [...solidMats.values()].map((mm) => mm.name).join(", ");
+    throw new Error(
+      `coupledMaterials: the coupled solid-shell solve supports only one solid material, but the ` +
+        `solid domain spans ${solidMats.size} distinct materials (${names}). Per-body materials are ` +
+        `not yet plumbed through the coupled shell path — assign a single material to all solid ` +
+        `bodies, or solve this model without the thin-wall shell idealisation.`,
+    );
+  }
+  const solidMat = [...solidMats.values()][0];
   return {
     solid: { young_modulus: solidMat.young, poisson_ratio: solidMat.poisson },
     shell: { young_modulus: shellMat.young, poisson_ratio: shellMat.poisson },
@@ -734,6 +766,13 @@ function tryCoupledSolve(
   const fixed_dofs = coupledFixedDofs(constraints, model, poolOf);
   const { load_dofs, load_vals } = coupledLoads(loads, surfaceLoads, poolOf);
 
+  // Solid bodies actually present in the coupled tet mesh (the shelled body is
+  // excluded — it becomes shell elements). coupledMaterials rejects the case
+  // where these span more than one distinct material (issue #376).
+  const solidBodyIds = [
+    ...new Set(tetElements.map((e) => e.propertyId)),
+  ].filter((pid) => pid !== shells.shellBody);
+
   self.postMessage({
     id: 0,
     log: `[auto-shell] body ${shells.shellBody}: ${shells.walls.length} thin walls → ${model.shellPool.length} shell nodes, ${model.tets.length / 4} solid tets, ${model.coupling.ref.length} couplings`,
@@ -756,7 +795,9 @@ function tryCoupledSolve(
       load_dofs: Int32Array.from(load_dofs),
       load_vals: Float64Array.from(load_vals),
     },
-    JSON.stringify(coupledMaterials(materials, properties, shells.shellBody)),
+    JSON.stringify(
+      coupledMaterials(materials, properties, shells.shellBody, solidBodyIds),
+    ),
   );
   if ("error" in result) throw new Error(result.error);
 
