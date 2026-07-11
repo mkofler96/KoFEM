@@ -98,7 +98,7 @@ function faceProps(mesh) {
  * welded by node coincidence. Returns the shell mesh + each node's source CAD
  * face (used to map boundary conditions) and the body the walls belong to.
  */
-export function extractThinWallShells(mesh, { maxWall = 15, weldTol = 3 } = {}) {
+export function extractThinWallShells(mesh, { maxWall = 15 } = {}) {
   const { V, surfTri: st, surfFace: sf } = mesh;
   const faces = faceProps(mesh);
   const big = faces.filter((f) => f.area > 0.01 * faces[0].area && f.flat > 0.9);
@@ -136,12 +136,12 @@ export function extractThinWallShells(mesh, { maxWall = 15, weldTol = 3 } = {}) 
   const keep = new Map(walls.map((w) => [w.keep, w]));
 
   // Offset each kept face's triangulation inward by thk/2 to the mid-plane.
-  const rawV = [], rawT = [], rawThk = [], rawSrc = [], nm = new Map();
+  const rawV = [], rawT = [], rawThk = [], rawSrc = [], rawOrig = [], nm = new Map();
   const addN = (fid, oi, p) => {
     const key = `${fid}:${oi}`;
     let id = nm.get(key);
     if (id !== undefined) return id;
-    id = rawV.length / 3; nm.set(key, id); rawV.push(p[0], p[1], p[2]); rawSrc.push(fid);
+    id = rawV.length / 3; nm.set(key, id); rawV.push(p[0], p[1], p[2]); rawSrc.push(fid); rawOrig.push(oi);
     return id;
   };
   for (let t = 0; t < sf.length; t++) {
@@ -155,25 +155,20 @@ export function extractThinWallShells(mesh, { maxWall = 15, weldTol = 3 } = {}) 
     rawT.push(nn[0], nn[1], nn[2]); rawThk.push(w.thk);
   }
 
-  // Weld coincident mid-surface nodes across walls (junctions).
+  // Weld mid-surface nodes that came from the SAME original mesh node: adjacent
+  // walls share Netgen's edge nodes along their CAD junction, so this fuses the
+  // walls exactly and independent of mesh resolution (a spatial tolerance
+  // over-welds a fine mesh — it collapsed the fine shell to two nodes — and
+  // under-welds a coarse one). Mirrors web/src/lib/shellize.ts.
   const nR = rawV.length / 3, rep = new Int32Array(nR).map((_, i) => i);
   const find = (x) => { while (rep[x] !== x) { rep[x] = rep[rep[x]]; x = rep[x]; } return x; };
-  const grid = new Map(), gk = (x, y, z) => `${Math.round(x / weldTol)},${Math.round(y / weldTol)},${Math.round(z / weldTol)}`;
-  for (let i = 0; i < nR; i++) {
-    const p = [rawV[3 * i], rawV[3 * i + 1], rawV[3 * i + 2]];
-    const cx = Math.round(p[0] / weldTol), cy = Math.round(p[1] / weldTol), cz = Math.round(p[2] / weldTol);
-    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) {
-      const b = grid.get(`${cx + dx},${cy + dy},${cz + dz}`);
-      if (!b) continue;
-      for (const j of b) {
-        const q = [rawV[3 * j], rawV[3 * j + 1], rawV[3 * j + 2]];
-        if (Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]) <= weldTol) {
-          const a = find(i), c = find(j); if (a !== c) rep[Math.max(a, c)] = Math.min(a, c);
-        }
-      }
+  const byOrig = new Map();
+  for (let i = 0; i < nR; i++) (byOrig.get(rawOrig[i]) ?? byOrig.set(rawOrig[i], []).get(rawOrig[i])).push(i);
+  for (const [, group] of byOrig)
+    for (let k = 1; k < group.length; k++) {
+      const a = find(group[0]), c = find(group[k]);
+      if (a !== c) rep[Math.max(a, c)] = Math.min(a, c);
     }
-    (grid.get(gk(...p)) ?? grid.set(gk(...p), []).get(gk(...p))).push(i);
-  }
   const comp = new Map(), shellVerts = [], shellSrc = [];
   const cid = (i) => {
     const r = find(i);
