@@ -82,6 +82,46 @@ export function plateWithHoleMesh(a, b, t, nr, nth, grade = 2) {
 }
 
 /**
+ * Mid-surface of the same square-plate-with-a-hole geometry as plateWithHoleMesh,
+ * but as a single-layer flat TRIANGLE surface mesh (z = 0) for the Kirchhoff shell
+ * solver instead of a through-thickness hex volume. Same O-grid: rings blend from
+ * the hole (s=0) to the square outer boundary (s=1), `grade` clusters rings near
+ * the hole. Each ring quad is split into two triangles, so the hole-ring elements
+ * — where the peak in-plane (membrane) stress sits — are the first 2·nth triangles.
+ * Loaded in its own plane this is the plane-stress Kirsch problem, membrane-only.
+ */
+export function plateWithHoleShellMesh(a, b, nr, nth, grade = 2) {
+  const idx = new Map();
+  const key = (i, j) => `${i},${((j % nth) + nth) % nth}`;
+  const square = (th) => {
+    const c = Math.cos(th),
+      s = Math.sin(th);
+    const m = Math.max(Math.abs(c), Math.abs(s));
+    return [(b * c) / m, (b * s) / m];
+  };
+  const vertices = [];
+  let id = 0;
+  for (let i = 0; i <= nr; i++) {
+    const s = Math.pow(i / nr, grade);
+    for (let j = 0; j < nth; j++) {
+      const th = (2 * Math.PI * j) / nth;
+      const [cx, cy] = [a * Math.cos(th), a * Math.sin(th)];
+      const [sx, sy] = square(th);
+      idx.set(key(i, j), id++);
+      vertices.push([(1 - s) * cx + s * sx, (1 - s) * cy + s * sy, 0]);
+    }
+  }
+  const n = (i, j) => idx.get(key(i, j));
+  const triangles = [];
+  for (let i = 0; i < nr; i++)
+    for (let j = 0; j < nth; j++) {
+      triangles.push([n(i, j), n(i + 1, j), n(i + 1, j + 1)]);
+      triangles.push([n(i, j), n(i + 1, j + 1), n(i, j + 1)]);
+    }
+  return { vertices, triangles, nth, nr };
+}
+
+/**
  * Hollow circular shaft (annulus) ri→ro, length Lz along +z.
  * nr radial × nth circumferential × nz axial linear hexes.
  * Returns helpers ring(k) → node indices at axial layer k.
