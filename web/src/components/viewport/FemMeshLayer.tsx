@@ -166,11 +166,21 @@ export function FemMeshLayer({
     const xyz = (n: { x: number; y: number; z: number }) =>
       [n.x, n.y, n.z] as [number, number, number];
 
+    const nodeById = (id: number) => {
+      const entry = nodeMap.get(id);
+      if (!entry)
+        throw new Error(
+          `Boundary face references node id ${id} missing from nodeMap ` +
+            "while building the undeformed surface — mesh/topology desync",
+        );
+      return entry.n;
+    };
+
     for (const [a, b, c_, dd] of boundaryQuadFaceIds) {
-      const pa = nodeMap.get(a)!.n,
-        pb = nodeMap.get(b)!.n;
-      const pc = nodeMap.get(c_)!.n,
-        pd = nodeMap.get(dd)!.n;
+      const pa = nodeById(a),
+        pb = nodeById(b);
+      const pc = nodeById(c_),
+        pd = nodeById(dd);
       positions.push(
         ...xyz(pa),
         ...xyz(pb),
@@ -185,9 +195,9 @@ export function FemMeshLayer({
       for (let k = 0; k < 6; k++) normals.push(norm.x, norm.y, norm.z);
     }
     for (const [a, b, c_] of boundaryTriFaceIds) {
-      const pa = nodeMap.get(a)!.n,
-        pb = nodeMap.get(b)!.n,
-        pc = nodeMap.get(c_)!.n;
+      const pa = nodeById(a),
+        pb = nodeById(b),
+        pc = nodeById(c_);
       positions.push(...xyz(pa), ...xyz(pb), ...xyz(pc));
       const AB = new THREE.Vector3(pb.x - pa.x, pb.y - pa.y, pb.z - pa.z);
       const AC = new THREE.Vector3(pc.x - pa.x, pc.y - pa.y, pc.z - pa.z);

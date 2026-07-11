@@ -223,7 +223,12 @@ export function useMeshTopology(): MeshTopology {
 
     const getPos = (id: number): Vec3 => {
       const n = nodeMap.get(id)?.n;
-      return n ? [n.x, n.y, n.z] : [0, 0, 0];
+      if (!n)
+        throw new Error(
+          `Boundary triangle references node id ${id} missing from nodeMap ` +
+            "while building face-picking topology — mesh/topology desync",
+        );
+      return [n.x, n.y, n.z];
     };
 
     // Build per-boundary-triangle face IDs by matching sorted vertex triples.
