@@ -15,6 +15,10 @@ import styles from "./LeftPanel.module.css";
 export function BcSection({ onError }: { onError(msg: string | null): void }) {
   const bcGroups = useModelStore((s) => s.bcGroups);
   const pickMode = useModelStore((s) => s.pickMode);
+  // Shell nodes carry rotational DOFs, so shell models expose Rx/Ry/Rz too.
+  const hasShells = useModelStore((s) =>
+    s.elements.some((el) => el.type === "CTRIA3"),
+  );
   const createBcGroup = useModelStore((s) => s.createBcGroup);
   const addFaceToBcGroup = useModelStore((s) => s.addFaceToBcGroup);
   const removeFaceFromBcGroup = useModelStore((s) => s.removeFaceFromBcGroup);
@@ -102,6 +106,7 @@ export function BcSection({ onError }: { onError(msg: string | null): void }) {
             <>
               <DofCheckboxes
                 checkedDofs={checkedDofs}
+                showRotations={hasShells}
                 onToggle={(index) =>
                   setCheckedDofs((prev) =>
                     prev.map((checked, i) =>

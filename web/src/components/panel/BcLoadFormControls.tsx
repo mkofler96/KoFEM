@@ -116,18 +116,22 @@ export function LoadKindSelect({
 }
 
 // Checkbox row for the constrainable DOFs. Solid (H1 displacement) elements
-// have only translational DOFs — Ux, Uy, Uz. Rotational constraints carry no
-// stiffness and are not offered.
+// have only translational DOFs — Ux, Uy, Uz; rotational constraints carry no
+// stiffness there and are not offered. Shell (CTRIA3) nodes carry six DOFs,
+// so shell models also expose Rx, Ry, Rz (a translations-only fix is a hinged
+// support; adding the rotations makes it clamped).
 export function DofCheckboxes({
   checkedDofs,
   onToggle,
+  showRotations = false,
 }: {
   checkedDofs: boolean[];
   onToggle(index: number): void;
+  showRotations?: boolean;
 }) {
   return (
     <div className={styles.dofGrid}>
-      {DOF_LABELS.slice(0, 3).map((dofLabel, i) => (
+      {DOF_LABELS.slice(0, showRotations ? 6 : 3).map((dofLabel, i) => (
         <label key={dofLabel} className={styles.dofCheck}>
           <input
             type="checkbox"

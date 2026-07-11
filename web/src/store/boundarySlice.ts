@@ -148,12 +148,30 @@ const HEX_FACE_INDICES = [
   [2, 3, 7, 6],
   [3, 0, 4, 7],
 ];
+// A shell element's loadable face is the facet itself (a 2D element has no
+// distinct boundary faces — loads act on its surface).
+const TRIA_FACE_INDICES = [[0, 1, 2]];
+const TRIA_EDGE_INDICES = [
+  [0, 1],
+  [1, 2],
+  [2, 0],
+];
 
-// The element boundary faces lying on one loaded face: every solid-element face
-// whose nodes all belong to the face's node set — triangles for tets, quads for
-// hexes. The engine matches these to its generated boundary elements by vertex
-// set (and ignores any interior faces that aren't boundaries), so the load is
-// integrated over the real surface, mesh type regardless.
+// The element boundary faces lying on one loaded face: every element face whose
+// nodes all belong to the face's node set — triangles for tets (and shell
+// facets), quads for hexes. The engine matches these to its generated boundary
+// elements by vertex set (and ignores any interior faces that aren't
+// boundaries), so the load is integrated over the real surface, mesh type
+// regardless.
+//
+// A selection on a shell mesh can also be an EDGE — a polyline of nodes (e.g.
+// the pulled edge of a plate) that contains no whole facet. When no face
+// matched, fall back to the shell-element edges whose both endpoints lie in
+// the set, emitted as 2-node entries: the shell solve path applies them as a
+// work-equivalent line load (the solid engine path never sees 2-node faces
+// because only CTRIA3 elements produce them). The fallback only engages on an
+// empty face match, so a region selection is never double-loaded along its
+// perimeter.
 function loadedFaces(
   face: { nodeIds: number[] },
   elements: Element[],
@@ -167,7 +185,9 @@ function loadedFaces(
         ? TET_FACE_INDICES
         : el.type === "CHEXA"
           ? HEX_FACE_INDICES
-          : null;
+          : el.type === "CTRIA3"
+            ? TRIA_FACE_INDICES
+            : null;
     if (!local) continue;
     for (const lf of local) {
       const verts = lf.map((i) => el.nodeIds[i]);
@@ -178,7 +198,21 @@ function loadedFaces(
       faces.push(verts);
     }
   }
-  return faces;
+  if (faces.length > 0) return faces;
+
+  const edges: number[][] = [];
+  for (const el of elements) {
+    if (el.type !== "CTRIA3") continue;
+    for (const le of TRIA_EDGE_INDICES) {
+      const verts = le.map((i) => el.nodeIds[i]);
+      if (!verts.every((v) => nodeSet.has(v))) continue;
+      const key = [...verts].sort((a, b) => a - b).join(",");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      edges.push(verts);
+    }
+  }
+  return edges;
 }
 
 export function rebuildLoads(

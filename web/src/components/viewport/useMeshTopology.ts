@@ -19,6 +19,7 @@ export interface MeshTopology {
   modelSize: number;
   hexElements: Element[];
   tetElements: Element[];
+  triElements: Element[];
   boundaryQuadFaceIds: [number, number, number, number][];
   boundaryTriFaceIds: [number, number, number][];
   boundaryMeshTopo: BoundaryMeshTopo | null;
@@ -86,6 +87,14 @@ export const TET_EDGES: [number, number][] = [
   [1, 2],
   [1, 3],
   [2, 3],
+];
+
+// ── CTRIA3 (shell) geometry ───────────────────────────────────────────────────
+
+export const TRI_EDGES: [number, number][] = [
+  [0, 1],
+  [1, 2],
+  [2, 0],
 ];
 
 const TET_FACE_DEFS: [number, number, number][] = [
@@ -194,14 +203,30 @@ export function useMeshTopology(): MeshTopology {
     () => visibleElements.filter((e) => e.type === "CTETRA"),
     [visibleElements],
   );
+  const triElements = useMemo(
+    () => visibleElements.filter((e) => e.type === "CTRIA3"),
+    [visibleElements],
+  );
 
   const boundaryQuadFaceIds = useMemo(
     () => extractBoundaryQuadFaceIds(hexElements),
     [hexElements],
   );
+  // Solid boundary faces (tet faces used exactly once) plus every shell facet —
+  // a shell element IS surface, so its facet always renders and picks.
   const boundaryTriFaceIds = useMemo(
-    () => extractBoundaryTriFaceIds(tetElements),
-    [tetElements],
+    () => [
+      ...extractBoundaryTriFaceIds(tetElements),
+      ...triElements.map(
+        (el) =>
+          [el.nodeIds[0], el.nodeIds[1], el.nodeIds[2]] as [
+            number,
+            number,
+            number,
+          ],
+      ),
+    ],
+    [tetElements, triElements],
   );
 
   // Boundary mesh topology for face picking.
@@ -270,6 +295,7 @@ export function useMeshTopology(): MeshTopology {
       modelSize,
       hexElements,
       tetElements,
+      triElements,
       boundaryQuadFaceIds,
       boundaryTriFaceIds,
       boundaryMeshTopo,
@@ -279,6 +305,7 @@ export function useMeshTopology(): MeshTopology {
       modelSize,
       hexElements,
       tetElements,
+      triElements,
       boundaryQuadFaceIds,
       boundaryTriFaceIds,
       boundaryMeshTopo,
