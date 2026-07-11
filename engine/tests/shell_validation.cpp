@@ -14,6 +14,7 @@
 
 #include "shell_core.h"
 
+#include <array>
 #include <cmath>
 #include <cstdio>
 #include <vector>
@@ -22,9 +23,7 @@ using namespace kofem::shell;
 
 namespace {
 
-int failures = 0;
-
-void check(const char* name, double got, double ref, double tol_pct) {
+void check(int& failures, const char* name, double got, double ref, double tol_pct) {
     const double err = std::fabs(got - ref) / std::fabs(ref) * 100.0;
     const bool ok = err <= tol_pct;
     if (!ok) ++failures;
@@ -50,8 +49,10 @@ void plate_mesh(double a, int n, std::vector<double>& V, std::vector<int>& T) {
 }
 
 double tri_area(const std::vector<double>& V, int n0, int n1, int n2) {
-    const double ux = V[3*n1]-V[3*n0], uy = V[3*n1+1]-V[3*n0+1], uz = V[3*n1+2]-V[3*n0+2];
-    const double vx = V[3*n2]-V[3*n0], vy = V[3*n2+1]-V[3*n0+1], vz = V[3*n2+2]-V[3*n0+2];
+    const size_t b0 = 3 * static_cast<size_t>(n0), b1 = 3 * static_cast<size_t>(n1),
+                 b2 = 3 * static_cast<size_t>(n2);
+    const double ux = V[b1]-V[b0], uy = V[b1+1]-V[b0+1], uz = V[b1+2]-V[b0+2];
+    const double vx = V[b2]-V[b0], vy = V[b2+1]-V[b0+1], vz = V[b2+2]-V[b0+2];
     const double cx = uy*vz-uz*vy, cy = uz*vx-ux*vz, cz = ux*vy-uy*vx;
     return 0.5 * std::sqrt(cx*cx + cy*cy + cz*cz);
 }
@@ -59,8 +60,8 @@ double tri_area(const std::vector<double>& V, int n0, int n1, int n2) {
 // center deflection of a square plate under uniform pressure q, clamped or SS.
 // When vm_center is given, also recovers the von Mises stress of the facet
 // nearest the plate center (surface stress from membrane + bending recovery).
-double plate_center_w(double a, double t, double E, double nu, double q, int n, bool clamped,
-                      double* vm_center = nullptr) {
+double plate_center_w(int& failures, double a, double t, double E, double nu, double q, int n,
+                      bool clamped, double* vm_center = nullptr) {
     std::vector<double> V; std::vector<int> T;
     plate_mesh(a, n, V, T);
     const int nNodes = (n + 1) * (n + 1);
@@ -91,20 +92,22 @@ double plate_center_w(double a, double t, double E, double nu, double q, int n, 
         if (Fz[nd] != 0.0) in.loads.emplace_back(6 * nd + 2, Fz[nd]);
     ShellResult r = solve_shell_core(in);
     if (!r.converged) { printf("  [FAIL] CG did not converge\n"); ++failures; }
-    if (vm_center) {
+    if (vm_center != nullptr) {
         const std::vector<double> vm =
             shell_von_mises(V, T, t, {}, E, nu, r.dofs);
         // von Mises of the facet whose centroid is nearest the plate center
         double best = 1e30;
         for (size_t e = 0; e < T.size() / 3; ++e) {
-            const int n0 = T[3*e], n1 = T[3*e+1], n2 = T[3*e+2];
-            const double cx = (V[3*n0] + V[3*n1] + V[3*n2]) / 3.0 - a / 2.0;
-            const double cy = (V[3*n0+1] + V[3*n1+1] + V[3*n2+1]) / 3.0 - a / 2.0;
+            const size_t b0 = 3 * static_cast<size_t>(T[3*e]),
+                         b1 = 3 * static_cast<size_t>(T[3*e+1]),
+                         b2 = 3 * static_cast<size_t>(T[3*e+2]);
+            const double cx = (V[b0] + V[b1] + V[b2]) / 3.0 - a / 2.0;
+            const double cy = (V[b0+1] + V[b1+1] + V[b2+1]) / 3.0 - a / 2.0;
             const double d2 = cx * cx + cy * cy;
             if (d2 < best) { best = d2; *vm_center = vm[e]; }
         }
     }
-    return r.dofs[6 * id(n / 2, n / 2) + 2];
+    return r.dofs[6 * static_cast<size_t>(id(n / 2, n / 2)) + 2];
 }
 
 double membrane_tip_u() {
@@ -127,7 +130,8 @@ double membrane_tip_u() {
         in.loads.emplace_back(6 * id(n, j) + 0, Ftot * wgt / n);
     }
     ShellResult r = solve_shell_core(in);
-    double u = 0.0; for (int j = 0; j <= n; ++j) u += r.dofs[6 * id(n, j) + 0];
+    double u = 0.0;
+    for (int j = 0; j <= n; ++j) u += r.dofs[6 * static_cast<size_t>(id(n, j))];
     return u / (n + 1);
 }
 
@@ -145,7 +149,8 @@ void box_tets(double L, double W, double H, int nx, int ny, int nz,
             for (int k = 0; k < nz; ++k) {
                 const int a = id(i,j,k), b = id(i+1,j,k), c = id(i+1,j+1,k), d = id(i,j+1,k),
                           e = id(i,j,k+1), f = id(i+1,j,k+1), g = id(i+1,j+1,k+1), h = id(i,j+1,k+1);
-                const int q[6][4] = {{a,b,c,g},{a,c,d,g},{a,d,h,g},{a,h,e,g},{a,e,f,g},{a,f,b,g}};
+                const std::array<std::array<int, 4>, 6> q = {{
+                    {a,b,c,g},{a,c,d,g},{a,d,h,g},{a,h,e,g},{a,e,f,g},{a,f,b,g}}};
                 for (const auto& tt : q) for (int m = 0; m < 4; ++m) T.push_back(tt[m]);
             }
 }
@@ -171,7 +176,12 @@ double coupled_tet_tension() {
     for (int j = 0; j <= ny; ++j)
         for (int k = 0; k <= nz; ++k) in.loads.emplace_back(6 * id(nx, j, k) + 0, P / nface);
     ShellResult r = solve_solid_shell_core(in);
-    auto planeU = [&](int i) { double u = 0; for (int j = 0; j <= ny; ++j) for (int k = 0; k <= nz; ++k) u += r.dofs[6 * id(i, j, k)]; return u / nface; };
+    auto planeU = [&](int i) {
+        double u = 0;
+        for (int j = 0; j <= ny; ++j)
+            for (int k = 0; k <= nz; ++k) u += r.dofs[6 * static_cast<size_t>(id(i, j, k))];
+        return u / nface;
+    };
     const double du = planeU(nx * 3 / 4) - planeU(nx / 4);
     const double ref = (P / (b * b)) * (L * (nx * 3 / 4 - nx / 4) / (double)nx) / E;
     printf("  [coupled] tet interior Δu %.4e vs %.4e\n", du, ref);
@@ -204,7 +214,9 @@ double coupled_moment_transfer() {
     for (int aa = 0; aa < 3; ++aa) for (int c = 0; c < 3; ++c) in.fixed_dofs.push_back(6 * (aBase + aa) + c);
     for (int tn : tip) in.loads.emplace_back(6 * tn + 2, P / (double)tip.size());
     ShellResult r = solve_solid_shell_core(in);
-    double w = 0; for (int tn : tip) w += r.dofs[6 * tn + 2]; w /= tip.size();
+    double w = 0;
+    for (int tn : tip) w += r.dofs[6 * static_cast<size_t>(tn) + 2];
+    w /= tip.size();
     const double I = b * t * t * t / 12.0, ref = P * L * L * L / (3 * E * I);
     printf("  [coupled] clamped-cantilever w %.4e vs %.4e\n", w, ref);
     return w / ref;
@@ -215,25 +227,27 @@ double coupled_moment_transfer() {
 int main() {
     const double a = 1.0, t = 0.01, E = 1.0e7, nu = 0.3, q = 1.0;
     const double D = E * t * t * t / (12.0 * (1.0 - nu * nu));
+    int failures = 0;
 
     printf("Kirchhoff shell (DKT+CST) validation:\n");
     // Both plate cases converge from a discretisation error, so the finest mesh
     // must land inside a tight band; coarse meshes carry more error by design.
-    check("clamped-plate", plate_center_w(a, t, E, nu, q, 32, true),
+    check(failures, "clamped-plate", plate_center_w(failures, a, t, E, nu, q, 32, true),
           0.00126 * q * std::pow(a, 4) / D, 1.5);
     double vm_center = 0.0;
-    check("simply-supported-plate", plate_center_w(a, t, E, nu, q, 32, false, &vm_center),
+    check(failures, "simply-supported-plate",
+          plate_center_w(failures, a, t, E, nu, q, 32, false, &vm_center),
           0.00406 * q * std::pow(a, 4) / D, 1.0);
     // Center bending stress of the SS plate: M = 0.0479·q·a² (ν = 0.3), and the
     // equal-biaxial state makes von Mises equal σ = 6M/t². Element-constant
     // recovery at the nearest facet centroid carries a few % discretisation.
-    check("ss-plate-von-mises", vm_center, 6.0 * 0.0479 * q * a * a / (t * t), 8.0);
-    check("membrane-tension", membrane_tip_u(), 1.0 * 1.0 / 1000.0, 0.5);
+    check(failures, "ss-plate-von-mises", vm_center, 6.0 * 0.0479 * q * a * a / (t * t), 8.0);
+    check(failures, "membrane-tension", membrane_tip_u(), 1.0 * 1.0 / 1000.0, 0.5);
 
     printf("Coupled solid + shell (distributing coupling):\n");
-    check("coupled-tet-tension", coupled_tet_tension(), 1.0, 0.2);
-    check("coupled-moment-transfer", coupled_moment_transfer(), 1.0, 6.0);
+    check(failures, "coupled-tet-tension", coupled_tet_tension(), 1.0, 0.2);
+    check(failures, "coupled-moment-transfer", coupled_moment_transfer(), 1.0, 6.0);
 
-    printf(failures ? "\n%d check(s) FAILED\n" : "\nall checks passed\n", failures);
-    return failures ? 1 : 0;
+    printf(failures != 0 ? "\n%d check(s) FAILED\n" : "\nall checks passed\n", failures);
+    return failures != 0 ? 1 : 0;
 }

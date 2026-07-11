@@ -142,6 +142,8 @@ val solve_shell(val mesh, const std::string& mat_json, const std::string& bcs_js
     try {
         r = kofem::shell::solve_shell_core(in);
     } catch (const std::exception& e) {
+        printf("[shell] solve failed: %s\n", e.what());
+        fflush(stdout);
         return error_result(std::string("shell solve failed: ") + e.what());
     }
 

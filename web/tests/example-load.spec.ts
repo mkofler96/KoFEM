@@ -173,12 +173,15 @@ test("the app opens normally when no ?example= is present", async ({
   expect((await readStore(page)).nodes).toBe(0);
 });
 
-let EXAMPLE_ANALYSES: { id: number }[];
+let EXAMPLE_ANALYSES: { id: number; showcase?: boolean }[];
 
 test.beforeAll(async () => {
-  EXAMPLE_ANALYSES = JSON.parse(
+  const manifest: { id: number; showcase?: boolean }[] = JSON.parse(
     await readFile("public/examples/examples.json", "utf8"),
   );
+  // Showcase entries (e.g. the coupled shell+solid crane) are gallery-only:
+  // they have no <id>.vtu the app could open, so they can't be screenshotted.
+  EXAMPLE_ANALYSES = manifest.filter((entry) => entry.showcase !== true);
 });
 test("capture screenshots of all examples", async ({ page }) => {
   // Open the app and import the STEP file via the Geometry panel.

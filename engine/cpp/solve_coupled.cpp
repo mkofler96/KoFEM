@@ -127,6 +127,8 @@ val solve_coupled(val mesh, val coupling, val bcs, const std::string& mat_json) 
     try {
         in.solid_stiffness = assemble_solid_stiffness_mfem(in.vertices, tets, solidE, solidNu);
     } catch (const std::exception& e) {
+        printf("[coupled] solid assembly failed: %s\n", e.what());
+        fflush(stdout);
         return error_result(std::string("coupled: solid assembly failed: ") + e.what());
     }
     printf("[coupled] MFEM solid stiffness: %zu triplets\n", in.solid_stiffness.size());
@@ -136,6 +138,8 @@ val solve_coupled(val mesh, val coupling, val bcs, const std::string& mat_json) 
     try {
         r = kofem::shell::solve_solid_shell_core(in);
     } catch (const std::exception& e) {
+        printf("[coupled] solve failed: %s\n", e.what());
+        fflush(stdout);
         return error_result(std::string("coupled solve failed: ") + e.what());
     }
     if (!r.converged)
