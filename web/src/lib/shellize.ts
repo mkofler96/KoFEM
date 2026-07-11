@@ -594,8 +594,8 @@ export function shellNodeLocator(
       throw new Error(
         `shellNodeLocator: no shell mid-surface node found within ${maxRings * cell} units of ` +
           `query point (${p[0]}, ${p[1]}, ${p[2]}) — a boundary condition or load on the shelled ` +
-          `body could not be mapped onto the shell mesh. The node may lie farther from any thin ` +
-          `wall than the search radius, or the model may be mis-scaled.`,
+          "body could not be mapped onto the shell mesh. The node may lie farther from any thin " +
+          "wall than the search radius, or the model may be mis-scaled.",
       );
     return best;
   };

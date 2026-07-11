@@ -561,10 +561,10 @@ function coupledMaterials(
   if (solidMats.size > 1) {
     const names = [...solidMats.values()].map((mm) => mm.name).join(", ");
     throw new Error(
-      `coupledMaterials: the coupled solid-shell solve supports only one solid material, but the ` +
+      "coupledMaterials: the coupled solid-shell solve supports only one solid material, but the " +
         `solid domain spans ${solidMats.size} distinct materials (${names}). Per-body materials are ` +
-        `not yet plumbed through the coupled shell path — assign a single material to all solid ` +
-        `bodies, or solve this model without the thin-wall shell idealisation.`,
+        "not yet plumbed through the coupled shell path — assign a single material to all solid " +
+        "bodies, or solve this model without the thin-wall shell idealisation.",
     );
   }
   const solidMat = [...solidMats.values()][0];
