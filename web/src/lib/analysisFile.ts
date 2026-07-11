@@ -116,6 +116,8 @@ function vtkCellType(type: ElementType, nNodes: number): number {
       return nNodes === 10 ? 24 : 10; // VTK_(QUADRATIC_)TETRA
     case "CHEXA":
       return nNodes === 20 ? 25 : 12; // VTK_(QUADRATIC_)HEXAHEDRON
+    case "CTRIA3":
+      return 5; // VTK_TRIANGLE — 3-node Kirchhoff shell facet
     default:
       throw new Error(
         `Cannot serialize analysis: unknown element type "${type}"`,
@@ -313,7 +315,7 @@ export function analysisFileName(modelName: string): string {
 
 const APP_MODES: AppMode[] = ["geometry", "constraints", "solve", "results"];
 const VIEW_REPRS = ["geometry", "surface", "volume", "wireframe"] as const;
-const ELEMENT_TYPES: ElementType[] = ["CTETRA", "CHEXA"];
+const ELEMENT_TYPES: ElementType[] = ["CTETRA", "CHEXA", "CTRIA3"];
 
 function dataArrayContent(xml: string, name: string): string {
   const match = xml.match(

@@ -13,20 +13,26 @@ export interface Node {
   z: number;
 }
 
-// The live OCCT → Netgen → MFEM pipeline only ever produces solid elements:
-// tetrahedra (CTETRA) and hexahedra (CHEXA). 1D (beam) and 2D (shell/plane)
-// element types are not modelled — restore the relevant variants here when
-// such support is actually added.
-export type ElementType = "CTETRA" | "CHEXA";
+// Solid elements from the live OCCT → Netgen → MFEM pipeline: tetrahedra
+// (CTETRA) and hexahedra (CHEXA). CTRIA3 is a 3-node Kirchhoff shell triangle
+// (DKT bending + CST membrane, 6 DOF/node) solved by the engine's solve_shell;
+// shell models currently enter the app via saved analyses (.vtu), not the
+// meshing pipeline. 1D (beam) elements are not modelled.
+export type ElementType = "CTETRA" | "CHEXA" | "CTRIA3";
 
 // Body → material mapping (#317/#353). One property per body of the imported
 // assembly: the property id is the 1-based body (CAD solid) index — the same
 // index Netgen assigns the body's tets as their mesh domain, carried on each
 // element as `propertyId` — and `materialId` names the material the body is
 // made of. The solver resolves every element's material through this mapping.
+// For shell (CTRIA3) elements the property additionally carries the shell
+// `thickness` (mm) — PSHELL semantics: thickness is a section property of the
+// idealised wall, not a material constant. Required on properties referenced
+// by shell elements; meaningless (and absent) on solid bodies.
 export interface Property {
   id: number;
   materialId: number;
+  thickness?: number;
 }
 
 export interface Element {

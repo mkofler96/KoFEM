@@ -9,7 +9,7 @@ import { useMemo } from "react";
 import * as THREE from "three";
 import type { ThreeEvent } from "@react-three/fiber";
 import { useModelStore } from "../../store/modelStore";
-import { HEX_EDGES, TET_EDGES } from "./useMeshTopology";
+import { HEX_EDGES, TET_EDGES, TRI_EDGES } from "./useMeshTopology";
 import type { MeshTopology } from "./useMeshTopology";
 
 interface FemMeshLayerProps {
@@ -33,6 +33,7 @@ export function FemMeshLayer({
     nodeMap,
     hexElements,
     tetElements,
+    triElements,
     boundaryQuadFaceIds,
     boundaryTriFaceIds,
   } = topology;
@@ -57,8 +58,13 @@ export function FemMeshLayer({
         segs.push(...coord(el.nodeIds[a]), ...coord(el.nodeIds[b]));
       }
     }
+    for (const el of triElements) {
+      for (const [a, b] of TRI_EDGES) {
+        segs.push(...coord(el.nodeIds[a]), ...coord(el.nodeIds[b]));
+      }
+    }
     return segs.length > 0 ? new Float32Array(segs) : null;
-  }, [hexElements, tetElements, nodeMap]);
+  }, [hexElements, tetElements, triElements, nodeMap]);
 
   const undeformedSurfaceEdgePositions = useMemo(() => {
     const seen = new Set<string>();
@@ -113,8 +119,13 @@ export function FemMeshLayer({
         segs.push(...coord(el.nodeIds[a]), ...coord(el.nodeIds[b]));
       }
     }
+    for (const el of triElements) {
+      for (const [a, b] of TRI_EDGES) {
+        segs.push(...coord(el.nodeIds[a]), ...coord(el.nodeIds[b]));
+      }
+    }
     return segs.length > 0 ? new Float32Array(segs) : null;
-  }, [result, hexElements, tetElements, nodeMap, deformScale]);
+  }, [result, hexElements, tetElements, triElements, nodeMap, deformScale]);
 
   // Boundary (surface) edges of the deformed mesh — the Surface representation in
   // results mode. Mirrors undeformedSurfaceEdgePositions but on deformed coords.

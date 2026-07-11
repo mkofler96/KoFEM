@@ -129,6 +129,82 @@ test("re-solving a loaded example does not trap on its node ids (#288)", async (
   }
 });
 
+test("a pure-shell (CTRIA3) example re-solves through the shell path", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+
+  // Loads the CTRIA3 shell plate and re-runs the solve exactly as the Solve
+  // button does. This exercises the whole shell pipeline end-to-end: CTRIA3
+  // parsing, the edge fallback of rebuildSurfaceLoads (the pulled edge is a
+  // node polyline containing no whole facet), the worker's work-equivalent
+  // line-load distribution, and the engine's Kirchhoff shell solve. Same mesh,
+  // BCs and load derivation as the generator → the fresh field must reproduce
+  // the one saved in the .vtu.
+  await page.goto("/app/?example=plate-with-hole-shell");
+  await expect(page.locator("nav")).toBeVisible();
+  await page.waitForFunction(
+    () => !!(window as unknown as { __kofem?: unknown }).__kofem,
+  );
+  await expect
+    .poll(async () => (await readStore(page)).nodes, { timeout: 15_000 })
+    .toBeGreaterThan(0);
+
+  const outcome = await page.evaluate(async () => {
+    const win = window as unknown as {
+      __kofem: {
+        sendToWorker(name: string, payload: object): Promise<unknown>;
+      };
+      __kofemStore: { getState(): Record<string, unknown> };
+    };
+    const st = win.__kofemStore.getState();
+    const elements = st.elements as { type: string }[];
+    const saved = st.result as { displacements: Float64Array };
+    const maxU = (disp: Float64Array): number => {
+      let max = 0;
+      for (let i = 0; i < disp.length; i += 3)
+        max = Math.max(max, Math.hypot(disp[i], disp[i + 1], disp[i + 2]));
+      return max;
+    };
+    try {
+      const res = (await win.__kofem.sendToWorker("solve", {
+        nodes: st.nodes,
+        elements: st.elements,
+        materials: st.materials,
+        properties: st.properties,
+        constraints: st.constraints,
+        loads: st.loads,
+        surfaceLoads: st.surfaceLoads,
+      })) as { displacements: Float64Array; vonMises: Float64Array };
+      return {
+        ok: true as const,
+        allShells: elements.every((el) => el.type === "CTRIA3"),
+        nNodes: (st.nodes as unknown[]).length,
+        nElems: elements.length,
+        nDisp: res.displacements.length,
+        nVm: res.vonMises.length,
+        savedMaxU: maxU(saved.displacements),
+        freshMaxU: maxU(res.displacements),
+      };
+    } catch (err) {
+      return { ok: false as const, error: (err as Error).message };
+    }
+  });
+
+  expect(outcome.ok).toBe(true);
+  if (outcome.ok) {
+    expect(outcome.allShells).toBe(true); // guard: the file really is a shell model
+    expect(outcome.nDisp).toBe(outcome.nNodes * 3);
+    expect(outcome.nVm).toBe(outcome.nElems);
+    // Identical inputs through a deterministic solver — only summation-order
+    // noise is tolerated.
+    expect(
+      Math.abs(outcome.freshMaxU - outcome.savedMaxU) /
+        Math.abs(outcome.savedMaxU),
+    ).toBeLessThan(1e-6);
+  }
+});
+
 test("?example= with an invalid id is rejected without a fetch", async ({
   page,
 }) => {
@@ -173,15 +249,18 @@ test("the app opens normally when no ?example= is present", async ({
   expect((await readStore(page)).nodes).toBe(0);
 });
 
-let EXAMPLE_ANALYSES: { id: number; showcase?: boolean }[];
+let EXAMPLE_ANALYSES: { id: string; showcase?: boolean; appId?: string }[];
 
 test.beforeAll(async () => {
-  const manifest: { id: number; showcase?: boolean }[] = JSON.parse(
-    await readFile("public/examples/examples.json", "utf8"),
+  const manifest: { id: string; showcase?: boolean; appId?: string }[] =
+    JSON.parse(await readFile("public/examples/examples.json", "utf8"));
+  // Showcase entries whose "Open in KoFEM web" points elsewhere (e.g. the
+  // coupled crane, which opens its solid assembly) have no <id>.vtu of their
+  // own, so they can't be screenshotted. A showcase entry that opens ITSELF
+  // (appId === id, e.g. the shell plate) has one and is included.
+  EXAMPLE_ANALYSES = manifest.filter(
+    (entry) => entry.showcase !== true || entry.appId === entry.id,
   );
-  // Showcase entries (e.g. the coupled shell+solid crane) are gallery-only:
-  // they have no <id>.vtu the app could open, so they can't be screenshotted.
-  EXAMPLE_ANALYSES = manifest.filter((entry) => entry.showcase !== true);
 });
 test("capture screenshots of all examples", async ({ page }) => {
   // Open the app and import the STEP file via the Geometry panel.

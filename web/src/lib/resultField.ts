@@ -34,15 +34,37 @@ function tetVolume(a: Node, b: Node, c: Node, d: Node): number {
   return Math.abs(det) / 6;
 }
 
-// Averaging weight for one element: its volume, so a node's averaged stress is
+// Area of a 3-node triangle from its node positions: |(b−a)×(c−a)|/2.
+function triArea(a: Node, b: Node, c: Node): number {
+  const abx = b.x - a.x,
+    aby = b.y - a.y,
+    abz = b.z - a.z;
+  const acx = c.x - a.x,
+    acy = c.y - a.y,
+    acz = c.z - a.z;
+  const nx = aby * acz - abz * acy;
+  const ny = abz * acx - abx * acz;
+  const nz = abx * acy - aby * acx;
+  return Math.sqrt(nx * nx + ny * ny + nz * nz) / 2;
+}
+
+// Averaging weight for one element: its measure, so a node's averaged stress is
 // dominated by the elements that actually fill the space around it. Tetrahedra
-// use the signed-volume formula; any other element type falls back to unit
+// use the signed-volume formula; 3-node shell facets use their area (uniform
+// thickness cancels in the average); any other element type falls back to unit
 // weight (still counted, just unweighted).
 function elementWeight(
   el: Element,
   nodeIndex: Map<number, number>,
   nodes: Node[],
 ): number {
+  if (el.nodeIds.length === 3) {
+    const i0 = nodeIndex.get(el.nodeIds[0]);
+    const i1 = nodeIndex.get(el.nodeIds[1]);
+    const i2 = nodeIndex.get(el.nodeIds[2]);
+    if (i0 === undefined || i1 === undefined || i2 === undefined) return 1;
+    return triArea(nodes[i0], nodes[i1], nodes[i2]);
+  }
   if (el.nodeIds.length !== 4) return 1;
   const i0 = nodeIndex.get(el.nodeIds[0]);
   const i1 = nodeIndex.get(el.nodeIds[1]);

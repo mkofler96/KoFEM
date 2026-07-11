@@ -1,14 +1,22 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Generates the interactive gallery card for the SHELL version of the plate with
-// a hole and merges it into web/public/examples/examples.json (the manifest the
-// /examples/ gallery renders). It is the exact same Kirsch stress-concentration
-// problem as the solid `plate-with-hole` benchmark — same geometry, material and
-// remote tension — but the through-thickness hexes are replaced by a single-layer
-// Kirchhoff shell (DKT bending + CST membrane) mid-surface. Loaded in its own
-// plane the shell reduces to plane stress, so the peak facet stress at the hole
-// edge still approaches Kirsch's Kt = 3.
+// Generates the interactive gallery card AND the openable analysis file for the
+// SHELL version of the plate with a hole:
+//
+//   plate-with-hole-shell.vtu — a complete KoFEM analysis (CTRIA3 shell mesh +
+//                               PSHELL property with thickness + BC/load groups
+//                               + solved fields). This is what the card's
+//                               "Open in KoFEM web" button loads, and the app
+//                               re-solves it through its pure-shell solve path.
+//   examples.json             — the card entry merged into the gallery manifest.
+//
+// It is the exact same Kirsch stress-concentration problem as the solid
+// `plate-with-hole` benchmark — same geometry, material and remote tension —
+// but the through-thickness hexes are replaced by a single-layer Kirchhoff
+// shell (DKT bending + CST membrane) mid-surface. Loaded in its own plane the
+// shell reduces to plane stress, so the peak facet stress at the hole edge
+// still approaches Kirsch's Kt = 3.
 //
 //   bun examples/web-examples/generate-plate-hole-shell.mjs
 //
@@ -28,7 +36,7 @@ const outDir = join(here, "../../web/public/examples");
 
 // Same canonical mm/MPa system and geometry as the solid plate-with-hole card
 // (examples.mjs): steel, a/b = 0.1 ⇒ ≈ infinite-plate Kt, σ = 100 MPa tension.
-const STEEL = { young_modulus: 210000, poisson_ratio: 0.3 };
+const STEEL = { young_modulus: 210000, poisson_ratio: 0.3, density: 7.85e-9 };
 const a = 1000, // hole radius (mm)
   b = 10000, // plate half-width (mm)
   t = 500, // shell thickness (mm)
@@ -37,16 +45,31 @@ const a = 1000, // hole radius (mm)
 const m = plateWithHoleShellMesh(a, b, 12, 64, 2);
 const nNodes = m.vertices.length;
 
-// Fix the left edge (all 6 DOF); pull the right edge in +x with a resultant equal
-// to the gross axial force P = σ·(2b·t), so the far-field membrane stress is σ.
-// The exact right-edge distribution is immaterial to the hole stress (St. Venant);
-// an equal nodal split gives the correct resultant.
+// Fix the left edge (all 6 DOF); pull the right edge in +x with the remote
+// tension σ as a work-equivalent line load q = σ·t along the edge: each edge
+// segment contributes q·L/2 to its two end nodes (consistent nodal load of a
+// uniform line load on linear shape functions), so the graded node spacing is
+// honoured and the resultant is the gross axial force P = σ·(2b·t). This is
+// applied per edge segment — NOT as an equal nodal split — and mirrors the
+// app's shell solve path 1:1: the saved load group re-derives the same edge
+// segments (boundarySlice loadedFaces edge fallback) and the same q·L/2 split
+// (solver.worker.ts distributeShellSurfaceLoad), so reopening the .vtu and
+// re-solving reproduces this exact field.
 const left = nodesWhere(m.vertices, (x) => x <= -b + 1e-6);
-const right = nodesWhere(m.vertices, (x) => x >= b - 1e-6);
+const right = nodesWhere(m.vertices, (x) => x >= b - 1e-6).sort(
+  (i, j) => m.vertices[i][1] - m.vertices[j][1],
+);
 const P = sigma * (2 * b * t);
-const point_loads = right.map((vertex) => ({
+const q = sigma * t; // line load along the edge (force per unit length)
+const forceAt = new Map(right.map((vertex) => [vertex, 0]));
+for (let k = 0; k + 1 < right.length; k++) {
+  const L = m.vertices[right[k + 1]][1] - m.vertices[right[k]][1];
+  forceAt.set(right[k], forceAt.get(right[k]) + (q * L) / 2);
+  forceAt.set(right[k + 1], forceAt.get(right[k + 1]) + (q * L) / 2);
+}
+const point_loads = [...forceAt.entries()].map(([vertex, fx]) => ({
   vertex,
-  force: [P / right.length, 0, 0],
+  force: [fx, 0, 0],
 }));
 
 const Module = await loadEngine();
@@ -67,6 +90,146 @@ let peak = 0;
 for (let e = 0; e < holeRing; e++) peak = Math.max(peak, r.von_mises[e]);
 const Kt = peak / sigma;
 const errPct = (Math.abs(Kt - 3.0) / 3.0) * 100;
+
+// ── Analysis file (.vtu) — matches web/src/lib/analysisFile.ts ─────────────────
+
+function encodeKofemFieldData(jsonText) {
+  const data = Buffer.from(jsonText, "utf8");
+  const bytes = Buffer.alloc(4 + data.length);
+  bytes.writeUInt32LE(data.length, 0);
+  data.copy(bytes, 4);
+  return { b64: bytes.toString("base64"), byteLength: data.length };
+}
+
+function joinTuples(values, stride) {
+  const lines = [];
+  for (let i = 0; i < values.length; i += stride)
+    lines.push(values.slice(i, i + stride).join(" "));
+  return lines.join("\n");
+}
+
+function dataArray(type, name, body, components) {
+  const comp =
+    components !== undefined ? ` NumberOfComponents="${components}"` : "";
+  return `<DataArray type="${type}" Name="${name}"${comp} format="ascii">\n${body}\n</DataArray>`;
+}
+
+function buildShellVtu() {
+  const nCells = m.triangles.length;
+  // Node / element IDs are 1-based; BC/load group faces reference these IDs.
+  const fixedIds = left.map((v) => v + 1);
+  const loadIds = right.map((v) => v + 1);
+
+  const meta = {
+    format: "kofem-analysis",
+    version: 1,
+    modelName: "Plate with a hole — shells",
+    mode: "results",
+    viewRepr: "surface",
+    resultType: "Von Mises stress",
+    elementTypes: m.triangles.map(() => "CTRIA3"),
+    materials: [
+      {
+        id: 1,
+        name: "Steel",
+        young: STEEL.young_modulus,
+        poisson: STEEL.poisson_ratio,
+        density: STEEL.density,
+      },
+    ],
+    // PSHELL: the shell thickness is a section property of the idealised wall.
+    properties: [{ id: 1, type: "PSHELL", materialId: 1, thickness: t }],
+    bcGroups: [
+      {
+        id: 1,
+        name: "BC1",
+        // All six DOFs — shell nodes carry rotations; the left edge is clamped.
+        dofs: [0, 1, 2, 3, 4, 5],
+        value: 0,
+        faces: [
+          {
+            id: 1,
+            label: `Fixed edge (${fixedIds.length} nodes)`,
+            nodeIds: fixedIds,
+          },
+        ],
+      },
+    ],
+    loadGroups: [
+      {
+        id: 1,
+        name: "Load1",
+        dof: 0,
+        totalForce: P,
+        kind: "force",
+        faces: [
+          {
+            id: 2,
+            label: `Tension (+X) (${loadIds.length} nodes)`,
+            nodeIds: loadIds,
+          },
+        ],
+      },
+    ],
+    nextBcGroupId: 2,
+    nextLoadGroupId: 2,
+    nextFaceEntryId: 3,
+    nextMatId: 2,
+    stepSurface: null,
+    volMesh: null,
+    surfaceTriangles: null,
+    surfaceFaceIds: null,
+  };
+
+  const connectivity = [];
+  const offsets = [];
+  let offset = 0;
+  for (const tri of m.triangles) {
+    connectivity.push(tri.join(" "));
+    offset += tri.length;
+    offsets.push(offset);
+  }
+  const types = m.triangles.map(() => 5); // VTK_TRIANGLE
+
+  const points = m.vertices.map((v) => `${v[0]} ${v[1]} ${v[2]}`).join("\n");
+  const nodeIds = m.vertices.map((_, i) => i + 1).join(" ");
+  const elementIds = m.triangles.map((_, i) => i + 1).join(" ");
+  const propertyIds = m.triangles.map(() => 1).join(" ");
+  const encoded = encodeKofemFieldData(JSON.stringify(meta));
+
+  return [
+    `<?xml version="1.0"?>`,
+    `<VTKFile type="UnstructuredGrid" version="1.0" byte_order="LittleEndian" header_type="UInt32">`,
+    `<UnstructuredGrid>`,
+    `<FieldData>`,
+    `<DataArray type="UInt8" Name="KoFEM" NumberOfTuples="${encoded.byteLength}" format="binary">`,
+    encoded.b64,
+    `</DataArray>`,
+    `</FieldData>`,
+    `<Piece NumberOfPoints="${nNodes}" NumberOfCells="${nCells}">`,
+    `<Points>`,
+    dataArray("Float64", "Points", points, 3),
+    `</Points>`,
+    `<Cells>`,
+    dataArray("Int64", "connectivity", connectivity.join("\n")),
+    dataArray("Int64", "offsets", offsets.join(" ")),
+    dataArray("UInt8", "types", types.join(" ")),
+    `</Cells>`,
+    `<PointData>`,
+    dataArray("Int64", "NodeId", nodeIds),
+    dataArray("Float64", "Displacement", joinTuples(r.displacements, 3), 3),
+    `</PointData>`,
+    `<CellData>`,
+    dataArray("Int64", "ElementId", elementIds),
+    dataArray("Int64", "PropertyId", propertyIds),
+    dataArray("Float64", "VonMises", joinTuples(r.von_mises, 1)),
+    `</CellData>`,
+    `</Piece>`,
+    `</UnstructuredGrid>`,
+    `</VTKFile>`,
+    ``,
+  ].join("\n");
+}
 
 // ── Gallery viewer surface (the shell triangles are already the surface) ───────
 const disp = r.displacements;
@@ -108,9 +271,9 @@ const entry = {
     "Kirchhoff shell (DKT + CST). Loaded in its own plane it is plane stress, and " +
     "the peak facet stress at the hole still approaches Kt = 3.",
   showcase: true,
-  // "Open in KoFEM web" opens the solid twin — the app solves solids, not pure
-  // shells (same reason the crane showcase points at its solid assembly).
-  appId: "plate-with-hole",
+  // "Open in KoFEM web" opens this card's own shell analysis — the app solves
+  // pure-shell (CTRIA3) models through the engine's Kirchhoff shell solver.
+  appId: "plate-with-hole-shell",
   metrics: [
     { k: "stress concentration Kt", v: Kt.toFixed(2) },
     {
@@ -134,6 +297,8 @@ const entry = {
   },
 };
 
+writeFileSync(join(outDir, "plate-with-hole-shell.vtu"), buildShellVtu());
+
 const manifestPath = join(outDir, "examples.json");
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8")).filter(
   (e) => e.id !== entry.id,
@@ -142,5 +307,5 @@ manifest.push(entry);
 writeFileSync(manifestPath, JSON.stringify(manifest));
 console.log(
   `plate-with-hole-shell: ${r.iterations} it, ${nNodes} nodes, ` +
-    `${triangles.length / 3} triangles, Kt=${Kt.toFixed(3)} (err ${errPct.toFixed(1)}%) → ${manifestPath}`,
+    `${triangles.length / 3} triangles, Kt=${Kt.toFixed(3)} (err ${errPct.toFixed(1)}%) → ${manifestPath} + plate-with-hole-shell.vtu`,
 );

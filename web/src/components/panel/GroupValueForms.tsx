@@ -2,7 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useState } from "react";
-import { loadKind, loadComponents } from "../../store/modelStore";
+import {
+  loadKind,
+  loadComponents,
+  useModelStore,
+} from "../../store/modelStore";
 import type {
   LoadKind,
   NamedBcGroup,
@@ -34,6 +38,10 @@ export function BcValueForm({
   );
   const [value, setValue] = useState(String(group.value));
   const [error, setError] = useState<string | null>(null);
+  // Shell nodes carry rotational DOFs, so shell models expose Rx/Ry/Rz too.
+  const hasShells = useModelStore((s) =>
+    s.elements.some((el) => el.type === "CTRIA3"),
+  );
 
   function handleSave() {
     // A prescribed displacement of 0 is physically valid (fixed support), so
@@ -63,6 +71,7 @@ export function BcValueForm({
       )}
       <DofCheckboxes
         checkedDofs={checkedDofs}
+        showRotations={hasShells}
         onToggle={(index) =>
           setCheckedDofs((prev) =>
             prev.map((checked, i) => (i === index ? !checked : checked)),

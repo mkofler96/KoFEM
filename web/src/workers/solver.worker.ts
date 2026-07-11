@@ -114,10 +114,12 @@ interface Material {
 }
 // Body → material mapping (#317/#353): each body of the assembly is one
 // property (property id = 1-based body index from Netgen's mesh domains), and
-// the property names the material the body is made of.
+// the property names the material the body is made of. Properties referenced
+// by shell (CTRIA3) elements also carry the shell thickness (PSHELL semantics).
 interface Property {
   id: number;
   materialId: number;
+  thickness?: number;
 }
 interface Constraint {
   nodeId: number;
@@ -484,6 +486,299 @@ function groupPointLoads(loads: Load[], vid: VertexIndexer) {
   return [...loadMap.entries()].map(([vertex, force]) => ({ vertex, force }));
 }
 
+// ── Pure-shell solve (CTRIA3 → solve_shell) ─────────────────────────────────
+
+// Resolve the shell section: one (E, ν) pair plus the per-facet thickness
+// field. The engine's shell solver takes a single material for the whole mesh;
+// a model whose shell elements span several materials cannot be honoured, so
+// refuse loudly instead of solving part of it with the wrong stiffness
+// (mirrors coupledMaterials, issue #376). Thickness lives on each element's
+// property (PSHELL semantics) and must be a positive number.
+function resolveShellSection(
+  shellElements: Element[],
+  materials: Material[],
+  properties: Property[],
+): { young: number; poisson: number; thicknesses: Float64Array } {
+  const propById = new Map(properties.map((p) => [p.id, p]));
+  const matById = new Map(materials.map((mat) => [mat.id, mat]));
+  const usedMats = new Map<number, Material>();
+  const thicknesses = new Float64Array(shellElements.length);
+  for (let i = 0; i < shellElements.length; i++) {
+    const el = shellElements[i];
+    const prop = propById.get(el.propertyId);
+    if (!prop)
+      throw new Error(
+        `shell solve: element ${el.id} belongs to body ${el.propertyId}, ` +
+          "which has no property — the model is inconsistent",
+      );
+    if (typeof prop.thickness !== "number" || prop.thickness <= 0)
+      throw new Error(
+        `shell solve: property ${prop.id} has no positive shell thickness — ` +
+          "shell (CTRIA3) elements require a thickness on their property",
+      );
+    thicknesses[i] = prop.thickness;
+    const mat = matById.get(prop.materialId);
+    if (!mat)
+      throw new Error(
+        `shell solve: property ${prop.id} references material ${prop.materialId}, ` +
+          "which does not exist",
+      );
+    usedMats.set(mat.id, mat);
+  }
+  if (usedMats.size > 1) {
+    const names = [...usedMats.values()].map((mat) => mat.name).join(", ");
+    throw new Error(
+      `shell solve: the shell solver supports one material, but the shell elements span ` +
+        `${usedMats.size} distinct materials (${names}) — assign a single material to the shell body`,
+    );
+  }
+  const mat = [...usedMats.values()][0];
+  return { young: mat.young, poisson: mat.poisson, thicknesses };
+}
+
+// Essential BCs for the shell solve. Shell nodes carry six DOFs
+// (u,v,w,θx,θy,θz), so rotational constraints are honoured — unlike the solid
+// path, which drops them as stiffness-free. A node with all six DOFs fixed
+// becomes a fixed_vertices entry, anything partial a fixed_dofs entry. The
+// shell solver has no inhomogeneous essential BCs, so a non-zero prescribed
+// displacement is a loud error, not a silent pin-to-zero.
+function shellDirichlet(constraints: Constraint[], vid: VertexIndexer) {
+  const dofsByVertex = new Map<number, Set<number>>();
+  for (const c of constraints) {
+    if (c.dof < 0 || c.dof > 5)
+      throw new Error(
+        `shell solve: constraint on node ${c.nodeId} names DOF ${c.dof} — valid shell DOFs are 0..5`,
+      );
+    // eslint-disable-next-line kofem/no-silent-fallback -- a constraint without prescribedValue is a homogeneous fixed BC, i.e. u = 0 by definition
+    if ((c.prescribedValue ?? 0) !== 0)
+      throw new Error(
+        "shell solve: prescribed (non-zero) displacements are not supported for shell models yet",
+      );
+    const vertex = vid(c.nodeId, "constraint");
+    let dofs = dofsByVertex.get(vertex);
+    if (!dofs) {
+      dofs = new Set();
+      dofsByVertex.set(vertex, dofs);
+    }
+    dofs.add(c.dof);
+  }
+  const fixed_vertices: number[] = [];
+  const fixed_dofs: { vertex: number; dofs: number[] }[] = [];
+  for (const [vertex, dofSet] of dofsByVertex) {
+    if (dofSet.size === 6) fixed_vertices.push(vertex);
+    else fixed_dofs.push({ vertex, dofs: [...dofSet].sort((a, b) => a - b) });
+  }
+  return { fixed_vertices, fixed_dofs };
+}
+
+type ShellNodalLoad = {
+  force: [number, number, number];
+  moment: [number, number, number];
+};
+
+// Work-equivalent nodal loads of one surface load on a shell mesh. The shell
+// solver takes only nodal loads, so the traction integral f_i = ∫ N_i·t dS the
+// solid engine evaluates over boundary elements must be computed here. With
+// linear (CST/DKT) shape functions a uniform traction contributes t·A/3 to
+// each node of a facet, and a uniform line load q·L/2 to each end of an edge:
+//   force on facets — uniform traction t = F/ΣA over the loaded region
+//   force on edges  — uniform line load q = F/ΣL along the loaded edge
+//   pressure        — -p·n̂·A/3 per facet node, n̂ the facet winding normal
+//                     (a shell has no outward side; + pushes against n̂)
+function distributeShellSurfaceLoad(
+  sl: SurfaceLoad,
+  posOf: (nodeId: number) => [number, number, number],
+  at: (nodeId: number) => ShellNodalLoad,
+): void {
+  const facets = sl.faces.filter((f) => f.length === 3);
+  const edges = sl.faces.filter((f) => f.length === 2);
+  if (facets.length + edges.length !== sl.faces.length)
+    throw new Error(
+      "shell solve: a surface load carries a face that is neither a facet (3 nodes) nor an edge (2 nodes)",
+    );
+
+  // Area-weighted winding normal: |areaNormal| = A, direction from winding.
+  const areaNormal = (f: number[]): [number, number, number] => {
+    const [a, b, c] = [posOf(f[0]), posOf(f[1]), posOf(f[2])];
+    const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    const ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+    return [
+      (ab[1] * ac[2] - ab[2] * ac[1]) / 2,
+      (ab[2] * ac[0] - ab[0] * ac[2]) / 2,
+      (ab[0] * ac[1] - ab[1] * ac[0]) / 2,
+    ];
+  };
+
+  if (sl.type === "pressure") {
+    if (sl.pressure === undefined)
+      throw new Error("shell solve: pressure load carries no magnitude");
+    if (facets.length === 0)
+      throw new Error(
+        "shell solve: a pressure load needs shell facets — it cannot act on an edge",
+      );
+    for (const f of facets) {
+      const n = areaNormal(f);
+      for (const nodeId of f) {
+        const acc = at(nodeId).force;
+        for (let d = 0; d < 3; d++) acc[d] += (-sl.pressure * n[d]) / 3;
+      }
+    }
+    return;
+  }
+
+  if (!sl.force)
+    throw new Error(`shell solve: ${sl.type} load carries no force vector`);
+  if (sl.type === "traction" && edges.length > 0)
+    throw new Error(
+      "shell solve: a traction (per-area) load cannot act on an edge",
+    );
+
+  if (facets.length > 0) {
+    const areas = facets.map((f) => {
+      const n = areaNormal(f);
+      return Math.hypot(n[0], n[1], n[2]);
+    });
+    const totalArea = areas.reduce((s, a) => s + a, 0);
+    if (totalArea <= 0)
+      throw new Error("shell solve: loaded facets have zero total area");
+    for (let i = 0; i < facets.length; i++) {
+      // force: share of the TOTAL vector ∝ area; traction: t·A/3 directly.
+      const scale =
+        sl.type === "force" ? areas[i] / (3 * totalArea) : areas[i] / 3;
+      for (const nodeId of facets[i]) {
+        const acc = at(nodeId).force;
+        for (let d = 0; d < 3; d++) acc[d] += sl.force[d] * scale;
+      }
+    }
+  } else if (edges.length > 0) {
+    const lengths = edges.map((e) => {
+      const [a, b] = [posOf(e[0]), posOf(e[1])];
+      return Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+    });
+    const totalLength = lengths.reduce((s, l) => s + l, 0);
+    if (totalLength <= 0)
+      throw new Error("shell solve: loaded edges have zero total length");
+    for (let i = 0; i < edges.length; i++) {
+      const scale = lengths[i] / (2 * totalLength);
+      for (const nodeId of edges[i]) {
+        const acc = at(nodeId).force;
+        for (let d = 0; d < 3; d++) acc[d] += sl.force[d] * scale;
+      }
+    }
+  }
+}
+
+// Nodal loads for the shell solve: direct loads (moment groups arrive here as
+// equivalent nodal forces; DOFs 3–5 would be true nodal moments) merged with
+// the work-equivalent distribution of every surface load.
+function shellPointLoads(
+  loads: Load[],
+  surfaceLoads: SurfaceLoad[] | undefined,
+  posOf: (nodeId: number) => [number, number, number],
+  vid: VertexIndexer,
+) {
+  const acc = new Map<number, ShellNodalLoad>();
+  const atVertex = (vertex: number): ShellNodalLoad => {
+    let entry = acc.get(vertex);
+    if (!entry) {
+      entry = { force: [0, 0, 0], moment: [0, 0, 0] };
+      acc.set(vertex, entry);
+    }
+    return entry;
+  };
+  for (const load of loads) {
+    if (load.dof < 0 || load.dof > 5)
+      throw new Error(
+        `shell solve: load on node ${load.nodeId} names DOF ${load.dof} — valid shell DOFs are 0..5`,
+      );
+    const entry = atVertex(vid(load.nodeId, "load"));
+    if (load.dof <= 2) entry.force[load.dof] += load.value;
+    else entry.moment[load.dof - 3] += load.value;
+  }
+  const atNode = (nodeId: number): ShellNodalLoad =>
+    atVertex(vid(nodeId, "surface load face"));
+  for (const sl of surfaceLoads ?? [])
+    distributeShellSurfaceLoad(sl, posOf, atNode);
+
+  return [...acc.entries()].map(([vertex, { force, moment }]) => ({
+    vertex,
+    ...(force.some((v) => v !== 0) ? { force } : {}),
+    ...(moment.some((v) => v !== 0) ? { moment } : {}),
+  }));
+}
+
+// Solve a pure-shell (all-CTRIA3) model via the engine's Kirchhoff shell
+// solver. The result matches the solid contract — three translations per node,
+// one von Mises surface stress per element — so the store and viewport consume
+// it unchanged. elementOrder and tieDistance do not apply to shells (the DKT
+// facet is what it is; ties join solid bodies) and are ignored.
+function handleShellSolve(id: number, payload: SolvePayload) {
+  const {
+    nodes,
+    elements,
+    materials,
+    properties,
+    constraints,
+    loads,
+    surfaceLoads,
+  } = payload;
+
+  const vid = buildVertexIndexer(nodes);
+  const vertices = new Float64Array(3 * nodes.length);
+  for (let i = 0; i < nodes.length; i++) {
+    vertices[3 * i] = nodes[i].x;
+    vertices[3 * i + 1] = nodes[i].y;
+    vertices[3 * i + 2] = nodes[i].z;
+  }
+  const triangles = new Int32Array(3 * elements.length);
+  for (let i = 0; i < elements.length; i++) {
+    const { nodeIds } = elements[i];
+    if (nodeIds.length !== 3)
+      throw new Error(
+        `CTRIA3 element ${elements[i].id} has ${nodeIds.length} nodes — expected 3`,
+      );
+    for (let k = 0; k < 3; k++)
+      triangles[3 * i + k] = vid(nodeIds[k], "CTRIA3 element");
+  }
+
+  const { young, poisson, thicknesses } = resolveShellSection(
+    elements,
+    materials,
+    properties,
+  );
+  const { fixed_vertices, fixed_dofs } = shellDirichlet(constraints, vid);
+  const posOf = (nodeId: number): [number, number, number] => {
+    const vi = vid(nodeId, "surface load face");
+    return [vertices[3 * vi], vertices[3 * vi + 1], vertices[3 * vi + 2]];
+  };
+  const point_loads = shellPointLoads(loads, surfaceLoads, posOf, vid);
+
+  self.postMessage({
+    id,
+    log: `Starting shell solve: ${nodes.length} nodes, ${elements.length} shell facets…`,
+  });
+  const result = m().solve_shell(
+    { vertices, triangles, thicknesses },
+    JSON.stringify({ young_modulus: young, poisson_ratio: poisson }),
+    JSON.stringify({ fixed_vertices, fixed_dofs, point_loads }),
+  );
+  if ("error" in result) throw new Error(result.error);
+
+  self.postMessage({
+    id,
+    log: `Shell solve complete: ${result.displacements.length / 3} vertex displacements, ${result.von_mises.length} facet stresses`,
+  });
+  self.postMessage(
+    {
+      id,
+      ok: true,
+      displacements: result.displacements,
+      vonMises: result.von_mises,
+    },
+    [result.displacements.buffer, result.von_mises.buffer],
+  );
+}
+
 // ── Auto-shell coupled solve ────────────────────────────────────────────────
 
 // Flat 0-based mesh for the shellize pipeline, built from the store model.
@@ -820,6 +1115,23 @@ function tryCoupledSolve(
 }
 
 function handleSolve(id: number, payload: SolvePayload) {
+  // Pure-shell models (all CTRIA3) solve via the Kirchhoff shell solver. A
+  // hand-mixed shell+solid mesh has no solve path yet (the auto-shell coupled
+  // solve below idealises thin SOLID bodies itself) — refuse loudly rather
+  // than solving only the solid part.
+  const nShells = payload.elements.filter((e) => e.type === "CTRIA3").length;
+  if (nShells > 0) {
+    if (nShells !== payload.elements.length)
+      throw new Error(
+        `solve: the model mixes ${nShells} shell (CTRIA3) elements with ` +
+          `${payload.elements.length - nShells} solid elements — mixed ` +
+          "shell/solid models are not supported yet; model the part as all " +
+          "solid (thin bodies are shell-idealised automatically) or all shell",
+      );
+    handleShellSolve(id, payload);
+    return;
+  }
+
   // Auto-shell: a thin-walled body of a multibody assembly is idealised as shells
   // and solved coupled to the solid bodies — this converges where the all-solid
   // solve of the thin part stalls (#358). Falls back to the all-solid path below
