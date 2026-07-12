@@ -4,21 +4,28 @@
 import * as THREE from "three";
 import type { ThreeEvent } from "@react-three/fiber";
 import { useModelStore } from "../../store/modelStore";
-import { pickFaceNodeIds, toggleFaceSelection } from "../../lib/facePick";
-import type { BoundaryMeshTopo } from "../../lib/facePick";
+import {
+  pickFaceNodeIds,
+  pickEdgeNodeIds,
+  toggleFaceSelection,
+} from "../../lib/facePick";
+import type { BoundaryMeshTopo, Vec3 } from "../../lib/facePick";
 
-// Face picking handler for the pickable boundary surfaces (undeformed solid
-// and deformed result surface). Returns undefined outside pick mode so the
-// meshes carry no onClick at all.
+// Picking handler for the pickable boundary surfaces (undeformed solid and
+// deformed result surface). Returns undefined outside pick mode so the meshes
+// carry no onClick at all.
 //
-// When OCC face IDs are available (STEP mesh via Netgen), uses instant face ID
-// lookup — topologically exact, works on any curved or flat CAD face.
-// Falls back to BFS flood-fill with normal-angle thresholds when no face IDs
-// are present (parametric box mesh or .inp import).
+// Face mode selects a surface region: when OCC face IDs are available (STEP mesh
+// via Netgen) an instant face-ID lookup (topologically exact on any CAD face),
+// otherwise a BFS flood-fill with normal-angle thresholds (parametric box mesh
+// or .inp import). Edge mode selects the boundary polyline near the click — the
+// only way to grab the rim of a flat shell, whose whole sheet is one region.
 export function useFacePick(
   boundaryMeshTopo: BoundaryMeshTopo | null,
+  getPos: (id: number) => Vec3,
 ): ((e: ThreeEvent<MouseEvent>) => void) | undefined {
   const pickMode = useModelStore((s) => s.pickMode);
+  const pickGeometry = useModelStore((s) => s.pickGeometry);
   const selectedFace = useModelStore((s) => s.selectedFace);
   const pendingFaces = useModelStore((s) => s.pendingFaces);
   const setSelectedFace = useModelStore((s) => s.setSelectedFace);
@@ -31,7 +38,18 @@ export function useFacePick(
     const startIdx = e.faceIndex;
     if (startIdx >= boundaryMeshTopo.triangles.length) return;
 
-    const faceNodeIds = [...pickFaceNodeIds(startIdx, boundaryMeshTopo)];
+    const faceNodeIds =
+      pickGeometry === "edge"
+        ? [
+            ...pickEdgeNodeIds(
+              [e.point.x, e.point.y, e.point.z],
+              startIdx,
+              boundaryMeshTopo,
+              getPos,
+            ),
+          ]
+        : [...pickFaceNodeIds(startIdx, boundaryMeshTopo)];
+    if (faceNodeIds.length === 0) return;
     const normal =
       e.face?.normal.clone().normalize() ?? new THREE.Vector3(0, 1, 0);
     const ax = Math.abs(normal.x),
@@ -56,12 +74,16 @@ export function useFacePick(
     const current = selectedFace
       ? [...pendingFaces, selectedFace]
       : pendingFaces;
-    const next = toggleFaceSelection(current, {
-      nodeIds: faceNodeIds,
-      axis,
-      isMax,
-      label: "",
-    });
+    const next = toggleFaceSelection(
+      current,
+      {
+        nodeIds: faceNodeIds,
+        axis,
+        isMax,
+        label: "",
+      },
+      pickGeometry === "edge" ? "Edge" : "Face",
+    );
 
     // Re-split into pending faces + the active (last) selection.
     setPendingFaces(next.slice(0, -1));

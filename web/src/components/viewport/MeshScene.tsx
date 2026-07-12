@@ -29,8 +29,22 @@ export function MeshScene() {
   const viewRepr = useModelStore((s) => s.viewRepr);
 
   const topology = useMeshTopology();
-  const onFacePick = useFacePick(topology.boundaryMeshTopo);
-  const { modelSize } = topology;
+  const { modelSize, nodeMap } = topology;
+
+  // Node position lookup for edge picking (nearest-edge + polyline directions).
+  const getPos = useMemo(
+    () =>
+      (id: number): [number, number, number] => {
+        const n = nodeMap.get(id)?.n;
+        if (!n)
+          throw new Error(
+            `Pick referenced node id ${id} missing from nodeMap — mesh/topology desync`,
+          );
+        return [n.x, n.y, n.z];
+      },
+    [nodeMap],
+  );
+  const onFacePick = useFacePick(topology.boundaryMeshTopo, getPos);
 
   // Automatic fit-to-view scale (max displacement → TARGET_DEFORM_FRACTION of the
   // model size) multiplied by the user-controlled deformScaleFactor. A factor of

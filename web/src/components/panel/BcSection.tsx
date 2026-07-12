@@ -5,7 +5,11 @@ import { useState } from "react";
 import { useModelStore } from "../../store/modelStore";
 import { usePickedFaces } from "../../hooks/usePickedFaces";
 import { DOF_LABELS, toFaceEntries } from "./bcFormUtils";
-import { DofCheckboxes, PickedFaceList } from "./BcLoadFormControls";
+import {
+  DofCheckboxes,
+  PickedFaceList,
+  PickGeometryToggle,
+} from "./BcLoadFormControls";
 import { BcValueForm } from "./GroupValueForms";
 import { GroupCard } from "./GroupCard";
 import styles from "./LeftPanel.module.css";
@@ -15,7 +19,10 @@ import styles from "./LeftPanel.module.css";
 export function BcSection({ onError }: { onError(msg: string | null): void }) {
   const bcGroups = useModelStore((s) => s.bcGroups);
   const pickMode = useModelStore((s) => s.pickMode);
-  // Shell nodes carry rotational DOFs, so shell models expose Rx/Ry/Rz too.
+  const pickGeometry = useModelStore((s) => s.pickGeometry);
+  const setPickGeometry = useModelStore((s) => s.setPickGeometry);
+  // Shell nodes carry rotational DOFs, so shell models expose Rx/Ry/Rz too, and
+  // edge picking (grabbing the rim of the flat sheet) is only offered for them.
   const hasShells = useModelStore((s) =>
     s.elements.some((el) => el.type === "CTRIA3"),
   );
@@ -55,6 +62,7 @@ export function BcSection({ onError }: { onError(msg: string | null): void }) {
     const faceEntries = toFaceEntries(
       allPickedFaces,
       targetBcGroup?.faces.length ?? 0,
+      pickGeometry === "edge" ? "Edge" : "Face",
     );
     if (targetBcGroup) {
       for (const faceEntry of faceEntries) {
@@ -100,7 +108,18 @@ export function BcSection({ onError }: { onError(msg: string | null): void }) {
             </button>
           </div>
 
-          <PickedFaceList faces={allPickedFaces} onRemove={removePickedFace} />
+          {hasShells && (
+            <PickGeometryToggle
+              value={pickGeometry}
+              onChange={setPickGeometry}
+            />
+          )}
+
+          <PickedFaceList
+            faces={allPickedFaces}
+            onRemove={removePickedFace}
+            geometry={pickGeometry}
+          />
 
           {allPickedFaces.length > 0 && !targetBcGroup && (
             <>
