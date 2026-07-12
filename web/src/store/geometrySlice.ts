@@ -29,10 +29,18 @@ export type ElementType = "CTETRA" | "CHEXA" | "CTRIA3";
 // `thickness` (mm) — PSHELL semantics: thickness is a section property of the
 // idealised wall, not a material constant. Required on properties referenced
 // by shell elements; meaningless (and absent) on solid bodies.
+// How a body is discretised for the solve, chosen per body before meshing.
+// "solid" meshes the body as tetrahedra (linear or quadratic per the global
+// element order); "shell" idealises its thin walls as Kirchhoff shells coupled to
+// the solid bodies (the auto-shell path). Thin-walled bodies are auto-preselected
+// "shell" at import (detectShellBodies); the user can switch any body.
+export type BodyDiscretization = "shell" | "solid";
+
 export interface Property {
   id: number;
   materialId: number;
   thickness?: number;
+  discretization?: BodyDiscretization;
 }
 
 export interface Element {
@@ -91,9 +99,11 @@ export interface GeometrySlice {
   addProperty(prop: Property): void;
   // Rebuild the body list after a CAD import: one property per body, all
   // defaulting to the first material (#353). Assignments are per-import —
-  // body indices from different files don't correspond.
-  setBodies(count: number): void;
+  // body indices from different files don't correspond. `shellBodyIds` (1-based
+  // body ids detected as thin-walled) preselect those bodies as shells.
+  setBodies(count: number, shellBodyIds?: number[]): void;
   assignBodyMaterial(propertyId: number, materialId: number): void;
+  setBodyDiscretization(propertyId: number, disc: BodyDiscretization): void;
   setStepSurface(tessellation: StepTessellation | null): void;
   setStepBytes(bytes: Uint8Array | null): void;
   setGeometryFormat(format: GeometryFormat): void;
@@ -136,7 +146,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
     set((s) => {
       s.properties.push(prop);
     }),
-  setBodies: (count) =>
+  setBodies: (count, shellBodyIds) =>
     set((s) => {
       const mat = s.materials[0];
       if (!mat)
@@ -144,10 +154,23 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       // A surface-only import reports 0 bodies; keep one property so the
       // material UI stays functional (meshing fails loudly on its own).
       const n = Math.max(1, count);
+      const shell = new Set(shellBodyIds ?? []);
       s.properties = Array.from({ length: n }, (_, i) => ({
         id: i + 1,
         materialId: mat.id,
+        discretization: shell.has(i + 1)
+          ? ("shell" as BodyDiscretization)
+          : ("solid" as BodyDiscretization),
       }));
+    }),
+  setBodyDiscretization: (propertyId, disc) =>
+    set((s) => {
+      const prop = s.properties.find((p) => p.id === propertyId);
+      if (!prop)
+        throw new Error(
+          `Cannot set element type: body ${propertyId} does not exist`,
+        );
+      prop.discretization = disc;
     }),
   assignBodyMaterial: (propertyId, materialId) =>
     set((s) => {

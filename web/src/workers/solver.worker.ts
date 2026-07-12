@@ -24,6 +24,7 @@ import {
   type CoupledModel,
   type ShellizeMesh,
 } from "../lib/shellize.js";
+import { detectShellBodies } from "../lib/thinBodies.js";
 
 let Module: KofemModule | null = null;
 
@@ -122,6 +123,10 @@ interface Property {
   id: number;
   materialId: number;
   thickness?: number;
+  // Per-body discretisation chosen before meshing: "shell" idealises the body's
+  // thin walls as shells, "solid" keeps it as tets. Undefined on legacy models
+  // (no per-body choice) — the auto-shell path then auto-detects thin bodies.
+  discretization?: "shell" | "solid";
 }
 interface Constraint {
   nodeId: number;
@@ -190,6 +195,14 @@ function handleParseStep(id: number, payload: ParseStepPayload) {
   // tessellate_step stores the OCCT shape in the module — record that so a
   // subsequent volume_mesh in this same worker can skip the reload.
   geometryLoaded = true;
+  // Thin-walled bodies (a ray cast inward from the surface finds an opposite wall
+  // close by, relative to the body's size) are preselected as shells — before any
+  // volume mesh exists, purely from the tessellation.
+  const shellBodyIds = detectShellBodies({
+    vertices,
+    triangles,
+    triangleBodyIds,
+  });
   // Return as {points, triangles} to match the StepTessellation type used by
   // the store; tessellate_step returns flat Float32/Uint32 typed arrays.
   // bodyCount (#353) drives the per-body material assignment UI; bodyIds
@@ -201,6 +214,7 @@ function handleParseStep(id: number, payload: ParseStepPayload) {
     triangles: chunk3(triangles),
     bodyIds: Array.from(triangleBodyIds),
     bodyCount,
+    shellBodyIds,
   });
 }
 
@@ -1014,10 +1028,12 @@ function mapCoupledVonMises(
   return vonMises;
 }
 
-// Returns the coupled displacement/von-Mises result, or null when the model has
-// no thin-walled body to shell (→ the caller runs the all-solid path).
+// Returns the coupled displacement/von-Mises result, or null when no body is
+// marked Shell (→ the caller runs the all-solid path). `shellBodyIds` is the
+// per-body Shell choice (property ids); an empty set means every body is solid.
 function tryCoupledSolve(
   payload: SolvePayload,
+  shellBodyIds: Set<number>,
 ): { displacements: Float64Array; vonMises: Float64Array } | null {
   const {
     nodes,
@@ -1045,8 +1061,15 @@ function tryCoupledSolve(
     surfaceFaceIds,
     vid,
   );
-  const shells = extractThinWallShells(mesh);
-  if (shells.shellBody < 0) return null; // no thin walls → all-solid path
+  if (shellBodyIds.size === 0) return null; // every body solid → all-solid path
+  const shells = extractThinWallShells(mesh, { shellBodyIds });
+  if (shells.shellBody < 0)
+    // A body is marked Shell but has no detectable thin walls — refuse loudly
+    // rather than silently solving it as solid (which would ignore the choice).
+    throw new Error(
+      `Shell idealisation failed: body ${[...shellBodyIds].join(", ")} is marked "Shell" but no ` +
+        "thin walls were found in it. Switch it to Solid, or check that it is genuinely thin-walled.",
+    );
 
   // Only the shelled body's thin walls become shells; its thick base tets stay
   // solid (kept in the pool) so the load path through them is not lost. Distinct
@@ -1384,11 +1407,17 @@ function handleSolve(id: number, payload: SolvePayload) {
     return;
   }
 
-  // Auto-shell: a thin-walled body of a multibody assembly is idealised as shells
-  // and solved coupled to the solid bodies — this converges where the all-solid
-  // solve of the thin part stalls (#358). Falls back to the all-solid path below
-  // when there is no thin-walled body to shell.
-  const coupled = tryCoupledSolve(payload);
+  // A body marked "Shell" is idealised as shells and solved coupled to the solid
+  // bodies — this converges where the all-solid solve of the thin part stalls
+  // (#358). Which bodies are shells is the per-body Shell/Solid choice
+  // (Property.discretization), set for every body at import by detectShellBodies
+  // and editable in the UI. No bodies marked Shell ⇒ the all-solid path.
+  const shellBodyIds = new Set(
+    payload.properties
+      .filter((p) => p.discretization === "shell")
+      .map((p) => p.id),
+  );
+  const coupled = tryCoupledSolve(payload, shellBodyIds);
   if (coupled) {
     self.postMessage({
       id,

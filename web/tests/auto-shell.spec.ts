@@ -222,9 +222,11 @@ test("auto-shell: thin plate on a block solves through the coupled path", async 
       materials: [
         { id: 1, name: "steel", young: 210000, poisson: 0.3, density: 7.85e-9 },
       ],
+      // Body 1 (the thin plate) is idealised as shells, body 2 (the block) stays
+      // solid — the per-body element-type choice that drives the coupled path.
       properties: [
-        { id: 1, materialId: 1 },
-        { id: 2, materialId: 1 },
+        { id: 1, materialId: 1, discretization: "shell" },
+        { id: 2, materialId: 1, discretization: "solid" },
       ],
       constraints,
       loads,

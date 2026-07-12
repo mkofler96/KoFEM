@@ -397,9 +397,17 @@ function collapseWallsToMidSurface(
 // mid-surface facet with its wall thickness; weld walls at their junctions.
 // Returns an empty extraction (shellBody = -1) when no thin walls are found, so
 // the caller can fall back to the all-solid solve.
+// `shellBodyIds` names the bodies to idealise as shells (the app passes the
+// per-body Shell/Solid choice; the showcase generator omits it to let the largest
+// thin-walled body be picked automatically). Only ONE body is shelled per solve —
+// the coupled solver takes a single shell material (#376) — so among the requested
+// bodies the one with the largest thin wall is used.
 export function extractThinWallShells(
   m: ShellizeMesh,
-  { maxWall = 15 }: { maxWall?: number } = {},
+  {
+    maxWall = 15,
+    shellBodyIds,
+  }: { maxWall?: number; shellBodyIds?: Set<number> } = {},
 ): ShellExtraction {
   const empty: ShellExtraction = {
     walls: [],
@@ -409,9 +417,12 @@ export function extractThinWallShells(
     shellThk: [],
     shellSrc: [],
   };
+  if (shellBodyIds && shellBodyIds.size === 0) return empty; // user chose all-solid
   const faces = faceProps(m);
   if (faces.length === 0) return empty;
-  const allWalls = detectWallPairs(faces, maxWall);
+  const allWalls = detectWallPairs(faces, maxWall).filter(
+    (w) => !shellBodyIds || shellBodyIds.has(w.body),
+  );
   if (allWalls.length === 0) return empty;
   // Shell exactly ONE body — the one carrying the largest thin wall. detectWallPairs
   // matches opposite faces on any body, so a thick flat block elsewhere can also

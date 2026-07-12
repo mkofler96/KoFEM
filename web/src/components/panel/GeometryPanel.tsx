@@ -266,10 +266,17 @@ const TIE_TIP =
   "welded so load transfers. 0 = off. Keep it below the element size to avoid " +
   "distorting the mesh.";
 
+const ELEMENT_TYPE_TIP =
+  "How this body is discretised. Solid meshes it as tetrahedra (linear or " +
+  "quadratic per the Element order above). Shell idealises a thin-walled body's " +
+  "walls as Kirchhoff shells coupled to the solid bodies — far more robust for " +
+  "thin parts. Thin-walled bodies are preselected Shell automatically.";
+
 function BodiesSection() {
   const materials = useModelStore((s) => s.materials);
   const properties = useModelStore((s) => s.properties);
   const assignBodyMaterial = useModelStore((s) => s.assignBodyMaterial);
+  const setBodyDiscretization = useModelStore((s) => s.setBodyDiscretization);
   const setHighlightBodyId = useModelStore((s) => s.setHighlightBodyId);
   const hiddenBodyIds = useModelStore((s) => s.hiddenBodyIds);
   const toggleBodyVisibility = useModelStore((s) => s.toggleBodyVisibility);
@@ -336,6 +343,23 @@ function BodiesSection() {
                   {mat.name}
                 </option>
               ))}
+            </select>
+            <select
+              className={styles.formSelect}
+              data-testid={`body-type-${prop.id}`}
+              title={ELEMENT_TYPE_TIP}
+              value={prop.discretization ?? "solid"}
+              onFocus={() => highlight(prop.id)}
+              onBlur={() => setHighlightBodyId(null)}
+              onChange={(e) =>
+                setBodyDiscretization(
+                  prop.id,
+                  e.target.value as "shell" | "solid",
+                )
+              }
+            >
+              <option value="solid">Solid</option>
+              <option value="shell">Shell</option>
             </select>
           </div>
         );
