@@ -428,88 +428,15 @@ export function extractThinWallShells(
   };
 }
 
-// Mutual-nearest weld of different-body solid nodes within tieDist (heals a
-// near-hinge where two solid bodies touch without a shared face). Only the thin
-// walls of the shelled body become shells, so its retained (base) tets take part
-// in the tie too — pass `sliverTets` to exclude just the wall elements. Without
-// it every element of the shelled body is skipped (whole-body shelling).
-export function tieSolidBodies(
-  m: ShellizeMesh,
-  shellBody: number,
-  {
-    tieDist = 2.5,
-    sliverTets,
-  }: { tieDist?: number; sliverTets?: Set<number> } = {},
-): Map<number, number> {
-  const skip = (e: number): boolean =>
-    sliverTets ? sliverTets.has(e) : m.body[e] === shellBody;
-  const bodiesOf = new Map<number, Set<number>>();
-  for (let e = 0; e < m.tet.length / 4; e++) {
-    if (skip(e)) continue;
-    for (let k = 0; k < 4; k++) {
-      const node = m.tet[4 * e + k];
-      getOrInit(bodiesOf, node, () => new Set<number>()).add(m.body[e]);
-    }
-  }
-  const grid = new Map<string, number[]>();
-  const gk = (x: number, y: number, z: number) =>
-    `${Math.floor(x / tieDist)},${Math.floor(y / tieDist)},${Math.floor(z / tieDist)}`;
-  for (const node of bodiesOf.keys()) {
-    const pos = pt(m.V, node);
-    getOrInit(grid, gk(...pos), () => []).push(node);
-  }
-  const nearest = new Map<number, number>();
-  for (const [node, nodeBodies] of bodiesOf) {
-    const pos = pt(m.V, node);
-    const cx = Math.floor(pos[0] / tieDist),
-      cy = Math.floor(pos[1] / tieDist),
-      cz = Math.floor(pos[2] / tieDist);
-    let bn = -1,
-      bd = tieDist * tieDist;
-    for (let dx = -1; dx <= 1; dx++)
-      for (let dy = -1; dy <= 1; dy++)
-        for (let dz = -1; dz <= 1; dz++) {
-          const bucket = grid.get(`${cx + dx},${cy + dy},${cz + dz}`);
-          if (!bucket) continue;
-          for (const mm of bucket) {
-            if (mm === node) continue;
-            const otherBodies = bodiesOf.get(mm);
-            if (otherBodies === undefined)
-              throw new Error(`tie grid holds unknown node ${mm}`);
-            let same = false;
-            for (const bodyId of nodeBodies)
-              if (otherBodies.has(bodyId)) same = true;
-            if (same) continue;
-            const posOther = pt(m.V, mm);
-            const dd =
-              (pos[0] - posOther[0]) ** 2 +
-              (pos[1] - posOther[1]) ** 2 +
-              (pos[2] - posOther[2]) ** 2;
-            if (dd < bd) {
-              bd = dd;
-              bn = mm;
-            }
-          }
-        }
-    nearest.set(node, bn);
-  }
-  const rep = new Map<number, number>();
-  for (const [node, mate] of nearest) {
-    if (mate >= 0 && nearest.get(mate) === node && node < mate)
-      rep.set(mate, node);
-  }
-  return rep;
-}
-
 export interface CoupledModel {
   pool: number[]; // 3·nPool (solid nodes then shell nodes)
   tets: number[]; // 4·nSolidTets over pool
+  tetBody: number[]; // body id per solid tet (for per-body PSOLID labelling)
   triangles: number[]; // 3·nShellTris over pool
   thicknesses: number[];
   coupling: { ref: number[]; offsets: number[]; solid: number[] };
   solidPool: Map<number, number>; // original vertex index → pool index (solid)
   shellPool: number[]; // local shell index → pool index
-  tied: (n: number) => number;
 }
 
 // Auto-detect distributing (RBE3) couplings: every reference (shell) node that
@@ -566,6 +493,67 @@ function autoDetectCouplings(
   return { ref, offsets, solid };
 }
 
+// Concatenate two CSR coupling sets (shell↔solid and solid↔solid) into one.
+function concatCouplings(
+  a: { ref: number[]; offsets: number[]; solid: number[] },
+  b: { ref: number[]; offsets: number[]; solid: number[] },
+): { ref: number[]; offsets: number[]; solid: number[] } {
+  const ref = [...a.ref, ...b.ref];
+  const solid = [...a.solid, ...b.solid];
+  const offsets = [...a.offsets];
+  const base = a.solid.length;
+  for (let k = 1; k < b.offsets.length; k++) offsets.push(base + b.offsets[k]);
+  return { ref, offsets, solid };
+}
+
+// Distributing (RBE3) tie of a gapped solid↔solid interface — two solid bodies
+// that touch across a clearance (a pin in a hole). Netgen meshes the assembly
+// nearly conformally, so the bodies can share a handful of interface nodes: that
+// thin bridge makes them one connected component yet leaves the pin hanging by a
+// near-hinge. So the split is by BODY LABEL, not connectivity: `poolBody` maps
+// each solid pool node to the set of bodies whose tets use it. The body with the
+// most exclusive nodes is the "master"; every exclusive node of another body with
+// ≥3 master nodes within `radius` distributes onto its nearest master nodes,
+// transmitting force AND moment across the clearance without merging. Nodes shared
+// by two bodies (the conformal bridge) are already rigidly joined and are skipped.
+// A body with no master node in range (held another way, e.g. a shelled body's
+// base carried by its shell couplings) simply gets no coupling.
+function autoDetectSolidCouplings(
+  ppt: (i: number) => [number, number, number],
+  poolBody: Map<number, Set<number>>,
+  radius: number,
+  maxCoupledNodes: number,
+): { ref: number[]; offsets: number[]; solid: number[] } {
+  const bodyOfNode = new Map<number, number>();
+  const bodyCount = new Map<number, number>();
+  for (const [pi, bodies] of poolBody) {
+    if (bodies.size !== 1) continue; // shared interface node — already joined
+    const body = [...bodies][0];
+    bodyOfNode.set(pi, body);
+    // eslint-disable-next-line kofem/no-silent-fallback -- counting occurrences; 0 is the identity for a body seen for the first time
+    bodyCount.set(body, (bodyCount.get(body) ?? 0) + 1);
+  }
+  if (bodyCount.size < 2) return { ref: [], offsets: [0], solid: [] };
+  let master = -1,
+    best = -1;
+  for (const [body, count] of bodyCount)
+    if (count > best) {
+      best = count;
+      master = body;
+    }
+  const masterNodes: number[] = [],
+    otherNodes: number[] = [];
+  for (const [pi, body] of bodyOfNode)
+    (body === master ? masterNodes : otherNodes).push(pi);
+  return autoDetectCouplings(
+    ppt,
+    masterNodes,
+    otherNodes,
+    radius,
+    maxCoupledNodes,
+  );
+}
+
 // Drop distributing couplings whose reference (shell) node carries an essential
 // BC. A fixed node's motion is prescribed, so it cannot ALSO be the dependent of
 // an RBE3 average of the solid — the engine refuses that conflict rather than
@@ -598,25 +586,33 @@ export function dropCouplingsOnFixedNodes(
 export function buildCoupledModel(
   m: ShellizeMesh,
   shells: ShellExtraction,
-  tieRep: Map<number, number>,
   sliverTets: Set<number>,
   {
     couplingRadius = 10,
+    solidCouplingRadius = 8,
     maxCoupledNodes = 16,
-  }: { couplingRadius?: number; maxCoupledNodes?: number } = {},
+  }: {
+    couplingRadius?: number;
+    solidCouplingRadius?: number;
+    maxCoupledNodes?: number;
+  } = {},
 ): CoupledModel {
-  const tied = (n: number) => tieRep.get(n) ?? n;
   // Solid tets = the other bodies plus the shelled body's non-wall (base) tets;
-  // only the thin-wall slivers are replaced by shell facets.
+  // only the thin-wall slivers are replaced by shell facets. Different solid
+  // bodies keep their own nodes; a gapped interface is tied by distributing
+  // couplings (autoDetectSolidCouplings), not node-merging.
   const solidTets: number[] = [];
+  const tetBody: number[] = [];
   for (let e = 0; e < m.tet.length / 4; e++)
-    if (!(m.body[e] === shells.shellBody && sliverTets.has(e)))
+    if (!(m.body[e] === shells.shellBody && sliverTets.has(e))) {
       solidTets.push(
         m.tet[4 * e],
         m.tet[4 * e + 1],
         m.tet[4 * e + 2],
         m.tet[4 * e + 3],
       );
+      tetBody.push(m.body[e]);
+    }
 
   const pool: number[] = [];
   const solidPool = new Map<number, number>();
@@ -625,8 +621,7 @@ export function buildCoupledModel(
     pool.push(x, y, z);
     return id;
   };
-  for (const n of new Set(solidTets.map(tied)))
-    solidPool.set(n, addPool(...pt(m.V, n)));
+  for (const n of new Set(solidTets)) solidPool.set(n, addPool(...pt(m.V, n)));
   const shellPool: number[] = [];
   for (let s = 0; s < shells.shellVerts.length / 3; s++)
     shellPool.push(
@@ -638,7 +633,7 @@ export function buildCoupledModel(
     );
 
   const tets = solidTets.map((n) => {
-    const poolIndex = solidPool.get(tied(n));
+    const poolIndex = solidPool.get(n);
     if (poolIndex === undefined)
       throw new Error(`solid node ${n} missing from the coupled pool`);
     return poolIndex;
@@ -650,9 +645,27 @@ export function buildCoupledModel(
     pool[3 * i + 2],
   ];
 
-  const coupling = autoDetectCouplings(
+  // Body of each solid pool node (a conformal interface node carries >1 body).
+  const poolBody = new Map<number, Set<number>>();
+  for (let t = 0; t < tets.length / 4; t++)
+    for (let k = 0; k < 4; k++)
+      getOrInit(poolBody, tets[4 * t + k], () => new Set<number>()).add(
+        tetBody[t],
+      );
+
+  // Gapped solid↔solid interfaces (pin in a hole) first — their reference nodes
+  // become coupling-dependent, so the shell↔solid detection must not also target
+  // them (a target DOF must be independent).
+  const solidCoupling = autoDetectSolidCouplings(
     ppt,
-    solidPool.values(),
+    poolBody,
+    solidCouplingRadius,
+    maxCoupledNodes,
+  );
+  const solidRefs = new Set(solidCoupling.ref);
+  const shellCoupling = autoDetectCouplings(
+    ppt,
+    [...solidPool.values()].filter((pi) => !solidRefs.has(pi)),
     shellPool,
     couplingRadius,
     maxCoupledNodes,
@@ -661,12 +674,12 @@ export function buildCoupledModel(
   return {
     pool,
     tets,
+    tetBody,
     triangles,
     thicknesses: shells.shellThk,
     solidPool,
     shellPool,
-    tied,
-    coupling,
+    coupling: concatCouplings(shellCoupling, solidCoupling),
   };
 }
 
@@ -693,12 +706,18 @@ export interface ExplicitCoupledModel {
 export function buildExplicitCoupledModel(
   V: number[], // 3·nNodes, xyz interleaved (store vertex order)
   solidTets: number[], // 4·nSolidTets, store vertex indices
+  solidTetBody: number[], // body/property id per solid tet (labels the pin/hole bodies)
   shellTris: number[], // 3·nShellTris, store vertex indices
   shellThk: number[], // per shell triangle thickness
   {
     couplingRadius = 10,
+    solidCouplingRadius = 8,
     maxCoupledNodes = 16,
-  }: { couplingRadius?: number; maxCoupledNodes?: number } = {},
+  }: {
+    couplingRadius?: number;
+    solidCouplingRadius?: number;
+    maxCoupledNodes?: number;
+  } = {},
 ): ExplicitCoupledModel {
   const pool: number[] = [];
   const poolOfVertex = new Map<number, number>();
@@ -720,6 +739,13 @@ export function buildExplicitCoupledModel(
       throw new Error(`explicit coupled: solid node ${vi} missing from pool`);
     return pi;
   });
+  // Body of each solid pool node, from the per-tet body labels.
+  const poolBody = new Map<number, Set<number>>();
+  for (let t = 0; t < tets.length / 4; t++)
+    for (let k = 0; k < 4; k++)
+      getOrInit(poolBody, tets[4 * t + k], () => new Set<number>()).add(
+        solidTetBody[t],
+      );
 
   // Shell nodes second — a node also used by a solid tet reuses its pool entry.
   const shellPoolIndex = new Set<number>();
@@ -734,15 +760,28 @@ export function buildExplicitCoupledModel(
     pool[3 * i + 1],
     pool[3 * i + 2],
   ];
+  // Gapped solid↔solid interfaces (pin in a hole) tied across the clearance,
+  // split by body label — re-derives the same tie the auto-shell path baked into
+  // the .vtu (where the bodies are distinct PSOLID properties).
+  const solidCoupling = autoDetectSolidCouplings(
+    ppt,
+    poolBody,
+    solidCouplingRadius,
+    maxCoupledNodes,
+  );
+  const solidRefs = new Set(solidCoupling.ref);
+
   // Shell nodes NOT shared with the solid need a distributing coupling; shared
-  // nodes are already rigidly attached through the common pool DOFs.
+  // nodes are already rigidly attached through the common pool DOFs. Solid nodes
+  // that are solid-tie references are coupling-dependent, so exclude them as
+  // shell-coupling targets (a target DOF must be independent).
   const solidPoolSet = new Set(solidPoolIndices);
   const refPoolIndices = [...shellPoolIndex].filter(
     (pi) => !solidPoolSet.has(pi),
   );
-  const coupling = autoDetectCouplings(
+  const shellCoupling = autoDetectCouplings(
     ppt,
-    solidPoolIndices,
+    solidPoolIndices.filter((pi) => !solidRefs.has(pi)),
     refPoolIndices,
     couplingRadius,
     maxCoupledNodes,
@@ -753,7 +792,7 @@ export function buildExplicitCoupledModel(
     tets,
     triangles,
     thicknesses: shellThk,
-    coupling,
+    coupling: concatCouplings(shellCoupling, solidCoupling),
     poolOfVertex,
     shellPoolIndex,
   };

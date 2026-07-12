@@ -20,7 +20,6 @@ import {
   meshStep,
   extractThinWallShells,
   shellBodySliverTets,
-  tieSolidBodies,
   buildCoupledModel,
   dropCouplingsOnFixedNodes,
 } from "../shell-coupling/lib.mjs";
@@ -37,9 +36,10 @@ const mesh = meshStep(Module, STEP, { maxElementSize: 6 });
 const shells = extractThinWallShells(mesh);
 // Only the holder's thin walls become shells; its thick base block stays solid
 // (kept in the pool) so the load path through it into the pin/hook is preserved.
+// The pin/hook/base stay separate solid bodies joined by distributing couplings
+// (a gapped pin/hole interface is a force-and-moment tie, not a sparse hinge).
 const slivers = shellBodySliverTets(mesh, shells.shellBody);
-const tie = tieSolidBodies(mesh, shells.shellBody, { sliverTets: slivers });
-const model = buildCoupledModel(mesh, shells, tie, slivers);
+const model = buildCoupledModel(mesh, shells, slivers);
 const nShell = model.shellPool.length;
 
 // BCs + loads by CAD face (see crane-holder-shell.mjs). `fixedShellNodes` are the
@@ -57,7 +57,7 @@ for (let t = 0; t < mesh.surfFace.length; t++) {
   const F = LOAD_FACES[mesh.surfFace[t]];
   if (!F) continue;
   for (const oi of [mesh.surfTri[3 * t], mesh.surfTri[3 * t + 1], mesh.surfTri[3 * t + 2]]) {
-    const pi = model.solidPool.get(model.tied(oi));
+    const pi = model.solidPool.get(oi);
     if (pi !== undefined) loadNodes.get(mesh.surfFace[t]).add(pi);
   }
 }
@@ -119,13 +119,20 @@ function buildCraneVtu() {
   const nTets = model.tets.length / 4;
   const nTris = model.triangles.length / 3;
 
-  // One solid property (PSOLID) plus one shell property (PSHELL) per distinct
-  // wall thickness — the store carries a single thickness per property.
-  const SOLID_PROP = 1;
+  // One PSOLID per distinct solid body (pin / hook / holder base) so the re-solved
+  // .vtu can tell the bodies apart and re-derive the distributing tie across the
+  // pin/hole clearance; plus one PSHELL per distinct wall thickness.
+  const properties = [];
+  const propOfBody = new Map();
+  let nextProp = 1;
+  for (const b of model.tetBody) {
+    if (propOfBody.has(b)) continue;
+    propOfBody.set(b, nextProp);
+    properties.push({ id: nextProp, type: "PSOLID", materialId: 1 });
+    nextProp++;
+  }
   const thkKey = (t) => Number(t.toFixed(6));
   const propOfThk = new Map();
-  const properties = [{ id: SOLID_PROP, type: "PSOLID", materialId: 1 }];
-  let nextProp = 2;
   for (const t of model.thicknesses) {
     const key = thkKey(t);
     if (propOfThk.has(key)) continue;
@@ -155,7 +162,7 @@ function buildCraneVtu() {
       [model.tets[4 * e], model.tets[4 * e + 1], model.tets[4 * e + 2], model.tets[4 * e + 3]],
       10, // VTK_TETRA
       "CTETRA",
-      SOLID_PROP,
+      propOfBody.get(model.tetBody[e]),
     );
   for (let t = 0; t < nTris; t++)
     pushCell(

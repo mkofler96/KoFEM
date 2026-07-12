@@ -16,7 +16,6 @@ import {
 import {
   extractThinWallShells,
   shellBodySliverTets,
-  tieSolidBodies,
   buildCoupledModel,
   buildExplicitCoupledModel,
   dropCouplingsOnFixedNodes,
@@ -943,7 +942,7 @@ function mapCoupledDisplacements(
 ): Float64Array {
   const displacements = new Float64Array(3 * nodes.length);
   for (let i = 0; i < nodes.length; i++) {
-    const sp = model.solidPool.get(model.tied(i));
+    const sp = model.solidPool.get(i);
     const pi =
       sp !== undefined
         ? sp
@@ -1050,18 +1049,18 @@ function tryCoupledSolve(
   if (shells.shellBody < 0) return null; // no thin walls → all-solid path
 
   // Only the shelled body's thin walls become shells; its thick base tets stay
-  // solid (kept in the pool) so the load path through them is not lost.
+  // solid (kept in the pool) so the load path through them is not lost. Distinct
+  // solid bodies keep their own nodes and are tied by distributing couplings
+  // (buildCoupledModel), not node-merging, so a gapped pin/hole interface is a
+  // proper force-and-moment tie instead of a sparse near-hinge.
   const slivers = shellBodySliverTets(mesh, shells.shellBody);
-  const tieRep = tieSolidBodies(mesh, shells.shellBody, {
-    sliverTets: slivers,
-  });
-  const model = buildCoupledModel(mesh, shells, tieRep, slivers);
+  const model = buildCoupledModel(mesh, shells, slivers);
   if (model.coupling.ref.length === 0) return null; // shell doesn't couple to the solid
 
   const nearestShell = shellNodeLocator(model);
   const poolOf = (nodeId: number): number => {
     const vi = vid(nodeId, "coupled bc");
-    const sp = model.solidPool.get(model.tied(vi));
+    const sp = model.solidPool.get(vi);
     if (sp !== undefined) return sp;
     return nearestShell([
       mesh.V[3 * vi],
@@ -1259,12 +1258,16 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
     verts[3 * i + 2] = nodes[i].z;
   }
   const solidTets: number[] = [];
+  // Per-tet body label = the solid element's property (body) id, so the coupled
+  // model can tie distinct solid bodies (a pin in a hole) across their clearance.
+  const solidTetBody: number[] = [];
   for (const el of solidElements) {
     if (el.nodeIds.length !== 4)
       throw new Error(
         `CTETRA element ${el.id} has ${el.nodeIds.length} nodes — expected 4`,
       );
     for (const nid of el.nodeIds) solidTets.push(vid(nid, "CTETRA element"));
+    solidTetBody.push(el.propertyId);
   }
   const shellTris: number[] = [];
   for (const el of shellElements) {
@@ -1279,6 +1282,7 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
   const model = buildExplicitCoupledModel(
     verts,
     solidTets,
+    solidTetBody,
     shellTris,
     thicknesses,
   );

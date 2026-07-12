@@ -17,7 +17,7 @@
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { loadEngine, meshStep, extractThinWallShells, shellBodySliverTets, tieSolidBodies, buildCoupledModel, dropCouplingsOnFixedNodes } from "./lib.mjs";
+import { loadEngine, meshStep, extractThinWallShells, shellBodySliverTets, buildCoupledModel, dropCouplingsOnFixedNodes } from "./lib.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const STEP = join(here, "../../test_files/full-crane-hook.step");
@@ -48,14 +48,13 @@ console.log(
     `(t = ${Math.min(...shells.shellThk).toFixed(1)}–${Math.max(...shells.shellThk).toFixed(1)} mm)`,
 );
 
-// ── 3. weld touching solid bodies (pin↔hook near-hinge) ────────────────────────
-// Only the holder's thin walls become shells; its thick base block stays solid.
+// ── 3. classify the holder's thin-wall slivers (→ shells) vs its base (→ solid) ─
 const slivers = shellBodySliverTets(mesh, shells.shellBody);
-const tie = tieSolidBodies(mesh, shells.shellBody, { sliverTets: slivers });
-console.log(`solid tie: welded ${tie.welded} node pairs across bodies`);
 
 // ── 4. build the coupled node pool + distributing couplings ────────────────────
-const model = buildCoupledModel(mesh, shells, tie, slivers);
+// Pin/hook/base stay separate solid bodies joined by distributing couplings; a
+// gapped pin/hole interface becomes a force-and-moment tie, not a sparse hinge.
+const model = buildCoupledModel(mesh, shells, slivers);
 const nSolid = model.solidPool.size, nShell = model.shellPool.length;
 console.log(
   `coupled model: ${model.pool.length / 3} nodes (${nSolid} solid + ${nShell} shell), ` +
@@ -74,7 +73,7 @@ for (let t = 0; t < mesh.surfFace.length; t++) {
   const F = LOAD_FACES[mesh.surfFace[t]];
   if (!F) continue;
   for (const oi of [mesh.surfTri[3 * t], mesh.surfTri[3 * t + 1], mesh.surfTri[3 * t + 2]]) {
-    const pi = model.solidPool.get(model.tied(oi));
+    const pi = model.solidPool.get(oi);
     if (pi !== undefined) loadNodes.get(mesh.surfFace[t]).add(pi);
   }
 }
