@@ -13,7 +13,6 @@
 //      solid+shell path (auto-shell), which converges where the all-solid thin
 //      part stalls (#358). Assert a converged, finite, physically sane result.
 
-import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { test, expect } from "./coverage";

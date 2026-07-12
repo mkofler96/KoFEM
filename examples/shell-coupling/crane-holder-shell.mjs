@@ -63,9 +63,13 @@ console.log(
 );
 
 // ── 5. boundary conditions + loads (by CAD face) ───────────────────────────────
-const fixed = [];
-for (let s = 0; s < nShell; s++)
-  if (shells.shellSrc[s] === BC_FIXED_FACE) for (let c = 0; c < 6; c++) fixed.push(6 * model.shellPool[s] + c);
+// Fix every node of a face-7 facet (fold nodes shared with the side walls carry the
+// wall's label, so a per-node test would drop them and let the walls hinge).
+const fixed = [], fixedLocal = new Set();
+for (let t = 0; t < shells.shellTris.length / 3; t++)
+  if (shells.shellTriSrc[t] === BC_FIXED_FACE)
+    for (let k = 0; k < 3; k++) fixedLocal.add(shells.shellTris[3 * t + k]);
+for (const s of fixedLocal) for (let c = 0; c < 6; c++) fixed.push(6 * model.shellPool[s] + c);
 if (fixed.length === 0) throw new Error(`no shell nodes on BC face ${BC_FIXED_FACE} — check the face id`);
 
 const loadNodes = new Map(Object.keys(LOAD_FACES).map((f) => [Number(f), new Set()]));

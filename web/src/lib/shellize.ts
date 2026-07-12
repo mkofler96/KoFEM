@@ -41,7 +41,9 @@ export interface ShellExtraction {
   shellVerts: number[]; // 3·nShellNodes
   shellTris: number[]; // 3·nShellTris (local shell indices)
   shellThk: number[]; // per shell tri
-  shellSrc: number[]; // source OCC face per shell node
+  shellSrc: number[]; // source OCC face per shell node (one, for a welded fold node arbitrary)
+  shellTriSrc: number[]; // source OCC face per shell TRI — unambiguous, so a BC on a
+  // folded face reaches every node of its facets (fold nodes shared with a wall included)
 }
 
 const TET_FACES = [
@@ -309,12 +311,16 @@ function detectWallPairs(faces: FaceProp[], maxWall: number): Wall[] {
 function collapseWallsToMidSurface(
   m: ShellizeMesh,
   walls: Wall[],
-): Pick<ShellExtraction, "shellVerts" | "shellTris" | "shellThk" | "shellSrc"> {
+): Pick<
+  ShellExtraction,
+  "shellVerts" | "shellTris" | "shellThk" | "shellSrc" | "shellTriSrc"
+> {
   const keep = new Map(walls.map((w) => [w.keep, w]));
 
   const rawV: number[] = [],
     rawT: number[] = [],
     rawThk: number[] = [],
+    rawTriSrc: number[] = [],
     rawSrc: number[] = [],
     rawOrig: number[] = [];
   const nm = new Map<string, number>();
@@ -347,6 +353,7 @@ function collapseWallsToMidSurface(
     });
     rawT.push(nn[0], nn[1], nn[2]);
     rawThk.push(wall.thk);
+    rawTriSrc.push(wall.keep);
   }
 
   const nR = rawV.length / 3;
@@ -381,7 +388,8 @@ function collapseWallsToMidSurface(
     return compact;
   };
   const shellTris: number[] = [],
-    shellThk: number[] = [];
+    shellThk: number[] = [],
+    shellTriSrc: number[] = [];
   for (let t = 0; t < rawT.length / 3; t++) {
     const triA = cid(rawT[3 * t]),
       triB = cid(rawT[3 * t + 1]),
@@ -389,8 +397,9 @@ function collapseWallsToMidSurface(
     if (triA === triB || triB === triC || triA === triC) continue;
     shellTris.push(triA, triB, triC);
     shellThk.push(rawThk[t]);
+    shellTriSrc.push(rawTriSrc[t]);
   }
-  return { shellVerts, shellTris, shellThk, shellSrc };
+  return { shellVerts, shellTris, shellThk, shellSrc, shellTriSrc };
 }
 
 // Detect thin walls (opposite planar CAD-face pairs) and collapse each to a
@@ -416,6 +425,7 @@ export function extractThinWallShells(
     shellTris: [],
     shellThk: [],
     shellSrc: [],
+    shellTriSrc: [],
   };
   if (shellBodyIds && shellBodyIds.size === 0) return empty; // user chose all-solid
   const faces = faceProps(m);

@@ -194,7 +194,7 @@ export function extractThinWallShells(mesh, { maxWall = 15 } = {}) {
   const keep = new Map(walls.map((w) => [w.keep, w]));
 
   // Offset each kept face's triangulation inward by thk/2 to the mid-plane.
-  const rawV = [], rawT = [], rawThk = [], rawSrc = [], rawOrig = [], nm = new Map();
+  const rawV = [], rawT = [], rawThk = [], rawTriSrc = [], rawSrc = [], rawOrig = [], nm = new Map();
   const addN = (fid, oi, p) => {
     const key = `${fid}:${oi}`;
     let id = nm.get(key);
@@ -210,7 +210,7 @@ export function extractThinWallShells(mesh, { maxWall = 15 } = {}) {
       const p = pt(V, oi);
       return addN(w.keep, oi, [p[0] - w.n[0] * o, p[1] - w.n[1] * o, p[2] - w.n[2] * o]);
     });
-    rawT.push(nn[0], nn[1], nn[2]); rawThk.push(w.thk);
+    rawT.push(nn[0], nn[1], nn[2]); rawThk.push(w.thk); rawTriSrc.push(w.keep);
   }
 
   // Weld mid-surface nodes that came from the SAME original mesh node: adjacent
@@ -234,13 +234,13 @@ export function extractThinWallShells(mesh, { maxWall = 15 } = {}) {
     if (c === undefined) { c = shellVerts.length / 3; comp.set(r, c); shellVerts.push(rawV[3 * r], rawV[3 * r + 1], rawV[3 * r + 2]); shellSrc.push(rawSrc[r]); }
     return c;
   };
-  const shellTris = [], shellThk = [];
+  const shellTris = [], shellThk = [], shellTriSrc = [];
   for (let t = 0; t < rawT.length / 3; t++) {
     const a = cid(rawT[3 * t]), b = cid(rawT[3 * t + 1]), c = cid(rawT[3 * t + 2]);
     if (a === b || b === c || a === c) continue;
-    shellTris.push(a, b, c); shellThk.push(rawThk[t]);
+    shellTris.push(a, b, c); shellThk.push(rawThk[t]); shellTriSrc.push(rawTriSrc[t]);
   }
-  return { walls, shellBody, shellVerts, shellTris, shellThk, shellSrc };
+  return { walls, shellBody, shellVerts, shellTris, shellThk, shellSrc, shellTriSrc };
 }
 
 // Distributing (RBE3) couplings: each ref node near ≥3 target nodes ties to its

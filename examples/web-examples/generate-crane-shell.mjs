@@ -45,13 +45,20 @@ const nShell = model.shellPool.length;
 // BCs + loads by CAD face (see crane-holder-shell.mjs). `fixedShellNodes` are the
 // shell POOL nodes clamped on the holder's fixed edge — kept alongside the flat
 // DOF list so the openable .vtu can persist them as a BC group (all 6 DOF).
+// Fix every shell node of a face-7 FACET (not just nodes labelled face 7): a fold
+// node where the flange meets a side wall is welded and carries the side wall's
+// label, so a per-node test drops the whole fold ring and lets the walls hinge
+// about it. Selecting per facet clamps the complete flange, fold included.
 const fixed = [];
 const fixedShellNodes = [];
-for (let s = 0; s < nShell; s++)
-  if (shells.shellSrc[s] === BC_FIXED_FACE) {
-    fixedShellNodes.push(model.shellPool[s]);
-    for (let c = 0; c < 6; c++) fixed.push(6 * model.shellPool[s] + c);
-  }
+const fixedLocal = new Set();
+for (let t = 0; t < shells.shellTris.length / 3; t++)
+  if (shells.shellTriSrc[t] === BC_FIXED_FACE)
+    for (let k = 0; k < 3; k++) fixedLocal.add(shells.shellTris[3 * t + k]);
+for (const s of fixedLocal) {
+  fixedShellNodes.push(model.shellPool[s]);
+  for (let c = 0; c < 6; c++) fixed.push(6 * model.shellPool[s] + c);
+}
 const loadNodes = new Map(Object.keys(LOAD_FACES).map((f) => [Number(f), new Set()]));
 for (let t = 0; t < mesh.surfFace.length; t++) {
   const F = LOAD_FACES[mesh.surfFace[t]];

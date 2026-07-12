@@ -18,6 +18,17 @@ export interface TessellationInput {
 
 type Vec3 = [number, number, number];
 
+// Append to the array stored under `key`, creating it on first use.
+function getOrPush(
+  map: Map<string, number[]>,
+  key: string,
+  value: number,
+): void {
+  const arr = map.get(key);
+  if (arr) arr.push(value);
+  else map.set(key, [value]);
+}
+
 // Möller–Trumbore ray/triangle intersection. Returns the forward hit distance
 // along the (unit) direction, or Infinity when the ray misses.
 function rayTriangle(
@@ -50,6 +61,54 @@ function rayTriangle(
   if (bary2 < -1e-6 || bary1 + bary2 > 1 + 1e-6) return Infinity;
   const dist = (e2[0] * qvec[0] + e2[1] * qvec[1] + e2[2] * qvec[2]) * inv;
   return dist > 1e-4 ? dist : Infinity; // ignore the originating surface itself
+}
+
+// Nearest inward same-body surface hit from triangle `t` — the local wall
+// thickness — searched cell by cell along −normal up to `searchCap` (Infinity when
+// nothing is hit within the cap). Grid-accelerated so only nearby triangles test.
+function nearestInwardHit(
+  t: number,
+  centroid: Vec3[],
+  normal: Vec3[],
+  tri: [Vec3, Vec3, Vec3][],
+  bodyOf: ArrayLike<number>,
+  grid: Map<string, number[]>,
+  cell: number,
+  searchCap: number,
+): number {
+  const body = bodyOf[t];
+  const origin: Vec3 = [
+    centroid[t][0] - normal[t][0] * 1e-3,
+    centroid[t][1] - normal[t][1] * 1e-3,
+    centroid[t][2] - normal[t][2] * 1e-3,
+  ];
+  const dir: Vec3 = [-normal[t][0], -normal[t][1], -normal[t][2]];
+  let best = Infinity;
+  const steps = Math.max(1, Math.ceil(searchCap / cell));
+  for (let step = 0; step <= steps; step++) {
+    const cx = Math.floor((centroid[t][0] + dir[0] * step * cell) / cell),
+      cy = Math.floor((centroid[t][1] + dir[1] * step * cell) / cell),
+      cz = Math.floor((centroid[t][2] + dir[2] * step * cell) / cell);
+    for (let dx = -1; dx <= 1; dx++)
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dz = -1; dz <= 1; dz++) {
+          const bucket = grid.get(`${body}:${cx + dx},${cy + dy},${cz + dz}`);
+          if (!bucket) continue;
+          for (const s of bucket) {
+            if (s === t) continue;
+            const hit = rayTriangle(
+              origin,
+              dir,
+              tri[s][0],
+              tri[s][1],
+              tri[s][2],
+            );
+            if (hit < best) best = hit;
+          }
+        }
+    if (best <= step * cell) break; // nearest hit already inside the swept range
+  }
+  return best;
 }
 
 // Body ids that should default to a shell idealisation: a large fraction of the
@@ -99,46 +158,42 @@ export function detectShellBodies(
     tri[t] = [va, vb, vc];
   }
 
-  // Per-body bounding-box diagonal and a spatial grid of the body's triangles so
-  // the inward ray only tests nearby candidates.
-  const bboxMin = new Map<number, Vec3>();
-  const bboxMax = new Map<number, Vec3>();
+  // Per-body bounding-box diagonal (one box per body — no non-null lookups).
+  const bbox = new Map<number, { min: Vec3; max: Vec3 }>();
   for (let t = 0; t < nTris; t++) {
-    const body = triangleBodyIds[t];
-    let mn = bboxMin.get(body);
-    let mx = bboxMax.get(body);
-    if (!mn || !mx) {
-      mn = [Infinity, Infinity, Infinity];
-      mx = [-Infinity, -Infinity, -Infinity];
-      bboxMin.set(body, mn);
-      bboxMax.set(body, mx);
+    let box = bbox.get(triangleBodyIds[t]);
+    if (!box) {
+      box = {
+        min: [Infinity, Infinity, Infinity],
+        max: [-Infinity, -Infinity, -Infinity],
+      };
+      bbox.set(triangleBodyIds[t], box);
     }
     for (const v of tri[t])
       for (let d = 0; d < 3; d++) {
-        if (v[d] < mn[d]) mn[d] = v[d];
-        if (v[d] > mx[d]) mx[d] = v[d];
+        if (v[d] < box.min[d]) box.min[d] = v[d];
+        if (v[d] > box.max[d]) box.max[d] = v[d];
       }
   }
   const diagonal = new Map<number, number>();
-  for (const [body, mn] of bboxMin) {
-    const mx = bboxMax.get(body)!;
-    diagonal.set(body, Math.hypot(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2]));
-  }
+  for (const [body, box] of bbox)
+    diagonal.set(
+      body,
+      Math.hypot(
+        box.max[0] - box.min[0],
+        box.max[1] - box.min[1],
+        box.max[2] - box.min[2],
+      ),
+    );
 
-  // Grid cell ~ the largest body diagonal fraction we care about; a fixed cell
-  // keyed by body id keeps different bodies' triangles from colliding.
+  // Spatial grid of each body's triangles (cell ~ 5 % of the largest diagonal),
+  // keyed by body id so different bodies' triangles never collide.
   const cell = Math.max(1e-3, Math.max(...[...diagonal.values()], 1) * 0.05);
   const grid = new Map<string, number[]>();
-  const key = (body: number, x: number, y: number, z: number) =>
-    `${body}:${Math.floor(x / cell)},${Math.floor(y / cell)},${Math.floor(z / cell)}`;
   for (let t = 0; t < nTris; t++) {
-    const k = key(triangleBodyIds[t], ...centroid[t]);
-    let bucket = grid.get(k);
-    if (!bucket) {
-      bucket = [];
-      grid.set(k, bucket);
-    }
-    bucket.push(t);
+    const cen = centroid[t];
+    const k = `${triangleBodyIds[t]}:${Math.floor(cen[0] / cell)},${Math.floor(cen[1] / cell)},${Math.floor(cen[2] / cell)}`;
+    getOrPush(grid, k, t);
   }
 
   // Per body, area-weighted thickness samples (only where the inward ray hits).
@@ -148,52 +203,25 @@ export function detectShellBodies(
     const body = triangleBodyIds[t];
     // eslint-disable-next-line kofem/no-silent-fallback -- accumulating area; 0 is the identity for a body seen for the first time
     totalArea.set(body, (totalArea.get(body) ?? 0) + area[t]);
-    const searchCap = Math.min(
-      // eslint-disable-next-line kofem/no-silent-fallback -- a body always has a diagonal (it has triangles); 1 is an inert lower bound if a degenerate body slips through
-      (diagonal.get(body) ?? 1) * 0.3,
-      1e6,
+    // eslint-disable-next-line kofem/no-silent-fallback -- a body with triangles always has a diagonal; 1 is an inert lower bound if a degenerate body slips through
+    const searchCap = Math.min((diagonal.get(body) ?? 1) * 0.3, 1e6);
+    const hit = nearestInwardHit(
+      t,
+      centroid,
+      normal,
+      tri,
+      triangleBodyIds,
+      grid,
+      cell,
+      searchCap,
     );
-    const origin: Vec3 = [
-      centroid[t][0] - normal[t][0] * 1e-3,
-      centroid[t][1] - normal[t][1] * 1e-3,
-      centroid[t][2] - normal[t][2] * 1e-3,
-    ];
-    const dir: Vec3 = [-normal[t][0], -normal[t][1], -normal[t][2]];
-    let best = Infinity;
-    const steps = Math.max(1, Math.ceil(searchCap / cell));
-    for (let step = 0; step <= steps; step++) {
-      const px = centroid[t][0] + dir[0] * step * cell;
-      const py = centroid[t][1] + dir[1] * step * cell;
-      const pz = centroid[t][2] + dir[2] * step * cell;
-      const cx = Math.floor(px / cell),
-        cy = Math.floor(py / cell),
-        cz = Math.floor(pz / cell);
-      for (let dx = -1; dx <= 1; dx++)
-        for (let dy = -1; dy <= 1; dy++)
-          for (let dz = -1; dz <= 1; dz++) {
-            const bucket = grid.get(`${body}:${cx + dx},${cy + dy},${cz + dz}`);
-            if (!bucket) continue;
-            for (const s of bucket) {
-              if (s === t) continue;
-              const hit = rayTriangle(
-                origin,
-                dir,
-                tri[s][0],
-                tri[s][1],
-                tri[s][2],
-              );
-              if (hit < best) best = hit;
-            }
-          }
-      if (best <= step * cell) break; // nearest hit already inside the swept range
-    }
-    if (best <= searchCap) {
+    if (hit <= searchCap) {
       let list = samples.get(body);
       if (!list) {
         list = [];
         samples.set(body, list);
       }
-      list.push([best, area[t]]);
+      list.push([hit, area[t]]);
     }
   }
 
