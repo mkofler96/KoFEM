@@ -66,6 +66,85 @@ function getOrInit<K, T>(map: Map<K, T>, key: K, make: () => T): T {
   return value;
 }
 
+// Minimum vertex-to-opposite-face altitude divided by the longest edge — a
+// scale-invariant shape measure. A well-formed tet is ≈ 0.3–0.8; a flat sliver
+// (the element that fills a thin wall) is well below 0.1. Being a ratio it is
+// independent of mesh size, so the sliver/base split holds across refinements.
+function tetFlatness(
+  V: number[],
+  a: number,
+  b: number,
+  c: number,
+  d: number,
+): number {
+  const verts = [pt(V, a), pt(V, b), pt(V, c), pt(V, d)];
+  let longest = 0;
+  for (let i = 0; i < 4; i++)
+    for (let j = i + 1; j < 4; j++) {
+      const edge = Math.hypot(
+        verts[i][0] - verts[j][0],
+        verts[i][1] - verts[j][1],
+        verts[i][2] - verts[j][2],
+      );
+      if (edge > longest) longest = edge;
+    }
+  let minAlt = Infinity;
+  for (let k = 0; k < 4; k++) {
+    const apex = verts[k],
+      base0 = verts[(k + 1) % 4],
+      base1 = verts[(k + 2) % 4],
+      base2 = verts[(k + 3) % 4];
+    const ux = base0[0] - base1[0],
+      uy = base0[1] - base1[1],
+      uz = base0[2] - base1[2];
+    const vx = base2[0] - base1[0],
+      vy = base2[1] - base1[1],
+      vz = base2[2] - base1[2];
+    const nx = uy * vz - uz * vy,
+      ny = uz * vx - ux * vz,
+      nz = ux * vy - uy * vx;
+    // eslint-disable-next-line kofem/no-silent-fallback -- div-by-zero guard: a degenerate opposite face has no defined altitude direction
+    const nl = Math.hypot(nx, ny, nz) || 1;
+    const altitude = Math.abs(
+      (nx * (apex[0] - base1[0]) +
+        ny * (apex[1] - base1[1]) +
+        nz * (apex[2] - base1[2])) /
+        nl,
+    );
+    if (altitude < minAlt) minAlt = altitude;
+  }
+  // eslint-disable-next-line kofem/no-silent-fallback -- div-by-zero guard: a fully degenerate tet has no longest edge
+  return minAlt / (longest || 1);
+}
+
+// The thin-wall (sliver) tets of the shelled body: the flat elements that fill
+// the thin walls being replaced by shells. Everything else of that body — the
+// thick junction/base blocks that connect it to the other bodies — stays a solid
+// tet so its stiffness and its contact with the neighbours are preserved.
+// Collapsing the WHOLE body to shells silently dropped those blocks (the crane
+// holder lost ~30 % of its volume, exactly the block carrying load into the hook),
+// leaving the shells floating with only a proximity coupling to the solids.
+export function shellBodySliverTets(
+  m: ShellizeMesh,
+  shellBody: number,
+  { sliverFlatness = 0.2 }: { sliverFlatness?: number } = {},
+): Set<number> {
+  const slivers = new Set<number>();
+  for (let e = 0; e < m.tet.length / 4; e++)
+    if (
+      m.body[e] === shellBody &&
+      tetFlatness(
+        m.V,
+        m.tet[4 * e],
+        m.tet[4 * e + 1],
+        m.tet[4 * e + 2],
+        m.tet[4 * e + 3],
+      ) < sliverFlatness
+    )
+      slivers.add(e);
+  return slivers;
+}
+
 function faceProps(m: ShellizeMesh): FaceProp[] {
   const faceBody = new Map<string, number>();
   for (let e = 0; e < m.tet.length / 4; e++) {
@@ -332,25 +411,41 @@ export function extractThinWallShells(
   };
   const faces = faceProps(m);
   if (faces.length === 0) return empty;
-  const walls = detectWallPairs(faces, maxWall);
-  if (walls.length === 0) return empty;
+  const allWalls = detectWallPairs(faces, maxWall);
+  if (allWalls.length === 0) return empty;
+  // Shell exactly ONE body — the one carrying the largest thin wall. detectWallPairs
+  // matches opposite faces on any body, so a thick flat block elsewhere can also
+  // pair up; collapsing such a wall would lay shell facets on top of a body that
+  // stays solid (double representation), corrupting the coupling. The crane hook
+  // picked up a stray 5 mm "wall" on the solid hook this way — 569 shell triangles
+  // glued onto solid tets. Keep only walls on the shelled body.
+  const shellBody = allWalls[0].body;
+  const walls = allWalls.filter((w) => w.body === shellBody);
   return {
     walls,
-    shellBody: walls[0].body,
+    shellBody,
     ...collapseWallsToMidSurface(m, walls),
   };
 }
 
 // Mutual-nearest weld of different-body solid nodes within tieDist (heals a
-// near-hinge where two solid bodies touch without a shared face).
+// near-hinge where two solid bodies touch without a shared face). Only the thin
+// walls of the shelled body become shells, so its retained (base) tets take part
+// in the tie too — pass `sliverTets` to exclude just the wall elements. Without
+// it every element of the shelled body is skipped (whole-body shelling).
 export function tieSolidBodies(
   m: ShellizeMesh,
   shellBody: number,
-  { tieDist = 2.5 }: { tieDist?: number } = {},
+  {
+    tieDist = 2.5,
+    sliverTets,
+  }: { tieDist?: number; sliverTets?: Set<number> } = {},
 ): Map<number, number> {
+  const skip = (e: number): boolean =>
+    sliverTets ? sliverTets.has(e) : m.body[e] === shellBody;
   const bodiesOf = new Map<number, Set<number>>();
   for (let e = 0; e < m.tet.length / 4; e++) {
-    if (m.body[e] === shellBody) continue;
+    if (skip(e)) continue;
     for (let k = 0; k < 4; k++) {
       const node = m.tet[4 * e + k];
       getOrInit(bodiesOf, node, () => new Set<number>()).add(m.body[e]);
@@ -471,6 +566,32 @@ function autoDetectCouplings(
   return { ref, offsets, solid };
 }
 
+// Drop distributing couplings whose reference (shell) node carries an essential
+// BC. A fixed node's motion is prescribed, so it cannot ALSO be the dependent of
+// an RBE3 average of the solid — the engine refuses that conflict rather than
+// silently dropping the constraint (issue #377). This arises where a clamped
+// shell edge (e.g. a bolted holder rim) sits next to the retained base solid: the
+// proximity detector would otherwise couple the very nodes the user fixed. The BC
+// wins; the surrounding shell/solid stays connected through the mesh either way.
+export function dropCouplingsOnFixedNodes(
+  coupling: { ref: number[]; offsets: number[]; solid: number[] },
+  fixedDofs: Iterable<number>,
+): { ref: number[]; offsets: number[]; solid: number[] } {
+  const fixedNodes = new Set<number>();
+  for (const d of fixedDofs) fixedNodes.add(Math.floor(d / 6));
+  const ref: number[] = [],
+    offsets = [0],
+    solid: number[] = [];
+  for (let k = 0; k < coupling.ref.length; k++) {
+    if (fixedNodes.has(coupling.ref[k])) continue;
+    ref.push(coupling.ref[k]);
+    for (let i = coupling.offsets[k]; i < coupling.offsets[k + 1]; i++)
+      solid.push(coupling.solid[i]);
+    offsets.push(solid.length);
+  }
+  return { ref, offsets, solid };
+}
+
 // Assemble the coupled node pool (solid nodes then shell nodes), remap tets and
 // shell triangles onto it, and auto-detect distributing couplings (each shell
 // node near ≥3 solid nodes ties to them).
@@ -478,15 +599,18 @@ export function buildCoupledModel(
   m: ShellizeMesh,
   shells: ShellExtraction,
   tieRep: Map<number, number>,
+  sliverTets: Set<number>,
   {
     couplingRadius = 10,
     maxCoupledNodes = 16,
   }: { couplingRadius?: number; maxCoupledNodes?: number } = {},
 ): CoupledModel {
   const tied = (n: number) => tieRep.get(n) ?? n;
+  // Solid tets = the other bodies plus the shelled body's non-wall (base) tets;
+  // only the thin-wall slivers are replaced by shell facets.
   const solidTets: number[] = [];
   for (let e = 0; e < m.tet.length / 4; e++)
-    if (m.body[e] !== shells.shellBody)
+    if (!(m.body[e] === shells.shellBody && sliverTets.has(e)))
       solidTets.push(
         m.tet[4 * e],
         m.tet[4 * e + 1],

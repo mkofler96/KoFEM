@@ -17,7 +17,7 @@
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { loadEngine, meshStep, extractThinWallShells, tieSolidBodies, buildCoupledModel } from "./lib.mjs";
+import { loadEngine, meshStep, extractThinWallShells, shellBodySliverTets, tieSolidBodies, buildCoupledModel, dropCouplingsOnFixedNodes } from "./lib.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const STEP = join(here, "../../test_files/full-crane-hook.step");
@@ -49,11 +49,13 @@ console.log(
 );
 
 // ── 3. weld touching solid bodies (pin↔hook near-hinge) ────────────────────────
-const tie = tieSolidBodies(mesh, shells.shellBody);
+// Only the holder's thin walls become shells; its thick base block stays solid.
+const slivers = shellBodySliverTets(mesh, shells.shellBody);
+const tie = tieSolidBodies(mesh, shells.shellBody, { sliverTets: slivers });
 console.log(`solid tie: welded ${tie.welded} node pairs across bodies`);
 
 // ── 4. build the coupled node pool + distributing couplings ────────────────────
-const model = buildCoupledModel(mesh, shells, tie);
+const model = buildCoupledModel(mesh, shells, tie, slivers);
 const nSolid = model.solidPool.size, nShell = model.shellPool.length;
 console.log(
   `coupled model: ${model.pool.length / 3} nodes (${nSolid} solid + ${nShell} shell), ` +
@@ -84,6 +86,8 @@ for (const [fid, F] of Object.entries(LOAD_FACES)) {
 console.log(`BCs: ${fixed.length / 6} fixed shell nodes (face ${BC_FIXED_FACE}); loads on ${[...loadNodes].map(([f, s]) => `f${f}:${s.size}`).join(" ")} solid nodes`);
 
 // ── 6. solve ───────────────────────────────────────────────────────────────────
+// Drop distributing couplings on the clamped rim (fixed RBE3 dependent, #377).
+const coupling = dropCouplingsOnFixedNodes(model.coupling, fixed);
 console.log("solving coupled crane…");
 const t0 = Date.now();
 const r = Module.solve_coupled(
@@ -94,9 +98,9 @@ const r = Module.solve_coupled(
     thicknesses: Float64Array.from(model.thicknesses),
   },
   {
-    ref: Int32Array.from(model.coupling.ref),
-    offsets: Int32Array.from(model.coupling.offsets),
-    solid: Int32Array.from(model.coupling.solid),
+    ref: Int32Array.from(coupling.ref),
+    offsets: Int32Array.from(coupling.offsets),
+    solid: Int32Array.from(coupling.solid),
   },
   { fixed_dofs: Int32Array.from(fixed), load_dofs: Int32Array.from(load_dofs), load_vals: Float64Array.from(load_vals) },
   JSON.stringify({ solid: STEEL, shell: STEEL }),

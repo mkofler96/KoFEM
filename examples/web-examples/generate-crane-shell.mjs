@@ -19,8 +19,10 @@ import {
   loadEngine,
   meshStep,
   extractThinWallShells,
+  shellBodySliverTets,
   tieSolidBodies,
   buildCoupledModel,
+  dropCouplingsOnFixedNodes,
 } from "../shell-coupling/lib.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -33,8 +35,11 @@ const LOAD_FACES = { 66: [0, -1000, 0], 67: [0, -1000, 0] };
 const Module = await loadEngine();
 const mesh = meshStep(Module, STEP, { maxElementSize: 6 });
 const shells = extractThinWallShells(mesh);
-const tie = tieSolidBodies(mesh, shells.shellBody);
-const model = buildCoupledModel(mesh, shells, tie);
+// Only the holder's thin walls become shells; its thick base block stays solid
+// (kept in the pool) so the load path through it into the pin/hook is preserved.
+const slivers = shellBodySliverTets(mesh, shells.shellBody);
+const tie = tieSolidBodies(mesh, shells.shellBody, { sliverTets: slivers });
+const model = buildCoupledModel(mesh, shells, tie, slivers);
 const nShell = model.shellPool.length;
 
 // BCs + loads by CAD face (see crane-holder-shell.mjs). `fixedShellNodes` are the
@@ -62,10 +67,13 @@ for (const [fid, F] of Object.entries(LOAD_FACES)) {
   for (const pi of ns) for (let c = 0; c < 3; c++) if (F[c] !== 0) { load_dofs.push(6 * pi + c); load_vals.push(F[c] / ns.length); }
 }
 
+// The clamped holder rim (face 7) sits next to the retained base solid; drop any
+// distributing coupling on those fixed nodes (a fixed RBE3 dependent is refused, #377).
+const coupling = dropCouplingsOnFixedNodes(model.coupling, fixed);
 const r = Module.solve_coupled(
   { vertices: Float64Array.from(model.pool), tets: Int32Array.from(model.tets),
     triangles: Int32Array.from(model.triangles), thicknesses: Float64Array.from(model.thicknesses) },
-  { ref: Int32Array.from(model.coupling.ref), offsets: Int32Array.from(model.coupling.offsets), solid: Int32Array.from(model.coupling.solid) },
+  { ref: Int32Array.from(coupling.ref), offsets: Int32Array.from(coupling.offsets), solid: Int32Array.from(coupling.solid) },
   { fixed_dofs: Int32Array.from(fixed), load_dofs: Int32Array.from(load_dofs), load_vals: Float64Array.from(load_vals) },
   JSON.stringify({ solid: STEEL, shell: STEEL }),
 );
