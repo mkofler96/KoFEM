@@ -222,8 +222,8 @@ test("a mixed shell/solid (CTRIA3 + CTETRA) example re-solves through the couple
 
   await page.goto("/app/?example=crane-hook-shell");
   await expect(page.locator("nav")).toBeVisible();
-  await page.waitForFunction(
-    () => !!(window as unknown as { __kofem?: unknown }).__kofem,
+  await page.waitForFunction(() =>
+    Boolean((window as unknown as { __kofem?: unknown }).__kofem),
   );
   await expect
     .poll(async () => (await readStore(page)).nodes, { timeout: 30_000 })
