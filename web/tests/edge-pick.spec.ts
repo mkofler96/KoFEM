@@ -92,8 +92,8 @@ test("edge picking a shell rim creates an edge BC and an edge load", async ({
 
   await page.goto("/app/?example=plate-with-hole-shell");
   await expect(page.locator("nav")).toBeVisible();
-  await page.waitForFunction(
-    () => !!(window as unknown as { __kofem?: unknown }).__kofem,
+  await page.waitForFunction(() =>
+    Boolean((window as unknown as { __kofem?: unknown }).__kofem),
   );
   await expect
     .poll(async () => (await readPickState(page)).nodeCount, {
@@ -119,11 +119,12 @@ test("edge picking a shell rim creates an edge BC and an edge load", async ({
 
   const afterBcPick = await readPickState(page);
   expect(afterBcPick.pickGeometry).toBe("edge");
-  expect(afterBcPick.selected).not.toBeNull();
-  expect(afterBcPick.selected!.label.startsWith("Edge")).toBe(true);
+  const bcSelection = afterBcPick.selected;
+  if (!bcSelection) throw new Error("edge pick did not set a selection");
+  expect(bcSelection.label.startsWith("Edge")).toBe(true);
   // A rim is a small polyline — never the whole flat plate (the motivating bug).
-  expect(afterBcPick.selected!.nodeIds.length).toBeGreaterThan(2);
-  expect(afterBcPick.selected!.nodeIds.length).toBeLessThan(totalNodes * 0.5);
+  expect(bcSelection.nodeIds.length).toBeGreaterThan(2);
+  expect(bcSelection.nodeIds.length).toBeLessThan(totalNodes * 0.5);
 
   await page.getByRole("button", { name: "Apply BC" }).click();
   const afterBc = await readPickState(page);
