@@ -316,7 +316,7 @@ test("a STEP-backed example (crane) restores its geometry and re-meshes", async 
   // loads (nodes appear), so poll for it rather than reading once.
   await expect
     .poll(
-      async () =>
+      () =>
         page.evaluate(() => {
           const bytes = (
             window as unknown as {
