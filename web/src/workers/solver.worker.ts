@@ -17,6 +17,7 @@ import {
   extractThinWallShells,
   tieSolidBodies,
   buildCoupledModel,
+  buildExplicitCoupledModel,
   shellNodeLocator,
   isShellPoolIndex,
   type CoupledModel,
@@ -871,11 +872,13 @@ function coupledMaterials(
 
 // Essential BCs for the coupled solve: a translation constraint maps to its
 // pool node, and a shelled node clamped in all three translations is also
-// clamped in rotation.
+// clamped in rotation. `isShell` reports whether a pool node carries shell
+// (6-DOF) stiffness — the auto-shell and mixed paths supply it differently, but
+// the rule is the same.
 function coupledFixedDofs(
   constraints: Constraint[],
-  model: CoupledModel,
   poolOf: (nodeId: number) => number,
+  isShell: (poolIndex: number) => boolean,
 ): number[] {
   const fixedByPool = new Map<number, Set<number>>();
   for (const c of constraints) {
@@ -891,12 +894,7 @@ function coupledFixedDofs(
   const fixed_dofs: number[] = [];
   for (const [pi, dofs] of fixedByPool) {
     for (const d of dofs) fixed_dofs.push(6 * pi + d);
-    if (
-      isShellPoolIndex(model, pi) &&
-      dofs.has(0) &&
-      dofs.has(1) &&
-      dofs.has(2)
-    )
+    if (isShell(pi) && dofs.has(0) && dofs.has(1) && dofs.has(2))
       for (const d of [3, 4, 5]) fixed_dofs.push(6 * pi + d);
   }
   return fixed_dofs;
@@ -1058,7 +1056,9 @@ function tryCoupledSolve(
     ]);
   };
 
-  const fixed_dofs = coupledFixedDofs(constraints, model, poolOf);
+  const fixed_dofs = coupledFixedDofs(constraints, poolOf, (pi) =>
+    isShellPoolIndex(model, pi),
+  );
   const { load_dofs, load_vals } = coupledLoads(loads, surfaceLoads, poolOf);
 
   // Solid bodies actually present in the coupled tet mesh (the shelled body is
@@ -1114,21 +1114,238 @@ function tryCoupledSolve(
   return { displacements, vonMises };
 }
 
+// ── Mixed shell/solid solve (explicit CTRIA3 + CTETRA → solve_coupled) ────────
+
+// Single (E, ν) per domain for the coupled assembler, resolved from the explicit
+// element → property → material chain. The coupled solid-shell solver takes one
+// material for the whole solid domain and one for the whole shell domain (issue
+// #376), so a domain spanning several materials is refused loudly rather than
+// solved with the wrong stiffness on part of it.
+function mixedCoupledMaterials(
+  materials: Material[],
+  properties: Property[],
+  shellElements: Element[],
+  solidElements: Element[],
+) {
+  const propById = new Map(properties.map((p) => [p.id, p]));
+  const matById = new Map(materials.map((mat) => [mat.id, mat]));
+  const domainMaterial = (els: Element[], domain: string): Material => {
+    const used = new Map<number, Material>();
+    for (const el of els) {
+      const prop = propById.get(el.propertyId);
+      if (!prop)
+        throw new Error(
+          `mixed solve: ${domain} element ${el.id} belongs to body ${el.propertyId}, ` +
+            "which has no property — the model is inconsistent",
+        );
+      const mat = matById.get(prop.materialId);
+      if (!mat)
+        throw new Error(
+          `mixed solve: property ${prop.id} references material ${prop.materialId}, ` +
+            "which does not exist",
+        );
+      used.set(mat.id, mat);
+    }
+    if (used.size === 0)
+      throw new Error(`mixed solve: the model has no ${domain} element`);
+    if (used.size > 1) {
+      const names = [...used.values()].map((mat) => mat.name).join(", ");
+      throw new Error(
+        `mixed solve: the coupled solid-shell solver supports one ${domain} material, but the ` +
+          `${domain} elements span ${used.size} distinct materials (${names}). Per-domain ` +
+          "materials are not yet plumbed through the coupled path — assign a single material to " +
+          `every ${domain} body.`,
+      );
+    }
+    return [...used.values()][0];
+  };
+  const solidMat = domainMaterial(solidElements, "solid");
+  const shellMat = domainMaterial(shellElements, "shell");
+  return {
+    solid: { young_modulus: solidMat.young, poisson_ratio: solidMat.poisson },
+    shell: { young_modulus: shellMat.young, poisson_ratio: shellMat.poisson },
+  };
+}
+
+// Per-facet shell thickness from each CTRIA3 element's PSHELL property, in shell
+// element order (matching the triangles handed to solve_coupled).
+function resolveMixedThicknesses(
+  shellElements: Element[],
+  properties: Property[],
+): number[] {
+  const propById = new Map(properties.map((p) => [p.id, p]));
+  return shellElements.map((el) => {
+    const prop = propById.get(el.propertyId);
+    if (!prop)
+      throw new Error(
+        `mixed solve: shell element ${el.id} belongs to body ${el.propertyId}, ` +
+          "which has no property — the model is inconsistent",
+      );
+    if (typeof prop.thickness !== "number" || prop.thickness <= 0)
+      throw new Error(
+        `mixed solve: property ${prop.id} has no positive shell thickness — ` +
+          "shell (CTRIA3) elements require a thickness on their property",
+      );
+    return prop.thickness;
+  });
+}
+
+// Solve a hand-mixed shell+solid model (explicit CTRIA3 shells alongside CTETRA
+// solids) through the engine's coupled solid-shell solver. The CTRIA3 elements
+// become DKT shell facets (per-facet thickness from their PSHELL property), the
+// CTETRA elements the solid tets, and the two domains are joined by RBE3
+// distributing couplings re-derived from proximity — the same pipeline the
+// auto-shell path uses, only with the shells given explicitly instead of
+// idealised from thin solid walls. Constraints/loads map onto the 6-DOF pool the
+// same way the auto-shell path does (coupledFixedDofs/coupledLoads). elementOrder
+// and tieDistance do not apply (the coupled assembler is linear tets + DKT
+// facets) and are ignored.
+function handleMixedSolve(id: number, payload: SolvePayload) {
+  const {
+    nodes,
+    elements,
+    materials,
+    properties,
+    constraints,
+    loads,
+    surfaceLoads,
+  } = payload;
+
+  const shellElements = elements.filter((e) => e.type === "CTRIA3");
+  const solidElements = elements.filter((e) => e.type !== "CTRIA3");
+  const nonTet = solidElements.find((e) => e.type !== "CTETRA");
+  if (nonTet)
+    throw new Error(
+      `mixed solve: solid element ${nonTet.id} is a ${nonTet.type} — the coupled ` +
+        "solid-shell solver supports CTETRA solids only; mesh the solid bodies as tetrahedra",
+    );
+  if (solidElements.length === 0)
+    throw new Error(
+      "mixed solve: no solid (CTETRA) elements — a mixed model needs at least one solid body",
+    );
+
+  const vid = buildVertexIndexer(nodes);
+  const verts = new Array<number>(3 * nodes.length);
+  for (let i = 0; i < nodes.length; i++) {
+    verts[3 * i] = nodes[i].x;
+    verts[3 * i + 1] = nodes[i].y;
+    verts[3 * i + 2] = nodes[i].z;
+  }
+  const solidTets: number[] = [];
+  for (const el of solidElements) {
+    if (el.nodeIds.length !== 4)
+      throw new Error(
+        `CTETRA element ${el.id} has ${el.nodeIds.length} nodes — expected 4`,
+      );
+    for (const nid of el.nodeIds) solidTets.push(vid(nid, "CTETRA element"));
+  }
+  const shellTris: number[] = [];
+  for (const el of shellElements) {
+    if (el.nodeIds.length !== 3)
+      throw new Error(
+        `CTRIA3 element ${el.id} has ${el.nodeIds.length} nodes — expected 3`,
+      );
+    for (const nid of el.nodeIds) shellTris.push(vid(nid, "CTRIA3 element"));
+  }
+  const thicknesses = resolveMixedThicknesses(shellElements, properties);
+
+  const model = buildExplicitCoupledModel(
+    verts,
+    solidTets,
+    shellTris,
+    thicknesses,
+  );
+
+  const poolOf = (nodeId: number): number => {
+    const pi = model.poolOfVertex.get(vid(nodeId, "coupled bc/load"));
+    if (pi === undefined)
+      throw new Error(
+        `mixed solve: node ${nodeId} carries a boundary condition or load but is not part of ` +
+          "any shell or solid element — the model is inconsistent",
+      );
+    return pi;
+  };
+  const fixed_dofs = coupledFixedDofs(constraints, poolOf, (pi) =>
+    model.shellPoolIndex.has(pi),
+  );
+  const { load_dofs, load_vals } = coupledLoads(loads, surfaceLoads, poolOf);
+  const mat = mixedCoupledMaterials(
+    materials,
+    properties,
+    shellElements,
+    solidElements,
+  );
+
+  self.postMessage({
+    id,
+    log: `[mixed] ${solidElements.length} solid tets, ${shellElements.length} shell facets → ${model.pool.length / 3} pool nodes, ${model.coupling.ref.length} couplings…`,
+  });
+
+  const result = m().solve_coupled(
+    {
+      vertices: Float64Array.from(model.pool),
+      tets: Int32Array.from(model.tets),
+      triangles: Int32Array.from(model.triangles),
+      thicknesses: Float64Array.from(model.thicknesses),
+    },
+    {
+      ref: Int32Array.from(model.coupling.ref),
+      offsets: Int32Array.from(model.coupling.offsets),
+      solid: Int32Array.from(model.coupling.solid),
+    },
+    {
+      fixed_dofs: Int32Array.from(fixed_dofs),
+      load_dofs: Int32Array.from(load_dofs),
+      load_vals: Float64Array.from(load_vals),
+    },
+    JSON.stringify(mat),
+  );
+  if ("error" in result) throw new Error(result.error);
+
+  // Displacements: every store node maps to its pool node (solid and shell store
+  // nodes both live in the pool). Von Mises: one solid-tet value per CTETRA and
+  // one shell-facet value per CTRIA3, in the order they crossed the WASM boundary
+  // (solid tets first, then shell triangles) — walk the original element list and
+  // pull from whichever field the element type selects.
+  const displacements = new Float64Array(3 * nodes.length);
+  for (let i = 0; i < nodes.length; i++) {
+    // A node in no element is not part of the solve; it stays at rest (u = 0).
+    const pi = model.poolOfVertex.get(i);
+    if (pi === undefined) continue;
+    displacements[3 * i] = result.displacements[3 * pi];
+    displacements[3 * i + 1] = result.displacements[3 * pi + 1];
+    displacements[3 * i + 2] = result.displacements[3 * pi + 2];
+  }
+  const vonMises = new Float64Array(elements.length);
+  let solidIdx = 0,
+    shellIdx = 0;
+  for (let e = 0; e < elements.length; e++) {
+    vonMises[e] =
+      elements[e].type === "CTRIA3"
+        ? result.von_mises_tris[shellIdx++]
+        : result.von_mises_tets[solidIdx++];
+  }
+
+  self.postMessage({
+    id,
+    log: `Mixed solve complete: ${displacements.length / 3} vertex displacements, ${vonMises.length} element stresses`,
+  });
+  self.postMessage({ id, ok: true, displacements, vonMises }, [
+    displacements.buffer,
+    vonMises.buffer,
+  ]);
+}
+
 function handleSolve(id: number, payload: SolvePayload) {
-  // Pure-shell models (all CTRIA3) solve via the Kirchhoff shell solver. A
-  // hand-mixed shell+solid mesh has no solve path yet (the auto-shell coupled
-  // solve below idealises thin SOLID bodies itself) — refuse loudly rather
-  // than solving only the solid part.
+  // Shell models route away from the all-solid path. A model that is ALL CTRIA3
+  // solves via the Kirchhoff shell solver; a model that MIXES CTRIA3 shells with
+  // solid elements solves via the coupled solid-shell solver (the shells are
+  // explicit here, unlike the auto-shell path below, which idealises thin SOLID
+  // bodies itself).
   const nShells = payload.elements.filter((e) => e.type === "CTRIA3").length;
   if (nShells > 0) {
-    if (nShells !== payload.elements.length)
-      throw new Error(
-        `solve: the model mixes ${nShells} shell (CTRIA3) elements with ` +
-          `${payload.elements.length - nShells} solid elements — mixed ` +
-          "shell/solid models are not supported yet; model the part as all " +
-          "solid (thin bodies are shell-idealised automatically) or all shell",
-      );
-    handleShellSolve(id, payload);
+    if (nShells === payload.elements.length) handleShellSolve(id, payload);
+    else handleMixedSolve(id, payload);
     return;
   }
 

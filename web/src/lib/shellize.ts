@@ -417,6 +417,60 @@ export interface CoupledModel {
   tied: (n: number) => number;
 }
 
+// Auto-detect distributing (RBE3) couplings: every reference (shell) node that
+// has ≥3 solid nodes within couplingRadius ties to them. Emitted CSR-style —
+// ref[k] ties to solid[offsets[k]..offsets[k+1]). Only the k NEAREST solid
+// candidates are kept per coupling: the RBE3 master-slave expansion is quadratic
+// in that count, so a radius alone picks hundreds of nodes on a fine mesh and the
+// reduction dominates the solve; ~16 well-spread nodes transmit force and moment
+// just as well and bound the cost independently of mesh density.
+function autoDetectCouplings(
+  ppt: (i: number) => [number, number, number],
+  solidPoolIndices: Iterable<number>,
+  refPoolIndices: Iterable<number>,
+  radius: number,
+  maxCoupledNodes: number,
+): { ref: number[]; offsets: number[]; solid: number[] } {
+  const grid = new Map<string, number[]>();
+  const gk = (x: number, y: number, z: number) =>
+    `${Math.floor(x / radius)},${Math.floor(y / radius)},${Math.floor(z / radius)}`;
+  for (const pi of solidPoolIndices) {
+    const pos = ppt(pi);
+    getOrInit(grid, gk(...pos), () => []).push(pi);
+  }
+  const ref: number[] = [],
+    offsets = [0],
+    solid: number[] = [];
+  for (const gi of refPoolIndices) {
+    const pos = ppt(gi);
+    const cx = Math.floor(pos[0] / radius),
+      cy = Math.floor(pos[1] / radius),
+      cz = Math.floor(pos[2] / radius);
+    const near: { pi: number; d2: number }[] = [];
+    for (let dx = -1; dx <= 1; dx++)
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dz = -1; dz <= 1; dz++) {
+          const bucket = grid.get(`${cx + dx},${cy + dy},${cz + dz}`);
+          if (!bucket) continue;
+          for (const pi of bucket) {
+            const posSolid = ppt(pi);
+            const d2 =
+              (pos[0] - posSolid[0]) ** 2 +
+              (pos[1] - posSolid[1]) ** 2 +
+              (pos[2] - posSolid[2]) ** 2;
+            if (d2 <= radius * radius) near.push({ pi, d2 });
+          }
+        }
+    if (near.length >= 3) {
+      near.sort((a, b) => a.d2 - b.d2);
+      ref.push(gi);
+      for (const { pi } of near.slice(0, maxCoupledNodes)) solid.push(pi);
+      offsets.push(solid.length);
+    }
+  }
+  return { ref, offsets, solid };
+}
+
 // Assemble the coupled node pool (solid nodes then shell nodes), remap tets and
 // shell triangles onto it, and auto-detect distributing couplings (each shell
 // node near ≥3 solid nodes ties to them).
@@ -472,49 +526,13 @@ export function buildCoupledModel(
     pool[3 * i + 2],
   ];
 
-  const radius = couplingRadius;
-  const grid = new Map<string, number[]>();
-  const gk = (x: number, y: number, z: number) =>
-    `${Math.floor(x / radius)},${Math.floor(y / radius)},${Math.floor(z / radius)}`;
-  for (const [, pi] of solidPool) {
-    const pos = ppt(pi);
-    getOrInit(grid, gk(...pos), () => []).push(pi);
-  }
-  const ref: number[] = [],
-    offsets = [0],
-    solid: number[] = [];
-  for (const gi of shellPool) {
-    const pos = ppt(gi);
-    const cx = Math.floor(pos[0] / radius),
-      cy = Math.floor(pos[1] / radius),
-      cz = Math.floor(pos[2] / radius);
-    const near: { pi: number; d2: number }[] = [];
-    for (let dx = -1; dx <= 1; dx++)
-      for (let dy = -1; dy <= 1; dy++)
-        for (let dz = -1; dz <= 1; dz++) {
-          const bucket = grid.get(`${cx + dx},${cy + dy},${cz + dz}`);
-          if (!bucket) continue;
-          for (const pi of bucket) {
-            const posSolid = ppt(pi);
-            const d2 =
-              (pos[0] - posSolid[0]) ** 2 +
-              (pos[1] - posSolid[1]) ** 2 +
-              (pos[2] - posSolid[2]) ** 2;
-            if (d2 <= radius * radius) near.push({ pi, d2 });
-          }
-        }
-    if (near.length >= 3) {
-      // Keep only the k NEAREST candidates: on a fine mesh a radius alone picks
-      // hundreds of solid nodes per coupling, and the RBE3 master-slave
-      // expansion is quadratic in that count — the reduction then dominates the
-      // whole solve. ~16 well-spread nodes transmit force and moment just as
-      // well, and bound the cost independently of mesh density.
-      near.sort((a, b) => a.d2 - b.d2);
-      ref.push(gi);
-      for (const { pi } of near.slice(0, maxCoupledNodes)) solid.push(pi);
-      offsets.push(solid.length);
-    }
-  }
+  const coupling = autoDetectCouplings(
+    ppt,
+    solidPool.values(),
+    shellPool,
+    couplingRadius,
+    maxCoupledNodes,
+  );
 
   return {
     pool,
@@ -524,7 +542,96 @@ export function buildCoupledModel(
     solidPool,
     shellPool,
     tied,
-    coupling: { ref, offsets, solid },
+    coupling,
+  };
+}
+
+// Coupled model built from EXPLICIT shell and solid elements (a hand-mixed
+// CTRIA3 + CTETRA model, or the regenerated crane showcase) — as opposed to the
+// auto-shell path, where the shells are derived by collapsing thin solid walls.
+// The pool is the solid tet nodes followed by the shell triangle nodes; the two
+// domains are joined by RBE3 couplings re-derived from proximity, exactly as the
+// auto-shell path does. `poolOfVertex` maps every store vertex index to its pool
+// node (used to place BCs/loads), and `shellPoolIndex` is the set of pool nodes
+// carrying shell (6-DOF) stiffness (used to auto-fix rotations of clamped shell
+// nodes). A shell node that IS a solid node (shared store id) reuses the solid
+// pool entry — a direct rigid connection, no distributing coupling needed.
+export interface ExplicitCoupledModel {
+  pool: number[]; // 3·nPool (solid nodes then shell nodes)
+  tets: number[]; // 4·nSolidTets over pool
+  triangles: number[]; // 3·nShellTris over pool
+  thicknesses: number[]; // per shell triangle
+  coupling: { ref: number[]; offsets: number[]; solid: number[] };
+  poolOfVertex: Map<number, number>; // store vertex index → pool index
+  shellPoolIndex: Set<number>; // pool indices carrying shell stiffness
+}
+
+export function buildExplicitCoupledModel(
+  V: number[], // 3·nNodes, xyz interleaved (store vertex order)
+  solidTets: number[], // 4·nSolidTets, store vertex indices
+  shellTris: number[], // 3·nShellTris, store vertex indices
+  shellThk: number[], // per shell triangle thickness
+  {
+    couplingRadius = 10,
+    maxCoupledNodes = 16,
+  }: { couplingRadius?: number; maxCoupledNodes?: number } = {},
+): ExplicitCoupledModel {
+  const pool: number[] = [];
+  const poolOfVertex = new Map<number, number>();
+  const addVertex = (vi: number): number => {
+    let pi = poolOfVertex.get(vi);
+    if (pi !== undefined) return pi;
+    pi = pool.length / 3;
+    poolOfVertex.set(vi, pi);
+    pool.push(V[3 * vi], V[3 * vi + 1], V[3 * vi + 2]);
+    return pi;
+  };
+
+  // Solid nodes first — their pool indices are the RBE3 coupling targets.
+  const solidPoolIndices: number[] = [];
+  for (const vi of new Set(solidTets)) solidPoolIndices.push(addVertex(vi));
+  const tets = solidTets.map((vi) => {
+    const pi = poolOfVertex.get(vi);
+    if (pi === undefined)
+      throw new Error(`explicit coupled: solid node ${vi} missing from pool`);
+    return pi;
+  });
+
+  // Shell nodes second — a node also used by a solid tet reuses its pool entry.
+  const shellPoolIndex = new Set<number>();
+  const triangles = shellTris.map((vi) => {
+    const pi = addVertex(vi);
+    shellPoolIndex.add(pi);
+    return pi;
+  });
+
+  const ppt = (i: number): [number, number, number] => [
+    pool[3 * i],
+    pool[3 * i + 1],
+    pool[3 * i + 2],
+  ];
+  // Shell nodes NOT shared with the solid need a distributing coupling; shared
+  // nodes are already rigidly attached through the common pool DOFs.
+  const solidPoolSet = new Set(solidPoolIndices);
+  const refPoolIndices = [...shellPoolIndex].filter(
+    (pi) => !solidPoolSet.has(pi),
+  );
+  const coupling = autoDetectCouplings(
+    ppt,
+    solidPoolIndices,
+    refPoolIndices,
+    couplingRadius,
+    maxCoupledNodes,
+  );
+
+  return {
+    pool,
+    tets,
+    triangles,
+    thicknesses: shellThk,
+    coupling,
+    poolOfVertex,
+    shellPoolIndex,
   };
 }
 
