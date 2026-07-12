@@ -205,6 +205,94 @@ test("a pure-shell (CTRIA3) example re-solves through the shell path", async ({
   }
 });
 
+test("a mixed shell/solid (CTRIA3 + CTETRA) example re-solves through the coupled path", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+
+  // Loads the coupled crane (thin holder as CTRIA3 shells, pin/hook as CTETRA
+  // solids) and re-runs the solve exactly as the Solve button does. This
+  // exercises the whole mixed shell/solid pipeline end-to-end: mixed-element
+  // parsing, the worker's handleMixedSolve (solve_coupled with RBE3 couplings
+  // re-derived from proximity), and the field mapping back onto the store nodes /
+  // elements. Same pool, BCs and load derivation as the generator → the fresh
+  // field must reproduce the one saved in the .vtu.
+  const logs: string[] = [];
+  page.on("console", (msg) => logs.push(msg.text()));
+
+  await page.goto("/app/?example=crane-hook-shell");
+  await expect(page.locator("nav")).toBeVisible();
+  await page.waitForFunction(() =>
+    Boolean((window as unknown as { __kofem?: unknown }).__kofem),
+  );
+  await expect
+    .poll(async () => (await readStore(page)).nodes, { timeout: 30_000 })
+    .toBeGreaterThan(0);
+
+  const outcome = await page.evaluate(async () => {
+    const win = window as unknown as {
+      __kofem: {
+        sendToWorker(name: string, payload: object): Promise<unknown>;
+      };
+      __kofemStore: { getState(): Record<string, unknown> };
+    };
+    const st = win.__kofemStore.getState();
+    const elements = st.elements as { type: string }[];
+    const saved = st.result as { displacements: Float64Array };
+    const maxU = (disp: Float64Array): number => {
+      let max = 0;
+      for (let i = 0; i < disp.length; i += 3)
+        max = Math.max(max, Math.hypot(disp[i], disp[i + 1], disp[i + 2]));
+      return max;
+    };
+    try {
+      const res = (await win.__kofem.sendToWorker("solve", {
+        nodes: st.nodes,
+        elements: st.elements,
+        materials: st.materials,
+        properties: st.properties,
+        constraints: st.constraints,
+        loads: st.loads,
+        surfaceLoads: st.surfaceLoads,
+      })) as { displacements: Float64Array; vonMises: Float64Array };
+      return {
+        ok: true as const,
+        nShells: elements.filter((el) => el.type === "CTRIA3").length,
+        nSolids: elements.filter((el) => el.type === "CTETRA").length,
+        nNodes: (st.nodes as unknown[]).length,
+        nElems: elements.length,
+        nDisp: res.displacements.length,
+        nVm: res.vonMises.length,
+        allFinite:
+          [...res.displacements].every(Number.isFinite) &&
+          [...res.vonMises].every(Number.isFinite),
+        savedMaxU: maxU(saved.displacements),
+        freshMaxU: maxU(res.displacements),
+      };
+    } catch (err) {
+      return { ok: false as const, error: (err as Error).message };
+    }
+  });
+
+  expect(outcome.ok).toBe(true);
+  if (outcome.ok) {
+    // Guard: the file really is a mixed model with both element kinds.
+    expect(outcome.nShells).toBeGreaterThan(0);
+    expect(outcome.nSolids).toBeGreaterThan(0);
+    expect(outcome.nDisp).toBe(outcome.nNodes * 3);
+    expect(outcome.nVm).toBe(outcome.nElems);
+    expect(outcome.allFinite).toBe(true);
+    // The mixed path (not the all-solid fallback) carried the solve.
+    expect(logs.some((l) => l.includes("[mixed]"))).toBe(true);
+    // The coupled solve re-derives the same couplings from the same pool, so the
+    // fresh field reproduces the saved one to within solver-tolerance noise.
+    expect(
+      Math.abs(outcome.freshMaxU - outcome.savedMaxU) /
+        Math.abs(outcome.savedMaxU),
+    ).toBeLessThan(1e-3);
+  }
+});
+
 test("?example= with an invalid id is rejected without a fetch", async ({
   page,
 }) => {
