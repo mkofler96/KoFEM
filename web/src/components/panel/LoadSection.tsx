@@ -15,6 +15,7 @@ import {
   LoadKindSelect,
   LoadVectorInputs,
   PickedFaceList,
+  PickGeometryToggle,
   PressureInput,
 } from "./BcLoadFormControls";
 import { LoadValueForm } from "./GroupValueForms";
@@ -31,6 +32,13 @@ export function LoadSection({
 }) {
   const loadGroups = useModelStore((s) => s.loadGroups);
   const pickMode = useModelStore((s) => s.pickMode);
+  const pickGeometry = useModelStore((s) => s.pickGeometry);
+  const setPickGeometry = useModelStore((s) => s.setPickGeometry);
+  // Edge picking (grabbing the rim of the flat sheet for a line load) is only
+  // offered for shell models — a flat shell is a single face-pick region.
+  const hasShells = useModelStore((s) =>
+    s.elements.some((el) => el.type === "CTRIA3"),
+  );
   const createLoadGroup = useModelStore((s) => s.createLoadGroup);
   const addFaceToLoadGroup = useModelStore((s) => s.addFaceToLoadGroup);
   const removeFaceFromLoadGroup = useModelStore(
@@ -75,6 +83,7 @@ export function LoadSection({
     const faceEntries = toFaceEntries(
       allPickedFaces,
       targetLoadGroup?.faces.length ?? 0,
+      pickGeometry === "edge" ? "Edge" : "Face",
     );
     if (targetLoadGroup) {
       for (const faceEntry of faceEntries) {
@@ -133,7 +142,18 @@ export function LoadSection({
             </button>
           </div>
 
-          <PickedFaceList faces={allPickedFaces} onRemove={removePickedFace} />
+          {hasShells && (
+            <PickGeometryToggle
+              value={pickGeometry}
+              onChange={setPickGeometry}
+            />
+          )}
+
+          <PickedFaceList
+            faces={allPickedFaces}
+            onRemove={removePickedFace}
+            geometry={pickGeometry}
+          />
 
           {allPickedFaces.length > 0 && !targetLoadGroup && (
             <>
@@ -153,7 +173,9 @@ export function LoadSection({
                 {loadKindSel === "pressure"
                   ? "applied as p·n̂ over each face (work-equivalent)"
                   : loadKindSel === "force"
-                    ? "applied as a work-equivalent surface traction"
+                    ? pickGeometry === "edge"
+                      ? "applied as a work-equivalent line load along the edge"
+                      : "applied as a work-equivalent surface traction"
                     : "distributed as equivalent nodal forces"}
               </div>
               <button className={styles.loadBtn} onClick={applyLoad}>

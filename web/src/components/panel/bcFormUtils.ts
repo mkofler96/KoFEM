@@ -32,9 +32,13 @@ export function faceKey(face: FaceSelection): string {
   return `${face.nodeIds.length}-${face.nodeIds[0]}-${face.nodeIds[face.nodeIds.length - 1]}`;
 }
 
-export function toFaceEntries(faces: FaceSelection[], existingCount: number) {
+export function toFaceEntries(
+  faces: FaceSelection[],
+  existingCount: number,
+  noun: "Face" | "Edge" = "Face",
+) {
   return faces.map((face, i) => ({
-    label: `Face ${existingCount + i + 1}`,
+    label: `${noun} ${existingCount + i + 1}`,
     nodeIds: face.nodeIds,
   }));
 }

@@ -10,16 +10,49 @@ import {
 } from "./bcFormUtils";
 import styles from "./LeftPanel.module.css";
 
+// Face / Edge picker for shell models: a flat shell sheet is one face-pick
+// region, so grabbing its rim (an edge load or supported-edge BC) needs edge
+// picking (#386). Offered only when the model has CTRIA3 elements.
+export function PickGeometryToggle({
+  value,
+  onChange,
+}: {
+  value: "face" | "edge";
+  onChange(geometry: "face" | "edge"): void;
+}) {
+  return (
+    <div className={styles.segToggle} role="group" aria-label="Pick geometry">
+      {(["face", "edge"] as const).map((geometry) => (
+        <button
+          key={geometry}
+          type="button"
+          className={`${styles.segBtn} ${value === geometry ? styles.segBtnActive : ""}`}
+          aria-pressed={value === geometry}
+          onClick={() => onChange(geometry)}
+        >
+          {geometry === "face" ? "Face" : "Edge"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function PickedFaceList({
   faces,
   onRemove,
+  geometry = "face",
 }: {
   faces: FaceSelection[];
   onRemove(index: number): void;
+  geometry?: "face" | "edge";
 }) {
   if (faces.length === 0) {
     return (
-      <div className={styles.pickHint}>Click a face in the 3D viewport</div>
+      <div className={styles.pickHint}>
+        {geometry === "edge"
+          ? "Click near a mesh edge in the 3D viewport"
+          : "Click a face in the 3D viewport"}
+      </div>
     );
   }
   return (

@@ -115,6 +115,7 @@ export function StatusBar() {
   const mode = useModelStore((s) => s.mode);
   const selectedFace = useModelStore((s) => s.selectedFace);
   const pickMode = useModelStore((s) => s.pickMode);
+  const pickGeometry = useModelStore((s) => s.pickGeometry);
   const viewRepr = useModelStore((s) => s.viewRepr);
   const setViewRepr = useModelStore((s) => s.setViewRepr);
   const showUndeformedOverlay = useModelStore((s) => s.showUndeformedOverlay);
@@ -164,9 +165,9 @@ export function StatusBar() {
         {pickMode && (
           <span className={styles.pickChip}>
             <span className={styles.pickDot} />
-            {pickMode === "bc"
-              ? "Pick face — fixed displacement"
-              : "Pick face — apply load"}
+            {`Pick ${pickGeometry} — ${
+              pickMode === "bc" ? "fixed displacement" : "apply load"
+            }`}
           </span>
         )}
 

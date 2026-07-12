@@ -281,11 +281,16 @@ export interface BoundarySlice {
 
   pickMode: "bc" | "load" | null;
   pickTargetGroupId: number | null; // null = creating new group; id = adding to existing
+  // Whether a click selects a surface region ("face") or a boundary polyline
+  // ("edge"). Edge picking is the only way to grab the rim of a flat shell,
+  // whose whole sheet is a single face-pick region. Reset to "face" on exit.
+  pickGeometry: "face" | "edge";
   selectedFace: FaceSelection | null;
   pendingFaces: FaceSelection[]; // faces accumulated via shift-click within a pick session
 
   // Pick mode / face selection
   setPickMode(mode: "bc" | "load" | null, targetGroupId?: number | null): void;
+  setPickGeometry(geometry: "face" | "edge"): void;
   setSelectedFace(face: FaceSelection | null): void;
   setPendingFaces(faces: FaceSelection[]): void;
 
@@ -332,6 +337,7 @@ export const createBoundarySlice: SliceCreator<BoundarySlice> = (set) => ({
   nextFaceEntryId: 1,
   pickMode: null,
   pickTargetGroupId: null,
+  pickGeometry: "face",
   selectedFace: null,
   pendingFaces: [],
 
@@ -346,7 +352,13 @@ export const createBoundarySlice: SliceCreator<BoundarySlice> = (set) => ({
       if (mode === null) {
         s.selectedFace = null;
         s.pendingFaces = [];
+        s.pickGeometry = "face";
       }
+    }),
+
+  setPickGeometry: (geometry: "face" | "edge") =>
+    set((s) => {
+      s.pickGeometry = geometry;
     }),
 
   setSelectedFace: (face: FaceSelection | null) =>
