@@ -293,6 +293,103 @@ test("a mixed shell/solid (CTRIA3 + CTETRA) example re-solves through the couple
   }
 });
 
+test("a STEP-backed example (crane) restores its geometry and re-meshes", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+
+  // The crane showcase ships its source STEP next to the .vtu. Loading it must
+  // restore stepBytes — a saved .vtu carries none, so loadAnalysis drops them —
+  // so the loaded model is re-meshable instead of hitting the "original STEP file
+  // is no longer available" guard. Procedural benchmarks (cantilever below) have
+  // no .step and correctly stay non-re-meshable.
+  await page.goto("/app/?example=crane-hook-shell");
+  await expect(page.locator("nav")).toBeVisible();
+  await page.waitForFunction(() =>
+    Boolean((window as unknown as { __kofem?: unknown }).__kofem),
+  );
+  await expect
+    .poll(async () => (await readStore(page)).nodes, { timeout: 30_000 })
+    .toBeGreaterThan(0);
+
+  // stepBytes is restored by a second fetch that resolves shortly after the .vtu
+  // loads (nodes appear), so poll for it rather than reading once.
+  await expect
+    .poll(
+      async () =>
+        page.evaluate(() => {
+          const bytes = (
+            window as unknown as {
+              __kofemStore: { getState(): { stepBytes: Uint8Array | null } };
+            }
+          ).__kofemStore.getState().stepBytes;
+          return bytes instanceof Uint8Array ? bytes.length : 0;
+        }),
+      { timeout: 15_000 },
+    )
+    .toBeGreaterThan(0);
+
+  const step = await page.evaluate(() => {
+    const st = (
+      window as unknown as {
+        __kofemStore: {
+          getState(): { stepBytes: Uint8Array | null; geometryFormat: string };
+        };
+      }
+    ).__kofemStore.getState();
+    const bytes = st.stepBytes;
+    return {
+      header: bytes ? new TextDecoder().decode(bytes.slice(0, 13)) : "",
+      format: st.geometryFormat,
+    };
+  });
+  expect(step.header).toBe("ISO-10303-21;"); // a genuine STEP, not index.html
+  expect(step.format).toBe("step");
+
+  // Re-mesh through the real worker path with the restored bytes: proof the
+  // geometry genuinely meshes, i.e. the Re-mesh button now works.
+  const mesh = await page.evaluate(async () => {
+    const win = window as unknown as {
+      __kofem: {
+        sendToWorker(name: string, payload: object): Promise<unknown>;
+      };
+      __kofemStore: { getState(): Record<string, unknown> };
+    };
+    const st = win.__kofemStore.getState();
+    const res = (await win.__kofem.sendToWorker("volume_mesh", {
+      bytes: st.stepBytes,
+      format: st.geometryFormat,
+      maxElementSize: 20,
+      minElementSize: 2,
+    })) as { nodes: unknown[]; elements: unknown[] };
+    return { nNodes: res.nodes.length, nElems: res.elements.length };
+  });
+  expect(mesh.nNodes).toBeGreaterThan(0);
+  expect(mesh.nElems).toBeGreaterThan(0);
+});
+
+test("a procedural example (cantilever) has no re-meshable STEP", async ({
+  page,
+}) => {
+  // The mirror of the crane test: a benchmark generated in code ships no .step,
+  // so stepBytes stays null and the model is (correctly) not re-meshable.
+  await page.goto("/app/?example=cantilever-beam");
+  await expect(page.locator("nav")).toBeVisible();
+  await expect
+    .poll(async () => (await readStore(page)).nodes, { timeout: 15_000 })
+    .toBeGreaterThan(0);
+
+  const hasBytes = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __kofemStore: { getState(): { stepBytes: Uint8Array | null } };
+        }
+      ).__kofemStore.getState().stepBytes !== null,
+  );
+  expect(hasBytes).toBe(false);
+});
+
 test("?example= with an invalid id is rejected without a fetch", async ({
   page,
 }) => {

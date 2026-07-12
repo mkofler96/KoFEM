@@ -15,6 +15,8 @@ import styles from "./App.module.css";
 // This is the target of the "Open in KoFEM web" buttons on the examples gallery.
 function useExampleFromUrl() {
   const loadAnalysis = useModelStore((s) => s.loadAnalysis);
+  const setStepBytes = useModelStore((s) => s.setStepBytes);
+  const setGeometryFormat = useModelStore((s) => s.setGeometryFormat);
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("example");
     if (!id) return;
@@ -28,7 +30,23 @@ function useExampleFromUrl() {
         const res = await fetch(`/examples/${id}.vtu`);
         if (!res.ok)
           throw new Error(`example "${id}" returned HTTP ${res.status}`);
-        if (!cancelled) loadAnalysis(parseAnalysisFile(await res.text()));
+        if (cancelled) return;
+        loadAnalysis(parseAnalysisFile(await res.text()));
+
+        // A saved .vtu carries no STEP, so loadAnalysis drops stepBytes and the
+        // loaded model can't be re-meshed. Examples that ship their source CAD
+        // (e.g. crane-hook-shell.step) restore it here so the user can re-mesh
+        // and re-solve. Procedurally-generated benchmarks have no .step: a 404
+        // (or dev-server SPA fallback to index.html) fails the ISO-10303-21
+        // header check and the model simply stays non-re-meshable.
+        const stepRes = await fetch(`/examples/${id}.step`);
+        if (cancelled || !stepRes.ok) return;
+        const buf = await stepRes.arrayBuffer();
+        const head = new TextDecoder().decode(buf.slice(0, 16));
+        if (!cancelled && head.startsWith("ISO-10303-21")) {
+          setGeometryFormat("step");
+          setStepBytes(new Uint8Array(buf));
+        }
       } catch (err) {
         window.alert(`Could not load example: ${(err as Error).message}`);
       }
@@ -36,7 +54,7 @@ function useExampleFromUrl() {
     return () => {
       cancelled = true;
     };
-  }, [loadAnalysis]);
+  }, [loadAnalysis, setStepBytes, setGeometryFormat]);
 }
 
 function Workspace() {
