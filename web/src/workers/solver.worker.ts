@@ -1163,6 +1163,253 @@ function tryCoupledSolve(
   return { displacements, vonMises };
 }
 
+// ── Pure auto-shell solve (thin single body / all-shell → solve_shell) ───────
+//
+// Nearest mid-surface node to a query point, grid-accelerated with an expanding
+// ring search so it works whatever the wall offset. Standalone counterpart of
+// shellNodeLocator (which needs a CoupledModel); here the pool IS the shell.
+function buildNearestVertexLocator(
+  verts: number[],
+): (p: [number, number, number]) => number {
+  const n = verts.length / 3;
+  let span = 0;
+  for (let d = 0; d < 3; d++) {
+    let lo = Infinity,
+      hi = -Infinity;
+    for (let i = 0; i < n; i++) {
+      const val = verts[3 * i + d];
+      if (val < lo) lo = val;
+      if (val > hi) hi = val;
+    }
+    span = Math.max(span, hi - lo);
+  }
+  // Cell ~ mean node spacing; the 1e-6 floor keeps it positive for a degenerate
+  // (single-point) cloud.
+  const cell = Math.max(span / Math.max(1, Math.cbrt(n)), 1e-6);
+  const grid = new Map<string, number[]>();
+  const gk = (x: number, y: number, z: number) =>
+    `${Math.floor(x / cell)},${Math.floor(y / cell)},${Math.floor(z / cell)}`;
+  for (let i = 0; i < n; i++) {
+    const key = gk(verts[3 * i], verts[3 * i + 1], verts[3 * i + 2]);
+    getOrInitList(grid, key).push(i);
+  }
+  const maxRings = 32;
+  return (p) => {
+    const cx = Math.floor(p[0] / cell),
+      cy = Math.floor(p[1] / cell),
+      cz = Math.floor(p[2] / cell);
+    let best = -1,
+      bd = Infinity;
+    for (let r = 0; r <= maxRings && best < 0; r++) {
+      for (let dx = -r; dx <= r; dx++)
+        for (let dy = -r; dy <= r; dy++)
+          for (let dz = -r; dz <= r; dz++) {
+            if (
+              r > 0 &&
+              Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz)) !== r
+            )
+              continue; // ring shell only
+            const bucket = grid.get(`${cx + dx},${cy + dy},${cz + dz}`);
+            if (!bucket) continue;
+            for (const i of bucket) {
+              const dd =
+                (p[0] - verts[3 * i]) ** 2 +
+                (p[1] - verts[3 * i + 1]) ** 2 +
+                (p[2] - verts[3 * i + 2]) ** 2;
+              if (dd < bd) {
+                bd = dd;
+                best = i;
+              }
+            }
+          }
+    }
+    if (best < 0)
+      throw new Error(
+        `pure shell: no mid-surface node found near query point (${p[0]}, ${p[1]}, ${p[2]}) — ` +
+          "a boundary condition or load could not be mapped onto the shell mesh",
+      );
+    return best;
+  };
+}
+
+function getOrInitList(map: Map<string, number[]>, key: string): number[] {
+  let arr = map.get(key);
+  if (!arr) {
+    arr = [];
+    map.set(key, arr);
+  }
+  return arr;
+}
+
+// A thin single body (or an assembly where EVERY body is marked Shell) has no
+// solid domain to couple to, so tryCoupledSolve bails. Idealise its thin walls
+// to a mid-surface shell mesh (extractThinWallShells) and solve it directly with
+// the engine's Kirchhoff shell solver — the auto counterpart of handleShellSolve
+// (which needs explicit CTRIA3 elements). BCs, loads and results map onto the
+// collapsed mid-surface by nearest node, exactly as the coupled path maps the
+// shelled body. Returns null when this path does not apply (a solid domain is
+// present, or there is no surface mesh); throws when a body is marked Shell but
+// carries no detectable thin wall — so the choice is never silently ignored.
+function tryPureShellSolve(
+  payload: SolvePayload,
+  shellBodyIds: Set<number>,
+): { displacements: Float64Array; vonMises: Float64Array } | null {
+  const { nodes, elements, materials, properties, constraints, loads } =
+    payload;
+  const surfaceLoads = payload.surfaceLoads;
+  const surfaceTriangles = payload.surfaceTriangles;
+  const surfaceFaceIds = payload.surfaceFaceIds;
+  if (!surfaceTriangles || !surfaceFaceIds || surfaceTriangles.length === 0)
+    return null;
+  if (surfaceFaceIds.length !== surfaceTriangles.length) return null;
+  const tetElements = elements.filter((e) => e.type === "CTETRA");
+  if (tetElements.length !== elements.length) return null; // tets-only idealisation
+  // Only when there is NO solid domain to preserve: every body is idealised as a
+  // shell. A mixed shell+solid assembly must go through the coupled path — pure
+  // shells here would silently drop the solid bodies.
+  if (!tetElements.every((e) => shellBodyIds.has(e.propertyId))) return null;
+
+  const vid = buildVertexIndexer(nodes);
+  const mesh = buildShellizeMesh(
+    nodes,
+    tetElements,
+    surfaceTriangles,
+    surfaceFaceIds,
+    vid,
+  );
+  const shells = extractThinWallShells(mesh, { shellBodyIds });
+  if (shells.shellBody < 0)
+    throw new Error(
+      `Shell idealisation failed: body ${[...shellBodyIds].join(", ")} is marked "Shell" but no ` +
+        "thin walls were found in it. Switch it to Solid, or check that it is genuinely thin-walled.",
+    );
+
+  // Single (E, ν) for the whole shell domain — the shelled body's material.
+  const prop = properties.find((p) => p.id === shells.shellBody);
+  if (!prop)
+    throw new Error(`pure shell: no property with id ${shells.shellBody}`);
+  const mat = materials.find((mm) => mm.id === prop.materialId);
+  if (!mat)
+    throw new Error(
+      `pure shell: property ${prop.id} references material ${prop.materialId}, which does not exist`,
+    );
+
+  const nearestShell = buildNearestVertexLocator(shells.shellVerts);
+  const shellOf = (nodeId: number): number => {
+    const vi = vid(nodeId, "pure shell bc");
+    return nearestShell([
+      mesh.V[3 * vi],
+      mesh.V[3 * vi + 1],
+      mesh.V[3 * vi + 2],
+    ]);
+  };
+
+  // Reuse the coupled BC/load mapping (nearest-node lumping, 6·node+dof), then
+  // fold it into the shell solver's fixed_vertices/fixed_dofs/point_loads form.
+  const flatFixed = coupledFixedDofs(constraints, shellOf, () => true);
+  const dofsByVertex = new Map<number, Set<number>>();
+  for (const d of flatFixed)
+    getOrInitDofs(dofsByVertex, Math.floor(d / 6)).add(d % 6);
+  const fixed_vertices: number[] = [];
+  const fixed_dofs: { vertex: number; dofs: number[] }[] = [];
+  for (const [vertex, dofSet] of dofsByVertex) {
+    if (dofSet.size === 6) fixed_vertices.push(vertex);
+    else fixed_dofs.push({ vertex, dofs: [...dofSet].sort((a, b) => a - b) });
+  }
+
+  const { load_dofs, load_vals } = coupledLoads(loads, surfaceLoads, shellOf);
+  const forceByVertex = new Map<number, [number, number, number]>();
+  for (let k = 0; k < load_dofs.length; k++) {
+    const vertex = Math.floor(load_dofs[k] / 6);
+    const comp = load_dofs[k] % 6;
+    let acc = forceByVertex.get(vertex);
+    if (!acc) {
+      acc = [0, 0, 0];
+      forceByVertex.set(vertex, acc);
+    }
+    if (comp <= 2) acc[comp] += load_vals[k];
+  }
+  const point_loads = [...forceByVertex.entries()].map(([vertex, force]) => ({
+    vertex,
+    force,
+  }));
+
+  self.postMessage({
+    id: 0,
+    log: `[auto-shell] body ${shells.shellBody}: ${shells.walls.length} thin walls → ${shells.shellVerts.length / 3} shell nodes, ${shells.shellTris.length / 3} facets (pure shell, no solid to couple)`,
+  });
+
+  const result = m().solve_shell(
+    {
+      vertices: Float64Array.from(shells.shellVerts),
+      triangles: Int32Array.from(shells.shellTris),
+      thicknesses: Float64Array.from(shells.shellThk),
+    },
+    JSON.stringify({ young_modulus: mat.young, poisson_ratio: mat.poisson }),
+    JSON.stringify({ fixed_vertices, fixed_dofs, point_loads }),
+  );
+  if ("error" in result) throw new Error(result.error);
+
+  // Displacements: every store node takes its nearest mid-surface node's three
+  // translations (the mid-surface is offset ~t/2 from the original solid faces).
+  const displacements = new Float64Array(3 * nodes.length);
+  for (let i = 0; i < nodes.length; i++) {
+    const si = nearestShell([nodes[i].x, nodes[i].y, nodes[i].z]);
+    displacements[3 * i] = result.displacements[3 * si];
+    displacements[3 * i + 1] = result.displacements[3 * si + 1];
+    displacements[3 * i + 2] = result.displacements[3 * si + 2];
+  }
+
+  // Von Mises per original tet: the worst surface stress of the shell facets
+  // adjacent to the tet's nearest mid-surface node (the same recovery the coupled
+  // path uses for wall-sliver elements).
+  const vmByShellNode = new Map<number, number>();
+  for (let t = 0; t < shells.shellTris.length / 3; t++) {
+    const facetVm = result.von_mises[t];
+    for (const si of [
+      shells.shellTris[3 * t],
+      shells.shellTris[3 * t + 1],
+      shells.shellTris[3 * t + 2],
+    ])
+      // eslint-disable-next-line kofem/no-silent-fallback -- running max over adjacent facets; 0 is the identity for a node seen for the first time
+      vmByShellNode.set(si, Math.max(vmByShellNode.get(si) ?? 0, facetVm));
+  }
+  const nodeById = new Map(nodes.map((nd) => [nd.id, nd]));
+  const vonMises = new Float64Array(elements.length);
+  for (let e = 0; e < elements.length; e++) {
+    let cx = 0,
+      cy = 0,
+      cz = 0;
+    for (const nid of elements[e].nodeIds) {
+      const nd = nodeById.get(nid);
+      if (!nd)
+        throw new Error(
+          `pure shell stress mapping: element ${elements[e].id} references unknown node id ${nid}`,
+        );
+      cx += nd.x;
+      cy += nd.y;
+      cz += nd.z;
+    }
+    const k = elements[e].nodeIds.length;
+    const si = nearestShell([cx / k, cy / k, cz / k]);
+    // eslint-disable-next-line kofem/no-silent-fallback -- a mid-surface node not touched by any facet carries no recovered stress
+    vonMises[e] = vmByShellNode.get(si) ?? 0;
+  }
+  return { displacements, vonMises };
+}
+
+function getOrInitDofs(
+  map: Map<number, Set<number>>,
+  key: number,
+): Set<number> {
+  let set = map.get(key);
+  if (!set) {
+    set = new Set();
+    map.set(key, set);
+  }
+  return set;
+}
+
 // ── Mixed shell/solid solve (explicit CTRIA3 + CTETRA → solve_coupled) ────────
 
 // Single (E, ν) per domain for the coupled assembler, resolved from the explicit
@@ -1417,22 +1664,31 @@ function handleSolve(id: number, payload: SolvePayload) {
       .filter((p) => p.discretization === "shell")
       .map((p) => p.id),
   );
-  const coupled = tryCoupledSolve(payload, shellBodyIds);
-  if (coupled) {
-    self.postMessage({
-      id,
-      log: `Coupled solve complete: ${coupled.displacements.length / 3} vertex displacements`,
-    });
-    self.postMessage(
-      {
+  if (shellBodyIds.size > 0) {
+    // A body is marked Shell: solve it as shells or fail loudly — never fall
+    // through to the all-solid path, which would silently ignore the choice.
+    // Coupled first (shells tied to solid bodies); if there is no solid domain
+    // to couple to (a single thin body, or an all-shell assembly), idealise the
+    // thin walls and solve them with the pure Kirchhoff shell solver.
+    const shellResult =
+      tryCoupledSolve(payload, shellBodyIds) ??
+      tryPureShellSolve(payload, shellBodyIds);
+    if (shellResult) {
+      self.postMessage({
         id,
-        ok: true,
-        displacements: coupled.displacements,
-        vonMises: coupled.vonMises,
-      },
-      [coupled.displacements.buffer, coupled.vonMises.buffer],
-    );
-    return;
+        log: `Shell solve complete: ${shellResult.displacements.length / 3} vertex displacements`,
+      });
+      self.postMessage(
+        {
+          id,
+          ok: true,
+          displacements: shellResult.displacements,
+          vonMises: shellResult.vonMises,
+        },
+        [shellResult.displacements.buffer, shellResult.vonMises.buffer],
+      );
+      return;
+    }
   }
 
   const {
