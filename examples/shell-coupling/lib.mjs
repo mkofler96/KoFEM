@@ -56,6 +56,58 @@ export function meshStep(Module, stepPath, { maxElementSize = 6 } = {}) {
 const pt = (V, i) => [V[3 * i], V[3 * i + 1], V[3 * i + 2]];
 const TET_FACES = [[0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3]];
 
+// Minimum vertex-to-opposite-face altitude / longest edge — a scale-invariant
+// flatness measure (well-formed tet ≈ 0.3–0.8, thin-wall sliver < 0.1). Mirrors
+// web/src/lib/shellize.ts.
+function tetFlatness(V, a, b, c, d) {
+  const p = [pt(V, a), pt(V, b), pt(V, c), pt(V, d)];
+  let longest = 0;
+  for (let i = 0; i < 4; i++) for (let j = i + 1; j < 4; j++) {
+    const e = Math.hypot(p[i][0] - p[j][0], p[i][1] - p[j][1], p[i][2] - p[j][2]);
+    if (e > longest) longest = e;
+  }
+  let minAlt = Infinity;
+  for (let k = 0; k < 4; k++) {
+    const o = p[k], q = p[(k + 1) % 4], r = p[(k + 2) % 4], s = p[(k + 3) % 4];
+    const ux = q[0] - r[0], uy = q[1] - r[1], uz = q[2] - r[2];
+    const vx = s[0] - r[0], vy = s[1] - r[1], vz = s[2] - r[2];
+    const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+    const nl = Math.hypot(nx, ny, nz) || 1;
+    const h = Math.abs((nx * (o[0] - r[0]) + ny * (o[1] - r[1]) + nz * (o[2] - r[2])) / nl);
+    if (h < minAlt) minAlt = h;
+  }
+  return minAlt / (longest || 1);
+}
+
+/** Thin-wall (sliver) tets of the shelled body — the flat elements replaced by
+ *  shells. The body's thick junction/base blocks stay solid so their stiffness
+ *  and their contact with the neighbours survive. Mirrors shellize.ts. */
+export function shellBodySliverTets(mesh, shellBody, { sliverFlatness = 0.2 } = {}) {
+  const { V, tet, body } = mesh;
+  const slivers = new Set();
+  for (let e = 0; e < tet.length / 4; e++)
+    if (body[e] === shellBody &&
+        tetFlatness(V, tet[4 * e], tet[4 * e + 1], tet[4 * e + 2], tet[4 * e + 3]) < sliverFlatness)
+      slivers.add(e);
+  return slivers;
+}
+
+/** Drop distributing couplings whose reference node carries an essential BC — a
+ *  fixed node cannot also be an RBE3 dependent (engine refuses, #377). Mirrors
+ *  shellize.ts. */
+export function dropCouplingsOnFixedNodes(coupling, fixedDofs) {
+  const fixedNodes = new Set();
+  for (const d of fixedDofs) fixedNodes.add(Math.floor(d / 6));
+  const ref = [], offsets = [0], solid = [];
+  for (let k = 0; k < coupling.ref.length; k++) {
+    if (fixedNodes.has(coupling.ref[k])) continue;
+    ref.push(coupling.ref[k]);
+    for (let i = coupling.offsets[k]; i < coupling.offsets[k + 1]; i++) solid.push(coupling.solid[i]);
+    offsets.push(solid.length);
+  }
+  return { ref, offsets, solid };
+}
+
 // Per-OCC-face area / area-weighted normal / centroid / owning body.
 function faceProps(mesh) {
   const { V, tet, body, surfTri: st, surfFace: sf } = mesh;
@@ -102,7 +154,8 @@ export function extractThinWallShells(mesh, { maxWall = 15 } = {}) {
   const { V, surfTri: st, surfFace: sf } = mesh;
   const faces = faceProps(mesh);
   const big = faces.filter((f) => f.area > 0.01 * faces[0].area && f.flat > 0.9);
-  const used = new Set(), walls = [];
+  const used = new Set();
+  let walls = [];
   for (let i = 0; i < big.length; i++) {
     if (used.has(big[i].id)) continue;
     let best = -1, bo = Infinity;
@@ -132,11 +185,16 @@ export function extractThinWallShells(mesh, { maxWall = 15 } = {}) {
       walls.push({ keep: outer.id, n: outer.n, thk: bo, body: fa.body });
     }
   }
+  // Shell exactly ONE body — the one with the largest thin wall. detectWallPairs
+  // can pair a thick flat block on another body; collapsing that would lay shell
+  // facets on top of a body kept solid (the crane hook picked up a stray 5 mm
+  // "wall" this way). Mirrors shellize.ts.
   const shellBody = walls.length ? walls[0].body : -1;
+  if (shellBody >= 0) walls = walls.filter((w) => w.body === shellBody);
   const keep = new Map(walls.map((w) => [w.keep, w]));
 
   // Offset each kept face's triangulation inward by thk/2 to the mid-plane.
-  const rawV = [], rawT = [], rawThk = [], rawSrc = [], rawOrig = [], nm = new Map();
+  const rawV = [], rawT = [], rawThk = [], rawTriSrc = [], rawSrc = [], rawOrig = [], nm = new Map();
   const addN = (fid, oi, p) => {
     const key = `${fid}:${oi}`;
     let id = nm.get(key);
@@ -152,7 +210,7 @@ export function extractThinWallShells(mesh, { maxWall = 15 } = {}) {
       const p = pt(V, oi);
       return addN(w.keep, oi, [p[0] - w.n[0] * o, p[1] - w.n[1] * o, p[2] - w.n[2] * o]);
     });
-    rawT.push(nn[0], nn[1], nn[2]); rawThk.push(w.thk);
+    rawT.push(nn[0], nn[1], nn[2]); rawThk.push(w.thk); rawTriSrc.push(w.keep);
   }
 
   // Weld mid-surface nodes that came from the SAME original mesh node: adjacent
@@ -176,83 +234,22 @@ export function extractThinWallShells(mesh, { maxWall = 15 } = {}) {
     if (c === undefined) { c = shellVerts.length / 3; comp.set(r, c); shellVerts.push(rawV[3 * r], rawV[3 * r + 1], rawV[3 * r + 2]); shellSrc.push(rawSrc[r]); }
     return c;
   };
-  const shellTris = [], shellThk = [];
+  const shellTris = [], shellThk = [], shellTriSrc = [];
   for (let t = 0; t < rawT.length / 3; t++) {
     const a = cid(rawT[3 * t]), b = cid(rawT[3 * t + 1]), c = cid(rawT[3 * t + 2]);
     if (a === b || b === c || a === c) continue;
-    shellTris.push(a, b, c); shellThk.push(rawThk[t]);
+    shellTris.push(a, b, c); shellThk.push(rawThk[t]); shellTriSrc.push(rawTriSrc[t]);
   }
-  return { walls, shellBody, shellVerts, shellTris, shellThk, shellSrc };
+  return { walls, shellBody, shellVerts, shellTris, shellThk, shellSrc, shellTriSrc };
 }
 
-/** Mutual-nearest weld of different-body solid nodes within tieDist (heals the
- *  near-hinge where two bodies touch without a shared face). Returns rep-map. */
-export function tieSolidBodies(mesh, shellBody, { tieDist = 2.5 } = {}) {
-  const { V, tet, body } = mesh;
-  const bodiesOf = new Map();
-  for (let e = 0; e < tet.length / 4; e++) {
-    if (body[e] === shellBody) continue;
-    for (let k = 0; k < 4; k++) (bodiesOf.get(tet[4 * e + k]) ?? bodiesOf.set(tet[4 * e + k], new Set()).get(tet[4 * e + k])).add(body[e]);
-  }
-  const nodes = [...bodiesOf.keys()];
-  const grid = new Map(), gk = (x, y, z) => `${Math.floor(x / tieDist)},${Math.floor(y / tieDist)},${Math.floor(z / tieDist)}`;
-  for (const n of nodes) (grid.get(gk(...pt(V, n))) ?? grid.set(gk(...pt(V, n)), []).get(gk(...pt(V, n)))).push(n);
-  const nearest = new Map();
-  for (const n of nodes) {
-    const p = pt(V, n);
-    const cx = Math.floor(p[0] / tieDist), cy = Math.floor(p[1] / tieDist), cz = Math.floor(p[2] / tieDist);
-    let bn = -1, bd = tieDist * tieDist;
-    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) {
-      const b = grid.get(`${cx + dx},${cy + dy},${cz + dz}`);
-      if (!b) continue;
-      for (const m of b) {
-        if (m === n) continue;
-        let same = false; for (const x of bodiesOf.get(n)) if (bodiesOf.get(m).has(x)) same = true;
-        if (same) continue;
-        const q = pt(V, m), dd = (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2 + (p[2] - q[2]) ** 2;
-        if (dd < bd) { bd = dd; bn = m; }
-      }
-    }
-    nearest.set(n, bn);
-  }
-  const rep = new Map();
-  let welded = 0;
-  for (const n of nodes) { const m = nearest.get(n); if (m >= 0 && nearest.get(m) === n && n < m) { rep.set(m, n); welded++; } }
-  return { rep, welded };
-}
-
-/**
- * Assemble the coupled node pool: compacted solid nodes (bodies != shellBody,
- * tied) followed by the shell mid-surface nodes. Builds solve_coupled inputs and
- * auto-detects distributing couplings (each shell node near ≥3 solid nodes).
- */
-export function buildCoupledModel(mesh, shells, tie, { couplingRadius = 10 } = {}) {
-  const { V, tet, body } = mesh;
-  const tied = (n) => tie.rep.get(n) ?? n;
-  const solidTets = [];
-  for (let e = 0; e < tet.length / 4; e++)
-    if (body[e] !== shells.shellBody) solidTets.push(tet[4 * e], tet[4 * e + 1], tet[4 * e + 2], tet[4 * e + 3]);
-
-  const pool = [];
-  const solidPool = new Map();
-  const addPool = (x, y, z) => { const id = pool.length / 3; pool.push(x, y, z); return id; };
-  for (const n of new Set(solidTets.map(tied))) solidPool.set(n, addPool(...pt(V, n)));
-  const shellPool = [];
-  for (let s = 0; s < shells.shellVerts.length / 3; s++)
-    shellPool.push(addPool(shells.shellVerts[3 * s], shells.shellVerts[3 * s + 1], shells.shellVerts[3 * s + 2]));
-
-  const tets = solidTets.map((n) => solidPool.get(tied(n)));
-  const triangles = shells.shellTris.map((s) => shellPool[s]);
-  const ppt = (i) => [pool[3 * i], pool[3 * i + 1], pool[3 * i + 2]];
-
-  // auto-couple: each shell node near ≥3 solid nodes → one distributing coupling.
-  // Capped at the 16 NEAREST candidates: the RBE3 expansion is quadratic in the
-  // per-coupling node count, and a radius alone picks hundreds on a fine mesh.
-  const R = couplingRadius, MAX_COUPLED = 16;
+// Distributing (RBE3) couplings: each ref node near ≥3 target nodes ties to its
+// nearest (≤ maxCoupled) targets. CSR-style. Mirrors shellize.ts.
+function autoDetectCouplings(ppt, targetNodes, refNodes, R, maxCoupled = 16) {
   const grid = new Map(), gk = (x, y, z) => `${Math.floor(x / R)},${Math.floor(y / R)},${Math.floor(z / R)}`;
-  for (const [, pi] of solidPool) (grid.get(gk(...ppt(pi))) ?? grid.set(gk(...ppt(pi)), []).get(gk(...ppt(pi)))).push(pi);
+  for (const pi of targetNodes) (grid.get(gk(...ppt(pi))) ?? grid.set(gk(...ppt(pi)), []).get(gk(...ppt(pi)))).push(pi);
   const ref = [], offsets = [0], solid = [];
-  for (const gi of shellPool) {
+  for (const gi of refNodes) {
     const p = ppt(gi);
     const cx = Math.floor(p[0] / R), cy = Math.floor(p[1] / R), cz = Math.floor(p[2] / R);
     const near = [];
@@ -268,14 +265,81 @@ export function buildCoupledModel(mesh, shells, tie, { couplingRadius = 10 } = {
     if (near.length >= 3) {
       near.sort((a, b) => a.d2 - b.d2);
       ref.push(gi);
-      for (const { pi } of near.slice(0, MAX_COUPLED)) solid.push(pi);
+      for (const { pi } of near.slice(0, maxCoupled)) solid.push(pi);
       offsets.push(solid.length);
     }
   }
+  return { ref, offsets, solid };
+}
+
+// Distributing tie of a gapped solid↔solid interface (a pin in a hole), split by
+// BODY LABEL (Netgen can mesh the bodies nearly conformally, so a few shared
+// interface nodes make them one connected component yet leave the pin a near-hinge
+// — connectivity can't separate them, the body label can). The body with the most
+// exclusive nodes is the master; every exclusive node of another body near ≥3
+// master nodes distributes onto them. Shared (multi-body) nodes are already
+// joined and skipped. Mirrors shellize.ts.
+function autoDetectSolidCouplings(ppt, poolBody, R, maxCoupled = 16) {
+  const bodyOfNode = new Map(), bodyCount = new Map();
+  for (const [pi, bodies] of poolBody) {
+    if (bodies.size !== 1) continue;
+    const b = [...bodies][0];
+    bodyOfNode.set(pi, b);
+    bodyCount.set(b, (bodyCount.get(b) ?? 0) + 1);
+  }
+  if (bodyCount.size < 2) return { ref: [], offsets: [0], solid: [] };
+  let master = -1, best = -1;
+  for (const [b, c] of bodyCount) if (c > best) { best = c; master = b; }
+  const masterNodes = [], otherNodes = [];
+  for (const [pi, b] of bodyOfNode) (b === master ? masterNodes : otherNodes).push(pi);
+  return autoDetectCouplings(ppt, masterNodes, otherNodes, R, maxCoupled);
+}
+
+// Concatenate two CSR coupling sets. Mirrors shellize.ts.
+function concatCouplings(a, b) {
+  const ref = [...a.ref, ...b.ref], solid = [...a.solid, ...b.solid], offsets = [...a.offsets];
+  const base = a.solid.length;
+  for (let k = 1; k < b.offsets.length; k++) offsets.push(base + b.offsets[k]);
+  return { ref, offsets, solid };
+}
+
+/**
+ * Assemble the coupled node pool: solid nodes (other bodies + the shelled body's
+ * non-wall base tets) followed by the shell mid-surface nodes. Distinct solid
+ * bodies keep their own nodes (no merging) and are tied by distributing couplings
+ * across any clearance; shells couple to the solid the same way. Mirrors
+ * shellize.ts.
+ */
+export function buildCoupledModel(mesh, shells, sliverTets, { couplingRadius = 10, solidCouplingRadius = 8 } = {}) {
+  const { V, tet, body } = mesh;
+  const solidTets = [], tetBody = [];
+  for (let e = 0; e < tet.length / 4; e++)
+    if (!(body[e] === shells.shellBody && sliverTets.has(e))) { solidTets.push(tet[4 * e], tet[4 * e + 1], tet[4 * e + 2], tet[4 * e + 3]); tetBody.push(body[e]); }
+
+  const pool = [];
+  const solidPool = new Map();
+  const addPool = (x, y, z) => { const id = pool.length / 3; pool.push(x, y, z); return id; };
+  for (const n of new Set(solidTets)) solidPool.set(n, addPool(...pt(V, n)));
+  const shellPool = [];
+  for (let s = 0; s < shells.shellVerts.length / 3; s++)
+    shellPool.push(addPool(shells.shellVerts[3 * s], shells.shellVerts[3 * s + 1], shells.shellVerts[3 * s + 2]));
+
+  const tets = solidTets.map((n) => solidPool.get(n));
+  const triangles = shells.shellTris.map((s) => shellPool[s]);
+  const ppt = (i) => [pool[3 * i], pool[3 * i + 1], pool[3 * i + 2]];
+
+  // body of each solid pool node (a conformal interface node carries >1 body)
+  const poolBody = new Map();
+  for (let t = 0; t < tets.length / 4; t++)
+    for (let k = 0; k < 4; k++) (poolBody.get(tets[4 * t + k]) ?? poolBody.set(tets[4 * t + k], new Set()).get(tets[4 * t + k])).add(tetBody[t]);
+
+  const solidCoupling = autoDetectSolidCouplings(ppt, poolBody, solidCouplingRadius);
+  const solidRefs = new Set(solidCoupling.ref);
+  const shellCoupling = autoDetectCouplings(ppt, [...solidPool.values()].filter((pi) => !solidRefs.has(pi)), shellPool, couplingRadius);
 
   return {
-    pool, tets, triangles, thicknesses: shells.shellThk,
-    solidPool, shellPool, tied,
-    coupling: { ref, offsets, solid },
+    pool, tets, tetBody, triangles, thicknesses: shells.shellThk,
+    solidPool, shellPool,
+    coupling: concatCouplings(shellCoupling, solidCoupling),
   };
 }

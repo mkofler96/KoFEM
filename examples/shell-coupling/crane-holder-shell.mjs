@@ -17,7 +17,7 @@
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { loadEngine, meshStep, extractThinWallShells, tieSolidBodies, buildCoupledModel } from "./lib.mjs";
+import { loadEngine, meshStep, extractThinWallShells, shellBodySliverTets, buildCoupledModel, dropCouplingsOnFixedNodes } from "./lib.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const STEP = join(here, "../../test_files/full-crane-hook.step");
@@ -48,12 +48,13 @@ console.log(
     `(t = ${Math.min(...shells.shellThk).toFixed(1)}–${Math.max(...shells.shellThk).toFixed(1)} mm)`,
 );
 
-// ── 3. weld touching solid bodies (pin↔hook near-hinge) ────────────────────────
-const tie = tieSolidBodies(mesh, shells.shellBody);
-console.log(`solid tie: welded ${tie.welded} node pairs across bodies`);
+// ── 3. classify the holder's thin-wall slivers (→ shells) vs its base (→ solid) ─
+const slivers = shellBodySliverTets(mesh, shells.shellBody);
 
 // ── 4. build the coupled node pool + distributing couplings ────────────────────
-const model = buildCoupledModel(mesh, shells, tie);
+// Pin/hook/base stay separate solid bodies joined by distributing couplings; a
+// gapped pin/hole interface becomes a force-and-moment tie, not a sparse hinge.
+const model = buildCoupledModel(mesh, shells, slivers);
 const nSolid = model.solidPool.size, nShell = model.shellPool.length;
 console.log(
   `coupled model: ${model.pool.length / 3} nodes (${nSolid} solid + ${nShell} shell), ` +
@@ -62,9 +63,13 @@ console.log(
 );
 
 // ── 5. boundary conditions + loads (by CAD face) ───────────────────────────────
-const fixed = [];
-for (let s = 0; s < nShell; s++)
-  if (shells.shellSrc[s] === BC_FIXED_FACE) for (let c = 0; c < 6; c++) fixed.push(6 * model.shellPool[s] + c);
+// Fix every node of a face-7 facet (fold nodes shared with the side walls carry the
+// wall's label, so a per-node test would drop them and let the walls hinge).
+const fixed = [], fixedLocal = new Set();
+for (let t = 0; t < shells.shellTris.length / 3; t++)
+  if (shells.shellTriSrc[t] === BC_FIXED_FACE)
+    for (let k = 0; k < 3; k++) fixedLocal.add(shells.shellTris[3 * t + k]);
+for (const s of fixedLocal) for (let c = 0; c < 6; c++) fixed.push(6 * model.shellPool[s] + c);
 if (fixed.length === 0) throw new Error(`no shell nodes on BC face ${BC_FIXED_FACE} — check the face id`);
 
 const loadNodes = new Map(Object.keys(LOAD_FACES).map((f) => [Number(f), new Set()]));
@@ -72,7 +77,7 @@ for (let t = 0; t < mesh.surfFace.length; t++) {
   const F = LOAD_FACES[mesh.surfFace[t]];
   if (!F) continue;
   for (const oi of [mesh.surfTri[3 * t], mesh.surfTri[3 * t + 1], mesh.surfTri[3 * t + 2]]) {
-    const pi = model.solidPool.get(model.tied(oi));
+    const pi = model.solidPool.get(oi);
     if (pi !== undefined) loadNodes.get(mesh.surfFace[t]).add(pi);
   }
 }
@@ -84,6 +89,8 @@ for (const [fid, F] of Object.entries(LOAD_FACES)) {
 console.log(`BCs: ${fixed.length / 6} fixed shell nodes (face ${BC_FIXED_FACE}); loads on ${[...loadNodes].map(([f, s]) => `f${f}:${s.size}`).join(" ")} solid nodes`);
 
 // ── 6. solve ───────────────────────────────────────────────────────────────────
+// Drop distributing couplings on the clamped rim (fixed RBE3 dependent, #377).
+const coupling = dropCouplingsOnFixedNodes(model.coupling, fixed);
 console.log("solving coupled crane…");
 const t0 = Date.now();
 const r = Module.solve_coupled(
@@ -94,9 +101,9 @@ const r = Module.solve_coupled(
     thicknesses: Float64Array.from(model.thicknesses),
   },
   {
-    ref: Int32Array.from(model.coupling.ref),
-    offsets: Int32Array.from(model.coupling.offsets),
-    solid: Int32Array.from(model.coupling.solid),
+    ref: Int32Array.from(coupling.ref),
+    offsets: Int32Array.from(coupling.offsets),
+    solid: Int32Array.from(coupling.solid),
   },
   { fixed_dofs: Int32Array.from(fixed), load_dofs: Int32Array.from(load_dofs), load_vals: Float64Array.from(load_vals) },
   JSON.stringify({ solid: STEEL, shell: STEEL }),

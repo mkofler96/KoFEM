@@ -12,15 +12,16 @@
 // It appends/replaces the "crane-hook-shell" entry, leaving the benchmark
 // entries produced by generate.mjs untouched.
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, copyFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
   loadEngine,
   meshStep,
   extractThinWallShells,
-  tieSolidBodies,
+  shellBodySliverTets,
   buildCoupledModel,
+  dropCouplingsOnFixedNodes,
 } from "../shell-coupling/lib.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -33,45 +34,85 @@ const LOAD_FACES = { 66: [0, -1000, 0], 67: [0, -1000, 0] };
 const Module = await loadEngine();
 const mesh = meshStep(Module, STEP, { maxElementSize: 6 });
 const shells = extractThinWallShells(mesh);
-const tie = tieSolidBodies(mesh, shells.shellBody);
-const model = buildCoupledModel(mesh, shells, tie);
+// Only the holder's thin walls become shells; its thick base block stays solid
+// (kept in the pool) so the load path through it into the pin/hook is preserved.
+// The pin/hook/base stay separate solid bodies joined by distributing couplings
+// (a gapped pin/hole interface is a force-and-moment tie, not a sparse hinge).
+const slivers = shellBodySliverTets(mesh, shells.shellBody);
+const model = buildCoupledModel(mesh, shells, slivers);
 const nShell = model.shellPool.length;
 
 // BCs + loads by CAD face (see crane-holder-shell.mjs). `fixedShellNodes` are the
 // shell POOL nodes clamped on the holder's fixed edge — kept alongside the flat
 // DOF list so the openable .vtu can persist them as a BC group (all 6 DOF).
+// Fix every shell node of a face-7 FACET (not just nodes labelled face 7): a fold
+// node where the flange meets a side wall is welded and carries the side wall's
+// label, so a per-node test drops the whole fold ring and lets the walls hinge
+// about it. Selecting per facet clamps the complete flange, fold included.
 const fixed = [];
 const fixedShellNodes = [];
-for (let s = 0; s < nShell; s++)
-  if (shells.shellSrc[s] === BC_FIXED_FACE) {
-    fixedShellNodes.push(model.shellPool[s]);
-    for (let c = 0; c < 6; c++) fixed.push(6 * model.shellPool[s] + c);
-  }
-const loadNodes = new Map(Object.keys(LOAD_FACES).map((f) => [Number(f), new Set()]));
+const fixedLocal = new Set();
+for (let t = 0; t < shells.shellTris.length / 3; t++)
+  if (shells.shellTriSrc[t] === BC_FIXED_FACE)
+    for (let k = 0; k < 3; k++) fixedLocal.add(shells.shellTris[3 * t + k]);
+for (const s of fixedLocal) {
+  fixedShellNodes.push(model.shellPool[s]);
+  for (let c = 0; c < 6; c++) fixed.push(6 * model.shellPool[s] + c);
+}
+const loadNodes = new Map(
+  Object.keys(LOAD_FACES).map((f) => [Number(f), new Set()]),
+);
 for (let t = 0; t < mesh.surfFace.length; t++) {
   const F = LOAD_FACES[mesh.surfFace[t]];
   if (!F) continue;
-  for (const oi of [mesh.surfTri[3 * t], mesh.surfTri[3 * t + 1], mesh.surfTri[3 * t + 2]]) {
-    const pi = model.solidPool.get(model.tied(oi));
+  for (const oi of [
+    mesh.surfTri[3 * t],
+    mesh.surfTri[3 * t + 1],
+    mesh.surfTri[3 * t + 2],
+  ]) {
+    const pi = model.solidPool.get(oi);
     if (pi !== undefined) loadNodes.get(mesh.surfFace[t]).add(pi);
   }
 }
-const load_dofs = [], load_vals = [];
+const load_dofs = [],
+  load_vals = [];
 for (const [fid, F] of Object.entries(LOAD_FACES)) {
   const ns = [...loadNodes.get(Number(fid))];
-  for (const pi of ns) for (let c = 0; c < 3; c++) if (F[c] !== 0) { load_dofs.push(6 * pi + c); load_vals.push(F[c] / ns.length); }
+  for (const pi of ns)
+    for (let c = 0; c < 3; c++)
+      if (F[c] !== 0) {
+        load_dofs.push(6 * pi + c);
+        load_vals.push(F[c] / ns.length);
+      }
 }
 
+// The clamped holder rim (face 7) sits next to the retained base solid; drop any
+// distributing coupling on those fixed nodes (a fixed RBE3 dependent is refused, #377).
+const coupling = dropCouplingsOnFixedNodes(model.coupling, fixed);
 const r = Module.solve_coupled(
-  { vertices: Float64Array.from(model.pool), tets: Int32Array.from(model.tets),
-    triangles: Int32Array.from(model.triangles), thicknesses: Float64Array.from(model.thicknesses) },
-  { ref: Int32Array.from(model.coupling.ref), offsets: Int32Array.from(model.coupling.offsets), solid: Int32Array.from(model.coupling.solid) },
-  { fixed_dofs: Int32Array.from(fixed), load_dofs: Int32Array.from(load_dofs), load_vals: Float64Array.from(load_vals) },
+  {
+    vertices: Float64Array.from(model.pool),
+    tets: Int32Array.from(model.tets),
+    triangles: Int32Array.from(model.triangles),
+    thicknesses: Float64Array.from(model.thicknesses),
+  },
+  {
+    ref: Int32Array.from(coupling.ref),
+    offsets: Int32Array.from(coupling.offsets),
+    solid: Int32Array.from(coupling.solid),
+  },
+  {
+    fixed_dofs: Int32Array.from(fixed),
+    load_dofs: Int32Array.from(load_dofs),
+    load_vals: Float64Array.from(load_vals),
+  },
   JSON.stringify({ solid: STEEL, shell: STEEL }),
 );
 if ("error" in r) throw new Error(r.error);
 if (!r.von_mises_tets || !r.von_mises_tris)
-  throw new Error("solve_coupled did not return per-element von Mises fields — rebuild the WASM engine");
+  throw new Error(
+    "solve_coupled did not return per-element von Mises fields — rebuild the WASM engine",
+  );
 
 // ── Openable analysis (.vtu) — a MIXED CTRIA3 + CTETRA model ───────────────────
 //
@@ -111,18 +152,30 @@ function buildCraneVtu() {
   const nTets = model.tets.length / 4;
   const nTris = model.triangles.length / 3;
 
-  // One solid property (PSOLID) plus one shell property (PSHELL) per distinct
-  // wall thickness — the store carries a single thickness per property.
-  const SOLID_PROP = 1;
+  // One PSOLID per distinct solid body (pin / hook / holder base) so the re-solved
+  // .vtu can tell the bodies apart and re-derive the distributing tie across the
+  // pin/hole clearance; plus one PSHELL per distinct wall thickness.
+  const properties = [];
+  const propOfBody = new Map();
+  let nextProp = 1;
+  for (const b of model.tetBody) {
+    if (propOfBody.has(b)) continue;
+    propOfBody.set(b, nextProp);
+    properties.push({ id: nextProp, type: "PSOLID", materialId: 1 });
+    nextProp++;
+  }
   const thkKey = (t) => Number(t.toFixed(6));
   const propOfThk = new Map();
-  const properties = [{ id: SOLID_PROP, type: "PSOLID", materialId: 1 }];
-  let nextProp = 2;
   for (const t of model.thicknesses) {
     const key = thkKey(t);
     if (propOfThk.has(key)) continue;
     propOfThk.set(key, nextProp);
-    properties.push({ id: nextProp, type: "PSHELL", materialId: 1, thickness: key });
+    properties.push({
+      id: nextProp,
+      type: "PSHELL",
+      materialId: 1,
+      thickness: key,
+    });
     nextProp++;
   }
 
@@ -144,14 +197,23 @@ function buildCraneVtu() {
   };
   for (let e = 0; e < nTets; e++)
     pushCell(
-      [model.tets[4 * e], model.tets[4 * e + 1], model.tets[4 * e + 2], model.tets[4 * e + 3]],
+      [
+        model.tets[4 * e],
+        model.tets[4 * e + 1],
+        model.tets[4 * e + 2],
+        model.tets[4 * e + 3],
+      ],
       10, // VTK_TETRA
       "CTETRA",
-      SOLID_PROP,
+      propOfBody.get(model.tetBody[e]),
     );
   for (let t = 0; t < nTris; t++)
     pushCell(
-      [model.triangles[3 * t], model.triangles[3 * t + 1], model.triangles[3 * t + 2]],
+      [
+        model.triangles[3 * t],
+        model.triangles[3 * t + 1],
+        model.triangles[3 * t + 2],
+      ],
       5, // VTK_TRIANGLE
       "CTRIA3",
       propOfThk.get(thkKey(model.thicknesses[t])),
@@ -199,7 +261,11 @@ function buildCraneVtu() {
         dofs: [0, 1, 2, 3, 4, 5],
         value: 0,
         faces: [
-          { id: 1, label: `Fixed holder edge (${fixedIds.length} nodes)`, nodeIds: fixedIds },
+          {
+            id: 1,
+            label: `Fixed holder edge (${fixedIds.length} nodes)`,
+            nodeIds: fixedIds,
+          },
         ],
       },
     ],
@@ -226,9 +292,14 @@ function buildCraneVtu() {
 
   const points = [];
   for (let v = 0; v < nPool; v++)
-    points.push(`${model.pool[3 * v]} ${model.pool[3 * v + 1]} ${model.pool[3 * v + 2]}`);
+    points.push(
+      `${model.pool[3 * v]} ${model.pool[3 * v + 1]} ${model.pool[3 * v + 2]}`,
+    );
   const nodeIds = Array.from({ length: nPool }, (_, i) => i + 1).join(" ");
-  const elementIds = Array.from({ length: nTets + nTris }, (_, i) => i + 1).join(" ");
+  const elementIds = Array.from(
+    { length: nTets + nTris },
+    (_, i) => i + 1,
+  ).join(" ");
   const vonMises = [...r.von_mises_tets, ...r.von_mises_tris];
   const encoded = encodeKofemFieldData(JSON.stringify(meta));
 
@@ -271,36 +342,76 @@ const disp = r.displacements;
 const pool = model.pool;
 
 // solid boundary = tet faces used by exactly one solid tet
-const TF = [[0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3]];
-const fc = new Map(), fn = new Map();
+const TF = [
+  [0, 1, 2],
+  [0, 1, 3],
+  [0, 2, 3],
+  [1, 2, 3],
+];
+const fc = new Map(),
+  fn = new Map();
 for (let e = 0; e < model.tets.length / 4; e++) {
-  const p = [model.tets[4 * e], model.tets[4 * e + 1], model.tets[4 * e + 2], model.tets[4 * e + 3]];
-  for (const f of TF) { const v = [p[f[0]], p[f[1]], p[f[2]]]; const k = [...v].sort((a, b) => a - b).join(","); const c = fc.get(k); if (c) c.n++; else { fc.set(k, { n: 1 }); fn.set(k, v); } }
+  const p = [
+    model.tets[4 * e],
+    model.tets[4 * e + 1],
+    model.tets[4 * e + 2],
+    model.tets[4 * e + 3],
+  ];
+  for (const f of TF) {
+    const v = [p[f[0]], p[f[1]], p[f[2]]];
+    const k = [...v].sort((a, b) => a - b).join(",");
+    const c = fc.get(k);
+    if (c) c.n++;
+    else {
+      fc.set(k, { n: 1 });
+      fn.set(k, v);
+    }
+  }
 }
 const surfaceTris = [];
 for (const [k, c] of fc) if (c.n === 1) surfaceTris.push(fn.get(k));
-for (let t = 0; t < model.triangles.length / 3; t++) surfaceTris.push([model.triangles[3 * t], model.triangles[3 * t + 1], model.triangles[3 * t + 2]]);
+for (let t = 0; t < model.triangles.length / 3; t++)
+  surfaceTris.push([
+    model.triangles[3 * t],
+    model.triangles[3 * t + 1],
+    model.triangles[3 * t + 2],
+  ]);
 
 // compact remap to used surface vertices, with per-vertex displacement + magnitude
-const remap = new Map(), positions = [], displacements = [], magnitudes = [];
-let magMin = Infinity, magMax = -Infinity;
+const remap = new Map(),
+  positions = [],
+  displacements = [],
+  magnitudes = [];
+let magMin = Infinity,
+  magMax = -Infinity;
 const idxOf = (g) => {
   let i = remap.get(g);
   if (i === undefined) {
-    i = remap.size; remap.set(g, i);
+    i = remap.size;
+    remap.set(g, i);
     positions.push(pool[3 * g], pool[3 * g + 1], pool[3 * g + 2]);
-    const dx = disp[3 * g], dy = disp[3 * g + 1], dz = disp[3 * g + 2];
+    const dx = disp[3 * g],
+      dy = disp[3 * g + 1],
+      dz = disp[3 * g + 2];
     displacements.push(dx, dy, dz);
-    const m = Math.hypot(dx, dy, dz); magnitudes.push(m);
-    magMin = Math.min(magMin, m); magMax = Math.max(magMax, m);
+    const m = Math.hypot(dx, dy, dz);
+    magnitudes.push(m);
+    magMin = Math.min(magMin, m);
+    magMax = Math.max(magMax, m);
   }
   return i;
 };
 const triangles = [];
-for (const [a, b, c] of surfaceTris) triangles.push(idxOf(a), idxOf(b), idxOf(c));
+for (const [a, b, c] of surfaceTris)
+  triangles.push(idxOf(a), idxOf(b), idxOf(c));
 
-let mn = [Infinity, Infinity, Infinity], mx = [-Infinity, -Infinity, -Infinity];
-for (let i = 0; i < positions.length / 3; i++) for (let k = 0; k < 3; k++) { mn[k] = Math.min(mn[k], positions[3 * i + k]); mx[k] = Math.max(mx[k], positions[3 * i + k]); }
+let mn = [Infinity, Infinity, Infinity],
+  mx = [-Infinity, -Infinity, -Infinity];
+for (let i = 0; i < positions.length / 3; i++)
+  for (let k = 0; k < 3; k++) {
+    mn[k] = Math.min(mn[k], positions[3 * i + k]);
+    mx[k] = Math.max(mx[k], positions[3 * i + k]);
+  }
 const modelSize = Math.max(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2], 1e-9);
 const deformScale = magMax < 1e-30 ? 1 : (0.2 * modelSize) / magMax;
 const round = (a, p) => a.map((x) => Number(x.toPrecision(p)));
@@ -320,11 +431,15 @@ const entry = {
     { k: "max displacement", v: `${magMax.toPrecision(3)} mm` },
     { k: "coupled solve", v: `converged · ${r.iterations} it`, pass: true },
   ],
-  referenceLabel: "shell holder ↔ solid pin/hook · distributing (RBE3) coupling",
+  referenceLabel:
+    "shell holder ↔ solid pin/hook · distributing (RBE3) coupling",
   colorLabel: "Displacement magnitude",
   viewer: {
     center: [(mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2, (mn[2] + mx[2]) / 2],
-    modelSize, deformScale, magMin, magMax,
+    modelSize,
+    deformScale,
+    magMin,
+    magMax,
     positions: round(positions, 7),
     displacements: round(displacements, 6),
     magnitudes: round(magnitudes, 6),
@@ -334,8 +449,15 @@ const entry = {
 
 writeFileSync(join(outDir, "crane-hook-shell.vtu"), buildCraneVtu());
 
+// Ship the source STEP next to the .vtu so "Open in KoFEM web" can re-mesh and
+// re-solve the model (App.tsx restores stepBytes from /examples/<id>.step). The
+// saved .vtu itself carries no STEP.
+copyFileSync(STEP, join(outDir, "crane-hook-shell.step"));
+
 const manifestPath = join(outDir, "examples.json");
-const manifest = JSON.parse(readFileSync(manifestPath, "utf8")).filter((e) => e.id !== entry.id);
+const manifest = JSON.parse(readFileSync(manifestPath, "utf8")).filter(
+  (e) => e.id !== entry.id,
+);
 manifest.push(entry);
 writeFileSync(manifestPath, JSON.stringify(manifest));
 console.log(

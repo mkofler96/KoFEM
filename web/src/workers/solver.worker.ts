@@ -15,14 +15,16 @@ import {
 } from "./tie.js";
 import {
   extractThinWallShells,
-  tieSolidBodies,
+  shellBodySliverTets,
   buildCoupledModel,
   buildExplicitCoupledModel,
+  dropCouplingsOnFixedNodes,
   shellNodeLocator,
   isShellPoolIndex,
   type CoupledModel,
   type ShellizeMesh,
 } from "../lib/shellize.js";
+import { detectShellBodies } from "../lib/thinBodies.js";
 
 let Module: KofemModule | null = null;
 
@@ -121,6 +123,10 @@ interface Property {
   id: number;
   materialId: number;
   thickness?: number;
+  // Per-body discretisation chosen before meshing: "shell" idealises the body's
+  // thin walls as shells, "solid" keeps it as tets. Undefined on legacy models
+  // (no per-body choice) — the auto-shell path then auto-detects thin bodies.
+  discretization?: "shell" | "solid";
 }
 interface Constraint {
   nodeId: number;
@@ -189,6 +195,14 @@ function handleParseStep(id: number, payload: ParseStepPayload) {
   // tessellate_step stores the OCCT shape in the module — record that so a
   // subsequent volume_mesh in this same worker can skip the reload.
   geometryLoaded = true;
+  // Thin-walled bodies (a ray cast inward from the surface finds an opposite wall
+  // close by, relative to the body's size) are preselected as shells — before any
+  // volume mesh exists, purely from the tessellation.
+  const shellBodyIds = detectShellBodies({
+    vertices,
+    triangles,
+    triangleBodyIds,
+  });
   // Return as {points, triangles} to match the StepTessellation type used by
   // the store; tessellate_step returns flat Float32/Uint32 typed arrays.
   // bodyCount (#353) drives the per-body material assignment UI; bodyIds
@@ -200,6 +214,7 @@ function handleParseStep(id: number, payload: ParseStepPayload) {
     triangles: chunk3(triangles),
     bodyIds: Array.from(triangleBodyIds),
     bodyCount,
+    shellBodyIds,
   });
 }
 
@@ -941,7 +956,7 @@ function mapCoupledDisplacements(
 ): Float64Array {
   const displacements = new Float64Array(3 * nodes.length);
   for (let i = 0; i < nodes.length; i++) {
-    const sp = model.solidPool.get(model.tied(i));
+    const sp = model.solidPool.get(i);
     const pi =
       sp !== undefined
         ? sp
@@ -953,10 +968,14 @@ function mapCoupledDisplacements(
   return displacements;
 }
 
-// Von Mises per ORIGINAL element. Solid-body elements map 1:1 (the coupled
-// tets were appended in element order, skipping the shelled body). Elements
-// of the shelled body take the stress of the shell node nearest their
-// centroid — per shell node, the worst adjacent facet's surface stress.
+// Von Mises per ORIGINAL element. Solid tets map 1:1 in the order they were
+// appended to the pool (every element that is NOT a shelled-body wall sliver,
+// which now includes the shelled body's retained base tets). The wall-sliver
+// elements of the shelled body take the stress of the shell node nearest their
+// centroid — per shell node, the worst adjacent facet's surface stress. The
+// append order in buildCoupledModel is the element iteration order below, so a
+// single `solidIdx` cursor over vmTets stays aligned as long as we consume it for
+// exactly the non-sliver elements.
 function mapCoupledVonMises(
   vmTets: Float64Array,
   vmTris: Float64Array,
@@ -965,6 +984,7 @@ function mapCoupledVonMises(
   model: CoupledModel,
   nearestShell: (p: [number, number, number]) => number,
   shellBody: number,
+  sliverTets: Set<number>,
 ): Float64Array {
   const vmByShellNode = new Map<number, number>();
   for (let t = 0; t < model.triangles.length / 3; t++) {
@@ -981,7 +1001,9 @@ function mapCoupledVonMises(
   const vonMises = new Float64Array(elements.length);
   let solidIdx = 0;
   for (let e = 0; e < elements.length; e++) {
-    if (elements[e].propertyId !== shellBody) {
+    // Solid tet (any other body, or the shelled body's retained base) → 1:1.
+    // Only the shelled body's wall slivers are represented by shells.
+    if (!(elements[e].propertyId === shellBody && sliverTets.has(e))) {
       vonMises[e] = vmTets[solidIdx++];
     } else {
       let cx = 0,
@@ -1006,10 +1028,12 @@ function mapCoupledVonMises(
   return vonMises;
 }
 
-// Returns the coupled displacement/von-Mises result, or null when the model has
-// no thin-walled body to shell (→ the caller runs the all-solid path).
+// Returns the coupled displacement/von-Mises result, or null when no body is
+// marked Shell (→ the caller runs the all-solid path). `shellBodyIds` is the
+// per-body Shell choice (property ids); an empty set means every body is solid.
 function tryCoupledSolve(
   payload: SolvePayload,
+  shellBodyIds: Set<number>,
 ): { displacements: Float64Array; vonMises: Float64Array } | null {
   const {
     nodes,
@@ -1037,17 +1061,29 @@ function tryCoupledSolve(
     surfaceFaceIds,
     vid,
   );
-  const shells = extractThinWallShells(mesh);
-  if (shells.shellBody < 0) return null; // no thin walls → all-solid path
+  if (shellBodyIds.size === 0) return null; // every body solid → all-solid path
+  const shells = extractThinWallShells(mesh, { shellBodyIds });
+  if (shells.shellBody < 0)
+    // A body is marked Shell but has no detectable thin walls — refuse loudly
+    // rather than silently solving it as solid (which would ignore the choice).
+    throw new Error(
+      `Shell idealisation failed: body ${[...shellBodyIds].join(", ")} is marked "Shell" but no ` +
+        "thin walls were found in it. Switch it to Solid, or check that it is genuinely thin-walled.",
+    );
 
-  const tieRep = tieSolidBodies(mesh, shells.shellBody);
-  const model = buildCoupledModel(mesh, shells, tieRep);
+  // Only the shelled body's thin walls become shells; its thick base tets stay
+  // solid (kept in the pool) so the load path through them is not lost. Distinct
+  // solid bodies keep their own nodes and are tied by distributing couplings
+  // (buildCoupledModel), not node-merging, so a gapped pin/hole interface is a
+  // proper force-and-moment tie instead of a sparse near-hinge.
+  const slivers = shellBodySliverTets(mesh, shells.shellBody);
+  const model = buildCoupledModel(mesh, shells, slivers);
   if (model.coupling.ref.length === 0) return null; // shell doesn't couple to the solid
 
   const nearestShell = shellNodeLocator(model);
   const poolOf = (nodeId: number): number => {
     const vi = vid(nodeId, "coupled bc");
-    const sp = model.solidPool.get(model.tied(vi));
+    const sp = model.solidPool.get(vi);
     if (sp !== undefined) return sp;
     return nearestShell([
       mesh.V[3 * vi],
@@ -1059,18 +1095,30 @@ function tryCoupledSolve(
   const fixed_dofs = coupledFixedDofs(constraints, poolOf, (pi) =>
     isShellPoolIndex(model, pi),
   );
+  // A clamped shell rim can sit next to the retained base solid; the proximity
+  // detector would otherwise couple the very nodes the user fixed (engine refuses
+  // a fixed coupling-dependent node, #377). The BC wins.
+  const coupling = dropCouplingsOnFixedNodes(model.coupling, fixed_dofs);
   const { load_dofs, load_vals } = coupledLoads(loads, surfaceLoads, poolOf);
 
-  // Solid bodies actually present in the coupled tet mesh (the shelled body is
-  // excluded — it becomes shell elements). coupledMaterials rejects the case
-  // where these span more than one distinct material (issue #376).
+  // Solid bodies that actually contribute solid tets to the pool: the other
+  // bodies plus the shelled body when its thick base survived (only its thin walls
+  // became shells). A body that is ENTIRELY shelled contributes none, so it is not
+  // part of the solid domain and its material must not be validated as such — the
+  // sliver set (tet indices in tetElements order) tells them apart. They are
+  // assembled with the single `solid` (E, ν); coupledMaterials rejects the case
+  // where the solid domain spans more than one material (issue #376).
   const solidBodyIds = [
-    ...new Set(tetElements.map((e) => e.propertyId)),
-  ].filter((pid) => pid !== shells.shellBody);
+    ...new Set(
+      tetElements
+        .filter((_el, idx) => !slivers.has(idx))
+        .map((el) => el.propertyId),
+    ),
+  ];
 
   self.postMessage({
     id: 0,
-    log: `[auto-shell] body ${shells.shellBody}: ${shells.walls.length} thin walls → ${model.shellPool.length} shell nodes, ${model.tets.length / 4} solid tets, ${model.coupling.ref.length} couplings`,
+    log: `[auto-shell] body ${shells.shellBody}: ${shells.walls.length} thin walls → ${model.shellPool.length} shell nodes, ${model.tets.length / 4} solid tets, ${coupling.ref.length} couplings`,
   });
 
   const result = m().solve_coupled(
@@ -1081,9 +1129,9 @@ function tryCoupledSolve(
       thicknesses: Float64Array.from(model.thicknesses),
     },
     {
-      ref: Int32Array.from(model.coupling.ref),
-      offsets: Int32Array.from(model.coupling.offsets),
-      solid: Int32Array.from(model.coupling.solid),
+      ref: Int32Array.from(coupling.ref),
+      offsets: Int32Array.from(coupling.offsets),
+      solid: Int32Array.from(coupling.solid),
     },
     {
       fixed_dofs: Int32Array.from(fixed_dofs),
@@ -1110,6 +1158,7 @@ function tryCoupledSolve(
     model,
     nearestShell,
     shells.shellBody,
+    slivers,
   );
   return { displacements, vonMises };
 }
@@ -1232,12 +1281,16 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
     verts[3 * i + 2] = nodes[i].z;
   }
   const solidTets: number[] = [];
+  // Per-tet body label = the solid element's property (body) id, so the coupled
+  // model can tie distinct solid bodies (a pin in a hole) across their clearance.
+  const solidTetBody: number[] = [];
   for (const el of solidElements) {
     if (el.nodeIds.length !== 4)
       throw new Error(
         `CTETRA element ${el.id} has ${el.nodeIds.length} nodes — expected 4`,
       );
     for (const nid of el.nodeIds) solidTets.push(vid(nid, "CTETRA element"));
+    solidTetBody.push(el.propertyId);
   }
   const shellTris: number[] = [];
   for (const el of shellElements) {
@@ -1252,6 +1305,7 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
   const model = buildExplicitCoupledModel(
     verts,
     solidTets,
+    solidTetBody,
     shellTris,
     thicknesses,
   );
@@ -1268,6 +1322,10 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
   const fixed_dofs = coupledFixedDofs(constraints, poolOf, (pi) =>
     model.shellPoolIndex.has(pi),
   );
+  // A clamped shell node that also sits within coupling range of the solid would
+  // be both fixed and a distributing-coupling dependent — the engine refuses that
+  // (#377). The BC wins; drop the coupling on those nodes.
+  const coupling = dropCouplingsOnFixedNodes(model.coupling, fixed_dofs);
   const { load_dofs, load_vals } = coupledLoads(loads, surfaceLoads, poolOf);
   const mat = mixedCoupledMaterials(
     materials,
@@ -1278,7 +1336,7 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
 
   self.postMessage({
     id,
-    log: `[mixed] ${solidElements.length} solid tets, ${shellElements.length} shell facets → ${model.pool.length / 3} pool nodes, ${model.coupling.ref.length} couplings…`,
+    log: `[mixed] ${solidElements.length} solid tets, ${shellElements.length} shell facets → ${model.pool.length / 3} pool nodes, ${coupling.ref.length} couplings…`,
   });
 
   const result = m().solve_coupled(
@@ -1289,9 +1347,9 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
       thicknesses: Float64Array.from(model.thicknesses),
     },
     {
-      ref: Int32Array.from(model.coupling.ref),
-      offsets: Int32Array.from(model.coupling.offsets),
-      solid: Int32Array.from(model.coupling.solid),
+      ref: Int32Array.from(coupling.ref),
+      offsets: Int32Array.from(coupling.offsets),
+      solid: Int32Array.from(coupling.solid),
     },
     {
       fixed_dofs: Int32Array.from(fixed_dofs),
@@ -1349,11 +1407,17 @@ function handleSolve(id: number, payload: SolvePayload) {
     return;
   }
 
-  // Auto-shell: a thin-walled body of a multibody assembly is idealised as shells
-  // and solved coupled to the solid bodies — this converges where the all-solid
-  // solve of the thin part stalls (#358). Falls back to the all-solid path below
-  // when there is no thin-walled body to shell.
-  const coupled = tryCoupledSolve(payload);
+  // A body marked "Shell" is idealised as shells and solved coupled to the solid
+  // bodies — this converges where the all-solid solve of the thin part stalls
+  // (#358). Which bodies are shells is the per-body Shell/Solid choice
+  // (Property.discretization), set for every body at import by detectShellBodies
+  // and editable in the UI. No bodies marked Shell ⇒ the all-solid path.
+  const shellBodyIds = new Set(
+    payload.properties
+      .filter((p) => p.discretization === "shell")
+      .map((p) => p.id),
+  );
+  const coupled = tryCoupledSolve(payload, shellBodyIds);
   if (coupled) {
     self.postMessage({
       id,

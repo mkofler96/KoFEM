@@ -780,9 +780,20 @@ ShellResult solve_solid_shell_core(const CoupledInput& in) {
         if (d < 0 || d >= nDof) throw std::runtime_error("coupled: fixed DOF out of range");
         fixed[d] = 1;
     }
-    // Solid-only nodes have no rotational stiffness → auto-fix their rotations.
+    // A distributing-coupling reference node has all six DOFs eliminated (they
+    // become the RBE3 average of its target nodes), so its rotations must NOT be
+    // auto-fixed — a fixed dependent DOF is a conflict the reduction rejects
+    // (#377). This lets a SOLID node be a coupling reference, which is how a
+    // gapped solid↔solid interface (a pin in a hole: the two surfaces do not share
+    // nodes) is tied: the pin surface nodes distribute onto the hole surface,
+    // transmitting force and moment across the clearance without merging nodes.
+    std::vector<char> is_coupling_ref(nNodes, 0);
+    for (const auto& cp : in.couplings)
+        if (cp.ref_node >= 0 && cp.ref_node < nNodes) is_coupling_ref[cp.ref_node] = 1;
+    // Solid-only nodes have no rotational stiffness → auto-fix their rotations
+    // (unless they are a coupling reference, whose rotations are eliminated).
     for (int n = 0; n < nNodes; ++n)
-        if (is_shell[n] == 0) {
+        if (is_shell[n] == 0 && is_coupling_ref[n] == 0) {
             const size_t n6 = 6 * static_cast<size_t>(n);
             for (size_t c = 3; c < 6; ++c) fixed[n6 + c] = 1;
         }
