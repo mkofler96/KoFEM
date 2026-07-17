@@ -71,6 +71,18 @@ struct Coupling {
     int ref_node = -1;                   // shell node whose 6 DOFs are dependent
     std::vector<int> solid_nodes;        // solid nodes it distributes to
     std::vector<double> weights;         // per solid node (empty ⇒ equal weights)
+    // Relaxed shell-to-solid MPC (Lu, Zhang & Yang, "A Relaxed MPC Method for
+    // Non-rigid Shell to Solid Coupling", J. Phys.: Conf. Ser. 2528 012064, 2023).
+    // When true, the reference (shell) node's translations are rigidly tied to its
+    // nearest solid node — a coincident-node tie that enforces displacement
+    // CONTINUITY at the junction (unlike the distributing RBE3 average, which only
+    // matches the resultant and lets the shell separate) — and its rotations follow
+    // the relaxation-scaled least-squares rotation of the coupled solid nodes.
+    // Appropriate for a continuous-material seam (a thin wall idealised as shell,
+    // tied back to the retained solid); the distributing coupling (mpc = false)
+    // stays for genuinely gapped, non-conforming interfaces (a pin in a hole).
+    bool mpc = false;
+    double relaxation = 1.0;  // ψ scaling the rotation transfer; paper uses [0.5, 1]
 };
 
 // The solid stiffness enters as assembled triplets over a 3-DOF/node numbering

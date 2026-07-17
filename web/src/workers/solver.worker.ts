@@ -797,6 +797,14 @@ function handleShellSolve(id: number, payload: SolvePayload) {
 
 // ── Auto-shell coupled solve ────────────────────────────────────────────────
 
+// Relaxation factor ψ for the shell↔solid MPC coupling (Lu, Zhang & Yang 2023,
+// "A Relaxed MPC Method for Non-rigid Shell to Solid Coupling", J. Phys.: Conf.
+// Ser. 2528 012064). ψ ∈ [0.5, 1]: 1 is the classical rigid MPC, < 1 relaxes the
+// rotation transfer to avoid the artificial over-stiffening of a fully rigid tie.
+// The rigid translation tie (mpc = 1 in the coupling set) is ψ-independent and is
+// what restores displacement continuity across the shell/solid seam.
+const SHELL_SOLID_MPC_RELAXATION = 1.0;
+
 // Flat 0-based mesh for the shellize pipeline, built from the store model.
 function buildShellizeMesh(
   nodes: Node[],
@@ -1132,6 +1140,8 @@ function tryCoupledSolve(
       ref: Int32Array.from(coupling.ref),
       offsets: Int32Array.from(coupling.offsets),
       solid: Int32Array.from(coupling.solid),
+      mpc: Int32Array.from(coupling.mpc ?? coupling.ref.map(() => 0)),
+      relaxation: SHELL_SOLID_MPC_RELAXATION,
     },
     {
       fixed_dofs: Int32Array.from(fixed_dofs),
@@ -1597,6 +1607,8 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
       ref: Int32Array.from(coupling.ref),
       offsets: Int32Array.from(coupling.offsets),
       solid: Int32Array.from(coupling.solid),
+      mpc: Int32Array.from(coupling.mpc ?? coupling.ref.map(() => 0)),
+      relaxation: SHELL_SOLID_MPC_RELAXATION,
     },
     {
       fixed_dofs: Int32Array.from(fixed_dofs),

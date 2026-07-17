@@ -222,6 +222,47 @@ double coupled_moment_transfer() {
     return w / ref;
 }
 
+// Relaxed-MPC shell-to-solid coupling (Lu, Zhang & Yang 2023): the same
+// cantilever-on-anchors, but the root is tied with the MPC coupling (rigid
+// translation to the nearest anchor + relaxed least-squares rotation) instead of
+// the distributing RBE3. With the anchors fully fixed the MPC clamps the root
+// exactly (u_R = u_S = 0, Θ_R = 0), so it must reproduce the clamped cantilever —
+// verifying the MPC branch of build_rbe3_constraints assembles and reduces. Runs
+// both the rigid (ψ = 1) and relaxed (ψ = 0.5) settings.
+double coupled_mpc_clamped(double psi) {
+    const double L = 2.0, b = 0.3, t = 0.01, E = 2.1e11, nu = 0.3, P = 100.0;
+    const int nx = 20, ny = 4;
+    auto id = [&](int i, int j) { return i * (ny + 1) + j; };
+    std::vector<double> V; std::vector<int> Tr; std::vector<int> root, tip;
+    for (int i = 0; i <= nx; ++i)
+        for (int j = 0; j <= ny; ++j) { V.push_back(L * i / nx); V.push_back(b * j / ny); V.push_back(0); }
+    for (int i = 0; i < nx; ++i)
+        for (int j = 0; j < ny; ++j) {
+            const int a = id(i,j), c = id(i+1,j), d = id(i+1,j+1), e = id(i,j+1);
+            Tr.push_back(a); Tr.push_back(c); Tr.push_back(d); Tr.push_back(a); Tr.push_back(d); Tr.push_back(e);
+        }
+    for (int j = 0; j <= ny; ++j) { root.push_back(id(0, j)); tip.push_back(id(nx, j)); }
+    const int aBase = (nx + 1) * (ny + 1);
+    V.insert(V.end(), {-0.1, 0.0, 0.0,  -0.1, b, 0.0,  -0.1, b / 2, 0.1});  // 3 anchors
+    CoupledInput in;
+    in.n_nodes = aBase + 3; in.vertices = V; in.triangles = Tr;
+    in.shell_young = E; in.shell_poisson = nu; in.thickness = t;
+    for (int rn : root) {
+        Coupling cp; cp.ref_node = rn; cp.solid_nodes = {aBase, aBase + 1, aBase + 2};
+        cp.mpc = true; cp.relaxation = psi;
+        in.couplings.push_back(cp);
+    }
+    for (int aa = 0; aa < 3; ++aa) for (int c = 0; c < 3; ++c) in.fixed_dofs.push_back(6 * (aBase + aa) + c);
+    for (int tn : tip) in.loads.emplace_back(6 * tn + 2, P / (double)tip.size());
+    ShellResult r = solve_solid_shell_core(in);
+    double w = 0;
+    for (int tn : tip) w += r.dofs[6 * static_cast<size_t>(tn) + 2];
+    w /= tip.size();
+    const double I = b * t * t * t / 12.0, ref = P * L * L * L / (3 * E * I);
+    printf("  [coupled] MPC(psi=%.1f) clamped-cantilever w %.4e vs %.4e\n", psi, w, ref);
+    return w / ref;
+}
+
 // A fixed-DOF constraint that lands on an RBE3 coupling reference node (a
 // dependent, shell-side DOF) must be rejected loudly, not silently dropped
 // (issue #377). Reuses the cantilever-on-anchors coupling: every root node is a
@@ -281,6 +322,8 @@ int main() {
     printf("Coupled solid + shell (distributing coupling):\n");
     check(failures, "coupled-tet-tension", coupled_tet_tension(), 1.0, 0.2);
     check(failures, "coupled-moment-transfer", coupled_moment_transfer(), 1.0, 6.0);
+    check(failures, "coupled-mpc-clamped-rigid", coupled_mpc_clamped(1.0), 1.0, 6.0);
+    check(failures, "coupled-mpc-clamped-relaxed", coupled_mpc_clamped(0.5), 1.0, 6.0);
 
     printf("Constraint-on-dependent-node rejection (issue #377):\n");
     {
