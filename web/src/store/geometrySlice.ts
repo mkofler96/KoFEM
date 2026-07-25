@@ -117,6 +117,10 @@ export interface GeometrySlice {
     modelName: string,
     surfaceTriangles?: [number, number, number][] | null,
     surfaceFaceIds?: number[] | null,
+    // Property table returned by a mesh that idealised thin walls as shells
+    // (#397): the solid bodies' own properties plus one PSHELL per distinct wall
+    // thickness. Absent for a plain all-solid mesh, which leaves properties as-is.
+    properties?: Property[] | null,
   ): void;
 }
 
@@ -244,10 +248,18 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       s.stepImportError = msg;
     }),
 
-  applyMeshResult: (nodes, elements, name, surfaceTriangles, surfaceFaceIds) =>
+  applyMeshResult: (
+    nodes,
+    elements,
+    name,
+    surfaceTriangles,
+    surfaceFaceIds,
+    properties,
+  ) =>
     set((s) => {
       s.nodes = nodes;
       s.elements = elements;
+      if (properties) s.properties = properties;
       s.surfaceTriangles = surfaceTriangles ?? null;
       s.surfaceFaceIds = surfaceFaceIds ?? null;
       s.bcGroups = [];

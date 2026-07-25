@@ -3,7 +3,7 @@
 
 import { useState } from "react";
 import { useModelStore } from "../store/modelStore";
-import type { Node, Element } from "../store/modelStore";
+import type { Node, Element, Property } from "../store/modelStore";
 import { sendToWorker, resetWorker } from "../workers/sharedWorker";
 import { useWorkerLogs } from "./useWorkerLogs";
 
@@ -17,6 +17,7 @@ export function useMesh() {
   const isMeshing = useModelStore((s) => s.isMeshing);
   const setMeshing = useModelStore((s) => s.setMeshing);
   const applyMeshResult = useModelStore((s) => s.applyMeshResult);
+  const properties = useModelStore((s) => s.properties);
   const elementOrder = useModelStore((s) => s.elementOrder);
   const setElementOrder = useModelStore((s) => s.setElementOrder);
 
@@ -41,11 +42,13 @@ export function useMesh() {
       const {
         nodes: meshNodes,
         elements: meshElements,
+        properties: meshProperties,
         surfaceTriangles,
         surfaceFaceIds,
       } = await sendToWorker<{
         nodes: Node[];
         elements: Element[];
+        properties?: Property[];
         surfaceTriangles: [number, number, number][] | null;
         surfaceFaceIds: number[] | null;
       }>("volume_mesh", {
@@ -53,6 +56,13 @@ export function useMesh() {
         format: geometryFormat,
         maxElementSize,
         minElementSize,
+        // Bodies the user (or detectShellBodies at import) marked Shell, plus the
+        // property table: meshing idealises their thin walls to a mid-surface
+        // shell mesh and returns the mixed CTRIA3 + CTETRA model (#397).
+        shellBodyIds: properties
+          .filter((p) => p.discretization === "shell")
+          .map((p) => p.id),
+        properties,
       });
       applyMeshResult(
         meshNodes,
@@ -60,6 +70,7 @@ export function useMesh() {
         "STEP Volume Mesh",
         surfaceTriangles,
         surfaceFaceIds,
+        meshProperties,
       );
       // Netgen's Ng_Init() installs global C++ state that contaminates the WASM
       // runtime for subsequent MFEM solves.  Resetting the worker here gives the
