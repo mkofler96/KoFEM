@@ -100,6 +100,10 @@ const r = Module.solve_coupled(
     ref: Int32Array.from(coupling.ref),
     offsets: Int32Array.from(coupling.offsets),
     solid: Int32Array.from(coupling.solid),
+    // Shell<->solid seam tied with the relaxed MPC coupling, exactly as the app
+    // does when this .vtu is loaded and re-solved (web/src/workers/solver.worker.ts).
+    mpc: Int32Array.from(coupling.mpc ?? coupling.ref.map(() => 0)),
+    relaxation: 1.0,
   },
   {
     fixed_dofs: Int32Array.from(fixed),

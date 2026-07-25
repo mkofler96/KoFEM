@@ -103,14 +103,26 @@ val solve_coupled(const val& mesh, const val& coupling, const val& bcs,
     in.shell_young = shell["young_modulus"].as<double>();
     in.shell_poisson = shell["poisson_ratio"].as<double>();
 
-    // Distributing couplings (CSR-style).
+    // Couplings (CSR-style). Optional per-coupling `mpc` flags (1 ⇒ relaxed
+    // shell-to-solid MPC, 0/absent ⇒ distributing RBE3) and a single `relaxation`
+    // ψ shared by the MPC couplings.
     std::vector<int> cref = i32_vector(coupling["ref"], "coupling.ref");
     std::vector<int> coff = i32_vector(coupling["offsets"], "coupling.offsets");
     std::vector<int> csolid = i32_vector(coupling["solid"], "coupling.solid");
+    std::vector<int> cmpc;
+    val mpc_js = coupling["mpc"];
+    if (!mpc_js.isUndefined() && !mpc_js.isNull()) cmpc = i32_vector(mpc_js, "coupling.mpc");
+    double relaxation = 1.0;
+    val relax_js = coupling["relaxation"];
+    if (!relax_js.isUndefined() && !relax_js.isNull()) relaxation = relax_js.as<double>();
     for (size_t k = 0; k < cref.size(); ++k) {
         kofem::shell::Coupling cp;
         cp.ref_node = cref[k];
         for (int i = coff[k]; i < coff[k + 1]; ++i) cp.solid_nodes.push_back(csolid[i]);
+        if (k < cmpc.size() && cmpc[k] != 0) {
+            cp.mpc = true;
+            cp.relaxation = relaxation;
+        }
         in.couplings.push_back(std::move(cp));
     }
 

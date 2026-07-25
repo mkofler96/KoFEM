@@ -23,6 +23,16 @@ function createWorker(): Worker {
   });
 
   worker.onmessage = (e: MessageEvent) => {
+    // Coverage counters shipped by the worker before it can be terminated
+    // (see solver.worker's finally block). Stash them for the test fixture.
+    const workerCov = (e.data as { __workerCoverage?: unknown })
+      .__workerCoverage;
+    if (workerCov !== undefined) {
+      const scope = globalThis as { __workerCoverage__?: unknown[] };
+      if (!scope.__workerCoverage__) scope.__workerCoverage__ = [];
+      scope.__workerCoverage__.push(workerCov);
+      return;
+    }
     const { id, ok, log, ...rest } = e.data as {
       id: number;
       ok?: boolean;

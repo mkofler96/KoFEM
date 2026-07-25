@@ -449,13 +449,23 @@ export function extractThinWallShells(
   };
 }
 
+// CSR-style coupling set. `mpc[k]` selects the coupling kind for reference k:
+// 1 ⇒ relaxed shell-to-solid MPC (rigid translation tie + relaxed rotation, for a
+// continuous-material seam), 0/absent ⇒ distributing RBE3 (for a gapped interface).
+export interface CouplingSet {
+  ref: number[];
+  offsets: number[];
+  solid: number[];
+  mpc?: number[]; // per ref; length matches ref when present
+}
+
 export interface CoupledModel {
   pool: number[]; // 3·nPool (solid nodes then shell nodes)
   tets: number[]; // 4·nSolidTets over pool
   tetBody: number[]; // body id per solid tet (for per-body PSOLID labelling)
   triangles: number[]; // 3·nShellTris over pool
   thicknesses: number[];
-  coupling: { ref: number[]; offsets: number[]; solid: number[] };
+  coupling: CouplingSet;
   solidPool: Map<number, number>; // original vertex index → pool index (solid)
   shellPool: number[]; // local shell index → pool index
 }
@@ -514,17 +524,19 @@ function autoDetectCouplings(
   return { ref, offsets, solid };
 }
 
-// Concatenate two CSR coupling sets (shell↔solid and solid↔solid) into one.
-function concatCouplings(
-  a: { ref: number[]; offsets: number[]; solid: number[] },
-  b: { ref: number[]; offsets: number[]; solid: number[] },
-): { ref: number[]; offsets: number[]; solid: number[] } {
+// Concatenate two CSR coupling sets (shell↔solid and solid↔solid) into one,
+// preserving each set's per-reference MPC flags (missing ⇒ distributing).
+function concatCouplings(a: CouplingSet, b: CouplingSet): CouplingSet {
   const ref = [...a.ref, ...b.ref];
   const solid = [...a.solid, ...b.solid];
   const offsets = [...a.offsets];
   const base = a.solid.length;
   for (let k = 1; k < b.offsets.length; k++) offsets.push(base + b.offsets[k]);
-  return { ref, offsets, solid };
+  const mpc = [
+    ...(a.mpc ?? a.ref.map(() => 0)),
+    ...(b.mpc ?? b.ref.map(() => 0)),
+  ];
+  return { ref, offsets, solid, mpc };
 }
 
 // Distributing (RBE3) tie of a gapped solid↔solid interface — two solid bodies
@@ -583,22 +595,25 @@ function autoDetectSolidCouplings(
 // proximity detector would otherwise couple the very nodes the user fixed. The BC
 // wins; the surrounding shell/solid stays connected through the mesh either way.
 export function dropCouplingsOnFixedNodes(
-  coupling: { ref: number[]; offsets: number[]; solid: number[] },
+  coupling: CouplingSet,
   fixedDofs: Iterable<number>,
-): { ref: number[]; offsets: number[]; solid: number[] } {
+): CouplingSet {
   const fixedNodes = new Set<number>();
   for (const d of fixedDofs) fixedNodes.add(Math.floor(d / 6));
   const ref: number[] = [],
     offsets = [0],
-    solid: number[] = [];
+    solid: number[] = [],
+    mpc: number[] = [];
   for (let k = 0; k < coupling.ref.length; k++) {
     if (fixedNodes.has(coupling.ref[k])) continue;
     ref.push(coupling.ref[k]);
     for (let i = coupling.offsets[k]; i < coupling.offsets[k + 1]; i++)
       solid.push(coupling.solid[i]);
     offsets.push(solid.length);
+    // eslint-disable-next-line kofem/no-silent-fallback -- mpc is an optional coupling-kind flag; absent means the distributing (RBE3) default
+    mpc.push(coupling.mpc?.[k] ?? 0);
   }
-  return { ref, offsets, solid };
+  return { ref, offsets, solid, mpc };
 }
 
 // Assemble the coupled node pool (solid nodes then shell nodes), remap tets and
@@ -700,7 +715,13 @@ export function buildCoupledModel(
     thicknesses: shells.shellThk,
     solidPool,
     shellPool,
-    coupling: concatCouplings(shellCoupling, solidCoupling),
+    // The shell↔solid seam is continuous material (a thin wall idealised as shell,
+    // tied back to its retained solid), so it uses the relaxed MPC coupling (mpc=1)
+    // for displacement continuity. The gapped pin↔hole solid tie stays distributing.
+    coupling: concatCouplings(
+      { ...shellCoupling, mpc: shellCoupling.ref.map(() => 1) },
+      { ...solidCoupling, mpc: solidCoupling.ref.map(() => 0) },
+    ),
   };
 }
 
@@ -719,7 +740,7 @@ export interface ExplicitCoupledModel {
   tets: number[]; // 4·nSolidTets over pool
   triangles: number[]; // 3·nShellTris over pool
   thicknesses: number[]; // per shell triangle
-  coupling: { ref: number[]; offsets: number[]; solid: number[] };
+  coupling: CouplingSet;
   poolOfVertex: Map<number, number>; // store vertex index → pool index
   shellPoolIndex: Set<number>; // pool indices carrying shell stiffness
 }
@@ -813,7 +834,11 @@ export function buildExplicitCoupledModel(
     tets,
     triangles,
     thicknesses: shellThk,
-    coupling: concatCouplings(shellCoupling, solidCoupling),
+    // Shell↔solid seam ⇒ relaxed MPC (continuity); gapped pin↔hole ⇒ distributing.
+    coupling: concatCouplings(
+      { ...shellCoupling, mpc: shellCoupling.ref.map(() => 1) },
+      { ...solidCoupling, mpc: solidCoupling.ref.map(() => 0) },
+    ),
     poolOfVertex,
     shellPoolIndex,
   };

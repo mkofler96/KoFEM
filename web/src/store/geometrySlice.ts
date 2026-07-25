@@ -104,6 +104,11 @@ export interface GeometrySlice {
   setBodies(count: number, shellBodyIds?: number[]): void;
   assignBodyMaterial(propertyId: number, materialId: number): void;
   setBodyDiscretization(propertyId: number, disc: BodyDiscretization): void;
+  // Re-apply an automatic thin-wall detection result: sets each body's
+  // discretization from `shellBodyIds` (1-based) WITHOUT rebuilding the property
+  // table, so per-body material assignments survive. Pass an empty list to make
+  // every body Solid (automatic detection switched off).
+  applyShellDetection(shellBodyIds: number[]): void;
   setStepSurface(tessellation: StepTessellation | null): void;
   setStepBytes(bytes: Uint8Array | null): void;
   setGeometryFormat(format: GeometryFormat): void;
@@ -117,6 +122,10 @@ export interface GeometrySlice {
     modelName: string,
     surfaceTriangles?: [number, number, number][] | null,
     surfaceFaceIds?: number[] | null,
+    // Property table returned by a mesh that idealised thin walls as shells
+    // (#397): the solid bodies' own properties plus one PSHELL per distinct wall
+    // thickness. Absent for a plain all-solid mesh, which leaves properties as-is.
+    properties?: Property[] | null,
   ): void;
 }
 
@@ -162,6 +171,14 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
           ? ("shell" as BodyDiscretization)
           : ("solid" as BodyDiscretization),
       }));
+    }),
+  applyShellDetection: (shellBodyIds) =>
+    set((s) => {
+      const shell = new Set(shellBodyIds);
+      for (const prop of s.properties)
+        prop.discretization = shell.has(prop.id)
+          ? ("shell" as BodyDiscretization)
+          : ("solid" as BodyDiscretization);
     }),
   setBodyDiscretization: (propertyId, disc) =>
     set((s) => {
@@ -244,10 +261,18 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       s.stepImportError = msg;
     }),
 
-  applyMeshResult: (nodes, elements, name, surfaceTriangles, surfaceFaceIds) =>
+  applyMeshResult: (
+    nodes,
+    elements,
+    name,
+    surfaceTriangles,
+    surfaceFaceIds,
+    properties,
+  ) =>
     set((s) => {
       s.nodes = nodes;
       s.elements = elements;
+      if (properties) s.properties = properties;
       s.surfaceTriangles = surfaceTriangles ?? null;
       s.surfaceFaceIds = surfaceFaceIds ?? null;
       s.bcGroups = [];

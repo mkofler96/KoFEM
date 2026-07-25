@@ -98,14 +98,15 @@ export function shellBodySliverTets(mesh, shellBody, { sliverFlatness = 0.2 } = 
 export function dropCouplingsOnFixedNodes(coupling, fixedDofs) {
   const fixedNodes = new Set();
   for (const d of fixedDofs) fixedNodes.add(Math.floor(d / 6));
-  const ref = [], offsets = [0], solid = [];
+  const ref = [], offsets = [0], solid = [], mpc = [];
   for (let k = 0; k < coupling.ref.length; k++) {
     if (fixedNodes.has(coupling.ref[k])) continue;
     ref.push(coupling.ref[k]);
     for (let i = coupling.offsets[k]; i < coupling.offsets[k + 1]; i++) solid.push(coupling.solid[i]);
     offsets.push(solid.length);
+    mpc.push(coupling.mpc?.[k] ?? 0);
   }
-  return { ref, offsets, solid };
+  return { ref, offsets, solid, mpc };
 }
 
 // Per-OCC-face area / area-weighted normal / centroid / owning body.
@@ -295,12 +296,14 @@ function autoDetectSolidCouplings(ppt, poolBody, R, maxCoupled = 16) {
   return autoDetectCouplings(ppt, masterNodes, otherNodes, R, maxCoupled);
 }
 
-// Concatenate two CSR coupling sets. Mirrors shellize.ts.
+// Concatenate two CSR coupling sets, preserving each set's per-reference MPC
+// flags (missing => distributing). Mirrors shellize.ts.
 function concatCouplings(a, b) {
   const ref = [...a.ref, ...b.ref], solid = [...a.solid, ...b.solid], offsets = [...a.offsets];
   const base = a.solid.length;
   for (let k = 1; k < b.offsets.length; k++) offsets.push(base + b.offsets[k]);
-  return { ref, offsets, solid };
+  const mpc = [...(a.mpc ?? a.ref.map(() => 0)), ...(b.mpc ?? b.ref.map(() => 0))];
+  return { ref, offsets, solid, mpc };
 }
 
 /**
@@ -340,6 +343,11 @@ export function buildCoupledModel(mesh, shells, sliverTets, { couplingRadius = 1
   return {
     pool, tets, tetBody, triangles, thicknesses: shells.shellThk,
     solidPool, shellPool,
-    coupling: concatCouplings(shellCoupling, solidCoupling),
+    // Shell<->solid seam is continuous material => relaxed MPC (displacement
+    // continuity); the gapped pin<->hole tie stays distributing. Mirrors shellize.ts.
+    coupling: concatCouplings(
+      { ...shellCoupling, mpc: shellCoupling.ref.map(() => 1) },
+      { ...solidCoupling, mpc: solidCoupling.ref.map(() => 0) },
+    ),
   };
 }

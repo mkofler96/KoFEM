@@ -115,8 +115,12 @@ export interface KofemModule {
   /** Coupled solid(tet)+shell solve. MFEM assembles the solid; DKT shells and
    *  RBE3 distributing couplings are added and solved together.
    *   mesh:     { vertices, tets, triangles, thicknesses? }
-   *   coupling: { ref, offsets, solid }  CSR-style: reference node ref[k] ties to
-   *             solid[offsets[k]..offsets[k+1]).
+   *   coupling: { ref, offsets, solid, mpc?, relaxation? }  CSR-style: reference
+   *             node ref[k] ties to solid[offsets[k]..offsets[k+1]). Optional
+   *             mpc[k] = 1 selects the relaxed shell-to-solid MPC coupling (rigid
+   *             translation tie + relaxation-scaled rotation) for that reference,
+   *             0/absent keeps the distributing RBE3 coupling; relaxation is the
+   *             shared ψ ∈ [0.5,1] used by the MPC couplings.
    *   bcs:      { fixed_dofs, load_dofs, load_vals }  (DOF = 6·node+component)
    *   mat_json: { solid:{young_modulus,poisson_ratio}, shell:{…} } */
   solve_coupled(
@@ -126,7 +130,13 @@ export interface KofemModule {
       triangles: Int32Array
       thicknesses?: Float64Array
     },
-    coupling: { ref: Int32Array; offsets: Int32Array; solid: Int32Array },
+    coupling: {
+      ref: Int32Array
+      offsets: Int32Array
+      solid: Int32Array
+      mpc?: Int32Array
+      relaxation?: number
+    },
     bcs: { fixed_dofs: Int32Array; load_dofs: Int32Array; load_vals: Float64Array },
     mat_json: string,
   ):

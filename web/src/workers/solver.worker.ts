@@ -23,6 +23,7 @@ import {
   isShellPoolIndex,
   type CoupledModel,
   type ShellizeMesh,
+  type ShellExtraction,
 } from "../lib/shellize.js";
 import { detectShellBodies } from "../lib/thinBodies.js";
 
@@ -159,6 +160,12 @@ interface VolumeMeshPayload {
   format?: string;
   maxElementSize?: number;
   minElementSize?: number;
+  // Bodies marked Shell (Property.discretization === "shell") and the current
+  // property table. With these, meshing idealises those bodies' thin walls to a
+  // mid-surface shell mesh and stores the MIXED CTRIA3 + CTETRA model, instead of
+  // deriving it throwaway inside the solve (#397). Absent/empty ⇒ all-solid mesh.
+  shellBodyIds?: number[];
+  properties?: Property[];
 }
 interface SolvePayload {
   nodes: Node[];
@@ -219,6 +226,18 @@ function handleParseStep(id: number, payload: ParseStepPayload) {
 }
 
 // ── volume_mesh ───────────────────────────────────────────────────────────────
+
+// Ship this worker's Istanbul counters to the page. useMesh calls resetWorker()
+// (terminate) as soon as the volume_mesh response resolves, so counters left in
+// the worker are destroyed before the coverage fixture can harvest them — the
+// entire mesh-time auto-shell idealisation reported as unexecuted. Messages are
+// delivered in post order, so calling this immediately BEFORE the task's result
+// guarantees the page stashes the counters before it can terminate the worker.
+// No-op unless the app was built with COVERAGE=1.
+function flushCoverage(): void {
+  const cov = (globalThis as { __coverage__?: unknown }).__coverage__;
+  if (cov) self.postMessage({ __workerCoverage: cov });
+}
 
 function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
   const { bytes, format = "step", maxElementSize = 20.0 } = payload;
@@ -321,14 +340,220 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
     };
   }
 
+  const surfaceTriangles = chunk3(dto.surfaceTriangles) as [
+    number,
+    number,
+    number,
+  ][];
+  const surfaceFaceIds = Array.from(dto.surfaceFaceIds);
+
+  // Auto-shell at MESH time (#397): a body marked Shell has its thin walls
+  // collapsed to a mid-surface shell mesh here, so the stored model is the mixed
+  // CTRIA3 + CTETRA model the user sees and solves — not an all-solid mesh whose
+  // shells only ever existed transiently inside the solve.
+  const mixed = buildMeshTimeShellModel(
+    nodes,
+    elements,
+    surfaceTriangles,
+    surfaceFaceIds,
+    new Set(payload.shellBodyIds ?? []),
+    payload.properties ?? [],
+    (line: string) => self.postMessage({ id, log: line }),
+  );
+  if (mixed) {
+    flushCoverage();
+    self.postMessage({
+      id,
+      ok: true,
+      nodes: mixed.nodes,
+      elements: mixed.elements,
+      properties: mixed.properties,
+      surfaceTriangles: mixed.surfaceTriangles,
+      surfaceFaceIds: mixed.surfaceFaceIds,
+    });
+    return;
+  }
+
+  flushCoverage();
   self.postMessage({
     id,
     ok: true,
     nodes,
     elements,
-    surfaceTriangles: chunk3(dto.surfaceTriangles),
-    surfaceFaceIds: Array.from(dto.surfaceFaceIds),
+    surfaceTriangles,
+    surfaceFaceIds,
   });
+}
+
+// Idealise the Shell-marked bodies' thin walls into a mid-surface shell mesh and
+// return the mixed model to store: the coupled node pool, the retained solid tets
+// as CTETRA, and the collapsed wall facets as CTRIA3. Thickness is per SECTION —
+// detectWallPairs measures each wall pair separately, so one PSHELL property is
+// emitted per distinct wall thickness and each facet references its own (the same
+// scheme the offline crane generator uses). Solid bodies keep their existing
+// property ids, so material assignments survive the mesh. Returns null when the
+// idealisation does not apply (no Shell body, no surface mesh, or no thin wall
+// found), leaving the caller's all-solid mesh in place.
+function buildMeshTimeShellModel(
+  nodes: Node[],
+  elements: Element[],
+  surfaceTriangles: [number, number, number][],
+  surfaceFaceIds: number[],
+  shellBodyIds: Set<number>,
+  properties: Property[],
+  log: (line: string) => void,
+): {
+  nodes: Node[];
+  elements: Element[];
+  properties: Property[];
+  surfaceTriangles: [number, number, number][];
+  surfaceFaceIds: number[];
+} | null {
+  if (shellBodyIds.size === 0) return null;
+  if (surfaceTriangles.length === 0) return null;
+  if (surfaceFaceIds.length !== surfaceTriangles.length) return null;
+  const tetElements = elements.filter((e) => e.type === "CTETRA");
+  if (tetElements.length !== elements.length) return null;
+
+  const vid = buildVertexIndexer(nodes);
+  const mesh = buildShellizeMesh(
+    nodes,
+    tetElements,
+    surfaceTriangles,
+    surfaceFaceIds,
+    vid,
+  );
+  const shells = extractThinWallShells(mesh, { shellBodyIds });
+  if (shells.shellBody < 0)
+    throw new Error(
+      `Shell idealisation failed: body ${[...shellBodyIds].join(", ")} is marked "Shell" but no ` +
+        "thin walls were found in it. Switch it to Solid, or check that it is genuinely thin-walled.",
+    );
+  const slivers = shellBodySliverTets(mesh, shells.shellBody);
+  const model = buildCoupledModel(mesh, shells, slivers);
+
+  // Nodes: the coupled pool (solid nodes first, then the shell mid-surface nodes).
+  const poolNodes: Node[] = [];
+  for (let i = 0; i < model.pool.length / 3; i++)
+    poolNodes.push({
+      id: i,
+      x: model.pool[3 * i],
+      y: model.pool[3 * i + 1],
+      z: model.pool[3 * i + 2],
+    });
+
+  // Properties: solid bodies keep their own ids (materials stay assigned); one
+  // PSHELL per distinct wall thickness, inheriting the shelled body's material.
+  const nextId = properties.reduce((mx, p) => Math.max(mx, p.id), 0) + 1;
+  const shellProp = properties.find((p) => p.id === shells.shellBody);
+  const shellMaterialId = shellProp ? shellProp.materialId : 1;
+  const thkKey = (t: number) => Number(t.toFixed(6));
+  const propOfThk = new Map<number, number>();
+  const outProperties: Property[] = properties.map((p) => ({ ...p }));
+  for (const t of model.thicknesses) {
+    const key = thkKey(t);
+    if (propOfThk.has(key)) continue;
+    const pid = nextId + propOfThk.size;
+    propOfThk.set(key, pid);
+    outProperties.push({
+      id: pid,
+      materialId: shellMaterialId,
+      thickness: key,
+      discretization: "shell",
+    });
+  }
+
+  // Elements: retained solid tets (their body's property) then the shell facets
+  // (their thickness's PSHELL).
+  const outElements: Element[] = [];
+  for (let e = 0; e < model.tets.length / 4; e++)
+    outElements.push({
+      id: outElements.length,
+      type: "CTETRA",
+      nodeIds: [
+        model.tets[4 * e],
+        model.tets[4 * e + 1],
+        model.tets[4 * e + 2],
+        model.tets[4 * e + 3],
+      ],
+      propertyId: model.tetBody[e],
+    });
+  for (let t = 0; t < model.triangles.length / 3; t++) {
+    const pid = propOfThk.get(thkKey(model.thicknesses[t]));
+    if (pid === undefined)
+      throw new Error(
+        `mesh-time shell: facet ${t} has thickness ${model.thicknesses[t]} with no PSHELL property`,
+      );
+    outElements.push({
+      id: outElements.length,
+      type: "CTRIA3",
+      nodeIds: [
+        model.triangles[3 * t],
+        model.triangles[3 * t + 1],
+        model.triangles[3 * t + 2],
+      ],
+      propertyId: pid,
+    });
+  }
+
+  const { surfaceTriangles: poolSurfTris, surfaceFaceIds: poolSurfFaces } =
+    rebuildPoolSurface(model, shells, surfaceTriangles, surfaceFaceIds);
+
+  const thkList = [...propOfThk.keys()]
+    .sort((a, b) => a - b)
+    .map((t) => `${t} mm`)
+    .join(", ");
+  log(
+    `[auto-shell] body ${shells.shellBody}: ${shells.walls.length} thin walls → ` +
+      `${model.shellPool.length} shell nodes, ${model.triangles.length / 3} facets ` +
+      `(${propOfThk.size} thickness section(s): ${thkList}), ` +
+      `${model.tets.length / 4} solid tets retained, ${model.coupling.ref.length} couplings`,
+  );
+
+  return {
+    nodes: poolNodes,
+    elements: outElements,
+    properties: outProperties,
+    surfaceTriangles: poolSurfTris,
+    surfaceFaceIds: poolSurfFaces,
+  };
+}
+
+// Surface mesh of the coupled pool, so face picking keeps working after the
+// idealisation. Two sources: every shell facet is itself a surface (its OCC face
+// is the wall it came from), and the retained solid keeps those original surface
+// triangles whose nodes all survived into the solid pool. Faces of the solid that
+// were only exposed by removing the wall slivers have no CAD face and are left
+// out — they are internal to the idealisation, not pickable CAD geometry.
+function rebuildPoolSurface(
+  model: CoupledModel,
+  shells: ShellExtraction,
+  surfaceTriangles: [number, number, number][],
+  surfaceFaceIds: number[],
+): {
+  surfaceTriangles: [number, number, number][];
+  surfaceFaceIds: number[];
+} {
+  const outTris: [number, number, number][] = [];
+  const outFaces: number[] = [];
+  for (let t = 0; t < surfaceTriangles.length; t++) {
+    const [a, b, c] = surfaceTriangles[t];
+    const pa = model.solidPool.get(a),
+      pb = model.solidPool.get(b),
+      pc = model.solidPool.get(c);
+    if (pa === undefined || pb === undefined || pc === undefined) continue;
+    outTris.push([pa, pb, pc]);
+    outFaces.push(surfaceFaceIds[t]);
+  }
+  for (let t = 0; t < shells.shellTris.length / 3; t++) {
+    outTris.push([
+      model.shellPool[shells.shellTris[3 * t]],
+      model.shellPool[shells.shellTris[3 * t + 1]],
+      model.shellPool[shells.shellTris[3 * t + 2]],
+    ]);
+    outFaces.push(shells.shellTriSrc[t]);
+  }
+  return { surfaceTriangles: outTris, surfaceFaceIds: outFaces };
 }
 
 // ── solve ─────────────────────────────────────────────────────────────────────
@@ -797,6 +1022,14 @@ function handleShellSolve(id: number, payload: SolvePayload) {
 
 // ── Auto-shell coupled solve ────────────────────────────────────────────────
 
+// Relaxation factor ψ for the shell↔solid MPC coupling (Lu, Zhang & Yang 2023,
+// "A Relaxed MPC Method for Non-rigid Shell to Solid Coupling", J. Phys.: Conf.
+// Ser. 2528 012064). ψ ∈ [0.5, 1]: 1 is the classical rigid MPC, < 1 relaxes the
+// rotation transfer to avoid the artificial over-stiffening of a fully rigid tie.
+// The rigid translation tie (mpc = 1 in the coupling set) is ψ-independent and is
+// what restores displacement continuity across the shell/solid seam.
+const SHELL_SOLID_MPC_RELAXATION = 1.0;
+
 // Flat 0-based mesh for the shellize pipeline, built from the store model.
 function buildShellizeMesh(
   nodes: Node[],
@@ -1132,6 +1365,8 @@ function tryCoupledSolve(
       ref: Int32Array.from(coupling.ref),
       offsets: Int32Array.from(coupling.offsets),
       solid: Int32Array.from(coupling.solid),
+      mpc: Int32Array.from(coupling.mpc ?? coupling.ref.map(() => 0)),
+      relaxation: SHELL_SOLID_MPC_RELAXATION,
     },
     {
       fixed_dofs: Int32Array.from(fixed_dofs),
@@ -1597,6 +1832,8 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
       ref: Int32Array.from(coupling.ref),
       offsets: Int32Array.from(coupling.offsets),
       solid: Int32Array.from(coupling.solid),
+      mpc: Int32Array.from(coupling.mpc ?? coupling.ref.map(() => 0)),
+      relaxation: SHELL_SOLID_MPC_RELAXATION,
     },
     {
       fixed_dofs: Int32Array.from(fixed_dofs),
@@ -1882,5 +2119,7 @@ self.onmessage = async (event: MessageEvent) => {
       console.error(`[solver.worker] ${type} failed:`, detail);
     }
     self.postMessage({ id, ok: false, error: errorMessage });
+  } finally {
+    flushCoverage();
   }
 };

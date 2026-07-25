@@ -9,6 +9,7 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -621,13 +622,64 @@ Rbe3Constraints build_rbe3_constraints(const CoupledInput& in, int nDof) {
         if (R < 0 || 6 * R >= nDof)
             throw std::runtime_error("coupled: coupling ref_node out of range");
         const int N = static_cast<int>(cp.solid_nodes.size());
-        if (N < 3) throw std::runtime_error("coupled: a distributing coupling needs ≥3 solid nodes");
+        if (N < 3) throw std::runtime_error("coupled: a coupling needs ≥3 solid nodes");
         const Vec3 pR = vtx(R);
         std::vector<double> w(N, 1.0);
         if (!cp.weights.empty()) {
             if ((int)cp.weights.size() != N) throw std::runtime_error("coupled: weights size mismatch");
             w = cp.weights;
         }
+        const size_t R6 = 6 * static_cast<size_t>(R);
+        for (size_t k = 0; k < 6; ++k) out.dep[R6 + k] = 1;
+
+        if (cp.mpc) {
+            // Relaxed shell-to-solid MPC (Lu, Zhang & Yang 2023): rigid translation
+            // tie to the nearest solid node S — enforcing displacement CONTINUITY at
+            // the coincident junction — plus a ψ-scaled least-squares rotation of the
+            // coupled solid nodes about S (the unstructured generalisation of the
+            // paper's finite-difference rotation stencil). See Coupling::mpc.
+            const double psi = cp.relaxation;
+            int S = cp.solid_nodes[0];
+            double best = std::numeric_limits<double>::max();
+            for (int sn : cp.solid_nodes) {
+                const Vec3 d = sub(vtx(sn), pR);
+                const double dd = dot(d, d);
+                if (dd < best) { best = dd; S = sn; }
+            }
+            const Vec3 pS = vtx(S);
+            std::vector<Vec3> r(N);
+            Vec3 Sp = {0.0, 0.0, 0.0};  // Σ w_i r_i, r_i measured from S
+            std::array<std::array<double, 3>, 3> H{};
+            for (int i = 0; i < N; ++i) {
+                const Vec3 pi = vtx(cp.solid_nodes[i]);
+                r[i] = {pi[0] - pS[0], pi[1] - pS[1], pi[2] - pS[2]};
+                for (int k = 0; k < 3; ++k) Sp[k] += w[i] * r[i][k];
+                const double rr = dot(r[i], r[i]);
+                for (int a = 0; a < 3; ++a)
+                    for (int b = 0; b < 3; ++b)
+                        H[a][b] += w[i] * ((a == b ? rr : 0.0) - r[i][a] * r[i][b]);
+            }
+            const auto Hinv = mat3_inv(H);
+            // U_R = u_S  (translations follow the coincident solid node exactly).
+            for (int c = 0; c < 3; ++c) out.Cmap[R6 + c].emplace_back(6 * S + c, 1.0);
+            // Θ_R = ψ · Hinv · Σ w_i [r_i]× (u_i − u_S). Split u_i and u_S parts:
+            // the [S']× u_S term collects the −u_S contribution (skew is linear).
+            for (int i = 0; i < N; ++i) {
+                const int sn = cp.solid_nodes[i];
+                const auto M = mat3_mul(Hinv, skew(r[i]));
+                for (int a = 0; a < 3; ++a)
+                    for (int c = 0; c < 3; ++c)
+                        out.Cmap[R6 + 3 + a].emplace_back(6 * sn + c, psi * w[i] * M[a][c]);
+            }
+            const auto Ms = mat3_mul(Hinv, skew(Sp));
+            for (int a = 0; a < 3; ++a)
+                for (int c = 0; c < 3; ++c)
+                    out.Cmap[R6 + 3 + a].emplace_back(6 * S + c, -psi * Ms[a][c]);
+            continue;
+        }
+
+        // Distributing (RBE3) coupling: weighted-average translation + weighted
+        // least-squares rotation about the reference node.
         double W = 0.0;
         for (double wi : w) W += wi;
         Vec3 S = {0.0, 0.0, 0.0};
@@ -644,8 +696,6 @@ Rbe3Constraints build_rbe3_constraints(const CoupledInput& in, int nDof) {
         }
         const auto Hinv = mat3_inv(H);
         const auto skewS = skew(S);
-        const size_t R6 = 6 * static_cast<size_t>(R);
-        for (size_t k = 0; k < 6; ++k) out.dep[R6 + k] = 1;
         for (int i = 0; i < N; ++i) {
             const int sn = cp.solid_nodes[i];
             // U_R = Σ (w_i/W) u_i  (component-diagonal).
