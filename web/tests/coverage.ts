@@ -46,6 +46,17 @@ export const test = base.extend({
       if (cov) writeCoverage(cov, "worker");
     }
 
+    // Counters the worker shipped before resetWorker() terminated it — without
+    // these, everything the mesh worker ran is reported as uncovered.
+    const stashed = (await page
+      .evaluate(
+        () =>
+          (globalThis as { __workerCoverage__?: CoverageMap[] })
+            .__workerCoverage__ ?? null,
+      )
+      .catch(() => null)) as CoverageMap[] | null;
+    for (const cov of stashed ?? []) writeCoverage(cov, "worker-stashed");
+
     const pageCov = await page
       .evaluate(
         () =>

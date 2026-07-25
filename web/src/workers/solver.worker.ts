@@ -227,6 +227,18 @@ function handleParseStep(id: number, payload: ParseStepPayload) {
 
 // ── volume_mesh ───────────────────────────────────────────────────────────────
 
+// Ship this worker's Istanbul counters to the page. useMesh calls resetWorker()
+// (terminate) as soon as the volume_mesh response resolves, so counters left in
+// the worker are destroyed before the coverage fixture can harvest them — the
+// entire mesh-time auto-shell idealisation reported as unexecuted. Messages are
+// delivered in post order, so calling this immediately BEFORE the task's result
+// guarantees the page stashes the counters before it can terminate the worker.
+// No-op unless the app was built with COVERAGE=1.
+function flushCoverage(): void {
+  const cov = (globalThis as { __coverage__?: unknown }).__coverage__;
+  if (cov) self.postMessage({ __workerCoverage: cov });
+}
+
 function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
   const { bytes, format = "step", maxElementSize = 20.0 } = payload;
 
@@ -349,6 +361,7 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
     (line: string) => self.postMessage({ id, log: line }),
   );
   if (mixed) {
+    flushCoverage();
     self.postMessage({
       id,
       ok: true,
@@ -361,6 +374,7 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
     return;
   }
 
+  flushCoverage();
   self.postMessage({
     id,
     ok: true,
@@ -2105,5 +2119,7 @@ self.onmessage = async (event: MessageEvent) => {
       console.error(`[solver.worker] ${type} failed:`, detail);
     }
     self.postMessage({ id, ok: false, error: errorMessage });
+  } finally {
+    flushCoverage();
   }
 };
