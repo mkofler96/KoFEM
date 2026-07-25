@@ -7,7 +7,7 @@ import type { Material } from "../../store/modelStore";
 import { pickMaterialColor } from "../../store/materialSlice";
 import { fmt } from "../../lib/modelDisplay";
 import { useGeometry } from "../../hooks/useGeometry";
-import { detectShellBodies, DEFAULT_THIN_RATIO } from "../../lib/thinBodies";
+import { detectShellBodies } from "../../lib/thinBodies";
 import { MeshPanel } from "./MeshPanel";
 import styles from "./LeftPanel.module.css";
 
@@ -220,6 +220,7 @@ function MaterialSection() {
       {materials.length === 1 && properties.length <= 1 && (
         <div className={styles.empty}>Applied to the whole part.</div>
       )}
+      <AutoShellSection />
       <BodiesSection />
     </>
   );
@@ -272,7 +273,7 @@ const AUTO_SHELL_TIP =
   "inward from each body's surface and compares the wall thickness it finds " +
   "against the body's own size; a body whose median wall is thinner than the " +
   "ratio below is idealised as shells. Switch it off to keep every body Solid, " +
-  "or set each body's type by hand below.";
+  "or set each body's type by hand in the Bodies list below.";
 
 const AUTO_SHELL_RATIO_TIP =
   "Wall-thickness threshold, as a fraction of the body's own bounding-box " +
@@ -286,22 +287,18 @@ const ELEMENT_TYPE_TIP =
   "walls as Kirchhoff shells coupled to the solid bodies — far more robust for " +
   "thin parts. Thin-walled bodies are preselected Shell automatically.";
 
-function BodiesSection() {
-  const materials = useModelStore((s) => s.materials);
-  const properties = useModelStore((s) => s.properties);
-  const assignBodyMaterial = useModelStore((s) => s.assignBodyMaterial);
-  const setBodyDiscretization = useModelStore((s) => s.setBodyDiscretization);
-  const setHighlightBodyId = useModelStore((s) => s.setHighlightBodyId);
-  const hiddenBodyIds = useModelStore((s) => s.hiddenBodyIds);
-  const toggleBodyVisibility = useModelStore((s) => s.toggleBodyVisibility);
-  const tieDistance = useModelStore((s) => s.tieDistance);
-  const setTieDistance = useModelStore((s) => s.setTieDistance);
-  const viewRepr = useModelStore((s) => s.viewRepr);
-  const setViewRepr = useModelStore((s) => s.setViewRepr);
+// Automatic shell idealisation: the on/off switch for thin-wall detection and,
+// while it is on, the ratio that decides how thin a wall must be. Shown for
+// every imported model — including single-body parts, where it is the only way
+// to choose between a shell and a solid idealisation (the per-body Element type
+// dropdown below appears for assemblies only).
+function AutoShellSection() {
   const stepSurface = useModelStore((s) => s.stepSurface);
   const applyShellDetection = useModelStore((s) => s.applyShellDetection);
-  const [autoShell, setAutoShell] = useState(true);
-  const [thinRatio, setThinRatio] = useState(DEFAULT_THIN_RATIO);
+  const autoShell = useModelStore((s) => s.autoShell);
+  const setAutoShell = useModelStore((s) => s.setAutoShell);
+  const thinRatio = useModelStore((s) => s.thinRatio);
+  const setThinRatio = useModelStore((s) => s.setThinRatio);
 
   // Re-run thin-wall detection over the imported tessellation and re-apply the
   // Shell/Solid choice. Detection is pure geometry (no mesh needed), so changing
@@ -330,25 +327,12 @@ function BodiesSection() {
     );
   };
 
-  if (properties.length <= 1) return null;
-
-  const matColor = (materialId: number) =>
-    materials.find((mat) => mat.id === materialId)?.color ?? "#7a9bbf";
-
-  // Highlighting a body dims the others in the geometry (coloured-tessellation)
-  // view; the FEM mesh views are a single neutral colour and can't show it. So
-  // when the user reaches for a body, switch to the geometry view where the
-  // highlight is visible. (The FEM surface is suppressed there, so no overlap.)
-  const highlight = (id: number) => {
-    setHighlightBodyId(id);
-    if (viewRepr !== "geometry" && viewRepr !== "wireframe")
-      setViewRepr("geometry");
-  };
+  if (!stepSurface) return null;
 
   return (
     <>
-      <div className={styles.sectionLabel} title={BODIES_TIP}>
-        Bodies
+      <div className={styles.sectionLabel} title={AUTO_SHELL_TIP}>
+        Shell idealisation
       </div>
       <label className={styles.formRow} title={AUTO_SHELL_TIP}>
         <input
@@ -382,6 +366,43 @@ function BodiesSection() {
           />
         </div>
       )}
+    </>
+  );
+}
+
+function BodiesSection() {
+  const materials = useModelStore((s) => s.materials);
+  const properties = useModelStore((s) => s.properties);
+  const assignBodyMaterial = useModelStore((s) => s.assignBodyMaterial);
+  const setBodyDiscretization = useModelStore((s) => s.setBodyDiscretization);
+  const setHighlightBodyId = useModelStore((s) => s.setHighlightBodyId);
+  const hiddenBodyIds = useModelStore((s) => s.hiddenBodyIds);
+  const toggleBodyVisibility = useModelStore((s) => s.toggleBodyVisibility);
+  const tieDistance = useModelStore((s) => s.tieDistance);
+  const setTieDistance = useModelStore((s) => s.setTieDistance);
+  const viewRepr = useModelStore((s) => s.viewRepr);
+  const setViewRepr = useModelStore((s) => s.setViewRepr);
+
+  if (properties.length <= 1) return null;
+
+  const matColor = (materialId: number) =>
+    materials.find((mat) => mat.id === materialId)?.color ?? "#7a9bbf";
+
+  // Highlighting a body dims the others in the geometry (coloured-tessellation)
+  // view; the FEM mesh views are a single neutral colour and can't show it. So
+  // when the user reaches for a body, switch to the geometry view where the
+  // highlight is visible. (The FEM surface is suppressed there, so no overlap.)
+  const highlight = (id: number) => {
+    setHighlightBodyId(id);
+    if (viewRepr !== "geometry" && viewRepr !== "wireframe")
+      setViewRepr("geometry");
+  };
+
+  return (
+    <>
+      <div className={styles.sectionLabel} title={BODIES_TIP}>
+        Bodies
+      </div>
       {properties.map((prop) => {
         const hidden = hiddenBodyIds.includes(prop.id);
         return (

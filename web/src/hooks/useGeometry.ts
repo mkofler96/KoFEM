@@ -17,6 +17,8 @@ export function useGeometry() {
   const setStepBytes = useModelStore((s) => s.setStepBytes);
   const setGeometryFormat = useModelStore((s) => s.setGeometryFormat);
   const setBodies = useModelStore((s) => s.setBodies);
+  const autoShell = useModelStore((s) => s.autoShell);
+  const thinRatio = useModelStore((s) => s.thinRatio);
 
   const [isImporting, setIsImporting] = useState(false);
 
@@ -30,13 +32,16 @@ export function useGeometry() {
     setIsImporting(true);
     setRunning(true);
     const bytes = new Uint8Array(await file.arrayBuffer());
+    // The worker preselects thin-walled bodies as shells at the user's current
+    // threshold (thinRatio); with automatic detection switched off the result is
+    // ignored and every body starts out solid.
     sendToWorker<{
       points: [number, number, number][];
       triangles: [number, number, number][];
       bodyIds: number[];
       bodyCount: number;
       shellBodyIds: number[];
-    }>("parse_step", { bytes, format })
+    }>("parse_step", { bytes, format, thinRatio })
       .then(({ points, triangles, bodyIds, bodyCount, shellBodyIds }) => {
         if (points.length === 0) setStepImportError("No geometry found.");
         else {
@@ -46,7 +51,7 @@ export function useGeometry() {
           setGeometryFormat(format);
           setStepSurface({ points, triangles, bodyIds });
           // One property per body (#353); thin-walled bodies preselected as shells.
-          setBodies(bodyCount, shellBodyIds);
+          setBodies(bodyCount, autoShell ? shellBodyIds : []);
         }
       })
       .catch((err) =>
