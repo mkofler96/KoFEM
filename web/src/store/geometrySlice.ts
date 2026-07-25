@@ -104,6 +104,11 @@ export interface GeometrySlice {
   setBodies(count: number, shellBodyIds?: number[]): void;
   assignBodyMaterial(propertyId: number, materialId: number): void;
   setBodyDiscretization(propertyId: number, disc: BodyDiscretization): void;
+  // Re-apply an automatic thin-wall detection result: sets each body's
+  // discretization from `shellBodyIds` (1-based) WITHOUT rebuilding the property
+  // table, so per-body material assignments survive. Pass an empty list to make
+  // every body Solid (automatic detection switched off).
+  applyShellDetection(shellBodyIds: number[]): void;
   setStepSurface(tessellation: StepTessellation | null): void;
   setStepBytes(bytes: Uint8Array | null): void;
   setGeometryFormat(format: GeometryFormat): void;
@@ -166,6 +171,14 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
           ? ("shell" as BodyDiscretization)
           : ("solid" as BodyDiscretization),
       }));
+    }),
+  applyShellDetection: (shellBodyIds) =>
+    set((s) => {
+      const shell = new Set(shellBodyIds);
+      for (const prop of s.properties)
+        prop.discretization = shell.has(prop.id)
+          ? ("shell" as BodyDiscretization)
+          : ("solid" as BodyDiscretization);
     }),
   setBodyDiscretization: (propertyId, disc) =>
     set((s) => {

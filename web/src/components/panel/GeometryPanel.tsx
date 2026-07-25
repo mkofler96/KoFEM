@@ -7,6 +7,7 @@ import type { Material } from "../../store/modelStore";
 import { pickMaterialColor } from "../../store/materialSlice";
 import { fmt } from "../../lib/modelDisplay";
 import { useGeometry } from "../../hooks/useGeometry";
+import { detectShellBodies, DEFAULT_THIN_RATIO } from "../../lib/thinBodies";
 import { MeshPanel } from "./MeshPanel";
 import styles from "./LeftPanel.module.css";
 
@@ -266,6 +267,19 @@ const TIE_TIP =
   "welded so load transfers. 0 = off. Keep it below the element size to avoid " +
   "distorting the mesh.";
 
+const AUTO_SHELL_TIP =
+  "Automatically preselect thin-walled bodies as Shell. Detection casts a ray " +
+  "inward from each body's surface and compares the wall thickness it finds " +
+  "against the body's own size; a body whose median wall is thinner than the " +
+  "ratio below is idealised as shells. Switch it off to keep every body Solid, " +
+  "or set each body's type by hand below.";
+
+const AUTO_SHELL_RATIO_TIP =
+  "Wall-thickness threshold, as a fraction of the body's own bounding-box " +
+  "diagonal. A body whose median wall is thinner than this becomes Shell. " +
+  "Larger values shell more bodies. 0.02 (2 %) suits typical sheet-metal and " +
+  "cast housings; raise it for short, stubby thin parts.";
+
 const ELEMENT_TYPE_TIP =
   "How this body is discretised. Solid meshes it as tetrahedra (linear or " +
   "quadratic per the Element order above). Shell idealises a thin-walled body's " +
@@ -284,6 +298,37 @@ function BodiesSection() {
   const setTieDistance = useModelStore((s) => s.setTieDistance);
   const viewRepr = useModelStore((s) => s.viewRepr);
   const setViewRepr = useModelStore((s) => s.setViewRepr);
+  const stepSurface = useModelStore((s) => s.stepSurface);
+  const applyShellDetection = useModelStore((s) => s.applyShellDetection);
+  const [autoShell, setAutoShell] = useState(true);
+  const [thinRatio, setThinRatio] = useState(DEFAULT_THIN_RATIO);
+
+  // Re-run thin-wall detection over the imported tessellation and re-apply the
+  // Shell/Solid choice. Detection is pure geometry (no mesh needed), so changing
+  // the threshold updates the bodies immediately; only the discretization is
+  // touched, so per-body material assignments survive.
+  const rerunDetection = (enabled: boolean, ratio: number) => {
+    if (!stepSurface) return;
+    if (!enabled) {
+      applyShellDetection([]);
+      return;
+    }
+    const vertices: number[] = [];
+    for (const point of stepSurface.points)
+      vertices.push(point[0], point[1], point[2]);
+    const triangles: number[] = [];
+    for (const tri of stepSurface.triangles)
+      triangles.push(tri[0], tri[1], tri[2]);
+
+    const triangleBodyIds =
+      stepSurface.bodyIds ?? stepSurface.triangles.map(() => 1);
+    applyShellDetection(
+      detectShellBodies(
+        { vertices, triangles, triangleBodyIds },
+        { thinRatio: ratio },
+      ),
+    );
+  };
 
   if (properties.length <= 1) return null;
 
@@ -305,6 +350,38 @@ function BodiesSection() {
       <div className={styles.sectionLabel} title={BODIES_TIP}>
         Bodies
       </div>
+      <label className={styles.formRow} title={AUTO_SHELL_TIP}>
+        <input
+          type="checkbox"
+          data-testid="auto-shell-detection"
+          checked={autoShell}
+          onChange={(e) => {
+            setAutoShell(e.target.checked);
+            rerunDetection(e.target.checked, thinRatio);
+          }}
+        />
+        <span className={styles.bodyLabel}>Automatic shell detection</span>
+      </label>
+      {autoShell && (
+        <div className={styles.formRow} title={AUTO_SHELL_RATIO_TIP}>
+          <span className={styles.formLabel}>Thin ratio</span>
+          <input
+            className={styles.formInput}
+            data-testid="auto-shell-ratio"
+            type="number"
+            min={0.001}
+            max={0.5}
+            step={0.005}
+            value={thinRatio}
+            onChange={(e) => {
+              const next = Number(e.target.value);
+              if (!Number.isFinite(next) || next <= 0) return;
+              setThinRatio(next);
+              rerunDetection(true, next);
+            }}
+          />
+        </div>
+      )}
       {properties.map((prop) => {
         const hidden = hiddenBodyIds.includes(prop.id);
         return (

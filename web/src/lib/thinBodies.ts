@@ -117,10 +117,15 @@ function nearestInwardHit(
 // The double test separates a truly thin-walled part (a hollow bracket: 0.5 mm
 // walls over a 500 mm span → ratio ~0.001) from a merely slender solid (a pin:
 // its "opposite wall" is the far side of the shaft, ~diameter away → ratio ~0.1).
+// Default wall-thickness threshold, as a fraction of the body's own bounding-box
+// diagonal. Exported so the UI can offer it as the starting value of the
+// user-adjustable "Automatic shell detection" ratio.
+export const DEFAULT_THIN_RATIO = 0.02;
+
 export function detectShellBodies(
   { vertices, triangles, triangleBodyIds }: TessellationInput,
   {
-    thinRatio = 0.02,
+    thinRatio = DEFAULT_THIN_RATIO,
     coverage = 0.5,
   }: { thinRatio?: number; coverage?: number } = {},
 ): number[] {
