@@ -19,6 +19,7 @@ import { create } from "zustand";
 import type { StateCreator } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import type { AnalysisState } from "../lib/analysisFile";
+import { DEFAULT_THIN_RATIO } from "../lib/thinBodies";
 import { createGeometrySlice, type GeometrySlice } from "./geometrySlice";
 import {
   createMaterialSlice,
@@ -161,6 +162,8 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.deformScale = 1;
       s.elementOrder = 1;
       s.tieDistance = 0;
+      s.autoShell = true;
+      s.thinRatio = DEFAULT_THIN_RATIO;
       s.nextMatId = 2;
       s.selectedFace = null;
       s.pendingFaces = [];

@@ -154,6 +154,10 @@ interface SurfaceLoad {
 interface ParseStepPayload {
   bytes: Uint8Array;
   format?: string;
+  // Wall-thickness threshold of the thin-body (auto-shell) preselection, as a
+  // fraction of each body's own bounding-box diagonal. Absent ⇒ the detector's
+  // own default (DEFAULT_THIN_RATIO).
+  thinRatio?: number;
 }
 interface VolumeMeshPayload {
   bytes?: Uint8Array;
@@ -205,11 +209,10 @@ function handleParseStep(id: number, payload: ParseStepPayload) {
   // Thin-walled bodies (a ray cast inward from the surface finds an opposite wall
   // close by, relative to the body's size) are preselected as shells — before any
   // volume mesh exists, purely from the tessellation.
-  const shellBodyIds = detectShellBodies({
-    vertices,
-    triangles,
-    triangleBodyIds,
-  });
+  const shellBodyIds = detectShellBodies(
+    { vertices, triangles, triangleBodyIds },
+    { thinRatio: payload.thinRatio },
+  );
   // Return as {points, triangles} to match the StepTessellation type used by
   // the store; tessellate_step returns flat Float32/Uint32 typed arrays.
   // bodyCount (#353) drives the per-body material assignment UI; bodyIds

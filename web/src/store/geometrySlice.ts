@@ -5,6 +5,7 @@
 // + retained source bytes), and the meshing pipeline state.
 
 import type { SliceCreator } from "./modelStore";
+import { DEFAULT_THIN_RATIO } from "../lib/thinBodies";
 
 export interface Node {
   id: number;
@@ -93,6 +94,12 @@ export interface GeometrySlice {
   surfaceTriangles: [number, number, number][] | null;
   surfaceFaceIds: number[] | null;
   stepImportError: string | null;
+  // Automatic thin-wall detection (auto-shell): when on, every CAD import — and
+  // every change of `thinRatio` — preselects the bodies whose median wall is
+  // thinner than `thinRatio` times their own bounding-box diagonal as Shell.
+  // When off no body is preselected; the element type is the user's alone.
+  autoShell: boolean;
+  thinRatio: number;
 
   addNode(node: Node): void;
   addElement(el: Element): void;
@@ -109,6 +116,8 @@ export interface GeometrySlice {
   // table, so per-body material assignments survive. Pass an empty list to make
   // every body Solid (automatic detection switched off).
   applyShellDetection(shellBodyIds: number[]): void;
+  setAutoShell(enabled: boolean): void;
+  setThinRatio(ratio: number): void;
   setStepSurface(tessellation: StepTessellation | null): void;
   setStepBytes(bytes: Uint8Array | null): void;
   setGeometryFormat(format: GeometryFormat): void;
@@ -142,6 +151,8 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
   surfaceTriangles: null,
   surfaceFaceIds: null,
   stepImportError: null,
+  autoShell: true,
+  thinRatio: DEFAULT_THIN_RATIO,
 
   addNode: (node) =>
     set((s) => {
@@ -179,6 +190,18 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
         prop.discretization = shell.has(prop.id)
           ? ("shell" as BodyDiscretization)
           : ("solid" as BodyDiscretization);
+    }),
+  setAutoShell: (enabled) =>
+    set((s) => {
+      s.autoShell = enabled;
+    }),
+  setThinRatio: (ratio) =>
+    set((s) => {
+      if (!Number.isFinite(ratio) || ratio <= 0)
+        throw new Error(
+          `Thin ratio must be a positive number, got ${String(ratio)}`,
+        );
+      s.thinRatio = ratio;
     }),
   setBodyDiscretization: (propertyId, disc) =>
     set((s) => {
