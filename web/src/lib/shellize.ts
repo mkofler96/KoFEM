@@ -120,6 +120,74 @@ function pointTriDist2(
   return at(vb * denom, vc * denom);
 }
 
+// Uniform grid over a triangle soup, for "is any triangle within r of p" queries.
+// Each triangle is registered in every cell its bounding box overlaps, so a
+// triangle within `cell` of a query point is always found among the 27 cells
+// around it — callers must therefore build with `cell` ≥ their largest query
+// radius. `corner(t, k)` returns vertex k of triangle t.
+interface TriangleGrid {
+  cell: number;
+  buckets: Map<string, number[]>;
+  corner: (t: number, k: number) => [number, number, number];
+}
+
+function buildTriangleGrid(
+  nTris: number,
+  corner: (t: number, k: number) => [number, number, number],
+  cell: number,
+): TriangleGrid {
+  const buckets = new Map<string, number[]>();
+  for (let t = 0; t < nTris; t++) {
+    const corners = [corner(t, 0), corner(t, 1), corner(t, 2)];
+    const lo = [0, 1, 2].map((axis) =>
+      Math.floor(
+        Math.min(corners[0][axis], corners[1][axis], corners[2][axis]) / cell,
+      ),
+    );
+    const hi = [0, 1, 2].map((axis) =>
+      Math.floor(
+        Math.max(corners[0][axis], corners[1][axis], corners[2][axis]) / cell,
+      ),
+    );
+    for (let x = lo[0]; x <= hi[0]; x++)
+      for (let y = lo[1]; y <= hi[1]; y++)
+        for (let z = lo[2]; z <= hi[2]; z++)
+          getOrInit(buckets, `${x},${y},${z}`, () => []).push(t);
+  }
+  return { cell, buckets, corner };
+}
+
+// True when some triangle near `p` satisfies `withinReach(squaredDistance, t)`.
+function anyTriangleNear(
+  grid: TriangleGrid,
+  p: [number, number, number],
+  withinReach: (dist2: number, tri: number) => boolean,
+): boolean {
+  const cx = Math.floor(p[0] / grid.cell),
+    cy = Math.floor(p[1] / grid.cell),
+    cz = Math.floor(p[2] / grid.cell);
+  for (let dx = -1; dx <= 1; dx++)
+    for (let dy = -1; dy <= 1; dy++)
+      for (let dz = -1; dz <= 1; dz++) {
+        const bucket = grid.buckets.get(`${cx + dx},${cy + dy},${cz + dz}`);
+        if (!bucket) continue;
+        for (const t of bucket)
+          if (
+            withinReach(
+              pointTriDist2(
+                p,
+                grid.corner(t, 0),
+                grid.corner(t, 1),
+                grid.corner(t, 2),
+              ),
+              t,
+            )
+          )
+            return true;
+      }
+  return false;
+}
+
 // The tets of the shelled body that the shell facets REPLACE: those lying inside
 // a detected thin wall. A tet is inside a wall exactly when its centroid is
 // within half that wall's thickness of the wall's mid-surface — the geometric
@@ -147,59 +215,20 @@ export function shellWallTets(
   const nFacets = shells.shellTris.length / 3;
   if (nFacets === 0) return wallTets;
 
-  const sv = shells.shellVerts;
-  const facetPt = (t: number, k: number): [number, number, number] => {
-    const i = shells.shellTris[3 * t + k];
-    return [sv[3 * i], sv[3 * i + 1], sv[3 * i + 2]];
-  };
-  // Cell size ≥ the largest search radius (half the thickest wall) so a facet
-  // within range of a query point always lands in one of the 27 cells around it,
-  // and ≥ the facet extent so a facet spans only a few cells.
+  const facetPt = midSurfaceCorner(shells);
+  // Cell ≥ the largest query radius (half the thickest wall) and ≥ the facet
+  // extent, so a facet spans only a few cells.
   let maxThk = 0,
     sumExtent = 0;
   for (let t = 0; t < nFacets; t++) {
     if (shells.shellThk[t] > maxThk) maxThk = shells.shellThk[t];
-    const cornerA = facetPt(t, 0),
-      cornerB = facetPt(t, 1),
-      cornerC = facetPt(t, 2);
-    sumExtent += Math.max(
-      Math.hypot(
-        cornerB[0] - cornerA[0],
-        cornerB[1] - cornerA[1],
-        cornerB[2] - cornerA[2],
-      ),
-      Math.hypot(
-        cornerC[0] - cornerB[0],
-        cornerC[1] - cornerB[1],
-        cornerC[2] - cornerB[2],
-      ),
-      Math.hypot(
-        cornerA[0] - cornerC[0],
-        cornerA[1] - cornerC[1],
-        cornerA[2] - cornerC[2],
-      ),
-    );
+    sumExtent += triangleExtent(facetPt, t);
   }
-  const cell = Math.max(maxThk * margin, sumExtent / nFacets, 1e-9);
-
-  const grid = new Map<string, number[]>();
-  for (let t = 0; t < nFacets; t++) {
-    const corners = [facetPt(t, 0), facetPt(t, 1), facetPt(t, 2)];
-    const lo = [0, 1, 2].map((axis) =>
-      Math.floor(
-        Math.min(corners[0][axis], corners[1][axis], corners[2][axis]) / cell,
-      ),
-    );
-    const hi = [0, 1, 2].map((axis) =>
-      Math.floor(
-        Math.max(corners[0][axis], corners[1][axis], corners[2][axis]) / cell,
-      ),
-    );
-    for (let x = lo[0]; x <= hi[0]; x++)
-      for (let y = lo[1]; y <= hi[1]; y++)
-        for (let z = lo[2]; z <= hi[2]; z++)
-          getOrInit(grid, `${x},${y},${z}`, () => []).push(t);
-  }
+  const grid = buildTriangleGrid(
+    nFacets,
+    facetPt,
+    Math.max(maxThk * margin, sumExtent / nFacets, 1e-9),
+  );
 
   for (let e = 0; e < m.tet.length / 4; e++) {
     if (m.body[e] !== shells.shellBody) continue;
@@ -210,34 +239,51 @@ export function shellWallTets(
       centroid[1] += node[1] / 4;
       centroid[2] += node[2] / 4;
     }
-    const cx = Math.floor(centroid[0] / cell),
-      cy = Math.floor(centroid[1] / cell),
-      cz = Math.floor(centroid[2] / cell);
-    let inside = false;
-    for (let dx = -1; dx <= 1 && !inside; dx++)
-      for (let dy = -1; dy <= 1 && !inside; dy++)
-        for (let dz = -1; dz <= 1 && !inside; dz++) {
-          const bucket = grid.get(`${cx + dx},${cy + dy},${cz + dz}`);
-          if (!bucket) continue;
-          for (const t of bucket) {
-            const reach = 0.5 * shells.shellThk[t] * margin;
-            if (
-              pointTriDist2(
-                centroid,
-                facetPt(t, 0),
-                facetPt(t, 1),
-                facetPt(t, 2),
-              ) <=
-              reach * reach
-            ) {
-              inside = true;
-              break;
-            }
-          }
-        }
+    const inside = anyTriangleNear(grid, centroid, (dist2, t) => {
+      const reach = 0.5 * shells.shellThk[t] * margin;
+      return dist2 <= reach * reach;
+    });
     if (inside) wallTets.add(e);
   }
   return wallTets;
+}
+
+// Corner accessor for the shell mid-surface facets.
+function midSurfaceCorner(
+  shells: ShellExtraction,
+): (t: number, k: number) => [number, number, number] {
+  const sv = shells.shellVerts;
+  return (t, k) => {
+    const i = shells.shellTris[3 * t + k];
+    return [sv[3 * i], sv[3 * i + 1], sv[3 * i + 2]];
+  };
+}
+
+// Longest edge of triangle t.
+function triangleExtent(
+  corner: (t: number, k: number) => [number, number, number],
+  t: number,
+): number {
+  const cornerA = corner(t, 0),
+    cornerB = corner(t, 1),
+    cornerC = corner(t, 2);
+  return Math.max(
+    Math.hypot(
+      cornerB[0] - cornerA[0],
+      cornerB[1] - cornerA[1],
+      cornerB[2] - cornerA[2],
+    ),
+    Math.hypot(
+      cornerC[0] - cornerB[0],
+      cornerC[1] - cornerB[1],
+      cornerC[2] - cornerB[2],
+    ),
+    Math.hypot(
+      cornerA[0] - cornerC[0],
+      cornerA[1] - cornerC[1],
+      cornerA[2] - cornerC[2],
+    ),
+  );
 }
 
 function faceProps(m: ShellizeMesh): FaceProp[] {
@@ -563,6 +609,114 @@ export interface CoupledModel {
   shellPool: number[]; // local shell index → pool index
 }
 
+// Boundary of a tet mesh: the faces used by exactly one element, as a flat
+// 3·nTris index array over the same node numbering as `tets`.
+function tetMeshBoundary(tets: number[]): number[] {
+  const seen = new Map<
+    string,
+    { tri: [number, number, number]; count: number }
+  >();
+  for (let e = 0; e < tets.length / 4; e++)
+    for (const face of TET_FACES) {
+      const tri: [number, number, number] = [
+        tets[4 * e + face[0]],
+        tets[4 * e + face[1]],
+        tets[4 * e + face[2]],
+      ];
+      const key = [...tri].sort((a, b) => a - b).join(",");
+      const entry = seen.get(key);
+      if (entry) entry.count++;
+      else seen.set(key, { tri, count: 1 });
+    }
+  const out: number[] = [];
+  for (const { tri, count } of seen.values())
+    if (count === 1) out.push(tri[0], tri[1], tri[2]);
+  return out;
+}
+
+// The shell mid-surface nodes that lie ON the retained solid — the seam where an
+// idealised wall meets material that stayed solid. These, and only these, are the
+// references of the shell↔solid tie.
+//
+// The reference set used to be "every shell node with ≥ 3 solid nodes within
+// couplingRadius" — a ball of fixed 10 mm, an absolute length with no relation to
+// the part being analysed. Every shell node it caught became rigidly tied to the
+// solid, so on the 2 mm fin of fin_two_parts.step the top 9.8 mm of the wall was
+// clamped to the block: the cantilever was shortened and its tip deflection came
+// out 26 % stiff. Whether a node is at the seam is a geometric fact, not a
+// distance-to-nodes question, so test it directly against the retained solid's
+// BOUNDARY SURFACE. The tolerance is one wall thickness: the mid-surface sits t/2
+// inside the original wall face, so a seam node can be up to t/2 off the solid
+// boundary, and t leaves margin for a curved or coarsely faceted seam.
+function seamShellNodes(
+  ppt: (i: number) => [number, number, number],
+  shellPoolIndices: number[],
+  solidBoundary: number[],
+  tolerance: number,
+): number[] {
+  const nTris = solidBoundary.length / 3;
+  if (nTris === 0 || tolerance <= 0) return [];
+  const corner = (t: number, k: number): [number, number, number] =>
+    ppt(solidBoundary[3 * t + k]);
+  let sumExtent = 0;
+  for (let t = 0; t < nTris; t++) sumExtent += triangleExtent(corner, t);
+  const grid = buildTriangleGrid(
+    nTris,
+    corner,
+    Math.max(tolerance, sumExtent / nTris, 1e-9),
+  );
+  const tol2 = tolerance * tolerance;
+  return shellPoolIndices.filter((pi) =>
+    anyTriangleNear(grid, ppt(pi), (dist2) => dist2 <= tol2),
+  );
+}
+
+// Median tet edge — the solid mesh's own length scale, from which both coupling
+// distances below are derived so neither is a fixed number of millimetres.
+function medianTetEdge(
+  ppt: (i: number) => [number, number, number],
+  tets: number[],
+): number {
+  const edges: number[] = [];
+  for (let e = 0; e < tets.length / 4; e++) {
+    const nodes = [0, 1, 2, 3].map((k) => ppt(tets[4 * e + k]));
+    for (let i = 0; i < 4; i++)
+      for (let j = i + 1; j < 4; j++)
+        edges.push(
+          Math.hypot(
+            nodes[i][0] - nodes[j][0],
+            nodes[i][1] - nodes[j][1],
+            nodes[i][2] - nodes[j][2],
+          ),
+        );
+  }
+  if (edges.length === 0) return 0;
+  edges.sort((a, b) => a - b);
+  return edges[Math.floor(edges.length / 2)];
+}
+
+// How far off the retained solid's boundary a shell node may sit and still count
+// as seam. The seam is a wall-thickness-scale feature, but a DISCRETISED seam is
+// only located to within the local element size: with 0.5 mm walls on a 6 mm mesh
+// the crane holder's junction ring lands well off the solid's faceted boundary,
+// and a wall-thickness tolerance found so few seam nodes that the shell hinged
+// there (max |u| 0.16 mm at 4 mm elements but 8.1 mm at 8 mm — no convergence at
+// all). So the tolerance carries both scales: one wall thickness, or half an
+// element, whichever is larger. Unlike a fixed radius it shrinks as the mesh is
+// refined, so the tied band is mesh-convergent rather than a constant bite out of
+// the structure.
+function seamTolerance(maxWallThickness: number, medEdge: number): number {
+  return Math.max(maxWallThickness, 0.5 * medEdge);
+}
+
+// Distance a coupling reference may reach to find its solid partners. It has to
+// span at least one solid element, otherwise a seam node on a coarse mesh finds
+// fewer than the three partners an RBE3/MPC needs and is silently dropped; beyond
+// that it only widens the patch the tie distributes over.
+function partnerSearchRadius(medEdge: number, floor: number): number {
+  return Math.max(2 * medEdge, floor, 1e-9);
+}
+
 // Auto-detect distributing (RBE3) couplings: every reference (shell) node that
 // has ≥3 solid nodes within couplingRadius ties to them. Emitted CSR-style —
 // ref[k] ties to solid[offsets[k]..offsets[k+1]). Only the k NEAREST solid
@@ -710,17 +864,24 @@ export function dropCouplingsOnFixedNodes(
 }
 
 // Assemble the coupled node pool (solid nodes then shell nodes), remap tets and
-// shell triangles onto it, and auto-detect distributing couplings (each shell
-// node near ≥3 solid nodes ties to them).
+// shell triangles onto it, and tie the two domains: the shell's SEAM nodes (those
+// on the retained solid's boundary) to their nearest solid nodes, plus any gapped
+// solid↔solid interface.
 export function buildCoupledModel(
   m: ShellizeMesh,
   shells: ShellExtraction,
   wallTets: Set<number>,
   {
-    couplingRadius = 10,
+    seamTolerance: seamToleranceOverride,
+    couplingRadius,
     solidCouplingRadius = 8,
     maxCoupledNodes = 16,
   }: {
+    // How far off the retained solid's boundary a shell node may sit and still
+    // count as seam. Defaults to seamTolerance() of the model's own scales.
+    seamTolerance?: number;
+    // How far a seam node may reach for its solid partners. Defaults to the
+    // solid mesh's own spacing — see partnerSearchRadius.
     couplingRadius?: number;
     solidCouplingRadius?: number;
     maxCoupledNodes?: number;
@@ -792,11 +953,22 @@ export function buildCoupledModel(
     maxCoupledNodes,
   );
   const solidRefs = new Set(solidCoupling.ref);
+  // Tie only the shell nodes that sit on the retained solid, and let each reach
+  // as far as the solid mesh's own spacing to find its partners. Both scales come
+  // from the model — a fixed radius rigidified whole millimetres of thin wall.
+  const medEdge = medianTetEdge(ppt, tets);
+  const tolerance =
+    seamToleranceOverride ??
+    seamTolerance(
+      shells.shellThk.length > 0 ? Math.max(...shells.shellThk) : 0,
+      medEdge,
+    );
+  const seam = seamShellNodes(ppt, shellPool, tetMeshBoundary(tets), tolerance);
   const shellCoupling = autoDetectCouplings(
     ppt,
     [...solidPool.values()].filter((pi) => !solidRefs.has(pi)),
-    shellPool,
-    couplingRadius,
+    seam,
+    couplingRadius ?? partnerSearchRadius(medEdge, tolerance),
     maxCoupledNodes,
   );
 
@@ -845,10 +1017,12 @@ export function buildExplicitCoupledModel(
   shellTris: number[], // 3·nShellTris, store vertex indices
   shellThk: number[], // per shell triangle thickness
   {
-    couplingRadius = 10,
+    seamTolerance: seamToleranceOverride,
+    couplingRadius,
     solidCouplingRadius = 8,
     maxCoupledNodes = 16,
   }: {
+    seamTolerance?: number;
     couplingRadius?: number;
     solidCouplingRadius?: number;
     maxCoupledNodes?: number;
@@ -907,18 +1081,31 @@ export function buildExplicitCoupledModel(
   const solidRefs = new Set(solidCoupling.ref);
 
   // Shell nodes NOT shared with the solid need a distributing coupling; shared
-  // nodes are already rigidly attached through the common pool DOFs. Solid nodes
-  // that are solid-tie references are coupling-dependent, so exclude them as
-  // shell-coupling targets (a target DOF must be independent).
+  // nodes are already rigidly attached through the common pool DOFs. Of those,
+  // only the SEAM nodes — the ones sitting on the retained solid's boundary — are
+  // tied, by the same geometric rule the auto-shell path uses, so a saved mixed
+  // model reloads with the tie it was meshed with. Solid nodes that are solid-tie
+  // references are coupling-dependent, so exclude them as shell-coupling targets
+  // (a target DOF must be independent).
   const solidPoolSet = new Set(solidPoolIndices);
-  const refPoolIndices = [...shellPoolIndex].filter(
+  const unsharedShellNodes = [...shellPoolIndex].filter(
     (pi) => !solidPoolSet.has(pi),
+  );
+  const medEdge = medianTetEdge(ppt, tets);
+  const tolerance =
+    seamToleranceOverride ??
+    seamTolerance(shellThk.length > 0 ? Math.max(...shellThk) : 0, medEdge);
+  const seam = seamShellNodes(
+    ppt,
+    unsharedShellNodes,
+    tetMeshBoundary(tets),
+    tolerance,
   );
   const shellCoupling = autoDetectCouplings(
     ppt,
     solidPoolIndices.filter((pi) => !solidRefs.has(pi)),
-    refPoolIndices,
-    couplingRadius,
+    seam,
+    couplingRadius ?? partnerSearchRadius(medEdge, tolerance),
     maxCoupledNodes,
   );
 

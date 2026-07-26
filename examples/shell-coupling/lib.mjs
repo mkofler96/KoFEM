@@ -207,6 +207,97 @@ function faceProps(mesh) {
   }).sort((a, b) => b.area - a.area);
 }
 
+/** Boundary of a tet mesh: faces used by exactly one element, flat 3*nTris.
+ *  Mirrors shellize.ts. */
+function tetMeshBoundary(tets) {
+  const seen = new Map();
+  for (let e = 0; e < tets.length / 4; e++)
+    for (const f of TET_FACES) {
+      const tri = [tets[4 * e + f[0]], tets[4 * e + f[1]], tets[4 * e + f[2]]];
+      const k = [...tri].sort((a, b) => a - b).join(",");
+      const entry = seen.get(k);
+      if (entry) entry.count++; else seen.set(k, { tri, count: 1 });
+    }
+  const out = [];
+  for (const { tri, count } of seen.values()) if (count === 1) out.push(tri[0], tri[1], tri[2]);
+  return out;
+}
+
+/** Shell mid-surface nodes lying ON the retained solid's boundary — the seam
+ *  where an idealised wall meets material that stayed solid, and the only nodes
+ *  the shell<->solid tie references. A fixed-radius ball of shell nodes instead
+ *  clamped whole millimetres of thin wall to the solid. Mirrors shellize.ts. */
+function seamShellNodes(ppt, shellPoolIndices, solidBoundary, tolerance) {
+  const nTris = solidBoundary.length / 3;
+  if (nTris === 0 || tolerance <= 0) return [];
+  const corner = (t, k) => ppt(solidBoundary[3 * t + k]);
+  let sumExtent = 0;
+  for (let t = 0; t < nTris; t++) {
+    const a = corner(t, 0), b = corner(t, 1), c = corner(t, 2);
+    sumExtent += Math.max(
+      Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]),
+      Math.hypot(c[0] - b[0], c[1] - b[1], c[2] - b[2]),
+      Math.hypot(a[0] - c[0], a[1] - c[1], a[2] - c[2]),
+    );
+  }
+  const cell = Math.max(tolerance, sumExtent / nTris, 1e-9);
+  const grid = new Map();
+  const push = (k, t) => { const arr = grid.get(k); if (arr) arr.push(t); else grid.set(k, [t]); };
+  for (let t = 0; t < nTris; t++) {
+    const p = [corner(t, 0), corner(t, 1), corner(t, 2)];
+    const lo = [0, 1, 2].map((d) => Math.floor(Math.min(p[0][d], p[1][d], p[2][d]) / cell));
+    const hi = [0, 1, 2].map((d) => Math.floor(Math.max(p[0][d], p[1][d], p[2][d]) / cell));
+    for (let x = lo[0]; x <= hi[0]; x++)
+      for (let y = lo[1]; y <= hi[1]; y++)
+        for (let z = lo[2]; z <= hi[2]; z++) push(`${x},${y},${z}`, t);
+  }
+  const out = [];
+  for (const pi of shellPoolIndices) {
+    const q = ppt(pi);
+    const c = [0, 1, 2].map((d) => Math.floor(q[d] / cell));
+    let hit = false;
+    for (let dx = -1; dx <= 1 && !hit; dx++)
+      for (let dy = -1; dy <= 1 && !hit; dy++)
+        for (let dz = -1; dz <= 1 && !hit; dz++) {
+          const bucket = grid.get(`${c[0] + dx},${c[1] + dy},${c[2] + dz}`);
+          if (!bucket) continue;
+          for (const t of bucket)
+            if (pointTriDist2(q, corner(t, 0), corner(t, 1), corner(t, 2)) <= tolerance * tolerance) { hit = true; break; }
+        }
+    if (hit) out.push(pi);
+  }
+  return out;
+}
+
+/** Median tet edge — the solid mesh's own length scale, from which both coupling
+ *  distances are derived so neither is a fixed length. Mirrors shellize.ts. */
+function medianTetEdge(ppt, tets) {
+  const edges = [];
+  for (let e = 0; e < tets.length / 4; e++) {
+    const n = [0, 1, 2, 3].map((k) => ppt(tets[4 * e + k]));
+    for (let i = 0; i < 4; i++)
+      for (let j = i + 1; j < 4; j++)
+        edges.push(Math.hypot(n[i][0] - n[j][0], n[i][1] - n[j][1], n[i][2] - n[j][2]));
+  }
+  if (edges.length === 0) return 0;
+  edges.sort((a, b) => a - b);
+  return edges[Math.floor(edges.length / 2)];
+}
+
+/** Seam tolerance: one wall thickness, or half an element — a discretised seam is
+ *  only located to within the local element size. Shrinks under refinement, so
+ *  the tied band is mesh-convergent. Mirrors shellize.ts. */
+function seamTolerance(maxWallThickness, medEdge) {
+  return Math.max(maxWallThickness, 0.5 * medEdge);
+}
+
+/** How far a seam node may reach for its solid partners: at least one solid
+ *  element, so a coarse mesh still yields the 3 partners an RBE3 needs.
+ *  Mirrors shellize.ts. */
+function partnerSearchRadius(medEdge, floor) {
+  return Math.max(2 * medEdge, floor, 1e-9);
+}
+
 /**
  * Detect thin walls (pairs of opposite planar CAD faces) and collapse each to a
  * mid-surface facet carrying the wall thickness. Walls meeting at a junction are
@@ -375,11 +466,11 @@ function concatCouplings(a, b) {
  * across any clearance; shells couple to the solid the same way. Mirrors
  * shellize.ts.
  */
-export function buildCoupledModel(mesh, shells, sliverTets, { couplingRadius = 10, solidCouplingRadius = 8 } = {}) {
+export function buildCoupledModel(mesh, shells, wallTets, { seamTolerance: seamToleranceOverride, couplingRadius, solidCouplingRadius = 8 } = {}) {
   const { V, tet, body } = mesh;
   const solidTets = [], tetBody = [];
   for (let e = 0; e < tet.length / 4; e++)
-    if (!(body[e] === shells.shellBody && sliverTets.has(e))) { solidTets.push(tet[4 * e], tet[4 * e + 1], tet[4 * e + 2], tet[4 * e + 3]); tetBody.push(body[e]); }
+    if (!(body[e] === shells.shellBody && wallTets.has(e))) { solidTets.push(tet[4 * e], tet[4 * e + 1], tet[4 * e + 2], tet[4 * e + 3]); tetBody.push(body[e]); }
 
   const pool = [];
   const solidPool = new Map();
@@ -400,7 +491,16 @@ export function buildCoupledModel(mesh, shells, sliverTets, { couplingRadius = 1
 
   const solidCoupling = autoDetectSolidCouplings(ppt, poolBody, solidCouplingRadius);
   const solidRefs = new Set(solidCoupling.ref);
-  const shellCoupling = autoDetectCouplings(ppt, [...solidPool.values()].filter((pi) => !solidRefs.has(pi)), shellPool, couplingRadius);
+  // Tie only the shell nodes sitting on the retained solid, each reaching as far
+  // as the solid mesh's own spacing for its partners — both scales come from the
+  // model instead of a fixed radius.
+  const medEdge = medianTetEdge(ppt, tets);
+  const tolerance = seamToleranceOverride
+    ?? seamTolerance(shells.shellThk.length > 0 ? Math.max(...shells.shellThk) : 0, medEdge);
+  const seam = seamShellNodes(ppt, shellPool, tetMeshBoundary(tets), tolerance);
+  const shellCoupling = autoDetectCouplings(
+    ppt, [...solidPool.values()].filter((pi) => !solidRefs.has(pi)), seam,
+    couplingRadius ?? partnerSearchRadius(medEdge, tolerance));
 
   return {
     pool, tets, tetBody, triangles, thicknesses: shells.shellThk,
