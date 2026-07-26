@@ -7,8 +7,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-  SLACK_CHANNEL: ${{ secrets.SLACK_CHANNEL }}
 
 jobs:
   rust:
@@ -212,9 +210,21 @@ jobs:
         env:
           DEEPSOURCE_DSN: ${{ secrets.DEEPSOURCE_DSN }}
 
-      - name: Post mesh report to Slack
-        if: always()
-        run: cd web && bun scripts/generate-mesh-report.ts
+      # Failure screenshots stay in the run that produced them. They used to be
+      # pushed to a chat channel on every run, which buried the signal; anyone
+      # investigating a red build downloads them from here instead.
+      - name: Upload Playwright results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results-${{ github.run_id }}
+          path: web/playwright-results/
+          retention-days: 3
+          if-no-files-found: ignore
+
+      # CI does not publish the workflow showcase. That is a weekly Claude task
+      # (.claude/skills/showcase) posting to Linear over MCP, so no Linear
+      # credential exists in this repository.
 
       # --- Docker image -----------------------------------------------------
       # Runs in the frontend job to reuse its checkout. No `if: always()`, so a

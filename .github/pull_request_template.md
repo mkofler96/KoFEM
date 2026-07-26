@@ -2,7 +2,9 @@
 
 <!-- What does this PR change, and why? -->
 
-closes #
+<!-- Linear is the tracker. Replace nn with the issue number; merging closes it. -->
+
+Fixes KOF-
 
 ## Key Changes
 

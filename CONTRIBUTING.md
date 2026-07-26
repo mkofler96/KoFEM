@@ -79,12 +79,20 @@ justification:
 /* eslint-disable kofem/min-identifier-length -- symbols from the Euler–Bernoulli formula above: δ = P·L³/(3·E·I), I = b·h³/12 */
 ```
 
+## Issues live in Linear
+
+Work is tracked in Linear (team `KOF`), not in GitHub Issues. Pick up or file
+work there; GitHub is for the code, the pull request and CI.
+
 ## Pull requests
 
 - The PR template asks you to confirm, per changed code path, that missing or
   mismatched data produces an error rather than a default. Answer it honestly
   — reviewers check this first.
-- Include `closes #<issue-number>` in the PR description so merging closes
-  the linked issue.
+- Include `Fixes KOF-nn` in the PR description. Linear's GitHub integration
+  links the PR and closes the issue when it merges. (Older PRs use
+  `closes #<github-number>`; that convention is retired.)
+- If the change has a visible result, attach the screenshot to the **Linear
+  issue** — one comment, edited on each push rather than a new comment per push.
 - Before committing: `cargo fmt`, `cargo clippy`, and in `web/`:
   `bun run typecheck && bun run lint`.

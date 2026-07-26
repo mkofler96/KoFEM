@@ -24,7 +24,7 @@
     "test:screenshot": "playwright test screenshot.spec.ts",
     "capture:tutorial": "playwright test -c playwright.capture.config.ts",
     "test:mesh-report": "playwright test mesh-report.spec.ts",
-    "report:mesh": "bun scripts/generate-mesh-report.ts"
+    "test:showcase": "playwright test showcase.spec.ts"
   },
   "packageManager": "bun",
   "dependencies": {

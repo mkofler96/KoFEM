@@ -2,25 +2,45 @@
 
 KoFEM is a browser-first finite element analysis application. This file is the primary context for Claude Code when working on this codebase.
 
+**This file describes how the code works.** Roadmap, decision records, feature
+specs and the visual showcase live in Linear — see
+[Planning and documentation live in Linear](#planning-and-documentation-live-in-linear).
+
 ## Architecture Overview
 
-The pipeline is: **STEP geometry → OCCT tessellation → Netgen volume mesh → MFEM FEM solve**
+The solid pipeline is: **STEP geometry → OCCT tessellation → Netgen volume mesh → MFEM FEM solve**.
+Thin-walled bodies take a shell path instead — see [Shells and multibody](#shells-and-multibody).
+
+**Everything that ships runs through the C++/WASM engine.** The Rust crates are
+type definitions and stubs for a future migration; no product code path calls
+them today.
 
 ```
 KoFEM/
-├── engine/             # C++ WASM engine (browser entry-point)
-│   ├── cpp/engine.cpp  # Full pipeline via Emscripten Embind
+├── engine/             # C++ WASM engine — the production pipeline
+│   ├── cpp/
+│   │   ├── engine.cpp        # Embind entry point only (~40 lines); the pipeline
+│   │   │                     # lives in the modules below
+│   │   ├── cad_io.cpp        # STEP/IGES import (OCCT)
+│   │   ├── tessellate.cpp    # OCCT surface tessellation (display)
+│   │   ├── mesh_netgen.cpp   # Netgen volume meshing
+│   │   ├── solve_mfem.cpp    # Linear-elastic solid solve (MFEM)
+│   │   ├── shell_core.cpp    # Kirchhoff/DKT shell formulation
+│   │   ├── solve_shell.cpp   # Pure-shell solve
+│   │   └── solve_coupled.cpp # Mixed shell/solid solve with RBE3 coupling
+│   ├── tests/          # Native C++ checks — NOT run by CI (tracked in Linear)
 │   └── CMakeLists.txt  # emcmake build → kofem_wasm_emcc.js + .wasm
-├── crates/
-│   ├── kofem-geom/     # OCCT wrapper: STEP import + surface tessellation (native)
-│   ├── kofem-mesh/     # Netgen wrapper: quality tetrahedral volume meshing (native)
-│   │                   # also defines the shared SurfaceMesh / VolumeMesh types
-│   └── kofem-core/     # MFEM wrapper: linear-elastic FEM via FemSolver trait (native)
-├── web/                # React + Three.js frontend (Vite)
-├── scripts/
-│   ├── build-wasm.sh        # CMake/Emscripten WASM build
-│   └── docker-build-wasm.sh # Docker wrapper (Mac / CI)
-└── docs/               # Project specs, roadmap, ADRs
+├── crates/             # Rust stubs for the 3.0 native migration — see below
+├── web/                # React + Three.js frontend (Vite) — bun, not npm
+├── examples/           # Validation cases, shell-coupling scripts, web examples
+├── test_files/         # STEP/IGES fixtures used by tests and examples
+└── scripts/
+    ├── build-wasm.sh        # CMake/Emscripten WASM build
+    ├── docker-build-wasm.sh # Docker wrapper (Mac / CI)
+    ├── fetch-wasm-deps.sh   # Pull the precompiled OCCT/Netgen/MFEM WASM libs
+    ├── clang-tidy.sh        # C++ lint, mirrors the DeepSource PR gate
+    ├── test-bc-validation.sh
+    └── test-shell.sh
 ```
 
 ### WASM build flow
@@ -37,48 +57,40 @@ web/src/wasm/pkg/kofem_wasm.js  (thin adapter, committed)
 solver.worker.ts  (awaits init(), calls methods on the KofemModule instance)
 ```
 
-### Incremental Rust migration
+### Shells and multibody
 
-When a piece of the pipeline is re-implemented in Rust, compile the relevant
-crate as `crate-type = ["staticlib"]` targeting `wasm32-unknown-emscripten`,
-expose the new logic via `extern "C"`, and call it from `engine.cpp`. The
-CMakeLists.txt gets one extra `target_link_libraries` entry — nothing else
-changes.
+Not every model is a bag of tetrahedra. Two features cut across the pipeline and
+touch nearly every layer, so check them before assuming a change is solid-only:
 
-### C++ bridge layout (native builds)
+- **Shells.** Thin-walled bodies are meshed as `CTRIA3` and solved with Kirchhoff
+  plate/DKT elements (`shell_core.cpp`, `solve_shell.cpp`). Mid-surface extraction
+  and the shell mesh assembly live in `web/src/lib/shellize.ts`. Auto-shell
+  detection picks the path from a wall-thickness ratio at mesh time and stores a
+  mixed `CTRIA3` + `CTETRA` model.
+- **Multibody.** Assemblies carry per-body materials and per-body element type
+  (shell or solid). Bodies are joined by bonded ties; shell-to-solid interfaces
+  use explicit **RBE3** coupling. The mixed solve is `solve_coupled.cpp`.
 
-Each Rust crate that wraps a C++ library has:
+A change to materials, boundary conditions, loads, or the solve payload almost
+always has a shell path, a solid path, and a coupled path. Cover all three.
 
-```
-crates/kofem-{geom,mesh,core}/
-├── build.rs            # detects installed libs, compiles bridge, emits link flags
-├── include/            # C header declaring the extern "C" bridge API
-└── cpp/                # thin C++ wrapper calling the real library
-```
+### The Rust crates are stubs (3.0 migration)
 
-### Solver abstraction
+`crates/kofem-{geom,mesh,core}` total ~300 lines. They define the shared
+`SurfaceMesh` / `VolumeMesh` / material / BC types and a `FemSolver` trait, and
+**every entry point returns an explicit "not implemented" error**. There is no
+`build.rs`, no C++ bridge, and no OCCT/Netgen/MFEM linkage — building them needs
+nothing but a Rust toolchain.
 
-`kofem-core` exposes a `FemSolver` trait. `MfemSolver` is the default implementation.
-To swap MFEM for a different solver, implement `FemSolver` in a new module — no other
-crate changes are needed.
+Rewriting the pipeline in Rust is a real intention, but it is targeted at **3.0**
+and no work has started. Until then:
 
-## Native prerequisites
-
-Install the three C++ libraries before building natively:
-
-| Library            | Version | Install hint                                     |
-| ------------------ | ------- | ------------------------------------------------ |
-| OpenCASCADE (OCCT) | ≥ 7.6   | `apt install libocct-*-dev` or build from source |
-| Netgen             | ≥ 6.2   | build from source, installs `libnglib`           |
-| MFEM               | ≥ 4.6   | `apt install libmfem-dev` or build from source   |
-
-Point the build system at non-standard install prefixes via environment variables:
-
-```bash
-export OCCT_ROOT=/opt/occt
-export NETGEN_ROOT=/opt/netgen
-export MFEM_DIR=/opt/mfem
-```
+- Do **not** add product logic to the crates, and do not treat `FemSolver` as an
+  extension point — implementing it changes nothing that ships.
+- To change solver behaviour, edit `engine/cpp/solve_{mfem,shell,coupled}.cpp`.
+- When the migration does start, the mechanism is: build the crate as
+  `crate-type = ["staticlib"]` for `wasm32-unknown-emscripten`, expose it via
+  `extern "C"`, and add one `target_link_libraries` entry in `engine/CMakeLists.txt`.
 
 ## First-time setup
 
@@ -89,18 +101,26 @@ git config core.hooksPath .githooks
 ## Build Commands
 
 ```bash
-# Check Rust compiles (requires native libs installed)
+# Rust stubs — no native libraries needed, and there are no tests yet.
 cargo check
-
-# Build and test Rust
 cargo test
 
-# Build WASM (requires Emscripten + pre-compiled WASM libs — see scripts/build-wasm.sh)
-OCCT_WASM_ROOT=... NETGEN_WASM_ROOT=... MFEM_WASM_ROOT=... ./scripts/build-wasm.sh
+# Build the WASM engine. Needs Emscripten plus the precompiled OCCT/Netgen/MFEM
+# WASM libs; scripts/fetch-wasm-deps.sh pulls them, or use the Docker wrapper.
+./scripts/build-wasm.sh          # or: ./scripts/docker-build-wasm.sh
 
 # Install and run the web frontend (uses bun, not npm)
 cd web && bun install && bun run dev
+
+# The gates CI enforces, in the order CI runs them
+cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings
+bash scripts/clang-tidy.sh
+cd web && bun run typecheck && bun run lint && bun run format:check && bun run test
 ```
+
+Building the WASM engine rewrites the committed `web/src/wasm/pkg/*.wasm`
+(~34 MB). Only rebuild when you have changed C++ sources — an unnecessary rebuild
+adds tens of megabytes of history to a repository whose `.git` is already ~80 MB.
 
 ## Geometry vs. Mesh — Critical Terminology
 
@@ -108,9 +128,9 @@ There are three distinct representations in this codebase. Using the wrong word 
 
 | Concept                   | What it is                                               | Produced by                                               | Used for                                                       |
 | ------------------------- | -------------------------------------------------------- | --------------------------------------------------------- | -------------------------------------------------------------- |
-| **Geometry tessellation** | Triangles approximating the CAD surface for display only | OCCT (`kofem-geom`)                                       | Viewport rendering of the STEP shape (Geometry repr)           |
+| **Geometry tessellation** | Triangles approximating the CAD surface for display only | OCCT (`engine/cpp/tessellate.cpp`)                        | Viewport rendering of the STEP shape (Geometry repr)           |
 | **Surface mesh**          | Quality triangulation of the CAD boundary surfaces       | OCCT tessellation **or** Netgen's direct OCCT integration | Input to the volume mesher + display (Surface Mesh repr)       |
-| **Volume mesh**           | Tetrahedral elements filling the solid body              | Netgen (`kofem-mesh`)                                     | FEM analysis — nodes + elements for stiffness matrix and solve |
+| **Volume mesh**           | Tetrahedral elements filling the solid body              | Netgen (`engine/cpp/mesh_netgen.cpp`)                     | FEM analysis — nodes + elements for stiffness matrix and solve |
 
 The surface mesh comes from the **geometry**, not from the volume mesh. It is either the OCCT tessellation repurposed as meshing input, or (preferred) a proper boundary mesh produced by Netgen's built-in OCCT integration, which respects CAD topology and feature edges.
 
@@ -129,8 +149,78 @@ The surface mesh comes from the **geometry**, not from the volume mesh. It is ei
 - Comments only for non-obvious physics/math — reference the paper/equation instead of explaining the code
 - ALWAYS prefer clear and information-rich error messages over silent fall-throughs. Avoid defensive try/catch blocks to make debugging easier.
 
-## Pull Request Convention
+## Planning and documentation live in Linear
 
-When the PR resolves a tracked issue, include `closes #<issue-number>` in the description body so that merging the PR automatically closes it on GitHub.
+**Linear is the source of truth for what to work on and why.** GitHub holds the
+code, the pull requests and CI; it is not where planning happens.
 
-Work that has no matching issue — a bug reported directly, an opportunistic fix — simply omits the line. Do not invent an issue number, and do not attach `closes` to an issue the PR does not actually resolve: merging would silently close still-open work. Naming a related-but-unresolved issue in prose is fine.
+| Question                                    | Where the answer lives                      |
+| ------------------------------------------- | ------------------------------------------- |
+| How does the code work? What are the rules? | This file, `CONTRIBUTING.md`, code comments |
+| What should I build, and why?               | Linear issue `KOF-nn`                       |
+| Where is the project going?                 | Linear document **Roadmap**                 |
+| Why is it built this way?                   | Linear documents **ADR-nnnn**               |
+| What shipped? What does the app look like?  | Linear project updates (weekly)             |
+
+Build and architecture facts stay in the repository on purpose: they must be
+versioned with the diff that changes them and readable without network access.
+Do not move them into Linear, and do not create a `docs/` directory.
+
+### Working an issue
+
+1. Find or create the Linear issue.
+2. Branch, implement, open the PR. Put `Fixes KOF-nn` in the PR description —
+   Linear's GitHub integration links the PR and closes the issue on merge.
+   (`closes #<github-number>` is the old convention; it is no longer used.)
+3. Record your evidence on the issue (below).
+
+**Do not move the status by hand.** The GitHub integration owns it: linking the
+PR moves the issue to **In Progress** and assigns it to the PR author, and
+merging closes it. A manual status change made before the PR links is simply
+overwritten when it does.
+
+Work with no matching issue — a bug reported directly, an opportunistic fix —
+simply omits the line. Do not invent an identifier, and **do not attach `Fixes`
+to an issue the PR does not actually resolve**: merging would silently close
+still-open work. Naming a related-but-unresolved issue in prose is fine.
+
+That last rule has teeth: an issue named with `Fixes` is linked the moment the
+PR body is saved, which drags it into **In Progress** immediately and puts it in
+line to be closed on merge. Ongoing operational issues — KOF-209, the showcase
+anchor — must never be named that way.
+
+### Recording evidence on an issue
+
+When a change has a visible result — a screenshot, a plot, a before/after, a
+convergence log — attach it to **the Linear issue**, not to a chat channel:
+
+- **One comment per issue, edited in place.** Update the existing evidence
+  comment when you push again; do not add a second comment per push. A stream of
+  near-identical posts is noise, and noise is what this workflow exists to avoid.
+- Say what the reader is looking at and what it proves. A bare image is not
+  evidence.
+- Failure screenshots from CI are **not** posted to Linear. They stay as the
+  GitHub Actions artifact of the run that produced them.
+
+### The weekly project update
+
+One post per week on the Kofem project, combining a progress digest with the
+five-step workflow capture from `web/tests/showcase.spec.ts`.
+
+**CI does not publish it, and there is no Linear credential in this repository.**
+It is a scheduled Claude task — the `showcase` skill in `.claude/skills/` — posting
+over the Linear MCP connection. Screenshot uploads are anchored to **KOF-209**,
+because Linear's file upload is issue-scoped.
+
+Three properties keep it out of the noise category. Any change must preserve all
+three:
+
+1. **One post per week.** Digest and screenshots share a body — never a post per
+   section, never a post per image.
+2. **Screenshots only when they changed.** The SHA-256 of the screenshot set is
+   written into the update body as an HTML comment and checked before anything is
+   uploaded. An unchanged week posts the digest alone.
+3. **No filler.** A week with nothing worth reading says so in one line.
+
+This replaced a Slack pipeline that posted the same images on every CI run, on
+every branch and PR.
