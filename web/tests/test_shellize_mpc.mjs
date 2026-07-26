@@ -24,7 +24,7 @@ import {
   buildExplicitCoupledModel,
   dropCouplingsOnFixedNodes,
   extractThinWallShells,
-  shellBodySliverTets,
+  shellWallTets,
 } from "../src/lib/shellize.ts";
 
 let failures = 0;
@@ -253,7 +253,7 @@ check(
   );
 }
 
-// ── extractThinWallShells / sliver split is thickness-driven, not body-driven ──
+// ── extractThinWallShells / wall split is thickness-driven, not body-driven ───
 {
   const verts = [];
   const idx = new Map();
@@ -301,20 +301,61 @@ check(
   addGrid(-12, 3, 4); // thick base
   addGrid(10, 1, 0.5); // 0.5 mm wall — sliver
   const oneBody = { V: verts, tet, body, surfTri: [], surfFace: [] };
-  const slivers = shellBodySliverTets(oneBody, 1);
-  let sliversHigh = 0,
-    sliversLow = 0;
-  for (const e of slivers) {
+  // Mid-surface of the 0.5 mm wall (z = 10 .. 10.5), one facet pair per grid
+  // cell, standing in for what collapseWallsToMidSurface produces.
+  const shellVerts = [],
+    shellTris = [],
+    shellThk = [];
+  const sidx = new Map();
+  const addS = (x, y) => {
+    const key = `${x},${y}`;
+    let i = sidx.get(key);
+    if (i === undefined) {
+      i = shellVerts.length / 3;
+      sidx.set(key, i);
+      shellVerts.push(x, y, 10.25);
+    }
+    return i;
+  };
+  for (let i = 0; i < 6; i++)
+    for (let j = 0; j < 3; j++) {
+      const c00 = addS(i * 5, j * 5),
+        c10 = addS((i + 1) * 5, j * 5),
+        c01 = addS(i * 5, (j + 1) * 5),
+        c11 = addS((i + 1) * 5, (j + 1) * 5);
+      shellTris.push(c00, c10, c11, c00, c11, c01);
+      shellThk.push(0.5, 0.5);
+    }
+  const wallTets = shellWallTets(oneBody, {
+    walls: [],
+    shellBody: 1,
+    shellVerts,
+    shellTris,
+    shellThk,
+    shellSrc: [],
+    shellTriSrc: [],
+  });
+  let wallHigh = 0,
+    wallLow = 0;
+  for (const e of wallTets) {
     let mz = 0;
     for (let k = 0; k < 4; k++) mz += verts[3 * tet[4 * e + k] + 2];
     mz /= 4;
-    if (mz > 9) sliversHigh++;
-    else sliversLow++;
+    if (mz > 9) wallHigh++;
+    else wallLow++;
+  }
+  // Every tet of the thin layer must be claimed — a wall represented by shells
+  // AND by leftover solid tets is counted twice.
+  let thinTets = 0;
+  for (let e = 0; e < tet.length / 4; e++) {
+    let mz = 0;
+    for (let k = 0; k < 4; k++) mz += verts[3 * tet[4 * e + k] + 2];
+    if (mz / 4 > 9) thinTets++;
   }
   check(
-    "sliver detection separates thin from thick WITHIN one body",
-    sliversHigh > 0 && sliversLow === 0,
-    `thin=${sliversHigh} thick=${sliversLow}`,
+    "wall-tet detection separates thin from thick WITHIN one body",
+    wallHigh === thinTets && wallLow === 0,
+    `thin=${wallHigh}/${thinTets} thick=${wallLow}`,
   );
   // No surface mesh here, so wall-pair detection has nothing to work with and
   // must report "no shell body" rather than inventing one.

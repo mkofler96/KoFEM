@@ -15,7 +15,7 @@ import {
 } from "./tie.js";
 import {
   extractThinWallShells,
-  shellBodySliverTets,
+  shellWallTets,
   buildCoupledModel,
   buildExplicitCoupledModel,
   dropCouplingsOnFixedNodes,
@@ -432,8 +432,8 @@ function buildMeshTimeShellModel(
       `Shell idealisation failed: body ${[...shellBodyIds].join(", ")} is marked "Shell" but no ` +
         "thin walls were found in it. Switch it to Solid, or check that it is genuinely thin-walled.",
     );
-  const slivers = shellBodySliverTets(mesh, shells.shellBody);
-  const model = buildCoupledModel(mesh, shells, slivers);
+  const wallTets = shellWallTets(mesh, shells);
+  const model = buildCoupledModel(mesh, shells, wallTets);
 
   // Nodes: the coupled pool (solid nodes first, then the shell mid-surface nodes).
   const poolNodes: Node[] = [];
@@ -526,7 +526,7 @@ function buildMeshTimeShellModel(
 // idealisation. Two sources: every shell facet is itself a surface (its OCC face
 // is the wall it came from), and the retained solid keeps those original surface
 // triangles whose nodes all survived into the solid pool. Faces of the solid that
-// were only exposed by removing the wall slivers have no CAD face and are left
+// were only exposed by removing the wall tets have no CAD face and are left
 // out — they are internal to the idealisation, not pickable CAD geometry.
 function rebuildPoolSurface(
   model: CoupledModel,
@@ -1205,13 +1205,13 @@ function mapCoupledDisplacements(
 }
 
 // Von Mises per ORIGINAL element. Solid tets map 1:1 in the order they were
-// appended to the pool (every element that is NOT a shelled-body wall sliver,
-// which now includes the shelled body's retained base tets). The wall-sliver
-// elements of the shelled body take the stress of the shell node nearest their
-// centroid — per shell node, the worst adjacent facet's surface stress. The
-// append order in buildCoupledModel is the element iteration order below, so a
-// single `solidIdx` cursor over vmTets stays aligned as long as we consume it for
-// exactly the non-sliver elements.
+// appended to the pool (every element that is NOT inside a shelled-body wall,
+// which now includes the shelled body's retained base tets). The wall elements of
+// the shelled body take the stress of the shell node nearest their centroid — per
+// shell node, the worst adjacent facet's surface stress. The append order in
+// buildCoupledModel is the element iteration order below, so a single `solidIdx`
+// cursor over vmTets stays aligned as long as we consume it for exactly the
+// non-wall elements.
 function mapCoupledVonMises(
   vmTets: Float64Array,
   vmTris: Float64Array,
@@ -1220,7 +1220,7 @@ function mapCoupledVonMises(
   model: CoupledModel,
   nearestShell: (p: [number, number, number]) => number,
   shellBody: number,
-  sliverTets: Set<number>,
+  wallTets: Set<number>,
 ): Float64Array {
   const vmByShellNode = new Map<number, number>();
   for (let t = 0; t < model.triangles.length / 3; t++) {
@@ -1238,8 +1238,8 @@ function mapCoupledVonMises(
   let solidIdx = 0;
   for (let e = 0; e < elements.length; e++) {
     // Solid tet (any other body, or the shelled body's retained base) → 1:1.
-    // Only the shelled body's wall slivers are represented by shells.
-    if (!(elements[e].propertyId === shellBody && sliverTets.has(e))) {
+    // Only the shelled body's wall tets are represented by shells.
+    if (!(elements[e].propertyId === shellBody && wallTets.has(e))) {
       vonMises[e] = vmTets[solidIdx++];
     } else {
       let cx = 0,
@@ -1312,8 +1312,8 @@ function tryCoupledSolve(
   // solid bodies keep their own nodes and are tied by distributing couplings
   // (buildCoupledModel), not node-merging, so a gapped pin/hole interface is a
   // proper force-and-moment tie instead of a sparse near-hinge.
-  const slivers = shellBodySliverTets(mesh, shells.shellBody);
-  const model = buildCoupledModel(mesh, shells, slivers);
+  const wallTets = shellWallTets(mesh, shells);
+  const model = buildCoupledModel(mesh, shells, wallTets);
   if (model.coupling.ref.length === 0) return null; // shell doesn't couple to the solid
 
   const nearestShell = shellNodeLocator(model);
@@ -1341,13 +1341,13 @@ function tryCoupledSolve(
   // bodies plus the shelled body when its thick base survived (only its thin walls
   // became shells). A body that is ENTIRELY shelled contributes none, so it is not
   // part of the solid domain and its material must not be validated as such — the
-  // sliver set (tet indices in tetElements order) tells them apart. They are
+  // wall-tet set (tet indices in tetElements order) tells them apart. They are
   // assembled with the single `solid` (E, ν); coupledMaterials rejects the case
   // where the solid domain spans more than one material (issue #376).
   const solidBodyIds = [
     ...new Set(
       tetElements
-        .filter((_el, idx) => !slivers.has(idx))
+        .filter((_el, idx) => !wallTets.has(idx))
         .map((el) => el.propertyId),
     ),
   ];
@@ -1396,7 +1396,7 @@ function tryCoupledSolve(
     model,
     nearestShell,
     shells.shellBody,
-    slivers,
+    wallTets,
   );
   return { displacements, vonMises };
 }
@@ -1600,7 +1600,7 @@ function tryPureShellSolve(
 
   // Von Mises per original tet: the worst surface stress of the shell facets
   // adjacent to the tet's nearest mid-surface node (the same recovery the coupled
-  // path uses for wall-sliver elements).
+  // path uses for wall elements).
   const vmByShellNode = new Map<number, number>();
   for (let t = 0; t < shells.shellTris.length / 3; t++) {
     const facetVm = result.von_mises[t];
