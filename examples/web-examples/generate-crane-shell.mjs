@@ -19,7 +19,7 @@ import {
   loadEngine,
   meshStep,
   extractThinWallShells,
-  shellBodySliverTets,
+  shellWallTets,
   buildCoupledModel,
   dropCouplingsOnFixedNodes,
 } from "../shell-coupling/lib.mjs";
@@ -38,8 +38,8 @@ const shells = extractThinWallShells(mesh);
 // (kept in the pool) so the load path through it into the pin/hook is preserved.
 // The pin/hook/base stay separate solid bodies joined by distributing couplings
 // (a gapped pin/hole interface is a force-and-moment tie, not a sparse hinge).
-const slivers = shellBodySliverTets(mesh, shells.shellBody);
-const model = buildCoupledModel(mesh, shells, slivers);
+const wallTets = shellWallTets(mesh, shells);
+const model = buildCoupledModel(mesh, shells, wallTets);
 const nShell = model.shellPool.length;
 
 // BCs + loads by CAD face (see crane-holder-shell.mjs). `fixedShellNodes` are the

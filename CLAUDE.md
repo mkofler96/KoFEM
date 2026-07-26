@@ -175,6 +175,11 @@ Do not move them into Linear, and do not create a `docs/` directory.
 3. Move the issue to **In Review** when the PR is open, and record your evidence
    on the issue (below).
 
+Work with no matching issue — a bug reported directly, an opportunistic fix —
+simply omits the line. Do not invent an identifier, and **do not attach `Fixes`
+to an issue the PR does not actually resolve**: merging would silently close
+still-open work. Naming a related-but-unresolved issue in prose is fine.
+
 ### Recording evidence on an issue
 
 When a change has a visible result — a screenshot, a plot, a before/after, a
