@@ -131,4 +131,6 @@ The surface mesh comes from the **geometry**, not from the volume mesh. It is ei
 
 ## Pull Request Convention
 
-Always include `closes #<issue-number>` in the PR description body so that merging the PR automatically closes the linked issue on GitHub.
+When the PR resolves a tracked issue, include `closes #<issue-number>` in the description body so that merging the PR automatically closes it on GitHub.
+
+Work that has no matching issue — a bug reported directly, an opportunistic fix — simply omits the line. Do not invent an issue number, and do not attach `closes` to an issue the PR does not actually resolve: merging would silently close still-open work. Naming a related-but-unresolved issue in prose is fine.
