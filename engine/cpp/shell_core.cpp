@@ -313,7 +313,10 @@ ShellResult cg_solve(Sparse& K, const std::vector<double>& F) {
     std::vector<double> lval(nnz, 0.0);  // strict-lower entries of L, K's sparsity
     std::vector<double> ldiag(n, 0.0);
     bool have_ic = false;
-    for (double alpha = 0.0; !have_ic && alpha <= 0.5; alpha = (alpha == 0.0 ? 1e-3 : alpha * 4)) {
+    // Shifts tried, in order: 0, then 1e-3·4ᵏ up to 0.256. The loop counts attempts
+    // with an integer and derives α from it, so the escalation cannot drift.
+    for (int attempt = 0; !have_ic && attempt <= 5; ++attempt) {
+        const double alpha = attempt == 0 ? 0.0 : 1e-3 * std::pow(4.0, attempt - 1);
         have_ic = true;
         for (int i = 0; i < n && have_ic; ++i) {
             // Row i of L, left to right: L(i,j) = (K(i,j) − Σ_{m<j} L(i,m)L(j,m)) / L(j,j),
