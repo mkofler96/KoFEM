@@ -17,7 +17,7 @@
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { loadEngine, meshStep, extractThinWallShells, shellBodySliverTets, buildCoupledModel, dropCouplingsOnFixedNodes } from "./lib.mjs";
+import { loadEngine, meshStep, extractThinWallShells, shellWallTets, buildCoupledModel, dropCouplingsOnFixedNodes } from "./lib.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const STEP = join(here, "../../test_files/full-crane-hook.step");
@@ -48,13 +48,13 @@ console.log(
     `(t = ${Math.min(...shells.shellThk).toFixed(1)}–${Math.max(...shells.shellThk).toFixed(1)} mm)`,
 );
 
-// ── 3. classify the holder's thin-wall slivers (→ shells) vs its base (→ solid) ─
-const slivers = shellBodySliverTets(mesh, shells.shellBody);
+// ── 3. classify the holder's thin-wall tets (→ shells) vs its base (→ solid) ───
+const wallTets = shellWallTets(mesh, shells);
 
 // ── 4. build the coupled node pool + distributing couplings ────────────────────
 // Pin/hook/base stay separate solid bodies joined by distributing couplings; a
 // gapped pin/hole interface becomes a force-and-moment tie, not a sparse hinge.
-const model = buildCoupledModel(mesh, shells, slivers);
+const model = buildCoupledModel(mesh, shells, wallTets);
 const nSolid = model.solidPool.size, nShell = model.shellPool.length;
 console.log(
   `coupled model: ${model.pool.length / 3} nodes (${nSolid} solid + ${nShell} shell), ` +

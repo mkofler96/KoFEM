@@ -68,83 +68,176 @@ function getOrInit<K, T>(map: Map<K, T>, key: K, make: () => T): T {
   return value;
 }
 
-// Minimum vertex-to-opposite-face altitude divided by the longest edge — a
-// scale-invariant shape measure. A well-formed tet is ≈ 0.3–0.8; a flat sliver
-// (the element that fills a thin wall) is well below 0.1. Being a ratio it is
-// independent of mesh size, so the sliver/base split holds across refinements.
-function tetFlatness(
-  V: number[],
-  a: number,
-  b: number,
-  c: number,
-  d: number,
+// Squared distance from a point to a triangle (Ericson, Real-Time Collision
+// Detection §5.1.5 — closest point on a triangle via the Voronoi regions of its
+// vertices, edges and interior).
+function pointTriDist2(
+  p: [number, number, number],
+  a: [number, number, number],
+  b: [number, number, number],
+  c: [number, number, number],
 ): number {
-  const verts = [pt(V, a), pt(V, b), pt(V, c), pt(V, d)];
-  let longest = 0;
-  for (let i = 0; i < 4; i++)
-    for (let j = i + 1; j < 4; j++) {
-      const edge = Math.hypot(
-        verts[i][0] - verts[j][0],
-        verts[i][1] - verts[j][1],
-        verts[i][2] - verts[j][2],
-      );
-      if (edge > longest) longest = edge;
-    }
-  let minAlt = Infinity;
-  for (let k = 0; k < 4; k++) {
-    const apex = verts[k],
-      base0 = verts[(k + 1) % 4],
-      base1 = verts[(k + 2) % 4],
-      base2 = verts[(k + 3) % 4];
-    const ux = base0[0] - base1[0],
-      uy = base0[1] - base1[1],
-      uz = base0[2] - base1[2];
-    const vx = base2[0] - base1[0],
-      vy = base2[1] - base1[1],
-      vz = base2[2] - base1[2];
-    const nx = uy * vz - uz * vy,
-      ny = uz * vx - ux * vz,
-      nz = ux * vy - uy * vx;
-    // eslint-disable-next-line kofem/no-silent-fallback -- div-by-zero guard: a degenerate opposite face has no defined altitude direction
-    const nl = Math.hypot(nx, ny, nz) || 1;
-    const altitude = Math.abs(
-      (nx * (apex[0] - base1[0]) +
-        ny * (apex[1] - base1[1]) +
-        nz * (apex[2] - base1[2])) /
-        nl,
+  const ab: [number, number, number] = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+  const ac: [number, number, number] = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+  const ap: [number, number, number] = [p[0] - a[0], p[1] - a[1], p[2] - a[2]];
+  const dot = (
+    u: [number, number, number],
+    v: [number, number, number],
+  ): number => u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
+  const d1 = dot(ab, ap),
+    d2 = dot(ac, ap);
+  const closest: [number, number, number] = [0, 0, 0];
+  const at = (s: number, t: number): number => {
+    closest[0] = a[0] + s * ab[0] + t * ac[0];
+    closest[1] = a[1] + s * ab[1] + t * ac[1];
+    closest[2] = a[2] + s * ab[2] + t * ac[2];
+    return (
+      (p[0] - closest[0]) ** 2 +
+      (p[1] - closest[1]) ** 2 +
+      (p[2] - closest[2]) ** 2
     );
-    if (altitude < minAlt) minAlt = altitude;
-  }
-  // eslint-disable-next-line kofem/no-silent-fallback -- div-by-zero guard: a fully degenerate tet has no longest edge
-  return minAlt / (longest || 1);
+  };
+  if (d1 <= 0 && d2 <= 0) return at(0, 0);
+  const bp: [number, number, number] = [p[0] - b[0], p[1] - b[1], p[2] - b[2]];
+  const d3 = dot(ab, bp),
+    d4 = dot(ac, bp);
+  if (d3 >= 0 && d4 <= d3) return at(1, 0);
+  const vc = d1 * d4 - d3 * d2;
+  if (vc <= 0 && d1 >= 0 && d3 <= 0) return at(d1 / (d1 - d3), 0);
+  const cp: [number, number, number] = [p[0] - c[0], p[1] - c[1], p[2] - c[2]];
+  const d5 = dot(ab, cp),
+    d6 = dot(ac, cp);
+  if (d6 >= 0 && d5 <= d6) return at(0, 1);
+  const vb = d5 * d2 - d1 * d6;
+  if (vb <= 0 && d2 >= 0 && d6 <= 0) return at(0, d2 / (d2 - d6));
+  const va = d3 * d6 - d5 * d4;
+  if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0)
+    return at(
+      1 - (d4 - d3) / (d4 - d3 + (d5 - d6)),
+      (d4 - d3) / (d4 - d3 + (d5 - d6)),
+    );
+  const denom = 1 / (va + vb + vc);
+  return at(vb * denom, vc * denom);
 }
 
-// The thin-wall (sliver) tets of the shelled body: the flat elements that fill
-// the thin walls being replaced by shells. Everything else of that body — the
-// thick junction/base blocks that connect it to the other bodies — stays a solid
-// tet so its stiffness and its contact with the neighbours are preserved.
-// Collapsing the WHOLE body to shells silently dropped those blocks (the crane
-// holder lost ~30 % of its volume, exactly the block carrying load into the hook),
-// leaving the shells floating with only a proximity coupling to the solids.
-export function shellBodySliverTets(
+// The tets of the shelled body that the shell facets REPLACE: those lying inside
+// a detected thin wall. A tet is inside a wall exactly when its centroid is
+// within half that wall's thickness of the wall's mid-surface — the geometric
+// statement of "this material is now carried by the shell". Everything farther
+// away — the thick junction/base blocks that connect the body to its neighbours —
+// stays a solid tet, so its stiffness and its contact with the neighbours are
+// preserved. Collapsing the WHOLE body to shells silently dropped those blocks
+// (the crane holder lost ~30 % of its volume, exactly the block carrying load
+// into the hook), leaving the shells floating with only a proximity coupling to
+// the solids.
+//
+// This used to be a SHAPE test (tet flatness below a fixed ratio), on the
+// assumption that a thin wall is always filled by flat slivers. Netgen refines
+// across a thin wall until its elements are well formed, so most wall tets pass
+// that test: the wall was represented twice — shell facets laid over retained
+// solid tets — by a fraction that moved with element size. On the 2 mm fin of
+// fin_two_parts.step, 68 % of the wall tets survived at 20 mm elements and
+// 99.8 % at 6 mm, while the shell covered the wall in full.
+export function shellWallTets(
   m: ShellizeMesh,
-  shellBody: number,
-  { sliverFlatness = 0.2 }: { sliverFlatness?: number } = {},
+  shells: ShellExtraction,
+  { margin = 1.0 }: { margin?: number } = {},
 ): Set<number> {
-  const slivers = new Set<number>();
-  for (let e = 0; e < m.tet.length / 4; e++)
-    if (
-      m.body[e] === shellBody &&
-      tetFlatness(
-        m.V,
-        m.tet[4 * e],
-        m.tet[4 * e + 1],
-        m.tet[4 * e + 2],
-        m.tet[4 * e + 3],
-      ) < sliverFlatness
-    )
-      slivers.add(e);
-  return slivers;
+  const wallTets = new Set<number>();
+  const nFacets = shells.shellTris.length / 3;
+  if (nFacets === 0) return wallTets;
+
+  const sv = shells.shellVerts;
+  const facetPt = (t: number, k: number): [number, number, number] => {
+    const i = shells.shellTris[3 * t + k];
+    return [sv[3 * i], sv[3 * i + 1], sv[3 * i + 2]];
+  };
+  // Cell size ≥ the largest search radius (half the thickest wall) so a facet
+  // within range of a query point always lands in one of the 27 cells around it,
+  // and ≥ the facet extent so a facet spans only a few cells.
+  let maxThk = 0,
+    sumExtent = 0;
+  for (let t = 0; t < nFacets; t++) {
+    if (shells.shellThk[t] > maxThk) maxThk = shells.shellThk[t];
+    const cornerA = facetPt(t, 0),
+      cornerB = facetPt(t, 1),
+      cornerC = facetPt(t, 2);
+    sumExtent += Math.max(
+      Math.hypot(
+        cornerB[0] - cornerA[0],
+        cornerB[1] - cornerA[1],
+        cornerB[2] - cornerA[2],
+      ),
+      Math.hypot(
+        cornerC[0] - cornerB[0],
+        cornerC[1] - cornerB[1],
+        cornerC[2] - cornerB[2],
+      ),
+      Math.hypot(
+        cornerA[0] - cornerC[0],
+        cornerA[1] - cornerC[1],
+        cornerA[2] - cornerC[2],
+      ),
+    );
+  }
+  const cell = Math.max(maxThk * margin, sumExtent / nFacets, 1e-9);
+
+  const grid = new Map<string, number[]>();
+  for (let t = 0; t < nFacets; t++) {
+    const corners = [facetPt(t, 0), facetPt(t, 1), facetPt(t, 2)];
+    const lo = [0, 1, 2].map((axis) =>
+      Math.floor(
+        Math.min(corners[0][axis], corners[1][axis], corners[2][axis]) / cell,
+      ),
+    );
+    const hi = [0, 1, 2].map((axis) =>
+      Math.floor(
+        Math.max(corners[0][axis], corners[1][axis], corners[2][axis]) / cell,
+      ),
+    );
+    for (let x = lo[0]; x <= hi[0]; x++)
+      for (let y = lo[1]; y <= hi[1]; y++)
+        for (let z = lo[2]; z <= hi[2]; z++)
+          getOrInit(grid, `${x},${y},${z}`, () => []).push(t);
+  }
+
+  for (let e = 0; e < m.tet.length / 4; e++) {
+    if (m.body[e] !== shells.shellBody) continue;
+    const centroid: [number, number, number] = [0, 0, 0];
+    for (let k = 0; k < 4; k++) {
+      const node = pt(m.V, m.tet[4 * e + k]);
+      centroid[0] += node[0] / 4;
+      centroid[1] += node[1] / 4;
+      centroid[2] += node[2] / 4;
+    }
+    const cx = Math.floor(centroid[0] / cell),
+      cy = Math.floor(centroid[1] / cell),
+      cz = Math.floor(centroid[2] / cell);
+    let inside = false;
+    for (let dx = -1; dx <= 1 && !inside; dx++)
+      for (let dy = -1; dy <= 1 && !inside; dy++)
+        for (let dz = -1; dz <= 1 && !inside; dz++) {
+          const bucket = grid.get(`${cx + dx},${cy + dy},${cz + dz}`);
+          if (!bucket) continue;
+          for (const t of bucket) {
+            const reach = 0.5 * shells.shellThk[t] * margin;
+            if (
+              pointTriDist2(
+                centroid,
+                facetPt(t, 0),
+                facetPt(t, 1),
+                facetPt(t, 2),
+              ) <=
+              reach * reach
+            ) {
+              inside = true;
+              break;
+            }
+          }
+        }
+    if (inside) wallTets.add(e);
+  }
+  return wallTets;
 }
 
 function faceProps(m: ShellizeMesh): FaceProp[] {
@@ -622,7 +715,7 @@ export function dropCouplingsOnFixedNodes(
 export function buildCoupledModel(
   m: ShellizeMesh,
   shells: ShellExtraction,
-  sliverTets: Set<number>,
+  wallTets: Set<number>,
   {
     couplingRadius = 10,
     solidCouplingRadius = 8,
@@ -634,13 +727,13 @@ export function buildCoupledModel(
   } = {},
 ): CoupledModel {
   // Solid tets = the other bodies plus the shelled body's non-wall (base) tets;
-  // only the thin-wall slivers are replaced by shell facets. Different solid
+  // only the tets inside the thin walls are replaced by shell facets. Different solid
   // bodies keep their own nodes; a gapped interface is tied by distributing
   // couplings (autoDetectSolidCouplings), not node-merging.
   const solidTets: number[] = [];
   const tetBody: number[] = [];
   for (let e = 0; e < m.tet.length / 4; e++)
-    if (!(m.body[e] === shells.shellBody && sliverTets.has(e))) {
+    if (!(m.body[e] === shells.shellBody && wallTets.has(e))) {
       solidTets.push(
         m.tet[4 * e],
         m.tet[4 * e + 1],
