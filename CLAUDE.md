@@ -168,17 +168,26 @@ Do not move them into Linear, and do not create a `docs/` directory.
 
 ### Working an issue
 
-1. Find or create the Linear issue. Move it to **In Progress** when you start.
+1. Find or create the Linear issue.
 2. Branch, implement, open the PR. Put `Fixes KOF-nn` in the PR description —
    Linear's GitHub integration links the PR and closes the issue on merge.
    (`closes #<github-number>` is the old convention; it is no longer used.)
-3. Move the issue to **In Review** when the PR is open, and record your evidence
-   on the issue (below).
+3. Record your evidence on the issue (below).
+
+**Do not move the status by hand.** The GitHub integration owns it: linking the
+PR moves the issue to **In Progress** and assigns it to the PR author, and
+merging closes it. A manual status change made before the PR links is simply
+overwritten when it does.
 
 Work with no matching issue — a bug reported directly, an opportunistic fix —
 simply omits the line. Do not invent an identifier, and **do not attach `Fixes`
 to an issue the PR does not actually resolve**: merging would silently close
 still-open work. Naming a related-but-unresolved issue in prose is fine.
+
+That last rule has teeth: an issue named with `Fixes` is linked the moment the
+PR body is saved, which drags it into **In Progress** immediately and puts it in
+line to be closed on merge. Ongoing operational issues — KOF-209, the showcase
+anchor — must never be named that way.
 
 ### Recording evidence on an issue
 

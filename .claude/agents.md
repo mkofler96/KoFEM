@@ -29,10 +29,18 @@ Follow strict red-green TDD for all implementation work:
 
 Linear (team `KOF`) is the tracker and the source of truth for what to build.
 
-1. **Start** — move the issue to **In Progress**.
-2. **Open the PR** — put `Fixes KOF-nn` in the description, and move the issue to
-   **In Review**.
-3. **Evidence** — if the change has a visible result, attach it to the issue.
+1. **Open the PR** — put `Fixes KOF-nn` in the description.
+2. **Evidence** — if the change has a visible result, attach it to the issue.
+
+**Do not set the issue status yourself.** The GitHub integration owns it: linking
+the PR moves the issue to **In Progress** and assigns it to the PR author,
+and merging closes it. Setting a status before the PR links just gets
+overwritten when it does.
+
+Only name an issue with `Fixes` if the PR genuinely resolves it — the link is
+created as soon as the PR body is saved, which starts the issue and queues it to
+be closed on merge. Ongoing operational issues (KOF-209, the showcase anchor)
+must never be named that way; mention them in prose instead.
 
 ### How to attach evidence
 
