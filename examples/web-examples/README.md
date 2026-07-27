@@ -48,34 +48,60 @@ not converge on models containing these 0.5 mm walls, running the full
 the latter stalling at a relative residual of 8e-3. Per-body materials and
 "solves at all" used to be mutually exclusive for this model.
 
-### Open: 2× stiffer than the external reference
+### The 6 mm example is NOT mesh-converged
 
-An OptiStruct run of the same load case reports max |u| = 0.5482 mm. This model
-gives **0.2690 mm** with the materials above. (All-steel it gives 0.1938 mm; the
-strain-energy split is holder 45.2 %, hook 15.9 %, cylinder 38.9 %.)
+An OptiStruct run of the same load case reports max |u| = 0.5482 mm. The shipped
+6 mm model gives 0.2690 mm. That gap is mostly mesh, not physics — the answer is
+still climbing at 1.5 mm elements.
 
-Ruled out as the cause:
+Refinement study, both models per size, materials as above. `F·u` is the
+compliance (twice the strain energy) — the measure to read, since max |u| is a
+point value at the cylinder end and noisier:
 
-- **The shell idealisation.** Solved all-solid, with every body meshed as tets
-  and no shells anywhere, the assembly gives 0.1907 mm against the coupled
-  model's 0.1938 mm — 1.6 %, and within 3 % body by body.
-- **The holder/hook connection.** In that all-solid model the interface is
+| h [mm] | coupled max \|u\| | coupled F·u | all-solid max \|u\| | all-solid F·u |
+| ------ | ----------------- | ----------- | ------------------ | ------------- |
+| 10 | 0.2873 | 439.60 | 0.2834 | 426.37 |
+| 8 | 0.2498 | 437.27 | 0.2461 | 426.28 |
+| 6 | 0.2690 | 439.22 | 0.2643 | 432.59 |
+| 4 | 0.2501 | 439.74 | 0.2486 | 437.62 |
+| 3 | 0.2508 | 439.73 | 0.2502 | 438.54 |
+| 2.5 | 0.3653 | 493.69 | 0.4078 | 494.18 |
+| 2 | 0.3623 | 500.14 | 0.4231 | 502.45 |
+| 1.5 | 0.3806 | 512.52 | 0.4620 | 516.03 |
+
+The flat run from 10 mm to 3 mm is **not** convergence. At 8, 6 and 4 mm the
+0.5 mm wall carries ONE linear tet through its thickness (surface node layers at
+x = −50.000 and −49.500 with nothing between), and one linear tet cannot bend, so
+the holder is locked solid. Netgen's `min_element_size` is `h/10`, so
+through-thickness resolution only improves as h falls; past 3 mm the lock
+releases and the holder softens. Its displacement goes 0.0846 → 0.1876 mm
+between 3 mm and 2 mm while the hook's and cylinder's own contributions move 5 %.
+
+Nothing else moves across the sweep: holder volume varies 0.2 %, four walls are
+detected at every size with thickness exactly 0.5000, and the 2 mm mesh has no
+slivers (worst tet quality 8.5e-2, same as 3 mm).
+
+At 1.5 mm the all-solid model is at 0.4620 mm against the reference's 0.5482 mm
+— 1.19×, down from 2.19× at 3 mm — and still rising. Whatever remains is
+smaller than the discretisation error at the sizes anyone would actually run.
+
+Ruled out as causes of the residual gap:
+
+- **The shell idealisation.** Compliance tracks the all-solid model to 0.7 % at
+  every size from 2.5 mm down (493.7/494.2, 500.1/502.5, 512.5/516.0), for 3–5×
+  fewer CG iterations. The comparison is only meaningful below 3 mm, though —
+  above it the all-solid reference is locked, so the two agreeing there is the
+  shell model matching a locked model, not two converged answers.
+- **The holder/hook connection.** In the all-solid model that interface is
   conformal shared nodes with no tie of any kind, and the answer does not move.
-- **Mesh resolution.** 0.1938 mm at 6 mm elements, 0.1905 mm at 3 mm.
-- **Load direction.** −Y gives 0.191 mm, −Z 3.976 mm, −X 6.916 mm; only −Y is
-  anywhere near the reference, and the reference's contour bands run
-  perpendicular to the arm and bunch toward the narrow end, which is what
-  axial tension of a tapering section looks like.
-- **A single body's modulus.** Reaching 0.5482 mm by softening the hook alone
-  needs E ≈ 16 GPa; by softening the holder alone, walls of ≈ 0.11 mm against
-  the 0.5 mm the CAD gives. Making *everything* aluminium reaches 0.5788 mm,
-  which is the only configuration that lands near the reference.
+- **Load direction.** −Y gives 0.191 mm, −Z 3.976 mm, −X 6.916 mm (all-steel at
+  6 mm); the reference's contour bands run perpendicular to the arm and bunch
+  toward the narrow end, which is what axial tension of a tapering section
+  looks like.
 
-Leading hypothesis, from reading the reference contour plot: it shows roughly
-0.25–0.30 mm at the holder's lower end, where this model computes 0.088 mm, so
-the disagreement looks concentrated in the holder rather than spread over the
-three bodies. Backing an effective axial area out of the holder's share of the
-compliance gives ≈ 59 mm² here against ≈ 27 mm² there. The holder is a closed
-box — two tapering side walls, a back wall and a top cap, all 0.5 mm — so a
-mid-surface model built from the face carrying the holes alone would land at
-about that ratio. Confirming this needs the reference's shell set and thickness.
+Still open: **max |u| diverges between the two models even where compliance
+agrees** — 0.3806 vs 0.4620 at 1.5 mm, a 21 % spread on a 0.7 % compliance
+match. The maximum sits at the cylinder's outboard end, and the two models
+derive different cylinder↔bore ties (809 couplings vs 185 at 1.5 mm, because
+the coupled model's median tet edge excludes the wall tets). A local tie
+difference is the obvious suspect; it does not affect the energy.
