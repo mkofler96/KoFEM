@@ -442,11 +442,71 @@ function detectWallPairs(faces: FaceProp[], maxWall: number): Wall[] {
   return walls;
 }
 
-// Collapse the kept wall faces to mid-surface facets (offset t/2 inward) and
-// weld mid-surface nodes that came from the SAME original mesh node. Where two
-// walls meet at a CAD edge they share Netgen's edge nodes, so joining nodes by
-// original id fuses the walls exactly — independent of mesh resolution (a
-// spatial tolerance over-welds a fine mesh and under-welds a coarse one).
+// Where a node lies on ONE wall the mid-surface is that wall's face offset t/2
+// along −n. A node on the CAD edge where two walls meet lies on both, and must
+// land on the LINE where the two mid-planes cross (three walls ⇒ the corner
+// point). Solving n_w·Δ = −t_w/2 for every wall w the node belongs to gives that
+// point; the walls are applied in face order, each along the direction the
+// earlier ones leave free, so every accepted constraint holds exactly.
+//
+// Offsetting along a single wall's normal instead leaves the node up to t/2 off
+// the other wall's mid-plane. That is not just a cosmetic kink in the facets: it
+// drags the mid-surface out of the wall it represents, so `shellWallTets` no
+// longer finds those wall tets within t/2 of it and they survive the collapse as
+// floating slivers of wall-thickness solid — debris that is drawn over the shell
+// AND picked up as coupling partners, tying seam shell nodes to material with no
+// load path. On the crane hook at 6 mm elements that left 17 fragments carrying
+// 900+ of the model's 265 couplings' partner slots (KOF-191).
+function midSurfaceOffset(
+  wallsOfNode: Set<number>,
+  keep: Map<number, Wall>,
+): [number, number, number] {
+  const delta: [number, number, number] = [0, 0, 0];
+  const basis: [number, number, number][] = [];
+  for (const fid of [...wallsOfNode].sort((a, b) => a - b)) {
+    const wall = keep.get(fid);
+    if (!wall)
+      throw new Error(`mid-surface offset asked for unknown wall face ${fid}`);
+    const residual: [number, number, number] = [
+      wall.n[0],
+      wall.n[1],
+      wall.n[2],
+    ];
+    for (const used of basis) {
+      const proj =
+        residual[0] * used[0] + residual[1] * used[1] + residual[2] * used[2];
+      residual[0] -= proj * used[0];
+      residual[1] -= proj * used[1];
+      residual[2] -= proj * used[2];
+    }
+    const len = Math.hypot(residual[0], residual[1], residual[2]);
+    // Nothing left to move along ⇒ this wall's mid-plane is (near) parallel to
+    // one already enforced, so it is already satisfied to within t/2·sin(angle).
+    if (len < 0.2) continue;
+    const dir: [number, number, number] = [
+      residual[0] / len,
+      residual[1] / len,
+      residual[2] / len,
+    ];
+    const along =
+      wall.n[0] * delta[0] + wall.n[1] * delta[1] + wall.n[2] * delta[2];
+    const step =
+      (-wall.thk / 2 - along) /
+      (wall.n[0] * dir[0] + wall.n[1] * dir[1] + wall.n[2] * dir[2]);
+    delta[0] += step * dir[0];
+    delta[1] += step * dir[1];
+    delta[2] += step * dir[2];
+    basis.push(dir);
+  }
+  return delta;
+}
+
+// Collapse the kept wall faces to mid-surface facets (offset to the mid-plane of
+// every wall the node lies on) and weld mid-surface nodes that came from the SAME
+// original mesh node. Where two walls meet at a CAD edge they share Netgen's edge
+// nodes, so joining nodes by original id fuses the walls exactly — independent of
+// mesh resolution (a spatial tolerance over-welds a fine mesh and under-welds a
+// coarse one).
 function collapseWallsToMidSurface(
   m: ShellizeMesh,
   walls: Wall[],
@@ -455,6 +515,16 @@ function collapseWallsToMidSurface(
   "shellVerts" | "shellTris" | "shellThk" | "shellSrc" | "shellTriSrc"
 > {
   const keep = new Map(walls.map((w) => [w.keep, w]));
+
+  // Every kept wall each node lies on — a junction node belongs to more than one.
+  const wallsOfNode = new Map<number, Set<number>>();
+  for (let t = 0; t < m.surfFace.length; t++) {
+    if (!keep.has(m.surfFace[t])) continue;
+    for (let k = 0; k < 3; k++)
+      getOrInit(wallsOfNode, m.surfTri[3 * t + k], () => new Set<number>()).add(
+        m.surfFace[t],
+      );
+  }
 
   const rawV: number[] = [],
     rawT: number[] = [],
@@ -474,20 +544,27 @@ function collapseWallsToMidSurface(
     rawOrig.push(oi);
     return id;
   };
+  const offsetOfNode = new Map<number, [number, number, number]>();
+  for (const [oi, nodeWalls] of wallsOfNode)
+    offsetOfNode.set(oi, midSurfaceOffset(nodeWalls, keep));
   for (let t = 0; t < m.surfFace.length; t++) {
     const wall = keep.get(m.surfFace[t]);
     if (!wall) continue;
-    const offset = wall.thk / 2;
     const nn = [
       m.surfTri[3 * t],
       m.surfTri[3 * t + 1],
       m.surfTri[3 * t + 2],
     ].map((oi) => {
       const pos = pt(m.V, oi);
+      const delta = offsetOfNode.get(oi);
+      if (!delta)
+        throw new Error(
+          `mid-surface offset missing for mesh node ${oi} on wall face ${wall.keep}`,
+        );
       return addN(wall.keep, oi, [
-        pos[0] - wall.n[0] * offset,
-        pos[1] - wall.n[1] * offset,
-        pos[2] - wall.n[2] * offset,
+        pos[0] + delta[0],
+        pos[1] + delta[1],
+        pos[2] + delta[2],
       ]);
     });
     rawT.push(nn[0], nn[1], nn[2]);

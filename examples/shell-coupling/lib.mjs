@@ -347,7 +347,44 @@ export function extractThinWallShells(mesh, { maxWall = 15 } = {}) {
   if (shellBody >= 0) walls = walls.filter((w) => w.body === shellBody);
   const keep = new Map(walls.map((w) => [w.keep, w]));
 
-  // Offset each kept face's triangulation inward by thk/2 to the mid-plane.
+  // Every kept wall a node lies on, in face order so the offset below is
+  // independent of triangle order. A node on the CAD edge where two walls meet
+  // belongs to both. Mirrors shellize.ts.
+  const wallsOfNode = new Map();
+  for (let t = 0; t < sf.length; t++) {
+    if (!keep.has(sf[t])) continue;
+    for (let k = 0; k < 3; k++) {
+      const oi = st[3 * t + k];
+      const set = wallsOfNode.get(oi) ?? wallsOfNode.set(oi, new Set()).get(oi);
+      set.add(sf[t]);
+    }
+  }
+
+  // Offset each kept face's triangulation inward to the mid-plane: a node must
+  // end up on the mid-plane of EVERY wall it lies on, so a junction node lands on
+  // the line (or corner point) where those mid-planes meet, not t/2 off it.
+  // Offsetting along one wall's normal alone drags the mid-surface out of the
+  // wall it represents, and shellWallTets then leaves those wall tets behind as
+  // floating debris tied into the coupling (KOF-191). Mirrors shellize.ts.
+  const midSurfaceOffset = (oi) => {
+    const delta = [0, 0, 0], basis = [];
+    for (const fid of [...wallsOfNode.get(oi)].sort((a, b) => a - b)) {
+      const w = keep.get(fid);
+      const r = [...w.n];
+      for (const e of basis) {
+        const d = r[0] * e[0] + r[1] * e[1] + r[2] * e[2];
+        r[0] -= d * e[0]; r[1] -= d * e[1]; r[2] -= d * e[2];
+      }
+      const len = Math.hypot(r[0], r[1], r[2]);
+      if (len < 0.2) continue; // this wall's mid-plane is already (nearly) enforced
+      const e = [r[0] / len, r[1] / len, r[2] / len];
+      const along = w.n[0] * delta[0] + w.n[1] * delta[1] + w.n[2] * delta[2];
+      const s = (-w.thk / 2 - along) / (w.n[0] * e[0] + w.n[1] * e[1] + w.n[2] * e[2]);
+      delta[0] += s * e[0]; delta[1] += s * e[1]; delta[2] += s * e[2];
+      basis.push(e);
+    }
+    return delta;
+  };
   const rawV = [], rawT = [], rawThk = [], rawTriSrc = [], rawSrc = [], rawOrig = [], nm = new Map();
   const addN = (fid, oi, p) => {
     const key = `${fid}:${oi}`;
@@ -359,10 +396,9 @@ export function extractThinWallShells(mesh, { maxWall = 15 } = {}) {
   for (let t = 0; t < sf.length; t++) {
     const w = keep.get(sf[t]);
     if (!w) continue;
-    const o = w.thk / 2;
     const nn = [st[3 * t], st[3 * t + 1], st[3 * t + 2]].map((oi) => {
-      const p = pt(V, oi);
-      return addN(w.keep, oi, [p[0] - w.n[0] * o, p[1] - w.n[1] * o, p[2] - w.n[2] * o]);
+      const p = pt(V, oi), d = midSurfaceOffset(oi);
+      return addN(w.keep, oi, [p[0] + d[0], p[1] + d[1], p[2] + d[2]]);
     });
     rawT.push(nn[0], nn[1], nn[2]); rawThk.push(w.thk); rawTriSrc.push(w.keep);
   }
