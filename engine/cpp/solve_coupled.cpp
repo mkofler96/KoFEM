@@ -32,23 +32,39 @@ val error_result(const std::string& message) {
 
 // Assemble the linear-elastic tet stiffness with MFEM and return it as triplets
 // over a 3·node+component numbering (no essential BCs eliminated).
+//
+// `attributes[e]` is the 1-based index of tet e's material into `youngs` /
+// `poissons`; empty ⇒ every tet takes material 1. The index rides on the MFEM
+// element attribute, so a PWConstCoefficient picks λ and μ per element and one
+// assembly covers an assembly of several materials.
 std::vector<kofem::shell::SolidTriplet> assemble_solid_stiffness_mfem(
-    const std::vector<double>& vertices, const std::vector<int>& tets, double E, double nu) {
+    const std::vector<double>& vertices, const std::vector<int>& tets,
+    const std::vector<double>& youngs, const std::vector<double>& poissons,
+    const std::vector<int>& attributes) {
     const int nv = static_cast<int>(vertices.size() / 3);
     const int nt = static_cast<int>(tets.size() / 4);
+    const int nMat = static_cast<int>(youngs.size());
     mfem::Mesh mesh(3, nv, nt, /*NBdrElem=*/0, /*spaceDim=*/3);
     for (int i = 0; i < nv; ++i)
         mesh.AddVertex(vertices[3 * i], vertices[3 * i + 1], vertices[3 * i + 2]);
     for (int e = 0; e < nt; ++e)
-        mesh.AddTet(tets[4 * e], tets[4 * e + 1], tets[4 * e + 2], tets[4 * e + 3], 1);
+        mesh.AddTet(tets[4 * e], tets[4 * e + 1], tets[4 * e + 2], tets[4 * e + 3],
+                    attributes.empty() ? 1 : attributes[e]);
     mesh.FinalizeTopology(/*generate_bdr=*/true);
     mesh.Finalize(/*refine=*/false, /*fix_orientation=*/true);
+    mesh.SetAttributes();
 
     mfem::H1_FECollection fec(1, 3);
     mfem::FiniteElementSpace fespace(&mesh, &fec, 3);
-    const double lam = E * nu / ((1.0 + nu) * (1.0 - 2.0 * nu));
-    const double mu = E / (2.0 * (1.0 + nu));
-    mfem::ConstantCoefficient lam_c(lam), mu_c(mu);
+    // PWConstCoefficient indexes its constants by attribute − 1, so the vectors
+    // must span every attribute present, not just the materials in use.
+    mfem::Vector lam(nMat), mu(nMat);
+    for (int m = 0; m < nMat; ++m) {
+        lam(m) = youngs[m] * poissons[m] /
+                 ((1.0 + poissons[m]) * (1.0 - 2.0 * poissons[m]));
+        mu(m) = youngs[m] / (2.0 * (1.0 + poissons[m]));
+    }
+    mfem::PWConstCoefficient lam_c(lam), mu_c(mu);
     mfem::BilinearForm a(&fespace);
     a.AddDomainIntegrator(new mfem::ElasticityIntegrator(lam_c, mu_c));
     a.Assemble();
@@ -96,10 +112,37 @@ val solve_coupled(const val& mesh, const val& coupling, const val& bcs,
     if (in.vertices.size() % 3 != 0 || tets.size() % 4 != 0 || in.triangles.size() % 3 != 0)
         return error_result("coupled: bad mesh array lengths");
 
+    // `mat.solid` is either one material object (every tet uses it) or an ARRAY
+    // of materials selected per tet by `mesh.attributes` (1-based), matching
+    // solve_linear_elastic's contract. Only the solid side is per-body: a solve
+    // shells exactly one body (#376), so one shell material covers it.
     val mat = parse_json(mat_json);
     val solid = mat["solid"], shell = mat["shell"];
-    const double solidE = solid["young_modulus"].as<double>();
-    const double solidNu = solid["poisson_ratio"].as<double>();
+    std::vector<double> solidE, solidNu;
+    if (solid["length"].isUndefined()) {
+        solidE.push_back(solid["young_modulus"].as<double>());
+        solidNu.push_back(solid["poisson_ratio"].as<double>());
+    } else {
+        const unsigned n = solid["length"].as<unsigned>();
+        if (n == 0) return error_result("coupled: mat.solid is an empty material array");
+        for (unsigned m = 0; m < n; ++m) {
+            solidE.push_back(solid[m]["young_modulus"].as<double>());
+            solidNu.push_back(solid[m]["poisson_ratio"].as<double>());
+        }
+    }
+    std::vector<int> attributes;
+    val attr_js = mesh["attributes"];
+    if (!attr_js.isUndefined() && !attr_js.isNull())
+        attributes = i32_vector(attr_js, "mesh.attributes");
+    if (!attributes.empty() && attributes.size() != tets.size() / 4)
+        return error_result("coupled: " + std::to_string(attributes.size()) +
+                            " mesh.attributes for " + std::to_string(tets.size() / 4) +
+                            " tets");
+    for (size_t e = 0; e < attributes.size(); ++e)
+        if (attributes[e] < 1 || static_cast<size_t>(attributes[e]) > solidE.size())
+            return error_result("coupled: tet " + std::to_string(e) + " selects material " +
+                                std::to_string(attributes[e]) + ", outside 1.." +
+                                std::to_string(solidE.size()));
     in.shell_young = shell["young_modulus"].as<double>();
     in.shell_poisson = shell["poisson_ratio"].as<double>();
 
@@ -132,13 +175,16 @@ val solve_coupled(const val& mesh, const val& coupling, const val& bcs,
     for (size_t i = 0; i < load_dofs.size(); ++i)
         in.loads.emplace_back(load_dofs[i], load_vals[i]);
 
-    printf("[coupled] solid %zu tets, shell %zu tris, %zu couplings, %zu fixed, %zu loads\n",
-           tets.size() / 4, in.triangles.size() / 3, in.couplings.size(),
-           in.fixed_dofs.size(), in.loads.size());
+    printf("[coupled] solid %zu tets (%zu material%s), shell %zu tris, %zu couplings, "
+           "%zu fixed, %zu loads\n",
+           tets.size() / 4, solidE.size(), solidE.size() == 1 ? "" : "s",
+           in.triangles.size() / 3, in.couplings.size(), in.fixed_dofs.size(),
+           in.loads.size());
     fflush(stdout);
 
     try {
-        in.solid_stiffness = assemble_solid_stiffness_mfem(in.vertices, tets, solidE, solidNu);
+        in.solid_stiffness =
+            assemble_solid_stiffness_mfem(in.vertices, tets, solidE, solidNu, attributes);
     } catch (const std::exception& e) {
         printf("[coupled] solid assembly failed: %s\n", e.what());
         fflush(stdout);
@@ -170,7 +216,7 @@ val solve_coupled(const val& mesh, const val& coupling, const val& bcs,
     // one per shell facet (surface stress from membrane + bending, worse of the
     // two surfaces z = ±t/2) — the caller maps these onto its element list.
     const std::vector<double> vm_tets =
-        kofem::shell::tet_von_mises(in.vertices, tets, solidE, solidNu, r.dofs);
+        kofem::shell::tet_von_mises(in.vertices, tets, solidE, solidNu, attributes, r.dofs);
     const std::vector<double> vm_tris = kofem::shell::shell_von_mises(
         in.vertices, in.triangles, in.thickness, in.thicknesses, in.shell_young,
         in.shell_poisson, r.dofs);

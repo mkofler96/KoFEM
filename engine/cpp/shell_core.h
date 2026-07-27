@@ -125,6 +125,20 @@ std::vector<SolidTriplet> tet_solid_stiffness(const std::vector<double>& vertice
 
 // One value per tet: constant-strain element stress from the displacement
 // gradient (translational DOFs only).
+//
+// `attributes[e]` is the 1-based material index of tet e into `youngs` /
+// `poissons`; an empty `attributes` puts every tet on material 1. Recovering
+// stress with one modulus for an assembly of several materials reports the wrong
+// stress everywhere the modulus is not that one, so the selection has to reach
+// this far, not just the stiffness assembly.
+std::vector<double> tet_von_mises(const std::vector<double>& vertices,
+                                  const std::vector<int>& tets,
+                                  const std::vector<double>& youngs,
+                                  const std::vector<double>& poissons,
+                                  const std::vector<int>& attributes,
+                                  const std::vector<double>& dofs);
+
+// Single-material convenience overload.
 std::vector<double> tet_von_mises(const std::vector<double>& vertices,
                                   const std::vector<int>& tets, double young,
                                   double poisson, const std::vector<double>& dofs);

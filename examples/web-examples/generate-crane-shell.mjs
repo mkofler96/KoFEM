@@ -28,6 +28,15 @@ const here = dirname(fileURLToPath(import.meta.url));
 const STEP = join(here, "../../test_files/full-crane-hook.step");
 const outDir = join(here, "../../web/public/examples");
 const STEEL = { young_modulus: 210000, poisson_ratio: 0.3 };
+const ALUMINIUM = { young_modulus: 70000, poisson_ratio: 0.33 };
+// The real part: the holder and the cylinder are steel, the hook is aluminium.
+// Body ids come from the STEP — 1 holder, 2 hook, 3 cylinder. The values here are
+// 1-based indices into SOLID_MATERIALS, which is what `mesh.attributes` selects
+// per tet. The holder is the shelled body, so the shell material is steel too.
+const SOLID_MATERIALS = [STEEL, ALUMINIUM];
+const MATERIAL_NAMES = ["Steel", "Aluminium"];
+const MATERIAL_OF_BODY = { 1: 1, 2: 2, 3: 1 };
+const SHELL_MATERIAL = 1;
 const BC_FIXED_FACE = 7;
 // PER-FACE force vector, not the model total: faces 66 and 67 are the two sides
 // of the pin cylinder and each carries 1 kN, so the hook is loaded with 2 kN in
@@ -99,6 +108,13 @@ const r = Module.solve_coupled(
     tets: Int32Array.from(model.tets),
     triangles: Int32Array.from(model.triangles),
     thicknesses: Float64Array.from(model.thicknesses),
+    attributes: Int32Array.from(
+      model.tetBody.map((b) => {
+        const at = MATERIAL_OF_BODY[b];
+        if (!at) throw new Error(`no material assigned to STEP body ${b}`);
+        return at;
+      }),
+    ),
   },
   {
     ref: Int32Array.from(coupling.ref),
@@ -114,7 +130,10 @@ const r = Module.solve_coupled(
     load_dofs: Int32Array.from(load_dofs),
     load_vals: Float64Array.from(load_vals),
   },
-  JSON.stringify({ solid: STEEL, shell: STEEL }),
+  JSON.stringify({
+    solid: SOLID_MATERIALS,
+    shell: SOLID_MATERIALS[SHELL_MATERIAL - 1],
+  }),
 );
 if ("error" in r) throw new Error(r.error);
 if (!r.von_mises_tets || !r.von_mises_tris)
@@ -169,7 +188,11 @@ function buildCraneVtu() {
   for (const b of model.tetBody) {
     if (propOfBody.has(b)) continue;
     propOfBody.set(b, nextProp);
-    properties.push({ id: nextProp, type: "PSOLID", materialId: 1 });
+    properties.push({
+      id: nextProp,
+      type: "PSOLID",
+      materialId: MATERIAL_OF_BODY[b],
+    });
     nextProp++;
   }
   const thkKey = (t) => Number(t.toFixed(6));
@@ -181,7 +204,7 @@ function buildCraneVtu() {
     properties.push({
       id: nextProp,
       type: "PSHELL",
-      materialId: 1,
+      materialId: SHELL_MATERIAL,
       thickness: key,
     });
     nextProp++;
@@ -254,15 +277,13 @@ function buildCraneVtu() {
     viewRepr: "surface",
     resultType: "Von Mises stress",
     elementTypes,
-    materials: [
-      {
-        id: 1,
-        name: "Steel",
-        young: STEEL.young_modulus,
-        poisson: STEEL.poisson_ratio,
-        density: 7.85e-9,
-      },
-    ],
+    materials: SOLID_MATERIALS.map((mat, i) => ({
+      id: i + 1,
+      name: MATERIAL_NAMES[i],
+      young: mat.young_modulus,
+      poisson: mat.poisson_ratio,
+      density: i === 0 ? 7.85e-9 : 2.7e-9,
+    })),
     properties,
     bcGroups: [
       {
@@ -294,7 +315,7 @@ function buildCraneVtu() {
     nextBcGroupId: 2,
     nextLoadGroupId: 2,
     nextFaceEntryId: faceEntryId,
-    nextMatId: 2,
+    nextMatId: SOLID_MATERIALS.length + 1,
     stepSurface: null,
     volMesh: null,
     surfaceTriangles: null,

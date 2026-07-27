@@ -34,24 +34,25 @@ Boundary conditions, matching the reference drawing:
 _(Load-case drawing supplied with the external reference run — clamp hatched at
 the holder's top, 1000 N at each cylinder end, materials called out per body.)_
 
-### Materials are not what the generator ships
+### Per-body materials
 
-The generator currently assigns **steel to every body**, because
-`solve_coupled` reads exactly one solid material and one shell material
-(`engine/cpp/solve_coupled.cpp`, `mat["solid"]` / `mat["shell"]`) — it has no
-per-element attribute path. `solve_linear_elastic` does take a material array
-selected by element attributes, but its Gauss-Seidel PCG does not converge on
-models containing these 0.5 mm walls — it runs the full 5000-iteration cap on
-both the assembly and the holder alone, the latter stalling at a relative
-residual of 8e-3. Per-body materials and "solves at all" are therefore mutually
-exclusive for this model today.
+`mat.solid` handed to `solve_coupled` is an ARRAY, selected per tet by
+`mesh.attributes` (1-based), so the aluminium hook and the steel holder solve
+together. The shell side stays a single material: a solve idealises exactly one
+body as shells (#376), and here that body is the steel holder.
 
-### Open: 2.2× stiffer than the external reference
+This is why it had to be added. `solve_coupled` used to read one solid material,
+and `solve_linear_elastic` — which has taken a material array since #353 — does
+not converge on models containing these 0.5 mm walls, running the full
+5000-iteration Gauss-Seidel PCG cap on both the assembly and the holder alone,
+the latter stalling at a relative residual of 8e-3. Per-body materials and
+"solves at all" used to be mutually exclusive for this model.
 
-An OptiStruct run of the same load case reports max |u| = 0.5482 mm. KoFEM
-predicts 0.2513 mm for the material assignment above (all-solid, all-steel
-solve at 0.1907 mm, rescaled by each body's strain-energy share — holder 45.2 %,
-hook 15.9 %, cylinder 38.9 %).
+### Open: 2× stiffer than the external reference
+
+An OptiStruct run of the same load case reports max |u| = 0.5482 mm. This model
+gives **0.2690 mm** with the materials above. (All-steel it gives 0.1938 mm; the
+strain-energy split is holder 45.2 %, hook 15.9 %, cylinder 38.9 %.)
 
 Ruled out as the cause:
 
@@ -67,7 +68,8 @@ Ruled out as the cause:
   axial tension of a tapering section looks like.
 - **A single body's modulus.** Reaching 0.5482 mm by softening the hook alone
   needs E ≈ 16 GPa; by softening the holder alone, walls of ≈ 0.11 mm against
-  the 0.5 mm the CAD gives.
+  the 0.5 mm the CAD gives. Making *everything* aluminium reaches 0.5788 mm,
+  which is the only configuration that lands near the reference.
 
 Leading hypothesis, from reading the reference contour plot: it shows roughly
 0.25–0.30 mm at the holder's lower end, where this model computes 0.088 mm, so
