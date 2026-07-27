@@ -397,8 +397,32 @@ export function extractThinWallShells(mesh, { maxWall = 15 } = {}) {
   return { walls, shellBody, shellVerts, shellTris, shellThk, shellSrc, shellTriSrc };
 }
 
-// Distributing (RBE3) couplings: each ref node near ≥3 target nodes ties to its
-// nearest (≤ maxCoupled) targets. CSR-style. Mirrors shellize.ts.
+/** Pick ≤ budget of the candidates found in the search ball, keeping the patch
+ *  WIDE: nearest first, then repeatedly the one farthest from those already
+ *  chosen. Taking the nearest `budget` instead lets the patch shrink with the
+ *  element size while the reference stays put, driving the RBE3 inertia H towards
+ *  its singular limit under refinement. Mirrors shellize.ts. */
+function spreadPatch(candidates, budget, ppt) {
+  if (candidates.length <= budget) return candidates.map((c) => c.pi);
+  const d2 = (a, b) => (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2;
+  const chosen = [candidates.reduce((a, b) => (a.d2 <= b.d2 ? a : b)).pi];
+  const rest = candidates.filter((c) => c.pi !== chosen[0]).map((c) => c.pi);
+  const sep = rest.map((pi) => d2(ppt(pi), ppt(chosen[0])));
+  while (chosen.length < budget) {
+    let best = -1;
+    for (let i = 0; i < rest.length; i++) if (sep[i] > (best < 0 ? -1 : sep[best])) best = i;
+    if (best < 0) break;
+    const picked = rest[best];
+    chosen.push(picked);
+    sep[best] = -1;
+    for (let i = 0; i < rest.length; i++)
+      if (sep[i] >= 0) sep[i] = Math.min(sep[i], d2(ppt(rest[i]), ppt(picked)));
+  }
+  return chosen;
+}
+
+// Distributing (RBE3) couplings: each ref node near ≥3 target nodes ties to
+// ≤ maxCoupled of them, chosen for spread. CSR-style. Mirrors shellize.ts.
 function autoDetectCouplings(ppt, targetNodes, refNodes, R, maxCoupled = 16) {
   const grid = new Map(), gk = (x, y, z) => `${Math.floor(x / R)},${Math.floor(y / R)},${Math.floor(z / R)}`;
   for (const pi of targetNodes) (grid.get(gk(...ppt(pi))) ?? grid.set(gk(...ppt(pi)), []).get(gk(...ppt(pi)))).push(pi);
@@ -417,23 +441,67 @@ function autoDetectCouplings(ppt, targetNodes, refNodes, R, maxCoupled = 16) {
       }
     }
     if (near.length >= 3) {
-      near.sort((a, b) => a.d2 - b.d2);
       ref.push(gi);
-      for (const { pi } of near.slice(0, maxCoupled)) solid.push(pi);
+      for (const pi of spreadPatch(near, maxCoupled, ppt)) solid.push(pi);
       offsets.push(solid.length);
     }
   }
   return { ref, offsets, solid };
 }
 
+/** Distance from each node to a triangle soup, for the nodes within reach of it.
+ *  The 27-cell scan only sees triangles within one cell, so a distance is reported
+ *  exactly when it is ≤ cell — and the cell doubles until the surface is found,
+ *  since the clearance of a fit is a property of the CAD. Mirrors shellize.ts. */
+function distancesToSurface(ppt, nodes, surface, startCell, maxDoublings) {
+  const nTris = surface.length / 3;
+  const out = new Map();
+  if (nTris === 0 || nodes.length === 0) return out;
+  const corner = (t, k) => ppt(surface[3 * t + k]);
+  for (let d = 0, cell = startCell; d <= maxDoublings; d++, cell *= 2) {
+    const grid = new Map();
+    const push = (k, t) => { const arr = grid.get(k); if (arr) arr.push(t); else grid.set(k, [t]); };
+    for (let t = 0; t < nTris; t++) {
+      const p = [corner(t, 0), corner(t, 1), corner(t, 2)];
+      const lo = [0, 1, 2].map((c) => Math.floor(Math.min(p[0][c], p[1][c], p[2][c]) / cell));
+      const hi = [0, 1, 2].map((c) => Math.floor(Math.max(p[0][c], p[1][c], p[2][c]) / cell));
+      for (let x = lo[0]; x <= hi[0]; x++)
+        for (let y = lo[1]; y <= hi[1]; y++)
+          for (let z = lo[2]; z <= hi[2]; z++) push(`${x},${y},${z}`, t);
+    }
+    out.clear();
+    for (const pi of nodes) {
+      const q = ppt(pi);
+      const c = [0, 1, 2].map((k) => Math.floor(q[k] / cell));
+      let best = Infinity;
+      for (let dx = -1; dx <= 1; dx++)
+        for (let dy = -1; dy <= 1; dy++)
+          for (let dz = -1; dz <= 1; dz++) {
+            const bucket = grid.get(`${c[0] + dx},${c[1] + dy},${c[2] + dz}`);
+            if (!bucket) continue;
+            for (const t of bucket) {
+              const dd = pointTriDist2(q, corner(t, 0), corner(t, 1), corner(t, 2));
+              if (dd < best) best = dd;
+            }
+          }
+      if (best <= cell * cell) out.set(pi, Math.sqrt(best));
+    }
+    if (out.size > 0) return out;
+  }
+  return out;
+}
+
 // Distributing tie of a gapped solid↔solid interface (a pin in a hole), split by
 // BODY LABEL (Netgen can mesh the bodies nearly conformally, so a few shared
 // interface nodes make them one connected component yet leave the pin a near-hinge
 // — connectivity can't separate them, the body label can). The body with the most
-// exclusive nodes is the master; every exclusive node of another body near ≥3
-// master nodes distributes onto them. Shared (multi-body) nodes are already
-// joined and skipped. Mirrors shellize.ts.
-function autoDetectSolidCouplings(ppt, poolBody, R, maxCoupled = 16) {
+// exclusive nodes is the master; the INTERFACE nodes of every other body — those
+// within the measured clearance, plus half an element, of the master body's
+// boundary surface — distribute onto master nodes. A fixed-radius ball instead
+// slaves a constant-VOLUME band, so the eliminated set grows without bound under
+// refinement and ties material far from the interface. Shared (multi-body) nodes
+// are already joined and skipped. Mirrors shellize.ts.
+function autoDetectSolidCouplings(ppt, poolBody, tets, tetBody, medEdge, maxCoupled = 16) {
   const bodyOfNode = new Map(), bodyCount = new Map();
   for (const [pi, bodies] of poolBody) {
     if (bodies.size !== 1) continue;
@@ -444,9 +512,27 @@ function autoDetectSolidCouplings(ppt, poolBody, R, maxCoupled = 16) {
   if (bodyCount.size < 2) return { ref: [], offsets: [0], solid: [] };
   let master = -1, best = -1;
   for (const [b, c] of bodyCount) if (c > best) { best = c; master = b; }
-  const masterNodes = [], otherNodes = [];
-  for (const [pi, b] of bodyOfNode) (b === master ? masterNodes : otherNodes).push(pi);
-  return autoDetectCouplings(ppt, masterNodes, otherNodes, R, maxCoupled);
+  const masterNodes = [], otherNodes = new Map();
+  for (const [pi, b] of bodyOfNode)
+    if (b === master) masterNodes.push(pi);
+    else { const arr = otherNodes.get(b); if (arr) arr.push(pi); else otherNodes.set(b, [pi]); }
+
+  const masterTets = [];
+  for (let t = 0; t < tetBody.length; t++)
+    if (tetBody[t] === master)
+      masterTets.push(tets[4 * t], tets[4 * t + 1], tets[4 * t + 2], tets[4 * t + 3]);
+  const masterBoundary = tetMeshBoundary(masterTets);
+
+  let all = { ref: [], offsets: [0], solid: [] };
+  for (const nodes of otherNodes.values()) {
+    const dist = distancesToSurface(ppt, nodes, masterBoundary, Math.max(2 * medEdge, 1e-9), 6);
+    if (dist.size === 0) continue;
+    const gap = Math.min(...dist.values());
+    const refs = [...dist].filter(([, d]) => d <= gap + 0.5 * medEdge).map(([pi]) => pi);
+    all = concatCouplings(all, autoDetectCouplings(
+      ppt, masterNodes, refs, partnerSearchRadius(medEdge, gap), maxCoupled));
+  }
+  return { ref: all.ref, offsets: all.offsets, solid: all.solid };
 }
 
 // Concatenate two CSR coupling sets, preserving each set's per-reference MPC
@@ -466,7 +552,7 @@ function concatCouplings(a, b) {
  * across any clearance; shells couple to the solid the same way. Mirrors
  * shellize.ts.
  */
-export function buildCoupledModel(mesh, shells, wallTets, { seamTolerance: seamToleranceOverride, couplingRadius, solidCouplingRadius = 8 } = {}) {
+export function buildCoupledModel(mesh, shells, wallTets, { seamTolerance: seamToleranceOverride, couplingRadius } = {}) {
   const { V, tet, body } = mesh;
   const solidTets = [], tetBody = [];
   for (let e = 0; e < tet.length / 4; e++)
@@ -489,12 +575,13 @@ export function buildCoupledModel(mesh, shells, wallTets, { seamTolerance: seamT
   for (let t = 0; t < tets.length / 4; t++)
     for (let k = 0; k < 4; k++) (poolBody.get(tets[4 * t + k]) ?? poolBody.set(tets[4 * t + k], new Set()).get(tets[4 * t + k])).add(tetBody[t]);
 
-  const solidCoupling = autoDetectSolidCouplings(ppt, poolBody, solidCouplingRadius);
+  // Every coupling distance below comes from the model's own scales, not a fixed
+  // number of millimetres.
+  const medEdge = medianTetEdge(ppt, tets);
+  const solidCoupling = autoDetectSolidCouplings(ppt, poolBody, tets, tetBody, medEdge);
   const solidRefs = new Set(solidCoupling.ref);
   // Tie only the shell nodes sitting on the retained solid, each reaching as far
-  // as the solid mesh's own spacing for its partners — both scales come from the
-  // model instead of a fixed radius.
-  const medEdge = medianTetEdge(ppt, tets);
+  // as the solid mesh's own spacing for its partners.
   const tolerance = seamToleranceOverride
     ?? seamTolerance(shells.shellThk.length > 0 ? Math.max(...shells.shellThk) : 0, medEdge);
   const seam = seamShellNodes(ppt, shellPool, tetMeshBoundary(tets), tolerance);
