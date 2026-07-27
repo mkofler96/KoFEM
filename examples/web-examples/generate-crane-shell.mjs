@@ -29,6 +29,10 @@ const STEP = join(here, "../../test_files/full-crane-hook.step");
 const outDir = join(here, "../../web/public/examples");
 const STEEL = { young_modulus: 210000, poisson_ratio: 0.3 };
 const BC_FIXED_FACE = 7;
+// PER-FACE force vector, not the model total: faces 66 and 67 are the two sides
+// of the pin cylinder and each carries 1 kN, so the hook is loaded with 2 kN in
+// −Y altogether. The .vtu's load group stores the same per-face vector, because
+// rebuildSurfaceLoads applies a group's components once per face entry.
 const LOAD_FACES = { 66: [0, -1000, 0], 67: [0, -1000, 0] };
 
 const Module = await loadEngine();
@@ -237,6 +241,9 @@ function buildCraneVtu() {
   }
   // LOAD_FACES applies the same vector to every listed face; take it as the
   // group's per-face force vector (rebuildSurfaceLoads applies it to each face).
+  // With both pin faces in the group that is 1 kN each — 2 kN on the model, the
+  // same resultant the solve above was run with. `totalForce` below names the
+  // group's primary component, which is per-face too, NOT the model total.
   const perFace = LOAD_FACES[Object.keys(LOAD_FACES)[0]];
 
   const meta = {
