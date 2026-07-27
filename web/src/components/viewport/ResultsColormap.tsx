@@ -10,7 +10,7 @@ import * as THREE from "three";
 import type { ThreeEvent } from "@react-three/fiber";
 import { useModelStore } from "../../store/modelStore";
 import type { ResultType } from "../../store/modelStore";
-import { nodeVonMisesField } from "../../lib/resultField";
+import { nodeVonMisesField, resultFraction } from "../../lib/resultField";
 import type { MeshTopology } from "./useMeshTopology";
 
 interface ResultsColormapProps {
@@ -28,6 +28,7 @@ export function ResultsColormap({
   const elements = useModelStore((s) => s.elements);
   const result = useModelStore((s) => s.result);
   const resultType = useModelStore((s) => s.resultType);
+  const legendRange = useModelStore((s) => s.legendRange);
 
   const { nodeMap, boundaryQuadFaceIds, boundaryTriFaceIds } = topology;
 
@@ -90,8 +91,10 @@ export function ResultsColormap({
       if (val < minVal) minVal = val;
       if (val > maxVal) maxVal = val;
     }
-    // eslint-disable-next-line kofem/no-silent-fallback -- div-by-zero guard: a uniform field has zero range and every node then maps to frac 0
-    const range = maxVal - minVal || 1;
+    // Manual legend limits colour the mesh too, otherwise the colorbar would
+    // read against a different scale than the surface it annotates.
+    const colorMin = legendRange ? legendRange.min : minVal;
+    const colorMax = legendRange ? legendRange.max : maxVal;
 
     const positions: number[] = [];
     const colors: number[] = [];
@@ -106,7 +109,7 @@ export function ResultsColormap({
     };
     const nodeColor = (id: number): [number, number, number] => {
       const { i } = nodeMap.get(id)!;
-      const frac = (nodeValue(i, resultType) - minVal) / range;
+      const frac = resultFraction(nodeValue(i, resultType), colorMin, colorMax);
       const color = new THREE.Color();
       color.setHSL(0.667 * (1 - frac), 1, 0.5);
       return [color.r, color.g, color.b];
@@ -142,6 +145,7 @@ export function ResultsColormap({
   }, [
     result,
     resultType,
+    legendRange,
     nodeVonMises,
     boundaryQuadFaceIds,
     boundaryTriFaceIds,
