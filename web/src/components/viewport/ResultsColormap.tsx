@@ -51,6 +51,14 @@ export function ResultsColormap({
     // plausible-looking but wrong colormap/deformed shape — bail instead.
     if (disp.length !== nodeMap.size * 3) return null;
 
+    // `SolverResult.vonMises` is optional, so an analysis file written before
+    // the field existed (or produced elsewhere) legitimately lacks it. Filling
+    // the missing field with zeros paints every node the same colour, which
+    // reads as a valid uniform-stress result — the same silent zero-fill the
+    // guard above rejects. Bail instead; ResultsPanel already reports
+    // "Von Mises data not available — re-run the solver".
+    if (resultType === "Von Mises stress" && !nodeVonMises) return null;
+
     // Compute per-node scalar value for the selected result type
     const nodeValue = (i: number, rt: ResultType): number => {
       switch (rt) {
@@ -61,7 +69,11 @@ export function ResultsColormap({
         case "Uz":
           return disp[i * 3 + 2];
         case "Von Mises stress":
-          return nodeVonMises?.[i] ?? 0;
+          if (!nodeVonMises)
+            throw new Error(
+              "von Mises node field is unavailable although it was requested",
+            );
+          return nodeVonMises[i];
         default: {
           const ux = disp[i * 3],
             uy = disp[i * 3 + 1],
@@ -78,6 +90,7 @@ export function ResultsColormap({
       if (val < minVal) minVal = val;
       if (val > maxVal) maxVal = val;
     }
+    // eslint-disable-next-line kofem/no-silent-fallback -- div-by-zero guard: a uniform field has zero range and every node then maps to frac 0
     const range = maxVal - minVal || 1;
 
     const positions: number[] = [];

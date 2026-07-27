@@ -159,6 +159,7 @@ export function BoundaryConditionLayer({
         normal.negate();
 
       for (const id of faceIds) {
+        // eslint-disable-next-line kofem/no-silent-fallback -- accumulating face normals; the zero vector is the identity for a node seen for the first time
         const acc = outward.get(id) ?? new THREE.Vector3();
         outward.set(id, acc.add(normal));
       }
@@ -348,8 +349,10 @@ export function BoundaryConditionLayer({
 
         const share = area / corners.length;
         for (const id of ids) {
+          // eslint-disable-next-line kofem/no-silent-fallback -- accumulating tributary area; 0 is the identity for a node seen for the first time
           tribArea.set(id, (tribArea.get(id) ?? 0) + share);
           if (kind === "pressure") {
+            // eslint-disable-next-line kofem/no-silent-fallback -- accumulating area-weighted normals; the zero vector is the identity for a node seen for the first time
             const acc = inward.get(id) ?? new THREE.Vector3();
             inward.set(id, acc.addScaledVector(normal, area));
           }

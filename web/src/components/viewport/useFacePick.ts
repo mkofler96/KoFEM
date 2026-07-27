@@ -1,7 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import * as THREE from "three";
 import type { ThreeEvent } from "@react-three/fiber";
 import { useModelStore } from "../../store/modelStore";
 import {
@@ -50,8 +49,11 @@ export function useFacePick(
           ]
         : [...pickFaceNodeIds(startIdx, boundaryMeshTopo)];
     if (faceNodeIds.length === 0) return;
-    const normal =
-      e.face?.normal.clone().normalize() ?? new THREE.Vector3(0, 1, 0);
+    // The normal decides which axis/extreme the picked face is snapped to, and
+    // that selection becomes solver input. Substituting +Y for a missing normal
+    // would silently snap the pick to the wrong face — drop the pick instead.
+    if (!e.face) return;
+    const normal = e.face.normal.clone().normalize();
     const ax = Math.abs(normal.x),
       ay = Math.abs(normal.y),
       az = Math.abs(normal.z);

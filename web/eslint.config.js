@@ -43,7 +43,18 @@ export default [
     // displayed results. Here any `??`/`||` fabricating a plausible value
     // default is an error; genuinely optional fields carry an
     // eslint-disable comment with a justification.
-    files: ["src/workers/**", "src/store/**", "src/lib/**"],
+    //
+    // Components and hooks are in scope because result rendering and solver
+    // input now live there too, not just in workers/store/lib: the von Mises
+    // colormap zero-filled missing stress data and the rule never saw it
+    // (issue #363).
+    files: [
+      "src/workers/**",
+      "src/store/**",
+      "src/lib/**",
+      "src/components/**",
+      "src/hooks/**",
+    ],
     plugins: { kofem },
     rules: {
       "kofem/no-silent-fallback": ["error", { checkValueDefaults: true }],

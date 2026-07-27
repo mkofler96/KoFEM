@@ -45,6 +45,7 @@ export function useSolver() {
   // A non-zero prescribed displacement drives the deformation on its own, so the
   // model is solvable without an applied load. Without either, the solve returns
   // the trivial zero field, so at least one driving action is still required.
+  // eslint-disable-next-line kofem/no-silent-fallback -- a constraint without prescribedValue is a homogeneous fixed BC, i.e. u = 0 by definition
   const prescribedOk = constraints.some((c) => (c.prescribedValue ?? 0) !== 0);
   const drivingOk = loadOk || prescribedOk;
   const allOk = meshOk && matOk && bcOk && drivingOk;

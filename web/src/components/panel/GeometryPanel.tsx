@@ -22,11 +22,16 @@ function MaterialForm({
   onSave(v: Omit<Material, "id">): void;
   onCancel(): void;
 }) {
+  // Form seeds for the "new material" dialog (`mat` undefined): structural
+  // steel, shown in the editable fields and validated in handleSave before it
+  // becomes a material. Nothing here reaches the solver unseen.
+  /* eslint-disable kofem/no-silent-fallback -- prefilled form values the user sees and edits, not a substitute for missing solver data */
   const [name, setName] = useState(mat?.name ?? "Material");
   const [young, setYoung] = useState(String(mat?.young ?? 210000));
   const [poisson, setPoisson] = useState(String(mat?.poisson ?? 0.3));
   const [density, setDensity] = useState(String(mat?.density ?? 7.85e-9));
   const [color, setColor] = useState(mat?.color ?? defaultColor ?? "#4e79a7");
+  /* eslint-enable kofem/no-silent-fallback */
   const [error, setError] = useState<string | null>(null);
 
   function handleSave() {
@@ -49,6 +54,7 @@ function MaterialForm({
       return;
     }
     onSave({
+      // eslint-disable-next-line kofem/no-silent-fallback -- label for a material the user left unnamed; cosmetic, the physical constants above are all validated
       name: name || "Material",
       young: youngModulus,
       poisson: poissonRatio,
@@ -386,6 +392,7 @@ function BodiesSection() {
   if (properties.length <= 1) return null;
 
   const matColor = (materialId: number) =>
+    // eslint-disable-next-line kofem/no-silent-fallback -- swatch colour for a body whose material carries none; display only, never reaches the solver
     materials.find((mat) => mat.id === materialId)?.color ?? "#7a9bbf";
 
   // Highlighting a body dims the others in the geometry (coloured-tessellation)
@@ -446,6 +453,7 @@ function BodiesSection() {
               className={styles.formSelect}
               data-testid={`body-type-${prop.id}`}
               title={ELEMENT_TYPE_TIP}
+              // eslint-disable-next-line kofem/no-silent-fallback -- selected option for a body left at the default discretization; absent means solid, matching how geometrySlice assigns it
               value={prop.discretization ?? "solid"}
               onFocus={() => highlight(prop.id)}
               onBlur={() => setHighlightBodyId(null)}
