@@ -61,6 +61,7 @@ export function BcSection({ onError }: { onError(msg: string | null): void }) {
     if (allPickedFaces.length === 0) return;
     const faceEntries = toFaceEntries(
       allPickedFaces,
+      // eslint-disable-next-line kofem/no-silent-fallback -- numbering offset for the new entries; a pick with no target group starts a fresh group, which has 0 faces
       targetBcGroup?.faces.length ?? 0,
       pickGeometry === "edge" ? "Edge" : "Face",
     );

@@ -44,6 +44,7 @@ export function GeometryLayer({ wireframe }: GeometryLayerProps) {
 
     const triIndicesByBody = new Map<number, number[]>();
     for (let t = 0; t < triangles.length; t++) {
+      // eslint-disable-next-line kofem/no-silent-fallback -- bodyIds is absent on analyses saved before per-body colours; StepTessellation documents body 1 for the whole tessellation in that case
       const body = bodyIds?.[t] ?? 1;
       let list = triIndicesByBody.get(body);
       if (!list) {
@@ -81,6 +82,7 @@ export function GeometryLayer({ wireframe }: GeometryLayerProps) {
         let nx = ay * bz - az * by,
           ny = az * bx - ax * bz,
           nz = ax * by - ay * bx;
+        // eslint-disable-next-line kofem/no-silent-fallback -- div-by-zero guard: a degenerate (zero-area) triangle has no defined normal
         const len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
         nx /= len;
         ny /= len;
@@ -103,6 +105,7 @@ export function GeometryLayer({ wireframe }: GeometryLayerProps) {
     return (bodyId: number): string => {
       const prop = properties.find((p) => p.id === bodyId);
       const mat = prop ? matById.get(prop.materialId) : undefined;
+      // eslint-disable-next-line kofem/no-silent-fallback -- display colour only: a body with no material assigned yet is drawn in the neutral default and never reaches the solver
       return mat?.color ?? DEFAULT_BODY_COLOR;
     };
   }, [properties, materials]);

@@ -70,6 +70,7 @@ export function TopBar() {
         <span className={styles.crumb}>
           <span className={styles.crumbMuted}>Workspace</span>
           <span className={styles.crumbSep}>/</span>
+          {/* eslint-disable-next-line kofem/no-silent-fallback -- breadcrumb label for an unnamed model; cosmetic, never fed back into the analysis */}
           <span className={styles.crumbPage}>{modelName || "Untitled"}</span>
         </span>
       </div>

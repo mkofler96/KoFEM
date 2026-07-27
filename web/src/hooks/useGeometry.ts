@@ -55,6 +55,7 @@ export function useGeometry() {
         }
       })
       .catch((err) =>
+        // eslint-disable-next-line kofem/no-silent-fallback -- fallback text for a rejection that arrived without a message; this is the error path itself, not solver data
         setStepImportError(err.message ?? `${label} import failed`),
       )
       .finally(() => {
