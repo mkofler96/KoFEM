@@ -127,6 +127,21 @@ export interface ResultRange {
   max: number;
 }
 
+// Position of `value` inside [min, max], as the t that resultColor expects.
+// Clamped, so a value outside a manually narrowed legend range saturates at the
+// end colour instead of wrapping back through the map.
+export function resultFraction(
+  value: number,
+  min: number,
+  max: number,
+): number {
+  const span = max - min;
+  // Div-by-zero guard: a uniform field has zero span, and everything then sits
+  // at the bottom of the map.
+  if (span <= 0) return 0;
+  return Math.min(1, Math.max(0, (value - min) / span));
+}
+
 // Min/max of the selected scalar field over all nodes.  Returns null when the
 // field cannot be computed (e.g. Von Mises requested but unavailable).
 export function computeResultRange(

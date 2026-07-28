@@ -29,21 +29,29 @@ export function ColorBar() {
   const mode = useModelStore((s) => s.mode);
   const nodes = useModelStore((s) => s.nodes);
   const elements = useModelStore((s) => s.elements);
+  const legendRange = useModelStore((s) => s.legendRange);
 
   if (mode !== "results" || !result) return null;
 
-  const range = computeResultRange(result, resultType, nodes, elements);
-  if (!range) return null;
+  const fieldRange = computeResultRange(result, resultType, nodes, elements);
+  if (!fieldRange) return null;
 
-  const { min, max } = range;
-  // Tick values from top (max) to bottom (min).
+  const { min, max } = legendRange ?? fieldRange;
+  // Tick values from top (max) to bottom (min). Each tick keeps its position on
+  // the bar, which is what identifies it across renders — the value changes
+  // whenever the range does.
   const ticks = Array.from({ length: TICKS }, (_, i) => {
     const frac = 1 - i / (TICKS - 1);
-    return min + frac * (max - min);
+    return { frac, value: min + frac * (max - min) };
   });
+  // Manual limits clamp the colouring, so the end ticks stand for "everything
+  // at or beyond this value" rather than for the extremes of the field.
+  const clampsAbove = max < fieldRange.max;
+  const clampsBelow = min > fieldRange.min;
 
   return (
     <div
+      data-testid="colorbar"
       style={{
         position: "absolute",
         left: 12,
@@ -64,6 +72,14 @@ export function ColorBar() {
       <div style={{ marginBottom: 6, fontWeight: 600, whiteSpace: "nowrap" }}>
         {resultFieldSymbol(resultType)} [{resultUnit(resultType)}]
       </div>
+      {legendRange && (
+        <div
+          data-testid="colorbar-manual"
+          style={{ marginBottom: 6, color: "#6b7280", whiteSpace: "nowrap" }}
+        >
+          manual range
+        </div>
+      )}
       <div style={{ display: "flex", gap: 6 }}>
         <div
           style={{
@@ -83,9 +99,15 @@ export function ColorBar() {
             fontVariantNumeric: "tabular-nums",
           }}
         >
-          {ticks.map((v, i) => (
-            <span key={i} style={{ whiteSpace: "nowrap", lineHeight: 1 }}>
-              {v.toExponential(2)}
+          {ticks.map(({ frac, value }, i) => (
+            <span
+              key={frac}
+              data-testid={`colorbar-tick-${i}`}
+              style={{ whiteSpace: "nowrap", lineHeight: 1 }}
+            >
+              {frac === 1 && clampsAbove ? "≥ " : ""}
+              {frac === 0 && clampsBelow ? "≤ " : ""}
+              {value.toExponential(2)}
             </span>
           ))}
         </div>

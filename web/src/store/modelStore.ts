@@ -58,7 +58,12 @@ export type {
   SurfaceLoad,
 } from "./boundarySlice";
 export { loadKind, loadComponents } from "./boundarySlice";
-export type { SolverResult, ResultType, AppMode } from "./resultsSlice";
+export type {
+  SolverResult,
+  ResultType,
+  AppMode,
+  LegendRange,
+} from "./resultsSlice";
 export { RESULT_TYPES } from "./resultsSlice";
 export type { LoadDisplay, ViewRepr } from "./viewSlice";
 
@@ -121,6 +126,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.modelName = a.modelName;
       s.result = a.result;
       s.resultType = a.resultType;
+      s.legendRange = null;
       s.viewRepr = a.viewRepr;
       s.deformScale = 1;
       s.mode = a.mode;
@@ -152,6 +158,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.modelName = "";
       s.result = null;
       s.resultType = "Displacement (magnitude)";
+      s.legendRange = null;
       s.stepSurface = null;
       s.stepBytes = null;
       s.geometryFormat = "step";

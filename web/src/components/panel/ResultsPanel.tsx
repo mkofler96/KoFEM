@@ -8,6 +8,7 @@ import {
   resultFieldSymbol,
   resultUnit,
 } from "../../lib/resultField";
+import { LegendRangeControls } from "./LegendRangeControls";
 import styles from "./LeftPanel.module.css";
 
 export function ResultsPanel() {
@@ -79,6 +80,13 @@ export function ResultsPanel() {
             {deformScale.toFixed(2)}×
           </span>
         </div>
+
+        {stats && (
+          <>
+            <div className={styles.sectionLabel}>Legend range</div>
+            <LegendRangeControls fieldRange={stats} unit={unit} />
+          </>
+        )}
 
         <div className={styles.sectionLabel}>Result summary</div>
         {stats ? (
