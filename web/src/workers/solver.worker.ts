@@ -1663,41 +1663,66 @@ function mixedCoupledMaterials(
 ) {
   const propById = new Map(properties.map((p) => [p.id, p]));
   const matById = new Map(materials.map((mat) => [mat.id, mat]));
-  const domainMaterial = (els: Element[], domain: string): Material => {
-    const used = new Map<number, Material>();
-    for (const el of els) {
-      const prop = propById.get(el.propertyId);
-      if (!prop)
-        throw new Error(
-          `mixed solve: ${domain} element ${el.id} belongs to body ${el.propertyId}, ` +
-            "which has no property — the model is inconsistent",
-        );
-      const mat = matById.get(prop.materialId);
-      if (!mat)
-        throw new Error(
-          `mixed solve: property ${prop.id} references material ${prop.materialId}, ` +
-            "which does not exist",
-        );
-      used.set(mat.id, mat);
-    }
-    if (used.size === 0)
-      throw new Error(`mixed solve: the model has no ${domain} element`);
-    if (used.size > 1) {
-      const names = [...used.values()].map((mat) => mat.name).join(", ");
+  const materialOf = (el: Element, domain: string): Material => {
+    const prop = propById.get(el.propertyId);
+    if (!prop)
       throw new Error(
-        `mixed solve: the coupled solid-shell solver supports one ${domain} material, but the ` +
-          `${domain} elements span ${used.size} distinct materials (${names}). Per-domain ` +
-          "materials are not yet plumbed through the coupled path — assign a single material to " +
-          `every ${domain} body.`,
+        `mixed solve: ${domain} element ${el.id} belongs to body ${el.propertyId}, ` +
+          "which has no property — the model is inconsistent",
       );
-    }
-    return [...used.values()][0];
+    const mat = matById.get(prop.materialId);
+    if (!mat)
+      throw new Error(
+        `mixed solve: property ${prop.id} references material ${prop.materialId}, ` +
+          "which does not exist",
+      );
+    return mat;
   };
-  const solidMat = domainMaterial(solidElements, "solid");
-  const shellMat = domainMaterial(shellElements, "shell");
+
+  // Solid: one entry per distinct material, selected per tet by `attributes`
+  // (1-based) — a steel bracket carrying an aluminium part is one solve.
+  if (solidElements.length === 0)
+    throw new Error("mixed solve: the model has no solid element");
+  const solidOrder: Material[] = [];
+  const solidIndex = new Map<number, number>();
+  const solidAttributes = solidElements.map((el) => {
+    const mat = materialOf(el, "solid");
+    let at = solidIndex.get(mat.id);
+    if (at === undefined) {
+      at = solidOrder.push(mat); // 1-based: push returns the new length
+      solidIndex.set(mat.id, at);
+    }
+    return at;
+  });
+
+  // Shell: still exactly one. A solve idealises a single body as shells (#376),
+  // so several shell materials means the model, not the solver, is inconsistent.
+  const shellUsed = new Map<number, Material>();
+  for (const el of shellElements) {
+    const mat = materialOf(el, "shell");
+    shellUsed.set(mat.id, mat);
+  }
+  if (shellUsed.size === 0)
+    throw new Error("mixed solve: the model has no shell element");
+  if (shellUsed.size > 1) {
+    const names = [...shellUsed.values()].map((mat) => mat.name).join(", ");
+    throw new Error(
+      "mixed solve: one body is idealised as shells per solve, so the shell elements carry one " +
+        `material — these span ${shellUsed.size} (${names}). Assign a single material to the ` +
+        "shelled body.",
+    );
+  }
+  const shellMat = [...shellUsed.values()][0];
   return {
-    solid: { young_modulus: solidMat.young, poisson_ratio: solidMat.poisson },
-    shell: { young_modulus: shellMat.young, poisson_ratio: shellMat.poisson },
+    mat: {
+      solid: solidOrder.map((mat) => ({
+        young_modulus: mat.young,
+        poisson_ratio: mat.poisson,
+      })),
+      shell: { young_modulus: shellMat.young, poisson_ratio: shellMat.poisson },
+    },
+    solidAttributes,
+    solidMaterialNames: solidOrder.map((mat) => mat.name),
   };
 }
 
@@ -1812,7 +1837,7 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
   // (#377). The BC wins; drop the coupling on those nodes.
   const coupling = dropCouplingsOnFixedNodes(model.coupling, fixed_dofs);
   const { load_dofs, load_vals } = coupledLoads(loads, surfaceLoads, poolOf);
-  const mat = mixedCoupledMaterials(
+  const { mat, solidAttributes, solidMaterialNames } = mixedCoupledMaterials(
     materials,
     properties,
     shellElements,
@@ -1821,7 +1846,7 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
 
   self.postMessage({
     id,
-    log: `[mixed] ${solidElements.length} solid tets, ${shellElements.length} shell facets → ${model.pool.length / 3} pool nodes, ${coupling.ref.length} couplings…`,
+    log: `[mixed] ${solidElements.length} solid tets (${solidMaterialNames.join(", ")}), ${shellElements.length} shell facets → ${model.pool.length / 3} pool nodes, ${coupling.ref.length} couplings…`,
   });
 
   const result = m().solve_coupled(
@@ -1830,6 +1855,7 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
       tets: Int32Array.from(model.tets),
       triangles: Int32Array.from(model.triangles),
       thicknesses: Float64Array.from(model.thicknesses),
+      attributes: Int32Array.from(solidAttributes),
     },
     {
       ref: Int32Array.from(coupling.ref),

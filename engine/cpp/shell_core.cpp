@@ -988,17 +988,36 @@ ShellResult solve_solid_shell_core(const CoupledInput& in) {
 // ── Stress recovery ───────────────────────────────────────────────────────────
 
 std::vector<double> tet_von_mises(const std::vector<double>& vertices,
-                                  const std::vector<int>& tets, double young,
-                                  double poisson, const std::vector<double>& dofs) {
-    const double lam = young * poisson / ((1.0 + poisson) * (1.0 - 2.0 * poisson));
-    const double mu = young / (2.0 * (1.0 + poisson));
+                                  const std::vector<int>& tets,
+                                  const std::vector<double>& youngs,
+                                  const std::vector<double>& poissons,
+                                  const std::vector<int>& attributes,
+                                  const std::vector<double>& dofs) {
+    const size_t nMat = youngs.size();
+    if (nMat == 0 || poissons.size() != nMat)
+        throw std::runtime_error("tet_von_mises: need at least one material, with one "
+                                 "Poisson ratio per Young's modulus");
+    std::vector<double> lam(nMat), mu(nMat);
+    for (size_t m = 0; m < nMat; ++m) {
+        lam[m] = youngs[m] * poissons[m] / ((1.0 + poissons[m]) * (1.0 - 2.0 * poissons[m]));
+        mu[m] = youngs[m] / (2.0 * (1.0 + poissons[m]));
+    }
     auto vtx = [&](int n) -> Vec3 {
         const size_t b3 = 3 * static_cast<size_t>(n);
         return {vertices[b3], vertices[b3 + 1], vertices[b3 + 2]};
     };
     const int nTets = static_cast<int>(tets.size() / 4);
+    if (!attributes.empty() && attributes.size() != static_cast<size_t>(nTets))
+        throw std::runtime_error("tet_von_mises: " + std::to_string(attributes.size()) +
+                                 " attributes for " + std::to_string(nTets) + " tets");
     std::vector<double> out(nTets);
     for (int e = 0; e < nTets; ++e) {
+        const int attr = attributes.empty() ? 1 : attributes[e];
+        if (attr < 1 || static_cast<size_t>(attr) > nMat)
+            throw std::runtime_error("tet_von_mises: tet " + std::to_string(e) +
+                                     " selects material " + std::to_string(attr) +
+                                     ", outside 1.." + std::to_string(nMat));
+        const size_t m = static_cast<size_t>(attr) - 1;
         const size_t e4 = 4 * static_cast<size_t>(e);
         const std::array<int, 4> nd = {tets[e4], tets[e4 + 1], tets[e4 + 2],
                                        tets[e4 + 3]};
@@ -1028,7 +1047,7 @@ std::vector<double> tet_von_mises(const std::vector<double>& vertices,
         std::array<std::array<double, 3>, 3> sig{};
         for (int a = 0; a < 3; ++a)
             for (int k = 0; k < 3; ++k)
-                sig[a][k] = (a == k ? lam * tr : 0.0) + 2.0 * mu * eps[a][k];
+                sig[a][k] = (a == k ? lam[m] * tr : 0.0) + 2.0 * mu[m] * eps[a][k];
         const double trs = sig[0][0] + sig[1][1] + sig[2][2];
         double vm2 = 0.0;
         for (int a = 0; a < 3; ++a)
@@ -1039,6 +1058,12 @@ std::vector<double> tet_von_mises(const std::vector<double>& vertices,
         out[e] = std::sqrt(1.5 * vm2);
     }
     return out;
+}
+
+std::vector<double> tet_von_mises(const std::vector<double>& vertices,
+                                  const std::vector<int>& tets, double young,
+                                  double poisson, const std::vector<double>& dofs) {
+    return tet_von_mises(vertices, tets, {young}, {poisson}, {}, dofs);
 }
 
 std::vector<double> shell_von_mises(const std::vector<double>& vertices,

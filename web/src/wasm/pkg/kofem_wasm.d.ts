@@ -114,7 +114,10 @@ export interface KofemModule {
   ): ShellSolveResult
   /** Coupled solid(tet)+shell solve. MFEM assembles the solid; DKT shells and
    *  RBE3 distributing couplings are added and solved together.
-   *   mesh:     { vertices, tets, triangles, thicknesses? }
+   *   mesh:     { vertices, tets, triangles, thicknesses?, attributes? }
+   *             `attributes` is one 1-based solid-material index per TET, into
+   *             the `mat_json.solid` array; omitted means every tet uses the
+   *             first material.
    *   coupling: { ref, offsets, solid, mpc?, relaxation? }  CSR-style: reference
    *             node ref[k] ties to solid[offsets[k]..offsets[k+1]). Optional
    *             mpc[k] = 1 selects the relaxed shell-to-solid MPC coupling (rigid
@@ -122,13 +125,17 @@ export interface KofemModule {
    *             0/absent keeps the distributing RBE3 coupling; relaxation is the
    *             shared ψ ∈ [0.5,1] used by the MPC couplings.
    *   bcs:      { fixed_dofs, load_dofs, load_vals }  (DOF = 6·node+component)
-   *   mat_json: { solid:{young_modulus,poisson_ratio}, shell:{…} } */
+   *   mat_json: { solid, shell:{young_modulus,poisson_ratio} } — `solid` is
+   *             either one material object (every tet uses it) or an ARRAY of
+   *             materials selected per tet by `mesh.attributes`. The shell side
+   *             stays single: a solve idealises one body as shells (#376). */
   solve_coupled(
     mesh: {
       vertices: Float64Array
       tets: Int32Array
       triangles: Int32Array
       thicknesses?: Float64Array
+      attributes?: Int32Array
     },
     coupling: {
       ref: Int32Array
