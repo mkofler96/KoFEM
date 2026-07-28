@@ -25,7 +25,7 @@ async function tickValue(
   i: number,
 ): Promise<number> {
   const text = await page.getByTestId(`colorbar-tick-${i}`).innerText();
-  return Number(text.replace(/^[≥≤]\s*/, ""));
+  return Number(text.replace(/^[≥≤]\s*/u, ""));
 }
 
 test("the colorbar limits can be pinned, rejected when inverted, and reset (#390)", async ({
@@ -51,8 +51,9 @@ test("the colorbar limits can be pinned, rejected when inverted, and reset (#390
 
   await expect(page.getByTestId("colorbar-manual")).toBeVisible();
   const range = await readLegendRange(page);
-  expect(range).not.toBeNull();
-  expect(range!.max).toBeCloseTo(pinnedMax, 6);
+  if (range === null)
+    throw new Error("the pinned limits did not reach the store");
+  expect(range.max).toBeCloseTo(pinnedMax, 6);
   await expect(page.getByTestId("colorbar-tick-0")).toContainText("≥");
   expect(await tickValue(page, 0)).toBeCloseTo(pinnedMax, 6);
 
@@ -62,7 +63,10 @@ test("the colorbar limits can be pinned, rejected when inverted, and reset (#390
   await expect(page.getByTestId("legend-error")).toContainText(
     "Max must be greater than min",
   );
-  expect((await readLegendRange(page))!.max).toBeCloseTo(pinnedMax, 6);
+  const afterReject = await readLegendRange(page);
+  if (afterReject === null)
+    throw new Error("the rejected edit dropped the applied limits");
+  expect(afterReject.max).toBeCloseTo(pinnedMax, 6);
 
   // "Auto" hands the range back to the field.
   await page.getByTestId("legend-auto").click();

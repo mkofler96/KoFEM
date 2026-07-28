@@ -37,10 +37,12 @@ export function ColorBar() {
   if (!fieldRange) return null;
 
   const { min, max } = legendRange ?? fieldRange;
-  // Tick values from top (max) to bottom (min).
+  // Tick values from top (max) to bottom (min). Each tick keeps its position on
+  // the bar, which is what identifies it across renders — the value changes
+  // whenever the range does.
   const ticks = Array.from({ length: TICKS }, (_, i) => {
     const frac = 1 - i / (TICKS - 1);
-    return min + frac * (max - min);
+    return { frac, value: min + frac * (max - min) };
   });
   // Manual limits clamp the colouring, so the end ticks stand for "everything
   // at or beyond this value" rather than for the extremes of the field.
@@ -97,15 +99,15 @@ export function ColorBar() {
             fontVariantNumeric: "tabular-nums",
           }}
         >
-          {ticks.map((v, i) => (
+          {ticks.map(({ frac, value }, i) => (
             <span
-              key={i}
+              key={frac}
               data-testid={`colorbar-tick-${i}`}
               style={{ whiteSpace: "nowrap", lineHeight: 1 }}
             >
-              {i === 0 && clampsAbove ? "≥ " : ""}
-              {i === TICKS - 1 && clampsBelow ? "≤ " : ""}
-              {v.toExponential(2)}
+              {frac === 1 && clampsAbove ? "≥ " : ""}
+              {frac === 0 && clampsBelow ? "≤ " : ""}
+              {value.toExponential(2)}
             </span>
           ))}
         </div>
