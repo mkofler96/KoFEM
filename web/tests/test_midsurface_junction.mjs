@@ -150,19 +150,20 @@ for (const { tri, count } of seen.values()) {
     verts[3 * i + 2],
   ]);
   const all = (axis, want) => corner.every((pos) => near(pos[axis], want));
-  let face;
-  if (all(2, 0)) face = 1;
-  else if (all(2, THK)) face = 2;
-  else if (all(0, 0)) face = 3;
-  else if (all(0, THK)) face = 4;
-  else if (all(1, 0)) face = 5;
-  else if (all(1, 20)) face = 6;
-  else if (all(0, 40)) face = 7;
-  else if (all(2, 30)) face = 8;
-  else
+  const faceOfPlane = () => {
+    if (all(2, 0)) return 1;
+    if (all(2, THK)) return 2;
+    if (all(0, 0)) return 3;
+    if (all(0, THK)) return 4;
+    if (all(1, 0)) return 5;
+    if (all(1, 20)) return 6;
+    if (all(0, 40)) return 7;
+    if (all(2, 30)) return 8;
     throw new Error(
       `boundary triangle on no known plane: ${JSON.stringify(corner)}`,
     );
+  };
+  const face = faceOfPlane();
   surfTri.push(tri[0], tri[1], tri[2]);
   surfFace.push(face);
 }

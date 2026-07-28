@@ -1707,7 +1707,7 @@ function mixedCoupledMaterials(
   if (shellUsed.size > 1) {
     const names = [...shellUsed.values()].map((mat) => mat.name).join(", ");
     throw new Error(
-      `mixed solve: one body is idealised as shells per solve, so the shell elements carry one ` +
+      "mixed solve: one body is idealised as shells per solve, so the shell elements carry one " +
         `material — these span ${shellUsed.size} (${names}). Assign a single material to the ` +
         "shelled body.",
     );

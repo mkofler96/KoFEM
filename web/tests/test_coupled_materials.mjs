@@ -24,8 +24,14 @@ const PKG = join(here, "../src/wasm/pkg");
 const { default: createModule } = await import(join(PKG, "kofem_wasm_emcc.js"));
 const Module = await createModule({
   wasmBinary: readFileSync(join(PKG, "kofem_wasm_emcc.wasm")).buffer,
-  print: () => {},
-  printErr: () => {},
+  print: () => {
+    /* the engine logs its iteration count per solve; this file runs seven and
+       reports only the checks, so the chatter is dropped rather than shown */
+  },
+  printErr: () => {
+    /* likewise for stderr: the refusal cases below EXPECT the solver to fail,
+       and their messages are asserted on from the returned error, not the log */
+  },
 });
 
 let failures = 0;
