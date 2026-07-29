@@ -42,6 +42,28 @@ export interface Property {
   materialId: number;
   thickness?: number;
   discretization?: BodyDiscretization;
+  // Set only on the PSHELL properties the mesh-time shell idealisation derives:
+  // the id of the CAD body whose thin walls they replace. Absent on the CAD
+  // bodies themselves, whose own id already is the body id. The geometry view
+  // needs it because a derived PSHELL has no tessellation of its own.
+  sourceBodyId?: number;
+}
+
+// A property the user owns: one CAD body of the imported file. Everything else
+// in `properties` is a section property the mesh derived from such a body — one
+// PSHELL per wall thickness — which is part of the discretisation, not a body.
+// The Bodies list, the shell-body selection and thin-wall detection all speak
+// in CAD bodies; only the solver and the mesh see the derived properties.
+export function isCadBody(prop: Property): boolean {
+  return prop.sourceBodyId === undefined;
+}
+
+// The section properties the mesh derived from `bodyId`, in id order.
+export function shellSectionsOf(
+  properties: Property[],
+  bodyId: number,
+): Property[] {
+  return properties.filter((p) => p.sourceBodyId === bodyId);
 }
 
 export interface Element {
@@ -186,10 +208,16 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
   applyShellDetection: (shellBodyIds) =>
     set((s) => {
       const shell = new Set(shellBodyIds);
-      for (const prop of s.properties)
+      // Detection runs over the CAD bodies of the tessellation, so only they can
+      // be marked. A PSHELL the mesh derived is a shell by construction; letting
+      // this loop stamp it "solid" left a thickness-carrying shell property
+      // labelled solid, which then dropped out of the next mesh's shell bodies.
+      for (const prop of s.properties) {
+        if (!isCadBody(prop)) continue;
         prop.discretization = shell.has(prop.id)
           ? ("shell" as BodyDiscretization)
           : ("solid" as BodyDiscretization);
+      }
     }),
   setAutoShell: (enabled) =>
     set((s) => {
@@ -224,6 +252,12 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
           `Cannot assign material: material ${materialId} does not exist`,
         );
       prop.materialId = materialId;
+      // A shell-idealised body owns no elements after meshing — its walls became
+      // PSHELLs, and the solve resolves their material through those. Assigning
+      // to the body alone would silently leave the shells on the old material.
+      for (const section of s.properties)
+        if (section.sourceBodyId === propertyId)
+          section.materialId = materialId;
     }),
   setStepBytes: (bytes) =>
     set((s) => {

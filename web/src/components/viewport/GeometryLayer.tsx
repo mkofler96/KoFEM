@@ -14,6 +14,11 @@ import { useModelStore } from "../../store/modelStore";
 
 interface GeometryLayerProps {
   wireframe: boolean;
+  // CAD body to highlight, already resolved against this tessellation by
+  // MeshScene (resolveHighlightedBody). null = highlight nothing, which is not
+  // the same as "dim everything": an id no body carries must leave the assembly
+  // fully lit, or the model reads as gone.
+  highlightBodyId: number | null;
 }
 
 // Fallback body colour when a body has no material assignment yet (or an
@@ -28,11 +33,13 @@ interface BodyGeometry {
   normals: Float32Array;
 }
 
-export function GeometryLayer({ wireframe }: GeometryLayerProps) {
+export function GeometryLayer({
+  wireframe,
+  highlightBodyId,
+}: GeometryLayerProps) {
   const stepSurface = useModelStore((s) => s.stepSurface);
   const properties = useModelStore((s) => s.properties);
   const materials = useModelStore((s) => s.materials);
-  const highlightBodyId = useModelStore((s) => s.highlightBodyId);
   const hiddenBodyIds = useModelStore((s) => s.hiddenBodyIds);
 
   // Build one flat position/normal buffer per body. Rebuilt only when the
@@ -118,7 +125,7 @@ export function GeometryLayer({ wireframe }: GeometryLayerProps) {
         if (hiddenBodyIds.includes(bodyId)) return null;
         // When a body is being assigned (highlightBodyId set), every other body
         // fades back so the one in question reads clearly against the assembly.
-        const dimmed = highlightBodyId != null && highlightBodyId !== bodyId;
+        const dimmed = highlightBodyId !== null && highlightBodyId !== bodyId;
         return (
           <mesh key={bodyId}>
             <bufferGeometry>

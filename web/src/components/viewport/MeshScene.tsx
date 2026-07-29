@@ -11,6 +11,7 @@
 
 import { useMemo } from "react";
 import { useModelStore } from "../../store/modelStore";
+import { resolveHighlightedBody } from "../../lib/bodyHighlight";
 import { useMeshTopology } from "./useMeshTopology";
 import { useFacePick } from "./useFacePick";
 import { GeometryLayer } from "./GeometryLayer";
@@ -27,6 +28,8 @@ export function MeshScene() {
   const stepSurface = useModelStore((s) => s.stepSurface);
   const deformScaleFactor = useModelStore((s) => s.deformScale);
   const viewRepr = useModelStore((s) => s.viewRepr);
+  const highlightBodyId = useModelStore((s) => s.highlightBodyId);
+  const properties = useModelStore((s) => s.properties);
 
   const topology = useMeshTopology();
   const { modelSize, nodeMap } = topology;
@@ -71,16 +74,32 @@ export function MeshScene() {
   // even though the solved `result` is still held in the store.
   const showResult = !!result && mode === "results";
 
+  // Hovering a row in the Bodies panel highlights that body, which only the
+  // coloured CAD tessellation can show — the FEM surface is one neutral colour.
+  // So a live highlight overrides the representation for as long as the pointer
+  // rests on the row. The override is derived, never written to the store: the
+  // user's chosen representation is still what the status bar shows and what
+  // comes back the instant the highlight clears. A body the tessellation cannot
+  // draw resolves to null and overrides nothing (issue: hovering a derived
+  // PSHELL row dimmed every body and hid the mesh with it).
+  const highlightBody = resolveHighlightedBody(
+    highlightBodyId,
+    properties,
+    stepSurface,
+  );
+  const repr = highlightBody !== null && !showResult ? "geometry" : viewRepr;
+
   // The CAD tessellation stands in for the geometry representation (and is the
   // only thing to show before a mesh exists). It must never paint over a solved
   // result, so it is suppressed in results mode.
   const showStepSurface =
-    !showResult && (viewRepr === "geometry" || nodes.length === 0);
+    !showResult && (repr === "geometry" || nodes.length === 0);
 
   return (
     <group>
       <FemMeshLayer
         topology={topology}
+        repr={repr}
         deformScale={deformScale}
         showResult={showResult}
         onFacePick={onFacePick}
@@ -94,7 +113,10 @@ export function MeshScene() {
       )}
       <BoundaryConditionLayer topology={topology} showResult={showResult} />
       {showStepSurface && (
-        <GeometryLayer wireframe={viewRepr === "wireframe"} />
+        <GeometryLayer
+          wireframe={viewRepr === "wireframe"}
+          highlightBodyId={highlightBody}
+        />
       )}
     </group>
   );

@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { useModelStore } from "../store/modelStore";
 import type { Node, Element, Property } from "../store/modelStore";
+import { isCadBody } from "../store/geometrySlice";
 import { sendToWorker, resetWorker } from "../workers/sharedWorker";
 import { useWorkerLogs } from "./useWorkerLogs";
 
@@ -58,9 +59,12 @@ export function useMesh() {
         minElementSize,
         // Bodies the user (or detectShellBodies at import) marked Shell, plus the
         // property table: meshing idealises their thin walls to a mid-surface
-        // shell mesh and returns the mixed CTRIA3 + CTETRA model (#397).
+        // shell mesh and returns the mixed CTRIA3 + CTETRA model (#397). Only CAD
+        // bodies can be idealised — the PSHELLs a previous mesh derived are
+        // shells already, and passing their ids would send the thin-wall
+        // extraction hunting for bodies the fresh mesh has never heard of.
         shellBodyIds: properties
-          .filter((p) => p.discretization === "shell")
+          .filter((p) => isCadBody(p) && p.discretization === "shell")
           .map((p) => p.id),
         properties,
       });
