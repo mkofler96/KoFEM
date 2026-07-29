@@ -3,7 +3,8 @@
 
 import { useState, useRef, type ChangeEvent } from "react";
 import { useModelStore } from "../../store/modelStore";
-import type { Material } from "../../store/modelStore";
+import type { Material, Property } from "../../store/modelStore";
+import { isCadBody, shellSectionsOf } from "../../store/geometrySlice";
 import { pickMaterialColor } from "../../store/materialSlice";
 import { fmt } from "../../lib/modelDisplay";
 import { useGeometry } from "../../hooks/useGeometry";
@@ -376,6 +377,19 @@ function AutoShellSection() {
   );
 }
 
+// Tooltip for a body's name: what the last mesh made of its walls. Empty for a
+// body the mesh left solid, so only shelled bodies carry the hint.
+function sectionsTip(sections: Property[]): string | undefined {
+  if (sections.length === 0) return undefined;
+  const thicknesses = sections
+    .map((s) => (s.thickness === undefined ? "?" : `${s.thickness} mm`))
+    .join(", ");
+  return (
+    `Idealised as shells by the last mesh — ${sections.length} thickness ` +
+    `section(s): ${thicknesses}. Its walls carry this body's material.`
+  );
+}
+
 function BodiesSection() {
   const materials = useModelStore((s) => s.materials);
   const properties = useModelStore((s) => s.properties);
@@ -387,7 +401,14 @@ function BodiesSection() {
   const tieDistance = useModelStore((s) => s.tieDistance);
   const setTieDistance = useModelStore((s) => s.setTieDistance);
 
-  if (properties.length <= 1) return null;
+  // One row per CAD body. A mesh-time shell idealisation adds one PSHELL per
+  // wall thickness to `properties`; those are section properties OF a body, not
+  // bodies, and listing them put a second row — its own name, eye and material
+  // dropdown — on screen for a single physical part, and made single-body parts
+  // grow a Bodies list the moment they were shelled. The thickness they carry is
+  // surfaced on their body's row instead.
+  const bodies = properties.filter(isCadBody);
+  if (bodies.length <= 1) return null;
 
   const matColor = (materialId: number) =>
     // eslint-disable-next-line kofem/no-silent-fallback -- swatch colour for a body whose material carries none; display only, never reaches the solver
@@ -405,8 +426,9 @@ function BodiesSection() {
       <div className={styles.sectionLabel} title={BODIES_TIP}>
         Bodies
       </div>
-      {properties.map((prop) => {
+      {bodies.map((prop) => {
         const hidden = hiddenBodyIds.includes(prop.id);
+        const sections = shellSectionsOf(properties, prop.id);
         return (
           <div
             className={styles.bodyRow}
@@ -418,7 +440,9 @@ function BodiesSection() {
               className={styles.materialSwatch}
               style={{ background: matColor(prop.materialId) }}
             />
-            <span className={styles.bodyLabel}>Body {prop.id}</span>
+            <span className={styles.bodyLabel} title={sectionsTip(sections)}>
+              Body {prop.id}
+            </span>
             <button
               className={`${styles.visBtn}${hidden ? ` ${styles.visBtnOff}` : ""}`}
               data-testid={`body-visibility-${prop.id}`}
