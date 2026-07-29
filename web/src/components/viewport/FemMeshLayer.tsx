@@ -9,11 +9,16 @@ import { useMemo } from "react";
 import * as THREE from "three";
 import type { ThreeEvent } from "@react-three/fiber";
 import { useModelStore } from "../../store/modelStore";
+import type { ViewRepr } from "../../store/viewSlice";
 import { HEX_EDGES, TET_EDGES, TRI_EDGES } from "./useMeshTopology";
 import type { MeshTopology } from "./useMeshTopology";
 
 interface FemMeshLayerProps {
   topology: MeshTopology;
+  // Effective representation, as resolved by MeshScene — not necessarily the
+  // stored viewRepr: a body highlight overrides it while the pointer rests on
+  // a Bodies-panel row.
+  repr: ViewRepr;
   deformScale: number;
   showResult: boolean;
   onFacePick?: (e: ThreeEvent<MouseEvent>) => void;
@@ -21,12 +26,12 @@ interface FemMeshLayerProps {
 
 export function FemMeshLayer({
   topology,
+  repr,
   deformScale,
   showResult,
   onFacePick,
 }: FemMeshLayerProps) {
   const result = useModelStore((s) => s.result);
-  const viewRepr = useModelStore((s) => s.viewRepr);
   const showUndeformedOverlay = useModelStore((s) => s.showUndeformedOverlay);
 
   const {
@@ -224,15 +229,15 @@ export function FemMeshLayer({
 
   // Edge overlays per representation: Geometry → none, Surface → boundary edges,
   // Volume → every element edge, Wireframe → every element edge with no fill.
-  const showSolid = viewRepr !== "wireframe";
-  const showSurfaceEdges = viewRepr === "surface";
-  const showAllEdges = viewRepr === "volume" || viewRepr === "wireframe";
+  const showSolid = repr !== "wireframe";
+  const showSurfaceEdges = repr === "surface";
+  const showAllEdges = repr === "volume" || repr === "wireframe";
 
   // In the Geometry representation the CAD tessellation (GeometryLayer) stands
   // in for the part, so the FEM boundary surface must not also draw — otherwise
   // the two overlap and z-fight. The edge overlays are already representation-
   // gated below; this gates the solid fill to match.
-  const showFemSurface = viewRepr !== "geometry";
+  const showFemSurface = repr !== "geometry";
 
   return (
     <group>

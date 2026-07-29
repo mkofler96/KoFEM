@@ -42,6 +42,11 @@ export interface Property {
   materialId: number;
   thickness?: number;
   discretization?: BodyDiscretization;
+  // Set only on the PSHELL properties the mesh-time shell idealisation derives:
+  // the id of the CAD body whose thin walls they replace. Absent on the CAD
+  // bodies themselves, whose own id already is the body id. The geometry view
+  // needs it because a derived PSHELL has no tessellation of its own.
+  sourceBodyId?: number;
 }
 
 export interface Element {

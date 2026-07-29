@@ -128,6 +128,9 @@ interface Property {
   // thin walls as shells, "solid" keeps it as tets. Undefined on legacy models
   // (no per-body choice) — the auto-shell path then auto-detects thin bodies.
   discretization?: "shell" | "solid";
+  // On a mesh-time PSHELL: the CAD body whose thin walls it replaces. Lets the
+  // viewport map the derived property back to a body that has a tessellation.
+  sourceBodyId?: number;
 }
 interface Constraint {
   nodeId: number;
@@ -463,6 +466,7 @@ function buildMeshTimeShellModel(
       materialId: shellMaterialId,
       thickness: key,
       discretization: "shell",
+      sourceBodyId: shells.shellBody,
     });
   }
 
