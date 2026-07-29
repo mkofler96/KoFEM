@@ -34,7 +34,7 @@ export function usePickedFaces(onError: (msg: string | null) => void) {
     setPendingFaces([]);
   }
 
-  function startPickForGroup(kind: "bc" | "load", groupId: number) {
+  function startPickForGroup(kind: "bc" | "load" | "tie", groupId: number) {
     setPickMode(kind, groupId);
     setSelectedFace(null);
     setPendingFaces([]);

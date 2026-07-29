@@ -831,6 +831,35 @@
   flex-shrink: 0;
 }
 
+/* Tie connections — the violet of the tied-surface highlight in the viewport,
+   so a connection reads the same in the panel and in 3D. */
+.tieDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #7c3aed;
+  flex-shrink: 0;
+}
+
+/* Header of one side (A / B) of a connection's face list. */
+.tieSideRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px 3px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.tieSideLabel {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  flex: 1;
+}
+
 /* ── Stats ──────────────────────────────────────────────────── */
 
 .statRow {

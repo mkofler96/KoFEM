@@ -56,8 +56,16 @@ export type {
   LoadKind,
   NamedLoadGroup,
   SurfaceLoad,
+  TieGroup,
+  TieSide,
 } from "./boundarySlice";
-export { loadKind, loadComponents } from "./boundarySlice";
+export {
+  loadKind,
+  loadComponents,
+  tieFaces,
+  DEFAULT_TIE_DISTANCE,
+} from "./boundarySlice";
+export type { TieExtent } from "../lib/tie";
 export type {
   SolverResult,
   ResultType,
@@ -108,11 +116,13 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.properties = a.properties;
       s.bcGroups = a.bcGroups;
       s.loadGroups = a.loadGroups;
+      s.tieGroups = a.tieGroups;
       s.constraints = rebuildConstraints(a.bcGroups);
       s.loads = rebuildLoads(a.loadGroups, s.nodes);
       s.surfaceLoads = rebuildSurfaceLoads(a.loadGroups, a.elements);
       s.nextBcGroupId = a.nextBcGroupId;
       s.nextLoadGroupId = a.nextLoadGroupId;
+      s.nextTieGroupId = a.nextTieGroupId;
       s.nextFaceEntryId = a.nextFaceEntryId;
       s.nextMatId = a.nextMatId;
       s.stepSurface = a.stepSurface;
@@ -137,6 +147,8 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.pendingFaces = [];
       s.pickMode = null;
       s.pickTargetGroupId = null;
+      s.pickTieSide = "a";
+      s.tieDraft = { a: [], b: [] };
       s.hasStarted = true;
       s.fitViewTrigger++;
     }),
@@ -149,11 +161,13 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.properties = [{ id: 1, materialId: 1 }];
       s.bcGroups = [];
       s.loadGroups = [];
+      s.tieGroups = [];
       s.constraints = [];
       s.loads = [];
       s.surfaceLoads = [];
       s.nextBcGroupId = 1;
       s.nextLoadGroupId = 1;
+      s.nextTieGroupId = 1;
       s.nextFaceEntryId = 1;
       s.modelName = "";
       s.result = null;
@@ -168,7 +182,6 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.viewRepr = "surface";
       s.deformScale = 1;
       s.elementOrder = 1;
-      s.tieDistance = 0;
       s.autoShell = true;
       s.thinRatio = DEFAULT_THIN_RATIO;
       s.nextMatId = 2;
@@ -176,6 +189,8 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.pendingFaces = [];
       s.pickMode = null;
       s.pickTargetGroupId = null;
+      s.pickTieSide = "a";
+      s.tieDraft = { a: [], b: [] };
       s.mode = "geometry";
       s.stepImportError = null;
       s.isRunning = false;

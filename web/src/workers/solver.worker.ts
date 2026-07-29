@@ -12,7 +12,8 @@ import {
   assertNoCollapsedElements,
   tiedId,
   expandToOriginalNodes,
-} from "./tie.js";
+  type TieDefinition,
+} from "../lib/tie.js";
 import {
   extractThinWallShells,
   shellWallTets,
@@ -180,9 +181,10 @@ interface SolvePayload {
   loads: Load[];
   surfaceLoads?: SurfaceLoad[];
   elementOrder?: number;
-  // Bonded-tie detection distance (mm): weld near-contact nodes of different
-  // bodies so parts that touch without a shared face are joined (#359). 0 = off.
-  tieDistance?: number;
+  // Tie (connector) conditions: each welds the nodes of two picked surfaces so
+  // parts that touch without a shared face are joined (#359). Absent/empty =
+  // no ties, and the mesh reaches the solver untouched.
+  tieGroups?: TieDefinition[];
   // Surface mesh + per-triangle CAD face id (from meshing / the analysis file):
   // needed to detect thin-walled bodies and idealise them as shells (auto-shell).
   surfaceTriangles?: [number, number, number][] | null;
@@ -954,8 +956,8 @@ function shellPointLoads(
 // Solve a pure-shell (all-CTRIA3) model via the engine's Kirchhoff shell
 // solver. The result matches the solid contract — three translations per node,
 // one von Mises surface stress per element — so the store and viewport consume
-// it unchanged. elementOrder and tieDistance do not apply to shells (the DKT
-// facet is what it is; ties join solid bodies) and are ignored.
+// it unchanged. elementOrder and tie connections do not apply to shells (the
+// DKT facet is what it is; ties join solid bodies) and are ignored.
 function handleShellSolve(id: number, payload: SolvePayload) {
   const {
     nodes,
@@ -1757,8 +1759,8 @@ function resolveMixedThicknesses(
 // auto-shell path uses, only with the shells given explicitly instead of
 // idealised from thin solid walls. Constraints/loads map onto the 6-DOF pool the
 // same way the auto-shell path does (coupledFixedDofs/coupledLoads). elementOrder
-// and tieDistance do not apply (the coupled assembler is linear tets + DKT
-// facets) and are ignored.
+// and tie connections do not apply (the coupled assembler is linear tets + DKT
+// facets, whose interfaces are joined by RBE3 coupling) and are ignored.
 function handleMixedSolve(id: number, payload: SolvePayload) {
   const {
     nodes,
@@ -1907,6 +1909,24 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
   ]);
 }
 
+// The shell and coupled solvers join their domains by RBE3 distributing
+// couplings derived from the geometry (shellize.ts) rather than by node
+// welding, so a tie connection never reaches them: the coupled path re-derives
+// its own solid↔solid tie across a clearance (autoDetectSolidCouplings). Say
+// which connections that skipped, so the model the user defined and the model
+// that was solved are never silently different.
+function reportTiesSkippedOnShellPath(id: number, payload: SolvePayload): void {
+  const ties = payload.tieGroups;
+  if (!ties || ties.length === 0) return;
+  self.postMessage({
+    id,
+    log:
+      `Note: tie connection(s) ${ties.map((tie) => `"${tie.name}"`).join(", ")} were not ` +
+      "applied — the shell/coupled solver joins its interfaces by RBE3 coupling " +
+      "derived from the geometry, not by welding nodes.",
+  });
+}
+
 function handleSolve(id: number, payload: SolvePayload) {
   // Shell models route away from the all-solid path. A model that is ALL CTRIA3
   // solves via the Kirchhoff shell solver; a model that MIXES CTRIA3 shells with
@@ -1915,6 +1935,7 @@ function handleSolve(id: number, payload: SolvePayload) {
   // bodies itself).
   const nShells = payload.elements.filter((e) => e.type === "CTRIA3").length;
   if (nShells > 0) {
+    reportTiesSkippedOnShellPath(id, payload);
     if (nShells === payload.elements.length) handleShellSolve(id, payload);
     else handleMixedSolve(id, payload);
     return;
@@ -1940,6 +1961,7 @@ function handleSolve(id: number, payload: SolvePayload) {
       tryCoupledSolve(payload, shellBodyIds) ??
       tryPureShellSolve(payload, shellBodyIds);
     if (shellResult) {
+      reportTiesSkippedOnShellPath(id, payload);
       self.postMessage({
         id,
         log: `Shell solve complete: ${shellResult.displacements.length / 3} vertex displacements`,
@@ -1967,25 +1989,37 @@ function handleSolve(id: number, payload: SolvePayload) {
     surfaceLoads,
   } = payload;
 
-  // Bonded tie (#359): weld near-contact nodes of different bodies so parts
-  // that touch without a shared face are joined for the solve. A no-op when
-  // tieDistance is 0/absent, in which case solveNodes/tiedElements are the
-  // originals and every step below is unchanged.
-  // eslint-disable-next-line kofem/no-silent-fallback -- tieDistance is optional; the documented default is 0 (tie off)
-  const tieDistance = payload.tieDistance ?? 0;
-  const tie = buildTie(nodes, elements, tieDistance);
+  // Tie conditions (#359): weld the node pairs of every connection the user
+  // defined, so parts that touch without a shared face are joined for the solve.
+  // A no-op when the model has none, in which case solveNodes/tiedElements are
+  // the originals and every step below is unchanged.
+  const tieGroups = payload.tieGroups ?? [];
+  const tie = buildTie(nodes, tieGroups);
   const solveNodes = tie.nodes;
   const tiedElements =
     tie.repOf.size > 0
       ? elements.map((el) => remapElement(el, tie.repOf))
       : elements;
   if (tie.repOf.size > 0) assertNoCollapsedElements(tiedElements);
-  if (tie.nWelded > 0) {
+  for (const report of tie.reports) {
+    // A connection that welds nothing AND shares no nodes joins nothing: the
+    // assembly stays split and the solve would fail far from the cause.
+    if (report.nPaired === 0 && report.nShared === 0)
+      throw new Error(
+        `Tie "${report.name}" connected no nodes — its two surfaces have no ` +
+          "node pairs within the search distance. Increase the distance, or " +
+          "couple the full surface.",
+      );
     self.postMessage({
       id,
-      log: `Bonded tie: welded ${tie.nWelded} node(s) across bodies (≤ ${tieDistance} mm), ${solveNodes.length} nodes remain`,
+      log: `Tie "${report.name}": welded ${report.nPaired} node pair(s) up to ${report.maxDistance.toFixed(4)} mm apart${report.nShared > 0 ? `, ${report.nShared} already shared` : ""}`,
     });
   }
+  if (tie.nWelded > 0)
+    self.postMessage({
+      id,
+      log: `Ties merged ${tie.nWelded} node(s); ${solveNodes.length} nodes remain`,
+    });
 
   const vid = buildVertexIndexer(solveNodes);
   // Every stored node reference (constraints, loads, surface-load faces) is an

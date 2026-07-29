@@ -1,7 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import type { FaceSelection, LoadKind } from "../../store/modelStore";
+import type {
+  FaceSelection,
+  LoadKind,
+  TieExtent,
+} from "../../store/modelStore";
 import {
   DOF_LABELS,
   FORCE_LABELS,
@@ -145,6 +149,54 @@ export function LoadKindSelect({
         <option value="pressure">Pressure</option>
       </select>
     </div>
+  );
+}
+
+// Extent of a tie connection: couple the two picked surfaces whole, or only
+// where they come within a search distance of each other. The distance input
+// appears only for the region extent — for a full coupling there is nothing to
+// tune, and a stale number left visible reads as if it still applied.
+export function TieExtentInputs({
+  extent,
+  distance,
+  onExtentChange,
+  onDistanceChange,
+}: {
+  extent: TieExtent;
+  distance: string;
+  onExtentChange(extent: TieExtent): void;
+  onDistanceChange(distance: string): void;
+}) {
+  return (
+    <>
+      <div className={styles.formRow}>
+        <span className={styles.formLabel}>Extent</span>
+        <select
+          className={styles.formSelect}
+          data-testid="tie-extent"
+          value={extent}
+          onChange={(e) => onExtentChange(e.target.value as TieExtent)}
+        >
+          <option value="full">Full surface</option>
+          <option value="region">Within distance</option>
+        </select>
+      </div>
+      {extent === "region" && (
+        <div className={styles.formRow}>
+          <span className={styles.formLabel}>Search distance</span>
+          <input
+            className={styles.formInput}
+            data-testid="tie-distance"
+            type="number"
+            min={0}
+            step={0.1}
+            value={distance}
+            onChange={(e) => onDistanceChange(e.target.value)}
+          />
+          <span className={styles.toleranceUnit}>mm</span>
+        </div>
+      )}
+    </>
   );
 }
 

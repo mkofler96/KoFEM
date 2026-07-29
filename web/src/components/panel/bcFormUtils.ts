@@ -77,3 +77,18 @@ export function parseLoadVector(
   }
   return [parsed[0], parsed[1], parsed[2]];
 }
+
+// A region tie welds only what lies within its search distance, so a zero or
+// unreadable distance welds nothing at all and leaves the assembly split.
+// Reject it here rather than let the solve fail on a singular matrix.
+export function parseTieDistance(
+  raw: string,
+  onError: (msg: string) => void,
+): number | null {
+  const distance = parseFloat(raw);
+  if (!isFinite(distance) || distance <= 0) {
+    onError("The search distance must be a positive number");
+    return null;
+  }
+  return distance;
+}
