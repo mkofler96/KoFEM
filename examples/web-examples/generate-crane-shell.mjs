@@ -452,9 +452,11 @@ const entry = {
   id: "crane-hook-shell",
   title: "Crane hook — coupled shell + solid",
   blurb:
-    "A multibody crane hook: the thin holder is modelled as Kirchhoff shells, " +
-    "the pin and hook stay solid, and the two are joined by a distributing (RBE3) " +
-    "coupling. This coupled model converges where the all-solid mesh stalls (#358).",
+    "A three-body crane hook from one STEP assembly: the holder's 0.5 mm walls are " +
+    "modelled as Kirchhoff shells, its base block and the aluminium hook and steel " +
+    "pin stay solid, and the two idealisations are joined by a distributing (RBE3) " +
+    "coupling. The coupled solve carries one material per body, and converges where " +
+    "the all-solid mesh stalls (#358).",
   showcase: true,
   // "Open in KoFEM web" opens this card's own mixed shell+solid analysis — the
   // app re-solves it through the worker's coupled shell/solid path (#387).
@@ -464,7 +466,7 @@ const entry = {
     { k: "coupled solve", v: `converged · ${r.iterations} it`, pass: true },
   ],
   referenceLabel:
-    "shell holder ↔ solid pin/hook · distributing (RBE3) coupling",
+    "shell holder ↔ solid pin/hook · steel + aluminium per body · distributing (RBE3) coupling",
   colorLabel: "Displacement magnitude",
   viewer: {
     center: [(mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2, (mn[2] + mx[2]) / 2],
