@@ -40,7 +40,14 @@ export interface BoundaryMeshTopo {
   triangles: Tri[];
   edgeToTris: Map<string, number[]>;
   triNormals: Vec3[];
-  faceIds?: number[]; // OCC face index per triangle (1-based); present when mesh came from STEP
+  // OCC face index per triangle (1-based); present when the mesh came from STEP.
+  // SPARSE: a triangle that has no CAD face behind it — a mid-surface shell
+  // facet the auto-shell idealisation created, or an internal face exposed by
+  // hiding a body — is `undefined`, and only that triangle falls back to the
+  // flood fill. Coverage is per triangle precisely because it is normally
+  // partial: an all-or-nothing rule would drop exact CAD picking for the whole
+  // model over a handful of facets, turning every pick into a flood fill.
+  faceIds?: (number | undefined)[];
 }
 
 export interface PickedFace {
@@ -121,7 +128,7 @@ export function buildTriNormals(
 export function buildBoundaryMeshTopo(
   triangles: Tri[],
   getPos: (id: number) => Vec3,
-  faceIds?: number[],
+  faceIds?: (number | undefined)[],
 ): BoundaryMeshTopo {
   return {
     triangles,
@@ -132,15 +139,66 @@ export function buildBoundaryMeshTopo(
 }
 
 /**
+ * Match each boundary triangle to the CAD face behind it.
+ *
+ * `surfaceTriangles` / `surfaceFaceIds` come from Netgen in surface-element
+ * order, which differs from the boundary-extraction order, so a direct index
+ * mapping would be wrong. Sorting the three vertex ids gives an order-
+ * independent key that matches across both orderings.
+ *
+ * The result is deliberately SPARSE, and coverage is normally partial: a
+ * mesh-time auto-shell model carries mid-surface facets that were never on the
+ * CAD boundary, and hiding a body exposes internal faces that were never
+ * surface elements. Returns undefined only when NOTHING matched — a map of
+ * nothing but holes would just slow the flood fill down.
+ *
+ * This used to require every triangle to match, which threw away exact CAD
+ * picking for the whole model over a few hundred such facets: on a freshly
+ * meshed crane hook one click then selected 64 % of the mesh, because the 89°
+ * curved flood fill walks a swept body end to end.
+ */
+export function mapTrianglesToCadFaces(
+  triangles: Tri[],
+  surfaceTriangles: Tri[] | null,
+  surfaceFaceIds: number[] | null,
+): (number | undefined)[] | undefined {
+  if (
+    !surfaceTriangles ||
+    !surfaceFaceIds ||
+    surfaceTriangles.length !== surfaceFaceIds.length
+  )
+    return undefined;
+
+  const sortedKey = (p: number, q: number, r: number): string =>
+    [p, q, r].sort((x, y) => x - y).join(",");
+  const keyToFaceId = new Map<string, number>();
+  for (let i = 0; i < surfaceTriangles.length; i++) {
+    const [a, b, c] = surfaceTriangles[i];
+    keyToFaceId.set(sortedKey(a, b, c), surfaceFaceIds[i]);
+  }
+  const mapped = triangles.map(([a, b, c]) =>
+    keyToFaceId.get(sortedKey(a, b, c)),
+  );
+  return mapped.some((id) => id !== undefined) ? mapped : undefined;
+}
+
+/**
  * Pick a face starting from triangle `startIdx`.
  *
- * Two modes:
- *   CAD face ID mode  — when `topo.faceIds` is present, instantly selects all
- *                       triangles with the same OCC face index.  Topologically
- *                       exact: each STEP face is always selected whole.
- *   BFS flood-fill    — fallback when no face IDs are available.  Uses normal
- *                       angle thresholds; surface type (flat vs curved) is
- *                       detected from the seed triangle's edge-adjacent neighbors.
+ * Two modes, chosen PER CLICK rather than per model:
+ *   CAD face ID mode  — when the clicked triangle has an OCC face index,
+ *                       instantly selects every triangle with the same index.
+ *                       Topologically exact: each STEP face is selected whole.
+ *   BFS flood-fill    — for a triangle with no CAD face behind it (a mid-surface
+ *                       shell facet, an internal face exposed by hiding a body,
+ *                       or a mesh that never came from STEP). Uses normal angle
+ *                       thresholds; surface type (flat vs curved) is detected
+ *                       from the seed triangle's edge-adjacent neighbours.
+ *
+ * When a face-id map exists, the flood fill will not cross into a triangle that
+ * DOES have a CAD face: those belong to a face the user could have picked
+ * exactly, and spilling into them is how a click on one shell facet used to
+ * swallow a whole curved body (the 89° curved rule walks a hook end to end).
  *
  * Returns the set of node IDs belonging to the picked face.
  */
@@ -151,11 +209,11 @@ export function pickFaceNodeIds(
   const { triangles, edgeToTris, triNormals, faceIds } = topo;
 
   // ── CAD face ID mode ─────────────────────────────────────────────────────────
-  if (faceIds) {
-    const targetId = faceIds[startIdx];
+  const targetId = faceIds?.[startIdx];
+  if (targetId !== undefined) {
     const nodeIds = new Set<number>();
     for (let i = 0; i < triangles.length; i++) {
-      if (faceIds[i] === targetId) {
+      if (faceIds?.[i] === targetId) {
         nodeIds.add(triangles[i][0]);
         nodeIds.add(triangles[i][1]);
         nodeIds.add(triangles[i][2]);
@@ -211,6 +269,8 @@ export function pickFaceNodeIds(
       const key = x < y ? `${x},${y}` : `${y},${x}`;
       for (const ni of edgeToTris.get(key) ?? []) {
         if (visited.has(ni)) continue;
+        // Never spill out of the CAD-less patch into a real CAD face.
+        if (faceIds?.[ni] !== undefined) continue;
         // Flat: compare against the seed normal (stops at any corner).
         // Curved: step-to-step comparison only (traverses cylinders/fillets).
         // Absolute dot product handles inconsistent winding from the tet mesher.

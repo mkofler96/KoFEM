@@ -14,6 +14,7 @@
 
 import {
   buildBoundaryMeshTopo,
+  mapTrianglesToCadFaces,
   pickFaceNodeIds,
   toggleFaceSelection,
 } from "../src/lib/facePick.ts";
@@ -283,6 +284,75 @@ assert(
 // Toggling the last remaining face off empties the selection.
 sel = toggleFaceSelection(sel, faceB);
 assert("toggling the last face off clears selection", sel.length === 0);
+
+// ── Test 6: partial CAD-face coverage (crane-hook whole-body pick) ────────────
+//
+// Face-id coverage is normally PARTIAL: a mesh-time auto-shell model carries
+// mid-surface facets that were never on the CAD boundary, and hiding a body
+// exposes internal faces that were never surface elements. The mapping used to
+// be all-or-nothing — one unmapped triangle dropped CAD picking for the WHOLE
+// model, leaving the 89° curved flood fill to walk a swept body end to end. On
+// a freshly meshed crane hook (270 of 7636 boundary triangles unmapped) one
+// click then selected 2832 of 4438 nodes: "it keeps selecting the whole hook".
+
+console.log("\nTest 6: partial CAD-face coverage");
+
+// Netgen's surface elements, minus two triangles on different faces — the
+// stand-in for facets with no CAD face behind them.
+const holeInner = innerTriIndices[0];
+const holeOuter = outerTriIndices[0];
+const surfaceTriangles = [];
+const surfaceFaceIds = [];
+for (let i = 0; i < triangles.length; i++) {
+  if (i === holeInner || i === holeOuter) continue;
+  surfaceTriangles.push(triangles[i]);
+  surfaceFaceIds.push(faceIds[i]);
+}
+
+const mapped = mapTrianglesToCadFaces(
+  triangles,
+  surfaceTriangles,
+  surfaceFaceIds,
+);
+assert("partial coverage still yields a face-id map", mapped !== undefined);
+assert(
+  "the unmapped triangles are the only holes in it",
+  mapped.filter((id) => id === undefined).length === 2,
+);
+assert(
+  "every other triangle keeps its CAD face id",
+  mapped.every((id, i) =>
+    i === holeInner || i === holeOuter ? id === undefined : id === faceIds[i],
+  ),
+);
+assert(
+  "surface data from a different mesh yields no map at all",
+  mapTrianglesToCadFaces(triangles, [[9001, 9002, 9003]], [1]) === undefined,
+);
+
+// A triangle that still has a CAD face picks that face exactly, holes or no.
+const sparseTopo = buildBoundaryMeshTopo(triangles, getPos, mapped);
+const neighbourPick = pickFaceNodeIds(innerTriIndices[1], sparseTopo);
+const innerMinusHole = new Set();
+for (const ti of innerTriIndices)
+  if (ti !== holeInner) for (const v of triangles[ti]) innerMinusHole.add(v);
+assert(
+  "a mapped triangle still selects its CAD face exactly",
+  setsEqual(neighbourPick, innerMinusHole),
+);
+
+// An unmapped triangle floods, but cannot spill into triangles that DO have a
+// CAD face — so it selects itself, and never joins the unmapped triangle on the
+// far side of the tube (which is what matching "everything with no id" did).
+const holePick = pickFaceNodeIds(holeInner, sparseTopo);
+assert(
+  "an unmapped triangle floods only within its own unmapped patch",
+  setsEqual(holePick, new Set(triangles[holeInner])),
+);
+assert(
+  "and does not reach the unmapped triangle on the outer mantle",
+  triangles[holeOuter].every((v) => !holePick.has(v)),
+);
 
 // ── Summary ───────────────────────────────────────────────────────────────────
 
