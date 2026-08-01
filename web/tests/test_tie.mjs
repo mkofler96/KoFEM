@@ -1,12 +1,15 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Bonded-tie test (#356). Two hex boxes separated by a 0.5 mm gap and meshed
+// Tie-connection test (#356). Two hex boxes separated by a 0.5 mm gap and meshed
 // independently (distinct node ids, different bodies) — a stand-in for the
 // crane-hook pin/eye line contact. Box A is clamped; box B carries a load but
-// touches nothing. Without a tie the assembly is disconnected and the solve
-// cannot converge; welding the near-contact nodes (tie distance > gap) joins
-// them so the solve succeeds and the load reaches box B.
+// touches nothing. Without a connection the assembly is disconnected and the
+// solve cannot converge; a tie between the two facing surfaces welds their node
+// pairs so the solve succeeds and the load reaches box B.
+//
+// Covers both extents: "region" (only pairs within a search distance) and
+// "full" (the whole selected surface, whatever the gap).
 //
 // Usage:  bun tests/test_tie.mjs   (from the web/ directory)
 
@@ -19,7 +22,7 @@ import {
   assertNoCollapsedElements,
   tiedId,
   expandToOriginalNodes,
-} from "../src/workers/tie.ts";
+} from "../src/lib/tie.ts";
 import { boxHexMesh } from "../../examples/validation/lib/mesh.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -59,9 +62,33 @@ boxB.hexahedra.forEach((h) =>
   }),
 );
 
+// ── The two facing surfaces the connection joins ──────────────────────────────
+// Box A's x = 10 face and box B's x = 10.5 face, as the node-id lists a face
+// pick would produce.
+const faceNodes = (predicate) => nodes.filter(predicate).map((node) => node.id);
+const SURFACE_A = faceNodes((node) => Math.abs(node.x - 10) < 1e-9);
+const SURFACE_B = faceNodes((node) => Math.abs(node.x - (10 + GAP)) < 1e-9);
+assert(
+  SURFACE_A.length === 9,
+  `surface A should have 9 nodes (3×3), got ${SURFACE_A.length}`,
+);
+assert(
+  SURFACE_B.length === 9,
+  `surface B should have 9 nodes (3×3), got ${SURFACE_B.length}`,
+);
+
+const tieBetween = (extent, searchDistance) => [
+  {
+    name: "Tie1",
+    facesA: [{ nodeIds: SURFACE_A }],
+    facesB: [{ nodeIds: SURFACE_B }],
+    extent,
+    searchDistance,
+  },
+];
+
 // ── Unit check: the tie welds exactly the 3×3 interface node pairs ────────────
-const tieDistance = 0.6; // > GAP, < element size (2 mm)
-const tie = buildTie(nodes, elements, tieDistance);
+const tie = buildTie(nodes, elements, tieBetween("region", 0.6)); // > GAP, < element size
 console.log(
   `buildTie: ${nodes.length} → ${tie.nodes.length} nodes, welded ${tie.nWelded}`,
 );
@@ -69,8 +96,28 @@ assert(
   tie.nWelded === 9,
   `expected 9 welded interface nodes (3×3), got ${tie.nWelded}`,
 );
+assert(
+  tie.reports[0].nPaired === 9,
+  `the connection should report 9 pairs, got ${tie.reports[0].nPaired}`,
+);
 const tiedElements = elements.map((el) => remapElement(el, tie.repOf));
 assertNoCollapsedElements(tiedElements);
+
+// A search distance below the gap reaches nothing — the connection welds no
+// pair, which is exactly what the solve path turns into an actionable error.
+const tooShort = buildTie(nodes, elements, tieBetween("region", 0.1));
+assert(
+  tooShort.nWelded === 0,
+  `a 0.1 mm search distance must not span the 0.5 mm gap, welded ${tooShort.nWelded}`,
+);
+
+// The full-surface extent has no distance to fall short of: it welds the same
+// nine pairs, whatever the gap.
+const fullTie = buildTie(nodes, elements, tieBetween("full", 0));
+assert(
+  fullTie.nWelded === 9,
+  `a full-surface tie should weld all 9 pairs, got ${fullTie.nWelded}`,
+);
 
 // ── Solve helper (single steel material, box A clamped, box B end-loaded) ─────
 const STEEL = JSON.stringify({ young_modulus: 210000, poisson_ratio: 0.3 });

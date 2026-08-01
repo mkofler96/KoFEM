@@ -269,12 +269,6 @@ const BODIES_TIP =
   "Touching bodies are bonded at their shared faces — a body that touches " +
   "nothing floats, so constrain it or check the assembly.";
 
-const TIE_TIP =
-  "Bonded tie for parts that touch without a shared face (e.g. a pin in a hook " +
-  "eye — a line contact). Nodes of different bodies within this distance are " +
-  "welded so load transfers. 0 = off. Keep it below the element size to avoid " +
-  "distorting the mesh.";
-
 const AUTO_SHELL_TIP =
   "Automatically preselect thin-walled bodies as Shell. Detection casts a ray " +
   "inward from each body's surface and compares the wall thickness it finds " +
@@ -398,8 +392,6 @@ function BodiesSection() {
   const setHighlightBodyId = useModelStore((s) => s.setHighlightBodyId);
   const hiddenBodyIds = useModelStore((s) => s.hiddenBodyIds);
   const toggleBodyVisibility = useModelStore((s) => s.toggleBodyVisibility);
-  const tieDistance = useModelStore((s) => s.tieDistance);
-  const setTieDistance = useModelStore((s) => s.setTieDistance);
 
   // One row per CAD body. A mesh-time shell idealisation adds one PSHELL per
   // wall thickness to `properties`; those are section properties OF a body, not
@@ -489,20 +481,6 @@ function BodiesSection() {
           </div>
         );
       })}
-
-      <div className={styles.formRow} title={TIE_TIP}>
-        <span className={styles.formLabel}>Tie distance</span>
-        <input
-          className={styles.formInput}
-          type="number"
-          min={0}
-          step={0.5}
-          value={tieDistance}
-          data-testid="tie-distance"
-          onChange={(e) => setTieDistance(Number(e.target.value))}
-        />
-        <span className={styles.toleranceUnit}>mm</span>
-      </div>
     </>
   );
 }

@@ -213,9 +213,9 @@ test("a mixed shell/solid (CTRIA3 + CTETRA) example re-solves through the couple
   // Loads the coupled crane (thin holder as CTRIA3 shells, pin/hook as CTETRA
   // solids) and re-runs the solve exactly as the Solve button does. This
   // exercises the whole mixed shell/solid pipeline end-to-end: mixed-element
-  // parsing, the worker's handleMixedSolve (solve_coupled with RBE3 couplings
-  // re-derived from proximity), and the field mapping back onto the store nodes /
-  // elements. Same pool, BCs and load derivation as the generator → the fresh
+  // parsing, the worker's handleMixedSolve (solve_coupled, with the RBE3
+  // couplings rebuilt from the saved tie connection), and the field mapping back
+  // onto the store nodes / elements. Same pool, BCs and load derivation as the generator → the fresh
   // field must reproduce the one saved in the .vtu.
   const logs: string[] = [];
   page.on("console", (msg) => logs.push(msg.text()));
@@ -254,6 +254,9 @@ test("a mixed shell/solid (CTRIA3 + CTETRA) example re-solves through the couple
         constraints: st.constraints,
         loads: st.loads,
         surfaceLoads: st.surfaceLoads,
+        // The saved tie connection joins the pin to the hook eye; the Solve
+        // button sends it the same way (useSolver).
+        tieGroups: st.tieGroups,
       })) as { displacements: Float64Array; vonMises: Float64Array };
       return {
         ok: true as const,

@@ -8,10 +8,18 @@
 //      mesh exists (detectShellBodies).
 //   2. Mesh the STEP volume through the real meshing pipeline (worker reset and
 //      all).
-//   3. Fully fix the holder's top face and apply 2 kN total downward on the pin.
+//   3. Fully fix the holder's top face, apply 2 kN total downward on the pin, and
+//      tie the pin to the hook eye.
 //   4. Solve. Because the holder is marked Shell, the worker routes to the coupled
 //      solid+shell path (auto-shell), which converges where the all-solid thin
 //      part stalls (#358). Assert a converged, finite, physically sane result.
+//
+// The tie is the model's own: Netgen meshes the pin and the hook eye almost
+// conformally, sharing only ~30 of their ~1000 interface nodes, which leaves the
+// pin hanging on a near-hinge and the reduced system indefinite. Nothing infers
+// that connection any more — it is declared, and picked the way a user picks it:
+// the interface faces, on Surface A only, split between the two bodies that meet
+// there (see TieSection.applyTie).
 
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -25,6 +33,8 @@ const STEP_PATH = join(here, "../../test_files/full-crane-hook.step");
 // coupled crane generator uses.
 const FIXED_FACE = 7;
 const LOAD_FACES = [66, 67];
+// The CAD faces where the pin sits in the hook eye — the tied interface.
+const TIE_FACES = [22, 24, 47, 65];
 const TOTAL_LOAD_N = 2000; // 2 kN total, downward (−Y)
 
 interface Body {
@@ -100,7 +110,7 @@ test("crane roundtrip: import STEP, auto-shell the holder, mesh, load 2 kN, fix 
   // 3. Fully fix the top face, apply 2 kN total on the pin ends, and solve
   //    through the real worker (same solve message the Solve button sends).
   const result = await page.evaluate(
-    async ({ fixedFace, loadFaces, totalLoad }) => {
+    async ({ fixedFace, loadFaces, tieFaces, totalLoad }) => {
       const win = window as unknown as {
         __kofem: {
           sendToWorker(name: string, payload: object): Promise<unknown>;
@@ -115,11 +125,16 @@ test("crane roundtrip: import STEP, auto-shell the holder, mesh, load 2 kN, fix 
 
       const fixedNodes = new Set<number>();
       const loadTriangles: number[][] = [];
+      const tieNodes = new Set<number>();
       for (let t = 0; t < faceIds.length; t++) {
         if (faceIds[t] === fixedFace)
           for (const n of tris[t]) fixedNodes.add(n);
         if (loadFaces.includes(faceIds[t])) loadTriangles.push([...tris[t]]);
+        if (tieFaces.includes(faceIds[t]))
+          for (const n of tris[t]) tieNodes.add(n);
       }
+      if (tieNodes.size === 0)
+        return { ok: false, error: "tie face lookup failed" };
       if (fixedNodes.size === 0 || loadTriangles.length === 0)
         return {
           ok: false,
@@ -135,6 +150,19 @@ test("crane roundtrip: import STEP, auto-shell the holder, mesh, load 2 kN, fix 
       const surfaceLoads = [
         { type: "force", faces: loadTriangles, force: [0, -totalLoad, 0] },
       ];
+      // One picked interface, Surface B left empty: the pin and the hook eye are
+      // coincident surfaces sharing a single CAD face, so the tie splits the pick
+      // between the two bodies.
+      const tieGroups = [
+        {
+          id: 1,
+          name: "Tie1",
+          facesA: [{ id: 1, label: "Face 1", nodeIds: [...tieNodes] }],
+          facesB: [],
+          extent: "full",
+          searchDistance: 0,
+        },
+      ];
 
       const res = (await win.__kofem.sendToWorker("solve", {
         nodes: st.nodes,
@@ -144,6 +172,7 @@ test("crane roundtrip: import STEP, auto-shell the holder, mesh, load 2 kN, fix 
         constraints,
         loads: [],
         surfaceLoads,
+        tieGroups,
         elementOrder: st.elementOrder,
         surfaceTriangles: st.surfaceTriangles,
         surfaceFaceIds: st.surfaceFaceIds,
@@ -165,7 +194,12 @@ test("crane roundtrip: import STEP, auto-shell the holder, mesh, load 2 kN, fix 
         maxU,
       };
     },
-    { fixedFace: FIXED_FACE, loadFaces: LOAD_FACES, totalLoad: TOTAL_LOAD_N },
+    {
+      fixedFace: FIXED_FACE,
+      loadFaces: LOAD_FACES,
+      tieFaces: TIE_FACES,
+      totalLoad: TOTAL_LOAD_N,
+    },
   );
 
   if (!result.ok) throw new Error(result.error);

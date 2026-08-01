@@ -7,6 +7,13 @@ import styles from "./StatusBar.module.css";
 
 type ViewRepr = "geometry" | "surface" | "volume" | "wireframe";
 
+// What the face being picked is for, shown next to the pick indicator.
+const PICK_PURPOSE: Record<"bc" | "load" | "tie", string> = {
+  bc: "fixed displacement",
+  load: "apply load",
+  tie: "tie connection",
+};
+
 const REPR_BUTTONS: {
   id: ViewRepr;
   label: string;
@@ -165,9 +172,7 @@ export function StatusBar() {
         {pickMode && (
           <span className={styles.pickChip}>
             <span className={styles.pickDot} />
-            {`Pick ${pickGeometry} — ${
-              pickMode === "bc" ? "fixed displacement" : "apply load"
-            }`}
+            {`Pick ${pickGeometry} — ${PICK_PURPOSE[pickMode]}`}
           </span>
         )}
 

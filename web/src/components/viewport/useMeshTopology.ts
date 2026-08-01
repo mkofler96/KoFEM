@@ -9,7 +9,10 @@
 import { useMemo } from "react";
 import { useModelStore } from "../../store/modelStore";
 import type { Element, Node } from "../../store/modelStore";
-import { buildBoundaryMeshTopo } from "../../lib/facePick";
+import {
+  buildBoundaryMeshTopo,
+  mapTrianglesToCadFaces,
+} from "../../lib/facePick";
 import type { BoundaryMeshTopo, Tri, Vec3 } from "../../lib/facePick";
 
 export type NodeMap = Map<number, { n: Node; i: number }>;
@@ -269,29 +272,13 @@ export function useMeshTopology(): MeshTopology {
       return [n.x, n.y, n.z];
     };
 
-    // Build per-boundary-triangle face IDs by matching sorted vertex triples.
-    // surfaceTriangles / surfaceFaceIds come from Netgen in surface-element order
-    // which differs from the tet boundary extraction order, so a direct index
-    // mapping would be wrong.  Sorting the three vertex IDs of each triangle
-    // produces an order-independent key that matches across both orderings.
-    let faceIds: number[] | undefined;
-    if (
-      surfaceTriangles &&
-      surfaceFaceIds &&
-      surfaceTriangles.length === surfaceFaceIds.length
-    ) {
-      const sk = (p: number, q: number, r: number): string =>
-        [p, q, r].sort((x, y) => x - y).join(",");
-      const keyToFaceId = new Map<string, number>();
-      for (let i = 0; i < surfaceTriangles.length; i++) {
-        const [a, b, c] = surfaceTriangles[i];
-        keyToFaceId.set(sk(a, b, c), surfaceFaceIds[i]);
-      }
-      const mapped = triangles.map(([a, b, c]) => keyToFaceId.get(sk(a, b, c)));
-      if (mapped.every((id) => id !== undefined)) {
-        faceIds = mapped as number[];
-      }
-    }
+    // Per-triangle CAD face ids, sparse where the mesh has no CAD face behind a
+    // triangle (see mapTrianglesToCadFaces).
+    const faceIds = mapTrianglesToCadFaces(
+      triangles,
+      surfaceTriangles,
+      surfaceFaceIds,
+    );
 
     return buildBoundaryMeshTopo(triangles, getPos, faceIds);
   }, [

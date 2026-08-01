@@ -21,7 +21,6 @@ interface Store {
     materials: { id: number; name: string; color: string }[];
     highlightBodyId: number | null;
     hiddenBodyIds: number[];
-    tieDistance: number;
     viewRepr: string;
     nodes: unknown[];
   };
@@ -262,20 +261,6 @@ test("a shell-idealised body stays one row that still owns its walls", async ({
   ))
     expect(section.discretization).toBe("shell");
 });
-
-test("the bonded tie distance is editable for multibody assemblies", async ({
-  page,
-}) => {
-  await importStep(page, TWO_BOXES);
-
-  const tie = page.getByTestId("tie-distance");
-  await expect(tie).toBeVisible();
-  await expect.poll(async () => (await store(page)).tieDistance).toBe(0);
-
-  await tie.fill("2");
-  await expect.poll(async () => (await store(page)).tieDistance).toBe(2);
-});
-
 test("adding a material auto-assigns a distinct colour", async ({ page }) => {
   await importStep(page, TWO_BOXES);
 

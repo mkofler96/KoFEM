@@ -287,11 +287,13 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       s.elements = [];
       s.bcGroups = [];
       s.loadGroups = [];
+      s.tieGroups = [];
       s.constraints = [];
       s.loads = [];
       s.surfaceLoads = [];
       s.nextBcGroupId = 1;
       s.nextLoadGroupId = 1;
+      s.nextTieGroupId = 1;
       s.nextFaceEntryId = 1;
       s.result = null;
       if (tessellation) {
@@ -334,17 +336,21 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       s.surfaceFaceIds = surfaceFaceIds ?? null;
       s.bcGroups = [];
       s.loadGroups = [];
+      s.tieGroups = [];
       s.constraints = [];
       s.loads = [];
       s.surfaceLoads = [];
       s.nextBcGroupId = 1;
       s.nextLoadGroupId = 1;
+      s.nextTieGroupId = 1;
       s.nextFaceEntryId = 1;
       s.result = null;
       s.selectedFace = null;
       s.pendingFaces = [];
       s.pickMode = null;
       s.pickTargetGroupId = null;
+      s.pickTieSide = "a";
+      s.tieDraft = { a: [], b: [] };
       s.modelName = name;
       s.viewRepr = "surface";
       s.fitViewTrigger++;

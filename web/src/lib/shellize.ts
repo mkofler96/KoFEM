@@ -904,135 +904,142 @@ function concatCouplings(a: CouplingSet, b: CouplingSet): CouplingSet {
   return { ref, offsets, solid, mpc };
 }
 
-// Distance from each of `nodes` to a triangle soup, for the nodes that are within
-// reach of it. The grid's 27-cell scan only sees triangles within one cell, so a
-// distance is reported exactly when it is ≤ cell — and `cell` doubles until the
-// surface is actually found, because the clearance of a fit is a property of the
-// CAD and this code may not assume a number of millimetres for it.
-function distancesToSurface(
+// One tie connection, as the coupled builders need it: the two surfaces the user
+// picked, given as STORE VERTEX INDICES (the builder maps them to pool nodes),
+// and how far the tie reaches. `maxSeparation` is the connection's search
+// distance, or Infinity when it couples the full surface.
+export interface TieSurfaces {
+  name: string;
+  verticesA: number[];
+  verticesB: number[];
+  maxSeparation: number;
+}
+
+// Distance from each ref node to its nearest master node, for the refs that have
+// one within `reach`. Grid cells are `reach` wide, so the 27-cell scan sees every
+// candidate in range.
+function nearestMasterDistances(
   ppt: (i: number) => [number, number, number],
-  nodes: number[],
-  surface: number[],
-  startCell: number,
-  maxDoublings: number,
+  masters: number[],
+  refs: number[],
+  reach: number,
 ): Map<number, number> {
-  const nTris = surface.length / 3;
   const out = new Map<number, number>();
-  if (nTris === 0 || nodes.length === 0) return out;
-  const corner = (t: number, k: number): [number, number, number] =>
-    ppt(surface[3 * t + k]);
-  for (let d = 0, cell = startCell; d <= maxDoublings; d++, cell *= 2) {
-    const grid = buildTriangleGrid(nTris, corner, cell);
-    const cell2 = cell * cell;
-    out.clear();
-    for (const pi of nodes) {
-      let best = Infinity;
-      anyTriangleNear(grid, ppt(pi), (dist2v) => {
-        if (dist2v < best) best = dist2v;
-        return false; // visit every triangle in reach, we want the minimum
-      });
-      if (best <= cell2) out.set(pi, Math.sqrt(best));
-    }
-    if (out.size > 0) return out;
+  if (masters.length === 0 || refs.length === 0 || !(reach > 0)) return out;
+  const gridKey = (x: number, y: number, z: number) =>
+    `${Math.floor(x / reach)},${Math.floor(y / reach)},${Math.floor(z / reach)}`;
+  const grid = new Map<string, number[]>();
+  for (const pi of masters)
+    getOrInit(grid, gridKey(...ppt(pi)), () => []).push(pi);
+
+  const reach2 = reach * reach;
+  for (const gi of refs) {
+    const pos = ppt(gi);
+    const cx = Math.floor(pos[0] / reach),
+      cy = Math.floor(pos[1] / reach),
+      cz = Math.floor(pos[2] / reach);
+    let best = Infinity;
+    for (let dx = -1; dx <= 1; dx++)
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dz = -1; dz <= 1; dz++)
+          for (const pi of grid.get(`${cx + dx},${cy + dy},${cz + dz}`) ?? []) {
+            const candidate = dist2(pos, ppt(pi));
+            if (candidate < best) best = candidate;
+          }
+    if (best <= reach2) out.set(gi, Math.sqrt(best));
   }
   return out;
 }
 
-// Distributing (RBE3) tie of a gapped solid↔solid interface — two solid bodies
-// that touch across a clearance (a pin in a hole). Netgen meshes the assembly
-// nearly conformally, so the bodies can share a handful of interface nodes: that
-// thin bridge makes them one connected component yet leaves the pin hanging by a
-// near-hinge. So the split is by BODY LABEL, not connectivity: `poolBody` maps
-// each solid pool node to the set of bodies whose tets use it. The body with the
-// most exclusive nodes is the "master"; the INTERFACE nodes of every other body
-// distribute onto master nodes, transmitting force AND moment across the clearance
-// without merging. Nodes shared by two bodies (the conformal bridge) are already
-// rigidly joined and are skipped. A body that never reaches the master (held
-// another way, e.g. a shelled body's base carried by its shell couplings) simply
-// gets no coupling.
+// Distributing (RBE3) tie of the two surfaces of one connection — two solid
+// bodies that touch across a clearance (a pin in a hook eye). The nodes of
+// surface B become the references; each distributes onto the surface-A nodes
+// around it, transmitting force AND moment across the clearance without merging
+// the meshes.
 //
-// Which nodes are interface nodes used to be "every exclusive node with ≥3 master
-// nodes inside a fixed 8 mm ball" — an absolute length with no relation to the
-// part or the mesh, the same mistake the shell↔solid seam carried before it was
-// made geometric. It slaves a CONSTANT-VOLUME band of the second body, so the
-// number of eliminated nodes grows without bound as the mesh is refined (32 of
-// them at 6 mm elements on the crane hook, 616 at 2 mm) and material up to 8 mm
-// deep inside the pin — nowhere near the interface — is tied rigidly to the hole.
-// Being at the interface is a geometric fact: it is being within the clearance of
-// the master body's BOUNDARY SURFACE. The clearance is measured, not assumed (the
-// closest approach of the two bodies), and widened by half an element because a
-// discretised surface is only located to within its own facet size. That band
-// thins as the mesh is refined, so the tie converges to a surface instead of
-// growing into a volume.
-function autoDetectSolidCouplings(
+// This used to be detected automatically: the bodies were split by label, the
+// one with the most nodes declared "master", and every other body's interface
+// band slaved to it. That guessed at the modelling intent — which parts are
+// joined, and over how much of their surface — from geometry alone, and had no
+// way to be inspected or corrected. Which surfaces are tied is now stated
+// explicitly (a tie connection in the Constraints panel), and this reads it.
+//
+// Two distances, both derived rather than assumed:
+//   gap    — the measured closest approach of the two picked surfaces, found by
+//            doubling the search until they see each other, because the
+//            clearance of a fit is a property of the CAD.
+//   radius — how far a reference reaches for its partners (partnerSearchRadius):
+//            at least one element, so a coarse mesh still finds the three
+//            partners an RBE3 needs.
+// A "within distance" connection additionally keeps only the references within
+// its search distance of the other surface, which is what limits the tie to the
+// part of the surface that actually touches.
+function tieCouplings(
   ppt: (i: number) => [number, number, number],
-  poolBody: Map<number, Set<number>>,
-  tets: number[],
-  tetBody: number[],
+  ties: { name: string; masters: number[]; refs: number[]; reach: number }[],
   medEdge: number,
   maxCoupledNodes: number,
-): { ref: number[]; offsets: number[]; solid: number[] } {
-  const bodyOfNode = new Map<number, number>();
-  const bodyCount = new Map<number, number>();
-  for (const [pi, bodies] of poolBody) {
-    if (bodies.size !== 1) continue; // shared interface node — already joined
-    const body = [...bodies][0];
-    bodyOfNode.set(pi, body);
-    // eslint-disable-next-line kofem/no-silent-fallback -- counting occurrences; 0 is the identity for a body seen for the first time
-    bodyCount.set(body, (bodyCount.get(body) ?? 0) + 1);
-  }
-  if (bodyCount.size < 2) return { ref: [], offsets: [0], solid: [] };
-  let master = -1,
-    best = -1;
-  for (const [body, count] of bodyCount)
-    if (count > best) {
-      best = count;
-      master = body;
-    }
-  const masterNodes: number[] = [];
-  const otherNodes = new Map<number, number[]>(); // body → its exclusive nodes
-  for (const [pi, body] of bodyOfNode)
-    if (body === master) masterNodes.push(pi);
-    else getOrInit(otherNodes, body, () => []).push(pi);
-
-  const masterTets: number[] = [];
-  for (let t = 0; t < tetBody.length; t++)
-    if (tetBody[t] === master)
-      masterTets.push(
-        tets[4 * t],
-        tets[4 * t + 1],
-        tets[4 * t + 2],
-        tets[4 * t + 3],
-      );
-  const masterBoundary = tetMeshBoundary(masterTets);
-
-  // Each body meets the master across its own clearance, so each gets its own
-  // band and its own partner-search radius.
+): CouplingSet {
   let all: CouplingSet = { ref: [], offsets: [0], solid: [] };
-  for (const nodes of otherNodes.values()) {
-    const dist = distancesToSurface(
-      ppt,
-      nodes,
-      masterBoundary,
-      Math.max(2 * medEdge, 1e-9),
-      6,
-    );
-    if (dist.size === 0) continue; // never reaches the master body
-    const gap = Math.min(...dist.values());
-    const band = gap + 0.5 * medEdge;
-    const refs = [...dist].filter(([, d]) => d <= band).map(([pi]) => pi);
+  for (const tie of ties) {
+    // Nodes the two surfaces share are already rigidly joined through the common
+    // pool DOFs, and a coupling reference must not also be a partner.
+    const shared = new Set(tie.masters.filter((pi) => tie.refs.includes(pi)));
+    const masters = tie.masters.filter((pi) => !shared.has(pi));
+    const refs = tie.refs.filter((pi) => !shared.has(pi));
+    if (masters.length === 0 || refs.length === 0) continue;
+
+    let distances = new Map<number, number>();
+    for (
+      let reach = Math.max(2 * medEdge, 1e-9), doublings = 0;
+      doublings <= 6 && distances.size === 0;
+      reach *= 2, doublings++
+    )
+      distances = nearestMasterDistances(ppt, masters, refs, reach);
+    if (distances.size === 0) continue; // the surfaces never reach each other
+
+    const gap = Math.min(...distances.values());
+    const kept = [...distances]
+      .filter(([, distance]) => distance <= tie.reach)
+      .map(([pi]) => pi);
+    if (kept.length === 0) continue;
+
     all = concatCouplings(
       all,
       autoDetectCouplings(
         ppt,
-        masterNodes,
-        refs,
+        masters,
+        kept,
         partnerSearchRadius(medEdge, gap),
         maxCoupledNodes,
       ),
     );
   }
   return { ref: all.ref, offsets: all.offsets, solid: all.solid };
+}
+
+// Map a connection's two picked surfaces from store vertex indices onto pool
+// nodes. A vertex with no pool node is skipped: on the auto-shell path the thin
+// walls a picked surface covered were replaced by mid-surface shell nodes, which
+// the seam coupling already ties.
+function tiesToPool(
+  ties: TieSurfaces[],
+  poolOfVertex: (vi: number) => number | undefined,
+): { name: string; masters: number[]; refs: number[]; reach: number }[] {
+  const toPool = (vertices: number[]): number[] => {
+    const out: number[] = [];
+    for (const vi of vertices) {
+      const pi = poolOfVertex(vi);
+      if (pi !== undefined) out.push(pi);
+    }
+    return out;
+  };
+  return ties.map((tie) => ({
+    name: tie.name,
+    masters: toPool(tie.verticesA),
+    refs: toPool(tie.verticesB),
+    reach: tie.maxSeparation,
+  }));
 }
 
 // Drop distributing couplings whose reference (shell) node carries an essential
@@ -1076,6 +1083,7 @@ export function buildCoupledModel(
     seamTolerance: seamToleranceOverride,
     couplingRadius,
     maxCoupledNodes = 16,
+    ties = [],
   }: {
     // How far off the retained solid's boundary a shell node may sit and still
     // count as seam. Defaults to seamTolerance() of the model's own scales.
@@ -1084,12 +1092,16 @@ export function buildCoupledModel(
     // solid mesh's own spacing — see partnerSearchRadius.
     couplingRadius?: number;
     maxCoupledNodes?: number;
+    // The model's tie connections. Distinct solid bodies are joined ONLY by
+    // these — nothing is inferred from the geometry — so an assembly with no
+    // connection keeps its bodies apart, which is what the empty default means.
+    ties?: TieSurfaces[];
   } = {},
 ): CoupledModel {
   // Solid tets = the other bodies plus the shelled body's non-wall (base) tets;
-  // only the tets inside the thin walls are replaced by shell facets. Different solid
-  // bodies keep their own nodes; a gapped interface is tied by distributing
-  // couplings (autoDetectSolidCouplings), not node-merging.
+  // only the tets inside the thin walls are replaced by shell facets. Different
+  // solid bodies keep their own nodes; a gapped interface is tied by the
+  // distributing couplings of a tie connection (tieCouplings), not node-merging.
   const solidTets: number[] = [];
   const tetBody: number[] = [];
   for (let e = 0; e < m.tet.length / 4; e++)
@@ -1134,25 +1146,15 @@ export function buildCoupledModel(
     pool[3 * i + 2],
   ];
 
-  // Body of each solid pool node (a conformal interface node carries >1 body).
-  const poolBody = new Map<number, Set<number>>();
-  for (let t = 0; t < tets.length / 4; t++)
-    for (let k = 0; k < 4; k++)
-      getOrInit(poolBody, tets[4 * t + k], () => new Set<number>()).add(
-        tetBody[t],
-      );
-
   // Every coupling distance below is derived from the solid mesh's own spacing —
   // a fixed radius rigidified whole millimetres of thin wall.
   const medEdge = medianTetEdge(ppt, tets);
-  // Gapped solid↔solid interfaces (pin in a hole) first — their reference nodes
-  // become coupling-dependent, so the shell↔solid detection must not also target
-  // them (a target DOF must be independent).
-  const solidCoupling = autoDetectSolidCouplings(
+  // The tie connections first — their reference nodes become coupling-dependent,
+  // so the shell↔solid seam detection must not also target them (a target DOF
+  // must be independent).
+  const solidCoupling = tieCouplings(
     ppt,
-    poolBody,
-    tets,
-    tetBody,
+    tiesToPool(ties, (vi) => solidPool.get(vi)),
     medEdge,
     maxCoupledNodes,
   );
@@ -1183,8 +1185,10 @@ export function buildCoupledModel(
     solidPool,
     shellPool,
     // The shell↔solid seam is continuous material (a thin wall idealised as shell,
-    // tied back to its retained solid), so it uses the relaxed MPC coupling (mpc=1)
-    // for displacement continuity. The gapped pin↔hole solid tie stays distributing.
+    // tied back to its retained solid) — not a tie connection between parts, and
+    // never something the user declares — so it uses the relaxed MPC coupling
+    // (mpc=1) for displacement continuity. A tie connection across a clearance
+    // stays distributing.
     coupling: concatCouplings(
       { ...shellCoupling, mpc: shellCoupling.ref.map(() => 1) },
       { ...solidCoupling, mpc: solidCoupling.ref.map(() => 0) },
@@ -1215,17 +1219,20 @@ export interface ExplicitCoupledModel {
 export function buildExplicitCoupledModel(
   V: number[], // 3·nNodes, xyz interleaved (store vertex order)
   solidTets: number[], // 4·nSolidTets, store vertex indices
-  solidTetBody: number[], // body/property id per solid tet (labels the pin/hole bodies)
   shellTris: number[], // 3·nShellTris, store vertex indices
   shellThk: number[], // per shell triangle thickness
   {
     seamTolerance: seamToleranceOverride,
     couplingRadius,
     maxCoupledNodes = 16,
+    ties = [],
   }: {
     seamTolerance?: number;
     couplingRadius?: number;
     maxCoupledNodes?: number;
+    // The model's tie connections — the only thing that joins distinct solid
+    // bodies here (see buildCoupledModel).
+    ties?: TieSurfaces[];
   } = {},
 ): ExplicitCoupledModel {
   const pool: number[] = [];
@@ -1248,14 +1255,6 @@ export function buildExplicitCoupledModel(
       throw new Error(`explicit coupled: solid node ${vi} missing from pool`);
     return pi;
   });
-  // Body of each solid pool node, from the per-tet body labels.
-  const poolBody = new Map<number, Set<number>>();
-  for (let t = 0; t < tets.length / 4; t++)
-    for (let k = 0; k < 4; k++)
-      getOrInit(poolBody, tets[4 * t + k], () => new Set<number>()).add(
-        solidTetBody[t],
-      );
-
   // Shell nodes second — a node also used by a solid tet reuses its pool entry.
   const shellPoolIndex = new Set<number>();
   const triangles = shellTris.map((vi) => {
@@ -1270,14 +1269,11 @@ export function buildExplicitCoupledModel(
     pool[3 * i + 2],
   ];
   const medEdge = medianTetEdge(ppt, tets);
-  // Gapped solid↔solid interfaces (pin in a hole) tied across the clearance,
-  // split by body label — re-derives the same tie the auto-shell path baked into
-  // the .vtu (where the bodies are distinct PSOLID properties).
-  const solidCoupling = autoDetectSolidCouplings(
+  // Gapped solid↔solid interfaces (a pin in a hole) tied across the clearance by
+  // the model's tie connections — the same couplings the auto-shell path builds.
+  const solidCoupling = tieCouplings(
     ppt,
-    poolBody,
-    tets,
-    solidTetBody,
+    tiesToPool(ties, (vi) => poolOfVertex.get(vi)),
     medEdge,
     maxCoupledNodes,
   );
@@ -1287,7 +1283,7 @@ export function buildExplicitCoupledModel(
   // nodes are already rigidly attached through the common pool DOFs. Of those,
   // only the SEAM nodes — the ones sitting on the retained solid's boundary — are
   // tied, by the same geometric rule the auto-shell path uses, so a saved mixed
-  // model reloads with the tie it was meshed with. Solid nodes that are solid-tie
+  // model reloads with the seam it was meshed with. Solid nodes that are tie
   // references are coupling-dependent, so exclude them as shell-coupling targets
   // (a target DOF must be independent).
   const solidPoolSet = new Set(solidPoolIndices);
@@ -1316,7 +1312,8 @@ export function buildExplicitCoupledModel(
     tets,
     triangles,
     thicknesses: shellThk,
-    // Shell↔solid seam ⇒ relaxed MPC (continuity); gapped pin↔hole ⇒ distributing.
+    // Shell↔solid seam ⇒ relaxed MPC (continuity); a tie connection across a
+    // clearance ⇒ distributing.
     coupling: concatCouplings(
       { ...shellCoupling, mpc: shellCoupling.ref.map(() => 1) },
       { ...solidCoupling, mpc: solidCoupling.ref.map(() => 0) },

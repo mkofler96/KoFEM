@@ -1,12 +1,13 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Boundary slice: named BC / load groups (the primary source of truth), the
-// flat constraint/load arrays derived from them for the solver, and the
+// Boundary slice: named BC / load / tie groups (the primary source of truth),
+// the flat constraint/load arrays derived from them for the solver, and the
 // face-pick session state used to build groups in the viewport.
 
 import type { SliceCreator } from "./modelStore";
 import type { Element, Node } from "./geometrySlice";
+import type { TieDefinition, TieExtent } from "../lib/tie";
 import { momentToNodalForces } from "./momentLoad";
 
 export interface Constraint {
@@ -65,6 +66,32 @@ export interface NamedLoadGroup {
   components?: [number, number, number];
   faces: BcFaceEntry[];
   kind?: LoadKind;
+}
+
+// A bonded tie between two picked surfaces — the connector condition that
+// replaced the model-wide "tie distance" (see lib/tie.ts). `extent` says whether
+// the whole selected surface is coupled or only the part of it within
+// `searchDistance` of the other side.
+export interface TieGroup extends TieDefinition {
+  id: number;
+  name: string; // e.g. "Tie1"
+  facesA: BcFaceEntry[];
+  facesB: BcFaceEntry[];
+  extent: TieExtent;
+  searchDistance: number;
+}
+
+// Which surface of a tie a pick session is currently filling.
+export type TieSide = "a" | "b";
+
+// Default search distance (mm) offered for a region tie. A contact patch is a
+// property of the assembly, so there is no right number — this is only the
+// starting value in the form, which the user edits before applying.
+export const DEFAULT_TIE_DISTANCE = 0.5;
+
+// The face list of one side of a tie.
+export function tieFaces(group: TieGroup, side: TieSide): BcFaceEntry[] {
+  return side === "a" ? group.facesA : group.facesB;
 }
 
 // Physical kind of a load group, defaulting from `dof` for older payloads that
@@ -272,14 +299,17 @@ export interface BoundarySlice {
   // work-equivalent surface tractions (force/pressure groups) handed to the solver
   surfaceLoads: SurfaceLoad[];
 
-  // Named BC / Load groups (primary source of truth for constraints & loads)
+  // Named BC / Load / Tie groups (primary source of truth for constraints,
+  // loads and bonded connections)
   bcGroups: NamedBcGroup[];
   loadGroups: NamedLoadGroup[];
+  tieGroups: TieGroup[];
   nextBcGroupId: number;
   nextLoadGroupId: number;
+  nextTieGroupId: number;
   nextFaceEntryId: number;
 
-  pickMode: "bc" | "load" | null;
+  pickMode: "bc" | "load" | "tie" | null;
   pickTargetGroupId: number | null; // null = creating new group; id = adding to existing
   // Whether a click selects a surface region ("face") or a boundary polyline
   // ("edge"). Edge picking is the only way to grab the rim of a flat shell,
@@ -288,11 +318,22 @@ export interface BoundarySlice {
   selectedFace: FaceSelection | null;
   pendingFaces: FaceSelection[]; // faces accumulated via shift-click within a pick session
 
+  // A tie connects TWO surfaces, so its pick session fills one side at a time:
+  // `pickTieSide` is the side the viewport clicks land on, and `tieDraft` holds
+  // the side that is parked (so the viewport can still show it, and switching
+  // back restores it). Cleared when the pick session ends.
+  pickTieSide: TieSide;
+  tieDraft: { a: FaceSelection[]; b: FaceSelection[] };
+
   // Pick mode / face selection
-  setPickMode(mode: "bc" | "load" | null, targetGroupId?: number | null): void;
+  setPickMode(
+    mode: "bc" | "load" | "tie" | null,
+    targetGroupId?: number | null,
+  ): void;
   setPickGeometry(geometry: "face" | "edge"): void;
   setSelectedFace(face: FaceSelection | null): void;
   setPendingFaces(faces: FaceSelection[]): void;
+  setPickTieSide(side: TieSide): void;
 
   // BC group actions
   createBcGroup(
@@ -324,6 +365,23 @@ export interface BoundarySlice {
   removeFaceFromLoadGroup(groupId: number, faceId: number): void;
   deleteLoadGroup(id: number): void;
   clearLoads(): void;
+
+  // Tie (connector) group actions
+  createTieGroup(
+    facesA: Omit<BcFaceEntry, "id">[],
+    facesB: Omit<BcFaceEntry, "id">[],
+    extent: TieExtent,
+    searchDistance: number,
+  ): void;
+  addFaceToTieGroup(
+    groupId: number,
+    side: TieSide,
+    face: Omit<BcFaceEntry, "id">,
+  ): void;
+  updateTieGroup(id: number, extent: TieExtent, searchDistance: number): void;
+  removeFaceFromTieGroup(groupId: number, side: TieSide, faceId: number): void;
+  deleteTieGroup(id: number): void;
+  clearTies(): void;
 }
 
 export const createBoundarySlice: SliceCreator<BoundarySlice> = (set) => ({
@@ -332,28 +390,50 @@ export const createBoundarySlice: SliceCreator<BoundarySlice> = (set) => ({
   surfaceLoads: [],
   bcGroups: [],
   loadGroups: [],
+  tieGroups: [],
   nextBcGroupId: 1,
   nextLoadGroupId: 1,
+  nextTieGroupId: 1,
   nextFaceEntryId: 1,
   pickMode: null,
   pickTargetGroupId: null,
   pickGeometry: "face",
   selectedFace: null,
   pendingFaces: [],
+  pickTieSide: "a",
+  tieDraft: { a: [], b: [] },
 
   // Pick mode / face selection
   setPickMode: (
-    mode: "bc" | "load" | null,
+    mode: "bc" | "load" | "tie" | null,
     targetGroupId: number | null = null,
   ) =>
     set((s) => {
       s.pickMode = mode;
       s.pickTargetGroupId = mode !== null ? (targetGroupId ?? null) : null;
+      s.pickTieSide = "a";
+      s.tieDraft = { a: [], b: [] };
       if (mode === null) {
         s.selectedFace = null;
         s.pendingFaces = [];
         s.pickGeometry = "face";
       }
+    }),
+
+  // Park the side being picked and bring the other one into the live session,
+  // so a tie's two surfaces are filled by the same face-pick machinery.
+  setPickTieSide: (side: TieSide) =>
+    set((s) => {
+      if (s.pickTieSide === side) return;
+      s.tieDraft[s.pickTieSide] = s.selectedFace
+        ? [...s.pendingFaces, s.selectedFace]
+        : s.pendingFaces;
+      const restored = s.tieDraft[side];
+      s.pendingFaces = restored.slice(0, -1);
+      s.selectedFace =
+        restored.length > 0 ? restored[restored.length - 1] : null;
+      s.tieDraft[side] = [];
+      s.pickTieSide = side;
     }),
 
   setPickGeometry: (geometry: "face" | "edge") =>
@@ -544,6 +624,86 @@ export const createBoundarySlice: SliceCreator<BoundarySlice> = (set) => ({
       s.loadGroups = [];
       s.loads = [];
       s.surfaceLoads = [];
+      s.result = null;
+    }),
+
+  // Tie (connector) group actions. A tie has no derived flat array: the weld it
+  // describes is applied to the mesh at solve time (buildTie), and drawn from
+  // the same definition in the viewport (tiedNodePairs).
+  createTieGroup: (
+    facesA: Omit<BcFaceEntry, "id">[],
+    facesB: Omit<BcFaceEntry, "id">[],
+    extent: TieExtent,
+    searchDistance: number,
+  ) =>
+    set((s) => {
+      const entries = (faces: Omit<BcFaceEntry, "id">[]) =>
+        faces.map((face) => ({
+          id: s.nextFaceEntryId++,
+          label: face.label,
+          nodeIds: face.nodeIds,
+        }));
+      s.tieGroups.push({
+        id: s.nextTieGroupId,
+        name: `Tie${s.nextTieGroupId}`,
+        facesA: entries(facesA),
+        facesB: entries(facesB),
+        extent,
+        searchDistance,
+      });
+      s.nextTieGroupId++;
+      s.result = null;
+    }),
+
+  addFaceToTieGroup: (
+    groupId: number,
+    side: TieSide,
+    face: Omit<BcFaceEntry, "id">,
+  ) =>
+    set((s) => {
+      const group = s.tieGroups.find((tie) => tie.id === groupId);
+      if (!group) return;
+      tieFaces(group, side).push({
+        id: s.nextFaceEntryId++,
+        label: face.label,
+        nodeIds: face.nodeIds,
+      });
+      s.result = null;
+    }),
+
+  updateTieGroup: (id: number, extent: TieExtent, searchDistance: number) =>
+    set((s) => {
+      const group = s.tieGroups.find((tie) => tie.id === id);
+      if (!group) return;
+      group.extent = extent;
+      group.searchDistance = searchDistance;
+      s.result = null;
+    }),
+
+  // Removing the last face of a side leaves a connection with nothing to tie
+  // to, so the whole connection goes — mirroring how a BC group disappears with
+  // its last face.
+  removeFaceFromTieGroup: (groupId: number, side: TieSide, faceId: number) =>
+    set((s) => {
+      const group = s.tieGroups.find((tie) => tie.id === groupId);
+      if (!group) return;
+      const kept = tieFaces(group, side).filter((face) => face.id !== faceId);
+      if (side === "a") group.facesA = kept;
+      else group.facesB = kept;
+      if (kept.length === 0)
+        s.tieGroups = s.tieGroups.filter((tie) => tie.id !== groupId);
+      s.result = null;
+    }),
+
+  deleteTieGroup: (id: number) =>
+    set((s) => {
+      s.tieGroups = s.tieGroups.filter((tie) => tie.id !== id);
+      s.result = null;
+    }),
+
+  clearTies: () =>
+    set((s) => {
+      s.tieGroups = [];
       s.result = null;
     }),
 });

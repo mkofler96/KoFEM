@@ -1,10 +1,10 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Multibody solve + tie coverage (issues #353 / #359). Drives the solver worker
-// (window.__kofem) directly, so the tie module and the worker's per-body
-// material / tie path run in the instrumented worker and are captured by the
-// coverage fixture. Also meshes a two-body assembly and toggles a body's
+// Multibody solve + tie-connection coverage (issues #353 / #359). Drives the
+// solver worker (window.__kofem) directly, so the tie module and the worker's
+// per-body material / tie path run in the instrumented worker and are captured
+// by the coverage fixture. Also meshes a two-body assembly and toggles a body's
 // visibility to exercise the mesh-hiding and per-body rendering paths.
 
 import { test, expect } from "./coverage";
@@ -30,7 +30,7 @@ interface SolveElement {
 // Two independently-meshed hex boxes separated by a 0.5 mm gap (distinct node
 // ids, different bodies) — the pin/eye line-contact case in miniature. Box A is
 // clamped; box B carries a load but touches nothing, so it is only solvable
-// once a tie welds the near-contact faces.
+// once a tie connection welds the two facing faces.
 function twoGappedBoxes() {
   const gap = 0.5;
   const boxA = boxHexMesh(10, 4, 4, 5, 2, 2);
@@ -67,9 +67,22 @@ function twoGappedBoxes() {
       loads.push({ nodeId: nd.id, dof: 0, value: 100 });
   }
 
+  // The two facing surfaces a face pick would produce, as the tie's two sides.
+  const facesAt = (predicate: (node: SolveNode) => boolean) => [
+    {
+      id: 1,
+      label: "Face 1",
+      nodeIds: nodes.filter(predicate).map((n) => n.id),
+    },
+  ];
+
   return {
     nodes,
     elements,
+    tieSurfaces: {
+      a: facesAt((node) => Math.abs(node.x - 10) < 1e-9),
+      b: facesAt((node) => Math.abs(node.x - (10 + gap)) < 1e-9),
+    },
     materials: [
       {
         id: 1,
@@ -91,7 +104,7 @@ function twoGappedBoxes() {
   };
 }
 
-test("a bonded tie makes a disconnected two-body solve converge", async ({
+test("a tie connection makes a disconnected two-body solve converge", async ({
   page,
 }) => {
   test.setTimeout(60_000);
@@ -100,10 +113,25 @@ test("a bonded tie makes a disconnected two-body solve converge", async ({
     () => !!(window as unknown as { __kofem?: unknown }).__kofem,
   );
 
-  const model = twoGappedBoxes();
-  const solve = (tieDistance: number) =>
+  const { tieSurfaces, ...model } = twoGappedBoxes();
+  // A connection between the two facing surfaces, or none at all.
+  const tieGroups = (searchDistance: number | null) =>
+    searchDistance === null
+      ? []
+      : [
+          {
+            id: 1,
+            name: "Tie1",
+            facesA: tieSurfaces.a,
+            facesB: tieSurfaces.b,
+            extent: "region" as const,
+            searchDistance,
+          },
+        ];
+
+  const solve = (searchDistance: number | null) =>
     page.evaluate(
-      async ({ model, tieDistance }) => {
+      async ({ model, ties }) => {
         const win = window as unknown as {
           __kofem: {
             sendToWorker(name: string, payload: object): Promise<unknown>;
@@ -112,22 +140,28 @@ test("a bonded tie makes a disconnected two-body solve converge", async ({
         try {
           const result = (await win.__kofem.sendToWorker("solve", {
             ...model,
-            tieDistance,
+            tieGroups: ties,
           })) as { displacements: Float64Array };
           return { ok: true as const, nDisp: result.displacements.length };
         } catch (err) {
           return { ok: false as const, error: (err as Error).message };
         }
       },
-      { model, tieDistance },
+      { model, ties: tieGroups(searchDistance) },
     );
 
-  // Without a tie, box B is disconnected → the solve cannot converge.
-  const untied = await solve(0);
+  // Without a connection, box B is disconnected → the solve cannot converge.
+  const untied = await solve(null);
   expect(untied.ok).toBe(false);
 
-  // With a tie spanning the 0.5 mm gap, the meshes weld and the solve succeeds,
-  // returning one displacement vector per original node.
+  // A connection whose search distance falls short of the gap welds nothing,
+  // and says so instead of failing later on a singular matrix.
+  const tooShort = await solve(0.1);
+  expect(tooShort.ok).toBe(false);
+  if (!tooShort.ok) expect(tooShort.error).toContain("connected no nodes");
+
+  // With a connection spanning the 0.5 mm gap, the meshes weld and the solve
+  // succeeds, returning one displacement vector per original node.
   const tied = await solve(0.6);
   expect(tied.ok).toBe(true);
   if (tied.ok) expect(tied.nDisp).toBe(model.nodes.length * 3);

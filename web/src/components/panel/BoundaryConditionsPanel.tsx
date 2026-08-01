@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useModelStore } from "../../store/modelStore";
 import { BcSection } from "./BcSection";
 import { LoadSection } from "./LoadSection";
+import { TieSection } from "./TieSection";
 import styles from "./LeftPanel.module.css";
 
 export function BoundaryConditionsPanel() {
@@ -31,6 +32,7 @@ export function BoundaryConditionsPanel() {
           <>
             <BcSection onError={setError} />
             <LoadSection onError={setError} />
+            <TieSection onError={setError} />
           </>
         )}
       </div>

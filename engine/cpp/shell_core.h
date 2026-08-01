@@ -67,6 +67,25 @@ ShellResult solve_shell_core(const ShellInput& in);
 // translations plus a rotation from their relative motion (weighted least
 // squares), and — by transpose — the shell's force/moment distributes back onto
 // the solid nodes with the correct resultant and no artificial stiffening.
+// Which side of a coupling is eliminated, and how the dependent motion is built.
+//
+//   Distributing  — RBE3. ref_node's 6 DOFs are DEPENDENT: the weighted-average
+//                   translation of solid_nodes plus their least-squares rotation.
+//                   Adds no stiffness to the coupled set, so it idealises a
+//                   surface to a point without making the surface rigid — but
+//                   the point cannot be fixed or driven, only loaded.
+//   RelaxedMpc    — the shell-to-solid seam variant of Distributing (see below).
+//   Kinematic     — RBE2. The other way round: solid_nodes are DEPENDENT and
+//                   follow ref_node as a rigid body, u_i = u_R + θ_R × r_i. The
+//                   point is INDEPENDENT, so it can be fixed, loaded, or tied to
+//                   another point — the bolt/screw idealisation. It does make the
+//                   coupled surface rigid, which is the accepted trade.
+enum class CouplingKind { Distributing = 0, RelaxedMpc = 1, Kinematic = 2 };
+
+// Bit c of a Kinematic coupling's dof_mask selects DOF c (0..2 translations,
+// 3..5 rotations) of every coupled node. All six by default.
+inline constexpr int kAllDofs = 0x3F;
+
 struct Coupling {
     int ref_node = -1;                   // shell node whose 6 DOFs are dependent
     std::vector<int> solid_nodes;        // solid nodes it distributes to
@@ -83,6 +102,15 @@ struct Coupling {
     // stays for genuinely gapped, non-conforming interfaces (a pin in a hole).
     bool mpc = false;
     double relaxation = 1.0;  // ψ scaling the rotation transfer; paper uses [0.5, 1]
+
+    CouplingKind kind = CouplingKind::Distributing;
+    // Kinematic only. A rotation bit ties θ_i = θ_R, which only exists where the
+    // coupled node carries rotational stiffness — on a solid-only node there is
+    // no rotation DOF to tie and the bit has no effect. Selecting the
+    // translations alone is therefore NOT how a hinge is made on a solid mesh:
+    // put the mask on a point-to-point coupling (one coupled node), where
+    // leaving the rotations free is exactly a spherical joint.
+    int dof_mask = kAllDofs;
 };
 
 // The solid stiffness enters as assembled triplets over a 3-DOF/node numbering

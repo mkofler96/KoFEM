@@ -11,13 +11,21 @@ import type {
   LoadKind,
   NamedBcGroup,
   NamedLoadGroup,
+  TieExtent,
+  TieGroup,
 } from "../../store/modelStore";
-import { DOF_LABELS, parsePressure, parseLoadVector } from "./bcFormUtils";
+import {
+  DOF_LABELS,
+  parsePressure,
+  parseLoadVector,
+  parseTieDistance,
+} from "./bcFormUtils";
 import {
   DofCheckboxes,
   LoadKindSelect,
   LoadVectorInputs,
   PressureInput,
+  TieExtentInputs,
 } from "./BcLoadFormControls";
 import styles from "./LeftPanel.module.css";
 
@@ -88,6 +96,58 @@ export function BcValueForm({
           onChange={(e) => setValue(e.target.value)}
         />
       </div>
+      <div className={styles.formBtns}>
+        <button className={styles.cancelBtn} onClick={onCancel}>
+          Cancel
+        </button>
+        <button className={styles.primaryBtn} onClick={handleSave}>
+          Save
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Inline editor for a tie connection's extent and search distance — opened by
+// the connection's ✎ button. The picked surfaces are edited through the face
+// rows, exactly as for a BC or a load.
+export function TieValueForm({
+  group,
+  onSave,
+  onCancel,
+}: {
+  group: TieGroup;
+  onSave(extent: TieExtent, searchDistance: number): void;
+  onCancel(): void;
+}) {
+  const [extent, setExtent] = useState<TieExtent>(group.extent);
+  const [distance, setDistance] = useState(String(group.searchDistance));
+  const [error, setError] = useState<string | null>(null);
+
+  function handleSave() {
+    if (extent === "full") {
+      onSave("full", 0);
+      return;
+    }
+    const searchDistance = parseTieDistance(distance, setError);
+    if (searchDistance === null) return;
+    onSave("region", searchDistance);
+  }
+
+  return (
+    <div className={styles.inlineForm} data-testid="tie-edit-form">
+      {error && (
+        <div className={styles.errorBanner} data-testid="tie-edit-error">
+          <span>{error}</span>
+          <button onClick={() => setError(null)}>×</button>
+        </div>
+      )}
+      <TieExtentInputs
+        extent={extent}
+        distance={distance}
+        onExtentChange={setExtent}
+        onDistanceChange={setDistance}
+      />
       <div className={styles.formBtns}>
         <button className={styles.cancelBtn} onClick={onCancel}>
           Cancel

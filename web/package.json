@@ -17,7 +17,7 @@
     "examples:generate": "bun ../examples/web-examples/generate.mjs",
     "examples:generate-crane-shell": "bun ../examples/web-examples/generate-crane-shell.mjs",
     "examples:generate-plate-hole-shell": "bun ../examples/web-examples/generate-plate-hole-shell.mjs",
-    "test": "bun ../examples/validation/run.mjs && bun ../examples/validation/dof-constraint.test.mjs && bun ../examples/validation/prescribed-displacement.test.mjs && bun tests/test_wall_bracket.mjs 20.0 && bun tests/test_multibody.mjs && bun tests/test_tie.mjs && bun tests/test_face_pick.mjs && bun tests/test_edge_pick.mjs && bun tests/test_moment_load.mjs && bun tests/test_shellize_mpc.mjs && bun tests/test_body_highlight.mjs && bun tests/test_midsurface_junction.mjs && bun tests/test_coupled_materials.mjs && playwright test",
+    "test": "bun ../examples/validation/run.mjs && bun ../examples/validation/dof-constraint.test.mjs && bun ../examples/validation/prescribed-displacement.test.mjs && bun tests/test_wall_bracket.mjs 20.0 && bun tests/test_multibody.mjs && bun tests/test_tie.mjs && bun tests/test_coupling.mjs && bun tests/test_face_pick.mjs && bun tests/test_edge_pick.mjs && bun tests/test_moment_load.mjs && bun tests/test_shellize_mpc.mjs && bun tests/test_body_highlight.mjs && bun tests/test_midsurface_junction.mjs && bun tests/test_coupled_materials.mjs && playwright test",
     "test:coverage": "rm -rf .nyc_output coverage && COVERAGE=1 playwright test && bun run coverage:report",
     "coverage:report": "nyc report && bun scripts/coverage-dead-code.ts",
     "test:ui": "playwright test --ui",

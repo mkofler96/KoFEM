@@ -12,6 +12,7 @@ import type {
   Property,
   ResultType,
   StepTessellation,
+  TieGroup,
   VolMesh,
 } from "../store/modelStore";
 import { RESULT_TYPES } from "../store/modelStore";
@@ -70,8 +71,10 @@ export interface AnalysisState {
   properties: Property[];
   bcGroups: NamedBcGroup[];
   loadGroups: NamedLoadGroup[];
+  tieGroups: TieGroup[];
   nextBcGroupId: number;
   nextLoadGroupId: number;
+  nextTieGroupId: number;
   nextFaceEntryId: number;
   nextMatId: number;
   stepSurface: StepTessellation | null;
@@ -98,8 +101,12 @@ interface KofemFieldDataV1 {
   properties: Property[];
   bcGroups: NamedBcGroup[];
   loadGroups: NamedLoadGroup[];
+  // Tie (connector) conditions. Absent in files written before connections
+  // became a named model object — such a file simply has no ties.
+  tieGroups?: TieGroup[];
   nextBcGroupId: number;
   nextLoadGroupId: number;
+  nextTieGroupId?: number;
   nextFaceEntryId: number;
   nextMatId: number;
   stepSurface: StepTessellation | null;
@@ -234,8 +241,10 @@ export function serializeAnalysis(state: AnalysisState): string {
     properties: state.properties,
     bcGroups: state.bcGroups,
     loadGroups: state.loadGroups,
+    tieGroups: state.tieGroups,
     nextBcGroupId: state.nextBcGroupId,
     nextLoadGroupId: state.nextLoadGroupId,
+    nextTieGroupId: state.nextTieGroupId,
     nextFaceEntryId: state.nextFaceEntryId,
     nextMatId: state.nextMatId,
     stepSurface: state.stepSurface,
@@ -388,6 +397,13 @@ function parseMetadata(xml: string): KofemFieldDataV1 {
         `Invalid analysis file: "${field}" must be an array, got ${typeof meta[field]}`,
       );
 
+  // Ties postdate the first analysis files, so absence is legitimate — but a
+  // present entry of the wrong shape is not.
+  if (meta.tieGroups !== undefined && !Array.isArray(meta.tieGroups))
+    throw new Error(
+      `Invalid analysis file: "tieGroups" must be an array, got ${typeof meta.tieGroups}`,
+    );
+
   if (typeof meta.modelName !== "string")
     throw new Error('Invalid analysis file: "modelName" must be a string');
   // Legacy: the standalone "Mesh" mode was merged into "geometry".
@@ -500,6 +516,14 @@ export function parseAnalysisFile(text: string): AnalysisState {
     }
   }
 
+  // A file written before ties existed carries none. The counter is then not
+  // guessed but derived from the ties actually present, so an id can never be
+  // reused whatever the file contained.
+  const tieGroups = meta.tieGroups ?? [];
+  const nextTieGroupId =
+    meta.nextTieGroupId ??
+    tieGroups.reduce((highest, tie) => Math.max(highest, tie.id), 0) + 1;
+
   return {
     modelName: meta.modelName,
     mode: meta.mode,
@@ -510,8 +534,10 @@ export function parseAnalysisFile(text: string): AnalysisState {
     properties: meta.properties,
     bcGroups: meta.bcGroups,
     loadGroups: meta.loadGroups,
+    tieGroups,
     nextBcGroupId: meta.nextBcGroupId,
     nextLoadGroupId: meta.nextLoadGroupId,
+    nextTieGroupId,
     nextFaceEntryId: meta.nextFaceEntryId,
     nextMatId: meta.nextMatId,
     stepSurface: meta.stepSurface,
