@@ -88,7 +88,7 @@ const tieBetween = (extent, searchDistance) => [
 ];
 
 // ── Unit check: the tie welds exactly the 3×3 interface node pairs ────────────
-const tie = buildTie(nodes, tieBetween("region", 0.6)); // > GAP, < element size
+const tie = buildTie(nodes, elements, tieBetween("region", 0.6)); // > GAP, < element size
 console.log(
   `buildTie: ${nodes.length} → ${tie.nodes.length} nodes, welded ${tie.nWelded}`,
 );
@@ -105,7 +105,7 @@ assertNoCollapsedElements(tiedElements);
 
 // A search distance below the gap reaches nothing — the connection welds no
 // pair, which is exactly what the solve path turns into an actionable error.
-const tooShort = buildTie(nodes, tieBetween("region", 0.1));
+const tooShort = buildTie(nodes, elements, tieBetween("region", 0.1));
 assert(
   tooShort.nWelded === 0,
   `a 0.1 mm search distance must not span the 0.5 mm gap, welded ${tooShort.nWelded}`,
@@ -113,7 +113,7 @@ assert(
 
 // The full-surface extent has no distance to fall short of: it welds the same
 // nine pairs, whatever the gap.
-const fullTie = buildTie(nodes, tieBetween("full", 0));
+const fullTie = buildTie(nodes, elements, tieBetween("full", 0));
 assert(
   fullTie.nWelded === 9,
   `a full-surface tie should weld all 9 pairs, got ${fullTie.nWelded}`,

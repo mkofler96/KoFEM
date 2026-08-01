@@ -207,15 +207,36 @@ test("a region tie needs a positive search distance", async ({ page }) => {
   expect(await tieState(page)).toHaveLength(0);
 });
 
-test("a tie with only one surface picked is rejected", async ({ page }) => {
+test("one picked interface splits between the two bodies that meet on it", async ({
+  page,
+}) => {
   const model = await openConstraintsMode(page);
 
+  // Where two parts meet across a coincident interface the mesher gives them a
+  // single CAD face, so one click selects both bodies' nodes. Leaving Surface B
+  // empty ties that one pick, split by body — the only way the crane's pin/hook
+  // interface can be declared.
   await page.getByTestId("add-tie").click();
-  await pickFace(page, model.facingA);
+  await pickFace(page, [...model.facingA, ...model.facingB]);
+  await page.getByTestId("apply-tie").click();
+
+  const groups = await tieState(page);
+  expect(groups).toHaveLength(1);
+  expect(groups[0].facesB).toHaveLength(0);
+  // The split found the 3x3 facing grids of the two boxes and welded them.
+  await expect(
+    page.getByText("full surface · split by body · 9 node pairs"),
+  ).toBeVisible();
+});
+
+test("a tie with nothing picked is rejected", async ({ page }) => {
+  await openConstraintsMode(page);
+
+  await page.getByTestId("add-tie").click();
   await page.getByTestId("apply-tie").click();
 
   await expect(page.getByTestId("constraints-error")).toContainText(
-    "one face on each of its two surfaces",
+    "at least one picked face on Surface A",
   );
   expect(await tieState(page)).toHaveLength(0);
 });

@@ -11,6 +11,9 @@ import {
   remapElement,
   assertNoCollapsedElements,
   tiedId,
+  tieLimit,
+  tieSides,
+  bodyMembership,
   expandToOriginalNodes,
   type TieDefinition,
 } from "../lib/tie.js";
@@ -19,6 +22,7 @@ import {
   shellWallTets,
   buildCoupledModel,
   buildExplicitCoupledModel,
+  type TieSurfaces,
   dropCouplingsOnFixedNodes,
   shellNodeLocator,
   isShellPoolIndex,
@@ -397,6 +401,31 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
 // emitted per distinct wall thickness and each facet references its own (the same
 // scheme the offline crane generator uses). Solid bodies keep their existing
 // property ids, so material assignments survive the mesh. Returns null when the
+// The model's tie connections in the form the coupled builders take: the two
+// picked surfaces as vertex indices, and how far the tie reaches. This is the
+// ONLY thing that joins distinct solid bodies in a coupled model — nothing is
+// inferred from the geometry — so a payload with no connections leaves the
+// bodies apart, exactly as the all-solid path does.
+function coupledTies(
+  tieGroups: TieDefinition[] | undefined,
+  elements: Element[],
+  vid: VertexIndexer,
+): TieSurfaces[] {
+  if (!tieGroups || tieGroups.length === 0) return [];
+  // The same side resolution the weld path uses (tieSides), so a connection
+  // means the same thing whichever solver ends up carrying it.
+  const bodyOf = bodyMembership(elements);
+  return tieGroups.map((tie) => {
+    const sides = tieSides(tie, bodyOf);
+    return {
+      name: tie.name,
+      verticesA: sides.a.map((nodeId) => vid(nodeId, "tie surface")),
+      verticesB: sides.b.map((nodeId) => vid(nodeId, "tie surface")),
+      maxSeparation: tieLimit(tie),
+    };
+  });
+}
+
 // idealisation does not apply (no Shell body, no surface mesh, or no thin wall
 // found), leaving the caller's all-solid mesh in place.
 function buildMeshTimeShellModel(
@@ -435,6 +464,9 @@ function buildMeshTimeShellModel(
         "thin walls were found in it. Switch it to Solid, or check that it is genuinely thin-walled.",
     );
   const wallTets = shellWallTets(mesh, shells);
+  // No ties here: this runs at MESH time, before any surface can have been
+  // picked. It only needs the pool's node/element layout — the couplings are
+  // rebuilt at solve time from the connections the user defined by then.
   const model = buildCoupledModel(mesh, shells, wallTets);
 
   // Nodes: the coupled pool (solid nodes first, then the shell mid-surface nodes).
@@ -1311,11 +1343,14 @@ function tryCoupledSolve(
 
   // Only the shelled body's thin walls become shells; its thick base tets stay
   // solid (kept in the pool) so the load path through them is not lost. Distinct
-  // solid bodies keep their own nodes and are tied by distributing couplings
-  // (buildCoupledModel), not node-merging, so a gapped pin/hole interface is a
-  // proper force-and-moment tie instead of a sparse near-hinge.
+  // solid bodies keep their own nodes and are joined only where the model has a
+  // tie connection, by distributing couplings rather than node-merging, so a
+  // gapped pin/hole interface is a proper force-and-moment tie instead of a
+  // sparse near-hinge.
   const wallTets = shellWallTets(mesh, shells);
-  const model = buildCoupledModel(mesh, shells, wallTets);
+  const model = buildCoupledModel(mesh, shells, wallTets, {
+    ties: coupledTies(payload.tieGroups, elements, vid),
+  });
   if (model.coupling.ref.length === 0) return null; // shell doesn't couple to the solid
 
   const nearestShell = shellNodeLocator(model);
@@ -1793,16 +1828,12 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
     verts[3 * i + 2] = nodes[i].z;
   }
   const solidTets: number[] = [];
-  // Per-tet body label = the solid element's property (body) id, so the coupled
-  // model can tie distinct solid bodies (a pin in a hole) across their clearance.
-  const solidTetBody: number[] = [];
   for (const el of solidElements) {
     if (el.nodeIds.length !== 4)
       throw new Error(
         `CTETRA element ${el.id} has ${el.nodeIds.length} nodes — expected 4`,
       );
     for (const nid of el.nodeIds) solidTets.push(vid(nid, "CTETRA element"));
-    solidTetBody.push(el.propertyId);
   }
   const shellTris: number[] = [];
   for (const el of shellElements) {
@@ -1817,9 +1848,9 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
   const model = buildExplicitCoupledModel(
     verts,
     solidTets,
-    solidTetBody,
     shellTris,
     thicknesses,
+    { ties: coupledTies(payload.tieGroups, elements, vid) },
   );
 
   const poolOf = (nodeId: number): number => {
@@ -1909,24 +1940,6 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
   ]);
 }
 
-// The shell and coupled solvers join their domains by RBE3 distributing
-// couplings derived from the geometry (shellize.ts) rather than by node
-// welding, so a tie connection never reaches them: the coupled path re-derives
-// its own solid↔solid tie across a clearance (autoDetectSolidCouplings). Say
-// which connections that skipped, so the model the user defined and the model
-// that was solved are never silently different.
-function reportTiesSkippedOnShellPath(id: number, payload: SolvePayload): void {
-  const ties = payload.tieGroups;
-  if (!ties || ties.length === 0) return;
-  self.postMessage({
-    id,
-    log:
-      `Note: tie connection(s) ${ties.map((tie) => `"${tie.name}"`).join(", ")} were not ` +
-      "applied — the shell/coupled solver joins its interfaces by RBE3 coupling " +
-      "derived from the geometry, not by welding nodes.",
-  });
-}
-
 function handleSolve(id: number, payload: SolvePayload) {
   // Shell models route away from the all-solid path. A model that is ALL CTRIA3
   // solves via the Kirchhoff shell solver; a model that MIXES CTRIA3 shells with
@@ -1935,7 +1948,6 @@ function handleSolve(id: number, payload: SolvePayload) {
   // bodies itself).
   const nShells = payload.elements.filter((e) => e.type === "CTRIA3").length;
   if (nShells > 0) {
-    reportTiesSkippedOnShellPath(id, payload);
     if (nShells === payload.elements.length) handleShellSolve(id, payload);
     else handleMixedSolve(id, payload);
     return;
@@ -1961,7 +1973,6 @@ function handleSolve(id: number, payload: SolvePayload) {
       tryCoupledSolve(payload, shellBodyIds) ??
       tryPureShellSolve(payload, shellBodyIds);
     if (shellResult) {
-      reportTiesSkippedOnShellPath(id, payload);
       self.postMessage({
         id,
         log: `Shell solve complete: ${shellResult.displacements.length / 3} vertex displacements`,
@@ -1994,7 +2005,7 @@ function handleSolve(id: number, payload: SolvePayload) {
   // A no-op when the model has none, in which case solveNodes/tiedElements are
   // the originals and every step below is unchanged.
   const tieGroups = payload.tieGroups ?? [];
-  const tie = buildTie(nodes, tieGroups);
+  const tie = buildTie(nodes, elements, tieGroups);
   const solveNodes = tie.nodes;
   const tiedElements =
     tie.repOf.size > 0

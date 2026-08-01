@@ -99,6 +99,64 @@ function nodeIdsOf(faces: { nodeIds: number[] }[]): Set<number> {
   return ids;
 }
 
+// Bodies (property ids) that use each node. A node on a conforming interface
+// belongs to several bodies; an ordinary surface node to one.
+export function bodyMembership(
+  elements: TieElement[],
+): Map<number, Set<number>> {
+  const bodies = new Map<number, Set<number>>();
+  for (const el of elements)
+    for (const nodeId of el.nodeIds) {
+      let set = bodies.get(nodeId);
+      if (!set) bodies.set(nodeId, (set = new Set()));
+      set.add(el.propertyId);
+    }
+  return bodies;
+}
+
+// The two node sets a connection actually joins.
+//
+// Normally they are just the two picked surfaces minus whatever they have in
+// common (nodes already shared by both are one node — nothing to join).
+//
+// A NEARLY-CONFORMAL interface cannot be picked that way: where a pin sits in a
+// hook eye the two surfaces are coincident, the mesher gives them a single CAD
+// face, and one click selects both bodies' nodes at once. There the sides are
+// separated by BODY instead — the two bodies with the most nodes in the pick
+// become the two sides. That is not a guess about whether the parts are joined
+// (creating the connection said so), only about which side of it each node is
+// on, which is a fact about the mesh. It is what makes the pin/hook tie of the
+// crane assembly expressible at all: 30 of its ~1000 interface nodes are shared,
+// and the rest split cleanly 564 / 445 between hook and pin.
+export function tieSides(
+  tie: TieDefinition,
+  bodyOf: Map<number, Set<number>>,
+): { a: number[]; b: number[]; nShared: number } {
+  const idsA = nodeIdsOf(tie.facesA);
+  const idsB = nodeIdsOf(tie.facesB);
+  const shared = [...idsA].filter((id) => idsB.has(id));
+  const exclusiveA = [...idsA].filter((id) => !idsB.has(id));
+  const exclusiveB = [...idsB].filter((id) => !idsA.has(id));
+  if (exclusiveA.length > 0 && exclusiveB.length > 0)
+    return { a: exclusiveA, b: exclusiveB, nShared: shared.length };
+
+  // The picks coincide — separate them by body.
+  const perBody = new Map<number, number[]>();
+  for (const id of new Set([...idsA, ...idsB])) {
+    const bodies = bodyOf.get(id);
+    if (!bodies || bodies.size !== 1) continue; // shared by bodies ⇒ already joined
+    const body = [...bodies][0];
+    let list = perBody.get(body);
+    if (!list) perBody.set(body, (list = []));
+    list.push(id);
+  }
+  const ranked = [...perBody.values()].sort(
+    (first, second) => second.length - first.length,
+  );
+  if (ranked.length < 2) return { a: [], b: [], nShared: shared.length };
+  return { a: ranked[0], b: ranked[1], nShared: shared.length };
+}
+
 // ── Nearest-partner search ────────────────────────────────────────────────────
 //
 // A uniform grid over the candidate set, scanned in Chebyshev shells around the
@@ -215,21 +273,11 @@ function nearestInGrid(
 function pairOneTie(
   tie: TieDefinition,
   nodeById: Map<number, TieNode>,
+  bodyOf: Map<number, Set<number>>,
 ): { pairs: TiePair[]; report: TieReport } {
-  const idsA = nodeIdsOf(tie.facesA);
-  const idsB = nodeIdsOf(tie.facesB);
+  const { a: idsA, b: idsB, nShared } = tieSides(tie, bodyOf);
 
-  // Nodes the two surfaces share are already one node — they are the tie, and
-  // must not be pairing candidates for anything else.
-  let nShared = 0;
-  for (const id of idsA)
-    if (idsB.has(id)) {
-      nShared++;
-      idsB.delete(id);
-    }
-  for (const id of idsB) idsA.delete(id);
-
-  const resolve = (ids: Set<number>): TieNode[] => {
+  const resolve = (ids: number[]): TieNode[] => {
     const out: TieNode[] = [];
     for (const id of ids) {
       const node = nodeById.get(id);
@@ -293,16 +341,18 @@ function pairOneTie(
 // collapse (see pairOneTie).
 export function tiedNodePairs(
   nodes: TieNode[],
+  elements: TieElement[],
   ties: TieDefinition[],
 ): { pairs: TiePair[]; reports: TieReport[] } {
   const nodeById = new Map<number, TieNode>();
   for (const node of nodes) nodeById.set(node.id, node);
+  const bodyOf = bodyMembership(elements);
 
   const welded = new Set<number>();
   const pairs: TiePair[] = [];
   const reports: TieReport[] = [];
   for (const tie of ties) {
-    const one = pairOneTie(tie, nodeById);
+    const one = pairOneTie(tie, nodeById, bodyOf);
     let kept = 0;
     for (const pair of one.pairs) {
       if (welded.has(pair.aId) || welded.has(pair.bId)) continue;
@@ -364,11 +414,15 @@ function collapseWeldedPairs(nodes: TieNode[], pairs: TiePair[]): TieResult {
 
 // Weld the node pairs of every tie connection. An empty connection list is a
 // no-op (returns the mesh unchanged), so a model with no ties is untouched.
-export function buildTie(nodes: TieNode[], ties: TieDefinition[]): TieResult {
+export function buildTie(
+  nodes: TieNode[],
+  elements: TieElement[],
+  ties: TieDefinition[],
+): TieResult {
   if (ties.length === 0)
     return { nodes, repOf: new Map(), nWelded: 0, pairs: [], reports: [] };
 
-  const { pairs, reports } = tiedNodePairs(nodes, ties);
+  const { pairs, reports } = tiedNodePairs(nodes, elements, ties);
   return { ...collapseWeldedPairs(nodes, pairs), reports };
 }
 

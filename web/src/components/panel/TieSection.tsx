@@ -20,13 +20,20 @@ const SIDE_LABEL: Record<TieSide, string> = {
   b: "Surface B",
 };
 
+// A connection with no Surface B is one picked interface split by body — see
+// applyTie.
+export function isSelfSplitTie(group: TieGroup): boolean {
+  return group.facesB.length === 0;
+}
+
 // One-line summary of what a connection couples and how far it reaches.
 export function tieGroupMeta(group: TieGroup, nPaired: number): string {
   const extent =
     group.extent === "full"
       ? "full surface"
       : `within ${group.searchDistance} mm`;
-  return `${extent} · ${nPaired} node pair${nPaired === 1 ? "" : "s"}`;
+  const split = isSelfSplitTie(group) ? " · split by body" : "";
+  return `${extent}${split} · ${nPaired} node pair${nPaired === 1 ? "" : "s"}`;
 }
 
 // Tie connections section: pick the two surfaces a connection joins, choose
@@ -86,10 +93,15 @@ export function TieSection({ onError }: { onError(msg: string | null): void }) {
       return;
     }
 
+    // Surface B may be left empty: where two parts meet across a coincident
+    // interface (a pin in a hook eye) the mesher gives the two surfaces one CAD
+    // face, so a single pick IS both sides and the tie separates them by body
+    // (tieSides). Picking both sides stays the way to tie surfaces that really
+    // are distinct.
     const facesA = pickedOf("a");
     const facesB = pickedOf("b");
-    if (facesA.length === 0 || facesB.length === 0) {
-      onError("A tie needs at least one face on each of its two surfaces");
+    if (facesA.length === 0) {
+      onError("A tie needs at least one picked face on Surface A");
       return;
     }
     let searchDistance = 0;
@@ -173,6 +185,12 @@ export function TieSection({ onError }: { onError(msg: string | null): void }) {
                   ? "every node pair across the two surfaces is welded"
                   : "only node pairs closer than the search distance are welded"}
               </div>
+              {pickedOf("b").length === 0 && (
+                <div className={styles.pickNote}>
+                  leave Surface B empty to tie one picked interface, split
+                  between the two bodies that meet on it
+                </div>
+              )}
             </>
           )}
 
@@ -226,12 +244,18 @@ export function TieSection({ onError }: { onError(msg: string | null): void }) {
           )}
 
           {/* The two surfaces are listed separately — which face sits on which
-              side is the whole content of a connection. */}
-          {(["a", "b"] as const).map((side) => (
+              side is the whole content of a connection. A self-split tie has
+              only the one interface to show. */}
+          {(isSelfSplitTie(group)
+            ? (["a"] as const)
+            : (["a", "b"] as const)
+          ).map((side) => (
             <div key={side}>
               <div className={styles.tieSideRow}>
                 <span className={styles.bcFaceIndent}>└</span>
-                <span className={styles.tieSideLabel}>{SIDE_LABEL[side]}</span>
+                <span className={styles.tieSideLabel}>
+                  {isSelfSplitTie(group) ? "Interface" : SIDE_LABEL[side]}
+                </span>
                 <button
                   className={styles.iconBtn}
                   title={`Add face to ${SIDE_LABEL[side]}`}

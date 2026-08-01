@@ -43,6 +43,12 @@ const BC_FIXED_FACE = 7;
 // −Y altogether. The .vtu's load group stores the same per-face vector, because
 // rebuildSurfaceLoads applies a group's components once per face entry.
 const LOAD_FACES = { 66: [0, -1000, 0], 67: [0, -1000, 0] };
+// The CAD faces where the pin sits in the hook eye. Netgen meshes the two bodies
+// almost conformally there — they share only ~30 of ~1000 interface nodes, which
+// leaves the pin hanging on a near-hinge — so the assembly needs a tie. Nothing
+// infers it: it is declared here, as one picked interface split between the two
+// bodies that meet on it, exactly as the app's tie connection does.
+const TIE_FACES = [22, 24, 47, 65];
 
 const Module = await loadEngine();
 const mesh = meshStep(Module, STEP, { maxElementSize: 6 });
@@ -52,7 +58,39 @@ const shells = extractThinWallShells(mesh);
 // The pin/hook/base stay separate solid bodies joined by distributing couplings
 // (a gapped pin/hole interface is a force-and-moment tie, not a sparse hinge).
 const wallTets = shellWallTets(mesh, shells);
-const model = buildCoupledModel(mesh, shells, wallTets);
+
+// The tied interface as MESH vertex indices, split by the body its tets belong
+// to — the two sides of the connection.
+const tieVerts = new Set();
+for (let t = 0; t < mesh.surfFace.length; t++)
+  if (TIE_FACES.includes(mesh.surfFace[t]))
+    for (let k = 0; k < 3; k++) tieVerts.add(mesh.surfTri[3 * t + k]);
+const bodyOfVert = new Map();
+for (let e = 0; e < mesh.tet.length / 4; e++)
+  for (let k = 0; k < 4; k++) {
+    const vi = mesh.tet[4 * e + k];
+    const set = bodyOfVert.get(vi);
+    if (set) set.add(mesh.body[e]);
+    else bodyOfVert.set(vi, new Set([mesh.body[e]]));
+  }
+const perBody = new Map();
+for (const vi of tieVerts) {
+  const bodies = bodyOfVert.get(vi);
+  if (!bodies || bodies.size !== 1) continue; // shared ⇒ already joined
+  const body = [...bodies][0];
+  const list = perBody.get(body);
+  if (list) list.push(vi);
+  else perBody.set(body, [vi]);
+}
+const [sideA, sideB] = [...perBody.values()].sort((x, y) => y.length - x.length);
+if (!sideA || !sideB)
+  throw new Error(
+    `tie interface (CAD faces ${TIE_FACES.join(", ")}) did not split into two bodies`,
+  );
+const ties = [
+  { name: "Tie1", verticesA: sideA, verticesB: sideB, maxSeparation: Infinity },
+];
+const model = buildCoupledModel(mesh, shells, wallTets, { ties });
 const nShell = model.shellPool.length;
 
 // BCs + loads by CAD face (see crane-holder-shell.mjs). `fixedShellNodes` are the
@@ -250,8 +288,15 @@ function buildCraneVtu() {
       propOfThk.get(thkKey(model.thicknesses[t])),
     );
 
-  // Node / element ids are 1-based; BC/load group faces reference these ids.
+  // Node / element ids are 1-based; BC/load/tie group faces reference these ids.
   const fixedIds = fixedShellNodes.map((pi) => pi + 1);
+  // The tied interface as pool node ids — the same nodes `ties` above coupled,
+  // so a re-solve of this .vtu rebuilds exactly these couplings.
+  const tieNodeIds = [];
+  for (const vi of [...sideA, ...sideB]) {
+    const pi = model.solidPool.get(vi);
+    if (pi !== undefined) tieNodeIds.push(pi + 1);
+  }
   const loadFaceEntries = [];
   let faceEntryId = 2; // id 1 is the BC face below
   for (const fid of Object.keys(LOAD_FACES)) {
@@ -312,8 +357,28 @@ function buildCraneVtu() {
         faces: loadFaceEntries,
       },
     ],
+    tieGroups: [
+      {
+        id: 1,
+        name: "Tie1",
+        // One interface, Surface B empty: the app splits it between the two
+        // bodies that meet on it (lib/tie.ts tieSides), reproducing the sides
+        // used above.
+        facesA: [
+          {
+            id: faceEntryId++,
+            label: `Pin / hook eye interface (${tieNodeIds.length} nodes)`,
+            nodeIds: tieNodeIds,
+          },
+        ],
+        facesB: [],
+        extent: "full",
+        searchDistance: 0,
+      },
+    ],
     nextBcGroupId: 2,
     nextLoadGroupId: 2,
+    nextTieGroupId: 2,
     nextFaceEntryId: faceEntryId,
     nextMatId: SOLID_MATERIALS.length + 1,
     stepSurface: null,

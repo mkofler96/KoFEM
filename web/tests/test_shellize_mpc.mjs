@@ -202,7 +202,6 @@ check(
   };
   // one solid tet cluster + a detached shell triangle set nearby
   const solidTets = [];
-  const solidBody = [];
   const corner = [
     addV(0, 0, 0),
     addV(10, 0, 0),
@@ -221,10 +220,8 @@ check(
     [0, 4, 5, 7],
     [0, 5, 1, 7],
   ];
-  for (const t of KUHN) {
+  for (const t of KUHN)
     solidTets.push(corner[t[0]], corner[t[1]], corner[t[2]], corner[t[3]]);
-    solidBody.push(1);
-  }
   const s0 = addV(2, 2, 14),
     s1 = addV(8, 2, 14),
     s2 = addV(8, 8, 14),
@@ -233,7 +230,6 @@ check(
   const explicitModel = buildExplicitCoupledModel(
     verts,
     solidTets,
-    solidBody,
     shellTris,
     [3, 3],
   );
@@ -250,6 +246,131 @@ check(
     explicitModel.coupling.ref.length === 0 ||
       solidCount < explicitModel.coupling.ref.length,
     `all ${explicitModel.coupling.ref.length} references were tagged distributing`,
+  );
+}
+
+// ── A tie connection, and only a tie connection, joins two solid bodies ───────
+//
+// Two detached solid cubes 1 mm apart. Nothing about the geometry says whether
+// they are connected — that used to be guessed (the bigger body was declared
+// "master" and the other's interface band slaved to it, autoDetectSolidCouplings).
+// Now it is stated: no connection, no coupling; a connection between the two
+// facing faces produces the distributing tie across the clearance.
+{
+  const verts = [];
+  const idx = new Map();
+  const addV = (x, y, z) => {
+    const key = `${x},${y},${z}`;
+    let i = idx.get(key);
+    if (i === undefined) {
+      i = verts.length / 3;
+      idx.set(key, i);
+      verts.push(x, y, z);
+    }
+    return i;
+  };
+  const KUHN = [
+    [0, 1, 3, 7],
+    [0, 3, 2, 7],
+    [0, 2, 6, 7],
+    [0, 6, 4, 7],
+    [0, 4, 5, 7],
+    [0, 5, 1, 7],
+  ];
+  // A unit-grid cube of Kuhn tets at (x0, 0, 0), 10 mm on a side, 2 cells wide
+  // so the facing surface has a 3x3 node grid to distribute onto.
+  const cube = (x0) => {
+    const tets = [];
+    const step = 5;
+    const at = (i, j, k) => addV(x0 + i * step, j * step, k * step);
+    for (let i = 0; i < 2; i++)
+      for (let j = 0; j < 2; j++)
+        for (let k = 0; k < 2; k++) {
+          const corner = [
+            at(i, j, k),
+            at(i + 1, j, k),
+            at(i, j + 1, k),
+            at(i + 1, j + 1, k),
+            at(i, j, k + 1),
+            at(i + 1, j, k + 1),
+            at(i, j + 1, k + 1),
+            at(i + 1, j + 1, k + 1),
+          ];
+          for (const t of KUHN)
+            tets.push(corner[t[0]], corner[t[1]], corner[t[2]], corner[t[3]]);
+        }
+    return tets;
+  };
+  const GAP = 1;
+  const solidTets = [...cube(0), ...cube(10 + GAP)];
+  const faceAt = (x) => {
+    const out = [];
+    for (let vi = 0; vi < verts.length / 3; vi++)
+      if (Math.abs(verts[3 * vi] - x) < 1e-9) out.push(vi);
+    return out;
+  };
+  const surfaceA = faceAt(10);
+  const surfaceB = faceAt(10 + GAP);
+  check(
+    "the two facing faces each have a 3x3 node grid",
+    surfaceA.length === 9 && surfaceB.length === 9,
+    `got ${surfaceA.length} and ${surfaceB.length}`,
+  );
+
+  const untied = buildExplicitCoupledModel(verts, solidTets, [], []);
+  check(
+    "with no tie connection the two bodies get no coupling at all",
+    untied.coupling.ref.length === 0,
+    `got ${untied.coupling.ref.length} couplings`,
+  );
+
+  const tied = buildExplicitCoupledModel(verts, solidTets, [], [], {
+    ties: [
+      {
+        name: "Tie1",
+        verticesA: surfaceA,
+        verticesB: surfaceB,
+        maxSeparation: Infinity,
+      },
+    ],
+  });
+  check(
+    "a tie connection couples the picked surface across the clearance",
+    tied.coupling.ref.length === surfaceB.length,
+    `expected ${surfaceB.length} references, got ${tied.coupling.ref.length}`,
+  );
+  check(
+    "every reference is a node of the picked surface B",
+    tied.coupling.ref.every((pi) =>
+      surfaceB.some((vi) => tied.poolOfVertex.get(vi) === pi),
+    ),
+  );
+  check(
+    "every partner is a node of the picked surface A",
+    tied.coupling.solid.every((pi) =>
+      surfaceA.some((vi) => tied.poolOfVertex.get(vi) === pi),
+    ),
+  );
+  check(
+    "a solid tie is distributing, not the relaxed shell MPC",
+    tied.coupling.mpc.every((flag) => flag === 0),
+  );
+
+  // A "within distance" connection shorter than the clearance reaches nothing.
+  const tooShort = buildExplicitCoupledModel(verts, solidTets, [], [], {
+    ties: [
+      {
+        name: "Tie1",
+        verticesA: surfaceA,
+        verticesB: surfaceB,
+        maxSeparation: 0.5 * GAP,
+      },
+    ],
+  });
+  check(
+    "a search distance below the clearance couples nothing",
+    tooShort.coupling.ref.length === 0,
+    `got ${tooShort.coupling.ref.length} couplings`,
   );
 }
 

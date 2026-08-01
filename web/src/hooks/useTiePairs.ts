@@ -13,6 +13,10 @@ import type { TiePair, TieReport } from "../lib/tie";
 // drift from the solved model.
 export function useTiePairs(): { pairs: TiePair[]; reports: TieReport[] } {
   const nodes = useModelStore((s) => s.nodes);
+  const elements = useModelStore((s) => s.elements);
   const tieGroups = useModelStore((s) => s.tieGroups);
-  return useMemo(() => tiedNodePairs(nodes, tieGroups), [nodes, tieGroups]);
+  return useMemo(
+    () => tiedNodePairs(nodes, elements, tieGroups),
+    [nodes, elements, tieGroups],
+  );
 }
