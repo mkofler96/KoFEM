@@ -133,6 +133,9 @@ interface Property {
   // thin walls as shells, "solid" keeps it as tets. Undefined on legacy models
   // (no per-body choice) — the auto-shell path then auto-detects thin bodies.
   discretization?: "shell" | "solid";
+  // On a mesh-time PSHELL: the CAD body whose thin walls it replaces. Lets the
+  // viewport map the derived property back to a body that has a tessellation.
+  sourceBodyId?: number;
 }
 interface Constraint {
   nodeId: number;
@@ -479,14 +482,18 @@ function buildMeshTimeShellModel(
       z: model.pool[3 * i + 2],
     });
 
-  // Properties: solid bodies keep their own ids (materials stay assigned); one
+  // Properties: the CAD bodies keep their own ids (materials stay assigned); one
   // PSHELL per distinct wall thickness, inheriting the shelled body's material.
-  const nextId = properties.reduce((mx, p) => Math.max(mx, p.id), 0) + 1;
-  const shellProp = properties.find((p) => p.id === shells.shellBody);
+  // The PSHELLs of an earlier mesh are dropped first — they describe walls that
+  // no longer exist, and carrying them over made every re-mesh append another
+  // dead body to the list.
+  const cadBodies = properties.filter((p) => p.sourceBodyId === undefined);
+  const nextId = cadBodies.reduce((mx, p) => Math.max(mx, p.id), 0) + 1;
+  const shellProp = cadBodies.find((p) => p.id === shells.shellBody);
   const shellMaterialId = shellProp ? shellProp.materialId : 1;
   const thkKey = (t: number) => Number(t.toFixed(6));
   const propOfThk = new Map<number, number>();
-  const outProperties: Property[] = properties.map((p) => ({ ...p }));
+  const outProperties: Property[] = cadBodies.map((p) => ({ ...p }));
   for (const t of model.thicknesses) {
     const key = thkKey(t);
     if (propOfThk.has(key)) continue;
@@ -497,6 +504,7 @@ function buildMeshTimeShellModel(
       materialId: shellMaterialId,
       thickness: key,
       discretization: "shell",
+      sourceBodyId: shells.shellBody,
     });
   }
 

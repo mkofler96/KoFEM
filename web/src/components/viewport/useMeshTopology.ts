@@ -189,13 +189,26 @@ export function useMeshTopology(): MeshTopology {
   // mesh here, so the eye hides a body in the FEM surface / volume views just
   // as it does in the geometry tessellation. Nodes and modelSize stay whole
   // (fit-to-view and the deformed-result node count must not change).
+  //
+  // A shell-idealised body owns no elements of its own — its walls are PSHELLs
+  // derived from it — so hiding it has to reach those too, or the eye would
+  // leave the body's shell facets floating on screen.
   const hiddenBodyIds = useModelStore((s) => s.hiddenBodyIds);
+  const properties = useModelStore((s) => s.properties);
+  const hiddenPropertyIds = useMemo(() => {
+    if (hiddenBodyIds.length === 0) return null;
+    const hidden = new Set(hiddenBodyIds);
+    for (const prop of properties)
+      if (prop.sourceBodyId !== undefined && hidden.has(prop.sourceBodyId))
+        hidden.add(prop.id);
+    return hidden;
+  }, [hiddenBodyIds, properties]);
   const visibleElements = useMemo(
     () =>
-      hiddenBodyIds.length === 0
+      hiddenPropertyIds === null
         ? elements
-        : elements.filter((e) => !hiddenBodyIds.includes(e.propertyId)),
-    [elements, hiddenBodyIds],
+        : elements.filter((e) => !hiddenPropertyIds.has(e.propertyId)),
+    [elements, hiddenPropertyIds],
   );
 
   const hexElements = useMemo(
