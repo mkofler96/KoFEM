@@ -26,10 +26,18 @@ import {
   dropCouplingsOnFixedNodes,
   shellNodeLocator,
   isShellPoolIndex,
+  concatCouplings,
+  couplingMpcCodes,
+  couplingDofMasks,
   type CoupledModel,
   type ShellizeMesh,
   type ShellExtraction,
 } from "../lib/shellize.js";
+import {
+  buildReferenceCouplings,
+  referencePointIds,
+  type CouplingDefinition,
+} from "../lib/coupling.js";
 import { detectShellBodies } from "../lib/thinBodies.js";
 
 let Module: KofemModule | null = null;
@@ -192,6 +200,11 @@ interface SolvePayload {
   // parts that touch without a shared face are joined (#359). Absent/empty =
   // no ties, and the mesh reaches the solver untouched.
   tieGroups?: TieDefinition[];
+  // Surface-to-point couplings (KOF-208): each idealises a picked surface to one
+  // reference point, either distributing (RBE3) or kinematic (RBE2). A model
+  // carrying any of these solves through the COUPLED assembler, whether or not
+  // it has shells. Absent/empty = no couplings, and the routing is unchanged.
+  couplings?: CouplingDefinition[];
   // Surface mesh + per-triangle CAD face id (from meshing / the analysis file):
   // needed to detect thin-walled bodies and idealise them as shells (auto-shell).
   surfaceTriangles?: [number, number, number][] | null;
@@ -1168,15 +1181,24 @@ function coupledMaterials(
 // clamped in rotation. `isShell` reports whether a pool node carries shell
 // (6-DOF) stiffness — the auto-shell and mixed paths supply it differently, but
 // the rule is the same.
+//
+// `isRefPoint` marks the pool nodes that are a coupling's REFERENCE POINT. Those
+// carry six real DOFs (shell_core gives a coupling reference its rotations), so
+// an Rx/Ry/Rz constraint on one is a genuine rotational restraint and is passed
+// through instead of dropped — clamping a kinematic reference point is how a
+// bolted connection is stated. Everywhere else a rotational constraint is still
+// dropped: the shell nodes take their rotational clamp from the all-three-
+// translations rule below, and a solid node has no rotational DOF to restrain.
 function coupledFixedDofs(
   constraints: Constraint[],
   poolOf: (nodeId: number) => number,
   isShell: (poolIndex: number) => boolean,
+  isRefPoint: (poolIndex: number) => boolean = () => false,
 ): number[] {
   const fixedByPool = new Map<number, Set<number>>();
   for (const c of constraints) {
-    if (c.dof > 2) continue;
     const pi = poolOf(c.nodeId);
+    if (c.dof > 2 && !isRefPoint(pi)) continue;
     let dofs = fixedByPool.get(pi);
     if (!dofs) {
       dofs = new Set();
@@ -1187,23 +1209,43 @@ function coupledFixedDofs(
   const fixed_dofs: number[] = [];
   for (const [pi, dofs] of fixedByPool) {
     for (const d of dofs) fixed_dofs.push(6 * pi + d);
-    if (isShell(pi) && dofs.has(0) && dofs.has(1) && dofs.has(2))
+    // A shell node clamped in all three translations is clamped, not hinged.
+    // A reference point is NOT given that treatment: its rotations are the DOFs
+    // the coupled surface's rigid-body motion rides on, so fixing them because
+    // the translations were fixed would silently turn a pinned point into a
+    // built-in one. Check Rx/Ry/Rz to clamp a reference point.
+    if (
+      isShell(pi) &&
+      !isRefPoint(pi) &&
+      dofs.has(0) &&
+      dofs.has(1) &&
+      dofs.has(2)
+    )
       for (const d of [3, 4, 5]) fixed_dofs.push(6 * pi + d);
   }
   return fixed_dofs;
 }
 
 // Point + surface loads → equivalent nodal forces on the pool.
+//
+// A moment (DOF 3..5) is applied directly where the node has a rotational DOF to
+// receive it — a coupling REFERENCE POINT. That is the couple a surface-to-point
+// coupling exists to carry: the point takes M, the coupling spreads it over the
+// gripped surface as the statically equivalent traction, and no lever arm has to
+// be invented. Elsewhere a moment still arrives pre-converted to a ring of nodal
+// forces (momentToNodalForces), so it is skipped here as it always was.
 function coupledLoads(
   loads: Load[],
   surfaceLoads: SurfaceLoad[] | undefined,
   poolOf: (nodeId: number) => number,
+  isRefPoint: (poolIndex: number) => boolean = () => false,
 ): { load_dofs: number[]; load_vals: number[] } {
   const load_dofs: number[] = [];
   const load_vals: number[] = [];
   for (const l of loads) {
-    if (l.dof > 2) continue;
-    load_dofs.push(6 * poolOf(l.nodeId) + l.dof);
+    const pi = poolOf(l.nodeId);
+    if (l.dof > 2 && !isRefPoint(pi)) continue;
+    load_dofs.push(6 * pi + l.dof);
     load_vals.push(l.value);
   }
   for (const sl of surfaceLoads ?? []) {
@@ -1234,7 +1276,8 @@ function mapCoupledDisplacements(
 ): Float64Array {
   const displacements = new Float64Array(3 * nodes.length);
   for (let i = 0; i < nodes.length; i++) {
-    const sp = model.solidPool.get(i);
+    const rp = model.refPool.get(i);
+    const sp = rp !== undefined ? rp : model.solidPool.get(i);
     const pi =
       sp !== undefined
         ? sp
@@ -1356,14 +1399,21 @@ function tryCoupledSolve(
   // gapped pin/hole interface is a proper force-and-moment tie instead of a
   // sparse near-hinge.
   const wallTets = shellWallTets(mesh, shells);
+  const couplings = payload.couplings ?? [];
+  const refIds = referencePointIds(couplings);
   const model = buildCoupledModel(mesh, shells, wallTets, {
     ties: coupledTies(payload.tieGroups, elements, vid),
+    referencePoints: [...refIds].map((nodeId) =>
+      vid(nodeId, "coupling reference point"),
+    ),
   });
-  if (model.coupling.ref.length === 0) return null; // shell doesn't couple to the solid
+  if (model.coupling.ref.length === 0 && couplings.length === 0) return null; // shell doesn't couple to the solid
 
   const nearestShell = shellNodeLocator(model);
   const poolOf = (nodeId: number): number => {
     const vi = vid(nodeId, "coupled bc");
+    const rp = model.refPool.get(vi);
+    if (rp !== undefined) return rp;
     const sp = model.solidPool.get(vi);
     if (sp !== undefined) return sp;
     return nearestShell([
@@ -1372,15 +1422,31 @@ function tryCoupledSolve(
       mesh.V[3 * vi + 2],
     ]);
   };
+  const refPoolIndices = new Set(model.refPool.values());
+  const isRefPoint = (pi: number) => refPoolIndices.has(pi);
 
-  const fixed_dofs = coupledFixedDofs(constraints, poolOf, (pi) =>
-    isShellPoolIndex(model, pi),
+  const fixed_dofs = coupledFixedDofs(
+    constraints,
+    poolOf,
+    (pi) => isShellPoolIndex(model, pi),
+    isRefPoint,
   );
   // A clamped shell rim can sit next to the retained base solid; the proximity
   // detector would otherwise couple the very nodes the user fixed (engine refuses
   // a fixed coupling-dependent node, #377). The BC wins.
-  const coupling = dropCouplingsOnFixedNodes(model.coupling, fixed_dofs);
-  const { load_dofs, load_vals } = coupledLoads(loads, surfaceLoads, poolOf);
+  // The declared surface-to-point couplings ride on the same pool mapping as the
+  // BCs: a coupled node whose thin wall was idealised away resolves to the
+  // mid-surface node that replaced it, which is where its stiffness now lives.
+  const coupling = concatCouplings(
+    dropCouplingsOnFixedNodes(model.coupling, fixed_dofs),
+    buildReferenceCouplings(couplings, (nodeId) => poolOf(nodeId)),
+  );
+  const { load_dofs, load_vals } = coupledLoads(
+    loads,
+    surfaceLoads,
+    poolOf,
+    isRefPoint,
+  );
 
   // Solid bodies that actually contribute solid tets to the pool: the other
   // bodies plus the shelled body when its thick base survived (only its thin walls
@@ -1413,7 +1479,8 @@ function tryCoupledSolve(
       ref: Int32Array.from(coupling.ref),
       offsets: Int32Array.from(coupling.offsets),
       solid: Int32Array.from(coupling.solid),
-      mpc: Int32Array.from(coupling.mpc ?? coupling.ref.map(() => 0)),
+      mpc: Int32Array.from(couplingMpcCodes(coupling)),
+      dof_mask: Int32Array.from(couplingDofMasks(coupling)),
       relaxation: SHELL_SOLID_MPC_RELAXATION,
     },
     {
@@ -1747,6 +1814,27 @@ function mixedCoupledMaterials(
     const mat = materialOf(el, "shell");
     shellUsed.set(mat.id, mat);
   }
+  // A model with NO shell element takes this path when it carries a
+  // surface-to-point coupling: the coupled assembler is what applies an RBE2/RBE3
+  // constraint, and it accepts zero triangles. `mat.shell` is still read by
+  // solve_coupled, so it gets the first solid material — with no facet to
+  // assemble it can only be unused, and inventing an arbitrary modulus would
+  // print a stiffness that is not in the model anywhere.
+  if (shellUsed.size === 0 && shellElements.length === 0)
+    return {
+      mat: {
+        solid: solidOrder.map((mat) => ({
+          young_modulus: mat.young,
+          poisson_ratio: mat.poisson,
+        })),
+        shell: {
+          young_modulus: solidOrder[0].young,
+          poisson_ratio: solidOrder[0].poisson,
+        },
+      },
+      solidAttributes,
+      solidMaterialNames: solidOrder.map((mat) => mat.name),
+    };
   if (shellUsed.size === 0)
     throw new Error("mixed solve: the model has no shell element");
   if (shellUsed.size > 1) {
@@ -1802,8 +1890,12 @@ function resolveMixedThicknesses(
 // auto-shell path uses, only with the shells given explicitly instead of
 // idealised from thin solid walls. Constraints/loads map onto the 6-DOF pool the
 // same way the auto-shell path does (coupledFixedDofs/coupledLoads). elementOrder
-// and tie connections do not apply (the coupled assembler is linear tets + DKT
-// facets, whose interfaces are joined by RBE3 coupling) and are ignored.
+// does not apply (the coupled assembler is linear tets + DKT facets).
+//
+// An ALL-SOLID model comes here too when it carries a surface-to-point coupling:
+// an RBE2/RBE3 constraint only exists in this assembler, and it is happy with
+// zero shell triangles. Nothing else about the path changes — the shell arrays
+// are simply empty.
 function handleMixedSolve(id: number, payload: SolvePayload) {
   const {
     nodes,
@@ -1853,12 +1945,20 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
   }
   const thicknesses = resolveMixedThicknesses(shellElements, properties);
 
+  // Reference points belong to no element, so they enter the pool explicitly.
+  const couplings = payload.couplings ?? [];
+  const refIds = referencePointIds(couplings);
   const model = buildExplicitCoupledModel(
     verts,
     solidTets,
     shellTris,
     thicknesses,
-    { ties: coupledTies(payload.tieGroups, elements, vid) },
+    {
+      ties: coupledTies(payload.tieGroups, elements, vid),
+      referencePoints: [...refIds].map((nodeId) =>
+        vid(nodeId, "coupling reference point"),
+      ),
+    },
   );
 
   const poolOf = (nodeId: number): number => {
@@ -1870,14 +1970,35 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
       );
     return pi;
   };
-  const fixed_dofs = coupledFixedDofs(constraints, poolOf, (pi) =>
-    model.shellPoolIndex.has(pi),
+  const refPoolIndices = new Set([...refIds].map((nodeId) => poolOf(nodeId)));
+  const isRefPoint = (pi: number) => refPoolIndices.has(pi);
+  const fixed_dofs = coupledFixedDofs(
+    constraints,
+    poolOf,
+    (pi) => model.shellPoolIndex.has(pi),
+    isRefPoint,
   );
   // A clamped shell node that also sits within coupling range of the solid would
   // be both fixed and a distributing-coupling dependent — the engine refuses that
   // (#377). The BC wins; drop the coupling on those nodes.
-  const coupling = dropCouplingsOnFixedNodes(model.coupling, fixed_dofs);
-  const { load_dofs, load_vals } = coupledLoads(loads, surfaceLoads, poolOf);
+  const coupling = concatCouplings(
+    dropCouplingsOnFixedNodes(model.coupling, fixed_dofs),
+    buildReferenceCouplings(couplings, (nodeId, context) => {
+      const pi = model.poolOfVertex.get(vid(nodeId, context));
+      if (pi === undefined)
+        throw new Error(
+          `${context}: node ${nodeId} is not part of the solved model — re-pick the ` +
+            "coupled surface, or delete the coupling.",
+        );
+      return pi;
+    }),
+  );
+  const { load_dofs, load_vals } = coupledLoads(
+    loads,
+    surfaceLoads,
+    poolOf,
+    isRefPoint,
+  );
   const { mat, solidAttributes, solidMaterialNames } = mixedCoupledMaterials(
     materials,
     properties,
@@ -1887,7 +2008,7 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
 
   self.postMessage({
     id,
-    log: `[mixed] ${solidElements.length} solid tets (${solidMaterialNames.join(", ")}), ${shellElements.length} shell facets → ${model.pool.length / 3} pool nodes, ${coupling.ref.length} couplings…`,
+    log: `[mixed] ${solidElements.length} solid tets (${solidMaterialNames.join(", ")}), ${shellElements.length} shell facets → ${model.pool.length / 3} pool nodes, ${coupling.ref.length} couplings (${couplings.length} declared)…`,
   });
 
   const result = m().solve_coupled(
@@ -1902,7 +2023,8 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
       ref: Int32Array.from(coupling.ref),
       offsets: Int32Array.from(coupling.offsets),
       solid: Int32Array.from(coupling.solid),
-      mpc: Int32Array.from(coupling.mpc ?? coupling.ref.map(() => 0)),
+      mpc: Int32Array.from(couplingMpcCodes(coupling)),
+      dof_mask: Int32Array.from(couplingDofMasks(coupling)),
       relaxation: SHELL_SOLID_MPC_RELAXATION,
     },
     {
@@ -1955,9 +2077,30 @@ function handleSolve(id: number, payload: SolvePayload) {
   // explicit here, unlike the auto-shell path below, which idealises thin SOLID
   // bodies itself).
   const nShells = payload.elements.filter((e) => e.type === "CTRIA3").length;
+  // eslint-disable-next-line kofem/no-silent-fallback -- `couplings` is optional in the solve message; a model with none is the ordinary case
+  const nCouplings = payload.couplings?.length ?? 0;
   if (nShells > 0) {
+    // A coupling is an RBE2/RBE3 constraint, and only the coupled assembler
+    // applies one — the pure Kirchhoff shell solver has no couplings, and the
+    // coupled assembler needs a solid domain to assemble. An all-shell model
+    // therefore cannot carry a coupling today; say so, rather than solve it
+    // as if the coupling were not there.
+    if (nShells === payload.elements.length && nCouplings > 0)
+      throw new Error(
+        `This model is all shell elements and declares ${nCouplings} surface-to-point ` +
+          "coupling(s), which the shell solver cannot apply — a coupling needs the " +
+          "coupled solid-shell assembler, and that needs at least one solid body. " +
+          "Delete the coupling, or keep one body solid.",
+      );
     if (nShells === payload.elements.length) handleShellSolve(id, payload);
     else handleMixedSolve(id, payload);
+    return;
+  }
+  // An all-solid model that declares a surface-to-point coupling still needs the
+  // coupled assembler — solve_linear_elastic has no notion of an RBE2/RBE3
+  // constraint, and the reference point is not even a node it could carry.
+  if (nCouplings > 0) {
+    handleMixedSolve(id, payload);
     return;
   }
 

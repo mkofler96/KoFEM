@@ -17,6 +17,7 @@ import {
   PickedFaceList,
   PickGeometryToggle,
   PressureInput,
+  ReferencePointSelect,
 } from "./BcLoadFormControls";
 import { LoadValueForm } from "./GroupValueForms";
 import { GroupCard } from "./GroupCard";
@@ -39,6 +40,7 @@ export function LoadSection({
   const hasShells = useModelStore((s) =>
     s.elements.some((el) => el.type === "CTRIA3"),
   );
+  const couplingGroups = useModelStore((s) => s.couplingGroups);
   const createLoadGroup = useModelStore((s) => s.createLoadGroup);
   const addFaceToLoadGroup = useModelStore((s) => s.addFaceToLoadGroup);
   const removeFaceFromLoadGroup = useModelStore(
@@ -72,6 +74,22 @@ export function LoadSection({
     "1000",
   ]);
   const [pressureVal, setPressureVal] = useState("10");
+  // A coupling's reference point, when the load acts on one instead of (or as
+  // well as) a picked surface. This is what carries a MOMENT into a solid model:
+  // the point has rotational DOFs, so the couple is applied directly and the
+  // coupling spreads it over the gripped surface (rebuildLoads / coupledLoads).
+  const [refNodeId, setRefNodeId] = useState<number | null>(null);
+  const refPointEntry = () => {
+    const coupling = couplingGroups.find((c) => c.refNodeId === refNodeId);
+    return coupling
+      ? [
+          {
+            label: `${coupling.name} reference point`,
+            nodeIds: [coupling.refNodeId],
+          },
+        ]
+      : [];
+  };
 
   const targetLoadGroup =
     pickTargetGroupId !== null
@@ -79,18 +97,30 @@ export function LoadSection({
       : null;
 
   function applyLoad() {
-    if (allPickedFaces.length === 0) return;
-    const faceEntries = toFaceEntries(
-      allPickedFaces,
-      // eslint-disable-next-line kofem/no-silent-fallback -- numbering offset for the new entries; a pick with no target group starts a fresh group, which has 0 faces
-      targetLoadGroup?.faces.length ?? 0,
-      pickGeometry === "edge" ? "Edge" : "Face",
-    );
+    if (allPickedFaces.length === 0 && refNodeId === null) return;
+    const faceEntries = [
+      ...toFaceEntries(
+        allPickedFaces,
+        // eslint-disable-next-line kofem/no-silent-fallback -- numbering offset for the new entries; a pick with no target group starts a fresh group, which has 0 faces
+        targetLoadGroup?.faces.length ?? 0,
+        pickGeometry === "edge" ? "Edge" : "Face",
+      ),
+      ...refPointEntry(),
+    ];
     if (targetLoadGroup) {
       for (const faceEntry of faceEntries) {
         addFaceToLoadGroup(targetLoadGroup.id, faceEntry);
       }
     } else if (loadKindSel === "pressure") {
+      // A pressure is a traction per unit area, and a reference point has none.
+      // Refuse it here rather than create a group whose point contributes
+      // nothing to the solve.
+      if (refNodeId !== null) {
+        onError(
+          "A pressure cannot act on a reference point — it has no area. Apply a force or a moment there, or pick a surface.",
+        );
+        return;
+      }
       const pressure = parsePressure(pressureVal, onError);
       if (pressure === null) return;
       createLoadGroup(faceEntries, 0, pressure, "pressure");
@@ -103,6 +133,7 @@ export function LoadSection({
       if (components === null) return;
       createLoadGroup(faceEntries, 0, 0, loadKindSel, components);
     }
+    setRefNodeId(null);
     endPick();
   }
 
@@ -156,42 +187,55 @@ export function LoadSection({
             geometry={pickGeometry}
           />
 
-          {allPickedFaces.length > 0 && !targetLoadGroup && (
-            <>
-              {/* Step 1 — pick the load kind. */}
-              <LoadKindSelect value={loadKindSel} onChange={setLoadKindSel} />
-              {/* Step 2 — prescribe each component on its own. */}
-              {loadKindSel === "pressure" ? (
-                <PressureInput value={pressureVal} onChange={setPressureVal} />
-              ) : (
-                <LoadVectorInputs
-                  kind={loadKindSel}
-                  vec={loadKindSel === "moment" ? momentVec : forceVec}
-                  onChange={updateVecComponent}
-                />
-              )}
-              <div className={styles.pickNote}>
-                {loadKindSel === "pressure"
-                  ? "applied as p·n̂ over each face (work-equivalent)"
-                  : loadKindSel === "force"
-                    ? pickGeometry === "edge"
-                      ? "applied as a work-equivalent line load along the edge"
-                      : "applied as a work-equivalent surface traction"
-                    : "distributed as equivalent nodal forces"}
-              </div>
-              <button className={styles.loadBtn} onClick={applyLoad}>
-                Apply Load
-              </button>
-            </>
-          )}
+          <ReferencePointSelect
+            couplings={couplingGroups}
+            value={refNodeId}
+            onChange={setRefNodeId}
+          />
 
-          {allPickedFaces.length > 0 && targetLoadGroup && (
-            <button className={styles.loadBtn} onClick={applyLoad}>
-              {allPickedFaces.length === 1
-                ? "Add Face"
-                : `Add ${allPickedFaces.length} Faces`}
-            </button>
-          )}
+          {(allPickedFaces.length > 0 || refNodeId !== null) &&
+            !targetLoadGroup && (
+              <>
+                {/* Step 1 — pick the load kind. */}
+                <LoadKindSelect value={loadKindSel} onChange={setLoadKindSel} />
+                {/* Step 2 — prescribe each component on its own. */}
+                {loadKindSel === "pressure" ? (
+                  <PressureInput
+                    value={pressureVal}
+                    onChange={setPressureVal}
+                  />
+                ) : (
+                  <LoadVectorInputs
+                    kind={loadKindSel}
+                    vec={loadKindSel === "moment" ? momentVec : forceVec}
+                    onChange={updateVecComponent}
+                  />
+                )}
+                <div className={styles.pickNote}>
+                  {loadKindSel === "pressure"
+                    ? "applied as p·n̂ over each face (work-equivalent)"
+                    : loadKindSel === "force"
+                      ? pickGeometry === "edge"
+                        ? "applied as a work-equivalent line load along the edge"
+                        : "applied as a work-equivalent surface traction"
+                      : refNodeId !== null
+                        ? "applied to the reference point as a couple, and spread over its coupled surface"
+                        : "distributed as equivalent nodal forces"}
+                </div>
+                <button className={styles.loadBtn} onClick={applyLoad}>
+                  Apply Load
+                </button>
+              </>
+            )}
+
+          {(allPickedFaces.length > 0 || refNodeId !== null) &&
+            targetLoadGroup && (
+              <button className={styles.loadBtn} onClick={applyLoad}>
+                {allPickedFaces.length === 1
+                  ? "Add Face"
+                  : `Add ${allPickedFaces.length} Faces`}
+              </button>
+            )}
         </div>
       )}
 

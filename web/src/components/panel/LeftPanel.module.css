@@ -841,6 +841,16 @@
   flex-shrink: 0;
 }
 
+/* Surface-to-point couplings — the emerald of the coupling spider in the
+   viewport, so a coupling reads the same in the panel and in 3D. */
+.couplingDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #059669;
+  flex-shrink: 0;
+}
+
 /* Header of one side (A / B) of a connection's face list. */
 .tieSideRow {
   display: flex;

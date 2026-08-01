@@ -667,16 +667,36 @@ export function extractThinWallShells(
 
 // CSR-style coupling set. `mpc[k]` selects the coupling kind for reference k:
 // 1 ⇒ relaxed shell-to-solid MPC (rigid translation tie + relaxed rotation, for a
-// continuous-material seam), 0/absent ⇒ distributing RBE3 (for a gapped interface).
+// continuous-material seam), 2 ⇒ kinematic RBE2 (the coupled nodes follow the
+// reference point rigidly), 0/absent ⇒ distributing RBE3 (for a gapped
+// interface). `dofMask[k]` selects which of a kinematic coupling's six DOFs are
+// tied (bits 0..5); absent ⇒ all six, which is what every coupling this module
+// derives itself wants.
 export interface CouplingSet {
   ref: number[];
   offsets: number[];
   solid: number[];
   mpc?: number[]; // per ref; length matches ref when present
+  dofMask?: number[]; // per ref; length matches ref when present
+}
+
+// All six DOFs of a coupling — the engine's kAllDofs.
+const ALL_DOF_MASK = 0x3f;
+
+// Per-reference coupling kinds / DOF masks of a set, defaulted for the sets
+// built here (which are all distributing or relaxed-MPC, and tie all six DOFs).
+export function couplingMpcCodes(set: CouplingSet): number[] {
+  if (set.mpc) return set.mpc;
+  return set.ref.map(() => 0);
+}
+
+export function couplingDofMasks(set: CouplingSet): number[] {
+  if (set.dofMask) return set.dofMask;
+  return set.ref.map(() => ALL_DOF_MASK);
 }
 
 export interface CoupledModel {
-  pool: number[]; // 3·nPool (solid nodes then shell nodes)
+  pool: number[]; // 3·nPool (solid nodes, then shell nodes, then reference points)
   tets: number[]; // 4·nSolidTets over pool
   tetBody: number[]; // body id per solid tet (for per-body PSOLID labelling)
   triangles: number[]; // 3·nShellTris over pool
@@ -684,6 +704,7 @@ export interface CoupledModel {
   coupling: CouplingSet;
   solidPool: Map<number, number>; // original vertex index → pool index (solid)
   shellPool: number[]; // local shell index → pool index
+  refPool: Map<number, number>; // reference-point vertex index → pool index
 }
 
 // Boundary of a tet mesh: the faces used by exactly one element, as a flat
@@ -889,19 +910,22 @@ function autoDetectCouplings(
   return { ref, offsets, solid };
 }
 
-// Concatenate two CSR coupling sets (shell↔solid and solid↔solid) into one,
-// preserving each set's per-reference MPC flags (missing ⇒ distributing).
-function concatCouplings(a: CouplingSet, b: CouplingSet): CouplingSet {
+// Concatenate two CSR coupling sets (shell↔solid, solid↔solid, and the
+// reference-point couplings the user declared) into one, preserving each set's
+// per-reference kind and DOF mask.
+export function concatCouplings(a: CouplingSet, b: CouplingSet): CouplingSet {
   const ref = [...a.ref, ...b.ref];
   const solid = [...a.solid, ...b.solid];
   const offsets = [...a.offsets];
   const base = a.solid.length;
   for (let k = 1; k < b.offsets.length; k++) offsets.push(base + b.offsets[k]);
-  const mpc = [
-    ...(a.mpc ?? a.ref.map(() => 0)),
-    ...(b.mpc ?? b.ref.map(() => 0)),
-  ];
-  return { ref, offsets, solid, mpc };
+  return {
+    ref,
+    offsets,
+    solid,
+    mpc: [...couplingMpcCodes(a), ...couplingMpcCodes(b)],
+    dofMask: [...couplingDofMasks(a), ...couplingDofMasks(b)],
+  };
 }
 
 // One tie connection, as the coupled builders need it: the two surfaces the user
@@ -1055,20 +1079,27 @@ export function dropCouplingsOnFixedNodes(
 ): CouplingSet {
   const fixedNodes = new Set<number>();
   for (const d of fixedDofs) fixedNodes.add(Math.floor(d / 6));
+  const kinds = couplingMpcCodes(coupling);
+  const masks = couplingDofMasks(coupling);
   const ref: number[] = [],
     offsets = [0],
     solid: number[] = [],
-    mpc: number[] = [];
+    mpc: number[] = [],
+    dofMask: number[] = [];
   for (let k = 0; k < coupling.ref.length; k++) {
-    if (fixedNodes.has(coupling.ref[k])) continue;
+    // A KINEMATIC coupling's reference point is INDEPENDENT — fixing it is the
+    // whole point of a bolted or clamped reference point, not a conflict — so
+    // only the couplings whose reference is dependent (distributing, relaxed
+    // MPC) are dropped here.
+    if (kinds[k] !== 2 && fixedNodes.has(coupling.ref[k])) continue;
     ref.push(coupling.ref[k]);
     for (let i = coupling.offsets[k]; i < coupling.offsets[k + 1]; i++)
       solid.push(coupling.solid[i]);
     offsets.push(solid.length);
-    // eslint-disable-next-line kofem/no-silent-fallback -- mpc is an optional coupling-kind flag; absent means the distributing (RBE3) default
-    mpc.push(coupling.mpc?.[k] ?? 0);
+    mpc.push(kinds[k]);
+    dofMask.push(masks[k]);
   }
-  return { ref, offsets, solid, mpc };
+  return { ref, offsets, solid, mpc, dofMask };
 }
 
 // Assemble the coupled node pool (solid nodes then shell nodes), remap tets and
@@ -1084,6 +1115,7 @@ export function buildCoupledModel(
     couplingRadius,
     maxCoupledNodes = 16,
     ties = [],
+    referencePoints = [],
   }: {
     // How far off the retained solid's boundary a shell node may sit and still
     // count as seam. Defaults to seamTolerance() of the model's own scales.
@@ -1096,6 +1128,9 @@ export function buildCoupledModel(
     // these — nothing is inferred from the geometry — so an assembly with no
     // connection keeps its bodies apart, which is what the empty default means.
     ties?: TieSurfaces[];
+    // Vertex indices of the surface-to-point couplings' reference points. They
+    // belong to no tet, so nothing else puts them in the pool.
+    referencePoints?: number[];
   } = {},
 ): CoupledModel {
   // Solid tets = the other bodies plus the shelled body's non-wall (base) tets;
@@ -1132,6 +1167,11 @@ export function buildCoupledModel(
         shells.shellVerts[3 * s + 2],
       ),
     );
+  // Reference points last, so isShellPoolIndex can keep telling the three
+  // groups apart by index range.
+  const refPool = new Map<number, number>();
+  for (const vi of referencePoints)
+    if (!refPool.has(vi)) refPool.set(vi, addPool(...pt(m.V, vi)));
 
   const tets = solidTets.map((n) => {
     const poolIndex = solidPool.get(n);
@@ -1184,6 +1224,7 @@ export function buildCoupledModel(
     thicknesses: shells.shellThk,
     solidPool,
     shellPool,
+    refPool,
     // The shell↔solid seam is continuous material (a thin wall idealised as shell,
     // tied back to its retained solid) — not a tie connection between parts, and
     // never something the user declares — so it uses the relaxed MPC coupling
@@ -1226,6 +1267,7 @@ export function buildExplicitCoupledModel(
     couplingRadius,
     maxCoupledNodes = 16,
     ties = [],
+    referencePoints = [],
   }: {
     seamTolerance?: number;
     couplingRadius?: number;
@@ -1233,6 +1275,10 @@ export function buildExplicitCoupledModel(
     // The model's tie connections — the only thing that joins distinct solid
     // bodies here (see buildCoupledModel).
     ties?: TieSurfaces[];
+    // Store vertex indices of the surface-to-point couplings' REFERENCE POINTS.
+    // They belong to no element, so nothing else would put them in the pool —
+    // and without a pool node the coupling has no reference to tie to.
+    referencePoints?: number[];
   } = {},
 ): ExplicitCoupledModel {
   const pool: number[] = [];
@@ -1262,6 +1308,10 @@ export function buildExplicitCoupledModel(
     shellPoolIndex.add(pi);
     return pi;
   });
+  // Reference points last. They carry no element stiffness; the engine gives a
+  // coupling reference its six DOFs and leaves its rotations free (shell_core:
+  // is_coupling_ref), so they need nothing here beyond a place in the pool.
+  for (const vi of referencePoints) addVertex(vi);
 
   const ppt = (i: number): [number, number, number] => [
     pool[3 * i],
@@ -1323,13 +1373,18 @@ export function buildExplicitCoupledModel(
   };
 }
 
-// A shell node is "solid" in the pool iff its index is < solidPool.size; shell
-// nodes are appended after the solid nodes.
+// The pool is built in three blocks — solid nodes, then shell mid-surface
+// nodes, then reference points — so a pool index says which it is. Only the
+// middle block carries shell (6-DOF) element stiffness; a reference point has
+// six DOFs too, but they come from its coupling, not from a facet.
 export function isShellPoolIndex(
   model: CoupledModel,
   poolIndex: number,
 ): boolean {
-  return poolIndex >= model.solidPool.size;
+  return (
+    poolIndex >= model.solidPool.size &&
+    poolIndex < model.solidPool.size + model.shellPool.length
+  );
 }
 
 // Nearest shell-mid-surface pool node to a point — used to map the shelled

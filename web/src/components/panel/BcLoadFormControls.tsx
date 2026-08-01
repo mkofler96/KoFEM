@@ -2,8 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import type {
+  CouplingGroup,
+  CouplingKind,
   FaceSelection,
   LoadKind,
+  ReferencePointOption,
   TieExtent,
 } from "../../store/modelStore";
 import {
@@ -12,6 +15,7 @@ import {
   MOMENT_LABELS,
   faceKey,
 } from "./bcFormUtils";
+import { fmt } from "../../lib/modelDisplay";
 import styles from "./LeftPanel.module.css";
 
 // Face / Edge picker for shell models: a flat shell sheet is one face-pick
@@ -226,6 +230,130 @@ export function DofCheckboxes({
           {dofLabel}
         </label>
       ))}
+    </div>
+  );
+}
+
+// How a surface-to-point coupling ties its surface to its reference point. The
+// two kinds are not interchangeable — see lib/coupling.ts — so the difference
+// is spelled out under the select rather than left to the two words.
+export function CouplingKindSelect({
+  value,
+  onChange,
+}: {
+  value: CouplingKind;
+  onChange(kind: CouplingKind): void;
+}) {
+  return (
+    <>
+      <div className={styles.formRow}>
+        <span className={styles.formLabel}>Kind</span>
+        <select
+          className={styles.formSelect}
+          data-testid="coupling-kind"
+          value={value}
+          onChange={(e) => onChange(e.target.value as CouplingKind)}
+        >
+          <option value="distributing">Distributing (RBE3)</option>
+          <option value="kinematic">Kinematic (RBE2)</option>
+        </select>
+      </div>
+      <div className={styles.pickNote}>
+        {value === "distributing"
+          ? "the surface stays flexible and the point follows it — the point can be loaded, but not fixed"
+          : "the surface follows the point rigidly — the point can be fixed, loaded or coupled onward"}
+      </div>
+    </>
+  );
+}
+
+// Where the reference point sits: one of the positions derived from the picked
+// surface (its centre, and the two ends of its axis when it is a cylinder), or
+// coordinates typed in. Choosing a derived position fills the coordinate boxes,
+// which stay editable — the derived positions are a starting point, not a
+// constraint (KOF-208).
+export function ReferencePointInputs({
+  options,
+  coords,
+  onCoordChange,
+  onPickOption,
+}: {
+  options: ReferencePointOption[];
+  coords: [string, string, string];
+  onCoordChange(index: number, value: string): void;
+  onPickOption(option: ReferencePointOption): void;
+}) {
+  return (
+    <>
+      {options.length > 0 && (
+        <div className={styles.formRow}>
+          <span className={styles.formLabel}>Place at</span>
+          <select
+            className={styles.formSelect}
+            data-testid="coupling-place-at"
+            value=""
+            onChange={(e) => {
+              const option = options[Number(e.target.value)];
+              if (option) onPickOption(option);
+            }}
+          >
+            <option value="">Custom coordinates</option>
+            {options.map((option, i) => (
+              <option key={option.label} value={i}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      {["X", "Y", "Z"].map((axis, i) => (
+        <div className={styles.formRow} key={axis}>
+          <span className={styles.formLabel}>{axis} (mm)</span>
+          <input
+            className={styles.formInput}
+            data-testid={`coupling-point-${axis.toLowerCase()}`}
+            type="number"
+            step="0.1"
+            value={coords[i]}
+            onChange={(e) => onCoordChange(i, e.target.value)}
+          />
+        </div>
+      ))}
+    </>
+  );
+}
+
+// A BC or a load may act on a coupling's REFERENCE POINT instead of (or as well
+// as) a picked surface — that is what a reference point is for. It is a node, so
+// it needs no special machinery downstream; this only lets one be named.
+export function ReferencePointSelect({
+  couplings,
+  value,
+  onChange,
+}: {
+  couplings: CouplingGroup[];
+  value: number | null;
+  onChange(refNodeId: number | null): void;
+}) {
+  if (couplings.length === 0) return null;
+  return (
+    <div className={styles.formRow}>
+      <span className={styles.formLabel}>Reference point</span>
+      <select
+        className={styles.formSelect}
+        data-testid="target-reference-point"
+        value={value === null ? "" : String(value)}
+        onChange={(e) =>
+          onChange(e.target.value === "" ? null : Number(e.target.value))
+        }
+      >
+        <option value="">None</option>
+        {couplings.map((coupling) => (
+          <option key={coupling.id} value={coupling.refNodeId}>
+            {coupling.name} ({coupling.point.map((c) => fmt(c)).join(", ")})
+          </option>
+        ))}
+      </select>
     </div>
   );
 }

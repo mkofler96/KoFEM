@@ -58,6 +58,8 @@ export type {
   SurfaceLoad,
   TieGroup,
   TieSide,
+  PickMode,
+  CouplingGroup,
 } from "./boundarySlice";
 export {
   loadKind,
@@ -66,6 +68,8 @@ export {
   DEFAULT_TIE_DISTANCE,
 } from "./boundarySlice";
 export type { TieExtent } from "../lib/tie";
+export type { CouplingKind, ReferencePointOption } from "../lib/coupling";
+export { ALL_DOFS, referencePointOptions } from "../lib/coupling";
 export type {
   SolverResult,
   ResultType,
@@ -117,12 +121,18 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.bcGroups = a.bcGroups;
       s.loadGroups = a.loadGroups;
       s.tieGroups = a.tieGroups;
+      s.couplingGroups = a.couplingGroups;
       s.constraints = rebuildConstraints(a.bcGroups);
-      s.loads = rebuildLoads(a.loadGroups, s.nodes);
-      s.surfaceLoads = rebuildSurfaceLoads(a.loadGroups, a.elements);
+      s.loads = rebuildLoads(a.loadGroups, s.nodes, a.couplingGroups);
+      s.surfaceLoads = rebuildSurfaceLoads(
+        a.loadGroups,
+        a.elements,
+        a.couplingGroups,
+      );
       s.nextBcGroupId = a.nextBcGroupId;
       s.nextLoadGroupId = a.nextLoadGroupId;
       s.nextTieGroupId = a.nextTieGroupId;
+      s.nextCouplingGroupId = a.nextCouplingGroupId;
       s.nextFaceEntryId = a.nextFaceEntryId;
       s.nextMatId = a.nextMatId;
       s.stepSurface = a.stepSurface;
@@ -162,12 +172,14 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.bcGroups = [];
       s.loadGroups = [];
       s.tieGroups = [];
+      s.couplingGroups = [];
       s.constraints = [];
       s.loads = [];
       s.surfaceLoads = [];
       s.nextBcGroupId = 1;
       s.nextLoadGroupId = 1;
       s.nextTieGroupId = 1;
+      s.nextCouplingGroupId = 1;
       s.nextFaceEntryId = 1;
       s.modelName = "";
       s.result = null;

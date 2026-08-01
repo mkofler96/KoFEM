@@ -9,6 +9,7 @@ import {
   DofCheckboxes,
   PickedFaceList,
   PickGeometryToggle,
+  ReferencePointSelect,
 } from "./BcLoadFormControls";
 import { BcValueForm } from "./GroupValueForms";
 import { GroupCard } from "./GroupCard";
@@ -26,6 +27,7 @@ export function BcSection({ onError }: { onError(msg: string | null): void }) {
   const hasShells = useModelStore((s) =>
     s.elements.some((el) => el.type === "CTRIA3"),
   );
+  const couplingGroups = useModelStore((s) => s.couplingGroups);
   const createBcGroup = useModelStore((s) => s.createBcGroup);
   const addFaceToBcGroup = useModelStore((s) => s.addFaceToBcGroup);
   const removeFaceFromBcGroup = useModelStore((s) => s.removeFaceFromBcGroup);
@@ -51,6 +53,22 @@ export function BcSection({ onError }: { onError(msg: string | null): void }) {
     false,
   ]);
   const [bcValue, setBcValue] = useState("0");
+  // A coupling's reference point, when the BC acts on one instead of (or as
+  // well as) a picked surface. Fixing a KINEMATIC coupling's point is how a
+  // bolted or bearing-supported hole is restrained without clamping every node
+  // of the bore.
+  const [refNodeId, setRefNodeId] = useState<number | null>(null);
+  const refPointEntry = () => {
+    const coupling = couplingGroups.find((c) => c.refNodeId === refNodeId);
+    return coupling
+      ? [
+          {
+            label: `${coupling.name} reference point`,
+            nodeIds: [coupling.refNodeId],
+          },
+        ]
+      : [];
+  };
 
   const targetBcGroup =
     pickTargetGroupId !== null
@@ -58,13 +76,16 @@ export function BcSection({ onError }: { onError(msg: string | null): void }) {
       : null;
 
   function applyBc() {
-    if (allPickedFaces.length === 0) return;
-    const faceEntries = toFaceEntries(
-      allPickedFaces,
-      // eslint-disable-next-line kofem/no-silent-fallback -- numbering offset for the new entries; a pick with no target group starts a fresh group, which has 0 faces
-      targetBcGroup?.faces.length ?? 0,
-      pickGeometry === "edge" ? "Edge" : "Face",
-    );
+    if (allPickedFaces.length === 0 && refNodeId === null) return;
+    const faceEntries = [
+      ...toFaceEntries(
+        allPickedFaces,
+        // eslint-disable-next-line kofem/no-silent-fallback -- numbering offset for the new entries; a pick with no target group starts a fresh group, which has 0 faces
+        targetBcGroup?.faces.length ?? 0,
+        pickGeometry === "edge" ? "Edge" : "Face",
+      ),
+      ...refPointEntry(),
+    ];
     if (targetBcGroup) {
       for (const faceEntry of faceEntries) {
         addFaceToBcGroup(targetBcGroup.id, faceEntry);
@@ -82,6 +103,7 @@ export function BcSection({ onError }: { onError(msg: string | null): void }) {
         .filter((i) => i >= 0);
       createBcGroup(faceEntries, dofs, value);
     }
+    setRefNodeId(null);
     endPick();
   }
 
@@ -122,42 +144,52 @@ export function BcSection({ onError }: { onError(msg: string | null): void }) {
             geometry={pickGeometry}
           />
 
-          {allPickedFaces.length > 0 && !targetBcGroup && (
-            <>
-              <DofCheckboxes
-                checkedDofs={checkedDofs}
-                showRotations={hasShells}
-                onToggle={(index) =>
-                  setCheckedDofs((prev) =>
-                    prev.map((checked, i) =>
-                      i === index ? !checked : checked,
-                    ),
-                  )
-                }
-              />
-              <div className={styles.formRow}>
-                <span className={styles.formLabel}>Value</span>
-                <input
-                  className={styles.formInput}
-                  type="number"
-                  value={bcValue}
-                  step="0.001"
-                  onChange={(e) => setBcValue(e.target.value)}
-                />
-              </div>
-              <button className={styles.primaryBtn} onClick={applyBc}>
-                Apply BC
-              </button>
-            </>
-          )}
+          <ReferencePointSelect
+            couplings={couplingGroups}
+            value={refNodeId}
+            onChange={setRefNodeId}
+          />
 
-          {allPickedFaces.length > 0 && targetBcGroup && (
-            <button className={styles.primaryBtn} onClick={applyBc}>
-              {allPickedFaces.length === 1
-                ? "Add Face"
-                : `Add ${allPickedFaces.length} Faces`}
-            </button>
-          )}
+          {(allPickedFaces.length > 0 || refNodeId !== null) &&
+            !targetBcGroup && (
+              <>
+                {/* A reference point carries six DOFs whichever elements the model
+                  has, so Rx/Ry/Rz are offered as soon as one is the target. */}
+                <DofCheckboxes
+                  checkedDofs={checkedDofs}
+                  showRotations={hasShells || refNodeId !== null}
+                  onToggle={(index) =>
+                    setCheckedDofs((prev) =>
+                      prev.map((checked, i) =>
+                        i === index ? !checked : checked,
+                      ),
+                    )
+                  }
+                />
+                <div className={styles.formRow}>
+                  <span className={styles.formLabel}>Value</span>
+                  <input
+                    className={styles.formInput}
+                    type="number"
+                    value={bcValue}
+                    step="0.001"
+                    onChange={(e) => setBcValue(e.target.value)}
+                  />
+                </div>
+                <button className={styles.primaryBtn} onClick={applyBc}>
+                  Apply BC
+                </button>
+              </>
+            )}
+
+          {(allPickedFaces.length > 0 || refNodeId !== null) &&
+            targetBcGroup && (
+              <button className={styles.primaryBtn} onClick={applyBc}>
+                {allPickedFaces.length === 1
+                  ? "Add Face"
+                  : `Add ${allPickedFaces.length} Faces`}
+              </button>
+            )}
         </div>
       )}
 

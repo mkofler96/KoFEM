@@ -1,10 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Boundary condition, load and tie visualisation: committed BC/load/tie face
-// highlights, the in-progress pick-session highlights (pending + selected
-// faces), the fixed-support marker, resultant / per-node load arrows, and the
-// links between the node pairs a tie connection welds.
+// Boundary condition, load, tie and coupling visualisation: committed
+// BC/load/tie/coupling face highlights, the in-progress pick-session highlights
+// (pending + selected faces), the fixed-support marker, resultant / per-node
+// load arrows, the links between the node pairs a tie connection welds, and the
+// spider of a surface-to-point coupling.
 
 import { useMemo } from "react";
 import * as THREE from "three";
@@ -21,6 +22,9 @@ import type { MeshTopology } from "./useMeshTopology";
 // is readable at a glance; the links between welded nodes take the A colour.
 const TIE_COLOR_A = "#7c3aed";
 const TIE_COLOR_B = "#0891b2";
+
+// Couplings: emerald, matching the panel's coupling dot.
+const COUPLING_COLOR = "#059669";
 
 interface BoundaryConditionLayerProps {
   topology: MeshTopology;
@@ -39,6 +43,7 @@ export function BoundaryConditionLayer({
   const bcGroups = useModelStore((s) => s.bcGroups);
   const loadGroups = useModelStore((s) => s.loadGroups);
   const tieGroups = useModelStore((s) => s.tieGroups);
+  const couplingGroups = useModelStore((s) => s.couplingGroups);
   const pickMode = useModelStore((s) => s.pickMode);
   const tieDraft = useModelStore((s) => s.tieDraft);
   const loadDisplay = useModelStore((s) => s.loadDisplay);
@@ -175,6 +180,59 @@ export function BoundaryConditionLayer({
     if (written === 0) return null;
     return { positions: positions.subarray(0, 6 * written), markers };
   }, [tiePairs, nodeMap]);
+
+  // Coupling surface highlights — the surface each coupling grips.
+  const couplingFaceHighlights = useMemo(() => {
+    if (!boundaryMeshTopo) return null;
+    const highlights: { key: string; positions: Float32Array }[] = [];
+    for (const group of couplingGroups)
+      group.faces.forEach((face, i) => {
+        const positions = buildFacePositions(
+          face.nodeIds,
+          boundaryMeshTopo.triangles,
+          nodeMap,
+        );
+        if (positions)
+          highlights.push({ key: `coupling-${group.id}-${i}`, positions });
+      });
+    return highlights;
+  }, [couplingGroups, boundaryMeshTopo, nodeMap]);
+
+  // Coupling spiders — a line from every gripped node to its reference point,
+  // plus a marker at the point. This is the constraint's actual reach: which
+  // nodes the point governs (kinematic) or averages (distributing), rather than
+  // just the surface it was declared on. The reference point is a node of the
+  // model, so its position comes from the same nodeMap as everything else.
+  const couplingSpiders = useMemo(() => {
+    const spiders: {
+      id: number;
+      positions: Float32Array;
+      point: [number, number, number];
+    }[] = [];
+    for (const group of couplingGroups) {
+      const ref = nodeMap.get(group.refNodeId);
+      if (!ref) continue;
+      const gripped = new Set(group.faces.flatMap((face) => face.nodeIds));
+      gripped.delete(group.refNodeId);
+      const positions = new Float32Array(6 * gripped.size);
+      let written = 0;
+      for (const nodeId of gripped) {
+        const node = nodeMap.get(nodeId);
+        if (!node) continue;
+        positions.set(
+          [ref.n.x, ref.n.y, ref.n.z, node.n.x, node.n.y, node.n.z],
+          6 * written,
+        );
+        written++;
+      }
+      spiders.push({
+        id: group.id,
+        positions: positions.subarray(0, 6 * written),
+        point: [ref.n.x, ref.n.y, ref.n.z],
+      });
+    }
+    return spiders;
+  }, [couplingGroups, nodeMap]);
 
   // BC markers — one small triangular cone per constrained node (apex at the
   // node, base outward), replacing the former single centroid marker. Each
@@ -582,6 +640,49 @@ export function BoundaryConditionLayer({
           ))}
         </group>
       )}
+
+      {/* Coupling surface highlights — the surface each coupling grips */}
+      {!showResult &&
+        couplingFaceHighlights?.map((highlight) => (
+          <mesh key={highlight.key} renderOrder={1}>
+            <bufferGeometry>
+              <bufferAttribute
+                attach="attributes-position"
+                args={[highlight.positions, 3]}
+              />
+            </bufferGeometry>
+            <meshBasicMaterial
+              color={COUPLING_COLOR}
+              transparent
+              opacity={0.3}
+              depthTest={false}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+        ))}
+
+      {/* Coupling spiders — a line from the reference point to every node it
+          couples, and a sphere at the point itself */}
+      {!showResult &&
+        couplingSpiders.map((spider) => (
+          <group key={`coupling-spider-${spider.id}`}>
+            {spider.positions.length > 0 && (
+              <lineSegments renderOrder={4}>
+                <bufferGeometry>
+                  <bufferAttribute
+                    attach="attributes-position"
+                    args={[spider.positions, 3]}
+                  />
+                </bufferGeometry>
+                <lineBasicMaterial color={COUPLING_COLOR} depthTest={false} />
+              </lineSegments>
+            )}
+            <mesh position={spider.point} renderOrder={5}>
+              <sphereGeometry args={[modelSize * 0.018, 12, 10]} />
+              <meshBasicMaterial color={COUPLING_COLOR} depthTest={false} />
+            </mesh>
+          </group>
+        ))}
 
       {/* Pending faces — accumulated via shift-click, same colour as selection but slightly dimmer */}
       {pendingFacePositions && (

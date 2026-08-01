@@ -1,13 +1,16 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   loadKind,
   loadComponents,
+  referencePointOptions,
   useModelStore,
 } from "../../store/modelStore";
 import type {
+  CouplingGroup,
+  CouplingKind,
   LoadKind,
   NamedBcGroup,
   NamedLoadGroup,
@@ -21,10 +24,12 @@ import {
   parseTieDistance,
 } from "./bcFormUtils";
 import {
+  CouplingKindSelect,
   DofCheckboxes,
   LoadKindSelect,
   LoadVectorInputs,
   PressureInput,
+  ReferencePointInputs,
   TieExtentInputs,
 } from "./BcLoadFormControls";
 import styles from "./LeftPanel.module.css";
@@ -225,6 +230,108 @@ export function LoadValueForm({
           }
         />
       )}
+      <div className={styles.formBtns}>
+        <button className={styles.cancelBtn} onClick={onCancel}>
+          Cancel
+        </button>
+        <button className={styles.primaryBtn} onClick={handleSave}>
+          Save
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Inline editor for a coupling's kind, tied DOFs and reference point position —
+// opened by the coupling's ✎ button. The gripped surface is edited through the
+// face rows, exactly as for a BC or a load.
+export function CouplingValueForm({
+  group,
+  onSave,
+  onCancel,
+}: {
+  group: CouplingGroup;
+  onSave(
+    kind: CouplingKind,
+    dofs: number[],
+    point: [number, number, number],
+  ): void;
+  onCancel(): void;
+}) {
+  const nodes = useModelStore((s) => s.nodes);
+  const elements = useModelStore((s) => s.elements);
+  const [kind, setKind] = useState<CouplingKind>(group.kind);
+  const [checkedDofs, setCheckedDofs] = useState<boolean[]>(
+    DOF_LABELS.map((_, i) => group.dofs.includes(i)),
+  );
+  const [coords, setCoords] = useState<[string, string, string]>([
+    String(group.point[0]),
+    String(group.point[1]),
+    String(group.point[2]),
+  ]);
+  const [error, setError] = useState<string | null>(null);
+
+  // Re-derived from the coupling's own surface, so a point can be re-centred
+  // after the surface was extended or trimmed.
+  const options = useMemo(
+    () => referencePointOptions(group.faces, nodes, elements),
+    [group.faces, nodes, elements],
+  );
+
+  function handleSave() {
+    const parsed = coords.map((c) => parseFloat(c));
+    if (parsed.some((c) => !isFinite(c))) {
+      setError("Each reference point coordinate must be a finite number");
+      return;
+    }
+    const dofs = checkedDofs
+      .map((checked, i) => (checked ? i : -1))
+      .filter((i) => i >= 0);
+    if (kind === "kinematic" && dofs.length === 0) {
+      setError("A kinematic coupling must tie at least one DOF");
+      return;
+    }
+    onSave(kind, dofs, [parsed[0], parsed[1], parsed[2]]);
+  }
+
+  return (
+    <div className={styles.inlineForm} data-testid="coupling-edit-form">
+      {error && (
+        <div className={styles.errorBanner} data-testid="coupling-edit-error">
+          <span>{error}</span>
+          <button onClick={() => setError(null)}>×</button>
+        </div>
+      )}
+      <CouplingKindSelect value={kind} onChange={setKind} />
+      {kind === "kinematic" && (
+        <DofCheckboxes
+          checkedDofs={checkedDofs}
+          showRotations
+          onToggle={(index) =>
+            setCheckedDofs((prev) =>
+              prev.map((checked, i) => (i === index ? !checked : checked)),
+            )
+          }
+        />
+      )}
+      <ReferencePointInputs
+        options={options}
+        coords={coords}
+        onCoordChange={(index, value) =>
+          setCoords((prev) => {
+            const next = [...prev] as [string, string, string];
+            next[index] = value;
+            return next;
+          })
+        }
+        onPickOption={(option) =>
+          setCoords([
+            String(option.point[0]),
+            String(option.point[1]),
+            String(option.point[2]),
+          ])
+        }
+      />
       <div className={styles.formBtns}>
         <button className={styles.cancelBtn} onClick={onCancel}>
           Cancel

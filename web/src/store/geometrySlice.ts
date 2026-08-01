@@ -288,12 +288,14 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       s.bcGroups = [];
       s.loadGroups = [];
       s.tieGroups = [];
+      s.couplingGroups = [];
       s.constraints = [];
       s.loads = [];
       s.surfaceLoads = [];
       s.nextBcGroupId = 1;
       s.nextLoadGroupId = 1;
       s.nextTieGroupId = 1;
+      s.nextCouplingGroupId = 1;
       s.nextFaceEntryId = 1;
       s.result = null;
       if (tessellation) {
@@ -337,12 +339,14 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       s.bcGroups = [];
       s.loadGroups = [];
       s.tieGroups = [];
+      s.couplingGroups = [];
       s.constraints = [];
       s.loads = [];
       s.surfaceLoads = [];
       s.nextBcGroupId = 1;
       s.nextLoadGroupId = 1;
       s.nextTieGroupId = 1;
+      s.nextCouplingGroupId = 1;
       s.nextFaceEntryId = 1;
       s.result = null;
       s.selectedFace = null;
