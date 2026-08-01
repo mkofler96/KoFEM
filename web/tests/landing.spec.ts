@@ -19,3 +19,22 @@ test("landing page renders and links to the solver app", async ({ page }) => {
   const launch = page.getByRole("link", { name: /Start Solver/i }).first();
   await expect(launch).toHaveAttribute("href", "/app/");
 });
+
+// A rel=canonical pointing at a domain we do not own tells Google the real page
+// lives elsewhere, so the page it sits on drops out of the index. These run
+// against `vite preview`, i.e. the same build output that ships.
+const SITE_ORIGIN = "https://kofem.org";
+
+for (const path of ["/", "/examples/", "/privacy/"]) {
+  test(`${path} declares its canonical URL on the production origin`, async ({
+    page,
+  }) => {
+    await page.goto(path);
+
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+      "href",
+      `${SITE_ORIGIN}${path}`,
+    );
+    expect(await page.content()).not.toContain("example.com");
+  });
+}
