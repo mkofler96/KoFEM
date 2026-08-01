@@ -146,15 +146,21 @@ val solve_coupled(const val& mesh, const val& coupling, const val& bcs,
     in.shell_young = shell["young_modulus"].as<double>();
     in.shell_poisson = shell["poisson_ratio"].as<double>();
 
-    // Couplings (CSR-style). Optional per-coupling `mpc` flags (1 ⇒ relaxed
-    // shell-to-solid MPC, 0/absent ⇒ distributing RBE3) and a single `relaxation`
-    // ψ shared by the MPC couplings.
+    // Couplings (CSR-style). Optional per-coupling `mpc` kind (0/absent ⇒
+    // distributing RBE3, 1 ⇒ relaxed shell-to-solid MPC, 2 ⇒ kinematic RBE2 —
+    // the coupled nodes follow the reference point) and a single `relaxation` ψ
+    // shared by the MPC couplings. `dof_mask[k]` selects which of a kinematic
+    // coupling's six DOFs are tied (bits 0..5, all six when absent).
     std::vector<int> cref = i32_vector(coupling["ref"], "coupling.ref");
     std::vector<int> coff = i32_vector(coupling["offsets"], "coupling.offsets");
     std::vector<int> csolid = i32_vector(coupling["solid"], "coupling.solid");
     std::vector<int> cmpc;
     val mpc_js = coupling["mpc"];
     if (!mpc_js.isUndefined() && !mpc_js.isNull()) cmpc = i32_vector(mpc_js, "coupling.mpc");
+    std::vector<int> cdof;
+    val dof_js = coupling["dof_mask"];
+    if (!dof_js.isUndefined() && !dof_js.isNull())
+        cdof = i32_vector(dof_js, "coupling.dof_mask");
     double relaxation = 1.0;
     val relax_js = coupling["relaxation"];
     if (!relax_js.isUndefined() && !relax_js.isNull()) relaxation = relax_js.as<double>();
@@ -162,9 +168,21 @@ val solve_coupled(const val& mesh, const val& coupling, const val& bcs,
         kofem::shell::Coupling cp;
         cp.ref_node = cref[k];
         for (int i = coff[k]; i < coff[k + 1]; ++i) cp.solid_nodes.push_back(csolid[i]);
-        if (k < cmpc.size() && cmpc[k] != 0) {
+        const int kind = k < cmpc.size() ? cmpc[k] : 0;
+        if (kind == 1) {
+            cp.kind = kofem::shell::CouplingKind::RelaxedMpc;
             cp.mpc = true;
             cp.relaxation = relaxation;
+        } else if (kind == 2) {
+            cp.kind = kofem::shell::CouplingKind::Kinematic;
+            cp.dof_mask = k < cdof.size() ? cdof[k] : kofem::shell::kAllDofs;
+            if ((cp.dof_mask & kofem::shell::kAllDofs) == 0)
+                return error_result("coupled: coupling " + std::to_string(k) +
+                                    " is kinematic but couples no DOF at all");
+        } else if (kind != 0) {
+            return error_result("coupled: coupling " + std::to_string(k) +
+                                " has unknown kind " + std::to_string(kind) +
+                                " (0 distributing, 1 relaxed MPC, 2 kinematic)");
         }
         in.couplings.push_back(std::move(cp));
     }

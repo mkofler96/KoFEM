@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdio>
 #include <limits>
+#include <map>
 #include <stdexcept>
 #include <string>
 
@@ -725,7 +726,11 @@ struct Rbe3Constraints {
 // Distributing (RBE3) coupling: express each reference node's 6 DOFs as a
 // linear combination of its solid nodes' translations — the weighted-average
 // translation plus the weighted-least-squares rotation of their relative motion.
-Rbe3Constraints build_rbe3_constraints(const CoupledInput& in, int nDof) {
+// `has_rotation[n]` marks the nodes whose rotation DOFs actually exist in the
+// system — shell nodes and coupling reference points. A rotation cannot be tied
+// on a node that has none (a solid-only node's rotations are auto-fixed).
+Rbe3Constraints build_rbe3_constraints(const CoupledInput& in, int nDof,
+                                       const std::vector<char>& has_rotation) {
     auto vtx = [&](int n) -> Vec3 {
         const size_t b3 = 3 * static_cast<size_t>(n);
         return {in.vertices[b3], in.vertices[b3 + 1], in.vertices[b3 + 2]};
@@ -738,8 +743,63 @@ Rbe3Constraints build_rbe3_constraints(const CoupledInput& in, int nDof) {
         if (R < 0 || 6 * R >= nDof)
             throw std::runtime_error("coupled: coupling ref_node out of range");
         const int N = static_cast<int>(cp.solid_nodes.size());
-        if (N < 3) throw std::runtime_error("coupled: a coupling needs ≥3 solid nodes");
         const Vec3 pR = vtx(R);
+
+        if (cp.kind == CouplingKind::Kinematic) {
+            // RBE2: every coupled node follows the reference point as a rigid
+            // body, so the COUPLED nodes are eliminated and the point stays an
+            // independent DOF that can be fixed, loaded or tied onward. One
+            // coupled node with the rotations masked out is a spherical joint;
+            // with them in, a rigid link.
+            if (N < 1)
+                throw std::runtime_error("coupled: a kinematic coupling needs ≥1 coupled node");
+            for (int i = 0; i < N; ++i) {
+                const int sn = cp.solid_nodes[i];
+                if (sn < 0 || 6 * sn >= nDof)
+                    throw std::runtime_error("coupled: kinematic coupled node out of range");
+                if (sn == R)
+                    throw std::runtime_error(
+                        "coupled: kinematic coupling node " + std::to_string(sn) +
+                        " is its own reference point");
+                const Vec3 pi = vtx(sn);
+                const Vec3 r = {pi[0] - pR[0], pi[1] - pR[1], pi[2] - pR[2]};
+                const size_t i6 = 6 * static_cast<size_t>(sn);
+                const size_t R6k = 6 * static_cast<size_t>(R);
+                // u_i = u_R + θ_R × r  (component-wise, to keep the signs plain)
+                //   x: +θy·rz − θz·ry   y: +θz·rx − θx·rz   z: +θx·ry − θy·rx
+                static constexpr std::array<int, 3> kPlus = {1, 2, 0};   // θ index, + sign
+                static constexpr std::array<int, 3> kMinus = {2, 0, 1};  // θ index, − sign
+                for (int c = 0; c < 3; ++c) {
+                    if ((cp.dof_mask & (1 << c)) == 0) continue;
+                    if (out.dep[i6 + c])
+                        throw std::runtime_error(
+                            "coupled: node " + std::to_string(sn) + " DOF " + std::to_string(c) +
+                            " is already governed by another coupling — a DOF can be "
+                            "eliminated by only one constraint");
+                    out.dep[i6 + c] = 1;
+                    out.Cmap[i6 + c].emplace_back(R6k + c, 1.0);
+                    out.Cmap[i6 + c].emplace_back(R6k + 3 + kPlus[c], r[kMinus[c]]);
+                    out.Cmap[i6 + c].emplace_back(R6k + 3 + kMinus[c], -r[kPlus[c]]);
+                }
+                // θ_i = θ_R, only where the coupled node actually carries a
+                // rotational DOF; on a solid-only node there is none to tie.
+                for (int a = 0; a < 3; ++a) {
+                    if ((cp.dof_mask & (1 << (3 + a))) == 0) continue;
+                    if (!has_rotation[sn]) continue;
+                    if (out.dep[i6 + 3 + a])
+                        throw std::runtime_error(
+                            "coupled: node " + std::to_string(sn) + " rotation " +
+                            std::to_string(a) +
+                            " is already governed by another coupling — a DOF can be "
+                            "eliminated by only one constraint");
+                    out.dep[i6 + 3 + a] = 1;
+                    out.Cmap[i6 + 3 + a].emplace_back(R6k + 3 + a, 1.0);
+                }
+            }
+            continue;
+        }
+
+        if (N < 3) throw std::runtime_error("coupled: a coupling needs ≥3 solid nodes");
         std::vector<double> w(N, 1.0);
         if (!cp.weights.empty()) {
             if ((int)cp.weights.size() != N) throw std::runtime_error("coupled: weights size mismatch");
@@ -831,6 +891,64 @@ Rbe3Constraints build_rbe3_constraints(const CoupledInput& in, int nDof) {
     return out;
 }
 
+// Substitute dependent DOFs out of each other's constraint rows until every row
+// references independent DOFs only.
+//
+// Constraints compose: a reference point can idealise a surface (its coupled
+// nodes depend on the point) and at the same time be tied to a second point (the
+// point depends on that one). The reduction eliminates dependent DOFs in ONE
+// pass, so it needs each row already expressed in independent DOFs — which is
+// exactly the substitution below, run to a fixpoint. Without it that perfectly
+// ordinary screw connection is rejected as a "chained coupling".
+//
+// Depth-first with an explicit stack (WASM stacks are small) and a cycle check:
+// two constraints that depend on each other have no elimination order and are a
+// modelling error, not something to iterate on.
+void resolve_constraint_chains(Rbe3Constraints& C, int nDof) {
+    enum : char { Unvisited = 0, InProgress = 1, Resolved = 2 };
+    std::vector<char> state(nDof, Unvisited);
+    std::vector<int> stack;
+    for (int start = 0; start < nDof; ++start) {
+        if (C.dep[start] == 0 || state[start] == Resolved) continue;
+        stack.push_back(start);
+        while (!stack.empty()) {
+            const int d = stack.back();
+            if (state[d] == Resolved) {
+                stack.pop_back();
+                continue;
+            }
+            if (state[d] == InProgress) {
+                // Every dependent DOF this row references is resolved by now, so
+                // one substitution pass leaves only independent DOFs.
+                std::map<int, double> flat;
+                for (const auto& [q, c] : C.Cmap[d]) {
+                    if (C.dep[q] == 0) {
+                        flat[q] += c;
+                    } else {
+                        for (const auto& [q2, c2] : C.Cmap[q]) flat[q2] += c * c2;
+                    }
+                }
+                C.Cmap[d].assign(flat.begin(), flat.end());
+                state[d] = Resolved;
+                stack.pop_back();
+                continue;
+            }
+            state[d] = InProgress;
+            for (const auto& [q, c] : C.Cmap[d]) {
+                (void)c;
+                if (C.dep[q] == 0) continue;
+                if (state[q] == InProgress)
+                    throw std::runtime_error(
+                        "coupled: constraints form a cycle — node " + std::to_string(d / 6) +
+                        " and node " + std::to_string(q / 6) +
+                        " each depend on the other. Break the loop: a chain of couplings "
+                        "must end at nodes that are free.");
+                if (state[q] == Unvisited) stack.push_back(q);
+            }
+        }
+    }
+}
+
 // Master-slave reduction K_red = Tᵀ K T (T carries Cmap on dependent rows),
 // homogeneous BCs, CG solve over the independent DOFs, and recovery of the
 // dependent DOFs. Consumes K row-by-row so the full and reduced systems never
@@ -843,21 +961,20 @@ ShellResult solve_reduced_system(Sparse& K, const std::vector<double>& F,
     for (int i = 0; i < nDof; ++i)
         if (C.dep[i] == 0) red[i] = nIndep++;
 
-    // The expansion below is single-level by construction: a coupling's target
-    // nodes must themselves be independent, so no chain has to be resolved. Check
-    // it once up front — a chained target has no reduced index (red = −1) and
-    // would otherwise index the reduced matrix out of bounds.
+    // resolve_constraint_chains has already substituted every dependent DOF out of
+    // the constraint rows, so each row references independent DOFs only. Verify
+    // it: a leftover chained target has no reduced index (red = −1) and would
+    // index the reduced matrix out of bounds.
     for (int i = 0; i < nDof; ++i)
         if (C.dep[i] != 0)
             for (const auto& [q, c] : C.Cmap[i]) {
                 (void)c;
                 if (C.dep[q] != 0)
                     throw std::runtime_error(
-                        "solve_reduced_system: the coupling on node " + std::to_string(i / 6) +
-                        " targets node " + std::to_string(q / 6) +
-                        ", which is itself a coupling reference node. Chained "
-                        "couplings cannot be eliminated in one pass — a coupling's "
-                        "target nodes must be independent.");
+                        "solve_reduced_system: node " + std::to_string(i / 6) +
+                        " still depends on node " + std::to_string(q / 6) +
+                        ", which is itself dependent — constraint chains were not "
+                        "resolved before the reduction (internal error).");
             }
 
     auto expand = [&](int dof) -> std::vector<std::pair<int, double>> {
@@ -963,13 +1080,15 @@ ShellResult solve_solid_shell_core(const CoupledInput& in) {
         if (d < 0 || d >= nDof) throw std::runtime_error("coupled: fixed DOF out of range");
         fixed[d] = 1;
     }
-    // A distributing-coupling reference node has all six DOFs eliminated (they
-    // become the RBE3 average of its target nodes), so its rotations must NOT be
-    // auto-fixed — a fixed dependent DOF is a conflict the reduction rejects
-    // (#377). This lets a SOLID node be a coupling reference, which is how a
-    // gapped solid↔solid interface (a pin in a hole: the two surfaces do not share
-    // nodes) is tied: the pin surface nodes distribute onto the hole surface,
-    // transmitting force and moment across the clearance without merging nodes.
+    // A coupling reference node's rotations must NOT be auto-fixed, whichever way
+    // the coupling points. For a distributing coupling all six of its DOFs are
+    // eliminated (they become the RBE3 average of its targets) and a fixed
+    // dependent DOF is a conflict the reduction rejects (#377). For a kinematic
+    // coupling the reference is the independent point the coupled surface follows,
+    // and its rotations are the very DOFs that carry the surface's rigid-body
+    // motion — fixing them would weld the spider flat. This also lets a SOLID node
+    // be a coupling reference, which is how a gapped solid↔solid interface (a pin
+    // in a hole: the two surfaces do not share nodes) is tied.
     std::vector<char> is_coupling_ref(nNodes, 0);
     for (const auto& cp : in.couplings)
         if (cp.ref_node >= 0 && cp.ref_node < nNodes) is_coupling_ref[cp.ref_node] = 1;
@@ -981,7 +1100,11 @@ ShellResult solve_solid_shell_core(const CoupledInput& in) {
             for (size_t c = 3; c < 6; ++c) fixed[n6 + c] = 1;
         }
 
-    const Rbe3Constraints constraints = build_rbe3_constraints(in, nDof);
+    std::vector<char> has_rotation(nNodes, 0);
+    for (int n = 0; n < nNodes; ++n)
+        has_rotation[n] = (is_shell[n] != 0 || is_coupling_ref[n] != 0) ? 1 : 0;
+    Rbe3Constraints constraints = build_rbe3_constraints(in, nDof, has_rotation);
+    resolve_constraint_chains(constraints, nDof);
     return solve_reduced_system(K, F, fixed, constraints, nDof);
 }
 
