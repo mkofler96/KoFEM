@@ -771,7 +771,7 @@ Rbe3Constraints build_rbe3_constraints(const CoupledInput& in, int nDof,
                 static constexpr std::array<int, 3> kMinus = {2, 0, 1};  // θ index, − sign
                 for (int c = 0; c < 3; ++c) {
                     if ((cp.dof_mask & (1 << c)) == 0) continue;
-                    if (out.dep[i6 + c])
+                    if (out.dep[i6 + c] != 0)
                         throw std::runtime_error(
                             "coupled: node " + std::to_string(sn) + " DOF " + std::to_string(c) +
                             " is already governed by another coupling — a DOF can be "
@@ -785,8 +785,8 @@ Rbe3Constraints build_rbe3_constraints(const CoupledInput& in, int nDof,
                 // rotational DOF; on a solid-only node there is none to tie.
                 for (int a = 0; a < 3; ++a) {
                     if ((cp.dof_mask & (1 << (3 + a))) == 0) continue;
-                    if (!has_rotation[sn]) continue;
-                    if (out.dep[i6 + 3 + a])
+                    if (has_rotation[sn] == 0) continue;
+                    if (out.dep[i6 + 3 + a] != 0)
                         throw std::runtime_error(
                             "coupled: node " + std::to_string(sn) + " rotation " +
                             std::to_string(a) +
