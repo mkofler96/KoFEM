@@ -407,12 +407,24 @@ export interface BoundarySlice {
   pickTieSide: TieSide;
   tieDraft: { a: FaceSelection[]; b: FaceSelection[] };
 
+  // The reference point currently being placed, and the nodes it would grip —
+  // the coupling as it stands in a form that has not been applied yet. A
+  // reference point is a position in space with nothing in the mesh to anchor it
+  // to, so typing coordinates without seeing them is guesswork; the viewport
+  // draws this the way it draws a committed coupling. Null whenever no coupling
+  // form is open. The form that owns it supplies both fields, rather than the
+  // viewport inferring the nodes from whichever session it thinks is live.
+  couplingDraft: { point: [number, number, number]; nodeIds: number[] } | null;
+
   // Pick mode / face selection
   setPickMode(mode: PickMode | null, targetGroupId?: number | null): void;
   setPickGeometry(geometry: "face" | "edge"): void;
   setSelectedFace(face: FaceSelection | null): void;
   setPendingFaces(faces: FaceSelection[]): void;
   setPickTieSide(side: TieSide): void;
+  setCouplingDraft(
+    draft: { point: [number, number, number]; nodeIds: number[] } | null,
+  ): void;
 
   // BC group actions
   createBcGroup(
@@ -502,6 +514,7 @@ export const createBoundarySlice: SliceCreator<BoundarySlice> = (set) => ({
   pendingFaces: [],
   pickTieSide: "a",
   tieDraft: { a: [], b: [] },
+  couplingDraft: null,
 
   // Pick mode / face selection
   setPickMode: (mode: PickMode | null, targetGroupId: number | null = null) =>
@@ -510,11 +523,19 @@ export const createBoundarySlice: SliceCreator<BoundarySlice> = (set) => ({
       s.pickTargetGroupId = mode !== null ? (targetGroupId ?? null) : null;
       s.pickTieSide = "a";
       s.tieDraft = { a: [], b: [] };
+      // Leaving the pick session abandons the coupling being placed with it, so
+      // its preview must not outlive the form that owned it.
+      s.couplingDraft = null;
       if (mode === null) {
         s.selectedFace = null;
         s.pendingFaces = [];
         s.pickGeometry = "face";
       }
+    }),
+
+  setCouplingDraft: (draft) =>
+    set((s) => {
+      s.couplingDraft = draft;
     }),
 
   // Park the side being picked and bring the other one into the live session,

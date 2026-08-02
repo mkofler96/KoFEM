@@ -34,6 +34,10 @@ type Store = {
     couplingGroups: CouplingGroupState[];
     bcGroups: { id: number; faces: { nodeIds: number[] }[] }[];
     nodes: { id: number; x: number; y: number; z: number }[];
+    couplingDraft: {
+      point: [number, number, number];
+      nodeIds: number[];
+    } | null;
     setSelectedFace(face: {
       nodeIds: number[];
       label: string;
@@ -214,4 +218,41 @@ test("a BC can act on a coupling's reference point, and goes when the coupling d
   expect(after.couplingGroups).toHaveLength(0);
   expect(after.bcGroups).toHaveLength(0);
   expect(after.nodes).toHaveLength(model.nodes.length);
+});
+
+test("the reference point being placed is previewed in the viewport", async ({
+  page,
+}) => {
+  const model = await openConstraintsMode(page);
+
+  // Nothing is being placed yet, so there is nothing to preview.
+  await page.getByTestId("add-coupling").click();
+  expect((await state(page)).couplingDraft).toBeNull();
+
+  // Picking the surface places the point at its centre, and the preview follows
+  // — the marker and the lines to the gripped nodes are what make it possible to
+  // judge the position before applying.
+  await pickFace(page, model.endFace);
+  const picked = await state(page);
+  expect(picked.couplingDraft?.point).toEqual([10, 2, 2]);
+  expect(picked.couplingDraft?.nodeIds).toEqual(model.endFace);
+
+  // Typing coordinates moves the preview with them.
+  await page.getByTestId("coupling-point-x").fill("14");
+  await expect
+    .poll(async () => (await state(page)).couplingDraft?.point[0])
+    .toBe(14);
+
+  // Half-typed input is not a position: the preview drops rather than park the
+  // marker at a number the user did not mean.
+  await page.getByTestId("coupling-point-x").fill("");
+  await expect.poll(async () => (await state(page)).couplingDraft).toBeNull();
+
+  // Cancelling the pick session abandons the coupling, and the preview with it.
+  await page.getByTestId("coupling-point-x").fill("14");
+  await expect
+    .poll(async () => (await state(page)).couplingDraft)
+    .not.toBeNull();
+  await page.getByTitle("Cancel").click();
+  expect((await state(page)).couplingDraft).toBeNull();
 });

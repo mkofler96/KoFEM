@@ -23,8 +23,13 @@ import type { MeshTopology } from "./useMeshTopology";
 const TIE_COLOR_A = "#7c3aed";
 const TIE_COLOR_B = "#0891b2";
 
-// Couplings: emerald, matching the panel's coupling dot.
+// Couplings: emerald, matching the panel's coupling dot. A coupling still being
+// placed gets its own blue rather than the pick session's orange or the
+// committed emerald: it sits ON the orange picked surface, and when a point is
+// being MOVED it has to be told apart from the committed spider still drawn at
+// the old position — which is the whole comparison the edit is about.
 const COUPLING_COLOR = "#059669";
+const COUPLING_DRAFT_COLOR = "#2563eb";
 
 interface BoundaryConditionLayerProps {
   topology: MeshTopology;
@@ -44,6 +49,7 @@ export function BoundaryConditionLayer({
   const loadGroups = useModelStore((s) => s.loadGroups);
   const tieGroups = useModelStore((s) => s.tieGroups);
   const couplingGroups = useModelStore((s) => s.couplingGroups);
+  const couplingDraft = useModelStore((s) => s.couplingDraft);
   const pickMode = useModelStore((s) => s.pickMode);
   const tieDraft = useModelStore((s) => s.tieDraft);
   const loadDisplay = useModelStore((s) => s.loadDisplay);
@@ -233,6 +239,25 @@ export function BoundaryConditionLayer({
     }
     return spiders;
   }, [couplingGroups, nodeMap]);
+
+  // The coupling being placed: the same spider, at the position the form
+  // currently holds. Drawn from `couplingDraft` rather than re-derived here, so
+  // the marker is exactly where the coordinates say and cannot drift from them.
+  const draftSpider = useMemo(() => {
+    if (!couplingDraft) return null;
+    const positions = new Float32Array(6 * couplingDraft.nodeIds.length);
+    let written = 0;
+    for (const nodeId of new Set(couplingDraft.nodeIds)) {
+      const node = nodeMap.get(nodeId);
+      if (!node) continue;
+      positions.set(
+        [...couplingDraft.point, node.n.x, node.n.y, node.n.z],
+        6 * written,
+      );
+      written++;
+    }
+    return { positions: positions.subarray(0, 6 * written) };
+  }, [couplingDraft, nodeMap]);
 
   // BC markers — one small triangular cone per constrained node (apex at the
   // node, base outward), replacing the former single centroid marker. Each
@@ -677,12 +702,54 @@ export function BoundaryConditionLayer({
                 <lineBasicMaterial color={COUPLING_COLOR} depthTest={false} />
               </lineSegments>
             )}
+            {/* `transparent` with full opacity, not a translucency: three.js
+                draws the opaque pass before the transparent one, so an opaque
+                marker is painted UNDER the surface highlights however high its
+                renderOrder. Joining the transparent pass is what lets the order
+                put the point on top of the surface it belongs to. */}
             <mesh position={spider.point} renderOrder={5}>
               <sphereGeometry args={[modelSize * 0.018, 12, 10]} />
-              <meshBasicMaterial color={COUPLING_COLOR} depthTest={false} />
+              <meshBasicMaterial
+                color={COUPLING_COLOR}
+                depthTest={false}
+                transparent
+                opacity={1}
+              />
             </mesh>
           </group>
         ))}
+
+      {/* The coupling being placed — its point and the nodes it would grip,
+          so the position can be judged against the model before it is applied */}
+      {!showResult && couplingDraft && draftSpider && (
+        <group>
+          {draftSpider.positions.length > 0 && (
+            <lineSegments renderOrder={5}>
+              <bufferGeometry>
+                <bufferAttribute
+                  attach="attributes-position"
+                  args={[draftSpider.positions, 3]}
+                />
+              </bufferGeometry>
+              <lineBasicMaterial
+                color={COUPLING_DRAFT_COLOR}
+                depthTest={false}
+                transparent
+                opacity={1}
+              />
+            </lineSegments>
+          )}
+          <mesh position={couplingDraft.point} renderOrder={6}>
+            <sphereGeometry args={[modelSize * 0.022, 16, 12]} />
+            <meshBasicMaterial
+              color={COUPLING_DRAFT_COLOR}
+              depthTest={false}
+              transparent
+              opacity={1}
+            />
+          </mesh>
+        </group>
+      )}
 
       {/* Pending faces — accumulated via shift-click, same colour as selection but slightly dimmer */}
       {pendingFacePositions && (

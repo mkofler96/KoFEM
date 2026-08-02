@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   loadKind,
   loadComponents,
@@ -260,6 +260,7 @@ export function CouplingValueForm({
 }) {
   const nodes = useModelStore((s) => s.nodes);
   const elements = useModelStore((s) => s.elements);
+  const setCouplingDraft = useModelStore((s) => s.setCouplingDraft);
   const [kind, setKind] = useState<CouplingKind>(group.kind);
   const [checkedDofs, setCheckedDofs] = useState<boolean[]>(
     DOF_LABELS.map((_, i) => group.dofs.includes(i)),
@@ -277,6 +278,28 @@ export function CouplingValueForm({
     () => referencePointOptions(group.faces, nodes, elements),
     [group.faces, nodes, elements],
   );
+
+  // Preview the edited position in the viewport, alongside the coupling's
+  // committed spider — so the point being moved is visible next to where it
+  // currently is, which is the comparison the edit is about.
+  const draftKey = coords.join(",");
+  useEffect(() => {
+    const parsed = coords.map((coord) => parseFloat(coord));
+    if (parsed.some((coord) => !isFinite(coord))) {
+      setCouplingDraft(null);
+      return;
+    }
+    setCouplingDraft({
+      point: [parsed[0], parsed[1], parsed[2]],
+      nodeIds: group.faces.flatMap((face) => face.nodeIds),
+    });
+    // Keyed on draftKey rather than `coords`, which is a fresh array on every
+    // render: re-running on it would set a new draft object each time, which
+    // re-renders, which re-runs.
+  }, [draftKey, group.faces, setCouplingDraft]);
+
+  // The preview belongs to this form; closing it must take the preview too.
+  useEffect(() => () => setCouplingDraft(null), [setCouplingDraft]);
 
   function handleSave() {
     const parsed = coords.map((c) => parseFloat(c));

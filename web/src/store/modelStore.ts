@@ -159,6 +159,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.pickTargetGroupId = null;
       s.pickTieSide = "a";
       s.tieDraft = { a: [], b: [] };
+      s.couplingDraft = null;
       s.hasStarted = true;
       s.fitViewTrigger++;
     }),
@@ -203,6 +204,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.pickTargetGroupId = null;
       s.pickTieSide = "a";
       s.tieDraft = { a: [], b: [] };
+      s.couplingDraft = null;
       s.mode = "geometry";
       s.stepImportError = null;
       s.isRunning = false;

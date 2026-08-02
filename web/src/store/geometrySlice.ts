@@ -355,6 +355,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       s.pickTargetGroupId = null;
       s.pickTieSide = "a";
       s.tieDraft = { a: [], b: [] };
+      s.couplingDraft = null;
       s.modelName = name;
       s.viewRepr = "surface";
       s.fitViewTrigger++;

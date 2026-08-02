@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useModelStore, referencePointOptions } from "../../store/modelStore";
 import type {
   CouplingGroup,
@@ -70,6 +70,7 @@ export function CouplingSection({
     (s) => s.removeFaceFromCouplingGroup,
   );
   const deleteCouplingGroup = useModelStore((s) => s.deleteCouplingGroup);
+  const setCouplingDraft = useModelStore((s) => s.setCouplingDraft);
   const {
     pickTargetGroupId,
     setPickMode,
@@ -123,6 +124,44 @@ export function CouplingSection({
       String(centre.point[2]),
     ]);
   }
+
+  // Mirror the coupling being built into the store so the viewport can draw it:
+  // the point where it currently sits, and the nodes it would grip. A reference
+  // point is a position in space with nothing in the mesh to anchor it, so
+  // without this the coordinate boxes are the only feedback there is until the
+  // coupling is already applied.
+  const draftKey = `${pickMode}|${targetGroup?.id ?? ""}|${coords.join(",")}|${allPickedFaces
+    .map((face) => face.nodeIds.length)
+    .join(",")}`;
+  useEffect(() => {
+    // Before a surface is picked there is no coupling yet — the coordinate
+    // boxes still hold their initial zeros, and previewing those would put a
+    // marker at the origin that stands for nothing. (Adding faces to an existing
+    // coupling is not placing a point either; that group's own spider already
+    // shows where its point is.)
+    if (pickMode !== "coupling" || targetGroup || allPickedFaces.length === 0) {
+      setCouplingDraft(null);
+      return;
+    }
+    const parsed = coords.map((coord) => parseFloat(coord));
+    if (parsed.some((coord) => !isFinite(coord))) {
+      // Half-typed coordinates are not a position — drop the preview rather than
+      // park the marker at a number the user did not mean.
+      setCouplingDraft(null);
+      return;
+    }
+    setCouplingDraft({
+      point: [parsed[0], parsed[1], parsed[2]],
+      nodeIds: allPickedFaces.flatMap((face) => face.nodeIds),
+    });
+    // Keyed on draftKey alone, deliberately: `coords` and `allPickedFaces` are
+    // rebuilt on every render, and re-running on those would set a fresh draft
+    // object each time, which re-renders, which re-runs — a loop. draftKey
+    // changes exactly when the preview should.
+  }, [draftKey, setCouplingDraft]);
+
+  // The preview belongs to this form; it must not survive it.
+  useEffect(() => () => setCouplingDraft(null), [setCouplingDraft]);
 
   function placeAt(option: ReferencePointOption) {
     setPlacedLabel(option.label);
