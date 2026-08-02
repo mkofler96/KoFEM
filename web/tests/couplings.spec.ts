@@ -42,6 +42,13 @@ type Store = {
       point: [number, number, number];
       nodeIds: number[];
     } | null;
+    selectedFace: { nodeIds: number[] } | null;
+    updateCouplingGroup(
+      id: number,
+      kind: string,
+      dofs: number[],
+      point: [number, number, number],
+    ): void;
     setSelectedFace(face: {
       nodeIds: number[];
       label: string;
@@ -203,12 +210,19 @@ test("a BC can act on a coupling's reference point, and goes when the coupling d
   const { couplingGroups } = await state(page);
   const refNodeId = couplingGroups[0].refNodeId;
 
-  // A BC with no face at all — the reference point IS the target. Clamping a
-  // kinematic point is how a bolted hole is restrained.
+  // The reference point is picked in the viewport like any other selection —
+  // its marker carries the click (useReferencePointPick), which lands in the
+  // same session state a face pick writes. Clamping a kinematic point is how a
+  // bolted hole is restrained without fixing every node of its bore.
   await page.getByRole("button", { name: "+ Add BC" }).click();
-  await page
-    .getByTestId("target-reference-point")
-    .selectOption(String(refNodeId));
+  await page.getByTestId("pick-geometry-point").click();
+  await pickFace(page, [refNodeId]);
+
+  // Picking a reference point exposes the rotational DOFs, because it has them
+  // — an ordinary solid node does not.
+  await expect(
+    page.getByRole("checkbox", { name: "Rx", exact: true }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Apply BC" }).click();
 
   const withBc = await state(page);
@@ -311,4 +325,67 @@ test("a pressure or a moment on a single node of a solid mesh is refused", async
   );
 
   expect((await state(page)).loadGroups).toHaveLength(0);
+});
+
+test("a reference point is picked by clicking its marker in the viewport", async ({
+  page,
+}) => {
+  const model = await openConstraintsMode(page);
+
+  await page.getByTestId("add-coupling").click();
+  await pickFace(page, model.endFace);
+  // Off the mesh grid on purpose: the face centre (10, 2, 2) is itself a node of
+  // this coarse box, and two exactly coincident candidates would not test which
+  // one the click resolves to.
+  await page.getByTestId("coupling-point-y").fill("1");
+  await page.getByTestId("coupling-point-z").fill("1");
+  await page.getByTestId("apply-coupling").click();
+  const refNodeId = (await state(page)).couplingGroups[0].refNodeId;
+
+  // Real viewport clicks, not injected state: the reference point belongs to no
+  // surface, so the ray always reports the mesh behind it — this is what proves
+  // the point still wins when it is what was clicked.
+  await page.getByRole("button", { name: "+ Add Load" }).click();
+  await page.getByTestId("pick-geometry-point").click();
+
+  const canvas = page.locator("canvas").first();
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("viewport canvas has no bounding box");
+  const hitsReferencePoint = () =>
+    page.evaluate((id) => {
+      const selected = (
+        window as unknown as { __kofemStore: Store }
+      ).__kofemStore.getState().selectedFace;
+      return selected?.nodeIds.length === 1 && selected.nodeIds[0] === id;
+    }, refNodeId);
+
+  // Sweep for the marker — where it lands on screen depends on the camera.
+  let marker: [number, number] | null = null;
+  for (let fx = 0.55; fx <= 0.9 && !marker; fx += 0.04) {
+    for (let fy = 0.4; fy <= 0.85 && !marker; fy += 0.04) {
+      const spot: [number, number] = [
+        box.x + box.width * fx,
+        box.y + box.height * fy,
+      ];
+      await page.mouse.click(...spot);
+      if (await hitsReferencePoint()) marker = spot;
+    }
+  }
+  expect(marker).not.toBeNull();
+
+  // Start the session over and click the marker once, so the group carries the
+  // reference point and nothing the sweep collected on the way.
+  await page.getByTitle("Cancel").click();
+  await page.getByRole("button", { name: "+ Add Load" }).click();
+  await page.getByTestId("pick-geometry-point").click();
+  if (!marker) throw new Error("no marker position");
+  await page.mouse.click(...marker);
+  expect(await hitsReferencePoint()).toBe(true);
+
+  await page.getByRole("button", { name: "Apply Load" }).click();
+  const { loadGroups } = await state(page);
+  expect(loadGroups).toHaveLength(1);
+  expect(loadGroups[0].faces).toHaveLength(1);
+  expect(loadGroups[0].faces[0].nodeIds).toEqual([refNodeId]);
+  expect(loadGroups[0].faces[0].geometry).toBe("point");
 });

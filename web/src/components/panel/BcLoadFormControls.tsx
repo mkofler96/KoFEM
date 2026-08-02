@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import type {
-  CouplingGroup,
   CouplingKind,
   FaceSelection,
   LoadKind,
@@ -16,7 +15,6 @@ import {
   MOMENT_LABELS,
   faceKey,
 } from "./bcFormUtils";
-import { fmt } from "../../lib/modelDisplay";
 import styles from "./LeftPanel.module.css";
 
 const GEOMETRY_LABEL: Record<PickGeometry, string> = {
@@ -333,40 +331,5 @@ export function ReferencePointInputs({
         </div>
       ))}
     </>
-  );
-}
-
-// A BC or a load may act on a coupling's REFERENCE POINT instead of (or as well
-// as) a picked surface — that is what a reference point is for. It is a node, so
-// it needs no special machinery downstream; this only lets one be named.
-export function ReferencePointSelect({
-  couplings,
-  value,
-  onChange,
-}: {
-  couplings: CouplingGroup[];
-  value: number | null;
-  onChange(refNodeId: number | null): void;
-}) {
-  if (couplings.length === 0) return null;
-  return (
-    <div className={styles.formRow}>
-      <span className={styles.formLabel}>Reference point</span>
-      <select
-        className={styles.formSelect}
-        data-testid="target-reference-point"
-        value={value === null ? "" : String(value)}
-        onChange={(e) =>
-          onChange(e.target.value === "" ? null : Number(e.target.value))
-        }
-      >
-        <option value="">None</option>
-        {couplings.map((coupling) => (
-          <option key={coupling.id} value={coupling.refNodeId}>
-            {coupling.name} ({coupling.point.map((c) => fmt(c)).join(", ")})
-          </option>
-        ))}
-      </select>
-    </div>
   );
 }

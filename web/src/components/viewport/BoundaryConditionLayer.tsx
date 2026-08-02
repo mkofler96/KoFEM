@@ -15,6 +15,7 @@ import {
   loadComponents,
 } from "../../store/modelStore";
 import { useTiePairs } from "../../hooks/useTiePairs";
+import { useReferencePointPick } from "./useFacePick";
 import { buildFacePositions } from "./useMeshTopology";
 import type { MeshTopology } from "./useMeshTopology";
 
@@ -30,6 +31,9 @@ const TIE_COLOR_B = "#0891b2";
 // the old position — which is the whole comparison the edit is about.
 const COUPLING_COLOR = "#059669";
 const COUPLING_DRAFT_COLOR = "#2563eb";
+
+// The orange every live pick session uses for what is currently selected.
+const SELECTION_COLOR = "#e05533";
 
 interface BoundaryConditionLayerProps {
   topology: MeshTopology;
@@ -54,6 +58,18 @@ export function BoundaryConditionLayer({
   const tieDraft = useModelStore((s) => s.tieDraft);
   const loadDisplay = useModelStore((s) => s.loadDisplay);
   const { pairs: tiePairs } = useTiePairs();
+  // Set only while a BC or load is being picked in point mode — see
+  // useReferencePointPick. When it is, the markers are click targets and are
+  // drawn larger to say so.
+  const pickReferencePoint = useReferencePointPick();
+  // Nodes in the live pick session, so a selected reference point is shown
+  // selected rather than the user having to read it off the panel.
+  const pickedNodeIds = useMemo(() => {
+    const ids = new Set<number>();
+    for (const face of pendingFaces) for (const id of face.nodeIds) ids.add(id);
+    if (selectedFace) for (const id of selectedFace.nodeIds) ids.add(id);
+    return ids;
+  }, [pendingFaces, selectedFace]);
 
   const {
     nodeMap,
@@ -212,6 +228,7 @@ export function BoundaryConditionLayer({
   const couplingSpiders = useMemo(() => {
     const spiders: {
       id: number;
+      refNodeId: number;
       positions: Float32Array;
       point: [number, number, number];
     }[] = [];
@@ -233,6 +250,7 @@ export function BoundaryConditionLayer({
       }
       spiders.push({
         id: group.id,
+        refNodeId: group.refNodeId,
         positions: positions.subarray(0, 6 * written),
         point: [ref.n.x, ref.n.y, ref.n.z],
       });
@@ -707,10 +725,26 @@ export function BoundaryConditionLayer({
                 marker is painted UNDER the surface highlights however high its
                 renderOrder. Joining the transparent pass is what lets the order
                 put the point on top of the surface it belongs to. */}
-            <mesh position={spider.point} renderOrder={5}>
-              <sphereGeometry args={[modelSize * 0.018, 12, 10]} />
+            <mesh
+              position={spider.point}
+              renderOrder={5}
+              onClick={
+                pickReferencePoint &&
+                ((event) => {
+                  event.stopPropagation();
+                  pickReferencePoint(spider.refNodeId);
+                })
+              }
+            >
+              <sphereGeometry
+                args={[modelSize * (pickReferencePoint ? 0.03 : 0.018), 12, 10]}
+              />
               <meshBasicMaterial
-                color={COUPLING_COLOR}
+                color={
+                  pickedNodeIds.has(spider.refNodeId)
+                    ? SELECTION_COLOR
+                    : COUPLING_COLOR
+                }
                 depthTest={false}
                 transparent
                 opacity={1}

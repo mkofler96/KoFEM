@@ -465,6 +465,31 @@ export function pickEdgeNodeIds(
 // ── Point picking ─────────────────────────────────────────────────────────────
 
 /**
+ * The reference point nearest a click, and how far away it was.
+ *
+ * A reference point is not part of any surface, so the ray never reports it —
+ * the click always lands on the mesh behind it. Whether the user meant the point
+ * or the node behind it is therefore a DISTANCE question, decided here rather
+ * than left to the depth ordering of two overlapping meshes: a marker drawn on
+ * the face it couples sits fractionally behind that face, so the surface always
+ * wins the raycast even when the point is what was clicked.
+ */
+export function nearestReferencePoint(
+  clickPoint: Vec3,
+  points: { nodeId: number; point: Vec3 }[],
+): { nodeId: number; distSq: number } | null {
+  let nearest: { nodeId: number; distSq: number } | null = null;
+  for (const { nodeId, point } of points) {
+    const distSq =
+      (clickPoint[0] - point[0]) ** 2 +
+      (clickPoint[1] - point[1]) ** 2 +
+      (clickPoint[2] - point[2]) ** 2;
+    if (!nearest || distSq < nearest.distSq) nearest = { nodeId, distSq };
+  }
+  return nearest;
+}
+
+/**
  * Pick the single node nearest the click, among the vertices of the clicked
  * facet.
  *

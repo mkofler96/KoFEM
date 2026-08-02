@@ -9,7 +9,6 @@ import {
   DofCheckboxes,
   PickedFaceList,
   PickGeometryToggle,
-  ReferencePointSelect,
 } from "./BcLoadFormControls";
 import { BcValueForm } from "./GroupValueForms";
 import { GroupCard } from "./GroupCard";
@@ -53,22 +52,15 @@ export function BcSection({ onError }: { onError(msg: string | null): void }) {
     false,
   ]);
   const [bcValue, setBcValue] = useState("0");
-  // A coupling's reference point, when the BC acts on one instead of (or as
-  // well as) a picked surface. Fixing a KINEMATIC coupling's point is how a
-  // bolted or bearing-supported hole is restrained without clamping every node
-  // of the bore.
-  const [refNodeId, setRefNodeId] = useState<number | null>(null);
-  const refPointEntry = () => {
-    const coupling = couplingGroups.find((c) => c.refNodeId === refNodeId);
-    return coupling
-      ? [
-          {
-            label: `${coupling.name} reference point`,
-            nodeIds: [coupling.refNodeId],
-          },
-        ]
-      : [];
-  };
+  // Whether the pick has landed on a coupling's reference point — clicked in
+  // the viewport like anything else. Such a point carries six real DOFs
+  // (shell_core gives a coupling reference its rotations), so the rotational
+  // boxes become meaningful: fixing them is how a bolted or welded connection
+  // is restrained without clamping every node of the bore.
+  const refPoints = new Set(couplingGroups.map((c) => c.refNodeId));
+  const pickedReferencePoint = allPickedFaces.some((face) =>
+    face.nodeIds.every((id) => refPoints.has(id)),
+  );
 
   const targetBcGroup =
     pickTargetGroupId !== null
@@ -76,16 +68,13 @@ export function BcSection({ onError }: { onError(msg: string | null): void }) {
       : null;
 
   function applyBc() {
-    if (allPickedFaces.length === 0 && refNodeId === null) return;
-    const faceEntries = [
-      ...toFaceEntries(
-        allPickedFaces,
-        // eslint-disable-next-line kofem/no-silent-fallback -- numbering offset for the new entries; a pick with no target group starts a fresh group, which has 0 faces
-        targetBcGroup?.faces.length ?? 0,
-        pickGeometry,
-      ),
-      ...refPointEntry(),
-    ];
+    if (allPickedFaces.length === 0) return;
+    const faceEntries = toFaceEntries(
+      allPickedFaces,
+      // eslint-disable-next-line kofem/no-silent-fallback -- numbering offset for the new entries; a pick with no target group starts a fresh group, which has 0 faces
+      targetBcGroup?.faces.length ?? 0,
+      pickGeometry,
+    );
     if (targetBcGroup) {
       for (const faceEntry of faceEntries) {
         addFaceToBcGroup(targetBcGroup.id, faceEntry);
@@ -103,7 +92,6 @@ export function BcSection({ onError }: { onError(msg: string | null): void }) {
         .filter((i) => i >= 0);
       createBcGroup(faceEntries, dofs, value);
     }
-    setRefNodeId(null);
     endPick();
   }
 
@@ -131,11 +119,14 @@ export function BcSection({ onError }: { onError(msg: string | null): void }) {
             </button>
           </div>
 
-          {/* Face or edge. A point BC is not offered: restraining a single
-              node of a solid mesh is a stress singularity, not a support. */}
+          {/* Point picking is offered so a coupling's REFERENCE POINT can be
+              fixed — clicked in the viewport like any other selection, which is
+              the only way to restrain a bolted hole without clamping every node
+              of its bore. It also allows a single mesh node, which is a
+              legitimate way to remove a rigid-body mode. */}
           <PickGeometryToggle
             value={pickGeometry}
-            options={hasShells ? ["face", "edge"] : ["face"]}
+            options={hasShells ? ["face", "edge", "point"] : ["face", "point"]}
             onChange={setPickGeometry}
           />
 
@@ -145,52 +136,44 @@ export function BcSection({ onError }: { onError(msg: string | null): void }) {
             geometry={pickGeometry}
           />
 
-          <ReferencePointSelect
-            couplings={couplingGroups}
-            value={refNodeId}
-            onChange={setRefNodeId}
-          />
-
-          {(allPickedFaces.length > 0 || refNodeId !== null) &&
-            !targetBcGroup && (
-              <>
-                {/* A reference point carries six DOFs whichever elements the model
-                  has, so Rx/Ry/Rz are offered as soon as one is the target. */}
-                <DofCheckboxes
-                  checkedDofs={checkedDofs}
-                  showRotations={hasShells || refNodeId !== null}
-                  onToggle={(index) =>
-                    setCheckedDofs((prev) =>
-                      prev.map((checked, i) =>
-                        i === index ? !checked : checked,
-                      ),
-                    )
-                  }
+          {allPickedFaces.length > 0 && !targetBcGroup && (
+            <>
+              {/* A reference point carries six DOFs whichever elements the
+                  model has, so Rx/Ry/Rz appear as soon as one is picked. */}
+              <DofCheckboxes
+                checkedDofs={checkedDofs}
+                showRotations={hasShells || pickedReferencePoint}
+                onToggle={(index) =>
+                  setCheckedDofs((prev) =>
+                    prev.map((checked, i) =>
+                      i === index ? !checked : checked,
+                    ),
+                  )
+                }
+              />
+              <div className={styles.formRow}>
+                <span className={styles.formLabel}>Value</span>
+                <input
+                  className={styles.formInput}
+                  type="number"
+                  value={bcValue}
+                  step="0.001"
+                  onChange={(e) => setBcValue(e.target.value)}
                 />
-                <div className={styles.formRow}>
-                  <span className={styles.formLabel}>Value</span>
-                  <input
-                    className={styles.formInput}
-                    type="number"
-                    value={bcValue}
-                    step="0.001"
-                    onChange={(e) => setBcValue(e.target.value)}
-                  />
-                </div>
-                <button className={styles.primaryBtn} onClick={applyBc}>
-                  Apply BC
-                </button>
-              </>
-            )}
-
-          {(allPickedFaces.length > 0 || refNodeId !== null) &&
-            targetBcGroup && (
+              </div>
               <button className={styles.primaryBtn} onClick={applyBc}>
-                {allPickedFaces.length === 1
-                  ? "Add Face"
-                  : `Add ${allPickedFaces.length} Faces`}
+                Apply BC
               </button>
-            )}
+            </>
+          )}
+
+          {allPickedFaces.length > 0 && targetBcGroup && (
+            <button className={styles.primaryBtn} onClick={applyBc}>
+              {allPickedFaces.length === 1
+                ? "Add Face"
+                : `Add ${allPickedFaces.length} Faces`}
+            </button>
+          )}
         </div>
       )}
 

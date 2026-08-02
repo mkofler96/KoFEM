@@ -17,6 +17,7 @@ import {
   mapTrianglesToCadFaces,
   pickFaceNodeIds,
   pickPointNodeId,
+  nearestReferencePoint,
   toggleFaceSelection,
 } from "../src/lib/facePick.ts";
 
@@ -400,6 +401,33 @@ const centroid = [0, 1, 2].map(
 assert(
   "a click at the facet centroid still picks exactly one node",
   pickPointNodeId(centroid, pointTri, topoWithIds, getPos).size === 1,
+);
+
+// ── Reference points compete with mesh nodes by distance ─────────────────────
+//
+// A reference point belongs to no surface, so the ray can only ever report the
+// mesh behind it — a marker drawn on the face it couples is ALWAYS behind that
+// face, whatever its render order. Which of the two was meant is therefore a
+// distance question, and this is the comparison that answers it.
+
+const refA = { nodeId: 900, point: [0, 0, 0] };
+const refB = { nodeId: 901, point: [10, 0, 0] };
+
+assert(
+  "the nearer of two reference points wins",
+  nearestReferencePoint([9, 0, 0], [refA, refB])?.nodeId === 901,
+);
+assert(
+  "…and the other way round",
+  nearestReferencePoint([1, 0, 0], [refA, refB])?.nodeId === 900,
+);
+assert(
+  "the squared distance is reported so the caller can compare against a node",
+  nearestReferencePoint([3, 4, 0], [refA])?.distSq === 25,
+);
+assert(
+  "a model with no couplings has no reference point to pick",
+  nearestReferencePoint([0, 0, 0], []) === null,
 );
 
 // ── Summary ───────────────────────────────────────────────────────────────────
