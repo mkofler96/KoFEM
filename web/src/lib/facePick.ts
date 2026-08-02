@@ -78,7 +78,7 @@ export function sameFaceNodes(a: number[], b: number[]): boolean {
 export function toggleFaceSelection(
   current: PickedFace[],
   picked: PickedFace,
-  noun: "Face" | "Edge" = "Face",
+  noun: SelectionNoun = "Face",
 ): PickedFace[] {
   const existingIdx = current.findIndex((f) =>
     sameFaceNodes(f.nodeIds, picked.nodeIds),
@@ -89,8 +89,32 @@ export function toggleFaceSelection(
       : [...current, picked];
   return next.map((f, i) => ({
     ...f,
-    label: `${noun} ${i + 1} (${f.nodeIds.length} nodes)`,
+    label: selectionLabel(noun, i + 1, f.nodeIds.length),
   }));
+}
+
+// What a click selects. "face" is a surface region, "edge" the boundary
+// polyline near the click, "point" the single nearest node of the clicked
+// facet.
+export type PickGeometry = "face" | "edge" | "point";
+
+export type SelectionNoun = "Face" | "Edge" | "Node";
+
+export const SELECTION_NOUN: Record<PickGeometry, SelectionNoun> = {
+  face: "Face",
+  edge: "Edge",
+  point: "Node",
+};
+
+// "Face 1 (37 nodes)" / "Node 2 (1 node)". Written in one place because both
+// the viewport's live labels and the panel's committed entries use it, and a
+// selection that reads differently in the two is the same selection twice.
+export function selectionLabel(
+  noun: SelectionNoun,
+  index: number,
+  nNodes: number,
+): string {
+  return `${noun} ${index} (${nNodes} node${nNodes === 1 ? "" : "s"})`;
 }
 
 export function buildEdgeToTris(triangles: Tri[]): Map<string, number[]> {
@@ -436,4 +460,43 @@ export function pickEdgeNodeIds(
     nodeIds.add(boundaryEdges[e][1]);
   }
   return nodeIds;
+}
+
+// ── Point picking ─────────────────────────────────────────────────────────────
+
+/**
+ * Pick the single node nearest the click, among the vertices of the clicked
+ * facet.
+ *
+ * Restricting the candidates to the clicked triangle is what makes this exact:
+ * a global nearest-node search over the whole mesh would happily return a node
+ * on the far side of the model that happens to project closer in space, and the
+ * user would have selected something they cannot see. The ray already told us
+ * which facet was hit; the node they meant is one of its three corners.
+ *
+ * Returns a one-element set, the same node-id-set shape the face and edge picks
+ * return, so group creation, storage and the viewport need no special case.
+ */
+export function pickPointNodeId(
+  clickPoint: Vec3,
+  startTriIdx: number,
+  topo: BoundaryMeshTopo,
+  getPos: (id: number) => Vec3,
+): Set<number> {
+  const triangle = topo.triangles[startTriIdx];
+  if (!triangle) return new Set();
+  let nearest = triangle[0];
+  let best = Infinity;
+  for (const nodeId of triangle) {
+    const pos = getPos(nodeId);
+    const distSq =
+      (clickPoint[0] - pos[0]) ** 2 +
+      (clickPoint[1] - pos[1]) ** 2 +
+      (clickPoint[2] - pos[2]) ** 2;
+    if (distSq < best) {
+      best = distSq;
+      nearest = nodeId;
+    }
+  }
+  return new Set([nearest]);
 }

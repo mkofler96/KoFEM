@@ -6,6 +6,7 @@ import type {
   CouplingKind,
   FaceSelection,
   LoadKind,
+  PickGeometry,
   ReferencePointOption,
   TieExtent,
 } from "../../store/modelStore";
@@ -18,32 +19,50 @@ import {
 import { fmt } from "../../lib/modelDisplay";
 import styles from "./LeftPanel.module.css";
 
-// Face / Edge picker for shell models: a flat shell sheet is one face-pick
-// region, so grabbing its rim (an edge load or supported-edge BC) needs edge
-// picking (#386). Offered only when the model has CTRIA3 elements.
+const GEOMETRY_LABEL: Record<PickGeometry, string> = {
+  face: "Face",
+  edge: "Edge",
+  point: "Point",
+};
+
+// What a click selects. `options` is explicit because not every geometry suits
+// every model or every condition: edge picking only means something on a shell
+// (a closed solid boundary has no boundary polyline to walk), and a point pick
+// is not offered where a single node would be the wrong thing to define.
+// Rendered only when there is a genuine choice to make.
 export function PickGeometryToggle({
   value,
+  options,
   onChange,
 }: {
-  value: "face" | "edge";
-  onChange(geometry: "face" | "edge"): void;
+  value: PickGeometry;
+  options: PickGeometry[];
+  onChange(geometry: PickGeometry): void;
 }) {
+  if (options.length < 2) return null;
   return (
     <div className={styles.segToggle} role="group" aria-label="Pick geometry">
-      {(["face", "edge"] as const).map((geometry) => (
+      {options.map((geometry) => (
         <button
           key={geometry}
           type="button"
+          data-testid={`pick-geometry-${geometry}`}
           className={`${styles.segBtn} ${value === geometry ? styles.segBtnActive : ""}`}
           aria-pressed={value === geometry}
           onClick={() => onChange(geometry)}
         >
-          {geometry === "face" ? "Face" : "Edge"}
+          {GEOMETRY_LABEL[geometry]}
         </button>
       ))}
     </div>
   );
 }
+
+const PICK_HINT: Record<PickGeometry, string> = {
+  face: "Click a face in the 3D viewport",
+  edge: "Click near a mesh edge in the 3D viewport",
+  point: "Click near a mesh node in the 3D viewport",
+};
 
 export function PickedFaceList({
   faces,
@@ -52,16 +71,10 @@ export function PickedFaceList({
 }: {
   faces: FaceSelection[];
   onRemove(index: number): void;
-  geometry?: "face" | "edge";
+  geometry?: PickGeometry;
 }) {
   if (faces.length === 0) {
-    return (
-      <div className={styles.pickHint}>
-        {geometry === "edge"
-          ? "Click near a mesh edge in the 3D viewport"
-          : "Click a face in the 3D viewport"}
-      </div>
-    );
+    return <div className={styles.pickHint}>{PICK_HINT[geometry]}</div>;
   }
   return (
     <div>

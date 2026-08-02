@@ -82,7 +82,7 @@ export function BcSection({ onError }: { onError(msg: string | null): void }) {
         allPickedFaces,
         // eslint-disable-next-line kofem/no-silent-fallback -- numbering offset for the new entries; a pick with no target group starts a fresh group, which has 0 faces
         targetBcGroup?.faces.length ?? 0,
-        pickGeometry === "edge" ? "Edge" : "Face",
+        pickGeometry,
       ),
       ...refPointEntry(),
     ];
@@ -131,12 +131,13 @@ export function BcSection({ onError }: { onError(msg: string | null): void }) {
             </button>
           </div>
 
-          {hasShells && (
-            <PickGeometryToggle
-              value={pickGeometry}
-              onChange={setPickGeometry}
-            />
-          )}
+          {/* Face or edge. A point BC is not offered: restraining a single
+              node of a solid mesh is a stress singularity, not a support. */}
+          <PickGeometryToggle
+            value={pickGeometry}
+            options={hasShells ? ["face", "edge"] : ["face"]}
+            onChange={setPickGeometry}
+          />
 
           <PickedFaceList
             faces={allPickedFaces}

@@ -13,9 +13,14 @@ import type { Page } from "@playwright/test";
 
 type PickState = {
   selectedFace: { nodeIds: number[]; label: string } | null;
-  pickGeometry: "face" | "edge";
+  pickGeometry: "face" | "edge" | "point";
   bcGroups: { name: string; faces: { label: string; nodeIds: number[] }[] }[];
   loadGroups: { name: string; faces: { label: string }[] }[];
+  couplingGroups: {
+    name: string;
+    point: [number, number, number];
+    faces: { label: string; nodeIds: number[] }[];
+  }[];
   nodes: unknown[];
 };
 
@@ -42,6 +47,14 @@ function readPickState(page: Page) {
       loadGroups: state.loadGroups.map((g) => ({
         name: g.name,
         faces: g.faces.map((f) => ({ label: f.label })),
+      })),
+      couplingGroups: state.couplingGroups.map((g) => ({
+        name: g.name,
+        point: g.point,
+        faces: g.faces.map((f) => ({
+          label: f.label,
+          count: f.nodeIds.length,
+        })),
       })),
       nodeCount: state.nodes.length,
     };
@@ -148,4 +161,45 @@ test("edge picking a shell rim creates an edge BC and an edge load", async ({
   const loadFace =
     afterLoad.loadGroups[afterLoad.loadGroups.length - 1].faces[0];
   expect(loadFace.label.startsWith("Edge")).toBe(true);
+});
+
+test("a coupling can grip a picked shell edge", async ({ page }) => {
+  test.setTimeout(90_000);
+
+  await page.goto("/app/?example=plate-with-hole-shell");
+  await expect(page.locator("nav")).toBeVisible();
+  await page.waitForFunction(() =>
+    Boolean((window as unknown as { __kofem?: unknown }).__kofem),
+  );
+  await expect
+    .poll(async () => (await readPickState(page)).nodeCount, {
+      timeout: 15_000,
+    })
+    .toBeGreaterThan(0);
+  const totalNodes = (await readPickState(page)).nodeCount;
+
+  await page.getByRole("button", { name: "Constraints" }).click();
+  await page.getByTestId("add-coupling").click();
+
+  // A coupling grips a LINE as readily as a surface — the rim of a shell, a
+  // stiffener edge. On a flat sheet this is the only way to select one, because
+  // the whole sheet is a single face-pick region.
+  await page.getByTestId("pick-geometry-edge").click();
+  await edgePickOnViewport(page);
+
+  const picked = await readPickState(page);
+  expect(picked.pickGeometry).toBe("edge");
+  expect(picked.selected?.label.startsWith("Edge")).toBe(true);
+
+  // The reference point defaults to the centre of whatever was picked — for a
+  // rim, the centre of the ring.
+  await expect(page.getByTestId("coupling-point-x")).not.toHaveValue("");
+  await page.getByTestId("apply-coupling").click();
+
+  const after = await readPickState(page);
+  expect(after.couplingGroups).toHaveLength(1);
+  const gripped = after.couplingGroups[0].faces[0];
+  expect(gripped.label.startsWith("Edge")).toBe(true);
+  expect(gripped.count).toBeGreaterThan(2);
+  expect(gripped.count).toBeLessThan(totalNodes * 0.5);
 });

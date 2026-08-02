@@ -295,7 +295,7 @@ console.log("Reference point placement");
   );
   const centre = options[0].point;
   check(
-    "the surface centre is on the bore axis at mid-height",
+    "the selection centre is on the bore axis at mid-height",
     Math.hypot(centre[0], centre[1]) < 1e-6 && Math.abs(centre[2] - 12) < 1e-6,
     `got (${centre.join(", ")})`,
   );
@@ -321,8 +321,8 @@ console.log("Reference point placement");
     beam.elements,
   );
   check(
-    "a flat face offers only the surface centre",
-    flatOptions.length === 1 && flatOptions[0].label === "Surface centre",
+    "a flat face offers only the selection centre",
+    flatOptions.length === 1 && flatOptions[0].label === "Selection centre",
     `got ${flatOptions.map((o) => o.label).join(", ")}`,
   );
 }
@@ -545,6 +545,41 @@ let forceDeflection = 0;
       withRef.elements,
       couplingGroups,
     ).length === 1,
+  );
+
+  // A POINT pick — a single mesh node, marked `geometry: "point"` — goes the
+  // same way as a reference point, and for the same reason: one node spans no
+  // element face, so an integrated traction over it is a traction over nothing.
+  // The marker is explicit rather than inferred from the node count, so the two
+  // builders agree by construction instead of by coincidence.
+  const pointPickGroup = {
+    id: 3,
+    name: "Load3",
+    dof: 1,
+    totalForce: FORCE,
+    components: [0, FORCE, 0],
+    kind: "force",
+    faces: [
+      {
+        id: 4,
+        label: "Node 1",
+        nodeIds: [centreTipId],
+        geometry: "point",
+      },
+    ],
+  };
+  const nodeLoads = rebuildLoads([pointPickGroup], withRef.nodes, []);
+  check(
+    "a force on a picked node becomes a nodal DOF load",
+    nodeLoads.length === 1 &&
+      nodeLoads[0].nodeId === centreTipId &&
+      nodeLoads[0].dof === 1 &&
+      nodeLoads[0].value === FORCE,
+    JSON.stringify(nodeLoads),
+  );
+  check(
+    "a force on a picked node produces no surface load to double-apply it",
+    rebuildSurfaceLoads([pointPickGroup], withRef.elements, []).length === 0,
   );
 }
 

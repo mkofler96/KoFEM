@@ -14,6 +14,7 @@ import {
   CouplingKindSelect,
   DofCheckboxes,
   PickedFaceList,
+  PickGeometryToggle,
   ReferencePointInputs,
 } from "./BcLoadFormControls";
 import { CouplingValueForm } from "./GroupValueForms";
@@ -63,6 +64,13 @@ export function CouplingSection({
   const elements = useModelStore((s) => s.elements);
   const couplingGroups = useModelStore((s) => s.couplingGroups);
   const pickMode = useModelStore((s) => s.pickMode);
+  const pickGeometry = useModelStore((s) => s.pickGeometry);
+  const setPickGeometry = useModelStore((s) => s.setPickGeometry);
+  // Edge picking only means something on a shell: a closed solid boundary has
+  // no boundary polyline to walk (extractBoundaryEdges finds none).
+  const hasShells = useModelStore((s) =>
+    s.elements.some((el) => el.type === "CTRIA3"),
+  );
   const createCouplingGroup = useModelStore((s) => s.createCouplingGroup);
   const addFaceToCouplingGroup = useModelStore((s) => s.addFaceToCouplingGroup);
   const updateCouplingGroup = useModelStore((s) => s.updateCouplingGroup);
@@ -188,6 +196,7 @@ export function CouplingSection({
       for (const faceEntry of toFaceEntries(
         allPickedFaces,
         targetGroup.faces.length,
+        pickGeometry,
       ))
         addFaceToCouplingGroup(targetGroup.id, faceEntry);
       endPick();
@@ -202,7 +211,12 @@ export function CouplingSection({
       onError("A kinematic coupling must tie at least one DOF");
       return;
     }
-    createCouplingGroup(toFaceEntries(allPickedFaces, 0), point, kind, dofs);
+    createCouplingGroup(
+      toFaceEntries(allPickedFaces, 0, pickGeometry),
+      point,
+      kind,
+      dofs,
+    );
     endPick();
   }
 
@@ -233,7 +247,20 @@ export function CouplingSection({
             </button>
           </div>
 
-          <PickedFaceList faces={allPickedFaces} onRemove={removePickedFace} />
+          {/* A coupling can grip a LINE as well as a surface — the rim of a
+              shell, a stiffener edge — which on a flat sheet is the only way to
+              select it at all, since the whole sheet is one face-pick region. */}
+          <PickGeometryToggle
+            value={pickGeometry}
+            options={hasShells ? ["face", "edge"] : ["face"]}
+            onChange={setPickGeometry}
+          />
+
+          <PickedFaceList
+            faces={allPickedFaces}
+            onRemove={removePickedFace}
+            geometry={pickGeometry}
+          />
 
           {!targetGroup && allPickedFaces.length > 0 && (
             <>

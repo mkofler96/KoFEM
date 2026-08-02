@@ -33,6 +33,10 @@ type Store = {
   getState(): {
     couplingGroups: CouplingGroupState[];
     bcGroups: { id: number; faces: { nodeIds: number[] }[] }[];
+    loadGroups: {
+      id: number;
+      faces: { nodeIds: number[]; geometry?: string }[];
+    }[];
     nodes: { id: number; x: number; y: number; z: number }[];
     couplingDraft: {
       point: [number, number, number];
@@ -116,7 +120,7 @@ test("a coupling idealises a picked surface to a reference point", async ({
   await page.getByTestId("add-coupling").click();
   await pickFace(page, model.endFace);
 
-  // The point defaults to the picked surface's centre — the x = 10 face of a
+  // The point defaults to the picked selection's centre — the x = 10 face of a
   // 10 × 4 × 4 box, so (10, 2, 2).
   await expect(page.getByTestId("coupling-point-x")).toHaveValue("10");
   await expect(page.getByTestId("coupling-point-y")).toHaveValue("2");
@@ -255,4 +259,56 @@ test("the reference point being placed is previewed in the viewport", async ({
     .not.toBeNull();
   await page.getByTitle("Cancel").click();
   expect((await state(page)).couplingDraft).toBeNull();
+});
+
+test("a load can be applied at a single picked node", async ({ page }) => {
+  const model = await openConstraintsMode(page);
+
+  await page.getByRole("button", { name: "+ Add Load" }).click();
+  // A solid mesh offers Face and Point, but not Edge — a closed solid boundary
+  // has no boundary polyline to walk.
+  await expect(page.getByTestId("pick-geometry-face")).toBeVisible();
+  await expect(page.getByTestId("pick-geometry-point")).toBeVisible();
+  await expect(page.getByTestId("pick-geometry-edge")).toHaveCount(0);
+
+  await page.getByTestId("pick-geometry-point").click();
+  await pickFace(page, [model.endFace[0]]);
+  await expect(
+    page.getByText("applied at the picked node as a concentrated force"),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Apply Load" }).click();
+
+  // The entry records that it was a POINT, which is what tells the solver to
+  // apply the force at the node instead of integrating it over a surface.
+  const { loadGroups } = await state(page);
+  expect(loadGroups).toHaveLength(1);
+  expect(loadGroups[0].faces[0].nodeIds).toEqual([model.endFace[0]]);
+  expect(loadGroups[0].faces[0].geometry).toBe("point");
+});
+
+test("a pressure or a moment on a single node of a solid mesh is refused", async ({
+  page,
+}) => {
+  const model = await openConstraintsMode(page);
+
+  await page.getByRole("button", { name: "+ Add Load" }).click();
+  await page.getByTestId("pick-geometry-point").click();
+  await pickFace(page, [model.endFace[0]]);
+
+  // A pressure is force per unit area, and a node has none.
+  await page.getByRole("combobox").first().selectOption("pressure");
+  await page.getByRole("button", { name: "Apply Load" }).click();
+  await expect(page.getByTestId("constraints-error")).toContainText(
+    "cannot act on a single node",
+  );
+
+  // A moment needs a rotational DOF, which a solid mesh node does not have —
+  // the message points at the reference point, which does.
+  await page.getByRole("combobox").first().selectOption("moment");
+  await page.getByRole("button", { name: "Apply Load" }).click();
+  await expect(page.getByTestId("constraints-error")).toContainText(
+    "reference point",
+  );
+
+  expect((await state(page)).loadGroups).toHaveLength(0);
 });

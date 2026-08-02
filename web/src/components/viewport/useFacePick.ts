@@ -6,7 +6,9 @@ import { useModelStore } from "../../store/modelStore";
 import {
   pickFaceNodeIds,
   pickEdgeNodeIds,
+  pickPointNodeId,
   toggleFaceSelection,
+  SELECTION_NOUN,
 } from "../../lib/facePick";
 import type { BoundaryMeshTopo, Vec3 } from "../../lib/facePick";
 
@@ -19,6 +21,7 @@ import type { BoundaryMeshTopo, Vec3 } from "../../lib/facePick";
 // otherwise a BFS flood-fill with normal-angle thresholds (parametric box mesh
 // or .inp import). Edge mode selects the boundary polyline near the click — the
 // only way to grab the rim of a flat shell, whose whole sheet is one region.
+// Point mode selects the single nearest node of the clicked facet.
 export function useFacePick(
   boundaryMeshTopo: BoundaryMeshTopo | null,
   getPos: (id: number) => Vec3,
@@ -37,17 +40,14 @@ export function useFacePick(
     const startIdx = e.faceIndex;
     if (startIdx >= boundaryMeshTopo.triangles.length) return;
 
-    const faceNodeIds =
+    const clickPoint: Vec3 = [e.point.x, e.point.y, e.point.z];
+    const picked =
       pickGeometry === "edge"
-        ? [
-            ...pickEdgeNodeIds(
-              [e.point.x, e.point.y, e.point.z],
-              startIdx,
-              boundaryMeshTopo,
-              getPos,
-            ),
-          ]
-        : [...pickFaceNodeIds(startIdx, boundaryMeshTopo)];
+        ? pickEdgeNodeIds(clickPoint, startIdx, boundaryMeshTopo, getPos)
+        : pickGeometry === "point"
+          ? pickPointNodeId(clickPoint, startIdx, boundaryMeshTopo, getPos)
+          : pickFaceNodeIds(startIdx, boundaryMeshTopo);
+    const faceNodeIds = [...picked];
     if (faceNodeIds.length === 0) return;
     // The normal decides which axis/extreme the picked face is snapped to, and
     // that selection becomes solver input. Substituting +Y for a missing normal
@@ -84,7 +84,7 @@ export function useFacePick(
         isMax,
         label: "",
       },
-      pickGeometry === "edge" ? "Edge" : "Face",
+      SELECTION_NOUN[pickGeometry],
     );
 
     // Re-split into pending faces + the active (last) selection.

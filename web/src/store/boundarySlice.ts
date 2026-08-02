@@ -8,6 +8,7 @@
 import type { SliceCreator } from "./modelStore";
 import type { Element, Node } from "./geometrySlice";
 import type { TieDefinition, TieExtent } from "../lib/tie";
+import type { PickGeometry } from "../lib/facePick";
 import type { CouplingDefinition, CouplingKind } from "../lib/coupling";
 import { ALL_DOFS, referencePointIds } from "../lib/coupling";
 import { momentToNodalForces } from "./momentLoad";
@@ -37,6 +38,12 @@ export interface BcFaceEntry {
   id: number;
   label: string; // e.g. "Face 1"
   nodeIds: number[];
+  // What was picked. Only "point" changes how the solver applies the group: a
+  // single node spans no element face, so a load on it cannot be integrated as
+  // a traction and is applied at the node instead (rebuildLoads). Absent on
+  // entries saved before point picking existed, which were faces or edges —
+  // both integrable — so absence reads correctly as "not a point".
+  geometry?: PickGeometry;
 }
 
 export interface NamedBcGroup {
@@ -267,13 +274,32 @@ function loadedFaces(
   return edges;
 }
 
-// Whether a load/BC face names a coupling's reference point rather than a patch
-// of the mesh. The single definition rebuildLoads and rebuildSurfaceLoads both
-// use to decide which of them owns a face.
-function isReferencePointFace(
-  face: { nodeIds: number[] },
+// Mint a committed face entry from a picked one, taking the next id. Written
+// once because every group type creates entries the same way, and a copy that
+// forgets to carry a field — `geometry` is the one that matters, since it is
+// what routes a load to its nodes rather than to a surface integral — fails
+// only in the solve, far from here.
+function faceEntry(
+  face: Omit<BcFaceEntry, "id">,
+  nextId: () => number,
+): BcFaceEntry {
+  return { ...face, id: nextId() };
+}
+
+// Whether a selection is applied AT ITS NODES rather than integrated over a
+// surface. Two ways to be one, and neither spans an element face:
+//
+//   a coupling's reference point — a node belonging to no element at all
+//   a point pick               — a single mesh node, which spans no face
+//
+// The single definition rebuildLoads and rebuildSurfaceLoads both consult to
+// decide which of them owns a face. Written once on purpose: a load that both
+// claim is applied twice, and a load neither claims disappears without a word.
+function isNodalFace(
+  face: { nodeIds: number[]; geometry?: PickGeometry },
   refPoints: Set<number>,
 ): boolean {
+  if (face.geometry === "point") return true;
   return (
     face.nodeIds.length > 0 && face.nodeIds.every((id) => refPoints.has(id))
   );
@@ -294,23 +320,28 @@ export function rebuildLoads(
     if (kind === "pressure") continue; // no vector, and a point has no area
     const vector = loadComponents(g);
 
-    // A load on a REFERENCE POINT is applied to the point directly, whichever
-    // kind it is, because neither of the usual routes can carry it:
+    // A load on a single NODE — a picked point, or a coupling's reference point
+    // — is applied there directly, whichever kind it is, because neither of the
+    // usual routes can carry it:
     //
     //   force  — rebuildSurfaceLoads integrates a traction over the boundary
-    //            faces lying on the selection, and a lone point spans none, so
+    //            faces lying on the selection, and a lone node spans none, so
     //            the load would be integrated over nothing and vanish.
     //   moment — momentToNodalForces turns a couple into a ring of tangential
     //            forces about the face centroid, and a single node IS its own
     //            centroid, so every lever arm is zero and the couple vanishes.
     //
-    // The point carries six real DOFs (it is a coupling reference — see
-    // shell_core's is_coupling_ref), so it simply takes the force and the couple
-    // as nodal DOF loads, and the coupling spreads them over the surface it
-    // grips. The group's vector is its TOTAL, so several reference points in one
-    // group share it, exactly as a surface selection shares a traction.
+    // A reference point carries six real DOFs (it is a coupling reference — see
+    // shell_core's is_coupling_ref), so it takes both the force and the couple,
+    // and its coupling spreads them over the surface it grips. An ordinary mesh
+    // node has only the three translations; a moment applied there reaches the
+    // engine as a rotational DOF the solid solve does not carry, so it is
+    // rejected at the panel rather than accepted and dropped here.
+    //
+    // The group's vector is its TOTAL, so several nodes in one group share it,
+    // exactly as a surface selection shares a traction.
     const pointFaces = new Set(
-      g.faces.filter((face) => isReferencePointFace(face, refPoints)),
+      g.faces.filter((face) => isNodalFace(face, refPoints)),
     );
     const pointNodeIds = [...pointFaces].flatMap((face) => face.nodeIds);
     for (const nodeId of pointNodeIds)
@@ -351,13 +382,13 @@ export function rebuildSurfaceLoads(
     const kind = loadKind(g);
     if (kind === "moment") continue; // moments stay as equivalent point loads
     for (const f of g.faces) {
-      // Reference points are rebuildLoads' half of the group: they belong to no
-      // element, so there is no surface to integrate over. The two builders
-      // partition a group's faces by the SAME test on purpose — leaving it to
-      // loadedFaces returning nothing would make the split an accident of that
-      // function, and a change there would either double-apply the load or drop
-      // it without a word.
-      if (isReferencePointFace(f, refPoints)) continue;
+      // Nodal selections are rebuildLoads' half of the group: a reference point
+      // belongs to no element and a picked point spans no face, so there is no
+      // surface to integrate over. The two builders partition a group's faces by
+      // the SAME test on purpose — leaving it to loadedFaces returning nothing
+      // would make the split an accident of that function, and a change there
+      // would either double-apply the load or drop it without a word.
+      if (isNodalFace(f, refPoints)) continue;
       const faces = loadedFaces(f, elements);
       if (faces.length === 0) continue;
       if (kind === "pressure") {
@@ -393,10 +424,11 @@ export interface BoundarySlice {
 
   pickMode: PickMode | null;
   pickTargetGroupId: number | null; // null = creating new group; id = adding to existing
-  // Whether a click selects a surface region ("face") or a boundary polyline
-  // ("edge"). Edge picking is the only way to grab the rim of a flat shell,
-  // whose whole sheet is a single face-pick region. Reset to "face" on exit.
-  pickGeometry: "face" | "edge";
+  // What a click selects: a surface region ("face"), the boundary polyline near
+  // the click ("edge" — the only way to grab the rim of a flat shell, whose
+  // whole sheet is a single face-pick region), or the single nearest node
+  // ("point"). Reset to "face" on exit.
+  pickGeometry: PickGeometry;
   selectedFace: FaceSelection | null;
   pendingFaces: FaceSelection[]; // faces accumulated via shift-click within a pick session
 
@@ -418,7 +450,7 @@ export interface BoundarySlice {
 
   // Pick mode / face selection
   setPickMode(mode: PickMode | null, targetGroupId?: number | null): void;
-  setPickGeometry(geometry: "face" | "edge"): void;
+  setPickGeometry(geometry: PickGeometry): void;
   setSelectedFace(face: FaceSelection | null): void;
   setPendingFaces(faces: FaceSelection[]): void;
   setPickTieSide(side: TieSide): void;
@@ -554,7 +586,7 @@ export const createBoundarySlice: SliceCreator<BoundarySlice> = (set) => ({
       s.pickTieSide = side;
     }),
 
-  setPickGeometry: (geometry: "face" | "edge") =>
+  setPickGeometry: (geometry: PickGeometry) =>
     set((s) => {
       s.pickGeometry = geometry;
     }),
@@ -576,11 +608,9 @@ export const createBoundarySlice: SliceCreator<BoundarySlice> = (set) => ({
     value: number,
   ) =>
     set((s) => {
-      const faceEntries = faces.map((f) => ({
-        id: s.nextFaceEntryId++,
-        label: f.label,
-        nodeIds: f.nodeIds,
-      }));
+      const faceEntries = faces.map((f) =>
+        faceEntry(f, () => s.nextFaceEntryId++),
+      );
       s.bcGroups.push({
         id: s.nextBcGroupId,
         name: `BC${s.nextBcGroupId}`,
@@ -597,12 +627,7 @@ export const createBoundarySlice: SliceCreator<BoundarySlice> = (set) => ({
     set((s) => {
       const group = s.bcGroups.find((g) => g.id === groupId);
       if (!group) return;
-      const faceId = s.nextFaceEntryId++;
-      group.faces.push({
-        id: faceId,
-        label: face.label,
-        nodeIds: face.nodeIds,
-      });
+      group.faces.push(faceEntry(face, () => s.nextFaceEntryId++));
       s.constraints = rebuildConstraints(s.bcGroups);
       s.result = null;
     }),
@@ -651,11 +676,9 @@ export const createBoundarySlice: SliceCreator<BoundarySlice> = (set) => ({
     components?: [number, number, number],
   ) =>
     set((s) => {
-      const faceEntries = faces.map((f) => ({
-        id: s.nextFaceEntryId++,
-        label: f.label,
-        nodeIds: f.nodeIds,
-      }));
+      const faceEntries = faces.map((f) =>
+        faceEntry(f, () => s.nextFaceEntryId++),
+      );
       // A componentwise force/moment carries its vector in `components` (the
       // source of truth); dof/totalForce are derived as a legacy summary.
       const { dof, totalForce } = components
@@ -684,12 +707,7 @@ export const createBoundarySlice: SliceCreator<BoundarySlice> = (set) => ({
     set((s) => {
       const group = s.loadGroups.find((g) => g.id === groupId);
       if (!group) return;
-      const faceId = s.nextFaceEntryId++;
-      group.faces.push({
-        id: faceId,
-        label: face.label,
-        nodeIds: face.nodeIds,
-      });
+      group.faces.push(faceEntry(face, () => s.nextFaceEntryId++));
       s.loads = rebuildLoads(s.loadGroups, s.nodes, s.couplingGroups);
       s.surfaceLoads = rebuildSurfaceLoads(
         s.loadGroups,
@@ -776,11 +794,7 @@ export const createBoundarySlice: SliceCreator<BoundarySlice> = (set) => ({
   ) =>
     set((s) => {
       const entries = (faces: Omit<BcFaceEntry, "id">[]) =>
-        faces.map((face) => ({
-          id: s.nextFaceEntryId++,
-          label: face.label,
-          nodeIds: face.nodeIds,
-        }));
+        faces.map((face) => faceEntry(face, () => s.nextFaceEntryId++));
       s.tieGroups.push({
         id: s.nextTieGroupId,
         name: `Tie${s.nextTieGroupId}`,
@@ -801,11 +815,7 @@ export const createBoundarySlice: SliceCreator<BoundarySlice> = (set) => ({
     set((s) => {
       const group = s.tieGroups.find((tie) => tie.id === groupId);
       if (!group) return;
-      tieFaces(group, side).push({
-        id: s.nextFaceEntryId++,
-        label: face.label,
-        nodeIds: face.nodeIds,
-      });
+      tieFaces(group, side).push(faceEntry(face, () => s.nextFaceEntryId++));
       s.result = null;
     }),
 
@@ -864,11 +874,7 @@ export const createBoundarySlice: SliceCreator<BoundarySlice> = (set) => ({
         dofs: kind === "kinematic" ? dofs : ALL_DOFS,
         refNodeId,
         point,
-        faces: faces.map((face) => ({
-          id: s.nextFaceEntryId++,
-          label: face.label,
-          nodeIds: face.nodeIds,
-        })),
+        faces: faces.map((face) => faceEntry(face, () => s.nextFaceEntryId++)),
       });
       s.nextCouplingGroupId++;
       s.result = null;
@@ -878,11 +884,7 @@ export const createBoundarySlice: SliceCreator<BoundarySlice> = (set) => ({
     set((s) => {
       const group = s.couplingGroups.find((c) => c.id === groupId);
       if (!group) return;
-      group.faces.push({
-        id: s.nextFaceEntryId++,
-        label: face.label,
-        nodeIds: face.nodeIds,
-      });
+      group.faces.push(faceEntry(face, () => s.nextFaceEntryId++));
       s.result = null;
     }),
 

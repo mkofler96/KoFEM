@@ -312,12 +312,12 @@ function fitCylinderAxis(
 
 // Where a coupling's reference point may sit, given the surface it grips.
 //
-// Always the surface centre — the mean of the picked nodes, which for a full
-// bore is its mid-axis point. When the surface is a cylinder (a bolt hole, a
-// bearing seat), the two ends of its axis are offered as well: KOF-208's "up and
-// down centre", the positions a bolt head and a nut actually occupy. Any other
-// position is typed in as coordinates, which is why this list is a starting
-// point and not a constraint.
+// Always the centre of the selection — the mean of its nodes, which for a full
+// bore is its mid-axis point and for a picked rim is the centre of the ring.
+// When the selection is a cylinder (a bolt hole, a bearing seat), the two ends
+// of its axis are offered as well: KOF-208's "up and down centre", the positions
+// a bolt head and a nut actually occupy. Any other position is typed in as
+// coordinates, which is why this list is a starting point and not a constraint.
 export function referencePointOptions(
   faces: { nodeIds: number[] }[],
   nodes: CouplingNode[],
@@ -342,7 +342,7 @@ export function referencePointOptions(
 
   const centroid = centroidOf(points);
   const options: ReferencePointOption[] = [
-    { label: "Surface centre", point: centroid },
+    { label: "Selection centre", point: centroid },
   ];
 
   const fit = fitCylinderAxis(

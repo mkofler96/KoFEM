@@ -68,6 +68,7 @@ export {
   DEFAULT_TIE_DISTANCE,
 } from "./boundarySlice";
 export type { TieExtent } from "../lib/tie";
+export type { PickGeometry } from "../lib/facePick";
 export type { CouplingKind, ReferencePointOption } from "../lib/coupling";
 export { ALL_DOFS, referencePointOptions } from "../lib/coupling";
 export type {
