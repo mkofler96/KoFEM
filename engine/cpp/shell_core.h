@@ -92,11 +92,23 @@ struct Coupling {
     std::vector<double> weights;         // per solid node (empty ⇒ equal weights)
     // Relaxed shell-to-solid MPC (Lu, Zhang & Yang, "A Relaxed MPC Method for
     // Non-rigid Shell to Solid Coupling", J. Phys.: Conf. Ser. 2528 012064, 2023).
-    // When true, the reference (shell) node's translations are rigidly tied to its
-    // nearest solid node — a coincident-node tie that enforces displacement
-    // CONTINUITY at the junction (unlike the distributing RBE3 average, which only
-    // matches the resultant and lets the shell separate) — and its rotations follow
-    // the relaxation-scaled least-squares rotation of the coupled solid nodes.
+    // When true, the reference (shell) node's translations are tied to the
+    // DISTANCE-WEIGHTED CENTROID of its solid patch, and its rotations follow the
+    // relaxation-scaled least-squares rotation of that patch. The 1/(d²+ε²) weight
+    // keeps the tie local, so it enforces displacement CONTINUITY at the junction —
+    // unlike the distributing RBE3 average, which spreads over the whole search
+    // ball, matches only the resultant, and lets the shell separate.
+    //
+    // The paper ties to a solid node COINCIDENT with the shell node. An
+    // auto-detected seam has none: the mid-surface sits t/2 from the footprint node
+    // on either wall face, equidistant to the last bit, so tying to "the nearest"
+    // picks a side by floating-point accident and welds the mid-surface to one face
+    // of the wall it idealises. That ±t/2 eccentricity carries a moment the
+    // structure does not, and it flips sign wherever the pick flips (KOF-212). The
+    // weighted centroid of the equidistant pair IS the mid-surface, so the
+    // eccentricity cancels; a genuinely coincident node still dominates the kernel
+    // and recovers the paper's tie.
+    //
     // Appropriate for a continuous-material seam (a thin wall idealised as shell,
     // tied back to the retained solid); the distributing coupling (mpc = false)
     // stays for genuinely gapped, non-conforming interfaces (a pin in a hole).
