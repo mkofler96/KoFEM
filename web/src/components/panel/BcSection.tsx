@@ -26,6 +26,7 @@ export function BcSection({ onError }: { onError(msg: string | null): void }) {
   const hasShells = useModelStore((s) =>
     s.elements.some((el) => el.type === "CTRIA3"),
   );
+  const couplingGroups = useModelStore((s) => s.couplingGroups);
   const createBcGroup = useModelStore((s) => s.createBcGroup);
   const addFaceToBcGroup = useModelStore((s) => s.addFaceToBcGroup);
   const removeFaceFromBcGroup = useModelStore((s) => s.removeFaceFromBcGroup);
@@ -51,6 +52,15 @@ export function BcSection({ onError }: { onError(msg: string | null): void }) {
     false,
   ]);
   const [bcValue, setBcValue] = useState("0");
+  // Whether the pick has landed on a coupling's reference point — clicked in
+  // the viewport like anything else. Such a point carries six real DOFs
+  // (shell_core gives a coupling reference its rotations), so the rotational
+  // boxes become meaningful: fixing them is how a bolted or welded connection
+  // is restrained without clamping every node of the bore.
+  const refPoints = new Set(couplingGroups.map((c) => c.refNodeId));
+  const pickedReferencePoint = allPickedFaces.some((face) =>
+    face.nodeIds.every((id) => refPoints.has(id)),
+  );
 
   const targetBcGroup =
     pickTargetGroupId !== null
@@ -63,7 +73,7 @@ export function BcSection({ onError }: { onError(msg: string | null): void }) {
       allPickedFaces,
       // eslint-disable-next-line kofem/no-silent-fallback -- numbering offset for the new entries; a pick with no target group starts a fresh group, which has 0 faces
       targetBcGroup?.faces.length ?? 0,
-      pickGeometry === "edge" ? "Edge" : "Face",
+      pickGeometry,
     );
     if (targetBcGroup) {
       for (const faceEntry of faceEntries) {
@@ -109,12 +119,16 @@ export function BcSection({ onError }: { onError(msg: string | null): void }) {
             </button>
           </div>
 
-          {hasShells && (
-            <PickGeometryToggle
-              value={pickGeometry}
-              onChange={setPickGeometry}
-            />
-          )}
+          {/* Point picking is offered so a coupling's REFERENCE POINT can be
+              fixed — clicked in the viewport like any other selection, which is
+              the only way to restrain a bolted hole without clamping every node
+              of its bore. It also allows a single mesh node, which is a
+              legitimate way to remove a rigid-body mode. */}
+          <PickGeometryToggle
+            value={pickGeometry}
+            options={hasShells ? ["face", "edge", "point"] : ["face", "point"]}
+            onChange={setPickGeometry}
+          />
 
           <PickedFaceList
             faces={allPickedFaces}
@@ -124,9 +138,11 @@ export function BcSection({ onError }: { onError(msg: string | null): void }) {
 
           {allPickedFaces.length > 0 && !targetBcGroup && (
             <>
+              {/* A reference point carries six DOFs whichever elements the
+                  model has, so Rx/Ry/Rz appear as soon as one is picked. */}
               <DofCheckboxes
                 checkedDofs={checkedDofs}
-                showRotations={hasShells}
+                showRotations={hasShells || pickedReferencePoint}
                 onToggle={(index) =>
                   setCheckedDofs((prev) =>
                     prev.map((checked, i) =>

@@ -39,6 +39,15 @@ export function LoadSection({
   const hasShells = useModelStore((s) =>
     s.elements.some((el) => el.type === "CTRIA3"),
   );
+  // A nodal MOMENT only reaches the solver on the pure-shell path
+  // (shellPointLoads carries DOFs 3..5). The solid and coupled assemblers give
+  // an ordinary mesh node three translations only and drop a rotational load,
+  // so on those a couple has to go through a coupling's reference point.
+  const isPureShell = useModelStore(
+    (s) =>
+      s.elements.length > 0 && s.elements.every((el) => el.type === "CTRIA3"),
+  );
+  const couplingGroups = useModelStore((s) => s.couplingGroups);
   const createLoadGroup = useModelStore((s) => s.createLoadGroup);
   const addFaceToLoadGroup = useModelStore((s) => s.addFaceToLoadGroup);
   const removeFaceFromLoadGroup = useModelStore(
@@ -72,6 +81,17 @@ export function LoadSection({
     "1000",
   ]);
   const [pressureVal, setPressureVal] = useState("10");
+  // Whether every picked selection is a coupling's REFERENCE POINT — clicked in
+  // the viewport like anything else. Such a point carries rotational DOFs, so
+  // it is the one place a MOMENT can act on a solid model: the couple is
+  // applied to the point and the coupling spreads it over the gripped surface
+  // (rebuildLoads / coupledLoads).
+  const refPoints = new Set(couplingGroups.map((c) => c.refNodeId));
+  const onlyReferencePoints =
+    allPickedFaces.length > 0 &&
+    allPickedFaces.every((face) =>
+      face.nodeIds.every((id) => refPoints.has(id)),
+    );
 
   const targetLoadGroup =
     pickTargetGroupId !== null
@@ -84,17 +104,43 @@ export function LoadSection({
       allPickedFaces,
       // eslint-disable-next-line kofem/no-silent-fallback -- numbering offset for the new entries; a pick with no target group starts a fresh group, which has 0 faces
       targetLoadGroup?.faces.length ?? 0,
-      pickGeometry === "edge" ? "Edge" : "Face",
+      pickGeometry,
     );
     if (targetLoadGroup) {
       for (const faceEntry of faceEntries) {
         addFaceToLoadGroup(targetLoadGroup.id, faceEntry);
       }
     } else if (loadKindSel === "pressure") {
+      // A pressure is force per unit area, and a single node — a mesh node or a
+      // reference point alike — has none. Refuse it here rather than create a
+      // group whose selection contributes nothing to the solve.
+      if (pickGeometry === "point") {
+        onError(
+          "A pressure cannot act on a single node — it has no area. Apply a force there, or pick a face.",
+        );
+        return;
+      }
       const pressure = parsePressure(pressureVal, onError);
       if (pressure === null) return;
       createLoadGroup(faceEntries, 0, pressure, "pressure");
     } else {
+      // A moment needs a rotational DOF to act on. A coupling's reference point
+      // has one on every solve path; an ordinary mesh node has one only on the
+      // pure-shell path (shellPointLoads carries DOFs 3..5), while the solid and
+      // coupled assemblers would drop it.
+      if (
+        loadKindSel === "moment" &&
+        pickGeometry === "point" &&
+        !onlyReferencePoints &&
+        !isPureShell
+      ) {
+        onError(
+          "A moment cannot act on a single node of a solid mesh — its nodes carry no " +
+            "rotational DOF, so the couple would be dropped. Couple the surface to a " +
+            "reference point and apply the moment there.",
+        );
+        return;
+      }
       const components = parseLoadVector(
         loadKindSel === "moment" ? momentVec : forceVec,
         loadKindSel,
@@ -104,6 +150,31 @@ export function LoadSection({
       createLoadGroup(faceEntries, 0, 0, loadKindSel, components);
     }
     endPick();
+  }
+
+  // How the load about to be created will actually reach the solver. The three
+  // routes are genuinely different physics — an integrated traction, a
+  // concentrated nodal load, and a couple carried by a coupling — so which one
+  // a selection lands on is worth saying before it is applied.
+  function applicationNote(): string {
+    if (loadKindSel === "pressure")
+      return "applied as p·n̂ over each face (work-equivalent)";
+    if (loadKindSel === "force") {
+      if (onlyReferencePoints)
+        return "applied at the reference point, and spread over its coupled surface";
+      if (pickGeometry === "point")
+        return "applied at the picked node as a concentrated force";
+      if (pickGeometry === "edge")
+        return "applied as a work-equivalent line load along the edge";
+      return "applied as a work-equivalent surface traction";
+    }
+    if (onlyReferencePoints)
+      return "applied to the reference point as a couple, and spread over its coupled surface";
+    if (pickGeometry === "point")
+      return isPureShell
+        ? "applied at the picked node as a couple"
+        : "a solid mesh node carries no rotation — use a coupling's reference point";
+    return "distributed as equivalent nodal forces";
   }
 
   function updateVecComponent(index: number, value: string) {
@@ -143,12 +214,15 @@ export function LoadSection({
             </button>
           </div>
 
-          {hasShells && (
-            <PickGeometryToggle
-              value={pickGeometry}
-              onChange={setPickGeometry}
-            />
-          )}
+          {/* A point load is applied at the node itself rather than integrated
+              over a surface, which is the only way to state a concentrated
+              force — a lug pin, a bolt reaction — on a mesh that has no element
+              face to spread it over. */}
+          <PickGeometryToggle
+            value={pickGeometry}
+            options={hasShells ? ["face", "edge", "point"] : ["face", "point"]}
+            onChange={setPickGeometry}
+          />
 
           <PickedFaceList
             faces={allPickedFaces}
@@ -170,15 +244,7 @@ export function LoadSection({
                   onChange={updateVecComponent}
                 />
               )}
-              <div className={styles.pickNote}>
-                {loadKindSel === "pressure"
-                  ? "applied as p·n̂ over each face (work-equivalent)"
-                  : loadKindSel === "force"
-                    ? pickGeometry === "edge"
-                      ? "applied as a work-equivalent line load along the edge"
-                      : "applied as a work-equivalent surface traction"
-                    : "distributed as equivalent nodal forces"}
-              </div>
+              <div className={styles.pickNote}>{applicationNote()}</div>
               <button className={styles.loadBtn} onClick={applyLoad}>
                 Apply Load
               </button>

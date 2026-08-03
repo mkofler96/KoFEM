@@ -2,8 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import type {
+  CouplingKind,
   FaceSelection,
   LoadKind,
+  PickGeometry,
+  ReferencePointOption,
   TieExtent,
 } from "../../store/modelStore";
 import {
@@ -14,32 +17,50 @@ import {
 } from "./bcFormUtils";
 import styles from "./LeftPanel.module.css";
 
-// Face / Edge picker for shell models: a flat shell sheet is one face-pick
-// region, so grabbing its rim (an edge load or supported-edge BC) needs edge
-// picking (#386). Offered only when the model has CTRIA3 elements.
+const GEOMETRY_LABEL: Record<PickGeometry, string> = {
+  face: "Face",
+  edge: "Edge",
+  point: "Point",
+};
+
+// What a click selects. `options` is explicit because not every geometry suits
+// every model or every condition: edge picking only means something on a shell
+// (a closed solid boundary has no boundary polyline to walk), and a point pick
+// is not offered where a single node would be the wrong thing to define.
+// Rendered only when there is a genuine choice to make.
 export function PickGeometryToggle({
   value,
+  options,
   onChange,
 }: {
-  value: "face" | "edge";
-  onChange(geometry: "face" | "edge"): void;
+  value: PickGeometry;
+  options: PickGeometry[];
+  onChange(geometry: PickGeometry): void;
 }) {
+  if (options.length < 2) return null;
   return (
     <div className={styles.segToggle} role="group" aria-label="Pick geometry">
-      {(["face", "edge"] as const).map((geometry) => (
+      {options.map((geometry) => (
         <button
           key={geometry}
           type="button"
+          data-testid={`pick-geometry-${geometry}`}
           className={`${styles.segBtn} ${value === geometry ? styles.segBtnActive : ""}`}
           aria-pressed={value === geometry}
           onClick={() => onChange(geometry)}
         >
-          {geometry === "face" ? "Face" : "Edge"}
+          {GEOMETRY_LABEL[geometry]}
         </button>
       ))}
     </div>
   );
 }
+
+const PICK_HINT: Record<PickGeometry, string> = {
+  face: "Click a face in the 3D viewport",
+  edge: "Click near a mesh edge in the 3D viewport",
+  point: "Click near a mesh node in the 3D viewport",
+};
 
 export function PickedFaceList({
   faces,
@@ -48,16 +69,10 @@ export function PickedFaceList({
 }: {
   faces: FaceSelection[];
   onRemove(index: number): void;
-  geometry?: "face" | "edge";
+  geometry?: PickGeometry;
 }) {
   if (faces.length === 0) {
-    return (
-      <div className={styles.pickHint}>
-        {geometry === "edge"
-          ? "Click near a mesh edge in the 3D viewport"
-          : "Click a face in the 3D viewport"}
-      </div>
-    );
+    return <div className={styles.pickHint}>{PICK_HINT[geometry]}</div>;
   }
   return (
     <div>
@@ -227,5 +242,94 @@ export function DofCheckboxes({
         </label>
       ))}
     </div>
+  );
+}
+
+// How a surface-to-point coupling ties its surface to its reference point. The
+// two kinds are not interchangeable — see lib/coupling.ts — so the difference
+// is spelled out under the select rather than left to the two words.
+export function CouplingKindSelect({
+  value,
+  onChange,
+}: {
+  value: CouplingKind;
+  onChange(kind: CouplingKind): void;
+}) {
+  return (
+    <>
+      <div className={styles.formRow}>
+        <span className={styles.formLabel}>Kind</span>
+        <select
+          className={styles.formSelect}
+          data-testid="coupling-kind"
+          value={value}
+          onChange={(e) => onChange(e.target.value as CouplingKind)}
+        >
+          <option value="distributing">Distributing (RBE3)</option>
+          <option value="kinematic">Kinematic (RBE2)</option>
+        </select>
+      </div>
+      <div className={styles.pickNote}>
+        {value === "distributing"
+          ? "the surface stays flexible and the point follows it — the point can be loaded, but not fixed"
+          : "the surface follows the point rigidly — the point can be fixed, loaded or coupled onward"}
+      </div>
+    </>
+  );
+}
+
+// Where the reference point sits: one of the positions derived from the picked
+// surface (its centre, and the two ends of its axis when it is a cylinder), or
+// coordinates typed in. Choosing a derived position fills the coordinate boxes,
+// which stay editable — the derived positions are a starting point, not a
+// constraint (KOF-208).
+export function ReferencePointInputs({
+  options,
+  coords,
+  onCoordChange,
+  onPickOption,
+}: {
+  options: ReferencePointOption[];
+  coords: [string, string, string];
+  onCoordChange(index: number, value: string): void;
+  onPickOption(option: ReferencePointOption): void;
+}) {
+  return (
+    <>
+      {options.length > 0 && (
+        <div className={styles.formRow}>
+          <span className={styles.formLabel}>Place at</span>
+          <select
+            className={styles.formSelect}
+            data-testid="coupling-place-at"
+            value=""
+            onChange={(e) => {
+              const option = options[Number(e.target.value)];
+              if (option) onPickOption(option);
+            }}
+          >
+            <option value="">Custom coordinates</option>
+            {options.map((option, i) => (
+              <option key={option.label} value={i}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      {["X", "Y", "Z"].map((axis, i) => (
+        <div className={styles.formRow} key={axis}>
+          <span className={styles.formLabel}>{axis} (mm)</span>
+          <input
+            className={styles.formInput}
+            data-testid={`coupling-point-${axis.toLowerCase()}`}
+            type="number"
+            step="0.1"
+            value={coords[i]}
+            onChange={(e) => onCoordChange(i, e.target.value)}
+          />
+        </div>
+      ))}
+    </>
   );
 }

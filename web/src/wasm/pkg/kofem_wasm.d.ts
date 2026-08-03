@@ -118,12 +118,16 @@ export interface KofemModule {
    *             `attributes` is one 1-based solid-material index per TET, into
    *             the `mat_json.solid` array; omitted means every tet uses the
    *             first material.
-   *   coupling: { ref, offsets, solid, mpc?, relaxation? }  CSR-style: reference
-   *             node ref[k] ties to solid[offsets[k]..offsets[k+1]). Optional
-   *             mpc[k] = 1 selects the relaxed shell-to-solid MPC coupling (rigid
-   *             translation tie + relaxation-scaled rotation) for that reference,
+   *   coupling: { ref, offsets, solid, mpc?, dof_mask?, relaxation? }  CSR-style:
+   *             reference node ref[k] ties to solid[offsets[k]..offsets[k+1]).
+   *             Optional mpc[k] = 1 selects the relaxed shell-to-solid MPC
+   *             coupling (rigid translation tie + relaxation-scaled rotation),
+   *             2 the kinematic RBE2 coupling (the coupled nodes follow the
+   *             reference point rigidly, leaving the point independent), and
    *             0/absent keeps the distributing RBE3 coupling; relaxation is the
-   *             shared ψ ∈ [0.5,1] used by the MPC couplings.
+   *             shared ψ ∈ [0.5,1] used by the MPC couplings. dof_mask[k] selects
+   *             which of a kinematic coupling's six DOFs are tied (bits 0..5,
+   *             all six when absent).
    *   bcs:      { fixed_dofs, load_dofs, load_vals }  (DOF = 6·node+component)
    *   mat_json: { solid, shell:{young_modulus,poisson_ratio} } — `solid` is
    *             either one material object (every tet uses it) or an ARRAY of
@@ -142,6 +146,7 @@ export interface KofemModule {
       offsets: Int32Array
       solid: Int32Array
       mpc?: Int32Array
+      dof_mask?: Int32Array
       relaxation?: number
     },
     bcs: { fixed_dofs: Int32Array; load_dofs: Int32Array; load_vals: Float64Array },

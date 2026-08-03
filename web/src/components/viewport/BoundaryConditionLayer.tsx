@@ -1,10 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Boundary condition, load and tie visualisation: committed BC/load/tie face
-// highlights, the in-progress pick-session highlights (pending + selected
-// faces), the fixed-support marker, resultant / per-node load arrows, and the
-// links between the node pairs a tie connection welds.
+// Boundary condition, load, tie and coupling visualisation: committed
+// BC/load/tie/coupling face highlights, the in-progress pick-session highlights
+// (pending + selected faces), the fixed-support marker, resultant / per-node
+// load arrows, the links between the node pairs a tie connection welds, and the
+// spider of a surface-to-point coupling.
 
 import { useMemo } from "react";
 import * as THREE from "three";
@@ -14,6 +15,7 @@ import {
   loadComponents,
 } from "../../store/modelStore";
 import { useTiePairs } from "../../hooks/useTiePairs";
+import { useReferencePointPick } from "./useFacePick";
 import { buildFacePositions } from "./useMeshTopology";
 import type { MeshTopology } from "./useMeshTopology";
 
@@ -21,6 +23,17 @@ import type { MeshTopology } from "./useMeshTopology";
 // is readable at a glance; the links between welded nodes take the A colour.
 const TIE_COLOR_A = "#7c3aed";
 const TIE_COLOR_B = "#0891b2";
+
+// Couplings: emerald, matching the panel's coupling dot. A coupling still being
+// placed gets its own blue rather than the pick session's orange or the
+// committed emerald: it sits ON the orange picked surface, and when a point is
+// being MOVED it has to be told apart from the committed spider still drawn at
+// the old position — which is the whole comparison the edit is about.
+const COUPLING_COLOR = "#059669";
+const COUPLING_DRAFT_COLOR = "#2563eb";
+
+// The orange every live pick session uses for what is currently selected.
+const SELECTION_COLOR = "#e05533";
 
 interface BoundaryConditionLayerProps {
   topology: MeshTopology;
@@ -39,10 +52,24 @@ export function BoundaryConditionLayer({
   const bcGroups = useModelStore((s) => s.bcGroups);
   const loadGroups = useModelStore((s) => s.loadGroups);
   const tieGroups = useModelStore((s) => s.tieGroups);
+  const couplingGroups = useModelStore((s) => s.couplingGroups);
+  const couplingDraft = useModelStore((s) => s.couplingDraft);
   const pickMode = useModelStore((s) => s.pickMode);
   const tieDraft = useModelStore((s) => s.tieDraft);
   const loadDisplay = useModelStore((s) => s.loadDisplay);
   const { pairs: tiePairs } = useTiePairs();
+  // Set only while a BC or load is being picked in point mode — see
+  // useReferencePointPick. When it is, the markers are click targets and are
+  // drawn larger to say so.
+  const pickReferencePoint = useReferencePointPick();
+  // Nodes in the live pick session, so a selected reference point is shown
+  // selected rather than the user having to read it off the panel.
+  const pickedNodeIds = useMemo(() => {
+    const ids = new Set<number>();
+    for (const face of pendingFaces) for (const id of face.nodeIds) ids.add(id);
+    if (selectedFace) for (const id of selectedFace.nodeIds) ids.add(id);
+    return ids;
+  }, [pendingFaces, selectedFace]);
 
   const {
     nodeMap,
@@ -175,6 +202,80 @@ export function BoundaryConditionLayer({
     if (written === 0) return null;
     return { positions: positions.subarray(0, 6 * written), markers };
   }, [tiePairs, nodeMap]);
+
+  // Coupling surface highlights — the surface each coupling grips.
+  const couplingFaceHighlights = useMemo(() => {
+    if (!boundaryMeshTopo) return null;
+    const highlights: { key: string; positions: Float32Array }[] = [];
+    for (const group of couplingGroups)
+      group.faces.forEach((face, i) => {
+        const positions = buildFacePositions(
+          face.nodeIds,
+          boundaryMeshTopo.triangles,
+          nodeMap,
+        );
+        if (positions)
+          highlights.push({ key: `coupling-${group.id}-${i}`, positions });
+      });
+    return highlights;
+  }, [couplingGroups, boundaryMeshTopo, nodeMap]);
+
+  // Coupling spiders — a line from every gripped node to its reference point,
+  // plus a marker at the point. This is the constraint's actual reach: which
+  // nodes the point governs (kinematic) or averages (distributing), rather than
+  // just the surface it was declared on. The reference point is a node of the
+  // model, so its position comes from the same nodeMap as everything else.
+  const couplingSpiders = useMemo(() => {
+    const spiders: {
+      id: number;
+      refNodeId: number;
+      positions: Float32Array;
+      point: [number, number, number];
+    }[] = [];
+    for (const group of couplingGroups) {
+      const ref = nodeMap.get(group.refNodeId);
+      if (!ref) continue;
+      const gripped = new Set(group.faces.flatMap((face) => face.nodeIds));
+      gripped.delete(group.refNodeId);
+      const positions = new Float32Array(6 * gripped.size);
+      let written = 0;
+      for (const nodeId of gripped) {
+        const node = nodeMap.get(nodeId);
+        if (!node) continue;
+        positions.set(
+          [ref.n.x, ref.n.y, ref.n.z, node.n.x, node.n.y, node.n.z],
+          6 * written,
+        );
+        written++;
+      }
+      spiders.push({
+        id: group.id,
+        refNodeId: group.refNodeId,
+        positions: positions.subarray(0, 6 * written),
+        point: [ref.n.x, ref.n.y, ref.n.z],
+      });
+    }
+    return spiders;
+  }, [couplingGroups, nodeMap]);
+
+  // The coupling being placed: the same spider, at the position the form
+  // currently holds. Drawn from `couplingDraft` rather than re-derived here, so
+  // the marker is exactly where the coordinates say and cannot drift from them.
+  const draftSpider = useMemo(() => {
+    if (!couplingDraft) return null;
+    const positions = new Float32Array(6 * couplingDraft.nodeIds.length);
+    let written = 0;
+    for (const nodeId of new Set(couplingDraft.nodeIds)) {
+      const node = nodeMap.get(nodeId);
+      if (!node) continue;
+      positions.set(
+        [...couplingDraft.point, node.n.x, node.n.y, node.n.z],
+        6 * written,
+      );
+      written++;
+    }
+    return { positions: positions.subarray(0, 6 * written) };
+  }, [couplingDraft, nodeMap]);
 
   // BC markers — one small triangular cone per constrained node (apex at the
   // node, base outward), replacing the former single centroid marker. Each
@@ -580,6 +681,107 @@ export function BoundaryConditionLayer({
               <meshBasicMaterial color={TIE_COLOR_A} depthTest={false} />
             </mesh>
           ))}
+        </group>
+      )}
+
+      {/* Coupling surface highlights — the surface each coupling grips */}
+      {!showResult &&
+        couplingFaceHighlights?.map((highlight) => (
+          <mesh key={highlight.key} renderOrder={1}>
+            <bufferGeometry>
+              <bufferAttribute
+                attach="attributes-position"
+                args={[highlight.positions, 3]}
+              />
+            </bufferGeometry>
+            <meshBasicMaterial
+              color={COUPLING_COLOR}
+              transparent
+              opacity={0.3}
+              depthTest={false}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+        ))}
+
+      {/* Coupling spiders — a line from the reference point to every node it
+          couples, and a sphere at the point itself */}
+      {!showResult &&
+        couplingSpiders.map((spider) => (
+          <group key={`coupling-spider-${spider.id}`}>
+            {spider.positions.length > 0 && (
+              <lineSegments renderOrder={4}>
+                <bufferGeometry>
+                  <bufferAttribute
+                    attach="attributes-position"
+                    args={[spider.positions, 3]}
+                  />
+                </bufferGeometry>
+                <lineBasicMaterial color={COUPLING_COLOR} depthTest={false} />
+              </lineSegments>
+            )}
+            {/* `transparent` with full opacity, not a translucency: three.js
+                draws the opaque pass before the transparent one, so an opaque
+                marker is painted UNDER the surface highlights however high its
+                renderOrder. Joining the transparent pass is what lets the order
+                put the point on top of the surface it belongs to. */}
+            <mesh
+              position={spider.point}
+              renderOrder={5}
+              onClick={
+                pickReferencePoint &&
+                ((event) => {
+                  event.stopPropagation();
+                  pickReferencePoint(spider.refNodeId);
+                })
+              }
+            >
+              <sphereGeometry
+                args={[modelSize * (pickReferencePoint ? 0.03 : 0.018), 12, 10]}
+              />
+              <meshBasicMaterial
+                color={
+                  pickedNodeIds.has(spider.refNodeId)
+                    ? SELECTION_COLOR
+                    : COUPLING_COLOR
+                }
+                depthTest={false}
+                transparent
+                opacity={1}
+              />
+            </mesh>
+          </group>
+        ))}
+
+      {/* The coupling being placed — its point and the nodes it would grip,
+          so the position can be judged against the model before it is applied */}
+      {!showResult && couplingDraft && draftSpider && (
+        <group>
+          {draftSpider.positions.length > 0 && (
+            <lineSegments renderOrder={5}>
+              <bufferGeometry>
+                <bufferAttribute
+                  attach="attributes-position"
+                  args={[draftSpider.positions, 3]}
+                />
+              </bufferGeometry>
+              <lineBasicMaterial
+                color={COUPLING_DRAFT_COLOR}
+                depthTest={false}
+                transparent
+                opacity={1}
+              />
+            </lineSegments>
+          )}
+          <mesh position={couplingDraft.point} renderOrder={6}>
+            <sphereGeometry args={[modelSize * 0.022, 16, 12]} />
+            <meshBasicMaterial
+              color={COUPLING_DRAFT_COLOR}
+              depthTest={false}
+              transparent
+              opacity={1}
+            />
+          </mesh>
         </group>
       )}
 

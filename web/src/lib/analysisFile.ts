@@ -3,6 +3,7 @@
 
 import type {
   AppMode,
+  CouplingGroup,
   Element,
   ElementType,
   Material,
@@ -72,9 +73,11 @@ export interface AnalysisState {
   bcGroups: NamedBcGroup[];
   loadGroups: NamedLoadGroup[];
   tieGroups: TieGroup[];
+  couplingGroups: CouplingGroup[];
   nextBcGroupId: number;
   nextLoadGroupId: number;
   nextTieGroupId: number;
+  nextCouplingGroupId: number;
   nextFaceEntryId: number;
   nextMatId: number;
   stepSurface: StepTessellation | null;
@@ -104,9 +107,14 @@ interface KofemFieldDataV1 {
   // Tie (connector) conditions. Absent in files written before connections
   // became a named model object — such a file simply has no ties.
   tieGroups?: TieGroup[];
+  // Surface-to-point couplings. Absent in files written before couplings
+  // existed — such a file simply has none. The reference points themselves need
+  // no separate entry: they are nodes, and travel in the VTU point list.
+  couplingGroups?: CouplingGroup[];
   nextBcGroupId: number;
   nextLoadGroupId: number;
   nextTieGroupId?: number;
+  nextCouplingGroupId?: number;
   nextFaceEntryId: number;
   nextMatId: number;
   stepSurface: StepTessellation | null;
@@ -242,9 +250,11 @@ export function serializeAnalysis(state: AnalysisState): string {
     bcGroups: state.bcGroups,
     loadGroups: state.loadGroups,
     tieGroups: state.tieGroups,
+    couplingGroups: state.couplingGroups,
     nextBcGroupId: state.nextBcGroupId,
     nextLoadGroupId: state.nextLoadGroupId,
     nextTieGroupId: state.nextTieGroupId,
+    nextCouplingGroupId: state.nextCouplingGroupId,
     nextFaceEntryId: state.nextFaceEntryId,
     nextMatId: state.nextMatId,
     stepSurface: state.stepSurface,
@@ -403,6 +413,10 @@ function parseMetadata(xml: string): KofemFieldDataV1 {
     throw new Error(
       `Invalid analysis file: "tieGroups" must be an array, got ${typeof meta.tieGroups}`,
     );
+  if (meta.couplingGroups !== undefined && !Array.isArray(meta.couplingGroups))
+    throw new Error(
+      `Invalid analysis file: "couplingGroups" must be an array, got ${typeof meta.couplingGroups}`,
+    );
 
   if (typeof meta.modelName !== "string")
     throw new Error('Invalid analysis file: "modelName" must be a string');
@@ -523,6 +537,10 @@ export function parseAnalysisFile(text: string): AnalysisState {
   const nextTieGroupId =
     meta.nextTieGroupId ??
     tieGroups.reduce((highest, tie) => Math.max(highest, tie.id), 0) + 1;
+  const couplingGroups = meta.couplingGroups ?? [];
+  const nextCouplingGroupId =
+    meta.nextCouplingGroupId ??
+    couplingGroups.reduce((highest, c) => Math.max(highest, c.id), 0) + 1;
 
   return {
     modelName: meta.modelName,
@@ -535,9 +553,11 @@ export function parseAnalysisFile(text: string): AnalysisState {
     bcGroups: meta.bcGroups,
     loadGroups: meta.loadGroups,
     tieGroups,
+    couplingGroups,
     nextBcGroupId: meta.nextBcGroupId,
     nextLoadGroupId: meta.nextLoadGroupId,
     nextTieGroupId,
+    nextCouplingGroupId,
     nextFaceEntryId: meta.nextFaceEntryId,
     nextMatId: meta.nextMatId,
     stepSurface: meta.stepSurface,

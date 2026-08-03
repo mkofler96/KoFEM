@@ -2,16 +2,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useModelStore, loadKind } from "../../store/modelStore";
+import type { PickMode } from "../../store/modelStore";
 import { APP_VERSION } from "../../lib/version";
 import styles from "./StatusBar.module.css";
 
 type ViewRepr = "geometry" | "surface" | "volume" | "wireframe";
 
 // What the face being picked is for, shown next to the pick indicator.
-const PICK_PURPOSE: Record<"bc" | "load" | "tie", string> = {
+const PICK_PURPOSE: Record<PickMode, string> = {
   bc: "fixed displacement",
   load: "apply load",
   tie: "tie connection",
+  coupling: "surface-to-point coupling",
 };
 
 const REPR_BUTTONS: {

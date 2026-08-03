@@ -8,6 +8,8 @@ import type {
   NamedLoadGroup,
 } from "../../store/modelStore";
 import { fmt } from "../../lib/modelDisplay";
+import { SELECTION_NOUN } from "../../lib/facePick";
+import type { PickGeometry } from "../../lib/facePick";
 
 export const DOF_LABELS = ["Ux", "Uy", "Uz", "Rx", "Ry", "Rz"];
 export const FORCE_LABELS = ["Fx", "Fy", "Fz"];
@@ -32,14 +34,21 @@ export function faceKey(face: FaceSelection): string {
   return `${face.nodeIds.length}-${face.nodeIds[0]}-${face.nodeIds[face.nodeIds.length - 1]}`;
 }
 
+// Committed entries for a set of picked selections. The picked GEOMETRY rides
+// along on each entry: only a "point" changes how the solver applies the group
+// (a single node spans no element face, so a load on it is applied at the node
+// rather than integrated as a traction — see rebuildLoads), and the panel must
+// state which it was rather than let a downstream builder guess from the node
+// count.
 export function toFaceEntries(
   faces: FaceSelection[],
   existingCount: number,
-  noun: "Face" | "Edge" = "Face",
+  geometry: PickGeometry = "face",
 ) {
   return faces.map((face, i) => ({
-    label: `${noun} ${existingCount + i + 1}`,
+    label: `${SELECTION_NOUN[geometry]} ${existingCount + i + 1}`,
     nodeIds: face.nodeIds,
+    geometry,
   }));
 }
 

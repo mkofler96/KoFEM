@@ -1,0 +1,344 @@
+// SPDX-FileCopyrightText: 2026 Michael Kofler
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+import { useEffect, useMemo, useState } from "react";
+import { useModelStore, referencePointOptions } from "../../store/modelStore";
+import type {
+  CouplingGroup,
+  CouplingKind,
+  ReferencePointOption,
+} from "../../store/modelStore";
+import { usePickedFaces } from "../../hooks/usePickedFaces";
+import { DOF_LABELS, toFaceEntries } from "./bcFormUtils";
+import {
+  CouplingKindSelect,
+  DofCheckboxes,
+  PickedFaceList,
+  PickGeometryToggle,
+  ReferencePointInputs,
+} from "./BcLoadFormControls";
+import { CouplingValueForm } from "./GroupValueForms";
+import { GroupCard } from "./GroupCard";
+import { fmt } from "../../lib/modelDisplay";
+import styles from "./LeftPanel.module.css";
+
+// One-line summary of a coupling: how it ties, and — for a kinematic one — the
+// DOFs it ties. A distributing coupling always ties all six, so listing them
+// would say nothing.
+export function couplingGroupMeta(group: CouplingGroup): string {
+  const nNodes = new Set(group.faces.flatMap((face) => face.nodeIds)).size;
+  const kind = group.kind === "kinematic" ? "kinematic" : "distributing";
+  const dofs =
+    group.kind === "kinematic"
+      ? ` · ${group.dofs.map((dof) => DOF_LABELS[dof]).join(", ")}`
+      : "";
+  return `${kind}${dofs} · ${nNodes} node${nNodes === 1 ? "" : "s"} → (${group.point
+    .map((c) => fmt(c))
+    .join(", ")})`;
+}
+
+// Parse the reference point's coordinate boxes. A point at the origin is
+// perfectly valid, so only non-finite input is rejected — never coerced to 0,
+// which would silently move the coupling somewhere the user did not ask for.
+function parsePoint(
+  coords: [string, string, string],
+  onError: (msg: string) => void,
+): [number, number, number] | null {
+  const parsed = coords.map((c) => parseFloat(c));
+  if (parsed.some((c) => !isFinite(c))) {
+    onError("Each reference point coordinate must be a finite number");
+    return null;
+  }
+  return [parsed[0], parsed[1], parsed[2]];
+}
+
+// Surface-to-point coupling section: pick the surface, choose how it ties to its
+// reference point and where that point sits, then apply. The same shape as a BC
+// or a load, because a coupling is model data just like they are.
+export function CouplingSection({
+  onError,
+}: {
+  onError(msg: string | null): void;
+}) {
+  const nodes = useModelStore((s) => s.nodes);
+  const elements = useModelStore((s) => s.elements);
+  const couplingGroups = useModelStore((s) => s.couplingGroups);
+  const pickMode = useModelStore((s) => s.pickMode);
+  const pickGeometry = useModelStore((s) => s.pickGeometry);
+  const setPickGeometry = useModelStore((s) => s.setPickGeometry);
+  // Edge picking only means something on a shell: a closed solid boundary has
+  // no boundary polyline to walk (extractBoundaryEdges finds none).
+  const hasShells = useModelStore((s) =>
+    s.elements.some((el) => el.type === "CTRIA3"),
+  );
+  const createCouplingGroup = useModelStore((s) => s.createCouplingGroup);
+  const addFaceToCouplingGroup = useModelStore((s) => s.addFaceToCouplingGroup);
+  const updateCouplingGroup = useModelStore((s) => s.updateCouplingGroup);
+  const removeFaceFromCouplingGroup = useModelStore(
+    (s) => s.removeFaceFromCouplingGroup,
+  );
+  const deleteCouplingGroup = useModelStore((s) => s.deleteCouplingGroup);
+  const setCouplingDraft = useModelStore((s) => s.setCouplingDraft);
+  const {
+    pickTargetGroupId,
+    setPickMode,
+    allPickedFaces,
+    removePickedFace,
+    endPick,
+    startPickForGroup,
+  } = usePickedFaces(onError);
+
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [kind, setKind] = useState<CouplingKind>("kinematic");
+  const [checkedDofs, setCheckedDofs] = useState([
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+  ]);
+  const [coords, setCoords] = useState<[string, string, string]>([
+    "0",
+    "0",
+    "0",
+  ]);
+  // Which derived position the coordinates were last filled from, so the boxes
+  // follow the pick until the user types their own numbers.
+  const [placedLabel, setPlacedLabel] = useState<string | null>(null);
+
+  const targetGroup =
+    pickTargetGroupId !== null
+      ? (couplingGroups.find((group) => group.id === pickTargetGroupId) ?? null)
+      : null;
+
+  // Positions derived from the surface picked so far — its centre, plus the two
+  // ends of its axis when it is a cylinder (KOF-208).
+  const options = useMemo(
+    () => referencePointOptions(allPickedFaces, nodes, elements),
+    [allPickedFaces, nodes, elements],
+  );
+  // Default the point to the surface centre as soon as one is picked, and keep
+  // following it while more faces are added — until the user picks another
+  // position or types coordinates, at which point the boxes are theirs.
+  const centre = options.length > 0 ? options[0] : null;
+  const centreKey = centre ? centre.point.join(",") : "";
+  const [followedCentre, setFollowedCentre] = useState("");
+  if (centre && placedLabel === null && centreKey !== followedCentre) {
+    setFollowedCentre(centreKey);
+    setCoords([
+      String(centre.point[0]),
+      String(centre.point[1]),
+      String(centre.point[2]),
+    ]);
+  }
+
+  // Mirror the coupling being built into the store so the viewport can draw it:
+  // the point where it currently sits, and the nodes it would grip. A reference
+  // point is a position in space with nothing in the mesh to anchor it, so
+  // without this the coordinate boxes are the only feedback there is until the
+  // coupling is already applied.
+  const draftKey = `${pickMode}|${targetGroup?.id ?? ""}|${coords.join(",")}|${allPickedFaces
+    .map((face) => face.nodeIds.length)
+    .join(",")}`;
+  useEffect(() => {
+    // Before a surface is picked there is no coupling yet — the coordinate
+    // boxes still hold their initial zeros, and previewing those would put a
+    // marker at the origin that stands for nothing. (Adding faces to an existing
+    // coupling is not placing a point either; that group's own spider already
+    // shows where its point is.)
+    if (pickMode !== "coupling" || targetGroup || allPickedFaces.length === 0) {
+      setCouplingDraft(null);
+      return;
+    }
+    const parsed = coords.map((coord) => parseFloat(coord));
+    if (parsed.some((coord) => !isFinite(coord))) {
+      // Half-typed coordinates are not a position — drop the preview rather than
+      // park the marker at a number the user did not mean.
+      setCouplingDraft(null);
+      return;
+    }
+    setCouplingDraft({
+      point: [parsed[0], parsed[1], parsed[2]],
+      nodeIds: allPickedFaces.flatMap((face) => face.nodeIds),
+    });
+    // Keyed on draftKey alone, deliberately: `coords` and `allPickedFaces` are
+    // rebuilt on every render, and re-running on those would set a fresh draft
+    // object each time, which re-renders, which re-runs — a loop. draftKey
+    // changes exactly when the preview should.
+  }, [draftKey, setCouplingDraft]);
+
+  // The preview belongs to this form; it must not survive it.
+  useEffect(() => () => setCouplingDraft(null), [setCouplingDraft]);
+
+  function placeAt(option: ReferencePointOption) {
+    setPlacedLabel(option.label);
+    setCoords([
+      String(option.point[0]),
+      String(option.point[1]),
+      String(option.point[2]),
+    ]);
+  }
+
+  function startCouplingPick(groupId: number | null) {
+    setPlacedLabel(null);
+    setFollowedCentre("");
+    if (groupId === null) setPickMode("coupling", null);
+    else startPickForGroup("coupling", groupId);
+  }
+
+  function applyCoupling() {
+    if (allPickedFaces.length === 0) {
+      onError("A coupling needs at least one picked face");
+      return;
+    }
+    if (targetGroup) {
+      for (const faceEntry of toFaceEntries(
+        allPickedFaces,
+        targetGroup.faces.length,
+        pickGeometry,
+      ))
+        addFaceToCouplingGroup(targetGroup.id, faceEntry);
+      endPick();
+      return;
+    }
+    const point = parsePoint(coords, onError);
+    if (point === null) return;
+    const dofs = checkedDofs
+      .map((checked, i) => (checked ? i : -1))
+      .filter((i) => i >= 0);
+    if (kind === "kinematic" && dofs.length === 0) {
+      onError("A kinematic coupling must tie at least one DOF");
+      return;
+    }
+    createCouplingGroup(
+      toFaceEntries(allPickedFaces, 0, pickGeometry),
+      point,
+      kind,
+      dofs,
+    );
+    endPick();
+  }
+
+  return (
+    <>
+      <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
+        Couplings
+      </div>
+
+      {pickMode !== "coupling" && (
+        <button
+          className={styles.pickBtn}
+          data-testid="add-coupling"
+          onClick={() => startCouplingPick(null)}
+        >
+          + Add Coupling
+        </button>
+      )}
+
+      {pickMode === "coupling" && (
+        <div className={styles.pickPanel}>
+          <div className={styles.pickPanelHeader}>
+            <span className={styles.pickPanelTitle}>
+              {targetGroup ? `Add face to ${targetGroup.name}` : "New Coupling"}
+            </span>
+            <button className={styles.iconBtn} onClick={endPick} title="Cancel">
+              ✕
+            </button>
+          </div>
+
+          {/* A coupling can grip a LINE as well as a surface — the rim of a
+              shell, a stiffener edge — which on a flat sheet is the only way to
+              select it at all, since the whole sheet is one face-pick region. */}
+          <PickGeometryToggle
+            value={pickGeometry}
+            options={hasShells ? ["face", "edge"] : ["face"]}
+            onChange={setPickGeometry}
+          />
+
+          <PickedFaceList
+            faces={allPickedFaces}
+            onRemove={removePickedFace}
+            geometry={pickGeometry}
+          />
+
+          {!targetGroup && allPickedFaces.length > 0 && (
+            <>
+              <CouplingKindSelect value={kind} onChange={setKind} />
+              {/* The DOF mask only exists for a kinematic coupling — a
+                  distributing one ties all six of its reference point's DOFs by
+                  construction, so offering checkboxes would promise a control
+                  the solver does not have. */}
+              {kind === "kinematic" && (
+                <DofCheckboxes
+                  checkedDofs={checkedDofs}
+                  showRotations
+                  onToggle={(index) =>
+                    setCheckedDofs((prev) =>
+                      prev.map((checked, i) =>
+                        i === index ? !checked : checked,
+                      ),
+                    )
+                  }
+                />
+              )}
+              <ReferencePointInputs
+                options={options}
+                coords={coords}
+                onCoordChange={(index, value) => {
+                  setPlacedLabel("custom");
+                  setCoords((prev) => {
+                    const next = [...prev] as [string, string, string];
+                    next[index] = value;
+                    return next;
+                  });
+                }}
+                onPickOption={placeAt}
+              />
+            </>
+          )}
+
+          <button
+            className={styles.primaryBtn}
+            data-testid="apply-coupling"
+            onClick={applyCoupling}
+          >
+            {targetGroup ? "Add Face" : "Apply Coupling"}
+          </button>
+        </div>
+      )}
+
+      {couplingGroups.map((group) => (
+        <GroupCard
+          key={group.id}
+          name={group.name}
+          meta={couplingGroupMeta(group)}
+          dotClassName={styles.couplingDot}
+          editTitle="Edit coupling"
+          deleteTitle="Delete coupling"
+          faces={group.faces}
+          editForm={
+            editingId === group.id && (
+              <CouplingValueForm
+                group={group}
+                onSave={(nextKind, nextDofs, nextPoint) => {
+                  updateCouplingGroup(group.id, nextKind, nextDofs, nextPoint);
+                  setEditingId(null);
+                }}
+                onCancel={() => setEditingId(null)}
+              />
+            )
+          }
+          onStartPick={() => startCouplingPick(group.id)}
+          onToggleEdit={() =>
+            setEditingId(editingId === group.id ? null : group.id)
+          }
+          onDelete={() => deleteCouplingGroup(group.id)}
+          onRemoveFace={(faceId) =>
+            removeFaceFromCouplingGroup(group.id, faceId)
+          }
+        />
+      ))}
+    </>
+  );
+}

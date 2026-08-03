@@ -16,6 +16,8 @@ import {
   buildBoundaryMeshTopo,
   mapTrianglesToCadFaces,
   pickFaceNodeIds,
+  pickPointNodeId,
+  nearestReferencePoint,
   toggleFaceSelection,
 } from "../src/lib/facePick.ts";
 
@@ -352,6 +354,80 @@ assert(
 assert(
   "and does not reach the unmapped triangle on the outer mantle",
   triangles[holeOuter].every((v) => !holePick.has(v)),
+);
+
+// ── Point picking ─────────────────────────────────────────────────────────────
+//
+// A point pick selects ONE node: the corner of the clicked facet nearest the
+// click. The candidates are restricted to that facet on purpose — a global
+// nearest-node search would happily return a node on the far side of the model
+// that projects closer in space, and the user would have selected something they
+// cannot see.
+
+const pointTri = innerTriIndices[0];
+const [pa, pb, pc] = triangles[pointTri];
+
+// Click exactly on one corner: that corner is the pick.
+for (const corner of [pa, pb, pc]) {
+  const picked = pickPointNodeId(getPos(corner), pointTri, topoWithIds, getPos);
+  assert(
+    `a click on node ${corner} picks node ${corner}`,
+    setsEqual(picked, new Set([corner])),
+  );
+}
+
+// Click just off a corner, still inside the facet: the same corner wins.
+const posA = getPos(pa);
+const posB = getPos(pb);
+const nearA = [
+  posA[0] + 0.2 * (posB[0] - posA[0]),
+  posA[1] + 0.2 * (posB[1] - posA[1]),
+  posA[2] + 0.2 * (posB[2] - posA[2]),
+];
+assert(
+  "a click 20 % along an edge picks the nearer end",
+  setsEqual(
+    pickPointNodeId(nearA, pointTri, topoWithIds, getPos),
+    new Set([pa]),
+  ),
+);
+
+// Every pick is a single node, whatever the click — the invariant the load path
+// depends on (a one-node selection spans no element face, so its load is
+// applied at the node rather than integrated).
+const centroid = [0, 1, 2].map(
+  (axis) => (getPos(pa)[axis] + getPos(pb)[axis] + getPos(pc)[axis]) / 3,
+);
+assert(
+  "a click at the facet centroid still picks exactly one node",
+  pickPointNodeId(centroid, pointTri, topoWithIds, getPos).size === 1,
+);
+
+// ── Reference points compete with mesh nodes by distance ─────────────────────
+//
+// A reference point belongs to no surface, so the ray can only ever report the
+// mesh behind it — a marker drawn on the face it couples is ALWAYS behind that
+// face, whatever its render order. Which of the two was meant is therefore a
+// distance question, and this is the comparison that answers it.
+
+const refA = { nodeId: 900, point: [0, 0, 0] };
+const refB = { nodeId: 901, point: [10, 0, 0] };
+
+assert(
+  "the nearer of two reference points wins",
+  nearestReferencePoint([9, 0, 0], [refA, refB])?.nodeId === 901,
+);
+assert(
+  "…and the other way round",
+  nearestReferencePoint([1, 0, 0], [refA, refB])?.nodeId === 900,
+);
+assert(
+  "the squared distance is reported so the caller can compare against a node",
+  nearestReferencePoint([3, 4, 0], [refA])?.distSq === 25,
+);
+assert(
+  "a model with no couplings has no reference point to pick",
+  nearestReferencePoint([0, 0, 0], []) === null,
 );
 
 // ── Summary ───────────────────────────────────────────────────────────────────

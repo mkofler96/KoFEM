@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useModelStore } from "../store/modelStore";
+import type { PickMode } from "../store/modelStore";
 
 // Shared face-picking session state: the viewport writes clicked faces into
 // the store (selectedFace + shift-click pendingFaces); both pick panels read
@@ -34,7 +35,7 @@ export function usePickedFaces(onError: (msg: string | null) => void) {
     setPendingFaces([]);
   }
 
-  function startPickForGroup(kind: "bc" | "load" | "tie", groupId: number) {
+  function startPickForGroup(kind: PickMode, groupId: number) {
     setPickMode(kind, groupId);
     setSelectedFace(null);
     setPendingFaces([]);
