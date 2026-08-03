@@ -1193,7 +1193,7 @@ function coupledFixedDofs(
   constraints: Constraint[],
   poolOf: (nodeId: number) => number,
   isShell: (poolIndex: number) => boolean,
-  isRefPoint: (poolIndex: number) => boolean = () => false,
+  isRefPoint: (poolIndex: number) => boolean,
 ): number[] {
   const fixedByPool = new Map<number, Set<number>>();
   for (const c of constraints) {
@@ -1238,7 +1238,7 @@ function coupledLoads(
   loads: Load[],
   surfaceLoads: SurfaceLoad[] | undefined,
   poolOf: (nodeId: number) => number,
-  isRefPoint: (poolIndex: number) => boolean = () => false,
+  isRefPoint: (poolIndex: number) => boolean,
 ): { load_dofs: number[]; load_vals: number[] } {
   const load_dofs: number[] = [];
   const load_vals: number[] = [];
@@ -1656,7 +1656,16 @@ function tryPureShellSolve(
 
   // Reuse the coupled BC/load mapping (nearest-node lumping, 6·node+dof), then
   // fold it into the shell solver's fixed_vertices/fixed_dofs/point_loads form.
-  const flatFixed = coupledFixedDofs(constraints, shellOf, () => true);
+  // Every node here is a shell node and none is a coupling reference point: an
+  // all-shell model that declares a coupling is refused in handleSolve, because
+  // only the coupled assembler applies one.
+  const noReferencePoints: (poolIndex: number) => boolean = () => false;
+  const flatFixed = coupledFixedDofs(
+    constraints,
+    shellOf,
+    () => true,
+    noReferencePoints,
+  );
   const dofsByVertex = new Map<number, Set<number>>();
   for (const d of flatFixed)
     getOrInitDofs(dofsByVertex, Math.floor(d / 6)).add(d % 6);
@@ -1667,7 +1676,12 @@ function tryPureShellSolve(
     else fixed_dofs.push({ vertex, dofs: [...dofSet].sort((a, b) => a - b) });
   }
 
-  const { load_dofs, load_vals } = coupledLoads(loads, surfaceLoads, shellOf);
+  const { load_dofs, load_vals } = coupledLoads(
+    loads,
+    surfaceLoads,
+    shellOf,
+    noReferencePoints,
+  );
   const forceByVertex = new Map<number, [number, number, number]>();
   for (let k = 0; k < load_dofs.length; k++) {
     const vertex = Math.floor(load_dofs[k] / 6);

@@ -83,8 +83,8 @@ function box() {
 async function openConstraintsMode(page: Page) {
   const model = box();
   await page.goto("/app/");
-  await page.waitForFunction(
-    () => !!(window as unknown as { __kofemStore?: unknown }).__kofemStore,
+  await page.waitForFunction(() =>
+    Boolean((window as unknown as { __kofemStore?: unknown }).__kofemStore),
   );
   await page.evaluate((injected) => {
     (window as unknown as { __kofemStore: Store }).__kofemStore.setState({
