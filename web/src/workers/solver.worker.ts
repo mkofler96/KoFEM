@@ -931,6 +931,16 @@ function distributeShellSurfaceLoad(
     throw new Error(
       "shell solve: a traction (per-area) load cannot act on an edge",
     );
+  // A group's total force is shared over the whole selection (rebuildSurfaceLoads),
+  // and there is no physical rule for splitting one total between an area and a
+  // length — the facet share would be arbitrary. Say so instead of distributing
+  // over the facets and dropping the edge without a word.
+  if (facets.length > 0 && edges.length > 0)
+    throw new Error(
+      "shell solve: one load selects both faces and edges, and a single total force " +
+        "has no meaningful split between a loaded area and a loaded edge — put the edge " +
+        "selection in its own load group.",
+    );
 
   if (facets.length > 0) {
     const areas = facets.map((f) => {
@@ -1197,6 +1207,19 @@ function coupledFixedDofs(
 ): number[] {
   const fixedByPool = new Map<number, Set<number>>();
   for (const c of constraints) {
+    // The coupled assembler's essential BCs are homogeneous — shell_core's
+    // ShellInput.fixed_dofs are "constrained to zero", with no inhomogeneous
+    // counterpart to the solid path's prescribed_dofs. A non-zero prescribed
+    // displacement used to be pinned to zero here without a word, which turns a
+    // displacement-driven model into an unloaded one and returns an all-zero
+    // field that looks like a converged answer (KOF-216).
+    // eslint-disable-next-line kofem/no-silent-fallback -- a constraint without prescribedValue is a homogeneous fixed BC, i.e. u = 0 by definition
+    if ((c.prescribedValue ?? 0) !== 0)
+      throw new Error(
+        `Prescribed (non-zero) displacements are not supported on the coupled shell/solid ` +
+          `path yet: node ${c.nodeId} prescribes ${c.prescribedValue} on DOF ${c.dof}. ` +
+          "Drive this model with a load instead, or solve it without the shell idealisation.",
+      );
     const pi = poolOf(c.nodeId);
     if (c.dof > 2 && !isRefPoint(pi)) continue;
     let dofs = fixedByPool.get(pi);

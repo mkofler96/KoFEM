@@ -410,13 +410,15 @@ std::map<std::vector<int>, int> build_boundary_face_map(const mfem::Mesh& mesh) 
     return face_to_be;
 }
 
-// Tag the boundary elements covering the given faces (node-index lists,
-// 3 = tri, 4 = quad) with the boundary attribute `attr`; returns how many
-// boundary elements matched.
-int tag_load_faces(mfem::Mesh& mesh, const val& faces,
-                   const std::map<std::vector<int>, int>& face_to_be, int attr) {
+// The boundary elements covering one load's faces (node-index lists, 3 = tri,
+// 4 = quad), sorted and de-duplicated. A face matching no boundary element is
+// ignored: it is interior, or a stale selection, and either way contributes
+// nothing to a surface integral.
+std::vector<int> collect_load_elements(
+    const val& faces, const std::map<std::vector<int>, int>& face_to_be) {
     unsigned n_faces = faces["length"].as<unsigned>();
-    int matched = 0;
+    std::vector<int> bes;
+    bes.reserve(n_faces);
     for (unsigned t = 0; t < n_faces; ++t) {
         val face = faces[t];
         unsigned fn = face["length"].as<unsigned>();
@@ -426,19 +428,22 @@ int tag_load_faces(mfem::Mesh& mesh, const val& faces,
         std::sort(key.begin(), key.end());
         auto it = face_to_be.find(key);
         if (it == face_to_be.end()) continue;
-        mesh.GetBdrElement(it->second)->SetAttribute(attr);
-        ++matched;
+        bes.push_back(it->second);
     }
-    return matched;
+    std::sort(bes.begin(), bes.end());
+    bes.erase(std::unique(bes.begin(), bes.end()), bes.end());
+    return bes;
 }
 
-// Integrated area of the boundary elements tagged with `attr` — the same
+// Integrated area of the boundary elements whose attribute is marked — the same
 // surface measure the integrator uses, so dividing a total force by it is
-// exact for straight-sided faces.
-double integrate_tagged_area(mfem::Mesh& mesh, int attr) {
+// exact for straight-sided faces. Takes the marker rather than a single
+// attribute because a load that overlaps another spans several of them.
+double integrate_marked_area(mfem::Mesh& mesh, const mfem::Array<int>& marker) {
     double area = 0.0;
     for (int be = 0; be < mesh.GetNBE(); ++be) {
-        if (mesh.GetBdrAttribute(be) != attr) continue;
+        int attr = mesh.GetBdrAttribute(be);
+        if (attr < 1 || attr > marker.Size() || marker[attr - 1] == 0) continue;
         mfem::ElementTransformation* T = mesh.GetBdrElementTransformation(be);
         const mfem::IntegrationRule& ir =
             mfem::IntRules.Get(mesh.GetBdrElementGeometry(be), 4);
@@ -455,10 +460,12 @@ double integrate_tagged_area(mfem::Mesh& mesh, int attr) {
 //   type "force"    — total force F spread as a uniform traction F / A_total
 //   type "traction" — a traction vector applied directly
 //   type "pressure" — scalar p applied as -p·n̂ (outward normal; + pushes in)
-// Returns nullptr for a "force" load whose matched area is zero (skipped).
+// `area` is the integrated area of the load's own boundary elements (shared
+// ones included) — the measure a total force is spread over. Returns nullptr
+// for a "force" load whose matched area is zero (skipped).
 std::unique_ptr<mfem::VectorCoefficient> make_surface_load_coefficient(
-    const val& entry, const std::string& type, mfem::Mesh& mesh,
-    int attr, unsigned load_idx, int matched) {
+    const val& entry, const std::string& type, unsigned load_idx, int matched,
+    double area) {
     if (type == "pressure") {
         double p = entry["pressure"].as<double>();
         printf("[mfem] surface_load %u: pressure %g over %d bdr elems\n",
@@ -471,7 +478,6 @@ std::unique_ptr<mfem::VectorCoefficient> make_surface_load_coefficient(
     tvec[1] = entry["force"][1].as<double>();
     tvec[2] = entry["force"][2].as<double>();
     if (type == "force") {
-        double area = integrate_tagged_area(mesh, attr);
         if (area <= 0.0) {
             printf("[mfem] surface_load %u: zero matched area — skipped\n", load_idx);
             return nullptr;
@@ -494,59 +500,97 @@ std::unique_ptr<mfem::VectorCoefficient> make_surface_load_coefficient(
 // share and (b) the resultant passes through the face's area-centroid no
 // matter how non-uniformly the face is meshed — no spurious moment.
 //
-// Each entry tags the boundary elements covering a set of surface faces
-// (matched by sorted node-index list) with a unique boundary attribute, then a
-// VectorBoundaryLFIntegrator restricted to that attribute applies the
-// coefficient built by make_surface_load_coefficient above.
+// Each entry claims the boundary elements covering a set of surface faces
+// (matched by sorted node-index list), then a VectorBoundaryLFIntegrator
+// restricted to the attributes it owns applies the coefficient built by
+// make_surface_load_coefficient above.
+//
+// Loads may OVERLAP — a pressure and a bolt pull-out force on the same flange
+// face, or two selections sharing a strip of elements — and every one of them
+// must still be integrated over the shared elements. A boundary element carries
+// exactly one attribute, so a per-load attribute cannot express that: tagging in
+// load order let a later load overwrite an earlier one's tag, and the
+// overwritten load then integrated over nothing and vanished without a word
+// (KOF-216). Instead the elements are grouped by the SET of loads covering them,
+// each distinct set gets one attribute, and a load's marker selects every
+// attribute whose set contains it.
 void apply_surface_loads(const val& surf_js, mfem::Mesh& mesh, mfem::LinearForm& b,
                          SurfaceLoadStorage& storage) {
     if (surf_js.isUndefined() || surf_js.isNull())
         return;
     unsigned n_surf = surf_js["length"].as<unsigned>();
+    if (n_surf == 0)
+        return;
 
-    std::map<std::vector<int>, int> face_to_be = build_boundary_face_map(mesh);
+    const std::map<std::vector<int>, int> face_to_be = build_boundary_face_map(mesh);
 
-    struct PendingLoad { int attr; std::unique_ptr<mfem::VectorCoefficient> coeff; };
-    std::vector<PendingLoad> pending;
-    int next_attr = 2;  // attribute 1 stays the default (un-loaded) value
-
+    std::vector<std::vector<int>> load_elems(n_surf);
+    std::map<int, std::vector<unsigned>> loads_of_be;  // bdr elem → covering loads
     for (unsigned i = 0; i < n_surf; ++i) {
-        val entry = surf_js[i];
-        std::string type = entry["type"].as<std::string>();
-        val faces = entry["faces"];  // node-index lists (3 = tri, 4 = quad)
+        load_elems[i] = collect_load_elements(surf_js[i]["faces"], face_to_be);
+        for (int be : load_elems[i])
+            loads_of_be[be].push_back(i);
+    }
 
-        int attr = next_attr;
-        int matched = tag_load_faces(mesh, faces, face_to_be, attr);
-        if (matched == 0) {
-            printf("[mfem] surface_load %u (%s): no boundary elements matched "
-                   "%u faces — skipped\n",
-                   i, type.c_str(), faces["length"].as<unsigned>());
-            continue;
-        }
-        // This load owns `attr` (its elements are now tagged); reserve the
-        // next number so a later skip can't make two loads share an attribute.
-        ++next_attr;
-
-        std::unique_ptr<mfem::VectorCoefficient> coeff =
-            make_surface_load_coefficient(entry, type, mesh, attr, i, matched);
-        if (!coeff)
-            continue;
-        pending.push_back({ attr, std::move(coeff) });
+    // One attribute per distinct covering set; attribute 1 stays the default
+    // (un-loaded) value.
+    std::map<std::vector<unsigned>, int> attr_of_set;
+    int next_attr = 2;
+    int n_shared = 0;
+    for (const auto& [be, covering] : loads_of_be) {
+        auto [slot, inserted] = attr_of_set.try_emplace(covering, next_attr);
+        if (inserted)
+            ++next_attr;
+        if (covering.size() > 1)
+            ++n_shared;
+        mesh.GetBdrElement(be)->SetAttribute(slot->second);
+    }
+    if (n_shared > 0) {
+        printf("[mfem] surface loads overlap on %d boundary element(s) — each "
+               "covering load is integrated over them\n", n_shared);
+        fflush(stdout);
     }
 
     // Refresh the mesh attribute tables now that boundary attributes changed,
     // so marker arrays can be sized to bdr_attributes.Max().
     mesh.SetAttributes();
-    int max_attr = mesh.bdr_attributes.Size() ? mesh.bdr_attributes.Max() : 0;
-    for (auto& pl : pending) {
-        storage.coeffs.push_back(std::move(pl.coeff));
-        storage.markers.emplace_back(max_attr);
-        mfem::Array<int>& marker = storage.markers.back();
+    const int max_attr = mesh.bdr_attributes.Size() ? mesh.bdr_attributes.Max() : 0;
+
+    for (unsigned i = 0; i < n_surf; ++i) {
+        val entry = surf_js[i];
+        std::string type = entry["type"].as<std::string>();
+        const int matched = (int)load_elems[i].size();
+        if (matched == 0) {
+            printf("[mfem] surface_load %u (%s): no boundary elements matched "
+                   "%u faces — skipped\n",
+                   i, type.c_str(), entry["faces"]["length"].as<unsigned>());
+            fflush(stdout);
+            continue;
+        }
+        mfem::Array<int> marker(max_attr);
         marker = 0;
-        if (pl.attr >= 1 && pl.attr <= max_attr)
-            marker[pl.attr - 1] = 1;
+        for (const auto& [covering, attr] : attr_of_set) {
+            if (std::find(covering.begin(), covering.end(), i) == covering.end())
+                continue;
+            if (attr >= 1 && attr <= max_attr)
+                marker[attr - 1] = 1;
+        }
+
+        std::unique_ptr<mfem::VectorCoefficient> coeff =
+            make_surface_load_coefficient(entry, type, i, matched,
+                                          integrate_marked_area(mesh, marker));
+        if (!coeff)
+            continue;
+        // Copied into the storage deque only once the load is certain to be
+        // applied: the integrator keeps a POINTER to the marker (and a reference
+        // to the coefficient), so both must live at a stable address until
+        // b.Assemble() — which the caller-owned deques guarantee.
+        storage.coeffs.push_back(std::move(coeff));
+        storage.markers.emplace_back();
+        storage.markers.back() = marker;
         b.AddBoundaryIntegrator(
-            new mfem::VectorBoundaryLFIntegrator(*storage.coeffs.back()), marker);
+            new mfem::VectorBoundaryLFIntegrator(*storage.coeffs.back()),
+            storage.markers.back());
     }
 }
 

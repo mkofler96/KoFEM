@@ -363,14 +363,25 @@ export function rebuildLoads(
   return result;
 }
 
-// Build the work-equivalent surface loads (one per loaded face) for force and
-// pressure groups. The engine integrates these over the face's boundary elements
+// Build the work-equivalent surface loads (ONE per load group) for force and
+// pressure groups. The engine integrates these over the group's boundary elements
 // (f_i = ∫ N_i·t dS), which is both shape-function-correct and immune to the
 // spurious moment that equal nodal splitting introduces on a non-uniform mesh.
 //
+// One load per GROUP, not per picked selection: a force group's vector is its
+// TOTAL, so the engine has to see the whole loaded region at once to spread that
+// total over it (it divides by the area it matched). Emitting one load per
+// selection instead handed the full total to each, so a 1000 N group picked as
+// three faces pulled 3000 N — the same total-sharing rule rebuildLoads applies
+// to a group's nodal selections (KOF-216). Pressure is intensive and unaffected
+// either way, but it is merged too so both kinds reach the engine identically.
+//
 // The loaded faces are derived from the element connectivity (loadedFaces), so a
 // load works on tet meshes (triangle faces) and hex meshes (quad faces) alike,
-// with no dependency on a separately-stored surface triangulation.
+// with no dependency on a separately-stored surface triangulation. Selections
+// that overlap contribute their shared element faces once — a face counted twice
+// would take a double share of the traction, and inflate the area the total is
+// divided by.
 export function rebuildSurfaceLoads(
   loadGroups: NamedLoadGroup[],
   elements: Element[],
@@ -381,6 +392,8 @@ export function rebuildSurfaceLoads(
   for (const g of loadGroups) {
     const kind = loadKind(g);
     if (kind === "moment") continue; // moments stay as equivalent point loads
+    const faces: number[][] = [];
+    const seen = new Set<string>();
     for (const f of g.faces) {
       // Nodal selections are rebuildLoads' half of the group: a reference point
       // belongs to no element and a picked point spans no face, so there is no
@@ -389,13 +402,18 @@ export function rebuildSurfaceLoads(
       // would make the split an accident of that function, and a change there
       // would either double-apply the load or drop it without a word.
       if (isNodalFace(f, refPoints)) continue;
-      const faces = loadedFaces(f, elements);
-      if (faces.length === 0) continue;
-      if (kind === "pressure") {
-        result.push({ type: "pressure", pressure: g.totalForce, faces });
-      } else {
-        result.push({ type: "force", force: loadComponents(g), faces });
+      for (const face of loadedFaces(f, elements)) {
+        const key = [...face].sort((a, b) => a - b).join(",");
+        if (seen.has(key)) continue;
+        seen.add(key);
+        faces.push(face);
       }
+    }
+    if (faces.length === 0) continue;
+    if (kind === "pressure") {
+      result.push({ type: "pressure", pressure: g.totalForce, faces });
+    } else {
+      result.push({ type: "force", force: loadComponents(g), faces });
     }
   }
   return result;
