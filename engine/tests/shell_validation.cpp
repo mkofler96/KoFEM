@@ -334,15 +334,17 @@ double mpc_seam_peak(int order) {
         const int rn = wid(i, 0);
         std::vector<int> patch;
         for (int sn = 0; sn < nSolid; ++sn) {
-            const double dx=V[3*sn]-V[3*rn], dy=V[3*sn+1]-V[3*rn+1], dz=V[3*sn+2]-V[3*rn+2];
+            const size_t bs = 3 * static_cast<size_t>(sn), br = 3 * static_cast<size_t>(rn);
+            const double dx = V[bs] - V[br], dy = V[bs+1] - V[br+1], dz = V[bs+2] - V[br+2];
             if (dx*dx + dy*dy + dz*dz <= radius*radius) patch.push_back(sn);
         }
         if (patch.size() < 3) continue;
         const bool plusFirst = (order == 1) || (order == 2 && (i % 2 == 0));
         std::stable_sort(patch.begin(), patch.end(), [&](int a, int b) {
             auto key = [&](int n) {
-                const double dy = V[3*n+1] - W / 2;
-                if (std::fabs(std::fabs(dy) - t/2) > 1e-9 || std::fabs(V[3*n+2]) > 1e-9) return 2;
+                const size_t b = 3 * static_cast<size_t>(n);
+                const double dy = V[b+1] - W / 2;
+                if (std::fabs(std::fabs(dy) - t/2) > 1e-9 || std::fabs(V[b+2]) > 1e-9) return 2;
                 return (dy > 0) == plusFirst ? 0 : 1;
             };
             return key(a) < key(b);
