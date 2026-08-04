@@ -14,6 +14,7 @@
 
 #include "shell_core.h"
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdio>
@@ -263,6 +264,110 @@ double coupled_mpc_clamped(double psi) {
     return w / ref;
 }
 
+// Shell-to-solid MPC on a NON-CONFORMING seam: the wall footprint has solid
+// nodes on both faces (y = W/2 ± t/2) and the shell mid-surface node exactly
+// between them, so the two candidate partners are equidistant to the last bit.
+// Which one an unstructured mesh lists first is an accident, so the solved
+// stress must not depend on it — anchoring the tie on one of them instead of on
+// the mid-surface carries a ±t/2 eccentricity, and a moment with it (KOF-212).
+//
+// `order`: 0 = the y−t/2 node is listed first for every seam node, 1 = y+t/2,
+// 2 = alternating along the seam (what a real mesh produces). Returns the peak
+// shell von Mises; the three must agree.
+double mpc_seam_peak(int order) {
+    const double L = 60, W = 40, H = 6, Hw = 30, t = 2.0;
+    const double E = 210e3, nu = 0.3, P = 5000.0;
+    const int nx = 12, nz = 2, nzw = 10;
+
+    std::vector<double> ys;
+    for (int j = 0; j <= 8; ++j) ys.push_back(W * j / 8);
+    ys.push_back(W / 2 - t / 2);
+    ys.push_back(W / 2 + t / 2);
+    ys.erase(std::remove_if(ys.begin(), ys.end(),
+                            [&](double y) { return std::fabs(y - W / 2) < 1e-12; }),
+             ys.end());
+    std::sort(ys.begin(), ys.end());
+    const int ny = (int)ys.size() - 1;
+
+    std::vector<double> V;
+    std::vector<int> tets;
+    auto sid = [&](int i, int j, int k) { return i * (ny + 1) * (nz + 1) + j * (nz + 1) + k; };
+    for (int i = 0; i <= nx; ++i)
+        for (int j = 0; j <= ny; ++j)
+            for (int k = 0; k <= nz; ++k) {
+                V.push_back(L * i / nx); V.push_back(ys[j]); V.push_back(H * k / nz);
+            }
+    for (int i = 0; i < nx; ++i)
+        for (int j = 0; j < ny; ++j)
+            for (int k = 0; k < nz; ++k) {
+                const int a=sid(i,j,k),b=sid(i+1,j,k),c=sid(i+1,j+1,k),d=sid(i,j+1,k),
+                          e=sid(i,j,k+1),f=sid(i+1,j,k+1),g=sid(i+1,j+1,k+1),h=sid(i,j+1,k+1);
+                const std::array<std::array<int,4>,6> q = {{
+                    {a,b,c,g},{a,c,d,g},{a,d,h,g},{a,h,e,g},{a,e,f,g},{a,f,b,g}}};
+                for (const auto& tt : q) for (int m = 0; m < 4; ++m) tets.push_back(tt[m]);
+            }
+    const int nSolid = (int)(V.size() / 3);
+
+    // Shell wall hanging below the block on the mid-surface y = W/2.
+    const int base = nSolid;
+    auto wid = [&](int i, int k) { return base + i * (nzw + 1) + k; };
+    for (int i = 0; i <= nx; ++i)
+        for (int k = 0; k <= nzw; ++k) {
+            V.push_back(L * i / nx); V.push_back(W / 2); V.push_back(-Hw * k / nzw);
+        }
+    std::vector<int> tris;
+    for (int i = 0; i < nx; ++i)
+        for (int k = 0; k < nzw; ++k) {
+            const int a=wid(i,k),b=wid(i+1,k),c=wid(i+1,k+1),d=wid(i,k+1);
+            tris.push_back(a); tris.push_back(b); tris.push_back(c);
+            tris.push_back(a); tris.push_back(c); tris.push_back(d);
+        }
+
+    CoupledInput in;
+    in.n_nodes = (int)(V.size() / 3);
+    in.vertices = V; in.triangles = tris;
+    in.shell_young = E; in.shell_poisson = nu; in.thickness = t;
+    in.solid_stiffness = tet_solid_stiffness(V, tets, E, nu);
+
+    const double radius = 1.6 * (L / nx);
+    for (int i = 0; i <= nx; ++i) {
+        const int rn = wid(i, 0);
+        std::vector<int> patch;
+        for (int sn = 0; sn < nSolid; ++sn) {
+            const size_t bs = 3 * static_cast<size_t>(sn), br = 3 * static_cast<size_t>(rn);
+            const double dx = V[bs] - V[br], dy = V[bs+1] - V[br+1], dz = V[bs+2] - V[br+2];
+            if (dx*dx + dy*dy + dz*dz <= radius*radius) patch.push_back(sn);
+        }
+        if (patch.size() < 3) continue;
+        const bool plusFirst = (order == 1) || (order == 2 && (i % 2 == 0));
+        std::stable_sort(patch.begin(), patch.end(), [&](int a, int b) {
+            auto key = [&](int n) {
+                const size_t b = 3 * static_cast<size_t>(n);
+                const double dy = V[b+1] - W / 2;
+                if (std::fabs(std::fabs(dy) - t/2) > 1e-9 || std::fabs(V[b+2]) > 1e-9) return 2;
+                return (dy > 0) == plusFirst ? 0 : 1;
+            };
+            return key(a) < key(b);
+        });
+        Coupling cp;
+        cp.ref_node = rn; cp.solid_nodes = patch;
+        cp.kind = CouplingKind::RelaxedMpc; cp.mpc = true; cp.relaxation = 1.0;
+        in.couplings.push_back(std::move(cp));
+    }
+    // Cantilever the block in its own plane so the seam sees a transverse
+    // gradient ∂u/∂y — what an eccentric tie converts into spurious bending.
+    for (int j = 0; j <= ny; ++j)
+        for (int k = 0; k <= nz; ++k)
+            for (int c = 0; c < 3; ++c) in.fixed_dofs.push_back(6 * sid(0, j, k) + c);
+    for (int j = 0; j <= ny; ++j)
+        for (int k = 0; k <= nz; ++k)
+            in.loads.emplace_back(6 * sid(nx, j, k) + 1, P / ((ny + 1.0) * (nz + 1.0)));
+
+    ShellResult r = solve_solid_shell_core(in);
+    const std::vector<double> vm = shell_von_mises(V, tris, t, {}, E, nu, r.dofs);
+    return *std::max_element(vm.begin(), vm.end());
+}
+
 // A fixed-DOF constraint that lands on an RBE3 coupling reference node (a
 // dependent, shell-side DOF) must be rejected loudly, not silently dropped
 // (issue #377). Reuses the cantilever-on-anchors coupling: every root node is a
@@ -324,6 +429,21 @@ int main() {
     check(failures, "coupled-moment-transfer", coupled_moment_transfer(), 1.0, 6.0);
     check(failures, "coupled-mpc-clamped-rigid", coupled_mpc_clamped(1.0), 1.0, 6.0);
     check(failures, "coupled-mpc-clamped-relaxed", coupled_mpc_clamped(0.5), 1.0, 6.0);
+
+    printf("Non-conforming shell-to-solid seam (KOF-212):\n");
+    {
+        const double a0 = mpc_seam_peak(0), a1 = mpc_seam_peak(1), a2 = mpc_seam_peak(2);
+        const double lo = std::min({a0, a1, a2}), hi = std::max({a0, a1, a2});
+        const double spread = (hi - lo) / lo * 100.0;
+        // The tie anchors on the mid-surface, so which equidistant footprint node
+        // the patch happens to list first cannot change the answer at all. Before
+        // the fix these came out 24.6 / 26.3 / 63.7 — a 159 % spread, worst for
+        // the alternating pick a real mesh produces.
+        const bool ok = spread <= 0.1;
+        if (!ok) ++failures;
+        printf("  [%s] %-28s peak vM %.4e / %.4e / %.4e  spread %.2f%% (tol 0.1%%)\n",
+               ok ? "PASS" : "FAIL", "seam-tie-order-invariant", a0, a1, a2, spread);
+    }
 
     printf("Constraint-on-dependent-node rejection (issue #377):\n");
     {

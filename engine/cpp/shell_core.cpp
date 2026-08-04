@@ -9,7 +9,6 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
-#include <limits>
 #include <map>
 #include <stdexcept>
 #include <string>
@@ -809,37 +808,65 @@ Rbe3Constraints build_rbe3_constraints(const CoupledInput& in, int nDof,
         for (size_t k = 0; k < 6; ++k) out.dep[R6 + k] = 1;
 
         if (cp.mpc) {
-            // Relaxed shell-to-solid MPC (Lu, Zhang & Yang 2023): rigid translation
-            // tie to the nearest solid node S — enforcing displacement CONTINUITY at
-            // the coincident junction — plus a ψ-scaled least-squares rotation of the
-            // coupled solid nodes about S (the unstructured generalisation of the
-            // paper's finite-difference rotation stencil). See Coupling::mpc.
+            // Relaxed shell-to-solid MPC (Lu, Zhang & Yang 2023), generalised to a
+            // NON-CONFORMING seam. The paper ties the shell node to a solid node
+            // coincident with it; an auto-detected seam has none, and tying to the
+            // nearest partner instead welds the mid-surface to one FACE of the very
+            // wall it idealises. The mid-surface sits t/2 from the footprint node on
+            // either face, so with both partners equidistant the pick is decided by
+            // floating-point noise and flips from node to node along the seam. Each
+            // flip is a spurious ±t/2 eccentricity, and an eccentric tie carries a
+            // moment the structure does not: on a 2 mm wall the shell facets touching
+            // a tied node ran 12× the von Mises of their neighbours, peaking exactly
+            // where the sign flipped (KOF-212).
+            //
+            // Anchor the tie on the patch's distance-weighted centroid instead of on
+            // one node of it. For the equidistant pair that is precisely the
+            // mid-surface, so the eccentricity cancels; a genuinely coincident node
+            // still dominates the kernel and recovers the paper's tie. The 1/(d²+ε²)
+            // weighting keeps the tie LOCAL, which is what separates it from the
+            // equal-weight distributing coupling — that one averages over the whole
+            // search ball and smears the junction stress away instead.
             const double psi = cp.relaxation;
-            int S = cp.solid_nodes[0];
-            double best = std::numeric_limits<double>::max();
-            for (int sn : cp.solid_nodes) {
-                const Vec3 d = sub(vtx(sn), pR);
-                const double dd = dot(d, d);
-                if (dd < best) { best = dd; S = sn; }
+            double rmax = 0.0;
+            for (int sn : cp.solid_nodes) rmax = std::max(rmax, norm(sub(vtx(sn), pR)));
+            if (rmax <= 0.0)
+                throw std::runtime_error(
+                    "coupled: every coupled node of the shell-to-solid MPC at node " +
+                    std::to_string(R) +
+                    " sits on the reference point, so the patch has no extent and no "
+                    "rotation can be measured from it.");
+            // ε softens the kernel at d → 0 and is a fraction of the patch's own
+            // radius, so the weighting is scale-free.
+            const double eps2 = (0.05 * rmax) * (0.05 * rmax);
+            double W = 0.0;
+            for (int i = 0; i < N; ++i) {
+                const Vec3 d = sub(vtx(cp.solid_nodes[i]), pR);
+                w[i] /= dot(d, d) + eps2;
+                W += w[i];
             }
-            const Vec3 pS = vtx(S);
-            std::vector<Vec3> r(N);
-            Vec3 Sp = {0.0, 0.0, 0.0};  // Σ w_i r_i, r_i measured from S
-            std::array<std::array<double, 3>, 3> H{};
+            // Σ wᵢ rᵢ = 0 about the weighted centroid — that is what drops the u_A
+            // term out of the least-squares rotation below.
+            Vec3 pA = {0.0, 0.0, 0.0};
             for (int i = 0; i < N; ++i) {
                 const Vec3 pi = vtx(cp.solid_nodes[i]);
-                r[i] = {pi[0] - pS[0], pi[1] - pS[1], pi[2] - pS[2]};
-                for (int k = 0; k < 3; ++k) Sp[k] += w[i] * r[i][k];
+                for (int k = 0; k < 3; ++k) pA[k] += (w[i] / W) * pi[k];
+            }
+            std::vector<Vec3> r(N);
+            std::array<std::array<double, 3>, 3> H{};
+            for (int i = 0; i < N; ++i) {
+                r[i] = sub(vtx(cp.solid_nodes[i]), pA);
                 const double rr = dot(r[i], r[i]);
                 for (int a = 0; a < 3; ++a)
                     for (int b = 0; b < 3; ++b)
                         H[a][b] += w[i] * ((a == b ? rr : 0.0) - r[i][a] * r[i][b]);
             }
             const auto Hinv = mat3_inv(H);
-            // U_R = u_S  (translations follow the coincident solid node exactly).
-            for (int c = 0; c < 3; ++c) out.Cmap[R6 + c].emplace_back(6 * S + c, 1.0);
-            // Θ_R = ψ · Hinv · Σ w_i [r_i]× (u_i − u_S). Split u_i and u_S parts:
-            // the [S']× u_S term collects the −u_S contribution (skew is linear).
+            // U_R = Σ (wᵢ/W) uᵢ — the patch's weighted motion at the anchor.
+            for (int i = 0; i < N; ++i)
+                for (int c = 0; c < 3; ++c)
+                    out.Cmap[R6 + c].emplace_back(6 * cp.solid_nodes[i] + c, w[i] / W);
+            // Θ_R = ψ · Hinv · Σ wᵢ [rᵢ]× uᵢ.
             for (int i = 0; i < N; ++i) {
                 const int sn = cp.solid_nodes[i];
                 const auto M = mat3_mul(Hinv, skew(r[i]));
@@ -847,10 +874,6 @@ Rbe3Constraints build_rbe3_constraints(const CoupledInput& in, int nDof,
                     for (int c = 0; c < 3; ++c)
                         out.Cmap[R6 + 3 + a].emplace_back(6 * sn + c, psi * w[i] * M[a][c]);
             }
-            const auto Ms = mat3_mul(Hinv, skew(Sp));
-            for (int a = 0; a < 3; ++a)
-                for (int c = 0; c < 3; ++c)
-                    out.Cmap[R6 + 3 + a].emplace_back(6 * S + c, -psi * Ms[a][c]);
             continue;
         }
 
