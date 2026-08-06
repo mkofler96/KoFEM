@@ -25,7 +25,7 @@ function assert(label, condition, detail = "") {
     console.log(`  ✓ ${label}`);
     passed++;
   } else {
-    console.error(`  ✗ FAIL: ${label}${detail ? "  — " + detail : ""}`);
+    console.error(`  ✗ FAIL: ${label}${detail ? `  — ${detail}` : ""}`);
     failed++;
   }
 }

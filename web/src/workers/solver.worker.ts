@@ -1216,7 +1216,7 @@ function coupledFixedDofs(
     // eslint-disable-next-line kofem/no-silent-fallback -- a constraint without prescribedValue is a homogeneous fixed BC, i.e. u = 0 by definition
     if ((c.prescribedValue ?? 0) !== 0)
       throw new Error(
-        `Prescribed (non-zero) displacements are not supported on the coupled shell/solid ` +
+        "Prescribed (non-zero) displacements are not supported on the coupled shell/solid " +
           `path yet: node ${c.nodeId} prescribes ${c.prescribedValue} on DOF ${c.dof}. ` +
           "Drive this model with a load instead, or solve it without the shell idealisation.",
       );
