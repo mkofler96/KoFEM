@@ -6,6 +6,14 @@ web/node_modules/
 web/dist/
 web/.vite/
 
+# Compiled WASM engine — a ~34 MB build output, published as a GitHub Release
+# instead of committed (KOF-186). Install it with scripts/fetch-wasm-engine.sh.
+# The thin adapter beside it (kofem_wasm.js, kofem_wasm.d.ts) is hand-written and
+# stays tracked.
+web/src/wasm/pkg/kofem_wasm_emcc.js
+web/src/wasm/pkg/kofem_wasm_emcc.wasm
+web/src/wasm/pkg/.engine-id
+
 # macOS
 .DS_Store
 

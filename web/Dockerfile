@@ -21,8 +21,15 @@ COPY package.json bun.lock ./
 
 RUN bun install --frozen-lockfile
 
-# Copy the rest of the source. This includes the pre-compiled WASM engine
-# committed under src/wasm/pkg/, so no Emscripten build is needed here.
+# Copy the rest of the source. src/wasm/pkg must already hold the compiled engine
+# — it is a build output published as a GitHub Release rather than committed
+# (KOF-186), so populate it before building the image:
+#
+#   bash scripts/fetch-wasm-engine.sh && docker build ./web
+#
+# The `bun run build` below would normally fetch it via its package.json pre-hook,
+# but the build context is web/ alone and the repo's scripts/ is not in it; the
+# hook detects that and leaves whatever was copied in place. No Emscripten needed.
 COPY . .
 
 # Optional version stamp injected by CI. Vite exposes VITE_* vars to the
