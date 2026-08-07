@@ -38,10 +38,10 @@ const MATERIAL_NAMES = ["Steel", "Aluminium"];
 const MATERIAL_OF_BODY = { 1: 1, 2: 2, 3: 1 };
 const SHELL_MATERIAL = 1;
 const BC_FIXED_FACE = 7;
-// PER-FACE force vector, not the model total: faces 66 and 67 are the two sides
-// of the pin cylinder and each carries 1 kN, so the hook is loaded with 2 kN in
-// −Y altogether. The .vtu's load group stores the same per-face vector, because
-// rebuildSurfaceLoads applies a group's components once per face entry.
+// PER-FACE force vector applied by the solve below: faces 66 and 67 are the two
+// sides of the pin cylinder and each carries 1 kN, so the hook is loaded with
+// 2 kN in −Y altogether. The .vtu's load group stores that SUM as its total,
+// which the app then shares back over the two faces.
 const LOAD_FACES = { 66: [0, -1000, 0], 67: [0, -1000, 0] };
 // The CAD faces where the pin sits in the hook eye. Netgen meshes the two bodies
 // almost conformally there — they share only ~30 of ~1000 interface nodes, which
@@ -307,12 +307,16 @@ function buildCraneVtu() {
       nodeIds: ns,
     });
   }
-  // LOAD_FACES applies the same vector to every listed face; take it as the
-  // group's per-face force vector (rebuildSurfaceLoads applies it to each face).
-  // With both pin faces in the group that is 1 kN each — 2 kN on the model, the
-  // same resultant the solve above was run with. `totalForce` below names the
-  // group's primary component, which is per-face too, NOT the model total.
-  const perFace = LOAD_FACES[Object.keys(LOAD_FACES)[0]];
+  // A load group's `components` is the group's TOTAL force, shared over every
+  // face in it (rebuildSurfaceLoads) — so the group must name the sum of the
+  // per-face vectors the solve above was run with, here 2 × 1 kN = 2 kN in −Y.
+  // It used to store the per-face vector instead, because the store re-applied
+  // a group's full vector once per face entry; that bug (KOF-216) is fixed, and
+  // storing the per-face vector now would reload the example at half its load.
+  const groupTotal = Object.values(LOAD_FACES).reduce(
+    (acc, F) => acc.map((v, d) => v + F[d]),
+    [0, 0, 0],
+  );
 
   const meta = {
     format: "kofem-analysis",
@@ -350,10 +354,10 @@ function buildCraneVtu() {
       {
         id: 1,
         name: "Load1",
-        dof: 1, // primary axis of the per-face force (−Y)
-        totalForce: perFace[1],
+        dof: 1, // primary axis of the group's total force (−Y)
+        totalForce: groupTotal[1],
         kind: "force",
-        components: perFace,
+        components: groupTotal,
         faces: loadFaceEntries,
       },
     ],
