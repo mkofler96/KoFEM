@@ -35,10 +35,12 @@ KoFEM/
 ├── examples/           # Validation cases, shell-coupling scripts, web examples
 ├── test_files/         # STEP/IGES fixtures used by tests and examples
 └── scripts/
-    ├── build-wasm.sh        # CMake/Emscripten WASM build
-    ├── docker-build-wasm.sh # Docker wrapper (Mac / CI)
-    ├── fetch-wasm-deps.sh   # Pull the precompiled OCCT/Netgen/MFEM WASM libs
-    ├── clang-tidy.sh        # C++ lint, mirrors the DeepSource PR gate
+    ├── build-wasm.sh         # CMake/Emscripten WASM build
+    ├── docker-build-wasm.sh  # Docker wrapper (Mac / CI)
+    ├── fetch-wasm-deps.sh    # Pull the precompiled OCCT/Netgen/MFEM WASM libs
+    ├── fetch-wasm-engine.sh  # Pull the compiled engine from its GitHub Release
+    ├── engine-version.sh     # Content hash of the engine sources → release tag
+    ├── clang-tidy.sh         # C++ lint, mirrors the DeepSource PR gate
     ├── test-bc-validation.sh
     └── test-shell.sh
 ```
@@ -51,11 +53,32 @@ OCCT / Netgen / MFEM  (.a, compiled with emcc)
 engine/cpp/engine.cpp  (C++17, calls libs directly, Embind API)
          ↓  emcmake cmake + ninja
 kofem_wasm_emcc.js + kofem_wasm_emcc.wasm
-         ↓
+         ↓  published as the release engine-<id>, fetched into web/src/wasm/pkg/
 web/src/wasm/pkg/kofem_wasm.js  (thin adapter, committed)
          ↓
 solver.worker.ts  (awaits init(), calls methods on the KofemModule instance)
 ```
+
+### The compiled engine is not in git
+
+`kofem_wasm_emcc.js` + `.wasm` are ~34 MB of build output. Committing them added a
+fresh full-size blob to history on every engine change, so they are gitignored and
+published as a GitHub Release instead (KOF-186).
+
+`scripts/engine-version.sh` hashes the engine sources (`engine/`,
+`scripts/build-wasm.sh`, `scripts/fetch-wasm-deps.sh`) into an ID; CI publishes each
+main build as the release `engine-<id>`; `scripts/fetch-wasm-engine.sh` resolves the
+ID from the checkout and downloads the matching binary. Nothing to bump by hand, and
+changed sources can never resolve to a stale binary.
+
+What this means in practice:
+
+- `bun run dev|build|test` fetch the engine first via package.json pre-hooks. A
+  matching `.engine-id` stamp in `web/src/wasm/pkg/` makes that a no-op.
+- **After changing `engine/cpp`, build locally** (`scripts/docker-build-wasm.sh`):
+  no release exists for unmerged sources. The build writes the stamp, so the fetch
+  then leaves your binary alone. The release appears once the PR lands on `main`.
+- Do not re-add the binaries to git, and do not `git add -f` them.
 
 ### Shells and multibody
 
@@ -105,8 +128,13 @@ git config core.hooksPath .githooks
 cargo check
 cargo test
 
-# Build the WASM engine. Needs Emscripten plus the precompiled OCCT/Netgen/MFEM
-# WASM libs; scripts/fetch-wasm-deps.sh pulls them, or use the Docker wrapper.
+# Install the prebuilt engine from its release. Needs no toolchain at all, and the
+# bun scripts below run it for you.
+./scripts/fetch-wasm-engine.sh
+
+# Build the WASM engine from source instead — required after editing engine/cpp.
+# Needs Emscripten plus the precompiled OCCT/Netgen/MFEM WASM libs;
+# scripts/fetch-wasm-deps.sh pulls them, or use the Docker wrapper.
 ./scripts/build-wasm.sh          # or: ./scripts/docker-build-wasm.sh
 
 # Install and run the web frontend (uses bun, not npm)
@@ -118,9 +146,10 @@ bash scripts/clang-tidy.sh
 cd web && bun run typecheck && bun run lint && bun run format:check && bun run test
 ```
 
-Building the WASM engine rewrites the committed `web/src/wasm/pkg/*.wasm`
-(~34 MB). Only rebuild when you have changed C++ sources — an unnecessary rebuild
-adds tens of megabytes of history to a repository whose `.git` is already ~80 MB.
+Building the WASM engine rewrites `web/src/wasm/pkg/*.wasm` (~34 MB). Those files
+are gitignored — see [The compiled engine is not in git](#the-compiled-engine-is-not-in-git)
+— so a rebuild no longer costs history, but it does cost ~20 minutes. Only rebuild
+when you have changed C++ sources; otherwise let the fetch script install it.
 
 ## Geometry vs. Mesh — Critical Terminology
 
