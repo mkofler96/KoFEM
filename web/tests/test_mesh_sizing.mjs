@@ -80,10 +80,8 @@ console.log("\n1. Measuring a closed tessellation");
 }
 
 console.log("\n2. Empty geometry has no measure");
-{
-  check("no points", measureTessellation([], []) === null);
-  check("no triangles", measureTessellation([[0, 0, 0]], []) === null);
-}
+check("no points", measureTessellation([], []) === null);
+check("no triangles", measureTessellation([[0, 0, 0]], []) === null);
 
 console.log("\n3. The suggested size hits the target element count");
 for (const dims of [

@@ -130,7 +130,7 @@ test("the worker rejects a non-positive element size (KOF-222)", async ({
 
   await page.goto("/app/", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(
-    () => !!(window as Window & { __kofem?: unknown }).__kofem,
+    () => Boolean((window as Window & { __kofem?: unknown }).__kofem),
     { timeout: 30_000 },
   );
 
@@ -163,33 +163,22 @@ test("a real import is meshed at its suggested size (KOF-222)", async ({
   expect(suggested).toBeGreaterThan(0.5);
   expect(suggested).toBeLessThan(20);
 
+  const elementCount = async () =>
+    (await page.evaluate(
+      () =>
+        (
+          window as unknown as {
+            __kofemStore: { getState(): { elements: unknown[] } };
+          }
+        ).__kofemStore.getState().elements.length,
+    )) as number;
+
   await page.getByRole("button", { name: /Mesh STEP volume/ }).click();
-  const elements = await expect
-    .poll(
-      async () =>
-        (await page.evaluate(
-          () =>
-            (
-              window as unknown as {
-                __kofemStore: { getState(): { elements: unknown[] } };
-              }
-            ).__kofemStore.getState().elements.length,
-        )) as number,
-      { timeout: 240_000 },
-    )
-    .toBeGreaterThan(0);
-  void elements;
+  await expect.poll(elementCount, { timeout: 240_000 }).toBeGreaterThan(0);
 
   // The suggestion aims at TARGET_ELEMENT_COUNT (50K). Netgen's actual density
   // varies with geometry, so assert the order of magnitude, not the number.
-  const count = (await page.evaluate(
-    () =>
-      (
-        window as unknown as {
-          __kofemStore: { getState(): { elements: unknown[] } };
-        }
-      ).__kofemStore.getState().elements.length,
-  )) as number;
+  const count = await elementCount();
   expect(count).toBeGreaterThan(10_000);
   expect(count).toBeLessThan(250_000);
 });
