@@ -250,6 +250,13 @@
   width: 14px;
 }
 
+.hint {
+  font-size: 10.5px;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  margin: -2px 0 8px;
+}
+
 /* ── Tree items ─────────────────────────────────────────────── */
 
 .treeItem {

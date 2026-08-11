@@ -267,6 +267,24 @@ function flushCoverage(): void {
 function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
   const { bytes, format = "step", maxElementSize = 20.0 } = payload;
 
+  // Floor the curvature-driven local element size at maxElementSize/10 by
+  // default.  Without a floor, Netgen refines every fillet to ~radius/2
+  // (elementspercurve) — on fillet-heavy CAD this produces >10x more
+  // elements than the max size suggests and meshing takes minutes.
+  const minSize = payload.minElementSize ?? maxElementSize / 10;
+
+  // Any positive size is legal (KOF-222) — a 1 mm cube is meshed with 0.1 mm
+  // elements. Zero, negative and NaN are not: Netgen's maxh would disable the
+  // size field entirely and mesh for minutes before failing obscurely.
+  if (!Number.isFinite(maxElementSize) || maxElementSize <= 0)
+    throw new Error(
+      `volume_mesh: max_element_size must be a positive number of mm, got ${maxElementSize}`,
+    );
+  if (!Number.isFinite(minSize) || minSize < 0 || minSize > maxElementSize)
+    throw new Error(
+      `volume_mesh: min_element_size must be between 0 and max_element_size (${maxElementSize} mm), got ${minSize}`,
+    );
+
   // A re-mesh runs in a fresh worker (the previous mesh tore this worker's
   // predecessor down), so the OCCT shape generate_fem_mesh needs is gone.
   // Reload it from the original STEP bytes first. This makes every mesh
@@ -292,12 +310,6 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
     );
     geometryLoaded = true;
   }
-
-  // Floor the curvature-driven local element size at maxElementSize/10 by
-  // default.  Without a floor, Netgen refines every fillet to ~radius/2
-  // (elementspercurve) — on fillet-heavy CAD this produces >10x more
-  // elements than the max size suggests and meshing takes minutes.
-  const minSize = payload.minElementSize ?? maxElementSize / 10;
 
   const opts = JSON.stringify({
     max_element_size: maxElementSize,
