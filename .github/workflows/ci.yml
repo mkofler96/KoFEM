@@ -69,11 +69,35 @@ jobs:
       - name: clang-tidy
         run: bash scripts/clang-tidy.sh
 
+  # The compiled engine is not committed (KOF-186) — it is published as the
+  # release `engine-<id>` and pulled in by scripts/fetch-wasm-engine.sh. The ID is
+  # a content hash of the engine sources, computed here on the runner rather than
+  # in the `wasm` job: that job runs inside the dependency container, which may
+  # have no git metadata to hash.
+  engine-id:
+    name: Engine build ID
+    runs-on: ubuntu-24.04
+    outputs:
+      id: ${{ steps.compute.outputs.id }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: compute
+        run: |
+          ID="$(bash scripts/engine-version.sh)"
+          echo "id=$ID" >> "$GITHUB_OUTPUT"
+          echo "Engine build ID: $ID"
+
   wasm:
     name: WASM (Emscripten)
+    needs: [engine-id]
     runs-on: ubuntu-24.04
     container:
       image: ghcr.io/mkofler96/kofem-dependencies:0.0.2
+
+    env:
+      KOFEM_ENGINE_ID: ${{ needs.engine-id.outputs.id }}
 
     steps:
       - uses: actions/checkout@v4
@@ -86,36 +110,112 @@ jobs:
           path: |
             web/src/wasm/pkg/kofem_wasm_emcc.js
             web/src/wasm/pkg/kofem_wasm_emcc.wasm
-          # deps tag is part of the key so bumping the toolchain image invalidates
-          # any artifact built with the previous emscripten/Binaryen pair.
-          key: wasm-${{ runner.os }}-deps0.0.2-${{ hashFiles('engine/**', 'scripts/build-wasm.sh') }}
+            web/src/wasm/pkg/.engine-id
+          key: wasm-${{ runner.os }}-${{ needs.engine-id.outputs.id }}
 
-      - name: WASM cache status
+      # On a cache miss the engine may still have been built before — every push
+      # to main publishes one. Downloading it beats a 20-minute rebuild, and it
+      # exercises the exact path contributors use.
+      - name: Try the published engine release
+        if: steps.wasm-cache.outputs.cache-hit != 'true'
+        run: bash scripts/fetch-wasm-engine.sh --optional
+
+      - name: Engine source status
+        id: engine
         run: |
-          if [ "${{ steps.wasm-cache.outputs.cache-hit }}" = "true" ]; then
-            echo "WASM cache HIT — skipping build"
+          if [ -s web/src/wasm/pkg/kofem_wasm_emcc.wasm ]; then
+            echo "have=true" >> "$GITHUB_OUTPUT"
+            echo "Engine ${KOFEM_ENGINE_ID} obtained without building."
           else
-            echo "WASM cache MISS — full build will run"
+            echo "have=false" >> "$GITHUB_OUTPUT"
+            echo "Engine ${KOFEM_ENGINE_ID} not published yet — full build will run."
           fi
 
       - name: Clean stale CMake cache
-        if: steps.wasm-cache.outputs.cache-hit != 'true'
+        if: steps.engine.outputs.have != 'true'
         run: |
           rm -f target/wasm-build/CMakeCache.txt
           rm -rf target/wasm-build/CMakeFiles
 
       - name: Build WASM engine
-        if: steps.wasm-cache.outputs.cache-hit != 'true'
+        if: steps.engine.outputs.have != 'true'
         run: bash scripts/build-wasm.sh
 
+      # include-hidden-files carries the .engine-id stamp through to the jobs that
+      # download this, so they can tell which sources the binary came from.
       - name: Upload WASM artifacts
         uses: actions/upload-artifact@v4
         with:
           name: kofem-wasm-pkg
           retention-days: 7
+          include-hidden-files: true
           path: |
             web/src/wasm/pkg/kofem_wasm_emcc.js
             web/src/wasm/pkg/kofem_wasm_emcc.wasm
+            web/src/wasm/pkg/.engine-id
+
+  # Publish the engine so contributors, the Docker build and future CI runs can
+  # download it instead of committing a ~34 MB blob per engine change (KOF-186).
+  # Only from main: a release is a public, immutable artifact, and PR branches are
+  # served by the workflow artifact above.
+  publish-engine:
+    name: Publish engine release
+    needs: [engine-id, wasm]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download WASM artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: kofem-wasm-pkg
+          path: engine-dist/
+
+      # Releases are content-addressed, so an existing tag already holds a binary
+      # built from these exact sources — re-uploading would only churn it.
+      - name: Publish release if absent
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.engine-id.outputs.id }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already published — nothing to do."
+            exit 0
+          fi
+
+          cd engine-dist
+          sha256sum kofem_wasm_emcc.js kofem_wasm_emcc.wasm > SHA256SUMS
+
+          # Marked as a prerelease so these build artifacts never take over the
+          # "Latest release" banner from an actual product release.
+          if gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "WASM engine $TAG" \
+            --prerelease \
+            --notes "Compiled KoFEM WASM engine, built from \`engine/\` at ${GITHUB_SHA}.
+
+          Installed automatically by \`scripts/fetch-wasm-engine.sh\`, which resolves this
+          tag from the engine sources in your checkout — you should not need to download
+          these files by hand." \
+            kofem_wasm_emcc.js kofem_wasm_emcc.wasm SHA256SUMS; then
+            exit 0
+          fi
+
+          # Two pushes carrying the same engine sources can race here. Losing the
+          # race is fine — the winner published a binary built from those same
+          # sources. Anything else is a real failure.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG was published concurrently — nothing to do."
+            exit 0
+          fi
+          echo "ERROR: publishing $TAG failed and no release exists." >&2
+          exit 1
 
   frontend:
     name: Frontend
@@ -126,11 +226,17 @@ jobs:
       contents: read
       packages: write
 
+    env:
+      # This job takes the engine from the `wasm` job's artifact, so the
+      # package.json pre-hooks must not try to fetch a release on top of it —
+      # a PR that changes engine/ has no published release yet.
+      KOFEM_WASM_SKIP_FETCH: 1
+
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-          # Full history + tags so `git describe --tags` can stamp the image.
+          # Full history + tags so `git describe` can stamp the image.
           fetch-depth: 0
 
       - name: Download WASM artifacts
@@ -242,7 +348,7 @@ jobs:
       # image never ships. Reuses the gha cache, so the push build below is warm.
       - name: Smoke-test production image
         run: |
-          VERSION=$(git describe --tags --abbrev=0 || echo 'smoke')
+          VERSION=$(git describe --tags --abbrev=0 --match 'v*' || echo 'smoke')
           docker buildx build \
             --load \
             --platform linux/amd64 \
@@ -276,7 +382,7 @@ jobs:
         run: |
           OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           IMAGE_PREFIX="ghcr.io/${OWNER_LC}"
-          VERSION=$(git describe --tags --abbrev=0 || echo 'no-tags-found')
+          VERSION=$(git describe --tags --abbrev=0 --match 'v*' || echo 'no-tags-found')
           IMAGE_TAG="${VERSION}-$(git rev-parse --short HEAD)"
 
           if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
