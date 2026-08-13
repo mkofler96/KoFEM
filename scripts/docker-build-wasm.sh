@@ -52,10 +52,15 @@ echo ""
 echo "==> Launching build container..."
 echo ""
 
+# Computed on the host: the ID is derived from git metadata, and git inside the
+# container would refuse the bind-mounted repo as dubiously owned anyway.
+ENGINE_ID="$(bash "${REPO_ROOT}/scripts/engine-version.sh")"
+
 docker run --rm \
     --platform "${PLATFORM}" \
     -v "${REPO_ROOT}:/repo" \
     -w /repo \
+    -e KOFEM_ENGINE_ID="${ENGINE_ID}" \
     "${IMAGE}" \
     bash -c "
         rm -f target/wasm-build/CMakeCache.txt

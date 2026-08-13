@@ -54,6 +54,19 @@ mkdir -p "$OUT_DIR"
 cp "$BUILD_DIR/kofem_wasm_emcc.js"   "$OUT_DIR/kofem_wasm_emcc.js"
 cp "$BUILD_DIR/kofem_wasm_emcc.wasm" "$OUT_DIR/kofem_wasm_emcc.wasm"
 
+# Record which sources these binaries came from, so scripts/fetch-wasm-engine.sh
+# leaves a fresh local build alone instead of replacing it with a download. The
+# build may run somewhere without git metadata (a CI container checked out from a
+# tarball), in which case the caller passes the ID down; with neither, drop the
+# stamp rather than leave a stale one claiming the wrong sources.
+ENGINE_ID="${KOFEM_ENGINE_ID:-$(bash "$REPO_ROOT/scripts/engine-version.sh" 2>/dev/null || true)}"
+if [ -n "$ENGINE_ID" ]; then
+    printf '%s\n' "$ENGINE_ID" >"$OUT_DIR/.engine-id"
+else
+    rm -f "$OUT_DIR/.engine-id"
+    echo "NOTE: engine ID unavailable here — wrote no .engine-id stamp."
+fi
+
 echo "Done."
 echo "  $OUT_DIR/kofem_wasm_emcc.js"
 echo "  $OUT_DIR/kofem_wasm_emcc.wasm"

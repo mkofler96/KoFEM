@@ -22,6 +22,12 @@ git -C "$REPO" config core.hooksPath .githooks
 
 bash "$REPO/scripts/fetch-wasm-deps.sh"
 
+# The compiled engine is not committed (KOF-186), so a fresh clone has none —
+# install the published one up front rather than making the first `bun run dev`
+# wait for it. --optional: a session branched off an unmerged engine change has no
+# release to fetch and must build instead, which is not a reason to fail startup.
+bash "$REPO/scripts/fetch-wasm-engine.sh" --optional
+
 # clang-tidy >= 20 for scripts/clang-tidy.sh (the C++ engine linter, mirroring
 # the DeepSource rules — see .clang-tidy). The sandbox's default clang-tidy-18
 # cannot parse the emsdk clang-22-era headers.
