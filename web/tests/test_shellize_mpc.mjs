@@ -25,6 +25,7 @@ import {
   dropCouplingsOnFixedNodes,
   extractThinWallShells,
   shellWallTets,
+  tieCouplingProblem,
 } from "../src/lib/shellize.ts";
 
 let failures = 0;
@@ -356,6 +357,29 @@ check(
     tied.coupling.mpc.every((flag) => flag === 0),
   );
 
+  check(
+    "a tie that coupled reports what it contributed",
+    tied.tieReports.length === 1 &&
+      tied.tieReports[0].name === "Tie1" &&
+      tied.tieReports[0].nCoupled === surfaceB.length &&
+      tied.tieReports[0].nPartners > 0 &&
+      Math.abs(tied.tieReports[0].gap - GAP) < 1e-9 &&
+      tied.tieReports[0].drop === undefined,
+    JSON.stringify(tied.tieReports),
+  );
+  check(
+    "a tie that coupled is not a problem",
+    tieCouplingProblem(tied.tieReports[0]) === undefined,
+  );
+
+  // ── A declared tie that couples nothing is reported, never dropped silently ──
+  //
+  // Every way tieCouplings can fail to produce a coupling must name the tie and
+  // say which way it failed (KOF-203). The builders stay pure — they report; the
+  // worker turns a report into the refusal, exactly as the all-solid weld path
+  // does. Solving on regardless leaves the assembly split and returns a
+  // plausible-looking but structurally wrong shape.
+
   // A "within distance" connection shorter than the clearance reaches nothing.
   const tooShort = buildExplicitCoupledModel(verts, solidTets, [], [], {
     ties: [
@@ -371,6 +395,119 @@ check(
     "a search distance below the clearance couples nothing",
     tooShort.coupling.ref.length === 0,
     `got ${tooShort.coupling.ref.length} couplings`,
+  );
+  check(
+    "...and says the surfaces are beyond the search distance",
+    tooShort.tieReports.length === 1 &&
+      tooShort.tieReports[0].drop?.kind === "beyond-search-distance" &&
+      Math.abs(tooShort.tieReports[0].drop.gap - GAP) < 1e-9 &&
+      tooShort.tieReports[0].drop.reach === 0.5 * GAP,
+    JSON.stringify(tooShort.tieReports),
+  );
+  check(
+    "...as a problem naming the tie and both distances",
+    (tieCouplingProblem(tooShort.tieReports[0]) ?? "").includes('Tie "Tie1"') &&
+      (tieCouplingProblem(tooShort.tieReports[0]) ?? "").includes(
+        "search distance",
+      ),
+    tieCouplingProblem(tooShort.tieReports[0]),
+  );
+
+  // The outward-facing faces of the two bodies: a whole body apart, so they come
+  // into nominal range but no reference finds the three partners an RBE3 needs
+  // (only the one node directly opposite is within the radius).
+  const backToBack = buildExplicitCoupledModel(verts, solidTets, [], [], {
+    ties: [
+      {
+        name: "Wrong faces",
+        verticesA: faceAt(0),
+        verticesB: faceAt(10 + GAP + 10),
+        maxSeparation: Infinity,
+      },
+    ],
+  });
+  check(
+    "surfaces too sparse to distribute onto are reported, not dropped",
+    backToBack.coupling.ref.length === 0 &&
+      backToBack.tieReports.length === 1 &&
+      backToBack.tieReports[0].drop?.kind === "too-few-partners" &&
+      (tieCouplingProblem(backToBack.tieReports[0]) ?? "").includes(
+        'Tie "Wrong faces"',
+      ),
+    JSON.stringify(backToBack.tieReports),
+  );
+
+  // A surface whose nodes are in no element of the solved model — the auto-shell
+  // case where the picked wall was idealised away, and the re-pick-after-remesh
+  // case — leaves that side with no pool node at all.
+  const orphan = buildExplicitCoupledModel(verts, solidTets, [], [], {
+    ties: [
+      {
+        name: "Stale pick",
+        verticesA: surfaceA,
+        verticesB: [verts.length / 3 + 5],
+        maxSeparation: Infinity,
+      },
+    ],
+  });
+  check(
+    "a surface with no node in the solved model is reported, not skipped",
+    orphan.coupling.ref.length === 0 &&
+      orphan.tieReports.length === 1 &&
+      orphan.tieReports[0].drop?.kind === "no-pool-nodes" &&
+      orphan.tieReports[0].drop.side === "B" &&
+      (tieCouplingProblem(orphan.tieReports[0]) ?? "").includes(
+        'Tie "Stale pick"',
+      ),
+    JSON.stringify(orphan.tieReports),
+  );
+
+  // Two surfaces that are the SAME nodes are already rigidly joined through the
+  // shared pool DOFs. That is a connected tie, so it must NOT be reported as a
+  // problem even though it produces no coupling.
+  const shared = buildExplicitCoupledModel(verts, solidTets, [], [], {
+    ties: [
+      {
+        name: "Coincident",
+        verticesA: surfaceA,
+        verticesB: surfaceA,
+        maxSeparation: Infinity,
+      },
+    ],
+  });
+  check(
+    "a tie whose surfaces share their nodes is joined, not a problem",
+    shared.tieReports.length === 1 &&
+      shared.tieReports[0].nShared === surfaceA.length &&
+      shared.tieReports[0].nCoupled === 0 &&
+      tieCouplingProblem(shared.tieReports[0]) === undefined,
+    JSON.stringify(shared.tieReports),
+  );
+
+  // Surfaces that never see each other at all: a third body far enough away that
+  // the search gives up before reaching it. Added last — `cube` appends to the
+  // shared vertex array, and the models above were built from it.
+  const farTets = [...solidTets, ...cube(2000)];
+  const farApart = buildExplicitCoupledModel(verts, farTets, [], [], {
+    ties: [
+      {
+        name: "Distant body",
+        verticesA: faceAt(0),
+        verticesB: faceAt(2010),
+        maxSeparation: Infinity,
+      },
+    ],
+  });
+  check(
+    "surfaces the search never reaches are reported out of reach",
+    farApart.coupling.ref.length === 0 &&
+      farApart.tieReports.length === 1 &&
+      farApart.tieReports[0].drop?.kind === "out-of-reach" &&
+      farApart.tieReports[0].drop.searched > 0 &&
+      (tieCouplingProblem(farApart.tieReports[0]) ?? "").includes(
+        'Tie "Distant body"',
+      ),
+    JSON.stringify(farApart.tieReports),
   );
 }
 
