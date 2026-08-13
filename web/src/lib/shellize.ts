@@ -1000,6 +1000,15 @@ export function tieCouplingProblem(
         `three partners a distributing coupling needs within ${drop.radius.toFixed(4)} mm. ` +
         "Refine the mesh on the other surface, or pick more of it."
       );
+    // TieCouplingDrop is a closed union, so this is unreachable. The `never`
+    // binding turns adding a drop kind without a message into a compile error,
+    // rather than a connection that coupled nothing and reports no reason.
+    default: {
+      const unhandled: never = drop;
+      throw new Error(
+        `Cannot say why tie "${report.name}" coupled nothing: unhandled drop ${JSON.stringify(unhandled)}`,
+      );
+    }
   }
 }
 
