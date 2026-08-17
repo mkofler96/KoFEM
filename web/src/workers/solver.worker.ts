@@ -23,6 +23,8 @@ import {
   buildCoupledModel,
   buildExplicitCoupledModel,
   type TieSurfaces,
+  tieCouplingProblem,
+  type TieCouplingReport,
   dropCouplingsOnFixedNodes,
   shellNodeLocator,
   isShellPoolIndex,
@@ -1387,6 +1389,26 @@ function mapCoupledVonMises(
 // Returns the coupled displacement/von-Mises result, or null when no body is
 // marked Shell (→ the caller runs the all-solid path). `shellBodyIds` is the
 // per-body Shell choice (property ids); an empty set means every body is solid.
+// Say what each tie connection contributed to a coupled model, and refuse one
+// that contributed nothing. A declared connection that couples no node and shares
+// none leaves the assembly split: the solve still runs and returns a
+// plausible-looking but structurally wrong shape. This is the same refusal the
+// all-solid weld path makes on its own reports (KOF-203) — a connection is a
+// modelling statement, so failing to honour it is an error, not a silent skip.
+function reportTieCouplings(id: number, reports: TieCouplingReport[]): void {
+  for (const report of reports) {
+    const problem = tieCouplingProblem(report);
+    if (problem) throw new Error(problem);
+    self.postMessage({
+      id,
+      log:
+        report.nCoupled === 0
+          ? `Tie "${report.name}": already joined through ${report.nShared} shared node(s)`
+          : `Tie "${report.name}": ${report.nCoupled} distributing coupling(s) onto ${report.nPartners} partner node(s) across a ${report.gap.toFixed(4)} mm gap${report.nShared > 0 ? `, ${report.nShared} node(s) already shared` : ""}`,
+    });
+  }
+}
+
 function tryCoupledSolve(
   payload: SolvePayload,
   shellBodyIds: Set<number>,
@@ -1442,6 +1464,9 @@ function tryCoupledSolve(
       vid(nodeId, "coupling reference point"),
     ),
   });
+  // Before the bail below: a dropped tie must not be hidden by falling through to
+  // the pure-shell path, which would solve a different model entirely.
+  reportTieCouplings(0, model.tieReports);
   if (model.coupling.ref.length === 0 && couplings.length === 0) return null; // shell doesn't couple to the solid
 
   const nearestShell = shellNodeLocator(model);
@@ -2009,6 +2034,7 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
       ),
     },
   );
+  reportTieCouplings(id, model.tieReports);
 
   const poolOf = (nodeId: number): number => {
     const pi = model.poolOfVertex.get(vid(nodeId, "coupled bc/load"));
