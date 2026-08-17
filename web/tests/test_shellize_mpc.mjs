@@ -458,6 +458,12 @@ check(
       orphan.tieReports[0].drop.side === "B" &&
       (tieCouplingProblem(orphan.tieReports[0]) ?? "").includes(
         'Tie "Stale pick"',
+      ) &&
+      // The side that has nothing is the side the sentence must say is empty —
+      // "surface B has a node in the solved model" would send the user to the
+      // one surface that is fine.
+      (tieCouplingProblem(orphan.tieReports[0]) ?? "").includes(
+        "picked surface B has no node in the solved model",
       ),
     JSON.stringify(orphan.tieReports),
   );

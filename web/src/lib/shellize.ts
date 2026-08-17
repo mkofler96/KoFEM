@@ -979,8 +979,8 @@ export function tieCouplingProblem(
   switch (drop.kind) {
     case "no-pool-nodes":
       return (
-        `${head} — ${drop.side === "both" ? "neither picked surface has" : `picked surface ${drop.side} has`} ` +
-        "a node in the solved model. Re-pick its surfaces after remeshing, or " +
+        `${head} — ${drop.side === "both" ? "neither picked surface has a node" : `picked surface ${drop.side} has no node`} ` +
+        "in the solved model. Re-pick its surfaces after remeshing, or " +
         "mark the body Solid if the tie lands on a wall that was idealised as shell."
       );
     case "out-of-reach":
