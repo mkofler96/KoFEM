@@ -1,67 +1,355 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 400" width="780" height="400" role="img" aria-labelledby="cvTitle">
-<title id="cvTitle">Computed stiffness against mesh size. Linear tetrahedra fall steadily from 11,890 to 11,364 N/mm without settling, while quadratic elements on the same meshes sit flat at about 10,130 N/mm from the coarsest mesh onward.</title>
+<svg class="kf-chart" role="img" aria-labelledby="kfConvTitle" preserveAspectRatio="xMidYMid meet" xmlns:xlink="http://www.w3.org/1999/xlink" width="561.611407pt" height="302.282695pt" viewBox="0 0 561.611407 302.282695" xmlns="http://www.w3.org/2000/svg" version="1.1">
+<title id="kfConvTitle">Computed stiffness against mesh node count. Linear tetrahedra fall steadily from 11,890 to 11,364 N/mm without settling. Quadratic elements on the same meshes stay inside a narrow band between 10,103 and 10,185 N/mm from the coarsest mesh onward.</title>
 <style>
-  .ax{stroke:#3a3f4b;stroke-width:1;fill:none}
-  .gr{stroke:#2a2e38;stroke-width:1;stroke-dasharray:3 4;fill:none}
-  .tk{font:400 11.5px Geist,system-ui,sans-serif;fill:#9aa0ad}
-  .al{font:500 12.5px Geist,system-ui,sans-serif;fill:#9aa0ad}
-  .lg{font:500 13px Geist,system-ui,sans-serif}
-  .lin{stroke:#e5484d;stroke-width:2.4;fill:none}
-  .lind{fill:#e5484d}
-  .qua{stroke:#2f54eb;stroke-width:2.4;fill:none}
-  .quad{fill:#2f54eb}
-  [data-theme="light"] .ax{stroke:#c9cdd6}
-  [data-theme="light"] .gr{stroke:#e7e9ee}
-  [data-theme="light"] .tk,[data-theme="light"] .al{fill:#5b616e}
+.kf-chart{width:100%;height:auto;display:block;
+  --fig-ink:#eceef3;--fig-muted:#9aa0ad;--fig-grid:#2a2e38;--fig-axis:#3a3f4b;
+  --fig-series-a:#ff6b6e;--fig-series-b:#7aa0ff;--fig-band:rgba(122,160,255,.12)}
+[data-theme="light"] .kf-chart{
+  --fig-ink:#0d1117;--fig-muted:#5b616e;--fig-grid:#e7e9ee;--fig-axis:#c9cdd6;
+  --fig-series-a:#d93438;--fig-series-b:#2f54eb;--fig-band:rgba(47,84,235,.09)}
 </style>
-<path class="gr" d="M78 334.0 H750"/>
-<text class="tk" x="67" y="338.0" text-anchor="end">9,800</text>
-<path class="gr" d="M78 287.0 H750"/>
-<text class="tk" x="67" y="291.0" text-anchor="end">10,200</text>
-<path class="gr" d="M78 240.0 H750"/>
-<text class="tk" x="67" y="244.0" text-anchor="end">10,600</text>
-<path class="gr" d="M78 193.0 H750"/>
-<text class="tk" x="67" y="197.0" text-anchor="end">11,000</text>
-<path class="gr" d="M78 146.0 H750"/>
-<text class="tk" x="67" y="150.0" text-anchor="end">11,400</text>
-<path class="gr" d="M78 99.0 H750"/>
-<text class="tk" x="67" y="103.0" text-anchor="end">11,800</text>
-<path class="gr" d="M78 52.0 H750"/>
-<text class="tk" x="67" y="56.0" text-anchor="end">12,200</text>
-<text class="tk" x="119.9" y="354" text-anchor="middle">5.7k</text>
-<text class="tk" x="119.9" y="370" text-anchor="middle" opacity=".7">10</text>
-<text class="tk" x="174.9" y="354" text-anchor="middle">6.4k</text>
-<text class="tk" x="174.9" y="370" text-anchor="middle" opacity=".7">8</text>
-<text class="tk" x="233.5" y="354" text-anchor="middle">7.1k</text>
-<text class="tk" x="233.5" y="370" text-anchor="middle" opacity=".7">6</text>
-<text class="tk" x="322.5" y="354" text-anchor="middle">8.1k</text>
-<text class="tk" x="322.5" y="370" text-anchor="middle" opacity=".7">5</text>
-<text class="tk" x="442.7" y="354" text-anchor="middle">9.5k</text>
-<text class="tk" x="442.7" y="370" text-anchor="middle" opacity=".7">4</text>
-<text class="tk" x="525.2" y="354" text-anchor="middle">10.5k</text>
-<text class="tk" x="525.2" y="370" text-anchor="middle" opacity=".7">3</text>
-<text class="tk" x="569.9" y="354" text-anchor="middle">11.1k</text>
-<text class="tk" x="569.9" y="370" text-anchor="middle" opacity=".7">2.5</text>
-<text class="tk" x="707.2" y="354" text-anchor="middle">12.7k</text>
-<text class="tk" x="707.2" y="370" text-anchor="middle" opacity=".7">2</text>
-<path class="ax" d="M78 52 V334 H750"/>
-<path class="lin" d="M119.9 88.5L174.9 97.5L233.5 98.6L322.5 104.8L442.7 110.2L525.2 125.4L569.9 128.5L707.2 150.2"/>
-<path class="qua" d="M119.9 290.7L174.9 298.4L233.5 296.0L322.5 293.6L442.7 288.8"/>
-<circle class="lind" cx="119.9" cy="88.5" r="3.6"/>
-<circle class="lind" cx="174.9" cy="97.5" r="3.6"/>
-<circle class="lind" cx="233.5" cy="98.6" r="3.6"/>
-<circle class="lind" cx="322.5" cy="104.8" r="3.6"/>
-<circle class="lind" cx="442.7" cy="110.2" r="3.6"/>
-<circle class="lind" cx="525.2" cy="125.4" r="3.6"/>
-<circle class="lind" cx="569.9" cy="128.5" r="3.6"/>
-<circle class="lind" cx="707.2" cy="150.2" r="3.6"/>
-<circle class="quad" cx="119.9" cy="290.7" r="3.6"/>
-<circle class="quad" cx="174.9" cy="298.4" r="3.6"/>
-<circle class="quad" cx="233.5" cy="296.0" r="3.6"/>
-<circle class="quad" cx="322.5" cy="293.6" r="3.6"/>
-<circle class="quad" cx="442.7" cy="288.8" r="3.6"/>
-<text class="al" x="414" y="390" text-anchor="middle">mesh nodes (top) &#183; max element size in mm (bottom)</text>
-<text class="al" transform="translate(18 193) rotate(-90)" text-anchor="middle">k&#8348; [N/mm]</text>
-<circle class="lind" cx="84" cy="26" r="4"/><text class="lg" x="96" y="30" fill="#e5484d">linear tetrahedra &#8212; still falling</text>
-<circle class="quad" cx="84" cy="44" r="4"/><text class="lg" x="96" y="48" fill="#2f54eb">quadratic elements &#8212; flat from the start</text>
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:date>2026-08-17T20:23:10.697121</dc:date>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator>
+     <cc:Agent>
+      <dc:title>Matplotlib v3.11.1, https://matplotlib.org/</dc:title>
+     </cc:Agent>
+    </dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 302.282695 
+L 561.611407 302.282695 
+L 561.611407 0 
+L 0 0 
+L 0 302.282695 
+z
+" style="fill: none"/>
+  </g>
+  <g id="axes_1">
+   <g id="patch_2">
+    <path d="M 76.381914 255.640898 
+L 523.490592 255.640898 
+L 523.490592 41.878203 
+L 76.381914 41.878203 
+L 76.381914 255.640898 
+z
+" style="fill: none"/>
+   </g>
+   <g id="patch_3">
+    <path d="M 76.381914 224.000876 
+L 523.490592 224.000876 
+L 523.490592 217.525124 
+L 76.381914 217.525124 
+z
+" clip-path="url(#p67301e24c7)" style="fill: var(--fig-band)"/>
+   </g>
+   <g id="axes_2">
+    <g id="patch_4">
+     <path d="M 76.381914 41.878203 
+L 523.490592 41.878203 
+L 523.490592 41.878203 
+L 76.381914 41.878203 
+L 76.381914 41.878203 
+z
+" style="fill: none"/>
+    </g>
+    <g id="matplotlib.axis_1">
+     <g id="xtick_1">
+      <g id="line2d_1"/>
+      <g id="text_1">
+       <text style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; text-anchor: middle; fill: var(--fig-muted)" x="108.649155" y="34.115508" transform="rotate(-0 108.649155 34.115508)">10</text>
+      </g>
+     </g>
+     <g id="xtick_2">
+      <g id="line2d_2"/>
+      <g id="text_2">
+       <text style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; text-anchor: middle; fill: var(--fig-muted)" x="143.879164" y="34.115508" transform="rotate(-0 143.879164 34.115508)">8</text>
+      </g>
+     </g>
+     <g id="xtick_3">
+      <g id="line2d_3"/>
+      <g id="text_3">
+       <text style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; text-anchor: middle; fill: var(--fig-muted)" x="181.479388" y="34.115508" transform="rotate(-0 181.479388 34.115508)">6</text>
+      </g>
+     </g>
+     <g id="xtick_4">
+      <g id="line2d_4"/>
+      <g id="text_4">
+       <text style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; text-anchor: middle; fill: var(--fig-muted)" x="238.580014" y="34.115508" transform="rotate(-0 238.580014 34.115508)">5</text>
+      </g>
+     </g>
+     <g id="xtick_5">
+      <g id="line2d_5"/>
+      <g id="text_5">
+       <text style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; text-anchor: middle; fill: var(--fig-muted)" x="315.66586" y="34.115508" transform="rotate(-0 315.66586 34.115508)">4</text>
+      </g>
+     </g>
+     <g id="xtick_6">
+      <g id="line2d_6"/>
+      <g id="text_6">
+       <text style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; text-anchor: middle; fill: var(--fig-muted)" x="368.564742" y="34.115508" transform="rotate(-0 368.564742 34.115508)">3</text>
+      </g>
+     </g>
+     <g id="xtick_7">
+      <g id="line2d_7"/>
+      <g id="text_7">
+       <text style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; text-anchor: middle; fill: var(--fig-muted)" x="397.222792" y="34.115508" transform="rotate(-0 397.222792 34.115508)">2.5</text>
+      </g>
+     </g>
+     <g id="xtick_8">
+      <g id="line2d_8"/>
+      <g id="text_8">
+       <text style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; text-anchor: middle; fill: var(--fig-muted)" x="485.243946" y="34.115508" transform="rotate(-0 485.243946 34.115508)">2</text>
+      </g>
+     </g>
+     <g id="text_9">
+      <text style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; text-anchor: middle; fill: var(--fig-muted)" x="299.936253" y="17.378203" transform="rotate(-0 299.936253 17.378203)">Max element size  [mm]</text>
+     </g>
+    </g>
+    <g id="matplotlib.axis_2"/>
+   </g>
+   <g id="matplotlib.axis_3">
+    <g id="xtick_9">
+     <g id="line2d_9"/>
+     <g id="text_10">
+      <text style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; text-anchor: middle; fill: var(--fig-muted)" x="124.863578" y="271.379102" transform="rotate(-0 124.863578 271.379102)">6k</text>
+     </g>
+    </g>
+    <g id="xtick_10">
+     <g id="line2d_10"/>
+     <g id="text_11">
+      <text style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; text-anchor: middle; fill: var(--fig-muted)" x="178.732093" y="271.379102" transform="rotate(-0 178.732093 271.379102)">7k</text>
+     </g>
+    </g>
+    <g id="xtick_11">
+     <g id="line2d_11"/>
+     <g id="text_12">
+      <text style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; text-anchor: middle; fill: var(--fig-muted)" x="232.600609" y="271.379102" transform="rotate(-0 232.600609 271.379102)">8k</text>
+     </g>
+    </g>
+    <g id="xtick_12">
+     <g id="line2d_12"/>
+     <g id="text_13">
+      <text style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; text-anchor: middle; fill: var(--fig-muted)" x="286.469124" y="271.379102" transform="rotate(-0 286.469124 271.379102)">9k</text>
+     </g>
+    </g>
+    <g id="xtick_13">
+     <g id="line2d_13"/>
+     <g id="text_14">
+      <text style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; text-anchor: middle; fill: var(--fig-muted)" x="340.33764" y="271.379102" transform="rotate(-0 340.33764 271.379102)">10k</text>
+     </g>
+    </g>
+    <g id="xtick_14">
+     <g id="line2d_14"/>
+     <g id="text_15">
+      <text style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; text-anchor: middle; fill: var(--fig-muted)" x="394.206155" y="271.379102" transform="rotate(-0 394.206155 271.379102)">11k</text>
+     </g>
+    </g>
+    <g id="xtick_15">
+     <g id="line2d_15"/>
+     <g id="text_16">
+      <text style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; text-anchor: middle; fill: var(--fig-muted)" x="448.074671" y="271.379102" transform="rotate(-0 448.074671 271.379102)">12k</text>
+     </g>
+    </g>
+    <g id="xtick_16">
+     <g id="line2d_16"/>
+     <g id="text_17">
+      <text style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; text-anchor: middle; fill: var(--fig-muted)" x="501.943186" y="271.379102" transform="rotate(-0 501.943186 271.379102)">13k</text>
+     </g>
+    </g>
+    <g id="text_18">
+     <text style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; text-anchor: middle; fill: var(--fig-muted)" x="299.936253" y="290.88" transform="rotate(-0 299.936253 290.88)">Mesh nodes</text>
+    </g>
+   </g>
+   <g id="matplotlib.axis_4">
+    <g id="ytick_1">
+     <g id="line2d_17">
+      <path d="M 76.381914 232.064131 
+L 523.490592 232.064131 
+" clip-path="url(#p67301e24c7)" style="fill: none; stroke-dasharray: 1.8,3.6; stroke-dashoffset: 0; stroke: var(--fig-grid); stroke-width: 0.9"/>
+     </g>
+     <g id="line2d_18"/>
+     <g id="text_19">
+      <text style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; text-anchor: end; fill: var(--fig-muted)" x="69.381914" y="236.432783" transform="rotate(-0 69.381914 236.432783)">10,000</text>
+     </g>
+    </g>
+    <g id="ytick_2">
+     <g id="line2d_19">
+      <path d="M 76.381914 192.769517 
+L 523.490592 192.769517 
+" clip-path="url(#p67301e24c7)" style="fill: none; stroke-dasharray: 1.8,3.6; stroke-dashoffset: 0; stroke: var(--fig-grid); stroke-width: 0.9"/>
+     </g>
+     <g id="line2d_20"/>
+     <g id="text_20">
+      <text style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; text-anchor: end; fill: var(--fig-muted)" x="69.381914" y="197.13817" transform="rotate(-0 69.381914 197.13817)">10,500</text>
+     </g>
+    </g>
+    <g id="ytick_3">
+     <g id="line2d_21">
+      <path d="M 76.381914 153.474904 
+L 523.490592 153.474904 
+" clip-path="url(#p67301e24c7)" style="fill: none; stroke-dasharray: 1.8,3.6; stroke-dashoffset: 0; stroke: var(--fig-grid); stroke-width: 0.9"/>
+     </g>
+     <g id="line2d_22"/>
+     <g id="text_21">
+      <text style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; text-anchor: end; fill: var(--fig-muted)" x="69.381914" y="157.843557" transform="rotate(-0 69.381914 157.843557)">11,000</text>
+     </g>
+    </g>
+    <g id="ytick_4">
+     <g id="line2d_23">
+      <path d="M 76.381914 114.180291 
+L 523.490592 114.180291 
+" clip-path="url(#p67301e24c7)" style="fill: none; stroke-dasharray: 1.8,3.6; stroke-dashoffset: 0; stroke: var(--fig-grid); stroke-width: 0.9"/>
+     </g>
+     <g id="line2d_24"/>
+     <g id="text_22">
+      <text style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; text-anchor: end; fill: var(--fig-muted)" x="69.381914" y="118.548944" transform="rotate(-0 69.381914 118.548944)">11,500</text>
+     </g>
+    </g>
+    <g id="ytick_5">
+     <g id="line2d_25">
+      <path d="M 76.381914 74.885678 
+L 523.490592 74.885678 
+" clip-path="url(#p67301e24c7)" style="fill: none; stroke-dasharray: 1.8,3.6; stroke-dashoffset: 0; stroke: var(--fig-grid); stroke-width: 0.9"/>
+     </g>
+     <g id="line2d_26"/>
+     <g id="text_23">
+      <text style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; text-anchor: end; fill: var(--fig-muted)" x="69.381914" y="79.25433" transform="rotate(-0 69.381914 79.25433)">12,000</text>
+     </g>
+    </g>
+    <g id="text_24">
+     <!-- Stiffness $k_w$  [N/mm] -->
+     <g style="fill: var(--fig-muted)" transform="translate(17.38 207.697051) rotate(-90)">
+      <text>
+       <tspan x="0" y="-0.265625" style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; fill: var(--fig-muted)">S</tspan>
+       <tspan x="7.299805" y="-0.265625" style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; fill: var(--fig-muted)">t</tspan>
+       <tspan x="11.808838" y="-0.265625" style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; fill: var(--fig-muted)">i</tspan>
+       <tspan x="15.003906" y="-0.265625" style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; fill: var(--fig-muted)">f</tspan>
+       <tspan x="19.05249" y="-0.265625" style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; fill: var(--fig-muted)">f</tspan>
+       <tspan x="23.101074" y="-0.265625" style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; fill: var(--fig-muted)">n</tspan>
+       <tspan x="30.389648" y="-0.265625" style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; fill: var(--fig-muted)">e</tspan>
+       <tspan x="37.464844" y="-0.265625" style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; fill: var(--fig-muted)">s</tspan>
+       <tspan x="43.456299" y="-0.265625" style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; fill: var(--fig-muted)">s</tspan>
+       <tspan x="49.447754" y="-0.265625" style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; fill: var(--fig-muted)"> </tspan>
+       <tspan x="66.661255" y="-0.265625" style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; fill: var(--fig-muted)"> </tspan>
+       <tspan x="70.316772" y="-0.265625" style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; fill: var(--fig-muted)"> </tspan>
+       <tspan x="73.97229" y="-0.265625" style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; fill: var(--fig-muted)">[</tspan>
+       <tspan x="78.458862" y="-0.265625" style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; fill: var(--fig-muted)">N</tspan>
+       <tspan x="87.061401" y="-0.265625" style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; fill: var(--fig-muted)">/</tspan>
+       <tspan x="90.935913" y="-0.265625" style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; fill: var(--fig-muted)">m</tspan>
+       <tspan x="102.138306" y="-0.265625" style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; fill: var(--fig-muted)">m</tspan>
+       <tspan x="113.340698" y="-0.265625" style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; fill: var(--fig-muted)">]</tspan>
+       <tspan x="53.103271" y="-0.265625" style="font-style: oblique; font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; fill: var(--fig-muted)">k</tspan>
+       <tspan x="59.762939" y="1.459369" style="font-style: oblique; font-size: 8.05px; font-family: Geist, system-ui, -apple-system, sans-serif; fill: var(--fig-muted)">w</tspan>
+      </text>
+     </g>
+    </g>
+   </g>
+   <g id="patch_5">
+    <path d="M 76.381914 255.640898 
+L 76.381914 41.878203 
+" style="fill: none; stroke: var(--fig-axis); stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="patch_6">
+    <path d="M 76.381914 255.640898 
+L 523.490592 255.640898 
+" style="fill: none; stroke: var(--fig-axis); stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_27">
+    <path d="M 108.649155 83.561929 
+L 143.879164 89.60544 
+L 181.479388 90.312743 
+L 238.580014 94.509408 
+L 315.66586 98.085218 
+L 368.564742 108.286099 
+L 397.222792 110.329419 
+L 485.243946 124.868426 
+" clip-path="url(#p67301e24c7)" style="fill: none; stroke: var(--fig-series-a); stroke-width: 2.2; stroke-linecap: square"/>
+    <defs>
+     <path id="maef36a507e" d="M 0 2.75 
+C 0.729309 2.75 1.428845 2.460243 1.944544 1.944544 
+C 2.460243 1.428845 2.75 0.729309 2.75 0 
+C 2.75 -0.729309 2.460243 -1.428845 1.944544 -1.944544 
+C 1.428845 -2.460243 0.729309 -2.75 0 -2.75 
+C -0.729309 -2.75 -1.428845 -2.460243 -1.944544 -1.944544 
+C -2.460243 -1.428845 -2.75 -0.729309 -2.75 0 
+C -2.75 0.729309 -2.460243 1.428845 -1.944544 1.944544 
+C -1.428845 2.460243 -0.729309 2.75 0 2.75 
+z
+" style="stroke: var(--fig-series-a)"/>
+    </defs>
+    <g clip-path="url(#p67301e24c7)">
+     <use xlink:href="#maef36a507e" x="108.649155" y="83.561929" style="fill: var(--fig-series-a); stroke: var(--fig-series-a)"/>
+     <use xlink:href="#maef36a507e" x="143.879164" y="89.60544" style="fill: var(--fig-series-a); stroke: var(--fig-series-a)"/>
+     <use xlink:href="#maef36a507e" x="181.479388" y="90.312743" style="fill: var(--fig-series-a); stroke: var(--fig-series-a)"/>
+     <use xlink:href="#maef36a507e" x="238.580014" y="94.509408" style="fill: var(--fig-series-a); stroke: var(--fig-series-a)"/>
+     <use xlink:href="#maef36a507e" x="315.66586" y="98.085218" style="fill: var(--fig-series-a); stroke: var(--fig-series-a)"/>
+     <use xlink:href="#maef36a507e" x="368.564742" y="108.286099" style="fill: var(--fig-series-a); stroke: var(--fig-series-a)"/>
+     <use xlink:href="#maef36a507e" x="397.222792" y="110.329419" style="fill: var(--fig-series-a); stroke: var(--fig-series-a)"/>
+     <use xlink:href="#maef36a507e" x="485.243946" y="124.868426" style="fill: var(--fig-series-a); stroke: var(--fig-series-a)"/>
+    </g>
+   </g>
+   <g id="line2d_28">
+    <path d="M 108.649155 218.79041 
+L 143.879164 224.000876 
+L 181.479388 222.397656 
+L 238.580014 220.786577 
+L 315.66586 217.525124 
+" clip-path="url(#p67301e24c7)" style="fill: none; stroke: var(--fig-series-b); stroke-width: 2.2; stroke-linecap: square"/>
+    <defs>
+     <path id="m0bdd649156" d="M 0 2.75 
+C 0.729309 2.75 1.428845 2.460243 1.944544 1.944544 
+C 2.460243 1.428845 2.75 0.729309 2.75 0 
+C 2.75 -0.729309 2.460243 -1.428845 1.944544 -1.944544 
+C 1.428845 -2.460243 0.729309 -2.75 0 -2.75 
+C -0.729309 -2.75 -1.428845 -2.460243 -1.944544 -1.944544 
+C -2.460243 -1.428845 -2.75 -0.729309 -2.75 0 
+C -2.75 0.729309 -2.460243 1.428845 -1.944544 1.944544 
+C -1.428845 2.460243 -0.729309 2.75 0 2.75 
+z
+" style="stroke: var(--fig-series-b)"/>
+    </defs>
+    <g clip-path="url(#p67301e24c7)">
+     <use xlink:href="#m0bdd649156" x="108.649155" y="218.79041" style="fill: var(--fig-series-b); stroke: var(--fig-series-b)"/>
+     <use xlink:href="#m0bdd649156" x="143.879164" y="224.000876" style="fill: var(--fig-series-b); stroke: var(--fig-series-b)"/>
+     <use xlink:href="#m0bdd649156" x="181.479388" y="222.397656" style="fill: var(--fig-series-b); stroke: var(--fig-series-b)"/>
+     <use xlink:href="#m0bdd649156" x="238.580014" y="220.786577" style="fill: var(--fig-series-b); stroke: var(--fig-series-b)"/>
+     <use xlink:href="#m0bdd649156" x="315.66586" y="217.525124" style="fill: var(--fig-series-b); stroke: var(--fig-series-b)"/>
+    </g>
+   </g>
+   <g id="text_25">
+    <text style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; text-anchor: start; fill: var(--fig-series-a)" x="143.879164" y="70.339007" transform="rotate(-0 143.879164 70.339007)">Linear tetrahedra  (order 1)</text>
+   </g>
+   <g id="text_26">
+    <text style="font-size: 11.5px; font-family: Geist, system-ui, -apple-system, sans-serif; text-anchor: start; fill: var(--fig-series-b)" x="143.879164" y="206.306228" transform="rotate(-0 143.879164 206.306228)">Quadratic elements  (order 2)</text>
+   </g>
+   <g id="patch_7">
+    <path d="M 485.243946 143.544961 
+Q 485.243946 137.204697 485.243946 130.864433 
+" style="fill: none; opacity: 0.5; stroke: var(--fig-series-a); stroke-linecap: round"/>
+   </g>
+   <g id="text_27">
+    <text style="font-size: 10.5px; font-family: Geist, system-ui, -apple-system, sans-serif; fill: var(--fig-series-a)" transform="translate(417.516485 158.574828)">still falling — 4.4 % below</text>
+    <text style="font-size: 10.5px; font-family: Geist, system-ui, -apple-system, sans-serif; fill: var(--fig-series-a)" transform="translate(422.781251 171.177699)">its coarsest-mesh value</text>
+   </g>
+   <g id="text_28">
+    <text style="font-size: 10.5px; font-family: Geist, system-ui, -apple-system, sans-serif; text-anchor: start; fill: var(--fig-series-b)" x="108.649155" y="242.115946" transform="rotate(-0 108.649155 242.115946)">converged band: 10,103–10,185 N/mm  (0.8 % spread)</text>
+   </g>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="p67301e24c7">
+   <rect x="76.381914" y="41.878203" width="447.108678" height="213.762695"/>
+  </clipPath>
+ </defs>
 </svg>

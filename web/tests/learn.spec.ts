@@ -61,17 +61,16 @@ test("the hinge tutorial renders its figures and offers the geometry", async ({
     }),
   ).toBeVisible();
 
-  // Both figures are generated SVGs under public/learn/. A missing file still
-  // renders an <img> of the declared width, so assert the images actually
-  // decoded. They are loading="lazy" and below the fold, so scroll each into
-  // view first or the browser never requests it.
-  for (const src of ["/learn/hinge-bc.svg", "/learn/hinge-convergence.svg"]) {
-    const img = page.locator(`img[src="${src}"]`);
-    await img.scrollIntoViewIfNeeded();
-    await expect(img).toBeVisible();
-    await expect
-      .poll(() => img.evaluate((el: HTMLImageElement) => el.naturalWidth))
-      .toBeGreaterThan(0);
+  // Both figures are inlined SVG, not <img>: that is what lets the site's theme
+  // toggle and webfont reach them. Assert they are present and actually laid
+  // out — an SVG that failed to inline would leave the <figure> empty.
+  for (const cls of ["svg.kf-fig", "svg.kf-chart"]) {
+    const svg = page.locator(cls);
+    await expect(svg).toHaveCount(1);
+    await svg.scrollIntoViewIfNeeded();
+    const box = await svg.boundingBox();
+    expect(box!.width).toBeGreaterThan(200);
+    expect(box!.height).toBeGreaterThan(100);
   }
 
   // The downloadable geometry the tutorial is built around must actually be
@@ -82,6 +81,34 @@ test("the hinge tutorial renders its figures and offers the geometry", async ({
   expect(href).toBe("/examples/scharnier.igs");
   const res = await page.request.get(href!);
   expect(res.status()).toBe(200);
+});
+
+// The figures used to be <img src="…svg">. An <img>-loaded SVG is an isolated
+// document that cannot see the page's data-theme attribute, so the site's theme
+// toggle never reached them and light mode rendered near-invisible axis labels
+// on a light background. Inlining fixed it; this guards the fix.
+test("the tutorial figures follow the site theme", async ({ page }) => {
+  const inkOf = async (theme: "dark" | "light") => {
+    await page.addInitScript((t) => {
+      try {
+        localStorage.setItem("kofem_theme", t);
+      } catch (e) {
+        /* private mode — the page falls back to its default theme */
+      }
+    }, theme);
+    await page.goto("/learn/hinge-bracket-stiffness/");
+    return page
+      .locator("svg.kf-chart")
+      .evaluate((el) =>
+        getComputedStyle(el).getPropertyValue("--fig-ink").trim(),
+      );
+  };
+
+  const dark = await inkOf("dark");
+  const light = await inkOf("light");
+  expect(dark).not.toBe("");
+  expect(light).not.toBe("");
+  expect(light).not.toBe(dark);
 });
 
 test("every page in the site nav reaches the Learn section", async ({

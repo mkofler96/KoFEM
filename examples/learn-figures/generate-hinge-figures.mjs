@@ -1,20 +1,26 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Regenerate the two SVG figures in /learn/hinge-bracket-stiffness/:
+// Rebuild both figures in /learn/hinge-bracket-stiffness/ and inline them into
+// the article.
 //
 //   web/public/learn/hinge-bc.svg          — the model and its boundary conditions,
-//                                            drawn from the mesh the engine produces
-//   web/public/learn/hinge-convergence.svg — k_w against mesh size, both element orders
+//                                            projected here out of a real KoFEM mesh
+//   web/public/learn/hinge-convergence.svg — k_w against mesh size, drawn by
+//                                            plot_hinge_convergence.py (matplotlib)
 //
-// The boundary-condition figure is projected from a real KoFEM mesh rather than
-// drawn by hand, so it cannot drift out of step with the geometry. The
-// convergence data is measured by analyze-hinge.mjs in this directory; re-run
-// that first and paste its numbers into CONVERGENCE below if the model changes.
+// The figures are INLINED into the HTML rather than referenced with <img>. An
+// <img>-loaded SVG is an isolated document: it cannot see the page's
+// data-theme attribute, so the site's light/dark toggle does not reach it, and
+// it cannot use the page's webfont either. Inlined, both work — the figures
+// carry classes and a palette scoped to their own root element.
 //
-// Usage (from web/):  bun ../examples/learn-figures/generate-hinge-figures.mjs
+// Requires python3 with matplotlib for the chart (see README.md).
+//
+// Usage (from web/):  bun run learn:figures
 
 import { readFileSync, writeFileSync, mkdirSync } from "fs";
+import { spawnSync } from "child_process";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 
@@ -22,30 +28,13 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const wasmPkg = join(__dirname, "../../web/src/wasm/pkg");
 const IGES = join(__dirname, "../../web/public/examples/scharnier.igs");
 const OUT_DIR = join(__dirname, "../../web/public/learn");
+const ARTICLE = join(
+  __dirname,
+  "../../web/learn/hinge-bracket-stiffness/index.html",
+);
 
 const CLAMP_FACE = 6;
 const BORE_FACES = new Set([22, 25]);
-
-// Measured by analyze-hinge.mjs. k in N/mm.
-const CONVERGENCE = {
-  linear: [
-    { h: 10, nodes: 5699, k: 11889.6 },
-    { h: 8, nodes: 6353, k: 11812.7 },
-    { h: 6, nodes: 7051, k: 11803.7 },
-    { h: 5, nodes: 8111, k: 11750.3 },
-    { h: 4, nodes: 9542, k: 11704.8 },
-    { h: 3, nodes: 10524, k: 11575.0 },
-    { h: 2.5, nodes: 11056, k: 11549.0 },
-    { h: 2, nodes: 12690, k: 11364.0 },
-  ],
-  quadratic: [
-    { h: 10, nodes: 5699, k: 10168.9 },
-    { h: 8, nodes: 6353, k: 10102.6 },
-    { h: 6, nodes: 7051, k: 10123.0 },
-    { h: 5, nodes: 8111, k: 10143.5 },
-    { h: 4, nodes: 9542, k: 10185.0 },
-  ],
-};
 
 const f1 = (n) => n.toFixed(1);
 const cross = (a, b) => [
@@ -130,10 +119,10 @@ async function boundaryConditionFigure() {
       depth: (p[0][2] + p[1][2] + p[2][2]) / 3,
       kind:
         FID[t] === CLAMP_FACE
-          ? "clamp"
+          ? "kf-clamp"
           : BORE_FACES.has(FID[t])
-            ? "load"
-            : "body",
+            ? "kf-load"
+            : "kf-body",
     });
   }
   tris.sort((a, b) => a.depth - b.depth); // painter's algorithm: far first
@@ -160,30 +149,35 @@ async function boundaryConditionFigure() {
 
   const o = [];
   o.push(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-labelledby="bcTitle">`,
+    `<svg class="kf-fig" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="kfBcTitle">`,
   );
   o.push(
-    `<title id="bcTitle">Hinge bracket seen from below: the mounting face is fully clamped and a 1000 N load in +z is spread over the eye bore.</title>`,
+    `<title id="kfBcTitle">Hinge bracket seen from below: the mounting face is fully clamped and a 1000 N load in +z is spread over the eye bore.</title>`,
   );
+  // Class names are kf- prefixed and the palette is scoped to the figure's own
+  // root class: inlined, this <style> is a document-wide stylesheet, so an
+  // unprefixed `.body` rule would restyle the page.
   o.push(`<style>
-  .body{fill:#8f98ac;stroke:#5c6478;stroke-width:.3;stroke-opacity:.45}
-  .clamp{fill:#2f54eb;fill-opacity:.85;stroke:#2f54eb;stroke-width:.3}
-  .load{fill:#e5484d;fill-opacity:.9;stroke:#e5484d;stroke-width:.3}
-  .lbl{font:600 15px Geist,system-ui,sans-serif;fill:#e9ecf3}
-  .sub{font:400 12.5px Geist,system-ui,sans-serif;fill:#9aa0ad}
-  .arw{stroke:#e5484d;stroke-width:2.6;fill:none;marker-end:url(#ah)}
-  .lead{stroke:#9aa0ad;stroke-width:1;fill:none;stroke-dasharray:3 3}
-  [data-theme="light"] .lbl{fill:#0d1117}
-  [data-theme="light"] .sub{fill:#5b616e}
+.kf-fig{width:100%;height:auto;display:block;
+  --fig-ink:#e9ecf3;--fig-muted:#9aa0ad;--fig-solid:#8f98ac;--fig-edge:#5c6478}
+[data-theme="light"] .kf-fig{
+  --fig-ink:#0d1117;--fig-muted:#5b616e;--fig-solid:#8a93a6;--fig-edge:#6b7386}
+.kf-body{fill:var(--fig-solid);stroke:var(--fig-edge);stroke-width:.3;stroke-opacity:.45}
+.kf-clamp{fill:#2f54eb;fill-opacity:.85;stroke:#2f54eb;stroke-width:.3}
+.kf-load{fill:#e5484d;fill-opacity:.9;stroke:#e5484d;stroke-width:.3}
+.kf-lbl{font:600 15px Geist,system-ui,sans-serif;fill:var(--fig-ink)}
+.kf-sub{font:400 12.5px Geist,system-ui,sans-serif;fill:var(--fig-muted)}
+.kf-arw{stroke:#e5484d;stroke-width:2.6;fill:none;marker-end:url(#kfArrowHead)}
+.kf-lead{stroke:var(--fig-muted);stroke-width:1;fill:none;stroke-dasharray:3 3}
 </style>`);
   o.push(
-    `<defs><marker id="ah" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#e5484d"/></marker></defs>`,
+    `<defs><marker id="kfArrowHead" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#e5484d"/></marker></defs>`,
   );
 
   for (const t of tris) {
     const d = `M${t.p.map((q) => `${f1(SX(q))} ${f1(SY(q))}`).join("L")}Z`;
     const shade =
-      t.kind === "body"
+      t.kind === "kf-body"
         ? ` fill-opacity="${(0.34 + 0.54 * t.nz).toFixed(2)}"`
         : "";
     o.push(`<path class="${t.kind}"${shade} d="${d}"/>`);
@@ -191,120 +185,77 @@ async function boundaryConditionFigure() {
 
   const [bx, by] = xy([0, 4, 0]); // eye bore centre
   const [tx, ty] = xy([0, 4, 52]); // 52 mm along +z
-  o.push(`<path class="arw" d="M${f1(bx)} ${f1(by)} L${f1(tx)} ${f1(ty)}"/>`);
+  o.push(`<path class="kf-arw" d="M${f1(bx)} ${f1(by)} L${f1(tx)} ${f1(ty)}"/>`);
   o.push(
-    `<text class="lbl" x="${f1(tx + 12)}" y="${f1(ty + 5)}">F<tspan font-size="11" dy="3">w</tspan><tspan dy="-3">&#160;= 1000 N in +z</tspan></text>`,
+    `<text class="kf-lbl" x="${f1(tx + 12)}" y="${f1(ty + 5)}">F<tspan font-size="11" dy="3">w</tspan><tspan dy="-3">&#160;= 1000 N in +z</tspan></text>`,
   );
   o.push(
-    `<text class="sub" x="${f1(tx + 12)}" y="${f1(ty + 24)}">spread over the bore; w is read back from it</text>`,
+    `<text class="kf-sub" x="${f1(tx + 12)}" y="${f1(ty + 24)}">spread over the bore; w is read back from it</text>`,
   );
 
   const [cx, cy] = xy([76, -20, -6]); // on the clamped face
   o.push(
-    `<path class="lead" d="M${f1(cx)} ${f1(cy)} L${f1(cx + 46)} ${f1(cy + 40)}"/>`,
+    `<path class="kf-lead" d="M${f1(cx)} ${f1(cy)} L${f1(cx + 46)} ${f1(cy + 40)}"/>`,
   );
   o.push(
-    `<text class="lbl" x="${f1(cx + 52)}" y="${f1(cy + 45)}">clamped face</text>`,
+    `<text class="kf-lbl" x="${f1(cx + 52)}" y="${f1(cy + 45)}">clamped face</text>`,
   );
   o.push(
-    `<text class="sub" x="${f1(cx + 52)}" y="${f1(cy + 63)}">all DOF fixed, y = &#8722;20 mm</text>`,
+    `<text class="kf-sub" x="${f1(cx + 52)}" y="${f1(cy + 63)}">all DOF fixed, y = &#8722;20 mm</text>`,
   );
   o.push(`</svg>`);
 
-  writeFileSync(join(OUT_DIR, "hinge-bc.svg"), o.join("\n") + "\n");
-  console.log(`hinge-bc.svg           — ${tris.length} visible triangles`);
+  const svg = o.join("\n") + "\n";
+  writeFileSync(join(OUT_DIR, "hinge-bc.svg"), svg);
+  console.log(
+    `hinge-bc.svg           — ${(svg.length / 1024).toFixed(1)} kB, ${tris.length} visible triangles`,
+  );
 }
 
-// ── figure 2: convergence ────────────────────────────────────────────────────
+// ── figure 2: convergence (matplotlib) ───────────────────────────────────────
 
 function convergenceFigure() {
-  const { linear, quadratic } = CONVERGENCE;
-  const W = 780;
-  const H = 400;
-  const L = 78;
-  const R = 30;
-  const TOP = 52;
-  const BOT = 66;
-  const PW = W - L - R;
-  const PH = H - TOP - BOT;
-  const x0 = 5200;
-  const x1 = 13200;
-  const y0 = 9800;
-  const y1 = 12200;
-  const SX = (n) => L + ((n - x0) / (x1 - x0)) * PW;
-  const SY = (k) => TOP + PH - ((k - y0) / (y1 - y0)) * PH;
-
-  const o = [];
-  o.push(
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-labelledby="cvTitle">`,
-  );
-  o.push(
-    `<title id="cvTitle">Computed stiffness against mesh size. Linear tetrahedra fall steadily from 11,890 to 11,364 N/mm without settling, while quadratic elements on the same meshes sit flat at about 10,130 N/mm from the coarsest mesh onward.</title>`,
-  );
-  o.push(`<style>
-  .ax{stroke:#3a3f4b;stroke-width:1;fill:none}
-  .gr{stroke:#2a2e38;stroke-width:1;stroke-dasharray:3 4;fill:none}
-  .tk{font:400 11.5px Geist,system-ui,sans-serif;fill:#9aa0ad}
-  .al{font:500 12.5px Geist,system-ui,sans-serif;fill:#9aa0ad}
-  .lg{font:500 13px Geist,system-ui,sans-serif}
-  .lin{stroke:#e5484d;stroke-width:2.4;fill:none}
-  .lind{fill:#e5484d}
-  .qua{stroke:#2f54eb;stroke-width:2.4;fill:none}
-  .quad{fill:#2f54eb}
-  [data-theme="light"] .ax{stroke:#c9cdd6}
-  [data-theme="light"] .gr{stroke:#e7e9ee}
-  [data-theme="light"] .tk,[data-theme="light"] .al{fill:#5b616e}
-</style>`);
-
-  for (let k = y0; k <= y1; k += 400) {
-    o.push(`<path class="gr" d="M${L} ${f1(SY(k))} H${L + PW}"/>`);
-    o.push(
-      `<text class="tk" x="${L - 11}" y="${f1(SY(k) + 4)}" text-anchor="end">${k.toLocaleString("en-US")}</text>`,
+  const script = join(__dirname, "plot_hinge_convergence.py");
+  const r = spawnSync("python3", [script], { encoding: "utf8" });
+  if (r.error || r.status !== 0)
+    throw new Error(
+      `plot_hinge_convergence.py failed (${r.error?.message ?? `exit ${r.status}`}).\n` +
+        `matplotlib is required for this figure — see examples/learn-figures/README.md\n` +
+        (r.stderr ?? ""),
     );
+  process.stdout.write(r.stdout);
+}
+
+// ── inline both figures into the article ─────────────────────────────────────
+
+// Each figure sits between a pair of HTML comments so this script owns the SVG
+// markup and the article keeps everything around it.
+function inlineIntoArticle() {
+  let html = readFileSync(ARTICLE, "utf8");
+  const figures = [
+    ["hinge-bc", "hinge-bc.svg"],
+    ["hinge-convergence", "hinge-convergence.svg"],
+  ];
+
+  for (const [marker, file] of figures) {
+    const open = `<!-- figure:${marker} -->`;
+    const close = `<!-- /figure:${marker} -->`;
+    const start = html.indexOf(open);
+    const end = html.indexOf(close);
+    if (start < 0 || end < 0)
+      throw new Error(
+        `marker pair ${open} … ${close} not found in ${ARTICLE} — ` +
+          `the article must keep them so the figures can be re-inlined`,
+      );
+    const svg = readFileSync(join(OUT_DIR, file), "utf8").trim();
+    html = html.slice(0, start + open.length) + "\n" + svg + "\n" + html.slice(end);
   }
-  for (const d of linear) {
-    o.push(
-      `<text class="tk" x="${f1(SX(d.nodes))}" y="${TOP + PH + 20}" text-anchor="middle">${(d.nodes / 1000).toFixed(1)}k</text>`,
-    );
-    o.push(
-      `<text class="tk" x="${f1(SX(d.nodes))}" y="${TOP + PH + 36}" text-anchor="middle" opacity=".7">${d.h}</text>`,
-    );
-  }
-  o.push(`<path class="ax" d="M${L} ${TOP} V${TOP + PH} H${L + PW}"/>`);
 
-  const line = (rows) =>
-    `M` + rows.map((d) => `${f1(SX(d.nodes))} ${f1(SY(d.k))}`).join("L");
-  o.push(`<path class="lin" d="${line(linear)}"/>`);
-  o.push(`<path class="qua" d="${line(quadratic)}"/>`);
-  for (const d of linear)
-    o.push(
-      `<circle class="lind" cx="${f1(SX(d.nodes))}" cy="${f1(SY(d.k))}" r="3.6"/>`,
-    );
-  for (const d of quadratic)
-    o.push(
-      `<circle class="quad" cx="${f1(SX(d.nodes))}" cy="${f1(SY(d.k))}" r="3.6"/>`,
-    );
-
-  o.push(
-    `<text class="al" x="${L + PW / 2}" y="${H - 10}" text-anchor="middle">mesh nodes (top) &#183; max element size in mm (bottom)</text>`,
-  );
-  o.push(
-    `<text class="al" transform="translate(18 ${TOP + PH / 2}) rotate(-90)" text-anchor="middle">k&#8348; [N/mm]</text>`,
-  );
-  o.push(
-    `<circle class="lind" cx="${L + 6}" cy="${TOP - 26}" r="4"/><text class="lg" x="${L + 18}" y="${TOP - 22}" fill="#e5484d">linear tetrahedra &#8212; still falling</text>`,
-  );
-  o.push(
-    `<circle class="quad" cx="${L + 6}" cy="${TOP - 8}" r="4"/><text class="lg" x="${L + 18}" y="${TOP - 4}" fill="#2f54eb">quadratic elements &#8212; flat from the start</text>`,
-  );
-  o.push(`</svg>`);
-
-  writeFileSync(join(OUT_DIR, "hinge-convergence.svg"), o.join("\n") + "\n");
-  console.log(
-    `hinge-convergence.svg  — ${linear.length} linear + ${quadratic.length} quadratic points`,
-  );
+  writeFileSync(ARTICLE, html);
+  console.log(`inlined both figures into learn/hinge-bracket-stiffness/`);
 }
 
 mkdirSync(OUT_DIR, { recursive: true });
 await boundaryConditionFigure();
 convergenceFigure();
+inlineIntoArticle();
