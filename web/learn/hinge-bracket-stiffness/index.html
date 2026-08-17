@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/svg+xml" href="/kofem_logo.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <title>The stiffness of a hinge bracket, start to finish — KoFEM</title>
+    <meta
+      name="description"
+      content="A worked FEA tutorial: import a broken surface-only IGES hinge bracket, let KoFEM sew it into a solid, mesh it, clamp the mounting face, load the eye bore, and find the stiffness k_w — with the mesh study that shows the first answer was 15 percent too stiff."
+    />
+    <link
+      rel="canonical"
+      href="https://kofem.org/learn/hinge-bracket-stiffness/"
+    />
+    <meta name="robots" content="index, follow" />
+
+    <!-- Open Graph / social -->
+    <meta property="og:type" content="article" />
+    <meta
+      property="og:title"
+      content="The stiffness of a hinge bracket, start to finish"
+    />
+    <meta
+      property="og:description"
+      content="From a surface-only IGES file to a converged stiffness, with every number reproducible in the browser."
+    />
+    <meta
+      property="og:url"
+      content="https://kofem.org/learn/hinge-bracket-stiffness/"
+    />
+    <meta
+      property="og:image"
+      content="https://kofem.org/learn/hinge-bc.svg"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:title"
+      content="The stiffness of a hinge bracket, start to finish"
+    />
+    <meta
+      name="twitter:description"
+      content="From a surface-only IGES file to a converged stiffness, with every number reproducible in the browser."
+    />
+    <meta
+      name="twitter:image"
+      content="https://kofem.org/learn/hinge-bc.svg"
+    />
+
+    <!-- Self-hosted fonts (SIL OFL) — see public/fonts/README.md -->
+    <link href="/fonts/geist.css" rel="stylesheet" />
+    <link href="/learn.css" rel="stylesheet" />
+
+    <!-- Apply the saved theme before first paint to avoid a flash. -->
+    <script>
+      try {
+        if (localStorage.getItem("kofem_theme") === "light")
+          document.documentElement.setAttribute("data-theme", "light");
+      } catch (e) {}
+    </script>
+  </head>
+
+  <body>
+    <!-- ===================== NAV ===================== -->
+    <header class="site-header">
+      <div class="header-inner">
+        <a class="brand" href="/">
+          <img
+            class="brand-mark"
+            src="/kofem_logo.svg"
+            alt="KoFEM logo"
+            width="29"
+            height="29"
+          />
+          <span class="brand-name">KoFEM</span>
+        </a>
+        <nav class="nav-links">
+          <a href="/learn/" aria-current="page">Learn</a>
+          <a href="/examples/">Examples</a>
+          <a href="/#workflow">Workflow</a>
+        </nav>
+        <div class="header-actions">
+          <a
+            class="icon-btn"
+            href="https://github.com/mkofler96/KoFEM"
+            target="_blank"
+            rel="noopener"
+            aria-label="KoFEM on GitHub"
+          >
+            <svg
+              width="17"
+              height="17"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                d="M12 .5C5.37.5 0 5.78 0 12.29c0 5.2 3.44 9.6 8.21 11.16.6.11.82-.25.82-.56 0-.28-.01-1.02-.02-2-3.34.71-4.04-1.58-4.04-1.58-.55-1.37-1.34-1.74-1.34-1.74-1.08-.72.08-.71.08-.71 1.2.08 1.83 1.21 1.83 1.21 1.07 1.79 2.81 1.27 3.5.97.11-.76.42-1.27.76-1.56-2.67-.3-5.47-1.3-5.47-5.78 0-1.28.47-2.32 1.24-3.14-.12-.3-.54-1.52.12-3.16 0 0 1.01-.32 3.3 1.2a11.6 11.6 0 0 1 6 0c2.29-1.52 3.3-1.2 3.3-1.2.66 1.64.24 2.86.12 3.16.77.82 1.24 1.86 1.24 3.14 0 4.49-2.81 5.47-5.49 5.76.43.36.81 1.08.81 2.18 0 1.58-.01 2.85-.01 3.24 0 .31.22.68.83.56A12.02 12.02 0 0 0 24 12.29C24 5.78 18.63.5 12 .5z"
+              ></path>
+            </svg>
+          </a>
+          <button class="icon-btn" id="theme-toggle" aria-label="Toggle theme">
+            <svg
+              class="icon-sun"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <circle cx="12" cy="12" r="4"></circle>
+              <path
+                d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"
+              ></path>
+            </svg>
+            <svg
+              class="icon-moon"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+            >
+              <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path>
+            </svg>
+          </button>
+          <a class="btn-primary" href="/app/">Start Solver</a>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <div class="wrap">
+        <div class="page-head">
+          <div class="eyebrow">Worked example</div>
+          <h1>The stiffness of a hinge bracket</h1>
+          <p class="lede">
+            A steel hinge bracket is bolted to a wall and pulled at its eye. How
+            much does the eye move per newton? We start from an IGES file that
+            contains no solid at all, and finish with a stiffness we can defend —
+            after a mesh study that shows the obvious first answer was 15&nbsp;%
+            too stiff.
+          </p>
+        </div>
+
+        <div class="article">
+          <article class="prose">
+            <h2 id="task">The task</h2>
+            <p>
+              The part is a cast steel hinge bracket: a flat mounting plate with
+              two bolt holes, a tapering arm, and a cylindrical eye at the far
+              end. It is 96&nbsp;mm long, 40&nbsp;mm wide and 33&nbsp;mm tall.
+              The mounting plate is bolted flat against a support; a pin through
+              the eye pulls the bracket sideways with a force
+              <em>F</em><sub>w</sub>.
+            </p>
+            <p>We want the stiffness of the bracket in that direction:</p>
+            <div class="eq">
+              k<sub>w</sub> = F<sub>w</sub> / w
+              <span class="where"
+                >w is the displacement of the eye along the load direction</span
+              >
+            </div>
+            <p>
+              Assumptions: linear elastic, static, small displacement. Material
+              is steel — <em>E</em> = 210,000&nbsp;MPa, ν = 0.3. Everything here
+              is in the N&nbsp;·&nbsp;mm&nbsp;·&nbsp;MPa unit system, so
+              displacements come out in mm and stiffness in N/mm.
+            </p>
+
+            <figure>
+              <img
+                src="/learn/hinge-bc.svg"
+                alt="Hinge bracket seen from below, with the mounting face highlighted in blue as fully clamped and a red arrow showing the 1000 N load applied to the eye bore in the +z direction."
+                width="780"
+                height="400"
+                loading="lazy"
+              />
+              <figcaption>
+                The model, drawn from the actual mesh KoFEM generates. The
+                camera looks slightly up at the part so the mounting face —
+                which is on the underside — is visible. Blue: the clamped face.
+                Red: the bore the load is spread over, and the direction of
+                <em>F</em><sub>w</sub>.
+              </figcaption>
+            </figure>
+
+            <div class="callout">
+              <div class="callout-head">Follow along</div>
+              <p>
+                Download
+                <a href="/examples/scharnier.igs" download>scharnier.igs</a>
+                (202&nbsp;kB) and
+                <a href="/app/">open the solver</a> — everything below runs in
+                the browser, and nothing is uploaded anywhere.
+              </p>
+            </div>
+
+            <h2 id="broken-geometry">
+              First problem: the file contains no solid
+            </h2>
+            <p>
+              IGES is a surface format at heart. Open this file and count what is
+              actually inside it: 31 trimmed surfaces, a pile of NURBS curves and
+              arcs, and <strong>not one solid entity</strong>. It is a bag of
+              patches that happen to form a closed shape — the CAD equivalent of
+              a paper model that has been cut out but never glued.
+            </p>
+            <p>
+              This matters because a volume mesher fills a region, and a bag of
+              surfaces does not define one. Hand this file to a mesher that only
+              understands solids and you get either a hard error or, worse, a
+              surface mesh with zero tetrahedra in it and no explanation.
+            </p>
+            <p>
+              KoFEM repairs this at import, before anything else touches the
+              shape. The loose faces are <strong>sewn</strong> together with a
+              tolerance scaled to the model size — here 0.0109&nbsp;mm, one part
+              in ten thousand of the 109&nbsp;mm bounding-box diagonal — and any
+              shell that comes out watertight is promoted to a solid. The log
+              says so explicitly:
+            </p>
+            <pre><code>[occt] sew_faces_into_solid: built 1 solid(s) from 31 surface faces
+       (sew tol=0.01092 mm)
+[occt] tessellate: bbox diag=109.237 mm -&gt; linear_defl=0.1092 mm</code></pre>
+            <p>
+              One solid, from 31 loose faces. That line is worth reading every
+              time you import an IGES file: if it reports that it sewed the faces
+              but found no watertight shell, the geometry has a genuine gap and
+              no amount of meshing effort will fix it — you need a better export.
+            </p>
+            <div class="callout warn">
+              <div class="callout-head">Why the tolerance is relative</div>
+              <p>
+                A fixed absolute sewing tolerance is wrong at both ends: too
+                tight and the sub-millimetre gaps at IGES trim boundaries never
+                close; too loose and it merges features that are genuinely
+                separate — a thin wall, a small clearance. Scaling with the
+                bounding box keeps the same behaviour on a 20&nbsp;mm part and a
+                900&nbsp;mm casting.
+              </p>
+            </div>
+
+            <h2 id="mesh">Meshing</h2>
+            <p>
+              With a solid in hand, Netgen meshes it directly from the CAD
+              topology — feature edges first, then the boundary surfaces, then
+              the tetrahedral fill. The classical route for this part, and the
+              one the original course notes take, is to segment the solid by hand
+              and sweep a hexahedral mesh through each block. That produces a
+              beautiful mesh and takes an afternoon. An automatic tetrahedral
+              mesh takes about eight seconds and, as we are about to see, is
+              perfectly adequate <em>provided you pick the right element</em>.
+            </p>
+            <p>
+              A 5&nbsp;mm maximum element size gives 8,111 nodes and 33,602
+              tetrahedra, with automatic refinement around the bore and the
+              fillets where curvature demands it.
+            </p>
+
+            <h2 id="bcs">Boundary conditions</h2>
+            <p>
+              This is where the analysis is actually decided, so it is worth
+              being explicit about both choices.
+            </p>
+            <div class="steps">
+              <div class="step">
+                <h3>Clamp the mounting face</h3>
+                <p>
+                  All three translations are fixed on the plate's seating face —
+                  the underside at y&nbsp;=&nbsp;−20&nbsp;mm, 630&nbsp;mm² of it.
+                  That is the face pressed against the support by the two bolts.
+                </p>
+              </div>
+              <div class="step">
+                <h3>Load the bore</h3>
+                <p>
+                  <em>F</em><sub>w</sub> = 1000&nbsp;N is applied to the
+                  cylindrical bore of the eye as a
+                  <strong>surface force</strong>, not a point load: KoFEM spreads
+                  the total force over the bore's area as a uniform traction and
+                  integrates it into work-equivalent nodal forces. The magnitude
+                  is arbitrary — the problem is linear, so
+                  <em>k</em><sub>w</sub> comes out the same for 1&nbsp;N or
+                  10&nbsp;kN.
+                </p>
+              </div>
+              <div class="step">
+                <h3>Read the displacement back</h3>
+                <p>
+                  <em>w</em> is the mean displacement of the bore surface along
+                  the load direction — averaging over the loaded face rather than
+                  picking one node, so the number does not depend on which node
+                  happened to land where.
+                </p>
+              </div>
+            </div>
+            <div class="callout warn">
+              <div class="callout-head">What the clamp is really saying</div>
+              <p>
+                A fully fixed face is an infinitely rigid support. A real bolted
+                joint is not: the plate can lift slightly between the bolts, and
+                the support itself deflects. So this model will be
+                <em>stiffer</em> than the real bracket, on top of any
+                discretisation error. If you needed the true assembly stiffness,
+                you would model the bolts and the support — but for comparing
+                design variants of the bracket itself, a consistent clamp is
+                exactly the right choice.
+              </p>
+            </div>
+
+            <h2 id="first-answer">The first answer, and why it is wrong</h2>
+            <p>
+              Solve it with the default linear tetrahedra at 5&nbsp;mm elements
+              and you get <em>w</em> = 0.0851&nbsp;mm, so
+              <em>k</em><sub>w</sub> ≈ 11,750&nbsp;N/mm. It looks like a
+              perfectly respectable result. It is roughly 15&nbsp;% too stiff.
+            </p>
+            <p>
+              Refining does not rescue it. Taking the linear mesh from 5,700
+              nodes all the way to 12,700 — more than doubling it — moves the
+              stiffness from 11,890 down to 11,364&nbsp;N/mm, a 4.4&nbsp;% drift
+              that is still going when you run out of patience. The mesh is not
+              the problem; the <em>element</em> is.
+            </p>
+
+            <figure>
+              <img
+                src="/learn/hinge-convergence.svg"
+                alt="Line chart of computed stiffness against mesh node count. The linear-tetrahedra curve starts at 11,890 N/mm and falls steadily to 11,364 N/mm without flattening. The quadratic-element curve sits flat near 10,150 N/mm across every mesh."
+                width="780"
+                height="400"
+                loading="lazy"
+              />
+              <figcaption>
+                Every point is one full solve of this bracket. Linear tetrahedra
+                (red) are still descending at 12,700 nodes. Quadratic elements
+                (blue), on exactly the same meshes, are flat to within
+                0.8&nbsp;% from the coarsest mesh onward — and land far below
+                where the linear curve was heading.
+              </figcaption>
+            </figure>
+
+            <p>
+              The bracket works in bending. A 4-node tetrahedron has constant
+              strain throughout its volume and physically cannot bend, so it
+              resists deformation the mesh should have allowed. Switching the
+              element order to 2 — quadratic shape functions, a mid-side node on
+              every edge — lets strain vary within each element, and the
+              artificial stiffness disappears:
+            </p>
+
+            <div class="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Max element size</th>
+                    <th>Nodes</th>
+                    <th>Tetrahedra</th>
+                    <th>k<sub>w</sub> linear</th>
+                    <th>k<sub>w</sub> quadratic</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>10 mm</td>
+                    <td>5,699</td>
+                    <td>23,142</td>
+                    <td>11,890</td>
+                    <td>10,169</td>
+                  </tr>
+                  <tr>
+                    <td>8 mm</td>
+                    <td>6,353</td>
+                    <td>25,818</td>
+                    <td>11,813</td>
+                    <td>10,103</td>
+                  </tr>
+                  <tr>
+                    <td>6 mm</td>
+                    <td>7,051</td>
+                    <td>28,482</td>
+                    <td>11,804</td>
+                    <td>10,123</td>
+                  </tr>
+                  <tr>
+                    <td>5 mm</td>
+                    <td>8,111</td>
+                    <td>33,602</td>
+                    <td>11,750</td>
+                    <td>10,144</td>
+                  </tr>
+                  <tr>
+                    <td>4 mm</td>
+                    <td>9,542</td>
+                    <td>39,070</td>
+                    <td>11,705</td>
+                    <td>10,185</td>
+                  </tr>
+                  <tr>
+                    <td>3 mm</td>
+                    <td>10,524</td>
+                    <td>43,180</td>
+                    <td>11,575</td>
+                    <td>—</td>
+                  </tr>
+                  <tr>
+                    <td>2.5 mm</td>
+                    <td>11,056</td>
+                    <td>45,444</td>
+                    <td>11,549</td>
+                    <td>—</td>
+                  </tr>
+                  <tr>
+                    <td>2 mm</td>
+                    <td>12,690</td>
+                    <td>52,368</td>
+                    <td>11,364</td>
+                    <td>—</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p>
+              All stiffnesses in N/mm. The quadratic column varies by 0.8&nbsp;%
+              across the whole range and does not trend — that scatter is
+              re-meshing noise, not convergence error, because each row is an
+              independently generated mesh rather than a refinement of the one
+              above it. That is what a converged answer looks like.
+            </p>
+
+            <div class="result">
+              <div class="result-label">Result</div>
+              <div class="result-value">k<sub>w</sub> ≈ 10,100 N/mm</div>
+              <p class="result-note">
+                Quadratic elements, converged across five meshes from 5,700 to
+                9,500 nodes (10,103–10,185 N/mm). At
+                <em>F</em><sub>w</sub> = 1000&nbsp;N the eye moves
+                <em>w</em> ≈ 0.099&nbsp;mm. The linear-tetrahedron answer of
+                ~11,750 N/mm overstates the stiffness by about 15&nbsp;%.
+              </p>
+            </div>
+
+            <h2 id="stress">A note on the stress</h2>
+            <p>
+              Peak von Mises stress across all those runs bounced between 165 and
+              187&nbsp;MPa with no pattern — it went <em>up</em> on some
+              refinements and down on others. That is not solver noise, and it is
+              not something to fix by meshing harder.
+            </p>
+            <p>
+              The maximum sits at the edge of the clamped face, where a perfectly
+              rigid support meets a deformable part. In the exact elasticity
+              solution the stress there is infinite; every mesh simply reports a
+              finite number that depends on how small its elements happen to be
+              at that edge. Refining chases a value that does not exist.
+            </p>
+            <p>
+              The stiffness, by contrast, is an integral quantity and is
+              completely unbothered by a local singularity — which is exactly why
+              <em>k</em><sub>w</sub> converged cleanly while the peak stress did
+              not. If you needed a real stress number here, you would model the
+              fillet radius at the plate, or replace the rigid clamp with a
+              bolted-joint representation, and evaluate away from the corner.
+              See
+              <a href="/learn/fem-basics/#convergence"
+                >what converges and what does not</a
+              >
+              for the general version of this trap.
+            </p>
+
+            <h2 id="takeaways">What to take away</h2>
+            <ol>
+              <li>
+                <strong>An IGES file with no solid in it is normal, not
+                broken.</strong> Sewing the surfaces into a watertight solid is a
+                standard repair — but check the log line that says it worked.
+              </li>
+              <li>
+                <strong>Element order beat mesh refinement, by a lot.</strong>
+                Doubling the linear mesh bought 4.4&nbsp;%; switching to
+                quadratic elements on the coarsest mesh bought 15&nbsp;% and
+                landed on the converged answer immediately.
+              </li>
+              <li>
+                <strong>Converged does not mean correct.</strong> The rigid clamp
+                still makes this stiffer than the real bolted bracket. Mesh
+                convergence bounds discretisation error and says nothing at all
+                about modelling error.
+              </li>
+              <li>
+                <strong>Report what converged.</strong>
+                <em>k</em><sub>w</sub> is defensible; the 187&nbsp;MPa peak is a
+                mesh size wearing a stress's clothes.
+              </li>
+            </ol>
+
+            <div class="next-links">
+              <a class="btn-primary" href="/app/">Try it in the solver</a>
+              <a class="btn-secondary" href="/learn/fem-basics/"
+                >Read the fundamentals</a
+              >
+              <a class="btn-secondary" href="/examples/">More examples</a>
+            </div>
+
+            <p style="margin-top: 30px; font-size: 13.5px; color: var(--muted)">
+              The geometry and the problem statement come from a finite element
+              course exercise at the Institute of Lightweight Design and
+              Structural Biomechanics (ILSB), TU Wien. All numbers on this page
+              were produced by running the model in KoFEM.
+            </p>
+          </article>
+
+          <aside class="toc">
+            <div class="toc-head">On this page</div>
+            <a href="#task">The task</a>
+            <a href="#broken-geometry">The file contains no solid</a>
+            <a href="#mesh">Meshing</a>
+            <a href="#bcs">Boundary conditions</a>
+            <a href="#first-answer">The first answer is wrong</a>
+            <a href="#stress">A note on the stress</a>
+            <a href="#takeaways">What to take away</a>
+            <div class="article-meta">
+              <span>Worked example</span>
+              <span>15 min</span>
+              <span>Steel · N·mm·MPa</span>
+            </div>
+          </aside>
+        </div>
+      </div>
+    </main>
+
+    <!-- ===================== FOOTER ===================== -->
+    <footer class="site-footer">
+      <div class="footer-top">
+        <div class="footer-brand">
+          <div class="brand">
+            <img
+              class="brand-mark"
+              src="/kofem_logo.svg"
+              alt="KoFEM logo"
+              width="29"
+              height="29"
+            />
+            <span class="brand-name">KoFEM</span>
+          </div>
+          <p>
+            Browser-native finite element analysis for engineers. Mesh, solve,
+            and visualize without leaving the tab.
+          </p>
+        </div>
+        <div>
+          <div class="footer-col-head">Product</div>
+          <div class="footer-col-links">
+            <a href="/app/">Launch solver</a>
+            <a href="/#workflow">Workflow</a>
+            <a href="/examples/">Examples</a>
+            <a
+              href="https://github.com/mkofler96/KoFEM"
+              target="_blank"
+              rel="noopener"
+              >GitHub</a
+            >
+          </div>
+        </div>
+        <div>
+          <div class="footer-col-head">Learn</div>
+          <div class="footer-col-links">
+            <a href="/learn/">All articles</a>
+            <a href="/learn/fem-basics/">FEM fundamentals</a>
+            <a href="/learn/hinge-bracket-stiffness/">Hinge bracket tutorial</a>
+            <a href="/examples/">Validated examples</a>
+          </div>
+        </div>
+        <div>
+          <div class="footer-col-head">Engine</div>
+          <div class="footer-col-links">
+            <a
+              href="https://dev.opencascade.org/"
+              target="_blank"
+              rel="noopener"
+              >OpenCASCADE</a
+            >
+            <a href="https://ngsolve.org/" target="_blank" rel="noopener"
+              >Netgen</a
+            >
+            <a href="https://mfem.org/" target="_blank" rel="noopener">MFEM</a>
+            <a
+              href="https://github.com/mkofler96/KoFEM/blob/main/THIRD-PARTY-LICENSES.md"
+              target="_blank"
+              rel="noopener"
+              >Third-party licenses</a
+            >
+          </div>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <div class="footer-bottom-inner">
+          <span>© 2026 KoFEM · AGPL-3.0 · Built for engineers.</span>
+          <div class="legal">
+            <a href="/">Home</a>
+            <a href="/learn/">Learn</a>
+            <a href="/examples/">Examples</a>
+            <a href="/privacy/">Privacy &amp; Cookies</a>
+            <a href="#" id="kofem-cookie-settings">Cookie settings</a>
+            <a
+              href="https://github.com/mkofler96/KoFEM/blob/main/LICENSE"
+              target="_blank"
+              rel="noopener"
+              >License</a
+            >
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <script>
+      // Theme toggle — flips the CSS custom-property set on <html> and persists.
+      (function () {
+        var btn = document.getElementById("theme-toggle");
+        if (!btn) return;
+        btn.addEventListener("click", function () {
+          var root = document.documentElement;
+          var light = root.getAttribute("data-theme") === "light";
+          if (light) {
+            root.removeAttribute("data-theme");
+            try {
+              localStorage.setItem("kofem_theme", "dark");
+            } catch (e) {}
+          } else {
+            root.setAttribute("data-theme", "light");
+            try {
+              localStorage.setItem("kofem_theme", "light");
+            } catch (e) {}
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>

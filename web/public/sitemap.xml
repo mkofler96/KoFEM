@@ -9,6 +9,18 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://kofem.org/learn/</loc>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://kofem.org/learn/fem-basics/</loc>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://kofem.org/learn/hinge-bracket-stiffness/</loc>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://kofem.org/privacy/</loc>
     <priority>0.1</priority>
   </url>

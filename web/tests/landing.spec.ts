@@ -25,7 +25,14 @@ test("landing page renders and links to the solver app", async ({ page }) => {
 // against `vite preview`, i.e. the same build output that ships.
 const SITE_ORIGIN = "https://kofem.org";
 
-for (const path of ["/", "/examples/", "/privacy/"]) {
+for (const path of [
+  "/",
+  "/examples/",
+  "/privacy/",
+  "/learn/",
+  "/learn/fem-basics/",
+  "/learn/hinge-bracket-stiffness/",
+]) {
   test(`${path} declares its canonical URL on the production origin`, async ({
     page,
   }) => {

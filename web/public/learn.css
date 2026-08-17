@@ -1,0 +1,778 @@
+/* SPDX-FileCopyrightText: 2026 Michael Kofler
+   SPDX-License-Identifier: AGPL-3.0-or-later
+
+   Shared stylesheet for the /learn/ articles. The other static pages
+   (index.html, examples/, privacy/) each inline their CSS because each is a
+   one-off layout; the Learn section is a set of pages that must look identical
+   to one another, so its styles live here instead of being copied per article.
+   Served straight from public/ — no hashing, no build step. */
+
+:root {
+  --bg: #0a0b0f;
+  --bg2: #0c0e13;
+  --panel: #13151c;
+  --panel2: #171a22;
+  --border: #23262f;
+  --border2: #2d313b;
+  --text: #eceef3;
+  --muted: #9aa0ad;
+  --faint: #6b7280;
+  --accent: #5b7cff;
+  --accent-soft: rgba(91, 124, 255, 0.13);
+  --warn: #e5a13d;
+  --warn-soft: rgba(229, 161, 61, 0.12);
+  --shadow: rgba(0, 0, 0, 0.55);
+  --mono: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+:root[data-theme="light"] {
+  --bg: #ffffff;
+  --bg2: #f7f8fa;
+  --panel: #ffffff;
+  --panel2: #f5f6f8;
+  --border: #e7e9ee;
+  --border2: #d8dbe2;
+  --text: #0d1117;
+  --muted: #5b616e;
+  --faint: #868d99;
+  --accent: #2f54eb;
+  --accent-soft: rgba(47, 84, 235, 0.09);
+  --warn: #b46a05;
+  --warn-soft: rgba(180, 106, 5, 0.09);
+  --shadow: rgba(20, 30, 60, 0.12);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family:
+    "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  transition:
+    background 0.35s ease,
+    color 0.35s ease;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+::selection {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ===================== NAV ===================== */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  background: color-mix(in srgb, var(--bg) 76%, transparent);
+  border-bottom: 1px solid var(--border);
+}
+
+.header-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 13px 32px;
+  display: flex;
+  align-items: center;
+  gap: 30px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-mark {
+  width: 29px;
+  height: 29px;
+  border-radius: 8px;
+  display: block;
+  object-fit: contain;
+}
+
+.brand-name {
+  font-weight: 600;
+  font-size: 17px;
+  letter-spacing: -0.015em;
+}
+
+.nav-links {
+  display: flex;
+  gap: 26px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.nav-links a {
+  transition: color 0.15s;
+}
+
+.nav-links a:hover,
+.nav-links a[aria-current="page"] {
+  color: var(--text);
+}
+
+.header-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.icon-btn {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+
+.icon-btn:hover {
+  border-color: var(--border2);
+}
+
+.icon-moon {
+  display: none;
+}
+
+:root[data-theme="light"] .icon-sun {
+  display: none;
+}
+
+:root[data-theme="light"] .icon-moon {
+  display: block;
+}
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+  padding: 8px 15px;
+  border-radius: 9px;
+  box-shadow: 0 6px 18px -8px var(--accent);
+  transition:
+    transform 0.12s,
+    filter 0.15s;
+}
+
+.btn-primary:hover {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font-weight: 550;
+  font-size: 14px;
+  padding: 8px 15px;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  transition:
+    border-color 0.15s,
+    transform 0.12s;
+}
+
+.btn-secondary:hover {
+  border-color: var(--border2);
+  transform: translateY(-1px);
+}
+
+/* ===================== PAGE SHELL ===================== */
+.wrap {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 32px;
+}
+
+.page-head {
+  padding: 62px 0 34px;
+  border-bottom: 1px solid var(--border);
+}
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 14px;
+}
+
+.page-head h1 {
+  margin: 0 0 14px;
+  font-size: clamp(30px, 4.4vw, 46px);
+  line-height: 1.1;
+  letter-spacing: -0.028em;
+  font-weight: 640;
+  max-width: 16ch;
+}
+
+.page-head .lede {
+  margin: 0;
+  font-size: 17.5px;
+  line-height: 1.62;
+  color: var(--muted);
+  max-width: 62ch;
+}
+
+/* ===================== INDEX CARDS ===================== */
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(316px, 1fr));
+  gap: 22px;
+  padding: 44px 0 20px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: var(--panel);
+  padding: 26px 26px 24px;
+  transition:
+    border-color 0.15s,
+    transform 0.14s,
+    box-shadow 0.18s;
+}
+
+.card:hover {
+  border-color: var(--border2);
+  transform: translateY(-2px);
+  box-shadow: 0 16px 34px -22px var(--shadow);
+}
+
+.card-kicker {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 12px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.card h2 {
+  margin: 0 0 10px;
+  font-size: 21px;
+  letter-spacing: -0.017em;
+  font-weight: 620;
+  line-height: 1.24;
+}
+
+.card p {
+  margin: 0 0 18px;
+  font-size: 14.7px;
+  line-height: 1.62;
+  color: var(--muted);
+}
+
+.card .go {
+  margin-top: auto;
+  font-size: 14px;
+  font-weight: 560;
+  color: var(--accent);
+}
+
+/* ===================== ARTICLE ===================== */
+.article {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 232px;
+  gap: 62px;
+  padding: 44px 0 84px;
+  align-items: start;
+}
+
+.prose {
+  min-width: 0;
+  font-size: 16.4px;
+  line-height: 1.72;
+  max-width: 74ch;
+}
+
+.prose h2 {
+  margin: 54px 0 16px;
+  font-size: 26px;
+  letter-spacing: -0.021em;
+  font-weight: 630;
+  line-height: 1.25;
+  scroll-margin-top: 84px;
+}
+
+.prose h3 {
+  margin: 36px 0 12px;
+  font-size: 19px;
+  letter-spacing: -0.013em;
+  font-weight: 600;
+  scroll-margin-top: 84px;
+}
+
+.prose p {
+  margin: 0 0 19px;
+  color: var(--text);
+}
+
+.prose ul,
+.prose ol {
+  margin: 0 0 19px;
+  padding-left: 24px;
+}
+
+.prose li {
+  margin-bottom: 9px;
+}
+
+.prose li::marker {
+  color: var(--faint);
+}
+
+.prose a:not(.btn-primary):not(.btn-secondary) {
+  color: var(--accent);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+  transition: border-color 0.15s;
+}
+
+.prose a:not(.btn-primary):not(.btn-secondary):hover {
+  border-bottom-color: var(--accent);
+}
+
+.prose strong {
+  font-weight: 620;
+}
+
+.prose code {
+  font-family: var(--mono);
+  font-size: 0.875em;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 1.5px 5px;
+}
+
+.prose pre {
+  margin: 0 0 22px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  padding: 16px 18px;
+  overflow-x: auto;
+  font-size: 13.4px;
+  line-height: 1.62;
+}
+
+.prose pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: inherit;
+}
+
+/* Display equations: centred, monospaced, breathing room. Deliberately not
+   MathML/KaTeX — the few formulas here read fine as text and stay dependency
+   free. */
+.eq {
+  margin: 0 0 22px;
+  padding: 15px 18px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  font-family: var(--mono);
+  font-size: 14.4px;
+  text-align: center;
+  overflow-x: auto;
+}
+
+.eq .where {
+  display: block;
+  margin-top: 9px;
+  font-family: "Geist", sans-serif;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+figure {
+  margin: 30px 0;
+}
+
+figure img,
+figure svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel2);
+}
+
+figcaption {
+  margin-top: 11px;
+  font-size: 13.6px;
+  line-height: 1.58;
+  color: var(--muted);
+}
+
+.table-scroll {
+  overflow-x: auto;
+  margin: 0 0 22px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 14.2px;
+}
+
+th,
+td {
+  padding: 10px 15px;
+  text-align: right;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+th:first-child,
+td:first-child {
+  text-align: left;
+}
+
+thead th {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+  font-weight: 500;
+  background: var(--panel2);
+}
+
+tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+tbody td {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Callout — a boxed aside. .note is the default; .warn flags a trap. */
+.callout {
+  margin: 0 0 24px;
+  padding: 17px 20px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  background: var(--accent-soft);
+  font-size: 15.2px;
+  line-height: 1.62;
+}
+
+.callout.warn {
+  border-left-color: var(--warn);
+  background: var(--warn-soft);
+}
+
+.callout p {
+  margin: 0 0 11px;
+}
+
+.callout p:last-child {
+  margin-bottom: 0;
+}
+
+.callout .callout-head {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 8px;
+}
+
+/* Steps — the numbered walkthrough of the tutorial. */
+.step {
+  counter-increment: step;
+  position: relative;
+  padding-left: 52px;
+  margin: 0 0 34px;
+}
+
+.steps {
+  counter-reset: step;
+  margin: 26px 0 0;
+}
+
+.step::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 1px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.step h3 {
+  margin: 4px 0 10px;
+}
+
+/* Key-result banner. */
+.result {
+  margin: 30px 0;
+  padding: 24px 26px;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--border));
+  border-radius: 14px;
+  background: var(--accent-soft);
+}
+
+.result .result-label {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 10px;
+}
+
+.result .result-value {
+  font-family: var(--mono);
+  font-size: clamp(23px, 3.4vw, 31px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.result .result-note {
+  margin: 11px 0 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* ===================== TOC ===================== */
+.toc {
+  position: sticky;
+  top: 92px;
+  font-size: 13.8px;
+  border-left: 1px solid var(--border);
+  padding-left: 20px;
+}
+
+.toc-head {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 13px;
+}
+
+.toc a {
+  display: block;
+  padding: 5px 0;
+  color: var(--muted);
+  line-height: 1.45;
+  transition: color 0.15s;
+}
+
+.toc a:hover {
+  color: var(--text);
+}
+
+.article-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 20px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.article-meta span {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 9px;
+}
+
+.next-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 34px;
+  padding-top: 26px;
+  border-top: 1px solid var(--border);
+}
+
+/* ===================== FOOTER ===================== */
+.site-footer {
+  border-top: 1px solid var(--border);
+  background: var(--bg2);
+}
+
+.footer-top {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 56px 32px 40px;
+  display: grid;
+  grid-template-columns: 1.6fr 1fr 1fr 1fr;
+  gap: 40px;
+}
+
+.footer-brand p {
+  margin: 0 0 16px;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--muted);
+  max-width: 240px;
+}
+
+.footer-brand .brand {
+  margin-bottom: 16px;
+}
+
+.footer-col-head {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 16px;
+}
+
+.footer-col-links {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.footer-col-links a {
+  transition: color 0.15s;
+}
+
+.footer-col-links a:hover {
+  color: var(--text);
+}
+
+.footer-bottom {
+  border-top: 1px solid var(--border);
+}
+
+.footer-bottom-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px 32px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--faint);
+}
+
+.footer-bottom-inner .legal {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+
+.footer-bottom-inner .legal a:hover {
+  color: var(--text);
+}
+
+/* ===================== RESPONSIVE ===================== */
+@media (max-width: 1000px) {
+  .article {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .toc {
+    display: none;
+  }
+
+  .footer-top {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .wrap {
+    padding: 0 20px;
+  }
+
+  .header-inner {
+    padding: 12px 20px;
+    gap: 16px;
+  }
+
+  .nav-links {
+    display: none;
+  }
+
+  .page-head {
+    padding: 40px 0 26px;
+  }
+
+  .prose {
+    font-size: 16px;
+  }
+
+  .footer-top {
+    grid-template-columns: 1fr;
+    padding: 40px 20px 32px;
+  }
+
+  .footer-bottom-inner {
+    padding: 18px 20px;
+  }
+}

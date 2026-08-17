@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 400" width="780" height="400" role="img" aria-labelledby="cvTitle">
+<title id="cvTitle">Computed stiffness against mesh size. Linear tetrahedra fall steadily from 11,890 to 11,364 N/mm without settling, while quadratic elements on the same meshes sit flat at about 10,130 N/mm from the coarsest mesh onward.</title>
+<style>
+  .ax{stroke:#3a3f4b;stroke-width:1;fill:none}
+  .gr{stroke:#2a2e38;stroke-width:1;stroke-dasharray:3 4;fill:none}
+  .tk{font:400 11.5px Geist,system-ui,sans-serif;fill:#9aa0ad}
+  .al{font:500 12.5px Geist,system-ui,sans-serif;fill:#9aa0ad}
+  .lg{font:500 13px Geist,system-ui,sans-serif}
+  .lin{stroke:#e5484d;stroke-width:2.4;fill:none}
+  .lind{fill:#e5484d}
+  .qua{stroke:#2f54eb;stroke-width:2.4;fill:none}
+  .quad{fill:#2f54eb}
+  [data-theme="light"] .ax{stroke:#c9cdd6}
+  [data-theme="light"] .gr{stroke:#e7e9ee}
+  [data-theme="light"] .tk,[data-theme="light"] .al{fill:#5b616e}
+</style>
+<path class="gr" d="M78 334.0 H750"/>
+<text class="tk" x="67" y="338.0" text-anchor="end">9,800</text>
+<path class="gr" d="M78 287.0 H750"/>
+<text class="tk" x="67" y="291.0" text-anchor="end">10,200</text>
+<path class="gr" d="M78 240.0 H750"/>
+<text class="tk" x="67" y="244.0" text-anchor="end">10,600</text>
+<path class="gr" d="M78 193.0 H750"/>
+<text class="tk" x="67" y="197.0" text-anchor="end">11,000</text>
+<path class="gr" d="M78 146.0 H750"/>
+<text class="tk" x="67" y="150.0" text-anchor="end">11,400</text>
+<path class="gr" d="M78 99.0 H750"/>
+<text class="tk" x="67" y="103.0" text-anchor="end">11,800</text>
+<path class="gr" d="M78 52.0 H750"/>
+<text class="tk" x="67" y="56.0" text-anchor="end">12,200</text>
+<text class="tk" x="119.9" y="354" text-anchor="middle">5.7k</text>
+<text class="tk" x="119.9" y="370" text-anchor="middle" opacity=".7">10</text>
+<text class="tk" x="174.9" y="354" text-anchor="middle">6.4k</text>
+<text class="tk" x="174.9" y="370" text-anchor="middle" opacity=".7">8</text>
+<text class="tk" x="233.5" y="354" text-anchor="middle">7.1k</text>
+<text class="tk" x="233.5" y="370" text-anchor="middle" opacity=".7">6</text>
+<text class="tk" x="322.5" y="354" text-anchor="middle">8.1k</text>
+<text class="tk" x="322.5" y="370" text-anchor="middle" opacity=".7">5</text>
+<text class="tk" x="442.7" y="354" text-anchor="middle">9.5k</text>
+<text class="tk" x="442.7" y="370" text-anchor="middle" opacity=".7">4</text>
+<text class="tk" x="525.2" y="354" text-anchor="middle">10.5k</text>
+<text class="tk" x="525.2" y="370" text-anchor="middle" opacity=".7">3</text>
+<text class="tk" x="569.9" y="354" text-anchor="middle">11.1k</text>
+<text class="tk" x="569.9" y="370" text-anchor="middle" opacity=".7">2.5</text>
+<text class="tk" x="707.2" y="354" text-anchor="middle">12.7k</text>
+<text class="tk" x="707.2" y="370" text-anchor="middle" opacity=".7">2</text>
+<path class="ax" d="M78 52 V334 H750"/>
+<path class="lin" d="M119.9 88.5L174.9 97.5L233.5 98.6L322.5 104.8L442.7 110.2L525.2 125.4L569.9 128.5L707.2 150.2"/>
+<path class="qua" d="M119.9 290.7L174.9 298.4L233.5 296.0L322.5 293.6L442.7 288.8"/>
+<circle class="lind" cx="119.9" cy="88.5" r="3.6"/>
+<circle class="lind" cx="174.9" cy="97.5" r="3.6"/>
+<circle class="lind" cx="233.5" cy="98.6" r="3.6"/>
+<circle class="lind" cx="322.5" cy="104.8" r="3.6"/>
+<circle class="lind" cx="442.7" cy="110.2" r="3.6"/>
+<circle class="lind" cx="525.2" cy="125.4" r="3.6"/>
+<circle class="lind" cx="569.9" cy="128.5" r="3.6"/>
+<circle class="lind" cx="707.2" cy="150.2" r="3.6"/>
+<circle class="quad" cx="119.9" cy="290.7" r="3.6"/>
+<circle class="quad" cx="174.9" cy="298.4" r="3.6"/>
+<circle class="quad" cx="233.5" cy="296.0" r="3.6"/>
+<circle class="quad" cx="322.5" cy="293.6" r="3.6"/>
+<circle class="quad" cx="442.7" cy="288.8" r="3.6"/>
+<text class="al" x="414" y="390" text-anchor="middle">mesh nodes (top) &#183; max element size in mm (bottom)</text>
+<text class="al" transform="translate(18 193) rotate(-90)" text-anchor="middle">k&#8348; [N/mm]</text>
+<circle class="lind" cx="84" cy="26" r="4"/><text class="lg" x="96" y="30" fill="#e5484d">linear tetrahedra &#8212; still falling</text>
+<circle class="quad" cx="84" cy="44" r="4"/><text class="lg" x="96" y="48" fill="#2f54eb">quadratic elements &#8212; flat from the start</text>
+</svg>

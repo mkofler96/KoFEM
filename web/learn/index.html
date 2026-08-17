@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/svg+xml" href="/kofem_logo.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <title>Learn FEM — KoFEM Online Finite Element Solver</title>
+    <meta
+      name="description"
+      content="Finite element analysis explained from the ground up, plus worked examples you can re-run in your browser. Start with what a stiffness matrix really is, then solve a real hinge bracket from CAD to stiffness."
+    />
+    <link rel="canonical" href="https://kofem.org/learn/" />
+    <meta name="robots" content="index, follow" />
+
+    <!-- Open Graph / social -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Learn FEM — KoFEM" />
+    <meta
+      property="og:description"
+      content="Finite element analysis explained from the ground up, plus worked examples you can re-run in your browser."
+    />
+    <meta property="og:url" content="https://kofem.org/learn/" />
+    <meta property="og:image" content="https://kofem.org/kofem_logo.svg" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Learn FEM — KoFEM" />
+    <meta
+      name="twitter:description"
+      content="Finite element analysis explained from the ground up, plus worked examples you can re-run in your browser."
+    />
+    <meta name="twitter:image" content="https://kofem.org/kofem_logo.svg" />
+
+    <!-- Self-hosted fonts (SIL OFL) — see public/fonts/README.md -->
+    <link href="/fonts/geist.css" rel="stylesheet" />
+    <link href="/learn.css" rel="stylesheet" />
+
+    <!-- Apply the saved theme before first paint to avoid a flash. -->
+    <script>
+      try {
+        if (localStorage.getItem("kofem_theme") === "light")
+          document.documentElement.setAttribute("data-theme", "light");
+      } catch (e) {}
+    </script>
+  </head>
+
+  <body>
+    <!-- ===================== NAV ===================== -->
+    <header class="site-header">
+      <div class="header-inner">
+        <a class="brand" href="/">
+          <img
+            class="brand-mark"
+            src="/kofem_logo.svg"
+            alt="KoFEM logo"
+            width="29"
+            height="29"
+          />
+          <span class="brand-name">KoFEM</span>
+        </a>
+        <nav class="nav-links">
+          <a href="/learn/" aria-current="page">Learn</a>
+          <a href="/examples/">Examples</a>
+          <a href="/#workflow">Workflow</a>
+        </nav>
+        <div class="header-actions">
+          <a
+            class="icon-btn"
+            href="https://github.com/mkofler96/KoFEM"
+            target="_blank"
+            rel="noopener"
+            aria-label="KoFEM on GitHub"
+          >
+            <svg
+              width="17"
+              height="17"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                d="M12 .5C5.37.5 0 5.78 0 12.29c0 5.2 3.44 9.6 8.21 11.16.6.11.82-.25.82-.56 0-.28-.01-1.02-.02-2-3.34.71-4.04-1.58-4.04-1.58-.55-1.37-1.34-1.74-1.34-1.74-1.08-.72.08-.71.08-.71 1.2.08 1.83 1.21 1.83 1.21 1.07 1.79 2.81 1.27 3.5.97.11-.76.42-1.27.76-1.56-2.67-.3-5.47-1.3-5.47-5.78 0-1.28.47-2.32 1.24-3.14-.12-.3-.54-1.52.12-3.16 0 0 1.01-.32 3.3 1.2a11.6 11.6 0 0 1 6 0c2.29-1.52 3.3-1.2 3.3-1.2.66 1.64.24 2.86.12 3.16.77.82 1.24 1.86 1.24 3.14 0 4.49-2.81 5.47-5.49 5.76.43.36.81 1.08.81 2.18 0 1.58-.01 2.85-.01 3.24 0 .31.22.68.83.56A12.02 12.02 0 0 0 24 12.29C24 5.78 18.63.5 12 .5z"
+              ></path>
+            </svg>
+          </a>
+          <button class="icon-btn" id="theme-toggle" aria-label="Toggle theme">
+            <svg
+              class="icon-sun"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            >
+              <circle cx="12" cy="12" r="4"></circle>
+              <path
+                d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"
+              ></path>
+            </svg>
+            <svg
+              class="icon-moon"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+            >
+              <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path>
+            </svg>
+          </button>
+          <a class="btn-primary" href="/app/">Start Solver</a>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <div class="wrap">
+        <div class="page-head">
+          <div class="eyebrow">Learn</div>
+          <h1>Finite elements, without the hand-waving</h1>
+          <p class="lede">
+            Short, honest articles about how FEM actually works — and worked
+            examples you can re-run yourself in the browser, on the same solver
+            the numbers came from. Every figure and every number on these pages
+            was produced by running KoFEM, not sketched by hand.
+          </p>
+        </div>
+
+        <div class="card-grid">
+          <a class="card" href="/learn/fem-basics/">
+            <div class="card-kicker">
+              <span>Fundamentals</span>
+              <span>·</span>
+              <span>12 min</span>
+            </div>
+            <h2>What a finite element solver is actually doing</h2>
+            <p>
+              From a continuum you cannot solve to a linear system you can:
+              elements, shape functions, the stiffness matrix, boundary
+              conditions, and why the answer is always a little too stiff.
+            </p>
+            <span class="go">Read the article →</span>
+          </a>
+
+          <a class="card" href="/learn/hinge-bracket-stiffness/">
+            <div class="card-kicker">
+              <span>Worked example</span>
+              <span>·</span>
+              <span>15 min</span>
+            </div>
+            <h2>The stiffness of a hinge bracket, start to finish</h2>
+            <p>
+              A real IGES part with no solid in it, repaired, meshed and solved
+              for its stiffness <em>k</em><sub>w</sub> — including the mesh
+              study that shows the first answer was 15&nbsp;% too stiff.
+            </p>
+            <span class="go">Work through it →</span>
+          </a>
+
+          <a class="card" href="/examples/">
+            <div class="card-kicker">
+              <span>Reference</span>
+              <span>·</span>
+              <span>Interactive</span>
+            </div>
+            <h2>Validated examples against closed-form solutions</h2>
+            <p>
+              Axial bar, cantilever beam, plate with a hole and Cook's membrane
+              — each solved in KoFEM and checked against the analytical result,
+              with the error stated.
+            </p>
+            <span class="go">Open the gallery →</span>
+          </a>
+        </div>
+      </div>
+    </main>
+
+    <!-- ===================== FOOTER ===================== -->
+    <footer class="site-footer">
+      <div class="footer-top">
+        <div class="footer-brand">
+          <div class="brand">
+            <img
+              class="brand-mark"
+              src="/kofem_logo.svg"
+              alt="KoFEM logo"
+              width="29"
+              height="29"
+            />
+            <span class="brand-name">KoFEM</span>
+          </div>
+          <p>
+            Browser-native finite element analysis for engineers. Mesh, solve,
+            and visualize without leaving the tab.
+          </p>
+        </div>
+        <div>
+          <div class="footer-col-head">Product</div>
+          <div class="footer-col-links">
+            <a href="/app/">Launch solver</a>
+            <a href="/#workflow">Workflow</a>
+            <a href="/examples/">Examples</a>
+            <a
+              href="https://github.com/mkofler96/KoFEM"
+              target="_blank"
+              rel="noopener"
+              >GitHub</a
+            >
+          </div>
+        </div>
+        <div>
+          <div class="footer-col-head">Learn</div>
+          <div class="footer-col-links">
+            <a href="/learn/">All articles</a>
+            <a href="/learn/fem-basics/">FEM fundamentals</a>
+            <a href="/learn/hinge-bracket-stiffness/">Hinge bracket tutorial</a>
+            <a href="/examples/">Validated examples</a>
+          </div>
+        </div>
+        <div>
+          <div class="footer-col-head">Engine</div>
+          <div class="footer-col-links">
+            <a
+              href="https://dev.opencascade.org/"
+              target="_blank"
+              rel="noopener"
+              >OpenCASCADE</a
+            >
+            <a href="https://ngsolve.org/" target="_blank" rel="noopener"
+              >Netgen</a
+            >
+            <a href="https://mfem.org/" target="_blank" rel="noopener">MFEM</a>
+            <a
+              href="https://github.com/mkofler96/KoFEM/blob/main/THIRD-PARTY-LICENSES.md"
+              target="_blank"
+              rel="noopener"
+              >Third-party licenses</a
+            >
+          </div>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <div class="footer-bottom-inner">
+          <span>© 2026 KoFEM · AGPL-3.0 · Built for engineers.</span>
+          <div class="legal">
+            <a href="/">Home</a>
+            <a href="/learn/">Learn</a>
+            <a href="/examples/">Examples</a>
+            <a href="/privacy/">Privacy &amp; Cookies</a>
+            <a href="#" id="kofem-cookie-settings">Cookie settings</a>
+            <a
+              href="https://github.com/mkofler96/KoFEM/blob/main/LICENSE"
+              target="_blank"
+              rel="noopener"
+              >License</a
+            >
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <script>
+      // Theme toggle — flips the CSS custom-property set on <html> and persists.
+      (function () {
+        var btn = document.getElementById("theme-toggle");
+        if (!btn) return;
+        btn.addEventListener("click", function () {
+          var root = document.documentElement;
+          var light = root.getAttribute("data-theme") === "light";
+          if (light) {
+            root.removeAttribute("data-theme");
+            try {
+              localStorage.setItem("kofem_theme", "dark");
+            } catch (e) {}
+          } else {
+            root.setAttribute("data-theme", "light");
+            try {
+              localStorage.setItem("kofem_theme", "light");
+            } catch (e) {}
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>

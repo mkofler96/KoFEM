@@ -16,8 +16,10 @@ import {
 
 const htmlEntry = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 
-// The marketing pages (index.html, examples/index.html, privacy/index.html) are
+// The marketing and Learn pages (index.html, examples/, privacy/, learn/) are
 // fully static — Vite emits them byte-for-byte, they import no hashed assets.
+// The Learn pages share /learn.css, which is served straight from public/ and
+// is therefore un-hashed like every other public/ asset.
 // Feeding them as extra MPA rollup inputs is flaky (in some environments rollup
 // crosses the landing/app chunk names and drops the landing HTML entirely,
 // leaving "/" on nginx's default page). So the build has a single entry (the
@@ -30,6 +32,9 @@ const STATIC_PAGES = [
   "index.html",
   "examples/index.html",
   "privacy/index.html",
+  "learn/index.html",
+  "learn/fem-basics/index.html",
+  "learn/hinge-bracket-stiffness/index.html",
 ];
 
 const copyStaticPages = (snippet: string): PluginOption => ({
