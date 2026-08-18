@@ -171,7 +171,6 @@ val solve_coupled(const val& mesh, const val& coupling, const val& bcs,
         const int kind = k < cmpc.size() ? cmpc[k] : 0;
         if (kind == 1) {
             cp.kind = kofem::shell::CouplingKind::RelaxedMpc;
-            cp.mpc = true;
             cp.relaxation = relaxation;
         } else if (kind == 2) {
             cp.kind = kofem::shell::CouplingKind::Kinematic;

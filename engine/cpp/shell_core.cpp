@@ -807,7 +807,7 @@ Rbe3Constraints build_rbe3_constraints(const CoupledInput& in, int nDof,
         const size_t R6 = 6 * static_cast<size_t>(R);
         for (size_t k = 0; k < 6; ++k) out.dep[R6 + k] = 1;
 
-        if (cp.mpc) {
+        if (cp.kind == CouplingKind::RelaxedMpc) {
             // Relaxed shell-to-solid MPC (Lu, Zhang & Yang 2023), generalised to a
             // NON-CONFORMING seam. The paper ties the shell node to a solid node
             // coincident with it; an auto-detected seam has none, and tying to the

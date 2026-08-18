@@ -250,7 +250,7 @@ double coupled_mpc_clamped(double psi) {
     in.shell_young = E; in.shell_poisson = nu; in.thickness = t;
     for (int rn : root) {
         Coupling cp; cp.ref_node = rn; cp.solid_nodes = {aBase, aBase + 1, aBase + 2};
-        cp.mpc = true; cp.relaxation = psi;
+        cp.kind = CouplingKind::RelaxedMpc; cp.relaxation = psi;
         in.couplings.push_back(cp);
     }
     for (int aa = 0; aa < 3; ++aa) for (int c = 0; c < 3; ++c) in.fixed_dofs.push_back(6 * (aBase + aa) + c);
@@ -351,7 +351,7 @@ double mpc_seam_peak(int order) {
         });
         Coupling cp;
         cp.ref_node = rn; cp.solid_nodes = patch;
-        cp.kind = CouplingKind::RelaxedMpc; cp.mpc = true; cp.relaxation = 1.0;
+        cp.kind = CouplingKind::RelaxedMpc; cp.relaxation = 1.0;
         in.couplings.push_back(std::move(cp));
     }
     // Cantilever the block in its own plane so the seam sees a transverse
