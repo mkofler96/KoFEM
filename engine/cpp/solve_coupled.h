@@ -16,8 +16,11 @@
 //   coupling: {ref: Int32Array, offsets: Int32Array, solid: Int32Array}
 //              CSR-style distributing couplings: coupling ref-node k ties to
 //              solid[offsets[k]..offsets[k+1]).
-//   bcs:      {fixed_dofs: Int32Array, load_dofs: Int32Array, load_vals: Float64Array}
+//   bcs:      {fixed_dofs: Int32Array, load_dofs: Int32Array, load_vals: Float64Array,
+//              prescribed_dofs?: Int32Array, prescribed_vals?: Float64Array}
 //              DOF indices are 6·node+component (0..5 = u,v,w,θx,θy,θz).
+//              fixed_dofs are constrained to ZERO; prescribed_dofs[k] is driven
+//              to prescribed_vals[k] (inhomogeneous essential BC).
 //   mat_json: {solid:{young_modulus,poisson_ratio}, shell:{young_modulus,poisson_ratio}}
 // Returns {displacements: Float64Array} (three translations per node) or {error}.
 emscripten::val solve_coupled(const emscripten::val& mesh, const emscripten::val& coupling,

@@ -555,20 +555,61 @@ std::array<std::array<double, 3>, 3> skew(const Vec3& a) {
     return {{{0.0, -a[2], a[1]}, {a[2], 0.0, -a[0]}, {-a[1], a[0], 0.0}}};
 }
 
-void apply_homogeneous_bc(Sparse& K, std::vector<double>& F, const std::vector<char>& fixed) {
+// Eliminate the essential (Dirichlet) DOFs. `fixed` marks every constrained DOF
+// and `values` carries what each is constrained TO — zero for a homogeneous
+// clamp, g for a prescribed displacement. Standard inhomogeneous elimination:
+// the known column contribution K[:,p]·g moves to the right-hand side before the
+// row/column is cleared, which keeps the reduced system symmetric and gives the
+// same answer as solving the free block alone.
+//
+// `values` may be empty, which means every constrained DOF is fixed to zero.
+void apply_essential_bc(Sparse& K, std::vector<double>& F, const std::vector<char>& fixed,
+                        const std::vector<double>& values) {
     const int n = static_cast<int>(F.size());
+    // Column pass first: each free row still holds its original entries, so the
+    // known part of the product can be moved onto F before the columns go.
     for (int i = 0; i < n; ++i) {
+        if (fixed[i] != 0) continue;
+        auto& row = K.rows[i];
+        if (!values.empty())
+            for (const auto& [j, v] : row)
+                if (fixed[j] != 0 && values[j] != 0.0) F[i] -= v * values[j];
+        row.erase(std::remove_if(row.begin(), row.end(),
+                                 [&](const std::pair<int, double>& e) {
+                                     return fixed[e.first] != 0;
+                                 }),
+                  row.end());
+    }
+    // Row pass: a constrained DOF becomes the identity equation u_i = g_i.
+    for (int i = 0; i < n; ++i)
         if (fixed[i] != 0) {
             K.rows[i].assign(1, {i, 1.0});
-            F[i] = 0.0;
-        } else {
-            auto& row = K.rows[i];
-            row.erase(std::remove_if(row.begin(), row.end(),
-                                     [&](const std::pair<int, double>& e) {
-                                         return fixed[e.first] != 0;
-                                     }),
-                      row.end());
+            F[i] = values.empty() ? 0.0 : values[i];
         }
+}
+
+// Fold `prescribed` into the (fixed, values) pair the elimination takes. A DOF
+// already in `fixed` is upgraded to its prescribed value — the same "prescribed
+// wins over a plain clamp on the same face" rule the solid path gets from MFEM.
+// Two prescribed values for one DOF are a modelling contradiction, not something
+// to pick a winner for.
+void add_prescribed(const std::vector<std::pair<int, double>>& prescribed, int nDof,
+                    const char* what, std::vector<char>& fixed, std::vector<double>& values) {
+    if (prescribed.empty()) return;
+    values.assign(nDof, 0.0);
+    std::vector<char> seen(nDof, 0);
+    for (const auto& [dof, val] : prescribed) {
+        if (dof < 0 || dof >= nDof)
+            throw std::runtime_error(std::string(what) + ": prescribed DOF out of range");
+        if (seen[dof] != 0 && values[dof] != val)
+            throw std::runtime_error(
+                std::string(what) + ": node " + std::to_string(dof / 6) + " component " +
+                std::to_string(dof % 6) + " is prescribed twice, to " +
+                std::to_string(values[dof]) + " and " + std::to_string(val) +
+                " — a DOF cannot be driven to two displacements at once.");
+        seen[dof] = 1;
+        fixed[dof] = 1;
+        values[dof] = val;
     }
 }
 
@@ -611,7 +652,9 @@ ShellResult solve_shell_core(const ShellInput& in) {
         if (d < 0 || d >= nDof) throw std::runtime_error("shell: fixed DOF out of range");
         fixed[d] = 1;
     }
-    apply_homogeneous_bc(K, F, fixed);
+    std::vector<double> values;
+    add_prescribed(in.prescribed_dofs, nDof, "shell", fixed, values);
+    apply_essential_bc(K, F, fixed, values);
 
     ShellResult res = cg_solve(K, F);
     if (res.dofs.empty()) res.dofs.assign(nDof, 0.0);
@@ -978,6 +1021,7 @@ void resolve_constraint_chains(Rbe3Constraints& C, int nDof) {
 // coexist in full (WASM heap headroom).
 ShellResult solve_reduced_system(Sparse& K, const std::vector<double>& F,
                                  const std::vector<char>& fixed,
+                                 const std::vector<double>& values,
                                  const Rbe3Constraints& C, int nDof) {
     std::vector<int> red(nDof, -1);
     int nIndep = 0;
@@ -1022,27 +1066,38 @@ ShellResult solve_reduced_system(Sparse& K, const std::vector<double>& F,
         if (F[i] != 0.0)
             for (const auto& [pi, ci] : expand(i)) Fr[red[pi]] += ci * F[i];
 
+    // An independent DOF maps one-to-one onto its reduced column (coefficient 1),
+    // so a prescribed value carries over unchanged. A dependent one has no column
+    // of its own and is refused below, which is why no transform is needed here.
     std::vector<char> fr(nIndep, 0);
+    std::vector<double> vr;
+    if (!values.empty()) vr.assign(nIndep, 0.0);
     for (int i = 0; i < nDof; ++i) {
         if (fixed[i] == 0) continue;
-        // A fixed DOF on a dependent (RBE3 distributing-coupling reference) node
-        // has no reduced-system column of its own — its motion is a weighted
-        // average of the coupled solid nodes — so it cannot be constrained here.
-        // Silently skipping it (the old `&& C.dep[i] == 0` guard) dropped the
-        // user's constraint and still let CG converge on an under-restrained
-        // model (issue #377). Refuse loudly instead.
-        if (C.dep[i] != 0)
+        // A fixed or prescribed DOF on a dependent (RBE3 distributing-coupling
+        // reference) node has no reduced-system column of its own — its motion is
+        // a weighted average of the coupled solid nodes — so it cannot be
+        // constrained here. Silently skipping it (the old `&& C.dep[i] == 0`
+        // guard) dropped the user's constraint and still let CG converge on an
+        // under-restrained model (issue #377). Refuse loudly instead. Driving such
+        // a node is refused for the same reason it cannot be clamped: the
+        // coupling, not the BC, already dictates the motion (KOF-210).
+        if (C.dep[i] != 0) {
+            const bool driven = !values.empty() && values[i] != 0.0;
             throw std::runtime_error(
-                "solve_reduced_system: fixed DOF " + std::to_string(i) + " (node " +
-                std::to_string(i / 6) + ", component " + std::to_string(i % 6) +
+                std::string("solve_reduced_system: ") + (driven ? "prescribed" : "fixed") +
+                " DOF " + std::to_string(i) + " (node " + std::to_string(i / 6) +
+                ", component " + std::to_string(i % 6) +
                 ") lies on a coupling-dependent node — its motion is governed by "
                 "the RBE3 distributing coupling to the solid, so a direct "
                 "constraint on it cannot be honoured and would otherwise be "
                 "silently dropped. Constrain the coupled solid node(s) instead of "
                 "the shell coupling reference node.");
+        }
         fr[red[i]] = 1;
+        if (!vr.empty()) vr[red[i]] = values[i];
     }
-    apply_homogeneous_bc(Kr, Fr, fr);
+    apply_essential_bc(Kr, Fr, fr, vr);
 
     ShellResult rr = cg_solve(Kr, Fr);
     if (rr.dofs.empty()) rr.dofs.assign(nIndep, 0.0);
@@ -1103,6 +1158,8 @@ ShellResult solve_solid_shell_core(const CoupledInput& in) {
         if (d < 0 || d >= nDof) throw std::runtime_error("coupled: fixed DOF out of range");
         fixed[d] = 1;
     }
+    std::vector<double> values;
+    add_prescribed(in.prescribed_dofs, nDof, "coupled", fixed, values);
     // A coupling reference node's rotations must NOT be auto-fixed, whichever way
     // the coupling points. For a distributing coupling all six of its DOFs are
     // eliminated (they become the RBE3 average of its targets) and a fixed
@@ -1128,7 +1185,7 @@ ShellResult solve_solid_shell_core(const CoupledInput& in) {
         has_rotation[n] = (is_shell[n] != 0 || is_coupling_ref[n] != 0) ? 1 : 0;
     Rbe3Constraints constraints = build_rbe3_constraints(in, nDof, has_rotation);
     resolve_constraint_chains(constraints, nDof);
-    return solve_reduced_system(K, F, fixed, constraints, nDof);
+    return solve_reduced_system(K, F, fixed, values, constraints, nDof);
 }
 
 // ── Stress recovery ───────────────────────────────────────────────────────────

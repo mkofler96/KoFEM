@@ -402,6 +402,149 @@ bool coupled_fixed_dependent_throws() {
     return false;
 }
 
+// ── Prescribed (inhomogeneous) Dirichlet conditions, KOF-210 ─────────────────
+//
+// Uniaxial extension of a membrane strip [0,L]x[0,b] in the z=0 plane, driven
+// EITHER by a prescribed edge displacement ux = delta on x = L, or by the edge
+// force that produces the same strain. Symmetry rollers ux=0 on x=0 and uy=0 on
+// y=0; bending DOFs pinned so this is the pure membrane (CST) problem. The exact
+// solution is the linear field
+//   ux = eps*x,  uy = -nu*eps*y,   eps = delta/L,
+// which the CST reproduces exactly, so both drives must land on it and on each
+// other. Driving by displacement is the discriminator: an implementation that
+// pins a prescribed DOF to zero returns the all-zero field instead.
+struct StripResult {
+    double ux_end;   // mean ux on the x = L edge
+    double uy_side;  // uy at the (L, b) corner — the free Poisson contraction
+};
+
+StripResult strip_uniaxial(bool by_displacement, double delta) {
+    const double L = 1.0, b = 0.25, t = 0.01, E = 210e9, nu = 0.3;
+    const int nx = 8, ny = 2;
+    auto id = [&](int i, int j) { return i * (ny + 1) + j; };
+    std::vector<double> V;
+    std::vector<int> Tr;
+    for (int i = 0; i <= nx; ++i)
+        for (int j = 0; j <= ny; ++j) {
+            V.push_back(L * i / nx); V.push_back(b * j / ny); V.push_back(0.0);
+        }
+    for (int i = 0; i < nx; ++i)
+        for (int j = 0; j < ny; ++j) {
+            const int a0 = id(i,j), a1 = id(i+1,j), a2 = id(i+1,j+1), a3 = id(i,j+1);
+            Tr.push_back(a0); Tr.push_back(a1); Tr.push_back(a2);
+            Tr.push_back(a0); Tr.push_back(a2); Tr.push_back(a3);
+        }
+    ShellInput in;
+    in.vertices = V; in.triangles = Tr; in.thickness = t; in.young = E; in.poisson = nu;
+    const int nNodes = (nx + 1) * (ny + 1);
+    for (int nd = 0; nd < nNodes; ++nd)
+        for (int c : {2, 3, 4, 5}) in.fixed_dofs.push_back(6 * nd + c);  // membrane only
+    for (int j = 0; j <= ny; ++j) in.fixed_dofs.push_back(6 * id(0, j) + 0);   // x=0: ux=0
+    for (int i = 0; i <= nx; ++i) in.fixed_dofs.push_back(6 * id(i, 0) + 1);   // y=0: uy=0
+    if (by_displacement) {
+        for (int j = 0; j <= ny; ++j) in.prescribed_dofs.emplace_back(6 * id(nx, j) + 0, delta);
+    } else {
+        // Trapezoidal edge tractions equivalent to sigma = E*delta/L.
+        const double Ftot = E * (delta / L) * b * t;
+        for (int j = 0; j <= ny; ++j) {
+            const double wgt = (j == 0 || j == ny) ? 0.5 : 1.0;
+            in.loads.emplace_back(6 * id(nx, j) + 0, Ftot * wgt / ny);
+        }
+    }
+    ShellResult r = solve_shell_core(in);
+    double u = 0.0;
+    for (int j = 0; j <= ny; ++j) u += r.dofs[6 * static_cast<size_t>(id(nx, j))];
+    return {u / (ny + 1), r.dofs[6 * static_cast<size_t>(id(nx, ny)) + 1]};
+}
+
+// Prescribed displacement through the COUPLED assembler and its RBE3 reduction:
+// a shell cantilever whose root is distributing-coupled to three anchor nodes,
+// with the anchors driven uz = delta and no load at all. The anchors move as a
+// body, so the RBE3 average hands the root a pure translation and the whole
+// shell must ride along rigidly — tip w = delta. A prescribed value dropped
+// anywhere between the input and the reduced system leaves the tip at zero.
+double coupled_prescribed_rigid_translation(double delta) {
+    const double L = 2.0, b = 0.3, t = 0.01, E = 2.1e11, nu = 0.3;
+    const int nx = 20, ny = 4;
+    auto id = [&](int i, int j) { return i * (ny + 1) + j; };
+    std::vector<double> V; std::vector<int> Tr; std::vector<int> root;
+    for (int i = 0; i <= nx; ++i)
+        for (int j = 0; j <= ny; ++j) { V.push_back(L * i / nx); V.push_back(b * j / ny); V.push_back(0); }
+    for (int i = 0; i < nx; ++i)
+        for (int j = 0; j < ny; ++j) {
+            const int a = id(i,j), c = id(i+1,j), d = id(i+1,j+1), e = id(i,j+1);
+            Tr.push_back(a); Tr.push_back(c); Tr.push_back(d); Tr.push_back(a); Tr.push_back(d); Tr.push_back(e);
+        }
+    for (int j = 0; j <= ny; ++j) root.push_back(id(0, j));
+    const int aBase = (nx + 1) * (ny + 1);
+    V.insert(V.end(), {-0.1, 0.0, 0.0,  -0.1, b, 0.0,  -0.1, b / 2, 0.1});  // 3 anchors
+    CoupledInput in;
+    in.n_nodes = aBase + 3; in.vertices = V; in.triangles = Tr;
+    in.shell_young = E; in.shell_poisson = nu; in.thickness = t;
+    for (int rn : root) { Coupling cp; cp.ref_node = rn; cp.solid_nodes = {aBase, aBase + 1, aBase + 2}; in.couplings.push_back(cp); }
+    for (int aa = 0; aa < 3; ++aa) {
+        in.fixed_dofs.push_back(6 * (aBase + aa) + 0);
+        in.fixed_dofs.push_back(6 * (aBase + aa) + 1);
+        in.prescribed_dofs.emplace_back(6 * (aBase + aa) + 2, delta);  // the drive
+    }
+    ShellResult r = solve_solid_shell_core(in);
+    double w = 0.0;
+    for (int j = 0; j <= ny; ++j) w += r.dofs[6 * static_cast<size_t>(id(nx, j)) + 2];
+    return w / (ny + 1);
+}
+
+// A prescribed DOF on a distributing-coupling REFERENCE node is refused for the
+// same reason a fixed one is (issue #377): the coupling already governs that
+// node's motion, so the drive could only be dropped silently. Same model as
+// coupled_fixed_dependent_throws, with the offending constraint driven instead
+// of clamped.
+bool coupled_prescribed_dependent_throws() {
+    const double L = 2.0, b = 0.3, t = 0.01, E = 2.1e11, nu = 0.3;
+    const int nx = 8, ny = 2;
+    auto id = [&](int i, int j) { return i * (ny + 1) + j; };
+    std::vector<double> V; std::vector<int> Tr; std::vector<int> root;
+    for (int i = 0; i <= nx; ++i)
+        for (int j = 0; j <= ny; ++j) { V.push_back(L * i / nx); V.push_back(b * j / ny); V.push_back(0); }
+    for (int i = 0; i < nx; ++i)
+        for (int j = 0; j < ny; ++j) {
+            const int a = id(i,j), c = id(i+1,j), d = id(i+1,j+1), e = id(i,j+1);
+            Tr.push_back(a); Tr.push_back(c); Tr.push_back(d); Tr.push_back(a); Tr.push_back(d); Tr.push_back(e);
+        }
+    for (int j = 0; j <= ny; ++j) root.push_back(id(0, j));
+    const int aBase = (nx + 1) * (ny + 1);
+    V.insert(V.end(), {-0.1, 0.0, 0.0,  -0.1, b, 0.0,  -0.1, b / 2, 0.1});
+    CoupledInput in;
+    in.n_nodes = aBase + 3; in.vertices = V; in.triangles = Tr;
+    in.shell_young = E; in.shell_poisson = nu; in.thickness = t;
+    for (int rn : root) { Coupling cp; cp.ref_node = rn; cp.solid_nodes = {aBase, aBase + 1, aBase + 2}; in.couplings.push_back(cp); }
+    for (int aa = 0; aa < 3; ++aa) for (int c = 0; c < 3; ++c) in.fixed_dofs.push_back(6 * (aBase + aa) + c);
+    in.prescribed_dofs.emplace_back(6 * root[0] + 0, 1e-3);
+    try {
+        solve_solid_shell_core(in);
+    } catch (const std::exception&) {
+        return true;
+    }
+    return false;
+}
+
+// Two different prescribed values on one DOF is a contradiction, not a
+// precedence question — the core must say so rather than pick.
+bool shell_conflicting_prescribed_throws() {
+    std::vector<double> V; std::vector<int> T;
+    plate_mesh(1.0, 2, V, T);
+    ShellInput in;
+    in.vertices = V; in.triangles = T; in.thickness = 0.01; in.young = 1e7; in.poisson = 0.3;
+    for (int nd = 0; nd < 9; ++nd) for (int c = 0; c < 6; ++c) in.fixed_dofs.push_back(6 * nd + c);
+    in.prescribed_dofs.emplace_back(6 * 4 + 2, 1e-3);
+    in.prescribed_dofs.emplace_back(6 * 4 + 2, 2e-3);
+    try {
+        solve_shell_core(in);
+    } catch (const std::exception&) {
+        return true;
+    }
+    return false;
+}
+
 }  // namespace
 
 int main() {
@@ -452,6 +595,39 @@ int main() {
         printf("  [%s] %-28s %s\n", threw ? "PASS" : "FAIL",
                "fixed-dof-on-dependent throws",
                threw ? "rejected as expected" : "did NOT throw");
+    }
+
+    printf("Prescribed (non-zero) Dirichlet conditions (KOF-210):\n");
+    {
+        const double delta = 1e-4, Lstrip = 1.0, bstrip = 0.25, nu_s = 0.3;
+        const StripResult pres = strip_uniaxial(true, delta);
+        const StripResult forced = strip_uniaxial(false, delta);
+        // THE DISCRIMINATOR: the prescribed edge actually reaches delta. Pinned
+        // to zero (the old behaviour on every shell path) this reads 0.
+        check(failures, "shell-prescribed-extension", pres.ux_end, delta, 0.01);
+        // The Poisson contraction is a SOLVED unknown on the driven edge, so it
+        // also proves the edge was not over-constrained into a full clamp.
+        check(failures, "shell-prescribed-poisson", pres.uy_side,
+              -nu_s * (delta / Lstrip) * bstrip, 0.1);
+        // Displacement drive and the equivalent force drive are the same
+        // boundary-value problem — they agree only if the known column
+        // contribution K[:,p]*g really moved onto the right-hand side.
+        check(failures, "shell-prescribed-vs-force", pres.ux_end, forced.ux_end, 0.01);
+    }
+    {
+        const double delta = 1e-3;
+        check(failures, "coupled-prescribed-rigid",
+              coupled_prescribed_rigid_translation(delta), delta, 0.01);
+        const bool threw = coupled_prescribed_dependent_throws();
+        if (!threw) ++failures;
+        printf("  [%s] %-28s %s\n", threw ? "PASS" : "FAIL",
+               "prescribed-on-dependent throws",
+               threw ? "rejected as expected" : "did NOT throw");
+        const bool conflict = shell_conflicting_prescribed_throws();
+        if (!conflict) ++failures;
+        printf("  [%s] %-28s %s\n", conflict ? "PASS" : "FAIL",
+               "conflicting prescribed throws",
+               conflict ? "rejected as expected" : "did NOT throw");
     }
 
     printf(failures != 0 ? "\n%d check(s) FAILED\n" : "\nall checks passed\n", failures);

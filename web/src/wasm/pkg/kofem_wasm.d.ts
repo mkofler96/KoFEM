@@ -104,9 +104,11 @@ export interface KofemModule {
   ): StaticSolveResult
   /** Kirchhoff flat-facet shell solve on a triangle surface mesh. `mat_json` is
    *  `{ young_modulus, poisson_ratio, thickness }`; `bcs_json` is
-   *  `{ fixed_vertices?, fixed_dofs?, point_loads? }` with DOF components
-   *  0..5 = (u,v,w,θx,θy,θz). Returns three translations per node plus one von
-   *  Mises surface stress per triangle. */
+   *  `{ fixed_vertices?, fixed_dofs?, prescribed_dofs?, point_loads? }` with DOF
+   *  components 0..5 = (u,v,w,θx,θy,θz). `fixed_*` always mean u = 0;
+   *  `prescribed_dofs: [{vertex, dof, value}]` drives a DOF to a non-zero value
+   *  (inhomogeneous essential BC). Returns three translations per node plus one
+   *  von Mises surface stress per triangle. */
   solve_shell(
     mesh: ShellMesh,
     mat_json: string,
@@ -128,7 +130,10 @@ export interface KofemModule {
    *             shared ψ ∈ [0.5,1] used by the MPC couplings. dof_mask[k] selects
    *             which of a kinematic coupling's six DOFs are tied (bits 0..5,
    *             all six when absent).
-   *   bcs:      { fixed_dofs, load_dofs, load_vals }  (DOF = 6·node+component)
+   *   bcs:      { fixed_dofs, load_dofs, load_vals, prescribed_dofs?,
+   *               prescribed_vals? }  (DOF = 6·node+component). fixed_dofs are
+   *               constrained to ZERO; prescribed_dofs[k] is driven to
+   *               prescribed_vals[k] (inhomogeneous essential BC).
    *   mat_json: { solid, shell:{young_modulus,poisson_ratio} } — `solid` is
    *             either one material object (every tet uses it) or an ARRAY of
    *             materials selected per tet by `mesh.attributes`. The shell side
@@ -149,7 +154,13 @@ export interface KofemModule {
       dof_mask?: Int32Array
       relaxation?: number
     },
-    bcs: { fixed_dofs: Int32Array; load_dofs: Int32Array; load_vals: Float64Array },
+    bcs: {
+      fixed_dofs: Int32Array
+      load_dofs: Int32Array
+      load_vals: Float64Array
+      prescribed_dofs?: Int32Array
+      prescribed_vals?: Float64Array
+    },
     mat_json: string,
   ):
     | {

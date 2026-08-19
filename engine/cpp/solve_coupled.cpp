@@ -187,16 +187,29 @@ val solve_coupled(const val& mesh, const val& coupling, const val& bcs,
     }
 
     in.fixed_dofs = i32_vector(bcs["fixed_dofs"], "bcs.fixed_dofs");
+    // Inhomogeneous essential BCs: prescribed_dofs[k] is driven to
+    // prescribed_vals[k]. Optional — a model with none omits both.
+    val pdofs_js = bcs["prescribed_dofs"];
+    if (!pdofs_js.isUndefined() && !pdofs_js.isNull()) {
+        std::vector<int> pdofs = i32_vector(pdofs_js, "bcs.prescribed_dofs");
+        std::vector<double> pvals = f64_vector(bcs["prescribed_vals"], "bcs.prescribed_vals");
+        if (pdofs.size() != pvals.size())
+            return error_result("coupled: " + std::to_string(pdofs.size()) +
+                                " bcs.prescribed_dofs but " + std::to_string(pvals.size()) +
+                                " bcs.prescribed_vals — one value per prescribed DOF");
+        for (size_t i = 0; i < pdofs.size(); ++i)
+            in.prescribed_dofs.emplace_back(pdofs[i], pvals[i]);
+    }
     std::vector<int> load_dofs = i32_vector(bcs["load_dofs"], "bcs.load_dofs");
     std::vector<double> load_vals = f64_vector(bcs["load_vals"], "bcs.load_vals");
     for (size_t i = 0; i < load_dofs.size(); ++i)
         in.loads.emplace_back(load_dofs[i], load_vals[i]);
 
     printf("[coupled] solid %zu tets (%zu material%s), shell %zu tris, %zu couplings, "
-           "%zu fixed, %zu loads\n",
+           "%zu fixed, %zu prescribed, %zu loads\n",
            tets.size() / 4, solidE.size(), solidE.size() == 1 ? "" : "s",
            in.triangles.size() / 3, in.couplings.size(), in.fixed_dofs.size(),
-           in.loads.size());
+           in.prescribed_dofs.size(), in.loads.size());
     fflush(stdout);
 
     try {

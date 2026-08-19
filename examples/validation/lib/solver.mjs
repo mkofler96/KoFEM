@@ -35,15 +35,7 @@ const pkg = join(here, "../../../web/src/wasm/pkg");
  * Returns { displacements:number[] (3/node), von_mises:number[] (1/elem) }.
  */
 export async function loadSolver() {
-  const wasmBinary = readFileSync(join(pkg, "kofem_wasm_emcc.wasm")).buffer;
-  const { default: createModule } = await import(
-    join(pkg, "kofem_wasm_emcc.js")
-  );
-  const Module = await createModule({
-    wasmBinary,
-    print: () => {},
-    printErr: () => {},
-  });
+  const Module = await loadModule();
 
   return function solve(mesh, material, bcs, order = 1) {
     // The engine takes the mesh as flat typed arrays (issue #166); the
@@ -69,6 +61,55 @@ export async function loadSolver() {
     );
     if ("error" in result) throw new Error(result.error);
     // Plain arrays keep the documented number[] contract for the cases.
+    return {
+      displacements: Array.from(result.displacements),
+      von_mises: Array.from(result.von_mises),
+    };
+  };
+}
+
+// The raw Emscripten module, shared by the solve wrappers below.
+async function loadModule() {
+  const wasmBinary = readFileSync(join(pkg, "kofem_wasm_emcc.wasm")).buffer;
+  const { default: createModule } = await import(
+    join(pkg, "kofem_wasm_emcc.js")
+  );
+  return createModule({ wasmBinary, print: () => {}, printErr: () => {} });
+}
+
+/**
+ * Initialise the engine and return a solveShell() closure over the Kirchhoff
+ * flat-facet shell entry point (solve_shell). Same nested-tuple → typed-array
+ * flattening as loadSolver, for the shell's triangle surface mesh:
+ *   mesh:     { vertices:[[x,y,z]...], triangles:[[a,b,c]...],
+ *               thicknesses?:[t...] }   (per-facet thickness)
+ *   material: { young_modulus, poisson_ratio, thickness }
+ *   bcs:      { fixed_vertices:[v...],
+ *               fixed_dofs:[{vertex, dofs:[0..5,...]}...],       // u = 0
+ *               prescribed_dofs:[{vertex, dof:0..5, value}...],  // u = value
+ *               point_loads:[{vertex, force:[fx,fy,fz], moment?:[mx,my,mz]}...] }
+ * Shell DOF components are 0..5 = (u,v,w,θx,θy,θz).
+ * Returns { displacements:number[] (3/node), von_mises:number[] (1/triangle) }.
+ */
+export async function loadShellSolver() {
+  const Module = await loadModule();
+
+  return function solveShell(mesh, material, bcs) {
+    const result = Module.solve_shell(
+      {
+        vertices: Float64Array.from(mesh.vertices.flat()),
+        triangles: Int32Array.from(mesh.triangles.flat()),
+        thicknesses: Float64Array.from(mesh.thicknesses ?? []),
+      },
+      JSON.stringify(material),
+      JSON.stringify({
+        fixed_vertices: bcs.fixed_vertices ?? [],
+        fixed_dofs: bcs.fixed_dofs ?? [],
+        prescribed_dofs: bcs.prescribed_dofs ?? [],
+        point_loads: bcs.point_loads ?? [],
+      }),
+    );
+    if ("error" in result) throw new Error(result.error);
     return {
       displacements: Array.from(result.displacements),
       von_mises: Array.from(result.von_mises),
