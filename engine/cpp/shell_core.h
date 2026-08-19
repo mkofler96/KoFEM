@@ -37,6 +37,10 @@ struct ShellInput {
     double young = 0.0;             // Young's modulus E
     double poisson = 0.0;           // Poisson ratio ν
     std::vector<int> fixed_dofs;    // global DOF indices constrained to zero
+    // Global DOF index → prescribed value: an INHOMOGENEOUS essential BC (u = g),
+    // eliminated alongside fixed_dofs rather than instead of it. A DOF listed in
+    // both takes the prescribed value; two conflicting values for one DOF throw.
+    std::vector<std::pair<int, double>> prescribed_dofs;
     std::vector<std::pair<int, double>> loads;  // global DOF index → force/moment
 };
 
@@ -148,6 +152,10 @@ struct CoupledInput {
     std::vector<double> thicknesses;     // optional per-triangle thickness
     std::vector<Coupling> couplings;
     std::vector<int> fixed_dofs;         // global DOF (6·node+comp) fixed to zero
+    // Global DOF → prescribed value (inhomogeneous essential BC), as ShellInput.
+    // A prescribed DOF must be INDEPENDENT: like a fixed one, it cannot sit on a
+    // coupling-dependent node, whose motion the reduction already governs.
+    std::vector<std::pair<int, double>> prescribed_dofs;
     std::vector<std::pair<int, double>> loads;  // global DOF → force/moment
 };
 

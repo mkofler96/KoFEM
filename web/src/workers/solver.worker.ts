@@ -852,22 +852,27 @@ function resolveShellSection(
 // Essential BCs for the shell solve. Shell nodes carry six DOFs
 // (u,v,w,θx,θy,θz), so rotational constraints are honoured — unlike the solid
 // path, which drops them as stiffness-free. A node with all six DOFs fixed
-// becomes a fixed_vertices entry, anything partial a fixed_dofs entry. The
-// shell solver has no inhomogeneous essential BCs, so a non-zero prescribed
-// displacement is a loud error, not a silent pin-to-zero.
+// becomes a fixed_vertices entry, anything partial a fixed_dofs entry.
+//
+// A non-zero prescribed displacement (or rotation) is split off into
+// prescribed_dofs exactly as groupDirichlet does for the solid path: the
+// fixed_* sets always mean u = 0, so folding a driven DOF into them would pin
+// away the value the user asked for (KOF-210).
 function shellDirichlet(constraints: Constraint[], vid: VertexIndexer) {
   const dofsByVertex = new Map<number, Set<number>>();
+  const prescribed_dofs: { vertex: number; dof: number; value: number }[] = [];
   for (const c of constraints) {
     if (c.dof < 0 || c.dof > 5)
       throw new Error(
         `shell solve: constraint on node ${c.nodeId} names DOF ${c.dof} — valid shell DOFs are 0..5`,
       );
-    // eslint-disable-next-line kofem/no-silent-fallback -- a constraint without prescribedValue is a homogeneous fixed BC, i.e. u = 0 by definition
-    if ((c.prescribedValue ?? 0) !== 0)
-      throw new Error(
-        "shell solve: prescribed (non-zero) displacements are not supported for shell models yet",
-      );
     const vertex = vid(c.nodeId, "constraint");
+    // eslint-disable-next-line kofem/no-silent-fallback -- a constraint without prescribedValue is a homogeneous fixed BC, i.e. u = 0 by definition
+    const value = c.prescribedValue ?? 0;
+    if (value !== 0) {
+      prescribed_dofs.push({ vertex, dof: c.dof, value });
+      continue;
+    }
     let dofs = dofsByVertex.get(vertex);
     if (!dofs) {
       dofs = new Set();
@@ -881,7 +886,7 @@ function shellDirichlet(constraints: Constraint[], vid: VertexIndexer) {
     if (dofSet.size === 6) fixed_vertices.push(vertex);
     else fixed_dofs.push({ vertex, dofs: [...dofSet].sort((a, b) => a - b) });
   }
-  return { fixed_vertices, fixed_dofs };
+  return { fixed_vertices, fixed_dofs, prescribed_dofs };
 }
 
 type ShellNodalLoad = {
@@ -1069,7 +1074,10 @@ function handleShellSolve(id: number, payload: SolvePayload) {
     materials,
     properties,
   );
-  const { fixed_vertices, fixed_dofs } = shellDirichlet(constraints, vid);
+  const { fixed_vertices, fixed_dofs, prescribed_dofs } = shellDirichlet(
+    constraints,
+    vid,
+  );
   const posOf = (nodeId: number): [number, number, number] => {
     const vi = vid(nodeId, "surface load face");
     return [vertices[3 * vi], vertices[3 * vi + 1], vertices[3 * vi + 2]];
@@ -1083,7 +1091,12 @@ function handleShellSolve(id: number, payload: SolvePayload) {
   const result = m().solve_shell(
     { vertices, triangles, thicknesses },
     JSON.stringify({ young_modulus: young, poisson_ratio: poisson }),
-    JSON.stringify({ fixed_vertices, fixed_dofs, point_loads }),
+    JSON.stringify({
+      fixed_vertices,
+      fixed_dofs,
+      prescribed_dofs,
+      point_loads,
+    }),
   );
   if ("error" in result) throw new Error(result.error);
 
@@ -1213,29 +1226,55 @@ function coupledMaterials(
 // bolted connection is stated. Everywhere else a rotational constraint is still
 // dropped: the shell nodes take their rotational clamp from the all-three-
 // translations rule below, and a solid node has no rotational DOF to restrain.
+//
+// A non-zero prescribed value leaves through `prescribed_dofs`/`prescribed_vals`
+// (the coupled engine's inhomogeneous essential BCs), never through fixed_dofs,
+// which always mean u = 0 (KOF-210). A driven node is NOT given the
+// all-translations-clamped rotational treatment: a face pulled to a displacement
+// is not thereby built in, and clamping its rotations would over-stiffen it.
 function coupledFixedDofs(
   constraints: Constraint[],
   poolOf: (nodeId: number) => number,
   isShell: (poolIndex: number) => boolean,
   isRefPoint: (poolIndex: number) => boolean,
-): number[] {
+): {
+  fixed_dofs: number[];
+  prescribed_dofs: number[];
+  prescribed_vals: number[];
+} {
   const fixedByPool = new Map<number, Set<number>>();
+  const drivenPools = new Set<number>();
+  const prescribed = new Map<number, number>();
   for (const c of constraints) {
-    // The coupled assembler's essential BCs are homogeneous — shell_core's
-    // ShellInput.fixed_dofs are "constrained to zero", with no inhomogeneous
-    // counterpart to the solid path's prescribed_dofs. A non-zero prescribed
-    // displacement used to be pinned to zero here without a word, which turns a
-    // displacement-driven model into an unloaded one and returns an all-zero
-    // field that looks like a converged answer (KOF-216).
-    // eslint-disable-next-line kofem/no-silent-fallback -- a constraint without prescribedValue is a homogeneous fixed BC, i.e. u = 0 by definition
-    if ((c.prescribedValue ?? 0) !== 0)
-      throw new Error(
-        "Prescribed (non-zero) displacements are not supported on the coupled shell/solid " +
-          `path yet: node ${c.nodeId} prescribes ${c.prescribedValue} on DOF ${c.dof}. ` +
-          "Drive this model with a load instead, or solve it without the shell idealisation.",
-      );
     const pi = poolOf(c.nodeId);
-    if (c.dof > 2 && !isRefPoint(pi)) continue;
+    // eslint-disable-next-line kofem/no-silent-fallback -- a constraint without prescribedValue is a homogeneous fixed BC, i.e. u = 0 by definition
+    const value = c.prescribedValue ?? 0;
+    if (c.dof > 2 && !isRefPoint(pi)) {
+      // A rotational CLAMP is dropped here by design (see above), but a driven
+      // rotation has no such substitute — dropping it is the silent pin-to-zero
+      // this path was fixed for (KOF-210). Say so instead.
+      if (value !== 0)
+        throw new Error(
+          `Node ${c.nodeId} prescribes a rotation (DOF ${c.dof} = ${value}), which this ` +
+            "model has nowhere to apply: only a coupling reference point carries a " +
+            "drivable rotational DOF here. Prescribe the translations instead, or " +
+            "declare the node as a coupling reference point.",
+        );
+      continue;
+    }
+    if (value !== 0) {
+      const dof = 6 * pi + c.dof;
+      const seen = prescribed.get(dof);
+      if (seen !== undefined && seen !== value)
+        throw new Error(
+          `Node ${c.nodeId} (DOF ${c.dof}) is prescribed to two different displacements, ` +
+            `${seen} and ${value} — a DOF cannot be driven to both. Remove or merge one ` +
+            "of the boundary conditions.",
+        );
+      prescribed.set(dof, value);
+      drivenPools.add(pi);
+      continue;
+    }
     let dofs = fixedByPool.get(pi);
     if (!dofs) {
       dofs = new Set();
@@ -1245,7 +1284,12 @@ function coupledFixedDofs(
   }
   const fixed_dofs: number[] = [];
   for (const [pi, dofs] of fixedByPool) {
-    for (const d of dofs) fixed_dofs.push(6 * pi + d);
+    // A DOF driven to a value wins over a plain clamp on the same DOF, the same
+    // way the solid path's prescribed_dofs override an overlapping fixed group.
+    for (const d of dofs) {
+      if (prescribed.has(6 * pi + d)) continue;
+      fixed_dofs.push(6 * pi + d);
+    }
     // A shell node clamped in all three translations is clamped, not hinged.
     // A reference point is NOT given that treatment: its rotations are the DOFs
     // the coupled surface's rigid-body motion rides on, so fixing them because
@@ -1254,13 +1298,20 @@ function coupledFixedDofs(
     if (
       isShell(pi) &&
       !isRefPoint(pi) &&
+      !drivenPools.has(pi) &&
       dofs.has(0) &&
       dofs.has(1) &&
       dofs.has(2)
     )
       for (const d of [3, 4, 5]) fixed_dofs.push(6 * pi + d);
   }
-  return fixed_dofs;
+  const prescribed_dofs: number[] = [];
+  const prescribed_vals: number[] = [];
+  for (const [dof, value] of prescribed) {
+    prescribed_dofs.push(dof);
+    prescribed_vals.push(value);
+  }
+  return { fixed_dofs, prescribed_dofs, prescribed_vals };
 }
 
 // Point + surface loads → equivalent nodal forces on the pool.
@@ -1485,20 +1536,24 @@ function tryCoupledSolve(
   const refPoolIndices = new Set(model.refPool.values());
   const isRefPoint = (pi: number) => refPoolIndices.has(pi);
 
-  const fixed_dofs = coupledFixedDofs(
+  const { fixed_dofs, prescribed_dofs, prescribed_vals } = coupledFixedDofs(
     constraints,
     poolOf,
     (pi) => isShellPoolIndex(model, pi),
     isRefPoint,
   );
-  // A clamped shell rim can sit next to the retained base solid; the proximity
-  // detector would otherwise couple the very nodes the user fixed (engine refuses
-  // a fixed coupling-dependent node, #377). The BC wins.
+  // A clamped or DRIVEN shell rim can sit next to the retained base solid; the
+  // proximity detector would otherwise couple the very nodes the user constrained
+  // (the engine refuses a constrained coupling-dependent node, #377/KOF-210). The
+  // BC wins, for a prescribed displacement exactly as for a clamp.
   // The declared surface-to-point couplings ride on the same pool mapping as the
   // BCs: a coupled node whose thin wall was idealised away resolves to the
   // mid-surface node that replaced it, which is where its stiffness now lives.
   const coupling = concatCouplings(
-    dropCouplingsOnFixedNodes(model.coupling, fixed_dofs),
+    dropCouplingsOnFixedNodes(model.coupling, [
+      ...fixed_dofs,
+      ...prescribed_dofs,
+    ]),
     buildReferenceCouplings(couplings, (nodeId) => poolOf(nodeId)),
   );
   const { load_dofs, load_vals } = coupledLoads(
@@ -1545,6 +1600,8 @@ function tryCoupledSolve(
     },
     {
       fixed_dofs: Int32Array.from(fixed_dofs),
+      prescribed_dofs: Int32Array.from(prescribed_dofs),
+      prescribed_vals: Float64Array.from(prescribed_vals),
       load_dofs: Int32Array.from(load_dofs),
       load_vals: Float64Array.from(load_vals),
     },
@@ -1720,14 +1777,14 @@ function tryPureShellSolve(
   // all-shell model that declares a coupling is refused in handleSolve, because
   // only the coupled assembler applies one.
   const noReferencePoints: (poolIndex: number) => boolean = () => false;
-  const flatFixed = coupledFixedDofs(
+  const flat = coupledFixedDofs(
     constraints,
     shellOf,
     () => true,
     noReferencePoints,
   );
   const dofsByVertex = new Map<number, Set<number>>();
-  for (const d of flatFixed)
+  for (const d of flat.fixed_dofs)
     getOrInitDofs(dofsByVertex, Math.floor(d / 6)).add(d % 6);
   const fixed_vertices: number[] = [];
   const fixed_dofs: { vertex: number; dofs: number[] }[] = [];
@@ -1735,6 +1792,13 @@ function tryPureShellSolve(
     if (dofSet.size === 6) fixed_vertices.push(vertex);
     else fixed_dofs.push({ vertex, dofs: [...dofSet].sort((a, b) => a - b) });
   }
+  // Driven DOFs stay separate: solve_shell's fixed_* sets mean u = 0, so a
+  // prescribed value only survives as an inhomogeneous essential BC (KOF-210).
+  const prescribed_dofs = flat.prescribed_dofs.map((d, k) => ({
+    vertex: Math.floor(d / 6),
+    dof: d % 6,
+    value: flat.prescribed_vals[k],
+  }));
 
   const { load_dofs, load_vals } = coupledLoads(
     loads,
@@ -1770,7 +1834,12 @@ function tryPureShellSolve(
       thicknesses: Float64Array.from(shells.shellThk),
     },
     JSON.stringify({ young_modulus: mat.young, poisson_ratio: mat.poisson }),
-    JSON.stringify({ fixed_vertices, fixed_dofs, point_loads }),
+    JSON.stringify({
+      fixed_vertices,
+      fixed_dofs,
+      prescribed_dofs,
+      point_loads,
+    }),
   );
   if ("error" in result) throw new Error(result.error);
 
@@ -2047,17 +2116,21 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
   };
   const refPoolIndices = new Set([...refIds].map((nodeId) => poolOf(nodeId)));
   const isRefPoint = (pi: number) => refPoolIndices.has(pi);
-  const fixed_dofs = coupledFixedDofs(
+  const { fixed_dofs, prescribed_dofs, prescribed_vals } = coupledFixedDofs(
     constraints,
     poolOf,
     (pi) => model.shellPoolIndex.has(pi),
     isRefPoint,
   );
-  // A clamped shell node that also sits within coupling range of the solid would
-  // be both fixed and a distributing-coupling dependent — the engine refuses that
-  // (#377). The BC wins; drop the coupling on those nodes.
+  // A clamped or driven shell node that also sits within coupling range of the
+  // solid would be both constrained and a distributing-coupling dependent — the
+  // engine refuses that (#377/KOF-210). The BC wins; drop the coupling on those
+  // nodes.
   const coupling = concatCouplings(
-    dropCouplingsOnFixedNodes(model.coupling, fixed_dofs),
+    dropCouplingsOnFixedNodes(model.coupling, [
+      ...fixed_dofs,
+      ...prescribed_dofs,
+    ]),
     buildReferenceCouplings(couplings, (nodeId, context) => {
       const pi = model.poolOfVertex.get(vid(nodeId, context));
       if (pi === undefined)
@@ -2104,6 +2177,8 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
     },
     {
       fixed_dofs: Int32Array.from(fixed_dofs),
+      prescribed_dofs: Int32Array.from(prescribed_dofs),
+      prescribed_vals: Float64Array.from(prescribed_vals),
       load_dofs: Int32Array.from(load_dofs),
       load_vals: Float64Array.from(load_vals),
     },

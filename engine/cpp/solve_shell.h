@@ -15,8 +15,11 @@
 // object of flat typed arrays {vertices: Float64Array, triangles: Int32Array}.
 // `mat_json` is {young_modulus, poisson_ratio, thickness}. `bcs_json` is
 // {fixed_vertices?: int[], fixed_dofs?: [{vertex, dofs:int[]}],
+//  prescribed_dofs?: [{vertex, dof, value}],
 //  point_loads?: [{vertex, force:[fx,fy,fz], moment?:[mx,my,mz]}]} where DOF
-// components are 0..5 = (u,v,w,θx,θy,θz). Returns {displacements: Float64Array}
+// components are 0..5 = (u,v,w,θx,θy,θz). prescribed_dofs states an
+// INHOMOGENEOUS essential BC (u = value) — fixed_* always mean u = 0.
+// Returns {displacements: Float64Array}
 // (three translations per node, node order) or {error: string} on bad input.
 emscripten::val solve_shell(const emscripten::val& mesh,
                             const std::string& mat_json,

@@ -65,6 +65,26 @@ void add_fixed_vertices(const val& fv_js, int n_nodes, std::vector<int>& fixed) 
     }
 }
 
+// prescribed_dofs pins one component of a vertex to a NON-ZERO value — an
+// inhomogeneous Dirichlet condition (a prescribed-displacement drive, or a
+// prescribed rotation on a shell node, which carries all six DOFs). Mirrors
+// solve_linear_elastic's `prescribed_dofs` contract, extended from components
+// 0..2 to 0..5 because a shell node has rotational DOFs to prescribe.
+void add_prescribed_dofs(const val& pdofs_js, int n_nodes,
+                         std::vector<std::pair<int, double>>& prescribed) {
+    if (pdofs_js.isUndefined() || pdofs_js.isNull())
+        return;
+    unsigned n = pdofs_js["length"].as<unsigned>();
+    for (unsigned i = 0; i < n; ++i) {
+        val entry = pdofs_js[i];
+        int v = entry["vertex"].as<int>();
+        int d = entry["dof"].as<int>();
+        kofem::bc::require_valid_vertex(v, n_nodes, "add_prescribed_dofs");
+        kofem::bc::require_valid_shell_component(d, v, "add_prescribed_dofs");
+        prescribed.emplace_back(6 * v + d, entry["value"].as<double>());
+    }
+}
+
 // point_loads: force [fx,fy,fz] → DOFs 0..2, optional moment [mx,my,mz] → 3..5.
 void add_point_loads(const val& loads_js, int n_nodes,
                      std::vector<std::pair<int, double>>& loads) {
@@ -134,12 +154,13 @@ val solve_shell(const val& mesh, const std::string& mat_json, const std::string&
     val bcs = parse_json(bcs_json);
     add_fixed_vertices(bcs["fixed_vertices"], n_nodes, in.fixed_dofs);
     add_fixed_dofs(bcs["fixed_dofs"], n_nodes, in.fixed_dofs);
+    add_prescribed_dofs(bcs["prescribed_dofs"], n_nodes, in.prescribed_dofs);
     add_point_loads(bcs["point_loads"], n_nodes, in.loads);
 
     printf("[shell] solve: %d nodes, %d triangles, t=%g, E=%g, nu=%g; "
-           "%zu fixed DOFs, %zu loads\n",
+           "%zu fixed DOFs, %zu prescribed DOFs, %zu loads\n",
            n_nodes, (int)(in.triangles.size() / 3), in.thickness, in.young,
-           in.poisson, in.fixed_dofs.size(), in.loads.size());
+           in.poisson, in.fixed_dofs.size(), in.prescribed_dofs.size(), in.loads.size());
     fflush(stdout);
 
     kofem::shell::ShellResult r;

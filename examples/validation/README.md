@@ -82,3 +82,26 @@ node examples/validation/prescribed-displacement.test.mjs
 Like the single-DOF test, this needs the `prescribed_dofs` support compiled into
 `engine/cpp/engine.cpp`, so it only passes against a **freshly built** WASM and
 fails on purpose on the committed binary until `scripts/build-wasm.sh` runs.
+
+## `shell-prescribed-displacement.test.mjs` — non-zero Dirichlet on shells
+
+The shell counterpart of the test above, guarding KOF-210. The solid path got
+inhomogeneous Dirichlet conditions from MFEM; the shell formulation's boundary
+conditions were homogeneous-only, so a prescribed displacement on a shell model
+either refused to run or — on the auto-shell and coupled paths — silently pinned
+the value to zero and returned an all-zero field that looks converged. Thin
+walls become shells automatically at mesh time, so this was easy to hit without
+choosing a shell idealisation.
+
+A flat strip is stretched in its own plane by a prescribed edge displacement,
+with **no applied load**. The driven edge must reach ux ≈ δ, midspan must land
+on the linear field δ/2, and the driven edge must still contract under Poisson's
+effect — proving it was driven, not clamped.
+
+```bash
+node examples/validation/shell-prescribed-displacement.test.mjs
+```
+
+The element math behind it is also covered natively, without a WASM build, by
+`bash scripts/test-shell.sh` (the `shell-prescribed-*` and `coupled-prescribed-*`
+checks in `engine/tests/shell_validation.cpp`).
