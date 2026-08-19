@@ -74,7 +74,7 @@ ShellResult solve_shell_core(const ShellInput& in);
 //                   Adds no stiffness to the coupled set, so it idealises a
 //                   surface to a point without making the surface rigid — but
 //                   the point cannot be fixed or driven, only loaded.
-//   RelaxedMpc    — the shell-to-solid seam variant of Distributing (see below).
+//   RelaxedMpc    — the shell-to-solid seam variant of Distributing (see `kind`).
 //   Kinematic     — RBE2. The other way round: solid_nodes are DEPENDENT and
 //                   follow ref_node as a rigid body, u_i = u_R + θ_R × r_i. The
 //                   point is INDEPENDENT, so it can be fixed, loaded, or tied to
@@ -90,9 +90,11 @@ struct Coupling {
     int ref_node = -1;                   // shell node whose 6 DOFs are dependent
     std::vector<int> solid_nodes;        // solid nodes it distributes to
     std::vector<double> weights;         // per solid node (empty ⇒ equal weights)
-    // Relaxed shell-to-solid MPC (Lu, Zhang & Yang, "A Relaxed MPC Method for
-    // Non-rigid Shell to Solid Coupling", J. Phys.: Conf. Ser. 2528 012064, 2023).
-    // When true, the reference (shell) node's translations are tied to the
+    // Which formulation ties this coupling — the single source of truth for it.
+    //
+    // RelaxedMpc is the relaxed shell-to-solid MPC of Lu, Zhang & Yang ("A Relaxed
+    // MPC Method for Non-rigid Shell to Solid Coupling", J. Phys.: Conf. Ser. 2528
+    // 012064, 2023): the reference (shell) node's translations are tied to the
     // DISTANCE-WEIGHTED CENTROID of its solid patch, and its rotations follow the
     // relaxation-scaled least-squares rotation of that patch. The 1/(d²+ε²) weight
     // keeps the tie local, so it enforces displacement CONTINUITY at the junction —
@@ -110,12 +112,11 @@ struct Coupling {
     // and recovers the paper's tie.
     //
     // Appropriate for a continuous-material seam (a thin wall idealised as shell,
-    // tied back to the retained solid); the distributing coupling (mpc = false)
-    // stays for genuinely gapped, non-conforming interfaces (a pin in a hole).
-    bool mpc = false;
-    double relaxation = 1.0;  // ψ scaling the rotation transfer; paper uses [0.5, 1]
-
+    // tied back to the retained solid); Distributing stays for genuinely gapped,
+    // non-conforming interfaces (a pin in a hole).
     CouplingKind kind = CouplingKind::Distributing;
+    double relaxation = 1.0;  // RelaxedMpc only: ψ scaling the rotation transfer; paper uses [0.5, 1]
+
     // Kinematic only. A rotation bit ties θ_i = θ_R, which only exists where the
     // coupled node carries rotational stiffness — on a solid-only node there is
     // no rotation DOF to tie and the bit has no effect. Selecting the
