@@ -225,6 +225,14 @@ function solve(model) {
       load_vals.push(-1000 / ns.length);
     }
   }
+  // Resultant of what is actually handed to the engine. Splitting each face's
+  // 1000 N over "the nodes still in the solid pool" is only −2000 N in total if
+  // none were lost — a node that fell out (shelled away, merged) would silently
+  // reduce the load rather than fail. The engine accumulates (F[dof] += val), so
+  // a duplicated DOF would double its share instead of overwriting it.
+  const resultant = [0, 0, 0];
+  for (let i = 0; i < load_dofs.length; i++)
+    resultant[load_dofs[i] % 6] += load_vals[i];
 
   const coupling = dropCouplingsOnFixedNodes(model.coupling, fixed);
   const result = Module.solve_coupled(
@@ -247,7 +255,7 @@ function solve(model) {
     },
     JSON.stringify({ solid: STEEL, shell: STEEL }),
   );
-  if ("error" in result) return { ok: false, error: result.error };
+  if ("error" in result) return { ok: false, error: result.error, resultant };
   let maxU = 0;
   const disp = result.displacements;
   for (let i = 0; i < model.pool.length / 3; i++)
@@ -259,6 +267,9 @@ function solve(model) {
     ok: true,
     iterations: result.iterations,
     maxU,
+    resultant,
+    nLoads: load_dofs.length,
+    distinctLoadDofs: new Set(load_dofs).size,
     vmSolid: Math.max(0, ...result.von_mises_tets),
     vmShell: Math.max(0, ...result.von_mises_tris),
   };
@@ -267,6 +278,20 @@ function solve(model) {
 // ── 3. Solve: tied converges, untied does not ─────────────────────────────────
 console.log("\nsolve:");
 const tiedResult = solve(tied);
+// 1000 N down on each of the two hook faces. Checked before the result is read:
+// a load that never reached −2000 N makes every displacement and stress below
+// meaningless, however plausible the numbers look.
+const [Fx, Fy, Fz] = tiedResult.resultant;
+check(
+  "the applied load resultant is −2000 N in Y",
+  Math.abs(Fy + 2000) < 1e-6 && Math.abs(Fx) < 1e-9 && Math.abs(Fz) < 1e-9,
+  `Fx=${Fx} Fy=${Fy} Fz=${Fz}`,
+);
+check(
+  "each loaded node is loaded once",
+  tiedResult.nLoads === tiedResult.distinctLoadDofs,
+  `${tiedResult.nLoads} load entries on ${tiedResult.distinctLoadDofs} distinct DOFs`,
+);
 check(
   "the tied assembly converges",
   tiedResult.ok,
