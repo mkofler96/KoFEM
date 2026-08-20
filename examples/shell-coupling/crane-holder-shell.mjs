@@ -17,7 +17,7 @@
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { loadEngine, meshStep, extractThinWallShells, shellWallTets, buildCoupledModel, dropCouplingsOnFixedNodes } from "./lib.mjs";
+import { loadEngine, meshStep, extractThinWallShells, shellWallTets, buildCoupledModel, dropCouplingsOnFixedNodes, surfaceVertices } from "./lib.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const STEP = join(here, "../../test_files/full-crane-hook.step");
@@ -40,10 +40,6 @@ const LOAD_FACES = { 66: [0, -1000, 0], 67: [0, -1000, 0] };
 const TIE_HOOK_FACE = 65;
 const TIE_PIN_BODY = 2;
 const TIE_CLEARANCE = 3.0; // mm — measured pin/eye gap is ~2.5 mm
-
-// A tet's four faces, and the order-independent key that identifies one.
-const TET_FACES = [[0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3]];
-const faceKey = (a, b, c) => [a, b, c].sort((x, y) => x - y).join(",");
 
 const vtuArg = process.argv.indexOf("--vtu");
 const vtuPath = vtuArg >= 0 ? process.argv[vtuArg + 1] : null;
@@ -70,19 +66,10 @@ const wallTets = shellWallTets(mesh, shells);
 // The holder and pin are meshed conformally; the hook is its own body across a
 // clearance, so it is tied explicitly. A gapped pin/eye interface becomes a
 // force-and-moment tie, not a sparse hinge.
-const owningBody = new Map();
-for (let e = 0; e < mesh.tet.length / 4; e++) {
-  const p = [mesh.tet[4 * e], mesh.tet[4 * e + 1], mesh.tet[4 * e + 2], mesh.tet[4 * e + 3]];
-  for (const f of TET_FACES) owningBody.set(faceKey(p[f[0]], p[f[1]], p[f[2]]), mesh.body[e]);
-}
-const pinVerts = new Set(), hookVerts = new Set();
-for (let t = 0; t < mesh.surfFace.length; t++) {
-  const tri = [mesh.surfTri[3 * t], mesh.surfTri[3 * t + 1], mesh.surfTri[3 * t + 2]];
-  if (owningBody.get(faceKey(...tri)) === TIE_PIN_BODY) for (const v of tri) pinVerts.add(v);
-  if (mesh.surfFace[t] === TIE_HOOK_FACE) for (const v of tri) hookVerts.add(v);
-}
-if (pinVerts.size === 0 || hookVerts.size === 0)
-  throw new Error(`pin/hook tie found no surface (pin body ${TIE_PIN_BODY}: ${pinVerts.size} verts, hook face ${TIE_HOOK_FACE}: ${hookVerts.size}) — check the body/face ids`);
+const { byBody, byFace } = surfaceVertices(mesh);
+const pinVerts = byBody.get(TIE_PIN_BODY), hookVerts = byFace.get(TIE_HOOK_FACE);
+if (!pinVerts?.size || !hookVerts?.size)
+  throw new Error(`pin/hook tie found no surface (pin body ${TIE_PIN_BODY}: ${pinVerts?.size ?? 0} verts, hook face ${TIE_HOOK_FACE}: ${hookVerts?.size ?? 0}) — check the body/face ids`);
 const ties = [{ verticesA: [...pinVerts], verticesB: [...hookVerts], maxSeparation: TIE_CLEARANCE }];
 const model = buildCoupledModel(mesh, shells, wallTets, { ties });
 const nSolid = model.solidPool.size, nShell = model.shellPool.length;
