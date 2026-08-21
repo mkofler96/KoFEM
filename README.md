@@ -6,7 +6,38 @@
 
 KoFEM is Finite element analysis tool made to run in your browser, without installation and without sending data to any server or cloud. It runs the full pipeline — **STEP geometry → OCCT tessellation → Netgen
 volume mesh → MFEM FEM solve** — directly in the browser via a C++ engine
-compiled to WebAssembly, with a React + Three.js frontend. The software can be launched from the official website [kofem.org](https://kofem.org/) or run locally via docker.
+compiled to WebAssembly, with a React + Three.js frontend. Thin-walled bodies
+take a shell path instead of tetrahedra, and assemblies can mix the two. The software can be launched from the official website [kofem.org](https://kofem.org/) or run locally via docker.
+
+## Features
+
+- **CAD import** — STEP and IGES, single parts as well as multibody assemblies.
+- **Meshing** — Netgen tetrahedral meshing straight from the CAD topology. The
+  default element size is derived from the imported geometry rather than a fixed
+  number, so a 1 mm cube and a 1 m bracket both come out sensibly meshed.
+- **Shells** — thin-walled bodies are detected at mesh time from their wall
+  thickness, collapsed to a mid-surface `CTRIA3` mesh and solved with Kirchhoff /
+  DKT plate elements. The detection can be switched off, its thickness ratio
+  tuned, and the element type (shell or solid) set per body.
+- **Multibody assemblies** — one material per body, bonded ties between bodies,
+  and explicit **RBE3** coupling at shell-to-solid interfaces. Mixed
+  `CTRIA3` + `CTETRA` models are solved by the coupled solver.
+- **Surface-to-point couplings** — a picked surface is idealised to a single
+  reference point, so a bolt, bearing or pin acts through the one point it acts
+  through instead of being smeared over the nodes of a hole. Both
+  **distributing (RBE3)** and **kinematic (RBE2)** kinds, the latter with a
+  selectable DOF mask.
+- **Boundary conditions and loads** — pick faces, edges or nodes in the viewport;
+  fix DOFs or prescribe non-zero displacements (solid and shell alike), and apply
+  forces, moments or pressures to a selection.
+- **Solve** — linear-elastic small-displacement analysis with MFEM: a solid path,
+  a pure-shell path, and a coupled shell/solid path.
+- **Results** — displacement magnitude, `Ux`/`Uy`/`Uz` and von Mises stress on the
+  deformed shape, with a scalable deformation and a colorbar whose limits can be
+  clamped by hand to compare load cases on one scale.
+- **Save and share** — the complete analysis (mesh, materials, BCs, loads,
+  results, view state) is stored in a single `.vtu` file that also opens directly
+  in ParaView, VisIt or meshio.
 
 ## Examples
 
@@ -16,6 +47,13 @@ Click here to view this example on KoFEM web [Plate with Hole](https://kofem.org
 
 ![](web/screenshots/beam-torsion_screenshot.png)
 Click here to view this example on KoFEM web [Beam Torsion](https://kofem.org/app/?example=beam-torsion)
+
+The gallery also carries the shell and multibody cases:
+[Plate with a hole — shells](https://kofem.org/app/?example=plate-with-hole-shell)
+solves the same plate with Kirchhoff shell elements, and
+[Crane hook — coupled shell + solid](https://kofem.org/app/?example=crane-hook-shell)
+is a three-body assembly with per-body materials, a shell-idealised holder, and
+the pin tied into the hook's bore by an RBE3 coupling.
 
 For more examples visit [KoFEM Examples](https://kofem.org/examples/)
 
