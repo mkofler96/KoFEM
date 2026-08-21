@@ -55,6 +55,31 @@ export function meshStep(Module, stepPath, { maxElementSize = 6 } = {}) {
 
 const pt = (V, i) => [V[3 * i], V[3 * i + 1], V[3 * i + 2]];
 const TET_FACES = [[0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3]];
+/** Order-independent key identifying one triangular face by its vertices. */
+const faceKey = (a, b, c) => [a, b, c].sort((x, y) => x - y).join(",");
+
+/**
+ * Surface vertices of a meshed assembly, grouped by the body that owns them and
+ * by CAD face id — the two ways a tie connection names a surface (a body picked
+ * in the model tree, a face picked in the viewport). Vertex indices are into
+ * `mesh.V`, which is what `buildCoupledModel`'s `ties` expect.
+ */
+export function surfaceVertices(mesh) {
+  const owner = new Map();
+  for (let e = 0; e < mesh.tet.length / 4; e++) {
+    const p = [mesh.tet[4 * e], mesh.tet[4 * e + 1], mesh.tet[4 * e + 2], mesh.tet[4 * e + 3]];
+    for (const f of TET_FACES) owner.set(faceKey(p[f[0]], p[f[1]], p[f[2]]), mesh.body[e]);
+  }
+  const byBody = new Map(), byFace = new Map();
+  const bucket = (m, k) => m.get(k) ?? m.set(k, new Set()).get(k);
+  for (let t = 0; t < mesh.surfFace.length; t++) {
+    const tri = [mesh.surfTri[3 * t], mesh.surfTri[3 * t + 1], mesh.surfTri[3 * t + 2]];
+    const b = bucket(byBody, owner.get(faceKey(...tri)));
+    const f = bucket(byFace, mesh.surfFace[t]);
+    for (const v of tri) { b.add(v); f.add(v); }
+  }
+  return { byBody, byFace };
+}
 
 // Squared distance from a point to a triangle (Ericson, Real-Time Collision
 // Detection §5.1.5). Mirrors web/src/lib/shellize.ts.

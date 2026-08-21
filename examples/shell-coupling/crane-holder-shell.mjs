@@ -17,7 +17,7 @@
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { loadEngine, meshStep, extractThinWallShells, shellWallTets, buildCoupledModel, dropCouplingsOnFixedNodes } from "./lib.mjs";
+import { loadEngine, meshStep, extractThinWallShells, shellWallTets, buildCoupledModel, dropCouplingsOnFixedNodes, surfaceVertices } from "./lib.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const STEP = join(here, "../../test_files/full-crane-hook.step");
@@ -29,6 +29,17 @@ const STEEL = { young_modulus: 210000, poisson_ratio: 0.3 }; // MPa
 // web/public/examples/full-crane-hook.vtu.
 const BC_FIXED_FACE = 7;
 const LOAD_FACES = { 66: [0, -1000, 0], 67: [0, -1000, 0] };
+
+// The hook hangs from the pin through a clearance fit: face 65 is the hook eye,
+// the pin is body 2. Netgen meshes the two bodies independently, so in the raw
+// mesh they touch at exactly TWO coincidental nodes — a hinge free to rotate
+// about the line through them, not a joint. Until #417 that tie was detected
+// automatically; it is now declared by the caller, so name it here. Without it
+// the hook is a mechanism, the load has a component in the null space of K, and
+// the solve diverges into a CG breakdown (KOF-214).
+const TIE_HOOK_FACE = 65;
+const TIE_PIN_BODY = 2;
+const TIE_CLEARANCE = 3.0; // mm — measured pin/eye gap is ~2.5 mm
 
 const vtuArg = process.argv.indexOf("--vtu");
 const vtuPath = vtuArg >= 0 ? process.argv[vtuArg + 1] : null;
@@ -52,14 +63,22 @@ console.log(
 const wallTets = shellWallTets(mesh, shells);
 
 // ── 4. build the coupled node pool + distributing couplings ────────────────────
-// Pin/hook/base stay separate solid bodies joined by distributing couplings; a
-// gapped pin/hole interface becomes a force-and-moment tie, not a sparse hinge.
-const model = buildCoupledModel(mesh, shells, wallTets);
+// The holder and pin are meshed conformally; the hook is its own body across a
+// clearance, so it is tied explicitly. A gapped pin/eye interface becomes a
+// force-and-moment tie, not a sparse hinge.
+const { byBody, byFace } = surfaceVertices(mesh);
+const pinVerts = byBody.get(TIE_PIN_BODY), hookVerts = byFace.get(TIE_HOOK_FACE);
+if (!pinVerts?.size || !hookVerts?.size)
+  throw new Error(`pin/hook tie found no surface (pin body ${TIE_PIN_BODY}: ${pinVerts?.size ?? 0} verts, hook face ${TIE_HOOK_FACE}: ${hookVerts?.size ?? 0}) — check the body/face ids`);
+const ties = [{ verticesA: [...pinVerts], verticesB: [...hookVerts], maxSeparation: TIE_CLEARANCE }];
+const model = buildCoupledModel(mesh, shells, wallTets, { ties });
 const nSolid = model.solidPool.size, nShell = model.shellPool.length;
 console.log(
   `coupled model: ${model.pool.length / 3} nodes (${nSolid} solid + ${nShell} shell), ` +
     `${model.tets.length / 4} tets, ${model.triangles.length / 3} shell tris, ` +
-    `${model.coupling.ref.length} distributing couplings`,
+    `${model.coupling.ref.length} couplings ` +
+    `(${model.coupling.mpc.filter((k) => k === 1).length} shell/solid seam, ` +
+    `${model.coupling.mpc.filter((k) => k === 0).length} pin/eye tie)`,
 );
 
 // ── 5. boundary conditions + loads (by CAD face) ───────────────────────────────
@@ -104,6 +123,10 @@ const r = Module.solve_coupled(
     ref: Int32Array.from(coupling.ref),
     offsets: Int32Array.from(coupling.offsets),
     solid: Int32Array.from(coupling.solid),
+    // Per-coupling kind: the shell/solid seam is continuous material (relaxed
+    // MPC), the pin/eye tie spans a clearance (distributing). Dropping this
+    // silently solved the seam as distributing.
+    mpc: Int32Array.from(coupling.mpc),
   },
   { fixed_dofs: Int32Array.from(fixed), load_dofs: Int32Array.from(load_dofs), load_vals: Float64Array.from(load_vals) },
   JSON.stringify({ solid: STEEL, shell: STEEL }),
