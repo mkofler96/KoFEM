@@ -461,8 +461,8 @@ double integrate_marked_area(mfem::Mesh& mesh, const mfem::Array<int>& marker) {
 //   type "traction" — a traction vector applied directly
 //   type "pressure" — scalar p applied as -p·n̂ (outward normal; + pushes in)
 // `area` is the integrated area of the load's own boundary elements (shared
-// ones included) — the measure a total force is spread over. Returns nullptr
-// for a "force" load whose matched area is zero (skipped).
+// ones included) — the measure a total force is spread over; a "force" load
+// whose area is not positive throws rather than vanishing from the solve.
 std::unique_ptr<mfem::VectorCoefficient> make_surface_load_coefficient(
     const val& entry, const std::string& type, unsigned load_idx, int matched,
     double area) {
@@ -478,10 +478,7 @@ std::unique_ptr<mfem::VectorCoefficient> make_surface_load_coefficient(
     tvec[1] = entry["force"][1].as<double>();
     tvec[2] = entry["force"][2].as<double>();
     if (type == "force") {
-        if (area <= 0.0) {
-            printf("[mfem] surface_load %u: zero matched area — skipped\n", load_idx);
-            return nullptr;
-        }
+        kofem::bc::require_positive_load_area(area, load_idx, matched);
         tvec /= area;
         printf("[mfem] surface_load %u: force → traction [%g %g %g] over "
                "%d bdr elems (A=%g)\n",
@@ -560,13 +557,8 @@ void apply_surface_loads(const val& surf_js, mfem::Mesh& mesh, mfem::LinearForm&
         val entry = surf_js[i];
         std::string type = entry["type"].as<std::string>();
         const int matched = (int)load_elems[i].size();
-        if (matched == 0) {
-            printf("[mfem] surface_load %u (%s): no boundary elements matched "
-                   "%u faces — skipped\n",
-                   i, type.c_str(), entry["faces"]["length"].as<unsigned>());
-            fflush(stdout);
-            continue;
-        }
+        kofem::bc::require_matched_boundary_elements(
+            matched, entry["faces"]["length"].as<unsigned>(), i, type.c_str());
         mfem::Array<int> marker(max_attr);
         marker = 0;
         for (const auto& [covering, attr] : attr_of_set) {
@@ -579,8 +571,6 @@ void apply_surface_loads(const val& surf_js, mfem::Mesh& mesh, mfem::LinearForm&
         std::unique_ptr<mfem::VectorCoefficient> coeff =
             make_surface_load_coefficient(entry, type, i, matched,
                                           integrate_marked_area(mesh, marker));
-        if (!coeff)
-            continue;
         // Copied into the storage deque only once the load is certain to be
         // applied: the integrator keeps a POINTER to the marker (and a reference
         // to the coefficient), so both must live at a stable address until
