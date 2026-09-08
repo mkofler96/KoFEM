@@ -22,7 +22,11 @@ The pipeline is fully automatic from the STEP file:
    each to a shell mid-surface facet carrying that wall's own thickness
    (`extractThinWallShells`). The holder's walls run 0.6–5.4 mm.
 3. **Keep the bulk bodies solid** (pin, hook); **weld** the pin↔hook contact that
-   otherwise meets at only a couple of coincidental nodes (`tieSolidBodies`).
+   otherwise meets at only a couple of coincidental nodes. Netgen meshes the two
+   bodies independently, so the raw mesh joins them at exactly two nodes — a
+   hinge, not a joint. The tie is *declared* by the caller (`buildCoupledModel`'s
+   `ties`, naming the hook eye face and the pin body); it is no longer detected
+   from geometry.
 4. **Couple** the shell holder to the solid with a **distributing (RBE3)**
    constraint — transmits force *and* moment across the mid-surface offset,
    tolerant of the non-conforming interface (`buildCoupledModel`).
