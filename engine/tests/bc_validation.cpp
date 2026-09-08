@@ -108,6 +108,25 @@ int main() {
     expect_throws(failures, "shell component error names the vertex",
                   [&] { require_valid_shell_component(9, 42, "add_fixed_dofs"); }, "42");
 
+    // ── Surface-load selection checks (solid path, issue #428) ────────────────
+    // A face selection that matches no boundary element, or a total-force load
+    // whose matched faces integrate to zero area, used to be dropped from the
+    // solve with only a stdout line — the shell path throws for the same case.
+    printf("\nSurface-load selection validation (issue #428):\n");
+    expect_ok(failures, "one matched element passes",
+              [&] { require_matched_boundary_elements(1, 4, 0, "force"); });
+    expect_throws(failures, "zero matched elements rejected",
+                  [&] { require_matched_boundary_elements(0, 4, 3, "force"); },
+                  "surface_load 3");
+    expect_throws(failures, "zero-match error names the face count",
+                  [&] { require_matched_boundary_elements(0, 7, 0, "pressure"); }, "7");
+    expect_ok(failures, "positive load area passes",
+              [&] { require_positive_load_area(2.5, 0, 4); });
+    expect_throws(failures, "zero load area rejected",
+                  [&] { require_positive_load_area(0.0, 2, 4); }, "surface_load 2");
+    expect_throws(failures, "negative load area rejected",
+                  [&] { require_positive_load_area(-1.0, 0, 4); }, "force");
+
     printf(failures != 0 ? "\n%d check(s) FAILED\n" : "\nall checks passed\n", failures);
     return failures != 0 ? 1 : 0;
 }

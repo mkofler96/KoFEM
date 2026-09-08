@@ -71,6 +71,39 @@ inline void require_valid_shell_component(int d, int vi, const char* fn) {
             " — expected 0..5 (0=Ux, 1=Uy, 2=Uz, 3=Rx, 4=Ry, 5=Rz)");
 }
 
+// Throw if a surface load's face selection resolved to no boundary element at
+// all. `matched` is the number of boundary elements found for the load's
+// `n_faces` selected faces; `load_idx` and `type` name the offending entry.
+// A load matching nothing contributes nothing to the right-hand side, so the
+// solve still "converges" — with the load the user configured simply absent
+// (issue #428). The shell path already treats the equivalent case as fatal
+// (distributeShellSurfaceLoad in web/src/workers/solver.worker.ts).
+inline void require_matched_boundary_elements(int matched, unsigned n_faces,
+                                              unsigned load_idx, const char* type) {
+    if (matched == 0)
+        throw std::runtime_error(
+            "surface_load " + std::to_string(load_idx) + " (" + type +
+            "): none of the " + std::to_string(n_faces) +
+            " selected face(s) matched a boundary element of the mesh, so the "
+            "load would apply no force at all — a stale face selection after a "
+            "remesh renumbered the nodes?");
+}
+
+// Throw if the boundary elements matched by a total-force ("force") surface load
+// integrate to a non-positive area. Such a load is applied as the uniform
+// traction F/A, which has no meaningful value for A <= 0; returning no
+// coefficient instead would drop the force silently (issue #428).
+inline void require_positive_load_area(double area, unsigned load_idx, int matched) {
+    if (area <= 0.0)
+        throw std::runtime_error(
+            "surface_load " + std::to_string(load_idx) + " (force): the " +
+            std::to_string(matched) +
+            " matched boundary element(s) integrate to a total area of " +
+            std::to_string(area) +
+            ", so a total force cannot be spread into a traction — degenerate or "
+            "zero-area faces in the selection?");
+}
+
 }  // namespace kofem::bc
 
 #endif  // KOFEM_BC_VALIDATION_H
