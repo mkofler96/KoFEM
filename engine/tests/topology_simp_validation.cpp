@@ -120,9 +120,6 @@ int main() {
         load[vdofs[1]] -= total_force / (double)tip_vertices.size();  // -y
     }
 
-    mfem::GridFunction x_dir(&fespace);
-    x_dir = 0.0;  // homogeneous (clamped) essential values
-
     const double E0 = 1.0, nu = 0.3;
     const double penalty = 3.0, emin_rel = 1e-9;
     ElementStiffnessCache cache = build_element_stiffness_cache(fespace, E0, nu);
@@ -138,7 +135,7 @@ int main() {
     printf("\nUniform density ρ≡1 vs. direct ElasticityIntegrator solve:\n");
     std::vector<double> rho_one(ne, 1.0);
     ComplianceEvaluation ev1 =
-        evaluate_compliance(fespace, cache, ess_tdof, x_dir, load, rho_one, penalty, emin_rel);
+        evaluate_compliance(fespace, cache, ess_tdof, load, rho_one, penalty, emin_rel);
     const double s1 = simp_scale(1.0, penalty, emin_rel);
     const double c_ref = reference_compliance(fespace, ess_tdof, load, E0 * s1, nu);
     check(failures, "compliance == direct-assembly reference",
@@ -149,7 +146,7 @@ int main() {
     printf("\nSIMP E-scaling (ρ≡0.5):\n");
     std::vector<double> rho_half(ne, 0.5);
     ComplianceEvaluation ev_half =
-        evaluate_compliance(fespace, cache, ess_tdof, x_dir, load, rho_half, penalty, emin_rel);
+        evaluate_compliance(fespace, cache, ess_tdof, load, rho_half, penalty, emin_rel);
     const double s_half = simp_scale(0.5, penalty, emin_rel);
     const double c_expect = ev1.compliance / s_half;
     check(failures, "compliance(0.5) == compliance(1) / s(0.5)",
@@ -174,10 +171,10 @@ int main() {
         rp[e] += h;
         rm[e] -= h;
         const double cp =
-            evaluate_compliance(fespace, cache, ess_tdof, x_dir, load, rp, penalty, emin_rel)
+            evaluate_compliance(fespace, cache, ess_tdof, load, rp, penalty, emin_rel)
                 .compliance;
         const double cm =
-            evaluate_compliance(fespace, cache, ess_tdof, x_dir, load, rm, penalty, emin_rel)
+            evaluate_compliance(fespace, cache, ess_tdof, load, rm, penalty, emin_rel)
                 .compliance;
         const double fd = (cp - cm) / (2.0 * h);
         const double an = ev_half.dcompliance[e];

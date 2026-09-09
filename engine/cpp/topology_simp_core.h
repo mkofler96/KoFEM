@@ -56,9 +56,18 @@ struct ComplianceEvaluation {
     int cg_iterations = 0;
 };
 
-// Assemble K(ρ) = Σ_e s(ρ_e)·k0[e], solve K u = f with the essential DOFs in
-// `ess_tdof` (their prescribed values seeded into `x_dirichlet`), and return the
-// compliance and its element sensitivities.
+// Assemble K(ρ) = Σ_e s(ρ_e)·k0[e], solve K u = f with the DOFs in `ess_tdof`
+// clamped to zero, and return the compliance and its element sensitivities.
+//
+// HOMOGENEOUS essential BCs only. The compliance objective c = fᵀu = uᵀKu and
+// the self-adjoint sensitivity dc/dρ_e = −uᵀK'ₑu both rely on u = 0 on the
+// essential DOFs (and a design-independent load): only then does fᵀu = uᵀKu and
+// do the ∂u terms cancel. A nonzero prescribed displacement breaks both
+// identities — the objective would no longer equal the load compliance and the
+// element sensitivity would steer the optimizer wrongly — so it needs a
+// different adjoint and is out of scope here (KOF-228). The supports of a
+// force-driven minimum-compliance problem are clamped, so this is the whole
+// v1 requirement; the API simply cannot express an inhomogeneous BC.
 //
 //   load    the assembled right-hand side (built once by the caller)
 //   rho     one design density per element, in fespace element order
@@ -71,7 +80,6 @@ struct ComplianceEvaluation {
 ComplianceEvaluation evaluate_compliance(mfem::FiniteElementSpace& fespace,
                                          const ElementStiffnessCache& cache,
                                          const mfem::Array<int>& ess_tdof,
-                                         const mfem::GridFunction& x_dirichlet,
                                          const mfem::LinearForm& load,
                                          const std::vector<double>& rho,
                                          double penalty, double emin_rel,

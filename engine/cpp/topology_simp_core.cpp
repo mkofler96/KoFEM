@@ -103,7 +103,6 @@ ElementStiffnessCache build_element_stiffness_cache(mfem::FiniteElementSpace& fe
 ComplianceEvaluation evaluate_compliance(mfem::FiniteElementSpace& fespace,
                                          const ElementStiffnessCache& cache,
                                          const mfem::Array<int>& ess_tdof,
-                                         const mfem::GridFunction& x_dirichlet,
                                          const mfem::LinearForm& load,
                                          const std::vector<double>& rho,
                                          double penalty, double emin_rel,
@@ -124,8 +123,11 @@ ComplianceEvaluation evaluate_compliance(mfem::FiniteElementSpace& fespace,
     a.AddDomainIntegrator(new ScaledElementMatrixIntegrator(cache.k0, scale));
     a.Assemble();
 
+    // Homogeneous essential BCs: u = 0 on the clamped supports (see the header
+    // for why inhomogeneous Dirichlet is excluded). FormLinearSystem eliminates
+    // those DOFs, driving them to the zero seeded here.
     mfem::GridFunction x(&fespace);
-    x = x_dirichlet;  // carries the prescribed essential values (0 when clamped)
+    x = 0.0;
 
     // FormLinearSystem eliminates the essential DOFs into the RHS in place, so
     // work on a copy and leave the caller's `load` untouched for reuse.
