@@ -2465,6 +2465,11 @@ self.onmessage = async (event: MessageEvent) => {
       handleVolumeMesh(id, payload as VolumeMeshPayload);
     } else if (type === "solve") {
       handleSolve(id, payload as SolvePayload);
+      // TODO(KOF-231): add an "optimize_topology" branch here once the SIMP loop
+      // lands. It calls m().optimize_topology(mesh, mat_json, bcs_json,
+      // topopt_json) — see the TopOptSettings/TopOptResult contract in
+      // wasm/pkg/kofem_wasm.d.ts (KOF-227 design spike, ADR-0002) — and streams
+      // per-iteration progress over the same log channel the solve uses.
     } else if (type === "test_generate_fem_mesh") {
       handleTestGenerateFemMesh(id);
     } else if (type === "mesh") {
