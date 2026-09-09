@@ -49,6 +49,48 @@ export type StaticSolveResult =
   | { displacements: Float64Array; von_mises: Float64Array }
   | { error: string }
 
+/** Topology-optimization settings — the object the worker JSON-stringifies into
+ *  the `topopt_json` argument of `optimize_topology`. This is the KOF-227 design
+ *  contract (ADR-0002) the Phase-A sub-issues build against; the shape is fixed
+ *  here so the engine loop (KOF-228…) and the setup panel (KOF-232) agree.
+ *  In v1 the design domain is automatic (the whole solid mesh, supports/loads
+ *  kept solid); `passive` is reserved for the Phase-B keep-in/keep-out picker. */
+export interface TopOptSettings {
+  objective: "min_compliance" | "min_volume"
+  constraints: {
+    volumeFraction?: number // required for min_compliance
+    complianceLimit?: number // required for min_volume
+    maxStress?: number // optional von Mises stress constraint (Phase A)
+  }
+  penalty: number // SIMP penalty p, default 3
+  filterRadius: number // r_min, model length units
+  moveLimit: number // MMA move limit, default 0.2
+  maxIterations: number
+  tolerance: number // convergence on max |Δρ|, default 0.01
+  passive?: { solid?: number[]; void?: number[] } // reserved, element indices
+}
+
+/** One optimizer iteration in the returned history. `objective` is the value
+ *  being minimized (compliance for min_compliance, volume for min_volume);
+ *  `volume` is the current volume fraction; `max_change` is max |Δρ| over the
+ *  design variables; `stress` is the aggregated max von Mises, present only when
+ *  a stress constraint is active. */
+export interface TopOptHistoryEntry {
+  it: number
+  objective: number
+  volume: number
+  max_change: number
+  stress?: number
+}
+
+/** Topology-optimization output: the final per-element density (Float64Array,
+ *  one per element in solve/element order — binary transfer, no JSON text,
+ *  issue #166) plus the iteration history. Incomplete inputs or an ill-posed
+ *  problem yield `{error}` instead, matching the static-solve contract. */
+export type TopOptResult =
+  | { density: Float64Array; history: TopOptHistoryEntry[] }
+  | { error: string }
+
 /** Triangle SURFACE mesh input to the Kirchhoff shell solver: `vertices` is xyz
  *  interleaved (length 3·nNodes); `triangles` is three 0-based vertex indices
  *  per triangle (length 3·nTris). `thicknesses` is an optional per-triangle
@@ -170,6 +212,19 @@ export interface KofemModule {
         iterations: number
       }
     | { error: string }
+  /** SIMP topology optimization (KOF-226 epic, ADR-0002). Takes the same
+   *  mesh/material/BC inputs as `solve_linear_elastic` plus a `topopt_json` TO
+   *  settings block (see {@link TopOptSettings}); iterates a per-element density
+   *  field inside the engine and returns the final density plus the iteration
+   *  history. NOT YET IMPLEMENTED — this signature is the KOF-227 design
+   *  contract; the entry is registered once `engine/cpp/topology_simp.cpp` lands
+   *  (KOF-228…KOF-231). */
+  optimize_topology(
+    mesh: SolveMesh,
+    mat_json: string,
+    bcs_json: string,
+    topopt_json: string,
+  ): TopOptResult
 }
 
 export interface ModuleOverrides {
