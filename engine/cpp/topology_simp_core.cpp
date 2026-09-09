@@ -22,20 +22,20 @@ constexpr int dim = 3;
 // element index is ElementTransformation::ElementNo, which BilinearForm::Assemble
 // sets before each AssembleElementMatrix call.
 class ScaledElementMatrixIntegrator : public mfem::BilinearFormIntegrator {
-    const std::vector<mfem::DenseMatrix>& k0_;
-    const std::vector<double>& scale_;
+    const std::vector<mfem::DenseMatrix>* k0_;
+    const std::vector<double>* scale_;
 
 public:
     ScaledElementMatrixIntegrator(const std::vector<mfem::DenseMatrix>& k0,
                                   const std::vector<double>& scale)
-        : k0_(k0), scale_(scale) {}
+        : k0_(&k0), scale_(&scale) {}
 
     void AssembleElementMatrix(const mfem::FiniteElement& /*el*/,
                                mfem::ElementTransformation& Tr,
                                mfem::DenseMatrix& elmat) override {
         const int e = Tr.ElementNo;
-        elmat = k0_[e];
-        elmat *= scale_[e];
+        elmat = (*k0_)[e];
+        elmat *= (*scale_)[e];
     }
 };
 

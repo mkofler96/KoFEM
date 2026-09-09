@@ -32,11 +32,10 @@ namespace {
 
 constexpr int dim = 3;
 
-int check(int& failures, const char* name, bool ok, double got, double want) {
+void check(int& failures, const char* name, bool ok, double got, double want) {
     if (!ok) ++failures;
     printf("  [%s] %-52s got %.12g  want %.12g\n", ok ? "PASS" : "FAIL", name, got,
            want);
-    return ok;
 }
 
 // Reference compliance of a uniform-modulus solve, assembled directly with
