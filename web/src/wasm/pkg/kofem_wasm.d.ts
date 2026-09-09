@@ -58,9 +58,9 @@ export type StaticSolveResult =
 export interface TopOptSettings {
   objective: "min_compliance" | "min_volume"
   constraints: {
-    volumeFraction?: number // required for min_compliance
-    complianceLimit?: number // required for min_volume
-    maxStress?: number // optional von Mises stress constraint (Phase A)
+    volumeFraction?: number
+    complianceLimit?: number
+    maxStress?: number
   }
   penalty: number // SIMP penalty p, default 3
   filterRadius: number // r_min, model length units
