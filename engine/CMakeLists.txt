@@ -35,10 +35,12 @@ add_executable(kofem_wasm_emcc
     cpp/tessellate.cpp
     cpp/geometry_cache.cpp
     cpp/mesh_netgen.cpp
+    cpp/fem_mesh_io.cpp
     cpp/solve_mfem.cpp
     cpp/solve_shell.cpp
     cpp/solve_coupled.cpp
     cpp/shell_core.cpp
+    cpp/topology_simp_core.cpp
     cpp/json_util.cpp
     cpp/wasm_util.cpp
     cpp/netgen_glue.cpp
