@@ -72,6 +72,21 @@ ComplianceOptResult optimize_compliance(mfem::FiniteElementSpace& fespace,
         throw std::runtime_error("optimize_compliance: volume_fraction must be in (0, 1]");
     if (std::isnan(config.rho_min) || config.rho_min < 0.0 || config.rho_min >= 1.0)
         throw std::runtime_error("optimize_compliance: rho_min must be in [0, 1)");
+    if (config.max_iterations <= 0)
+        throw std::runtime_error("optimize_compliance: max_iterations must be positive");
+    if (!std::isfinite(config.penalty) || config.penalty <= 0.0)
+        throw std::runtime_error("optimize_compliance: penalty must be finite and positive");
+    if (!std::isfinite(config.filter_radius))
+        throw std::runtime_error("optimize_compliance: filter_radius must be finite");
+    if (!std::isfinite(config.move_limit) || config.move_limit <= 0.0)
+        throw std::runtime_error("optimize_compliance: move_limit must be finite and positive");
+    if (!std::isfinite(config.tolerance) || config.tolerance <= 0.0)
+        throw std::runtime_error("optimize_compliance: tolerance must be finite and positive");
+    if (!std::isfinite(config.emin_rel) || config.emin_rel <= 0.0 ||
+        config.emin_rel >= 1.0)
+        throw std::runtime_error("optimize_compliance: emin_rel must be in (0, 1)");
+    if (!std::isfinite(config.cg_rtol) || config.cg_rtol <= 0.0)
+        throw std::runtime_error("optimize_compliance: cg_rtol must be finite and positive");
 
     const DesignDomain dom =
         build_design_domain(ne, config.passive_solid, config.passive_void);
@@ -95,7 +110,8 @@ ComplianceOptResult optimize_compliance(mfem::FiniteElementSpace& fespace,
     // violation and the change-only stopping test could then report "convergence"
     // on an infeasible design, so reject it up front.
     double solid_volume = 0.0;
-    for (const int e : config.passive_solid) solid_volume += cache.volume[e];
+    for (int e = 0; e < ne; ++e)
+        if (dom.pinned[e] == 1) solid_volume += cache.volume[e];
     const double min_volume = solid_volume + config.rho_min * (vtotal - solid_volume);
     if (min_volume > vcap * (1.0 + 1e-9))
         throw std::runtime_error(
