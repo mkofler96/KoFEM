@@ -31,6 +31,7 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <stdexcept>
 #include <vector>
 
 using kofem::Point3;
@@ -284,6 +285,34 @@ int main() {
             if (static_cast<int>(got.size()) != brute) ok = false;
         }
         check(failures, "query_radius finds exactly the in-radius points", ok);
+    }
+
+    // ── spatial grid: large coordinates stay exact with the int64 cell index ───
+    {
+        std::printf("SpatialGrid: large-coordinate cloud (int64 cell index)\n");
+        // Two pairs ~3e9 apart — the extent that overflows a 32-bit cell index.
+        const std::vector<Point3> c = {{0.0, 0.0, 0.0},
+                                       {0.5, 0.0, 0.0},
+                                       {3.0e9, 0.0, 0.0},
+                                       {3.0e9 + 0.5, 0.0, 0.0}};
+        const SpatialGrid grid(c, 1.0);
+        std::vector<int> got;
+        grid.query_radius(c[0], 1.0, got);  // only points 0 and 1 are within 1.0
+        check(failures, "query on a large-coordinate cloud finds only the near pair",
+              got.size() == 2);
+    }
+
+    // ── spatial grid: a cell_size far too small for the extent is a loud error ─
+    {
+        std::printf("SpatialGrid: cell_size too small for extent throws\n");
+        const std::vector<Point3> c = {{0.0, 0.0, 0.0}, {1.0e9, 0.0, 0.0}};
+        bool threw = false;
+        try {
+            const SpatialGrid grid(c, 1.0e-9);  // ~1e18 cells/axis > 2^52
+        } catch (const std::runtime_error&) {
+            threw = true;
+        }
+        check(failures, "tiny cell_size relative to extent throws", threw);
     }
 
     std::printf(failures != 0 ? "\n%d check(s) FAILED\n" : "\nall checks passed\n",

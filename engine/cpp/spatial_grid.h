@@ -20,6 +20,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <unordered_map>
 #include <vector>
 
@@ -32,7 +33,10 @@ using Point3 = std::array<double, 3>;
 class SpatialGrid {
 public:
     // `cell_size` must be > 0; choose it close to the typical query radius so a
-    // query touches a 3×3×3 cell block. Throws std::runtime_error otherwise.
+    // query touches a 3×3×3 cell block. Throws std::runtime_error if cell_size is
+    // not positive, or if it is so small relative to the point-cloud extent that
+    // a cell index would no longer be exactly representable (see spatial_grid.cpp)
+    // — a loud error beats silently corrupted buckets.
     SpatialGrid(const std::vector<Point3>& points, double cell_size);
 
     // Append to `out` the indices of every stored point within `radius`
@@ -42,7 +46,10 @@ public:
     void query_radius(const Point3& query, double radius, std::vector<int>& out) const;
 
 private:
-    using Cell = std::array<int, 3>;
+    // 64-bit cell coordinates so a realistic extent/cell_size ratio (far beyond
+    // what int's ~2.1e9 range allows) maps without overflow; the constructor
+    // additionally caps the ratio at the exactly-representable range.
+    using Cell = std::array<std::int64_t, 3>;
 
     struct CellHash {
         std::size_t operator()(const Cell& c) const noexcept;
