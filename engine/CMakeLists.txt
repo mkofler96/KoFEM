@@ -36,6 +36,7 @@ add_executable(kofem_wasm_emcc
     cpp/geometry_cache.cpp
     cpp/mesh_netgen.cpp
     cpp/fem_mesh_io.cpp
+    cpp/fem_bc_io.cpp
     cpp/solve_mfem.cpp
     cpp/solve_shell.cpp
     cpp/solve_coupled.cpp
@@ -45,6 +46,7 @@ add_executable(kofem_wasm_emcc
     cpp/topology_filter.cpp
     cpp/topology_mma.cpp
     cpp/topology_optimize.cpp
+    cpp/topology_simp.cpp
     cpp/json_util.cpp
     cpp/wasm_util.cpp
     cpp/netgen_glue.cpp

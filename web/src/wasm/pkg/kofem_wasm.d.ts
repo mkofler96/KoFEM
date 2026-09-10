@@ -216,9 +216,12 @@ export interface KofemModule {
    *  mesh/material/BC inputs as `solve_linear_elastic` plus a `topopt_json` TO
    *  settings block (see {@link TopOptSettings}); iterates a per-element density
    *  field inside the engine and returns the final density plus the iteration
-   *  history. NOT YET IMPLEMENTED — this signature is the KOF-227 design
-   *  contract; the entry is registered once `engine/cpp/topology_simp.cpp` lands
-   *  (KOF-228…KOF-231). */
+   *  history. Per-iteration progress streams over the same `print`→worker log
+   *  channel the solve uses. v1 implements the `min_compliance` objective
+   *  (KOF-230/231); `min_volume` (KOF-235) and the `maxStress` constraint
+   *  (KOF-236) share this contract and return a clear `{error}` until they land.
+   *  Topology optimization is solid-only for now — an all-shell model is
+   *  rejected (KOF-237). */
   optimize_topology(
     mesh: SolveMesh,
     mat_json: string,
