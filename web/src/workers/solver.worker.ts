@@ -5,7 +5,11 @@
 // Runs kofem-wasm off the main thread so heavy solves don't freeze the UI.
 
 import createModule from "../wasm/pkg/kofem_wasm.js";
-import type { KofemModule, SolveMesh } from "../wasm/pkg/kofem_wasm.js";
+import type {
+  KofemModule,
+  SolveMesh,
+  TopOptSettings,
+} from "../wasm/pkg/kofem_wasm.js";
 import {
   buildTie,
   remapElement,
@@ -211,6 +215,21 @@ interface SolvePayload {
   // needed to detect thin-walled bodies and idealise them as shells (auto-shell).
   surfaceTriangles?: [number, number, number][] | null;
   surfaceFaceIds?: number[] | null;
+}
+
+// Topology-optimization request: the same solid model the static solve takes
+// (mesh + materials + BCs/loads) plus the TO settings block. Ties, couplings and
+// element order do not apply — TO v1 is solid-only (KOF-237), single design
+// material, linear elements — so those SolvePayload fields are ignored here.
+interface TopOptPayload {
+  nodes: Node[];
+  elements: Element[];
+  materials: Material[];
+  properties: Property[];
+  constraints: Constraint[];
+  loads: Load[];
+  surfaceLoads?: SurfaceLoad[];
+  settings: TopOptSettings;
 }
 
 // ── parse_step ────────────────────────────────────────────────────────────────
@@ -2220,6 +2239,116 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
   ]);
 }
 
+// ── Topology optimization (CTETRA/CHEXA → optimize_topology) ──────────────────
+
+// SIMP density-based topology optimization (KOF-226 epic, ADR-0002). Packs the
+// mesh, materials and BCs/loads EXACTLY like handleSolve's all-solid path
+// (packSolveMesh + resolveMaterials + groupDirichlet + groupPointLoads + the
+// surface-load face remap), then calls the engine's in-loop optimizer instead of
+// the single-shot solve. The engine crosses the JS↔WASM boundary only twice for
+// the whole run (ADR-0002 decision 1); per-iteration "[topopt] it N: …" progress
+// streams over the same print→log channel the solve uses, so no extra plumbing
+// is needed to feed the live log.
+//
+// Cancellation is owned by the worker lifecycle, exactly as meshing is: the
+// optimize_topology call is one blocking WASM call, so the app cancels it by
+// calling resetWorker() (terminate), which discards the in-flight run. The ADR
+// notes the cost — no intermediate density is streamed mid-run, so a cancelled
+// run reports nothing rather than a best-so-far field; that is a deliberate
+// consequence of the one-call design, not a gap here.
+//
+// TO v1 is solid-only (KOF-237): shell (CTRIA3) elements and Shell-marked bodies
+// are rejected with a clear message rather than silently idealised away, and an
+// empty solid mesh is caught by packSolveMesh.
+function handleTopOpt(id: number, payload: TopOptPayload) {
+  const {
+    nodes,
+    elements,
+    materials,
+    properties,
+    constraints,
+    loads,
+    surfaceLoads,
+    settings,
+  } = payload;
+
+  const shellElements = elements.filter((e) => e.type === "CTRIA3");
+  if (shellElements.length > 0)
+    throw new Error(
+      `Topology optimization is solid-only for now (KOF-237): this model has ` +
+        `${shellElements.length} shell (CTRIA3) element(s). Optimize a solid ` +
+        "(tetrahedral) model, or wait for shell/coupled support.",
+    );
+  // A body marked "Shell" would be idealised to a mid-surface mesh by the solve
+  // path; TO never sees those, so refuse loudly instead of optimizing a model
+  // that is not the one the user is looking at.
+  const shellBodies = properties.filter((p) => p.discretization === "shell");
+  if (shellBodies.length > 0)
+    throw new Error(
+      `Topology optimization is solid-only for now (KOF-237): ` +
+        `${shellBodies.length} body/bodies are marked "Shell". Switch them to ` +
+        "Solid to optimize this model.",
+    );
+
+  const vid = buildVertexIndexer(nodes);
+  const tetElements = elements.filter((e) => e.type === "CTETRA");
+  const hexElements = elements.filter((e) => e.type === "CHEXA");
+  const mesh = packSolveMesh(nodes, tetElements, hexElements, vid);
+  const { materials: engineMaterials, attributes } = resolveMaterials(
+    [...tetElements, ...hexElements],
+    materials,
+    properties,
+  );
+  mesh.attributes = attributes;
+
+  // Surface-load faces are node-id lists from the store; remap each to the
+  // engine's vertex indices, exactly as handleSolve does.
+  const surface_loads = (surfaceLoads ?? []).map((sl) => ({
+    ...sl,
+    faces: sl.faces.map((face) =>
+      face.map((nodeId) => vid(nodeId, "surface load face")),
+    ),
+  }));
+  const bcs = {
+    ...groupDirichlet(constraints, vid),
+    point_loads: groupPointLoads(loads, vid),
+    surface_loads,
+  };
+
+  const nElems = tetElements.length + hexElements.length;
+  const volfrac = settings.constraints.volumeFraction;
+  self.postMessage({
+    id,
+    log:
+      `Starting topology optimization: ${nodes.length} nodes, ${nElems} ` +
+      `elements (${settings.objective}` +
+      (volfrac !== undefined ? `, volume fraction ${volfrac}` : "") +
+      `, max ${settings.maxIterations} iterations)…`,
+  });
+
+  // Mesh as typed arrays; materials/BCs/settings stay JSON (small). The final
+  // density comes back as a Float64Array whose buffer is transferred to the main
+  // thread zero-copy; the iteration history is a small plain array.
+  const result = m().optimize_topology(
+    mesh,
+    JSON.stringify(engineMaterials),
+    JSON.stringify(bcs),
+    JSON.stringify(settings),
+  );
+  if ("error" in result) throw new Error(result.error);
+
+  self.postMessage({
+    id,
+    log:
+      `Topology optimization complete: ${result.density.length} element ` +
+      `densities over ${result.history.length} iteration(s)`,
+  });
+  self.postMessage(
+    { id, ok: true, density: result.density, history: result.history },
+    [result.density.buffer],
+  );
+}
+
 function handleSolve(id: number, payload: SolvePayload) {
   // Shell models route away from the all-solid path. A model that is ALL CTRIA3
   // solves via the Kirchhoff shell solver; a model that MIXES CTRIA3 shells with
@@ -2465,11 +2594,8 @@ self.onmessage = async (event: MessageEvent) => {
       handleVolumeMesh(id, payload as VolumeMeshPayload);
     } else if (type === "solve") {
       handleSolve(id, payload as SolvePayload);
-      // TODO(KOF-231): add an "optimize_topology" branch here once the SIMP loop
-      // lands. It calls m().optimize_topology(mesh, mat_json, bcs_json,
-      // topopt_json) — see the TopOptSettings/TopOptResult contract in
-      // wasm/pkg/kofem_wasm.d.ts (KOF-227 design spike, ADR-0002) — and streams
-      // per-iteration progress over the same log channel the solve uses.
+    } else if (type === "optimize_topology") {
+      handleTopOpt(id, payload as TopOptPayload);
     } else if (type === "test_generate_fem_mesh") {
       handleTestGenerateFemMesh(id);
     } else if (type === "mesh") {
