@@ -90,12 +90,16 @@ ElementStiffnessCache build_element_stiffness_cache(mfem::FiniteElementSpace& fe
     cache.k0.resize(ne);
     cache.vdofs.resize(ne);
     cache.volume.resize(ne);
+    cache.centroid.resize(ne);
+    mfem::Vector center(dim);
     for (int e = 0; e < ne; ++e) {
         const mfem::FiniteElement& fe = *fespace.GetFE(e);
         mfem::ElementTransformation& T = *fespace.GetElementTransformation(e);
         integ.AssembleElementMatrix(fe, T, cache.k0[e]);
         fespace.GetElementVDofs(e, cache.vdofs[e]);
         cache.volume[e] = mesh->GetElementVolume(e);
+        mesh->GetElementCenter(e, center);
+        for (int d = 0; d < dim; ++d) cache.centroid[e][d] = center[d];
     }
     return cache;
 }
