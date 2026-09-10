@@ -39,6 +39,7 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <stdexcept>
 #include <vector>
 
 using namespace kofem::topopt;
@@ -197,6 +198,27 @@ int main() {
     check(failures, "density spread away from the uniform gray start (std > 0.1)",
           stddev > 0.1);
 
+    // (3b) The returned density IS the analysed design: re-evaluating it reproduces
+    // the final history entry's compliance and volume exactly (guards against the
+    // returned density being one un-analysed MMA step ahead of its reported metrics).
+    {
+        double vtotal = 0.0;
+        for (const double v : model.cache.volume) vtotal += v;
+        double vfin = 0.0;
+        for (int e = 0; e < model.fespace.GetNE(); ++e)
+            vfin += res.density[e] * model.cache.volume[e];
+        const ComplianceEvaluation ev_final = evaluate_compliance(
+            model.fespace, model.cache, model.ess_tdof, model.load, res.density,
+            base_config().penalty, base_config().emin_rel, base_config().cg_rtol);
+        std::printf("  re-evaluated returned density: c=%.6g (history %.6g), vol=%.5f\n",
+                    ev_final.compliance, res.history.back().compliance, vfin / vtotal);
+        check(failures, "returned density's compliance matches the final history entry",
+              std::abs(ev_final.compliance - res.history.back().compliance) <=
+                  1e-9 * std::abs(res.history.back().compliance));
+        check(failures, "returned density's volume matches the final history entry",
+              std::abs((vfin / vtotal) - res.history.back().volume) < 1e-9);
+    }
+
     // ── (4) Passive elements: pinned solid stays 1, pinned void stays rho_min ──
     std::printf("\nPassive regions (keep-in solid + keep-out void):\n");
     ComplianceOptConfig pcfg = base_config();
@@ -236,6 +258,42 @@ int main() {
     std::printf("  passive-run final compliance = %.6g\n", pc);
     check(failures, "passive run stays a well-posed structure (finite, non-mechanism)",
           std::isfinite(pc) && pc < 1e6);
+
+    // ── (4b) Ill-posed inputs are rejected loudly, not silently mishandled ─────
+    std::printf("\nInput validation:\n");
+    auto throws = [&](const ComplianceOptConfig& cfg) {
+        try {
+            optimize_compliance(model.fespace, model.cache, model.ess_tdof, model.load, cfg);
+        } catch (const std::runtime_error&) {
+            return true;
+        }
+        return false;
+    };
+    // An element listed as both keep-in and keep-out has contradictory pins.
+    {
+        ComplianceOptConfig bad = base_config();
+        const int e = solid_box.front();  // non-empty, checked above
+        bad.passive_solid = {e};
+        bad.passive_void = {e};
+        check(failures, "overlapping passive solid/void is rejected", throws(bad));
+    }
+    // rho_min above the volume fraction makes the minimum reachable volume exceed
+    // the cap — an unsatisfiable constraint.
+    {
+        ComplianceOptConfig bad = base_config();
+        bad.volume_fraction = 0.3;
+        bad.rho_min = 0.5;  // every element ≥ 0.5 ⇒ volume ≥ 0.5 > 0.3
+        check(failures, "infeasible volume fraction (rho_min > volfrac) is rejected",
+              throws(bad));
+    }
+    // Pinning most of the mesh solid also overruns a small volume fraction.
+    {
+        ComplianceOptConfig bad = base_config();
+        bad.volume_fraction = 0.1;
+        bad.passive_solid = model.elements_in_box({0.0, 0.0, -1.0}, {5.0, 2.0, 1.0});
+        check(failures, "infeasible volume fraction (too much pinned solid) is rejected",
+              throws(bad));
+    }
 
     // ── (5) Determinism: identical inputs → identical final density ───────────
     std::printf("\nDeterminism:\n");

@@ -23,25 +23,32 @@ namespace {
 // Element indices with a live design variable: every element except the pinned
 // passive ones. `pinned[e]` is set for a passive-solid or passive-void element.
 struct DesignDomain {
-    std::vector<int> active;    // element index of each design variable
-    std::vector<char> pinned;   // per element, 1 if density is fixed
+    std::vector<int> active;   // element index of each design variable
+    std::vector<char> pinned;  // per element: 0 active, 1 passive solid, 2 passive void
 };
 
 DesignDomain build_design_domain(int ne, const std::vector<int>& passive_solid,
                                  const std::vector<int>& passive_void) {
     DesignDomain dom;
     dom.pinned.assign(ne, 0);
-    auto mark = [&](const std::vector<int>& set, const char* which) {
+    auto mark = [&](const std::vector<int>& set, char kind, const char* which) {
         for (const int e : set) {
             if (e < 0 || e >= ne)
                 throw std::runtime_error(std::string("optimize_compliance: passive ") +
                                          which + " element index " + std::to_string(e) +
                                          " out of range [0, " + std::to_string(ne) + ")");
-            dom.pinned[e] = 1;
+            // An element cannot be both kept solid and kept void — the two pins
+            // give it contradictory densities. Reject the overlap loudly rather
+            // than silently letting one set win.
+            if (dom.pinned[e] != 0 && dom.pinned[e] != kind)
+                throw std::runtime_error(
+                    "optimize_compliance: element " + std::to_string(e) +
+                    " is listed as both passive solid and passive void");
+            dom.pinned[e] = kind;
         }
     };
-    mark(passive_solid, "solid");
-    mark(passive_void, "void");
+    mark(passive_solid, 1, "solid");
+    mark(passive_void, 2, "void");
     for (int e = 0; e < ne; ++e)
         if (dom.pinned[e] == 0) dom.active.push_back(e);
     return dom;
@@ -58,9 +65,12 @@ ComplianceOptResult optimize_compliance(mfem::FiniteElementSpace& fespace,
     if (ne <= 0) throw std::runtime_error("optimize_compliance: mesh has no elements");
     if (static_cast<int>(cache.volume.size()) != ne)
         throw std::runtime_error("optimize_compliance: stiffness cache does not match mesh");
-    if (!(config.volume_fraction > 0.0 && config.volume_fraction <= 1.0))
+    // Reject NaN explicitly: the range test alone would let a NaN through (every
+    // comparison against NaN is false), so an isnan guard has to lead.
+    if (std::isnan(config.volume_fraction) || config.volume_fraction <= 0.0 ||
+        config.volume_fraction > 1.0)
         throw std::runtime_error("optimize_compliance: volume_fraction must be in (0, 1]");
-    if (!(config.rho_min >= 0.0 && config.rho_min < 1.0))
+    if (std::isnan(config.rho_min) || config.rho_min < 0.0 || config.rho_min >= 1.0)
         throw std::runtime_error("optimize_compliance: rho_min must be in [0, 1)");
 
     const DesignDomain dom =
@@ -77,6 +87,23 @@ ComplianceOptResult optimize_compliance(mfem::FiniteElementSpace& fespace,
     for (const double v : cache.volume) vtotal += v;
     const double vcap = config.volume_fraction * vtotal;
     if (!(vcap > 0.0)) throw std::runtime_error("optimize_compliance: non-positive volume");
+
+    // Feasibility: the smallest volume the design can reach is the pinned-solid
+    // volume plus rho_min over everything else (active variables cannot fall below
+    // rho_min, passive solids are fixed at 1). If that already exceeds the cap the
+    // constraint is unsatisfiable — the MMA artificial variables would absorb the
+    // violation and the change-only stopping test could then report "convergence"
+    // on an infeasible design, so reject it up front.
+    double solid_volume = 0.0;
+    for (const int e : config.passive_solid) solid_volume += cache.volume[e];
+    const double min_volume = solid_volume + config.rho_min * (vtotal - solid_volume);
+    if (min_volume > vcap * (1.0 + 1e-9))
+        throw std::runtime_error(
+            "optimize_compliance: volume fraction " +
+            std::to_string(config.volume_fraction) +
+            " is infeasible — the minimum reachable volume fraction is " +
+            std::to_string(min_volume / vtotal) +
+            " given rho_min and the pinned-solid volume");
 
     const double r_min = config.filter_radius > 0.0 ? config.filter_radius
                                                     : default_filter_radius(cache.volume);
@@ -100,7 +127,13 @@ ComplianceOptResult optimize_compliance(mfem::FiniteElementSpace& fespace,
     result.history.reserve(config.max_iterations);
     double obj_scale = -1.0;  // 1/c₀, fixed at the first iteration to keep MMA scaled
 
-    for (int it = 1; it <= config.max_iterations; ++it) {
+    // The analysis, the recorded history entry and the returned density all
+    // describe the SAME design `rho`: each pass analyses the current `rho`, records
+    // it, then computes the MMA step. The step is applied only if another pass will
+    // analyse the result — so on both convergence and the iteration cap the loop
+    // exits with `rho` (and hence the returned density) equal to the last analysed
+    // design, never one un-analysed MMA step ahead of the reported metrics.
+    for (int it = 1;; ++it) {
         // (1) SIMP-penalized solve → compliance and self-adjoint sensitivities.
         ComplianceEvaluation ev = evaluate_compliance(
             fespace, cache, ess_tdof, load, rho, config.penalty, config.emin_rel,
@@ -129,16 +162,13 @@ ComplianceOptResult optimize_compliance(mfem::FiniteElementSpace& fespace,
         const std::vector<double> fval = {(vol_used / vcap) - 1.0};
         const double f0 = ev.compliance * obj_scale;
 
-        // (3) One MMA step, then rebuild the density field and measure the change.
+        // (3) One MMA step; measure the change it would make to the design.
         const std::vector<double> xnew = mma.update(x, f0, df0, fval, dfdx);
         double change = 0.0;
-        for (int k = 0; k < nact; ++k) {
+        for (int k = 0; k < nact; ++k)
             change = std::max(change, std::abs(xnew[k] - x[k]));
-            rho[dom.active[k]] = xnew[k];
-        }
-        x = xnew;
 
-        // (4) Stream progress and record history.
+        // (4) Stream progress and record the analysed design's history entry.
         std::array<char, 128> line;
         std::snprintf(line.data(), line.size(),
                       "[topopt] it %d: c=%.6g vol=%.4f change=%.4g", it, ev.compliance,
@@ -151,6 +181,11 @@ ComplianceOptResult optimize_compliance(mfem::FiniteElementSpace& fespace,
             result.converged = true;
             break;
         }
+        if (it >= config.max_iterations) break;
+
+        // Apply the step: `rho`/`x` become the next design the loop will analyse.
+        x = xnew;
+        for (int k = 0; k < nact; ++k) rho[dom.active[k]] = xnew[k];
     }
 
     result.density = rho;

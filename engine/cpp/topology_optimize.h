@@ -69,8 +69,8 @@ struct ComplianceOptConfig {
 
 struct ComplianceOptResult {
     std::vector<double> density;        // final ρ_e, one per element (solve order)
-    std::vector<double> displacements;  // nodal solution of the last analysed design
-                                        // (the iterate of the final history entry),
+    std::vector<double> displacements;  // nodal solution of that same returned design
+                                        // (its metrics are the final history entry),
                                         // 3 per vertex
     std::vector<TopOptHistoryEntry> history;
     int iterations = 0;
