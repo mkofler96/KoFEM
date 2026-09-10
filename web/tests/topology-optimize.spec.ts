@@ -151,15 +151,21 @@ test("optimize_topology worker: density field of element length + progress logs"
         historyLength: res.history.length,
         allFinite: Array.from(res.density).every((d) => Number.isFinite(d)),
         inRange: Array.from(res.density).every((d) => d >= 0 && d <= 1),
+        // Supported/loaded elements are auto-pinned solid (ADR-0002 decision 6),
+        // so a converged field always keeps some elements exactly at ρ = 1.
+        hasSolid: Array.from(res.density).some((d) => d === 1),
       };
     },
-    makeBeam(4, 1, 1),
+    // A beam long/wide enough that the auto-pinned support (x=0) and load (x=Lx)
+    // faces stay well under the 0.5 volume fraction, so the problem is feasible.
+    makeBeam(8, 2, 2),
   )) as {
     densityLength: number;
     elementCount: number;
     historyLength: number;
     allFinite: boolean;
     inRange: boolean;
+    hasSolid: boolean;
   };
 
   // One density per element, all finite and within the SIMP [0, 1] bounds.
@@ -167,6 +173,8 @@ test("optimize_topology worker: density field of element length + progress logs"
   expect(result.historyLength).toBeGreaterThanOrEqual(1);
   expect(result.allFinite).toBe(true);
   expect(result.inRange).toBe(true);
+  // The auto-pinned supports/loads stay solid.
+  expect(result.hasSolid).toBe(true);
 
   // At least one per-iteration progress line reached the log channel (the engine
   // prints "[topopt] it N: c=… vol=… change=…" each iteration).

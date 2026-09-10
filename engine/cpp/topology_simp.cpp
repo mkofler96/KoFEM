@@ -31,6 +31,8 @@
 #include <mfem.hpp>
 
 #include <cstdio>
+#include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -66,6 +68,62 @@ void read_index_array(const val& parent, const char* key, std::vector<int>& out)
         out.push_back(arr[i].as<int>());
 }
 
+// Collect the vertex indices touched by a support or a load, from the same BCs
+// payload the solve consumes: fixed_vertices, fixed_dofs[].vertex,
+// prescribed_dofs[].vertex, point_loads[].vertex, and every node of every
+// surface-load face. These are the nodes whose attachment to the structure must
+// not be optimized away.
+void collect_bc_vertices(const val& bcs_js, std::set<int>& verts) {
+    auto add_scalar_array = [&](const val& arr) {
+        if (arr.isUndefined() || arr.isNull()) return;
+        unsigned n = arr["length"].as<unsigned>();
+        for (unsigned i = 0; i < n; ++i) verts.insert(arr[i].as<int>());
+    };
+    auto add_vertex_field = [&](const val& arr) {
+        if (arr.isUndefined() || arr.isNull()) return;
+        unsigned n = arr["length"].as<unsigned>();
+        for (unsigned i = 0; i < n; ++i) verts.insert(arr[i]["vertex"].as<int>());
+    };
+    add_scalar_array(bcs_js["fixed_vertices"]);
+    add_vertex_field(bcs_js["fixed_dofs"]);
+    add_vertex_field(bcs_js["prescribed_dofs"]);
+    add_vertex_field(bcs_js["point_loads"]);
+    // Surface loads: every node of every loaded face.
+    val surf = bcs_js["surface_loads"];
+    if (surf.isUndefined() || surf.isNull()) return;
+    unsigned ns = surf["length"].as<unsigned>();
+    for (unsigned i = 0; i < ns; ++i) {
+        val faces = surf[i]["faces"];
+        if (faces.isUndefined() || faces.isNull()) continue;
+        unsigned nf = faces["length"].as<unsigned>();
+        for (unsigned f = 0; f < nf; ++f) {
+            val face = faces[f];
+            unsigned fn = face["length"].as<unsigned>();
+            for (unsigned k = 0; k < fn; ++k) verts.insert(face[k].as<int>());
+        }
+    }
+}
+
+// Elements incident to any support/load vertex. Pinned solid in v1 so the
+// optimizer cannot erode the structure's attachment to its supports and loads
+// toward void and return a non-physical layout (ADR-0002 decision 6: "loaded/
+// supported elements are kept solid"). A stale/out-of-range vertex reference is
+// skipped — the solve-side BC helpers already validate them and throw.
+std::vector<int> pinned_solid_from_bcs(const val& bcs_js, mfem::Mesh& mesh) {
+    std::set<int> bc_verts;
+    collect_bc_vertices(bcs_js, bc_verts);
+    const std::unique_ptr<mfem::Table> v2e(mesh.GetVertexToElementTable());
+    const int nv = mesh.GetNV();
+    std::set<int> elems;
+    for (const int v : bc_verts) {
+        if (v < 0 || v >= nv) continue;
+        const int nrow = v2e->RowSize(v);
+        const int* row = v2e->GetRow(v);
+        for (int j = 0; j < nrow; ++j) elems.insert(row[j]);
+    }
+    return {elems.begin(), elems.end()};
+}
+
 }  // namespace
 
 val optimize_topology(val mesh_js, const std::string& mat_json,
@@ -82,23 +140,47 @@ val optimize_topology(val mesh_js, const std::string& mat_json,
     kofem::fem::MeshArrays mesh_arrays = kofem::fem::parse_mesh(mesh_js);
 
     // Design material: v1 treats the whole solid mesh as ONE design domain at a
-    // single (E₀, ν). Read the first material entry (mirrors solve's
-    // array-or-object materials contract). The minimum-compliance topology is
-    // invariant to a uniform modulus scale, so the first material sets the design
-    // stiffness; per-material design domains are a later extension.
+    // single (E₀, ν) — ADR-0002's "single design material". A genuinely
+    // heterogeneous model (more than one distinct (E, ν) referenced by the mesh)
+    // is REJECTED, not silently optimized with the first material: minimum-
+    // compliance scale invariance holds only for a UNIFORM modulus, so mixing
+    // materials would produce the wrong topology and compliance. Per-material
+    // design domains are a later extension.
     const bool is_mat_array = val::global("Array").call<bool>("isArray", mat_js);
     const unsigned n_mats   = is_mat_array ? mat_js["length"].as<unsigned>() : 1U;
     if (n_mats == 0)
         return error_result("materials array is empty — at least one material is required");
-    val mat0   = is_mat_array ? mat_js[0] : mat_js;
-    val E_val  = mat0["young_modulus"];
-    val nu_val = mat0["poisson_ratio"];
-    if (E_val.isNull() || E_val.isUndefined())
-        return error_result("material 1 is missing young_modulus");
-    if (nu_val.isNull() || nu_val.isUndefined())
-        return error_result("material 1 is missing poisson_ratio");
-    const double E0 = E_val.as<double>();
-    const double nu = nu_val.as<double>();
+    std::vector<double> E_by_mat(n_mats);
+    std::vector<double> nu_by_mat(n_mats);
+    for (unsigned k = 0; k < n_mats; ++k) {
+        val mat    = is_mat_array ? mat_js[k] : mat_js;
+        val E_val  = mat["young_modulus"];
+        val nu_val = mat["poisson_ratio"];
+        if (E_val.isNull() || E_val.isUndefined())
+            return error_result("material " + std::to_string(k + 1) + " is missing young_modulus");
+        if (nu_val.isNull() || nu_val.isUndefined())
+            return error_result("material " + std::to_string(k + 1) + " is missing poisson_ratio");
+        E_by_mat[k]  = E_val.as<double>();
+        nu_by_mat[k] = nu_val.as<double>();
+    }
+    // Materials the mesh actually references (attributes are 1-based; empty ⇒
+    // every element is material 1). Validate the range as the solve does.
+    std::set<unsigned> used_mats;
+    for (const int a : mesh_arrays.attrs) {
+        if (a < 1 || static_cast<unsigned>(a) > n_mats)
+            return error_result("mesh.attributes references material " + std::to_string(a) +
+                                " but only " + std::to_string(n_mats) + " material(s) were provided");
+        used_mats.insert(static_cast<unsigned>(a));
+    }
+    if (used_mats.empty()) used_mats.insert(1U);
+    const double E0 = E_by_mat[*used_mats.begin() - 1];
+    const double nu = nu_by_mat[*used_mats.begin() - 1];
+    for (const unsigned k : used_mats)
+        if (E_by_mat[k - 1] != E0 || nu_by_mat[k - 1] != nu)
+            return error_result(
+                "topology optimization supports a single design material, but this mesh "
+                "references more than one distinct material — assign one material to the "
+                "whole design domain (per-material design domains are a later extension).");
 
     Mesh mfem_mesh = kofem::fem::build_mfem_mesh(mesh_arrays);
     const int ne   = mfem_mesh.GetNE();
@@ -135,10 +217,30 @@ val optimize_topology(val mesh_js, const std::string& mat_json,
     kofem::fem::apply_surface_loads(bcs_js["surface_loads"], mfem_mesh, load, surf_storage);
     load.Assemble();
     kofem::fem::apply_point_loads(bcs_js["point_loads"], fespace, load);
-    if (load.Normlinf() == 0.0)
-        return error_result(
-            "topology optimization needs an applied load — the assembled load vector "
-            "is zero, so the compliance objective is trivial");
+    // A load that acts only on constrained DOFs is eliminated by FormLinearSystem
+    // and reaches the optimizer as a zero right-hand side — a trivial, meaningless
+    // run. Test the FREE DOFs (those not in ess_tdof), not the full assembled
+    // vector, so a load applied entirely on a fixed face is caught here rather
+    // than producing a zero-compliance, arbitrary density evolution.
+    {
+        std::vector<char> is_ess(load.Size(), 0);
+        for (int i = 0; i < ess.ess_tdof.Size(); ++i) {
+            const int d = ess.ess_tdof[i];
+            if (d >= 0 && d < load.Size()) is_ess[d] = 1;
+        }
+        bool has_free_load = false;
+        for (int i = 0; i < load.Size(); ++i)
+            if (is_ess[i] == 0 && load[i] != 0.0) {
+                has_free_load = true;
+                break;
+            }
+        if (!has_free_load)
+            return error_result(
+                "topology optimization needs a load on a free degree of freedom — the "
+                "assembled load is zero, or every applied load acts on a constrained DOF, "
+                "so the reduced system has a zero right-hand side and the compliance "
+                "objective is trivial");
+    }
 
     // Per-element base stiffness k0ₑ at the design material, assembled once and
     // scaled per iteration (ADR-0002 decision 3).
@@ -188,10 +290,24 @@ val optimize_topology(val mesh_js, const std::string& mat_json,
     read_index_array(topopt_js["passive"], "solid", config.passive_solid);
     read_index_array(topopt_js["passive"], "void", config.passive_void);
 
+    // Auto-keep the supported and loaded elements solid (ADR-0002 decision 6),
+    // unioned with any explicit keep-in from the reserved picker payload. The
+    // optimizer treats a duplicate index as a single pin; an element listed both
+    // here (a support/load) and as keep-out void is a genuine contradiction and
+    // is rejected there. This is what makes the automatic v1 design domain
+    // physical — the load path stays attached to its supports and loads.
+    const std::vector<int> bc_pinned = pinned_solid_from_bcs(bcs_js, mfem_mesh);
+    config.passive_solid.insert(config.passive_solid.end(), bc_pinned.begin(),
+                                bc_pinned.end());
+
     // Iteration-count sanity: a non-positive budget would run zero iterations and
     // return the uniform start, which is never what the caller wants.
     if (config.max_iterations <= 0)
         return error_result("maxIterations must be a positive integer");
+
+    printf("[topopt] design domain: %d of %d elements pinned solid at supports/loads\n",
+           static_cast<int>(bc_pinned.size()), ne);
+    fflush(stdout);
 
     printf("[topopt] min_compliance: %d elements, %d dofs, volfrac=%.3f, p=%.2f, "
            "r_min=%.4g, move=%.3f, maxit=%d, tol=%.4g\n",
