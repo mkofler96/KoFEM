@@ -43,6 +43,8 @@ add_executable(kofem_wasm_emcc
     cpp/spatial_grid.cpp
     cpp/topology_simp_core.cpp
     cpp/topology_filter.cpp
+    cpp/topology_mma.cpp
+    cpp/topology_optimize.cpp
     cpp/json_util.cpp
     cpp/wasm_util.cpp
     cpp/netgen_glue.cpp
