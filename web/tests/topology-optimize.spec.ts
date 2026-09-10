@@ -13,6 +13,15 @@
 import { test, expect } from "./coverage";
 import { gotoApp } from "./fixtures/app";
 
+// The test hook main.tsx exposes on the page (src/main.tsx). Typed here so the
+// evaluate/waitForFunction callbacks avoid `any` — the type is erased before the
+// callback body is serialized into the browser.
+type KofemWindow = Window & {
+  __kofem?: {
+    sendToWorker: (type: string, payload: unknown) => Promise<unknown>;
+  };
+};
+
 // A cantilever beam of unit cubes, each split into 6 tets (Freudenthal, all
 // sharing the 0–7 body diagonal). Returns store-shaped nodes/elements plus the
 // x=0 (built-in) and x=Lx (loaded) node ids, so the caller can constrain and
@@ -88,7 +97,7 @@ test("optimize_topology worker: density field of element length + progress logs"
   );
 
   await gotoApp(page);
-  await page.waitForFunction(() => !!(window as any).__kofem);
+  await page.waitForFunction(() => Boolean((window as KofemWindow).__kofem));
 
   const result = (await page.evaluate(
     async (beam) => {
@@ -130,10 +139,12 @@ test("optimize_topology worker: density field of element length + progress logs"
         },
       };
 
-      const res = (await (window as any).__kofem.sendToWorker(
-        "optimize_topology",
-        payload,
-      )) as { density: Float64Array; history: unknown[] };
+      const kofem = (window as KofemWindow).__kofem;
+      if (!kofem) throw new Error("__kofem test hook is not available");
+      const res = (await kofem.sendToWorker("optimize_topology", payload)) as {
+        density: Float64Array;
+        history: unknown[];
+      };
       return {
         densityLength: res.density.length,
         elementCount: elements.length,

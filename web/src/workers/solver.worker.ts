@@ -2275,7 +2275,7 @@ function handleTopOpt(id: number, payload: TopOptPayload) {
   const shellElements = elements.filter((e) => e.type === "CTRIA3");
   if (shellElements.length > 0)
     throw new Error(
-      `Topology optimization is solid-only for now (KOF-237): this model has ` +
+      "Topology optimization is solid-only for now (KOF-237): this model has " +
         `${shellElements.length} shell (CTRIA3) element(s). Optimize a solid ` +
         "(tetrahedral) model, or wait for shell/coupled support.",
     );
@@ -2285,7 +2285,7 @@ function handleTopOpt(id: number, payload: TopOptPayload) {
   const shellBodies = properties.filter((p) => p.discretization === "shell");
   if (shellBodies.length > 0)
     throw new Error(
-      `Topology optimization is solid-only for now (KOF-237): ` +
+      "Topology optimization is solid-only for now (KOF-237): " +
         `${shellBodies.length} body/bodies are marked "Shell". Switch them to ` +
         "Solid to optimize this model.",
     );
@@ -2317,13 +2317,11 @@ function handleTopOpt(id: number, payload: TopOptPayload) {
 
   const nElems = tetElements.length + hexElements.length;
   const volfrac = settings.constraints.volumeFraction;
+  const volfracNote =
+    volfrac !== undefined ? `, volume fraction ${volfrac}` : "";
   self.postMessage({
     id,
-    log:
-      `Starting topology optimization: ${nodes.length} nodes, ${nElems} ` +
-      `elements (${settings.objective}` +
-      (volfrac !== undefined ? `, volume fraction ${volfrac}` : "") +
-      `, max ${settings.maxIterations} iterations)…`,
+    log: `Starting topology optimization: ${nodes.length} nodes, ${nElems} elements (${settings.objective}${volfracNote}, max ${settings.maxIterations} iterations)…`,
   });
 
   // Mesh as typed arrays; materials/BCs/settings stay JSON (small). The final
