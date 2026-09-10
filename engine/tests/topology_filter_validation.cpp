@@ -39,16 +39,16 @@ using namespace kofem::topopt;
 
 namespace {
 
-int g_failures = 0;
-
-void check(const char* name, bool ok) {
-    if (!ok) ++g_failures;
+// Failure counter threaded by reference (as in topology_simp_validation.cpp /
+// shell_validation.cpp) rather than a mutable global.
+void check(int& failures, const char* name, bool ok) {
+    if (!ok) ++failures;
     std::printf("  [%s] %s\n", ok ? "PASS" : "FAIL", name);
 }
 
-void check_close(const char* name, double got, double want, double tol) {
+void check_close(int& failures, const char* name, double got, double want, double tol) {
     const bool ok = std::abs(got - want) <= tol;
-    if (!ok) ++g_failures;
+    if (!ok) ++failures;
     std::printf("  [%s] %-52s got %.12g  want %.12g\n", ok ? "PASS" : "FAIL", name, got,
                 want);
 }
@@ -86,7 +86,7 @@ ReferenceH brute_force_H(const std::vector<Point3>& c, double r_min) {
 
 // Compare the filter's sparse H against the dense reference: same row sums, same
 // per-neighbor weights, same neighbor counts (no missing or spurious neighbors).
-void check_against_reference(const char* tag, const DensityFilter& filter,
+void check_against_reference(int& failures, const char* tag, const DensityFilter& filter,
                              const ReferenceH& ref) {
     std::printf("%s: filter H/Hs vs. brute-force reference (%d elements)\n", tag, ref.ne);
 
@@ -117,11 +117,11 @@ void check_against_reference(const char* tag, const DensityFilter& filter,
         }
     }
 
-    check("row sums Hs match reference", rowsums_ok);
-    check("neighbor counts match reference (no missing/spurious)", counts_ok);
-    check("neighbor weights match reference H", weights_ok);
-    check("H is symmetric", symmetric);
-    check("self weight H_ee present and == reference", self_weight_ok);
+    check(failures, "row sums Hs match reference", rowsums_ok);
+    check(failures, "neighbor counts match reference (no missing/spurious)", counts_ok);
+    check(failures, "neighbor weights match reference H", weights_ok);
+    check(failures, "H is symmetric", symmetric);
+    check(failures, "self weight H_ee present and == reference", self_weight_ok);
 }
 
 // e = ix*ny + iy, centroid (ix+0.5, iy+0.5, 0.5) on a unit grid.
@@ -147,6 +147,8 @@ std::vector<Point3> grid_3d(int nx, int ny, int nz) {
 }  // namespace
 
 int main() {
+    int failures = 0;
+
     // ── (1) 2D grid: reproduce Andreassen H / Hs for a known r_min ─────────────
     {
         const int nx = 8, ny = 5;
@@ -154,7 +156,7 @@ int main() {
         const std::vector<Point3> c = grid_2d(nx, ny);
         const DensityFilter filter(c, r_min);
         const ReferenceH ref = brute_force_H(c, r_min);
-        check_against_reference("2D grid (r_min=2.4)", filter, ref);
+        check_against_reference(failures, "2D grid (r_min=2.4)", filter, ref);
 
         // The interior element at (3,2) has the full rotation-symmetric stencil;
         // its Hs is Σ over the stencil of (r_min − dist). Spot-check the value so
@@ -166,8 +168,8 @@ int main() {
                 const double w = r_min - std::sqrt((double)(dx * dx + dy * dy));
                 if (w > 0.0) hs_expect += w;
             }
-        check_close("interior Hs matches analytic cone stencil", filter.row_sum(e_int),
-                    hs_expect, 1e-12);
+        check_close(failures, "interior Hs matches analytic cone stencil",
+                    filter.row_sum(e_int), hs_expect, 1e-12);
 
         // ── (2) single-element sensitivity spike smears over the r_min ball ────
         // rho ≡ 0.5, sens = e_k. Then d̃c_e = H_ek·ρ_k·1 / (Hs_e·max(ρ_e,γ))
@@ -192,8 +194,9 @@ int main() {
         int ball = 0;
         for (int e = 0; e < ref.ne; ++e)
             if (ref.at(e, k) > 0.0) ++ball;
-        check("filtered spike equals H_ek/Hs_e on the ball, 0 outside", spike_ok);
-        check_close("smeared support size == r_min neighborhood of k", nonzero, ball, 0);
+        check(failures, "filtered spike equals H_ek/Hs_e on the ball, 0 outside", spike_ok);
+        check_close(failures, "smeared support size == r_min neighborhood of k", nonzero,
+                    ball, 0);
 
         // ── (3a) density filter reproduces a uniform field (partition of unity) ─
         const std::vector<double> uniform(c.size(), 0.37);
@@ -201,7 +204,7 @@ int main() {
         bool partition_ok = true;
         for (const double v : phys)
             if (std::abs(v - 0.37) > 1e-12) partition_ok = false;
-        check("density filter reproduces a uniform field", partition_ok);
+        check(failures, "density filter reproduces a uniform field", partition_ok);
     }
 
     // ── (1b) 3D grid: the grid search must be correct in 3D too ────────────────
@@ -211,7 +214,7 @@ int main() {
         const std::vector<Point3> c = grid_3d(nx, ny, nz);
         const DensityFilter filter(c, r_min);
         const ReferenceH ref = brute_force_H(c, r_min);
-        check_against_reference("3D grid (r_min=1.8)", filter, ref);
+        check_against_reference(failures, "3D grid (r_min=1.8)", filter, ref);
 
         // ── (3b) density-filter chain rule vs. central finite difference ───────
         // f(ρ) = Σ_e ½·ρ̃_e², so ∂f/∂ρ̃_e = ρ̃_e; chain back to ρ and compare to a
@@ -245,18 +248,18 @@ int main() {
                         grad[j], rel);
             if (rel > 1e-6) fd_ok = false;
         }
-        check("density-filter gradient matches finite difference", fd_ok);
+        check(failures, "density-filter gradient matches finite difference", fd_ok);
     }
 
     // ── (3c) default filter radius ≈ 1.5× mean element size ────────────────────
     {
         std::printf("default r_min from element volumes\n");
         const std::vector<double> unit_cubes(20, 1.0);  // mean size = cbrt(1) = 1
-        check_close("default_filter_radius(unit cubes) == 1.5", default_filter_radius(unit_cubes),
-                    1.5, 1e-12);
+        check_close(failures, "default_filter_radius(unit cubes) == 1.5",
+                    default_filter_radius(unit_cubes), 1.5, 1e-12);
         const std::vector<double> vol8(10, 8.0);  // mean size = cbrt(8) = 2
-        check_close("default_filter_radius(vol 8) == 3.0", default_filter_radius(vol8), 3.0,
-                    1e-12);
+        check_close(failures, "default_filter_radius(vol 8) == 3.0", default_filter_radius(vol8),
+                    3.0, 1e-12);
     }
 
     // ── spatial grid: a direct radius query matches a brute-force scan ─────────
@@ -280,10 +283,10 @@ int main() {
             }
             if (static_cast<int>(got.size()) != brute) ok = false;
         }
-        check("query_radius finds exactly the in-radius points", ok);
+        check(failures, "query_radius finds exactly the in-radius points", ok);
     }
 
-    std::printf(g_failures != 0 ? "\n%d check(s) FAILED\n" : "\nall checks passed\n",
-                g_failures);
-    return g_failures != 0 ? 1 : 0;
+    std::printf(failures != 0 ? "\n%d check(s) FAILED\n" : "\nall checks passed\n",
+                failures);
+    return failures != 0 ? 1 : 0;
 }
