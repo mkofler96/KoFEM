@@ -294,6 +294,23 @@ int main() {
         check(failures, "infeasible volume fraction (too much pinned solid) is rejected",
               throws(bad));
     }
+    // Repeating an index does not pin any additional material. Treat passive
+    // regions as sets when checking feasibility rather than counting duplicate
+    // entries repeatedly.
+    {
+        ComplianceOptConfig duplicate = base_config();
+        duplicate.max_iterations = 1;
+        duplicate.passive_solid.assign(1000, solid_box.front());
+        check(failures, "duplicate passive indices are counted only once",
+              !throws(duplicate));
+    }
+    // A non-positive iteration budget is a malformed request. In particular,
+    // max_iterations=0 must not perform one unrequested analysis iteration.
+    {
+        ComplianceOptConfig bad = base_config();
+        bad.max_iterations = 0;
+        check(failures, "non-positive max_iterations is rejected", throws(bad));
+    }
 
     // ── (5) Determinism: identical inputs → identical final density ───────────
     std::printf("\nDeterminism:\n");
