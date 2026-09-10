@@ -21,6 +21,7 @@
 
 #include <mfem.hpp>
 
+#include <array>
 #include <vector>
 
 namespace kofem::topopt {
@@ -33,13 +34,17 @@ double simp_scale_deriv(double rho, double penalty, double emin_rel);
 
 // Per-element quantities built once from the design mesh at the full material
 // modulus E₀, reused across every optimization iteration:
-//   k0[e]     full-material element stiffness (dof·dim square)
-//   vdofs[e]  the element's global vdof indices (gather uₑ, scatter kₑ)
-//   volume[e] element measure ∫_e dV (for the volume constraint + sensitivity)
+//   k0[e]       full-material element stiffness (dof·dim square)
+//   vdofs[e]    the element's global vdof indices (gather uₑ, scatter kₑ)
+//   volume[e]   element measure ∫_e dV (for the volume constraint + sensitivity)
+//   centroid[e] element center {x,y,z} (the radius filter's neighbor search,
+//               KOF-229 — built here so the filter's precompute is part of the
+//               same once-per-run cache, then handed to DensityFilter)
 struct ElementStiffnessCache {
     std::vector<mfem::DenseMatrix> k0;
     std::vector<mfem::Array<int>> vdofs;
     std::vector<double> volume;
+    std::vector<std::array<double, 3>> centroid;
 };
 
 // Assemble k0[e], vdofs[e] and volume[e] for a vector-H1 space (vdim = dim)
