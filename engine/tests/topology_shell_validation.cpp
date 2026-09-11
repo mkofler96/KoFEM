@@ -31,18 +31,18 @@ using namespace kofem::topopt;
 
 namespace {
 
-int g_failures = 0;
-
-void check(const char* name, double got, double ref, double tol_pct) {
+// The pass/fail counter is threaded through by reference rather than kept as a
+// mutable global (matching shell_validation.cpp), so the checks stay pure.
+void check(int& failures, const char* name, double got, double ref, double tol_pct) {
     const double err = std::fabs(got - ref) / std::max(std::fabs(ref), 1e-300) * 100.0;
     const bool ok = err <= tol_pct;
-    if (!ok) ++g_failures;
+    if (!ok) ++failures;
     std::printf("  [%s] %-30s got=%.6e ref=%.6e err=%.3f%% (tol %.2f%%)\n",
                 ok ? "PASS" : "FAIL", name, got, ref, err, tol_pct);
 }
 
-void expect(const char* name, bool ok, const char* detail) {
-    if (!ok) ++g_failures;
+void expect(int& failures, const char* name, bool ok, const char* detail) {
+    if (!ok) ++failures;
     std::printf("  [%s] %-30s %s\n", ok ? "PASS" : "FAIL", name, detail);
 }
 
@@ -88,7 +88,7 @@ double fd_sensitivity(const ShellTopOptInput& in, const ShellStiffnessCache& cac
 }
 
 // ── 1. Pure-shell FD sensitivity ──────────────────────────────────────────────
-void test_shell_fd_sensitivity() {
+void test_shell_fd_sensitivity(int& failures) {
     std::printf("Pure-shell compliance sensitivity vs. finite difference:\n");
     const double a = 100.0, E = 210000.0, nu = 0.3, t = 2.0;
     const int n = 4;
@@ -119,9 +119,9 @@ void test_shell_fd_sensitivity() {
     // Check a spread of elements (every 3rd) against the finite difference.
     for (int e = 0; e < ne; e += 3) {
         const double fd = fd_sensitivity(in, cache, rho, e, h, p, emin);
-        char name[48];
-        std::snprintf(name, sizeof(name), "facet %d dc/drho", e);
-        check(name, ev.dcompliance[e], fd, 0.5);
+        std::array<char, 48> name{};
+        std::snprintf(name.data(), name.size(), "facet %d dc/drho", e);
+        check(failures, name.data(), ev.dcompliance[e], fd, 0.5);
     }
 }
 
@@ -129,7 +129,7 @@ void test_shell_fd_sensitivity() {
 // A solid block cantilevered at x=0 with a thin shell wall hanging from its
 // under-face on the mid-surface y=W/2, joined by distributing (RBE3) couplings.
 // The whole thing — tets AND facets — is one design domain; the coupling is not.
-void test_coupled_fd_sensitivity() {
+void test_coupled_fd_sensitivity(int& failures) {
     std::printf("Coupled shell/solid sensitivity vs. finite difference (RBE3 interface):\n");
     const double L = 40.0, W = 8.0, H = 8.0, Hw = 20.0, t = 1.5;
     const double Es = 210000.0, nus = 0.3, Esh = 70000.0, nush = 0.33;
@@ -228,14 +228,15 @@ void test_coupled_fd_sensitivity() {
     for (const int e : probe) {
         if (e >= ne) continue;
         const double fd = fd_sensitivity(in, cache, rho, e, h, p, emin);
-        char name[48];
-        std::snprintf(name, sizeof(name), "%s %d dc/drho", e < cache.n_tets ? "tet" : "facet", e);
-        check(name, ev.dcompliance[e], fd, 1.0);
+        std::array<char, 48> name{};
+        std::snprintf(name.data(), name.size(), "%s %d dc/drho",
+                      e < cache.n_tets ? "tet" : "facet", e);
+        check(failures, name.data(), ev.dcompliance[e], fd, 1.0);
     }
 }
 
 // ── 3. Thin-plate SIMP: compliance descent + rib layout ───────────────────────
-void test_plate_optimization() {
+void test_plate_optimization(int& failures) {
     std::printf("Simply-supported thin plate under pressure — SIMP rib layout:\n");
     const double a = 100.0, E = 210000.0, nu = 0.3, t = 2.0;
     const int n = 16;
@@ -266,15 +267,15 @@ void test_plate_optimization() {
 
     const ShellTopOptResult res = optimize_shell_compliance(in, cfg);
     const auto& h = res.history;
-    expect("plate ran iterations", !h.empty(),
+    expect(failures, "plate ran iterations", !h.empty(),
            h.empty() ? "no history" : "history recorded");
     if (h.empty()) return;
 
     // Compliance descends from the uniform start.
-    expect("compliance decreased", h.back().compliance < h.front().compliance * 0.999,
+    expect(failures, "compliance decreased", h.back().compliance < h.front().compliance * 0.999,
            h.back().compliance < h.front().compliance ? "c(final) < c(initial)" : "no descent");
     // Volume constraint respected (allow a small MMA overshoot band).
-    check("final volume fraction", h.back().volume, cfg.volume_fraction, 8.0);
+    check(failures, "final volume fraction", h.back().volume, cfg.volume_fraction, 8.0);
 
     // Rib layout: the design is non-uniform — material pulled into ribs, voids
     // elsewhere — rather than a uniform gray field. Measure the spread.
@@ -288,7 +289,7 @@ void test_plate_optimization() {
     std::printf("  density: min=%.3f mean=%.3f max=%.3f over %zu facets, %d iters (%s)\n",
                 lo, mean, hi, res.density.size(), res.iterations,
                 res.converged ? "converged" : "hit cap");
-    expect("non-uniform (ribs form)", hi - lo > 0.5,
+    expect(failures, "non-uniform (ribs form)", hi - lo > 0.5,
            hi - lo > 0.5 ? "clear solid/void separation" : "field too uniform");
 }
 
@@ -296,9 +297,10 @@ void test_plate_optimization() {
 
 int main() {
     std::printf("\nKoFEM shell/coupled topology-optimization validation (KOF-237)\n\n");
-    test_shell_fd_sensitivity();
-    test_coupled_fd_sensitivity();
-    test_plate_optimization();
-    std::printf("\n%s\n", g_failures == 0 ? "all checks passed" : "SOME CHECKS FAILED");
-    return g_failures == 0 ? 0 : 1;
+    int failures = 0;
+    test_shell_fd_sensitivity(failures);
+    test_coupled_fd_sensitivity(failures);
+    test_plate_optimization(failures);
+    std::printf("\n%s\n", failures == 0 ? "all checks passed" : "SOME CHECKS FAILED");
+    return failures == 0 ? 0 : 1;
 }

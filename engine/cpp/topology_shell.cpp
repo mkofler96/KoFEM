@@ -113,7 +113,7 @@ ShellStiffnessCache build_shell_stiffness_cache(const ShellTopOptInput& in) {
         const auto Ke = kofem::shell::tet_element_stiffness(
             in.vertices, nd[0], nd[1], nd[2], nd[3], in.solid_young, in.solid_poisson);
         std::vector<double>& k0 = cache.k0[e];
-        k0.resize(12 * 12);
+        k0.resize(static_cast<size_t>(12) * 12);
         for (int a = 0; a < 12; ++a)
             for (int b = 0; b < 12; ++b) k0[a * 12 + b] = Ke[a][b];
         std::vector<int>& dofs = cache.dofs[e];
@@ -145,7 +145,7 @@ ShellStiffnessCache build_shell_stiffness_cache(const ShellTopOptInput& in) {
         const auto Ke = kofem::shell::facet_global_stiffness(in.vertices, nd[0], nd[1], nd[2], t,
                                                              in.shell_young, in.shell_poisson);
         std::vector<double>& k0 = cache.k0[e];
-        k0.resize(18 * 18);
+        k0.resize(static_cast<size_t>(18) * 18);
         for (int a = 0; a < 18; ++a)
             for (int b = 0; b < 18; ++b) k0[a * 18 + b] = Ke[a][b];
         std::vector<int>& dofs = cache.dofs[e];
