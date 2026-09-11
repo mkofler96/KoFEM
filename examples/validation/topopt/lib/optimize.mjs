@@ -69,13 +69,18 @@ export async function loadOptimizer() {
     );
     if ("error" in result) throw new Error(result.error);
     const history = result.history.map((h) => ({ ...h }));
+    const last = history[history.length - 1];
     return {
       density: Array.from(result.density),
       history,
-      // The JS boundary returns only { density, history }; the loop stops early
-      // only on the convergence tolerance, so fewer iterations than the budget
-      // means it converged (it never short-circuits for any other reason).
-      converged: history.length < settings.maxIterations,
+      // The JS boundary returns only { density, history }, not the native
+      // `converged` flag. The loop marks a run converged exactly when the last
+      // iteration's max|Δρ| falls below the tolerance (topology_optimize.cpp:
+      // `change < tolerance`, tested BEFORE the iteration cap), so a run that
+      // converges on the very last allowed iteration still counts. Infer it
+      // from the final history entry's max_change — not the iteration count,
+      // which can't tell that case apart from hitting the cap.
+      converged: last !== undefined && last.max_change < settings.tolerance,
       logs: [...logs],
     };
   };

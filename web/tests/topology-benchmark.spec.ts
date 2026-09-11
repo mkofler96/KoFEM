@@ -99,8 +99,8 @@ test("optimize_topology worker: MBB beam converges to a stiffened bimodal layout
   );
 
   await gotoApp(page);
-  await page.waitForFunction(
-    () => !!(window as unknown as { __kofem: unknown }).__kofem,
+  await page.waitForFunction(() =>
+    Boolean((window as unknown as { __kofem: unknown }).__kofem),
   );
 
   const result = (await page.evaluate(
