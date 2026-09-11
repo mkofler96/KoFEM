@@ -107,7 +107,17 @@ test("Optimize panel: a multi-material model is blocked (v1 optimizes one materi
   // one — so a model whose bodies use different materials must be refused rather
   // than optimized as if every body were the first material.
   await page.evaluate(() => {
-    const store = (window as any).__kofemStore;
+    const store = (
+      window as unknown as {
+        __kofemStore: {
+          getState(): {
+            materials: unknown[];
+            elements: { propertyId: number }[];
+          };
+          setState(s: object): void;
+        };
+      }
+    ).__kofemStore;
     const state = store.getState();
     store.setState({
       materials: [
@@ -125,7 +135,7 @@ test("Optimize panel: a multi-material model is blocked (v1 optimizes one materi
         { id: 1, materialId: 1 },
         { id: 2, materialId: 2 },
       ],
-      elements: state.elements.map((e: { propertyId: number }, i: number) =>
+      elements: state.elements.map((e, i) =>
         i % 2 === 0 ? { ...e, propertyId: 2 } : e,
       ),
     });
@@ -148,12 +158,18 @@ test("Optimize panel: a non-zero prescribed displacement is blocked", async ({
   // The engine's compliance sensitivity assumes homogeneous supports and rejects
   // any non-zero prescribed displacement, so the pre-flight must catch it.
   await page.evaluate(() => {
-    const store = (window as any).__kofemStore;
+    const store = (
+      window as unknown as {
+        __kofemStore: {
+          getState(): { constraints: { prescribedValue?: number }[] };
+          setState(s: object): void;
+        };
+      }
+    ).__kofemStore;
     const state = store.getState();
     store.setState({
-      constraints: state.constraints.map(
-        (c: { prescribedValue?: number }, i: number) =>
-          i === 0 ? { ...c, prescribedValue: 0.5 } : c,
+      constraints: state.constraints.map((c, i) =>
+        i === 0 ? { ...c, prescribedValue: 0.5 } : c,
       ),
     });
   });
