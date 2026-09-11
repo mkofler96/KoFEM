@@ -25,6 +25,7 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <stdexcept>
 #include <vector>
 
 using namespace kofem::topopt;
@@ -293,6 +294,35 @@ void test_plate_optimization(int& failures) {
            hi - lo > 0.5 ? "clear solid/void separation" : "field too uniform");
 }
 
+// ── 4. Invalid per-facet thickness is rejected, not silently degenerate ───────
+// A zero/negative/non-finite per-facet thickness would give a zero-or-negative
+// facet volume and a degenerate stiffness; the cache builder must refuse it with
+// a clear error (Codex review on #448), matching solve_shell_core.
+void test_invalid_thickness_rejected(int& failures) {
+    std::printf("Invalid per-facet thickness is rejected:\n");
+    std::vector<double> V;
+    std::vector<int> Tr;
+    plate_mesh(100.0, 2, V, Tr);
+
+    ShellTopOptInput in;
+    in.n_nodes = static_cast<int>(V.size() / 3);
+    in.vertices = V;
+    in.triangles = Tr;
+    in.shell_young = 210000.0;
+    in.shell_poisson = 0.3;
+    in.thicknesses.assign(Tr.size() / 3, 2.0);
+    in.thicknesses[0] = 0.0;  // one degenerate facet
+
+    bool threw = false;
+    try {
+        build_shell_stiffness_cache(in);
+    } catch (const std::runtime_error&) {
+        threw = true;
+    }
+    expect(failures, "zero per-facet thickness throws", threw,
+           threw ? "rejected as expected" : "accepted a zero thickness");
+}
+
 }  // namespace
 
 int main() {
@@ -301,6 +331,7 @@ int main() {
     test_shell_fd_sensitivity(failures);
     test_coupled_fd_sensitivity(failures);
     test_plate_optimization(failures);
+    test_invalid_thickness_rejected(failures);
     std::printf("\n%s\n", failures == 0 ? "all checks passed" : "SOME CHECKS FAILED");
     return failures == 0 ? 0 : 1;
 }

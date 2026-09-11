@@ -90,9 +90,23 @@ ShellStiffnessCache build_shell_stiffness_cache(const ShellTopOptInput& in) {
 
     const int n_tets = static_cast<int>(in.tets.size() / 4);
     const int n_facets = static_cast<int>(in.triangles.size() / 3);
+    // Thickness must be a valid per-facet field or a positive uniform scalar —
+    // the same rule solve_shell_core enforces. A zero/negative/non-finite value
+    // would give a zero-or-negative facet volume and a degenerate stiffness, so
+    // refuse it with a clear error rather than optimize on garbage.
     const bool per_facet = static_cast<int>(in.thicknesses.size()) == n_facets;
-    if (n_facets > 0 && !per_facet && in.thickness <= 0.0)
-        throw std::runtime_error("build_shell_stiffness_cache: shell thickness must be positive");
+    if (n_facets > 0) {
+        if (per_facet) {
+            for (const double tk : in.thicknesses)
+                if (!std::isfinite(tk) || tk <= 0.0)
+                    throw std::runtime_error(
+                        "build_shell_stiffness_cache: every per-facet shell thickness must be "
+                        "finite and positive");
+        } else if (!std::isfinite(in.thickness) || in.thickness <= 0.0) {
+            throw std::runtime_error(
+                "build_shell_stiffness_cache: shell thickness must be finite and positive");
+        }
+    }
 
     ShellStiffnessCache cache;
     cache.n_tets = n_tets;
