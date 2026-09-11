@@ -31,6 +31,18 @@ single-DOF test below) via `bun run test` in `web/`.
 
 See `REPORT.md` for the latest FE-vs-reference numbers.
 
+## Topology-optimization benchmarks
+
+The linear-elastic cases above check a single FE scalar against a closed form. A
+topology-optimization run has no such closed form, so the SIMP + MMA optimizer
+(KOF-230/231) has its own benchmark suite under [`topopt/`](topopt/) — the MBB
+beam, a 3D cantilever, and a mesh-independence check — each locking a converged
+compliance/volume trajectory and the emergent layout to a tolerance band:
+
+```bash
+node examples/validation/topopt/run.mjs
+```
+
 ## What shapes the tolerances
 
 The engine targets interactive, in-browser solves, which sets two limits the
