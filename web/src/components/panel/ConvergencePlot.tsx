@@ -19,17 +19,22 @@ const PAD_BOTTOM = 20;
 const OBJ_COLOR = "#4e79a7"; // objective (compliance) — normalized to its range
 const VOL_COLOR = "#e15759"; // volume fraction — absolute 0..1
 
+interface Pt {
+  x: number;
+  y: number;
+}
+
 // Objective spans many orders of magnitude and volume fraction is bounded 0..1,
 // so they cannot share a linear axis. The objective is normalized to its own
 // [min, max] (its absolute start→end values are shown in the legend); volume
 // fraction is drawn on an absolute 0..1 scale. Both then live in the same unit
 // plot box, read against the legend rather than a shared numeric axis.
-function pathFor(
+function scaledCoords(
   points: ConvergencePoint[],
   value: (point: ConvergencePoint) => number,
   valueMin: number,
   valueMax: number,
-): string {
+): Pt[] {
   const iterations = points.map((point) => point.it);
   const itMin = Math.min(...iterations);
   const itMax = Math.max(...iterations);
@@ -37,15 +42,21 @@ function pathFor(
   // to the low end rather than divide by zero.
   const spanIt = itMax > itMin ? itMax - itMin : 1;
   const spanValue = valueMax > valueMin ? valueMax - valueMin : 1;
-  const plotX = (it: number) =>
-    PAD_LEFT + ((it - itMin) / spanIt) * (PLOT_W - PAD_LEFT - PAD_RIGHT);
-  const plotY = (val: number) =>
-    PAD_TOP +
-    (1 - (val - valueMin) / spanValue) * (PLOT_H - PAD_TOP - PAD_BOTTOM);
-  return points
+  return points.map((point) => ({
+    x:
+      PAD_LEFT +
+      ((point.it - itMin) / spanIt) * (PLOT_W - PAD_LEFT - PAD_RIGHT),
+    y:
+      PAD_TOP +
+      (1 - (value(point) - valueMin) / spanValue) *
+        (PLOT_H - PAD_TOP - PAD_BOTTOM),
+  }));
+}
+
+function toPath(coords: Pt[]): string {
+  return coords
     .map(
-      (point, i) =>
-        `${i === 0 ? "M" : "L"}${plotX(point.it).toFixed(1)} ${plotY(value(point)).toFixed(1)}`,
+      (pt, i) => `${i === 0 ? "M" : "L"}${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`,
     )
     .join(" ");
 }
@@ -65,8 +76,13 @@ export function ConvergencePlot({
   const objFirst = points[0].objective;
   const objLast = points[points.length - 1].objective;
 
-  const objPath = pathFor(points, (point) => point.objective, objMin, objMax);
-  const volPath = pathFor(points, (point) => point.volume, 0, 1);
+  const objCoords = scaledCoords(
+    points,
+    (point) => point.objective,
+    objMin,
+    objMax,
+  );
+  const volCoords = scaledCoords(points, (point) => point.volume, 0, 1);
 
   const fmt = (val: number) =>
     Math.abs(val) >= 1000 || (val !== 0 && Math.abs(val) < 0.01)
@@ -91,8 +107,27 @@ export function ConvergencePlot({
           fill="none"
           stroke="#d1d5db"
         />
-        <path d={objPath} fill="none" stroke={OBJ_COLOR} strokeWidth={1.5} />
-        <path d={volPath} fill="none" stroke={VOL_COLOR} strokeWidth={1.5} />
+        <path
+          d={toPath(objCoords)}
+          fill="none"
+          stroke={OBJ_COLOR}
+          strokeWidth={1.5}
+        />
+        <path
+          d={toPath(volCoords)}
+          fill="none"
+          stroke={VOL_COLOR}
+          strokeWidth={1.5}
+        />
+        {/* Point markers: a single-iteration run (maxIterations=1 or convergence
+            on the first pass, and the first live frame) has no line segment to
+            draw, so the dot is what makes that data point visible. */}
+        {objCoords.map((pt, i) => (
+          <circle key={i} cx={pt.x} cy={pt.y} r={1.6} fill={OBJ_COLOR} />
+        ))}
+        {volCoords.map((pt, i) => (
+          <circle key={i} cx={pt.x} cy={pt.y} r={1.6} fill={VOL_COLOR} />
+        ))}
         <text x={PAD_LEFT} y={PLOT_H - 6} fontSize={9} fill="#6b7280">
           it {points[0].it}
         </text>

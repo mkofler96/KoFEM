@@ -39,7 +39,7 @@ export function visibleElementCount(
   threshold: number,
 ): number {
   let n = 0;
-  for (let i = 0; i < density.length; i++) if (density[i] >= threshold) n++;
+  for (const value of density) if (value >= threshold) n++;
   return n;
 }
 
