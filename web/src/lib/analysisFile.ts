@@ -14,6 +14,8 @@ import type {
   ResultType,
   StepTessellation,
   TieGroup,
+  TopOptObjective,
+  TopOptSettingsState,
   VolMesh,
 } from "../store/modelStore";
 import { RESULT_TYPES } from "../store/modelStore";
@@ -86,6 +88,10 @@ export interface AnalysisState {
   surfaceFaceIds: number[] | null;
   result: { displacements: Float64Array; vonMises?: Float64Array } | null;
   resultType: ResultType;
+  // Topology-optimization setup (KOF-232). Absent in files written before TO
+  // existed — such a file restores the default settings. The density field a
+  // run produces is a transient result and is not saved.
+  topOpt?: TopOptSettingsState;
 }
 
 // Setup state embedded as JSON in the "KoFEM" FieldData string array.
@@ -121,6 +127,8 @@ interface KofemFieldDataV1 {
   volMesh: VolMesh | null;
   surfaceTriangles: [number, number, number][] | null;
   surfaceFaceIds: number[] | null;
+  // Topology-optimization setup. Absent in files written before TO existed.
+  topOpt?: TopOptSettingsState;
 }
 
 // ── VTK cell types (vtkCellType.h) ────────────────────────────────────────────
@@ -261,6 +269,7 @@ export function serializeAnalysis(state: AnalysisState): string {
     volMesh: state.volMesh,
     surfaceTriangles: state.surfaceTriangles,
     surfaceFaceIds: state.surfaceFaceIds,
+    topOpt: state.topOpt,
   };
 
   const pointData: string[] = [
@@ -332,7 +341,23 @@ export function analysisFileName(modelName: string): string {
 
 // ── Parsing ───────────────────────────────────────────────────────────────────
 
-const APP_MODES: AppMode[] = ["geometry", "constraints", "solve", "results"];
+const APP_MODES: AppMode[] = [
+  "geometry",
+  "constraints",
+  "solve",
+  "optimize",
+  "results",
+];
+const TOPOPT_OBJECTIVES: TopOptObjective[] = ["min_compliance", "min_volume"];
+const TOPOPT_NUMERIC_FIELDS: (keyof TopOptSettingsState)[] = [
+  "volumeFraction",
+  "complianceLimit",
+  "penalty",
+  "filterRadius",
+  "moveLimit",
+  "maxIterations",
+  "tolerance",
+];
 const VIEW_REPRS = ["geometry", "surface", "volume", "wireframe"] as const;
 const ELEMENT_TYPES: ElementType[] = ["CTETRA", "CHEXA", "CTRIA3"];
 
@@ -417,6 +442,32 @@ function parseMetadata(xml: string): KofemFieldDataV1 {
     throw new Error(
       `Invalid analysis file: "couplingGroups" must be an array, got ${typeof meta.couplingGroups}`,
     );
+
+  // TO settings postdate the first analysis files, so absence is legitimate —
+  // but a present block of the wrong shape is not. The numeric fields are the
+  // raw strings the user typed (validated when a run starts), so only their
+  // type is checked here, not their range.
+  if (meta.topOpt !== undefined) {
+    const topOptRaw = meta.topOpt;
+    if (
+      typeof topOptRaw !== "object" ||
+      topOptRaw === null ||
+      Array.isArray(topOptRaw)
+    )
+      throw new Error(
+        `Invalid analysis file: "topOpt" must be an object, got ${typeof topOptRaw}`,
+      );
+    const to = topOptRaw as Record<string, unknown>;
+    if (!TOPOPT_OBJECTIVES.includes(to.objective as TopOptObjective))
+      throw new Error(
+        `Invalid analysis file: unknown topOpt objective "${to.objective}"`,
+      );
+    for (const field of TOPOPT_NUMERIC_FIELDS)
+      if (typeof to[field] !== "string")
+        throw new Error(
+          `Invalid analysis file: topOpt.${field} must be a string, got ${typeof to[field]}`,
+        );
+  }
 
   if (typeof meta.modelName !== "string")
     throw new Error('Invalid analysis file: "modelName" must be a string');
@@ -566,5 +617,6 @@ export function parseAnalysisFile(text: string): AnalysisState {
     surfaceFaceIds: meta.surfaceFaceIds,
     result,
     resultType: meta.resultType,
+    topOpt: meta.topOpt,
   };
 }

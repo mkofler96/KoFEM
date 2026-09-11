@@ -35,6 +35,11 @@ import {
   type BoundarySlice,
 } from "./boundarySlice";
 import { createResultsSlice, type ResultsSlice } from "./resultsSlice";
+import {
+  createTopOptSlice,
+  DEFAULT_TOPOPT_SETTINGS,
+  type TopOptSlice,
+} from "./topOptSlice";
 import { createViewSlice, type ViewSlice } from "./viewSlice";
 
 export type {
@@ -78,6 +83,13 @@ export type {
   LegendRange,
 } from "./resultsSlice";
 export { RESULT_TYPES } from "./resultsSlice";
+export type {
+  TopOptObjective,
+  TopOptSettingsState,
+  TopOptNumericField,
+  DensityResult,
+} from "./topOptSlice";
+export { DEFAULT_TOPOPT_SETTINGS } from "./topOptSlice";
 export type { LoadDisplay, ViewRepr } from "./viewSlice";
 
 // Whole-model lifecycle actions — they touch every slice, so they live in the
@@ -91,6 +103,7 @@ export type ModelState = GeometrySlice &
   MaterialSlice &
   BoundarySlice &
   ResultsSlice &
+  TopOptSlice &
   ViewSlice &
   AnalysisActions;
 
@@ -148,6 +161,15 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.result = a.result;
       s.resultType = a.resultType;
       s.legendRange = null;
+      // A saved analysis restores its static result (density is not persisted).
+      s.activeResult = "static";
+      // TO settings persist with the analysis; the density result does not, so a
+      // freshly loaded model carries the saved setup but no stale run. Files
+      // written before TO existed carry no block — fall back to the defaults.
+      // eslint-disable-next-line kofem/no-silent-fallback -- topOpt is genuinely optional: pre-TO analysis files carry no settings block, and the defaults are the intended starting setup, not fabricated solver data
+      s.topOpt = a.topOpt ?? { ...DEFAULT_TOPOPT_SETTINGS };
+      s.isOptimizing = false;
+      s.densityResult = null;
       s.viewRepr = a.viewRepr;
       s.deformScale = 1;
       s.mode = a.mode;
@@ -187,6 +209,10 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.result = null;
       s.resultType = "Displacement (magnitude)";
       s.legendRange = null;
+      s.activeResult = "static";
+      s.topOpt = { ...DEFAULT_TOPOPT_SETTINGS };
+      s.isOptimizing = false;
+      s.densityResult = null;
       s.stepSurface = null;
       s.stepBytes = null;
       s.geometryFormat = "step";
@@ -222,6 +248,7 @@ export const useModelStore = create<ModelState>()(
     ...createMaterialSlice(...args),
     ...createBoundarySlice(...args),
     ...createResultsSlice(...args),
+    ...createTopOptSlice(...args),
     ...createViewSlice(...args),
     ...createAnalysisActions(...args),
   })),

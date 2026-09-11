@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useModelStore, RESULT_TYPES } from "../../store/modelStore";
-import type { ResultType } from "../../store/modelStore";
+import type { DensityResult, ResultType } from "../../store/modelStore";
 import {
   computeResultRange,
   resultFieldSymbol,
@@ -11,14 +11,71 @@ import {
 import { LegendRangeControls } from "./LegendRangeControls";
 import styles from "./LeftPanel.module.css";
 
+// Compact summary of a topology-optimization run. The full density-field
+// visualization, threshold slider and convergence plot are KOF-233; this only
+// keeps the Results panel honest when a run has produced a density but no
+// displacement field (the common case: optimize without a prior static solve).
+function TopOptSummary({ density, history }: DensityResult) {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const d of density) {
+    if (d < min) min = d;
+    if (d > max) max = d;
+  }
+  const last = history[history.length - 1];
+  return (
+    <div className={styles.panel}>
+      <div className={styles.tabContent}>
+        <div className={styles.sectionLabel}>Topology optimization</div>
+        <div className={styles.statRow}>
+          <span className={styles.statKey}>Elements</span>
+          <span className={styles.statVal}>{density.length}</span>
+        </div>
+        <div className={styles.statRow}>
+          <span className={styles.statKey}>Iterations</span>
+          <span className={styles.statVal}>{history.length}</span>
+        </div>
+        {last && (
+          <>
+            <div className={styles.statRow}>
+              <span className={styles.statKey}>Final volume frac.</span>
+              <span className={styles.statVal}>{last.volume.toFixed(3)}</span>
+            </div>
+            <div className={styles.statRow}>
+              <span className={styles.statKey}>Final objective</span>
+              <span className={styles.statVal}>
+                {last.objective.toExponential(3)}
+              </span>
+            </div>
+          </>
+        )}
+        <div className={styles.statRow}>
+          <span className={styles.statKey}>Density range</span>
+          <span className={styles.statVal}>
+            {min.toFixed(3)} – {max.toFixed(3)}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ResultsPanel() {
   const result = useModelStore((s) => s.result);
+  const densityResult = useModelStore((s) => s.densityResult);
+  const activeResult = useModelStore((s) => s.activeResult);
   const resultType = useModelStore((s) => s.resultType);
   const setResultType = useModelStore((s) => s.setResultType);
   const deformScale = useModelStore((s) => s.deformScale);
   const setDeformScale = useModelStore((s) => s.setDeformScale);
   const nodes = useModelStore((s) => s.nodes);
   const elements = useModelStore((s) => s.elements);
+
+  // Show the density when an optimization is the current result (it just ran, or
+  // it is the only result present) — a static result left from an earlier solve
+  // must not shadow it after the hand-off.
+  if (densityResult && (activeResult === "density" || !result))
+    return <TopOptSummary {...densityResult} />;
 
   if (!result) {
     return (
