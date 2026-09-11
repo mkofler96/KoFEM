@@ -14,7 +14,7 @@
 // Run:  bun tests/test_density_field.mjs
 
 import {
-  orderedSolidElements,
+  orderedDesignElements,
   visibleElementCount,
   densityColor,
   buildDensitySurface,
@@ -42,7 +42,7 @@ const tetA = { id: 10, type: "CTETRA", nodeIds: [0, 1, 2, 3], propertyId: 1 };
 const tetB = { id: 11, type: "CTETRA", nodeIds: [1, 2, 3, 4], propertyId: 1 };
 const twoTets = [tetA, tetB];
 
-// ── orderedSolidElements: tets first, then hexes, shells dropped ──────────────
+// ── orderedDesignElements: tets, then hexes, then shell facets ────────────────
 {
   const hex = {
     id: 20,
@@ -51,14 +51,41 @@ const twoTets = [tetA, tetB];
     propertyId: 1,
   };
   const shell = { id: 21, type: "CTRIA3", nodeIds: [0, 1, 2], propertyId: 1 };
-  const ordered = orderedSolidElements([hex, tetA, shell, tetB]);
+  const ordered = orderedDesignElements([hex, tetA, shell, tetB]);
   check(
-    "orderedSolidElements puts tets before hexes and drops shells",
-    ordered.length === 3 &&
+    "orderedDesignElements orders tets, then hexes, then shell facets",
+    ordered.length === 4 &&
       ordered[0].id === tetA.id &&
       ordered[1].id === tetB.id &&
-      ordered[2].id === hex.id,
+      ordered[2].id === hex.id &&
+      ordered[3].id === shell.id,
     `got ${ordered.map((e) => e.id).join(",")}`,
+  );
+}
+
+// ── buildDensitySurface: a kept shell facet draws its own triangle ────────────
+{
+  const shellNodes = [
+    { id: 0, x: 0, y: 0, z: 0 },
+    { id: 1, x: 1, y: 0, z: 0 },
+    { id: 2, x: 0, y: 1, z: 0 },
+  ];
+  const shell = { id: 30, type: "CTRIA3", nodeIds: [0, 1, 2], propertyId: 1 };
+  const kept = buildDensitySurface(
+    shellNodes,
+    [shell],
+    new Float64Array([0.9]),
+    0.5,
+  );
+  check(
+    "a shell facet above the threshold is drawn as one triangle",
+    kept !== null && kept.triangleCount === 1,
+    kept === null ? "got null" : `got ${kept.triangleCount} triangles`,
+  );
+  check(
+    "a shell facet below the threshold is dropped",
+    buildDensitySurface(shellNodes, [shell], new Float64Array([0.1]), 0.5) ===
+      null,
   );
 }
 

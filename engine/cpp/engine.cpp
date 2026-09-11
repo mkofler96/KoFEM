@@ -29,6 +29,7 @@
 #include "solve_mfem.h"
 #include "solve_shell.h"
 #include "tessellate.h"
+#include "topology_shell_entry.h"
 #include "topology_simp.h"
 
 // ── Embind registrations ──────────────────────────────────────────────────────
@@ -42,5 +43,7 @@ EMSCRIPTEN_BINDINGS(kofem) {
     emscripten::function("solve_linear_elastic",   &solve_linear_elastic);
     emscripten::function("solve_shell",            &solve_shell);
     emscripten::function("solve_coupled",          &solve_coupled);
-    emscripten::function("optimize_topology",      &optimize_topology);
+    emscripten::function("optimize_topology",         &optimize_topology);
+    emscripten::function("optimize_topology_shell",   &optimize_topology_shell);
+    emscripten::function("optimize_topology_coupled", &optimize_topology_coupled);
 }

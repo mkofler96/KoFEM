@@ -47,6 +47,8 @@ add_executable(kofem_wasm_emcc
     cpp/topology_mma.cpp
     cpp/topology_optimize.cpp
     cpp/topology_simp.cpp
+    cpp/topology_shell.cpp
+    cpp/topology_shell_entry.cpp
     cpp/json_util.cpp
     cpp/wasm_util.cpp
     cpp/netgen_glue.cpp

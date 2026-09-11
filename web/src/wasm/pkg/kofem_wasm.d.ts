@@ -220,12 +220,56 @@ export interface KofemModule {
    *  channel the solve uses. v1 implements the `min_compliance` objective
    *  (KOF-230/231); `min_volume` (KOF-235) and the `maxStress` constraint
    *  (KOF-236) share this contract and return a clear `{error}` until they land.
-   *  Topology optimization is solid-only for now — an all-shell model is
-   *  rejected (KOF-237). */
+   *  This is the SOLID (tet/hex) design domain; shell and coupled models use the
+   *  two entries below (KOF-237). */
   optimize_topology(
     mesh: SolveMesh,
     mat_json: string,
     bcs_json: string,
+    topopt_json: string,
+  ): TopOptResult
+  /** SIMP topology optimization of a PURE-SHELL (all-CTRIA3) design domain
+   *  (KOF-237). Same mesh/material/BC payloads as {@link solve_shell} plus the
+   *  `topopt_json` settings block; each shell facet carries a design density that
+   *  penalizes its membrane+bending stiffness. Returns one density per facet (in
+   *  triangle order) plus the iteration history, or `{error}`. */
+  optimize_topology_shell(
+    mesh: ShellMesh,
+    mat_json: string,
+    bcs_json: string,
+    topopt_json: string,
+  ): TopOptResult
+  /** SIMP topology optimization of a COUPLED shell/solid design domain (KOF-237).
+   *  Same mesh/coupling/BC/material payloads as {@link solve_coupled} plus the
+   *  `topopt_json` settings block. A single density field spans the solid tets and
+   *  the shell facets; the RBE3/RBE2/MPC couplings are constraints, not design
+   *  variables, so the interface stays intact across iterations. Returns one
+   *  density per design element — solid tets first (tet order), then shell facets
+   *  (triangle order) — plus the iteration history, or `{error}`. */
+  optimize_topology_coupled(
+    mesh: {
+      vertices: Float64Array
+      tets: Int32Array
+      triangles: Int32Array
+      thicknesses?: Float64Array
+      attributes?: Int32Array
+    },
+    coupling: {
+      ref: Int32Array
+      offsets: Int32Array
+      solid: Int32Array
+      mpc?: Int32Array
+      dof_mask?: Int32Array
+      relaxation?: number
+    },
+    bcs: {
+      fixed_dofs: Int32Array
+      load_dofs: Int32Array
+      load_vals: Float64Array
+      prescribed_dofs?: Int32Array
+      prescribed_vals?: Float64Array
+    },
+    mat_json: string,
     topopt_json: string,
   ): TopOptResult
 }
