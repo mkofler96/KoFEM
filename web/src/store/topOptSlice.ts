@@ -82,13 +82,19 @@ export const createTopOptSlice: SliceCreator<TopOptSlice> = (set) => ({
   isOptimizing: false,
   densityResult: null,
 
+  // Changing any setting makes an existing density stale — it was computed with
+  // the previous setup. Clear it so the Optimize/Results nav steps no longer read
+  // as complete and Results stops showing a density that no longer matches the
+  // configured run (mirrors how the mesh/BC setters invalidate a static result).
   setTopOptObjective: (objective) =>
     set((s) => {
       s.topOpt.objective = objective;
+      s.densityResult = null;
     }),
   setTopOptSetting: (field, value) =>
     set((s) => {
       s.topOpt[field] = value;
+      s.densityResult = null;
     }),
   setOptimizing: (v) =>
     set((s) => {
@@ -97,5 +103,8 @@ export const createTopOptSlice: SliceCreator<TopOptSlice> = (set) => ({
   setDensityResult: (result) =>
     set((s) => {
       s.densityResult = result;
+      // A completed run is the freshly produced output; make Results show it in
+      // preference to any static result left from an earlier solve.
+      if (result) s.activeResult = "density";
     }),
 });

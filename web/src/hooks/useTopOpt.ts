@@ -152,9 +152,36 @@ export function useTopOpt() {
   // unlike the static solve, which a non-zero prescribed displacement drives.
   const loadOk = loads.length > 0 || surfaceLoads.length > 0;
 
+  // TO v1 optimizes ONE design material: the engine reads only the first
+  // material entry and treats the whole solid as that stiffness
+  // (topology_simp.cpp). A model whose bodies span several materials would be
+  // optimized as if all were the first, silently discarding the per-body
+  // assignments — so gate it, the way the shell/coupled solvers refuse a
+  // multi-material domain.
+  const usedPropertyIds = new Set(elements.map((e) => e.propertyId));
+  const usedMaterialIds = new Set(
+    properties
+      .filter((p) => usedPropertyIds.has(p.id))
+      .map((p) => p.materialId),
+  );
+  const singleMaterialOk = usedMaterialIds.size <= 1;
+
+  // The engine's compliance sensitivity assumes homogeneous supports, so it
+  // rejects any non-zero prescribed displacement (topology_simp.cpp). Catch it
+  // in pre-flight and explain, rather than enable a run that predictably fails.
+  // eslint-disable-next-line kofem/no-silent-fallback -- a constraint without prescribedValue is a homogeneous fixed BC, i.e. u = 0 by definition
+  const hasPrescribed = constraints.some((c) => (c.prescribedValue ?? 0) !== 0);
+
   const { settings, errors } = parseSettings(topOpt);
   const settingsOk = settings !== null;
-  const allOk = meshOk && matOk && bcOk && loadOk && settingsOk;
+  const allOk =
+    meshOk &&
+    matOk &&
+    singleMaterialOk &&
+    bcOk &&
+    loadOk &&
+    !hasPrescribed &&
+    settingsOk;
 
   function optimize() {
     // __kofemTriggerOptimize (E2E) can reach this without the button's gate, so
@@ -248,6 +275,20 @@ export function useTopOpt() {
         : `Fix the optimization settings: ${Object.values(errors).join("; ")}`,
     ],
   ];
+
+  // Blocker rows shown only when the condition applies, so the common case keeps
+  // the familiar five-row checklist rather than always carrying two green rows
+  // for constraints most models never hit.
+  if (matOk && !singleMaterialOk)
+    checks.push([
+      false,
+      `Topology optimization uses one design material, but the model spans ${usedMaterialIds.size} — assign a single material to all bodies`,
+    ]);
+  if (hasPrescribed)
+    checks.push([
+      false,
+      "Remove non-zero prescribed displacements — topology optimization supports fixed (zero) supports only",
+    ]);
 
   return {
     optimize,

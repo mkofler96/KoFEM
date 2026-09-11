@@ -161,6 +161,8 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.result = a.result;
       s.resultType = a.resultType;
       s.legendRange = null;
+      // A saved analysis restores its static result (density is not persisted).
+      s.activeResult = "static";
       // TO settings persist with the analysis; the density result does not, so a
       // freshly loaded model carries the saved setup but no stale run. Files
       // written before TO existed carry no block — fall back to the defaults.
@@ -207,6 +209,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.result = null;
       s.resultType = "Displacement (magnitude)";
       s.legendRange = null;
+      s.activeResult = "static";
       s.topOpt = { ...DEFAULT_TOPOPT_SETTINGS };
       s.isOptimizing = false;
       s.densityResult = null;

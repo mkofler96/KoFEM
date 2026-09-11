@@ -97,3 +97,72 @@ test("Optimize panel: invalid volume fraction blocks the run", async ({
   await page.getByLabel("Volume frac.").fill("0.4");
   await expect(runButton).toBeEnabled();
 });
+
+test("Optimize panel: a multi-material model is blocked (v1 optimizes one material)", async ({
+  page,
+}) => {
+  await bootstrapCantilever(page);
+
+  // TO v1 optimizes a single design material — the engine reads only the first
+  // one — so a model whose bodies use different materials must be refused rather
+  // than optimized as if every body were the first material.
+  await page.evaluate(() => {
+    const store = (window as any).__kofemStore;
+    const state = store.getState();
+    store.setState({
+      materials: [
+        ...state.materials,
+        {
+          id: 2,
+          name: "Aluminum",
+          young: 70e9,
+          poisson: 0.33,
+          density: 2700,
+          color: "#e15759",
+        },
+      ],
+      properties: [
+        { id: 1, materialId: 1 },
+        { id: 2, materialId: 2 },
+      ],
+      elements: state.elements.map((e: { propertyId: number }, i: number) =>
+        i % 2 === 0 ? { ...e, propertyId: 2 } : e,
+      ),
+    });
+  });
+
+  await goToOptimizePanel(page);
+  await expect(
+    page.getByText(/uses one design material, but the model spans 2/),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Run optimization/ }),
+  ).toBeDisabled();
+});
+
+test("Optimize panel: a non-zero prescribed displacement is blocked", async ({
+  page,
+}) => {
+  await bootstrapCantilever(page);
+
+  // The engine's compliance sensitivity assumes homogeneous supports and rejects
+  // any non-zero prescribed displacement, so the pre-flight must catch it.
+  await page.evaluate(() => {
+    const store = (window as any).__kofemStore;
+    const state = store.getState();
+    store.setState({
+      constraints: state.constraints.map(
+        (c: { prescribedValue?: number }, i: number) =>
+          i === 0 ? { ...c, prescribedValue: 0.5 } : c,
+      ),
+    });
+  });
+
+  await goToOptimizePanel(page);
+  await expect(
+    page.getByText(/Remove non-zero prescribed displacements/),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Run optimization/ }),
+  ).toBeDisabled();
+});
