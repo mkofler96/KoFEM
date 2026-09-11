@@ -6,6 +6,7 @@ import { OrbitControls, GizmoHelper, GizmoViewport } from "@react-three/drei";
 import { MeshScene } from "./MeshScene";
 import { FitCamera } from "./FitCamera";
 import { ColorBar } from "./ColorBar";
+import { DensityColorBar } from "./DensityColorBar";
 import { useModelStore } from "../../store/modelStore";
 
 export function Viewport() {
@@ -34,8 +35,9 @@ export function Viewport() {
         </button>
       </div>
 
-      {/* Result field legend */}
+      {/* Result field legend — static field, or density for a TO run */}
       <ColorBar />
+      <DensityColorBar />
 
       <Canvas
         camera={{ position: [5, 5, 5], fov: 45 }}

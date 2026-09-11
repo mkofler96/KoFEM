@@ -117,6 +117,7 @@ roadmap and the code agree.>
 ![Step 3 · Mesh generation](<assetUrl>)
 ![Step 4 · Load application](<assetUrl>)
 ![Step 5 · Analysis results](<assetUrl>)
+![Step 6 · Topology optimization](<assetUrl>)
 
 <!-- kofem-showcase-sha256:<fingerprint> -->
 ```
@@ -133,6 +134,7 @@ File-name-to-title mapping:
 | `03-mesh-generation.png` | Step 3 · Mesh generation |
 | `04-load-application.png` | Step 4 · Load application |
 | `05-results.png` | Step 5 · Analysis results |
+| `06-optimization.png` | Step 6 · Topology optimization |
 
 If the spec produces a file not in this table, use its filename as the title and
 say so — do not silently drop the image.

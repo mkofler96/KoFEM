@@ -5,6 +5,7 @@ import { test, expect } from "./coverage";
 import path from "path";
 import fs from "fs";
 import { gotoApp } from "./fixtures/app";
+import { bootstrapCantilever } from "./fixtures/cantilever";
 
 const OUT_DIR = path.join("playwright-results", "screenshots", "showcase");
 const STEP_FILES_DIR = path.resolve("..", "test_files");
@@ -287,5 +288,60 @@ test.describe("Full workflow showcase", () => {
     console.log(`[showcase] ${elapsed()} 05 screenshot done`);
 
     console.log(`[showcase] ${elapsed()} DONE`);
+  });
+
+  // Frame 6: topology optimization (KOF-233). The tube in the workflow above is
+  // a thin-walled shell demo, and TO is solid-only (KOF-237), so this frame runs
+  // on the solid cantilever fixture instead — a fast, deterministic minimum-
+  // compliance run — to show the density field, threshold and convergence plot.
+  // Mirrors optimize-panel.spec.ts so it stays as robust as that passing test.
+  test("optimize: density field, threshold and convergence plot", async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+
+    page.on("pageerror", (err) =>
+      console.error(`[showcase] page exception: ${err.message}`),
+    );
+
+    await bootstrapCantilever(page);
+    await page
+      .locator("nav")
+      .getByRole("button")
+      .filter({ hasText: "Optimize" })
+      .click();
+
+    // A filter radius sized to the beam and a small iteration cap keep the run
+    // fast; the emerged shape reads clearly at these settings.
+    await page.getByLabel("Filter r_min").fill("0.15");
+    await page.getByRole("button", { name: "Advanced" }).click();
+    await page.getByLabel("Max iters").fill("20");
+
+    await page.getByRole("button", { name: /Run optimization/ }).click();
+
+    // Hand-off to the density Results view.
+    await expect(page.getByText("Density threshold")).toBeVisible({
+      timeout: 120_000,
+    });
+    await expect(page.getByTestId("density-colorbar")).toBeVisible();
+    await expect(page.getByTestId("convergence-plot")).toBeVisible();
+
+    // A cutoff below 0.5 keeps the load-bearing material and lets the optimized
+    // structure emerge from the design domain for the screenshot.
+    await page.evaluate(() => {
+      (
+        window as unknown as {
+          __kofemStore: {
+            getState(): { setDensityThreshold(x: number): void };
+          };
+        }
+      ).__kofemStore
+        .getState()
+        .setDensityThreshold(0.4);
+    });
+    // Let the viewport rebuild the thresholded surface before capturing.
+    await page.waitForTimeout(400);
+
+    await page.screenshot({ path: path.join(OUT_DIR, "06-optimization.png") });
   });
 });

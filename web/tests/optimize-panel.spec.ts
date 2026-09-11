@@ -53,10 +53,11 @@ test("Optimize panel: gates, runs, streams logs, hands off to Results", async ({
 
   await runButton.click();
 
-  // A finished run advances to Results, which shows the density summary. The
-  // full field visualization is KOF-233; here it is enough that the hand-off
-  // happened and the density reached the store.
-  await expect(page.getByText("Topology optimization")).toBeVisible({
+  // A finished run advances to Results, which shows the density view (KOF-233):
+  // the threshold slider and the run summary. Here it is enough that the hand-off
+  // happened and the density reached the store; the density-field visualization
+  // and threshold behaviour are covered by topology-optimize-results.spec.ts.
+  await expect(page.getByText("Density threshold")).toBeVisible({
     timeout: 90_000,
   });
   await expect(page.getByText(/Iterations/)).toBeVisible();
