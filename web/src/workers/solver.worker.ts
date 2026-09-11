@@ -2332,9 +2332,7 @@ type TopOptEngineResult = { density: Float64Array; history: unknown[] };
 function postDensityResult(id: number, result: TopOptEngineResult) {
   self.postMessage({
     id,
-    log:
-      `Topology optimization complete: ${result.density.length} element ` +
-      `densities over ${result.history.length} iteration(s)`,
+    log: `Topology optimization complete: ${result.density.length} element densities over ${result.history.length} iteration(s)`,
   });
   self.postMessage(
     { id, ok: true, density: result.density, history: result.history },
@@ -2387,14 +2385,12 @@ function handleTopOpt(id: number, payload: TopOptPayload) {
 
   const volfrac = settings.constraints.volumeFraction;
   const settingsJson = JSON.stringify(settings);
+  const volfracNote =
+    volfrac !== undefined ? `, volume fraction ${volfrac}` : "";
   const startLog = (nElems: number, domain: string) =>
     self.postMessage({
       id,
-      log:
-        `Starting ${domain} topology optimization: ${nodes.length} nodes, ` +
-        `${nElems} elements (${settings.objective}` +
-        (volfrac !== undefined ? `, volume fraction ${volfrac}` : "") +
-        `, max ${settings.maxIterations} iterations)…`,
+      log: `Starting ${domain} topology optimization: ${nodes.length} nodes, ${nElems} elements (${settings.objective}${volfracNote}, max ${settings.maxIterations} iterations)…`,
     });
 
   // ── Pure shell (all CTRIA3, no couplings) → optimize_topology_shell ──────────

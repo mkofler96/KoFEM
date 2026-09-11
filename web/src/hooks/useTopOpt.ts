@@ -263,15 +263,16 @@ export function useTopOpt() {
   const nShell = shellElements.length;
   const plural = (n: number, word: string) =>
     `${n} ${word}${n === 1 ? "" : "s"}`;
+  const couplingNote =
+    couplingGroups.length > 0
+      ? ` (${plural(couplingGroups.length, "coupling")} held fixed)`
+      : "";
   const designDomain =
     nShell === 0
       ? plural(nSolid, "solid element")
       : nSolid === 0
         ? plural(nShell, "shell facet")
-        : `${plural(nSolid, "solid element")} + ${plural(nShell, "shell facet")}` +
-          (couplingGroups.length > 0
-            ? ` (${plural(couplingGroups.length, "coupling")} held fixed)`
-            : "");
+        : `${plural(nSolid, "solid element")} + ${plural(nShell, "shell facet")}${couplingNote}`;
 
   const checks: [boolean, string][] = [
     [
