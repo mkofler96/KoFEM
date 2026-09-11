@@ -17,6 +17,7 @@ import { useFacePick } from "./useFacePick";
 import { GeometryLayer } from "./GeometryLayer";
 import { FemMeshLayer } from "./FemMeshLayer";
 import { ResultsColormap } from "./ResultsColormap";
+import { DensityField } from "./DensityField";
 import { BoundaryConditionLayer } from "./BoundaryConditionLayer";
 
 const TARGET_DEFORM_FRACTION = 0.2;
@@ -24,6 +25,8 @@ const TARGET_DEFORM_FRACTION = 0.2;
 export function MeshScene() {
   const nodes = useModelStore((s) => s.nodes);
   const result = useModelStore((s) => s.result);
+  const densityResult = useModelStore((s) => s.densityResult);
+  const activeResult = useModelStore((s) => s.activeResult);
   const mode = useModelStore((s) => s.mode);
   const stepSurface = useModelStore((s) => s.stepSurface);
   const deformScaleFactor = useModelStore((s) => s.deformScale);
@@ -68,11 +71,18 @@ export function MeshScene() {
     return null;
   }
 
+  // A topology-optimization run is the active result: show the density field
+  // (KOF-233) instead of the deformed static result, even if an earlier static
+  // solve is still in the store. Results-mode only, same as the static result.
+  const showDensity =
+    mode === "results" && activeResult === "density" && !!densityResult;
+
   // Results are only displayed in the Results tab.  Navigating back to an
   // earlier step (e.g. Constraints) must show that step's visualization —
   // the undeformed mesh with BC/load overlays — not the deformed result,
-  // even though the solved `result` is still held in the store.
-  const showResult = !!result && mode === "results";
+  // even though the solved `result` is still held in the store. A density run
+  // takes precedence over a static result when it is the active one.
+  const showResult = !!result && mode === "results" && !showDensity;
 
   // Hovering a row in the Bodies panel highlights that body, which only the
   // coloured CAD tessellation can show — the FEM surface is one neutral colour.
@@ -91,9 +101,20 @@ export function MeshScene() {
 
   // The CAD tessellation stands in for the geometry representation (and is the
   // only thing to show before a mesh exists). It must never paint over a solved
-  // result, so it is suppressed in results mode.
+  // result, so it is suppressed in results mode (static or density).
   const showStepSurface =
-    !showResult && (repr === "geometry" || nodes.length === 0);
+    !showResult && !showDensity && (repr === "geometry" || nodes.length === 0);
+
+  // The density view stands alone: its own boundary surface replaces the neutral
+  // FEM surface, the deformed colormap and the BC/load overlays, so the emerged
+  // structure reads without the undeformed mesh drawn behind it.
+  if (showDensity) {
+    return (
+      <group>
+        <DensityField />
+      </group>
+    );
+  }
 
   return (
     <group>

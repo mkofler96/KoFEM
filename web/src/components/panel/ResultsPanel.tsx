@@ -8,14 +8,19 @@ import {
   resultFieldSymbol,
   resultUnit,
 } from "../../lib/resultField";
+import { visibleElementCount } from "../../lib/densityField";
+import type { ConvergencePoint } from "../../lib/topOptProgress";
+import { ConvergencePlot } from "./ConvergencePlot";
 import { LegendRangeControls } from "./LegendRangeControls";
 import styles from "./LeftPanel.module.css";
 
-// Compact summary of a topology-optimization run. The full density-field
-// visualization, threshold slider and convergence plot are KOF-233; this only
-// keeps the Results panel honest when a run has produced a density but no
-// displacement field (the common case: optimize without a prior static solve).
+// The density-field result view (KOF-233): the threshold slider that filters the
+// viewport, the convergence plot from the returned history, and the run summary.
+// Shown whenever a topology-optimization run is the active result.
 function TopOptSummary({ density, history }: DensityResult) {
+  const threshold = useModelStore((s) => s.densityThreshold);
+  const setDensityThreshold = useModelStore((s) => s.setDensityThreshold);
+
   let min = Infinity;
   let max = -Infinity;
   for (const d of density) {
@@ -23,13 +28,63 @@ function TopOptSummary({ density, history }: DensityResult) {
     if (d > max) max = d;
   }
   const last = history[history.length - 1];
+  const visible = visibleElementCount(density, threshold);
+  const points: ConvergencePoint[] = history.map((h) => ({
+    it: h.it,
+    objective: h.objective,
+    volume: h.volume,
+  }));
+
   return (
     <div className={styles.panel}>
       <div className={styles.tabContent}>
-        <div className={styles.sectionLabel}>Topology optimization</div>
+        <div className={styles.sectionLabel}>Density threshold</div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            marginBottom: 4,
+          }}
+        >
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={threshold}
+            onChange={(e) => setDensityThreshold(parseFloat(e.target.value))}
+            style={{ flex: 1 }}
+            aria-label="Density threshold"
+          />
+          <span
+            className={styles.statVal}
+            style={{ minWidth: 38, textAlign: "right" }}
+          >
+            {threshold.toFixed(2)}
+          </span>
+        </div>
+        <div className={styles.formNote} style={{ marginBottom: 12 }}>
+          Elements below the cutoff are hidden, revealing the optimized shape.
+        </div>
         <div className={styles.statRow}>
-          <span className={styles.statKey}>Elements</span>
-          <span className={styles.statVal}>{density.length}</span>
+          <span className={styles.statKey}>Visible elements</span>
+          <span className={styles.statVal} data-testid="visible-element-count">
+            {visible} / {density.length}
+          </span>
+        </div>
+
+        {points.length > 0 && (
+          <>
+            <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
+              Convergence
+            </div>
+            <ConvergencePlot points={points} />
+          </>
+        )}
+
+        <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
+          Run summary
         </div>
         <div className={styles.statRow}>
           <span className={styles.statKey}>Iterations</span>

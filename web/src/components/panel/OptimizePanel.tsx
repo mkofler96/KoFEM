@@ -1,10 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useModelStore } from "../../store/modelStore";
 import type { TopOptNumericField } from "../../store/modelStore";
 import { useTopOpt, type FieldErrors } from "../../hooks/useTopOpt";
+import { convergenceFromLogs } from "../../lib/topOptProgress";
+import { ConvergencePlot } from "./ConvergencePlot";
 import { LogSection } from "./LogSection";
 import styles from "./LeftPanel.module.css";
 
@@ -64,6 +66,12 @@ export function OptimizePanel() {
     logs,
   } = useTopOpt();
   const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  // Live convergence curve, parsed from the streamed "[topopt] it N: …" log
+  // lines as they arrive (the density field itself is only returned at the end —
+  // ADR-0002 decision 1 — so the geometry updates once, on completion, but the
+  // objective/volume history animates in real time here during the run).
+  const livePoints = useMemo(() => convergenceFromLogs(logs), [logs]);
 
   return (
     <div className={styles.panel}>
@@ -193,6 +201,15 @@ export function OptimizePanel() {
           >
             Cancel
           </button>
+        )}
+
+        {livePoints.length > 0 && (
+          <>
+            <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
+              Convergence
+            </div>
+            <ConvergencePlot points={livePoints} live={isOptimizing} />
+          </>
         )}
 
         <LogSection logs={logs} busy={isOptimizing} />

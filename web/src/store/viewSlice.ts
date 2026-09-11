@@ -15,6 +15,12 @@ export type LoadDisplay = "resultant" | "nodal";
 
 export type ViewRepr = "geometry" | "surface" | "volume" | "wireframe";
 
+// Default density cutoff for the topology-optimization result view (KOF-233).
+// Elements whose optimized density is below the threshold are hidden, so the
+// user sees the emerged structure instead of a fuzzy gradient. 0.5 is the usual
+// starting point — the midpoint of the SIMP [0, 1] density range.
+export const DEFAULT_DENSITY_THRESHOLD = 0.5;
+
 // Sidebar sizing (issue #339). Width is persisted so the user's preferred
 // split survives reloads; the open/closed state is derived from screen size
 // on startup (collapsed on small screens, expanded on desktop).
@@ -60,6 +66,11 @@ export interface ViewSlice {
   highlightBodyId: number | null;
   hiddenBodyIds: number[];
 
+  // Density cutoff for the topology-optimization result view (KOF-233): a
+  // viewport-side visibility filter, transient (not persisted), hiding every
+  // element below it so the optimized shape emerges from the density field.
+  densityThreshold: number;
+
   setViewRepr(v: ViewRepr): void;
   setShowUndeformedOverlay(v: boolean): void;
   setLoadDisplay(v: LoadDisplay): void;
@@ -70,6 +81,7 @@ export interface ViewSlice {
   setHighlightBodyId(id: number | null): void;
   toggleBodyVisibility(id: number): void;
   setAllBodiesVisible(): void;
+  setDensityThreshold(v: number): void;
 }
 
 export const createViewSlice: SliceCreator<ViewSlice> = (set) => ({
@@ -82,6 +94,7 @@ export const createViewSlice: SliceCreator<ViewSlice> = (set) => ({
   sidebarWidth: initialSidebarWidth(),
   highlightBodyId: null,
   hiddenBodyIds: [],
+  densityThreshold: DEFAULT_DENSITY_THRESHOLD,
 
   setViewRepr: (v) =>
     set((s) => {
@@ -125,5 +138,9 @@ export const createViewSlice: SliceCreator<ViewSlice> = (set) => ({
   setAllBodiesVisible: () =>
     set((s) => {
       s.hiddenBodyIds = [];
+    }),
+  setDensityThreshold: (v) =>
+    set((s) => {
+      s.densityThreshold = Math.min(1, Math.max(0, v));
     }),
 });

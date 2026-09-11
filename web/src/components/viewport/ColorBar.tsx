@@ -30,8 +30,13 @@ export function ColorBar() {
   const nodes = useModelStore((s) => s.nodes);
   const elements = useModelStore((s) => s.elements);
   const legendRange = useModelStore((s) => s.legendRange);
+  const activeResult = useModelStore((s) => s.activeResult);
+  const densityResult = useModelStore((s) => s.densityResult);
 
-  if (mode !== "results" || !result) return null;
+  // A density run showing its own field has its own legend (DensityColorBar);
+  // the static-field legend must not also paint over it.
+  const showDensity = activeResult === "density" && !!densityResult;
+  if (mode !== "results" || !result || showDensity) return null;
 
   const fieldRange = computeResultRange(result, resultType, nodes, elements);
   if (!fieldRange) return null;

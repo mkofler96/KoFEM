@@ -298,6 +298,10 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       s.nextCouplingGroupId = 1;
       s.nextFaceEntryId = 1;
       s.result = null;
+      // New/cleared geometry drops the element set a density was computed over
+      // (KOF-233): clear it so the Optimize/Results steps don't read as complete
+      // against a mesh that no longer exists.
+      s.densityResult = null;
       if (tessellation) {
         s.fitViewTrigger++;
         s.hasStarted = true;
@@ -349,6 +353,9 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       s.nextCouplingGroupId = 1;
       s.nextFaceEntryId = 1;
       s.result = null;
+      // A fresh mesh changes the element set, so any density from a prior run is
+      // stale (KOF-233) — drop it alongside the static result.
+      s.densityResult = null;
       s.selectedFace = null;
       s.pendingFaces = [];
       s.pickMode = null;

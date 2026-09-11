@@ -40,7 +40,11 @@ import {
   DEFAULT_TOPOPT_SETTINGS,
   type TopOptSlice,
 } from "./topOptSlice";
-import { createViewSlice, type ViewSlice } from "./viewSlice";
+import {
+  createViewSlice,
+  DEFAULT_DENSITY_THRESHOLD,
+  type ViewSlice,
+} from "./viewSlice";
 
 export type {
   Node,
@@ -172,6 +176,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.densityResult = null;
       s.viewRepr = a.viewRepr;
       s.deformScale = 1;
+      s.densityThreshold = DEFAULT_DENSITY_THRESHOLD;
       s.mode = a.mode;
       s.stepImportError = null;
       s.isRunning = false;
@@ -221,6 +226,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.surfaceFaceIds = null;
       s.viewRepr = "surface";
       s.deformScale = 1;
+      s.densityThreshold = DEFAULT_DENSITY_THRESHOLD;
       s.elementOrder = 1;
       s.autoShell = true;
       s.thinRatio = DEFAULT_THIN_RATIO;
