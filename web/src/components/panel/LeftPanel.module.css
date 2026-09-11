@@ -376,6 +376,47 @@
   line-height: 1.4;
 }
 
+/* Inline validation message under a form field, aligned with the input (past
+   the 80px label + 8px gap). Used by the Optimize panel's setting fields. */
+.fieldError {
+  font-size: 10.5px;
+  color: var(--warn);
+  margin: -4px 0 8px 88px;
+  line-height: 1.4;
+}
+
+/* Collapsible "Advanced" sub-header: a section label that toggles a group of
+   less-common settings (Optimize panel's SIMP move limit / iterations / tol). */
+.advancedToggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 12px 0 8px;
+  cursor: pointer;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted-2);
+  font-family: inherit;
+}
+
+.advancedToggle:hover {
+  color: var(--ink);
+}
+
+.advancedChevron {
+  font-size: 8px;
+  transition: transform 100ms ease;
+}
+
+.advancedChevronOpen {
+  transform: rotate(90deg);
+}
+
 .formLabel {
   font-size: 12px;
   color: var(--muted);

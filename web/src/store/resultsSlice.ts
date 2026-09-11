@@ -20,7 +20,8 @@ export const RESULT_TYPES = [
 ] as const;
 export type ResultType = (typeof RESULT_TYPES)[number];
 
-export type AppMode = "geometry" | "constraints" | "solve" | "results";
+export type AppMode =
+  "geometry" | "constraints" | "solve" | "optimize" | "results";
 
 // User-chosen colorbar limits, in the units of the displayed result field.
 export interface LegendRange {

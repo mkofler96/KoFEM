@@ -6,6 +6,7 @@ import { PanelNav } from "./PanelNav";
 import { GeometryPanel } from "./GeometryPanel";
 import { BoundaryConditionsPanel } from "./BoundaryConditionsPanel";
 import { SolvePanel } from "./SolvePanel";
+import { OptimizePanel } from "./OptimizePanel";
 import { ResultsPanel } from "./ResultsPanel";
 import styles from "./LeftPanel.module.css";
 
@@ -20,6 +21,7 @@ export function LeftPanel() {
       {mode === "geometry" && <GeometryPanel />}
       {mode === "constraints" && <BoundaryConditionsPanel />}
       {mode === "solve" && <SolvePanel />}
+      {mode === "optimize" && <OptimizePanel />}
       {mode === "results" && <ResultsPanel />}
     </aside>
   );

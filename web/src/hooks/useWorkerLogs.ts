@@ -49,8 +49,8 @@ const NO_LOGS: WorkerLogEntry[] = [];
 // panel. LeftPanel mounts exactly one panel at a time, so the sharedWorker's
 // single log-callback slot always belongs to whichever panel is active — the
 // mesh log while meshing on the Geometry tab, the solver log while solving on
-// the Solve tab.
-export function useWorkerLogs(channel: "mesh" | "solve") {
+// the Solve tab, the optimizer log while optimizing on the Optimize tab.
+export function useWorkerLogs(channel: "mesh" | "solve" | "optimize") {
   const logs = useWorkerLogStore((s) => s.channels[channel] ?? NO_LOGS);
   const append = useWorkerLogStore((s) => s.append);
   const clear = useWorkerLogStore((s) => s.clear);
