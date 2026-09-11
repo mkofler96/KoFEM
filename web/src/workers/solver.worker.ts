@@ -217,10 +217,11 @@ interface SolvePayload {
   surfaceFaceIds?: number[] | null;
 }
 
-// Topology-optimization request: the same solid model the static solve takes
-// (mesh + materials + BCs/loads) plus the TO settings block. Ties, couplings and
-// element order do not apply — TO v1 is solid-only (KOF-237), single design
-// material, linear elements — so those SolvePayload fields are ignored here.
+// Topology-optimization request: the same model the static solve takes (mesh +
+// materials + BCs/loads + ties/couplings) plus the TO settings block. The design
+// domain follows the element mix — all-solid, all-shell, or coupled shell/solid
+// (KOF-237). Ties and couplings join the coupled design domain exactly as they
+// do for the solve; element order does not apply (linear tets + DKT facets).
 interface TopOptPayload {
   nodes: Node[];
   elements: Element[];
@@ -229,6 +230,8 @@ interface TopOptPayload {
   constraints: Constraint[];
   loads: Load[];
   surfaceLoads?: SurfaceLoad[];
+  tieGroups?: TieDefinition[];
+  couplings?: CouplingDefinition[];
   settings: TopOptSettings;
 }
 
@@ -1054,12 +1057,20 @@ function shellPointLoads(
   }));
 }
 
-// Solve a pure-shell (all-CTRIA3) model via the engine's Kirchhoff shell
-// solver. The result matches the solid contract — three translations per node,
-// one von Mises surface stress per element — so the store and viewport consume
-// it unchanged. elementOrder and tie connections do not apply to shells (the
-// DKT facet is what it is; ties join solid bodies) and are ignored.
-function handleShellSolve(id: number, payload: SolvePayload) {
+// Pack a pure-shell (all-CTRIA3) model into the { mesh, mat_json, bcs_json }
+// payload the engine's shell solver AND its shell topology optimizer both take —
+// so the two paths share one packing. `elements` are all shell facets, in store
+// order (density[i] from the optimizer maps back to elements[i]).
+interface ShellEngineInputs {
+  mesh: {
+    vertices: Float64Array;
+    triangles: Int32Array;
+    thicknesses: Float64Array;
+  };
+  matJson: string;
+  bcsJson: string;
+}
+function buildShellEngineInputs(payload: SolvePayload): ShellEngineInputs {
   const {
     nodes,
     elements,
@@ -1103,20 +1114,32 @@ function handleShellSolve(id: number, payload: SolvePayload) {
   };
   const point_loads = shellPointLoads(loads, surfaceLoads, posOf, vid);
 
-  self.postMessage({
-    id,
-    log: `Starting shell solve: ${nodes.length} nodes, ${elements.length} shell facets…`,
-  });
-  const result = m().solve_shell(
-    { vertices, triangles, thicknesses },
-    JSON.stringify({ young_modulus: young, poisson_ratio: poisson }),
-    JSON.stringify({
+  return {
+    mesh: { vertices, triangles, thicknesses },
+    matJson: JSON.stringify({ young_modulus: young, poisson_ratio: poisson }),
+    bcsJson: JSON.stringify({
       fixed_vertices,
       fixed_dofs,
       prescribed_dofs,
       point_loads,
     }),
-  );
+  };
+}
+
+// Solve a pure-shell (all-CTRIA3) model via the engine's Kirchhoff shell
+// solver. The result matches the solid contract — three translations per node,
+// one von Mises surface stress per element — so the store and viewport consume
+// it unchanged. elementOrder and tie connections do not apply to shells (the
+// DKT facet is what it is; ties join solid bodies) and are ignored.
+function handleShellSolve(id: number, payload: SolvePayload) {
+  const { nodes, elements } = payload;
+  const { mesh, matJson, bcsJson } = buildShellEngineInputs(payload);
+
+  self.postMessage({
+    id,
+    log: `Starting shell solve: ${nodes.length} nodes, ${elements.length} shell facets…`,
+  });
+  const result = m().solve_shell(mesh, matJson, bcsJson);
   if ("error" in result) throw new Error(result.error);
 
   self.postMessage({
@@ -2058,7 +2081,47 @@ function resolveMixedThicknesses(
 // an RBE2/RBE3 constraint only exists in this assembler, and it is happy with
 // zero shell triangles. Nothing else about the path changes — the shell arrays
 // are simply empty.
-function handleMixedSolve(id: number, payload: SolvePayload) {
+// The mesh/coupling/BC/material payload the coupled solid-shell assembler takes,
+// built from a store model — shared by the coupled SOLVE and the coupled
+// topology optimizer (KOF-237), so both feed the assembler the identical model.
+// The engine consumes design elements as solid tets first (in `solidElements`
+// order) then shell facets (in `shellElements` order), which is the same order
+// the density/von-Mises fields come back in.
+interface CoupledEngineInputs {
+  mesh: {
+    vertices: Float64Array;
+    tets: Int32Array;
+    triangles: Int32Array;
+    thicknesses: Float64Array;
+    attributes: Int32Array;
+  };
+  coupling: {
+    ref: Int32Array;
+    offsets: Int32Array;
+    solid: Int32Array;
+    mpc: Int32Array;
+    dof_mask: Int32Array;
+    relaxation: number;
+  };
+  bcs: {
+    fixed_dofs: Int32Array;
+    prescribed_dofs: Int32Array;
+    prescribed_vals: Float64Array;
+    load_dofs: Int32Array;
+    load_vals: Float64Array;
+  };
+  matJson: string;
+  model: ReturnType<typeof buildExplicitCoupledModel>;
+  solidElements: Element[];
+  shellElements: Element[];
+  solidMaterialNames: string[];
+  couplingCount: number;
+  declaredCouplings: number;
+}
+function buildCoupledEngineInputs(
+  id: number,
+  payload: SolvePayload,
+): CoupledEngineInputs {
   const {
     nodes,
     elements,
@@ -2173,20 +2236,15 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
     solidElements,
   );
 
-  self.postMessage({
-    id,
-    log: `[mixed] ${solidElements.length} solid tets (${solidMaterialNames.join(", ")}), ${shellElements.length} shell facets → ${model.pool.length / 3} pool nodes, ${coupling.ref.length} couplings (${couplings.length} declared)…`,
-  });
-
-  const result = m().solve_coupled(
-    {
+  return {
+    mesh: {
       vertices: Float64Array.from(model.pool),
       tets: Int32Array.from(model.tets),
       triangles: Int32Array.from(model.triangles),
       thicknesses: Float64Array.from(model.thicknesses),
       attributes: Int32Array.from(solidAttributes),
     },
-    {
+    coupling: {
       ref: Int32Array.from(coupling.ref),
       offsets: Int32Array.from(coupling.offsets),
       solid: Int32Array.from(coupling.solid),
@@ -2194,16 +2252,40 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
       dof_mask: Int32Array.from(couplingDofMasks(coupling)),
       relaxation: SHELL_SOLID_MPC_RELAXATION,
     },
-    {
+    bcs: {
       fixed_dofs: Int32Array.from(fixed_dofs),
       prescribed_dofs: Int32Array.from(prescribed_dofs),
       prescribed_vals: Float64Array.from(prescribed_vals),
       load_dofs: Int32Array.from(load_dofs),
       load_vals: Float64Array.from(load_vals),
     },
-    JSON.stringify(mat),
+    matJson: JSON.stringify(mat),
+    model,
+    solidElements,
+    shellElements,
+    solidMaterialNames,
+    couplingCount: coupling.ref.length,
+    declaredCouplings: couplings.length,
+  };
+}
+
+function handleMixedSolve(id: number, payload: SolvePayload) {
+  const { nodes, elements } = payload;
+  const inp = buildCoupledEngineInputs(id, payload);
+
+  self.postMessage({
+    id,
+    log: `[mixed] ${inp.solidElements.length} solid tets (${inp.solidMaterialNames.join(", ")}), ${inp.shellElements.length} shell facets → ${inp.model.pool.length / 3} pool nodes, ${inp.couplingCount} couplings (${inp.declaredCouplings} declared)…`,
+  });
+
+  const result = m().solve_coupled(
+    inp.mesh,
+    inp.coupling,
+    inp.bcs,
+    inp.matJson,
   );
   if ("error" in result) throw new Error(result.error);
+  const { model } = inp;
 
   // Displacements: every store node maps to its pool node (solid and shell store
   // nodes both live in the pool). Von Mises: one solid-tet value per CTETRA and
@@ -2239,27 +2321,40 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
   ]);
 }
 
-// ── Topology optimization (CTETRA/CHEXA → optimize_topology) ──────────────────
+// ── Topology optimization (solid / shell / coupled → optimize_topology*) ──────
 
-// SIMP density-based topology optimization (KOF-226 epic, ADR-0002). Packs the
-// mesh, materials and BCs/loads EXACTLY like handleSolve's all-solid path
-// (packSolveMesh + resolveMaterials + groupDirichlet + groupPointLoads + the
-// surface-load face remap), then calls the engine's in-loop optimizer instead of
-// the single-shot solve. The engine crosses the JS↔WASM boundary only twice for
-// the whole run (ADR-0002 decision 1); per-iteration "[topopt] it N: …" progress
-// streams over the same print→log channel the solve uses, so no extra plumbing
-// is needed to feed the live log.
+// The optimizer result the worker returns, whichever design domain produced it.
+// The density is one value per DESIGN element, in the canonical order the
+// viewport's densityField expects — solid tets, then hexes, then shell facets —
+// which is exactly the order each engine entry returns (KOF-237).
+type TopOptEngineResult = { density: Float64Array; history: unknown[] };
+
+function postDensityResult(id: number, result: TopOptEngineResult) {
+  self.postMessage({
+    id,
+    log:
+      `Topology optimization complete: ${result.density.length} element ` +
+      `densities over ${result.history.length} iteration(s)`,
+  });
+  self.postMessage(
+    { id, ok: true, density: result.density, history: result.history },
+    [result.density.buffer],
+  );
+}
+
+// SIMP density-based topology optimization (KOF-226 epic, ADR-0002). The design
+// domain follows the element mix, exactly as the static solve routes: an
+// all-solid model optimizes through optimize_topology; an all-shell (CTRIA3)
+// model through optimize_topology_shell; a mixed shell/solid model, or any model
+// carrying a surface-to-point coupling, through the coupled optimizer
+// (optimize_topology_coupled). Each engine entry runs the whole loop in C++
+// (crossing the JS↔WASM boundary only twice) and streams "[topopt] it N: …"
+// progress over the same print→log channel the solve uses.
 //
 // Cancellation is owned by the worker lifecycle, exactly as meshing is: the
-// optimize_topology call is one blocking WASM call, so the app cancels it by
-// calling resetWorker() (terminate), which discards the in-flight run. The ADR
-// notes the cost — no intermediate density is streamed mid-run, so a cancelled
-// run reports nothing rather than a best-so-far field; that is a deliberate
-// consequence of the one-call design, not a gap here.
-//
-// TO v1 is solid-only (KOF-237): shell (CTRIA3) elements and Shell-marked bodies
-// are rejected with a clear message rather than silently idealised away, and an
-// empty solid mesh is caught by packSolveMesh.
+// optimize_topology* call is one blocking WASM call, so the app cancels it by
+// calling resetWorker() (terminate), which discards the in-flight run (ADR-0002
+// — no best-so-far density is streamed).
 function handleTopOpt(id: number, payload: TopOptPayload) {
   const {
     nodes,
@@ -2269,27 +2364,71 @@ function handleTopOpt(id: number, payload: TopOptPayload) {
     constraints,
     loads,
     surfaceLoads,
-    settings,
   } = payload;
+  const { settings } = payload;
 
   const shellElements = elements.filter((e) => e.type === "CTRIA3");
-  if (shellElements.length > 0)
-    throw new Error(
-      `Topology optimization is solid-only for now (KOF-237): this model has ` +
-        `${shellElements.length} shell (CTRIA3) element(s). Optimize a solid ` +
-        "(tetrahedral) model, or wait for shell/coupled support.",
-    );
-  // A body marked "Shell" would be idealised to a mid-surface mesh by the solve
-  // path; TO never sees those, so refuse loudly instead of optimizing a model
-  // that is not the one the user is looking at.
+  const solidElements = elements.filter((e) => e.type !== "CTRIA3");
+  const couplings = payload.couplings ?? [];
+
+  // A body marked "Shell" that has NOT been idealised into shell (CTRIA3)
+  // elements would be turned into a mid-surface mesh only at solve time — the
+  // optimizer never runs that idealisation, so it would silently optimize the
+  // solid tets the user does not intend. Re-meshing idealises the shell bodies up
+  // front (#397), so ask for that rather than optimize the wrong model.
   const shellBodies = properties.filter((p) => p.discretization === "shell");
-  if (shellBodies.length > 0)
+  if (shellBodies.length > 0 && shellElements.length === 0)
     throw new Error(
-      `Topology optimization is solid-only for now (KOF-237): ` +
-        `${shellBodies.length} body/bodies are marked "Shell". Switch them to ` +
-        "Solid to optimize this model.",
+      `Topology optimization: ${shellBodies.length} body/bodies are marked "Shell" ` +
+        "but were not idealised into shell elements. Re-mesh (which collapses their " +
+        "thin walls to a shell mid-surface), then optimize the mixed model — or switch " +
+        "them to Solid.",
     );
 
+  const volfrac = settings.constraints.volumeFraction;
+  const settingsJson = JSON.stringify(settings);
+  const startLog = (nElems: number, domain: string) =>
+    self.postMessage({
+      id,
+      log:
+        `Starting ${domain} topology optimization: ${nodes.length} nodes, ` +
+        `${nElems} elements (${settings.objective}` +
+        (volfrac !== undefined ? `, volume fraction ${volfrac}` : "") +
+        `, max ${settings.maxIterations} iterations)…`,
+    });
+
+  // ── Pure shell (all CTRIA3, no couplings) → optimize_topology_shell ──────────
+  if (solidElements.length === 0 && couplings.length === 0) {
+    const { mesh, matJson, bcsJson } = buildShellEngineInputs(payload);
+    startLog(shellElements.length, "shell");
+    const result = m().optimize_topology_shell(
+      mesh,
+      matJson,
+      bcsJson,
+      settingsJson,
+    );
+    if ("error" in result) throw new Error(result.error);
+    postDensityResult(id, result);
+    return;
+  }
+
+  // ── Coupled shell/solid (mixed CTRIA3+CTETRA, or any coupling) ───────────────
+  if (shellElements.length > 0 || couplings.length > 0) {
+    const inp = buildCoupledEngineInputs(id, payload);
+    startLog(inp.solidElements.length + inp.shellElements.length, "coupled");
+    const result = m().optimize_topology_coupled(
+      inp.mesh,
+      inp.coupling,
+      inp.bcs,
+      inp.matJson,
+      settingsJson,
+    );
+    if ("error" in result) throw new Error(result.error);
+    postDensityResult(id, result);
+    return;
+  }
+
+  // ── All-solid (CTETRA/CHEXA) → optimize_topology ─────────────────────────────
   const vid = buildVertexIndexer(nodes);
   const tetElements = elements.filter((e) => e.type === "CTETRA");
   const hexElements = elements.filter((e) => e.type === "CHEXA");
@@ -2315,38 +2454,15 @@ function handleTopOpt(id: number, payload: TopOptPayload) {
     surface_loads,
   };
 
-  const nElems = tetElements.length + hexElements.length;
-  const volfrac = settings.constraints.volumeFraction;
-  self.postMessage({
-    id,
-    log:
-      `Starting topology optimization: ${nodes.length} nodes, ${nElems} ` +
-      `elements (${settings.objective}` +
-      (volfrac !== undefined ? `, volume fraction ${volfrac}` : "") +
-      `, max ${settings.maxIterations} iterations)…`,
-  });
-
-  // Mesh as typed arrays; materials/BCs/settings stay JSON (small). The final
-  // density comes back as a Float64Array whose buffer is transferred to the main
-  // thread zero-copy; the iteration history is a small plain array.
+  startLog(tetElements.length + hexElements.length, "solid");
   const result = m().optimize_topology(
     mesh,
     JSON.stringify(engineMaterials),
     JSON.stringify(bcs),
-    JSON.stringify(settings),
+    settingsJson,
   );
   if ("error" in result) throw new Error(result.error);
-
-  self.postMessage({
-    id,
-    log:
-      `Topology optimization complete: ${result.density.length} element ` +
-      `densities over ${result.history.length} iteration(s)`,
-  });
-  self.postMessage(
-    { id, ok: true, density: result.density, history: result.history },
-    [result.density.buffer],
-  );
+  postDensityResult(id, result);
 }
 
 function handleSolve(id: number, payload: SolvePayload) {

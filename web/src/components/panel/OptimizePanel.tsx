@@ -64,6 +64,7 @@ export function OptimizePanel() {
     checks,
     errors,
     logs,
+    designDomain,
   } = useTopOpt();
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
@@ -92,6 +93,11 @@ export function OptimizePanel() {
             <span className={styles.checkLabel}>{label}</span>
           </div>
         ))}
+
+        <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
+          Design domain
+        </div>
+        <div className={styles.formNote}>{designDomain}</div>
 
         <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
           Objective

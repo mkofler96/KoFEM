@@ -21,15 +21,18 @@ export function densityColor(t: number): THREE.Color {
   return new THREE.Color().setHSL(0, 0, lightness);
 }
 
-// The elements in the exact order the worker packs them for the solver
-// (packSolveMesh: all CTETRA first, then all CHEXA), so density[i] belongs to
-// orderedSolidElements(elements)[i]. Topology optimization is solid-only
-// (KOF-237), so any shell (CTRIA3) elements are not part of the density field
-// and are dropped here.
-export function orderedSolidElements(elements: Element[]): Element[] {
+// The design elements in the exact order the optimizer returns one density per
+// element, so density[i] belongs to orderedDesignElements(elements)[i]. That
+// order is: solid tets, then hexes, then shell facets (KOF-237) — matching how
+// the solid entry packs its mesh (CTETRA then CHEXA), the coupled entry its
+// design domain (tets then facets), and the pure-shell entry (facets only). A
+// coupled model carries no hexes and a solid model no facets, so the single
+// concatenation covers all three domains.
+export function orderedDesignElements(elements: Element[]): Element[] {
   const tets = elements.filter((e) => e.type === "CTETRA");
   const hexes = elements.filter((e) => e.type === "CHEXA");
-  return [...tets, ...hexes];
+  const shells = elements.filter((e) => e.type === "CTRIA3");
+  return [...tets, ...hexes, ...shells];
 }
 
 // Number of elements kept at a given threshold — the count the viewport draws.
@@ -86,7 +89,7 @@ export function buildDensitySurface(
   density: Float64Array,
   threshold: number,
 ): DensitySurface | null {
-  const ordered = orderedSolidElements(elements);
+  const ordered = orderedDesignElements(elements);
   if (density.length !== ordered.length || ordered.length === 0) return null;
 
   const nodeMap = new Map<number, Node>(nodes.map((n) => [n.id, n]));
@@ -101,6 +104,11 @@ export function buildDensitySurface(
     else faceMap.set(key, { face: { ids, color }, count: 1 });
   };
 
+  // Shell facets are themselves surfaces (not the boundary of a volume), so they
+  // are drawn directly rather than run through the shared-face dedup that finds a
+  // solid body's boundary — a kept CTRIA3 always shows its triangle.
+  const shellFaces: Face[] = [];
+
   for (let i = 0; i < ordered.length; i++) {
     if (density[i] < threshold) continue;
     const el = ordered[i];
@@ -114,6 +122,11 @@ export function buildDensitySurface(
           [el.nodeIds[a], el.nodeIds[b], el.nodeIds[c], el.nodeIds[d]],
           color,
         );
+    } else if (el.type === "CTRIA3") {
+      shellFaces.push({
+        ids: [el.nodeIds[0], el.nodeIds[1], el.nodeIds[2]],
+        color,
+      });
     }
   }
 
@@ -137,6 +150,13 @@ export function buildDensitySurface(
     const [a, b, c, d] = pts as Node[];
     pushTri(a, b, c, face.color);
     if (face.ids.length === 4) pushTri(a, c, d, face.color);
+  }
+  // Shell facets: each kept CTRIA3 draws its own triangle, flat-shaded.
+  for (const face of shellFaces) {
+    const pts = face.ids.map((id) => nodeMap.get(id));
+    if (pts.some((p) => p === undefined)) continue;
+    const [a, b, c] = pts as Node[];
+    pushTri(a, b, c, face.color);
   }
 
   if (positions.length === 0) return null;

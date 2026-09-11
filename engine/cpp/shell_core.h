@@ -20,6 +20,7 @@
 #ifndef KOFEM_SHELL_CORE_H
 #define KOFEM_SHELL_CORE_H
 
+#include <array>
 #include <cstddef>
 #include <utility>
 #include <vector>
@@ -36,6 +37,11 @@ struct ShellInput {
     std::vector<double> thicknesses;  // optional per-triangle thickness (length nTris)
     double young = 0.0;             // Young's modulus E
     double poisson = 0.0;           // Poisson ratio ν
+    // Optional per-facet stiffness multiplier (length nTris). Empty ⇒ every facet
+    // at full modulus. The facet stiffness is linear in E, so a SIMP density ρ_e
+    // enters as element_scale[e] = E(ρ_e)/E₀ and scales the whole 18×18 element
+    // matrix — the hook the topology optimizer (topology_shell.h) drives.
+    std::vector<double> element_scale;
     std::vector<int> fixed_dofs;    // global DOF indices constrained to zero
     // Global DOF index → prescribed value: an INHOMOGENEOUS essential BC (u = g),
     // eliminated alongside fixed_dofs rather than instead of it. A DOF listed in
@@ -150,6 +156,11 @@ struct CoupledInput {
     double shell_poisson = 0.0;
     double thickness = 0.0;              // uniform thickness (fallback)
     std::vector<double> thicknesses;     // optional per-triangle thickness
+    // Optional per-facet stiffness multiplier (length nTris), as ShellInput. The
+    // solid tets are scaled independently by pre-scaling `solid_stiffness` (each
+    // tet's stiffness is linear in E), so a single SIMP density field can span
+    // both the shell facets and the solid tets of a coupled design domain.
+    std::vector<double> shell_scale;
     std::vector<Coupling> couplings;
     std::vector<int> fixed_dofs;         // global DOF (6·node+comp) fixed to zero
     // Global DOF → prescribed value (inhomogeneous essential BC), as ShellInput.
@@ -166,6 +177,28 @@ ShellResult solve_solid_shell_core(const CoupledInput& in);
 std::vector<SolidTriplet> tet_solid_stiffness(const std::vector<double>& vertices,
                                               const std::vector<int>& tets,
                                               double young, double poisson);
+
+// ── Element base stiffness (topology optimization) ────────────────────────────
+//
+// The single element stiffness matrices, in the GLOBAL 6-DOF/node ordering the
+// assembled system uses. The topology optimizer (topology_shell.cpp) caches these
+// once at the full design modulus E₀ and uses them to (a) assemble the
+// SIMP-penalized system K(ρ) = Σ_e s(ρ_e)·k0_e and (b) recover the per-element
+// strain energy qₑ = uₑᵀk0ₑuₑ that both the compliance and its self-adjoint
+// sensitivity are built from.
+
+// One shell facet's 18×18 stiffness (6 DOF/node × 3 nodes, local DOF order
+// u,v,w,θx,θy,θz per node), transformed into global coordinates — exactly the
+// matrix assemble_shell_element scatters, including the drilling stabilisation.
+std::array<std::array<double, 18>, 18> facet_global_stiffness(
+    const std::vector<double>& vertices, int n0, int n1, int n2, double t, double E,
+    double nu);
+
+// One linear tet's 12×12 stiffness (3 translational DOF/node × 4 nodes, local DOF
+// order u,v,w per node) — the per-element block tet_solid_stiffness scatters.
+std::array<std::array<double, 12>, 12> tet_element_stiffness(
+    const std::vector<double>& vertices, int n0, int n1, int n2, int n3, double young,
+    double poisson);
 
 // ── Stress recovery ───────────────────────────────────────────────────────────
 //

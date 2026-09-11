@@ -462,70 +462,19 @@ ShellResult cg_solve(Sparse& K, const std::vector<double>& F) {
     return res;
 }
 
-// Assemble one DKT+CST shell facet into the global 6-DOF/node system.
+// Assemble one DKT+CST shell facet into the global 6-DOF/node system, its
+// stiffness multiplied by `scale` (1 for the plain solve; the SIMP density
+// interpolation E(ρ)/E₀ for topology optimization — the element stiffness is
+// linear in E, so one scalar scales the whole facet). The 18×18 global element
+// matrix itself is built by the public facet_global_stiffness below.
 void assemble_shell_element(Sparse& K, const std::vector<double>& V, int n0, int n1,
-                            int n2, double t, double E, double nu) {
-    auto vtx = [&](int n) -> Vec3 {
-        const size_t b3 = 3 * static_cast<size_t>(n);
-        return {V[b3], V[b3 + 1], V[b3 + 2]};
-    };
-    const Vec3 P0 = vtx(n0), P1 = vtx(n1), P2 = vtx(n2);
-
-    // Local orthonormal frame: e1 along P0→P1, e3 = normal, e2 = e3×e1.
-    const Vec3 v1 = sub(P1, P0), v2 = sub(P2, P0);
-    const double l1 = norm(v1);
-    if (l1 == 0.0) throw std::runtime_error("shell: degenerate triangle (coincident nodes)");
-    const Vec3 e1 = scale(v1, 1.0 / l1);
-    Vec3 e3 = cross(v1, v2);
-    const double twoA = norm(e3);
-    if (twoA == 0.0) throw std::runtime_error("shell: degenerate triangle (zero area)");
-    e3 = scale(e3, 1.0 / twoA);
-    const Vec3 e2 = cross(e3, e1);
-    const double area = 0.5 * twoA;
-
-    const std::array<double, 3> lx = {0.0, l1, dot(v2, e1)};
-    const std::array<double, 3> ly = {0.0, 0.0, dot(v2, e2)};
-
-    const auto Km = membrane_stiffness(lx, ly, area, t, E, nu);
-    const auto Kb = bending_stiffness(lx, ly, area, t, E, nu);
-
-    std::array<std::array<double, 18>, 18> Kl{};
-    static constexpr std::array<int, 6> mdof = {0, 1, 6, 7, 12, 13};
-    for (int a = 0; a < 6; ++a)
-        for (int b = 0; b < 6; ++b) Kl[mdof[a]][mdof[b]] += Km[a][b];
-    static constexpr std::array<int, 9> bdof = {2, 3, 4, 8, 9, 10, 14, 15, 16};
-    for (int a = 0; a < 9; ++a)
-        for (int b = 0; b < 9; ++b) Kl[bdof[a]][bdof[b]] += Kb[a][b];
-    // drilling θz: tiny fictitious stiffness (removes the coplanar in-plane
-    // rotation singularity; no load excites it on a flat facet).
-    double kdiag = 0.0;
-    for (int a = 0; a < 9; ++a) kdiag += Kb[a][a];
-    const double kdrill = 1e-4 * kdiag / 9.0;
-    for (int i = 0; i < 3; ++i) Kl[6 * i + 5][6 * i + 5] += kdrill;
-
-    // Transform to global: local vector = Q·global, Q rows = (e1,e2,e3).
-    const std::array<std::array<double, 3>, 3> Q = {{e1, e2, e3}};
-    std::array<std::array<double, 18>, 18> T{};
-    for (int i = 0; i < 3; ++i)
-        for (int blk = 0; blk < 2; ++blk)
-            for (int r = 0; r < 3; ++r)
-                for (int c = 0; c < 3; ++c)
-                    T[6 * i + 3 * blk + r][6 * i + 3 * blk + c] = Q[r][c];
-
-    std::array<std::array<double, 18>, 18> KlT{};
-    for (int i = 0; i < 18; ++i)
-        for (int j = 0; j < 18; ++j) {
-            double s = 0.0;
-            for (int k = 0; k < 18; ++k) s += Kl[i][k] * T[k][j];
-            KlT[i][j] = s;
-        }
+                            int n2, double t, double E, double nu, double scale = 1.0) {
+    const auto KG = facet_global_stiffness(V, n0, n1, n2, t, E, nu);
     const std::array<int, 3> nodes = {n0, n1, n2};
     for (int a = 0; a < 18; ++a)
         for (int b = 0; b < 18; ++b) {
-            double s = 0.0;
-            for (int k = 0; k < 18; ++k) s += T[k][a] * KlT[k][b];
-            if (s == 0.0) continue;
-            K.add(6 * nodes[a / 6] + a % 6, 6 * nodes[b / 6] + b % 6, s);
+            if (KG[a][b] == 0.0) continue;
+            K.add(6 * nodes[a / 6] + a % 6, 6 * nodes[b / 6] + b % 6, scale * KG[a][b]);
         }
 }
 
@@ -615,6 +564,136 @@ void add_prescribed(const std::vector<std::pair<int, double>>& prescribed, int n
 
 }  // namespace
 
+std::array<std::array<double, 18>, 18> facet_global_stiffness(
+    const std::vector<double>& V, int n0, int n1, int n2, double t, double E, double nu) {
+    auto vtx = [&](int n) -> Vec3 {
+        const size_t b3 = 3 * static_cast<size_t>(n);
+        return {V[b3], V[b3 + 1], V[b3 + 2]};
+    };
+    const Vec3 P0 = vtx(n0), P1 = vtx(n1), P2 = vtx(n2);
+
+    // Local orthonormal frame: e1 along P0→P1, e3 = normal, e2 = e3×e1.
+    const Vec3 v1 = sub(P1, P0), v2 = sub(P2, P0);
+    const double l1 = norm(v1);
+    if (l1 == 0.0) throw std::runtime_error("shell: degenerate triangle (coincident nodes)");
+    const Vec3 e1 = scale(v1, 1.0 / l1);
+    Vec3 e3 = cross(v1, v2);
+    const double twoA = norm(e3);
+    if (twoA == 0.0) throw std::runtime_error("shell: degenerate triangle (zero area)");
+    e3 = scale(e3, 1.0 / twoA);
+    const Vec3 e2 = cross(e3, e1);
+    const double area = 0.5 * twoA;
+
+    const std::array<double, 3> lx = {0.0, l1, dot(v2, e1)};
+    const std::array<double, 3> ly = {0.0, 0.0, dot(v2, e2)};
+
+    const auto Km = membrane_stiffness(lx, ly, area, t, E, nu);
+    const auto Kb = bending_stiffness(lx, ly, area, t, E, nu);
+
+    std::array<std::array<double, 18>, 18> Kl{};
+    static constexpr std::array<int, 6> mdof = {0, 1, 6, 7, 12, 13};
+    for (int a = 0; a < 6; ++a)
+        for (int b = 0; b < 6; ++b) Kl[mdof[a]][mdof[b]] += Km[a][b];
+    static constexpr std::array<int, 9> bdof = {2, 3, 4, 8, 9, 10, 14, 15, 16};
+    for (int a = 0; a < 9; ++a)
+        for (int b = 0; b < 9; ++b) Kl[bdof[a]][bdof[b]] += Kb[a][b];
+    // drilling θz: tiny fictitious stiffness (removes the coplanar in-plane
+    // rotation singularity; no load excites it on a flat facet).
+    double kdiag = 0.0;
+    for (int a = 0; a < 9; ++a) kdiag += Kb[a][a];
+    const double kdrill = 1e-4 * kdiag / 9.0;
+    for (int i = 0; i < 3; ++i) Kl[6 * i + 5][6 * i + 5] += kdrill;
+
+    // Transform to global: local vector = Q·global, Q rows = (e1,e2,e3).
+    const std::array<std::array<double, 3>, 3> Q = {{e1, e2, e3}};
+    std::array<std::array<double, 18>, 18> T{};
+    for (int i = 0; i < 3; ++i)
+        for (int blk = 0; blk < 2; ++blk)
+            for (int r = 0; r < 3; ++r)
+                for (int c = 0; c < 3; ++c)
+                    T[6 * i + 3 * blk + r][6 * i + 3 * blk + c] = Q[r][c];
+
+    std::array<std::array<double, 18>, 18> KlT{};
+    for (int i = 0; i < 18; ++i)
+        for (int j = 0; j < 18; ++j) {
+            double s = 0.0;
+            for (int k = 0; k < 18; ++k) s += Kl[i][k] * T[k][j];
+            KlT[i][j] = s;
+        }
+    std::array<std::array<double, 18>, 18> KG{};
+    for (int a = 0; a < 18; ++a)
+        for (int b = 0; b < 18; ++b) {
+            double s = 0.0;
+            for (int k = 0; k < 18; ++k) s += T[k][a] * KlT[k][b];
+            KG[a][b] = s;
+        }
+    return KG;
+}
+
+std::array<std::array<double, 12>, 12> tet_element_stiffness(
+    const std::vector<double>& vertices, int n0, int n1, int n2, int n3, double young,
+    double poisson) {
+    const double lam = young * poisson / ((1.0 + poisson) * (1.0 - 2.0 * poisson));
+    const double mu = young / (2.0 * (1.0 + poisson));
+    std::array<std::array<double, 6>, 6> D{};
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) D[i][j] = lam;
+        D[i][i] = lam + 2.0 * mu;
+        D[3 + i][3 + i] = mu;
+    }
+    auto vtx = [&](int n) -> Vec3 {
+        const size_t b3 = 3 * static_cast<size_t>(n);
+        return {vertices[b3], vertices[b3 + 1], vertices[b3 + 2]};
+    };
+    const Vec3 p0 = vtx(n0), p1 = vtx(n1), p2 = vtx(n2), p3 = vtx(n3);
+    const std::array<std::array<double, 3>, 3> J = {{
+        {p1[0] - p0[0], p2[0] - p0[0], p3[0] - p0[0]},
+        {p1[1] - p0[1], p2[1] - p0[1], p3[1] - p0[1]},
+        {p1[2] - p0[2], p2[2] - p0[2], p3[2] - p0[2]},
+    }};
+    const double det = J[0][0] * (J[1][1] * J[2][2] - J[1][2] * J[2][1]) -
+                       J[0][1] * (J[1][0] * J[2][2] - J[1][2] * J[2][0]) +
+                       J[0][2] * (J[1][0] * J[2][1] - J[1][1] * J[2][0]);
+    const double vol = std::fabs(det) / 6.0;
+    if (vol == 0.0) throw std::runtime_error("coupled: degenerate (zero-volume) tet");
+    const auto Jinv = mat3_inv(J);
+    static constexpr std::array<std::array<double, 4>, 3> dNl = {{
+        {-1.0, 1.0, 0.0, 0.0}, {-1.0, 0.0, 1.0, 0.0}, {-1.0, 0.0, 0.0, 1.0}}};
+    std::array<std::array<double, 3>, 4> g{};
+    for (int i = 0; i < 4; ++i)
+        for (int k = 0; k < 3; ++k) {
+            double s = 0.0;
+            for (int m = 0; m < 3; ++m) s += Jinv[m][k] * dNl[m][i];
+            g[i][k] = s;
+        }
+    std::array<std::array<double, 12>, 6> B{};
+    for (int i = 0; i < 4; ++i) {
+        const size_t i3 = 3 * static_cast<size_t>(i);
+        const double gx = g[i][0], gy = g[i][1], gz = g[i][2];
+        B[0][i3] = gx;
+        B[1][i3 + 1] = gy;
+        B[2][i3 + 2] = gz;
+        B[3][i3] = gy; B[3][i3 + 1] = gx;
+        B[4][i3 + 1] = gz; B[4][i3 + 2] = gy;
+        B[5][i3] = gz; B[5][i3 + 2] = gx;
+    }
+    std::array<std::array<double, 12>, 6> DB{};
+    for (int i = 0; i < 6; ++i)
+        for (int j = 0; j < 12; ++j) {
+            double s = 0.0;
+            for (int k = 0; k < 6; ++k) s += D[i][k] * B[k][j];
+            DB[i][j] = s;
+        }
+    std::array<std::array<double, 12>, 12> Ke{};
+    for (int a = 0; a < 12; ++a)
+        for (int b = 0; b < 12; ++b) {
+            double s = 0.0;
+            for (int k = 0; k < 6; ++k) s += B[k][a] * DB[k][b];
+            Ke[a][b] = vol * s;
+        }
+    return Ke;
+}
+
 ShellResult solve_shell_core(const ShellInput& in) {
     if (in.vertices.size() % 3 != 0)
         throw std::runtime_error("shell: vertices length not divisible by 3");
@@ -633,12 +712,16 @@ ShellResult solve_shell_core(const ShellInput& in) {
     if (per_facet)
         for (double tk : in.thicknesses)
             if (tk <= 0.0) throw std::runtime_error("shell: per-facet thickness must be positive");
+    // Optional per-facet stiffness scale (SIMP density interpolation); empty ⇒ 1.
+    const bool scaled = static_cast<int>(in.element_scale.size()) == nTris;
+    if (!in.element_scale.empty() && !scaled)
+        throw std::runtime_error("shell: element_scale length must match the triangle count");
     Sparse K(nDof);
     for (int e = 0; e < nTris; ++e) {
         const size_t e3 = 3 * static_cast<size_t>(e);
         assemble_shell_element(K, in.vertices, in.triangles[e3], in.triangles[e3 + 1],
                                in.triangles[e3 + 2], per_facet ? in.thicknesses[e] : in.thickness,
-                               in.young, in.poisson);
+                               in.young, in.poisson, scaled ? in.element_scale[e] : 1.0);
     }
 
     std::vector<double> F(nDof, 0.0);
@@ -1139,11 +1222,16 @@ ShellResult solve_solid_shell_core(const CoupledInput& in) {
     std::vector<char> is_shell(nNodes, 0);
     const int nTris = static_cast<int>(in.triangles.size() / 3);
     const bool per_facet = static_cast<int>(in.thicknesses.size()) == nTris;
+    // Optional per-facet stiffness scale (SIMP); the solid tets are scaled by the
+    // caller pre-scaling in.solid_stiffness, so one density field spans both.
+    const bool scaled = static_cast<int>(in.shell_scale.size()) == nTris;
+    if (!in.shell_scale.empty() && !scaled)
+        throw std::runtime_error("coupled: shell_scale length must match the triangle count");
     for (int e = 0; e < nTris; ++e) {
         const size_t e3 = 3 * static_cast<size_t>(e);
         const int a = in.triangles[e3], b = in.triangles[e3 + 1], c = in.triangles[e3 + 2];
         assemble_shell_element(K, in.vertices, a, b, c, per_facet ? in.thicknesses[e] : in.thickness,
-                               in.shell_young, in.shell_poisson);
+                               in.shell_young, in.shell_poisson, scaled ? in.shell_scale[e] : 1.0);
         is_shell[a] = is_shell[b] = is_shell[c] = 1;
     }
 

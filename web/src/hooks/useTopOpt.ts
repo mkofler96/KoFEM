@@ -130,6 +130,10 @@ export function useTopOpt() {
   const loads = useModelStore((s) => s.loads);
   const surfaceLoads = useModelStore((s) => s.surfaceLoads);
   const topOpt = useModelStore((s) => s.topOpt);
+  // Ties/couplings join solid bodies and idealised shells in the coupled TO path
+  // (KOF-237), exactly as the static solve consumes them.
+  const tieGroups = useModelStore((s) => s.tieGroups);
+  const couplingGroups = useModelStore((s) => s.couplingGroups);
   const isOptimizing = useModelStore((s) => s.isOptimizing);
   const setOptimizing = useModelStore((s) => s.setOptimizing);
   const setDensityResult = useModelStore((s) => s.setDensityResult);
@@ -152,19 +156,26 @@ export function useTopOpt() {
   // unlike the static solve, which a non-zero prescribed displacement drives.
   const loadOk = loads.length > 0 || surfaceLoads.length > 0;
 
-  // TO v1 optimizes ONE design material: the engine reads only the first
-  // material entry and treats the whole solid as that stiffness
-  // (topology_simp.cpp). A model whose bodies span several materials would be
-  // optimized as if all were the first, silently discarding the per-body
-  // assignments — so gate it, the way the shell/coupled solvers refuse a
-  // multi-material domain.
-  const usedPropertyIds = new Set(elements.map((e) => e.propertyId));
-  const usedMaterialIds = new Set(
-    properties
-      .filter((p) => usedPropertyIds.has(p.id))
-      .map((p) => p.materialId),
-  );
-  const singleMaterialOk = usedMaterialIds.size <= 1;
+  // TO optimizes ONE design material per sub-domain: the engine reads a single
+  // (E, ν) for the solid tets and a single (E, ν) for the shell facets
+  // (topology_simp.cpp / topology_shell_entry.cpp), so each sub-domain must
+  // resolve to one material — otherwise the per-body assignments would be
+  // silently discarded. Count the solid and shell domains separately, the way
+  // the shell/coupled solvers do (a coupled model legitimately carries one solid
+  // material and one shell material).
+  const propById = new Map(properties.map((p) => [p.id, p]));
+  const materialIdsOf = (els: typeof elements) =>
+    new Set(
+      els
+        .map((e) => propById.get(e.propertyId)?.materialId)
+        .filter((id): id is number => id !== undefined),
+    );
+  const solidElements = elements.filter((e) => e.type !== "CTRIA3");
+  const shellElements = elements.filter((e) => e.type === "CTRIA3");
+  const solidMaterialIds = materialIdsOf(solidElements);
+  const shellMaterialIds = materialIdsOf(shellElements);
+  const singleMaterialOk =
+    solidMaterialIds.size <= 1 && shellMaterialIds.size <= 1;
 
   // The engine's compliance sensitivity assumes homogeneous supports, so it
   // rejects any non-zero prescribed displacement (topology_simp.cpp). Catch it
@@ -206,6 +217,8 @@ export function useTopOpt() {
         constraints,
         loads,
         surfaceLoads,
+        tieGroups,
+        couplings: couplingGroups,
         settings,
       },
     )
@@ -243,6 +256,23 @@ export function useTopOpt() {
       ? `Minimize compliance · volfrac ${topOpt.volumeFraction} · p=${topOpt.penalty} · r_min=${topOpt.filterRadius}`
       : `Minimize volume · compliance ≤ ${topOpt.complianceLimit} · p=${topOpt.penalty} · r_min=${topOpt.filterRadius}`;
 
+  // What the optimizer treats as design variables (KOF-237): every solid tet and
+  // shell facet carries a density; the RBE3/coupling DOFs of a coupled model do
+  // not. The panel shows this so the design domain is never a surprise.
+  const nSolid = solidElements.length;
+  const nShell = shellElements.length;
+  const plural = (n: number, word: string) =>
+    `${n} ${word}${n === 1 ? "" : "s"}`;
+  const designDomain =
+    nShell === 0
+      ? plural(nSolid, "solid element")
+      : nSolid === 0
+        ? plural(nShell, "shell facet")
+        : `${plural(nSolid, "solid element")} + ${plural(nShell, "shell facet")}` +
+          (couplingGroups.length > 0
+            ? ` (${plural(couplingGroups.length, "coupling")} held fixed)`
+            : "");
+
   const checks: [boolean, string][] = [
     [
       meshOk,
@@ -279,11 +309,20 @@ export function useTopOpt() {
   // Blocker rows shown only when the condition applies, so the common case keeps
   // the familiar five-row checklist rather than always carrying two green rows
   // for constraints most models never hit.
-  if (matOk && !singleMaterialOk)
-    checks.push([
-      false,
-      `Topology optimization uses one design material, but the model spans ${usedMaterialIds.size} — assign a single material to all bodies`,
-    ]);
+  if (matOk && !singleMaterialOk) {
+    // Pure-solid model: keep the original single-material wording. A shell or
+    // coupled model reports which sub-domain is over-assigned instead.
+    if (shellElements.length === 0)
+      checks.push([
+        false,
+        `Topology optimization uses one design material, but the model spans ${solidMaterialIds.size} — assign a single material to all bodies`,
+      ]);
+    else
+      checks.push([
+        false,
+        `Topology optimization uses one material per design domain — the solid domain spans ${solidMaterialIds.size} and the shell domain ${shellMaterialIds.size}; assign a single material to each`,
+      ]);
+  }
   if (hasPrescribed)
     checks.push([
       false,
@@ -300,5 +339,6 @@ export function useTopOpt() {
     checks,
     errors,
     logs,
+    designDomain,
   };
 }
