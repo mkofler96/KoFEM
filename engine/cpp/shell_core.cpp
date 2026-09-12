@@ -247,7 +247,9 @@ struct Sparse {
 // Consumes K: each assembly row is released as soon as it is copied into the
 // CSR arrays, so the assembly storage and the CSR copy never coexist in full —
 // this matters on the ~10⁷-entry coupled systems inside the WASM heap cap.
-ShellResult cg_solve(Sparse& K, const std::vector<double>& F) {
+ShellResult cg_solve(Sparse& K, const std::vector<double>& F, double rel_tol) {
+    if (!(rel_tol > 0.0))
+        throw std::runtime_error("cg_solve: CG relative tolerance must be positive");
     const int n = static_cast<int>(F.size());
     // Flatten the sorted assembly rows into CSR once: the CG matvec then scans
     // contiguous arrays. Rows are column-sorted, so diagPos splits each CSR row
@@ -412,7 +414,7 @@ ShellResult cg_solve(Sparse& K, const std::vector<double>& F) {
     // tracked as KOF-173.)
     const int maxit =
         std::max(20000, static_cast<int>(400.0 * std::cbrt(static_cast<double>(n))));
-    const double tol = 1e-10;
+    const double tol = rel_tol;
     ShellResult res;
     for (int it = 0; it < maxit; ++it) {
         matvec(p, Ap);
@@ -739,7 +741,7 @@ ShellResult solve_shell_core(const ShellInput& in) {
     add_prescribed(in.prescribed_dofs, nDof, "shell", fixed, values);
     apply_essential_bc(K, F, fixed, values);
 
-    ShellResult res = cg_solve(K, F);
+    ShellResult res = cg_solve(K, F, in.cg_rel_tol);
     if (res.dofs.empty()) res.dofs.assign(nDof, 0.0);
     return res;
 }
@@ -1105,7 +1107,7 @@ void resolve_constraint_chains(Rbe3Constraints& C, int nDof) {
 ShellResult solve_reduced_system(Sparse& K, const std::vector<double>& F,
                                  const std::vector<char>& fixed,
                                  const std::vector<double>& values,
-                                 const Rbe3Constraints& C, int nDof) {
+                                 const Rbe3Constraints& C, int nDof, double rel_tol) {
     std::vector<int> red(nDof, -1);
     int nIndep = 0;
     for (int i = 0; i < nDof; ++i)
@@ -1182,7 +1184,7 @@ ShellResult solve_reduced_system(Sparse& K, const std::vector<double>& F,
     }
     apply_essential_bc(Kr, Fr, fr, vr);
 
-    ShellResult rr = cg_solve(Kr, Fr);
+    ShellResult rr = cg_solve(Kr, Fr, rel_tol);
     if (rr.dofs.empty()) rr.dofs.assign(nIndep, 0.0);
 
     ShellResult full;
@@ -1273,7 +1275,7 @@ ShellResult solve_solid_shell_core(const CoupledInput& in) {
         has_rotation[n] = (is_shell[n] != 0 || is_coupling_ref[n] != 0) ? 1 : 0;
     Rbe3Constraints constraints = build_rbe3_constraints(in, nDof, has_rotation);
     resolve_constraint_chains(constraints, nDof);
-    return solve_reduced_system(K, F, fixed, values, constraints, nDof);
+    return solve_reduced_system(K, F, fixed, values, constraints, nDof, in.cg_rel_tol);
 }
 
 // ── Stress recovery ───────────────────────────────────────────────────────────

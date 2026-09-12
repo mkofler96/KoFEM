@@ -48,6 +48,10 @@ struct ShellInput {
     // both takes the prescribed value; two conflicting values for one DOF throw.
     std::vector<std::pair<int, double>> prescribed_dofs;
     std::vector<std::pair<int, double>> loads;  // global DOF index → force/moment
+    // CG relative-residual target for the iterative solve. A single accuracy-driven
+    // static solve wants this tight (the default); a topology-optimization inner
+    // solve loosens it (topology_shell.h) — see CoupledInput::cg_rel_tol.
+    double cg_rel_tol = 1e-10;
 };
 
 struct ShellResult {
@@ -168,6 +172,15 @@ struct CoupledInput {
     // coupling-dependent node, whose motion the reduction already governs.
     std::vector<std::pair<int, double>> prescribed_dofs;
     std::vector<std::pair<int, double>> loads;  // global DOF → force/moment
+    // CG relative-residual target. Tight by default, for an accuracy-driven static
+    // solve. The topology optimizer runs one solve per iteration on a SIMP system
+    // whose conditioning worsens as void regions form (the E_min stiffness floor
+    // drives κ up), so the achievable residual floor RISES over the run; a 1e-10
+    // target then falls below what CG can reach and the solve burns the whole
+    // iteration cap without ever "converging". The TO inner solve therefore sets a
+    // looser, reliably-reachable target here (topology_shell.h, KOF-245), matching
+    // the solid path's caller-set cg_rtol (topology_simp_core.cpp).
+    double cg_rel_tol = 1e-10;
 };
 
 ShellResult solve_solid_shell_core(const CoupledInput& in);

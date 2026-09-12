@@ -51,6 +51,22 @@ struct ShellTopOptConfig {
     double tolerance = 0.01;  // convergence on max|Δρ|
     double emin_rel = 1e-9;   // stiffness floor E_min/E₀ (ADR-0002)
     double rho_min = 0.0;     // design lower bound
+    // CG relative-residual target for each SIMP inner solve — a caller-set loosening
+    // of the static shell solve's 1e-10, the same device the solid path uses
+    // (ComplianceOptConfig::cg_rtol, topology_optimize.h). As void regions form the
+    // E_min floor drives κ up, so the achievable CG residual floor RISES over the
+    // run; a 1e-10 target then sits below what the SSOR/IC-preconditioned CG can
+    // reach and the solve burns the whole iteration cap without ever "converging",
+    // which throws and stalls the optimization mid-run (KOF-245). This is looser
+    // than the solid path's 1e-8 because the thin-wall shell/coupled systems are
+    // far worse conditioned (bending/membrane ratio ∝ (t/L)²) and lack MFEM's
+    // solver: reaching 1e-8 (or even 1e-6) costs so many CG iterations that a
+    // mid-run solve still runs the cap out. 1e-5 keeps the peak iteration count
+    // well under the cap (headroom against a finer mesh or thinner wall) while the
+    // compliance and its (quadratic-in-u) sensitivities stay accurate to ~1e-5 —
+    // negligible for the move-limited MMA step: on the KOF-245 crane the whole
+    // trajectory is identical to a 1e-10 solve to six significant figures.
+    double cg_rtol = 1e-5;
     // Passive regions over the DESIGN-ELEMENT index (tets first, then facets — see
     // ShellTopOptInput). Pinned solid → 1, pinned void → rho_min. Empty in v1
     // (KOF-238 populates them).
@@ -139,7 +155,8 @@ ShellStiffnessCache build_shell_stiffness_cache(const ShellTopOptInput& in);
 ShellComplianceEvaluation evaluate_shell_compliance(const ShellTopOptInput& in,
                                                     const ShellStiffnessCache& cache,
                                                     const std::vector<double>& rho,
-                                                    double penalty, double emin_rel);
+                                                    double penalty, double emin_rel,
+                                                    double cg_rtol = 1e-10);
 
 // Run the SIMP minimum-compliance loop. Streams one `[topopt] it N: c=… vol=…
 // change=…` line per iteration over stdout (the printf→worker channel). Throws
