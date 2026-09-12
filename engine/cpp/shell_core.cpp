@@ -248,8 +248,12 @@ struct Sparse {
 // CSR arrays, so the assembly storage and the CSR copy never coexist in full —
 // this matters on the ~10⁷-entry coupled systems inside the WASM heap cap.
 ShellResult cg_solve(Sparse& K, const std::vector<double>& F, double rel_tol) {
-    if (!(rel_tol > 0.0))
-        throw std::runtime_error("cg_solve: CG relative tolerance must be positive");
+    // Finite guard leads: a +inf tolerance passes `> 0` yet the first residual is
+    // then < tol, so CG would report convergence after one step with an inaccurate
+    // solution. optimize_shell_compliance checks this for the TO path; direct
+    // static callers bypass that, so reject it here too.
+    if (!std::isfinite(rel_tol) || rel_tol <= 0.0)
+        throw std::runtime_error("cg_solve: CG relative tolerance must be finite and positive");
     const int n = static_cast<int>(F.size());
     // Flatten the sorted assembly rows into CSR once: the CG matvec then scans
     // contiguous arrays. Rows are column-sorted, so diagPos splits each CSR row
