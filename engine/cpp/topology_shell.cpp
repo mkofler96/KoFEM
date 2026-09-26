@@ -183,7 +183,8 @@ ShellStiffnessCache build_shell_stiffness_cache(const ShellTopOptInput& in) {
 ShellComplianceEvaluation evaluate_shell_compliance(const ShellTopOptInput& in,
                                                     const ShellStiffnessCache& cache,
                                                     const std::vector<double>& rho,
-                                                    double penalty, double emin_rel) {
+                                                    double penalty, double emin_rel,
+                                                    double cg_rtol) {
     const int ne = cache.num_elements();
     if (static_cast<int>(rho.size()) != ne)
         throw std::runtime_error(
@@ -209,6 +210,7 @@ ShellComplianceEvaluation evaluate_shell_compliance(const ShellTopOptInput& in,
     ci.fixed_dofs = in.fixed_dofs;
     ci.prescribed_dofs = in.prescribed_dofs;
     ci.loads = in.loads;
+    ci.cg_rel_tol = cg_rtol;
 
     ci.solid_stiffness.reserve(static_cast<size_t>(cache.n_tets) * 144);
     for (int e = 0; e < cache.n_tets; ++e) {
@@ -279,6 +281,8 @@ ShellTopOptResult optimize_shell_compliance(const ShellTopOptInput& in,
         throw std::runtime_error("optimize_shell_compliance: tolerance must be finite and positive");
     if (!std::isfinite(config.emin_rel) || config.emin_rel <= 0.0 || config.emin_rel >= 1.0)
         throw std::runtime_error("optimize_shell_compliance: emin_rel must be in (0, 1)");
+    if (!std::isfinite(config.cg_rtol) || config.cg_rtol <= 0.0)
+        throw std::runtime_error("optimize_shell_compliance: cg_rtol must be finite and positive");
 
     const ShellStiffnessCache cache = build_shell_stiffness_cache(in);
     const int ne = cache.num_elements();
@@ -327,8 +331,8 @@ ShellTopOptResult optimize_shell_compliance(const ShellTopOptInput& in,
     double obj_scale = -1.0;  // 1/c₀, fixed at iteration 1 to keep MMA scaled
 
     for (int it = 1;; ++it) {
-        ShellComplianceEvaluation ev =
-            evaluate_shell_compliance(in, cache, rho, config.penalty, config.emin_rel);
+        ShellComplianceEvaluation ev = evaluate_shell_compliance(
+            in, cache, rho, config.penalty, config.emin_rel, config.cg_rtol);
         result.displacements = ev.displacements;
         if (obj_scale < 0.0) obj_scale = ev.compliance > 0.0 ? 1.0 / ev.compliance : 1.0;
 
