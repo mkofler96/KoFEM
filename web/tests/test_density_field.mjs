@@ -18,6 +18,8 @@ import {
   visibleElementCount,
   densityColor,
   buildDensitySurface,
+  buildDensityStl,
+  densityStlFileName,
 } from "../src/lib/densityField.ts";
 
 let failures = 0;
@@ -166,6 +168,144 @@ const twoTets = [tetA, tetB];
     buildDensitySurface(nodes, twoTets, new Float64Array([0.9]), 0.5) === null,
   );
 }
+
+// ── buildDensityStl (KOF-239) ─────────────────────────────────────────────────
+// Parse a binary STL back into triangles so the checks read the bytes a viewer
+// would, not the in-memory surface.
+function parseStl(buffer) {
+  const view = new DataView(buffer);
+  const count = view.getUint32(80, true);
+  const tris = [];
+  for (let t = 0; t < count; t++) {
+    const base = 84 + t * 50;
+    const float = (k) => view.getFloat32(base + k * 4, true);
+    tris.push({
+      normal: [float(0), float(1), float(2)],
+      v: [
+        [float(3), float(4), float(5)],
+        [float(6), float(7), float(8)],
+        [float(9), float(10), float(11)],
+      ],
+    });
+  }
+  const header = String.fromCharCode(...new Uint8Array(buffer, 0, 5));
+  return { count, tris, header, byteLength: buffer.byteLength };
+}
+
+// Enclosed volume by the divergence theorem, Σ v0·(v1×v2)/6. It equals the
+// solid's volume only if the surface is closed AND every triangle is wound
+// outward; an inward face subtracts instead, so this checks both at once.
+function signedVolume(tris) {
+  let vol = 0;
+  for (const { v } of tris) {
+    const [a, b, c] = v;
+    vol +=
+      (a[0] * (b[1] * c[2] - b[2] * c[1]) -
+        a[1] * (b[0] * c[2] - b[2] * c[0]) +
+        a[2] * (b[0] * c[1] - b[1] * c[0])) /
+      6;
+  }
+  return vol;
+}
+
+{
+  const stl = buildDensityStl(
+    nodes,
+    twoTets,
+    new Float64Array([0.9, 0.9]),
+    0.5,
+  );
+  const parsed = stl && parseStl(stl);
+  check(
+    "STL of two kept tets: 6 triangles, 84 + 50·n bytes",
+    parsed !== null && parsed.count === 6 && parsed.byteLength === 84 + 6 * 50,
+    parsed ? `count=${parsed.count} bytes=${parsed.byteLength}` : "got null",
+  );
+  check(
+    "STL header does not start with 'solid' (would read as ASCII STL)",
+    parsed !== null && parsed.header !== "solid",
+  );
+  // tet A = 1/6, tet B = 1/3.
+  const vol = parsed ? signedVolume(parsed.tris) : NaN;
+  check(
+    "STL surface is closed and outward-wound (encloses 0.5)",
+    Math.abs(vol - 0.5) < 1e-6,
+    `signed volume ${vol}`,
+  );
+  check(
+    "STL facet normals point outward (agree with the winding)",
+    parsed !== null &&
+      parsed.tris.every(({ normal, v }) => {
+        const [a, b, c] = v;
+        const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+        const ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+        const cross = [
+          ab[1] * ac[2] - ab[2] * ac[1],
+          ab[2] * ac[0] - ab[0] * ac[2],
+          ab[0] * ac[1] - ab[1] * ac[0],
+        ];
+        return (
+          normal[0] * cross[0] + normal[1] * cross[1] + normal[2] * cross[2] > 0
+        );
+      }),
+  );
+}
+
+{
+  // A tet with inverted node ordering (negative Jacobian) still exports
+  // outward: orientation comes from the element centroid, not the node order.
+  const inverted = {
+    id: 12,
+    type: "CTETRA",
+    nodeIds: [0, 2, 1, 3],
+    propertyId: 1,
+  };
+  const stl = buildDensityStl(nodes, [inverted], new Float64Array([1]), 0.5);
+  const vol = stl ? signedVolume(parseStl(stl).tris) : NaN;
+  check(
+    "inverted tet ordering still exports outward (volume +1/6)",
+    Math.abs(vol - 1 / 6) < 1e-6,
+    `signed volume ${vol}`,
+  );
+}
+
+{
+  // Unit cube as one CHEXA: 6 quads → 12 triangles enclosing volume 1.
+  const cubeNodes = [
+    [0, 0, 0],
+    [1, 0, 0],
+    [1, 1, 0],
+    [0, 1, 0],
+    [0, 0, 1],
+    [1, 0, 1],
+    [1, 1, 1],
+    [0, 1, 1],
+  ].map(([x, y, z], id) => ({ id, x, y, z }));
+  const hex = {
+    id: 40,
+    type: "CHEXA",
+    nodeIds: [0, 1, 2, 3, 4, 5, 6, 7],
+    propertyId: 1,
+  };
+  const stl = buildDensityStl(cubeNodes, [hex], new Float64Array([1]), 0.5);
+  const parsed = stl && parseStl(stl);
+  const vol = parsed ? signedVolume(parsed.tris) : NaN;
+  check(
+    "hex exports as 12 outward triangles enclosing volume 1",
+    parsed !== null && parsed.count === 12 && Math.abs(vol - 1) < 1e-6,
+    parsed ? `count=${parsed.count} volume=${vol}` : "got null",
+  );
+}
+
+check(
+  "STL with every element below threshold → null (nothing to export)",
+  buildDensityStl(nodes, twoTets, new Float64Array([0.1, 0.1]), 0.5) === null,
+);
+check(
+  "STL file name encodes model and threshold",
+  densityStlFileName("crane hook", 0.5) === "crane_hook_topopt_t0.50.stl",
+  densityStlFileName("crane hook", 0.5),
+);
 
 console.log(
   failures === 0
