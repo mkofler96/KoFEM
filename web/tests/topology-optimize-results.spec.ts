@@ -106,6 +106,36 @@ test("TO results: density field renders, threshold reveals the shape, convergenc
   // the emerged-shape reveal. A near-1 cutoff must keep strictly fewer than all.
   await setThreshold(page, 0.99);
   await expect.poll(() => visibleCount(page)).toBeLessThan(countAll);
+
+  // Export the thresholded shape (KOF-239): a well-formed, non-empty binary STL
+  // whose triangle count matches its byte length.
+  await setThreshold(page, 0.5);
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("button", { name: "Export shape as STL" }).click(),
+  ]);
+  expect(download.suggestedFilename()).toMatch(/_topopt_t0\.50\.stl$/);
+  const stream = await download.createReadStream();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(chunk as Buffer);
+  const stl = Buffer.concat(chunks);
+  const triangles = stl.readUInt32LE(80);
+  expect(triangles).toBeGreaterThan(0);
+  expect(stl.length).toBe(84 + 50 * triangles);
+  // Outward winding: the divergence-theorem volume Σ v0·(v1×v2)/6 is positive.
+  let volume = 0;
+  for (let t = 0; t < triangles; t++) {
+    const [ax, ay, az, bx, by, bz, cx, cy, cz] = Array.from(
+      { length: 9 },
+      (_, k) => stl.readFloatLE(84 + t * 50 + 12 + k * 4),
+    );
+    volume +=
+      (ax * (by * cz - bz * cy) -
+        ay * (bx * cz - bz * cx) +
+        az * (bx * cy - by * cx)) /
+      6;
+  }
+  expect(volume).toBeGreaterThan(0);
 });
 
 // Live density during the run (KOF-240): while the optimizer runs, the Optimize
