@@ -26,6 +26,7 @@ OUT="$(mktemp -d)/topology_shell_validation"
     "$REPO_ROOT/engine/cpp/spatial_grid.cpp" \
     "$REPO_ROOT/engine/cpp/topology_filter.cpp" \
     "$REPO_ROOT/engine/cpp/topology_mma.cpp" \
+    "$REPO_ROOT/engine/cpp/topology_formulation.cpp" \
     "$REPO_ROOT/engine/cpp/topology_shell.cpp" \
     "$REPO_ROOT/engine/tests/topology_shell_validation.cpp" \
     -o "$OUT"

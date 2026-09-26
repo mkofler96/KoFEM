@@ -82,13 +82,15 @@ export type TopOptDensityCallback =
   | null
 
 /** One optimizer iteration in the returned history. `objective` is the value
- *  being minimized (compliance for min_compliance, volume for min_volume);
- *  `volume` is the current volume fraction; `max_change` is max |Δρ| over the
+ *  being minimized (compliance for min_compliance, volume fraction for
+ *  min_volume); `compliance` is always the structural compliance c = fᵀu (the
+ *  constraint of a min_volume run); `volume` is the current volume fraction; `max_change` is max |Δρ| over the
  *  design variables; `stress` is the aggregated max von Mises, present only when
  *  a stress constraint is active. */
 export interface TopOptHistoryEntry {
   it: number
   objective: number
+  compliance: number
   volume: number
   max_change: number
   stress?: number
@@ -229,9 +231,9 @@ export interface KofemModule {
    *  field inside the engine and returns the final density plus the iteration
    *  history. Per-iteration progress streams over the same `print`→worker log
    *  channel the solve uses, and the design density itself streams through
-   *  `on_density` (KOF-240). v1 implements the `min_compliance` objective
-   *  (KOF-230/231); `min_volume` (KOF-235) and the `maxStress` constraint
-   *  (KOF-236) share this contract and return a clear `{error}` until they land.
+   *  `on_density` (KOF-240). Implements both the `min_compliance` (KOF-230/231)
+   *  and `min_volume` (KOF-235) objectives; the `maxStress` constraint (KOF-236)
+   *  shares this contract and returns a clear `{error}` until it lands.
    *  This is the SOLID (tet/hex) design domain; shell and coupled models use the
    *  two entries below (KOF-237). */
   optimize_topology(

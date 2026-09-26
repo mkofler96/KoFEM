@@ -1,11 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// SIMP minimum-compliance optimization loop — see topology_optimize.h.
+// SIMP optimization loop (min_compliance / min_volume) — see topology_optimize.h.
 
 #include "topology_optimize.h"
 
 #include "topology_filter.h"
+#include "topology_formulation.h"
 #include "topology_mma.h"
 #include "topology_simp_core.h"
 
@@ -65,11 +66,17 @@ ComplianceOptResult optimize_compliance(mfem::FiniteElementSpace& fespace,
     if (ne <= 0) throw std::runtime_error("optimize_compliance: mesh has no elements");
     if (static_cast<int>(cache.volume.size()) != ne)
         throw std::runtime_error("optimize_compliance: stiffness cache does not match mesh");
+    const bool min_volume = config.objective == TopOptObjective::MinVolume;
     // Reject NaN explicitly: the range test alone would let a NaN through (every
-    // comparison against NaN is false), so an isnan guard has to lead.
-    if (std::isnan(config.volume_fraction) || config.volume_fraction <= 0.0 ||
-        config.volume_fraction > 1.0)
+    // comparison against NaN is false), so an isnan guard has to lead. Each
+    // formulation validates only the constraint bound it actually uses.
+    if (!min_volume && (std::isnan(config.volume_fraction) ||
+                        config.volume_fraction <= 0.0 || config.volume_fraction > 1.0))
         throw std::runtime_error("optimize_compliance: volume_fraction must be in (0, 1]");
+    if (min_volume && (!std::isfinite(config.compliance_limit) || config.compliance_limit <= 0.0))
+        throw std::runtime_error(
+            "optimize_compliance: compliance_limit must be finite and positive for the "
+            "min_volume objective");
     if (std::isnan(config.rho_min) || config.rho_min < 0.0 || config.rho_min >= 1.0)
         throw std::runtime_error("optimize_compliance: rho_min must be in [0, 1)");
     if (config.max_iterations <= 0)
@@ -96,13 +103,11 @@ ComplianceOptResult optimize_compliance(mfem::FiniteElementSpace& fespace,
         throw std::runtime_error(
             "optimize_compliance: every element is pinned — no design variables");
 
-    // Total volume and the constraint scale volfrac·V_total. The constraint is
-    // written normalized, f1 = (Σρ_e·V_e)/(volfrac·V_total) − 1 ≤ 0, so it and its
-    // gradient are O(1) for MMA.
+    // Total volume and the min_compliance constraint scale volfrac·V_total.
     double vtotal = 0.0;
     for (const double v : cache.volume) vtotal += v;
+    if (!(vtotal > 0.0)) throw std::runtime_error("optimize_compliance: non-positive volume");
     const double vcap = config.volume_fraction * vtotal;
-    if (!(vcap > 0.0)) throw std::runtime_error("optimize_compliance: non-positive volume");
 
     // Feasibility: the smallest volume the design can reach is the pinned-solid
     // volume plus rho_min over everything else (active variables cannot fall below
@@ -113,24 +118,29 @@ ComplianceOptResult optimize_compliance(mfem::FiniteElementSpace& fespace,
     double solid_volume = 0.0;
     for (int e = 0; e < ne; ++e)
         if (dom.pinned[e] == 1) solid_volume += cache.volume[e];
-    const double min_volume = solid_volume + config.rho_min * (vtotal - solid_volume);
-    if (min_volume > vcap * (1.0 + 1e-9))
+    const double least_volume = solid_volume + config.rho_min * (vtotal - solid_volume);
+    if (!min_volume && least_volume > vcap * (1.0 + 1e-9))
         throw std::runtime_error(
             "optimize_compliance: volume fraction " +
             std::to_string(config.volume_fraction) +
             " is infeasible — the minimum reachable volume fraction is " +
-            std::to_string(min_volume / vtotal) +
+            std::to_string(least_volume / vtotal) +
             " given rho_min and the pinned-solid volume");
 
     const double r_min = config.filter_radius > 0.0 ? config.filter_radius
                                                     : default_filter_radius(cache.volume);
     const DensityFilter filter(cache.centroid, r_min);
 
-    // Densities: active elements start at the volume fraction, passives are pinned.
+    // Densities: passives are pinned; active elements start at the volume fraction
+    // (min_compliance: feasible and uniform) or at full material (min_volume: the
+    // stiffest reachable design, so the first solve doubles as the feasibility
+    // check of c_allow and MMA starts inside the feasible set).
     std::vector<double> rho(ne, 0.0);
     for (int e = 0; e < ne; ++e) rho[e] = config.rho_min;  // = passive-void value
     for (const int e : config.passive_solid) rho[e] = 1.0;
-    for (const int e : dom.active) rho[e] = config.volume_fraction;
+    const double rho_start = min_volume ? 1.0 : config.volume_fraction;
+    for (const int e : dom.active) rho[e] = rho_start;
+    FeasibleDesign best_feasible;  // min_volume only
 
     // MMA design vector over the active elements, bounds [rho_min, 1].
     const std::vector<double> xmin(nact, config.rho_min);
@@ -158,6 +168,17 @@ ComplianceOptResult optimize_compliance(mfem::FiniteElementSpace& fespace,
         result.displacements = ev.displacements;
         if (obj_scale < 0.0) obj_scale = ev.compliance > 0.0 ? 1.0 / ev.compliance : 1.0;
 
+        // Compliance is non-increasing in every ρ_e (dc/dρ_e ≤ 0), so the
+        // full-material start is the least compliance any design can reach. If it
+        // already exceeds c_allow no design meets the limit — reject it rather than
+        // let MMA's artificial variables absorb the violation.
+        if (min_volume && it == 1 && ev.compliance > config.compliance_limit * (1.0 + 1e-9))
+            throw std::runtime_error(
+                "optimize_compliance: compliance limit " +
+                std::to_string(config.compliance_limit) +
+                " is infeasible — even the full-material design has compliance " +
+                std::to_string(ev.compliance) + "; raise the limit above that value");
+
         // (2) Filter the sensitivities for mesh-independence (sensitivity filter,
         // the Phase-A default). The volume gradient is exact and unfiltered.
         std::vector<double> sens = ev.dcompliance;
@@ -169,18 +190,22 @@ ComplianceOptResult optimize_compliance(mfem::FiniteElementSpace& fespace,
         for (int e = 0; e < ne; ++e) vol_used += rho[e] * cache.volume[e];
         const double vol_frac = vol_used / vtotal;
 
-        std::vector<double> df0(nact);
-        std::vector<double> dfdx(nact);  // m = 1 → the single constraint row
-        for (int k = 0; k < nact; ++k) {
-            const int e = dom.active[k];
-            df0[k] = sens[e] * obj_scale;
-            dfdx[k] = cache.volume[e] / vcap;
-        }
-        const std::vector<double> fval = {(vol_used / vcap) - 1.0};
-        const double f0 = ev.compliance * obj_scale;
+        FormulationInputs fin;
+        fin.objective = config.objective;
+        fin.active = &dom.active;
+        fin.elem_volume = &cache.volume;
+        fin.vtotal = vtotal;
+        fin.vol_used = vol_used;
+        fin.compliance = ev.compliance;
+        fin.dcompliance = &sens;
+        fin.volume_cap = vcap;
+        fin.compliance_limit = config.compliance_limit;
+        fin.compliance_scale = obj_scale;
+        const MmaStepData step = formulate_mma_step(fin);
 
         // (3) One MMA step; measure the change it would make to the design.
-        const std::vector<double> xnew = mma.update(x, f0, df0, fval, dfdx);
+        const std::vector<double> xnew =
+            mma.update(x, step.f0, step.df0, step.fval, step.dfdx);
         double change = 0.0;
         for (int k = 0; k < nact; ++k)
             change = std::max(change, std::abs(xnew[k] - x[k]));
@@ -194,8 +219,27 @@ ComplianceOptResult optimize_compliance(mfem::FiniteElementSpace& fespace,
         result.history.push_back({it, ev.compliance, vol_frac, change});
         result.iterations = it;
 
-        const bool converged = change < config.tolerance;
+        // A min_volume design has only converged once it also honours c ≤ c_allow;
+        // a stalled-but-infeasible iterate runs on to max_iterations, and if the
+        // cap lands on one, the last feasible design is returned instead.
+        const bool feasible =
+            !min_volume ||
+            ev.compliance <= config.compliance_limit * (1.0 + kComplianceLimitSlack);
+        if (min_volume && feasible) best_feasible = {it, rho, result.displacements};
+        const bool converged = change < config.tolerance && feasible;
         const bool last = converged || it >= config.max_iterations;
+        if (last && !feasible) {
+            std::printf("[topopt] hit max_iterations with c=%.6g above c_allow=%.6g; "
+                        "returning the last design that met the limit (it %d)\n",
+                        ev.compliance, config.compliance_limit, best_feasible.it);
+            rho = best_feasible.rho;
+            result.displacements = best_feasible.displacements;
+            result.history.resize(best_feasible.it);
+            result.iterations = best_feasible.it;
+            result.converged = false;
+            config.stream.emit(best_feasible.it, true, rho);
+            break;
+        }
         config.stream.emit(it, last, rho);
         if (last) {
             result.converged = converged;

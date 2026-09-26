@@ -52,21 +52,30 @@ std::string parse_topopt_settings(const val& topopt_js, kofem::topopt::ShellTopO
             return "the maximum-stress constraint (constraints.maxStress) is not "
                    "implemented yet (KOF-236)";
     }
-    if (objective == "min_volume")
-        return "the min_volume objective (minimize volume subject to a compliance "
-               "limit) is not implemented yet (KOF-235) — use objective \"min_compliance\"";
-    if (objective != "min_compliance")
+    if (objective != "min_compliance" && objective != "min_volume")
         return "unknown topology-optimization objective \"" + objective +
                "\" — expected \"min_compliance\" or \"min_volume\"";
 
-    val vf = (constraints.isUndefined() || constraints.isNull())
-                 ? val::undefined()
-                 : constraints["volumeFraction"];
-    if (vf.isUndefined() || vf.isNull())
-        return "the min_compliance objective requires constraints.volumeFraction "
-               "(the target material fraction, in (0, 1])";
+    // Each objective requires the bound of its own constraint: a volume fraction
+    // for min_compliance, a compliance ceiling for min_volume.
+    const bool min_volume = objective == "min_volume";
+    const char* bound_key = min_volume ? "complianceLimit" : "volumeFraction";
+    val bound = (constraints.isUndefined() || constraints.isNull())
+                    ? val::undefined()
+                    : constraints[bound_key];
+    if (bound.isUndefined() || bound.isNull())
+        return min_volume ? "the min_volume objective requires constraints.complianceLimit "
+                            "(the compliance ceiling c_allow, > 0)"
+                          : "the min_compliance objective requires constraints.volumeFraction "
+                            "(the target material fraction, in (0, 1])";
 
-    cfg.volume_fraction = vf.as<double>();
+    if (min_volume) {
+        cfg.objective = kofem::topopt::TopOptObjective::MinVolume;
+        cfg.compliance_limit = bound.as<double>();
+    } else {
+        cfg.objective = kofem::topopt::TopOptObjective::MinCompliance;
+        cfg.volume_fraction = bound.as<double>();
+    }
     cfg.penalty = jdouble(topopt_js, "penalty", 3.0);
     cfg.filter_radius = jdouble(topopt_js, "filterRadius", 0.0);
     cfg.move_limit = jdouble(topopt_js, "moveLimit", 0.2);
@@ -82,7 +91,8 @@ std::string parse_topopt_settings(const val& topopt_js, kofem::topopt::ShellTopO
 
 // Pack the optimizer result into the { density, history } object the worker
 // expects — identical shape to optimize_topology (topology_simp.cpp).
-val pack_result(const kofem::topopt::ShellTopOptResult& result) {
+val pack_result(const kofem::topopt::ShellTopOptResult& result,
+                kofem::topopt::TopOptObjective objective) {
     val out = val::object();
     out.set("density", float64_array(result.density));
     val history = val::array();
@@ -90,7 +100,9 @@ val pack_result(const kofem::topopt::ShellTopOptResult& result) {
         const auto& h = result.history[i];
         val entry = val::object();
         entry.set("it", h.it);
-        entry.set("objective", h.compliance);
+        entry.set("objective",
+                  kofem::topopt::objective_value(objective, h.compliance, h.volume));
+        entry.set("compliance", h.compliance);
         entry.set("volume", h.volume);
         entry.set("max_change", h.max_change);
         history.set(static_cast<int>(i), entry);
@@ -191,10 +203,13 @@ val optimize_topology_shell(val mesh, const std::string& mat_json, const std::st
     if (!err.empty()) return error_result(err);
     cfg.stream.on_density = kofem::topopt::js_density_callback(on_density);
 
-    printf("[topopt] shell min_compliance: %d facets, %d nodes, volfrac=%.3f, p=%.2f, "
-           "r_min=%.4g, move=%.3f, maxit=%d\n",
-           n_tris, in.n_nodes, cfg.volume_fraction, cfg.penalty, cfg.filter_radius,
-           cfg.move_limit, cfg.max_iterations);
+    printf("[topopt] shell %s: %d facets, %d nodes, p=%.2f, r_min=%.4g, move=%.3f, "
+           "maxit=%d\n",
+           kofem::topopt::describe_formulation(cfg.objective, cfg.volume_fraction,
+                                               cfg.compliance_limit)
+               .c_str(),
+           n_tris, in.n_nodes, cfg.penalty, cfg.filter_radius, cfg.move_limit,
+           cfg.max_iterations);
     fflush(stdout);
     log_mem("topopt-shell: before loop");
 
@@ -205,7 +220,7 @@ val optimize_topology_shell(val mesh, const std::string& mat_json, const std::st
            static_cast<int>(result.density.size()));
     fflush(stdout);
     log_mem("topopt-shell: complete");
-    return pack_result(result);
+    return pack_result(result, cfg.objective);
 }
 
 val optimize_topology_coupled(val mesh, val coupling, val bcs, const std::string& mat_json,
@@ -307,10 +322,13 @@ val optimize_topology_coupled(val mesh, val coupling, val bcs, const std::string
     if (!err.empty()) return error_result(err);
     cfg.stream.on_density = kofem::topopt::js_density_callback(on_density);
 
-    printf("[topopt] coupled min_compliance: %d tets + %d facets, %d nodes, %zu couplings, "
-           "volfrac=%.3f, p=%.2f, maxit=%d\n",
+    printf("[topopt] coupled %s: %d tets + %d facets, %d nodes, %zu couplings, p=%.2f, "
+           "maxit=%d\n",
+           kofem::topopt::describe_formulation(cfg.objective, cfg.volume_fraction,
+                                               cfg.compliance_limit)
+               .c_str(),
            static_cast<int>(in.tets.size() / 4), static_cast<int>(in.triangles.size() / 3),
-           in.n_nodes, in.couplings.size(), cfg.volume_fraction, cfg.penalty, cfg.max_iterations);
+           in.n_nodes, in.couplings.size(), cfg.penalty, cfg.max_iterations);
     fflush(stdout);
     log_mem("topopt-coupled: before loop");
 
@@ -321,5 +339,5 @@ val optimize_topology_coupled(val mesh, val coupling, val bcs, const std::string
            static_cast<int>(result.density.size()));
     fflush(stdout);
     log_mem("topopt-coupled: complete");
-    return pack_result(result);
+    return pack_result(result, cfg.objective);
 }

@@ -11,10 +11,8 @@
 import type { TopOptHistoryEntry } from "../wasm/pkg/kofem_wasm.js";
 import type { SliceCreator } from "./modelStore";
 
-// The two objectives the panel offers. v1's engine implements only
-// `min_compliance`; `min_volume` (KOF-235) shares the contract and returns a
-// clear error until it lands, so selecting it and running surfaces that message
-// rather than a silent no-op.
+// The two objectives the panel offers: minimize compliance under a volume
+// fraction (KOF-230) or minimize volume under a compliance limit (KOF-235).
 export type TopOptObjective = "min_compliance" | "min_volume";
 
 // The numeric settings are held as the raw strings the user typed, exactly as

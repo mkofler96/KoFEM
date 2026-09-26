@@ -1,14 +1,15 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// SIMP minimum-compliance topology optimization for the SHELL and COUPLED
+// SIMP topology optimization for the SHELL and COUPLED
 // shell/solid design domains (KOF-237, Phase B of the KOF-226 epic; ADR-0002).
 //
 // Phase A (topology_optimize.h) optimizes a solid tetrahedral domain through
-// MFEM. This is the same SIMP minimum-compliance formulation
+// MFEM. These are the same two SIMP formulations (topology_formulation.h)
 //
-//   minimize   c(ρ) = fᵀu(ρ)
-//   subject to Σ_e ρ_e·V_e ≤ volfrac·Σ_e V_e,   ρ_min ≤ ρ_e ≤ 1
+//   min_compliance:  minimize c(ρ) = fᵀu(ρ)  s.t. Σ_e ρ_e·V_e ≤ volfrac·Σ_e V_e
+//   min_volume:      minimize Σ_e ρ_e·V_e    s.t. c(ρ) ≤ c_allow      (KOF-235)
+//   both with ρ_min ≤ ρ_e ≤ 1,
 //
 // carried onto KoFEM's Kirchhoff/DKT shell facets and its coupled shell/solid
 // assembler (shell_core.h). A single density field spans the whole design domain:
@@ -33,6 +34,7 @@
 #pragma once
 
 #include "shell_core.h"
+#include "topology_formulation.h"
 #include "topology_stream.h"
 
 #include <array>
@@ -44,7 +46,9 @@ namespace kofem::topopt {
 // Optimizer knobs — the MFEM-free mirror of ComplianceOptConfig
 // (topology_optimize.h), duplicated here so this header carries no MFEM include.
 struct ShellTopOptConfig {
-    double volume_fraction = 0.5;  // target Σρ_e·V_e / ΣV_e
+    TopOptObjective objective = TopOptObjective::MinCompliance;
+    double volume_fraction = 0.5;  // min_compliance: target Σρ_e·V_e / ΣV_e
+    double compliance_limit = 0.0; // min_volume: c_allow (> 0, model work units)
     double penalty = 3.0;          // SIMP penalty p
     double filter_radius = 0.0;    // r_min; ≤ 0 → default 1.5× mean element size
     double move_limit = 0.2;       // MMA move limit
@@ -162,11 +166,12 @@ ShellComplianceEvaluation evaluate_shell_compliance(const ShellTopOptInput& in,
                                                     double penalty, double emin_rel,
                                                     double cg_rtol = 1e-10);
 
-// Run the SIMP minimum-compliance loop. Streams one `[topopt] it N: c=… vol=…
+// Run the SIMP loop (either formulation). Streams one `[topopt] it N: c=… vol=…
 // change=…` line per iteration over stdout (the printf→worker channel), and hands
 // the analysed ρ to `config.stream` when one is set. Throws
 // std::runtime_error on an ill-posed problem (no design elements, an infeasible
-// volume fraction, a non-homogeneous BC, a solve that fails to converge).
+// volume fraction or compliance limit, a non-homogeneous BC, a solve that fails
+// to converge).
 ShellTopOptResult optimize_shell_compliance(const ShellTopOptInput& in,
                                             const ShellTopOptConfig& config);
 

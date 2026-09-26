@@ -16,7 +16,9 @@
 //      identity carries through the master-slave reduction.
 //   3. A thin-plate SIMP run (simply-supported square plate under pressure)
 //      drives the compliance down under a volume constraint and redistributes
-//      material into a non-uniform rib layout.
+//      material into a non-uniform rib layout. The same plate under min_volume
+//      s.t. compliance (KOF-235), with c_allow set to that run's final compliance,
+//      meets the limit and lands on the same volume fraction.
 
 #include "shell_core.h"
 #include "topology_shell.h"
@@ -292,6 +294,58 @@ void test_plate_optimization(int& failures) {
                 res.converged ? "converged" : "hit cap");
     expect(failures, "non-uniform (ribs form)", hi - lo > 0.5,
            hi - lo > 0.5 ? "clear solid/void separation" : "field too uniform");
+
+    // min_volume s.t. compliance on the same plate: the shell path shares the
+    // formulation, so it must also meet c_allow and agree with min_compliance.
+    ShellTopOptConfig vcfg = cfg;
+    vcfg.objective = TopOptObjective::MinVolume;
+    vcfg.compliance_limit = h.back().compliance;
+    vcfg.max_iterations = 150;
+    const ShellTopOptResult vres = optimize_shell_compliance(in, vcfg);
+    const ShellTopOptHistoryEntry& vl = vres.history.back();
+    std::printf("  min_volume at c_allow=%.6g: c=%.6g vol=%.4f (min_compliance vol %.4f), "
+                "%d iters (%s)\n",
+                vcfg.compliance_limit, vl.compliance, vl.volume, h.back().volume,
+                vres.iterations, vres.converged ? "converged" : "hit cap");
+    expect(failures, "min_volume converged", vres.converged,
+           vres.converged ? "stopped on tolerance, limit met" : "hit max_iterations");
+    expect(failures, "min_volume meets the compliance limit",
+           vl.compliance <= vcfg.compliance_limit * (1.0 + kComplianceLimitSlack),
+           "c ≤ c_allow within slack");
+    check(failures, "min_volume volume matches min_compliance", vl.volume, h.back().volume,
+          1.0);
+    // Capped runs: whatever iteration the cap lands on, the returned design meets
+    // c_allow and is exactly the design its last history entry describes — an
+    // infeasible final iterate falls back to the last feasible one.
+    int fallbacks = 0;
+    bool capped_ok = true;
+    for (int cap = 5; cap <= 60; cap += 5) {
+        ShellTopOptConfig ccfg = vcfg;
+        ccfg.max_iterations = cap;
+        const ShellTopOptResult cres = optimize_shell_compliance(in, ccfg);
+        const ShellTopOptHistoryEntry& cl = cres.history.back();
+        if (cres.iterations < cap && !cres.converged) ++fallbacks;
+        const ShellStiffnessCache cache = build_shell_stiffness_cache(in);
+        const ShellComplianceEvaluation ev = evaluate_shell_compliance(
+            in, cache, cres.density, ccfg.penalty, ccfg.emin_rel, ccfg.cg_rtol);
+        const bool feasible_ok =
+            cl.compliance <= ccfg.compliance_limit * (1.0 + kComplianceLimitSlack);
+        const bool consistent =
+            std::fabs(ev.compliance - cl.compliance) <= 1e-6 * std::fabs(cl.compliance) &&
+            static_cast<int>(cres.history.size()) == cres.iterations;
+        if (!feasible_ok || !consistent) {
+            capped_ok = false;
+            std::printf("  cap %d: c=%.6g (re-eval %.6g), it=%d — %s\n", cap, cl.compliance,
+                        ev.compliance, cres.iterations,
+                        feasible_ok ? "inconsistent" : "infeasible");
+        }
+    }
+    std::printf("  capped min_volume runs: %d of 12 fell back to an earlier feasible design\n",
+                fallbacks);
+    expect(failures, "capped min_volume runs return a feasible, self-consistent design",
+           capped_ok, capped_ok ? "every cap feasible" : "see above");
+    expect(failures, "the infeasible-cap fallback is exercised", fallbacks > 0,
+           fallbacks > 0 ? "some caps landed above c_allow" : "no cap hit the fallback");
 }
 
 // ── 4. Invalid per-facet thickness is rejected, not silently degenerate ───────
