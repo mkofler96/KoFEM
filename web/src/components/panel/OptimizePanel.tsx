@@ -7,6 +7,7 @@ import type { TopOptNumericField } from "../../store/modelStore";
 import { useTopOpt, type FieldErrors } from "../../hooks/useTopOpt";
 import { convergenceFromLogs } from "../../lib/topOptProgress";
 import { ConvergencePlot } from "./ConvergencePlot";
+import { DensityThresholdControl } from "./DensityThresholdControl";
 import { LogSection } from "./LogSection";
 import styles from "./LeftPanel.module.css";
 
@@ -66,12 +67,12 @@ export function OptimizePanel() {
     logs,
     designDomain,
   } = useTopOpt();
+  const liveDensity = useModelStore((s) => s.liveDensity);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
   // Live convergence curve, parsed from the streamed "[topopt] it N: …" log
-  // lines as they arrive (the density field itself is only returned at the end —
-  // ADR-0002 decision 1 — so the geometry updates once, on completion, but the
-  // objective/volume history animates in real time here during the run).
+  // lines as they arrive. The density field streams separately (KOF-240) and is
+  // drawn in the viewport; its threshold slider is shown below during the run.
   const livePoints = useMemo(() => convergenceFromLogs(logs), [logs]);
 
   return (
@@ -207,6 +208,19 @@ export function OptimizePanel() {
           >
             Cancel
           </button>
+        )}
+
+        {isOptimizing && liveDensity && (
+          <>
+            <div
+              className={styles.sectionLabel}
+              style={{ marginTop: 16 }}
+              data-testid="live-density-iteration"
+            >
+              Live density · iteration {liveDensity.it}
+            </div>
+            <DensityThresholdControl density={liveDensity.density} />
+          </>
         )}
 
         {livePoints.length > 0 && (

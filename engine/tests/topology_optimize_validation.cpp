@@ -27,6 +27,8 @@
 //   4. Fixed/passive elements are honoured: ρ pinned to 1 stays exactly solid and
 //      ρ pinned to rho_min stays exactly void, and the constraint is still met.
 //   5. The loop is deterministic and respects max_iterations.
+//   6. The live density stream (KOF-240) fires on its cadence and always on the
+//      last iteration, whose field is exactly the returned density.
 // Exits non-zero on any failure so it can gate a local run.
 
 #include "topology_optimize.h"
@@ -310,6 +312,36 @@ int main() {
         ComplianceOptConfig bad = base_config();
         bad.max_iterations = 0;
         check(failures, "non-positive max_iterations is rejected", throws(bad));
+    }
+
+    // ── (6) Live density streaming (KOF-240) ──────────────────────────────────
+    std::printf("\nLive density streaming:\n");
+    {
+        ComplianceOptConfig cfg = base_config();
+        cfg.stream.stream_every = 3;
+        std::vector<int> streamed_its;
+        std::vector<double> last_streamed;
+        cfg.stream.on_density = [&](int it, const std::vector<double>& rho) {
+            streamed_its.push_back(it);
+            last_streamed = rho;
+        };
+        const ComplianceOptResult sres = optimize_compliance(
+            model.fespace, model.cache, model.ess_tdof, model.load, cfg);
+
+        bool cadence = !streamed_its.empty();
+        for (std::size_t i = 0; cadence && i + 1 < streamed_its.size(); ++i)
+            if (streamed_its[i] % 3 != 0) cadence = false;
+        check(failures, "streams every stream_every iterations", cadence);
+        check(failures, "always streams the final iteration",
+              !streamed_its.empty() && streamed_its.back() == sres.iterations);
+        check(failures, "last streamed density equals the returned density",
+              last_streamed == sres.density);
+        check(failures, "streaming does not change the optimized design",
+              sres.density == res.density);
+
+        ComplianceOptConfig bad = base_config();
+        bad.stream.stream_every = 0;
+        check(failures, "non-positive stream_every is rejected", throws(bad));
     }
 
     // ── (5) Determinism: identical inputs → identical final density ───────────

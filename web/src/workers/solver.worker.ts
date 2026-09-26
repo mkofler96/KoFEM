@@ -2329,6 +2329,17 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
 // which is exactly the order each engine entry returns (KOF-237).
 type TopOptEngineResult = { density: Float64Array; history: unknown[] };
 
+// Live density streaming (KOF-240): the engine calls this synchronously from
+// inside the optimizer loop with a fresh Float64Array copy of the design density
+// (float64_array copies out of the WASM heap), so the buffer is ours to transfer.
+// The final iteration is always streamed, so the last progress message carries
+// exactly the density the result then returns.
+function densityStreamer(id: number) {
+  return (it: number, density: Float64Array) => {
+    self.postMessage({ id, progress: { it, density } }, [density.buffer]);
+  };
+}
+
 function postDensityResult(id: number, result: TopOptEngineResult) {
   self.postMessage({
     id,
@@ -2347,12 +2358,14 @@ function postDensityResult(id: number, result: TopOptEngineResult) {
 // carrying a surface-to-point coupling, through the coupled optimizer
 // (optimize_topology_coupled). Each engine entry runs the whole loop in C++
 // (crossing the JS↔WASM boundary only twice) and streams "[topopt] it N: …"
-// progress over the same print→log channel the solve uses.
+// progress over the same print→log channel the solve uses. The design density
+// streams per iteration as { id, progress: { it, density } } messages (KOF-240)
+// so the viewport can draw the shape emerging.
 //
 // Cancellation is owned by the worker lifecycle, exactly as meshing is: the
 // optimize_topology* call is one blocking WASM call, so the app cancels it by
-// calling resetWorker() (terminate), which discards the in-flight run (ADR-0002
-// — no best-so-far density is streamed).
+// calling resetWorker() (terminate), which discards the in-flight run; the
+// streamed live density is discarded with it — no best-so-far is kept.
 function handleTopOpt(id: number, payload: TopOptPayload) {
   const {
     nodes,
@@ -2385,6 +2398,7 @@ function handleTopOpt(id: number, payload: TopOptPayload) {
 
   const volfrac = settings.constraints.volumeFraction;
   const settingsJson = JSON.stringify(settings);
+  const onDensity = densityStreamer(id);
   const volfracNote =
     volfrac !== undefined ? `, volume fraction ${volfrac}` : "";
   const startLog = (nElems: number, domain: string) =>
@@ -2402,6 +2416,7 @@ function handleTopOpt(id: number, payload: TopOptPayload) {
       matJson,
       bcsJson,
       settingsJson,
+      onDensity,
     );
     if ("error" in result) throw new Error(result.error);
     postDensityResult(id, result);
@@ -2418,6 +2433,7 @@ function handleTopOpt(id: number, payload: TopOptPayload) {
       inp.bcs,
       inp.matJson,
       settingsJson,
+      onDensity,
     );
     if ("error" in result) throw new Error(result.error);
     postDensityResult(id, result);
@@ -2456,6 +2472,7 @@ function handleTopOpt(id: number, payload: TopOptPayload) {
     JSON.stringify(engineMaterials),
     JSON.stringify(bcs),
     settingsJson,
+    onDensity,
   );
   if ("error" in result) throw new Error(result.error);
   postDensityResult(id, result);

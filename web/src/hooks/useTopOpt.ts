@@ -9,7 +9,11 @@ import type {
   TopOptSettings,
 } from "../wasm/pkg/kofem_wasm.js";
 import { fmt } from "../lib/modelDisplay";
-import { resetWorker, sendToWorker } from "../workers/sharedWorker";
+import {
+  resetWorker,
+  sendToWorker,
+  setProgressCallback,
+} from "../workers/sharedWorker";
 import { useWorkerLogs } from "./useWorkerLogs";
 
 export type FieldErrors = Partial<Record<TopOptNumericField, string>>;
@@ -117,10 +121,12 @@ function parseSettings(state: {
 // Topology optimization: the run hook mirroring useSolver (KOF-232). Owns the
 // pre-flight readiness checks, the setting validation, the worker's
 // optimize_topology protocol (KOF-231) and its live iteration log stream, and
-// the hand-off to Results with the density field. Cancellation, like meshing's,
-// is owned by the worker lifecycle: optimize_topology is one blocking WASM call,
-// so a running optimization is cancelled by terminating the worker (resetWorker),
-// which discards the in-flight run (ADR-0002 — no best-so-far density is streamed).
+// the hand-off to Results with the density field. While the run is active each
+// streamed iteration density lands in `liveDensity` for the viewport (KOF-240).
+// Cancellation, like meshing's, is owned by the worker lifecycle:
+// optimize_topology is one blocking WASM call, so a running optimization is
+// cancelled by terminating the worker (resetWorker), which discards the
+// in-flight run and its live density — no best-so-far is kept.
 export function useTopOpt() {
   const nodes = useModelStore((s) => s.nodes);
   const elements = useModelStore((s) => s.elements);
@@ -137,6 +143,7 @@ export function useTopOpt() {
   const isOptimizing = useModelStore((s) => s.isOptimizing);
   const setOptimizing = useModelStore((s) => s.setOptimizing);
   const setDensityResult = useModelStore((s) => s.setDensityResult);
+  const setLiveDensity = useModelStore((s) => s.setLiveDensity);
   const setMode = useModelStore((s) => s.setMode);
   const [error, setError] = useState<string | null>(null);
   const { logs, clearLogs } = useWorkerLogs("optimize");
@@ -207,6 +214,8 @@ export function useTopOpt() {
     cancelledRef.current = false;
     setOptimizing(true);
     clearLogs();
+    setLiveDensity(null);
+    setProgressCallback(({ it, density }) => setLiveDensity({ it, density }));
     sendToWorker<{ density: Float64Array; history: TopOptHistoryEntry[] }>(
       "optimize_topology",
       {
@@ -232,7 +241,11 @@ export function useTopOpt() {
         console.error("[topopt] optimization failed:", err.message);
         setError(`Optimization error: ${err.message}`);
       })
-      .finally(() => setOptimizing(false));
+      .finally(() => {
+        setProgressCallback(null);
+        setLiveDensity(null);
+        setOptimizing(false);
+      });
   }
 
   function cancel() {
@@ -241,6 +254,8 @@ export function useTopOpt() {
     // next run recreates it (the mesh travels in the payload, so nothing needs
     // reloading into the fresh module).
     resetWorker();
+    setProgressCallback(null);
+    setLiveDensity(null);
     setOptimizing(false);
   }
 

@@ -87,6 +87,7 @@ ComplianceOptResult optimize_compliance(mfem::FiniteElementSpace& fespace,
         throw std::runtime_error("optimize_compliance: emin_rel must be in (0, 1)");
     if (!std::isfinite(config.cg_rtol) || config.cg_rtol <= 0.0)
         throw std::runtime_error("optimize_compliance: cg_rtol must be finite and positive");
+    config.stream.validate("optimize_compliance");
 
     const DesignDomain dom =
         build_design_domain(ne, config.passive_solid, config.passive_void);
@@ -193,11 +194,13 @@ ComplianceOptResult optimize_compliance(mfem::FiniteElementSpace& fespace,
         result.history.push_back({it, ev.compliance, vol_frac, change});
         result.iterations = it;
 
-        if (change < config.tolerance) {
-            result.converged = true;
+        const bool converged = change < config.tolerance;
+        const bool last = converged || it >= config.max_iterations;
+        config.stream.emit(it, last, rho);
+        if (last) {
+            result.converged = converged;
             break;
         }
-        if (it >= config.max_iterations) break;
 
         // Apply the step: `rho`/`x` become the next design the loop will analyse.
         x = xnew;

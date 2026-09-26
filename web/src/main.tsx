@@ -4,7 +4,11 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
-import { sendToWorker, resetWorker } from "./workers/sharedWorker";
+import {
+  sendToWorker,
+  resetWorker,
+  setProgressCallback,
+} from "./workers/sharedWorker";
 
 // Exposed for Playwright tests — not part of the public API.
 (
@@ -12,9 +16,10 @@ import { sendToWorker, resetWorker } from "./workers/sharedWorker";
     __kofem?: {
       sendToWorker: typeof sendToWorker;
       resetWorker: typeof resetWorker;
+      setProgressCallback: typeof setProgressCallback;
     };
   }
-).__kofem = { sendToWorker, resetWorker };
+).__kofem = { sendToWorker, resetWorker, setProgressCallback };
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
