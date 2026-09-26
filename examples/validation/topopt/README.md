@@ -101,6 +101,11 @@ stiffest design (the returned compliance is the minimum of the whole history).
   `engine/tests/`, CI does not run it yet (KOF-207). These `examples/` cases are
   the web-side counterpart: they run against the fetched engine with no build
   step, and lock the visual "textbook truss" layout the native test defers here.
+- **`engine/tests/topology_levelset_validation.cpp`** checks the reaction–diffusion
+  level-set optimizer (`method: "level_set"`) on the same MBB: exact element volume
+  fractions of φ > 0, volume constraint, convergence, a crisper design than SIMP at
+  comparable compliance, passive regions and streaming
+  (`scripts/test-topology-levelset.sh`; not run by CI either).
 - **`web/tests/topology-benchmark.spec.ts`** is a fast Playwright guard that runs
   a small MBB through the solver worker and asserts the same trajectory shape, so
   the Playwright suite catches a regression on every CI run without the full

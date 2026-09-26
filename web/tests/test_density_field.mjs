@@ -18,6 +18,9 @@ import {
   visibleElementCount,
   densityColor,
   buildDensitySurface,
+  buildSmoothDensitySurface,
+  levelSetField,
+  nodalDensity,
 } from "../src/lib/densityField.ts";
 
 let failures = 0;
@@ -164,6 +167,150 @@ const twoTets = [tetA, tetB];
   check(
     "density length mismatch → null (stale guard)",
     buildDensitySurface(nodes, twoTets, new Float64Array([0.9]), 0.5) === null,
+  );
+}
+
+// ── Smooth boundary: nodal field + isosurface ─────────────────────────────────
+{
+  // nodalDensity: two tets of equal volume share face {1,2,3}; density 1 and 0
+  // → the three shared nodes average to 0.5, the private ones keep their own.
+  const volA = 1 / 6;
+  const volB = 1 / 3; // tetB = (1,0,0),(0,1,0),(0,0,1),(1,1,1): volume 1/3
+  const nd = nodalDensity(nodes, twoTets, new Float64Array([1, 0]));
+  const shared = volA / (volA + volB);
+  check(
+    "nodalDensity: volume-weighted average at shared nodes",
+    nd !== null &&
+      Math.abs(nd[0] - 1) < 1e-12 &&
+      Math.abs(nd[4]) < 1e-12 &&
+      [1, 2, 3].every((i) => Math.abs(nd[i] - shared) < 1e-12),
+    nd ? `got ${Array.from(nd)}` : "got null",
+  );
+  check(
+    "nodalDensity: stale density → null",
+    nodalDensity(nodes, twoTets, new Float64Array([1])) === null,
+  );
+  const lsf = levelSetField(new Float64Array([-1, 0, 1]));
+  check(
+    "levelSetField maps φ = −1, 0, 1 to 0, 0.5, 1",
+    lsf[0] === 0 && lsf[1] === 0.5 && lsf[2] === 1,
+  );
+
+  // One tet, field 1 at node 0 and 0 elsewhere, level 0.5: the iso triangle
+  // through the three edge midpoints of node 0, plus the three boundary faces
+  // through node 0 clipped to their corner triangles → 4 triangles.
+  const field = new Float64Array([1, 0, 0, 0, 0]);
+  const one = buildSmoothDensitySurface(nodes, [tetA], field, 0.5);
+  check(
+    "single tet corner → 1 iso + 3 cap triangles",
+    one !== null && one.triangleCount === 4,
+    one ? `got ${one.triangleCount}` : "got null",
+  );
+  if (one) {
+    // The first triangle is the iso triangle: its vertices are the midpoints
+    // (0.5,0,0), (0,0.5,0), (0,0,0.5), and its normal points away from node 0.
+    const pts = [0, 1, 2].map((k) => one.positions.slice(3 * k, 3 * k + 3));
+    const midpoints = pts.every(
+      (pt) =>
+        Math.abs(pt[0] + pt[1] + pt[2] - 0.5) < 1e-6 &&
+        [...pt].filter((c) => Math.abs(c) < 1e-9).length === 2,
+    );
+    check("iso triangle passes through the edge midpoints", midpoints);
+    const nrm = one.normals.slice(0, 3);
+    check(
+      "iso normal points out of the material (away from node 0)",
+      nrm[0] > 0 && nrm[1] > 0 && nrm[2] > 0,
+      `normal ${Array.from(nrm)}`,
+    );
+  }
+  check(
+    "nothing inside → null",
+    buildSmoothDensitySurface(nodes, [tetA], field, 1.5) === null,
+  );
+  check(
+    "stale field (length ≠ nodes) → null",
+    buildSmoothDensitySurface(nodes, [tetA], new Float64Array(2), 0.5) === null,
+  );
+
+  // Watertightness on a Kuhn-split 4×4×4 cube grid: the boundary of {f ≥ level}
+  // must be a closed surface — every edge shared by exactly two triangles — both
+  // for a ball inside the domain (isosurface only) and one cut by the domain
+  // boundary (isosurface + caps).
+  const cells = 4;
+  const gridNodes = [];
+  const nid = (i, j, k) => i + (cells + 1) * (j + (cells + 1) * k);
+  for (let k = 0; k <= cells; k++)
+    for (let j = 0; j <= cells; j++)
+      for (let i = 0; i <= cells; i++)
+        gridNodes.push({ id: nid(i, j, k), x: i, y: j, z: k });
+  const gridTets = [];
+  const kuhn = [
+    [0, 1, 2, 6],
+    [0, 1, 5, 6],
+    [0, 4, 5, 6],
+    [0, 4, 7, 6],
+    [0, 3, 7, 6],
+    [0, 3, 2, 6],
+  ];
+  for (let k = 0; k < cells; k++)
+    for (let j = 0; j < cells; j++)
+      for (let i = 0; i < cells; i++) {
+        const corner = [
+          nid(i, j, k),
+          nid(i + 1, j, k),
+          nid(i + 1, j + 1, k),
+          nid(i, j + 1, k),
+          nid(i, j, k + 1),
+          nid(i + 1, j, k + 1),
+          nid(i + 1, j + 1, k + 1),
+          nid(i, j + 1, k + 1),
+        ];
+        for (const t of kuhn)
+          gridTets.push({
+            id: gridTets.length,
+            type: "CTETRA",
+            nodeIds: t.map((v) => corner[v]),
+            propertyId: 1,
+          });
+      }
+  const closed = (surface) => {
+    const key = (o) =>
+      Array.from(surface.positions.slice(o, o + 3))
+        .map((v) => v.toFixed(5))
+        .join(",");
+    const edges = new Map();
+    for (let t = 0; t < surface.triangleCount; t++) {
+      const vs = [0, 1, 2].map((m) => key(9 * t + 3 * m));
+      for (let m = 0; m < 3; m++) {
+        const edge = [vs[m], vs[(m + 1) % 3]].sort().join("|");
+        edges.set(edge, (edges.get(edge) ?? 0) + 1);
+      }
+    }
+    return [...edges.values()].every((n) => n === 2);
+  };
+  const ball = (cx, cy, cz, r) =>
+    new Float64Array(
+      gridNodes.map((n) => r - Math.hypot(n.x - cx, n.y - cy, n.z - cz)),
+    );
+  const inner = buildSmoothDensitySurface(
+    gridNodes,
+    gridTets,
+    ball(2, 2, 2, 1.3),
+    0,
+  );
+  check(
+    "ball inside the domain → closed isosurface",
+    inner !== null && closed(inner),
+  );
+  const cut = buildSmoothDensitySurface(
+    gridNodes,
+    gridTets,
+    ball(0.2, 0.3, 0.1, 2.4),
+    0,
+  );
+  check(
+    "ball cut by the domain boundary → closed (isosurface + caps)",
+    cut !== null && closed(cut),
   );
 }
 

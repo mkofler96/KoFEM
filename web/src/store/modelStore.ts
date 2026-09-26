@@ -88,6 +88,7 @@ export type {
 } from "./resultsSlice";
 export { RESULT_TYPES } from "./resultsSlice";
 export type {
+  TopOptMethod,
   TopOptObjective,
   TopOptSettingsState,
   TopOptNumericField,

@@ -70,6 +70,9 @@ export interface ViewSlice {
   // viewport-side visibility filter, transient (not persisted), hiding every
   // element below it so the optimized shape emerges from the density field.
   densityThreshold: number;
+  // Draw the density result as a smooth isosurface of the nodal field (true)
+  // or as the element-wise boundary of the kept elements (false). Transient.
+  densitySmooth: boolean;
 
   setViewRepr(v: ViewRepr): void;
   setShowUndeformedOverlay(v: boolean): void;
@@ -82,6 +85,7 @@ export interface ViewSlice {
   toggleBodyVisibility(id: number): void;
   setAllBodiesVisible(): void;
   setDensityThreshold(v: number): void;
+  setDensitySmooth(v: boolean): void;
 }
 
 export const createViewSlice: SliceCreator<ViewSlice> = (set) => ({
@@ -95,6 +99,7 @@ export const createViewSlice: SliceCreator<ViewSlice> = (set) => ({
   highlightBodyId: null,
   hiddenBodyIds: [],
   densityThreshold: DEFAULT_DENSITY_THRESHOLD,
+  densitySmooth: true,
 
   setViewRepr: (v) =>
     set((s) => {
@@ -142,5 +147,9 @@ export const createViewSlice: SliceCreator<ViewSlice> = (set) => ({
   setDensityThreshold: (v) =>
     set((s) => {
       s.densityThreshold = Math.min(1, Math.max(0, v));
+    }),
+  setDensitySmooth: (v) =>
+    set((s) => {
+      s.densitySmooth = v;
     }),
 });
