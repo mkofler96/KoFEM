@@ -8,6 +8,7 @@
 
 #include "json_util.h"
 #include "topology_shell.h"
+#include "topology_stream_js.h"
 #include "wasm_util.h"
 
 #include <cstdio>
@@ -83,6 +84,8 @@ std::string parse_topopt_settings(const val& topopt_js, kofem::topopt::ShellTopO
     read_index_array(topopt_js["passive"], "solid", cfg.passive_solid);
     read_index_array(topopt_js["passive"], "void", cfg.passive_void);
     if (cfg.max_iterations <= 0) return "maxIterations must be a positive integer";
+    cfg.stream.stream_every = jint(topopt_js, "streamEvery", 1);
+    if (cfg.stream.stream_every <= 0) return "streamEvery must be a positive integer";
     return "";
 }
 
@@ -111,7 +114,7 @@ val pack_result(const kofem::topopt::ShellTopOptResult& result,
 }  // namespace
 
 val optimize_topology_shell(val mesh, const std::string& mat_json, const std::string& bcs_json,
-                            const std::string& topopt_json) {
+                            const std::string& topopt_json, val on_density) {
     log_mem("topopt-shell: start");
     printf("[topopt] optimize_topology_shell: parsing inputs\n");
     fflush(stdout);
@@ -198,6 +201,7 @@ val optimize_topology_shell(val mesh, const std::string& mat_json, const std::st
     kofem::topopt::ShellTopOptConfig cfg;
     const std::string err = parse_topopt_settings(parse_json(topopt_json), cfg);
     if (!err.empty()) return error_result(err);
+    cfg.stream.on_density = kofem::topopt::js_density_callback(on_density);
 
     printf("[topopt] shell %s: %d facets, %d nodes, p=%.2f, r_min=%.4g, move=%.3f, "
            "maxit=%d\n",
@@ -220,7 +224,7 @@ val optimize_topology_shell(val mesh, const std::string& mat_json, const std::st
 }
 
 val optimize_topology_coupled(val mesh, val coupling, val bcs, const std::string& mat_json,
-                              const std::string& topopt_json) {
+                              const std::string& topopt_json, val on_density) {
     log_mem("topopt-coupled: start");
     printf("[topopt] optimize_topology_coupled: parsing inputs\n");
     fflush(stdout);
@@ -316,6 +320,7 @@ val optimize_topology_coupled(val mesh, val coupling, val bcs, const std::string
     kofem::topopt::ShellTopOptConfig cfg;
     const std::string err = parse_topopt_settings(parse_json(topopt_json), cfg);
     if (!err.empty()) return error_result(err);
+    cfg.stream.on_density = kofem::topopt::js_density_callback(on_density);
 
     printf("[topopt] coupled %s: %d tets + %d facets, %d nodes, %zu couplings, p=%.2f, "
            "maxit=%d\n",

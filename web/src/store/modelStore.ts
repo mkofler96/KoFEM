@@ -92,6 +92,7 @@ export type {
   TopOptSettingsState,
   TopOptNumericField,
   DensityResult,
+  LiveDensity,
 } from "./topOptSlice";
 export { DEFAULT_TOPOPT_SETTINGS } from "./topOptSlice";
 export type { LoadDisplay, ViewRepr } from "./viewSlice";
@@ -174,6 +175,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.topOpt = a.topOpt ?? { ...DEFAULT_TOPOPT_SETTINGS };
       s.isOptimizing = false;
       s.densityResult = null;
+      s.liveDensity = null;
       s.viewRepr = a.viewRepr;
       s.deformScale = 1;
       s.densityThreshold = DEFAULT_DENSITY_THRESHOLD;
@@ -218,6 +220,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.topOpt = { ...DEFAULT_TOPOPT_SETTINGS };
       s.isOptimizing = false;
       s.densityResult = null;
+      s.liveDensity = null;
       s.stepSurface = null;
       s.stepBytes = null;
       s.geometryFormat = "step";

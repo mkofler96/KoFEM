@@ -35,6 +35,7 @@
 
 #include "shell_core.h"
 #include "topology_formulation.h"
+#include "topology_stream.h"
 
 #include <array>
 #include <utility>
@@ -76,6 +77,9 @@ struct ShellTopOptConfig {
     // (KOF-238 populates them).
     std::vector<int> passive_solid;
     std::vector<int> passive_void;
+
+    // Live density observer (KOF-240) — see topology_stream.h.
+    DensityStream stream;
 };
 
 // The shell/coupled design domain. Design elements are the solid tets FIRST
@@ -163,7 +167,8 @@ ShellComplianceEvaluation evaluate_shell_compliance(const ShellTopOptInput& in,
                                                     double cg_rtol = 1e-10);
 
 // Run the SIMP loop (either formulation). Streams one `[topopt] it N: c=… vol=…
-// change=…` line per iteration over stdout (the printf→worker channel). Throws
+// change=…` line per iteration over stdout (the printf→worker channel), and hands
+// the analysed ρ to `config.stream` when one is set. Throws
 // std::runtime_error on an ill-posed problem (no design elements, an infeasible
 // volume fraction or compliance limit, a non-homogeneous BC, a solve that fails
 // to converge).

@@ -59,6 +59,7 @@ export function optimizeShell(Module, mesh, mat, bcs, settings) {
       point_loads: bcs.point_loads ?? [],
     }),
     JSON.stringify(settings),
+    null, // no live density stream (KOF-240)
   );
   if ("error" in result) throw new Error(result.error);
   return finalize(result, settings);
@@ -96,6 +97,7 @@ export function optimizeCoupled(Module, mesh, coupling, bcs, mat, settings) {
     },
     JSON.stringify(mat),
     JSON.stringify(settings),
+    null, // no live density stream (KOF-240)
   );
   if ("error" in result) throw new Error(result.error);
   return finalize(result, settings);

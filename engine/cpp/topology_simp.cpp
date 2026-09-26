@@ -8,10 +8,11 @@
 // static solve takes plus a TO-settings block, builds the FE space, essential
 // DOFs, right-hand side and the once-per-run element-stiffness cache using the
 // SHARED assembly helpers (fem_bc_io / fem_mesh_io / topology_simp_core), then
-// hands them to the in-engine optimization loop (topology_optimize.h). The loop,
-// not this file, crosses the boundary only twice per optimization (ADR-0002
-// decision 1): all ~50–200 iterations run in C++ and stream progress out over
-// the same printf→worker log channel the solver uses.
+// hands them to the in-engine optimization loop (topology_optimize.h). All
+// ~50–200 iterations run in C++ (ADR-0002 decision 1) and stream progress out
+// over the same printf→worker log channel the solver uses; the optional
+// `on_density` callback additionally receives the design ρ per iteration
+// (KOF-240, revising that decision) so the viewport can draw it live.
 //
 // Routes both compliance/volume formulations: min_compliance (KOF-230) and
 // min_volume (KOF-235). The stress constraint (KOF-236) reuses the same wire
@@ -25,6 +26,7 @@
 #include "json_util.h"
 #include "topology_optimize.h"
 #include "topology_simp_core.h"
+#include "topology_stream_js.h"
 #include "wasm_util.h"
 
 #include <mfem.hpp>
@@ -68,7 +70,8 @@ void read_index_array(const val& parent, const char* key, std::vector<int>& out)
 }  // namespace
 
 val optimize_topology(val mesh_js, const std::string& mat_json,
-                      const std::string& bcs_json, const std::string& topopt_json) {
+                      const std::string& bcs_json, const std::string& topopt_json,
+                      val on_density) {
     using namespace mfem;
 
     log_mem("topopt: start");
@@ -198,6 +201,10 @@ val optimize_topology(val mesh_js, const std::string& mat_json,
     // return the uniform start, which is never what the caller wants.
     if (config.max_iterations <= 0)
         return error_result("maxIterations must be a positive integer");
+    config.stream.stream_every = jint(topopt_js, "streamEvery", 1);
+    if (config.stream.stream_every <= 0)
+        return error_result("streamEvery must be a positive integer");
+    config.stream.on_density = kofem::topopt::js_density_callback(on_density);
 
     printf("[topopt] %s: %d elements, %d dofs, p=%.2f, r_min=%.4g, move=%.3f, maxit=%d, "
            "tol=%.4g\n",

@@ -3,10 +3,9 @@
 
 // Live topology-optimization progress (KOF-233). The engine emits one
 // `[topopt] it N: c=… vol=… change=…` line per iteration over the print→worker
-// log channel (topology_optimize.cpp) — the density field itself only crosses
-// the WASM boundary once, at the end (ADR-0002 decision 1). Parsing those lines
-// lets the convergence plot animate live during the run, before the final
-// history array is available.
+// log channel (topology_optimize.cpp). Parsing those lines lets the convergence
+// plot animate live during the run, before the final history array is
+// available. The density field streams on its own channel (KOF-240).
 
 // One point on the convergence curve: the compliance and the current volume
 // fraction at iteration `it`. Both formulations track the same pair — one is the

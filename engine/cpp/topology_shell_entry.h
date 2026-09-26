@@ -7,9 +7,9 @@
 // These are the JS↔WASM boundary for the shell/coupled optimizer, mirroring
 // solve_shell / solve_coupled's payloads so the worker reuses the same
 // mesh/material/BC packing, plus the TO-settings block optimize_topology takes.
-// Like the solid entry (topology_simp.h) they cross the boundary only twice per
-// optimization: all iterations run in C++ (topology_shell.h) and stream progress
-// over the printf→worker log channel.
+// Like the solid entry (topology_simp.h) all iterations run in C++
+// (topology_shell.h) and stream progress over the printf→worker log channel,
+// plus the optional per-iteration density callback (KOF-240).
 //
 // The numerical loop, its self-adjoint sensitivities and the finite-difference
 // verification live in topology_shell.{h,cpp}; this file only parses inputs,
@@ -26,9 +26,12 @@
 //   { density: Float64Array (one per shell facet, triangle order),
 //     history: [{ it, objective, compliance, volume, max_change }, …] }
 // or { error: string } on incomplete/ill-posed input.
+// `on_density` is the optional per-iteration density callback, exactly as on
+// optimize_topology (KOF-240).
 emscripten::val optimize_topology_shell(emscripten::val mesh, const std::string& mat_json,
                                         const std::string& bcs_json,
-                                        const std::string& topopt_json);
+                                        const std::string& topopt_json,
+                                        emscripten::val on_density);
 
 // Coupled shell/solid SIMP topology optimization (either objective). `mesh`,
 // `coupling`, `bcs` and `mat_json` are exactly solve_coupled's payloads;
@@ -39,4 +42,5 @@ emscripten::val optimize_topology_shell(emscripten::val mesh, const std::string&
 //     triangle order), history: [...] }  or  { error: string }.
 emscripten::val optimize_topology_coupled(emscripten::val mesh, emscripten::val coupling,
                                           emscripten::val bcs, const std::string& mat_json,
-                                          const std::string& topopt_json);
+                                          const std::string& topopt_json,
+                                          emscripten::val on_density);

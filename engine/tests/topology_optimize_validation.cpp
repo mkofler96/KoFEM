@@ -27,7 +27,9 @@
 //   4. Fixed/passive elements are honoured: ρ pinned to 1 stays exactly solid and
 //      ρ pinned to rho_min stays exactly void, and the constraint is still met.
 //   5. The loop is deterministic and respects max_iterations.
-//   6. min_volume s.t. compliance (KOF-235): with c_allow set to the baseline
+//   6. The live density stream (KOF-240) fires on its cadence and always on the
+//      last iteration, whose field is exactly the returned density.
+//   7. min_volume s.t. compliance (KOF-235): with c_allow set to the baseline
 //      min_compliance optimum, it converges to a feasible design that meets the
 //      compliance target, and lands on the baseline's volume fraction — the two
 //      formulations agree where they meet on the trade-off curve. A looser limit
@@ -317,6 +319,36 @@ int main() {
         check(failures, "non-positive max_iterations is rejected", throws(bad));
     }
 
+    // ── (6) Live density streaming (KOF-240) ──────────────────────────────────
+    std::printf("\nLive density streaming:\n");
+    {
+        ComplianceOptConfig cfg = base_config();
+        cfg.stream.stream_every = 3;
+        std::vector<int> streamed_its;
+        std::vector<double> last_streamed;
+        cfg.stream.on_density = [&](int it, const std::vector<double>& rho) {
+            streamed_its.push_back(it);
+            last_streamed = rho;
+        };
+        const ComplianceOptResult sres = optimize_compliance(
+            model.fespace, model.cache, model.ess_tdof, model.load, cfg);
+
+        bool cadence = !streamed_its.empty();
+        for (std::size_t i = 0; cadence && i + 1 < streamed_its.size(); ++i)
+            if (streamed_its[i] % 3 != 0) cadence = false;
+        check(failures, "streams every stream_every iterations", cadence);
+        check(failures, "always streams the final iteration",
+              !streamed_its.empty() && streamed_its.back() == sres.iterations);
+        check(failures, "last streamed density equals the returned density",
+              last_streamed == sres.density);
+        check(failures, "streaming does not change the optimized design",
+              sres.density == res.density);
+
+        ComplianceOptConfig bad = base_config();
+        bad.stream.stream_every = 0;
+        check(failures, "non-positive stream_every is rejected", throws(bad));
+    }
+
     // ── (5) Determinism: identical inputs → identical final density ───────────
     std::printf("\nDeterminism:\n");
     const ComplianceOptResult res2 = optimize_compliance(
@@ -327,7 +359,7 @@ int main() {
         if (res2.density[i] != res.density[i]) identical = false;
     check(failures, "two runs give a bit-identical final density", identical);
 
-    // ── (6) min_volume s.t. compliance ≤ c_allow (KOF-235) ─────────────────────
+    // ── (7) min_volume s.t. compliance ≤ c_allow (KOF-235) ─────────────────────
     std::printf("\nmin_volume s.t. compliance (self-consistency with min_compliance):\n");
     const double c_star = res.history.back().compliance;
     const double v_star = res.history.back().volume;

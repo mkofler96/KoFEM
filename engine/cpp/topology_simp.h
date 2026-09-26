@@ -56,7 +56,12 @@
 //     history: [{ it, objective, compliance, volume, max_change, stress? }, …] }
 // or { error: string } when the inputs are incomplete or the problem is
 // ill-posed, matching solve_linear_elastic's error contract.
+//
+// `on_density` (KOF-240) is null/undefined or a JS function (it, density) called
+// synchronously with a Float64Array copy of the design ρ every `streamEvery`
+// iterations and always on the last, whose field equals the returned density.
 emscripten::val optimize_topology(emscripten::val mesh,
                                   const std::string& mat_json,
                                   const std::string& bcs_json,
-                                  const std::string& topopt_json);
+                                  const std::string& topopt_json,
+                                  emscripten::val on_density);

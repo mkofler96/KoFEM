@@ -64,21 +64,32 @@ export type TopOptNumericField = Exclude<
   "objective"
 >;
 
+// The design density of the iteration currently being streamed from a running
+// optimization (KOF-240). Transient: set per progress message, cleared when a
+// run starts, finishes or is cancelled — never persisted, never a "best so far".
+export interface LiveDensity {
+  it: number;
+  density: Float64Array;
+}
+
 export interface TopOptSlice {
   topOpt: TopOptSettingsState;
   isOptimizing: boolean;
   densityResult: DensityResult | null;
+  liveDensity: LiveDensity | null;
 
   setTopOptObjective(objective: TopOptObjective): void;
   setTopOptSetting(field: TopOptNumericField, value: string): void;
   setOptimizing(v: boolean): void;
   setDensityResult(result: DensityResult | null): void;
+  setLiveDensity(live: LiveDensity | null): void;
 }
 
 export const createTopOptSlice: SliceCreator<TopOptSlice> = (set) => ({
   topOpt: { ...DEFAULT_TOPOPT_SETTINGS },
   isOptimizing: false,
   densityResult: null,
+  liveDensity: null,
 
   // Changing any setting makes an existing density stale — it was computed with
   // the previous setup. Clear it so the Optimize/Results nav steps no longer read
@@ -104,5 +115,9 @@ export const createTopOptSlice: SliceCreator<TopOptSlice> = (set) => ({
       // A completed run is the freshly produced output; make Results show it in
       // preference to any static result left from an earlier solve.
       if (result) s.activeResult = "density";
+    }),
+  setLiveDensity: (live) =>
+    set((s) => {
+      s.liveDensity = live;
     }),
 });

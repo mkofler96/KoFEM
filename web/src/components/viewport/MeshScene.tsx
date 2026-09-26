@@ -19,14 +19,13 @@ import { FemMeshLayer } from "./FemMeshLayer";
 import { ResultsColormap } from "./ResultsColormap";
 import { DensityField } from "./DensityField";
 import { BoundaryConditionLayer } from "./BoundaryConditionLayer";
+import { useDisplayedDensity } from "./useDisplayedDensity";
 
 const TARGET_DEFORM_FRACTION = 0.2;
 
 export function MeshScene() {
   const nodes = useModelStore((s) => s.nodes);
   const result = useModelStore((s) => s.result);
-  const densityResult = useModelStore((s) => s.densityResult);
-  const activeResult = useModelStore((s) => s.activeResult);
   const mode = useModelStore((s) => s.mode);
   const stepSurface = useModelStore((s) => s.stepSurface);
   const deformScaleFactor = useModelStore((s) => s.deformScale);
@@ -34,6 +33,7 @@ export function MeshScene() {
   const highlightBodyId = useModelStore((s) => s.highlightBodyId);
   const properties = useModelStore((s) => s.properties);
 
+  const density = useDisplayedDensity();
   const topology = useMeshTopology();
   const { modelSize, nodeMap } = topology;
 
@@ -71,11 +71,10 @@ export function MeshScene() {
     return null;
   }
 
-  // A topology-optimization run is the active result: show the density field
-  // (KOF-233) instead of the deformed static result, even if an earlier static
-  // solve is still in the store. Results-mode only, same as the static result.
-  const showDensity =
-    mode === "results" && activeResult === "density" && !!densityResult;
+  // A density field replaces the deformed static result: the final run when it
+  // is the active result in Results (KOF-233), or the live iteration while an
+  // optimization runs on the Optimize step (KOF-240).
+  const showDensity = density !== null;
 
   // Results are only displayed in the Results tab.  Navigating back to an
   // earlier step (e.g. Constraints) must show that step's visualization —
@@ -108,10 +107,10 @@ export function MeshScene() {
   // The density view stands alone: its own boundary surface replaces the neutral
   // FEM surface, the deformed colormap and the BC/load overlays, so the emerged
   // structure reads without the undeformed mesh drawn behind it.
-  if (showDensity) {
+  if (density !== null) {
     return (
       <group>
-        <DensityField />
+        <DensityField density={density} />
       </group>
     );
   }

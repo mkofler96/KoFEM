@@ -66,6 +66,7 @@ export async function loadOptimizer() {
       JSON.stringify(materials),
       bcsJson,
       JSON.stringify(settings),
+      null, // no live density stream (KOF-240)
     );
     if ("error" in result) throw new Error(result.error);
     const history = result.history.map((h) => ({ ...h }));
