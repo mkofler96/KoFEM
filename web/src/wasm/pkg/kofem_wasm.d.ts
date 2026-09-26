@@ -68,7 +68,18 @@ export interface TopOptSettings {
   maxIterations: number
   tolerance: number // convergence on max |Δρ|, default 0.01
   passive?: { solid?: number[]; void?: number[] } // reserved, element indices
+  streamEvery?: number // live density every N iterations (KOF-240), default 1
 }
+
+/** Per-iteration density observer (KOF-240) passed to the optimize_topology*
+ *  entries, or `null` to stream nothing. Called synchronously from inside the
+ *  optimizer loop with the iteration number and a fresh Float64Array copy of the
+ *  design density that iteration analysed (same order as the final `density`),
+ *  every `streamEvery` iterations and always on the last one — whose field is
+ *  identical to the returned density. The array is owned by the receiver. */
+export type TopOptDensityCallback =
+  | ((it: number, density: Float64Array) => void)
+  | null
 
 /** One optimizer iteration in the returned history. `objective` is the value
  *  being minimized (compliance for min_compliance, volume for min_volume);
@@ -217,7 +228,8 @@ export interface KofemModule {
    *  settings block (see {@link TopOptSettings}); iterates a per-element density
    *  field inside the engine and returns the final density plus the iteration
    *  history. Per-iteration progress streams over the same `print`→worker log
-   *  channel the solve uses. v1 implements the `min_compliance` objective
+   *  channel the solve uses, and the design density itself streams through
+   *  `on_density` (KOF-240). v1 implements the `min_compliance` objective
    *  (KOF-230/231); `min_volume` (KOF-235) and the `maxStress` constraint
    *  (KOF-236) share this contract and return a clear `{error}` until they land.
    *  This is the SOLID (tet/hex) design domain; shell and coupled models use the
@@ -227,6 +239,7 @@ export interface KofemModule {
     mat_json: string,
     bcs_json: string,
     topopt_json: string,
+    on_density: TopOptDensityCallback,
   ): TopOptResult
   /** SIMP topology optimization of a PURE-SHELL (all-CTRIA3) design domain
    *  (KOF-237). Same mesh/material/BC payloads as {@link solve_shell} plus the
@@ -238,6 +251,7 @@ export interface KofemModule {
     mat_json: string,
     bcs_json: string,
     topopt_json: string,
+    on_density: TopOptDensityCallback,
   ): TopOptResult
   /** SIMP topology optimization of a COUPLED shell/solid design domain (KOF-237).
    *  Same mesh/coupling/BC/material payloads as {@link solve_coupled} plus the
@@ -271,6 +285,7 @@ export interface KofemModule {
     },
     mat_json: string,
     topopt_json: string,
+    on_density: TopOptDensityCallback,
   ): TopOptResult
 }
 

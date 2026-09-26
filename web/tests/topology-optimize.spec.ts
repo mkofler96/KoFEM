@@ -161,3 +161,88 @@ test("optimize_topology worker: density field of element length + progress logs"
   // prints "[topopt] it N: c=… vol=… change=…" each iteration).
   expect(logs.some((l) => l.includes("[topopt] it"))).toBe(true);
 });
+
+// Live density streaming (KOF-240): the engine hands the worker the design
+// density every iteration, and the worker forwards it as a progress message
+// before the call resolves. One snapshot per iteration (streamEvery defaults to
+// 1), iterations in order, the shape actually changing between snapshots, and
+// the last snapshot bit-identical to the returned density.
+test("optimize_topology worker: streams the density every iteration", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  page.on("pageerror", (e) =>
+    console.error(`[topopt-stream] page error: ${e.message}`),
+  );
+
+  await gotoApp(page);
+  await page.waitForFunction(() => !!(window as any).__kofem);
+
+  const result = (await page.evaluate(
+    async (beam) => {
+      const { nodes, elements, fixedNodeIds, loadedNodeIds } = beam;
+      const kofem = (window as any).__kofem;
+      const snapshots: { it: number; density: number[] }[] = [];
+      kofem.setProgressCallback(
+        ({ it, density }: { it: number; density: Float64Array }) =>
+          snapshots.push({ it, density: Array.from(density) }),
+      );
+      const res = (await kofem.sendToWorker("optimize_topology", {
+        nodes,
+        elements,
+        materials: [
+          { id: 1, name: "Steel", young: 210000, poisson: 0.3, density: 0 },
+        ],
+        properties: [{ id: 1, materialId: 1 }],
+        constraints: fixedNodeIds.flatMap((nodeId: number) =>
+          [0, 1, 2].map((dof) => ({ nodeId, dof })),
+        ),
+        loads: loadedNodeIds.map((nodeId: number) => ({
+          nodeId,
+          dof: 2,
+          value: -100,
+        })),
+        settings: {
+          objective: "min_compliance",
+          constraints: { volumeFraction: 0.5 },
+          penalty: 3,
+          filterRadius: 1.5,
+          moveLimit: 0.2,
+          maxIterations: 8,
+          tolerance: 0.01,
+        },
+      })) as { density: Float64Array; history: { it: number }[] };
+      kofem.setProgressCallback(null);
+
+      const last = snapshots[snapshots.length - 1];
+      const final = Array.from(res.density);
+      return {
+        its: snapshots.map((snap) => snap.it),
+        historyIts: res.history.map((h) => h.it),
+        lengthsOk: snapshots.every(
+          (snap) => snap.density.length === elements.length,
+        ),
+        lastMatchesFinal:
+          last !== undefined &&
+          last.density.length === final.length &&
+          last.density.every((d, i) => d === final[i]),
+        firstDiffersFromLast:
+          snapshots.length > 1 &&
+          snapshots[0].density.some((d, i) => d !== last.density[i]),
+      };
+    },
+    makeBeam(4, 1, 1),
+  )) as {
+    its: number[];
+    historyIts: number[];
+    lengthsOk: boolean;
+    lastMatchesFinal: boolean;
+    firstDiffersFromLast: boolean;
+  };
+
+  expect(result.its.length).toBeGreaterThan(1);
+  expect(result.its).toEqual(result.historyIts);
+  expect(result.lengthsOk).toBe(true);
+  expect(result.firstDiffersFromLast).toBe(true);
+  expect(result.lastMatchesFinal).toBe(true);
+});

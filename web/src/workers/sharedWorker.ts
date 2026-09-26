@@ -17,6 +17,20 @@ export function setLogCallback(cb: ((message: string) => void) | null) {
   _logCallback = cb;
 }
 
+// Intermediate results a long-running call streams before it resolves — today
+// only the topology optimizer's per-iteration density (KOF-240).
+export interface WorkerProgress {
+  it: number;
+  density: Float64Array;
+}
+let _progressCallback: ((progress: WorkerProgress) => void) | null = null;
+
+export function setProgressCallback(
+  cb: ((progress: WorkerProgress) => void) | null,
+) {
+  _progressCallback = cb;
+}
+
 function createWorker(): Worker {
   const worker = new Worker(new URL("./solver.worker.ts", import.meta.url), {
     type: "module",
@@ -33,10 +47,11 @@ function createWorker(): Worker {
       scope.__workerCoverage__.push(workerCov);
       return;
     }
-    const { id, ok, log, ...rest } = e.data as {
+    const { id, ok, log, progress, ...rest } = e.data as {
       id: number;
       ok?: boolean;
       log?: string;
+      progress?: WorkerProgress;
       [k: string]: unknown;
     };
     if (log !== undefined) {
@@ -44,6 +59,13 @@ function createWorker(): Worker {
       // regardless of which panel is active (log callback may be null).
       console.log("[wasm]", log);
       _logCallback?.(log);
+      return;
+    }
+    if (progress !== undefined) {
+      // Progress does not settle the call. Drop it once the call is no longer
+      // pending (resetWorker cleared it), so a cancelled run cannot repaint the
+      // viewport after the fact.
+      if (_pending.has(id)) _progressCallback?.(progress);
       return;
     }
     const pending = _pending.get(id);

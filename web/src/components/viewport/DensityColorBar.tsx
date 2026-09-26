@@ -3,11 +3,12 @@
 
 // Legend for the topology-optimization density field (KOF-233): the grayscale
 // 0→1 density ramp with a marker at the current visibility threshold, so the
-// user reads which densities the cutoff keeps. Shown only when a density run is
-// the active result in the Results view.
+// user reads which densities the cutoff keeps. Shown whenever the viewport draws
+// a density field — the final run in Results or the live one while optimizing.
 
 import { useModelStore } from "../../store/modelStore";
 import { densityColor } from "../../lib/densityField";
+import { useDisplayedDensity } from "./useDisplayedDensity";
 
 const GRADIENT_STOPS = 12;
 const BAR_HEIGHT = 160;
@@ -22,13 +23,10 @@ const gradient = (() => {
 })();
 
 export function DensityColorBar() {
-  const mode = useModelStore((s) => s.mode);
-  const activeResult = useModelStore((s) => s.activeResult);
-  const densityResult = useModelStore((s) => s.densityResult);
+  const density = useDisplayedDensity();
   const threshold = useModelStore((s) => s.densityThreshold);
 
-  if (mode !== "results" || activeResult !== "density" || !densityResult)
-    return null;
+  if (density === null) return null;
 
   const ticks = [1, 0.75, 0.5, 0.25, 0];
 

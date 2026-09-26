@@ -26,6 +26,7 @@
 #pragma once
 
 #include "topology_simp_core.h"
+#include "topology_stream.h"
 
 #include <mfem.hpp>
 
@@ -65,6 +66,9 @@ struct ComplianceOptConfig {
     // keep-in/keep-out picker that populates them is KOF-238.
     std::vector<int> passive_solid;
     std::vector<int> passive_void;
+
+    // Live density observer (KOF-240) — see topology_stream.h.
+    DensityStream stream;
 };
 
 struct ComplianceOptResult {
@@ -81,7 +85,8 @@ struct ComplianceOptResult {
 // clamped essential DOFs `ess_tdof` and the assembled `load` are the same objects
 // the static solve builds (built once by the caller, reused every iteration —
 // ADR-0002 decision 1). Streams one `[topopt] it N: c=… vol=… change=…` line per
-// iteration over the printf→worker channel. Throws std::runtime_error on an
+// iteration over the printf→worker channel, and hands the analysed ρ to
+// `config.stream` when one is set. Throws std::runtime_error on an
 // ill-posed problem (no design elements, invalid volume fraction, a solve that
 // fails to converge).
 ComplianceOptResult optimize_compliance(mfem::FiniteElementSpace& fespace,
