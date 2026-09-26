@@ -167,6 +167,15 @@ test("optimize_topology worker: density field of element length + progress logs"
 // before the call resolves. One snapshot per iteration (streamEvery defaults to
 // 1), iterations in order, the shape actually changing between snapshots, and
 // the last snapshot bit-identical to the returned density.
+type KofemTestHooks = {
+  __kofem?: {
+    sendToWorker(type: string, payload: unknown): Promise<unknown>;
+    setProgressCallback(
+      cb: ((progress: { it: number; density: Float64Array }) => void) | null,
+    ): void;
+  };
+};
+
 test("optimize_topology worker: streams the density every iteration", async ({
   page,
 }) => {
@@ -176,12 +185,16 @@ test("optimize_topology worker: streams the density every iteration", async ({
   );
 
   await gotoApp(page);
-  await page.waitForFunction(() => !!(window as any).__kofem);
+  await page.waitForFunction(() =>
+    Boolean((window as unknown as KofemTestHooks).__kofem),
+  );
 
   const result = (await page.evaluate(
     async (beam) => {
       const { nodes, elements, fixedNodeIds, loadedNodeIds } = beam;
-      const kofem = (window as any).__kofem;
+      const kofem = (window as unknown as KofemTestHooks).__kofem;
+      if (!kofem)
+        throw new Error("window.__kofem test hooks are not installed");
       const snapshots: { it: number; density: number[] }[] = [];
       kofem.setProgressCallback(
         ({ it, density }: { it: number; density: Float64Array }) =>
@@ -194,10 +207,10 @@ test("optimize_topology worker: streams the density every iteration", async ({
           { id: 1, name: "Steel", young: 210000, poisson: 0.3, density: 0 },
         ],
         properties: [{ id: 1, materialId: 1 }],
-        constraints: fixedNodeIds.flatMap((nodeId: number) =>
+        constraints: fixedNodeIds.flatMap((nodeId) =>
           [0, 1, 2].map((dof) => ({ nodeId, dof })),
         ),
-        loads: loadedNodeIds.map((nodeId: number) => ({
+        loads: loadedNodeIds.map((nodeId) => ({
           nodeId,
           dof: 2,
           value: -100,
