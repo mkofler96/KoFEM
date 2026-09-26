@@ -20,17 +20,17 @@
 
 #include <string>
 
-// Pure-shell (all-CTRIA3) minimum-compliance topology optimization. `mesh`,
+// Pure-shell (all-CTRIA3) SIMP topology optimization (either objective). `mesh`,
 // `mat_json` and `bcs_json` are exactly solve_shell's payloads; `topopt_json` is
 // the TopOptSettings block optimize_topology takes. Returns
 //   { density: Float64Array (one per shell facet, triangle order),
-//     history: [{ it, objective, volume, max_change }, …] }
+//     history: [{ it, objective, compliance, volume, max_change }, …] }
 // or { error: string } on incomplete/ill-posed input.
 emscripten::val optimize_topology_shell(emscripten::val mesh, const std::string& mat_json,
                                         const std::string& bcs_json,
                                         const std::string& topopt_json);
 
-// Coupled shell/solid minimum-compliance topology optimization. `mesh`,
+// Coupled shell/solid SIMP topology optimization (either objective). `mesh`,
 // `coupling`, `bcs` and `mat_json` are exactly solve_coupled's payloads;
 // `topopt_json` is the TopOptSettings block. The single density field spans the
 // solid tets and shell facets both; the couplings are constraints, not design

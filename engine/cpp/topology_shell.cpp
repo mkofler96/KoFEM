@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// SIMP minimum-compliance topology optimization for shell + coupled shell/solid
+// SIMP topology optimization (min_compliance / min_volume) for shell + coupled shell/solid
 // design domains — see topology_shell.h (KOF-237).
 
 #include "topology_shell.h"
@@ -264,9 +264,14 @@ ShellTopOptResult optimize_shell_compliance(const ShellTopOptInput& in,
             "optimize_shell_compliance: prescribed (non-zero) displacements are not "
             "supported — the minimum-compliance objective is self-adjoint only for "
             "homogeneous supports (u = 0)");
-    if (std::isnan(config.volume_fraction) || config.volume_fraction <= 0.0 ||
-        config.volume_fraction > 1.0)
+    const bool min_volume = config.objective == TopOptObjective::MinVolume;
+    if (!min_volume && (std::isnan(config.volume_fraction) ||
+                        config.volume_fraction <= 0.0 || config.volume_fraction > 1.0))
         throw std::runtime_error("optimize_shell_compliance: volume_fraction must be in (0, 1]");
+    if (min_volume && (!std::isfinite(config.compliance_limit) || config.compliance_limit <= 0.0))
+        throw std::runtime_error(
+            "optimize_shell_compliance: compliance_limit must be finite and positive for "
+            "the min_volume objective");
     if (std::isnan(config.rho_min) || config.rho_min < 0.0 || config.rho_min >= 1.0)
         throw std::runtime_error("optimize_shell_compliance: rho_min must be in [0, 1)");
     if (config.max_iterations <= 0)
@@ -297,19 +302,19 @@ ShellTopOptResult optimize_shell_compliance(const ShellTopOptInput& in,
 
     double vtotal = 0.0;
     for (const double v : cache.volume) vtotal += v;
+    if (!(vtotal > 0.0)) throw std::runtime_error("optimize_shell_compliance: non-positive volume");
     const double vcap = config.volume_fraction * vtotal;
-    if (!(vcap > 0.0)) throw std::runtime_error("optimize_shell_compliance: non-positive volume");
 
     double solid_volume = 0.0;
     for (int e = 0; e < ne; ++e)
         if (dom.pinned[e] == 1) solid_volume += cache.volume[e];
-    const double min_volume = solid_volume + config.rho_min * (vtotal - solid_volume);
-    if (min_volume > vcap * (1.0 + 1e-9))
+    const double least_volume = solid_volume + config.rho_min * (vtotal - solid_volume);
+    if (!min_volume && least_volume > vcap * (1.0 + 1e-9))
         throw std::runtime_error(
             "optimize_shell_compliance: volume fraction " +
             std::to_string(config.volume_fraction) +
             " is infeasible — the minimum reachable volume fraction is " +
-            std::to_string(min_volume / vtotal) + " given rho_min and the pinned-solid volume");
+            std::to_string(least_volume / vtotal) + " given rho_min and the pinned-solid volume");
 
     const double r_min = config.filter_radius > 0.0 ? config.filter_radius
                                                      : default_filter_radius(cache.volume);
@@ -317,7 +322,10 @@ ShellTopOptResult optimize_shell_compliance(const ShellTopOptInput& in,
 
     std::vector<double> rho(ne, config.rho_min);
     for (const int e : config.passive_solid) rho[e] = 1.0;
-    for (const int e : dom.active) rho[e] = config.volume_fraction;
+    // min_volume starts at full material — the stiffest reachable design — so the
+    // first solve checks c_allow's feasibility (see topology_optimize.cpp).
+    const double rho_start = min_volume ? 1.0 : config.volume_fraction;
+    for (const int e : dom.active) rho[e] = rho_start;
 
     const std::vector<double> xmin(nact, config.rho_min);
     const std::vector<double> xmax(nact, 1.0);
@@ -335,6 +343,12 @@ ShellTopOptResult optimize_shell_compliance(const ShellTopOptInput& in,
             in, cache, rho, config.penalty, config.emin_rel, config.cg_rtol);
         result.displacements = ev.displacements;
         if (obj_scale < 0.0) obj_scale = ev.compliance > 0.0 ? 1.0 / ev.compliance : 1.0;
+        if (min_volume && it == 1 && ev.compliance > config.compliance_limit * (1.0 + 1e-9))
+            throw std::runtime_error(
+                "optimize_shell_compliance: compliance limit " +
+                std::to_string(config.compliance_limit) +
+                " is infeasible — even the full-material design has compliance " +
+                std::to_string(ev.compliance) + "; raise the limit above that value");
 
         std::vector<double> sens = ev.dcompliance;
         filter.filter_sensitivity(rho, sens);
@@ -343,17 +357,21 @@ ShellTopOptResult optimize_shell_compliance(const ShellTopOptInput& in,
         for (int e = 0; e < ne; ++e) vol_used += rho[e] * cache.volume[e];
         const double vol_frac = vol_used / vtotal;
 
-        std::vector<double> df0(nact);
-        std::vector<double> dfdx(nact);
-        for (int k = 0; k < nact; ++k) {
-            const int e = dom.active[k];
-            df0[k] = sens[e] * obj_scale;
-            dfdx[k] = cache.volume[e] / vcap;
-        }
-        const std::vector<double> fval = {(vol_used / vcap) - 1.0};
-        const double f0 = ev.compliance * obj_scale;
+        FormulationInputs fin;
+        fin.objective = config.objective;
+        fin.active = &dom.active;
+        fin.elem_volume = &cache.volume;
+        fin.vtotal = vtotal;
+        fin.vol_used = vol_used;
+        fin.compliance = ev.compliance;
+        fin.dcompliance = &sens;
+        fin.volume_cap = vcap;
+        fin.compliance_limit = config.compliance_limit;
+        fin.compliance_scale = obj_scale;
+        const MmaStepData step = formulate_mma_step(fin);
 
-        const std::vector<double> xnew = mma.update(x, f0, df0, fval, dfdx);
+        const std::vector<double> xnew =
+            mma.update(x, step.f0, step.df0, step.fval, step.dfdx);
         double change = 0.0;
         for (int k = 0; k < nact; ++k) change = std::max(change, std::abs(xnew[k] - x[k]));
 
@@ -366,7 +384,10 @@ ShellTopOptResult optimize_shell_compliance(const ShellTopOptInput& in,
         result.history.push_back({it, ev.compliance, vol_frac, change});
         result.iterations = it;
 
-        if (change < config.tolerance) {
+        const bool feasible =
+            !min_volume ||
+            ev.compliance <= config.compliance_limit * (1.0 + kComplianceLimitSlack);
+        if (change < config.tolerance && feasible) {
             result.converged = true;
             break;
         }

@@ -53,7 +53,7 @@
 //
 // Returns, as binary typed arrays (no JSON text — issue #166):
 //   { density: Float64Array (one per element, in solve/element order),
-//     history: [{ it, objective, volume, max_change, stress? }, …] }
+//     history: [{ it, objective, compliance, volume, max_change, stress? }, …] }
 // or { error: string } when the inputs are incomplete or the problem is
 // ill-posed, matching solve_linear_elastic's error contract.
 emscripten::val optimize_topology(emscripten::val mesh,

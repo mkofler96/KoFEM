@@ -13,11 +13,10 @@
 // decision 1): all ~50–200 iterations run in C++ and stream progress out over
 // the same printf→worker log channel the solver uses.
 //
-// v1 exposes the minimum-compliance objective (KOF-230). The general
-// minimum-volume formulation (KOF-235) and the stress constraint (KOF-236) reuse
-// the same wire contract — this entry routes to them once they land and, until
-// then, rejects their settings with a clear message rather than silently
-// mis-solving.
+// Routes both compliance/volume formulations: min_compliance (KOF-230) and
+// min_volume (KOF-235). The stress constraint (KOF-236) reuses the same wire
+// contract and, until it lands, is rejected with a clear message rather than
+// silently mis-solved.
 
 #include "topology_simp.h"
 
@@ -159,27 +158,34 @@ val optimize_topology(val mesh_js, const std::string& mat_json,
                 "implemented yet (KOF-236)");
     }
 
-    if (objective == "min_volume")
-        return error_result(
-            "the min_volume objective (minimize volume subject to a compliance limit) "
-            "is not implemented yet (KOF-235) — use objective \"min_compliance\"");
-    if (objective != "min_compliance")
+    if (objective != "min_compliance" && objective != "min_volume")
         return error_result(
             "unknown topology-optimization objective \"" + objective +
             "\" — expected \"min_compliance\" or \"min_volume\"");
 
-    // min_compliance requires a volume fraction (the constraint it optimizes
-    // under). The remaining knobs fall back to the ADR-0002 defaults.
-    val vf = (constraints.isUndefined() || constraints.isNull())
-                 ? val::undefined()
-                 : constraints["volumeFraction"];
-    if (vf.isUndefined() || vf.isNull())
+    // Each objective requires the bound of its own constraint: a volume fraction
+    // for min_compliance, a compliance ceiling for min_volume (KOF-235). The
+    // remaining knobs fall back to the ADR-0002 defaults.
+    const bool min_volume = objective == "min_volume";
+    const char* bound_key = min_volume ? "complianceLimit" : "volumeFraction";
+    val bound = (constraints.isUndefined() || constraints.isNull())
+                    ? val::undefined()
+                    : constraints[bound_key];
+    if (bound.isUndefined() || bound.isNull())
         return error_result(
-            "the min_compliance objective requires constraints.volumeFraction "
-            "(the target material fraction, in (0, 1])");
+            min_volume ? "the min_volume objective requires constraints.complianceLimit "
+                         "(the compliance ceiling c_allow, > 0)"
+                       : "the min_compliance objective requires constraints.volumeFraction "
+                         "(the target material fraction, in (0, 1])");
 
     kofem::topopt::ComplianceOptConfig config;
-    config.volume_fraction = vf.as<double>();
+    if (min_volume) {
+        config.objective = kofem::topopt::TopOptObjective::MinVolume;
+        config.compliance_limit = bound.as<double>();
+    } else {
+        config.objective = kofem::topopt::TopOptObjective::MinCompliance;
+        config.volume_fraction = bound.as<double>();
+    }
     config.penalty         = jdouble(topopt_js, "penalty", 3.0);
     config.filter_radius   = jdouble(topopt_js, "filterRadius", 0.0);
     config.move_limit      = jdouble(topopt_js, "moveLimit", 0.2);
@@ -193,11 +199,13 @@ val optimize_topology(val mesh_js, const std::string& mat_json,
     if (config.max_iterations <= 0)
         return error_result("maxIterations must be a positive integer");
 
-    printf("[topopt] min_compliance: %d elements, %d dofs, volfrac=%.3f, p=%.2f, "
-           "r_min=%.4g, move=%.3f, maxit=%d, tol=%.4g\n",
-           ne, fespace.GetTrueVSize(), config.volume_fraction, config.penalty,
-           config.filter_radius, config.move_limit, config.max_iterations,
-           config.tolerance);
+    printf("[topopt] %s: %d elements, %d dofs, p=%.2f, r_min=%.4g, move=%.3f, maxit=%d, "
+           "tol=%.4g\n",
+           kofem::topopt::describe_formulation(config.objective, config.volume_fraction,
+                                               config.compliance_limit)
+               .c_str(),
+           ne, fespace.GetTrueVSize(), config.penalty, config.filter_radius,
+           config.move_limit, config.max_iterations, config.tolerance);
     fflush(stdout);
     log_mem("topopt: before optimization loop");
 
@@ -217,8 +225,8 @@ val optimize_topology(val mesh_js, const std::string& mat_json,
 
     // Binary density (one Float64 per element, solve order — issue #166) plus the
     // iteration history as a small JSON-shaped array. `objective` carries the
-    // minimized value (compliance here), matching the TopOptHistoryEntry wire
-    // type in kofem_wasm.d.ts.
+    // minimized value (compliance or volume fraction) and `compliance` is always
+    // c(ρ), matching the TopOptHistoryEntry wire type in kofem_wasm.d.ts.
     val out = val::object();
     out.set("density", float64_array(result.density));
     val history = val::array();
@@ -226,7 +234,9 @@ val optimize_topology(val mesh_js, const std::string& mat_json,
         const kofem::topopt::TopOptHistoryEntry& h = result.history[i];
         val entry = val::object();
         entry.set("it", h.it);
-        entry.set("objective", h.compliance);
+        entry.set("objective", kofem::topopt::objective_value(config.objective,
+                                                              h.compliance, h.volume));
+        entry.set("compliance", h.compliance);
         entry.set("volume", h.volume);
         entry.set("max_change", h.max_change);
         history.set(static_cast<int>(i), entry);

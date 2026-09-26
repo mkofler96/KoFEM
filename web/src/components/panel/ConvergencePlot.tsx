@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Convergence history for a topology-optimization run (KOF-233): objective
-// (compliance) and volume fraction vs iteration, as a lightweight inline SVG —
+// Convergence history for a topology-optimization run (KOF-233): compliance and
+// volume fraction vs iteration — the objective/constraint pair of either
+// formulation (KOF-235) — as a lightweight inline SVG —
 // no charting dependency. Drives both the live curve in the Optimize panel
 // (parsed from streamed logs) and the final curve in Results (from the returned
 // history); both reduce to ConvergencePoint[].
@@ -16,7 +17,7 @@ const PAD_RIGHT = 8;
 const PAD_TOP = 10;
 const PAD_BOTTOM = 20;
 
-const OBJ_COLOR = "#4e79a7"; // objective (compliance) — normalized to its range
+const OBJ_COLOR = "#4e79a7"; // compliance — normalized to its range
 const VOL_COLOR = "#e15759"; // volume fraction — absolute 0..1
 
 interface Pt {
@@ -24,8 +25,8 @@ interface Pt {
   y: number;
 }
 
-// Objective spans many orders of magnitude and volume fraction is bounded 0..1,
-// so they cannot share a linear axis. The objective is normalized to its own
+// Compliance spans many orders of magnitude and volume fraction is bounded 0..1,
+// so they cannot share a linear axis. Compliance is normalized to its own
 // [min, max] (its absolute start→end values are shown in the legend); volume
 // fraction is drawn on an absolute 0..1 scale. Both then live in the same unit
 // plot box, read against the legend rather than a shared numeric axis.
@@ -70,15 +71,15 @@ export function ConvergencePlot({
 }) {
   if (points.length === 0) return null;
 
-  const objectives = points.map((point) => point.objective);
-  const objMin = Math.min(...objectives);
-  const objMax = Math.max(...objectives);
-  const objFirst = points[0].objective;
-  const objLast = points[points.length - 1].objective;
+  const compliances = points.map((point) => point.compliance);
+  const objMin = Math.min(...compliances);
+  const objMax = Math.max(...compliances);
+  const objFirst = points[0].compliance;
+  const objLast = points[points.length - 1].compliance;
 
   const objCoords = scaledCoords(
     points,
-    (point) => point.objective,
+    (point) => point.compliance,
     objMin,
     objMax,
   );
@@ -95,7 +96,7 @@ export function ConvergencePlot({
         viewBox={`0 0 ${PLOT_W} ${PLOT_H}`}
         width="100%"
         role="img"
-        aria-label="Convergence history: objective and volume fraction vs iteration"
+        aria-label="Convergence history: compliance and volume fraction vs iteration"
         style={{ display: "block" }}
       >
         {/* plot frame */}
@@ -144,7 +145,7 @@ export function ConvergencePlot({
       </svg>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 12, fontSize: 11 }}>
         <span style={{ color: OBJ_COLOR }}>
-          ■ Objective {fmt(objFirst)} → {fmt(objLast)}
+          ■ Compliance {fmt(objFirst)} → {fmt(objLast)}
         </span>
         <span style={{ color: VOL_COLOR }}>
           ■ Volume fraction {points[points.length - 1].volume.toFixed(3)}

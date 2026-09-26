@@ -27,6 +27,11 @@
 //   4. Fixed/passive elements are honoured: ρ pinned to 1 stays exactly solid and
 //      ρ pinned to rho_min stays exactly void, and the constraint is still met.
 //   5. The loop is deterministic and respects max_iterations.
+//   6. min_volume s.t. compliance (KOF-235): with c_allow set to the baseline
+//      min_compliance optimum, it converges to a feasible design that meets the
+//      compliance target, and lands on the baseline's volume fraction — the two
+//      formulations agree where they meet on the trade-off curve. A looser limit
+//      buys a smaller volume, and an unreachable limit is rejected.
 // Exits non-zero on any failure so it can gate a local run.
 
 #include "topology_optimize.h"
@@ -321,6 +326,60 @@ int main() {
     for (std::size_t i = 0; identical && i < res.density.size(); ++i)
         if (res2.density[i] != res.density[i]) identical = false;
     check(failures, "two runs give a bit-identical final density", identical);
+
+    // ── (6) min_volume s.t. compliance ≤ c_allow (KOF-235) ─────────────────────
+    std::printf("\nmin_volume s.t. compliance (self-consistency with min_compliance):\n");
+    const double c_star = res.history.back().compliance;
+    const double v_star = res.history.back().volume;
+    ComplianceOptConfig vcfg = base_config();
+    vcfg.objective = TopOptObjective::MinVolume;
+    vcfg.compliance_limit = c_star;
+    vcfg.max_iterations = 150;
+    const ComplianceOptResult vres = optimize_compliance(
+        model.fespace, model.cache, model.ess_tdof, model.load, vcfg);
+    const TopOptHistoryEntry& vlast = vres.history.back();
+    std::printf("  c_allow = %.6g (min_compliance optimum at volfrac %.4f)\n", c_star, v_star);
+    std::printf("  min_volume: %d iterations, final c=%.6g (%.3f%% of limit), vol=%.5f\n",
+                vres.iterations, vlast.compliance, 100.0 * vlast.compliance / c_star,
+                vlast.volume);
+    check(failures, "min_volume converged within the iteration budget", vres.converged);
+    check(failures, "min_volume design meets the compliance target",
+          vlast.compliance <= c_star * (1.0 + kComplianceLimitSlack));
+    check(failures, "min_volume started from full material (volume 1 at it 1)",
+          std::abs(vres.history.front().volume - 1.0) < 1e-12);
+    check(failures, "min_volume removed material (final volume well below 1)",
+          vlast.volume < 0.8);
+    std::printf("  formulations agree: |vol_minV − vol_minC| = %.4f\n",
+                std::abs(vlast.volume - v_star));
+    check(failures, "min_volume at c_allow = c* recovers the min_compliance volume (< 0.5%)",
+          std::abs(vlast.volume - v_star) < 0.005);
+
+    // Trade-off monotonicity: doubling the allowed compliance must buy less volume.
+    {
+        ComplianceOptConfig loose = vcfg;
+        loose.compliance_limit = 2.0 * c_star;
+        const ComplianceOptResult lres = optimize_compliance(
+            model.fespace, model.cache, model.ess_tdof, model.load, loose);
+        std::printf("  c_allow = 2c*: vol=%.5f, c=%.6g\n", lres.history.back().volume,
+                    lres.history.back().compliance);
+        check(failures, "a looser compliance limit yields a smaller volume",
+              lres.history.back().volume < vlast.volume - 0.05);
+        check(failures, "the looser run also meets its limit",
+              lres.history.back().compliance <=
+                  loose.compliance_limit * (1.0 + kComplianceLimitSlack));
+    }
+    // The full-material design is the stiffest reachable; a limit below its
+    // compliance is unsatisfiable and must be rejected, as must a non-positive one.
+    // The baseline's uniform ρ ≡ volfrac start has K scaled by volfrac^p against
+    // full material, so full material's compliance is c₀·volfrac^p; ask for half.
+    {
+        ComplianceOptConfig bad = vcfg;
+        bad.compliance_limit = 0.5 * res.history.front().compliance *
+                               std::pow(base_config().volume_fraction, base_config().penalty);
+        check(failures, "an unreachable compliance limit is rejected", throws(bad));
+        bad.compliance_limit = 0.0;
+        check(failures, "a non-positive compliance limit is rejected", throws(bad));
+    }
 
     std::printf(failures != 0 ? "\n%d check(s) FAILED\n" : "\nall checks passed\n",
                 failures);

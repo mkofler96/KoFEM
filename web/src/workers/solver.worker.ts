@@ -2383,10 +2383,14 @@ function handleTopOpt(id: number, payload: TopOptPayload) {
         "them to Solid.",
     );
 
-  const volfrac = settings.constraints.volumeFraction;
+  const { volumeFraction, complianceLimit } = settings.constraints;
   const settingsJson = JSON.stringify(settings);
   const volfracNote =
-    volfrac !== undefined ? `, volume fraction ${volfrac}` : "";
+    volumeFraction !== undefined
+      ? `, volume fraction ${volumeFraction}`
+      : complianceLimit !== undefined
+        ? `, compliance ≤ ${complianceLimit}`
+        : "";
   const startLog = (nElems: number, domain: string) =>
     self.postMessage({
       id,

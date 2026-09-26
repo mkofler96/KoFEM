@@ -42,6 +42,7 @@ em++ -std=c++17 -O2 -fexceptions \
     "$REPO_ROOT/engine/cpp/topology_filter.cpp" \
     "$REPO_ROOT/engine/cpp/spatial_grid.cpp" \
     "$REPO_ROOT/engine/cpp/topology_mma.cpp" \
+    "$REPO_ROOT/engine/cpp/topology_formulation.cpp" \
     "$REPO_ROOT/engine/cpp/topology_optimize.cpp" \
     "$REPO_ROOT/engine/tests/topology_optimize_validation.cpp" \
     -L "$MFEM_ROOT/lib" -lmfem \

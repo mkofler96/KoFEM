@@ -126,21 +126,12 @@ export function OptimizePanel() {
             errors={errors}
           />
         ) : (
-          <>
-            <SettingField
-              field="complianceLimit"
-              label="Compliance ≤"
-              hint="Upper bound on compliance, in the model's work units"
-              errors={errors}
-            />
-            {/* min_volume shares the KOF-231 contract but its engine loop
-                (KOF-235) is not implemented yet — flag it here rather than let
-                the run fail with a bare engine error. */}
-            <div className={styles.hint}>
-              Minimize-volume is not implemented in the solver yet — running it
-              will report an error.
-            </div>
-          </>
+          <SettingField
+            field="complianceLimit"
+            label="Compliance ≤"
+            hint="Upper bound on compliance, in the model's work units"
+            errors={errors}
+          />
         )}
 
         <div className={styles.sectionLabel}>SIMP parameters</div>

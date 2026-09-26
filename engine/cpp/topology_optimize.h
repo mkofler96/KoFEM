@@ -1,30 +1,33 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// SIMP minimum-compliance optimization loop (KOF-230, Phase A of the KOF-226
-// epic; ADR-0002). This is the first end-to-end topology optimization: the loop
-// that drives the per-iteration SIMP math (topology_simp_core.h), the
+// SIMP optimization loop (KOF-230, Phase A of the KOF-226 epic; ADR-0002). The
+// loop drives the per-iteration SIMP math (topology_simp_core.h), the
 // mesh-independence filter (topology_filter.h) and the MMA optimizer
-// (topology_mma.h) to a minimum-compliance layout under a volume constraint.
+// (topology_mma.h) through one of two compliance/volume formulations
+// (topology_formulation.h):
 //
-//   minimize   c(ρ) = fᵀu(ρ)      (structural compliance)
-//   subject to Σ_e ρ_e·V_e ≤ volfrac·Σ_e V_e     (volume fraction)
-//              ρ_min ≤ ρ_e ≤ 1
+//   min_compliance (KOF-230):  minimize c(ρ) = fᵀu(ρ)
+//                              subject to Σ_e ρ_e·V_e ≤ volfrac·Σ_e V_e
+//   min_volume     (KOF-235):  minimize Σ_e ρ_e·V_e
+//                              subject to c(ρ) ≤ c_allow
+//   both with ρ_min ≤ ρ_e ≤ 1.
 //
 // One iteration:
 //   1. SIMP-penalized solve → compliance c and dc/dρ (evaluate_compliance);
-//   2. filter the sensitivities for mesh-independence (DensityFilter);
-//   3. feed (c, dc/dρ) as the objective and the volume constraint (with dV/dρ) to
-//      one MMA step, updating ρ within the move limit and [ρ_min, 1] bounds;
-//   4. converge on max|Δρ| < tolerance, or stop at max_iterations.
+//   2. filter the compliance sensitivities for mesh-independence (DensityFilter);
+//   3. hand the objective and the constraint (with their gradients) to one MMA
+//      step, updating ρ within the move limit and [ρ_min, 1] bounds;
+//   4. converge on max|Δρ| < tolerance — for min_volume only once the design also
+//      meets c ≤ c_allow — or stop at max_iterations.
 //
 // This is the numerical core only — NO JS boundary. The `optimize_topology` Embind
 // entry, its payload parsing and the live-progress/cancellation worker handler are
 // KOF-231; that entry parses the TopOptSettings block into a ComplianceOptConfig
-// and calls this. The MMA optimizer here is what the general constrained
-// formulation (KOF-235) and the stress constraint (KOF-236) build on unchanged.
+// and calls this. The stress constraint (KOF-236) extends the same formulation.
 #pragma once
 
+#include "topology_formulation.h"
 #include "topology_simp_core.h"
 
 #include <mfem.hpp>
@@ -33,8 +36,8 @@
 
 namespace kofem::topopt {
 
-// One optimizer iteration in the returned history. `compliance` is the objective
-// being minimized; `volume` is the current volume fraction Σρ_e·V_e / ΣV_e;
+// One optimizer iteration in the returned history. `compliance` is c(ρ) — the
+// objective of a min_compliance run, the constraint of a min_volume run; `volume` is the current volume fraction Σρ_e·V_e / ΣV_e;
 // `max_change` is max|Δρ_e| over the design variables this iteration. Mirrors the
 // TopOptHistoryEntry wire type (kofem_wasm.d.ts), minus the stress field that only
 // a stress-constrained run (KOF-236) fills.
@@ -46,7 +49,9 @@ struct TopOptHistoryEntry {
 };
 
 struct ComplianceOptConfig {
-    double volume_fraction = 0.5;  // target Σρ_e·V_e / ΣV_e
+    TopOptObjective objective = TopOptObjective::MinCompliance;
+    double volume_fraction = 0.5;  // min_compliance: target Σρ_e·V_e / ΣV_e
+    double compliance_limit = 0.0; // min_volume: c_allow (> 0, model work units)
     double penalty = 3.0;          // SIMP penalty p
     double filter_radius = 0.0;    // r_min; ≤ 0 → default 1.5× mean element size
     double move_limit = 0.2;       // MMA move limit
@@ -77,13 +82,13 @@ struct ComplianceOptResult {
     bool converged = false;  // true if it stopped on the tolerance, not max_iterations
 };
 
-// Run the SIMP minimum-compliance loop on a prebuilt design mesh. `cache`, the
+// Run the SIMP loop (either formulation) on a prebuilt design mesh. `cache`, the
 // clamped essential DOFs `ess_tdof` and the assembled `load` are the same objects
 // the static solve builds (built once by the caller, reused every iteration —
 // ADR-0002 decision 1). Streams one `[topopt] it N: c=… vol=… change=…` line per
 // iteration over the printf→worker channel. Throws std::runtime_error on an
 // ill-posed problem (no design elements, invalid volume fraction, a solve that
-// fails to converge).
+// fails to converge, a compliance limit even the full-material design exceeds).
 ComplianceOptResult optimize_compliance(mfem::FiniteElementSpace& fespace,
                                         const ElementStiffnessCache& cache,
                                         const mfem::Array<int>& ess_tdof,

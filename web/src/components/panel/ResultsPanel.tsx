@@ -31,7 +31,7 @@ function TopOptSummary({ density, history }: DensityResult) {
   const visible = visibleElementCount(density, threshold);
   const points: ConvergencePoint[] = history.map((h) => ({
     it: h.it,
-    objective: h.objective,
+    compliance: h.compliance,
     volume: h.volume,
   }));
 
@@ -97,9 +97,9 @@ function TopOptSummary({ density, history }: DensityResult) {
               <span className={styles.statVal}>{last.volume.toFixed(3)}</span>
             </div>
             <div className={styles.statRow}>
-              <span className={styles.statKey}>Final objective</span>
+              <span className={styles.statKey}>Final compliance</span>
               <span className={styles.statVal}>
-                {last.objective.toExponential(3)}
+                {last.compliance.toExponential(3)}
               </span>
             </div>
           </>
