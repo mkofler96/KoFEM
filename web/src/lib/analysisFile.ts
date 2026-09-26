@@ -14,11 +14,12 @@ import type {
   ResultType,
   StepTessellation,
   TieGroup,
+  StressAggregation,
   TopOptObjective,
   TopOptSettingsState,
   VolMesh,
 } from "../store/modelStore";
-import { RESULT_TYPES } from "../store/modelStore";
+import { DEFAULT_TOPOPT_SETTINGS, RESULT_TYPES } from "../store/modelStore";
 
 // ── KoFEM analysis file format (.vtu) ─────────────────────────────────────────
 //
@@ -358,6 +359,16 @@ const TOPOPT_NUMERIC_FIELDS: (keyof TopOptSettingsState)[] = [
   "maxIterations",
   "tolerance",
 ];
+// The max-stress settings (KOF-236) postdate the first TO settings blocks, so a
+// file may lack all of them; they are then filled from the defaults (stress
+// constraint off). A file that carries any of them must carry all, well-typed.
+const TOPOPT_STRESS_FIELDS = [
+  "stressConstraint",
+  "maxStress",
+  "stressAggregation",
+  "stressP",
+] as const;
+const STRESS_AGGREGATIONS: StressAggregation[] = ["pnorm", "ks"];
 const VIEW_REPRS = ["geometry", "surface", "volume", "wireframe"] as const;
 const ELEMENT_TYPES: ElementType[] = ["CTETRA", "CHEXA", "CTRIA3"];
 
@@ -467,6 +478,26 @@ function parseMetadata(xml: string): KofemFieldDataV1 {
         throw new Error(
           `Invalid analysis file: topOpt.${field} must be a string, got ${typeof to[field]}`,
         );
+    if (TOPOPT_STRESS_FIELDS.every((field) => to[field] === undefined)) {
+      for (const field of TOPOPT_STRESS_FIELDS)
+        to[field] = DEFAULT_TOPOPT_SETTINGS[field];
+    } else {
+      if (typeof to.stressConstraint !== "boolean")
+        throw new Error(
+          `Invalid analysis file: topOpt.stressConstraint must be a boolean, got ${typeof to.stressConstraint}`,
+        );
+      for (const field of ["maxStress", "stressP"] as const)
+        if (typeof to[field] !== "string")
+          throw new Error(
+            `Invalid analysis file: topOpt.${field} must be a string, got ${typeof to[field]}`,
+          );
+      if (
+        !STRESS_AGGREGATIONS.includes(to.stressAggregation as StressAggregation)
+      )
+        throw new Error(
+          `Invalid analysis file: unknown topOpt.stressAggregation "${to.stressAggregation}"`,
+        );
+    }
   }
 
   if (typeof meta.modelName !== "string")

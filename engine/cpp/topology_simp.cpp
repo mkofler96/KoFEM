@@ -14,10 +14,9 @@
 // `on_density` callback additionally receives the design ρ per iteration
 // (KOF-240, revising that decision) so the viewport can draw it live.
 //
-// Routes both compliance/volume formulations: min_compliance (KOF-230) and
-// min_volume (KOF-235). The stress constraint (KOF-236) reuses the same wire
-// contract and, until it lands, is rejected with a clear message rather than
-// silently mis-solved.
+// Routes both compliance/volume formulations — min_compliance (KOF-230) and
+// min_volume (KOF-235) — each optionally bounded by a maximum von Mises stress
+// (constraints.maxStress, KOF-236).
 
 #include "topology_simp.h"
 
@@ -27,10 +26,12 @@
 #include "topology_optimize.h"
 #include "topology_simp_core.h"
 #include "topology_stream_js.h"
+#include "topology_stress.h"
 #include "wasm_util.h"
 
 #include <mfem.hpp>
 
+#include <cmath>
 #include <cstdio>
 #include <string>
 #include <vector>
@@ -151,45 +152,79 @@ val optimize_topology(val mesh_js, const std::string& mat_json,
     const std::string objective = jstring(topopt_js, "objective", "min_compliance");
     val constraints             = topopt_js["constraints"];
 
-    // The stress constraint (KOF-236) shares this contract but has no
-    // implementation yet — reject it explicitly instead of ignoring it.
-    if (!constraints.isUndefined() && !constraints.isNull()) {
-        val ms = constraints["maxStress"];
-        if (!ms.isUndefined() && !ms.isNull())
-            return error_result(
-                "the maximum-stress constraint (constraints.maxStress) is not "
-                "implemented yet (KOF-236)");
-    }
-
     if (objective != "min_compliance" && objective != "min_volume")
         return error_result(
             "unknown topology-optimization objective \"" + objective +
             "\" — expected \"min_compliance\" or \"min_volume\"");
 
+    auto constraint = [&](const char* key) {
+        return (constraints.isUndefined() || constraints.isNull()) ? val::undefined()
+                                                                   : constraints[key];
+    };
+    auto present = [](const val& v) { return !v.isUndefined() && !v.isNull(); };
+
     // Each objective requires the bound of its own constraint: a volume fraction
-    // for min_compliance, a compliance ceiling for min_volume (KOF-235). The
-    // remaining knobs fall back to the ADR-0002 defaults.
+    // for min_compliance, a compliance ceiling for min_volume (KOF-235) — unless a
+    // stress limit bounds the min_volume run instead (KOF-236). The remaining
+    // knobs fall back to the ADR-0002 defaults.
     const bool min_volume = objective == "min_volume";
-    const char* bound_key = min_volume ? "complianceLimit" : "volumeFraction";
-    val bound = (constraints.isUndefined() || constraints.isNull())
-                    ? val::undefined()
-                    : constraints[bound_key];
-    if (bound.isUndefined() || bound.isNull())
+    const val max_stress = constraint("maxStress");
+    const val bound = constraint(min_volume ? "complianceLimit" : "volumeFraction");
+    if (!present(bound) && !(min_volume && present(max_stress)))
         return error_result(
             min_volume ? "the min_volume objective requires constraints.complianceLimit "
-                         "(the compliance ceiling c_allow, > 0)"
+                         "(the compliance ceiling c_allow, > 0), constraints.maxStress "
+                         "(the von Mises limit sigma_allow, > 0), or both"
                        : "the min_compliance objective requires constraints.volumeFraction "
                          "(the target material fraction, in (0, 1])");
 
     kofem::topopt::ComplianceOptConfig config;
     if (min_volume) {
         config.objective = kofem::topopt::TopOptObjective::MinVolume;
-        config.compliance_limit = bound.as<double>();
+        if (present(bound)) {
+            config.compliance_limit = bound.as<double>();
+            if (!(config.compliance_limit > 0.0))
+                return error_result("constraints.complianceLimit must be > 0");
+        }
     } else {
         config.objective = kofem::topopt::TopOptObjective::MinCompliance;
         config.volume_fraction = bound.as<double>();
     }
+
     config.penalty         = jdouble(topopt_js, "penalty", 3.0);
+
+    // Maximum von Mises stress (KOF-236), in the material's stress units. The
+    // optional `stress` block tunes the aggregation; see StressConstraintConfig.
+    if (present(max_stress)) {
+        kofem::topopt::StressConstraintConfig& st = config.stress;
+        st.enabled = true;
+        st.limit = max_stress.as<double>();
+        if (!std::isfinite(st.limit) || st.limit <= 0.0)
+            return error_result("constraints.maxStress must be a finite stress > 0");
+        val stress_js = topopt_js["stress"];
+        const std::string aggregation =
+            present(stress_js) ? jstring(stress_js, "aggregation", "pnorm") : "pnorm";
+        if (aggregation != "pnorm" && aggregation != "ks")
+            return error_result("unknown stress.aggregation \"" + aggregation +
+                                "\" — expected \"pnorm\" or \"ks\"");
+        st.aggregation = aggregation == "ks" ? kofem::topopt::StressAggregation::KS
+                                             : kofem::topopt::StressAggregation::PNorm;
+        // Default P per method: the P-norm is already tight at 8; KS works on
+        // σ/σ_allow ≈ 1, where it needs a larger parameter for the same tightness.
+        const double default_p = aggregation == "ks" ? 40.0 : 8.0;
+        // q defaults to p − ½, keeping the relaxed stress at the ρ^½ interpolation
+        // of Le et al. (2010) whatever penalty is chosen (q = 2.5 at p = 3).
+        const double default_q = config.penalty - 0.5;
+        st.aggregation_p = present(stress_js) ? jdouble(stress_js, "p", default_p) : default_p;
+        st.relaxation_q  = present(stress_js) ? jdouble(stress_js, "q", default_q) : default_q;
+        // The qp-relaxed stress ρ^(p−q)·σ has an unbounded ρ-derivative at ρ = 0,
+        // so keep a small positive design floor (1e-3, as in Le et al. 2010).
+        config.rho_min = 1e-3;
+    } else if (present(topopt_js["stress"])) {
+        return error_result("the stress block (aggregation settings) needs "
+                            "constraints.maxStress — there is no stress limit to tune");
+    }
+
     config.filter_radius   = jdouble(topopt_js, "filterRadius", 0.0);
     config.move_limit      = jdouble(topopt_js, "moveLimit", 0.2);
     config.max_iterations  = jint(topopt_js, "maxIterations", 100);
@@ -206,11 +241,12 @@ val optimize_topology(val mesh_js, const std::string& mat_json,
         return error_result("streamEvery must be a positive integer");
     config.stream.on_density = kofem::topopt::js_density_callback(on_density);
 
-    printf("[topopt] %s: %d elements, %d dofs, p=%.2f, r_min=%.4g, move=%.3f, maxit=%d, "
+    printf("[topopt] %s%s: %d elements, %d dofs, p=%.2f, r_min=%.4g, move=%.3f, maxit=%d, "
            "tol=%.4g\n",
            kofem::topopt::describe_formulation(config.objective, config.volume_fraction,
                                                config.compliance_limit)
                .c_str(),
+           kofem::topopt::describe_stress_constraint(config.stress).c_str(),
            ne, fespace.GetTrueVSize(), config.penalty, config.filter_radius,
            config.move_limit, config.max_iterations, config.tolerance);
     fflush(stdout);
@@ -221,8 +257,14 @@ val optimize_topology(val mesh_js, const std::string& mat_json,
     // contradictory passive pins, a solve that fails to converge). Those throws
     // propagate as a C++ exception the worker decodes — the same contract
     // solve_linear_elastic uses for a solve-time failure.
+    // The full-material stress operators D₀·B_e, only when a stress limit is set.
+    kofem::topopt::ElementStressCache stress_cache;
+    if (config.stress.enabled)
+        stress_cache = kofem::topopt::build_element_stress_cache(fespace, E0, nu);
+
     kofem::topopt::ComplianceOptResult result = kofem::topopt::optimize_compliance(
-        fespace, cache, ess.ess_tdof, load, config);
+        fespace, cache, ess.ess_tdof, load, config,
+        config.stress.enabled ? &stress_cache : nullptr);
 
     printf("[topopt] complete: %d iteration(s), %s; returning %d densities\n",
            result.iterations, result.converged ? "converged" : "hit max_iterations",
@@ -233,7 +275,8 @@ val optimize_topology(val mesh_js, const std::string& mat_json,
     // Binary density (one Float64 per element, solve order — issue #166) plus the
     // iteration history as a small JSON-shaped array. `objective` carries the
     // minimized value (compliance or volume fraction) and `compliance` is always
-    // c(ρ), matching the TopOptHistoryEntry wire type in kofem_wasm.d.ts.
+    // c(ρ); a stress-constrained run adds the aggregated `stress` and the true
+    // `max_stress`. Matches the TopOptHistoryEntry wire type in kofem_wasm.d.ts.
     val out = val::object();
     out.set("density", float64_array(result.density));
     val history = val::array();
@@ -246,6 +289,10 @@ val optimize_topology(val mesh_js, const std::string& mat_json,
         entry.set("compliance", h.compliance);
         entry.set("volume", h.volume);
         entry.set("max_change", h.max_change);
+        if (config.stress.enabled) {
+            entry.set("stress", h.stress);
+            entry.set("max_stress", h.max_stress);
+        }
         history.set(static_cast<int>(i), entry);
     }
     out.set("history", history);

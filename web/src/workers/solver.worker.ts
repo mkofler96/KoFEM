@@ -2396,15 +2396,15 @@ function handleTopOpt(id: number, payload: TopOptPayload) {
         "them to Solid.",
     );
 
-  const { volumeFraction, complianceLimit } = settings.constraints;
+  const { volumeFraction, complianceLimit, maxStress } = settings.constraints;
   const settingsJson = JSON.stringify(settings);
   const onDensity = densityStreamer(id);
   const volfracNote =
-    volumeFraction !== undefined
+    (volumeFraction !== undefined
       ? `, volume fraction ${volumeFraction}`
-      : complianceLimit !== undefined
-        ? `, compliance ≤ ${complianceLimit}`
-        : "";
+      : "") +
+    (complianceLimit !== undefined ? `, compliance ≤ ${complianceLimit}` : "") +
+    (maxStress !== undefined ? `, von Mises ≤ ${maxStress}` : "");
   const startLog = (nElems: number, domain: string) =>
     self.postMessage({
       id,

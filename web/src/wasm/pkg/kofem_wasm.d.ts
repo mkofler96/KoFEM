@@ -57,11 +57,21 @@ export type StaticSolveResult =
  *  kept solid); `passive` is reserved for the Phase-B keep-in/keep-out picker. */
 export interface TopOptSettings {
   objective: "min_compliance" | "min_volume"
+  /** `volumeFraction` bounds a min_compliance run; `complianceLimit` and/or
+   *  `maxStress` bound a min_volume run. `maxStress` (KOF-236) is the von Mises
+   *  limit σ_allow in the material's stress units, on the qp-relaxed element
+   *  stress; it can also be added to a min_compliance run. All-solid models
+   *  only — the shell/coupled entries reject it. */
   constraints: {
     volumeFraction?: number
     complianceLimit?: number
     maxStress?: number
   }
+  /** Aggregation of the stress constraint (only with `maxStress`): P-norm or KS,
+   *  the parameter P (default 8 for pnorm, 40 for ks) and the qp-relaxation
+   *  exponent q, 0 ≤ q < penalty (default penalty − 0.5, i.e. the ρ^½ stress
+   *  interpolation; 2.5 at the default p = 3). */
+  stress?: { aggregation?: "pnorm" | "ks"; p?: number; q?: number }
   penalty: number // SIMP penalty p, default 3
   filterRadius: number // r_min, model length units
   moveLimit: number // MMA move limit, default 0.2
@@ -84,9 +94,11 @@ export type TopOptDensityCallback =
 /** One optimizer iteration in the returned history. `objective` is the value
  *  being minimized (compliance for min_compliance, volume fraction for
  *  min_volume); `compliance` is always the structural compliance c = fᵀu (the
- *  constraint of a min_volume run); `volume` is the current volume fraction; `max_change` is max |Δρ| over the
- *  design variables; `stress` is the aggregated max von Mises, present only when
- *  a stress constraint is active. */
+ *  constraint of a min_volume run); `volume` is the current volume fraction;
+ *  `max_change` is max |Δρ| over the design variables. With a stress constraint
+ *  (KOF-236) `stress` is the normalized aggregate the constraint bounds and
+ *  `max_stress` the true max relaxed von Mises it tracks; both are absent
+ *  otherwise. */
 export interface TopOptHistoryEntry {
   it: number
   objective: number
@@ -94,6 +106,7 @@ export interface TopOptHistoryEntry {
   volume: number
   max_change: number
   stress?: number
+  max_stress?: number
 }
 
 /** Topology-optimization output: the final per-element density (Float64Array,
@@ -232,8 +245,8 @@ export interface KofemModule {
    *  history. Per-iteration progress streams over the same `print`→worker log
    *  channel the solve uses, and the design density itself streams through
    *  `on_density` (KOF-240). Implements both the `min_compliance` (KOF-230/231)
-   *  and `min_volume` (KOF-235) objectives; the `maxStress` constraint (KOF-236)
-   *  shares this contract and returns a clear `{error}` until it lands.
+   *  and `min_volume` (KOF-235) objectives, each optionally bounded by the
+   *  `maxStress` constraint (KOF-236).
    *  This is the SOLID (tet/hex) design domain; shell and coupled models use the
    *  two entries below (KOF-237). */
   optimize_topology(

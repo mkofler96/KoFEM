@@ -12,17 +12,26 @@
 // objective, the other the constraint (min_compliance / min_volume, KOF-235) — so
 // the plot needs no objective switch. Both the live log parse and the final
 // history array reduce to this shape so the plot draws from a single source.
+//
+// A stress-constrained run (KOF-236) also carries `stress`, the aggregated value
+// the constraint bounds, and `maxStress`, the true max relaxed von Mises stress
+// it tracks — so the plot can show how closely the aggregate follows the peak.
 export interface ConvergencePoint {
   it: number;
   compliance: number;
   volume: number;
+  stress?: number;
+  maxStress?: number;
 }
 
-// Matches "[topopt] it 7: c=1.234e+03 vol=0.4998 change=0.012". `c` is the
-// compliance and `vol` the volume fraction, whichever objective is running.
+// Matches "[topopt] it 7: c=1.234e+03 vol=0.4998 change=0.012", optionally
+// followed by " sigma=812.3 sigma_max=815.1" on a stress-constrained run. `c` is
+// the compliance and `vol` the volume fraction, whichever objective is running.
 // Returns null for any other log line.
-const LINE_RE =
-  /\[topopt\] it (\d+): c=([-+0-9.eE]+) vol=([-+0-9.eE]+) change=/;
+const NUM = "([-+0-9.eE]+)";
+const LINE_RE = new RegExp(
+  `\\[topopt\\] it (\\d+): c=${NUM} vol=${NUM} change=${NUM}(?: sigma=${NUM} sigma_max=${NUM})?`,
+);
 
 export function parseTopOptLogLine(text: string): ConvergencePoint | null {
   const match = LINE_RE.exec(text);
@@ -36,7 +45,11 @@ export function parseTopOptLogLine(text: string): ConvergencePoint | null {
     !Number.isFinite(volume)
   )
     return null;
-  return { it, compliance, volume };
+  if (match[5] === undefined) return { it, compliance, volume };
+  const stress = Number(match[5]);
+  const maxStress = Number(match[6]);
+  if (!Number.isFinite(stress) || !Number.isFinite(maxStress)) return null;
+  return { it, compliance, volume, stress, maxStress };
 }
 
 // Reduce a streamed log channel to the convergence curve so far. Keeps the last

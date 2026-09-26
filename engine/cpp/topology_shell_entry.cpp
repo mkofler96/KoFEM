@@ -49,8 +49,10 @@ std::string parse_topopt_settings(const val& topopt_js, kofem::topopt::ShellTopO
     if (!constraints.isUndefined() && !constraints.isNull()) {
         val ms = constraints["maxStress"];
         if (!ms.isUndefined() && !ms.isNull())
-            return "the maximum-stress constraint (constraints.maxStress) is not "
-                   "implemented yet (KOF-236)";
+            return "the maximum-stress constraint (constraints.maxStress) is supported "
+                   "for all-solid models only — shell and coupled shell/solid models "
+                   "cannot be stress-constrained yet. Remove the stress limit, or "
+                   "optimize an all-solid model";
     }
     if (objective != "min_compliance" && objective != "min_volume")
         return "unknown topology-optimization objective \"" + objective +

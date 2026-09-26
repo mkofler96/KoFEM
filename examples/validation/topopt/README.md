@@ -101,6 +101,13 @@ stiffest design (the returned compliance is the minimum of the whole history).
   `engine/tests/`, CI does not run it yet (KOF-207). These `examples/` cases are
   the web-side counterpart: they run against the fetched engine with no build
   step, and lock the visual "textbook truss" layout the native test defers here.
+- **`engine/tests/topology_stress_validation.cpp`** (KOF-236) is the native check
+  of the maximum-stress constraint (`scripts/test-topology-stress.sh`, not run by
+  CI either): a finite-difference check of the aggregated-stress adjoint (P-norm
+  and KS), and the L-bracket stress-concentration benchmark — the
+  compliance-only design peaks at the re-entrant corner, and minimizing volume
+  subject to σ ≤ σ_allow meets the limit with a peak ≥ 10 % below a
+  compliance-only design of the same volume.
 - **`web/tests/topology-benchmark.spec.ts`** is a fast Playwright guard that runs
   a small MBB through the solver worker and asserts the same trajectory shape, so
   the Playwright suite catches a regression on every CI run without the full

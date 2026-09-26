@@ -11,7 +11,9 @@
 //                              subject to Σ_e ρ_e·V_e ≤ volfrac·Σ_e V_e
 //   min_volume     (KOF-235):  minimize Σ_e ρ_e·V_e
 //                              subject to c(ρ) ≤ c_allow
-//   both with ρ_min ≤ ρ_e ≤ 1.
+//   both with ρ_min ≤ ρ_e ≤ 1, and either optionally subject to a maximum von
+//   Mises stress σ_PN(ρ) ≤ σ_allow (KOF-236, topology_stress.h) — min_volume may
+//   then drop the compliance limit.
 //
 // One iteration:
 //   1. SIMP-penalized solve → compliance c and dc/dρ (evaluate_compliance);
@@ -21,15 +23,24 @@
 //   4. converge on max|Δρ| < tolerance — for min_volume only once the design also
 //      meets c ≤ c_allow — or stop at max_iterations.
 //
+// A stress-constrained run differs in two places. Each iteration adds the relaxed
+// stress, its aggregate and one adjoint solve after (1). And it filters DENSITIES
+// rather than sensitivities: the design variable x is smoothed into the physical
+// density ρ̃ = H·x/Hs that is analysed, and every gradient is chained back to x
+// exactly (DensityFilter::filter_density_sensitivity). Sigmund's sensitivity
+// filter is a heuristic tuned for compliance; applied to the mixed-sign stress
+// gradient it no longer approximates a true derivative and MMA stalls.
+//
 // This is the numerical core only — NO JS boundary. The `optimize_topology` Embind
 // entry, its payload parsing and the live-progress/cancellation worker handler are
 // KOF-231; that entry parses the TopOptSettings block into a ComplianceOptConfig
-// and calls this. The stress constraint (KOF-236) extends the same formulation.
+// and calls this.
 #pragma once
 
 #include "topology_formulation.h"
 #include "topology_simp_core.h"
 #include "topology_stream.h"
+#include "topology_stress.h"
 
 #include <mfem.hpp>
 
@@ -38,28 +49,34 @@
 namespace kofem::topopt {
 
 // One optimizer iteration in the returned history. `compliance` is c(ρ) — the
-// objective of a min_compliance run, the constraint of a min_volume run; `volume` is the current volume fraction Σρ_e·V_e / ΣV_e;
-// `max_change` is max|Δρ_e| over the design variables this iteration. Mirrors the
-// TopOptHistoryEntry wire type (kofem_wasm.d.ts), minus the stress field that only
-// a stress-constrained run (KOF-236) fills.
+// objective of a min_compliance run, the constraint of a min_volume run; `volume`
+// is the current volume fraction Σρ_e·V_e / ΣV_e; `max_change` is max|Δρ_e| over
+// the design variables this iteration. A stress-constrained run (KOF-236) also
+// fills `stress`, the normalized aggregate c·σ_PN the constraint bounds, and
+// `max_stress`, the true max relaxed von Mises it approximates (both in stress
+// units); otherwise both are NaN. Mirrors the TopOptHistoryEntry wire type
+// (kofem_wasm.d.ts).
 struct TopOptHistoryEntry {
     int it;
     double compliance;
     double volume;
     double max_change;
+    double stress;
+    double max_stress;
 };
 
 struct ComplianceOptConfig {
     TopOptObjective objective = TopOptObjective::MinCompliance;
     double volume_fraction = 0.5;  // min_compliance: target Σρ_e·V_e / ΣV_e
-    double compliance_limit = 0.0; // min_volume: c_allow (> 0, model work units)
+    double compliance_limit = 0.0; // min_volume: c_allow (> 0, model work units);
+                                   // 0 = none, allowed only with a stress limit
     double penalty = 3.0;          // SIMP penalty p
     double filter_radius = 0.0;    // r_min; ≤ 0 → default 1.5× mean element size
     double move_limit = 0.2;       // MMA move limit
     int max_iterations = 100;
     double tolerance = 0.01;       // convergence on max|Δρ|
     double emin_rel = 1e-9;        // stiffness floor E_min/E₀ (ADR-0002)
-    double rho_min = 0.0;          // design lower bound
+    double rho_min = 0.0;          // design lower bound (> 0 with a stress limit)
     double cg_rtol = 1e-8;         // CG tolerance for each SIMP solve
 
     // Passive regions (ADR-0002 decision 6): element indices whose density is
@@ -71,6 +88,9 @@ struct ComplianceOptConfig {
     // keep-in/keep-out picker that populates them is KOF-238.
     std::vector<int> passive_solid;
     std::vector<int> passive_void;
+
+    // Maximum von Mises stress constraint (KOF-236) — see topology_formulation.h.
+    StressConstraintConfig stress;
 
     // Live density observer (KOF-240) — see topology_stream.h.
     DensityStream stream;
@@ -91,13 +111,16 @@ struct ComplianceOptResult {
 // the static solve builds (built once by the caller, reused every iteration —
 // ADR-0002 decision 1). Streams one `[topopt] it N: c=… vol=… change=…` line per
 // iteration over the printf→worker channel, and hands the analysed ρ to
-// `config.stream` when one is set. Throws std::runtime_error on an
+// `config.stream` when one is set. `stress_cache` is required when
+// config.stress.enabled and ignored otherwise. Throws std::runtime_error on an
 // ill-posed problem (no design elements, invalid volume fraction, a solve that
-// fails to converge, a compliance limit even the full-material design exceeds).
+// fails to converge, a compliance limit even the full-material design exceeds, a
+// stress limit no iterate of the run ever met).
 ComplianceOptResult optimize_compliance(mfem::FiniteElementSpace& fespace,
                                         const ElementStiffnessCache& cache,
                                         const mfem::Array<int>& ess_tdof,
                                         const mfem::LinearForm& load,
-                                        const ComplianceOptConfig& config);
+                                        const ComplianceOptConfig& config,
+                                        const ElementStressCache* stress_cache = nullptr);
 
 }  // namespace kofem::topopt

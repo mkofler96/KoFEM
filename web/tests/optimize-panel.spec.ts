@@ -183,3 +183,45 @@ test("Optimize panel: a non-zero prescribed displacement is blocked", async ({
     page.getByRole("button", { name: /Run optimization/ }),
   ).toBeDisabled();
 });
+
+// KOF-236: the max-stress constraint in the panel. Enabling it reveals the
+// σ_allow field, which is required (an empty limit blocks the run with an inline
+// error — no silent default), shows up in the pre-flight summary, and a run with
+// it reports the true max stress in Results next to the aggregated value in the
+// convergence plot.
+test("Optimize panel: max-stress constraint", async ({ page }) => {
+  test.setTimeout(120_000);
+  await bootstrapCantilever(page);
+  await goToOptimizePanel(page);
+
+  const runButton = page.getByRole("button", { name: /Run optimization/ });
+  await expect(runButton).toBeEnabled();
+
+  await page.getByTestId("topopt-stress-constraint").check();
+  await expect(
+    page
+      .locator('[class*="fieldError"]')
+      .filter({ hasText: /max stress σ_allow > 0/ }),
+  ).toBeVisible();
+  await expect(runButton).toBeDisabled();
+
+  // A deliberately loose limit keeps the run feasible and short.
+  await page.getByLabel("σ_vm ≤").fill("1e9");
+  await expect(runButton).toBeEnabled();
+  await expect(page.getByText(/σ_vm ≤ 1e9 MPa/)).toBeVisible();
+
+  // The aggregation controls live under Advanced, only while the constraint is on.
+  await page.getByLabel("Filter r_min").fill("0.15");
+  await page.getByRole("button", { name: "Advanced" }).click();
+  await expect(page.getByLabel("Aggregation P")).toHaveValue("8");
+  await page.getByRole("button", { name: "KS", exact: true }).click();
+  await expect(page.getByLabel("Aggregation P")).toHaveValue("40");
+  await page.getByLabel("Max iters").fill("6");
+
+  await runButton.click();
+  await expect(page.getByTestId("topopt-final-max-stress")).toBeVisible({
+    timeout: 90_000,
+  });
+  await expect(page.getByTestId("convergence-max-stress")).toBeVisible();
+  await expect(page.getByTestId("convergence-stress-limit")).toHaveCount(1);
+});

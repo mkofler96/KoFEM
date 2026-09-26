@@ -376,3 +376,128 @@ test("optimize_topology worker: min_volume meets its compliance limit", async ({
 
   expect(result.infeasible.error).toContain("infeasible");
 });
+
+// KOF-236: the maximum von Mises stress constraint runs through the same worker
+// entry. A stress-constrained run reports the aggregated and the true max stress
+// per iteration; min_volume can be bounded by stress alone (no compliance
+// limit) and must meet it while shedding material; and a limit no design can
+// reach ends in a clear error rather than a silently non-converged result.
+test("optimize_topology worker: max-stress constraint", async ({ page }) => {
+  test.setTimeout(180_000);
+  await gotoApp(page);
+  await page.waitForFunction(() =>
+    Boolean((window as unknown as KofemTestHooks).__kofem),
+  );
+
+  type History = {
+    it: number;
+    compliance: number;
+    volume: number;
+    stress?: number;
+    max_stress?: number;
+  }[];
+  type Run = { history: History; error: string | null };
+
+  const result = (await page.evaluate(
+    async (beam) => {
+      const { nodes, elements, fixedNodeIds, loadedNodeIds } = beam;
+      const kofem = (window as unknown as KofemTestHooks).__kofem;
+      if (!kofem)
+        throw new Error("window.__kofem test hooks are not installed");
+      const run = async (settings: Record<string, unknown>) => {
+        const payload = {
+          nodes,
+          elements,
+          materials: [
+            {
+              id: 1,
+              name: "Steel",
+              young: 210000,
+              poisson: 0.3,
+              density: 7.85e-9,
+            },
+          ],
+          properties: [{ id: 1, materialId: 1 }],
+          constraints: fixedNodeIds.flatMap((nodeId) => [
+            { nodeId, dof: 0 },
+            { nodeId, dof: 1 },
+            { nodeId, dof: 2 },
+          ]),
+          loads: loadedNodeIds.map((nodeId) => ({
+            nodeId,
+            dof: 2,
+            value: -100,
+          })),
+          settings: {
+            penalty: 3,
+            filterRadius: 1.5,
+            moveLimit: 0.2,
+            tolerance: 0.01,
+            ...settings,
+          },
+        };
+        try {
+          const res = (await kofem.sendToWorker(
+            "optimize_topology",
+            payload,
+          )) as { history: History };
+          return { history: res.history, error: null };
+        } catch (e) {
+          return { history: [] as History, error: String(e) };
+        }
+      };
+
+      // A compliance-only run carries no stress; a non-binding stress limit on
+      // one full-material iteration measures the full-material peak.
+      const plain = await run({
+        objective: "min_compliance",
+        constraints: { volumeFraction: 0.5 },
+        maxIterations: 2,
+      });
+      const full = await run({
+        objective: "min_volume",
+        constraints: { maxStress: 1e12 },
+        maxIterations: 1,
+      });
+      const peakFull = full.history[0]?.max_stress ?? NaN;
+      const limit = 1.5 * peakFull;
+      const minVol = await run({
+        objective: "min_volume",
+        constraints: { maxStress: limit },
+        maxIterations: 60,
+      });
+      const infeasible = await run({
+        objective: "min_compliance",
+        constraints: { volumeFraction: 0.3, maxStress: 1e-6 * peakFull },
+        maxIterations: 5,
+      });
+      return { plain, full, peakFull, limit, minVol, infeasible };
+    },
+    makeBeam(6, 1, 1),
+  )) as {
+    plain: Run;
+    full: Run;
+    peakFull: number;
+    limit: number;
+    minVol: Run;
+    infeasible: Run;
+  };
+
+  expect(result.plain.error).toBeNull();
+  expect(result.plain.history[0].stress).toBeUndefined();
+  expect(result.plain.history[0].max_stress).toBeUndefined();
+
+  expect(result.full.error).toBeNull();
+  expect(result.full.history[0].volume).toBeCloseTo(1, 9);
+  expect(result.peakFull).toBeGreaterThan(0);
+  expect(Number.isFinite(result.full.history[0].stress)).toBe(true);
+
+  expect(result.minVol.error).toBeNull();
+  const last = result.minVol.history[result.minVol.history.length - 1];
+  // Material was removed while the true max stress held the limit (within the
+  // loop's 2% slack on the lagged P-norm normalization).
+  expect(last.volume).toBeLessThan(0.9);
+  expect(last.max_stress as number).toBeLessThanOrEqual(result.limit * 1.02);
+
+  expect(result.infeasible.error).toContain("was not met");
+});

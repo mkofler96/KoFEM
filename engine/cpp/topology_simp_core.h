@@ -58,8 +58,22 @@ struct ComplianceEvaluation {
     std::vector<double> dcompliance;    // dc/dρ_e = −s'(ρ_e)·uₑᵀk0ₑuₑ  (≤ 0)
     std::vector<double> strain_energy;  // qₑ = uₑᵀk0ₑuₑ  (≥ 0, cache-reusable)
     std::vector<double> displacements;  // full nodal solution, 3 per vertex
+    mfem::Vector solution;              // the same u as a vdof vector (fespace
+                                        // ordering) — gathered by cache.vdofs[e]
     int cg_iterations = 0;
 };
+
+// Solve K(ρ)·x = rhs with K(ρ) = Σ_e s(ρ_e)·k0[e] and x = 0 on `ess_tdof`, and
+// return x as a vdof vector. The shared SIMP linear solve behind both the state
+// solve (evaluate_compliance) and the stress adjoint (KOF-236). `rhs` is read
+// only; its entries on the essential DOFs are ignored. `cg_iterations`, when
+// given, receives the CG count. Throws std::runtime_error if CG fails.
+mfem::Vector solve_simp_system(mfem::FiniteElementSpace& fespace,
+                               const ElementStiffnessCache& cache,
+                               const mfem::Array<int>& ess_tdof, const mfem::Vector& rhs,
+                               const std::vector<double>& rho, double penalty,
+                               double emin_rel, double cg_rtol,
+                               int* cg_iterations = nullptr);
 
 // Assemble K(ρ) = Σ_e s(ρ_e)·k0[e], solve K u = f with the DOFs in `ess_tdof`
 // clamped to zero, and return the compliance and its element sensitivities.

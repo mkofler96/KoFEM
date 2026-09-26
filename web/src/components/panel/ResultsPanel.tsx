@@ -18,6 +18,11 @@ import styles from "./LeftPanel.module.css";
 // viewport, the convergence plot from the returned history, and the run summary.
 // Shown whenever a topology-optimization run is the active result.
 function TopOptSummary({ density, history }: DensityResult) {
+  // Changing any TO setting clears the density result, so the store's settings
+  // are the ones this run used — including its σ_allow (KOF-236).
+  const stressConstraint = useModelStore((s) => s.topOpt.stressConstraint);
+  const maxStressText = useModelStore((s) => s.topOpt.maxStress);
+  const stressLimit = stressConstraint ? Number(maxStressText) : NaN;
   let min = Infinity;
   let max = -Infinity;
   for (const d of density) {
@@ -29,6 +34,9 @@ function TopOptSummary({ density, history }: DensityResult) {
     it: h.it,
     compliance: h.compliance,
     volume: h.volume,
+    ...(h.stress !== undefined && h.max_stress !== undefined
+      ? { stress: h.stress, maxStress: h.max_stress }
+      : {}),
   }));
 
   return (
@@ -41,7 +49,7 @@ function TopOptSummary({ density, history }: DensityResult) {
             <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
               Convergence
             </div>
-            <ConvergencePlot points={points} />
+            <ConvergencePlot points={points} stressLimit={stressLimit} />
           </>
         )}
 
@@ -64,6 +72,21 @@ function TopOptSummary({ density, history }: DensityResult) {
                 {last.compliance.toExponential(3)}
               </span>
             </div>
+            {last.max_stress !== undefined && (
+              <div className={styles.statRow}>
+                <span className={styles.statKey}>Max von Mises</span>
+                <span
+                  className={styles.statVal}
+                  data-testid="topopt-final-max-stress"
+                >
+                  {last.max_stress.toExponential(3)}{" "}
+                  {resultUnit("Von Mises stress")}
+                  {Number.isFinite(stressLimit)
+                    ? ` (limit ${stressLimit.toExponential(3)})`
+                    : ""}
+                </span>
+              </div>
+            )}
           </>
         )}
         <div className={styles.statRow}>

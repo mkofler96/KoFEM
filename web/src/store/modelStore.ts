@@ -89,6 +89,7 @@ export type {
 export { RESULT_TYPES } from "./resultsSlice";
 export type {
   TopOptObjective,
+  StressAggregation,
   TopOptSettingsState,
   TopOptNumericField,
   DensityResult,

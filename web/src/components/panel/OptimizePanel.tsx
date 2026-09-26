@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { useModelStore } from "../../store/modelStore";
 import type { TopOptNumericField } from "../../store/modelStore";
 import { useTopOpt, type FieldErrors } from "../../hooks/useTopOpt";
+import { resultUnit } from "../../lib/resultField";
 import { convergenceFromLogs } from "../../lib/topOptProgress";
 import { ConvergencePlot } from "./ConvergencePlot";
 import { DensityThresholdControl } from "./DensityThresholdControl";
@@ -55,6 +56,11 @@ function SettingField({
 export function OptimizePanel() {
   const objective = useModelStore((s) => s.topOpt.objective);
   const setTopOptObjective = useModelStore((s) => s.setTopOptObjective);
+  const stressConstraint = useModelStore((s) => s.topOpt.stressConstraint);
+  const setStressConstraint = useModelStore((s) => s.setStressConstraint);
+  const stressAggregation = useModelStore((s) => s.topOpt.stressAggregation);
+  const setStressAggregation = useModelStore((s) => s.setStressAggregation);
+  const maxStressText = useModelStore((s) => s.topOpt.maxStress);
   const {
     optimize,
     cancel,
@@ -74,6 +80,8 @@ export function OptimizePanel() {
   // lines as they arrive. The density field streams separately (KOF-240) and is
   // drawn in the viewport; its threshold slider is shown below during the run.
   const livePoints = useMemo(() => convergenceFromLogs(logs), [logs]);
+  // The σ_allow line in the plot, when the entered limit is a usable number.
+  const stressLimit = stressConstraint ? Number(maxStressText) : NaN;
 
   return (
     <div className={styles.panel}>
@@ -130,7 +138,29 @@ export function OptimizePanel() {
           <SettingField
             field="complianceLimit"
             label="Compliance ≤"
-            hint="Upper bound on compliance, in the model's work units"
+            hint={
+              stressConstraint
+                ? "Upper bound on compliance, in the model's work units — leave blank to bound the volume by stress alone"
+                : "Upper bound on compliance, in the model's work units"
+            }
+            errors={errors}
+          />
+        )}
+
+        <label className={styles.formRow}>
+          <input
+            type="checkbox"
+            data-testid="topopt-stress-constraint"
+            checked={stressConstraint}
+            onChange={(e) => setStressConstraint(e.target.checked)}
+          />
+          <span className={styles.bodyLabel}>Max von Mises stress</span>
+        </label>
+        {stressConstraint && (
+          <SettingField
+            field="maxStress"
+            label="σ_vm ≤"
+            hint={`Stress limit σ_allow in ${resultUnit("Von Mises stress")}, on the relaxed element von Mises stress (all-solid models)`}
             errors={errors}
           />
         )}
@@ -181,6 +211,37 @@ export function OptimizePanel() {
               hint="Stop when max |Δρ| falls below this (> 0)"
               errors={errors}
             />
+            {stressConstraint && (
+              <>
+                <div className={styles.formRow}>
+                  <label className={styles.formLabel}>Aggregation</label>
+                  <div className={styles.segToggle}>
+                    <button
+                      className={`${styles.segBtn} ${stressAggregation === "pnorm" ? styles.segBtnActive : ""}`}
+                      onClick={() => setStressAggregation("pnorm")}
+                    >
+                      P-norm
+                    </button>
+                    <button
+                      className={`${styles.segBtn} ${stressAggregation === "ks" ? styles.segBtnActive : ""}`}
+                      onClick={() => setStressAggregation("ks")}
+                    >
+                      KS
+                    </button>
+                  </div>
+                </div>
+                <SettingField
+                  field="stressP"
+                  label="Aggregation P"
+                  hint={
+                    stressAggregation === "pnorm"
+                      ? "P-norm exponent, ≥ 1 (default 8) — larger tracks the peak more tightly but converges less smoothly"
+                      : "KS parameter, ≥ 1 (default 40) — larger tracks the peak more tightly but converges less smoothly"
+                  }
+                  errors={errors}
+                />
+              </>
+            )}
           </>
         )}
 
@@ -219,7 +280,11 @@ export function OptimizePanel() {
             <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
               Convergence
             </div>
-            <ConvergencePlot points={livePoints} live={isOptimizing} />
+            <ConvergencePlot
+              points={livePoints}
+              live={isOptimizing}
+              stressLimit={stressLimit}
+            />
           </>
         )}
 
