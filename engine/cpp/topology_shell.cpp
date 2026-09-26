@@ -327,6 +327,7 @@ ShellTopOptResult optimize_shell_compliance(const ShellTopOptInput& in,
     // first solve checks c_allow's feasibility (see topology_optimize.cpp).
     const double rho_start = min_volume ? 1.0 : config.volume_fraction;
     for (const int e : dom.active) rho[e] = rho_start;
+    FeasibleDesign best_feasible;  // min_volume only
 
     const std::vector<double> xmin(nact, config.rho_min);
     const std::vector<double> xmax(nact, 1.0);
@@ -388,8 +389,21 @@ ShellTopOptResult optimize_shell_compliance(const ShellTopOptInput& in,
         const bool feasible =
             !min_volume ||
             ev.compliance <= config.compliance_limit * (1.0 + kComplianceLimitSlack);
+        if (min_volume && feasible) best_feasible = {it, rho, result.displacements};
         const bool converged = change < config.tolerance && feasible;
         const bool last = converged || it >= config.max_iterations;
+        if (last && !feasible) {
+            std::printf("[topopt] hit max_iterations with c=%.6g above c_allow=%.6g; "
+                        "returning the last design that met the limit (it %d)\n",
+                        ev.compliance, config.compliance_limit, best_feasible.it);
+            rho = best_feasible.rho;
+            result.displacements = best_feasible.displacements;
+            result.history.resize(best_feasible.it);
+            result.iterations = best_feasible.it;
+            result.converged = false;
+            config.stream.emit(best_feasible.it, true, rho);
+            break;
+        }
         config.stream.emit(it, last, rho);
         if (last) {
             result.converged = converged;

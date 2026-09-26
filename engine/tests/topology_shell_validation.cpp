@@ -314,6 +314,38 @@ void test_plate_optimization(int& failures) {
            "c ≤ c_allow within slack");
     check(failures, "min_volume volume matches min_compliance", vl.volume, h.back().volume,
           1.0);
+    // Capped runs: whatever iteration the cap lands on, the returned design meets
+    // c_allow and is exactly the design its last history entry describes — an
+    // infeasible final iterate falls back to the last feasible one.
+    int fallbacks = 0;
+    bool capped_ok = true;
+    for (int cap = 5; cap <= 60; cap += 5) {
+        ShellTopOptConfig ccfg = vcfg;
+        ccfg.max_iterations = cap;
+        const ShellTopOptResult cres = optimize_shell_compliance(in, ccfg);
+        const ShellTopOptHistoryEntry& cl = cres.history.back();
+        if (cres.iterations < cap && !cres.converged) ++fallbacks;
+        const ShellStiffnessCache cache = build_shell_stiffness_cache(in);
+        const ShellComplianceEvaluation ev = evaluate_shell_compliance(
+            in, cache, cres.density, ccfg.penalty, ccfg.emin_rel, ccfg.cg_rtol);
+        const bool feasible_ok =
+            cl.compliance <= ccfg.compliance_limit * (1.0 + kComplianceLimitSlack);
+        const bool consistent =
+            std::fabs(ev.compliance - cl.compliance) <= 1e-6 * std::fabs(cl.compliance) &&
+            static_cast<int>(cres.history.size()) == cres.iterations;
+        if (!feasible_ok || !consistent) {
+            capped_ok = false;
+            std::printf("  cap %d: c=%.6g (re-eval %.6g), it=%d — %s\n", cap, cl.compliance,
+                        ev.compliance, cres.iterations,
+                        feasible_ok ? "inconsistent" : "infeasible");
+        }
+    }
+    std::printf("  capped min_volume runs: %d of 12 fell back to an earlier feasible design\n",
+                fallbacks);
+    expect(failures, "capped min_volume runs return a feasible, self-consistent design",
+           capped_ok, capped_ok ? "every cap feasible" : "see above");
+    expect(failures, "the infeasible-cap fallback is exercised", fallbacks > 0,
+           fallbacks > 0 ? "some caps landed above c_allow" : "no cap hit the fallback");
 }
 
 // ── 4. Invalid per-facet thickness is rejected, not silently degenerate ───────

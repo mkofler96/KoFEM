@@ -386,6 +386,41 @@ int main() {
     check(failures, "min_volume at c_allow = c* recovers the min_compliance volume (< 0.5%)",
           std::abs(vlast.volume - v_star) < 0.005);
 
+    // Capped runs: wherever the cap lands, the returned design meets c_allow and
+    // is exactly the design its last history entry describes — an infeasible final
+    // iterate falls back to the last feasible one.
+    {
+        int fallbacks = 0;
+        bool capped_ok = true;
+        for (int cap = 4; cap <= 32; cap += 4) {
+            ComplianceOptConfig ccfg = vcfg;
+            ccfg.max_iterations = cap;
+            const ComplianceOptResult cres = optimize_compliance(
+                model.fespace, model.cache, model.ess_tdof, model.load, ccfg);
+            const TopOptHistoryEntry& cl = cres.history.back();
+            if (cres.iterations < cap && !cres.converged) ++fallbacks;
+            const ComplianceEvaluation ev = evaluate_compliance(
+                model.fespace, model.cache, model.ess_tdof, model.load, cres.density,
+                ccfg.penalty, ccfg.emin_rel, ccfg.cg_rtol);
+            const bool feasible_ok =
+                cl.compliance <= ccfg.compliance_limit * (1.0 + kComplianceLimitSlack);
+            const bool consistent =
+                std::abs(ev.compliance - cl.compliance) <= 1e-9 * std::abs(cl.compliance) &&
+                static_cast<int>(cres.history.size()) == cres.iterations;
+            if (!feasible_ok || !consistent) {
+                capped_ok = false;
+                std::printf("  cap %d: c=%.6g (re-eval %.6g), it=%d — %s\n", cap,
+                            cl.compliance, ev.compliance, cres.iterations,
+                            feasible_ok ? "inconsistent" : "infeasible");
+            }
+        }
+        std::printf("  capped runs: %d of 8 fell back to an earlier feasible design\n",
+                    fallbacks);
+        check(failures, "capped min_volume runs return a feasible, self-consistent design",
+              capped_ok);
+        check(failures, "the infeasible-cap fallback is exercised", fallbacks > 0);
+    }
+
     // Trade-off monotonicity: doubling the allowed compliance must buy less volume.
     {
         ComplianceOptConfig loose = vcfg;

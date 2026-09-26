@@ -29,10 +29,10 @@ function check(name, cond, detail = "") {
     "[topopt] it 7: c=1.234e+03 vol=0.4998 change=0.012",
   );
   check(
-    "parses iteration, compliance (objective) and volume fraction",
+    "parses iteration, compliance and volume fraction",
     point !== null &&
       point.it === 7 &&
-      Math.abs(point.objective - 1234) < 1e-6 &&
+      Math.abs(point.compliance - 1234) < 1e-6 &&
       Math.abs(point.volume - 0.4998) < 1e-9,
     JSON.stringify(point),
   );
@@ -70,7 +70,7 @@ function check(name, cond, detail = "") {
   ]);
   check(
     "a repeated iteration index keeps the last value",
-    withRepeat.length === 1 && Math.abs(withRepeat[0].objective - 400) < 1e-6,
+    withRepeat.length === 1 && Math.abs(withRepeat[0].compliance - 400) < 1e-6,
     JSON.stringify(withRepeat),
   );
 

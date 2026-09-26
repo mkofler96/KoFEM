@@ -26,6 +26,17 @@ enum class TopOptObjective { MinCompliance, MinVolume };
 // iterate sits within a fraction of a percent of c_allow rather than exactly on it.
 constexpr double kComplianceLimitSlack = 5e-3;
 
+// The last analysed min_volume design that met c ≤ c_allow. If the run reaches
+// max_iterations on an iterate above the limit, the loop returns this design (and
+// truncates the history to it) instead of an infeasible one. Iteration 1 — full
+// material — is always feasible, otherwise the run was rejected up front, so a
+// capped min_volume run always has one to fall back to.
+struct FeasibleDesign {
+    int it = 0;
+    std::vector<double> rho;
+    std::vector<double> displacements;
+};
+
 // Everything one MMA step needs, over the active design variables.
 struct MmaStepData {
     double f0 = 0.0;

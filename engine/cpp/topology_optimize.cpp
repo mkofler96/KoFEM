@@ -140,6 +140,7 @@ ComplianceOptResult optimize_compliance(mfem::FiniteElementSpace& fespace,
     for (const int e : config.passive_solid) rho[e] = 1.0;
     const double rho_start = min_volume ? 1.0 : config.volume_fraction;
     for (const int e : dom.active) rho[e] = rho_start;
+    FeasibleDesign best_feasible;  // min_volume only
 
     // MMA design vector over the active elements, bounds [rho_min, 1].
     const std::vector<double> xmin(nact, config.rho_min);
@@ -219,12 +220,26 @@ ComplianceOptResult optimize_compliance(mfem::FiniteElementSpace& fespace,
         result.iterations = it;
 
         // A min_volume design has only converged once it also honours c ≤ c_allow;
-        // a stalled-but-infeasible iterate runs on to max_iterations instead.
+        // a stalled-but-infeasible iterate runs on to max_iterations, and if the
+        // cap lands on one, the last feasible design is returned instead.
         const bool feasible =
             !min_volume ||
             ev.compliance <= config.compliance_limit * (1.0 + kComplianceLimitSlack);
+        if (min_volume && feasible) best_feasible = {it, rho, result.displacements};
         const bool converged = change < config.tolerance && feasible;
         const bool last = converged || it >= config.max_iterations;
+        if (last && !feasible) {
+            std::printf("[topopt] hit max_iterations with c=%.6g above c_allow=%.6g; "
+                        "returning the last design that met the limit (it %d)\n",
+                        ev.compliance, config.compliance_limit, best_feasible.it);
+            rho = best_feasible.rho;
+            result.displacements = best_feasible.displacements;
+            result.history.resize(best_feasible.it);
+            result.iterations = best_feasible.it;
+            result.converged = false;
+            config.stream.emit(best_feasible.it, true, rho);
+            break;
+        }
         config.stream.emit(it, last, rho);
         if (last) {
             result.converged = converged;
