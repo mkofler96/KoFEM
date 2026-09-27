@@ -200,14 +200,20 @@ test("max-stress TO settings round-trip; older files load with it off", async ({
   expect(await readTopOpt()).toMatchObject(meta.topOpt);
 
   // A pre-KOF-236 file: the same block without the four stress fields.
-  const legacyMeta = structuredClone(meta);
-  for (const field of [
+  const stressFields = [
     "stressConstraint",
     "maxStress",
     "stressAggregation",
     "stressP",
-  ])
-    delete legacyMeta.topOpt[field];
+  ];
+  const legacyMeta = {
+    ...meta,
+    topOpt: Object.fromEntries(
+      Object.entries(meta.topOpt).filter(
+        ([field]) => !stressFields.includes(field),
+      ),
+    ),
+  };
   const json = Buffer.from(JSON.stringify(legacyMeta), "utf-8");
   const header = Buffer.alloc(4);
   header.writeUInt32LE(json.length, 0);

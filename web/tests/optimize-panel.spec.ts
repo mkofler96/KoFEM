@@ -201,14 +201,14 @@ test("Optimize panel: max-stress constraint", async ({ page }) => {
   await expect(
     page
       .locator('[class*="fieldError"]')
-      .filter({ hasText: /max stress σ_allow > 0/ }),
+      .filter({ hasText: /max stress σ_allow > 0/u }),
   ).toBeVisible();
   await expect(runButton).toBeDisabled();
 
   // A deliberately loose limit keeps the run feasible and short.
   await page.getByLabel("σ_vm ≤").fill("1e9");
   await expect(runButton).toBeEnabled();
-  await expect(page.getByText(/σ_vm ≤ 1e9 MPa/)).toBeVisible();
+  await expect(page.getByText(/σ_vm ≤ 1e9 MPa/u)).toBeVisible();
 
   // The aggregation controls live under Advanced, only while the constraint is on.
   await page.getByLabel("Filter r_min").fill("0.15");
