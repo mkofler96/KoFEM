@@ -9,6 +9,7 @@ import {
   resultUnit,
 } from "../../lib/resultField";
 import type { ConvergencePoint } from "../../lib/topOptProgress";
+import { buildDensityStl, densityStlFileName } from "../../lib/densityField";
 import { ConvergencePlot } from "./ConvergencePlot";
 import { DensityThresholdControl } from "./DensityThresholdControl";
 import { LegendRangeControls } from "./LegendRangeControls";
@@ -23,6 +24,8 @@ function TopOptSummary({ density, history }: DensityResult) {
   const stressConstraint = useModelStore((s) => s.topOpt.stressConstraint);
   const maxStressText = useModelStore((s) => s.topOpt.maxStress);
   const stressLimit = stressConstraint ? Number(maxStressText) : NaN;
+  const threshold = useModelStore((s) => s.densityThreshold);
+  const anyKept = density.some((d) => d >= threshold);
   let min = Infinity;
   let max = -Infinity;
   for (const d of density) {
@@ -95,9 +98,41 @@ function TopOptSummary({ density, history }: DensityResult) {
             {min.toFixed(3)} – {max.toFixed(3)}
           </span>
         </div>
+
+        <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
+          Export
+        </div>
+        <button
+          className={styles.outlineBtn}
+          onClick={() => downloadDensityStl(density, threshold)}
+          disabled={!anyKept}
+        >
+          Export shape as STL
+        </button>
+        <div className={styles.formNote} style={{ marginTop: 6 }}>
+          {anyKept
+            ? "Faceted surface of the elements shown at the current threshold, in model units."
+            : "No elements are kept at this threshold — lower it to export a shape."}
+        </div>
       </div>
     </div>
   );
+}
+
+// Writes the thresholded shape the viewport shows as a binary STL (KOF-239).
+function downloadDensityStl(density: Float64Array, threshold: number) {
+  const { nodes, elements, modelName } = useModelStore.getState();
+  const stl = buildDensityStl(nodes, elements, density, threshold);
+  if (!stl)
+    throw new Error(
+      `STL export: no surface at threshold ${threshold} — the density (${density.length} values) does not match the current mesh or keeps no element`,
+    );
+  const url = URL.createObjectURL(new Blob([stl], { type: "model/stl" }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = densityStlFileName(modelName, threshold);
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 export function ResultsPanel() {
