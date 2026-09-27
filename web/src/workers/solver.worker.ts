@@ -2411,11 +2411,16 @@ function handleTopOpt(id: number, payload: TopOptPayload) {
         "them to Solid.",
     );
 
-  // The level-set optimizer runs on solid meshes only (the engine refuses it for
-  // shells too); say so before building the shell/coupled inputs.
+  // The level-set optimizer runs through the plain solid entry only; a model
+  // with shells or with a coupling routes to the shell/coupled entries below
+  // (which refuse it too), so say so before building their inputs.
   if (settings.method === "level_set" && shellElements.length > 0)
     throw new Error(
       `Topology optimization: the level-set method supports solid models only, but this model has ${shellElements.length} shell (CTRIA3) element(s) — use SIMP for shell and coupled models.`,
+    );
+  if (settings.method === "level_set" && couplings.length > 0)
+    throw new Error(
+      `Topology optimization: the level-set method does not support couplings yet, but this model has ${couplings.length} — remove them or use SIMP.`,
     );
 
   const { volumeFraction, complianceLimit } = settings.constraints;

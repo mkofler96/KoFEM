@@ -297,6 +297,23 @@ int main() {
               !bad.passive_solid.empty() && !bad.passive_void.empty() && throws(bad));
     }
 
+    // Pins that make the target unreachable are rejected up front instead of the
+    // bisection sitting on an endpoint and returning a constraint-violating design.
+    {
+        LevelSetOptConfig bad = base_config();
+        bad.volume_fraction = 0.1;
+        bad.passive_solid = model.elements_in_box({0.0, 0.0, -1.0}, {5.0, 2.0, 1.0});
+        check(failures, "volume fraction below the pinned-solid volume is rejected",
+              throws(bad));
+    }
+    {
+        LevelSetOptConfig bad = base_config();
+        bad.volume_fraction = 0.9;
+        bad.passive_void = model.elements_in_box({1.0, 0.0, -1.0}, {5.0, 1.5, 1.0});
+        check(failures, "volume fraction above the reachable (non-void) volume is rejected",
+              throws(bad));
+    }
+
     std::printf("\n%s: %d failure(s)\n", failures == 0 ? "OK" : "FAILED", failures);
     return failures == 0 ? 0 : 1;
 }

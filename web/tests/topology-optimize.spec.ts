@@ -245,6 +245,75 @@ test("optimize_topology worker: level-set method returns a nodal level set", asy
   expect(Math.abs(result.lastVolume - 0.5)).toBeLessThan(0.01);
 });
 
+// A coupling routes even an all-solid model to the coupled optimizer, which is
+// SIMP-only: a level-set request with a coupling must fail with a clear
+// message rather than reach an engine entry that cannot run it.
+test("optimize_topology worker: level set with a coupling is rejected clearly", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await gotoApp(page);
+  await page.waitForFunction(() =>
+    Boolean((window as unknown as KofemTestHooks).__kofem),
+  );
+
+  const message = await page.evaluate(
+    async (beam) => {
+      const { nodes, elements, fixedNodeIds, loadedNodeIds } = beam;
+      const kofem = (window as unknown as KofemTestHooks).__kofem;
+      if (!kofem)
+        throw new Error("window.__kofem test hooks are not installed");
+      try {
+        await kofem.sendToWorker("optimize_topology", {
+          nodes,
+          elements,
+          materials: [
+            {
+              id: 1,
+              name: "Steel",
+              young: 210000,
+              poisson: 0.3,
+              density: 7.85e-9,
+            },
+          ],
+          properties: [{ id: 1, materialId: 1 }],
+          constraints: fixedNodeIds.flatMap((nodeId) =>
+            [0, 1, 2].map((dof) => ({ nodeId, dof })),
+          ),
+          loads: loadedNodeIds.map((nodeId) => ({
+            nodeId,
+            dof: 2,
+            value: -100,
+          })),
+          couplings: [
+            {
+              name: "tip",
+              kind: "distributing",
+              dofs: [0, 1, 2, 3, 4, 5],
+              refNodeId: loadedNodeIds[0],
+              faces: [{ nodeIds: loadedNodeIds.slice(0, 3) }],
+            },
+          ],
+          settings: {
+            method: "level_set",
+            objective: "min_compliance",
+            constraints: { volumeFraction: 0.5 },
+            filterRadius: 1,
+            maxIterations: 5,
+            tolerance: 0.01,
+          },
+        });
+        return "resolved";
+      } catch (err) {
+        return (err as Error).message;
+      }
+    },
+    makeBeam(4, 1, 1),
+  );
+
+  expect(message).toContain("level-set method does not support couplings");
+});
+
 // Live density streaming (KOF-240): the engine hands the worker the design
 // density every iteration, and the worker forwards it as a progress message
 // before the call resolves. One snapshot per iteration (streamEvery defaults to

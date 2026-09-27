@@ -200,10 +200,14 @@ export function useTopOpt() {
   // meshes and minimizes compliance only; SIMP covers the rest.
   const levelSet = topOpt.method === "level_set";
   const levelSetShellBlock = levelSet && shellElements.length > 0;
+  // A coupling routes even an all-solid model to the coupled optimizer, which
+  // runs SIMP only (solver.worker.ts handleTopOpt).
+  const levelSetCouplingBlock = levelSet && couplingGroups.length > 0;
   const levelSetObjectiveBlock =
     levelSet && topOpt.objective !== "min_compliance";
   const allOk =
     !levelSetShellBlock &&
+    !levelSetCouplingBlock &&
     !levelSetObjectiveBlock &&
     meshOk &&
     matOk &&
@@ -357,6 +361,11 @@ export function useTopOpt() {
     checks.push([
       false,
       "The level-set method supports solid models only — use SIMP for shell and coupled models",
+    ]);
+  if (levelSetCouplingBlock)
+    checks.push([
+      false,
+      "The level-set method does not support couplings yet — remove them, or use SIMP",
     ]);
   if (levelSetObjectiveBlock)
     checks.push([

@@ -230,6 +230,27 @@ LevelSetOptResult optimize_level_set(mfem::FiniteElementSpace& fespace,
     for (const double v : cache.volume) vtotal += v;
     if (!(vtotal > 0.0)) throw std::runtime_error("optimize_level_set: non-positive volume");
 
+    // Reachable volume range with the pins applied: every free node at −1 (the
+    // emptiest design) to every free node at +1 (the fullest). A target outside
+    // it cannot be met — the λ bisection would just sit on an endpoint and the
+    // loop would return a design violating the constraint — so reject it here.
+    auto pinned_extreme = [&](double free_value) {
+        std::vector<double> phi_ext(nv, free_value);
+        apply_pins(phi_ext);
+        double v = 0.0;
+        const std::vector<double> rho_ext = level_set_density(mesh, phi_ext);
+        for (int e = 0; e < ne; ++e) v += rho_ext[e] * cache.volume[e];
+        return v / vtotal;
+    };
+    const double vf_min = pinned_extreme(-1.0);
+    const double vf_max = pinned_extreme(1.0);
+    if (config.volume_fraction < vf_min - 1e-9 || config.volume_fraction > vf_max + 1e-9)
+        throw std::runtime_error(
+            "optimize_level_set: volume fraction " + std::to_string(config.volume_fraction) +
+            " is infeasible — with the passive solid/void regions the design can only "
+            "reach volume fractions in [" +
+            std::to_string(vf_min) + ", " + std::to_string(vf_max) + "]");
+
     // Scalar linear H1 space on the design mesh: for order 1 its DOFs are the
     // mesh vertices in vertex order, so φ is indexed exactly like the mesh.
     mfem::H1_FECollection fec_s(1, mesh.Dimension());
