@@ -38,7 +38,7 @@ double von_mises(const std::array<double, kVoigt>& s, std::array<double, kVoigt>
 
 ElementStressCache build_element_stress_cache(mfem::FiniteElementSpace& fespace, double E0,
                                               double nu) {
-    if (!(E0 > 0.0) || !(nu > -1.0 && nu < 0.5))
+    if (!std::isfinite(E0) || E0 <= 0.0 || !std::isfinite(nu) || nu <= -1.0 || nu >= 0.5)
         throw std::runtime_error("build_element_stress_cache: need E0 > 0 and -1 < nu < 0.5");
     const double lam = E0 * nu / ((1.0 + nu) * (1.0 - 2.0 * nu));
     const double mu = E0 / (2.0 * (1.0 + nu));

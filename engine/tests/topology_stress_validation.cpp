@@ -61,7 +61,7 @@ mfem::Mesh make_l_bracket(int n, double thickness) {
     const double h = 1.0 / n;
     const double cut = 0.4;  // arms are 0.4 wide
     auto vid = [&](int i, int j, int k) { return (k * (n + 1) + j) * (n + 1) + i; };
-    auto kept = [&](int i, int j) { return !((i + 0.5) * h > cut && (j + 0.5) * h > cut); };
+    auto kept = [&](int i, int j) { return (i + 0.5) * h <= cut || (j + 0.5) * h <= cut; };
     int ncells = 0;
     for (int j = 0; j < n; ++j)
         for (int i = 0; i < n; ++i) ncells += kept(i, j) ? 1 : 0;
@@ -222,16 +222,12 @@ int run(int argc, char** argv) {
         const double penalty = 3.0;
         const double emin = 1e-9;
         const double rtol = 1e-13;
-        auto aggregate = [&](const std::vector<double>& r, const StressConstraintConfig& sc,
-                             std::vector<double>* grad) {
+        auto evaluate = [&](const std::vector<double>& r, const StressConstraintConfig& sc) {
             const ComplianceEvaluation ev =
                 evaluate_compliance(m.fespace, m.cache, m.ess_tdof, m.load, r, penalty, emin,
                                     rtol);
-            const StressEvaluation sev =
-                evaluate_stress(m.fespace, m.cache, m.stress_cache, m.ess_tdof, r,
-                                ev.solution, penalty, emin, rtol, penalty - 2.5, sc);
-            if (grad != nullptr) *grad = sev.daggregate;
-            return sev.aggregate;
+            return evaluate_stress(m.fespace, m.cache, m.stress_cache, m.ess_tdof, r,
+                                   ev.solution, penalty, emin, rtol, penalty - 2.5, sc);
         };
         const std::array<StressConstraintConfig, 2> configs = {
             stress_config(0.5, StressAggregation::PNorm, 8.0),
@@ -240,8 +236,7 @@ int run(int argc, char** argv) {
         // A spread of elements, including the most stressed one (the gradient is
         // largest there) and low-density ones.
         for (std::size_t c = 0; c < configs.size(); ++c) {
-            std::vector<double> grad;
-            aggregate(rho, configs[c], &grad);
+            const std::vector<double> grad = evaluate(rho, configs[c]).daggregate;
             // Probe elements whose sensitivity is non-negligible (≥ 1% of the
             // largest): below that the FD quotient is dominated by the CG solve
             // noise of the two perturbed states, not by the derivative. Take the
@@ -266,7 +261,7 @@ int run(int argc, char** argv) {
                 rp[e] += h;
                 rm[e] -= h;
                 const double fd =
-                    (aggregate(rp, configs[c], nullptr) - aggregate(rm, configs[c], nullptr)) /
+                    (evaluate(rp, configs[c]).aggregate - evaluate(rm, configs[c]).aggregate) /
                     (2.0 * h);
                 const double rel = std::abs(fd - grad[e]) / std::max(std::abs(fd), 1e-12);
                 worst = std::max(worst, rel);
@@ -391,6 +386,9 @@ int run(int argc, char** argv) {
             optimize_compliance(lb.fespace, lb.cache, lb.ess_tdof, lb.load, cfg,
                                 &lb.stress_cache);
         } catch (const std::runtime_error& err) {
+            // The rejection IS the expected outcome here: log it and hand the
+            // message back so each case can check its wording.
+            std::printf("  rejected: %s\n", err.what());
             return err.what();
         }
         return "";
@@ -402,7 +400,6 @@ int run(int argc, char** argv) {
         bad.max_iterations = 25;
         bad.stress = stress_config(0.02 * base_peak, StressAggregation::PNorm, 8.0);
         const std::string msg = error_of(bad);
-        std::printf("  → %s\n", msg.c_str());
         check(failures, "an unreachable σ_allow is rejected with a clear error",
               msg.find("was not met") != std::string::npos &&
                   msg.find("lowest max von Mises") != std::string::npos);
