@@ -71,101 +71,219 @@ export interface DensitySurface {
   triangleCount: number;
 }
 
-interface Face {
-  ids: number[]; // node ids, outward-oriented
+// One triangle of the retained-material surface. a→b→c winds counter-clockwise
+// seen from outside the material, so the right-hand normal points outward.
+interface SurfaceTriangle {
+  a: Node;
+  b: Node;
+  c: Node;
   color: THREE.Color;
 }
 
-// Boundary surface of the retained element set. A face shared by two kept
-// elements is interior (drawn from neither); a face kept by exactly one element
-// is on the surface of the emerging structure and is drawn, flat-shaded in the
-// owning element's density colour. Returns null when there is nothing to draw
-// (empty mesh, or every element below the threshold) or when the density is
-// stale — its length no longer matches the mesh (e.g. a re-mesh after the run),
-// mirroring the guard the displacement colormap uses.
+interface Face {
+  ids: number[]; // node ids, as listed by the element's local face table
+  color: THREE.Color;
+  // Centroid of the owning element: the face is flipped if its normal points
+  // towards it, so the surface is outward-oriented whatever the element's
+  // node-ordering handedness (the STL export relies on this).
+  inside: THREE.Vector3;
+}
+
+function centroid(pts: Node[]): THREE.Vector3 {
+  const sum = new THREE.Vector3();
+  for (const p of pts) sum.add(new THREE.Vector3(p.x, p.y, p.z));
+  return sum.divideScalar(pts.length);
+}
+
+function triangleNormal(a: Node, b: Node, c: Node): THREE.Vector3 {
+  const ab = new THREE.Vector3(b.x - a.x, b.y - a.y, b.z - a.z);
+  const ac = new THREE.Vector3(c.x - a.x, c.y - a.y, c.z - a.z);
+  return ab.cross(ac).normalize();
+}
+
+// Boundary triangles of the retained element set — the single definition of
+// "the optimized shape" that both the viewport and the STL export draw. A face
+// shared by two kept elements is interior (drawn from neither); a face kept by
+// exactly one element is on the surface of the emerging structure and is drawn
+// in the owning element's density colour. Returns null when there is nothing to
+// draw (empty mesh, or every element below the threshold) or when the density
+// is stale — its length no longer matches the mesh (e.g. a re-mesh after the
+// run), mirroring the guard the displacement colormap uses.
+function collectSurfaceTriangles(
+  nodes: Node[],
+  elements: Element[],
+  density: Float64Array,
+  threshold: number,
+): SurfaceTriangle[] | null {
+  const ordered = orderedDesignElements(elements);
+  if (density.length !== ordered.length || ordered.length === 0) return null;
+
+  const nodeMap = new Map<number, Node>(nodes.map((n) => [n.id, n]));
+  const lookup = (ids: number[]): Node[] | null => {
+    const pts = ids.map((id) => nodeMap.get(id));
+    return pts.some((p) => p === undefined) ? null : (pts as Node[]);
+  };
+
+  // Collect every face of every kept element, keyed by its sorted node ids, and
+  // count how many kept elements share it. Interior faces appear twice.
+  const faceMap = new Map<string, { face: Face; count: number }>();
+  const addFace = (
+    ids: number[],
+    color: THREE.Color,
+    inside: THREE.Vector3,
+  ) => {
+    const key = [...ids].sort((a, b) => a - b).join(",");
+    const entry = faceMap.get(key);
+    if (entry) entry.count++;
+    else faceMap.set(key, { face: { ids, color, inside }, count: 1 });
+  };
+
+  // Shell facets are themselves surfaces (not the boundary of a volume), so they
+  // are drawn directly rather than run through the shared-face dedup that finds a
+  // solid body's boundary — a kept CTRIA3 always shows its triangle.
+  const triangles: SurfaceTriangle[] = [];
+
+  for (let i = 0; i < ordered.length; i++) {
+    if (density[i] < threshold) continue;
+    const el = ordered[i];
+    const color = densityColor(density[i]);
+    if (el.type === "CTETRA" || el.type === "CHEXA") {
+      const pts = lookup(el.nodeIds);
+      if (!pts) continue;
+      const inside = centroid(pts);
+      const table = el.type === "CTETRA" ? TET_FACES : HEX_FACES;
+      for (const local of table)
+        addFace(
+          local.map((k) => el.nodeIds[k]),
+          color,
+          inside,
+        );
+    } else if (el.type === "CTRIA3") {
+      const pts = lookup(el.nodeIds.slice(0, 3));
+      if (!pts) continue;
+      triangles.push({ a: pts[0], b: pts[1], c: pts[2], color });
+    }
+  }
+
+  for (const { face, count } of faceMap.values()) {
+    if (count !== 1) continue; // interior face — not part of the surface
+    const pts = lookup(face.ids);
+    if (!pts) continue;
+    const outward = new THREE.Vector3()
+      .copy(centroid(pts))
+      .sub(face.inside)
+      .dot(triangleNormal(pts[0], pts[1], pts[2]));
+    const ring = outward < 0 ? [...pts].reverse() : pts;
+    triangles.push({ a: ring[0], b: ring[1], c: ring[2], color: face.color });
+    if (ring.length === 4)
+      triangles.push({ a: ring[0], b: ring[2], c: ring[3], color: face.color });
+  }
+
+  return triangles.length > 0 ? triangles : null;
+}
+
+// Flat-shaded viewport geometry of the retained-material surface.
 export function buildDensitySurface(
   nodes: Node[],
   elements: Element[],
   density: Float64Array,
   threshold: number,
 ): DensitySurface | null {
-  const ordered = orderedDesignElements(elements);
-  if (density.length !== ordered.length || ordered.length === 0) return null;
+  const triangles = collectSurfaceTriangles(
+    nodes,
+    elements,
+    density,
+    threshold,
+  );
+  if (!triangles) return null;
 
-  const nodeMap = new Map<number, Node>(nodes.map((n) => [n.id, n]));
-
-  // Collect every face of every kept element, keyed by its sorted node ids, and
-  // count how many kept elements share it. Interior faces appear twice.
-  const faceMap = new Map<string, { face: Face; count: number }>();
-  const addFace = (ids: number[], color: THREE.Color) => {
-    const key = [...ids].sort((a, b) => a - b).join(",");
-    const entry = faceMap.get(key);
-    if (entry) entry.count++;
-    else faceMap.set(key, { face: { ids, color }, count: 1 });
-  };
-
-  // Shell facets are themselves surfaces (not the boundary of a volume), so they
-  // are drawn directly rather than run through the shared-face dedup that finds a
-  // solid body's boundary — a kept CTRIA3 always shows its triangle.
-  const shellFaces: Face[] = [];
-
-  for (let i = 0; i < ordered.length; i++) {
-    if (density[i] < threshold) continue;
-    const el = ordered[i];
-    const color = densityColor(density[i]);
-    if (el.type === "CTETRA") {
-      for (const [a, b, c] of TET_FACES)
-        addFace([el.nodeIds[a], el.nodeIds[b], el.nodeIds[c]], color);
-    } else if (el.type === "CHEXA") {
-      for (const [a, b, c, d] of HEX_FACES)
-        addFace(
-          [el.nodeIds[a], el.nodeIds[b], el.nodeIds[c], el.nodeIds[d]],
-          color,
-        );
-    } else if (el.type === "CTRIA3") {
-      shellFaces.push({
-        ids: [el.nodeIds[0], el.nodeIds[1], el.nodeIds[2]],
-        color,
-      });
+  const n = triangles.length;
+  const positions = new Float32Array(n * 9);
+  const normals = new Float32Array(n * 9);
+  const colors = new Float32Array(n * 9);
+  triangles.forEach(({ a, b, c, color }, t) => {
+    const nrm = triangleNormal(a, b, c);
+    positions.set([a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z], t * 9);
+    for (let k = 0; k < 3; k++) {
+      normals.set([nrm.x, nrm.y, nrm.z], t * 9 + k * 3);
+      colors.set([color.r, color.g, color.b], t * 9 + k * 3);
     }
-  }
+  });
+  return { positions, normals, colors, triangleCount: n };
+}
 
-  const positions: number[] = [];
-  const normals: number[] = [];
-  const colors: number[] = [];
+// Binary STL of a density surface as the viewport draws it, in the model's own
+// length units (STL carries none). The facet normal is recomputed from each
+// triangle's winding (a smooth surface carries averaged vertex normals, which
+// are not facet normals).
+//
+// Layout: 80-byte header, uint32 triangle count, then per triangle 12 float32
+// (normal, three vertices) and a uint16 attribute word, all little-endian.
+function surfaceToStl(surface: DensitySurface, header: string): ArrayBuffer {
+  const count = surface.triangleCount;
+  const buffer = new ArrayBuffer(84 + count * 50);
+  const view = new DataView(buffer);
+  for (let i = 0; i < header.length && i < 80; i++)
+    view.setUint8(i, header.charCodeAt(i) & 0x7f);
+  view.setUint32(80, count, true);
 
-  const pushTri = (a: Node, b: Node, c: Node, color: THREE.Color) => {
-    const ab = new THREE.Vector3(b.x - a.x, b.y - a.y, b.z - a.z);
-    const ac = new THREE.Vector3(c.x - a.x, c.y - a.y, c.z - a.z);
-    const nrm = ab.cross(ac).normalize();
-    positions.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
-    for (let k = 0; k < 3; k++) normals.push(nrm.x, nrm.y, nrm.z);
-    for (let k = 0; k < 3; k++) colors.push(color.r, color.g, color.b);
+  let offset = 84;
+  const put = (v: number) => {
+    view.setFloat32(offset, v, true);
+    offset += 4;
   };
-
-  for (const { face, count } of faceMap.values()) {
-    if (count !== 1) continue; // interior face — not part of the surface
-    const pts = face.ids.map((id) => nodeMap.get(id));
-    if (pts.some((p) => p === undefined)) continue;
-    const [a, b, c, d] = pts as Node[];
-    pushTri(a, b, c, face.color);
-    if (face.ids.length === 4) pushTri(a, c, d, face.color);
+  const pos = surface.positions;
+  const vertex = (t: number, k: number): Node => ({
+    id: -1,
+    x: pos[9 * t + 3 * k],
+    y: pos[9 * t + 3 * k + 1],
+    z: pos[9 * t + 3 * k + 2],
+  });
+  for (let t = 0; t < count; t++) {
+    const tri = [vertex(t, 0), vertex(t, 1), vertex(t, 2)];
+    const nrm = triangleNormal(tri[0], tri[1], tri[2]);
+    put(nrm.x);
+    put(nrm.y);
+    put(nrm.z);
+    for (const p of tri) {
+      put(p.x);
+      put(p.y);
+      put(p.z);
+    }
+    view.setUint16(offset, 0, true);
+    offset += 2;
   }
-  // Shell facets: each kept CTRIA3 draws its own triangle, flat-shaded.
-  for (const face of shellFaces) {
-    const pts = face.ids.map((id) => nodeMap.get(id));
-    if (pts.some((p) => p === undefined)) continue;
-    const [a, b, c] = pts as Node[];
-    pushTri(a, b, c, face.color);
-  }
+  return buffer;
+}
 
-  if (positions.length === 0) return null;
-  return {
-    positions: new Float32Array(positions),
-    normals: new Float32Array(normals),
-    colors: new Float32Array(colors),
-    triangleCount: positions.length / 9,
-  };
+// Binary STL of the retained-material surface at `threshold` (KOF-239): exactly
+// the faceted shape the element view draws. Solid elements export as the
+// closed, outward-oriented boundary of the kept set; kept shell facets export
+// as zero-thickness mid-surface triangles. Returns null when nothing is kept —
+// there is no shape to export.
+export function buildDensityStl(
+  nodes: Node[],
+  elements: Element[],
+  density: Float64Array,
+  threshold: number,
+): ArrayBuffer | null {
+  const surface = buildDensitySurface(nodes, elements, density, threshold);
+  if (!surface) return null;
+  return surfaceToStl(
+    surface,
+    `KoFEM topology optimization, density >= ${threshold.toFixed(2)}`,
+  );
+}
+
+// Download filename for the exported shape; encodes the cutoff so exports at
+// different thresholds do not overwrite each other.
+export function densityStlFileName(
+  modelName: string,
+  threshold: number,
+): string {
+  // eslint-disable-next-line kofem/no-silent-fallback -- download filename for an unnamed model; cosmetic, never fed back into the analysis
+  const base = (modelName || "model").replace(/[^\w-]+/g, "_");
+  return `${base}_topopt_t${threshold.toFixed(2)}.stl`;
 }
 
 // ── Smooth boundary (isosurface) ──────────────────────────────────────────────
@@ -409,9 +527,12 @@ export function buildSmoothDensitySurface(
   // Caps and shell facets: flat-shaded clipped polygons.
   const flatPos: number[] = [];
   const flatNrm: number[] = [];
-  // Clip polygon `ids` (outward-oriented node ids) to {field ≥ level} and fan
-  // it into triangles (Sutherland–Hodgman against a single linear field).
-  const clipFace = (ids: number[]) => {
+  // Clip polygon `ids` to {field ≥ level} and fan it into triangles
+  // (Sutherland–Hodgman against a single linear field). A solid boundary face
+  // passes its owning element's centroid and is oriented away from it, whatever
+  // the element's node-ordering handedness (as collectSurfaceTriangles does);
+  // a shell facet has no inside and keeps its node order.
+  const clipFace = (ids: number[], owner?: THREE.Vector3) => {
     const poly: THREE.Vector3[] = [];
     for (let i = 0; i < ids.length; i++) {
       const cur = ids[i];
@@ -428,8 +549,14 @@ export function buildSmoothDensitySurface(
     const nrm = new THREE.Vector3(p1.x - p0.x, p1.y - p0.y, p1.z - p0.z)
       .cross(new THREE.Vector3(p2.x - p0.x, p2.y - p0.y, p2.z - p0.z))
       .normalize();
+    const flip =
+      owner !== undefined &&
+      new THREE.Vector3(p0.x, p0.y, p0.z).sub(owner).dot(nrm) < 0;
+    if (flip) nrm.negate();
     for (let i = 1; i + 1 < poly.length; i++)
-      for (const vtx of [poly[0], poly[i], poly[i + 1]]) {
+      for (const vtx of flip
+        ? [poly[0], poly[i + 1], poly[i]]
+        : [poly[0], poly[i], poly[i + 1]]) {
         flatPos.push(vtx.x, vtx.y, vtx.z);
         flatNrm.push(nrm.x, nrm.y, nrm.z);
       }
@@ -437,32 +564,38 @@ export function buildSmoothDensitySurface(
 
   // Boundary faces of the solid design domain: faces owned by exactly one
   // element (same dedup as buildDensitySurface, over ALL solid elements).
-  const faceCount = new Map<string, { ids: number[]; count: number }>();
-  const addFace = (ids: number[]) => {
+  const faceCount = new Map<
+    string,
+    { ids: number[]; owner: THREE.Vector3; count: number }
+  >();
+  const addFace = (ids: number[], owner: THREE.Vector3) => {
     const key = [...ids].sort((a, b) => a - b).join(",");
     const entry = faceCount.get(key);
     if (entry) entry.count++;
-    else faceCount.set(key, { ids, count: 1 });
+    else faceCount.set(key, { ids, owner, count: 1 });
   };
 
   for (const el of orderedDesignElements(elements)) {
     const ids = el.nodeIds;
     if (el.type === "CTETRA") {
       marchTet([ids[0], ids[1], ids[2], ids[3]]);
-      for (const [a, b, c] of TET_FACES) addFace([ids[a], ids[b], ids[c]]);
+      const owner = centroid(ids.map((id) => nodeMap.get(id) as Node));
+      for (const [a, b, c] of TET_FACES)
+        addFace([ids[a], ids[b], ids[c]], owner);
     } else if (el.type === "CHEXA") {
       // Kuhn tets for the interior surface. Adjacent hexes may split a shared
       // face along different diagonals, which can leave hairline seams there.
       for (const [a, b, c, d] of HEX_KUHN_TETS)
         marchTet([ids[a], ids[b], ids[c], ids[d]]);
+      const owner = centroid(ids.map((id) => nodeMap.get(id) as Node));
       for (const [a, b, c, d] of HEX_FACES)
-        addFace([ids[a], ids[b], ids[c], ids[d]]);
+        addFace([ids[a], ids[b], ids[c], ids[d]], owner);
     } else if (el.type === "CTRIA3") {
       clipFace([ids[0], ids[1], ids[2]]);
     }
   }
-  for (const { ids, count } of faceCount.values())
-    if (count === 1) clipFace(ids);
+  for (const { ids, owner, count } of faceCount.values())
+    if (count === 1) clipFace(ids, owner);
 
   const total = isoTris.length * 3 + flatPos.length;
   if (total === 0) return null;
@@ -494,4 +627,23 @@ export function buildSmoothDensitySurface(
     colors[i + 2] = SMOOTH_COLOR.b;
   }
   return { positions, normals, colors, triangleCount: total / 9 };
+}
+
+// Binary STL of the smooth surface (buildSmoothDensitySurface) — what the
+// viewport shows in its Smooth mode: the closed, outward-oriented boundary of
+// {field ≥ level}, with shell facets clipped as zero-thickness triangles.
+// Returns null when nothing is inside.
+export function buildSmoothDensityStl(
+  nodes: Node[],
+  elements: Element[],
+  field: Float64Array,
+  level: number,
+  what: string,
+): ArrayBuffer | null {
+  const surface = buildSmoothDensitySurface(nodes, elements, field, level);
+  if (!surface) return null;
+  return surfaceToStl(
+    surface,
+    `KoFEM topology optimization, smooth ${what} >= ${level.toFixed(2)}`,
+  );
 }
