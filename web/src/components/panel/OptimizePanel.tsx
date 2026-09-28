@@ -53,8 +53,11 @@ function SettingField({
 }
 
 export function OptimizePanel() {
+  const method = useModelStore((s) => s.topOpt.method);
   const objective = useModelStore((s) => s.topOpt.objective);
+  const setTopOptMethod = useModelStore((s) => s.setTopOptMethod);
   const setTopOptObjective = useModelStore((s) => s.setTopOptObjective);
+  const levelSet = method === "level_set";
   const {
     optimize,
     cancel,
@@ -101,6 +104,29 @@ export function OptimizePanel() {
         <div className={styles.formNote}>{designDomain}</div>
 
         <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
+          Method
+        </div>
+        <div className={styles.segToggle}>
+          <button
+            className={`${styles.segBtn} ${!levelSet ? styles.segBtnActive : ""}`}
+            onClick={() => setTopOptMethod("simp")}
+          >
+            SIMP
+          </button>
+          <button
+            className={`${styles.segBtn} ${levelSet ? styles.segBtnActive : ""}`}
+            onClick={() => setTopOptMethod("level_set")}
+          >
+            Level set
+          </button>
+        </div>
+        <div className={styles.formNote}>
+          {levelSet
+            ? "Nodal level set (reaction–diffusion): a crisp, smooth boundary. Solid models, minimum compliance."
+            : "Density per element (SIMP + MMA). Supports every objective and shell models."}
+        </div>
+
+        <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
           Objective
         </div>
         <div className={styles.segToggle}>
@@ -135,19 +161,33 @@ export function OptimizePanel() {
           />
         )}
 
-        <div className={styles.sectionLabel}>SIMP parameters</div>
-        <SettingField
-          field="penalty"
-          label="Penalty p"
-          hint="SIMP penalization exponent, ≥ 1 (typically 3)"
-          errors={errors}
-        />
-        <SettingField
-          field="filterRadius"
-          label="Filter r_min"
-          hint="Density filter radius, in model length units"
-          errors={errors}
-        />
+        {levelSet ? (
+          <>
+            <div className={styles.sectionLabel}>Level-set parameters</div>
+            <SettingField
+              field="filterRadius"
+              label="Length ℓ"
+              hint="Smallest member/curvature scale, in model length units — about one element size keeps thin members"
+              errors={errors}
+            />
+          </>
+        ) : (
+          <>
+            <div className={styles.sectionLabel}>SIMP parameters</div>
+            <SettingField
+              field="penalty"
+              label="Penalty p"
+              hint="SIMP penalization exponent, ≥ 1 (typically 3)"
+              errors={errors}
+            />
+            <SettingField
+              field="filterRadius"
+              label="Filter r_min"
+              hint="Density filter radius, in model length units"
+              errors={errors}
+            />
+          </>
+        )}
 
         <button
           className={styles.advancedToggle}
@@ -163,12 +203,14 @@ export function OptimizePanel() {
         </button>
         {advancedOpen && (
           <>
-            <SettingField
-              field="moveLimit"
-              label="Move limit"
-              hint="MMA step cap per iteration, (0, 1] (default 0.2)"
-              errors={errors}
-            />
+            {!levelSet && (
+              <SettingField
+                field="moveLimit"
+                label="Move limit"
+                hint="MMA step cap per iteration, (0, 1] (default 0.2)"
+                errors={errors}
+              />
+            )}
             <SettingField
               field="maxIterations"
               label="Max iters"

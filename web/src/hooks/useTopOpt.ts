@@ -27,6 +27,7 @@ export type FieldErrors = Partial<Record<TopOptNumericField, string>>;
 // House rule (no silent fallbacks): an unparseable or out-of-range field is an
 // explicit error and blocks the run, never a quietly substituted default.
 function parseSettings(state: {
+  method: NonNullable<TopOptSettings["method"]>;
   objective: TopOptSettings["objective"];
   volumeFraction: string;
   complianceLimit: string;
@@ -53,24 +54,26 @@ function parseSettings(state: {
     return parsed;
   };
 
-  const penalty = num(
-    "penalty",
-    state.penalty,
-    (value) => value >= 1,
-    "penalty p ≥ 1",
-  );
+  // The level set has no SIMP penalty and no MMA move limit; those fields are
+  // hidden in its panel, so they are neither validated nor sent.
+  const simp = state.method === "simp";
+  const penalty = simp
+    ? num("penalty", state.penalty, (value) => value >= 1, "penalty p ≥ 1")
+    : undefined;
   const filterRadius = num(
     "filterRadius",
     state.filterRadius,
     (value) => value > 0,
-    "filter radius r_min > 0",
+    simp ? "filter radius r_min > 0" : "length scale ℓ > 0",
   );
-  const moveLimit = num(
-    "moveLimit",
-    state.moveLimit,
-    (value) => value > 0 && value <= 1,
-    "move limit in (0, 1]",
-  );
+  const moveLimit = simp
+    ? num(
+        "moveLimit",
+        state.moveLimit,
+        (value) => value > 0 && value <= 1,
+        "move limit in (0, 1]",
+      )
+    : undefined;
   const maxIterations = num(
     "maxIterations",
     state.maxIterations,
@@ -106,6 +109,7 @@ function parseSettings(state: {
   if (Object.keys(errors).length > 0) return { settings: null, errors };
   return {
     settings: {
+      method: state.method,
       objective: state.objective,
       constraints,
       penalty,
@@ -192,7 +196,19 @@ export function useTopOpt() {
 
   const { settings, errors } = parseSettings(topOpt);
   const settingsOk = settings !== null;
+  // The level-set optimizer (engine/cpp/topology_levelset.h) runs on solid
+  // meshes and minimizes compliance only; SIMP covers the rest.
+  const levelSet = topOpt.method === "level_set";
+  const levelSetShellBlock = levelSet && shellElements.length > 0;
+  // A coupling routes even an all-solid model to the coupled optimizer, which
+  // runs SIMP only (solver.worker.ts handleTopOpt).
+  const levelSetCouplingBlock = levelSet && couplingGroups.length > 0;
+  const levelSetObjectiveBlock =
+    levelSet && topOpt.objective !== "min_compliance";
   const allOk =
+    !levelSetShellBlock &&
+    !levelSetCouplingBlock &&
+    !levelSetObjectiveBlock &&
     meshOk &&
     matOk &&
     singleMaterialOk &&
@@ -216,23 +232,24 @@ export function useTopOpt() {
     clearLogs();
     setLiveDensity(null);
     setProgressCallback(({ it, density }) => setLiveDensity({ it, density }));
-    sendToWorker<{ density: Float64Array; history: TopOptHistoryEntry[] }>(
-      "optimize_topology",
-      {
-        nodes,
-        elements,
-        materials,
-        properties,
-        constraints,
-        loads,
-        surfaceLoads,
-        tieGroups,
-        couplings: couplingGroups,
-        settings,
-      },
-    )
-      .then(({ density, history }) => {
-        setDensityResult({ density, history });
+    sendToWorker<{
+      density: Float64Array;
+      levelSet?: Float64Array;
+      history: TopOptHistoryEntry[];
+    }>("optimize_topology", {
+      nodes,
+      elements,
+      materials,
+      properties,
+      constraints,
+      loads,
+      surfaceLoads,
+      tieGroups,
+      couplings: couplingGroups,
+      settings,
+    })
+      .then(({ density, levelSet, history }) => {
+        setDensityResult({ density, levelSet, history });
         setMode("results");
       })
       .catch((err) => {
@@ -266,8 +283,9 @@ export function useTopOpt() {
     ).__kofemTriggerOptimize = optimize;
   });
 
-  const settingsSummary =
-    topOpt.objective === "min_compliance"
+  const settingsSummary = levelSet
+    ? `Level set · minimize compliance · volfrac ${topOpt.volumeFraction} · ℓ=${topOpt.filterRadius}`
+    : topOpt.objective === "min_compliance"
       ? `Minimize compliance · volfrac ${topOpt.volumeFraction} · p=${topOpt.penalty} · r_min=${topOpt.filterRadius}`
       : `Minimize volume · compliance ≤ ${topOpt.complianceLimit} · p=${topOpt.penalty} · r_min=${topOpt.filterRadius}`;
 
@@ -339,6 +357,21 @@ export function useTopOpt() {
         `Topology optimization uses one material per design domain — the solid domain spans ${solidMaterialIds.size} and the shell domain ${shellMaterialIds.size}; assign a single material to each`,
       ]);
   }
+  if (levelSetShellBlock)
+    checks.push([
+      false,
+      "The level-set method supports solid models only — use SIMP for shell and coupled models",
+    ]);
+  if (levelSetCouplingBlock)
+    checks.push([
+      false,
+      "The level-set method does not support couplings yet — remove them, or use SIMP",
+    ]);
+  if (levelSetObjectiveBlock)
+    checks.push([
+      false,
+      "The level-set method minimizes compliance only — switch the objective, or use SIMP",
+    ]);
   if (hasPrescribed)
     checks.push([
       false,

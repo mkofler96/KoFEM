@@ -14,6 +14,7 @@ import type {
   ResultType,
   StepTessellation,
   TieGroup,
+  TopOptMethod,
   TopOptObjective,
   TopOptSettingsState,
   VolMesh,
@@ -349,6 +350,7 @@ const APP_MODES: AppMode[] = [
   "results",
 ];
 const TOPOPT_OBJECTIVES: TopOptObjective[] = ["min_compliance", "min_volume"];
+const TOPOPT_METHODS: TopOptMethod[] = ["simp", "level_set"];
 const TOPOPT_NUMERIC_FIELDS: (keyof TopOptSettingsState)[] = [
   "volumeFraction",
   "complianceLimit",
@@ -458,6 +460,13 @@ function parseMetadata(xml: string): KofemFieldDataV1 {
         `Invalid analysis file: "topOpt" must be an object, got ${typeof topOptRaw}`,
       );
     const to = topOptRaw as Record<string, unknown>;
+    // Legacy: files written before the level-set method carry no `method` — every
+    // one of them was a SIMP setup.
+    if (to.method === undefined) to.method = "simp";
+    if (!TOPOPT_METHODS.includes(to.method as TopOptMethod))
+      throw new Error(
+        `Invalid analysis file: unknown topOpt method "${to.method}"`,
+      );
     if (!TOPOPT_OBJECTIVES.includes(to.objective as TopOptObjective))
       throw new Error(
         `Invalid analysis file: unknown topOpt objective "${to.objective}"`,
