@@ -437,6 +437,71 @@ test("the app opens normally when no ?example= is present", async ({
   expect((await readStore(page)).nodes).toBe(0);
 });
 
+test("the MBB topology example opens ready to optimize and re-mesh", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+
+  // mbb-beam-topopt is built with KoFEM's own pipeline (STEP → OCCT → Netgen,
+  // examples/web-examples/generate-mbb-topopt.mjs). It must open in the Optimize
+  // step with its settings, supports and face load restored, carry the CAD face
+  // ids for picking, and get its STEP back so the model can be re-meshed.
+  await page.goto("/app/?example=mbb-beam-topopt");
+  await expect(page.locator("nav")).toBeVisible();
+  await page.waitForFunction(
+    () =>
+      (
+        window as unknown as {
+          __kofemStore: { getState(): { stepBytes: Uint8Array | null } };
+        }
+      ).__kofemStore.getState().stepBytes !== null,
+    null,
+    { timeout: 15_000 },
+  );
+
+  const snapshot = await readStore(page);
+  expect(snapshot.modelName).toBe("MBB beam — topology optimization");
+  expect(snapshot.mode).toBe("optimize");
+  expect(snapshot.hasResult).toBe(false);
+  expect(snapshot.bcGroups).toBe(2); // pin + roller
+  expect(snapshot.loadGroups).toBe(1); // central load
+
+  const setup = await page.evaluate(() => {
+    const st = (
+      window as unknown as {
+        __kofemStore: {
+          getState(): {
+            topOpt: { volumeFraction: string; filterRadius: string };
+            surfaceLoads: { faces: number[][] }[];
+            surfaceFaceIds: number[] | null;
+            elements: { type: string }[];
+          };
+        };
+      }
+    ).__kofemStore.getState();
+    return {
+      volumeFraction: st.topOpt.volumeFraction,
+      filterRadius: st.topOpt.filterRadius,
+      surfaceLoads: st.surfaceLoads.length,
+      loadFaces: st.surfaceLoads[0]?.faces.length ?? 0,
+      cadFaces: new Set(st.surfaceFaceIds).size,
+      allTets: st.elements.every((e) => e.type === "CTETRA"),
+    };
+  });
+  expect(setup.volumeFraction).toBe("0.5");
+  expect(setup.filterRadius).toBe("10");
+  // The load pad resolves to a work-equivalent traction over its triangles.
+  expect(setup.surfaceLoads).toBe(1);
+  expect(setup.loadFaces).toBeGreaterThan(0);
+  // 8 split sides + 2 caps: the pads are their own pickable CAD faces.
+  expect(setup.cadFaces).toBe(10);
+  expect(setup.allTets).toBe(true);
+
+  await expect(
+    page.getByRole("button", { name: /Run optimization/ }),
+  ).toBeEnabled();
+});
+
 let EXAMPLE_ANALYSES: { id: string; showcase?: boolean; appId?: string }[];
 
 test.beforeAll(async () => {
@@ -455,13 +520,19 @@ test("capture screenshots of all examples", async ({ page }) => {
   for (const analysis of EXAMPLE_ANALYSES) {
     await page.goto(`/app/?example=${analysis.id}`);
 
+    await expect
+      .poll(async () => (await readStore(page)).nodes, { timeout: 15_000 })
+      .toBeGreaterThan(0);
     // Allow the camera reposition and a render frame to settle
     await page.waitForTimeout(100);
-    await page
-      .getByRole("button", {
-        name: "Toggle undeformed overlay",
-      })
-      .click();
+    // The overlay toggle exists only for a solved model; a topology-optimization
+    // example (mbb-beam-topopt) opens unsolved, in the Optimize step.
+    if ((await readStore(page)).hasResult)
+      await page
+        .getByRole("button", {
+          name: "Toggle undeformed overlay",
+        })
+        .click();
     await page.mouse.move(0, 0);
     await page.evaluate(() => {
       const store = (window as any).__kofemStore;
