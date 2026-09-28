@@ -277,7 +277,7 @@ jobs:
 
       - name: Lint
         run: cd web && bun run lint
-      
+
       - name: Format
         run: cd web && bun run format:check
 
@@ -353,6 +353,7 @@ jobs:
             --load \
             --platform linux/amd64 \
             --file ./web/Dockerfile \
+            --build-context gallery=./examples/gallery/site \
             --build-arg VITE_GIT_VERSION=${VERSION} \
             --cache-from=type=gha \
             --cache-to=type=gha,mode=max \
@@ -399,6 +400,7 @@ jobs:
           docker buildx build \
             --platform linux/amd64 \
             --file ./web/Dockerfile \
+            --build-context gallery=./examples/gallery/site \
             --build-arg VITE_GIT_VERSION=${VERSION} \
             --cache-from=type=gha \
             --cache-to=type=gha,mode=max \

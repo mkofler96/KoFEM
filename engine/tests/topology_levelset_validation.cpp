@@ -5,7 +5,7 @@
 // (engine/cpp/topology_levelset.{h,cpp}).
 //
 // Links MFEM and runs under node via Emscripten
-// (scripts/test-topology-levelset.sh). It is NOT run by CI (see CLAUDE.md).
+// (scripts/test-topology-levelset.sh). It is NOT run by CI (see AGENTS.md).
 //
 // Checks:
 //   1. The exact tet volume fraction of {φ > 0}: the four sign patterns, the

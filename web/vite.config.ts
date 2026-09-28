@@ -3,7 +3,15 @@
 
 import { defineConfig, loadEnv, type PluginOption } from "vite";
 import { fileURLToPath } from "node:url";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { extname, join } from "node:path";
 import react from "@vitejs/plugin-react";
 import wasm from "vite-plugin-wasm";
 import topLevelAwait from "vite-plugin-top-level-await";
@@ -16,21 +24,24 @@ import {
 
 const htmlEntry = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 
-// The marketing pages (index.html, examples/index.html, privacy/index.html) are
-// fully static — Vite emits them byte-for-byte, they import no hashed assets.
-// Feeding them as extra MPA rollup inputs is flaky (in some environments rollup
-// crosses the landing/app chunk names and drops the landing HTML entirely,
-// leaving "/" on nginx's default page). So the build has a single entry (the
-// app) and we copy the static pages into dist/ deterministically. The analytics
-// consent block is injected here because these pages bypass Vite's HTML pipeline
+// The marketing pages (index.html, privacy/index.html) are fully static — Vite
+// emits them byte-for-byte, they import no hashed assets. Feeding them as extra
+// MPA rollup inputs is flaky (in some environments rollup crosses the
+// landing/app chunk names and drops the landing HTML entirely, leaving "/" on
+// nginx's default page). So the build has a single entry (the app) and we copy
+// the static pages into dist/ deterministically. The analytics consent block is
+// injected here because these pages bypass Vite's HTML pipeline
 // (transformIndexHtml only runs on the app entry at build time). Dev is
 // unaffected: rollupOptions is build-only, the dev server serves the pages from
 // the filesystem, and transformIndexHtml injects analytics there instead.
-const STATIC_PAGES = [
-  "index.html",
-  "examples/index.html",
-  "privacy/index.html",
-];
+const STATIC_PAGES = ["index.html", "privacy/index.html"];
+
+// The examples gallery lives outside web/, with everything else example-related
+// (examples/gallery/). Its site/ folder is served verbatim at /examples/: the
+// gallery page, examples.json, and the <id>.vtu / <id>.step files the app's
+// `?example=` loader fetches. The Docker build receives it as the named build
+// context "gallery" (web/Dockerfile).
+const GALLERY_SITE = htmlEntry("../examples/gallery/site/");
 
 const copyStaticPages = (snippet: string): PluginOption => ({
   name: "copy-static-pages",
@@ -44,6 +55,53 @@ const copyStaticPages = (snippet: string): PluginOption => ({
       mkdirSync(htmlEntry(`./dist/${page}/..`), { recursive: true });
       writeFileSync(htmlEntry(`./dist/${page}`), html);
     }
+    const galleryOut = htmlEntry("./dist/examples/");
+    cpSync(GALLERY_SITE, galleryOut, { recursive: true });
+    writeFileSync(
+      join(galleryOut, "index.html"),
+      injectAnalytics(
+        readFileSync(join(GALLERY_SITE, "index.html"), "utf8"),
+        snippet,
+      ),
+    );
+  },
+});
+
+const GALLERY_TYPES: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".json": "application/json",
+  ".vtu": "application/xml",
+  ".step": "application/octet-stream",
+};
+
+// Dev server only; `vite preview` serves dist/, which copyStaticPages fills.
+const serveGallery = (): PluginOption => ({
+  name: "serve-gallery",
+  apply: "serve",
+  configureServer(server) {
+    server.middlewares.use("/examples", (req, res, next) => {
+      const [original, query] = (req.originalUrl ?? "").split("?");
+      // The page fetches "./examples.json"; served at "/examples" that resolves
+      // to "/examples.json". nginx redirects the bare path too.
+      if (original === "/examples") {
+        res.statusCode = 301;
+        res.setHeader("Location", `/examples/${query ? `?${query}` : ""}`);
+        return res.end();
+      }
+      const path = decodeURIComponent((req.url ?? "/").split("?")[0]);
+      const rel = path === "/" ? "index.html" : path.slice(1);
+      const file = join(GALLERY_SITE, rel);
+      if (!file.startsWith(GALLERY_SITE) || !existsSync(file)) return next();
+      if (!statSync(file).isFile()) return next();
+      res.setHeader(
+        "Content-Type",
+        GALLERY_TYPES[extname(file)] ?? "application/octet-stream",
+      );
+      if (rel !== "index.html") return res.end(readFileSync(file));
+      server
+        .transformIndexHtml("/examples/", readFileSync(file, "utf8"))
+        .then((html) => res.end(html), next);
+    });
   },
 });
 
@@ -80,6 +138,7 @@ export default defineConfig(({ mode }) => {
       wasm(),
       topLevelAwait(),
       copyStaticPages(gaSnippet),
+      serveGallery(),
       analyticsPlugin(gaSnippet),
       ...coveragePlugins,
     ],

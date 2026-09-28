@@ -9,7 +9,7 @@
 # (engine/cpp/topology_simp_core.cpp) solves a real elastic problem, so it links
 # MFEM. The precompiled MFEM at $MFEM_WASM_ROOT is a WASM (emcc) archive, so the
 # test is compiled with em++ and run under node — the same toolchain the engine
-# uses. It is NOT run by CI (see CLAUDE.md); this is the fast local proof of the
+# uses. It is NOT run by CI (see AGENTS.md); this is the fast local proof of the
 # per-iteration math (compliance reproduction + finite-difference sensitivities).
 #
 # Usage:  bash scripts/test-topology.sh

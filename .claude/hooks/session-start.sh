@@ -15,7 +15,7 @@ fi
 
 REPO="${CLAUDE_PROJECT_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
 
-# The container clones fresh, so the first-time setup from CLAUDE.md never ran
+# The container clones fresh, so the first-time setup from AGENTS.md never ran
 # here — without it the .githooks/pre-commit checks (fmt + clippy) are
 # silently skipped on every commit made in a remote session.
 git -C "$REPO" config core.hooksPath .githooks

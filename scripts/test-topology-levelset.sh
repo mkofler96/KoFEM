@@ -9,7 +9,7 @@
 # iteration and compares against the SIMP loop, so — like
 # scripts/test-topology-optimize.sh — it links MFEM. The precompiled MFEM at
 # $MFEM_WASM_ROOT is a WASM (emcc) archive, so the test is compiled with em++ and
-# run under node. It is NOT run by CI (see CLAUDE.md).
+# run under node. It is NOT run by CI (see AGENTS.md).
 #
 # Usage:  bash scripts/test-topology-levelset.sh
 

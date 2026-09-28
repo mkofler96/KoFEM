@@ -153,7 +153,7 @@ export function prismStep(polygon, depth, name) {
     "ISO-10303-21;",
     "HEADER;",
     `FILE_DESCRIPTION(('${name}'),'2;1');`,
-    `FILE_NAME('${name}','2026-01-01T00:00:00',('KoFEM'),('KoFEM'),'KoFEM examples/web-examples/step-prism.mjs','KoFEM','');`,
+    `FILE_NAME('${name}','2026-01-01T00:00:00',('KoFEM'),('KoFEM'),'KoFEM examples/gallery/step-prism.mjs','KoFEM','');`,
     "FILE_SCHEMA(('AUTOMOTIVE_DESIGN { 1 0 10303 214 1 1 1 1 }'));",
     "ENDSEC;",
     "DATA;",

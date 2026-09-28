@@ -15,7 +15,7 @@
 //   conventional counters stay usable outside loop headers too.
 //
 // A genuine physics/math symbol documented by an equation reference (per the
-// CLAUDE.md comment convention) may keep its name via
+// AGENTS.md comment convention) may keep its name via
 //   // eslint-disable-next-line kofem/min-identifier-length -- <equation the symbol comes from>
 // The justification after `--` is mandatory by convention, matching
 // kofem/no-silent-fallback.

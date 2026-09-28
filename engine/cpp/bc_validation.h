@@ -14,7 +14,7 @@
 // successful while quietly missing something the user configured in the UI.
 // These helpers validate the incoming indices up front and throw a descriptive
 // std::runtime_error instead, matching the "loud, information-rich errors, no
-// silent fall-throughs" convention in CLAUDE.md.
+// silent fall-throughs" convention in AGENTS.md.
 
 #ifndef KOFEM_BC_VALIDATION_H
 #define KOFEM_BC_VALIDATION_H

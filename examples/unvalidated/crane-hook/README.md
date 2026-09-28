@@ -3,43 +3,43 @@ SPDX-FileCopyrightText: 2026 Michael Kofler
 SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 
-# Web gallery examples
+# Crane hook (unvalidated)
 
-Generators for the analyses shipped in `web/public/examples/`. Each writes a
-`.vtu` plus its entry in `examples.json`; `generate.mjs` runs them all.
+The crane hook assembly from `test_files/full-crane-hook.step`. It used to be on
+the [/examples/ gallery](https://kofem.org/examples/) and was taken off because
+the result is **not trusted yet**: there is a suspected error that has not been
+found. Nothing here is served on kofem.org. It moves back to
+`examples/gallery/` only once the result is validated against a reference.
 
-## The MBB beam (topology optimization)
+| File                       | What it is                                                                                                                                          |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `generate-crane-shell.mjs` | Builds the coupled shell + solid analysis below. Writes `crane-hook-shell.vtu` and the gallery card `crane-hook-shell.card.json` (gitignored) here. |
+| `crane-hook-shell.vtu`     | Its last output, solved.                                                                                                                            |
+| `full-crane-hook.vtu`      | The older all-solid, unsolved setup of the same assembly (#360). **No generator** — it was saved from the app.                                      |
+| `crane-load-case.png`      | The reference load-case drawing.                                                                                                                    |
 
-`generate-mbb-topopt.mjs` builds the classical MBB minimum-compliance benchmark
-with KoFEM's own pipeline only — no structured grid, no external mesher:
+The two `.vtu` files are still regression fixtures: `web/tests/example-load.spec.ts`
+and `web/tests/crane-hook-example.spec.ts` serve them from this folder to the app's
+`/app/?example=<id>` loader, because they exercise the coupled shell/solid solve and
+the multibody restore. A fixture passing says the app reproduces the file, not
+that the file is right.
 
-1. writes the design domain as a STEP file (`step-prism.mjs`): a 300 × 50 × 10 mm
-   block whose bottom and top edges are split, so the pin pad, the roller pad
-   and the load pad are their own CAD faces;
-2. tessellates it and meshes it with Netgen using the app's exact mesher
-   options (5 mm max element size → ~8k tets);
-3. optimizes it with `optimize_topology` (volume fraction 0.5, p = 3,
-   r_min = 10 mm) and fails if it does not converge or no topology emerges.
+`generate-crane-shell.mjs` is not run by CI:
 
-It ships `mbb-beam-topopt.step` next to the `.vtu`, so the example opens in the
-Optimize step ready to run **and** can be re-meshed (re-meshing clears the
-support/load groups, as for any model — re-pick the three pad faces). The app
-reproduces the generator's run exactly: 192.8 → 47.8 N·mm in 66 iterations,
-~40 s in the browser.
+```bash
+cd web && bun run examples:generate-crane-shell
+```
 
-The half-model regression benchmark on a structured hex grid lives in
-`examples/validation/topopt/cases/mbb-beam.mjs`.
-
-## The crane hook load case
+## The load case
 
 `generate-crane-shell.mjs` builds the coupled shell + solid analysis from
 `test_files/full-crane-hook.step`. The STEP holds three bodies:
 
-| body | part | how it is modelled | material |
-| ---- | ---- | ------------------ | -------- |
-| 1 | holder — the tapered channel carrying the four lightening holes | thin walls (0.5 mm) collapsed to a shell mid-surface; the base block stays solid | steel |
-| 2 | hook — the curl at the lower end | solid tets | aluminium |
-| 3 | cylinder — the pin through the hook's bore | solid tets, tied to the bore by RBE3 across the fit clearance | steel |
+| body | part                                                            | how it is modelled                                                               | material  |
+| ---- | --------------------------------------------------------------- | -------------------------------------------------------------------------------- | --------- |
+| 1    | holder — the tapered channel carrying the four lightening holes | thin walls (0.5 mm) collapsed to a shell mid-surface; the base block stays solid | steel     |
+| 2    | hook — the curl at the lower end                                | solid tets                                                                       | aluminium |
+| 3    | cylinder — the pin through the hook's bore                      | solid tets, tied to the bore by RBE3 across the fit clearance                    | steel     |
 
 Boundary conditions, matching the reference drawing:
 
@@ -81,15 +81,15 @@ compliance (twice the strain energy) — the measure to read, since max |u| is a
 point value at the cylinder end and noisier:
 
 | h [mm] | coupled max \|u\| | coupled F·u | all-solid max \|u\| | all-solid F·u |
-| ------ | ----------------- | ----------- | ------------------ | ------------- |
-| 10 | 0.2873 | 439.60 | 0.2834 | 426.37 |
-| 8 | 0.2498 | 437.27 | 0.2461 | 426.28 |
-| 6 | 0.2690 | 439.22 | 0.2643 | 432.59 |
-| 4 | 0.2501 | 439.74 | 0.2486 | 437.62 |
-| 3 | 0.2508 | 439.73 | 0.2502 | 438.54 |
-| 2.5 | 0.3653 | 493.69 | 0.4078 | 494.18 |
-| 2 | 0.3623 | 500.14 | 0.4231 | 502.45 |
-| 1.5 | 0.3806 | 512.52 | 0.4620 | 516.03 |
+| ------ | ----------------- | ----------- | ------------------- | ------------- |
+| 10     | 0.2873            | 439.60      | 0.2834              | 426.37        |
+| 8      | 0.2498            | 437.27      | 0.2461              | 426.28        |
+| 6      | 0.2690            | 439.22      | 0.2643              | 432.59        |
+| 4      | 0.2501            | 439.74      | 0.2486              | 437.62        |
+| 3      | 0.2508            | 439.73      | 0.2502              | 438.54        |
+| 2.5    | 0.3653            | 493.69      | 0.4078              | 494.18        |
+| 2      | 0.3623            | 500.14      | 0.4231              | 502.45        |
+| 1.5    | 0.3806            | 512.52      | 0.4620              | 516.03        |
 
 The flat run from 10 mm to 3 mm is **not** convergence. At 8, 6 and 4 mm the
 0.5 mm wall carries ONE linear tet through its thickness (surface node layers at

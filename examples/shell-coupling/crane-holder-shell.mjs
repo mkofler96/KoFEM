@@ -26,7 +26,7 @@ const STEEL = { young_modulus: 210000, poisson_ratio: 0.3 }; // MPa
 // CAD (OCC) face ids of the boundary conditions, stable across re-meshing of the
 // same STEP: face 7 is the holder mounting face (fixed); faces 66/67 are the two
 // loaded faces on the hook (−1000 N in Y each). These match the saved analysis in
-// web/public/examples/full-crane-hook.vtu.
+// examples/unvalidated/crane-hook/full-crane-hook.vtu.
 const BC_FIXED_FACE = 7;
 const LOAD_FACES = { 66: [0, -1000, 0], 67: [0, -1000, 0] };
 

@@ -9,7 +9,7 @@
 // unlike topology_simp_validation, MMA has no MFEM/OCCT/Netgen dependency — it is
 // dense linear algebra over element densities — so it compiles with a plain host
 // C++ compiler (scripts/test-topology-mma.sh) and runs fast. It is NOT run by CI
-// (see CLAUDE.md); this is the local proof that the subproblem solver hits a known
+// (see AGENTS.md); this is the local proof that the subproblem solver hits a known
 // optimum.
 //
 // The checks the issue asks for ("MMA subproblem verified on a tiny analytic

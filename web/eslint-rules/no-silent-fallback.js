@@ -1,4 +1,4 @@
-// Custom rule enforcing the CLAUDE.md convention "ALWAYS prefer clear and
+// Custom rule enforcing the AGENTS.md convention "ALWAYS prefer clear and
 // information-rich error messages over silent fall-throughs" — the recurring
 // bug class catalogued in issue #322 (silent steel defaults #183/#174, silent
 // zero-force loads #198, discarded materials #310, ...).

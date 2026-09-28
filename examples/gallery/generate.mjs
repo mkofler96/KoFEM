@@ -4,7 +4,7 @@
 // Generates the data behind the interactive examples gallery (/examples/).
 //
 // For every example in examples.mjs it runs the real KoFEM WASM solver and
-// writes two artifacts into web/public/examples/:
+// writes two artifacts into site/ (served at /examples/):
 //
 //   <id>.vtu       — a complete KoFEM analysis file (mesh + BC/load groups +
 //                    solved displacement / von-Mises fields). This is what the
@@ -13,7 +13,7 @@
 //                    boundary-surface payload the gallery's WebGL viewer renders
 //                    (undeformed positions, per-vertex displacement, triangles).
 //
-// Run with:  bun examples/web-examples/generate.mjs   (or `bun run examples:generate`)
+// Run with:  bun examples/gallery/generate.mjs   (or `bun run examples:generate`)
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -22,7 +22,7 @@ import { loadSolver } from "../validation/lib/solver.mjs";
 import examples from "./examples.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const outDir = join(here, "../../web/public/examples");
+const outDir = join(here, "site");
 
 // ── Boundary-surface extraction (hex faces appearing exactly once) ────────────
 
@@ -382,8 +382,8 @@ for (const ex of examples) {
   );
 }
 
-// Preserve showcase entries (e.g. the coupled crane written by
-// generate-crane-shell.mjs) so regenerating the benchmarks doesn't drop them.
+// Preserve showcase entries (e.g. the shell plate written by
+// generate-plate-hole-shell.mjs) so regenerating the benchmarks doesn't drop them.
 const manifestPath = join(outDir, "examples.json");
 const showcase = existsSync(manifestPath)
   ? JSON.parse(readFileSync(manifestPath, "utf8")).filter((e) => e.showcase)

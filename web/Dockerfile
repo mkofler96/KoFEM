@@ -1,4 +1,8 @@
-# Build context is ./web (see .github/workflows/ci.yml, "docker" steps).
+# Build context is ./web, plus the named context "gallery" = ./examples/gallery/site
+# (the /examples/ gallery, which lives outside web/). See .github/workflows/ci.yml,
+# "docker" steps:
+#
+#   docker build --build-context gallery=./examples/gallery/site ./web
 #
 # Stage 1: Build the static frontend bundle.
 #
@@ -25,12 +29,14 @@ RUN bun install --frozen-lockfile
 # — it is a build output published as a GitHub Release rather than committed
 # (KOF-186), so populate it before building the image:
 #
-#   bash scripts/fetch-wasm-engine.sh && docker build ./web
+#   bash scripts/fetch-wasm-engine.sh && docker build --build-context gallery=./examples/gallery/site ./web
 #
 # The `bun run build` below would normally fetch it via its package.json pre-hook,
 # but the build context is web/ alone and the repo's scripts/ is not in it; the
 # hook detects that and leaves whatever was copied in place. No Emscripten needed.
 COPY . .
+# vite.config.ts reads the gallery from ../examples/gallery/site.
+COPY --from=gallery . /examples/gallery/site
 
 # Optional version stamp injected by CI. Vite exposes VITE_* vars to the
 # bundle via import.meta.env at build time.

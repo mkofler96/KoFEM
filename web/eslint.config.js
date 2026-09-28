@@ -1,5 +1,5 @@
 // Deliberately narrow ESLint setup: its job is to enforce the "no silent
-// fallbacks" convention from CLAUDE.md / CONTRIBUTING.md (issue #322), not
+// fallbacks" convention from AGENTS.md / CONTRIBUTING.md (issue #322), not
 // general style — tsc --strict covers the rest.
 import tseslint from "typescript-eslint";
 import noSilentFallback from "./eslint-rules/no-silent-fallback.js";

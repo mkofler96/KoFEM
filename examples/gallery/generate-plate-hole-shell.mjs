@@ -18,7 +18,7 @@
 // shell reduces to plane stress, so the peak facet stress at the hole edge
 // still approaches Kirsch's Kt = 3.
 //
-//   bun examples/web-examples/generate-plate-hole-shell.mjs
+//   bun examples/gallery/generate-plate-hole-shell.mjs
 //
 // Like the crane showcase it has its own generator (the benchmark pipeline in
 // generate.mjs only knows solid hex meshes + solve_linear_elastic), and it
@@ -32,7 +32,7 @@ import { loadEngine } from "../shell-coupling/lib.mjs";
 import { plateWithHoleShellMesh, nodesWhere } from "../validation/lib/mesh.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const outDir = join(here, "../../web/public/examples");
+const outDir = join(here, "site");
 
 // Same canonical mm/MPa system and geometry as the solid plate-with-hole card
 // (examples.mjs): steel, a/b = 0.1 ⇒ ≈ infinite-plate Kt, σ = 100 MPa tension.

@@ -9,7 +9,7 @@
 // Like topology_simp_validation and unlike the filter/MMA tests, the loop solves a
 // real elastic problem every iteration, so this links MFEM and runs under node via
 // Emscripten (scripts/test-topology-optimize.sh). It is NOT run by CI (see
-// CLAUDE.md); the visual "textbook truss" layout is validated properly in KOF-234.
+// AGENTS.md); the visual "textbook truss" layout is validated properly in KOF-234.
 // This is the fast local proof of the trajectory the issue asks for.
 //
 // The problem is a tiny 2D-in-3D MBB half-beam: a thin slab meshed into tets, with

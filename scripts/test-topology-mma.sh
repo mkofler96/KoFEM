@@ -10,7 +10,7 @@
 # variables, function values and gradients as plain arrays — so, like
 # scripts/test-shell.sh and scripts/test-topology-filter.sh, this compiles with a
 # plain host C++ compiler for a fast unit-test loop. It is NOT run by CI (see
-# CLAUDE.md).
+# AGENTS.md).
 #
 # Usage:  bash scripts/test-topology-mma.sh
 

@@ -28,7 +28,7 @@
 // in the textbooks. The regression-locked half-model on a structured hex grid is
 // examples/validation/topopt/cases/mbb-beam.mjs.
 //
-//   bun examples/web-examples/generate-mbb-topopt.mjs
+//   bun examples/gallery/generate-mbb-topopt.mjs
 //
 // It appends/replaces the "mbb-beam-topopt" entry in examples.json, leaving the
 // other entries untouched. Netgen is not bit-reproducible across builds, so a
@@ -41,7 +41,7 @@ import { loadEngine } from "../shell-coupling/lib.mjs";
 import { prismStep } from "./step-prism.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const outDir = join(here, "../../web/public/examples");
+const outDir = join(here, "site");
 const ID = "mbb-beam-topopt";
 const TITLE = "MBB beam — topology optimization";
 
