@@ -1,6 +1,6 @@
 # KoFEM Agent Guidelines
 
-Read [CLAUDE.md](../CLAUDE.md) first — it describes the architecture, the build
+Read [AGENTS.md](../AGENTS.md) first — it describes the architecture, the build
 commands, and the terminology rules. This file covers how an agent should work a
 task from start to finish.
 
@@ -20,7 +20,7 @@ Follow strict red-green TDD for all implementation work:
   script under `examples/validation/` — the behaviour that ships is exercised
   through the web app and the WASM engine.
 - `cargo test` currently exercises nothing: `crates/` holds stubs with no tests
-  (see CLAUDE.md). Do not treat a green `cargo test` as coverage of anything.
+  (see AGENTS.md). Do not treat a green `cargo test` as coverage of anything.
 - For acceptance criteria given in a Linear issue, copy the test verbatim into
   the test file before touching implementation code.
 - Prefer small, focused tests over large integration tests so failures pinpoint the broken unit.
@@ -59,5 +59,5 @@ What does **not** go on a Linear issue:
 
 - CI failure screenshots — they stay as the GitHub Actions artifact of the run.
 - Routine green-run screenshots — the weekly showcase covers "what the app looks
-  like now" (see CLAUDE.md).
+  like now" (see AGENTS.md).
 - Progress narration. Move the status; don't post that you are still working.

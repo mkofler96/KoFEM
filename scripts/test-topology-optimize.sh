@@ -9,7 +9,7 @@
 # SIMP core, which solves a real elastic problem every iteration, so — like
 # scripts/test-topology.sh — it links MFEM. The precompiled MFEM at $MFEM_WASM_ROOT
 # is a WASM (emcc) archive, so the test is compiled with em++ and run under node.
-# It is NOT run by CI (see CLAUDE.md); this is the fast local proof of the
+# It is NOT run by CI (see AGENTS.md); this is the fast local proof of the
 # compliance/volume trajectory.
 #
 # Usage:  bash scripts/test-topology-optimize.sh

@@ -5,7 +5,7 @@
 // stress, its P-norm/KS aggregate and adjoint sensitivity
 // (engine/cpp/topology_stress.{h,cpp}), and the constraint inside the MMA loop
 // (topology_optimize.cpp). Links MFEM and runs under node via Emscripten
-// (scripts/test-topology-stress.sh). NOT run by CI (see CLAUDE.md).
+// (scripts/test-topology-stress.sh). NOT run by CI (see AGENTS.md).
 //
 // The benchmark is the L-bracket — the canonical stress-concentration problem of
 // Le et al. (2010) — as a 2D-in-3D slab (u_z ≡ 0): a unit square with the upper-

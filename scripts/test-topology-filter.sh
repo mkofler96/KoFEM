@@ -9,7 +9,7 @@
 # neighbor search (engine/cpp/spatial_grid.cpp) have no MFEM/OCCT/Netgen/
 # Emscripten dependency — they work on element centroids and sensitivities as
 # plain arrays — so, like scripts/test-shell.sh, this compiles with a plain host
-# C++ compiler for a fast unit-test loop. It is NOT run by CI (see CLAUDE.md).
+# C++ compiler for a fast unit-test loop. It is NOT run by CI (see AGENTS.md).
 #
 # Usage:  bash scripts/test-topology-filter.sh
 

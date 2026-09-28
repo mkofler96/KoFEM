@@ -9,7 +9,7 @@
 // filter core has no MFEM/OCCT/Netgen/Emscripten dependency — it operates on
 // element centroids and sensitivities as plain arrays — so it compiles with a
 // plain host C++ compiler (scripts/test-topology-filter.sh). It is NOT run by CI
-// (see CLAUDE.md); this is the fast local proof.
+// (see AGENTS.md); this is the fast local proof.
 //
 // The checks the issue asks for:
 //   1. On a uniform grid the filter weights sum correctly and reproduce the

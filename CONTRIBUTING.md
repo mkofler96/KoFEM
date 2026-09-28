@@ -1,6 +1,6 @@
 # Contributing to KoFEM
 
-Start with [CLAUDE.md](CLAUDE.md) — it describes the architecture, the build
+Start with [AGENTS.md](AGENTS.md) — it describes the architecture, the build
 commands, and the geometry/mesh terminology rules. This file covers the
 conventions checked in review, starting with the one that matters most.
 
@@ -27,7 +27,7 @@ const force = parseFloat(loadForce) || 0;
 const material = materials[0] ?? DEFAULT_STEEL;
 ```
 
-The rule, from CLAUDE.md: **ALWAYS prefer clear and information-rich error
+The rule, from AGENTS.md: **ALWAYS prefer clear and information-rich error
 messages over silent fall-throughs.** Concretely:
 
 - Parse, then **validate and throw**: `Number.isFinite(v)` after `parseFloat`,
