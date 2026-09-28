@@ -11,7 +11,7 @@ import { useModelStore } from "./store/modelStore";
 import { parseAnalysisFile } from "./lib/analysisFile";
 import styles from "./App.module.css";
 
-// `/app/?example=<id>` loads a pre-solved example shipped in public/examples/.
+// `/app/?example=<id>` loads a pre-solved example shipped in examples/gallery/site/.
 // This is the target of the "Open in KoFEM web" buttons on the examples gallery.
 function useExampleFromUrl() {
   const loadAnalysis = useModelStore((s) => s.loadAnalysis);

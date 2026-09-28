@@ -3,10 +3,22 @@ SPDX-FileCopyrightText: 2026 Michael Kofler
 SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 
-# Web gallery examples
+# Gallery — kofem.org/examples/
 
-Generators for the analyses shipped in `web/public/examples/`. Each writes a
-`.vtu` plus its entry in `examples.json`; `generate.mjs` runs them all.
+Everything on the public [examples gallery](https://kofem.org/examples/).
+
+- `site/` is served verbatim at `/examples/`: the gallery page (`index.html`),
+  its manifest `examples.json`, and the `<id>.vtu` (plus optional `<id>.step`)
+  that "Open in KoFEM web" loads through `/app/?example=<id>`. Vite serves it in
+  dev and copies it into `dist/examples/` on build (`web/vite.config.ts`).
+- The generators here write `site/`. Never hand-edit a `.vtu` or
+  `examples.json`; change the generator and re-run it:
+
+| Generator                       | Examples                        | Run (in `web/`)                              |
+| ------------------------------- | ------------------------------- | -------------------------------------------- |
+| `generate.mjs` + `examples.mjs` | the hex-mesh benchmarks         | `bun run examples:generate`                  |
+| `generate-plate-hole-shell.mjs` | plate with a hole, shells       | `bun run examples:generate-plate-hole-shell` |
+| `generate-mbb-topopt.mjs`       | MBB beam, topology optimization | `bun run examples:generate-mbb-topopt`       |
 
 ## The MBB beam (topology optimization)
 

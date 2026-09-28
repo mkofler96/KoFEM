@@ -5,7 +5,7 @@
 // gallery: the result is not validated yet (see README.md). It writes
 // crane-hook-shell.vtu and the gallery card crane-hook-shell.card.json next to
 // this file; promoting it back to the gallery means moving the .vtu into
-// web/public/examples/, copying the STEP there as crane-hook-shell.step, and
+// examples/gallery/site/, copying the STEP there as crane-hook-shell.step, and
 // appending the card to examples.json.
 //
 //   bun examples/unvalidated/crane-hook/generate-crane-shell.mjs

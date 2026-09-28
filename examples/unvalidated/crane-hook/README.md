@@ -9,7 +9,7 @@ The crane hook assembly from `test_files/full-crane-hook.step`. It used to be on
 the [/examples/ gallery](https://kofem.org/examples/) and was taken off because
 the result is **not trusted yet**: there is a suspected error that has not been
 found. Nothing here is served on kofem.org. It moves back to
-`examples/web-examples/` only once the result is validated against a reference.
+`examples/gallery/` only once the result is validated against a reference.
 
 | File                       | What it is                                                                                                                                          |
 | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |

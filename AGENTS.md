@@ -177,15 +177,19 @@ entry on the public gallery at **https://kofem.org/examples/** — a pre-solved
 model you can rotate in the browser and open with "Open in KoFEM web". Not a
 validation case, not a script under `examples/shell-coupling/`, not a test fixture.
 
-An example is made of these pieces; a change usually touches all of them:
+All of it lives in `examples/gallery/` — see its `README.md`:
 
-| Piece                           | Where                                                                                                                        |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Generator (the source of truth) | `examples/web-examples/` — `examples.mjs` for the hex-mesh examples, `generate-*.mjs` for the rest; notes in its `README.md` |
-| Shipped output (generated)      | `web/public/examples/<id>.vtu`, optional `<id>.step`, and the entry in `examples.json`                                       |
-| Gallery page                    | `web/examples/index.html` (renders `examples.json`)                                                                          |
-| Opening it in the app           | `/app/?example=<id>` → `useExampleFromUrl` in `web/src/App.tsx`                                                              |
-| Test                            | `web/tests/example-load.spec.ts`                                                                                             |
+| Piece                            | Where                                                                                                |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Generators (the source of truth) | `examples/gallery/` — `examples.mjs` for the hex-mesh examples, `generate-*.mjs` for the rest        |
+| What kofem.org/examples/ serves  | `examples/gallery/site/`: `index.html` (the page), `examples.json`, `<id>.vtu`, optional `<id>.step` |
+| Opening it in the app            | `/app/?example=<id>` → `useExampleFromUrl` in `web/src/App.tsx`                                      |
+| Test                             | `web/tests/example-load.spec.ts`                                                                     |
+
+`site/` is served at `/examples/` by `web/vite.config.ts` (dev middleware, and a
+copy into `dist/examples/` on build) and reaches the Docker image as the named
+build context `gallery`. There is no `web/examples/` or `web/public/examples/`;
+do not recreate them.
 
 Change the generator and re-run it (`bun run examples:generate` or the specific
 `examples:generate-*` script in `web/package.json`) — never hand-edit the `.vtu`
@@ -195,14 +199,13 @@ or `examples.json`. Then check the result in the gallery and in the app.
 made it, because their result is not trusted yet (the crane hook). Nothing there
 is served on kofem.org; tests that still need one of its files serve it through
 `web/tests/fixtures/unvalidated-examples.ts`. An example goes back to
-`examples/web-examples/` only once its result is validated — never move one onto
-the gallery without the user asking.
+`examples/gallery/` only once its result is validated — never move one onto the
+gallery without the user asking.
 
 Everything else under `examples/` is internal: `validation/` holds regression
-benchmarks, `shell-coupling/` and `topopt-shell/` hold dev scripts, and
-`nastran/` holds Nastran bulk-data (`.bdf`) inputs. Touch those only when the
-request names them explicitly. Input decks are Nastran only — do not add Abaqus
-`.inp` files or an Abaqus reader.
+benchmarks, `shell-coupling/` and `topopt-shell/` hold dev scripts. Touch those
+only when the request names them explicitly. Do not add Abaqus `.inp` input
+files or an Abaqus reader (licensing).
 
 ## Code Style
 

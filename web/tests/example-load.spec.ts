@@ -446,7 +446,7 @@ test("the MBB topology example opens ready to optimize and re-mesh", async ({
   test.setTimeout(60_000);
 
   // mbb-beam-topopt is built with KoFEM's own pipeline (STEP → OCCT → Netgen,
-  // examples/web-examples/generate-mbb-topopt.mjs). It must open in the Optimize
+  // examples/gallery/generate-mbb-topopt.mjs). It must open in the Optimize
   // step with its settings, supports and face load restored, carry the CAD face
   // ids for picking, and get its STEP back so the model can be re-meshed.
   await page.goto("/app/?example=mbb-beam-topopt");
@@ -509,7 +509,9 @@ let EXAMPLE_ANALYSES: { id: string; showcase?: boolean; appId?: string }[];
 
 test.beforeAll(async () => {
   const manifest: { id: string; showcase?: boolean; appId?: string }[] =
-    JSON.parse(await readFile("public/examples/examples.json", "utf8"));
+    JSON.parse(
+      await readFile("../examples/gallery/site/examples.json", "utf8"),
+    );
   // Showcase entries whose "Open in KoFEM web" points elsewhere have no
   // <id>.vtu of their own, so they can't be screenshotted. A showcase entry that opens ITSELF
   // (appId === id, e.g. the shell plate) has one and is included.

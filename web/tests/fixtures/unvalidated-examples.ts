@@ -3,7 +3,7 @@
 
 // Serves the analyses in examples/unvalidated/ at the URLs the app's
 // `/app/?example=<id>` loader fetches. They are regression fixtures, not
-// gallery examples, so they are not in web/public/ and kofem.org never ships
+// gallery examples, so they are not in examples/gallery/site/ and kofem.org never ships
 // them (examples/unvalidated/crane-hook/README.md).
 
 import type { Page } from "@playwright/test";
