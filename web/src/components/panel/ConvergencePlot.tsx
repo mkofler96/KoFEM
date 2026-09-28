@@ -3,8 +3,10 @@
 
 // Convergence history for a topology-optimization run (KOF-233): compliance and
 // volume fraction vs iteration — the objective/constraint pair of either
-// formulation (KOF-235) — as a lightweight inline SVG —
-// no charting dependency. Drives both the live curve in the Optimize panel
+// formulation (KOF-235) — as a lightweight inline SVG, no charting dependency.
+// A stress-constrained run (KOF-236) adds the aggregated stress the constraint
+// bounds next to the true max von Mises stress it approximates, plus the σ_allow
+// line, so the gap between the smooth aggregate and the real peak is visible. Drives both the live curve in the Optimize panel
 // (parsed from streamed logs) and the final curve in Results (from the returned
 // history); both reduce to ConvergencePoint[].
 
@@ -19,6 +21,9 @@ const PAD_BOTTOM = 20;
 
 const OBJ_COLOR = "#4e79a7"; // compliance — normalized to its range
 const VOL_COLOR = "#e15759"; // volume fraction — absolute 0..1
+const STRESS_COLOR = "#59a14f"; // aggregated stress — shared stress range
+const MAX_STRESS_COLOR = "#f28e2b"; // true max stress — same range, dashed
+const LIMIT_COLOR = "#9ca3af"; // σ_allow
 
 interface Pt {
   x: number;
@@ -65,9 +70,12 @@ function toPath(coords: Pt[]): string {
 export function ConvergencePlot({
   points,
   live = false,
+  stressLimit = NaN,
 }: {
   points: ConvergencePoint[];
   live?: boolean;
+  // σ_allow of a stress-constrained run, drawn as a reference line; NaN = none.
+  stressLimit?: number;
 }) {
   if (points.length === 0) return null;
 
@@ -85,6 +93,40 @@ export function ConvergencePlot({
   );
   const volCoords = scaledCoords(points, (point) => point.volume, 0, 1);
 
+  // Stress series, when the run carried a stress constraint. The aggregate and
+  // the true max share one range (with σ_allow) so their gap reads directly.
+  const stressPoints = points.filter(
+    (point) => point.stress !== undefined && point.maxStress !== undefined,
+  );
+  const hasStress = stressPoints.length > 0;
+  const hasLimit = hasStress && Number.isFinite(stressLimit) && stressLimit > 0;
+  const stressValues = stressPoints.flatMap((point) => [
+    point.stress as number,
+    point.maxStress as number,
+  ]);
+  if (hasLimit) stressValues.push(stressLimit);
+  const stressMin = hasStress ? Math.min(...stressValues) : 0;
+  const stressMax = hasStress ? Math.max(...stressValues) : 1;
+  const stressCoords = scaledCoords(
+    stressPoints,
+    (point) => point.stress as number,
+    stressMin,
+    stressMax,
+  );
+  const maxStressCoords = scaledCoords(
+    stressPoints,
+    (point) => point.maxStress as number,
+    stressMin,
+    stressMax,
+  );
+  const limitY =
+    PAD_TOP +
+    (1 -
+      (stressLimit - stressMin) /
+        (stressMax > stressMin ? stressMax - stressMin : 1)) *
+      (PLOT_H - PAD_TOP - PAD_BOTTOM);
+  const lastStress = hasStress ? stressPoints[stressPoints.length - 1] : null;
+
   const fmt = (val: number) =>
     Math.abs(val) >= 1000 || (val !== 0 && Math.abs(val) < 0.01)
       ? val.toExponential(2)
@@ -96,7 +138,11 @@ export function ConvergencePlot({
         viewBox={`0 0 ${PLOT_W} ${PLOT_H}`}
         width="100%"
         role="img"
-        aria-label="Convergence history: compliance and volume fraction vs iteration"
+        aria-label={
+          hasStress
+            ? "Convergence history: compliance, volume fraction and stress vs iteration"
+            : "Convergence history: compliance and volume fraction vs iteration"
+        }
         style={{ display: "block" }}
       >
         {/* plot frame */}
@@ -120,6 +166,34 @@ export function ConvergencePlot({
           stroke={VOL_COLOR}
           strokeWidth={1.5}
         />
+        {hasLimit && (
+          <line
+            data-testid="convergence-stress-limit"
+            x1={PAD_LEFT}
+            x2={PLOT_W - PAD_RIGHT}
+            y1={limitY}
+            y2={limitY}
+            stroke={LIMIT_COLOR}
+            strokeDasharray="2 3"
+          />
+        )}
+        {hasStress && (
+          <>
+            <path
+              d={toPath(stressCoords)}
+              fill="none"
+              stroke={STRESS_COLOR}
+              strokeWidth={1.5}
+            />
+            <path
+              d={toPath(maxStressCoords)}
+              fill="none"
+              stroke={MAX_STRESS_COLOR}
+              strokeWidth={1.2}
+              strokeDasharray="4 2"
+            />
+          </>
+        )}
         {/* Point markers: a single-iteration run (maxIterations=1 or convergence
             on the first pass, and the first live frame) has no line segment to
             draw, so the dot is what makes that data point visible. */}
@@ -150,6 +224,24 @@ export function ConvergencePlot({
         <span style={{ color: VOL_COLOR }}>
           ■ Volume fraction {points[points.length - 1].volume.toFixed(3)}
         </span>
+        {lastStress && (
+          <>
+            <span style={{ color: STRESS_COLOR }}>
+              ■ Aggregated σ {fmt(lastStress.stress as number)}
+            </span>
+            <span
+              style={{ color: MAX_STRESS_COLOR }}
+              data-testid="convergence-max-stress"
+            >
+              ■ True max σ {fmt(lastStress.maxStress as number)}
+            </span>
+            {hasLimit && (
+              <span style={{ color: LIMIT_COLOR }}>
+                ┄ σ_allow {fmt(stressLimit)}
+              </span>
+            )}
+          </>
+        )}
       </div>
     </div>
   );

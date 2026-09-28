@@ -3,12 +3,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useModelStore } from "../store/modelStore";
-import type { TopOptNumericField } from "../store/modelStore";
+import type {
+  TopOptNumericField,
+  TopOptSettingsState,
+} from "../store/modelStore";
 import type {
   TopOptHistoryEntry,
   TopOptSettings,
 } from "../wasm/pkg/kofem_wasm.js";
 import { fmt } from "../lib/modelDisplay";
+import { resultUnit } from "../lib/resultField";
 import {
   resetWorker,
   sendToWorker,
@@ -26,17 +30,10 @@ export type FieldErrors = Partial<Record<TopOptNumericField, string>>;
 // relevant field is valid, plus a per-field error map for inline messages.
 // House rule (no silent fallbacks): an unparseable or out-of-range field is an
 // explicit error and blocks the run, never a quietly substituted default.
-function parseSettings(state: {
-  method: NonNullable<TopOptSettings["method"]>;
-  objective: TopOptSettings["objective"];
-  volumeFraction: string;
-  complianceLimit: string;
-  penalty: string;
-  filterRadius: string;
-  moveLimit: string;
-  maxIterations: string;
-  tolerance: string;
-}): { settings: TopOptSettings | null; errors: FieldErrors } {
+function parseSettings(state: TopOptSettingsState): {
+  settings: TopOptSettings | null;
+  errors: FieldErrors;
+} {
   const errors: FieldErrors = {};
 
   // Validate one numeric field: parse it, apply the predicate, and record a
@@ -57,6 +54,9 @@ function parseSettings(state: {
   // The level set has no SIMP penalty and no MMA move limit; those fields are
   // hidden in its panel, so they are neither validated nor sent.
   const simp = state.method === "simp";
+  // The max-stress constraint is SIMP-only too (KOF-236): hidden in the
+  // level-set panel, so neither validated nor sent there.
+  const stressOn = simp && state.stressConstraint;
   const penalty = simp
     ? num("penalty", state.penalty, (value) => value >= 1, "penalty p ≥ 1")
     : undefined;
@@ -96,14 +96,36 @@ function parseSettings(state: {
       "volume fraction in (0, 1)",
     );
     constraints.volumeFraction = volfrac;
+  } else if (stressOn && state.complianceLimit.trim() === "") {
+    // A stress-bounded min_volume run needs no compliance limit (KOF-236): a
+    // blank field means "none", which the engine accepts with maxStress present.
   } else {
     const limit = num(
       "complianceLimit",
       state.complianceLimit,
       (value) => value > 0,
-      "compliance limit > 0",
+      stressOn
+        ? "compliance limit > 0, or blank for none"
+        : "compliance limit > 0",
     );
     constraints.complianceLimit = limit;
+  }
+
+  let stress: TopOptSettings["stress"];
+  if (stressOn) {
+    constraints.maxStress = num(
+      "maxStress",
+      state.maxStress,
+      (value) => value > 0,
+      "max stress σ_allow > 0",
+    );
+    const aggregationP = num(
+      "stressP",
+      state.stressP,
+      (value) => value >= 1,
+      "aggregation P ≥ 1",
+    );
+    stress = { aggregation: state.stressAggregation, p: aggregationP };
   }
 
   if (Object.keys(errors).length > 0) return { settings: null, errors };
@@ -112,6 +134,7 @@ function parseSettings(state: {
       method: state.method,
       objective: state.objective,
       constraints,
+      ...(stress ? { stress } : {}),
       penalty,
       filterRadius,
       moveLimit,
@@ -194,6 +217,16 @@ export function useTopOpt() {
   // eslint-disable-next-line kofem/no-silent-fallback -- a constraint without prescribedValue is a homogeneous fixed BC, i.e. u = 0 by definition
   const hasPrescribed = constraints.some((c) => (c.prescribedValue ?? 0) !== 0);
 
+  // The stress constraint is implemented for the plain solid SIMP entry only.
+  // Shells, and any coupling (which routes even an all-solid model to the
+  // coupled optimizer), reach entries that reject it (topology_shell_entry.cpp),
+  // so block the run in pre-flight rather than let it fail in the worker. The
+  // level-set panel hides the constraint and does not send it.
+  const stressOnShell =
+    topOpt.method === "simp" &&
+    topOpt.stressConstraint &&
+    (shellElements.length > 0 || couplingGroups.length > 0);
+
   const { settings, errors } = parseSettings(topOpt);
   const settingsOk = settings !== null;
   // The level-set optimizer (engine/cpp/topology_levelset.h) runs on solid
@@ -215,6 +248,7 @@ export function useTopOpt() {
     bcOk &&
     loadOk &&
     !hasPrescribed &&
+    !stressOnShell &&
     settingsOk;
 
   function optimize() {
@@ -283,11 +317,18 @@ export function useTopOpt() {
     ).__kofemTriggerOptimize = optimize;
   });
 
+  const stressSummary = topOpt.stressConstraint
+    ? ` · σ_vm ≤ ${topOpt.maxStress} ${resultUnit("Von Mises stress")}`
+    : "";
+  const complianceSummary =
+    topOpt.complianceLimit.trim() === ""
+      ? ""
+      : ` · compliance ≤ ${topOpt.complianceLimit}`;
   const settingsSummary = levelSet
     ? `Level set · minimize compliance · volfrac ${topOpt.volumeFraction} · ℓ=${topOpt.filterRadius}`
     : topOpt.objective === "min_compliance"
-      ? `Minimize compliance · volfrac ${topOpt.volumeFraction} · p=${topOpt.penalty} · r_min=${topOpt.filterRadius}`
-      : `Minimize volume · compliance ≤ ${topOpt.complianceLimit} · p=${topOpt.penalty} · r_min=${topOpt.filterRadius}`;
+      ? `Minimize compliance · volfrac ${topOpt.volumeFraction}${stressSummary} · p=${topOpt.penalty} · r_min=${topOpt.filterRadius}`
+      : `Minimize volume${complianceSummary}${stressSummary} · p=${topOpt.penalty} · r_min=${topOpt.filterRadius}`;
 
   // What the optimizer treats as design variables (KOF-237): every solid tet and
   // shell facet carries a density; the RBE3/coupling DOFs of a coupled model do
@@ -376,6 +417,11 @@ export function useTopOpt() {
     checks.push([
       false,
       "Remove non-zero prescribed displacements — topology optimization supports fixed (zero) supports only",
+    ]);
+  if (stressOnShell)
+    checks.push([
+      false,
+      "The max-stress constraint supports all-solid models without couplings only — turn it off to optimize this shell/coupled model",
     ]);
 
   return {

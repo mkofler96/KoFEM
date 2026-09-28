@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdio>
 #include <stdexcept>
+#include <utility>
 
 namespace kofem::topopt {
 
@@ -104,6 +105,46 @@ ElementStiffnessCache build_element_stiffness_cache(mfem::FiniteElementSpace& fe
     return cache;
 }
 
+mfem::Vector solve_simp_system(mfem::FiniteElementSpace& fespace,
+                               const ElementStiffnessCache& cache,
+                               const mfem::Array<int>& ess_tdof, const mfem::Vector& rhs,
+                               const std::vector<double>& rho, double penalty,
+                               double emin_rel, double cg_rtol, int* cg_iterations) {
+    const int ne = fespace.GetNE();
+    if ((int)rho.size() != ne)
+        throw std::runtime_error(
+            "solve_simp_system: density field has " + std::to_string(rho.size()) +
+            " entries but the mesh has " + std::to_string(ne) + " elements");
+
+    std::vector<double> scale(ne);
+    for (int e = 0; e < ne; ++e)
+        scale[e] = simp_scale(rho[e], penalty, emin_rel);
+
+    // K(ρ) = Σ_e scale[e]·k0[e]. The BilinearForm takes ownership of the
+    // integrator; `scale` outlives it (declared first, destroyed last).
+    mfem::BilinearForm a(&fespace);
+    a.AddDomainIntegrator(new ScaledElementMatrixIntegrator(cache.k0, scale));
+    a.Assemble();
+
+    // Homogeneous essential BCs: x = 0 on the clamped supports (see the header
+    // for why inhomogeneous Dirichlet is excluded). FormLinearSystem eliminates
+    // those DOFs, driving them to the zero seeded here.
+    mfem::GridFunction x(&fespace);
+    x = 0.0;
+
+    // FormLinearSystem eliminates the essential DOFs into the RHS in place, so
+    // work on a copy and leave the caller's `rhs` untouched for reuse.
+    mfem::Vector b_local(rhs);
+    mfem::OperatorPtr A;
+    mfem::Vector B, X;
+    a.FormLinearSystem(ess_tdof, x, b_local, A, X, B);
+
+    const int iters = simp_cg_solve(*A.As<mfem::SparseMatrix>(), B, X, cg_rtol);
+    if (cg_iterations != nullptr) *cg_iterations = iters;
+    a.RecoverFEMSolution(X, b_local, x);
+    return x;
+}
+
 ComplianceEvaluation evaluate_compliance(mfem::FiniteElementSpace& fespace,
                                          const ElementStiffnessCache& cache,
                                          const mfem::Array<int>& ess_tdof,
@@ -117,31 +158,9 @@ ComplianceEvaluation evaluate_compliance(mfem::FiniteElementSpace& fespace,
             "evaluate_compliance: density field has " + std::to_string(rho.size()) +
             " entries but the mesh has " + std::to_string(ne) + " elements");
 
-    std::vector<double> scale(ne);
-    for (int e = 0; e < ne; ++e)
-        scale[e] = simp_scale(rho[e], penalty, emin_rel);
-
-    // K(ρ) = Σ_e scale[e]·k0[e]. The BilinearForm takes ownership of the
-    // integrator; `scale` outlives it (declared first, destroyed last).
-    mfem::BilinearForm a(&fespace);
-    a.AddDomainIntegrator(new ScaledElementMatrixIntegrator(cache.k0, scale));
-    a.Assemble();
-
-    // Homogeneous essential BCs: u = 0 on the clamped supports (see the header
-    // for why inhomogeneous Dirichlet is excluded). FormLinearSystem eliminates
-    // those DOFs, driving them to the zero seeded here.
-    mfem::GridFunction x(&fespace);
-    x = 0.0;
-
-    // FormLinearSystem eliminates the essential DOFs into the RHS in place, so
-    // work on a copy and leave the caller's `load` untouched for reuse.
-    mfem::Vector b_local(load);
-    mfem::OperatorPtr A;
-    mfem::Vector B, X;
-    a.FormLinearSystem(ess_tdof, x, b_local, A, X, B);
-
-    const int iters = simp_cg_solve(*A.As<mfem::SparseMatrix>(), B, X, cg_rtol);
-    a.RecoverFEMSolution(X, b_local, x);
+    int iters = 0;
+    mfem::Vector x = solve_simp_system(fespace, cache, ess_tdof, load, rho, penalty,
+                                       emin_rel, cg_rtol, &iters);
 
     ComplianceEvaluation ev;
     ev.dcompliance.resize(ne);
@@ -156,7 +175,7 @@ ComplianceEvaluation evaluate_compliance(mfem::FiniteElementSpace& fespace,
         x.GetSubVector(cache.vdofs[e], ue);
         const double qe = cache.k0[e].InnerProduct(ue, ue);
         ev.strain_energy[e] = qe;
-        ev.compliance += scale[e] * qe;
+        ev.compliance += simp_scale(rho[e], penalty, emin_rel) * qe;
         ev.dcompliance[e] = -simp_scale_deriv(rho[e], penalty, emin_rel) * qe;
     }
 
@@ -168,6 +187,7 @@ ComplianceEvaluation evaluate_compliance(mfem::FiniteElementSpace& fespace,
         for (int c = 0; c < dim && c < vdofs.Size(); ++c)
             ev.displacements[3 * vi + c] = x[vdofs[c]];
     }
+    ev.solution = std::move(x);
     return ev;
 }
 

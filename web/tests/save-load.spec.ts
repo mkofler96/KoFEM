@@ -135,3 +135,103 @@ test("loading a non-KoFEM file shows a clear error", async ({ page }) => {
 
   await expect.poll(() => dialogMessage).toContain("Not a KoFEM analysis file");
 });
+
+// KOF-236: the max-stress settings travel in the saved TO settings block, and a
+// file saved before they existed still loads — with the constraint off and the
+// defaults filled in — rather than being rejected.
+test("max-stress TO settings round-trip; older files load with it off", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "kofem-save-stress-"));
+
+  type TopOptState = {
+    volumeFraction: string;
+    stressConstraint: boolean;
+    maxStress: string;
+    stressAggregation: string;
+    stressP: string;
+  };
+  const readTopOpt = () =>
+    page.evaluate(
+      () =>
+        (
+          window as unknown as {
+            __kofemStore: { getState(): { topOpt: TopOptState } };
+          }
+        ).__kofemStore.getState().topOpt,
+    );
+
+  await bootstrapCantilever(page);
+  await page
+    .locator("nav")
+    .getByRole("button")
+    .filter({ hasText: "Optimize" })
+    .click();
+  await page.getByLabel("Volume frac.").fill("0.35");
+  await page.getByTestId("topopt-stress-constraint").check();
+  await page.getByLabel("σ_vm ≤").fill("250");
+  await page.getByRole("button", { name: "Advanced" }).click();
+  await page.getByRole("button", { name: "KS", exact: true }).click();
+
+  const file1 = path.join(tmpDir, "stress.vtu");
+  const saved = await saveAnalysis(page, file1);
+
+  // The KoFEM FieldData block: base64 of [u32 LE byte length][UTF-8 JSON].
+  const match = saved.match(
+    /(<DataArray[^>]*Name="KoFEM"[^>]*>)([\s\S]*?)(<\/DataArray>)/,
+  );
+  if (!match) throw new Error("saved file has no KoFEM FieldData");
+  const raw = Buffer.from(match[2].trim(), "base64");
+  const meta = JSON.parse(
+    raw.subarray(4, 4 + raw.readUInt32LE(0)).toString("utf-8"),
+  );
+  expect(meta.topOpt).toMatchObject({
+    volumeFraction: "0.35",
+    stressConstraint: true,
+    maxStress: "250",
+    stressAggregation: "ks",
+    stressP: "40",
+  });
+
+  await gotoApp(page);
+  await page.locator('input[type="file"][accept=".vtu"]').setInputFiles(file1);
+  await expect(page.getByText("Cantilever Beam")).toBeVisible();
+  expect(await readTopOpt()).toMatchObject(meta.topOpt);
+
+  // A pre-KOF-236 file: the same block without the four stress fields.
+  const stressFields = [
+    "stressConstraint",
+    "maxStress",
+    "stressAggregation",
+    "stressP",
+  ];
+  const legacyMeta = {
+    ...meta,
+    topOpt: Object.fromEntries(
+      Object.entries(meta.topOpt).filter(
+        ([field]) => !stressFields.includes(field),
+      ),
+    ),
+  };
+  const json = Buffer.from(JSON.stringify(legacyMeta), "utf-8");
+  const header = Buffer.alloc(4);
+  header.writeUInt32LE(json.length, 0);
+  const legacy = saved.replace(
+    match[0],
+    `${match[1]}${Buffer.concat([header, json]).toString("base64")}${match[3]}`,
+  );
+  const file2 = path.join(tmpDir, "legacy.vtu");
+  fs.writeFileSync(file2, legacy);
+
+  await gotoApp(page);
+  await page.locator('input[type="file"][accept=".vtu"]').setInputFiles(file2);
+  await expect(page.getByText("Cantilever Beam")).toBeVisible();
+  expect(await readTopOpt()).toMatchObject({
+    volumeFraction: "0.35",
+    stressConstraint: false,
+    maxStress: "",
+    stressAggregation: "pnorm",
+    stressP: "8",
+  });
+});

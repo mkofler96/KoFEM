@@ -2,16 +2,16 @@
 # SPDX-FileCopyrightText: 2026 Michael Kofler
 # SPDX-License-Identifier: AGPL-3.0-or-later
 
-# Build and run the native validation of the reaction–diffusion level-set
-# optimizer (engine/tests/topology_levelset_validation.cpp).
+# Build and run the native stress-constrained SIMP validation
+# (engine/tests/topology_stress_validation.cpp) — KOF-236: the FD check of the
+# aggregated-stress adjoint and the L-bracket benchmark.
 #
-# The loop (engine/cpp/topology_levelset.cpp) solves a real elastic problem every
-# iteration and compares against the SIMP loop, so — like
-# scripts/test-topology-optimize.sh — it links MFEM. The precompiled MFEM at
-# $MFEM_WASM_ROOT is a WASM (emcc) archive, so the test is compiled with em++ and
-# run under node. It is NOT run by CI (see CLAUDE.md).
+# Like scripts/test-topology-optimize.sh it links the precompiled WASM MFEM at
+# $MFEM_WASM_ROOT, so it is compiled with em++ and run under node. It is NOT run
+# by CI (see CLAUDE.md). Pass a directory to also write the L-bracket density
+# fields there as CSV for the before/after plot.
 #
-# Usage:  bash scripts/test-topology-levelset.sh
+# Usage:  bash scripts/test-topology-stress.sh [dump-dir]
 
 set -euo pipefail
 
@@ -32,7 +32,7 @@ source "$EMSDK/emsdk_env.sh" >/dev/null 2>&1
 set -u
 
 OUT_DIR="$(mktemp -d)"
-OUT="$OUT_DIR/topology_levelset_validation.js"
+OUT="$OUT_DIR/topology_stress_validation.js"
 
 em++ -std=c++17 -O2 -fexceptions \
     -I "$REPO_ROOT/engine/cpp" \
@@ -44,8 +44,7 @@ em++ -std=c++17 -O2 -fexceptions \
     "$REPO_ROOT/engine/cpp/topology_formulation.cpp" \
     "$REPO_ROOT/engine/cpp/topology_optimize.cpp" \
     "$REPO_ROOT/engine/cpp/topology_stress.cpp" \
-    "$REPO_ROOT/engine/cpp/topology_levelset.cpp" \
-    "$REPO_ROOT/engine/tests/topology_levelset_validation.cpp" \
+    "$REPO_ROOT/engine/tests/topology_stress_validation.cpp" \
     -L "$MFEM_ROOT/lib" -lmfem \
     -sDISABLE_EXCEPTION_CATCHING=0 \
     -sEXPORT_EXCEPTION_HANDLING_HELPERS=1 \
@@ -53,6 +52,7 @@ em++ -std=c++17 -O2 -fexceptions \
     -sINITIAL_MEMORY=268435456 \
     -sUSE_ZLIB=1 \
     -sENVIRONMENT=node \
+    -sNODERAWFS=1 \
     -o "$OUT"
 
-node "$OUT"
+node "$OUT" "$@"

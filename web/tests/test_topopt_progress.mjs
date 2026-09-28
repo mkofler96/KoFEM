@@ -42,6 +42,29 @@ function check(name, cond, detail = "") {
     parseTopOptLogLine("Starting topology optimization: 274 nodes") === null,
   );
   check("returns null for an empty string", parseTopOptLogLine("") === null);
+
+  check(
+    "a compliance/volume-only line carries no stress fields",
+    point !== null &&
+      point.stress === undefined &&
+      point.maxStress === undefined,
+    JSON.stringify(point),
+  );
+
+  // A stress-constrained run (KOF-236) appends the aggregated and the true max
+  // von Mises stress.
+  const stressed = parseTopOptLogLine(
+    "[topopt] it 12: c=4443.67 vol=0.5484 change=0.0065 sigma=1063.52 sigma_max=1061.9",
+  );
+  check(
+    "parses the aggregated and true max stress of a stress-constrained run",
+    stressed !== null &&
+      stressed.it === 12 &&
+      Math.abs(stressed.volume - 0.5484) < 1e-9 &&
+      Math.abs(stressed.stress - 1063.52) < 1e-9 &&
+      Math.abs(stressed.maxStress - 1061.9) < 1e-9,
+    JSON.stringify(stressed),
+  );
 }
 
 // ── convergenceFromLogs ──────────────────────────────────────────────────────
