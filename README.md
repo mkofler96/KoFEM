@@ -38,8 +38,9 @@ Option B — Build it yourself
 # Fetch the prebuilt engine into web/src/wasm/pkg/ (see Development below).
 bash scripts/fetch-wasm-engine.sh
 
-# Build context is the web/ directory (Dockerfile lives at web/Dockerfile).
-docker build -t kofem-web ./web
+# Build context is web/ (Dockerfile lives at web/Dockerfile), plus the /examples/
+# gallery as the named context "gallery". Run from the repository root.
+docker build -t kofem-web --build-context gallery=./examples/gallery/site ./web
 docker run kofem-web
 ```
 

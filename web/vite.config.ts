@@ -80,6 +80,14 @@ const serveGallery = (): PluginOption => ({
   apply: "serve",
   configureServer(server) {
     server.middlewares.use("/examples", (req, res, next) => {
+      const [original, query] = (req.originalUrl ?? "").split("?");
+      // The page fetches "./examples.json"; served at "/examples" that resolves
+      // to "/examples.json". nginx redirects the bare path too.
+      if (original === "/examples") {
+        res.statusCode = 301;
+        res.setHeader("Location", `/examples/${query ? `?${query}` : ""}`);
+        return res.end();
+      }
       const path = decodeURIComponent((req.url ?? "/").split("?")[0]);
       const rel = path === "/" ? "index.html" : path.slice(1);
       const file = join(GALLERY_SITE, rel);
