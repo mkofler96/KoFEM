@@ -769,9 +769,8 @@
         const el = document.createElement("article");
         el.className = "card";
         // "Open in KoFEM web" opens the editable analysis. Benchmark cards open
-        // their own id; a showcase card (e.g. the coupled crane, which the app
-        // can't re-solve as shells) can point `appId` at a related openable model
-        // — the crane assembly — or omit the link entirely.
+        // their own id; a showcase card sets `appId` — its own id, or a related
+        // openable model — or omits the link entirely.
         const appId = ex.appId ?? (ex.showcase ? null : ex.id);
         const openLink = !appId
           ? ""

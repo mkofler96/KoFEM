@@ -1,12 +1,13 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Loads the crane-hook example — a real multibody assembly (three CAD solids)
+// Loads the unvalidated full-crane-hook fixture — a real multibody assembly (three CAD solids)
 // with constraints and loads — through the ?example= deep-link, and verifies
 // the multibody analysis restores intact: mesh, per-body properties (issue
 // #353), and the saved boundary conditions / loads.
 
 import { test, expect } from "./coverage";
+import { serveUnvalidatedExample } from "./fixtures/unvalidated-examples";
 
 interface CraneHookState {
   modelName: string;
@@ -60,6 +61,7 @@ test("?example=full-crane-hook restores the multibody analysis", async ({
 }) => {
   test.setTimeout(120_000);
 
+  await serveUnvalidatedExample(page, "full-crane-hook");
   await page.goto("/app/?example=full-crane-hook");
   await expect(page.locator("nav")).toBeVisible();
 

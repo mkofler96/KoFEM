@@ -20,7 +20,7 @@
     "prevalidate": "bun run wasm:fetch",
     "validate": "bun ../examples/validation/run.mjs",
     "examples:generate": "bun ../examples/web-examples/generate.mjs",
-    "examples:generate-crane-shell": "bun ../examples/web-examples/generate-crane-shell.mjs",
+    "examples:generate-crane-shell": "bun ../examples/unvalidated/crane-hook/generate-crane-shell.mjs",
     "examples:generate-plate-hole-shell": "bun ../examples/web-examples/generate-plate-hole-shell.mjs",
     "examples:generate-mbb-topopt": "bun ../examples/web-examples/generate-mbb-topopt.mjs",
     "pretest": "bun run wasm:fetch",

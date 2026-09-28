@@ -1,18 +1,16 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Generates the interactive gallery card for the coupled solid+shell crane
-// showcase and merges it into web/public/examples/examples.json (the manifest
-// the /examples/ gallery renders). Unlike the benchmark examples, this one meshes
-// a STEP assembly, turns the thin holder into shells, and solves the coupled
-// system — so it has its own generator rather than living in examples.mjs.
+// Generates the coupled solid+shell crane analysis. NOT on the /examples/
+// gallery: the result is not validated yet (see README.md). It writes
+// crane-hook-shell.vtu and the gallery card crane-hook-shell.card.json next to
+// this file; promoting it back to the gallery means moving the .vtu into
+// web/public/examples/, copying the STEP there as crane-hook-shell.step, and
+// appending the card to examples.json.
 //
-//   bun examples/web-examples/generate-crane-shell.mjs
-//
-// It appends/replaces the "crane-hook-shell" entry, leaving the benchmark
-// entries produced by generate.mjs untouched.
+//   bun examples/unvalidated/crane-hook/generate-crane-shell.mjs
 
-import { readFileSync, writeFileSync, copyFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
@@ -22,11 +20,10 @@ import {
   shellWallTets,
   buildCoupledModel,
   dropCouplingsOnFixedNodes,
-} from "../shell-coupling/lib.mjs";
+} from "../../shell-coupling/lib.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const STEP = join(here, "../../test_files/full-crane-hook.step");
-const outDir = join(here, "../../web/public/examples");
+const STEP = join(here, "../../../test_files/full-crane-hook.step");
 const STEEL = { young_modulus: 210000, poisson_ratio: 0.3 };
 const ALUMINIUM = { young_modulus: 70000, poisson_ratio: 0.33 };
 // The real part: the holder and the cylinder are steel, the hook is aluminium.
@@ -548,21 +545,11 @@ const entry = {
   },
 };
 
-writeFileSync(join(outDir, "crane-hook-shell.vtu"), buildCraneVtu());
-
-// Ship the source STEP next to the .vtu so "Open in KoFEM web" can re-mesh and
-// re-solve the model (App.tsx restores stepBytes from /examples/<id>.step). The
-// saved .vtu itself carries no STEP.
-copyFileSync(STEP, join(outDir, "crane-hook-shell.step"));
-
-const manifestPath = join(outDir, "examples.json");
-const manifest = JSON.parse(readFileSync(manifestPath, "utf8")).filter(
-  (e) => e.id !== entry.id,
-);
-manifest.push(entry);
-writeFileSync(manifestPath, JSON.stringify(manifest));
+writeFileSync(join(here, "crane-hook-shell.vtu"), buildCraneVtu());
+const cardPath = join(here, "crane-hook-shell.card.json");
+writeFileSync(cardPath, JSON.stringify(entry));
 console.log(
   `crane-hook-shell: ${r.iterations} it, max |u| ${magMax.toPrecision(3)} mm, ` +
     `${model.tets.length / 4} tets + ${model.triangles.length / 3} shells, ` +
-    `${triangles.length / 3} surface tris → ${manifestPath} + crane-hook-shell.vtu`,
+    `${triangles.length / 3} surface tris → crane-hook-shell.vtu + ${cardPath}`,
 );

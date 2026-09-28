@@ -191,9 +191,18 @@ Change the generator and re-run it (`bun run examples:generate` or the specific
 `examples:generate-*` script in `web/package.json`) — never hand-edit the `.vtu`
 or `examples.json`. Then check the result in the gallery and in the app.
 
+`examples/unvalidated/` holds models that were taken off the gallery, or never
+made it, because their result is not trusted yet (the crane hook). Nothing there
+is served on kofem.org; tests that still need one of its files serve it through
+`web/tests/fixtures/unvalidated-examples.ts`. An example goes back to
+`examples/web-examples/` only once its result is validated — never move one onto
+the gallery without the user asking.
+
 Everything else under `examples/` is internal: `validation/` holds regression
-benchmarks, `shell-coupling/`, `topopt-shell/` and `inp/` hold dev scripts and
-inputs. Touch those only when the request names them explicitly.
+benchmarks, `shell-coupling/` and `topopt-shell/` hold dev scripts, and
+`nastran/` holds Nastran bulk-data (`.bdf`) inputs. Touch those only when the
+request names them explicitly. Input decks are Nastran only — do not add Abaqus
+`.inp` files or an Abaqus reader.
 
 ## Code Style
 

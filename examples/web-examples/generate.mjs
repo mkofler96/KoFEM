@@ -382,8 +382,8 @@ for (const ex of examples) {
   );
 }
 
-// Preserve showcase entries (e.g. the coupled crane written by
-// generate-crane-shell.mjs) so regenerating the benchmarks doesn't drop them.
+// Preserve showcase entries (e.g. the shell plate written by
+// generate-plate-hole-shell.mjs) so regenerating the benchmarks doesn't drop them.
 const manifestPath = join(outDir, "examples.json");
 const showcase = existsSync(manifestPath)
   ? JSON.parse(readFileSync(manifestPath, "utf8")).filter((e) => e.showcase)

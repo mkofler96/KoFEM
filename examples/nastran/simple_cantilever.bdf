@@ -1,0 +1,44 @@
+$ 12 grids, 2 CHEXA elements
+$ Steel 100×100 mm square cross-section, L=1 m
+$ Fixed left face (x=0), Fy=-10 kN distributed over right face (x=1)
+$ Analytical tip deflection: delta = PL^3/(3EI) = -1.587e-4 m
+$ Units: SI (m, N, Pa, kg/m^3). Free-field MSC/NX Nastran bulk data.
+$
+SOL 101
+CEND
+TITLE = KoFEM simple cantilever, 2x1x1 CHEXA
+SUBCASE 1
+  SPC = 1
+  LOAD = 1
+  DISPLACEMENT = ALL
+  STRESS = ALL
+BEGIN BULK
+$ Steel
+MAT1,1,2.1e+11,,0.3,7850
+PSOLID,1,1
+$ Grids
+GRID,1,,0,0,0
+GRID,2,,0,0,0.1
+GRID,3,,0,0.1,0
+GRID,4,,0,0.1,0.1
+GRID,5,,0.5,0,0
+GRID,6,,0.5,0,0.1
+GRID,7,,0.5,0.1,0
+GRID,8,,0.5,0.1,0.1
+GRID,9,,1,0,0
+GRID,10,,1,0,0.1
+GRID,11,,1,0.1,0
+GRID,12,,1,0.1,0.1
+$ Elements (CHEXA corner order matches the fixture meshes)
+CHEXA,1,1,1,5,7,3,2,6
+,8,4
+CHEXA,2,1,5,9,11,7,6,10
+,12,8
+$ Fixed face: translations 1-3
+SPC1,1,123,1,2,3,4
+$ Tip load, split equally over the load-face grids
+FORCE,1,9,0,2500,0,-1,0
+FORCE,1,10,0,2500,0,-1,0
+FORCE,1,11,0,2500,0,-1,0
+FORCE,1,12,0,2500,0,-1,0
+ENDDATA

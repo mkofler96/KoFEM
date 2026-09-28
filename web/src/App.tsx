@@ -35,7 +35,7 @@ function useExampleFromUrl() {
 
         // A saved .vtu carries no STEP, so loadAnalysis drops stepBytes and the
         // loaded model can't be re-meshed. Examples that ship their source CAD
-        // (e.g. crane-hook-shell.step) restore it here so the user can re-mesh
+        // (e.g. mbb-beam-topopt.step) restore it here so the user can re-mesh
         // and re-solve. Procedurally-generated benchmarks have no .step: a 404
         // (or dev-server SPA fallback to index.html) fails the ISO-10303-21
         // header check and the model simply stays non-re-meshable.

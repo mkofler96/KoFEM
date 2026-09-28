@@ -3,6 +3,7 @@
 
 import { test, expect } from "./coverage";
 import { gotoApp } from "./fixtures/app";
+import { serveUnvalidatedExample } from "./fixtures/unvalidated-examples";
 import { readFile } from "node:fs/promises";
 
 // Coverage for the `?example=<id>` deep-link (App.tsx useExampleFromUrl), the
@@ -220,6 +221,7 @@ test("a mixed shell/solid (CTRIA3 + CTETRA) example re-solves through the couple
   const logs: string[] = [];
   page.on("console", (msg) => logs.push(msg.text()));
 
+  await serveUnvalidatedExample(page, "crane-hook-shell");
   await page.goto("/app/?example=crane-hook-shell");
   await expect(page.locator("nav")).toBeVisible();
   await page.waitForFunction(() =>
@@ -301,11 +303,12 @@ test("a STEP-backed example (crane) restores its geometry and re-meshes", async 
 }) => {
   test.setTimeout(180_000);
 
-  // The crane showcase ships its source STEP next to the .vtu. Loading it must
+  // The crane fixture ships its source STEP next to the .vtu. Loading it must
   // restore stepBytes — a saved .vtu carries none, so loadAnalysis drops them —
   // so the loaded model is re-meshable instead of hitting the "original STEP file
   // is no longer available" guard. Procedural benchmarks (cantilever below) have
   // no .step and correctly stay non-re-meshable.
+  await serveUnvalidatedExample(page, "crane-hook-shell");
   await page.goto("/app/?example=crane-hook-shell");
   await expect(page.locator("nav")).toBeVisible();
   await page.waitForFunction(() =>
@@ -507,9 +510,8 @@ let EXAMPLE_ANALYSES: { id: string; showcase?: boolean; appId?: string }[];
 test.beforeAll(async () => {
   const manifest: { id: string; showcase?: boolean; appId?: string }[] =
     JSON.parse(await readFile("public/examples/examples.json", "utf8"));
-  // Showcase entries whose "Open in KoFEM web" points elsewhere (e.g. the
-  // coupled crane, which opens its solid assembly) have no <id>.vtu of their
-  // own, so they can't be screenshotted. A showcase entry that opens ITSELF
+  // Showcase entries whose "Open in KoFEM web" points elsewhere have no
+  // <id>.vtu of their own, so they can't be screenshotted. A showcase entry that opens ITSELF
   // (appId === id, e.g. the shell plate) has one and is included.
   EXAMPLE_ANALYSES = manifest.filter(
     (entry) => entry.showcase !== true || entry.appId === entry.id,
