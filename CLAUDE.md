@@ -170,6 +170,31 @@ The surface mesh comes from the **geometry**, not from the volume mesh. It is ei
 - **The pipeline:** geometry → tessellation (display) → surface mesh (from geometry, input to Netgen) → volume mesh (FEM) → solve. Tessellation serves display; the volume mesh is what the solver operates on.
 - In the UI the three viewport representations map to: **Geometry** shows the OCCT tessellation, **Surface Mesh** shows the boundary triangulation of the FEM model, **Volume Mesh** shows all tetrahedral edges.
 
+## "Example" means the kofem.org/examples/ gallery
+
+When the user asks to **add, modify, fix or remove an example**, they mean an
+entry on the public gallery at **https://kofem.org/examples/** — a pre-solved
+model you can rotate in the browser and open with "Open in KoFEM web". Not a
+validation case, not a script under `examples/shell-coupling/`, not a test fixture.
+
+An example is made of these pieces; a change usually touches all of them:
+
+| Piece                           | Where                                                                                                                        |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Generator (the source of truth) | `examples/web-examples/` — `examples.mjs` for the hex-mesh examples, `generate-*.mjs` for the rest; notes in its `README.md` |
+| Shipped output (generated)      | `web/public/examples/<id>.vtu`, optional `<id>.step`, and the entry in `examples.json`                                       |
+| Gallery page                    | `web/examples/index.html` (renders `examples.json`)                                                                          |
+| Opening it in the app           | `/app/?example=<id>` → `useExampleFromUrl` in `web/src/App.tsx`                                                              |
+| Test                            | `web/tests/example-load.spec.ts`                                                                                             |
+
+Change the generator and re-run it (`bun run examples:generate` or the specific
+`examples:generate-*` script in `web/package.json`) — never hand-edit the `.vtu`
+or `examples.json`. Then check the result in the gallery and in the app.
+
+Everything else under `examples/` is internal: `validation/` holds regression
+benchmarks, `shell-coupling/`, `topopt-shell/` and `inp/` hold dev scripts and
+inputs. Touch those only when the request names them explicitly.
+
 ## Code Style
 
 - Before committing, always run `cargo fmt` and `cargo clippy`
