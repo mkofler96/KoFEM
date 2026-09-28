@@ -16,13 +16,17 @@
 //
 // Routes both compliance/volume formulations — min_compliance (KOF-230) and
 // min_volume (KOF-235) — each optionally bounded by a maximum von Mises stress
-// (constraints.maxStress, KOF-236).
+// (constraints.maxStress, KOF-236). With `method: "level_set"` it runs the
+// reaction–diffusion level-set optimizer (topology_levelset.h) instead, which
+// additionally returns the nodal level set φ so the viewport can draw a smooth
+// φ = 0 boundary; that method is minimum-compliance only, without a stress limit.
 
 #include "topology_simp.h"
 
 #include "fem_bc_io.h"
 #include "fem_mesh_io.h"
 #include "json_util.h"
+#include "topology_levelset.h"
 #include "topology_optimize.h"
 #include "topology_simp_core.h"
 #include "topology_stream_js.h"
@@ -66,6 +70,78 @@ void read_index_array(const val& parent, const char* key, std::vector<int>& out)
     out.reserve(n);
     for (unsigned i = 0; i < n; ++i)
         out.push_back(arr[i].as<int>());
+}
+
+// The { density, history } object both methods return; `objective` carries the
+// minimized value and `compliance` is always c(ρ); a stress-constrained run adds
+// the aggregated `stress` and the true `max_stress` (TopOptHistoryEntry).
+val pack_history(const std::vector<kofem::topopt::TopOptHistoryEntry>& hist,
+                 kofem::topopt::TopOptObjective objective) {
+    val history = val::array();
+    for (std::size_t i = 0; i < hist.size(); ++i) {
+        const kofem::topopt::TopOptHistoryEntry& h = hist[i];
+        val entry = val::object();
+        entry.set("it", h.it);
+        entry.set("objective", kofem::topopt::objective_value(objective, h.compliance,
+                                                              h.volume));
+        entry.set("compliance", h.compliance);
+        entry.set("volume", h.volume);
+        entry.set("max_change", h.max_change);
+        // Stress fields only on a stress-constrained SIMP run (KOF-236); they stay
+        // NaN otherwise and are left out, per the optional wire fields.
+        if (!std::isnan(h.stress)) entry.set("stress", h.stress);
+        if (!std::isnan(h.max_stress)) entry.set("max_stress", h.max_stress);
+        history.set(static_cast<int>(i), entry);
+    }
+    return history;
+}
+
+// Level-set branch of optimize_topology: same prebuilt FE problem, a different
+// loop (topology_levelset.h). Returns the element densities like SIMP does, plus
+// the nodal level set φ (one Float64 per mesh vertex, in solve vertex order) the
+// viewport contours at φ = 0.
+val run_level_set(mfem::FiniteElementSpace& fespace,
+                  const kofem::topopt::ElementStiffnessCache& cache,
+                  const mfem::Array<int>& ess_tdof, const mfem::LinearForm& load,
+                  double volume_fraction, const val& topopt_js, const val& on_density) {
+    kofem::topopt::LevelSetOptConfig config;
+    config.volume_fraction = volume_fraction;
+    config.regularization_length = jdouble(topopt_js, "filterRadius", 0.0);
+    config.max_iterations = jint(topopt_js, "maxIterations", 100);
+    config.tolerance = jdouble(topopt_js, "tolerance", 0.01);
+    read_index_array(topopt_js["passive"], "solid", config.passive_solid);
+    read_index_array(topopt_js["passive"], "void", config.passive_void);
+    if (config.max_iterations <= 0)
+        return error_result("maxIterations must be a positive integer");
+    config.stream.stream_every = jint(topopt_js, "streamEvery", 1);
+    if (config.stream.stream_every <= 0)
+        return error_result("streamEvery must be a positive integer");
+    config.stream.on_density = kofem::topopt::js_density_callback(on_density);
+
+    printf("[topopt] level_set min_compliance volfrac=%.3f: %d elements, %d dofs, "
+           "l=%.4g, maxit=%d, tol=%.4g\n",
+           config.volume_fraction, fespace.GetNE(), fespace.GetTrueVSize(),
+           config.regularization_length, config.max_iterations, config.tolerance);
+    fflush(stdout);
+    log_mem("topopt: before level-set loop");
+
+    const kofem::topopt::LevelSetOptResult result =
+        kofem::topopt::optimize_level_set(fespace, cache, ess_tdof, load, config);
+
+    printf("[topopt] complete: %d iteration(s), %s; returning %d densities and %d "
+           "level-set values\n",
+           result.iterations, result.converged ? "converged" : "hit max_iterations",
+           static_cast<int>(result.density.size()),
+           static_cast<int>(result.level_set.size()));
+    fflush(stdout);
+    log_mem("topopt: complete");
+
+    val out = val::object();
+    out.set("density", float64_array(result.density));
+    out.set("levelSet", float64_array(result.level_set));
+    out.set("history",
+            pack_history(result.history, kofem::topopt::TopOptObjective::MinCompliance));
+    return out;
 }
 
 }  // namespace
@@ -178,6 +254,28 @@ val optimize_topology(val mesh_js, const std::string& mat_json,
                        : "the min_compliance objective requires constraints.volumeFraction "
                          "(the target material fraction, in (0, 1])");
 
+    // Optimization method: SIMP (element densities, the default) or the
+    // reaction–diffusion level set (nodal φ, smooth boundary). The level set is
+    // minimum-compliance only for now.
+    const std::string method = jstring(topopt_js, "method", "simp");
+    if (method != "simp" && method != "level_set")
+        return error_result("unknown topology-optimization method \"" + method +
+                            "\" — expected \"simp\" or \"level_set\"");
+    if (method == "level_set") {
+        if (present(max_stress) || present(topopt_js["stress"]))
+            return error_result(
+                "the level-set method does not support the maximum-stress constraint "
+                "(constraints.maxStress) — remove the stress limit, or use SIMP for a "
+                "stress-constrained run");
+        if (min_volume)
+            return error_result(
+                "the level-set method supports the min_compliance objective only — "
+                "switch the objective to minimum compliance, or use SIMP for "
+                "min_volume");
+        return run_level_set(fespace, cache, ess.ess_tdof, load, bound.as<double>(),
+                             topopt_js, on_density);
+    }
+
     kofem::topopt::ComplianceOptConfig config;
     if (min_volume) {
         config.objective = kofem::topopt::TopOptObjective::MinVolume;
@@ -279,22 +377,6 @@ val optimize_topology(val mesh_js, const std::string& mat_json,
     // `max_stress`. Matches the TopOptHistoryEntry wire type in kofem_wasm.d.ts.
     val out = val::object();
     out.set("density", float64_array(result.density));
-    val history = val::array();
-    for (std::size_t i = 0; i < result.history.size(); ++i) {
-        const kofem::topopt::TopOptHistoryEntry& h = result.history[i];
-        val entry = val::object();
-        entry.set("it", h.it);
-        entry.set("objective", kofem::topopt::objective_value(config.objective,
-                                                              h.compliance, h.volume));
-        entry.set("compliance", h.compliance);
-        entry.set("volume", h.volume);
-        entry.set("max_change", h.max_change);
-        if (config.stress.enabled) {
-            entry.set("stress", h.stress);
-            entry.set("max_stress", h.max_stress);
-        }
-        history.set(static_cast<int>(i), entry);
-    }
-    out.set("history", history);
+    out.set("history", pack_history(result.history, config.objective));
     return out;
 }

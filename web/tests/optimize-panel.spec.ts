@@ -224,4 +224,15 @@ test("Optimize panel: max-stress constraint", async ({ page }) => {
   });
   await expect(page.getByTestId("convergence-max-stress")).toBeVisible();
   await expect(page.getByTestId("convergence-stress-limit")).toHaveCount(1);
+
+  // The level-set method has no stress constraint: its toggle disappears, and
+  // the pre-flight summary drops the limit (it is neither validated nor sent).
+  await page
+    .locator("nav")
+    .getByRole("button")
+    .filter({ hasText: "Optimize" })
+    .click();
+  await page.getByRole("button", { name: "Level set", exact: true }).click();
+  await expect(page.getByTestId("topopt-stress-constraint")).toHaveCount(0);
+  await expect(page.getByText(/σ_vm ≤/u)).toHaveCount(0);
 });

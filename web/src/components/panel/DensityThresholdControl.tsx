@@ -16,6 +16,8 @@ export function DensityThresholdControl({
 }) {
   const threshold = useModelStore((s) => s.densityThreshold);
   const setDensityThreshold = useModelStore((s) => s.setDensityThreshold);
+  const smooth = useModelStore((s) => s.densitySmooth);
+  const setDensitySmooth = useModelStore((s) => s.setDensitySmooth);
   const visible = visibleElementCount(density, threshold);
 
   return (
@@ -46,8 +48,24 @@ export function DensityThresholdControl({
           {threshold.toFixed(2)}
         </span>
       </div>
-      <div className={styles.formNote} style={{ marginBottom: 12 }}>
-        Elements below the cutoff are hidden, revealing the optimized shape.
+      <div className={styles.formNote} style={{ marginBottom: 8 }}>
+        {smooth
+          ? "Shows the surface where the density crosses the cutoff (the level set's own boundary at 0.50)."
+          : "Elements below the cutoff are hidden, revealing the optimized shape."}
+      </div>
+      <div className={styles.segToggle} style={{ marginBottom: 12 }}>
+        <button
+          className={`${styles.segBtn} ${smooth ? styles.segBtnActive : ""}`}
+          onClick={() => setDensitySmooth(true)}
+        >
+          Smooth
+        </button>
+        <button
+          className={`${styles.segBtn} ${!smooth ? styles.segBtnActive : ""}`}
+          onClick={() => setDensitySmooth(false)}
+        >
+          Elements
+        </button>
       </div>
       <div className={styles.statRow}>
         <span className={styles.statKey}>Visible elements</span>

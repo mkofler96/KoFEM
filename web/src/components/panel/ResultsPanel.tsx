@@ -9,7 +9,13 @@ import {
   resultUnit,
 } from "../../lib/resultField";
 import type { ConvergencePoint } from "../../lib/topOptProgress";
-import { buildDensityStl, densityStlFileName } from "../../lib/densityField";
+import {
+  buildDensityStl,
+  buildSmoothDensityStl,
+  densityStlFileName,
+  levelSetField,
+  nodalDensity,
+} from "../../lib/densityField";
 import { ConvergencePlot } from "./ConvergencePlot";
 import { DensityThresholdControl } from "./DensityThresholdControl";
 import { LegendRangeControls } from "./LegendRangeControls";
@@ -18,14 +24,20 @@ import styles from "./LeftPanel.module.css";
 // The density-field result view (KOF-233): the threshold slider that filters the
 // viewport, the convergence plot from the returned history, and the run summary.
 // Shown whenever a topology-optimization run is the active result.
-function TopOptSummary({ density, history }: DensityResult) {
+function TopOptSummary({ density, levelSet, history }: DensityResult) {
   // Changing any TO setting clears the density result, so the store's settings
   // are the ones this run used — including its σ_allow (KOF-236).
   const stressConstraint = useModelStore((s) => s.topOpt.stressConstraint);
   const maxStressText = useModelStore((s) => s.topOpt.maxStress);
   const stressLimit = stressConstraint ? Number(maxStressText) : NaN;
   const threshold = useModelStore((s) => s.densityThreshold);
-  const anyKept = density.some((d) => d >= threshold);
+  const smooth = useModelStore((s) => s.densitySmooth);
+  // Something to export at this threshold: a level-set run has material where
+  // its mapped φ reaches the cutoff; otherwise some element density must.
+  const anyKept =
+    smooth && levelSet
+      ? levelSetField(levelSet).some((v) => v >= threshold)
+      : density.some((d) => d >= threshold);
   let min = Infinity;
   let max = -Infinity;
   for (const d of density) {
@@ -104,25 +116,52 @@ function TopOptSummary({ density, history }: DensityResult) {
         </div>
         <button
           className={styles.outlineBtn}
-          onClick={() => downloadDensityStl(density, threshold)}
+          onClick={() =>
+            downloadDensityStl(density, levelSet, threshold, smooth)
+          }
           disabled={!anyKept}
         >
           Export shape as STL
         </button>
         <div className={styles.formNote} style={{ marginTop: 6 }}>
-          {anyKept
-            ? "Faceted surface of the elements shown at the current threshold, in model units."
-            : "No elements are kept at this threshold — lower it to export a shape."}
+          {!anyKept
+            ? "No material is kept at this threshold — lower it to export a shape."
+            : smooth
+              ? "The smooth surface shown at the current threshold, in model units."
+              : "Faceted surface of the elements shown at the current threshold, in model units."}
         </div>
       </div>
     </div>
   );
 }
 
-// Writes the thresholded shape the viewport shows as a binary STL (KOF-239).
-function downloadDensityStl(density: Float64Array, threshold: number) {
+// Writes the thresholded shape the viewport shows as a binary STL (KOF-239):
+// the smooth surface in Smooth mode (the level set's own φ contour, or the
+// node-averaged density for SIMP — the same field DensityField draws), the
+// element boundary in Elements mode.
+function downloadDensityStl(
+  density: Float64Array,
+  levelSet: Float64Array | undefined,
+  threshold: number,
+  smooth: boolean,
+) {
   const { nodes, elements, modelName } = useModelStore.getState();
-  const stl = buildDensityStl(nodes, elements, density, threshold);
+  let stl: ArrayBuffer | null;
+  if (!smooth) stl = buildDensityStl(nodes, elements, density, threshold);
+  else {
+    const field = levelSet
+      ? levelSetField(levelSet)
+      : nodalDensity(nodes, elements, density);
+    stl = field
+      ? buildSmoothDensityStl(
+          nodes,
+          elements,
+          field,
+          threshold,
+          levelSet ? "level set" : "density",
+        )
+      : null;
+  }
   if (!stl)
     throw new Error(
       `STL export: no surface at threshold ${threshold} — the density (${density.length} values) does not match the current mesh or keeps no element`,

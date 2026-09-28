@@ -19,6 +19,11 @@ export type TopOptObjective = "min_compliance" | "min_volume";
 // (KOF-236): P-norm or Kreisselmeier–Steinhauser.
 export type StressAggregation = "pnorm" | "ks";
 
+// How the design is represented and updated: SIMP (a density per element, MMA)
+// or the reaction–diffusion level set (a nodal φ whose zero contour is the
+// boundary — smooth instead of element-wise; solid models, min compliance only).
+export type TopOptMethod = "simp" | "level_set";
+
 // The numeric settings are held as the raw strings the user typed, exactly as
 // the mesh-size fields are (KOF-222): there is no single meaningful range to
 // clamp typing to (a compliance limit spans many orders of magnitude with the
@@ -26,6 +31,7 @@ export type StressAggregation = "pnorm" | "ks";
 // round-trip through save/load without being coerced. useTopOpt parses and
 // validates them when the run starts, and refuses to run while any is invalid.
 export interface TopOptSettingsState {
+  method: TopOptMethod;
   objective: TopOptObjective;
   // Constraint for min_compliance: target volume fraction ∈ (0, 1).
   volumeFraction: string;
@@ -39,7 +45,8 @@ export interface TopOptSettingsState {
   maxStress: string;
   stressAggregation: StressAggregation;
   stressP: string;
-  // SIMP penalty p (≥ 1), filter radius r_min (> 0, model length units),
+  // SIMP penalty p (≥ 1), filter radius r_min (> 0, model length units; the
+  // level set's regularization length ℓ when method is "level_set"),
   // MMA move limit (∈ (0, 1]), iteration cap (integer > 0), and the
   // convergence tolerance on max |Δρ| (> 0).
   penalty: string;
@@ -53,6 +60,8 @@ export interface TopOptSettingsState {
 // the per-iteration history that drives the convergence plot (KOF-233).
 export interface DensityResult {
   density: Float64Array;
+  // Level-set runs only: φ per node, aligned with the store's `nodes` array.
+  levelSet?: Float64Array;
   history: TopOptHistoryEntry[];
 }
 
@@ -60,6 +69,7 @@ export interface DensityResult {
 // the model's own work units — so it starts empty and is required before a
 // min_volume run, shown as an inline error rather than guessed.
 export const DEFAULT_TOPOPT_SETTINGS: TopOptSettingsState = {
+  method: "simp",
   objective: "min_compliance",
   volumeFraction: "0.5",
   complianceLimit: "",
@@ -77,7 +87,7 @@ export const DEFAULT_TOPOPT_SETTINGS: TopOptSettingsState = {
 // The numeric fields, so the setter and the panel can iterate them generically.
 export type TopOptNumericField = Exclude<
   keyof TopOptSettingsState,
-  "objective" | "stressConstraint" | "stressAggregation"
+  "objective" | "method" | "stressConstraint" | "stressAggregation"
 >;
 
 // Default aggregation parameter per method: the P-norm is tight at 8, while KS
@@ -101,6 +111,7 @@ export interface TopOptSlice {
   densityResult: DensityResult | null;
   liveDensity: LiveDensity | null;
 
+  setTopOptMethod(method: TopOptMethod): void;
   setTopOptObjective(objective: TopOptObjective): void;
   setTopOptSetting(field: TopOptNumericField, value: string): void;
   setStressConstraint(enabled: boolean): void;
@@ -120,6 +131,11 @@ export const createTopOptSlice: SliceCreator<TopOptSlice> = (set) => ({
   // the previous setup. Clear it so the Optimize/Results nav steps no longer read
   // as complete and Results stops showing a density that no longer matches the
   // configured run (mirrors how the mesh/BC setters invalidate a static result).
+  setTopOptMethod: (method) =>
+    set((s) => {
+      s.topOpt.method = method;
+      s.densityResult = null;
+    }),
   setTopOptObjective: (objective) =>
     set((s) => {
       s.topOpt.objective = objective;

@@ -2327,7 +2327,11 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
 // The density is one value per DESIGN element, in the canonical order the
 // viewport's densityField expects — solid tets, then hexes, then shell facets —
 // which is exactly the order each engine entry returns (KOF-237).
-type TopOptEngineResult = { density: Float64Array; history: unknown[] };
+type TopOptEngineResult = {
+  density: Float64Array;
+  levelSet?: Float64Array;
+  history: unknown[];
+};
 
 // Live density streaming (KOF-240): the engine calls this synchronously from
 // inside the optimizer loop with a fresh Float64Array copy of the design density
@@ -2345,9 +2349,20 @@ function postDensityResult(id: number, result: TopOptEngineResult) {
     id,
     log: `Topology optimization complete: ${result.density.length} element densities over ${result.history.length} iteration(s)`,
   });
+  // The level set (method "level_set") is one value per engine vertex; the
+  // solid path indexes vertices in payload node order (buildVertexIndexer), so it
+  // arrives aligned with the store's `nodes` array.
+  const transfer = [result.density.buffer];
+  if (result.levelSet) transfer.push(result.levelSet.buffer);
   self.postMessage(
-    { id, ok: true, density: result.density, history: result.history },
-    [result.density.buffer],
+    {
+      id,
+      ok: true,
+      density: result.density,
+      levelSet: result.levelSet,
+      history: result.history,
+    },
+    transfer,
   );
 }
 
@@ -2394,6 +2409,18 @@ function handleTopOpt(id: number, payload: TopOptPayload) {
         "but were not idealised into shell elements. Re-mesh (which collapses their " +
         "thin walls to a shell mid-surface), then optimize the mixed model — or switch " +
         "them to Solid.",
+    );
+
+  // The level-set optimizer runs through the plain solid entry only; a model
+  // with shells or with a coupling routes to the shell/coupled entries below
+  // (which refuse it too), so say so before building their inputs.
+  if (settings.method === "level_set" && shellElements.length > 0)
+    throw new Error(
+      `Topology optimization: the level-set method supports solid models only, but this model has ${shellElements.length} shell (CTRIA3) element(s) — use SIMP for shell and coupled models.`,
+    );
+  if (settings.method === "level_set" && couplings.length > 0)
+    throw new Error(
+      `Topology optimization: the level-set method does not support couplings yet, but this model has ${couplings.length} — remove them or use SIMP.`,
     );
 
   const { volumeFraction, complianceLimit, maxStress } = settings.constraints;

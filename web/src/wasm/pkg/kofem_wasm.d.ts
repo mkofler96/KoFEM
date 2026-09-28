@@ -56,6 +56,11 @@ export type StaticSolveResult =
  *  In v1 the design domain is automatic (the whole solid mesh, supports/loads
  *  kept solid); `passive` is reserved for the Phase-B keep-in/keep-out picker. */
 export interface TopOptSettings {
+  /** "simp" (default): per-element densities, MMA. "level_set": nodal level set
+   *  φ updated by a reaction–diffusion equation (Yamada et al. 2010) — solid
+   *  models and min_compliance only; `filterRadius` is then the regularization
+   *  length ℓ, and `penalty`/`moveLimit` are unused. */
+  method?: "simp" | "level_set"
   objective: "min_compliance" | "min_volume"
   /** `volumeFraction` bounds a min_compliance run; `complianceLimit` and/or
    *  `maxStress` bound a min_volume run. `maxStress` (KOF-236) is the von Mises
@@ -72,9 +77,9 @@ export interface TopOptSettings {
    *  exponent q, 0 ≤ q < penalty (default penalty − 0.5, i.e. the ρ^½ stress
    *  interpolation; 2.5 at the default p = 3). */
   stress?: { aggregation?: "pnorm" | "ks"; p?: number; q?: number }
-  penalty: number // SIMP penalty p, default 3
+  penalty?: number // SIMP penalty p, default 3 (SIMP only)
   filterRadius: number // r_min, model length units
-  moveLimit: number // MMA move limit, default 0.2
+  moveLimit?: number // MMA move limit, default 0.2 (SIMP only)
   maxIterations: number
   tolerance: number // convergence on max |Δρ|, default 0.01
   passive?: { solid?: number[]; void?: number[] } // reserved, element indices
@@ -114,7 +119,13 @@ export interface TopOptHistoryEntry {
  *  issue #166) plus the iteration history. Incomplete inputs or an ill-posed
  *  problem yield `{error}` instead, matching the static-solve contract. */
 export type TopOptResult =
-  | { density: Float64Array; history: TopOptHistoryEntry[] }
+  | {
+      density: Float64Array
+      /** method "level_set" only: φ per mesh vertex, in the solve's vertex
+       *  order; the design boundary is φ = 0. */
+      levelSet?: Float64Array
+      history: TopOptHistoryEntry[]
+    }
   | { error: string }
 
 /** Triangle SURFACE mesh input to the Kirchhoff shell solver: `vertices` is xyz

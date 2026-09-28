@@ -54,6 +54,15 @@ std::string parse_topopt_settings(const val& topopt_js, kofem::topopt::ShellTopO
                    "cannot be stress-constrained yet. Remove the stress limit, or "
                    "optimize an all-solid model";
     }
+    // The level-set method (topology_levelset.h) runs on solid meshes only; a
+    // shell or coupled model would otherwise be optimized with SIMP silently.
+    const std::string method = jstring(topopt_js, "method", "simp");
+    if (method == "level_set")
+        return "the level-set method supports solid (CTETRA/CHEXA) models only — "
+               "shell and coupled shell/solid models optimize with SIMP";
+    if (method != "simp")
+        return "unknown topology-optimization method \"" + method +
+               "\" — expected \"simp\" or \"level_set\"";
     if (objective != "min_compliance" && objective != "min_volume")
         return "unknown topology-optimization objective \"" + objective +
                "\" — expected \"min_compliance\" or \"min_volume\"";

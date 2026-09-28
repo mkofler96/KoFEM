@@ -27,11 +27,11 @@ committed engine (the refined mesh-independence solve dominates). See
 
 ## Cases
 
-| Case                         | Validates                                               | Reference                         |
-| ---------------------------- | ------------------------------------------------------- | --------------------------------- |
-| MBB beam (half-model)        | converged compliance + the textbook truss layout        | Sigmund 99-line / Andreassen 88   |
-| 3D cantilever (tip load)     | converged compliance + z-mirror symmetry of the design  | short-cantilever (e.g. top3d)     |
-| Cantilever mesh-independence | same design at two resolutions with a fixed r_min        | filter mesh-independence (KOF-229)|
+| Case                         | Validates                                              | Reference                          |
+| ---------------------------- | ------------------------------------------------------ | ---------------------------------- |
+| MBB beam (half-model)        | converged compliance + the textbook truss layout       | Sigmund 99-line / Andreassen 88    |
+| 3D cantilever (tip load)     | converged compliance + z-mirror symmetry of the design | short-cantilever (e.g. top3d)      |
+| Cantilever mesh-independence | same design at two resolutions with a fixed r_min      | filter mesh-independence (KOF-229) |
 
 ### MBB beam (half-model)
 
@@ -90,7 +90,7 @@ and mesh-independence bounds are tight because they follow from the formulation,
 not the numerics.
 
 MMA legitimately oscillates mid-run while the layout reorganises, so the cases do
-**not** demand a monotone trajectory; they require the run to *end* at its
+**not** demand a monotone trajectory; they require the run to _end_ at its
 stiffest design (the returned compliance is the minimum of the whole history).
 
 ## Relationship to the other TO checks
@@ -108,6 +108,11 @@ stiffest design (the returned compliance is the minimum of the whole history).
   compliance-only design peaks at the re-entrant corner, and minimizing volume
   subject to σ ≤ σ_allow meets the limit with a peak ≥ 10 % below a
   compliance-only design of the same volume.
+- **`engine/tests/topology_levelset_validation.cpp`** checks the reaction–diffusion
+  level-set optimizer (`method: "level_set"`) on the same MBB: exact element volume
+  fractions of φ > 0, volume constraint, convergence, a crisper design than SIMP at
+  comparable compliance, passive regions and streaming
+  (`scripts/test-topology-levelset.sh`; not run by CI either).
 - **`web/tests/topology-benchmark.spec.ts`** is a fast Playwright guard that runs
   a small MBB through the solver worker and asserts the same trajectory shape, so
   the Playwright suite catches a regression on every CI run without the full

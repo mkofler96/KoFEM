@@ -44,6 +44,7 @@
 
 #include <mfem.hpp>
 
+#include <limits>
 #include <vector>
 
 namespace kofem::topopt {
@@ -54,15 +55,16 @@ namespace kofem::topopt {
 // the design variables this iteration. A stress-constrained run (KOF-236) also
 // fills `stress`, the normalized aggregate c·σ_PN the constraint bounds, and
 // `max_stress`, the true max relaxed von Mises it approximates (both in stress
-// units); otherwise both are NaN. Mirrors the TopOptHistoryEntry wire type
-// (kofem_wasm.d.ts).
+// units); otherwise both stay NaN — including in the level-set loop's entries
+// (topology_levelset.cpp), which never set them. Mirrors the TopOptHistoryEntry
+// wire type (kofem_wasm.d.ts).
 struct TopOptHistoryEntry {
     int it;
     double compliance;
     double volume;
     double max_change;
-    double stress;
-    double max_stress;
+    double stress = std::numeric_limits<double>::quiet_NaN();
+    double max_stress = std::numeric_limits<double>::quiet_NaN();
 };
 
 struct ComplianceOptConfig {

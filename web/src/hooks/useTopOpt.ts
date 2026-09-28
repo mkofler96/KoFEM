@@ -51,24 +51,29 @@ function parseSettings(state: TopOptSettingsState): {
     return parsed;
   };
 
-  const penalty = num(
-    "penalty",
-    state.penalty,
-    (value) => value >= 1,
-    "penalty p ≥ 1",
-  );
+  // The level set has no SIMP penalty and no MMA move limit; those fields are
+  // hidden in its panel, so they are neither validated nor sent.
+  const simp = state.method === "simp";
+  // The max-stress constraint is SIMP-only too (KOF-236): hidden in the
+  // level-set panel, so neither validated nor sent there.
+  const stressOn = simp && state.stressConstraint;
+  const penalty = simp
+    ? num("penalty", state.penalty, (value) => value >= 1, "penalty p ≥ 1")
+    : undefined;
   const filterRadius = num(
     "filterRadius",
     state.filterRadius,
     (value) => value > 0,
-    "filter radius r_min > 0",
+    simp ? "filter radius r_min > 0" : "length scale ℓ > 0",
   );
-  const moveLimit = num(
-    "moveLimit",
-    state.moveLimit,
-    (value) => value > 0 && value <= 1,
-    "move limit in (0, 1]",
-  );
+  const moveLimit = simp
+    ? num(
+        "moveLimit",
+        state.moveLimit,
+        (value) => value > 0 && value <= 1,
+        "move limit in (0, 1]",
+      )
+    : undefined;
   const maxIterations = num(
     "maxIterations",
     state.maxIterations,
@@ -91,7 +96,7 @@ function parseSettings(state: TopOptSettingsState): {
       "volume fraction in (0, 1)",
     );
     constraints.volumeFraction = volfrac;
-  } else if (state.stressConstraint && state.complianceLimit.trim() === "") {
+  } else if (stressOn && state.complianceLimit.trim() === "") {
     // A stress-bounded min_volume run needs no compliance limit (KOF-236): a
     // blank field means "none", which the engine accepts with maxStress present.
   } else {
@@ -99,7 +104,7 @@ function parseSettings(state: TopOptSettingsState): {
       "complianceLimit",
       state.complianceLimit,
       (value) => value > 0,
-      state.stressConstraint
+      stressOn
         ? "compliance limit > 0, or blank for none"
         : "compliance limit > 0",
     );
@@ -107,7 +112,7 @@ function parseSettings(state: TopOptSettingsState): {
   }
 
   let stress: TopOptSettings["stress"];
-  if (state.stressConstraint) {
+  if (stressOn) {
     constraints.maxStress = num(
       "maxStress",
       state.maxStress,
@@ -126,6 +131,7 @@ function parseSettings(state: TopOptSettingsState): {
   if (Object.keys(errors).length > 0) return { settings: null, errors };
   return {
     settings: {
+      method: state.method,
       objective: state.objective,
       constraints,
       ...(stress ? { stress } : {}),
@@ -211,14 +217,31 @@ export function useTopOpt() {
   // eslint-disable-next-line kofem/no-silent-fallback -- a constraint without prescribedValue is a homogeneous fixed BC, i.e. u = 0 by definition
   const hasPrescribed = constraints.some((c) => (c.prescribedValue ?? 0) !== 0);
 
-  // The stress constraint is implemented for the solid design domain only; the
-  // shell/coupled optimizers reject it (topology_shell_entry.cpp), so block the
-  // run in pre-flight rather than let it fail in the worker.
-  const stressOnShell = topOpt.stressConstraint && shellElements.length > 0;
+  // The stress constraint is implemented for the plain solid SIMP entry only.
+  // Shells, and any coupling (which routes even an all-solid model to the
+  // coupled optimizer), reach entries that reject it (topology_shell_entry.cpp),
+  // so block the run in pre-flight rather than let it fail in the worker. The
+  // level-set panel hides the constraint and does not send it.
+  const stressOnShell =
+    topOpt.method === "simp" &&
+    topOpt.stressConstraint &&
+    (shellElements.length > 0 || couplingGroups.length > 0);
 
   const { settings, errors } = parseSettings(topOpt);
   const settingsOk = settings !== null;
+  // The level-set optimizer (engine/cpp/topology_levelset.h) runs on solid
+  // meshes and minimizes compliance only; SIMP covers the rest.
+  const levelSet = topOpt.method === "level_set";
+  const levelSetShellBlock = levelSet && shellElements.length > 0;
+  // A coupling routes even an all-solid model to the coupled optimizer, which
+  // runs SIMP only (solver.worker.ts handleTopOpt).
+  const levelSetCouplingBlock = levelSet && couplingGroups.length > 0;
+  const levelSetObjectiveBlock =
+    levelSet && topOpt.objective !== "min_compliance";
   const allOk =
+    !levelSetShellBlock &&
+    !levelSetCouplingBlock &&
+    !levelSetObjectiveBlock &&
     meshOk &&
     matOk &&
     singleMaterialOk &&
@@ -243,23 +266,24 @@ export function useTopOpt() {
     clearLogs();
     setLiveDensity(null);
     setProgressCallback(({ it, density }) => setLiveDensity({ it, density }));
-    sendToWorker<{ density: Float64Array; history: TopOptHistoryEntry[] }>(
-      "optimize_topology",
-      {
-        nodes,
-        elements,
-        materials,
-        properties,
-        constraints,
-        loads,
-        surfaceLoads,
-        tieGroups,
-        couplings: couplingGroups,
-        settings,
-      },
-    )
-      .then(({ density, history }) => {
-        setDensityResult({ density, history });
+    sendToWorker<{
+      density: Float64Array;
+      levelSet?: Float64Array;
+      history: TopOptHistoryEntry[];
+    }>("optimize_topology", {
+      nodes,
+      elements,
+      materials,
+      properties,
+      constraints,
+      loads,
+      surfaceLoads,
+      tieGroups,
+      couplings: couplingGroups,
+      settings,
+    })
+      .then(({ density, levelSet, history }) => {
+        setDensityResult({ density, levelSet, history });
         setMode("results");
       })
       .catch((err) => {
@@ -300,8 +324,9 @@ export function useTopOpt() {
     topOpt.complianceLimit.trim() === ""
       ? ""
       : ` · compliance ≤ ${topOpt.complianceLimit}`;
-  const settingsSummary =
-    topOpt.objective === "min_compliance"
+  const settingsSummary = levelSet
+    ? `Level set · minimize compliance · volfrac ${topOpt.volumeFraction} · ℓ=${topOpt.filterRadius}`
+    : topOpt.objective === "min_compliance"
       ? `Minimize compliance · volfrac ${topOpt.volumeFraction}${stressSummary} · p=${topOpt.penalty} · r_min=${topOpt.filterRadius}`
       : `Minimize volume${complianceSummary}${stressSummary} · p=${topOpt.penalty} · r_min=${topOpt.filterRadius}`;
 
@@ -373,6 +398,21 @@ export function useTopOpt() {
         `Topology optimization uses one material per design domain — the solid domain spans ${solidMaterialIds.size} and the shell domain ${shellMaterialIds.size}; assign a single material to each`,
       ]);
   }
+  if (levelSetShellBlock)
+    checks.push([
+      false,
+      "The level-set method supports solid models only — use SIMP for shell and coupled models",
+    ]);
+  if (levelSetCouplingBlock)
+    checks.push([
+      false,
+      "The level-set method does not support couplings yet — remove them, or use SIMP",
+    ]);
+  if (levelSetObjectiveBlock)
+    checks.push([
+      false,
+      "The level-set method minimizes compliance only — switch the objective, or use SIMP",
+    ]);
   if (hasPrescribed)
     checks.push([
       false,
@@ -381,7 +421,7 @@ export function useTopOpt() {
   if (stressOnShell)
     checks.push([
       false,
-      "The max-stress constraint supports all-solid models only — turn it off to optimize this shell/coupled model",
+      "The max-stress constraint supports all-solid models without couplings only — turn it off to optimize this shell/coupled model",
     ]);
 
   return {

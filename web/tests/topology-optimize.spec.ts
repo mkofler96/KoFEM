@@ -162,6 +162,158 @@ test("optimize_topology worker: density field of element length + progress logs"
   expect(logs.some((l) => l.includes("[topopt] it"))).toBe(true);
 });
 
+// The level-set method: same worker message with `method: "level_set"`. Besides
+// the element densities it returns the nodal level set φ — one value per node,
+// in payload node order, bounded to [−1, 1] — which the viewport contours at
+// φ = 0 for the smooth boundary. The run starts from full material and walks the
+// volume down, so the first history entry sits at volume 1.
+test("optimize_topology worker: level-set method returns a nodal level set", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  page.on("pageerror", (e) =>
+    console.error(`[topopt-levelset] page error: ${e.message}`),
+  );
+
+  await gotoApp(page);
+  await page.waitForFunction(() =>
+    Boolean((window as unknown as KofemTestHooks).__kofem),
+  );
+
+  const result = await page.evaluate(
+    async (beam) => {
+      const { nodes, elements, fixedNodeIds, loadedNodeIds } = beam;
+      const kofem = (window as unknown as KofemTestHooks).__kofem;
+      if (!kofem)
+        throw new Error("window.__kofem test hooks are not installed");
+      const res = (await kofem.sendToWorker("optimize_topology", {
+        nodes,
+        elements,
+        materials: [
+          {
+            id: 1,
+            name: "Steel",
+            young: 210000,
+            poisson: 0.3,
+            density: 7.85e-9,
+          },
+        ],
+        properties: [{ id: 1, materialId: 1 }],
+        constraints: fixedNodeIds.flatMap((nodeId) =>
+          [0, 1, 2].map((dof) => ({ nodeId, dof })),
+        ),
+        loads: loadedNodeIds.map((nodeId) => ({
+          nodeId,
+          dof: 2,
+          value: -100,
+        })),
+        settings: {
+          method: "level_set",
+          objective: "min_compliance",
+          constraints: { volumeFraction: 0.5 },
+          filterRadius: 1,
+          maxIterations: 40,
+          tolerance: 0.01,
+        },
+      })) as {
+        density: Float64Array;
+        levelSet?: Float64Array;
+        history: { volume: number }[];
+      };
+      const phi = res.levelSet ? Array.from(res.levelSet) : [];
+      return {
+        nodeCount: nodes.length,
+        elementCount: elements.length,
+        densityLength: res.density.length,
+        levelSetLength: phi.length,
+        phiBounded: phi.every((v) => v >= -1 && v <= 1),
+        hasBoundary: phi.some((v) => v > 0) && phi.some((v) => v < 0),
+        densityInRange: Array.from(res.density).every((d) => d >= 0 && d <= 1),
+        firstVolume: res.history[0].volume,
+        lastVolume: res.history[res.history.length - 1].volume,
+      };
+    },
+    makeBeam(8, 2, 2),
+  );
+
+  expect(result.densityLength).toBe(result.elementCount);
+  expect(result.levelSetLength).toBe(result.nodeCount);
+  expect(result.phiBounded).toBe(true);
+  expect(result.hasBoundary).toBe(true);
+  expect(result.densityInRange).toBe(true);
+  expect(result.firstVolume).toBeCloseTo(1, 9);
+  expect(Math.abs(result.lastVolume - 0.5)).toBeLessThan(0.01);
+});
+
+// A coupling routes even an all-solid model to the coupled optimizer, which is
+// SIMP-only: a level-set request with a coupling must fail with a clear
+// message rather than reach an engine entry that cannot run it.
+test("optimize_topology worker: level set with a coupling is rejected clearly", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await gotoApp(page);
+  await page.waitForFunction(() =>
+    Boolean((window as unknown as KofemTestHooks).__kofem),
+  );
+
+  const message = await page.evaluate(
+    async (beam) => {
+      const { nodes, elements, fixedNodeIds, loadedNodeIds } = beam;
+      const kofem = (window as unknown as KofemTestHooks).__kofem;
+      if (!kofem)
+        throw new Error("window.__kofem test hooks are not installed");
+      try {
+        await kofem.sendToWorker("optimize_topology", {
+          nodes,
+          elements,
+          materials: [
+            {
+              id: 1,
+              name: "Steel",
+              young: 210000,
+              poisson: 0.3,
+              density: 7.85e-9,
+            },
+          ],
+          properties: [{ id: 1, materialId: 1 }],
+          constraints: fixedNodeIds.flatMap((nodeId) =>
+            [0, 1, 2].map((dof) => ({ nodeId, dof })),
+          ),
+          loads: loadedNodeIds.map((nodeId) => ({
+            nodeId,
+            dof: 2,
+            value: -100,
+          })),
+          couplings: [
+            {
+              name: "tip",
+              kind: "distributing",
+              dofs: [0, 1, 2, 3, 4, 5],
+              refNodeId: loadedNodeIds[0],
+              faces: [{ nodeIds: loadedNodeIds.slice(0, 3) }],
+            },
+          ],
+          settings: {
+            method: "level_set",
+            objective: "min_compliance",
+            constraints: { volumeFraction: 0.5 },
+            filterRadius: 1,
+            maxIterations: 5,
+            tolerance: 0.01,
+          },
+        });
+        return "resolved";
+      } catch (err) {
+        return (err as Error).message;
+      }
+    },
+    makeBeam(4, 1, 1),
+  );
+
+  expect(message).toContain("level-set method does not support couplings");
+});
+
 // Live density streaming (KOF-240): the engine hands the worker the design
 // density every iteration, and the worker forwards it as a progress message
 // before the call resolves. One snapshot per iteration (streamEvery defaults to
@@ -471,7 +623,30 @@ test("optimize_topology worker: max-stress constraint", async ({ page }) => {
         constraints: { volumeFraction: 0.3, maxStress: 1e-6 * peakFull },
         maxIterations: 5,
       });
-      return { plain, full, peakFull, limit, minVol, infeasible };
+      // The level-set method has no stress constraint: a stress limit is
+      // rejected, and its own history carries no stress fields.
+      const levelSetStress = await run({
+        method: "level_set",
+        objective: "min_compliance",
+        constraints: { volumeFraction: 0.5, maxStress: 1e9 },
+        maxIterations: 2,
+      });
+      const levelSetPlain = await run({
+        method: "level_set",
+        objective: "min_compliance",
+        constraints: { volumeFraction: 0.5 },
+        maxIterations: 2,
+      });
+      return {
+        plain,
+        full,
+        peakFull,
+        limit,
+        minVol,
+        infeasible,
+        levelSetStress,
+        levelSetPlain,
+      };
     },
     makeBeam(6, 1, 1),
   )) as {
@@ -481,6 +656,8 @@ test("optimize_topology worker: max-stress constraint", async ({ page }) => {
     limit: number;
     minVol: Run;
     infeasible: Run;
+    levelSetStress: Run;
+    levelSetPlain: Run;
   };
 
   expect(result.plain.error).toBeNull();
@@ -500,4 +677,11 @@ test("optimize_topology worker: max-stress constraint", async ({ page }) => {
   expect(last.max_stress as number).toBeLessThanOrEqual(result.limit * 1.02);
 
   expect(result.infeasible.error).toContain("was not met");
+
+  expect(result.levelSetStress.error).toContain(
+    "level-set method does not support the maximum-stress constraint",
+  );
+  expect(result.levelSetPlain.error).toBeNull();
+  expect(result.levelSetPlain.history[0].stress).toBeUndefined();
+  expect(result.levelSetPlain.history[0].max_stress).toBeUndefined();
 });

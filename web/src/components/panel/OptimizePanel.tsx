@@ -54,13 +54,19 @@ function SettingField({
 }
 
 export function OptimizePanel() {
+  const method = useModelStore((s) => s.topOpt.method);
   const objective = useModelStore((s) => s.topOpt.objective);
+  const setTopOptMethod = useModelStore((s) => s.setTopOptMethod);
   const setTopOptObjective = useModelStore((s) => s.setTopOptObjective);
   const stressConstraint = useModelStore((s) => s.topOpt.stressConstraint);
   const setStressConstraint = useModelStore((s) => s.setStressConstraint);
   const stressAggregation = useModelStore((s) => s.topOpt.stressAggregation);
   const setStressAggregation = useModelStore((s) => s.setStressAggregation);
   const maxStressText = useModelStore((s) => s.topOpt.maxStress);
+  const levelSet = method === "level_set";
+  // The max-stress constraint is SIMP-only (KOF-236): its controls are hidden in
+  // level-set mode, and useTopOpt neither validates nor sends it there.
+  const stressOn = !levelSet && stressConstraint;
   const {
     optimize,
     cancel,
@@ -81,7 +87,7 @@ export function OptimizePanel() {
   // drawn in the viewport; its threshold slider is shown below during the run.
   const livePoints = useMemo(() => convergenceFromLogs(logs), [logs]);
   // The σ_allow line in the plot, when the entered limit is a usable number.
-  const stressLimit = stressConstraint ? Number(maxStressText) : NaN;
+  const stressLimit = stressOn ? Number(maxStressText) : NaN;
 
   return (
     <div className={styles.panel}>
@@ -107,6 +113,29 @@ export function OptimizePanel() {
           Design domain
         </div>
         <div className={styles.formNote}>{designDomain}</div>
+
+        <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
+          Method
+        </div>
+        <div className={styles.segToggle}>
+          <button
+            className={`${styles.segBtn} ${!levelSet ? styles.segBtnActive : ""}`}
+            onClick={() => setTopOptMethod("simp")}
+          >
+            SIMP
+          </button>
+          <button
+            className={`${styles.segBtn} ${levelSet ? styles.segBtnActive : ""}`}
+            onClick={() => setTopOptMethod("level_set")}
+          >
+            Level set
+          </button>
+        </div>
+        <div className={styles.formNote}>
+          {levelSet
+            ? "Nodal level set (reaction–diffusion): a crisp, smooth boundary. Solid models, minimum compliance."
+            : "Density per element (SIMP + MMA). Supports every objective and shell models."}
+        </div>
 
         <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
           Objective
@@ -139,7 +168,7 @@ export function OptimizePanel() {
             field="complianceLimit"
             label="Compliance ≤"
             hint={
-              stressConstraint
+              stressOn
                 ? "Upper bound on compliance, in the model's work units — leave blank to bound the volume by stress alone"
                 : "Upper bound on compliance, in the model's work units"
             }
@@ -147,16 +176,18 @@ export function OptimizePanel() {
           />
         )}
 
-        <label className={styles.formRow}>
-          <input
-            type="checkbox"
-            data-testid="topopt-stress-constraint"
-            checked={stressConstraint}
-            onChange={(e) => setStressConstraint(e.target.checked)}
-          />
-          <span className={styles.bodyLabel}>Max von Mises stress</span>
-        </label>
-        {stressConstraint && (
+        {!levelSet && (
+          <label className={styles.formRow}>
+            <input
+              type="checkbox"
+              data-testid="topopt-stress-constraint"
+              checked={stressConstraint}
+              onChange={(e) => setStressConstraint(e.target.checked)}
+            />
+            <span className={styles.bodyLabel}>Max von Mises stress</span>
+          </label>
+        )}
+        {stressOn && (
           <SettingField
             field="maxStress"
             label="σ_vm ≤"
@@ -165,19 +196,33 @@ export function OptimizePanel() {
           />
         )}
 
-        <div className={styles.sectionLabel}>SIMP parameters</div>
-        <SettingField
-          field="penalty"
-          label="Penalty p"
-          hint="SIMP penalization exponent, ≥ 1 (typically 3)"
-          errors={errors}
-        />
-        <SettingField
-          field="filterRadius"
-          label="Filter r_min"
-          hint="Density filter radius, in model length units"
-          errors={errors}
-        />
+        {levelSet ? (
+          <>
+            <div className={styles.sectionLabel}>Level-set parameters</div>
+            <SettingField
+              field="filterRadius"
+              label="Length ℓ"
+              hint="Smallest member/curvature scale, in model length units — about one element size keeps thin members"
+              errors={errors}
+            />
+          </>
+        ) : (
+          <>
+            <div className={styles.sectionLabel}>SIMP parameters</div>
+            <SettingField
+              field="penalty"
+              label="Penalty p"
+              hint="SIMP penalization exponent, ≥ 1 (typically 3)"
+              errors={errors}
+            />
+            <SettingField
+              field="filterRadius"
+              label="Filter r_min"
+              hint="Density filter radius, in model length units"
+              errors={errors}
+            />
+          </>
+        )}
 
         <button
           className={styles.advancedToggle}
@@ -193,12 +238,14 @@ export function OptimizePanel() {
         </button>
         {advancedOpen && (
           <>
-            <SettingField
-              field="moveLimit"
-              label="Move limit"
-              hint="MMA step cap per iteration, (0, 1] (default 0.2)"
-              errors={errors}
-            />
+            {!levelSet && (
+              <SettingField
+                field="moveLimit"
+                label="Move limit"
+                hint="MMA step cap per iteration, (0, 1] (default 0.2)"
+                errors={errors}
+              />
+            )}
             <SettingField
               field="maxIterations"
               label="Max iters"
@@ -211,7 +258,7 @@ export function OptimizePanel() {
               hint="Stop when max |Δρ| falls below this (> 0)"
               errors={errors}
             />
-            {stressConstraint && (
+            {stressOn && (
               <>
                 <div className={styles.formRow}>
                   <label className={styles.formLabel}>Aggregation</label>
