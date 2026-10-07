@@ -4,10 +4,6 @@
 import { test, expect, type Page } from "./coverage";
 import { gotoApp } from "./fixtures/app";
 
-// Sidebar resize / collapse behavior (issue #339): drag-to-resize with
-// clamping and persistence on desktop, collapse to a floating expand button,
-// and the small-screen overlay mode with its auto-collapse breakpoint.
-
 async function asideWidth(page: Page): Promise<number> {
   const box = await page.locator("aside").boundingBox();
   if (!box) throw new Error("sidebar is not visible");
@@ -31,7 +27,6 @@ test("drag resizes the sidebar and clamps to min/max", async ({ page }) => {
   await dragHandleBy(page, 140);
   expect(await asideWidth(page)).toBe(480);
 
-  // Overshooting either way clamps to the [260, 560] range.
   await dragHandleBy(page, 600);
   expect(await asideWidth(page)).toBe(560);
   await dragHandleBy(page, -500);
@@ -89,18 +84,15 @@ test.describe("small screens", () => {
     page,
   }) => {
     await page.goto("/app/");
-    // Collapsed on load: no panel, just the expand button.
     const expandBtn = page.getByRole("button", { name: "Show panel" });
     await expect(expandBtn).toBeVisible();
     await expect(page.locator("aside")).toBeHidden();
 
     await expandBtn.click();
-    // Overlay width is min(85vw, 360px) — 331.5px at 390px viewport.
     const width = await asideWidth(page);
     expect(width).toBeGreaterThan(300);
     expect(width).toBeLessThan(360);
 
-    // A click on the backdrop (right of the overlay) closes it.
     await page.mouse.click(375, 400);
     await expect(page.locator("aside")).toBeHidden();
   });
