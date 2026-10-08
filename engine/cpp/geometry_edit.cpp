@@ -317,9 +317,12 @@ TopoDS_Shape split_by_mode(const std::string& mode, const TopoDS_Shape& shape,
 
 val split_geometry(const std::string& opts_json) {
     const val opts = parse_json(opts_json);
+    // Named in sequence: mode, then plane, then the shape, so a caller always
+    // meets the first invalid input — not one of two unsequenced arguments.
+    const std::string mode = jstring(opts, "mode", "");
     const gp_Pln plane = plane_from(opts);
-    const TopoDS_Shape edited =
-        split_by_mode(jstring(opts, "mode", ""), cached_shape(), opts, plane);
+    const TopoDS_Shape& shape = cached_shape();
+    const TopoDS_Shape edited = split_by_mode(mode, shape, opts, plane);
 
     const std::vector<uint8_t> bytes = step_bytes(edited);
     // The edit lives in the returned file from here on. Drop the pre-edit shape

@@ -167,6 +167,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.splitPicking = false;
       s.splitFaceIds = [];
       s.splitDraft = null;
+      s.splitError = null;
       s.remeshNotice = null;
       s.volMesh = a.volMesh;
       s.surfaceTriangles = a.surfaceTriangles;
@@ -237,6 +238,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.splitPicking = false;
       s.splitFaceIds = [];
       s.splitDraft = null;
+      s.splitError = null;
       s.remeshNotice = null;
       s.volMesh = null;
       s.surfaceTriangles = null;

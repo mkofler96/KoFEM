@@ -6,6 +6,7 @@
 // with real clicks on the faces, the way a user builds the MBB beam's pads.
 
 import { test, expect } from "./coverage";
+import type { Page } from "@playwright/test";
 import {
   clickModelAt,
   geometryCounts,
@@ -99,57 +100,155 @@ test("split a body in two: the halves are separate bodies, bonded on mesh", asyn
     .toBe(2);
 });
 
-// Whether a click on the geometry view would still toggle split faces.
-function splitPicking(page: import("@playwright/test").Page) {
-  return page.evaluate(
-    () =>
-      (
-        window as unknown as {
-          __kofemStore: { getState(): { splitPicking: boolean } };
-        }
-      ).__kofemStore.getState().splitPicking,
-  );
+// The split answers after an await. Hold every split_geometry request in the
+// page for a while, so the user's next action provably lands while the worker
+// is still busy — a fast machine must not turn these into tests of nothing.
+async function delaySplits(page: Page, ms: number): Promise<void> {
+  await page.addInitScript((delay) => {
+    const post = Worker.prototype.postMessage;
+    Worker.prototype.postMessage = function (
+      this: Worker,
+      ...args: Parameters<Worker["postMessage"]>
+    ) {
+      const type = (args[0] as { type?: string } | null)?.type;
+      if (type === "split_geometry")
+        setTimeout(() => post.apply(this, args), delay);
+      else post.apply(this, args);
+    } as Worker["postMessage"];
+  }, ms);
 }
 
-// The split answers after an await. Closing the tool, or leaving the Geometry
-// step, while the worker runs must leave face picking off: the continuation
-// used to turn it back on from the state the split started in, behind a closed
-// form, so every click on the model kept toggling invisible split faces.
-test("closing the tool or leaving the step mid-split leaves picking off", async ({
-  page,
-}) => {
-  test.setTimeout(120_000);
-  await importStepText(page, BLOCK);
+function storeState(page: Page) {
+  return page.evaluate(() => {
+    const state = (
+      window as unknown as {
+        __kofemStore: {
+          getState(): {
+            splitPicking: boolean;
+            pickMode: string | null;
+            pendingFaces: unknown[];
+            selectedFace: unknown;
+          };
+        };
+      }
+    ).__kofemStore.getState();
+    return {
+      splitPicking: state.splitPicking,
+      pickMode: state.pickMode,
+      picked: state.pendingFaces.length + (state.selectedFace ? 1 : 0),
+    };
+  });
+}
 
-  // Each pass cuts a fresh piece of the top face: x = 100, then x = 200 on the
-  // right-hand piece the first cut left.
-  for (const [leave, cut, at] of [
-    ["close", 100, [50, 50, 5]],
-    ["step", 200, [250, 50, 5]],
-  ] as const) {
-    const before = (await geometryCounts(page)).edits;
-    if (leave === "step")
-      await page
-        .getByRole("navigation")
-        .getByRole("button", { name: "Geometry" })
-        .click();
-    await page.getByTestId("split-open").click();
-    await page.getByTestId("split-position").fill(String(cut));
-    await clickModelAt(page, [...at]);
-    await expect(page.locator('[data-testid^="split-face-"]')).toHaveCount(1);
-    await page.getByTestId("split-apply").click();
-    if (leave === "close")
-      await page.getByRole("button", { name: "Close" }).click();
-    else
-      await page
-        .getByRole("navigation")
-        .getByRole("button", { name: "Constraints" })
-        .click();
+// Start a split of the top face at x = `cut` and leave it running.
+async function startSplit(page: Page, cut: number): Promise<number> {
+  const before = (await geometryCounts(page)).edits;
+  await page.getByTestId("split-open").click();
+  await page.getByTestId("split-position").fill(String(cut));
+  await clickModelAt(page, [100, 50, 5]);
+  await expect(page.locator('[data-testid^="split-face-"]')).toHaveCount(1);
+  await page.getByTestId("split-apply").click();
+  return before;
+}
 
+const nav = (page: Page, step: string) =>
+  page.getByRole("navigation").getByRole("button", { name: step }).click();
+
+// What the user does while the split runs — each must leave face picking off
+// once it lands. The continuation used to turn it back on from the state the
+// split started in (open, faces), behind a closed form or a Bodies form, so
+// every click on the model kept toggling invisible split faces.
+const MID_SPLIT: [string, (page: Page) => Promise<void>][] = [
+  [
+    "closes the tool",
+    (page) => page.getByRole("button", { name: "Close" }).click(),
+  ],
+  ["leaves the Geometry step", (page) => nav(page, "Constraints")],
+  [
+    "switches to Bodies",
+    (page) => page.getByTestId("split-mode-bodies").click(),
+  ],
+];
+
+for (const [action, act] of MID_SPLIT) {
+  test(`a split that lands after the user ${action} leaves picking off`, async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await delaySplits(page, 1500);
+    await importStepText(page, BLOCK);
+    const before = await startSplit(page, 150);
+    await act(page);
+    // Still in flight: the action really raced the split.
+    expect((await geometryCounts(page)).edits).toBe(before);
     // The split itself still lands — the user only stopped looking at it.
     await expect
       .poll(async () => (await geometryCounts(page)).edits, { timeout: 30_000 })
       .toBe(before + 1);
-    expect(await splitPicking(page), `after leaving by ${leave}`).toBe(false);
-  }
+    expect((await storeState(page)).splitPicking).toBe(false);
+  });
+}
+
+test("a split that fails after the tool was closed still reports why", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await delaySplits(page, 1500);
+  await importStepText(page, BLOCK);
+  await startSplit(page, 500); // misses the 300 mm face
+  await page.getByRole("button", { name: "Close" }).click();
+  await expect(page.getByTestId("split-form")).toBeHidden();
+  await expect(page.getByTestId("split-error")).toContainText(
+    "is not crossed by the plane x = 500 mm",
+    { timeout: 30_000 },
+  );
+  // Reopening shows the error until the next split or a dismissal.
+  await page.getByTestId("split-open").click();
+  await expect(page.getByTestId("split-error")).toBeVisible();
+});
+
+test("a split that lands during a BC pick ends the pick session", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  await delaySplits(page, 1500);
+  await importStepText(page, BLOCK);
+  await page.getByTestId("max-element-size").fill("20");
+  await page.getByTestId("min-element-size").fill("2");
+  await page.getByRole("button", { name: /mesh STEP volume/i }).click();
+  await expect
+    .poll(
+      () =>
+        page.evaluate(
+          () =>
+            (
+              window as unknown as {
+                __kofemStore: { getState(): { nodes: unknown[] } };
+              }
+            ).__kofemStore.getState().nodes.length,
+        ),
+      { timeout: 90_000 },
+    )
+    .toBeGreaterThan(0);
+
+  const before = await startSplit(page, 150);
+  await nav(page, "Constraints");
+  // The split tool switched the view to the CAD geometry; faces are picked for
+  // a BC on the mesh surface.
+  await page.getByRole("button", { name: "Surface", exact: true }).click();
+  await page.getByRole("button", { name: "Add BC" }).click();
+  await clickModelAt(page, [100, 50, 5]);
+  expect(await storeState(page)).toMatchObject({ pickMode: "bc", picked: 1 });
+  expect((await geometryCounts(page)).edits).toBe(before);
+
+  await expect
+    .poll(async () => (await geometryCounts(page)).edits, { timeout: 30_000 })
+    .toBe(before + 1);
+  // The mesh the pick was made on is gone, and with it the BC section that
+  // could have cancelled the session.
+  expect(await storeState(page)).toEqual({
+    splitPicking: false,
+    pickMode: null,
+    picked: 0,
+  });
 });

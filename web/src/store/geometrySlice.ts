@@ -158,6 +158,10 @@ export interface GeometrySlice {
   // The cut the split tool would make right now (`axis = position`, axis 0–2),
   // drawn as a plane in the geometry view while the tool is open. Transient.
   splitDraft: { axis: 0 | 1 | 2; position: number } | null;
+  // Why the last split failed. In the store, not the panel: a split answers
+  // after an await, and its error must still reach the user when they closed
+  // the tool or left the Geometry step meanwhile.
+  splitError: string | null;
   // What the last mesh did with the existing supports/loads/ties: which it
   // carried over on their CAD faces and which the user has to pick again.
   // Null when the mesh had nothing to carry. Shown by the mesh panel.
@@ -203,6 +207,7 @@ export interface GeometrySlice {
   toggleSplitFace(faceId: number): void;
   clearSplitFaces(): void;
   setSplitDraft(draft: { axis: 0 | 1 | 2; position: number } | null): void;
+  setSplitError(message: string | null): void;
   setRemeshNotice(notice: string | null): void;
   applyMeshResult(
     nodes: Node[],
@@ -269,7 +274,18 @@ function dropAnalysis(s: ModelState): void {
   s.densityResult = null;
   s.splitPicking = false;
   s.splitFaceIds = [];
+  s.splitError = null;
   s.remeshNotice = null;
+  // A pick session picks on the mesh that is now gone — and an edit can land
+  // while one is open on the Constraints step (a split answers after an
+  // await), whose BC/load sections then unmount and could no longer end it.
+  s.selectedFace = null;
+  s.pendingFaces = [];
+  s.pickMode = null;
+  s.pickTargetGroupId = null;
+  s.pickTieSide = "a";
+  s.tieDraft = { a: [], b: [] };
+  s.couplingDraft = null;
 }
 
 export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
@@ -291,6 +307,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
   splitPicking: false,
   splitFaceIds: [],
   splitDraft: null,
+  splitError: null,
   remeshNotice: null,
 
   addNode: (node) =>
@@ -462,6 +479,10 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
   setSplitDraft: (draft) =>
     set((s) => {
       s.splitDraft = draft;
+    }),
+  setSplitError: (message) =>
+    set((s) => {
+      s.splitError = message;
     }),
   setRemeshNotice: (notice) =>
     set((s) => {

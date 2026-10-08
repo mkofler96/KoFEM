@@ -27,8 +27,9 @@ export function splitPlane(
 }
 
 // Geometry editing (the split tool): sends the current file and the cut to the
-// worker's split_geometry and swaps the edited file in. Owns the in-flight flag
-// and the error of the last attempt.
+// worker's split_geometry and swaps the edited file in. Owns the in-flight
+// flag; the error of the last attempt is store state (splitError), so it
+// outlives the panel that started the split.
 export function useGeometryEdit() {
   const stepBytes = useModelStore((s) => s.stepBytes);
   const geometryFormat = useModelStore((s) => s.geometryFormat);
@@ -36,8 +37,9 @@ export function useGeometryEdit() {
   const applyGeometryEdit = useModelStore((s) => s.applyGeometryEdit);
   const undoGeometryEdit = useModelStore((s) => s.undoGeometryEdit);
   const setRunning = useModelStore((s) => s.setRunning);
+  const splitError = useModelStore((s) => s.splitError);
+  const setSplitError = useModelStore((s) => s.setSplitError);
   const [isSplitting, setIsSplitting] = useState(false);
-  const [splitError, setSplitError] = useState<string | null>(null);
 
   async function split(
     mode: SplitMode,

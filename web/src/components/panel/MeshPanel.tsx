@@ -32,6 +32,7 @@ function formatEstimate(measure: GeometryMeasure, size: string): string | null {
 // inside the Geometry tab below the import cards.
 export function MeshPanel() {
   const hasMesh = useModelStore((s) => s.nodes.length > 0);
+  const isRunning = useModelStore((s) => s.isRunning);
   const remeshNotice = useModelStore((s) => s.remeshNotice);
   const setRemeshNotice = useModelStore((s) => s.setRemeshNotice);
   const {
@@ -115,7 +116,9 @@ export function MeshPanel() {
           </div>
           <button
             className={hasMesh ? styles.outlineBtn : styles.meshVolBtn}
-            disabled={isMeshing}
+            // A mesh queued behind a running import, split or solve would mesh
+            // with settings from before it — and its worker reset would kill it.
+            disabled={isMeshing || isRunning}
             onClick={meshVolume}
           >
             {isMeshing

@@ -103,7 +103,6 @@ export function SplitSection() {
 
   function openTool() {
     setOpen(true);
-    setSplitError(null);
     // The panel mounts before any import, so start each session's plane at the
     // middle of the geometry it will cut.
     setPosition(centre(axisIndex));
@@ -150,6 +149,14 @@ export function SplitSection() {
       <div className={styles.sectionLabel} title={SPLIT_TIP}>
         Split geometry
       </div>
+      {/* Above the form, not in it: a split that fails after the tool was
+          closed (or the step left) still has to be reported. */}
+      {splitError && (
+        <div className={styles.errorBanner} data-testid="split-error">
+          <span>{splitError}</span>
+          <button onClick={() => setSplitError(null)}>×</button>
+        </div>
+      )}
       {!open ? (
         <>
           <button
@@ -178,12 +185,6 @@ export function SplitSection() {
         </>
       ) : (
         <div className={styles.inlineForm} data-testid="split-form">
-          {splitError && (
-            <div className={styles.errorBanner} data-testid="split-error">
-              <span>{splitError}</span>
-              <button onClick={() => setSplitError(null)}>×</button>
-            </div>
-          )}
           <div className={styles.segToggle} role="group" aria-label="Split">
             {(["faces", "bodies"] as SplitMode[]).map((m) => (
               <button
