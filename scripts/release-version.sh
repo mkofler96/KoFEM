@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Print the product version, after checking that everything declaring it agrees.
 #
-#   scripts/release-version.sh          # prints e.g. 0.1.0
-#   scripts/release-version.sh --notes  # prints that version's CHANGELOG.md section
+#   scripts/release-version.sh                 # prints e.g. 0.3.0
+#   scripts/release-version.sh --notes         # prints that version's CHANGELOG.md section
+#   scripts/release-version.sh --notes 0.2.0   # prints an older version's section
+#   scripts/release-version.sh --changelog-versions  # every version in CHANGELOG.md, oldest first
 #
 # The version lives in web/package.json and in Cargo.toml [workspace.package];
 # Cargo.lock must record it for the kofem-* crates, and CHANGELOG.md must carry a
@@ -35,19 +37,39 @@ if [ -n "$stale_lock" ]; then
 fi
 
 # Everything from "## [X.Y.Z]" up to the next "## [" heading, minus the heading.
-notes=$(awk -v ver="$web_version" '
-  index($0, "## [" ver "]") == 1 { inside = 1; next }
-  inside && index($0, "## [") == 1 { exit }
-  inside { print }
-' CHANGELOG.md)
+section_notes() {
+  awk -v ver="$1" '
+    index($0, "## [" ver "]") == 1 { inside = 1; next }
+    inside && index($0, "## [") == 1 { exit }
+    inside { print }
+  ' CHANGELOG.md | sed -e '/./,$!d'
+}
 
+notes=$(section_notes "$web_version")
 if [ -z "$(printf '%s' "$notes" | tr -d '[:space:]')" ]; then
   echo "ERROR: CHANGELOG.md has no '## [$web_version]' section, or it is empty. A release PR adds one." >&2
   exit 1
 fi
 
-if [ "${1:-}" = "--notes" ]; then
-  printf '%s\n' "$notes" | sed -e '/./,$!d'
-else
-  echo "$web_version"
-fi
+case "${1:-}" in
+  --notes)
+    if [ -n "${2:-}" ]; then
+      notes=$(section_notes "$2")
+      if [ -z "$(printf '%s' "$notes" | tr -d '[:space:]')" ]; then
+        echo "ERROR: CHANGELOG.md has no '## [$2]' section, or it is empty." >&2
+        exit 1
+      fi
+    fi
+    printf '%s\n' "$notes"
+    ;;
+  --changelog-versions)
+    sed -n 's/^## \[\([0-9][0-9.]*\)\].*/\1/p' CHANGELOG.md | tac
+    ;;
+  "")
+    echo "$web_version"
+    ;;
+  *)
+    echo "ERROR: unknown argument '$1'. Use --notes [VERSION] or --changelog-versions." >&2
+    exit 1
+    ;;
+esac

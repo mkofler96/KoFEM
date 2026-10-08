@@ -225,7 +225,9 @@ The `release` skill in `.claude/skills/` has the procedure. The rules:
   `release` job then tags the merge commit and publishes the GitHub Release, and
   it only does so once every gate has passed on that commit.
 - **Agents never tag, and never create or edit a GitHub Release.** Never open a
-  release PR unless the maintainer asked for that release.
+  release PR unless the maintainer asked for that release. The maintainer may tag
+  by hand. CI then publishes the GitHub Release for any `vX.Y.Z` tag that has a
+  `CHANGELOG.md` section.
 - **Feature PRs do not touch `CHANGELOG.md`.** Notes are written once, at release
   time, from the merged PRs. That keeps parallel branches from conflicting.
 - **Semver, pre-1.0:** a patch release is fixes only. A minor release is anything
