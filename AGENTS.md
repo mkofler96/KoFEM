@@ -40,6 +40,7 @@ KoFEM/
     ├── fetch-wasm-deps.sh    # Pull the precompiled OCCT/Netgen/MFEM WASM libs
     ├── fetch-wasm-engine.sh  # Pull the compiled engine from its GitHub Release
     ├── engine-version.sh     # Content hash of the engine sources → release tag
+    ├── release-version.sh    # Product version; checks package.json/Cargo/CHANGELOG agree
     ├── clang-tidy.sh         # C++ lint, mirrors the DeepSource PR gate
     ├── test-bc-validation.sh
     └── test-shell.sh
@@ -207,6 +208,32 @@ benchmarks, `shell-coupling/` and `topopt-shell/` hold dev scripts. Touch those
 only when the request names them explicitly. Do not add Abaqus `.inp` input
 files or an Abaqus reader (licensing).
 
+## Releases
+
+kofem.org deploys `main` continuously, so a release does not ship code. It tags a
+tested commit as `vX.Y.Z`, which gives users and bug reports a version to name and
+puts changes to numerical results on record. The `release` skill in
+`.claude/skills/` has the procedure. The rules:
+
+- **The version** is `web/package.json` `version` and must equal `Cargo.toml`
+  `[workspace.package] version`. `scripts/release-version.sh` checks both on
+  every PR, and also checks that `CHANGELOG.md` has a section for the version.
+- **A release is a PR** titled `Release vX.Y.Z`. It bumps both versions and adds
+  the `CHANGELOG.md` section. Merging it is the maintainer's go/no-go. CI's
+  `release` job then tags the merge commit and publishes the GitHub Release, and
+  it only does so once every gate has passed on that commit.
+- **Agents never tag, and never create or edit a GitHub Release.** Never open a
+  release PR unless the maintainer asked for that release.
+- **Feature PRs do not touch `CHANGELOG.md`.** Notes are written once, at release
+  time, from the merged PRs. That keeps parallel branches from conflicting.
+- **Semver, pre-1.0:** a patch release is fixes only. A minor release is anything
+  new or breaking. Breaking means a saved model, an example link or an exported
+  file stops loading or reading the same, or results for an unchanged model move
+  beyond the validation tolerances. Every numerical change is listed, with what
+  moved and why.
+- `engine-<id>` releases are build artifacts, unrelated to product versions. They
+  are marked prerelease so they never show as "Latest".
+
 ## Code Style
 
 - Before committing, always run `cargo fmt` and `cargo clippy`
@@ -287,6 +314,10 @@ three:
    written into the update body as an HTML comment and checked before anything is
    uploaded. An unchanged week posts the digest alone.
 3. **No filler.** A week with nothing worth reading says so in one line.
+
+The update also carries the `release` skill's assessment, so there is no separate
+weekly release post. It gets a section only when the recommendation is to release
+or the release is blocked. "Wait" is left out.
 
 This replaced a Slack pipeline that posted the same images on every CI run, on
 every branch and PR.

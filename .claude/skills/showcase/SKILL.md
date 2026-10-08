@@ -84,7 +84,13 @@ prepare calls:
    are embedded in the update body, and an attachment row per image per week would
    clutter the issue.
 
-### 5. Post the update
+### 5. Release check
+
+Run the `release` skill's **assess** mode. It is read-only. Keep its result for
+the body only when it says **release now** or **blocked**. "Wait" is not news, so
+leave it out.
+
+### 6. Post the update
 
 `save_status_update` with `type: "project"`, the project ID, and a `health` that
 reflects what you actually found (`onTrack` / `atRisk` / `offTrack`) — not a
@@ -103,6 +109,11 @@ from 131s three weeks ago" beats "good progress on several fronts".>
 the Roadmap document says. Name the deviation and what you did about it —
 reprioritised issue X, filed issue Y. Omit this section entirely when the
 roadmap and the code agree.>
+
+### Release
+
+<Only when the release check says release now or blocked. Its five-line report,
+verbatim. Omit the section entirely when it says wait.>
 
 ### Filed this week
 
