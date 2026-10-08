@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useModelStore } from "../../store/modelStore";
 import type { SplitMode } from "../../store/modelStore";
 import { useGeometryEdit } from "../../hooks/useGeometryEdit";
@@ -75,9 +75,19 @@ export function SplitSection() {
     );
   }, [open, axisIndex, parsed, setSplitDraft]);
 
+  // The tool as it is NOW, for a split's continuation: the worker answers after
+  // an await, by which time the user may have closed the tool, switched to
+  // Bodies or left the Geometry step. The open/mode the split started with
+  // would turn picking back on behind a closed form.
+  const liveTool = useRef({ open, mode });
+  useEffect(() => {
+    liveTool.current = { open, mode };
+  }, [open, mode]);
+
   // Leaving the Geometry step (unmount) ends the tool, picks and plane included.
   useEffect(
     () => () => {
+      liveTool.current = { ...liveTool.current, open: false };
       setSplitPicking(false);
       clearSplitFaces();
       setSplitDraft(null);
@@ -131,7 +141,8 @@ export function SplitSection() {
     const ok = await split(mode, axis, parsed, splitFaceIds);
     // The edit replaced every face id, so the old picks are gone; keep picking
     // so a run of cuts (both pads of a beam, say) needs no extra clicks.
-    if (ok && mode === "faces") setSplitPicking(true);
+    if (ok && liveTool.current.open && liveTool.current.mode === "faces")
+      setSplitPicking(true);
   }
 
   return (

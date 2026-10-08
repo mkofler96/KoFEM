@@ -98,3 +98,58 @@ test("split a body in two: the halves are separate bodies, bonded on mesh", asyn
     )
     .toBe(2);
 });
+
+// Whether a click on the geometry view would still toggle split faces.
+function splitPicking(page: import("@playwright/test").Page) {
+  return page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __kofemStore: { getState(): { splitPicking: boolean } };
+        }
+      ).__kofemStore.getState().splitPicking,
+  );
+}
+
+// The split answers after an await. Closing the tool, or leaving the Geometry
+// step, while the worker runs must leave face picking off: the continuation
+// used to turn it back on from the state the split started in, behind a closed
+// form, so every click on the model kept toggling invisible split faces.
+test("closing the tool or leaving the step mid-split leaves picking off", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await importStepText(page, BLOCK);
+
+  // Each pass cuts a fresh piece of the top face: x = 100, then x = 200 on the
+  // right-hand piece the first cut left.
+  for (const [leave, cut, at] of [
+    ["close", 100, [50, 50, 5]],
+    ["step", 200, [250, 50, 5]],
+  ] as const) {
+    const before = (await geometryCounts(page)).edits;
+    if (leave === "step")
+      await page
+        .getByRole("navigation")
+        .getByRole("button", { name: "Geometry" })
+        .click();
+    await page.getByTestId("split-open").click();
+    await page.getByTestId("split-position").fill(String(cut));
+    await clickModelAt(page, [...at]);
+    await expect(page.locator('[data-testid^="split-face-"]')).toHaveCount(1);
+    await page.getByTestId("split-apply").click();
+    if (leave === "close")
+      await page.getByRole("button", { name: "Close" }).click();
+    else
+      await page
+        .getByRole("navigation")
+        .getByRole("button", { name: "Constraints" })
+        .click();
+
+    // The split itself still lands — the user only stopped looking at it.
+    await expect
+      .poll(async () => (await geometryCounts(page)).edits, { timeout: 30_000 })
+      .toBe(before + 1);
+    expect(await splitPicking(page), `after leaving by ${leave}`).toBe(false);
+  }
+});

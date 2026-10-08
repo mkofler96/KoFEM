@@ -3,7 +3,7 @@
 
 import { useEffect } from "react";
 import { useThree } from "@react-three/fiber";
-import * as THREE from "three";
+import { Vector3 } from "three";
 
 export interface ViewportHooks {
   // Where a model-space point lands on the page (client pixels), so an E2E test
@@ -23,7 +23,7 @@ export function ViewportTestHooks() {
   useEffect(() => {
     const hooks: ViewportHooks = {
       project(point) {
-        const ndc = new THREE.Vector3(...point).project(camera);
+        const ndc = new Vector3(...point).project(camera);
         if (ndc.z > 1) return null;
         const rect = gl.domElement.getBoundingClientRect();
         return {
@@ -33,7 +33,7 @@ export function ViewportTestHooks() {
       },
       lookFrom(direction) {
         const orbit = controls as unknown as {
-          target: THREE.Vector3;
+          target: Vector3;
           update(): void;
         } | null;
         if (!orbit)
@@ -41,10 +41,7 @@ export function ViewportTestHooks() {
         const distance = camera.position.distanceTo(orbit.target);
         camera.position
           .copy(orbit.target)
-          .addScaledVector(
-            new THREE.Vector3(...direction).normalize(),
-            distance,
-          );
+          .addScaledVector(new Vector3(...direction).normalize(), distance);
         orbit.update();
       },
     };

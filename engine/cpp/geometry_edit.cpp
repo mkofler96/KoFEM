@@ -303,22 +303,23 @@ std::vector<uint8_t> step_bytes(const TopoDS_Shape& shape) {
     return bytes;
 }
 
+TopoDS_Shape split_by_mode(const std::string& mode, const TopoDS_Shape& shape,
+                           const val& opts, const gp_Pln& plane) {
+    if (mode == "faces")
+        return split_faces(shape, id_list(opts, "faceIds"), plane);
+    if (mode == "bodies")
+        return split_bodies(shape, id_list(opts, "bodyIds"), plane);
+    throw std::runtime_error(
+        R"(split_geometry: "mode" must be "faces" or "bodies", got ')" + mode + "'");
+}
+
 }  // namespace
 
 val split_geometry(const std::string& opts_json) {
     const val opts = parse_json(opts_json);
-    const std::string mode = jstring(opts, "mode", "");
     const gp_Pln plane = plane_from(opts);
-    const TopoDS_Shape& shape = cached_shape();
-
-    TopoDS_Shape edited;
-    if (mode == "faces")
-        edited = split_faces(shape, id_list(opts, "faceIds"), plane);
-    else if (mode == "bodies")
-        edited = split_bodies(shape, id_list(opts, "bodyIds"), plane);
-    else
-        throw std::runtime_error("split_geometry: \"mode\" must be \"faces\" or \"bodies\", got \"" +
-                                 mode + "\"");
+    const TopoDS_Shape edited =
+        split_by_mode(jstring(opts, "mode", ""), cached_shape(), opts, plane);
 
     const std::vector<uint8_t> bytes = step_bytes(edited);
     // The edit lives in the returned file from here on. Drop the pre-edit shape

@@ -52,7 +52,7 @@ export function useGeometryEdit() {
       return false;
     }
     if (!Number.isFinite(position)) {
-      setSplitError(`The plane position must be a number of mm.`);
+      setSplitError("The plane position must be a number of mm.");
       return false;
     }
     if (mode === "faces" && faceIds.length === 0) {
