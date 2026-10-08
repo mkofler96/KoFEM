@@ -94,6 +94,9 @@ export function SplitSection() {
   function openTool() {
     setOpen(true);
     setSplitError(null);
+    // The panel mounts before any import, so start each session's plane at the
+    // middle of the geometry it will cut.
+    setPosition(centre(axisIndex));
     // Faces are picked on the CAD geometry, not on a mesh.
     setViewRepr("geometry");
     if (mode === "faces") setSplitPicking(true);
