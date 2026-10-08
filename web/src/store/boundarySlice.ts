@@ -30,6 +30,8 @@ export interface FaceSelection {
   label: string; // e.g. "Min X face (9 nodes)"
   axis: "X" | "Y" | "Z";
   isMax: boolean;
+  // The CAD face the pick selected whole — see BcFaceEntry.cadFaceId.
+  cadFaceId?: number;
 }
 
 // ── Named BC / Load groups ────────────────────────────────────────────────────
@@ -44,6 +46,12 @@ export interface BcFaceEntry {
   // entries saved before point picking existed, which were faces or edges —
   // both integrable — so absence reads correctly as "not a point".
   geometry?: PickGeometry;
+  // The CAD face this entry is, when it was picked as one whole CAD face (the
+  // mesh's surfaceFaceIds numbering). It is what lets the entry outlive its
+  // mesh: a re-mesh re-resolves `nodeIds` from this face of the new mesh
+  // (lib/remeshGroups) instead of dropping the group. Absent on edge, node and
+  // flood-fill picks, whose node sets mean nothing on another mesh.
+  cadFaceId?: number;
 }
 
 export interface NamedBcGroup {

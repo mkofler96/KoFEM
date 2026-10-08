@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Minimal STEP (AP214) writer for a straight prism: a simple polygon in the xy
-// plane extruded along +z. Every polygon edge becomes its own planar side face,
-// so extra polygon vertices on a straight edge split that side into separate CAD
-// faces — which is how the gallery examples get pickable support and load pads
-// on an otherwise plain block. The B-rep uses plain LINE edge curves and PLANE
-// surfaces; OCCT rebuilds the p-curves on import.
+// plane extruded along +z. Every polygon edge becomes its own planar side face.
+// It writes the plain stock a user would import — the gallery's support and load
+// pads are cut afterwards with the app's split tool (split_geometry), as a user
+// cuts them, not baked into the polygon. The B-rep uses plain LINE edge curves
+// and PLANE surfaces; OCCT rebuilds the p-curves on import.
 
 /**
  * @param {[number, number][]} polygon  vertices in counter-clockwise order (seen from +z)

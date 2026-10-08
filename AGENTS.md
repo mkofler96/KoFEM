@@ -23,6 +23,7 @@ KoFEM/
 │   │   │                     # lives in the modules below
 │   │   ├── cad_io.cpp        # STEP/IGES import (OCCT)
 │   │   ├── tessellate.cpp    # OCCT surface tessellation (display)
+│   │   ├── geometry_edit.cpp # Split faces/bodies with a plane (the split tool)
 │   │   ├── mesh_netgen.cpp   # Netgen volume meshing
 │   │   ├── solve_mfem.cpp    # Linear-elastic solid solve (MFEM)
 │   │   ├── shell_core.cpp    # Kirchhoff/DKT shell formulation
@@ -194,6 +195,14 @@ do not recreate them.
 Change the generator and re-run it (`bun run examples:generate` or the specific
 `examples:generate-*` script in `web/package.json`) — never hand-edit the `.vtu`
 or `examples.json`. Then check the result in the gallery and in the app.
+
+**An example must be something a user can build in the app.** A generator makes
+the model through the engine calls the UI makes — STEP import, the split tool
+(`split_geometry`) for sub-face pads, whole-CAD-face group entries carrying
+`cadFaceId` — not with geometry the app cannot create or with scripted node
+sets, which vanish on the first re-mesh. The MBB beam is the reference, with
+`web/tests/mbb-by-hand.spec.ts` building it through the UI; the hex benchmarks
+and the shell plate predate the rule (see `examples/gallery/README.md`).
 
 `examples/unvalidated/` holds models that were taken off the gallery, or never
 made it, because their result is not trusted yet (the crane hook). Nothing there

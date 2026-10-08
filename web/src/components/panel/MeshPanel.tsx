@@ -32,6 +32,8 @@ function formatEstimate(measure: GeometryMeasure, size: string): string | null {
 // inside the Geometry tab below the import cards.
 export function MeshPanel() {
   const hasMesh = useModelStore((s) => s.nodes.length > 0);
+  const remeshNotice = useModelStore((s) => s.remeshNotice);
+  const setRemeshNotice = useModelStore((s) => s.setRemeshNotice);
   const {
     stepSurface,
     isMeshing,
@@ -122,6 +124,19 @@ export function MeshPanel() {
                 ? "⟳ Re-mesh STEP volume"
                 : "▶  Mesh STEP volume"}
           </button>
+          {remeshNotice && (
+            <div className={styles.inlineForm} data-testid="remesh-notice">
+              <span className={styles.hint}>{remeshNotice}</span>
+              <div className={styles.formBtns}>
+                <button
+                  className={styles.cancelBtn}
+                  onClick={() => setRemeshNotice(null)}
+                >
+                  OK
+                </button>
+              </div>
+            </div>
+          )}
         </>
       ) : (
         !hasMesh && (

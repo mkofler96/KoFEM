@@ -6,10 +6,11 @@
 // volume mesh → SIMP/MMA optimizer — so what the gallery shows is exactly what
 // the app produces, and the user can re-mesh and re-optimize it:
 //
-//   mbb-beam-topopt.step — the design domain: a 300 × 50 × 10 mm block. Its
-//                          bottom and top edges are split so the two supports and
-//                          the load sit on their own CAD faces (pickable in one
-//                          click, and still there after a re-mesh).
+//   mbb-beam-topopt.step — the design domain: a 300 × 50 × 10 mm block whose
+//                          bottom and top faces were cut with the app's split
+//                          tool, so the two supports and the load sit on their
+//                          own CAD faces (pickable in one click, and still there
+//                          after a re-mesh).
 //   mbb-beam-topopt.vtu  — the analysis the "Open in KoFEM web" button loads:
 //                          the Netgen mesh, the tessellation and CAD face ids
 //                          (face picking), the support/load groups and the
@@ -29,6 +30,20 @@
 // examples/validation/topopt/cases/mbb-beam.mjs.
 //
 //   bun examples/gallery/generate-mbb-topopt.mjs
+//
+// Everything here is something a user does in the app, in the same order and
+// through the same engine calls, so the example can be rebuilt by hand:
+//
+//   1. Geometry → import a plain 300 × 50 × 10 mm block (six faces).
+//   2. Split faces or bodies with a plane… → Faces, cut plane x = …:
+//        bottom face at x = 5, then its long piece at x = 295  (the two pads)
+//        top face at x = 145, then its right piece at x = 155  (the load pad)
+//   3. Mesh with a 5 mm max element size.
+//   4. Constraints: the left pad fixed (Ux Uy Uz), the right pad Uy only;
+//      Loads: Fy = −1000 N on the mid-span pad.
+//   5. Optimize: minimum compliance, volume fraction 0.5, p = 3, r_min = 10 mm.
+//
+// web/tests/mbb-by-hand.spec.ts walks exactly this path through the UI.
 //
 // It appends/replaces the "mbb-beam-topopt" entry in examples.json, leaving the
 // other entries untouched. Netgen is not bit-reproducible across builds, so a
@@ -76,31 +91,85 @@ const SETTINGS = {
   tolerance: 0.01,
 };
 
-// ── Geometry ──────────────────────────────────────────────────────────────────
-// Counter-clockwise outline in xy; each edge becomes one side face of the prism.
-const outline = [
-  [0, 0],
-  [PAD, 0],
-  [L - PAD, 0],
-  [L, 0],
-  [L, H],
-  [L / 2 + LOAD_PAD / 2, H],
-  [L / 2 - LOAD_PAD / 2, H],
-  [0, H],
-];
-const step = prismStep(outline, T, "MBB beam");
-const stepBytes = new TextEncoder().encode(step);
-
-// ── Tessellate + mesh, with the exact options the app's worker uses ───────────
+// ── Geometry: a plain block, cut with the split tool ──────────────────────────
+const TESSELLATE = JSON.stringify({
+  deflection_relative: 0.001,
+  angular_deflection: 0.5,
+  format: "step",
+});
 const mesher = await loadEngine();
-const tess = mesher.tessellate_step(
-  stepBytes,
-  JSON.stringify({
-    deflection_relative: 0.001,
-    angular_deflection: 0.5,
-    format: "step",
-  }),
+let stepBytes = new TextEncoder().encode(
+  prismStep(
+    [
+      [0, 0],
+      [L, 0],
+      [L, H],
+      [0, H],
+    ],
+    T,
+    "MBB beam",
+  ),
 );
+let tess = mesher.tessellate_step(stepBytes, TESSELLATE);
+
+// The CAD face whose tessellation triangles all satisfy `pred` — the face a user
+// clicks to pick it. Exactly one must match.
+function tessellatedFaceWhere(label, pred) {
+  const inside = new Set();
+  const outside = new Set();
+  for (let t = 0; t < tess.triangleFaceIds.length; t++) {
+    const onIt = [0, 1, 2].every((k) => {
+      const v = tess.triangles[3 * t + k];
+      return pred(
+        tess.vertices[3 * v],
+        tess.vertices[3 * v + 1],
+        tess.vertices[3 * v + 2],
+      );
+    });
+    (onIt ? inside : outside).add(tess.triangleFaceIds[t]);
+  }
+  const exact = [...inside].filter((id) => !outside.has(id));
+  if (exact.length !== 1)
+    throw new Error(
+      `${label}: expected exactly one CAD face, found [${exact.join(", ")}]`,
+    );
+  return exact[0];
+}
+
+// One use of the split tool: pick the face, cut it with the plane x = `x`. The
+// request is exactly the one the app's worker sends (useGeometryEdit), and the
+// edited file is loaded back, as the app does.
+function splitFaceAtX(label, pred, x) {
+  const faceId = tessellatedFaceWhere(label, pred);
+  const { bytes } = mesher.split_geometry(
+    JSON.stringify({
+      mode: "faces",
+      origin: [x, 0, 0],
+      normal: [1, 0, 0],
+      faceIds: [faceId],
+    }),
+  );
+  stepBytes = bytes;
+  tess = mesher.tessellate_step(stepBytes, TESSELLATE);
+}
+const eps = 1e-6;
+const onBottom = (y) => Math.abs(y) < eps;
+const onTop = (y) => Math.abs(y - H) < eps;
+splitFaceAtX("bottom face", (x, y) => onBottom(y), PAD);
+splitFaceAtX(
+  "bottom face right of the pin pad",
+  (x, y) => onBottom(y) && x >= PAD - eps,
+  L - PAD,
+);
+splitFaceAtX("top face", (x, y) => onTop(y), L / 2 - LOAD_PAD / 2);
+splitFaceAtX(
+  "top face right of the cut",
+  (x, y) => onTop(y) && x >= L / 2 - LOAD_PAD / 2 - eps,
+  L / 2 + LOAD_PAD / 2,
+);
+const step = new TextDecoder().decode(stepBytes);
+
+// ── Mesh, with the exact options the app's worker uses ────────────────────────
 const dto = mesher.generate_fem_mesh(
   JSON.stringify({
     max_element_size: MAX_ELEMENT_SIZE,
@@ -139,7 +208,6 @@ function cadFaceWhere(label, pred) {
     );
   return exact[0];
 }
-const eps = 1e-6;
 const pinFace = cadFaceWhere(
   "pin pad",
   (x, y) => Math.abs(y) < eps && x <= PAD + eps,
@@ -235,11 +303,14 @@ const chunk = (arr, n) =>
   Array.from({ length: arr.length / n }, (_, i) => arr.slice(n * i, n * i + n));
 
 function buildVtu() {
-  const faceEntry = (id, nodeIds) => ({
+  // Each entry is a whole CAD face, picked as one — so it carries the face id
+  // and survives a re-mesh in the app (BcFaceEntry.cadFaceId).
+  const faceEntry = (id, cadFaceId, nodeIds) => ({
     id,
-    label: `Face ${id}`,
+    label: "Face 1",
     nodeIds,
     geometry: "face",
+    cadFaceId,
   });
   const meta = {
     format: "kofem-analysis",
@@ -257,14 +328,14 @@ function buildVtu() {
         name: "Pin",
         dofs: [0, 1, 2],
         value: 0,
-        faces: [faceEntry(1, pinNodes)],
+        faces: [faceEntry(1, pinFace, pinNodes)],
       },
       {
         id: 2,
         name: "Roller",
         dofs: [1],
         value: 0,
-        faces: [faceEntry(2, rollerNodes)],
+        faces: [faceEntry(2, rollerFace, rollerNodes)],
       },
     ],
     loadGroups: [
@@ -275,7 +346,7 @@ function buildVtu() {
         totalForce: -F,
         components: [0, -F, 0],
         kind: "force",
-        faces: [faceEntry(3, loadNodes)],
+        faces: [faceEntry(3, loadFace, loadNodes)],
       },
     ],
     tieGroups: [],
@@ -292,6 +363,7 @@ function buildVtu() {
       points: chunk(Array.from(tess.vertices), 3),
       triangles: chunk(Array.from(tess.triangles), 3),
       bodyIds: Array.from(tess.triangleBodyIds),
+      faceIds: Array.from(tess.triangleFaceIds),
     },
     volMesh: null,
     surfaceTriangles: chunk(surfTri, 3),

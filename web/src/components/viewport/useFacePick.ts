@@ -101,6 +101,13 @@ export function useFacePick(
     const current = selectedFace
       ? [...pendingFaces, selectedFace]
       : pendingFaces;
+    // A face pick on a triangle with a CAD face behind it selected that whole
+    // face (pickFaceNodeIds' CAD face ID mode): remember which, so the entry
+    // can be re-resolved on a new mesh.
+    const cadFaceId =
+      pickGeometry === "face"
+        ? boundaryMeshTopo.faceIds?.[startIdx]
+        : undefined;
     const next = toggleFaceSelection(
       current,
       {
@@ -108,6 +115,7 @@ export function useFacePick(
         axis,
         isMax,
         label: "",
+        ...(cadFaceId !== undefined ? { cadFaceId } : {}),
       },
       SELECTION_NOUN[pickGeometry],
     );

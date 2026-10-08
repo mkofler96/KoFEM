@@ -39,21 +39,24 @@ export function useGeometry() {
       points: [number, number, number][];
       triangles: [number, number, number][];
       bodyIds: number[];
+      faceIds: number[];
       bodyCount: number;
       shellBodyIds: number[];
     }>("parse_step", { bytes, format, thinRatio })
-      .then(({ points, triangles, bodyIds, bodyCount, shellBodyIds }) => {
-        if (points.length === 0) setStepImportError("No geometry found.");
-        else {
-          // Retain the raw bytes + format so the geometry can be reloaded for a
-          // re-mesh (the worker is reset after each mesh and loses the shape).
-          setStepBytes(bytes);
-          setGeometryFormat(format);
-          setStepSurface({ points, triangles, bodyIds });
-          // One property per body (#353); thin-walled bodies preselected as shells.
-          setBodies(bodyCount, autoShell ? shellBodyIds : []);
-        }
-      })
+      .then(
+        ({ points, triangles, bodyIds, faceIds, bodyCount, shellBodyIds }) => {
+          if (points.length === 0) setStepImportError("No geometry found.");
+          else {
+            // Retain the raw bytes + format so the geometry can be reloaded for a
+            // re-mesh (the worker is reset after each mesh and loses the shape).
+            setStepBytes(bytes);
+            setGeometryFormat(format);
+            setStepSurface({ points, triangles, bodyIds, faceIds });
+            // One property per body (#353); thin-walled bodies preselected as shells.
+            setBodies(bodyCount, autoShell ? shellBodyIds : []);
+          }
+        },
+      )
       .catch((err) =>
         // eslint-disable-next-line kofem/no-silent-fallback -- fallback text for a rejection that arrived without a message; this is the error path itself, not solver data
         setStepImportError(err.message ?? `${label} import failed`),

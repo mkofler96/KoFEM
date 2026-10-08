@@ -5,12 +5,14 @@ import { Canvas } from "@react-three/fiber";
 import { OrbitControls, GizmoHelper, GizmoViewport } from "@react-three/drei";
 import { MeshScene } from "./MeshScene";
 import { FitCamera } from "./FitCamera";
+import { ViewportTestHooks } from "./ViewportTestHooks";
 import { ColorBar } from "./ColorBar";
 import { DensityColorBar } from "./DensityColorBar";
 import { useModelStore } from "../../store/modelStore";
 
 export function Viewport() {
   const pickMode = useModelStore((s) => s.pickMode);
+  const splitPicking = useModelStore((s) => s.splitPicking);
   const triggerFitView = useModelStore((s) => s.triggerFitView);
 
   return (
@@ -44,7 +46,7 @@ export function Viewport() {
         gl={{ antialias: true, preserveDrawingBuffer: true }}
         style={{
           background: "#f0f2f5",
-          cursor: pickMode ? "crosshair" : "default",
+          cursor: pickMode || splitPicking ? "crosshair" : "default",
         }}
       >
         <ambientLight intensity={0.7} />
@@ -53,6 +55,7 @@ export function Viewport() {
         <MeshScene />
         <OrbitControls makeDefault />
         <FitCamera />
+        <ViewportTestHooks />
         <GizmoHelper alignment="bottom-right" margin={[72, 72]}>
           <GizmoViewport labelColor="#374151" axisHeadScale={1} />
         </GizmoHelper>

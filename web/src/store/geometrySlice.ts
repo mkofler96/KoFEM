@@ -4,8 +4,15 @@
 // Geometry slice: FEM nodes/elements, the imported CAD geometry (tessellation
 // + retained source bytes), and the meshing pipeline state.
 
-import type { SliceCreator } from "./modelStore";
+import { current } from "immer";
+import type { ModelState, SliceCreator } from "./modelStore";
 import { DEFAULT_THIN_RATIO } from "../lib/thinBodies";
+import { carryGroupsToMesh, remeshNotice } from "../lib/remeshGroups";
+import {
+  rebuildConstraints,
+  rebuildLoads,
+  rebuildSurfaceLoads,
+} from "./boundarySlice";
 
 export interface Node {
   id: number;
@@ -86,7 +93,25 @@ export interface StepTessellation {
   // Absent on analyses saved before per-body colours; the viewer then treats
   // every triangle as body 1.
   bodyIds?: number[];
+  // 1-based CAD face id of each triangle, aligned with `triangles` — the ids the
+  // split tool picks and the engine's split_geometry takes, numbered like the
+  // mesh's surfaceFaceIds. Absent on analyses saved before the split tool: such
+  // a tessellation draws fine but its faces cannot be picked for a split.
+  faceIds?: number[];
 }
+
+// A geometry the split tool can return to: the file, its view, and the body
+// table that went with it (a body split renumbers the bodies).
+export interface GeometryVersion {
+  stepBytes: Uint8Array;
+  geometryFormat: GeometryFormat;
+  stepSurface: StepTessellation;
+  properties: Property[];
+}
+
+// How the split tool cuts: imprint the plane on the picked faces (the part stays
+// one body, the faces become several), or cut the bodies themselves in two.
+export type SplitMode = "faces" | "bodies";
 
 export interface VolMesh {
   points: [number, number, number][];
@@ -122,6 +147,21 @@ export interface GeometrySlice {
   // When off no body is preselected; the element type is the user's alone.
   autoShell: boolean;
   thinRatio: number;
+  // Geometry edits (the split tool), newest last — each entry is the geometry
+  // as it was BEFORE that edit, so undo pops one. Cleared by an import or a
+  // loaded analysis, which start a new geometry history.
+  geometryHistory: GeometryVersion[];
+  // Split-tool face picking: while on, a click on the geometry view toggles a
+  // CAD face in `splitFaceIds` (the faces the next split cuts). Transient.
+  splitPicking: boolean;
+  splitFaceIds: number[];
+  // The cut the split tool would make right now (`axis = position`, axis 0–2),
+  // drawn as a plane in the geometry view while the tool is open. Transient.
+  splitDraft: { axis: 0 | 1 | 2; position: number } | null;
+  // What the last mesh did with the existing supports/loads/ties: which it
+  // carried over on their CAD faces and which the user has to pick again.
+  // Null when the mesh had nothing to carry. Shown by the mesh panel.
+  remeshNotice: string | null;
 
   addNode(node: Node): void;
   addElement(el: Element): void;
@@ -147,6 +187,23 @@ export interface GeometrySlice {
   setSurfaceFaceIds(ids: number[] | null): void;
   setMeshing(v: boolean): void;
   setStepImportError(msg: string | null): void;
+  // Replace the geometry with the result of an edit (a split): the new file and
+  // its tessellation. The mesh, groups and results of the old geometry are
+  // dropped — they no longer describe it. The body table survives when the body
+  // count is unchanged (a face split); a body split renumbers the bodies and
+  // rebuilds it as an import would, preselecting `shellBodyIds` as shells.
+  applyGeometryEdit(
+    bytes: Uint8Array,
+    tessellation: StepTessellation,
+    bodyCount: number,
+    shellBodyIds: number[],
+  ): void;
+  undoGeometryEdit(): void;
+  setSplitPicking(on: boolean): void;
+  toggleSplitFace(faceId: number): void;
+  clearSplitFaces(): void;
+  setSplitDraft(draft: { axis: 0 | 1 | 2; position: number } | null): void;
+  setRemeshNotice(notice: string | null): void;
   applyMeshResult(
     nodes: Node[],
     elements: Element[],
@@ -158,6 +215,61 @@ export interface GeometrySlice {
     // thickness. Absent for a plain all-solid mesh, which leaves properties as-is.
     properties?: Property[] | null,
   ): void;
+}
+
+// One property per body, all made of the first material — the body table of a
+// freshly loaded geometry (#353). A surface-only geometry reports 0 bodies;
+// keep one property so the material UI stays functional (meshing fails loudly on
+// its own).
+function freshBodies(
+  s: ModelState,
+  count: number,
+  shellBodyIds: number[],
+): Property[] {
+  const mat = s.materials[0];
+  if (!mat) throw new Error("Cannot list bodies: the model has no materials");
+  const shell = new Set(shellBodyIds);
+  return Array.from({ length: Math.max(1, count) }, (_, i) => ({
+    id: i + 1,
+    materialId: mat.id,
+    discretization: shell.has(i + 1)
+      ? ("shell" as BodyDiscretization)
+      : ("solid" as BodyDiscretization),
+  }));
+}
+
+// Everything built ON the geometry — mesh, groups, results, transient body view
+// state — which a new or edited geometry invalidates.
+function dropAnalysis(s: ModelState): void {
+  s.volMesh = null;
+  s.viewRepr = "geometry";
+  s.stepImportError = null;
+  s.highlightBodyId = null;
+  s.hiddenBodyIds = [];
+  s.nodes = [];
+  s.elements = [];
+  s.surfaceTriangles = null;
+  s.surfaceFaceIds = null;
+  s.bcGroups = [];
+  s.loadGroups = [];
+  s.tieGroups = [];
+  s.couplingGroups = [];
+  s.constraints = [];
+  s.loads = [];
+  s.surfaceLoads = [];
+  s.nextBcGroupId = 1;
+  s.nextLoadGroupId = 1;
+  s.nextTieGroupId = 1;
+  s.nextCouplingGroupId = 1;
+  s.nextFaceEntryId = 1;
+  s.result = null;
+  // New/edited geometry drops the element set a density was computed over
+  // (KOF-233): clear it so the Optimize/Results steps don't read as complete
+  // against a mesh that no longer exists.
+  s.densityResult = null;
+  s.splitPicking = false;
+  s.splitFaceIds = [];
+  s.remeshNotice = null;
 }
 
 export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
@@ -175,6 +287,11 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
   stepImportError: null,
   autoShell: true,
   thinRatio: DEFAULT_THIN_RATIO,
+  geometryHistory: [],
+  splitPicking: false,
+  splitFaceIds: [],
+  splitDraft: null,
+  remeshNotice: null,
 
   addNode: (node) =>
     set((s) => {
@@ -190,20 +307,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
     }),
   setBodies: (count, shellBodyIds) =>
     set((s) => {
-      const mat = s.materials[0];
-      if (!mat)
-        throw new Error("Cannot list bodies: the model has no materials");
-      // A surface-only import reports 0 bodies; keep one property so the
-      // material UI stays functional (meshing fails loudly on its own).
-      const n = Math.max(1, count);
-      const shell = new Set(shellBodyIds ?? []);
-      s.properties = Array.from({ length: n }, (_, i) => ({
-        id: i + 1,
-        materialId: mat.id,
-        discretization: shell.has(i + 1)
-          ? ("shell" as BodyDiscretization)
-          : ("solid" as BodyDiscretization),
-      }));
+      s.properties = freshBodies(s, count, shellBodyIds ?? []);
     }),
   applyShellDetection: (shellBodyIds) =>
     set((s) => {
@@ -276,32 +380,11 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
         s.stepBytes = null;
         s.geometryFormat = "step";
       }
-      s.volMesh = null;
-      s.viewRepr = "geometry";
-      s.stepImportError = null;
-      // New (or cleared) geometry: body ids no longer apply, drop the transient
-      // per-body view state (issue #353).
-      s.highlightBodyId = null;
-      s.hiddenBodyIds = [];
-      s.nodes = [];
-      s.elements = [];
-      s.bcGroups = [];
-      s.loadGroups = [];
-      s.tieGroups = [];
-      s.couplingGroups = [];
-      s.constraints = [];
-      s.loads = [];
-      s.surfaceLoads = [];
-      s.nextBcGroupId = 1;
-      s.nextLoadGroupId = 1;
-      s.nextTieGroupId = 1;
-      s.nextCouplingGroupId = 1;
-      s.nextFaceEntryId = 1;
-      s.result = null;
-      // New/cleared geometry drops the element set a density was computed over
-      // (KOF-233): clear it so the Optimize/Results steps don't read as complete
-      // against a mesh that no longer exists.
-      s.densityResult = null;
+      // New (or cleared) geometry: body ids, the mesh and everything on it no
+      // longer apply (issue #353), and the edits of the previous geometry are
+      // not this one's to undo.
+      dropAnalysis(s);
+      s.geometryHistory = [];
       if (tessellation) {
         s.fitViewTrigger++;
         s.hasStarted = true;
@@ -325,6 +408,65 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
     set((s) => {
       s.stepImportError = msg;
     }),
+  applyGeometryEdit: (bytes, tessellation, bodyCount, shellBodyIds) =>
+    set((s) => {
+      if (!s.stepBytes || !s.stepSurface)
+        throw new Error(
+          "Cannot apply a geometry edit: no geometry is loaded to edit",
+        );
+      const cadBodies = s.properties.filter(isCadBody);
+      s.geometryHistory.push({
+        stepBytes: s.stepBytes,
+        geometryFormat: s.geometryFormat,
+        stepSurface: s.stepSurface,
+        properties: cadBodies,
+      });
+      s.stepBytes = bytes;
+      // The engine writes every edit as STEP, whatever the source format was.
+      s.geometryFormat = "step";
+      s.stepSurface = tessellation;
+      // A face split keeps the bodies, so their materials and element types
+      // stay; only the shell sections a mesh derived go, with the mesh. A body
+      // split renumbers the bodies — start the table over, as an import would.
+      s.properties =
+        cadBodies.length === Math.max(1, bodyCount)
+          ? cadBodies
+          : freshBodies(s, bodyCount, s.autoShell ? shellBodyIds : []);
+      dropAnalysis(s);
+    }),
+  undoGeometryEdit: () =>
+    set((s) => {
+      const previous = s.geometryHistory.pop();
+      if (!previous)
+        throw new Error("Cannot undo: there is no geometry edit to undo");
+      s.stepBytes = previous.stepBytes;
+      s.geometryFormat = previous.geometryFormat;
+      s.stepSurface = previous.stepSurface;
+      s.properties = previous.properties;
+      dropAnalysis(s);
+    }),
+  setSplitPicking: (on) =>
+    set((s) => {
+      s.splitPicking = on;
+    }),
+  toggleSplitFace: (faceId) =>
+    set((s) => {
+      s.splitFaceIds = s.splitFaceIds.includes(faceId)
+        ? s.splitFaceIds.filter((id) => id !== faceId)
+        : [...s.splitFaceIds, faceId];
+    }),
+  clearSplitFaces: () =>
+    set((s) => {
+      s.splitFaceIds = [];
+    }),
+  setSplitDraft: (draft) =>
+    set((s) => {
+      s.splitDraft = draft;
+    }),
+  setRemeshNotice: (notice) =>
+    set((s) => {
+      s.remeshNotice = notice;
+    }),
 
   applyMeshResult: (
     nodes,
@@ -340,18 +482,29 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       if (properties) s.properties = properties;
       s.surfaceTriangles = surfaceTriangles ?? null;
       s.surfaceFaceIds = surfaceFaceIds ?? null;
-      s.bcGroups = [];
-      s.loadGroups = [];
-      s.tieGroups = [];
+      // Groups picked on whole CAD faces follow those faces onto the new mesh
+      // (lib/remeshGroups); the rest are cleared and named in the notice. The
+      // id counters run on, so a carried group's id is never handed out again.
+      const before = current(s);
+      const carried = carryGroupsToMesh(
+        {
+          bcGroups: before.bcGroups,
+          loadGroups: before.loadGroups,
+          tieGroups: before.tieGroups,
+          couplingGroups: before.couplingGroups,
+        },
+        surfaceTriangles ?? null,
+        surfaceFaceIds ?? null,
+        new Set(nodes.map((n) => n.id)),
+      );
+      s.bcGroups = carried.bcGroups;
+      s.loadGroups = carried.loadGroups;
+      s.tieGroups = carried.tieGroups;
       s.couplingGroups = [];
-      s.constraints = [];
-      s.loads = [];
-      s.surfaceLoads = [];
-      s.nextBcGroupId = 1;
-      s.nextLoadGroupId = 1;
-      s.nextTieGroupId = 1;
-      s.nextCouplingGroupId = 1;
-      s.nextFaceEntryId = 1;
+      s.constraints = rebuildConstraints(carried.bcGroups);
+      s.loads = rebuildLoads(carried.loadGroups, nodes, []);
+      s.surfaceLoads = rebuildSurfaceLoads(carried.loadGroups, elements, []);
+      s.remeshNotice = remeshNotice(carried);
       s.result = null;
       // A fresh mesh changes the element set, so any density from a prior run is
       // stale (KOF-233) — drop it alongside the static result.

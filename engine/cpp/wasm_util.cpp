@@ -54,6 +54,11 @@ val int32_array(const std::vector<int32_t>& v) {
         .new_(val(emscripten::typed_memory_view(v.size(), v.data())));
 }
 
+val uint8_array(const std::vector<uint8_t>& v) {
+    return val::global("Uint8Array")
+        .new_(val(emscripten::typed_memory_view(v.size(), v.data())));
+}
+
 // ── Binary input helpers ──────────────────────────────────────────────────────
 // Copy a JS numeric array into a C++ vector with a single
 // TypedArray.prototype.set call on a WASM-heap view over the vector's storage.

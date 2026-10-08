@@ -20,6 +20,7 @@ emscripten::val float32_array(const std::vector<float>& v);
 emscripten::val uint32_array(const std::vector<uint32_t>& v);
 emscripten::val float64_array(const std::vector<double>& v);
 emscripten::val int32_array(const std::vector<int32_t>& v);
+emscripten::val uint8_array(const std::vector<uint8_t>& v);
 
 // Bulk-copy a JS numeric array (typed array or plain Array) into a C++ vector
 // via TypedArray.prototype.set on a WASM-heap view — one memcpy-like call

@@ -34,6 +34,7 @@ add_executable(kofem_wasm_emcc
     cpp/cad_io.cpp
     cpp/tessellate.cpp
     cpp/geometry_cache.cpp
+    cpp/geometry_edit.cpp
     cpp/mesh_netgen.cpp
     cpp/fem_mesh_io.cpp
     cpp/fem_bc_io.cpp

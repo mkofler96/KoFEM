@@ -13,6 +13,7 @@
 //   cad_io.cpp        — STEP/IGES import + surface-only-geometry repair (OCCT)
 //   tessellate.cpp    — OCCT surface tessellation (display + meshing input)
 //   geometry_cache.cpp— cross-call cache of the loaded CAD shape
+//   geometry_edit.cpp — split faces / bodies with a plane (returns STEP bytes)
 //   mesh_netgen.cpp   — Netgen OCC surface + tetrahedral volume meshing
 //   solve_mfem.cpp    — MFEM linear-elastic assembly, CG solve, post-processing
 //   json_util.cpp     — manual JSON in/out helpers
@@ -24,6 +25,7 @@
 #include <emscripten/bind.h>
 
 #include "geometry_cache.h"
+#include "geometry_edit.h"
 #include "mesh_netgen.h"
 #include "solve_coupled.h"
 #include "solve_mfem.h"
@@ -40,6 +42,7 @@ EMSCRIPTEN_BINDINGS(kofem) {
     emscripten::function("generate_volume_mesh",   &generate_volume_mesh);
     emscripten::function("generate_fem_mesh",      &generate_fem_mesh);
     emscripten::function("free_geometry_cache",    &free_geometry_cache);
+    emscripten::function("split_geometry",         &split_geometry);
     emscripten::function("solve_linear_elastic",   &solve_linear_elastic);
     emscripten::function("solve_shell",            &solve_shell);
     emscripten::function("solve_coupled",          &solve_coupled);

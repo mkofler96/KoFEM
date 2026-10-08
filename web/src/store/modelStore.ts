@@ -54,6 +54,8 @@ export type {
   GeometryFormat,
   StepTessellation,
   VolMesh,
+  GeometryVersion,
+  SplitMode,
 } from "./geometrySlice";
 export type { Material } from "./materialSlice";
 export type {
@@ -161,6 +163,11 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       // file, so re-meshing a loaded analysis requires re-importing the STEP.
       s.stepBytes = null;
       s.geometryFormat = "step";
+      s.geometryHistory = [];
+      s.splitPicking = false;
+      s.splitFaceIds = [];
+      s.splitDraft = null;
+      s.remeshNotice = null;
       s.volMesh = a.volMesh;
       s.surfaceTriangles = a.surfaceTriangles;
       s.surfaceFaceIds = a.surfaceFaceIds;
@@ -226,6 +233,11 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.stepSurface = null;
       s.stepBytes = null;
       s.geometryFormat = "step";
+      s.geometryHistory = [];
+      s.splitPicking = false;
+      s.splitFaceIds = [];
+      s.splitDraft = null;
+      s.remeshNotice = null;
       s.volMesh = null;
       s.surfaceTriangles = null;
       s.surfaceFaceIds = null;

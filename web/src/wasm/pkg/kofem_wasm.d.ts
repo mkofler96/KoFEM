@@ -6,14 +6,30 @@
  *  vertex indices per triangle (length 3·nTris); `triangleBodyIds` is the
  *  1-based body (CAD solid) index of each triangle (length nTris), matching the
  *  body ids of the volume mesh (issue #353) for per-body colour / highlight /
- *  hide in the geometry view. `bodyCount` is the number of solids in the
- *  imported shape — 0 when the file held no closed solid (surface-only
- *  geometry that failed sewing). */
+ *  hide in the geometry view. `triangleFaceIds` is the 1-based CAD face id of
+ *  each triangle (length nTris) — the ids {@link KofemModule.split_geometry}
+ *  takes, numbered like the volume mesh's `surfaceFaceIds`. `bodyCount` is the
+ *  number of solids in the imported shape — 0 when the file held no closed
+ *  solid (surface-only geometry that failed sewing). */
 export interface StepTessellation {
   vertices: Float32Array
   triangles: Uint32Array
   triangleBodyIds: Uint32Array
+  triangleFaceIds: Uint32Array
   bodyCount: number
+}
+
+/** Plane cut requested of {@link KofemModule.split_geometry}, JSON-stringified.
+ *  "faces" imprints the plane on the listed faces (1-based CAD face ids, as
+ *  `triangleFaceIds` reports them), splitting each into several faces of the
+ *  same solid. "bodies" cuts the listed solids (1-based; absent or empty: every
+ *  body the plane crosses) into separate bodies, bonded again on reload. */
+export interface SplitGeometryOptions {
+  mode: "faces" | "bodies"
+  origin: [number, number, number]
+  normal: [number, number, number]
+  faceIds?: number[]
+  bodyIds?: number[]
 }
 
 /** FEM volume mesh returned as flat typed arrays (binary, no JSON text — issue #166).
@@ -166,6 +182,13 @@ export interface KofemModule {
    *  @param opts_json JSON `{ max_element_size, min_element_size, grading, second_order, elementsperedge, elementspercurve, optsteps_2d, optsteps_3d }`
    */
   generate_fem_mesh(opts_json: string): FemMesh
+  /** Split faces or bodies of the loaded shape with a plane (see
+   *  {@link SplitGeometryOptions}) and return the edited geometry as STEP
+   *  AP214 bytes. Throws, naming the face or body, when the plane leaves any
+   *  requested one whole. Releases the cached shape: load the returned bytes
+   *  with tessellate_step before meshing or splitting again.
+   *  @param opts_json JSON-stringified {@link SplitGeometryOptions}. */
+  split_geometry(opts_json: string): { bytes: Uint8Array }
   /** Release the OCCT shape + STEP byte cache from WASM heap.
    *  Call this after meshing is complete and before solving to free ~10–30 MB
    *  of WASM memory that is no longer needed.

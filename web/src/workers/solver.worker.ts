@@ -8,6 +8,7 @@ import createModule from "../wasm/pkg/kofem_wasm.js";
 import type {
   KofemModule,
   SolveMesh,
+  SplitGeometryOptions,
   TopOptSettings,
 } from "../wasm/pkg/kofem_wasm.js";
 import {
@@ -181,6 +182,13 @@ interface ParseStepPayload {
   // own default (DEFAULT_THIN_RATIO).
   thinRatio?: number;
 }
+interface SplitGeometryPayload {
+  // The current geometry file and its format — reloaded before the split.
+  bytes: Uint8Array;
+  format: string;
+  split: SplitGeometryOptions;
+  thinRatio?: number;
+}
 interface VolumeMeshPayload {
   bytes?: Uint8Array;
   format?: string;
@@ -237,18 +245,21 @@ interface TopOptPayload {
 
 // ── parse_step ────────────────────────────────────────────────────────────────
 
-function handleParseStep(id: number, payload: ParseStepPayload) {
+// Load CAD bytes into this worker's engine and build the store's view of them:
+// the display tessellation plus the thin-body (auto-shell) preselection. Shared
+// by the import and by every geometry edit, which both end in a freshly loaded
+// file.
+function loadGeometry(bytes: Uint8Array, format: string, thinRatio?: number) {
   // deflection_relative: chord tolerance as a fraction of the model's
   // bounding-box diagonal, so a large part isn't tessellated into millions of
   // needless triangles. ~0.1% matches the fast browser STEP viewers.
   const opts = JSON.stringify({
     deflection_relative: 0.001,
     angular_deflection: 0.5,
-    // eslint-disable-next-line kofem/no-silent-fallback -- format is optional in the parse_step message; absent means STEP, the primary import path
-    format: payload.format ?? "step",
+    format,
   });
-  const { vertices, triangles, triangleBodyIds, bodyCount } =
-    m().tessellate_step(payload.bytes, opts);
+  const { vertices, triangles, triangleBodyIds, triangleFaceIds, bodyCount } =
+    m().tessellate_step(bytes, opts);
   // tessellate_step stores the OCCT shape in the module — record that so a
   // subsequent volume_mesh in this same worker can skip the reload.
   geometryLoaded = true;
@@ -257,20 +268,56 @@ function handleParseStep(id: number, payload: ParseStepPayload) {
   // volume mesh exists, purely from the tessellation.
   const shellBodyIds = detectShellBodies(
     { vertices, triangles, triangleBodyIds },
-    { thinRatio: payload.thinRatio },
+    { thinRatio },
   );
   // Return as {points, triangles} to match the StepTessellation type used by
   // the store; tessellate_step returns flat Float32/Uint32 typed arrays.
   // bodyCount (#353) drives the per-body material assignment UI; bodyIds
-  // (one per triangle) drives per-body colour / highlight / hide.
-  self.postMessage({
-    id,
-    ok: true,
+  // (one per triangle) drives per-body colour / highlight / hide; faceIds (one
+  // per triangle) drive CAD-face picking and the face outlines of the split tool.
+  return {
     points: chunk3(vertices),
     triangles: chunk3(triangles),
     bodyIds: Array.from(triangleBodyIds),
+    faceIds: Array.from(triangleFaceIds),
     bodyCount,
     shellBodyIds,
+  };
+}
+
+function handleParseStep(id: number, payload: ParseStepPayload) {
+  self.postMessage({
+    id,
+    ok: true,
+    // eslint-disable-next-line kofem/no-silent-fallback -- format is optional in the parse_step message; absent means STEP, the primary import path
+    ...loadGeometry(payload.bytes, payload.format ?? "step", payload.thinRatio),
+  });
+}
+
+// ── split_geometry ────────────────────────────────────────────────────────────
+
+// Split faces or bodies of the current geometry with a plane. The face/body ids
+// in `split` were read off the store's tessellation of `bytes`, so the shape is
+// always reloaded from exactly those bytes first — whatever this worker last
+// held (an earlier import, an example's file) is not trusted to match. The
+// engine hands the edit back as STEP bytes, which become the geometry: they are
+// loaded straight away, so the reply carries both the new file and its view.
+function handleSplitGeometry(id: number, payload: SplitGeometryPayload) {
+  m().tessellate_step(
+    payload.bytes,
+    JSON.stringify({
+      deflection_relative: 0.001,
+      angular_deflection: 0.5,
+      format: payload.format,
+    }),
+  );
+  const { bytes } = m().split_geometry(JSON.stringify(payload.split));
+  geometryLoaded = false; // split_geometry released the pre-edit shape
+  self.postMessage({
+    id,
+    ok: true,
+    bytes,
+    ...loadGeometry(bytes, "step", payload.thinRatio),
   });
 }
 
@@ -2750,6 +2797,8 @@ self.onmessage = async (event: MessageEvent) => {
 
     if (type === "parse_step") {
       handleParseStep(id, payload as ParseStepPayload);
+    } else if (type === "split_geometry") {
+      handleSplitGeometry(id, payload as SplitGeometryPayload);
     } else if (type === "volume_mesh") {
       handleVolumeMesh(id, payload as VolumeMeshPayload);
     } else if (type === "solve") {
