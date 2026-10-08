@@ -212,8 +212,9 @@ files or an Abaqus reader (licensing).
 
 kofem.org deploys `main` continuously, so a release does not ship code. It tags a
 tested commit as `vX.Y.Z`, which gives users and bug reports a version to name and
-puts changes to numerical results on record. The `release` skill in
-`.claude/skills/` has the procedure. The rules:
+puts changes to numerical results on record. There is no schedule.
+Releases happen when the maintainer asks for one, and nothing prompts for them.
+The `release` skill in `.claude/skills/` has the procedure. The rules:
 
 - **The version** is `web/package.json` `version` and must equal `Cargo.toml`
   `[workspace.package] version`. `scripts/release-version.sh` checks both on
@@ -314,10 +315,6 @@ three:
    written into the update body as an HTML comment and checked before anything is
    uploaded. An unchanged week posts the digest alone.
 3. **No filler.** A week with nothing worth reading says so in one line.
-
-The update also carries the `release` skill's assessment, so there is no separate
-weekly release post. It gets a section only when the recommendation is to release
-or the release is blocked. "Wait" is left out.
 
 This replaced a Slack pipeline that posted the same images on every CI run, on
 every branch and PR.

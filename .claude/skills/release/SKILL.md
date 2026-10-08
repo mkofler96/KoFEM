@@ -9,6 +9,9 @@ kofem.org deploys `main` continuously. A release does not ship code. It labels a
 tested commit, so users and bug reports have a version to point at and changes to
 numerical results get written down.
 
+Releases have no schedule. Run this skill only when the maintainer asks for it.
+Never run it from a routine, and never put it in the weekly update.
+
 | Piece | Where |
 | -- | -- |
 | Version | `web/package.json` `version` and `Cargo.toml` `[workspace.package] version`. The two must match |
@@ -63,11 +66,10 @@ until you have read it and shown otherwise.
 
 **Recommendation:**
 
-- **Release now** when there is a Breaking or numerical change, or when user-facing
-  work has been sitting unreleased for more than about three weeks. Propose the
-  version, following the rules above.
-- **Wait** when everything since the last tag is Internal, or when there is only a
-  little user-facing work and it is recent.
+- **Release now** when there is user-facing work since the last tag. Propose the
+  version, following the rules above. Say so explicitly when a Breaking or
+  numerical change is in the range, because those benefit most from a tag.
+- **Wait** when everything since the last tag is Internal.
 - **Blocked** when CI is red on `origin/main`'s head, or when an open Linear issue
   reports a wrong result that this range introduced or did not fix. A release
   must not label a known-wrong result as a reference point.
