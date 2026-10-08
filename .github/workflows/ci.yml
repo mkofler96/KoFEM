@@ -148,3 +148,297 @@ jobs:
         run: |
           rm -f target/wasm-build/CMakeCache.txt
           rm -rf target/wasm-build/CMakeFiles
+
+      - name: Build WASM engine
+        if: steps.engine.outputs.have != 'true'
+        run: bash scripts/build-wasm.sh
+
+      # include-hidden-files carries the .engine-id stamp through to the jobs that
+      # download this, so they can tell which sources the binary came from.
+      - name: Upload WASM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: kofem-wasm-pkg
+          retention-days: 7
+          include-hidden-files: true
+          path: |
+            web/src/wasm/pkg/kofem_wasm_emcc.js
+            web/src/wasm/pkg/kofem_wasm_emcc.wasm
+            web/src/wasm/pkg/.engine-id
+
+  # Publish the engine so contributors, the Docker build and future CI runs can
+  # download it instead of committing a ~34 MB blob per engine change (KOF-186).
+  # Only from main: a release is a public, immutable artifact, and PR branches are
+  # served by the workflow artifact above.
+  publish-engine:
+    name: Publish engine release
+    needs: [engine-id, wasm]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download WASM artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: kofem-wasm-pkg
+          path: engine-dist/
+
+      # Releases are content-addressed, so an existing tag already holds a binary
+      # built from these exact sources — re-uploading would only churn it.
+      - name: Publish release if absent
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.engine-id.outputs.id }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already published — nothing to do."
+            exit 0
+          fi
+
+          cd engine-dist
+          sha256sum kofem_wasm_emcc.js kofem_wasm_emcc.wasm > SHA256SUMS
+
+          # Marked as a prerelease so these build artifacts never take over the
+          # "Latest release" banner from an actual product release.
+          if gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "WASM engine $TAG" \
+            --prerelease \
+            --notes "Compiled KoFEM WASM engine, built from \`engine/\` at ${GITHUB_SHA}.
+
+          Installed automatically by \`scripts/fetch-wasm-engine.sh\`, which resolves this
+          tag from the engine sources in your checkout — you should not need to download
+          these files by hand." \
+            kofem_wasm_emcc.js kofem_wasm_emcc.wasm SHA256SUMS; then
+            exit 0
+          fi
+
+          # Two pushes carrying the same engine sources can race here. Losing the
+          # race is fine — the winner published a binary built from those same
+          # sources. Anything else is a real failure.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG was published concurrently — nothing to do."
+            exit 0
+          fi
+          echo "ERROR: publishing $TAG failed and no release exists." >&2
+          exit 1
+
+  frontend:
+    name: Frontend
+    needs: [wasm, version]
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: read
+      packages: write
+
+    env:
+      # This job takes the engine from the `wasm` job's artifact, so the
+      # package.json pre-hooks must not try to fetch a release on top of it —
+      # a PR that changes engine/ has no published release yet.
+      KOFEM_WASM_SKIP_FETCH: 1
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Download WASM artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: kofem-wasm-pkg
+          path: web/src/wasm/pkg/
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            web/node_modules
+          key: bun-${{ runner.os }}-${{ hashFiles('web/bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('web/bun.lock') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+
+      - name: Install web dependencies
+        run: cd web && bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: cd web && bun run typecheck
+
+      - name: Lint
+        run: cd web && bun run lint
+
+      - name: Format
+        run: cd web && bun run format:check
+
+      - name: Build frontend
+        run: cd web && bun run build
+
+      - name: Install Playwright Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: cd web && bunx playwright install --with-deps chromium
+
+      - name: Install Playwright system deps
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: cd web && bunx playwright install-deps chromium
+
+      - name: Run frontend tests
+        run: cd web && bun run test
+        env:
+          # Builds the app instrumented with Istanbul so Playwright collects
+          # runtime coverage (tests/coverage.ts) — no second test run needed.
+          COVERAGE: 1
+
+      # Prints per-file coverage and flags src files never loaded by any test
+      # (dead-code candidates).  `if: always()` so a failing test still yields
+      # the coverage gathered up to that point.
+      - name: Coverage report
+        if: always()
+        run: cd web && bun run coverage:report
+
+      - name: Report coverage to DeepSource
+        if: always()
+        run: |
+          curl -sSf https://deepsource.io/cli | sh
+          sed 's|^SF:|SF:web/|' web/coverage/lcov.info > web/coverage/lcov.deepsource.info
+          ./bin/deepsource report --analyzer test-coverage --key javascript \
+            --value-file web/coverage/lcov.deepsource.info
+        env:
+          DEEPSOURCE_DSN: ${{ secrets.DEEPSOURCE_DSN }}
+
+      # Failure screenshots stay in the run that produced them. They used to be
+      # pushed to a chat channel on every run, which buried the signal; anyone
+      # investigating a red build downloads them from here instead.
+      - name: Upload Playwright results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results-${{ github.run_id }}
+          path: web/playwright-results/
+          retention-days: 3
+          if-no-files-found: ignore
+
+      # CI does not publish the workflow showcase. That is a weekly Claude task
+      # (.claude/skills/showcase) posting to Linear over MCP, so no Linear
+      # credential exists in this repository.
+
+      # --- Docker image -----------------------------------------------------
+      # Runs in the frontend job to reuse its checkout. No `if: always()`, so a
+      # failing test above skips the build — a broken commit never ships an
+      # image. main = build + push to GHCR; every other branch/PR builds
+      # only as a smoke test. The image is built map-free in main mode by
+      # web/Dockerfile.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Build the real production image, run it, and drive the full WASM pipeline
+      # through the served artifacts. This catches production-only breakage (e.g.
+      # a fingerprinted asset or the .wasm binary failing to resolve) that the
+      # dev server and dist preview cannot. Runs before the push so a broken
+      # image never ships. Reuses the gha cache, so the push build below is warm.
+      - name: Smoke-test production image
+        run: |
+          VERSION=v${{ needs.version.outputs.version }}-$(git rev-parse --short HEAD)
+          docker buildx build \
+            --load \
+            --platform linux/amd64 \
+            --file ./web/Dockerfile \
+            --build-context gallery=./examples/gallery/site \
+            --build-arg VITE_GIT_VERSION=${VERSION} \
+            --cache-from=type=gha \
+            --cache-to=type=gha,mode=max \
+            --tag kofem-web:smoke \
+            ./web
+          docker run -d --name kofem-smoke -p 10000:10000 kofem-web:smoke
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:10000/ >/dev/null && break
+            sleep 1
+          done
+          cd web && SMOKE_BASE_URL=http://localhost:10000 \
+            bunx playwright test -c playwright.docker.config.ts
+
+      - name: Tear down smoke container
+        if: always()
+        run: docker rm -f kofem-smoke || true
+
+      - name: Log in to GitHub Container Registry
+        if: github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build web image (main = push, otherwise build only)
+        run: |
+          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE_PREFIX="ghcr.io/${OWNER_LC}"
+          # The status bar shows this, so a bug report names the exact commit.
+          VERSION=v${{ needs.version.outputs.version }}-$(git rev-parse --short HEAD)
+
+          if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+            echo "main build: pushing images"
+            PUSH_FLAG="--push"
+            TAG_ARGS="--tag ${IMAGE_PREFIX}/kofem-web:latest \
+                      --tag ${IMAGE_PREFIX}/kofem-web:${VERSION}"
+          else
+            echo "Development build: build only, no push"
+            PUSH_FLAG=""
+            TAG_ARGS=""
+          fi
+
+          docker buildx build \
+            --platform linux/amd64 \
+            --file ./web/Dockerfile \
+            --build-context gallery=./examples/gallery/site \
+            --build-arg VITE_GIT_VERSION=${VERSION} \
+            --cache-from=type=gha \
+            --cache-to=type=gha,mode=max \
+            $TAG_ARGS \
+            $PUSH_FLAG \
+            ./web
+
+  # Tag and publish vX.Y.Z from the release commit: the merged release PR, which
+  # is the maintainer's go/no-go. This job only runs after every gate passed on
+  # that exact commit; scripts/publish-release.sh makes every other commit's run
+  # a no-op, so a later push to main can never take the tag.
+  release:
+    name: Publish product release
+    needs: [rust, clang-tidy, frontend, publish-engine]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history: the script finds the commit that added the version's
+          # CHANGELOG.md heading.
+          fetch-depth: 0
+
+      - name: Publish release if this is the release commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/publish-release.sh
