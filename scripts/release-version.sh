@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# Print the product version, after checking that everything declaring it agrees.
+#
+#   scripts/release-version.sh                 # prints e.g. 0.3.0
+#   scripts/release-version.sh --notes         # prints that version's CHANGELOG.md section
+#   scripts/release-version.sh --notes 0.2.0   # prints an older version's section
+#   scripts/release-version.sh --changelog-versions  # every version in CHANGELOG.md, oldest first
+#
+# The version lives in web/package.json and in Cargo.toml [workspace.package];
+# Cargo.lock must record it for the kofem-* crates, and CHANGELOG.md must carry a
+# "## [X.Y.Z]" section for it. CI runs this on every PR,
+# so a release PR that bumps one file and forgets the other cannot merge.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+web_version=$(jq -r .version web/package.json)
+cargo_version=$(sed -n '/^\[workspace\.package\]/,/^\[/s/^version = "\(.*\)"$/\1/p' Cargo.toml)
+
+if [ -z "$cargo_version" ]; then
+  echo "ERROR: no version found under [workspace.package] in Cargo.toml." >&2
+  exit 1
+fi
+if [ "$web_version" != "$cargo_version" ]; then
+  echo "ERROR: web/package.json says $web_version but Cargo.toml [workspace.package] says $cargo_version. A release PR bumps both." >&2
+  exit 1
+fi
+
+# CI does not build with --locked, so a stale Cargo.lock would pass every gate and
+# only break the next local build.
+stale_lock=$(awk -v ver="\"$web_version\"" '
+  /^name = "kofem-/ { crate = $3; next }
+  crate != "" && /^version = / { if ($3 != ver) print crate; crate = "" }
+' Cargo.lock)
+if [ -n "$stale_lock" ]; then
+  echo "ERROR: Cargo.lock still records another version for $(echo "$stale_lock" | tr '\n' ' ')- run 'cargo check' to update it to $web_version." >&2
+  exit 1
+fi
+
+# Everything from "## [X.Y.Z]" up to the next "## [" heading, minus the heading.
+section_notes() {
+  awk -v ver="$1" '
+    index($0, "## [" ver "]") == 1 { inside = 1; next }
+    inside && index($0, "## [") == 1 { exit }
+    inside { print }
+  ' CHANGELOG.md | sed -e '/./,$!d'
+}
+
+notes=$(section_notes "$web_version")
+if [ -z "$(printf '%s' "$notes" | tr -d '[:space:]')" ]; then
+  echo "ERROR: CHANGELOG.md has no '## [$web_version]' section, or it is empty. A release PR adds one." >&2
+  exit 1
+fi
+
+case "${1:-}" in
+  --notes)
+    if [ -n "${2:-}" ]; then
+      notes=$(section_notes "$2")
+      if [ -z "$(printf '%s' "$notes" | tr -d '[:space:]')" ]; then
+        echo "ERROR: CHANGELOG.md has no '## [$2]' section, or it is empty." >&2
+        exit 1
+      fi
+    fi
+    printf '%s\n' "$notes"
+    ;;
+  --changelog-versions)
+    sed -n 's/^## \[\([0-9][0-9.]*\)\].*/\1/p' CHANGELOG.md | tac
+    ;;
+  "")
+    echo "$web_version"
+    ;;
+  *)
+    echo "ERROR: unknown argument '$1'. Use --notes [VERSION] or --changelog-versions." >&2
+    exit 1
+    ;;
+esac

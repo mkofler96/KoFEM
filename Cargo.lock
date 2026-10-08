@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "kofem-core"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "kofem-mesh",
  "log",
@@ -14,14 +14,14 @@ dependencies = [
 
 [[package]]
 name = "kofem-geom"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
 name = "kofem-mesh"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "serde",
  "thiserror",

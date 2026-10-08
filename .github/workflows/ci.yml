@@ -9,6 +9,18 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # The product version, from web/package.json — also checks that Cargo.toml and
+  # CHANGELOG.md agree with it, so a half-done release PR fails here.
+  version:
+    name: Release version
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        run: echo "version=$(bash scripts/release-version.sh)" >> "$GITHUB_OUTPUT"
+
   rust:
     name: Rust (native)
     runs-on: ubuntu-24.04
@@ -219,7 +231,7 @@ jobs:
 
   frontend:
     name: Frontend
-    needs: [wasm]
+    needs: [wasm, version]
     runs-on: ubuntu-24.04
 
     permissions:
@@ -236,8 +248,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-          # Full history + tags so `git describe` can stamp the image.
-          fetch-depth: 0
 
       - name: Download WASM artifacts
         uses: actions/download-artifact@v4
@@ -348,7 +358,7 @@ jobs:
       # image never ships. Reuses the gha cache, so the push build below is warm.
       - name: Smoke-test production image
         run: |
-          VERSION=$(git describe --tags --abbrev=0 --match 'v*' || echo 'smoke')
+          VERSION=v${{ needs.version.outputs.version }}-$(git rev-parse --short HEAD)
           docker buildx build \
             --load \
             --platform linux/amd64 \
@@ -383,14 +393,14 @@ jobs:
         run: |
           OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           IMAGE_PREFIX="ghcr.io/${OWNER_LC}"
-          VERSION=$(git describe --tags --abbrev=0 --match 'v*' || echo 'no-tags-found')
-          IMAGE_TAG="${VERSION}-$(git rev-parse --short HEAD)"
+          # The status bar shows this, so a bug report names the exact commit.
+          VERSION=v${{ needs.version.outputs.version }}-$(git rev-parse --short HEAD)
 
           if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
             echo "main build: pushing images"
             PUSH_FLAG="--push"
             TAG_ARGS="--tag ${IMAGE_PREFIX}/kofem-web:latest \
-                      --tag ${IMAGE_PREFIX}/kofem-web:${IMAGE_TAG}"
+                      --tag ${IMAGE_PREFIX}/kofem-web:${VERSION}"
           else
             echo "Development build: build only, no push"
             PUSH_FLAG=""
@@ -407,3 +417,28 @@ jobs:
             $TAG_ARGS \
             $PUSH_FLAG \
             ./web
+
+  # Tag and publish vX.Y.Z from the release commit: the merged release PR, which
+  # is the maintainer's go/no-go. This job only runs after every gate passed on
+  # that exact commit; scripts/publish-release.sh makes every other commit's run
+  # a no-op, so a later push to main can never take the tag.
+  release:
+    name: Publish product release
+    needs: [rust, clang-tidy, frontend, publish-engine]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history: the script finds the commit that added the version's
+          # CHANGELOG.md heading.
+          fetch-depth: 0
+
+      - name: Publish release if this is the release commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/publish-release.sh
