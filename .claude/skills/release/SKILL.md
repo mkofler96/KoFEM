@@ -17,7 +17,7 @@ Never run it from a routine, and never put it in the weekly update.
 | Version | `web/package.json` `version` and `Cargo.toml` `[workspace.package] version`. The two must match |
 | Release notes | `CHANGELOG.md`, one `## [X.Y.Z] - YYYY-MM-DD` section per release |
 | Consistency check | `scripts/release-version.sh`, which CI runs on every PR |
-| Tag and GitHub Release | CI's `release` job, on the first commit on `main` that carries a new version |
+| Tag and GitHub Release | CI's `release` job via `scripts/publish-release.sh`, on the commit that added the version's changelog heading |
 
 ## The rules
 

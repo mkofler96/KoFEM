@@ -5,7 +5,8 @@
 #   scripts/release-version.sh --notes  # prints that version's CHANGELOG.md section
 #
 # The version lives in web/package.json and in Cargo.toml [workspace.package];
-# CHANGELOG.md must carry a "## [X.Y.Z]" section for it. CI runs this on every PR,
+# Cargo.lock must record it for the kofem-* crates, and CHANGELOG.md must carry a
+# "## [X.Y.Z]" section for it. CI runs this on every PR,
 # so a release PR that bumps one file and forgets the other cannot merge.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -19,6 +20,17 @@ if [ -z "$cargo_version" ]; then
 fi
 if [ "$web_version" != "$cargo_version" ]; then
   echo "ERROR: web/package.json says $web_version but Cargo.toml [workspace.package] says $cargo_version. A release PR bumps both." >&2
+  exit 1
+fi
+
+# CI does not build with --locked, so a stale Cargo.lock would pass every gate and
+# only break the next local build.
+stale_lock=$(awk -v ver="\"$web_version\"" '
+  /^name = "kofem-/ { crate = $3; next }
+  crate != "" && /^version = / { if ($3 != ver) print crate; crate = "" }
+' Cargo.lock)
+if [ -n "$stale_lock" ]; then
+  echo "ERROR: Cargo.lock still records another version for $(echo "$stale_lock" | tr '\n' ' ')- run 'cargo check' to update it to $web_version." >&2
   exit 1
 fi
 

@@ -41,6 +41,7 @@ KoFEM/
     ├── fetch-wasm-engine.sh  # Pull the compiled engine from its GitHub Release
     ├── engine-version.sh     # Content hash of the engine sources → release tag
     ├── release-version.sh    # Product version; checks package.json/Cargo/CHANGELOG agree
+    ├── publish-release.sh    # CI: tag + GitHub Release, only from the release commit
     ├── clang-tidy.sh         # C++ lint, mirrors the DeepSource PR gate
     ├── test-bc-validation.sh
     └── test-shell.sh
