@@ -55,6 +55,8 @@ export interface PickedFace {
   axis: "X" | "Y" | "Z";
   isMax: boolean;
   label: string;
+  // Set when the pick selected a whole CAD face (CAD face ID mode).
+  cadFaceId?: number;
 }
 
 // Two picked faces are the same when they reference the same set of nodes.

@@ -454,6 +454,17 @@
   cursor: pointer;
 }
 
+/* Split tool's plane row: "x =" select + position input + unit on one line.
+   min-width: 0 lets the number input shrink below its intrinsic width. */
+.planeAxis {
+  flex: 0 0 auto;
+  width: 64px;
+}
+
+.planePosition {
+  min-width: 0;
+}
+
 .inlineForm {
   background: var(--surface-3);
   border: 1px solid var(--border);

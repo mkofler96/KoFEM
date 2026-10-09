@@ -49,6 +49,8 @@ export function toFaceEntries(
     label: `${SELECTION_NOUN[geometry]} ${existingCount + i + 1}`,
     nodeIds: face.nodeIds,
     geometry,
+    // A whole CAD face survives a re-mesh (see BcFaceEntry.cadFaceId).
+    ...(face.cadFaceId !== undefined ? { cadFaceId: face.cadFaceId } : {}),
   }));
 }
 

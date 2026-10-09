@@ -87,6 +87,11 @@ val tessellate_step(val bytes_val, const std::string& opts_json) {
     // under no solid (surface-only geometry, bodyCount 0) default to body 1.
     TopTools_IndexedMapOfShape solids;
     TopExp::MapShapes(shape, TopAbs_SOLID, solids);
+    // CAD face id of every triangle: the face's 1-based index in the shape's
+    // face map — the numbering split_geometry takes its faceIds in, and the
+    // order Netgen numbers surface-element faces (surfaceFaceIds).
+    TopTools_IndexedMapOfShape faces;
+    TopExp::MapShapes(shape, TopAbs_FACE, faces);
     TopTools_IndexedDataMapOfShapeListOfShape face_solids;
     TopExp::MapShapesAndAncestors(shape, TopAbs_FACE, TopAbs_SOLID, face_solids);
 
@@ -95,6 +100,7 @@ val tessellate_step(val bytes_val, const std::string& opts_json) {
     std::vector<float>    verts;
     std::vector<uint32_t> tris;
     std::vector<uint32_t> tri_bodies;  // one 1-based body id per triangle
+    std::vector<uint32_t> tri_faces;   // one 1-based CAD face id per triangle
 
     for (TopExp_Explorer exp(shape, TopAbs_FACE); exp.More(); exp.Next()) {
         TopoDS_Face face = TopoDS::Face(exp.Current());
@@ -109,6 +115,7 @@ val tessellate_step(val bytes_val, const std::string& opts_json) {
                 body = (uint32_t)solids.FindIndex(owners.First());
         }
         if (body < 1) body = 1;
+        const auto face_id = (uint32_t)faces.FindIndex(face);
 
         uint32_t base = (uint32_t)(verts.size() / 3);
 
@@ -128,6 +135,7 @@ val tessellate_step(val bytes_val, const std::string& opts_json) {
             tris.push_back(base + (uint32_t)(n2 - 1));
             tris.push_back(base + (uint32_t)(n3 - 1));
             tri_bodies.push_back(body);
+            tri_faces.push_back(face_id);
         }
     }
 
@@ -136,15 +144,19 @@ val tessellate_step(val bytes_val, const std::string& opts_json) {
 
     // {vertices: Float32Array (xyz interleaved), triangles: Uint32Array (3 idx/tri),
     //  triangleBodyIds: Uint32Array (1-based body id per triangle),
+    //  triangleFaceIds: Uint32Array (1-based CAD face id per triangle),
     //  bodyCount: number of solids} — bodyCount lets the UI offer per-body
     // material assignment (issue #353) before any mesh exists, and
     // triangleBodyIds lets it colour / highlight / hide each body in the
-    // geometry view. 0 bodyCount means the file held no closed solid
-    // (surface-only geometry that failed sewing).
+    // geometry view. triangleFaceIds lets it pick whole CAD faces before any
+    // mesh exists (the split tool) and draw the face boundaries. 0 bodyCount
+    // means the file held no closed solid (surface-only geometry that failed
+    // sewing).
     val result = val::object();
     result.set("vertices",        float32_array(verts));
     result.set("triangles",       uint32_array(tris));
     result.set("triangleBodyIds", uint32_array(tri_bodies));
+    result.set("triangleFaceIds", uint32_array(tri_faces));
     result.set("bodyCount",       n_bodies);
     return result;
 }

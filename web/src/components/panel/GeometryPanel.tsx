@@ -10,6 +10,7 @@ import { fmt } from "../../lib/modelDisplay";
 import { useGeometry } from "../../hooks/useGeometry";
 import { detectShellBodies } from "../../lib/thinBodies";
 import { MeshPanel } from "./MeshPanel";
+import { SplitSection } from "./SplitSection";
 import styles from "./LeftPanel.module.css";
 
 function MaterialForm({
@@ -594,6 +595,7 @@ export function GeometryPanel() {
     <div className={styles.panel}>
       <div className={styles.tabContent}>
         <ImportSection />
+        <SplitSection />
         <MeshPanel />
         <MaterialSection />
       </div>
