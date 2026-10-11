@@ -137,6 +137,8 @@ export function ModelTree() {
       case "results":
         // Reached by either pipeline — a static solve or an optimization.
         return result !== null || densityResult !== null;
+      default:
+        throw new Error(`Model tree: no completion rule for group "${group}"`);
     }
   }
 

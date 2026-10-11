@@ -101,6 +101,8 @@ export function modeSelection(mode: AppMode): TreeSelection {
       return viewSelection("studies", "topopt");
     case "results":
       return viewSelection("results", "results");
+    default:
+      throw new Error(`modeSelection: no tree entry for mode "${mode}"`);
   }
 }
 
