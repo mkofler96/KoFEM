@@ -7,7 +7,7 @@ import type { Property } from "../../store/modelStore";
 import {
   isCadBody,
   shellSectionsOf,
-  suppressedStillMeshed,
+  suppressionMismatch,
 } from "../../store/geometrySlice";
 import type { TreeTarget } from "../../store/viewSlice";
 import { useGeometry } from "../../hooks/useGeometry";
@@ -258,7 +258,8 @@ function BodyDetail({ id }: { id: number }) {
   const hiddenBodyIds = useModelStore((s) => s.hiddenBodyIds);
   const toggleBodyVisibility = useModelStore((s) => s.toggleBodyVisibility);
   const setBodySuppressed = useModelStore((s) => s.setBodySuppressed);
-  const elements = useModelStore((s) => s.elements);
+  const meshSuppressedIds = useModelStore((s) => s.meshSuppressedIds);
+  const nodeCount = useModelStore((s) => s.nodes.length);
   if (!prop) return null;
 
   const hidden = hiddenBodyIds.includes(prop.id);
@@ -268,9 +269,13 @@ function BodyDetail({ id }: { id: number }) {
   // The last body still in the model cannot go — there would be nothing left.
   const lastBody =
     !suppressed && bodies.every((b) => b.id === prop.id || b.suppressed);
-  const stillMeshed = suppressedStillMeshed(properties, elements).includes(
-    prop.id,
+  const mismatch = suppressionMismatch(
+    properties,
+    meshSuppressedIds,
+    nodeCount > 0,
   );
+  const stillMeshed = mismatch.stillMeshed.includes(prop.id);
+  const notMeshed = mismatch.missing.includes(prop.id);
   const tip = sectionsTip(shellSectionsOf(properties, prop.id));
   return (
     <>
@@ -307,6 +312,12 @@ function BodyDetail({ id }: { id: number }) {
         <p className={styles.formNote} data-testid="suppressed-remesh-note">
           Re-mesh to take it out of the analysis — the current mesh still
           contains it.
+        </p>
+      )}
+      {notMeshed && (
+        <p className={styles.formNote} data-testid="restored-remesh-note">
+          Re-mesh to bring it back into the analysis — the current mesh was made
+          without it.
         </p>
       )}
       <div className={styles.formRow}>

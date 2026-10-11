@@ -70,10 +70,17 @@ test("a suppressed body is left out of the mesh and comes back when unsuppressed
   expect(without.nodes).toBeLessThan(full.nodes);
   expect(without.nodes).toBeGreaterThan(0);
 
-  // One click brings it back, exactly as it was.
+  // One click brings it back, exactly as it was — but the mesh was made
+  // without it, so solving waits for a re-mesh instead of silently analysing
+  // the assembly minus the restored body.
   await openBody(page, 2);
   await page.getByTestId("body-suppressed-2").uncheck();
   expect((await state(page)).suppressed).toEqual([]);
+  await expect(page.getByTestId("restored-remesh-note")).toBeVisible();
+  await openTree(page, "static");
+  await expect(
+    page.getByText("Re-mesh: restored Body 2 not in the mesh"),
+  ).toBeVisible();
   await mesh(page);
   expect((await state(page)).bodies).toEqual([1, 2]);
 });

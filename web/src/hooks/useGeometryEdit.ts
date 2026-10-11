@@ -5,6 +5,8 @@ import { useState } from "react";
 import { useModelStore } from "../store/modelStore";
 import type { SplitMode, StepTessellation } from "../store/modelStore";
 import { resetWorker, sendToWorker } from "../workers/sharedWorker";
+import { isCadBody } from "../store/geometrySlice";
+import { booleanBodySources } from "../lib/booleanBodies";
 
 export type SplitAxis = "x" | "y" | "z";
 
@@ -42,6 +44,7 @@ export function useGeometryEdit() {
   const stepBytes = useModelStore((s) => s.stepBytes);
   const geometryFormat = useModelStore((s) => s.geometryFormat);
   const thinRatio = useModelStore((s) => s.thinRatio);
+  const properties = useModelStore((s) => s.properties);
   const applyGeometryEdit = useModelStore((s) => s.applyGeometryEdit);
   const undoGeometryEdit = useModelStore((s) => s.undoGeometryEdit);
   const setRunning = useModelStore((s) => s.setRunning);
@@ -95,14 +98,24 @@ export function useGeometryEdit() {
       setSplitError("Pick at least one tool body.");
       return false;
     }
-    return run("boolean_geometry", {
-      boolean: { op, target, tools, keepTools },
-    });
+    const bodyIds = properties
+      .filter(isCadBody)
+      .map((p) => p.id)
+      .sort((a, b) => a - b);
+    return run(
+      "boolean_geometry",
+      { boolean: { op, target, tools, keepTools } },
+      (bodyCount) =>
+        booleanBodySources(bodyIds, op, target, tools, keepTools, bodyCount),
+    );
   }
 
+  // `bodySources` maps the edited model's bodies back to the old ones when the
+  // edit knows it (a Boolean), so their settings survive the renumbering.
   async function run(
     type: "split_geometry" | "boolean_geometry",
     edit: Record<string, unknown>,
+    bodySources?: (bodyCount: number) => number[],
   ): Promise<boolean> {
     setSplitError(null);
     setIsSplitting(true);
@@ -124,9 +137,13 @@ export function useGeometryEdit() {
         },
         reply.bodyCount,
         reply.shellBodyIds,
+        bodySources?.(reply.bodyCount),
       );
       return true;
     } catch (err) {
+      // The worker may already hold the edited shape the store did not take;
+      // replace it so the next mesh reloads the file the store has.
+      resetWorker();
       // The engine's message names the face or body and the fix; the C++ type
       // the worker prefixes it with says nothing to the user.
       const message = err instanceof Error ? err.message : String(err);

@@ -177,7 +177,7 @@ for (const [action, act] of MID_SPLIT) {
     page,
   }) => {
     test.setTimeout(120_000);
-    await delaySplits(page, 1500);
+    await delaySplits(page, 6000);
     await importStepText(page, BLOCK);
     const before = await startSplit(page, 150);
     await act(page);
@@ -195,7 +195,7 @@ test("a split that fails after the tool was closed still reports why", async ({
   page,
 }) => {
   test.setTimeout(120_000);
-  await delaySplits(page, 1500);
+  await delaySplits(page, 6000);
   await importStepText(page, BLOCK);
   await startSplit(page, 500); // misses the 300 mm face
   await page.getByRole("button", { name: "Close" }).click();
@@ -214,7 +214,9 @@ test("a split that lands during a BC pick ends the pick session", async ({
   page,
 }) => {
   test.setTimeout(180_000);
-  await delaySplits(page, 1500);
+  // Long enough for the BC pick below to finish before the split lands, even
+  // with every worker of a full run competing for the CPU.
+  await delaySplits(page, 6000);
   await importStepText(page, BLOCK);
   await page.getByTestId("max-element-size").fill("20");
   await page.getByTestId("min-element-size").fill("2");

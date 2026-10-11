@@ -20,7 +20,11 @@ import type { StateCreator } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import type { AnalysisState } from "../lib/analysisFile";
 import { DEFAULT_THIN_RATIO } from "../lib/thinBodies";
-import { createGeometrySlice, type GeometrySlice } from "./geometrySlice";
+import {
+  createGeometrySlice,
+  isCadBody,
+  type GeometrySlice,
+} from "./geometrySlice";
 import {
   createMaterialSlice,
   DEFAULT_MATERIAL,
@@ -143,6 +147,10 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
         color: m.color ?? MATERIAL_PALETTE[i % MATERIAL_PALETTE.length],
       }));
       s.properties = a.properties;
+      // A saved mesh was made with the saved suppression, so they agree.
+      s.meshSuppressedIds = a.properties
+        .filter((p) => isCadBody(p) && p.suppressed)
+        .map((p) => p.id);
       s.bcGroups = a.bcGroups;
       s.loadGroups = a.loadGroups;
       s.tieGroups = a.tieGroups;
@@ -213,6 +221,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.elements = [];
       s.materials = [DEFAULT_MATERIAL];
       s.properties = [{ id: 1, materialId: 1 }];
+      s.meshSuppressedIds = [];
       s.bcGroups = [];
       s.loadGroups = [];
       s.tieGroups = [];

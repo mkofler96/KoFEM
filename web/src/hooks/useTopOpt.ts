@@ -19,7 +19,10 @@ import {
   setProgressCallback,
 } from "../workers/sharedWorker";
 import { useWorkerLogs } from "./useWorkerLogs";
-import { suppressedStillMeshed } from "../store/geometrySlice";
+import {
+  suppressionMismatch,
+  suppressionMismatchMessage,
+} from "../store/geometrySlice";
 
 export type FieldErrors = Partial<Record<TopOptNumericField, string>>;
 
@@ -180,10 +183,13 @@ export function useTopOpt() {
   // surface as an error banner.
   const cancelledRef = useRef(false);
 
-  // A body suppressed after meshing is still in the mesh — solving it would
-  // analyse the body the user took out.
-  const staleSuppressed = suppressedStillMeshed(properties, elements);
-  const meshOk = nodes.length > 0 && staleSuppressed.length === 0;
+  // A body suppressed or restored after meshing makes the mesh a different
+  // assembly from the model — solving it would analyse the wrong one.
+  const meshSuppressedIds = useModelStore((s) => s.meshSuppressedIds);
+  const suppressionStale = suppressionMismatchMessage(
+    suppressionMismatch(properties, meshSuppressedIds, nodes.length > 0),
+  );
+  const meshOk = nodes.length > 0 && suppressionStale === null;
   // Every body must resolve to an existing material — same rule as the solve.
   const matOk =
     materials.length > 0 &&
@@ -355,8 +361,8 @@ export function useTopOpt() {
   const checks: [boolean, string][] = [
     [
       meshOk,
-      staleSuppressed.length > 0
-        ? `Re-mesh: suppressed ${staleSuppressed.map((id) => `Body ${id}`).join(", ")} still in the mesh`
+      suppressionStale !== null
+        ? suppressionStale
         : `Mesh ready · ${nodes.length} nodes · ${elements.length} elements`,
     ],
     [

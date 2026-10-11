@@ -70,27 +70,38 @@ export function isCadBody(prop: Property): boolean {
   return prop.sourceBodyId === undefined;
 }
 
-// Suppressed bodies the current mesh still contains (directly, or through the
-// shell sections derived from them): the mesh predates the suppression, so it
-// must be re-meshed before anything is solved on it.
-export function suppressedStillMeshed(
+// Where the current mesh and the bodies' suppression disagree: bodies
+// suppressed after the mesh was made (still in it), and bodies restored after
+// it (left out of it). Either way the mesh is not the model, and solving it
+// would silently analyse the wrong assembly — it must be re-meshed first.
+export function suppressionMismatch(
   properties: Property[],
-  elements: { propertyId?: number }[],
-): number[] {
-  const suppressed = new Set(
-    properties.filter((p) => isCadBody(p) && p.suppressed).map((p) => p.id),
-  );
-  if (suppressed.size === 0 || elements.length === 0) return [];
-  const bodyOf = new Map<number, number>();
-  for (const p of properties)
-    bodyOf.set(p.id, p.sourceBodyId === undefined ? p.id : p.sourceBodyId);
-  const meshed = new Set<number>();
-  for (const el of elements) {
-    if (el.propertyId === undefined) continue;
-    const body = bodyOf.get(el.propertyId);
-    if (body !== undefined && suppressed.has(body)) meshed.add(body);
-  }
-  return [...meshed].sort((a, b) => a - b);
+  meshSuppressedIds: number[],
+  hasMesh: boolean,
+): { stillMeshed: number[]; missing: number[] } {
+  if (!hasMesh) return { stillMeshed: [], missing: [] };
+  const bodies = properties.filter(isCadBody);
+  const now = new Set(bodies.filter((p) => p.suppressed).map((p) => p.id));
+  const atMesh = new Set(meshSuppressedIds);
+  return {
+    stillMeshed: [...now].filter((id) => !atMesh.has(id)).sort((a, b) => a - b),
+    missing: bodies
+      .filter((p) => atMesh.has(p.id) && !now.has(p.id))
+      .map((p) => p.id),
+  };
+}
+
+// The pre-flight line for a mesh that disagrees with the suppression, or null.
+export function suppressionMismatchMessage(m: {
+  stillMeshed: number[];
+  missing: number[];
+}): string | null {
+  const bodies = (ids: number[]) => ids.map((id) => `Body ${id}`).join(", ");
+  if (m.stillMeshed.length > 0)
+    return `Re-mesh: suppressed ${bodies(m.stillMeshed)} still in the mesh`;
+  if (m.missing.length > 0)
+    return `Re-mesh: restored ${bodies(m.missing)} not in the mesh`;
+  return null;
 }
 
 // The section properties the mesh derived from `bodyId`, in id order.
@@ -194,6 +205,10 @@ export interface GeometrySlice {
   // carried over on their CAD faces and which the user has to pick again.
   // Null when the mesh had nothing to carry. Shown by the mesh panel.
   remeshNotice: string | null;
+  // The CAD bodies that were suppressed when the current mesh was made — and
+  // so are missing from it. Compared with the bodies' suppression now to tell
+  // whether the mesh still matches the model (suppressionMismatch).
+  meshSuppressedIds: number[];
 
   addNode(node: Node): void;
   addElement(el: Element): void;
@@ -230,6 +245,9 @@ export interface GeometrySlice {
     tessellation: StepTessellation,
     bodyCount: number,
     shellBodyIds: number[],
+    // For an edit that knows where each new body came from (a Boolean): entry
+    // j is the old id of new Body j+1, whose settings it inherits.
+    bodySources?: number[],
   ): void;
   undoGeometryEdit(): void;
   setSplitPicking(on: boolean): void;
@@ -248,6 +266,8 @@ export interface GeometrySlice {
     // (#397): the solid bodies' own properties plus one PSHELL per distinct wall
     // thickness. Absent for a plain all-solid mesh, which leaves properties as-is.
     properties?: Property[] | null,
+    // The bodies the mesh request left out as suppressed.
+    meshSuppressedIds?: number[],
   ): void;
 }
 
@@ -282,6 +302,7 @@ function dropAnalysis(s: ModelState): void {
   s.hiddenBodyIds = [];
   s.nodes = [];
   s.elements = [];
+  s.meshSuppressedIds = [];
   s.surfaceTriangles = null;
   s.surfaceFaceIds = null;
   s.bcGroups = [];
@@ -338,6 +359,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
   splitDraft: null,
   splitError: null,
   remeshNotice: null,
+  meshSuppressedIds: [],
 
   addNode: (node) =>
     set((s) => {
@@ -464,7 +486,13 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
     set((s) => {
       s.stepImportError = msg;
     }),
-  applyGeometryEdit: (bytes, tessellation, bodyCount, shellBodyIds) =>
+  applyGeometryEdit: (
+    bytes,
+    tessellation,
+    bodyCount,
+    shellBodyIds,
+    bodySources,
+  ) =>
     set((s) => {
       if (!s.stepBytes || !s.stepSurface)
         throw new Error(
@@ -481,13 +509,29 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       // The engine writes every edit as STEP, whatever the source format was.
       s.geometryFormat = "step";
       s.stepSurface = tessellation;
-      // A face split keeps the bodies, so their materials and element types
-      // stay; only the shell sections a mesh derived go, with the mesh. A body
-      // split renumbers the bodies — start the table over, as an import would.
-      s.properties =
-        cadBodies.length === Math.max(1, bodyCount)
-          ? cadBodies
-          : freshBodies(s, bodyCount, s.autoShell ? shellBodyIds : []);
+      // An edit that maps its bodies (a Boolean) carries each body's settings
+      // to its new id. A face split keeps the bodies, so their materials and
+      // element types stay; only the shell sections a mesh derived go, with the
+      // mesh. A body split renumbers the bodies — start the table over, as an
+      // import would.
+      if (bodySources) {
+        if (bodySources.length !== Math.max(1, bodyCount))
+          throw new Error(
+            `Geometry edit: ${bodySources.length} body sources for ${bodyCount} bodies`,
+          );
+        s.properties = bodySources.map((sourceId, j) => {
+          const source = cadBodies.find((p) => p.id === sourceId);
+          if (!source)
+            throw new Error(
+              `Geometry edit: new Body ${j + 1} comes from Body ${sourceId}, which does not exist`,
+            );
+          return { ...source, id: j + 1 };
+        });
+      } else
+        s.properties =
+          cadBodies.length === Math.max(1, bodyCount)
+            ? cadBodies
+            : freshBodies(s, bodyCount, s.autoShell ? shellBodyIds : []);
       dropAnalysis(s);
     }),
   undoGeometryEdit: () =>
@@ -535,9 +579,11 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
     surfaceTriangles,
     surfaceFaceIds,
     properties,
+    meshSuppressedIds,
   ) =>
     set((s) => {
       s.nodes = nodes;
+      s.meshSuppressedIds = meshSuppressedIds ?? [];
       s.elements = elements;
       if (properties) s.properties = properties;
       s.surfaceTriangles = surfaceTriangles ?? null;
