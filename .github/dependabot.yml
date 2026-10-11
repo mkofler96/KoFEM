@@ -1,0 +1,23 @@
+# Dependency bumps arrive as reviewable PRs. CI actions and the Dockerfile base
+# images are pinned to commits / digests (supply-chain hardening for the
+# auto-deployed dev site, see deploy/README.md); Dependabot keeps those pins
+# current instead of letting a tag move them silently.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    target-branch: develop
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: /web
+    schedule:
+      interval: weekly
+    target-branch: develop
+    groups:
+      base-images:
+        patterns: ["*"]

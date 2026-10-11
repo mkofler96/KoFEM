@@ -14,8 +14,12 @@
 # binary resolves to Node and the build succeeds. This is an isolated,
 # production-mode build (no source maps), independent of whatever the CI test
 # step left in web/dist.
-FROM node:20-bookworm-slim AS builder
-COPY --from=oven/bun:latest /usr/local/bin/bun /usr/local/bin/bun
+#
+# Base images are pinned by digest (the tag is kept for readability): a
+# rebuilt tag upstream must not change what ships without a reviewable diff.
+# Dependabot proposes the bumps (.github/dependabot.yml).
+FROM node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 AS builder
+COPY --from=oven/bun:1.3.6@sha256:f20d9cf365ab35529384f1717687c739c92e6f39157a35a95ef06f4049a10e4a /usr/local/bin/bun /usr/local/bin/bun
 
 WORKDIR /app
 
@@ -56,7 +60,7 @@ RUN find dist -name '*.map' -type f -delete
 
 
 # Stage 2: Serve the static bundle with Nginx.
-FROM nginx:alpine
+FROM nginx:alpine@sha256:df221db836e1754089190208cee7eeda94f233197056426eda74a43ab1abeac2
 
 COPY --from=builder /app/dist /usr/share/nginx/html
 
@@ -72,9 +76,16 @@ ENV VITE_GA_ID=""
 
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 
-# Runs before nginx starts (the base image executes /docker-entrypoint.d/*.sh).
+# Deployment channel, applied at container start (see
+# docker-entrypoint.d/30-kofem-channel.sh): empty for kofem.org, "dev" for the
+# dev deployment, which is then marked as such and kept out of search engines.
+ENV KOFEM_CHANNEL=""
+
+# Run before nginx starts (the base image executes /docker-entrypoint.d/*.sh in
+# name order).
+COPY docker-entrypoint.d/30-kofem-channel.sh /docker-entrypoint.d/30-kofem-channel.sh
 COPY docker-entrypoint.d/40-kofem-ga-config.sh /docker-entrypoint.d/40-kofem-ga-config.sh
-RUN chmod +x /docker-entrypoint.d/40-kofem-ga-config.sh
+RUN chmod +x /docker-entrypoint.d/30-kofem-channel.sh /docker-entrypoint.d/40-kofem-ga-config.sh
 
 EXPOSE 10000
 

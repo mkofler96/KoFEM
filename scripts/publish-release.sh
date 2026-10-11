@@ -6,11 +6,14 @@
 #    tags the maintainer made by hand. The tag already fixes the commit, so this
 #    is safe from any run.
 # 2. If the current version has no tag yet, it is created here, but only by the
-#    run for the release commit. That is the commit that added this version's
-#    "## [X.Y.Z]" heading to CHANGELOG.md, i.e. the merged release PR. A later
-#    commit on main never gets the tag, even when the release commit's run failed
-#    or is still running, so a tag always names the commit the maintainer
-#    approved by merging.
+#    run for the main commit that brought the release commit to main, and on
+#    that commit. The release commit is the one that added this version's
+#    "## [X.Y.Z]" heading to CHANGELOG.md, i.e. the merged release PR. It reaches
+#    main either directly (squash-merged into main: it IS that commit) or inside
+#    the promotion merge from develop (then the merge commit is tagged — what
+#    kofem.org runs, approved by merging the promotion). A later commit on main
+#    already contains the release commit through its first parent and never gets
+#    the tag, even when the right run failed or is still running.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -61,8 +64,13 @@ if [ -z "$release_commit" ]; then
   exit 1
 fi
 
-if [ "$release_commit" != "$GITHUB_SHA" ]; then
-  echo "::warning::$tag is not published yet. Only the run for its release commit $release_commit publishes it, and this run is for $GITHUB_SHA. If that run failed, re-run it."
+if ! git merge-base --is-ancestor "$release_commit" "$GITHUB_SHA"; then
+  echo "ERROR: release commit $release_commit is not in the history of $GITHUB_SHA." >&2
+  exit 1
+fi
+first_parent=$(git rev-parse --verify --quiet "$GITHUB_SHA^1" || true)
+if [ -n "$first_parent" ] && git merge-base --is-ancestor "$release_commit" "$first_parent"; then
+  echo "::warning::$tag is not published yet. Only the run for the main commit that brought release commit $release_commit to main publishes it, and this run is for $GITHUB_SHA. If that run failed, re-run it."
   exit 0
 fi
 

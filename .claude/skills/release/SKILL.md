@@ -5,9 +5,10 @@ description: Assess whether KoFEM is due for a release and, when the maintainer 
 
 # Releasing KoFEM
 
-kofem.org deploys `main` continuously. A release does not ship code. It labels a
-tested commit, so users and bug reports have a version to point at and changes to
-numerical results get written down.
+Feature work lands on `develop` (deployed to dev.kofem.org); the maintainer
+promotes `develop` to `main` (kofem.org) with a merge PR. A release does not ship
+code. It labels a tested commit, so users and bug reports have a version to point
+at and changes to numerical results get written down.
 
 Releases have no schedule. Run this skill only when the maintainer asks for it.
 Never run it from a routine, and never put it in the weekly update.
@@ -17,13 +18,14 @@ Never run it from a routine, and never put it in the weekly update.
 | Version | `web/package.json` `version` and `Cargo.toml` `[workspace.package] version`. The two must match |
 | Release notes | `CHANGELOG.md`, one `## [X.Y.Z] - YYYY-MM-DD` section per release |
 | Consistency check | `scripts/release-version.sh`, which CI runs on every PR |
-| Tag and GitHub Release | CI's `release` job via `scripts/publish-release.sh`. It tags on the commit that added the version's changelog heading, and publishes releases for tags the maintainer made by hand |
+| Tag and GitHub Release | CI's `release` job via `scripts/publish-release.sh`, on `main`. It tags the `main` commit that brought in the commit adding the version's changelog heading (the promotion merge), and publishes releases for tags the maintainer made by hand |
 
 ## The rules
 
-1. **You never tag, and never create or edit a GitHub Release.** The only human
-   approval is the maintainer merging the release PR. CI then tags that exact
-   commit, after every gate has passed on it.
+1. **You never tag, and never create or edit a GitHub Release.** The human
+   approvals are the maintainer merging the release PR into `develop` and then
+   promoting `develop` to `main`. CI tags the promotion's merge commit, after
+   every gate has passed on it. You never open or merge the promotion.
 2. **Assess is read-only.** It recommends. It does not branch, push, open a PR or
    file issues.
 3. **Numerical changes are never silent.** Any change to the solver, the mesher,
@@ -47,13 +49,14 @@ Pre-1.0 [semver](https://semver.org/):
 ## Mode 1: assess (read-only)
 
 ```bash
-git fetch origin main --tags
+git fetch origin main develop --tags
+# Tags sit on main (the promotion merge); unreleased work is on develop.
 LAST=$(git describe --tags --abbrev=0 --match 'v[0-9]*' origin/main)
-git log --first-parent --format='%h %s' "$LAST"..origin/main
-git diff --stat "$LAST"..origin/main -- engine/cpp examples/validation
+git log --first-parent --format='%h %s' "$LAST"..origin/develop
+git diff --stat "$LAST"..origin/develop -- engine/cpp examples/validation
 ```
 
-`main` is squash-merged, so each first-parent commit is one PR, and `(#nnn)` in
+`develop` is squash-merged, so each first-parent commit is one PR, and `(#nnn)` in
 the subject gives the PR number. For each PR, read its title and description, and
 look for the `Fixes KOF-nn` issue. If there is a comment drafting a release note
 for it, read that too. Sort each PR into **Added**, **Changed**, **Fixed**,
@@ -70,7 +73,7 @@ until you have read it and shown otherwise.
   version, following the rules above. Say so explicitly when a Breaking or
   numerical change is in the range, because those benefit most from a tag.
 - **Wait** when everything since the last tag is Internal.
-- **Blocked** when CI is red on `origin/main`'s head, or when an open Linear issue
+- **Blocked** when CI is red on `origin/develop`'s head, or when an open Linear issue
   reports a wrong result that this range introduced or did not fix. A release
   must not label a known-wrong result as a reference point.
 
@@ -88,7 +91,7 @@ If nothing user-facing happened, say so in one line and stop.
 
 ## Mode 2: prepare (only after the maintainer says release)
 
-1. Branch from `origin/main`, or use the branch your session was told to use.
+1. Branch from `origin/develop`, or use the branch your session was told to use.
 2. Set the new version in `web/package.json` and in `Cargo.toml`
    `[workspace.package]`. Run `cargo check` so `Cargo.lock` picks it up.
 3. Add the section to the top of `CHANGELOG.md`, below the intro, dated today:
@@ -102,13 +105,15 @@ If nothing user-facing happened, say so in one line and stop.
    ```bash
    bash scripts/release-version.sh && bash scripts/release-version.sh --notes
    ```
-5. Open a PR titled `Release vA.B.C`. The body has two parts:
+5. Open a PR into `develop` titled `Release vA.B.C`. The body has two parts:
    - The changelog section.
    - The readiness report below, filled in.
 
    Do **not** put `Fixes KOF-nn` in it, because a release resolves no issue.
 6. Stop and report the PR link. If the PR merges on a later day, move the date in
-   the changelog heading before it merges.
+   the changelog heading before it merges. Once it is in `develop`, the
+   maintainer checks dev.kofem.org and promotes `develop` to `main` with a merge
+   PR; that promotion is what CI tags.
 
 ### Readiness report
 
@@ -116,7 +121,7 @@ If nothing user-facing happened, say so in one line and stop.
 ## Readiness
 
 - **Range:** vX.Y.Z..<sha>, N PRs
-- **CI on main head:** green / red (<run link>)
+- **CI on develop head:** green / red (<run link>)
 - **Numerical changes:** <each one, with the validation evidence from its PR, or "none">
 - **Breaking changes:** <what users must do, or "none">
 - **Open correctness issues:** <KOF-nn links, or "none known">
@@ -126,7 +131,8 @@ If nothing user-facing happened, say so in one line and stop.
 ## After merge
 
 CI's `release` job publishes `vA.B.C` once rust, clang-tidy, frontend (tests and
-the production smoke test) and publish-engine pass on the merge commit. If the
+the production smoke test) and publish-engine pass on the promotion's merge
+commit on `main`. If the
 job fails, report its error. Do not tag by hand to work around it.
 
 The app's status bar and the image tag both show `vA.B.C-<short sha>`. Every

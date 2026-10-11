@@ -1,0 +1,13 @@
+# Checks for a new dev image every 10 minutes. A check with nothing new does
+# nothing; a refused image leaves the running deployment untouched and shows as
+# a failed run in `systemctl status kofem-dev-deploy`.
+[Unit]
+Description=Check for a new KoFEM dev image
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=10min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

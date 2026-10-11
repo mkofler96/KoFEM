@@ -1,0 +1,13 @@
+# Runs deploy/dev/deploy-dev.sh: verify the newest :dev image, then deploy it.
+# Install (see deploy/README.md): copy both units to /etc/systemd/system/, set
+# User= and the paths below, then `systemctl enable --now kofem-dev-deploy.timer`.
+[Unit]
+Description=Deploy the verified KoFEM dev image to dev.kofem.org
+Wants=network-online.target
+After=network-online.target docker.service
+
+[Service]
+Type=oneshot
+# A user in the docker group, logged in to gh (see deploy-dev.sh).
+User=mkofler
+ExecStart=/home/mkofler/KoFEM-Private/dev/deploy-dev.sh
