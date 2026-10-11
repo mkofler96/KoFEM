@@ -11,7 +11,7 @@
 #    "## [X.Y.Z]" heading to CHANGELOG.md, i.e. the merged release PR. It reaches
 #    main either directly (squash-merged into main: it IS that commit) or inside
 #    the promotion merge from develop (then the merge commit is tagged — what
-#    kofem.org runs, approved by merging the promotion). A later commit on main
+#    main's image is built from, approved by merging the promotion). A later commit on main
 #    already contains the release commit through its first parent and never gets
 #    the tag, even when the right run failed or is still running.
 set -euo pipefail

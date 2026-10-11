@@ -1,7 +1,7 @@
 #!/bin/sh
 # Runs at container start (nginx image executes /docker-entrypoint.d/*.sh before
 # starting nginx). Marks the deployment channel in the served site, so one image
-# serves kofem.org and the dev deployment alike:
+# serves production and a development deployment alike:
 #
 #   KOFEM_CHANNEL unset/empty — production: the site is served as built.
 #   KOFEM_CHANNEL=dev         — every HTML page gets <meta name="robots"

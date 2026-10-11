@@ -77,8 +77,9 @@ ENV VITE_GA_ID=""
 COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 
 # Deployment channel, applied at container start (see
-# docker-entrypoint.d/30-kofem-channel.sh): empty for kofem.org, "dev" for the
-# dev deployment, which is then marked as such and kept out of search engines.
+# docker-entrypoint.d/30-kofem-channel.sh): empty for production, "dev" for a
+# development deployment, which is then marked as such and kept out of search
+# engines.
 ENV KOFEM_CHANNEL=""
 
 # Run before nginx starts (the base image executes /docker-entrypoint.d/*.sh in

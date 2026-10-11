@@ -5,19 +5,19 @@ description: Assess whether KoFEM is due for a release and, when the maintainer 
 
 # Releasing KoFEM
 
-Feature work lands on `develop` (deployed to dev.kofem.org); the maintainer
-promotes `develop` to `main` (kofem.org) with a merge PR. A release does not ship
+Feature work lands on `develop` (published as the `:dev` image); the maintainer
+promotes `develop` to `main` (the `:latest` image) with a merge PR. A release does not ship
 code. It labels a tested commit, so users and bug reports have a version to point
 at and changes to numerical results get written down.
 
 Releases have no schedule. Run this skill only when the maintainer asks for it.
 Never run it from a routine, and never put it in the weekly update.
 
-| Piece | Where |
-| -- | -- |
-| Version | `web/package.json` `version` and `Cargo.toml` `[workspace.package] version`. The two must match |
-| Release notes | `CHANGELOG.md`, one `## [X.Y.Z] - YYYY-MM-DD` section per release |
-| Consistency check | `scripts/release-version.sh`, which CI runs on every PR |
+| Piece                  | Where                                                                                                                                                                                                                                          |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Version                | `web/package.json` `version` and `Cargo.toml` `[workspace.package] version`. The two must match                                                                                                                                                |
+| Release notes          | `CHANGELOG.md`, one `## [X.Y.Z] - YYYY-MM-DD` section per release                                                                                                                                                                              |
+| Consistency check      | `scripts/release-version.sh`, which CI runs on every PR                                                                                                                                                                                        |
 | Tag and GitHub Release | CI's `release` job via `scripts/publish-release.sh`, on `main`. It tags the `main` commit that brought in the commit adding the version's changelog heading (the promotion merge), and publishes releases for tags the maintainer made by hand |
 
 ## The rules
@@ -110,9 +110,10 @@ If nothing user-facing happened, say so in one line and stop.
    - The readiness report below, filled in.
 
    Do **not** put `Fixes KOF-nn` in it, because a release resolves no issue.
+
 6. Stop and report the PR link. If the PR merges on a later day, move the date in
    the changelog heading before it merges. Once it is in `develop`, the
-   maintainer checks dev.kofem.org and promotes `develop` to `main` with a merge
+   maintainer checks the dev build and promotes `develop` to `main` with a merge
    PR; that promotion is what CI tags.
 
 ### Readiness report

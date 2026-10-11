@@ -11,7 +11,7 @@ import {
 import { resetWorker } from "../../workers/sharedWorker";
 import styles from "./TopBar.module.css";
 
-// The dev deployment (dev.kofem.org) is marked at container start with
+// A development deployment is marked at container start with
 // <meta name="kofem-channel" content="dev"> (web/docker-entrypoint.d/
 // 30-kofem-channel.sh); production and local builds carry no such tag.
 const DEV_CHANNEL =

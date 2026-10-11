@@ -241,8 +241,8 @@ jobs:
     permissions:
       contents: read
       packages: write
-      # Signed build provenance for pushed images (GitHub OIDC): the dev
-      # deployment verifies it before running an image (deploy/deploy-dev.sh).
+      # Signed build provenance for pushed images (GitHub OIDC), so a deployment
+      # can verify an image before running it.
       id-token: write
       attestations: write
 
@@ -353,8 +353,8 @@ jobs:
       # --- Docker image -----------------------------------------------------
       # Runs in the frontend job to reuse its checkout. No `if: always()`, so a
       # failing test above skips the build — a broken commit never ships an
-      # image. main = push :latest (kofem.org), develop = push :dev
-      # (dev.kofem.org); every other branch/PR builds only as a smoke test.
+      # image. main = push :latest, develop = push :dev; every other
+      # branch/PR builds only as a smoke test.
       # The image is built map-free in main mode by web/Dockerfile.
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
@@ -463,9 +463,12 @@ jobs:
           fi
 
       # Signed provenance (SLSA, via GitHub OIDC) stored next to the image in
-      # GHCR. A deployment that verifies it (deploy/deploy-dev.sh) only runs
-      # images this workflow built from this repository — an image pushed to the
-      # registry any other way fails the check.
+      # GHCR. A deployment that verifies it only runs images this workflow built
+      # from this repository and branch — an image pushed to the registry any
+      # other way fails the check:
+      #   gh attestation verify oci://ghcr.io/mkofler96/kofem-web@<digest> \
+      #     --repo mkofler96/KoFEM --signer-workflow mkofler96/KoFEM/.github/workflows/ci.yml \
+      #     --source-ref refs/heads/develop --deny-self-hosted-runners
       - name: Attest web image provenance
         if: steps.image.outputs.digest != ''
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2

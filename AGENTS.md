@@ -219,26 +219,27 @@ benchmarks, `shell-coupling/` and `topopt-shell/` hold dev scripts. Touch those
 only when the request names them explicitly. Do not add Abaqus `.inp` input
 files or an Abaqus reader (licensing).
 
-## Branches and deployment
+## Branches and images
 
-| Branch    | Takes                                | Deployed to                                    |
-| --------- | ------------------------------------ | ---------------------------------------------- |
-| `develop` | feature PRs (squash-merged)          | dev.kofem.org, automatically (image `:dev`)    |
-| `main`    | promotions from `develop` (merge PR) | kofem.org, by the maintainer (image `:latest`) |
+| Branch    | Takes                                | CI publishes        |
+| --------- | ------------------------------------ | ------------------- |
+| `develop` | feature PRs (squash-merged)          | the image `:dev`    |
+| `main`    | promotions from `develop` (merge PR) | the image `:latest` |
 
 - **Feature PRs target `develop`**, never `main`.
 - **A promotion** is a PR from `develop` to `main`, merged with a **merge
   commit** — squashing it would rewrite `develop`'s history onto `main` and make
   the next promotion conflict. Only the maintainer opens or merges one.
 - CI pushes images only from these two branches, each with signed build
-  provenance; the dev deployment verifies it before running an image. The VPS
-  side lives in `deploy/` (see its README); do not weaken the verification, the
-  container hardening or the pinned digests and action SHAs there or in CI.
+  provenance (`actions/attest-build-provenance`), so a deployment can verify an
+  image before running it. Do not weaken that, or the pinned base-image digests
+  and action SHAs in CI and `web/Dockerfile`.
+- How and where the images are deployed is not part of this repository.
 
 ## Releases
 
-A release does not ship code: kofem.org runs whatever the maintainer last
-promoted. It tags a tested commit as `vX.Y.Z`, which gives users and bug reports
+A release does not ship code: the images are built from every commit that
+reaches `develop` and `main`. It tags a tested commit as `vX.Y.Z`, which gives users and bug reports
 a version to name and puts changes to numerical results on record. There is no
 schedule. Releases happen when the maintainer asks for one, and nothing prompts
 for them. The `release` skill in `.claude/skills/` has the procedure. The rules:
