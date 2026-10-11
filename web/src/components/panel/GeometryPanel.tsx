@@ -1,272 +1,30 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useState, useRef, type ChangeEvent } from "react";
+import { useRef, useState, type ChangeEvent } from "react";
 import { useModelStore } from "../../store/modelStore";
-import type { Material, Property } from "../../store/modelStore";
-import { isCadBody, shellSectionsOf } from "../../store/geometrySlice";
-import { pickMaterialColor } from "../../store/materialSlice";
-import { fmt } from "../../lib/modelDisplay";
+import type { Property } from "../../store/modelStore";
+import {
+  isCadBody,
+  shellSectionsOf,
+  suppressionMismatch,
+} from "../../store/geometrySlice";
+import type { TreeTarget } from "../../store/viewSlice";
 import { useGeometry } from "../../hooks/useGeometry";
 import { detectShellBodies } from "../../lib/thinBodies";
-import { MeshPanel } from "./MeshPanel";
 import { SplitSection } from "./SplitSection";
-import styles from "./LeftPanel.module.css";
+import { BooleanSection } from "./BooleanSection";
+import { EYE_ICON, EYE_OFF_ICON } from "./bodyIcons";
+import styles from "./Panel.module.css";
 
-function MaterialForm({
-  mat,
-  defaultColor,
-  onSave,
-  onCancel,
-}: {
-  mat?: Material;
-  defaultColor?: string;
-  onSave(v: Omit<Material, "id">): void;
-  onCancel(): void;
-}) {
-  // Form seeds for the "new material" dialog (`mat` undefined): structural
-  // steel, shown in the editable fields and validated in handleSave before it
-  // becomes a material. Nothing here reaches the solver unseen.
-  /* eslint-disable kofem/no-silent-fallback -- prefilled form values the user sees and edits, not a substitute for missing solver data */
-  const [name, setName] = useState(mat?.name ?? "Material");
-  const [young, setYoung] = useState(String(mat?.young ?? 210000));
-  const [poisson, setPoisson] = useState(String(mat?.poisson ?? 0.3));
-  const [density, setDensity] = useState(String(mat?.density ?? 7.85e-9));
-  const [color, setColor] = useState(mat?.color ?? defaultColor ?? "#4e79a7");
-  /* eslint-enable kofem/no-silent-fallback */
-  const [error, setError] = useState<string | null>(null);
+const SUPPRESS_TIP =
+  "Take the body out of the model as if it were deleted — it is not drawn, " +
+  "meshed or analysed — while keeping its material and settings. Uncheck to " +
+  "bring it back.";
 
-  function handleSave() {
-    const youngModulus = parseFloat(young);
-    const poissonRatio = parseFloat(poisson);
-    const densityValue = parseFloat(density);
-
-    if (!isFinite(youngModulus) || youngModulus <= 0) {
-      setError("Young's modulus must be a positive number");
-      return;
-    }
-    // ν must lie in (-1, 0.5); ν = 0 is physically valid (e.g. auxetic foams,
-    // cork) and must not be silently replaced by the steel default.
-    if (!isFinite(poissonRatio) || poissonRatio <= -1 || poissonRatio >= 0.5) {
-      setError("Poisson's ratio must be in the range (-1, 0.5)");
-      return;
-    }
-    if (!isFinite(densityValue) || densityValue < 0) {
-      setError("Density must be a non-negative number");
-      return;
-    }
-    onSave({
-      // eslint-disable-next-line kofem/no-silent-fallback -- label for a material the user left unnamed; cosmetic, the physical constants above are all validated
-      name: name || "Material",
-      young: youngModulus,
-      poisson: poissonRatio,
-      density: densityValue,
-      color,
-    });
-  }
-
-  return (
-    <div className={styles.inlineForm}>
-      {error && (
-        <div className={styles.errorBanner} data-testid="material-error">
-          <span>{error}</span>
-          <button onClick={() => setError(null)}>×</button>
-        </div>
-      )}
-      <div className={styles.formRow}>
-        <span className={styles.formLabel}>Name</span>
-        <input
-          className={styles.formInput}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-      </div>
-      <div className={styles.formRow}>
-        <span className={styles.formLabel}>Colour</span>
-        <input
-          className={styles.colorInput}
-          type="color"
-          value={color}
-          data-testid="material-color"
-          onChange={(e) => setColor(e.target.value)}
-          title="Colour used to paint the bodies made of this material"
-        />
-      </div>
-      <div className={styles.formRow}>
-        <span className={styles.formLabel}>E (MPa)</span>
-        <input
-          className={styles.formInput}
-          type="number"
-          value={young}
-          step="1000"
-          onChange={(e) => setYoung(e.target.value)}
-        />
-      </div>
-      <div className={styles.formRow}>
-        <span className={styles.formLabel}>ν</span>
-        <input
-          className={styles.formInput}
-          type="number"
-          value={poisson}
-          step="0.01"
-          onChange={(e) => setPoisson(e.target.value)}
-        />
-      </div>
-      <div className={styles.formRow}>
-        <span className={styles.formLabel}>ρ (t/mm³)</span>
-        <input
-          className={styles.formInput}
-          type="number"
-          value={density}
-          step="1e-9"
-          onChange={(e) => setDensity(e.target.value)}
-          title="Stored with the material but not used by the current static solver (reserved for future gravity / inertial loads)."
-        />
-      </div>
-      <p className={styles.formNote}>
-        Not used by the current static solver — reserved for future gravity /
-        inertial loads.
-      </p>
-      <div className={styles.formBtns}>
-        <button className={styles.cancelBtn} onClick={onCancel}>
-          Cancel
-        </button>
-        <button className={styles.primaryBtn} onClick={handleSave}>
-          Save
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// Material definitions with per-body assignment (#317/#353). A single-body
-// part keeps the old behaviour — one material, applied to the whole part; a
-// multibody assembly lists every body with a material dropdown (the body ↔
-// material mapping made explicit — the confusion behind #275).
-function MaterialSection() {
-  const materials = useModelStore((s) => s.materials);
-  const properties = useModelStore((s) => s.properties);
-  const updateMaterial = useModelStore((s) => s.updateMaterial);
-  const deleteMaterial = useModelStore((s) => s.deleteMaterial);
-  const createMaterial = useModelStore((s) => s.createMaterial);
-
-  const [editingMatId, setEditingMatId] = useState<number | null>(null);
-  const [isAdding, setIsAdding] = useState(false);
-
-  const isAssigned = (matId: number) =>
-    properties.some((p) => p.materialId === matId);
-
-  return (
-    <>
-      <div className={styles.sectionLabel}>Materials</div>
-      {materials.length === 0 && (
-        <div className={styles.empty}>No material</div>
-      )}
-      {materials.map((mat) => (
-        <div key={mat.id}>
-          <div className={styles.treeItem}>
-            <span
-              className={styles.materialSwatch}
-              style={{ background: mat.color }}
-              title={`Body colour ${mat.color}`}
-            />
-            <div className={styles.treeItemBody}>
-              <div className={styles.treeItemName}>{mat.name}</div>
-              <div className={styles.treeItemDetail}>
-                E = {fmt(mat.young, 3)} MPa · ν = {mat.poisson}
-              </div>
-            </div>
-            <div className={styles.treeItemActions}>
-              <button
-                className={styles.iconBtn}
-                title="Edit material"
-                onClick={() => setEditingMatId(mat.id)}
-              >
-                ✎
-              </button>
-              {materials.length > 1 && !isAssigned(mat.id) && (
-                <button
-                  className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
-                  title="Remove material"
-                  onClick={() => deleteMaterial(mat.id)}
-                >
-                  ×
-                </button>
-              )}
-            </div>
-          </div>
-          {editingMatId === mat.id && (
-            <MaterialForm
-              mat={mat}
-              onSave={(values) => {
-                updateMaterial(mat.id, values);
-                setEditingMatId(null);
-              }}
-              onCancel={() => setEditingMatId(null)}
-            />
-          )}
-        </div>
-      ))}
-      {isAdding ? (
-        <MaterialForm
-          defaultColor={pickMaterialColor(materials)}
-          onSave={(values) => {
-            createMaterial(values);
-            setIsAdding(false);
-          }}
-          onCancel={() => setIsAdding(false)}
-        />
-      ) : (
-        <button
-          className={styles.outlineBtn}
-          data-testid="add-material"
-          onClick={() => setIsAdding(true)}
-        >
-          + Add material
-        </button>
-      )}
-      {materials.length === 1 && properties.length <= 1 && (
-        <div className={styles.empty}>Applied to the whole part.</div>
-      )}
-      <AutoShellSection />
-      <BodiesSection />
-    </>
-  );
-}
-
-// Minimalist eye / eye-off glyphs for the per-body visibility toggle.
-const EYE_ICON = (
-  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden>
-    <path
-      d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-    <circle cx="12" cy="12" r="2.6" stroke="currentColor" strokeWidth="1.8" />
-  </svg>
-);
-
-const EYE_OFF_ICON = (
-  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" aria-hidden>
-    <path
-      d="M2 12s3.5-7 10-7c1.6 0 3 .4 4.3 1M22 12s-3.5 7-10 7c-1.6 0-3-.4-4.3-1M9.5 9.6a3.5 3.5 0 0 0 4.9 4.9M4 4l16 16"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
-  </svg>
-);
-
-// Body ↔ material assignment for multibody assemblies (#353): one row per
-// body of the imported CAD file, each with an eye (show/hide), a material-colour
-// swatch and a material dropdown. Hovering or focusing a row highlights that
-// body in the viewport (others dim). Hidden for single-body parts, where the
-// sole material applies to the whole part.
-const BODIES_TIP =
-  "Hover a body to highlight it in the geometry view; use the eye to hide it. " +
+// Body ↔ material assignment (#353) lives on each body's tree entry; hovering
+// the entry highlights the body in the viewport (others dim).
+const BODIES_NOTE =
   "Touching bodies are bonded at their shared faces — a body that touches " +
   "nothing floats, so constrain it or check the assembly.";
 
@@ -294,7 +52,7 @@ const ELEMENT_TYPE_TIP =
 // every imported model — including single-body parts, where it is the only way
 // to choose between a shell and a solid idealisation (the per-body Element type
 // dropdown below appears for assemblies only).
-function AutoShellSection() {
+export function AutoShellSection() {
   const stepSurface = useModelStore((s) => s.stepSurface);
   const applyShellDetection = useModelStore((s) => s.applyShellDetection);
   const autoShell = useModelStore((s) => s.autoShell);
@@ -382,107 +140,6 @@ function sectionsTip(sections: Property[]): string | undefined {
   return (
     `Idealised as shells by the last mesh — ${sections.length} thickness ` +
     `section(s): ${thicknesses}. Its walls carry this body's material.`
-  );
-}
-
-function BodiesSection() {
-  const materials = useModelStore((s) => s.materials);
-  const properties = useModelStore((s) => s.properties);
-  const assignBodyMaterial = useModelStore((s) => s.assignBodyMaterial);
-  const setBodyDiscretization = useModelStore((s) => s.setBodyDiscretization);
-  const setHighlightBodyId = useModelStore((s) => s.setHighlightBodyId);
-  const hiddenBodyIds = useModelStore((s) => s.hiddenBodyIds);
-  const toggleBodyVisibility = useModelStore((s) => s.toggleBodyVisibility);
-
-  // One row per CAD body. A mesh-time shell idealisation adds one PSHELL per
-  // wall thickness to `properties`; those are section properties OF a body, not
-  // bodies, and listing them put a second row — its own name, eye and material
-  // dropdown — on screen for a single physical part, and made single-body parts
-  // grow a Bodies list the moment they were shelled. The thickness they carry is
-  // surfaced on their body's row instead.
-  const bodies = properties.filter(isCadBody);
-  if (bodies.length <= 1) return null;
-
-  const matColor = (materialId: number) =>
-    // eslint-disable-next-line kofem/no-silent-fallback -- swatch colour for a body whose material carries none; display only, never reaches the solver
-    materials.find((mat) => mat.id === materialId)?.color ?? "#7a9bbf";
-
-  // Hover/focus only publishes which body is in question. Highlighting it dims
-  // the others in the geometry (coloured-tessellation) view, and the viewport
-  // falls back to that view while a highlight is live — MeshScene's call,
-  // derived from highlightBodyId. The panel must not write viewRepr itself, or
-  // a hover would permanently replace the representation the user picked and
-  // leave the mesh hidden long after the pointer moved on.
-
-  return (
-    <>
-      <div className={styles.sectionLabel} title={BODIES_TIP}>
-        Bodies
-      </div>
-      {bodies.map((prop) => {
-        const hidden = hiddenBodyIds.includes(prop.id);
-        const sections = shellSectionsOf(properties, prop.id);
-        return (
-          <div
-            className={styles.bodyRow}
-            key={prop.id}
-            onMouseEnter={() => setHighlightBodyId(prop.id)}
-            onMouseLeave={() => setHighlightBodyId(null)}
-          >
-            <span
-              className={styles.materialSwatch}
-              style={{ background: matColor(prop.materialId) }}
-            />
-            <span className={styles.bodyLabel} title={sectionsTip(sections)}>
-              Body {prop.id}
-            </span>
-            <button
-              className={`${styles.visBtn}${hidden ? ` ${styles.visBtnOff}` : ""}`}
-              data-testid={`body-visibility-${prop.id}`}
-              title={hidden ? "Show body" : "Hide body"}
-              aria-pressed={hidden}
-              onClick={() => toggleBodyVisibility(prop.id)}
-            >
-              {hidden ? EYE_OFF_ICON : EYE_ICON}
-            </button>
-            <select
-              className={styles.formSelect}
-              data-testid={`body-material-${prop.id}`}
-              value={prop.materialId}
-              onFocus={() => setHighlightBodyId(prop.id)}
-              onBlur={() => setHighlightBodyId(null)}
-              onChange={(e) =>
-                assignBodyMaterial(prop.id, Number(e.target.value))
-              }
-            >
-              {materials.map((mat) => (
-                <option key={mat.id} value={mat.id}>
-                  {mat.name}
-                </option>
-              ))}
-            </select>
-            <select
-              className={styles.formSelect}
-              data-testid={`body-type-${prop.id}`}
-              title={ELEMENT_TYPE_TIP}
-              // eslint-disable-next-line kofem/no-silent-fallback -- selected option for a body left at the default discretization; absent means solid, matching how geometrySlice assigns it
-              value={prop.discretization ?? "solid"}
-              onFocus={() => setHighlightBodyId(prop.id)}
-              onBlur={() => setHighlightBodyId(null)}
-              onChange={(e) =>
-                setBodyDiscretization(
-                  prop.id,
-                  e.target.value as "shell" | "solid",
-                )
-              }
-            >
-              <option value="solid">Solid</option>
-              <option value="shell">Shell</option>
-            </select>
-          </div>
-        );
-      })}
-    </>
   );
 }
 
@@ -590,14 +247,173 @@ function ImportSection() {
   );
 }
 
-export function GeometryPanel() {
+// One body, opened from the model tree: visibility, material and (for an
+// assembly) element type — the body's row of the Bodies list as a form.
+function BodyDetail({ id }: { id: number }) {
+  const prop = useModelStore((s) => s.properties.find((p) => p.id === id));
+  const properties = useModelStore((s) => s.properties);
+  const materials = useModelStore((s) => s.materials);
+  const assignBodyMaterial = useModelStore((s) => s.assignBodyMaterial);
+  const setBodyDiscretization = useModelStore((s) => s.setBodyDiscretization);
+  const hiddenBodyIds = useModelStore((s) => s.hiddenBodyIds);
+  const toggleBodyVisibility = useModelStore((s) => s.toggleBodyVisibility);
+  const setBodySuppressed = useModelStore((s) => s.setBodySuppressed);
+  const meshSuppressedIds = useModelStore((s) => s.meshSuppressedIds);
+  const nodeCount = useModelStore((s) => s.nodes.length);
+  if (!prop) return null;
+
+  const hidden = hiddenBodyIds.includes(prop.id);
+  const bodies = properties.filter(isCadBody);
+  const assembly = bodies.length > 1;
+  const suppressed = prop.suppressed === true;
+  // The last body still in the model cannot go — there would be nothing left.
+  const lastBody =
+    !suppressed && bodies.every((b) => b.id === prop.id || b.suppressed);
+  const mismatch = suppressionMismatch(
+    properties,
+    meshSuppressedIds,
+    nodeCount > 0,
+  );
+  const stillMeshed = mismatch.stillMeshed.includes(prop.id);
+  const notMeshed = mismatch.missing.includes(prop.id);
+  const tip = sectionsTip(shellSectionsOf(properties, prop.id));
+  return (
+    <>
+      <div className={styles.formRow}>
+        <span className={styles.formLabel}>Visible</span>
+        <button
+          className={`${styles.visBtn}${hidden ? ` ${styles.visBtnOff}` : ""}`}
+          data-testid={`body-visibility-${prop.id}`}
+          title={hidden ? "Show body" : "Hide body"}
+          aria-pressed={hidden}
+          onClick={() => toggleBodyVisibility(prop.id)}
+        >
+          {hidden ? EYE_OFF_ICON : EYE_ICON}
+        </button>
+      </div>
+      <label
+        className={styles.formRow}
+        title={
+          lastBody
+            ? "The last body in the model cannot be suppressed"
+            : SUPPRESS_TIP
+        }
+      >
+        <span className={styles.formLabel}>Suppressed</span>
+        <input
+          type="checkbox"
+          data-testid={`body-suppressed-${prop.id}`}
+          checked={suppressed}
+          disabled={lastBody}
+          onChange={(e) => setBodySuppressed(prop.id, e.target.checked)}
+        />
+      </label>
+      {stillMeshed && (
+        <p className={styles.formNote} data-testid="suppressed-remesh-note">
+          Re-mesh to take it out of the analysis — the current mesh still
+          contains it.
+        </p>
+      )}
+      {notMeshed && (
+        <p className={styles.formNote} data-testid="restored-remesh-note">
+          Re-mesh to bring it back into the analysis — the current mesh was made
+          without it.
+        </p>
+      )}
+      <div className={styles.formRow}>
+        <span className={styles.formLabel}>Material</span>
+        <select
+          className={styles.formSelect}
+          data-testid={`body-material-${prop.id}`}
+          value={prop.materialId}
+          onChange={(e) => assignBodyMaterial(prop.id, Number(e.target.value))}
+        >
+          {materials.map((mat) => (
+            <option key={mat.id} value={mat.id}>
+              {mat.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      {assembly && (
+        <div className={styles.formRow} title={ELEMENT_TYPE_TIP}>
+          <span className={styles.formLabel}>Element type</span>
+          <select
+            className={styles.formSelect}
+            data-testid={`body-type-${prop.id}`}
+            // eslint-disable-next-line kofem/no-silent-fallback -- selected option for a body left at the default discretization; absent means solid, matching how geometrySlice assigns it
+            value={prop.discretization ?? "solid"}
+            onChange={(e) =>
+              setBodyDiscretization(
+                prop.id,
+                e.target.value as "shell" | "solid",
+              )
+            }
+          >
+            <option value="solid">Solid</option>
+            <option value="shell">Shell</option>
+          </select>
+        </div>
+      )}
+      {tip && <p className={styles.formNote}>{tip}</p>}
+      {assembly && <p className={styles.formNote}>{BODIES_NOTE}</p>}
+    </>
+  );
+}
+
+// Geometry → + Add: import a CAD file (replacing the current model) or make a
+// body from a Boolean of the bodies already there.
+function AddGeometry() {
+  const [source, setSource] = useState<"import" | "boolean">("import");
+  return (
+    <>
+      <div
+        className={`${styles.segToggle} ${styles.addSource}`}
+        role="group"
+        aria-label="Add geometry"
+      >
+        {(
+          [
+            ["import", "Import file"],
+            ["boolean", "From boolean"],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            data-testid={`add-geometry-${id}`}
+            className={`${styles.segBtn} ${source === id ? styles.segBtnActive : ""}`}
+            aria-pressed={source === id}
+            onClick={() => setSource(id)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {source === "import" ? <ImportSection /> : <BooleanSection />}
+    </>
+  );
+}
+
+// The Geometry entries: "+ Add" imports or combines, the split tool cuts, and
+// each body has its own properties.
+export function GeometryPanel({ target }: { target: TreeTarget }) {
+  const hasGeometry = useModelStore((s) => s.stepSurface !== null);
   return (
     <div className={styles.panel}>
       <div className={styles.tabContent}>
-        <ImportSection />
-        <SplitSection />
-        <MeshPanel />
-        <MaterialSection />
+        {target.type === "add" && <AddGeometry />}
+        {target.type === "view" && target.view === "split" && (
+          <>
+            {!hasGeometry && (
+              <div className={styles.empty}>
+                Import a CAD model to split it.
+              </div>
+            )}
+            <SplitSection />
+          </>
+        )}
+        {target.type === "item" && <BodyDetail id={target.id} />}
       </div>
     </div>
   );

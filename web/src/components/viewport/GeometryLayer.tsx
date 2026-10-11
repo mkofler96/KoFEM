@@ -205,7 +205,12 @@ export function GeometryLayer({
     <group>
       {bodyGeometries.map(
         ({ bodyId, positions, normals, triIndices, outline }) => {
-          if (hiddenBodyIds.includes(bodyId)) return null;
+          // Hidden (the eye) or suppressed (as good as deleted): not drawn.
+          if (
+            hiddenBodyIds.includes(bodyId) ||
+            properties.some((p) => p.id === bodyId && p.suppressed)
+          )
+            return null;
           // When a body is being assigned (highlightBodyId set), every other body
           // fades back so the one in question reads clearly against the assembly.
           const dimmed = highlightBodyId !== null && highlightBodyId !== bodyId;

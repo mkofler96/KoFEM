@@ -1,0 +1,220 @@
+/* Model tree (left column on desktop, top of the panel drawer on small
+   screens). Colours follow the tokens in Panel.module.css. */
+
+.tree {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 6px 12px;
+  background: var(--surface);
+  font-family: "IBM Plex Sans", "Helvetica Neue", sans-serif;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.header {
+  padding: 4px 8px 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.group + .group {
+  margin-top: 4px;
+}
+
+/* Group header: a collapsible divider, not a selectable entry. */
+.divider {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.divider:hover {
+  background: var(--hover);
+}
+
+.divider svg {
+  flex-shrink: 0;
+  color: var(--muted);
+  transition: transform 120ms ease;
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}
+
+/* The divider holding the selected entry is marked, so the user sees where
+   in the workflow the panel on the right is. */
+.dividerCurrent .label {
+  color: var(--accent);
+}
+
+.done {
+  flex-shrink: 0;
+  width: 13px;
+  height: 13px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* Entries sit one step in from the divider label. */
+.node {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding: 0 8px 0 21px;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--ink-2);
+  font-family: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.node:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.nodeActive,
+.nodeActive:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--muted-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.nodeActive .detail {
+  color: var(--accent);
+}
+
+.swatch,
+.kindDot,
+.viewMark {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 2px;
+}
+
+.kindDot {
+  border-radius: 50%;
+  background: var(--muted-2);
+}
+
+/* Fixed entries (mesh, split tool, studies, results): a hollow square. */
+.viewMark {
+  border: 1.5px solid var(--muted-2);
+}
+
+.nodeActive .viewMark {
+  border-color: var(--accent);
+}
+
+/* Same hues as the BC / load / tie / coupling dots in the panel. */
+.kindBc {
+  background: #ef4444;
+}
+
+.kindLoad {
+  background: #f59e0b;
+}
+
+.kindTie {
+  background: #7c3aed;
+}
+
+.kindCoupling {
+  background: #059669;
+}
+
+.addIcon {
+  width: 8px;
+  flex-shrink: 0;
+  text-align: center;
+  font-weight: 600;
+}
+
+/* Entry row: the entry button, optionally followed by a control (the body
+   eye). */
+.entryRow {
+  display: flex;
+  align-items: center;
+}
+
+.entryRow .node {
+  flex: 1;
+}
+
+.eye {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  margin-left: 2px;
+  padding: 0;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--muted-2);
+  cursor: pointer;
+}
+
+.eye:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.eyeOff {
+  color: var(--muted);
+}
+
+/* A hidden body stays listed, greyed out, so it can be shown again. */
+.nodeDimmed .label,
+.nodeDimmed .swatch {
+  opacity: 0.45;
+}

@@ -32,6 +32,17 @@ export interface SplitGeometryOptions {
   bodyIds?: number[]
 }
 
+/** Boolean combination requested of {@link KofemModule.boolean_geometry},
+ *  JSON-stringified. The `target` body (1-based) is combined with the `tools`
+ *  bodies and the result takes its place; tools are consumed unless
+ *  `keepTools` (subtract only) keeps them, bonded to the cut target on reload. */
+export interface BooleanGeometryOptions {
+  op: "union" | "subtract" | "intersect"
+  target: number
+  tools: number[]
+  keepTools?: boolean
+}
+
 /** FEM volume mesh returned as flat typed arrays (binary, no JSON text — issue #166).
  *  `vertices` is xyz interleaved (length 3·nNodes); `tetrahedra` is four 0-based
  *  vertex indices per tet (length 4·nTets); `bodyIds` is the 1-based body
@@ -189,6 +200,12 @@ export interface KofemModule {
    *  with tessellate_step before meshing or splitting again.
    *  @param opts_json JSON-stringified {@link SplitGeometryOptions}. */
   split_geometry(opts_json: string): { bytes: Uint8Array }
+  /** Combine bodies of the loaded shape with a Boolean (see
+   *  {@link BooleanGeometryOptions}) and return the edited geometry as STEP
+   *  AP214 bytes. Throws, naming the bodies, when the operation would change
+   *  nothing. Releases the cached shape, like split_geometry.
+   *  @param opts_json JSON-stringified {@link BooleanGeometryOptions}. */
+  boolean_geometry(opts_json: string): { bytes: Uint8Array }
   /** Release the OCCT shape + STEP byte cache from WASM heap.
    *  Call this after meshing is complete and before solving to free ~10–30 MB
    *  of WASM memory that is no longer needed.

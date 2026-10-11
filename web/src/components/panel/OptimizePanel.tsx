@@ -10,7 +10,7 @@ import { convergenceFromLogs } from "../../lib/topOptProgress";
 import { ConvergencePlot } from "./ConvergencePlot";
 import { DensityThresholdControl } from "./DensityThresholdControl";
 import { LogSection } from "./LogSection";
-import styles from "./LeftPanel.module.css";
+import styles from "./Panel.module.css";
 
 // One labelled numeric setting bound to the store, with its inline validation
 // message. The value is the raw text the user typed (parsed and range-checked in

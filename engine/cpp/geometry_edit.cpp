@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Split faces or bodies of the loaded CAD shape with a plane. See geometry_edit.h.
+// Split faces or bodies of the loaded CAD shape with a plane, or combine
+// bodies with a Boolean operation. See geometry_edit.h.
 //
 // Both modes run OCCT's General Fuse splitter (BOPAlgo_Splitter), the same
 // Boolean framework imprint_touching_solids uses: it rebuilds the whole shape
@@ -11,6 +12,9 @@
 //            edge lying in a face splits that face; the solid itself is not cut.
 //   bodies — the tool is a planar face larger than the model, which cuts every
 //            argument solid it crosses into two.
+//
+// boolean_geometry runs the matching BRepAlgoAPI operation (Fuse, Cut, Common)
+// of one target body with tool bodies and puts the result in the target's place.
 
 #include "geometry_edit.h"
 
@@ -20,6 +24,12 @@
 #include "wasm_util.h"
 
 #include <BOPAlgo_Splitter.hxx>
+#include <BRepAlgoAPI_BooleanOperation.hxx>
+#include <BRepAlgoAPI_Common.hxx>
+#include <BRepAlgoAPI_Cut.hxx>
+#include <BRepAlgoAPI_Fuse.hxx>
+#include <BRepGProp.hxx>
+#include <GProp_GProps.hxx>
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepAlgoAPI_Section.hxx>
 #include <BRepBndLib.hxx>
@@ -48,6 +58,7 @@
 #include <cstring>
 #include <fstream>
 #include <iterator>
+#include <memory>
 #include <set>
 #include <sstream>
 #include <stdexcept>
@@ -111,16 +122,17 @@ std::vector<int> id_list(const val& opts, const char* key) {
     return {ids.begin(), ids.end()};
 }
 
-void require_unique_in_range(const std::vector<int>& ids, int count, const char* what) {
+void require_unique_in_range(const char* caller, const std::vector<int>& ids, int count,
+                             const char* what) {
     std::set<int> seen;
     for (const int id : ids) {
         if (id < 1 || id > count)
-            throw std::runtime_error(std::string("split_geometry: ") + what + " " +
+            throw std::runtime_error(std::string(caller) + ": " + what + " " +
                                      std::to_string(id) + " does not exist — the model has " +
                                      std::to_string(count) + " " + what + "s (ids 1–" +
                                      std::to_string(count) + ")");
         if (!seen.insert(id).second)
-            throw std::runtime_error(std::string("split_geometry: ") + what + " " +
+            throw std::runtime_error(std::string(caller) + ": " + what + " " +
                                      std::to_string(id) + " is listed twice");
     }
 }
@@ -187,7 +199,7 @@ TopoDS_Shape split_faces(const TopoDS_Shape& shape, const std::vector<int>& face
         throw std::runtime_error("split_geometry: no face to split — pick at least one face");
     TopTools_IndexedMapOfShape faces;
     TopExp::MapShapes(shape, TopAbs_FACE, faces);
-    require_unique_in_range(face_ids, faces.Extent(), "face");
+    require_unique_in_range("split_geometry", face_ids, faces.Extent(), "face");
 
     BOPAlgo_Splitter splitter;
     splitter.AddArgument(shape);
@@ -236,7 +248,7 @@ TopoDS_Shape split_bodies(const TopoDS_Shape& shape, const std::vector<int>& bod
         throw std::runtime_error(
             "split_geometry: the model has no solid body to split — it is surface-only "
             "geometry. Split its faces instead.");
-    require_unique_in_range(body_ids, solids.Extent(), "body");
+    require_unique_in_range("split_geometry", body_ids, solids.Extent(), "body");
 
     // A planar face that reaches past the model in every direction: half the
     // model diagonal past the farthest point of the box from the plane origin.
@@ -281,25 +293,25 @@ TopoDS_Shape split_bodies(const TopoDS_Shape& shape, const std::vector<int>& bod
 std::vector<uint8_t> step_bytes(const TopoDS_Shape& shape) {
     STEPControl_Writer writer;
     if (writer.Transfer(shape, STEPControl_AsIs) != IFSelect_RetDone)
-        throw std::runtime_error("split_geometry: STEPControl_Writer could not transfer the edited shape");
+        throw std::runtime_error("geometry edit: STEPControl_Writer could not transfer the edited shape");
 
     std::array<char, 32> path{};
     std::strcpy(path.data(), "/tmp/kofem_XXXXXX.stp");
     const int fd = mkstemps(path.data(), 4);
     if (fd < 0)
-        throw std::runtime_error("split_geometry: failed to create a /tmp STEP file");
+        throw std::runtime_error("geometry edit: failed to create a /tmp STEP file");
     close(fd);
     const IFSelect_ReturnStatus status = writer.Write(path.data());
     if (status != IFSelect_RetDone) {
         unlink(path.data());
-        throw std::runtime_error("split_geometry: STEPControl_Writer::Write failed");
+        throw std::runtime_error("geometry edit: STEPControl_Writer::Write failed");
     }
     std::ifstream file(path.data(), std::ios::binary);
     std::vector<uint8_t> bytes((std::istreambuf_iterator<char>(file)),
                                std::istreambuf_iterator<char>());
     unlink(path.data());
     if (bytes.empty())
-        throw std::runtime_error("split_geometry: the written STEP file is empty");
+        throw std::runtime_error("geometry edit: the written STEP file is empty");
     return bytes;
 }
 
@@ -313,7 +325,141 @@ TopoDS_Shape split_by_mode(const std::string& mode, const TopoDS_Shape& shape,
         R"(split_geometry: "mode" must be "faces" or "bodies", got ')" + mode + "'");
 }
 
+// ── Boolean operations ───────────────────────────────────────────────────────
+
+// Relative volume change below which a Boolean "did nothing" — OCCT rebuilds
+// the shape even when the tool misses, so the result is compared, not trusted.
+constexpr double VOLUME_UNCHANGED = 1e-9;
+
+double solid_volume(const TopoDS_Shape& shape) {
+    GProp_GProps props;
+    BRepGProp::VolumeProperties(shape, props);
+    return std::abs(props.Mass());
+}
+
+std::string body_list(const std::vector<int>& ids) {
+    std::string out;
+    for (size_t k = 0; k < ids.size(); ++k) {
+        if (k > 0)
+            out += k + 1 == ids.size() ? " and " : ", ";
+        out += "Body " + std::to_string(ids[k]);
+    }
+    return out;
+}
+
+std::unique_ptr<BRepAlgoAPI_BooleanOperation> make_operation(const std::string& op) {
+    if (op == "union")
+        return std::make_unique<BRepAlgoAPI_Fuse>();
+    if (op == "subtract")
+        return std::make_unique<BRepAlgoAPI_Cut>();
+    if (op == "intersect")
+        return std::make_unique<BRepAlgoAPI_Common>();
+    throw std::runtime_error(
+        R"(boolean_geometry: "op" must be "union", "subtract" or "intersect", got ')" + op + "'");
+}
+
+// Refuse a result that leaves the model as it was or with nothing: OCCT reports
+// success for a cut whose tool misses, and an empty common is a valid shape.
+void check_boolean_result(const std::string& op, const TopoDS_Shape& result, int target,
+                          const std::vector<int>& tools, double target_volume) {
+    const std::string target_name = "Body " + std::to_string(target);
+    const int n_solids = count_solids(result);
+    if (op == "union" && n_solids != 1)
+        throw std::runtime_error(target_name + " and " + body_list(tools) +
+                                 " do not touch or overlap — a union of separate bodies "
+                                 "would still be " + std::to_string(n_solids) + " bodies");
+    if (op == "intersect" && (n_solids == 0 || solid_volume(result) <= 0.0))
+        throw std::runtime_error(target_name + " and " + body_list(tools) +
+                                 " do not overlap — their intersection is empty");
+    if (op == "subtract") {
+        if (n_solids == 0)
+            throw std::runtime_error(target_name + " lies entirely inside " + body_list(tools) +
+                                     " — subtracting would leave nothing of it");
+        if (std::abs(solid_volume(result) - target_volume) <= VOLUME_UNCHANGED * target_volume)
+            throw std::runtime_error(body_list(tools) + " does not overlap " + target_name +
+                                     " — there is nothing to subtract");
+    }
+}
+
+TopoDS_Shape combine_bodies(const TopoDS_Shape& shape, const std::string& op, int target,
+                            const std::vector<int>& tools, bool keep_tools) {
+    TopTools_IndexedMapOfShape solids;
+    TopExp::MapShapes(shape, TopAbs_SOLID, solids);
+    if (solids.Extent() < 2)
+        throw std::runtime_error(
+            "boolean_geometry: a Boolean needs at least two bodies, the model has " +
+            std::to_string(solids.Extent()));
+    if (tools.empty())
+        throw std::runtime_error("boolean_geometry: no tool body — pick at least one body to " +
+                                 op + (op == "subtract" ? " from" : " with") + " Body " +
+                                 std::to_string(target));
+    std::vector<int> all = tools;
+    all.push_back(target);
+    require_unique_in_range("boolean_geometry", all, solids.Extent(), "body");
+
+    std::unique_ptr<BRepAlgoAPI_BooleanOperation> operation = make_operation(op);
+    TopTools_ListOfShape arguments;
+    arguments.Append(solids(target));
+    TopTools_ListOfShape tool_shapes;
+    for (const int id : tools)
+        tool_shapes.Append(solids(id));
+    operation->SetArguments(arguments);
+    operation->SetTools(tool_shapes);
+    operation->SetRunParallel(false);  // single-threaded WASM build
+    operation->Build();
+    if (operation->HasErrors() || !operation->IsDone()) {
+        std::ostringstream alerts;
+        operation->DumpErrors(alerts);
+        throw std::runtime_error("boolean_geometry: the OCCT " + op +
+                                 " failed — the bodies' geometry where they meet is likely "
+                                 "defective. OCCT reports: " + alerts.str());
+    }
+    // Merge the coplanar faces the operation leaves where the bodies met, so a
+    // union reads as one clean body rather than a patchwork of its inputs.
+    operation->SimplifyResult();
+    const TopoDS_Shape result = operation->Shape();
+    check_boolean_result(op, result, target, tools, solid_volume(solids(target)));
+
+    // Rebuild in the input's solid order (body ids are that order): the result
+    // takes the target's place, consumed tools drop out, the rest stay as is.
+    const bool tools_stay = op == "subtract" && keep_tools;
+    const std::set<int> tool_set(tools.begin(), tools.end());
+    BRep_Builder builder;
+    TopoDS_Compound out;
+    builder.MakeCompound(out);
+    for (int i = 1; i <= solids.Extent(); ++i) {
+        if (i == target) {
+            for (TopExp_Explorer e(result, TopAbs_SOLID); e.More(); e.Next())
+                builder.Add(out, e.Current());
+        } else if (tool_set.count(i) == 0 || tools_stay) {
+            builder.Add(out, solids(i));
+        }
+    }
+    (void)printf("[occt] boolean: %s of Body %d with %s → %d bodies\n", op.c_str(), target,
+                 body_list(tools).c_str(), count_solids(out));
+    (void)fflush(stdout);
+    return out;
+}
+
 }  // namespace
+
+val boolean_geometry(const std::string& opts_json) {
+    const val opts = parse_json(opts_json);
+    const std::string op = jstring(opts, "op", "");
+    const int target = jint(opts, "target", 0);
+    const std::vector<int> tools = id_list(opts, "tools");
+    const bool keep_tools = jbool(opts, "keepTools", false);
+    const TopoDS_Shape& shape = cached_shape();
+    const TopoDS_Shape edited = combine_bodies(shape, op, target, tools, keep_tools);
+
+    const std::vector<uint8_t> bytes = step_bytes(edited);
+    // As for a split: the edit lives in the returned file from here on.
+    free_geometry_cache();
+
+    val result = val::object();
+    result.set("bytes", uint8_array(bytes));
+    return result;
+}
 
 val split_geometry(const std::string& opts_json) {
     const val opts = parse_json(opts_json);

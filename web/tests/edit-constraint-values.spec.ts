@@ -3,7 +3,6 @@
 
 import { test, expect } from "./coverage";
 import { bootstrapCantilever } from "./fixtures/cantilever";
-import type { Page } from "@playwright/test";
 
 // Coverage for issue #258: the ✎ button on a BC / load group must open an
 // inline editor for the group's values (force components, pressure magnitude,
@@ -37,21 +36,13 @@ type Store = {
   setState(s: object): void;
 };
 
-async function openConstraintsMode(page: Page): Promise<void> {
-  await bootstrapCantilever(page);
-  await page.evaluate(() => {
-    (window as unknown as { __kofemStore: Store }).__kofemStore.setState({
-      mode: "constraints",
-    });
-  });
-}
-
 test("editing a load group's force components updates the surface loads", async ({
   page,
 }) => {
-  await openConstraintsMode(page);
+  await bootstrapCantilever(page);
 
-  await page.getByTitle("Edit load").click();
+  // The load's tree entry opens it with its editor already expanded.
+  await page.locator('[data-testid^="tree-load-"]').click();
   const form = page.getByTestId("load-edit-form");
   await expect(form).toBeVisible();
 
@@ -89,9 +80,10 @@ test("editing a load group's force components updates the surface loads", async 
 test("editing a load group can switch its kind to pressure", async ({
   page,
 }) => {
-  await openConstraintsMode(page);
+  await bootstrapCantilever(page);
 
-  await page.getByTitle("Edit load").click();
+  // The load's tree entry opens it with its editor already expanded.
+  await page.locator('[data-testid^="tree-load-"]').click();
   const form = page.getByTestId("load-edit-form");
   await form.locator("select").selectOption("pressure");
   await form.locator("input").fill("25");
@@ -117,9 +109,10 @@ test("editing a load group can switch its kind to pressure", async ({
 });
 
 test("an all-zero force vector is rejected with an error", async ({ page }) => {
-  await openConstraintsMode(page);
+  await bootstrapCantilever(page);
 
-  await page.getByTitle("Edit load").click();
+  // The load's tree entry opens it with its editor already expanded.
+  await page.locator('[data-testid^="tree-load-"]').click();
   const form = page.getByTestId("load-edit-form");
   const inputs = form.locator("input");
   await inputs.nth(1).fill("0");
@@ -140,9 +133,10 @@ test("an all-zero force vector is rejected with an error", async ({ page }) => {
 test("editing a BC group's DOFs and value rebuilds the constraints", async ({
   page,
 }) => {
-  await openConstraintsMode(page);
+  await bootstrapCantilever(page);
 
-  await page.getByTitle("Edit BC").click();
+  // The BC's tree entry opens it with its editor already expanded.
+  await page.locator('[data-testid^="tree-bc-"]').click();
   const form = page.getByTestId("bc-edit-form");
   await expect(form).toBeVisible();
 
@@ -174,9 +168,10 @@ test("editing a BC group's DOFs and value rebuilds the constraints", async ({
 });
 
 test("unchecking every DOF is rejected with an error", async ({ page }) => {
-  await openConstraintsMode(page);
+  await bootstrapCantilever(page);
 
-  await page.getByTitle("Edit BC").click();
+  // The BC's tree entry opens it with its editor already expanded.
+  await page.locator('[data-testid^="tree-bc-"]').click();
   const form = page.getByTestId("bc-edit-form");
   const checks = form.locator("input[type=checkbox]");
   await checks.nth(0).uncheck();
@@ -190,7 +185,7 @@ test("unchecking every DOF is rejected with an error", async ({ page }) => {
 });
 
 test("updating load values invalidates a stale result", async ({ page }) => {
-  await openConstraintsMode(page);
+  await bootstrapCantilever(page);
 
   const resultCleared = await page.evaluate(() => {
     const store = (window as unknown as { __kofemStore: Store }).__kofemStore;

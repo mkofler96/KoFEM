@@ -9,6 +9,7 @@
 import { useMemo } from "react";
 import { useModelStore } from "../../store/modelStore";
 import type { Element, Node } from "../../store/modelStore";
+import { isCadBody } from "../../store/geometrySlice";
 import {
   buildBoundaryMeshTopo,
   mapTrianglesToCadFaces,
@@ -196,8 +197,12 @@ export function useMeshTopology(): MeshTopology {
   const hiddenBodyIds = useModelStore((s) => s.hiddenBodyIds);
   const properties = useModelStore((s) => s.properties);
   const hiddenPropertyIds = useMemo(() => {
-    if (hiddenBodyIds.length === 0) return null;
+    // A suppressed body is gone until it is re-meshed away — never drawn, even
+    // from a mesh made before it was suppressed.
     const hidden = new Set(hiddenBodyIds);
+    for (const prop of properties)
+      if (isCadBody(prop) && prop.suppressed) hidden.add(prop.id);
+    if (hidden.size === 0) return null;
     for (const prop of properties)
       if (prop.sourceBodyId !== undefined && hidden.has(prop.sourceBodyId))
         hidden.add(prop.id);

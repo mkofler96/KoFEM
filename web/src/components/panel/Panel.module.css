@@ -27,7 +27,7 @@
   min-width: 0;
   min-height: 0;
   background: var(--surface);
-  border-right: 1px solid var(--border);
+  border-left: 1px solid var(--border);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -43,82 +43,27 @@
   min-height: 0;
 }
 
-/* ── Mode nav (Geometry / Constraints / Solve / Results) ───────────── */
+/* ── Panel header (model-tree selection) ───────────────────── */
 
-.modeNav {
-  display: flex;
-  align-items: stretch;
-  padding: 0 8px;
+.panelHeader {
+  flex-shrink: 0;
+  padding: 14px 18px 12px;
   border-bottom: 1px solid var(--border);
 }
 
-.navTab {
-  flex: 1;
-  padding: 11px 4px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  cursor: pointer;
-  border: none;
-  background: none;
+.panelCrumb {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   color: var(--muted);
-  font-family: inherit;
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: -0.005em;
-  position: relative;
-  white-space: nowrap;
-  transition: color 100ms ease;
 }
 
-.navTab:hover:not(.navTabFuture) {
+.panelTitle {
+  margin-top: 3px;
+  font-size: 15px;
+  font-weight: 600;
   color: var(--ink);
-}
-
-.navTabActive {
-  color: #1f5fd0;
-}
-
-.navTabActive::after {
-  content: "";
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: -1px;
-  height: 2px;
-  background: #1f5fd0;
-  border-radius: 2px 2px 0 0;
-}
-
-.navTabFuture {
-  color: #cdd2d9;
-}
-
-.navTabLabel {
-  font-size: 12px;
-}
-
-.navDot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  border: 1.5px solid #1f5fd0;
-  background: transparent;
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-  color: #1f5fd0;
-}
-
-.navTabFuture .navDot {
-  border-color: #cdd2d9;
-  color: #cdd2d9;
-}
-
-.navDotDone {
-  border-color: #15803d;
-  color: #15803d;
 }
 
 /* ── Tabs ───────────────────────────────────────────────────── */
@@ -1162,4 +1107,50 @@
 .logEmpty {
   color: #3d444d;
   font-style: italic;
+}
+
+/* ── "+ Add" type chooser (Boundary conditions) ─────────────── */
+
+.addChooser {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.addChoice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 100ms ease,
+    background 100ms ease;
+}
+
+.addChoice:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.addChoiceLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.addChoiceHint {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+/* Geometry → + Add: "Import file | From boolean" above the chosen form. */
+.addSource {
+  margin-bottom: 14px;
 }

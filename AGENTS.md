@@ -23,7 +23,8 @@ KoFEM/
 │   │   │                     # lives in the modules below
 │   │   ├── cad_io.cpp        # STEP/IGES import (OCCT)
 │   │   ├── tessellate.cpp    # OCCT surface tessellation (display)
-│   │   ├── geometry_edit.cpp # Split faces/bodies with a plane (the split tool)
+│   │   ├── geometry_edit.cpp # Split faces/bodies with a plane (the split tool),
+│   │   │                     # Boolean union/subtract/intersect of bodies
 │   │   ├── mesh_netgen.cpp   # Netgen volume meshing
 │   │   ├── solve_mfem.cpp    # Linear-elastic solid solve (MFEM)
 │   │   ├── shell_core.cpp    # Kirchhoff/DKT shell formulation

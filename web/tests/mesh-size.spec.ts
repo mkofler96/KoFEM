@@ -9,6 +9,7 @@
 
 import { test, expect } from "./coverage";
 import { gotoApp, importStep } from "./fixtures/app";
+import { openTree } from "./fixtures/tree";
 import { fileURLToPath } from "url";
 
 const STEP_FILE = fileURLToPath(
@@ -59,6 +60,8 @@ async function fakeImport(page: import("@playwright/test").Page) {
       stepBytes: new Uint8Array([1, 2, 3]),
     });
   });
+  // A real import lands on the mesh entry; the injected one has to go there.
+  await openTree(page, "mesh");
 }
 
 test("a sub-millimetre element size can be typed and kept (KOF-222)", async ({

@@ -9,6 +9,7 @@ import { test, expect } from "./coverage";
 import { gotoApp } from "./fixtures/app";
 import fs from "fs";
 import { fileURLToPath } from "url";
+import { openTree } from "./fixtures/tree";
 
 // Regression test for issue #250: clicking "Re-mesh" failed with an opaque
 // "Error: <pointer>". The worker is torn down after every mesh (so Netgen's
@@ -174,6 +175,7 @@ test("re-meshing without the original STEP shows an actionable banner (issue #25
     });
   });
 
+  await openTree(page, "mesh");
   await page.getByRole("button", { name: /Re-mesh STEP volume/ }).click();
 
   await expect(page.getByTestId("meshing-error")).toContainText(

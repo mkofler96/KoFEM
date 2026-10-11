@@ -98,6 +98,11 @@ export function useMesh() {
     setMeshError(null);
     setMeshing(true);
     clearLogs();
+    // Captured at request time: the mesh records what it left out, even if the
+    // user toggles a body while Netgen runs.
+    const suppressedBodyIds = properties
+      .filter((p) => isCadBody(p) && p.suppressed)
+      .map((p) => p.id);
     try {
       const {
         nodes: meshNodes,
@@ -123,8 +128,12 @@ export function useMesh() {
         // shells already, and passing their ids would send the thin-wall
         // extraction hunting for bodies the fresh mesh has never heard of.
         shellBodyIds: properties
-          .filter((p) => isCadBody(p) && p.discretization === "shell")
+          .filter(
+            (p) =>
+              isCadBody(p) && p.discretization === "shell" && !p.suppressed,
+          )
           .map((p) => p.id),
+        suppressedBodyIds,
         properties,
       });
       applyMeshResult(
@@ -134,6 +143,7 @@ export function useMesh() {
         surfaceTriangles,
         surfaceFaceIds,
         meshProperties,
+        suppressedBodyIds,
       );
       // Netgen's Ng_Init() installs global C++ state that contaminates the WASM
       // runtime for subsequent MFEM solves.  Resetting the worker here gives the

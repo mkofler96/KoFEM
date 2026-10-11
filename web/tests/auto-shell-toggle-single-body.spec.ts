@@ -67,6 +67,7 @@ test("automatic shell detection and its ratio are offered for single-body parts"
   await expect(page.getByTestId("auto-shell-ratio")).toHaveCount(0);
 
   // Re-importing must not silently switch detection back on.
+  await page.getByTestId("tree-add-geometry").click();
   await page.setInputFiles('input[accept=".stp,.step"]', STEP_PATH);
   await expect(toggle).not.toBeChecked();
   await expect

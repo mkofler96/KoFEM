@@ -5,9 +5,13 @@ import { useEffect } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { TopBar } from "./components/topbar/TopBar";
 import { Sidebar } from "./components/panel/Sidebar";
+import { ModelTree } from "./components/panel/ModelTree";
+import { useTreeSelectionSync } from "./components/panel/modelTreeItems";
 import { Viewport } from "./components/viewport/Viewport";
 import { StatusBar } from "./components/statusbar/StatusBar";
 import { useModelStore } from "./store/modelStore";
+import { SMALL_SCREEN_QUERY } from "./store/viewSlice";
+import { useMediaQuery } from "./hooks/useMediaQuery";
 import { parseAnalysisFile } from "./lib/analysisFile";
 import styles from "./App.module.css";
 
@@ -59,14 +63,23 @@ function useExampleFromUrl() {
 
 function Workspace() {
   useExampleFromUrl();
+  useTreeSelectionSync();
+  // Model tree left, viewport centre, properties right. Small screens have no
+  // room for the tree column; the properties drawer carries it instead.
+  const small = useMediaQuery(SMALL_SCREEN_QUERY);
   return (
     <div className={styles.layout}>
       <TopBar />
       <div className={styles.main}>
-        <Sidebar />
+        {!small && (
+          <div className={styles.treeColumn}>
+            <ModelTree />
+          </div>
+        )}
         <main className={styles.viewport}>
           <Viewport />
         </main>
+        <Sidebar />
       </div>
       <StatusBar />
     </div>

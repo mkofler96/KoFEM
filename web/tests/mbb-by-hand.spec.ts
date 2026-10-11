@@ -22,6 +22,7 @@ import {
   splitFaceAt,
 } from "./fixtures/split";
 import { prismStep } from "../../examples/gallery/step-prism.mjs";
+import { openTree, addBoundary } from "./fixtures/tree";
 
 const BLOCK = prismStep(
   [
@@ -105,10 +106,7 @@ function readModel(page: Page) {
 
 async function mesh(page: Page, maxSize: string): Promise<void> {
   const before = (await readModel(page)).nodes;
-  await page
-    .getByRole("navigation")
-    .getByRole("button", { name: "Geometry" })
-    .click();
+  await openTree(page, "mesh");
   await page.getByTestId("max-element-size").fill(maxSize);
   await page.getByTestId("min-element-size").fill(String(Number(maxSize) / 10));
   await page.getByRole("button", { name: /mesh STEP volume/i }).click();
@@ -122,7 +120,7 @@ async function pickSupport(
   at: [number, number, number],
   keep: string[],
 ): Promise<void> {
-  await page.getByRole("button", { name: "Add BC" }).click();
+  await addBoundary(page, "bc");
   await lookFrom(page, FROM_BELOW);
   await clickModelAt(page, at);
   for (const dof of ["Ux", "Uy", "Uz"]) {
@@ -140,6 +138,7 @@ test("the MBB beam example can be built by hand, and survives a finer re-mesh", 
   // ── Geometry: a plain block, four cuts ──────────────────────────────────────
   await importStepText(page, BLOCK);
   expect((await geometryCounts(page)).faces).toBe(6);
+  await openTree(page, "split");
   await page.getByTestId("split-open").click();
   await lookFrom(page, FROM_BELOW);
   await splitFaceAt(page, [150, 0, 5], 5); // pin pad
@@ -156,14 +155,10 @@ test("the MBB beam example can be built by hand, and survives a finer re-mesh", 
 
   // ── Mesh, supports, load ────────────────────────────────────────────────────
   await mesh(page, "5");
-  await page
-    .getByRole("navigation")
-    .getByRole("button", { name: "Constraints" })
-    .click();
   await pickSupport(page, [2.5, 0, 5], ["Ux", "Uy", "Uz"]); // pin
   await pickSupport(page, [297.5, 0, 5], ["Uy"]); // roller
 
-  await page.getByRole("button", { name: "Add Load" }).click();
+  await addBoundary(page, "load");
   await lookFrom(page, FROM_ABOVE);
   await clickModelAt(page, [150, 50, 5]);
   await page.getByText("Fy (N)").locator("..").locator("input").fill("-1000");

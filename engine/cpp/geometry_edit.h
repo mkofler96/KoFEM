@@ -3,7 +3,7 @@
 
 // Geometry editing on the loaded CAD shape: split faces or bodies with a plane,
 // so a support or a load can be applied to part of a face (a bearing pad, a
-// load patch) instead of the whole of it.
+// load patch) instead of the whole of it; and combine bodies with a Boolean.
 #pragma once
 
 #include <emscripten/val.h>
@@ -40,3 +40,23 @@
 // with tessellate_step before meshing or editing again, so face ids always
 // refer to exactly what the file contains.
 emscripten::val split_geometry(const std::string& opts_json);
+
+// Combine bodies of the cached CAD shape with a Boolean operation.
+//
+// opts_json:
+//   { "op":        "union" | "subtract" | "intersect",
+//     "target":    id,          the body that is kept and changed (1-based)
+//     "tools":     [..],        the bodies it is combined with (1-based)
+//     "keepTools": bool }       "subtract" only: keep the tool bodies, so they
+//                               end up bonded to the cut target on reload (an
+//                               insert in its pocket). Default false.
+//
+// The result takes the target's place in the body order; tool bodies are
+// consumed unless kept, every other body is untouched. "subtract" may leave
+// the target in several pieces. A Boolean that changes nothing — a union of
+// bodies that do not touch, a subtraction or intersection of bodies that do not
+// overlap — is an error naming the bodies, never a silent no-op.
+//
+// Returns { bytes: Uint8Array } (STEP AP214 of the edited shape) and releases
+// the cached shape, exactly like split_geometry.
+emscripten::val boolean_geometry(const std::string& opts_json);

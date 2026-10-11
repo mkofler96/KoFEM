@@ -13,6 +13,7 @@
 import { test, expect } from "./coverage";
 import type { Page } from "@playwright/test";
 import { boxHexMesh } from "../../examples/validation/lib/mesh.mjs";
+import { addBoundary } from "./fixtures/tree";
 
 interface TieGroupState {
   id: number;
@@ -131,7 +132,7 @@ test("a tie connects two picked surfaces and reports the pairs it welds", async 
 }) => {
   const model = await openConstraintsMode(page);
 
-  await page.getByTestId("add-tie").click();
+  await addBoundary(page, "tie");
 
   // Surface A, then switch sides and pick surface B. Switching parks the first
   // side, so both counts are visible on the toggle.
@@ -157,7 +158,7 @@ test("a tie connects two picked surfaces and reports the pairs it welds", async 
 
   // The card names the connection and the node pairs it actually welds — the
   // 3×3 interface of the two facing faces.
-  await expect(page.getByText("Tie1")).toBeVisible();
+  await expect(page.getByTestId("tree-tie-1")).toHaveText("Tie1");
   await expect(page.getByText("within 0.6 mm · 9 node pairs")).toBeVisible();
 });
 
@@ -166,7 +167,7 @@ test("a tie's extent is editable after creation, and the tie is deletable", asyn
 }) => {
   const model = await openConstraintsMode(page);
 
-  await page.getByTestId("add-tie").click();
+  await addBoundary(page, "tie");
   await pickFace(page, model.facingA);
   await page.getByTestId("tie-side-b").click();
   await pickFace(page, model.facingB);
@@ -174,8 +175,8 @@ test("a tie's extent is editable after creation, and the tie is deletable", asyn
   await page.getByTestId("tie-distance").fill("0.6");
   await page.getByTestId("apply-tie").click();
 
-  // ✎ opens the inline editor; switching to the full surface drops the distance.
-  await page.getByTitle("Edit tie").click();
+  // Applying selects the new tie with its editor open; switching to the full
+  // surface drops the distance.
   const form = page.getByTestId("tie-edit-form");
   await expect(form).toBeVisible();
   await form.getByTestId("tie-extent").selectOption("full");
@@ -193,7 +194,7 @@ test("a tie's extent is editable after creation, and the tie is deletable", asyn
 test("a region tie needs a positive search distance", async ({ page }) => {
   const model = await openConstraintsMode(page);
 
-  await page.getByTestId("add-tie").click();
+  await addBoundary(page, "tie");
   await pickFace(page, model.facingA);
   await page.getByTestId("tie-side-b").click();
   await pickFace(page, model.facingB);
@@ -216,7 +217,7 @@ test("one picked interface splits between the two bodies that meet on it", async
   // single CAD face, so one click selects both bodies' nodes. Leaving Surface B
   // empty ties that one pick, split by body — the only way the crane's pin/hook
   // interface can be declared.
-  await page.getByTestId("add-tie").click();
+  await addBoundary(page, "tie");
   await pickFace(page, [...model.facingA, ...model.facingB]);
   await page.getByTestId("apply-tie").click();
 
@@ -232,7 +233,7 @@ test("one picked interface splits between the two bodies that meet on it", async
 test("a tie with nothing picked is rejected", async ({ page }) => {
   await openConstraintsMode(page);
 
-  await page.getByTestId("add-tie").click();
+  await addBoundary(page, "tie");
   await page.getByTestId("apply-tie").click();
 
   await expect(page.getByTestId("constraints-error")).toContainText(

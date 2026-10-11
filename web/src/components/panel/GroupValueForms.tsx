@@ -32,7 +32,7 @@ import {
   ReferencePointInputs,
   TieExtentInputs,
 } from "./BcLoadFormControls";
-import styles from "./LeftPanel.module.css";
+import styles from "./Panel.module.css";
 
 // Inline editor for a BC group's constrained DOFs and prescribed value —
 // opened by the group's ✎ button (issue #258: the values, not just the faces,

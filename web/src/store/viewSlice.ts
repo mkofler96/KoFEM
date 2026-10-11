@@ -4,7 +4,7 @@
 // View slice: transient viewport presentation settings — none of this is
 // persisted in saved analyses except viewRepr.
 
-import type { SliceCreator } from "./modelStore";
+import type { AppMode, SliceCreator } from "./modelStore";
 
 // How load glyphs are drawn in the viewport. "resultant" shows one arrow per
 // force/pressure group at the centroid of its loaded nodes (the statically
@@ -14,6 +14,7 @@ import type { SliceCreator } from "./modelStore";
 export type LoadDisplay = "resultant" | "nodal";
 
 export type ViewRepr = "geometry" | "surface" | "volume" | "wireframe";
+export type MeshRepr = Exclude<ViewRepr, "geometry">;
 
 // Default density cutoff for the topology-optimization result view (KOF-233).
 // Elements whose optimized density is below the threshold are hidden, so the
@@ -30,6 +31,81 @@ export const SIDEBAR_MAX_WIDTH = 560;
 // Must match the @media breakpoints in Sidebar.module.css.
 export const SMALL_SCREEN_QUERY = "(max-width: 768px)";
 
+// Model tree (left column). Groups are collapsible dividers, not selectable;
+// under them sit the model objects (bodies, materials, BC/load/tie/coupling
+// groups), the fixed entries (mesh, split tool, studies, results) and a
+// "+ Add" entry. The selection decides what the properties panel shows.
+export type TreeGroup =
+  "geometry" | "materials" | "mesh" | "boundary" | "studies" | "results";
+
+export type TreeItemKind =
+  "body" | "material" | "bc" | "load" | "tie" | "coupling";
+
+// Entries that exist once, whatever the model holds.
+export type TreeView = "split" | "mesh" | "static" | "topopt" | "results";
+
+// The four object kinds "+ Add" under Boundary conditions can create.
+export type BoundaryKind = "bc" | "load" | "tie" | "coupling";
+
+export type TreeTarget =
+  | { type: "item"; kind: TreeItemKind; id: number }
+  | { type: "view"; view: TreeView }
+  // kind null: the creation form of the group, or for Boundary conditions the
+  // type chooser before a type is picked.
+  | { type: "add"; kind: BoundaryKind | null };
+
+export interface TreeSelection {
+  group: TreeGroup;
+  target: TreeTarget;
+}
+
+// The app mode a selection works in — mode still drives the viewport (result
+// colouring, live density) and the pick handlers.
+export function selectionMode({ group, target }: TreeSelection): AppMode {
+  if (group === "boundary") return "constraints";
+  if (target.type === "view") {
+    if (target.view === "static") return "solve";
+    if (target.view === "topopt") return "optimize";
+    if (target.view === "results") return "results";
+  }
+  return "geometry";
+}
+
+export function viewSelection(group: TreeGroup, view: TreeView): TreeSelection {
+  return { group, target: { type: "view", view } };
+}
+
+export function addSelection(group: TreeGroup): TreeSelection {
+  return { group, target: { type: "add", kind: null } };
+}
+
+// Which representation a tree group works on: the CAD geometry while shaping
+// the model (bodies, Booleans, the split tool, materials), the FEM mesh from
+// meshing on. Crossing between the two switches the viewport (see
+// selectTreeNode); moving within one keeps whatever the user picked.
+function reprContext(group: TreeGroup): "geometry" | "mesh" {
+  return group === "geometry" || group === "materials" ? "geometry" : "mesh";
+}
+
+// Where the pipeline lands when it changes mode by itself (solve → results,
+// loading an analysis).
+export function modeSelection(mode: AppMode): TreeSelection {
+  switch (mode) {
+    case "geometry":
+      return viewSelection("mesh", "mesh");
+    case "constraints":
+      return addSelection("boundary");
+    case "solve":
+      return viewSelection("studies", "static");
+    case "optimize":
+      return viewSelection("studies", "topopt");
+    case "results":
+      return viewSelection("results", "results");
+    default:
+      throw new Error(`modeSelection: no tree entry for mode "${mode}"`);
+  }
+}
+
 const SIDEBAR_WIDTH_KEY = "kofem.sidebarWidth";
 
 function clampSidebarWidth(w: number): number {
@@ -45,6 +121,9 @@ function initialSidebarWidth(): number {
 
 export interface ViewSlice {
   viewRepr: ViewRepr;
+  // The mesh representation last shown (surface / volume / wireframe), so a
+  // trip to the geometry entries and back returns to it.
+  meshRepr: MeshRepr;
   showUndeformedOverlay: boolean;
   // Whether load glyphs are drawn as a single resultant per group or as one
   // arrow per loaded node (issue #196). A transient view setting, not persisted.
@@ -57,6 +136,10 @@ export interface ViewSlice {
   // gets the full width, resizable on desktop.
   sidebarOpen: boolean;
   sidebarWidth: number;
+  // Model-tree selection (see TreeSelection). Every write to `mode` resets it
+  // (modeSelection), so a step entered by the pipeline (solve → results) never
+  // keeps an object of another step open.
+  treeSelection: TreeSelection;
 
   // Body (CAD solid) presentation in the geometry view (issue #353). Both are
   // transient — not persisted. highlightBodyId is the body whose material is
@@ -81,6 +164,7 @@ export interface ViewSlice {
   triggerFitView(): void;
   setSidebarOpen(v: boolean): void;
   setSidebarWidth(v: number): void;
+  selectTreeNode(selection: TreeSelection): void;
   setHighlightBodyId(id: number | null): void;
   toggleBodyVisibility(id: number): void;
   setAllBodiesVisible(): void;
@@ -90,12 +174,14 @@ export interface ViewSlice {
 
 export const createViewSlice: SliceCreator<ViewSlice> = (set) => ({
   viewRepr: "surface",
+  meshRepr: "surface",
   showUndeformedOverlay: true,
   loadDisplay: "resultant",
   deformScale: 1,
   fitViewTrigger: 0,
   sidebarOpen: !window.matchMedia(SMALL_SCREEN_QUERY).matches,
   sidebarWidth: initialSidebarWidth(),
+  treeSelection: addSelection("geometry"),
   highlightBodyId: null,
   hiddenBodyIds: [],
   densityThreshold: DEFAULT_DENSITY_THRESHOLD,
@@ -104,6 +190,7 @@ export const createViewSlice: SliceCreator<ViewSlice> = (set) => ({
   setViewRepr: (v) =>
     set((s) => {
       s.viewRepr = v;
+      if (v !== "geometry") s.meshRepr = v;
     }),
   setShowUndeformedOverlay: (v) =>
     set((s) => {
@@ -129,6 +216,25 @@ export const createViewSlice: SliceCreator<ViewSlice> = (set) => ({
     set((s) => {
       s.sidebarWidth = clampSidebarWidth(v);
       localStorage.setItem(SIDEBAR_WIDTH_KEY, String(s.sidebarWidth));
+    }),
+  selectTreeNode: (selection) =>
+    set((s) => {
+      const from = reprContext(s.treeSelection.group);
+      const to = reprContext(selection.group);
+      if (from !== to && to === "geometry" && s.viewRepr !== "geometry") {
+        s.meshRepr = s.viewRepr;
+        s.viewRepr = "geometry";
+      } else if (
+        from !== to &&
+        to === "mesh" &&
+        s.viewRepr === "geometry" &&
+        s.nodes.length > 0
+      ) {
+        s.viewRepr = s.meshRepr;
+      }
+      s.mode = selectionMode(selection);
+      s.treeSelection = selection;
+      s.sidebarOpen = true;
     }),
   setHighlightBodyId: (id) =>
     set((s) => {

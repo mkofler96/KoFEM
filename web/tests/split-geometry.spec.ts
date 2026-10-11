@@ -14,6 +14,7 @@ import {
   splitFaceAt,
 } from "./fixtures/split";
 import { prismStep } from "../../examples/gallery/step-prism.mjs";
+import { openTree, addBoundary } from "./fixtures/tree";
 
 // A plain 300 × 50 × 10 mm block — the MBB design domain before any split:
 // six faces, nothing to pick a pad from.
@@ -35,6 +36,7 @@ test("split a face with a plane, see the error for a plane that misses, undo", a
   await importStepText(page, BLOCK);
   expect(await geometryCounts(page)).toEqual({ faces: 6, bodies: 1, edits: 0 });
 
+  await openTree(page, "split");
   await page.getByTestId("split-open").click();
   await expect(page.getByTestId("split-form")).toBeVisible();
 
@@ -66,6 +68,7 @@ test("split a body in two: the halves are separate bodies, bonded on mesh", asyn
 }) => {
   test.setTimeout(180_000);
   await importStepText(page, BLOCK);
+  await openTree(page, "split");
   await page.getByTestId("split-open").click();
   await page.getByTestId("split-mode-bodies").click();
   await page.getByTestId("split-axis").selectOption("x");
@@ -77,9 +80,10 @@ test("split a body in two: the halves are separate bodies, bonded on mesh", asyn
   // 2 × 5 faces of the halves plus the cut, which the reload imprints into one
   // face shared by both — that shared face is what bonds them in the mesh.
   expect((await geometryCounts(page)).faces).toBe(11);
-  await expect(page.getByTestId("body-material-2")).toBeVisible();
+  await expect(page.getByTestId("tree-body-2")).toBeVisible();
 
   await page.getByRole("button", { name: "Close" }).click();
+  await openTree(page, "mesh");
   await page.getByTestId("max-element-size").fill("20");
   await page.getByRole("button", { name: /mesh STEP volume/i }).click();
   await expect
@@ -143,6 +147,7 @@ function storeState(page: Page) {
 // Start a split of the top face at x = `cut` and leave it running.
 async function startSplit(page: Page, cut: number): Promise<number> {
   const before = (await geometryCounts(page)).edits;
+  await openTree(page, "split");
   await page.getByTestId("split-open").click();
   await page.getByTestId("split-position").fill(String(cut));
   await clickModelAt(page, [100, 50, 5]);
@@ -150,9 +155,6 @@ async function startSplit(page: Page, cut: number): Promise<number> {
   await page.getByTestId("split-apply").click();
   return before;
 }
-
-const nav = (page: Page, step: string) =>
-  page.getByRole("navigation").getByRole("button", { name: step }).click();
 
 // What the user does while the split runs — each must leave face picking off
 // once it lands. The continuation used to turn it back on from the state the
@@ -163,7 +165,7 @@ const MID_SPLIT: [string, (page: Page) => Promise<void>][] = [
     "closes the tool",
     (page) => page.getByRole("button", { name: "Close" }).click(),
   ],
-  ["leaves the Geometry step", (page) => nav(page, "Constraints")],
+  ["leaves the split tool", (page) => openTree(page, "mesh")],
   [
     "switches to Bodies",
     (page) => page.getByTestId("split-mode-bodies").click(),
@@ -175,7 +177,7 @@ for (const [action, act] of MID_SPLIT) {
     page,
   }) => {
     test.setTimeout(120_000);
-    await delaySplits(page, 1500);
+    await delaySplits(page, 6000);
     await importStepText(page, BLOCK);
     const before = await startSplit(page, 150);
     await act(page);
@@ -193,7 +195,7 @@ test("a split that fails after the tool was closed still reports why", async ({
   page,
 }) => {
   test.setTimeout(120_000);
-  await delaySplits(page, 1500);
+  await delaySplits(page, 6000);
   await importStepText(page, BLOCK);
   await startSplit(page, 500); // misses the 300 mm face
   await page.getByRole("button", { name: "Close" }).click();
@@ -203,6 +205,7 @@ test("a split that fails after the tool was closed still reports why", async ({
     { timeout: 30_000 },
   );
   // Reopening shows the error until the next split or a dismissal.
+  await openTree(page, "split");
   await page.getByTestId("split-open").click();
   await expect(page.getByTestId("split-error")).toBeVisible();
 });
@@ -211,7 +214,9 @@ test("a split that lands during a BC pick ends the pick session", async ({
   page,
 }) => {
   test.setTimeout(180_000);
-  await delaySplits(page, 1500);
+  // Long enough for the BC pick below to finish before the split lands, even
+  // with every worker of a full run competing for the CPU.
+  await delaySplits(page, 6000);
   await importStepText(page, BLOCK);
   await page.getByTestId("max-element-size").fill("20");
   await page.getByTestId("min-element-size").fill("2");
@@ -232,11 +237,10 @@ test("a split that lands during a BC pick ends the pick session", async ({
     .toBeGreaterThan(0);
 
   const before = await startSplit(page, 150);
-  await nav(page, "Constraints");
   // The split tool switched the view to the CAD geometry; faces are picked for
   // a BC on the mesh surface.
   await page.getByRole("button", { name: "Surface", exact: true }).click();
-  await page.getByRole("button", { name: "Add BC" }).click();
+  await addBoundary(page, "bc");
   await clickModelAt(page, [100, 50, 5]);
   expect(await storeState(page)).toMatchObject({ pickMode: "bc", picked: 1 });
   expect((await geometryCounts(page)).edits).toBe(before);

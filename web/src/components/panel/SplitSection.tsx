@@ -7,7 +7,7 @@ import type { SplitMode } from "../../store/modelStore";
 import { useGeometryEdit } from "../../hooks/useGeometryEdit";
 import type { SplitAxis } from "../../hooks/useGeometryEdit";
 import { tessellationBounds } from "../../lib/cadFaces";
-import styles from "./LeftPanel.module.css";
+import styles from "./Panel.module.css";
 
 const AXES: SplitAxis[] = ["x", "y", "z"];
 

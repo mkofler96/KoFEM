@@ -5,6 +5,7 @@ import { test, expect } from "./coverage";
 import path from "path";
 import fs from "fs";
 import { gotoApp } from "./fixtures/app";
+import { openTree } from "./fixtures/tree";
 
 // Captures the landing-page tutorial figures by driving the real app through a
 // full analysis, exactly like the e2e showcase. Unlike showcase.spec.ts (whose
@@ -188,13 +189,9 @@ test.describe("Tutorial figure capture", () => {
       );
     }
 
-    await page
-      .locator("nav")
-      .getByRole("button")
-      .filter({ hasText: "Constraints" })
-      .click();
+    await page.locator('[data-testid^="tree-bc-"]').first().click();
     await Promise.race([
-      expect(page.getByText("Fixed displacement")).toBeVisible({
+      expect(page.getByTitle("Delete BC")).toBeVisible({
         timeout: 15_000,
       }),
       fatalError,
@@ -204,11 +201,7 @@ test.describe("Tutorial figure capture", () => {
 
     // 5. Solve → results. Trigger via the exposed hook (the showcase documents
     // why clicking the button stalls under Promise.race in CI).
-    await page
-      .locator("nav")
-      .getByRole("button")
-      .filter({ hasText: "Solve" })
-      .click();
+    await openTree(page, "static");
     await Promise.race([
       page.waitForFunction(
         () =>
