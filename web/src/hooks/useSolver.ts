@@ -6,6 +6,7 @@ import { useModelStore } from "../store/modelStore";
 import { fmt } from "../lib/modelDisplay";
 import { sendToWorker } from "../workers/sharedWorker";
 import { useWorkerLogs } from "./useWorkerLogs";
+import { suppressedStillMeshed } from "../store/geometrySlice";
 
 // Static solve: owns the pre-flight readiness checks, the worker's solve
 // protocol and result storage (displacements + von Mises), the solver log
@@ -33,7 +34,10 @@ export function useSolver() {
   const [error, setError] = useState<string | null>(null);
   const { logs, clearLogs } = useWorkerLogs("solve");
 
-  const meshOk = nodes.length > 0;
+  // A body suppressed after meshing is still in the mesh — solving it would
+  // analyse the body the user took out.
+  const staleSuppressed = suppressedStillMeshed(properties, elements);
+  const meshOk = nodes.length > 0 && staleSuppressed.length === 0;
   // Every body must resolve to an existing material — a body left pointing at
   // a deleted material would fail in the solver with the same message.
   const matOk =
@@ -95,7 +99,9 @@ export function useSolver() {
   const checks: [boolean, string][] = [
     [
       meshOk,
-      `Mesh ready · ${nodes.length} nodes · ${elements.length} elements`,
+      staleSuppressed.length > 0
+        ? `Re-mesh: suppressed ${staleSuppressed.map((id) => `Body ${id}`).join(", ")} still in the mesh`
+        : `Mesh ready · ${nodes.length} nodes · ${elements.length} elements`,
     ],
     [
       matOk,

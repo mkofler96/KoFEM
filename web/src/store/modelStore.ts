@@ -43,6 +43,8 @@ import {
 import {
   createViewSlice,
   DEFAULT_DENSITY_THRESHOLD,
+  addSelection,
+  modeSelection,
   type ViewSlice,
 } from "./viewSlice";
 
@@ -190,6 +192,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.deformScale = 1;
       s.densityThreshold = DEFAULT_DENSITY_THRESHOLD;
       s.mode = a.mode;
+      s.treeSelection = modeSelection(a.mode);
       s.stepImportError = null;
       s.isRunning = false;
       s.isMeshing = false;
@@ -258,6 +261,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.tieDraft = { a: [], b: [] };
       s.couplingDraft = null;
       s.mode = "geometry";
+      s.treeSelection = addSelection("geometry");
       s.stepImportError = null;
       s.isRunning = false;
       s.isMeshing = false;

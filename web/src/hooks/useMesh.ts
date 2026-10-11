@@ -123,7 +123,13 @@ export function useMesh() {
         // shells already, and passing their ids would send the thin-wall
         // extraction hunting for bodies the fresh mesh has never heard of.
         shellBodyIds: properties
-          .filter((p) => isCadBody(p) && p.discretization === "shell")
+          .filter(
+            (p) =>
+              isCadBody(p) && p.discretization === "shell" && !p.suppressed,
+          )
+          .map((p) => p.id),
+        suppressedBodyIds: properties
+          .filter((p) => isCadBody(p) && p.suppressed)
           .map((p) => p.id),
         properties,
       });

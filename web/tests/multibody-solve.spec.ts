@@ -10,6 +10,7 @@
 import { test, expect } from "./coverage";
 import path from "path";
 import { gotoApp, importStep } from "./fixtures/app";
+import { openBody } from "./fixtures/tree";
 import { boxHexMesh } from "../../examples/validation/lib/mesh.mjs";
 
 const TWO_BOXES = path.resolve("..", "test_files", "two_boxes.stp");
@@ -201,10 +202,8 @@ test("meshing a two-body part and toggling a body's visibility", async ({
 
   // Hover to highlight (switches to the geometry view and dims the other body),
   // then hide and re-show body 2 (drives the mesh-hiding filter + render layers).
-  await page
-    .getByTestId("body-material-2")
-    .locator("xpath=ancestor::div[1]")
-    .hover();
+  await page.getByTestId("tree-body-2").hover();
+  await openBody(page, 2);
   await page.getByTestId("body-visibility-2").click();
   await expect.poll(readHidden).toEqual([2]);
   await page.getByTestId("body-visibility-2").click();

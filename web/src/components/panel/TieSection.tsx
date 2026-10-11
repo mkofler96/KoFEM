@@ -13,7 +13,14 @@ import { useTiePairs } from "../../hooks/useTiePairs";
 import { parseTieDistance, toFaceEntries } from "./bcFormUtils";
 import { PickedFaceList, TieExtentInputs } from "./BcLoadFormControls";
 import { TieValueForm } from "./GroupValueForms";
-import styles from "./LeftPanel.module.css";
+import styles from "./Panel.module.css";
+import {
+  focusedId,
+  showsItem,
+  showsPick,
+  useStartOnAdd,
+  type SectionFocus,
+} from "./sectionFocus";
 
 const SIDE_LABEL: Record<TieSide, string> = {
   a: "Surface A",
@@ -40,7 +47,13 @@ export function tieGroupMeta(group: TieGroup, nPaired: number): string {
 // whether it couples them whole or only where they come within a distance, and
 // list the existing connections with their inline editors — the same shape as a
 // BC or a load, because a connection is model data just like they are.
-export function TieSection({ onError }: { onError(msg: string | null): void }) {
+export function TieSection({
+  onError,
+  focus,
+}: {
+  onError(msg: string | null): void;
+  focus: SectionFocus;
+}) {
   const tieGroups = useModelStore((s) => s.tieGroups);
   const pickMode = useModelStore((s) => s.pickMode);
   const pickTieSide = useModelStore((s) => s.pickTieSide);
@@ -61,7 +74,9 @@ export function TieSection({ onError }: { onError(msg: string | null): void }) {
   const { reports } = useTiePairs();
 
   // Connection whose values are being edited inline (✎), if any.
-  const [editingTieId, setEditingTieId] = useState<number | null>(null);
+  const [editingTieId, setEditingTieId] = useState<number | null>(
+    focusedId(focus),
+  );
   const [extent, setExtent] = useState<TieExtent>("full");
   const [distance, setDistance] = useState(String(DEFAULT_TIE_DISTANCE));
 
@@ -79,6 +94,8 @@ export function TieSection({ onError }: { onError(msg: string | null): void }) {
     setPickMode("tie", groupId);
     setPickTieSide(side);
   }
+
+  useStartOnAdd(focus, () => startTiePick(null, "a"));
 
   function applyTie() {
     if (targetTieGroup) {
@@ -121,11 +138,7 @@ export function TieSection({ onError }: { onError(msg: string | null): void }) {
 
   return (
     <>
-      <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
-        Tie connections
-      </div>
-
-      {pickMode !== "tie" && (
+      {pickMode !== "tie" && focus.type === "add" && (
         <button
           className={styles.pickBtn}
           data-testid="add-tie"
@@ -135,7 +148,7 @@ export function TieSection({ onError }: { onError(msg: string | null): void }) {
         </button>
       )}
 
-      {pickMode === "tie" && (
+      {pickMode === "tie" && showsPick(focus, pickTargetGroupId) && (
         <div className={styles.pickPanel}>
           <div className={styles.pickPanelHeader}>
             <span className={styles.pickPanelTitle}>
@@ -204,86 +217,88 @@ export function TieSection({ onError }: { onError(msg: string | null): void }) {
         </div>
       )}
 
-      {tieGroups.map((group, index) => (
-        <div className={styles.bcGroup} key={group.id}>
-          <div className={styles.bcGroupHeader}>
-            <span className={styles.tieDot} />
-            <span className={styles.bcGroupName}>{group.name}</span>
-            <span className={styles.bcGroupMeta}>
-              {tieGroupMeta(group, reports[index].nPaired)}
-            </span>
-            <div className={styles.treeItemActions}>
-              <button
-                className={styles.iconBtn}
-                title="Edit tie"
-                onClick={() =>
-                  setEditingTieId(editingTieId === group.id ? null : group.id)
-                }
-              >
-                ✎
-              </button>
-              <button
-                className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
-                title="Delete tie"
-                onClick={() => deleteTieGroup(group.id)}
-              >
-                ✕
-              </button>
-            </div>
-          </div>
-
-          {editingTieId === group.id && (
-            <TieValueForm
-              group={group}
-              onSave={(nextExtent, nextDistance) => {
-                updateTieGroup(group.id, nextExtent, nextDistance);
-                setEditingTieId(null);
-              }}
-              onCancel={() => setEditingTieId(null)}
-            />
-          )}
-
-          {/* The two surfaces are listed separately — which face sits on which
-              side is the whole content of a connection. A self-split tie has
-              only the one interface to show. */}
-          {(isSelfSplitTie(group)
-            ? (["a"] as const)
-            : (["a", "b"] as const)
-          ).map((side) => (
-            <div key={side}>
-              <div className={styles.tieSideRow}>
-                <span className={styles.bcFaceIndent}>└</span>
-                <span className={styles.tieSideLabel}>
-                  {isSelfSplitTie(group) ? "Interface" : SIDE_LABEL[side]}
-                </span>
+      {tieGroups.map((group, index) =>
+        !showsItem(focus, group.id) ? null : (
+          <div className={styles.bcGroup} key={group.id}>
+            <div className={styles.bcGroupHeader}>
+              <span className={styles.tieDot} />
+              <span className={styles.bcGroupName}>{group.name}</span>
+              <span className={styles.bcGroupMeta}>
+                {tieGroupMeta(group, reports[index].nPaired)}
+              </span>
+              <div className={styles.treeItemActions}>
                 <button
                   className={styles.iconBtn}
-                  title={`Add face to ${SIDE_LABEL[side]}`}
-                  data-testid={`tie-add-face-${group.id}-${side}`}
-                  onClick={() => startTiePick(group.id, side)}
+                  title="Edit tie"
+                  onClick={() =>
+                    setEditingTieId(editingTieId === group.id ? null : group.id)
+                  }
                 >
-                  +
+                  ✎
+                </button>
+                <button
+                  className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
+                  title="Delete tie"
+                  onClick={() => deleteTieGroup(group.id)}
+                >
+                  ✕
                 </button>
               </div>
-              {tieFaces(group, side).map((face) => (
-                <div key={face.id} className={styles.bcFaceRow}>
+            </div>
+
+            {editingTieId === group.id && (
+              <TieValueForm
+                group={group}
+                onSave={(nextExtent, nextDistance) => {
+                  updateTieGroup(group.id, nextExtent, nextDistance);
+                  setEditingTieId(null);
+                }}
+                onCancel={() => setEditingTieId(null)}
+              />
+            )}
+
+            {/* The two surfaces are listed separately — which face sits on which
+              side is the whole content of a connection. A self-split tie has
+              only the one interface to show. */}
+            {(isSelfSplitTie(group)
+              ? (["a"] as const)
+              : (["a", "b"] as const)
+            ).map((side) => (
+              <div key={side}>
+                <div className={styles.tieSideRow}>
                   <span className={styles.bcFaceIndent}>└</span>
-                  <span className={styles.bcFaceName}>{face.label}</span>
+                  <span className={styles.tieSideLabel}>
+                    {isSelfSplitTie(group) ? "Interface" : SIDE_LABEL[side]}
+                  </span>
                   <button
-                    className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
-                    title="Remove face"
-                    onClick={() =>
-                      removeFaceFromTieGroup(group.id, side, face.id)
-                    }
+                    className={styles.iconBtn}
+                    title={`Add face to ${SIDE_LABEL[side]}`}
+                    data-testid={`tie-add-face-${group.id}-${side}`}
+                    onClick={() => startTiePick(group.id, side)}
                   >
-                    ×
+                    +
                   </button>
                 </div>
-              ))}
-            </div>
-          ))}
-        </div>
-      ))}
+                {tieFaces(group, side).map((face) => (
+                  <div key={face.id} className={styles.bcFaceRow}>
+                    <span className={styles.bcFaceIndent}>└</span>
+                    <span className={styles.bcFaceName}>{face.label}</span>
+                    <button
+                      className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
+                      title="Remove face"
+                      onClick={() =>
+                        removeFaceFromTieGroup(group.id, side, face.id)
+                      }
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        ),
+      )}
     </>
   );
 }

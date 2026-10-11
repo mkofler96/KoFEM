@@ -1,4 +1,4 @@
-/* Resizable / collapsible sidebar shell (issue #339).
+/* Resizable / collapsible properties sidebar, docked right (issue #339).
    The 768px breakpoint must match SMALL_SCREEN_QUERY in store/viewSlice.ts. */
 
 .sidebar {
@@ -20,7 +20,7 @@
   padding: 4px 8px;
   background: #ffffff;
   border-top: 1px solid #e2e5ea;
-  border-right: 1px solid #e2e5ea;
+  border-left: 1px solid #e2e5ea;
 }
 
 .collapseBtn {
@@ -50,7 +50,7 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  right: -4px;
+  left: -4px;
   width: 8px;
   cursor: col-resize;
   z-index: 25;
@@ -79,7 +79,7 @@
 .expandBtn {
   position: absolute;
   bottom: 10px;
-  left: 10px;
+  right: 10px;
   z-index: 25;
   width: 30px;
   height: 30px;
@@ -109,12 +109,21 @@
   .sidebar {
     position: absolute;
     top: 0;
-    left: 0;
+    right: 0;
     bottom: 0;
     height: auto;
     z-index: 30;
     width: min(85vw, 360px);
-    box-shadow: 8px 0 24px rgba(13, 17, 23, 0.18);
+    box-shadow: -8px 0 24px rgba(13, 17, 23, 0.18);
+  }
+
+  /* The drawer stacks the model tree over the panel; the tree keeps its
+     natural height up to a third of the screen, the panel scrolls below. */
+  .sidebar > nav {
+    flex-shrink: 0;
+    max-height: 34vh;
+    border-left: 1px solid #e2e5ea;
+    border-bottom: 1px solid #e2e5ea;
   }
 
   .resizeHandle {

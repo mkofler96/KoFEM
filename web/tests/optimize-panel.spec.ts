@@ -11,13 +11,10 @@
 import { test, expect } from "./coverage";
 import type { Page } from "@playwright/test";
 import { bootstrapCantilever } from "./fixtures/cantilever";
+import { openTree } from "./fixtures/tree";
 
 function goToOptimizePanel(page: Page) {
-  return page
-    .locator("nav")
-    .getByRole("button")
-    .filter({ hasText: "Optimize" })
-    .click();
+  return openTree(page, "topopt");
 }
 
 test("Optimize panel: gates, runs, streams logs, hands off to Results", async ({
@@ -227,11 +224,7 @@ test("Optimize panel: max-stress constraint", async ({ page }) => {
 
   // The level-set method has no stress constraint: its toggle disappears, and
   // the pre-flight summary drops the limit (it is neither validated nor sent).
-  await page
-    .locator("nav")
-    .getByRole("button")
-    .filter({ hasText: "Optimize" })
-    .click();
+  await openTree(page, "topopt");
   await page.getByRole("button", { name: "Level set", exact: true }).click();
   await expect(page.getByTestId("topopt-stress-constraint")).toHaveCount(0);
   await expect(page.getByText(/σ_vm ≤/u)).toHaveCount(0);

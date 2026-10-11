@@ -6,6 +6,7 @@
 
 import { current } from "immer";
 import type { ModelState, SliceCreator } from "./modelStore";
+import { viewSelection } from "./viewSlice";
 import { DEFAULT_THIN_RATIO } from "../lib/thinBodies";
 import { carryGroupsToMesh, remeshNotice } from "../lib/remeshGroups";
 import {
@@ -49,6 +50,10 @@ export interface Property {
   materialId: number;
   thickness?: number;
   discretization?: BodyDiscretization;
+  // A suppressed CAD body is treated as deleted — not drawn, not meshed, not
+  // analysed — but keeps its place, material and settings, so un-suppressing
+  // brings it back exactly as it was. Takes effect in the mesh at the next mesh.
+  suppressed?: boolean;
   // Set only on the PSHELL properties the mesh-time shell idealisation derives:
   // the id of the CAD body whose thin walls they replace. Absent on the CAD
   // bodies themselves, whose own id already is the body id. The geometry view
@@ -63,6 +68,29 @@ export interface Property {
 // in CAD bodies; only the solver and the mesh see the derived properties.
 export function isCadBody(prop: Property): boolean {
   return prop.sourceBodyId === undefined;
+}
+
+// Suppressed bodies the current mesh still contains (directly, or through the
+// shell sections derived from them): the mesh predates the suppression, so it
+// must be re-meshed before anything is solved on it.
+export function suppressedStillMeshed(
+  properties: Property[],
+  elements: { propertyId?: number }[],
+): number[] {
+  const suppressed = new Set(
+    properties.filter((p) => isCadBody(p) && p.suppressed).map((p) => p.id),
+  );
+  if (suppressed.size === 0 || elements.length === 0) return [];
+  const bodyOf = new Map<number, number>();
+  for (const p of properties)
+    bodyOf.set(p.id, p.sourceBodyId === undefined ? p.id : p.sourceBodyId);
+  const meshed = new Set<number>();
+  for (const el of elements) {
+    if (el.propertyId === undefined) continue;
+    const body = bodyOf.get(el.propertyId);
+    if (body !== undefined && suppressed.has(body)) meshed.add(body);
+  }
+  return [...meshed].sort((a, b) => a - b);
 }
 
 // The section properties the mesh derived from `bodyId`, in id order.
@@ -176,6 +204,7 @@ export interface GeometrySlice {
   // body ids detected as thin-walled) preselect those bodies as shells.
   setBodies(count: number, shellBodyIds?: number[]): void;
   assignBodyMaterial(propertyId: number, materialId: number): void;
+  setBodySuppressed(propertyId: number, suppressed: boolean): void;
   setBodyDiscretization(propertyId: number, disc: BodyDiscretization): void;
   // Re-apply an automatic thin-wall detection result: sets each body's
   // discretization from `shellBodyIds` (1-based) WITHOUT rebuilding the property
@@ -352,6 +381,14 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
         );
       s.thinRatio = ratio;
     }),
+  setBodySuppressed: (propertyId, suppressed) =>
+    set((s) => {
+      const prop = s.properties.find((p) => p.id === propertyId);
+      if (!prop || !isCadBody(prop))
+        throw new Error(`Cannot suppress: body ${propertyId} does not exist`);
+      if (suppressed) prop.suppressed = true;
+      else delete prop.suppressed;
+    }),
   setBodyDiscretization: (propertyId, disc) =>
     set((s) => {
       const prop = s.properties.find((p) => p.id === propertyId);
@@ -406,6 +443,8 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
         s.fitViewTrigger++;
         s.hasStarted = true;
         s.mode = "geometry";
+        // Next step after an import: the mesh controls.
+        s.treeSelection = viewSelection("mesh", "mesh");
       }
     }),
   setVolMesh: (mesh) =>

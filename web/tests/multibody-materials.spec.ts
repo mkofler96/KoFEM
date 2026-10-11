@@ -8,6 +8,7 @@
 import { test, expect } from "./coverage";
 import path from "path";
 import { importStep } from "./fixtures/app";
+import { addMaterial, openBody, openTree } from "./fixtures/tree";
 
 interface Store {
   getState(): {
@@ -52,6 +53,7 @@ const meshGeneration = (page: import("@playwright/test").Page) =>
 
 async function meshOnce(page: import("@playwright/test").Page) {
   const before = await meshGeneration(page);
+  await openTree(page, "mesh");
   await page
     .getByRole("button")
     // "Mesh STEP volume" before the first mesh, "Re-mesh STEP volume" after.
@@ -101,26 +103,45 @@ test("two-body assembly lists per-body materials with colours", async ({
   expect(state.properties).toHaveLength(2);
   expect(state.properties.map((p) => p.id).sort()).toEqual([1, 2]);
 
-  // Both body rows render with a material dropdown.
-  await expect(page.getByTestId("body-material-1")).toBeVisible();
+  // Both bodies are listed in the tree, each opening a material dropdown.
+  await expect(page.getByTestId("tree-body-1")).toBeVisible();
+  await expect(page.getByTestId("tree-body-2")).toBeVisible();
+  await openBody(page, 2);
   await expect(page.getByTestId("body-material-2")).toBeVisible();
 });
 
 test("hovering a body highlights it; the eye hides it", async ({ page }) => {
   await importStep(page, TWO_BOXES);
 
-  const body2Row = page
-    .getByTestId("body-material-2")
-    .locator("xpath=ancestor::div[1]");
-
-  // Hover → the body is highlighted in the store (viewport dims the others).
-  await body2Row.hover();
+  // Hovering its tree entry → the body is highlighted in the store (viewport
+  // dims the others).
+  await page.getByTestId("tree-body-2").hover();
   await expect.poll(async () => (await store(page)).highlightBodyId).toBe(2);
 
   // Eye toggle hides the body, and clicking again shows it.
+  await openBody(page, 2);
   await page.getByTestId("body-visibility-2").click();
   await expect.poll(async () => (await store(page)).hiddenBodyIds).toEqual([2]);
   await page.getByTestId("body-visibility-2").click();
+  await expect.poll(async () => (await store(page)).hiddenBodyIds).toEqual([]);
+});
+
+test("the tree's eye hides and shows a body without opening it", async ({
+  page,
+}) => {
+  await importStep(page, TWO_BOXES);
+  const title = await page.getByTestId("panel-title").textContent();
+
+  await page.getByTestId("tree-eye-body-2").click();
+  await expect.poll(async () => (await store(page)).hiddenBodyIds).toEqual([2]);
+  await expect(page.getByTestId("tree-eye-body-2")).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  // The eye is not a selection: the panel still shows what it showed.
+  await expect(page.getByTestId("panel-title")).toHaveText(title ?? "");
+
+  await page.getByTestId("tree-eye-body-2").click();
   await expect.poll(async () => (await store(page)).hiddenBodyIds).toEqual([]);
 });
 
@@ -151,12 +172,14 @@ test("hovering a body never blanks the viewport or changes the representation", 
   const baseline = await drawnFraction(page);
   expect(baseline).toBeGreaterThan(0.05);
 
-  const rows = page.locator('[data-testid^="body-material-"]');
+  const rows = page.locator('[data-testid^="tree-body-"]');
   const rowCount = await rows.count();
   expect(rowCount).toBe(2);
 
   for (let i = 0; i < rowCount; i++) {
-    await rows.nth(i).locator("xpath=ancestor::div[1]").hover();
+    // Start from off the tree so each hover is a fresh mouseenter.
+    await page.mouse.move(0, 0);
+    await rows.nth(i).hover();
     await expect
       .poll(async () => (await store(page)).highlightBodyId)
       .not.toBeNull();
@@ -199,15 +222,13 @@ test("a shell-idealised body stays one row that still owns its walls", async ({
   expect(sections).toHaveLength(1);
   expect(sections[0].thickness).toBe(2);
 
-  // One row per CAD body — the PSHELL is a section of body 2, not a third body.
-  await expect(page.locator('[data-testid^="body-material-"]')).toHaveCount(2);
-  await expect(page.getByTestId(`body-material-${sections[0].id}`)).toHaveCount(
-    0,
-  );
+  // One entry per CAD body — the PSHELL is a section of body 2, not a third.
+  await expect(page.locator('[data-testid^="tree-body-"]')).toHaveCount(2);
+  await expect(page.getByTestId(`tree-body-${sections[0].id}`)).toHaveCount(0);
 
   // The material dropdown on the shelled body reaches the walls it became: the
   // shell elements resolve their material through the derived PSHELL.
-  await page.getByTestId("add-material").click();
+  await addMaterial(page);
   const colorInput = page.getByTestId("material-color");
   await colorInput
     .locator("xpath=ancestor::div[contains(@class,'inlineForm')]")
@@ -217,6 +238,7 @@ test("a shell-idealised body stays one row that still owns its walls", async ({
   expect(withTwo.materials).toHaveLength(2);
   const aluminium = withTwo.materials[1].id;
 
+  await openBody(page, 2);
   await page.getByTestId("body-material-2").selectOption(String(aluminium));
   const reassigned = await store(page);
   expect(reassigned.properties.find((p) => p.id === 2)?.materialId).toBe(
@@ -244,7 +266,7 @@ test("a shell-idealised body stays one row that still owns its walls", async ({
   expect(
     remeshed.properties.filter((p) => p.sourceBodyId !== undefined),
   ).toHaveLength(1);
-  await expect(page.locator('[data-testid^="body-material-"]')).toHaveCount(2);
+  await expect(page.locator('[data-testid^="tree-body-"]')).toHaveCount(2);
 
   // Thin-wall detection speaks in CAD bodies. Re-running it must not stamp the
   // derived PSHELL "solid" — a shell property labelled solid drops out of the
@@ -267,7 +289,7 @@ test("adding a material auto-assigns a distinct colour", async ({ page }) => {
   const before = await store(page);
   const firstColor = before.materials[0].color;
 
-  await page.getByTestId("add-material").click();
+  await addMaterial(page);
   // The new material's colour picker is pre-filled with a palette colour that
   // differs from the existing material.
   const colorInput = page.getByTestId("material-color");
@@ -284,6 +306,7 @@ test("adding a material auto-assigns a distinct colour", async ({ page }) => {
   const after = await store(page);
   expect(after.materials).toHaveLength(2);
 
+  await openBody(page, 2);
   await page
     .getByTestId("body-material-2")
     .selectOption(String(after.materials[1].id));

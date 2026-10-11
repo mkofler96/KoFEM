@@ -19,7 +19,7 @@ import {
 import { ConvergencePlot } from "./ConvergencePlot";
 import { DensityThresholdControl } from "./DensityThresholdControl";
 import { LegendRangeControls } from "./LegendRangeControls";
-import styles from "./LeftPanel.module.css";
+import styles from "./Panel.module.css";
 
 // The density-field result view (KOF-233): the threshold slider that filters the
 // viewport, the convergence plot from the returned history, and the run summary.

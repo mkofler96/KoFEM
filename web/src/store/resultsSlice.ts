@@ -5,6 +5,7 @@
 // transitions (mode navigation).
 
 import type { SliceCreator } from "./modelStore";
+import { modeSelection } from "./viewSlice";
 
 export interface SolverResult {
   displacements: Float64Array;
@@ -118,5 +119,6 @@ export const createResultsSlice: SliceCreator<ResultsSlice> = (set) => ({
   setMode: (mode) =>
     set((s) => {
       s.mode = mode;
+      s.treeSelection = modeSelection(mode);
     }),
 });

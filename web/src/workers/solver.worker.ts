@@ -9,6 +9,7 @@ import type {
   KofemModule,
   SolveMesh,
   SplitGeometryOptions,
+  BooleanGeometryOptions,
   TopOptSettings,
 } from "../wasm/pkg/kofem_wasm.js";
 import {
@@ -46,6 +47,7 @@ import {
   type CouplingDefinition,
 } from "../lib/coupling.js";
 import { detectShellBodies } from "../lib/thinBodies.js";
+import { dropSuppressedBodies } from "../lib/suppressBodies.js";
 
 let Module: KofemModule | null = null;
 
@@ -189,6 +191,13 @@ interface SplitGeometryPayload {
   split: SplitGeometryOptions;
   thinRatio?: number;
 }
+interface BooleanGeometryPayload {
+  // The current geometry file and its format — reloaded before the Boolean.
+  bytes: Uint8Array;
+  format: string;
+  boolean: BooleanGeometryOptions;
+  thinRatio?: number;
+}
 interface VolumeMeshPayload {
   bytes?: Uint8Array;
   format?: string;
@@ -199,6 +208,9 @@ interface VolumeMeshPayload {
   // mid-surface shell mesh and stores the MIXED CTRIA3 + CTETRA model, instead of
   // deriving it throwaway inside the solve (#397). Absent/empty ⇒ all-solid mesh.
   shellBodyIds?: number[];
+  // Suppressed CAD bodies: meshed with the assembly (Netgen meshes the whole
+  // imprinted shape) and then dropped — see dropSuppressedBodies.
+  suppressedBodyIds?: number[];
   properties?: Property[];
 }
 interface SolvePayload {
@@ -303,14 +315,7 @@ function handleParseStep(id: number, payload: ParseStepPayload) {
 // engine hands the edit back as STEP bytes, which become the geometry: they are
 // loaded straight away, so the reply carries both the new file and its view.
 function handleSplitGeometry(id: number, payload: SplitGeometryPayload) {
-  m().tessellate_step(
-    payload.bytes,
-    JSON.stringify({
-      deflection_relative: 0.001,
-      angular_deflection: 0.5,
-      format: payload.format,
-    }),
-  );
+  reloadForEdit(payload.bytes, payload.format);
   const { bytes } = m().split_geometry(JSON.stringify(payload.split));
   geometryLoaded = false; // split_geometry released the pre-edit shape
   self.postMessage({
@@ -319,6 +324,32 @@ function handleSplitGeometry(id: number, payload: SplitGeometryPayload) {
     bytes,
     ...loadGeometry(bytes, "step", payload.thinRatio),
   });
+}
+
+// Combine bodies with a Boolean — the same reload / edit / reload round trip as
+// a split, with body ids read off the store's tessellation of `bytes`.
+function handleBooleanGeometry(id: number, payload: BooleanGeometryPayload) {
+  reloadForEdit(payload.bytes, payload.format);
+  const { bytes } = m().boolean_geometry(JSON.stringify(payload.boolean));
+  geometryLoaded = false; // boolean_geometry released the pre-edit shape
+  self.postMessage({
+    id,
+    ok: true,
+    bytes,
+    ...loadGeometry(bytes, "step", payload.thinRatio),
+  });
+}
+
+// Load exactly the bytes an edit's ids were read from into the engine.
+function reloadForEdit(bytes: Uint8Array, format: string) {
+  m().tessellate_step(
+    bytes,
+    JSON.stringify({
+      deflection_relative: 0.001,
+      angular_deflection: 0.5,
+      format,
+    }),
+  );
 }
 
 // ── volume_mesh ───────────────────────────────────────────────────────────────
@@ -422,18 +453,18 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
 
   // The store models nodes/elements as object lists; build them here from
   // the flat arrays (plain JS, no parsing — cheap relative to meshing).
-  const nodes: Node[] = new Array<Node>(nNodes);
+  const meshNodes: Node[] = new Array<Node>(nNodes);
   for (let i = 0; i < nNodes; i++) {
-    nodes[i] = {
+    meshNodes[i] = {
       id: i,
       x: dto.vertices[3 * i],
       y: dto.vertices[3 * i + 1],
       z: dto.vertices[3 * i + 2],
     };
   }
-  const elements: Element[] = new Array<Element>(nTets);
+  const meshElements: Element[] = new Array<Element>(nTets);
   for (let i = 0; i < nTets; i++) {
-    elements[i] = {
+    meshElements[i] = {
       id: i,
       type: "CTETRA",
       nodeIds: [
@@ -448,12 +479,26 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
     };
   }
 
-  const surfaceTriangles = chunk3(dto.surfaceTriangles) as [
-    number,
-    number,
-    number,
-  ][];
-  const surfaceFaceIds = Array.from(dto.surfaceFaceIds);
+  const suppressed = new Set(payload.suppressedBodyIds ?? []);
+  const { nodes, elements, surfaceTriangles, surfaceFaceIds } =
+    dropSuppressedBodies(
+      {
+        nodes: meshNodes,
+        elements: meshElements,
+        surfaceTriangles: chunk3(dto.surfaceTriangles) as [
+          number,
+          number,
+          number,
+        ][],
+        surfaceFaceIds: Array.from(dto.surfaceFaceIds),
+      },
+      suppressed,
+    );
+  if (suppressed.size > 0)
+    self.postMessage({
+      id,
+      log: `Suppressed bodies ${[...suppressed].join(", ")} left out: ${nodes.length} nodes, ${elements.length} elements remain`,
+    });
 
   // Auto-shell at MESH time (#397): a body marked Shell has its thin walls
   // collapsed to a mid-surface shell mesh here, so the stored model is the mixed
@@ -2799,6 +2844,8 @@ self.onmessage = async (event: MessageEvent) => {
       handleParseStep(id, payload as ParseStepPayload);
     } else if (type === "split_geometry") {
       handleSplitGeometry(id, payload as SplitGeometryPayload);
+    } else if (type === "boolean_geometry") {
+      handleBooleanGeometry(id, payload as BooleanGeometryPayload);
     } else if (type === "volume_mesh") {
       handleVolumeMesh(id, payload as VolumeMeshPayload);
     } else if (type === "solve") {

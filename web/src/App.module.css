@@ -10,8 +10,9 @@
   -webkit-font-smoothing: antialiased;
 }
 
-/* Middle row: sidebar + viewport. position: relative anchors the sidebar's
-   small-screen overlay mode and its collapsed expand button. */
+/* Middle row: model tree | viewport | properties sidebar. position: relative
+   anchors the sidebar's small-screen overlay mode and its collapsed expand
+   button. */
 .main {
   flex: 1;
   min-height: 0;
@@ -24,4 +25,14 @@
   min-width: 0;
   position: relative;
   overflow: hidden;
+}
+
+.treeColumn {
+  width: 220px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid #e2e5ea;
+  background: #ffffff;
 }

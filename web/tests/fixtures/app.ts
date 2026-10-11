@@ -9,7 +9,7 @@ export const APP_PATH = "/app/";
 // Open the solver app with an empty model.
 export async function gotoApp(page: Page): Promise<void> {
   await page.goto(APP_PATH);
-  // The mode-nav row renders as soon as the workspace mounts.
+  // The model tree renders as soon as the workspace mounts.
   await expect(page.locator("nav")).toBeVisible();
 }
 

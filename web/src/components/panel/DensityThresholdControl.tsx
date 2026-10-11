@@ -3,7 +3,7 @@
 
 import { useModelStore } from "../../store/modelStore";
 import { visibleElementCount } from "../../lib/densityField";
-import styles from "./LeftPanel.module.css";
+import styles from "./Panel.module.css";
 
 // The density threshold slider that filters the viewport's density field, plus
 // the visible-element readout for `density`. Shared by the Results view of a

@@ -7,7 +7,7 @@
 import { useEffect, useState } from "react";
 import { useModelStore } from "../../store/modelStore";
 import type { ResultRange } from "../../lib/resultField";
-import styles from "./LeftPanel.module.css";
+import styles from "./Panel.module.css";
 
 interface LegendRangeControlsProps {
   // The field's own min/max, used both as the auto range and as the starting

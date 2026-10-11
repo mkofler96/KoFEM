@@ -3,7 +3,7 @@
 
 import { useSolver } from "../../hooks/useSolver";
 import { LogSection } from "./LogSection";
-import styles from "./LeftPanel.module.css";
+import styles from "./Panel.module.css";
 
 export function SolvePanel() {
   const {

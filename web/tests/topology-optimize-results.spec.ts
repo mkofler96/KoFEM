@@ -12,13 +12,10 @@
 import { test, expect } from "./coverage";
 import type { Page } from "@playwright/test";
 import { bootstrapCantilever } from "./fixtures/cantilever";
+import { openTree } from "./fixtures/tree";
 
 function goToOptimizePanel(page: Page) {
-  return page
-    .locator("nav")
-    .getByRole("button")
-    .filter({ hasText: "Optimize" })
-    .click();
+  return openTree(page, "topopt");
 }
 
 // The slider's onChange calls setDensityThreshold(parseFloat(value)); driving it

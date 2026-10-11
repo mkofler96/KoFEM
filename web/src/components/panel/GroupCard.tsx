@@ -3,7 +3,7 @@
 
 import type { ReactNode } from "react";
 import type { BcFaceEntry } from "../../store/modelStore";
-import styles from "./LeftPanel.module.css";
+import styles from "./Panel.module.css";
 
 // One entry in the BC / load group list: name + summary header with the
 // add-face / edit / delete actions, an optional inline edit form, and the

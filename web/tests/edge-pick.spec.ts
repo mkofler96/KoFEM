@@ -3,6 +3,7 @@
 
 import { test, expect } from "./coverage";
 import type { Page } from "@playwright/test";
+import { addBoundary } from "./fixtures/tree";
 
 // End-to-end coverage for edge picking (#386): a flat shell sheet is one
 // face-pick region, so grabbing its rim (an edge load or a supported-edge BC)
@@ -115,12 +116,11 @@ test("edge picking a shell rim creates an edge BC and an edge load", async ({
     .toBeGreaterThan(0);
   const totalNodes = (await readPickState(page)).nodeCount;
 
-  // The example opens in Results; move to Constraints where the BC/Load pickers
-  // live (the nav tab drives setMode).
-  await page.getByRole("button", { name: "Constraints" }).click();
+  // The example opens in Results; Boundary conditions → + Add moves to the
+  // constraints mode where the BC/Load pickers live.
 
   // ── Edge BC ──────────────────────────────────────────────────────────────
-  await page.getByRole("button", { name: "Add BC" }).click();
+  await addBoundary(page, "bc");
 
   // The Face/Edge toggle is offered because the model has shell elements.
   const edgeToggle = page.getByRole("button", { name: "Edge", exact: true });
@@ -147,7 +147,7 @@ test("edge picking a shell rim creates an edge BC and an edge load", async ({
   expect(bcFace.count).toBeGreaterThan(2);
 
   // ── Edge load ────────────────────────────────────────────────────────────
-  await page.getByRole("button", { name: "Add Load" }).click();
+  await addBoundary(page, "load");
   await page.getByRole("button", { name: "Edge", exact: true }).click();
 
   await edgePickOnViewport(page);
@@ -178,8 +178,7 @@ test("a coupling can grip a picked shell edge", async ({ page }) => {
     .toBeGreaterThan(0);
   const totalNodes = (await readPickState(page)).nodeCount;
 
-  await page.getByRole("button", { name: "Constraints" }).click();
-  await page.getByTestId("add-coupling").click();
+  await addBoundary(page, "coupling");
 
   // A coupling grips a LINE as readily as a surface — the rim of a shell, a
   // stiffener edge. On a flat sheet this is the only way to select one, because

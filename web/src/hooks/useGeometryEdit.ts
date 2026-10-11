@@ -8,6 +8,14 @@ import { resetWorker, sendToWorker } from "../workers/sharedWorker";
 
 export type SplitAxis = "x" | "y" | "z";
 
+export type BooleanOp = "union" | "subtract" | "intersect";
+
+type EditReply = Required<StepTessellation> & {
+  bytes: Uint8Array;
+  bodyCount: number;
+  shellBodyIds: number[];
+};
+
 const AXIS_NORMAL: Record<SplitAxis, [number, number, number]> = {
   x: [1, 0, 0],
   y: [0, 1, 0],
@@ -26,10 +34,10 @@ export function splitPlane(
   };
 }
 
-// Geometry editing (the split tool): sends the current file and the cut to the
-// worker's split_geometry and swaps the edited file in. Owns the in-flight
-// flag; the error of the last attempt is store state (splitError), so it
-// outlives the panel that started the split.
+// Geometry editing (the split tool, Booleans): sends the current file and the
+// edit to the worker and swaps the edited file in. Owns the in-flight flag; the
+// error of the last attempt is store state (splitError), so it outlives the
+// panel that started the edit.
 export function useGeometryEdit() {
   const stepBytes = useModelStore((s) => s.stepBytes);
   const geometryFormat = useModelStore((s) => s.geometryFormat);
@@ -61,25 +69,50 @@ export function useGeometryEdit() {
       setSplitError("Pick at least one face to split.");
       return false;
     }
+    return run("split_geometry", {
+      split: {
+        mode,
+        ...splitPlane(axis, position),
+        ...(mode === "faces" ? { faceIds } : {}),
+      },
+    });
+  }
+
+  // Combine `target` with `tools`; the result replaces the target body.
+  async function combine(
+    op: BooleanOp,
+    target: number,
+    tools: number[],
+    keepTools: boolean,
+  ): Promise<boolean> {
+    if (!stepBytes) {
+      setSplitError(
+        "Cannot combine bodies: the geometry file is not available (a saved analysis carries none). Re-import the STEP file to edit its geometry.",
+      );
+      return false;
+    }
+    if (tools.length === 0) {
+      setSplitError("Pick at least one tool body.");
+      return false;
+    }
+    return run("boolean_geometry", {
+      boolean: { op, target, tools, keepTools },
+    });
+  }
+
+  async function run(
+    type: "split_geometry" | "boolean_geometry",
+    edit: Record<string, unknown>,
+  ): Promise<boolean> {
     setSplitError(null);
     setIsSplitting(true);
     setRunning(true);
     try {
-      const reply = await sendToWorker<
-        Required<StepTessellation> & {
-          bytes: Uint8Array;
-          bodyCount: number;
-          shellBodyIds: number[];
-        }
-      >("split_geometry", {
+      const reply = await sendToWorker<EditReply>(type, {
         bytes: stepBytes,
         format: geometryFormat,
         thinRatio,
-        split: {
-          mode,
-          ...splitPlane(axis, position),
-          ...(mode === "faces" ? { faceIds } : {}),
-        },
+        ...edit,
       });
       applyGeometryEdit(
         reply.bytes,
@@ -94,7 +127,7 @@ export function useGeometryEdit() {
       );
       return true;
     } catch (err) {
-      // The engine's message names the face and the fix; the C++ exception type
+      // The engine's message names the face or body and the fix; the C++ type
       // the worker prefixes it with says nothing to the user.
       const message = err instanceof Error ? err.message : String(err);
       setSplitError(message.replace(/^std::\w+: /, ""));
@@ -114,5 +147,5 @@ export function useGeometryEdit() {
     resetWorker();
   }
 
-  return { split, undo, isSplitting, splitError, setSplitError };
+  return { split, combine, undo, isSplitting, splitError, setSplitError };
 }
