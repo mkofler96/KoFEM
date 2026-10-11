@@ -85,9 +85,13 @@ test.describe("small screens", () => {
   test("starts collapsed and opens as an overlay with backdrop close", async ({
     page,
   }) => {
-    await page.goto("/app/");
     // On a phone the consent banner spans the bottom edge, over the button.
-    await page.getByRole("button", { name: "Decline" }).click();
+    // It only exists when a GA ID is configured (locally via web/.env, not in
+    // CI), so answer it up front instead of clicking it.
+    await page.addInitScript(() =>
+      localStorage.setItem("kofem_analytics_consent", "denied"),
+    );
+    await page.goto("/app/");
     const expandBtn = page.getByRole("button", { name: "Show panel" });
     await expect(expandBtn).toBeVisible();
     await expect(page.locator("aside")).toBeHidden();
