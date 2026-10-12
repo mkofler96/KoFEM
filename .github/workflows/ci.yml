@@ -612,7 +612,7 @@ jobs:
   publish-image:
     name: Publish image
     runs-on: ubuntu-24.04
-    needs: [version, web-checks, validation, e2e, image]
+    needs: [version, web-checks, validation, e2e, coverage, image]
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
 
     permissions:
@@ -708,7 +708,7 @@ jobs:
   # a no-op, so a later push to main can never take the tag.
   release:
     name: Publish product release
-    needs: [rust, clang-tidy, web-checks, validation, e2e, image, publish-image, publish-engine]
+    needs: [rust, clang-tidy, web-checks, validation, e2e, coverage, image, publish-image, publish-engine]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
 
