@@ -40,12 +40,12 @@ const reduced = matchMedia("(prefers-reduced-motion: reduce)");
 const mobile = matchMedia("(max-width:700px)");
 const clamp = (value) => Math.max(0, Math.min(1, value));
 const smooth = (value) => {
-  const t = clamp(value);
-  return t * t * (3 - 2 * t);
+  const x = clamp(value);
+  return x * x * (3 - 2 * x);
 };
 const curve = (value) => {
-  const t = clamp(value);
-  return t * t * t * (t * (t * 6 - 15) + 10);
+  const x = clamp(value);
+  return x * x * x * (x * (x * 6 - 15) + 10);
 };
 function transitionAnalysis(results, optimization, still) {
   const weights = [1 - results, results * (1 - optimization), optimization];
@@ -150,20 +150,20 @@ async function start() {
       attachedFaces[triangles[face * 3 + corner]].push(face);
   function faceDirections() {
     for (let face = 0; face < faceCount; face++) {
-      const a = triangles[face * 3] * 3,
-        b = triangles[face * 3 + 1] * 3,
-        c = triangles[face * 3 + 2] * 3;
-      const ux = positions[b] - positions[a],
-        uy = positions[b + 1] - positions[a + 1],
-        uz = positions[b + 2] - positions[a + 2];
-      const vx = positions[c] - positions[a],
-        vy = positions[c + 1] - positions[a + 1],
-        vz = positions[c + 2] - positions[a + 2];
-      const x = uy * vz - uz * vy,
-        y = uz * vx - ux * vz,
-        z = ux * vy - uy * vx,
-        length = Math.hypot(x, y, z);
-      faceNormals.set([x / length, y / length, z / length], face * 3);
+      const p0 = triangles[face * 3] * 3,
+        p1 = triangles[face * 3 + 1] * 3,
+        p2 = triangles[face * 3 + 2] * 3;
+      const ux = positions[p1] - positions[p0],
+        uy = positions[p1 + 1] - positions[p0 + 1],
+        uz = positions[p1 + 2] - positions[p0 + 2];
+      const vx = positions[p2] - positions[p0],
+        vy = positions[p2 + 1] - positions[p0 + 1],
+        vz = positions[p2 + 2] - positions[p0 + 2];
+      const nx = uy * vz - uz * vy,
+        ny = uz * vx - ux * vz,
+        nz = ux * vy - uy * vx,
+        length = Math.hypot(nx, ny, nz);
+      faceNormals.set([nx / length, ny / length, nz / length], face * 3);
     }
   }
   faceDirections();
@@ -191,16 +191,16 @@ async function start() {
         positions.subarray(node * 3, node * 3 + 3),
         corner * 3,
       );
-      let x = 0,
-        y = 0,
-        z = 0;
+      let nx = 0,
+        ny = 0,
+        nz = 0;
       for (const face of normalGroups[corner]) {
-        x += faceNormals[face * 3];
-        y += faceNormals[face * 3 + 1];
-        z += faceNormals[face * 3 + 2];
+        nx += faceNormals[face * 3];
+        ny += faceNormals[face * 3 + 1];
+        nz += faceNormals[face * 3 + 2];
       }
-      const length = Math.hypot(x, y, z);
-      renderNormals.set([x / length, y / length, z / length], corner * 3);
+      const length = Math.hypot(nx, ny, nz);
+      renderNormals.set([nx / length, ny / length, nz / length], corner * 3);
     }
     surfacePosition.needsUpdate = true;
     surfaceNormal.needsUpdate = true;
@@ -405,11 +405,13 @@ async function start() {
   const baseColor = new THREE.Color("#b6d0e6");
   const fieldColors = new Float32Array(nodes.length);
   for (let node = 0; node < magnitudes.length; node++) {
-    const t =
+    const scaled =
       clamp(magnitudes[node] / solution.maxDisplacementMm) *
       (palette.length - 1);
-    const index = Math.min(palette.length - 2, Math.floor(t));
-    const color = palette[index].clone().lerp(palette[index + 1], t - index);
+    const index = Math.min(palette.length - 2, Math.floor(scaled));
+    const color = palette[index]
+      .clone()
+      .lerp(palette[index + 1], scaled - index);
     fieldColors.set([color.r, color.g, color.b], node * 3);
   }
   const count = edgeIndices.length / 2;
@@ -442,44 +444,44 @@ async function start() {
       completed = 0,
       growing = 0,
       pulses = 0;
-    function segment(output, index, a, b, start, end) {
+    function segment(output, index, fromNode, toNode, head, tail) {
       for (let axis = 0; axis < 3; axis++) {
-        const origin = positions[a * 3 + axis],
-          delta = positions[b * 3 + axis] - origin;
-        output[index * 6 + axis] = origin + delta * start;
-        output[index * 6 + 3 + axis] = origin + delta * end;
+        const origin = positions[fromNode * 3 + axis],
+          delta = positions[toNode * 3 + axis] - origin;
+        output[index * 6 + axis] = origin + delta * head;
+        output[index * 6 + 3 + axis] = origin + delta * tail;
       }
     }
     for (let edge = 0; edge < count; edge++) {
-      const a = edgeIndices[edge * 2],
-        b = edgeIndices[edge * 2 + 1],
+      const nodeA = edgeIndices[edge * 2],
+        nodeB = edgeIndices[edge * 2 + 1],
         length = edgeLengths[edge];
-      const fromA = clamp((wave - arrival[a]) / length),
-        fromB = clamp((wave - arrival[b]) / length);
+      const fromA = clamp((wave - arrival[nodeA]) / length),
+        fromB = clamp((wave - arrival[nodeB]) / length);
       if (fromA + fromB <= 0) continue;
       if (fromA + fromB >= 1 - 1e-5) {
-        segment(linePositions, visible++, a, b, 0, 1);
+        segment(linePositions, visible++, nodeA, nodeB, 0, 1);
         completed++;
       } else {
         growing++;
         if (fromA > 0) {
-          segment(linePositions, visible++, a, b, 0, fromA);
+          segment(linePositions, visible++, nodeA, nodeB, 0, fromA);
           segment(
             pulsePositions,
             pulses++,
-            a,
-            b,
+            nodeA,
+            nodeB,
             Math.max(0, fromA - 0.22),
             fromA,
           );
         }
         if (fromB > 0) {
-          segment(linePositions, visible++, b, a, 0, fromB);
+          segment(linePositions, visible++, nodeB, nodeA, 0, fromB);
           segment(
             pulsePositions,
             pulses++,
-            b,
-            a,
+            nodeB,
+            nodeA,
             Math.max(0, fromB - 0.22),
             fromB,
           );
@@ -518,93 +520,70 @@ async function start() {
     element.style.opacity = String(opacity);
     element.setAttribute("aria-hidden", String(opacity < 0.05));
   }
-  function update() {
-    raf = 0;
-    const distance = scrollViewport.scrollHeight - scrollViewport.clientHeight;
-    const overallProgress = clamp(
-      scrollViewport.scrollTop / Math.max(1, distance),
-    );
-    const progress = clamp(overallProgress / 0.7),
-      relax = curve((overallProgress - 0.7) / 0.06),
-      topologyProgress = clamp((overallProgress - 0.76) / 0.24);
-    const optimizationPlayback = clamp(curve(topologyProgress) / 0.8);
-    const edges = clamp((progress - 0.12) / 0.24),
-      turn = curve((progress - 0.38) / 0.24);
-    const ceilingTurn = turn,
-      mounted = smooth((progress - 0.62) / 0.06),
-      load = smooth((progress - 0.62) / 0.08),
-      contour = smooth((progress - 0.72) / 0.08);
+  const yaw = -0.65,
+    phi = 1.05;
+  const originalFrame = new THREE.PerspectiveCamera();
+  originalFrame.position.set(
+    Math.sin(phi) * Math.cos(yaw),
+    Math.sin(phi) * Math.sin(yaw),
+    Math.cos(phi),
+  );
+  originalFrame.up.copy(originalCameraUp);
+  originalFrame.lookAt(0, 0, 0);
+  const viewRotation = originalFrame.quaternion;
+  const finalFrame = new THREE.PerspectiveCamera();
+  const finalYaw = -2.48,
+    elevation = 0.255;
+  finalFrame.position.set(
+    Math.cos(elevation) * Math.sin(finalYaw),
+    -Math.sin(elevation),
+    Math.cos(elevation) * Math.cos(finalYaw),
+  );
+  finalFrame.up.copy(ceilingCameraUp);
+  finalFrame.lookAt(0, 0, 0);
+  const startView = finalFrame.quaternion
+    .clone()
+    .invert()
+    .multiply(ceilingOrientation);
+  startView.premultiply(
+    new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(0, 0, 1),
+      Math.PI,
+    ),
+  );
+  const quarterTurn = new THREE.Quaternion().setFromAxisAngle(
+    new THREE.Vector3(1, 0, 0),
+    -Math.PI / 2,
+  );
+  const verticalAxis = new THREE.Vector3(0, 1, 0);
+  const topologyPlaceholder = {
+    busy: false,
+    renderedProgress: -1,
+    triangles: 0,
+    elapsedMs: 0,
+    metadata: { elements: 0 },
+  };
+  function updateCopy(progress, still) {
     const introFade = smooth((progress - 0.06) / 0.09),
-      next = smooth((progress - 0.53) / 0.08);
-    const still = reduced.matches;
+      next = smooth((progress - 0.53) / 0.08),
+      meshExit = curve((progress - 0.38) / 0.1);
     copy(intro, 1 - introFade);
-    const meshExit = curve((progress - 0.38) / 0.1);
     copy(meshCopy, introFade * (1 - meshExit));
     copy(analysisCopy, next);
     intro.style.translate = `0 ${still ? 0 : -introFade * 28}px`;
     meshCopy.style.translate = `0 ${still ? 0 : (1 - introFade - meshExit) * 28}px`;
     analysisCopy.style.translate = `0 ${still ? 0 : (1 - next) * 28}px`;
-    const shownContour = contour * (1 - relax);
-    surface(shownContour);
-    drawEdges(edges);
-    const optimizing = overallProgress >= 0.76;
-    frontSurface.visible = !optimizing || !topologyReady;
-    const topologyState = topology
-      ? topology.update(optimizationPlayback, optimizing)
-      : null;
-    frontMaterial.opacity = 1;
-    frontMaterial.transparent = false;
-    frontMaterial.depthWrite = true;
-    lineMaterial.opacity = (0.6 - 0.35 * shownContour) * (1 - relax);
-    lineMaterial.depthWrite = false;
-    const orientation = still ? (progress >= 0.62 ? 1 : 0) : ceilingTurn;
-    const yaw = -0.65;
-    const phi = 1.05;
-    const canvasDistance = 9.4 / (mobile.matches ? 0.54 : 0.81);
-    const originalFrame = new THREE.PerspectiveCamera();
-    originalFrame.position.set(
-      Math.sin(phi) * Math.cos(yaw),
-      Math.sin(phi) * Math.sin(yaw),
-      Math.cos(phi),
-    );
-    originalFrame.up.copy(originalCameraUp);
-    originalFrame.lookAt(0, 0, 0);
-    const finalFrame = new THREE.PerspectiveCamera();
-    const finalYaw = -2.48,
-      elevation = 0.255;
-    finalFrame.position.set(
-      Math.cos(elevation) * Math.sin(finalYaw),
-      -Math.sin(elevation),
-      Math.cos(elevation) * Math.cos(finalYaw),
-    );
-    finalFrame.up.copy(ceilingCameraUp);
-    finalFrame.lookAt(0, 0, 0);
-    const startView = finalFrame.quaternion
-      .clone()
-      .invert()
-      .multiply(ceilingOrientation);
-    startView.premultiply(
-      new THREE.Quaternion().setFromAxisAngle(
-        new THREE.Vector3(0, 0, 1),
-        Math.PI,
-      ),
-    );
-    const quarterTurn = new THREE.Quaternion().setFromAxisAngle(
-      new THREE.Vector3(1, 0, 0),
-      -Math.PI / 2,
-    );
-    const optimizationTurn = still ? 0 : curve(topologyProgress);
-    const rotationDegrees = 90 * orientation + 360 * optimizationTurn;
+  }
+  function poseBody(rotationDegrees) {
     const verticalRotation = new THREE.Quaternion().setFromAxisAngle(
-      new THREE.Vector3(0, 1, 0),
+      verticalAxis,
       (rotationDegrees * Math.PI) / 180,
     );
-    const basePose = originalFrame.quaternion
-      .clone()
+    body.quaternion
+      .copy(viewRotation)
       .multiply(verticalRotation)
       .multiply(startView)
       .multiply(quarterTurn);
-    body.quaternion.copy(basePose);
     body.position.set(0, 0, 0);
     const bodyShift = body.position.clone().multiplyScalar(metadata.scale);
     const sceneAlignment = body.quaternion
@@ -615,7 +594,10 @@ async function start() {
       bolt.object.position.copy(bodyShift);
     }
     arrowObject.quaternion.copy(sceneAlignment);
-    const viewRotation = originalFrame.quaternion;
+    arrowObject.position.copy(bodyShift);
+  }
+  function frameCamera(orientation) {
+    const canvasDistance = 9.4 / (mobile.matches ? 0.54 : 0.81);
     const cameraPosition = new THREE.Vector3(
       0,
       0,
@@ -641,68 +623,116 @@ async function start() {
         canvasWidth,
         canvasHeight,
       );
+    return cameraPosition;
+  }
+  function fadeAnnotations(mounted, load, overallProgress) {
     const annotationFade = 1 - curve((overallProgress - 0.76) / 0.08);
     for (const bolt of boltArrows) {
       bolt.object.visible = mounted * annotationFade > 0;
       for (const material of bolt.materials)
         material.opacity = mounted * 0.9 * annotationFade;
     }
-
     arrowObject.visible = load * annotationFade > 0;
     for (const material of arrowMaterials)
       material.opacity = load * annotationFade;
-    arrowObject.position.copy(bodyShift);
+  }
+  function publishState(state) {
+    const shownTopology = topology ?? topologyPlaceholder;
+    const data = sceneHost.dataset;
+    data.progress = state.overallProgress.toFixed(3);
+    data.optimization = state.topologyProgress.toFixed(3);
+    data.optimizationPlayback = state.optimizationPlayback.toFixed(3);
+    data.topologyReady = String(topologyReady);
+    data.iteration = String(state.topologyState.iteration);
+    data.retainedElements = String(state.topologyState.retained);
+    data.edgeDrawProgress = state.edges.toFixed(3);
+    data.deformation = "0.000";
+    data.contour = state.shownContour.toFixed(3);
+    data.mounting = "horizontal";
+    data.rotationAxis = "vertical";
+    data.rotationDegrees = String(state.rotationDegrees);
+    data.optimizationRotationDegrees = String(360 * state.optimizationTurn);
+    data.frontLiftDegrees = "0";
+    data.poseQuaternion = body.quaternion.toArray().join(",");
+    data.ceilingTurn = state.turn.toFixed(3);
+    data.boltDirection = "up";
+    data.boltArrows = String(boltArrows.length);
+    data.mounted = state.mounted.toFixed(3);
+    data.loadDirection = `source-positive-${loadAxis.toLowerCase()}`;
+    data.support = "hole-bores-only";
+    data.torsionNm = String(solution.momentNmm[0] / 1000);
+    data.initialScreenRotation = "180";
+    data.cameraRadius = state.cameraPosition.length().toFixed(4);
+    data.networkPropagation = "connected";
+    data.transparency = "0";
+    data.sharpCorners = String(sharpCorners);
+    data.ceilingPlane = "removed";
+    data.surfaceBusy = String(shownTopology.busy);
+    data.surfaceProgress = String(shownTopology.renderedProgress);
+    data.surfaceTriangles = String(shownTopology.triangles);
+    data.surfaceComputeMs = String(shownTopology.elapsedMs);
+    data.topologyRendering = "smooth-isosurface";
+    data.optimizationElements = String(shownTopology.metadata.elements);
+    data.bodyOpacity = frontMaterial.opacity.toFixed(2);
+    data.turn = state.turn.toFixed(3);
+    data.force = state.load.toFixed(3);
+  }
+  function update() {
+    raf = 0;
+    const distance = scrollViewport.scrollHeight - scrollViewport.clientHeight;
+    const overallProgress = clamp(
+      scrollViewport.scrollTop / Math.max(1, distance),
+    );
+    const progress = clamp(overallProgress / 0.7),
+      relax = curve((overallProgress - 0.7) / 0.06),
+      topologyProgress = clamp((overallProgress - 0.76) / 0.24);
+    const optimizationPlayback = clamp(curve(topologyProgress) / 0.8);
+    const edges = clamp((progress - 0.12) / 0.24),
+      turn = curve((progress - 0.38) / 0.24);
+    const mounted = smooth((progress - 0.62) / 0.06),
+      load = smooth((progress - 0.62) / 0.08),
+      contour = smooth((progress - 0.72) / 0.08);
+    const still = reduced.matches;
+    updateCopy(progress, still);
+    const shownContour = contour * (1 - relax);
+    surface(shownContour);
+    drawEdges(edges);
+    const optimizing = overallProgress >= 0.76;
+    frontSurface.visible = !optimizing || !topologyReady;
+    const topologyState = topology
+      ? topology.update(optimizationPlayback, optimizing)
+      : { iteration: 0, retained: solution.tetrahedra };
+    frontMaterial.opacity = 1;
+    frontMaterial.transparent = false;
+    frontMaterial.depthWrite = true;
+    lineMaterial.opacity = (0.6 - 0.35 * shownContour) * (1 - relax);
+    lineMaterial.depthWrite = false;
+    const orientation = still ? Number(progress >= 0.62) : turn;
+    const optimizationTurn = still ? 0 : curve(topologyProgress);
+    const rotationDegrees = 90 * orientation + 360 * optimizationTurn;
+    poseBody(rotationDegrees);
+    const cameraPosition = frameCamera(orientation);
+    fadeAnnotations(mounted, load, overallProgress);
     transitionAnalysis(
       still ? Number(progress >= 0.81) : smooth((progress - 0.81) / 0.06),
       still ? Number(optimizing) : smooth((overallProgress - 0.76) / 0.035),
       still,
     );
     progressBar.style.transform = `scaleX(${overallProgress})`;
-    sceneHost.dataset.progress = overallProgress.toFixed(3);
-    sceneHost.dataset.optimization = topologyProgress.toFixed(3);
-    sceneHost.dataset.optimizationPlayback = optimizationPlayback.toFixed(3);
-    sceneHost.dataset.topologyReady = String(topologyReady);
-    sceneHost.dataset.iteration = String(topologyState?.iteration ?? 0);
-    sceneHost.dataset.retainedElements = String(
-      topologyState?.retained ?? solution.tetrahedra,
-    );
-    sceneHost.dataset.edgeDrawProgress = edges.toFixed(3);
-    sceneHost.dataset.deformation = "0.000";
-    sceneHost.dataset.contour = shownContour.toFixed(3);
-    sceneHost.dataset.mounting = "horizontal";
-    sceneHost.dataset.rotationAxis = "vertical";
-    sceneHost.dataset.rotationDegrees = String(rotationDegrees);
-    sceneHost.dataset.optimizationRotationDegrees = String(
-      360 * optimizationTurn,
-    );
-    sceneHost.dataset.frontLiftDegrees = "0";
-    sceneHost.dataset.poseQuaternion = body.quaternion.toArray().join(",");
-    sceneHost.dataset.ceilingTurn = ceilingTurn.toFixed(3);
-    sceneHost.dataset.boltDirection = "up";
-    sceneHost.dataset.boltArrows = String(boltArrows.length);
-    sceneHost.dataset.mounted = mounted.toFixed(3);
-    sceneHost.dataset.loadDirection = `source-positive-${loadAxis.toLowerCase()}`;
-    sceneHost.dataset.support = "hole-bores-only";
-    sceneHost.dataset.torsionNm = String(solution.momentNmm[0] / 1000);
-    sceneHost.dataset.initialScreenRotation = "180";
-    sceneHost.dataset.cameraRadius = cameraPosition.length().toFixed(4);
-    sceneHost.dataset.networkPropagation = "connected";
-    sceneHost.dataset.transparency = "0";
-    sceneHost.dataset.sharpCorners = String(sharpCorners);
-    sceneHost.dataset.ceilingPlane = "removed";
-    sceneHost.dataset.surfaceBusy = String(topology?.busy ?? false);
-    sceneHost.dataset.surfaceProgress = String(
-      topology?.renderedProgress ?? -1,
-    );
-    sceneHost.dataset.surfaceTriangles = String(topology?.triangles ?? 0);
-    sceneHost.dataset.surfaceComputeMs = String(topology?.elapsedMs ?? 0);
-    sceneHost.dataset.topologyRendering = "smooth-isosurface";
-    sceneHost.dataset.optimizationElements = String(
-      topology?.metadata.elements ?? 0,
-    );
-    sceneHost.dataset.bodyOpacity = frontMaterial.opacity.toFixed(2);
-    sceneHost.dataset.turn = turn.toFixed(3);
-    sceneHost.dataset.force = load.toFixed(3);
+    publishState({
+      overallProgress,
+      topologyProgress,
+      optimizationPlayback,
+      topologyState,
+      edges,
+      shownContour,
+      rotationDegrees,
+      optimizationTurn,
+      turn,
+      mounted,
+      load,
+      cameraPosition,
+    });
     scene.render();
   }
   function schedule() {
@@ -812,25 +842,24 @@ async function start() {
       status.textContent = `Optimization could not load: ${error.message}`;
       console.error(error);
     });
-  window.addEventListener(
-    "pagehide",
-    () => {
-      cancelAnimationFrame(raf);
-      observer.disconnect();
-      if (topology) topology.dispose();
-      scene.dispose();
-      surfaceGeometry.dispose();
-      lineGeometry.dispose();
-      frontMaterial.dispose();
-      lineMaterial.dispose();
-      pulseGeometry.dispose();
-      pulseMaterial.dispose();
-      nodeGeometry.dispose();
-      nodeMaterial.dispose();
-      nodeTexture.dispose();
-    },
-    { once: true },
-  );
+  window.addEventListener("pagehide", (event) => {
+    // A persisted page is frozen in the back-forward cache and restored as-is,
+    // without start() running again, so it must keep its scene.
+    if (event.persisted) return;
+    cancelAnimationFrame(raf);
+    observer.disconnect();
+    if (topology) topology.dispose();
+    scene.dispose();
+    surfaceGeometry.dispose();
+    lineGeometry.dispose();
+    frontMaterial.dispose();
+    lineMaterial.dispose();
+    pulseGeometry.dispose();
+    pulseMaterial.dispose();
+    nodeGeometry.dispose();
+    nodeMaterial.dispose();
+    nodeTexture.dispose();
+  });
 }
 start().catch((error) => {
   status.hidden = false;

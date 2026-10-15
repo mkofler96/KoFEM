@@ -6,7 +6,7 @@ export async function createTopology(
   baseColor,
   _triangles,
   _restNormals,
-  onChange = () => {},
+  onChange,
 ) {
   const [metaResponse, dataResponse] = await Promise.all([
     fetch(new URL("./ge-engine-bracket-smooth.json", import.meta.url)),
@@ -48,20 +48,20 @@ export async function createTopology(
     triangles = 0,
     elapsedMs = 0,
     failed = null;
-  let resolveReady, rejectReady;
+  const readiness = {};
   const ready = new Promise((resolve, reject) => {
-    resolveReady = resolve;
-    rejectReady = reject;
+    readiness.resolve = resolve;
+    readiness.reject = reject;
   });
   function frame(amount) {
-    let a = 0;
-    while (a < stops.length - 2 && amount > stops[a + 1]) a++;
-    const b = a + 1,
+    let lower = 0;
+    while (lower < stops.length - 2 && amount > stops[lower + 1]) lower++;
+    const upper = lower + 1,
       blend = Math.max(
         0,
-        Math.min(1, (amount - stops[a]) / (stops[b] - stops[a])),
+        Math.min(1, (amount - stops[lower]) / (stops[upper] - stops[lower])),
       );
-    return { type: "surface", a, b, blend, amount };
+    return { type: "surface", lower, upper, blend, amount };
   }
   function send(request) {
     busy = true;
@@ -70,7 +70,7 @@ export async function createTopology(
   worker.onerror = (event) => {
     failed = new Error(event.message || "Topology surface worker failed");
     busy = false;
-    rejectReady(failed);
+    readiness.reject(failed);
     onChange();
   };
   worker.onmessage = (event) => {
@@ -78,7 +78,7 @@ export async function createTopology(
     if (result.type === "error") {
       failed = new Error(result.message);
       busy = false;
-      rejectReady(failed);
+      readiness.reject(failed);
       onChange();
       return;
     }
@@ -109,7 +109,7 @@ export async function createTopology(
     triangles = result.triangleCount;
     elapsedMs = result.elapsedMs;
     busy = false;
-    resolveReady();
+    readiness.resolve();
     if (pending) {
       const next = pending;
       pending = null;
@@ -126,7 +126,7 @@ export async function createTopology(
       if (!visible) return { iteration: 0, retained: metadata.elements };
       const time = Math.max(0, Math.min(1, amount)),
         request = frame(time),
-        { a, b, blend } = request;
+        { lower, upper, blend } = request;
       if (time !== last) {
         last = time;
         if (busy) pending = request;
@@ -134,10 +134,11 @@ export async function createTopology(
       }
       return {
         iteration: Math.round(
-          metadata.frames[a] * (1 - blend) + metadata.frames[b] * blend,
+          metadata.frames[lower] * (1 - blend) + metadata.frames[upper] * blend,
         ),
         retained: Math.round(
-          metadata.retained[a] * (1 - blend) + metadata.retained[b] * blend,
+          metadata.retained[lower] * (1 - blend) +
+            metadata.retained[upper] * blend,
         ),
       };
     },
