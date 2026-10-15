@@ -4,13 +4,7 @@
   --text: #edf1f5;
   --muted: #82909e;
   --accent: #83b6ed;
-  font-family:
-    Inter,
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    sans-serif;
+  font-family: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 * {
   box-sizing: border-box;
@@ -53,9 +47,9 @@ a:focus-visible {
   pointer-events: auto;
 }
 .wordmark {
-  font-weight: 650;
+  font-weight: 600;
   font-size: 20px;
-  letter-spacing: -1px;
+  letter-spacing: -0.01em;
 }
 .brand-dot {
   color: var(--accent);
@@ -109,20 +103,27 @@ a:focus-visible {
   pointer-events: none;
   will-change: opacity, transform;
 }
+.intro-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.2em;
+  font-size: clamp(60px, 7vw, 108px);
+  margin-bottom: 25px;
+}
 .logo {
   display: block;
-  width: 90px;
-  height: 90px;
+  width: 0.8em;
+  height: 0.8em;
+  flex-shrink: 0;
   object-fit: contain;
-  margin: 0 0 32px;
   opacity: 0.86;
 }
 h1 {
-  font-size: clamp(68px, 9.5vw, 150px);
-  font-weight: 550;
-  letter-spacing: -0.065em;
-  line-height: 0.98;
-  margin: 20px 0 25px;
+  font-size: inherit;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  margin: 0;
 }
 p {
   font-size: clamp(18px, 2.1vw, 28px);
@@ -135,11 +136,14 @@ p {
   opacity: 0;
   transform: translateY(calc(-50% + 25px));
 }
+.intro p {
+  font-size: clamp(16px, 1.6vw, 24px);
+}
 .mesh-copy h2 {
   font-size: clamp(30px, 4.2vw, 64px);
-  font-weight: 450;
+  font-weight: 600;
   line-height: 1.13;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.01em;
   margin: 22px 0;
 }
 .model-wrap {
@@ -237,20 +241,12 @@ p {
     width: 84vw;
     transform: none;
   }
-  .logo {
-    width: 45px;
-    height: 45px;
-    margin-bottom: 16px;
-  }
-  h1 {
-    font-size: 62px;
-    margin: 12px 0 14px;
+  .intro-brand {
+    font-size: clamp(48px, 12vw, 62px);
+    margin-bottom: 14px;
   }
   .intro p {
     font-size: 18px;
-  }
-  .intro p br {
-    display: none;
   }
   .mesh-copy h2 {
     font-size: 34px;
@@ -300,9 +296,9 @@ p {
 }
 .analysis-copy h2 {
   font-size: clamp(30px, 4.2vw, 64px);
-  font-weight: 450;
+  font-weight: 600;
   line-height: 1.13;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.01em;
   margin: 22px 0;
 }
 .stage-subtitle {

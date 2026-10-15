@@ -359,6 +359,7 @@ async function start() {
       for (const material of list) {
         material.transparent = true;
         material.depthWrite = false;
+        material.depthTest = true;
         arrowMaterials.push(material);
       }
     }
@@ -366,7 +367,6 @@ async function start() {
   arrowObject.traverse((object) => {
     object.renderOrder = 6;
   });
-  for (const material of arrowMaterials) material.depthTest = false;
   const boltArrows = solution.mountingHoleCentersMm.map((hole) => {
     const point = normalized(hole);
     const arrow = new Arrow3D({
