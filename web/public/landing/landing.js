@@ -4,9 +4,38 @@ const scrollViewport = document.querySelector("#scroll-viewport");
 const intro = document.querySelector(".intro");
 const meshCopy = document.querySelector(".mesh-copy");
 const analysisCopy = document.querySelector(".analysis-copy");
+const analysisStages = {
+  solve: {
+    title: "Local Solve",
+    subtitle: "No cloud, full control over your data.",
+  },
+  results: {
+    title: "Post Processing",
+    subtitle: "Integrated web-based visualization",
+  },
+  optimization: {
+    title: "Optimization",
+    subtitle: "Put material where it is needed",
+  },
+};
+const analysisPanels = Object.values(analysisStages).map((stage, index) => {
+  const panel = document.createElement("div");
+  panel.className = "analysis-stage";
+  panel.setAttribute("aria-hidden", String(index !== 0));
+  const title = document.createElement("h2");
+  title.textContent = stage.title;
+  const subtitle = document.createElement("p");
+  subtitle.className = "stage-subtitle";
+  subtitle.textContent = stage.subtitle;
+  if (index === 0) {
+    title.id = "analysis-title";
+    subtitle.id = "analysis-detail";
+  }
+  panel.append(title, subtitle);
+  return { panel, title, subtitle };
+});
+analysisCopy.replaceChildren(...analysisPanels.map(({ panel }) => panel));
 const progressBar = document.querySelector(".progress i");
-const phase = document.querySelector("#phase");
-const note = document.querySelector("#mesh-note");
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
 const mobile = matchMedia("(max-width:700px)");
 const clamp = (value) => Math.max(0, Math.min(1, value));
@@ -18,6 +47,24 @@ const curve = (value) => {
   const t = clamp(value);
   return t * t * t * (t * (t * 6 - 15) + 10);
 };
+function transitionAnalysis(results, optimization, still) {
+  const weights = [1 - results, results * (1 - optimization), optimization];
+  const offsets = [-results, 1 - results - optimization, 1 - optimization];
+  const active = weights.indexOf(Math.max(...weights));
+  analysisPanels.forEach(({ panel, title, subtitle }, index) => {
+    const weight = weights[index];
+    panel.style.opacity = String(weight);
+    panel.style.translate = `0 ${still ? 0 : offsets[index] * 28}px`;
+    panel.style.filter = still ? "none" : `blur(${(1 - weight) * 4}px)`;
+    panel.setAttribute("aria-hidden", String(index !== active));
+    title.id = index === active ? "analysis-title" : "";
+    subtitle.id = index === active ? "analysis-detail" : "";
+    subtitle.style.opacity = String(
+      still ? weight : smooth((weight - 0.12) / 0.88),
+    );
+    subtitle.style.translate = `0 ${still ? 0 : (1 - weight) * 8}px`;
+  });
+}
 async function start() {
   const { ThreeDScene, ModelMobject, Arrow3D } =
     await import("./vendor/manim-web.browser.js");
@@ -31,7 +78,6 @@ async function start() {
   const loadAxis = ["X", "Y", "Z"][
     solution.sourceForceN.findIndex((value) => value !== 0)
   ];
-  const loadDescription = `Four mounting bores fixed · 1 kN pull along bracket +${loadAxis}`;
   const geometryResponse = await fetch(
     new URL("./ge-engine-bracket.json", import.meta.url),
   );
@@ -71,7 +117,6 @@ async function start() {
       : new Float32Array(binary, info.offset, info.length);
   }
   const nodes = array("positions"),
-    displacements = array("displacements"),
     magnitudes = array("magnitudes");
   const triangles = array("triangles"),
     edgeIndices = array("edges");
@@ -369,19 +414,11 @@ async function start() {
   }
   const count = edgeIndices.length / 2;
   const sceneHost = document.querySelector("#scene");
-  let lastDeformation = -1,
-    lastContour = -1,
+  let lastContour = -1,
     raf = 0,
     topology = null;
   let topologyReady = false;
-  function surface(deformation, contour) {
-    if (deformation !== lastDeformation) {
-      const factor = deformation * solution.deformationScale;
-      for (let i = 0; i < nodes.length; i++)
-        positions[i] = nodes[i] - center[i % 3] + displacements[i] * factor;
-      updateSurfaceGeometry();
-      lastDeformation = deformation;
-    }
+  function surface(contour) {
     if (contour !== lastContour) {
       for (let i = 0; i < nodes.length; i += 3) {
         colors[i] = baseColor.r;
@@ -496,17 +533,19 @@ async function start() {
     const ceilingTurn = turn,
       mounted = smooth((progress - 0.62) / 0.06),
       load = smooth((progress - 0.62) / 0.08),
-      contour = smooth((progress - 0.72) / 0.08),
-      deformation = smooth((progress - 0.81) / 0.19);
+      contour = smooth((progress - 0.72) / 0.08);
     const introFade = smooth((progress - 0.06) / 0.09),
       next = smooth((progress - 0.53) / 0.08);
     const still = reduced.matches;
     copy(intro, 1 - introFade);
-    copy(meshCopy, introFade * (1 - curve((progress - 0.38) / 0.1)));
+    const meshExit = curve((progress - 0.38) / 0.1);
+    copy(meshCopy, introFade * (1 - meshExit));
     copy(analysisCopy, next);
-    const shownDeformation = (still ? 0 : deformation) * (1 - relax),
-      shownContour = contour * (1 - relax);
-    surface(shownDeformation, shownContour);
+    intro.style.translate = `0 ${still ? 0 : -introFade * 28}px`;
+    meshCopy.style.translate = `0 ${still ? 0 : (1 - introFade - meshExit) * 28}px`;
+    analysisCopy.style.translate = `0 ${still ? 0 : (1 - next) * 28}px`;
+    const shownContour = contour * (1 - relax);
+    surface(shownContour);
     drawEdges(edges);
     const optimizing = overallProgress >= 0.76;
     frontSurface.visible = !optimizing || !topologyReady;
@@ -612,57 +651,13 @@ async function start() {
     arrowObject.visible = load * annotationFade > 0;
     for (const material of arrowMaterials)
       material.opacity = load * annotationFade;
-    const arrowDelta = solution.deformationScale * shownDeformation;
-    // The arrow follows the mean motion of the distributed load region.
-    const arrowShift = new THREE.Vector3(
-      solution.meanLoadedDisplacementMm[0] * arrowDelta * metadata.scale,
-      solution.meanLoadedDisplacementMm[2] * arrowDelta * metadata.scale,
-      -solution.meanLoadedDisplacementMm[1] * arrowDelta * metadata.scale,
-    ).applyQuaternion(sceneAlignment);
-    arrowObject.position.copy(arrowShift).add(bodyShift);
-    const title = document.querySelector("#analysis-title"),
-      detail = document.querySelector("#analysis-detail");
-    document.querySelector(".analysis-copy .eyebrow").textContent = optimizing
-      ? "06 / Optimize"
-      : progress >= 0.72
-        ? "04 / Results"
-        : "03 / Load & solve";
-    if (optimizing) {
-      title.innerHTML = "Material, where<br>it matters.";
-      detail.textContent =
-        "KoFEM redistributes material while preserving the mounting and load regions.";
-    } else if (progress < 0.72) {
-      title.innerHTML = "Load it.<br>Pull it.";
-      detail.textContent = loadDescription;
-    } else {
-      title.innerHTML = "Displacement.<br>Made visible.";
-      detail.textContent = "A real KoFEM solve, revealed as you scroll.";
-    }
+    arrowObject.position.copy(bodyShift);
+    transitionAnalysis(
+      still ? Number(progress >= 0.81) : smooth((progress - 0.81) / 0.06),
+      still ? Number(optimizing) : smooth((overallProgress - 0.76) / 0.035),
+      still,
+    );
     progressBar.style.transform = `scaleX(${overallProgress})`;
-    phase.textContent = optimizing
-      ? "06 / Topology optimization"
-      : progress >= 0.81
-        ? "05 / Deformation"
-        : progress >= 0.72
-          ? "04 / Displacement magnitude"
-          : progress >= 0.62
-            ? "03 / Pull force"
-            : edges > 0
-              ? "02 / Finite element mesh"
-              : "01 / CAD geometry";
-    note.textContent = optimizing
-      ? topologyReady
-        ? "KoFEM · Material density"
-        : "Loading optimization…"
-      : progress >= 0.72
-        ? "KoFEM · Displacement magnitude"
-        : progress >= 0.62
-          ? `1 kN along bracket +${loadAxis} · Static elasticity`
-          : edges > 0
-            ? `${solution.nodes.toLocaleString()} nodes · ${solution.tetrahedra.toLocaleString()} tetrahedra`
-            : "GE engine bracket";
-    document.querySelector("#scroll-hint").textContent =
-      overallProgress > 0.98 ? "Geometry → optimized" : "Scroll to explore";
     sceneHost.dataset.progress = overallProgress.toFixed(3);
     sceneHost.dataset.optimization = topologyProgress.toFixed(3);
     sceneHost.dataset.optimizationPlayback = optimizationPlayback.toFixed(3);
@@ -672,7 +667,7 @@ async function start() {
       topologyState?.retained ?? solution.tetrahedra,
     );
     sceneHost.dataset.edgeDrawProgress = edges.toFixed(3);
-    sceneHost.dataset.deformation = shownDeformation.toFixed(3);
+    sceneHost.dataset.deformation = "0.000";
     sceneHost.dataset.contour = shownContour.toFixed(3);
     sceneHost.dataset.mounting = "horizontal";
     sceneHost.dataset.rotationAxis = "vertical";

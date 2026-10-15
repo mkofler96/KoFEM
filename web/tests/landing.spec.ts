@@ -72,9 +72,7 @@ test("bracket turns 90 degrees during transfer and a full turn during optimizati
     "source-positive-z",
   );
   await expect(scene).toHaveAttribute("data-torsion-nm", "0");
-  await expect(page.locator("#analysis-detail")).toHaveText(
-    "Four mounting bores fixed · 1 kN pull along bracket +Z",
-  );
+  await expect(page.locator("#analysis-title")).toHaveText("Local Solve");
   expect(await canvas.boundingBox()).toEqual(bounds);
   await scrollTo(0.76);
   const optimizationPose = (await scene.getAttribute("data-pose-quaternion"))!

@@ -10,7 +10,7 @@ The topology sequence is a converged KoFEM reaction–diffusion level-set run wi
 
 Playback shows iterations 0–36, starting from the solid bracket. The last four solver iterations are excluded from display because the end of the sequence develops a knobbly outline. The complete 40-iteration solver history and fields remain in the assets. Each displayed iteration gets an equal part of the first 80% of the turn, with continuous interpolation between density fields. Iteration 36 stays fixed for the final 72° of rotation so it can be inspected.
 
-The canvas is fixed outside an inner scroll viewport. The bracket moves horizontally from right to left while rotating 90° about the viewport's vertical axis, then completes another 360° turn about that same axis during optimization. Reduced-motion preferences suppress deformation and the optimization turn.
+The canvas is fixed outside an inner scroll viewport. The bracket moves horizontally from right to left while rotating 90° about the viewport's vertical axis, then completes another 360° turn about that same axis during optimization. Post-processing displays the displacement contour on undeformed geometry. Reduced-motion preferences suppress the optimization turn and heading transitions.
 
 `ge-engine-bracket-solution.bin`, `ge-engine-bracket-network.bin`, and `ge-engine-bracket-smooth.bin` contain precomputed results, not engine WASM build artifacts. The solver engine itself is not vendored here.
 

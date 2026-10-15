@@ -117,14 +117,6 @@ a:focus-visible {
   margin: 0 0 32px;
   opacity: 0.86;
 }
-.eyebrow {
-  font:
-    10px ui-monospace,
-    monospace;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: var(--muted);
-}
 h1 {
   font-size: clamp(68px, 9.5vw, 150px);
   font-weight: 550;
@@ -149,9 +141,6 @@ p {
   line-height: 1.13;
   letter-spacing: -0.04em;
   margin: 22px 0;
-}
-.mesh-copy p {
-  font-size: 15px;
 }
 .model-wrap {
   position: absolute;
@@ -211,27 +200,6 @@ p {
   border-radius: 20px;
   color: #dae5f0;
 }
-.model-caption {
-  display: grid;
-  grid-template-columns: 8px auto;
-  align-items: center;
-  gap: 9px 10px;
-  font:
-    11px ui-monospace,
-    monospace;
-  letter-spacing: 0.4px;
-}
-.caption-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--accent);
-}
-.model-caption small {
-  grid-column: 2;
-  color: var(--muted);
-  font-size: 10px;
-}
 .progress {
   position: absolute;
   bottom: 0;
@@ -278,10 +246,6 @@ p {
     font-size: 62px;
     margin: 12px 0 14px;
   }
-  .eyebrow {
-    font-size: 8px;
-    letter-spacing: 1.2px;
-  }
   .intro p {
     font-size: 18px;
   }
@@ -292,9 +256,6 @@ p {
     font-size: 34px;
     margin: 15px 0;
   }
-  .mesh-copy p {
-    font-size: 13px;
-  }
   .bottom-line {
     bottom: 24px;
     left: 6vw;
@@ -304,13 +265,6 @@ p {
   .scroll-cue {
     font-size: 9px;
     gap: 8px;
-  }
-  .model-caption {
-    font-size: 9px;
-    letter-spacing: 0;
-  }
-  .model-caption small {
-    font-size: 8px;
   }
   .scroll-icon {
     width: 24px;
@@ -329,6 +283,7 @@ p {
 }
 
 .analysis-copy {
+  display: grid;
   position: absolute;
   z-index: 5;
   left: 57vw;
@@ -338,6 +293,11 @@ p {
   opacity: 0;
   pointer-events: none;
 }
+.analysis-stage {
+  grid-area: 1 / 1;
+  min-width: 0;
+  will-change: opacity, translate, filter;
+}
 .analysis-copy h2 {
   font-size: clamp(30px, 4.2vw, 64px);
   font-weight: 450;
@@ -345,9 +305,15 @@ p {
   letter-spacing: -0.04em;
   margin: 22px 0;
 }
-.analysis-copy p {
-  font-size: 14px;
+.stage-subtitle {
+  font-size: 15px;
+  line-height: 1.6;
   max-width: 350px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .analysis-stage {
+    will-change: auto;
+  }
 }
 .contour-legend {
   opacity: 0;
@@ -398,8 +364,8 @@ p {
     font-size: 34px;
     margin: 15px 0;
   }
-  .analysis-copy p {
-    font-size: 11px;
+  .stage-subtitle {
+    font-size: 13px;
   }
   .contour-legend {
     margin-top: 16px;
