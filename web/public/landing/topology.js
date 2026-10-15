@@ -16,6 +16,13 @@ export async function createTopology(
     throw Error("KoFEM smooth topology sequence could not load");
   const metadata = await metaResponse.json(),
     buffer = await dataResponse.arrayBuffer();
+  const playbackEndIteration = 36;
+  const playbackFrames = metadata.frames.filter(
+    (iteration) => iteration <= playbackEndIteration,
+  );
+  const stops = playbackFrames.map(
+    (iteration) => iteration / playbackFrames.at(-1),
+  );
   let geometry = new THREE.BufferGeometry();
   let capacity = 0;
   const material = new THREE.MeshPhongMaterial({
@@ -48,15 +55,11 @@ export async function createTopology(
   });
   function frame(amount) {
     let a = 0;
-    while (a < metadata.stops.length - 2 && amount > metadata.stops[a + 1]) a++;
+    while (a < stops.length - 2 && amount > stops[a + 1]) a++;
     const b = a + 1,
       blend = Math.max(
         0,
-        Math.min(
-          1,
-          (amount - metadata.stops[a]) /
-            (metadata.stops[b] - metadata.stops[a]),
-        ),
+        Math.min(1, (amount - stops[a]) / (stops[b] - stops[a])),
       );
     return { type: "surface", a, b, blend, amount };
   }

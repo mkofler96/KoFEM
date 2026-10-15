@@ -28,6 +28,10 @@ async function start() {
   if (!response.ok)
     throw Error(`KoFEM solution metadata returned HTTP ${response.status}`);
   const solution = await response.json();
+  const loadAxis = ["X", "Y", "Z"][
+    solution.sourceForceN.findIndex((value) => value !== 0)
+  ];
+  const loadDescription = `Four mounting bores fixed · 1 kN pull along bracket +${loadAxis}`;
   const geometryResponse = await fetch(
     new URL("./ge-engine-bracket.json", import.meta.url),
   );
@@ -318,52 +322,6 @@ async function start() {
     object.renderOrder = 6;
   });
   for (const material of arrowMaterials) material.depthTest = false;
-  const momentGroup = new THREE.Group();
-  const momentRadius = 0.62,
-    momentStart = -Math.PI * 0.35,
-    momentEnd = momentStart + Math.PI * 1.65;
-  const momentPoints = Array.from({ length: 81 }, (_, i) => {
-    const angle = momentStart + ((momentEnd - momentStart) * i) / 80;
-    return new THREE.Vector3(
-      0,
-      Math.cos(angle) * momentRadius,
-      Math.sin(angle) * momentRadius,
-    );
-  });
-  const momentMaterial = new THREE.MeshBasicMaterial({
-    color: "#d7a9ff",
-    transparent: true,
-    opacity: 0,
-    depthWrite: false,
-    depthTest: false,
-  });
-  const momentTube = new THREE.TubeGeometry(
-    new THREE.CatmullRomCurve3(momentPoints),
-    96,
-    0.024,
-    8,
-    false,
-  );
-  momentGroup.add(new THREE.Mesh(momentTube, momentMaterial));
-  const momentTipGeometry = new THREE.ConeGeometry(0.077, 0.2, 16);
-  const momentTip = new THREE.Mesh(momentTipGeometry, momentMaterial);
-  const tangent = new THREE.Vector3(
-    0,
-    -Math.sin(momentEnd),
-    Math.cos(momentEnd),
-  );
-  momentTip.position.copy(momentPoints.at(-1)).addScaledVector(tangent, 0.08);
-  momentTip.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tangent);
-  momentGroup.add(momentTip);
-  momentGroup.traverse((object) => {
-    object.renderOrder = 6;
-  });
-  scene.add(new ModelMobject(momentGroup));
-  const momentAnchor = new THREE.Vector3(
-    anchor[0] + 0.45,
-    anchor[1],
-    anchor[2],
-  );
   const boltArrows = solution.mountingHoleCentersMm.map((hole) => {
     const point = normalized(hole);
     const arrow = new Arrow3D({
@@ -532,8 +490,8 @@ async function start() {
     const progress = clamp(overallProgress / 0.7),
       relax = curve((overallProgress - 0.7) / 0.06),
       topologyProgress = clamp((overallProgress - 0.76) / 0.24);
-    const move = smooth(progress / 0.14),
-      edges = clamp((progress - 0.12) / 0.24),
+    const optimizationPlayback = clamp(curve(topologyProgress) / 0.8);
+    const edges = clamp((progress - 0.12) / 0.24),
       turn = curve((progress - 0.38) / 0.24);
     const ceilingTurn = turn,
       mounted = smooth((progress - 0.62) / 0.06),
@@ -553,7 +511,7 @@ async function start() {
     const optimizing = overallProgress >= 0.76;
     frontSurface.visible = !optimizing || !topologyReady;
     const topologyState = topology
-      ? topology.update(topologyProgress, optimizing)
+      ? topology.update(optimizationPlayback, optimizing)
       : null;
     frontMaterial.opacity = 1;
     frontMaterial.transparent = false;
@@ -592,27 +550,23 @@ async function start() {
         Math.PI,
       ),
     );
-    // Present the same side-facing pose at both ends of the transfer.
     const quarterTurn = new THREE.Quaternion().setFromAxisAngle(
       new THREE.Vector3(1, 0, 0),
       -Math.PI / 2,
     );
+    const optimizationTurn = still ? 0 : curve(topologyProgress);
+    const rotationDegrees = 90 * orientation + 360 * optimizationTurn;
+    const verticalRotation = new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(0, 1, 0),
+      (rotationDegrees * Math.PI) / 180,
+    );
     const basePose = originalFrame.quaternion
       .clone()
+      .multiply(verticalRotation)
       .multiply(startView)
       .multiply(quarterTurn);
-    const frontLift =
-      18 * (still ? (optimizing ? 1 : 0) : curve(topologyProgress));
-    const liftRotation = new THREE.Quaternion().setFromAxisAngle(
-      new THREE.Vector3(0, 1, 0),
-      (-frontLift * Math.PI) / 180,
-    );
-    const backPivot = new THREE.Vector3(-center[0], -center[1], 20 - center[2]);
-    body.quaternion.copy(basePose).multiply(liftRotation);
-    body.position
-      .copy(backPivot)
-      .sub(backPivot.clone().applyQuaternion(liftRotation))
-      .applyQuaternion(basePose);
+    body.quaternion.copy(basePose);
+    body.position.set(0, 0, 0);
     const bodyShift = body.position.clone().multiplyScalar(metadata.scale);
     const sceneAlignment = body.quaternion
       .clone()
@@ -636,18 +590,8 @@ async function start() {
     scene.camera3D.getCamera().quaternion.copy(viewRotation);
     const canvasWidth = sceneHost.clientWidth,
       canvasHeight = sceneHost.clientHeight;
-    const horizontal = mobile.matches
-      ? 0.5
-      : still
-        ? progress >= 0.6
-          ? 0.27
-          : 0.7
-        : 0.7 - move * 0.03 - turn * 0.4;
-    const vertical = mobile.matches
-      ? 0.68
-      : still
-        ? 0.505
-        : 0.505 - move * 0.015 - 0.025 * Math.sin(Math.PI * turn);
+    const horizontal = mobile.matches ? 0.5 : 0.7 - orientation * 0.4;
+    const vertical = mobile.matches ? 0.68 : 0.505;
     scene.camera3D
       .getCamera()
       .setViewOffset(
@@ -676,14 +620,6 @@ async function start() {
       -solution.meanLoadedDisplacementMm[1] * arrowDelta * metadata.scale,
     ).applyQuaternion(sceneAlignment);
     arrowObject.position.copy(arrowShift).add(bodyShift);
-    momentGroup.visible = load * annotationFade > 0;
-    momentMaterial.opacity = load * annotationFade;
-    momentGroup.quaternion.copy(sceneAlignment);
-    momentGroup.position
-      .copy(momentAnchor)
-      .applyQuaternion(sceneAlignment)
-      .add(arrowShift)
-      .add(bodyShift);
     const title = document.querySelector("#analysis-title"),
       detail = document.querySelector("#analysis-detail");
     document.querySelector(".analysis-copy .eyebrow").textContent = optimizing
@@ -696,9 +632,8 @@ async function start() {
       detail.textContent =
         "KoFEM redistributes material while preserving the mounting and load regions.";
     } else if (progress < 0.72) {
-      title.innerHTML = "Load it.<br>Twist it.";
-      detail.textContent =
-        "Four mounting bores fixed · Sideways force + torsion";
+      title.innerHTML = "Load it.<br>Pull it.";
+      detail.textContent = loadDescription;
     } else {
       title.innerHTML = "Displacement.<br>Made visible.";
       detail.textContent = "A real KoFEM solve, revealed as you scroll.";
@@ -711,7 +646,7 @@ async function start() {
         : progress >= 0.72
           ? "04 / Displacement magnitude"
           : progress >= 0.62
-            ? "03 / Force & torsion"
+            ? "03 / Pull force"
             : edges > 0
               ? "02 / Finite element mesh"
               : "01 / CAD geometry";
@@ -722,7 +657,7 @@ async function start() {
       : progress >= 0.72
         ? "KoFEM · Displacement magnitude"
         : progress >= 0.62
-          ? "1 kN + 50 N·m · Static elasticity"
+          ? `1 kN along bracket +${loadAxis} · Static elasticity`
           : edges > 0
             ? `${solution.nodes.toLocaleString()} nodes · ${solution.tetrahedra.toLocaleString()} tetrahedra`
             : "GE engine bracket";
@@ -730,6 +665,7 @@ async function start() {
       overallProgress > 0.98 ? "Geometry → optimized" : "Scroll to explore";
     sceneHost.dataset.progress = overallProgress.toFixed(3);
     sceneHost.dataset.optimization = topologyProgress.toFixed(3);
+    sceneHost.dataset.optimizationPlayback = optimizationPlayback.toFixed(3);
     sceneHost.dataset.topologyReady = String(topologyReady);
     sceneHost.dataset.iteration = String(topologyState?.iteration ?? 0);
     sceneHost.dataset.retainedElements = String(
@@ -738,16 +674,19 @@ async function start() {
     sceneHost.dataset.edgeDrawProgress = edges.toFixed(3);
     sceneHost.dataset.deformation = shownDeformation.toFixed(3);
     sceneHost.dataset.contour = shownContour.toFixed(3);
-    sceneHost.dataset.mounting = frontLift > 0 ? "front-raised" : "horizontal";
-    sceneHost.dataset.rotationAxis = "mounting-normal";
-    sceneHost.dataset.rotationDegrees = "-90";
-    sceneHost.dataset.frontLiftDegrees = String(frontLift);
+    sceneHost.dataset.mounting = "horizontal";
+    sceneHost.dataset.rotationAxis = "vertical";
+    sceneHost.dataset.rotationDegrees = String(rotationDegrees);
+    sceneHost.dataset.optimizationRotationDegrees = String(
+      360 * optimizationTurn,
+    );
+    sceneHost.dataset.frontLiftDegrees = "0";
     sceneHost.dataset.poseQuaternion = body.quaternion.toArray().join(",");
     sceneHost.dataset.ceilingTurn = ceilingTurn.toFixed(3);
     sceneHost.dataset.boltDirection = "up";
     sceneHost.dataset.boltArrows = String(boltArrows.length);
     sceneHost.dataset.mounted = mounted.toFixed(3);
-    sceneHost.dataset.loadDirection = "sideways";
+    sceneHost.dataset.loadDirection = `source-positive-${loadAxis.toLowerCase()}`;
     sceneHost.dataset.support = "hole-bores-only";
     sceneHost.dataset.torsionNm = String(solution.momentNmm[0] / 1000);
     sceneHost.dataset.initialScreenRotation = "180";
@@ -894,9 +833,6 @@ async function start() {
       nodeGeometry.dispose();
       nodeMaterial.dispose();
       nodeTexture.dispose();
-      momentTube.dispose();
-      momentTipGeometry.dispose();
-      momentMaterial.dispose();
     },
     { once: true },
   );
