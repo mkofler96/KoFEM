@@ -233,21 +233,19 @@ jobs:
           echo "ERROR: publishing $TAG failed and no release exists." >&2
           exit 1
 
-  frontend:
-    name: Frontend
-    needs: [wasm, version]
-    runs-on: ubuntu-24.04
+  # --- Web frontend ---------------------------------------------------------
+  # The web gates run as parallel jobs: the static checks, the validation
+  # scripts, the Playwright suite split into shards, and the production-image
+  # smoke test. Coverage is merged from the shards afterwards, and an image is
+  # only published once every one of them has passed.
 
-    permissions:
-      contents: read
-      packages: write
-      # Signed build provenance for pushed images (GitHub OIDC), so a deployment
-      # can verify an image before running it.
-      id-token: write
-      attestations: write
+  web-checks:
+    name: Frontend checks
+    runs-on: ubuntu-24.04
+    needs: [wasm]
 
     env:
-      # This job takes the engine from the `wasm` job's artifact, so the
+      # These jobs take the engine from the `wasm` job's artifact, so the
       # package.json pre-hooks must not try to fetch a release on top of it —
       # a PR that changes engine/ has no published release yet.
       KOFEM_WASM_SKIP_FETCH: 1
@@ -278,15 +276,6 @@ jobs:
           restore-keys: |
             bun-${{ runner.os }}-
 
-      - name: Cache Playwright browsers
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('web/bun.lock') }}
-          restore-keys: |
-            playwright-${{ runner.os }}-
-
       - name: Install web dependencies
         run: cd web && bun install --frozen-lockfile
 
@@ -302,6 +291,110 @@ jobs:
       - name: Build frontend
         run: cd web && bun run build
 
+  # The engine-level validation benchmarks and the node-side checks
+  # (tests/test_*.mjs) — no browser, so they run beside the Playwright shards.
+  validation:
+    name: Validation scripts
+    runs-on: ubuntu-24.04
+    needs: [wasm]
+
+    env:
+      # These jobs take the engine from the `wasm` job's artifact, so the
+      # package.json pre-hooks must not try to fetch a release on top of it —
+      # a PR that changes engine/ has no published release yet.
+      KOFEM_WASM_SKIP_FETCH: 1
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Download WASM artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: kofem-wasm-pkg
+          path: web/src/wasm/pkg/
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.6
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            web/node_modules
+          key: bun-${{ runner.os }}-${{ hashFiles('web/bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Install web dependencies
+        run: cd web && bun install --frozen-lockfile
+
+      - name: Run validation scripts
+        run: cd web && bun run test:validation
+
+  # The Playwright suite, split across parallel jobs (`--shard`). Each shard
+  # builds the coverage-instrumented app and keeps the counters it collected
+  # (tests/coverage.ts writes one uniquely named file per test), so the
+  # `coverage` job only has to put the four directories together.
+  e2e:
+    name: Playwright (${{ matrix.shard }}/4)
+    runs-on: ubuntu-24.04
+    needs: [wasm]
+
+    strategy:
+      # Every shard reports, so one failure does not hide another.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+
+    env:
+      # These jobs take the engine from the `wasm` job's artifact, so the
+      # package.json pre-hooks must not try to fetch a release on top of it —
+      # a PR that changes engine/ has no published release yet.
+      KOFEM_WASM_SKIP_FETCH: 1
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Download WASM artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: kofem-wasm-pkg
+          path: web/src/wasm/pkg/
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.6
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            web/node_modules
+          key: bun-${{ runner.os }}-${{ hashFiles('web/bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Install web dependencies
+        run: cd web && bun install --frozen-lockfile
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('web/bun.lock') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+
       - name: Install Playwright Chromium
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: cd web && bunx playwright install --with-deps chromium
@@ -310,29 +403,23 @@ jobs:
         if: steps.playwright-cache.outputs.cache-hit == 'true'
         run: cd web && bunx playwright install-deps chromium
 
-      - name: Run frontend tests
-        run: cd web && bun run test
+      - name: Run Playwright shard
+        run: cd web && bunx playwright test --shard=${{ matrix.shard }}/4
         env:
           # Builds the app instrumented with Istanbul so Playwright collects
           # runtime coverage (tests/coverage.ts) — no second test run needed.
           COVERAGE: 1
 
-      # Prints per-file coverage and flags src files never loaded by any test
-      # (dead-code candidates).  `if: always()` so a failing test still yields
-      # the coverage gathered up to that point.
-      - name: Coverage report
+      # `if: always()`: a failing shard still hands over the coverage it gathered.
+      - name: Upload coverage counters
         if: always()
-        run: cd web && bun run coverage:report
-
-      - name: Report coverage to DeepSource
-        if: always()
-        run: |
-          curl -sSf https://deepsource.io/cli | sh
-          sed 's|^SF:|SF:web/|' web/coverage/lcov.info > web/coverage/lcov.deepsource.info
-          ./bin/deepsource report --analyzer test-coverage --key javascript \
-            --value-file web/coverage/lcov.deepsource.info
-        env:
-          DEEPSOURCE_DSN: ${{ secrets.DEEPSOURCE_DSN }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coverage-shard-${{ matrix.shard }}
+          path: web/.nyc_output/
+          include-hidden-files: true
+          retention-days: 1
+          if-no-files-found: ignore
 
       # Failure screenshots stay in the run that produced them. They used to be
       # pushed to a chat channel on every run, which buried the signal; anyone
@@ -341,32 +428,139 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: playwright-results-${{ github.run_id }}
+          name: playwright-results-${{ github.run_id }}-shard-${{ matrix.shard }}
           path: web/playwright-results/
           retention-days: 3
           if-no-files-found: ignore
+
+  # Prints per-file coverage and flags src files never loaded by any test
+  # (dead-code candidates), from all shards together. Runs even when a shard
+  # failed, on the coverage gathered up to that point.
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-24.04
+    needs: [e2e]
+    if: ${{ !cancelled() }}
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.6
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            web/node_modules
+          key: bun-${{ runner.os }}-${{ hashFiles('web/bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Install web dependencies
+        run: cd web && bun install --frozen-lockfile
+
+      - name: Collect coverage from the shards
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: coverage-shard-*
+          merge-multiple: true
+          path: web/.nyc_output/
+
+      - name: Coverage report
+        run: cd web && bun run coverage:report
+
+      - name: Report coverage to DeepSource
+        run: |
+          curl -sSf https://deepsource.io/cli | sh
+          sed 's|^SF:|SF:web/|' web/coverage/lcov.info > web/coverage/lcov.deepsource.info
+          ./bin/deepsource report --analyzer test-coverage --key javascript \
+            --value-file web/coverage/lcov.deepsource.info
+        env:
+          DEEPSOURCE_DSN: ${{ secrets.DEEPSOURCE_DSN }}
 
       # CI does not publish the workflow showcase. That is a weekly Claude task
       # (.claude/skills/showcase) posting to Linear over MCP, so no Linear
       # credential exists in this repository.
 
-      # --- Docker image -----------------------------------------------------
-      # Runs in the frontend job to reuse its checkout. No `if: always()`, so a
-      # failing test above skips the build — a broken commit never ships an
-      # image. main = push :latest, develop = push :dev; every other
-      # branch/PR builds only as a smoke test.
-      # The image is built map-free in main mode by web/Dockerfile.
+  # Build the real production image and smoke-test it, in parallel with the
+  # tests. The image is built map-free in main mode by web/Dockerfile.
+  image:
+    name: Docker image
+    runs-on: ubuntu-24.04
+    needs: [wasm, version]
+
+    env:
+      # These jobs take the engine from the `wasm` job's artifact, so the
+      # package.json pre-hooks must not try to fetch a release on top of it —
+      # a PR that changes engine/ has no published release yet.
+      KOFEM_WASM_SKIP_FETCH: 1
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Download WASM artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: kofem-wasm-pkg
+          path: web/src/wasm/pkg/
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.6
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            web/node_modules
+          key: bun-${{ runner.os }}-${{ hashFiles('web/bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Install web dependencies
+        run: cd web && bun install --frozen-lockfile
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('web/bun.lock') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+
+      - name: Install Playwright Chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: cd web && bunx playwright install --with-deps chromium
+
+      - name: Install Playwright system deps
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: cd web && bunx playwright install-deps chromium
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       # Build the real production image, run it, and drive the full WASM pipeline
       # through the served artifacts. This catches production-only breakage (e.g.
       # a fingerprinted asset or the .wasm binary failing to resolve) that the
-      # dev server and dist preview cannot. Runs before the push so a broken
-      # image never ships. Reuses the gha cache, so the push build below is warm.
+      # dev server and dist preview cannot. publish-image only runs once this
+      # passed, and builds with the same inputs, so it pushes these layers from
+      # the gha cache.
       - name: Smoke-test production image
         run: |
           VERSION=v${{ needs.version.outputs.version }}-$(git rev-parse --short HEAD)
+          # Same stamp as publish-image, so its build is all cache hits.
+          if [ "${GITHUB_REF}" = "refs/heads/develop" ]; then VERSION="${VERSION/-/-dev-}"; fi
           docker buildx build \
             --load \
             --platform linux/amd64 \
@@ -410,15 +604,47 @@ jobs:
         if: always()
         run: docker rm -f kofem-smoke kofem-smoke-dev || true
 
+
+  # Publish the image: main = :latest, develop = :dev; nothing for any other
+  # branch or PR. Only after every gate passed on this commit, so a broken
+  # commit never ships an image. The smoke test's build left its layers in the
+  # gha cache, so this build is mostly cache hits.
+  publish-image:
+    name: Publish image
+    runs-on: ubuntu-24.04
+    needs: [version, web-checks, validation, e2e, coverage, image]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+
+    permissions:
+      contents: read
+      packages: write
+      # Signed build provenance for pushed images (GitHub OIDC), so a deployment
+      # can verify an image before running it.
+      id-token: write
+      attestations: write
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Download WASM artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: kofem-wasm-pkg
+          path: web/src/wasm/pkg/
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
       - name: Log in to GitHub Container Registry
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build web image (main / develop = push, otherwise build only)
+      - name: Build and push web image
         id: image
         run: |
           OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
@@ -436,9 +662,8 @@ jobs:
             PUSH_FLAG="--push"
             TAG_ARGS="--tag ${IMAGE}:dev --tag ${IMAGE}:${VERSION}"
           else
-            echo "Development build: build only, no push"
-            PUSH_FLAG=""
-            TAG_ARGS=""
+            echo "ERROR: publish-image runs only for main and develop, not ${GITHUB_REF}" >&2
+            exit 1
           fi
           echo "name=${IMAGE}" >> "$GITHUB_OUTPUT"
 
@@ -483,7 +708,7 @@ jobs:
   # a no-op, so a later push to main can never take the tag.
   release:
     name: Publish product release
-    needs: [rust, clang-tidy, frontend, publish-engine]
+    needs: [rust, clang-tidy, web-checks, validation, e2e, coverage, image, publish-image, publish-engine]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
 
