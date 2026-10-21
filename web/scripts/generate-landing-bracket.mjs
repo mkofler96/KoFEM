@@ -3,6 +3,7 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
+import { gzipSync } from "node:zlib";
 import createModule from "../src/wasm/pkg/kofem_wasm_emcc.js";
 
 const directory = new URL("../public/landing/", import.meta.url);
@@ -35,20 +36,54 @@ const wasmBinary = readFileSync(
 );
 const engine = () =>
   createModule({ wasmBinary, print: console.log, printErr: console.error });
+// An entry is a typed array, or { array, scale } for a quantized one that
+// landing/assets.js multiplies back to floats.
 function pack(arrays) {
   let offset = 0;
   const layout = {},
     buffers = [];
-  for (const [name, array] of Object.entries(arrays)) {
+  for (const [name, entry] of Object.entries(arrays)) {
+    const { array, scale } = ArrayBuffer.isView(entry)
+      ? { array: entry }
+      : entry;
+    if (offset % array.BYTES_PER_ELEMENT)
+      throw Error(`${name} would start at unaligned byte offset ${offset}`);
     layout[name] = {
       offset,
       length: array.length,
       type: array.constructor.name,
+      ...(scale !== undefined && { scale }),
     };
     buffers.push(Buffer.from(array.buffer, array.byteOffset, array.byteLength));
     offset += array.byteLength;
   }
   return { layout, buffer: Buffer.concat(buffers) };
+}
+function quantize(values, Type, scale) {
+  const limit = Math.round(1 / scale);
+  return {
+    array: Type.from(values, (value) => {
+      const level = Math.round(value / scale);
+      if (Math.abs(level) > limit)
+        throw Error(
+          `${value} is outside the quantized range ±${limit * scale}`,
+        );
+      return level;
+    }),
+    scale,
+  };
+}
+// Node indices fit 16 bits on the optimization mesh. Sorting each tetrahedron's
+// nodes and then the tetrahedra halves the gzipped size; marching tetrahedra
+// does not depend on either order.
+function compactTetrahedra(tetrahedra, nodeCount) {
+  if (nodeCount > 65536)
+    throw Error(`${nodeCount} nodes do not fit 16-bit tetrahedron indices`);
+  const rows = Array.from({ length: tetrahedra.length / 4 }, (_, e) =>
+    Array.from(tetrahedra.subarray(e * 4, e * 4 + 4)).sort((a, b) => a - b),
+  );
+  rows.sort((a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2] || a[3] - b[3]);
+  return Uint16Array.from(rows.flat());
 }
 const sourceForce = [0, 0, 1000];
 const material = JSON.stringify({ young_modulus: 210000, poisson_ratio: 0.3 });
@@ -469,12 +504,19 @@ fields[fields.length - 1] = Float32Array.from(
   optimized.levelSet,
   (phi) => 0.5 * (phi + 1),
 );
+for (const [frame, field] of fields.entries())
+  if (field.some((value) => !(value >= 0 && value <= 1)))
+    throw Error(`Topology frame ${frames[frame]} leaves the [0, 1] range`);
 const topologyData = pack({
   positions: fine.positions,
-  tetrahedra: fine.tetrahedra,
-  boundary: fine.boundary,
-  boundaryNormals: fine.boundaryNormals,
-  fields: Float32Array.from(fields.flatMap((field) => Array.from(field))),
+  tetrahedra: compactTetrahedra(fine.tetrahedra, nNodes),
+  boundary: Uint16Array.from(fine.boundary),
+  boundaryNormals: quantize(fine.boundaryNormals, Int16Array, 1 / 32767),
+  fields: quantize(
+    fields.flatMap((field) => Array.from(field)),
+    Uint16Array,
+    1 / 65535,
+  ),
 });
 const topologyMetadata = {
   ...topology,
@@ -530,7 +572,10 @@ for (const [stem, metadata, buffer] of [
   ["ge-engine-bracket-smooth", topologyMetadata, topologyData.buffer],
 ]) {
   writeFileSync(new URL(`${stem}.json`, directory), JSON.stringify(metadata));
-  writeFileSync(new URL(`${stem}.bin`, directory), buffer);
+  writeFileSync(
+    new URL(`${stem}.bin`, directory),
+    gzipSync(buffer, { level: 9 }),
+  );
 }
 console.log(
   JSON.stringify(

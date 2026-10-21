@@ -1,3 +1,5 @@
+import { fetchBinary, fetchJson, typedArray } from "./assets.js";
+import { createTopology, loadTopology } from "./topology.js";
 const status = document.querySelector("#load-status");
 const track = document.querySelector(".scroll-story");
 const scrollViewport = document.querySelector("#scroll-viewport");
@@ -65,62 +67,42 @@ function transitionAnalysis(results, optimization, still) {
     subtitle.style.translate = `0 ${still ? 0 : (1 - weight) * 8}px`;
   });
 }
+const asset = (name) => new URL(`./${name}`, import.meta.url);
+// Every request starts at once; awaiting them in turn chained a round trip each.
+const libraries = Promise.all([
+  import("./vendor/manim-web.browser.js"),
+  import("./vendor/three.module.js"),
+]);
+const bracketAssets = Promise.all([
+  fetchJson(asset("ge-engine-bracket-solution.json")),
+  fetchJson(asset("ge-engine-bracket.json")),
+  fetchBinary(asset("ge-engine-bracket-solution.bin")),
+  fetchJson(asset("ge-engine-bracket-network.json")),
+  fetchBinary(asset("ge-engine-bracket-network.bin")),
+]);
 async function start() {
-  const { ThreeDScene, ModelMobject, Arrow3D } =
-    await import("./vendor/manim-web.browser.js");
-  const THREE = await import("./vendor/three.module.js");
-  const response = await fetch(
-    new URL("./ge-engine-bracket-solution.json", import.meta.url),
-  );
-  if (!response.ok)
-    throw Error(`KoFEM solution metadata returned HTTP ${response.status}`);
-  const solution = await response.json();
+  const [
+    [solution, metadata, binary, network, travelBuffer],
+    [{ ThreeDScene, ModelMobject, Arrow3D }, THREE],
+  ] = await Promise.all([bracketAssets, libraries]);
+  const center = metadata.min.map((v, j) => (v + metadata.max[j]) / 2);
+  // The optimization download is the largest. It starts once everything the
+  // bracket needs is in, so it does not compete with it.
+  const topologySource = loadTopology(center);
   const loadAxis = ["X", "Y", "Z"][
     solution.sourceForceN.findIndex((value) => value !== 0)
   ];
-  const geometryResponse = await fetch(
-    new URL("./ge-engine-bracket.json", import.meta.url),
-  );
-  if (!geometryResponse.ok)
-    throw Error(`Geometry metadata returned HTTP ${geometryResponse.status}`);
-  const metadata = await geometryResponse.json();
-  const binaryResponse = await fetch(
-    new URL("./ge-engine-bracket-solution.bin", import.meta.url),
-  );
-  if (!binaryResponse.ok)
-    throw Error(`KoFEM solution data returned HTTP ${binaryResponse.status}`);
-  const binary = await binaryResponse.arrayBuffer();
-  const networkResponse = await fetch(
-    new URL("./ge-engine-bracket-network.json", import.meta.url),
-  );
-  if (!networkResponse.ok)
-    throw Error(`Mesh network returned HTTP ${networkResponse.status}`);
-  const network = await networkResponse.json();
-  const travelResponse = await fetch(
-    new URL("./ge-engine-bracket-network.bin", import.meta.url),
-  );
-  if (!travelResponse.ok)
-    throw Error(
-      `Mesh network travel data returned HTTP ${travelResponse.status}`,
-    );
-  const travelBuffer = await travelResponse.arrayBuffer();
   const arrival = new Float32Array(travelBuffer, 0, network.nodeCount);
   const edgeLengths = new Float32Array(
     travelBuffer,
     network.nodeCount * 4,
     network.edgeCount,
   );
-  function array(name) {
-    const info = solution.layout[name];
-    return info.type === "Uint32Array"
-      ? new Uint32Array(binary, info.offset, info.length)
-      : new Float32Array(binary, info.offset, info.length);
-  }
+  const array = (name) => typedArray(binary, solution.layout[name]);
   const nodes = array("positions"),
     magnitudes = array("magnitudes");
   const triangles = array("triangles"),
     edgeIndices = array("edges");
-  const center = metadata.min.map((v, j) => (v + metadata.max[j]) / 2);
   const positions = new Float32Array(nodes.length);
   const colors = new Float32Array(nodes.length);
   const surfaceGeometry = new THREE.BufferGeometry();
@@ -206,7 +188,6 @@ async function start() {
     surfaceNormal.needsUpdate = true;
   }
   updateSurfaceGeometry();
-  const restSurfaceNormals = new Float32Array(renderNormals);
   const frontMaterial = new THREE.MeshPhongMaterial({
     color: "#ffffff",
     vertexColors: true,
@@ -819,19 +800,8 @@ async function start() {
   sceneHost.dataset.meshSource = solution.generator;
   sceneHost.dataset.solver = solution.solver;
   update();
-  import("./topology.js")
-    .then((module) =>
-      module.createTopology(
-        THREE,
-        body,
-        nodes,
-        center,
-        baseColor,
-        triangles,
-        restSurfaceNormals,
-        schedule,
-      ),
-    )
+  topologySource
+    .then((source) => createTopology(THREE, body, baseColor, schedule, source))
     .then((sequence) => {
       topology = sequence;
       topologyReady = true;

@@ -419,6 +419,13 @@ p {
 .navigation-links .launch {
   color: var(--text);
 }
+.github {
+  display: flex;
+  color: var(--muted);
+}
+.github:hover {
+  color: var(--text);
+}
 @media (max-width: 700px) {
   .navigation-links {
     gap: 12px;

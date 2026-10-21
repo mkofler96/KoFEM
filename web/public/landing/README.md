@@ -14,6 +14,10 @@ The canvas is fixed outside an inner scroll viewport. The bracket moves horizont
 
 `ge-engine-bracket-solution.bin`, `ge-engine-bracket-network.bin`, and `ge-engine-bracket-smooth.bin` contain precomputed results, not engine WASM build artifacts. The solver engine itself is not vendored here.
 
+The generator gzips each `.bin` itself, so it arrives compressed from any static host; `assets.js` inflates it with `DecompressionStream`. The smooth sequence is also packed for size: tetrahedron and boundary indices are 16-bit, each tetrahedron's nodes and then the tetrahedra are sorted (element indices in `settings.passive` refer to the mesher's original order), boundary normals are 16-bit signed and density fields 16-bit unsigned, each with the `scale` recorded in its layout entry.
+
+`landing.js` requests the libraries and the bracket data in parallel. The topology worker fetches and decodes the optimization sequence itself, starting once everything the bracket needs has arrived.
+
 Regenerate the static solve, connected mesh reveal, and level-set sequence with the matching engine installed:
 
 ```bash
