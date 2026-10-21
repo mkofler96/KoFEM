@@ -10,6 +10,7 @@
 
 import type { TopOptHistoryEntry } from "../wasm/pkg/kofem_wasm.js";
 import type { SliceCreator } from "./modelStore";
+import { ensurePlot } from "./studySlice";
 
 // The two objectives the panel offers: minimize compliance under a volume
 // fraction (KOF-230) or minimize volume under a compliance limit (KOF-235).
@@ -168,7 +169,10 @@ export const createTopOptSlice: SliceCreator<TopOptSlice> = (set) => ({
       s.densityResult = result;
       // A completed run is the freshly produced output; make Results show it in
       // preference to any static result left from an earlier solve.
-      if (result) s.activeResult = "density";
+      if (result) {
+        s.activeResult = "density";
+        ensurePlot(s, "density");
+      }
     }),
   setLiveDensity: (live) =>
     set((s) => {

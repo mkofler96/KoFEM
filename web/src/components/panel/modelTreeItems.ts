@@ -4,8 +4,10 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useModelStore } from "../../store/modelStore";
 import { isCadBody } from "../../store/geometrySlice";
+import { plotLabel } from "../../store/studySlice";
 import {
   addSelection,
+  MESH_ITEM_ID,
   type TreeGroup,
   type TreeItemKind,
 } from "../../store/viewSlice";
@@ -16,6 +18,8 @@ export interface TreeItem {
   label: string;
   // Swatch colour (bodies and materials carry their material's colour).
   color?: string;
+  // Muted text at the row's end (the mesh's node count).
+  detail?: string;
 }
 
 // The model objects listed under each tree group. Groups without objects map
@@ -30,6 +34,9 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
   const loadGroups = useModelStore((s) => s.loadGroups);
   const tieGroups = useModelStore((s) => s.tieGroups);
   const couplingGroups = useModelStore((s) => s.couplingGroups);
+  const nodeCount = useModelStore((s) => s.nodes.length);
+  const studies = useModelStore((s) => s.studies);
+  const resultPlots = useModelStore((s) => s.resultPlots);
 
   return useMemo(() => {
     const colorOf = (materialId: number) =>
@@ -51,7 +58,17 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
         label: m.name,
         color: m.color,
       })),
-      mesh: [],
+      mesh:
+        nodeCount > 0
+          ? [
+              {
+                kind: "mesh" as const,
+                id: MESH_ITEM_ID,
+                label: "Volume mesh",
+                detail: `${nodeCount.toLocaleString("en-US")} nodes`,
+              },
+            ]
+          : [],
       boundary: [
         ...bcGroups.map((g) => ({
           kind: "bc" as const,
@@ -74,8 +91,16 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
           label: g.name,
         })),
       ],
-      studies: [],
-      results: [],
+      studies: studies.map((st) => ({
+        kind: "study" as const,
+        id: st.id,
+        label: st.name,
+      })),
+      results: resultPlots.map((p) => ({
+        kind: "plot" as const,
+        id: p.id,
+        label: plotLabel(p),
+      })),
     };
   }, [
     hasGeometry,
@@ -85,12 +110,16 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
     loadGroups,
     tieGroups,
     couplingGroups,
+    nodeCount,
+    studies,
+    resultPlots,
   ]);
 }
 
 // Keeps the tree selection pointing at something that exists: an object that
-// was deleted falls back to its group's "+ Add", and a creation form that just created
-// an object moves on to that object — "+ Add" → apply lands on the new item.
+// was deleted falls back to its group's "+ Add", and a creation form that just
+// created an object moves on to that object — "+ Add" → apply lands on the new
+// item, shown as saved (created) rather than with its editor open.
 export function useTreeSelectionSync(): void {
   const items = useTreeItems();
   const selection = useModelStore((s) => s.treeSelection);
@@ -121,7 +150,12 @@ export function useTreeSelectionSync(): void {
     if (created && group !== "geometry")
       selectTreeNode({
         group,
-        target: { type: "item", kind: created.kind, id: created.id },
+        target: {
+          type: "item",
+          kind: created.kind,
+          id: created.id,
+          created: true,
+        },
       });
   }, [items, selection, selectTreeNode]);
 }

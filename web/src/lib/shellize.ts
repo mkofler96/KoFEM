@@ -248,6 +248,22 @@ export function shellWallTets(
   return wallTets;
 }
 
+// Every tet of the shelled body — what the app replaces with shell facets. A
+// body the user marks Shell is idealised as shells everywhere, not just where a
+// thin wall was detected: a part that is only partly thin-walled is split into
+// bodies first and only the thin ones are marked, so no thick block of a Shell
+// body is left behind as solid (shellWallTets keeps those, for the dev scripts
+// that shell an unsplit part).
+export function shellBodyTets(
+  m: ShellizeMesh,
+  shells: ShellExtraction,
+): Set<number> {
+  const tets = new Set<number>();
+  for (let e = 0; e < m.tet.length / 4; e++)
+    if (m.body[e] === shells.shellBody) tets.add(e);
+  return tets;
+}
+
 // Corner accessor for the shell mid-surface facets.
 function midSurfaceCorner(
   shells: ShellExtraction,

@@ -3,15 +3,14 @@
 
 // Full STEP → mesh → solve roundtrip of the crane assembly, exercising the
 // per-body element-type feature end to end:
-//   1. Import full-crane-hook.step. The thin holder is auto-preselected "Shell",
-//      the pin and hook stay "Solid" — decided from the tessellation before any
-//      mesh exists (detectShellBodies).
+//   1. Import full-crane-hook.step and mark the thin holder "Shell"; the pin and
+//      hook stay "Solid".
 //   2. Mesh the STEP volume through the real meshing pipeline (worker reset and
 //      all).
 //   3. Fully fix the holder's top face, apply 2 kN total downward on the pin, and
 //      tie the pin to the hook eye.
 //   4. Solve. Because the holder is marked Shell, the worker routes to the coupled
-//      solid+shell path (auto-shell), which converges where the all-solid thin
+//      solid+shell path, which converges where the all-solid thin
 //      part stalls (#358). Assert a converged, finite, physically sane result.
 //
 // The tie is the model's own: Netgen meshes the pin and the hook eye almost
@@ -24,6 +23,7 @@
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { test, expect } from "./coverage";
+import { openTree, setElementType } from "./fixtures/tree";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const STEP_PATH = join(here, "../../test_files/full-crane-hook.step");
@@ -59,8 +59,8 @@ test("crane roundtrip: import STEP, auto-shell the holder, mesh, load 2 kN, fix 
   // 1. Import the STEP through the real file-import path (hidden STEP input).
   await page.setInputFiles('input[accept=".stp,.step"]', STEP_PATH);
 
-  // The tessellation-based detector runs on import: the thin holder (body 1) is
-  // preselected Shell, the bulky pin (3) and hook (2) stay Solid.
+  // Every body imports Solid; the user marks the thin holder (body 1) Shell and
+  // leaves the bulky pin (3) and hook (2) Solid.
   await expect
     .poll(
       async () =>
@@ -77,6 +77,7 @@ test("crane roundtrip: import STEP, auto-shell the holder, mesh, load 2 kN, fix 
       { timeout: 60_000 },
     )
     .toBe(3);
+  await setElementType(page, 1, "shell");
   const bodies = (await page.evaluate(
     () =>
       (
@@ -86,11 +87,12 @@ test("crane roundtrip: import STEP, auto-shell the holder, mesh, load 2 kN, fix 
       ).__kofemStore.getState().properties,
   )) as Body[];
   const disc = Object.fromEntries(bodies.map((b) => [b.id, b.discretization]));
-  expect(disc[1]).toBe("shell"); // thin holder → shell, auto-preselected pre-mesh
+  expect(disc[1]).toBe("shell"); // thin holder → shell, chosen pre-mesh
   expect(disc[2]).toBe("solid"); // hook → solid
   expect(disc[3]).toBe("solid"); // pin → solid
 
   // 2. Mesh the STEP volume (coarser element size keeps the roundtrip quick).
+  await openTree(page, "mesh");
   await page.getByRole("button", { name: /Mesh STEP volume/i }).click();
   await expect
     .poll(

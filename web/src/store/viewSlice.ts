@@ -4,7 +4,8 @@
 // View slice: transient viewport presentation settings — none of this is
 // persisted in saved analyses except viewRepr.
 
-import type { AppMode, SliceCreator } from "./modelStore";
+import type { AppMode, ModelState, SliceCreator } from "./modelStore";
+import { showPlot, studyOf, type Study, type StudyKind } from "./studySlice";
 
 // How load glyphs are drawn in the viewport. "resultant" shows one arrow per
 // force/pressure group at the centroid of its loaded nodes (the statically
@@ -32,24 +33,33 @@ export const SIDEBAR_MAX_WIDTH = 560;
 export const SMALL_SCREEN_QUERY = "(max-width: 768px)";
 
 // Model tree (left column). Groups are collapsible dividers, not selectable;
-// under them sit the model objects (bodies, materials, BC/load/tie/coupling
-// groups), the fixed entries (mesh, split tool, studies, results) and a
-// "+ Add" entry. The selection decides what the properties panel shows.
+// under them sit the model objects (bodies, materials, the mesh, BC/load/tie/
+// coupling groups, studies, result plots) and a "+ Add" entry. The selection
+// decides what the properties panel shows.
 export type TreeGroup =
   "geometry" | "materials" | "mesh" | "boundary" | "studies" | "results";
 
 export type TreeItemKind =
-  "body" | "material" | "bc" | "load" | "tie" | "coupling";
+  | "body"
+  | "material"
+  | "mesh"
+  | "bc"
+  | "load"
+  | "tie"
+  | "coupling"
+  | "study"
+  | "plot";
 
-// Entries that exist once, whatever the model holds.
-export type TreeView = "split" | "mesh" | "static" | "topopt" | "results";
+// The id of the one mesh a model has.
+export const MESH_ITEM_ID = 1;
 
 // The four object kinds "+ Add" under Boundary conditions can create.
 export type BoundaryKind = "bc" | "load" | "tie" | "coupling";
 
 export type TreeTarget =
-  | { type: "item"; kind: TreeItemKind; id: number }
-  | { type: "view"; view: TreeView }
+  // created: the object was just made by its "+ Add" form, so its view opens
+  // on the saved object rather than on its editor.
+  | { type: "item"; kind: TreeItemKind; id: number; created?: boolean }
   // kind null: the creation form of the group, or for Boundary conditions the
   // type chooser before a type is picked.
   | { type: "add"; kind: BoundaryKind | null };
@@ -61,18 +71,26 @@ export interface TreeSelection {
 
 // The app mode a selection works in — mode still drives the viewport (result
 // colouring, live density) and the pick handlers.
-export function selectionMode({ group, target }: TreeSelection): AppMode {
+function selectionMode(
+  { group, target }: TreeSelection,
+  studies: Study[],
+): AppMode {
   if (group === "boundary") return "constraints";
-  if (target.type === "view") {
-    if (target.view === "static") return "solve";
-    if (target.view === "topopt") return "optimize";
-    if (target.view === "results") return "results";
+  if (group === "results") return "results";
+  if (group === "studies") {
+    if (target.type !== "item") return "solve";
+    const study = studies.find((st) => st.id === target.id);
+    return study?.kind === "topopt" ? "optimize" : "solve";
   }
   return "geometry";
 }
 
-export function viewSelection(group: TreeGroup, view: TreeView): TreeSelection {
-  return { group, target: { type: "view", view } };
+export function itemSelection(
+  group: TreeGroup,
+  kind: TreeItemKind,
+  id: number,
+): TreeSelection {
+  return { group, target: { type: "item", kind, id } };
 }
 
 export function addSelection(group: TreeGroup): TreeSelection {
@@ -87,23 +105,49 @@ function reprContext(group: TreeGroup): "geometry" | "mesh" {
   return group === "geometry" || group === "materials" ? "geometry" : "mesh";
 }
 
-// Where the pipeline lands when it changes mode by itself (solve → results,
-// loading an analysis).
-export function modeSelection(mode: AppMode): TreeSelection {
+// Where the pipeline lands when it changes mode by itself (import → mesh,
+// solve → results, loading an analysis): the object of that step when there
+// is one, its "+ Add" otherwise.
+export function modeSelection(mode: AppMode, s: ModelState): TreeSelection {
+  const study = (kind: StudyKind) => {
+    const found = studyOf(s.studies, kind);
+    return found
+      ? itemSelection("studies", "study", found.id)
+      : addSelection("studies");
+  };
   switch (mode) {
     case "geometry":
-      return viewSelection("mesh", "mesh");
+      return s.nodes.length > 0
+        ? itemSelection("mesh", "mesh", MESH_ITEM_ID)
+        : addSelection("mesh");
     case "constraints":
       return addSelection("boundary");
     case "solve":
-      return viewSelection("studies", "static");
+      return study("static");
     case "optimize":
-      return viewSelection("studies", "topopt");
-    case "results":
-      return viewSelection("results", "results");
+      return study("topopt");
+    case "results": {
+      const plot = s.resultPlots.find((p) => p.source === s.activeResult);
+      return plot
+        ? itemSelection("results", "plot", plot.id)
+        : addSelection("results");
+    }
     default:
       throw new Error(`modeSelection: no tree entry for mode "${mode}"`);
   }
+}
+
+// Make `selection` the tree selection; a result plot also puts its run and
+// field on the viewport.
+export function applyTreeSelection(
+  s: ModelState,
+  selection: TreeSelection,
+): void {
+  s.treeSelection = selection;
+  const { target } = selection;
+  if (target.type !== "item" || target.kind !== "plot") return;
+  const plot = s.resultPlots.find((p) => p.id === target.id);
+  if (plot) showPlot(s, plot);
 }
 
 const SIDEBAR_WIDTH_KEY = "kofem.sidebarWidth";
@@ -232,8 +276,8 @@ export const createViewSlice: SliceCreator<ViewSlice> = (set) => ({
       ) {
         s.viewRepr = s.meshRepr;
       }
-      s.mode = selectionMode(selection);
-      s.treeSelection = selection;
+      s.mode = selectionMode(selection, s.studies);
+      applyTreeSelection(s, selection);
       s.sidebarOpen = true;
     }),
   setHighlightBodyId: (id) =>

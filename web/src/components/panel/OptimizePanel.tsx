@@ -1,15 +1,16 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useModelStore } from "../../store/modelStore";
-import type { TopOptNumericField } from "../../store/modelStore";
+import type { Study, TopOptNumericField } from "../../store/modelStore";
 import { useTopOpt, type FieldErrors } from "../../hooks/useTopOpt";
 import { resultUnit } from "../../lib/resultField";
 import { convergenceFromLogs } from "../../lib/topOptProgress";
 import { ConvergencePlot } from "./ConvergencePlot";
 import { DensityThresholdControl } from "./DensityThresholdControl";
 import { LogSection } from "./LogSection";
+import { PreflightChecks } from "./PreflightChecks";
 import styles from "./Panel.module.css";
 
 // One labelled numeric setting bound to the store, with its inline validation
@@ -53,7 +54,18 @@ function SettingField({
   );
 }
 
-export function OptimizePanel() {
+// One optimization study: optimizes the material layout for the supports and
+// loads of its static case. `header` / `footer` carry the study's own controls
+// (its static case, delete).
+export function OptimizePanel({
+  staticCase,
+  header,
+  footer,
+}: {
+  staticCase: Study | null;
+  header: ReactNode;
+  footer: ReactNode;
+}) {
   const method = useModelStore((s) => s.topOpt.method);
   const objective = useModelStore((s) => s.topOpt.objective);
   const setTopOptMethod = useModelStore((s) => s.setTopOptMethod);
@@ -73,12 +85,23 @@ export function OptimizePanel() {
     error,
     setError,
     isOptimizing,
-    allOk,
-    checks,
+    allOk: modelOk,
+    checks: modelChecks,
     errors,
     logs,
     designDomain,
   } = useTopOpt();
+  // Without a static case there is nothing to optimize for.
+  const checks: [boolean, string][] = [
+    [
+      staticCase !== null,
+      staticCase
+        ? `Static case · ${staticCase.name}`
+        : "No static case — pick the static study to optimize for",
+    ],
+    ...modelChecks,
+  ];
+  const allOk = modelOk && staticCase !== null;
   const liveDensity = useModelStore((s) => s.liveDensity);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
@@ -92,6 +115,7 @@ export function OptimizePanel() {
   return (
     <div className={styles.panel}>
       <div className={styles.tabContent}>
+        {header}
         {error && (
           <div className={styles.errorBanner}>
             <span>{error}</span>
@@ -99,15 +123,7 @@ export function OptimizePanel() {
           </div>
         )}
 
-        <div className={styles.sectionLabel}>Pre-flight check</div>
-        {checks.map(([ok, label]) => (
-          <div key={label} className={styles.checkRow}>
-            <span className={ok ? styles.checkOk : styles.checkFail}>
-              {ok ? "✓" : "✗"}
-            </span>
-            <span className={styles.checkLabel}>{label}</span>
-          </div>
-        ))}
+        <PreflightChecks checks={checks} />
 
         <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
           Design domain
@@ -336,6 +352,7 @@ export function OptimizePanel() {
         )}
 
         <LogSection logs={logs} busy={isOptimizing} />
+        {footer}
       </div>
     </div>
   );

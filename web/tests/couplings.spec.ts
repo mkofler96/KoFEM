@@ -169,11 +169,13 @@ test("a coupling's kind, DOFs and point are editable, and deleting it removes th
   await pickFace(page, model.endFace);
   await page.getByTestId("apply-coupling").click();
 
-  // Applying selects the new coupling with its editor open. Switching to
-  // distributing drops the DOF mask — a distributing coupling ties all six of
-  // its point's DOFs by construction, so the checkboxes are not offered and the
-  // stored mask is the full set.
+  // Applying saves the coupling and selects it as saved — no editor to
+  // confirm. ✎ opens it. Switching to distributing drops the DOF mask — a
+  // distributing coupling ties all six of its point's DOFs by construction, so
+  // the checkboxes are not offered and the stored mask is the full set.
   const form = page.getByTestId("coupling-edit-form");
+  await expect(form).toBeHidden();
+  await page.getByTitle("Edit coupling").click();
   await expect(form).toBeVisible();
   await form.getByTestId("coupling-kind").selectOption("distributing");
   await expect(

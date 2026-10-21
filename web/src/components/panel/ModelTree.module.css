@@ -65,17 +65,6 @@
   color: var(--accent);
 }
 
-.done {
-  flex-shrink: 0;
-  width: 13px;
-  height: 13px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--ok-soft);
-  color: var(--ok);
-}
-
 .list {
   list-style: none;
   margin: 0;
@@ -145,7 +134,7 @@
   background: var(--muted-2);
 }
 
-/* Fixed entries (mesh, split tool, studies, results): a hollow square. */
+/* Analysis objects (the mesh, studies, result plots): a hollow square. */
 .viewMark {
   border: 1.5px solid var(--muted-2);
 }

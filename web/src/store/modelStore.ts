@@ -19,7 +19,6 @@ import { create } from "zustand";
 import type { StateCreator } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import type { AnalysisState } from "../lib/analysisFile";
-import { DEFAULT_THIN_RATIO } from "../lib/thinBodies";
 import {
   createGeometrySlice,
   isCadBody,
@@ -44,10 +43,12 @@ import {
   DEFAULT_TOPOPT_SETTINGS,
   type TopOptSlice,
 } from "./topOptSlice";
+import { createStudySlice, type StudySlice } from "./studySlice";
 import {
   createViewSlice,
   DEFAULT_DENSITY_THRESHOLD,
   addSelection,
+  applyTreeSelection,
   modeSelection,
   type ViewSlice,
 } from "./viewSlice";
@@ -106,6 +107,7 @@ export type {
 } from "./topOptSlice";
 export { DEFAULT_TOPOPT_SETTINGS } from "./topOptSlice";
 export type { LoadDisplay, ViewRepr } from "./viewSlice";
+export type { Study, StudyKind, ResultPlot } from "./studySlice";
 
 // Whole-model lifecycle actions — they touch every slice, so they live in the
 // combiner rather than in any single slice.
@@ -119,6 +121,7 @@ export type ModelState = GeometrySlice &
   BoundarySlice &
   ResultsSlice &
   TopOptSlice &
+  StudySlice &
   ViewSlice &
   AnalysisActions;
 
@@ -199,8 +202,28 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.viewRepr = a.viewRepr;
       s.deformScale = 1;
       s.densityThreshold = DEFAULT_DENSITY_THRESHOLD;
+      // Studies and plots are not saved. A meshed analysis reopens with the
+      // static study its supports and loads describe — and with the
+      // optimization of it when it was saved in that step — and a saved
+      // result with its field plotted.
+      s.studies =
+        a.nodes.length > 0
+          ? [{ id: 1, kind: "static", name: "Static 1", staticId: null }]
+          : [];
+      if (a.nodes.length > 0 && a.mode === "optimize")
+        s.studies.push({
+          id: 2,
+          kind: "topopt",
+          name: "Optimization 1",
+          staticId: 1,
+        });
+      s.nextStudyId = s.studies.length + 1;
+      s.resultPlots = a.result
+        ? [{ id: 1, source: "static", field: a.resultType }]
+        : [];
+      s.nextPlotId = s.resultPlots.length + 1;
       s.mode = a.mode;
-      s.treeSelection = modeSelection(a.mode);
+      applyTreeSelection(s, modeSelection(a.mode, s));
       s.stepImportError = null;
       s.isRunning = false;
       s.isMeshing = false;
@@ -259,8 +282,10 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.deformScale = 1;
       s.densityThreshold = DEFAULT_DENSITY_THRESHOLD;
       s.elementOrder = 1;
-      s.autoShell = true;
-      s.thinRatio = DEFAULT_THIN_RATIO;
+      s.studies = [];
+      s.nextStudyId = 1;
+      s.resultPlots = [];
+      s.nextPlotId = 1;
       s.nextMatId = 2;
       s.selectedFace = null;
       s.pendingFaces = [];
@@ -287,6 +312,7 @@ export const useModelStore = create<ModelState>()(
     ...createBoundarySlice(...args),
     ...createResultsSlice(...args),
     ...createTopOptSlice(...args),
+    ...createStudySlice(...args),
     ...createViewSlice(...args),
     ...createAnalysisActions(...args),
   })),

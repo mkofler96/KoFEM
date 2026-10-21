@@ -21,8 +21,7 @@ const SPLIT_TIP =
 const MODE_HINT: Record<SplitMode, string> = {
   faces:
     "Click the faces to split in the viewport, then Split. The part stays one body.",
-  bodies:
-    "Cuts every body the plane crosses into two bodies, bonded at the cut.",
+  bodies: "Cuts this body into two bodies, bonded at the cut.",
 };
 
 // Plane position typed as text, like the mesh sizes: there is no range to clamp
@@ -31,10 +30,10 @@ function formatMm(value: number): string {
   return String(Number(value.toPrecision(6)));
 }
 
-// The split tool: cut faces or bodies of the imported geometry with an
+// The split tool, an edit of one body: cut its faces, or the body itself, with an
 // axis-aligned plane. Closed, it is one button; open, it draws the cutting
 // plane in the viewport and (in face mode) lets the user pick the faces to cut.
-export function SplitSection() {
+export function SplitSection({ bodyId }: { bodyId: number }) {
   const stepSurface = useModelStore((s) => s.stepSurface);
   const stepBytes = useModelStore((s) => s.stepBytes);
   const hasMesh = useModelStore((s) => s.nodes.length > 0);
@@ -77,14 +76,14 @@ export function SplitSection() {
 
   // The tool as it is NOW, for a split's continuation: the worker answers after
   // an await, by which time the user may have closed the tool, switched to
-  // Bodies or left the Geometry step. The open/mode the split started with
+  // Bodies or left the body. The open/mode the split started with
   // would turn picking back on behind a closed form.
   const liveTool = useRef({ open, mode });
   useEffect(() => {
     liveTool.current = { open, mode };
   }, [open, mode]);
 
-  // Leaving the Geometry step (unmount) ends the tool, picks and plane included.
+  // Leaving the body (unmount) ends the tool, picks and plane included.
   useEffect(
     () => () => {
       liveTool.current = { ...liveTool.current, open: false };
@@ -137,7 +136,7 @@ export function SplitSection() {
   }
 
   async function applySplit() {
-    const ok = await split(mode, axis, parsed, splitFaceIds);
+    const ok = await split(mode, axis, parsed, splitFaceIds, [bodyId]);
     // The edit replaced every face id, so the old picks are gone; keep picking
     // so a run of cuts (both pads of a beam, say) needs no extra clicks.
     if (ok && liveTool.current.open && liveTool.current.mode === "faces")
@@ -147,7 +146,7 @@ export function SplitSection() {
   return (
     <>
       <div className={styles.sectionLabel} title={SPLIT_TIP}>
-        Split geometry
+        Edit
       </div>
       {/* Above the form, not in it: a split that fails after the tool was
           closed (or the step left) still has to be reported. */}
@@ -170,7 +169,7 @@ export function SplitSection() {
             }
             onClick={openTool}
           >
-            ✂ Split faces or bodies with a plane…
+            ✂ Split with a plane…
           </button>
           {geometryHistory.length > 0 && (
             <button

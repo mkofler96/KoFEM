@@ -129,9 +129,29 @@ test("the tree opens one entry at a time in the panel", async ({ page }) => {
   // A tree pick reopens a collapsed panel.
   await page.getByRole("button", { name: "Hide panel" }).click();
   await expect(page.locator("aside")).toBeHidden();
-  await page.getByTestId("tree-view-static").click();
+  await page.getByTestId("tree-add-studies").click();
   await expect(page.locator("aside")).toBeVisible();
-  await expect(title).toHaveText("Static solve");
+  await expect(title).toHaveText("New study");
+
+  // An optimization works on a static case, so it is offered once there is one.
+  await expect(page.getByTestId("add-study-topopt")).toBeDisabled();
+  await page.getByTestId("add-study-static").click();
+  await expect(title).toHaveText("Static 1");
+  await page.getByTestId("tree-add-studies").click();
+  await page.getByTestId("add-study-topopt").click();
+  await expect(page.getByTestId("add-study-static-case")).toHaveValue("1");
+  await page.getByTestId("add-study-create").click();
+  await expect(title).toHaveText("Optimization 1");
+  await expect(page.getByTestId("study-static-case")).toHaveValue("1");
+
+  // Deleting its static case leaves the optimization unable to run.
+  await page.getByTestId("tree-study-1").click();
+  await page.getByTestId("delete-study").click();
+  await page.getByTestId("tree-study-2").click();
+  await expect(page.getByTestId("study-static-case")).toHaveValue("");
+  await expect(
+    page.getByRole("button", { name: "Run optimization" }),
+  ).toBeDisabled();
 });
 
 test("saving a new material selects it", async ({ page }) => {
@@ -151,10 +171,10 @@ test("saving a new material selects it", async ({ page }) => {
 test("dividers collapse their entries and select nothing", async ({ page }) => {
   await gotoApp(page);
   const title = page.getByTestId("panel-title");
-  await expect(page.getByTestId("tree-view-mesh")).toBeVisible();
+  await expect(page.getByTestId("tree-add-mesh")).toBeVisible();
   await page.getByTestId("tree-group-mesh").click();
-  await expect(page.getByTestId("tree-view-mesh")).toBeHidden();
+  await expect(page.getByTestId("tree-add-mesh")).toBeHidden();
   await expect(title).toHaveText("Add geometry");
   await page.getByTestId("tree-group-mesh").click();
-  await expect(page.getByTestId("tree-view-mesh")).toBeVisible();
+  await expect(page.getByTestId("tree-add-mesh")).toBeVisible();
 });

@@ -4,8 +4,10 @@
 import { useEffect, useRef } from "react";
 
 // What a boundary section (BCs, loads, ties, couplings) shows for the
-// model-tree selection: the creation form ("+ Add") or a single object.
-export type SectionFocus = { type: "add" } | { type: "item"; id: number };
+// model-tree selection: the creation form ("+ Add") or a single object —
+// `created` when its "+ Add" form just made it.
+export type SectionFocus =
+  { type: "add" } | { type: "item"; id: number; created?: boolean };
 
 export function showsItem(focus: SectionFocus, id: number): boolean {
   return focus.type === "item" && focus.id === id;
@@ -20,9 +22,11 @@ export function showsPick(
   return focus.type === "add" ? targetId === null : targetId === focus.id;
 }
 
-// The id an object view opens its editor on, null otherwise.
+// The id an object view opens its editor on, null otherwise. Picking an object
+// in the tree opens its editor; one just applied is already saved, so it shows
+// as saved — no second confirmation.
 export function focusedId(focus: SectionFocus): number | null {
-  return focus.type === "item" ? focus.id : null;
+  return focus.type === "item" && !focus.created ? focus.id : null;
 }
 
 // Entering the add view starts the creation pick right away, so "+ Add" in the

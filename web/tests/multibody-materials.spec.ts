@@ -8,7 +8,12 @@
 import { test, expect } from "./coverage";
 import path from "path";
 import { importStep } from "./fixtures/app";
-import { addMaterial, openBody, openTree } from "./fixtures/tree";
+import {
+  addMaterial,
+  openBody,
+  openTree,
+  setElementType,
+} from "./fixtures/tree";
 
 interface Store {
   getState(): {
@@ -35,6 +40,7 @@ const store = (page: import("@playwright/test").Page) =>
 // meshed model carries a derived PSHELL alongside the two CAD bodies.
 async function importAndMeshFin(page: import("@playwright/test").Page) {
   await importStep(page, FIN_TWO_PARTS);
+  await setElementType(page, 2, "shell");
   await meshOnce(page);
 }
 
@@ -88,7 +94,7 @@ const drawnFraction = (page: import("@playwright/test").Page) =>
 
 // Playwright runs from web/; test_files sits one level up (see screenshot.spec).
 const TWO_BOXES = path.resolve("..", "test_files", "two_boxes.stp");
-// A solid base plus a 2 mm fin: auto-shell idealises the fin at mesh time, so
+// A solid base plus a 2 mm fin: marked Shell, the fin is idealised at mesh time, so
 // the meshed model carries a derived PSHELL property alongside the two CAD
 // bodies — the case the highlight has to resolve back to a tessellated body.
 const FIN_TWO_PARTS = path.resolve("..", "test_files", "fin_two_parts.step");
@@ -268,17 +274,10 @@ test("a shell-idealised body stays one row that still owns its walls", async ({
   ).toHaveLength(1);
   await expect(page.locator('[data-testid^="tree-body-"]')).toHaveCount(2);
 
-  // Thin-wall detection speaks in CAD bodies. Re-running it must not stamp the
-  // derived PSHELL "solid" — a shell property labelled solid drops out of the
-  // next mesh's shell bodies and quietly un-idealises the part.
-  const autoShell = page.getByTestId("auto-shell-detection");
-  await autoShell.uncheck();
-  await autoShell.check();
-  const redetected = await store(page);
-  expect(redetected.properties.find((p) => p.id === 2)?.discretization).toBe(
-    "shell",
-  );
-  for (const section of redetected.properties.filter(
+  // Setting the element type speaks in CAD bodies: it must not stamp the
+  // derived PSHELLs — they stay shells.
+  await setElementType(page, 2, "shell");
+  for (const section of (await store(page)).properties.filter(
     (p) => p.sourceBodyId !== undefined,
   ))
     expect(section.discretization).toBe("shell");

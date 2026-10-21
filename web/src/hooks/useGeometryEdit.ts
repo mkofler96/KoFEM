@@ -15,7 +15,6 @@ export type BooleanOp = "union" | "subtract" | "intersect";
 type EditReply = Required<StepTessellation> & {
   bytes: Uint8Array;
   bodyCount: number;
-  shellBodyIds: number[];
 };
 
 const AXIS_NORMAL: Record<SplitAxis, [number, number, number]> = {
@@ -43,7 +42,6 @@ export function splitPlane(
 export function useGeometryEdit() {
   const stepBytes = useModelStore((s) => s.stepBytes);
   const geometryFormat = useModelStore((s) => s.geometryFormat);
-  const thinRatio = useModelStore((s) => s.thinRatio);
   const properties = useModelStore((s) => s.properties);
   const applyGeometryEdit = useModelStore((s) => s.applyGeometryEdit);
   const undoGeometryEdit = useModelStore((s) => s.undoGeometryEdit);
@@ -57,6 +55,8 @@ export function useGeometryEdit() {
     axis: SplitAxis,
     position: number,
     faceIds: number[],
+    // Bodies mode: the bodies to cut; empty cuts every body the plane crosses.
+    bodyIds: number[] = [],
   ): Promise<boolean> {
     if (!stepBytes) {
       setSplitError(
@@ -77,6 +77,7 @@ export function useGeometryEdit() {
         mode,
         ...splitPlane(axis, position),
         ...(mode === "faces" ? { faceIds } : {}),
+        ...(mode === "bodies" && bodyIds.length > 0 ? { bodyIds } : {}),
       },
     });
   }
@@ -124,7 +125,6 @@ export function useGeometryEdit() {
       const reply = await sendToWorker<EditReply>(type, {
         bytes: stepBytes,
         format: geometryFormat,
-        thinRatio,
         ...edit,
       });
       applyGeometryEdit(
@@ -136,7 +136,6 @@ export function useGeometryEdit() {
           faceIds: reply.faceIds,
         },
         reply.bodyCount,
-        reply.shellBodyIds,
         bodySources?.(reply.bodyCount),
       );
       return true;
