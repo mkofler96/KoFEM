@@ -1,14 +1,15 @@
+import { fetchBinary, fetchJson, typedArray } from "./assets.js";
 import { createSurfaceExtractor } from "./smooth-surface.js";
 let sequence = null;
-function load({ metadata, buffer, center }) {
-  const read = (name) => {
-    const info = metadata.layout[name];
-    return info.type === "Uint32Array"
-      ? new Uint32Array(buffer, info.offset, info.length)
-      : new Float32Array(buffer, info.offset, info.length);
-  };
+async function load({ metadataUrl, dataUrl, center }) {
+  const [metadata, buffer] = await Promise.all([
+    fetchJson(metadataUrl),
+    fetchBinary(dataUrl),
+  ]);
+  const read = (name) => typedArray(buffer, metadata.layout[name]);
   const positions = read("positions");
   return {
+    metadata,
     nodeCount: positions.length / 3,
     fields: read("fields"),
     threshold: metadata.threshold,
@@ -41,15 +42,21 @@ function surface(request) {
     elapsedMs: performance.now() - started,
   };
 }
-self.onmessage = (event) => {
+self.onmessage = async (event) => {
   const data = event.data;
   try {
-    if (data.type === "init") sequence = load(data);
+    const init = data.type === "init";
+    if (init) sequence = await load(data);
     const result = surface(data);
-    self.postMessage({ type: "surface", amount: data.amount ?? 0, ...result }, [
-      result.positions.buffer,
-      result.normals.buffer,
-    ]);
+    self.postMessage(
+      {
+        type: "surface",
+        amount: data.amount ?? 0,
+        ...(init && { metadata: sequence.metadata }),
+        ...result,
+      },
+      [result.positions.buffer, result.normals.buffer],
+    );
   } catch (error) {
     self.postMessage({ type: "error", message: error.message });
   }
