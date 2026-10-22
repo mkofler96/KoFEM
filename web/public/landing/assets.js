@@ -23,6 +23,11 @@ const arrayTypes = { Float32Array, Uint32Array, Uint16Array, Int16Array };
 export function typedArray(buffer, info) {
   const Type = arrayTypes[info.type];
   if (!Type) throw Error(`Unsupported binary layout type ${info.type}`);
+  const end = info.offset + info.length * Type.BYTES_PER_ELEMENT;
+  if (end > buffer.byteLength)
+    throw Error(
+      `Binary layout ${info.type}(offset ${info.offset}, length ${info.length}) ends at byte ${end}, past the ${buffer.byteLength}-byte buffer: the .json and .bin come from different builds`,
+    );
   const array = new Type(buffer, info.offset, info.length);
   return info.scale === undefined
     ? array
