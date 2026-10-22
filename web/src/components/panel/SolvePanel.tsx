@@ -1,11 +1,24 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import type { ReactNode } from "react";
+import type { Study } from "../../store/modelStore";
 import { useSolver } from "../../hooks/useSolver";
 import { LogSection } from "./LogSection";
+import { PreflightChecks } from "./PreflightChecks";
 import styles from "./Panel.module.css";
 
-export function SolvePanel() {
+// One static study: the pre-flight check, the solver settings and the run.
+// `header` / `footer` carry the study's own controls.
+export function SolvePanel({
+  study,
+  header,
+  footer,
+}: {
+  study: Study;
+  header: ReactNode;
+  footer: ReactNode;
+}) {
   const {
     solve,
     error,
@@ -20,28 +33,21 @@ export function SolvePanel() {
   return (
     <div className={styles.panel}>
       <div className={styles.tabContent}>
+        {header}
         {error && (
           <div className={styles.errorBanner}>
             <span>{error}</span>
             <button onClick={() => setError(null)}>×</button>
           </div>
         )}
-        <div className={styles.sectionLabel}>Pre-flight check</div>
-        {checks.map(([ok, label]) => (
-          <div key={label} className={styles.checkRow}>
-            <span className={ok ? styles.checkOk : styles.checkFail}>
-              {ok ? "✓" : "✗"}
-            </span>
-            <span className={styles.checkLabel}>{label}</span>
-          </div>
-        ))}
+        <PreflightChecks checks={checks} />
 
         <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
           Solver settings
         </div>
         <div className={styles.statRow}>
           <span className={styles.statKey}>Step</span>
-          <span className={styles.statVal}>Static · Step-1</span>
+          <span className={styles.statVal}>Static · {study.name}</span>
         </div>
         <div className={styles.statRow}>
           <span className={styles.statKey}>Solver</span>
@@ -51,9 +57,8 @@ export function SolvePanel() {
           <span className={styles.statKey}>Output</span>
           <span className={styles.statVal}>U, S, RF</span>
         </div>
-        {/* The element order is set with the mesh controls on the Geometry
-            tab (issue #286) — echoed here read-only so the pre-solve summary
-            stays complete. */}
+        {/* The element order is set with the mesh controls (issue #286) —
+            echoed here read-only so the pre-solve summary stays complete. */}
         <div className={styles.statRow}>
           <span className={styles.statKey}>Element order</span>
           <span className={styles.statVal}>
@@ -72,6 +77,7 @@ export function SolvePanel() {
         </button>
 
         <LogSection logs={logs} busy={isRunning} />
+        {footer}
       </div>
     </div>
   );

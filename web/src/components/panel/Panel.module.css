@@ -904,17 +904,23 @@
   padding: 4px 0;
 }
 
-.checkOk {
-  color: var(--ok);
-  font-weight: 600;
-  font-size: 13px;
+.checkOk,
+.checkFail {
   flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  margin-top: 2px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+}
+.checkOk {
+  background: var(--ok-soft);
+  color: var(--ok);
 }
 .checkFail {
+  background: var(--warn-soft);
   color: var(--warn);
-  font-weight: 600;
-  font-size: 13px;
-  flex-shrink: 0;
 }
 
 .checkLabel {
@@ -1134,9 +1140,15 @@
     background 100ms ease;
 }
 
-.addChoice:hover {
+.addChoice:hover:not(:disabled),
+.addChoiceActive {
   border-color: var(--accent);
   background: var(--accent-soft);
+}
+
+.addChoice:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .addChoiceLabel {

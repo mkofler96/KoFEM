@@ -175,9 +175,11 @@ test("a tie's extent is editable after creation, and the tie is deletable", asyn
   await page.getByTestId("tie-distance").fill("0.6");
   await page.getByTestId("apply-tie").click();
 
-  // Applying selects the new tie with its editor open; switching to the full
-  // surface drops the distance.
+  // Applying saves the tie and selects it as saved — no editor to confirm.
+  // ✎ opens it; switching to the full surface drops the distance.
   const form = page.getByTestId("tie-edit-form");
+  await expect(form).toBeHidden();
+  await page.getByTitle("Edit tie").click();
   await expect(form).toBeVisible();
   await form.getByTestId("tie-extent").selectOption("full");
   await form.getByRole("button", { name: "Save" }).click();

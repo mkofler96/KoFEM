@@ -11,7 +11,6 @@ import {
 } from "../../store/geometrySlice";
 import type { TreeTarget } from "../../store/viewSlice";
 import { useGeometry } from "../../hooks/useGeometry";
-import { detectShellBodies } from "../../lib/thinBodies";
 import { SplitSection } from "./SplitSection";
 import { BooleanSection } from "./BooleanSection";
 import { EYE_ICON, EYE_OFF_ICON } from "./bodyIcons";
@@ -28,107 +27,12 @@ const BODIES_NOTE =
   "Touching bodies are bonded at their shared faces — a body that touches " +
   "nothing floats, so constrain it or check the assembly.";
 
-const AUTO_SHELL_TIP =
-  "Automatically preselect thin-walled bodies as Shell. Detection casts a ray " +
-  "inward from each body's surface and compares the wall thickness it finds " +
-  "against the body's own size; a body whose median wall is thinner than the " +
-  "ratio below is idealised as shells. Switch it off to keep every body Solid, " +
-  "or set each body's type by hand in the Bodies list below.";
-
-const AUTO_SHELL_RATIO_TIP =
-  "Wall-thickness threshold, as a fraction of the body's own bounding-box " +
-  "diagonal. A body whose median wall is thinner than this becomes Shell. " +
-  "Larger values shell more bodies. 0.02 (2 %) suits typical sheet-metal and " +
-  "cast housings; raise it for short, stubby thin parts.";
-
 const ELEMENT_TYPE_TIP =
   "How this body is discretised. Solid meshes it as tetrahedra (linear or " +
-  "quadratic per the Element order above). Shell idealises a thin-walled body's " +
-  "walls as Kirchhoff shells coupled to the solid bodies — far more robust for " +
-  "thin parts. Thin-walled bodies are preselected Shell automatically.";
-
-// Automatic shell idealisation: the on/off switch for thin-wall detection and,
-// while it is on, the ratio that decides how thin a wall must be. Shown for
-// every imported model — including single-body parts, where it is the only way
-// to choose between a shell and a solid idealisation (the per-body Element type
-// dropdown below appears for assemblies only).
-export function AutoShellSection() {
-  const stepSurface = useModelStore((s) => s.stepSurface);
-  const applyShellDetection = useModelStore((s) => s.applyShellDetection);
-  const autoShell = useModelStore((s) => s.autoShell);
-  const setAutoShell = useModelStore((s) => s.setAutoShell);
-  const thinRatio = useModelStore((s) => s.thinRatio);
-  const setThinRatio = useModelStore((s) => s.setThinRatio);
-
-  // Re-run thin-wall detection over the imported tessellation and re-apply the
-  // Shell/Solid choice. Detection is pure geometry (no mesh needed), so changing
-  // the threshold updates the bodies immediately; only the discretization is
-  // touched, so per-body material assignments survive.
-  const rerunDetection = (enabled: boolean, ratio: number) => {
-    if (!stepSurface) return;
-    if (!enabled) {
-      applyShellDetection([]);
-      return;
-    }
-    const vertices: number[] = [];
-    for (const point of stepSurface.points)
-      vertices.push(point[0], point[1], point[2]);
-    const triangles: number[] = [];
-    for (const tri of stepSurface.triangles)
-      triangles.push(tri[0], tri[1], tri[2]);
-
-    const triangleBodyIds =
-      stepSurface.bodyIds ?? stepSurface.triangles.map(() => 1);
-    applyShellDetection(
-      detectShellBodies(
-        { vertices, triangles, triangleBodyIds },
-        { thinRatio: ratio },
-      ),
-    );
-  };
-
-  if (!stepSurface) return null;
-
-  return (
-    <>
-      <div className={styles.sectionLabel} title={AUTO_SHELL_TIP}>
-        Shell idealisation
-      </div>
-      <label className={styles.formRow} title={AUTO_SHELL_TIP}>
-        <input
-          type="checkbox"
-          data-testid="auto-shell-detection"
-          checked={autoShell}
-          onChange={(e) => {
-            setAutoShell(e.target.checked);
-            rerunDetection(e.target.checked, thinRatio);
-          }}
-        />
-        <span className={styles.bodyLabel}>Automatic shell detection</span>
-      </label>
-      {autoShell && (
-        <div className={styles.formRow} title={AUTO_SHELL_RATIO_TIP}>
-          <span className={styles.formLabel}>Thin ratio</span>
-          <input
-            className={styles.formInput}
-            data-testid="auto-shell-ratio"
-            type="number"
-            min={0.001}
-            max={0.5}
-            step={0.005}
-            value={thinRatio}
-            onChange={(e) => {
-              const next = Number(e.target.value);
-              if (!Number.isFinite(next) || next <= 0) return;
-              setThinRatio(next);
-              rerunDetection(true, next);
-            }}
-          />
-        </div>
-      )}
-    </>
-  );
-}
+  "quadratic per the mesh's element order). Shell idealises the whole body as " +
+  "Kirchhoff shells on the mid-surface of its walls, coupled to the solid " +
+  "bodies it touches — far more robust for thin parts. A part that is only " +
+  "partly thin-walled: split off the thin walls first and make only them Shell.";
 
 // Tooltip for a body's name: what the last mesh made of its walls. Empty for a
 // body the mesh left solid, so only shelled bodies carry the hint.
@@ -247,8 +151,8 @@ function ImportSection() {
   );
 }
 
-// One body, opened from the model tree: visibility, material and (for an
-// assembly) element type — the body's row of the Bodies list as a form.
+// One body, opened from the model tree: visibility, material, element type and
+// the edits that cut it (the split tool).
 function BodyDetail({ id }: { id: number }) {
   const prop = useModelStore((s) => s.properties.find((p) => p.id === id));
   const properties = useModelStore((s) => s.properties);
@@ -335,28 +239,24 @@ function BodyDetail({ id }: { id: number }) {
           ))}
         </select>
       </div>
-      {assembly && (
-        <div className={styles.formRow} title={ELEMENT_TYPE_TIP}>
-          <span className={styles.formLabel}>Element type</span>
-          <select
-            className={styles.formSelect}
-            data-testid={`body-type-${prop.id}`}
-            // eslint-disable-next-line kofem/no-silent-fallback -- selected option for a body left at the default discretization; absent means solid, matching how geometrySlice assigns it
-            value={prop.discretization ?? "solid"}
-            onChange={(e) =>
-              setBodyDiscretization(
-                prop.id,
-                e.target.value as "shell" | "solid",
-              )
-            }
-          >
-            <option value="solid">Solid</option>
-            <option value="shell">Shell</option>
-          </select>
-        </div>
-      )}
+      <div className={styles.formRow} title={ELEMENT_TYPE_TIP}>
+        <span className={styles.formLabel}>Element type</span>
+        <select
+          className={styles.formSelect}
+          data-testid={`body-type-${prop.id}`}
+          // eslint-disable-next-line kofem/no-silent-fallback -- selected option for a body left at the default discretization; absent means solid, matching how geometrySlice assigns it
+          value={prop.discretization ?? "solid"}
+          onChange={(e) =>
+            setBodyDiscretization(prop.id, e.target.value as "shell" | "solid")
+          }
+        >
+          <option value="solid">Solid</option>
+          <option value="shell">Shell</option>
+        </select>
+      </div>
       {tip && <p className={styles.formNote}>{tip}</p>}
       {assembly && <p className={styles.formNote}>{BODIES_NOTE}</p>}
+      {!suppressed && <SplitSection bodyId={prop.id} />}
     </>
   );
 }
@@ -395,24 +295,13 @@ function AddGeometry() {
   );
 }
 
-// The Geometry entries: "+ Add" imports or combines, the split tool cuts, and
-// each body has its own properties.
+// The Geometry entries: "+ Add" imports or combines, and each body has its own
+// properties and edits.
 export function GeometryPanel({ target }: { target: TreeTarget }) {
-  const hasGeometry = useModelStore((s) => s.stepSurface !== null);
   return (
     <div className={styles.panel}>
       <div className={styles.tabContent}>
         {target.type === "add" && <AddGeometry />}
-        {target.type === "view" && target.view === "split" && (
-          <>
-            {!hasGeometry && (
-              <div className={styles.empty}>
-                Import a CAD model to split it.
-              </div>
-            )}
-            <SplitSection />
-          </>
-        )}
         {target.type === "item" && <BodyDetail id={target.id} />}
       </div>
     </div>

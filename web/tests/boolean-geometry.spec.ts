@@ -9,7 +9,7 @@ import { test, expect } from "./coverage";
 import type { Page } from "@playwright/test";
 import { importStep } from "./fixtures/app";
 import { geometryCounts } from "./fixtures/split";
-import { addMaterial, openBody, openTree } from "./fixtures/tree";
+import { addMaterial, openBody } from "./fixtures/tree";
 
 // Two boxes sharing a face: they touch but do not overlap.
 const TWO_BOXES = path.resolve("..", "test_files", "two_boxes.stp");
@@ -77,7 +77,7 @@ test("bodies keep their settings when a Boolean renumbers them", async ({
   test.setTimeout(180_000);
   await importStep(page, TWO_BOXES);
   // Three bodies: cut the second box (x 20–40) in two at x = 30.
-  await openTree(page, "split");
+  await openBody(page, 2);
   await page.getByTestId("split-open").click();
   await page.getByTestId("split-mode-bodies").click();
   await page.getByTestId("split-axis").selectOption("x");

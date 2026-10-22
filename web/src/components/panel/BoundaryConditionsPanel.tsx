@@ -36,7 +36,7 @@ function focusFor(
   if (target.type === "add")
     return target.kind === kind ? { type: "add" } : undefined;
   if (target.type === "item" && target.kind === kind)
-    return { type: "item", id: target.id };
+    return { type: "item", id: target.id, created: target.created };
   return undefined;
 }
 

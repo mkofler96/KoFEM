@@ -3,32 +3,37 @@
 
 import { useModelStore } from "../../store/modelStore";
 import type { TreeItemKind, TreeSelection } from "../../store/viewSlice";
-import { AutoShellSection, GeometryPanel } from "./GeometryPanel";
+import { GeometryPanel } from "./GeometryPanel";
 import { MaterialsPanel } from "./MaterialsPanel";
 import { MeshPanel } from "./MeshPanel";
 import {
   BOUNDARY_KINDS,
   BoundaryConditionsPanel,
 } from "./BoundaryConditionsPanel";
-import { SolvePanel } from "./SolvePanel";
-import { OptimizePanel } from "./OptimizePanel";
+import { StudiesPanel } from "./StudiesPanel";
 import { ResultsPanel } from "./ResultsPanel";
-import { TREE_GROUPS, VIEW_LABEL } from "./ModelTree";
+import { TREE_GROUPS } from "./ModelTree";
 import { useTreeItems } from "./modelTreeItems";
 import styles from "./Panel.module.css";
 
 const KIND_LABEL: Record<TreeItemKind, string> = {
   body: "Body",
   material: "Material",
+  mesh: "Mesh",
   bc: "Support",
   load: "Load",
   tie: "Tie",
   coupling: "Coupling",
+  study: "Study",
+  plot: "Result plot",
 };
 
 function addTitle({ group, target }: TreeSelection): string {
   if (group === "geometry") return "Add geometry";
   if (group === "materials") return "New material";
+  if (group === "mesh") return "New mesh";
+  if (group === "studies") return "New study";
+  if (group === "results") return "New result plot";
   if (target.type === "add" && target.kind !== null) {
     const kind = BOUNDARY_KINDS.find((k) => k.kind === target.kind);
     if (kind) return `New ${kind.label.toLowerCase()}`;
@@ -52,15 +57,12 @@ export function PropertiesPanel() {
     title = items[group].find(
       (i) => i.kind === target.kind && i.id === target.id,
     )?.label;
-  } else if (target.type === "add") {
-    title = addTitle(selection);
   } else {
-    title = VIEW_LABEL[target.view];
+    title = addTitle(selection);
   }
 
   // Keyed by the selection so each object opens with fresh form state.
   const key = JSON.stringify(selection);
-  const view = target.type === "view" ? target.view : null;
   return (
     <aside className={styles.aside}>
       <header className={styles.panelHeader}>
@@ -71,20 +73,18 @@ export function PropertiesPanel() {
       </header>
       {group === "geometry" && <GeometryPanel key={key} target={target} />}
       {group === "materials" && <MaterialsPanel key={key} target={target} />}
-      {view === "mesh" && (
+      {group === "mesh" && (
         <div className={styles.panel}>
           <div className={styles.tabContent}>
             <MeshPanel />
-            <AutoShellSection />
           </div>
         </div>
       )}
       {group === "boundary" && (
         <BoundaryConditionsPanel key={key} target={target} />
       )}
-      {view === "static" && <SolvePanel />}
-      {view === "topopt" && <OptimizePanel />}
-      {view === "results" && <ResultsPanel />}
+      {group === "studies" && <StudiesPanel key={key} target={target} />}
+      {group === "results" && <ResultsPanel key={key} target={target} />}
     </aside>
   );
 }

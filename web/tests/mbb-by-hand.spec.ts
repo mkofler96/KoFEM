@@ -163,6 +163,10 @@ test("the MBB beam example can be built by hand, and survives a finer re-mesh", 
   await clickModelAt(page, [150, 50, 5]);
   await page.getByText("Fy (N)").locator("..").locator("input").fill("-1000");
   await page.getByRole("button", { name: "Apply Load" }).click();
+  // Applying is saving: the new load opens as saved, with no editor waiting
+  // for a second confirmation.
+  await expect(page.getByTestId("panel-title")).toHaveText("Load1");
+  await expect(page.getByTestId("load-edit-form")).toBeHidden();
 
   const built = await readModel(page);
   expect(built.bc.map((g) => g.dofs)).toEqual([[0, 1, 2], [1]]);

@@ -121,8 +121,8 @@ export function useMesh() {
         format: geometryFormat,
         maxElementSize: maxSize,
         minElementSize: minSize,
-        // Bodies the user (or detectShellBodies at import) marked Shell, plus the
-        // property table: meshing idealises their thin walls to a mid-surface
+        // Bodies the user marked Shell, plus the property table: meshing
+        // idealises them to a mid-surface
         // shell mesh and returns the mixed CTRIA3 + CTETRA model (#397). Only CAD
         // bodies can be idealised — the PSHELLs a previous mesh derived are
         // shells already, and passing their ids would send the thin-wall

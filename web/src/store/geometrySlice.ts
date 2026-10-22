@@ -6,8 +6,7 @@
 
 import { current } from "immer";
 import type { ModelState, SliceCreator } from "./modelStore";
-import { viewSelection } from "./viewSlice";
-import { DEFAULT_THIN_RATIO } from "../lib/thinBodies";
+import { addSelection } from "./viewSlice";
 import { carryGroupsToMesh, remeshNotice } from "../lib/remeshGroups";
 import {
   rebuildConstraints,
@@ -40,9 +39,9 @@ export type ElementType = "CTETRA" | "CHEXA" | "CTRIA3";
 // by shell elements; meaningless (and absent) on solid bodies.
 // How a body is discretised for the solve, chosen per body before meshing.
 // "solid" meshes the body as tetrahedra (linear or quadratic per the global
-// element order); "shell" idealises its thin walls as Kirchhoff shells coupled to
-// the solid bodies (the auto-shell path). Thin-walled bodies are auto-preselected
-// "shell" at import (detectShellBodies); the user can switch any body.
+// element order); "shell" idealises the whole body as Kirchhoff shells on the
+// mid-surface of its walls, coupled to the solid bodies it touches. Every body
+// starts "solid"; a part that is only partly thin is split into bodies first.
 export type BodyDiscretization = "shell" | "solid";
 
 export interface Property {
@@ -180,12 +179,6 @@ export interface GeometrySlice {
   surfaceTriangles: [number, number, number][] | null;
   surfaceFaceIds: number[] | null;
   stepImportError: string | null;
-  // Automatic thin-wall detection (auto-shell): when on, every CAD import — and
-  // every change of `thinRatio` — preselects the bodies whose median wall is
-  // thinner than `thinRatio` times their own bounding-box diagonal as Shell.
-  // When off no body is preselected; the element type is the user's alone.
-  autoShell: boolean;
-  thinRatio: number;
   // Geometry edits (the split tool), newest last — each entry is the geometry
   // as it was BEFORE that edit, so undo pops one. Cleared by an import or a
   // loaded analysis, which start a new geometry history.
@@ -215,19 +208,12 @@ export interface GeometrySlice {
   addProperty(prop: Property): void;
   // Rebuild the body list after a CAD import: one property per body, all
   // defaulting to the first material (#353). Assignments are per-import —
-  // body indices from different files don't correspond. `shellBodyIds` (1-based
-  // body ids detected as thin-walled) preselect those bodies as shells.
-  setBodies(count: number, shellBodyIds?: number[]): void;
+  // body indices from different files don't correspond. Every body starts
+  // Solid; Shell is the user's choice per body.
+  setBodies(count: number): void;
   assignBodyMaterial(propertyId: number, materialId: number): void;
   setBodySuppressed(propertyId: number, suppressed: boolean): void;
   setBodyDiscretization(propertyId: number, disc: BodyDiscretization): void;
-  // Re-apply an automatic thin-wall detection result: sets each body's
-  // discretization from `shellBodyIds` (1-based) WITHOUT rebuilding the property
-  // table, so per-body material assignments survive. Pass an empty list to make
-  // every body Solid (automatic detection switched off).
-  applyShellDetection(shellBodyIds: number[]): void;
-  setAutoShell(enabled: boolean): void;
-  setThinRatio(ratio: number): void;
   setStepSurface(tessellation: StepTessellation | null): void;
   setStepBytes(bytes: Uint8Array | null): void;
   setGeometryFormat(format: GeometryFormat): void;
@@ -239,12 +225,11 @@ export interface GeometrySlice {
   // its tessellation. The mesh, groups and results of the old geometry are
   // dropped — they no longer describe it. The body table survives when the body
   // count is unchanged (a face split); a body split renumbers the bodies and
-  // rebuilds it as an import would, preselecting `shellBodyIds` as shells.
+  // rebuilds it as an import would.
   applyGeometryEdit(
     bytes: Uint8Array,
     tessellation: StepTessellation,
     bodyCount: number,
-    shellBodyIds: number[],
     // For an edit that knows where each new body came from (a Boolean): entry
     // j is the old id of new Body j+1, whose settings it inherits.
     bodySources?: number[],
@@ -275,20 +260,13 @@ export interface GeometrySlice {
 // freshly loaded geometry (#353). A surface-only geometry reports 0 bodies;
 // keep one property so the material UI stays functional (meshing fails loudly on
 // its own).
-function freshBodies(
-  s: ModelState,
-  count: number,
-  shellBodyIds: number[],
-): Property[] {
+function freshBodies(s: ModelState, count: number): Property[] {
   const mat = s.materials[0];
   if (!mat) throw new Error("Cannot list bodies: the model has no materials");
-  const shell = new Set(shellBodyIds);
   return Array.from({ length: Math.max(1, count) }, (_, i) => ({
     id: i + 1,
     materialId: mat.id,
-    discretization: shell.has(i + 1)
-      ? ("shell" as BodyDiscretization)
-      : ("solid" as BodyDiscretization),
+    discretization: "solid" as BodyDiscretization,
   }));
 }
 
@@ -351,8 +329,6 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
   surfaceTriangles: null,
   surfaceFaceIds: null,
   stepImportError: null,
-  autoShell: true,
-  thinRatio: DEFAULT_THIN_RATIO,
   geometryHistory: [],
   splitPicking: false,
   splitFaceIds: [],
@@ -373,35 +349,9 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
     set((s) => {
       s.properties.push(prop);
     }),
-  setBodies: (count, shellBodyIds) =>
+  setBodies: (count) =>
     set((s) => {
-      s.properties = freshBodies(s, count, shellBodyIds ?? []);
-    }),
-  applyShellDetection: (shellBodyIds) =>
-    set((s) => {
-      const shell = new Set(shellBodyIds);
-      // Detection runs over the CAD bodies of the tessellation, so only they can
-      // be marked. A PSHELL the mesh derived is a shell by construction; letting
-      // this loop stamp it "solid" left a thickness-carrying shell property
-      // labelled solid, which then dropped out of the next mesh's shell bodies.
-      for (const prop of s.properties) {
-        if (!isCadBody(prop)) continue;
-        prop.discretization = shell.has(prop.id)
-          ? ("shell" as BodyDiscretization)
-          : ("solid" as BodyDiscretization);
-      }
-    }),
-  setAutoShell: (enabled) =>
-    set((s) => {
-      s.autoShell = enabled;
-    }),
-  setThinRatio: (ratio) =>
-    set((s) => {
-      if (!Number.isFinite(ratio) || ratio <= 0)
-        throw new Error(
-          `Thin ratio must be a positive number, got ${String(ratio)}`,
-        );
-      s.thinRatio = ratio;
+      s.properties = freshBodies(s, count);
     }),
   setBodySuppressed: (propertyId, suppressed) =>
     set((s) => {
@@ -466,7 +416,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
         s.hasStarted = true;
         s.mode = "geometry";
         // Next step after an import: the mesh controls.
-        s.treeSelection = viewSelection("mesh", "mesh");
+        s.treeSelection = addSelection("mesh");
       }
     }),
   setVolMesh: (mesh) =>
@@ -486,13 +436,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
     set((s) => {
       s.stepImportError = msg;
     }),
-  applyGeometryEdit: (
-    bytes,
-    tessellation,
-    bodyCount,
-    shellBodyIds,
-    bodySources,
-  ) =>
+  applyGeometryEdit: (bytes, tessellation, bodyCount, bodySources) =>
     set((s) => {
       if (!s.stepBytes || !s.stepSurface)
         throw new Error(
@@ -531,7 +475,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
         s.properties =
           cadBodies.length === Math.max(1, bodyCount)
             ? cadBodies
-            : freshBodies(s, bodyCount, s.autoShell ? shellBodyIds : []);
+            : freshBodies(s, bodyCount);
       dropAnalysis(s);
     }),
   undoGeometryEdit: () =>

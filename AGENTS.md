@@ -92,9 +92,10 @@ touch nearly every layer, so check them before assuming a change is solid-only:
 
 - **Shells.** Thin-walled bodies are meshed as `CTRIA3` and solved with Kirchhoff
   plate/DKT elements (`shell_core.cpp`, `solve_shell.cpp`). Mid-surface extraction
-  and the shell mesh assembly live in `web/src/lib/shellize.ts`. Auto-shell
-  detection picks the path from a wall-thickness ratio at mesh time and stores a
-  mixed `CTRIA3` + `CTETRA` model.
+  and the shell mesh assembly live in `web/src/lib/shellize.ts`. Shell is the
+  user's per-body Element type — nothing is detected automatically. A body marked
+  Shell is idealised as shells everywhere at mesh time (a partly thin part is
+  split into bodies first), and the mesh stores a mixed `CTRIA3` + `CTETRA` model.
 - **Multibody.** Assemblies carry per-body materials and per-body element type
   (shell or solid). Bodies are joined by bonded ties; shell-to-solid interfaces
   use explicit **RBE3** coupling. The mixed solve is `solve_coupled.cpp`.

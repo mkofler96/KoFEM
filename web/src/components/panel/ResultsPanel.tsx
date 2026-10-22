@@ -1,8 +1,14 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import type { ReactNode } from "react";
 import { useModelStore, RESULT_TYPES } from "../../store/modelStore";
-import type { DensityResult, ResultType } from "../../store/modelStore";
+import type {
+  DensityResult,
+  ResultPlot,
+  ResultType,
+} from "../../store/modelStore";
+import type { TreeTarget } from "../../store/viewSlice";
 import {
   computeResultRange,
   resultFieldSymbol,
@@ -24,7 +30,12 @@ import styles from "./Panel.module.css";
 // The density-field result view (KOF-233): the threshold slider that filters the
 // viewport, the convergence plot from the returned history, and the run summary.
 // Shown whenever a topology-optimization run is the active result.
-function TopOptSummary({ density, levelSet, history }: DensityResult) {
+function TopOptSummary({
+  density,
+  levelSet,
+  history,
+  footer,
+}: DensityResult & { footer: ReactNode }) {
   // Changing any TO setting clears the density result, so the store's settings
   // are the ones this run used — including its σ_allow (KOF-236).
   const stressConstraint = useModelStore((s) => s.topOpt.stressConstraint);
@@ -130,6 +141,7 @@ function TopOptSummary({ density, levelSet, history }: DensityResult) {
               ? "The smooth surface shown at the current threshold, in model units."
               : "Faceted surface of the elements shown at the current threshold, in model units."}
         </div>
+        {footer}
       </div>
     </div>
   );
@@ -174,40 +186,109 @@ function downloadDensityStl(
   URL.revokeObjectURL(url);
 }
 
-export function ResultsPanel() {
+// "Von Mises stress" → "von-mises-stress", for test ids.
+function fieldSlug(field: ResultType): string {
+  return field
+    .toLowerCase()
+    .replace(/[^a-z]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+// Results → + Add: pick the result to plot — a field of the static solve, or
+// the optimization's density. A result its study has not produced yet cannot
+// be picked.
+function AddResultPlot() {
+  const hasStatic = useModelStore((s) => s.result !== null);
+  const hasDensity = useModelStore((s) => s.densityResult !== null);
+  const addResultPlot = useModelStore((s) => s.addResultPlot);
+  return (
+    <div className={styles.addChooser}>
+      {RESULT_TYPES.map((field) => (
+        <button
+          key={field}
+          className={styles.addChoice}
+          data-testid={`add-plot-${fieldSlug(field)}`}
+          disabled={!hasStatic}
+          onClick={() => addResultPlot("static", field)}
+        >
+          <span className={styles.addChoiceLabel}>{field}</span>
+          <span className={styles.addChoiceHint}>
+            {hasStatic
+              ? `Static solve · ${resultUnit(field)}`
+              : "Run a static study first"}
+          </span>
+        </button>
+      ))}
+      <button
+        className={styles.addChoice}
+        data-testid="add-plot-density"
+        disabled={!hasDensity}
+        onClick={() => addResultPlot("density", null)}
+      >
+        <span className={styles.addChoiceLabel}>Density</span>
+        <span className={styles.addChoiceHint}>
+          {hasDensity
+            ? "Topology optimization · material layout"
+            : "Run a topology optimization first"}
+        </span>
+      </button>
+    </div>
+  );
+}
+
+function Empty({ text, footer }: { text: string; footer: ReactNode }) {
+  return (
+    <div className={styles.panel}>
+      <div className={styles.tabContent}>
+        <div className={styles.empty}>{text}</div>
+        {footer}
+      </div>
+    </div>
+  );
+}
+
+// One result plot: the density view of an optimization, or a field of the
+// static solve with its scale, legend and summary.
+function PlotDetail({ plot }: { plot: ResultPlot }) {
   const result = useModelStore((s) => s.result);
   const densityResult = useModelStore((s) => s.densityResult);
-  const activeResult = useModelStore((s) => s.activeResult);
-  const resultType = useModelStore((s) => s.resultType);
-  const setResultType = useModelStore((s) => s.setResultType);
+  const setPlotField = useModelStore((s) => s.setPlotField);
+  const deleteResultPlot = useModelStore((s) => s.deleteResultPlot);
   const deformScale = useModelStore((s) => s.deformScale);
   const setDeformScale = useModelStore((s) => s.setDeformScale);
   const nodes = useModelStore((s) => s.nodes);
   const elements = useModelStore((s) => s.elements);
 
-  // Show the density when an optimization is the current result (it just ran, or
-  // it is the only result present) — a static result left from an earlier solve
-  // must not shadow it after the hand-off.
-  if (densityResult && (activeResult === "density" || !result))
-    return <TopOptSummary {...densityResult} />;
+  const footer = (
+    <button
+      className={styles.dangerBtn}
+      data-testid="delete-plot"
+      onClick={() => deleteResultPlot(plot.id)}
+    >
+      Delete plot
+    </button>
+  );
 
-  if (!result) {
-    return (
-      <div className={styles.panel}>
-        <div className={styles.tabContent}>
-          <div className={styles.empty}>No results — run the solver first</div>
-        </div>
-      </div>
+  if (plot.source === "density")
+    return densityResult ? (
+      <TopOptSummary {...densityResult} footer={footer} />
+    ) : (
+      <Empty
+        text="No density — run the topology optimization"
+        footer={footer}
+      />
     );
-  }
 
+  if (!result || plot.field === null)
+    return <Empty text="No results — run the static study" footer={footer} />;
+
+  const resultType = plot.field;
   // Min/max of the selected scalar field over all nodes — the same field and
   // node averaging used for the viewport coloring and colorbar legend.
   const stats = computeResultRange(result, resultType, nodes, elements);
 
   const fieldSymbol = resultFieldSymbol(resultType);
   const unit = resultUnit(resultType);
-
   return (
     <div className={styles.panel}>
       <div className={styles.tabContent}>
@@ -215,8 +296,9 @@ export function ResultsPanel() {
         <select
           className={styles.formSelect}
           style={{ marginBottom: 12 }}
+          data-testid="plot-field"
           value={resultType}
-          onChange={(e) => setResultType(e.target.value as ResultType)}
+          onChange={(e) => setPlotField(plot.id, e.target.value as ResultType)}
         >
           {RESULT_TYPES.map((t) => (
             <option key={t} value={t}>
@@ -282,6 +364,23 @@ export function ResultsPanel() {
               : "No nodal data"}
           </div>
         )}
+        {footer}
+      </div>
+    </div>
+  );
+}
+
+export function ResultsPanel({ target }: { target: TreeTarget }) {
+  const plot = useModelStore((s) =>
+    target.type === "item"
+      ? s.resultPlots.find((p) => p.id === target.id)
+      : undefined,
+  );
+  if (target.type === "item") return plot ? <PlotDetail plot={plot} /> : null;
+  return (
+    <div className={styles.panel}>
+      <div className={styles.tabContent}>
+        <AddResultPlot />
       </div>
     </div>
   );

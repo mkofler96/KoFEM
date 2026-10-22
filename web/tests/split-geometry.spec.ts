@@ -82,6 +82,29 @@ test("split a body in two: the halves are separate bodies, bonded on mesh", asyn
   expect((await geometryCounts(page)).faces).toBe(11);
   await expect(page.getByTestId("tree-body-2")).toBeVisible();
 
+  // Each half is drawn closed: the shared cut face is tessellated for both
+  // bodies, so hiding one leaves the other a solid rather than an open shell
+  // you can see into.
+  const facesPerBody = await page.evaluate(() => {
+    const surface = (
+      window as unknown as {
+        __kofemStore: {
+          getState(): {
+            stepSurface: { bodyIds?: number[]; faceIds?: number[] };
+          };
+        };
+      }
+    ).__kofemStore.getState().stepSurface;
+    const faces: Record<number, Set<number>> = {};
+    surface.faceIds?.forEach((face, tri) => {
+      const body = surface.bodyIds?.[tri];
+      if (body === undefined) return;
+      (faces[body] ??= new Set()).add(face);
+    });
+    return Object.values(faces).map((set) => set.size);
+  });
+  expect(facesPerBody).toEqual([6, 6]);
+
   await page.getByRole("button", { name: "Close" }).click();
   await openTree(page, "mesh");
   await page.getByTestId("max-element-size").fill("20");

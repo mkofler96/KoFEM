@@ -79,12 +79,13 @@ val tessellate_step(val bytes_val, const std::string& opts_json) {
     if (!mesher.IsDone())
         throw std::runtime_error("BRepMesh_IncrementalMesh failed");
 
-    // Map every face to its owning body (1-based solid index in TopExp order —
-    // the same order generate_fem_mesh numbers bodies, so a triangle's body id
-    // matches its tets' body id). A face shared by two solids (an imprinted
-    // interface, issue #353) is attributed to the first — it is internal and
-    // hidden between the bodies, so the choice has no visible effect. Faces
-    // under no solid (surface-only geometry, bodyCount 0) default to body 1.
+    // Body id of a triangle: the 1-based solid index in TopExp order — the same
+    // order generate_fem_mesh numbers bodies, so a triangle's body id matches its
+    // tets' body id. Faces are emitted per solid, so a face shared by two solids
+    // (an imprinted interface or a split's cut, issue #353) is drawn once for
+    // each, with that solid's orientation: hiding or dimming one body leaves the
+    // other closed. Faces under no solid (surface-only geometry, bodyCount 0)
+    // follow as body 1.
     TopTools_IndexedMapOfShape solids;
     TopExp::MapShapes(shape, TopAbs_SOLID, solids);
     // CAD face id of every triangle: the face's 1-based index in the shape's
@@ -102,22 +103,12 @@ val tessellate_step(val bytes_val, const std::string& opts_json) {
     std::vector<uint32_t> tri_bodies;  // one 1-based body id per triangle
     std::vector<uint32_t> tri_faces;   // one 1-based CAD face id per triangle
 
-    for (TopExp_Explorer exp(shape, TopAbs_FACE); exp.More(); exp.Next()) {
-        TopoDS_Face face = TopoDS::Face(exp.Current());
+    auto emit_face = [&](const TopoDS_Face& face, uint32_t body) {
         TopLoc_Location loc;
         Handle(Poly_Triangulation) tri = BRep_Tool::Triangulation(face, loc);
-        if (tri.IsNull()) continue;
-
-        uint32_t body = 1;
-        if (face_solids.Contains(face)) {
-            const TopTools_ListOfShape& owners = face_solids.FindFromKey(face);
-            if (!owners.IsEmpty())
-                body = (uint32_t)solids.FindIndex(owners.First());
-        }
-        if (body < 1) body = 1;
+        if (tri.IsNull()) return;
         const auto face_id = (uint32_t)faces.FindIndex(face);
-
-        uint32_t base = (uint32_t)(verts.size() / 3);
+        const auto base = (uint32_t)(verts.size() / 3);
 
         for (int i = 1; i <= tri->NbNodes(); ++i) {
             gp_Pnt pt = tri->Node(i).Transformed(loc);
@@ -137,6 +128,15 @@ val tessellate_step(val bytes_val, const std::string& opts_json) {
             tri_bodies.push_back(body);
             tri_faces.push_back(face_id);
         }
+    };
+
+    for (int s = 1; s <= solids.Extent(); ++s)
+        for (TopExp_Explorer exp(solids(s), TopAbs_FACE); exp.More(); exp.Next())
+            emit_face(TopoDS::Face(exp.Current()), (uint32_t)s);
+    for (TopExp_Explorer exp(shape, TopAbs_FACE); exp.More(); exp.Next()) {
+        const bool in_solid = face_solids.Contains(exp.Current()) &&
+                              !face_solids.FindFromKey(exp.Current()).IsEmpty();
+        if (!in_solid) emit_face(TopoDS::Face(exp.Current()), 1);
     }
 
     if (verts.empty())
