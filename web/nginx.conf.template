@@ -30,11 +30,15 @@ server {
     # The React solver is mounted below /app/. Deep links under that prefix must
     # serve the app entry; the marketing landing page remains the root fallback.
     location /app/ {
+        add_header Cache-Control "no-cache";
         try_files $uri $uri/ /app/index.html;
     }
 
-    # Static marketing landing fallback.
+    # Static marketing landing fallback. Its /landing/ files keep their names
+    # across deploys, and each .json describes the layout of its .bin. Without
+    # revalidation a browser can pair a cached .json with a newer .bin.
     location / {
+        add_header Cache-Control "no-cache";
         try_files $uri $uri/ /index.html;
     }
 }
