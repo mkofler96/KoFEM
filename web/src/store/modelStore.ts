@@ -19,11 +19,8 @@ import { create } from "zustand";
 import type { StateCreator } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import type { AnalysisState } from "../lib/analysisFile";
-import {
-  createGeometrySlice,
-  isCadBody,
-  type GeometrySlice,
-} from "./geometrySlice";
+import { bodiesLeftOutOfMesh } from "../lib/suppressBodies";
+import { createGeometrySlice, type GeometrySlice } from "./geometrySlice";
 import {
   createMaterialSlice,
   DEFAULT_MATERIAL,
@@ -150,10 +147,11 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
         color: m.color ?? MATERIAL_PALETTE[i % MATERIAL_PALETTE.length],
       }));
       s.properties = a.properties;
-      // A saved mesh was made with the saved suppression, so they agree.
-      s.meshSuppressedIds = a.properties
-        .filter((p) => isCadBody(p) && p.suppressed)
-        .map((p) => p.id);
+      // Read the mesh-time suppression from the saved mesh, not from the saved
+      // flags: a body suppressed or restored after meshing and saved without
+      // re-meshing must still block the solve until it is re-meshed.
+      s.meshSuppressedIds =
+        a.nodes.length > 0 ? bodiesLeftOutOfMesh(a.properties, a.elements) : [];
       s.bcGroups = a.bcGroups;
       s.loadGroups = a.loadGroups;
       s.tieGroups = a.tieGroups;

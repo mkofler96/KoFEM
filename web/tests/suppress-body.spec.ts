@@ -5,10 +5,12 @@
 // were deleted — not drawn, not meshed, not analysed — and comes back with one
 // click.
 
+import fs from "fs";
+import os from "os";
 import path from "path";
 import { test, expect } from "./coverage";
 import type { Page } from "@playwright/test";
-import { importStep } from "./fixtures/app";
+import { gotoApp, importStep } from "./fixtures/app";
 import { openBody, openTree } from "./fixtures/tree";
 
 const TWO_BOXES = path.resolve("..", "test_files", "two_boxes.stp");
@@ -83,6 +85,38 @@ test("a suppressed body is left out of the mesh and comes back when unsuppressed
   ).toBeVisible();
   await mesh(page);
   expect((await state(page)).bodies).toEqual([1, 2]);
+});
+
+// The saved file holds the mesh and the current flags. A body suppressed after
+// meshing and saved without re-meshing is still in that mesh, so the reopened
+// analysis must still refuse to solve it, as the session that saved it did.
+test("a suppression made after meshing still blocks the solve after save and load", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await importStep(page, TWO_BOXES);
+  await mesh(page);
+  await openBody(page, 2);
+  await page.getByTestId("body-suppressed-2").check();
+
+  const file = path.join(
+    fs.mkdtempSync(path.join(os.tmpdir(), "kofem-suppress-")),
+    "suppressed-after-mesh.vtu",
+  );
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Save analysis" }).click();
+  await (await download).saveAs(file);
+
+  await gotoApp(page);
+  await page.locator('input[type="file"][accept=".vtu"]').setInputFiles(file);
+  await expect.poll(async () => (await state(page)).nodes).toBeGreaterThan(0);
+  const loaded = await state(page);
+  expect(loaded.bodies).toEqual([1, 2]);
+  expect(loaded.suppressed).toEqual([2]);
+  await openTree(page, "static");
+  await expect(
+    page.getByText("Re-mesh: suppressed Body 2 still in the mesh"),
+  ).toBeVisible();
 });
 
 test("the last body in the model cannot be suppressed", async ({ page }) => {

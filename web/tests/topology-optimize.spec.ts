@@ -162,6 +162,75 @@ test("optimize_topology worker: density field of element length + progress logs"
   expect(logs.some((l) => l.includes("[topopt] it"))).toBe(true);
 });
 
+// A suppressed body is not in the mesh, so its element type no longer applies:
+// a Shell-marked body that is suppressed must not make the solve or the
+// optimizer of the remaining all-solid mesh ask for shell idealisation.
+test("a suppressed Shell body does not block solving or optimizing the rest", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await gotoApp(page);
+  await page.waitForFunction(() => !!(window as any).__kofem);
+
+  const outcome = (await page.evaluate(
+    async (beam) => {
+      const { nodes, elements, fixedNodeIds, loadedNodeIds } = beam;
+      const model = {
+        nodes,
+        elements,
+        materials: [
+          {
+            id: 1,
+            name: "Steel",
+            young: 210000,
+            poisson: 0.3,
+            density: 7.85e-9,
+          },
+        ],
+        properties: [
+          { id: 1, materialId: 1, discretization: "solid" },
+          { id: 2, materialId: 1, discretization: "shell", suppressed: true },
+        ],
+        constraints: fixedNodeIds.flatMap((nodeId) => [
+          { nodeId, dof: 0 },
+          { nodeId, dof: 1 },
+          { nodeId, dof: 2 },
+        ]),
+        loads: loadedNodeIds.map((nodeId) => ({ nodeId, dof: 2, value: -100 })),
+        surfaceLoads: [],
+        elementOrder: 1,
+      };
+      const run = async (name: string, payload: object) => {
+        try {
+          await (window as any).__kofem.sendToWorker(name, payload);
+          return "ok";
+        } catch (err) {
+          return (err as Error).message;
+        }
+      };
+      return {
+        solve: await run("solve", model),
+        optimize: await run("optimize_topology", {
+          ...model,
+          settings: {
+            objective: "min_compliance",
+            constraints: { volumeFraction: 0.5 },
+            penalty: 3,
+            filterRadius: 1.5,
+            moveLimit: 0.2,
+            maxIterations: 2,
+            tolerance: 0.01,
+          },
+        }),
+      };
+    },
+    makeBeam(4, 1, 1),
+  )) as { solve: string; optimize: string };
+
+  expect(outcome.solve).toBe("ok");
+  expect(outcome.optimize).toBe("ok");
+});
+
 // The level-set method: same worker message with `method: "level_set"`. Besides
 // the element densities it returns the nodal level set φ — one value per node,
 // in payload node order, bounded to [−1, 1] — which the viewport contours at
