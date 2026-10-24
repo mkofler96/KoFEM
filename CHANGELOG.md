@@ -11,6 +11,70 @@ Versions 0.1.0 to 0.3.0 were tagged after the fact, on the commits that complete
 each theme. kofem.org was deployed continuously from `main` throughout, so their
 dates are when the work landed, not when anything was shipped.
 
+## [0.4.0] - 2026-10-24
+
+A model tree, and geometry editing in the app.
+
+### Added
+
+- A model tree on the left with a properties panel on the right. It replaces the
+  Geometry / Constraints / Solve / Optimize / Results step tabs. Each group
+  (Geometry, Materials, Mesh, Boundary conditions, Studies, Results) lists its
+  objects and ends in **+ Add**, and picking an entry opens only that object's
+  editor. On small screens the tree and the panel share one drawer.
+- A split tool that cuts faces or bodies with a plane. Splitting a face gives you
+  a separate pad for a support or a load. Splitting a body cuts it into two
+  bonded bodies. You find it in a body's panel, and a split can be undone. The
+  geometry view now draws CAD face outlines, so you can see a split.
+- Boolean bodies: union, subtract (optionally keeping the tool bodies, bonded in
+  the pocket) and intersect, from Geometry → **+ Add**. A Boolean that would
+  change nothing is refused with a message naming the bodies.
+- Per-body visibility, and a **Suppressed** option that leaves a body out of the
+  next mesh without deleting it.
+- Studies and result plots. Add a static study or a topology optimization, and
+  pick the static case an optimization runs on when you add it. Add plots of any
+  static result field or of the optimization density. A finished run opens a
+  plot of its own result.
+- An animated homepage that walks through a bracket from geometry to mesh,
+  loads, results and topology optimization.
+
+### Changed
+
+- Supports and loads made on a whole CAD face survive a re-mesh. Edge and node
+  picks and couplings are still cleared, and a notice names the ones that were.
+- A support or load you just added opens as saved, without asking for a second
+  Save.
+- "Constraints" is now called "Boundary conditions".
+- The MBB beam example is now built the way you would build it in the app: a
+  plain block whose bearing and load pads are cut with the split tool.
+
+### Fixed
+
+- After a body was split, one half could render open and see-through when the
+  other half was hidden or dimmed.
+
+### Breaking
+
+- **Shells are no longer detected automatically.** Every body imports as Solid.
+  To mesh a thin-walled body as shells, set its **Element type** to Shell. Until
+  you do, re-importing a thin-walled part that used to be shelled automatically
+  meshes and solves it as solid, and its results differ.
+- **A body marked Shell is now shelled as a whole.** Before, a thick region such
+  as a mounting block stayed solid. Now a Shell body whose thin walls do not cover
+  all of it is refused, and the message says how much of it would be lost. Split
+  the thick part off into its own Solid body first.
+- Saved analyses still open unchanged, with their saved mesh and results.
+
+### Known limitations
+
+- Only one body per model can be a Shell. Marking a second one is refused with
+  an error.
+- A distributing coupling between a shell and a solid transmits the right force
+  and gives the right deflection, but the stress it leaves in the solid at the
+  joint is about 7× too low and does not improve with a finer mesh. Do not rely
+  on junction stress from a distributing coupling. This was already the case in
+  0.3.0.
+
 ## [0.3.0] - 2026-09-28
 
 Topology optimization.
