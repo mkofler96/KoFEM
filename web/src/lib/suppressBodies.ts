@@ -12,6 +12,33 @@ interface MeshElement {
   propertyId?: number;
 }
 
+// The bodies a mesh actually leaves out: CAD bodies that own no element, either
+// directly or through a PSHELL derived from them. This is the mesh-time
+// suppression read back from the mesh itself, so it stays right when the
+// suppression flags were changed after meshing and saved without re-meshing.
+export function bodiesLeftOutOfMesh(
+  properties: { id: number; sourceBodyId?: number }[],
+  elements: { propertyId?: number }[],
+): number[] {
+  const meshed = new Set<number>();
+  const sourceOf = new Map(
+    properties
+      .filter((p) => p.sourceBodyId !== undefined)
+      .map((p) => [p.id, p.sourceBodyId]),
+  );
+  for (const el of elements) {
+    if (el.propertyId === undefined)
+      throw new Error(
+        "bodiesLeftOutOfMesh: an element carries no propertyId, so the mesh cannot say which bodies it holds",
+      );
+    const source = sourceOf.get(el.propertyId);
+    meshed.add(source === undefined ? el.propertyId : source);
+  }
+  return properties
+    .filter((p) => p.sourceBodyId === undefined && !meshed.has(p.id))
+    .map((p) => p.id);
+}
+
 export interface VolumeMeshParts<N extends MeshNode, E extends MeshElement> {
   nodes: N[];
   elements: E[];

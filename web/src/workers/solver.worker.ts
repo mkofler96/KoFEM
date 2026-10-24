@@ -152,6 +152,8 @@ interface Property {
   // On a mesh-time PSHELL: the CAD body whose thin walls it replaces. Lets the
   // viewport map the derived property back to a body that has a tessellation.
   sourceBodyId?: number;
+  // A suppressed body is not in the mesh, whatever its element type.
+  suppressed?: boolean;
 }
 interface Constraint {
   nodeId: number;
@@ -520,6 +522,14 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
     surfaceTriangles,
     surfaceFaceIds,
   });
+}
+
+// The bodies marked Shell that take part in the analysis. A suppressed body was
+// left out of the mesh, so its element type no longer applies.
+function shellMarkedBodies(properties: Property[]): Property[] {
+  return properties.filter(
+    (p) => p.discretization === "shell" && !p.suppressed,
+  );
 }
 
 // The coupled and shell solvers take a single shell material (#376), so one body
@@ -2490,7 +2500,7 @@ function handleTopOpt(id: number, payload: TopOptPayload) {
   // optimizer never runs that idealisation, so it would silently optimize the
   // solid tets the user does not intend. Re-meshing idealises the shell bodies up
   // front (#397), so ask for that rather than optimize the wrong model.
-  const shellBodies = properties.filter((p) => p.discretization === "shell");
+  const shellBodies = shellMarkedBodies(properties);
   if (shellBodies.length > 0 && shellElements.length === 0)
     throw new Error(
       `Topology optimization: ${shellBodies.length} body/bodies are marked "Shell" ` +
@@ -2636,9 +2646,7 @@ function handleSolve(id: number, payload: SolvePayload) {
   // (#358). Which bodies are shells is the per-body Shell/Solid choice
   // (Property.discretization), set by the user per body. No bodies marked Shell ⇒ the all-solid path.
   const shellBodyIds = new Set(
-    payload.properties
-      .filter((p) => p.discretization === "shell")
-      .map((p) => p.id),
+    shellMarkedBodies(payload.properties).map((p) => p.id),
   );
   if (shellBodyIds.size > 0) {
     requireOneShellBody(shellBodyIds);
