@@ -6,7 +6,7 @@ import { useMesh } from "../../hooks/useMesh";
 import { estimateElementCount } from "../../lib/meshSizing";
 import type { GeometryMeasure } from "../../lib/meshSizing";
 import { LogSection } from "./LogSection";
-import styles from "./LeftPanel.module.css";
+import styles from "./Panel.module.css";
 
 // Bounding box of the import, as "x × y × z". Three significant digits keep a
 // 0.8 mm part and a 2400 mm weldment equally readable.

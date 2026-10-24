@@ -20,15 +20,23 @@ import {
 } from "./BcLoadFormControls";
 import { LoadValueForm } from "./GroupValueForms";
 import { GroupCard } from "./GroupCard";
-import styles from "./LeftPanel.module.css";
+import {
+  focusedId,
+  showsItem,
+  showsPick,
+  useStartOnAdd,
+  type SectionFocus,
+} from "./sectionFocus";
+import styles from "./Panel.module.css";
 
-// Applied-loads section: pick faces, create/extend load groups (componentwise
-// force / moment or pressure), and list the existing groups with their inline
-// editors.
+// Applied-loads section: pick faces to create a load group (componentwise
+// force / moment or pressure), or edit / extend one group — see SectionFocus.
 export function LoadSection({
   onError,
+  focus,
 }: {
   onError(msg: string | null): void;
+  focus: SectionFocus;
 }) {
   const loadGroups = useModelStore((s) => s.loadGroups);
   const pickMode = useModelStore((s) => s.pickMode);
@@ -65,7 +73,10 @@ export function LoadSection({
   } = usePickedFaces(onError);
 
   // Group whose values are being edited inline (✎), if any.
-  const [editingLoadId, setEditingLoadId] = useState<number | null>(null);
+  const [editingLoadId, setEditingLoadId] = useState<number | null>(
+    focusedId(focus),
+  );
+  useStartOnAdd(focus, () => setPickMode("load", null));
   // A load is defined in two steps (issues #219, #190): pick the kind, then
   // prescribe each component on its own — like the displacement BC above.
   // Force and moment carry a [x,y,z] vector; pressure is a single scalar.
@@ -188,11 +199,7 @@ export function LoadSection({
 
   return (
     <>
-      <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
-        Applied loads
-      </div>
-
-      {pickMode !== "load" && (
+      {pickMode !== "load" && focus.type === "add" && (
         <button
           className={styles.pickBtn}
           onClick={() => setPickMode("load", null)}
@@ -201,7 +208,7 @@ export function LoadSection({
         </button>
       )}
 
-      {pickMode === "load" && (
+      {pickMode === "load" && showsPick(focus, pickTargetGroupId) && (
         <div className={styles.pickPanel}>
           <div className={styles.pickPanelHeader}>
             <span className={styles.pickPanelTitle}>
@@ -261,35 +268,37 @@ export function LoadSection({
         </div>
       )}
 
-      {loadGroups.map((group) => (
-        <GroupCard
-          key={group.id}
-          name={group.name}
-          meta={loadGroupMeta(group)}
-          dotClassName={styles.loadDot}
-          editTitle="Edit load"
-          deleteTitle="Delete Load"
-          faces={group.faces}
-          editForm={
-            editingLoadId === group.id && (
-              <LoadValueForm
-                group={group}
-                onSave={(kind, totalForce, components) => {
-                  updateLoadGroup(group.id, kind, totalForce, components);
-                  setEditingLoadId(null);
-                }}
-                onCancel={() => setEditingLoadId(null)}
-              />
-            )
-          }
-          onStartPick={() => startPickForGroup("load", group.id)}
-          onToggleEdit={() =>
-            setEditingLoadId(editingLoadId === group.id ? null : group.id)
-          }
-          onDelete={() => deleteLoadGroup(group.id)}
-          onRemoveFace={(faceId) => removeFaceFromLoadGroup(group.id, faceId)}
-        />
-      ))}
+      {loadGroups
+        .filter((group) => showsItem(focus, group.id))
+        .map((group) => (
+          <GroupCard
+            key={group.id}
+            name={group.name}
+            meta={loadGroupMeta(group)}
+            dotClassName={styles.loadDot}
+            editTitle="Edit load"
+            deleteTitle="Delete Load"
+            faces={group.faces}
+            editForm={
+              editingLoadId === group.id && (
+                <LoadValueForm
+                  group={group}
+                  onSave={(kind, totalForce, components) => {
+                    updateLoadGroup(group.id, kind, totalForce, components);
+                    setEditingLoadId(null);
+                  }}
+                  onCancel={() => setEditingLoadId(null)}
+                />
+              )
+            }
+            onStartPick={() => startPickForGroup("load", group.id)}
+            onToggleEdit={() =>
+              setEditingLoadId(editingLoadId === group.id ? null : group.id)
+            }
+            onDelete={() => deleteLoadGroup(group.id)}
+            onRemoveFace={(faceId) => removeFaceFromLoadGroup(group.id, faceId)}
+          />
+        ))}
     </>
   );
 }

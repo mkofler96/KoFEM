@@ -15,7 +15,7 @@ import {
   MOMENT_LABELS,
   faceKey,
 } from "./bcFormUtils";
-import styles from "./LeftPanel.module.css";
+import styles from "./Panel.module.css";
 
 const GEOMETRY_LABEL: Record<PickGeometry, string> = {
   face: "Face",

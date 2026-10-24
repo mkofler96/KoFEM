@@ -23,7 +23,11 @@
 //
 // Run:  bun tests/test_midsurface_junction.mjs
 
-import { extractThinWallShells, shellWallTets } from "../src/lib/shellize.ts";
+import {
+  extractThinWallShells,
+  shellBodyTets,
+  shellWallTets,
+} from "../src/lib/shellize.ts";
 
 let failures = 0;
 function check(name, cond, detail = "") {
@@ -45,129 +49,134 @@ const KUHN = [
   [0, 5, 1, 7],
 ];
 
-// ── L-shaped single body, tetrahedralised on a shared grid so it is conformal ──
-const verts = [];
-const vIndex = new Map();
-const addV = (x, y, z) => {
-  const key = `${x},${y},${z}`;
-  let i = vIndex.get(key);
-  if (i === undefined) {
-    i = verts.length / 3;
-    vIndex.set(key, i);
-    verts.push(x, y, z);
-  }
-  return i;
-};
-const tet = [];
-const body = [];
-const addBox = (x0, nx, dx, z0, nz, dz) => {
-  const gid = (i, j, k) => addV(x0 + i * dx, j * 5, z0 + k * dz);
-  for (let i = 0; i < nx; i++)
-    for (let j = 0; j < 4; j++)
-      for (let k = 0; k < nz; k++) {
-        const cell = [
-          gid(i, j, k),
-          gid(i + 1, j, k),
-          gid(i, j + 1, k),
-          gid(i + 1, j + 1, k),
-          gid(i, j, k + 1),
-          gid(i + 1, j, k + 1),
-          gid(i, j + 1, k + 1),
-          gid(i + 1, j + 1, k + 1),
-        ];
-        for (const t of KUHN) {
-          tet.push(cell[t[0]], cell[t[1]], cell[t[2]], cell[t[3]]);
-          body.push(1);
-        }
-      }
-};
-addBox(0, 20, 2, 0, 1, THK); // wall A, z ∈ [0, 2]
-addBox(0, 1, THK, THK, 14, 2); // wall B, x ∈ [0, 2], z ∈ [2, 30]
+const near = (a, b) => Math.abs(a - b) < 1e-9;
 
-// ── Surface triangulation, labelled by CAD face ───────────────────────────────
-// Face ids: 1 = A outer (z = 0), 2 = A inner (z = 2), 3 = B outer (x = 0),
-// 4 = B inner (x = 2), 5.. = ends and sides (never paired: 20 mm apart, or a
-// tenth of the wall faces' area).
-const TET_FACES = [
-  [0, 1, 2],
-  [0, 1, 3],
-  [0, 2, 3],
-  [1, 2, 3],
-];
-const seen = new Map();
-for (let e = 0; e < tet.length / 4; e++)
-  for (const f of TET_FACES) {
-    const tri = [tet[4 * e + f[0]], tet[4 * e + f[1]], tet[4 * e + f[2]]];
-    const key = [...tri].sort((a, b) => a - b).join(",");
-    const hit = seen.get(key);
-    if (hit) {
-      hit.count++;
-      continue;
+// ── L-shaped single body, tetrahedralised on a shared grid so it is conformal ──
+// Wall A is `lengthA` mm long (40 in the fixture above).
+function buildL(lengthA) {
+  const verts = [];
+  const vIndex = new Map();
+  const addV = (x, y, z) => {
+    const key = `${x},${y},${z}`;
+    let i = vIndex.get(key);
+    if (i === undefined) {
+      i = verts.length / 3;
+      vIndex.set(key, i);
+      verts.push(x, y, z);
     }
-    // Wind outward (away from the tet's fourth node) — faceProps averages the
-    // triangle normals, so a face wound at random reads as non-planar.
-    const opposite = tet[4 * e + [0, 1, 2, 3].find((k) => !f.includes(k))];
+    return i;
+  };
+  const tet = [];
+  const body = [];
+  const addBox = (x0, nx, dx, z0, nz, dz) => {
+    const gid = (i, j, k) => addV(x0 + i * dx, j * 5, z0 + k * dz);
+    for (let i = 0; i < nx; i++)
+      for (let j = 0; j < 4; j++)
+        for (let k = 0; k < nz; k++) {
+          const cell = [
+            gid(i, j, k),
+            gid(i + 1, j, k),
+            gid(i, j + 1, k),
+            gid(i + 1, j + 1, k),
+            gid(i, j, k + 1),
+            gid(i + 1, j, k + 1),
+            gid(i, j + 1, k + 1),
+            gid(i + 1, j + 1, k + 1),
+          ];
+          for (const t of KUHN) {
+            tet.push(cell[t[0]], cell[t[1]], cell[t[2]], cell[t[3]]);
+            body.push(1);
+          }
+        }
+  };
+  addBox(0, lengthA / 2, 2, 0, 1, THK); // wall A, z ∈ [0, 2]
+  addBox(0, 1, THK, THK, 14, 2); // wall B, x ∈ [0, 2], z ∈ [2, 30]
+
+  // ── Surface triangulation, labelled by CAD face ───────────────────────────────
+  // Face ids (wall A is `lengthA` long): 1 = A outer (z = 0), 2 = A inner (z = 2), 3 = B outer (x = 0),
+  // 4 = B inner (x = 2), 5.. = ends and sides (never paired: 20 mm apart, or a
+  // tenth of the wall faces' area).
+  const TET_FACES = [
+    [0, 1, 2],
+    [0, 1, 3],
+    [0, 2, 3],
+    [1, 2, 3],
+  ];
+  const seen = new Map();
+  for (let e = 0; e < tet.length / 4; e++)
+    for (const f of TET_FACES) {
+      const tri = [tet[4 * e + f[0]], tet[4 * e + f[1]], tet[4 * e + f[2]]];
+      const key = [...tri].sort((a, b) => a - b).join(",");
+      const hit = seen.get(key);
+      if (hit) {
+        hit.count++;
+        continue;
+      }
+      // Wind outward (away from the tet's fourth node) — faceProps averages the
+      // triangle normals, so a face wound at random reads as non-planar.
+      const opposite = tet[4 * e + [0, 1, 2, 3].find((k) => !f.includes(k))];
+      const corner = tri.map((i) => [
+        verts[3 * i],
+        verts[3 * i + 1],
+        verts[3 * i + 2],
+      ]);
+      const edgeAB = [
+        corner[1][0] - corner[0][0],
+        corner[1][1] - corner[0][1],
+        corner[1][2] - corner[0][2],
+      ];
+      const edgeAC = [
+        corner[2][0] - corner[0][0],
+        corner[2][1] - corner[0][1],
+        corner[2][2] - corner[0][2],
+      ];
+      const normal = [
+        edgeAB[1] * edgeAC[2] - edgeAB[2] * edgeAC[1],
+        edgeAB[2] * edgeAC[0] - edgeAB[0] * edgeAC[2],
+        edgeAB[0] * edgeAC[1] - edgeAB[1] * edgeAC[0],
+      ];
+      const inward = [
+        verts[3 * opposite] - corner[0][0],
+        verts[3 * opposite + 1] - corner[0][1],
+        verts[3 * opposite + 2] - corner[0][2],
+      ];
+      if (
+        normal[0] * inward[0] + normal[1] * inward[1] + normal[2] * inward[2] >
+        0
+      )
+        [tri[1], tri[2]] = [tri[2], tri[1]];
+      seen.set(key, { tri, count: 1 });
+    }
+  const surfTri = [];
+  const surfFace = [];
+  for (const { tri, count } of seen.values()) {
+    if (count !== 1) continue;
     const corner = tri.map((i) => [
       verts[3 * i],
       verts[3 * i + 1],
       verts[3 * i + 2],
     ]);
-    const edgeAB = [
-      corner[1][0] - corner[0][0],
-      corner[1][1] - corner[0][1],
-      corner[1][2] - corner[0][2],
-    ];
-    const edgeAC = [
-      corner[2][0] - corner[0][0],
-      corner[2][1] - corner[0][1],
-      corner[2][2] - corner[0][2],
-    ];
-    const normal = [
-      edgeAB[1] * edgeAC[2] - edgeAB[2] * edgeAC[1],
-      edgeAB[2] * edgeAC[0] - edgeAB[0] * edgeAC[2],
-      edgeAB[0] * edgeAC[1] - edgeAB[1] * edgeAC[0],
-    ];
-    const inward = [
-      verts[3 * opposite] - corner[0][0],
-      verts[3 * opposite + 1] - corner[0][1],
-      verts[3 * opposite + 2] - corner[0][2],
-    ];
-    if (
-      normal[0] * inward[0] + normal[1] * inward[1] + normal[2] * inward[2] >
-      0
-    )
-      [tri[1], tri[2]] = [tri[2], tri[1]];
-    seen.set(key, { tri, count: 1 });
+    const all = (axis, want) => corner.every((pos) => near(pos[axis], want));
+    const faceOfPlane = () => {
+      if (all(2, 0)) return 1;
+      if (all(2, THK)) return 2;
+      if (all(0, 0)) return 3;
+      if (all(0, THK)) return 4;
+      if (all(1, 0)) return 5;
+      if (all(1, 20)) return 6;
+      if (all(0, lengthA)) return 7;
+      if (all(2, 30)) return 8;
+      throw new Error(
+        `boundary triangle on no known plane: ${JSON.stringify(corner)}`,
+      );
+    };
+    const face = faceOfPlane();
+    surfTri.push(tri[0], tri[1], tri[2]);
+    surfFace.push(face);
   }
-const near = (a, b) => Math.abs(a - b) < 1e-9;
-const surfTri = [];
-const surfFace = [];
-for (const { tri, count } of seen.values()) {
-  if (count !== 1) continue;
-  const corner = tri.map((i) => [
-    verts[3 * i],
-    verts[3 * i + 1],
-    verts[3 * i + 2],
-  ]);
-  const all = (axis, want) => corner.every((pos) => near(pos[axis], want));
-  const faceOfPlane = () => {
-    if (all(2, 0)) return 1;
-    if (all(2, THK)) return 2;
-    if (all(0, 0)) return 3;
-    if (all(0, THK)) return 4;
-    if (all(1, 0)) return 5;
-    if (all(1, 20)) return 6;
-    if (all(0, 40)) return 7;
-    if (all(2, 30)) return 8;
-    throw new Error(
-      `boundary triangle on no known plane: ${JSON.stringify(corner)}`,
-    );
-  };
-  const face = faceOfPlane();
-  surfTri.push(tri[0], tri[1], tri[2]);
-  surfFace.push(face);
+  return { V: verts, tet, body, surfTri, surfFace };
 }
-const mesh = { V: verts, tet, body, surfTri, surfFace };
+const mesh = buildL(40);
 
 console.log("mid-surface placement at a wall junction:");
 
@@ -236,8 +245,37 @@ check(
 const wallTets = shellWallTets(mesh, shells);
 check(
   "the collapse claims every tet of the L — no wall material is left behind",
-  wallTets.size === tet.length / 4,
-  `claimed ${wallTets.size} of ${tet.length / 4} tets`,
+  wallTets.size === mesh.tet.length / 4,
+  `claimed ${wallTets.size} of ${mesh.tet.length / 4} tets`,
+);
+
+// The app shells a Shell body whole (shellBodyTets): fine when the walls cover
+// it, as they cover this L ...
+check(
+  "a body the walls cover is replaced whole",
+  shellBodyTets(mesh, shells).size === mesh.tet.length / 4,
+);
+
+// ... but a wall too small to be paired yields no facets. With wall A 4000 mm
+// long, wall B's faces fall under detectWallPairs' 1 % area cut: only wall A is
+// extracted, and replacing the whole body would silently drop the flange.
+const longL = buildL(4000);
+const longShells = extractThinWallShells(longL);
+check(
+  "the short flange of a long L is not detected as a wall",
+  longShells.walls.length === 1,
+  `walls=${longShells.walls.length}`,
+);
+let refusal = "";
+try {
+  shellBodyTets(longL, longShells);
+} catch (err) {
+  refusal = err instanceof Error ? err.message : String(err);
+}
+check(
+  "a body the walls do not cover is refused, not shelled with the flange dropped",
+  /Body 1 is marked "Shell", but \d+ of its \d+ elements/.test(refusal),
+  refusal || "no error",
 );
 
 console.log(

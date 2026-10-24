@@ -12,11 +12,24 @@ import {
 } from "./BcLoadFormControls";
 import { BcValueForm } from "./GroupValueForms";
 import { GroupCard } from "./GroupCard";
-import styles from "./LeftPanel.module.css";
+import {
+  focusedId,
+  showsItem,
+  showsPick,
+  useStartOnAdd,
+  type SectionFocus,
+} from "./sectionFocus";
+import styles from "./Panel.module.css";
 
-// Fixed-displacement section: pick faces, create/extend BC groups, and list
-// the existing groups with their inline editors.
-export function BcSection({ onError }: { onError(msg: string | null): void }) {
+// Fixed-displacement section: pick faces to create a BC group ("+ Add" in the
+// model tree), or edit / extend one group (its tree entry) — see SectionFocus.
+export function BcSection({
+  onError,
+  focus,
+}: {
+  onError(msg: string | null): void;
+  focus: SectionFocus;
+}) {
   const bcGroups = useModelStore((s) => s.bcGroups);
   const pickMode = useModelStore((s) => s.pickMode);
   const pickGeometry = useModelStore((s) => s.pickGeometry);
@@ -42,7 +55,10 @@ export function BcSection({ onError }: { onError(msg: string | null): void }) {
   } = usePickedFaces(onError);
 
   // Group whose values are being edited inline (✎), if any.
-  const [editingBcId, setEditingBcId] = useState<number | null>(null);
+  const [editingBcId, setEditingBcId] = useState<number | null>(
+    focusedId(focus),
+  );
+  useStartOnAdd(focus, () => setPickMode("bc", null));
   const [checkedDofs, setCheckedDofs] = useState([
     true,
     true,
@@ -97,9 +113,7 @@ export function BcSection({ onError }: { onError(msg: string | null): void }) {
 
   return (
     <>
-      <div className={styles.sectionLabel}>Fixed displacement</div>
-
-      {pickMode !== "bc" && (
+      {pickMode !== "bc" && focus.type === "add" && (
         <button
           className={styles.pickBtn}
           onClick={() => setPickMode("bc", null)}
@@ -108,7 +122,7 @@ export function BcSection({ onError }: { onError(msg: string | null): void }) {
         </button>
       )}
 
-      {pickMode === "bc" && (
+      {pickMode === "bc" && showsPick(focus, pickTargetGroupId) && (
         <div className={styles.pickPanel}>
           <div className={styles.pickPanelHeader}>
             <span className={styles.pickPanelTitle}>
@@ -177,35 +191,37 @@ export function BcSection({ onError }: { onError(msg: string | null): void }) {
         </div>
       )}
 
-      {bcGroups.map((group) => (
-        <GroupCard
-          key={group.id}
-          name={group.name}
-          meta={`${group.dofs.map((dof) => DOF_LABELS[dof]).join(", ")} = ${group.value}`}
-          dotClassName={styles.bcDot}
-          editTitle="Edit BC"
-          deleteTitle="Delete BC"
-          faces={group.faces}
-          editForm={
-            editingBcId === group.id && (
-              <BcValueForm
-                group={group}
-                onSave={(dofs, value) => {
-                  updateBcGroup(group.id, dofs, value);
-                  setEditingBcId(null);
-                }}
-                onCancel={() => setEditingBcId(null)}
-              />
-            )
-          }
-          onStartPick={() => startPickForGroup("bc", group.id)}
-          onToggleEdit={() =>
-            setEditingBcId(editingBcId === group.id ? null : group.id)
-          }
-          onDelete={() => deleteBcGroup(group.id)}
-          onRemoveFace={(faceId) => removeFaceFromBcGroup(group.id, faceId)}
-        />
-      ))}
+      {bcGroups
+        .filter((group) => showsItem(focus, group.id))
+        .map((group) => (
+          <GroupCard
+            key={group.id}
+            name={group.name}
+            meta={`${group.dofs.map((dof) => DOF_LABELS[dof]).join(", ")} = ${group.value}`}
+            dotClassName={styles.bcDot}
+            editTitle="Edit BC"
+            deleteTitle="Delete BC"
+            faces={group.faces}
+            editForm={
+              editingBcId === group.id && (
+                <BcValueForm
+                  group={group}
+                  onSave={(dofs, value) => {
+                    updateBcGroup(group.id, dofs, value);
+                    setEditingBcId(null);
+                  }}
+                  onCancel={() => setEditingBcId(null)}
+                />
+              )
+            }
+            onStartPick={() => startPickForGroup("bc", group.id)}
+            onToggleEdit={() =>
+              setEditingBcId(editingBcId === group.id ? null : group.id)
+            }
+            onDelete={() => deleteBcGroup(group.id)}
+            onRemoveFace={(faceId) => removeFaceFromBcGroup(group.id, faceId)}
+          />
+        ))}
     </>
   );
 }

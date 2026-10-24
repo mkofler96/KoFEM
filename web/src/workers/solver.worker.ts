@@ -9,6 +9,7 @@ import type {
   KofemModule,
   SolveMesh,
   SplitGeometryOptions,
+  BooleanGeometryOptions,
   TopOptSettings,
 } from "../wasm/pkg/kofem_wasm.js";
 import {
@@ -24,7 +25,7 @@ import {
 } from "../lib/tie.js";
 import {
   extractThinWallShells,
-  shellWallTets,
+  shellBodyTets,
   buildCoupledModel,
   buildExplicitCoupledModel,
   type TieSurfaces,
@@ -45,7 +46,7 @@ import {
   referencePointIds,
   type CouplingDefinition,
 } from "../lib/coupling.js";
-import { detectShellBodies } from "../lib/thinBodies.js";
+import { dropSuppressedBodies } from "../lib/suppressBodies.js";
 
 let Module: KofemModule | null = null;
 
@@ -151,6 +152,8 @@ interface Property {
   // On a mesh-time PSHELL: the CAD body whose thin walls it replaces. Lets the
   // viewport map the derived property back to a body that has a tessellation.
   sourceBodyId?: number;
+  // A suppressed body is not in the mesh, whatever its element type.
+  suppressed?: boolean;
 }
 interface Constraint {
   nodeId: number;
@@ -177,17 +180,18 @@ interface SurfaceLoad {
 interface ParseStepPayload {
   bytes: Uint8Array;
   format?: string;
-  // Wall-thickness threshold of the thin-body (auto-shell) preselection, as a
-  // fraction of each body's own bounding-box diagonal. Absent ⇒ the detector's
-  // own default (DEFAULT_THIN_RATIO).
-  thinRatio?: number;
 }
 interface SplitGeometryPayload {
   // The current geometry file and its format — reloaded before the split.
   bytes: Uint8Array;
   format: string;
   split: SplitGeometryOptions;
-  thinRatio?: number;
+}
+interface BooleanGeometryPayload {
+  // The current geometry file and its format — reloaded before the Boolean.
+  bytes: Uint8Array;
+  format: string;
+  boolean: BooleanGeometryOptions;
 }
 interface VolumeMeshPayload {
   bytes?: Uint8Array;
@@ -199,6 +203,9 @@ interface VolumeMeshPayload {
   // mid-surface shell mesh and stores the MIXED CTRIA3 + CTETRA model, instead of
   // deriving it throwaway inside the solve (#397). Absent/empty ⇒ all-solid mesh.
   shellBodyIds?: number[];
+  // Suppressed CAD bodies: meshed with the assembly (Netgen meshes the whole
+  // imprinted shape) and then dropped — see dropSuppressedBodies.
+  suppressedBodyIds?: number[];
   properties?: Property[];
 }
 interface SolvePayload {
@@ -246,10 +253,9 @@ interface TopOptPayload {
 // ── parse_step ────────────────────────────────────────────────────────────────
 
 // Load CAD bytes into this worker's engine and build the store's view of them:
-// the display tessellation plus the thin-body (auto-shell) preselection. Shared
-// by the import and by every geometry edit, which both end in a freshly loaded
-// file.
-function loadGeometry(bytes: Uint8Array, format: string, thinRatio?: number) {
+// the display tessellation. Shared by the import and by every geometry edit,
+// which both end in a freshly loaded file.
+function loadGeometry(bytes: Uint8Array, format: string) {
   // deflection_relative: chord tolerance as a fraction of the model's
   // bounding-box diagonal, so a large part isn't tessellated into millions of
   // needless triangles. ~0.1% matches the fast browser STEP viewers.
@@ -263,13 +269,6 @@ function loadGeometry(bytes: Uint8Array, format: string, thinRatio?: number) {
   // tessellate_step stores the OCCT shape in the module — record that so a
   // subsequent volume_mesh in this same worker can skip the reload.
   geometryLoaded = true;
-  // Thin-walled bodies (a ray cast inward from the surface finds an opposite wall
-  // close by, relative to the body's size) are preselected as shells — before any
-  // volume mesh exists, purely from the tessellation.
-  const shellBodyIds = detectShellBodies(
-    { vertices, triangles, triangleBodyIds },
-    { thinRatio },
-  );
   // Return as {points, triangles} to match the StepTessellation type used by
   // the store; tessellate_step returns flat Float32/Uint32 typed arrays.
   // bodyCount (#353) drives the per-body material assignment UI; bodyIds
@@ -281,7 +280,6 @@ function loadGeometry(bytes: Uint8Array, format: string, thinRatio?: number) {
     bodyIds: Array.from(triangleBodyIds),
     faceIds: Array.from(triangleFaceIds),
     bodyCount,
-    shellBodyIds,
   };
 }
 
@@ -290,7 +288,7 @@ function handleParseStep(id: number, payload: ParseStepPayload) {
     id,
     ok: true,
     // eslint-disable-next-line kofem/no-silent-fallback -- format is optional in the parse_step message; absent means STEP, the primary import path
-    ...loadGeometry(payload.bytes, payload.format ?? "step", payload.thinRatio),
+    ...loadGeometry(payload.bytes, payload.format ?? "step"),
   });
 }
 
@@ -303,22 +301,41 @@ function handleParseStep(id: number, payload: ParseStepPayload) {
 // engine hands the edit back as STEP bytes, which become the geometry: they are
 // loaded straight away, so the reply carries both the new file and its view.
 function handleSplitGeometry(id: number, payload: SplitGeometryPayload) {
-  m().tessellate_step(
-    payload.bytes,
-    JSON.stringify({
-      deflection_relative: 0.001,
-      angular_deflection: 0.5,
-      format: payload.format,
-    }),
-  );
+  reloadForEdit(payload.bytes, payload.format);
   const { bytes } = m().split_geometry(JSON.stringify(payload.split));
   geometryLoaded = false; // split_geometry released the pre-edit shape
   self.postMessage({
     id,
     ok: true,
     bytes,
-    ...loadGeometry(bytes, "step", payload.thinRatio),
+    ...loadGeometry(bytes, "step"),
   });
+}
+
+// Combine bodies with a Boolean — the same reload / edit / reload round trip as
+// a split, with body ids read off the store's tessellation of `bytes`.
+function handleBooleanGeometry(id: number, payload: BooleanGeometryPayload) {
+  reloadForEdit(payload.bytes, payload.format);
+  const { bytes } = m().boolean_geometry(JSON.stringify(payload.boolean));
+  geometryLoaded = false; // boolean_geometry released the pre-edit shape
+  self.postMessage({
+    id,
+    ok: true,
+    bytes,
+    ...loadGeometry(bytes, "step"),
+  });
+}
+
+// Load exactly the bytes an edit's ids were read from into the engine.
+function reloadForEdit(bytes: Uint8Array, format: string) {
+  m().tessellate_step(
+    bytes,
+    JSON.stringify({
+      deflection_relative: 0.001,
+      angular_deflection: 0.5,
+      format,
+    }),
+  );
 }
 
 // ── volume_mesh ───────────────────────────────────────────────────────────────
@@ -422,18 +439,18 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
 
   // The store models nodes/elements as object lists; build them here from
   // the flat arrays (plain JS, no parsing — cheap relative to meshing).
-  const nodes: Node[] = new Array<Node>(nNodes);
+  const meshNodes: Node[] = new Array<Node>(nNodes);
   for (let i = 0; i < nNodes; i++) {
-    nodes[i] = {
+    meshNodes[i] = {
       id: i,
       x: dto.vertices[3 * i],
       y: dto.vertices[3 * i + 1],
       z: dto.vertices[3 * i + 2],
     };
   }
-  const elements: Element[] = new Array<Element>(nTets);
+  const meshElements: Element[] = new Array<Element>(nTets);
   for (let i = 0; i < nTets; i++) {
-    elements[i] = {
+    meshElements[i] = {
       id: i,
       type: "CTETRA",
       nodeIds: [
@@ -448,12 +465,26 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
     };
   }
 
-  const surfaceTriangles = chunk3(dto.surfaceTriangles) as [
-    number,
-    number,
-    number,
-  ][];
-  const surfaceFaceIds = Array.from(dto.surfaceFaceIds);
+  const suppressed = new Set(payload.suppressedBodyIds ?? []);
+  const { nodes, elements, surfaceTriangles, surfaceFaceIds } =
+    dropSuppressedBodies(
+      {
+        nodes: meshNodes,
+        elements: meshElements,
+        surfaceTriangles: chunk3(dto.surfaceTriangles) as [
+          number,
+          number,
+          number,
+        ][],
+        surfaceFaceIds: Array.from(dto.surfaceFaceIds),
+      },
+      suppressed,
+    );
+  if (suppressed.size > 0)
+    self.postMessage({
+      id,
+      log: `Suppressed bodies ${[...suppressed].join(", ")} left out: ${nodes.length} nodes, ${elements.length} elements remain`,
+    });
 
   // Auto-shell at MESH time (#397): a body marked Shell has its thin walls
   // collapsed to a mid-surface shell mesh here, so the stored model is the mixed
@@ -493,13 +524,26 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
   });
 }
 
-// Idealise the Shell-marked bodies' thin walls into a mid-surface shell mesh and
-// return the mixed model to store: the coupled node pool, the retained solid tets
-// as CTETRA, and the collapsed wall facets as CTRIA3. Thickness is per SECTION —
-// detectWallPairs measures each wall pair separately, so one PSHELL property is
-// emitted per distinct wall thickness and each facet references its own (the same
-// scheme the offline crane generator uses). Solid bodies keep their existing
-// property ids, so material assignments survive the mesh. Returns null when the
+// The bodies marked Shell that take part in the analysis. A suppressed body was
+// left out of the mesh, so its element type no longer applies.
+function shellMarkedBodies(properties: Property[]): Property[] {
+  return properties.filter(
+    (p) => p.discretization === "shell" && !p.suppressed,
+  );
+}
+
+// The coupled and shell solvers take a single shell material (#376), so one body
+// is idealised per model. Marking a second would leave it solid behind the
+// user's back — refuse instead.
+function requireOneShellBody(shellBodyIds: Set<number>): void {
+  if (shellBodyIds.size > 1)
+    throw new Error(
+      `Bodies ${[...shellBodyIds].join(", ")} are all marked "Shell", but one body per ` +
+        "model can be idealised as shells today. Keep one of them Shell and set the " +
+        "others to Solid.",
+    );
+}
+
 // The model's tie connections in the form the coupled builders take: the two
 // picked surfaces as vertex indices, and how far the tie reaches. This is the
 // ONLY thing that joins distinct solid bodies in a coupled model — nothing is
@@ -525,6 +569,13 @@ function coupledTies(
   });
 }
 
+// Idealise the Shell-marked body into a mid-surface shell mesh and
+// return the mixed model to store: the coupled node pool, the retained solid tets
+// as CTETRA, and the collapsed wall facets as CTRIA3. Thickness is per SECTION —
+// detectWallPairs measures each wall pair separately, so one PSHELL property is
+// emitted per distinct wall thickness and each facet references its own (the same
+// scheme the offline crane generator uses). Solid bodies keep their existing
+// property ids, so material assignments survive the mesh. Returns null when the
 // idealisation does not apply (no Shell body, no surface mesh, or no thin wall
 // found), leaving the caller's all-solid mesh in place.
 function buildMeshTimeShellModel(
@@ -543,6 +594,7 @@ function buildMeshTimeShellModel(
   surfaceFaceIds: number[];
 } | null {
   if (shellBodyIds.size === 0) return null;
+  requireOneShellBody(shellBodyIds);
   if (surfaceTriangles.length === 0) return null;
   if (surfaceFaceIds.length !== surfaceTriangles.length) return null;
   const tetElements = elements.filter((e) => e.type === "CTETRA");
@@ -562,7 +614,7 @@ function buildMeshTimeShellModel(
       `Shell idealisation failed: body ${[...shellBodyIds].join(", ")} is marked "Shell" but no ` +
         "thin walls were found in it. Switch it to Solid, or check that it is genuinely thin-walled.",
     );
-  const wallTets = shellWallTets(mesh, shells);
+  const wallTets = shellBodyTets(mesh, shells);
   // No ties here: this runs at MESH time, before any surface can have been
   // picked. It only needs the pool's node/element layout — the couplings are
   // rebuilt at solve time from the connections the user defined by then.
@@ -1589,13 +1641,12 @@ function tryCoupledSolve(
         "thin walls were found in it. Switch it to Solid, or check that it is genuinely thin-walled.",
     );
 
-  // Only the shelled body's thin walls become shells; its thick base tets stay
-  // solid (kept in the pool) so the load path through them is not lost. Distinct
+  // The shelled body becomes shells everywhere (shellBodyTets). Distinct
   // solid bodies keep their own nodes and are joined only where the model has a
   // tie connection, by distributing couplings rather than node-merging, so a
   // gapped pin/hole interface is a proper force-and-moment tie instead of a
   // sparse near-hinge.
-  const wallTets = shellWallTets(mesh, shells);
+  const wallTets = shellBodyTets(mesh, shells);
   const couplings = payload.couplings ?? [];
   const refIds = referencePointIds(couplings);
   const model = buildCoupledModel(mesh, shells, wallTets, {
@@ -2449,7 +2500,7 @@ function handleTopOpt(id: number, payload: TopOptPayload) {
   // optimizer never runs that idealisation, so it would silently optimize the
   // solid tets the user does not intend. Re-meshing idealises the shell bodies up
   // front (#397), so ask for that rather than optimize the wrong model.
-  const shellBodies = properties.filter((p) => p.discretization === "shell");
+  const shellBodies = shellMarkedBodies(properties);
   if (shellBodies.length > 0 && shellElements.length === 0)
     throw new Error(
       `Topology optimization: ${shellBodies.length} body/bodies are marked "Shell" ` +
@@ -2593,14 +2644,12 @@ function handleSolve(id: number, payload: SolvePayload) {
   // A body marked "Shell" is idealised as shells and solved coupled to the solid
   // bodies — this converges where the all-solid solve of the thin part stalls
   // (#358). Which bodies are shells is the per-body Shell/Solid choice
-  // (Property.discretization), set for every body at import by detectShellBodies
-  // and editable in the UI. No bodies marked Shell ⇒ the all-solid path.
+  // (Property.discretization), set by the user per body. No bodies marked Shell ⇒ the all-solid path.
   const shellBodyIds = new Set(
-    payload.properties
-      .filter((p) => p.discretization === "shell")
-      .map((p) => p.id),
+    shellMarkedBodies(payload.properties).map((p) => p.id),
   );
   if (shellBodyIds.size > 0) {
+    requireOneShellBody(shellBodyIds);
     // A body is marked Shell: solve it as shells or fail loudly — never fall
     // through to the all-solid path, which would silently ignore the choice.
     // Coupled first (shells tied to solid bodies); if there is no solid domain
@@ -2799,6 +2848,8 @@ self.onmessage = async (event: MessageEvent) => {
       handleParseStep(id, payload as ParseStepPayload);
     } else if (type === "split_geometry") {
       handleSplitGeometry(id, payload as SplitGeometryPayload);
+    } else if (type === "boolean_geometry") {
+      handleBooleanGeometry(id, payload as BooleanGeometryPayload);
     } else if (type === "volume_mesh") {
       handleVolumeMesh(id, payload as VolumeMeshPayload);
     } else if (type === "solve") {

@@ -6,14 +6,11 @@ import path from "path";
 import fs from "fs";
 import { bootstrapCantilever } from "./fixtures/cantilever";
 import { gotoApp, importStep } from "./fixtures/app";
+import { openTree } from "./fixtures/tree";
 
 // Navigate to the "04 Solve" mode tab in the top navigation bar
 async function goToSolvePanel(page: import("@playwright/test").Page) {
-  await page
-    .locator("nav")
-    .getByRole("button")
-    .filter({ hasText: "Solve" })
-    .click();
+  await openTree(page, "static");
 }
 
 // Returns a promise that rejects the moment any browser console.error or

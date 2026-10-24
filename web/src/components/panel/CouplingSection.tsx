@@ -19,8 +19,15 @@ import {
 } from "./BcLoadFormControls";
 import { CouplingValueForm } from "./GroupValueForms";
 import { GroupCard } from "./GroupCard";
+import {
+  focusedId,
+  showsItem,
+  showsPick,
+  useStartOnAdd,
+  type SectionFocus,
+} from "./sectionFocus";
 import { fmt } from "../../lib/modelDisplay";
-import styles from "./LeftPanel.module.css";
+import styles from "./Panel.module.css";
 
 // One-line summary of a coupling: how it ties, and — for a kinematic one — the
 // DOFs it ties. A distributing coupling always ties all six, so listing them
@@ -57,8 +64,10 @@ function parsePoint(
 // or a load, because a coupling is model data just like they are.
 export function CouplingSection({
   onError,
+  focus,
 }: {
   onError(msg: string | null): void;
+  focus: SectionFocus;
 }) {
   const nodes = useModelStore((s) => s.nodes);
   const elements = useModelStore((s) => s.elements);
@@ -88,7 +97,7 @@ export function CouplingSection({
     startPickForGroup,
   } = usePickedFaces(onError);
 
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(focusedId(focus));
   const [kind, setKind] = useState<CouplingKind>("kinematic");
   const [checkedDofs, setCheckedDofs] = useState([
     true,
@@ -187,6 +196,8 @@ export function CouplingSection({
     else startPickForGroup("coupling", groupId);
   }
 
+  useStartOnAdd(focus, () => startCouplingPick(null));
+
   function applyCoupling() {
     if (allPickedFaces.length === 0) {
       onError("A coupling needs at least one picked face");
@@ -222,11 +233,7 @@ export function CouplingSection({
 
   return (
     <>
-      <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
-        Couplings
-      </div>
-
-      {pickMode !== "coupling" && (
+      {pickMode !== "coupling" && focus.type === "add" && (
         <button
           className={styles.pickBtn}
           data-testid="add-coupling"
@@ -236,7 +243,7 @@ export function CouplingSection({
         </button>
       )}
 
-      {pickMode === "coupling" && (
+      {pickMode === "coupling" && showsPick(focus, pickTargetGroupId) && (
         <div className={styles.pickPanel}>
           <div className={styles.pickPanelHeader}>
             <span className={styles.pickPanelTitle}>
@@ -308,37 +315,44 @@ export function CouplingSection({
         </div>
       )}
 
-      {couplingGroups.map((group) => (
-        <GroupCard
-          key={group.id}
-          name={group.name}
-          meta={couplingGroupMeta(group)}
-          dotClassName={styles.couplingDot}
-          editTitle="Edit coupling"
-          deleteTitle="Delete coupling"
-          faces={group.faces}
-          editForm={
-            editingId === group.id && (
-              <CouplingValueForm
-                group={group}
-                onSave={(nextKind, nextDofs, nextPoint) => {
-                  updateCouplingGroup(group.id, nextKind, nextDofs, nextPoint);
-                  setEditingId(null);
-                }}
-                onCancel={() => setEditingId(null)}
-              />
-            )
-          }
-          onStartPick={() => startCouplingPick(group.id)}
-          onToggleEdit={() =>
-            setEditingId(editingId === group.id ? null : group.id)
-          }
-          onDelete={() => deleteCouplingGroup(group.id)}
-          onRemoveFace={(faceId) =>
-            removeFaceFromCouplingGroup(group.id, faceId)
-          }
-        />
-      ))}
+      {couplingGroups
+        .filter((group) => showsItem(focus, group.id))
+        .map((group) => (
+          <GroupCard
+            key={group.id}
+            name={group.name}
+            meta={couplingGroupMeta(group)}
+            dotClassName={styles.couplingDot}
+            editTitle="Edit coupling"
+            deleteTitle="Delete coupling"
+            faces={group.faces}
+            editForm={
+              editingId === group.id && (
+                <CouplingValueForm
+                  group={group}
+                  onSave={(nextKind, nextDofs, nextPoint) => {
+                    updateCouplingGroup(
+                      group.id,
+                      nextKind,
+                      nextDofs,
+                      nextPoint,
+                    );
+                    setEditingId(null);
+                  }}
+                  onCancel={() => setEditingId(null)}
+                />
+              )
+            }
+            onStartPick={() => startCouplingPick(group.id)}
+            onToggleEdit={() =>
+              setEditingId(editingId === group.id ? null : group.id)
+            }
+            onDelete={() => deleteCouplingGroup(group.id)}
+            onRemoveFace={(faceId) =>
+              removeFaceFromCouplingGroup(group.id, faceId)
+            }
+          />
+        ))}
     </>
   );
 }

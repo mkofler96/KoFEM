@@ -1,0 +1,128 @@
+// SPDX-FileCopyrightText: 2026 Michael Kofler
+// SPDX-License-Identifier: AGPL-3.0-or-later
+
+// Geometry → Body N → Suppressed: the body is taken out of the model as if it
+// were deleted — not drawn, not meshed, not analysed — and comes back with one
+// click.
+
+import fs from "fs";
+import os from "os";
+import path from "path";
+import { test, expect } from "./coverage";
+import type { Page } from "@playwright/test";
+import { gotoApp, importStep } from "./fixtures/app";
+import { openBody, openTree } from "./fixtures/tree";
+
+const TWO_BOXES = path.resolve("..", "test_files", "two_boxes.stp");
+
+interface MeshState {
+  nodes: unknown[];
+  elements: { propertyId: number }[];
+  properties: { id: number; suppressed?: boolean }[];
+  fitViewTrigger: number;
+}
+
+const state = (page: Page) =>
+  page.evaluate(() => {
+    const store = (
+      window as unknown as { __kofemStore: { getState(): MeshState } }
+    ).__kofemStore.getState();
+    return {
+      nodes: store.nodes.length,
+      bodies: [...new Set(store.elements.map((e) => e.propertyId))].sort(),
+      suppressed: store.properties.filter((p) => p.suppressed).map((p) => p.id),
+      generation: store.fitViewTrigger,
+    };
+  });
+
+async function mesh(page: Page): Promise<void> {
+  const before = (await state(page)).generation;
+  await openTree(page, "mesh");
+  await page
+    .getByRole("button")
+    .filter({ hasText: /(re-)?mesh STEP volume/i })
+    .click();
+  await expect
+    .poll(async () => (await state(page)).generation, { timeout: 90_000 })
+    .toBeGreaterThan(before);
+}
+
+test("a suppressed body is left out of the mesh and comes back when unsuppressed", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await importStep(page, TWO_BOXES);
+  await mesh(page);
+  const full = await state(page);
+  expect(full.bodies).toEqual([1, 2]);
+
+  await openBody(page, 2);
+  await page.getByTestId("body-suppressed-2").check();
+  await expect(page.getByTestId("tree-body-2")).toContainText("suppressed");
+  // The mesh predates the suppression: say so, and refuse to solve on it.
+  await expect(page.getByTestId("suppressed-remesh-note")).toBeVisible();
+  await openTree(page, "static");
+  await expect(
+    page.getByText("Re-mesh: suppressed Body 2 still in the mesh"),
+  ).toBeVisible();
+
+  await mesh(page);
+  const without = await state(page);
+  expect(without.bodies).toEqual([1]);
+  expect(without.nodes).toBeLessThan(full.nodes);
+  expect(without.nodes).toBeGreaterThan(0);
+
+  // One click brings it back, exactly as it was — but the mesh was made
+  // without it, so solving waits for a re-mesh instead of silently analysing
+  // the assembly minus the restored body.
+  await openBody(page, 2);
+  await page.getByTestId("body-suppressed-2").uncheck();
+  expect((await state(page)).suppressed).toEqual([]);
+  await expect(page.getByTestId("restored-remesh-note")).toBeVisible();
+  await openTree(page, "static");
+  await expect(
+    page.getByText("Re-mesh: restored Body 2 not in the mesh"),
+  ).toBeVisible();
+  await mesh(page);
+  expect((await state(page)).bodies).toEqual([1, 2]);
+});
+
+// The saved file holds the mesh and the current flags. A body suppressed after
+// meshing and saved without re-meshing is still in that mesh, so the reopened
+// analysis must still refuse to solve it, as the session that saved it did.
+test("a suppression made after meshing still blocks the solve after save and load", async ({
+  page,
+}) => {
+  test.setTimeout(240_000);
+  await importStep(page, TWO_BOXES);
+  await mesh(page);
+  await openBody(page, 2);
+  await page.getByTestId("body-suppressed-2").check();
+
+  const file = path.join(
+    fs.mkdtempSync(path.join(os.tmpdir(), "kofem-suppress-")),
+    "suppressed-after-mesh.vtu",
+  );
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Save analysis" }).click();
+  await (await download).saveAs(file);
+
+  await gotoApp(page);
+  await page.locator('input[type="file"][accept=".vtu"]').setInputFiles(file);
+  await expect.poll(async () => (await state(page)).nodes).toBeGreaterThan(0);
+  const loaded = await state(page);
+  expect(loaded.bodies).toEqual([1, 2]);
+  expect(loaded.suppressed).toEqual([2]);
+  await openTree(page, "static");
+  await expect(
+    page.getByText("Re-mesh: suppressed Body 2 still in the mesh"),
+  ).toBeVisible();
+});
+
+test("the last body in the model cannot be suppressed", async ({ page }) => {
+  await importStep(page, TWO_BOXES);
+  await openBody(page, 1);
+  await page.getByTestId("body-suppressed-1").check();
+  await openBody(page, 2);
+  await expect(page.getByTestId("body-suppressed-2")).toBeDisabled();
+});

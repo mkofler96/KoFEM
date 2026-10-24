@@ -1,0 +1,2 @@
+# Upstream browser bundles are vendored, not authored application code.
+web/public/landing/vendor/** linguist-vendored -whitespace

@@ -23,7 +23,8 @@ KoFEM/
 │   │   │                     # lives in the modules below
 │   │   ├── cad_io.cpp        # STEP/IGES import (OCCT)
 │   │   ├── tessellate.cpp    # OCCT surface tessellation (display)
-│   │   ├── geometry_edit.cpp # Split faces/bodies with a plane (the split tool)
+│   │   ├── geometry_edit.cpp # Split faces/bodies with a plane (the split tool),
+│   │   │                     # Boolean union/subtract/intersect of bodies
 │   │   ├── mesh_netgen.cpp   # Netgen volume meshing
 │   │   ├── solve_mfem.cpp    # Linear-elastic solid solve (MFEM)
 │   │   ├── shell_core.cpp    # Kirchhoff/DKT shell formulation
@@ -70,7 +71,8 @@ published as a GitHub Release instead (KOF-186).
 
 `scripts/engine-version.sh` hashes the engine sources (`engine/`,
 `scripts/build-wasm.sh`, `scripts/fetch-wasm-deps.sh`) into an ID; CI publishes each
-main build as the release `engine-<id>`; `scripts/fetch-wasm-engine.sh` resolves the
+`develop` and `main` build as the release `engine-<id>` (the same sources give the
+same ID, so a promotion to `main` finds its release already there); `scripts/fetch-wasm-engine.sh` resolves the
 ID from the checkout and downloads the matching binary. Nothing to bump by hand, and
 changed sources can never resolve to a stale binary.
 
@@ -80,7 +82,7 @@ What this means in practice:
   matching `.engine-id` stamp in `web/src/wasm/pkg/` makes that a no-op.
 - **After changing `engine/cpp`, build locally** (`scripts/docker-build-wasm.sh`):
   no release exists for unmerged sources. The build writes the stamp, so the fetch
-  then leaves your binary alone. The release appears once the PR lands on `main`.
+  then leaves your binary alone. The release appears once the PR lands on `develop`.
 - Do not re-add the binaries to git, and do not `git add -f` them.
 
 ### Shells and multibody
@@ -90,9 +92,10 @@ touch nearly every layer, so check them before assuming a change is solid-only:
 
 - **Shells.** Thin-walled bodies are meshed as `CTRIA3` and solved with Kirchhoff
   plate/DKT elements (`shell_core.cpp`, `solve_shell.cpp`). Mid-surface extraction
-  and the shell mesh assembly live in `web/src/lib/shellize.ts`. Auto-shell
-  detection picks the path from a wall-thickness ratio at mesh time and stores a
-  mixed `CTRIA3` + `CTETRA` model.
+  and the shell mesh assembly live in `web/src/lib/shellize.ts`. Shell is the
+  user's per-body Element type — nothing is detected automatically. A body marked
+  Shell is idealised as shells everywhere at mesh time (a partly thin part is
+  split into bodies first), and the mesh stores a mixed `CTRIA3` + `CTETRA` model.
 - **Multibody.** Assemblies carry per-body materials and per-body element type
   (shell or solid). Bodies are joined by bonded ties; shell-to-solid interfaces
   use explicit **RBE3** coupling. The mixed solve is `solve_coupled.cpp`.
@@ -218,21 +221,39 @@ benchmarks, `shell-coupling/` and `topopt-shell/` hold dev scripts. Touch those
 only when the request names them explicitly. Do not add Abaqus `.inp` input
 files or an Abaqus reader (licensing).
 
+## Branches and images
+
+| Branch    | Takes                                | CI publishes        |
+| --------- | ------------------------------------ | ------------------- |
+| `develop` | feature PRs (squash-merged)          | the image `:dev`    |
+| `main`    | promotions from `develop` (merge PR) | the image `:latest` |
+
+- **Feature PRs target `develop`**, never `main`.
+- **A promotion** is a PR from `develop` to `main`, merged with a **merge
+  commit** — squashing it would rewrite `develop`'s history onto `main` and make
+  the next promotion conflict. Only the maintainer opens or merges one.
+- CI pushes images only from these two branches, each with signed build
+  provenance (`actions/attest-build-provenance`), so a deployment can verify an
+  image before running it. Do not weaken that, or the pinned base-image digests
+  and action SHAs in CI and `web/Dockerfile`.
+- How and where the images are deployed is not part of this repository.
+
 ## Releases
 
-kofem.org deploys `main` continuously, so a release does not ship code. It tags a
-tested commit as `vX.Y.Z`, which gives users and bug reports a version to name and
-puts changes to numerical results on record. There is no schedule.
-Releases happen when the maintainer asks for one, and nothing prompts for them.
-The `release` skill in `.claude/skills/` has the procedure. The rules:
+A release does not ship code: the images are built from every commit that
+reaches `develop` and `main`. It tags a tested commit as `vX.Y.Z`, which gives users and bug reports
+a version to name and puts changes to numerical results on record. There is no
+schedule. Releases happen when the maintainer asks for one, and nothing prompts
+for them. The `release` skill in `.claude/skills/` has the procedure. The rules:
 
 - **The version** is `web/package.json` `version` and must equal `Cargo.toml`
   `[workspace.package] version`. `scripts/release-version.sh` checks both on
   every PR, and also checks that `CHANGELOG.md` has a section for the version.
-- **A release is a PR** titled `Release vX.Y.Z`. It bumps both versions and adds
-  the `CHANGELOG.md` section. Merging it is the maintainer's go/no-go. CI's
-  `release` job then tags the merge commit and publishes the GitHub Release, and
-  it only does so once every gate has passed on that commit.
+- **A release is a PR** titled `Release vX.Y.Z` into `develop`. It bumps both
+  versions and adds the `CHANGELOG.md` section. The promotion that carries it to
+  `main` is the maintainer's go/no-go: CI's `release` job tags the `main` commit
+  that brought the release commit in (the promotion merge) and publishes the
+  GitHub Release, and it only does so once every gate has passed on that commit.
 - **Agents never tag, and never create or edit a GitHub Release.** Never open a
   release PR unless the maintainer asked for that release. The maintainer may tag
   by hand. CI then publishes the GitHub Release for any `vX.Y.Z` tag that has a
@@ -275,8 +296,9 @@ Do not move them into Linear, and do not create a `docs/` directory.
 ### Working an issue
 
 1. Find or create the Linear issue.
-2. Branch, implement, open the PR. Put `Fixes KOF-nn` in the PR description —
-   Linear's GitHub integration links the PR and closes the issue on merge.
+2. Branch from `develop`, implement, open the PR against `develop`. Put
+   `Fixes KOF-nn` in the PR description — Linear's GitHub integration links the
+   PR and moves the issue on as the PR merges.
    (`closes #<github-number>` is the old convention; it is no longer used.)
 3. Record your evidence on the issue (below).
 

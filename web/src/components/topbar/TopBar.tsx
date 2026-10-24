@@ -11,6 +11,14 @@ import {
 import { resetWorker } from "../../workers/sharedWorker";
 import styles from "./TopBar.module.css";
 
+// A development deployment is marked at container start with
+// <meta name="kofem-channel" content="dev"> (web/docker-entrypoint.d/
+// 30-kofem-channel.sh); production and local builds carry no such tag.
+const DEV_CHANNEL =
+  document
+    .querySelector<HTMLMetaElement>('meta[name="kofem-channel"]')
+    ?.getAttribute("content") === "dev";
+
 export function TopBar() {
   const modelName = useModelStore((s) => s.modelName);
   const loadAnalysis = useModelStore((s) => s.loadAnalysis);
@@ -67,6 +75,15 @@ export function TopBar() {
           height={24}
         />
         <span className={styles.name}>KoFEM</span>
+        {DEV_CHANNEL && (
+          <span
+            className={styles.devBadge}
+            data-testid="dev-badge"
+            title="Development build of the next KoFEM — results may change"
+          >
+            DEV
+          </span>
+        )}
         <span className={styles.crumb}>
           <span className={styles.crumbMuted}>Workspace</span>
           <span className={styles.crumbSep}>/</span>

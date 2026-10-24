@@ -15,6 +15,7 @@
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { test, expect } from "./coverage";
+import { openTree, setElementType } from "./fixtures/tree";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const STEP_PATH = join(here, "../../test_files/fin_two_parts.step");
@@ -52,6 +53,9 @@ test("mesh-time auto-shell: the fin is stored as a mid-surface shell mesh", asyn
     )
     .toBeGreaterThan(0);
 
+  // Body 2 is the fin; the user marks it Shell.
+  await setElementType(page, 2, "shell");
+  await openTree(page, "mesh");
   await page.getByRole("button", { name: /Mesh STEP volume/i }).click();
   await expect
     .poll(

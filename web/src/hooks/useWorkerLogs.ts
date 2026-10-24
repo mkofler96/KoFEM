@@ -46,7 +46,7 @@ const NO_LOGS: WorkerLogEntry[] = [];
 
 // Collects the shared worker's log stream (WASM stdout/stderr plus the
 // worker's own status lines) into the given channel for display in a log
-// panel. LeftPanel mounts exactly one panel at a time, so the sharedWorker's
+// panel. PropertiesPanel mounts one step panel at a time, so the sharedWorker's
 // single log-callback slot always belongs to whichever panel is active — the
 // mesh log while meshing on the Geometry tab, the solver log while solving on
 // the Solve tab, the optimizer log while optimizing on the Optimize tab.

@@ -5,6 +5,8 @@
 // transitions (mode navigation).
 
 import type { SliceCreator } from "./modelStore";
+import { modeSelection, applyTreeSelection } from "./viewSlice";
+import { ensurePlot } from "./studySlice";
 
 export interface SolverResult {
   displacements: Float64Array;
@@ -83,6 +85,7 @@ export const createResultsSlice: SliceCreator<ResultsSlice> = (set) => ({
       // A static solve just finished — it, not any earlier density field, is
       // what Results should show.
       s.activeResult = "static";
+      ensurePlot(s, "static");
     }),
   // Switching the field changes both the quantity and its unit, so limits
   // picked for the previous one no longer mean anything — back to auto.
@@ -118,5 +121,6 @@ export const createResultsSlice: SliceCreator<ResultsSlice> = (set) => ({
   setMode: (mode) =>
     set((s) => {
       s.mode = mode;
+      applyTreeSelection(s, modeSelection(mode, s));
     }),
 });

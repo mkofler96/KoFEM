@@ -3,7 +3,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import type { WorkerLogEntry } from "../../hooks/useWorkerLogs";
-import styles from "./LeftPanel.module.css";
+import styles from "./Panel.module.css";
 
 // VSCode-style collapsable log panel showing the worker's log stream — used
 // by both the mesher (Geometry tab) and the solver (Solve tab) so long-running

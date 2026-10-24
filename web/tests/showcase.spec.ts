@@ -6,6 +6,7 @@ import path from "path";
 import fs from "fs";
 import { gotoApp } from "./fixtures/app";
 import { bootstrapCantilever } from "./fixtures/cantilever";
+import { openTree } from "./fixtures/tree";
 
 const OUT_DIR = path.join("playwright-results", "screenshots", "showcase");
 const STEP_FILES_DIR = path.resolve("..", "test_files");
@@ -200,13 +201,9 @@ test.describe("Full workflow showcase", () => {
       );
     }
 
-    await page
-      .locator("nav")
-      .getByRole("button")
-      .filter({ hasText: "Constraints" })
-      .click();
+    await page.locator('[data-testid^="tree-load-"]').first().click();
     await Promise.race([
-      expect(page.getByText("Fixed displacement")).toBeVisible({
+      expect(page.getByTitle("Delete load")).toBeVisible({
         timeout: 15_000,
       }),
       fatalError,
@@ -221,11 +218,7 @@ test.describe("Full workflow showcase", () => {
     // window.__kofemTriggerSolve.  We trigger the solve via evaluate() rather
     // than clicking the button because toBeEnabled() inside Promise.race() has
     // exhibited a mysterious ~300 s stall in CI despite correct store state.
-    await page
-      .locator("nav")
-      .getByRole("button")
-      .filter({ hasText: "Solve" })
-      .click();
+    await openTree(page, "static");
     await Promise.race([
       page.waitForFunction(
         () =>
@@ -305,11 +298,7 @@ test.describe("Full workflow showcase", () => {
     );
 
     await bootstrapCantilever(page);
-    await page
-      .locator("nav")
-      .getByRole("button")
-      .filter({ hasText: "Optimize" })
-      .click();
+    await openTree(page, "topopt");
 
     // A filter radius sized to the beam and a small iteration cap keep the run
     // fast; the emerged shape reads clearly at these settings.

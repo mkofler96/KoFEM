@@ -18,6 +18,7 @@
 import { test, expect } from "./coverage";
 import type { Page } from "@playwright/test";
 import { boxHexMesh } from "../../examples/validation/lib/mesh.mjs";
+import { addBoundary } from "./fixtures/tree";
 
 interface CouplingGroupState {
   id: number;
@@ -124,7 +125,7 @@ test("a coupling idealises a picked surface to a reference point", async ({
 }) => {
   const model = await openConstraintsMode(page);
 
-  await page.getByTestId("add-coupling").click();
+  await addBoundary(page, "coupling");
   await pickFace(page, model.endFace);
 
   // The point defaults to the picked selection's centre — the x = 10 face of a
@@ -153,7 +154,7 @@ test("a coupling idealises a picked surface to a reference point", async ({
   expect([refNode?.x, refNode?.y, refNode?.z]).toEqual([10, 2, 2]);
   expect(nodes).toHaveLength(model.nodes.length + 1);
 
-  await expect(page.getByText("Coupling1")).toBeVisible();
+  await expect(page.getByTestId("tree-coupling-1")).toHaveText("Coupling1");
   await expect(
     page.getByText(/kinematic · Ux, Uy, Uz · 9 nodes/),
   ).toBeVisible();
@@ -164,15 +165,17 @@ test("a coupling's kind, DOFs and point are editable, and deleting it removes th
 }) => {
   const model = await openConstraintsMode(page);
 
-  await page.getByTestId("add-coupling").click();
+  await addBoundary(page, "coupling");
   await pickFace(page, model.endFace);
   await page.getByTestId("apply-coupling").click();
 
-  // ✎ opens the inline editor. Switching to distributing drops the DOF mask —
-  // a distributing coupling ties all six of its point's DOFs by construction,
-  // so the checkboxes are not offered and the stored mask is the full set.
-  await page.getByTitle("Edit coupling").click();
+  // Applying saves the coupling and selects it as saved — no editor to
+  // confirm. ✎ opens it. Switching to distributing drops the DOF mask — a
+  // distributing coupling ties all six of its point's DOFs by construction, so
+  // the checkboxes are not offered and the stored mask is the full set.
   const form = page.getByTestId("coupling-edit-form");
+  await expect(form).toBeHidden();
+  await page.getByTitle("Edit coupling").click();
   await expect(form).toBeVisible();
   await form.getByTestId("coupling-kind").selectOption("distributing");
   await expect(
@@ -203,7 +206,7 @@ test("a BC can act on a coupling's reference point, and goes when the coupling d
 }) => {
   const model = await openConstraintsMode(page);
 
-  await page.getByTestId("add-coupling").click();
+  await addBoundary(page, "coupling");
   await pickFace(page, model.endFace);
   await page.getByTestId("coupling-kind").selectOption("kinematic");
   await page.getByTestId("apply-coupling").click();
@@ -214,7 +217,7 @@ test("a BC can act on a coupling's reference point, and goes when the coupling d
   // its marker carries the click (useReferencePointPick), which lands in the
   // same session state a face pick writes. Clamping a kinematic point is how a
   // bolted hole is restrained without fixing every node of its bore.
-  await page.getByRole("button", { name: "+ Add BC" }).click();
+  await addBoundary(page, "bc");
   await page.getByTestId("pick-geometry-point").click();
   await pickFace(page, [refNodeId]);
 
@@ -231,6 +234,7 @@ test("a BC can act on a coupling's reference point, and goes when the coupling d
 
   // Deleting the coupling takes the reference point with it, so the BC that
   // named it must go too rather than constrain a node that no longer exists.
+  await page.locator('[data-testid^="tree-coupling-"]').click();
   await page.getByTitle("Delete coupling").click();
   const after = await state(page);
   expect(after.couplingGroups).toHaveLength(0);
@@ -244,7 +248,7 @@ test("the reference point being placed is previewed in the viewport", async ({
   const model = await openConstraintsMode(page);
 
   // Nothing is being placed yet, so there is nothing to preview.
-  await page.getByTestId("add-coupling").click();
+  await addBoundary(page, "coupling");
   expect((await state(page)).couplingDraft).toBeNull();
 
   // Picking the surface places the point at its centre, and the preview follows
@@ -278,7 +282,7 @@ test("the reference point being placed is previewed in the viewport", async ({
 test("a load can be applied at a single picked node", async ({ page }) => {
   const model = await openConstraintsMode(page);
 
-  await page.getByRole("button", { name: "+ Add Load" }).click();
+  await addBoundary(page, "load");
   // A solid mesh offers Face and Point, but not Edge — a closed solid boundary
   // has no boundary polyline to walk.
   await expect(page.getByTestId("pick-geometry-face")).toBeVisible();
@@ -305,7 +309,7 @@ test("a pressure or a moment on a single node of a solid mesh is refused", async
 }) => {
   const model = await openConstraintsMode(page);
 
-  await page.getByRole("button", { name: "+ Add Load" }).click();
+  await addBoundary(page, "load");
   await page.getByTestId("pick-geometry-point").click();
   await pickFace(page, [model.endFace[0]]);
 
@@ -332,7 +336,7 @@ test("a reference point is picked by clicking its marker in the viewport", async
 }) => {
   const model = await openConstraintsMode(page);
 
-  await page.getByTestId("add-coupling").click();
+  await addBoundary(page, "coupling");
   await pickFace(page, model.endFace);
   // Off the mesh grid on purpose: the face centre (10, 2, 2) is itself a node of
   // this coarse box, and two exactly coincident candidates would not test which
@@ -345,7 +349,7 @@ test("a reference point is picked by clicking its marker in the viewport", async
   // Real viewport clicks, not injected state: the reference point belongs to no
   // surface, so the ray always reports the mesh behind it — this is what proves
   // the point still wins when it is what was clicked.
-  await page.getByRole("button", { name: "+ Add Load" }).click();
+  await addBoundary(page, "load");
   await page.getByTestId("pick-geometry-point").click();
 
   const canvas = page.locator("canvas").first();
@@ -376,7 +380,7 @@ test("a reference point is picked by clicking its marker in the viewport", async
   // Start the session over and click the marker once, so the group carries the
   // reference point and nothing the sweep collected on the way.
   await page.getByTitle("Cancel").click();
-  await page.getByRole("button", { name: "+ Add Load" }).click();
+  await addBoundary(page, "load");
   await page.getByTestId("pick-geometry-point").click();
   if (!marker) throw new Error("no marker position");
   await page.mouse.click(...marker);

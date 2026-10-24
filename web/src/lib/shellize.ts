@@ -248,6 +248,64 @@ export function shellWallTets(
   return wallTets;
 }
 
+// Every tet of the shelled body — what the app replaces with shell facets. A
+// body the user marks Shell is idealised as shells everywhere, not just where a
+// thin wall was detected: a part that is only partly thin-walled is split into
+// bodies first and only the thin ones are marked, so no thick block of a Shell
+// body is left behind as solid (shellWallTets keeps those, for the dev scripts
+// that shell an unsplit part).
+//
+// Replacing the whole body is only sound when the detected walls cover all of
+// it. Wall detection pairs opposite PLANAR faces of a useful size, so a curved
+// wall, a small tab or a thick block yields no facets — dropping its tets would
+// quietly remove material and change the load path. Such a body is refused,
+// with the share of it the shells would lose.
+export function shellBodyTets(
+  m: ShellizeMesh,
+  shells: ShellExtraction,
+): Set<number> {
+  const tets = new Set<number>();
+  for (let e = 0; e < m.tet.length / 4; e++)
+    if (m.body[e] === shells.shellBody) tets.add(e);
+  const covered = shellWallTets(m, shells);
+  let lostVolume = 0,
+    bodyVolume = 0,
+    lost = 0;
+  for (const e of tets) {
+    const volume = tetVolume(m, e);
+    bodyVolume += volume;
+    if (covered.has(e)) continue;
+    lost++;
+    lostVolume += volume;
+  }
+  if (lost > 0)
+    throw new Error(
+      `Body ${shells.shellBody} is marked "Shell", but ${lost} of its ${tets.size} ` +
+        `elements (${((100 * lostVolume) / bodyVolume).toFixed(1)} % of its volume) ` +
+        "lie outside every flat thin wall the shell idealisation found — a curved " +
+        "or small face, or a thick block, that the shells would drop. Split that " +
+        "part into a body of its own and keep it Solid, or set the body to Solid.",
+    );
+  return tets;
+}
+
+function tetVolume(m: ShellizeMesh, e: number): number {
+  const corner = [0, 1, 2, 3].map((k) => pt(m.V, m.tet[4 * e + k]));
+  const edge = [1, 2, 3].map((k) => [
+    corner[k][0] - corner[0][0],
+    corner[k][1] - corner[0][1],
+    corner[k][2] - corner[0][2],
+  ]);
+  // |e₁ · (e₂ × e₃)| / 6, the edges from corner 0
+  return (
+    Math.abs(
+      edge[0][0] * (edge[1][1] * edge[2][2] - edge[1][2] * edge[2][1]) +
+        edge[0][1] * (edge[1][2] * edge[2][0] - edge[1][0] * edge[2][2]) +
+        edge[0][2] * (edge[1][0] * edge[2][1] - edge[1][1] * edge[2][0]),
+    ) / 6
+  );
+}
+
 // Corner accessor for the shell mid-surface facets.
 function midSurfaceCorner(
   shells: ShellExtraction,

@@ -5,8 +5,17 @@ import { useState } from "react";
 import { useModelStore } from "../store/modelStore";
 import type { SplitMode, StepTessellation } from "../store/modelStore";
 import { resetWorker, sendToWorker } from "../workers/sharedWorker";
+import { isCadBody } from "../store/geometrySlice";
+import { booleanBodySources } from "../lib/booleanBodies";
 
 export type SplitAxis = "x" | "y" | "z";
+
+export type BooleanOp = "union" | "subtract" | "intersect";
+
+type EditReply = Required<StepTessellation> & {
+  bytes: Uint8Array;
+  bodyCount: number;
+};
 
 const AXIS_NORMAL: Record<SplitAxis, [number, number, number]> = {
   x: [1, 0, 0],
@@ -26,14 +35,14 @@ export function splitPlane(
   };
 }
 
-// Geometry editing (the split tool): sends the current file and the cut to the
-// worker's split_geometry and swaps the edited file in. Owns the in-flight
-// flag; the error of the last attempt is store state (splitError), so it
-// outlives the panel that started the split.
+// Geometry editing (the split tool, Booleans): sends the current file and the
+// edit to the worker and swaps the edited file in. Owns the in-flight flag; the
+// error of the last attempt is store state (splitError), so it outlives the
+// panel that started the edit.
 export function useGeometryEdit() {
   const stepBytes = useModelStore((s) => s.stepBytes);
   const geometryFormat = useModelStore((s) => s.geometryFormat);
-  const thinRatio = useModelStore((s) => s.thinRatio);
+  const properties = useModelStore((s) => s.properties);
   const applyGeometryEdit = useModelStore((s) => s.applyGeometryEdit);
   const undoGeometryEdit = useModelStore((s) => s.undoGeometryEdit);
   const setRunning = useModelStore((s) => s.setRunning);
@@ -46,6 +55,8 @@ export function useGeometryEdit() {
     axis: SplitAxis,
     position: number,
     faceIds: number[],
+    // Bodies mode: the bodies to cut; empty cuts every body the plane crosses.
+    bodyIds: number[] = [],
   ): Promise<boolean> {
     if (!stepBytes) {
       setSplitError(
@@ -61,25 +72,60 @@ export function useGeometryEdit() {
       setSplitError("Pick at least one face to split.");
       return false;
     }
+    return run("split_geometry", {
+      split: {
+        mode,
+        ...splitPlane(axis, position),
+        ...(mode === "faces" ? { faceIds } : {}),
+        ...(mode === "bodies" && bodyIds.length > 0 ? { bodyIds } : {}),
+      },
+    });
+  }
+
+  // Combine `target` with `tools`; the result replaces the target body.
+  async function combine(
+    op: BooleanOp,
+    target: number,
+    tools: number[],
+    keepTools: boolean,
+  ): Promise<boolean> {
+    if (!stepBytes) {
+      setSplitError(
+        "Cannot combine bodies: the geometry file is not available (a saved analysis carries none). Re-import the STEP file to edit its geometry.",
+      );
+      return false;
+    }
+    if (tools.length === 0) {
+      setSplitError("Pick at least one tool body.");
+      return false;
+    }
+    const bodyIds = properties
+      .filter(isCadBody)
+      .map((p) => p.id)
+      .sort((a, b) => a - b);
+    return run(
+      "boolean_geometry",
+      { boolean: { op, target, tools, keepTools } },
+      (bodyCount) =>
+        booleanBodySources(bodyIds, op, target, tools, keepTools, bodyCount),
+    );
+  }
+
+  // `bodySources` maps the edited model's bodies back to the old ones when the
+  // edit knows it (a Boolean), so their settings survive the renumbering.
+  async function run(
+    type: "split_geometry" | "boolean_geometry",
+    edit: Record<string, unknown>,
+    bodySources?: (bodyCount: number) => number[],
+  ): Promise<boolean> {
     setSplitError(null);
     setIsSplitting(true);
     setRunning(true);
     try {
-      const reply = await sendToWorker<
-        Required<StepTessellation> & {
-          bytes: Uint8Array;
-          bodyCount: number;
-          shellBodyIds: number[];
-        }
-      >("split_geometry", {
+      const reply = await sendToWorker<EditReply>(type, {
         bytes: stepBytes,
         format: geometryFormat,
-        thinRatio,
-        split: {
-          mode,
-          ...splitPlane(axis, position),
-          ...(mode === "faces" ? { faceIds } : {}),
-        },
+        ...edit,
       });
       applyGeometryEdit(
         reply.bytes,
@@ -90,11 +136,14 @@ export function useGeometryEdit() {
           faceIds: reply.faceIds,
         },
         reply.bodyCount,
-        reply.shellBodyIds,
+        bodySources?.(reply.bodyCount),
       );
       return true;
     } catch (err) {
-      // The engine's message names the face and the fix; the C++ exception type
+      // The worker may already hold the edited shape the store did not take;
+      // replace it so the next mesh reloads the file the store has.
+      resetWorker();
+      // The engine's message names the face or body and the fix; the C++ type
       // the worker prefixes it with says nothing to the user.
       const message = err instanceof Error ? err.message : String(err);
       setSplitError(message.replace(/^std::\w+: /, ""));
@@ -114,5 +163,5 @@ export function useGeometryEdit() {
     resetWorker();
   }
 
-  return { split, undo, isSplitting, splitError, setSplitError };
+  return { split, combine, undo, isSplitting, splitError, setSplitError };
 }

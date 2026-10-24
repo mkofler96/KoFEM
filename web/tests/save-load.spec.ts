@@ -7,6 +7,7 @@ import path from "path";
 import os from "os";
 import { bootstrapCantilever } from "./fixtures/cantilever";
 import { gotoApp } from "./fixtures/app";
+import { openTree } from "./fixtures/tree";
 
 // End-to-end coverage for issue #179: save the full analysis (setup +
 // results) to a ParaView-readable .vtu file, restore it into a fresh
@@ -31,11 +32,7 @@ test("save → load → re-save round-trips the analysis losslessly", async ({
 
   // ── 1. Solve the cantilever fixture so the saved file contains results ────
   await bootstrapCantilever(page);
-  await page
-    .locator("nav")
-    .getByRole("button")
-    .filter({ hasText: "Solve" })
-    .click();
+  await openTree(page, "static");
   const solveBtn = page
     .getByRole("button")
     .filter({ hasText: "Run static solve" });
@@ -97,11 +94,7 @@ test("save → load → re-save round-trips the analysis losslessly", async ({
     });
 
   const loaded = await readResult();
-  await page
-    .locator("nav")
-    .getByRole("button")
-    .filter({ hasText: "Solve" })
-    .click();
+  await openTree(page, "static");
   const reSolveBtn = page
     .getByRole("button")
     .filter({ hasText: "Run static solve" });
@@ -163,11 +156,7 @@ test("max-stress TO settings round-trip; older files load with it off", async ({
     );
 
   await bootstrapCantilever(page);
-  await page
-    .locator("nav")
-    .getByRole("button")
-    .filter({ hasText: "Optimize" })
-    .click();
+  await openTree(page, "topopt");
   await page.getByLabel("Volume frac.").fill("0.35");
   await page.getByTestId("topopt-stress-constraint").check();
   await page.getByLabel("σ_vm ≤").fill("250");
