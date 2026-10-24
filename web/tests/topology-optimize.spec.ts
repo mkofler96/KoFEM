@@ -170,7 +170,9 @@ test("a suppressed Shell body does not block solving or optimizing the rest", as
 }) => {
   test.setTimeout(120_000);
   await gotoApp(page);
-  await page.waitForFunction(() => !!(window as any).__kofem);
+  await page.waitForFunction(() =>
+    Boolean((window as unknown as { __kofem?: unknown }).__kofem),
+  );
 
   const outcome = (await page.evaluate(
     async (beam) => {
@@ -202,7 +204,12 @@ test("a suppressed Shell body does not block solving or optimizing the rest", as
       };
       const run = async (name: string, payload: object) => {
         try {
-          await (window as any).__kofem.sendToWorker(name, payload);
+          const win = window as unknown as {
+            __kofem: {
+              sendToWorker(name: string, payload: object): Promise<unknown>;
+            };
+          };
+          await win.__kofem.sendToWorker(name, payload);
           return "ok";
         } catch (err) {
           return (err as Error).message;
