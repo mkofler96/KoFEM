@@ -78,7 +78,27 @@ jobs:
       # ninja-build is needed by the emcmake configure that emits
       # compile_commands.json (see scripts/clang-tidy.sh).
       - name: Install clang-tidy-20
-        run: sudo apt-get update && sudo apt-get install -y clang-tidy-20 ninja-build
+        timeout-minutes: 5
+        run: |
+          # The runner's Azure mirror stalled LLVM downloads for >16 minutes.
+          # Use the main Ubuntu archive for this install, without changing the
+          # runner's sources or pulling LLVM's recommended development packages.
+          cat > "$RUNNER_TEMP/clang-tidy.sources" <<'EOF'
+          Types: deb
+          URIs: https://archive.ubuntu.com/ubuntu
+          Suites: noble noble-updates noble-security
+          Components: main universe
+          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+          EOF
+          APT_OPTIONS=(
+            -o "Dir::Etc::sourcelist=$RUNNER_TEMP/clang-tidy.sources"
+            -o "Dir::Etc::sourceparts=-"
+            -o Acquire::Retries=2
+            -o Acquire::http::Timeout=30
+            -o Acquire::https::Timeout=30
+          )
+          sudo apt-get "${APT_OPTIONS[@]}" update
+          sudo apt-get "${APT_OPTIONS[@]}" install -y --no-install-recommends clang-tidy-20 ninja-build
 
       - name: clang-tidy
         run: bash scripts/clang-tidy.sh
