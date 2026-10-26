@@ -10,11 +10,11 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
     <title>
-      Online Finite Element Solver — Browser-Based FEM Analysis | KoFEM
+      Online Finite Element Solver — Local, Browser-Based FEM | KoFEM
     </title>
     <meta
       name="description"
-      content="KoFEM is a free online finite element solver that runs entirely in your browser. Import STEP geometry, apply loads and boundary conditions, and run a direct static solve — no installation required."
+      content="Free, open-source online finite element solver. Import STEP or IGES, mesh and solve linear static FEM locally in your browser — no installation, no CAD upload."
     />
     <link rel="canonical" href="https://kofem.org/" />
     <meta name="robots" content="index, follow" />
@@ -24,7 +24,7 @@
     <meta property="og:title" content="Online Finite Element Solver — KoFEM" />
     <meta
       property="og:description"
-      content="Browser-based FEM analysis. Import STEP geometry and run a direct static solve in your browser. No installation required."
+      content="Browser-based FEM: linear static analysis and topology optimization that run locally in your browser. Nothing to install, your CAD is never uploaded, and the code is open source (AGPL-3.0)."
     />
     <meta property="og:url" content="https://kofem.org/" />
     <meta property="og:image" content="https://kofem.org/kofem_logo.svg" />
@@ -32,7 +32,7 @@
     <meta name="twitter:title" content="Online Finite Element Solver — KoFEM" />
     <meta
       name="twitter:description"
-      content="Browser-based FEM analysis. Import STEP geometry and run a direct static solve in your browser. No installation required."
+      content="Browser-based FEM: linear static analysis and topology optimization that run locally in your browser. Nothing to install, your CAD is never uploaded, and the code is open source (AGPL-3.0)."
     />
     <meta name="twitter:image" content="https://kofem.org/kofem_logo.svg" />
 
@@ -45,9 +45,11 @@
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
         "name": "KoFEM",
+        "url": "https://kofem.org/",
         "applicationCategory": "EngineeringApplication",
         "operatingSystem": "Any (web browser)",
-        "description": "Browser-based finite element solver for linear static structural simulations. Import STEP geometry and run analyses in your browser.",
+        "description": "Free, open-source browser-based finite element solver for linear static structural analysis and topology optimization. Imports STEP and IGES geometry; meshing and solving run locally in the browser as WebAssembly, so CAD files are never uploaded.",
+        "license": "https://www.gnu.org/licenses/agpl-3.0.html",
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
       }
     </script>
@@ -96,35 +98,81 @@
         >
       </nav>
     </header>
-    <main
-      id="scroll-viewport"
-      class="scroll-viewport"
-      tabindex="0"
-      aria-label="Scroll to explore geometry, meshing, loads, results and optimization"
-    >
-      <section
-        id="top"
-        class="scroll-story"
-        aria-label="Bracket animation scroll range"
-      >
-        <div class="scroll-target" id="mesh-view" aria-hidden="true"></div>
-      </section>
-    </main>
-    <div class="stage">
+    <!-- The stage comes first so the hero links follow the navigation in tab
+         order; the scroll viewport below it only drives the animation. -->
+    <main class="stage">
       <div class="ambient" aria-hidden="true"></div>
-      <div class="intro">
-        <div class="intro-brand">
+      <section class="intro" aria-labelledby="hero-title">
+        <p class="intro-brand">
           <img
             class="logo"
             src="/landing/kofem-logo.svg"
             alt=""
             width="112"
             height="112"
-          />
-          <h1>KoFEM</h1>
+          />KoFEM
+        </p>
+        <h1 id="hero-title">Finite element analysis in your browser.</h1>
+        <p class="hero-lede">
+          Import a STEP or IGES part, apply loads and supports, and get
+          displacements and stresses — or let topology optimization find a
+          lighter shape.
+        </p>
+        <ul class="hero-claims">
+          <li>
+            <strong>Nothing to install.</strong
+            ><span class="claim-detail"> No installer, no sign-up.</span>
+          </li>
+          <li>
+            <strong>Computed in your browser.</strong
+            ><span class="claim-detail">
+              The Netgen mesher and MFEM solver run locally as WebAssembly, not
+              on a server.</span
+            >
+          </li>
+          <li>
+            <strong>Your CAD stays on your machine.</strong
+            ><span class="claim-detail">
+              Files, meshes and results are never uploaded; opt-in analytics
+              never see them (<a href="/privacy/">privacy notice</a>).</span
+            >
+          </li>
+          <li>
+            <strong>Open source.</strong
+            ><span class="claim-detail">
+              AGPL-3.0,
+              <a
+                href="https://github.com/mkofler96/KoFEM"
+                target="_blank"
+                rel="noopener"
+                >code on GitHub</a
+              >.</span
+            >
+          </li>
+        </ul>
+        <div class="hero-actions">
+          <a class="hero-primary" href="/app/?example=cantilever-beam"
+            >Try a sample simulation <span aria-hidden="true">→</span></a
+          >
+          <a class="hero-secondary" href="/app/">Open the solver</a>
+          <a class="hero-tertiary" href="/examples/">Browse examples</a>
         </div>
-        <p>Finite element analysis in your browser.</p>
-      </div>
+        <p class="hero-limits">
+          <strong>Research-grade software.</strong> Linear-elastic,
+          small-deformation statics and topology optimization only<span
+            class="limits-detail"
+            >; model size is bounded by browser memory (4 GB at most)</span
+          >. Not certified for safety-critical design decisions: check results
+          against references — the <a href="/examples/">examples</a> include
+          benchmarks against known solutions.
+          <a
+            href="https://github.com/mkofler96/KoFEM/blob/main/DISCLAIMER.md"
+            target="_blank"
+            rel="noopener"
+            >Disclaimer</a
+          >
+        </p>
+      </section>
       <div class="mesh-copy" aria-hidden="true">
         <h2>Automatic Meshing</h2>
         <p class="stage-subtitle">Netgen automatic mesh generation</p>
@@ -152,6 +200,21 @@
         >
       </div>
       <div class="progress" aria-hidden="true"><i></i></div>
+    </main>
+    <div
+      id="scroll-viewport"
+      class="scroll-viewport"
+      role="region"
+      tabindex="0"
+      aria-label="Scroll to explore geometry, meshing, loads, results and optimization"
+    >
+      <section
+        id="top"
+        class="scroll-story"
+        aria-label="Bracket animation scroll range"
+      >
+        <div class="scroll-target" id="mesh-view" aria-hidden="true"></div>
+      </section>
     </div>
     <script type="module" src="/landing/landing.js"></script>
   </body>

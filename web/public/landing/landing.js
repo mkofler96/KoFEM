@@ -4,6 +4,7 @@ const status = document.querySelector("#load-status");
 const track = document.querySelector(".scroll-story");
 const scrollViewport = document.querySelector("#scroll-viewport");
 const intro = document.querySelector(".intro");
+const bottomLine = document.querySelector(".bottom-line");
 const meshCopy = document.querySelector(".mesh-copy");
 const analysisCopy = document.querySelector(".analysis-copy");
 const analysisStages = {
@@ -39,7 +40,11 @@ const analysisPanels = Object.values(analysisStages).map((stage, index) => {
 analysisCopy.replaceChildren(...analysisPanels.map(({ panel }) => panel));
 const progressBar = document.querySelector(".progress i");
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
-const mobile = matchMedia("(max-width:700px)");
+// Phones and portrait tablets stack the copy above the bracket; the same query
+// switches the layout in landing.css.
+const stacked = matchMedia(
+  "(max-width: 700px) and (orientation: portrait), (max-aspect-ratio: 4/5)",
+);
 const clamp = (value) => Math.max(0, Math.min(1, value));
 const smooth = (value) => {
   const x = clamp(value);
@@ -500,6 +505,8 @@ async function start() {
   function copy(element, opacity) {
     element.style.opacity = String(opacity);
     element.setAttribute("aria-hidden", String(opacity < 0.05));
+    // The hero holds links: once faded out they must leave the tab order.
+    element.inert = opacity < 0.05;
   }
   const yaw = -0.65,
     phi = 1.05;
@@ -554,6 +561,7 @@ async function start() {
     intro.style.translate = `0 ${still ? 0 : -introFade * 28}px`;
     meshCopy.style.translate = `0 ${still ? 0 : (1 - introFade - meshExit) * 28}px`;
     analysisCopy.style.translate = `0 ${still ? 0 : (1 - next) * 28}px`;
+    return introFade;
   }
   function poseBody(rotationDegrees) {
     const verticalRotation = new THREE.Quaternion().setFromAxisAngle(
@@ -577,8 +585,20 @@ async function start() {
     arrowObject.quaternion.copy(sceneAlignment);
     arrowObject.position.copy(bodyShift);
   }
-  function frameCamera(orientation) {
-    const canvasDistance = 9.4 / (mobile.matches ? 0.54 : 0.81);
+  // In the stacked layout the hero fills the top of the screen, so the bracket
+  // first waits between it and the scroll cue, then rises to its own place as
+  // the hero fades out.
+  function stackedVertical(canvasHeight, heroShown) {
+    const rest = 0.68;
+    const heroBottom = intro.offsetTop + intro.offsetHeight;
+    const waiting = Math.min(
+      0.95,
+      Math.max(rest, (heroBottom + bottomLine.offsetTop) / 2 / canvasHeight),
+    );
+    return rest + (waiting - rest) * heroShown;
+  }
+  function frameCamera(orientation, heroShown) {
+    const canvasDistance = 9.4 / (stacked.matches ? 0.54 : 0.81);
     const cameraPosition = new THREE.Vector3(
       0,
       0,
@@ -592,8 +612,10 @@ async function start() {
     scene.camera3D.getCamera().quaternion.copy(viewRotation);
     const canvasWidth = sceneHost.clientWidth,
       canvasHeight = sceneHost.clientHeight;
-    const horizontal = mobile.matches ? 0.5 : 0.7 - orientation * 0.4;
-    const vertical = mobile.matches ? 0.68 : 0.505;
+    const horizontal = stacked.matches ? 0.5 : 0.7 - orientation * 0.4;
+    const vertical = stacked.matches
+      ? stackedVertical(canvasHeight, heroShown)
+      : 0.505;
     scene.camera3D
       .getCamera()
       .setViewOffset(
@@ -604,7 +626,7 @@ async function start() {
         canvasWidth,
         canvasHeight,
       );
-    return cameraPosition;
+    return { cameraPosition, vertical };
   }
   function fadeAnnotations(mounted, load, overallProgress) {
     const annotationFade = 1 - curve((overallProgress - 0.76) / 0.08);
@@ -644,6 +666,7 @@ async function start() {
     data.torsionNm = String(solution.momentNmm[0] / 1000);
     data.initialScreenRotation = "180";
     data.cameraRadius = state.cameraPosition.length().toFixed(4);
+    data.bracketVertical = state.vertical.toFixed(3);
     data.networkPropagation = "connected";
     data.transparency = "0";
     data.sharpCorners = String(sharpCorners);
@@ -674,7 +697,7 @@ async function start() {
       load = smooth((progress - 0.62) / 0.08),
       contour = smooth((progress - 0.72) / 0.08);
     const still = reduced.matches;
-    updateCopy(progress, still);
+    const introFade = updateCopy(progress, still);
     const shownContour = contour * (1 - relax);
     surface(shownContour);
     drawEdges(edges);
@@ -692,7 +715,10 @@ async function start() {
     const optimizationTurn = still ? 0 : curve(topologyProgress);
     const rotationDegrees = 90 * orientation + 360 * optimizationTurn;
     poseBody(rotationDegrees);
-    const cameraPosition = frameCamera(orientation);
+    const { cameraPosition, vertical } = frameCamera(
+      orientation,
+      still ? Number(introFade < 0.5) : 1 - introFade,
+    );
     fadeAnnotations(mounted, load, overallProgress);
     transitionAnalysis(
       still ? Number(progress >= 0.81) : smooth((progress - 0.81) / 0.06),
@@ -713,6 +739,7 @@ async function start() {
       mounted,
       load,
       cameraPosition,
+      vertical,
     });
     scene.render();
   }
@@ -755,6 +782,29 @@ async function start() {
     },
     { passive: false },
   );
+  // A swipe that starts on a hero link or the navigation is outside the scroll
+  // viewport too; pan it by hand, as the wheel handler does.
+  let touchY = null;
+  document.addEventListener(
+    "touchstart",
+    (event) => {
+      touchY =
+        event.touches.length === 1 && !scrollViewport.contains(event.target)
+          ? event.touches[0].clientY
+          : null;
+    },
+    { passive: true },
+  );
+  document.addEventListener(
+    "touchmove",
+    (event) => {
+      if (touchY === null || event.touches.length !== 1) return;
+      const y = event.touches[0].clientY;
+      scrollViewport.scrollBy({ top: touchY - y, behavior: "instant" });
+      touchY = y;
+    },
+    { passive: true },
+  );
   document.addEventListener("keydown", (event) => {
     if (
       event.defaultPrevented ||
@@ -792,7 +842,7 @@ async function start() {
     }
   });
   reduced.addEventListener("change", schedule);
-  mobile.addEventListener("change", schedule);
+  stacked.addEventListener("change", schedule);
   const observer = new ResizeObserver(schedule);
   observer.observe(sceneHost);
   status.hidden = true;

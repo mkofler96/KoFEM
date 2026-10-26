@@ -12,6 +12,8 @@ Playback shows iterations 0–36, starting from the solid bracket. The last four
 
 The canvas is fixed outside an inner scroll viewport. The bracket moves horizontally from right to left while rotating 90° about the viewport's vertical axis, then completes another 360° turn about that same axis during optimization. Post-processing displays the displacement contour on undeformed geometry. Reduced-motion preferences suppress the optimization turn and heading transitions.
 
+The hero in `index.html` (claims, calls to action, research-grade limits) fades out like the stage headings; once hidden it is `inert`, so its links leave the tab order. Phones and portrait tablets use the stacked layout, selected by the same media query in `landing.css` and `landing.js`: the copy sits above the bracket, which waits below the hero and rises to its stacked place as the hero fades (`data-bracket-vertical` on `#scene` reports the framing). Short screens drop the hero's secondary lines rather than overflow.
+
 `ge-engine-bracket-solution.bin`, `ge-engine-bracket-network.bin`, and `ge-engine-bracket-smooth.bin` contain precomputed results, not engine WASM build artifacts. The solver engine itself is not vendored here.
 
 The generator gzips each `.bin` itself, so it arrives compressed from any static host; `assets.js` inflates it with `DecompressionStream`. The smooth sequence is also packed for size: tetrahedron and boundary indices are 16-bit, each tetrahedron's nodes and then the tetrahedra are sorted (element indices in `settings.passive` refer to the mesher's original order), boundary normals are 16-bit signed and density fields 16-bit unsigned, each with the `scale` recorded in its layout entry.

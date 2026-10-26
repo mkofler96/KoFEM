@@ -103,27 +103,33 @@ a:focus-visible {
   pointer-events: none;
   will-change: opacity, transform;
 }
+.intro {
+  width: min(41vw, 600px);
+}
 .intro-brand {
   display: flex;
   align-items: center;
-  gap: 0.2em;
-  font-size: clamp(60px, 7vw, 108px);
-  margin-bottom: 25px;
+  gap: 0.3em;
+  font-size: clamp(24px, 2.2vw, 32px);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  color: var(--text);
 }
 .logo {
   display: block;
-  width: 0.8em;
-  height: 0.8em;
+  width: 1.1em;
+  height: 1.1em;
   flex-shrink: 0;
   object-fit: contain;
   opacity: 0.86;
 }
 h1 {
-  font-size: inherit;
+  font-size: clamp(32px, 3.2vw, 50px);
   font-weight: 600;
-  letter-spacing: -0.01em;
-  line-height: 1.1;
-  margin: 0;
+  letter-spacing: -0.015em;
+  line-height: 1.08;
+  margin: clamp(14px, 2.6vh, 26px) 0 0;
 }
 p {
   font-size: clamp(18px, 2.1vw, 28px);
@@ -136,8 +142,121 @@ p {
   opacity: 0;
   transform: translateY(calc(-50% + 25px));
 }
-.intro p {
-  font-size: clamp(16px, 1.6vw, 24px);
+.intro .hero-lede {
+  margin-top: clamp(12px, 2vh, 18px);
+  font-size: clamp(16px, 1.3vw, 19px);
+  line-height: 1.5;
+}
+.hero-claims {
+  list-style: none;
+  margin: clamp(16px, 2.8vh, 26px) 0 0;
+  padding: 0;
+  display: grid;
+  gap: clamp(6px, 1.1vh, 10px);
+  font-size: 14.5px;
+  line-height: 1.45;
+  color: #a0adb9;
+}
+.hero-claims li {
+  position: relative;
+  padding-left: 24px;
+}
+.hero-claims li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 0.32em;
+  width: 9px;
+  height: 5px;
+  border-left: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent);
+  transform: rotate(-45deg);
+}
+.hero-claims strong {
+  color: var(--text);
+  font-weight: 500;
+}
+.intro a {
+  pointer-events: auto;
+}
+.hero-claims a,
+.hero-limits a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+.hero-claims a:focus-visible,
+.hero-limits a:focus-visible {
+  outline-offset: 2px;
+}
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 14px;
+  margin-top: clamp(18px, 3.4vh, 32px);
+}
+.hero-primary,
+.hero-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 46px;
+  padding: 0 22px;
+  border-radius: 30px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.hero-primary {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: var(--bg);
+  font-weight: 600;
+}
+.hero-primary:hover {
+  background: #a9cdf3;
+  border-color: #a9cdf3;
+}
+.hero-secondary {
+  border: 1px solid #4a5866;
+  background: #0c1015c9;
+}
+.hero-secondary:hover {
+  background: #1b2733;
+}
+.hero-tertiary {
+  padding: 8px 4px;
+  font-size: 14px;
+  color: #a0adb9;
+  text-decoration: underline;
+  text-decoration-color: #4a5866;
+  text-underline-offset: 4px;
+}
+.hero-tertiary:hover {
+  color: var(--text);
+}
+.hero-actions a:focus-visible {
+  outline-offset: 3px;
+}
+.intro .hero-limits {
+  margin-top: clamp(16px, 3vh, 28px);
+  padding: 11px 14px;
+  border: 1px solid #26313b;
+  border-left: 2px solid #ffbb6a;
+  border-radius: 3px 8px 8px 3px;
+  background: #0c1015b3;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: #9aa7b3;
+}
+.hero-limits strong {
+  color: var(--text);
+  font-weight: 500;
+}
+/* inert follows the fade in landing.js; keep the hidden hero unclickable. */
+.intro[inert] a {
+  pointer-events: none;
 }
 .mesh-copy h2 {
   font-size: clamp(30px, 4.2vw, 64px);
@@ -227,13 +346,24 @@ p {
   width: 1px;
   height: 1px;
 }
-@media (max-width: 700px) {
-  .navigation {
-    padding: 20px 6vw;
+/* Short screens: the navigation wordmark already names the product. */
+@media (max-height: 860px) {
+  .intro-brand,
+  .limits-detail {
+    display: none;
   }
-  .launch {
-    padding: 10px 15px;
+  h1 {
+    margin-top: 0;
   }
+}
+@media (max-height: 680px) {
+  .intro .hero-lede {
+    display: none;
+  }
+}
+/* Phones and portrait tablets stack the copy above the bracket. Keep this
+   query in step with `stacked` in landing.js, which frames the camera. */
+@media (max-width: 700px) and (orientation: portrait), (max-aspect-ratio: 4/5) {
   .intro,
   .mesh-copy {
     left: 8vw;
@@ -241,12 +371,55 @@ p {
     width: 84vw;
     transform: none;
   }
-  .intro-brand {
-    font-size: clamp(48px, 12vw, 62px);
-    margin-bottom: 14px;
+  .intro {
+    left: 6vw;
+    top: max(84px, 10vh, calc(env(safe-area-inset-top) + 64px));
+    width: min(88vw, 620px);
   }
-  .intro p {
-    font-size: 18px;
+}
+@media (max-width: 700px) {
+  .navigation {
+    padding: 20px 6vw;
+  }
+  .launch {
+    padding: 10px 15px;
+  }
+  .intro-brand {
+    display: none;
+  }
+  h1 {
+    font-size: clamp(25px, 7vw, 30px);
+    margin: 0;
+  }
+  .intro .hero-lede {
+    margin-top: 10px;
+    font-size: 14px;
+  }
+  .hero-claims {
+    margin-top: 14px;
+    gap: 5px;
+    font-size: 14px;
+  }
+  .claim-detail,
+  .limits-detail {
+    display: none;
+  }
+  .hero-actions {
+    margin-top: 18px;
+    gap: 6px 16px;
+  }
+  .hero-primary {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+  .hero-secondary {
+    min-height: 42px;
+  }
+  .intro .hero-limits {
+    margin-top: 14px;
+    padding: 9px 12px;
+    font-size: 11.5px;
+    line-height: 1.5;
   }
   .mesh-copy h2 {
     font-size: 34px;
@@ -265,6 +438,48 @@ p {
   .scroll-icon {
     width: 24px;
     height: 34px;
+  }
+}
+/* Landscape phones: only the heading, the claims, the actions and the limits. */
+@media (max-height: 500px) {
+  .intro {
+    top: max(76px, calc(env(safe-area-inset-top) + 56px));
+    width: 54vw;
+    transform: none;
+  }
+  h1 {
+    font-size: 24px;
+  }
+  .claim-detail,
+  .hero-tertiary,
+  .bottom-line {
+    display: none;
+  }
+  .hero-claims {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 16px;
+    margin-top: 10px;
+    font-size: 13px;
+  }
+  .hero-actions {
+    margin-top: 12px;
+    gap: 8px 14px;
+  }
+  .hero-primary {
+    flex: 0 1 auto;
+  }
+  .hero-primary,
+  .hero-secondary {
+    min-height: 38px;
+    padding: 0 16px;
+    font-size: 13px;
+  }
+  .intro .hero-limits {
+    margin-top: 12px;
+    padding: 7px 10px;
+    font-size: 11px;
+    line-height: 1.45;
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -349,13 +564,15 @@ p {
   margin-top: 16px;
   opacity: 0;
 }
-@media (max-width: 700px) {
+@media (max-width: 700px) and (orientation: portrait), (max-aspect-ratio: 4/5) {
   .analysis-copy {
     left: 8vw;
     top: 19%;
     width: 84vw;
     transform: none;
   }
+}
+@media (max-width: 700px) {
   .analysis-copy h2 {
     font-size: 34px;
     margin: 15px 0;

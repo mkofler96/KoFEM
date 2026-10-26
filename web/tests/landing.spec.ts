@@ -1,26 +1,144 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { test, expect } from "./coverage";
+import { test, expect, type Page } from "./coverage";
+
+const HEADLINE = "Finite element analysis in your browser.";
+const SAMPLE_CTA = /Try a sample simulation/;
+
+const scrollStory = (page: Page, amount: number) =>
+  page.locator("#scroll-viewport").evaluate((element, value) => {
+    const viewport = element as HTMLElement;
+    viewport.style.scrollBehavior = "auto";
+    viewport.scrollTop =
+      value * (viewport.scrollHeight - viewport.clientHeight);
+  }, amount);
 
 test("landing page renders and links to the solver app", async ({ page }) => {
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "KoFEM", exact: true }),
+    page.getByRole("heading", { level: 1, name: HEADLINE }),
   ).toBeVisible();
+  const navigation = page.getByRole("navigation", { name: "Main navigation" });
   await expect(
-    page.getByRole("link", { name: /Start Solver/i }),
+    navigation.getByRole("link", { name: /Start Solver/i }),
   ).toHaveAttribute("href", "/app/");
   await expect(
-    page.getByRole("link", { name: "Examples", exact: true }),
+    navigation.getByRole("link", { name: "Examples", exact: true }),
   ).toHaveAttribute("href", "/examples/");
-  await page.getByText("More", { exact: true }).click();
+  await navigation.getByText("More", { exact: true }).click();
   await expect(
-    page.getByRole("link", { name: "Privacy", exact: true }),
+    navigation.getByRole("link", { name: "Privacy", exact: true }),
   ).toHaveAttribute("href", "/privacy/");
   await expect(
-    page.getByRole("link", { name: "Cookie settings", exact: true }),
+    navigation.getByRole("link", { name: "Cookie settings", exact: true }),
   ).toBeVisible();
+});
+
+test("hero states what KoFEM is, how it differs, its limits and where to start", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const hero = page.locator(".intro");
+  for (const claim of [
+    "Nothing to install.",
+    "Computed in your browser.",
+    "Your CAD stays on your machine.",
+    "Open source.",
+  ])
+    await expect(hero.getByText(claim, { exact: true })).toBeVisible();
+  await expect(
+    hero.getByRole("link", { name: "privacy notice" }),
+  ).toHaveAttribute("href", "/privacy/");
+  await expect(
+    hero.getByRole("link", { name: "code on GitHub" }),
+  ).toHaveAttribute("href", "https://github.com/mkofler96/KoFEM");
+
+  const limits = hero.locator(".hero-limits");
+  await expect(limits).toBeInViewport({ ratio: 1 });
+  await expect(limits).toContainText("Research-grade software.");
+  await expect(limits).toContainText(
+    "Not certified for safety-critical design decisions",
+  );
+  await expect(
+    limits.getByRole("link", { name: "Disclaimer" }),
+  ).toHaveAttribute(
+    "href",
+    "https://github.com/mkofler96/KoFEM/blob/main/DISCLAIMER.md",
+  );
+
+  // The sample link is the contract with the solver's first-run experience.
+  await expect(hero.getByRole("link", { name: SAMPLE_CTA })).toHaveAttribute(
+    "href",
+    "/app/?example=cantilever-beam",
+  );
+  await expect(
+    hero.getByRole("link", { name: "Open the solver" }),
+  ).toHaveAttribute("href", "/app/");
+  await expect(
+    hero.getByRole("link", { name: "Browse examples" }),
+  ).toHaveAttribute("href", "/examples/");
+  const sample = await page.request.get("/examples/cantilever-beam.vtu");
+  expect(sample.ok(), "the sample simulation's gallery model").toBe(true);
+});
+
+test("hero links follow the navigation in tab order and leave it once the hero fades", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(page.locator("#scene")).toHaveAttribute("data-loaded", "true");
+  const sample = page.getByRole("link", { name: SAMPLE_CTA });
+  await page.getByRole("link", { name: /Start Solver/i }).focus();
+  // The claims' inline links (privacy notice, GitHub) come first.
+  for (let press = 0; press < 3; press++) {
+    await page.keyboard.press("Tab");
+    if (await sample.evaluate((link) => link === document.activeElement)) break;
+  }
+  await expect(sample).toBeFocused();
+  await expect(sample).toHaveCSS("outline-style", "solid");
+
+  const hero = page.locator(".intro");
+  await scrollStory(page, 0.2);
+  await expect(hero).toHaveJSProperty("inert", true);
+  await expect(hero).toHaveAttribute("aria-hidden", "true");
+  await page.getByRole("link", { name: /Start Solver/i }).focus();
+  await page.keyboard.press("Tab");
+  expect(
+    await page.evaluate(() => document.activeElement?.closest(".intro")),
+  ).toBeNull();
+
+  await scrollStory(page, 0);
+  await expect(hero).toHaveJSProperty("inert", false);
+  await expect(sample).toBeVisible();
+});
+
+test.describe("on a phone", () => {
+  test.use({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+  });
+
+  test("hero, actions and limits sit above the bracket, which rises as the hero fades", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const scene = page.locator("#scene");
+    await expect(scene).toHaveAttribute("data-loaded", "true");
+    const hero = (await page.locator(".intro").boundingBox())!;
+    const cue = (await page.locator(".bottom-line").boundingBox())!;
+    const heroBottom = hero.y + hero.height;
+    expect(heroBottom).toBeLessThan(cue.y);
+    await expect(page.locator(".hero-limits")).toBeInViewport({ ratio: 1 });
+    await expect(page.getByRole("link", { name: SAMPLE_CTA })).toBeInViewport({
+      ratio: 1,
+    });
+    // The bracket's centre waits below the hero, then takes its stacked place.
+    const waiting = Number(await scene.getAttribute("data-bracket-vertical"));
+    expect(waiting * 844).toBeGreaterThan(heroBottom);
+    await scrollStory(page, 0.2);
+    await expect(scene).toHaveAttribute("data-bracket-vertical", "0.680");
+  });
 });
 
 test("bracket turns 90 degrees during transfer and a full turn during optimization", async ({
