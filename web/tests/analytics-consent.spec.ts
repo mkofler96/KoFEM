@@ -84,10 +84,12 @@ async function triggerSolve(page: Page) {
       typeof (window as Window & { __kofemTriggerSolve?: () => void })
         .__kofemTriggerSolve === "function",
   );
-  await page.evaluate(() =>
-    (window as Window & { __kofemTriggerSolve?: () => void })
-      .__kofemTriggerSolve!(),
-  );
+  await page.evaluate(() => {
+    const trigger = (window as Window & { __kofemTriggerSolve?: () => void })
+      .__kofemTriggerSolve;
+    if (!trigger) throw new Error("__kofemTriggerSolve is not registered");
+    trigger();
+  });
 }
 
 const banner = (page: Page) =>
@@ -174,8 +176,8 @@ test.describe("consent", () => {
     await page.goto("/app/");
     await expect.poll(() => eventNames(page)).toContain("solver_opened");
     await page.evaluate(() => {
-      document.cookie = "_ga=GA1.1.123.456; path=/";
-      document.cookie = "_ga_TEST000000=GS1.1.789; path=/";
+      for (const cookie of ["_ga=GA1.1.123.456", "_ga_TEST000000=GS1.1.789"])
+        document.cookie = `${cookie}; path=/`;
     });
 
     await page.getByRole("link", { name: "Cookie settings" }).click();

@@ -94,7 +94,8 @@ function useWorkflowAnalytics() {
     });
   }, []);
   const inResults = useModelStore(
-    (s) => s.mode === "results" && (!!s.result || !!s.densityResult),
+    (s) =>
+      s.mode === "results" && (Boolean(s.result) || Boolean(s.densityResult)),
   );
   useEffect(() => {
     if (inResults) track("results_viewed", { workflow: currentWorkflow() });
