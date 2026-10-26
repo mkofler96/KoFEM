@@ -160,6 +160,14 @@ bash scripts/clang-tidy.sh
 cd web && bun run typecheck && bun run lint && bun run format:check && bun run test
 ```
 
+Before changing distributing-coupling weights, run
+`CXX=g++ bash scripts/study-rbe3-junction.sh` (or use `clang++`). It compares
+flat RBE3, an explicit inverse-square weighting candidate, and relaxed MPC
+against the same wall/block model meshed entirely as solids. Its CSV rows report
+top-layer solid stress and tip displacement across x refinements. This is a
+diagnostic study, not a stress-accuracy gate; successful execution only checks
+that solves converge to finite, positive results.
+
 Building the WASM engine rewrites `web/src/wasm/pkg/*.wasm` (~34 MB). Those files
 are gitignored — see [The compiled engine is not in git](#the-compiled-engine-is-not-in-git)
 — so a rebuild no longer costs history, but it does cost ~20 minutes. Only rebuild
