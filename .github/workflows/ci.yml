@@ -336,10 +336,9 @@ jobs:
       - name: Run validation scripts
         run: cd web && bun run test:validation
 
-  # The Playwright suite, split across parallel jobs (`--shard`). Each shard
-  # builds the coverage-instrumented app and keeps the counters it collected
-  # (tests/coverage.ts writes one uniquely named file per test), so the
-  # `coverage` job only has to put the four directories together.
+  # The Playwright suite, split across parallel jobs (`--shard`). Code changes
+  # collect coverage for the aggregate job; Dependabot PRs run the same tests
+  # without coverage instrumentation or reporting.
   e2e:
     name: Playwright (${{ matrix.shard }}/4)
     runs-on: ubuntu-24.04
@@ -406,13 +405,13 @@ jobs:
       - name: Run Playwright shard
         run: cd web && bunx playwright test --shard=${{ matrix.shard }}/4
         env:
-          # Builds the app instrumented with Istanbul so Playwright collects
-          # runtime coverage (tests/coverage.ts) — no second test run needed.
-          COVERAGE: 1
+          # Use the PR author so a maintainer's rerun or follow-up commit keeps
+          # the dependency-update policy. Vite disables Istanbul on an empty value.
+          COVERAGE: ${{ github.event.pull_request.user.login != 'dependabot[bot]' && '1' || '' }}
 
       # `if: always()`: a failing shard still hands over the coverage it gathered.
       - name: Upload coverage counters
-        if: always()
+        if: ${{ always() && github.event.pull_request.user.login != 'dependabot[bot]' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: coverage-shard-${{ matrix.shard }}
@@ -435,12 +434,13 @@ jobs:
 
   # Prints per-file coverage and flags src files never loaded by any test
   # (dead-code candidates), from all shards together. Runs even when a shard
-  # failed, on the coverage gathered up to that point.
+  # failed, on the coverage gathered up to that point. Dependency updates are
+  # gated by tests and smoke tests, without a coverage job or external upload.
   coverage:
     name: Coverage
     runs-on: ubuntu-24.04
     needs: [e2e]
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && github.event.pull_request.user.login != 'dependabot[bot]' }}
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
