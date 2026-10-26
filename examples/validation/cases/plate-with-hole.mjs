@@ -27,16 +27,41 @@ const a = 1.0, // hole radius (m)
   b = 10.0, // plate half-width (m) — a/b = 0.1 ⇒ ≈ infinite-plate Kt
   t = 0.5; // thickness (m)
 const sigma = 100e6; // applied gross tension (Pa)
+const NR = 12, // element rings from the hole to the outer edge
+  NTH = 64, // elements around the hole
+  GRADE = 2; // ring spacing ∝ s^GRADE, clustered at the hole
 
 export default {
+  id: "plate-with-hole",
   name: "Plate with a hole (Kirsch)",
   quantity: "stress-concentration factor Kt",
   unit: "",
   reference: 3.0,
   referenceLabel: "Kt = 3 (infinite plate)",
   tolPct: 15,
+  page: {
+    summary:
+      "Kirsch stress concentration at a hole — the one stress-based case, hence the wider band.",
+    model:
+      "Square plate of half-width b and thickness t, central hole of radius a.",
+    inputs: [
+      ["a", a, "m"],
+      ["b", b, "m"],
+      ["t", t, "m"],
+      ["E", E, "Pa"],
+      ["ν", nu, ""],
+      ["σ", sigma, "Pa"],
+    ],
+    supports: "x = −b face clamped.",
+    loads: "σ·2b·t in +x, split equally over the x = +b face nodes.",
+    measured:
+      "Peak element-centre von Mises stress around the hole, divided by σ.",
+    mesh: `O-grid, ${NR} rings × ${NTH} around the hole, 1 through t`,
+    source: "Kirsch (1898); Timoshenko & Goodier",
+    gallery: "plate-with-hole",
+  },
   run(solve) {
-    const m = plateWithHoleMesh(a, b, t, 12, 64, 2);
+    const m = plateWithHoleMesh(a, b, t, NR, NTH, GRADE);
     const left = nodesWhere(m.vertices, (x) => x <= -b + 1e-6);
     const right = nodesWhere(m.vertices, (x) => x >= b - 1e-6);
     const P = sigma * (2 * b * t); // gross axial force

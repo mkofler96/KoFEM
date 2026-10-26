@@ -23,40 +23,33 @@
 //
 // Reference: Euler–Bernoulli beam theory (Gere & Goodno, deflections of beams).
 
-import { boxHexMesh, nodesWhere, distributeForce } from "../lib/mesh.mjs";
+import {
+  cantileverInputs,
+  cantileverReference,
+  cantileverTip,
+} from "./cantilever-bending.mjs";
 
-const E = 210e9; // Pa
-const nu = 0.3;
-const L = 1.0; // m
-const b = 0.1,
-  h = 0.1; // cross-section (m)
-const P = 1.0e4; // tip load (N), downward
-
-const I = (b * h ** 3) / 12;
+const DIV = [10, 2, 2]; // elements along x, y, z
 
 export default {
+  id: "cantilever-p2",
   name: "Cantilever beam (P2, coarse mesh)",
   quantity: "tip deflection δ",
   unit: "m",
-  reference: -(P * L ** 3) / (3 * E * I), // downward
+  reference: cantileverReference,
   referenceLabel: "δ = P·L³ / (3·E·I)",
   tolPct: 4,
+  page: {
+    summary: "The same beam on a coarse mesh with quadratic elements.",
+    model: "Beam of span L along x, b × h section, I = b·h³/12.",
+    inputs: cantileverInputs,
+    supports: "x = 0 face clamped.",
+    loads: "P in −y, split equally over the x = L face vertices.",
+    measured: "Mean y-displacement of the x = L face vertices.",
+    mesh: `${DIV.join(" × ")} grid`,
+    source: "Euler–Bernoulli beam theory",
+  },
   run(solve) {
-    const m = boxHexMesh(L, b, h, 10, 2, 2);
-    const fixed = nodesWhere(m.vertices, (x) => x <= 1e-9);
-    const loaded = nodesWhere(m.vertices, (x) => x >= L - 1e-9);
-    const result = solve(
-      { vertices: m.vertices, hexahedra: m.hexahedra },
-      { young_modulus: E, poisson_ratio: nu, density: 7850 },
-      {
-        fixed_vertices: fixed,
-        point_loads: distributeForce(loaded, [0, -P, 0]),
-      },
-      2, // second-order (P2) elements
-    );
-    return (
-      loaded.reduce((s, v) => s + result.displacements[v * 3 + 1], 0) /
-      loaded.length
-    );
+    return cantileverTip(solve, DIV, 2); // second-order (P2) elements
   },
 };

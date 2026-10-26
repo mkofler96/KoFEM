@@ -20,18 +20,36 @@ const L = 1.0; // m
 const W = 0.1,
   H = 0.1; // cross-section (m)
 const P = 1.0e6; // total axial force (N), applied as a surface traction
+const DIV = [20, 4, 4]; // elements along x, y, z
 
 export default {
+  id: "surface-traction",
   name: "Surface traction (axial bar)",
   quantity: "tip extension δ",
   unit: "m",
   reference: (P * L) / (E * (W * H)), // δ = PL/EA
   referenceLabel: "δ = P·L / (E·A)",
   tolPct: 2,
+  page: {
+    summary:
+      "The axial bar loaded the way the app loads a face: a uniform traction integrated over the element faces.",
+    model: "Prismatic bar of length L along x, W × H section.",
+    inputs: [
+      ["L", L, "m"],
+      ["W × H", `${W} × ${H}`, "m"],
+      ["E", E, "Pa"],
+      ["ν", nu, ""],
+      ["P", P, "N"],
+    ],
+    supports: "x = 0 face clamped.",
+    loads: "P in +x as a uniform traction on the x = L face.",
+    measured: "Mean x-displacement of the x = L face.",
+    mesh: `${DIV.join(" × ")} grid`,
+    source: "Gere & Goodno, Mechanics of Materials",
+    gallery: "axial-bar",
+  },
   run(solve) {
-    const nx = 20,
-      ny = 4,
-      nz = 4;
+    const [nx, ny, nz] = DIV;
     const m = boxHexMesh(L, W, H, nx, ny, nz);
     const fixed = nodesWhere(m.vertices, (x) => x <= 1e-9);
     const loaded = nodesWhere(m.vertices, (x) => x >= L - 1e-9);

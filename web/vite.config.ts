@@ -24,7 +24,8 @@ import {
 
 const htmlEntry = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 
-// The marketing pages (index.html, privacy/index.html) are fully static — Vite
+// The static pages (index.html, privacy/index.html, and validation/index.html,
+// which examples/validation/run.mjs --report generates) are fully static — Vite
 // emits them byte-for-byte, they import no hashed assets. Feeding them as extra
 // MPA rollup inputs is flaky (in some environments rollup crosses the
 // landing/app chunk names and drops the landing HTML entirely, leaving "/" on
@@ -34,7 +35,11 @@ const htmlEntry = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 // (transformIndexHtml only runs on the app entry at build time). Dev is
 // unaffected: rollupOptions is build-only, the dev server serves the pages from
 // the filesystem, and transformIndexHtml injects analytics there instead.
-const STATIC_PAGES = ["index.html", "privacy/index.html"];
+const STATIC_PAGES = [
+  "index.html",
+  "privacy/index.html",
+  "validation/index.html",
+];
 
 // The examples gallery lives outside web/, with everything else example-related
 // (examples/gallery/). Its site/ folder is served verbatim at /examples/: the

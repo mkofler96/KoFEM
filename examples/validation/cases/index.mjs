@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Registry of validation cases. Each default-exports a descriptor:
-//   { name, quantity, unit, reference, referenceLabel, tolPct, run(solve) }
-// run(solve) returns the finite-element value for `quantity`.
+//   { id, name, quantity, unit, reference, referenceLabel, tolPct, page, run(solve) }
+// run(solve) returns the finite-element value for `quantity`; `page` holds the
+// model description shown on /validation/ (see ../lib/page.mjs).
 
 import axialBar from "./axial-bar.mjs";
 import cantilever from "./cantilever-bending.mjs";
