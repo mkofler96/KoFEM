@@ -86,12 +86,14 @@ function describeError(err: unknown): string {
 
 async function ensureInit() {
   if (!Module) {
+    const t0 = performance.now();
     Module = await createModule({
       print: (text: string) =>
         self.postMessage({ id: 0, log: `[wasm] ${text}` }),
       printErr: (text: string) =>
         self.postMessage({ id: 0, log: `[wasm:err] ${text}` }),
     });
+    self.postMessage({ id: 0, engineInitMs: performance.now() - t0 });
   }
 }
 function m(): KofemModule {

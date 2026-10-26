@@ -4,6 +4,7 @@
 import { useModelStore, loadKind } from "../../store/modelStore";
 import type { PickMode } from "../../store/modelStore";
 import { APP_VERSION } from "../../lib/version";
+import { consentBanner } from "../../lib/analytics";
 import styles from "./StatusBar.module.css";
 
 type ViewRepr = "geometry" | "surface" | "volume" | "wireframe";
@@ -328,6 +329,18 @@ export function StatusBar() {
         >
           No warranty
         </a>
+        {consentBanner() && (
+          <a
+            className={styles.discLink}
+            href="#cookie-settings"
+            onClick={(e) => {
+              e.preventDefault();
+              consentBanner()?.removeAttribute("hidden");
+            }}
+          >
+            Cookie settings
+          </a>
+        )}
       </div>
     </div>
   );

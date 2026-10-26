@@ -8,6 +8,16 @@ import { isCadBody } from "../store/geometrySlice";
 import { sendToWorker, resetWorker } from "../workers/sharedWorker";
 import { useWorkerLogs } from "./useWorkerLogs";
 import { suggestElementSizes } from "../lib/meshSizing";
+import {
+  categorizeError,
+  currentWorkflow,
+  modelType,
+  startTimer,
+  track,
+  type DurationBucket,
+  type ErrorCategory,
+  type ModelType,
+} from "../lib/analytics";
 
 // Sizes shown before any geometry is imported. The mesh controls only render
 // once a part is loaded, at which point the import's own suggestion (sized to
@@ -65,10 +75,41 @@ export function useMesh() {
     setMinElementSize(suggestion.min);
   }, [suggestion]);
 
+  // What the user asked to mesh; the result's element types say the same once
+  // there is a result.
+  const shellBodies = properties.filter(
+    (p) => isCadBody(p) && p.discretization === "shell" && !p.suppressed,
+  ).length;
+  const activeBodies = properties.filter(
+    (p) => isCadBody(p) && !p.suppressed,
+  ).length;
+  const requestedModelType: ModelType =
+    shellBodies === 0
+      ? "solid"
+      : shellBodies === activeBodies
+        ? "shell"
+        : "mixed";
+
+  function rejectInput(message: string) {
+    setMeshError(message);
+    trackMeshFailed("invalid_input", "lt_1s");
+  }
+  function trackMeshFailed(
+    error_category: ErrorCategory,
+    duration_bucket: DurationBucket,
+  ) {
+    track("mesh_failed", {
+      workflow: currentWorkflow(),
+      model_type: requestedModelType,
+      duration_bucket,
+      error_category,
+    });
+  }
+
   async function meshVolume() {
     if (!stepSurface) return;
     if (!stepBytes) {
-      setMeshError(
+      rejectInput(
         "Cannot mesh: the original STEP file is no longer available (e.g. after loading a saved analysis). Re-import the STEP file to mesh.",
       );
       return;
@@ -77,19 +118,19 @@ export function useMesh() {
     const maxSize = parseFloat(maxElementSize);
     const minSize = parseFloat(minElementSize);
     if (!Number.isFinite(maxSize) || maxSize <= 0) {
-      setMeshError(
+      rejectInput(
         `Max element size must be a positive number of mm — got "${maxElementSize}".`,
       );
       return;
     }
     if (!Number.isFinite(minSize) || minSize < 0) {
-      setMeshError(
+      rejectInput(
         `Min element size must be 0 or a positive number of mm — got "${minElementSize}".`,
       );
       return;
     }
     if (minSize > maxSize) {
-      setMeshError(
+      rejectInput(
         `Min element size (${minSize} mm) must not exceed max element size (${maxSize} mm).`,
       );
       return;
@@ -98,6 +139,7 @@ export function useMesh() {
     setMeshError(null);
     setMeshing(true);
     clearLogs();
+    const elapsed = startTimer();
     // Captured at request time: the mesh records what it left out, even if the
     // user toggles a body while Netgen runs.
     const suppressedBodyIds = properties
@@ -145,6 +187,11 @@ export function useMesh() {
         meshProperties,
         suppressedBodyIds,
       );
+      track("mesh_completed", {
+        workflow: currentWorkflow(),
+        model_type: modelType(meshElements),
+        duration_bucket: elapsed(),
+      });
       // Netgen's Ng_Init() installs global C++ state that contaminates the WASM
       // runtime for subsequent MFEM solves.  Resetting the worker here gives the
       // solve a clean module instance, preventing an infinite loop on first call.
@@ -153,6 +200,7 @@ export function useMesh() {
       console.error("[meshing] volume mesh failed:", err);
       const detail = err instanceof Error ? err.message : String(err);
       setMeshError(`Volume meshing failed: ${detail}`);
+      trackMeshFailed(categorizeError(err), elapsed());
     } finally {
       setMeshing(false);
     }
