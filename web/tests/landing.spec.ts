@@ -125,8 +125,10 @@ test.describe("on a phone", () => {
     await page.goto("/");
     const scene = page.locator("#scene");
     await expect(scene).toHaveAttribute("data-loaded", "true");
-    const hero = (await page.locator(".intro").boundingBox())!;
-    const cue = (await page.locator(".bottom-line").boundingBox())!;
+    const hero = await page.locator(".intro").boundingBox();
+    if (!hero) throw new Error("hero (.intro) is not rendered");
+    const cue = await page.locator(".bottom-line").boundingBox();
+    if (!cue) throw new Error("scroll cue (.bottom-line) is not rendered");
     const heroBottom = hero.y + hero.height;
     expect(heroBottom).toBeLessThan(cue.y);
     await expect(page.locator(".hero-limits")).toBeInViewport({ ratio: 1 });
