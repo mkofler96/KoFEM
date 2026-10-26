@@ -27,6 +27,8 @@
 // load path but not for accurate local contact stress. A geometry-preserving
 // MPC tie is the accurate follow-up (issue tracked separately).
 
+import { SpatialGrid } from "./spatialGrid.js";
+
 export type TieExtent = "full" | "region";
 
 export interface TieNode {
@@ -168,12 +170,8 @@ export function tieSides(
 
 interface PointGrid {
   cell: number;
-  buckets: Map<string, number[]>;
+  candidates: SpatialGrid<number>;
   maxShell: number;
-}
-
-function gridKey(cx: number, cy: number, cz: number): string {
-  return `${cx},${cy},${cz}`;
 }
 
 function buildPointGrid(points: TieNode[], limit: number): PointGrid {
@@ -203,18 +201,12 @@ function buildPointGrid(points: TieNode[], limit: number): PointGrid {
     1e-9,
   );
 
-  const buckets = new Map<string, number[]>();
-  for (let i = 0; i < points.length; i++) {
-    const key = gridKey(
-      Math.floor(points[i].x / cell),
-      Math.floor(points[i].y / cell),
-      Math.floor(points[i].z / cell),
-    );
-    const bucket = buckets.get(key);
-    if (bucket) bucket.push(i);
-    else buckets.set(key, [i]);
-  }
-  return { cell, buckets, maxShell: Math.ceil(span / cell) + 1 };
+  const candidates = new SpatialGrid(
+    points.map((_, index) => index),
+    (index) => [points[index].x, points[index].y, points[index].z],
+    cell,
+  );
+  return { cell, candidates, maxShell: Math.ceil(span / cell) + 1 };
 }
 
 // Index of the point nearest `from` within `limit`, or -1 when none is in reach.
@@ -224,10 +216,7 @@ function nearestInGrid(
   from: TieNode,
   limit: number,
 ): number {
-  const { cell, buckets, maxShell } = grid;
-  const cx = Math.floor(from.x / cell);
-  const cy = Math.floor(from.y / cell);
-  const cz = Math.floor(from.z / cell);
+  const { cell, candidates, maxShell } = grid;
   const limit2 = Number.isFinite(limit) ? limit * limit : Infinity;
 
   let best = -1;
@@ -246,15 +235,12 @@ function nearestInGrid(
   for (let shell = 0; shell <= maxShell; shell++) {
     const reach = shell * cell;
     if (reach > limit) break; // nothing left inside the search distance
-    for (let dx = -shell; dx <= shell; dx++)
-      for (let dy = -shell; dy <= shell; dy++)
-        for (let dz = -shell; dz <= shell; dz++) {
-          // Only the shell's surface — the interior was scanned already.
-          if (Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz)) !== shell)
-            continue;
-          const bucket = buckets.get(gridKey(cx + dx, cy + dy, cz + dz));
-          if (bucket) for (const idx of bucket) consider(idx);
-        }
+    for (const idx of candidates.candidates(
+      [from.x, from.y, from.z],
+      shell,
+      shell,
+    ))
+      consider(idx);
     // Everything unscanned is now at least shell·cell away.
     if (best >= 0 && bestDist2 <= reach * reach) break;
   }
