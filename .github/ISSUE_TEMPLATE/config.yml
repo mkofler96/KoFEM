@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: What KoFEM sends (privacy)
+    url: https://kofem.org/privacy/#feedback
+    about: Your models stay in your browser. Bug reports carry only what you review and submit here.
+  - name: Examples gallery
+    url: https://kofem.org/examples/
+    about: Pre-solved models to reproduce a problem with, instead of your own CAD.

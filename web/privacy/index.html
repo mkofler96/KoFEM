@@ -307,6 +307,10 @@
           and sent only if you accept.
         </li>
         <li>
+          That a feedback form was opened from the solver — not what you write
+          in it.
+        </li>
+        <li>
           Approximate location (country / region), derived by Google from your
           IP address. IP addresses are not stored by GA4.
         </li>
@@ -336,6 +340,46 @@
           target="_blank"
           >Google Analytics opt-out browser add-on</a
         >.
+      </p>
+
+      <h2 id="feedback">Feedback and bug reports</h2>
+      <p>
+        The solver's <em>Feedback</em> menu opens a form on
+        <a
+          href="https://github.com/mkofler96/KoFEM/issues"
+          rel="noopener"
+          target="_blank"
+          >GitHub</a
+        >
+        in a new tab. KoFEM sends nothing itself: a report exists only once you
+        submit it on GitHub, under your GitHub account, and GitHub issues are
+        <strong>public</strong>.
+      </p>
+      <p>
+        When you report a problem you can choose to include diagnostics. They
+        are shown to you in full before you decide, and they are off unless you
+        tick the box:
+      </p>
+      <ul>
+        <li>the KoFEM version and engine build;</li>
+        <li>
+          your browser and operating system (name and major version only), and
+          whether WebAssembly and WebGL are available;
+        </li>
+        <li>
+          the size of the model as counts — bodies, nodes, elements, supports,
+          loads — and the step you are on;
+        </li>
+        <li>
+          the last error message KoFEM showed, with model names, file names and
+          coordinates replaced.
+        </li>
+      </ul>
+      <p>
+        Your geometry, file names, coordinates, meshes, materials, loads and
+        results are never included, and no CAD or simulation file is ever
+        uploaded. Please don't attach confidential files to a public issue
+        yourself either.
       </p>
 
       <h2>Other storage</h2>

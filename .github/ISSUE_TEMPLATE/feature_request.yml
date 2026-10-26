@@ -1,0 +1,15 @@
+name: Suggest an improvement
+description: An idea for a feature or a smoother workflow.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like KoFEM to do?
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: What would it help you with?
+      description: The analysis you are trying to run, or the step that is slow or awkward today.

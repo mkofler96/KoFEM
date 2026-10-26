@@ -1,0 +1,226 @@
+/* Top-bar Feedback entry: a quiet text button, its menu, and the report dialog. */
+
+.wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 5px;
+  background: none;
+  border: none;
+  color: #6b7280;
+  font-family: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition:
+    background 100ms ease,
+    color 100ms ease;
+}
+
+.trigger:hover,
+.trigger[aria-expanded="true"] {
+  background: #f0f2f5;
+  color: #0d1117;
+}
+
+/* ── Menu ──────────────────────────────────────────────────── */
+
+.menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 280px;
+  padding: 6px;
+  background: #ffffff;
+  border: 1px solid #e2e5ea;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(13, 17, 23, 0.12);
+  z-index: 30;
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  font-family: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.item:hover,
+.item:focus-visible {
+  background: #f0f2f5;
+  outline: none;
+}
+
+.itemTitle {
+  font-size: 13px;
+  font-weight: 500;
+  color: #0d1117;
+}
+
+.itemSub {
+  font-size: 11.5px;
+  color: #6b7280;
+}
+
+.menuNote {
+  margin: 4px 0 0;
+  padding: 8px 10px 4px;
+  border-top: 1px solid #eef0f4;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #6b7280;
+}
+
+.menuNote a,
+.fine a {
+  color: #1f5fd0;
+}
+
+/* ── Report dialog ─────────────────────────────────────────── */
+
+.dialog {
+  width: min(500px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  border: 1px solid #e2e5ea;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #0d1117;
+  box-shadow: 0 16px 48px rgba(13, 17, 23, 0.2);
+  font-family: "IBM Plex Sans", "Helvetica Neue", sans-serif;
+}
+
+.dialog::backdrop {
+  background: rgba(13, 17, 23, 0.35);
+}
+
+.body {
+  padding: 20px 22px 18px;
+}
+
+.title {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.text {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #3a4150;
+}
+
+.optIn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.optIn input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: #1f5fd0;
+}
+
+.preview {
+  margin: 8px 0 10px;
+  padding: 10px 12px;
+  max-height: 200px;
+  overflow: auto;
+  background: #fafbfc;
+  border: 1px dashed #cdd2d9;
+  border-radius: 6px;
+  color: #6b7280;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 11.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.previewOn {
+  border: 1px solid #1f5fd0;
+  background: #f5f8fe;
+  color: #0d1117;
+}
+
+.fine {
+  margin: 0 0 16px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: #6b7280;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.secondary,
+.primary {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.secondary {
+  background: #ffffff;
+  border: 1px solid #e2e5ea;
+  color: #3a4150;
+}
+
+.secondary:hover {
+  background: #f0f2f5;
+}
+
+.primary {
+  background: #1f5fd0;
+  border: 1px solid #1f5fd0;
+  color: #ffffff;
+}
+
+.primary:hover {
+  background: #1750b3;
+}
+
+@media (max-width: 768px) {
+  .triggerLabel {
+    display: none;
+  }
+
+  /* The entry sits mid-bar on a phone; pin the menu to the screen edge. */
+  .menu {
+    position: fixed;
+    top: 50px;
+    right: 8px;
+  }
+}
