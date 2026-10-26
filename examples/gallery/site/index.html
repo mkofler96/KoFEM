@@ -443,6 +443,18 @@
         font-size: 12px;
         color: var(--faint);
       }
+      .page-link {
+        margin-top: 12px;
+        font-size: 13.5px;
+        font-weight: 550;
+        color: var(--accent);
+      }
+      .page-link:hover {
+        filter: brightness(1.12);
+      }
+      .page-head a {
+        color: var(--accent);
+      }
 
       .load-error {
         color: #f4a3a3;
@@ -572,7 +584,9 @@
             app runs — coloured by displacement magnitude on the deformed shape.
             Drag to rotate, scroll to zoom, then open any example in KoFEM web
             to edit the mesh, boundary conditions and loads yourself. The cases
-            mirror the benchmarks in <code>examples/validation</code>.
+            mirror the benchmarks in <code>examples/validation</code>. The
+            <a href="/examples/plate-with-hole/">plate with a hole</a> has a full
+            write-up.
           </p>
         </div>
 
@@ -782,6 +796,10 @@
                   <line x1="10" y1="14" x2="21" y2="3"></line>
                 </svg>
               </a>`;
+        // A benchmark with a write-up (examples.mjs `page`) links to it.
+        const pageLink = ex.page
+          ? `<a class="page-link" href="/examples/${ex.page}">Read the benchmark write-up &rarr;</a>`
+          : "";
         // Metrics: benchmark cards show FE value vs. closed-form reference;
         // showcase cards provide their own metric cells (no reference).
         let metricsHtml;
@@ -819,6 +837,7 @@
             <p class="blurb">${ex.blurb}</p>
             <div class="metrics">${metricsHtml}</div>
             <div class="ref-note">${ex.referenceLabel}</div>
+            ${pageLink}
           </div>`;
         grid.appendChild(el);
         return el.querySelector(".viewer");

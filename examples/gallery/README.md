@@ -16,9 +16,27 @@ Everything on the public [examples gallery](https://kofem.org/examples/).
 
 | Generator                       | Examples                        | Run (in `web/`)                              |
 | ------------------------------- | ------------------------------- | -------------------------------------------- |
-| `generate.mjs` + `examples.mjs` | the hex-mesh benchmarks         | `bun run examples:generate`                  |
+| `generate.mjs` + `examples.mjs` | the hex-mesh benchmarks         | `bun run examples:generate [id …]`           |
 | `generate-plate-hole-shell.mjs` | plate with a hole, shells       | `bun run examples:generate-plate-hole-shell` |
 | `generate-mbb-topopt.mjs`       | MBB beam, topology optimization | `bun run examples:generate-mbb-topopt`       |
+| `generate-plate-hole-page.mjs`  | the plate-with-hole write-up    | `bun run examples:generate-plate-hole-page`  |
+
+`examples:generate` re-solves every hex benchmark; with ids
+(`bun run examples:generate plate-with-hole`) it re-solves only those and keeps
+every other `.vtu` and `examples.json` entry byte for byte.
+
+## Write-ups — `/examples/<id>/`
+
+The plate with a hole has a static write-up at `site/plate-with-hole/`: model,
+mesh, results, limitations and an "Open in KoFEM" link. The card links to it
+through `page` in `examples.mjs`; the URL is listed in `web/public/sitemap.xml`.
+
+No number on it is typed by hand: `generate-plate-hole-page.mjs` computes them
+from `examples.mjs` and the shipped `examples.json` and `.vtu` files, and stops
+when those disagree. Its figure (also the `og:image`) is captured from the app
+by `web/tests/example-page-capture.spec.ts`. After the plate's result changes,
+run `examples:generate plate-with-hole`, `capture:example-pages` (needs the
+built app), then `examples:generate-plate-hole-page`.
 
 ## Examples are built the way a user builds them
 

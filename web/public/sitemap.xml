@@ -9,6 +9,10 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://kofem.org/examples/plate-with-hole/</loc>
+    <priority>0.6</priority>
+  </url>
+  <url>
     <loc>https://kofem.org/privacy/</loc>
     <priority>0.1</priority>
   </url>
