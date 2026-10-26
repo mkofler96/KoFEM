@@ -16,6 +16,7 @@
 #include <array>
 #include <map>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -259,10 +260,18 @@ std::unique_ptr<mfem::VectorCoefficient> make_surface_load_coefficient(
         return std::make_unique<PressureCoefficient>(dim, p);
     }
     // "force" or "traction"
+    const val force = entry["force"];
+    if (!val::global("Array").call<bool>("isArray", force) ||
+        force["length"].as<unsigned>() != 3) {
+        throw std::runtime_error(
+            "surface_load " + std::to_string(load_idx) + " (" + type +
+            "): malformed force vector — expected an array of exactly 3 "
+            "components [Fx, Fy, Fz]");
+    }
     mfem::Vector tvec(3);
-    tvec[0] = entry["force"][0].as<double>();
-    tvec[1] = entry["force"][1].as<double>();
-    tvec[2] = entry["force"][2].as<double>();
+    tvec[0] = force[0].as<double>();
+    tvec[1] = force[1].as<double>();
+    tvec[2] = force[2].as<double>();
     if (type == "force") {
         kofem::bc::require_positive_load_area(area, load_idx, matched);
         tvec /= area;
