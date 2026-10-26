@@ -12,4 +12,3 @@ body:
     id: why
     attributes:
       label: What would it help you with?
-      description: The analysis you are trying to run, or the step that is slow or awkward today.

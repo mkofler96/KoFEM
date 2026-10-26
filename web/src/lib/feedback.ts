@@ -8,9 +8,10 @@
 // Everything a report can carry from the app passes through buildDiagnostics,
 // and its output type is the complete list: versions, browser, the WebAssembly
 // and WebGL support, model size as counts, the current step and the last error
-// message the UI showed. The model reaches the builder only as arrays it counts;
-// geometry, file names, coordinates, meshes and results have no field to go in.
-// The one free-text field, the error message, is redacted and capped.
+// message the UI showed. The model reaches the builder only as arrays it counts
+// and the names it must redact; geometry, file names, coordinates, meshes and
+// results have no field to go in. The one free-text field, the error message,
+// is redacted and capped.
 
 import type { TreeGroup } from "../store/viewSlice";
 
@@ -48,15 +49,26 @@ export interface Diagnostics {
   readonly lastError: string | null;
 }
 
-/** The model as the builder sees it: lists to count, never to read. */
+interface Named {
+  readonly name: string;
+}
+
+/**
+ * The model as the builder sees it: lists to count, and the names the user
+ * gave, which are only ever used to redact them from the error text.
+ */
 export interface DiagnosticsModel {
   readonly modelName: string;
   readonly stepSurface: object | null;
   readonly properties: readonly { readonly sourceBodyId?: number }[];
   readonly nodes: readonly unknown[];
   readonly elements: readonly unknown[];
-  readonly bcGroups: readonly unknown[];
-  readonly loadGroups: readonly unknown[];
+  readonly materials: readonly Named[];
+  readonly bcGroups: readonly Named[];
+  readonly loadGroups: readonly Named[];
+  readonly tieGroups: readonly Named[];
+  readonly couplingGroups: readonly Named[];
+  readonly studies: readonly Named[];
   readonly treeSelection: { readonly group: TreeGroup };
 }
 
@@ -70,8 +82,8 @@ export interface DiagnosticsEnvironment {
   readonly lastShownError: string | null;
 }
 
-const VERSION_RE = /^[\w.+-]{1,64}$/;
-const ENGINE_ID_RE = /^engine-[0-9a-f]{12}$/;
+const VERSION_RE = /^[\w.+-]{1,64}$/u;
+const ENGINE_ID_RE = /^engine-[0-9a-f]{12}$/u;
 
 export function buildDiagnostics(
   env: DiagnosticsEnvironment,
@@ -107,37 +119,53 @@ export function buildDiagnostics(
     lastError:
       env.lastShownError === null
         ? null
-        : redactErrorText(env.lastShownError, [model.modelName]),
+        : redactErrorText(env.lastShownError, [
+            model.modelName,
+            ...[
+              model.materials,
+              model.bcGroups,
+              model.loadGroups,
+              model.tieGroups,
+              model.couplingGroups,
+              model.studies,
+            ].flatMap((list) => list.map((item) => item.name)),
+          ]),
   };
 }
 
-// Engine and mesher messages can quote what they choke on. Names the user
-// gave, CAD file names and coordinate triples are replaced before the text is
-// shown in the preview; the user still reviews the result.
+// Engine, mesher and solver messages quote what they choke on: a coupling, a
+// material, a file. Quoted text, every name the user gave, CAD file names and
+// coordinate triples are replaced before the preview; the user still reviews
+// the result. Quoted numbers (`got "0"`) stay: they are settings, not names.
+const QUOTED_RE = /"[^"]*\p{L}[^"]*"|“[^”]*\p{L}[^”]*”/gu;
 const FILE_NAME_RE =
-  /[^\s"'`()[\]{}<>:;,|]+\.(?:step|stp|iges|igs|brep|stl|vtu|xml|json|csv)\b/gi;
+  /[^\s"'`()[\]{}<>:;,|]+\.(?:step|stp|iges|igs|brep|stl|vtu|xml|json|csv)\b/giu;
 const NUMBER = String.raw`[-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?`;
 const COORDINATES_RE = new RegExp(
   String.raw`[([]\s*${NUMBER}\s*[,;\s]\s*${NUMBER}\s*[,;\s]\s*${NUMBER}\s*[)\]]`,
-  "gi",
+  "giu",
 );
-const CONTROL_RE = /[\u0000-\u001f\u007f]+/g;
+const CONTROL_RE = /\p{Cc}+/gu;
 
 export function redactErrorText(text: string, names: string[]): string {
-  let out = text.replace(CONTROL_RE, " ");
-  for (const name of names) {
-    const trimmed = name.trim();
+  let out = text.replace(CONTROL_RE, " ").replace(QUOTED_RE, '"[redacted]"');
+  // Longest first, so a name that contains another is replaced whole.
+  const distinct = [...new Set(names.map((n) => n.trim()))].sort(
+    (a, b) => b.length - a.length,
+  );
+  for (const name of distinct) {
     // Too short to tell apart from ordinary words in the message.
-    if (trimmed.length < 3) continue;
-    out = out.replace(
-      new RegExp(trimmed.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"),
-      "[model name]",
-    );
+    if (name.length < 3) continue;
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+    // Whole words only; the leading boundary is captured, not looked behind,
+    // for Safari before 16.4.
+    const word = String.raw`(^|[^\p{L}\p{N}_])${escaped}(?![\p{L}\p{N}_])`;
+    out = out.replace(new RegExp(word, "giu"), "$1[name]");
   }
   out = out
     .replace(FILE_NAME_RE, "[file]")
     .replace(COORDINATES_RE, "[coordinates]")
-    .replace(/\s+/g, " ")
+    .replace(/\s+/gu, " ")
     .trim();
   // Cut by code point so a surrogate pair is never split (encodeURIComponent
   // throws on a lone surrogate).
@@ -148,22 +176,22 @@ export function redactErrorText(text: string, names: string[]): string {
 }
 
 const OS_RULES: [string, RegExp][] = [
-  ["Windows", /Windows NT/],
+  ["Windows", /Windows NT/u],
   // Before macOS and Linux: iOS claims "like Mac OS X", Android "Linux".
-  ["iOS", /iPhone|iPad|iPod/],
-  ["Android", /Android/],
-  ["ChromeOS", /CrOS/],
-  ["macOS", /Mac OS X|Macintosh/],
-  ["Linux", /Linux/],
+  ["iOS", /iPhone|iPad|iPod/u],
+  ["Android", /Android/u],
+  ["ChromeOS", /CrOS/u],
+  ["macOS", /Mac OS X|Macintosh/u],
+  ["Linux", /Linux/u],
 ];
 // Most specific first: Edge and Opera also say "Chrome", Chrome says "Safari".
 const BROWSER_RULES: [string, RegExp][] = [
-  ["Edge", /Edg(?:e|A|iOS)?\/(\d+)/],
-  ["Opera", /OPR\/(\d+)/],
-  ["Samsung Internet", /SamsungBrowser\/(\d+)/],
-  ["Firefox", /(?:Firefox|FxiOS)\/(\d+)/],
-  ["Chrome", /(?:HeadlessChrome|Chrome|CriOS)\/(\d+)/],
-  ["Safari", /Version\/(\d+)[\d.]*(?: Mobile\/\S+)? Safari\//],
+  ["Edge", /Edg(?:e|A|iOS)?\/(\d+)/u],
+  ["Opera", /OPR\/(\d+)/u],
+  ["Samsung Internet", /SamsungBrowser\/(\d+)/u],
+  ["Firefox", /(?:Firefox|FxiOS)\/(\d+)/u],
+  ["Chrome", /(?:HeadlessChrome|Chrome|CriOS)\/(\d+)/u],
+  ["Safari", /Version\/(\d+)[\d.]*(?: Mobile\/\S+)? Safari\//u],
 ];
 
 /** Browser family with its major version, and the OS family — no full UA. */

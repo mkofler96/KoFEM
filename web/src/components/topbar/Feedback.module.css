@@ -36,7 +36,7 @@
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  width: 280px;
+  width: 220px;
   padding: 6px;
   background: #ffffff;
   border: 1px solid #e2e5ea;
@@ -46,15 +46,16 @@
 }
 
 .item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  display: block;
   width: 100%;
   padding: 8px 10px;
   border: none;
   border-radius: 6px;
   background: none;
+  color: #0d1117;
   font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
   text-align: left;
   text-decoration: none;
   cursor: pointer;
@@ -66,28 +67,15 @@
   outline: none;
 }
 
-.itemTitle {
-  font-size: 13px;
-  font-weight: 500;
-  color: #0d1117;
-}
-
-.itemSub {
-  font-size: 11.5px;
-  color: #6b7280;
-}
-
 .menuNote {
   margin: 4px 0 0;
   padding: 8px 10px 4px;
   border-top: 1px solid #eef0f4;
   font-size: 11px;
-  line-height: 1.45;
   color: #6b7280;
 }
 
-.menuNote a,
-.fine a {
+.text a {
   color: #1f5fd0;
 }
 
@@ -144,7 +132,7 @@
 }
 
 .preview {
-  margin: 8px 0 10px;
+  margin: 8px 0 16px;
   padding: 10px 12px;
   max-height: 200px;
   overflow: auto;
@@ -163,13 +151,6 @@
   border: 1px solid #1f5fd0;
   background: #f5f8fe;
   color: #0d1117;
-}
-
-.fine {
-  margin: 0 0 16px;
-  font-size: 11.5px;
-  line-height: 1.5;
-  color: #6b7280;
 }
 
 .actions {

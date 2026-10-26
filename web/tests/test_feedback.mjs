@@ -87,6 +87,9 @@ function storeLike(overrides = {}) {
       { id: 1, name: "Pump pressure", components: [98765, 0, 0] },
       { id: 2, name: "Weight", components: [0, 0, -1] },
     ],
+    tieGroups: [{ id: 1, name: "Flange weld 3" }],
+    couplingGroups: [{ id: 1, name: "ACME_Secret_Project" }],
+    studies: [{ id: 1, kind: "static", name: "Burst case Q3" }],
     result: { displacement: [4.2e-7, 0, 0], vonMises: [98765] },
     treeSelection: { group: "mesh", target: { type: "item", kind: "mesh" } },
     ...overrides,
@@ -147,6 +150,8 @@ const FIELDS = [
     "ACME",
     "Bolt hole",
     "Pump",
+    "Flange",
+    "Burst",
     ...SECRET_NUMBERS,
   ].filter((secret) => everything.some((s) => s.includes(secret)));
   check(
@@ -202,9 +207,52 @@ check(
   check(
     "the model name, file names and coordinate triples are replaced",
     diag.lastError ===
-      "Volume meshing failed for [model name]: [file] node at [coordinates] is degenerate",
+      "Volume meshing failed for [name]: [file] node at [coordinates] is degenerate",
     diag.lastError,
   );
+}
+{
+  // Real messages: coupling.ts quotes the coupling name, the worker names
+  // materials and ties without quotes too.
+  const shown = (lastShownError) =>
+    buildDiagnostics({ ...env, lastShownError }, storeLike()).lastError;
+  check(
+    "a quoted coupling name is redacted",
+    shown(
+      'Solver error: Coupling "ACME_Secret_Project" grips no node — pick the surface it couples to',
+    ) ===
+      'Solver error: Coupling "[redacted]" grips no node — pick the surface it couples to',
+    shown('Coupling "ACME_Secret_Project" grips no node'),
+  );
+  check(
+    "unquoted material, group, tie and study names are redacted",
+    shown(
+      "Shell body uses ACME alloy X; Bolt hole ACME, Pump pressure, Flange weld 3 and Burst case Q3 failed",
+    ) === "Shell body uses [name]; [name], [name], [name] and [name] failed",
+    shown("Shell body uses ACME alloy X"),
+  );
+  check(
+    "a quoted name that is not in the store is redacted too",
+    redactErrorText('Tie "Customer part B" connected no nodes', []) ===
+      'Tie "[redacted]" connected no nodes',
+  );
+  check(
+    "curly quotes are redacted like straight ones",
+    redactErrorText("Material “Secret alloy” is invalid", []) ===
+      'Material "[redacted]" is invalid',
+  );
+  check(
+    "a quoted number is a setting and stays",
+    redactErrorText('Max element size must be positive — got "0".', []) ===
+      'Max element size must be positive — got "0".',
+  );
+  check(
+    "names match whole words only",
+    redactErrorText("Weightless mesh; Weight failed", ["Weight"]) ===
+      "Weightless mesh; [name] failed",
+  );
+}
+{
   check(
     "plain error text survives",
     redactErrorText("Solver error: matrix is singular", []) ===

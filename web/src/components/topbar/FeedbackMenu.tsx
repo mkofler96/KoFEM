@@ -65,7 +65,7 @@ export function FeedbackMenu() {
   useEffect(() => watchShownErrors(), []);
 
   useEffect(() => {
-    if (!menuOpen) return;
+    if (!menuOpen) return undefined;
     function onPointerDown(e: PointerEvent) {
       if (!wrapRef.current?.contains(e.target as Node)) setMenuOpen(false);
     }
@@ -87,7 +87,7 @@ export function FeedbackMenu() {
         aria-label="Feedback"
         aria-haspopup="menu"
         aria-expanded={menuOpen}
-        title="Feedback — report a problem or suggest an improvement"
+        title="Report a problem or suggest an improvement"
         data-testid="feedback-button"
         onClick={() => setMenuOpen((open) => !open)}
       >
@@ -119,10 +119,7 @@ export function FeedbackMenu() {
               track("feedback_report_opened", {});
             }}
           >
-            <span className={styles.itemTitle}>Report a problem</span>
-            <span className={styles.itemSub}>
-              Something broke, or a result looks wrong
-            </span>
+            Report a problem
           </button>
           <a
             className={styles.item}
@@ -136,17 +133,9 @@ export function FeedbackMenu() {
               track("feedback_suggestion_opened", {});
             }}
           >
-            <span className={styles.itemTitle}>Suggest an improvement</span>
-            <span className={styles.itemSub}>
-              A short form on GitHub — opens in a new tab
-            </span>
+            Suggest an improvement
           </a>
-          <p className={styles.menuNote}>
-            Both go to public GitHub issues. KoFEM sends nothing on its own.{" "}
-            <a href="/privacy/#feedback" target="_blank" rel="noopener">
-              Privacy
-            </a>
-          </p>
+          <p className={styles.menuNote}>Opens a public GitHub issue.</p>
         </div>
       )}
 
@@ -195,10 +184,10 @@ function ReportDialog({
           Report a problem
         </h2>
         <p className={styles.text}>
-          You describe what happened on GitHub: the form asks for the steps to
-          reproduce it and what you expected instead. KoFEM sends nothing — the
-          report exists only once you submit it there, and{" "}
-          <strong>GitHub issues are public</strong>.
+          Opens a public GitHub issue. KoFEM sends nothing itself.{" "}
+          <a href="/privacy/#feedback" target="_blank" rel="noopener">
+            Privacy
+          </a>
         </p>
 
         <label className={styles.optIn}>
@@ -208,7 +197,7 @@ function ReportDialog({
             onChange={(e) => setInclude(e.target.checked)}
             data-testid="feedback-include"
           />
-          Include these diagnostics in the report
+          Include diagnostics (no geometry, file names or results)
         </label>
         <pre
           className={`${styles.preview} ${include ? styles.previewOn : ""}`}
@@ -217,15 +206,6 @@ function ReportDialog({
         >
           {formatDiagnostics(diagnostics)}
         </pre>
-        <p className={styles.fine}>
-          Never included: your geometry, file names, coordinates, mesh, results
-          or any other model data. Please don&apos;t attach confidential CAD
-          files to the issue — a gallery example or a simple model that shows
-          the problem helps just as much.{" "}
-          <a href="/privacy/#feedback" target="_blank" rel="noopener">
-            Privacy
-          </a>
-        </p>
 
         <div className={styles.actions}>
           <button

@@ -141,28 +141,40 @@ test("an error shown in the UI reaches the preview with names and coordinates re
   page,
 }) => {
   await gotoApp(page);
-  await page.evaluate(() =>
-    (
+  // A material the user named, and an error quoting a coupling name the way
+  // lib/coupling.ts does, next to a file name and a coordinate triple.
+  await page.evaluate(() => {
+    const store = (
       window as unknown as {
         __kofemStore: {
-          getState(): { setStepImportError(msg: string | null): void };
+          getState(): {
+            materials: { name: string }[];
+            setStepImportError(msg: string | null): void;
+          };
+          setState(partial: Record<string, unknown>): void;
         };
       }
-    ).__kofemStore
+    ).__kofemStore;
+    store.setState({
+      materials: store
+        .getState()
+        .materials.map((m) => ({ ...m, name: "ACME alloy X" })),
+    });
+    store
       .getState()
       .setStepImportError(
-        "Could not read secret-bracket-rev7.step near (12.5, 3, -4)",
-      ),
-  );
+        'Could not read secret-bracket-rev7.step: Coupling "ACME_Secret_Project" on ACME alloy X near (12.5, 3, -4)',
+      );
+  });
   await expect(page.getByTestId("step-error")).toBeVisible();
 
   await openReport(page);
   const preview = await page.getByTestId("feedback-diagnostics").innerText();
   expect(preview).toContain(
-    "Last error: Could not read [file] near [coordinates]",
+    'Last error: Could not read [file]: Coupling "[redacted]" on [name] near [coordinates]',
   );
   expect(preview).toContain("Model: 0 bodies, 0 nodes, 0 elements");
-  expect(preview).not.toMatch(/secret|12\.5/);
+  expect(preview).not.toMatch(/secret|ACME|12\.5/i);
 
   // Escape closes the dialog without opening anything.
   await page.keyboard.press("Escape");

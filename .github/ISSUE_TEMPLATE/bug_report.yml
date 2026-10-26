@@ -7,23 +7,17 @@ labels: ["bug"]
 body:
   - type: markdown
     attributes:
-      value: |
-        **This issue will be public.** Please don't attach confidential CAD files, models or results. A [gallery example](https://kofem.org/examples/) or a simple part that shows the same problem helps just as much.
+      value: "**This issue is public.** Don't attach confidential CAD files or results."
   - type: textarea
     id: what-happened
     attributes:
       label: What happened?
-      description: What you saw — an error message, a crash, a result you think is wrong.
     validations:
       required: true
   - type: textarea
     id: steps
     attributes:
       label: Steps to reproduce
-      placeholder: |
-        1. Import a STEP file of …
-        2. Mesh with a maximum element size of …
-        3. …
     validations:
       required: true
   - type: textarea
@@ -36,5 +30,5 @@ body:
     id: diagnostics
     attributes:
       label: Diagnostics (optional)
-      description: Filled in when you tick "Include these diagnostics" in KoFEM (Feedback → Report a problem). Versions, browser and model size only — check it before submitting.
+      description: Filled in by KoFEM when you include diagnostics.
       render: text
