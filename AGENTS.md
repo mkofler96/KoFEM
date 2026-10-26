@@ -168,6 +168,17 @@ top-layer solid stress and tip displacement across x refinements. This is a
 diagnostic study, not a stress-accuracy gate; successful execution only checks
 that solves converge to finite, positive results.
 
+`CXX=g++ bash scripts/study-shell-solid-footprint.sh [max-refinement]` tests
+physical-footprint kinematic transitions at the joint and above a 3/6 mm
+retained solid wall section. It refines the block and wall in all directions,
+including thickness, and reports fixed-volume stress averages, the block von
+Mises field error, displacement, and force/moment balance. It also checks six
+rigid motions and six load resultants on an offset asymmetric patch. Default
+refinement is 1..4; the optional maximum is 1..6. This conforming, planar,
+in-plane-load study does not implement automatic footprint detection or a
+general non-conforming seam. Its sharp-corner peak remains mesh-dependent;
+the accuracy checks compare models on the same mesh, not an absolute peak.
+
 Building the WASM engine rewrites `web/src/wasm/pkg/*.wasm` (~34 MB). Those files
 are gitignored — see [The compiled engine is not in git](#the-compiled-engine-is-not-in-git)
 — so a rebuild no longer costs history, but it does cost ~20 minutes. Only rebuild
