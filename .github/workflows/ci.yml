@@ -49,6 +49,54 @@ jobs:
       - name: Tests
         run: cargo test --workspace
 
+  native-tests:
+    name: C++ numerical tests (native)
+    runs-on: ubuntu-24.04
+    env:
+      CXX: g++
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Boundary condition validation
+        run: bash scripts/test-bc-validation.sh
+
+      - name: Shell element validation
+        run: bash scripts/test-shell.sh
+
+      - name: Topology filter validation
+        run: bash scripts/test-topology-filter.sh
+
+      - name: MMA optimizer validation
+        run: bash scripts/test-topology-mma.sh
+
+      - name: Shell and coupled topology validation
+        run: bash scripts/test-topology-shell.sh
+
+  # These harnesses link the precompiled MFEM WASM library, so they need em++
+  # and node from the dependency image. Run independently of the engine build:
+  # a cached or published engine must never bypass numerical regression tests.
+  wasm-tests:
+    name: C++ numerical tests (MFEM/WASM)
+    runs-on: ubuntu-24.04
+    container:
+      image: ghcr.io/mkofler96/kofem-dependencies:0.0.2
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: SIMP core validation
+        run: bash scripts/test-topology.sh
+
+      - name: Topology optimization loop validation
+        run: bash scripts/test-topology-optimize.sh
+
+      - name: Stress-constrained topology validation
+        run: bash scripts/test-topology-stress.sh
+
+      - name: Level-set topology validation
+        run: bash scripts/test-topology-levelset.sh
+
   clang-tidy:
     name: C++ clang-tidy
     runs-on: ubuntu-24.04
@@ -196,7 +244,7 @@ jobs:
   # main would publish — main finds it and has nothing to do.
   publish-engine:
     name: Publish engine release
-    needs: [engine-id, wasm]
+    needs: [engine-id, wasm, native-tests, wasm-tests]
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
     runs-on: ubuntu-24.04
 
@@ -606,7 +654,7 @@ jobs:
   publish-image:
     name: Publish image
     runs-on: ubuntu-24.04
-    needs: [version, web-checks, validation, e2e, coverage, image]
+    needs: [version, native-tests, wasm-tests, web-checks, validation, e2e, coverage, image]
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
 
     permissions:
@@ -702,7 +750,7 @@ jobs:
   # a no-op, so a later push to main can never take the tag.
   release:
     name: Publish product release
-    needs: [rust, clang-tidy, web-checks, validation, e2e, coverage, image, publish-image, publish-engine]
+    needs: [rust, clang-tidy, native-tests, wasm-tests, web-checks, validation, e2e, coverage, image, publish-image, publish-engine]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
 

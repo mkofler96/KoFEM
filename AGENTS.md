@@ -30,7 +30,7 @@ KoFEM/
 │   │   ├── shell_core.cpp    # Kirchhoff/DKT shell formulation
 │   │   ├── solve_shell.cpp   # Pure-shell solve
 │   │   └── solve_coupled.cpp # Mixed shell/solid solve with RBE3 coupling
-│   ├── tests/          # Native C++ checks — NOT run by CI (tracked in Linear)
+│   ├── tests/          # C++ numerical checks — run by CI (native + MFEM/WASM)
 │   └── CMakeLists.txt  # emcmake build → kofem_wasm_emcc.js + .wasm
 ├── crates/             # Rust stubs for the 3.0 native migration — see below
 ├── web/                # React + Three.js frontend (Vite) — bun, not npm
@@ -148,6 +148,14 @@ cd web && bun install && bun run dev
 
 # The gates CI enforces, in the order CI runs them
 cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings
+# C++ numerical tests: native-tests uses a host compiler; wasm-tests uses em++
+# and the precompiled MFEM WASM library. Both run independently of engine caching.
+for suite in bc-validation shell topology-filter topology-mma topology-shell; do
+  bash "scripts/test-$suite.sh"
+done
+for suite in topology topology-optimize topology-stress topology-levelset; do
+  bash "scripts/test-$suite.sh"
+done
 bash scripts/clang-tidy.sh
 cd web && bun run typecheck && bun run lint && bun run format:check && bun run test
 ```
