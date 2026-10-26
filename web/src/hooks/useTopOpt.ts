@@ -20,6 +20,12 @@ import {
 } from "../workers/sharedWorker";
 import { useWorkerLogs } from "./useWorkerLogs";
 import {
+  categorizeError,
+  currentWorkflow,
+  startTimer,
+  track,
+} from "../lib/analytics";
+import {
   suppressionMismatch,
   suppressionMismatchMessage,
 } from "../store/geometrySlice";
@@ -276,6 +282,9 @@ export function useTopOpt() {
     clearLogs();
     setLiveDensity(null);
     setProgressCallback(({ it, density }) => setLiveDensity({ it, density }));
+    const workflow = currentWorkflow();
+    const elapsed = startTimer();
+    track("solve_started", { workflow, analysis_type: "topology" });
     sendToWorker<{
       density: Float64Array;
       levelSet?: Float64Array;
@@ -294,6 +303,11 @@ export function useTopOpt() {
     })
       .then(({ density, levelSet, history }) => {
         setDensityResult({ density, levelSet, history });
+        track("solve_completed", {
+          workflow,
+          analysis_type: "topology",
+          duration_bucket: elapsed(),
+        });
         setMode("results");
       })
       .catch((err) => {
@@ -301,6 +315,12 @@ export function useTopOpt() {
         if (cancelledRef.current) return;
         console.error("[topopt] optimization failed:", err.message);
         setError(`Optimization error: ${err.message}`);
+        track("solve_failed", {
+          workflow,
+          analysis_type: "topology",
+          duration_bucket: elapsed(),
+          error_category: categorizeError(err),
+        });
       })
       .finally(() => {
         setProgressCallback(null);

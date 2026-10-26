@@ -17,7 +17,7 @@ jobs:
     outputs:
       version: ${{ steps.read.outputs.version }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: read
         run: echo "version=$(bash scripts/release-version.sh)" >> "$GITHUB_OUTPUT"
 
@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
@@ -36,7 +36,7 @@ jobs:
           components: clippy,rustfmt
 
       - name: Cache Rust
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           shared-key: native-rust
 
@@ -54,7 +54,7 @@ jobs:
     runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # fetch-wasm-deps.sh writes to /emsdk and /opt/kofem-deps (the image's
       # baked-in paths); pre-own them so the non-root fetch and the cache
@@ -63,7 +63,7 @@ jobs:
         run: sudo mkdir -p /emsdk /opt/kofem-deps && sudo chown -R "$USER" /emsdk /opt/kofem-deps
 
       - name: Cache WASM toolchain
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             /emsdk
@@ -78,7 +78,27 @@ jobs:
       # ninja-build is needed by the emcmake configure that emits
       # compile_commands.json (see scripts/clang-tidy.sh).
       - name: Install clang-tidy-20
-        run: sudo apt-get update && sudo apt-get install -y clang-tidy-20 ninja-build
+        timeout-minutes: 5
+        run: |
+          # The runner's Azure mirror stalled LLVM downloads for >16 minutes.
+          # Use the main Ubuntu archive for this install, without changing the
+          # runner's sources or pulling LLVM's recommended development packages.
+          cat > "$RUNNER_TEMP/clang-tidy.sources" <<'EOF'
+          Types: deb
+          URIs: https://archive.ubuntu.com/ubuntu
+          Suites: noble noble-updates noble-security
+          Components: main universe
+          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+          EOF
+          APT_OPTIONS=(
+            -o "Dir::Etc::sourcelist=$RUNNER_TEMP/clang-tidy.sources"
+            -o "Dir::Etc::sourceparts=-"
+            -o Acquire::Retries=2
+            -o Acquire::http::Timeout=30
+            -o Acquire::https::Timeout=30
+          )
+          sudo apt-get "${APT_OPTIONS[@]}" update
+          sudo apt-get "${APT_OPTIONS[@]}" install -y --no-install-recommends clang-tidy-20 ninja-build
 
       - name: clang-tidy
         run: bash scripts/clang-tidy.sh
@@ -95,7 +115,7 @@ jobs:
       id: ${{ steps.compute.outputs.id }}
 
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - id: compute
         run: |
@@ -114,12 +134,12 @@ jobs:
       KOFEM_ENGINE_ID: ${{ needs.engine-id.outputs.id }}
 
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # CMake stores absolute EMSDK paths in CMakeCache.txt and breaks across runs
       - name: Cache WASM build output
         id: wasm-cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             web/src/wasm/pkg/kofem_wasm_emcc.js
@@ -158,7 +178,7 @@ jobs:
       # include-hidden-files carries the .engine-id stamp through to the jobs that
       # download this, so they can tell which sources the binary came from.
       - name: Upload WASM artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: kofem-wasm-pkg
           retention-days: 7
@@ -184,10 +204,10 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Download WASM artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: kofem-wasm-pkg
           path: engine-dist/
@@ -251,12 +271,12 @@ jobs:
       KOFEM_WASM_SKIP_FETCH: 1
 
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Download WASM artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: kofem-wasm-pkg
           path: web/src/wasm/pkg/
@@ -267,7 +287,7 @@ jobs:
           bun-version: 1.3.6
 
       - name: Cache Bun dependencies
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.bun/install/cache
@@ -305,12 +325,12 @@ jobs:
       KOFEM_WASM_SKIP_FETCH: 1
 
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Download WASM artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: kofem-wasm-pkg
           path: web/src/wasm/pkg/
@@ -321,7 +341,7 @@ jobs:
           bun-version: 1.3.6
 
       - name: Cache Bun dependencies
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.bun/install/cache
@@ -357,12 +377,12 @@ jobs:
       KOFEM_WASM_SKIP_FETCH: 1
 
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Download WASM artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: kofem-wasm-pkg
           path: web/src/wasm/pkg/
@@ -373,7 +393,7 @@ jobs:
           bun-version: 1.3.6
 
       - name: Cache Bun dependencies
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.bun/install/cache
@@ -385,22 +405,9 @@ jobs:
       - name: Install web dependencies
         run: cd web && bun install --frozen-lockfile
 
-      - name: Cache Playwright browsers
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('web/bun.lock') }}
-          restore-keys: |
-            playwright-${{ runner.os }}-
-
-      - name: Install Playwright Chromium
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: cd web && bunx playwright install --with-deps chromium
-
-      - name: Install Playwright system deps
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: cd web && bunx playwright install-deps chromium
+      - name: Set up Playwright Chromium
+        uses: ./.github/actions/setup-playwright
+        timeout-minutes: 5
 
       - name: Run Playwright shard
         run: cd web && bunx playwright test --shard=${{ matrix.shard }}/4
@@ -412,7 +419,7 @@ jobs:
       # `if: always()`: a failing shard still hands over the coverage it gathered.
       - name: Upload coverage counters
         if: ${{ always() && github.event.pull_request.user.login != 'dependabot[bot]' }}
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-shard-${{ matrix.shard }}
           path: web/.nyc_output/
@@ -425,7 +432,7 @@ jobs:
       # investigating a red build downloads them from here instead.
       - name: Upload Playwright results
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: playwright-results-${{ github.run_id }}-shard-${{ matrix.shard }}
           path: web/playwright-results/
@@ -443,7 +450,7 @@ jobs:
     if: ${{ !cancelled() && github.event.pull_request.user.login != 'dependabot[bot]' }}
 
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
@@ -453,7 +460,7 @@ jobs:
           bun-version: 1.3.6
 
       - name: Cache Bun dependencies
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.bun/install/cache
@@ -466,7 +473,7 @@ jobs:
         run: cd web && bun install --frozen-lockfile
 
       - name: Collect coverage from the shards
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: coverage-shard-*
           merge-multiple: true
@@ -502,12 +509,12 @@ jobs:
       KOFEM_WASM_SKIP_FETCH: 1
 
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Download WASM artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: kofem-wasm-pkg
           path: web/src/wasm/pkg/
@@ -518,7 +525,7 @@ jobs:
           bun-version: 1.3.6
 
       - name: Cache Bun dependencies
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.bun/install/cache
@@ -530,25 +537,12 @@ jobs:
       - name: Install web dependencies
         run: cd web && bun install --frozen-lockfile
 
-      - name: Cache Playwright browsers
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('web/bun.lock') }}
-          restore-keys: |
-            playwright-${{ runner.os }}-
-
-      - name: Install Playwright Chromium
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: cd web && bunx playwright install --with-deps chromium
-
-      - name: Install Playwright system deps
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: cd web && bunx playwright install-deps chromium
+      - name: Set up Playwright Chromium
+        uses: ./.github/actions/setup-playwright
+        timeout-minutes: 5
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       # Build the real production image, run it, and drive the full WASM pipeline
       # through the served artifacts. This catches production-only breakage (e.g.
@@ -624,21 +618,21 @@ jobs:
       attestations: write
 
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Download WASM artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: kofem-wasm-pkg
           path: web/src/wasm/pkg/
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -716,7 +710,7 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Full history: the script finds the commit that added the version's
           # CHANGELOG.md heading.
