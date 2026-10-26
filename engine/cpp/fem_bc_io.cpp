@@ -8,6 +8,7 @@
 #include "fem_bc_io.h"
 
 #include "bc_validation.h"
+#include "surface_load_selection.h"
 
 #include <mfem.hpp>
 
@@ -202,29 +203,22 @@ std::map<std::vector<int>, int> build_boundary_face_map(const mfem::Mesh& mesh) 
     return face_to_be;
 }
 
-// The boundary elements covering one load's faces (node-index lists, 3 = tri,
-// 4 = quad), sorted and de-duplicated. A face matching no boundary element is
-// ignored: it is interior, or a stale selection, and either way contributes
-// nothing to a surface integral.
-std::vector<int> collect_load_elements(
+// Convert the JS selection before matching so duplicate faces and unmatched
+// selections are counted independently of the de-duplicated integration set.
+kofem::bc::SurfaceLoadSelection collect_load_elements(
     const val& faces, const std::map<std::vector<int>, int>& face_to_be) {
     unsigned n_faces = faces["length"].as<unsigned>();
-    std::vector<int> bes;
-    bes.reserve(n_faces);
+    std::vector<std::vector<int>> selection;
+    selection.reserve(n_faces);
     for (unsigned t = 0; t < n_faces; ++t) {
         val face = faces[t];
         unsigned fn = face["length"].as<unsigned>();
         std::vector<int> key(fn);
         for (unsigned k = 0; k < fn; ++k)
             key[k] = face[k].as<int>();
-        std::sort(key.begin(), key.end());
-        auto it = face_to_be.find(key);
-        if (it == face_to_be.end()) continue;
-        bes.push_back(it->second);
+        selection.push_back(std::move(key));
     }
-    std::sort(bes.begin(), bes.end());
-    bes.erase(std::unique(bes.begin(), bes.end()), bes.end());
-    return bes;
+    return kofem::bc::match_surface_load_faces(selection, face_to_be);
 }
 
 // Integrated area of the boundary elements whose attribute is marked — the same
@@ -334,7 +328,16 @@ void apply_surface_loads(const val& surf_js, mfem::Mesh& mesh, mfem::LinearForm&
     std::vector<std::vector<int>> load_elems(n_surf);
     std::map<int, std::vector<unsigned>> loads_of_be;  // bdr elem → covering loads
     for (unsigned i = 0; i < n_surf; ++i) {
-        load_elems[i] = collect_load_elements(surf_js[i]["faces"], face_to_be);
+        auto selection = collect_load_elements(surf_js[i]["faces"], face_to_be);
+        if (selection.unmatched_faces > 0) {
+            printf("[mfem] WARNING: surface_load %u: %zu of %u selected face(s) "
+                   "matched no boundary element; these faces contribute no load "
+                   "— check for stale or interior face selections\n",
+                   i, selection.unmatched_faces,
+                   surf_js[i]["faces"]["length"].as<unsigned>());
+            fflush(stdout);
+        }
+        load_elems[i] = std::move(selection.elements);
         for (int be : load_elems[i])
             loads_of_be[be].push_back(i);
     }
