@@ -1,0 +1,53 @@
+/* The empty workspace's sample entry (KOF-261), centred over the viewport. The
+   overlay lets clicks through to the canvas; only the entry takes them. */
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  pointer-events: none;
+}
+
+.entry {
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.sampleBtn {
+  padding: 12px 22px;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--r-md);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    background 100ms,
+    box-shadow 100ms;
+}
+
+.sampleBtn:hover:not(:disabled) {
+  background: #1750b3;
+  box-shadow: 0 4px 12px rgba(31, 95, 208, 0.3);
+}
+
+.sampleBtn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}

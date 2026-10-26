@@ -17,6 +17,7 @@ Everything on the public [examples gallery](https://kofem.org/examples/).
 | Generator                       | Examples                        | Run (in `web/`)                              |
 | ------------------------------- | ------------------------------- | -------------------------------------------- |
 | `generate.mjs` + `examples.mjs` | the hex-mesh benchmarks         | `bun run examples:generate`                  |
+| `generate-cantilever.mjs`       | cantilever beam, app's sample   | `bun run examples:generate-cantilever`       |
 | `generate-plate-hole-shell.mjs` | plate with a hole, shells       | `bun run examples:generate-plate-hole-shell` |
 | `generate-mbb-topopt.mjs`       | MBB beam, topology optimization | `bun run examples:generate-mbb-topopt`       |
 
@@ -28,9 +29,20 @@ whole-CAD-face picks — never from geometry or node sets the app cannot produce
 Face entries then carry their `cadFaceId`, so an opened example keeps its
 supports and loads through a re-mesh.
 
-The MBB beam follows this. The five hex-mesh benchmarks (`examples.mjs`) and the
-shell plate with a hole do not yet: they are structured meshes with node-set
-boundary conditions, which the app's Netgen pipeline cannot reproduce.
+The MBB beam and the cantilever beam follow this. The four hex-mesh benchmarks
+(`examples.mjs`) and the shell plate with a hole do not yet: they are structured
+meshes with node-set boundary conditions, which the app's Netgen pipeline cannot
+reproduce.
+
+## The cantilever beam (the app's sample)
+
+`generate-cantilever.mjs` builds δ = P·L³ / (3·E·I) as a user would: import a
+1000 × 100 × 100 mm block, mesh it at 25 mm with quadratic tetrahedra (linear
+ones lock in bending), clamp the face x = 0, load the face x = 1000 with
+Fy = −10 kN. It is the sample the empty app offers, so its `.vtu` is saved
+**unsolved**, on the static study, with a `handCheck` block
+(`web/src/lib/handCheck.ts`) the Results panel compares the tip deflection
+with. It ships `cantilever-beam.step`, so it can be re-meshed.
 
 ## The MBB beam (topology optimization)
 

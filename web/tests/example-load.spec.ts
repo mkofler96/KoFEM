@@ -52,7 +52,7 @@ function readStore(page: import("@playwright/test").Page) {
 test("?example= loads a pre-solved example into the app", async ({ page }) => {
   test.setTimeout(60_000);
 
-  await page.goto("/app/?example=cantilever-beam");
+  await page.goto("/app/?example=axial-bar");
   await expect(page.locator("nav")).toBeVisible();
 
   // The example .vtu is fetched, parsed and loaded into the store.
@@ -61,7 +61,7 @@ test("?example= loads a pre-solved example into the app", async ({ page }) => {
     .toBeGreaterThan(0);
 
   const snapshot = await readStore(page);
-  expect(snapshot.modelName).toBe("Cantilever beam under tip load");
+  expect(snapshot.modelName).toBe("Axial bar in tension");
   expect(snapshot.elements).toBeGreaterThan(0);
   expect(snapshot.hasResult).toBe(true); // saved in results mode with displacements
   expect(snapshot.mode).toBe("results");
@@ -77,12 +77,12 @@ test("re-solving a loaded example does not trap on its node ids (#288)", async (
 }) => {
   test.setTimeout(60_000);
 
-  // The example .vtu numbers nodes 1-based, so a node id is NOT its 0-based
-  // vertex index. Re-running the solve used to hand those ids to the engine as
-  // vertex indices, reading past the vertex array and trapping with "memory
-  // access out of bounds". Load the example, then drive a fresh solve straight
-  // from the restored store state exactly as the Solve button does.
-  await page.goto("/app/?example=cantilever-beam");
+  // The hex-mesh example .vtu numbers nodes 1-based, so a node id is NOT its
+  // 0-based vertex index. Re-running the solve used to hand those ids to the
+  // engine as vertex indices, reading past the vertex array and trapping with
+  // "memory access out of bounds". Load the example, then drive a fresh solve
+  // straight from the restored store state exactly as the Solve button does.
+  await page.goto("/app/?example=axial-bar");
   await expect(page.locator("nav")).toBeVisible();
   await page.waitForFunction(
     () => !!(window as unknown as { __kofem?: unknown }).__kofem,
@@ -374,12 +374,12 @@ test("a STEP-backed example (crane) restores its geometry and re-meshes", async 
   expect(mesh.nElems).toBeGreaterThan(0);
 });
 
-test("a procedural example (cantilever) has no re-meshable STEP", async ({
+test("a procedural example (axial bar) has no re-meshable STEP", async ({
   page,
 }) => {
   // The mirror of the crane test: a benchmark generated in code ships no .step,
   // so stepBytes stays null and the model is (correctly) not re-meshable.
-  await page.goto("/app/?example=cantilever-beam");
+  await page.goto("/app/?example=axial-bar");
   await expect(page.locator("nav")).toBeVisible();
   await expect
     .poll(async () => (await readStore(page)).nodes, { timeout: 15_000 })
@@ -502,6 +502,70 @@ test("the MBB topology example opens ready to optimize and re-mesh", async ({
 
   await expect(
     page.getByRole("button", { name: /Run optimization/ }),
+  ).toBeEnabled();
+});
+
+test("the cantilever sample opens ready to run and re-mesh", async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+
+  // cantilever-beam is the app's first-run sample (KOF-261), built with the
+  // app's own pipeline (examples/gallery/generate-cantilever.mjs). It must open
+  // unsolved on its static study with the clamp, the tip load, the quadratic
+  // element order and its hand check restored, and get its STEP back.
+  await page.goto("/app/?example=cantilever-beam");
+  await expect(page.locator("nav")).toBeVisible();
+  await page.waitForFunction(
+    () =>
+      (
+        window as unknown as {
+          __kofemStore: { getState(): { stepBytes: Uint8Array | null } };
+        }
+      ).__kofemStore.getState().stepBytes !== null,
+    null,
+    { timeout: 15_000 },
+  );
+
+  const snapshot = await readStore(page);
+  expect(snapshot.modelName).toBe("Cantilever beam under tip load");
+  expect(snapshot.mode).toBe("solve");
+  expect(snapshot.hasResult).toBe(false);
+  expect(snapshot.bcGroups).toBe(1); // the clamped end
+  expect(snapshot.loadGroups).toBe(1); // the tip load
+
+  const setup = await page.evaluate(() => {
+    const st = (
+      window as unknown as {
+        __kofemStore: {
+          getState(): {
+            elementOrder: number;
+            handCheck: { reference: number; formula: string } | null;
+            surfaceLoads: unknown[];
+            bcGroups: { faces: { cadFaceId?: number }[] }[];
+            loadGroups: { faces: { cadFaceId?: number }[] }[];
+          };
+        };
+      }
+    ).__kofemStore.getState();
+    return {
+      elementOrder: st.elementOrder,
+      handCheck: st.handCheck,
+      surfaceLoads: st.surfaceLoads.length,
+      // Whole CAD faces, so the support and load survive a re-mesh.
+      cadFaces: [...st.bcGroups, ...st.loadGroups].every((g) =>
+        g.faces.every((f) => typeof f.cadFaceId === "number"),
+      ),
+    };
+  });
+  expect(setup.elementOrder).toBe(2);
+  expect(setup.handCheck?.formula).toBe("−P·L³ / (3·E·I)");
+  expect(setup.handCheck?.reference).toBeCloseTo(-1.9048, 3);
+  expect(setup.surfaceLoads).toBe(1);
+  expect(setup.cadFaces).toBe(true);
+
+  await expect(
+    page.getByRole("button", { name: /Run static solve/ }),
   ).toBeEnabled();
 });
 

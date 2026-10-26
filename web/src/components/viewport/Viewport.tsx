@@ -8,6 +8,7 @@ import { FitCamera } from "./FitCamera";
 import { ViewportTestHooks } from "./ViewportTestHooks";
 import { ColorBar } from "./ColorBar";
 import { DensityColorBar } from "./DensityColorBar";
+import { EmptyState } from "./EmptyState";
 import { useModelStore } from "../../store/modelStore";
 
 export function Viewport() {
@@ -40,6 +41,9 @@ export function Viewport() {
       {/* Result field legend — static field, or density for a TO run */}
       <ColorBar />
       <DensityColorBar />
+
+      {/* Nothing loaded yet: the sample entry */}
+      <EmptyState />
 
       <Canvas
         camera={{ position: [5, 5, 5], fov: 45 }}

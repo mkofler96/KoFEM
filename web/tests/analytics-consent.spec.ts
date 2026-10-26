@@ -227,7 +227,7 @@ test.describe("workflow events", () => {
     test.setTimeout(90_000);
     await withAnalytics(page);
     await setConsent(page, "granted");
-    await page.goto("/app/?example=cantilever-beam");
+    await page.goto("/app/?example=axial-bar");
 
     await expect
       .poll(() => eventNames(page), { timeout: 15_000 })
@@ -244,7 +244,7 @@ test.describe("workflow events", () => {
     );
     expect(
       events.find((e) => e.name === "example_loaded")?.params.example_id,
-    ).toBe("cantilever-beam");
+    ).toBe("axial-bar");
     expect(
       events.find((e) => e.name === "results_viewed")?.params.workflow,
     ).toBe("example");
