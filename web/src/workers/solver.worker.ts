@@ -47,6 +47,10 @@ import {
   type CouplingDefinition,
 } from "../lib/coupling.js";
 import { dropSuppressedBodies } from "../lib/suppressBodies.js";
+import {
+  shellPointLoads,
+  coupledLoads as packCoupledLoads,
+} from "../lib/solveLoads.js";
 
 let Module: KofemModule | null = null;
 
@@ -1012,152 +1016,6 @@ function shellDirichlet(constraints: Constraint[], vid: VertexIndexer) {
   return { fixed_vertices, fixed_dofs, prescribed_dofs };
 }
 
-type ShellNodalLoad = {
-  force: [number, number, number];
-  moment: [number, number, number];
-};
-
-// Work-equivalent nodal loads of one surface load on a shell mesh. The shell
-// solver takes only nodal loads, so the traction integral f_i = ∫ N_i·t dS the
-// solid engine evaluates over boundary elements must be computed here. With
-// linear (CST/DKT) shape functions a uniform traction contributes t·A/3 to
-// each node of a facet, and a uniform line load q·L/2 to each end of an edge:
-//   force on facets — uniform traction t = F/ΣA over the loaded region
-//   force on edges  — uniform line load q = F/ΣL along the loaded edge
-//   pressure        — -p·n̂·A/3 per facet node, n̂ the facet winding normal
-//                     (a shell has no outward side; + pushes against n̂)
-function distributeShellSurfaceLoad(
-  sl: SurfaceLoad,
-  posOf: (nodeId: number) => [number, number, number],
-  at: (nodeId: number) => ShellNodalLoad,
-): void {
-  const facets = sl.faces.filter((f) => f.length === 3);
-  const edges = sl.faces.filter((f) => f.length === 2);
-  if (facets.length + edges.length !== sl.faces.length)
-    throw new Error(
-      "shell solve: a surface load carries a face that is neither a facet (3 nodes) nor an edge (2 nodes)",
-    );
-
-  // Area-weighted winding normal: |areaNormal| = A, direction from winding.
-  const areaNormal = (f: number[]): [number, number, number] => {
-    const [a, b, c] = [posOf(f[0]), posOf(f[1]), posOf(f[2])];
-    const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
-    const ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
-    return [
-      (ab[1] * ac[2] - ab[2] * ac[1]) / 2,
-      (ab[2] * ac[0] - ab[0] * ac[2]) / 2,
-      (ab[0] * ac[1] - ab[1] * ac[0]) / 2,
-    ];
-  };
-
-  if (sl.type === "pressure") {
-    if (sl.pressure === undefined)
-      throw new Error("shell solve: pressure load carries no magnitude");
-    if (facets.length === 0)
-      throw new Error(
-        "shell solve: a pressure load needs shell facets — it cannot act on an edge",
-      );
-    for (const f of facets) {
-      const n = areaNormal(f);
-      for (const nodeId of f) {
-        const acc = at(nodeId).force;
-        for (let d = 0; d < 3; d++) acc[d] += (-sl.pressure * n[d]) / 3;
-      }
-    }
-    return;
-  }
-
-  if (!sl.force)
-    throw new Error(`shell solve: ${sl.type} load carries no force vector`);
-  if (sl.type === "traction" && edges.length > 0)
-    throw new Error(
-      "shell solve: a traction (per-area) load cannot act on an edge",
-    );
-  // A group's total force is shared over the whole selection (rebuildSurfaceLoads),
-  // and there is no physical rule for splitting one total between an area and a
-  // length — the facet share would be arbitrary. Say so instead of distributing
-  // over the facets and dropping the edge without a word.
-  if (facets.length > 0 && edges.length > 0)
-    throw new Error(
-      "shell solve: one load selects both faces and edges, and a single total force " +
-        "has no meaningful split between a loaded area and a loaded edge — put the edge " +
-        "selection in its own load group.",
-    );
-
-  if (facets.length > 0) {
-    const areas = facets.map((f) => {
-      const n = areaNormal(f);
-      return Math.hypot(n[0], n[1], n[2]);
-    });
-    const totalArea = areas.reduce((s, a) => s + a, 0);
-    if (totalArea <= 0)
-      throw new Error("shell solve: loaded facets have zero total area");
-    for (let i = 0; i < facets.length; i++) {
-      // force: share of the TOTAL vector ∝ area; traction: t·A/3 directly.
-      const scale =
-        sl.type === "force" ? areas[i] / (3 * totalArea) : areas[i] / 3;
-      for (const nodeId of facets[i]) {
-        const acc = at(nodeId).force;
-        for (let d = 0; d < 3; d++) acc[d] += sl.force[d] * scale;
-      }
-    }
-  } else if (edges.length > 0) {
-    const lengths = edges.map((e) => {
-      const [a, b] = [posOf(e[0]), posOf(e[1])];
-      return Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
-    });
-    const totalLength = lengths.reduce((s, l) => s + l, 0);
-    if (totalLength <= 0)
-      throw new Error("shell solve: loaded edges have zero total length");
-    for (let i = 0; i < edges.length; i++) {
-      const scale = lengths[i] / (2 * totalLength);
-      for (const nodeId of edges[i]) {
-        const acc = at(nodeId).force;
-        for (let d = 0; d < 3; d++) acc[d] += sl.force[d] * scale;
-      }
-    }
-  }
-}
-
-// Nodal loads for the shell solve: direct loads (moment groups arrive here as
-// equivalent nodal forces; DOFs 3–5 would be true nodal moments) merged with
-// the work-equivalent distribution of every surface load.
-function shellPointLoads(
-  loads: Load[],
-  surfaceLoads: SurfaceLoad[] | undefined,
-  posOf: (nodeId: number) => [number, number, number],
-  vid: VertexIndexer,
-) {
-  const acc = new Map<number, ShellNodalLoad>();
-  const atVertex = (vertex: number): ShellNodalLoad => {
-    let entry = acc.get(vertex);
-    if (!entry) {
-      entry = { force: [0, 0, 0], moment: [0, 0, 0] };
-      acc.set(vertex, entry);
-    }
-    return entry;
-  };
-  for (const load of loads) {
-    if (load.dof < 0 || load.dof > 5)
-      throw new Error(
-        `shell solve: load on node ${load.nodeId} names DOF ${load.dof} — valid shell DOFs are 0..5`,
-      );
-    const entry = atVertex(vid(load.nodeId, "load"));
-    if (load.dof <= 2) entry.force[load.dof] += load.value;
-    else entry.moment[load.dof - 3] += load.value;
-  }
-  const atNode = (nodeId: number): ShellNodalLoad =>
-    atVertex(vid(nodeId, "surface load face"));
-  for (const sl of surfaceLoads ?? [])
-    distributeShellSurfaceLoad(sl, posOf, atNode);
-
-  return [...acc.entries()].map(([vertex, { force, moment }]) => ({
-    vertex,
-    ...(force.some((v) => v !== 0) ? { force } : {}),
-    ...(moment.some((v) => v !== 0) ? { moment } : {}),
-  }));
-}
-
 // Pack a pure-shell (all-CTRIA3) model into the { mesh, mat_json, bcs_json }
 // payload the engine's shell solver AND its shell topology optimizer both take —
 // so the two paths share one packing. `elements` are all shell facets, in store
@@ -1457,44 +1315,18 @@ function coupledFixedDofs(
   return { fixed_dofs, prescribed_dofs, prescribed_vals };
 }
 
-// Point + surface loads → equivalent nodal forces on the pool.
-//
-// A moment (DOF 3..5) is applied directly where the node has a rotational DOF to
-// receive it — a coupling REFERENCE POINT. That is the couple a surface-to-point
-// coupling exists to carry: the point takes M, the coupling spreads it over the
-// gripped surface as the statically equivalent traction, and no lever arm has to
-// be invented. Elsewhere a moment still arrives pre-converted to a ring of nodal
-// forces (momentToNodalForces), so it is skipped here as it always was.
 function coupledLoads(
   loads: Load[],
   surfaceLoads: SurfaceLoad[] | undefined,
   poolOf: (nodeId: number) => number,
   isRefPoint: (poolIndex: number) => boolean,
+  nodes: Node[],
+  vid: VertexIndexer,
 ): { load_dofs: number[]; load_vals: number[] } {
-  const load_dofs: number[] = [];
-  const load_vals: number[] = [];
-  for (const l of loads) {
-    const pi = poolOf(l.nodeId);
-    if (l.dof > 2 && !isRefPoint(pi)) continue;
-    load_dofs.push(6 * pi + l.dof);
-    load_vals.push(l.value);
-  }
-  for (const sl of surfaceLoads ?? []) {
-    if ((sl.type !== "force" && sl.type !== "traction") || !sl.force) continue; // pressure not mapped yet
-    const nodeSet = new Set<number>();
-    for (const f of sl.faces) for (const n of f) nodeSet.add(n);
-    if (nodeSet.size === 0) continue;
-    const per = sl.force.map((v) => v / nodeSet.size);
-    for (const nid of nodeSet) {
-      const pi = poolOf(nid);
-      for (let d = 0; d < 3; d++)
-        if (per[d] !== 0) {
-          load_dofs.push(6 * pi + d);
-          load_vals.push(per[d]);
-        }
-    }
-  }
-  return { load_dofs, load_vals };
+  return packCoupledLoads(loads, surfaceLoads, poolOf, isRefPoint, (nodeId) => {
+    const node = nodes[vid(nodeId, "surface load face")];
+    return [node.x, node.y, node.z];
+  });
 }
 
 // Map pool displacements onto every original store node: solid nodes directly,
@@ -1703,6 +1535,8 @@ function tryCoupledSolve(
     surfaceLoads,
     poolOf,
     isRefPoint,
+    nodes,
+    vid,
   );
 
   // Solid bodies that actually contribute solid tets to the pool: the other
@@ -1913,7 +1747,7 @@ function tryPureShellSolve(
     ]);
   };
 
-  // Reuse the coupled BC/load mapping (nearest-node lumping, 6·node+dof), then
+  // Reuse the coupled BC/load mapping (work-equivalent loads, 6·node+dof), then
   // fold it into the shell solver's fixed_vertices/fixed_dofs/point_loads form.
   // Every node here is a shell node and none is a coupling reference point: an
   // all-shell model that declares a coupling is refused in handleSolve, because
@@ -1947,6 +1781,8 @@ function tryPureShellSolve(
     surfaceLoads,
     shellOf,
     noReferencePoints,
+    nodes,
+    vid,
   );
   const forceByVertex = new Map<number, [number, number, number]>();
   for (let k = 0; k < load_dofs.length; k++) {
@@ -2328,6 +2164,8 @@ function buildCoupledEngineInputs(
     surfaceLoads,
     poolOf,
     isRefPoint,
+    nodes,
+    vid,
   );
   const { mat, solidAttributes, solidMaterialNames } = mixedCoupledMaterials(
     materials,
