@@ -1387,6 +1387,7 @@ export function buildCoupledModel(
     triangles,
     shells.shellThk,
     solidRefs,
+    tolerance,
   );
   const shellCoupling = autoDetectCouplings(
     ppt,
@@ -1540,6 +1541,7 @@ export function buildExplicitCoupledModel(
     triangles,
     shellThk,
     solidRefs,
+    tolerance,
   );
   const shellCoupling = autoDetectCouplings(
     ppt,
@@ -1783,6 +1785,7 @@ function shellFootprintCouplings(
   triangles: number[],
   thicknesses: number[],
   dependentSolidRefs: Set<number>,
+  seamReach: number,
 ): { coupling: CouplingSet; shellNodes: Set<number> } {
   const coupling: CouplingSet = {
     ref: [],
@@ -1902,24 +1905,35 @@ function shellFootprintCouplings(
     shellNodes.add(closest.edge.first);
     shellNodes.add(closest.edge.second);
   }
-  // A physical footprint replaces the search-ball seam for this connected shell.
-  const neighbours = new Map<number, number[]>();
-  for (let triangle = 0; triangle < triangles.length / 3; triangle++) {
-    const nodes = triangles.slice(3 * triangle, 3 * triangle + 3);
-    for (const node of nodes)
-      getOrInit(neighbours, node, () => []).push(...nodes);
-  }
-  const pending = [...shellNodes];
-  while (pending.length) {
-    const node = pending.pop();
-    if (node === undefined) throw new Error("Missing shell component node");
-    const adjacent = neighbours.get(node);
-    if (!adjacent) throw new Error("Footprint node belongs to no shell facet");
-    for (const neighbour of adjacent)
-      if (!shellNodes.has(neighbour)) {
-        shellNodes.add(neighbour);
-        pending.push(neighbour);
+  // Exclude the old search-ball tie only near the physical footprint. A
+  // different seam elsewhere on the same wall must keep its own connection.
+  const activeEdges = [
+    ...new Set([...closestByNode.values()].map((entry) => entry.edge)),
+  ];
+  for (const shellNode of shellSet) {
+    const position = pt(vertices, shellNode);
+    for (const edge of activeEdges) {
+      const first = pt(vertices, edge.first),
+        second = pt(vertices, edge.second);
+      const tangent = second.map((value, axis) => value - first[axis]);
+      const offset = position.map((value, axis) => value - first[axis]);
+      const fraction = Math.max(
+        0,
+        Math.min(
+          1,
+          tangent.reduce((sum, value, axis) => sum + value * offset[axis], 0) /
+            tangent.reduce((sum, value) => sum + value * value, 0),
+        ),
+      );
+      const distance = offset.reduce(
+        (sum, value, axis) => sum + (value - fraction * tangent[axis]) ** 2,
+        0,
+      );
+      if (distance <= (seamReach + tolerance) ** 2) {
+        shellNodes.add(shellNode);
+        break;
       }
+    }
   }
   return { coupling, shellNodes };
 }

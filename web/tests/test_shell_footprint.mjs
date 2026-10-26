@@ -278,3 +278,32 @@ if (process.argv.includes("--wasm")) {
     "automatic solid-section footprint survives reload and passes WASM stress regression",
   );
 }
+
+// A physical joint at the lower edge must not drop a separate gapped joint
+// at the upper edge of the same connected shell panel.
+const extendedVertices = [
+  ...vertices,
+  0,
+  -1,
+  9.5,
+  2,
+  -1,
+  9.5,
+  0,
+  1,
+  9.5,
+  0,
+  -1,
+  11.5,
+];
+const twoEnds = buildExplicitCoupledModel(
+  extendedVertices,
+  [...tets, 11, 12, 13, 14],
+  tris,
+  [2, 2],
+);
+assert.ok(couplingMpcCodes(twoEnds.coupling).includes(3));
+assert.ok(
+  couplingMpcCodes(twoEnds.coupling).includes(1),
+  "a footprint must not suppress a distinct seam elsewhere on the shell",
+);
