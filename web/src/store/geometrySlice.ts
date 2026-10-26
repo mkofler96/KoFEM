@@ -39,8 +39,8 @@ export type ElementType = "CTETRA" | "CHEXA" | "CTRIA3";
 // by shell elements; meaningless (and absent) on solid bodies.
 // How a body is discretised for the solve, chosen per body before meshing.
 // "solid" meshes the body as tetrahedra (linear or quadratic per the global
-// element order); "shell" idealises the whole body as Kirchhoff shells on the
-// mid-surface of its walls, coupled to the solid bodies it touches. Every body
+// element order); "shell" idealises thin walls as Kirchhoff shells on the
+// mid-surface, retaining solid sections at planar joints. Every body
 // starts "solid"; a part that is only partly thin is split into bodies first.
 export type BodyDiscretization = "shell" | "solid";
 

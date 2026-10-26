@@ -107,6 +107,9 @@ test("mesh-time auto-shell: the fin is stored as a mid-surface shell mesh", asyn
     }[];
     return {
       nTets: els.filter((e) => e.type === "CTETRA").length,
+      transitionTets: els.filter(
+        (entry) => entry.type === "CTETRA" && entry.propertyId === 2,
+      ).length,
       nShells: shellEls.length,
       shellYMin: ymin,
       shellYMax: ymax,
@@ -119,6 +122,7 @@ test("mesh-time auto-shell: the fin is stored as a mid-surface shell mesh", asyn
   // Both element families are present — a genuinely mixed model.
   expect(meshed.nShells).toBeGreaterThan(0);
   expect(meshed.nTets).toBeGreaterThan(0);
+  expect(meshed.transitionTets).toBeGreaterThan(0);
 
   // The shell facets sit on the mid-surface, not on either original wall face.
   expect(meshed.shellYMin).toBeCloseTo(MID_SURFACE_Y, 3);
