@@ -10,10 +10,14 @@
 // can gate CI.
 
 #include "bc_validation.h"
+#include "surface_load_selection.h"
 
 #include <cstdio>
+#include <cstddef>
+#include <map>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 using namespace kofem::bc;
 
@@ -126,6 +130,29 @@ int main() {
                   [&] { require_positive_load_area(0.0, 2, 4); }, "surface_load 2");
     expect_throws(failures, "negative load area rejected",
                   [&] { require_positive_load_area(-1.0, 0, 4); }, "force");
+
+    printf("\nSurface-load face matching (KOF-220):\n");
+    const std::map<std::vector<int>, int> boundary_faces{
+        {{0, 1, 2}, 5}, {{3, 4, 5, 6}, 9}};
+    const auto check_selection = [&](const char* name,
+                                     const std::vector<std::vector<int>>& faces,
+                                     const std::vector<int>& expected,
+                                     std::size_t unmatched) {
+        const auto result = match_surface_load_faces(faces, boundary_faces);
+        const bool pass = result.elements == expected && result.unmatched_faces == unmatched;
+        if (!pass) ++failures;
+        printf("  [%s] %s\n", pass ? "PASS" : "FAIL", name);
+    };
+    check_selection("tri/quad permutations match", {{2, 0, 1}, {6, 4, 3, 5}}, {5, 9}, 0);
+    check_selection("partial miss is counted", {{0, 1, 2}, {7, 8, 9}}, {5}, 1);
+    check_selection("full miss is counted", {{7, 8, 9}}, {}, 1);
+    check_selection("duplicate valid faces produce no misses",
+                    {{0, 1, 2}, {2, 1, 0}}, {5}, 0);
+    check_selection("duplicates integrate once without false misses",
+                    {{0, 1, 2}, {2, 1, 0}, {7, 8, 9}}, {5}, 1);
+    check_selection("each unmatched selection is counted",
+                    {{7, 8, 9}, {9, 8, 7}, {0, 1, 2}}, {5}, 2);
+    check_selection("empty selection", {}, {}, 0);
 
     printf(failures != 0 ? "\n%d check(s) FAILED\n" : "\nall checks passed\n", failures);
     return failures != 0 ? 1 : 0;
