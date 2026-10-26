@@ -18,7 +18,7 @@
 # Base images are pinned by digest (the tag is kept for readability): a
 # rebuilt tag upstream must not change what ships without a reviewable diff.
 # Dependabot proposes the bumps (.github/dependabot.yml).
-FROM node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 AS builder
+FROM node:25-bookworm-slim@sha256:81db02c4b671288a03915da9534dbd54f96d0e7c24d80ccc54f5b36b2e684370 AS builder
 COPY --from=oven/bun:1.3.6@sha256:f20d9cf365ab35529384f1717687c739c92e6f39157a35a95ef06f4049a10e4a /usr/local/bin/bun /usr/local/bin/bun
 
 WORKDIR /app
