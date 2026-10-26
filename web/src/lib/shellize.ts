@@ -11,6 +11,8 @@
 // Flat mesh over a 0-based vertex numbering (the worker builds this from the
 // store model via its vertex indexer).
 
+import { SpatialGrid } from "./spatialGrid.js";
+
 export interface ShellizeMesh {
   V: number[]; // 3·nNodes, xyz interleaved
   tet: number[]; // 4·nTets, vertex indices
@@ -930,36 +932,17 @@ function autoDetectCouplings(
   radius: number,
   maxCoupledNodes: number,
 ): { ref: number[]; offsets: number[]; solid: number[] } {
-  const grid = new Map<string, number[]>();
-  const gk = (x: number, y: number, z: number) =>
-    `${Math.floor(x / radius)},${Math.floor(y / radius)},${Math.floor(z / radius)}`;
-  for (const pi of solidPoolIndices) {
-    const pos = ppt(pi);
-    getOrInit(grid, gk(...pos), () => []).push(pi);
-  }
+  const grid = new SpatialGrid(solidPoolIndices, ppt, radius);
   const ref: number[] = [],
     offsets = [0],
     solid: number[] = [];
   for (const gi of refPoolIndices) {
     const pos = ppt(gi);
-    const cx = Math.floor(pos[0] / radius),
-      cy = Math.floor(pos[1] / radius),
-      cz = Math.floor(pos[2] / radius);
     const near: { pi: number; d2: number }[] = [];
-    for (let dx = -1; dx <= 1; dx++)
-      for (let dy = -1; dy <= 1; dy++)
-        for (let dz = -1; dz <= 1; dz++) {
-          const bucket = grid.get(`${cx + dx},${cy + dy},${cz + dz}`);
-          if (!bucket) continue;
-          for (const pi of bucket) {
-            const posSolid = ppt(pi);
-            const d2 =
-              (pos[0] - posSolid[0]) ** 2 +
-              (pos[1] - posSolid[1]) ** 2 +
-              (pos[2] - posSolid[2]) ** 2;
-            if (d2 <= radius * radius) near.push({ pi, d2 });
-          }
-        }
+    for (const pi of grid.candidates(pos, 1)) {
+      const d2 = dist2(pos, ppt(pi));
+      if (d2 <= radius * radius) near.push({ pi, d2 });
+    }
     if (near.length >= 3) {
       ref.push(gi);
       for (const pi of spreadPatch(near, maxCoupledNodes, ppt)) solid.push(pi);
@@ -1081,26 +1064,16 @@ function nearestMasterDistances(
 ): Map<number, number> {
   const out = new Map<number, number>();
   if (masters.length === 0 || refs.length === 0 || !(reach > 0)) return out;
-  const gridKey = (x: number, y: number, z: number) =>
-    `${Math.floor(x / reach)},${Math.floor(y / reach)},${Math.floor(z / reach)}`;
-  const grid = new Map<string, number[]>();
-  for (const pi of masters)
-    getOrInit(grid, gridKey(...ppt(pi)), () => []).push(pi);
+  const grid = new SpatialGrid(masters, ppt, reach);
 
   const reach2 = reach * reach;
   for (const gi of refs) {
     const pos = ppt(gi);
-    const cx = Math.floor(pos[0] / reach),
-      cy = Math.floor(pos[1] / reach),
-      cz = Math.floor(pos[2] / reach);
     let best = Infinity;
-    for (let dx = -1; dx <= 1; dx++)
-      for (let dy = -1; dy <= 1; dy++)
-        for (let dz = -1; dz <= 1; dz++)
-          for (const pi of grid.get(`${cx + dx},${cy + dy},${cz + dz}`) ?? []) {
-            const candidate = dist2(pos, ppt(pi));
-            if (candidate < best) best = candidate;
-          }
+    for (const pi of grid.candidates(pos, 1)) {
+      const candidate = dist2(pos, ppt(pi));
+      if (candidate < best) best = candidate;
+    }
     if (best <= reach2) out.set(gi, Math.sqrt(best));
   }
   return out;
@@ -1583,46 +1556,23 @@ export function shellNodeLocator(
   model: CoupledModel,
 ): (p: [number, number, number]) => number {
   const cell = 15;
-  const grid = new Map<string, number[]>();
-  const gk = (x: number, y: number, z: number) =>
-    `${Math.floor(x / cell)},${Math.floor(y / cell)},${Math.floor(z / cell)}`;
-  for (const pi of model.shellPool) {
-    const key = gk(
-      model.pool[3 * pi],
-      model.pool[3 * pi + 1],
-      model.pool[3 * pi + 2],
-    );
-    getOrInit(grid, key, () => []).push(pi);
-  }
+  const grid = new SpatialGrid(
+    model.shellPool,
+    (pi) => pt(model.pool, pi),
+    cell,
+  );
   const maxRings = 6;
   return (p) => {
-    const cx = Math.floor(p[0] / cell),
-      cy = Math.floor(p[1] / cell),
-      cz = Math.floor(p[2] / cell);
     let best = -1,
       bd = Infinity;
     for (let r = 0; r <= maxRings && bd === Infinity; r++) {
-      for (let dx = -r; dx <= r; dx++)
-        for (let dy = -r; dy <= r; dy++)
-          for (let dz = -r; dz <= r; dz++) {
-            if (
-              r > 0 &&
-              Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz)) !== r
-            )
-              continue; // ring shell only
-            const bucket = grid.get(`${cx + dx},${cy + dy},${cz + dz}`);
-            if (!bucket) continue;
-            for (const pi of bucket) {
-              const dd =
-                (p[0] - model.pool[3 * pi]) ** 2 +
-                (p[1] - model.pool[3 * pi + 1]) ** 2 +
-                (p[2] - model.pool[3 * pi + 2]) ** 2;
-              if (dd < bd) {
-                bd = dd;
-                best = pi;
-              }
-            }
-          }
+      for (const pi of grid.candidates(p, r, r)) {
+        const dd = dist2(p, pt(model.pool, pi));
+        if (dd < bd) {
+          bd = dd;
+          best = pi;
+        }
+      }
     }
     // No candidate within the searched radius: the query point (a BC/load on the
     // shelled body) is farther from every shell mid-surface node than the grid

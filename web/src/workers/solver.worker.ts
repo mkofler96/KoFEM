@@ -4,6 +4,12 @@
 
 // Runs kofem-wasm off the main thread so heavy solves don't freeze the UI.
 
+import {
+  coupledMaterials,
+  mixedCoupledMaterials,
+} from "../lib/coupledMaterials.js";
+import { SpatialGrid } from "../lib/spatialGrid.js";
+
 import createModule from "../wasm/pkg/kofem_wasm.js";
 import type { KofemModule } from "../wasm/pkg/kofem_wasm.js";
 import {
@@ -870,60 +876,6 @@ function buildShellizeMesh(
   return { V: verts, tet, body, surfTri, surfFace };
 }
 
-// Solid and shell material for the coupled solve (single each). The shell uses
-// the thin body's material; the solid uses the single material shared by every
-// solid body. The coupled solid-shell assembler (engine/cpp/solve_coupled.cpp →
-// assemble_solid_stiffness_mfem) takes one (E, nu) pair for the whole solid
-// domain — it has no per-body material plumbing — so a solid domain that spans
-// two different materials cannot be honoured here. Rather than silently pick one
-// and solve part of the model with the wrong stiffness (issue #376), refuse
-// loudly and name the ambiguity. `solidBodyIds` are the property ids of the
-// solid bodies actually present in the coupled tet mesh (shell body excluded).
-function coupledMaterials(
-  materials: Material[],
-  properties: Property[],
-  shellBody: number,
-  solidBodyIds: number[],
-) {
-  const matOf = (propId: number): Material => {
-    const prop = properties.find((p) => p.id === propId);
-    if (!prop)
-      throw new Error(
-        `coupledMaterials: no property with id ${propId} in the model`,
-      );
-    const mat = materials.find((mm) => mm.id === prop.materialId);
-    if (!mat)
-      throw new Error(
-        `coupledMaterials: property ${propId} references material ${prop.materialId}, which does not exist`,
-      );
-    return mat;
-  };
-  const shellMat = matOf(shellBody);
-  const solidMats = new Map<number, Material>();
-  for (const pid of solidBodyIds) {
-    const mat = matOf(pid);
-    solidMats.set(mat.id, mat);
-  }
-  if (solidMats.size === 0)
-    throw new Error(
-      "coupledMaterials: the coupled solve has no solid body — a shell body must be coupled to at least one solid body",
-    );
-  if (solidMats.size > 1) {
-    const names = [...solidMats.values()].map((mm) => mm.name).join(", ");
-    throw new Error(
-      "coupledMaterials: the coupled solid-shell solve supports only one solid material, but the " +
-        `solid domain spans ${solidMats.size} distinct materials (${names}). Per-body materials are ` +
-        "not yet plumbed through the coupled shell path — assign a single material to all solid " +
-        "bodies, or solve this model without the thin-wall shell idealisation.",
-    );
-  }
-  const solidMat = [...solidMats.values()][0];
-  return {
-    solid: { young_modulus: solidMat.young, poisson_ratio: solidMat.poisson },
-    shell: { young_modulus: shellMat.young, poisson_ratio: shellMat.poisson },
-  };
-}
-
 // Essential BCs for the coupled solve: a translation constraint maps to its
 // pool node, and a shelled node clamped in all three translations is also
 // clamped in rotation. `isShell` reports whether a pool node carries shell
@@ -1339,42 +1291,26 @@ function buildNearestVertexLocator(
   // Cell ~ mean node spacing; the 1e-6 floor keeps it positive for a degenerate
   // (single-point) cloud.
   const cell = Math.max(span / Math.max(1, Math.cbrt(n)), 1e-6);
-  const grid = new Map<string, number[]>();
-  const gk = (x: number, y: number, z: number) =>
-    `${Math.floor(x / cell)},${Math.floor(y / cell)},${Math.floor(z / cell)}`;
-  for (let i = 0; i < n; i++) {
-    const key = gk(verts[3 * i], verts[3 * i + 1], verts[3 * i + 2]);
-    getOrInitList(grid, key).push(i);
-  }
+  const grid = new SpatialGrid(
+    Array.from({ length: n }, (_, index) => index),
+    (index) => [verts[3 * index], verts[3 * index + 1], verts[3 * index + 2]],
+    cell,
+  );
   const maxRings = 32;
   return (p) => {
-    const cx = Math.floor(p[0] / cell),
-      cy = Math.floor(p[1] / cell),
-      cz = Math.floor(p[2] / cell);
     let best = -1,
       bd = Infinity;
     for (let r = 0; r <= maxRings && best < 0; r++) {
-      for (let dx = -r; dx <= r; dx++)
-        for (let dy = -r; dy <= r; dy++)
-          for (let dz = -r; dz <= r; dz++) {
-            if (
-              r > 0 &&
-              Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz)) !== r
-            )
-              continue; // ring shell only
-            const bucket = grid.get(`${cx + dx},${cy + dy},${cz + dz}`);
-            if (!bucket) continue;
-            for (const i of bucket) {
-              const dd =
-                (p[0] - verts[3 * i]) ** 2 +
-                (p[1] - verts[3 * i + 1]) ** 2 +
-                (p[2] - verts[3 * i + 2]) ** 2;
-              if (dd < bd) {
-                bd = dd;
-                best = i;
-              }
-            }
-          }
+      for (const i of grid.candidates(p, r, r)) {
+        const dd =
+          (p[0] - verts[3 * i]) ** 2 +
+          (p[1] - verts[3 * i + 1]) ** 2 +
+          (p[2] - verts[3 * i + 2]) ** 2;
+        if (dd < bd) {
+          bd = dd;
+          best = i;
+        }
+      }
     }
     if (best < 0)
       throw new Error(
@@ -1383,15 +1319,6 @@ function buildNearestVertexLocator(
       );
     return best;
   };
-}
-
-function getOrInitList(map: Map<string, number[]>, key: string): number[] {
-  let arr = map.get(key);
-  if (!arr) {
-    arr = [];
-    map.set(key, arr);
-  }
-  return arr;
 }
 
 // A thin single body (or an assembly where EVERY body is marked Shell) has no
@@ -1592,103 +1519,6 @@ function getOrInitDofs(
 }
 
 // ── Mixed shell/solid solve (explicit CTRIA3 + CTETRA → solve_coupled) ────────
-
-// Single (E, ν) per domain for the coupled assembler, resolved from the explicit
-// element → property → material chain. The coupled solid-shell solver takes one
-// material for the whole solid domain and one for the whole shell domain (issue
-// #376), so a domain spanning several materials is refused loudly rather than
-// solved with the wrong stiffness on part of it.
-function mixedCoupledMaterials(
-  materials: Material[],
-  properties: Property[],
-  shellElements: Element[],
-  solidElements: Element[],
-) {
-  const propById = new Map(properties.map((p) => [p.id, p]));
-  const matById = new Map(materials.map((mat) => [mat.id, mat]));
-  const materialOf = (el: Element, domain: string): Material => {
-    const prop = propById.get(el.propertyId);
-    if (!prop)
-      throw new Error(
-        `mixed solve: ${domain} element ${el.id} belongs to body ${el.propertyId}, ` +
-          "which has no property — the model is inconsistent",
-      );
-    const mat = matById.get(prop.materialId);
-    if (!mat)
-      throw new Error(
-        `mixed solve: property ${prop.id} references material ${prop.materialId}, ` +
-          "which does not exist",
-      );
-    return mat;
-  };
-
-  // Solid: one entry per distinct material, selected per tet by `attributes`
-  // (1-based) — a steel bracket carrying an aluminium part is one solve.
-  if (solidElements.length === 0)
-    throw new Error("mixed solve: the model has no solid element");
-  const solidOrder: Material[] = [];
-  const solidIndex = new Map<number, number>();
-  const solidAttributes = solidElements.map((el) => {
-    const mat = materialOf(el, "solid");
-    let at = solidIndex.get(mat.id);
-    if (at === undefined) {
-      at = solidOrder.push(mat); // 1-based: push returns the new length
-      solidIndex.set(mat.id, at);
-    }
-    return at;
-  });
-
-  // Shell: still exactly one. A solve idealises a single body as shells (#376),
-  // so several shell materials means the model, not the solver, is inconsistent.
-  const shellUsed = new Map<number, Material>();
-  for (const el of shellElements) {
-    const mat = materialOf(el, "shell");
-    shellUsed.set(mat.id, mat);
-  }
-  // A model with NO shell element takes this path when it carries a
-  // surface-to-point coupling: the coupled assembler is what applies an RBE2/RBE3
-  // constraint, and it accepts zero triangles. `mat.shell` is still read by
-  // solve_coupled, so it gets the first solid material — with no facet to
-  // assemble it can only be unused, and inventing an arbitrary modulus would
-  // print a stiffness that is not in the model anywhere.
-  if (shellUsed.size === 0 && shellElements.length === 0)
-    return {
-      mat: {
-        solid: solidOrder.map((mat) => ({
-          young_modulus: mat.young,
-          poisson_ratio: mat.poisson,
-        })),
-        shell: {
-          young_modulus: solidOrder[0].young,
-          poisson_ratio: solidOrder[0].poisson,
-        },
-      },
-      solidAttributes,
-      solidMaterialNames: solidOrder.map((mat) => mat.name),
-    };
-  if (shellUsed.size === 0)
-    throw new Error("mixed solve: the model has no shell element");
-  if (shellUsed.size > 1) {
-    const names = [...shellUsed.values()].map((mat) => mat.name).join(", ");
-    throw new Error(
-      "mixed solve: one body is idealised as shells per solve, so the shell elements carry one " +
-        `material — these span ${shellUsed.size} (${names}). Assign a single material to the ` +
-        "shelled body.",
-    );
-  }
-  const shellMat = [...shellUsed.values()][0];
-  return {
-    mat: {
-      solid: solidOrder.map((mat) => ({
-        young_modulus: mat.young,
-        poisson_ratio: mat.poisson,
-      })),
-      shell: { young_modulus: shellMat.young, poisson_ratio: shellMat.poisson },
-    },
-    solidAttributes,
-    solidMaterialNames: solidOrder.map((mat) => mat.name),
-  };
-}
 
 // Per-facet shell thickness from each CTRIA3 element's PSHELL property, in shell
 // element order (matching the triangles handed to solve_coupled).
