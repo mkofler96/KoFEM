@@ -18,6 +18,10 @@ The React/TypeScript/Three.js frontend is in `web/`. Use **bun**, not npm.
   See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed conventions.
 - Analytics require opt-in consent. Use `web/src/lib/analytics.ts`; never
   send model data, filenames, results, or raw errors.
+- Keep UI copy brief and user-focused; link to technical detail and extended
+  limitations. Negative example: [KOF-266 / PR #479](https://github.com/mkofler96/KoFEM/pull/479)
+  overloaded the homepage hero with explanations. Read that example only
+  when working on homepage copy.
 
 ## Build and checks
 
