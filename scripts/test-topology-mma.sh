@@ -9,8 +9,7 @@
 # algebra with no MFEM/OCCT/Netgen/Emscripten dependency — it works on design
 # variables, function values and gradients as plain arrays — so, like
 # scripts/test-shell.sh and scripts/test-topology-filter.sh, this compiles with a
-# plain host C++ compiler for a fast unit-test loop. It is NOT run by CI (see
-# AGENTS.md).
+# plain host C++ compiler for a fast unit-test loop. CI runs it in native-tests.
 #
 # Usage:  bash scripts/test-topology-mma.sh
 

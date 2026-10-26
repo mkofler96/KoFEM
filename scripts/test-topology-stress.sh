@@ -7,8 +7,8 @@
 # aggregated-stress adjoint and the L-bracket benchmark.
 #
 # Like scripts/test-topology-optimize.sh it links the precompiled WASM MFEM at
-# $MFEM_WASM_ROOT, so it is compiled with em++ and run under node. It is NOT run
-# by CI (see AGENTS.md). Pass a directory to also write the L-bracket density
+# $MFEM_WASM_ROOT, so it is compiled with em++ and run under node. CI runs it in
+# wasm-tests. Pass a directory to also write the L-bracket density
 # fields there as CSV for the before/after plot.
 #
 # Usage:  bash scripts/test-topology-stress.sh [dump-dir]

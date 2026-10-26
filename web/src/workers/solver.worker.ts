@@ -4,14 +4,14 @@
 
 // Runs kofem-wasm off the main thread so heavy solves don't freeze the UI.
 
+import {
+  coupledMaterials,
+  mixedCoupledMaterials,
+} from "../lib/coupledMaterials.js";
+import { SpatialGrid } from "../lib/spatialGrid.js";
+
 import createModule from "../wasm/pkg/kofem_wasm.js";
-import type {
-  KofemModule,
-  SolveMesh,
-  SplitGeometryOptions,
-  BooleanGeometryOptions,
-  TopOptSettings,
-} from "../wasm/pkg/kofem_wasm.js";
+import type { KofemModule } from "../wasm/pkg/kofem_wasm.js";
 import {
   buildTie,
   remapElement,
@@ -41,12 +41,35 @@ import {
   type ShellizeMesh,
   type ShellExtraction,
 } from "../lib/shellize.js";
+import { buildReferenceCouplings, referencePointIds } from "../lib/coupling.js";
+import type {
+  Node,
+  Element,
+  Material,
+  Property,
+  Constraint,
+  Load,
+  SurfaceLoad,
+  ParseStepPayload,
+  SplitGeometryPayload,
+  BooleanGeometryPayload,
+  VolumeMeshPayload,
+  SolvePayload,
+  TopOptPayload,
+} from "./solverTypes.js";
 import {
-  buildReferenceCouplings,
-  referencePointIds,
-  type CouplingDefinition,
-} from "../lib/coupling.js";
+  buildVertexIndexer,
+  packSolveMesh,
+  resolveMaterials,
+  groupDirichlet,
+  groupPointLoads,
+  type VertexIndexer,
+} from "../lib/solveMeshPacking.js";
 import { dropSuppressedBodies } from "../lib/suppressBodies.js";
+import {
+  shellPointLoads,
+  coupledLoads as packCoupledLoads,
+} from "../lib/solveLoads.js";
 
 let Module: KofemModule | null = null;
 
@@ -116,140 +139,6 @@ function chunk3(
     out[i] = [flat[j], flat[j + 1], flat[j + 2]];
   }
   return out;
-}
-
-// ── Payload types ─────────────────────────────────────────────────────────────
-
-interface Node {
-  id: number;
-  x: number;
-  y: number;
-  z: number;
-}
-interface Element {
-  id: number;
-  type: string;
-  nodeIds: number[];
-  propertyId: number;
-}
-interface Material {
-  id: number;
-  name: string;
-  young: number;
-  poisson: number;
-  density: number;
-}
-// Body → material mapping (#317/#353): each body of the assembly is one
-// property (property id = 1-based body index from Netgen's mesh domains), and
-// the property names the material the body is made of. Properties referenced
-// by shell (CTRIA3) elements also carry the shell thickness (PSHELL semantics).
-interface Property {
-  id: number;
-  materialId: number;
-  thickness?: number;
-  // Per-body discretisation chosen before meshing: "shell" idealises the body's
-  // thin walls as shells, "solid" keeps it as tets. Undefined on legacy models
-  // (no per-body choice) — the auto-shell path then auto-detects thin bodies.
-  discretization?: "shell" | "solid";
-  // On a mesh-time PSHELL: the CAD body whose thin walls it replaces. Lets the
-  // viewport map the derived property back to a body that has a tessellation.
-  sourceBodyId?: number;
-  // A suppressed body is not in the mesh, whatever its element type.
-  suppressed?: boolean;
-}
-interface Constraint {
-  nodeId: number;
-  dof: number;
-  prescribedValue?: number;
-}
-interface Load {
-  nodeId: number;
-  dof: number;
-  value: number;
-}
-// A work-equivalent surface load applied by the engine's boundary integrator
-// over the boundary elements covering `faces` (node-index lists — triangles for
-// tets, quads for hexes).
-//   force    — total force vector spread as a uniform traction over the face
-//   pressure — scalar magnitude applied as -p·n̂ (outward normal; + pushes in)
-//   traction — traction vector applied directly
-interface SurfaceLoad {
-  type: "force" | "pressure" | "traction";
-  faces: number[][];
-  force?: [number, number, number];
-  pressure?: number;
-}
-interface ParseStepPayload {
-  bytes: Uint8Array;
-  format?: string;
-}
-interface SplitGeometryPayload {
-  // The current geometry file and its format — reloaded before the split.
-  bytes: Uint8Array;
-  format: string;
-  split: SplitGeometryOptions;
-}
-interface BooleanGeometryPayload {
-  // The current geometry file and its format — reloaded before the Boolean.
-  bytes: Uint8Array;
-  format: string;
-  boolean: BooleanGeometryOptions;
-}
-interface VolumeMeshPayload {
-  bytes?: Uint8Array;
-  format?: string;
-  maxElementSize?: number;
-  minElementSize?: number;
-  // Bodies marked Shell (Property.discretization === "shell") and the current
-  // property table. With these, meshing idealises those bodies' thin walls to a
-  // mid-surface shell mesh and stores the MIXED CTRIA3 + CTETRA model, instead of
-  // deriving it throwaway inside the solve (#397). Absent/empty ⇒ all-solid mesh.
-  shellBodyIds?: number[];
-  // Suppressed CAD bodies: meshed with the assembly (Netgen meshes the whole
-  // imprinted shape) and then dropped — see dropSuppressedBodies.
-  suppressedBodyIds?: number[];
-  properties?: Property[];
-}
-interface SolvePayload {
-  nodes: Node[];
-  elements: Element[];
-  materials: Material[];
-  properties: Property[];
-  constraints: Constraint[];
-  loads: Load[];
-  surfaceLoads?: SurfaceLoad[];
-  elementOrder?: number;
-  // Tie (connector) conditions: each welds the nodes of two picked surfaces so
-  // parts that touch without a shared face are joined (#359). Absent/empty =
-  // no ties, and the mesh reaches the solver untouched.
-  tieGroups?: TieDefinition[];
-  // Surface-to-point couplings (KOF-208): each idealises a picked surface to one
-  // reference point, either distributing (RBE3) or kinematic (RBE2). A model
-  // carrying any of these solves through the COUPLED assembler, whether or not
-  // it has shells. Absent/empty = no couplings, and the routing is unchanged.
-  couplings?: CouplingDefinition[];
-  // Surface mesh + per-triangle CAD face id (from meshing / the analysis file):
-  // needed to detect thin-walled bodies and idealise them as shells (auto-shell).
-  surfaceTriangles?: [number, number, number][] | null;
-  surfaceFaceIds?: number[] | null;
-}
-
-// Topology-optimization request: the same model the static solve takes (mesh +
-// materials + BCs/loads + ties/couplings) plus the TO settings block. The design
-// domain follows the element mix — all-solid, all-shell, or coupled shell/solid
-// (KOF-237). Ties and couplings join the coupled design domain exactly as they
-// do for the solve; element order does not apply (linear tets + DKT facets).
-interface TopOptPayload {
-  nodes: Node[];
-  elements: Element[];
-  materials: Material[];
-  properties: Property[];
-  constraints: Constraint[];
-  loads: Load[];
-  surfaceLoads?: SurfaceLoad[];
-  tieGroups?: TieDefinition[];
-  couplings?: CouplingDefinition[];
-  settings: TopOptSettings;
 }
 
 // ── parse_step ────────────────────────────────────────────────────────────────
@@ -753,175 +642,6 @@ function rebuildPoolSurface(
 
 // ── solve ─────────────────────────────────────────────────────────────────────
 
-// The engine indexes vertices 0-based in the order they are added (mesh
-// vertices are emitted in node-array order). Stored node .id values are NOT
-// those indices — saved analyses number nodes 1-based and .inp imports use
-// arbitrary ids — so every node reference (element connectivity, constraints,
-// loads, surface-load faces) must be remapped to its vertex index before
-// reaching the engine. Passing a raw node id where the engine expects a vertex
-// index reads past the vertex array and traps with "memory access out of
-// bounds" (issue #288).
-type VertexIndexer = (nodeId: number, context: string) => number;
-
-function buildVertexIndexer(nodes: Node[]): VertexIndexer {
-  const vertexIndexById = new Map(nodes.map((n, i) => [n.id, i]));
-  return (nodeId, context) => {
-    const i = vertexIndexById.get(nodeId);
-    if (i === undefined)
-      throw new Error(
-        `${context} references unknown node id ${nodeId} — the model is inconsistent`,
-      );
-    return i;
-  };
-}
-
-// The mesh crosses the WASM boundary as flat typed arrays (issue #166):
-// no multi-MB JSON.stringify here and no JSON.parse inside the engine —
-// the engine bulk-copies these buffers onto its heap in one call each.
-function packSolveMesh(
-  nodes: Node[],
-  tetElements: Element[],
-  hexElements: Element[],
-  vid: VertexIndexer,
-): SolveMesh {
-  if (tetElements.length === 0 && hexElements.length === 0) {
-    throw new Error(
-      "No supported elements found. MFEM requires CTETRA or CHEXA elements — " +
-        'import a STEP file and click "Mesh STEP volume" first.',
-    );
-  }
-  const vertices = new Float64Array(3 * nodes.length);
-  for (let i = 0; i < nodes.length; i++) {
-    vertices[3 * i] = nodes[i].x;
-    vertices[3 * i + 1] = nodes[i].y;
-    vertices[3 * i + 2] = nodes[i].z;
-  }
-  const packConnectivity = (
-    els: Element[],
-    nodesPerElement: number,
-    context: string,
-  ): Int32Array => {
-    const out = new Int32Array(nodesPerElement * els.length);
-    for (let i = 0; i < els.length; i++) {
-      const { nodeIds } = els[i];
-      if (nodeIds.length !== nodesPerElement)
-        throw new Error(
-          `${context} ${els[i].id} has ${nodeIds.length} nodes — expected ${nodesPerElement}`,
-        );
-      for (let k = 0; k < nodesPerElement; k++)
-        out[nodesPerElement * i + k] = vid(nodeIds[k], context);
-    }
-    return out;
-  };
-  return {
-    vertices,
-    tetrahedra: packConnectivity(tetElements, 4, "CTETRA element"),
-    hexahedra: packConnectivity(hexElements, 8, "CHEXA element"),
-  };
-}
-
-// Per-body materials (#317/#353): each element's propertyId is its body, and
-// the property maps the body to a material. Returns the materials payload for
-// the engine plus one 1-based index into it per element, in the order the
-// elements cross the WASM boundary (mesh.attributes contract).
-function resolveMaterials(
-  orderedElements: Element[],
-  materials: Material[],
-  properties: Property[],
-) {
-  if (materials.length === 0) {
-    throw new Error(
-      "solve: no material assigned — assign a material before running the solver",
-    );
-  }
-  const matIndexById = new Map(materials.map((mat, i) => [mat.id, i + 1]));
-  const matIndexByProperty = new Map<number, number>();
-  for (const prop of properties) {
-    const idx = matIndexById.get(prop.materialId);
-    if (idx === undefined)
-      throw new Error(
-        `solve: body ${prop.id} is assigned material id ${prop.materialId}, ` +
-          "which does not exist — assign an existing material to every body",
-      );
-    matIndexByProperty.set(prop.id, idx);
-  }
-  const attributes = new Int32Array(orderedElements.length);
-  for (let i = 0; i < orderedElements.length; i++) {
-    const idx = matIndexByProperty.get(orderedElements[i].propertyId);
-    if (idx === undefined)
-      throw new Error(
-        `solve: element ${orderedElements[i].id} belongs to body ` +
-          `${orderedElements[i].propertyId}, which has no material assignment — ` +
-          "the model is inconsistent",
-      );
-    attributes[i] = idx;
-  }
-  return {
-    materials: materials.map((mat) => ({
-      young_modulus: mat.young,
-      poisson_ratio: mat.poisson,
-      density: mat.density,
-    })),
-    attributes,
-  };
-}
-
-// Group translational constraints (DOFs 0–2) per node. A node constrained
-// in all three components is a full fix (fixed_vertices); a node constrained
-// in only some becomes a per-DOF constraint (fixed_dofs) so the unconstrained
-// directions stay free — e.g. a symmetry-plane roller. Rotational DOFs (3–5)
-// carry no stiffness for solid (H1 displacement) elements and are ignored.
-//
-// A non-zero prescribed displacement is also a Dirichlet condition, but it
-// must reach the solver as an inhomogeneous essential BC (prescribed_dofs):
-// folding it into fixed_vertices/fixed_dofs would silently pin the DOF to
-// zero and discard the requested value (issue #216).
-// Keyed by vertex index (vid), so the essential-DOF sets the engine
-// receives line up with the remapped mesh connectivity.
-function groupDirichlet(constraints: Constraint[], vid: VertexIndexer) {
-  const dofsByNode = new Map<number, Set<number>>();
-  const prescribed_dofs: { vertex: number; dof: number; value: number }[] = [];
-  for (const c of constraints) {
-    if (c.dof > 2) continue;
-    const vertex = vid(c.nodeId, "constraint");
-    // eslint-disable-next-line kofem/no-silent-fallback -- a constraint without prescribedValue is a homogeneous fixed BC, i.e. u = 0 by definition
-    const value = c.prescribedValue ?? 0;
-    if (value === 0) {
-      let dofs = dofsByNode.get(vertex);
-      if (!dofs) {
-        dofs = new Set();
-        dofsByNode.set(vertex, dofs);
-      }
-      dofs.add(c.dof);
-    } else {
-      prescribed_dofs.push({ vertex, dof: c.dof, value });
-    }
-  }
-  const fixed_vertices: number[] = [];
-  const fixed_dofs: { vertex: number; dofs: number[] }[] = [];
-  for (const [vertex, dofSet] of dofsByNode) {
-    if (dofSet.size === 3) fixed_vertices.push(vertex);
-    else fixed_dofs.push({ vertex, dofs: [...dofSet].sort() });
-  }
-  return { fixed_vertices, fixed_dofs, prescribed_dofs };
-}
-
-// Group translational force loads by vertex index, accumulating [fx,fy,fz]
-function groupPointLoads(loads: Load[], vid: VertexIndexer) {
-  const loadMap = new Map<number, [number, number, number]>();
-  for (const load of loads) {
-    if (load.dof > 2) continue;
-    const vertex = vid(load.nodeId, "load");
-    let force = loadMap.get(vertex);
-    if (!force) {
-      force = [0, 0, 0];
-      loadMap.set(vertex, force);
-    }
-    force[load.dof] += load.value;
-  }
-  return [...loadMap.entries()].map(([vertex, force]) => ({ vertex, force }));
-}
-
 // ── Pure-shell solve (CTRIA3 → solve_shell) ─────────────────────────────────
 
 // Resolve the shell section: one (E, ν) pair plus the per-facet thickness
@@ -1010,152 +730,6 @@ function shellDirichlet(constraints: Constraint[], vid: VertexIndexer) {
     else fixed_dofs.push({ vertex, dofs: [...dofSet].sort((a, b) => a - b) });
   }
   return { fixed_vertices, fixed_dofs, prescribed_dofs };
-}
-
-type ShellNodalLoad = {
-  force: [number, number, number];
-  moment: [number, number, number];
-};
-
-// Work-equivalent nodal loads of one surface load on a shell mesh. The shell
-// solver takes only nodal loads, so the traction integral f_i = ∫ N_i·t dS the
-// solid engine evaluates over boundary elements must be computed here. With
-// linear (CST/DKT) shape functions a uniform traction contributes t·A/3 to
-// each node of a facet, and a uniform line load q·L/2 to each end of an edge:
-//   force on facets — uniform traction t = F/ΣA over the loaded region
-//   force on edges  — uniform line load q = F/ΣL along the loaded edge
-//   pressure        — -p·n̂·A/3 per facet node, n̂ the facet winding normal
-//                     (a shell has no outward side; + pushes against n̂)
-function distributeShellSurfaceLoad(
-  sl: SurfaceLoad,
-  posOf: (nodeId: number) => [number, number, number],
-  at: (nodeId: number) => ShellNodalLoad,
-): void {
-  const facets = sl.faces.filter((f) => f.length === 3);
-  const edges = sl.faces.filter((f) => f.length === 2);
-  if (facets.length + edges.length !== sl.faces.length)
-    throw new Error(
-      "shell solve: a surface load carries a face that is neither a facet (3 nodes) nor an edge (2 nodes)",
-    );
-
-  // Area-weighted winding normal: |areaNormal| = A, direction from winding.
-  const areaNormal = (f: number[]): [number, number, number] => {
-    const [a, b, c] = [posOf(f[0]), posOf(f[1]), posOf(f[2])];
-    const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
-    const ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
-    return [
-      (ab[1] * ac[2] - ab[2] * ac[1]) / 2,
-      (ab[2] * ac[0] - ab[0] * ac[2]) / 2,
-      (ab[0] * ac[1] - ab[1] * ac[0]) / 2,
-    ];
-  };
-
-  if (sl.type === "pressure") {
-    if (sl.pressure === undefined)
-      throw new Error("shell solve: pressure load carries no magnitude");
-    if (facets.length === 0)
-      throw new Error(
-        "shell solve: a pressure load needs shell facets — it cannot act on an edge",
-      );
-    for (const f of facets) {
-      const n = areaNormal(f);
-      for (const nodeId of f) {
-        const acc = at(nodeId).force;
-        for (let d = 0; d < 3; d++) acc[d] += (-sl.pressure * n[d]) / 3;
-      }
-    }
-    return;
-  }
-
-  if (!sl.force)
-    throw new Error(`shell solve: ${sl.type} load carries no force vector`);
-  if (sl.type === "traction" && edges.length > 0)
-    throw new Error(
-      "shell solve: a traction (per-area) load cannot act on an edge",
-    );
-  // A group's total force is shared over the whole selection (rebuildSurfaceLoads),
-  // and there is no physical rule for splitting one total between an area and a
-  // length — the facet share would be arbitrary. Say so instead of distributing
-  // over the facets and dropping the edge without a word.
-  if (facets.length > 0 && edges.length > 0)
-    throw new Error(
-      "shell solve: one load selects both faces and edges, and a single total force " +
-        "has no meaningful split between a loaded area and a loaded edge — put the edge " +
-        "selection in its own load group.",
-    );
-
-  if (facets.length > 0) {
-    const areas = facets.map((f) => {
-      const n = areaNormal(f);
-      return Math.hypot(n[0], n[1], n[2]);
-    });
-    const totalArea = areas.reduce((s, a) => s + a, 0);
-    if (totalArea <= 0)
-      throw new Error("shell solve: loaded facets have zero total area");
-    for (let i = 0; i < facets.length; i++) {
-      // force: share of the TOTAL vector ∝ area; traction: t·A/3 directly.
-      const scale =
-        sl.type === "force" ? areas[i] / (3 * totalArea) : areas[i] / 3;
-      for (const nodeId of facets[i]) {
-        const acc = at(nodeId).force;
-        for (let d = 0; d < 3; d++) acc[d] += sl.force[d] * scale;
-      }
-    }
-  } else if (edges.length > 0) {
-    const lengths = edges.map((e) => {
-      const [a, b] = [posOf(e[0]), posOf(e[1])];
-      return Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
-    });
-    const totalLength = lengths.reduce((s, l) => s + l, 0);
-    if (totalLength <= 0)
-      throw new Error("shell solve: loaded edges have zero total length");
-    for (let i = 0; i < edges.length; i++) {
-      const scale = lengths[i] / (2 * totalLength);
-      for (const nodeId of edges[i]) {
-        const acc = at(nodeId).force;
-        for (let d = 0; d < 3; d++) acc[d] += sl.force[d] * scale;
-      }
-    }
-  }
-}
-
-// Nodal loads for the shell solve: direct loads (moment groups arrive here as
-// equivalent nodal forces; DOFs 3–5 would be true nodal moments) merged with
-// the work-equivalent distribution of every surface load.
-function shellPointLoads(
-  loads: Load[],
-  surfaceLoads: SurfaceLoad[] | undefined,
-  posOf: (nodeId: number) => [number, number, number],
-  vid: VertexIndexer,
-) {
-  const acc = new Map<number, ShellNodalLoad>();
-  const atVertex = (vertex: number): ShellNodalLoad => {
-    let entry = acc.get(vertex);
-    if (!entry) {
-      entry = { force: [0, 0, 0], moment: [0, 0, 0] };
-      acc.set(vertex, entry);
-    }
-    return entry;
-  };
-  for (const load of loads) {
-    if (load.dof < 0 || load.dof > 5)
-      throw new Error(
-        `shell solve: load on node ${load.nodeId} names DOF ${load.dof} — valid shell DOFs are 0..5`,
-      );
-    const entry = atVertex(vid(load.nodeId, "load"));
-    if (load.dof <= 2) entry.force[load.dof] += load.value;
-    else entry.moment[load.dof - 3] += load.value;
-  }
-  const atNode = (nodeId: number): ShellNodalLoad =>
-    atVertex(vid(nodeId, "surface load face"));
-  for (const sl of surfaceLoads ?? [])
-    distributeShellSurfaceLoad(sl, posOf, atNode);
-
-  return [...acc.entries()].map(([vertex, { force, moment }]) => ({
-    vertex,
-    ...(force.some((v) => v !== 0) ? { force } : {}),
-    ...(moment.some((v) => v !== 0) ? { moment } : {}),
-  }));
 }
 
 // Pack a pure-shell (all-CTRIA3) model into the { mesh, mat_json, bcs_json }
@@ -1302,60 +876,6 @@ function buildShellizeMesh(
   return { V: verts, tet, body, surfTri, surfFace };
 }
 
-// Solid and shell material for the coupled solve (single each). The shell uses
-// the thin body's material; the solid uses the single material shared by every
-// solid body. The coupled solid-shell assembler (engine/cpp/solve_coupled.cpp →
-// assemble_solid_stiffness_mfem) takes one (E, nu) pair for the whole solid
-// domain — it has no per-body material plumbing — so a solid domain that spans
-// two different materials cannot be honoured here. Rather than silently pick one
-// and solve part of the model with the wrong stiffness (issue #376), refuse
-// loudly and name the ambiguity. `solidBodyIds` are the property ids of the
-// solid bodies actually present in the coupled tet mesh (shell body excluded).
-function coupledMaterials(
-  materials: Material[],
-  properties: Property[],
-  shellBody: number,
-  solidBodyIds: number[],
-) {
-  const matOf = (propId: number): Material => {
-    const prop = properties.find((p) => p.id === propId);
-    if (!prop)
-      throw new Error(
-        `coupledMaterials: no property with id ${propId} in the model`,
-      );
-    const mat = materials.find((mm) => mm.id === prop.materialId);
-    if (!mat)
-      throw new Error(
-        `coupledMaterials: property ${propId} references material ${prop.materialId}, which does not exist`,
-      );
-    return mat;
-  };
-  const shellMat = matOf(shellBody);
-  const solidMats = new Map<number, Material>();
-  for (const pid of solidBodyIds) {
-    const mat = matOf(pid);
-    solidMats.set(mat.id, mat);
-  }
-  if (solidMats.size === 0)
-    throw new Error(
-      "coupledMaterials: the coupled solve has no solid body — a shell body must be coupled to at least one solid body",
-    );
-  if (solidMats.size > 1) {
-    const names = [...solidMats.values()].map((mm) => mm.name).join(", ");
-    throw new Error(
-      "coupledMaterials: the coupled solid-shell solve supports only one solid material, but the " +
-        `solid domain spans ${solidMats.size} distinct materials (${names}). Per-body materials are ` +
-        "not yet plumbed through the coupled shell path — assign a single material to all solid " +
-        "bodies, or solve this model without the thin-wall shell idealisation.",
-    );
-  }
-  const solidMat = [...solidMats.values()][0];
-  return {
-    solid: { young_modulus: solidMat.young, poisson_ratio: solidMat.poisson },
-    shell: { young_modulus: shellMat.young, poisson_ratio: shellMat.poisson },
-  };
-}
-
 // Essential BCs for the coupled solve: a translation constraint maps to its
 // pool node, and a shelled node clamped in all three translations is also
 // clamped in rotation. `isShell` reports whether a pool node carries shell
@@ -1457,44 +977,18 @@ function coupledFixedDofs(
   return { fixed_dofs, prescribed_dofs, prescribed_vals };
 }
 
-// Point + surface loads → equivalent nodal forces on the pool.
-//
-// A moment (DOF 3..5) is applied directly where the node has a rotational DOF to
-// receive it — a coupling REFERENCE POINT. That is the couple a surface-to-point
-// coupling exists to carry: the point takes M, the coupling spreads it over the
-// gripped surface as the statically equivalent traction, and no lever arm has to
-// be invented. Elsewhere a moment still arrives pre-converted to a ring of nodal
-// forces (momentToNodalForces), so it is skipped here as it always was.
 function coupledLoads(
   loads: Load[],
   surfaceLoads: SurfaceLoad[] | undefined,
   poolOf: (nodeId: number) => number,
   isRefPoint: (poolIndex: number) => boolean,
+  nodes: Node[],
+  vid: VertexIndexer,
 ): { load_dofs: number[]; load_vals: number[] } {
-  const load_dofs: number[] = [];
-  const load_vals: number[] = [];
-  for (const l of loads) {
-    const pi = poolOf(l.nodeId);
-    if (l.dof > 2 && !isRefPoint(pi)) continue;
-    load_dofs.push(6 * pi + l.dof);
-    load_vals.push(l.value);
-  }
-  for (const sl of surfaceLoads ?? []) {
-    if ((sl.type !== "force" && sl.type !== "traction") || !sl.force) continue; // pressure not mapped yet
-    const nodeSet = new Set<number>();
-    for (const f of sl.faces) for (const n of f) nodeSet.add(n);
-    if (nodeSet.size === 0) continue;
-    const per = sl.force.map((v) => v / nodeSet.size);
-    for (const nid of nodeSet) {
-      const pi = poolOf(nid);
-      for (let d = 0; d < 3; d++)
-        if (per[d] !== 0) {
-          load_dofs.push(6 * pi + d);
-          load_vals.push(per[d]);
-        }
-    }
-  }
-  return { load_dofs, load_vals };
+  return packCoupledLoads(loads, surfaceLoads, poolOf, isRefPoint, (nodeId) => {
+    const node = nodes[vid(nodeId, "surface load face")];
+    return [node.x, node.y, node.z];
+  });
 }
 
 // Map pool displacements onto every original store node: solid nodes directly,
@@ -1703,6 +1197,8 @@ function tryCoupledSolve(
     surfaceLoads,
     poolOf,
     isRefPoint,
+    nodes,
+    vid,
   );
 
   // Solid bodies that actually contribute solid tets to the pool: the other
@@ -1795,42 +1291,26 @@ function buildNearestVertexLocator(
   // Cell ~ mean node spacing; the 1e-6 floor keeps it positive for a degenerate
   // (single-point) cloud.
   const cell = Math.max(span / Math.max(1, Math.cbrt(n)), 1e-6);
-  const grid = new Map<string, number[]>();
-  const gk = (x: number, y: number, z: number) =>
-    `${Math.floor(x / cell)},${Math.floor(y / cell)},${Math.floor(z / cell)}`;
-  for (let i = 0; i < n; i++) {
-    const key = gk(verts[3 * i], verts[3 * i + 1], verts[3 * i + 2]);
-    getOrInitList(grid, key).push(i);
-  }
+  const grid = new SpatialGrid(
+    Array.from({ length: n }, (_, index) => index),
+    (index) => [verts[3 * index], verts[3 * index + 1], verts[3 * index + 2]],
+    cell,
+  );
   const maxRings = 32;
   return (p) => {
-    const cx = Math.floor(p[0] / cell),
-      cy = Math.floor(p[1] / cell),
-      cz = Math.floor(p[2] / cell);
     let best = -1,
       bd = Infinity;
     for (let r = 0; r <= maxRings && best < 0; r++) {
-      for (let dx = -r; dx <= r; dx++)
-        for (let dy = -r; dy <= r; dy++)
-          for (let dz = -r; dz <= r; dz++) {
-            if (
-              r > 0 &&
-              Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz)) !== r
-            )
-              continue; // ring shell only
-            const bucket = grid.get(`${cx + dx},${cy + dy},${cz + dz}`);
-            if (!bucket) continue;
-            for (const i of bucket) {
-              const dd =
-                (p[0] - verts[3 * i]) ** 2 +
-                (p[1] - verts[3 * i + 1]) ** 2 +
-                (p[2] - verts[3 * i + 2]) ** 2;
-              if (dd < bd) {
-                bd = dd;
-                best = i;
-              }
-            }
-          }
+      for (const i of grid.candidates(p, r, r)) {
+        const dd =
+          (p[0] - verts[3 * i]) ** 2 +
+          (p[1] - verts[3 * i + 1]) ** 2 +
+          (p[2] - verts[3 * i + 2]) ** 2;
+        if (dd < bd) {
+          bd = dd;
+          best = i;
+        }
+      }
     }
     if (best < 0)
       throw new Error(
@@ -1839,15 +1319,6 @@ function buildNearestVertexLocator(
       );
     return best;
   };
-}
-
-function getOrInitList(map: Map<string, number[]>, key: string): number[] {
-  let arr = map.get(key);
-  if (!arr) {
-    arr = [];
-    map.set(key, arr);
-  }
-  return arr;
 }
 
 // A thin single body (or an assembly where EVERY body is marked Shell) has no
@@ -1913,7 +1384,7 @@ function tryPureShellSolve(
     ]);
   };
 
-  // Reuse the coupled BC/load mapping (nearest-node lumping, 6·node+dof), then
+  // Reuse the coupled BC/load mapping (work-equivalent loads, 6·node+dof), then
   // fold it into the shell solver's fixed_vertices/fixed_dofs/point_loads form.
   // Every node here is a shell node and none is a coupling reference point: an
   // all-shell model that declares a coupling is refused in handleSolve, because
@@ -1947,6 +1418,8 @@ function tryPureShellSolve(
     surfaceLoads,
     shellOf,
     noReferencePoints,
+    nodes,
+    vid,
   );
   const forceByVertex = new Map<number, [number, number, number]>();
   for (let k = 0; k < load_dofs.length; k++) {
@@ -2046,103 +1519,6 @@ function getOrInitDofs(
 }
 
 // ── Mixed shell/solid solve (explicit CTRIA3 + CTETRA → solve_coupled) ────────
-
-// Single (E, ν) per domain for the coupled assembler, resolved from the explicit
-// element → property → material chain. The coupled solid-shell solver takes one
-// material for the whole solid domain and one for the whole shell domain (issue
-// #376), so a domain spanning several materials is refused loudly rather than
-// solved with the wrong stiffness on part of it.
-function mixedCoupledMaterials(
-  materials: Material[],
-  properties: Property[],
-  shellElements: Element[],
-  solidElements: Element[],
-) {
-  const propById = new Map(properties.map((p) => [p.id, p]));
-  const matById = new Map(materials.map((mat) => [mat.id, mat]));
-  const materialOf = (el: Element, domain: string): Material => {
-    const prop = propById.get(el.propertyId);
-    if (!prop)
-      throw new Error(
-        `mixed solve: ${domain} element ${el.id} belongs to body ${el.propertyId}, ` +
-          "which has no property — the model is inconsistent",
-      );
-    const mat = matById.get(prop.materialId);
-    if (!mat)
-      throw new Error(
-        `mixed solve: property ${prop.id} references material ${prop.materialId}, ` +
-          "which does not exist",
-      );
-    return mat;
-  };
-
-  // Solid: one entry per distinct material, selected per tet by `attributes`
-  // (1-based) — a steel bracket carrying an aluminium part is one solve.
-  if (solidElements.length === 0)
-    throw new Error("mixed solve: the model has no solid element");
-  const solidOrder: Material[] = [];
-  const solidIndex = new Map<number, number>();
-  const solidAttributes = solidElements.map((el) => {
-    const mat = materialOf(el, "solid");
-    let at = solidIndex.get(mat.id);
-    if (at === undefined) {
-      at = solidOrder.push(mat); // 1-based: push returns the new length
-      solidIndex.set(mat.id, at);
-    }
-    return at;
-  });
-
-  // Shell: still exactly one. A solve idealises a single body as shells (#376),
-  // so several shell materials means the model, not the solver, is inconsistent.
-  const shellUsed = new Map<number, Material>();
-  for (const el of shellElements) {
-    const mat = materialOf(el, "shell");
-    shellUsed.set(mat.id, mat);
-  }
-  // A model with NO shell element takes this path when it carries a
-  // surface-to-point coupling: the coupled assembler is what applies an RBE2/RBE3
-  // constraint, and it accepts zero triangles. `mat.shell` is still read by
-  // solve_coupled, so it gets the first solid material — with no facet to
-  // assemble it can only be unused, and inventing an arbitrary modulus would
-  // print a stiffness that is not in the model anywhere.
-  if (shellUsed.size === 0 && shellElements.length === 0)
-    return {
-      mat: {
-        solid: solidOrder.map((mat) => ({
-          young_modulus: mat.young,
-          poisson_ratio: mat.poisson,
-        })),
-        shell: {
-          young_modulus: solidOrder[0].young,
-          poisson_ratio: solidOrder[0].poisson,
-        },
-      },
-      solidAttributes,
-      solidMaterialNames: solidOrder.map((mat) => mat.name),
-    };
-  if (shellUsed.size === 0)
-    throw new Error("mixed solve: the model has no shell element");
-  if (shellUsed.size > 1) {
-    const names = [...shellUsed.values()].map((mat) => mat.name).join(", ");
-    throw new Error(
-      "mixed solve: one body is idealised as shells per solve, so the shell elements carry one " +
-        `material — these span ${shellUsed.size} (${names}). Assign a single material to the ` +
-        "shelled body.",
-    );
-  }
-  const shellMat = [...shellUsed.values()][0];
-  return {
-    mat: {
-      solid: solidOrder.map((mat) => ({
-        young_modulus: mat.young,
-        poisson_ratio: mat.poisson,
-      })),
-      shell: { young_modulus: shellMat.young, poisson_ratio: shellMat.poisson },
-    },
-    solidAttributes,
-    solidMaterialNames: solidOrder.map((mat) => mat.name),
-  };
-}
 
 // Per-facet shell thickness from each CTRIA3 element's PSHELL property, in shell
 // element order (matching the triangles handed to solve_coupled).
@@ -2328,6 +1704,8 @@ function buildCoupledEngineInputs(
     surfaceLoads,
     poolOf,
     isRefPoint,
+    nodes,
+    vid,
   );
   const { mat, solidAttributes, solidMaterialNames } = mixedCoupledMaterials(
     materials,
