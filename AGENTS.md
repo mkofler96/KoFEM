@@ -176,6 +176,41 @@ The surface mesh comes from the **geometry**, not from the volume mesh. It is ei
 - **The pipeline:** geometry → tessellation (display) → surface mesh (from geometry, input to Netgen) → volume mesh (FEM) → solve. Tessellation serves display; the volume mesh is what the solver operates on.
 - In the UI the three viewport representations map to: **Geometry** shows the OCCT tessellation, **Surface Mesh** shows the boundary triangulation of the FEM model, **Volume Mesh** shows all tetrahedral edges.
 
+## Product analytics
+
+GA4 is opt-in. `web/vite-analytics.ts` injects the cookie banner and the only
+code that loads gtag.js, on every page. It also publishes the visitor's choice
+as `window.__kofemAnalyticsConsent`. Product events go through
+`web/src/lib/analytics.ts` (`track`, `trackOnce`), never through `window.gtag`
+directly:
+
+- **Consent decides everything.** Events are sent only when consent is
+  granted. While the banner is unanswered they wait in memory, and they are
+  dropped on decline or withdrawal. Never load or call gtag from anywhere else,
+  and never send an event to work around a missing consent answer.
+- **No model data.** Parameters are enums (`workflow`, `format`, `model_type`,
+  `analysis_type`, `error_category`, `duration_bucket`) plus the public
+  gallery `example_id`. `track` refuses any value that is not
+  `[A-Za-z0-9_-]{1,64}`. File names, sizes, geometry, results and raw error
+  text never leave the page. Map errors with `categorizeError`.
+- **Add an event** in `AnalyticsEvents`. Cover the solid, shell and topology
+  paths where the event applies. Then register any new parameter as a GA4
+  custom dimension (below).
+
+The GA4 property is set up by hand; nothing in the repository configures it:
+
+| Setting                                   | Value                                                                                                                                                                  |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Key event                                 | `solve_completed`                                                                                                                                                      |
+| Event-scoped custom dimensions            | `workflow`, `entry`, `format`, `model_type`, `analysis_type`, `error_category`, `duration_bucket`, `example_id`                                                        |
+| Funnel exploration (open, session-scoped) | `solver_opened` → `geometry_import_success` or `example_loaded` → `mesh_completed` → `solve_started` → `solve_completed` → `results_viewed`, broken down by `workflow` |
+| Success rate                              | Sessions with `solve_completed` ÷ sessions with `solver_opened` (Explore → session count, not key-event count)                                                         |
+
+Pre-solved examples open straight into results, so they can skip the mesh and
+solve steps. Use an open funnel, or filter on `workflow`.
+`tests/analytics-consent.spec.ts` covers consent in the browser, and
+`tests/test_analytics.mjs` covers the utility.
+
 ## "Example" means the kofem.org/examples/ gallery
 
 When the user asks to **add, modify, fix or remove an example**, they mean an

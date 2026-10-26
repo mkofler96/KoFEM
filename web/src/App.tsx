@@ -13,6 +13,15 @@ import { useModelStore } from "./store/modelStore";
 import { SMALL_SCREEN_QUERY } from "./store/viewSlice";
 import { useMediaQuery } from "./hooks/useMediaQuery";
 import { parseAnalysisFile } from "./lib/analysisFile";
+import {
+  categorizeError,
+  currentWorkflow,
+  durationBucket,
+  setWorkflow,
+  startTimer,
+  track,
+  trackOnce,
+} from "./lib/analytics";
 import styles from "./App.module.css";
 
 // `/app/?example=<id>` loads a pre-solved example shipped in examples/gallery/site/.
@@ -30,12 +39,18 @@ function useExampleFromUrl() {
     }
     let cancelled = false;
     (async () => {
+      const elapsed = startTimer();
       try {
         const res = await fetch(`/examples/${id}.vtu`);
         if (!res.ok)
           throw new Error(`example "${id}" returned HTTP ${res.status}`);
         if (cancelled) return;
         loadAnalysis(parseAnalysisFile(await res.text()));
+        setWorkflow("example");
+        track("example_loaded", {
+          example_id: id,
+          duration_bucket: elapsed(),
+        });
 
         // A saved .vtu carries no STEP, so loadAnalysis drops stepBytes and the
         // loaded model can't be re-meshed. Examples that ship their source CAD
@@ -53,6 +68,10 @@ function useExampleFromUrl() {
         }
       } catch (err) {
         window.alert(`Could not load example: ${(err as Error).message}`);
+        track("example_load_failed", {
+          example_id: id,
+          error_category: categorizeError(err),
+        });
       }
     })();
     return () => {
@@ -61,7 +80,29 @@ function useExampleFromUrl() {
   }, [loadAnalysis, setStepBytes, setGeometryFormat]);
 }
 
+// The funnel's ends: the app opening, and each arrival in the results view
+// (from a solve, an optimization, or a pre-solved example or saved file).
+function useWorkflowAnalytics() {
+  useEffect(() => {
+    // performance.now() counts from navigation start: the time until the
+    // workspace is on screen and usable.
+    trackOnce("solver_opened", {
+      entry: new URLSearchParams(window.location.search).has("example")
+        ? "example"
+        : "direct",
+      duration_bucket: durationBucket(performance.now()),
+    });
+  }, []);
+  const inResults = useModelStore(
+    (s) => s.mode === "results" && (!!s.result || !!s.densityResult),
+  );
+  useEffect(() => {
+    if (inResults) track("results_viewed", { workflow: currentWorkflow() });
+  }, [inResults]);
+}
+
 function Workspace() {
+  useWorkflowAnalytics();
   useExampleFromUrl();
   useTreeSelectionSync();
   // Model tree left, viewport centre, properties right. Small screens have no

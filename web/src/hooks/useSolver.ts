@@ -7,6 +7,12 @@ import { fmt } from "../lib/modelDisplay";
 import { sendToWorker } from "../workers/sharedWorker";
 import { useWorkerLogs } from "./useWorkerLogs";
 import {
+  categorizeError,
+  currentWorkflow,
+  startTimer,
+  track,
+} from "../lib/analytics";
+import {
   suppressionMismatch,
   suppressionMismatchMessage,
 } from "../store/geometrySlice";
@@ -64,6 +70,9 @@ export function useSolver() {
   function solve() {
     setRunning(true);
     clearLogs();
+    const workflow = currentWorkflow();
+    const elapsed = startTimer();
+    track("solve_started", { workflow, analysis_type: "static" });
     // The worker transfers the solver's Float64Array buffers here zero-copy
     // (issue #166) — store them as-is, no per-element copy.
     sendToWorker<{ displacements: Float64Array; vonMises: Float64Array }>(
@@ -85,11 +94,22 @@ export function useSolver() {
     )
       .then(({ displacements, vonMises }) => {
         setResult({ displacements, vonMises });
+        track("solve_completed", {
+          workflow,
+          analysis_type: "static",
+          duration_bucket: elapsed(),
+        });
         setMode("results");
       })
       .catch((err) => {
         console.error("[solve] solver failed:", err.message);
         setError(`Solver error: ${err.message}`);
+        track("solve_failed", {
+          workflow,
+          analysis_type: "static",
+          duration_bucket: elapsed(),
+          error_category: categorizeError(err),
+        });
       })
       .finally(() => setRunning(false));
   }

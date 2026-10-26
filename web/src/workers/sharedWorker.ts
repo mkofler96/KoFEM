@@ -5,6 +5,8 @@
 // Each call gets a unique message ID; the onmessage handler routes
 // responses back to the correct Promise via a pending-call map.
 
+import { durationBucket, trackOnce } from "../lib/analytics";
+
 let _worker: Worker | null = null;
 let _msgId = 0;
 const _pending = new Map<
@@ -47,13 +49,22 @@ function createWorker(): Worker {
       scope.__workerCoverage__.push(workerCov);
       return;
     }
-    const { id, ok, log, progress, ...rest } = e.data as {
+    const { id, ok, log, progress, engineInitMs, ...rest } = e.data as {
       id: number;
       ok?: boolean;
       log?: string;
       progress?: WorkerProgress;
+      engineInitMs?: number;
       [k: string]: unknown;
     };
+    if (engineInitMs !== undefined) {
+      // The worker is recreated after every mesh; only the first start, the
+      // one a visitor waits for, is reported.
+      trackOnce("engine_ready", {
+        duration_bucket: durationBucket(engineInitMs),
+      });
+      return;
+    }
     if (log !== undefined) {
       // Always emit to browser console so Playwright and DevTools see it
       // regardless of which panel is active (log callback may be null).
