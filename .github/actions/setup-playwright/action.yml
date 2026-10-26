@@ -1,0 +1,45 @@
+name: Set up Playwright Chromium
+description: Cache headless Chromium and use bounded Ubuntu package downloads
+
+runs:
+  using: composite
+  steps:
+    - name: Read Playwright version
+      id: version
+      shell: bash
+      working-directory: web
+      run: echo "version=$(bun -p 'require("playwright/package.json").version')" >> "$GITHUB_OUTPUT"
+
+    - name: Cache Playwright browsers
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.version.outputs.version }}-headless
+
+    - name: Configure Ubuntu package downloads
+      shell: bash
+      run: |
+        # The hosted runner's Azure mirror took >11 minutes for 24 MB of fonts
+        # and libraries. Keep Playwright's complete dependency list, using the
+        # signed main archive and bounded retries instead of that mirror.
+        cat > "$RUNNER_TEMP/playwright.sources" <<'EOF'
+        Types: deb
+        URIs: https://archive.ubuntu.com/ubuntu
+        Suites: noble noble-updates noble-security
+        Components: main universe
+        Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+        EOF
+        sudo tee /etc/apt/apt.conf.d/99-kofem-playwright > /dev/null <<EOF
+        Dir::Etc::sourcelist "$RUNNER_TEMP/playwright.sources";
+        Dir::Etc::sourceparts "-";
+        Acquire::Retries "2";
+        Acquire::http::Timeout "30";
+        Acquire::https::Timeout "30";
+        EOF
+
+    - name: Install headless Chromium and system dependencies
+      shell: bash
+      working-directory: web
+      # The installer checks the browser revision itself, so cache hits avoid
+      # downloading it. The suites use headless mode, without a browser channel.
+      run: bunx playwright install --with-deps --only-shell chromium
