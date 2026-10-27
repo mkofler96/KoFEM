@@ -93,6 +93,7 @@ export default {
     measured: "Mean rotation of the z = L end about the axis.",
     mesh: `${DIV.join(" × ")} grid (radial × around × axial)`,
     source: "Gere & Goodno, Mechanics of Materials",
+    grid: DIV,
   },
   run(solve) {
     return shaftTwist(solve, DIV, 1);

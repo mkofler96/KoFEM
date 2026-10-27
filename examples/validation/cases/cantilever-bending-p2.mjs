@@ -48,6 +48,7 @@ export default {
     measured: "Mean y-displacement of the x = L face vertices.",
     mesh: `${DIV.join(" × ")} grid`,
     source: "Euler–Bernoulli beam theory",
+    grid: DIV,
   },
   run(solve) {
     return cantileverTip(solve, DIV, 2); // second-order (P2) elements

@@ -7,6 +7,7 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   statSync,
   writeFileSync,
@@ -24,8 +25,9 @@ import {
 
 const htmlEntry = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 
-// The static pages (index.html, privacy/index.html, and validation/index.html,
-// which examples/validation/run.mjs --report generates) are fully static — Vite
+// The static pages (index.html, privacy/index.html, and validation/index.html
+// plus one validation/<case>/index.html per benchmark, which
+// examples/validation/run.mjs --report generates) are fully static — Vite
 // emits them byte-for-byte, they import no hashed assets. Feeding them as extra
 // MPA rollup inputs is flaky (in some environments rollup crosses the
 // landing/app chunk names and drops the landing HTML entirely, leaving "/" on
@@ -39,6 +41,9 @@ const STATIC_PAGES = [
   "index.html",
   "privacy/index.html",
   "validation/index.html",
+  ...readdirSync(htmlEntry("./validation/"), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => `validation/${entry.name}/index.html`),
 ];
 
 // The examples gallery lives outside web/, with everything else example-related

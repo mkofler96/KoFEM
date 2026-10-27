@@ -4,16 +4,25 @@
 // Validation runner: solves every case through the real WASM engine and checks
 // the finite-element result against its closed-form / published reference.
 //
-//   node examples/validation/run.mjs            # run + print table + check page
-//   node examples/validation/run.mjs --report   # also regenerate REPORT.md and
-//                                               # the public page /validation/
+//   node examples/validation/run.mjs              # run + print table + check page
+//   node examples/validation/run.mjs --case <id>  # run one case (no page check)
+//   node examples/validation/run.mjs --report     # also regenerate REPORT.md and
+//                                                 # the public pages /validation/
+//                                                 # and /validation/<id>/
 //
 // Exits non-zero if any case falls outside its tolerance band, so CI fails on a
 // solver regression — or if the numbers published on /validation/ no longer
 // match a fresh run, so the public page cannot drift from the engine. See
 // README.md for what each case validates.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, relative } from "node:path";
 import { loadSolver } from "./lib/solver.mjs";
@@ -26,14 +35,18 @@ import {
   fmtErr,
   relErrPct,
 } from "./lib/format.mjs";
-import { renderValidationPage } from "./lib/page.mjs";
+import { renderCasePage, renderValidationPage } from "./lib/page.mjs";
 import cases from "./cases/index.mjs";
+import textbook from "./textbook/index.mjs";
 import studies from "./convergence.mjs";
 import reproduce from "./reproduce.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = join(here, "../..");
-const PAGE = join(repo, "web/validation/index.html");
+const PAGES = join(repo, "web/validation");
+const PAGE = join(PAGES, "index.html");
+const SITEMAP = join(repo, "web/public/sitemap.xml");
+const SITE = "https://kofem.org";
 const DATA = join(repo, "web/public/validation/results.json");
 const REPORT = join(here, "REPORT.md");
 const ENGINE_STAMP = join(repo, "web/src/wasm/pkg/.engine-id");
@@ -43,6 +56,17 @@ const ENGINE_STAMP = join(repo, "web/src/wasm/pkg/.engine-id");
 const PUBLISHED_RTOL = 1e-4;
 
 const report = process.argv.includes("--report");
+const caseFlag = process.argv.indexOf("--case");
+const only = caseFlag >= 0 ? process.argv[caseFlag + 1] : null;
+if (caseFlag >= 0 && !only)
+  throw new Error("--case needs a case id, e.g. --case axial-bar");
+if (only && report)
+  throw new Error("--report regenerates every page; run it without --case");
+const selected = only ? cases.filter((c) => c.id === only) : cases;
+if (!selected.length)
+  throw new Error(
+    `unknown case "${only}"; cases: ${cases.map((c) => c.id).join(", ")}`,
+  );
 const solve = await loadSolver();
 
 // Run `fn` with a solve() that records the mesh it is handed, so the page
@@ -60,7 +84,7 @@ function solveOnce(fn) {
   return { value, mesh: meshes[0] };
 }
 
-const rows = cases.map((c) => {
+const rows = selected.map((c) => {
   const { value: fe, mesh } = solveOnce((s) => c.run(s));
   const errPct = relErrPct(fe, c.reference);
   return {
@@ -85,8 +109,9 @@ const rows = cases.map((c) => {
 const failed = rows.filter((r) => !r.pass).length;
 
 // The in-app reproduction: what the app's Result summary shows for the gallery
-// cantilever. Cheap (one small solve), so it is checked on every run.
+// axial bar. Cheap (one small solve), so it is checked on every full run.
 const app = (() => {
+  if (only) return null;
   const { value } = solveOnce((s) => reproduce.run(s));
   return {
     caseId: reproduce.caseId,
@@ -116,6 +141,8 @@ console.log(
 );
 
 const rel = (p) => relative(repo, p);
+
+if (only) process.exit(failed ? 1 : 0);
 
 if (report) {
   // ── Convergence studies (slow: ~half a minute) ──────────────────────────────
@@ -176,23 +203,40 @@ if (report) {
 
   mkdirSync(dirname(DATA), { recursive: true });
   writeFileSync(DATA, JSON.stringify(data, null, 2) + "\n");
-  mkdirSync(dirname(PAGE), { recursive: true });
+  mkdirSync(PAGES, { recursive: true });
   writeFileSync(PAGE, renderValidationPage(data, { cases, studies }));
+  // One page per case; a case that no longer exists loses its page.
+  const ids = new Set(rows.map((r) => r.id));
+  for (const entry of readdirSync(PAGES, { withFileTypes: true }))
+    if (entry.isDirectory() && !ids.has(entry.name))
+      rmSync(join(PAGES, entry.name), { recursive: true });
+  for (const r of rows) {
+    mkdirSync(join(PAGES, r.id), { recursive: true });
+    writeFileSync(
+      join(PAGES, r.id, "index.html"),
+      renderCasePage(data, { cases, studies, textbook }, r.id),
+    );
+  }
+  writeFileSync(SITEMAP, sitemapWithCases(readFileSync(SITEMAP, "utf8"), rows));
   writeFileSync(REPORT, markdownReport(rows));
-  console.log(`\nWrote ${rel(DATA)}, ${rel(PAGE)} and ${rel(REPORT)}`);
+  console.log(
+    `\nWrote ${rel(DATA)}, ${rel(PAGE)}, ${rows.length} case pages in ${rel(PAGES)}/<id>/, ${rel(SITEMAP)} and ${rel(REPORT)}`,
+  );
 } else {
   const stale = checkPublished();
   if (stale.length) {
     console.error(
-      `\n${rel(DATA)} is stale — the public page /validation/ shows numbers a fresh run no longer reproduces:\n` +
+      `\nThe public pages /validation/ are out of date with this run or their sources:\n` +
         stale.map((s) => `  • ${s}`).join("\n") +
-        `\nRegenerate the page and commit the result:\n` +
+        `\nRegenerate the pages and commit the result:\n` +
         `  cd web && bun run validate:report\n` +
-        `  git add web/validation/index.html web/public/validation/results.json examples/validation/REPORT.md`,
+        `  git add web/validation web/public/validation/results.json web/public/sitemap.xml examples/validation/REPORT.md`,
     );
     process.exit(1);
   }
-  console.log(`\n${rel(DATA)} matches this run (/validation/ is current).`);
+  console.log(
+    `\n${rel(DATA)} matches this run and the pages match their sources (/validation/ is current).`,
+  );
 }
 
 process.exit(failed ? 1 : 0);
@@ -224,7 +268,39 @@ function checkPublished() {
     out.push(
       `in-app reproduction: published "${published.reproduce.appReadout}", this run "${app.appReadout}"`,
     );
+  // The committed HTML must be what the current sources render from the
+  // committed data, so a text or layout change cannot ship without the pages.
+  const pages = [
+    [PAGE, renderValidationPage(published, { cases, studies })],
+    ...published.cases.map((c) => [
+      join(PAGES, c.id, "index.html"),
+      renderCasePage(published, { cases, studies, textbook }, c.id),
+    ]),
+  ];
+  for (const [file, html] of pages)
+    if (!existsSync(file) || readFileSync(file, "utf8") !== html)
+      out.push(`${rel(file)} differs from what the page sources render`);
   return out;
+}
+
+// The sitemap's validation block (between the validation markers) lists the
+// overview and every case page.
+function sitemapWithCases(xml, rs) {
+  const start = "<!-- validation:start -->",
+    end = "<!-- validation:end -->";
+  const i = xml.indexOf(start),
+    j = xml.indexOf(end);
+  if (i < 0 || j < i)
+    throw new Error(`${rel(SITEMAP)} has no ${start} … ${end} block`);
+  const url = (path, priority) =>
+    `  <url>\n    <loc>${SITE}${path}</loc>\n    <priority>${priority}</priority>\n  </url>`;
+  const block = [
+    start,
+    url("/validation/", "0.7"),
+    ...rs.map((r) => url(`/validation/${r.id}/`, "0.6")),
+    `  ${end}`,
+  ].join("\n");
+  return xml.slice(0, i) + block + xml.slice(j + end.length);
 }
 
 function markdownReport(rs) {
@@ -232,9 +308,9 @@ function markdownReport(rs) {
     "# KoFEM validation results",
     "",
     "Each case is solved by the real MFEM WASM engine and compared against its",
-    "closed-form or published reference. The same numbers, with the models,",
-    "mesh-convergence studies and steps to reproduce them, are published at",
-    "<https://kofem.org/validation/>. Regenerate both with:",
+    "closed-form or published reference. The same numbers are published at",
+    "<https://kofem.org/validation/>, with one page per case (derivation, model,",
+    "mesh convergence, discussion, how to reproduce). Regenerate them with:",
     "",
     "```bash",
     "node examples/validation/run.mjs --report",

@@ -45,6 +45,7 @@ export default {
     measured: "Mean x-displacement of the x = L face.",
     mesh: `${DIV.join(" × ")} grid`,
     source: "Uniaxial compression, σ = −p",
+    grid: DIV,
   },
   run(solve) {
     const [nx, ny, nz] = DIV;

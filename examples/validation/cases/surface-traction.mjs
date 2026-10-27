@@ -47,6 +47,7 @@ export default {
     mesh: `${DIV.join(" × ")} grid`,
     source: "Gere & Goodno, Mechanics of Materials",
     gallery: "axial-bar",
+    grid: DIV,
   },
   run(solve) {
     const [nx, ny, nz] = DIV;

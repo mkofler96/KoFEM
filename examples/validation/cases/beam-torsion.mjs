@@ -64,6 +64,7 @@ export default {
     mesh: `${DIV.join(" × ")} grid`,
     source: "Timoshenko & Goodier, Theory of Elasticity; Roark",
     gallery: "beam-torsion",
+    grid: DIV,
   },
   run(solve) {
     const m = boxHexMesh(L, b, b, ...DIV);

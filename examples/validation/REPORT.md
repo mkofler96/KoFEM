@@ -1,9 +1,9 @@
 # KoFEM validation results
 
 Each case is solved by the real MFEM WASM engine and compared against its
-closed-form or published reference. The same numbers, with the models,
-mesh-convergence studies and steps to reproduce them, are published at
-<https://kofem.org/validation/>. Regenerate both with:
+closed-form or published reference. The same numbers are published at
+<https://kofem.org/validation/>, with one page per case (derivation, model,
+mesh convergence, discussion, how to reproduce). Regenerate them with:
 
 ```bash
 node examples/validation/run.mjs --report

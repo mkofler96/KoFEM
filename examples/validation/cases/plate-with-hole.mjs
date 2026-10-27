@@ -31,6 +31,9 @@ const NR = 12, // element rings from the hole to the outer edge
   NTH = 64, // elements around the hole
   GRADE = 2; // ring spacing ∝ s^GRADE, clustered at the hole
 
+// The O-grid, for the case page's analysis of where the peak is sampled.
+export const plateMesh = { a, b, nr: NR, nth: NTH, grade: GRADE };
+
 export default {
   id: "plate-with-hole",
   name: "Plate with a hole (Kirsch)",

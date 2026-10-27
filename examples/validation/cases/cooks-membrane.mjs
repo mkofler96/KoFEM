@@ -68,6 +68,7 @@ export default {
     measured: "y-displacement of the corner (48, 60).",
     mesh: `${N} × ${N} grid, 1 through t`,
     source: "Cook (1974)",
+    grid: [N, N, 1],
     note: "Finer meshes move past the reference (see Convergence): a regression check, not accuracy evidence.",
   },
   run(solve) {
