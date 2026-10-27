@@ -144,13 +144,17 @@ function rendererRssMB(userDataDir) {
   if (process.platform !== "linux") return null;
   const procs = new Map();
   for (const pid of readdirSync("/proc").filter((name) => /^\d+$/.test(name))) {
-    let cmd, status;
-    try {
-      cmd = readFileSync(`/proc/${pid}/cmdline`, "utf8").replaceAll("\0", " ");
-      status = readFileSync(`/proc/${pid}/status`, "utf8");
-    } catch {
-      continue; // exited while we looked
-    }
+    const read = (file) => {
+      try {
+        return readFileSync(`/proc/${pid}/${file}`, "utf8");
+      } catch {
+        return null; // exited while we looked
+      }
+    };
+    const cmdline = read("cmdline");
+    const status = read("status");
+    if (cmdline === null || status === null) continue;
+    const cmd = cmdline.replaceAll("\0", " ");
     const ppid = Number(/PPid:\s+(\d+)/.exec(status)[1]);
     const rss = /VmRSS:\s+(\d+) kB/.exec(status);
     procs.set(Number(pid), { ppid, cmd, rss: rss ? Number(rss[1]) * 1024 : 0 });
@@ -281,19 +285,24 @@ async function oneLoad(context, profile, opts, userDataDir) {
     sample.mainHeapMB = metric("JSHeapUsedSize") / MB;
     sample.rendererRssMB = rendererRssMB(userDataDir);
 
-    // A fresh worker after resetWorker() — the restart every mesh pays.
-    const restart = await page.evaluate(async () => {
+    // A fresh worker after resetWorker() — the restart every mesh pays. An
+    // engine that fails to load again is this sample's error.
+    sample.restartMs = await page.evaluate(async (deadlineMs) => {
       const kofem = window.__kofem;
-      const marks = window.__loadMarks;
-      const before = marks.ready.length;
+      const { ready } = window.__loadMarks;
+      const before = ready.length;
       const t0 = performance.now();
       kofem.resetWorker();
-      await kofem.sendToWorker("init", null).catch(() => {});
-      while (marks.ready.length === before)
+      await kofem.sendToWorker("init", null);
+      while (ready.length === before) {
+        if (performance.now() - t0 > deadlineMs)
+          throw new Error(
+            `the restarted engine reported no ready mark within ${deadlineMs} ms`,
+          );
         await new Promise((resolve) => setTimeout(resolve, 20));
+      }
       return performance.now() - t0;
-    });
-    sample.restartMs = restart;
+    }, capMs);
   } catch (err) {
     sample.error = String(err.message ?? err).split("\n")[0];
   }
