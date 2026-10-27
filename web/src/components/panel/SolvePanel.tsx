@@ -4,6 +4,7 @@
 import type { ReactNode } from "react";
 import type { Study } from "../../store/modelStore";
 import { useSolver } from "../../hooks/useSolver";
+import { useEngineGate } from "../../store/engineStore";
 import { LogSection } from "./LogSection";
 import { PreflightChecks } from "./PreflightChecks";
 import styles from "./Panel.module.css";
@@ -29,6 +30,7 @@ export function SolvePanel({
     elementOrder,
     logs,
   } = useSolver();
+  const engine = useEngineGate();
 
   return (
     <div className={styles.panel}>
@@ -70,7 +72,8 @@ export function SolvePanel({
 
         <button
           className={styles.solveBtn}
-          disabled={!allOk || isRunning}
+          disabled={!allOk || isRunning || engine.blocked}
+          title={engine.reason}
           onClick={solve}
         >
           {isRunning ? "Solving…" : "▶  Run static solve"}

@@ -58,6 +58,12 @@ RUN bun run build
 # Defensive: production images must never contain source maps.
 RUN find dist -name '*.map' -type f -delete
 
+# Precompress the fingerprinted assets once, at the best gzip level. nginx serves
+# the .gz beside each file (gzip_static in nginx.conf.template) instead of
+# compressing per request at its default level 1: the ~35 MB engine .wasm goes
+# over the wire as 9.0 MB instead of 10.7 MB (KOF-263).
+RUN find dist/assets -type f \( -name '*.wasm' -o -name '*.js' -o -name '*.css' \) -exec gzip -9 -k {} +
+
 
 # Stage 2: Serve the static bundle with Nginx.
 FROM nginx:alpine@sha256:df221db836e1754089190208cee7eeda94f233197056426eda74a43ab1abeac2

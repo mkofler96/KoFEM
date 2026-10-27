@@ -105,6 +105,19 @@ const serveGallery = (): PluginOption => ({
   },
 });
 
+// Uncompressed size of the engine binary, compiled into the adapter
+// (src/wasm/pkg/kofem_wasm.js) as the total its download progress counts
+// toward: the wasm is served gzipped, so Content-Length (when sent at all)
+// counts compressed bytes while the stream yields decompressed ones.
+function engineBytes(): number {
+  const engine = htmlEntry("./src/wasm/pkg/kofem_wasm_emcc.wasm");
+  if (!existsSync(engine))
+    throw new Error(
+      `${engine} is missing — install the engine with scripts/fetch-wasm-engine.sh (the bun pre-hooks run it) or build it with scripts/build-wasm.sh.`,
+    );
+  return statSync(engine).size;
+}
+
 // COVERAGE=1 instruments all src/ modules with Istanbul counters so Playwright
 // can collect runtime coverage (see tests/coverage.ts).  Off by default: the
 // instrumented bundle is bigger and slower.
@@ -133,6 +146,7 @@ export default defineConfig(({ mode }) => {
     // React solver app lives at "/app/" (app/index.html). MPA mode disables the
     // SPA history fallback so the two entries are served independently.
     appType: "mpa",
+    define: { __KOFEM_ENGINE_BYTES__: JSON.stringify(engineBytes()) },
     plugins: [
       react(),
       wasm(),
