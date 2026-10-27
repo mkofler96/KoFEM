@@ -91,6 +91,7 @@ const app = (() => {
   return {
     caseId: reproduce.caseId,
     galleryId: reproduce.galleryId,
+    title: reproduce.title,
     field: reproduce.field,
     stat: reproduce.stat,
     unit: reproduce.unit,

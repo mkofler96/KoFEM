@@ -48,7 +48,7 @@ by hand:
 The text comes from the sources: each case's `page` block (model, inputs,
 supports, load, measured quantity, source, optional note and gallery id),
 `convergence.mjs` (the mesh-refinement studies, which reuse the case builders),
-`reproduce.mjs` (the cantilever as the app solves it, for the in-browser
+`reproduce.mjs` (the gallery axial bar as the app solves it, for the in-browser
 reproduction) and `lib/page.mjs` (layout). Change those and regenerate — never
 edit the two outputs by hand:
 

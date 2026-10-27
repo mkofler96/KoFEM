@@ -69,7 +69,6 @@ export default {
     mesh: `${N} × ${N} grid, 1 through t`,
     source: "Cook (1974)",
     note: "Finer meshes move past the reference (see Convergence): a regression check, not accuracy evidence.",
-    gallery: "cooks-membrane",
   },
   run(solve) {
     return cookCorner(solve, N, 1);

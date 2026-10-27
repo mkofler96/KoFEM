@@ -75,7 +75,6 @@ export default {
     measured: "Mean y-displacement of the x = L face.",
     mesh: `${DIV.join(" × ")} grid`,
     source: "Euler–Bernoulli beam theory",
-    gallery: "cantilever-beam",
   },
   run(solve) {
     return cantileverTip(solve, DIV, 1);

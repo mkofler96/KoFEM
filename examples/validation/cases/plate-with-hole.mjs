@@ -58,7 +58,6 @@ export default {
       "Peak element-centre von Mises stress around the hole, divided by σ.",
     mesh: `O-grid, ${NR} rings × ${NTH} around the hole, 1 through t`,
     source: "Kirsch (1898); Timoshenko & Goodier",
-    gallery: "plate-with-hole",
   },
   run(solve) {
     const m = plateWithHoleMesh(a, b, t, NR, NTH, GRADE);

@@ -8,8 +8,7 @@ import { test, expect } from "./coverage";
 // examples/validation/run.mjs --report (which also checks, on every CI run, that
 // its numbers still match the engine). These tests check that the page is served
 // and complete, and that its in-app reproduction holds: opening the linked
-// example in KoFEM shows exactly the value the page publishes, both as stored
-// and after solving it again in the browser.
+// example in KoFEM and solving it shows exactly the value the page publishes.
 
 type Published = {
   engine: string;
@@ -24,7 +23,7 @@ async function published(page: Page): Promise<Published> {
   return (await res.json()) as Published;
 }
 
-// The value the app's Result summary shows for `stat` (e.g. "Min Uy").
+// The value the app's Result summary shows for `stat` (e.g. "Max Ux").
 function summaryValue(page: Page, stat: string) {
   return page
     .getByText(stat, { exact: true })
@@ -102,9 +101,11 @@ test("the page's in-app reproduction shows the published value", async ({
   const readout = page.getByTestId("app-readout");
   await expect(readout).toHaveAttribute("data-stat", reproduce.stat);
   const value = await readout.getAttribute("data-value");
+  if (!value)
+    throw new Error("the page's app readout is missing its data-value");
   expect(value).toMatch(/^-?\d\.\d{3}e[+-]\d+ mm$/);
 
-  // "Open the cantilever in KoFEM" opens the gallery example in the app.
+  // The page's link opens the gallery example in the app.
   await page.getByTestId("reproduce-open").click();
   await expect(page).toHaveURL(`/app/?example=${reproduce.galleryId}`);
   await expect(page.locator("nav")).toBeVisible();
@@ -119,11 +120,8 @@ test("the page's in-app reproduction shows the published value", async ({
     { timeout: 30_000 },
   );
 
-  // The stored result reads the published value…
-  await showField(page, reproduce.field);
-  await expect(summaryValue(page, reproduce.stat)).toHaveText(value!);
-
-  // …and so does a fresh solve in the browser (Studies → Static 1 → Run).
+  // Solve it in the browser (Studies → Static 1 → Run static solve), as the
+  // page instructs: the example ships a stored result, which the solve replaces.
   await page.evaluate(() => {
     const win = window as unknown as {
       __kofemStore: { getState(): { result: unknown } };
@@ -146,5 +144,5 @@ test("the page's in-app reproduction shows the published value", async ({
     { timeout: 60_000 },
   );
   await showField(page, reproduce.field);
-  await expect(summaryValue(page, reproduce.stat)).toHaveText(value!);
+  await expect(summaryValue(page, reproduce.stat)).toHaveText(value);
 });

@@ -1,5 +1,5 @@
 {
-  "generated": "2026-10-26",
+  "generated": "2026-10-27",
   "engine": "engine-bb451aa7afb6",
   "cases": [
     {
@@ -701,15 +701,16 @@
     }
   ],
   "reproduce": {
-    "caseId": "cantilever",
-    "galleryId": "cantilever-beam",
-    "field": "Uy",
-    "stat": "Min Uy",
+    "caseId": "surface-traction",
+    "galleryId": "axial-bar",
+    "title": "the axial bar",
+    "field": "Ux",
+    "stat": "Max Ux",
     "unit": "mm",
-    "reference": -1.9047619047619047,
-    "appValue": -1.8379073917835702,
-    "appReadout": "-1.838e+0 mm",
-    "faceMean": -1.8378324011483105,
-    "errPct": -3.5137989397136944
+    "reference": 0.47619047619047616,
+    "appValue": 0.4735916833152663,
+    "appReadout": "4.736e-1 mm",
+    "faceMean": 0.47357718453249403,
+    "errPct": -0.5487912481762475
   }
 }

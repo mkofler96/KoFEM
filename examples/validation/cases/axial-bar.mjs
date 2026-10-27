@@ -42,7 +42,6 @@ export default {
     measured: "Mean x-displacement of the x = L face.",
     mesh: `${DIV.join(" × ")} grid`,
     source: "Gere & Goodno, Mechanics of Materials",
-    gallery: "axial-bar",
   },
   run(solve) {
     const m = boxHexMesh(L, W, H, ...DIV);

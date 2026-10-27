@@ -3,37 +3,37 @@
 
 // The "reproduce it in the app" model behind the validation page (/validation/).
 //
-// The cantilever case solved the way the app solves the gallery example
-// /app/?example=cantilever-beam (examples/gallery/examples.mjs): the same beam
-// and mesh in the app's units (mm · N · MPa), with the tip force applied as a
-// work-equivalent surface traction over the end face (rebuildSurfaceLoads in
-// web/src/store/boundarySlice.ts) instead of the case's equal nodal split. The page
-// publishes what the app's Result summary then shows, and
-// web/tests/validation-page.spec.ts checks the app shows exactly that.
+// The gallery example /app/?example=axial-bar (examples/gallery/examples.mjs)
+// is the surface-traction case in the app's units (mm · N · MPa): the same bar
+// and mesh, the force applied as a work-equivalent surface traction over the
+// end face (rebuildSurfaceLoads in web/src/store/boundarySlice.ts). This solves
+// it as the app does; the page publishes what the app's Result summary shows
+// after a fresh solve, and web/tests/validation-page.spec.ts checks the app
+// shows exactly that.
 
 import { boxHexMesh, nodesWhere, boxMaxXQuads } from "./lib/mesh.mjs";
 
 const E = 210000; // MPa
 const nu = 0.3;
 const L = 1000, // mm
-  b = 100,
-  h = 100; // mm
-const P = 1.0e4; // N, downward
-const DIV = [40, 4, 4];
-const I = (b * h ** 3) / 12;
+  W = 100,
+  H = 100; // mm
+const P = 1.0e6; // N, +x
+const DIV = [20, 4, 4];
 
 export default {
-  caseId: "cantilever",
-  galleryId: "cantilever-beam",
+  caseId: "surface-traction",
+  galleryId: "axial-bar",
+  title: "the axial bar",
   unit: "mm",
-  reference: -(P * L ** 3) / (3 * E * I),
-  // The app's Result summary: field Uy, row "Min Uy" (ResultsPanel.tsx), the
-  // minimum over all nodes printed with toExponential(3).
-  field: "Uy",
-  stat: "Min Uy",
+  reference: (P * L) / (E * (W * H)),
+  // The app's Result summary: field Ux, row "Max Ux" (ResultsPanel.tsx), the
+  // maximum over all nodes printed with toExponential(3).
+  field: "Ux",
+  stat: "Max Ux",
   run(solve) {
     const [nx, ny, nz] = DIV;
-    const m = boxHexMesh(L, b, h, nx, ny, nz);
+    const m = boxHexMesh(L, W, H, nx, ny, nz);
     const fixed = nodesWhere(m.vertices, (x) => x <= 1e-9);
     const loaded = nodesWhere(m.vertices, (x) => x >= L - 1e-9);
     const result = solve(
@@ -44,19 +44,19 @@ export default {
         surface_loads: [
           {
             type: "force",
-            force: [0, -P, 0],
+            force: [P, 0, 0],
             faces: boxMaxXQuads(m.nid, nx, ny, nz),
           },
         ],
       },
       1,
     );
-    let minUy = Infinity;
+    let maxUx = -Infinity;
     for (let v = 0; v < m.vertices.length; v++)
-      minUy = Math.min(minUy, result.displacements[v * 3 + 1]);
+      maxUx = Math.max(maxUx, result.displacements[v * 3]);
     const faceMean =
-      loaded.reduce((s, v) => s + result.displacements[v * 3 + 1], 0) /
+      loaded.reduce((s, v) => s + result.displacements[v * 3], 0) /
       loaded.length;
-    return { appValue: minUy, faceMean };
+    return { appValue: maxUx, faceMean };
   },
 };

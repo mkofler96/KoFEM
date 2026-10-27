@@ -988,14 +988,12 @@ node examples/validation/run.mjs</code></pre>
       <pre class="console" data-testid="console-line"><code>${esc(consoleHeader())}
 ${esc(consoleRow(appCase))}</code></pre>
       <p>
-        In the app: ${openLink(app.galleryId, "open the cantilever", "reproduce-open")},
-        select the result plot, set Field to ${esc(app.field)}; the Result
-        summary shows
-        <span class="readout" data-testid="app-readout" data-stat="${esc(app.stat)}" data-value="${esc(app.appReadout)}">${esc(app.stat)} ${esc(app.appReadout)}</span>.
-        Studies → Static 1 → Run static solve re-solves it in your browser
-        with the same result. (This model loads the tip as a surface traction;
-        its end-face mean is ${withUnit(num(app.faceMean), app.unit)},
-        ${errHtml(app.errPct)}.)
+        In the app: ${openLink(app.galleryId, `open ${app.title}`, "reproduce-open")},
+        run Studies → Static 1 → Run static solve, select the result plot and
+        set Field to ${esc(app.field)}. The Result summary shows
+        <span class="readout" data-testid="app-readout" data-stat="${esc(app.stat)}" data-value="${esc(app.appReadout)}">${esc(app.stat)} ${esc(app.appReadout)}</span>;
+        the end-face mean, ${withUnit(num(app.faceMean), app.unit)}, is the
+        ${esc(appCase.name)} row above in mm.
       </p>
     </main>
 

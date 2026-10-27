@@ -664,7 +664,7 @@
       </p>
       <p class="meta">
         9 of 9 within their CI band ·
-        engine engine-bb451aa7afb6 · 2026-10-26 ·
+        engine engine-bb451aa7afb6 · 2026-10-27 ·
         <a href="/validation/results.json">results.json</a> ·
         <a href="https://github.com/mkofler96/KoFEM/blob/main/examples/validation/README.md">details</a>
       </p>
@@ -749,7 +749,7 @@
       <section class="case" id="case-axial-bar" data-case="axial-bar">
         <div class="case-head">
           <h3>Axial bar (uniaxial tension)</h3>
-          <a class="open-link" href="/app/?example=axial-bar">Open in KoFEM<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>
+          
         </div>
         <p>Uniform tension: checks material, supports and load bookkeeping.</p>
         <table class="spec">
@@ -765,7 +765,7 @@
       <section class="case" id="case-cantilever" data-case="cantilever">
         <div class="case-head">
           <h3>Cantilever beam (end load)</h3>
-          <a class="open-link" href="/app/?example=cantilever-beam">Open in KoFEM<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>
+          
         </div>
         <p>Classic bending check. Linear hexahedra are too stiff in bending (shear locking).</p>
         <table class="spec">
@@ -813,7 +813,7 @@
       <section class="case" id="case-plate-with-hole" data-case="plate-with-hole">
         <div class="case-head">
           <h3>Plate with a hole (Kirsch)</h3>
-          <a class="open-link" href="/app/?example=plate-with-hole">Open in KoFEM<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>
+          
         </div>
         <p>Kirsch stress concentration at a hole — the one stress-based case, hence the wider band.</p>
         <table class="spec">
@@ -845,7 +845,7 @@
       <section class="case" id="case-cooks-membrane" data-case="cooks-membrane">
         <div class="case-head">
           <h3>Cook's membrane</h3>
-          <a class="open-link" href="/app/?example=cooks-membrane">Open in KoFEM<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>
+          
         </div>
         <p>Tapered, skewed cantilever in shear — a standard distortion benchmark (dimensionless).</p>
         <table class="spec">
@@ -1193,16 +1193,14 @@ bash scripts/fetch-wasm-engine.sh
 node examples/validation/run.mjs</code></pre>
       <p>prints every case, for example:</p>
       <pre class="console" data-testid="console-line"><code>Case                               Quantity                                  FE   Reference     Err%  Tol%  Status
-Cantilever beam (end load)         tip deflection δ                  -1.8379e-3  -1.9048e-3    -3.51     6  PASS</code></pre>
+Surface traction (axial bar)       tip extension δ                    4.7358e-4   4.7619e-4    -0.55     2  PASS</code></pre>
       <p>
-        In the app: <a class="open-link" href="/app/?example=cantilever-beam" data-testid="reproduce-open">open the cantilever<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>,
-        select the result plot, set Field to Uy; the Result
-        summary shows
-        <span class="readout" data-testid="app-readout" data-stat="Min Uy" data-value="-1.838e+0 mm">Min Uy -1.838e+0 mm</span>.
-        Studies → Static 1 → Run static solve re-solves it in your browser
-        with the same result. (This model loads the tip as a surface traction;
-        its end-face mean is −1.8378&nbsp;mm,
-        −3.51&nbsp;%.)
+        In the app: <a class="open-link" href="/app/?example=axial-bar" data-testid="reproduce-open">open the axial bar<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></a>,
+        run Studies → Static 1 → Run static solve, select the result plot and
+        set Field to Ux. The Result summary shows
+        <span class="readout" data-testid="app-readout" data-stat="Max Ux" data-value="4.736e-1 mm">Max Ux 4.736e-1 mm</span>;
+        the end-face mean, 0.47358&nbsp;mm, is the
+        Surface traction (axial bar) row above in mm.
       </p>
     </main>
 
