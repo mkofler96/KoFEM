@@ -2,13 +2,15 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import type {
+  BcFaceEntry,
   Material,
+  NamedBcGroup,
   NamedLoadGroup,
   Node,
   Property,
   SolverResult,
 } from "../store/modelStore";
-import { loadComponents, loadKind } from "../store/modelStore";
+import { loadComponents, loadKind } from "../store/boundarySlice";
 
 // A closed-form result an example carries so a first-time user can judge the
 // solve (KOF-261): the quantity read off the solved field, the hand formula it
@@ -23,9 +25,15 @@ export interface HandCheck {
   // The hand formula and its value in mm, both signed like the probed component.
   formula: string;
   reference: number;
-  // The load and material the formula assumes. Once the user changes either,
-  // the hand calculation no longer describes the model and is withheld.
-  assumes: { force: [number, number, number]; young: number };
+  // The problem the formula was worked out for: every load and every support,
+  // each on whole CAD faces, and the Young's modulus of every body. Once the
+  // model differs in any of them, the hand calculation no longer describes it
+  // and is withheld.
+  assumes: {
+    loads: { force: [number, number, number]; cadFaceIds: number[] }[];
+    supports: { dofs: number[]; value: number; cadFaceIds: number[] }[];
+    young: number;
+  };
 }
 
 export type HandCheckOutcome =
@@ -47,6 +55,17 @@ function expectFinite(value: unknown, field: string): number {
   return value;
 }
 
+function expectArray(value: unknown, field: string): unknown[] {
+  if (!Array.isArray(value))
+    throw new Error(
+      `Invalid analysis file: handCheck.${field} must be an array, got ${JSON.stringify(value)}`,
+    );
+  return value;
+}
+
+const expectNumbers = (value: unknown, field: string) =>
+  expectArray(value, field).map((v, i) => expectFinite(v, `${field}[${i}]`));
+
 function expectObject(value: unknown, field: string): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value))
     throw new Error(
@@ -65,11 +84,6 @@ export function parseHandCheck(raw: unknown): HandCheck {
     throw new Error(
       `Invalid analysis file: handCheck.probe.component must be 0, 1 or 2 (Ux, Uy, Uz), got ${JSON.stringify(component)}`,
     );
-  const force = assumes.force;
-  if (!Array.isArray(force) || force.length !== 3)
-    throw new Error(
-      `Invalid analysis file: handCheck.assumes.force must be [Fx, Fy, Fz], got ${JSON.stringify(force)}`,
-    );
   return {
     quantity: expectString(check.quantity, "quantity"),
     probe: {
@@ -79,11 +93,33 @@ export function parseHandCheck(raw: unknown): HandCheck {
     formula: expectString(check.formula, "formula"),
     reference: expectFinite(check.reference, "reference"),
     assumes: {
-      force: [
-        expectFinite(force[0], "assumes.force[0]"),
-        expectFinite(force[1], "assumes.force[1]"),
-        expectFinite(force[2], "assumes.force[2]"),
-      ],
+      loads: expectArray(assumes.loads, "assumes.loads").map((raw, i) => {
+        const field = `assumes.loads[${i}]`;
+        const load = expectObject(raw, `.${field}`);
+        const force = expectNumbers(load.force, `${field}.force`);
+        if (force.length !== 3)
+          throw new Error(
+            `Invalid analysis file: handCheck.${field}.force must be [Fx, Fy, Fz], got ${JSON.stringify(load.force)}`,
+          );
+        return {
+          force: [force[0], force[1], force[2]],
+          cadFaceIds: expectNumbers(load.cadFaceIds, `${field}.cadFaceIds`),
+        };
+      }),
+      supports: expectArray(assumes.supports, "assumes.supports").map(
+        (raw, i) => {
+          const field = `assumes.supports[${i}]`;
+          const support = expectObject(raw, `.${field}`);
+          return {
+            dofs: expectNumbers(support.dofs, `${field}.dofs`),
+            value: expectFinite(support.value, `${field}.value`),
+            cadFaceIds: expectNumbers(
+              support.cadFaceIds,
+              `${field}.cadFaceIds`,
+            ),
+          };
+        },
+      ),
       young: expectFinite(assumes.young, "assumes.young"),
     },
   };
@@ -92,14 +128,37 @@ export function parseHandCheck(raw: unknown): HandCheck {
 const sameValue = (a: number, b: number) =>
   Math.abs(a - b) <= 1e-9 * Math.max(1, Math.abs(a), Math.abs(b));
 
-// The FE value of the check on the solved field, or "changed" when the load or
-// a body's material no longer is the one the formula assumes. Null when the
-// probed load group is gone or empty — the check has nothing left to read.
+const sameMembers = (actual: number[], expected: number[]) =>
+  actual.length === expected.length &&
+  expected.every((value) => actual.includes(value));
+
+const onFaces = (faces: BcFaceEntry[], cadFaceIds: number[]) =>
+  faces.length === cadFaceIds.length &&
+  cadFaceIds.every((id) => faces.some((face) => face.cadFaceId === id));
+
+// Whether every group pairs up with one of the assumed ones, and none is extra
+// or missing.
+function sameGroups<G, A>(
+  groups: G[],
+  assumed: A[],
+  matches: (group: G, assumption: A) => boolean,
+): boolean {
+  return (
+    groups.length === assumed.length &&
+    groups.every((group) => assumed.some((a) => matches(group, a)))
+  );
+}
+
+// The FE value of the check on the solved field, or "changed" when a load, a
+// support or a body's material no longer is the one the formula assumes. Null
+// when the probed load group is gone or empty — the check has nothing left to
+// read.
 export function evaluateHandCheck(
   check: HandCheck,
   model: {
     nodes: Node[];
     loadGroups: NamedLoadGroup[];
+    bcGroups: NamedBcGroup[];
     materials: Material[];
     properties: Property[];
     result: SolverResult;
@@ -107,17 +166,32 @@ export function evaluateHandCheck(
 ): HandCheckOutcome | null {
   const group = model.loadGroups.find((g) => g.id === check.probe.loadGroupId);
   if (!group) return null;
-  const force = loadComponents(group);
-  const loadUnchanged =
-    loadKind(group) === "force" &&
-    force.every((value, axis) => sameValue(value, check.assumes.force[axis]));
+  const loadsUnchanged = sameGroups(
+    model.loadGroups,
+    check.assumes.loads,
+    (g, load) =>
+      loadKind(g) === "force" &&
+      loadComponents(g).every((value, axis) =>
+        sameValue(value, load.force[axis]),
+      ) &&
+      onFaces(g.faces, load.cadFaceIds),
+  );
+  const supportsUnchanged = sameGroups(
+    model.bcGroups,
+    check.assumes.supports,
+    (g, support) =>
+      sameMembers(g.dofs, support.dofs) &&
+      sameValue(g.value, support.value) &&
+      onFaces(g.faces, support.cadFaceIds),
+  );
   const materialUnchanged = model.properties.every((prop) => {
     const material = model.materials.find((m) => m.id === prop.materialId);
     return (
       material !== undefined && sameValue(material.young, check.assumes.young)
     );
   });
-  if (!loadUnchanged || !materialUnchanged) return { kind: "changed" };
+  if (!loadsUnchanged || !supportsUnchanged || !materialUnchanged)
+    return { kind: "changed" };
 
   const index = new Map(model.nodes.map((node, i) => [node.id, i]));
   const probed = new Set(group.faces.flatMap((face) => face.nodeIds));

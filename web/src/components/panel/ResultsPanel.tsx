@@ -248,11 +248,13 @@ function HandCheckNote({
 }) {
   const nodes = useModelStore((s) => s.nodes);
   const loadGroups = useModelStore((s) => s.loadGroups);
+  const bcGroups = useModelStore((s) => s.bcGroups);
   const materials = useModelStore((s) => s.materials);
   const properties = useModelStore((s) => s.properties);
   const outcome = evaluateHandCheck(check, {
     nodes,
     loadGroups,
+    bcGroups,
     materials,
     properties,
     result,
@@ -263,7 +265,7 @@ function HandCheckNote({
   return (
     <p className={styles.handCheck} data-testid="hand-check">
       {outcome.kind === "changed" ? (
-        "The load or material changed, so the hand calculation no longer applies."
+        "The loads, supports or material changed, so the hand calculation no longer applies."
       ) : (
         <>
           {check.quantity}{" "}

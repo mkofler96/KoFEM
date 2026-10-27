@@ -22,7 +22,7 @@ export function EmptyState() {
         <button
           className={styles.sampleBtn}
           disabled={importing || loading !== null}
-          onClick={() => void openExample(SAMPLE_EXAMPLE_ID)}
+          onClick={() => openExample(SAMPLE_EXAMPLE_ID)}
         >
           {loading !== null ? "Opening…" : "Try a sample simulation"}
         </button>

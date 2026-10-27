@@ -26,13 +26,9 @@ import styles from "./App.module.css";
 function useExampleFromUrl() {
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("example");
-    if (!id) return;
-    if (!isExampleId(id)) {
-      window.alert(`Invalid example id: "${id}"`);
-      return;
-    }
     const controller = new AbortController();
-    void openExample(id, controller.signal);
+    if (id && !isExampleId(id)) window.alert(`Invalid example id: "${id}"`);
+    else if (id) openExample(id, controller.signal);
     return () => controller.abort();
   }, []);
 }

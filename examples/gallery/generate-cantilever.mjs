@@ -269,7 +269,11 @@ function buildVtu() {
       probe: { loadGroupId: 1, component: 1 },
       formula: "−P·L³ / (3·E·I)",
       reference: REFERENCE,
-      assumes: { force: [0, -P, 0], young: STEEL.young },
+      assumes: {
+        loads: [{ force: [0, -P, 0], cadFaceIds: [loadFace] }],
+        supports: [{ dofs: [0, 1, 2], value: 0, cadFaceIds: [fixedFace] }],
+        young: STEEL.young,
+      },
     },
   };
 
