@@ -7,7 +7,8 @@
 //
 // Supported: single-letter identifiers (Latin or Greek, one per letter, so
 // "PL" is P times L), numbers, operators, {groups}, ^ and _ (single token or
-// group), \frac{a}{b}, \sqrt{a}, \text{...} (upright words), \mathrm{...}
+// group), \frac{a}{b}, \sqrt{a}, \sin \cos \tan \exp \log \ln,
+// \text{...} (upright words), \mathrm{...}
 // (upright identifiers such as "max"), \left( \right) stretchy delimiters, and
 // \, \; spacing. Anything else throws, so a typo cannot render as a silent gap.
 
@@ -15,6 +16,33 @@ const esc = (s) =>
   String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 const COMMANDS = new Set(["frac", "sqrt", "text", "mathrm", "left", "right"]);
+const FUNCTIONS = new Set(["sin", "cos", "tan", "exp", "log", "ln"]);
+const THIN = `<mspace width="0.1667em"/>`;
+const TIGHT = `lspace="0" rspace="0"`;
+
+/**
+ * An operator with TeX's spacing where MathML Core's defaults differ: plain
+ * brackets are not stretchy and take no space, "/", ".", "°" and the prime
+ * are ordinary, and a sign that starts an expression or follows an operator is
+ * unary (−P, not − P). `prev` is the token before it.
+ */
+function operator(v, prev) {
+  if ("()[]|".includes(v))
+    return `<mo stretchy="false" ${TIGHT}>${esc(v)}</mo>`;
+  if (v === "/" || v === "°" || v === ".") return `<mo ${TIGHT}>${v}</mo>`;
+  if (v === "'") return `<mo ${TIGHT}>′</mo>`;
+  if ("−+±".includes(v)) {
+    const unary =
+      !prev ||
+      prev.kind === "{" ||
+      prev.kind === "^" ||
+      prev.kind === "_" ||
+      (prev.kind === "op" && !")]|'".includes(prev.value)) ||
+      (prev.kind === "cmd" && ["left", "quad", ",", ";"].includes(prev.value));
+    if (unary) return `<mo form="prefix" ${TIGHT}>${v}</mo>`;
+  }
+  return `<mo>${esc(v)}</mo>`;
+}
 const SYMBOLS = {
   cdot: "·",
   times: "×",
@@ -100,7 +128,7 @@ function parser(tokens, src) {
       case "num":
         return `<mn>${t.value}</mn>`;
       case "op":
-        return `<mo>${esc(t.value)}</mo>`;
+        return operator(t.value, tokens[p - 2]);
       case "{": {
         const inner = sequence("}");
         expect("}");
@@ -113,6 +141,18 @@ function parser(tokens, src) {
         if (v === "!") return "";
         if (v === "|" || v === "{" || v === "}") return `<mo>${esc(v)}</mo>`;
         if (v === "quad") return `<mspace width="1em"/>`;
+        if (FUNCTIONS.has(v)) {
+          // Upright, with TeX's thin space after it, and before it when it
+          // follows an ordinary symbol (2 cos 2θ).
+          const prev = tokens[p - 2];
+          const ordinary =
+            prev &&
+            (prev.kind === "id" ||
+              prev.kind === "num" ||
+              prev.kind === "}" ||
+              (prev.kind === "op" && ")]".includes(prev.value)));
+          return `${ordinary ? THIN : ""}<mi>${v}</mi>${THIN}`;
+        }
         if (v in SYMBOLS) {
           const s = SYMBOLS[v];
           return v === "int" || v === "sum"
@@ -134,7 +174,7 @@ function parser(tokens, src) {
           const inner = sequence("right");
           expect("cmd");
           const close = tokens[p++];
-          return `<mrow><mo stretchy="true">${esc(open.value)}</mo>${inner}<mo stretchy="true">${esc(close.value)}</mo></mrow>`;
+          return `<mrow><mo stretchy="true" ${TIGHT}>${esc(open.value)}</mo>${inner}<mo stretchy="true" ${TIGHT}>${esc(close.value)}</mo></mrow>`;
         }
         return fail(`stray \\${v}`);
       }

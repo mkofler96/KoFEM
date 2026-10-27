@@ -31,6 +31,7 @@
 
     <!-- Self-hosted fonts (SIL OFL) — see public/fonts/README.md -->
     <link href="/fonts/ibm-plex.css" rel="stylesheet" />
+    <link rel="preload" href="/fonts/kofem-math.woff2" as="font" type="font/woff2" crossorigin />
 
     <script type="application/ld+json">
       {
@@ -80,6 +81,15 @@
     </script>
 
     <style>
+      /* Equations and figure symbols: a subset of New Computer Modern Math,
+         the LaTeX look (web/public/fonts/README.md). */
+      @font-face {
+        font-family: "KoFEM Math";
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url(/fonts/kofem-math.woff2) format("woff2");
+      }
       :root {
         color-scheme: dark;
         --bg: #0c1015;
@@ -98,7 +108,7 @@
         --s2: #cf6d2c;
         --sans: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
         --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
-        --serif: "STIX Two Text", "Cambria", "Times New Roman", serif;
+        --math: "KoFEM Math", math;
       }
       *,
       *::before,
@@ -302,8 +312,11 @@
       }
       math {
         color: var(--text);
-        font-family: "STIX Two Math", "Cambria Math", "Latin Modern Math", math;
-        font-size: 1.08em;
+        font-family: "KoFEM Math", math;
+        font-size: 1.12em;
+      }
+      math:not([display]) {
+        padding: 0 0.06em;
       }
       math[display="block"] {
         margin: 20px 0 22px;
@@ -612,9 +625,15 @@
       svg.fig .sym,
       svg.fig .axis-lbl {
         fill: var(--text);
-        font-family: var(--serif);
-        font-style: italic;
-        font-size: 16px;
+        font-family: var(--math);
+        font-size: 17px;
+      }
+      svg.fig .sub {
+        font-size: 70%;
+      }
+      svg.fig .m {
+        font-family: var(--math);
+        font-size: 14px;
       }
       svg.fig .axis-lbl {
         fill: var(--muted);
@@ -1000,11 +1019,11 @@
     <ellipse class="hole" cx="400" cy="112" rx="9.6" ry="30"/>
     <rect class="clamp" x="70" y="56" width="14" height="112"/><line class="wall" x1="84" y1="56" x2="84" y2="168"/>
     <line class="axis" x1="406" y1="112" x2="500" y2="112"/>
-    <text class="axis-lbl" x="506" y="116" text-anchor="start">z</text>
+    <text class="axis-lbl" x="506" y="116" text-anchor="start">𝑧</text>
     <polyline class="load" points="390.7,41.6 395.3,38.9 400,38 404.7,38.9 409.3,41.6 413.6,46.1 417.6,52.1 421.2,59.7 424.3,68.5 426.7,78.4 428.5,89.1 429.6,100.4 430,112 429.6,123.6 428.5,134.9 426.7,145.6 424.3,155.5 421.2,164.3 417.6,171.9 413.6,177.9 409.3,182.4 404.7,185.1 400,186 395.3,185.1 390.7,182.4 386.4,177.9 382.4,171.9 378.8,164.3 375.7,155.5 373.3,145.6 371.5,134.9" marker-end="url(#arr-load)"/>
-    <text class="sym" x="426" y="38" text-anchor="start">T</text>
+    <text class="sym" x="426" y="38" text-anchor="start">𝑇</text>
     <line class="dim" x1="100" y1="188" x2="400" y2="188" marker-start="url(#arr-dim)" marker-end="url(#arr-dim)"/>
-    <text class="sym" x="250" y="182" text-anchor="middle">L</text>
+    <text class="sym" x="250" y="182" text-anchor="middle">𝐿</text>
     <path class="body" fill-rule="evenodd" d="M616 112L614.9 122.9L611.7 133.4L606.6 143.1L599.6 151.6L591.1 158.6L581.4 163.7L570.9 166.9L560 168L549.1 166.9L538.6 163.7L528.9 158.6L520.4 151.6L513.4 143.1L508.3 133.4L505.1 122.9L504 112L505.1 101.1L508.3 90.6L513.4 80.9L520.4 72.4L528.9 65.4L538.6 60.3L549.1 57.1L560 56L570.9 57.1L581.4 60.3L591.1 65.4L599.6 72.4L606.6 80.9L611.7 90.6L614.9 101.1Z M593.6 112L593 118.6L591 124.9L587.9 130.7L583.8 135.8L578.7 139.9L572.9 143L566.6 145L560 145.6L553.4 145L547.1 143L541.3 139.9L536.2 135.8L532.1 130.7L529 124.9L527 118.6L526.4 112L527 105.4L529 99.1L532.1 93.3L536.2 88.2L541.3 84.1L547.1 81L553.4 79L560 78.4L566.6 79L572.9 81L578.7 84.1L583.8 88.2L587.9 93.3L591 99.1L593 105.4Z"/>
     <polyline class="mesh" points="601.1,112 600.3,120 597.9,127.7 594.1,134.8 589,141 582.8,146.1 575.7,149.9 568,152.3 560,153.1 552,152.3 544.3,149.9 537.2,146.1 531,141 525.9,134.8 522.1,127.7 519.7,120 518.9,112 519.7,104 522.1,96.3 525.9,89.2 531,83 537.2,77.9 544.3,74.1 552,71.7 560,70.9 568,71.7 575.7,74.1 582.8,77.9 589,83 594.1,89.2 597.9,96.3 600.3,104 601.1,112"/>
     <polyline class="mesh" points="608.5,112 607.6,121.5 604.8,130.6 600.4,139 594.3,146.3 587,152.4 578.6,156.8 569.5,159.6 560,160.5 550.5,159.6 541.4,156.8 533,152.4 525.7,146.3 519.6,139 515.2,130.6 512.4,121.5 511.5,112 512.4,102.5 515.2,93.4 519.6,85 525.7,77.7 533,71.6 541.4,67.2 550.5,64.4 560,63.5 569.5,64.4 578.6,67.2 587,71.6 594.3,77.7 600.4,85 604.8,93.4 607.6,102.5 608.5,112"/>
@@ -1041,9 +1060,9 @@
     <line class="mesh" x1="591" y1="99.1" x2="611.7" y2="90.6"/>
     <line class="mesh" x1="593" y1="105.4" x2="614.9" y2="101.1"/>
     <line class="dim" x1="560" y1="112" x2="540.2" y2="84.8" marker-end="url(#arr-dim)"/>
-    <text class="sym" x="548" y="110" text-anchor="end">rᵢ</text>
+    <text class="sym" x="542" y="110" text-anchor="end">𝑟<tspan class="sub" dy="4">i</tspan></text>
     <line class="dim" x1="560" y1="112" x2="609.1" y2="138.8" marker-end="url(#arr-dim)"/>
-    <text class="sym" x="594.7" y="164.7" text-anchor="start">rₒ</text>
+    <text class="sym" x="594.7" y="164.7" text-anchor="start">𝑟<tspan class="sub" dy="4">o</tspan></text>
     <text class="lbl" x="560" y="44" text-anchor="middle">section mesh, 32 segments</text>
   </svg>
         <figcaption>Tube of length L along z, radii rᵢ and rₒ; J = π·(rₒ⁴ − rᵢ⁴)/2. Sketch, not to scale; faint lines show the element mesh.</figcaption>
@@ -1064,21 +1083,21 @@
 
       <h2 id="theory">Analytical solution</h2>
         <p>By symmetry, each section of a circular shaft stays plane and turns
-        as a rigid disc. If the angle of twist grows at the rate <math><mi>θ</mi><mo>'</mo></math>
+        as a rigid disc. If the angle of twist grows at the rate <math><mi>θ</mi><mo lspace="0" rspace="0">′</mo></math>
         along the axis, the material at radius <math><mi>r</mi></math> is sheared by</p>
-        <math display="block"><mi>γ</mi><mo>=</mo><mi>r</mi><mi>θ</mi><mo>'</mo><mo>,</mo><mspace width="1em"/><mi>τ</mi><mo>=</mo><mi>G</mi><mi>γ</mi><mo>=</mo><mi>G</mi><mi>r</mi><mi>θ</mi><mo>'</mo><mo>.</mo></math>
+        <math display="block"><mi>γ</mi><mo>=</mo><mi>r</mi><mi>θ</mi><mo lspace="0" rspace="0">′</mo><mo>,</mo><mspace width="1em"/><mi>τ</mi><mo>=</mo><mi>G</mi><mi>γ</mi><mo>=</mo><mi>G</mi><mi>r</mi><mi>θ</mi><mo lspace="0" rspace="0">′</mo><mo lspace="0" rspace="0">.</mo></math>
         <p>The shear stress grows linearly from the inner to the outer
         surface. Its moment about the axis balances the applied torque,</p>
-        <math display="block"><mi>T</mi><mo>=</mo><msub><mo largeop="true">∫</mo><mrow><mi>A</mi></mrow></msub><mi>τ</mi><mi>r</mi><mspace width="0.17em"/><mi mathvariant="normal">d</mi><mi>A</mi><mo>=</mo><mi>G</mi><mi>θ</mi><mo>'</mo><msub><mo largeop="true">∫</mo><mrow><mi>A</mi></mrow></msub><msup><mi>r</mi><mn>2</mn></msup><mspace width="0.17em"/><mi mathvariant="normal">d</mi><mi>A</mi><mo>=</mo><mi>G</mi><mi>J</mi><mi>θ</mi><mo>'</mo><mo>,</mo></math>
+        <math display="block"><mi>T</mi><mo>=</mo><msub><mo largeop="true">∫</mo><mrow><mi>A</mi></mrow></msub><mi>τ</mi><mi>r</mi><mspace width="0.17em"/><mi mathvariant="normal">d</mi><mi>A</mi><mo>=</mo><mi>G</mi><mi>θ</mi><mo lspace="0" rspace="0">′</mo><msub><mo largeop="true">∫</mo><mrow><mi>A</mi></mrow></msub><msup><mi>r</mi><mn>2</mn></msup><mspace width="0.17em"/><mi mathvariant="normal">d</mi><mi>A</mi><mo>=</mo><mi>G</mi><mi>J</mi><mi>θ</mi><mo lspace="0" rspace="0">′</mo><mo>,</mo></math>
         <p>with the polar moment of the annulus</p>
-        <math display="block"><mi>J</mi><mo>=</mo><mfrac><mrow><mi>π</mi></mrow><mrow><mn>2</mn></mrow></mfrac><mrow><mo stretchy="true">(</mo><msubsup><mi>r</mi><mrow><mi mathvariant="normal">o</mi></mrow><mn>4</mn></msubsup><mo>−</mo><msubsup><mi>r</mi><mrow><mi mathvariant="normal">i</mi></mrow><mn>4</mn></msubsup><mo stretchy="true">)</mo></mrow><mo>.</mo></math>
+        <math display="block"><mi>J</mi><mo>=</mo><mfrac><mrow><mi>π</mi></mrow><mrow><mn>2</mn></mrow></mfrac><mrow><mo stretchy="true" lspace="0" rspace="0">(</mo><msubsup><mi>r</mi><mrow><mi mathvariant="normal">o</mi></mrow><mn>4</mn></msubsup><mo>−</mo><msubsup><mi>r</mi><mrow><mi mathvariant="normal">i</mi></mrow><mn>4</mn></msubsup><mo stretchy="true" lspace="0" rspace="0">)</mo></mrow><mo lspace="0" rspace="0">.</mo></math>
         <p>Over the length <math><mi>L</mi></math> the free end turns by</p>
-        <math display="block"><mi>θ</mi><mo>=</mo><mfrac><mrow><mi>T</mi><mi>L</mi></mrow><mrow><mi>G</mi><mi>J</mi></mrow></mfrac><mo>.</mo></math>
-        <p>Here <math><mi>J</mi><mo>=</mo><mn>8.5451</mn><mo>×</mo><msup><mn>10</mn><mrow><mo>−</mo><mn>6</mn></mrow></msup><msup><mtext> m</mtext><mn>4</mn></msup></math>,
+        <math display="block"><mi>θ</mi><mo>=</mo><mfrac><mrow><mi>T</mi><mi>L</mi></mrow><mrow><mi>G</mi><mi>J</mi></mrow></mfrac><mo lspace="0" rspace="0">.</mo></math>
+        <p>Here <math><mi>J</mi><mo>=</mo><mn>8.5451</mn><mo>×</mo><msup><mn>10</mn><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>6</mn></mrow></msup><msup><mtext> m</mtext><mn>4</mn></msup></math>,
         <math><mi>G</mi><mo>=</mo><mn>80.769</mn><mtext> GPa</mtext></math> and
-        <math><mi>θ</mi><mo>=</mo><mn>1.4489</mn><mo>×</mo><msup><mn>10</mn><mrow><mo>−</mo><mn>3</mn></mrow></msup><mtext> rad</mtext></math>. The largest shear stress,
+        <math><mi>θ</mi><mo>=</mo><mn>1.4489</mn><mo>×</mo><msup><mn>10</mn><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>3</mn></mrow></msup><mtext> rad</mtext></math>. The largest shear stress,
         at the outer surface, is
-        <math><msub><mi>τ</mi><mrow><mi mathvariant="normal">max</mi></mrow></msub><mo>=</mo><mi>T</mi><msub><mi>r</mi><mrow><mi mathvariant="normal">o</mi></mrow></msub><mo>/</mo><mi>J</mi><mo>=</mo><mn>11.703</mn><mtext> MPa</mtext></math>.</p>
+        <math><msub><mi>τ</mi><mrow><mi mathvariant="normal">max</mi></mrow></msub><mo>=</mo><mi>T</mi><msub><mi>r</mi><mrow><mi mathvariant="normal">o</mi></mrow></msub><mo lspace="0" rspace="0">/</mo><mi>J</mi><mo>=</mo><mn>11.703</mn><mtext> MPa</mtext></math>.</p>
 
       <h2 id="model">Finite element model</h2>
       <table class="spec">
@@ -1188,9 +1207,9 @@
         circles. Its polar moment is smaller than <math><mi>J</mi></math>, so it twists
         more. The polar moment of a regular <math><mi>n</mi></math>-gon inscribed in a
         circle of radius <math><mi>r</mi></math> is</p>
-        <math display="block"><msub><mi>J</mi><mrow><mi>n</mi></mrow></msub><mo>=</mo><mfrac><mrow><mi>n</mi><msup><mi>r</mi><mn>4</mn></msup></mrow><mrow><mn>12</mn></mrow></mfrac><mspace width="0.17em"/><mi mathvariant="normal">sin</mi><mfrac><mrow><mn>2</mn><mi>π</mi></mrow><mrow><mi>n</mi></mrow></mfrac><mrow><mo stretchy="true">(</mo><mn>2</mn><mo>+</mo><mi mathvariant="normal">cos</mi><mfrac><mrow><mn>2</mn><mi>π</mi></mrow><mrow><mi>n</mi></mrow></mfrac><mo stretchy="true">)</mo></mrow><mo>,</mo></math>
-        <p>which tends to <math><mi>π</mi><msup><mi>r</mi><mn>4</mn></msup><mo>/</mo><mn>2</mn></math> as <math><mi>n</mi></math> grows. The twist
-        the polygon alone predicts, <math><mi>J</mi><mo>/</mo><msub><mi>J</mi><mrow><mi>n</mi></mrow></msub><mo>−</mo><mn>1</mn></math>, matches KoFEM's
+        <math display="block"><msub><mi>J</mi><mrow><mi>n</mi></mrow></msub><mo>=</mo><mfrac><mrow><mi>n</mi><msup><mi>r</mi><mn>4</mn></msup></mrow><mrow><mn>12</mn></mrow></mfrac><mspace width="0.1667em"/><mi>sin</mi><mspace width="0.1667em"/><mfrac><mrow><mn>2</mn><mi>π</mi></mrow><mrow><mi>n</mi></mrow></mfrac><mrow><mo stretchy="true" lspace="0" rspace="0">(</mo><mn>2</mn><mo>+</mo><mi>cos</mi><mspace width="0.1667em"/><mfrac><mrow><mn>2</mn><mi>π</mi></mrow><mrow><mi>n</mi></mrow></mfrac><mo stretchy="true" lspace="0" rspace="0">)</mo></mrow><mo>,</mo></math>
+        <p>which tends to <math><mi>π</mi><msup><mi>r</mi><mn>4</mn></msup><mo lspace="0" rspace="0">/</mo><mn>2</mn></math> as <math><mi>n</mi></math> grows. The twist
+        the polygon alone predicts, <math><mi>J</mi><mo lspace="0" rspace="0">/</mo><msub><mi>J</mi><mrow><mi>n</mi></mrow></msub><mo>−</mo><mn>1</mn></math>, matches KoFEM's
         error on every mesh of the convergence study:</p>
         <div class="table-wrap">
           <table class="data">

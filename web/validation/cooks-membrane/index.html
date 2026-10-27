@@ -31,6 +31,7 @@
 
     <!-- Self-hosted fonts (SIL OFL) — see public/fonts/README.md -->
     <link href="/fonts/ibm-plex.css" rel="stylesheet" />
+    <link rel="preload" href="/fonts/kofem-math.woff2" as="font" type="font/woff2" crossorigin />
 
     <script type="application/ld+json">
       {
@@ -80,6 +81,15 @@
     </script>
 
     <style>
+      /* Equations and figure symbols: a subset of New Computer Modern Math,
+         the LaTeX look (web/public/fonts/README.md). */
+      @font-face {
+        font-family: "KoFEM Math";
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url(/fonts/kofem-math.woff2) format("woff2");
+      }
       :root {
         color-scheme: dark;
         --bg: #0c1015;
@@ -98,7 +108,7 @@
         --s2: #cf6d2c;
         --sans: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
         --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
-        --serif: "STIX Two Text", "Cambria", "Times New Roman", serif;
+        --math: "KoFEM Math", math;
       }
       *,
       *::before,
@@ -302,8 +312,11 @@
       }
       math {
         color: var(--text);
-        font-family: "STIX Two Math", "Cambria Math", "Latin Modern Math", math;
-        font-size: 1.08em;
+        font-family: "KoFEM Math", math;
+        font-size: 1.12em;
+      }
+      math:not([display]) {
+        padding: 0 0.06em;
       }
       math[display="block"] {
         margin: 20px 0 22px;
@@ -612,9 +625,15 @@
       svg.fig .sym,
       svg.fig .axis-lbl {
         fill: var(--text);
-        font-family: var(--serif);
-        font-style: italic;
-        font-size: 16px;
+        font-family: var(--math);
+        font-size: 17px;
+      }
+      svg.fig .sub {
+        font-size: 70%;
+      }
+      svg.fig .m {
+        font-family: var(--math);
+        font-size: 14px;
       }
       svg.fig .axis-lbl {
         fill: var(--muted);
@@ -1030,13 +1049,13 @@
     <line class="load" x1="327.2" y1="70.8" x2="327.2" y2="59.8" marker-end="url(#arr-load)"/>
     <line class="load" x1="327.2" y1="59.2" x2="327.2" y2="48.2" marker-end="url(#arr-load)"/>
     <line class="load" x1="327.2" y1="47.6" x2="327.2" y2="36.6" marker-end="url(#arr-load)"/>
-    <text class="sym" x="339.2" y="64.2" text-anchor="start">F</text>
+    <text class="sym" x="339.2" y="64.2" text-anchor="start">𝐹</text>
     <circle class="pt" cx="313.2" cy="32" r="3.5"/>
     <text class="lbl" x="323.2" y="24" text-anchor="start">C (48, 60)</text>
     <text class="coord" x="130" y="240" text-anchor="end">(0, 0)</text>
     <text class="coord" x="130" y="90.4" text-anchor="end">(0, 44)</text>
     <text class="coord" x="323.2" y="102.4" text-anchor="start">(48, 44)</text>
-    <line class="dim" x1="30" y1="236" x2="56" y2="236" marker-end="url(#arr-dim)"/><line class="dim" x1="30" y1="236" x2="30" y2="210" marker-end="url(#arr-dim)"/><text class="axis-lbl" x="62" y="240" text-anchor="start">x</text><text class="axis-lbl" x="30" y="204" text-anchor="middle">y</text>
+    <line class="dim" x1="30" y1="236" x2="56" y2="236" marker-end="url(#arr-dim)"/><line class="dim" x1="30" y1="236" x2="30" y2="210" marker-end="url(#arr-dim)"/><text class="axis-lbl" x="62" y="240" text-anchor="start">𝑥</text><text class="axis-lbl" x="30" y="204" text-anchor="middle">𝑦</text>
   </svg>
         <figcaption>Trapezoid (0, 0)–(48, 44)–(48, 60)–(0, 44), thickness t. Sketch, not to scale; faint lines show the element mesh.</figcaption>
       </figure>
@@ -1055,7 +1074,7 @@
       <h2 id="theory">Analytical solution</h2>
         <p>The panel is the quadrilateral with corners (0, 0), (48, 44),
         (48, 60) and (0, 44), of unit thickness, with <math><mi>E</mi><mo>=</mo><mn>1</mn></math> and
-        <math><mi>ν</mi><mo>=</mo><mn>1</mn><mo>/</mo><mn>3</mn></math>. A total shear force <math><mi>F</mi><mo>=</mo><mn>1</mn></math> is spread
+        <math><mi>ν</mi><mo>=</mo><mn>1</mn><mo lspace="0" rspace="0">/</mo><mn>3</mn></math>. A total shear force <math><mi>F</mi><mo>=</mo><mn>1</mn></math> is spread
         uniformly over the right edge, and the left edge is clamped. All
         quantities are dimensionless. The result compared is the vertical
         displacement of the top-right corner C.</p>

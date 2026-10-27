@@ -84,7 +84,7 @@ export default {
         circles. Its polar moment is smaller than ${tex("J")}, so it twists
         more. The polar moment of a regular ${tex("n")}-gon inscribed in a
         circle of radius ${tex("r")} is</p>
-        ${texBlock("J_{n} = \\frac{n r^4}{12}\\,\\mathrm{sin}\\frac{2π}{n}\\left(2 + \\mathrm{cos}\\frac{2π}{n}\\right),")}
+        ${texBlock("J_{n} = \\frac{n r^4}{12}\\sin\\frac{2π}{n}\\left(2 + \\cos\\frac{2π}{n}\\right),")}
         <p>which tends to ${tex("π r^4 / 2")} as ${tex("n")} grows. The twist
         the polygon alone predicts, ${tex("J / J_{n} - 1")}, matches KoFEM's
         error on every mesh of the convergence study:</p>

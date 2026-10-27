@@ -31,6 +31,7 @@
 
     <!-- Self-hosted fonts (SIL OFL) — see public/fonts/README.md -->
     <link href="/fonts/ibm-plex.css" rel="stylesheet" />
+    <link rel="preload" href="/fonts/kofem-math.woff2" as="font" type="font/woff2" crossorigin />
 
     <script type="application/ld+json">
       {
@@ -80,6 +81,15 @@
     </script>
 
     <style>
+      /* Equations and figure symbols: a subset of New Computer Modern Math,
+         the LaTeX look (web/public/fonts/README.md). */
+      @font-face {
+        font-family: "KoFEM Math";
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url(/fonts/kofem-math.woff2) format("woff2");
+      }
       :root {
         color-scheme: dark;
         --bg: #0c1015;
@@ -98,7 +108,7 @@
         --s2: #cf6d2c;
         --sans: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
         --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
-        --serif: "STIX Two Text", "Cambria", "Times New Roman", serif;
+        --math: "KoFEM Math", math;
       }
       *,
       *::before,
@@ -302,8 +312,11 @@
       }
       math {
         color: var(--text);
-        font-family: "STIX Two Math", "Cambria Math", "Latin Modern Math", math;
-        font-size: 1.08em;
+        font-family: "KoFEM Math", math;
+        font-size: 1.12em;
+      }
+      math:not([display]) {
+        padding: 0 0.06em;
       }
       math[display="block"] {
         margin: 20px 0 22px;
@@ -612,9 +625,15 @@
       svg.fig .sym,
       svg.fig .axis-lbl {
         fill: var(--text);
-        font-family: var(--serif);
-        font-style: italic;
-        font-size: 16px;
+        font-family: var(--math);
+        font-size: 17px;
+      }
+      svg.fig .sub {
+        font-size: 70%;
+      }
+      svg.fig .m {
+        font-family: var(--math);
+        font-size: 14px;
       }
       svg.fig .axis-lbl {
         fill: var(--muted);
@@ -1007,20 +1026,20 @@
     <line class="load" x1="432" y1="127.5" x2="462" y2="127.5" marker-end="url(#arr-load)"/>
     <line class="load" x1="432" y1="135.3" x2="462" y2="135.3" marker-end="url(#arr-load)"/>
     <line class="load" x1="432" y1="143" x2="462" y2="143" marker-end="url(#arr-load)"/>
-    <text class="sym" x="472" y="117" text-anchor="start">t = P / A</text>
+    <text class="sym" x="472" y="117" text-anchor="start">𝑡 = 𝑃 / 𝐴</text>
     <line class="ext" x1="410" y1="74" x2="410" y2="56"/>
     <line class="ext" x1="432" y1="74" x2="432" y2="56"/>
     <line class="dim" x1="410" y1="62" x2="432" y2="62" marker-start="url(#arr-dim)" marker-end="url(#arr-dim)"/>
-    <text class="sym" x="421" y="54" text-anchor="middle">δ</text>
+    <text class="sym" x="421" y="54" text-anchor="middle">𝛿</text>
     <line class="dim" x1="90" y1="170" x2="410" y2="170" marker-start="url(#arr-dim)" marker-end="url(#arr-dim)"/>
-    <text class="sym" x="250" y="164" text-anchor="middle">L</text>
-    <line class="dim" x1="30" y1="196" x2="56" y2="196" marker-end="url(#arr-dim)"/><line class="dim" x1="30" y1="196" x2="30" y2="170" marker-end="url(#arr-dim)"/><text class="axis-lbl" x="62" y="200" text-anchor="start">x</text><text class="axis-lbl" x="30" y="164" text-anchor="middle">y</text>
+    <text class="sym" x="250" y="164" text-anchor="middle">𝐿</text>
+    <line class="dim" x1="30" y1="196" x2="56" y2="196" marker-end="url(#arr-dim)"/><line class="dim" x1="30" y1="196" x2="30" y2="170" marker-end="url(#arr-dim)"/><text class="axis-lbl" x="62" y="200" text-anchor="start">𝑥</text><text class="axis-lbl" x="30" y="164" text-anchor="middle">𝑦</text>
     <rect class="body" x="533" y="85" width="54" height="54"/>
     <line class="dim" x1="533" y1="153" x2="587" y2="153" marker-start="url(#arr-dim)" marker-end="url(#arr-dim)"/>
-    <text class="sym" x="560" y="169" text-anchor="middle">W</text>
+    <text class="sym" x="560" y="169" text-anchor="middle">𝑊</text>
     <line class="dim" x1="601" y1="85" x2="601" y2="139" marker-start="url(#arr-dim)" marker-end="url(#arr-dim)"/>
-    <text class="sym" x="613" y="117" text-anchor="start">H</text>
-    <text class="lbl" x="560" y="73" text-anchor="middle">section A = W·H</text>
+    <text class="sym" x="613" y="117" text-anchor="start">𝐻</text>
+    <text class="lbl" x="560" y="73" text-anchor="middle">section <tspan class="m">𝐴 = 𝑊 𝐻</tspan></text>
   </svg>
         <figcaption>Prismatic bar of length L along x, W × H section. Sketch, not to scale; faint lines show the element mesh.</figcaption>
       </figure>
@@ -1040,16 +1059,16 @@
       <h2 id="theory">Analytical solution</h2>
         <p>The analytical answer is the axial bar's
         (<a href="/validation/axial-bar/">derivation</a>):</p>
-        <math display="block"><mi>δ</mi><mo>=</mo><mfrac><mrow><mi>P</mi><mi>L</mi></mrow><mrow><mi>E</mi><mi>A</mi></mrow></mfrac><mo>=</mo><mn>4.7619</mn><mo>×</mo><msup><mn>10</mn><mrow><mo>−</mo><mn>4</mn></mrow></msup><mtext> m</mtext><mo>.</mo></math>
+        <math display="block"><mi>δ</mi><mo>=</mo><mfrac><mrow><mi>P</mi><mi>L</mi></mrow><mrow><mi>E</mi><mi>A</mi></mrow></mfrac><mo>=</mo><mn>4.7619</mn><mo>×</mo><msup><mn>10</mn><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>4</mn></mrow></msup><mtext> m</mtext><mo lspace="0" rspace="0">.</mo></math>
         <p>What this case adds is the load vector. In the finite element
         method a traction <math><mi>t</mi></math> on a surface <math><mi>Γ</mi></math> enters through
         the work it does, so the force on node <math><mi>i</mi></math> is</p>
         <math display="block"><msub><mi>f</mi><mrow><mi>i</mi></mrow></msub><mo>=</mo><msub><mo largeop="true">∫</mo><mrow><mi>Γ</mi></mrow></msub><msub><mi>N</mi><mrow><mi>i</mi></mrow></msub><mspace width="0.17em"/><mi>t</mi><mspace width="0.28em"/><mi mathvariant="normal">d</mi><mi>S</mi><mo>,</mo></math>
         <p>where <math><msub><mi>N</mi><mrow><mi>i</mi></mrow></msub></math> is the shape function of that node. On
         linear quadrilateral faces of size <math><mi>h</mi><mo>×</mo><mi>h</mi></math> under a uniform
-        traction, a node collects <math><mi>t</mi><msup><mi>h</mi><mn>2</mn></msup><mo>/</mo><mn>4</mn></math> from each face it
+        traction, a node collects <math><mi>t</mi><msup><mi>h</mi><mn>2</mn></msup><mo lspace="0" rspace="0">/</mo><mn>4</mn></math> from each face it
         touches. An interior node of the end face gets <math><mi>t</mi><msup><mi>h</mi><mn>2</mn></msup></math>, an
-        edge node <math><mi>t</mi><msup><mi>h</mi><mn>2</mn></msup><mo>/</mo><mn>2</mn></math> and a corner node <math><mi>t</mi><msup><mi>h</mi><mn>2</mn></msup><mo>/</mo><mn>4</mn></math>.
+        edge node <math><mi>t</mi><msup><mi>h</mi><mn>2</mn></msup><mo lspace="0" rspace="0">/</mo><mn>2</mn></math> and a corner node <math><mi>t</mi><msup><mi>h</mi><mn>2</mn></msup><mo lspace="0" rspace="0">/</mo><mn>4</mn></math>.
         The forces add up to <math><mi>t</mi><mi>A</mi><mo>=</mo><mi>P</mi></math>, and they do the same work as
         the distributed traction on every displacement the elements can
         represent. Splitting <math><mi>P</mi></math> equally over the nodes, as the
@@ -1078,7 +1097,7 @@
       </table>
 
       <h2 id="discussion">Discussion</h2>
-        <p>The extension differs from <math><mi>P</mi><mi>L</mi><mo>/</mo><mo>(</mo><mi>E</mi><mi>A</mi><mo>)</mo></math> by
+        <p>The extension differs from <math><mi>P</mi><mi>L</mi><mo lspace="0" rspace="0">/</mo><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>E</mi><mi>A</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></math> by
         −0.55&nbsp;%. With a consistent load, what remains is the clamp.
         The x = 0 face is fully fixed, so near it the bar cannot contract
         sideways. That material is in a multiaxial state and stiffer than the

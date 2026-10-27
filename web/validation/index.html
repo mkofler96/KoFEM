@@ -31,6 +31,7 @@
 
     <!-- Self-hosted fonts (SIL OFL) — see public/fonts/README.md -->
     <link href="/fonts/ibm-plex.css" rel="stylesheet" />
+    <link rel="preload" href="/fonts/kofem-math.woff2" as="font" type="font/woff2" crossorigin />
 
     <script type="application/ld+json">
       {
@@ -112,6 +113,15 @@
     </script>
 
     <style>
+      /* Equations and figure symbols: a subset of New Computer Modern Math,
+         the LaTeX look (web/public/fonts/README.md). */
+      @font-face {
+        font-family: "KoFEM Math";
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url(/fonts/kofem-math.woff2) format("woff2");
+      }
       :root {
         color-scheme: dark;
         --bg: #0c1015;
@@ -130,7 +140,7 @@
         --s2: #cf6d2c;
         --sans: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
         --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
-        --serif: "STIX Two Text", "Cambria", "Times New Roman", serif;
+        --math: "KoFEM Math", math;
       }
       *,
       *::before,
@@ -334,8 +344,11 @@
       }
       math {
         color: var(--text);
-        font-family: "STIX Two Math", "Cambria Math", "Latin Modern Math", math;
-        font-size: 1.08em;
+        font-family: "KoFEM Math", math;
+        font-size: 1.12em;
+      }
+      math:not([display]) {
+        padding: 0 0.06em;
       }
       math[display="block"] {
         margin: 20px 0 22px;
@@ -644,9 +657,15 @@
       svg.fig .sym,
       svg.fig .axis-lbl {
         fill: var(--text);
-        font-family: var(--serif);
-        font-style: italic;
-        font-size: 16px;
+        font-family: var(--math);
+        font-size: 17px;
+      }
+      svg.fig .sub {
+        font-size: 70%;
+      }
+      svg.fig .m {
+        font-family: var(--math);
+        font-size: 14px;
       }
       svg.fig .axis-lbl {
         fill: var(--muted);

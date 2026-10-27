@@ -31,6 +31,7 @@
 
     <!-- Self-hosted fonts (SIL OFL) — see public/fonts/README.md -->
     <link href="/fonts/ibm-plex.css" rel="stylesheet" />
+    <link rel="preload" href="/fonts/kofem-math.woff2" as="font" type="font/woff2" crossorigin />
 
     <script type="application/ld+json">
       {
@@ -80,6 +81,15 @@
     </script>
 
     <style>
+      /* Equations and figure symbols: a subset of New Computer Modern Math,
+         the LaTeX look (web/public/fonts/README.md). */
+      @font-face {
+        font-family: "KoFEM Math";
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url(/fonts/kofem-math.woff2) format("woff2");
+      }
       :root {
         color-scheme: dark;
         --bg: #0c1015;
@@ -98,7 +108,7 @@
         --s2: #cf6d2c;
         --sans: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
         --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
-        --serif: "STIX Two Text", "Cambria", "Times New Roman", serif;
+        --math: "KoFEM Math", math;
       }
       *,
       *::before,
@@ -302,8 +312,11 @@
       }
       math {
         color: var(--text);
-        font-family: "STIX Two Math", "Cambria Math", "Latin Modern Math", math;
-        font-size: 1.08em;
+        font-family: "KoFEM Math", math;
+        font-size: 1.12em;
+      }
+      math:not([display]) {
+        padding: 0 0.06em;
       }
       math[display="block"] {
         margin: 20px 0 22px;
@@ -612,9 +625,15 @@
       svg.fig .sym,
       svg.fig .axis-lbl {
         fill: var(--text);
-        font-family: var(--serif);
-        font-style: italic;
-        font-size: 16px;
+        font-family: var(--math);
+        font-size: 17px;
+      }
+      svg.fig .sub {
+        font-size: 70%;
+      }
+      svg.fig .m {
+        font-family: var(--math);
+        font-size: 14px;
       }
       svg.fig .axis-lbl {
         fill: var(--muted);
@@ -1001,11 +1020,11 @@
     <rect class="clamp" x="86" y="64" width="14" height="92"/><line class="wall" x1="100" y1="64" x2="100" y2="156"/>
     <line class="axis" x1="70" y1="110" x2="112" y2="110"/>
     <line class="axis" x1="437" y1="110" x2="512" y2="110"/>
-    <text class="axis-lbl" x="518" y="114" text-anchor="start">x</text>
+    <text class="axis-lbl" x="518" y="114" text-anchor="start">𝑥</text>
     <polyline class="load" points="426.2,60.5 429.6,58.6 433,58 436.4,58.6 439.8,60.5 443,63.7 445.9,67.9 448.6,73.2 450.8,79.4 452.6,86.4 453.9,93.9 454.7,101.9 455,110 454.7,118.1 453.9,126.1 452.6,133.6 450.8,140.6 448.6,146.8 445.9,152.1 443,156.3 439.8,159.5 436.4,161.4 433,162 429.6,161.4 426.2,159.5 423,156.3 420.1,152.1 417.4,146.8 415.2,140.6 413.4,133.6 412.1,126.1" marker-end="url(#arr-load)"/>
-    <text class="sym" x="463" y="60" text-anchor="start">T</text>
+    <text class="sym" x="463" y="60" text-anchor="start">𝑇</text>
     <line class="dim" x1="100" y1="176" x2="420" y2="176" marker-start="url(#arr-dim)" marker-end="url(#arr-dim)"/>
-    <text class="sym" x="260" y="170" text-anchor="middle">L</text>
+    <text class="sym" x="260" y="170" text-anchor="middle">𝐿</text>
     <rect class="body" x="528" y="88" width="64" height="64"/>
     <line class="mesh" x1="528" y1="120" x2="592" y2="120"/>
     <line class="mesh" x1="560" y1="88" x2="560" y2="152"/>
@@ -1014,7 +1033,7 @@
     <text class="warp" x="544" y="141" text-anchor="middle">−</text>
     <text class="warp" x="576" y="141" text-anchor="middle">+</text>
     <line class="dim" x1="528" y1="166" x2="592" y2="166" marker-start="url(#arr-dim)" marker-end="url(#arr-dim)"/>
-    <text class="sym" x="560" y="182" text-anchor="middle">b</text>
+    <text class="sym" x="560" y="182" text-anchor="middle">𝑏</text>
     <text class="lbl" x="560" y="76" text-anchor="middle">warping sign</text>
   </svg>
         <figcaption>Beam of length L along x, square b × b section; K = β·b⁴, β = 1/3 − 0.21·(1 − 1/12). Sketch, not to scale; faint lines show the element mesh.</figcaption>
@@ -1037,27 +1056,27 @@
         and the torsional stiffness is <math><mi>G</mi><mi>J</mi></math>, with the polar moment
         <math><mi>J</mi></math>. Saint-Venant's theory (1855) covers any section. Each
         section rotates rigidly in its own plane by an angle that grows
-        linearly along the bar, <math><mi>θ</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>=</mo><mi>θ</mi><mo>'</mo><mi>x</mi></math>, and is free to warp
-        axially by <math><msub><mi>u</mi><mrow><mi>x</mi></mrow></msub><mo>=</mo><mi>θ</mi><mo>'</mo><mi>ω</mi><mo>(</mo><mi>y</mi><mo>,</mo><mi>z</mi><mo>)</mo></math>, with a warping function
+        linearly along the bar, <math><mi>θ</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>x</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo>=</mo><mi>θ</mi><mo lspace="0" rspace="0">′</mo><mi>x</mi></math>, and is free to warp
+        axially by <math><msub><mi>u</mi><mrow><mi>x</mi></mrow></msub><mo>=</mo><mi>θ</mi><mo lspace="0" rspace="0">′</mo><mi>ω</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>y</mi><mo>,</mo><mi>z</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></math>, with a warping function
         <math><mi>ω</mi></math> that depends on the shape of the section.</p>
         <p>The shear stresses follow from Prandtl's stress function
-        <math><mi>φ</mi><mo>(</mo><mi>y</mi><mo>,</mo><mi>z</mi><mo>)</mo></math>, with <math><msub><mi>τ</mi><mrow><mi>x</mi><mi>y</mi></mrow></msub><mo>=</mo><mo>∂</mo><mi>φ</mi><mo>/</mo><mo>∂</mo><mi>z</mi></math> and
-        <math><msub><mi>τ</mi><mrow><mi>x</mi><mi>z</mi></mrow></msub><mo>=</mo><mo>−</mo><mo>∂</mo><mi>φ</mi><mo>/</mo><mo>∂</mo><mi>y</mi></math>. Compatibility requires</p>
-        <math display="block"><msup><mo>∇</mo><mn>2</mn></msup><mi>φ</mi><mo>=</mo><mo>−</mo><mn>2</mn><mi>G</mi><mi>θ</mi><mo>'</mo><mtext> in the section</mtext><mo>,</mo><mspace width="1em"/><mi>φ</mi><mo>=</mo><mn>0</mn><mtext> on its boundary</mtext><mo>,</mo></math>
+        <math><mi>φ</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>y</mi><mo>,</mo><mi>z</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></math>, with <math><msub><mi>τ</mi><mrow><mi>x</mi><mi>y</mi></mrow></msub><mo>=</mo><mo>∂</mo><mi>φ</mi><mo lspace="0" rspace="0">/</mo><mo>∂</mo><mi>z</mi></math> and
+        <math><msub><mi>τ</mi><mrow><mi>x</mi><mi>z</mi></mrow></msub><mo>=</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mo>∂</mo><mi>φ</mi><mo lspace="0" rspace="0">/</mo><mo>∂</mo><mi>y</mi></math>. Compatibility requires</p>
+        <math display="block"><msup><mo>∇</mo><mn>2</mn></msup><mi>φ</mi><mo>=</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mn>2</mn><mi>G</mi><mi>θ</mi><mo lspace="0" rspace="0">′</mo><mtext> in the section</mtext><mo>,</mo><mspace width="1em"/><mi>φ</mi><mo>=</mo><mn>0</mn><mtext> on its boundary</mtext><mo>,</mo></math>
         <p>and the torque is twice the volume under <math><mi>φ</mi></math>:</p>
-        <math display="block"><mi>T</mi><mo>=</mo><mn>2</mn><msub><mo largeop="true">∫</mo><mrow><mi>A</mi></mrow></msub><mi>φ</mi><mspace width="0.17em"/><mi mathvariant="normal">d</mi><mi>A</mi><mo>=</mo><mi>G</mi><mi>K</mi><mi>θ</mi><mo>'</mo><mo>.</mo></math>
+        <math display="block"><mi>T</mi><mo>=</mo><mn>2</mn><msub><mo largeop="true">∫</mo><mrow><mi>A</mi></mrow></msub><mi>φ</mi><mspace width="0.17em"/><mi mathvariant="normal">d</mi><mi>A</mi><mo>=</mo><mi>G</mi><mi>K</mi><mi>θ</mi><mo lspace="0" rspace="0">′</mo><mo lspace="0" rspace="0">.</mo></math>
         <p>This defines the torsion constant <math><mi>K</mi></math>. For a square of side
         <math><mi>b</mi></math> the series solution gives <math><mi>K</mi><mo>≈</mo><mn>0.1406</mn><msup><mi>b</mi><mn>4</mn></msup></math>
         (Timoshenko and Goodier tabulate 0.141). The case uses Roark's
         closed-form fit for rectangles, evaluated for a square:</p>
-        <math display="block"><mi>K</mi><mo>=</mo><mi>β</mi><msup><mi>b</mi><mn>4</mn></msup><mo>,</mo><mspace width="1em"/><mi>β</mi><mo>=</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mn>3</mn></mrow></mfrac><mo>−</mo><mn>0.21</mn><mrow><mo stretchy="true">(</mo><mn>1</mn><mo>−</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mn>12</mn></mrow></mfrac><mo stretchy="true">)</mo></mrow><mo>=</mo><mn>0.1408</mn><mo>.</mo></math>
-        <p>The polar moment of the square, <math><mi>J</mi><mo>=</mo><msup><mi>b</mi><mn>4</mn></msup><mo>/</mo><mn>6</mn><mo>≈</mo><mn>0.1667</mn><msup><mi>b</mi><mn>4</mn></msup></math>,
+        <math display="block"><mi>K</mi><mo>=</mo><mi>β</mi><msup><mi>b</mi><mn>4</mn></msup><mo>,</mo><mspace width="1em"/><mi>β</mi><mo>=</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mn>3</mn></mrow></mfrac><mo>−</mo><mn>0.21</mn><mrow><mo stretchy="true" lspace="0" rspace="0">(</mo><mn>1</mn><mo>−</mo><mfrac><mrow><mn>1</mn></mrow><mrow><mn>12</mn></mrow></mfrac><mo stretchy="true" lspace="0" rspace="0">)</mo></mrow><mo>=</mo><mn>0.1408</mn><mo lspace="0" rspace="0">.</mo></math>
+        <p>The polar moment of the square, <math><mi>J</mi><mo>=</mo><msup><mi>b</mi><mn>4</mn></msup><mo lspace="0" rspace="0">/</mo><mn>6</mn><mo>≈</mo><mn>0.1667</mn><msup><mi>b</mi><mn>4</mn></msup></math>,
         would overestimate the stiffness by 18&nbsp;%.
         The free end rotates by</p>
-        <math display="block"><mi>θ</mi><mo>=</mo><mfrac><mrow><mi>T</mi><mi>L</mi></mrow><mrow><mi>G</mi><mi>K</mi></mrow></mfrac><mo>,</mo><mspace width="1em"/><mi>G</mi><mo>=</mo><mfrac><mrow><mi>E</mi></mrow><mrow><mn>2</mn><mo>(</mo><mn>1</mn><mo>+</mo><mi>ν</mi><mo>)</mo></mrow></mfrac><mo>.</mo></math>
+        <math display="block"><mi>θ</mi><mo>=</mo><mfrac><mrow><mi>T</mi><mi>L</mi></mrow><mrow><mi>G</mi><mi>K</mi></mrow></mfrac><mo>,</mo><mspace width="1em"/><mi>G</mi><mo>=</mo><mfrac><mrow><mi>E</mi></mrow><mrow><mn>2</mn><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>1</mn><mo>+</mo><mi>ν</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></mrow></mfrac><mo lspace="0" rspace="0">.</mo></math>
         <p>Here <math><mi>G</mi><mo>=</mo><mn>80.769</mn><mtext> GPa</mtext></math>,
-        <math><mi>K</mi><mo>=</mo><mn>1.4083</mn><mo>×</mo><msup><mn>10</mn><mrow><mo>−</mo><mn>5</mn></mrow></msup><msup><mtext> m</mtext><mn>4</mn></msup></math> and
-        <math><mi>θ</mi><mo>=</mo><mn>8.7912</mn><mo>×</mo><msup><mn>10</mn><mrow><mo>−</mo><mn>4</mn></mrow></msup><mtext> rad</mtext></math>.</p>
+        <math><mi>K</mi><mo>=</mo><mn>1.4083</mn><mo>×</mo><msup><mn>10</mn><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>5</mn></mrow></msup><msup><mtext> m</mtext><mn>4</mn></msup></math> and
+        <math><mi>θ</mi><mo>=</mo><mn>8.7912</mn><mo>×</mo><msup><mn>10</mn><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>4</mn></mrow></msup><mtext> rad</mtext></math>.</p>
         <p>The warping is largest at the corners and changes sign from one
         quadrant of the section to the next (inset in the figure). The
         largest shear stress is at the middle of each side, not at the
@@ -1077,7 +1096,7 @@
         stress distribution over a square, but by Saint-Venant's principle
         the difference only affects the region near the loaded end. The
         twist is the mean in-plane rotation of the end-face nodes,
-        <math><mo>(</mo><mi>y</mi><msub><mi>u</mi><mrow><mi>z</mi></mrow></msub><mo>−</mo><mi>z</mi><msub><mi>u</mi><mrow><mi>y</mi></mrow></msub><mo>)</mo><mo>/</mo><msup><mi>r</mi><mn>2</mn></msup></math>.</p>
+        <math><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>y</mi><msub><mi>u</mi><mrow><mi>z</mi></mrow></msub><mo>−</mo><mi>z</mi><msub><mi>u</mi><mrow><mi>y</mi></mrow></msub><mo stretchy="false" lspace="0" rspace="0">)</mo><mo lspace="0" rspace="0">/</mo><msup><mi>r</mi><mn>2</mn></msup></math>.</p>
 
       <h2 id="results">Results</h2>
       <table class="spec">
@@ -1094,7 +1113,7 @@
         <math><mi>x</mi><mo>=</mo><mn>0</mn></math> section flat. Restraining the warping stiffens the bar
         over a length comparable to the section size, here a tenth of the
         bar, so the whole bar twists slightly less. A converged 3-D solution
-        therefore lies below <math><mi>T</mi><mi>L</mi><mo>/</mo><mo>(</mo><mi>G</mi><mi>K</mi><mo>)</mo></math>; the ±5&nbsp;%
+        therefore lies below <math><mi>T</mi><mi>L</mi><mo lspace="0" rspace="0">/</mo><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>G</mi><mi>K</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></math>; the ±5&nbsp;%
         band allows for that.</p>
         <p>The reference itself carries Roark's fit: the series value
         <math><mi>β</mi><mo>=</mo><mn>0.1406</mn></math> would raise it by

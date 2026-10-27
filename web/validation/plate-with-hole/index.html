@@ -31,6 +31,7 @@
 
     <!-- Self-hosted fonts (SIL OFL) — see public/fonts/README.md -->
     <link href="/fonts/ibm-plex.css" rel="stylesheet" />
+    <link rel="preload" href="/fonts/kofem-math.woff2" as="font" type="font/woff2" crossorigin />
 
     <script type="application/ld+json">
       {
@@ -80,6 +81,15 @@
     </script>
 
     <style>
+      /* Equations and figure symbols: a subset of New Computer Modern Math,
+         the LaTeX look (web/public/fonts/README.md). */
+      @font-face {
+        font-family: "KoFEM Math";
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url(/fonts/kofem-math.woff2) format("woff2");
+      }
       :root {
         color-scheme: dark;
         --bg: #0c1015;
@@ -98,7 +108,7 @@
         --s2: #cf6d2c;
         --sans: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
         --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
-        --serif: "STIX Two Text", "Cambria", "Times New Roman", serif;
+        --math: "KoFEM Math", math;
       }
       *,
       *::before,
@@ -302,8 +312,11 @@
       }
       math {
         color: var(--text);
-        font-family: "STIX Two Math", "Cambria Math", "Latin Modern Math", math;
-        font-size: 1.08em;
+        font-family: "KoFEM Math", math;
+        font-size: 1.12em;
+      }
+      math:not([display]) {
+        padding: 0 0.06em;
       }
       math[display="block"] {
         margin: 20px 0 22px;
@@ -612,9 +625,15 @@
       svg.fig .sym,
       svg.fig .axis-lbl {
         fill: var(--text);
-        font-family: var(--serif);
-        font-style: italic;
-        font-size: 16px;
+        font-family: var(--math);
+        font-size: 17px;
+      }
+      svg.fig .sub {
+        font-size: 70%;
+      }
+      svg.fig .m {
+        font-family: var(--math);
+        font-size: 14px;
       }
       svg.fig .axis-lbl {
         fill: var(--muted);
@@ -1004,15 +1023,15 @@
     <line class="load" x1="252" y1="161.3" x2="282" y2="161.3" marker-end="url(#arr-load)"/>
     <line class="load" x1="252" y1="192.7" x2="282" y2="192.7" marker-end="url(#arr-load)"/>
     <line class="load" x1="252" y1="224" x2="282" y2="224" marker-end="url(#arr-load)"/>
-    <text class="sym" x="290" y="135" text-anchor="start">σ</text>
+    <text class="sym" x="290" y="135" text-anchor="start">𝜎</text>
     <circle class="pt" cx="150" cy="106" r="3.5"/>
     <circle class="pt" cx="150" cy="154" r="3.5"/>
     <text class="lbl" x="150" y="96" text-anchor="middle">A</text>
     <text class="lbl" x="150" y="174" text-anchor="middle">A</text>
     <line class="dim" x1="150" y1="130" x2="168.4" y2="114.5" marker-start="url(#arr-dim)" marker-end="url(#arr-dim)"/>
-    <text class="sym" x="154" y="144" text-anchor="start">a</text>
+    <text class="sym" x="154" y="144" text-anchor="start">𝑎</text>
     <line class="dim" x1="50" y1="252" x2="250" y2="252" marker-start="url(#arr-dim)" marker-end="url(#arr-dim)"/>
-    <text class="sym" x="150" y="246" text-anchor="middle">2b</text>
+    <text class="sym" x="150" y="246" text-anchor="middle">2𝑏</text>
   </svg><svg class="fig half" viewBox="0 0 310 270" role="img" aria-label="The Kirsch stress along the transverse axis falls from 3σ at the hole edge towards σ">
     
     <line class="chart-axis" x1="50" y1="214" x2="290" y2="214"/>
@@ -1032,9 +1051,9 @@
     <text class="tick" x="42" y="54.9" text-anchor="end">3</text>
     <polyline class="curve" points="50,50.9 53,67.9 56,81.4 59,92.4 62,101.4 65,108.8 68,115 71,120.2 74,124.5 77,128.2 80,131.4 83,134.2 86,136.6 89,138.6 92,140.5 95,142.1 98,143.5 101,144.7 104,145.8 107,146.8 110,147.7 113,148.5 116,149.3 119,149.9 122,150.5 125,151.1 128,151.6 131,152 134,152.4 137,152.8 140,153.2 143,153.5 146,153.8 149,154.1 152,154.4 155,154.6 158,154.8 161,155 164,155.2 167,155.4 170,155.6 173,155.8 176,155.9 179,156.1 182,156.2 185,156.3 188,156.4 191,156.6 194,156.7 197,156.8 200,156.9 203,157 206,157 209,157.1 212,157.2 215,157.3 218,157.4 221,157.4 224,157.5 227,157.5 230,157.6 233,157.7 236,157.7 239,157.8 242,157.8 245,157.9 248,157.9 251,158 254,158 257,158 260,158.1 263,158.1 266,158.2 269,158.2 272,158.2 275,158.3 278,158.3 281,158.3 284,158.4 287,158.4 290,158.4"/>
     <circle class="pt" cx="50" cy="50.875" r="3.5"/>
-    <text class="lbl" x="60" y="54.9" text-anchor="start">A: 3σ</text>
-    <text class="axis-lbl" x="290" y="246" text-anchor="end">y / a</text>
-    <text class="axis-lbl" x="50" y="28" text-anchor="start">σₓₓ / σ on x = 0</text>
+    <text class="lbl" x="60" y="54.9" text-anchor="start">A: <tspan class="m">3𝜎</tspan></text>
+    <text class="axis-lbl" x="290" y="246" text-anchor="end">𝑦/𝑎</text>
+    <text class="axis-lbl" x="50" y="28" text-anchor="start">𝜎<tspan class="sub" dy="4">𝑥𝑥</tspan><tspan dy="-4">/𝜎  on 𝑥 = 0</tspan></text>
   </svg></div>
         <figcaption>Square plate of half-width b and thickness t, central hole of radius a. Sketch, not to scale.</figcaption>
       </figure>
@@ -1055,26 +1074,26 @@
       <h2 id="theory">Analytical solution</h2>
         <p>Take an infinite plate under uniaxial tension <math><mi>σ</mi></math> along
         <math><mi>x</mi></math>, with a hole of radius <math><mi>a</mi></math>. In polar coordinates
-        <math><mo>(</mo><mi>r</mi><mo>,</mo><mi>θ</mi><mo>)</mo></math> about the hole centre, with <math><mi>θ</mi></math> measured from
+        <math><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>r</mi><mo>,</mo><mi>θ</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></math> about the hole centre, with <math><mi>θ</mi></math> measured from
         the load direction, Kirsch's solution of the plane elasticity problem
         gives the hoop stress</p>
-        <math display="block"><msub><mi>σ</mi><mrow><mi>θ</mi><mi>θ</mi></mrow></msub><mo>=</mo><mfrac><mrow><mi>σ</mi></mrow><mrow><mn>2</mn></mrow></mfrac><mrow><mo stretchy="true">(</mo><mn>1</mn><mo>+</mo><mfrac><mrow><msup><mi>a</mi><mn>2</mn></msup></mrow><mrow><msup><mi>r</mi><mn>2</mn></msup></mrow></mfrac><mo stretchy="true">)</mo></mrow><mo>−</mo><mfrac><mrow><mi>σ</mi></mrow><mrow><mn>2</mn></mrow></mfrac><mrow><mo stretchy="true">(</mo><mn>1</mn><mo>+</mo><mfrac><mrow><mn>3</mn><msup><mi>a</mi><mn>4</mn></msup></mrow><mrow><msup><mi>r</mi><mn>4</mn></msup></mrow></mfrac><mo stretchy="true">)</mo></mrow><mi mathvariant="normal">cos</mi><mspace width="0.17em"/><mn>2</mn><mi>θ</mi><mo>.</mo></math>
+        <math display="block"><msub><mi>σ</mi><mrow><mi>θ</mi><mi>θ</mi></mrow></msub><mo>=</mo><mfrac><mrow><mi>σ</mi></mrow><mrow><mn>2</mn></mrow></mfrac><mrow><mo stretchy="true" lspace="0" rspace="0">(</mo><mn>1</mn><mo>+</mo><mfrac><mrow><msup><mi>a</mi><mn>2</mn></msup></mrow><mrow><msup><mi>r</mi><mn>2</mn></msup></mrow></mfrac><mo stretchy="true" lspace="0" rspace="0">)</mo></mrow><mo>−</mo><mfrac><mrow><mi>σ</mi></mrow><mrow><mn>2</mn></mrow></mfrac><mrow><mo stretchy="true" lspace="0" rspace="0">(</mo><mn>1</mn><mo>+</mo><mfrac><mrow><mn>3</mn><msup><mi>a</mi><mn>4</mn></msup></mrow><mrow><msup><mi>r</mi><mn>4</mn></msup></mrow></mfrac><mo stretchy="true" lspace="0" rspace="0">)</mo></mrow><mspace width="0.1667em"/><mi>cos</mi><mspace width="0.1667em"/><mn>2</mn><mi>θ</mi><mo lspace="0" rspace="0">.</mo></math>
         <p>On the edge of the hole, <math><mi>r</mi><mo>=</mo><mi>a</mi></math>, the radial and shear
         stresses vanish because the surface is free, and</p>
-        <math display="block"><msub><mi>σ</mi><mrow><mi>θ</mi><mi>θ</mi></mrow></msub><mo>(</mo><mi>a</mi><mo>,</mo><mi>θ</mi><mo>)</mo><mo>=</mo><mi>σ</mi><mo>(</mo><mn>1</mn><mo>−</mo><mn>2</mn><mi mathvariant="normal">cos</mi><mspace width="0.17em"/><mn>2</mn><mi>θ</mi><mo>)</mo><mo>.</mo></math>
-        <p>This is largest at <math><mi>θ</mi><mo>=</mo><mo>±</mo><mn>90</mn><mo>°</mo></math>, the points A across the load
+        <math display="block"><msub><mi>σ</mi><mrow><mi>θ</mi><mi>θ</mi></mrow></msub><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>a</mi><mo>,</mo><mi>θ</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo>=</mo><mi>σ</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>1</mn><mo>−</mo><mn>2</mn><mspace width="0.1667em"/><mi>cos</mi><mspace width="0.1667em"/><mn>2</mn><mi>θ</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo lspace="0" rspace="0">.</mo></math>
+        <p>This is largest at <math><mi>θ</mi><mo>=</mo><mo form="prefix" lspace="0" rspace="0">±</mo><mn>90</mn><mo lspace="0" rspace="0">°</mo></math>, the points A across the load
         direction, and the stress concentration factor is</p>
-        <math display="block"><msub><mi>K</mi><mrow><mi mathvariant="normal">t</mi></mrow></msub><mo>=</mo><mfrac><mrow><msub><mi>σ</mi><mrow><mi mathvariant="normal">max</mi></mrow></msub></mrow><mrow><mi>σ</mi></mrow></mfrac><mo>=</mo><mn>3</mn><mo>.</mo></math>
-        <p>At <math><mi>θ</mi><mo>=</mo><mn>0</mn></math> the edge is in compression, <math><msub><mi>σ</mi><mrow><mi>θ</mi><mi>θ</mi></mrow></msub><mo>=</mo><mo>−</mo><mi>σ</mi></math>,
+        <math display="block"><msub><mi>K</mi><mrow><mi mathvariant="normal">t</mi></mrow></msub><mo>=</mo><mfrac><mrow><msub><mi>σ</mi><mrow><mi mathvariant="normal">max</mi></mrow></msub></mrow><mrow><mi>σ</mi></mrow></mfrac><mo>=</mo><mn>3</mn><mo lspace="0" rspace="0">.</mo></math>
+        <p>At <math><mi>θ</mi><mo>=</mo><mn>0</mn></math> the edge is in compression, <math><msub><mi>σ</mi><mrow><mi>θ</mi><mi>θ</mi></mrow></msub><mo>=</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mi>σ</mi></math>,
         although the plate is pulled. Along the transverse axis the stress
         decays quickly with the distance from the hole,</p>
-        <math display="block"><msub><mi>σ</mi><mrow><mi>x</mi><mi>x</mi></mrow></msub><mo>(</mo><mn>0</mn><mo>,</mo><mi>y</mi><mo>)</mo><mo>=</mo><mi>σ</mi><mrow><mo stretchy="true">(</mo><mn>1</mn><mo>+</mo><mfrac><mrow><msup><mi>a</mi><mn>2</mn></msup></mrow><mrow><mn>2</mn><msup><mi>y</mi><mn>2</mn></msup></mrow></mfrac><mo>+</mo><mfrac><mrow><mn>3</mn><msup><mi>a</mi><mn>4</mn></msup></mrow><mrow><mn>2</mn><msup><mi>y</mi><mn>4</mn></msup></mrow></mfrac><mo stretchy="true">)</mo></mrow><mo>,</mo></math>
+        <math display="block"><msub><mi>σ</mi><mrow><mi>x</mi><mi>x</mi></mrow></msub><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>0</mn><mo>,</mo><mi>y</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo>=</mo><mi>σ</mi><mrow><mo stretchy="true" lspace="0" rspace="0">(</mo><mn>1</mn><mo>+</mo><mfrac><mrow><msup><mi>a</mi><mn>2</mn></msup></mrow><mrow><mn>2</mn><msup><mi>y</mi><mn>2</mn></msup></mrow></mfrac><mo>+</mo><mfrac><mrow><mn>3</mn><msup><mi>a</mi><mn>4</mn></msup></mrow><mrow><mn>2</mn><msup><mi>y</mi><mn>4</mn></msup></mrow></mfrac><mo stretchy="true" lspace="0" rspace="0">)</mo></mrow><mo>,</mo></math>
         <p>to <math><mn>1.22</mn><mi>σ</mi></math> at <math><mi>y</mi><mo>=</mo><mn>2</mn><mi>a</mi></math> and
         <math><mn>1.04</mn><mi>σ</mi></math> at <math><mi>y</mi><mo>=</mo><mn>4</mn><mi>a</mi></math> (figure, right). At
-        the edge it falls steeply, <math><mi mathvariant="normal">d</mi><msub><mi>σ</mi><mrow><mi>x</mi><mi>x</mi></mrow></msub><mo>/</mo><mi mathvariant="normal">d</mi><mi>y</mi><mo>=</mo><mo>−</mo><mn>7</mn><mi>σ</mi><mo>/</mo><mi>a</mi></math>.</p>
+        the edge it falls steeply, <math><mi mathvariant="normal">d</mi><msub><mi>σ</mi><mrow><mi>x</mi><mi>x</mi></mrow></msub><mo lspace="0" rspace="0">/</mo><mi mathvariant="normal">d</mi><mi>y</mi><mo>=</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mn>7</mn><mi>σ</mi><mo lspace="0" rspace="0">/</mo><mi>a</mi></math>.</p>
         <p>The solution does not depend on Poisson's ratio, so it holds in
         plane stress and plane strain alike. A plate of finite half-width
-        <math><mi>b</mi></math> raises <math><msub><mi>K</mi><mrow><mi mathvariant="normal">t</mi></mrow></msub></math> slightly; for <math><mi>a</mi><mo>/</mo><mi>b</mi><mo>=</mo><mn>0.1</mn></math>,
+        <math><mi>b</mi></math> raises <math><msub><mi>K</mi><mrow><mi mathvariant="normal">t</mi></mrow></msub></math> slightly; for <math><mi>a</mi><mo lspace="0" rspace="0">/</mo><mi>b</mi><mo>=</mo><mn>0.1</mn></math>,
         as here, by about 1&nbsp;% (Peterson's), so <math><msub><mi>K</mi><mrow><mi mathvariant="normal">t</mi></mrow></msub><mo>=</mo><mn>3</mn></math> is a
         good reference.</p>
 
@@ -1107,7 +1126,7 @@
         but at the centre of the first element, a small distance away, where
         the stress has already started to fall. Kirsch's solution at that
         point, <math><mi>r</mi><mo>=</mo><mn>1.031</mn><mi>a</mi></math> and
-        <math><mi>θ</mi><mo>=</mo><mn>87.2</mn><mo>°</mo></math>, gives a von Mises stress of
+        <math><mi>θ</mi><mo>=</mo><mn>87.2</mn><mo lspace="0" rspace="0">°</mo></math>, gives a von Mises stress of
         <math><mn>2.75</mn><mi>σ</mi></math>, 8.4&nbsp;% below
         the peak. Even exact element stresses could not reach 3 with this
         measure.</p>

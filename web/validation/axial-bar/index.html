@@ -31,6 +31,7 @@
 
     <!-- Self-hosted fonts (SIL OFL) — see public/fonts/README.md -->
     <link href="/fonts/ibm-plex.css" rel="stylesheet" />
+    <link rel="preload" href="/fonts/kofem-math.woff2" as="font" type="font/woff2" crossorigin />
 
     <script type="application/ld+json">
       {
@@ -80,6 +81,15 @@
     </script>
 
     <style>
+      /* Equations and figure symbols: a subset of New Computer Modern Math,
+         the LaTeX look (web/public/fonts/README.md). */
+      @font-face {
+        font-family: "KoFEM Math";
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url(/fonts/kofem-math.woff2) format("woff2");
+      }
       :root {
         color-scheme: dark;
         --bg: #0c1015;
@@ -98,7 +108,7 @@
         --s2: #cf6d2c;
         --sans: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
         --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
-        --serif: "STIX Two Text", "Cambria", "Times New Roman", serif;
+        --math: "KoFEM Math", math;
       }
       *,
       *::before,
@@ -302,8 +312,11 @@
       }
       math {
         color: var(--text);
-        font-family: "STIX Two Math", "Cambria Math", "Latin Modern Math", math;
-        font-size: 1.08em;
+        font-family: "KoFEM Math", math;
+        font-size: 1.12em;
+      }
+      math:not([display]) {
+        padding: 0 0.06em;
       }
       math[display="block"] {
         margin: 20px 0 22px;
@@ -612,9 +625,15 @@
       svg.fig .sym,
       svg.fig .axis-lbl {
         fill: var(--text);
-        font-family: var(--serif);
-        font-style: italic;
-        font-size: 16px;
+        font-family: var(--math);
+        font-size: 17px;
+      }
+      svg.fig .sub {
+        font-size: 70%;
+      }
+      svg.fig .m {
+        font-family: var(--math);
+        font-size: 14px;
       }
       svg.fig .axis-lbl {
         fill: var(--muted);
@@ -1004,20 +1023,20 @@
     <line class="load" x1="432" y1="112" x2="478" y2="112" marker-end="url(#arr-load)"/>
     <line class="load" x1="432" y1="129" x2="478" y2="129" marker-end="url(#arr-load)"/>
     <line class="load" x1="432" y1="146" x2="478" y2="146" marker-end="url(#arr-load)"/>
-    <text class="sym" x="492" y="117" text-anchor="start">P</text>
+    <text class="sym" x="492" y="117" text-anchor="start">𝑃</text>
     <line class="ext" x1="410" y1="74" x2="410" y2="56"/>
     <line class="ext" x1="432" y1="74" x2="432" y2="56"/>
     <line class="dim" x1="410" y1="62" x2="432" y2="62" marker-start="url(#arr-dim)" marker-end="url(#arr-dim)"/>
-    <text class="sym" x="421" y="54" text-anchor="middle">δ</text>
+    <text class="sym" x="421" y="54" text-anchor="middle">𝛿</text>
     <line class="dim" x1="90" y1="170" x2="410" y2="170" marker-start="url(#arr-dim)" marker-end="url(#arr-dim)"/>
-    <text class="sym" x="250" y="164" text-anchor="middle">L</text>
-    <line class="dim" x1="30" y1="196" x2="56" y2="196" marker-end="url(#arr-dim)"/><line class="dim" x1="30" y1="196" x2="30" y2="170" marker-end="url(#arr-dim)"/><text class="axis-lbl" x="62" y="200" text-anchor="start">x</text><text class="axis-lbl" x="30" y="164" text-anchor="middle">y</text>
+    <text class="sym" x="250" y="164" text-anchor="middle">𝐿</text>
+    <line class="dim" x1="30" y1="196" x2="56" y2="196" marker-end="url(#arr-dim)"/><line class="dim" x1="30" y1="196" x2="30" y2="170" marker-end="url(#arr-dim)"/><text class="axis-lbl" x="62" y="200" text-anchor="start">𝑥</text><text class="axis-lbl" x="30" y="164" text-anchor="middle">𝑦</text>
     <rect class="body" x="533" y="85" width="54" height="54"/>
     <line class="dim" x1="533" y1="153" x2="587" y2="153" marker-start="url(#arr-dim)" marker-end="url(#arr-dim)"/>
-    <text class="sym" x="560" y="169" text-anchor="middle">W</text>
+    <text class="sym" x="560" y="169" text-anchor="middle">𝑊</text>
     <line class="dim" x1="601" y1="85" x2="601" y2="139" marker-start="url(#arr-dim)" marker-end="url(#arr-dim)"/>
-    <text class="sym" x="613" y="117" text-anchor="start">H</text>
-    <text class="lbl" x="560" y="73" text-anchor="middle">section A = W·H</text>
+    <text class="sym" x="613" y="117" text-anchor="start">𝐻</text>
+    <text class="lbl" x="560" y="73" text-anchor="middle">section <tspan class="m">𝐴 = 𝑊 𝐻</tspan></text>
   </svg>
         <figcaption>Prismatic bar of length L along x, W × H section. Sketch, not to scale; faint lines show the element mesh.</figcaption>
       </figure>
@@ -1036,22 +1055,22 @@
 
       <h2 id="theory">Analytical solution</h2>
         <p>Cut the bar at a section <math><mi>x</mi></math>. Equilibrium of the part to the
-        right of the cut needs an internal axial force <math><mi>N</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>=</mo><mi>P</mi></math>, the
+        right of the cut needs an internal axial force <math><mi>N</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>x</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo>=</mo><mi>P</mi></math>, the
         same at every section, because nothing loads the bar between its ends.
         Assume that this force is carried by a normal stress that is uniform
         over the cross-section <math><mi>A</mi><mo>=</mo><mi>W</mi><mi>H</mi></math>:</p>
-        <math display="block"><mi>σ</mi><mo>=</mo><mfrac><mrow><mi>N</mi></mrow><mrow><mi>A</mi></mrow></mfrac><mo>=</mo><mfrac><mrow><mi>P</mi></mrow><mrow><mi>A</mi></mrow></mfrac><mo>.</mo></math>
+        <math display="block"><mi>σ</mi><mo>=</mo><mfrac><mrow><mi>N</mi></mrow><mrow><mi>A</mi></mrow></mfrac><mo>=</mo><mfrac><mrow><mi>P</mi></mrow><mrow><mi>A</mi></mrow></mfrac><mo lspace="0" rspace="0">.</mo></math>
         <p>Hooke's law relates the stress to the axial strain, and the strain is
-        the rate of change of the axial displacement <math><mi>u</mi><mo>(</mo><mi>x</mi><mo>)</mo></math>:</p>
-        <math display="block"><mi>ε</mi><mo>=</mo><mfrac><mrow><mi>σ</mi></mrow><mrow><mi>E</mi></mrow></mfrac><mo>,</mo><mspace width="1em"/><mi>ε</mi><mo>=</mo><mfrac><mrow><mi mathvariant="normal">d</mi><mi>u</mi></mrow><mrow><mi mathvariant="normal">d</mi><mi>x</mi></mrow></mfrac><mo>.</mo></math>
-        <p>With the clamp, <math><mi>u</mi><mo>(</mo><mn>0</mn><mo>)</mo><mo>=</mo><mn>0</mn></math>, the displacement grows linearly
+        the rate of change of the axial displacement <math><mi>u</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>x</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></math>:</p>
+        <math display="block"><mi>ε</mi><mo>=</mo><mfrac><mrow><mi>σ</mi></mrow><mrow><mi>E</mi></mrow></mfrac><mo>,</mo><mspace width="1em"/><mi>ε</mi><mo>=</mo><mfrac><mrow><mi mathvariant="normal">d</mi><mi>u</mi></mrow><mrow><mi mathvariant="normal">d</mi><mi>x</mi></mrow></mfrac><mo lspace="0" rspace="0">.</mo></math>
+        <p>With the clamp, <math><mi>u</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>0</mn><mo stretchy="false" lspace="0" rspace="0">)</mo><mo>=</mo><mn>0</mn></math>, the displacement grows linearly
         along the bar,</p>
-        <math display="block"><mi>u</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>=</mo><mfrac><mrow><mi>P</mi><mi>x</mi></mrow><mrow><mi>E</mi><mi>A</mi></mrow></mfrac><mo>,</mo></math>
+        <math display="block"><mi>u</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>x</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo>=</mo><mfrac><mrow><mi>P</mi><mi>x</mi></mrow><mrow><mi>E</mi><mi>A</mi></mrow></mfrac><mo>,</mo></math>
         <p>and the loaded end moves by</p>
-        <math display="block"><mi>δ</mi><mo>=</mo><mi>u</mi><mo>(</mo><mi>L</mi><mo>)</mo><mo>=</mo><mfrac><mrow><mi>P</mi><mi>L</mi></mrow><mrow><mi>E</mi><mi>A</mi></mrow></mfrac><mo>.</mo></math>
+        <math display="block"><mi>δ</mi><mo>=</mo><mi>u</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>L</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo>=</mo><mfrac><mrow><mi>P</mi><mi>L</mi></mrow><mrow><mi>E</mi><mi>A</mi></mrow></mfrac><mo lspace="0" rspace="0">.</mo></math>
         <p>With the inputs above, <math><mi>A</mi><mo>=</mo><mn>0.01</mn><msup><mtext> m</mtext><mn>2</mn></msup></math>, the stress is
         <math><mi>σ</mi><mo>=</mo><mn>100</mn><mtext> MPa</mtext></math> and
-        <math><mi>δ</mi><mo>=</mo><mn>4.7619</mn><mo>×</mo><msup><mn>10</mn><mrow><mo>−</mo><mn>4</mn></mrow></msup><mtext> m</mtext></math>.</p>
+        <math><mi>δ</mi><mo>=</mo><mn>4.7619</mn><mo>×</mo><msup><mn>10</mn><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>4</mn></mrow></msup><mtext> m</mtext></math>.</p>
         <p>Two simplifications hide in this one-dimensional model. The stress
         is uniform over every section, and the lateral (Poisson) contraction is
         free everywhere. A 3-D solid meets neither exactly near its ends: the
@@ -1084,7 +1103,7 @@
       </table>
 
       <h2 id="discussion">Discussion</h2>
-        <p>KoFEM's extension differs from <math><mi>P</mi><mi>L</mi><mo>/</mo><mo>(</mo><mi>E</mi><mi>A</mi><mo>)</mo></math> by
+        <p>KoFEM's extension differs from <math><mi>P</mi><mi>L</mi><mo lspace="0" rspace="0">/</mo><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>E</mi><mi>A</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></math> by
         +0.23&nbsp;%.
         Linear elements represent a linearly varying displacement exactly, so
         the uniform state inside the bar carries no discretisation error; the

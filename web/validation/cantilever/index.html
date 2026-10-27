@@ -31,6 +31,7 @@
 
     <!-- Self-hosted fonts (SIL OFL) — see public/fonts/README.md -->
     <link href="/fonts/ibm-plex.css" rel="stylesheet" />
+    <link rel="preload" href="/fonts/kofem-math.woff2" as="font" type="font/woff2" crossorigin />
 
     <script type="application/ld+json">
       {
@@ -80,6 +81,15 @@
     </script>
 
     <style>
+      /* Equations and figure symbols: a subset of New Computer Modern Math,
+         the LaTeX look (web/public/fonts/README.md). */
+      @font-face {
+        font-family: "KoFEM Math";
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url(/fonts/kofem-math.woff2) format("woff2");
+      }
       :root {
         color-scheme: dark;
         --bg: #0c1015;
@@ -98,7 +108,7 @@
         --s2: #cf6d2c;
         --sans: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
         --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
-        --serif: "STIX Two Text", "Cambria", "Times New Roman", serif;
+        --math: "KoFEM Math", math;
       }
       *,
       *::before,
@@ -302,8 +312,11 @@
       }
       math {
         color: var(--text);
-        font-family: "STIX Two Math", "Cambria Math", "Latin Modern Math", math;
-        font-size: 1.08em;
+        font-family: "KoFEM Math", math;
+        font-size: 1.12em;
+      }
+      math:not([display]) {
+        padding: 0 0.06em;
       }
       math[display="block"] {
         margin: 20px 0 22px;
@@ -612,9 +625,15 @@
       svg.fig .sym,
       svg.fig .axis-lbl {
         fill: var(--text);
-        font-family: var(--serif);
-        font-style: italic;
-        font-size: 16px;
+        font-family: var(--math);
+        font-size: 17px;
+      }
+      svg.fig .sub {
+        font-size: 70%;
+      }
+      svg.fig .m {
+        font-family: var(--math);
+        font-size: 14px;
       }
       svg.fig .axis-lbl {
         fill: var(--muted);
@@ -999,19 +1018,19 @@
     <polyline class="deformed" points="90,111 99.5,111 109,111.2 118.5,111.4 128,111.8 137.5,112.2 147,112.7 156.5,113.2 166,113.9 175.5,114.7 185,115.5 194.5,116.4 204,117.3 213.5,118.3 223,119.4 232.5,120.6 242,121.8 251.5,123.1 261,124.4 270.5,125.8 280,127.3 289.5,128.7 299,130.3 308.5,131.8 318,133.5 327.5,135.1 337,136.8 346.5,138.5 356,140.3 365.5,142.1 375,143.9 384.5,145.7 394,147.6 403.5,149.5 413,151.4 422.5,153.3 432,155.2 441.5,157.2 451,159.1 460.5,161.1 470,163"/>
     <line class="deformed" x1="470" y1="125" x2="470" y2="163"/>
     <line class="load" x1="470" y1="21" x2="470" y2="71" marker-end="url(#arr-load)"/>
-    <text class="sym" x="480" y="39" text-anchor="start">P</text>
+    <text class="sym" x="480" y="39" text-anchor="start">𝑃</text>
     <line class="ext" x1="474" y1="92" x2="504" y2="92"/>
     <line class="ext" x1="474" y1="144" x2="504" y2="144"/>
     <line class="dim" x1="498" y1="92" x2="498" y2="144" marker-start="url(#arr-dim)" marker-end="url(#arr-dim)"/>
-    <text class="sym" x="508" y="123" text-anchor="start">δ</text>
+    <text class="sym" x="508" y="123" text-anchor="start">𝛿</text>
     <line class="dim" x1="90" y1="197" x2="470" y2="197" marker-start="url(#arr-dim)" marker-end="url(#arr-dim)"/>
-    <text class="sym" x="280" y="191" text-anchor="middle">L</text>
-    <line class="dim" x1="30" y1="236" x2="56" y2="236" marker-end="url(#arr-dim)"/><line class="dim" x1="30" y1="236" x2="30" y2="210" marker-end="url(#arr-dim)"/><text class="axis-lbl" x="62" y="240" text-anchor="start">x</text><text class="axis-lbl" x="30" y="204" text-anchor="middle">y</text>
+    <text class="sym" x="280" y="191" text-anchor="middle">𝐿</text>
+    <line class="dim" x1="30" y1="236" x2="56" y2="236" marker-end="url(#arr-dim)"/><line class="dim" x1="30" y1="236" x2="30" y2="210" marker-end="url(#arr-dim)"/><text class="axis-lbl" x="62" y="240" text-anchor="start">𝑥</text><text class="axis-lbl" x="30" y="204" text-anchor="middle">𝑦</text>
     <rect class="body" x="560" y="77" width="30" height="30"/>
     <line class="dim" x1="560" y1="121" x2="590" y2="121" marker-start="url(#arr-dim)" marker-end="url(#arr-dim)"/>
-    <text class="sym" x="575" y="137" text-anchor="middle">b</text>
+    <text class="sym" x="575" y="137" text-anchor="middle">𝑏</text>
     <line class="dim" x1="604" y1="77" x2="604" y2="107" marker-start="url(#arr-dim)" marker-end="url(#arr-dim)"/>
-    <text class="sym" x="614" y="97" text-anchor="start">h</text>
+    <text class="sym" x="614" y="97" text-anchor="start">ℎ</text>
     <text class="lbl" x="575" y="65" text-anchor="middle">section</text>
   </svg>
         <figcaption>Beam of span L along x, b × h section, I = b·h³/12. Sketch, not to scale; faint lines show the element mesh.</figcaption>
@@ -1032,28 +1051,28 @@
       <h2 id="theory">Analytical solution</h2>
         <p>Euler–Bernoulli beam theory assumes that cross-sections stay plane
         and perpendicular to the deformed axis, which neglects shear
-        deformation. Take <math><mi>w</mi><mo>(</mo><mi>x</mi><mo>)</mo></math> as the deflection, positive upwards,
+        deformation. Take <math><mi>w</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>x</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></math> as the deflection, positive upwards,
         with the load <math><mi>P</mi></math> acting downwards at the tip. Equilibrium of
         the part beyond a section <math><mi>x</mi></math> gives the bending moment</p>
-        <math display="block"><mi>M</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>=</mo><mo>−</mo><mi>P</mi><mo>(</mo><mi>L</mi><mo>−</mo><mi>x</mi><mo>)</mo><mo>,</mo></math>
+        <math display="block"><mi>M</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>x</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo>=</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mi>P</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>L</mi><mo>−</mo><mi>x</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo>,</mo></math>
         <p>and the curvature is proportional to it:</p>
-        <math display="block"><mi>E</mi><mi>I</mi><mfrac><mrow><msup><mi mathvariant="normal">d</mi><mn>2</mn></msup><mi>w</mi></mrow><mrow><mi mathvariant="normal">d</mi><msup><mi>x</mi><mn>2</mn></msup></mrow></mfrac><mo>=</mo><mi>M</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>,</mo><mspace width="1em"/><mi>I</mi><mo>=</mo><mfrac><mrow><mi>b</mi><msup><mi>h</mi><mn>3</mn></msup></mrow><mrow><mn>12</mn></mrow></mfrac><mo>.</mo></math>
-        <p>Integrating twice with the clamp conditions <math><mi>w</mi><mo>(</mo><mn>0</mn><mo>)</mo><mo>=</mo><mn>0</mn></math> and
-        <math><mfrac><mrow><mi mathvariant="normal">d</mi><mi>w</mi></mrow><mrow><mi mathvariant="normal">d</mi><mi>x</mi></mrow></mfrac><mo>(</mo><mn>0</mn><mo>)</mo><mo>=</mo><mn>0</mn></math> gives the deflection
+        <math display="block"><mi>E</mi><mi>I</mi><mfrac><mrow><msup><mi mathvariant="normal">d</mi><mn>2</mn></msup><mi>w</mi></mrow><mrow><mi mathvariant="normal">d</mi><msup><mi>x</mi><mn>2</mn></msup></mrow></mfrac><mo>=</mo><mi>M</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>x</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo>,</mo><mspace width="1em"/><mi>I</mi><mo>=</mo><mfrac><mrow><mi>b</mi><msup><mi>h</mi><mn>3</mn></msup></mrow><mrow><mn>12</mn></mrow></mfrac><mo lspace="0" rspace="0">.</mo></math>
+        <p>Integrating twice with the clamp conditions <math><mi>w</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>0</mn><mo stretchy="false" lspace="0" rspace="0">)</mo><mo>=</mo><mn>0</mn></math> and
+        <math><mfrac><mrow><mi mathvariant="normal">d</mi><mi>w</mi></mrow><mrow><mi mathvariant="normal">d</mi><mi>x</mi></mrow></mfrac><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>0</mn><mo stretchy="false" lspace="0" rspace="0">)</mo><mo>=</mo><mn>0</mn></math> gives the deflection
         curve</p>
-        <math display="block"><mi>w</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>=</mo><mo>−</mo><mfrac><mrow><mi>P</mi><msup><mi>x</mi><mn>2</mn></msup></mrow><mrow><mn>6</mn><mi>E</mi><mi>I</mi></mrow></mfrac><mo>(</mo><mn>3</mn><mi>L</mi><mo>−</mo><mi>x</mi><mo>)</mo><mo>,</mo></math>
+        <math display="block"><mi>w</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>x</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo>=</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mfrac><mrow><mi>P</mi><msup><mi>x</mi><mn>2</mn></msup></mrow><mrow><mn>6</mn><mi>E</mi><mi>I</mi></mrow></mfrac><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>3</mn><mi>L</mi><mo>−</mo><mi>x</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo>,</mo></math>
         <p>and at the tip</p>
-        <math display="block"><mi>δ</mi><mo>=</mo><mi>w</mi><mo>(</mo><mi>L</mi><mo>)</mo><mo>=</mo><mo>−</mo><mfrac><mrow><mi>P</mi><msup><mi>L</mi><mn>3</mn></msup></mrow><mrow><mn>3</mn><mi>E</mi><mi>I</mi></mrow></mfrac><mo>.</mo></math>
-        <p>For this beam <math><mi>I</mi><mo>=</mo><mn>8.3333</mn><mo>×</mo><msup><mn>10</mn><mrow><mo>−</mo><mn>6</mn></mrow></msup><msup><mtext> m</mtext><mn>4</mn></msup></math> and
-        <math><mi>δ</mi><mo>=</mo><mo>−</mo><mn>1.9048</mn><mo>×</mo><msup><mn>10</mn><mrow><mo>−</mo><mn>3</mn></mrow></msup><mtext> m</mtext></math>.</p>
+        <math display="block"><mi>δ</mi><mo>=</mo><mi>w</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>L</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo>=</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mfrac><mrow><mi>P</mi><msup><mi>L</mi><mn>3</mn></msup></mrow><mrow><mn>3</mn><mi>E</mi><mi>I</mi></mrow></mfrac><mo lspace="0" rspace="0">.</mo></math>
+        <p>For this beam <math><mi>I</mi><mo>=</mo><mn>8.3333</mn><mo>×</mo><msup><mn>10</mn><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>6</mn></mrow></msup><msup><mtext> m</mtext><mn>4</mn></msup></math> and
+        <math><mi>δ</mi><mo>=</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mn>1.9048</mn><mo>×</mo><msup><mn>10</mn><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>3</mn></mrow></msup><mtext> m</mtext></math>.</p>
         <p>Timoshenko beam theory adds the shear deformation that
         Euler–Bernoulli leaves out. For a cantilever with a tip load it adds
         a second term,</p>
-        <math display="block"><msub><mi>δ</mi><mrow><mi mathvariant="normal">s</mi></mrow></msub><mo>=</mo><mo>−</mo><mfrac><mrow><mi>P</mi><mi>L</mi></mrow><mrow><mi>κ</mi><mi>G</mi><mi>A</mi></mrow></mfrac><mo>,</mo><mspace width="1em"/><mi>κ</mi><mo>=</mo><mfrac><mrow><mn>5</mn></mrow><mrow><mn>6</mn></mrow></mfrac><mo>,</mo><mspace width="1em"/><mi>G</mi><mo>=</mo><mfrac><mrow><mi>E</mi></mrow><mrow><mn>2</mn><mo>(</mo><mn>1</mn><mo>+</mo><mi>ν</mi><mo>)</mo></mrow></mfrac><mo>,</mo></math>
+        <math display="block"><msub><mi>δ</mi><mrow><mi mathvariant="normal">s</mi></mrow></msub><mo>=</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mfrac><mrow><mi>P</mi><mi>L</mi></mrow><mrow><mi>κ</mi><mi>G</mi><mi>A</mi></mrow></mfrac><mo>,</mo><mspace width="1em"/><mi>κ</mi><mo>=</mo><mfrac><mrow><mn>5</mn></mrow><mrow><mn>6</mn></mrow></mfrac><mo>,</mo><mspace width="1em"/><mi>G</mi><mo>=</mo><mfrac><mrow><mi>E</mi></mrow><mrow><mn>2</mn><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>1</mn><mo>+</mo><mi>ν</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></mrow></mfrac><mo>,</mo></math>
         <p>which is 0.78&nbsp;% of the bending term
         for this beam (span ten times the depth). A converged 3-D solid model
         should therefore deflect slightly more than
-        <math><mi>P</mi><msup><mi>L</mi><mn>3</mn></msup><mo>/</mo><mo>(</mo><mn>3</mn><mi>E</mi><mi>I</mi><mo>)</mo></math>.</p>
+        <math><mi>P</mi><msup><mi>L</mi><mn>3</mn></msup><mo lspace="0" rspace="0">/</mo><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>3</mn><mi>E</mi><mi>I</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></math>.</p>
 
       <h2 id="model">Finite element model</h2>
       <table class="spec">

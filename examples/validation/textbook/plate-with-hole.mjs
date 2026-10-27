@@ -54,10 +54,10 @@ export default {
         ${tex("(r, θ)")} about the hole centre, with ${tex("θ")} measured from
         the load direction, Kirsch's solution of the plane elasticity problem
         gives the hoop stress</p>
-        ${texBlock("σ_{θθ} = \\frac{σ}{2}\\left(1 + \\frac{a^2}{r^2}\\right) - \\frac{σ}{2}\\left(1 + \\frac{3 a^4}{r^4}\\right)\\mathrm{cos}\\, 2θ.")}
+        ${texBlock("σ_{θθ} = \\frac{σ}{2}\\left(1 + \\frac{a^2}{r^2}\\right) - \\frac{σ}{2}\\left(1 + \\frac{3 a^4}{r^4}\\right)\\cos 2θ.")}
         <p>On the edge of the hole, ${tex("r = a")}, the radial and shear
         stresses vanish because the surface is free, and</p>
-        ${texBlock("σ_{θθ}(a, θ) = σ (1 - 2 \\mathrm{cos}\\, 2θ).")}
+        ${texBlock("σ_{θθ}(a, θ) = σ (1 - 2 \\cos 2θ).")}
         <p>This is largest at ${tex("θ = ±90°")}, the points A across the load
         direction, and the stress concentration factor is</p>
         ${texBlock("K_{\\mathrm{t}} = \\frac{σ_{\\mathrm{max}}}{σ} = 3.")}

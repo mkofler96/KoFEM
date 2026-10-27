@@ -31,6 +31,7 @@
 
     <!-- Self-hosted fonts (SIL OFL) — see public/fonts/README.md -->
     <link href="/fonts/ibm-plex.css" rel="stylesheet" />
+    <link rel="preload" href="/fonts/kofem-math.woff2" as="font" type="font/woff2" crossorigin />
 
     <script type="application/ld+json">
       {
@@ -80,6 +81,15 @@
     </script>
 
     <style>
+      /* Equations and figure symbols: a subset of New Computer Modern Math,
+         the LaTeX look (web/public/fonts/README.md). */
+      @font-face {
+        font-family: "KoFEM Math";
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src: url(/fonts/kofem-math.woff2) format("woff2");
+      }
       :root {
         color-scheme: dark;
         --bg: #0c1015;
@@ -98,7 +108,7 @@
         --s2: #cf6d2c;
         --sans: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
         --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
-        --serif: "STIX Two Text", "Cambria", "Times New Roman", serif;
+        --math: "KoFEM Math", math;
       }
       *,
       *::before,
@@ -302,8 +312,11 @@
       }
       math {
         color: var(--text);
-        font-family: "STIX Two Math", "Cambria Math", "Latin Modern Math", math;
-        font-size: 1.08em;
+        font-family: "KoFEM Math", math;
+        font-size: 1.12em;
+      }
+      math:not([display]) {
+        padding: 0 0.06em;
       }
       math[display="block"] {
         margin: 20px 0 22px;
@@ -612,9 +625,15 @@
       svg.fig .sym,
       svg.fig .axis-lbl {
         fill: var(--text);
-        font-family: var(--serif);
-        font-style: italic;
-        font-size: 16px;
+        font-family: var(--math);
+        font-size: 17px;
+      }
+      svg.fig .sub {
+        font-size: 70%;
+      }
+      svg.fig .m {
+        font-family: var(--math);
+        font-size: 14px;
       }
       svg.fig .axis-lbl {
         fill: var(--muted);
@@ -1004,20 +1023,20 @@
     <line class="load" x1="450" y1="122" x2="414" y2="122" marker-end="url(#arr-load)"/>
     <line class="load" x1="450" y1="132" x2="414" y2="132" marker-end="url(#arr-load)"/>
     <line class="load" x1="450" y1="142" x2="414" y2="142" marker-end="url(#arr-load)"/>
-    <text class="sym" x="460" y="117" text-anchor="start">p</text>
+    <text class="sym" x="460" y="117" text-anchor="start">𝑝</text>
     <line class="ext" x1="410" y1="74" x2="410" y2="56"/>
     <line class="ext" x1="388" y1="74" x2="388" y2="56"/>
     <line class="dim" x1="388" y1="62" x2="410" y2="62" marker-start="url(#arr-dim)" marker-end="url(#arr-dim)"/>
-    <text class="sym" x="399" y="54" text-anchor="middle">|u|</text>
+    <text class="sym" x="399" y="54" text-anchor="middle">|𝑢|</text>
     <line class="dim" x1="90" y1="170" x2="410" y2="170" marker-start="url(#arr-dim)" marker-end="url(#arr-dim)"/>
-    <text class="sym" x="250" y="164" text-anchor="middle">L</text>
-    <line class="dim" x1="30" y1="196" x2="56" y2="196" marker-end="url(#arr-dim)"/><line class="dim" x1="30" y1="196" x2="30" y2="170" marker-end="url(#arr-dim)"/><text class="axis-lbl" x="62" y="200" text-anchor="start">x</text><text class="axis-lbl" x="30" y="164" text-anchor="middle">y</text>
+    <text class="sym" x="250" y="164" text-anchor="middle">𝐿</text>
+    <line class="dim" x1="30" y1="196" x2="56" y2="196" marker-end="url(#arr-dim)"/><line class="dim" x1="30" y1="196" x2="30" y2="170" marker-end="url(#arr-dim)"/><text class="axis-lbl" x="62" y="200" text-anchor="start">𝑥</text><text class="axis-lbl" x="30" y="164" text-anchor="middle">𝑦</text>
     <rect class="body" x="533" y="85" width="54" height="54"/>
     <line class="dim" x1="533" y1="153" x2="587" y2="153" marker-start="url(#arr-dim)" marker-end="url(#arr-dim)"/>
-    <text class="sym" x="560" y="169" text-anchor="middle">W</text>
+    <text class="sym" x="560" y="169" text-anchor="middle">𝑊</text>
     <line class="dim" x1="601" y1="85" x2="601" y2="139" marker-start="url(#arr-dim)" marker-end="url(#arr-dim)"/>
-    <text class="sym" x="613" y="117" text-anchor="start">H</text>
-    <text class="lbl" x="560" y="73" text-anchor="middle">section A = W·H</text>
+    <text class="sym" x="613" y="117" text-anchor="start">𝐻</text>
+    <text class="lbl" x="560" y="73" text-anchor="middle">section <tspan class="m">𝐴 = 𝑊 𝐻</tspan></text>
   </svg>
         <figcaption>Prismatic bar of length L along x, W × H section. Sketch, not to scale; faint lines show the element mesh.</figcaption>
       </figure>
@@ -1036,15 +1055,15 @@
 
       <h2 id="theory">Analytical solution</h2>
         <p>On the end face the outward normal is <math><mi>n</mi><mo>=</mo><msub><mi>e</mi><mrow><mi>x</mi></mrow></msub></math>, so the
-        traction is <math><mi>t</mi><mo>=</mo><mo>−</mo><mi>p</mi><mi>n</mi><mo>=</mo><mo>−</mo><mi>p</mi><msub><mi>e</mi><mrow><mi>x</mi></mrow></msub></math>. The bar carries an axial
-        force <math><mi>N</mi><mo>=</mo><mo>−</mo><mi>p</mi><mi>A</mi></math> and a uniform compressive stress
-        <math><msub><mi>σ</mi><mrow><mi>x</mi><mi>x</mi></mrow></msub><mo>=</mo><mo>−</mo><mi>p</mi></math>. Following the
+        traction is <math><mi>t</mi><mo>=</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mi>p</mi><mi>n</mi><mo>=</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mi>p</mi><msub><mi>e</mi><mrow><mi>x</mi></mrow></msub></math>. The bar carries an axial
+        force <math><mi>N</mi><mo>=</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mi>p</mi><mi>A</mi></math> and a uniform compressive stress
+        <math><msub><mi>σ</mi><mrow><mi>x</mi><mi>x</mi></mrow></msub><mo>=</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mi>p</mi></math>. Following the
         <a href="/validation/axial-bar/">axial bar derivation</a>,</p>
-        <math display="block"><mi>u</mi><mo>(</mo><mi>L</mi><mo>)</mo><mo>=</mo><mfrac><mrow><mi>N</mi><mi>L</mi></mrow><mrow><mi>E</mi><mi>A</mi></mrow></mfrac><mo>=</mo><mo>−</mo><mfrac><mrow><mi>p</mi><mi>L</mi></mrow><mrow><mi>E</mi></mrow></mfrac><mo>.</mo></math>
+        <math display="block"><mi>u</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>L</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo>=</mo><mfrac><mrow><mi>N</mi><mi>L</mi></mrow><mrow><mi>E</mi><mi>A</mi></mrow></mfrac><mo>=</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mfrac><mrow><mi>p</mi><mi>L</mi></mrow><mrow><mi>E</mi></mrow></mfrac><mo lspace="0" rspace="0">.</mo></math>
         <p>The cross-section cancels: an end pressure shortens a bar by the
         same amount whatever its size. With
         <math><mi>p</mi><mo>=</mo><mn>1</mn><mtext> MPa</mtext></math>, the tip moves by
-        <math><mi>u</mi><mo>(</mo><mi>L</mi><mo>)</mo><mo>=</mo><mo>−</mo><mn>4.7619</mn><mo>×</mo><msup><mn>10</mn><mrow><mo>−</mo><mn>6</mn></mrow></msup><mtext> m</mtext></math>.</p>
+        <math><mi>u</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>L</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo>=</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mn>4.7619</mn><mo>×</mo><msup><mn>10</mn><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>6</mn></mrow></msup><mtext> m</mtext></math>.</p>
 
       <h2 id="model">Finite element model</h2>
       <table class="spec">
@@ -1056,7 +1075,7 @@
         <p>The pressure is integrated over the end face with the same
         boundary integrator as the
         <a href="/validation/surface-traction/">surface traction</a>, with
-        the traction <math><mi>t</mi><mo>=</mo><mo>−</mo><mi>p</mi><mi>n</mi></math> built from each face's normal.</p>
+        the traction <math><mi>t</mi><mo>=</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mi>p</mi><mi>n</mi></math> built from each face's normal.</p>
 
       <h2 id="results">Results</h2>
       <table class="spec">
@@ -1072,7 +1091,7 @@
         predicts: the resultant here is <math><mi>p</mi><mi>A</mi><mo>=</mo><mn>10</mn><mtext> kN</mtext></math>
         instead of <math><mi>P</mi><mo>=</mo><mn>1000</mn><mtext> kN</mtext></math>, and every displacement scales with the load. An
         identical relative error shows that the pressure path builds the same
-        load vector as the traction path with <math><mi>t</mi><mo>=</mo><mo>−</mo><mi>p</mi><mi>n</mi></math>, so both its
+        load vector as the traction path with <math><mi>t</mi><mo>=</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mi>p</mi><mi>n</mi></math>, so both its
         sign and its area scaling are right.</p>
         <p>The two ways this could go wrong are easy to spot. A flipped sign
         would stretch the bar instead (about −200&nbsp;% error). Treating

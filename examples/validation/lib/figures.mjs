@@ -33,8 +33,42 @@ const dim = (x1, y1, x2, y2) =>
 /** A label; `sym` labels are set in italic like the symbols in the text. */
 const label = (x, y, s, { anchor = "middle", cls = "lbl" } = {}) =>
   `<text class="${cls}" x="${f(x)}" y="${f(y)}" text-anchor="${anchor}">${s}</text>`;
-const sym = (x, y, s, anchor = "middle") =>
-  label(x, y, s, { anchor, cls: "sym" });
+
+// Mathematical italic code points, so symbols are set in the math font's
+// italic as in LaTeX rather than slanted by the browser. Planck's h has its
+// own code point (U+210E); the slot in the italic block is reserved.
+function italic(c) {
+  const code = c.codePointAt(0);
+  if (c === "h") return "\u210E";
+  if (code >= 0x41 && code <= 0x5a)
+    return String.fromCodePoint(0x1d434 + code - 0x41);
+  if (code >= 0x61 && code <= 0x7a)
+    return String.fromCodePoint(0x1d44e + code - 0x61);
+  if (code >= 0x391 && code <= 0x3a9)
+    return String.fromCodePoint(0x1d6e2 + code - 0x391);
+  if (code >= 0x3b1 && code <= 0x3c9)
+    return String.fromCodePoint(0x1d6fc + code - 0x3b1);
+  return c;
+}
+
+/**
+ * Math text for a label: single letters become math italic, words of two or
+ * more letters stay upright (as \text would), everything else is kept.
+ */
+const mathText = (s) =>
+  s.replace(/[A-Za-zΑ-Ωα-ω]+/g, (w) => (w.length === 1 ? italic(w) : w));
+
+/** Math inside a plain label, set in the math font. */
+const math = (s) => `<tspan class="m">${mathText(s)}</tspan>`;
+
+/** A symbol label; `sub` adds an upright subscript (rᵢ: sym(…, "r", …, "i")). */
+const sym = (x, y, s, anchor = "middle", sub = null) =>
+  label(
+    x,
+    y,
+    mathText(s) + (sub ? `<tspan class="sub" dy="4">${sub}</tspan>` : ""),
+    { anchor, cls: "sym" },
+  );
 
 /** Clamped support: a hatched strip to the left of x, from y1 to y2. */
 const clamp = (x, y1, y2) =>
@@ -64,8 +98,8 @@ const triad = (x, y, [a, b] = ["x", "y"]) =>
   [
     arrow(x, y, x + 26, y, "dim"),
     arrow(x, y, x, y - 26, "dim"),
-    label(x + 32, y + 4, a, { anchor: "start", cls: "axis-lbl" }),
-    label(x, y - 32, b, { cls: "axis-lbl" }),
+    label(x + 32, y + 4, mathText(a), { anchor: "start", cls: "axis-lbl" }),
+    label(x, y - 32, mathText(b), { cls: "axis-lbl" }),
   ].join("");
 
 // ── Axial bar: point loads, surface traction or end pressure ────────────────
@@ -140,7 +174,7 @@ export function barFigure({ load, div }) {
     sym(sx, yc + s / 2 + 30, "W"),
     dim(sx + s / 2 + 14, yc - s / 2, sx + s / 2 + 14, yc + s / 2),
     sym(sx + s / 2 + 26, yc + 5, "H", "start"),
-    label(sx, yc - s / 2 - 12, "section A = W·H"),
+    label(sx, yc - s / 2 - 12, `section ${math("A = W H")}`),
   );
   return svg(
     640,
@@ -254,7 +288,10 @@ export function squareTorsionFigure({ div }) {
     clamp(x0, top + dy, bot),
     line(x0 - 30, yc + dy / 2, x0 + 12, yc + dy / 2, "axis"),
     line(x1 + dx / 2 + 4, yc + dy / 2, x1 + 92, yc + dy / 2, "axis"),
-    label(x1 + 98, yc + dy / 2 + 4, "x", { anchor: "start", cls: "axis-lbl" }),
+    label(x1 + 98, yc + dy / 2 + 4, mathText("x"), {
+      anchor: "start",
+      cls: "axis-lbl",
+    }),
     torqueArc(x1 + dx / 2, yc + dy / 2, 22, 52),
     sym(x1 + dx / 2 + 30, top - 30, "T", "start"),
     dim(x0, bot + 26, x1, bot + 26),
@@ -300,7 +337,10 @@ export function hollowShaftFigure({ div }) {
     ell(x1, ri, "hole"),
     clamp(x0 - ex, yc - ro, yc + ro),
     line(x1 + 6, yc, x1 + 100, yc, "axis"),
-    label(x1 + 106, yc + 4, "z", { anchor: "start", cls: "axis-lbl" }),
+    label(x1 + 106, yc + 4, mathText("z"), {
+      anchor: "start",
+      cls: "axis-lbl",
+    }),
     torqueArc(x1, yc, 30, 74),
     sym(x1 + 26, yc - ro - 24, "T", "start"),
     dim(x0, yc + ro + 26, x1, yc + ro + 26),
@@ -335,9 +375,9 @@ export function hollowShaftFigure({ div }) {
     parts.push(line(...inner[k], ...outer[k], "mesh"));
   parts.push(
     arrow(sx, yc, sx + Ri * Math.cos(-2.2), yc + Ri * Math.sin(-2.2), "dim"),
-    sym(sx - 12, yc - 2, "rᵢ", "end"),
+    sym(sx - 18, yc - 2, "r", "end", "i"),
     arrow(sx, yc, sx + Ro * Math.cos(0.5), yc + Ro * Math.sin(0.5), "dim"),
-    sym(sx + Ro * 0.62, yc + Ro * 0.62 + 18, "rₒ", "start"),
+    sym(sx + Ro * 0.62, yc + Ro * 0.62 + 18, "r", "start", "o"),
     label(sx, yc - Ro - 12, `section mesh, ${nth} segments`),
   );
   return svg(
@@ -411,12 +451,14 @@ export function plateFigure() {
   g.push(
     polyline(pts, "curve"),
     `<circle class="pt" cx="${X(1)}" cy="${Y(3)}" r="3.5"/>`,
-    label(X(1) + 10, Y(3) + 4, "A: 3σ", { anchor: "start" }),
-    label(gx1, gy0 + 32, "y / a", { anchor: "end", cls: "axis-lbl" }),
-    label(gx0, gy1 - 12, "σₓₓ / σ on x = 0", {
-      anchor: "start",
-      cls: "axis-lbl",
-    }),
+    label(X(1) + 10, Y(3) + 4, `A: ${math("3σ")}`, { anchor: "start" }),
+    label(gx1, gy0 + 32, mathText("y/a"), { anchor: "end", cls: "axis-lbl" }),
+    label(
+      gx0,
+      gy1 - 12,
+      `${italic("σ")}<tspan class="sub" dy="4">${italic("x")}${italic("x")}</tspan><tspan dy="-4">/${mathText("σ")}  ${mathText("on x = 0")}</tspan>`,
+      { anchor: "start", cls: "axis-lbl" },
+    ),
   );
   const graph = svg(
     310,

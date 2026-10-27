@@ -126,6 +126,16 @@ test("every benchmark has its own indexable page with derivation and result", as
       await expect(page.locator(`h2#${section}`)).toBeVisible();
     await expect(page.locator("figure.diagram svg").first()).toBeVisible();
     await expect(page.locator("main math").first()).toBeVisible();
+    if (i === 0) {
+      // Equations are set in the self-hosted LaTeX math font, not a fallback.
+      const mathFont = await page.evaluate(async () => {
+        await document.fonts.ready;
+        return [...document.fonts]
+          .filter((f) => f.family.replace(/"/g, "") === "KoFEM Math")
+          .map((f) => f.status);
+      });
+      expect(mathFont).toEqual(["loaded"]);
+    }
     await expect(page.locator("ol.refs li").first()).toBeVisible();
     await expect(page.getByTestId("disclaimer")).toBeVisible();
     await expect(page.locator("pre").first()).toContainText(
