@@ -8,6 +8,7 @@
 //   FemMeshLayer           — FEM boundary surface + edge wireframes (± deformed)
 //   ResultsColormap        — result-field vertex colours on the deformed surface
 //   BoundaryConditionLayer — BC/load face highlights, markers and load arrows
+//   SampleGuideTargets     — the faces the sample guide asks to pick
 
 import { useMemo } from "react";
 import { useModelStore } from "../../store/modelStore";
@@ -19,6 +20,7 @@ import { FemMeshLayer } from "./FemMeshLayer";
 import { ResultsColormap } from "./ResultsColormap";
 import { DensityField } from "./DensityField";
 import { BoundaryConditionLayer } from "./BoundaryConditionLayer";
+import { SampleGuideTargets } from "./SampleGuideTargets";
 import { useDisplayedDensity } from "./useDisplayedDensity";
 
 const TARGET_DEFORM_FRACTION = 0.2;
@@ -132,6 +134,9 @@ export function MeshScene() {
         />
       )}
       <BoundaryConditionLayer topology={topology} showResult={showResult} />
+      {!showResult && repr !== "geometry" && (
+        <SampleGuideTargets topology={topology} />
+      )}
       {showStepSurface && (
         <GeometryLayer
           wireframe={viewRepr === "wireframe"}

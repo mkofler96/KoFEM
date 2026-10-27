@@ -33,7 +33,7 @@ test("the colorbar limits can be pinned, rejected when inverted, and reset (#390
 }) => {
   test.setTimeout(60_000);
 
-  await page.goto("/app/?example=cantilever-beam");
+  await page.goto("/app/?example=axial-bar");
   await expect(page.locator("nav")).toBeVisible();
   await expect(page.getByTestId("colorbar")).toBeVisible({ timeout: 20_000 });
 
@@ -44,8 +44,9 @@ test("the colorbar limits can be pinned, rejected when inverted, and reset (#390
   expect(fieldMax).toBeGreaterThan(0);
 
   // Pinning the top of the range to half the peak: the store carries the
-  // override, the colorbar says so, and the top tick reads as a clamp.
-  const pinnedMax = fieldMax / 2;
+  // override, the colorbar says so, and the top tick reads as a clamp. Two
+  // significant digits, so the three-digit tick shows the limit exactly.
+  const pinnedMax = Number((fieldMax / 2).toPrecision(2));
   await page.getByTestId("legend-max").fill(String(pinnedMax));
   await page.getByTestId("legend-max").press("Enter");
 

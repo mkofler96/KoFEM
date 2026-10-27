@@ -18,6 +18,10 @@
 // These reuse the validation mesh generators so the geometry and physics match
 // the benchmarks in examples/validation/ (those cases are stated in SI; here the
 // identical problems are expressed in the app's mm/MPa system).
+//
+// The cantilever beam is not here: it is built through the app's own pipeline
+// (STEP → Netgen) by generate-cantilever.mjs, because it opens ready to run
+// with a hand check and must re-mesh.
 
 import {
   boxHexMesh,
@@ -59,37 +63,6 @@ const axialBar = (() => {
     reference: (P * L) / (E * (W * H)),
     referenceLabel: "δ = P·L / (E·A)",
     feValue: (r, loaded) => avg(loaded.map((v) => r.displacements[v * 3])),
-  };
-})();
-
-// ── Cantilever beam ───────────────────────────────────────────────────────────
-const cantilever = (() => {
-  const E = STEEL.young_modulus,
-    L = 1000, // mm
-    b = 100,
-    h = 100, // mm
-    P = 1.0e4; // N
-  const I = (b * h ** 3) / 12;
-  const m = boxHexMesh(L, b, h, 40, 4, 4);
-  return {
-    id: "cantilever-beam",
-    title: "Cantilever beam under tip load",
-    blurb:
-      "A beam clamped at the wall with a transverse load over its free-end face — the classic Euler–Bernoulli bending check, δ = P·L³ / (3·E·I).",
-    mesh: { vertices: m.vertices, hexahedra: m.hexahedra },
-    material: { name: "Steel", ...STEEL },
-    fixed: nodesWhere(m.vertices, (x) => x <= 1e-9),
-    load: {
-      dof: 1,
-      totalForce: -P,
-      nodes: nodesWhere(m.vertices, (x) => x >= L - 1e-9),
-      label: "Tip load (−Y)",
-    },
-    quantity: "tip deflection δ",
-    unit: "mm",
-    reference: -(P * L ** 3) / (3 * E * I),
-    referenceLabel: "δ = P·L³ / (3·E·I)",
-    feValue: (r, loaded) => avg(loaded.map((v) => r.displacements[v * 3 + 1])),
   };
 })();
 
@@ -228,7 +201,6 @@ const cooksMembrane = (() => {
 
 export default [
   axialBar,
-  cantilever,
   beamTorsion,
   plateWithHole,
   cooksMembrane,
