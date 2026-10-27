@@ -169,7 +169,11 @@ test("a newcomer takes the CAD sample from mesh to result with the guide", async
   await expect(guideAt(page, "load")).toBeVisible();
 
   // 3. A load on the highlighted bore, Fy as the guide says.
-  await expect(page.getByTestId("sample-guide")).toContainText("Fy = −2000 N");
+  // What to do shows on hovering the current step, not in the strip.
+  const tip = page.getByRole("tooltip").filter({ hasText: "Fy = −2000 N" });
+  await expect(tip).toBeHidden();
+  await page.getByTestId("sample-guide-current").hover();
+  await expect(tip).toBeVisible();
   await page.getByTestId("sample-guide-action").click();
   await clickCadFace(page, 37);
   await page.getByText("Fy (N)").locator("..").locator("input").fill("-2000");

@@ -24,22 +24,22 @@ const fy = `${SAMPLE.loadFy < 0 ? "−" : ""}${Math.abs(SAMPLE.loadFy)} N`;
 const STEP_TEXT: Record<Step, { title: string; how: string; action: string }> =
   {
     mesh: {
-      title: "Mesh the part",
+      title: "Mesh",
       how: "Fill the solid with elements: press Mesh STEP volume.",
       action: "Open mesh",
     },
     support: {
-      title: "Fix the bolt holes",
+      title: "Fix bolt holes",
       how: "Add a support, click the three highlighted holes, then Apply.",
       action: "Add support",
     },
     load: {
-      title: "Load the hub",
+      title: "Load hub",
       how: `Add a load, click the highlighted bore, set Fy = ${fy}, then Apply.`,
       action: "Add load",
     },
     run: {
-      title: "Run the analysis",
+      title: "Run",
       how: "Add a static study and press Run.",
       action: "Open study",
     },
@@ -48,8 +48,9 @@ const STEP_TEXT: Record<Step, { title: string; how: string; action: string }> =
 const sameSelection = (a: TreeSelection, b: TreeSelection) =>
   JSON.stringify(a) === JSON.stringify(b);
 
-// The guide through the sample (KOF-261): the four steps of every analysis,
-// the current one with what to do and a shortcut to the panel it happens in.
+// The guide through the sample (KOF-261): a slim strip along the top of the
+// viewport with the four steps of every analysis. Hovering (or focusing) a
+// step says what to do; the current one has a shortcut to its panel.
 // It follows the model, not clicks on it — a step is done when the model has
 // it (lib/sampleGuide).
 export function SampleGuide() {
@@ -92,17 +93,7 @@ export function SampleGuide() {
       data-step={step}
       aria-label="Sample guide"
     >
-      <header className={styles.header}>
-        <span className={styles.title}>Sample · wall bracket</span>
-        <button
-          className={styles.close}
-          title="Close the guide"
-          aria-label="Close the guide"
-          onClick={dismissSampleGuide}
-        >
-          ×
-        </button>
-      </header>
+      <span className={styles.title}>Sample</span>
       <ol className={styles.steps}>
         {GUIDE_STEPS.map((s, i) => {
           const state =
@@ -110,37 +101,69 @@ export function SampleGuide() {
           const text = STEP_TEXT[s];
           return (
             <li key={s} className={styles.step} data-state={state}>
-              <span className={styles.marker} aria-hidden>
-                {state === "done" ? "✓" : i + 1}
-              </span>
-              <div className={styles.body}>
+              <span
+                className={styles.chip}
+                tabIndex={0}
+                aria-describedby={`sample-guide-tip-${s}`}
+                data-testid={
+                  state === "current" ? "sample-guide-current" : undefined
+                }
+              >
+                <span className={styles.marker} aria-hidden>
+                  {state === "done" ? "✓" : i + 1}
+                </span>
                 <span className={styles.stepTitle}>{text.title}</span>
-                {state === "current" && (
-                  <>
-                    <p className={styles.how}>{text.how}</p>
-                    {!sameSelection(treeSelection, destination(s)) && (
-                      <button
-                        className={styles.action}
-                        data-testid="sample-guide-action"
-                        onClick={() => go(s)}
-                      >
-                        {text.action}
-                      </button>
-                    )}
-                  </>
+              </span>
+              <span
+                className={styles.tip}
+                id={`sample-guide-tip-${s}`}
+                role="tooltip"
+              >
+                {text.how}
+              </span>
+              {state === "current" &&
+                !sameSelection(treeSelection, destination(s)) && (
+                  <button
+                    className={styles.action}
+                    data-testid="sample-guide-action"
+                    onClick={() => go(s)}
+                  >
+                    {text.action}
+                  </button>
                 )}
-              </div>
             </li>
           );
         })}
+        {step === "done" && (
+          <li className={styles.step} data-state="current">
+            <span
+              className={styles.chip}
+              tabIndex={0}
+              aria-describedby="sample-guide-tip-done"
+              data-testid="sample-guide-done"
+            >
+              <span className={styles.stepTitle}>Done</span>
+            </span>
+            <span
+              className={styles.tip}
+              id="sample-guide-tip-done"
+              role="tooltip"
+            >
+              The colours show how far each point moves under the load. Try von
+              Mises stress in the Results panel to see where the bracket works
+              hardest.
+            </span>
+          </li>
+        )}
       </ol>
-      {step === "done" && (
-        <p className={styles.done} data-testid="sample-guide-done">
-          Done. The colours show how far each point moves under the load. Try
-          von Mises stress in the Results panel to see where the bracket works
-          hardest.
-        </p>
-      )}
+      <button
+        className={styles.close}
+        title="Close the guide"
+        aria-label="Close the guide"
+        onClick={dismissSampleGuide}
+      >
+        ×
+      </button>
     </section>
   );
 }
