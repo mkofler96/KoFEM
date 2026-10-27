@@ -45,9 +45,10 @@ test("plate-with-hole write-up figure @capture", async ({ page }) => {
     null,
     { timeout: 30_000 },
   );
-  await page.waitForFunction(
-    () =>
-      !!(window as unknown as { __kofemViewport?: unknown }).__kofemViewport,
+  await page.waitForFunction(() =>
+    Boolean(
+      (window as unknown as { __kofemViewport?: unknown }).__kofemViewport,
+    ),
   );
 
   const canvas = page.locator("canvas").first();

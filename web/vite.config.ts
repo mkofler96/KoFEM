@@ -89,13 +89,22 @@ const redirectBareFolder =
   (root: string): Connect.NextHandleFunction =>
   (req, res, next) => {
     const [original, query] = (req.originalUrl ?? "").split("?");
-    if (original.endsWith("/")) return next();
+    if (original.endsWith("/")) {
+      next();
+      return;
+    }
     const dir = join(
       root,
       decodeURIComponent(original.slice("/examples".length)),
     );
-    if (!dir.startsWith(root) || !existsSync(dir)) return next();
-    if (!statSync(dir).isDirectory()) return next();
+    if (!dir.startsWith(root) || !existsSync(dir)) {
+      next();
+      return;
+    }
+    if (!statSync(dir).isDirectory()) {
+      next();
+      return;
+    }
     res.statusCode = 301;
     res.setHeader("Location", `${original}/${query ? `?${query}` : ""}`);
     res.end();

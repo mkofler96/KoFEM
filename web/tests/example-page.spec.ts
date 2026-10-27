@@ -90,8 +90,9 @@ test("the write-up carries its search and social metadata", async ({
   const description = await page
     .locator('meta[name="description"]')
     .getAttribute("content");
+  if (description === null) throw new Error("the page has no meta description");
   expect(description).toContain(`Kt = ${plate.feValue.toFixed(3)}`);
-  expect(description!.length).toBeLessThanOrEqual(170);
+  expect(description.length).toBeLessThanOrEqual(170);
   await expect(page.locator('meta[property="og:image"]')).toHaveAttribute(
     "content",
     `${SITE_ORIGIN}${PAGE}kofem-web-von-mises.png`,
@@ -169,8 +170,8 @@ test("Open in KoFEM loads the example the page describes", async ({ page }) => {
   await page.locator("#open-in-kofem").click();
   await expect(page).toHaveURL(/\/app\/\?example=plate-with-hole$/);
   await expect(page.locator("nav")).toBeVisible();
-  await page.waitForFunction(
-    () => !!(window as unknown as { __kofem?: unknown }).__kofem,
+  await page.waitForFunction(() =>
+    Boolean((window as unknown as { __kofem?: unknown }).__kofem),
   );
   await expect
     .poll(
