@@ -355,10 +355,36 @@ export interface KofemModule {
   ): TopOptResult
 }
 
+/** Progress of init(): bytes are the uncompressed engine size. */
+export type EngineLoadProgress =
+  | { phase: 'downloading'; loaded: number; total: number }
+  | { phase: 'compiling'; loaded: number; total: number }
+  /** Compiled; emcc instantiates the module and runs its static constructors. */
+  | { phase: 'starting' }
+  | {
+      phase: 'ready'
+      /** From the request to the last byte. */
+      downloadMs: number
+      /** Compilation left after the last byte (it streams alongside the download). */
+      compileMs: number
+      /** emcc start-up: instantiation and static constructors. */
+      instantiateMs: number
+      /** WebAssembly linear memory once started. */
+      memoryBytes: number
+    }
+
+/** The step of init() that failed. */
+export type EngineLoadStage = 'download' | 'compile' | 'instantiate'
+
+/** Thrown by init(); the message says what failed, `stage` where. */
+export class EngineLoadError extends Error {
+  readonly stage: EngineLoadStage
+}
+
 export interface ModuleOverrides {
   print?: (text: string) => void
   printErr?: (text: string) => void
-  wasmBinary?: ArrayBuffer
+  onProgress?: (progress: EngineLoadProgress) => void
 }
 
 /** Initialise the WASM module and return it. Must be awaited before using any function. */
