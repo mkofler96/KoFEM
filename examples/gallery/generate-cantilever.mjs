@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Generates the cantilever beam: the gallery's bending check and the sample the
-// app offers a first-time user ("Try a sample simulation", KOF-261). It is built
+// Generates the cantilever beam: the gallery's bending check, which opens ready
+// to run and compares its result with a hand calculation (KOF-261). It is built
 // with KoFEM's own pipeline — STEP geometry → OCCT tessellation → Netgen volume
 // mesh → MFEM solve — by the steps a user takes in the app:
 //
@@ -16,8 +16,7 @@
 // load follow them through a re-mesh.
 //
 //   cantilever-beam.step — the block, as a user would import it.
-//   cantilever-beam.vtu  — what "Open in KoFEM web" and the app's sample button
-//                          load: geometry, mesh, support, load and the static
+//   cantilever-beam.vtu  — what "Open in KoFEM web" loads: geometry, mesh, support, load and the static
 //                          study, UNSOLVED — it opens on the study, ready to run.
 //                          It also carries the hand check (δ = P·L³ / (3·E·I))
 //                          the Results panel compares the solved tip deflection

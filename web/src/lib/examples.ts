@@ -7,13 +7,8 @@ import { parseAnalysisFile } from "./analysisFile";
 import { categorizeError, setWorkflow, startTimer, track } from "./analytics";
 
 // Opening a gallery example (examples/gallery/site/, served at /examples/) in
-// the app: from the `/app/?example=<id>` deep-link the gallery's "Open in KoFEM
-// web" buttons use, and from the empty workspace's "Try a sample simulation".
-
-// The example a first-time user is offered (KOF-261): it opens with geometry,
-// mesh, support and load in place, on the static study, ready to run, and
-// carries a hand check for its result.
-export const SAMPLE_EXAMPLE_ID = "cantilever-beam";
+// the app, from the `/app/?example=<id>` deep-link the gallery's "Open in KoFEM
+// web" buttons use.
 
 const EXAMPLE_ID_PATTERN = /^[\w-]+$/;
 
@@ -21,7 +16,8 @@ export function isExampleId(id: string): boolean {
   return EXAMPLE_ID_PATTERN.test(id);
 }
 
-// The example being fetched, so the empty viewport does not offer another.
+// The example being fetched, so the empty viewport does not offer the sample
+// meanwhile.
 export const useExampleLoad = create<{ loading: string | null }>(() => ({
   loading: null,
 }));

@@ -20,8 +20,8 @@
 // identical problems are expressed in the app's mm/MPa system).
 //
 // The cantilever beam is not here: it is built through the app's own pipeline
-// (STEP → Netgen) by generate-cantilever.mjs, because it doubles as the app's
-// first-run sample and must open ready to run and re-mesh.
+// (STEP → Netgen) by generate-cantilever.mjs, because it opens ready to run
+// with a hand check and must re-mesh.
 
 import {
   boxHexMesh,

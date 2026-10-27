@@ -266,6 +266,25 @@ test.describe("workflow events", () => {
     expect(after.map((e) => e.name)).not.toContain("solve_failed");
   });
 
+  test("the sample counts as an example, not as the user's CAD", async ({
+    page,
+  }) => {
+    test.setTimeout(60_000);
+    await withAnalytics(page);
+    await setConsent(page, "granted");
+    await page.goto("/app/");
+    await page.getByRole("button", { name: "Try a sample simulation" }).click();
+
+    await expect
+      .poll(() => eventNames(page), { timeout: 30_000 })
+      .toContain("example_loaded");
+    const events = await gaEvents(page);
+    expect(
+      events.find((e) => e.name === "example_loaded")?.params.example_id,
+    ).toBe("wall-bracket");
+    expect(events.map((e) => e.name)).not.toContain("geometry_import_success");
+  });
+
   test("CAD import: failure and success are told apart, nothing about the file is sent", async ({
     page,
   }) => {

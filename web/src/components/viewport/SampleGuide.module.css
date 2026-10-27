@@ -1,0 +1,139 @@
+/* The sample guide (KOF-261): a compact card in the viewport's top-left
+   corner, clear of the Fit View button and the colour bar. */
+
+.guide {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 10;
+  width: 280px;
+  max-width: calc(100% - 20px);
+  padding: 10px 12px 12px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  box-shadow: 0 4px 14px rgba(13, 17, 23, 0.08);
+  backdrop-filter: blur(4px);
+  font-size: 12.5px;
+  color: var(--ink);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.title {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.close {
+  padding: 0 4px;
+  background: none;
+  border: none;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.close:hover {
+  color: var(--ink);
+}
+
+.steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.step {
+  display: flex;
+  gap: 8px;
+}
+
+.marker {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10.5px;
+  font-weight: 600;
+  border: 1px solid var(--border-2);
+  color: var(--muted);
+}
+
+.step[data-state="current"] .marker {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.step[data-state="done"] .marker {
+  background: var(--ok-soft);
+  border-color: var(--ok-soft);
+  color: var(--ok);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+  padding-top: 1px;
+}
+
+.stepTitle {
+  font-weight: 500;
+}
+
+.step[data-state="todo"] .stepTitle {
+  color: var(--muted);
+}
+
+.step[data-state="done"] .stepTitle {
+  color: var(--muted);
+}
+
+.how {
+  margin: 0;
+  color: var(--ink-2);
+  line-height: 1.4;
+}
+
+.action {
+  padding: 4px 10px;
+  background: var(--accent-soft);
+  border: 1px solid transparent;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.action:hover {
+  border-color: var(--accent);
+}
+
+.done {
+  margin: 10px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  color: var(--ink-2);
+  line-height: 1.4;
+}

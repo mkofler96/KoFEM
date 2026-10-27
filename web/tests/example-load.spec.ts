@@ -505,14 +505,14 @@ test("the MBB topology example opens ready to optimize and re-mesh", async ({
   ).toBeEnabled();
 });
 
-test("the cantilever sample opens ready to run and re-mesh", async ({
+test("the cantilever example opens ready to run and re-mesh", async ({
   page,
 }) => {
   test.setTimeout(60_000);
 
-  // cantilever-beam is the app's first-run sample (KOF-261), built with the
-  // app's own pipeline (examples/gallery/generate-cantilever.mjs). It must open
-  // unsolved on its static study with the clamp, the tip load, the quadratic
+  // cantilever-beam opens ready to run with a hand check (KOF-261), built
+  // with the app's own pipeline (examples/gallery/generate-cantilever.mjs). It
+  // must open unsolved on its static study with the clamp, the tip load, the quadratic
   // element order and its hand check restored, and get its STEP back.
   await page.goto("/app/?example=cantilever-beam");
   await expect(page.locator("nav")).toBeVisible();

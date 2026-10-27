@@ -51,3 +51,10 @@
   font-size: 12px;
   color: var(--muted);
 }
+
+.error {
+  margin: 0;
+  max-width: 320px;
+  font-size: 12px;
+  color: var(--warn);
+}
