@@ -19,31 +19,59 @@ const E = 1.0;
 const nu = 1 / 3;
 const t = 1.0; // thin slab ⇒ plane-stress-like
 const F = 1.0; // total shear load
+const N = 16; // elements along each in-plane edge
+
+/**
+ * Mean vertical deflection of the top-right corner on an n × n in-plane grid
+ * (one element through the thickness) at element order `order`.
+ */
+export function cookCorner(solve, n, order) {
+  const m = cookMembraneMesh(n, n, t);
+  const clamp = nodesWhere(m.vertices, (x) => x <= 1e-9);
+  const right = nodesWhere(m.vertices, (x) => x >= 48 - 1e-9);
+  const corner = nodesWhere(
+    m.vertices,
+    (x, y) => x >= 48 - 1e-9 && y >= 60 - 1e-9,
+  );
+  const result = solve(
+    { vertices: m.vertices, hexahedra: m.hexahedra },
+    { young_modulus: E, poisson_ratio: nu, density: 1 },
+    { fixed_vertices: clamp, point_loads: distributeForce(right, [0, F, 0]) },
+    order,
+  );
+  return (
+    corner.reduce((s, v) => s + result.displacements[v * 3 + 1], 0) /
+    corner.length
+  );
+}
 
 export default {
+  id: "cooks-membrane",
   name: "Cook's membrane",
   quantity: "top-corner deflection",
   unit: "",
   reference: 23.9,
   referenceLabel: "converged ≈ 23.9",
   tolPct: 6,
+  page: {
+    summary:
+      "Tapered, skewed cantilever in shear — a standard distortion benchmark (dimensionless).",
+    model: "Trapezoid (0, 0)–(48, 44)–(48, 60)–(0, 44), thickness t.",
+    inputs: [
+      ["t", t, ""],
+      ["E", E, ""],
+      ["ν", nu, ""],
+      ["F", F, ""],
+    ],
+    supports: "x = 0 edge clamped.",
+    loads: "F in +y, split equally over the x = 48 edge nodes.",
+    measured: "y-displacement of the corner (48, 60).",
+    mesh: `${N} × ${N} grid, 1 through t`,
+    source: "Cook (1974)",
+    grid: [N, N, 1],
+    note: "Finer meshes move past the reference (see Convergence): a regression check, not accuracy evidence.",
+  },
   run(solve) {
-    const m = cookMembraneMesh(16, 16, t);
-    const clamp = nodesWhere(m.vertices, (x) => x <= 1e-9);
-    const right = nodesWhere(m.vertices, (x) => x >= 48 - 1e-9);
-    const corner = nodesWhere(
-      m.vertices,
-      (x, y) => x >= 48 - 1e-9 && y >= 60 - 1e-9,
-    );
-    const result = solve(
-      { vertices: m.vertices, hexahedra: m.hexahedra },
-      { young_modulus: E, poisson_ratio: nu, density: 1 },
-      { fixed_vertices: clamp, point_loads: distributeForce(right, [0, F, 0]) },
-      1,
-    );
-    return (
-      corner.reduce((s, v) => s + result.displacements[v * 3 + 1], 0) /
-      corner.length
-    );
+    return cookCorner(solve, N, 1);
   },
 };

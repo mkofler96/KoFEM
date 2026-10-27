@@ -19,6 +19,8 @@
     "format:check": "prettier --check src tests eslint-rules eslint.config.js \"../*.md\" \"../.github/**/*.md\"",
     "prevalidate": "bun run wasm:fetch",
     "validate": "bun ../examples/validation/run.mjs",
+    "prevalidate:report": "bun run wasm:fetch",
+    "validate:report": "bun ../examples/validation/run.mjs --report",
     "examples:generate": "bun ../examples/gallery/generate.mjs",
     "examples:generate-crane-shell": "bun ../examples/unvalidated/crane-hook/generate-crane-shell.mjs",
     "examples:generate-plate-hole-shell": "bun ../examples/gallery/generate-plate-hole-shell.mjs",

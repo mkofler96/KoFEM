@@ -13,7 +13,14 @@ import { openTree } from "./fixtures/tree";
 // request that would have is recorded.
 
 const GA_ID = "G-TEST000000";
-const PAGES = ["/", "/app/", "/examples/", "/privacy/"];
+const PAGES = [
+  "/",
+  "/app/",
+  "/examples/",
+  "/privacy/",
+  "/validation/",
+  "/validation/axial-bar/",
+];
 const CONSENT_KEY = "kofem_analytics_consent";
 
 interface GaEvent {
