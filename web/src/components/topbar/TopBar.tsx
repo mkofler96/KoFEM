@@ -10,6 +10,7 @@ import {
 } from "../../lib/analysisFile";
 import { resetWorker } from "../../workers/sharedWorker";
 import { setWorkflow } from "../../lib/analytics";
+import { FeedbackMenu } from "./FeedbackMenu";
 import styles from "./TopBar.module.css";
 
 // A development deployment is marked at container start with
@@ -104,6 +105,7 @@ export function TopBar() {
           style={{ display: "none" }}
           onChange={handleLoadFile}
         />
+        <FeedbackMenu />
         <button
           className={styles.iconBtn}
           title="New analysis"

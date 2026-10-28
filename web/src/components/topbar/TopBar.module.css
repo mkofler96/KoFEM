@@ -109,3 +109,34 @@
   font-weight: 700;
   letter-spacing: 0.08em;
 }
+
+/* Phones: the buttons need the room. Drop the fixed "Workspace /" prefix and
+   let a long model name shorten instead of pushing the buttons off-screen. */
+@media (max-width: 768px) {
+  .bar {
+    padding: 0 12px;
+  }
+
+  .brand {
+    flex-shrink: 1;
+  }
+
+  .crumb {
+    min-width: 0;
+  }
+
+  .crumbMuted,
+  .crumbSep {
+    display: none;
+  }
+
+  .crumbPage {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .right {
+    gap: 6px;
+  }
+}
