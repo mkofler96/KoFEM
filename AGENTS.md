@@ -1,397 +1,61 @@
-# KoFEM — AI Development Guide
+# KoFEM
 
-KoFEM is a browser-first finite element analysis application. This file is the primary context for coding agents (Claude Code, Codex, Cursor, …) working on this codebase. `CLAUDE.md` only imports it — edit this file, not that one.
+Browser FEA: STEP → OCCT → Netgen → MFEM. Production code is C++/WASM in
+`engine/cpp/`; `crates/` contains Rust stubs, not product extension points.
+The React/TypeScript/Three.js frontend is in `web/`. Use **bun**, not npm.
 
-**This file describes how the code works.** Roadmap, decision records, feature
-specs and the visual showcase live in Linear — see
-[Planning and documentation live in Linear](#planning-and-documentation-live-in-linear).
+## Implementation
 
-## Architecture Overview
+- Solver paths: `solve_mfem.cpp` (solid), `solve_shell.cpp` (shell), and
+  `solve_coupled.cpp` (mixed). Cover all applicable paths for materials, BCs,
+  loads, and solve payload changes, including per-body materials.
+- Shell is an explicit per-body choice. Mid-surface and mixed-mesh assembly
+  live in `web/src/lib/shellize.ts`; shell element math is in `shell_core.cpp`.
+- Geometry tessellation is for display. Never call it a mesh; surface and
+  volume meshes are FEM discretisations.
+- Use strict TypeScript without `any`, C++ `std::array` instead of C arrays,
+  and explicit errors for invalid or missing required data. No silent fallbacks.
+  See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed conventions.
+- Analytics require opt-in consent. Use `web/src/lib/analytics.ts`; never
+  send model data, filenames, results, or raw errors.
+- Keep UI copy brief and user-focused; link to technical detail and extended
+  limitations. Negative example: [KOF-266 / PR #479](https://github.com/mkofler96/KoFEM/pull/479)
+  overloaded the homepage hero with explanations. Read that example only
+  when working on homepage copy.
 
-The solid pipeline is: **STEP geometry → OCCT tessellation → Netgen volume mesh → MFEM FEM solve**.
-Thin-walled bodies take a shell path instead — see [Shells and multibody](#shells-and-multibody).
+## Build and checks
 
-**Everything that ships runs through the C++/WASM engine.** The Rust crates are
-type definitions and stubs for a future migration; no product code path calls
-them today.
-
-```
-KoFEM/
-├── engine/             # C++ WASM engine — the production pipeline
-│   ├── cpp/
-│   │   ├── engine.cpp        # Embind entry point only (~40 lines); the pipeline
-│   │   │                     # lives in the modules below
-│   │   ├── cad_io.cpp        # STEP/IGES import (OCCT)
-│   │   ├── tessellate.cpp    # OCCT surface tessellation (display)
-│   │   ├── geometry_edit.cpp # Split faces/bodies with a plane (the split tool),
-│   │   │                     # Boolean union/subtract/intersect of bodies
-│   │   ├── mesh_netgen.cpp   # Netgen volume meshing
-│   │   ├── solve_mfem.cpp    # Linear-elastic solid solve (MFEM)
-│   │   ├── shell_core.cpp    # Kirchhoff/DKT shell formulation
-│   │   ├── solve_shell.cpp   # Pure-shell solve
-│   │   └── solve_coupled.cpp # Mixed shell/solid solve with RBE3 coupling
-│   ├── tests/          # C++ numerical checks — run by CI (native + MFEM/WASM)
-│   └── CMakeLists.txt  # emcmake build → kofem_wasm_emcc.js + .wasm
-├── crates/             # Rust stubs for the 3.0 native migration — see below
-├── web/                # React + Three.js frontend (Vite) — bun, not npm
-├── examples/           # Validation cases, shell-coupling scripts, web examples
-├── test_files/         # STEP/IGES fixtures used by tests and examples
-└── scripts/
-    ├── build-wasm.sh         # CMake/Emscripten WASM build
-    ├── docker-build-wasm.sh  # Docker wrapper (Mac / CI)
-    ├── fetch-wasm-deps.sh    # Pull the precompiled OCCT/Netgen/MFEM WASM libs
-    ├── fetch-wasm-engine.sh  # Pull the compiled engine from its GitHub Release
-    ├── engine-version.sh     # Content hash of the engine sources → release tag
-    ├── release-version.sh    # Product version; checks package.json/Cargo/CHANGELOG agree
-    ├── publish-release.sh    # CI: tag + GitHub Release, only from the release commit
-    ├── clang-tidy.sh         # C++ lint, mirrors the DeepSource PR gate
-    ├── test-bc-validation.sh
-    └── test-shell.sh
-```
-
-### WASM build flow
-
-```
-OCCT / Netgen / MFEM  (.a, compiled with emcc)
-         ↓
-engine/cpp/engine.cpp  (C++17, calls libs directly, Embind API)
-         ↓  emcmake cmake + ninja
-kofem_wasm_emcc.js + kofem_wasm_emcc.wasm
-         ↓  published as the release engine-<id>, fetched into web/src/wasm/pkg/
-web/src/wasm/pkg/kofem_wasm.js  (thin adapter, committed)
-         ↓
-solver.worker.ts  (awaits init(), calls methods on the KofemModule instance)
-```
-
-### The compiled engine is not in git
-
-`kofem_wasm_emcc.js` + `.wasm` are ~34 MB of build output. Committing them added a
-fresh full-size blob to history on every engine change, so they are gitignored and
-published as a GitHub Release instead (KOF-186).
-
-`scripts/engine-version.sh` hashes the engine sources (`engine/`,
-`scripts/build-wasm.sh`, `scripts/fetch-wasm-deps.sh`) into an ID; CI publishes each
-`develop` and `main` build as the release `engine-<id>` (the same sources give the
-same ID, so a promotion to `main` finds its release already there); `scripts/fetch-wasm-engine.sh` resolves the
-ID from the checkout and downloads the matching binary. Nothing to bump by hand, and
-changed sources can never resolve to a stale binary.
-
-What this means in practice:
-
-- `bun run dev|build|test` fetch the engine first via package.json pre-hooks. A
-  matching `.engine-id` stamp in `web/src/wasm/pkg/` makes that a no-op.
-- **After changing `engine/cpp`, build locally** (`scripts/docker-build-wasm.sh`):
-  no release exists for unmerged sources. The build writes the stamp, so the fetch
-  then leaves your binary alone. The release appears once the PR lands on `develop`.
-- Do not re-add the binaries to git, and do not `git add -f` them.
-
-### Shells and multibody
-
-Not every model is a bag of tetrahedra. Two features cut across the pipeline and
-touch nearly every layer, so check them before assuming a change is solid-only:
-
-- **Shells.** Thin-walled bodies are meshed as `CTRIA3` and solved with Kirchhoff
-  plate/DKT elements (`shell_core.cpp`, `solve_shell.cpp`). Mid-surface extraction
-  and the shell mesh assembly live in `web/src/lib/shellize.ts`. Shell is the
-  user's per-body Element type — nothing is detected automatically. A body marked
-  Shell is idealised as shells everywhere at mesh time (a partly thin part is
-  split into bodies first), and the mesh stores a mixed `CTRIA3` + `CTETRA` model.
-- **Multibody.** Assemblies carry per-body materials and per-body element type
-  (shell or solid). Bodies are joined by bonded ties; shell-to-solid interfaces
-  use explicit **RBE3** coupling. The mixed solve is `solve_coupled.cpp`.
-
-A change to materials, boundary conditions, loads, or the solve payload almost
-always has a shell path, a solid path, and a coupled path. Cover all three.
-
-### The Rust crates are stubs (3.0 migration)
-
-`crates/kofem-{geom,mesh,core}` total ~300 lines. They define the shared
-`SurfaceMesh` / `VolumeMesh` / material / BC types and a `FemSolver` trait, and
-**every entry point returns an explicit "not implemented" error**. There is no
-`build.rs`, no C++ bridge, and no OCCT/Netgen/MFEM linkage — building them needs
-nothing but a Rust toolchain.
-
-Rewriting the pipeline in Rust is a real intention, but it is targeted at **3.0**
-and no work has started. Until then:
-
-- Do **not** add product logic to the crates, and do not treat `FemSolver` as an
-  extension point — implementing it changes nothing that ships.
-- To change solver behaviour, edit `engine/cpp/solve_{mfem,shell,coupled}.cpp`.
-- When the migration does start, the mechanism is: build the crate as
-  `crate-type = ["staticlib"]` for `wasm32-unknown-emscripten`, expose it via
-  `extern "C"`, and add one `target_link_libraries` entry in `engine/CMakeLists.txt`.
-
-## First-time setup
-
-```bash
+```sh
 git config core.hooksPath .githooks
-```
-
-## Build Commands
-
-```bash
-# Rust stubs — no native libraries needed, and there are no tests yet.
-cargo check
-cargo test
-
-# Install the prebuilt engine from its release. Needs no toolchain at all, and the
-# bun scripts below run it for you.
-./scripts/fetch-wasm-engine.sh
-
-# Build the WASM engine from source instead — required after editing engine/cpp.
-# Needs Emscripten plus the precompiled OCCT/Netgen/MFEM WASM libs;
-# scripts/fetch-wasm-deps.sh pulls them, or use the Docker wrapper.
-./scripts/build-wasm.sh          # or: ./scripts/docker-build-wasm.sh
-
-# Install and run the web frontend (uses bun, not npm)
 cd web && bun install && bun run dev
-
-# The gates CI enforces, in the order CI runs them
-cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings
-# C++ numerical tests: native-tests uses a host compiler; wasm-tests uses em++
-# and the precompiled MFEM WASM library. Both run independently of engine caching.
-for suite in bc-validation shell topology-filter topology-mma topology-shell; do
-  bash "scripts/test-$suite.sh"
-done
-for suite in topology topology-optimize topology-stress topology-levelset; do
-  bash "scripts/test-$suite.sh"
-done
-bash scripts/clang-tidy.sh
-cd web && bun run typecheck && bun run lint && bun run format:check && bun run test
 ```
 
-Building the WASM engine rewrites `web/src/wasm/pkg/*.wasm` (~34 MB). Those files
-are gitignored — see [The compiled engine is not in git](#the-compiled-engine-is-not-in-git)
-— so a rebuild no longer costs history, but it does cost ~20 minutes. Only rebuild
-when you have changed C++ sources; otherwise let the fetch script install it.
+Web scripts fetch the matching compiled engine automatically. After engine
+changes, build with `bash scripts/docker-build-wasm.sh` (or `build-wasm.sh`
+with Emscripten and dependencies installed). Never commit generated WASM/JS.
 
-## Geometry vs. Mesh — Critical Terminology
+Run checks appropriate to the change; CI definitions are in
+[.github/workflows/ci.yml](.github/workflows/ci.yml):
 
-There are three distinct representations in this codebase. Using the wrong word is a bug in the code and the UI.
+- Rust: `cargo fmt --all --check` and `cargo clippy --workspace --all-targets -- -D warnings`.
+- C++: `bash scripts/clang-tidy.sh` and relevant `scripts/test-*.sh` suites.
+- Frontend, from `web/`: `bun run typecheck && bun run lint && bun run format:check && bun run test`.
 
-| Concept                   | What it is                                               | Produced by                                               | Used for                                                       |
-| ------------------------- | -------------------------------------------------------- | --------------------------------------------------------- | -------------------------------------------------------------- |
-| **Geometry tessellation** | Triangles approximating the CAD surface for display only | OCCT (`engine/cpp/tessellate.cpp`)                        | Viewport rendering of the STEP shape (Geometry repr)           |
-| **Surface mesh**          | Quality triangulation of the CAD boundary surfaces       | OCCT tessellation **or** Netgen's direct OCCT integration | Input to the volume mesher + display (Surface Mesh repr)       |
-| **Volume mesh**           | Tetrahedral elements filling the solid body              | Netgen (`engine/cpp/mesh_netgen.cpp`)                     | FEM analysis — nodes + elements for stiffness matrix and solve |
+## Workflow
 
-The surface mesh comes from the **geometry**, not from the volume mesh. It is either the OCCT tessellation repurposed as meshing input, or (preferred) a proper boundary mesh produced by Netgen's built-in OCCT integration, which respects CAD topology and feature edges.
+- Linear holds issues, specs, and decisions; GitHub holds code and PRs.
+  Keep task-specific findings out of this file.
+- Branch from `develop` and target PRs there. Use `Fixes KOF-nn` only when
+  the PR resolves that issue. Let the GitHub integration manage issue status.
+- Record meaningful evidence on the Linear issue, editing one comment in place.
+- Feature PRs do not edit `CHANGELOG.md`. Releases require an explicit request;
+  follow `.claude/skills/release/SKILL.md`. Agents never create tags or GitHub
+  Releases; only the maintainer handles promotions from `develop` to `main`.
+- Preserve pinned dependency/action/image versions and signed build provenance.
 
-**Rules — never violate these:**
+## Examples
 
-- **Geometry tessellation triangles are NOT a mesh.** They are a visual approximation of the CAD surface. Never call them "mesh", "surface mesh", or use mesh-related variable names (`mesh`, `meshTriangles`, etc.) for them. Correct names: `tessellation`, `stepTessellation`, `stepSurface`, `geomTriangles`.
-- **"Mesh" always means FEM mesh** — nodes + elements produced by Netgen and used for analysis. The words `mesh`, `meshing`, `meshResult` are reserved for Netgen output and FEM data.
-- **The pipeline:** geometry → tessellation (display) → surface mesh (from geometry, input to Netgen) → volume mesh (FEM) → solve. Tessellation serves display; the volume mesh is what the solver operates on.
-- In the UI the three viewport representations map to: **Geometry** shows the OCCT tessellation, **Surface Mesh** shows the boundary triangulation of the FEM model, **Volume Mesh** shows all tetrahedral edges.
-
-## Product analytics
-
-GA4 is opt-in. `web/vite-analytics.ts` injects the cookie banner and the only
-code that loads gtag.js, on every page. It also publishes the visitor's choice
-as `window.__kofemAnalyticsConsent`. Product events go through
-`web/src/lib/analytics.ts` (`track`, `trackOnce`), never through `window.gtag`
-directly:
-
-- **Consent decides everything.** Events are sent only when consent is
-  granted. While the banner is unanswered they wait in memory, and they are
-  dropped on decline or withdrawal. Never load or call gtag from anywhere else,
-  and never send an event to work around a missing consent answer.
-- **No model data.** Parameters are enums (`workflow`, `format`, `model_type`,
-  `analysis_type`, `error_category`, `duration_bucket`) plus the public
-  gallery `example_id`. `track` refuses any value that is not
-  `[A-Za-z0-9_-]{1,64}`. File names, sizes, geometry, results and raw error
-  text never leave the page. Map errors with `categorizeError`.
-- **Add an event** in `AnalyticsEvents`. Cover the solid, shell and topology
-  paths where the event applies. Then register any new parameter as a GA4
-  custom dimension (below).
-
-The GA4 property is set up by hand; nothing in the repository configures it:
-
-| Setting                                   | Value                                                                                                                                                                  |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Key event                                 | `solve_completed`                                                                                                                                                      |
-| Event-scoped custom dimensions            | `workflow`, `entry`, `format`, `model_type`, `analysis_type`, `error_category`, `duration_bucket`, `example_id`                                                        |
-| Funnel exploration (open, session-scoped) | `solver_opened` → `geometry_import_success` or `example_loaded` → `mesh_completed` → `solve_started` → `solve_completed` → `results_viewed`, broken down by `workflow` |
-| Success rate                              | Sessions with `solve_completed` ÷ sessions with `solver_opened` (Explore → session count, not key-event count)                                                         |
-
-Pre-solved examples open straight into results, so they can skip the mesh and
-solve steps. Use an open funnel, or filter on `workflow`.
-`tests/analytics-consent.spec.ts` covers consent in the browser, and
-`tests/test_analytics.mjs` covers the utility.
-
-## "Example" means the kofem.org/examples/ gallery
-
-When the user asks to **add, modify, fix or remove an example**, they mean an
-entry on the public gallery at **https://kofem.org/examples/** — a pre-solved
-model you can rotate in the browser and open with "Open in KoFEM web". Not a
-validation case, not a script under `examples/shell-coupling/`, not a test fixture.
-
-All of it lives in `examples/gallery/` — see its `README.md`:
-
-| Piece                            | Where                                                                                                |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Generators (the source of truth) | `examples/gallery/` — `examples.mjs` for the hex-mesh examples, `generate-*.mjs` for the rest        |
-| What kofem.org/examples/ serves  | `examples/gallery/site/`: `index.html` (the page), `examples.json`, `<id>.vtu`, optional `<id>.step` |
-| Opening it in the app            | `/app/?example=<id>` → `useExampleFromUrl` in `web/src/App.tsx`                                      |
-| Test                             | `web/tests/example-load.spec.ts`                                                                     |
-
-`site/` is served at `/examples/` by `web/vite.config.ts` (dev middleware, and a
-copy into `dist/examples/` on build) and reaches the Docker image as the named
-build context `gallery`. There is no `web/examples/` or `web/public/examples/`;
-do not recreate them.
-
-Change the generator and re-run it (`bun run examples:generate` or the specific
-`examples:generate-*` script in `web/package.json`) — never hand-edit the `.vtu`
-or `examples.json`. Then check the result in the gallery and in the app.
-
-**An example must be something a user can build in the app.** A generator makes
-the model through the engine calls the UI makes — STEP import, the split tool
-(`split_geometry`) for sub-face pads, whole-CAD-face group entries carrying
-`cadFaceId` — not with geometry the app cannot create or with scripted node
-sets, which vanish on the first re-mesh. The MBB beam is the reference, with
-`web/tests/mbb-by-hand.spec.ts` building it through the UI; the hex benchmarks
-and the shell plate predate the rule (see `examples/gallery/README.md`).
-
-`examples/unvalidated/` holds models that were taken off the gallery, or never
-made it, because their result is not trusted yet (the crane hook). Nothing there
-is served on kofem.org; tests that still need one of its files serve it through
-`web/tests/fixtures/unvalidated-examples.ts`. An example goes back to
-`examples/gallery/` only once its result is validated — never move one onto the
-gallery without the user asking.
-
-Everything else under `examples/` is internal: `validation/` holds regression
-benchmarks, `shell-coupling/` and `topopt-shell/` hold dev scripts. Touch those
-only when the request names them explicitly. Do not add Abaqus `.inp` input
-files or an Abaqus reader (licensing).
-
-## Branches and images
-
-| Branch    | Takes                                | CI publishes        |
-| --------- | ------------------------------------ | ------------------- |
-| `develop` | feature PRs (squash-merged)          | the image `:dev`    |
-| `main`    | promotions from `develop` (merge PR) | the image `:latest` |
-
-- **Feature PRs target `develop`**, never `main`.
-- **A promotion** is a PR from `develop` to `main`, merged with a **merge
-  commit** — squashing it would rewrite `develop`'s history onto `main` and make
-  the next promotion conflict. Only the maintainer opens or merges one.
-- CI pushes images only from these two branches, each with signed build
-  provenance (`actions/attest-build-provenance`), so a deployment can verify an
-  image before running it. Do not weaken that, or the pinned base-image digests
-  and action SHAs in CI and `web/Dockerfile`.
-- How and where the images are deployed is not part of this repository.
-
-## Releases
-
-A release does not ship code: the images are built from every commit that
-reaches `develop` and `main`. It tags a tested commit as `vX.Y.Z`, which gives users and bug reports
-a version to name and puts changes to numerical results on record. There is no
-schedule. Releases happen when the maintainer asks for one, and nothing prompts
-for them. The `release` skill in `.claude/skills/` has the procedure. The rules:
-
-- **The version** is `web/package.json` `version` and must equal `Cargo.toml`
-  `[workspace.package] version`. `scripts/release-version.sh` checks both on
-  every PR, and also checks that `CHANGELOG.md` has a section for the version.
-- **A release is a PR** titled `Release vX.Y.Z` into `develop`. It bumps both
-  versions and adds the `CHANGELOG.md` section. The promotion that carries it to
-  `main` is the maintainer's go/no-go: CI's `release` job tags the `main` commit
-  that brought the release commit in (the promotion merge) and publishes the
-  GitHub Release, and it only does so once every gate has passed on that commit.
-- **Agents never tag, and never create or edit a GitHub Release.** Never open a
-  release PR unless the maintainer asked for that release. The maintainer may tag
-  by hand. CI then publishes the GitHub Release for any `vX.Y.Z` tag that has a
-  `CHANGELOG.md` section.
-- **Feature PRs do not touch `CHANGELOG.md`.** Notes are written once, at release
-  time, from the merged PRs. That keeps parallel branches from conflicting.
-- **Semver, pre-1.0:** a patch release is fixes only. A minor release is anything
-  new or breaking. Breaking means a saved model, an example link or an exported
-  file stops loading or reading the same, or results for an unchanged model move
-  beyond the validation tolerances. Every numerical change is listed, with what
-  moved and why.
-- `engine-<id>` releases are build artifacts, unrelated to product versions. They
-  are marked prerelease so they never show as "Latest".
-
-## Code Style
-
-- Before committing, always run `cargo fmt` and `cargo clippy`
-- C++ (`engine/cpp`): run `bash scripts/clang-tidy.sh` after changes — the checks in `.clang-tidy` mirror the DeepSource rules that gate PRs (no C-style arrays: use `std::array` and pass `.data()` at C-API boundaries, plus the `bugprone-*` family)
-- TypeScript: strict mode, no `any`
-- Comments only for non-obvious physics/math — reference the paper/equation instead of explaining the code
-- ALWAYS prefer clear and information-rich error messages over silent fall-throughs. Avoid defensive try/catch blocks to make debugging easier.
-
-## Planning and documentation live in Linear
-
-**Linear is the source of truth for what to work on and why.** GitHub holds the
-code, the pull requests and CI; it is not where planning happens.
-
-| Question                                    | Where the answer lives                      |
-| ------------------------------------------- | ------------------------------------------- |
-| How does the code work? What are the rules? | This file, `CONTRIBUTING.md`, code comments |
-| What should I build, and why?               | Linear issue `KOF-nn`                       |
-| Where is the project going?                 | Linear document **Roadmap**                 |
-| Why is it built this way?                   | Linear documents **ADR-nnnn**               |
-| What shipped? What does the app look like?  | Linear project updates (weekly)             |
-
-Build and architecture facts stay in the repository on purpose: they must be
-versioned with the diff that changes them and readable without network access.
-Do not move them into Linear, and do not create a `docs/` directory.
-
-### Working an issue
-
-1. Find or create the Linear issue.
-2. Branch from `develop`, implement, open the PR against `develop`. Put
-   `Fixes KOF-nn` in the PR description — Linear's GitHub integration links the
-   PR and moves the issue on as the PR merges.
-   (`closes #<github-number>` is the old convention; it is no longer used.)
-3. Record your evidence on the issue (below).
-
-**Do not move the status by hand.** The GitHub integration owns it: linking the
-PR moves the issue to **In Progress** and assigns it to the PR author, and
-merging closes it. A manual status change made before the PR links is simply
-overwritten when it does.
-
-Work with no matching issue — a bug reported directly, an opportunistic fix —
-simply omits the line. Do not invent an identifier, and **do not attach `Fixes`
-to an issue the PR does not actually resolve**: merging would silently close
-still-open work. Naming a related-but-unresolved issue in prose is fine.
-
-That last rule has teeth: an issue named with `Fixes` is linked the moment the
-PR body is saved, which drags it into **In Progress** immediately and puts it in
-line to be closed on merge. Ongoing operational issues — KOF-209, the showcase
-anchor — must never be named that way.
-
-### Recording evidence on an issue
-
-When a change has a visible result — a screenshot, a plot, a before/after, a
-convergence log — attach it to **the Linear issue**, not to a chat channel:
-
-- **One comment per issue, edited in place.** Update the existing evidence
-  comment when you push again; do not add a second comment per push. A stream of
-  near-identical posts is noise, and noise is what this workflow exists to avoid.
-- Say what the reader is looking at and what it proves. A bare image is not
-  evidence.
-- Failure screenshots from CI are **not** posted to Linear. They stay as the
-  GitHub Actions artifact of the run that produced them.
-
-### The weekly project update
-
-One post per week on the Kofem project, combining a progress digest with the
-five-step workflow capture from `web/tests/showcase.spec.ts`.
-
-**CI does not publish it, and there is no Linear credential in this repository.**
-It is a scheduled Claude task — the `showcase` skill in `.claude/skills/` — posting
-over the Linear MCP connection. Screenshot uploads are anchored to **KOF-209**,
-because Linear's file upload is issue-scoped.
-
-Three properties keep it out of the noise category. Any change must preserve all
-three:
-
-1. **One post per week.** Digest and screenshots share a body — never a post per
-   section, never a post per image.
-2. **Screenshots only when they changed.** The SHA-256 of the screenshot set is
-   written into the update body as an HTML comment and checked before anything is
-   uploaded. An unchanged week posts the digest alone.
-3. **No filler.** A week with nothing worth reading says so in one line.
-
-This replaced a Slack pipeline that posted the same images on every CI run, on
-every branch and PR.
+“Example” means the public gallery in `examples/gallery/`; read its README.
+Edit generators and regenerate outputs, then check the gallery and app.
+Models must be buildable through the app. Do not hand-edit generated VTU/JSON,
+add Abaqus inputs/readers, or publish unvalidated examples without being asked.

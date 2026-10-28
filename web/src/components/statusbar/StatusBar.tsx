@@ -5,6 +5,7 @@ import { useModelStore, loadKind } from "../../store/modelStore";
 import type { PickMode } from "../../store/modelStore";
 import { APP_VERSION } from "../../lib/version";
 import { consentBanner } from "../../lib/analytics";
+import { EngineStatus } from "./EngineStatus";
 import styles from "./StatusBar.module.css";
 
 type ViewRepr = "geometry" | "surface" | "volume" | "wireframe";
@@ -319,6 +320,7 @@ export function StatusBar() {
             Mesh OK
           </span>
         ) : null}
+        <EngineStatus />
         <span className={styles.muted}>m · N · Pa · {APP_VERSION}</span>
         <a
           className={styles.discLink}

@@ -3,6 +3,7 @@
 
 import { useModelStore } from "../../store/modelStore";
 import { useMesh } from "../../hooks/useMesh";
+import { useEngineGate } from "../../store/engineStore";
 import { estimateElementCount } from "../../lib/meshSizing";
 import type { GeometryMeasure } from "../../lib/meshSizing";
 import { LogSection } from "./LogSection";
@@ -35,6 +36,7 @@ export function MeshPanel() {
   const isRunning = useModelStore((s) => s.isRunning);
   const remeshNotice = useModelStore((s) => s.remeshNotice);
   const setRemeshNotice = useModelStore((s) => s.setRemeshNotice);
+  const engine = useEngineGate();
   const {
     stepSurface,
     isMeshing,
@@ -118,7 +120,8 @@ export function MeshPanel() {
             className={hasMesh ? styles.outlineBtn : styles.meshVolBtn}
             // A mesh queued behind a running import, split or solve would mesh
             // with settings from before it — and its worker reset would kill it.
-            disabled={isMeshing || isRunning}
+            disabled={isMeshing || isRunning || engine.blocked}
+            title={engine.reason}
             onClick={meshVolume}
           >
             {isMeshing

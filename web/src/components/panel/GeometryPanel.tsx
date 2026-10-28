@@ -11,6 +11,7 @@ import {
 } from "../../store/geometrySlice";
 import type { TreeTarget } from "../../store/viewSlice";
 import { useGeometry } from "../../hooks/useGeometry";
+import { useEngineGate } from "../../store/engineStore";
 import { SplitSection } from "./SplitSection";
 import { BooleanSection } from "./BooleanSection";
 import { EYE_ICON, EYE_OFF_ICON } from "./bodyIcons";
@@ -81,6 +82,10 @@ const IGES_CARD_ICON = (
 function ImportSection() {
   const { isImporting, isRunning, stepImportError, importCadFile } =
     useGeometry();
+  // A file picked while the engine loads waits for it; a failed engine
+  // blocks the import with the reason on hover.
+  const engine = useEngineGate();
+  const importLabel = engine.waiting ? "Waiting for engine…" : "Importing…";
 
   const stepRef = useRef<HTMLInputElement | null>(null);
   const igesRef = useRef<HTMLInputElement | null>(null);
@@ -116,24 +121,26 @@ function ImportSection() {
       <div className={styles.cardGrid}>
         <button
           className={styles.importCard}
-          disabled={isImporting || isRunning}
+          disabled={isImporting || isRunning || engine.blocked}
+          title={engine.reason}
           onClick={() => stepRef.current?.click()}
         >
           {STEP_CARD_ICON}
           <span className={styles.cardTitle}>
-            {isImporting ? "Importing…" : "Import STEP"}
+            {isImporting ? importLabel : "Import STEP"}
           </span>
           <span className={styles.cardSub}>.step / .stp</span>
         </button>
 
         <button
           className={styles.importCard}
-          disabled={isImporting || isRunning}
+          disabled={isImporting || isRunning || engine.blocked}
+          title={engine.reason}
           onClick={() => igesRef.current?.click()}
         >
           {IGES_CARD_ICON}
           <span className={styles.cardTitle}>
-            {isImporting ? "Importing…" : "Import IGES"}
+            {isImporting ? importLabel : "Import IGES"}
           </span>
           <span className={styles.cardSub}>.igs / .iges</span>
         </button>

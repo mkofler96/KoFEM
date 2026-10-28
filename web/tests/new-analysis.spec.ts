@@ -51,7 +51,7 @@ function readStore(page: import("@playwright/test").Page) {
 
 // Load a pre-solved example so the store carries a full analysis to discard.
 async function loadExample(page: import("@playwright/test").Page) {
-  await page.goto("/app/?example=cantilever-beam");
+  await page.goto("/app/?example=axial-bar");
   await expect(page.locator("nav")).toBeVisible();
   await expect
     .poll(async () => (await readStore(page)).nodes, { timeout: 15_000 })
@@ -103,7 +103,7 @@ test("dismissing the confirm keeps the current analysis", async ({ page }) => {
 
   const snapshot = await readStore(page);
   expect(snapshot.nodes).toBeGreaterThan(0);
-  expect(snapshot.modelName).toBe("Cantilever beam under tip load");
+  expect(snapshot.modelName).toBe("Axial bar in tension");
   expect(snapshot.hasResult).toBe(true);
 });
 

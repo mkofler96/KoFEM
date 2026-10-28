@@ -1166,3 +1166,14 @@
 .addSource {
   margin-bottom: 14px;
 }
+
+/* An example's hand calculation beside its result (KOF-261). */
+.handCheck {
+  margin: 0 0 14px;
+  padding: 8px 12px;
+  background: var(--accent-soft);
+  border-radius: var(--r-md);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}

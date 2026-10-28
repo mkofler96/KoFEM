@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { useModelStore } from "../store/modelStore";
-import { fmt } from "../lib/modelDisplay";
+import { fmt, loadsSummary } from "../lib/modelDisplay";
 import { sendToWorker } from "../workers/sharedWorker";
 import { useWorkerLogs } from "./useWorkerLogs";
 import {
@@ -148,7 +148,7 @@ export function useSolver() {
     [
       drivingOk,
       loadOk
-        ? `Loads applied · ${loads.length} load DOFs`
+        ? loadsSummary(loads.length, surfaceLoads.length)
         : prescribedOk
           ? "Prescribed displacement drives the model"
           : "No loads or prescribed displacement",

@@ -7,6 +7,7 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   statSync,
   writeFileSync,
@@ -24,7 +25,9 @@ import {
 
 const htmlEntry = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 
-// The marketing pages (index.html, privacy/index.html) are fully static — Vite
+// The static pages (index.html, privacy/index.html, and validation/index.html
+// plus one validation/<case>/index.html per benchmark, which
+// examples/validation/run.mjs --report generates) are fully static — Vite
 // emits them byte-for-byte, they import no hashed assets. Feeding them as extra
 // MPA rollup inputs is flaky (in some environments rollup crosses the
 // landing/app chunk names and drops the landing HTML entirely, leaving "/" on
@@ -34,7 +37,14 @@ const htmlEntry = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 // (transformIndexHtml only runs on the app entry at build time). Dev is
 // unaffected: rollupOptions is build-only, the dev server serves the pages from
 // the filesystem, and transformIndexHtml injects analytics there instead.
-const STATIC_PAGES = ["index.html", "privacy/index.html"];
+const STATIC_PAGES = [
+  "index.html",
+  "privacy/index.html",
+  "validation/index.html",
+  ...readdirSync(htmlEntry("./validation/"), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => `validation/${entry.name}/index.html`),
+];
 
 // The examples gallery lives outside web/, with everything else example-related
 // (examples/gallery/). Its site/ folder is served verbatim at /examples/: the
@@ -105,6 +115,19 @@ const serveGallery = (): PluginOption => ({
   },
 });
 
+// Uncompressed size of the engine binary, compiled into the adapter
+// (src/wasm/pkg/kofem_wasm.js) as the total its download progress counts
+// toward: the wasm is served gzipped, so Content-Length (when sent at all)
+// counts compressed bytes while the stream yields decompressed ones.
+function engineBytes(): number {
+  const engine = htmlEntry("./src/wasm/pkg/kofem_wasm_emcc.wasm");
+  if (!existsSync(engine))
+    throw new Error(
+      `${engine} is missing — install the engine with scripts/fetch-wasm-engine.sh (the bun pre-hooks run it) or build it with scripts/build-wasm.sh.`,
+    );
+  return statSync(engine).size;
+}
+
 // COVERAGE=1 instruments all src/ modules with Istanbul counters so Playwright
 // can collect runtime coverage (see tests/coverage.ts).  Off by default: the
 // instrumented bundle is bigger and slower.
@@ -133,6 +156,7 @@ export default defineConfig(({ mode }) => {
     // React solver app lives at "/app/" (app/index.html). MPA mode disables the
     // SPA history fallback so the two entries are served independently.
     appType: "mpa",
+    define: { __KOFEM_ENGINE_BYTES__: JSON.stringify(engineBytes()) },
     plugins: [
       react(),
       wasm(),

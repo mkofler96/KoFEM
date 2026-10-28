@@ -382,11 +382,17 @@ for (const ex of examples) {
   );
 }
 
-// Preserve showcase entries (e.g. the shell plate written by
-// generate-plate-hole-shell.mjs) so regenerating the benchmarks doesn't drop them.
+// Replace this generator's entries in place and keep every other generator's
+// (the cantilever, the shell plate, the MBB beam) where it is, so regenerating
+// the benchmarks neither drops nor reorders them.
 const manifestPath = join(outDir, "examples.json");
-const showcase = existsSync(manifestPath)
-  ? JSON.parse(readFileSync(manifestPath, "utf8")).filter((e) => e.showcase)
+const existing = existsSync(manifestPath)
+  ? JSON.parse(readFileSync(manifestPath, "utf8"))
   : [];
-writeFileSync(join(outDir, "examples.json"), JSON.stringify([...manifest, ...showcase]));
-console.log(`\nWrote ${manifest.length} examples (+${showcase.length} showcase) to ${outDir}`);
+const merged = existing.map((e) => manifest.find((m) => m.id === e.id) ?? e);
+for (const m of manifest)
+  if (!existing.some((e) => e.id === m.id)) merged.push(m);
+writeFileSync(manifestPath, JSON.stringify(merged));
+console.log(
+  `\nWrote ${manifest.length} examples (${merged.length - manifest.length} from other generators kept) to ${outDir}`,
+);

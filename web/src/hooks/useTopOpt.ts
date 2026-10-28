@@ -11,7 +11,7 @@ import type {
   TopOptHistoryEntry,
   TopOptSettings,
 } from "../wasm/pkg/kofem_wasm.js";
-import { fmt } from "../lib/modelDisplay";
+import { fmt, loadsSummary } from "../lib/modelDisplay";
 import { resultUnit } from "../lib/resultField";
 import {
   resetWorker,
@@ -402,7 +402,7 @@ export function useTopOpt() {
     [
       loadOk,
       loadOk
-        ? `Loads applied · ${loads.length} load DOFs`
+        ? loadsSummary(loads.length, surfaceLoads.length)
         : "No loads — topology optimization needs an applied load",
     ],
     [

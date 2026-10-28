@@ -13,7 +13,14 @@ import { openTree } from "./fixtures/tree";
 // request that would have is recorded.
 
 const GA_ID = "G-TEST000000";
-const PAGES = ["/", "/app/", "/examples/", "/privacy/"];
+const PAGES = [
+  "/",
+  "/app/",
+  "/examples/",
+  "/privacy/",
+  "/validation/",
+  "/validation/axial-bar/",
+];
 const CONSENT_KEY = "kofem_analytics_consent";
 
 interface GaEvent {
@@ -227,7 +234,7 @@ test.describe("workflow events", () => {
     test.setTimeout(90_000);
     await withAnalytics(page);
     await setConsent(page, "granted");
-    await page.goto("/app/?example=cantilever-beam");
+    await page.goto("/app/?example=axial-bar");
 
     await expect
       .poll(() => eventNames(page), { timeout: 15_000 })
@@ -244,7 +251,7 @@ test.describe("workflow events", () => {
     );
     expect(
       events.find((e) => e.name === "example_loaded")?.params.example_id,
-    ).toBe("cantilever-beam");
+    ).toBe("axial-bar");
     expect(
       events.find((e) => e.name === "results_viewed")?.params.workflow,
     ).toBe("example");
@@ -264,6 +271,25 @@ test.describe("workflow events", () => {
     expect(completed?.params.duration_bucket).toMatch(/^[a-z0-9_]+$/);
     expect(after.map((e) => e.name)).toContain("engine_ready");
     expect(after.map((e) => e.name)).not.toContain("solve_failed");
+  });
+
+  test("the sample counts as an example, not as the user's CAD", async ({
+    page,
+  }) => {
+    test.setTimeout(60_000);
+    await withAnalytics(page);
+    await setConsent(page, "granted");
+    await page.goto("/app/");
+    await page.getByRole("button", { name: "Try a sample simulation" }).click();
+
+    await expect
+      .poll(() => eventNames(page), { timeout: 30_000 })
+      .toContain("example_loaded");
+    const events = await gaEvents(page);
+    expect(
+      events.find((e) => e.name === "example_loaded")?.params.example_id,
+    ).toBe("wall-bracket");
+    expect(events.map((e) => e.name)).not.toContain("geometry_import_success");
   });
 
   test("CAD import: failure and success are told apart, nothing about the file is sent", async ({
