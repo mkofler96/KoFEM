@@ -6,7 +6,7 @@ import { test, expect } from "./coverage";
 test("landing page renders and links to the solver app", async ({ page }) => {
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "KoFEM", exact: true }),
+    page.getByRole("heading", { name: /Finite element analysis/ }),
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: /Start Solver/i }),

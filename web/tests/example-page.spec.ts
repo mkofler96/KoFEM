@@ -48,7 +48,7 @@ test("the write-up shows its sections, figure and the gallery's numbers", async 
   await page.goto(PAGE);
   await expect(page).toHaveTitle(/Plate with a Hole FEA Benchmark/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Plate with a hole in tension: Kirsch stress concentration",
+    "Plate with a hole",
   );
   expect(await page.locator("main h2").allTextContents()).toEqual([
     "Model",

@@ -17,6 +17,7 @@ import react from "@vitejs/plugin-react";
 import wasm from "vite-plugin-wasm";
 import topLevelAwait from "vite-plugin-top-level-await";
 import istanbul from "vite-plugin-istanbul";
+import { injectSiteLayout } from "./site-layout.mjs";
 import {
   analyticsPlugin,
   analyticsSnippet,
@@ -59,7 +60,10 @@ const copyStaticPages = (snippet: string): PluginOption => ({
   closeBundle() {
     for (const page of STATIC_PAGES) {
       const html = injectAnalytics(
-        readFileSync(htmlEntry(`./${page}`), "utf8"),
+        injectSiteLayout(
+          readFileSync(htmlEntry(`./${page}`), "utf8"),
+          `/${page}`,
+        ),
         snippet,
       );
       mkdirSync(htmlEntry(`./dist/${page}/..`), { recursive: true });
@@ -73,7 +77,10 @@ const copyStaticPages = (snippet: string): PluginOption => ({
         writeFileSync(
           join(galleryOut, page),
           injectAnalytics(
-            readFileSync(join(GALLERY_SITE, page), "utf8"),
+            injectSiteLayout(
+              readFileSync(join(GALLERY_SITE, page), "utf8"),
+              `/examples/${page}`,
+            ),
             snippet,
           ),
         );
@@ -193,6 +200,13 @@ export default defineConfig(({ mode }) => {
     appType: "mpa",
     define: { __KOFEM_ENGINE_BYTES__: JSON.stringify(engineBytes()) },
     plugins: [
+      {
+        name: "site-layout",
+        transformIndexHtml: {
+          order: "pre",
+          handler: (html, context) => injectSiteLayout(html, context.path),
+        },
+      },
       react(),
       wasm(),
       topLevelAwait(),

@@ -19,6 +19,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import examples from "./examples.mjs";
+import { siteHeader, siteFooter } from "../../web/site-layout.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const site = join(here, "site");
@@ -267,42 +268,11 @@ ${JSON.stringify(jsonLd, null, 2)}
     </script>
 
     <!-- Self-hosted fonts (SIL OFL) — see public/fonts/README.md -->
-    <link href="/fonts/geist.css" rel="stylesheet" />
+    <link href="/fonts/ibm-plex.css" rel="stylesheet" />
+    <link href="/case-page.css" rel="stylesheet" />
 
-    <!-- Apply the saved theme before first paint to avoid a flash. -->
-    <script>
-      try {
-        if (localStorage.getItem("kofem_theme") === "light")
-          document.documentElement.setAttribute("data-theme", "light");
-      } catch (e) {}
-    </script>
 
     <style>
-      :root {
-        --bg: #0a0b0f;
-        --bg2: #0c0e13;
-        --panel: #13151c;
-        --panel2: #171a22;
-        --border: #23262f;
-        --border2: #2d313b;
-        --text: #eceef3;
-        --muted: #9aa0ad;
-        --faint: #6b7280;
-        --accent: #5b7cff;
-        --mono: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
-      }
-      :root[data-theme="light"] {
-        --bg: #ffffff;
-        --bg2: #f7f8fa;
-        --panel: #ffffff;
-        --panel2: #f5f6f8;
-        --border: #e7e9ee;
-        --border2: #d8dbe2;
-        --text: #0d1117;
-        --muted: #5b616e;
-        --faint: #868d99;
-        --accent: #2f54eb;
-      }
       *,
       *::before,
       *::after {
@@ -333,68 +303,6 @@ ${JSON.stringify(jsonLd, null, 2)}
       }
 
       /* Header and footer as on the gallery page. */
-      .site-header {
-        position: sticky;
-        top: 0;
-        z-index: 50;
-        backdrop-filter: blur(14px);
-        -webkit-backdrop-filter: blur(14px);
-        background: color-mix(in srgb, var(--bg) 76%, transparent);
-        border-bottom: 1px solid var(--border);
-      }
-      .header-inner {
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 13px 32px;
-        display: flex;
-        align-items: center;
-        gap: 30px;
-      }
-      .brand {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        color: var(--text);
-        font-weight: 600;
-        font-size: 17px;
-      }
-      .brand img {
-        width: 29px;
-        height: 29px;
-        border-radius: 8px;
-      }
-      .nav-links {
-        display: flex;
-        gap: 26px;
-        font-size: 14px;
-      }
-      .nav-links a {
-        color: var(--muted);
-      }
-      .nav-links a.current,
-      .nav-links a:hover {
-        color: var(--text);
-        text-decoration: none;
-      }
-      .header-actions {
-        margin-left: auto;
-        display: flex;
-        align-items: center;
-        gap: 12px;
-      }
-      .icon-btn {
-        width: 34px;
-        height: 34px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 8px;
-        border: 1px solid var(--border);
-        background: var(--panel);
-        color: var(--text);
-        cursor: pointer;
-      }
-      .icon-moon,
       :root[data-theme="light"] .icon-sun {
         display: none;
       }
@@ -418,8 +326,7 @@ ${JSON.stringify(jsonLd, null, 2)}
         border: 1px solid var(--border2);
       }
       .btn:hover,
-      .btn-ghost:hover,
-      .brand:hover {
+      .btn-ghost:hover {
         text-decoration: none;
         filter: brightness(1.08);
       }
@@ -526,37 +433,8 @@ ${JSON.stringify(jsonLd, null, 2)}
         white-space: nowrap;
       }
 
-      .site-footer {
-        border-top: 1px solid var(--border);
-        background: var(--bg2);
-      }
-      .footer-inner {
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 22px 32px;
-        display: flex;
-        justify-content: space-between;
-        gap: 16px;
-        flex-wrap: wrap;
-        font-size: 13px;
-        color: var(--faint);
-      }
-      .footer-inner nav {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 20px;
-      }
-      .footer-inner a {
-        color: var(--faint);
-      }
-
       @media (max-width: 760px) {
-        .nav-links {
-          display: none;
-        }
-        .header-inner,
-        main,
-        .footer-inner {
+        main {
           padding-left: 20px;
           padding-right: 20px;
         }
@@ -570,42 +448,21 @@ ${JSON.stringify(jsonLd, null, 2)}
         }
       }
     </style>
+    <link href="/site.css" rel="stylesheet" />
   </head>
 
   <body>
-    <header class="site-header">
-      <div class="header-inner">
-        <a class="brand" href="/"><img src="/kofem_logo.svg" alt="KoFEM logo" width="29" height="29" />KoFEM</a>
-        <nav class="nav-links" aria-label="Site">
-          <a href="/#workflow">Workflow</a>
-          <a class="current" href="/examples/">Examples</a>
-          <a href="/#app">Solver</a>
-        </nav>
-        <div class="header-actions">
-          <button class="icon-btn" id="theme-toggle" aria-label="Toggle theme">
-            <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="4"></circle>
-              <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path>
-            </svg>
-            <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path>
-            </svg>
-          </button>
-          <a class="btn" href="/app/">Start Solver</a>
-        </div>
-      </div>
-    </header>
+    ${siteHeader("examples")}
 
     <main>
       <nav class="breadcrumb" aria-label="Breadcrumb">
         <a href="/">Home</a> / <a href="/examples/">Examples</a> / ${esc(solidCard.title)}
       </nav>
 
-      <h1>${esc(headline)}</h1>
+      <h1>${esc(solidCard.title)}</h1>
       <p class="lede">
-        A plate with a central hole under uniaxial tension, checked against
-        Kirsch's solution, K<sub>t</sub> = 3. KoFEM's solid model gives
-        K<sub>t</sub> = ${ktStr} in the element next to the hole edge.
+        A steel plate in tension. Compare the stress around the hole with
+        Kirsch's analytical solution.
       </p>
       <div class="cta">
         <a class="btn" id="open-in-kofem" href="${appPath}">Open in KoFEM</a>
@@ -687,32 +544,8 @@ ${JSON.stringify(jsonLd, null, 2)}
       </ol>
     </main>
 
-    <footer class="site-footer">
-      <div class="footer-inner">
-        <span>© 2026 KoFEM — Online Finite Element Solver</span>
-        <nav aria-label="Footer">
-          <a href="/">Home</a>
-          <a href="/examples/">Examples</a>
-          <a href="/app/">Launch</a>
-          <a href="/privacy/">Privacy &amp; Cookies</a>
-          <a href="#" id="kofem-cookie-settings">Cookie settings</a>
-        </nav>
-      </div>
-    </footer>
+    ${siteFooter()}
 
-    <script>
-      // Theme toggle, shared with the landing page and the gallery through the
-      // "kofem_theme" localStorage key.
-      document.getElementById("theme-toggle").addEventListener("click", function () {
-        var root = document.documentElement;
-        var light = root.getAttribute("data-theme") === "light";
-        if (light) root.removeAttribute("data-theme");
-        else root.setAttribute("data-theme", "light");
-        try {
-          localStorage.setItem("kofem_theme", light ? "dark" : "light");
-        } catch (e) {}
-      });
-    </script>
   </body>
 </html>
 `;
