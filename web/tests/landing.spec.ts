@@ -16,6 +16,9 @@ test("landing page renders and links to the solver app", async ({ page }) => {
   ).toHaveAttribute("href", "/examples/");
   await page.getByText("More", { exact: true }).click();
   await expect(
+    page.getByRole("link", { name: "Validation", exact: true }),
+  ).toHaveAttribute("href", "/validation/");
+  await expect(
     page.getByRole("link", { name: "Privacy", exact: true }),
   ).toHaveAttribute("href", "/privacy/");
   await expect(
@@ -132,7 +135,7 @@ test("bracket turns 90 degrees during transfer and a full turn during optimizati
 });
 
 const SITE_ORIGIN = "https://kofem.org";
-for (const path of ["/", "/examples/", "/privacy/"]) {
+for (const path of ["/", "/examples/", "/privacy/", "/validation/"]) {
   test(`${path} declares its canonical URL on the production origin`, async ({
     page,
   }) => {

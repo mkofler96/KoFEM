@@ -19,9 +19,15 @@ server {
     gzip on;
     gzip_types text/plain text/css application/javascript application/json application/wasm image/svg+xml;
     gzip_min_length 1024;
+    # Responses differ by Accept-Encoding; say so to caches in front (a CDN).
+    gzip_vary on;
 
     # Fingerprinted Vite assets are immutable — cache them aggressively.
     location /assets/ {
+        # The Dockerfile precompresses them at gzip -9 (KOF-263): the engine's
+        # .wasm travels as 9.0 MB instead of the 10.7 MB nginx's on-the-fly
+        # level-1 gzip makes of it, and is not recompressed on every request.
+        gzip_static on;
         try_files $uri =404;
         expires 1y;
         add_header Cache-Control "public, immutable";

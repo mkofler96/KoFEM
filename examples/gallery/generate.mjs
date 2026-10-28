@@ -409,10 +409,11 @@ for (const ex of examples) {
   );
 }
 
-// Preserve showcase entries (e.g. the shell plate written by
-// generate-plate-hole-shell.mjs) so regenerating the benchmarks doesn't drop them.
-const showcase = previous.filter((e) => e.showcase);
-writeFileSync(manifestPath, JSON.stringify([...manifest, ...showcase]));
+// Replace this generator's entries in place; keep other generators' entries.
+const merged = previous.map((e) => manifest.find((m) => m.id === e.id) ?? e);
+for (const m of manifest)
+  if (!previous.some((e) => e.id === m.id)) merged.push(m);
+writeFileSync(manifestPath, JSON.stringify(merged));
 console.log(
-  `\nWrote ${only.length || manifest.length} solved examples (${manifest.length} benchmarks +${showcase.length} showcase in the manifest) to ${outDir}`,
+  `\nWrote ${only.length || manifest.length} solved examples (${merged.length - manifest.length} from other generators kept) to ${outDir}`,
 );

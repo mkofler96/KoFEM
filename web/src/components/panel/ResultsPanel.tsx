@@ -7,6 +7,7 @@ import type {
   DensityResult,
   ResultPlot,
   ResultType,
+  SolverResult,
 } from "../../store/modelStore";
 import type { TreeTarget } from "../../store/viewSlice";
 import {
@@ -14,6 +15,7 @@ import {
   resultFieldSymbol,
   resultUnit,
 } from "../../lib/resultField";
+import { evaluateHandCheck, type HandCheck } from "../../lib/handCheck";
 import type { ConvergencePoint } from "../../lib/topOptProgress";
 import {
   buildDensityStl,
@@ -236,6 +238,46 @@ function AddResultPlot() {
   );
 }
 
+// The example's hand calculation beside its solved value (KOF-261).
+function HandCheckNote({
+  check,
+  result,
+}: {
+  check: HandCheck;
+  result: SolverResult;
+}) {
+  const nodes = useModelStore((s) => s.nodes);
+  const loadGroups = useModelStore((s) => s.loadGroups);
+  const bcGroups = useModelStore((s) => s.bcGroups);
+  const materials = useModelStore((s) => s.materials);
+  const properties = useModelStore((s) => s.properties);
+  const outcome = evaluateHandCheck(check, {
+    nodes,
+    loadGroups,
+    bcGroups,
+    materials,
+    properties,
+    result,
+  });
+  if (outcome === null) return null;
+  // With a typographic minus, like the formula's.
+  const mm = (value: number) => `${value.toFixed(3).replace("-", "−")} mm`;
+  return (
+    <p className={styles.handCheck} data-testid="hand-check">
+      {outcome.kind === "changed" ? (
+        "The loads, supports or material changed, so the hand calculation no longer applies."
+      ) : (
+        <>
+          {check.quantity}{" "}
+          <span data-testid="hand-check-fe">{mm(outcome.fe)}</span>; hand
+          calculation {check.formula} ={" "}
+          <span data-testid="hand-check-reference">{mm(check.reference)}</span>.
+        </>
+      )}
+    </p>
+  );
+}
+
 function Empty({ text, footer }: { text: string; footer: ReactNode }) {
   return (
     <div className={styles.panel}>
@@ -258,6 +300,7 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
   const setDeformScale = useModelStore((s) => s.setDeformScale);
   const nodes = useModelStore((s) => s.nodes);
   const elements = useModelStore((s) => s.elements);
+  const handCheck = useModelStore((s) => s.handCheck);
 
   const footer = (
     <button
@@ -292,6 +335,7 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
   return (
     <div className={styles.panel}>
       <div className={styles.tabContent}>
+        {handCheck && <HandCheckNote check={handCheck} result={result} />}
         <div className={styles.sectionLabel}>Field</div>
         <select
           className={styles.formSelect}

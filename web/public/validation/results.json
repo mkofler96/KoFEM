@@ -1,0 +1,716 @@
+{
+  "generated": "2026-10-27",
+  "engine": "engine-bb451aa7afb6",
+  "cases": [
+    {
+      "id": "axial-bar",
+      "name": "Axial bar (uniaxial tension)",
+      "quantity": "tip extension δ",
+      "unit": "m",
+      "reference": 0.0004761904761904761,
+      "referenceLabel": "δ = P·L / (E·A)",
+      "tolPct": 2,
+      "fe": 0.00047730011818624714,
+      "errPct": 0.23302481911192222,
+      "pass": true,
+      "mesh": {
+        "order": 1,
+        "elements": 320,
+        "vertices": 525,
+        "nodes": 525,
+        "dofs": 1575
+      },
+      "inputs": [
+        {
+          "symbol": "L",
+          "value": 1,
+          "unit": "m"
+        },
+        {
+          "symbol": "W × H",
+          "value": "0.1 × 0.1",
+          "unit": "m"
+        },
+        {
+          "symbol": "E",
+          "value": 210000000000,
+          "unit": "Pa"
+        },
+        {
+          "symbol": "ν",
+          "value": 0.3,
+          "unit": ""
+        },
+        {
+          "symbol": "P",
+          "value": 1000000,
+          "unit": "N"
+        }
+      ]
+    },
+    {
+      "id": "cantilever",
+      "name": "Cantilever beam (end load)",
+      "quantity": "tip deflection δ",
+      "unit": "m",
+      "reference": -0.0019047619047619043,
+      "referenceLabel": "δ = P·L³ / (3·E·I)",
+      "tolPct": 6,
+      "fe": -0.0018378907142868747,
+      "errPct": -3.510737499939058,
+      "pass": true,
+      "mesh": {
+        "order": 1,
+        "elements": 640,
+        "vertices": 1025,
+        "nodes": 1025,
+        "dofs": 3075
+      },
+      "inputs": [
+        {
+          "symbol": "L",
+          "value": 1,
+          "unit": "m"
+        },
+        {
+          "symbol": "b × h",
+          "value": "0.1 × 0.1",
+          "unit": "m"
+        },
+        {
+          "symbol": "E",
+          "value": 210000000000,
+          "unit": "Pa"
+        },
+        {
+          "symbol": "ν",
+          "value": 0.3,
+          "unit": ""
+        },
+        {
+          "symbol": "P",
+          "value": 10000,
+          "unit": "N"
+        }
+      ]
+    },
+    {
+      "id": "cantilever-p2",
+      "name": "Cantilever beam (P2, coarse mesh)",
+      "quantity": "tip deflection δ",
+      "unit": "m",
+      "reference": -0.0019047619047619043,
+      "referenceLabel": "δ = P·L³ / (3·E·I)",
+      "tolPct": 4,
+      "fe": -0.001940629873489702,
+      "errPct": 1.8830683582093746,
+      "pass": true,
+      "mesh": {
+        "order": 2,
+        "elements": 40,
+        "vertices": 99,
+        "nodes": 525,
+        "dofs": 1575
+      },
+      "inputs": [
+        {
+          "symbol": "L",
+          "value": 1,
+          "unit": "m"
+        },
+        {
+          "symbol": "b × h",
+          "value": "0.1 × 0.1",
+          "unit": "m"
+        },
+        {
+          "symbol": "E",
+          "value": 210000000000,
+          "unit": "Pa"
+        },
+        {
+          "symbol": "ν",
+          "value": 0.3,
+          "unit": ""
+        },
+        {
+          "symbol": "P",
+          "value": 10000,
+          "unit": "N"
+        }
+      ]
+    },
+    {
+      "id": "beam-torsion",
+      "name": "Square beam under torsion",
+      "quantity": "angle of twist θ",
+      "unit": "rad",
+      "reference": 0.0008791208791208789,
+      "referenceLabel": "θ = T·L / (G·K)",
+      "tolPct": 5,
+      "fe": 0.0008578338315512303,
+      "errPct": -2.421401661047525,
+      "pass": true,
+      "mesh": {
+        "order": 1,
+        "elements": 720,
+        "vertices": 1029,
+        "nodes": 1029,
+        "dofs": 3087
+      },
+      "inputs": [
+        {
+          "symbol": "L",
+          "value": 1,
+          "unit": "m"
+        },
+        {
+          "symbol": "b",
+          "value": 0.1,
+          "unit": "m"
+        },
+        {
+          "symbol": "E",
+          "value": 210000000000,
+          "unit": "Pa"
+        },
+        {
+          "symbol": "ν",
+          "value": 0.3,
+          "unit": ""
+        },
+        {
+          "symbol": "T",
+          "value": 1000,
+          "unit": "N·m"
+        }
+      ]
+    },
+    {
+      "id": "plate-with-hole",
+      "name": "Plate with a hole (Kirsch)",
+      "quantity": "stress-concentration factor Kt",
+      "unit": "",
+      "reference": 3,
+      "referenceLabel": "Kt = 3 (infinite plate)",
+      "tolPct": 15,
+      "fe": 2.870857397547184,
+      "errPct": -4.304753415093865,
+      "pass": true,
+      "mesh": {
+        "order": 1,
+        "elements": 768,
+        "vertices": 1664,
+        "nodes": 1664,
+        "dofs": 4992
+      },
+      "inputs": [
+        {
+          "symbol": "a",
+          "value": 1,
+          "unit": "m"
+        },
+        {
+          "symbol": "b",
+          "value": 10,
+          "unit": "m"
+        },
+        {
+          "symbol": "t",
+          "value": 0.5,
+          "unit": "m"
+        },
+        {
+          "symbol": "E",
+          "value": 210000000000,
+          "unit": "Pa"
+        },
+        {
+          "symbol": "ν",
+          "value": 0.3,
+          "unit": ""
+        },
+        {
+          "symbol": "σ",
+          "value": 100000000,
+          "unit": "Pa"
+        }
+      ]
+    },
+    {
+      "id": "shaft-torsion",
+      "name": "Hollow shaft under torsion",
+      "quantity": "angle of twist θ",
+      "unit": "rad",
+      "reference": 0.0014488895379514278,
+      "referenceLabel": "θ = T·L / (G·J)",
+      "tolPct": 5,
+      "fe": 0.001468288244624007,
+      "errPct": 1.338867192043276,
+      "pass": true,
+      "mesh": {
+        "order": 1,
+        "elements": 1152,
+        "vertices": 1664,
+        "nodes": 1664,
+        "dofs": 4992
+      },
+      "inputs": [
+        {
+          "symbol": "L",
+          "value": 0.5,
+          "unit": "m"
+        },
+        {
+          "symbol": "rᵢ",
+          "value": 0.03,
+          "unit": "m"
+        },
+        {
+          "symbol": "rₒ",
+          "value": 0.05,
+          "unit": "m"
+        },
+        {
+          "symbol": "E",
+          "value": 210000000000,
+          "unit": "Pa"
+        },
+        {
+          "symbol": "ν",
+          "value": 0.3,
+          "unit": ""
+        },
+        {
+          "symbol": "T",
+          "value": 2000,
+          "unit": "N·m"
+        }
+      ]
+    },
+    {
+      "id": "cooks-membrane",
+      "name": "Cook's membrane",
+      "quantity": "top-corner deflection",
+      "unit": "",
+      "reference": 23.9,
+      "referenceLabel": "converged ≈ 23.9",
+      "tolPct": 6,
+      "fe": 24.113336147071486,
+      "errPct": 0.8926198622237967,
+      "pass": true,
+      "mesh": {
+        "order": 1,
+        "elements": 256,
+        "vertices": 578,
+        "nodes": 578,
+        "dofs": 1734
+      },
+      "inputs": [
+        {
+          "symbol": "t",
+          "value": 1,
+          "unit": ""
+        },
+        {
+          "symbol": "E",
+          "value": 1,
+          "unit": ""
+        },
+        {
+          "symbol": "ν",
+          "value": 0.3333333333333333,
+          "unit": ""
+        },
+        {
+          "symbol": "F",
+          "value": 1,
+          "unit": ""
+        }
+      ]
+    },
+    {
+      "id": "surface-traction",
+      "name": "Surface traction (axial bar)",
+      "quantity": "tip extension δ",
+      "unit": "m",
+      "reference": 0.0004761904761904761,
+      "referenceLabel": "δ = P·L / (E·A)",
+      "tolPct": 2,
+      "fe": 0.0004735771845317028,
+      "errPct": -0.5487912483423933,
+      "pass": true,
+      "mesh": {
+        "order": 1,
+        "elements": 320,
+        "vertices": 525,
+        "nodes": 525,
+        "dofs": 1575
+      },
+      "inputs": [
+        {
+          "symbol": "L",
+          "value": 1,
+          "unit": "m"
+        },
+        {
+          "symbol": "W × H",
+          "value": "0.1 × 0.1",
+          "unit": "m"
+        },
+        {
+          "symbol": "E",
+          "value": 210000000000,
+          "unit": "Pa"
+        },
+        {
+          "symbol": "ν",
+          "value": 0.3,
+          "unit": ""
+        },
+        {
+          "symbol": "P",
+          "value": 1000000,
+          "unit": "N"
+        }
+      ]
+    },
+    {
+      "id": "surface-pressure",
+      "name": "Surface pressure (axial bar)",
+      "quantity": "tip displacement u",
+      "unit": "m",
+      "reference": -0.0000047619047619047615,
+      "referenceLabel": "u = -p·L / E",
+      "tolPct": 2,
+      "fe": -0.000004735771845320725,
+      "errPct": -0.5487912482647742,
+      "pass": true,
+      "mesh": {
+        "order": 1,
+        "elements": 320,
+        "vertices": 525,
+        "nodes": 525,
+        "dofs": 1575
+      },
+      "inputs": [
+        {
+          "symbol": "L",
+          "value": 1,
+          "unit": "m"
+        },
+        {
+          "symbol": "W × H",
+          "value": "0.1 × 0.1",
+          "unit": "m"
+        },
+        {
+          "symbol": "E",
+          "value": 210000000000,
+          "unit": "Pa"
+        },
+        {
+          "symbol": "ν",
+          "value": 0.3,
+          "unit": ""
+        },
+        {
+          "symbol": "p",
+          "value": 1000000,
+          "unit": "Pa"
+        }
+      ]
+    }
+  ],
+  "convergence": [
+    {
+      "id": "cantilever",
+      "caseId": "cantilever",
+      "title": "Cantilever beam, P1 vs. P2",
+      "series": [
+        {
+          "label": "P1 (linear)",
+          "caseId": "cantilever",
+          "order": 1,
+          "points": [
+            {
+              "mesh": "10 × 1 × 1",
+              "order": 1,
+              "elements": 10,
+              "vertices": 44,
+              "nodes": 44,
+              "dofs": 132,
+              "fe": -0.0012338999357163118,
+              "errPct": -35.22025337489361,
+              "ci": false
+            },
+            {
+              "mesh": "20 × 2 × 2",
+              "order": 1,
+              "elements": 80,
+              "vertices": 189,
+              "nodes": 189,
+              "dofs": 567,
+              "fe": -0.0016682344506913354,
+              "errPct": -12.417691338704874,
+              "ci": false
+            },
+            {
+              "mesh": "40 × 4 × 4",
+              "order": 1,
+              "elements": 640,
+              "vertices": 1025,
+              "nodes": 1025,
+              "dofs": 3075,
+              "fe": -0.0018378907142868747,
+              "errPct": -3.510737499939058,
+              "ci": true
+            },
+            {
+              "mesh": "80 × 8 × 8",
+              "order": 1,
+              "elements": 5120,
+              "vertices": 6561,
+              "nodes": 6561,
+              "dofs": 19683,
+              "fe": -0.0018879371299740494,
+              "errPct": -0.8833006763623817,
+              "ci": false
+            }
+          ]
+        },
+        {
+          "label": "P2 (quadratic)",
+          "caseId": "cantilever-p2",
+          "order": 2,
+          "points": [
+            {
+              "mesh": "5 × 1 × 1",
+              "order": 2,
+              "elements": 5,
+              "vertices": 24,
+              "nodes": 99,
+              "dofs": 297,
+              "fe": -0.001885876707011543,
+              "errPct": -0.9914728818939735,
+              "ci": false
+            },
+            {
+              "mesh": "10 × 2 × 2",
+              "order": 2,
+              "elements": 40,
+              "vertices": 99,
+              "nodes": 525,
+              "dofs": 1575,
+              "fe": -0.001940629873489702,
+              "errPct": 1.8830683582093746,
+              "ci": true
+            },
+            {
+              "mesh": "20 × 4 × 4",
+              "order": 2,
+              "elements": 320,
+              "vertices": 525,
+              "nodes": 3321,
+              "dofs": 9963,
+              "fe": -0.0019334378490254611,
+              "errPct": 1.505487073836733,
+              "ci": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "shaft-torsion",
+      "caseId": "shaft-torsion",
+      "title": "Hollow shaft",
+      "series": [
+        {
+          "label": "P1 (linear)",
+          "caseId": "shaft-torsion",
+          "order": 1,
+          "points": [
+            {
+              "mesh": "1 × 8 × 3",
+              "order": 1,
+              "elements": 24,
+              "vertices": 64,
+              "nodes": 64,
+              "dofs": 192,
+              "fe": 0.0017832383240060773,
+              "errPct": 23.0762095589,
+              "ci": false
+            },
+            {
+              "mesh": "2 × 16 × 6",
+              "order": 1,
+              "elements": 192,
+              "vertices": 336,
+              "nodes": 336,
+              "dofs": 1008,
+              "fe": 0.0015258593267039485,
+              "errPct": 5.3123296660246115,
+              "ci": false
+            },
+            {
+              "mesh": "3 × 32 × 12",
+              "order": 1,
+              "elements": 1152,
+              "vertices": 1664,
+              "nodes": 1664,
+              "dofs": 4992,
+              "fe": 0.001468288244624007,
+              "errPct": 1.338867192043276,
+              "ci": true
+            },
+            {
+              "mesh": "4 × 64 × 24",
+              "order": 1,
+              "elements": 6144,
+              "vertices": 8000,
+              "nodes": 8000,
+              "dofs": 24000,
+              "fe": 0.0014545860106318059,
+              "errPct": 0.39316128187606586,
+              "ci": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cooks-membrane",
+      "caseId": "cooks-membrane",
+      "title": "Cook's membrane",
+      "series": [
+        {
+          "label": "P1 (linear)",
+          "caseId": "cooks-membrane",
+          "order": 1,
+          "points": [
+            {
+              "mesh": "4 × 4",
+              "order": 1,
+              "elements": 16,
+              "vertices": 50,
+              "nodes": 50,
+              "dofs": 150,
+              "fe": 17.68131501806105,
+              "errPct": -26.019602434891002,
+              "ci": false
+            },
+            {
+              "mesh": "8 × 8",
+              "order": 1,
+              "elements": 64,
+              "vertices": 162,
+              "nodes": 162,
+              "dofs": 486,
+              "fe": 22.203212728028173,
+              "errPct": -7.099528334610147,
+              "ci": false
+            },
+            {
+              "mesh": "16 × 16",
+              "order": 1,
+              "elements": 256,
+              "vertices": 578,
+              "nodes": 578,
+              "dofs": 1734,
+              "fe": 24.113336147071486,
+              "errPct": 0.8926198622237967,
+              "ci": true
+            },
+            {
+              "mesh": "32 × 32",
+              "order": 1,
+              "elements": 1024,
+              "vertices": 2178,
+              "nodes": 2178,
+              "dofs": 6534,
+              "fe": 24.79508768559579,
+              "errPct": 3.7451367598150216,
+              "ci": false
+            },
+            {
+              "mesh": "64 × 64",
+              "order": 1,
+              "elements": 4096,
+              "vertices": 8450,
+              "nodes": 8450,
+              "dofs": 25350,
+              "fe": 25.033655699840637,
+              "errPct": 4.743329288036143,
+              "ci": false
+            }
+          ]
+        },
+        {
+          "label": "P2 (quadratic)",
+          "caseId": "cooks-membrane",
+          "order": 2,
+          "points": [
+            {
+              "mesh": "2 × 2",
+              "order": 2,
+              "elements": 4,
+              "vertices": 18,
+              "nodes": 75,
+              "dofs": 225,
+              "fe": 23.690059120222543,
+              "errPct": -0.8784137229182251,
+              "ci": false
+            },
+            {
+              "mesh": "4 × 4",
+              "order": 2,
+              "elements": 16,
+              "vertices": 50,
+              "nodes": 243,
+              "dofs": 729,
+              "fe": 24.77592970705664,
+              "errPct": 3.6649778537934807,
+              "ci": false
+            },
+            {
+              "mesh": "8 × 8",
+              "order": 2,
+              "elements": 64,
+              "vertices": 162,
+              "nodes": 867,
+              "dofs": 2601,
+              "fe": 25.261968884348164,
+              "errPct": 5.6986145788626175,
+              "ci": false
+            },
+            {
+              "mesh": "16 × 16",
+              "order": 2,
+              "elements": 256,
+              "vertices": 578,
+              "nodes": 3267,
+              "dofs": 9801,
+              "fe": 25.521425475119997,
+              "errPct": 6.784207008870288,
+              "ci": false
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "reproduce": {
+    "caseId": "surface-traction",
+    "galleryId": "axial-bar",
+    "title": "the axial bar",
+    "field": "Ux",
+    "stat": "Max Ux",
+    "unit": "mm",
+    "reference": 0.47619047619047616,
+    "appValue": 0.4735916833152663,
+    "appReadout": "4.736e-1 mm",
+    "faceMean": 0.47357718453249403,
+    "errPct": -0.5487912481762475
+  }
+}

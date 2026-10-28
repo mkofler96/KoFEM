@@ -5,16 +5,18 @@ browser app runs — and compared against a closed-form or published reference.
 No solver is re-implemented; the meshes, boundary conditions and loads are built
 in plain JS, fed to `solve_linear_elastic`, and the result is checked against
 theory. This doubles as a CI regression gate and as the source of the numbers
-shown in the landing-page tutorial.
+on the public validation page, [kofem.org/validation/](https://kofem.org/validation/).
 
 ## Run
 
 ```bash
-node examples/validation/run.mjs            # run all cases, print a table
-node examples/validation/run.mjs --report   # also (re)write REPORT.md
+node examples/validation/run.mjs                 # run all cases, print a table
+node examples/validation/run.mjs --case <id>     # run one case, e.g. axial-bar
+node examples/validation/run.mjs --report        # also regenerate the pages + REPORT.md
 ```
 
-It exits non-zero if any case leaves its tolerance band. CI runs it (and the
+It exits non-zero if any case leaves its tolerance band, or if the public
+pages no longer match the run or their sources (below). CI runs it (and the
 single-DOF test below) via `bun run test` in `web/`.
 
 ## Cases
@@ -28,8 +30,55 @@ single-DOF test below) via `bun run test` in `web/`.
 | Plate with a hole    | stress-concentration Kt ≈ 3     | Kirsch / Timoshenko & Goodier |
 | Hollow shaft torsion | angle of twist θ = T·L/(G·J)    | Saint-Venant torsion          |
 | Cook's membrane      | top-corner deflection ≈ 23.9    | Cook (1974)                   |
+| Surface traction     | δ = P·L/(E·A), traction load    | mechanics of materials        |
+| Surface pressure     | u = −p·L/E, pressure sign       | mechanics of materials        |
 
 See `REPORT.md` for the latest FE-vs-reference numbers.
+
+## The public pages, `/validation/` and `/validation/<id>/`
+
+`run.mjs --report` writes the pages from one engine run — nothing on them is
+typed by hand:
+
+| Output                               | What it is                                                                        |
+| ------------------------------------ | --------------------------------------------------------------------------------- |
+| `web/validation/index.html`          | the overview: results table, one card per case, reproduction (at `/validation/`)  |
+| `web/validation/<id>/index.html`     | one textbook page per case: problem, derivation, model, results, discussion       |
+| `web/public/validation/results.json` | every number on them, plus the engine id; linked as the pages' raw data           |
+| `web/public/sitemap.xml`             | the block between the `validation` markers lists the overview and every case page |
+| `REPORT.md`                          | the results table in Markdown                                                     |
+
+Vite copies every `web/validation/**/index.html` into the build
+(`STATIC_PAGES`). The text comes from the sources: each case's `page` block
+(model, inputs, supports, load, measured quantity, source, mesh grid, optional
+note and gallery id), `textbook/<id>.mjs` (the case page: introduction,
+derivation, model notes, discussion, references and the figure from
+`lib/figures.mjs`), `convergence.mjs` (the mesh-refinement studies, which
+reuse the case builders), `reproduce.mjs` (the gallery axial bar as the app
+solves it, for the in-browser reproduction) and `lib/page.mjs` (layout, in the
+homepage's design). Equations are written in a small TeX subset that
+`lib/tex.mjs` turns into MathML, so the pages stay static and crawlable. Every
+number in the textbook text is computed from the case inputs or the run.
+Change the sources and regenerate — never edit the outputs by hand:
+
+```bash
+cd web && bun run validate:report    # ~40 s: the convergence studies dominate
+```
+
+Every plain run compares itself with the committed `results.json` — each case's
+value to 1e-4 relative, its reference, band and mesh, and the app read-out of
+the reproduction — and re-renders every page from that data, which must match
+the committed HTML. It fails with the list of differences when either
+disagrees. So an engine change that moves a published number, or a text or
+layout change, fails CI until the pages are regenerated. The convergence
+studies are too slow to repeat on every run; they are only refreshed by
+`--report`. `web/tests/validation-page.spec.ts` checks that the pages are
+served, complete and indexable, and that the app shows the published read-out.
+
+The Cook's membrane study shows that refining the mesh moves KoFEM's result past
+the 23.9 reference (to ≈ 25 at 64 × 64 linear and 16 × 16 quadratic elements).
+The page says so; the case stays a regression check until the reference and the
+model definition are reconciled.
 
 ## Topology-optimization benchmarks
 

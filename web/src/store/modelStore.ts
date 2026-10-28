@@ -186,6 +186,8 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.modelName = a.modelName;
       s.result = a.result;
       s.resultType = a.resultType;
+      s.elementOrder = a.elementOrder;
+      s.handCheck = a.handCheck;
       s.legendRange = null;
       // A saved analysis restores its static result (density is not persisted).
       s.activeResult = "static";
@@ -280,6 +282,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.deformScale = 1;
       s.densityThreshold = DEFAULT_DENSITY_THRESHOLD;
       s.elementOrder = 1;
+      s.handCheck = null;
       s.studies = [];
       s.nextStudyId = 1;
       s.resultPlots = [];

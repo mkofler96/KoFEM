@@ -32,19 +32,42 @@ const G = E / (2 * (1 + nu));
 const L = 1.0; // m
 const b = 0.1; // square side (m)
 const T = 1000; // N·m about x
+const DIV = [20, 6, 6]; // elements along x, y, z
 
 const beta = 1 / 3 - 0.21 * (1 - 1 / 12); // square-section (b/a = 1) constant
 const K = beta * b ** 4;
 
 export default {
+  id: "beam-torsion",
   name: "Square beam under torsion",
   quantity: "angle of twist θ",
   unit: "rad",
   reference: (T * L) / (G * K),
   referenceLabel: "θ = T·L / (G·K)",
   tolPct: 5,
+  page: {
+    summary:
+      "Saint-Venant torsion of a square section, which warps; the clamp restrains that warping.",
+    model:
+      "Beam of length L along x, square b × b section; K = β·b⁴, β = 1/3 − 0.21·(1 − 1/12).",
+    inputs: [
+      ["L", L, "m"],
+      ["b", b, "m"],
+      ["E", E, "Pa"],
+      ["ν", nu, ""],
+      ["T", T, "N·m"],
+    ],
+    supports: "x = 0 face clamped.",
+    loads:
+      "Torque T on the x = L face as tangential nodal forces ∝ r (KoFEM's moment load).",
+    measured: "Mean rotation of the x = L face about the axis.",
+    mesh: `${DIV.join(" × ")} grid`,
+    source: "Timoshenko & Goodier, Theory of Elasticity; Roark",
+    gallery: "beam-torsion",
+    grid: DIV,
+  },
   run(solve) {
-    const m = boxHexMesh(L, b, b, 20, 6, 6);
+    const m = boxHexMesh(L, b, b, ...DIV);
     const fixed = nodesWhere(m.vertices, (x) => x <= 1e-9);
     const tip = nodesWhere(m.vertices, (x) => x >= L - 1e-9);
 
