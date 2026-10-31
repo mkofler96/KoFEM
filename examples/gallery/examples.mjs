@@ -126,14 +126,21 @@ const plateWithHole = (() => {
   const a = 1000, // hole radius (mm)
     b = 10000, // plate half-width (mm)
     t = 500, // thickness (mm)
-    sigma = 100; // remote tension (MPa)
-  const m = plateWithHoleMesh(a, b, t, 12, 64, 2);
+    sigma = 100, // remote tension (MPa)
+    rings = 12, // element rings from the hole to the outer square
+    sectors = 64, // elements around the hole
+    grade = 2; // ring spacing ∝ (i/rings)^grade, clustered at the hole
+  const m = plateWithHoleMesh(a, b, t, rings, sectors, grade);
   const P = sigma * (2 * b * t);
   return {
     id: "plate-with-hole",
     title: "Plate with a hole",
     blurb:
       "A wide plate in uniaxial tension with a central circular hole. The stress peaks at the hole edge transverse to the load, approaching Kirsch's Kt = 3.",
+    // The benchmark write-up at /examples/plate-with-hole/, written from this
+    // definition and the solved files by generate-plate-hole-page.mjs.
+    page: "plate-with-hole/",
+    geometry: { a, b, t, sigma, rings, sectors, grade },
     mesh: { vertices: m.vertices, hexahedra: m.hexahedra },
     material: { name: "Steel", ...STEEL },
     fixed: nodesWhere(m.vertices, (x) => x <= -b + 1e-6),

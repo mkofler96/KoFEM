@@ -14,6 +14,10 @@
 //                    (undeformed positions, per-vertex displacement, triangles).
 //
 // Run with:  bun examples/gallery/generate.mjs   (or `bun run examples:generate`)
+//
+// Pass example ids to re-solve only those (`bun run examples:generate
+// plate-with-hole`): every other entry of examples.json and every other .vtu is
+// left exactly as it is, so one changed example does not re-commit the others.
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -347,11 +351,33 @@ function solverLoadsFor(example) {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 
+const manifestPath = join(outDir, "examples.json");
+const previous = existsSync(manifestPath)
+  ? JSON.parse(readFileSync(manifestPath, "utf8"))
+  : [];
+
+const only = process.argv.slice(2);
+const known = new Set(examples.map((ex) => ex.id));
+for (const id of only)
+  if (!known.has(id))
+    throw new Error(
+      `Unknown example id "${id}" — examples.mjs defines: ${[...known].join(", ")}`,
+    );
+
 const solve = await loadSolver();
 mkdirSync(outDir, { recursive: true });
 
 const manifest = [];
 for (const ex of examples) {
+  if (only.length > 0 && !only.includes(ex.id)) {
+    const kept = previous.find((e) => e.id === ex.id);
+    if (!kept)
+      throw new Error(
+        `examples.json has no entry for "${ex.id}" to keep — run without ids to regenerate every example`,
+      );
+    manifest.push(kept);
+    continue;
+  }
   const loads = solverLoadsFor(ex);
   const result = solve(ex.mesh, ex.material, {
     fixed_vertices: ex.fixed,
@@ -373,6 +399,7 @@ for (const ex of examples) {
     referenceLabel: ex.referenceLabel,
     feValue: fe,
     errPct,
+    page: ex.page,
     colorLabel: "Displacement magnitude",
     viewer: buildViewer(ex, result),
   });
@@ -382,17 +409,11 @@ for (const ex of examples) {
   );
 }
 
-// Replace this generator's entries in place and keep every other generator's
-// (the cantilever, the shell plate, the MBB beam) where it is, so regenerating
-// the benchmarks neither drops nor reorders them.
-const manifestPath = join(outDir, "examples.json");
-const existing = existsSync(manifestPath)
-  ? JSON.parse(readFileSync(manifestPath, "utf8"))
-  : [];
-const merged = existing.map((e) => manifest.find((m) => m.id === e.id) ?? e);
+// Replace this generator's entries in place; keep other generators' entries.
+const merged = previous.map((e) => manifest.find((m) => m.id === e.id) ?? e);
 for (const m of manifest)
-  if (!existing.some((e) => e.id === m.id)) merged.push(m);
+  if (!previous.some((e) => e.id === m.id)) merged.push(m);
 writeFileSync(manifestPath, JSON.stringify(merged));
 console.log(
-  `\nWrote ${manifest.length} examples (${merged.length - manifest.length} from other generators kept) to ${outDir}`,
+  `\nWrote ${only.length || manifest.length} solved examples (${merged.length - manifest.length} from other generators kept) to ${outDir}`,
 );

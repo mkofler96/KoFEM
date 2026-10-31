@@ -1,0 +1,58 @@
+main {
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+main h1 {
+  font-size: clamp(27px, 3.2vw, 32px);
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  margin-bottom: 12px;
+}
+
+main h2 {
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: normal;
+  margin-top: 36px;
+}
+
+main h3 {
+  font-size: 17px;
+  font-weight: 500;
+}
+
+main .lede,
+main .lede p,
+main p.lede {
+  font-size: 16px;
+  line-height: 1.65;
+}
+
+main .breadcrumb {
+  margin-bottom: 20px;
+}
+
+main .btn,
+main .btn-ghost {
+  font-weight: 500;
+  border-radius: 4px;
+}
+
+main .cta {
+  margin-bottom: 24px;
+}
+
+main figure img {
+  border-radius: 4px;
+}
+
+main table {
+  font-size: 14px;
+}
+
+main .btn {
+  color: var(--bg);
+}
