@@ -118,6 +118,11 @@ export function useFacePick(
         ...(cadFaceId !== undefined ? { cadFaceId } : {}),
       },
       SELECTION_NOUN[pickGeometry],
+      // A flood-fill face pick toggles off a selection containing the clicked
+      // triangle, even when this seed grew a different region (KOF-211).
+      pickGeometry === "face" && cadFaceId === undefined
+        ? boundaryMeshTopo.triangles[startIdx]
+        : undefined,
     );
 
     // Re-split into pending faces + the active (last) selection.
