@@ -9,15 +9,15 @@ const analysisCopy = document.querySelector(".analysis-copy");
 const analysisStages = {
   solve: {
     title: "Local Solve",
-    subtitle: "No cloud, full control over your data.",
+    subtitle: "Apply loads and supports, then solve in your browser.",
   },
   results: {
-    title: "Post Processing",
-    subtitle: "Integrated web-based visualization",
+    title: "Inspect the result",
+    subtitle: "Displacement and stress on the solved bracket.",
   },
   optimization: {
-    title: "Optimization",
-    subtitle: "Put material where it is needed",
+    title: "Topology optimization",
+    subtitle: "Material density evolves with each iteration.",
   },
 };
 const analysisPanels = Object.values(analysisStages).map((stage, index) => {

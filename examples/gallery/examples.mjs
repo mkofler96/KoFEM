@@ -18,6 +18,10 @@
 // These reuse the validation mesh generators so the geometry and physics match
 // the benchmarks in examples/validation/ (those cases are stated in SI; here the
 // identical problems are expressed in the app's mm/MPa system).
+//
+// The cantilever beam is not here: it is built through the app's own pipeline
+// (STEP → Netgen) by generate-cantilever.mjs, because it opens ready to run
+// with a hand check and must re-mesh.
 
 import {
   boxHexMesh,
@@ -59,37 +63,6 @@ const axialBar = (() => {
     reference: (P * L) / (E * (W * H)),
     referenceLabel: "δ = P·L / (E·A)",
     feValue: (r, loaded) => avg(loaded.map((v) => r.displacements[v * 3])),
-  };
-})();
-
-// ── Cantilever beam ───────────────────────────────────────────────────────────
-const cantilever = (() => {
-  const E = STEEL.young_modulus,
-    L = 1000, // mm
-    b = 100,
-    h = 100, // mm
-    P = 1.0e4; // N
-  const I = (b * h ** 3) / 12;
-  const m = boxHexMesh(L, b, h, 40, 4, 4);
-  return {
-    id: "cantilever-beam",
-    title: "Cantilever beam under tip load",
-    blurb:
-      "A beam clamped at the wall with a transverse load over its free-end face — the classic Euler–Bernoulli bending check, δ = P·L³ / (3·E·I).",
-    mesh: { vertices: m.vertices, hexahedra: m.hexahedra },
-    material: { name: "Steel", ...STEEL },
-    fixed: nodesWhere(m.vertices, (x) => x <= 1e-9),
-    load: {
-      dof: 1,
-      totalForce: -P,
-      nodes: nodesWhere(m.vertices, (x) => x >= L - 1e-9),
-      label: "Tip load (−Y)",
-    },
-    quantity: "tip deflection δ",
-    unit: "mm",
-    reference: -(P * L ** 3) / (3 * E * I),
-    referenceLabel: "δ = P·L³ / (3·E·I)",
-    feValue: (r, loaded) => avg(loaded.map((v) => r.displacements[v * 3 + 1])),
   };
 })();
 
@@ -153,14 +126,21 @@ const plateWithHole = (() => {
   const a = 1000, // hole radius (mm)
     b = 10000, // plate half-width (mm)
     t = 500, // thickness (mm)
-    sigma = 100; // remote tension (MPa)
-  const m = plateWithHoleMesh(a, b, t, 12, 64, 2);
+    sigma = 100, // remote tension (MPa)
+    rings = 12, // element rings from the hole to the outer square
+    sectors = 64, // elements around the hole
+    grade = 2; // ring spacing ∝ (i/rings)^grade, clustered at the hole
+  const m = plateWithHoleMesh(a, b, t, rings, sectors, grade);
   const P = sigma * (2 * b * t);
   return {
     id: "plate-with-hole",
     title: "Plate with a hole",
     blurb:
       "A wide plate in uniaxial tension with a central circular hole. The stress peaks at the hole edge transverse to the load, approaching Kirsch's Kt = 3.",
+    // The benchmark write-up at /examples/plate-with-hole/, written from this
+    // definition and the solved files by generate-plate-hole-page.mjs.
+    page: "plate-with-hole/",
+    geometry: { a, b, t, sigma, rings, sectors, grade },
     mesh: { vertices: m.vertices, hexahedra: m.hexahedra },
     material: { name: "Steel", ...STEEL },
     fixed: nodesWhere(m.vertices, (x) => x <= -b + 1e-6),
@@ -228,7 +208,6 @@ const cooksMembrane = (() => {
 
 export default [
   axialBar,
-  cantilever,
   beamTorsion,
   plateWithHole,
   cooksMembrane,

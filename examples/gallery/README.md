@@ -16,9 +16,28 @@ Everything on the public [examples gallery](https://kofem.org/examples/).
 
 | Generator                       | Examples                        | Run (in `web/`)                              |
 | ------------------------------- | ------------------------------- | -------------------------------------------- |
-| `generate.mjs` + `examples.mjs` | the hex-mesh benchmarks         | `bun run examples:generate`                  |
+| `generate.mjs` + `examples.mjs` | the hex-mesh benchmarks         | `bun run examples:generate [id …]`           |
+| `generate-cantilever.mjs`       | cantilever beam, hand check     | `bun run examples:generate-cantilever`       |
 | `generate-plate-hole-shell.mjs` | plate with a hole, shells       | `bun run examples:generate-plate-hole-shell` |
 | `generate-mbb-topopt.mjs`       | MBB beam, topology optimization | `bun run examples:generate-mbb-topopt`       |
+| `generate-plate-hole-page.mjs`  | the plate-with-hole write-up    | `bun run examples:generate-plate-hole-page`  |
+
+`examples:generate` re-solves every hex benchmark; with ids
+(`bun run examples:generate plate-with-hole`) it re-solves only those and keeps
+every other `.vtu` and `examples.json` entry byte for byte.
+
+## Write-ups — `/examples/<id>/`
+
+The plate with a hole has a static write-up at `site/plate-with-hole/`: model,
+mesh, results, limitations and an "Open in KoFEM" link. The card links to it
+through `page` in `examples.mjs`; the URL is listed in `web/public/sitemap.xml`.
+
+No number on it is typed by hand: `generate-plate-hole-page.mjs` computes them
+from `examples.mjs` and the shipped `examples.json` and `.vtu` files, and stops
+when those disagree. Its figure (also the `og:image`) is captured from the app
+by `web/tests/example-page-capture.spec.ts`. After the plate's result changes,
+run `examples:generate plate-with-hole`, `capture:example-pages` (needs the
+built app), then `examples:generate-plate-hole-page`.
 
 ## Examples are built the way a user builds them
 
@@ -28,9 +47,24 @@ whole-CAD-face picks — never from geometry or node sets the app cannot produce
 Face entries then carry their `cadFaceId`, so an opened example keeps its
 supports and loads through a re-mesh.
 
-The MBB beam follows this. The five hex-mesh benchmarks (`examples.mjs`) and the
-shell plate with a hole do not yet: they are structured meshes with node-set
-boundary conditions, which the app's Netgen pipeline cannot reproduce.
+The MBB beam and the cantilever beam follow this. The four hex-mesh benchmarks
+(`examples.mjs`) and the shell plate with a hole do not yet: they are structured
+meshes with node-set boundary conditions, which the app's Netgen pipeline cannot
+reproduce.
+
+## The cantilever beam (with a hand check)
+
+`generate-cantilever.mjs` builds δ = P·L³ / (3·E·I) as a user would: import a
+1000 × 100 × 100 mm block, mesh it at 25 mm with quadratic tetrahedra (linear
+ones lock in bending), clamp the face x = 0, load the face x = 1000 with
+Fy = −10 kN. It opens ready to run, so its `.vtu` is saved **unsolved**, on
+the static study, with a `handCheck` block (`web/src/lib/handCheck.ts`) the
+Results panel compares the tip deflection with. It ships `cantilever-beam.step`,
+so it can be re-meshed.
+
+The empty app's "Try a sample simulation" is not a gallery example: it opens
+the wall bracket's CAD file (`web/public/samples/`) with nothing set up, and a
+guide walks the user through meshing, supports, load and run.
 
 ## The MBB beam (topology optimization)
 

@@ -198,6 +198,70 @@ export function cookMembraneMesh(nx, ny, t) {
   return { vertices, hexahedra, nid, nx, ny };
 }
 
+const HEX_EDGES = [
+  [0, 1],
+  [1, 2],
+  [2, 3],
+  [3, 0],
+  [4, 5],
+  [5, 6],
+  [6, 7],
+  [7, 4],
+  [0, 4],
+  [1, 5],
+  [2, 6],
+  [3, 7],
+];
+const HEX_FACES = [
+  [0, 1, 2, 3],
+  [4, 5, 6, 7],
+  [0, 1, 5, 4],
+  [2, 3, 7, 6],
+  [0, 3, 7, 4],
+  [1, 2, 6, 5],
+];
+
+/**
+ * Size of a hex mesh solved at H1 order p: elements, mesh vertices, FE nodes and
+ * displacement DOFs (3 per node). A tensor-product Q_p hexahedron carries one
+ * node per vertex, p−1 per edge, (p−1)² per face and (p−1)³ inside, so P2 is
+ * the 27-node hexahedron. Counts are before supports are eliminated.
+ */
+export function meshStats(mesh, order) {
+  if ((mesh.tetrahedra ?? []).length > 0)
+    throw new Error(
+      `meshStats counts hexahedral meshes only, got ${mesh.tetrahedra.length} tetrahedra`,
+    );
+  const edges = new Set();
+  const faces = new Set();
+  for (const hex of mesh.hexahedra) {
+    for (const [a, b] of HEX_EDGES)
+      edges.add(
+        hex[a] < hex[b] ? `${hex[a]},${hex[b]}` : `${hex[b]},${hex[a]}`,
+      );
+    for (const f of HEX_FACES)
+      faces.add(
+        f
+          .map((i) => hex[i])
+          .sort((x, y) => x - y)
+          .join(","),
+      );
+  }
+  const p = order - 1;
+  const nodes =
+    mesh.vertices.length +
+    p * edges.size +
+    p * p * faces.size +
+    p * p * p * mesh.hexahedra.length;
+  return {
+    order,
+    elements: mesh.hexahedra.length,
+    vertices: mesh.vertices.length,
+    nodes,
+    dofs: 3 * nodes,
+  };
+}
+
 /** Indices of vertices satisfying pred(x,y,z,index). */
 export function nodesWhere(vertices, pred) {
   const out = [];

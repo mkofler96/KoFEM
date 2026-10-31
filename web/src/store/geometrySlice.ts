@@ -412,6 +412,8 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       dropAnalysis(s);
       s.geometryHistory = [];
       if (tessellation) {
+        // A new part is a new model: an example's hand check no longer applies.
+        s.handCheck = null;
         s.fitViewTrigger++;
         s.hasStarted = true;
         s.mode = "geometry";

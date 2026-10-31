@@ -5,6 +5,7 @@
 // transitions (mode navigation).
 
 import type { SliceCreator } from "./modelStore";
+import type { HandCheck } from "../lib/handCheck";
 import { modeSelection, applyTreeSelection } from "./viewSlice";
 import { ensurePlot } from "./studySlice";
 
@@ -54,6 +55,9 @@ export interface ResultsSlice {
   legendRange: LegendRange | null;
   mode: AppMode;
   hasStarted: boolean;
+  // The closed-form check the loaded example carries (KOF-261), shown beside
+  // its result. Null for any model the user built or imported.
+  handCheck: HandCheck | null;
 
   setResult(result: SolverResult): void;
   setResultType(t: ResultType): void;
@@ -76,6 +80,7 @@ export const createResultsSlice: SliceCreator<ResultsSlice> = (set) => ({
   legendRange: null,
   mode: "geometry",
   hasStarted: false,
+  handCheck: null,
 
   setResult: (result) =>
     set((s) => {

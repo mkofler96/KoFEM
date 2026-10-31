@@ -8,6 +8,52 @@
     <loc>https://kofem.org/examples/</loc>
     <priority>0.8</priority>
   </url>
+  <!-- validation:start -->
+  <url>
+    <loc>https://kofem.org/validation/</loc>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://kofem.org/validation/axial-bar/</loc>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://kofem.org/validation/cantilever/</loc>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://kofem.org/validation/cantilever-p2/</loc>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://kofem.org/validation/beam-torsion/</loc>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://kofem.org/validation/plate-with-hole/</loc>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://kofem.org/validation/shaft-torsion/</loc>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://kofem.org/validation/cooks-membrane/</loc>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://kofem.org/validation/surface-traction/</loc>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://kofem.org/validation/surface-pressure/</loc>
+    <priority>0.6</priority>
+  </url>
+  <!-- validation:end -->
+  <url>
+    <loc>https://kofem.org/examples/plate-with-hole/</loc>
+    <priority>0.6</priority>
+  </url>
   <url>
     <loc>https://kofem.org/privacy/</loc>
     <priority>0.1</priority>

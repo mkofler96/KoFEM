@@ -1,12 +1,13 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { defineConfig, loadEnv, type PluginOption } from "vite";
+import { defineConfig, loadEnv, type Connect, type PluginOption } from "vite";
 import { fileURLToPath } from "node:url";
 import {
   cpSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   statSync,
   writeFileSync,
@@ -16,6 +17,7 @@ import react from "@vitejs/plugin-react";
 import wasm from "vite-plugin-wasm";
 import topLevelAwait from "vite-plugin-top-level-await";
 import istanbul from "vite-plugin-istanbul";
+import { injectSiteLayout } from "./site-layout.mjs";
 import {
   analyticsPlugin,
   analyticsSnippet,
@@ -24,7 +26,9 @@ import {
 
 const htmlEntry = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 
-// The marketing pages (index.html, privacy/index.html) are fully static — Vite
+// The static pages (index.html, privacy/index.html, and validation/index.html
+// plus one validation/<case>/index.html per benchmark, which
+// examples/validation/run.mjs --report generates) are fully static — Vite
 // emits them byte-for-byte, they import no hashed assets. Feeding them as extra
 // MPA rollup inputs is flaky (in some environments rollup crosses the
 // landing/app chunk names and drops the landing HTML entirely, leaving "/" on
@@ -34,7 +38,14 @@ const htmlEntry = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 // (transformIndexHtml only runs on the app entry at build time). Dev is
 // unaffected: rollupOptions is build-only, the dev server serves the pages from
 // the filesystem, and transformIndexHtml injects analytics there instead.
-const STATIC_PAGES = ["index.html", "privacy/index.html"];
+const STATIC_PAGES = [
+  "index.html",
+  "privacy/index.html",
+  "validation/index.html",
+  ...readdirSync(htmlEntry("./validation/"), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => `validation/${entry.name}/index.html`),
+];
 
 // The examples gallery lives outside web/, with everything else example-related
 // (examples/gallery/). Its site/ folder is served verbatim at /examples/: the
@@ -49,7 +60,10 @@ const copyStaticPages = (snippet: string): PluginOption => ({
   closeBundle() {
     for (const page of STATIC_PAGES) {
       const html = injectAnalytics(
-        readFileSync(htmlEntry(`./${page}`), "utf8"),
+        injectSiteLayout(
+          readFileSync(htmlEntry(`./${page}`), "utf8"),
+          `/${page}`,
+        ),
         snippet,
       );
       mkdirSync(htmlEntry(`./dist/${page}/..`), { recursive: true });
@@ -57,13 +71,19 @@ const copyStaticPages = (snippet: string): PluginOption => ({
     }
     const galleryOut = htmlEntry("./dist/examples/");
     cpSync(GALLERY_SITE, galleryOut, { recursive: true });
-    writeFileSync(
-      join(galleryOut, "index.html"),
-      injectAnalytics(
-        readFileSync(join(GALLERY_SITE, "index.html"), "utf8"),
-        snippet,
-      ),
-    );
+    // The gallery and every example write-up below it (site/<id>/index.html).
+    for (const page of readdirSync(GALLERY_SITE, { recursive: true }))
+      if (extname(page) === ".html")
+        writeFileSync(
+          join(galleryOut, page),
+          injectAnalytics(
+            injectSiteLayout(
+              readFileSync(join(GALLERY_SITE, page), "utf8"),
+              `/examples/${page}`,
+            ),
+            snippet,
+          ),
+        );
   },
 });
 
@@ -72,38 +92,83 @@ const GALLERY_TYPES: Record<string, string> = {
   ".json": "application/json",
   ".vtu": "application/xml",
   ".step": "application/octet-stream",
+  ".png": "image/png",
+  ".svg": "image/svg+xml",
 };
 
-// Dev server only; `vite preview` serves dist/, which copyStaticPages fills.
+// A folder under /examples/ requested without its trailing slash — the gallery
+// itself, or a write-up (site/<id>/index.html) — gets a 301 to the slash form,
+// as nginx answers it in production; otherwise the pages' relative URLs (the
+// gallery fetches "./examples.json") resolve one level too high. `root` is the
+// folder served at /examples/.
+const redirectBareFolder =
+  (root: string): Connect.NextHandleFunction =>
+  (req, res, next) => {
+    const [original, query] = (req.originalUrl ?? "").split("?");
+    if (original.endsWith("/")) {
+      next();
+      return;
+    }
+    const dir = join(
+      root,
+      decodeURIComponent(original.slice("/examples".length)),
+    );
+    if (!dir.startsWith(root) || !existsSync(dir)) {
+      next();
+      return;
+    }
+    if (!statSync(dir).isDirectory()) {
+      next();
+      return;
+    }
+    res.statusCode = 301;
+    res.setHeader("Location", `${original}/${query ? `?${query}` : ""}`);
+    res.end();
+  };
+
+// Dev serves the gallery from examples/gallery/site/; `vite preview` serves
+// dist/examples/, which copyStaticPages fills, and only needs the redirect.
 const serveGallery = (): PluginOption => ({
   name: "serve-gallery",
   apply: "serve",
   configureServer(server) {
+    server.middlewares.use("/examples", redirectBareFolder(GALLERY_SITE));
     server.middlewares.use("/examples", (req, res, next) => {
-      const [original, query] = (req.originalUrl ?? "").split("?");
-      // The page fetches "./examples.json"; served at "/examples" that resolves
-      // to "/examples.json". nginx redirects the bare path too.
-      if (original === "/examples") {
-        res.statusCode = 301;
-        res.setHeader("Location", `/examples/${query ? `?${query}` : ""}`);
-        return res.end();
-      }
       const path = decodeURIComponent((req.url ?? "/").split("?")[0]);
-      const rel = path === "/" ? "index.html" : path.slice(1);
-      const file = join(GALLERY_SITE, rel);
+      let file = join(GALLERY_SITE, path.slice(1));
       if (!file.startsWith(GALLERY_SITE) || !existsSync(file)) return next();
-      if (!statSync(file).isFile()) return next();
+      if (statSync(file).isDirectory()) file = join(file, "index.html");
+      if (!existsSync(file)) return next();
       res.setHeader(
         "Content-Type",
         GALLERY_TYPES[extname(file)] ?? "application/octet-stream",
       );
-      if (rel !== "index.html") return res.end(readFileSync(file));
+      if (extname(file) !== ".html") return res.end(readFileSync(file));
       server
-        .transformIndexHtml("/examples/", readFileSync(file, "utf8"))
+        .transformIndexHtml(`/examples${path}`, readFileSync(file, "utf8"))
         .then((html) => res.end(html), next);
     });
   },
+  configurePreviewServer(server) {
+    server.middlewares.use(
+      "/examples",
+      redirectBareFolder(htmlEntry("./dist/examples/")),
+    );
+  },
 });
+
+// Uncompressed size of the engine binary, compiled into the adapter
+// (src/wasm/pkg/kofem_wasm.js) as the total its download progress counts
+// toward: the wasm is served gzipped, so Content-Length (when sent at all)
+// counts compressed bytes while the stream yields decompressed ones.
+function engineBytes(): number {
+  const engine = htmlEntry("./src/wasm/pkg/kofem_wasm_emcc.wasm");
+  if (!existsSync(engine))
+    throw new Error(
+      `${engine} is missing — install the engine with scripts/fetch-wasm-engine.sh (the bun pre-hooks run it) or build it with scripts/build-wasm.sh.`,
+    );
+  return statSync(engine).size;
+}
 
 // COVERAGE=1 instruments all src/ modules with Istanbul counters so Playwright
 // can collect runtime coverage (see tests/coverage.ts).  Off by default: the
@@ -133,7 +198,15 @@ export default defineConfig(({ mode }) => {
     // React solver app lives at "/app/" (app/index.html). MPA mode disables the
     // SPA history fallback so the two entries are served independently.
     appType: "mpa",
+    define: { __KOFEM_ENGINE_BYTES__: JSON.stringify(engineBytes()) },
     plugins: [
+      {
+        name: "site-layout",
+        transformIndexHtml: {
+          order: "pre",
+          handler: (html, context) => injectSiteLayout(html, context.path),
+        },
+      },
       react(),
       wasm(),
       topLevelAwait(),

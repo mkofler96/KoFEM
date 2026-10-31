@@ -10,8 +10,11 @@ import {
 } from "../lib/coupledMaterials.js";
 import { SpatialGrid } from "../lib/spatialGrid.js";
 
-import createModule from "../wasm/pkg/kofem_wasm.js";
-import type { KofemModule } from "../wasm/pkg/kofem_wasm.js";
+import createModule, { EngineLoadError } from "../wasm/pkg/kofem_wasm.js";
+import type {
+  EngineLoadProgress,
+  KofemModule,
+} from "../wasm/pkg/kofem_wasm.js";
 import {
   buildTie,
   remapElement,
@@ -108,16 +111,50 @@ function describeError(err: unknown): string {
   return String(err);
 }
 
-async function ensureInit() {
-  if (!Module) {
-    const t0 = performance.now();
+// The engine's load progress, streamed to sharedWorker's status store
+// (store/engineStore.ts): downloading → compiling → starting → ready | failed.
+type EngineStatusMessage =
+  | Exclude<EngineLoadProgress, { phase: "ready" }>
+  | (Extract<EngineLoadProgress, { phase: "ready" }> & { initMs: number })
+  | { phase: "failed"; stage: EngineLoadError["stage"]; detail: string };
+
+function postEngineStatus(engineStatus: EngineStatusMessage) {
+  self.postMessage({ id: 0, engineStatus });
+}
+
+// One load per worker, however many requests arrive while it runs: the
+// "init" message sharedWorker sends at start-up and any import queued behind
+// it share this promise. A failure stays failed — every later request gets the
+// same error until sharedWorker.retryEngine() replaces the worker.
+let initPromise: Promise<void> | null = null;
+
+function ensureInit(): Promise<void> {
+  if (!initPromise) initPromise = initEngine();
+  return initPromise;
+}
+
+async function initEngine() {
+  const t0 = performance.now();
+  try {
     Module = await createModule({
       print: (text: string) =>
         self.postMessage({ id: 0, log: `[wasm] ${text}` }),
       printErr: (text: string) =>
         self.postMessage({ id: 0, log: `[wasm:err] ${text}` }),
+      onProgress: (progress) =>
+        postEngineStatus(
+          progress.phase === "ready"
+            ? { ...progress, initMs: performance.now() - t0 }
+            : progress,
+        ),
     });
-    self.postMessage({ id: 0, engineInitMs: performance.now() - t0 });
+  } catch (err) {
+    postEngineStatus({
+      phase: "failed",
+      stage: err instanceof EngineLoadError ? err.stage : "instantiate",
+      detail: err instanceof Error ? err.message : String(err),
+    });
+    throw err;
   }
 }
 function m(): KofemModule {
@@ -2245,7 +2282,9 @@ self.onmessage = async (event: MessageEvent) => {
   try {
     await ensureInit();
 
-    if (type === "parse_step") {
+    if (type === "init") {
+      self.postMessage({ id, ok: true });
+    } else if (type === "parse_step") {
       handleParseStep(id, payload as ParseStepPayload);
     } else if (type === "split_geometry") {
       handleSplitGeometry(id, payload as SplitGeometryPayload);
@@ -2276,7 +2315,10 @@ self.onmessage = async (event: MessageEvent) => {
         err.message.includes("unreachable") ||
         err.message.includes("null function or function signature mismatch") ||
         err.message.includes("table index is out of bounds"));
-    const detail = describeError(err);
+    const detail =
+      err instanceof EngineLoadError
+        ? `The solver engine failed to load: ${err.message} Retry from the status bar.`
+        : describeError(err);
     const errorMessage = isWasmTrap
       ? `WASM trap (code bug, not OOM): ${detail}`
       : detail;
