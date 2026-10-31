@@ -3,49 +3,7 @@
 
 #include "json_util.h"
 
-#include <sstream>
-
 using emscripten::val;
-
-// ── Minimal JSON output helpers ───────────────────────────────────────────────
-// We build JSON manually to avoid a third-party parser dependency.  The output
-// format is machine-generated and tightly controlled so this is safe.
-
-std::string json_vec3(const std::vector<double>& d) {
-    std::ostringstream ss;
-    ss << '[';
-    size_t n = d.size() / 3;
-    for (size_t i = 0; i < n; ++i) {
-        if (i != 0) ss << ',';
-        ss << '[' << d[3*i] << ',' << d[3*i+1] << ',' << d[3*i+2] << ']';
-    }
-    ss << ']';
-    return ss.str();
-}
-
-std::string json_ivec3(const std::vector<int>& d) {
-    std::ostringstream ss;
-    ss << '[';
-    size_t n = d.size() / 3;
-    for (size_t i = 0; i < n; ++i) {
-        if (i != 0) ss << ',';
-        ss << '[' << d[3*i] << ',' << d[3*i+1] << ',' << d[3*i+2] << ']';
-    }
-    ss << ']';
-    return ss.str();
-}
-
-std::string json_ivec4(const std::vector<int>& d) {
-    std::ostringstream ss;
-    ss << '[';
-    size_t n = d.size() / 4;
-    for (size_t i = 0; i < n; ++i) {
-        if (i != 0) ss << ',';
-        ss << '[' << d[4*i] << ',' << d[4*i+1] << ',' << d[4*i+2] << ',' << d[4*i+3] << ']';
-    }
-    ss << ']';
-    return ss.str();
-}
 
 // ── JSON input helpers (delegate parsing to the JS engine via emscripten::val) ─
 

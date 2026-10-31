@@ -39,8 +39,6 @@
 
 EMSCRIPTEN_BINDINGS(kofem) {
     emscripten::function("tessellate_step",        &tessellate_step);
-    emscripten::function("tessellate_for_meshing", &tessellate_for_meshing);
-    emscripten::function("generate_volume_mesh",   &generate_volume_mesh);
     emscripten::function("generate_fem_mesh",      &generate_fem_mesh);
     emscripten::function("free_geometry_cache",    &free_geometry_cache);
     emscripten::function("split_geometry",         &split_geometry);

@@ -186,8 +186,6 @@ export interface KofemModule {
    *                   `format` selects the reader (defaults to "step").
    */
   tessellate_step(cad_bytes: Uint8Array, opts_json: string): StepTessellation
-  tessellate_for_meshing(opts_json: string): string
-  generate_volume_mesh(surface_json: string, opts_json: string): string
   /** Generate a FEM surface mesh + volume mesh directly from the stored STEP geometry
    *  using Netgen's native OCC integration.  Must call tessellate_step first.
    *  @param opts_json JSON `{ max_element_size, min_element_size, grading, second_order, elementsperedge, elementspercurve, optsteps_2d, optsteps_3d }`

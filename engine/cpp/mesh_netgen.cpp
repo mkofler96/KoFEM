@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Netgen: surface mesh → tetrahedral volume mesh. See mesh_netgen.h.
+// Netgen: cached OCC geometry → FEM surface mesh + tetrahedral volume mesh.
+// See mesh_netgen.h.
 
 #include "mesh_netgen.h"
 
@@ -26,7 +27,7 @@
 
 using emscripten::val;
 
-// ── Netgen: surface mesh → tetrahedral volume mesh ────────────────────────────
+// ── Netgen C API declarations ─────────────────────────────────────────────────
 //
 // Netgen on some platforms compiles its C API inside namespace nglib; on others
 // (including our Emscripten build from source) the symbols are in the global
@@ -40,7 +41,6 @@ namespace nglib {
         NG_VOLUME_FAILURE = 2, NG_STL_INPUT_ERROR = 3,
         NG_SURFACE_FAILURE = 4, NG_FILE_NOT_FOUND = 5,
     };
-    enum Ng_Surface_Element_Type { NG_TRIG = 1 };
 
     class Ng_Meshing_Parameters {
     public:
@@ -61,8 +61,6 @@ namespace nglib {
     extern void      Ng_Init();
     extern Ng_Mesh*  Ng_NewMesh();
     extern void      Ng_DeleteMesh(Ng_Mesh*);
-    extern void      Ng_AddPoint(Ng_Mesh*, double*);
-    extern void      Ng_AddSurfaceElement(Ng_Mesh*, Ng_Surface_Element_Type, int*);
     extern Ng_Result Ng_GenerateVolumeMesh(Ng_Mesh*, Ng_Meshing_Parameters*);
     extern void      Ng_GetPoint(Ng_Mesh*, int, double*);
     extern Ng_Result Ng_GetVolumeElement(Ng_Mesh*, int, int*);
@@ -319,120 +317,4 @@ val generate_fem_mesh(const std::string& opts_json)
 #error "KoFEM requires Netgen built with -DUSE_OCC=ON (KOFEM_NETGEN_OCC is not defined). " \
        "Rebuild the kofem-dependencies Docker image or pass -DUSE_NETGEN_OCC=ON to CMake."
 #endif
-}
-
-std::string generate_volume_mesh(
-    const std::string& surface_json,
-    const std::string& opts_json)
-{
-    // Ng_Init() must be called once before any Netgen API usage.
-    // Called lazily here rather than as a static initializer to avoid
-    // potential crashes during WASM module startup.
-    static bool ng_initialized = false;
-    if (!ng_initialized) {
-        nglib::Ng_Init();
-        ng_initialized = true;
-    }
-
-    val surface = parse_json(surface_json);
-    val opts    = parse_json(opts_json);
-
-    double max_size        = jdouble(opts, "max_element_size",   10.0);
-    double min_size        = jdouble(opts, "min_element_size",    0.0);
-    double grading         = jdouble(opts, "grading",             0.3);
-    bool   second_ord      = jbool  (opts, "second_order",       false);
-    int    uselocalh       = jint   (opts, "uselocalh",             1);
-    double elems_per_edge  = jdouble(opts, "elementsperedge",     2.0);
-    double elems_per_curve = jdouble(opts, "elementspercurve",    2.0);
-    int    optsteps_2d     = jint   (opts, "optsteps_2d",           3);
-    int    optsteps_3d     = jint   (opts, "optsteps_3d",           3);
-
-    val verts_js = surface["vertices"];
-    val tris_js  = surface["triangles"];
-    unsigned nv  = verts_js["length"].as<unsigned>();
-    unsigned nt  = tris_js ["length"].as<unsigned>();
-
-    nglib::Ng_Mesh* mesh = nglib::Ng_NewMesh();
-    if (mesh == nullptr) throw std::runtime_error("Ng_NewMesh() returned null");
-
-    for (unsigned i = 0; i < nv; ++i) {
-        val v = verts_js[i];
-        std::array<double, 3> pt = { v[0].as<double>(), v[1].as<double>(), v[2].as<double>() };
-        nglib::Ng_AddPoint(mesh, pt.data());
-    }
-    for (unsigned i = 0; i < nt; ++i) {
-        val t = tris_js[i];
-        std::array<int, 3> tri = { t[0].as<int>()+1, t[1].as<int>()+1, t[2].as<int>()+1 };
-        nglib::Ng_AddSurfaceElement(mesh, nglib::NG_TRIG, tri.data());
-    }
-
-    // Initialise every field explicitly.  In the WASM build Netgen exports
-    // symbols in the global namespace while the re-declaration above is inside
-    // namespace nglib::, so Ng_Meshing_Parameters() may not link and leaves
-    // fields uninitialised.  Explicit assignment is correct regardless.
-    //
-    // check_overlap / check_overlapping_boundary are 0 on this legacy path
-    // only: its input is a raw display-tessellation triangle soup whose
-    // near-zero-area triangles the check reads as overlaps. There is no CAD
-    // shape here to heal. The live pipeline (generate_fem_mesh above) meshes
-    // healed CAD geometry and keeps both checks enabled (issue #214).
-    nglib::Ng_Meshing_Parameters mp;
-    mp.uselocalh                  = uselocalh;
-    mp.maxh                       = max_size;
-    mp.minh                       = min_size;
-    mp.fineness                   = 0.5;
-    mp.grading                    = grading;
-    mp.elementsperedge            = elems_per_edge;
-    mp.elementspercurve           = elems_per_curve;
-    mp.closeedgeenable            = 0;
-    mp.closeedgefact              = 2.0;
-    mp.minedgelenenable           = 0;
-    mp.minedgelen                 = 1e-4;
-    mp.second_order               = second_ord ? 1 : 0;
-    mp.quad_dominated             = 0;
-    mp.meshsize_filename          = nullptr;
-    mp.optsurfmeshenable          = 1;
-    mp.optvolmeshenable           = 1;
-    mp.optsteps_3d                = optsteps_3d;
-    mp.optsteps_2d                = optsteps_2d;
-    mp.invert_tets                = 0;
-    mp.invert_trigs               = 0;
-    mp.check_overlap              = 0;
-    mp.check_overlapping_boundary = 0;
-
-    nglib::Ng_Result res = nglib::Ng_GenerateVolumeMesh(mesh, &mp);
-    if (res != nglib::NG_OK) {
-        kofem_delete_mesh(static_cast<void*>(mesh));
-        throw std::runtime_error(
-            "Ng_GenerateVolumeMesh failed (code " + std::to_string((int)res) + ")");
-    }
-
-    int np = nglib::Ng_GetNP(mesh);
-    int ne = nglib::Ng_GetNE(mesh);
-
-    std::vector<double> out_verts;
-    out_verts.reserve(3 * np);
-    for (int i = 1; i <= np; ++i) {
-        std::array<double, 3> pt;
-        nglib::Ng_GetPoint(mesh, i, pt.data());
-        out_verts.push_back(pt[0]);
-        out_verts.push_back(pt[1]);
-        out_verts.push_back(pt[2]);
-    }
-
-    std::vector<int> out_tets;
-    out_tets.reserve(4 * ne);
-    for (int i = 1; i <= ne; ++i) {
-        std::array<int, 4> tet;
-        nglib::Ng_GetVolumeElement(mesh, i, tet.data());
-        out_tets.push_back(tet[0] - 1);
-        out_tets.push_back(tet[1] - 1);
-        out_tets.push_back(tet[2] - 1);
-        out_tets.push_back(tet[3] - 1);
-    }
-
-    kofem_delete_mesh(static_cast<void*>(mesh));
-
-    return "{\"vertices\":" + json_vec3(out_verts) +
-           ",\"tetrahedra\":" + json_ivec4(out_tets) + "}";
 }
