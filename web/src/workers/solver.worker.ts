@@ -30,6 +30,7 @@ import {
   extractThinWallShells,
   shellBodyTets,
   buildCoupledModel,
+  buildShellTransitionModel,
   buildExplicitCoupledModel,
   type TieSurfaces,
   tieCouplingProblem,
@@ -542,11 +543,11 @@ function buildMeshTimeShellModel(
       `Shell idealisation failed: body ${[...shellBodyIds].join(", ")} is marked "Shell" but no ` +
         "thin walls were found in it. Switch it to Solid, or check that it is genuinely thin-walled.",
     );
-  const wallTets = shellBodyTets(mesh, shells);
   // No ties here: this runs at MESH time, before any surface can have been
   // picked. It only needs the pool's node/element layout — the couplings are
   // rebuilt at solve time from the connections the user defined by then.
-  const model = buildCoupledModel(mesh, shells, wallTets);
+  const transition = buildShellTransitionModel(mesh, shells);
+  const model = transition.model;
 
   // Nodes: the coupled pool (solid nodes first, then the shell mid-surface nodes).
   const poolNodes: Node[] = [];
@@ -618,7 +619,20 @@ function buildMeshTimeShellModel(
   }
 
   const { surfaceTriangles: poolSurfTris, surfaceFaceIds: poolSurfFaces } =
-    rebuildPoolSurface(model, shells, surfaceTriangles, surfaceFaceIds);
+    rebuildPoolSurface(
+      model,
+      shells,
+      Array.from(
+        { length: transition.mesh.surfFace.length },
+        (_, index) =>
+          transition.mesh.surfTri.slice(3 * index, 3 * index + 3) as [
+            number,
+            number,
+            number,
+          ],
+      ),
+      transition.mesh.surfFace,
+    );
 
   const thkList = [...propOfThk.keys()]
     .sort((a, b) => a - b)
@@ -1270,6 +1284,9 @@ function tryCoupledSolve(
       offsets: Int32Array.from(coupling.offsets),
       solid: Int32Array.from(coupling.solid),
       mpc: Int32Array.from(couplingMpcCodes(coupling)),
+      weights: coupling.weights
+        ? Float64Array.from(coupling.weights)
+        : undefined,
       dof_mask: Int32Array.from(couplingDofMasks(coupling)),
       relaxation: SHELL_SOLID_MPC_RELAXATION,
     },
@@ -1614,6 +1631,7 @@ interface CoupledEngineInputs {
     solid: Int32Array;
     mpc: Int32Array;
     dof_mask: Int32Array;
+    weights?: Float64Array;
     relaxation: number;
   };
   bcs: {
@@ -1764,6 +1782,9 @@ function buildCoupledEngineInputs(
       offsets: Int32Array.from(coupling.offsets),
       solid: Int32Array.from(coupling.solid),
       mpc: Int32Array.from(couplingMpcCodes(coupling)),
+      weights: coupling.weights
+        ? Float64Array.from(coupling.weights)
+        : undefined,
       dof_mask: Int32Array.from(couplingDofMasks(coupling)),
       relaxation: SHELL_SOLID_MPC_RELAXATION,
     },

@@ -8,6 +8,8 @@
 // in-app port of the pipeline demonstrated in examples/shell-coupling/lib.mjs;
 // the heavy solving lives in engine/cpp/solve_coupled.cpp.
 
+import { clipShellTransition, type TransitionPlane } from "./clipMesh";
+
 // Flat mesh over a 0-based vertex numbering (the worker builds this from the
 // store model via its vertex indexer).
 
@@ -728,7 +730,8 @@ export function extractThinWallShells(
 // CSR-style coupling set. `mpc[k]` selects the coupling kind for reference k:
 // 1 ⇒ relaxed shell-to-solid MPC (rigid translation tie + relaxed rotation, for a
 // continuous-material seam), 2 ⇒ kinematic RBE2 (the coupled nodes follow the
-// reference point rigidly), 0/absent ⇒ distributing RBE3 (for a gapped
+// reference point rigidly), 3 ⇒ physical footprint (solid translations follow
+// an interpolated shell edge), 0/absent ⇒ distributing RBE3 (for a gapped
 // interface). `dofMask[k]` selects which of a kinematic coupling's six DOFs are
 // tied (bits 0..5); absent ⇒ all six, which is what every coupling this module
 // derives itself wants.
@@ -737,6 +740,7 @@ export interface CouplingSet {
   offsets: number[];
   solid: number[];
   mpc?: number[]; // per ref; length matches ref when present
+  weights?: number[]; // per partner; shell-footprint interpolation coefficients
   dofMask?: number[]; // per ref; length matches ref when present
 }
 
@@ -967,6 +971,10 @@ export function concatCouplings(a: CouplingSet, b: CouplingSet): CouplingSet {
     solid,
     mpc: [...couplingMpcCodes(a), ...couplingMpcCodes(b)],
     dofMask: [...couplingDofMasks(a), ...couplingDofMasks(b)],
+    weights: [
+      ...(a.weights ?? a.solid.map(() => 1)),
+      ...(b.weights ?? b.solid.map(() => 1)),
+    ],
   };
 }
 
@@ -1239,6 +1247,7 @@ export function dropCouplingsOnFixedNodes(
   for (const d of fixedDofs) fixedNodes.add(Math.floor(d / 6));
   const kinds = couplingMpcCodes(coupling);
   const masks = couplingDofMasks(coupling);
+  const weights: number[] = [];
   const ref: number[] = [],
     offsets = [0],
     solid: number[] = [],
@@ -1249,15 +1258,21 @@ export function dropCouplingsOnFixedNodes(
     // whole point of a bolted or clamped reference point, not a conflict — so
     // only the couplings whose reference is dependent (distributing, relaxed
     // MPC) are dropped here.
+    if (kinds[k] === 3 && fixedNodes.has(coupling.ref[k]))
+      throw new Error(
+        "A shell/solid transition node is prescribed. Move the support away from the transition or keep the body Solid.",
+      );
     if (kinds[k] !== 2 && fixedNodes.has(coupling.ref[k])) continue;
     ref.push(coupling.ref[k]);
-    for (let i = coupling.offsets[k]; i < coupling.offsets[k + 1]; i++)
+    for (let i = coupling.offsets[k]; i < coupling.offsets[k + 1]; i++) {
       solid.push(coupling.solid[i]);
+      weights.push(coupling.weights ? coupling.weights[i] : 1);
+    }
     offsets.push(solid.length);
     mpc.push(kinds[k]);
     dofMask.push(masks[k]);
   }
-  return { ref, offsets, solid, mpc, dofMask };
+  return { ref, offsets, solid, mpc, dofMask, weights };
 }
 
 // Assemble the coupled node pool (solid nodes then shell nodes), remap tets and
@@ -1366,10 +1381,18 @@ export function buildCoupledModel(
       medEdge,
     );
   const seam = seamShellNodes(ppt, shellPool, tetMeshBoundary(tets), tolerance);
+  const footprint = shellFootprintCouplings(
+    pool,
+    tets,
+    triangles,
+    shells.shellThk,
+    solidRefs,
+    tolerance,
+  );
   const shellCoupling = autoDetectCouplings(
     ppt,
     [...solidPool.values()].filter((pi) => !solidRefs.has(pi)),
-    seam,
+    seam.filter((index) => !footprint.shellNodes.has(index)),
     couplingRadius ?? partnerSearchRadius(medEdge, tolerance),
     maxCoupledNodes,
   );
@@ -1390,7 +1413,10 @@ export function buildCoupledModel(
     // (mpc=1) for displacement continuity. A tie connection across a clearance
     // stays distributing.
     coupling: concatCouplings(
-      { ...shellCoupling, mpc: shellCoupling.ref.map(() => 1) },
+      concatCouplings(footprint.coupling, {
+        ...shellCoupling,
+        mpc: shellCoupling.ref.map(() => 1),
+      }),
       { ...solidCoupling, mpc: solidCoupling.ref.map(() => 0) },
     ),
   };
@@ -1509,10 +1535,18 @@ export function buildExplicitCoupledModel(
     tetMeshBoundary(tets),
     tolerance,
   );
+  const footprint = shellFootprintCouplings(
+    pool,
+    tets,
+    triangles,
+    shellThk,
+    solidRefs,
+    tolerance,
+  );
   const shellCoupling = autoDetectCouplings(
     ppt,
     solidPoolIndices.filter((pi) => !solidRefs.has(pi)),
-    seam,
+    seam.filter((index) => !footprint.shellNodes.has(index)),
     couplingRadius ?? partnerSearchRadius(medEdge, tolerance),
     maxCoupledNodes,
   );
@@ -1525,7 +1559,10 @@ export function buildExplicitCoupledModel(
     // Shell↔solid seam ⇒ relaxed MPC (continuity); a tie connection across a
     // clearance ⇒ distributing.
     coupling: concatCouplings(
-      { ...shellCoupling, mpc: shellCoupling.ref.map(() => 1) },
+      concatCouplings(footprint.coupling, {
+        ...shellCoupling,
+        mpc: shellCoupling.ref.map(() => 1),
+      }),
       { ...solidCoupling, mpc: solidCoupling.ref.map(() => 0) },
     ),
     poolOfVertex,
@@ -1587,4 +1624,316 @@ export function shellNodeLocator(
       );
     return best;
   };
+}
+
+// Preserve 3-D material at planar wall roots before the shell idealisation.
+export function buildShellTransitionModel(
+  mesh: ShellizeMesh,
+  shells: ShellExtraction,
+): { mesh: ShellizeMesh; model: CoupledModel } {
+  const replaced = shellBodyTets(mesh, shells);
+  const retained: number[] = [];
+  for (let element = 0; element < mesh.body.length; element++)
+    if (!replaced.has(element))
+      retained.push(...mesh.tet.slice(4 * element, 4 * element + 4));
+  if (retained.length === 0)
+    return { mesh, model: buildCoupledModel(mesh, shells, replaced) };
+  const boundary = tetMeshBoundary(retained);
+  const tolerance = Math.max(...shells.shellThk) * 1e-7;
+  const grid = buildTriangleGrid(
+    boundary.length / 3,
+    (triangle, corner) => pt(mesh.V, boundary[3 * triangle + corner]),
+    Math.max(...shells.shellThk),
+  );
+  const planes: TransitionPlane[] = [];
+  for (const edge of shellBoundaryEdges(
+    shells.shellVerts,
+    shells.shellTris,
+    shells.shellThk,
+  )) {
+    const first = pt(shells.shellVerts, edge.first),
+      second = pt(shells.shellVerts, edge.second);
+    const middle = first.map((value, axis) => (value + second[axis]) / 2) as [
+      number,
+      number,
+      number,
+    ];
+    if (
+      ![first, second, middle].every((point) =>
+        anyTriangleNear(
+          grid,
+          point,
+          (distance) => distance <= tolerance * tolerance,
+        ),
+      )
+    )
+      continue;
+    const origin = middle.map(
+      (value, axis) => value + 3 * edge.thickness * edge.inward[axis],
+    ) as [number, number, number];
+    if (
+      !planes.some(
+        (plane) =>
+          plane.normal.every(
+            (value, axis) => Math.abs(value - edge.inward[axis]) < 1e-7,
+          ) &&
+          Math.abs(
+            plane.normal.reduce(
+              (sum, value, axis) =>
+                sum + value * (plane.origin[axis] - origin[axis]),
+              0,
+            ),
+          ) < tolerance,
+      )
+    )
+      planes.push({ origin, normal: edge.inward });
+  }
+  if (planes.length === 0)
+    return { mesh, model: buildCoupledModel(mesh, shells, replaced) };
+  const shellFaces = new Set(
+    faceProps(mesh)
+      .filter((face) => face.body === shells.shellBody)
+      .map((face) => face.id),
+  );
+  const clipped = clipShellTransition(
+    mesh,
+    shells,
+    replaced,
+    planes,
+    shellFaces,
+    tolerance,
+  );
+  const model = buildCoupledModel(clipped, shells, new Set());
+  if (!couplingMpcCodes(model.coupling).includes(3))
+    throw new Error(
+      "The retained solid joint could not be connected to the shell footprint. Keep this body Solid.",
+    );
+  return { mesh: clipped, model };
+}
+
+interface ShellBoundaryEdge {
+  first: number;
+  second: number;
+  thickness: number;
+  normal: [number, number, number];
+  inward: [number, number, number];
+}
+function shellBoundaryEdges(
+  vertices: number[],
+  triangles: number[],
+  thicknesses: number[],
+): ShellBoundaryEdge[] {
+  const edges = new Map<string, { count: number; edge: ShellBoundaryEdge }>();
+  for (let triangle = 0; triangle < triangles.length / 3; triangle++) {
+    const nodes = triangles.slice(3 * triangle, 3 * triangle + 3),
+      points = nodes.map((index) => pt(vertices, index));
+    const side = points[1].map((value, axis) => value - points[0][axis]);
+    const other = points[2].map((value, axis) => value - points[0][axis]);
+    const raw = [
+      side[1] * other[2] - side[2] * other[1],
+      side[2] * other[0] - side[0] * other[2],
+      side[0] * other[1] - side[1] * other[0],
+    ];
+    const length = Math.hypot(...raw);
+    if (length === 0)
+      throw new Error("Degenerate shell triangle at transition");
+    const normal = raw.map((value) => value / length) as [
+      number,
+      number,
+      number,
+    ];
+    for (let corner = 0; corner < 3; corner++) {
+      const first = nodes[corner],
+        second = nodes[(corner + 1) % 3];
+      const key = [first, second].sort((left, right) => left - right).join(",");
+      const existing = edges.get(key);
+      if (existing) {
+        existing.count++;
+        continue;
+      }
+      const tangent = points[(corner + 1) % 3].map(
+        (value, axis) => value - points[corner][axis],
+      );
+      const inwardRaw = [
+        normal[1] * tangent[2] - normal[2] * tangent[1],
+        normal[2] * tangent[0] - normal[0] * tangent[2],
+        normal[0] * tangent[1] - normal[1] * tangent[0],
+      ];
+      const inward = inwardRaw.map(
+        (value) => value / Math.hypot(...inwardRaw),
+      ) as [number, number, number];
+      edges.set(key, {
+        count: 1,
+        edge: {
+          first,
+          second,
+          thickness: thicknesses[triangle],
+          normal,
+          inward,
+        },
+      });
+    }
+  }
+  return [...edges.values()]
+    .filter((entry) => entry.count === 1)
+    .map((entry) => entry.edge);
+}
+
+function shellFootprintCouplings(
+  vertices: number[],
+  tets: number[],
+  triangles: number[],
+  thicknesses: number[],
+  dependentSolidRefs: Set<number>,
+  seamReach: number,
+): { coupling: CouplingSet; shellNodes: Set<number> } {
+  const coupling: CouplingSet = {
+    ref: [],
+    offsets: [0],
+    solid: [],
+    mpc: [],
+    weights: [],
+  };
+  const shellNodes = new Set<number>();
+  if (triangles.length === 0 || tets.length === 0)
+    return { coupling, shellNodes };
+  const boundary = [...new Set(tetMeshBoundary(tets))];
+  const edges = shellBoundaryEdges(vertices, triangles, thicknesses);
+  const tolerance = Math.max(...thicknesses) * 1e-6;
+  const shellSet = new Set(triangles);
+  const groups: {
+    edge: ShellBoundaryEdge;
+    minimum: number;
+    maximum: number;
+  }[] = [];
+  const candidates: {
+    solid: number;
+    edge: ShellBoundaryEdge;
+    ratio: number;
+    distance: number;
+    group: number;
+  }[] = [];
+  for (const solid of boundary) {
+    if (shellSet.has(solid)) continue;
+    const position = pt(vertices, solid);
+    for (const edge of edges) {
+      const first = pt(vertices, edge.first),
+        second = pt(vertices, edge.second);
+      const tangent = second.map((value, axis) => value - first[axis]);
+      const offset = position.map((value, axis) => value - first[axis]);
+      const fraction =
+        tangent.reduce((sum, value, axis) => sum + value * offset[axis], 0) /
+        tangent.reduce((sum, value) => sum + value * value, 0);
+      if (fraction < -1e-7 || fraction > 1 + 1e-7) continue;
+      const ratio = Math.max(0, Math.min(1, fraction));
+      const remainder = offset.map(
+        (value, axis) => value - ratio * tangent[axis],
+      );
+      const normalDistance = remainder.reduce(
+        (sum, value, axis) => sum + value * edge.normal[axis],
+        0,
+      );
+      const planeDistance = remainder.reduce(
+        (sum, value, axis) => sum + value * edge.inward[axis],
+        0,
+      );
+      if (
+        Math.abs(planeDistance) > tolerance ||
+        Math.abs(normalDistance) > edge.thickness / 2 + tolerance
+      )
+        continue;
+      const distance = Math.hypot(...remainder);
+      let group = groups.findIndex((entry) => {
+        const delta = pt(vertices, entry.edge.first).map(
+          (value, axis) => value - first[axis],
+        );
+        return (
+          entry.edge.normal.every(
+            (value, axis) => Math.abs(value - edge.normal[axis]) < 1e-7,
+          ) &&
+          entry.edge.inward.every(
+            (value, axis) => Math.abs(value - edge.inward[axis]) < 1e-7,
+          ) &&
+          Math.abs(entry.edge.thickness - edge.thickness) < tolerance &&
+          Math.abs(
+            delta.reduce(
+              (sum, value, axis) => sum + value * edge.inward[axis],
+              0,
+            ),
+          ) < tolerance &&
+          Math.abs(
+            delta.reduce(
+              (sum, value, axis) => sum + value * edge.normal[axis],
+              0,
+            ),
+          ) < tolerance
+        );
+      });
+      if (group < 0) {
+        group = groups.length;
+        groups.push({ edge, minimum: normalDistance, maximum: normalDistance });
+      }
+      groups[group].minimum = Math.min(groups[group].minimum, normalDistance);
+      groups[group].maximum = Math.max(groups[group].maximum, normalDistance);
+      candidates.push({ solid, edge, ratio, distance, group });
+    }
+  }
+  const closestByNode = new Map<number, (typeof candidates)[number]>();
+  for (const candidate of candidates) {
+    const group = groups[candidate.group];
+    // A section spans both wall faces. A shell lying above a solid surface
+    // is not a through-thickness section and retains its existing coupling.
+    if (
+      group.minimum > -group.edge.thickness / 2 + tolerance ||
+      group.maximum < group.edge.thickness / 2 - tolerance
+    )
+      continue;
+    const closest = closestByNode.get(candidate.solid);
+    if (!closest || candidate.distance < closest.distance)
+      closestByNode.set(candidate.solid, candidate);
+  }
+  for (const [solid, closest] of closestByNode) {
+    if (dependentSolidRefs.has(solid))
+      throw new Error(
+        "A tie connection overlaps the shell/solid transition. Reverse its master and slave surfaces or keep the body Solid.",
+      );
+    coupling.ref.push(solid);
+    coupling.solid.push(closest.edge.first, closest.edge.second);
+    coupling.offsets.push(coupling.solid.length);
+    coupling.mpc?.push(3);
+    coupling.weights?.push(1 - closest.ratio, closest.ratio);
+    shellNodes.add(closest.edge.first);
+    shellNodes.add(closest.edge.second);
+  }
+  // Exclude the old search-ball tie only near the physical footprint. A
+  // different seam elsewhere on the same wall must keep its own connection.
+  const activeEdges = [
+    ...new Set([...closestByNode.values()].map((entry) => entry.edge)),
+  ];
+  for (const shellNode of shellSet) {
+    const position = pt(vertices, shellNode);
+    for (const edge of activeEdges) {
+      const first = pt(vertices, edge.first),
+        second = pt(vertices, edge.second);
+      const tangent = second.map((value, axis) => value - first[axis]);
+      const offset = position.map((value, axis) => value - first[axis]);
+      const fraction = Math.max(
+        0,
+        Math.min(
+          1,
+          tangent.reduce((sum, value, axis) => sum + value * offset[axis], 0) /
+            tangent.reduce((sum, value) => sum + value * value, 0),
+        ),
+      );
+      const distance = offset.reduce(
+        (sum, value, axis) => sum + (value - fraction * tangent[axis]) ** 2,
+        0,
+      );
+      if (distance <= (seamReach + tolerance) ** 2) {
+        shellNodes.add(shellNode);
+        break;
+      }
+    }
+  }
+  return { coupling, shellNodes };
 }

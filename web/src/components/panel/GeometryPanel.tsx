@@ -29,11 +29,8 @@ const BODIES_NOTE =
   "nothing floats, so constrain it or check the assembly.";
 
 const ELEMENT_TYPE_TIP =
-  "How this body is discretised. Solid meshes it as tetrahedra (linear or " +
-  "quadratic per the mesh's element order). Shell idealises the whole body as " +
-  "Kirchhoff shells on the mid-surface of its walls, coupled to the solid " +
-  "bodies it touches — far more robust for thin parts. A part that is only " +
-  "partly thin-walled: split off the thin walls first and make only them Shell.";
+  "Solid uses tetrahedra. Shell uses wall mid-surfaces and retains solid material " +
+  "at planar joints. Split thick or curved regions into separate Solid bodies first.";
 
 // Tooltip for a body's name: what the last mesh made of its walls. Empty for a
 // body the mesh left solid, so only shelled bodies carry the hint.

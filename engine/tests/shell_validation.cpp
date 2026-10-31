@@ -545,6 +545,45 @@ bool shell_conflicting_prescribed_throws() {
     return false;
 }
 
+bool footprint_rigid_motion() {
+    CoupledInput in;
+    in.n_nodes = 4;
+    in.vertices = {0,0,0, 2,0,0, 0,0,2, 1,1,0};
+    in.triangles = {0,1,2};
+    in.thickness = 0.1; in.shell_young = 1e5; in.shell_poisson = 0.3;
+    for (int component = 0; component < 3; ++component)
+        in.solid_stiffness.push_back({9 + component, 9 + component, 1});
+    Coupling cp;
+    cp.kind = CouplingKind::ShellFootprint; cp.ref_node = 3;
+    cp.solid_nodes = {0,1}; cp.weights = {0.5,0.5};
+    in.couplings.push_back(cp);
+    double error = 0;
+    for (int motion = 0; motion < 7; ++motion) {
+        in.prescribed_dofs.clear();
+        for (int node = 0; node < 3; ++node) {
+            const size_t vertex_offset = 3 * static_cast<size_t>(node);
+            const std::array<double,3> position = {in.vertices[vertex_offset], in.vertices[vertex_offset+1], in.vertices[vertex_offset+2]};
+            const std::array<double,3> theta = {motion == 3 ? 1.0 : 0, motion == 4 ? 1.0 : 0, motion == 5 ? 1.0 : 0};
+            for (int component = 0; component < 3; ++component) {
+                double value = (motion == component ? 1.0 : 0) + theta[(component+1)%3]*position[(component+2)%3] - theta[(component+2)%3]*position[(component+1)%3];
+                if (motion == 6) value = component == 0 ? position[0] : 0;
+                in.prescribed_dofs.emplace_back(6*node+component,value);
+                in.prescribed_dofs.emplace_back(6*node+3+component,theta[component]);
+            }
+        }
+        const auto result = solve_solid_shell_core(in);
+        if (!result.converged) return false;
+        for (int component = 0; component < 3; ++component) {
+            const std::array<double,3> position = {1,1,0};
+            const std::array<double,3> theta = {motion == 3 ? 1.0 : 0, motion == 4 ? 1.0 : 0, motion == 5 ? 1.0 : 0};
+            double expected = (motion == component ? 1.0 : 0) + theta[(component+1)%3]*position[(component+2)%3] - theta[(component+2)%3]*position[(component+1)%3];
+            if (motion == 6) expected = component == 0 ? 1.0 : 0;
+            error = std::max(error,std::abs(result.dofs[18+component]-expected));
+        }
+    }
+    return error < 1e-10;
+}
+
 }  // namespace
 
 int main() {
@@ -552,6 +591,9 @@ int main() {
     const double D = E * t * t * t / (12.0 * (1.0 - nu * nu));
     int failures = 0;
 
+    const bool footprint_ok = footprint_rigid_motion();
+    if (!footprint_ok) ++failures;
+    printf("  [%s] footprint rigid and affine motion\n", footprint_ok ? "PASS" : "FAIL");
     printf("Kirchhoff shell (DKT+CST) validation:\n");
     // Both plate cases converge from a discretisation error, so the finest mesh
     // must land inside a tight band; coarse meshes carry more error by design.

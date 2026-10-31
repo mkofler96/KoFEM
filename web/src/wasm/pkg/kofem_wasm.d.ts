@@ -239,7 +239,7 @@ export interface KofemModule {
    *             `attributes` is one 1-based solid-material index per TET, into
    *             the `mat_json.solid` array; omitted means every tet uses the
    *             first material.
-   *   coupling: { ref, offsets, solid, mpc?, dof_mask?, relaxation? }  CSR-style:
+   *   coupling: { ref, offsets, solid, mpc?, weights?, dof_mask?, relaxation? }  CSR-style:
    *             reference node ref[k] ties to solid[offsets[k]..offsets[k+1]).
    *             Optional mpc[k] = 1 selects the relaxed shell-to-solid MPC
    *             coupling (rigid translation tie + relaxation-scaled rotation),
@@ -248,7 +248,9 @@ export interface KofemModule {
    *             0/absent keeps the distributing RBE3 coupling; relaxation is the
    *             shared ψ ∈ [0.5,1] used by the MPC couplings. dof_mask[k] selects
    *             which of a kinematic coupling's six DOFs are tied (bits 0..5,
-   *             all six when absent).
+   *             all six when absent). Kind 3 is a physical shell footprint:
+   *             solid ref[k] translations follow two shell edge partners with
+   *             per-partner `weights` interpolating their motion and rotation.
    *   bcs:      { fixed_dofs, load_dofs, load_vals, prescribed_dofs?,
    *               prescribed_vals? }  (DOF = 6·node+component). fixed_dofs are
    *               constrained to ZERO; prescribed_dofs[k] is driven to
@@ -266,6 +268,7 @@ export interface KofemModule {
       attributes?: Int32Array
     },
     coupling: {
+      weights?: Float64Array
       ref: Int32Array
       offsets: Int32Array
       solid: Int32Array
@@ -335,6 +338,7 @@ export interface KofemModule {
       attributes?: Int32Array
     },
     coupling: {
+      weights?: Float64Array
       ref: Int32Array
       offsets: Int32Array
       solid: Int32Array

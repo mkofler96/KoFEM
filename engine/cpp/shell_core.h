@@ -94,7 +94,7 @@ ShellResult solve_shell_core(const ShellInput& in);
 //                   point is INDEPENDENT, so it can be fixed, loaded, or tied to
 //                   another point — the bolt/screw idealisation. It does make the
 //                   coupled surface rigid, which is the accepted trade.
-enum class CouplingKind { Distributing = 0, RelaxedMpc = 1, Kinematic = 2 };
+enum class CouplingKind { Distributing = 0, RelaxedMpc = 1, Kinematic = 2, ShellFootprint = 3 };
 
 // Bit c of a Kinematic coupling's dof_mask selects DOF c (0..2 translations,
 // 3..5 rotations) of every coupled node. All six by default.

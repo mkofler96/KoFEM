@@ -876,6 +876,45 @@ Rbe3Constraints build_rbe3_constraints(const CoupledInput& in, int nDof,
         const int N = static_cast<int>(cp.solid_nodes.size());
         const Vec3 pR = vtx(R);
 
+        if (cp.kind == CouplingKind::ShellFootprint) {
+            if (N != 2 || cp.weights.size() != 2)
+                throw std::runtime_error("coupled: shell footprint needs two shell edge nodes and weights");
+            double sum = 0;
+            Vec3 anchor{};
+            for (int i = 0; i < N; ++i) {
+                const int node = cp.solid_nodes[i];
+                const double weight = cp.weights[i];
+                if (node < 0 || node >= nDof / 6 || node == R || has_rotation[node] == 0 ||
+                    !std::isfinite(weight) || weight < 0 || weight > 1)
+                    throw std::runtime_error("coupled: invalid shell footprint edge node or weight");
+                sum += weight;
+                const Vec3 position = vtx(node);
+                for (int component = 0; component < 3; ++component)
+                    anchor[component] += weight * position[component];
+            }
+            if (std::abs(sum - 1) > 1e-10)
+                throw std::runtime_error("coupled: shell footprint weights must sum to one");
+            const Vec3 offset = sub(pR, anchor);
+            const auto rotation = skew(offset);
+            const size_t base = 6 * static_cast<size_t>(R);
+            // Kirchhoff section kinematics: u_S = sum N_i (u_i + theta_i x r).
+            // Partition of unity and interpolation of the anchor reproduce rigid
+            // motion; the transpose transfers the same resultant and moment.
+            for (int component = 0; component < 3; ++component) {
+                if (out.dep[base + component] != 0)
+                    throw std::runtime_error("coupled: shell footprint DOF already belongs to a constraint");
+                out.dep[base + component] = 1;
+                for (int i = 0; i < N; ++i) {
+                    const int node = cp.solid_nodes[i];
+                    out.Cmap[base + component].emplace_back(6 * node + component, cp.weights[i]);
+                    for (int axis = 0; axis < 3; ++axis)
+                        out.Cmap[base + component].emplace_back(6 * node + 3 + axis,
+                                                               -cp.weights[i] * rotation[component][axis]);
+                }
+            }
+            continue;
+        }
+
         if (cp.kind == CouplingKind::Kinematic) {
             // RBE2: every coupled node follows the reference point as a rigid
             // body, so the COUPLED nodes are eliminated and the point stays an
@@ -1265,7 +1304,8 @@ ShellResult solve_solid_shell_core(const CoupledInput& in) {
     // in a hole: the two surfaces do not share nodes) is tied.
     std::vector<char> is_coupling_ref(nNodes, 0);
     for (const auto& cp : in.couplings)
-        if (cp.ref_node >= 0 && cp.ref_node < nNodes) is_coupling_ref[cp.ref_node] = 1;
+        if (cp.kind != CouplingKind::ShellFootprint && cp.ref_node >= 0 && cp.ref_node < nNodes)
+            is_coupling_ref[cp.ref_node] = 1;
     // Solid-only nodes have no rotational stiffness → auto-fix their rotations
     // (unless they are a coupling reference, whose rotations are eliminated).
     for (int n = 0; n < nNodes; ++n)
