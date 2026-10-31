@@ -29,7 +29,15 @@
       "Bash(gh run list*)",
       "Bash(gh run view*)",
       "Bash(gh workflow list*)",
-      "Bash(gh release list*)"
+      "Bash(gh release list*)",
+      "mcp__Linear__list_issues",
+      "mcp__Linear__get_issue",
+      "mcp__Linear__list_comments",
+      "mcp__Linear__list_issue_statuses",
+      "mcp__Linear__save_issue",
+      "mcp__Linear__save_comment",
+      "mcp__Linear__prepare_file_upload",
+      "mcp__Linear__create_attachment_from_upload"
     ]
   },
   "hooks": {
