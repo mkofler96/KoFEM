@@ -43,7 +43,7 @@ const DIMMED_OPACITY = 0.15;
 const OUTLINE_ON_LIGHT = "#1f2937";
 const OUTLINE_ON_DARK = "#e5edf7";
 // Faces picked for a split, and the cutting plane — the selection colour of the
-// BC/load pick (BoundaryConditionLayer), so a pick reads as a pick everywhere.
+// BC/load pick (PickHighlights), so a pick reads as a pick everywhere.
 const SPLIT_PICK_COLOR = "#e05533";
 const SPLIT_PLANE_COLOR = "#2563eb";
 
