@@ -154,6 +154,28 @@ int main() {
                     {{7, 8, 9}, {9, 8, 7}, {0, 1, 2}}, {5}, 2);
     check_selection("empty selection", {}, {}, 0);
 
+    printf("\nConflicting Dirichlet values (KOF-218):\n");
+    const auto fixed = DirichletSource::Fixed;
+    const auto prescribed = DirichletSource::Prescribed;
+    expect_ok(failures, "same fixed value twice accepted", [&] {
+        require_consistent_dirichlet(3, 0, fixed, 0.0, fixed, 0.0, "add_fixed_dofs");
+    });
+    expect_ok(failures, "same prescribed value twice accepted", [&] {
+        require_consistent_dirichlet(3, 1, prescribed, 0.5, prescribed, 0.5, "add_prescribed_dofs");
+    });
+    expect_ok(failures, "fixed then prescribed to 0 accepted", [&] {
+        require_consistent_dirichlet(3, 2, fixed, 0.0, prescribed, 0.0, "add_prescribed_dofs");
+    });
+    expect_throws(failures, "fixed then prescribed non-zero rejected", [&] {
+        require_consistent_dirichlet(7, 2, fixed, 0.0, prescribed, 0.1, "add_prescribed_dofs");
+    }, "add_prescribed_dofs: vertex 7 component Uz (DOF 2) is fixed to 0 and also prescribed to 0.1");
+    expect_throws(failures, "two prescribed values rejected", [&] {
+        require_consistent_dirichlet(7, 0, prescribed, 0.1, prescribed, -0.2, "add_prescribed_dofs");
+    }, "prescribed to 0.1 and also prescribed to -0.2");
+    expect_throws(failures, "prescribed then fixed rejected", [&] {
+        require_consistent_dirichlet(7, 4, prescribed, 0.01, fixed, 0.0, "shell");
+    }, "component Ry (DOF 4) is prescribed to 0.01 and also fixed to 0");
+
     printf(failures != 0 ? "\n%d check(s) FAILED\n" : "\nall checks passed\n", failures);
     return failures != 0 ? 1 : 0;
 }

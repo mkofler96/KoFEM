@@ -117,4 +117,160 @@ for (const order of [1, 2]) {
   }
 }
 
+// KOF-218: a vertex/component that two BC groups constrain to DIFFERENT values
+// is a modelling contradiction. The solve must refuse it with a message naming
+// the vertex, the component and both values, not let the last entry win. The
+// same value twice (two overlapping fixed groups, a prescribed group listed
+// twice) is no contradiction and must keep solving.
+for (const order of [1, 2]) {
+  // Fixed (u = 0) by fixed_vertices, and prescribed to a non-zero value.
+  expectCppError(
+    { prescribed_dofs: [{ vertex: 0, dof: 0, value: 0.1 }] },
+    /vertex 0 component Ux \(DOF 0\) is fixed to 0 and also prescribed to 0\.1/,
+    order,
+  );
+  // Fixed by a partial fixed_dofs entry, then prescribed.
+  expectCppError(
+    {
+      fixed_dofs: [{ vertex: 1, dofs: [2] }],
+      prescribed_dofs: [{ vertex: 1, dof: 2, value: -0.25 }],
+    },
+    /vertex 1 component Uz \(DOF 2\) is fixed to 0 and also prescribed to -0\.25/,
+    order,
+  );
+  // Two prescribed entries on one DOF with different values.
+  expectCppError(
+    {
+      prescribed_dofs: [
+        { vertex: 1, dof: 0, value: 0.1 },
+        { vertex: 1, dof: 0, value: 0.2 },
+      ],
+    },
+    /vertex 1 component Ux \(DOF 0\) is prescribed to 0\.1 and also prescribed to 0\.2/,
+    order,
+  );
+
+  // Identical duplicates still solve, and the prescribed value is honoured.
+  const duplicate = solve(
+    {
+      fixed_dofs: [{ vertex: 0, dofs: [0, 1, 2] }],
+      prescribed_dofs: [
+        { vertex: 1, dof: 0, value: 0.1 },
+        { vertex: 1, dof: 0, value: 0.1 },
+      ],
+    },
+    order,
+  );
+  assert.ok(!("error" in duplicate), duplicate.error);
+  assert.ok(Math.abs(duplicate.displacements[3] - 0.1) < 1e-12);
+}
+
+// Shell path (solve_shell → shell_core add_prescribed): a 2×2-cell plate in
+// z = 0, clamped on the x = 0 edge (vertices 0, 1, 2).
+const shellMesh = {
+  vertices: Float64Array.from(
+    [0, 1, 2].flatMap((i) => [0, 1, 2].flatMap((j) => [i * 0.5, j * 0.5, 0])),
+  ),
+  triangles: Int32Array.from([
+    0, 3, 4, 0, 4, 1, 1, 4, 5, 1, 5, 2, 3, 6, 7, 3, 7, 4, 4, 7, 8, 4, 8, 5,
+  ]),
+};
+const shellMaterial = JSON.stringify({
+  young_modulus: 210000,
+  poisson_ratio: 0.3,
+  thickness: 0.01,
+});
+function solveShell(overrides) {
+  return Module.solve_shell(
+    shellMesh,
+    shellMaterial,
+    JSON.stringify({
+      fixed_vertices: [0, 1, 2],
+      point_loads: [],
+      ...overrides,
+    }),
+  );
+}
+function expectShellError(overrides, expected) {
+  const result = solveShell(overrides);
+  assert.ok("error" in result, `shell BCs ${JSON.stringify(overrides)} solved`);
+  assert.match(result.error, expected);
+}
+expectShellError(
+  { prescribed_dofs: [{ vertex: 0, dof: 2, value: 0.001 }] },
+  /vertex 0 component Uz \(DOF 2\) is fixed to 0 and also prescribed to 0\.001/,
+);
+expectShellError(
+  {
+    prescribed_dofs: [
+      { vertex: 8, dof: 2, value: 0.001 },
+      { vertex: 8, dof: 2, value: 0.002 },
+    ],
+  },
+  /vertex 8 component Uz \(DOF 2\) is prescribed to 0\.001 and also prescribed to 0\.002/,
+);
+const shellDuplicate = solveShell({
+  fixed_dofs: [{ vertex: 0, dofs: [0, 1, 2, 3, 4, 5] }],
+  prescribed_dofs: [
+    { vertex: 8, dof: 2, value: 0.001 },
+    { vertex: 8, dof: 2, value: 0.001 },
+  ],
+});
+assert.ok(!("error" in shellDuplicate), shellDuplicate.error);
+assert.ok(Math.abs(shellDuplicate.displacements[3 * 8 + 2] - 0.001) < 1e-9);
+
+// Coupled path (solve_coupled → shell_core add_prescribed): the same plate as a
+// shell-only coupled model, DOFs addressed as 6·vertex + component.
+function solveCoupled(fixed, prescribed) {
+  return Module.solve_coupled(
+    {
+      vertices: shellMesh.vertices,
+      tets: new Int32Array(0),
+      triangles: shellMesh.triangles,
+      thicknesses: Float64Array.from({ length: 8 }, () => 0.01),
+    },
+    {
+      ref: new Int32Array(0),
+      offsets: Int32Array.from([0]),
+      solid: new Int32Array(0),
+      mpc: new Int32Array(0),
+      relaxation: 1.0,
+    },
+    {
+      fixed_dofs: Int32Array.from(fixed),
+      prescribed_dofs: Int32Array.from(prescribed.map(([dof]) => dof)),
+      prescribed_vals: Float64Array.from(prescribed.map(([, value]) => value)),
+      load_dofs: new Int32Array(0),
+      load_vals: new Float64Array(0),
+    },
+    JSON.stringify({
+      solid: { young_modulus: 210000, poisson_ratio: 0.3 },
+      shell: { young_modulus: 210000, poisson_ratio: 0.3 },
+    }),
+  );
+}
+const clampedEdge = [0, 1, 2].flatMap((vertex) =>
+  [0, 1, 2, 3, 4, 5].map((dof) => 6 * vertex + dof),
+);
+const coupledConflict = solveCoupled(clampedEdge, [[6 * 0 + 2, 0.001]]);
+assert.ok(
+  "error" in coupledConflict,
+  "coupled fixed+prescribed conflict solved",
+);
+assert.match(
+  coupledConflict.error,
+  /vertex 0 component Uz \(DOF 2\) is fixed to 0 and also prescribed to 0\.001/,
+);
+const coupledDuplicate = solveCoupled(
+  [...clampedEdge, ...clampedEdge],
+  [
+    [6 * 8 + 2, 0.001],
+    [6 * 8 + 2, 0.001],
+  ],
+);
+assert.ok(!("error" in coupledDuplicate), coupledDuplicate.error);
+
+console.log(
+  "Conflicting Dirichlet values rejected on solid, shell and coupled paths",
+);
 console.log("BC input validation passed for element orders 1 and 2");

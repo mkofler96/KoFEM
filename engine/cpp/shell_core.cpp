@@ -5,6 +5,8 @@
 
 #include "shell_core.h"
 
+#include "bc_validation.h"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -544,10 +546,10 @@ void apply_essential_bc(Sparse& K, std::vector<double>& F, const std::vector<cha
 }
 
 // Fold `prescribed` into the (fixed, values) pair the elimination takes. A DOF
-// already in `fixed` is upgraded to its prescribed value — the same "prescribed
-// wins over a plain clamp on the same face" rule the solid path gets from MFEM.
-// Two prescribed values for one DOF are a modelling contradiction, not something
-// to pick a winner for.
+// constrained twice to different values is a modelling contradiction, not
+// something to pick a winner for (KOF-218): a DOF already in `fixed` (u = 0) may
+// only be prescribed to 0, and two prescribed values must agree. Identical
+// duplicates pass.
 void add_prescribed(const std::vector<std::pair<int, double>>& prescribed, int nDof,
                     const char* what, std::vector<char>& fixed, std::vector<double>& values) {
     if (prescribed.empty()) return;
@@ -556,12 +558,12 @@ void add_prescribed(const std::vector<std::pair<int, double>>& prescribed, int n
     for (const auto& [dof, val] : prescribed) {
         if (dof < 0 || dof >= nDof)
             throw std::runtime_error(std::string(what) + ": prescribed DOF out of range");
-        if (seen[dof] != 0 && values[dof] != val)
-            throw std::runtime_error(
-                std::string(what) + ": node " + std::to_string(dof / 6) + " component " +
-                std::to_string(dof % 6) + " is prescribed twice, to " +
-                std::to_string(values[dof]) + " and " + std::to_string(val) +
-                " — a DOF cannot be driven to two displacements at once.");
+        if (seen[dof] != 0 || fixed[dof] != 0)
+            kofem::bc::require_consistent_dirichlet(
+                dof / 6, dof % 6,
+                seen[dof] != 0 ? kofem::bc::DirichletSource::Prescribed
+                               : kofem::bc::DirichletSource::Fixed,
+                values[dof], kofem::bc::DirichletSource::Prescribed, val, what);
         seen[dof] = 1;
         fixed[dof] = 1;
         values[dof] = val;

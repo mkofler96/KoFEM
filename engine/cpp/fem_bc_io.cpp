@@ -65,7 +65,24 @@ public:
 struct VDir {
     std::array<bool, 3>   set{false, false, false};
     std::array<double, 3> val{0.0, 0.0, 0.0};
+    std::array<kofem::bc::DirichletSource, 3> src{kofem::bc::DirichletSource::Fixed,
+                                                  kofem::bc::DirichletSource::Fixed,
+                                                  kofem::bc::DirichletSource::Fixed};
 };
+
+// Record a Dirichlet value for component `d` of vertex `vi`. A component that an
+// earlier entry already set to a different value is a conflict between two BC
+// groups and is refused (KOF-218) instead of letting the last entry win.
+void set_dirichlet(std::map<int, VDir>& vdir, int vi, int d,
+                   kofem::bc::DirichletSource source, double value, const char* fn) {
+    VDir& vd = vdir[vi];
+    const auto c = static_cast<size_t>(d);
+    if (vd.set[c])
+        kofem::bc::require_consistent_dirichlet(vi, d, vd.src[c], vd.val[c], source, value, fn);
+    vd.set[c] = true;
+    vd.val[c] = value;
+    vd.src[c] = source;
+}
 
 // fixed_vertices is the full-fixity shorthand: every translational component
 // (Ux, Uy, Uz) of the listed vertex is pinned.
@@ -80,11 +97,9 @@ void add_fixed_vertices(const val& fixed_js, mfem::FiniteElementSpace& fespace,
         fespace.GetVertexVDofs(vi, vdofs);
         for (int j = 0; j < vdofs.Size(); ++j)
             ess_tdof.Append(vdofs[j]);
-        VDir& vd = vdir[vi];
-        for (int d = 0; d < dim && d < vdofs.Size(); ++d) {
-            vd.set[d] = true;
-            vd.val[d] = 0.0;
-        }
+        for (int d = 0; d < dim && d < vdofs.Size(); ++d)
+            set_dirichlet(vdir, vi, d, kofem::bc::DirichletSource::Fixed, 0.0,
+                          "add_fixed_vertices");
     }
 }
 
@@ -111,9 +126,8 @@ void add_fixed_dofs(const val& fdofs_js, mfem::FiniteElementSpace& fespace,
             int d = comps[c].as<int>();
             kofem::bc::require_valid_component(d, vdofs.Size(), vi, "add_fixed_dofs");
             ess_tdof.Append(vdofs[d]);
-            VDir& vd = vdir[vi];
-            vd.set[d] = true;
-            vd.val[d] = 0.0;
+            set_dirichlet(vdir, vi, d, kofem::bc::DirichletSource::Fixed, 0.0,
+                          "add_fixed_dofs");
         }
     }
 }
@@ -143,11 +157,10 @@ void add_prescribed_dofs(const val& pdofs_js, mfem::FiniteElementSpace& fespace,
         mfem::Array<int> vdofs;
         fespace.GetVertexVDofs(vi, vdofs);
         kofem::bc::require_valid_component(d, vdofs.Size(), vi, "add_prescribed_dofs");
+        set_dirichlet(vdir, vi, d, kofem::bc::DirichletSource::Prescribed, value,
+                      "add_prescribed_dofs");
         ess_tdof.Append(vdofs[d]);
         prescribed_vals.emplace_back(vdofs[d], value);
-        VDir& vd = vdir[vi];
-        vd.set[d] = true;
-        vd.val[d] = value;
     }
 }
 
