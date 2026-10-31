@@ -18,6 +18,8 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <stdexcept>
+#include <string>
 #include <vector>
 
 using namespace kofem::shell;
@@ -534,13 +536,16 @@ bool shell_conflicting_prescribed_throws() {
     plate_mesh(1.0, 2, V, T);
     ShellInput in;
     in.vertices = V; in.triangles = T; in.thickness = 0.01; in.young = 1e7; in.poisson = 0.3;
-    for (int nd = 0; nd < 9; ++nd) for (int c = 0; c < 6; ++c) in.fixed_dofs.push_back(6 * nd + c);
+    for (int nd = 0; nd < 9; ++nd)
+        for (int c = 0; c < 6; ++c)
+            if (6 * nd + c != 6 * 4 + 2) in.fixed_dofs.push_back(6 * nd + c);
     in.prescribed_dofs.emplace_back(6 * 4 + 2, 1e-3);
     in.prescribed_dofs.emplace_back(6 * 4 + 2, 2e-3);
     try {
         solve_shell_core(in);
-    } catch (const std::exception&) {
-        return true;
+    } catch (const std::exception& e) {
+        return std::string(e.what()).find("prescribed to 0.001 and also prescribed to 0.002") !=
+               std::string::npos;
     }
     return false;
 }
@@ -582,6 +587,44 @@ bool footprint_rigid_motion() {
         }
     }
     return error < 1e-10;
+}
+
+// A DOF that a fixed support pins to zero and a prescribed displacement drives
+// to a non-zero value is the same contradiction (KOF-218) — it used to resolve
+// silently in favour of the prescribed value. The same value twice is fine.
+bool shell_fixed_and_prescribed_throws() {
+    std::vector<double> V; std::vector<int> T;
+    plate_mesh(1.0, 2, V, T);
+    ShellInput in;
+    in.vertices = V; in.triangles = T; in.thickness = 0.01; in.young = 1e7; in.poisson = 0.3;
+    for (int nd = 0; nd < 9; ++nd) for (int c = 0; c < 6; ++c) in.fixed_dofs.push_back(6 * nd + c);
+    in.prescribed_dofs.emplace_back(6 * 4 + 2, 1e-3);
+    try {
+        solve_shell_core(in);
+    } catch (const std::exception& e) {
+        return std::string(e.what()).find("fixed to 0 and also prescribed to 0.001") !=
+               std::string::npos;
+    }
+    return false;
+}
+
+bool shell_identical_duplicates_solve() {
+    std::vector<double> V; std::vector<int> T;
+    plate_mesh(1.0, 2, V, T);
+    ShellInput in;
+    in.vertices = V; in.triangles = T; in.thickness = 0.01; in.young = 1e7; in.poisson = 0.3;
+    for (int nd = 0; nd < 9; ++nd)
+        for (int c = 0; c < 6; ++c)
+            if (6 * nd + c != 6 * 4 + 2) in.fixed_dofs.push_back(6 * nd + c);
+    in.prescribed_dofs.emplace_back(6 * 0 + 2, 0.0);  // fixed AND prescribed to 0
+    in.prescribed_dofs.emplace_back(6 * 4 + 2, 1e-3);
+    in.prescribed_dofs.emplace_back(6 * 4 + 2, 1e-3);
+    try {
+        const ShellResult r = solve_shell_core(in);
+        return std::abs(r.dofs[6 * 4 + 2] - 1e-3) < 1e-12;
+    } catch (const std::exception&) {
+        return false;
+    }
 }
 
 }  // namespace
@@ -669,7 +712,17 @@ int main() {
         if (!conflict) ++failures;
         printf("  [%s] %-28s %s\n", conflict ? "PASS" : "FAIL",
                "conflicting prescribed throws",
-               conflict ? "rejected as expected" : "did NOT throw");
+               conflict ? "rejected as expected" : "did NOT throw a named conflict");
+        const bool fixed_conflict = shell_fixed_and_prescribed_throws();
+        if (!fixed_conflict) ++failures;
+        printf("  [%s] %-28s %s\n", fixed_conflict ? "PASS" : "FAIL",
+               "fixed+prescribed throws",
+               fixed_conflict ? "rejected as expected" : "did NOT throw a named conflict");
+        const bool duplicates = shell_identical_duplicates_solve();
+        if (!duplicates) ++failures;
+        printf("  [%s] %-28s %s\n", duplicates ? "PASS" : "FAIL",
+               "identical duplicates solve",
+               duplicates ? "solved, value honoured" : "rejected or value lost");
     }
 
     printf(failures != 0 ? "\n%d check(s) FAILED\n" : "\nall checks passed\n", failures);
