@@ -2277,10 +2277,6 @@ self.onmessage = async (event: MessageEvent) => {
       handleTopOpt(id, payload as TopOptPayload);
     } else if (type === "test_generate_fem_mesh") {
       handleTestGenerateFemMesh(id);
-    } else if (type === "mesh") {
-      throw new Error(
-        "Parametric mesh generation is not available in the new pipeline. Import a STEP file instead.",
-      );
     } else {
       throw new Error(`Unknown worker message type: ${type}`);
     }

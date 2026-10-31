@@ -1,22 +1,14 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Minimal JSON helpers shared across the engine's pipeline stages.
-//
-// Output is built manually to avoid a third-party parser dependency — the
-// format is machine-generated and tightly controlled so this is safe. Input
-// parsing is delegated to the JS engine via emscripten::val.
+// Minimal JSON input helpers shared across the engine's pipeline stages.
+// Parsing is delegated to the JS engine via emscripten::val, so there is no
+// third-party parser dependency.
 #pragma once
 
 #include <emscripten/val.h>
 
 #include <string>
-#include <vector>
-
-// ── JSON output ───────────────────────────────────────────────────────────────
-std::string json_vec3(const std::vector<double>& d);
-std::string json_ivec3(const std::vector<int>& d);
-std::string json_ivec4(const std::vector<int>& d);
 
 // ── JSON input (delegate parsing to the JS engine via emscripten::val) ─────────
 emscripten::val parse_json(const std::string& s);

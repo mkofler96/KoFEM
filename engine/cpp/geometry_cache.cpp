@@ -10,9 +10,8 @@
 #include <cstdio>
 #include <stdexcept>
 
-// Stored by tessellate_step for reuse by tessellate_for_meshing and
-// generate_fem_mesh, which build the Netgen OCC geometry directly from this
-// shape (no CAD re-read). Held in a function-local static so the mutable
+// Stored by tessellate_step for reuse by generate_fem_mesh, which builds the
+// Netgen OCC geometry directly from this shape (no CAD re-read). Held in a function-local static so the mutable
 // state has a single named access path instead of file-scope globals.
 namespace {
 struct ShapeCache {

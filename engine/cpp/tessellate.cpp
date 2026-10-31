@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// OCCT: STEP / IGES shape → surface tessellation (display + meshing input).
+// OCCT: STEP / IGES shape → surface tessellation for display.
 // See tessellate.h.
 
 #include "tessellate.h"
@@ -13,7 +13,6 @@
 
 #include <BRep_Tool.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
-#include <BRepTools.hxx>
 #include <Poly_Triangulation.hxx>
 #include <TopAbs_Orientation.hxx>
 #include <TopExp.hxx>
@@ -159,72 +158,4 @@ val tessellate_step(val bytes_val, const std::string& opts_json) {
     result.set("triangleFaceIds", uint32_array(tri_faces));
     result.set("bodyCount",       n_bodies);
     return result;
-}
-
-// Re-tessellate the stored STEP shape with parameters tied to the target
-// element size.  The visualization tessellation (linear_deflection=0.1)
-// produces very many small triangles; passing that directly to Netgen's
-// advancing-front mesher can trigger memory-access crashes on complex geometry
-// because the size mismatch between surface triangles and volume elements
-// confuses Netgen's internal bookkeeping.
-//
-// Using linear_defl ≈ max_element_size/4 gives surface triangles roughly
-// the same scale as the volume elements, which is what Netgen expects.
-std::string tessellate_for_meshing(const std::string& opts_json) {
-    if (!has_cached_shape())
-        throw std::runtime_error(
-            "tessellate_for_meshing: no STEP shape loaded — call tessellate_step first");
-    const TopoDS_Shape& shape = cached_shape();
-
-    val opts = parse_json(opts_json);
-    double max_size = jdouble(opts, "max_element_size", 10.0);
-
-    // Surface triangles at ~1/4 of the target element size; floor at 1.0 to
-    // avoid producing a surface finer than the viz tessellation.
-    double linear_defl  = std::max(1.0, max_size / 4.0);
-    double angular_defl = 0.3;
-
-    // BRepMesh_IncrementalMesh will skip faces whose stored deflection already
-    // satisfies the request.  Since we first tessellated with 0.1 (finer than
-    // max_size/4 for typical element sizes), we must clear first to force a
-    // coarser, more uniform re-tessellation.
-    BRepTools::Clean(shape);
-    BRepMesh_IncrementalMesh mesher(shape, linear_defl, /*isRelative=*/false, angular_defl);
-    mesher.Perform();
-    if (!mesher.IsDone())
-        throw std::runtime_error("BRepMesh_IncrementalMesh (mesh-quality) failed");
-
-    std::vector<double> verts;
-    std::vector<int>    tris;
-
-    for (TopExp_Explorer exp(shape, TopAbs_FACE); exp.More(); exp.Next()) {
-        TopoDS_Face face = TopoDS::Face(exp.Current());
-        TopLoc_Location loc;
-        Handle(Poly_Triangulation) tri = BRep_Tool::Triangulation(face, loc);
-        if (tri.IsNull()) continue;
-
-        int base = (int)(verts.size() / 3);
-
-        for (int i = 1; i <= tri->NbNodes(); ++i) {
-            gp_Pnt pt = tri->Node(i).Transformed(loc);
-            verts.push_back(pt.X());
-            verts.push_back(pt.Y());
-            verts.push_back(pt.Z());
-        }
-
-        bool rev = (face.Orientation() == TopAbs_REVERSED);
-        for (int i = 1; i <= tri->NbTriangles(); ++i) {
-            int n1, n2, n3;
-            tri->Triangle(i).Get(n1, n2, n3);
-            if (rev) std::swap(n2, n3);
-            tris.push_back(base + n1 - 1);
-            tris.push_back(base + n2 - 1);
-            tris.push_back(base + n3 - 1);
-        }
-    }
-
-    if (verts.empty())
-        throw std::runtime_error("mesh-quality tessellation produced no triangles");
-
-    return "{\"vertices\":" + json_vec3(verts) + ",\"triangles\":" + json_ivec3(tris) + "}";
 }
