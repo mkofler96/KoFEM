@@ -15,6 +15,7 @@ import { FaceOverlay } from "./FaceOverlay";
 
 interface FaceHighlight {
   groupId: number;
+  faceId: number;
   positions: Float32Array;
 }
 
@@ -30,6 +31,7 @@ function groupFaceHighlights(
     .flatMap((g) =>
       g.faces.map((f) => ({
         groupId: g.id,
+        faceId: f.id,
         positions: buildFacePositions(
           f.nodeIds,
           boundaryMeshTopo.triangles,
@@ -71,9 +73,9 @@ export function BcFaceHighlights({
   return (
     <>
       {/* BC face highlights — persistent coloured overlay for all committed BC faces */}
-      {bcFaceHighlights?.map((h, i) => (
+      {bcFaceHighlights?.map((h) => (
         <FaceOverlay
-          key={`bc-face-${h.groupId}-${i}`}
+          key={`bc-face-${h.groupId}-${h.faceId}`}
           positions={h.positions}
           color="#dc2626"
           opacity={pickTargetGroupId === h.groupId ? 0.45 : 0.25}
@@ -82,9 +84,9 @@ export function BcFaceHighlights({
       ))}
 
       {/* Load face highlights — persistent coloured overlay for all committed load faces */}
-      {loadFaceHighlights?.map((h, i) => (
+      {loadFaceHighlights?.map((h) => (
         <FaceOverlay
-          key={`load-face-${h.groupId}-${i}`}
+          key={`load-face-${h.groupId}-${h.faceId}`}
           positions={h.positions}
           color="#d97706"
           opacity={pickTargetGroupId === h.groupId ? 0.45 : 0.25}

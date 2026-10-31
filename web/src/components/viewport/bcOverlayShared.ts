@@ -4,7 +4,7 @@
 // Shared by the boundary-condition overlay layers: the pick-session colour and
 // the node lookups the BC marker and load-arrow glyphs are built from.
 
-import * as THREE from "three";
+import { Vector3 } from "three";
 import type { Node } from "../../store/modelStore";
 import type { NodeMap } from "./useMeshTopology";
 
@@ -13,7 +13,7 @@ export const SELECTION_COLOR = "#e05533";
 
 // Model centroid (mean of all node coordinates) — orients face normals and
 // pressure arrows. Callers check `nodes.length > 0` first.
-export function modelCentroid(nodes: readonly Node[]): THREE.Vector3 {
+export function modelCentroid(nodes: readonly Node[]): Vector3 {
   let mx = 0,
     my = 0,
     mz = 0;
@@ -25,14 +25,11 @@ export function modelCentroid(nodes: readonly Node[]): THREE.Vector3 {
   mx /= nodes.length;
   my /= nodes.length;
   mz /= nodes.length;
-  return new THREE.Vector3(mx, my, mz);
+  return new Vector3(mx, my, mz);
 }
 
 // Position of a mesh node, or null when the id is not in the mesh.
-export function nodePosition(
-  nodeMap: NodeMap,
-  id: number,
-): THREE.Vector3 | null {
+export function nodePosition(nodeMap: NodeMap, id: number): Vector3 | null {
   const entry = nodeMap.get(id);
-  return entry ? new THREE.Vector3(entry.n.x, entry.n.y, entry.n.z) : null;
+  return entry ? new Vector3(entry.n.x, entry.n.y, entry.n.z) : null;
 }

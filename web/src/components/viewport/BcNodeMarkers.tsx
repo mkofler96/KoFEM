@@ -4,7 +4,7 @@
 // Fixed-support markers: a small triangular cone at every constrained node.
 
 import { useMemo } from "react";
-import * as THREE from "three";
+import { Quaternion, Vector3 } from "three";
 import { useModelStore } from "../../store/modelStore";
 import type { MeshTopology } from "./useMeshTopology";
 import { modelCentroid, nodePosition } from "./bcOverlayShared";
@@ -36,59 +36,58 @@ export function BcNodeMarkers({ topology, showResult }: BcNodeMarkersProps) {
     const centroid = modelCentroid(nodes);
     const posOf = (id: number) => nodePosition(nodeMap, id);
 
-    const outward = new Map<number, THREE.Vector3>();
+    const outward = new Map<number, Vector3>();
     const addFace = (faceIds: number[]) => {
       if (!faceIds.every((id) => ids.has(id))) return;
       const pts = faceIds.map(posOf);
       if (pts.some((pt) => pt === null)) return;
-      const corners = pts as THREE.Vector3[];
+      const corners = pts as Vector3[];
 
       // Area-weighted normal: triangle directly, quad via its diagonals.
-      const normal = new THREE.Vector3();
+      const normal = new Vector3();
       if (corners.length === 3) {
         normal
           .copy(corners[1])
           .sub(corners[0])
-          .cross(new THREE.Vector3().copy(corners[2]).sub(corners[0]));
+          .cross(new Vector3().copy(corners[2]).sub(corners[0]));
       } else {
         normal
           .copy(corners[2])
           .sub(corners[0])
-          .cross(new THREE.Vector3().copy(corners[3]).sub(corners[1]));
+          .cross(new Vector3().copy(corners[3]).sub(corners[1]));
       }
       if (normal.lengthSq() < 1e-30) return;
 
-      const fc = new THREE.Vector3();
+      const fc = new Vector3();
       for (const v of corners) fc.add(v);
       fc.divideScalar(corners.length);
-      if (normal.dot(new THREE.Vector3().copy(centroid).sub(fc)) > 0)
-        normal.negate();
+      if (normal.dot(new Vector3().copy(centroid).sub(fc)) > 0) normal.negate();
 
       for (const id of faceIds) {
         // eslint-disable-next-line kofem/no-silent-fallback -- accumulating face normals; the zero vector is the identity for a node seen for the first time
-        const acc = outward.get(id) ?? new THREE.Vector3();
+        const acc = outward.get(id) ?? new Vector3();
         outward.set(id, acc.add(normal));
       }
     };
     for (const tri of boundaryTriFaceIds) addFace(tri);
     for (const quad of boundaryQuadFaceIds) addFace(quad);
 
-    const down = new THREE.Vector3(0, -1, 0);
+    const down = new Vector3(0, -1, 0);
     const markers: {
       nodeId: number;
       pos: [number, number, number];
-      quaternion: THREE.Quaternion;
+      quaternion: Quaternion;
     }[] = [];
     for (const id of ids) {
       const pos = posOf(id);
       if (!pos) continue;
       let dir = outward.get(id);
       if (!dir || dir.lengthSq() < 1e-30)
-        dir = new THREE.Vector3().copy(pos).sub(centroid);
+        dir = new Vector3().copy(pos).sub(centroid);
       if (dir.lengthSq() < 1e-30) continue;
       dir.normalize();
       // Rotate so that -Y (cone base direction) aligns with the outward normal
-      const quaternion = new THREE.Quaternion().setFromUnitVectors(down, dir);
+      const quaternion = new Quaternion().setFromUnitVectors(down, dir);
       markers.push({ nodeId: id, pos: [pos.x, pos.y, pos.z], quaternion });
     }
     return markers;

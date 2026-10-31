@@ -4,7 +4,7 @@
 // The translucent face overlay every BC, load, tie, coupling and pick-session
 // highlight is drawn with.
 
-import * as THREE from "three";
+import { DoubleSide } from "three";
 
 interface FaceOverlayProps {
   positions: Float32Array;
@@ -31,7 +31,7 @@ export function FaceOverlay({
         transparent
         opacity={opacity}
         depthTest={false}
-        side={THREE.DoubleSide}
+        side={DoubleSide}
       />
     </mesh>
   );
