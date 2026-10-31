@@ -7,10 +7,11 @@ export function fmt(v: number, digits = 3) {
   return v.toPrecision(digits + 1);
 }
 
-// The pre-flight line for an applied load. Forces and pressures reach the
-// solver as face tractions, moments and point loads as nodal DOFs — counting
-// only the DOFs told a face-loaded model it had "0 load DOFs".
-export function loadsSummary(nodalLoadDofs: number, faceLoads: number): string {
+// What is loaded, as the pre-flight checks and the status bar show it. Forces
+// and pressures on faces (and shell edges) reach the solver as surface loads,
+// moments and point loads as nodal DOFs — counting only the DOFs told a
+// face-loaded model it had "0 load DOFs" (KOF-250).
+export function loadCounts(nodalLoadDofs: number, faceLoads: number): string[] {
   const parts: string[] = [];
   if (faceLoads > 0)
     parts.push(`${faceLoads} face load${faceLoads > 1 ? "s" : ""}`);
@@ -18,5 +19,9 @@ export function loadsSummary(nodalLoadDofs: number, faceLoads: number): string {
     parts.push(
       `${nodalLoadDofs} nodal load DOF${nodalLoadDofs > 1 ? "s" : ""}`,
     );
-  return `Loads applied · ${parts.join(" · ")}`;
+  return parts;
+}
+
+export function loadsSummary(nodalLoadDofs: number, faceLoads: number): string {
+  return `Loads applied · ${loadCounts(nodalLoadDofs, faceLoads).join(" · ")}`;
 }
