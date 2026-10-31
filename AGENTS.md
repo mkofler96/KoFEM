@@ -51,8 +51,12 @@ Run checks appropriate to the change; CI definitions are in
   writing code. After that, let the GitHub integration manage its status.
 - Record meaningful evidence on the Linear issue, editing one comment in place.
 - Feature PRs do not edit `CHANGELOG.md`. Releases require an explicit request;
-  follow `.claude/skills/release/SKILL.md`. Agents never create tags or GitHub
-  Releases; only the maintainer handles promotions from `develop` to `main`.
+  `prepare-release` creates the Linear plan and readiness tasks;
+  `create-release` rechecks them and opens the version/changelog PR. The legacy
+  `release` skill handles assessment and routes those requests. Skills live in
+  `.claude/skills/`, with Codex links in `.agents/skills/`. Agents never create
+  tags or GitHub Releases; the maintainer merges release PRs and handles
+  promotions from `develop` to `main`.
 - Preserve pinned dependency/action/image versions and signed build provenance.
 
 ## Examples
