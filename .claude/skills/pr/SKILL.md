@@ -18,7 +18,8 @@ the Evidence, and judge the risk from Merge Danger, before opening the diff.
 
 ## Workflow
 
-1. **Branch** from `develop`; the PR targets `develop` (see `AGENTS.md`).
+1. **Start** by moving the Linear issue to **In Progress**. Then branch from
+   `develop`; the PR targets `develop` (see `AGENTS.md`).
 2. **Capture the red run first.** Before changing code, run the test or repro
    that shows the problem on the base and save the trimmed output. If no test
    can show it, write one. A fix without a failing-then-passing run is a claim,

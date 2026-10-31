@@ -46,7 +46,9 @@ Run checks appropriate to the change; CI definitions are in
 - Linear holds issues, specs, and decisions; GitHub holds code and PRs.
   Keep task-specific findings out of this file.
 - Branch from `develop` and target PRs there. Use `Fixes KOF-nn` only when
-  the PR resolves that issue. Let the GitHub integration manage issue status.
+  the PR resolves that issue.
+- When you start work on a Linear issue, move it to **In Progress** before
+  writing code. After that, let the GitHub integration manage its status.
 - Record meaningful evidence on the Linear issue, editing one comment in place.
 - Feature PRs do not edit `CHANGELOG.md`. Releases require an explicit request;
   follow `.claude/skills/release/SKILL.md`. Agents never create tags or GitHub
