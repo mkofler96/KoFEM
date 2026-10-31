@@ -7,7 +7,7 @@ export interface TransitionPlane {
   origin: Point;
   normal: Point;
 }
-const faces = [
+const tetFaces = [
   [0, 1, 2],
   [0, 1, 3],
   [0, 2, 3],
@@ -26,209 +26,280 @@ const cross = (left: Point, right: Point): Point => [
   left[0] * right[1] - left[1] * right[0],
 ];
 
-// Clip at physical transition planes. Intersections are shared by edge+plane;
-// canonical face fans give neighbouring cut tets the same face triangulation.
-export function clipShellTransition(
-  mesh: ShellizeMesh,
-  shells: ShellExtraction,
-  replaced: Set<number>,
-  planes: TransitionPlane[],
-  shellFaceIds: Set<number>,
-  tolerance: number,
-): ShellizeMesh {
-  const vertices = [...mesh.V];
-  const intersections = new Map<string, number>();
-  const point = (index: number): Point => [
-    vertices[3 * index],
-    vertices[3 * index + 1],
-    vertices[3 * index + 2],
-  ];
-  const distance = (index: number, plane: TransitionPlane) =>
-    dot(minus(point(index), plane.origin), plane.normal);
-  const intersection = (first: number, second: number, planeIndex: number) => {
-    const plane = planes[planeIndex];
-    const firstDistance = distance(first, plane),
-      secondDistance = distance(second, plane);
-    if (Math.abs(firstDistance) <= tolerance) return first;
-    if (Math.abs(secondDistance) <= tolerance) return second;
+function triangulate(polygon: number[]): number[][] {
+  if (polygon.length < 3) return [];
+  const minimum = polygon.indexOf(Math.min(...polygon));
+  const ordered = [...polygon.slice(minimum), ...polygon.slice(0, minimum)];
+  return ordered
+    .slice(1, -1)
+    .map((_, index) => [ordered[0], ordered[index + 1], ordered[index + 2]]);
+}
+
+interface VolumePiece {
+  faces: number[][];
+  retained: boolean;
+}
+interface SurfacePiece {
+  polygon: number[];
+  retained: boolean;
+}
+
+// One cache per node pool makes intersections shared across materials and
+// neighbouring elements. Canonical face fans then preserve solid conformity.
+class PlaneClipper {
+  private readonly intersections = new Map<string, number>();
+  constructor(
+    readonly vertices: number[],
+    readonly planes: TransitionPlane[],
+    readonly tolerance: number,
+  ) {}
+  point(index: number): Point {
+    return [
+      this.vertices[3 * index],
+      this.vertices[3 * index + 1],
+      this.vertices[3 * index + 2],
+    ];
+  }
+  addPoint(point: Point): number {
+    const index = this.vertices.length / 3;
+    this.vertices.push(...point);
+    return index;
+  }
+  center(nodes: number[]): Point {
+    const center: Point = [0, 0, 0];
+    for (const index of nodes)
+      this.point(index).forEach(
+        (value, axis) => (center[axis] += value / nodes.length),
+      );
+    return center;
+  }
+  distance(index: number, planeIndex: number): number {
+    const plane = this.planes[planeIndex];
+    return dot(minus(this.point(index), plane.origin), plane.normal);
+  }
+  side(nodes: number[], planeIndex: number): -1 | 0 | 1 {
+    const distances = nodes.map((index) => this.distance(index, planeIndex));
+    if (Math.max(...distances) <= this.tolerance) return -1;
+    if (Math.min(...distances) >= -this.tolerance) return 1;
+    return 0;
+  }
+  intersection(first: number, second: number, planeIndex: number): number {
+    const startDistance = this.distance(first, planeIndex),
+      endDistance = this.distance(second, planeIndex);
+    if (Math.abs(startDistance) <= this.tolerance) return first;
+    if (Math.abs(endDistance) <= this.tolerance) return second;
     const key = `${Math.min(first, second)},${Math.max(first, second)},${planeIndex}`;
-    const existing = intersections.get(key);
+    const existing = this.intersections.get(key);
     if (existing !== undefined) return existing;
-    const ratio = firstDistance / (firstDistance - secondDistance);
-    const start = point(first),
-      end = point(second);
-    const result = vertices.length / 3;
-    vertices.push(
-      ...start.map((value, axis) => value + ratio * (end[axis] - value)),
+    const ratio = startDistance / (startDistance - endDistance),
+      start = this.point(first),
+      end = this.point(second);
+    const index = this.addPoint(
+      start.map((value, axis) => value + ratio * (end[axis] - value)) as Point,
     );
-    intersections.set(key, result);
-    return result;
-  };
-  const clipPolygon = (
+    this.intersections.set(key, index);
+    return index;
+  }
+  clipPolygon(
     polygon: number[],
     planeIndex: number,
     positive: boolean,
-  ): number[] => {
-    const output: number[] = [];
-    const sign = positive ? 1 : -1;
+  ): number[] {
+    const output: number[] = [],
+      sign = positive ? 1 : -1;
     for (let corner = 0; corner < polygon.length; corner++) {
       const start = polygon[corner],
         end = polygon[(corner + 1) % polygon.length];
-      const inside = sign * distance(start, planes[planeIndex]) >= -tolerance;
-      const nextInside = sign * distance(end, planes[planeIndex]) >= -tolerance;
+      const inside = sign * this.distance(start, planeIndex) >= -this.tolerance;
+      const nextInside =
+        sign * this.distance(end, planeIndex) >= -this.tolerance;
       if (inside) output.push(start);
       if (inside !== nextInside)
-        output.push(intersection(start, end, planeIndex));
+        output.push(this.intersection(start, end, planeIndex));
     }
     return [...new Set(output)];
-  };
-  const split = (
-    polyhedron: number[][],
+  }
+  private orderedCap(nodes: number[], planeIndex: number): number[] {
+    const cap = nodes.filter(
+      (index) => Math.abs(this.distance(index, planeIndex)) <= this.tolerance,
+    );
+    const center = this.center(cap),
+      normal = this.planes[planeIndex].normal;
+    const seed: Point = Math.abs(normal[0]) < 0.8 ? [1, 0, 0] : [0, 1, 0];
+    const first = cross(normal, seed),
+      second = cross(normal, first);
+    const angle = (index: number) => {
+      const offset = minus(this.point(index), center);
+      return Math.atan2(dot(offset, second), dot(offset, first));
+    };
+    return cap.sort((left, right) => angle(left) - angle(right));
+  }
+  private volumeSide(
+    faces: number[][],
     planeIndex: number,
     positive: boolean,
-  ): number[][] => {
-    const output = polyhedron
-      .map((face) => clipPolygon(face, planeIndex, positive))
+  ): number[][] {
+    const clipped = faces
+      .map((face) => this.clipPolygon(face, planeIndex, positive))
       .filter((face) => face.length >= 3);
-    const cap = [...new Set(output.flat())].filter(
-      (index) => Math.abs(distance(index, planes[planeIndex])) <= tolerance,
+    const cap = this.orderedCap([...new Set(clipped.flat())], planeIndex);
+    const existing = clipped.some(
+      (face) =>
+        face.length === cap.length &&
+        face.every((index) => cap.includes(index)),
     );
-    if (cap.length >= 3) {
-      const center: Point = [0, 0, 0];
-      for (const index of cap)
-        point(index).forEach(
-          (value, axis) => (center[axis] += value / cap.length),
-        );
-      const normal = planes[planeIndex].normal;
-      const seed: Point = Math.abs(normal[0]) < 0.8 ? [1, 0, 0] : [0, 1, 0];
-      const firstAxis = cross(normal, seed),
-        secondAxis = cross(normal, firstAxis);
-      cap.sort((left, right) => {
-        const leftOffset = minus(point(left), center),
-          rightOffset = minus(point(right), center);
-        return (
-          Math.atan2(dot(leftOffset, secondAxis), dot(leftOffset, firstAxis)) -
-          Math.atan2(dot(rightOffset, secondAxis), dot(rightOffset, firstAxis))
-        );
-      });
-      // An original face on the plane is already present.
-      if (
-        !output.some(
-          (face) =>
-            face.length === cap.length &&
-            face.every((index) => cap.includes(index)),
-        )
-      )
-        output.push(cap);
-    }
-    return output;
-  };
-  const fan = (polygon: number[]) => {
-    const minimum = polygon.indexOf(Math.min(...polygon));
-    const ordered = [...polygon.slice(minimum), ...polygon.slice(0, minimum)];
-    return ordered
-      .slice(1, -1)
-      .map((_, index) => [ordered[0], ordered[index + 1], ordered[index + 2]]);
-  };
-  const tets: number[] = [],
-    body: number[] = [];
-  const addTet = (nodes: number[], bodyId: number) => {
-    const corners = nodes.map(point);
+    if (cap.length >= 3 && !existing) clipped.push(cap);
+    return clipped;
+  }
+  splitVolume(piece: VolumePiece, planeIndex: number): VolumePiece[] {
+    const side = this.side([...new Set(piece.faces.flat())], planeIndex);
+    if (side < 0) return [{ faces: piece.faces, retained: true }];
+    if (side > 0) return [piece];
+    return [
+      {
+        faces: this.volumeSide(piece.faces, planeIndex, false),
+        retained: true,
+      },
+      {
+        faces: this.volumeSide(piece.faces, planeIndex, true),
+        retained: piece.retained,
+      },
+    ];
+  }
+  splitSurface(piece: SurfacePiece, planeIndex: number): SurfacePiece[] {
+    const side = this.side(piece.polygon, planeIndex);
+    if (side < 0) return [{ polygon: piece.polygon, retained: true }];
+    if (side > 0) return [piece];
+    return [
+      {
+        polygon: this.clipPolygon(piece.polygon, planeIndex, false),
+        retained: true,
+      },
+      {
+        polygon: this.clipPolygon(piece.polygon, planeIndex, true),
+        retained: piece.retained,
+      },
+    ].filter((part) => part.polygon.length >= 3);
+  }
+}
+
+class SolidOutput {
+  readonly tet: number[] = [];
+  readonly body: number[] = [];
+  constructor(private readonly clipper: PlaneClipper) {}
+  addTet(nodes: number[], bodyId: number): void {
+    const corners = nodes.map((index) => this.clipper.point(index));
     const determinant = dot(
       minus(corners[1], corners[0]),
       cross(minus(corners[2], corners[0]), minus(corners[3], corners[0])),
     );
-    if (Math.abs(determinant) <= tolerance ** 3) return;
+    if (Math.abs(determinant) <= this.clipper.tolerance ** 3) return;
     if (determinant < 0) [nodes[1], nodes[2]] = [nodes[2], nodes[1]];
-    tets.push(...nodes);
-    body.push(bodyId);
-  };
-  const addPolyhedron = (polyhedron: number[][], bodyId: number) => {
-    const nodes = [...new Set(polyhedron.flat())];
-    if (nodes.length < 4) return;
-    const center: Point = [0, 0, 0];
-    for (const index of nodes)
-      point(index).forEach(
-        (value, axis) => (center[axis] += value / nodes.length),
-      );
-    const centerIndex = vertices.length / 3;
-    vertices.push(...center);
-    for (const face of polyhedron)
-      for (const triangle of fan(face))
-        addTet([...triangle, centerIndex], bodyId);
-  };
-  for (let element = 0; element < mesh.tet.length / 4; element++) {
-    const nodes = mesh.tet.slice(4 * element, 4 * element + 4);
-    if (!replaced.has(element)) {
-      addTet(nodes, mesh.body[element]);
-      continue;
-    }
-    let remainder = faces.map((face) => face.map((corner) => nodes[corner]));
-    for (
-      let planeIndex = 0;
-      planeIndex < planes.length && remainder.length;
-      planeIndex++
-    ) {
-      const distances = [...new Set(remainder.flat())].map((index) =>
-        distance(index, planes[planeIndex]),
-      );
-      if (Math.max(...distances) <= tolerance) {
-        // Preserve untouched tets rather than subdividing them.
-        if (
-          remainder.length === 4 &&
-          remainder.every((face) =>
-            face.every((index) => nodes.includes(index)),
-          )
-        )
-          addTet(nodes, mesh.body[element]);
-        else addPolyhedron(remainder, mesh.body[element]);
-        remainder = [];
-        break;
-      }
-      if (Math.min(...distances) >= -tolerance) continue;
-      addPolyhedron(split(remainder, planeIndex, false), mesh.body[element]);
-      remainder = split(remainder, planeIndex, true);
-    }
+    this.tet.push(...nodes);
+    this.body.push(bodyId);
   }
+  addVolume(piece: VolumePiece, originalNodes: number[], bodyId: number): void {
+    if (!piece.retained) return;
+    const nodes = [...new Set(piece.faces.flat())];
+    if (nodes.length < 4) return;
+    if (
+      nodes.length === 4 &&
+      nodes.every((index) => originalNodes.includes(index))
+    ) {
+      this.addTet(originalNodes, bodyId);
+      return;
+    }
+    const center = this.clipper.addPoint(this.clipper.center(nodes));
+    for (const face of piece.faces)
+      for (const triangle of triangulate(face))
+        this.addTet([...triangle, center], bodyId);
+  }
+}
+
+function clipSolidTets(
+  mesh: ShellizeMesh,
+  replaced: Set<number>,
+  clipper: PlaneClipper,
+): SolidOutput {
+  const output = new SolidOutput(clipper);
+  for (let element = 0; element < mesh.body.length; element++) {
+    const nodes = mesh.tet.slice(4 * element, 4 * element + 4);
+    let pieces: VolumePiece[] = [
+      {
+        faces: tetFaces.map((face) => face.map((corner) => nodes[corner])),
+        retained: !replaced.has(element),
+      },
+    ];
+    // Retained solids must receive every cut too: otherwise a plane from a
+    // perpendicular joint leaves hanging nodes on their shared solid interface.
+    for (let planeIndex = 0; planeIndex < clipper.planes.length; planeIndex++)
+      pieces = pieces.flatMap((piece) =>
+        clipper.splitVolume(piece, planeIndex),
+      );
+    for (const piece of pieces)
+      output.addVolume(piece, nodes, mesh.body[element]);
+  }
+  return output;
+}
+
+function clipSolidSurface(
+  mesh: ShellizeMesh,
+  shellFaceIds: Set<number>,
+  clipper: PlaneClipper,
+): { surfTri: number[]; surfFace: number[] } {
   const surfTri: number[] = [],
     surfFace: number[] = [];
   for (let triangle = 0; triangle < mesh.surfFace.length; triangle++) {
-    let polygon = mesh.surfTri.slice(3 * triangle, 3 * triangle + 3);
-    if (!shellFaceIds.has(mesh.surfFace[triangle])) {
-      surfTri.push(...polygon);
-      surfFace.push(mesh.surfFace[triangle]);
-      continue;
-    }
-    for (
-      let planeIndex = 0;
-      planeIndex < planes.length && polygon.length >= 3;
-      planeIndex++
-    ) {
-      const retained = clipPolygon(polygon, planeIndex, false);
-      for (const face of fan(retained)) {
+    const faceId = mesh.surfFace[triangle];
+    let pieces: SurfacePiece[] = [
+      {
+        polygon: mesh.surfTri.slice(3 * triangle, 3 * triangle + 3),
+        retained: !shellFaceIds.has(faceId),
+      },
+    ];
+    for (let planeIndex = 0; planeIndex < clipper.planes.length; planeIndex++)
+      pieces = pieces.flatMap((piece) =>
+        clipper.splitSurface(piece, planeIndex),
+      );
+    for (const piece of pieces) {
+      if (!piece.retained) continue;
+      for (const face of triangulate(piece.polygon)) {
         surfTri.push(...face);
-        surfFace.push(mesh.surfFace[triangle]);
+        surfFace.push(faceId);
       }
-      polygon = clipPolygon(polygon, planeIndex, true);
     }
   }
-  // Shell facets occupy only the complement of the retained solid sections.
-  const shellVertices = [...shells.shellVerts];
-  const shellMesh: ShellizeMesh = {
-    V: shellVertices,
-    tet: [],
-    body: [],
-    surfTri: [],
-    surfFace: [],
-  };
-  // Reuse polygon clipping with its own edge cache and node numbering.
-  const shellCache = new Map<string, number>();
-  const shellPoint = (index: number): Point => [
-    shellMesh.V[3 * index],
-    shellMesh.V[3 * index + 1],
-    shellMesh.V[3 * index + 2],
-  ];
-  const shellTriangles: number[] = [],
+  return { surfTri, surfFace };
+}
+
+function compactShellNodes(
+  shells: ShellExtraction,
+  triangles: number[],
+  nodeSources: number[],
+  clipper: PlaneClipper,
+): void {
+  if (triangles.length === 0)
+    throw new Error(
+      "Shell body is too short to retain its solid joint sections. Keep this body Solid.",
+    );
+  const used = [...new Set(triangles)],
+    remap = new Map(used.map((index, position) => [index, position]));
+  shells.shellVerts = used.flatMap((index) => clipper.point(index));
+  shells.shellSrc = used.map((index) => nodeSources[index]);
+  shells.shellTris = triangles.map((index) => {
+    const mapped = remap.get(index);
+    if (mapped === undefined) throw new Error("Missing clipped shell vertex");
+    return mapped;
+  });
+}
+
+function clipShellFacets(
+  shells: ShellExtraction,
+  planes: TransitionPlane[],
+  tolerance: number,
+): void {
+  const clipper = new PlaneClipper([...shells.shellVerts], planes, tolerance);
+  const triangles: number[] = [],
     thicknesses: number[] = [],
     sources: number[] = [],
     nodeSources = [...shells.shellSrc];
@@ -238,78 +309,40 @@ export function clipShellTransition(
       let planeIndex = 0;
       planeIndex < planes.length && polygon.length >= 3;
       planeIndex++
-    ) {
-      const plane = planes[planeIndex],
-        output: number[] = [];
-      for (let corner = 0; corner < polygon.length; corner++) {
-        const start = polygon[corner],
-          end = polygon[(corner + 1) % polygon.length];
-        const startDistance = dot(
-            minus(shellPoint(start), plane.origin),
-            plane.normal,
-          ),
-          endDistance = dot(minus(shellPoint(end), plane.origin), plane.normal);
-        const inside = startDistance >= -tolerance,
-          nextInside = endDistance >= -tolerance;
-        if (inside) output.push(start);
-        if (inside === nextInside) continue;
-        if (Math.abs(startDistance) <= tolerance) {
-          output.push(start);
-          continue;
-        }
-        if (Math.abs(endDistance) <= tolerance) {
-          output.push(end);
-          continue;
-        }
-        const key = `${Math.min(start, end)},${Math.max(start, end)},${planeIndex}`;
-        let index = shellCache.get(key);
-        if (index === undefined) {
-          const ratio = startDistance / (startDistance - endDistance),
-            first = shellPoint(start),
-            second = shellPoint(end);
-          index = shellMesh.V.length / 3;
-          shellMesh.V.push(
-            ...first.map(
-              (value, axis) => value + ratio * (second[axis] - value),
-            ),
-          );
-          nodeSources.push(shells.shellTriSrc[triangle]);
-          shellCache.set(key, index);
-        }
-        output.push(index);
-      }
-      polygon = [...new Set(output)];
-    }
-    for (const face of fan(polygon)) {
-      const [first, second, third] = face.map(shellPoint);
-      if (
-        normCross(minus(second, first), minus(third, first)) <=
-        tolerance ** 2
-      )
-        continue;
-      shellTriangles.push(...face);
+    )
+      polygon = clipper.clipPolygon(polygon, planeIndex, true);
+    while (nodeSources.length < clipper.vertices.length / 3)
+      nodeSources.push(shells.shellTriSrc[triangle]);
+    for (const face of triangulate(polygon)) {
+      const [first, second, third] = face.map((index) => clipper.point(index));
+      const normal = cross(minus(second, first), minus(third, first));
+      if (Math.sqrt(dot(normal, normal)) <= tolerance ** 2) continue;
+      triangles.push(...face);
       thicknesses.push(shells.shellThk[triangle]);
       sources.push(shells.shellTriSrc[triangle]);
     }
   }
-  if (shellTriangles.length === 0)
-    throw new Error(
-      "Shell body is too short to retain its solid joint sections. Keep this body Solid.",
-    );
-  // Remove unused shell nodes so BC mapping cannot select a node without stiffness.
-  const used = [...new Set(shellTriangles)],
-    remap = new Map(used.map((index, position) => [index, position]));
-  shells.shellVerts = used.flatMap(shellPoint);
-  shells.shellSrc = used.map((index) => nodeSources[index]);
-  shells.shellTris = shellTriangles.map((index) => {
-    const mapped = remap.get(index);
-    if (mapped === undefined) throw new Error("Missing clipped shell vertex");
-    return mapped;
-  });
+  compactShellNodes(shells, triangles, nodeSources, clipper);
   shells.shellThk = thicknesses;
   shells.shellTriSrc = sources;
-  return { V: vertices, tet: tets, body, surfTri, surfFace };
 }
-function normCross(left: Point, right: Point) {
-  return Math.sqrt(dot(cross(left, right), cross(left, right)));
+
+export function clipShellTransition(
+  mesh: ShellizeMesh,
+  shells: ShellExtraction,
+  replaced: Set<number>,
+  planes: TransitionPlane[],
+  shellFaceIds: Set<number>,
+  tolerance: number,
+): ShellizeMesh {
+  const clipper = new PlaneClipper([...mesh.V], planes, tolerance);
+  const solids = clipSolidTets(mesh, replaced, clipper);
+  const surface = clipSolidSurface(mesh, shellFaceIds, clipper);
+  clipShellFacets(shells, planes, tolerance);
+  return {
+    V: clipper.vertices,
+    tet: solids.tet,
+    body: solids.body,
+    ...surface,
+  };
 }

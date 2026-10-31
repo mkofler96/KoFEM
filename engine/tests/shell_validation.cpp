@@ -561,7 +561,8 @@ bool footprint_rigid_motion() {
     for (int motion = 0; motion < 7; ++motion) {
         in.prescribed_dofs.clear();
         for (int node = 0; node < 3; ++node) {
-            const std::array<double,3> position = {in.vertices[3*node], in.vertices[3*node+1], in.vertices[3*node+2]};
+            const size_t vertex_offset = 3 * static_cast<size_t>(node);
+            const std::array<double,3> position = {in.vertices[vertex_offset], in.vertices[vertex_offset+1], in.vertices[vertex_offset+2]};
             const std::array<double,3> theta = {motion == 3 ? 1.0 : 0, motion == 4 ? 1.0 : 0, motion == 5 ? 1.0 : 0};
             for (int component = 0; component < 3; ++component) {
                 double value = (motion == component ? 1.0 : 0) + theta[(component+1)%3]*position[(component+2)%3] - theta[(component+2)%3]*position[(component+1)%3];

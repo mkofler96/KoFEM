@@ -1,6 +1,10 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
-export function shellJunction(refinement = 1, wallStep = 3) {
+export function shellJunction(
+  refinement = 1,
+  wallStep = 3,
+  perpendicularSupport = false,
+) {
   const mesh = { V: [], tet: [], body: [], surfTri: [], surfFace: [] };
   const byPosition = new Map();
   const add = (pos) => {
@@ -43,9 +47,9 @@ export function shellJunction(refinement = 1, wallStep = 3) {
     [0, 4, 5, 6],
     [0, 5, 1, 6],
   ];
-  const addBox = (ys, zs, bodyId) => {
-    const node = (col, row, layer) => add([coordsX[col], ys[row], zs[layer]]);
-    for (let col = 0; col < coordsX.length - 1; col++)
+  const addBox = (ys, zs, bodyId, xs = coordsX) => {
+    const node = (col, row, layer) => add([xs[col], ys[row], zs[layer]]);
+    for (let col = 0; col < xs.length - 1; col++)
       for (let row = 0; row < ys.length - 1; row++)
         for (let layer = 0; layer < zs.length - 1; layer++) {
           const nodes = [
@@ -66,6 +70,7 @@ export function shellJunction(refinement = 1, wallStep = 3) {
   };
   addBox(coordsY, baseZ, 2);
   addBox(wallY, wallZ, 1);
+  if (perpendicularSupport) addBox(wallY, wallZ, 3, [-5, 0]);
   const boundary = new Map();
   for (let element = 0; element < mesh.body.length; element++)
     for (const face of [
@@ -87,7 +92,12 @@ export function shellJunction(refinement = 1, wallStep = 3) {
   for (const face of boundary.values()) {
     if (face.count !== 1) continue;
     const positions = face.nodes.map(point);
-    const center = face.body === 1 ? [30, 20, 21] : [30, 20, 3];
+    const center =
+      face.body === 1
+        ? [30, 20, 21]
+        : face.body === 2
+          ? [30, 20, 3]
+          : [-2.5, 20, 21];
     const axis = [0, 1, 2].find((index) =>
       positions.every(
         (pos) => Math.abs(pos[index] - positions[0][index]) < 1e-8,
@@ -108,7 +118,9 @@ export function shellJunction(refinement = 1, wallStep = 3) {
     if (normal[axis] * (side ? 1 : -1) < 0)
       [face.nodes[1], face.nodes[2]] = [face.nodes[2], face.nodes[1]];
     mesh.surfTri.push(...face.nodes);
-    mesh.surfFace.push((face.body === 1 ? 1 : 10) + 2 * axis + side);
+    mesh.surfFace.push(
+      (face.body === 1 ? 1 : face.body === 2 ? 10 : 20) + 2 * axis + side,
+    );
   }
   return mesh;
 }

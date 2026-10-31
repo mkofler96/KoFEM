@@ -125,6 +125,91 @@ console.log(
   "automatic solid sections conserve volume and move the shell transition",
 );
 
+// Two perpendicular supports share solid interfaces with the retained wall.
+// Every face inside those interfaces needs a matching neighbour after cutting.
+{
+  const original = shellJunction(1, 4, true);
+  const shells = extractThinWallShells(original, {
+    shellBodyIds: new Set([1]),
+  });
+  const { mesh: clipped } = buildShellTransitionModel(original, shells);
+  const counts = new Map();
+  for (let element = 0; element < clipped.body.length; element++)
+    for (const corners of [
+      [0, 1, 2],
+      [0, 1, 3],
+      [0, 2, 3],
+      [1, 2, 3],
+    ]) {
+      const nodes = corners.map((corner) => clipped.tet[4 * element + corner]);
+      const key = nodes.toSorted((left, right) => left - right).join(",");
+      const entry = counts.get(key);
+      if (entry) entry.count++;
+      else counts.set(key, { nodes, count: 1 });
+    }
+  const between = (value, minimum, maximum) =>
+    value > minimum + 1e-7 && value < maximum - 1e-7;
+  const insideBox = (point, lower, upper) =>
+    point.every((value, axis) => between(value, lower[axis], upper[axis]));
+  const onInterface = (point) =>
+    between(point[1], 19, 21) &&
+    ((Math.abs(point[0]) < 1e-7 && between(point[2], 6, 36)) ||
+      (Math.abs(point[2] - 6) < 1e-7 && between(point[0], 0, 60)));
+  const insideRetainedWall = (point) =>
+    insideBox(point, [0, 19, 6], [60, 21, 36]) &&
+    (point[0] < 6 - 1e-7 || point[2] < 12 - 1e-7);
+  const unmatched = [...counts.values()].filter((face) => {
+    assert.ok(face.count <= 2, "solid faces must remain manifold");
+    if (face.count !== 1) return false;
+    const center = [0, 1, 2].map((axis) =>
+      face.nodes.reduce((sum, node) => sum + clipped.V[3 * node + axis] / 3, 0),
+    );
+    return (
+      insideBox(center, [0, 0, 0], [60, 40, 6]) ||
+      insideBox(center, [-5, 19, 6], [0, 21, 36]) ||
+      insideRetainedWall(center) ||
+      onInterface(center)
+    );
+  });
+  assert.equal(
+    unmatched.length,
+    0,
+    "perpendicular support interfaces must have no hanging faces",
+  );
+  for (let triangle = 0; triangle < clipped.surfFace.length; triangle++) {
+    const key = clipped.surfTri
+      .slice(3 * triangle, 3 * triangle + 3)
+      .toSorted((left, right) => left - right)
+      .join(",");
+    assert.ok(
+      counts.has(key),
+      "CAD surface triangles must match the subdivided FEM faces",
+    );
+  }
+
+  for (const [bodyId, expected] of [
+    [1, 1008],
+    [2, 14400],
+    [3, 300],
+  ]) {
+    const volume = clipped.body.reduce(
+      (sum, body, index) =>
+        sum +
+        (body === bodyId
+          ? tetVolume(clipped.V, clipped.tet.slice(4 * index, 4 * index + 4))
+          : 0),
+      0,
+    );
+    assert.ok(
+      Math.abs(volume - expected) < 1e-6,
+      `body ${bodyId} volume changed: ${volume}`,
+    );
+  }
+}
+console.log(
+  "perpendicular solid supports remain conforming after transition cuts",
+);
+
 if (process.argv.includes("--wasm")) {
   const { readFileSync } = await import("node:fs");
   const { default: createModule } =
