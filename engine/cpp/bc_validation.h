@@ -19,10 +19,47 @@
 #ifndef KOFEM_BC_VALIDATION_H
 #define KOFEM_BC_VALIDATION_H
 
+#include <array>
+#include <cstdio>
 #include <stdexcept>
 #include <string>
 
 namespace kofem::bc {
+
+// Where an essential (Dirichlet) value came from, for the conflict message:
+// a fixed support pins the DOF to zero, a prescribed displacement drives it.
+enum class DirichletSource { Fixed, Prescribed };
+
+// Throw if a vertex/DOF component that already carries the Dirichlet value
+// `old_value` (from `old_source`) is constrained again to a DIFFERENT value.
+// Two BC groups overlapping on a node — a fixed support and a prescribed
+// displacement sharing an edge, or two prescribed groups — used to resolve by
+// "last entry wins" with no trace in the log or UI (KOF-218), so the solve ran
+// a boundary condition the user never asked for. The same value twice is no
+// contradiction and passes. `d` is 0..5 (Ux, Uy, Uz, Rx, Ry, Rz); `fn` names
+// the caller. Mirrors build_rbe3_constraints' "already governed" guard.
+inline void require_consistent_dirichlet(int vi, int d, DirichletSource old_source,
+                                         double old_value, DirichletSource new_source,
+                                         double new_value, const char* fn) {
+    if (old_value == new_value)
+        return;
+    static const std::array<const char*, 6> kNames{"Ux", "Uy", "Uz", "Rx", "Ry", "Rz"};
+    auto describe = [](DirichletSource source, double value) {
+        std::array<char, 32> buf{};
+        std::snprintf(buf.data(), buf.size(), "%.10g", value);
+        return std::string(source == DirichletSource::Fixed ? "fixed to " : "prescribed to ") +
+               buf.data();
+    };
+    const std::string name =
+        d >= 0 && d < static_cast<int>(kNames.size()) ? kNames[static_cast<size_t>(d)] : "?";
+    throw std::runtime_error(
+        std::string(fn) + ": vertex " + std::to_string(vi) + " component " + name +
+        " (DOF " + std::to_string(d) + ") is " + describe(old_source, old_value) +
+        " and also " + describe(new_source, new_value) +
+        " — a DOF cannot be held at two displacements at once. Two boundary "
+        "condition groups overlap at this node; remove it from one of them or give "
+        "both the same value.");
+}
 
 // Throw if `vi` is not a valid 0-based vertex index into a mesh of `nv`
 // vertices. `fn` names the calling ingestion function for the error message.

@@ -927,6 +927,16 @@ function buildShellizeMesh(
   return { V: verts, tet, body, surfTri, surfFace };
 }
 
+// A DOF fixed to zero by one BC group and driven to a value by another is a
+// contradiction the solve must not resolve by picking a winner (KOF-218).
+function fixedAndPrescribedError(nodeId: number, dof: number, value: number) {
+  return new Error(
+    `Node ${nodeId} (DOF ${dof}) is fixed to 0 and also prescribed to ${value} — a DOF ` +
+      "cannot be held at two displacements at once. Remove the node from one of the " +
+      "boundary conditions.",
+  );
+}
+
 // Essential BCs for the coupled solve: a translation constraint maps to its
 // pool node, and a shelled node clamped in all three translations is also
 // clamped in rotation. `isShell` reports whether a pool node carries shell
@@ -985,6 +995,8 @@ function coupledFixedDofs(
             `${seen} and ${value} — a DOF cannot be driven to both. Remove or merge one ` +
             "of the boundary conditions.",
         );
+      if (fixedByPool.get(pi)?.has(c.dof))
+        throw fixedAndPrescribedError(c.nodeId, c.dof, value);
       prescribed.set(dof, value);
       drivenPools.add(pi);
       continue;
@@ -994,16 +1006,14 @@ function coupledFixedDofs(
       dofs = new Set();
       fixedByPool.set(pi, dofs);
     }
+    const driven = prescribed.get(6 * pi + c.dof);
+    if (driven !== undefined)
+      throw fixedAndPrescribedError(c.nodeId, c.dof, driven);
     dofs.add(c.dof);
   }
   const fixed_dofs: number[] = [];
   for (const [pi, dofs] of fixedByPool) {
-    // A DOF driven to a value wins over a plain clamp on the same DOF, the same
-    // way the solid path's prescribed_dofs override an overlapping fixed group.
-    for (const d of dofs) {
-      if (prescribed.has(6 * pi + d)) continue;
-      fixed_dofs.push(6 * pi + d);
-    }
+    for (const d of dofs) fixed_dofs.push(6 * pi + d);
     // A shell node clamped in all three translations is clamped, not hinged.
     // A reference point is NOT given that treatment: its rotations are the DOFs
     // the coupled surface's rigid-body motion rides on, so fixing them because
