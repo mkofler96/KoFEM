@@ -19,6 +19,7 @@ import { test, expect } from "./coverage";
 import type { Page } from "@playwright/test";
 import { boxHexMesh } from "../../examples/validation/lib/mesh.mjs";
 import { addBoundary } from "./fixtures/tree";
+import { clickModelAt } from "./fixtures/split";
 
 interface CouplingGroupState {
   id: number;
@@ -331,65 +332,65 @@ test("a pressure or a moment on a single node of a solid mesh is refused", async
   expect((await state(page)).loadGroups).toHaveLength(0);
 });
 
-test("a reference point is picked by clicking its marker in the viewport", async ({
-  page,
-}) => {
-  const model = await openConstraintsMode(page);
+for (const scenario of [
+  { name: "on the surface", x: 10, width: 1280, height: 720 },
+  { name: "clear of the model", x: 14, width: 1600, height: 900 },
+]) {
+  test(`a reference point is picked by clicking its marker ${scenario.name}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({
+      width: scenario.width,
+      height: scenario.height,
+    });
+    const model = await openConstraintsMode(page);
 
-  await addBoundary(page, "coupling");
-  await pickFace(page, model.endFace);
-  // Off the mesh grid on purpose: the face centre (10, 2, 2) is itself a node of
-  // this coarse box, and two exactly coincident candidates would not test which
-  // one the click resolves to.
-  await page.getByTestId("coupling-point-y").fill("1");
-  await page.getByTestId("coupling-point-z").fill("1");
-  await page.getByTestId("apply-coupling").click();
-  const refNodeId = (await state(page)).couplingGroups[0].refNodeId;
+    await addBoundary(page, "coupling");
+    await pickFace(page, model.endFace);
+    // Avoid a coincident mesh node: the click must resolve to the reference
+    // point, including when the surface behind it also receives a ray hit.
+    await page.getByTestId("coupling-point-x").fill(String(scenario.x));
+    await page.getByTestId("coupling-point-y").fill("1");
+    await page.getByTestId("coupling-point-z").fill("1");
+    await page.getByTestId("apply-coupling").click();
+    const reference = (await state(page)).couplingGroups[0];
 
-  // Real viewport clicks, not injected state: the reference point belongs to no
-  // surface, so the ray always reports the mesh behind it — this is what proves
-  // the point still wins when it is what was clicked.
-  await addBoundary(page, "load");
-  await page.getByTestId("pick-geometry-point").click();
+    await addBoundary(page, "load");
+    await page.getByTestId("pick-geometry-point").click();
+    await page.waitForFunction(
+      () =>
+        !!(window as unknown as { __kofemViewport?: unknown }).__kofemViewport,
+    );
+    await page.getByRole("button", { name: "Fit View", exact: true }).click();
+    // Let the camera effect and the scene's world matrices reach a rendered
+    // frame before projecting the marker and dispatching the pointer event.
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        }),
+    );
 
-  const canvas = page.locator("canvas").first();
-  const box = await canvas.boundingBox();
-  if (!box) throw new Error("viewport canvas has no bounding box");
-  const hitsReferencePoint = () =>
-    page.evaluate((id) => {
-      const selected = (
-        window as unknown as { __kofemStore: Store }
-      ).__kofemStore.getState().selectedFace;
-      return selected?.nodeIds.length === 1 && selected.nodeIds[0] === id;
-    }, refNodeId);
+    expect((await state(page)).selectedFace).toBeNull();
+    await clickModelAt(page, reference.point);
+    await expect
+      .poll(async () => (await state(page)).selectedFace?.nodeIds)
+      .toEqual([reference.refNodeId]);
 
-  // Sweep for the marker — where it lands on screen depends on the camera.
-  let marker: [number, number] | null = null;
-  for (let fx = 0.55; fx <= 0.9 && !marker; fx += 0.04) {
-    for (let fy = 0.4; fy <= 0.85 && !marker; fy += 0.04) {
-      const spot: [number, number] = [
-        box.x + box.width * fx,
-        box.y + box.height * fy,
-      ];
-      await page.mouse.click(...spot);
-      if (await hitsReferencePoint()) marker = spot;
-    }
-  }
-  expect(marker).not.toBeNull();
+    // A second click removes the selection; picking it again must leave one
+    // point entry, with no incidental surface selections.
+    await clickModelAt(page, reference.point);
+    await expect.poll(async () => (await state(page)).selectedFace).toBeNull();
+    await clickModelAt(page, reference.point);
+    await expect
+      .poll(async () => (await state(page)).selectedFace?.nodeIds)
+      .toEqual([reference.refNodeId]);
 
-  // Start the session over and click the marker once, so the group carries the
-  // reference point and nothing the sweep collected on the way.
-  await page.getByTitle("Cancel").click();
-  await addBoundary(page, "load");
-  await page.getByTestId("pick-geometry-point").click();
-  if (!marker) throw new Error("no marker position");
-  await page.mouse.click(...marker);
-  expect(await hitsReferencePoint()).toBe(true);
-
-  await page.getByRole("button", { name: "Apply Load" }).click();
-  const { loadGroups } = await state(page);
-  expect(loadGroups).toHaveLength(1);
-  expect(loadGroups[0].faces).toHaveLength(1);
-  expect(loadGroups[0].faces[0].nodeIds).toEqual([refNodeId]);
-  expect(loadGroups[0].faces[0].geometry).toBe("point");
-});
+    await page.getByRole("button", { name: "Apply Load" }).click();
+    const { loadGroups } = await state(page);
+    expect(loadGroups).toHaveLength(1);
+    expect(loadGroups[0].faces).toHaveLength(1);
+    expect(loadGroups[0].faces[0].nodeIds).toEqual([reference.refNodeId]);
+    expect(loadGroups[0].faces[0].geometry).toBe("point");
+  });
+}
