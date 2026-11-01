@@ -12,6 +12,10 @@ import { ensurePlot } from "./studySlice";
 export interface SolverResult {
   displacements: Float64Array;
   vonMises?: Float64Array;
+  // The element order the result was solved with. The order setting can change
+  // after the solve, so the result keeps its own (KOF-274: the thin-wall note
+  // applies to a linear result, whatever the setting is now).
+  elementOrder: number;
 }
 
 export const RESULT_TYPES = [

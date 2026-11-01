@@ -6,6 +6,7 @@ import { useModelStore } from "../store/modelStore";
 import { fmt, loadsSummary } from "../lib/modelDisplay";
 import { sendToWorker } from "../workers/sharedWorker";
 import { useWorkerLogs } from "./useWorkerLogs";
+import { useUnderResolvedWalls } from "./useThinWalls";
 import {
   categorizeError,
   currentWorkflow,
@@ -40,6 +41,9 @@ export function useSolver() {
   // in the worker's coupled solve.
   const surfaceTriangles = useModelStore((s) => s.surfaceTriangles);
   const surfaceFaceIds = useModelStore((s) => s.surfaceFaceIds);
+  // Thin walls too few linear elements thick (KOF-274): a warning, not a
+  // blocker — the solve runs, but the user is told the result will be stiff.
+  const thinWalls = useUnderResolvedWalls(elementOrder === 1);
   const [error, setError] = useState<string | null>(null);
   const { logs, clearLogs } = useWorkerLogs("solve");
 
@@ -93,7 +97,7 @@ export function useSolver() {
       },
     )
       .then(({ displacements, vonMises }) => {
-        setResult({ displacements, vonMises });
+        setResult({ displacements, vonMises, elementOrder });
         track("solve_completed", {
           workflow,
           analysis_type: "static",
@@ -163,6 +167,7 @@ export function useSolver() {
     allOk,
     checks,
     elementOrder,
+    thinWalls,
     logs,
   };
 }

@@ -31,7 +31,7 @@ type Store = {
       totalForce: number,
       components?: [number, number, number],
     ): void;
-    setResult(r: { displacements: Float64Array }): void;
+    setResult(r: { displacements: Float64Array; elementOrder: number }): void;
   };
   setState(s: object): void;
 };
@@ -189,7 +189,10 @@ test("updating load values invalidates a stale result", async ({ page }) => {
 
   const resultCleared = await page.evaluate(() => {
     const store = (window as unknown as { __kofemStore: Store }).__kofemStore;
-    store.getState().setResult({ displacements: new Float64Array(3) });
+    store.getState().setResult({
+      displacements: new Float64Array(3),
+      elementOrder: 1,
+    });
     const id = store.getState().loadGroups[0].id;
     store.getState().updateLoadGroup(id, "force", 0, [0, -20000, 0]);
     return store.getState().result === null;

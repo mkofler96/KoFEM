@@ -27,6 +27,8 @@ import {
 import { ConvergencePlot } from "./ConvergencePlot";
 import { DensityThresholdControl } from "./DensityThresholdControl";
 import { LegendRangeControls } from "./LegendRangeControls";
+import { ThinWallNotice } from "./ThinWallNotice";
+import { useUnderResolvedWalls } from "../../hooks/useThinWalls";
 import styles from "./Panel.module.css";
 
 // The density-field result view (KOF-233): the threshold slider that filters the
@@ -301,6 +303,7 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
   const nodes = useModelStore((s) => s.nodes);
   const elements = useModelStore((s) => s.elements);
   const handCheck = useModelStore((s) => s.handCheck);
+  const thinWalls = useUnderResolvedWalls(result?.elementOrder === 1);
 
   const footer = (
     <button
@@ -336,6 +339,7 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
     <div className={styles.panel}>
       <div className={styles.tabContent}>
         {handCheck && <HandCheckNote check={handCheck} result={result} />}
+        <ThinWallNotice walls={thinWalls} stage="result" />
         <div className={styles.sectionLabel}>Field</div>
         <select
           className={styles.formSelect}

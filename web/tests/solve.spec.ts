@@ -82,6 +82,7 @@ test("results panel switches to von Mises stress", async ({ page }) => {
             setResult(r: {
               displacements: Float64Array;
               vonMises?: Float64Array;
+              elementOrder: number;
             }): void;
             setMode(m: string): void;
           };
@@ -107,6 +108,7 @@ test("results panel switches to von Mises stress", async ({ page }) => {
     store.getState().setResult({
       displacements: new Float64Array(displacements),
       vonMises: vonMises ? new Float64Array(vonMises) : undefined,
+      elementOrder: 1,
     });
     store.getState().setMode("results");
   });

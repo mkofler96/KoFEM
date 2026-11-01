@@ -7,6 +7,7 @@ import { useSolver } from "../../hooks/useSolver";
 import { useEngineGate } from "../../store/engineStore";
 import { LogSection } from "./LogSection";
 import { PreflightChecks } from "./PreflightChecks";
+import { ThinWallNotice } from "./ThinWallNotice";
 import styles from "./Panel.module.css";
 
 // One static study: the pre-flight check, the solver settings and the run.
@@ -28,6 +29,7 @@ export function SolvePanel({
     allOk,
     checks,
     elementOrder,
+    thinWalls,
     logs,
   } = useSolver();
   const engine = useEngineGate();
@@ -43,6 +45,7 @@ export function SolvePanel({
           </div>
         )}
         <PreflightChecks checks={checks} />
+        <ThinWallNotice walls={thinWalls} stage="preflight" />
 
         <div className={styles.sectionLabel} style={{ marginTop: 16 }}>
           Solver settings

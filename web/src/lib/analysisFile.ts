@@ -89,7 +89,11 @@ export interface AnalysisState {
   volMesh: VolMesh | null;
   surfaceTriangles: [number, number, number][] | null;
   surfaceFaceIds: number[] | null;
-  result: { displacements: Float64Array; vonMises?: Float64Array } | null;
+  result: {
+    displacements: Float64Array;
+    vonMises?: Float64Array;
+    elementOrder: number;
+  } | null;
   resultType: ResultType;
   // Topology-optimization setup (KOF-232). Absent in files written before TO
   // existed — such a file restores the default settings. The density field a
@@ -629,6 +633,8 @@ export function parseAnalysisFile(text: string): AnalysisState {
     start = end;
   }
 
+  // eslint-disable-next-line kofem/no-silent-fallback -- files written before the order was saved carry none; linear is the app's documented default order
+  const elementOrder = meta.elementOrder ?? 1;
   let result: AnalysisState["result"] = null;
   if (/<DataArray[^>]*Name="Displacement"/.test(text)) {
     const disp = parseNumbers(
@@ -636,7 +642,8 @@ export function parseAnalysisFile(text: string): AnalysisState {
       "Displacement",
     );
     expectLength(disp.length, 3 * nPoints, "Displacement");
-    result = { displacements: new Float64Array(disp) };
+    // The file records one order, the one the analysis was saved with.
+    result = { displacements: new Float64Array(disp), elementOrder };
     if (/<DataArray[^>]*Name="VonMises"/.test(text)) {
       const vm = parseNumbers(dataArrayContent(text, "VonMises"), "VonMises");
       expectLength(vm.length, nCells, "VonMises");
@@ -681,8 +688,7 @@ export function parseAnalysisFile(text: string): AnalysisState {
     result,
     resultType: meta.resultType,
     topOpt: meta.topOpt,
-    // eslint-disable-next-line kofem/no-silent-fallback -- files written before the order was saved carry none; linear is the app's documented default order
-    elementOrder: meta.elementOrder ?? 1,
+    elementOrder,
     // Only gallery examples carry a hand check.
     handCheck: meta.handCheck ?? null,
   };

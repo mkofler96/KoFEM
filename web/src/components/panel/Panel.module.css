@@ -1177,3 +1177,31 @@
   line-height: 1.5;
   color: var(--ink-2);
 }
+
+/* Thin walls with too few linear elements through them (KOF-274). */
+.thinWallNote {
+  margin: 8px 0 14px;
+  padding: 8px 12px;
+  background: var(--warn-soft);
+  border-radius: var(--r-md);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.thinWallNote p {
+  margin: 0;
+}
+.thinWallNote p:first-child {
+  color: var(--warn);
+  font-weight: 500;
+}
+.thinWallNote ul {
+  margin: 4px 0;
+  padding-left: 18px;
+}
+.thinWallNote a {
+  color: var(--accent);
+}
+.thinWallNote .outlineBtn {
+  background: var(--surface);
+}
