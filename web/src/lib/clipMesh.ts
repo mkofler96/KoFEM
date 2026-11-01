@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
-import type { ShellExtraction, ShellizeMesh } from "./shellize";
+import type { ShellizeMesh } from "./shellize/geometry.js";
+import type { ShellExtraction } from "./shellize/midSurface.js";
 
 type Point = [number, number, number];
 export interface TransitionPlane {
