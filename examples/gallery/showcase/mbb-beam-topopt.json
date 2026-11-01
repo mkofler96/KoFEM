@@ -494,7 +494,7 @@
   ],
   "solid": 1806,
   "void": 1913,
-  "seconds": 53.081533746,
+  "seconds": 51.759183918000005,
   "readout": null,
   "figure": {
     "field": "density",
@@ -514,6 +514,6 @@
     "mesh": "Netgen, 5 mm maximum element size",
     "source": "Sigmund (2001); Andreassen et al. (2011)"
   },
-  "engine": "engine-bb451aa7afb6",
-  "generated": "2026-10-27"
+  "engine": "engine-5ceb743373dd",
+  "generated": "2026-11-01"
 }

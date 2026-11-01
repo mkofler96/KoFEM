@@ -64,6 +64,6 @@
     "mesh": "Netgen, 25 mm maximum element size",
     "source": "Euler–Bernoulli beam theory"
   },
-  "engine": "engine-bb451aa7afb6",
-  "generated": "2026-10-27"
+  "engine": "engine-5ceb743373dd",
+  "generated": "2026-11-01"
 }

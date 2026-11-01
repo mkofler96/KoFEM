@@ -70,6 +70,6 @@
     "mesh": "O-grid, 12 rings × 64 around the hole, two triangles per quad",
     "source": "Kirsch (1898); Timoshenko & Goodier"
   },
-  "engine": "engine-bb451aa7afb6",
-  "generated": "2026-10-27"
+  "engine": "engine-5ceb743373dd",
+  "generated": "2026-11-01"
 }
