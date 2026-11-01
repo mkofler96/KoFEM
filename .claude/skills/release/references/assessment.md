@@ -39,8 +39,10 @@ Breaking means a saved model, example link, or exported file no longer loads
 or reads the same, or results for an unchanged model move beyond validation
 tolerances. State what users must do, including re-solving or re-meshing.
 
-Treat changes to solver paths, `shell_core.cpp`, the mesher, solver defaults,
-and validation reference values or tolerances as numerical until inspected.
+Treat changes to solver paths, `shell_core.cpp` and the `shell_element`,
+`tet_element`, `coupling_constraints` and `sparse_cg` units it drives, the
+mesher, solver defaults, and validation reference values or tolerances as
+numerical until inspected.
 Record what changed, why, its measured effect when known, and validation
 evidence. An experiment or native study does not prove the production fix
 shipped. Every numerical change needs a **Changed** or **Breaking** note.

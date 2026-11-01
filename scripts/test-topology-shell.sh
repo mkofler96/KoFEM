@@ -23,6 +23,10 @@ OUT="$(mktemp -d)/topology_shell_validation"
 "$CXX" -std=c++17 -O2 -Wall -Wextra \
     -I "$REPO_ROOT/engine/cpp" \
     "$REPO_ROOT/engine/cpp/shell_core.cpp" \
+    "$REPO_ROOT/engine/cpp/shell_element.cpp" \
+    "$REPO_ROOT/engine/cpp/tet_element.cpp" \
+    "$REPO_ROOT/engine/cpp/coupling_constraints.cpp" \
+    "$REPO_ROOT/engine/cpp/sparse_cg.cpp" \
     "$REPO_ROOT/engine/cpp/spatial_grid.cpp" \
     "$REPO_ROOT/engine/cpp/topology_filter.cpp" \
     "$REPO_ROOT/engine/cpp/topology_mma.cpp" \

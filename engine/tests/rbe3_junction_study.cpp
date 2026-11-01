@@ -9,6 +9,7 @@
 // Run: CXX=g++ bash scripts/study-rbe3-junction.sh
 
 #include "shell_core.h"
+#include "tet_element.h"
 
 #include <algorithm>
 #include <array>

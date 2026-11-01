@@ -13,6 +13,8 @@
 
 #include "json_util.h"
 #include "shell_core.h"
+#include "shell_element.h"
+#include "tet_element.h"
 #include "wasm_util.h"
 
 #include <mfem.hpp>

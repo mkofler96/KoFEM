@@ -42,6 +42,10 @@ add_executable(kofem_wasm_emcc
     cpp/solve_shell.cpp
     cpp/solve_coupled.cpp
     cpp/shell_core.cpp
+    cpp/shell_element.cpp
+    cpp/tet_element.cpp
+    cpp/coupling_constraints.cpp
+    cpp/sparse_cg.cpp
     cpp/spatial_grid.cpp
     cpp/topology_simp_core.cpp
     cpp/topology_filter.cpp
