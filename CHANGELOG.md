@@ -11,6 +11,75 @@ Versions 0.1.0 to 0.3.0 were tagged after the fact, on the commits that complete
 each theme. kofem.org was deployed continuously from `main` throughout, so their
 dates are when the work landed, not when anything was shipped.
 
+## [0.5.0] - 2026-11-01
+
+A guided first simulation, public validation examples, and corrections to loads
+and shell/solid joints.
+
+### Added
+
+- **Try a sample simulation** opens a wall bracket as CAD geometry and guides you
+  through meshing, supports, loading and solving.
+- Example and validation pages at `/examples/`, with models you can open in
+  KoFEM, reference calculations, convergence studies and limitations. Older
+  `/validation/` links redirect to the corresponding example pages.
+- **Feedback** offers problem reports and suggestions, with optional diagnostics
+  that omit geometry, files and results.
+- The engine starts loading when the app opens. The status bar shows progress,
+  failures and **Retry**.
+- Opt-in workflow analytics, with **Cookie settings** in the app when analytics
+  are enabled.
+
+### Changed
+
+- Saved analyses retain their linear or quadratic element order. Older analyses
+  without an order still open as linear.
+- The cantilever example opens ready to solve and compares its result with a
+  hand calculation.
+- Validation cases use the same loads as the app. Published results are now
+  0.47358 mm axial extension, 2.7750 plate-with-hole stress concentration, and
+  24.042 dimensionless Cook's membrane deflection. The benchmark models and
+  loads were corrected; acceptance tolerances are unchanged.
+
+### Fixed
+
+- Clicking inside a selected curved region deselects it.
+- The status bar counts face and shell edge loads.
+- Solid surface loads warn when some selected faces cannot be matched to the
+  mesh. Malformed force and traction vectors are rejected with clear errors.
+
+### Breaking
+
+- **Shell/solid joints change when re-meshed.** Shell meshing retains three wall
+  thicknesses of solid material at planar joints and connects the shell through
+  its physical footprint. Re-mesh and re-solve existing shell models to obtain
+  these transitions. In tested tension and bending cases, comparisons with an
+  all-solid model on the same mesh stayed within 0.36% for peak junction stress
+  and 0.34% for the block stress field.
+- **Coupled and shell surface-load results can change.** Total forces distribute
+  by area or edge length, traction acts per unit area, and pressure is applied.
+  One graded-face test changes its moment from 257.142857 to 240 N·mm; pressure
+  previously omitted contributes the intended −120 N. Re-solve affected
+  analyses, including coupled topology optimizations. Saved results do not
+  update automatically.
+- **Conflicting displacement constraints stop the solve.** A component cannot
+  be fixed at zero and prescribed to a nonzero displacement, or prescribed to
+  two different values. Remove the conflicting group or make its values agree.
+  Identical duplicates remain valid.
+
+### Known limitations
+
+- Only one body per model can be a Shell.
+- The planar shell/solid transition checks do not establish junction-stress
+  accuracy for every model. Generic distributing couplings retain their
+  existing junction-stress limitations.
+- Coarse linear tetrahedra can make thin-walled solid models too stiff. In a
+  reported 3 mm bracket, displacement was 0.0275 mm with linear elements versus
+  0.0560 mm with quadratic elements. Use quadratic elements or an appropriate
+  Shell idealisation and check convergence.
+- A reported meshing crash on complex STEP/IGES models remains unresolved and
+  is deferred to 0.6.0.
+
 ## [0.4.0] - 2026-10-24
 
 A model tree, and geometry editing in the app.
