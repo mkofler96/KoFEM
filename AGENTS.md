@@ -10,7 +10,8 @@ The React/TypeScript/Three.js frontend is in `web/`. Use **bun**, not npm.
   `solve_coupled.cpp` (mixed). Cover all applicable paths for materials, BCs,
   loads, and solve payload changes, including per-body materials.
 - Shell is an explicit per-body choice. Mid-surface and mixed-mesh assembly
-  live in `web/src/lib/shellize.ts`; shell element math is in `shell_core.cpp`.
+  live in `web/src/lib/shellize/` (one module per stage, re-exported by
+  `web/src/lib/shellize.ts`); shell element math is in `shell_core.cpp`.
 - Geometry tessellation is for display. Never call it a mesh; surface and
   volume meshes are FEM discretisations.
 - Use strict TypeScript without `any`, C++ `std::array` instead of C arrays,
