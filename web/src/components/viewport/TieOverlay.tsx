@@ -1,6 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+// JS-0455 checks DOM attributes; these are Three.js objects whose properties
+// are checked by React Three Fiber's TypeScript types. Annotate only those props.
+
 // Tie connections: the two tied surfaces of every connection (and of the tie
 // being picked), and the links between the node pairs each connection welds.
 
@@ -112,23 +115,44 @@ export function TieOverlay({ topology, showResult }: TieOverlayProps) {
           tied node, so the contact patch a connection produced is visible */}
       {tieLinks && (
         <group>
-          <lineSegments renderOrder={4}>
+          <lineSegments
+            // skipcq: JS-0455 -- typed React Three Fiber property
+            renderOrder={4}
+          >
             <bufferGeometry>
               <bufferAttribute
+                // skipcq: JS-0455 -- typed React Three Fiber property
                 attach="attributes-position"
+
+                // skipcq: JS-0455 -- typed React Three Fiber property
                 args={[tieLinks.positions, 3]}
               />
             </bufferGeometry>
-            <lineBasicMaterial color={TIE_COLOR_A} depthTest={false} />
+            <lineBasicMaterial
+              color={TIE_COLOR_A}
+              // skipcq: JS-0455 -- typed React Three Fiber property
+              depthTest={false}
+            />
           </lineSegments>
           {tieLinks.markers.map((marker) => (
             <mesh
               key={`tie-node-${marker.key}`}
+
+              // skipcq: JS-0455 -- typed React Three Fiber property
               position={marker.pos}
+
+              // skipcq: JS-0455 -- typed React Three Fiber property
               renderOrder={4}
             >
-              <sphereGeometry args={[modelSize * 0.008, 8, 6]} />
-              <meshBasicMaterial color={TIE_COLOR_A} depthTest={false} />
+              <sphereGeometry
+                // skipcq: JS-0455 -- typed React Three Fiber property
+                args={[modelSize * 0.008, 8, 6]}
+              />
+              <meshBasicMaterial
+                color={TIE_COLOR_A}
+                // skipcq: JS-0455 -- typed React Three Fiber property
+                depthTest={false}
+              />
             </mesh>
           ))}
         </group>

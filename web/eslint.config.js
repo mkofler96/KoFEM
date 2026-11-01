@@ -29,18 +29,6 @@ export default [
     },
   },
   {
-    // These modules render Three.js objects, not DOM elements. DeepSource
-    // respects ESLint rule overrides; tsc checks their React Three Fiber props.
-    files: [
-      "src/components/viewport/BcNodeMarkers.tsx",
-      "src/components/viewport/CouplingOverlay.tsx",
-      "src/components/viewport/FaceOverlay.tsx",
-      "src/components/viewport/LoadArrows.tsx",
-      "src/components/viewport/TieOverlay.tsx",
-    ],
-    rules: { "react/no-unknown-property": "off" },
-  },
-  {
     // Keep the extracted overlays below DeepSource's high-risk threshold.
     files: [
       "src/components/viewport/{BcFaceHighlights,BcNodeMarkers,BoundaryConditionLayer,CouplingOverlay,FaceOverlay,LoadArrows,PickHighlights,TieOverlay,bcOverlayShared}.{ts,tsx}",
