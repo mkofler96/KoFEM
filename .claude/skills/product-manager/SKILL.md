@@ -10,8 +10,8 @@ the right things? Are we delivering them? What should happen next? What is ready
 for a named release, and what remains blocked? Make a small number of clear
 recommendations tied to user outcomes and available maintainer time.
 
-Run weekly after `customer-insights`, or on demand. Reuse a current insights
-report when available; this skill must also work independently. Do not run a
+Run weekly or on demand. Reuse the latest report from the recurring customer/UX
+prompt when available; this skill must also work independently. Do not run a
 second full analytics/UX review just to produce this report. An invocation does
 not create an automation or authorize implementing the recommendations.
 
@@ -81,8 +81,8 @@ stale state is available, say so and lower confidence.
 
 5. **Release advice.** The maintainer explicitly requested recurring release
    recommendations in this product review. Include a read-only assessment here;
-   do not invoke release preparation or the publishing showcase routine. This
-   advisory scope does not authorize a release PR, tags, GitHub Release edits,
+   do not invoke release preparation. This advisory scope does not authorize
+   a release PR, tags, GitHub Release edits,
    version/changelog changes, merges or promotion.
 
    - Establish the last actual product `vX.Y.Z` tag reachable from `main` and its

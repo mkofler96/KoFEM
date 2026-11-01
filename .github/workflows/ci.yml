@@ -539,10 +539,6 @@ jobs:
         env:
           DEEPSOURCE_DSN: ${{ secrets.DEEPSOURCE_DSN }}
 
-      # CI does not publish the workflow showcase. That is a weekly Claude task
-      # (.claude/skills/showcase) posting to Linear over MCP, so no Linear
-      # credential exists in this repository.
-
   # Build the real production image and smoke-test it, in parallel with the
   # tests. The image is built map-free in main mode by web/Dockerfile.
   image:
