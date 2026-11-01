@@ -59,6 +59,9 @@ Run checks appropriate to the change; CI definitions are in
   tags or GitHub Releases; the maintainer merges release PRs and handles
   promotions from `develop` to `main`.
 - Preserve pinned dependency/action/image versions and signed build provenance.
+- The scheduled `daily-fea` skill analyzes an unseen CAD part from the web
+  with `web/scripts/analyze-cad.mjs` and publishes a Linear report. It writes
+  nothing to the repository.
 
 ## Examples
 
