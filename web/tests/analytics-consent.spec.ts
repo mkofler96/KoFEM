@@ -18,8 +18,8 @@ const PAGES = [
   "/app/",
   "/examples/",
   "/privacy/",
-  "/validation/",
-  "/validation/axial-bar/",
+  "/examples/axial-bar/",
+  "/examples/mbb-beam-topopt/",
 ];
 const CONSENT_KEY = "kofem_analytics_consent";
 

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Case page text: Saint-Venant torsion of a square bar.
+// Page text: Saint-Venant torsion of a square bar.
 
 import { squareTorsionFigure } from "../lib/figures.mjs";
 import { REF } from "./refs.mjs";
@@ -48,8 +48,8 @@ export default {
         would overestimate the stiffness by ${pctAbs((1 / 6 / beta - 1) * 100, 0)}.
         The free end rotates by</p>
         ${texBlock("θ = \\frac{T L}{G K}, \\quad G = \\frac{E}{2(1 + ν)}.")}
-        <p>Here ${tex(`G = ${n(G / 1e9)}\\text{ GPa}`)},
-        ${tex(`K = ${n(beta * b ** 4)}\\text{ m}^4`)} and
+        <p>Here ${tex(`G = ${n(G / 1e3)}\\text{ GPa}`)},
+        ${tex(`K = ${n(beta * b ** 4)}\\text{ mm}^4`)} and
         ${tex(`θ = ${n(row.reference)}\\text{ rad}`)}.</p>
         <p>The warping is largest at the corners and changes sign from one
         quadrant of the section to the next (inset in the figure). The
@@ -59,8 +59,8 @@ export default {
   model: ({ tex }) => `
         <p>The torque is applied as tangential nodal forces on the end face,
         proportional to each node's distance ${tex("r")} from the axis and
-        scaled so the net force is zero and the moment is ${tex("T")}. This is
-        how the app applies a moment load. It is not the exact Saint-Venant
+        scaled so the net force is zero and the moment is ${tex("T")}. That is
+        how the app applies a moment to a face. It is not the exact Saint-Venant
         stress distribution over a square, but by Saint-Venant's principle
         the difference only affects the region near the loaded end. The
         twist is the mean in-plane rotation of the end-face nodes,

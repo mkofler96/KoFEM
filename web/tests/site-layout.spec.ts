@@ -7,7 +7,7 @@ const PAGES = [
   "/",
   "/examples/",
   "/examples/plate-with-hole/",
-  "/validation/plate-with-hole/",
+  "/examples/mbb-beam-topopt/",
 ];
 
 test.use({ javaScriptEnabled: false });
@@ -31,13 +31,12 @@ test("public pages share navigation and typography without JavaScript", async ({
     await expect(
       header.getByRole("link", { name: "Cookie settings" }),
     ).toBeVisible();
-    await expect(
-      header.getByRole("link", { name: "Validation", exact: true }),
-    ).toHaveAttribute("href", "/validation/");
     appearances.push(
       await home.evaluate((element) => {
+        // Font and size, not colour: the example pages are light, the
+        // landing page dark.
         const style = getComputedStyle(element);
-        return [style.fontFamily, style.fontSize, style.color];
+        return [style.fontFamily, style.fontSize];
       }),
     );
   }

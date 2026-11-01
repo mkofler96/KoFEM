@@ -61,7 +61,8 @@ Run checks appropriate to the change; CI definitions are in
 
 ## Examples
 
-“Example” means the public gallery in `examples/gallery/`; read its README.
-Edit generators and regenerate outputs, then check the gallery and app.
+“Example” means the public example pages at `/examples/`, built from
+`examples/gallery/` and `examples/validation/`; read `examples/gallery/README.md`.
+Edit generators and regenerate outputs, then check the pages and app.
 Models must be buildable through the app. Do not hand-edit generated VTU/JSON,
 add Abaqus inputs/readers, or publish unvalidated examples without being asked.

@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Case page text: the cantilever on a coarse mesh of quadratic elements.
+// Page text: the cantilever on a coarse mesh of quadratic elements.
 
 import { cantileverFigure } from "../lib/figures.mjs";
 import { REF } from "./refs.mjs";
@@ -11,8 +11,8 @@ export default {
   description:
     "The tip-loaded cantilever on a coarse mesh of quadratic (P2) hexahedra: why second-order elements do not shear-lock, with KoFEM's result against beam theory.",
   figure: ({ page }) => cantileverFigure({ div: page.grid }),
-  intro: ({ page }) => `
-        <p>The <a href="/validation/cantilever/">cantilever</a> again, on a mesh
+  intro: ({ page, url }) => `
+        <p>The <a href="${url("cantilever")}">cantilever</a> again, on a mesh
         four times coarser in each direction (${page.grid.join(" × ")}), with
         quadratic elements instead of linear ones. The case checks KoFEM's
         second-order element path and shows why element order matters in
@@ -28,9 +28,9 @@ export default {
         mid-edge and mid-face ones. The ${row.mesh.elements} elements have
         ${row.mesh.nodes.toLocaleString("en-US")} nodes and
         ${row.mesh.dofs.toLocaleString("en-US")} unknowns, about half the
-        ${p1.dofs.toLocaleString("en-US")} of the linear case. The tip load
-        is split equally over the element vertices of the end face; its
-        mid-side nodes carry no load.</p>`;
+        ${p1.dofs.toLocaleString("en-US")} of the linear mesh. The tip load is
+        a force on the end face, integrated with the quadratic shape
+        functions, so the mid-side nodes carry their share.</p>`;
   },
   discussion: ({ row, pct, tex, n, study, inp }) => {
     const k = beam(inp);
@@ -40,11 +40,11 @@ export default {
         <p>On this coarse mesh the deflection differs from the
         Euler–Bernoulli value by ${pct(row.errPct)} and is close to the
         Timoshenko value that includes shear deformation,
-        ${tex(`${n(timo)}\\text{ m}`)}. A quadratic element
+        ${tex(`${n(timo)}\\text{ mm}`)}. A quadratic element
         can represent a linearly varying bending strain exactly: its edges
         curve, so it bends without parasitic shear and does not lock.</p>
         <p>Linear elements on meshes this coarse lock badly. In the
-        convergence study below, the error is ${pct(p1[0].errPct)} with
+        convergence study above, the error is ${pct(p1[0].errPct)} with
         ${p1[0].mesh} linear elements and ${pct(p1[1].errPct)} with
         ${p1[1].mesh}; the quadratic series is within a few percent on every mesh. For
         bending-dominated parts, quadratic elements give more accuracy per

@@ -22,7 +22,7 @@ import {
 import styles from "./App.module.css";
 
 // `/app/?example=<id>` loads an example shipped in examples/gallery/site/.
-// This is the target of the "Open in KoFEM web" buttons on the examples gallery.
+// This is the target of the "Open in KoFEM" links on the example pages.
 function useExampleFromUrl() {
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("example");

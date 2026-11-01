@@ -4,10 +4,10 @@
 import { test, expect } from "./coverage";
 import { gotoApp } from "./fixtures/app";
 import { serveUnvalidatedExample } from "./fixtures/unvalidated-examples";
-import { readFile } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 
 // Coverage for the `?example=<id>` deep-link (App.tsx useExampleFromUrl), the
-// target of the "Open in KoFEM web" buttons on the examples gallery. Exercises
+// target of the "Open in KoFEM" links on the example pages. Exercises
 // the success path plus both guarded failure paths (invalid id, missing file).
 
 type StoreSnapshot = {
@@ -569,19 +569,13 @@ test("the cantilever example opens ready to run and re-mesh", async ({
   ).toBeEnabled();
 });
 
-let EXAMPLE_ANALYSES: { id: string; showcase?: boolean; appId?: string }[];
+let EXAMPLE_ANALYSES: { id: string }[];
 
 test.beforeAll(async () => {
-  const manifest: { id: string; showcase?: boolean; appId?: string }[] =
-    JSON.parse(
-      await readFile("../examples/gallery/site/examples.json", "utf8"),
-    );
-  // Showcase entries whose "Open in KoFEM web" points elsewhere have no
-  // <id>.vtu of their own, so they can't be screenshotted. A showcase entry that opens ITSELF
-  // (appId === id, e.g. the shell plate) has one and is included.
-  EXAMPLE_ANALYSES = manifest.filter(
-    (entry) => entry.showcase !== true || entry.appId === entry.id,
-  );
+  // Every example ships the analysis file the app opens (examples/gallery/site/).
+  EXAMPLE_ANALYSES = (await readdir("../examples/gallery/site"))
+    .filter((file) => file.endsWith(".vtu"))
+    .map((file) => ({ id: file.slice(0, -".vtu".length) }));
 });
 test("capture screenshots of all examples", async ({ page }) => {
   // Open the app and import the STEP file via the Geometry panel.

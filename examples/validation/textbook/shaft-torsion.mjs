@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Case page text: torsion of a hollow circular shaft.
+// Page text: torsion of a hollow circular shaft.
 
 import { hollowShaftFigure } from "../lib/figures.mjs";
 import { REF } from "./refs.mjs";
@@ -16,10 +16,10 @@ export default {
   description:
     "Torsion of a hollow circular shaft, θ = TL/(GJ): derivation, and how the polygonal mesh of a circle explains almost all of KoFEM's error.",
   figure: ({ page }) => hollowShaftFigure({ div: page.grid }),
-  intro: () => `
+  intro: ({ url }) => `
         <p>Torsion of a circular tube is the shaft problem from every
         mechanics-of-materials course. Unlike the
-        <a href="/validation/beam-torsion/">square bar</a>, a circular section
+        <a href="${url("beam-torsion")}">square bar</a>, a circular section
         does not warp, so the 1-D theory is exact for the 3-D body away from
         the loaded end. That makes the case a clean test of how well a mesh
         represents a curved boundary.</p>`,
@@ -43,11 +43,11 @@ export default {
         ${texBlock("J = \\frac{π}{2}\\left(r_{\\mathrm{o}}^4 - r_{\\mathrm{i}}^4\\right).")}
         <p>Over the length ${tex("L")} the free end turns by</p>
         ${texBlock("θ = \\frac{T L}{G J}.")}
-        <p>Here ${tex(`J = ${n(J)}\\text{ m}^4`)},
-        ${tex(`G = ${n(G / 1e9)}\\text{ GPa}`)} and
+        <p>Here ${tex(`J = ${n(J)}\\text{ mm}^4`)},
+        ${tex(`G = ${n(G / 1e3)}\\text{ GPa}`)} and
         ${tex(`θ = ${n(row.reference)}\\text{ rad}`)}. The largest shear stress,
         at the outer surface, is
-        ${tex(`τ_{\\mathrm{max}} = T r_{\\mathrm{o}} / J = ${n((T * ro) / J / 1e6)}\\text{ MPa}`)}.</p>`;
+        ${tex(`τ_{\\mathrm{max}} = T r_{\\mathrm{o}} / J = ${n((T * ro) / J)}\\text{ MPa}`)}.</p>`;
   },
   model: ({ tex, page }) => {
     const [nr, nth, nz] = page.grid;
@@ -57,7 +57,8 @@ export default {
         circles, but the element edges between them are straight. The torque
         is applied as tangential nodal forces on the end ring, proportional to
         the radius ${tex("r")} (the ${tex("τ ∝ r")} distribution of the exact
-        solution) and scaled so the moment is ${tex("T")}. The twist is the
+        solution) and scaled so the moment is ${tex("T")}, which is how the app
+        applies a moment to a face. The twist is the
         mean rotation of the end-ring nodes.</p>`;
   },
   discussion: ({ row, pct, tex, texBlock, study, studyDef, inp }) => {

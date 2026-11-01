@@ -86,7 +86,7 @@ work there; GitHub is for the code, the pull request and CI.
 
 ## Public site layout
 
-The public landing, examples and validation pages share `web/public/site.css`
+The public landing, privacy and example pages share `web/public/site.css`
 and the header/footer templates in `web/site-layout.mjs`. Vite expands the
 `<!-- site-header -->` and `<!-- site-footer -->` placeholders in static source
 pages during development and builds. Generated case pages use the same templates

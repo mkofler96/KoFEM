@@ -78,27 +78,60 @@ body {
   color: var(--muted);
 }
 
+/* Start Solver: a small solid button, the reverse of the page colours. */
 .site-links .site-launch {
-  color: var(--text);
-  border: 1px solid var(--line2);
-  border-radius: 30px;
-  padding: 12px 20px;
-  background: var(--bg);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--bg);
+  background: var(--text);
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
   white-space: nowrap;
+  transition: opacity 0.15s;
 }
 
 .site-launch svg {
-  margin-left: 18px;
-  color: var(--accent);
-  vertical-align: middle;
+  width: 10px;
+  height: 10px;
 }
 
 .site-links .site-launch:hover {
-  background: #1b2733;
+  color: var(--bg);
+  opacity: 0.85;
 }
 
 .site-github {
   display: flex;
+}
+
+.site-theme {
+  display: flex;
+  padding: 4px;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+.site-theme[hidden] {
+  display: none;
+}
+
+.site-theme:hover {
+  color: var(--text);
+}
+
+.site-theme-sun,
+:root[data-theme="dark"] .site-theme-moon {
+  display: none;
+}
+
+:root[data-theme="dark"] .site-theme-sun {
+  display: block;
 }
 
 .site-more {
@@ -169,7 +202,8 @@ body {
   }
 
   .site-links .site-launch {
-    padding: 10px 15px;
+    padding: 5px 10px;
+    font-size: 12px;
   }
 
   .site-footer {
@@ -178,11 +212,8 @@ body {
 }
 
 @media (max-width: 360px) {
-  .site-github {
+  .site-github,
+  .site-theme {
     display: none;
-  }
-
-  .site-launch svg {
-    margin-left: 8px;
   }
 }
