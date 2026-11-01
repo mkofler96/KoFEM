@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import type { Load, SurfaceLoad } from "../store/boundarySlice.js";
+import type { Load, SurfaceLoad } from "../store/boundaryRebuild.js";
 
 type ShellNodalLoad = {
   force: [number, number, number];

@@ -44,7 +44,7 @@ export interface TieElement {
 }
 
 // The structural minimum of a tie connection the weld needs. The store's
-// TieGroup (boundarySlice) satisfies it, and so does the solve payload.
+// TieGroup (tieSlice) satisfies it, and so does the solve payload.
 export interface TieDefinition {
   name: string;
   facesA: { nodeIds: number[] }[];

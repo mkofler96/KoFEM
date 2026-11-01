@@ -12,7 +12,7 @@ import {
   rebuildConstraints,
   rebuildLoads,
   rebuildSurfaceLoads,
-} from "./boundarySlice";
+} from "./boundaryRebuild";
 
 export interface Node {
   id: number;

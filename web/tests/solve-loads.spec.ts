@@ -3,7 +3,7 @@
 
 import { test, expect } from "@playwright/test";
 import { coupledLoads, shellPointLoads } from "../src/lib/solveLoads";
-import type { SurfaceLoad } from "../src/store/boundarySlice";
+import type { SurfaceLoad } from "../src/store/boundaryRebuild";
 
 // The right half of a 4 x 2 rectangle is refined more than the left half.
 // Equal nodal shares put the resultant at x=15/7 instead of the area centroid x=2.

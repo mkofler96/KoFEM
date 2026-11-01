@@ -5,7 +5,7 @@
 // No Zustand dependency — unit-testable without any store setup (issue #202).
 
 import type { Node } from "./geometrySlice";
-import type { Load } from "./boundarySlice";
+import type { Load } from "./boundaryRebuild";
 
 export interface MomentFace {
   nodeIds: number[];

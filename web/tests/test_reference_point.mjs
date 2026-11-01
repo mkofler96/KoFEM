@@ -47,7 +47,7 @@ import {
 import {
   rebuildLoads,
   rebuildSurfaceLoads,
-} from "../src/store/boundarySlice.ts";
+} from "../src/store/boundaryRebuild.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const wasmPkg = join(__dirname, "../src/wasm/pkg");
