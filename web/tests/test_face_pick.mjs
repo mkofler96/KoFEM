@@ -430,6 +430,145 @@ assert(
   nearestReferencePoint([0, 0, 0], []) === null,
 );
 
+// ── Test 7: a click inside a flood-fill region toggles it off (KOF-211) ──────
+//
+// Without a CAD face behind the click, the region comes from the flood fill,
+// and the flood fill depends on its seed triangle. On a finely tessellated
+// cylinder every neighbour is within 15° of the seed, so the seed counts as
+// "flat" and the fill grows a ±15° band centred on the click. A second click
+// slightly next to the first grows a shifted band: the exact node-set
+// comparison saw a new face and added it, so the selection could not be
+// cleared. On a coarse cylinder whose facets are split into several
+// triangles, an interior seed grows only its facet strip while a seed on a
+// strip boundary walks the whole cylinder.
+
+console.log("\nTest 7: deselect a flood-fill region by clicking inside it");
+
+// Two-ring cylinder mantle, no CAD faces: `strips` flat facets around, each
+// split into `cols` columns of quads (extra nodes on the chord), `rows` high.
+function cylinderMantle(strips, cols, rows) {
+  const perLevel = strips * cols;
+  const verts = [];
+  for (let lvl = 0; lvl <= rows; lvl++) {
+    for (let col = 0; col < perLevel; col++) {
+      const strip = Math.floor(col / cols);
+      const frac = (col % cols) / cols;
+      const theta0 = (2 * Math.PI * strip) / strips;
+      const theta1 = (2 * Math.PI * (strip + 1)) / strips;
+      verts.push([
+        Ro * ((1 - frac) * Math.cos(theta0) + frac * Math.cos(theta1)),
+        Ro * ((1 - frac) * Math.sin(theta0) + frac * Math.sin(theta1)),
+        (lvl * HEIGHT) / rows,
+      ]);
+    }
+  }
+  const tris = [];
+  for (let lvl = 0; lvl < rows; lvl++) {
+    const base = lvl * perLevel;
+    for (let col = 0; col < perLevel; col++) {
+      const next = (col + 1) % perLevel;
+      tris.push(
+        ...quad(
+          base + col,
+          base + next,
+          base + perLevel + next,
+          base + perLevel + col,
+        ),
+      );
+    }
+  }
+  const topo = buildBoundaryMeshTopo(tris, (id) => verts[id]);
+  const picks = tris.map((_, ti) => pickFaceNodeIds(ti, topo));
+  return { verts, tris, picks };
+}
+
+function regionPick(mantle, ti) {
+  return {
+    nodeIds: [...mantle.picks[ti]],
+    axis: "X",
+    isMax: true,
+    label: "",
+  };
+}
+
+// Select at triangle `first`, then click triangle `second`.
+function clickTwice(mantle, first, second) {
+  const sel = toggleFaceSelection(
+    [],
+    regionPick(mantle, first),
+    "Face",
+    mantle.tris[first],
+  );
+  return toggleFaceSelection(
+    sel,
+    regionPick(mantle, second),
+    "Face",
+    mantle.tris[second],
+  );
+}
+
+// Fine cylinder (48 facets of 7.5°): each click grows a band around itself.
+const fine = cylinderMantle(48, 1, 1);
+const bandA = 0;
+const bandB = 2; // the next facet over, inside band A
+assert(
+  "setup: a nearby click grows a different band",
+  !setsEqual(fine.picks[bandA], fine.picks[bandB]),
+);
+assert(
+  "setup: the second click lies inside the first band",
+  fine.tris[bandB].every((id) => fine.picks[bandA].has(id)),
+);
+assert(
+  "a click next to the first, inside its band, deselects it",
+  clickTwice(fine, bandA, bandB).length === 0,
+);
+
+// Coarse cylinder (8 facets, each 2 columns x 3 rows): strip vs whole mantle.
+const coarse = cylinderMantle(8, 2, 3);
+const curvedSeed = coarse.picks.findIndex(
+  (p) => p.size === coarse.verts.length,
+);
+const flatSeed = coarse.picks.findIndex((p) => p.size < coarse.verts.length);
+assert("setup: a strip-boundary seed grows the whole mantle", curvedSeed >= 0);
+assert("setup: an interior seed grows only its facet strip", flatSeed >= 0);
+assert(
+  "a click inside the selected mantle deselects it",
+  clickTwice(coarse, curvedSeed, flatSeed).length === 0,
+);
+const strip = coarse.picks[flatSeed];
+const curvedInStrip = coarse.tris.findIndex(
+  (tri, ti) =>
+    coarse.picks[ti].size === coarse.verts.length &&
+    tri.every((id) => strip.has(id)),
+);
+assert(
+  "a click inside the selected strip deselects it, even if it grows more",
+  curvedInStrip >= 0 &&
+    clickTwice(coarse, flatSeed, curvedInStrip).length === 0,
+);
+
+// A click outside the selection still adds a second region.
+const outside = fine.tris.findIndex(
+  (tri) => !tri.every((id) => fine.picks[bandA].has(id)),
+);
+assert(
+  "a click outside the selection adds a region",
+  clickTwice(fine, bandA, outside).length === 2,
+);
+
+// A whole CAD face is exact: only an identical pick toggles it, so a
+// flood-fill click whose triangle happens to lie on its nodes still adds.
+assert(
+  "a selected CAD face is not toggled by containment",
+  toggleFaceSelection(
+    [{ ...regionPick(fine, bandA), cadFaceId: 7 }],
+    regionPick(fine, bandB),
+    "Face",
+    fine.tris[bandB],
+  ).length === 2,
+);
+
 // ── Summary ───────────────────────────────────────────────────────────────────
 
 console.log(`\n${passed + failed} tests: ${passed} passed, ${failed} failed`);
