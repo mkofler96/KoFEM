@@ -19,11 +19,11 @@
 
 import type {
   BcFaceEntry,
-  CouplingGroup,
   NamedBcGroup,
   NamedLoadGroup,
-  TieGroup,
-} from "../store/boundarySlice";
+} from "../store/boundaryGroups";
+import type { CouplingGroup } from "../store/couplingSlice";
+import type { TieGroup } from "../store/tieSlice";
 
 export interface CarriedGroups {
   bcGroups: NamedBcGroup[];

@@ -43,7 +43,7 @@ export interface CouplingElement {
 }
 
 // The structural minimum of a coupling the solver needs. The store's
-// CouplingGroup (boundarySlice) satisfies it, and so does the solve payload.
+// CouplingGroup (couplingSlice) satisfies it, and so does the solve payload.
 export interface CouplingDefinition {
   name: string;
   kind: CouplingKind;

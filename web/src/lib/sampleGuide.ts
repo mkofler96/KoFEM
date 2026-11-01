@@ -8,7 +8,7 @@ import {
   loadKind,
   type NamedBcGroup,
   type NamedLoadGroup,
-} from "../store/boundarySlice";
+} from "../store/boundaryGroups";
 
 // The sample simulation the empty workspace offers (KOF-261): a real CAD part,
 // the wall bracket, opened as geometry only. The user takes the steps every

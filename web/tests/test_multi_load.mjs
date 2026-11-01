@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Unit test for the store → engine surface-load build (rebuildSurfaceLoads,
-// src/store/boundarySlice.ts) with MULTIPLE selections and MULTIPLE groups.
+// src/store/boundaryRebuild.ts) with MULTIPLE selections and MULTIPLE groups.
 //
 // THE BUG THIS GUARDS (KOF-216): the builder emitted one surface load per picked
 // SELECTION, each carrying the group's full force vector. A group's vector is its
@@ -15,7 +15,7 @@
 //
 // Run: bun tests/test_multi_load.mjs   (from the web/ directory)
 
-import { rebuildSurfaceLoads } from "../src/store/boundarySlice.ts";
+import { rebuildSurfaceLoads } from "../src/store/boundaryRebuild.ts";
 
 let passed = 0,
   failed = 0;

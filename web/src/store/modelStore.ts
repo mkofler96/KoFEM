@@ -7,6 +7,11 @@
 //   geometrySlice — nodes/elements, imported CAD geometry, meshing pipeline
 //   materialSlice — material definitions + CRUD
 //   boundarySlice — BC / load groups and the solver-facing flat arrays
+//   tieSlice      — bonded tie connections between two surfaces
+//   couplingSlice — surface-to-point couplings and their reference nodes
+//   pickSlice     — viewport face-pick session (selection, tie/coupling drafts)
+//   boundaryGroups / boundaryRebuild — the BC / load group model and the pure
+//                   derivation of the solver arrays from it, no Zustand
 //   resultsSlice  — solver output, solve settings, stage transitions
 //   viewSlice     — transient viewport presentation settings
 //   momentLoad    — pure math (moment → equivalent nodal forces), no Zustand
@@ -27,13 +32,15 @@ import {
   MATERIAL_PALETTE,
   type MaterialSlice,
 } from "./materialSlice";
+import { createBoundarySlice, type BoundarySlice } from "./boundarySlice";
 import {
-  createBoundarySlice,
   rebuildConstraints,
   rebuildLoads,
   rebuildSurfaceLoads,
-  type BoundarySlice,
-} from "./boundarySlice";
+} from "./boundaryRebuild";
+import { createTieSlice, type TieSlice } from "./tieSlice";
+import { createCouplingSlice, type CouplingSlice } from "./couplingSlice";
+import { createPickSlice, type PickSlice } from "./pickSlice";
 import { createResultsSlice, type ResultsSlice } from "./resultsSlice";
 import {
   createTopOptSlice,
@@ -63,25 +70,17 @@ export type {
 } from "./geometrySlice";
 export type { Material } from "./materialSlice";
 export type {
-  Constraint,
-  Load,
-  FaceSelection,
   BcFaceEntry,
   NamedBcGroup,
   LoadKind,
   NamedLoadGroup,
-  SurfaceLoad,
-  TieGroup,
-  TieSide,
-  PickMode,
-  CouplingGroup,
-} from "./boundarySlice";
-export {
-  loadKind,
-  loadComponents,
-  tieFaces,
-  DEFAULT_TIE_DISTANCE,
-} from "./boundarySlice";
+} from "./boundaryGroups";
+export { loadKind, loadComponents } from "./boundaryGroups";
+export type { Constraint, Load, SurfaceLoad } from "./boundaryRebuild";
+export type { TieGroup, TieSide } from "./tieSlice";
+export { tieFaces, DEFAULT_TIE_DISTANCE } from "./tieSlice";
+export type { CouplingGroup } from "./couplingSlice";
+export type { FaceSelection, PickMode } from "./pickSlice";
 export type { TieExtent } from "../lib/tie";
 export type { PickGeometry } from "../lib/facePick";
 export type { CouplingKind, ReferencePointOption } from "../lib/coupling";
@@ -116,6 +115,9 @@ interface AnalysisActions {
 export type ModelState = GeometrySlice &
   MaterialSlice &
   BoundarySlice &
+  TieSlice &
+  CouplingSlice &
+  PickSlice &
   ResultsSlice &
   TopOptSlice &
   StudySlice &
@@ -311,6 +313,9 @@ export const useModelStore = create<ModelState>()(
     ...createGeometrySlice(...args),
     ...createMaterialSlice(...args),
     ...createBoundarySlice(...args),
+    ...createTieSlice(...args),
+    ...createCouplingSlice(...args),
+    ...createPickSlice(...args),
     ...createResultsSlice(...args),
     ...createTopOptSlice(...args),
     ...createStudySlice(...args),

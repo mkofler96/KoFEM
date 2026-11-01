@@ -10,7 +10,7 @@ import type {
   Property,
   SolverResult,
 } from "../store/modelStore";
-import { loadComponents, loadKind } from "../store/boundarySlice";
+import { loadComponents, loadKind } from "../store/boundaryGroups";
 
 // A closed-form result an example carries so a first-time user can judge the
 // solve (KOF-261): the quantity read off the solved field, the hand formula it
