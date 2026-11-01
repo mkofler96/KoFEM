@@ -19,8 +19,9 @@ Follow strict red-green TDD for all implementation work:
   red → green. In practice that is `cd web && bunx playwright test <spec>` or a
   script under `examples/validation/` — the behaviour that ships is exercised
   through the web app and the WASM engine.
-- `cargo test` currently exercises nothing: `crates/` holds stubs with no tests
-  (see AGENTS.md). Do not treat a green `cargo test` as coverage of anything.
+- `cargo test` covers only the `crates/` stubs (see AGENTS.md): their shared
+  types and the explicit errors their native bridges return. It does not cover
+  the shipped engine, so do not treat a green `cargo test` as coverage of it.
 - For acceptance criteria given in a Linear issue, copy the test verbatim into
   the test file before touching implementation code.
 - Prefer small, focused tests over large integration tests so failures pinpoint the broken unit.
