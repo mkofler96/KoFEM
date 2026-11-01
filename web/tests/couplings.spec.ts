@@ -357,9 +357,10 @@ for (const scenario of [
 
     await addBoundary(page, "load");
     await page.getByTestId("pick-geometry-point").click();
-    await page.waitForFunction(
-      () =>
-        !!(window as unknown as { __kofemViewport?: unknown }).__kofemViewport,
+    await page.waitForFunction(() =>
+      Boolean(
+        (window as unknown as { __kofemViewport?: unknown }).__kofemViewport,
+      ),
     );
     await page.getByRole("button", { name: "Fit View", exact: true }).click();
     // Let the camera effect and the scene's world matrices reach a rendered
