@@ -32,3 +32,31 @@ impl BoundaryConditions {
         self.point_loads.push(PointLoad { vertex, force });
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_boundary_conditions_are_empty() {
+        let bcs = BoundaryConditions::default();
+        assert!(bcs.fixed_vertices.is_empty());
+        assert!(bcs.point_loads.is_empty());
+    }
+
+    #[test]
+    fn helpers_record_supports_and_loads_in_order() {
+        let mut bcs = BoundaryConditions::default();
+        bcs.fix_vertex(0);
+        bcs.fix_vertex(3);
+        bcs.apply_force(7, [0.0, 0.0, -100.0]);
+        bcs.apply_force(2, [5.0, 0.0, 0.0]);
+
+        assert_eq!(bcs.fixed_vertices, vec![0, 3]);
+        assert_eq!(bcs.point_loads.len(), 2);
+        assert_eq!(bcs.point_loads[0].vertex, 7);
+        assert_eq!(bcs.point_loads[0].force, [0.0, 0.0, -100.0]);
+        assert_eq!(bcs.point_loads[1].vertex, 2);
+        assert_eq!(bcs.point_loads[1].force, [5.0, 0.0, 0.0]);
+    }
+}

@@ -74,3 +74,35 @@ impl Default for TessOptions {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn load_step_reports_missing_native_bridge() {
+        match load_step(b"ISO-10303-21;") {
+            Err(GeomError::LoadFailed(msg)) => assert!(msg.contains("WASM build")),
+            Err(other) => panic!("expected LoadFailed, got {other:?}"),
+            Ok(_) => panic!("native OCCT bridge must not report success"),
+        }
+    }
+
+    #[test]
+    fn tessellate_model_reports_missing_native_bridge() {
+        match tessellate_model(&OcctModel, &TessOptions::default()) {
+            Err(GeomError::TessFailed(msg)) => assert!(msg.contains("WASM build")),
+            Err(other) => panic!("expected TessFailed, got {other:?}"),
+            Ok(_) => panic!("native OCCT bridge must not report success"),
+        }
+    }
+
+    #[test]
+    fn default_tess_options_are_absolute_and_positive() {
+        let opts = TessOptions::default();
+        assert!(opts.linear_deflection > 0.0);
+        assert!(opts.angular_deflection > 0.0);
+        assert!(opts.angular_deflection < std::f64::consts::PI);
+        assert!(!opts.relative);
+    }
+}
