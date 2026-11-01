@@ -597,6 +597,11 @@ function handleSolve(id: number, payload: SolvePayload) {
     case "solid":
       handleSolidSolve(id, payload);
       return;
+    default: {
+      // Compile-time exhaustiveness: a new route without a case fails to build.
+      const unhandled: never = route;
+      throw new Error(`solve: unhandled route ${JSON.stringify(unhandled)}`);
+    }
   }
 }
 

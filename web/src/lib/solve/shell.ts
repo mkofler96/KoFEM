@@ -56,7 +56,7 @@ export function resolveShellSection(
   if (usedMats.size > 1) {
     const names = [...usedMats.values()].map((mat) => mat.name).join(", ");
     throw new Error(
-      `shell solve: the shell solver supports one material, but the shell elements span ` +
+      "shell solve: the shell solver supports one material, but the shell elements span " +
         `${usedMats.size} distinct materials (${names}) — assign a single material to the shell body`,
     );
   }
