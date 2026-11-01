@@ -1,0 +1,75 @@
+{
+  "id": "plate-with-hole-shell",
+  "name": "Plate with a hole, shell elements",
+  "script": "examples:generate-plate-hole-shell",
+  "quantity": "stress-concentration factor Kt",
+  "unit": "",
+  "reference": 3,
+  "referenceLabel": "Kt = 3 (infinite plate)",
+  "fe": 2.938729841652951,
+  "errPct": -2.042338611568306,
+  "inputs": [
+    {
+      "symbol": "a",
+      "value": 1000,
+      "unit": "mm"
+    },
+    {
+      "symbol": "b",
+      "value": 10000,
+      "unit": "mm"
+    },
+    {
+      "symbol": "t",
+      "value": 500,
+      "unit": "mm"
+    },
+    {
+      "symbol": "E",
+      "value": 210000,
+      "unit": "MPa"
+    },
+    {
+      "symbol": "ν",
+      "value": 0.3,
+      "unit": ""
+    },
+    {
+      "symbol": "σ",
+      "value": 100,
+      "unit": "MPa"
+    }
+  ],
+  "mesh": {
+    "elements": "1,536 3-node Kirchhoff shell triangles (DKT bending, CST membrane)",
+    "nodes": 832,
+    "dofs": 4992,
+    "rings": 12,
+    "around": 64
+  },
+  "readout": {
+    "field": "Ux",
+    "stat": "Max",
+    "value": "9.707e+0 mm"
+  },
+  "figure": {
+    "field": "vonMises",
+    "unit": "MPa",
+    "min": 23.88583493617129,
+    "max": 280.3887737614959,
+    "deform": 0,
+    "width": 1200,
+    "height": 720
+  },
+  "page": {
+    "summary": "The same plate as a single layer of shell triangles on its mid-surface instead of solid elements.",
+    "model": "Square plate of half-width b and thickness t, central hole of radius a, as a mid-surface.",
+    "supports": "x = −b edge fixed (all six DOFs).",
+    "loads": "σ·2b·t in +x as a force on the x = +b edge.",
+    "measured": "Peak facet von Mises stress around the hole, divided by σ.",
+    "mesh": "O-grid, 12 rings × 64 around the hole, two triangles per quad",
+    "source": "Kirsch (1898); Timoshenko & Goodier"
+  },
+  "engine": "engine-5ceb743373dd",
+  "generated": "2026-11-01"
+}

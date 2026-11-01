@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Number formatting shared by the console table (run.mjs) and the public
-// validation page (page.mjs), so the page can quote the exact line a user sees
+// example pages (page.mjs), so the page can quote the exact line a user sees
 // when they run the suite themselves.
 
 /** Five significant digits; exponent notation outside [0.01, 10⁴). */
@@ -25,11 +25,11 @@ export function fmtErr(errPct) {
 const pad = (s, n) => String(s).padEnd(n);
 const padl = (s, n) => String(s).padStart(n);
 
-export const CONSOLE_RULE = "-".repeat(118);
+export const CONSOLE_RULE = "-".repeat(121);
 
 export function consoleHeader() {
   return (
-    pad("Case", 35) +
+    pad("Case", 38) +
     pad("Quantity", 32) +
     padl("FE", 12) +
     padl("Reference", 12) +
@@ -42,7 +42,7 @@ export function consoleHeader() {
 /** One console row; `row` carries name, quantity, fe, reference, errPct, tolPct, pass. */
 export function consoleRow(row) {
   return (
-    pad(row.name, 35) +
+    pad(row.name, 38) +
     pad(row.quantity, 32) +
     padl(fmt(row.fe), 12) +
     padl(fmt(row.reference), 12) +

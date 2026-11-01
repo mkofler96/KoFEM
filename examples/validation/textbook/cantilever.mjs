@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Case page text: cantilever beam, linear elements. Shared beam theory with the
-// P2 case (cantilever-p2.mjs).
+// Page text: cantilever beam, linear hexahedra. Shared beam theory with the
+// quadratic and CAD cantilevers (cantilever-p2.mjs, cantilever-beam.mjs).
 
 import { cantileverFigure } from "../lib/figures.mjs";
 import { REF } from "./refs.mjs";
@@ -23,7 +23,7 @@ export function beam(inp) {
   return { b, h, E, nu, L, P, I, G, A, bending, shear };
 }
 
-/** Euler–Bernoulli derivation, shared with the P2 case page. */
+/** Euler–Bernoulli derivation, shared with the other cantilever pages. */
 export function beamTheory({ tex, texBlock, n, pctAbs, inp }) {
   const k = beam(inp);
   return `
@@ -41,8 +41,8 @@ export function beamTheory({ tex, texBlock, n, pctAbs, inp }) {
         ${texBlock("w(x) = -\\frac{P x^2}{6 E I}(3 L - x),")}
         <p>and at the tip</p>
         ${texBlock("δ = w(L) = -\\frac{P L^3}{3 E I}.")}
-        <p>For this beam ${tex(`I = ${n(k.I)}\\text{ m}^4`)} and
-        ${tex(`δ = ${n(-k.bending)}\\text{ m}`)}.</p>
+        <p>For this beam ${tex(`I = ${n(k.I)}\\text{ mm}^4`)} and
+        ${tex(`δ = ${n(-k.bending)}\\text{ mm}`)}.</p>
         <p>Timoshenko beam theory adds the shear deformation that
         Euler–Bernoulli leaves out. For a cantilever with a tip load it adds
         a second term,</p>
@@ -70,10 +70,10 @@ export default {
         so this case tests the element as much as the solver.</p>`,
   theory: beamTheory,
   model: () => `
-        <p>The beam is meshed with linear 8-node hexahedra, the fast
-        interactive default. Each element is a cube with sides one quarter of
-        the beam depth.</p>`,
-  discussion: ({ row, pct, study, inp }) => {
+        <p>The beam is meshed with linear 8-node hexahedra. Each element is a
+        cube with sides one quarter of the beam depth. The tip load is a force
+        on the end face, which the app integrates as a uniform traction.</p>`,
+  discussion: ({ row, pct, study, inp, url }) => {
     const p1 = studySeries(study, 1);
     const p2 = studySeries(study, 2);
     const k = beam(inp);
@@ -87,13 +87,15 @@ export default {
         spurious, parasitic shear stores strain energy that the real beam
         does not have, and the element is too stiff. The longer the element
         compared with the depth it spans, the worse it gets.</p>
-        <p>Refining the mesh cures it slowly. In the convergence study below
+        <p>Refining the mesh cures it slowly. In the convergence study above
         the linear-element error goes ${p1.map((p) => pct(p.errPct)).join(" → ")}
         as the element size halves, approaching a factor of four per step: the
         second-order convergence of displacements with linear elements, once
         locking is under control.</p>
         <p>Quadratic elements can bend, so they do not lock; see the
-        <a href="/validation/cantilever-p2/">P2 case</a>. Their series settles
+        <a href="${url("cantilever-p2")}">quadratic hexahedra</a> and the
+        <a href="${url("cantilever-beam")}">beam meshed from a STEP file</a>.
+        Their series settles
         near ${pct(last.errPct)}, above the reference. About
         ${pct((k.shear / k.bending) * 100)} of
         that is the shear deformation that Euler–Bernoulli theory leaves out.

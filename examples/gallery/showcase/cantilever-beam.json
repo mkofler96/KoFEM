@@ -1,0 +1,69 @@
+{
+  "id": "cantilever-beam",
+  "name": "Cantilever beam from a STEP file",
+  "script": "examples:generate-cantilever",
+  "quantity": "tip deflection δ",
+  "unit": "mm",
+  "reference": -1.9047619047619047,
+  "referenceLabel": "δ = P·L³ / (3·E·I)",
+  "fe": -1.9040270177518843,
+  "errPct": -0.0385815680260676,
+  "inputs": [
+    {
+      "symbol": "L",
+      "value": 1000,
+      "unit": "mm"
+    },
+    {
+      "symbol": "b × h",
+      "value": "100 × 100",
+      "unit": "mm"
+    },
+    {
+      "symbol": "E",
+      "value": 210000,
+      "unit": "MPa"
+    },
+    {
+      "symbol": "ν",
+      "value": 0.3,
+      "unit": ""
+    },
+    {
+      "symbol": "P",
+      "value": 10000,
+      "unit": "N"
+    }
+  ],
+  "mesh": {
+    "elements": "2,991 quadratic 10-node tetrahedra (P2)",
+    "nodes": 5532,
+    "dofs": 16596,
+    "maxElementSize": 25
+  },
+  "readout": {
+    "field": "Uy",
+    "stat": "Min",
+    "value": "-1.904e+0 mm"
+  },
+  "figure": {
+    "field": "displacement",
+    "unit": "mm",
+    "min": 0,
+    "max": 1.9094451841042084,
+    "deform": 50,
+    "width": 1200,
+    "height": 523
+  },
+  "page": {
+    "summary": "The cantilever built as you would build it: a STEP block, a Netgen mesh, a support and a load on CAD faces.",
+    "model": "Block of length L along x, b × h section, I = b·h³/12.",
+    "supports": "x = 0 face fixed (Ux, Uy, Uz), picked as one CAD face.",
+    "loads": "P in −y as a force on the x = L face, picked as one CAD face.",
+    "measured": "Mean y-displacement of the x = L face.",
+    "mesh": "Netgen, 25 mm maximum element size",
+    "source": "Euler–Bernoulli beam theory"
+  },
+  "engine": "engine-5ceb743373dd",
+  "generated": "2026-11-01"
+}

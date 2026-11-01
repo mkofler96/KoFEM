@@ -1,20 +1,28 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Mesh-convergence studies for the public validation page (/validation/).
+// Mesh-convergence studies for the example pages (/examples/<id>/).
 //
 // Each study re-solves one validation case on a sequence of meshes through the
-// case's own builder, so the model is exactly the CI case with only the mesh
-// changed. Errors are against the reference of the series' case, and every
+// case's own model builder, so the model is exactly the CI case with only the
+// mesh changed. Errors are against the reference of the series' case, and every
 // study includes the mesh that case is gated on in CI. Run by
 // `run.mjs --report`; a full run takes about half a minute, which is why the
 // default CI run does not repeat it.
 
-import { cantileverTip } from "./cases/cantilever-bending.mjs";
-import { shaftTwist } from "./cases/shaft-torsion.mjs";
-import { cookCorner } from "./cases/cooks-membrane.mjs";
+import { solveModel } from "./lib/app-model.mjs";
+import { cantileverModel, cantileverTip } from "./cases/cantilever-bending.mjs";
+import { shaftModel, shaftTwist } from "./cases/shaft-torsion.mjs";
+import { cookCorner, cookModel } from "./cases/cooks-membrane.mjs";
 
 const grid = (d) => d.join(" × ");
+
+// solve(solver, level, order): the study's model at one mesh level, solved
+// with the app's loads, and the case's measured value read off it.
+const study = (build, measure) => (solver, level, order) => {
+  const model = build("study", level, order);
+  return measure(model, solveModel(solver, model));
+};
 
 export default [
   {
@@ -46,7 +54,7 @@ export default [
       },
     ],
     meshLabel: grid,
-    solve: cantileverTip,
+    solve: study(cantileverModel, cantileverTip),
   },
   {
     id: "shaft-torsion",
@@ -67,7 +75,7 @@ export default [
       },
     ],
     meshLabel: grid,
-    solve: shaftTwist,
+    solve: study(shaftModel, shaftTwist),
   },
   {
     id: "cooks-membrane",
@@ -89,6 +97,6 @@ export default [
       },
     ],
     meshLabel: (n) => `${n} × ${n}`,
-    solve: cookCorner,
+    solve: study(cookModel, cookCorner),
   },
 ];

@@ -40,6 +40,19 @@ server {
         return 404;
     }
 
+    # The validation pages became the example pages (/examples/<id>/); the
+    # surface-traction case became the axial bar's page. Old links and search
+    # results land on the same content. vite.config.ts redirects alike in dev.
+    location = /validation {
+        return 301 /examples/;
+    }
+    location ^~ /validation/surface-traction {
+        return 301 /examples/axial-bar/;
+    }
+    location ~ ^/validation/(.*)$ {
+        return 301 /examples/$1;
+    }
+
     # The React solver is mounted below /app/. Deep links under that prefix must
     # serve the app entry; the marketing landing page remains the root fallback.
     location /app/ {

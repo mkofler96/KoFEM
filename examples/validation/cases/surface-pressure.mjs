@@ -1,75 +1,74 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Uniform pressure on the end of an axial bar — validates the pressure load path
-// (traction = -p·n̂ over the loaded face) including its sign.
+// The axial bar compressed by a uniform pressure on its end face.
 //
-//   A prismatic bar fixed at x=0 carries a uniform pressure p on the x=L face.
-//   Pressure acts along the inward normal (-x here), so the bar is in uniaxial
-//   compression with σ_xx = -p everywhere, giving tip displacement
-//       u(L) = -p·L / E
-//   independent of the cross-section. A flipped pressure sign (tension) or a
-//   missing area normalisation would put this far outside tolerance.
+//   Pressure acts along the inward normal, so a positive p shortens the bar:
+//   u(L) = −p·L/E, independent of the cross-section. Checks the sign of
+//   pressure loads and that p is a force per area, not a total force.
 
-import { boxHexMesh, nodesWhere, boxMaxXQuads } from "../lib/mesh.mjs";
+import { boxHexMesh, nodesWhere } from "../lib/mesh.mjs";
+import { STEEL } from "../lib/app-model.mjs";
 
-const E = 210e9; // Pa
-const nu = 0.3;
-const L = 1.0; // m
-const W = 0.1,
-  H = 0.1; // cross-section (m)
-const p = 1.0e6; // pressure (Pa), pushes inward on the x=L face → compression
+const E = STEEL.young_modulus; // MPa
+const nu = STEEL.poisson_ratio;
+const L = 1000; // mm
+const W = 100,
+  H = 100; // cross-section (mm)
+const p = 1.0; // pressure (MPa) on the x = L face
 const DIV = [20, 4, 4]; // elements along x, y, z
 
 export default {
   id: "surface-pressure",
-  name: "Surface pressure (axial bar)",
+  name: "Bar under end pressure",
   quantity: "tip displacement u",
-  unit: "m",
-  reference: -(p * L) / E, // u(L) = -p·L/E (compression)
-  referenceLabel: "u = -p·L / E",
+  unit: "mm",
+  reference: -(p * L) / E, // u(L) = −p·L/E (compression)
+  referenceLabel: "u = −p·L / E",
   tolPct: 2,
+  readout: { field: "Ux", stat: "Min" },
   page: {
     summary:
-      "The axial bar compressed by an end pressure: checks the pressure sign and area scaling.",
+      "The bar pushed by a pressure. Checks the sign and the per-area scaling of pressure loads.",
     model: "Prismatic bar of length L along x, W × H section.",
     inputs: [
-      ["L", L, "m"],
-      ["W × H", `${W} × ${H}`, "m"],
-      ["E", E, "Pa"],
+      ["L", L, "mm"],
+      ["W × H", `${W} × ${H}`, "mm"],
+      ["E", E, "MPa"],
       ["ν", nu, ""],
-      ["p", p, "Pa"],
+      ["p", p, "MPa"],
     ],
-    supports: "x = 0 face clamped.",
-    loads: "Uniform pressure p on the x = L face.",
+    supports: "x = 0 face fixed (Ux, Uy, Uz).",
+    loads: "Pressure p on the x = L face.",
     measured: "Mean x-displacement of the x = L face.",
     mesh: `${DIV.join(" × ")} grid`,
-    source: "Uniaxial compression, σ = −p",
+    source: "Gere & Goodno, Mechanics of Materials",
     grid: DIV,
   },
-  run(solve) {
-    const [nx, ny, nz] = DIV;
-    const m = boxHexMesh(L, W, H, nx, ny, nz);
-    const fixed = nodesWhere(m.vertices, (x) => x <= 1e-9);
-    const loaded = nodesWhere(m.vertices, (x) => x >= L - 1e-9);
-    const result = solve(
-      { vertices: m.vertices, hexahedra: m.hexahedra },
-      { young_modulus: E, poisson_ratio: nu, density: 7850 },
-      {
-        fixed_vertices: fixed,
-        surface_loads: [
-          {
-            type: "pressure",
-            pressure: p,
-            faces: boxMaxXQuads(m.nid, nx, ny, nz),
-          },
-        ],
+  model() {
+    const m = boxHexMesh(L, W, H, ...DIV);
+    return {
+      title: this.name,
+      mesh: { vertices: m.vertices, hexahedra: m.hexahedra },
+      material: STEEL,
+      order: 1,
+      support: {
+        nodes: nodesWhere(m.vertices, (x) => x <= 1e-9),
+        label: "Fixed end x = 0",
       },
-      1,
-    );
+      load: {
+        kind: "pressure",
+        value: p,
+        nodes: nodesWhere(m.vertices, (x) => x >= L - 1e-9),
+        label: "End pressure",
+      },
+      resultType: "Ux",
+    };
+  },
+  measure(model, result) {
+    const nodes = model.load.nodes;
     return (
-      loaded.reduce((s, v) => s + result.displacements[v * 3], 0) /
-      loaded.length
+      nodes.reduce((s, v) => s + result.displacements[3 * v], 0) / nodes.length
     );
   },
 };

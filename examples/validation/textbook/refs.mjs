@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Literature cited on the validation case pages.
+// Literature cited on the example pages.
 
 export const REF = {
   gere: "J. M. Gere and B. J. Goodno, <cite>Mechanics of Materials</cite>, Cengage Learning: axially loaded members, torsion, deflections of beams.",
@@ -18,6 +18,18 @@ export const REF = {
   cook1974:
     "R. D. Cook, “Improved two-dimensional finite element”, <cite>Journal of the Structural Division (ASCE)</cite> 100 (1974) 1851–1863.",
   cmpw: "R. D. Cook, D. S. Malkus, M. E. Plesha and R. J. Witt, <cite>Concepts and Applications of Finite Element Analysis</cite>, 4th ed., Wiley, 2002.",
+  batoz:
+    "J.-L. Batoz, K.-J. Bathe and L.-W. Ho, “A study of three-node triangular plate bending elements”, <cite>International Journal for Numerical Methods in Engineering</cite> 15 (1980) 1771–1812.",
+  schoeberl:
+    "J. Schöberl, “NETGEN: An advancing front 2D/3D-mesh generator based on abstract rules”, <cite>Computing and Visualization in Science</cite> 1 (1997) 41–52.",
+  bendsoe:
+    "M. P. Bendsøe and O. Sigmund, <cite>Topology Optimization: Theory, Methods and Applications</cite>, Springer, 2003.",
+  sigmund99:
+    "O. Sigmund, “A 99 line topology optimization code written in Matlab”, <cite>Structural and Multidisciplinary Optimization</cite> 21 (2001) 120–127.",
+  andreassen:
+    "E. Andreassen, A. Clausen, M. Schevenels, B. S. Lazarov and O. Sigmund, “Efficient topology optimization in MATLAB using 88 lines of code”, <cite>Structural and Multidisciplinary Optimization</cite> 43 (2011) 1–16.",
+  svanberg:
+    "K. Svanberg, “The method of moving asymptotes: a new method for structural optimization”, <cite>International Journal for Numerical Methods in Engineering</cite> 24 (1987) 359–373.",
   hughes:
     "T. J. R. Hughes, <cite>The Finite Element Method: Linear Static and Dynamic Finite Element Analysis</cite>, Dover, 2000.",
 };

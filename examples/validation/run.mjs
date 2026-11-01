@@ -1,19 +1,22 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Validation runner: solves every case through the real WASM engine and checks
-// the finite-element result against its closed-form / published reference.
+// Validation runner: solves every case through the real WASM engine, with the
+// loads built as the app builds them, and checks the finite-element result
+// against its closed-form / published reference.
 //
-//   node examples/validation/run.mjs              # run + print table + check page
+//   node examples/validation/run.mjs              # run + print table + check pages
 //   node examples/validation/run.mjs --case <id>  # run one case (no page check)
-//   node examples/validation/run.mjs --report     # also regenerate REPORT.md and
-//                                                 # the public pages /validation/
-//                                                 # and /validation/<id>/
+//   node examples/validation/run.mjs --report     # also regenerate REPORT.md,
+//                                                 # each case's analysis file and
+//                                                 # figure, and the pages
+//                                                 # /examples/ and /examples/<id>/
 //
 // Exits non-zero if any case falls outside its tolerance band, so CI fails on a
-// solver regression — or if the numbers published on /validation/ no longer
-// match a fresh run, so the public page cannot drift from the engine. See
-// README.md for what each case validates.
+// solver regression — or if the numbers published on /examples/ no longer
+// match a fresh run, or a page or analysis file no longer matches its sources,
+// so the public pages and the models the app opens cannot drift from the
+// engine. See README.md for what each case validates.
 
 import {
   existsSync,
@@ -35,19 +38,28 @@ import {
   fmtErr,
   relErrPct,
 } from "./lib/format.mjs";
-import { renderCasePage, renderValidationPage } from "./lib/page.mjs";
+import {
+  analysisFile,
+  analysisSetup,
+  appReadout,
+  readAnalysisSetup,
+  resultSurface,
+  solveModel,
+} from "./lib/app-model.mjs";
+import { resultFigure } from "./lib/render.mjs";
+import { renderExamplePage, renderIndexPage } from "./lib/page.mjs";
+import { ORDER, SITE_DIR, catalog } from "./catalog.mjs";
 import cases from "./cases/index.mjs";
 import textbook from "./textbook/index.mjs";
 import studies from "./convergence.mjs";
-import reproduce from "./reproduce.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = join(here, "../..");
-const PAGES = join(repo, "web/validation");
-const PAGE = join(PAGES, "index.html");
+const PAGES = join(repo, "web/examples");
+const INDEX = join(PAGES, "index.html");
 const SITEMAP = join(repo, "web/public/sitemap.xml");
 const SITE = "https://kofem.org";
-const DATA = join(repo, "web/public/validation/results.json");
+const DATA = join(repo, "web/public/examples/results.json");
 const REPORT = join(here, "REPORT.md");
 const ENGINE_STAMP = join(repo, "web/src/wasm/pkg/.engine-id");
 
@@ -69,25 +81,12 @@ if (!selected.length)
   );
 const solve = await loadSolver();
 
-// Run `fn` with a solve() that records the mesh it is handed, so the page
-// states the size of the mesh actually solved rather than a hand-kept count.
-function solveOnce(fn) {
-  const meshes = [];
-  const value = fn((mesh, material, bcs, order = 1) => {
-    meshes.push(meshStats(mesh, order));
-    return solve(mesh, material, bcs, order);
-  });
-  if (meshes.length !== 1)
-    throw new Error(
-      `expected exactly one solve per run, got ${meshes.length} — the page reports one mesh per value`,
-    );
-  return { value, mesh: meshes[0] };
-}
-
-const rows = selected.map((c) => {
-  const { value: fe, mesh } = solveOnce((s) => c.run(s));
+const runs = selected.map((c) => {
+  const model = c.model();
+  const result = solveModel(solve, model);
+  const fe = c.measure(model, result);
   const errPct = relErrPct(fe, c.reference);
-  return {
+  const row = {
     id: c.id,
     name: c.name,
     quantity: c.quantity,
@@ -98,36 +97,23 @@ const rows = selected.map((c) => {
     fe,
     errPct,
     pass: Math.abs(errPct) <= c.tolPct,
-    mesh,
+    mesh: meshStats(model.mesh, model.order),
     inputs: c.page.inputs.map(([symbol, value, unit]) => ({
       symbol,
       value,
       unit,
     })),
+    // What the app's Result summary shows after a fresh solve of the file.
+    readout: {
+      field: c.readout.field,
+      stat: c.readout.stat,
+      value: appReadout(result, c.readout.field, c.readout.stat),
+    },
   };
+  return { c, model, result, row };
 });
+const rows = runs.map((r) => r.row);
 const failed = rows.filter((r) => !r.pass).length;
-
-// The in-app reproduction: what the app's Result summary shows for the gallery
-// axial bar. Cheap (one small solve), so it is checked on every full run.
-const app = (() => {
-  if (only) return null;
-  const { value } = solveOnce((s) => reproduce.run(s));
-  return {
-    caseId: reproduce.caseId,
-    galleryId: reproduce.galleryId,
-    title: reproduce.title,
-    field: reproduce.field,
-    stat: reproduce.stat,
-    unit: reproduce.unit,
-    reference: reproduce.reference,
-    appValue: value.appValue,
-    // Exactly as ResultsPanel prints it: toExponential(3) and the unit.
-    appReadout: `${value.appValue.toExponential(3)} ${reproduce.unit}`,
-    faceMean: value.faceMean,
-    errPct: relErrPct(value.faceMean, reproduce.reference),
-  };
-})();
 
 // ── Console table ─────────────────────────────────────────────────────────────
 console.log("\nKoFEM validation suite — FE result vs. analytical reference\n");
@@ -141,10 +127,28 @@ console.log(
 );
 
 const rel = (p) => relative(repo, p);
+const vtuPath = (id) => join(SITE_DIR, `${id}.vtu`);
+const pngPath = (id) => join(SITE_DIR, `${id}.png`);
 
 if (only) process.exit(failed ? 1 : 0);
 
 if (report) {
+  // ── Analysis files and figures ──────────────────────────────────────────────
+  for (const { c, model, result, row } of runs) {
+    writeFileSync(vtuPath(c.id), analysisFile(model, result));
+    const fig = c.figure ?? {};
+    const field = fig.field ?? "displacement";
+    const { png, meta } = resultFigure(resultSurface(model, result, field), {
+      field,
+      unit: fig.unit ?? (field === "vonMises" ? "MPa" : "mm"),
+      view: fig.view,
+      deform: fig.deform,
+      focus: fig.focus,
+    });
+    writeFileSync(pngPath(c.id), png);
+    row.figure = meta;
+  }
+
   // ── Convergence studies (slow: ~half a minute) ──────────────────────────────
   const byId = new Map(rows.map((r) => [r.id, r]));
   const caseRow = (id) => {
@@ -164,8 +168,16 @@ if (report) {
         caseId: s.caseId,
         order: s.order,
         points: s.levels.map((level) => {
-          const { value: fe, mesh } = solveOnce((sv) =>
-            study.solve(sv, level, s.order),
+          // Record the mesh the study solves, so the page states its size.
+          let mesh = null;
+          const fe = study.solve(
+            (m, mat, bcs, order) => {
+              if (mesh) throw new Error("a study level must solve once");
+              mesh = meshStats(m, order);
+              return solve(m, mat, bcs, order);
+            },
+            level,
+            s.order,
           );
           const errPct = relErrPct(fe, ref.reference);
           const ci =
@@ -198,50 +210,58 @@ if (report) {
     engine: readFileSync(ENGINE_STAMP, "utf8").trim(),
     cases: rows,
     convergence,
-    reproduce: app,
   };
 
   mkdirSync(dirname(DATA), { recursive: true });
   writeFileSync(DATA, JSON.stringify(data, null, 2) + "\n");
+  const pages = renderPages(data);
+  // One page per example; an example that no longer exists loses its page.
   mkdirSync(PAGES, { recursive: true });
-  writeFileSync(PAGE, renderValidationPage(data, { cases, studies }));
-  // One page per case; a case that no longer exists loses its page.
-  const ids = new Set(rows.map((r) => r.id));
   for (const entry of readdirSync(PAGES, { withFileTypes: true }))
-    if (entry.isDirectory() && !ids.has(entry.name))
+    if (entry.isDirectory() && !ORDER.includes(entry.name))
       rmSync(join(PAGES, entry.name), { recursive: true });
-  for (const r of rows) {
-    mkdirSync(join(PAGES, r.id), { recursive: true });
-    writeFileSync(
-      join(PAGES, r.id, "index.html"),
-      renderCasePage(data, { cases, studies, textbook }, r.id),
-    );
+  for (const [file, html] of pages) {
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, html);
   }
-  writeFileSync(SITEMAP, sitemapWithCases(readFileSync(SITEMAP, "utf8"), rows));
+  writeFileSync(SITEMAP, sitemapWithExamples(readFileSync(SITEMAP, "utf8")));
   writeFileSync(REPORT, markdownReport(rows));
   console.log(
-    `\nWrote ${rel(DATA)}, ${rel(PAGE)}, ${rows.length} case pages in ${rel(PAGES)}/<id>/, ${rel(SITEMAP)} and ${rel(REPORT)}`,
+    `\nWrote ${rel(DATA)}, ${pages.length} pages in ${rel(PAGES)}, ${rows.length} analysis files and figures in ${rel(SITE_DIR)}, ${rel(SITEMAP)} and ${rel(REPORT)}`,
   );
 } else {
   const stale = checkPublished();
   if (stale.length) {
     console.error(
-      `\nThe public pages /validation/ are out of date with this run or their sources:\n` +
+      `\nThe example pages /examples/ are out of date with this run or their sources:\n` +
         stale.map((s) => `  • ${s}`).join("\n") +
         `\nRegenerate the pages and commit the result:\n` +
         `  cd web && bun run validate:report\n` +
-        `  git add web/validation web/public/validation/results.json web/public/sitemap.xml examples/validation/REPORT.md`,
+        `  git add web/examples web/public/examples/results.json web/public/sitemap.xml examples/gallery/site examples/gallery/showcase examples/validation/REPORT.md`,
     );
     process.exit(1);
   }
   console.log(
-    `\n${rel(DATA)} matches this run and the pages match their sources (/validation/ is current).`,
+    `\n${rel(DATA)} matches this run, and the pages and analysis files match their sources (/examples/ is current).`,
   );
 }
 
 process.exit(failed ? 1 : 0);
 
-// Differences between the committed page data and this run, as messages.
+/** Every page, as [file, html], rendered from published data. */
+function renderPages(data) {
+  const entries = catalog(data.cases);
+  return [
+    [INDEX, renderIndexPage(data, entries)],
+    ...entries.map((e) => [
+      join(PAGES, e.id, "index.html"),
+      renderExamplePage(data, entries, { studies, textbook }, e.id),
+    ]),
+  ];
+}
+
+// Differences between the committed data, pages and analysis files and this
+// run, as messages.
 function checkPublished() {
   if (!existsSync(DATA)) return [`${rel(DATA)} does not exist`];
   const published = JSON.parse(readFileSync(DATA, "utf8"));
@@ -263,31 +283,42 @@ function checkPublished() {
       out.push(
         `${r.name}: mesh changed (published ${JSON.stringify(p.mesh)}, now ${JSON.stringify(r.mesh)})`,
       );
+    if (JSON.stringify(r.inputs) !== JSON.stringify(p.inputs))
+      out.push(`${r.name}: inputs changed`);
+    if (r.readout.value !== p.readout.value)
+      out.push(
+        `${r.name}: the app shows ${r.readout.stat} ${r.readout.field} ${r.readout.value}, the page says ${p.readout.value}`,
+      );
   });
-  if (app.appReadout !== published.reproduce.appReadout)
-    out.push(
-      `in-app reproduction: published "${published.reproduce.appReadout}", this run "${app.appReadout}"`,
-    );
+  // The model the app opens must be the model this run solved.
+  for (const { c, model } of runs) {
+    const file = vtuPath(c.id);
+    if (!existsSync(file)) {
+      out.push(`${rel(file)} does not exist`);
+      continue;
+    }
+    if (
+      JSON.stringify(readAnalysisSetup(readFileSync(file, "utf8"))) !==
+      JSON.stringify(analysisSetup(model))
+    )
+      out.push(`${rel(file)}: its model differs from case "${c.id}"`);
+  }
+  for (const id of ORDER)
+    if (!existsSync(pngPath(id)))
+      out.push(`${rel(pngPath(id))} does not exist`);
   // The committed HTML must be what the current sources render from the
   // committed data, so a text or layout change cannot ship without the pages.
-  const pages = [
-    [PAGE, renderValidationPage(published, { cases, studies })],
-    ...published.cases.map((c) => [
-      join(PAGES, c.id, "index.html"),
-      renderCasePage(published, { cases, studies, textbook }, c.id),
-    ]),
-  ];
-  for (const [file, html] of pages)
+  for (const [file, html] of renderPages(published))
     if (!existsSync(file) || readFileSync(file, "utf8") !== html)
       out.push(`${rel(file)} differs from what the page sources render`);
   return out;
 }
 
-// The sitemap's validation block (between the validation markers) lists the
-// overview and every case page.
-function sitemapWithCases(xml, rs) {
-  const start = "<!-- validation:start -->",
-    end = "<!-- validation:end -->";
+// The sitemap's examples block (between the examples markers) lists the index
+// and every example page.
+function sitemapWithExamples(xml) {
+  const start = "<!-- examples:start -->",
+    end = "<!-- examples:end -->";
   const i = xml.indexOf(start),
     j = xml.indexOf(end);
   if (i < 0 || j < i)
@@ -296,8 +327,8 @@ function sitemapWithCases(xml, rs) {
     `  <url>\n    <loc>${SITE}${path}</loc>\n    <priority>${priority}</priority>\n  </url>`;
   const block = [
     start,
-    url("/validation/", "0.7"),
-    ...rs.map((r) => url(`/validation/${r.id}/`, "0.6")),
+    url("/examples/", "0.8"),
+    ...ORDER.map((id) => url(`/examples/${id}/`, "0.6")),
     `  ${end}`,
   ].join("\n");
   return xml.slice(0, i) + block + xml.slice(j + end.length);
@@ -307,10 +338,11 @@ function markdownReport(rs) {
   return [
     "# KoFEM validation results",
     "",
-    "Each case is solved by the real MFEM WASM engine and compared against its",
-    "closed-form or published reference. The same numbers are published at",
-    "<https://kofem.org/validation/>, with one page per case (derivation, model,",
-    "mesh convergence, discussion, how to reproduce). Regenerate them with:",
+    "Each case is solved by the real MFEM WASM engine, with its loads applied as",
+    "the app applies them, and compared against its closed-form or published",
+    "reference. The same numbers are published at <https://kofem.org/examples/>,",
+    "with one page per example (derivation, model, mesh convergence, discussion,",
+    "how to reproduce). Regenerate them with:",
     "",
     "```bash",
     "node examples/validation/run.mjs --report",

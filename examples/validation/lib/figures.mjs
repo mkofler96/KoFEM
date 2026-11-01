@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Schematic figures for the validation case pages (inline SVG, styled by the
-// page's CSS classes). Sketches, not to scale: they show the model, supports,
-// load and measured quantity, with the case's mesh drawn faintly where it fits.
+// Schematic figures for the example pages (inline SVG, styled by the page's
+// CSS classes). Sketches, not to scale: they show the model, supports, load
+// and measured quantity, with a structured mesh drawn faintly where it fits.
 
 const f = (v) => (Math.round(v * 10) / 10).toString();
 
@@ -105,8 +105,8 @@ const triad = (x, y, [a, b] = ["x", "y"]) =>
 // ── Axial bar: point loads, surface traction or end pressure ────────────────
 
 /**
- * Side view of the prismatic bar. `load`: "nodal" (equal nodal forces),
- * "traction" (uniform traction) or "pressure" (pressure on the end face).
+ * Side view of the prismatic bar. `load`: "traction" (a uniform traction, how
+ * the app applies a force to a face) or "pressure" (pressure on the end face).
  */
 export function barFigure({ load, div }) {
   const [nx, ny] = div;
@@ -134,26 +134,20 @@ export function barFigure({ load, div }) {
     ),
   ];
   const face = x1 + d;
-  if (load === "nodal") {
-    for (let j = 0; j <= ny; j++) {
-      const y = top + (2 * hh * j) / ny;
-      parts.push(arrow(face, y, face + 46, y));
-    }
-    parts.push(sym(face + 60, yc + 5, "P", "start"));
-  } else if (load === "traction") {
+  if (load === "traction") {
     for (let j = 0; j <= 8; j++) {
       const y = top + 3 + ((2 * hh - 6) * j) / 8;
       parts.push(arrow(face, y, face + 30, y));
     }
     parts.push(sym(face + 40, yc + 5, "t = P / A", "start"));
-  } else {
+  } else if (load === "pressure") {
     // Drawn on the undeformed face, clear of the shortened (dashed) bar.
     for (let j = 0; j <= 6; j++) {
       const y = top + 4 + ((2 * hh - 8) * j) / 6;
       parts.push(arrow(x1 + 40, y, x1 + 4, y));
     }
     parts.push(sym(x1 + 50, yc + 5, "p", "start"));
-  }
+  } else throw new Error(`bar figure: unknown load "${load}"`);
   // δ at the top, L below.
   const dy = top - 16;
   parts.push(
@@ -186,8 +180,9 @@ export function barFigure({ load, div }) {
 
 // ── Cantilever ───────────────────────────────────────────────────────────────
 
+/** `div`: the structured mesh to draw, or null for an unstructured one. */
 export function cantileverFigure({ div }) {
-  const [nx, ny] = div;
+  const [nx, ny] = div ?? [1, 1];
   const x0 = 90,
     x1 = 470,
     yc = 92,
@@ -525,6 +520,56 @@ export function cookFigure({ n }) {
     640,
     260,
     "Cook's membrane: a tapered panel clamped on its left edge with a uniform shear load F on its right edge; C is the top-right corner where the deflection is measured",
+    parts.join("\n    "),
+  );
+}
+
+// ── MBB beam (topology optimization) ─────────────────────────────────────────
+
+/** Pin: a triangle under the point, on a hatched ground line. */
+const pin = (x, y) =>
+  `${poly(
+    [
+      [x, y],
+      [x - 9, y + 14],
+      [x + 9, y + 14],
+    ],
+    "body",
+  )}${line(x - 14, y + 15, x + 14, y + 15, "wall")}`;
+
+/** Roller: the triangle on two wheels, free to slide along the ground. */
+const roller = (x, y) =>
+  `${poly(
+    [
+      [x, y],
+      [x - 9, y + 12],
+      [x + 9, y + 12],
+    ],
+    "body",
+  )}<circle class="body" cx="${f(x - 5)}" cy="${f(y + 15)}" r="3"/><circle class="body" cx="${f(x + 5)}" cy="${f(y + 15)}" r="3"/>${line(x - 14, y + 19, x + 14, y + 19, "wall")}`;
+
+export function mbbFigure() {
+  const x0 = 60,
+    x1 = 540,
+    y0 = 50,
+    y1 = 130;
+  const xm = (x0 + x1) / 2;
+  const parts = [
+    `<rect class="body" x="${x0}" y="${y0}" width="${x1 - x0}" height="${y1 - y0}"/>`,
+    pin(x0 + 4, y1),
+    roller(x1 - 4, y1),
+    arrow(xm, y0 - 44, xm, y0 - 2),
+    sym(xm + 10, y0 - 26, "F", "start"),
+    dim(x0, y1 + 44, x1, y1 + 44),
+    sym(xm, y1 + 38, "L"),
+    dim(x1 + 26, y0, x1 + 26, y1),
+    sym(x1 + 36, (y0 + y1) / 2 + 5, "H", "start"),
+    triad(24, 236),
+  ];
+  return svg(
+    620,
+    260,
+    "MBB beam: a block on a pin at the bottom left and a roller at the bottom right, with a downward load F at the top of mid-span",
     parts.join("\n    "),
   );
 }

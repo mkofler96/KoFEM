@@ -26,8 +26,8 @@ import {
 
 const htmlEntry = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 
-// The static pages (index.html, privacy/index.html, and validation/index.html
-// plus one validation/<case>/index.html per benchmark, which
+// The static pages (index.html, privacy/index.html, and examples/index.html
+// plus one examples/<id>/index.html per example, which
 // examples/validation/run.mjs --report generates) are fully static — Vite
 // emits them byte-for-byte, they import no hashed assets. Feeding them as extra
 // MPA rollup inputs is flaky (in some environments rollup crosses the
@@ -41,23 +41,25 @@ const htmlEntry = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 const STATIC_PAGES = [
   "index.html",
   "privacy/index.html",
-  "validation/index.html",
-  ...readdirSync(htmlEntry("./validation/"), { withFileTypes: true })
+  "examples/index.html",
+  ...readdirSync(htmlEntry("./examples/"), { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
-    .map((entry) => `validation/${entry.name}/index.html`),
+    .map((entry) => `examples/${entry.name}/index.html`),
 ];
 
-// The examples gallery lives outside web/, with everything else example-related
-// (examples/gallery/). Its site/ folder is served verbatim at /examples/: the
-// gallery page, examples.json, and the <id>.vtu / <id>.step files the app's
-// `?example=` loader fetches. The Docker build receives it as the named build
-// context "gallery" (web/Dockerfile).
+// The files each example is opened and drawn from live outside web/, with
+// everything else example-related (examples/gallery/site/): the <id>.vtu (and
+// optional <id>.step) the app's `?example=` loader fetches and the <id>.png
+// figure of its page. They are served at /examples/, next to the pages. The
+// Docker build receives the folder as the named build context "gallery"
+// (web/Dockerfile).
 const GALLERY_SITE = htmlEntry("../examples/gallery/site/");
 
 const copyStaticPages = (snippet: string): PluginOption => ({
   name: "copy-static-pages",
   apply: "build",
   closeBundle() {
+    cpSync(GALLERY_SITE, htmlEntry("./dist/examples/"), { recursive: true });
     for (const page of STATIC_PAGES) {
       const html = injectAnalytics(
         injectSiteLayout(
@@ -69,91 +71,65 @@ const copyStaticPages = (snippet: string): PluginOption => ({
       mkdirSync(htmlEntry(`./dist/${page}/..`), { recursive: true });
       writeFileSync(htmlEntry(`./dist/${page}`), html);
     }
-    const galleryOut = htmlEntry("./dist/examples/");
-    cpSync(GALLERY_SITE, galleryOut, { recursive: true });
-    // The gallery and every example write-up below it (site/<id>/index.html).
-    for (const page of readdirSync(GALLERY_SITE, { recursive: true }))
-      if (extname(page) === ".html")
-        writeFileSync(
-          join(galleryOut, page),
-          injectAnalytics(
-            injectSiteLayout(
-              readFileSync(join(GALLERY_SITE, page), "utf8"),
-              `/examples/${page}`,
-            ),
-            snippet,
-          ),
-        );
   },
 });
 
 const GALLERY_TYPES: Record<string, string> = {
-  ".html": "text/html; charset=utf-8",
-  ".json": "application/json",
   ".vtu": "application/xml",
   ".step": "application/octet-stream",
   ".png": "image/png",
-  ".svg": "image/svg+xml",
 };
 
-// A folder under /examples/ requested without its trailing slash — the gallery
-// itself, or a write-up (site/<id>/index.html) — gets a 301 to the slash form,
-// as nginx answers it in production; otherwise the pages' relative URLs (the
-// gallery fetches "./examples.json") resolve one level too high. `root` is the
-// folder served at /examples/.
-const redirectBareFolder =
-  (root: string): Connect.NextHandleFunction =>
-  (req, res, next) => {
-    const [original, query] = (req.originalUrl ?? "").split("?");
-    if (original.endsWith("/")) {
-      next();
-      return;
-    }
-    const dir = join(
-      root,
-      decodeURIComponent(original.slice("/examples".length)),
-    );
-    if (!dir.startsWith(root) || !existsSync(dir)) {
-      next();
-      return;
-    }
-    if (!statSync(dir).isDirectory()) {
-      next();
-      return;
-    }
-    res.statusCode = 301;
-    res.setHeader("Location", `${original}/${query ? `?${query}` : ""}`);
-    res.end();
-  };
+// Where an address of the retired /validation/ pages now lives, or null for
+// any other path. The surface-traction case became the axial bar's page.
+// nginx.conf.template redirects the same way in production.
+function validationRedirect(path: string): string | null {
+  const m = /^\/validation(\/.*)?$/.exec(path);
+  if (!m) return null;
+  const rest = m[1] ?? "/";
+  if (rest.startsWith("/surface-traction")) return "/examples/axial-bar/";
+  return `/examples${rest}`;
+}
 
-// Dev serves the gallery from examples/gallery/site/; `vite preview` serves
-// dist/examples/, which copyStaticPages fills, and only needs the redirect.
+// A folder under /examples/ requested without its trailing slash gets one, as
+// nginx answers it in production.
+const slashRedirect = (path: string): string | null =>
+  path === "/examples" || /^\/examples\/[\w-]+$/.test(path) ? `${path}/` : null;
+
+// Permanent redirects shared by the dev and preview servers.
+const redirects: Connect.NextHandleFunction = (req, res, next) => {
+  const [path, query] = (req.originalUrl ?? "").split("?");
+  const target = validationRedirect(path) ?? slashRedirect(path);
+  if (!target) {
+    next();
+    return;
+  }
+  res.statusCode = 301;
+  res.setHeader("Location", `${target}${query ? `?${query}` : ""}`);
+  res.end();
+};
+
+// Dev server: the example files from examples/gallery/site/; the pages
+// themselves are under web/examples/ and served by Vite, which expands the
+// site layout placeholders through transformIndexHtml. `vite preview` serves
+// dist/, which copyStaticPages fills, and only needs the redirects.
 const serveGallery = (): PluginOption => ({
   name: "serve-gallery",
-  apply: "serve",
   configureServer(server) {
-    server.middlewares.use("/examples", redirectBareFolder(GALLERY_SITE));
+    server.middlewares.use(redirects);
     server.middlewares.use("/examples", (req, res, next) => {
       const path = decodeURIComponent((req.url ?? "/").split("?")[0]);
-      let file = join(GALLERY_SITE, path.slice(1));
+      const type = GALLERY_TYPES[extname(path)];
+      if (!type) return next();
+      const file = join(GALLERY_SITE, path.slice(1));
       if (!file.startsWith(GALLERY_SITE) || !existsSync(file)) return next();
-      if (statSync(file).isDirectory()) file = join(file, "index.html");
-      if (!existsSync(file)) return next();
-      res.setHeader(
-        "Content-Type",
-        GALLERY_TYPES[extname(file)] ?? "application/octet-stream",
-      );
-      if (extname(file) !== ".html") return res.end(readFileSync(file));
-      server
-        .transformIndexHtml(`/examples${path}`, readFileSync(file, "utf8"))
-        .then((html) => res.end(html), next);
+      if (!statSync(file).isFile()) return next();
+      res.setHeader("Content-Type", type);
+      res.end(readFileSync(file));
     });
   },
   configurePreviewServer(server) {
-    server.middlewares.use(
-      "/examples",
-      redirectBareFolder(htmlEntry("./dist/examples/")),
-    );
+    server.middlewares.use(redirects);
   },
 });
 

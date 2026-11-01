@@ -22,25 +22,29 @@
 //                          the Results panel compares the solved tip deflection
 //                          with. The .step next to it is restored by the app, so
 //                          the model can be re-meshed.
-//   examples.json        — the gallery card, solved here so the card can show
-//                          the deformed beam and the FE-vs-hand-calculation error.
+//   cantilever-beam.png  — the solved beam, the figure on /examples/cantilever-beam/;
+//   showcase/cantilever-beam.json — the numbers on that page: the solve here,
+//                          the FE-vs-hand-calculation difference, the mesh.
 //
 // Quadratic tetrahedra, because linear ones lock in bending: at 25 mm a linear
 // mesh gives a tip deflection ~15 % short of δ, the quadratic one matches it.
-// The hex-mesh version of this check stays a regression benchmark in
-// examples/validation/.
+// The hex-mesh versions of this check are the validation cases cantilever and
+// cantilever-p2 in examples/validation/.
 //
 //   bun examples/gallery/generate-cantilever.mjs
 //
-// It replaces the "cantilever-beam" entry of examples.json in place, leaving the
-// other entries untouched. Netgen is not bit-reproducible across builds, so a
-// re-run can move the numbers on the card slightly.
+// Netgen is not bit-reproducible across builds, so a re-run can move the
+// numbers on the page slightly; regenerate the pages afterwards
+// (bun run validate:report).
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { loadEngine } from "../shell-coupling/lib.mjs";
 import { prismStep } from "./step-prism.mjs";
+import { appReadout } from "../validation/lib/app-model.mjs";
+import { resultFigure } from "../validation/lib/render.mjs";
+import { writeShowcase } from "../validation/catalog.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const outDir = join(here, "site");
@@ -327,63 +331,77 @@ function buildVtu() {
   ].join("\n");
 }
 
-// ── Gallery viewer: the solved boundary surface ───────────────────────────────
-// Netgen's surface triangles are the tet boundary. The deformation scale matches
-// the app's (TARGET_DEFORM_FRACTION = 0.2 of the model size).
-const local = new Map();
-const positions = [];
-const displacements = [];
-const magnitudes = [];
-const triangles = [];
-for (const v of surfTri) {
-  if (!local.has(v)) {
-    local.set(v, positions.length / 3);
-    const [dx, dy, dz] = [disp[3 * v], disp[3 * v + 1], disp[3 * v + 2]];
-    positions.push(V[3 * v], V[3 * v + 1], V[3 * v + 2]);
-    displacements.push(dx, dy, dz);
-    magnitudes.push(Math.hypot(dx, dy, dz));
-  }
-  triangles.push(local.get(v));
-}
-const maxComp = disp.reduce((m, d) => Math.max(m, Math.abs(d)), 0);
-const round = (arr, p) => arr.map((x) => Number(x.toPrecision(p)));
-
-const entry = {
-  id: ID,
-  title: TITLE,
-  blurb:
-    "A beam clamped at the wall with a transverse load over its free-end face — the classic Euler–Bernoulli bending check, δ = P·L³ / (3·E·I).",
-  quantity: "tip deflection δ",
-  unit: "mm",
-  reference: REFERENCE,
-  referenceLabel: "δ = P·L³ / (3·E·I)",
-  feValue,
-  errPct,
-  colorLabel: "Displacement magnitude",
-  viewer: {
-    center: [L / 2, H / 2, B / 2],
-    modelSize: L,
-    deformScale: (0.2 * L) / maxComp,
-    magMin: Math.min(...magnitudes),
-    magMax: Math.max(...magnitudes),
-    positions: round(positions, 7),
-    displacements: round(displacements, 6),
-    magnitudes: round(magnitudes, 6),
-    triangles,
+// ── The example page: record and figure ────────────────────────────────────────
+// The figure is the solved boundary surface, drawn as the app draws it.
+const { png, meta: figure } = resultFigure(
+  {
+    positions: V,
+    displacements: disp,
+    scalars: Array.from({ length: nNodes }, (_, v) =>
+      Math.hypot(disp[3 * v], disp[3 * v + 1], disp[3 * v + 2]),
+    ),
+    triangles: surfTri,
   },
-};
+  { field: "displacement", unit: "mm" },
+);
+// A P2 tetrahedron has a node at every vertex and every edge midpoint.
+const edges = new Set();
+for (let e = 0; e < nTets; e++)
+  for (let i = 0; i < 4; i++)
+    for (let j = i + 1; j < 4; j++) {
+      const [a, b] = [tets[4 * e + i], tets[4 * e + j]].sort((x, y) => x - y);
+      edges.add(`${a},${b}`);
+    }
+const nodes = nNodes + edges.size;
 
 writeFileSync(join(outDir, `${ID}.step`), step);
 writeFileSync(join(outDir, `${ID}.vtu`), buildVtu());
-const manifestPath = join(outDir, "examples.json");
-const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-const at = manifest.findIndex((e) => e.id === ID);
-if (at >= 0) manifest[at] = entry;
-else manifest.push(entry);
-writeFileSync(manifestPath, JSON.stringify(manifest));
+writeShowcase(
+  {
+    id: ID,
+    name: "Cantilever beam from a STEP file",
+    script: "examples:generate-cantilever",
+    quantity: "tip deflection δ",
+    unit: "mm",
+    reference: REFERENCE,
+    referenceLabel: "δ = P·L³ / (3·E·I)",
+    fe: feValue,
+    errPct: ((feValue - REFERENCE) / REFERENCE) * 100,
+    inputs: [
+      { symbol: "L", value: L, unit: "mm" },
+      { symbol: "b × h", value: `${B} × ${H}`, unit: "mm" },
+      { symbol: "E", value: STEEL.young, unit: "MPa" },
+      { symbol: "ν", value: STEEL.poisson, unit: "" },
+      { symbol: "P", value: P, unit: "N" },
+    ],
+    mesh: {
+      elements: `${nTets.toLocaleString("en-US")} quadratic 10-node tetrahedra (P2)`,
+      nodes,
+      dofs: 3 * nodes,
+      maxElementSize: MAX_ELEMENT_SIZE,
+    },
+    readout: {
+      field: "Uy",
+      stat: "Min",
+      value: appReadout({ displacements: disp }, "Uy", "Min"),
+    },
+    figure,
+    page: {
+      summary:
+        "The cantilever built as you would build it: a STEP block, a Netgen mesh, a support and a load on CAD faces.",
+      model: "Block of length L along x, b × h section, I = b·h³/12.",
+      supports: "x = 0 face fixed (Ux, Uy, Uz), picked as one CAD face.",
+      loads: "P in −y as a force on the x = L face, picked as one CAD face.",
+      measured: "Mean y-displacement of the x = L face.",
+      mesh: `Netgen, ${MAX_ELEMENT_SIZE} mm maximum element size`,
+      source: "Euler–Bernoulli beam theory",
+    },
+  },
+  png,
+);
 
 console.log(
   `${ID}: ${nNodes} nodes, ${nTets} tets, order ${ELEMENT_ORDER}; solved in ` +
     `${seconds.toFixed(1)} s; tip deflection ${feValue.toFixed(4)} mm vs ` +
-    `δ = ${REFERENCE.toFixed(4)} mm (err ${errPct.toFixed(2)}%) → ${ID}.{step,vtu} + examples.json`,
+    `δ = ${REFERENCE.toFixed(4)} mm (err ${errPct.toFixed(2)}%) → ${ID}.{step,vtu,png} + showcase/${ID}.json`,
 );

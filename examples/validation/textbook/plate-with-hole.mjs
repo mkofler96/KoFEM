@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Case page text: Kirsch stress concentration at a hole.
+// Page text: Kirsch stress concentration at a hole.
 
 import { plateFigure } from "../lib/figures.mjs";
 import { plateMesh } from "../cases/plate-with-hole.mjs";
@@ -100,8 +100,9 @@ export default {
         measure.</p>
         <p>Second, element stresses carry their own discretisation error.
         Stress comes from derivatives of the displacement field, so it
-        converges more slowly than the displacement does; here it lands above
-        the exact value at the element centre. The published ${row.fe.toFixed(2)}
+        converges more slowly than the displacement does; here it lands
+        ${row.fe > c.sv ? "above" : "below"} the exact value at the element
+        centre. The published ${row.fe.toFixed(2)}
         is the net of both. That is why this case has a wider ±${row.tolPct}&nbsp;%
         band. Treat it as a check that the peak is in the right place and of
         the right size. To resolve a peak stress in a design, refine the mesh

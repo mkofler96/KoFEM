@@ -6,9 +6,9 @@ import { useModelStore } from "../store/modelStore";
 import { parseAnalysisFile } from "./analysisFile";
 import { categorizeError, setWorkflow, startTimer, track } from "./analytics";
 
-// Opening a gallery example (examples/gallery/site/, served at /examples/) in
-// the app, from the `/app/?example=<id>` deep-link the gallery's "Open in KoFEM
-// web" buttons use.
+// Opening an example (examples/gallery/site/, served at /examples/) in the
+// app, from the `/app/?example=<id>` deep-link the example pages' "Open in
+// KoFEM" links use.
 
 const EXAMPLE_ID_PATTERN = /^[\w-]+$/;
 

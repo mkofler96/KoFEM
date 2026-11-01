@@ -4,11 +4,11 @@ Self-hosted copies of the fonts previously loaded from the Google Fonts CDN
 (the external requests made page load depend on a third-party host and broke
 Playwright runs in offline/sandboxed environments).
 
-| Family                    | Weights            | Used by                                                         |
-| ------------------------- | ------------------ | --------------------------------------------------------------- |
-| Geist / Geist Mono        | 400–700 / 400, 500 | landing page (`/`)                                              |
-| IBM Plex Sans / Plex Mono | 400–600 / 400, 600 | solver app (`/app/`)                                            |
-| KoFEM Math                | 400                | validation pages (`/validation/`): equations and figure symbols |
+| Family                    | Weights            | Used by                                                    |
+| ------------------------- | ------------------ | ---------------------------------------------------------- |
+| Geist / Geist Mono        | 400–700 / 400, 500 | landing page (`/`), example pages (`/examples/`)           |
+| IBM Plex Sans / Plex Mono | 400–600 / 400, 600 | solver app (`/app/`)                                       |
+| KoFEM Math                | 400                | example pages (`/examples/`): equations and figure symbols |
 
 Only the `latin` and `latin-ext` subsets are included. The `.css` files are
 the Google Fonts `css2` responses with the `fonts.gstatic.com` URLs rewritten
@@ -22,7 +22,7 @@ Geist and IBM Plex are licensed under the SIL Open Font License 1.1:
 `kofem-math.woff2` (family "KoFEM Math") is a subset of New Computer Modern
 Math 3.00, © 2019–2021 Antonis Tsolomitis, released under the GUST Font
 License (<http://tug.org/fonts/licenses/GUST-FONT-LICENSE.txt>). It gives the
-MathML equations on the validation pages the LaTeX (Computer Modern) look and
+MathML equations on the example pages the LaTeX (Computer Modern) look and
 keeps the font's OpenType MATH table. Source: `files/fonts/NewCMMath-Regular.otf`
 at tag `v0.13.1` of <https://github.com/typst/typst-assets> (SHA-256
 `bfd2f9b22caacd41b8b29cfe3f6d72f976f221a65362e07eda35cbae863721b7`). As the
