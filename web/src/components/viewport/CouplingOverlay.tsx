@@ -1,6 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+// JS-0455 checks DOM attributes; these are Three.js objects whose properties
+// are checked by React Three Fiber's TypeScript types. Annotate only those props.
+
 // Surface-to-point couplings: the surface each coupling grips, its spider from
 // the reference point to every gripped node, and the coupling being placed.
 
@@ -141,14 +144,23 @@ export function CouplingOverlay({
       {couplingSpiders.map((spider) => (
         <group key={`coupling-spider-${spider.id}`}>
           {spider.positions.length > 0 && (
-            <lineSegments renderOrder={4}>
+            <lineSegments
+              // skipcq: JS-0455 -- typed React Three Fiber property
+              renderOrder={4}
+            >
               <bufferGeometry>
                 <bufferAttribute
+                  // skipcq: JS-0455 -- typed React Three Fiber property
                   attach="attributes-position"
+                  // skipcq: JS-0455 -- typed React Three Fiber property
                   args={[spider.positions, 3]}
                 />
               </bufferGeometry>
-              <lineBasicMaterial color={COUPLING_COLOR} depthTest={false} />
+              <lineBasicMaterial
+                color={COUPLING_COLOR}
+                // skipcq: JS-0455 -- typed React Three Fiber property
+                depthTest={false}
+              />
             </lineSegments>
           )}
           {/* `transparent` with full opacity, not a translucency: three.js
@@ -157,7 +169,9 @@ export function CouplingOverlay({
               renderOrder. Joining the transparent pass is what lets the order
               put the point on top of the surface it belongs to. */}
           <mesh
+            // skipcq: JS-0455 -- typed React Three Fiber property
             position={spider.point}
+            // skipcq: JS-0455 -- typed React Three Fiber property
             renderOrder={5}
             onClick={
               pickReferencePoint &&
@@ -168,6 +182,7 @@ export function CouplingOverlay({
             }
           >
             <sphereGeometry
+              // skipcq: JS-0455 -- typed React Three Fiber property
               args={[modelSize * (pickReferencePoint ? 0.03 : 0.018), 12, 10]}
             />
             <meshBasicMaterial
@@ -176,7 +191,9 @@ export function CouplingOverlay({
                   ? SELECTION_COLOR
                   : COUPLING_COLOR
               }
+              // skipcq: JS-0455 -- typed React Three Fiber property
               depthTest={false}
+              // skipcq: JS-0455 -- typed React Three Fiber property
               transparent
               opacity={1}
             />
@@ -189,26 +206,43 @@ export function CouplingOverlay({
       {couplingDraft && draftSpider && (
         <group>
           {draftSpider.positions.length > 0 && (
-            <lineSegments renderOrder={5}>
+            <lineSegments
+              // skipcq: JS-0455 -- typed React Three Fiber property
+              renderOrder={5}
+            >
               <bufferGeometry>
                 <bufferAttribute
+                  // skipcq: JS-0455 -- typed React Three Fiber property
                   attach="attributes-position"
+                  // skipcq: JS-0455 -- typed React Three Fiber property
                   args={[draftSpider.positions, 3]}
                 />
               </bufferGeometry>
               <lineBasicMaterial
                 color={COUPLING_DRAFT_COLOR}
+                // skipcq: JS-0455 -- typed React Three Fiber property
                 depthTest={false}
+                // skipcq: JS-0455 -- typed React Three Fiber property
                 transparent
                 opacity={1}
               />
             </lineSegments>
           )}
-          <mesh position={couplingDraft.point} renderOrder={6}>
-            <sphereGeometry args={[modelSize * 0.022, 16, 12]} />
+          <mesh
+            // skipcq: JS-0455 -- typed React Three Fiber property
+            position={couplingDraft.point}
+            // skipcq: JS-0455 -- typed React Three Fiber property
+            renderOrder={6}
+          >
+            <sphereGeometry
+              // skipcq: JS-0455 -- typed React Three Fiber property
+              args={[modelSize * 0.022, 16, 12]}
+            />
             <meshBasicMaterial
               color={COUPLING_DRAFT_COLOR}
+              // skipcq: JS-0455 -- typed React Three Fiber property
               depthTest={false}
+              // skipcq: JS-0455 -- typed React Three Fiber property
               transparent
               opacity={1}
             />

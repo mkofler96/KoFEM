@@ -1,6 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+// JS-0455 checks DOM attributes; these are Three.js objects whose properties
+// are checked by React Three Fiber's TypeScript types. Annotate only those props.
+
 // Fixed-support markers: a small triangular cone at every constrained node.
 
 import { useMemo } from "react";
@@ -101,11 +104,19 @@ export function BcNodeMarkers({ topology, showResult }: BcNodeMarkersProps) {
       {bcNodeMarkers.map((m) => (
         <group
           key={`bc-node-${m.nodeId}`}
+          // skipcq: JS-0455 -- typed React Three Fiber property
           position={m.pos}
+          // skipcq: JS-0455 -- typed React Three Fiber property
           quaternion={m.quaternion}
         >
-          <mesh position={[0, -modelSize * 0.025, 0]}>
-            <coneGeometry args={[modelSize * 0.02, modelSize * 0.05, 3]} />
+          <mesh
+            // skipcq: JS-0455 -- typed React Three Fiber property
+            position={[0, -modelSize * 0.025, 0]}
+          >
+            <coneGeometry
+              // skipcq: JS-0455 -- typed React Three Fiber property
+              args={[modelSize * 0.02, modelSize * 0.05, 3]}
+            />
             <meshStandardMaterial color="#dc2626" />
           </mesh>
         </group>
