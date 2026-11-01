@@ -15,6 +15,10 @@ trap 'rm -rf "$STUDY_DIR"' EXIT
 "$CXX" -std=c++17 -O2 -Wall -Wextra \
     -I "$REPO_ROOT/engine/cpp" \
     "$REPO_ROOT/engine/cpp/shell_core.cpp" \
+    "$REPO_ROOT/engine/cpp/shell_element.cpp" \
+    "$REPO_ROOT/engine/cpp/tet_element.cpp" \
+    "$REPO_ROOT/engine/cpp/coupling_constraints.cpp" \
+    "$REPO_ROOT/engine/cpp/sparse_cg.cpp" \
     "$REPO_ROOT/engine/tests/rbe3_junction_study.cpp" \
     -o "$STUDY_DIR/rbe3_junction_study"
 

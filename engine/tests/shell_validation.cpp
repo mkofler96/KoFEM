@@ -13,6 +13,8 @@
 // Membrane: uniaxial tension, tip extension delta = sigma L / E.
 
 #include "shell_core.h"
+#include "shell_element.h"
+#include "tet_element.h"
 
 #include <algorithm>
 #include <array>

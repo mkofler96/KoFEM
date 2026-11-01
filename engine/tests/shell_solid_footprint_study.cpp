@@ -11,6 +11,7 @@
 // general non-conforming interface implementation or an absolute peak accuracy gate.
 
 #include "shell_core.h"
+#include "tet_element.h"
 
 #include <algorithm>
 #include <array>
