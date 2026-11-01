@@ -1,0 +1,34 @@
+# Opened from the app by Feedback → Report a problem, which can prefill the
+# `diagnostics` field through the URL (web/src/lib/feedback.ts). Renaming a
+# field id breaks that prefill; tests/test_feedback.mjs checks it.
+name: Report a problem
+description: Something in KoFEM broke, or a result looks wrong.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: "**This issue is public.** Don't attach confidential CAD files or results."
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics (optional)
+      description: Filled in by KoFEM when you include diagnostics.
+      render: text

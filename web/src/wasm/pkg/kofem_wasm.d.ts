@@ -186,8 +186,6 @@ export interface KofemModule {
    *                   `format` selects the reader (defaults to "step").
    */
   tessellate_step(cad_bytes: Uint8Array, opts_json: string): StepTessellation
-  tessellate_for_meshing(opts_json: string): string
-  generate_volume_mesh(surface_json: string, opts_json: string): string
   /** Generate a FEM surface mesh + volume mesh directly from the stored STEP geometry
    *  using Netgen's native OCC integration.  Must call tessellate_step first.
    *  @param opts_json JSON `{ max_element_size, min_element_size, grading, second_order, elementsperedge, elementspercurve, optsteps_2d, optsteps_3d }`
@@ -239,7 +237,7 @@ export interface KofemModule {
    *             `attributes` is one 1-based solid-material index per TET, into
    *             the `mat_json.solid` array; omitted means every tet uses the
    *             first material.
-   *   coupling: { ref, offsets, solid, mpc?, dof_mask?, relaxation? }  CSR-style:
+   *   coupling: { ref, offsets, solid, mpc?, weights?, dof_mask?, relaxation? }  CSR-style:
    *             reference node ref[k] ties to solid[offsets[k]..offsets[k+1]).
    *             Optional mpc[k] = 1 selects the relaxed shell-to-solid MPC
    *             coupling (rigid translation tie + relaxation-scaled rotation),
@@ -248,7 +246,9 @@ export interface KofemModule {
    *             0/absent keeps the distributing RBE3 coupling; relaxation is the
    *             shared ψ ∈ [0.5,1] used by the MPC couplings. dof_mask[k] selects
    *             which of a kinematic coupling's six DOFs are tied (bits 0..5,
-   *             all six when absent).
+   *             all six when absent). Kind 3 is a physical shell footprint:
+   *             solid ref[k] translations follow two shell edge partners with
+   *             per-partner `weights` interpolating their motion and rotation.
    *   bcs:      { fixed_dofs, load_dofs, load_vals, prescribed_dofs?,
    *               prescribed_vals? }  (DOF = 6·node+component). fixed_dofs are
    *               constrained to ZERO; prescribed_dofs[k] is driven to
@@ -266,6 +266,7 @@ export interface KofemModule {
       attributes?: Int32Array
     },
     coupling: {
+      weights?: Float64Array
       ref: Int32Array
       offsets: Int32Array
       solid: Int32Array
@@ -335,6 +336,7 @@ export interface KofemModule {
       attributes?: Int32Array
     },
     coupling: {
+      weights?: Float64Array
       ref: Int32Array
       offsets: Int32Array
       solid: Int32Array
@@ -355,10 +357,36 @@ export interface KofemModule {
   ): TopOptResult
 }
 
+/** Progress of init(): bytes are the uncompressed engine size. */
+export type EngineLoadProgress =
+  | { phase: 'downloading'; loaded: number; total: number }
+  | { phase: 'compiling'; loaded: number; total: number }
+  /** Compiled; emcc instantiates the module and runs its static constructors. */
+  | { phase: 'starting' }
+  | {
+      phase: 'ready'
+      /** From the request to the last byte. */
+      downloadMs: number
+      /** Compilation left after the last byte (it streams alongside the download). */
+      compileMs: number
+      /** emcc start-up: instantiation and static constructors. */
+      instantiateMs: number
+      /** WebAssembly linear memory once started. */
+      memoryBytes: number
+    }
+
+/** The step of init() that failed. */
+export type EngineLoadStage = 'download' | 'compile' | 'instantiate'
+
+/** Thrown by init(); the message says what failed, `stage` where. */
+export class EngineLoadError extends Error {
+  readonly stage: EngineLoadStage
+}
+
 export interface ModuleOverrides {
   print?: (text: string) => void
   printErr?: (text: string) => void
-  wasmBinary?: ArrayBuffer
+  onProgress?: (progress: EngineLoadProgress) => void
 }
 
 /** Initialise the WASM module and return it. Must be awaited before using any function. */

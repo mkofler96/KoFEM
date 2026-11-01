@@ -245,7 +245,7 @@
     <main>
       <div class="eyebrow">Legal</div>
       <h1>Privacy &amp; Cookies</h1>
-      <p class="updated">Last updated: July 2026</p>
+      <p class="updated">Last updated: October 2026</p>
 
       <p>
         KoFEM is a browser-based finite element solver. Your geometry, meshes,
@@ -286,15 +286,30 @@
         <p>
           You can change your choice at any time using the
           <a href="#" id="kofem-cookie-settings">Cookie settings</a> link (also
-          in the site footer). Declining opts you out via Google's documented
-          <code>ga-disable</code> flag.
+          in the site footer and the solver's status bar). Declining opts you
+          out via Google's documented <code>ga-disable</code> flag, removes the
+          <code>_ga</code> cookies, and stops all further analytics from the
+          page you are on.
         </p>
       </div>
 
       <h2>What is collected</h2>
       <p>If you accept analytics, Google Analytics may process:</p>
       <ul>
-        <li>Pages viewed and events such as starting the solver.</li>
+        <li>Pages viewed.</li>
+        <li>
+          Which steps of an analysis succeeded or failed — opening the solver,
+          importing geometry, meshing, solving, viewing results, opening a
+          gallery example — with the file format (STEP or IGES), a coarse
+          duration (such as “5–15 seconds”) and, for a failure, a generic
+          category (such as “unsupported format” or “did not converge”). Events
+          that happen before you answer the cookie banner are held in the page
+          and sent only if you accept.
+        </li>
+        <li>
+          That a feedback form was opened from the solver — not what you write
+          in it.
+        </li>
         <li>
           Approximate location (country / region), derived by Google from your
           IP address. IP addresses are not stored by GA4.
@@ -304,6 +319,12 @@
           system).
         </li>
       </ul>
+      <p>
+        Analytics never receives your files or their names, geometry, meshes,
+        materials, loads, numerical results, or the text of error messages.
+        Google signals and ad personalisation are turned off, so visits are not
+        linked to a Google account.
+      </p>
       <p>
         Data is processed by Google on our behalf. See
         <a
@@ -319,6 +340,25 @@
           target="_blank"
           >Google Analytics opt-out browser add-on</a
         >.
+      </p>
+
+      <h2 id="feedback">Feedback and bug reports</h2>
+      <p>
+        The solver's <em>Feedback</em> menu opens a public
+        <a
+          href="https://github.com/mkofler96/KoFEM/issues"
+          rel="noopener"
+          target="_blank"
+          >GitHub issue</a
+        >
+        form. KoFEM sends nothing itself.
+      </p>
+      <p>
+        Diagnostics are off unless you tick them, and you see them first: the
+        KoFEM and engine version, browser and OS, WebAssembly and WebGL support,
+        model size as counts, the current step, and the last error message with
+        names, file names and coordinates removed. Geometry, files, meshes and
+        results are never included.
       </p>
 
       <h2>Other storage</h2>

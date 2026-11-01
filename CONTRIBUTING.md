@@ -84,6 +84,16 @@ justification:
 Work is tracked in Linear (team `KOF`), not in GitHub Issues. Pick up or file
 work there; GitHub is for the code, the pull request and CI.
 
+## Public site layout
+
+The public landing, privacy and example pages share `web/public/site.css`
+and the header/footer templates in `web/site-layout.mjs`. Vite expands the
+`<!-- site-header -->` and `<!-- site-footer -->` placeholders in static source
+pages during development and builds. Generated case pages use the same templates
+directly; update their generators and regenerate the HTML after a template change.
+Article typography lives in `web/public/case-page.css`, and the landing animation
+has its own rules in `web/public/landing/landing.css`.
+
 ## Pull requests
 
 - The PR template asks you to confirm, per changed code path, that missing or

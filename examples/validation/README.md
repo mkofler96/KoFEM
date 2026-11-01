@@ -2,19 +2,26 @@
 
 Each case here is solved by the **real MFEM WASM engine** — the same binary the
 browser app runs — and compared against a closed-form or published reference.
-No solver is re-implemented; the meshes, boundary conditions and loads are built
-in plain JS, fed to `solve_linear_elastic`, and the result is checked against
-theory. This doubles as a CI regression gate and as the source of the numbers
-shown in the landing-page tutorial.
+No solver is re-implemented: each case is a model in the app's units
+(N · mm · MPa), with its loads built exactly as the app builds them
+(`lib/app-model.mjs`: a force on a face is a work-equivalent traction, a moment
+is tangential nodal forces, a pressure acts along the inward normal), fed to
+`solve_linear_elastic`, and the result is checked against theory. The same
+model is the example the app opens at `/app/?example=<id>`, so solving it in
+the app gives the number on its page. This doubles as a CI regression gate and
+as the source of the numbers on the public example pages,
+[kofem.org/examples/](https://kofem.org/examples/).
 
 ## Run
 
 ```bash
-node examples/validation/run.mjs            # run all cases, print a table
-node examples/validation/run.mjs --report   # also (re)write REPORT.md
+node examples/validation/run.mjs                 # run all cases, print a table
+node examples/validation/run.mjs --case <id>     # run one case, e.g. axial-bar
+node examples/validation/run.mjs --report        # also regenerate the pages, figures, .vtu files + REPORT.md
 ```
 
-It exits non-zero if any case leaves its tolerance band. CI runs it (and the
+It exits non-zero if any case leaves its tolerance band, or if the public
+pages no longer match the run or their sources (below). CI runs it (and the
 single-DOF test below) via `bun run test` in `web/`.
 
 ## Cases
@@ -22,6 +29,7 @@ single-DOF test below) via `bun run test` in `web/`.
 | Case                 | Validates                       | Reference                     |
 | -------------------- | ------------------------------- | ----------------------------- |
 | Axial bar            | tip extension δ = P·L/(E·A)     | mechanics of materials        |
+| Bar under pressure   | u = −p·L/E, pressure sign       | mechanics of materials        |
 | Cantilever beam      | tip deflection δ = P·L³/(3·E·I) | Euler–Bernoulli               |
 | Cantilever beam (P2) | δ on a coarse mesh, order 2     | Euler–Bernoulli               |
 | Square beam torsion  | angle of twist θ = T·L/(G·K)    | Saint-Venant torsion (square) |
@@ -30,6 +38,56 @@ single-DOF test below) via `bun run test` in `web/`.
 | Cook's membrane      | top-corner deflection ≈ 23.9    | Cook (1974)                   |
 
 See `REPORT.md` for the latest FE-vs-reference numbers.
+
+## The public pages, `/examples/` and `/examples/<id>/`
+
+`run.mjs --report` writes the pages from one engine run — nothing on them is
+typed by hand. The list of examples, and their order, is `catalog.mjs`: these
+cases plus the showcases built by the generators in `examples/gallery/` (see
+its README), which write their own records.
+
+| Output                             | What it is                                                                  |
+| ---------------------------------- | --------------------------------------------------------------------------- |
+| `web/examples/index.html`          | the index at `/examples/`: every example with its figure, the results table |
+| `web/examples/<id>/index.html`     | one page per example: problem, derivation, model, results, discussion       |
+| `examples/gallery/site/<id>.vtu`   | each case as the app opens it, solved                                       |
+| `examples/gallery/site/<id>.png`   | each case's figure (`lib/render.mjs`), drawn from the same solve            |
+| `web/public/examples/results.json` | every number on the case pages, plus the engine id; linked as the raw data  |
+| `web/public/sitemap.xml`           | the block between the `examples` markers lists the index and every page     |
+| `REPORT.md`                        | the results table in Markdown                                               |
+
+Vite copies every `web/examples/**/index.html` into the build (`STATIC_PAGES`)
+and `examples/gallery/site/` next to them. The text comes from the sources:
+each case's `page` block (model, inputs, supports, load, measured quantity,
+source, mesh grid, optional note), `textbook/<id>.mjs` (the page: introduction,
+derivation, model notes, discussion, references and the sketch from
+`lib/figures.mjs`), `convergence.mjs` (the mesh-refinement studies, which reuse
+the case builders) and `lib/page.mjs` (layout). Equations are written in a small
+TeX subset that `lib/tex.mjs` turns into MathML, so the pages stay static and
+crawlable. Every number in the text is computed from the case inputs or the
+run. Change the sources and regenerate — never edit the outputs by hand:
+
+```bash
+cd web && bun run validate:report    # ~40 s: the convergence studies dominate
+```
+
+Every plain run compares itself with the committed `results.json` — each case's
+value to 1e-4 relative, its reference, band, mesh and inputs, and the read-out
+the app's Result summary shows — checks that each case's `.vtu` holds the case's
+model, and re-renders every page from the committed data and records, which
+must match the committed HTML. It fails with the list of differences when any
+disagrees. So an engine change that moves a published number, or a text or
+layout change, fails CI until the pages are regenerated. The convergence
+studies and the figures are only refreshed by `--report`.
+`web/tests/examples-page.spec.ts` checks that the pages are served, complete and
+indexable, that the old `/validation/` addresses redirect to them, and that
+opening each example in the app and solving it shows the read-out its page
+publishes.
+
+The Cook's membrane study shows that refining the mesh moves KoFEM's result past
+the 23.9 reference (to ≈ 25 at 64 × 64 linear and 16 × 16 quadratic elements).
+The page says so; the case stays a regression check until the reference and the
+model definition are reconciled.
 
 ## Topology-optimization benchmarks
 

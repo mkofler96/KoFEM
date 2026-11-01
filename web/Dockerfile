@@ -18,7 +18,7 @@
 # Base images are pinned by digest (the tag is kept for readability): a
 # rebuilt tag upstream must not change what ships without a reviewable diff.
 # Dependabot proposes the bumps (.github/dependabot.yml).
-FROM node:20-bookworm-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 AS builder
+FROM node:26-bookworm-slim@sha256:bc0a2afd3b74ce12222fc8bab99271e66257f021078f5f4a5d687a77d280c1d9 AS builder
 COPY --from=oven/bun:1.3.6@sha256:f20d9cf365ab35529384f1717687c739c92e6f39157a35a95ef06f4049a10e4a /usr/local/bin/bun /usr/local/bin/bun
 
 WORKDIR /app
@@ -58,9 +58,15 @@ RUN bun run build
 # Defensive: production images must never contain source maps.
 RUN find dist -name '*.map' -type f -delete
 
+# Precompress the fingerprinted assets once, at the best gzip level. nginx serves
+# the .gz beside each file (gzip_static in nginx.conf.template) instead of
+# compressing per request at its default level 1: the ~35 MB engine .wasm goes
+# over the wire as 9.0 MB instead of 10.7 MB (KOF-263).
+RUN find dist/assets -type f \( -name '*.wasm' -o -name '*.js' -o -name '*.css' \) -exec gzip -9 -k {} +
+
 
 # Stage 2: Serve the static bundle with Nginx.
-FROM nginx:alpine@sha256:df221db836e1754089190208cee7eeda94f233197056426eda74a43ab1abeac2
+FROM nginx:alpine@sha256:785835ea65db4bba6f021acc0f3be91b0fef76a53fe41f8588c6698d2aed0606
 
 COPY --from=builder /app/dist /usr/share/nginx/html
 

@@ -9,6 +9,8 @@ import {
   serializeAnalysis,
 } from "../../lib/analysisFile";
 import { resetWorker } from "../../workers/sharedWorker";
+import { setWorkflow } from "../../lib/analytics";
+import { FeedbackMenu } from "./FeedbackMenu";
 import styles from "./TopBar.module.css";
 
 // A development deployment is marked at container start with
@@ -37,6 +39,7 @@ export function TopBar() {
     // in-flight mesh/solve belongs to the analysis being discarded.
     resetWorker();
     store.reset();
+    setWorkflow("none");
   }
 
   function handleSave() {
@@ -58,6 +61,7 @@ export function TopBar() {
     e.target.value = "";
     try {
       loadAnalysis(parseAnalysisFile(await file.text()));
+      setWorkflow("saved_file");
     } catch (err) {
       window.alert(`Could not load analysis: ${(err as Error).message}`);
     }
@@ -101,6 +105,7 @@ export function TopBar() {
           style={{ display: "none" }}
           onChange={handleLoadFile}
         />
+        <FeedbackMenu />
         <button
           className={styles.iconBtn}
           title="New analysis"

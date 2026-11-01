@@ -8,6 +8,7 @@ import {
   sendToWorker,
   resetWorker,
   setProgressCallback,
+  startEngine,
 } from "./workers/sharedWorker";
 
 // Exposed for Playwright tests — not part of the public API.
@@ -26,3 +27,8 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <App />
   </React.StrictMode>,
 );
+
+// Every workflow but viewing a pre-solved example needs the engine. Loading it
+// now overlaps its download with the visitor picking a file; on first request
+// the whole wait came after the pick (KOF-263).
+startEngine();

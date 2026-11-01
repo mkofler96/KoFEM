@@ -11,6 +11,7 @@ import {
 } from "../../store/geometrySlice";
 import type { TreeTarget } from "../../store/viewSlice";
 import { useGeometry } from "../../hooks/useGeometry";
+import { useEngineGate } from "../../store/engineStore";
 import { SplitSection } from "./SplitSection";
 import { BooleanSection } from "./BooleanSection";
 import { EYE_ICON, EYE_OFF_ICON } from "./bodyIcons";
@@ -28,11 +29,8 @@ const BODIES_NOTE =
   "nothing floats, so constrain it or check the assembly.";
 
 const ELEMENT_TYPE_TIP =
-  "How this body is discretised. Solid meshes it as tetrahedra (linear or " +
-  "quadratic per the mesh's element order). Shell idealises the whole body as " +
-  "Kirchhoff shells on the mid-surface of its walls, coupled to the solid " +
-  "bodies it touches — far more robust for thin parts. A part that is only " +
-  "partly thin-walled: split off the thin walls first and make only them Shell.";
+  "Solid uses tetrahedra. Shell uses wall mid-surfaces and retains solid material " +
+  "at planar joints. Split thick or curved regions into separate Solid bodies first.";
 
 // Tooltip for a body's name: what the last mesh made of its walls. Empty for a
 // body the mesh left solid, so only shelled bodies carry the hint.
@@ -81,6 +79,10 @@ const IGES_CARD_ICON = (
 function ImportSection() {
   const { isImporting, isRunning, stepImportError, importCadFile } =
     useGeometry();
+  // A file picked while the engine loads waits for it; a failed engine
+  // blocks the import with the reason on hover.
+  const engine = useEngineGate();
+  const importLabel = engine.waiting ? "Waiting for engine…" : "Importing…";
 
   const stepRef = useRef<HTMLInputElement | null>(null);
   const igesRef = useRef<HTMLInputElement | null>(null);
@@ -116,24 +118,26 @@ function ImportSection() {
       <div className={styles.cardGrid}>
         <button
           className={styles.importCard}
-          disabled={isImporting || isRunning}
+          disabled={isImporting || isRunning || engine.blocked}
+          title={engine.reason}
           onClick={() => stepRef.current?.click()}
         >
           {STEP_CARD_ICON}
           <span className={styles.cardTitle}>
-            {isImporting ? "Importing…" : "Import STEP"}
+            {isImporting ? importLabel : "Import STEP"}
           </span>
           <span className={styles.cardSub}>.step / .stp</span>
         </button>
 
         <button
           className={styles.importCard}
-          disabled={isImporting || isRunning}
+          disabled={isImporting || isRunning || engine.blocked}
+          title={engine.reason}
           onClick={() => igesRef.current?.click()}
         >
           {IGES_CARD_ICON}
           <span className={styles.cardTitle}>
-            {isImporting ? "Importing…" : "Import IGES"}
+            {isImporting ? importLabel : "Import IGES"}
           </span>
           <span className={styles.cardSub}>.igs / .iges</span>
         </button>

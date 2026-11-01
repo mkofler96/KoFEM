@@ -20,8 +20,17 @@ import type { PluginOption } from "vite";
 // necessary, so under GDPR / the ePrivacy directive they require prior
 // consent. We therefore never load gtag.js until the visitor clicks "Accept".
 // "Decline" (or a later opt-out via the footer "Cookie settings" link) sets
-// Google's documented window['ga-disable-<ID>'] flag. The choice is persisted
-// in localStorage under "kofem_analytics_consent".
+// Google's documented window['ga-disable-<ID>'] flag and expires the _ga
+// cookies. The choice is persisted in localStorage under
+// "kofem_analytics_consent".
+//
+// The loader is also the single source of truth for the app's product events
+// (src/lib/analytics.ts): it publishes the current state as
+// window.__kofemAnalyticsConsent ("granted" | "denied" | "disabled", absent
+// while the visitor has not answered) and announces every change with a
+// "kofem:analytics-consent" event. The stored choice is applied as soon as the
+// script runs, before the app's deferred module script, so a returning visitor's
+// first app event already sees it.
 
 // Token baked into the HTML when no build-time ID is given; replaced at runtime
 // by the Docker entrypoint. Kept in sync with docker-entrypoint.d/40-kofem-ga-config.sh.
@@ -126,7 +135,10 @@ export function analyticsSnippet(gaId: string | undefined): string {
         var GA_ID = "${id}";
         // Inert until a real measurement ID is present. An unreplaced runtime
         // placeholder starts with "_"; real IDs (G-…, UA-…) never do.
-        if (!GA_ID || GA_ID.charAt(0) === "_") return;
+        if (!GA_ID || GA_ID.charAt(0) === "_") {
+          window.__kofemAnalyticsConsent = "disabled";
+          return;
+        }
         var KEY = "kofem_analytics_consent";
         var disableFlag = "ga-disable-" + GA_ID;
 
@@ -150,13 +162,45 @@ export function analyticsSnippet(gaId: string | undefined): string {
           window.dataLayer = window.dataLayer || [];
           window.gtag = function () { window.dataLayer.push(arguments); };
           window.gtag("js", new Date());
-          window.gtag("config", GA_ID);
+          // No Google signals or ad personalisation: GA4 then never joins
+          // visits to signed-in Google accounts.
+          window.gtag("config", GA_ID, {
+            allow_google_signals: false,
+            allow_ad_personalization_signals: false
+          });
+        }
+
+        // Withdrawing consent also removes the cookies GA already set. They are
+        // written on the widest domain the host allows, so try every suffix.
+        function clearGACookies() {
+          var names = document.cookie.split(";");
+          var host = location.hostname.split(".");
+          for (var i = 0; i < names.length; i++) {
+            var name = names[i].split("=")[0].trim();
+            if (name.indexOf("_ga") !== 0) continue;
+            for (var j = 0; j < host.length; j++) {
+              var domain = host.slice(j).join(".");
+              document.cookie =
+                name + "=; Max-Age=0; path=/; domain=" + domain;
+            }
+            document.cookie = name + "=; Max-Age=0; path=/";
+          }
         }
 
         function apply(choice) {
           if (choice === "granted") loadGA();
-          else window[disableFlag] = true; // documented gtag.js opt-out
+          else {
+            window[disableFlag] = true; // documented gtag.js opt-out
+            clearGACookies();
+          }
+          window.__kofemAnalyticsConsent = choice;
+          window.dispatchEvent(
+            new CustomEvent("kofem:analytics-consent", { detail: choice })
+          );
         }
+
+        var stored = getChoice();
+        if (stored === "granted" || stored === "denied") apply(stored);
 
         function init() {
           var banner = document.getElementById("kofem-cookie-consent");
@@ -178,11 +222,8 @@ export function analyticsSnippet(gaId: string | undefined): string {
               banner.hidden = false;
             });
           }
-
-          var choice = getChoice();
-          if (choice === "granted") apply("granted");
-          else if (choice === "denied") apply("denied");
-          else if (banner) banner.hidden = false;
+          if (stored !== "granted" && stored !== "denied" && banner)
+            banner.hidden = false;
         }
 
         if (document.readyState === "loading") {

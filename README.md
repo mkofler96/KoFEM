@@ -12,10 +12,10 @@ compiled to WebAssembly, with a React + Three.js frontend. The software can be l
 
 ![](web/screenshots/plate-with-hole_screenshot.png)
 
-Click here to view this example on KoFEM web [Plate with Hole](https://kofem.org/app/?example=plate-with-hole)
+Open this example in KoFEM web: [Plate with a hole](https://kofem.org/app/?example=plate-with-hole) ([write-up](https://kofem.org/examples/plate-with-hole/))
 
 ![](web/screenshots/beam-torsion_screenshot.png)
-Click here to view this example on KoFEM web [Beam Torsion](https://kofem.org/app/?example=beam-torsion)
+Open this example in KoFEM web: [Square beam under torsion](https://kofem.org/app/?example=beam-torsion) ([write-up](https://kofem.org/examples/beam-torsion/))
 
 For more examples visit [KoFEM Examples](https://kofem.org/examples/)
 

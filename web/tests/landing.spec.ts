@@ -6,7 +6,7 @@ import { test, expect } from "./coverage";
 test("landing page renders and links to the solver app", async ({ page }) => {
   await page.goto("/");
   await expect(
-    page.getByRole("heading", { name: "KoFEM", exact: true }),
+    page.getByRole("heading", { name: /Finite element analysis/ }),
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: /Start Solver/i }),
@@ -132,7 +132,7 @@ test("bracket turns 90 degrees during transfer and a full turn during optimizati
 });
 
 const SITE_ORIGIN = "https://kofem.org";
-for (const path of ["/", "/examples/", "/privacy/"]) {
+for (const path of ["/", "/examples/", "/examples/axial-bar/", "/privacy/"]) {
   test(`${path} declares its canonical URL on the production origin`, async ({
     page,
   }) => {

@@ -4,10 +4,56 @@
     <loc>https://kofem.org/</loc>
     <priority>1.0</priority>
   </url>
+  <!-- examples:start -->
   <url>
     <loc>https://kofem.org/examples/</loc>
     <priority>0.8</priority>
   </url>
+  <url>
+    <loc>https://kofem.org/examples/axial-bar/</loc>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://kofem.org/examples/surface-pressure/</loc>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://kofem.org/examples/cantilever/</loc>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://kofem.org/examples/cantilever-p2/</loc>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://kofem.org/examples/cantilever-beam/</loc>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://kofem.org/examples/beam-torsion/</loc>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://kofem.org/examples/shaft-torsion/</loc>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://kofem.org/examples/plate-with-hole/</loc>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://kofem.org/examples/plate-with-hole-shell/</loc>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://kofem.org/examples/cooks-membrane/</loc>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://kofem.org/examples/mbb-beam-topopt/</loc>
+    <priority>0.6</priority>
+  </url>
+  <!-- examples:end -->
   <url>
     <loc>https://kofem.org/privacy/</loc>
     <priority>0.1</priority>

@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Privacy
+    url: https://kofem.org/privacy/#feedback
+    about: What a bug report from KoFEM includes.

@@ -3,7 +3,7 @@
 
 // Generates the classical MBB beam topology-optimization example, built end to
 // end with KoFEM's own pipeline — STEP geometry → OCCT tessellation → Netgen
-// volume mesh → SIMP/MMA optimizer — so what the gallery shows is exactly what
+// volume mesh → SIMP/MMA optimizer — so what the page shows is exactly what
 // the app produces, and the user can re-mesh and re-optimize it:
 //
 //   mbb-beam-topopt.step — the design domain: a 300 × 50 × 10 mm block whose
@@ -11,14 +11,17 @@
 //                          tool, so the two supports and the load sit on their
 //                          own CAD faces (pickable in one click, and still there
 //                          after a re-mesh).
-//   mbb-beam-topopt.vtu  — the analysis the "Open in KoFEM web" button loads:
+//   mbb-beam-topopt.vtu  — the analysis "Open in KoFEM" loads:
 //                          the Netgen mesh, the tessellation and CAD face ids
 //                          (face picking), the support/load groups and the
 //                          optimization settings. It opens in the Optimize step,
 //                          ready to run; the .step next to it is restored by
 //                          App.tsx, so the model can also be re-meshed.
-//   examples.json        — the gallery card. Its viewer shows the OPTIMIZED
-//                          design: the boundary of every tet with density ≥ 0.5.
+//   mbb-beam-topopt.png  — the figure on /examples/mbb-beam-topopt/: the
+//                          OPTIMIZED design, the boundary of every tet with
+//                          density ≥ 0.5;
+//   showcase/mbb-beam-topopt.json — the numbers on that page: settings, the
+//                          compliance history, the mesh.
 //
 // The MBB (Messerschmitt-Bölkow-Blohm) beam is the canonical minimum-compliance
 // benchmark (Olhoff et al. 1991; Sigmund 2001, "A 99 line topology optimization
@@ -45,15 +48,17 @@
 //
 // web/tests/mbb-by-hand.spec.ts walks exactly this path through the UI.
 //
-// It appends/replaces the "mbb-beam-topopt" entry in examples.json, leaving the
-// other entries untouched. Netgen is not bit-reproducible across builds, so a
-// re-run can move the numbers on the card slightly.
+// Netgen is not bit-reproducible across builds, so a re-run can move the
+// numbers on the page slightly; regenerate the pages afterwards
+// (bun run validate:report).
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { loadEngine } from "../shell-coupling/lib.mjs";
 import { prismStep } from "./step-prism.mjs";
+import { resultFigure } from "../validation/lib/render.mjs";
+import { writeShowcase } from "../validation/catalog.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const outDir = join(here, "site");
@@ -432,7 +437,7 @@ function buildVtu() {
   ].join("\n");
 }
 
-// ── Gallery viewer: the boundary of the solid (ρ ≥ 0.5) design ────────────────
+// ── The figure: the boundary of the solid (ρ ≥ 0.5) design ────────────────────
 // A tet face is on the boundary of the thresholded design when exactly one solid
 // tet owns it. Vertex colour is the mean density of the solid tets meeting at
 // that vertex, which reads as a smooth field rather than per-tet speckle.
@@ -476,58 +481,75 @@ for (const { face, count } of owners.values()) {
     triangles.push(local.get(v));
   }
 }
-const round = (arr, p) => arr.map((x) => Number(x.toPrecision(p)));
-
-const entry = {
-  id: ID,
-  title: TITLE,
-  blurb:
-    "The classical minimum-compliance benchmark: a simply-supported beam with a " +
-    "central load and half its material to spend. SIMP + MMA carves the solid " +
-    "block into the textbook truss: a compression chord sloping down to the " +
-    "supports, a straight tension tie and a web of diagonals. Open it in KoFEM " +
-    "web and press Optimize to watch it emerge, or re-mesh it first.",
-  showcase: true,
-  appId: ID,
-  metrics: [
-    {
-      k: `compliance · ${history.length} iterations`,
-      v: `${c0.toFixed(0)} → ${cN.toFixed(0)} N·mm (−${((1 - cN / c0) * 100).toFixed(0)}%)`,
-    },
-    {
-      k: "volume fraction",
-      v: `${volN.toFixed(3)} (target ${SETTINGS.constraints.volumeFraction})`,
-      pass: converged,
-    },
-  ],
-  referenceLabel:
-    "Sigmund 99-line / Andreassen 88-line MBB · SIMP p = 3 · MMA · Netgen tet mesh · density ≥ 0.5 shown",
-  colorLabel: "Element density",
-  viewer: {
-    center: [L / 2, H / 2, T / 2],
-    // Framing, not a measure: the slender beam fills the card at ~0.6·L.
-    modelSize: 0.6 * L,
-    deformScale: 0,
-    magMin: 0,
-    magMax: 1,
-    positions: round(positions, 7),
+const { png, meta: figure } = resultFigure(
+  {
+    positions,
     displacements: positions.map(() => 0),
-    magnitudes: round(magnitudes, 3),
+    scalars: magnitudes,
     triangles,
   },
-};
+  { field: "density", unit: "", view: [-0.3, -0.25, -1], deform: false },
+);
 
 writeFileSync(join(outDir, `${ID}.step`), step);
 writeFileSync(join(outDir, `${ID}.vtu`), buildVtu());
-const manifestPath = join(outDir, "examples.json");
-const manifest = JSON.parse(readFileSync(manifestPath, "utf8")).filter(
-  (e) => e.id !== entry.id,
+writeShowcase(
+  {
+    id: ID,
+    name: "MBB beam, topology optimization",
+    script: "examples:generate-mbb-topopt",
+    headline: `Compliance ${c0.toFixed(1)} → ${cN.toFixed(1)} N·mm in ${history.length} iterations at volume fraction ${volN.toFixed(3)}`,
+    inputs: [
+      { symbol: "L", value: L, unit: "mm" },
+      { symbol: "H", value: H, unit: "mm" },
+      { symbol: "t", value: T, unit: "mm" },
+      { symbol: "E", value: STEEL.young, unit: "MPa" },
+      { symbol: "ν", value: STEEL.poisson, unit: "" },
+      { symbol: "F", value: F, unit: "N" },
+    ],
+    mesh: {
+      elements: `${nTets.toLocaleString("en-US")} linear 4-node tetrahedra (P1)`,
+      nodes: nNodes,
+      dofs: 3 * nNodes,
+      maxElementSize: MAX_ELEMENT_SIZE,
+    },
+    settings: {
+      volumeFraction: SETTINGS.constraints.volumeFraction,
+      penalty: SETTINGS.penalty,
+      filterRadius: SETTINGS.filterRadius,
+      moveLimit: SETTINGS.moveLimit,
+      maxIterations: SETTINGS.maxIterations,
+      tolerance: SETTINGS.tolerance,
+      threshold: THRESHOLD,
+    },
+    history: history.map((h) => ({
+      objective: h.objective,
+      volume: h.volume,
+      maxChange: h.max_change,
+    })),
+    solid: nSolid,
+    void: nVoid,
+    seconds,
+    readout: null,
+    figure,
+    page: {
+      summary:
+        "A simply supported beam with half its material to spend. The optimizer carves the block into a truss.",
+      model: `Block of span L, height H and thickness t; pads of ${PAD} mm at the supports and ${LOAD_PAD} mm under the load.`,
+      supports:
+        "Bottom-left pad fixed (Ux, Uy, Uz); bottom-right pad Uy only (a roller).",
+      loads: "F in −y as a force on the pad at the top of mid-span.",
+      measured:
+        "Compliance F·u, the work done by the load, at half the volume.",
+      mesh: `Netgen, ${MAX_ELEMENT_SIZE} mm maximum element size`,
+      source: "Sigmund (2001); Andreassen et al. (2011)",
+    },
+  },
+  png,
 );
-manifest.push(entry);
-writeFileSync(manifestPath, JSON.stringify(manifest));
 
 console.log(
   `${ID}: ${nNodes} nodes, ${nTets} tets; ${history.length} it (converged: ${converged}) ` +
     `in ${seconds.toFixed(1)} s, compliance ${c0.toFixed(1)} → ${cN.toFixed(1)}, ` +
-    `volume ${volN.toFixed(4)}, ${nSolid} solid / ${nVoid} void → ${ID}.{step,vtu} + examples.json`,
+    `volume ${volN.toFixed(4)}, ${nSolid} solid / ${nVoid} void → ${ID}.{step,vtu,png} + showcase/${ID}.json`,
 );

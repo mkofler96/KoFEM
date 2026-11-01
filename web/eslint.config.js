@@ -29,6 +29,13 @@ export default [
     },
   },
   {
+    // Keep the extracted overlays below DeepSource's high-risk threshold.
+    files: [
+      "src/components/viewport/{BcFaceHighlights,BcNodeMarkers,BoundaryConditionLayer,CouplingOverlay,FaceOverlay,LoadArrows,PickHighlights,TieOverlay,bcOverlayShared}.{ts,tsx}",
+    ],
+    rules: { complexity: ["error", 20] },
+  },
+  {
     // Mirrors DeepSource JS-C1003 (issue #341). Covers tests/ as well —
     // 3 of the 10 findings on #340 were in specs.
     files: ["src/**/*.{ts,tsx}", "tests/**/*.{ts,mjs}"],

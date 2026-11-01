@@ -15,6 +15,7 @@
 #include "bc_validation.h"
 #include "json_util.h"
 #include "shell_core.h"
+#include "shell_element.h"
 #include "wasm_util.h"
 
 #include <string>

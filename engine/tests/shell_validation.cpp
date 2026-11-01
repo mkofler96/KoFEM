@@ -13,11 +13,15 @@
 // Membrane: uniaxial tension, tip extension delta = sigma L / E.
 
 #include "shell_core.h"
+#include "shell_element.h"
+#include "tet_element.h"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <stdexcept>
+#include <string>
 #include <vector>
 
 using namespace kofem::shell;
@@ -534,15 +538,95 @@ bool shell_conflicting_prescribed_throws() {
     plate_mesh(1.0, 2, V, T);
     ShellInput in;
     in.vertices = V; in.triangles = T; in.thickness = 0.01; in.young = 1e7; in.poisson = 0.3;
-    for (int nd = 0; nd < 9; ++nd) for (int c = 0; c < 6; ++c) in.fixed_dofs.push_back(6 * nd + c);
+    for (int nd = 0; nd < 9; ++nd)
+        for (int c = 0; c < 6; ++c)
+            if (6 * nd + c != 6 * 4 + 2) in.fixed_dofs.push_back(6 * nd + c);
     in.prescribed_dofs.emplace_back(6 * 4 + 2, 1e-3);
     in.prescribed_dofs.emplace_back(6 * 4 + 2, 2e-3);
     try {
         solve_shell_core(in);
-    } catch (const std::exception&) {
-        return true;
+    } catch (const std::exception& e) {
+        return std::string(e.what()).find("prescribed to 0.001 and also prescribed to 0.002") !=
+               std::string::npos;
     }
     return false;
+}
+
+bool footprint_rigid_motion() {
+    CoupledInput in;
+    in.n_nodes = 4;
+    in.vertices = {0,0,0, 2,0,0, 0,0,2, 1,1,0};
+    in.triangles = {0,1,2};
+    in.thickness = 0.1; in.shell_young = 1e5; in.shell_poisson = 0.3;
+    for (int component = 0; component < 3; ++component)
+        in.solid_stiffness.push_back({9 + component, 9 + component, 1});
+    Coupling cp;
+    cp.kind = CouplingKind::ShellFootprint; cp.ref_node = 3;
+    cp.solid_nodes = {0,1}; cp.weights = {0.5,0.5};
+    in.couplings.push_back(cp);
+    double error = 0;
+    for (int motion = 0; motion < 7; ++motion) {
+        in.prescribed_dofs.clear();
+        for (int node = 0; node < 3; ++node) {
+            const size_t vertex_offset = 3 * static_cast<size_t>(node);
+            const std::array<double,3> position = {in.vertices[vertex_offset], in.vertices[vertex_offset+1], in.vertices[vertex_offset+2]};
+            const std::array<double,3> theta = {motion == 3 ? 1.0 : 0, motion == 4 ? 1.0 : 0, motion == 5 ? 1.0 : 0};
+            for (int component = 0; component < 3; ++component) {
+                double value = (motion == component ? 1.0 : 0) + theta[(component+1)%3]*position[(component+2)%3] - theta[(component+2)%3]*position[(component+1)%3];
+                if (motion == 6) value = component == 0 ? position[0] : 0;
+                in.prescribed_dofs.emplace_back(6*node+component,value);
+                in.prescribed_dofs.emplace_back(6*node+3+component,theta[component]);
+            }
+        }
+        const auto result = solve_solid_shell_core(in);
+        if (!result.converged) return false;
+        for (int component = 0; component < 3; ++component) {
+            const std::array<double,3> position = {1,1,0};
+            const std::array<double,3> theta = {motion == 3 ? 1.0 : 0, motion == 4 ? 1.0 : 0, motion == 5 ? 1.0 : 0};
+            double expected = (motion == component ? 1.0 : 0) + theta[(component+1)%3]*position[(component+2)%3] - theta[(component+2)%3]*position[(component+1)%3];
+            if (motion == 6) expected = component == 0 ? 1.0 : 0;
+            error = std::max(error,std::abs(result.dofs[18+component]-expected));
+        }
+    }
+    return error < 1e-10;
+}
+
+// A DOF that a fixed support pins to zero and a prescribed displacement drives
+// to a non-zero value is the same contradiction (KOF-218) — it used to resolve
+// silently in favour of the prescribed value. The same value twice is fine.
+bool shell_fixed_and_prescribed_throws() {
+    std::vector<double> V; std::vector<int> T;
+    plate_mesh(1.0, 2, V, T);
+    ShellInput in;
+    in.vertices = V; in.triangles = T; in.thickness = 0.01; in.young = 1e7; in.poisson = 0.3;
+    for (int nd = 0; nd < 9; ++nd) for (int c = 0; c < 6; ++c) in.fixed_dofs.push_back(6 * nd + c);
+    in.prescribed_dofs.emplace_back(6 * 4 + 2, 1e-3);
+    try {
+        solve_shell_core(in);
+    } catch (const std::exception& e) {
+        return std::string(e.what()).find("fixed to 0 and also prescribed to 0.001") !=
+               std::string::npos;
+    }
+    return false;
+}
+
+bool shell_identical_duplicates_solve() {
+    std::vector<double> V; std::vector<int> T;
+    plate_mesh(1.0, 2, V, T);
+    ShellInput in;
+    in.vertices = V; in.triangles = T; in.thickness = 0.01; in.young = 1e7; in.poisson = 0.3;
+    for (int nd = 0; nd < 9; ++nd)
+        for (int c = 0; c < 6; ++c)
+            if (6 * nd + c != 6 * 4 + 2) in.fixed_dofs.push_back(6 * nd + c);
+    in.prescribed_dofs.emplace_back(6 * 0 + 2, 0.0);  // fixed AND prescribed to 0
+    in.prescribed_dofs.emplace_back(6 * 4 + 2, 1e-3);
+    in.prescribed_dofs.emplace_back(6 * 4 + 2, 1e-3);
+    try {
+        const ShellResult r = solve_shell_core(in);
+        return std::abs(r.dofs[6 * 4 + 2] - 1e-3) < 1e-12;
+    } catch (const std::exception&) {
+        return false;
+    }
 }
 
 }  // namespace
@@ -552,6 +636,9 @@ int main() {
     const double D = E * t * t * t / (12.0 * (1.0 - nu * nu));
     int failures = 0;
 
+    const bool footprint_ok = footprint_rigid_motion();
+    if (!footprint_ok) ++failures;
+    printf("  [%s] footprint rigid and affine motion\n", footprint_ok ? "PASS" : "FAIL");
     printf("Kirchhoff shell (DKT+CST) validation:\n");
     // Both plate cases converge from a discretisation error, so the finest mesh
     // must land inside a tight band; coarse meshes carry more error by design.
@@ -627,7 +714,17 @@ int main() {
         if (!conflict) ++failures;
         printf("  [%s] %-28s %s\n", conflict ? "PASS" : "FAIL",
                "conflicting prescribed throws",
-               conflict ? "rejected as expected" : "did NOT throw");
+               conflict ? "rejected as expected" : "did NOT throw a named conflict");
+        const bool fixed_conflict = shell_fixed_and_prescribed_throws();
+        if (!fixed_conflict) ++failures;
+        printf("  [%s] %-28s %s\n", fixed_conflict ? "PASS" : "FAIL",
+               "fixed+prescribed throws",
+               fixed_conflict ? "rejected as expected" : "did NOT throw a named conflict");
+        const bool duplicates = shell_identical_duplicates_solve();
+        if (!duplicates) ++failures;
+        printf("  [%s] %-28s %s\n", duplicates ? "PASS" : "FAIL",
+               "identical duplicates solve",
+               duplicates ? "solved, value honoured" : "rejected or value lost");
     }
 
     printf(failures != 0 ? "\n%d check(s) FAILED\n" : "\nall checks passed\n", failures);

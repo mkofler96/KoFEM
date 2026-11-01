@@ -76,15 +76,32 @@ export function sameFaceNodes(a: number[], b: number[]): boolean {
  * their node-id set (see `sameFaceNodes`). The result is relabeled
  * "<noun> 1..N" by position so labels stay contiguous after a toggle. `noun`
  * is "Face" for region picks and "Edge" for polyline picks.
+ *
+ * `floodFillTri` is the clicked triangle of a face pick that had no CAD face
+ * behind it. The flood fill's region depends on its seed (on a finely
+ * tessellated curve it is a band around the click; on a coarse one a facet
+ * strip or the whole surface), so a second click on the same surface can grow
+ * a different node set. Such a click still toggles off the first flood-fill
+ * selection whose nodes include all three of the clicked triangle's
+ * (KOF-211). CAD-face selections are exact and keep the node-set comparison
+ * only.
  */
 export function toggleFaceSelection(
   current: PickedFace[],
   picked: PickedFace,
   noun: SelectionNoun = "Face",
+  floodFillTri?: Tri,
 ): PickedFace[] {
-  const existingIdx = current.findIndex((f) =>
+  let existingIdx = current.findIndex((f) =>
     sameFaceNodes(f.nodeIds, picked.nodeIds),
   );
+  if (existingIdx < 0 && floodFillTri !== undefined) {
+    existingIdx = current.findIndex(
+      (f) =>
+        f.cadFaceId === undefined &&
+        floodFillTri.every((id) => f.nodeIds.includes(id)),
+    );
+  }
   const next =
     existingIdx >= 0
       ? current.filter((_, i) => i !== existingIdx)

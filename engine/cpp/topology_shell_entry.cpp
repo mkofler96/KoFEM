@@ -281,6 +281,17 @@ val optimize_topology_coupled(val mesh, val coupling, val bcs, const std::string
     std::vector<int> cref = i32_vector(coupling["ref"], "coupling.ref");
     std::vector<int> coff = i32_vector(coupling["offsets"], "coupling.offsets");
     std::vector<int> csolid = i32_vector(coupling["solid"], "coupling.solid");
+    std::vector<double> cweights;
+    val weights_js = coupling["weights"];
+    if (!weights_js.isUndefined() && !weights_js.isNull())
+        cweights = f64_vector(weights_js, "coupling.weights");
+    if ((!cweights.empty() && cweights.size() != csolid.size()) ||
+        coff.size() != cref.size() + 1 || coff.empty() || coff.front() != 0 ||
+        coff.back() != static_cast<int>(csolid.size()))
+        return error_result("coupled: inconsistent coupling offsets or weights");
+    for (size_t k = 1; k < coff.size(); ++k)
+        if (coff[k] < coff[k - 1] || coff[k] > static_cast<int>(csolid.size()))
+            return error_result("coupled: invalid coupling offsets");
     std::vector<int> cmpc;
     val mpc_js = coupling["mpc"];
     if (!mpc_js.isUndefined() && !mpc_js.isNull()) cmpc = i32_vector(mpc_js, "coupling.mpc");
@@ -293,7 +304,10 @@ val optimize_topology_coupled(val mesh, val coupling, val bcs, const std::string
     for (size_t k = 0; k < cref.size(); ++k) {
         kofem::shell::Coupling cp;
         cp.ref_node = cref[k];
-        for (int i = coff[k]; i < coff[k + 1]; ++i) cp.solid_nodes.push_back(csolid[i]);
+        for (int i = coff[k]; i < coff[k + 1]; ++i) {
+            cp.solid_nodes.push_back(csolid[i]);
+            if (!cweights.empty()) cp.weights.push_back(cweights[i]);
+        }
         const int kind = k < cmpc.size() ? cmpc[k] : 0;
         if (kind == 1) {
             cp.kind = kofem::shell::CouplingKind::RelaxedMpc;
@@ -304,6 +318,8 @@ val optimize_topology_coupled(val mesh, val coupling, val bcs, const std::string
             if ((cp.dof_mask & kofem::shell::kAllDofs) == 0)
                 return error_result("coupled topology optimization: coupling " +
                                     std::to_string(k) + " is kinematic but couples no DOF");
+        } else if (kind == 3) {
+            cp.kind = kofem::shell::CouplingKind::ShellFootprint;
         } else if (kind != 0) {
             return error_result("coupled topology optimization: coupling " + std::to_string(k) +
                                 " has unknown kind " + std::to_string(kind));

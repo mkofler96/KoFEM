@@ -1,15 +1,16 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Generates the interactive gallery card AND the openable analysis file for the
-// SHELL version of the plate with a hole:
+// Generates the SHELL version of the plate with a hole,
+// /examples/plate-with-hole-shell/:
 //
 //   plate-with-hole-shell.vtu — a complete KoFEM analysis (CTRIA3 shell mesh +
 //                               PSHELL property with thickness + BC/load groups
-//                               + solved fields). This is what the card's
-//                               "Open in KoFEM web" button loads, and the app
-//                               re-solves it through its pure-shell solve path.
-//   examples.json             — the card entry merged into the gallery manifest.
+//                               + solved fields). This is what "Open in KoFEM"
+//                               loads, and the app re-solves it through its
+//                               pure-shell solve path.
+//   plate-with-hole-shell.png — the page's figure;
+//   showcase/plate-with-hole-shell.json — the numbers on the page.
 //
 // It is the exact same Kirsch stress-concentration problem as the solid
 // `plate-with-hole` benchmark — same geometry, material and remote tension —
@@ -20,22 +21,25 @@
 //
 //   bun examples/gallery/generate-plate-hole-shell.mjs
 //
-// Like the crane showcase it has its own generator (the benchmark pipeline in
-// generate.mjs only knows solid hex meshes + solve_linear_elastic), and it
-// appends/replaces the "plate-with-hole-shell" entry, leaving the other entries
-// untouched.
+// It has its own generator because the validation runner only knows solid
+// hex meshes and solve_linear_elastic. Regenerate the pages afterwards
+// (bun run validate:report).
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { loadEngine } from "../shell-coupling/lib.mjs";
 import { plateWithHoleShellMesh, nodesWhere } from "../validation/lib/mesh.mjs";
+import { appReadout } from "../validation/lib/app-model.mjs";
+import { resultFigure } from "../validation/lib/render.mjs";
+import { writeShowcase } from "../validation/catalog.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const outDir = join(here, "site");
 
-// Same canonical mm/MPa system and geometry as the solid plate-with-hole card
-// (examples.mjs): steel, a/b = 0.1 ⇒ ≈ infinite-plate Kt, σ = 100 MPa tension.
+// Same canonical mm/MPa system and geometry as the solid plate with a hole
+// (examples/validation/cases/plate-with-hole.mjs): steel, a/b = 0.1 ⇒
+// ≈ infinite-plate Kt, σ = 100 MPa tension.
 const STEEL = { young_modulus: 210000, poisson_ratio: 0.3, density: 7.85e-9 };
 const a = 1000, // hole radius (mm)
   b = 10000, // plate half-width (mm)
@@ -231,81 +235,82 @@ function buildShellVtu() {
   ].join("\n");
 }
 
-// ── Gallery viewer surface (the shell triangles are already the surface) ───────
+// ── The example page: record and figure ────────────────────────────────────────
+// The figure: the facet von Mises stress averaged to the nodes (as the app
+// averages it), face-on around the hole, like the solid plate's.
 const disp = r.displacements;
-const positions = [];
-const displacements = [];
-const magnitudes = [];
-let magMin = Infinity,
-  magMax = -Infinity;
-for (let i = 0; i < nNodes; i++) {
-  positions.push(m.vertices[i][0], m.vertices[i][1], m.vertices[i][2]);
-  const dx = disp[3 * i],
-    dy = disp[3 * i + 1],
-    dz = disp[3 * i + 2];
-  displacements.push(dx, dy, dz);
-  const mag = Math.hypot(dx, dy, dz);
-  magnitudes.push(mag);
-  magMin = Math.min(magMin, mag);
-  magMax = Math.max(magMax, mag);
-}
-const triangles = m.triangles.flat();
-
-let mn = [Infinity, Infinity, Infinity],
-  mx = [-Infinity, -Infinity, -Infinity];
-for (let i = 0; i < nNodes; i++)
-  for (let k = 0; k < 3; k++) {
-    mn[k] = Math.min(mn[k], positions[3 * i + k]);
-    mx[k] = Math.max(mx[k], positions[3 * i + k]);
+const vmSum = new Float64Array(nNodes);
+const vmCount = new Uint32Array(nNodes);
+m.triangles.forEach((tri, e) => {
+  for (const v of tri) {
+    vmSum[v] += r.von_mises[e];
+    vmCount[v]++;
   }
-const modelSize = Math.max(mx[0] - mn[0], mx[1] - mn[1], mx[2] - mn[2], 1e-9);
-const deformScale = magMax < 1e-30 ? 1 : (0.2 * modelSize) / magMax;
-const round = (arr, p) => arr.map((x) => Number(x.toPrecision(p)));
-
-const entry = {
-  id: "plate-with-hole-shell",
-  title: "Plate with a hole — shells",
-  blurb:
-    "The exact same Kirsch stress-concentration problem as the solid plate " +
-    "with a hole, but the through-thickness hexes are replaced by a single-layer " +
-    "Kirchhoff shell (DKT + CST). Loaded in its own plane it is plane stress, and " +
-    "the peak facet stress at the hole still approaches Kt = 3.",
-  showcase: true,
-  // "Open in KoFEM web" opens this card's own shell analysis — the app solves
-  // pure-shell (CTRIA3) models through the engine's Kirchhoff shell solver.
-  appId: "plate-with-hole-shell",
-  metrics: [
-    { k: "stress concentration Kt", v: Kt.toFixed(2) },
-    {
-      k: "vs. Kirsch Kt = 3",
-      v: `${errPct.toFixed(1)}% err`,
-      pass: errPct <= 15,
-    },
-  ],
-  referenceLabel: "Kt = 3 (Kirsch) · Kirchhoff shell (DKT + CST membrane)",
-  colorLabel: "Displacement magnitude",
-  viewer: {
-    center: [(mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2, (mn[2] + mx[2]) / 2],
-    modelSize,
-    deformScale,
-    magMin,
-    magMax,
-    positions: round(positions, 7),
-    displacements: round(displacements, 6),
-    magnitudes: round(magnitudes, 6),
-    triangles,
+});
+const { png, meta: figure } = resultFigure(
+  {
+    positions: m.vertices.flat(),
+    displacements: Array.from(disp),
+    scalars: Array.from(vmSum, (sum, v) => sum / vmCount[v]),
+    triangles: m.triangles.flat(),
   },
-};
+  {
+    field: "vonMises",
+    unit: "MPa",
+    view: [0, 0, -1],
+    deform: false,
+    focus: { center: [0, 0, 0], half: 3200, aspect: 0.6 },
+  },
+);
 
 writeFileSync(join(outDir, "plate-with-hole-shell.vtu"), buildShellVtu());
-
-const manifestPath = join(outDir, "examples.json");
-const manifest = JSON.parse(readFileSync(manifestPath, "utf8")).filter(
-  (e) => e.id !== entry.id,
+writeShowcase(
+  {
+    id: "plate-with-hole-shell",
+    name: "Plate with a hole, shell elements",
+    script: "examples:generate-plate-hole-shell",
+    quantity: "stress-concentration factor Kt",
+    unit: "",
+    reference: 3,
+    referenceLabel: "Kt = 3 (infinite plate)",
+    fe: Kt,
+    errPct: ((Kt - 3) / 3) * 100,
+    inputs: [
+      { symbol: "a", value: a, unit: "mm" },
+      { symbol: "b", value: b, unit: "mm" },
+      { symbol: "t", value: t, unit: "mm" },
+      { symbol: "E", value: STEEL.young_modulus, unit: "MPa" },
+      { symbol: "ν", value: STEEL.poisson_ratio, unit: "" },
+      { symbol: "σ", value: sigma, unit: "MPa" },
+    ],
+    mesh: {
+      elements: `${m.triangles.length.toLocaleString("en-US")} 3-node Kirchhoff shell triangles (DKT bending, CST membrane)`,
+      nodes: nNodes,
+      dofs: 6 * nNodes,
+      rings: m.nr,
+      around: m.nth,
+    },
+    readout: {
+      field: "Ux",
+      stat: "Max",
+      value: appReadout({ displacements: disp }, "Ux", "Max"),
+    },
+    figure,
+    page: {
+      summary:
+        "The same plate as a single layer of shell triangles on its mid-surface instead of solid elements.",
+      model:
+        "Square plate of half-width b and thickness t, central hole of radius a, as a mid-surface.",
+      supports: "x = −b edge fixed (all six DOFs).",
+      loads: "σ·2b·t in +x as a force on the x = +b edge.",
+      measured: "Peak facet von Mises stress around the hole, divided by σ.",
+      mesh: `O-grid, ${m.nr} rings × ${m.nth} around the hole, two triangles per quad`,
+      source: "Kirsch (1898); Timoshenko & Goodier",
+    },
+  },
+  png,
 );
-manifest.push(entry);
-writeFileSync(manifestPath, JSON.stringify(manifest));
 console.log(
   `plate-with-hole-shell: ${r.iterations} it, ${nNodes} nodes, ` +
-    `${triangles.length / 3} triangles, Kt=${Kt.toFixed(3)} (err ${errPct.toFixed(1)}%) → ${manifestPath} + plate-with-hole-shell.vtu`,
+    `${m.triangles.length} triangles, Kt=${Kt.toFixed(3)} (err ${errPct.toFixed(1)}%) → plate-with-hole-shell.{vtu,png} + showcase/plate-with-hole-shell.json`,
 );

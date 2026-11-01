@@ -1,93 +1,101 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Square prismatic beam under torsion — Saint-Venant torsion of a non-circular
-// section, the torsional counterpart to the cantilever-bending case.
+// Square beam under torsion — Saint-Venant torsion of a non-circular section.
 //
-//   The same beam (fixed at x=0, square b×b cross-section, length L) is twisted
-//   by a torque T about its own axis applied over the x=L face. Unlike a circular
-//   shaft the cross-section warps, so the angle of twist uses the torsion
-//   constant K (not the polar moment J):
-//        θ = T·L / (G·K),   K = β·b⁴,   β = 1/3 − 0.21·(1 − 1/12) ≈ 0.1408
-//        G = E / [2(1+ν)].
-//   (β is the b/a → 1 limit of the rectangular-bar constant
-//    K = a·b³·[1/3 − 0.21·(b/a)·(1 − b⁴/(12a⁴))], a ≥ b.)
+//   Beam of length L along x, square b × b section, clamped at x=0, torque T
+//   about the beam axis on the free end face. Angle of twist θ = T·L / (G·K),
+//   G = E/(2(1+ν)), K = β·b⁴ with Roark's square-section constant
+//   β = 1/3 − 0.21·(1 − 1/12) ≈ 0.1408.
 //
-//   The torque is applied as tangential nodal forces scaled ∝ r so the net force
-//   is zero and the net moment about x is exactly T (the same work-equivalent
-//   couple the UI builds for a moment load). This is not the exact Saint-Venant
-//   end traction for a square, but by Saint-Venant's principle the twist away
-//   from the end is unaffected; the free-end twist is read back from the
-//   tangential displacement, a displacement quantity that validates tightly. The
-//   ~2% under-prediction is the physical warping restraint of the clamped end.
+// The torque is a moment load on the end face, which the app turns into
+// tangential nodal forces ∝ r about the face centroid. The clamp restrains
+// warping, which stiffens the bar slightly, hence the band.
 //
-// Reference: Saint-Venant torsion of a square bar (Timoshenko & Goodier, "Theory
-// of Elasticity", torsion of prismatic bars; Roark's rectangular-section K).
+// Reference: Timoshenko & Goodier, "Theory of Elasticity"; Roark's Formulas.
 
 import { boxHexMesh, nodesWhere } from "../lib/mesh.mjs";
+import { STEEL } from "../lib/app-model.mjs";
 
-const E = 210e9; // Pa
-const nu = 0.3;
+const E = STEEL.young_modulus; // MPa
+const nu = STEEL.poisson_ratio;
 const G = E / (2 * (1 + nu));
-const L = 1.0; // m
-const b = 0.1; // square side (m)
-const T = 1000; // N·m about x
+const L = 1000; // mm
+const b = 100; // square side (mm)
+const T = 1.0e6; // N·mm about x
+const DIV = [20, 6, 6]; // elements along x, y, z
 
 const beta = 1 / 3 - 0.21 * (1 - 1 / 12); // square-section (b/a = 1) constant
 const K = beta * b ** 4;
 
 export default {
+  id: "beam-torsion",
   name: "Square beam under torsion",
   quantity: "angle of twist θ",
   unit: "rad",
   reference: (T * L) / (G * K),
   referenceLabel: "θ = T·L / (G·K)",
   tolPct: 5,
-  run(solve) {
-    const m = boxHexMesh(L, b, b, 20, 6, 6);
-    const fixed = nodesWhere(m.vertices, (x) => x <= 1e-9);
-    const tip = nodesWhere(m.vertices, (x) => x >= L - 1e-9);
-
-    // Cross-section centroid of the loaded face (the torsion axis).
-    const cy = tip.reduce((s, v) => s + m.vertices[v][1], 0) / tip.length;
-    const cz = tip.reduce((s, v) => s + m.vertices[v][2], 0) / tip.length;
-
-    // Tangential forces ∝ r about x, scaled so Σ r·ft = T (zero net force).
-    const sumR2 = tip.reduce((s, v) => {
-      const y = m.vertices[v][1] - cy,
-        z = m.vertices[v][2] - cz;
-      return s + y * y + z * z;
-    }, 0);
-    const c = T / sumR2;
-    const loads = tip.map((v) => {
-      const y = m.vertices[v][1] - cy,
-        z = m.vertices[v][2] - cz;
-      return { vertex: v, force: [0, -c * z, c * y] };
-    });
-
-    const result = solve(
-      { vertices: m.vertices, hexahedra: m.hexahedra },
-      { young_modulus: E, poisson_ratio: nu, density: 7850 },
-      { fixed_vertices: fixed, point_loads: loads },
-      1,
-    );
-
-    // θ = mean of (r × u)_x / r²  over the free-end face.
-    return (
-      tip.reduce((s, v) => {
-        const y = m.vertices[v][1] - cy,
-          z = m.vertices[v][2] - cz;
-        const r2 = y * y + z * z;
-        if (r2 < 1e-12) return s;
-        const uy = result.displacements[v * 3 + 1],
-          uz = result.displacements[v * 3 + 2];
-        return s + (y * uz - z * uy) / r2;
-      }, 0) /
-      tip.filter((v) => {
-        const y = m.vertices[v][1] - cy,
-          z = m.vertices[v][2] - cz;
-        return y * y + z * z >= 1e-12;
-      }).length
-    );
+  readout: { field: "|U|", stat: "Max" },
+  page: {
+    summary:
+      "Torsion of a square section, which warps. The clamp holds the warping back.",
+    model:
+      "Beam of length L along x, square b × b section; K = β·b⁴, β = 1/3 − 0.21·(1 − 1/12).",
+    inputs: [
+      ["L", L, "mm"],
+      ["b", b, "mm"],
+      ["E", E, "MPa"],
+      ["ν", nu, ""],
+      ["T", T, "N·mm"],
+    ],
+    supports: "x = 0 face fixed (Ux, Uy, Uz).",
+    loads: "Torque T about x as a moment on the x = L face.",
+    measured: "Mean rotation of the x = L face about the axis.",
+    mesh: `${DIV.join(" × ")} grid`,
+    source: "Timoshenko & Goodier, Theory of Elasticity; Roark",
+    grid: DIV,
+  },
+  model() {
+    const m = boxHexMesh(L, b, b, ...DIV);
+    return {
+      title: this.name,
+      mesh: { vertices: m.vertices, hexahedra: m.hexahedra },
+      material: STEEL,
+      order: 1,
+      support: {
+        nodes: nodesWhere(m.vertices, (x) => x <= 1e-9),
+        label: "Clamped end x = 0",
+      },
+      load: {
+        kind: "moment",
+        axis: 0,
+        value: T,
+        nodes: nodesWhere(m.vertices, (x) => x >= L - 1e-9),
+        label: "Torque (about X)",
+      },
+      resultType: "Displacement (magnitude)",
+    };
+  },
+  // θ = mean of (r × u)_x / r² over the end-face nodes off the axis.
+  measure(model, result) {
+    const { vertices } = model.mesh;
+    const tip = model.load.nodes;
+    const cy = tip.reduce((s, v) => s + vertices[v][1], 0) / tip.length;
+    const cz = tip.reduce((s, v) => s + vertices[v][2], 0) / tip.length;
+    let sum = 0,
+      n = 0;
+    for (const v of tip) {
+      const y = vertices[v][1] - cy,
+        z = vertices[v][2] - cz;
+      const r2 = y * y + z * z;
+      if (r2 < 1e-9) continue;
+      sum +=
+        (y * result.displacements[3 * v + 2] -
+          z * result.displacements[3 * v + 1]) /
+        r2;
+      n++;
+    }
+    return sum / n;
   },
 };

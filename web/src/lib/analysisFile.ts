@@ -21,6 +21,7 @@ import type {
   VolMesh,
 } from "../store/modelStore";
 import { DEFAULT_TOPOPT_SETTINGS, RESULT_TYPES } from "../store/modelStore";
+import { parseHandCheck, type HandCheck } from "./handCheck";
 
 // ── KoFEM analysis file format (.vtu) ─────────────────────────────────────────
 //
@@ -94,6 +95,10 @@ export interface AnalysisState {
   // existed — such a file restores the default settings. The density field a
   // run produces is a transient result and is not saved.
   topOpt?: TopOptSettingsState;
+  // FE polynomial order of the solve (1 linear, 2 quadratic).
+  elementOrder: number;
+  // The closed-form check a gallery example carries (lib/handCheck), or null.
+  handCheck: HandCheck | null;
 }
 
 // Setup state embedded as JSON in the "KoFEM" FieldData string array.
@@ -131,6 +136,11 @@ interface KofemFieldDataV1 {
   surfaceFaceIds: number[] | null;
   // Topology-optimization setup. Absent in files written before TO existed.
   topOpt?: TopOptSettingsState;
+  // Absent in files written before the order was saved; they were solved with
+  // whatever order the session had, and reopen linear (the app's default).
+  elementOrder?: number;
+  // Only gallery examples carry one.
+  handCheck?: HandCheck;
 }
 
 // ── VTK cell types (vtkCellType.h) ────────────────────────────────────────────
@@ -272,6 +282,8 @@ export function serializeAnalysis(state: AnalysisState): string {
     surfaceTriangles: state.surfaceTriangles,
     surfaceFaceIds: state.surfaceFaceIds,
     topOpt: state.topOpt,
+    elementOrder: state.elementOrder,
+    ...(state.handCheck ? { handCheck: state.handCheck } : {}),
   };
 
   const pointData: string[] = [
@@ -509,6 +521,17 @@ function parseMetadata(xml: string): KofemFieldDataV1 {
     }
   }
 
+  if (
+    meta.elementOrder !== undefined &&
+    meta.elementOrder !== 1 &&
+    meta.elementOrder !== 2
+  )
+    throw new Error(
+      `Invalid analysis file: "elementOrder" must be 1 or 2, got ${JSON.stringify(meta.elementOrder)}`,
+    );
+  if (meta.handCheck !== undefined)
+    meta.handCheck = parseHandCheck(meta.handCheck);
+
   if (typeof meta.modelName !== "string")
     throw new Error('Invalid analysis file: "modelName" must be a string');
   // Legacy: the standalone "Mesh" mode was merged into "geometry".
@@ -658,5 +681,9 @@ export function parseAnalysisFile(text: string): AnalysisState {
     result,
     resultType: meta.resultType,
     topOpt: meta.topOpt,
+    // eslint-disable-next-line kofem/no-silent-fallback -- files written before the order was saved carry none; linear is the app's documented default order
+    elementOrder: meta.elementOrder ?? 1,
+    // Only gallery examples carry a hand check.
+    handCheck: meta.handCheck ?? null,
   };
 }

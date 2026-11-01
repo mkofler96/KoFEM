@@ -7,6 +7,8 @@
 #include "topology_shell.h"
 
 #include "shell_core.h"
+#include "shell_element.h"
+#include "tet_element.h"
 #include "topology_filter.h"
 #include "topology_mma.h"
 

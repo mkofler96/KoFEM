@@ -18,9 +18,13 @@ import {
   meshStep,
   extractThinWallShells,
   shellWallTets,
+} from "../../shell-coupling/lib.mjs";
+// Use the app's coupling builder so the saved field and a mixed-model reload
+// use the same shell-footprint interpolation and seam detection.
+import {
   buildCoupledModel,
   dropCouplingsOnFixedNodes,
-} from "../../shell-coupling/lib.mjs";
+} from "../../../web/src/lib/shellize.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const STEP = join(here, "../../../test_files/full-crane-hook.step");
@@ -158,6 +162,7 @@ const r = Module.solve_coupled(
     // Shell<->solid seam tied with the relaxed MPC coupling, exactly as the app
     // does when this .vtu is loaded and re-solved (web/src/workers/solver.worker.ts).
     mpc: Int32Array.from(coupling.mpc ?? coupling.ref.map(() => 0)),
+    weights: Float64Array.from(coupling.weights ?? []),
     relaxation: 1.0,
   },
   {

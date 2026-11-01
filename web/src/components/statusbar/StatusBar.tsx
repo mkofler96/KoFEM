@@ -1,9 +1,13 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { Fragment } from "react";
 import { useModelStore, loadKind } from "../../store/modelStore";
 import type { PickMode } from "../../store/modelStore";
 import { APP_VERSION } from "../../lib/version";
+import { consentBanner } from "../../lib/analytics";
+import { loadCounts } from "../../lib/modelDisplay";
+import { EngineStatus } from "./EngineStatus";
 import styles from "./StatusBar.module.css";
 
 type ViewRepr = "geometry" | "surface" | "volume" | "wireframe";
@@ -120,6 +124,7 @@ export function StatusBar() {
   const elements = useModelStore((s) => s.elements);
   const constraints = useModelStore((s) => s.constraints);
   const loads = useModelStore((s) => s.loads);
+  const surfaceLoads = useModelStore((s) => s.surfaceLoads);
   const result = useModelStore((s) => s.result);
   const mode = useModelStore((s) => s.mode);
   const selectedFace = useModelStore((s) => s.selectedFace);
@@ -212,12 +217,12 @@ export function StatusBar() {
           </>
         )}
 
-        {loads.length > 0 && (
-          <>
+        {loadCounts(loads.length, surfaceLoads.length).map((count) => (
+          <Fragment key={count}>
             <span className={styles.sep}>·</span>
-            <span className={styles.stat}>{loads.length} load DOFs</span>
-          </>
-        )}
+            <span className={styles.stat}>{count}</span>
+          </Fragment>
+        ))}
       </div>
 
       {/* Center — repr toolbar + undeformed overlay toggle */}
@@ -318,6 +323,7 @@ export function StatusBar() {
             Mesh OK
           </span>
         ) : null}
+        <EngineStatus />
         <span className={styles.muted}>m · N · Pa · {APP_VERSION}</span>
         <a
           className={styles.discLink}
@@ -328,6 +334,18 @@ export function StatusBar() {
         >
           No warranty
         </a>
+        {consentBanner() && (
+          <a
+            className={styles.discLink}
+            href="#cookie-settings"
+            onClick={(e) => {
+              e.preventDefault();
+              consentBanner()?.removeAttribute("hidden");
+            }}
+          >
+            Cookie settings
+          </a>
+        )}
       </div>
     </div>
   );
