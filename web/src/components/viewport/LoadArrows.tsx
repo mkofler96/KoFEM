@@ -1,6 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+// JS-0455 checks DOM attributes; these are Three.js objects whose properties
+// are checked by React Three Fiber's TypeScript types. Annotate only those props.
+
 // Load glyphs: one resultant arrow per load group, or one arrow per loaded
 // node sized by the load it carries (loadDisplay === "nodal"). Moment arrows
 // are double-headed and shown in both display modes.
@@ -303,20 +306,40 @@ export function LoadArrows({ topology, showResult }: LoadArrowsProps) {
           return (
             <group
               key={`arrow-${arrow.groupId}`}
+              // skipcq: JS-0455 -- typed React Three Fiber property
               position={arrow.pos}
+              // skipcq: JS-0455 -- typed React Three Fiber property
               quaternion={arrow.quaternion}
             >
-              <mesh position={[0, shaftLen / 2, 0]}>
-                <cylinderGeometry args={[shaftR, shaftR, shaftLen, 8]} />
+              <mesh
+                // skipcq: JS-0455 -- typed React Three Fiber property
+                position={[0, shaftLen / 2, 0]}
+              >
+                <cylinderGeometry
+                  // skipcq: JS-0455 -- typed React Three Fiber property
+                  args={[shaftR, shaftR, shaftLen, 8]}
+                />
                 <meshStandardMaterial color={LOAD_COLOR} />
               </mesh>
-              <mesh position={[0, shaftLen + headLen / 2, 0]}>
-                <coneGeometry args={[headR, headLen, 8]} />
+              <mesh
+                // skipcq: JS-0455 -- typed React Three Fiber property
+                position={[0, shaftLen + headLen / 2, 0]}
+              >
+                <coneGeometry
+                  // skipcq: JS-0455 -- typed React Three Fiber property
+                  args={[headR, headLen, 8]}
+                />
                 <meshStandardMaterial color={LOAD_COLOR} />
               </mesh>
               {arrow.isMoment && (
-                <mesh position={[0, shaftLen - headLen / 2, 0]}>
-                  <coneGeometry args={[headR, headLen, 8]} />
+                <mesh
+                  // skipcq: JS-0455 -- typed React Three Fiber property
+                  position={[0, shaftLen - headLen / 2, 0]}
+                >
+                  <coneGeometry
+                    // skipcq: JS-0455 -- typed React Three Fiber property
+                    args={[headR, headLen, 8]}
+                  />
                   <meshStandardMaterial color={LOAD_COLOR} />
                 </mesh>
               )}
@@ -338,15 +361,29 @@ export function LoadArrows({ topology, showResult }: LoadArrowsProps) {
           return (
             <group
               key={`nodal-arrow-${arrow.nodeId}`}
+              // skipcq: JS-0455 -- typed React Three Fiber property
               position={arrow.pos}
+              // skipcq: JS-0455 -- typed React Three Fiber property
               quaternion={arrow.quaternion}
             >
-              <mesh position={[0, shaftLen / 2, 0]}>
-                <cylinderGeometry args={[shaftR, shaftR, shaftLen, 6]} />
+              <mesh
+                // skipcq: JS-0455 -- typed React Three Fiber property
+                position={[0, shaftLen / 2, 0]}
+              >
+                <cylinderGeometry
+                  // skipcq: JS-0455 -- typed React Three Fiber property
+                  args={[shaftR, shaftR, shaftLen, 6]}
+                />
                 <meshStandardMaterial color={LOAD_COLOR} />
               </mesh>
-              <mesh position={[0, shaftLen + headLen / 2, 0]}>
-                <coneGeometry args={[headR, headLen, 8]} />
+              <mesh
+                // skipcq: JS-0455 -- typed React Three Fiber property
+                position={[0, shaftLen + headLen / 2, 0]}
+              >
+                <coneGeometry
+                  // skipcq: JS-0455 -- typed React Three Fiber property
+                  args={[headR, headLen, 8]}
+                />
                 <meshStandardMaterial color={LOAD_COLOR} />
               </mesh>
             </group>
