@@ -86,13 +86,13 @@ export default {
         <caption>Converted material values (US values rounded)</caption>
         <thead><tr><th scope="col">System</th><th scope="col">Young’s modulus</th><th scope="col">Mass density</th></tr></thead>
         <tbody>
-          <tr><th scope="row">SI</th><td>2.10 × 10¹¹ Pa</td><td>7850 kg/m³</td></tr>
-          <tr><th scope="row">N–mm–s</th><td>210000 MPa</td><td>7.85 × 10⁻⁹ tonne/mm³</td></tr>
-          <tr><th scope="row">N–mm–ms</th><td>210000 MPa</td><td>7.85 × 10⁻³ g/mm³</td></tr>
-          <tr><th scope="row">kN–mm–ms</th><td>210 GPa</td><td>7.85 × 10⁻⁶ kg/mm³</td></tr>
-          <tr><th scope="row">CGS</th><td>2.10 × 10¹² dyn/cm²</td><td>7.85 g/cm³</td></tr>
-          <tr><th scope="row">US inch–second</th><td>3.046 × 10⁷ psi</td><td>7.345 × 10⁻⁴ (lbf·s²/in)/in³</td></tr>
-          <tr><th scope="row">US foot–second</th><td>4.386 × 10⁹ psf</td><td>15.23 slug/ft³</td></tr>
+          <tr><th scope="row">SI</th><td>${tex("2.10 × 10^{11}")} Pa</td><td>7850 kg/m³</td></tr>
+          <tr><th scope="row">N–mm–s</th><td>210000 MPa</td><td>${tex("7.85 × 10^{-9}")} tonne/mm³</td></tr>
+          <tr><th scope="row">N–mm–ms</th><td>210000 MPa</td><td>${tex("7.85 × 10^{-3}")} g/mm³</td></tr>
+          <tr><th scope="row">kN–mm–ms</th><td>210 GPa</td><td>${tex("7.85 × 10^{-6}")} kg/mm³</td></tr>
+          <tr><th scope="row">CGS</th><td>${tex("2.10 × 10^{12}")} dyn/cm²</td><td>7.85 g/cm³</td></tr>
+          <tr><th scope="row">US inch–second</th><td>${tex("3.046 × 10^7")} psi</td><td>${tex("7.345 × 10^{-4}")} (lbf·s²/in)/in³</td></tr>
+          <tr><th scope="row">US foot–second</th><td>${tex("4.386 × 10^9")} psf</td><td>15.23 slug/ft³</td></tr>
         </tbody>
       </table>
     </div>

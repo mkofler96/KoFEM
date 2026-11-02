@@ -362,12 +362,20 @@ test("numerical-methods articles give checkable elements, assembly and planned l
   await expect(global.locator("mtr").nth(1).locator("mtd").nth(1)).toHaveText(
     "1+1",
   );
-  await expect(
-    page.getByRole("row", {
-      name: "T2 (1, 2, 3, 4) 1, 2, 3, 4 6, 7, 8, 9 11, 12, 13, 14",
-      exact: true,
-    }),
-  ).toBeVisible();
+  const t2 = page.getByRole("row").filter({
+    has: page.getByRole("cell", { name: "6, 7, 8, 9", exact: true }),
+  });
+  await expect(t2.locator("th math")).toBeVisible();
+  await expect(t2.locator("th")).toContainText("(1, 2, 3, 4)");
+  await expect(t2.locator("td").last()).toHaveText("11, 12, 13, 14");
+  // Inline math is typeset, never plain text with <sub>/<sup> tags.
+  for (const path of [...NUMERICAL_PAGES, ...OPERATOR_PAGES, NOTATION_PAGE]) {
+    await page.goto(path);
+    await expect(
+      page.locator("main p sub, main p sup, main li sub, main li sup"),
+    ).toHaveCount(0);
+  }
+  await page.goto(assembly);
   await expect(page.locator('.pager a[rel="prev"]')).toHaveAttribute(
     "href",
     elements,

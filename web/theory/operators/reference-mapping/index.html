@@ -1003,86 +1003,86 @@
       elements; surface and shell mappings need surface measures instead.</p>
 
     <h2 id="element-map">Map one reference element</h2>
-    <p>Let ξ = (ξ, η, ζ)ᵀ be dimensionless
+    <p>Let <math><mi>ξ</mi><mo>=</mo></math>​<math><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>ξ</mi><mo>,</mo><mi>η</mi><mo>,</mo><mi>ζ</mi><msup><mo stretchy="false" lspace="0" rspace="0">)</mo><mi>T</mi></msup></math> be dimensionless
       <a href="/theory/notation/#reference-coordinates">reference coordinates</a>. The map
-      x = F(ξ) takes a reference point (3-vector) to a physical position
+      <math><mi>x</mi><mo>=</mo></math>​<math><mi>F</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>ξ</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></math> takes a reference point (3-vector) to a physical position
       (3-vector, mm). For an isoparametric element,</p>
-    <div class="equation" tabindex="0" role="region" aria-label="Physical position interpolates nodal positions using reference shape functions; scroll horizontally if needed"><math display="block"><msub><mi>x</mi><mi>i</mi></msub><mo>=</mo><msub><mi>F</mi><mi>i</mi></msub><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>ξ</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo>=</mo><msub><mo largeop="true">∑</mo><mi>a</mi></msub><msubsup><mi>N</mi><mi>a</mi><mi>r</mi></msubsup><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>ξ</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><msub><mi>x</mi><mrow><mi>a</mi><mi>i</mi></mrow></msub><mo lspace="0" rspace="0">.</mo></math></div>
-    <p>Here xₐ is physical node a’s position and Nₐʳ is its reference
+    <div class="equation" tabindex="0" role="region" aria-label="Physical position interpolates nodal positions using reference shape functions; scroll horizontally if needed"><math display="block"><msub><mi>x</mi><mi>i</mi></msub><mo>=</mo><msub><mi>F</mi><mi>i</mi></msub><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>ξ</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo>=</mo><msub><mo largeop="true">∑</mo><mi>a</mi></msub><msubsup><mi>N</mi><mi>a</mi><mrow><mi mathvariant="normal">r</mi></mrow></msubsup><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>ξ</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><msub><mi>x</mi><mrow><mi>a</mi><mi>i</mi></mrow></msub><mo lspace="0" rspace="0">.</mo></math></div>
+    <p>Here <math><msub><mi>x</mi><mi>a</mi></msub></math> is physical node <math><mi>a</mi></math>’s position and <math><msubsup><mi>N</mi><mi>a</mi><mrow><mi mathvariant="normal">r</mi></mrow></msubsup></math> is its reference
       <a href="/theory/notation/#shape-functions">shape function</a>.
-      The superscript r labels a reference quantity; it is not a power.
-      For a linear reference tetrahedron, ξ, η, ζ ≥ 0 and ξ + η + ζ ≤ 1;
-      its shape functions are 1 − ξ − η − ζ, ξ, η and ζ.</p>
-    <p>Use an affine map x = 10 + 2ξ + η, y = 20 + 3η,
-      z = 30 + 4ζ, with physical lengths in mm. It maps the reference origin
-      to (10, 20, 30) mm and the three other vertices to (12, 20, 30),
-      (11, 23, 30) and (10, 20, 34) mm.
-      At ξ = η = ζ = 1/4, the physical point is (10.75, 20.75, 31) mm.</p>
+      The upright superscript <math><mi mathvariant="normal">r</mi></math> labels a reference quantity; it is not a power.
+      For a linear reference tetrahedron, <math><mi>ξ</mi><mo>,</mo><mi>η</mi><mo>,</mo><mi>ζ</mi><mo>≥</mo></math>​<math><mn>0</mn></math> and <math><mi>ξ</mi><mo>+</mo><mi>η</mi><mo>+</mo><mi>ζ</mi><mo>≤</mo></math>​<math><mn>1</mn></math>;
+      its shape functions are <math><mn>1</mn><mo>−</mo><mi>ξ</mi><mo>−</mo><mi>η</mi><mo>−</mo><mi>ζ</mi></math>, <math><mi>ξ</mi></math>, <math><mi>η</mi></math> and <math><mi>ζ</mi></math>.</p>
+    <p>Use an affine map <math><mi>x</mi><mo>=</mo></math>​<math><mn>10</mn><mo>+</mo><mn>2</mn><mi>ξ</mi><mo>+</mo><mi>η</mi></math>, <math><mi>y</mi><mo>=</mo></math>​<math><mn>20</mn><mo>+</mo><mn>3</mn><mi>η</mi></math>,
+      <math><mi>z</mi><mo>=</mo></math>​<math><mn>30</mn><mo>+</mo><mn>4</mn><mi>ζ</mi></math>, with physical lengths in mm. It maps the reference origin
+      to <math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>10</mn><mo>,</mo><mn>20</mn><mo>,</mo><mn>30</mn><mo stretchy="false" lspace="0" rspace="0">)</mo><mtext> mm</mtext></math> and the three other vertices to <math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>12</mn><mo>,</mo><mn>20</mn><mo>,</mo><mn>30</mn><mo stretchy="false" lspace="0" rspace="0">)</mo></math>,
+      <math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>11</mn><mo>,</mo><mn>23</mn><mo>,</mo><mn>30</mn><mo stretchy="false" lspace="0" rspace="0">)</mo></math> and <math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>10</mn><mo>,</mo><mn>20</mn><mo>,</mo><mn>34</mn><mo stretchy="false" lspace="0" rspace="0">)</mo><mtext> mm</mtext></math>.
+      At <math><mi>ξ</mi><mo>=</mo></math>​<math><mi>η</mi><mo>=</mo></math>​<math><mi>ζ</mi><mo>=</mo></math>​<math><mn>1</mn><mo lspace="0" rspace="0">/</mo><mn>4</mn></math>, the physical point is <math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>10.75</mn><mo>,</mo><mn>20.75</mn><mo>,</mo><mn>31</mn><mo stretchy="false" lspace="0" rspace="0">)</mo><mtext> mm</mtext></math>.</p>
 
     <h2 id="jacobian">Jacobian: local directions and scale</h2>
-    <p>The <a href="/theory/notation/#jacobian">Jacobian J</a> is the 3 × 3
-      derivative of F. Its row is the physical
+    <p>The <a href="/theory/notation/#jacobian">Jacobian <math><mi>J</mi></math></a> is the 3 × 3
+      derivative of <math><mi>F</mi></math>. Its row is the physical
       component and its column the reference direction:</p>
-    <div class="equation" tabindex="0" role="region" aria-label="Jacobian maps a small reference step into a physical step; scroll horizontally if needed"><math display="block"><msub><mi>J</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub><mo>=</mo><mfrac><mrow><mo>∂</mo><msub><mi>x</mi><mi>i</mi></msub></mrow><mrow><mo>∂</mo><msub><mi>ξ</mi><mi>j</mi></msub></mrow></mfrac><mo>,</mo><mspace width="1em"/><mi>d</mi><msub><mi>x</mi><mi>i</mi></msub><mo>=</mo><msub><mi>J</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub><mspace width="0.17em"/><mi>d</mi><msub><mi>ξ</mi><mi>j</mi></msub><mo lspace="0" rspace="0">.</mo></math></div>
+    <div class="equation" tabindex="0" role="region" aria-label="Jacobian maps a small reference step into a physical step; scroll horizontally if needed"><math display="block"><msub><mi>J</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub><mo>=</mo><mfrac><mrow><mo lspace="0" rspace="0">∂</mo><msub><mi>x</mi><mi>i</mi></msub></mrow><mrow><mo lspace="0" rspace="0">∂</mo><msub><mi>ξ</mi><mi>j</mi></msub></mrow></mfrac><mo>,</mo><mspace width="1em"/><mi>d</mi><msub><mi>x</mi><mi>i</mi></msub><mo>=</mo><msub><mi>J</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub><mspace width="0.17em"/><mi>d</mi><msub><mi>ξ</mi><mi>j</mi></msub><mo lspace="0" rspace="0">.</mo></math></div>
     <div class="equation" tabindex="0" role="region" aria-label="Affine element Jacobian in millimetres, with a skew term in the xy position; scroll horizontally if needed"><math display="block"><mi>J</mi><mo>=</mo><mrow><mo stretchy="true">[</mo><mtable><mtr><mtd><mn>2</mn></mtd><mtd><mn>1</mn></mtd><mtd><mn>0</mn></mtd></mtr><mtr><mtd><mn>0</mn></mtd><mtd><mn>3</mn></mtd><mtd><mn>0</mn></mtd></mtr><mtr><mtd><mn>0</mn></mtd><mtd><mn>0</mn></mtd><mtd><mn>4</mn></mtd></mtr></mtable><mo stretchy="true">]</mo></mrow></math></div>
     <p>Each column is a mapped reference-axis direction, in mm. A small
-      step h in η moves the physical point by (h, 3h, 0) mm.
-      The determinant is 2 × 3 × 4 = 24 mm³: it scales volume, while its
-      sign records orientation. The translation (10, 20, 30) does not affect J.</p>
+      step <math><mi>h</mi></math> in <math><mi>η</mi></math> moves the physical point by <math><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>h</mi><mo>,</mo><mn>3</mn><mi>h</mi><mo>,</mo><mn>0</mn><mo stretchy="false" lspace="0" rspace="0">)</mo><mtext> mm</mtext></math>.
+      The determinant is <math><mn>2</mn><mo>×</mo><mn>3</mn><mo>×</mo><mn>4</mn><mo>=</mo></math>​<math><mn>24</mn><msup><mtext> mm</mtext><mn>3</mn></msup></math>: it scales volume, while its
+      sign records orientation. The translation <math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>10</mn><mo>,</mo><mn>20</mn><mo>,</mo><mn>30</mn><mo stretchy="false" lspace="0" rspace="0">)</mo></math> does not affect <math><mi>J</mi></math>.</p>
 
     <h2 id="gradient-transform">Transform a shape-function gradient</h2>
-    <p>The chain rule for a scalar q gives
-      <math><mo>∂</mo><msup><mi>q</mi><mi>r</mi></msup><mo lspace="0" rspace="0">/</mo><mo>∂</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo>=</mo><mo stretchy="false" lspace="0" rspace="0">(</mo><mo>∂</mo><mi>q</mi><mo lspace="0" rspace="0">/</mo><mo>∂</mo><msub><mi>x</mi><mi>i</mi></msub><mo stretchy="false" lspace="0" rspace="0">)</mo><msub><mi>J</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub></math>,
-      where qʳ(ξ) = q(F(ξ)). In particular, the physical shape function is
-      Nₐ(x) = Nₐʳ(F⁻¹(x)). With gradients stored as column 3-vectors,
-      this means ∇<sub>ξ</sub>qʳ = Jᵀ∇<sub>x</sub>q, hence:</p>
-    <div class="equation" tabindex="0" role="region" aria-label="The physical shape-function gradient is the inverse transpose Jacobian times the reference gradient; scroll horizontally if needed"><math display="block"><msub><mo>∇</mo><mi>x</mi></msub><msub><mi>N</mi><mi>a</mi></msub><mo>=</mo><msup><mi>J</mi><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mi>T</mi></mrow></msup><msub><mo>∇</mo><mi>ξ</mi></msub><msubsup><mi>N</mi><mi>a</mi><mi>r</mi></msubsup><mo lspace="0" rspace="0">.</mo></math></div>
-    <p>J⁻ᵀ means (J⁻¹)ᵀ. The output is a 3-vector with units 1/mm,
-      since Nₐ is dimensionless. For N₂ʳ = η, its reference gradient is
-      (0, 1, 0)ᵀ. The inverse transpose is:</p>
+    <p>The chain rule for a scalar <math><mi>q</mi></math> gives
+      <math><mo lspace="0" rspace="0">∂</mo><msup><mi>q</mi><mrow><mi mathvariant="normal">r</mi></mrow></msup><mo lspace="0" rspace="0">/</mo><mo lspace="0" rspace="0">∂</mo><msub><mi>ξ</mi><mi>j</mi></msub><mo>=</mo></math>​<math><mo stretchy="false" lspace="0" rspace="0">(</mo><mo lspace="0" rspace="0">∂</mo><mi>q</mi><mo lspace="0" rspace="0">/</mo><mo lspace="0" rspace="0">∂</mo><msub><mi>x</mi><mi>i</mi></msub><mo stretchy="false" lspace="0" rspace="0">)</mo><msub><mi>J</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub></math>,
+      where <math><msup><mi>q</mi><mrow><mi mathvariant="normal">r</mi></mrow></msup><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>ξ</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo>=</mo></math>​<math><mi>q</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>F</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>ξ</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo stretchy="false" lspace="0" rspace="0">)</mo></math>. In particular, the physical shape function is
+      <math><msub><mi>N</mi><mi>a</mi></msub><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>x</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo>=</mo></math>​<math><msubsup><mi>N</mi><mi>a</mi><mrow><mi mathvariant="normal">r</mi></mrow></msubsup><mo stretchy="false" lspace="0" rspace="0">(</mo><msup><mi>F</mi><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>1</mn></mrow></msup><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>x</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo stretchy="false" lspace="0" rspace="0">)</mo></math>. With gradients stored as column 3-vectors,
+      this means <math><msub><mo lspace="0" rspace="0">∇</mo><mi>ξ</mi></msub><msup><mi>q</mi><mrow><mi mathvariant="normal">r</mi></mrow></msup><mo>=</mo></math>​<math><msup><mi>J</mi><mi>T</mi></msup><msub><mo lspace="0" rspace="0">∇</mo><mi>x</mi></msub><mi>q</mi></math>, hence:</p>
+    <div class="equation" tabindex="0" role="region" aria-label="The physical shape-function gradient is the inverse transpose Jacobian times the reference gradient; scroll horizontally if needed"><math display="block"><msub><mo lspace="0" rspace="0">∇</mo><mi>x</mi></msub><msub><mi>N</mi><mi>a</mi></msub><mo>=</mo><msup><mi>J</mi><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mi>T</mi></mrow></msup><msub><mo lspace="0" rspace="0">∇</mo><mi>ξ</mi></msub><msubsup><mi>N</mi><mi>a</mi><mrow><mi mathvariant="normal">r</mi></mrow></msubsup><mo lspace="0" rspace="0">.</mo></math></div>
+    <p><math><msup><mi>J</mi><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mi>T</mi></mrow></msup></math> means <math><mo stretchy="false" lspace="0" rspace="0">(</mo><msup><mi>J</mi><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>1</mn></mrow></msup><msup><mo stretchy="false" lspace="0" rspace="0">)</mo><mi>T</mi></msup></math>. The output is a 3-vector with units 1/mm,
+      since <math><msub><mi>N</mi><mi>a</mi></msub></math> is dimensionless. For <math><msubsup><mi>N</mi><mn>2</mn><mrow><mi mathvariant="normal">r</mi></mrow></msubsup><mo>=</mo></math>​<math><mi>η</mi></math>, its reference gradient is
+      <math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>0</mn><mo>,</mo><mn>1</mn><mo>,</mo><mn>0</mn><msup><mo stretchy="false" lspace="0" rspace="0">)</mo><mi>T</mi></msup></math>. The inverse transpose is:</p>
     <div class="equation" tabindex="0" role="region" aria-label="Inverse transpose Jacobian in inverse millimetres; scroll horizontally if needed"><math display="block"><msup><mi>J</mi><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mi>T</mi></mrow></msup><mo>=</mo><mrow><mo stretchy="true">[</mo><mtable><mtr><mtd><mn>1</mn><mo lspace="0" rspace="0">/</mo><mn>2</mn></mtd><mtd><mn>0</mn></mtd><mtd><mn>0</mn></mtd></mtr><mtr><mtd><mo form="prefix" lspace="0" rspace="0">−</mo><mn>1</mn><mo lspace="0" rspace="0">/</mo><mn>6</mn></mtd><mtd><mn>1</mn><mo lspace="0" rspace="0">/</mo><mn>3</mn></mtd><mtd><mn>0</mn></mtd></mtr><mtr><mtd><mn>0</mn></mtd><mtd><mn>0</mn></mtd><mtd><mn>1</mn><mo lspace="0" rspace="0">/</mo><mn>4</mn></mtd></mtr></mtable><mo stretchy="true">]</mo></mrow></math></div>
-    <p>Thus ∇<sub>x</sub>N₂ = (0, 1/3, 0)ᵀ mm⁻¹. Independently,
-      η = (y − 20)/3, giving the same derivative. Multiplying by J⁻¹
-      instead would incorrectly give (−1/6, 1/3, 0)ᵀ.
+    <p>Thus <math><msub><mo lspace="0" rspace="0">∇</mo><mi>x</mi></msub><msub><mi>N</mi><mn>2</mn></msub><mo>=</mo></math>​<math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>0</mn><mo>,</mo><mn>1</mn><mo lspace="0" rspace="0">/</mo><mn>3</mn><mo>,</mo><mn>0</mn><msup><mo stretchy="false" lspace="0" rspace="0">)</mo><mi>T</mi></msup><msup><mtext> mm</mtext><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>1</mn></mrow></msup></math>. Independently,
+      <math><mi>η</mi><mo>=</mo></math>​<math><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>y</mi><mo>−</mo><mn>20</mn><mo stretchy="false" lspace="0" rspace="0">)</mo><mo lspace="0" rspace="0">/</mo><mn>3</mn></math>, giving the same derivative. Multiplying by <math><msup><mi>J</mi><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>1</mn></mrow></msup></math>
+      instead would incorrectly give <math><mo stretchy="false" lspace="0" rspace="0">(</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mn>1</mn><mo lspace="0" rspace="0">/</mo><mn>6</mn><mo>,</mo><mn>1</mn><mo lspace="0" rspace="0">/</mo><mn>3</mn><mo>,</mo><mn>0</mn><msup><mo stretchy="false" lspace="0" rspace="0">)</mo><mi>T</mi></msup></math>.
       The skew in this example makes the transpose matter.</p>
-    <p>A nonzero gradient in x is visible for N₁ʳ = ξ:
-      ξ = (x − 10)/2 − (y − 20)/6, so
-      ∇<sub>x</sub>N₁ = (1/2, −1/6, 0)ᵀ mm⁻¹.
+    <p>A nonzero gradient in <math><mi>x</mi></math> is visible for <math><msubsup><mi>N</mi><mn>1</mn><mrow><mi mathvariant="normal">r</mi></mrow></msubsup><mo>=</mo></math>​<math><mi>ξ</mi></math>:
+      <math><mi>ξ</mi><mo>=</mo></math>​<math><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>x</mi><mo>−</mo><mn>10</mn><mo stretchy="false" lspace="0" rspace="0">)</mo><mo lspace="0" rspace="0">/</mo><mn>2</mn><mo>−</mo><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>y</mi><mo>−</mo><mn>20</mn><mo stretchy="false" lspace="0" rspace="0">)</mo><mo lspace="0" rspace="0">/</mo><mn>6</mn></math>, so
+      <math><msub><mo lspace="0" rspace="0">∇</mo><mi>x</mi></msub><msub><mi>N</mi><mn>1</mn></msub><mo>=</mo></math>​<math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>1</mn><mo lspace="0" rspace="0">/</mo><mn>2</mn><mo>,</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mn>1</mn><mo lspace="0" rspace="0">/</mo><mn>6</mn><mo>,</mo><mn>0</mn><msup><mo stretchy="false" lspace="0" rspace="0">)</mo><mi>T</mi></msup><msup><mtext> mm</mtext><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>1</mn></mrow></msup></math>.
       These transformed gradients enter the
       <a href="/theory/operators/gradient-divergence/#vector-gradient">displacement gradient</a>
-      and the <a href="/theory/notation/#strain-displacement">B matrix</a>.</p>
+      and the <a href="/theory/notation/#strain-displacement"><math><mi>B</mi></math> matrix</a>.</p>
 
     <h2 id="integration-transform">Transform an integral</h2>
     <p>Changing variables converts a physical volume integral into a reference
-      integral. For a scalar integrand g, both sides are scalars:</p>
-    <div class="equation" tabindex="0" role="region" aria-label="Physical integration uses the mapped integrand times the absolute Jacobian determinant; scroll horizontally if needed"><math display="block"><msub><mo largeop="true">∫</mo><mrow><msub><mi>Ω</mi><mi>e</mi></msub></mrow></msub><mi>g</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>x</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mspace width="0.17em"/><mi>d</mi><mi>V</mi><mo>=</mo><msub><mo largeop="true">∫</mo><mrow><msup><mi>Ω</mi><mi>r</mi></msup></mrow></msub><mi>g</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>F</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>ξ</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo stretchy="false" lspace="0" rspace="0">)</mo><mspace width="0.17em"/><mo stretchy="false" lspace="0" rspace="0">|</mo><mi mathvariant="normal">det</mi><mi>J</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>ξ</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo stretchy="false" lspace="0" rspace="0">|</mo><mspace width="0.17em"/><mi>d</mi><mi>ξ</mi><mspace width="0.17em"/><mi>d</mi><mi>η</mi><mspace width="0.17em"/><mi>d</mi><mi>ζ</mi><mo lspace="0" rspace="0">.</mo></math></div>
-    <p>Ω<sub>e</sub> is the physical element and Ωʳ its reference tetrahedron.
-      Integrating g = 1 checks the volume. The reference tetrahedron has
-      volume 1/6; our constant determinant therefore gives 24/6 = 4 mm³.</p>
+      integral. For a scalar integrand <math><mi>g</mi></math>, both sides are scalars:</p>
+    <div class="equation" tabindex="0" role="region" aria-label="Physical integration uses the mapped integrand times the absolute Jacobian determinant; scroll horizontally if needed"><math display="block"><msub><mo largeop="true">∫</mo><mrow><msub><mi>Ω</mi><mi>e</mi></msub></mrow></msub><mi>g</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>x</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mspace width="0.17em"/><mi>d</mi><mi>V</mi><mo>=</mo><msub><mo largeop="true">∫</mo><mrow><msup><mi>Ω</mi><mrow><mi mathvariant="normal">r</mi></mrow></msup></mrow></msub><mi>g</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>F</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>ξ</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo stretchy="false" lspace="0" rspace="0">)</mo><mspace width="0.17em"/><mo stretchy="false" lspace="0" rspace="0">|</mo><mi mathvariant="normal">det</mi><mi>J</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>ξ</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo stretchy="false" lspace="0" rspace="0">|</mo><mspace width="0.17em"/><mi>d</mi><mi>ξ</mi><mspace width="0.17em"/><mi>d</mi><mi>η</mi><mspace width="0.17em"/><mi>d</mi><mi>ζ</mi><mo lspace="0" rspace="0">.</mo></math></div>
+    <p><math><msub><mi>Ω</mi><mi>e</mi></msub></math> is the physical element and <math><msup><mi>Ω</mi><mrow><mi mathvariant="normal">r</mi></mrow></msup></math> its reference tetrahedron.
+      Integrating <math><mi>g</mi><mo>=</mo></math>​<math><mn>1</mn></math> checks the volume. The reference tetrahedron has
+      volume 1/6; our constant determinant therefore gives <math><mn>24</mn><mo lspace="0" rspace="0">/</mo><mn>6</mn><mo>=</mo></math>​<math><mn>4</mn><msup><mtext> mm</mtext><mn>3</mn></msup></math>.</p>
     <p>Numerical quadrature replaces the reference integral by a weighted sum,
       <math><msub><mo largeop="true">∑</mo><mi>q</mi></msub><mi>g</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>F</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><msub><mi>ξ</mi><mi>q</mi></msub><mo stretchy="false" lspace="0" rspace="0">)</mo><mo stretchy="false" lspace="0" rspace="0">)</mo><mo stretchy="false" lspace="0" rspace="0">|</mo><mi mathvariant="normal">det</mi><mi>J</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><msub><mi>ξ</mi><mi>q</mi></msub><mo stretchy="false" lspace="0" rspace="0">)</mo><mo stretchy="false" lspace="0" rspace="0">|</mo><msub><mi>ω</mi><mi>q</mi></msub></math>,
-      with dimensionless reference points ξ<sub>q</sub> and weights ω<sub>q</sub>.
+      with dimensionless reference points <math><msub><mi>ξ</mi><mi>q</mi></msub></math> and weights <math><msub><mi>ω</mi><mi>q</mi></msub></math>.
       For this constant integrand, a centroid point with weight 1/6 gives
       the exact volume. This does not make one-point quadrature exact for
       general element stiffness or load integrands.</p>
     <p>Element stiffness uses transformed shape-function derivatives and the
       volume factor together, for example
-      <math><msup><mi>K</mi><mrow><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>e</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></mrow></msup><mo>=</mo><msub><mo largeop="true">∫</mo><mrow><msub><mi>Ω</mi><mi>e</mi></msub></mrow></msub><msup><mi>B</mi><mi>T</mi></msup><mi>C</mi><mi>B</mi><mspace width="0.17em"/><mi>d</mi><mi>V</mi></math>.
-      Here B maps displacement coefficients to engineering strain, and C maps
-      engineering strain to stress. B has units 1/mm and C has units N/mm²,
+      <math><msup><mi>K</mi><mrow><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>e</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></mrow></msup><mo>=</mo></math>​<math><msub><mo largeop="true">∫</mo><mrow><msub><mi>Ω</mi><mi>e</mi></msub></mrow></msub><msup><mi>B</mi><mi>T</mi></msup><mi>C</mi><mi>B</mi><mspace width="0.17em"/><mi>d</mi><mi>V</mi></math>.
+      Here <math><mi>B</mi></math> maps displacement coefficients to engineering strain, and <math><mi>C</mi></math> maps
+      engineering strain to stress. <math><mi>B</mi></math> has units 1/mm and <math><mi>C</mi></math> has units N/mm²,
       so a solid translational stiffness entry has units N/mm.
       <a href="/theory/numerical-methods/elements-and-quadrature/#worked-element">Elements and quadrature</a>
       evaluates this integral for one tetrahedron and explains the choice of rule.</p>
 
     <h2 id="mapping-limits">Check the mapping</h2>
-    <p>A zero determinant means the local volume has collapsed and J cannot
+    <p>A zero determinant means the local volume has collapsed and <math><mi>J</mi></math> cannot
       be inverted. A small volume scale or highly stretched directions can
       amplify derivative errors. A negative determinant records a reversed
       orientation; the absolute value in the change-of-variables identity is
       not permission to accept an inverted FEM element. Valid orientation and
       connectivity must be checked using the element’s convention.</p>
-    <p>Affine elements have constant J. Curved or higher-order maps generally
-      require J at each quadrature point, and a map that folds over itself is
+    <p>Affine elements have constant <math><mi>J</mi></math>. Curved or higher-order maps generally
+      require <math><mi>J</mi></math> at each quadrature point, and a map that folds over itself is
       invalid even if a few sampled determinants are nonzero. Surface elements
       use tangent vectors and an area factor, not this 3D volume determinant.
       Integration order, element quality and solver conditioning remain

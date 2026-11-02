@@ -1,8 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { tex } from "../../../examples/validation/lib/tex.mjs";
-import { equation, matrixEquation } from "./math.mjs";
+import { equation, matrixEquation, tex } from "./math.mjs";
 
 export default {
   slug: "operators/gradient-divergence",
@@ -20,33 +19,34 @@ export default {
     <p class="lede">How do derivatives connect displacement, strain, stress and equilibrium?</p>
     <p>A field varies from point to point. A gradient records that variation;
       a divergence measures its net outward flow. We use a fixed Cartesian
-      basis with x₁ = x, x₂ = y and x₃ = z, following the
+      basis with ${tex("x_1 = x")}, ${tex("x_2 = y")} and ${tex("x_3 = z")}, following the
       <a href="/theory/notation/#reading-notation">index convention</a>.
       The polynomial examples below use dimensionless coordinates and values
       unless units are shown. They illustrate operators, not solved models.</p>
 
     <h2 id="scalar-gradient">Gradient of a scalar</h2>
     <p>The <a href="/theory/notation/#gradient">gradient</a> turns a
-      scalar field q into a 3-vector of slopes. A component gives the change
+      scalar field ${tex("q")} into a 3-vector of slopes. A component gives the change
       per unit distance along that coordinate axis:</p>
     ${equation("(∇q)_i = \\frac{∂q}{∂x_i}, \\quad ∇q = (∂q/∂x, ∂q/∂y, ∂q/∂z)^T.", "A scalar field maps to three spatial derivatives")}
-    <p>For q = x² + 3y, the derivatives are (2x, 3, 0). At (2, 1, 0),
-      q = 7 and ∇q = (4, 3, 0)ᵀ. A small step h along x changes q by
-      approximately 4h; a step along z does not change it. The gradient points
+    <p>For ${tex("q = x^2 + 3y")}, the derivatives are ${tex("(2x, 3, 0)")}. At ${tex("(2, 1, 0)")},
+      ${tex("q = 7")} and ${tex("∇q = (4, 3, 0)^T")}. A small step ${tex("h")} along ${tex("x")} changes ${tex("q")} by
+      approximately ${tex("4h")}; a step along ${tex("z")} does not change it. The gradient points
       toward the steepest local increase.</p>
     <p>Units divide by length: a pressure gradient has units MPa/mm.
       In FEM, the gradient of a dimensionless
-      <a href="/theory/notation/#shape-functions">shape function Nₐ</a>
+      <a href="/theory/notation/#shape-functions">shape function ${tex("N_a")}</a>
       has units 1/mm. These derivatives turn nodal displacements into strain.</p>
 
     <h2 id="vector-gradient">Gradient of a vector</h2>
-    <p>A 3-vector field v has three slopes for each of its three components.
-      Its gradient is a 3 × 3 tensor. <strong>Row i identifies the vector
-      component; column j identifies the differentiation direction.</strong></p>
+    <p>A 3-vector field ${tex("v")} has three slopes for each of its three components.
+      Its gradient is a 3 × 3 tensor. <strong>Row ${tex("i")} identifies the vector
+      component; column ${tex("j")} identifies the differentiation direction.</strong></p>
     ${equation("(∇v)_{ij} = \\frac{∂v_i}{∂x_j}.", "Vector gradient: component i differentiated with respect to coordinate j")}
-    <p>For the displacement field u = (0.001x + 0.002y,
-      −0.004x + 0.003y, 0.005z)ᵀ, with coordinates and displacement both
-      measured in mm, the dimensionless gradient is constant:</p>
+    <p>Take the displacement field</p>
+    ${equation("u = (0.001x + 0.002y,\; -0.004x + 0.003y,\; 0.005z)^T,", "Example displacement field with linear components")}
+    <p>with coordinates and displacement both measured in mm. Its
+      dimensionless gradient is constant:</p>
     ${matrixEquation(
       "∇u =",
       [
@@ -56,7 +56,7 @@ export default {
       ],
       "Displacement gradient: rows are displacement components, columns are x, y and z derivatives",
     )}
-    <p>The xy entry is ∂uₓ/∂y = 0.002; the yx entry is ∂uᵧ/∂x = −0.004.
+    <p>The ${tex("xy")} entry is ${tex("∂u_x/∂y = 0.002")}; the ${tex("yx")} entry is ${tex("∂u_y/∂x = -0.004")}.
       Some texts transpose this convention. Check the component definition
       before transferring a formula. In an element, differentiating
       ${tex("u_i^h = \\sum_a N_a d_{ai}")} gives
@@ -77,12 +77,12 @@ export default {
       ],
       "Strain for the displacement example, including xy shear of minus 0.001",
     )}
-    <p>Here εₓᵧ = (0.002 − 0.004)/2 = −0.001.
+    <p>Here ${tex("ε_{xy} = (0.002 - 0.004)/2 = -0.001")}.
       The <a href="/theory/notation/#engineering-shear">engineering shear</a>
-      is γₓᵧ = 2εₓᵧ = −0.002. With shear modulus μ = 80000 MPa,
-      σₓᵧ = 2μεₓᵧ = μγₓᵧ = −160 MPa. See
+      is ${tex("γ_{xy} = 2ε_{xy} = -0.002")}. With shear modulus ${tex("μ = 80000\\text{ MPa}")},
+      ${tex("σ_{xy} = 2με_{xy} = μγ_{xy} = -160\\text{ MPa}")}. See
       <a href="/theory/operators/tensor-products/#double-contraction">why shear appears twice in tensor work</a>.</p>
-    <p>As a check, u = (−θy, θx, 0)ᵀ has opposite xy and yx derivatives,
+    <p>As a check, ${tex("u = (-θy, θx, 0)^T")} has opposite ${tex("xy")} and ${tex("yx")} derivatives,
       so its symmetric gradient is zero. This is an <em>infinitesimal</em>
       rigid rotation. Small-strain kinematics neglect quadratic gradient terms;
       finite rotations need a different strain measure.</p>
@@ -91,14 +91,14 @@ export default {
     <p>The <a href="/theory/notation/#divergence">divergence</a> maps a
       3-vector field to a scalar by adding its outward directional changes:</p>
     ${equation("∇\\cdot v = \\frac{∂v_x}{∂x} + \\frac{∂v_y}{∂y} + \\frac{∂v_z}{∂z} = \\mathrm{tr}(∇v).", "Vector divergence is the sum of the three diagonal gradient entries")}
-    <p>For v = (x², xy, z)ᵀ, div v = 2x + x + 1 = 3x + 1,
-      giving 7 at x = 2. Positive divergence means a small region has more
-      outgoing than incoming flow. For displacement, div u = tr ε gives
+    <p>For ${tex("v = (x^2, xy, z)^T")}, ${tex("∇\\cdot v = 2x + x + 1 = 3x + 1")},
+      giving 7 at ${tex("x = 2")}. Positive divergence means a small region has more
+      outgoing than incoming flow. For displacement, ${tex("∇\\cdot u = \\mathrm{tr}\\,ε")} gives
       first-order relative volume change: the example above gives 0.009.</p>
 
     <h2 id="stress-divergence">Divergence of stress</h2>
     <p>Stress is a tensor field, so its divergence is a 3-vector. Using the
-      <a href="/theory/notation/#traction">traction convention tᵢ = σᵢⱼnⱼ</a>,
+      <a href="/theory/notation/#traction">traction convention ${tex("t_i = σ_{ij}n_j")}</a>,
       differentiate and sum across each row:</p>
     ${equation("(∇\\cdot σ)_i = \\sum_{j=1}^3 \\frac{∂σ_{ij}}{∂x_j}.", "Stress divergence sums derivatives across row i to form force component i")}
     ${matrixEquation(
@@ -110,12 +110,12 @@ export default {
       ],
       "Symmetric polynomial stress example in dimensionless coordinates",
     )}
-    <p>The x component is 2x + x + 0 = 3x; the y component is y + 2 + 0;
-      the z component is 3. At (2, 1, 0), div σ = (6, 3, 3)ᵀ.
-      This is different from taking the gradient of tr σ.</p>
+    <p>The ${tex("x")} component is ${tex("2x + x + 0 = 3x")}; the ${tex("y")} component is ${tex("y + 2 + 0")};
+      the ${tex("z")} component is 3. At ${tex("(2, 1, 0)")}, ${tex("∇\\cdot σ = (6, 3, 3)^T")}.
+      This is different from taking the gradient of ${tex("\\mathrm{tr}\\,σ")}.</p>
     <p>In physical units, differentiating stress (N/mm²) gives N/mm³,
-      matching <a href="/theory/notation/#body-force">body force per volume b</a>.
-      Static equilibrium is div σ + b = 0. The
+      matching <a href="/theory/notation/#body-force">body force per volume ${tex("b")}</a>.
+      Static equilibrium is ${tex("∇\\cdot σ + b = 0")}. The
       <a href="/theory/operators/integration-by-parts/#weak-form">weak form</a>
       transfers this derivative to a test displacement so neighbouring FEM
       elements need not share a pointwise stress derivative.</p>
