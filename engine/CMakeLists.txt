@@ -36,6 +36,7 @@ add_executable(kofem_wasm_emcc
     cpp/geometry_cache.cpp
     cpp/geometry_edit.cpp
     cpp/mesh_netgen.cpp
+    cpp/mesh_overlap.cpp
     cpp/fem_mesh_io.cpp
     cpp/fem_bc_io.cpp
     cpp/solve_mfem.cpp

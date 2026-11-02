@@ -7,6 +7,7 @@ import type { SplitMode, StepTessellation } from "../store/modelStore";
 import { resetWorker, sendToWorker } from "../workers/sharedWorker";
 import { isCadBody } from "../store/geometrySlice";
 import { booleanBodySources } from "../lib/booleanBodies";
+import type { RepairHingesOptions } from "../wasm/pkg/kofem_wasm";
 
 export type SplitAxis = "x" | "y" | "z";
 
@@ -111,10 +112,36 @@ export function useGeometryEdit() {
     );
   }
 
+  // Remove the hinges a failed mesh reported. Separating can leave a body in
+  // pieces, which the user then has to decide about.
+  async function repairHinges(repair: RepairHingesOptions): Promise<boolean> {
+    if (!stepBytes) {
+      setSplitError(
+        "Cannot repair: the geometry file is not available (a saved analysis carries none). Re-import the STEP file to edit its geometry.",
+      );
+      return false;
+    }
+    if (!Number.isFinite(repair.width) || repair.width <= 0) {
+      setSplitError("The repair width must be a positive number of mm.");
+      return false;
+    }
+    const bodiesBefore = properties.filter(isCadBody).length;
+    const ok = await run("repair_hinges", { repair });
+    if (ok) {
+      const state = useModelStore.getState();
+      const bodies = state.properties.filter(isCadBody).length;
+      if (bodies > bodiesBefore)
+        state.setRemeshNotice(
+          `The model is now ${bodies} separate bodies. Suppress any you don't need, or tie them together.`,
+        );
+    }
+    return ok;
+  }
+
   // `bodySources` maps the edited model's bodies back to the old ones when the
   // edit knows it (a Boolean), so their settings survive the renumbering.
   async function run(
-    type: "split_geometry" | "boolean_geometry",
+    type: "split_geometry" | "boolean_geometry" | "repair_hinges",
     edit: Record<string, unknown>,
     bodySources?: (bodyCount: number) => number[],
   ): Promise<boolean> {
@@ -163,5 +190,13 @@ export function useGeometryEdit() {
     resetWorker();
   }
 
-  return { split, combine, undo, isSplitting, splitError, setSplitError };
+  return {
+    split,
+    combine,
+    repairHinges,
+    undo,
+    isSplitting,
+    splitError,
+    setSplitError,
+  };
 }

@@ -4,6 +4,7 @@
 import type {
   SplitGeometryOptions,
   BooleanGeometryOptions,
+  RepairHingesOptions,
   TopOptSettings,
 } from "../wasm/pkg/kofem_wasm.js";
 import type { TieDefinition } from "../lib/tie.js";
@@ -83,6 +84,12 @@ export interface BooleanGeometryPayload {
   bytes: Uint8Array;
   format: string;
   boolean: BooleanGeometryOptions;
+}
+export interface RepairHingesPayload {
+  // The current geometry file and its format — reloaded before the repair.
+  bytes: Uint8Array;
+  format: string;
+  repair: RepairHingesOptions;
 }
 export interface VolumeMeshPayload {
   bytes?: Uint8Array;
