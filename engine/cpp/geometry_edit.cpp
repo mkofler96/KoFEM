@@ -539,8 +539,9 @@ TopoDS_Shape apply_hinge_tool(const TopoDS_Shape& solid, const std::string& op,
     }
     // The box's sides split the faces it lands on along the contact. Fusing can
     // leave an invalid wire there, whatever the width; merging the faces that lie
-    // on one surface removes it, as in combine_bodies.
-    if (op == "connect")
+    // on one surface removes it. Only then: the merge can itself break a part the
+    // fuse left valid.
+    if (op == "connect" && !BRepCheck_Analyzer(operation->Shape()).IsValid())
         operation->SimplifyResult();
     const TopoDS_Shape result = operation->Shape();
     if (count_solids(result) == 0 || !BRepCheck_Analyzer(result).IsValid())
