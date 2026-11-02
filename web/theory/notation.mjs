@@ -233,46 +233,60 @@ export default {
 
     <h2 id="operators">Operator reference</h2>
     <p>The definitions below fix the convention used by this guide. Detailed
-      operator examples will follow in the guide; these anchors already work.</p>
+      operator examples are linked from each entry.</p>
     <dl class="operator-definitions">
       <dt id="gradient">${tex("∇")} — Gradient</dt>
       <dd>Spatial derivative. For a scalar q, (∇q)ᵢ = ∂q/∂xᵢ is a 3-vector.
         For a vector v, (∇v)ᵢⱼ = ∂vᵢ/∂xⱼ is a 3 × 3 tensor: row i is the
         component being differentiated. Units are those of the field divided
         by mm. Displacement’s gradient is dimensionless.
-        See <a href="#symmetric-gradient">symmetric gradient</a>.</dd>
+        See <a href="#symmetric-gradient">symmetric gradient</a>. <a href="/theory/operators/gradient-divergence/#scalar-gradient">Scalar and vector gradient examples</a>.</dd>
       <dt id="symmetric-gradient">${tex("\\mathrm{sym} ∇")} — Symmetric gradient</dt>
       <dd>The symmetric part of the vector gradient: εᵢⱼ = (∂uᵢ/∂xⱼ + ∂uⱼ/∂xᵢ)/2.
         It is a symmetric 3 × 3 tensor with units of displacement per length,
-        hence dimensionless. See <a href="#engineering-shear">shear components</a>.</dd>
+        hence dimensionless. See <a href="#engineering-shear">shear components</a>. <a href="/theory/operators/gradient-divergence/#symmetric-gradient">Small-strain calculation</a>.</dd>
       <dt id="divergence">${tex("∇ \\cdot")} — Divergence</dt>
       <dd>For a vector v, div v = ∂vᵢ/∂xᵢ is a scalar. For stress,
         (div σ)ᵢ = ∂σᵢⱼ/∂xⱼ is a 3-vector. Each has the field’s units divided
         by mm. Thus div σ and <a href="#body-force">body force</a> both have
-        units N/mm³ in equilibrium, div σ + b = 0.</dd>
+        units N/mm³ in equilibrium, div σ + b = 0. <a href="/theory/operators/gradient-divergence/#stress-divergence">Vector and stress divergence examples</a>.</dd>
       <dt id="transpose">${tex("A^T")} — Transpose</dt>
       <dd>Swap rows and columns: (Aᵀ)ᵢⱼ = Aⱼᵢ. An m × n matrix becomes
         n × m; physical units stay the same. The symmetric part of A is
-        (A + Aᵀ)/2. See <a href="#symmetric-gradient">small strain</a>.</dd>
+        (A + Aᵀ)/2. See <a href="#symmetric-gradient">small strain</a>. <a href="/theory/operators/tensor-products/#transpose">Transpose example</a>.</dd>
       <dt id="dot-product">${tex("a \\cdot b")} — Dot product</dt>
       <dd>The scalar aᵢbᵢ for two 3-vectors. Units multiply: force dotted
         with displacement has work units N·mm. The norm |a| = √(a·a) has
-        the same units as a. See <a href="#integral">virtual work</a>.</dd>
+        the same units as a. See <a href="#integral">virtual work</a>. <a href="/theory/operators/tensor-products/#dot-product">Dot-product example</a>.</dd>
+      <dt id="outer-product">${tex("a⊗b")} — Outer product</dt>
+      <dd>Two 3-vectors form a 3 × 3 tensor, (a⊗b)ᵢⱼ = aᵢbⱼ; units multiply.
+        Unlike a dot product, it retains two directions. See the
+        <a href="/theory/operators/tensor-products/#outer-product">outer-product calculation</a>
+        and its role in displacement interpolation.</dd>
       <dt id="double-contraction">${tex("A:B")} — Double contraction</dt>
       <dd>The scalar AᵢⱼBᵢⱼ, summed over both spatial indices for two
         second-order tensors. Units multiply. For symmetric tensors both
         off-diagonal entries contribute: σ:ε includes 2σₓᵧεₓᵧ, and similarly
-        for the other shear pairs. See <a href="#engineering-shear">engineering shear</a>.</dd>
+        for the other shear pairs. See <a href="#engineering-shear">engineering shear</a>. <a href="/theory/operators/tensor-products/#double-contraction">Contraction and shear calculation</a>.</dd>
       <dt id="trace">${tex("\\mathrm{tr}(A)")} — Trace</dt>
       <dd>The scalar Aᵢᵢ = A₁₁ + A₂₂ + A₃₃ of a 3 × 3 tensor; units stay
         the same. For strain, it measures the first-order relative volume
-        change. See <a href="#lame-parameters">the isotropic material law</a>.</dd>
+        change. See <a href="#lame-parameters">the isotropic material law</a>. <a href="/theory/operators/tensor-products/#trace">Trace example</a>.</dd>
+      <dt id="reference-coordinates">${tex("ξ")} — Reference coordinates</dt>
+      <dd>A dimensionless 3-vector locating a point in a reference volume element.
+        The map x = F(ξ) gives the physical position in mm. See the
+        <a href="/theory/operators/reference-mapping/#element-map">tetrahedron example</a>.</dd>
+      <dt id="jacobian">${tex("J")} — Mapping Jacobian</dt>
+      <dd>The 3 × 3 matrix Jᵢⱼ = ∂xᵢ/∂ξⱼ, in mm. Its determinant scales volume;
+        its inverse transpose transforms column gradients. See the
+        <a href="/theory/operators/reference-mapping/#jacobian">Jacobian calculation</a>
+        and <a href="/theory/operators/reference-mapping/#gradient-transform">gradient transformation</a>.</dd>
       <dt id="integral">${tex("\\int_Ω (·) dV, \\int_Γ (·) dS")} — Integrals</dt>
       <dd>Sum a field over a volume or surface. Units multiply by mm³ or mm².
         For example, the solid nodal force contribution ∫Γ Nₐtᵢ dS has units N.
         Virtual work ∫Ω ε(w):σ dV, ∫Ω w·b dV and ∫Γ w·t dS each has units
         N·mm. See <a href="#test-function">test displacement</a> and
-        <a href="#load-vector">assembled loads</a>.</dd>
+        <a href="#load-vector">assembled loads</a>. <a href="/theory/operators/integration-by-parts/#volume-and-surface">Integration and virtual-work examples</a>.</dd>
     </dl>
 
     <h2 id="components-and-signs">Components, shear and signs</h2>

@@ -13,6 +13,21 @@ export const topics = [
     "operators/gradient-divergence",
     "Gradient and divergence",
   ],
+  [
+    "Notation and operators",
+    "operators/tensor-products",
+    "Tensor products and contractions",
+  ],
+  [
+    "Notation and operators",
+    "operators/integration-by-parts",
+    "Integration and the weak form",
+  ],
+  [
+    "Notation and operators",
+    "operators/reference-mapping",
+    "Reference elements and Jacobians",
+  ],
   ["Solid mechanics", "solid-mechanics/linear-elasticity", "Linear elasticity"],
   [
     "Solid mechanics",

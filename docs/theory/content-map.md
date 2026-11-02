@@ -24,6 +24,9 @@ published. Renames require redirects and preserved heading anchors.
 | Foundations            | `/theory/foundations/reading-a-study/`               | How do geometry, materials, constraints, loads, the FEM discretisation, and results form one study?        |
 | Notation and operators | `/theory/notation/`                                  | What do the shared symbols, indices, coordinate conventions, and units mean?                               |
 | Notation and operators | `/theory/operators/gradient-divergence/`             | How do gradient, symmetric gradient, and divergence connect displacement, strain, stress, and equilibrium? |
+| Notation and operators | `/theory/operators/tensor-products/`                 | Which products keep directions, and which reduce them to a scalar?                                         |
+| Notation and operators | `/theory/operators/integration-by-parts/`            | Why can equilibrium be expressed using first derivatives of displacement?                                  |
+| Notation and operators | `/theory/operators/reference-mapping/`               | How can the same shape functions and integration points work on different elements?                        |
 | Solid mechanics        | `/theory/solid-mechanics/linear-elasticity/`         | Which assumptions lead from displacement to isotropic linear-elastic stress?                               |
 | Solid mechanics        | `/theory/solid-mechanics/equilibrium-and-weak-form/` | Why does KoFEM solve the weak form instead of pointwise equilibrium?                                       |
 | Numerical methods      | `/theory/numerical-methods/elements-and-quadrature/` | How are the displacement field and element integrals approximated?                                         |

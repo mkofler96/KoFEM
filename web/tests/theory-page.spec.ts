@@ -6,7 +6,19 @@ import { test, expect } from "./coverage";
 const ARTICLE = "/theory/foundations/model-and-units/";
 const UNIT_PAGE = "/theory/foundations/consistent-units/";
 const NOTATION_PAGE = "/theory/notation/";
-const PAGES = ["/theory/", ARTICLE, UNIT_PAGE, NOTATION_PAGE];
+const OPERATOR_PAGES = [
+  "/theory/operators/gradient-divergence/",
+  "/theory/operators/tensor-products/",
+  "/theory/operators/integration-by-parts/",
+  "/theory/operators/reference-mapping/",
+];
+const PAGES = [
+  "/theory/",
+  ARTICLE,
+  UNIT_PAGE,
+  NOTATION_PAGE,
+  ...OPERATOR_PAGES,
+];
 
 test.describe("static theory content", () => {
   test.use({ javaScriptEnabled: false });
@@ -186,6 +198,17 @@ for (const width of [320, 390, 1440]) {
       ),
     ).toBe(true);
     await expect(page.locator("main math").first()).toBeVisible();
+    for (const path of OPERATOR_PAGES) {
+      await page.goto(path);
+      await page.evaluate(() => document.fonts.ready);
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth,
+        ),
+        path,
+      ).toBe(true);
+      await expect(page.locator("main math").first()).toBeVisible();
+    }
   });
 }
 
@@ -221,9 +244,12 @@ test("shared symbols and operators have unique, usable deep links", async ({
     "divergence",
     "transpose",
     "dot-product",
+    "outer-product",
     "double-contraction",
     "trace",
     "integral",
+    "reference-coordinates",
+    "jacobian",
   ];
   for (const anchor of anchors) {
     await expect(page.locator(`#${anchor}`), anchor).toHaveCount(1);
@@ -239,9 +265,53 @@ test("shared symbols and operators have unique, usable deep links", async ({
   await expect(page.locator("main")).toContainText("engineering shear");
   await expect(page.locator("main")).toContainText("automatic unit conversion");
   await expect(
-    page.locator('main a[href="/theory/operators/gradient-divergence/"]'),
-  ).toHaveCount(0);
+    page.locator(
+      'main a[href="/theory/operators/gradient-divergence/#scalar-gradient"]',
+    ),
+  ).toHaveCount(1);
   await expect(page.locator("h2 a, h3 a")).toHaveCount(0);
+});
+
+test("operator articles connect notation, worked equations and reading order", async ({
+  page,
+}) => {
+  const headings = [
+    "Gradient and divergence",
+    "Tensor products and contractions",
+    "Integration and the weak form",
+    "Reference elements and Jacobians",
+  ];
+  for (const [index, path] of OPERATOR_PAGES.entries()) {
+    await page.goto(path);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      headings[index],
+    );
+    await expect(page.locator("main .equation math").first()).toBeVisible();
+    await expect(
+      page.locator('main a[href^="/theory/notation/#"]').first(),
+    ).toBeVisible();
+    await expect(page.locator("h2 a, h3 a")).toHaveCount(0);
+    expect(
+      await page
+        .locator(
+          'main .equation:not([aria-label]), main .equation:not([tabindex="0"])',
+        )
+        .count(),
+    ).toBe(0);
+    if (index < OPERATOR_PAGES.length - 1) {
+      await expect(page.locator('.pager a[rel="next"]')).toHaveAttribute(
+        "href",
+        OPERATOR_PAGES[index + 1],
+      );
+    }
+  }
+  const inverse = page.getByRole("region", {
+    name: /^Inverse transpose Jacobian/,
+  });
+  await expect(inverse.locator("mtr")).toHaveCount(3);
+  await expect(inverse.locator("mtr").nth(1).locator("mtd").first()).toHaveText(
+    "−1/6",
+  );
 });
 
 test("the unit comparison is separate and explains SI stress defaults", async ({
