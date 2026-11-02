@@ -61,9 +61,9 @@ export default {
     </div>
     <dl class="symbols">
       <dt id="extension">${tex("δ")}</dt><dd>Extension of the loaded end.</dd>
-      <dt id="force">${tex("P")}</dt><dd>Total tensile force along the bar axis.</dd>
+      <dt id="force">${tex("P")}</dt><dd>Total tensile force along the bar axis; the axial magnitude of a <a href="/theory/notation/#point-force">force vector</a>.</dd>
       <dt id="length">${tex("L")}</dt><dd>Undeformed bar length.</dd>
-      <dt id="young-modulus">${tex("E")}</dt><dd>Young’s modulus.</dd>
+      <dt id="young-modulus">${tex("E")}</dt><dd><a href="/theory/notation/#young-modulus">Young’s modulus</a>.</dd>
       <dt id="area">${tex("A")}</dt><dd>Cross-sectional area.</dd>
     </dl>
     <figure class="model-sketch">

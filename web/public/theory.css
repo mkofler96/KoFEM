@@ -62,6 +62,25 @@
   margin: 0;
 }
 
+.theory-docs .notation-table td:nth-child(2) {
+  min-width: 240px;
+  white-space: normal;
+}
+
+.operator-definitions dt {
+  margin-top: 20px;
+  font-weight: 600;
+}
+
+.operator-definitions dd {
+  margin: 6px 0 0;
+}
+
+/* MathML Core only standardises mathvariant="normal"; also set the CSS weight. */
+.theory-docs mi.math-bold {
+  font-weight: 700;
+}
+
 .theory-docs .equation {
   max-width: 100%;
   overflow-x: auto;
