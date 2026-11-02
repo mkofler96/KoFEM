@@ -224,12 +224,15 @@ function handleBooleanGeometry(id: number, payload: BooleanGeometryPayload) {
 // Remove hinges a failed mesh reported — the same round trip as a split.
 function handleRepairHinges(id: number, payload: RepairHingesPayload) {
   reloadForEdit(payload.bytes, payload.format);
-  const { bytes } = m().repair_hinges(JSON.stringify(payload.repair));
+  const { bytes, bodySources } = m().repair_hinges(
+    JSON.stringify(payload.repair),
+  );
   geometryLoaded = false; // repair_hinges released the pre-edit shape
   self.postMessage({
     id,
     ok: true,
     bytes,
+    bodySources,
     ...loadGeometry(bytes, "step"),
   });
 }

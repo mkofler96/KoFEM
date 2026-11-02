@@ -537,8 +537,13 @@ TopoDS_Shape apply_hinge_tool(const TopoDS_Shape& solid, const std::string& op,
     return result;
 }
 
-TopoDS_Shape repair_hinge_lines(const TopoDS_Shape& shape, const std::string& op, double width,
-                                const std::vector<HingeLine>& hinges) {
+struct RepairedShape {
+    TopoDS_Shape shape;
+    std::vector<int> body_sources;  // entry j: the old id of new body j+1
+};
+
+RepairedShape repair_hinge_lines(const TopoDS_Shape& shape, const std::string& op, double width,
+                                 const std::vector<HingeLine>& hinges) {
     if (op != "connect" && op != "separate")
         throw std::runtime_error(
             R"(repair_hinges: "op" must be "connect" or "separate", got ')" + op + "'");
@@ -558,14 +563,17 @@ TopoDS_Shape repair_hinge_lines(const TopoDS_Shape& shape, const std::string& op
         tools_of_body[hinge.body].push_back(hinge_tool(hinge, width, depth));
     }
 
-    // Body ids are the solids' order in the file: a repaired body keeps its place.
+    // Body ids are the solids' order in the file: a repaired body keeps its place,
+    // and the pieces of one that came apart take that place together.
     BRep_Builder builder;
     TopoDS_Compound out;
     builder.MakeCompound(out);
+    std::vector<int> body_sources;
     for (int i = 1; i <= solids.Extent(); ++i) {
         const auto tools = tools_of_body.find(i);
         if (tools == tools_of_body.end()) {
             builder.Add(out, solids(i));
+            body_sources.push_back(i);
             continue;
         }
         // One tool at a time: OCCT left invalid geometry when fusing several
@@ -573,13 +581,15 @@ TopoDS_Shape repair_hinge_lines(const TopoDS_Shape& shape, const std::string& op
         TopoDS_Shape repaired = solids(i);
         for (const TopoDS_Shape& tool : tools->second)
             repaired = apply_hinge_tool(repaired, op, tool);
-        for (TopExp_Explorer e(repaired, TopAbs_SOLID); e.More(); e.Next())
+        for (TopExp_Explorer e(repaired, TopAbs_SOLID); e.More(); e.Next()) {
             builder.Add(out, e.Current());
+            body_sources.push_back(i);
+        }
     }
     (void)printf("[occt] hinge repair: %s %d hinge(s), width %g mm → %d bodies\n", op.c_str(),
                  static_cast<int>(hinges.size()), width, count_solids(out));
     (void)fflush(stdout);
-    return out;
+    return {out, body_sources};
 }
 
 }  // namespace
@@ -589,14 +599,15 @@ val repair_hinges(const std::string& opts_json) {
     const std::string op = jstring(opts, "op", "");
     const double width = jdouble(opts, "width", 0.0);
     const std::vector<HingeLine> hinges = hinge_lines(opts);
-    const TopoDS_Shape edited = repair_hinge_lines(cached_shape(), op, width, hinges);
+    const RepairedShape edited = repair_hinge_lines(cached_shape(), op, width, hinges);
 
-    const std::vector<uint8_t> bytes = step_bytes(edited);
+    const std::vector<uint8_t> bytes = step_bytes(edited.shape);
     // As for a split: the edit lives in the returned file from here on.
     free_geometry_cache();
 
     val result = val::object();
     result.set("bytes", uint8_array(bytes));
+    result.set("bodySources", val::array(edited.body_sources));
     return result;
 }
 

@@ -9,6 +9,7 @@ import { test, expect } from "./coverage";
 import type { Page } from "@playwright/test";
 import { importStep } from "./fixtures/app";
 import { geometryCounts } from "./fixtures/split";
+import { addMaterial, openBody, openTree } from "./fixtures/tree";
 
 // A plate and an R3.05 pin on a shared base. The pin is pushed 1e-9 mm into the
 // plate's face x = -9, so the two touch along y = 0, z = 0…14.
@@ -116,6 +117,83 @@ test("a separate that leaves invalid geometry is refused and changes nothing", a
   );
   expect((await geometryCounts(page)).edits).toBe(0);
   await expect(page.getByTestId("hinge-warning")).toBeVisible();
+});
+
+test("bodies keep their settings when a separate splits one of them", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  await importStep(page, path.resolve("..", "test_files", "two_boxes.stp"));
+  await addMaterial(page);
+  await page
+    .getByTestId("material-color")
+    .locator("xpath=ancestor::div[contains(@class,'inlineForm')]")
+    .getByRole("button", { name: "Save" })
+    .click();
+  await openBody(page, 2);
+  await page.getByTestId("body-material-2").selectOption("2");
+  await page.getByTestId("body-suppressed-2").check();
+
+  // A line across the first box (x 0–20, y 0–10, z 0–10) at x = 10: the 12 mm
+  // repair width spans y, so the cut goes all the way through.
+  await openTree(page, "mesh");
+  await page.evaluate(() => {
+    (
+      window as unknown as {
+        __kofemStore: {
+          getState(): { setMeshOverlaps(overlaps: unknown[]): void };
+        };
+      }
+    ).__kofemStore
+      .getState()
+      .setMeshOverlaps([
+        {
+          kind: "hinge",
+          faceIds: [1, 2],
+          bodyId: 1,
+          positions: [10, 0, 0, 10, 10, 0, 10, 10, 10],
+          hinge: {
+            start: [10, 5, -1],
+            end: [10, 5, 11],
+            normal: [1, 0, 0],
+            length: 12,
+          },
+        },
+      ]);
+  });
+  await page.getByTestId("hinge-repair-width").fill("12");
+  await page.getByTestId("hinge-separate").click();
+  await expect
+    .poll(async () => (await geometryCounts(page)).bodies, { timeout: 60_000 })
+    .toBe(3);
+
+  const bodies = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __kofemStore: {
+            getState(): {
+              properties: {
+                id: number;
+                materialId: number;
+                suppressed?: boolean;
+              }[];
+            };
+          };
+        }
+      ).__kofemStore.getState().properties,
+  );
+  expect(
+    bodies.map((p) => ({
+      id: p.id,
+      materialId: p.materialId,
+      suppressed: Boolean(p.suppressed),
+    })),
+  ).toEqual([
+    { id: 1, materialId: 1, suppressed: false },
+    { id: 2, materialId: 1, suppressed: false },
+    { id: 3, materialId: 2, suppressed: true },
+  ]);
 });
 
 test("a repair with no usable width is refused", async ({ page }) => {

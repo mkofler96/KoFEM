@@ -19,6 +19,8 @@ export function MeshOverlapLayer() {
   const shapes = useMemo(
     () =>
       overlaps.map((overlap) => ({
+        // No two overlaps share a surface element, so the first one names it.
+        key: overlap.positions.slice(0, 9).join(),
         faces: Float32Array.from(overlap.positions),
         line: overlap.hinge
           ? new Float32Array([...overlap.hinge.start, ...overlap.hinge.end])
@@ -29,8 +31,8 @@ export function MeshOverlapLayer() {
 
   return (
     <group>
-      {shapes.map(({ faces, line }, i) => (
-        <group key={i}>
+      {shapes.map(({ key, faces, line }) => (
+        <group key={key}>
           <FaceOverlay
             positions={faces}
             color={OVERLAP_COLOR}

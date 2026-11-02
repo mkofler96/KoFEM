@@ -107,8 +107,15 @@ export function useGeometryEdit() {
     return run(
       "boolean_geometry",
       { boolean: { op, target, tools, keepTools } },
-      (bodyCount) =>
-        booleanBodySources(bodyIds, op, target, tools, keepTools, bodyCount),
+      (reply) =>
+        booleanBodySources(
+          bodyIds,
+          op,
+          target,
+          tools,
+          keepTools,
+          reply.bodyCount,
+        ),
     );
   }
 
@@ -126,7 +133,11 @@ export function useGeometryEdit() {
       return false;
     }
     const bodiesBefore = properties.filter(isCadBody).length;
-    const ok = await run("repair_hinges", { repair });
+    const ok = await run<EditReply & { bodySources: number[] }>(
+      "repair_hinges",
+      { repair },
+      (reply) => reply.bodySources,
+    );
     if (ok) {
       const state = useModelStore.getState();
       const bodies = state.properties.filter(isCadBody).length;
@@ -139,17 +150,18 @@ export function useGeometryEdit() {
   }
 
   // `bodySources` maps the edited model's bodies back to the old ones when the
-  // edit knows it (a Boolean), so their settings survive the renumbering.
-  async function run(
+  // edit knows it (a Boolean, a hinge repair), so their settings survive the
+  // renumbering.
+  async function run<Reply extends EditReply = EditReply>(
     type: "split_geometry" | "boolean_geometry" | "repair_hinges",
     edit: Record<string, unknown>,
-    bodySources?: (bodyCount: number) => number[],
+    bodySources?: (reply: Reply) => number[],
   ): Promise<boolean> {
     setSplitError(null);
     setIsSplitting(true);
     setRunning(true);
     try {
-      const reply = await sendToWorker<EditReply>(type, {
+      const reply = await sendToWorker<Reply>(type, {
         bytes: stepBytes,
         format: geometryFormat,
         ...edit,
@@ -163,7 +175,7 @@ export function useGeometryEdit() {
           faceIds: reply.faceIds,
         },
         reply.bodyCount,
-        bodySources?.(reply.bodyCount),
+        bodySources?.(reply),
       );
       return true;
     } catch (err) {

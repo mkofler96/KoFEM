@@ -462,11 +462,11 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       // The engine writes every edit as STEP, whatever the source format was.
       s.geometryFormat = "step";
       s.stepSurface = tessellation;
-      // An edit that maps its bodies (a Boolean) carries each body's settings
-      // to its new id. A face split keeps the bodies, so their materials and
-      // element types stay; only the shell sections a mesh derived go, with the
-      // mesh. A body split renumbers the bodies — start the table over, as an
-      // import would.
+      // An edit that maps its bodies (a Boolean, a hinge repair) carries each
+      // body's settings to its new id. A face split keeps the bodies, so their
+      // materials and element types stay; only the shell sections a mesh derived
+      // go, with the mesh. A body split renumbers the bodies — start the table
+      // over, as an import would.
       if (bodySources) {
         if (bodySources.length !== Math.max(1, bodyCount))
           throw new Error(

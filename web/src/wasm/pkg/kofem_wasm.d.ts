@@ -237,9 +237,11 @@ export interface KofemModule {
    *  @param opts_json JSON-stringified {@link BooleanGeometryOptions}. */
   boolean_geometry(opts_json: string): { bytes: Uint8Array }
   /** Remove hinges reported by generate_fem_mesh and return the edited geometry
-   *  as STEP AP214 bytes. Releases the cached shape, like split_geometry.
+   *  as STEP AP214 bytes. `bodySources[j]` is the old id of new Body j+1: a body
+   *  that came apart appears once per piece. Releases the cached shape, like
+   *  split_geometry.
    *  @param opts_json JSON-stringified {@link RepairHingesOptions}. */
-  repair_hinges(opts_json: string): { bytes: Uint8Array }
+  repair_hinges(opts_json: string): { bytes: Uint8Array; bodySources: number[] }
   /** Release the OCCT shape + STEP byte cache from WASM heap.
    *  Call this after meshing is complete and before solving to free ~10–30 MB
    *  of WASM memory that is no longer needed.
