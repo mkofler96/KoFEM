@@ -8,6 +8,7 @@
 
 #include "geometry_cache.h"
 #include "json_util.h"
+#include "mesh_overlap.h"
 #include "wasm_util.h"
 
 // Netgen (C API)
@@ -227,6 +228,20 @@ val generate_fem_mesh(const std::string& opts_json)
     int ne = nglib::Ng_GetNE(mesh);
     printf("[netgen] step 4/4: volume mesh done — %d nodes, %d tetrahedra\n", np, ne);
     fflush(stdout);
+
+    // Netgen catches its own "boundary mesh is overlapping" exception and returns
+    // NG_OK with no tetrahedra. Tell that apart from an open shell below: report
+    // where the surface overlaps so the caller can show it and offer a repair.
+    if (ne == 0) {
+        const std::vector<KofemSurfaceTriangle> overlapping =
+            kofem_overlapping_surface_elements(static_cast<void*>(mesh));
+        if (!overlapping.empty()) {
+            kofem_delete_mesh(static_cast<void*>(mesh));
+            val overlap_result = val::object();
+            overlap_result.set("overlaps", describe_mesh_overlaps(overlapping, cached_shape()));
+            return overlap_result;
+        }
+    }
 
     // A surface mesh with no tetrahedra means the geometry enclosed no volume:
     // the boundary surfaces did not sew into a watertight solid (typical of

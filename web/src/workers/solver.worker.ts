@@ -16,6 +16,7 @@ import type {
   ParseStepPayload,
   SplitGeometryPayload,
   BooleanGeometryPayload,
+  RepairHingesPayload,
   VolumeMeshPayload,
   SolvePayload,
   TopOptPayload,
@@ -220,6 +221,22 @@ function handleBooleanGeometry(id: number, payload: BooleanGeometryPayload) {
   });
 }
 
+// Remove hinges a failed mesh reported — the same round trip as a split.
+function handleRepairHinges(id: number, payload: RepairHingesPayload) {
+  reloadForEdit(payload.bytes, payload.format);
+  const { bytes, bodySources } = m().repair_hinges(
+    JSON.stringify(payload.repair),
+  );
+  geometryLoaded = false; // repair_hinges released the pre-edit shape
+  self.postMessage({
+    id,
+    ok: true,
+    bytes,
+    bodySources,
+    ...loadGeometry(bytes, "step"),
+  });
+}
+
 // Load exactly the bytes an edit's ids were read from into the engine.
 function reloadForEdit(bytes: Uint8Array, format: string) {
   m().tessellate_step(
@@ -317,6 +334,11 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
   // surface-element order (NOT tet boundary order); surfaceFaceIds holds
   // the 1-based OCC face index per surface triangle.
   const dto = m().generate_fem_mesh(opts);
+  if ("overlaps" in dto) {
+    flushCoverage();
+    self.postMessage({ id, ok: true, overlaps: dto.overlaps });
+    return;
+  }
   const nNodes = dto.vertices.length / 3;
   const nTets = dto.tetrahedra.length / 4;
 
@@ -727,6 +749,10 @@ function handleTestGenerateFemMesh(id: number) {
     optsteps_3d: 0,
   });
   const dto = m().generate_fem_mesh(opts);
+  if ("overlaps" in dto)
+    throw new Error(
+      `test_generate_fem_mesh: the surface mesh overlaps itself in ${dto.overlaps.length} places`,
+    );
   self.postMessage({
     id,
     ok: true,
@@ -752,6 +778,8 @@ self.onmessage = async (event: MessageEvent) => {
       handleSplitGeometry(id, payload as SplitGeometryPayload);
     } else if (type === "boolean_geometry") {
       handleBooleanGeometry(id, payload as BooleanGeometryPayload);
+    } else if (type === "repair_hinges") {
+      handleRepairHinges(id, payload as RepairHingesPayload);
     } else if (type === "volume_mesh") {
       handleVolumeMesh(id, payload as VolumeMeshPayload);
     } else if (type === "solve") {

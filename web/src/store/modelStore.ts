@@ -182,6 +182,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.splitDraft = null;
       s.splitError = null;
       s.remeshNotice = null;
+      s.meshOverlaps = [];
       s.volMesh = a.volMesh;
       s.surfaceTriangles = a.surfaceTriangles;
       s.surfaceFaceIds = a.surfaceFaceIds;
@@ -277,6 +278,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.splitDraft = null;
       s.splitError = null;
       s.remeshNotice = null;
+      s.meshOverlaps = [];
       s.volMesh = null;
       s.surfaceTriangles = null;
       s.surfaceFaceIds = null;

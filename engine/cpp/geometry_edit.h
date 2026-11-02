@@ -60,3 +60,18 @@ emscripten::val split_geometry(const std::string& opts_json);
 // Returns { bytes: Uint8Array } (STEP AP214 of the edited shape) and releases
 // the cached shape, exactly like split_geometry.
 emscripten::val boolean_geometry(const std::string& opts_json);
+
+// Remove line contacts that generate_fem_mesh reported (see mesh_overlap.h).
+//
+// opts_json:
+//   { "op":     "connect" | "separate",
+//     "width":  w,                       width of the repair across the line (mm)
+//     "hinges": [{ "bodyId", "start", "end", "normal" }, ..] }
+//
+// "connect" fuses a box along each line, welding the two sides together with new
+// material. "separate" cuts one out, opening a gap between them; if the line was
+// the only connection, the body falls apart into several.
+//
+// Returns { bytes: Uint8Array } (STEP AP214 of the edited shape) and releases
+// the cached shape, exactly like split_geometry.
+emscripten::val repair_hinges(const std::string& opts_json);

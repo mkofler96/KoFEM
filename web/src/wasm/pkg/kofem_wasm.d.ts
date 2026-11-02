@@ -43,6 +43,37 @@ export interface BooleanGeometryOptions {
   keepTools?: boolean
 }
 
+/** A place where the surface mesh overlaps itself, so no volume mesh exists.
+ *  `positions` holds xyz of 3 corners per overlapping surface element. A "hinge"
+ *  is a straight tangent contact between two CAD faces, located exactly in
+ *  `hinge` (mm) and repairable with {@link KofemModule.repair_hinges}. */
+export interface MeshOverlap {
+  kind: "hinge" | "surface"
+  faceIds: Int32Array
+  bodyId: number
+  positions: Float64Array
+  hinge?: {
+    start: Float64Array
+    end: Float64Array
+    normal: Float64Array
+    length: number
+  }
+}
+
+/** Hinge repair requested of {@link KofemModule.repair_hinges}, JSON-stringified.
+ *  "connect" welds the two sides with a box along each line, "separate" cuts one
+ *  out to open a gap. `width` is the box's width across the line in mm. */
+export interface RepairHingesOptions {
+  op: "connect" | "separate"
+  width: number
+  hinges: {
+    bodyId: number
+    start: number[]
+    end: number[]
+    normal: number[]
+  }[]
+}
+
 /** FEM volume mesh returned as flat typed arrays (binary, no JSON text — issue #166).
  *  `vertices` is xyz interleaved (length 3·nNodes); `tetrahedra` is four 0-based
  *  vertex indices per tet (length 4·nTets); `bodyIds` is the 1-based body
@@ -188,9 +219,10 @@ export interface KofemModule {
   tessellate_step(cad_bytes: Uint8Array, opts_json: string): StepTessellation
   /** Generate a FEM surface mesh + volume mesh directly from the stored STEP geometry
    *  using Netgen's native OCC integration.  Must call tessellate_step first.
+   *  Returns `{ overlaps }` instead of a mesh when the surface mesh overlaps itself.
    *  @param opts_json JSON `{ max_element_size, min_element_size, grading, second_order, elementsperedge, elementspercurve, optsteps_2d, optsteps_3d }`
    */
-  generate_fem_mesh(opts_json: string): FemMesh
+  generate_fem_mesh(opts_json: string): FemMesh | { overlaps: MeshOverlap[] }
   /** Split faces or bodies of the loaded shape with a plane (see
    *  {@link SplitGeometryOptions}) and return the edited geometry as STEP
    *  AP214 bytes. Throws, naming the face or body, when the plane leaves any
@@ -204,6 +236,12 @@ export interface KofemModule {
    *  nothing. Releases the cached shape, like split_geometry.
    *  @param opts_json JSON-stringified {@link BooleanGeometryOptions}. */
   boolean_geometry(opts_json: string): { bytes: Uint8Array }
+  /** Remove hinges reported by generate_fem_mesh and return the edited geometry
+   *  as STEP AP214 bytes. `bodySources[j]` is the old id of new Body j+1: a body
+   *  that came apart appears once per piece. Releases the cached shape, like
+   *  split_geometry.
+   *  @param opts_json JSON-stringified {@link RepairHingesOptions}. */
+  repair_hinges(opts_json: string): { bytes: Uint8Array; bodySources: number[] }
   /** Release the OCCT shape + STEP byte cache from WASM heap.
    *  Call this after meshing is complete and before solving to free ~10–30 MB
    *  of WASM memory that is no longer needed.

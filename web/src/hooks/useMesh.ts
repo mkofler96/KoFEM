@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useModelStore } from "../store/modelStore";
 import type { Node, Element, Property } from "../store/modelStore";
+import type { MeshOverlap } from "../wasm/pkg/kofem_wasm";
 import { isCadBody } from "../store/geometrySlice";
 import { sendToWorker, resetWorker } from "../workers/sharedWorker";
 import { useWorkerLogs } from "./useWorkerLogs";
@@ -34,6 +35,7 @@ export function useMesh() {
   const geometryFormat = useModelStore((s) => s.geometryFormat);
   const isMeshing = useModelStore((s) => s.isMeshing);
   const setMeshing = useModelStore((s) => s.setMeshing);
+  const setMeshOverlaps = useModelStore((s) => s.setMeshOverlaps);
   const applyMeshResult = useModelStore((s) => s.applyMeshResult);
   const properties = useModelStore((s) => s.properties);
   const elementOrder = useModelStore((s) => s.elementOrder);
@@ -137,6 +139,7 @@ export function useMesh() {
     }
 
     setMeshError(null);
+    setMeshOverlaps([]);
     setMeshing(true);
     clearLogs();
     const elapsed = startTimer();
@@ -146,19 +149,16 @@ export function useMesh() {
       .filter((p) => isCadBody(p) && p.suppressed)
       .map((p) => p.id);
     try {
-      const {
-        nodes: meshNodes,
-        elements: meshElements,
-        properties: meshProperties,
-        surfaceTriangles,
-        surfaceFaceIds,
-      } = await sendToWorker<{
-        nodes: Node[];
-        elements: Element[];
-        properties?: Property[];
-        surfaceTriangles: [number, number, number][] | null;
-        surfaceFaceIds: number[] | null;
-      }>("volume_mesh", {
+      const reply = await sendToWorker<
+        | {
+            nodes: Node[];
+            elements: Element[];
+            properties?: Property[];
+            surfaceTriangles: [number, number, number][] | null;
+            surfaceFaceIds: number[] | null;
+          }
+        | { overlaps: MeshOverlap[] }
+      >("volume_mesh", {
         bytes: stepBytes,
         format: geometryFormat,
         maxElementSize: maxSize,
@@ -178,6 +178,20 @@ export function useMesh() {
         suppressedBodyIds,
         properties,
       });
+      // Same reason for the reset as after a mesh, below.
+      if ("overlaps" in reply) {
+        resetWorker();
+        setMeshOverlaps(reply.overlaps);
+        trackMeshFailed("geometry_defect", elapsed());
+        return;
+      }
+      const {
+        nodes: meshNodes,
+        elements: meshElements,
+        properties: meshProperties,
+        surfaceTriangles,
+        surfaceFaceIds,
+      } = reply;
       applyMeshResult(
         meshNodes,
         meshElements,

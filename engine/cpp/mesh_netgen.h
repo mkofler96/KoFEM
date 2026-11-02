@@ -13,4 +13,6 @@
 // volume). Returns {vertices, tetrahedra, surfaceTriangles, surfaceFaceIds}
 // as flat typed arrays (Float64 xyz per vertex, Int32 indices) — binary
 // transfer, no JSON text (issue #166).
+// When the surface mesh overlaps itself no volume mesh exists: returns
+// { overlaps: [..] } instead (see mesh_overlap.h).
 emscripten::val generate_fem_mesh(const std::string& opts_json);
