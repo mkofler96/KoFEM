@@ -46,9 +46,11 @@ export interface BooleanGeometryOptions {
 /** A place where the surface mesh overlaps itself, so no volume mesh exists.
  *  `positions` holds xyz of 3 corners per overlapping surface element. A "hinge"
  *  is a straight tangent contact between two CAD faces, located exactly in
- *  `hinge` (mm) and repairable with {@link KofemModule.repair_hinges}. */
+ *  `hinge` (mm) and repairable with {@link KofemModule.repair_hinges}. A "cone"
+ *  holds a full cone face closing at its tip, which Netgen can fail on; repairable
+ *  with {@link KofemModule.split_cone_tips}. */
 export interface MeshOverlap {
-  kind: "hinge" | "surface"
+  kind: "hinge" | "cone" | "surface"
   faceIds: Int32Array
   bodyId: number
   positions: Float64Array
@@ -242,6 +244,11 @@ export interface KofemModule {
    *  split_geometry.
    *  @param opts_json JSON-stringified {@link RepairHingesOptions}. */
   repair_hinges(opts_json: string): { bytes: Uint8Array; bodySources: number[] }
+  /** Divide cone faces reported by generate_fem_mesh into pieces Netgen can mesh
+   *  and return the edited geometry as STEP AP214 bytes. Releases the cached
+   *  shape, like split_geometry.
+   *  @param opts_json JSON-stringified `{ faceIds: number[] }`. */
+  split_cone_tips(opts_json: string): { bytes: Uint8Array }
   /** Release the OCCT shape + STEP byte cache from WASM heap.
    *  Call this after meshing is complete and before solving to free ~10–30 MB
    *  of WASM memory that is no longer needed.

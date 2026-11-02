@@ -4,7 +4,11 @@
 import { useState } from "react";
 import { useModelStore } from "../../store/modelStore";
 import { useGeometryEdit } from "../../hooks/useGeometryEdit";
-import { hingeRepairs, defaultRepairWidth } from "../../lib/meshOverlaps";
+import {
+  coneTipFaces,
+  hingeRepairs,
+  defaultRepairWidth,
+} from "../../lib/meshOverlaps";
 import type { RepairHingesOptions } from "../../wasm/pkg/kofem_wasm";
 import styles from "./Panel.module.css";
 
@@ -19,15 +23,22 @@ export function MeshOverlapCard({
   const overlaps = useModelStore((s) => s.meshOverlaps);
   const isRunning = useModelStore((s) => s.isRunning);
   const isMeshing = useModelStore((s) => s.isMeshing);
-  const { repairHinges, isSplitting, splitError, setSplitError } =
-    useGeometryEdit();
+  const {
+    repairHinges,
+    splitConeTips,
+    isSplitting,
+    splitError,
+    setSplitError,
+  } = useGeometryEdit();
   // Null until typed: the default follows the element size.
   const [typedWidth, setTypedWidth] = useState<string | null>(null);
 
   if (overlaps.length === 0) return null;
 
   const hinges = hingeRepairs(overlaps);
-  const others = overlaps.length - hinges.length;
+  const coneFaces = coneTipFaces(overlaps);
+  const cones = overlaps.filter((overlap) => overlap.kind === "cone").length;
+  const others = overlaps.length - hinges.length - cones;
   const width = typedWidth ?? defaultRepairWidth(maxElementSize);
   const busy = isSplitting || isRunning || isMeshing;
 
@@ -85,6 +96,28 @@ export function MeshOverlapCard({
               onClick={() => repair("connect")}
             >
               Connect
+            </button>
+          </div>
+        </>
+      )}
+      {cones > 0 && (
+        <>
+          <div className={styles.errorBanner} data-testid="cone-warning">
+            <span>
+              The mesher can&apos;t handle {cones === 1 ? "a" : cones} sharp
+              cone {cones === 1 ? "tip" : "tips"} here, highlighted in the view.
+              Splitting the {cones === 1 ? "face" : "faces"} fixes this without
+              changing the shape.
+            </span>
+          </div>
+          <div className={styles.formBtns}>
+            <button
+              className={styles.outlineBtn}
+              data-testid="cone-split"
+              disabled={busy}
+              onClick={() => splitConeTips(coneFaces)}
+            >
+              Split {cones === 1 ? "face" : "faces"}
             </button>
           </div>
         </>

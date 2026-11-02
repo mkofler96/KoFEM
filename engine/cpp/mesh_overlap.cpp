@@ -9,10 +9,12 @@
 #include "wasm_util.h"
 
 #include <BRepAdaptor_Curve.hxx>
+#include <BRepAdaptor_Surface.hxx>
 #include <BRepAlgoAPI_Section.hxx>
 #include <BRep_Tool.hxx>
 #include <GeomAPI_ProjectPointOnSurf.hxx>
 #include <GeomAbs_CurveType.hxx>
+#include <GeomAbs_SurfaceType.hxx>
 #include <GeomLProp_SLProps.hxx>
 #include <Geom_Surface.hxx>
 #include <TopExp.hxx>
@@ -231,6 +233,16 @@ val point_array(const gp_XYZ& p) {
 
 }  // namespace
 
+bool is_closed_cone_tip(const TopoDS_Face& face) {
+    const BRepAdaptor_Surface surface(face);
+    if (surface.GetType() != GeomAbs_Cone || !surface.IsUClosed())
+        return false;
+    for (TopExp_Explorer e(face, TopAbs_EDGE); e.More(); e.Next())
+        if (BRep_Tool::Degenerated(TopoDS::Edge(e.Current())))
+            return true;
+    return false;
+}
+
 val describe_mesh_overlaps(const std::vector<KofemSurfaceTriangle>& triangles,
                            const TopoDS_Shape& shape) {
     TopTools_IndexedMapOfShape faces;
@@ -262,8 +274,12 @@ val describe_mesh_overlaps(const std::vector<KofemSurfaceTriangle>& triangles,
         const int body = owners.IsEmpty() ? 0 : solids.FindIndex(owners.First());
         const std::optional<Hinge> hinge = body > 0 ? find_hinge(face_ids, faces) : std::nullopt;
 
+        const bool has_cone_tip =
+            std::any_of(face_ids.begin(), face_ids.end(),
+                        [&](int id) { return is_closed_cone_tip(TopoDS::Face(faces(id))); });
+
         val overlap = val::object();
-        overlap.set("kind", hinge ? "hinge" : "surface");
+        overlap.set("kind", hinge ? "hinge" : has_cone_tip ? "cone" : "surface");
         overlap.set("faceIds", int32_array(face_ids));
         overlap.set("bodyId", body);
         overlap.set("positions", float64_array(positions));

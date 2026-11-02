@@ -22,6 +22,13 @@ const COLLAPSED = path.resolve(
   "nearly_collapsed_spline.step",
 );
 
+// A plate with a pin tangent to it that ends below the plate's top, so the fuse
+// box's end stands proud. OCCT's raw fuse leaves an invalid wire on this.
+const HINGE_FREE_END = path.resolve("..", "test_files", "hinge_free_end.step");
+// A block with a blind hole ending in a sharp cone: one full cone face closing at
+// its tip, which Netgen's surface mesh fails on at every element size.
+const CONE_TIP = path.resolve("..", "test_files", "cone_tip_bore.step");
+
 async function setSizes(page: Page, max: string, min: string): Promise<void> {
   await page.getByTestId("max-element-size").fill(max);
   await page.getByTestId("min-element-size").fill(min);
@@ -96,6 +103,50 @@ test("connect repairs a hinge so the part meshes", async ({ page }) => {
     .poll(async () => (await geometryCounts(page)).edits, { timeout: 60_000 })
     .toBe(1);
   expect((await geometryCounts(page)).bodies).toBe(1);
+  await expect(page.getByTestId("mesh-overlap-card")).toHaveCount(0);
+
+  await mesh(page);
+  await expectMeshed(page);
+});
+
+test("connect repairs a hinge whose raw fuse is invalid", async ({ page }) => {
+  test.setTimeout(300_000);
+  await importStep(page, HINGE_FREE_END);
+  await setSizes(page, "2", "0.2");
+  await mesh(page);
+  await expect(page.getByTestId("hinge-warning")).toBeVisible({
+    timeout: 120_000,
+  });
+  await page.getByTestId("hinge-connect").click();
+  await expect
+    .poll(async () => (await geometryCounts(page)).edits, { timeout: 60_000 })
+    .toBe(1);
+  await expect(page.getByTestId("mesh-overlap-error")).toHaveCount(0);
+
+  await mesh(page);
+  await expectMeshed(page);
+});
+
+test("splitting a sharp cone tip lets the part mesh", async ({ page }) => {
+  test.setTimeout(300_000);
+  // The page must stay usable: Netgen prints four lines per overlapping pair.
+  const pairLines: string[] = [];
+  page.on("console", (message) => {
+    if (message.text().includes("Intersecting elements"))
+      pairLines.push(message.text());
+  });
+  await importStep(page, CONE_TIP);
+  await setSizes(page, "1", "0.1");
+  await mesh(page);
+  await expect(page.getByTestId("cone-warning")).toBeVisible({
+    timeout: 120_000,
+  });
+  expect(pairLines).toEqual([]);
+
+  await page.getByTestId("cone-split").click();
+  await expect
+    .poll(async () => (await geometryCounts(page)).edits, { timeout: 60_000 })
+    .toBe(1);
   await expect(page.getByTestId("mesh-overlap-card")).toHaveCount(0);
 
   await mesh(page);

@@ -31,3 +31,10 @@ export function hingeRepairs(
       : [],
   );
 }
+
+// The faces of the cone overlaps, as the engine takes them.
+export function coneTipFaces(overlaps: MeshOverlap[]): number[] {
+  return overlaps.flatMap((overlap) =>
+    overlap.kind === "cone" ? Array.from(overlap.faceIds) : [],
+  );
+}

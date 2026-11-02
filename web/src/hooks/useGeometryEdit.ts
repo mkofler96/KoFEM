@@ -149,11 +149,26 @@ export function useGeometryEdit() {
     return ok;
   }
 
+  // Divide the cone tips a failed mesh reported.
+  async function splitConeTips(faceIds: number[]): Promise<boolean> {
+    if (!stepBytes) {
+      setSplitError(
+        "Cannot split the cone tips: the geometry file is not available (a saved analysis carries none). Re-import the STEP file to edit its geometry.",
+      );
+      return false;
+    }
+    return run("split_cone_tips", { faceIds });
+  }
+
   // `bodySources` maps the edited model's bodies back to the old ones when the
   // edit knows it (a Boolean, a hinge repair), so their settings survive the
   // renumbering.
   async function run<Reply extends EditReply = EditReply>(
-    type: "split_geometry" | "boolean_geometry" | "repair_hinges",
+    type:
+      | "split_geometry"
+      | "boolean_geometry"
+      | "repair_hinges"
+      | "split_cone_tips",
     edit: Record<string, unknown>,
     bodySources?: (reply: Reply) => number[],
   ): Promise<boolean> {
@@ -206,6 +221,7 @@ export function useGeometryEdit() {
     split,
     combine,
     repairHinges,
+    splitConeTips,
     undo,
     isSplitting,
     splitError,

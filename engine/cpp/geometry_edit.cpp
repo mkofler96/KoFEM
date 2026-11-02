@@ -24,6 +24,7 @@
 #include "cad_io.h"
 #include "geometry_cache.h"
 #include "json_util.h"
+#include "mesh_overlap.h"
 #include "wasm_util.h"
 
 #include <BOPAlgo_Splitter.hxx>
@@ -36,12 +37,15 @@
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepAlgoAPI_Section.hxx>
 #include <BRepBndLib.hxx>
+#include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
 #include <BRepCheck_Analyzer.hxx>
 #include <BRepPrimAPI_MakeBox.hxx>
 #include <BRep_Builder.hxx>
+#include <BRep_Tool.hxx>
 #include <Bnd_Box.hxx>
 #include <GeomAbs_SurfaceType.hxx>
+#include <Geom_Surface.hxx>
 #include <IFSelect_ReturnStatus.hxx>
 #include <STEPControl_Writer.hxx>
 #include <TopExp.hxx>
@@ -450,6 +454,12 @@ TopoDS_Shape combine_bodies(const TopoDS_Shape& shape, const std::string& op, in
     return out;
 }
 
+// ── Cone tips ───────────────────────────────────────────────────────────────
+
+// Lines from the tip to the rim, away from the seam, open a closed cone face up
+// into pieces that Netgen can mesh.
+constexpr std::array<double, 2> CONE_CUT_FRACTIONS = {1.0 / 3.0, 2.0 / 3.0};
+
 // ── Hinge repair ─────────────────────────────────────────────────────────────
 
 // How deep the tool reaches to each side of the contact, per unit of its width.
@@ -527,6 +537,11 @@ TopoDS_Shape apply_hinge_tool(const TopoDS_Shape& solid, const std::string& op,
         throw std::runtime_error("repair_hinges: the OCCT Boolean failed. OCCT reports: " +
                                  alerts.str());
     }
+    // The box's sides split the faces it lands on along the contact. Fusing can
+    // leave an invalid wire there, whatever the width; merging the faces that lie
+    // on one surface removes it, as in combine_bodies.
+    if (op == "connect")
+        operation->SimplifyResult();
     const TopoDS_Shape result = operation->Shape();
     if (count_solids(result) == 0 || !BRepCheck_Analyzer(result).IsValid())
         throw std::runtime_error(op == "connect"
@@ -593,6 +608,52 @@ RepairedShape repair_hinge_lines(const TopoDS_Shape& shape, const std::string& o
 }
 
 }  // namespace
+
+val split_cone_tips(const std::string& opts_json) {
+    const val opts = parse_json(opts_json);
+    const std::vector<int> face_ids = id_list(opts, "faceIds");
+    const TopoDS_Shape& shape = cached_shape();
+    TopTools_IndexedMapOfShape faces;
+    TopExp::MapShapes(shape, TopAbs_FACE, faces);
+    require_unique_in_range("split_cone_tips", face_ids, faces.Extent(), "face");
+
+    BOPAlgo_Splitter splitter;
+    splitter.AddArgument(shape);
+    int n_cones = 0;
+    for (const int id : face_ids) {
+        const TopoDS_Face& face = TopoDS::Face(faces(id));
+        // An overlap region can reach the faces next to the cone.
+        if (!is_closed_cone_tip(face))
+            continue;
+        ++n_cones;
+        const BRepAdaptor_Surface bounds(face);
+        const Handle(Geom_Surface) surface = BRep_Tool::Surface(face);
+        for (const double fraction : CONE_CUT_FRACTIONS) {
+            const double u = bounds.FirstUParameter() +
+                             fraction * (bounds.LastUParameter() - bounds.FirstUParameter());
+            splitter.AddTool(BRepBuilderAPI_MakeEdge(surface->UIso(u), bounds.FirstVParameter(),
+                                                     bounds.LastVParameter())
+                                 .Edge());
+        }
+    }
+    if (n_cones == 0)
+        throw std::runtime_error("split_cone_tips: none of the given faces is a cone with a tip");
+    run_splitter(splitter);
+    const TopoDS_Shape edited = in_solid_order(shape, splitter);
+    if (!BRepCheck_Analyzer(edited).IsValid())
+        throw std::runtime_error(
+            "Splitting the cone tips left invalid geometry. Simplify them in CAD and re-import.");
+    (void)printf("[occt] split %d cone tip(s)\n", n_cones);
+    (void)fflush(stdout);
+
+    const std::vector<uint8_t> bytes = step_bytes(edited);
+    // As for a split: the edit lives in the returned file from here on.
+    free_geometry_cache();
+
+    val result = val::object();
+    result.set("bytes", uint8_array(bytes));
+    return result;
+}
 
 val repair_hinges(const std::string& opts_json) {
     const val opts = parse_json(opts_json);

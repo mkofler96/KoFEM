@@ -10,11 +10,12 @@
 
 #include <vector>
 
+class TopoDS_Face;
 class TopoDS_Shape;
 
 // Group the flagged surface elements into regions and describe each one:
 //
-//   { kind:      "hinge" | "surface",
+//   { kind:      "hinge" | "cone" | "surface",
 //     faceIds:   [..],                 1-based OCC faces of the flagged elements
 //     bodyId:    1-based solid owning the first of them
 //     positions: Float64Array,         xyz of 3 corners per flagged element
@@ -23,7 +24,12 @@ class TopoDS_Shape;
 // A "hinge" is a straight tangent contact between two faces facing each other:
 // the solid pinches to zero thickness along that line, which no tetrahedron can
 // fill. It is located exactly from the CAD faces, so it can be repaired
-// (repair_hinges). Anything else is a "surface" overlap, located only by its
+// (repair_hinges). A "cone" region holds a full cone face closing at its tip,
+// which Netgen can fail to mesh at any element size; dividing it fixes that
+// (split_cone_tips). Anything else is a "surface" overlap, located only by its
 // elements.
 emscripten::val describe_mesh_overlaps(const std::vector<KofemSurfaceTriangle>& triangles,
                                        const TopoDS_Shape& shape);
+
+// A cone face going all the way around and closing at its tip.
+bool is_closed_cone_tip(const TopoDS_Face& face);

@@ -5,7 +5,11 @@
 // offered, and the width it starts from.
 
 import assert from "node:assert/strict";
-import { defaultRepairWidth, hingeRepairs } from "../src/lib/meshOverlaps.ts";
+import {
+  coneTipFaces,
+  defaultRepairWidth,
+  hingeRepairs,
+} from "../src/lib/meshOverlaps.ts";
 
 const hinge = {
   kind: "hinge",
@@ -36,6 +40,11 @@ assert.deepEqual(hingeRepairs([surface, hinge]), [
   },
 ]);
 assert.deepEqual(hingeRepairs([surface]), []);
+
+// Only cone overlaps offer their faces for the cone split.
+const cone = { ...surface, kind: "cone", faceIds: new Int32Array([7, 8]) };
+assert.deepEqual(coneTipFaces([surface, hinge, cone]), [7, 8]);
+assert.deepEqual(coneTipFaces([surface, hinge]), []);
 
 // The width follows the element size; no usable size means the field asks.
 assert.equal(defaultRepairWidth("2"), "3");

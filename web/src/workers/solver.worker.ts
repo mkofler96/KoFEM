@@ -17,6 +17,7 @@ import type {
   SplitGeometryPayload,
   BooleanGeometryPayload,
   RepairHingesPayload,
+  SplitConeTipsPayload,
   VolumeMeshPayload,
   SolvePayload,
   TopOptPayload,
@@ -99,12 +100,24 @@ function ensureInit(): Promise<void> {
   return initPromise;
 }
 
+// Netgen prints four lines per overlapping pair of surface elements, and a bad
+// surface has thousands of pairs: forwarding them freezes the page. The mesh
+// result reports the overlaps themselves.
+const OVERLAP_PAIR_LINE =
+  /^\s*(?:WARNING: Intersecting elements |el[12] = np = |layer[12] = )/;
+
+function isOverlapPairLine(text: string): boolean {
+  return OVERLAP_PAIR_LINE.test(text);
+}
+
 async function initEngine() {
   const t0 = performance.now();
   try {
     Module = await createModule({
-      print: (text: string) =>
-        self.postMessage({ id: 0, log: `[wasm] ${text}` }),
+      print: (text: string) => {
+        if (!isOverlapPairLine(text))
+          self.postMessage({ id: 0, log: `[wasm] ${text}` });
+      },
       printErr: (text: string) =>
         self.postMessage({ id: 0, log: `[wasm:err] ${text}` }),
       onProgress: (progress) =>
@@ -233,6 +246,21 @@ function handleRepairHinges(id: number, payload: RepairHingesPayload) {
     ok: true,
     bytes,
     bodySources,
+    ...loadGeometry(bytes, "step"),
+  });
+}
+
+// Divide cone tips a failed mesh reported — the same round trip as a split.
+function handleSplitConeTips(id: number, payload: SplitConeTipsPayload) {
+  reloadForEdit(payload.bytes, payload.format);
+  const { bytes } = m().split_cone_tips(
+    JSON.stringify({ faceIds: payload.faceIds }),
+  );
+  geometryLoaded = false; // split_cone_tips released the pre-edit shape
+  self.postMessage({
+    id,
+    ok: true,
+    bytes,
     ...loadGeometry(bytes, "step"),
   });
 }
@@ -780,6 +808,8 @@ self.onmessage = async (event: MessageEvent) => {
       handleBooleanGeometry(id, payload as BooleanGeometryPayload);
     } else if (type === "repair_hinges") {
       handleRepairHinges(id, payload as RepairHingesPayload);
+    } else if (type === "split_cone_tips") {
+      handleSplitConeTips(id, payload as SplitConeTipsPayload);
     } else if (type === "volume_mesh") {
       handleVolumeMesh(id, payload as VolumeMeshPayload);
     } else if (type === "solve") {
