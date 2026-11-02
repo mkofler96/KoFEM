@@ -14,7 +14,7 @@ The published articles are `foundations/model-and-units`, the separate
 `foundations/consistent-units` comparison, `notation`, and four focused operator
 articles: gradients/divergence, tensor products, integration by parts, and
 reference-element mappings, and the numerical-methods articles
-`elements-and-quadrature` and `assembly`. General FEM introductions can use standalone
+`elements-and-quadrature`, `assembly` and `loads-and-constraints`. General FEM introductions can use standalone
 physical models; KoFEM examples and
 implementation sections are included when relevant. Remaining topics stay marked
 as planned until reviewed.
