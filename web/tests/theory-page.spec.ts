@@ -5,7 +5,8 @@ import { test, expect } from "./coverage";
 
 const ARTICLE = "/theory/foundations/model-and-units/";
 const UNIT_PAGE = "/theory/foundations/consistent-units/";
-const PAGES = ["/theory/", ARTICLE, UNIT_PAGE];
+const NOTATION_PAGE = "/theory/notation/";
+const PAGES = ["/theory/", ARTICLE, UNIT_PAGE, NOTATION_PAGE];
 
 test.describe("static theory content", () => {
   test.use({ javaScriptEnabled: false });
@@ -177,8 +178,71 @@ for (const width of [320, 390, 1440]) {
         .poll(() => table.evaluate((element) => element.scrollLeft))
         .toBeGreaterThan(0);
     }
+    await page.goto(NOTATION_PAGE);
+    await page.evaluate(() => document.fonts.ready);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    await expect(page.locator("main math").first()).toBeVisible();
   });
 }
+
+test("shared symbols and operators have unique, usable deep links", async ({
+  page,
+}) => {
+  await page.goto(NOTATION_PAGE);
+  const anchors = [
+    "position",
+    "domain",
+    "boundary",
+    "normal",
+    "displacement",
+    "test-function",
+    "strain",
+    "stress",
+    "von-mises",
+    "young-modulus",
+    "poisson-ratio",
+    "lame-parameters",
+    "density",
+    "point-force",
+    "traction",
+    "body-force",
+    "pressure",
+    "shape-functions",
+    "discrete-displacement",
+    "strain-displacement",
+    "stiffness",
+    "load-vector",
+    "gradient",
+    "symmetric-gradient",
+    "divergence",
+    "transpose",
+    "dot-product",
+    "double-contraction",
+    "trace",
+    "integral",
+  ];
+  for (const anchor of anchors) {
+    await expect(page.locator(`#${anchor}`), anchor).toHaveCount(1);
+    await expect(page.locator(`#${anchor}`), anchor).not.toBeEmpty();
+  }
+  expect(
+    await page.locator("#displacement mi").evaluate((element) => {
+      return getComputedStyle(element).fontWeight;
+    }),
+  ).toBe("700");
+  await page.goto(`${NOTATION_PAGE}#engineering-shear`);
+  await expect(page.locator("#engineering-shear")).toBeInViewport();
+  await expect(page.locator("main")).toContainText("engineering shear");
+  await expect(page.locator("main")).toContainText("automatic unit conversion");
+  await expect(
+    page.locator('main a[href="/theory/operators/gradient-divergence/"]'),
+  ).toHaveCount(0);
+  await expect(page.locator("h2 a, h3 a")).toHaveCount(0);
+});
 
 test("the unit comparison is separate and explains SI stress defaults", async ({
   page,

@@ -9,9 +9,10 @@ import { siteHeader, siteFooter } from "../site-layout.mjs";
 import { topics, topicAnchor, articleUrl } from "./content.mjs";
 import modelAndUnits from "./model-and-units.mjs";
 import consistentUnits from "./consistent-units.mjs";
+import notation from "./notation.mjs";
 
 const web = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const articles = [modelAndUnits, consistentUnits];
+const articles = [modelAndUnits, consistentUnits, notation];
 const sections = [...new Set(topics.map((topic) => topic.section))];
 const published = (topic) =>
   articles.some((article) => article.slug === topic.slug);
@@ -100,7 +101,7 @@ export function renderTheoryPages() {
     <p>Start with modelling assumptions and consistent units, then follow the
       mathematics from displacement and strain to the linear system and its
       results. Worked examples make each concept concrete.</p>
-    <p class="note">The guide is being written. Model and units and the unit-system comparison are available now;
+    <p class="note">The guide is being written. Model and units, the unit-system comparison and notation are available now;
       planned topics below show the reading order. Shells and optimization follow the solid guide.</p>
     <p><a class="button" href="/theory/foundations/model-and-units/">Start reading: Model and units →</a></p>
     ${sections

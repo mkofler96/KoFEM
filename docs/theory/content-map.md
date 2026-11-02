@@ -117,8 +117,8 @@ Evidence for these conventions lives in `web/src/store/materialSlice.ts`,
 
 ## Notation audit and conflicts to avoid
 
-The shared notation page will own the final symbol table. Until it is
-published, use these authoring rules:
+The published [notation reference](../../web/theory/notation.mjs) owns the symbol definitions
+and permanent anchors. Use these authoring rules:
 
 | Meaning                           | Preferred notation                           | Conflict found / rule                                                                                                                                                                                        |
 | --------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
