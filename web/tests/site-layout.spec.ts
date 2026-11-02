@@ -10,6 +10,7 @@ const PAGES = [
   "/examples/mbb-beam-topopt/",
   "/theory/",
   "/theory/foundations/model-and-units/",
+  "/theory/foundations/consistent-units/",
 ];
 
 test.use({ javaScriptEnabled: false });

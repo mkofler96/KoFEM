@@ -31,11 +31,6 @@
   outline-offset: 3px;
 }
 
-.section-link {
-  margin-left: 4px;
-  font-size: 0.8em;
-}
-
 .planned {
   color: var(--muted);
   font-size: 0.85em;
@@ -48,6 +43,13 @@
 
 .theory-topics li {
   margin: 8px 0;
+}
+
+/* Keep unit names and values together; the table region handles narrow screens. */
+.theory-docs table th,
+.theory-docs table td {
+  overflow-wrap: normal;
+  white-space: nowrap;
 }
 
 .symbols {

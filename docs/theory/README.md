@@ -10,8 +10,10 @@ one long manual.
   for an article.
 
 Public articles live under `/theory/`, with source modules in `web/theory/`.
-The initial representative article is `foundations/model-and-units`; remaining
-topics stay marked as planned until their articles are reviewed and published.
+The initial articles are `foundations/model-and-units` and the separate
+`foundations/consistent-units` comparison. General FEM introductions can use
+standalone physical models; KoFEM examples and implementation sections are
+included when relevant. Remaining topics stay marked as planned until reviewed.
 Run `cd web && bun run theory:generate` after editing, and commit generated
 HTML and sitemap. `bun run test:theory` checks output and content-map alignment.
 

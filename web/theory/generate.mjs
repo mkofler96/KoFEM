@@ -8,9 +8,10 @@ import { renderDocsPage } from "../docs-layout.mjs";
 import { siteHeader, siteFooter } from "../site-layout.mjs";
 import { topics, topicAnchor, articleUrl } from "./content.mjs";
 import modelAndUnits from "./model-and-units.mjs";
+import consistentUnits from "./consistent-units.mjs";
 
 const web = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const articles = [modelAndUnits];
+const articles = [modelAndUnits, consistentUnits];
 const sections = [...new Set(topics.map((topic) => topic.section))];
 const published = (topic) =>
   articles.some((article) => article.slug === topic.slug);
@@ -70,7 +71,6 @@ function page({ title, description, path, body, article = false }) {
     description,
     path,
     generatedBy: "web/theory/generate.mjs (cd web && bun run theory:generate)",
-    image: "/examples/axial-bar.png",
     jsonLd: {
       "@context": "https://schema.org",
       "@type": article ? "TechArticle" : "CollectionPage",
@@ -97,10 +97,10 @@ export function renderTheoryPages() {
   const overview = `
     <h1>Theory Guide</h1>
     <p class="lede">The mathematics and numerical choices behind a KoFEM study.</p>
-    <p>Start with the physical model, then follow a problem from displacement
-      and strain to the linear system and its results. The
-      <a href="/examples/axial-bar/">axial bar in tension</a> is the running example.</p>
-    <p class="note">The guide is being written. Model and units is available now;
+    <p>Start with modelling assumptions and consistent units, then follow the
+      mathematics from displacement and strain to the linear system and its
+      results. Worked examples make each concept concrete.</p>
+    <p class="note">The guide is being written. Model and units and the unit-system comparison are available now;
       planned topics below show the reading order. Shells and optimization follow the solid guide.</p>
     <p><a class="button" href="/theory/foundations/model-and-units/">Start reading: Model and units →</a></p>
     ${sections

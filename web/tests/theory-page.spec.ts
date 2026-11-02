@@ -4,7 +4,8 @@
 import { test, expect } from "./coverage";
 
 const ARTICLE = "/theory/foundations/model-and-units/";
-const PAGES = ["/theory/", ARTICLE];
+const UNIT_PAGE = "/theory/foundations/consistent-units/";
+const PAGES = ["/theory/", ARTICLE, UNIT_PAGE];
 
 test.describe("static theory content", () => {
   test.use({ javaScriptEnabled: false });
@@ -56,16 +57,14 @@ test.describe("static theory content", () => {
       const sitemap = await (await page.request.get("/sitemap.xml")).text();
       expect(sitemap).toContain(`<loc>https://kofem.org${path}</loc>`);
     }
-    await page.locator("figure img").scrollIntoViewIfNeeded();
-    expect(
-      await page
-        .locator("figure img")
-        .evaluate((element) => (element as HTMLImageElement).naturalWidth),
-    ).toBeGreaterThan(0);
-    await expect(page.locator("figure figcaption")).not.toBeEmpty();
+    await page.goto(ARTICLE);
     await expect(
-      page.getByRole("link", { name: "Open in KoFEM", exact: true }),
-    ).toHaveAttribute("href", "/app/?example=axial-bar");
+      page.getByRole("img", { name: "Idealised bar under axial tension" }),
+    ).toBeVisible();
+    await expect(page.locator("figure figcaption")).not.toBeEmpty();
+    await expect(page.locator("main")).not.toContainText(
+      "KoFEM implementation",
+    );
   });
 
   test("skip link, topics and section links work by keyboard without scripts", async ({
@@ -99,10 +98,12 @@ test.describe("static theory content", () => {
     await page.getByText("On this page", { exact: true }).first().click();
     await page
       .locator(".article-contents")
-      .getByRole("link", { name: "A coherent unit system" })
+      .getByRole("link", { name: "Choose consistent units" })
       .click();
     await expect(page).toHaveURL(`${ARTICLE}#units`);
     await expect(page.locator("h2#units")).toBeInViewport();
+    await page.locator('.pager a[rel="next"]').click();
+    await expect(page).toHaveURL(UNIT_PAGE);
     await page.getByRole("link", { name: /Next · planned/ }).click();
     await expect(page).toHaveURL("/theory/#foundations-reading-a-study");
     await expect(page.locator("#foundations-reading-a-study")).toContainText(
@@ -159,8 +160,54 @@ for (const width of [320, 390, 1440]) {
     await expect(
       page.getByRole("banner").getByRole("link", { name: /Start Solver/ }),
     ).toBeInViewport();
+    await page.goto(UNIT_PAGE);
+    await page.evaluate(() => document.fonts.ready);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    if (width < 500) {
+      const table = page.getByRole("region", {
+        name: /Common consistent unit systems/,
+      });
+      await table.focus();
+      await table.press("ArrowRight");
+      await expect
+        .poll(() => table.evaluate((element) => element.scrollLeft))
+        .toBeGreaterThan(0);
+    }
   });
 }
+
+test("the unit comparison is separate and explains SI stress defaults", async ({
+  page,
+}) => {
+  await page.goto(UNIT_PAGE);
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Consistent unit systems" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("row", { name: "SI kg m s N Pa J", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator("main")).toContainText(
+    "The default stress unit changes with the unit system.",
+  );
+  await expect(page.locator("main")).toContainText("Pa (N/m²)");
+  await expect(page.locator("main")).toContainText("MPa (N/mm²)");
+  await expect(page.locator('.pager a[rel="prev"]')).toHaveAttribute(
+    "href",
+    ARTICLE,
+  );
+  await page.goto(ARTICLE);
+  await expect(
+    page.getByRole("link", {
+      name: "consistent unit systems reference",
+      exact: true,
+    }),
+  ).toHaveAttribute("href", UNIT_PAGE);
+  await expect(page.locator("main table")).toHaveCount(0);
+});
 
 test("Theory keeps the examples' theme choice and canonical redirects", async ({
   page,
