@@ -63,5 +63,9 @@
   <url><loc>https://kofem.org/theory/foundations/model-and-units/</loc></url>
   <url><loc>https://kofem.org/theory/foundations/consistent-units/</loc></url>
   <url><loc>https://kofem.org/theory/notation/</loc></url>
+  <url><loc>https://kofem.org/theory/operators/gradient-divergence/</loc></url>
+  <url><loc>https://kofem.org/theory/operators/tensor-products/</loc></url>
+  <url><loc>https://kofem.org/theory/operators/integration-by-parts/</loc></url>
+  <url><loc>https://kofem.org/theory/operators/reference-mapping/</loc></url>
   <!-- theory:end -->
 </urlset>
