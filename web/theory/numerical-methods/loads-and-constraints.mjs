@@ -26,15 +26,15 @@ export default {
   body: `
     <p class="lede">How do supported load and displacement conditions enter that system?</p>
     <p><a href="/theory/numerical-methods/assembly/">Assembly</a> produces a
-      stiffness matrix ${tex("\\mathbf{K}")} and a load vector ${tex("\\mathbf{f}")}. Before any support is
-      applied, ${tex("\\mathbf{K}")} is singular: the body can move as a rigid object without
-      strain. Supports remove that freedom, and loads drive the deformation.
-      This page explains both, and how either can change the answer. Units are
-      N, mm and MPa, as in the
+      stiffness matrix ${tex("\\mathbf{K}")} and a load vector ${tex("\\mathbf{f}")}. Supports change
+      which equations are solved; loads change only ${tex("\\mathbf{f}")}. Without supports,
+      ${tex("\\mathbf{K}")} is singular: the body can move as a rigid object without straining.
+      This page shows how each condition enters the system and how each can
+      change the answer. Units are N, mm and MPa, as in the
       <a href="/theory/foundations/consistent-units/">consistent-unit reference</a>.
-      Shells and solid–shell couplings carry rotations as well and are treated in
+      Shells and solid–shell couplings also carry rotations;
       <a href="/theory/shells/formulation/">Shell formulation</a> and
-      <a href="/theory/shells/solid-coupling/">Solid–shell coupling</a>.</p>
+      <a href="/theory/shells/solid-coupling/">Solid–shell coupling</a> cover them.</p>
 
     <h2 id="two-kinds">Two kinds of boundary condition</h2>
     <p>The <a href="/theory/operators/integration-by-parts/#weak-form">weak form</a>
@@ -45,12 +45,12 @@ export default {
     <ul>
       <li><strong>Essential (displacement) conditions</strong> on ${tex("Γ_D")}
         set the displacement itself: ${tex("\\mathbf{u} = \\mathbf{u}_D")}, where ${tex("\\mathbf{u}_D")} is the
-        prescribed value in mm. They are imposed on the unknowns, and the
+        prescribed value in mm. They act on the unknowns directly, and the
         <a href="/theory/notation/#test-function">test displacement</a> ${tex("\\mathbf{w}")} is zero there.
         A fixed support is the special case ${tex("\\mathbf{u}_D = \\mathbf{0}")}.</li>
       <li><strong>Natural (load) conditions</strong> on ${tex("Γ_N")} prescribe a
         <a href="/theory/notation/#traction">traction</a> ${tex("\\mathbf{t}")} in MPa. They appear only as
-        work on the right-hand side. A free surface with no load is also a
+        work on the right-hand side of the weak form. A free surface with no load is also a
         natural condition, ${tex("\\mathbf{t} = \\mathbf{0}")}; it needs no input.</li>
     </ul>
     <p>The <a href="/theory/notation/#body-force">body force</a> ${tex("\\mathbf{b}")} (N/mm³) acts in the
@@ -76,13 +76,12 @@ export default {
       the components to constrain and one value in mm. A value of 0 fixes those
       components; any other value prescribes it for each checked component.
       Solid nodes have no rotational DOFs, so Rx, Ry and Rz appear only when the
-      model contains shells or a coupling reference point. A rotation cannot be
-      fixed by constraining one solid node; constrain several nodes, or use a
-      coupling.</p>
-    <p>A prescribed displacement is a load path of its own. A model driven only by
-      prescribed values, with no applied load, is valid and solves. Solve is
-      enabled once a model has at least one support and either a load or a
-      non-zero prescribed value.</p>
+      model contains shells or a coupling reference point. Constraining one solid
+      node cannot stop a rotation; constrain several nodes, or use a coupling.</p>
+    <p>A prescribed displacement can drive the model on its own: a model with
+      prescribed values and no load is valid. The app enables Solve once the
+      model has at least one support and either a load or a non-zero prescribed
+      value.</p>
 
     <h2 id="elimination">How constraints change the system</h2>
     <p>Split the DOFs into free ones (F) and constrained ones (C). The assembled
@@ -90,11 +89,11 @@ export default {
       reactions ${tex("\\mathbf{r}")}, nonzero only at constrained DOFs.
       Written in blocks, with ${tex("\\mathbf{d}_{\\mathrm{C}}")} known:</p>
     ${equation("\\mathbf{K}_{\\mathrm{FF}}\\mathbf{d}_{\\mathrm{F}} = \\mathbf{f}_{\\mathrm{F}} - \\mathbf{K}_{\\mathrm{FC}}\\mathbf{d}_{\\mathrm{C}}, \\quad \\mathbf{r}_{\\mathrm{C}} = \\mathbf{K}_{\\mathrm{CF}}\\mathbf{d}_{\\mathrm{F}} + \\mathbf{K}_{\\mathrm{CC}}\\mathbf{d}_{\\mathrm{C}} - \\mathbf{f}_{\\mathrm{C}}.", "The free block times the free displacements equals the free loads minus the free-to-constrained block times the prescribed values; the reactions follow from the constrained rows")}
-    <p>The first equation is the one solved. A prescribed value moves to the
+    <p>The solver solves the first equation. A prescribed value moves to the
       right-hand side as an equivalent load, ${tex("-\\mathbf{K}_{\\mathrm{FC}}\\mathbf{d}_{\\mathrm{C}}")}. For a fixed support,
       ${tex("\\mathbf{d}_{\\mathrm{C}} = \\mathbf{0}")} and that term vanishes. The second equation recovers
       the support reactions afterwards.</p>
-    <p>MFEM, the finite element library KoFEM uses, keeps the full matrix size
+    <p>MFEM, the finite element library KoFEM uses, keeps the full matrix
       instead of deleting rows. It zeroes the off-diagonal entries in each
       constrained row and column and keeps the diagonal. Each constrained row
       then reads ${tex("K_{ii}d_i = K_{ii}g_i")}, where ${tex("g_i")} is the prescribed value of DOF ${tex("i")},
@@ -146,8 +145,8 @@ export default {
       solver tolerance.</p>
 
     <h2 id="loads">Loads: force, traction, pressure and body force</h2>
-    <p>A load enters only ${tex("\\mathbf{f}")}, as work-equivalent nodal forces in N. What
-      the input means decides how it is distributed:</p>
+    <p>Every load becomes work-equivalent nodal forces in ${tex("\\mathbf{f}")}, in N. The
+      type of input decides how the load is distributed:</p>
     <div class="table-wrap" tabindex="0" role="region" aria-label="Load types, their input and how they reach the load vector; scroll horizontally if needed">
       <table>
         <caption>Load types on a solid at the reviewed revision</caption>
@@ -161,14 +160,15 @@ export default {
         </tbody>
       </table>
     </div>
-    <p>A force is a total, not a force per area. Selecting a second face for the
-      same force group spreads the same total over a larger area. A pressure is
-      intensive: enlarging the selection increases the resultant. Loads
-      superpose: two groups on the same face both act, and their effects add.
-      Material density is stored but unused by the static solve.</p>
-    <p>A moment group is different: the full moment is applied on <em>each</em>
-      selected face. Two separate face selections in one moment group apply
-      twice the moment. Select one face, or divide the value.</p>
+    <p>A force is a total, not a force per area: adding a second face to a force
+      group spreads the same total over a larger area. A pressure is per area:
+      a larger selection gives a larger resultant. Loads superpose: two groups
+      on the same face both act, and their effects add. The static solve does
+      not use the stored material density.</p>
+    <p>A moment group works differently: it applies the full moment on
+      <em>each</em> selected face. Two face selections in one moment group apply
+      twice the moment. To apply it once, select one face, or divide the moment
+      by the number of faces.</p>
 
     <h2 id="force-to-traction">Worked example: from total force to traction</h2>
     <p>Pull the 100 mm × 100 mm end face of the bar with ${tex("F = 10^6\\text{ N}")} in ${tex("x")}. The face
@@ -249,9 +249,10 @@ export default {
 
     <h2 id="insufficient">Too few constraints</h2>
     <p>If any rigid mode remains, ${tex("\\mathbf{K}_{\\mathrm{FF}}")} is singular and the
-      equations have no unique solution. Two outcomes are possible, and both
-      occur in KoFEM. Take the bar with only Ux fixed on its root face: Uy, Uz and
-      the rotation about ${tex("x")} are still free.</p>
+      equations have no unique solution. KoFEM then either stops with an error, or returns a result that
+      contains an arbitrary rigid motion. The second outcome is more dangerous,
+      because it looks like a success. Both occur on the bar with only Ux fixed
+      on its root face, which leaves Uy, Uz and the rotation about ${tex("x")} free:</p>
     <ul>
       <li><strong>The load excites a free mode.</strong> A transverse force of
         1000 N in ${tex("y")} has nothing to react against. The iterative solver
@@ -261,11 +262,11 @@ export default {
         does no work in the free modes, so the solver converges. Elongation and
         stress are correct, but the displacement contains an arbitrary rigid
         part. Here the largest Uy was 0.0097 mm, against 0.0143 mm with a
-        proper 3-2-1 support; that difference is a rigid shift, not deformation.</li>
+        3-2-1 support; that difference is a rigid shift, not deformation.</li>
     </ul>
-    <p>The second case is the more dangerous one, because it looks like a
-      success. KoFEM requires at least one support before it solves, but does
-      not check that all six modes are removed. Common causes are:</p>
+    <p>KoFEM requires at least one support before it solves, but it does not
+      check that the supports remove all six modes. Common causes of a free
+      mode are:</p>
     <ul>
       <li>a single roller or symmetry plane with nothing holding the in-plane
         directions;</li>
@@ -276,9 +277,9 @@ export default {
     </ul>
 
     <h2 id="overconstraint">Too many constraints</h2>
-    <p>More constraints than the six needed are normal: a fixed face constrains
-      hundreds of DOFs. The danger is constraining motions the real support
-      allows. Each extra constraint can only make the model stiffer.</p>
+    <p>Constraining a motion that the real support allows makes the model too
+      stiff: each extra constraint can only add stiffness. Constraining more
+      than six DOFs is normal in itself; a fixed face constrains hundreds.</p>
     <p><strong>Fixed instead of sliding.</strong> A fully fixed face stops the
       Poisson contraction that a real end plate might allow. Pull a 100 mm long
       bar of the same section with ${tex("10^6\\text{ N}")}. With a sliding root face (Ux
@@ -288,7 +289,7 @@ export default {
       meshes). The peak von Mises stress at the edge of the fixed face rises
       from 102.7 to 127.3 MPa over the same refinements. That peak is a
       singularity: it grows with refinement and has no converged value. For the
-      1000 mm bar the stiffening is only 0.5%: the effect is local to the
+      1000 mm bar, the stiffening is 0.5%, because the effect stays near the
       support.</p>
     <p><strong>Point supports that carry load.</strong> A constraint at one node
       concentrates its reaction there. Hold the 1000 mm bar by the 3-2-1 points
@@ -302,17 +303,17 @@ export default {
       ${tex("x")} without also holding it in ${tex("y")} and ${tex("z")}, check only Ux.</p>
 
     <h2 id="conflicts">Conflicting constraints and unmatched selections</h2>
-    <p>A DOF can be named by several groups, for example the nodes on the edge
-      shared by two selected faces. At the reviewed revision, the solid solve
-      handles overlaps and stale selections as follows:</p>
+    <p>Several groups can name the same DOF, for example at the nodes on the
+      edge shared by two selected faces. At the reviewed revision, the solid
+      solve handles overlaps and stale selections as follows:</p>
     <ul>
       <li><strong>Same DOF, same value in two groups:</strong> accepted and
         merged into one constraint.</li>
       <li><strong>Same DOF, two different values</strong> (fixed by one group
         and prescribed by another, or prescribed twice): the solve stops with an
         error naming the vertex and component.</li>
-      <li><strong>Two loads on the same face:</strong> both are integrated and
-        add up.</li>
+      <li><strong>Two loads on the same face:</strong> the solve integrates
+        both and adds them.</li>
       <li><strong>Some selected faces are not on the boundary:</strong> the log
         warns with their count, and they add no load. A force total is spread
         over the matched area; a pressure loses that area.</li>
@@ -322,19 +323,20 @@ export default {
         constrained when both of its end nodes are, to their average value.
         Edges leaving a support stay free.</li>
     </ul>
-    <p>A conflict has to be resolved by the user: remove the shared nodes from
-      one group, or give both groups the same value. On order-2 hexahedra,
+    <p>To resolve a conflict, remove the shared nodes from one group, or give
+      both groups the same value. On order-2 hexahedra,
       which the app’s mesher does not produce, the centre node of a supported
       face is not constrained.</p>
 
     <h2 id="diagnosis">What to check when a result looks wrong</h2>
+    <p>Start from the symptom.</p>
     <p><strong>Singular: no convergence, or huge or arbitrary displacements.</strong></p>
     <ul>
       <li>For each separate body, list which of the three translations and three
-        rotations its supports stop. Every one must be stopped.</li>
+        rotations its supports stop. The supports must stop all six.</li>
       <li>Check per-component supports: a roller stops only one direction.</li>
       <li>Check that point supports are not on one line.</li>
-      <li>Check that touching bodies are connected by shared nodes or a tie.</li>
+      <li>Check that touching bodies share nodes or are joined by a tie.</li>
       <li>Compare the displacement pattern with a rigid motion. A body that
         translates or turns without straining has a free mode.</li>
     </ul>
@@ -342,8 +344,8 @@ export default {
     <ul>
       <li>Ask whether each fixed face is really fixed in all three directions,
         or should slide. Try a sliding support and compare.</li>
-      <li>Check that no load is applied to a constrained face or node, where it
-        has no effect.</li>
+      <li>Check that no load sits on a constrained face or node, where it has
+        no effect.</li>
       <li>Check force versus pressure: a force is a total in N, a pressure is
         per area in MPa. 1 MPa on 100 mm² is 100 N.</li>
       <li>Check prescribed groups for extra components.</li>
@@ -353,8 +355,9 @@ export default {
         <a href="/theory/numerical-methods/elements-and-quadrature/#thin-walls">Elements and quadrature</a>.</li>
     </ul>
     <p>Peak stresses at the edge of a support or under a point load are usually
-      singular. Judge the result away from them. How the linear solver reports
-      failure is covered in <a href="/theory/numerical-methods/linear-solve/">Linear solve</a>.</p>
+      singular. Judge the result away from them.
+      <a href="/theory/numerical-methods/linear-solve/">Linear solve</a> explains
+      how the solver reports failure.</p>
 
     <h2 id="implementation">KoFEM implementation and evidence</h2>
     <p>Reviewed on 2 November 2026 at
