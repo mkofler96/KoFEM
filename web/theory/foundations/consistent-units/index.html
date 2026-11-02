@@ -1013,7 +1013,7 @@
     <div class="equation" tabindex="0" role="region" aria-label="Units of stress, Young’s modulus, energy and mass density">
       <math display="block"><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>σ</mi><mo stretchy="false" lspace="0" rspace="0">]</mo><mo>=</mo><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>E</mi><mo stretchy="false" lspace="0" rspace="0">]</mo><mo>=</mo><mfrac><mrow><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>F</mi><mo stretchy="false" lspace="0" rspace="0">]</mo></mrow><mrow><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>L</mi><msup><mo stretchy="false" lspace="0" rspace="0">]</mo><mn>2</mn></msup></mrow></mfrac><mo>,</mo><mspace width="1em"/><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>W</mi><mo stretchy="false" lspace="0" rspace="0">]</mo><mo>=</mo><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>F</mi><mo stretchy="false" lspace="0" rspace="0">]</mo><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>L</mi><mo stretchy="false" lspace="0" rspace="0">]</mo><mo>,</mo><mspace width="1em"/><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>ρ</mi><mo stretchy="false" lspace="0" rspace="0">]</mo><mo>=</mo><mfrac><mrow><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>M</mi><mo stretchy="false" lspace="0" rspace="0">]</mo></mrow><mrow><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>L</mi><msup><mo stretchy="false" lspace="0" rspace="0">]</mo><mn>3</mn></msup></mrow></mfrac><mo lspace="0" rspace="0">.</mo></math>
     </div>
-    <p>The symbols <math><mi>σ</mi></math>, <math><mi>E</mi></math>, <math><mi>W</mi></math> and <math><mi>ρ</mi></math>
+    <p>The symbols <span class="math-nowrap"><math><mi>σ</mi></math>,</span> <span class="math-nowrap"><math><mi>E</mi></math>,</span> <math><mi>W</mi></math> and <math><mi>ρ</mi></math>
       denote stress, Young’s modulus, energy and mass density respectively.
       One can instead choose force, length and time and derive the mass unit.
       This is why N–mm–s uses tonnes, while N–mm–ms uses grams.</p>
@@ -1046,15 +1046,15 @@
       would require an additional conversion factor in force–mass relations.</p>
     <p>Even in a static calculation that has no mass or time term, geometry,
       loads and stiffness must agree. For N and mm,
-      <math><mn>1</mn><mtext> MPa</mtext><mo>=</mo><mn>1</mn><mtext> N</mtext><mo lspace="0" rspace="0">/</mo><msup><mtext>mm</mtext><mn>2</mn></msup></math>; for kN and mm,
-      <math><mn>1</mn><mtext> GPa</mtext><mo>=</mo><mn>1</mn><mtext> kN</mtext><mo lspace="0" rspace="0">/</mo><msup><mtext>mm</mtext><mn>2</mn></msup></math>.</p>
+      <span class="math-nowrap"><math><mn>1</mn><mtext> MPa</mtext><mo>=</mo><mn>1</mn><mtext> N</mtext><mo lspace="0" rspace="0">/</mo><msup><mtext>mm</mtext><mn>2</mn></msup></math>;</span> for kN and mm,
+      <span class="math-nowrap"><math><mn>1</mn><mtext> GPa</mtext><mo>=</mo><mn>1</mn><mtext> kN</mtext><mo lspace="0" rspace="0">/</mo><msup><mtext>mm</mtext><mn>2</mn></msup></math>.</span></p>
     <p><strong>The default stress unit changes with the unit system.</strong>
       In SI with metres, kilograms and seconds, stress and Young’s modulus
       are expressed in Pa (N/m²) by default. In an N–mm system, the corresponding
       unit is MPa (N/mm²). Switching to SI therefore changes the numerical values
       of both material stiffness and reported stress: a modulus of 210000 MPa
-      becomes <math><mn>2.10</mn><mo>×</mo><msup><mn>10</mn><mrow><mn>11</mn></mrow></msup><mtext> Pa</mtext></math>, and a stress of 100 MPa
-      becomes <math><msup><mn>10</mn><mn>8</mn></msup><mtext> Pa</mtext></math>. This is a unit conversion, not a change
+      becomes <span class="math-nowrap"><math><mn>2.10</mn><mo>×</mo><msup><mn>10</mn><mrow><mn>11</mn></mrow></msup><mtext> Pa</mtext></math>,</span> and a stress of 100 MPa
+      becomes <span class="math-nowrap"><math><msup><mn>10</mn><mn>8</mn></msup><mtext> Pa</mtext></math>.</span> This is a unit conversion, not a change
       in the physical material or stress.</p>
 
     <h2 id="material-values">The same material in different units</h2>
@@ -1103,25 +1103,25 @@
       units alone were not the entire calculation.</p>
     <p>Consider an idealised, strong, spherical blast in a uniform medium.
       Suppose the shock-front radius <math><mi>R</mi></math> depends on released energy
-      <math><mi>Q</mi></math>, ambient mass density <math><mi>ρ</mi></math> and elapsed time <math><mi>t</mi></math>.
+      <span class="math-nowrap"><math><mi>Q</mi></math>,</span> ambient mass density <math><mi>ρ</mi></math> and elapsed time <span class="math-nowrap"><math><mi>t</mi></math>.</span>
       Here <math><mi>Q</mi></math> denotes energy, keeping it distinct from Young’s modulus
       <math><mi>E</mi></math> above. Their dimensions are:</p>
     <div class="equation" tabindex="0" role="region" aria-label="Dimensions of energy, density and time">
       <math display="block"><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>Q</mi><mo stretchy="false" lspace="0" rspace="0">]</mo><mo>=</mo><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>M</mi><mo stretchy="false" lspace="0" rspace="0">]</mo><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>L</mi><msup><mo stretchy="false" lspace="0" rspace="0">]</mo><mn>2</mn></msup><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>T</mi><msup><mo stretchy="false" lspace="0" rspace="0">]</mo><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>2</mn></mrow></msup><mo>,</mo><mspace width="1em"/><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>ρ</mi><mo stretchy="false" lspace="0" rspace="0">]</mo><mo>=</mo><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>M</mi><mo stretchy="false" lspace="0" rspace="0">]</mo><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>L</mi><msup><mo stretchy="false" lspace="0" rspace="0">]</mo><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>3</mn></mrow></msup><mo>,</mo><mspace width="1em"/><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>t</mi><mo stretchy="false" lspace="0" rspace="0">]</mo><mo>=</mo><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>T</mi><mo stretchy="false" lspace="0" rspace="0">]</mo><mo lspace="0" rspace="0">.</mo></math>
     </div>
-    <p>Write a candidate power law <math><mi>R</mi><mo>=</mo><mi>C</mi><msup><mi>Q</mi><mi>a</mi></msup><msup><mi>ρ</mi><mi>b</mi></msup><msup><mi>t</mi><mi>c</mi></msup></math>, with a
-      dimensionless coefficient <math><mi>C</mi></math>. Matching mass, length and time
+    <p>Write a candidate power law <span class="math-nowrap"><math><mi>R</mi><mo>=</mo><mi>C</mi><msup><mi>Q</mi><mi>a</mi></msup><msup><mi>ρ</mi><mi>b</mi></msup><msup><mi>t</mi><mi>c</mi></msup></math>,</span> with a
+      dimensionless coefficient <span class="math-nowrap"><math><mi>C</mi></math>.</span> Matching mass, length and time
       powers on both sides gives:</p>
     <div class="equation" tabindex="0" role="region" aria-label="Equations matching the mass, length and time exponents">
       <math display="block"><mi>a</mi><mo>+</mo><mi>b</mi><mo>=</mo><mn>0</mn><mo>,</mo><mspace width="1em"/><mn>2</mn><mi>a</mi><mo>−</mo><mn>3</mn><mi>b</mi><mo>=</mo><mn>1</mn><mo>,</mo><mspace width="1em"/><mo form="prefix" lspace="0" rspace="0">−</mo><mn>2</mn><mi>a</mi><mo>+</mo><mi>c</mi><mo>=</mo><mn>0</mn><mo lspace="0" rspace="0">.</mo></math>
     </div>
-    <p>Thus <math><mi>a</mi><mo>=</mo><mn>1</mn><mo lspace="0" rspace="0">/</mo><mn>5</mn></math>, <math><mi>b</mi><mo>=</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mn>1</mn><mo lspace="0" rspace="0">/</mo><mn>5</mn></math> and <math><mi>c</mi><mo>=</mo><mn>2</mn><mo lspace="0" rspace="0">/</mo><mn>5</mn></math>, giving
+    <p>Thus <span class="math-nowrap"><math><mi>a</mi><mo>=</mo><mn>1</mn><mo lspace="0" rspace="0">/</mo><mn>5</mn></math>,</span> <math><mi>b</mi><mo>=</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mn>1</mn><mo lspace="0" rspace="0">/</mo><mn>5</mn></math> and <span class="math-nowrap"><math><mi>c</mi><mo>=</mo><mn>2</mn><mo lspace="0" rspace="0">/</mo><mn>5</mn></math>,</span> giving
       the familiar Sedov–Taylor scaling:</p>
     <div class="equation" tabindex="0" role="region" aria-label="Shock-front radius scales as energy times time squared divided by density, to the one-fifth power">
       <math display="block"><mi>R</mi><mo>=</mo><mi>C</mi><msup><mrow><mo stretchy="true" lspace="0" rspace="0">(</mo><mfrac><mrow><mi>Q</mi><msup><mi>t</mi><mn>2</mn></msup></mrow><mrow><mi>ρ</mi></mrow></mfrac><mo stretchy="true" lspace="0" rspace="0">)</mo></mrow><mrow><mn>1</mn><mo lspace="0" rspace="0">/</mo><mn>5</mn></mrow></msup><mo lspace="0" rspace="0">.</mo></math>
     </div>
     <p>Dimensional analysis fixes these exponents under the stated assumptions.
-      It does not determine <math><mi>C</mi></math>, which requires a physical solution or
+      It does not determine <span class="math-nowrap"><math><mi>C</mi></math>,</span> which requires a physical solution or
       measurement. The model assumes a concentrated energy release and negligible
       ambient pressure and energy losses. Its radius is the position of a shock
       front at a given time, not a damage radius.</p>

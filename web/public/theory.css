@@ -110,3 +110,8 @@
   min-width: 280px;
   white-space: normal;
 }
+
+/* Inline math plus its trailing punctuation; see bindMathPunctuation. */
+.theory-docs .math-nowrap {
+  white-space: nowrap;
+}

@@ -48,6 +48,14 @@ function resolveTopicLinks(html) {
     },
   );
 }
+// Inline MathML is an atomic box, so browsers may wrap between it and the
+// punctuation that follows ("(0, 0, 0.1)" then ". They…" on the next line).
+// Keep adjacent brackets and punctuation on the same line as the math.
+const bindMathPunctuation = (html) =>
+  html.replaceAll(
+    /([([]?)(<math>(?:(?!<math>)[\s\S])*?<\/math>)([.,;:!?)\]]+)/g,
+    '<span class="math-nowrap">$1$2$3</span>',
+  );
 const escape = (value) =>
   value
     .replaceAll("&", "&amp;")
@@ -186,7 +194,7 @@ export function renderTheoryPages() {
           article.sections,
           `<h1>${escape(topic.title)}</h1>
         <details class="article-contents"><summary>On this page</summary>${contents(article.sections)}</details>
-        ${resolveTopicLinks(article.body)}${pager}`,
+        ${bindMathPunctuation(resolveTopicLinks(article.body))}${pager}`,
         ),
       }),
     ]);

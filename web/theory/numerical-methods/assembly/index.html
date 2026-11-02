@@ -1006,7 +1006,7 @@
     <h2 id="local-global">Local and global degrees of freedom</h2>
     <p>A degree of freedom (DOF) is one unknown coefficient: one displacement
       component of one basis function. An element numbers its DOFs locally,
-      <math><mn>0</mn></math> to <math><mn>3</mn><msub><mi>n</mi><mi>e</mi></msub><mo>−</mo><mn>1</mn></math>. The model numbers every DOF once, globally.
+      <math><mn>0</mn></math> to <span class="math-nowrap"><math><mn>3</mn><msub><mi>n</mi><mi>e</mi></msub><mo>−</mo><mn>1</mn></math>.</span> The model numbers every DOF once, globally.
       The element’s connectivity, its list of global node numbers, links the
       two numberings.</p>
     <p>For a solid with <math><msub><mi>n</mi><mi>b</mi></msub></math> scalar basis functions, the global
@@ -1020,8 +1020,8 @@
 
     <h2 id="bar-example">Worked example: two bar elements</h2>
     <p>Use the axial bar from <a href="/theory/foundations/model-and-units/#axial-bar">Model and units</a>:
-      length <math><mi>L</mi><mo>=</mo></math>​<math><mn>1000</mn><mtext> mm</mtext></math>, area <math><mi>A</mi><mo>=</mo></math>​<math><mn>10000</mn><msup><mtext> mm</mtext><mn>2</mn></msup></math>, <math><mi>E</mi><mo>=</mo></math>​<math><mn>210000</mn><mtext> MPa</mtext></math> and end force
-      <math><mi>P</mi><mo>=</mo></math>​<math><msup><mn>10</mn><mn>6</mn></msup><mtext> N</mtext></math>. Split it into two 500 mm elements with nodes 1, 2 and 3.
+      length <math><mi>L</mi><mo>=</mo></math>​<span class="math-nowrap"><math><mn>1000</mn><mtext> mm</mtext></math>,</span> area <math><mi>A</mi><mo>=</mo></math>​<span class="math-nowrap"><math><mn>10000</mn><msup><mtext> mm</mtext><mn>2</mn></msup></math>,</span> <math><mi>E</mi><mo>=</mo></math>​<math><mn>210000</mn><mtext> MPa</mtext></math> and end force
+      <math><mi>P</mi><mo>=</mo></math>​<span class="math-nowrap"><math><msup><mn>10</mn><mn>6</mn></msup><mtext> N</mtext></math>.</span> Split it into two 500 mm elements with nodes 1, 2 and 3.
       Each node has one DOF, its axial displacement in mm.
       Each element is a spring of stiffness:</p>
     <div class="equation" tabindex="0" role="region" aria-label="Element axial stiffness equals modulus times area over element length, 4.2 million newtons per millimetre; scroll horizontally if needed"><math display="block"><mi>k</mi><mo>=</mo><mfrac><mrow><mi>E</mi><mi>A</mi></mrow><mrow><msub><mi>L</mi><mi>e</mi></msub></mrow></mfrac><mo>=</mo><mfrac><mrow><mn>210000</mn><mo>×</mo><mn>10000</mn></mrow><mrow><mn>500</mn></mrow></mfrac><mtext> N</mtext><mo lspace="0" rspace="0">/</mo><mtext>mm</mtext><mo>=</mo><mn>4.2</mn><mo>×</mo><msup><mn>10</mn><mn>6</mn></msup><mtext> N</mtext><mo lspace="0" rspace="0">/</mo><mtext>mm</mtext><mo lspace="0" rspace="0">.</mo></math></div>
@@ -1030,35 +1030,35 @@
       2 × 2 block into the rows and columns of its nodes. Node 2 belongs to
       both elements, so its diagonal receives <math><mi>k</mi></math> twice:</p>
     <div class="equation" tabindex="0" role="region" aria-label="Assembled three-by-three bar stiffness: k times one, minus one, zero; minus one, one plus one, minus one; zero, minus one, one; scroll horizontally if needed"><math display="block"><mi mathvariant="bold" class="math-bold">K</mi><mo>=</mo><mi>k</mi><mrow><mo stretchy="true">[</mo><mtable><mtr><mtd><mn>1</mn></mtd><mtd><mo form="prefix" lspace="0" rspace="0">−</mo><mn>1</mn></mtd><mtd><mn>0</mn></mtd></mtr><mtr><mtd><mo form="prefix" lspace="0" rspace="0">−</mo><mn>1</mn></mtd><mtd><mn>1</mn><mo>+</mo><mn>1</mn></mtd><mtd><mo form="prefix" lspace="0" rspace="0">−</mo><mn>1</mn></mtd></mtr><mtr><mtd><mn>0</mn></mtd><mtd><mo form="prefix" lspace="0" rspace="0">−</mo><mn>1</mn></mtd><mtd><mn>1</mn></mtd></mtr></mtable><mo stretchy="true">]</mo></mrow></math></div>
-    <p>The load vector is <math><mi mathvariant="bold" class="math-bold">f</mi><mo>=</mo></math>​<math><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>R</mi><mo>,</mo><mn>0</mn><mo>,</mo><mi>P</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mtext> N</mtext></math>, where <math><mi>R</mi></math> is the unknown support
+    <p>The load vector is <math><mi mathvariant="bold" class="math-bold">f</mi><mo>=</mo></math>​<span class="math-nowrap"><math><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>R</mi><mo>,</mo><mn>0</mn><mo>,</mo><mi>P</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mtext> N</mtext></math>,</span> where <math><mi>R</mi></math> is the unknown support
       reaction at node 1. As assembled, <math><mi mathvariant="bold" class="math-bold">K</mi></math> is singular: each row sums to zero
       because a rigid translation costs no energy. Fixing node 1
-      (<math><msub><mi>d</mi><mn>1</mn></msub><mo>=</mo></math>​<math><mn>0</mn></math>) leaves two equations for the two unknowns:</p>
+      (<math><msub><mi>d</mi><mn>1</mn></msub><mo>=</mo></math>​<span class="math-nowrap"><math><mn>0</mn></math>)</span> leaves two equations for the two unknowns:</p>
     <div class="equation" tabindex="0" role="region" aria-label="Reduced bar equations after fixing node 1: k times two d 2 minus d 3 equals zero; k times minus d 2 plus d 3 equals P; scroll horizontally if needed"><math display="block"><mi>k</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>2</mn><msub><mi>d</mi><mn>2</mn></msub><mo>−</mo><msub><mi>d</mi><mn>3</mn></msub><mo stretchy="false" lspace="0" rspace="0">)</mo><mo>=</mo><mn>0</mn><mo>,</mo><mspace width="1em"/><mi>k</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mo form="prefix" lspace="0" rspace="0">−</mo><msub><mi>d</mi><mn>2</mn></msub><mo>+</mo><msub><mi>d</mi><mn>3</mn></msub><mo stretchy="false" lspace="0" rspace="0">)</mo><mo>=</mo><mi>P</mi><mo lspace="0" rspace="0">.</mo></math></div>
     <p>Solving gives <math><msub><mi>d</mi><mn>2</mn></msub><mo>=</mo></math>​<math><mi>P</mi><mo lspace="0" rspace="0">/</mo><mi>k</mi><mo>=</mo></math>​<math><mn>5</mn><mo lspace="0" rspace="0">/</mo><mn>21</mn><mtext> mm</mtext><mo>≈</mo></math>​<math><mn>0.238</mn><mtext> mm</mtext></math> and
-      <math><msub><mi>d</mi><mn>3</mn></msub><mo>=</mo></math>​<math><mn>2</mn><mi>P</mi><mo lspace="0" rspace="0">/</mo><mi>k</mi><mo>=</mo></math>​<math><mn>10</mn><mo lspace="0" rspace="0">/</mo><mn>21</mn><mtext> mm</mtext><mo>≈</mo></math>​<math><mn>0.476</mn><mtext> mm</mtext></math>. This equals the analytical
-      <math><mi>P</mi><mi>L</mi><mo lspace="0" rspace="0">/</mo><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>E</mi><mi>A</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></math>. The first row then gives <math><mi>R</mi><mo>=</mo></math>​<math><mo form="prefix" lspace="0" rspace="0">−</mo><mi>k</mi><msub><mi>d</mi><mn>2</mn></msub><mo>=</mo></math>​<math><mo form="prefix" lspace="0" rspace="0">−</mo><msup><mn>10</mn><mn>6</mn></msup><mtext> N</mtext></math>, balancing
-      <math><mi>P</mi></math>. Linear elements are exact here because the true displacement of a
+      <math><msub><mi>d</mi><mn>3</mn></msub><mo>=</mo></math>​<math><mn>2</mn><mi>P</mi><mo lspace="0" rspace="0">/</mo><mi>k</mi><mo>=</mo></math>​<math><mn>10</mn><mo lspace="0" rspace="0">/</mo><mn>21</mn><mtext> mm</mtext><mo>≈</mo></math>​<span class="math-nowrap"><math><mn>0.476</mn><mtext> mm</mtext></math>.</span> This equals the analytical
+      <span class="math-nowrap"><math><mi>P</mi><mi>L</mi><mo lspace="0" rspace="0">/</mo><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>E</mi><mi>A</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></math>.</span> The first row then gives <math><mi>R</mi><mo>=</mo></math>​<math><mo form="prefix" lspace="0" rspace="0">−</mo><mi>k</mi><msub><mi>d</mi><mn>2</mn></msub><mo>=</mo></math>​<span class="math-nowrap"><math><mo form="prefix" lspace="0" rspace="0">−</mo><msup><mn>10</mn><mn>6</mn></msup><mtext> N</mtext></math>,</span> balancing
+      <span class="math-nowrap"><math><mi>P</mi></math>.</span> Linear elements are exact here because the true displacement of a
       uniform bar without body load is linear. Supports are treated in detail in
       <a href="/theory/#numerical-methods-loads-and-constraints">Loads and constraints</a>.</p>
 
     <h2 id="scatter">Assembly as gather and scatter</h2>
     <p>Formally, a Boolean matrix <math><msub><mi>A</mi><mi>e</mi></msub></math> of size <math><mn>3</mn><msub><mi>n</mi><mi>e</mi></msub><mo>×</mo><msub><mi>n</mi><mi>d</mi></msub></math>
       gathers the element’s DOFs from the global vector:
-      <math><msup><mi mathvariant="bold" class="math-bold">d</mi><mrow><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>e</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></mrow></msup><mo>=</mo></math>​<math><msub><mi>A</mi><mi>e</mi></msub><mi mathvariant="bold" class="math-bold">d</mi></math>. Equating the internal work
+      <math><msup><mi mathvariant="bold" class="math-bold">d</mi><mrow><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>e</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></mrow></msup><mo>=</mo></math>​<span class="math-nowrap"><math><msub><mi>A</mi><mi>e</mi></msub><mi mathvariant="bold" class="math-bold">d</mi></math>.</span> Equating the internal work
       of the elements with the global work gives:</p>
     <div class="equation" tabindex="0" role="region" aria-label="Global stiffness is the sum over elements of A e transpose times element stiffness times A e; the global load is the sum of A e transpose times element load; scroll horizontally if needed"><math display="block"><mi mathvariant="bold" class="math-bold">K</mi><mo>=</mo><msub><mo largeop="true">∑</mo><mi>e</mi></msub><msubsup><mi>A</mi><mi>e</mi><mi>T</mi></msubsup><msup><mi mathvariant="bold" class="math-bold">K</mi><mrow><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>e</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></mrow></msup><msub><mi>A</mi><mi>e</mi></msub><mo>,</mo><mspace width="1em"/><mi mathvariant="bold" class="math-bold">f</mi><mo>=</mo><msub><mo largeop="true">∑</mo><mi>e</mi></msub><msubsup><mi>A</mi><mi>e</mi><mi>T</mi></msubsup><msup><mi mathvariant="bold" class="math-bold">f</mi><mrow><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>e</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></mrow></msup><mo lspace="0" rspace="0">.</mo></math></div>
     <p><math><msub><mi>A</mi><mi>e</mi></msub></math> is never built. Implementations keep a list of the
       element’s global DOF indices and add entry <math><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>i</mi><mo>,</mo><mi>j</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></math> of <math><msup><mi mathvariant="bold" class="math-bold">K</mi><mrow><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>e</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></mrow></msup></math> to
-      entry <math><mo stretchy="false" lspace="0" rspace="0">(</mo><msub><mi>g</mi><mi>i</mi></msub><mo>,</mo><msub><mi>g</mi><mi>j</mi></msub><mo stretchy="false" lspace="0" rspace="0">)</mo></math> of <math><mi mathvariant="bold" class="math-bold">K</mi></math>, where <math><msub><mi>g</mi><mi>i</mi></msub></math> is the global index of local DOF <math><mi>i</mi></math>. Elements may be processed in any order.
+      entry <math><mo stretchy="false" lspace="0" rspace="0">(</mo><msub><mi>g</mi><mi>i</mi></msub><mo>,</mo><msub><mi>g</mi><mi>j</mi></msub><mo stretchy="false" lspace="0" rspace="0">)</mo></math> of <span class="math-nowrap"><math><mi mathvariant="bold" class="math-bold">K</mi></math>,</span> where <math><msub><mi>g</mi><mi>i</mi></msub></math> is the global index of local DOF <span class="math-nowrap"><math><mi>i</mi></math>.</span> Elements may be processed in any order.
       In the bar, element 1 has indices (1, 2) and element 2 has (2, 3).</p>
 
     <h2 id="shared-face">Two tetrahedra sharing a face</h2>
     <p>Take five vertices, 0 to 4, and two order-1 tetrahedra: <math><msub><mi>T</mi><mn>1</mn></msub><mo>=</mo></math>​<math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>0</mn><mo>,</mo><mn>1</mn><mo>,</mo><mn>2</mn><mo>,</mo><mn>3</mn><mo stretchy="false" lspace="0" rspace="0">)</mo></math>
-      and <math><msub><mi>T</mi><mn>2</mn></msub><mo>=</mo></math>​<math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>1</mn><mo>,</mo><mn>2</mn><mo>,</mo><mn>3</mn><mo>,</mo><mn>4</mn><mo stretchy="false" lspace="0" rspace="0">)</mo></math>. They share the face
-      <math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>1</mn><mo>,</mo><mn>2</mn><mo>,</mo><mn>3</mn><mo stretchy="false" lspace="0" rspace="0">)</mo></math>. With <math><msub><mi>n</mi><mi>b</mi></msub><mo>=</mo></math>​<math><mn>5</mn></math>, there are 15 global DOFs. Using the
+      and <math><msub><mi>T</mi><mn>2</mn></msub><mo>=</mo></math>​<span class="math-nowrap"><math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>1</mn><mo>,</mo><mn>2</mn><mo>,</mo><mn>3</mn><mo>,</mo><mn>4</mn><mo stretchy="false" lspace="0" rspace="0">)</mo></math>.</span> They share the face
+      <span class="math-nowrap"><math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>1</mn><mo>,</mo><mn>2</mn><mo>,</mo><mn>3</mn><mo stretchy="false" lspace="0" rspace="0">)</mo></math>.</span> With <math><msub><mi>n</mi><mi>b</mi></msub><mo>=</mo></math>​<span class="math-nowrap"><math><mn>5</mn></math>,</span> there are 15 global DOFs. Using the
       component-blocked order explained below, component <math><mi>c</mi><mo>=</mo></math>​<math><mn>0</mn><mo>,</mo><mn>1</mn><mo>,</mo><mn>2</mn></math>
-      (<math><mi>x</mi><mo>,</mo><mi>y</mi><mo>,</mo><mi>z</mi></math>) of vertex <math><mi>v</mi></math> has global index <math><mi>v</mi><mo>+</mo><mn>5</mn><mi>c</mi></math>:</p>
+      <span class="math-nowrap">(<math><mi>x</mi><mo>,</mo><mi>y</mi><mo>,</mo><mi>z</mi></math>)</span> of vertex <math><mi>v</mi></math> has global index <span class="math-nowrap"><math><mi>v</mi><mo>+</mo><mn>5</mn><mi>c</mi></math>:</span></p>
     <div class="table-wrap" tabindex="0" role="region" aria-label="Global DOF indices of two tetrahedra sharing a face; scroll horizontally if needed">
       <table>
         <caption>Global DOF indices per element</caption>
@@ -1080,29 +1080,29 @@
     <h2 id="dof-ordering">DOF ordering</h2>
     <p>Two orders are common for the same coefficients:</p>
     <ul>
-      <li><strong>Interleaved</strong> (by node): <math><mo stretchy="false" lspace="0" rspace="0">(</mo><msub><mi>d</mi><mrow><mn>0</mn><mi>x</mi></mrow></msub><mo>,</mo><msub><mi>d</mi><mrow><mn>0</mn><mi>y</mi></mrow></msub><mo>,</mo><msub><mi>d</mi><mrow><mn>0</mn><mi>z</mi></mrow></msub><mo>,</mo><msub><mi>d</mi><mrow><mn>1</mn><mi>x</mi></mrow></msub><mo>,</mo><mo>…</mo><mo stretchy="false" lspace="0" rspace="0">)</mo></math>,
-        index <math><mn>3</mn><mi>v</mi><mo>+</mo><mi>c</mi></math>. The
+      <li><strong>Interleaved</strong> (by node): <span class="math-nowrap"><math><mo stretchy="false" lspace="0" rspace="0">(</mo><msub><mi>d</mi><mrow><mn>0</mn><mi>x</mi></mrow></msub><mo>,</mo><msub><mi>d</mi><mrow><mn>0</mn><mi>y</mi></mrow></msub><mo>,</mo><msub><mi>d</mi><mrow><mn>0</mn><mi>z</mi></mrow></msub><mo>,</mo><msub><mi>d</mi><mrow><mn>1</mn><mi>x</mi></mrow></msub><mo>,</mo><mo>…</mo><mo stretchy="false" lspace="0" rspace="0">)</mo></math>,</span>
+        index <span class="math-nowrap"><math><mn>3</mn><mi>v</mi><mo>+</mo><mi>c</mi></math>.</span> The
         <a href="/theory/notation/#discrete-displacement">notation reference</a>
         and the <math><mi mathvariant="bold" class="math-bold">B</mi></math> blocks on the elements page use this order.</li>
-      <li><strong>Component-blocked</strong>: all <math><mi>x</mi></math> coefficients, then all <math><mi>y</mi></math>,
-        then all <math><mi>z</mi></math>, index <math><mi>v</mi><mo>+</mo><msub><mi>n</mi><mi>b</mi></msub><mi>c</mi></math>.</li>
+      <li><strong>Component-blocked</strong>: all <math><mi>x</mi></math> coefficients, then all <span class="math-nowrap"><math><mi>y</mi></math>,</span>
+        then all <span class="math-nowrap"><math><mi>z</mi></math>,</span> index <span class="math-nowrap"><math><mi>v</mi><mo>+</mo><msub><mi>n</mi><mi>b</mi></msub><mi>c</mi></math>.</span></li>
     </ul>
     <p>KoFEM’s solid solve uses MFEM’s default, component-blocked global order.
       MFEM’s elasticity integrator also orders each element matrix by
-      component: local index <math><mi>k</mi><mo>+</mo><msub><mi>n</mi><mi>e</mi></msub><mi>c</mi></math>. The two orders differ only by a
-      permutation matrix <math><mi>P</mi></math>: <math><msub><mi mathvariant="bold" class="math-bold">K</mi><mrow><mi mathvariant="normal">blocked</mi></mrow></msub><mo>=</mo></math>​<math><mi>P</mi><msub><mi mathvariant="bold" class="math-bold">K</mi><mrow><mi mathvariant="normal">interleaved</mi></mrow></msub><msup><mi>P</mi><mi>T</mi></msup></math>.
+      component: local index <span class="math-nowrap"><math><mi>k</mi><mo>+</mo><msub><mi>n</mi><mi>e</mi></msub><mi>c</mi></math>.</span> The two orders differ only by a
+      permutation matrix <span class="math-nowrap"><math><mi>P</mi></math>:</span> <math><msub><mi mathvariant="bold" class="math-bold">K</mi><mrow><mi mathvariant="normal">blocked</mi></mrow></msub><mo>=</mo></math>​<span class="math-nowrap"><math><mi>P</mi><msub><mi mathvariant="bold" class="math-bold">K</mi><mrow><mi mathvariant="normal">interleaved</mi></mrow></msub><msup><mi>P</mi><mi>T</mi></msup></math>.</span>
       For the worked tetrahedron, exact arithmetic confirms that MFEM’s form
       equals the permuted <math><msup><mi mathvariant="bold" class="math-bold">B</mi><mi>T</mi></msup><mi>C</mi><mi mathvariant="bold" class="math-bold">B</mi></math> matrix. The displacement field and
       every physical result are unchanged; only array positions differ.</p>
     <p>At order 1 the scalar index of a vertex DOF is the input vertex index,
-      so the <math><mi>x</mi><mo>,</mo><mi>y</mi><mo>,</mo><mi>z</mi></math> displacement of vertex <math><mi>v</mi></math> sits at <math><mi>v</mi></math>, <math><mi>v</mi><mo>+</mo><msub><mi>n</mi><mi>b</mi></msub></math> and
-      <math><mi>v</mi><mo>+</mo><mn>2</mn><msub><mi>n</mi><mi>b</mi></msub></math>. At order 2, edge functions follow all vertex
+      so the <math><mi>x</mi><mo>,</mo><mi>y</mi><mo>,</mo><mi>z</mi></math> displacement of vertex <math><mi>v</mi></math> sits at <span class="math-nowrap"><math><mi>v</mi></math>,</span> <math><mi>v</mi><mo>+</mo><msub><mi>n</mi><mi>b</mi></msub></math> and
+      <span class="math-nowrap"><math><mi>v</mi><mo>+</mo><mn>2</mn><msub><mi>n</mi><mi>b</mi></msub></math>.</span> At order 2, edge functions follow all vertex
       functions. When MFEM corrects a tetrahedron’s orientation it reorders
       that element’s local corners; global vertex numbers do not change.</p>
 
     <h2 id="global-properties">Properties of the global matrix</h2>
     <ul>
-      <li><strong>Size:</strong> <math><msub><mi>n</mi><mi>d</mi></msub><mo>×</mo><msub><mi>n</mi><mi>d</mi></msub></math>, N/mm. The load
+      <li><strong>Size:</strong> <span class="math-nowrap"><math><msub><mi>n</mi><mi>d</mi></msub><mo>×</mo><msub><mi>n</mi><mi>d</mi></msub></math>,</span> N/mm. The load
         vector has <math><msub><mi>n</mi><mi>d</mi></msub></math> entries in N.</li>
       <li><strong>Symmetric</strong>, because every element matrix is.</li>
       <li><strong>Sparse</strong>: nonzero only where two DOFs share an element.</li>
@@ -1112,8 +1112,8 @@
         six rigid-body modes. Supports must remove all of them before the
         system can be solved.</li>
     </ul>
-    <p>Bodies with different materials still assemble into one <math><mi mathvariant="bold" class="math-bold">K</mi></math>. Each element
-      uses its own body’s <math><mi>λ</mi></math> and <math><mi>μ</mi></math>, and contributions add at shared nodes.
+    <p>Bodies with different materials still assemble into one <span class="math-nowrap"><math><mi mathvariant="bold" class="math-bold">K</mi></math>.</span> Each element
+      uses its own body’s <math><mi>λ</mi></math> and <span class="math-nowrap"><math><mi>μ</mi></math>,</span> and contributions add at shared nodes.
       The <a href="/theory/#numerical-methods-linear-solve">Linear solve</a>
       page explains how the constrained system is solved.</p>
 
@@ -1131,7 +1131,7 @@
             (<a href="https://github.com/mkofler96/KoFEM/blob/41aa05f99bc99210995b21d1aded942d45ef4729/engine/cpp/fem_mesh_io.cpp#L113">fem_mesh_io.cpp</a>); MFEM builds edges and faces and fixes element orientation.</td></tr>
           <tr><th scope="row">Shape functions and DOF numbering</th><td>MFEM</td><td>An order-<math><mi>k</mi></math> H1 space with three components, component-blocked
             (<a href="https://github.com/mkofler96/KoFEM/blob/41aa05f99bc99210995b21d1aded942d45ef4729/engine/cpp/solve_mfem.cpp#L259">solve_mfem.cpp</a>).</td></tr>
-          <tr><th scope="row">Material per element</th><td>KoFEM</td><td><math><mi>λ</mi></math> and <math><mi>μ</mi></math> from each body’s <math><mi>E</mi></math> and <math><mi>ν</mi></math>, selected by element attribute
+          <tr><th scope="row">Material per element</th><td>KoFEM</td><td><math><mi>λ</mi></math> and <math><mi>μ</mi></math> from each body’s <math><mi>E</mi></math> and <span class="math-nowrap"><math><mi>ν</mi></math>,</span> selected by element attribute
             (<a href="https://github.com/mkofler96/KoFEM/blob/41aa05f99bc99210995b21d1aded942d45ef4729/engine/cpp/solve_mfem.cpp#L288">solve_mfem.cpp</a>).</td></tr>
           <tr><th scope="row">Element stiffness and quadrature</th><td>MFEM</td><td>Elasticity integrator with its default rule
             (<a href="https://github.com/mfem/mfem/blob/v4.7/fem/bilininteg.cpp#L3033">bilininteg.cpp</a>).</td></tr>
