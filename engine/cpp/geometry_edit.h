@@ -75,3 +75,14 @@ emscripten::val boolean_geometry(const std::string& opts_json);
 // Returns { bytes: Uint8Array } (STEP AP214 of the edited shape) and releases
 // the cached shape, exactly like split_geometry.
 emscripten::val repair_hinges(const std::string& opts_json);
+
+// Divide cone faces that a failed mesh reported (see mesh_overlap.h) into pieces
+// Netgen can mesh. The shape itself does not change, and neither do the bodies.
+//
+// opts_json:
+//   { "faceIds": [..] }   1-based ids; faces that aren't closed cone tips are left
+//                         alone, but at least one must be.
+//
+// Returns { bytes: Uint8Array } (STEP AP214 of the edited shape) and releases
+// the cached shape, exactly like split_geometry.
+emscripten::val split_cone_tips(const std::string& opts_json);

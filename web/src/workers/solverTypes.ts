@@ -91,6 +91,12 @@ export interface RepairHingesPayload {
   format: string;
   repair: RepairHingesOptions;
 }
+export interface SplitConeTipsPayload {
+  // The current geometry file and its format — reloaded before the split.
+  bytes: Uint8Array;
+  format: string;
+  faceIds: number[];
+}
 export interface VolumeMeshPayload {
   bytes?: Uint8Array;
   format?: string;

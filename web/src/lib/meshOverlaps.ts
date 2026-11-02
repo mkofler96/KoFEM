@@ -31,3 +31,15 @@ export function hingeRepairs(
       : [],
   );
 }
+
+// The faces of the cone overlaps, as the engine takes them: each once, since
+// separate overlaps can lie on one face.
+export function coneTipFaces(overlaps: MeshOverlap[]): number[] {
+  return [
+    ...new Set(
+      overlaps.flatMap((overlap) =>
+        overlap.kind === "cone" ? Array.from(overlap.faceIds) : [],
+      ),
+    ),
+  ];
+}
