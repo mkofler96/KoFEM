@@ -176,6 +176,12 @@ export function renderTheoryPages() {
   for (const article of articles) {
     const index = topics.findIndex((topic) => topic.slug === article.slug);
     if (index < 0) throw new Error(`Unknown theory article: ${article.slug}`);
+    // A TeX "\;" written with one backslash in a JS string loses it and
+    // renders a literal semicolon operator instead of a space.
+    if (article.body.includes("<mo>;</mo>"))
+      throw new Error(
+        `${article.slug}: a TeX \\; spacing command lost its backslash; write "\\\\;" in the source`,
+      );
     const topic = topics[index];
     const previous = topics[index - 1];
     const next = topics[index + 1];

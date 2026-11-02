@@ -10,7 +10,7 @@ import {
 // would put gaps around them ("( ∂q/ ∂x)"). Tighten them for Theory pages
 // without changing the generated example pages that share the renderer.
 const ordinary = (mathml) =>
-  mathml.replaceAll(/<mo>([∂∇])<\/mo>/g, '<mo lspace="0" rspace="0">$1</mo>');
+  mathml.replaceAll(/<mo>([∂∇])<\/mo>/gu, '<mo lspace="0" rspace="0">$1</mo>');
 
 // Browsers do not line-break inside MathML. Split inline math after each
 // top-level relation, where TeX breaks, so a long chain such as "a = b = c"
@@ -21,13 +21,13 @@ function splitAtRelations(src) {
   let depth = 0;
   let start = 0;
   for (let i = 0; i < src.length; i++) {
-    const c = src[i];
-    if (c === "\\" && "{}".includes(src[i + 1] ?? "")) {
+    const char = src[i];
+    if (char === "\\" && "{}".includes(src[i + 1] ?? "")) {
       i++;
       continue;
     }
-    if ("({[".includes(c)) depth++;
-    else if (")}]".includes(c)) depth--;
+    if ("({[".includes(char)) depth++;
+    else if (")}]".includes(char)) depth--;
     else if (depth === 0 && i > start) {
       const relation = RELATIONS.find((r) => src.startsWith(r, i));
       const end = relation ? i + relation.length : i;

@@ -44,7 +44,7 @@ export default {
       component; column ${tex("j")} identifies the differentiation direction.</strong></p>
     ${equation("(∇v)_{ij} = \\frac{∂v_i}{∂x_j}.", "Vector gradient: component i differentiated with respect to coordinate j")}
     <p>Take the displacement field</p>
-    ${equation("u = (0.001x + 0.002y,\; -0.004x + 0.003y,\; 0.005z)^T,", "Example displacement field with linear components")}
+    ${equation("u = (0.001x + 0.002y,\\; -0.004x + 0.003y,\\; 0.005z)^T,", "Example displacement field with linear components")}
     <p>with coordinates and displacement both measured in mm. Its
       dimensionless gradient is constant:</p>
     ${matrixEquation(
