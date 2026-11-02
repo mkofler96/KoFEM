@@ -58,4 +58,9 @@
     <loc>https://kofem.org/privacy/</loc>
     <priority>0.1</priority>
   </url>
+  <!-- theory:start -->
+  <url><loc>https://kofem.org/theory/</loc></url>
+  <url><loc>https://kofem.org/theory/foundations/model-and-units/</loc></url>
+  <url><loc>https://kofem.org/theory/foundations/consistent-units/</loc></url>
+  <!-- theory:end -->
 </urlset>

@@ -4,21 +4,32 @@ Copy this file for a new article and remove instructional comments. Keep the
 article small enough to answer one main question. If it answers a second
 question, split and link it.
 
+Do not add prerequisite lists or labels to public articles. Introduce needed
+concepts in the explanation and link related pages where useful. Keep stable
+heading IDs and page-contents links, without visible hashtag permalink links
+beside the headings.
+
+Use a general FEM explanation when it answers the question best. KoFEM
+examples, app walkthroughs and implementation sections are optional; add them
+when the article makes product-specific claims or needs verification evidence.
+Keep common unit-system comparisons on the separate
+`/theory/foundations/consistent-units/` page. All Theory PRs target `develop`
+(the development/dev channel), never `main`.
+
 ---
 
 **Question:** _One sentence ending in a question mark._
 
-**Prerequisites:** _Links to the few concepts or earlier guide pages required._
+**Reviewed solver revision (when applicable):** _Full Git commit SHA and review date for product-specific claims._
 
-**Reviewed solver revision:** _Full Git commit SHA and review date._
-
-**Implementation:** _Links to exact production C++/WASM and web source files._
+**Implementation (when applicable):** _Links to exact production C++/WASM and web source files._
 
 ## Assumptions and scope
 
 - State physical assumptions (for example static, small-strain, isotropic).
 - State the dimensional convention and the units of every input.
-- Say what solver path and element/discretisation types the explanation covers.
+- Say what physical model or element/discretisation types the explanation covers;
+  identify the solver path when making implementation-specific claims.
 - List important exclusions before the derivation.
 
 ## Explanation
@@ -33,7 +44,10 @@ _Equation or derivation, with all terms defined._
 Connect the physical problem to the formulation, then to the numerical method.
 Do not use a display tessellation as evidence about the FEM discretisation.
 
-## KoFEM implementation
+## KoFEM implementation (optional)
+
+Omit this section from conceptual introductions that make no product-specific
+claims. Include it for articles explaining actual solver behaviour.
 
 Explain, with source links pinned to the reviewed revision:
 
@@ -53,7 +67,8 @@ Do not use the deferred Rust stubs as evidence for production behavior.
 
 ## Example and references
 
-- **Reproducible example:** _Stable KoFEM example URL and exact command._
+- **Worked example (when useful):** _A standalone calculation or physical model;
+  use a KoFEM example URL and command when relevant to the article._
 - **Reference result:** _Analytical or published value, assumptions, and units._
 - **Sources:** _Primary references and implementation links._
 - **Related guide pages:** _Previous, next, and deeper pages._
@@ -72,11 +87,11 @@ Link an established Linear ADR when one exists; do not create a parallel ADR.
 ## Review checklist
 
 - [ ] The title and question describe one topic.
-- [ ] Prerequisites and previous/next links work.
+- [ ] Previous/next links work.
 - [ ] Assumptions, symbol definitions, units, and sign conventions are explicit.
 - [ ] Equations have meaningful text equivalents and stable symbol links.
-- [ ] Claims trace to production sources at the recorded revision.
+- [ ] Product-specific claims trace to production sources at the recorded revision.
 - [ ] Limitations and practical consequences are specific.
-- [ ] The example is reproducible and the reference is cited.
+- [ ] Any worked example is reproducible and its reference is cited.
 - [ ] Any decision section links the owning Linear ADR.
 - [ ] Solid, shell, coupled, and optimization scope is not overstated.

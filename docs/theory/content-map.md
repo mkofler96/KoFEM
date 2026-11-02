@@ -17,26 +17,27 @@ without breaking links.
 `/theory/` is the guide index. Article slugs below are permanent once
 published. Renames require redirects and preserved heading anchors.
 
-| Section                | Stable URL                                           | Main question                                                                                              | Prerequisites                            |
-| ---------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| Foundations            | `/theory/foundations/model-and-units/`               | What physical model and unit system does a KoFEM static analysis represent?                                | Basic statics                            |
-| Foundations            | `/theory/foundations/reading-a-study/`               | How do geometry, materials, constraints, loads, the FEM discretisation, and results form one study?        | Model and units                          |
-| Notation and operators | `/theory/notation/`                                  | What do the shared symbols, indices, coordinate conventions, and units mean?                               | Model and units                          |
-| Notation and operators | `/theory/operators/gradient-divergence/`             | How do gradient, symmetric gradient, and divergence connect displacement, strain, stress, and equilibrium? | Notation; vector calculus                |
-| Solid mechanics        | `/theory/solid-mechanics/linear-elasticity/`         | Which assumptions lead from displacement to isotropic linear-elastic stress?                               | Notation; gradient and divergence        |
-| Solid mechanics        | `/theory/solid-mechanics/equilibrium-and-weak-form/` | Why does KoFEM solve the weak form instead of pointwise equilibrium?                                       | Linear elasticity; integration by parts  |
-| Numerical methods      | `/theory/numerical-methods/elements-and-quadrature/` | How are the displacement field and element integrals approximated?                                         | Weak form; basic linear algebra          |
-| Numerical methods      | `/theory/numerical-methods/assembly/`                | How do element contributions become the global linear system?                                              | Elements and quadrature                  |
-| Numerical methods      | `/theory/numerical-methods/loads-and-constraints/`   | How do supported load and displacement conditions enter that system?                                       | Assembly                                 |
-| Numerical methods      | `/theory/numerical-methods/linear-solve/`            | How is the linear system solved, and what do tolerance and non-convergence mean?                           | Assembly; loads and constraints          |
-| Results                | `/theory/results/displacement-and-stress/`           | How are nodal displacement and element von Mises stress produced and displayed?                            | Linear elasticity; linear solve          |
-| Results                | `/theory/results/interpretation-and-convergence/`    | Which conclusions are justified by a result, and when must the FEM discretisation be refined?              | Displacement and stress                  |
-| Verification           | `/theory/verification/axial-bar/`                    | Does the complete KoFEM path reproduce the analytical extension of a bar in tension?                       | All initial pages through interpretation |
-| Verification           | `/theory/verification/strategy/`                     | What does each benchmark establish, and what remains unverified?                                           | Axial-bar verification                   |
-| Shells (later)         | `/theory/shells/formulation/`                        | How does KoFEM's flat-facet shell represent membrane and bending response?                                 | Initial solid guide; plate theory        |
-| Shells (later)         | `/theory/shells/solid-coupling/`                     | How are shell and solid degrees of freedom coupled?                                                        | Shell formulation; assembly              |
-| Optimization (later)   | `/theory/optimization/simp/`                         | How does SIMP turn a solid FEM problem into a density optimization problem?                                | Initial solid guide; optimization basics |
-| Optimization (later)   | `/theory/optimization/constraints-and-convergence/`  | How should filtering, constraints, convergence, and optimized results be interpreted?                      | SIMP                                     |
+| Section                | Stable URL                                           | Main question                                                                                              |
+| ---------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Foundations            | `/theory/foundations/model-and-units/`               | What makes a useful finite element model?                                                                  |
+| Foundations            | `/theory/foundations/consistent-units/`              | Which combinations of units can be used together in a finite element model?                                |
+| Foundations            | `/theory/foundations/reading-a-study/`               | How do geometry, materials, constraints, loads, the FEM discretisation, and results form one study?        |
+| Notation and operators | `/theory/notation/`                                  | What do the shared symbols, indices, coordinate conventions, and units mean?                               |
+| Notation and operators | `/theory/operators/gradient-divergence/`             | How do gradient, symmetric gradient, and divergence connect displacement, strain, stress, and equilibrium? |
+| Solid mechanics        | `/theory/solid-mechanics/linear-elasticity/`         | Which assumptions lead from displacement to isotropic linear-elastic stress?                               |
+| Solid mechanics        | `/theory/solid-mechanics/equilibrium-and-weak-form/` | Why does KoFEM solve the weak form instead of pointwise equilibrium?                                       |
+| Numerical methods      | `/theory/numerical-methods/elements-and-quadrature/` | How are the displacement field and element integrals approximated?                                         |
+| Numerical methods      | `/theory/numerical-methods/assembly/`                | How do element contributions become the global linear system?                                              |
+| Numerical methods      | `/theory/numerical-methods/loads-and-constraints/`   | How do supported load and displacement conditions enter that system?                                       |
+| Numerical methods      | `/theory/numerical-methods/linear-solve/`            | How is the linear system solved, and what do tolerance and non-convergence mean?                           |
+| Results                | `/theory/results/displacement-and-stress/`           | How are nodal displacement and element von Mises stress produced and displayed?                            |
+| Results                | `/theory/results/interpretation-and-convergence/`    | Which conclusions are justified by a result, and when must the FEM discretisation be refined?              |
+| Verification           | `/theory/verification/axial-bar/`                    | Does the complete KoFEM path reproduce the analytical extension of a bar in tension?                       |
+| Verification           | `/theory/verification/strategy/`                     | What does each benchmark establish, and what remains unverified?                                           |
+| Shells (later)         | `/theory/shells/formulation/`                        | How does KoFEM's flat-facet shell represent membrane and bending response?                                 |
+| Shells (later)         | `/theory/shells/solid-coupling/`                     | How are shell and solid degrees of freedom coupled?                                                        |
+| Optimization (later)   | `/theory/optimization/simp/`                         | How does SIMP turn a solid FEM problem into a density optimization problem?                                |
+| Optimization (later)   | `/theory/optimization/constraints-and-convergence/`  | How should filtering, constraints, convergence, and optimized results be interpreted?                      |
 
 The initial verified path ends at the axial-bar page. The strategy page can
 then branch to other existing benchmarks. Shell/coupling and optimization stay
@@ -45,8 +46,11 @@ the initial solid guide.
 
 ## Running example: axial bar in tension
 
-Use the existing **Axial bar in tension** validation case throughout the
-initial guide.
+Use the existing **Axial bar in tension** validation case where the initial
+guide needs implementation or verification evidence. General introductions
+may use standalone physical models and worked calculations; they do not need
+to follow a KoFEM example. The model introduction uses a generic bar, while
+unit-system comparisons have their own linked page.
 
 - Fixture: `examples/validation/cases/axial-bar.mjs`
 - Published page: `/examples/axial-bar/`
@@ -145,5 +149,22 @@ meaning must not depend on color or a rendered glyph alone.
 - Generated example pages remain owned by the validation/gallery generators;
   theory pages link to them instead of copying their results by hand.
 - New pages start from [`article-template.md`](article-template.md). A reviewer
-  checks the question, prerequisites, assumptions, units, limitations, source
+  checks the question, assumptions, units, limitations, source
   trace, links, and revision before publication.
+
+## Authoring and PR conventions
+
+Do not add prerequisite lists or labels to public articles. Explain needed
+concepts in context and link related pages when useful.
+
+Teach general FEM concepts directly. Add KoFEM workflows, examples and pinned
+implementation details when relevant to the claims; conceptual introductions
+do not require those sections. Keep unit-system comparison on the separate
+`/theory/foundations/consistent-units/` page, using
+[Ansys LS-DYNA](https://lsdyna.ansys.com/consistent-units/) as a reference.
+The general comparison does not imply automatic unit conversion in KoFEM.
+
+All Theory work branches from and targets `develop` (the development/dev
+channel). The repository branch is named `develop`, not `dev`; never target
+Theory PRs at `main`. The shared clarification is also recorded on KOF-278
+and KOF-280 through KOF-290 in Linear.

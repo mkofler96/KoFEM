@@ -1,0 +1,88 @@
+/* SPDX-FileCopyrightText: 2026 Michael Kofler
+ * SPDX-License-Identifier: AGPL-3.0-or-later */
+
+/* Theory uses the examples' shared docs layout; only article-specific rules live here. */
+.skip-link {
+  position: fixed;
+  top: -100px;
+  left: 16px;
+  z-index: 100;
+  padding: 8px 16px;
+  color: var(--text);
+  background: var(--bg);
+}
+
+.skip-link:focus {
+  top: 8px;
+}
+
+.theory-docs main {
+  overflow-wrap: anywhere;
+}
+
+.theory-docs :target {
+  scroll-margin-top: 110px;
+}
+
+.theory-docs summary:focus-visible,
+.theory-docs [tabindex="0"]:focus-visible,
+.theory-docs button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.planned {
+  color: var(--muted);
+  font-size: 0.85em;
+  font-weight: 400;
+}
+
+.theory-topics {
+  padding-left: 22px;
+}
+
+.theory-topics li {
+  margin: 8px 0;
+}
+
+/* Keep unit names and values together; the table region handles narrow screens. */
+.theory-docs table th,
+.theory-docs table td {
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
+.symbols {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 8px 16px;
+}
+
+.symbols dd {
+  margin: 0;
+}
+
+.theory-docs .equation {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 20px 0;
+  padding: 10px 2px;
+}
+
+.theory-docs .equation math {
+  width: max-content;
+  min-width: 100%;
+  margin: 0;
+  overflow: visible;
+}
+
+.article-contents {
+  display: none;
+}
+
+@media (max-width: 1240px) {
+  .article-contents {
+    display: block;
+    margin: 16px 0;
+  }
+}

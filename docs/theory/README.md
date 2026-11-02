@@ -9,6 +9,22 @@ one long manual.
 - [`article-template.md`](article-template.md) is the required starting point
   for an article.
 
-Public articles will be implemented in the website under `/theory/` in later
-issues. These planning files version with the code; Linear remains the source
-of truth for issue planning and architecture decision records (ADRs).
+Public articles live under `/theory/`, with source modules in `web/theory/`.
+The initial articles are `foundations/model-and-units` and the separate
+`foundations/consistent-units` comparison. General FEM introductions can use
+standalone physical models; KoFEM examples and implementation sections are
+included when relevant. Remaining topics stay marked as planned until reviewed.
+Run `cd web && bun run theory:generate` after editing, and commit generated
+HTML and sitemap. `bun run test:theory` checks output and content-map alignment.
+
+Articles use the existing examples' native MathML renderer (`tex` / `texBlock`)
+and self-hosted math font. Its supported TeX subset is documented in
+`examples/validation/lib/tex.mjs`; unsupported commands throw at generation.
+Accompany equations with prose and local symbol anchors; link shared symbol
+definitions when the notation article is published. Wrap display math in a
+labelled, focusable `.equation` region so long expressions scroll by keyboard.
+Sections use explicit permanent IDs, code uses `pre`/`code`, and figures have
+alt text and captions. Never copy measured results from the generated examples.
+
+These files version with the code; Linear remains the source of truth for
+issue planning and architecture decision records (ADRs).
