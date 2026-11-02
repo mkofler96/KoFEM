@@ -12,12 +12,17 @@ const OPERATOR_PAGES = [
   "/theory/operators/integration-by-parts/",
   "/theory/operators/reference-mapping/",
 ];
+const NUMERICAL_PAGES = [
+  "/theory/numerical-methods/elements-and-quadrature/",
+  "/theory/numerical-methods/assembly/",
+];
 const PAGES = [
   "/theory/",
   ARTICLE,
   UNIT_PAGE,
   NOTATION_PAGE,
   ...OPERATOR_PAGES,
+  ...NUMERICAL_PAGES,
 ];
 
 test.describe("static theory content", () => {
@@ -198,7 +203,7 @@ for (const width of [320, 390, 1440]) {
       ),
     ).toBe(true);
     await expect(page.locator("main math").first()).toBeVisible();
-    for (const path of OPERATOR_PAGES) {
+    for (const path of [...OPERATOR_PAGES, ...NUMERICAL_PAGES]) {
       await page.goto(path);
       await page.evaluate(() => document.fonts.ready);
       expect(
@@ -312,6 +317,73 @@ test("operator articles connect notation, worked equations and reading order", a
   await expect(inverse.locator("mtr").nth(1).locator("mtd").first()).toHaveText(
     "−1/6",
   );
+});
+
+test("numerical-methods articles give checkable elements, assembly and planned links", async ({
+  page,
+}) => {
+  const [elements, assembly] = NUMERICAL_PAGES;
+  await page.goto(elements);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Elements and quadrature",
+  );
+  await expect(
+    page.getByRole("row", {
+      name: "Tetrahedron, order 2 10 30 30 × 30 4 points",
+      exact: true,
+    }),
+  ).toBeVisible();
+  const k22 = page.getByRole("region", {
+    name: /^Worked tetrahedron: node 2 diagonal block/,
+  });
+  await expect(k22.locator("mtr")).toHaveCount(3);
+  await expect(k22.locator("mtr").nth(1).locator("mtd").nth(1)).toHaveText(
+    "500/3",
+  );
+  // Unwritten topics resolve to their planned overview entry, never a 404.
+  await expect(
+    page.locator('main a[href="/theory/#solid-mechanics-linear-elasticity"]'),
+  ).not.toHaveCount(0);
+  await expect(
+    page.locator('main a[href^="/theory/solid-mechanics/"]'),
+  ).toHaveCount(0);
+  await expect(page.locator("main")).toContainText("KOF-274");
+  await expect(page.locator('.pager a[rel="next"]')).toHaveAttribute(
+    "href",
+    assembly,
+  );
+
+  await page.goto(assembly);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Assembly");
+  const global = page.getByRole("region", {
+    name: /^Assembled three-by-three bar stiffness/,
+  });
+  await expect(global.locator("mtr")).toHaveCount(3);
+  await expect(global.locator("mtr").nth(1).locator("mtd").nth(1)).toHaveText(
+    "1+1",
+  );
+  const t2 = page.getByRole("row").filter({
+    has: page.getByRole("cell", { name: "6, 7, 8, 9", exact: true }),
+  });
+  await expect(t2.locator("th math")).toBeVisible();
+  await expect(t2.locator("th")).toContainText("(1, 2, 3, 4)");
+  await expect(t2.locator("td").last()).toHaveText("11, 12, 13, 14");
+  // Inline math is typeset, never plain text with <sub>/<sup> tags.
+  for (const path of [...NUMERICAL_PAGES, ...OPERATOR_PAGES, NOTATION_PAGE]) {
+    await page.goto(path);
+    await expect(
+      page.locator("main p sub, main p sup, main li sub, main li sup"),
+    ).toHaveCount(0);
+  }
+  await page.goto(assembly);
+  await expect(page.locator('.pager a[rel="prev"]')).toHaveAttribute(
+    "href",
+    elements,
+  );
+  await page.goto(NOTATION_PAGE);
+  await expect(
+    page.locator(`main a[href="${assembly}#dof-ordering"]`),
+  ).toHaveCount(1);
 });
 
 test("the unit comparison is separate and explains SI stress defaults", async ({

@@ -9,13 +9,22 @@
 // "PL" is P times L), numbers, operators, {groups}, ^ and _ (single token or
 // group), \frac{a}{b}, \sqrt{a}, \sin \cos \tan \exp \log \ln,
 // \text{...} (upright words), \mathrm{...}
-// (upright identifiers such as "max"), \left( \right) stretchy delimiters, and
-// \, \; spacing. Anything else throws, so a typo cannot render as a silent gap.
+// (upright identifiers such as "max"), \mathbf{...} (bold vectors and
+// matrices), \left( \right) stretchy delimiters, and \, \; spacing.
+// Anything else throws, so a typo cannot render as a silent gap.
 
 const esc = (s) =>
   String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-const COMMANDS = new Set(["frac", "sqrt", "text", "mathrm", "left", "right"]);
+const COMMANDS = new Set([
+  "frac",
+  "sqrt",
+  "text",
+  "mathrm",
+  "mathbf",
+  "left",
+  "right",
+]);
 const FUNCTIONS = new Set(["sin", "cos", "tan", "exp", "log", "ln"]);
 const THIN = `<mspace width="0.1667em"/>`;
 const TIGHT = `lspace="0" rspace="0"`;
@@ -79,7 +88,7 @@ function tokenize(src) {
       if (!m) throw new Error(`tex: bad number at "${src.slice(i)}"`);
       out.push({ kind: "num", value: m[0] });
       i += m[0].length;
-    } else if (/[A-Za-zΑ-Ωα-ωϑϕ]/.test(c)) {
+    } else if (/[A-Za-zΑ-Ωα-ωϑϕℓ]/.test(c)) {
       out.push({ kind: "id", value: c });
       i++;
     } else if ("{}^_".includes(c)) {
@@ -169,6 +178,10 @@ function parser(tokens, src) {
         if (v === "text") return `<mtext>${esc(rawGroup())}</mtext>`;
         if (v === "mathrm")
           return `<mi mathvariant="normal">${esc(rawGroup())}</mi>`;
+        // MathML Core only standardises mathvariant="normal"; the class lets
+        // pages set the bold weight in CSS.
+        if (v === "mathbf")
+          return `<mi mathvariant="bold" class="math-bold">${esc(rawGroup())}</mi>`;
         if (v === "left") {
           const open = tokens[p++];
           const inner = sequence("right");

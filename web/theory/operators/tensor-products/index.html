@@ -960,7 +960,7 @@
     </details><details class="docs-group">
       <summary>Solid mechanics</summary><ul><li><a href="/theory/#solid-mechanics-linear-elasticity">Linear elasticity <small class="planned">(planned)</small></a></li><li><a href="/theory/#solid-mechanics-equilibrium-and-weak-form">Equilibrium and weak form <small class="planned">(planned)</small></a></li></ul>
     </details><details class="docs-group">
-      <summary>Numerical methods</summary><ul><li><a href="/theory/#numerical-methods-elements-and-quadrature">Elements and quadrature <small class="planned">(planned)</small></a></li><li><a href="/theory/#numerical-methods-assembly">Assembly <small class="planned">(planned)</small></a></li><li><a href="/theory/#numerical-methods-loads-and-constraints">Loads and constraints <small class="planned">(planned)</small></a></li><li><a href="/theory/#numerical-methods-linear-solve">Linear solve <small class="planned">(planned)</small></a></li></ul>
+      <summary>Numerical methods</summary><ul><li><a href="/theory/numerical-methods/elements-and-quadrature/">Elements and quadrature</a></li><li><a href="/theory/numerical-methods/assembly/">Assembly</a></li><li><a href="/theory/#numerical-methods-loads-and-constraints">Loads and constraints <small class="planned">(planned)</small></a></li><li><a href="/theory/#numerical-methods-linear-solve">Linear solve <small class="planned">(planned)</small></a></li></ul>
     </details><details class="docs-group">
       <summary>Results</summary><ul><li><a href="/theory/#results-displacement-and-stress">Displacement and stress <small class="planned">(planned)</small></a></li><li><a href="/theory/#results-interpretation-and-convergence">Interpretation and convergence <small class="planned">(planned)</small></a></li></ul>
     </details><details class="docs-group">
@@ -980,7 +980,7 @@
     </details><details class="docs-group">
       <summary>Solid mechanics</summary><ul><li><a href="/theory/#solid-mechanics-linear-elasticity">Linear elasticity <small class="planned">(planned)</small></a></li><li><a href="/theory/#solid-mechanics-equilibrium-and-weak-form">Equilibrium and weak form <small class="planned">(planned)</small></a></li></ul>
     </details><details class="docs-group">
-      <summary>Numerical methods</summary><ul><li><a href="/theory/#numerical-methods-elements-and-quadrature">Elements and quadrature <small class="planned">(planned)</small></a></li><li><a href="/theory/#numerical-methods-assembly">Assembly <small class="planned">(planned)</small></a></li><li><a href="/theory/#numerical-methods-loads-and-constraints">Loads and constraints <small class="planned">(planned)</small></a></li><li><a href="/theory/#numerical-methods-linear-solve">Linear solve <small class="planned">(planned)</small></a></li></ul>
+      <summary>Numerical methods</summary><ul><li><a href="/theory/numerical-methods/elements-and-quadrature/">Elements and quadrature</a></li><li><a href="/theory/numerical-methods/assembly/">Assembly</a></li><li><a href="/theory/#numerical-methods-loads-and-constraints">Loads and constraints <small class="planned">(planned)</small></a></li><li><a href="/theory/#numerical-methods-linear-solve">Linear solve <small class="planned">(planned)</small></a></li></ul>
     </details><details class="docs-group">
       <summary>Results</summary><ul><li><a href="/theory/#results-displacement-and-stress">Displacement and stress <small class="planned">(planned)</small></a></li><li><a href="/theory/#results-interpretation-and-convergence">Interpretation and convergence <small class="planned">(planned)</small></a></li></ul>
     </details><details class="docs-group">
@@ -1007,11 +1007,11 @@
     <p>The <a href="/theory/notation/#dot-product">dot product</a> takes two
       3-vectors to one scalar. It measures their alignment, weighted by length:</p>
     <div class="equation" tabindex="0" role="region" aria-label="Dot product sums matching vector components; scroll horizontally if needed"><math display="block"><mi>a</mi><mo>·</mo><mi>b</mi><mo>=</mo><msubsup><mo largeop="true">∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mn>3</mn></msubsup><msub><mi>a</mi><mi>i</mi></msub><msub><mi>b</mi><mi>i</mi></msub><mo lspace="0" rspace="0">.</mo></math></div>
-    <p>For a = (1, 2, 0)ᵀ and b = (3, −1, 4)ᵀ,
-      a·b = 1 × 3 + 2 × (−1) + 0 × 4 = 1.
+    <p>For <math><mi>a</mi><mo>=</mo></math>​<math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>1</mn><mo>,</mo><mn>2</mn><mo>,</mo><mn>0</mn><msup><mo stretchy="false" lspace="0" rspace="0">)</mo><mi>T</mi></msup></math> and <math><mi>b</mi><mo>=</mo></math>​<span class="math-nowrap"><math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>3</mn><mo>,</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mn>1</mn><mo>,</mo><mn>4</mn><msup><mo stretchy="false" lspace="0" rspace="0">)</mo><mi>T</mi></msup></math>,</span>
+      <math><mi>a</mi><mo>·</mo><mi>b</mi><mo>=</mo></math>​<math><mn>1</mn><mo>×</mo><mn>3</mn><mo>+</mo><mn>2</mn><mo>×</mo><mo stretchy="false" lspace="0" rspace="0">(</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mn>1</mn><mo stretchy="false" lspace="0" rspace="0">)</mo><mo>+</mo><mn>0</mn><mo>×</mo><mn>4</mn><mo>=</mo></math>​<span class="math-nowrap"><math><mn>1</mn></math>.</span>
       The result has no direction. Orthogonal vectors have zero dot product.</p>
     <p>In virtual work, a force dotted with a test displacement has units
-      N·mm. A force (10, 0, 0) N and displacement (0, 2, 0) mm give zero work;
+      N·mm. A force <math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>10</mn><mo>,</mo><mn>0</mn><mo>,</mo><mn>0</mn><mo stretchy="false" lspace="0" rspace="0">)</mo><mtext> N</mtext></math> and displacement <math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>0</mn><mo>,</mo><mn>2</mn><mo>,</mo><mn>0</mn><mo stretchy="false" lspace="0" rspace="0">)</mo><mtext> mm</mtext></math> give zero work;
       only displacement along the force contributes. Distributed loads use
       the same product inside a volume or surface integral.</p>
 
@@ -1021,34 +1021,34 @@
       3-vectors produce a 3 × 3 tensor:</p>
     <div class="equation" tabindex="0" role="region" aria-label="Outer product multiplies component i of the first vector by component j of the second; scroll horizontally if needed"><math display="block"><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>a</mi><mo>⊗</mo><mi>b</mi><msub><mo stretchy="false" lspace="0" rspace="0">)</mo><mrow><mi>i</mi><mi>j</mi></mrow></msub><mo>=</mo><msub><mi>a</mi><mi>i</mi></msub><msub><mi>b</mi><mi>j</mi></msub><mo lspace="0" rspace="0">.</mo></math></div>
     <div class="equation" tabindex="0" role="region" aria-label="Outer product of vectors one two zero and three minus one four; scroll horizontally if needed"><math display="block"><mi>a</mi><mo>⊗</mo><mi>b</mi><mo>=</mo><mrow><mo stretchy="true">[</mo><mtable><mtr><mtd><mn>3</mn></mtd><mtd><mo form="prefix" lspace="0" rspace="0">−</mo><mn>1</mn></mtd><mtd><mn>4</mn></mtd></mtr><mtr><mtd><mn>6</mn></mtd><mtd><mo form="prefix" lspace="0" rspace="0">−</mo><mn>2</mn></mtd><mtd><mn>8</mn></mtd></mtr><mtr><mtd><mn>0</mn></mtd><mtd><mn>0</mn></mtd><mtd><mn>0</mn></mtd></mtr></mtable><mo stretchy="true">]</mo></mrow></math></div>
-    <p>The xy entry is 1 × (−1) = −1, whereas the yx entry is 2 × 3 = 6.
+    <p>The <math><mi>x</mi><mi>y</mi></math> entry is <math><mn>1</mn><mo>×</mo><mo stretchy="false" lspace="0" rspace="0">(</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mn>1</mn><mo stretchy="false" lspace="0" rspace="0">)</mo><mo>=</mo></math>​<span class="math-nowrap"><math><mo form="prefix" lspace="0" rspace="0">−</mo><mn>1</mn></math>,</span> whereas the <math><mi>y</mi><mi>x</mi></math> entry is <math><mn>2</mn><mo>×</mo><mn>3</mn><mo>=</mo></math>​<span class="math-nowrap"><math><mn>6</mn></math>.</span>
       The product is generally not symmetric. Units multiply, just as for a
       dot product, but the output retains two indices.</p>
     <p>In displacement interpolation,
-      <math><mo>∇</mo><msup><mi>u</mi><mi>h</mi></msup><mo>=</mo><msub><mo largeop="true">∑</mo><mi>a</mi></msub><msub><mi>d</mi><mi>a</mi></msub><mo>⊗</mo><mo>∇</mo><msub><mi>N</mi><mi>a</mi></msub></math>:
-      the nodal displacement dₐ (a 3-vector, mm) and shape-function gradient
+      <math><mo lspace="0" rspace="0">∇</mo><msup><mi>u</mi><mi>h</mi></msup><mo>=</mo></math>​<span class="math-nowrap"><math><msub><mo largeop="true">∑</mo><mi>a</mi></msub><msub><mi>d</mi><mi>a</mi></msub><mo>⊗</mo><mo lspace="0" rspace="0">∇</mo><msub><mi>N</mi><mi>a</mi></msub></math>:</span>
+      the nodal displacement <math><msub><mi>d</mi><mi>a</mi></msub></math> (a 3-vector, mm) and shape-function gradient
       (a 3-vector, 1/mm) form a dimensionless tensor. This agrees with the
       <a href="/theory/operators/gradient-divergence/#vector-gradient">row-component gradient convention</a>.</p>
 
     <h2 id="transpose">Transpose: swap indices</h2>
     <p>A <a href="/theory/notation/#transpose">transpose</a> exchanges rows
-      and columns: (Aᵀ)ᵢⱼ = Aⱼᵢ. An m × n input becomes n × m;
+      and columns: <math><mo stretchy="false" lspace="0" rspace="0">(</mo><msup><mi>A</mi><mi>T</mi></msup><msub><mo stretchy="false" lspace="0" rspace="0">)</mo><mrow><mi>i</mi><mi>j</mi></mrow></msub><mo>=</mo></math>​<span class="math-nowrap"><math><msub><mi>A</mi><mrow><mi>j</mi><mi>i</mi></mrow></msub></math>.</span> An <math><mi>m</mi><mo>×</mo><mi>n</mi></math> input becomes <span class="math-nowrap"><math><mi>n</mi><mo>×</mo><mi>m</mi></math>;</span>
       units stay the same. For a rectangular example:</p>
     <div class="equation" tabindex="0" role="region" aria-label="A two by three matrix; scroll horizontally if needed"><math display="block"><mi>A</mi><mo>=</mo><mrow><mo stretchy="true">[</mo><mtable><mtr><mtd><mn>1</mn></mtd><mtd><mn>2</mn></mtd><mtd><mn>3</mn></mtd></mtr><mtr><mtd><mn>4</mn></mtd><mtd><mn>5</mn></mtd><mtd><mn>6</mn></mtd></mtr></mtable><mo stretchy="true">]</mo></mrow></math></div>
     <div class="equation" tabindex="0" role="region" aria-label="Its three by two transpose; scroll horizontally if needed"><math display="block"><msup><mi>A</mi><mi>T</mi></msup><mo>=</mo><mrow><mo stretchy="true">[</mo><mtable><mtr><mtd><mn>1</mn></mtd><mtd><mn>4</mn></mtd></mtr><mtr><mtd><mn>2</mn></mtd><mtd><mn>5</mn></mtd></mtr><mtr><mtd><mn>3</mn></mtd><mtd><mn>6</mn></mtd></mtr></mtable><mo stretchy="true">]</mo></mrow></math></div>
-    <p>Thus (Aᵀ)₂₁ = A₁₂ = 2. A symmetric tensor equals its transpose.
-      Averaging ∇u and (∇u)ᵀ gives small strain. In stiffness assembly,
-      BᵀCB has compatible shapes: if B maps n element DOFs to six engineering
-      strain components, then B is 6 × n, C is 6 × 6 and BᵀCB is n × n.</p>
+    <p>Thus <math><mo stretchy="false" lspace="0" rspace="0">(</mo><msup><mi>A</mi><mi>T</mi></msup><msub><mo stretchy="false" lspace="0" rspace="0">)</mo><mrow><mn>21</mn></mrow></msub><mo>=</mo></math>​<math><msub><mi>A</mi><mrow><mn>12</mn></mrow></msub><mo>=</mo></math>​<span class="math-nowrap"><math><mn>2</mn></math>.</span> A symmetric tensor equals its transpose.
+      Averaging <math><mo lspace="0" rspace="0">∇</mo><mi>u</mi></math> and <math><mo stretchy="false" lspace="0" rspace="0">(</mo><mo lspace="0" rspace="0">∇</mo><mi>u</mi><msup><mo stretchy="false" lspace="0" rspace="0">)</mo><mi>T</mi></msup></math> gives small strain. In stiffness assembly,
+      <math><msup><mi>B</mi><mi>T</mi></msup><mi>C</mi><mi>B</mi></math> has compatible shapes: if <math><mi>B</mi></math> maps <math><mi>n</mi></math> element DOFs to six engineering
+      strain components, then <math><mi>B</mi></math> is <span class="math-nowrap"><math><mn>6</mn><mo>×</mo><mi>n</mi></math>,</span> <math><mi>C</mi></math> is 6 × 6 and <math><msup><mi>B</mi><mi>T</mi></msup><mi>C</mi><mi>B</mi></math> is <span class="math-nowrap"><math><mi>n</mi><mo>×</mo><mi>n</mi></math>.</span></p>
 
     <h2 id="trace">Trace: add the diagonal</h2>
     <p>The <a href="/theory/notation/#trace">trace</a> maps a square tensor
       to a scalar by adding its diagonal. It preserves units:</p>
     <div class="equation" tabindex="0" role="region" aria-label="Trace sums the three diagonal components; scroll horizontally if needed"><math display="block"><mi mathvariant="normal">tr</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>A</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo>=</mo><msubsup><mo largeop="true">∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mn>3</mn></msubsup><msub><mi>A</mi><mrow><mi>i</mi><mi>i</mi></mrow></msub><mo lspace="0" rspace="0">.</mo></math></div>
     <div class="equation" tabindex="0" role="region" aria-label="Trace example with diagonal entries one four five; scroll horizontally if needed"><math display="block"><mi>A</mi><mo>=</mo><mrow><mo stretchy="true">[</mo><mtable><mtr><mtd><mn>1</mn></mtd><mtd><mn>2</mn></mtd><mtd><mn>0</mn></mtd></mtr><mtr><mtd><mn>3</mn></mtd><mtd><mn>4</mn></mtd><mtd><mn>0</mn></mtd></mtr><mtr><mtd><mn>0</mn></mtd><mtd><mn>0</mn></mtd><mtd><mn>5</mn></mtd></mtr></mtable><mo stretchy="true">]</mo></mrow></math></div>
-    <p>Here tr A = 1 + 4 + 5 = 10; the off-diagonal entries do not enter.
-      For infinitesimal strain, tr ε is first-order relative volume change.
-      In the isotropic law σ = λ tr(ε)I + 2με, the identity I is a 3 × 3
+    <p>Here <math><mi mathvariant="normal">tr</mi><mspace width="0.17em"/><mi>A</mi><mo>=</mo></math>​<math><mn>1</mn><mo>+</mo><mn>4</mn><mo>+</mo><mn>5</mn><mo>=</mo></math>​<span class="math-nowrap"><math><mn>10</mn></math>;</span> the off-diagonal entries do not enter.
+      For infinitesimal strain, <math><mi mathvariant="normal">tr</mi><mspace width="0.17em"/><mi>ε</mi></math> is first-order relative volume change.
+      In the isotropic law <math><mi>σ</mi><mo>=</mo></math>​<span class="math-nowrap"><math><mi>λ</mi><mspace width="0.17em"/><mi mathvariant="normal">tr</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>ε</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mi>I</mi><mo>+</mo><mn>2</mn><mi>μ</mi><mi>ε</mi></math>,</span> the identity <math><mi>I</mi></math> is a 3 × 3
       tensor with ones on the diagonal. The trace term therefore adds equal
       normal stress in all three directions. See
       <a href="/theory/notation/#lame-parameters">Lamé parameters</a>.</p>
@@ -1059,18 +1059,18 @@
       every matching component. For 3 × 3 tensors:</p>
     <div class="equation" tabindex="0" role="region" aria-label="Double contraction sums all nine matching products; scroll horizontally if needed"><math display="block"><mi>A</mi><mo>:</mo><mi>B</mi><mo>=</mo><msubsup><mo largeop="true">∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mn>3</mn></msubsup><msubsup><mo largeop="true">∑</mo><mrow><mi>j</mi><mo>=</mo><mn>1</mn></mrow><mn>3</mn></msubsup><msub><mi>A</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub><msub><mi>B</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub><mo>=</mo><mi mathvariant="normal">tr</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><msup><mi>A</mi><mi>T</mi></msup><mi>B</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo lspace="0" rspace="0">.</mo></math></div>
     <p>This is not ordinary matrix multiplication. For symmetric stress and
-      strain, both xy and yx entries contribute the same product:</p>
+      strain, both <math><mi>x</mi><mi>y</mi></math> and <math><mi>y</mi><mi>x</mi></math> entries contribute the same product:</p>
     <div class="equation" tabindex="0" role="region" aria-label="Symmetric stress strain contraction counts each off-diagonal shear pair twice; scroll horizontally if needed"><math display="block"><mi>σ</mi><mo>:</mo><mi>ε</mi><mo>=</mo><msub><mi>σ</mi><mrow><mi>x</mi><mi>x</mi></mrow></msub><msub><mi>ε</mi><mrow><mi>x</mi><mi>x</mi></mrow></msub><mo>+</mo><msub><mi>σ</mi><mrow><mi>y</mi><mi>y</mi></mrow></msub><msub><mi>ε</mi><mrow><mi>y</mi><mi>y</mi></mrow></msub><mo>+</mo><msub><mi>σ</mi><mrow><mi>z</mi><mi>z</mi></mrow></msub><msub><mi>ε</mi><mrow><mi>z</mi><mi>z</mi></mrow></msub><mo>+</mo><mn>2</mn><msub><mi>σ</mi><mrow><mi>y</mi><mi>z</mi></mrow></msub><msub><mi>ε</mi><mrow><mi>y</mi><mi>z</mi></mrow></msub><mo>+</mo><mn>2</mn><msub><mi>σ</mi><mrow><mi>x</mi><mi>z</mi></mrow></msub><msub><mi>ε</mi><mrow><mi>x</mi><mi>z</mi></mrow></msub><mo>+</mo><mn>2</mn><msub><mi>σ</mi><mrow><mi>x</mi><mi>y</mi></mrow></msub><msub><mi>ε</mi><mrow><mi>x</mi><mi>y</mi></mrow></msub><mo lspace="0" rspace="0">.</mo></math></div>
-    <p>Take pure shear εₓᵧ = εᵧₓ = 0.001, all other strains zero, and
-      σₓᵧ = σᵧₓ = 160 MPa, all other stresses zero. Then
-      σ:ε = 160 × 0.001 + 160 × 0.001 = 0.32 MPa.
-      The six-component engineering strain vector has γₓᵧ = 0.002, so its
-      pairing with the undoubled shear stress gives the same 160 × 0.002.</p>
-    <p>The shared order is xx, yy, zz, yz, xz, xy:
+    <p>Take pure shear <math><msub><mi>ε</mi><mrow><mi>x</mi><mi>y</mi></mrow></msub><mo>=</mo></math>​<math><msub><mi>ε</mi><mrow><mi>y</mi><mi>x</mi></mrow></msub><mo>=</mo></math>​<span class="math-nowrap"><math><mn>0.001</mn></math>,</span> all other strains zero, and
+      <math><msub><mi>σ</mi><mrow><mi>x</mi><mi>y</mi></mrow></msub><mo>=</mo></math>​<math><msub><mi>σ</mi><mrow><mi>y</mi><mi>x</mi></mrow></msub><mo>=</mo></math>​<span class="math-nowrap"><math><mn>160</mn><mtext> MPa</mtext></math>,</span> all other stresses zero. Then
+      <math><mi>σ</mi><mo>:</mo><mi>ε</mi><mo>=</mo></math>​<math><mn>160</mn><mo>×</mo><mn>0.001</mn><mo>+</mo><mn>160</mn><mo>×</mo><mn>0.001</mn><mo>=</mo></math>​<span class="math-nowrap"><math><mn>0.32</mn><mtext> MPa</mtext></math>.</span>
+      The six-component engineering strain vector has <math><msub><mi>γ</mi><mrow><mi>x</mi><mi>y</mi></mrow></msub><mo>=</mo></math>​<span class="math-nowrap"><math><mn>0.002</mn></math>,</span> so its
+      pairing with the undoubled shear stress gives the same <span class="math-nowrap"><math><mn>160</mn><mo>×</mo><mn>0.002</mn></math>.</span></p>
+    <p>The shared order is <span class="math-nowrap"><math><mi>x</mi><mi>x</mi><mo>,</mo><mi>y</mi><mi>y</mi><mo>,</mo><mi>z</mi><mi>z</mi><mo>,</mo><mi>y</mi><mi>z</mi><mo>,</mo><mi>x</mi><mi>z</mi><mo>,</mo><mi>x</mi><mi>y</mi></math>:</span>
       <a href="/theory/notation/#engineering-shear">double the strain shear entries, not the stresses</a>.
       In proportional linear elasticity from zero stress, stored energy density
-      is ½σ:ε = 0.16 N/mm², equivalently 0.16 N·mm/mm³.
-      A virtual-work integrand instead uses σ:ε(w) without that half.
+      is <math><mfrac><mrow><mn>1</mn></mrow><mrow><mn>2</mn></mrow></mfrac><mi>σ</mi><mo>:</mo><mi>ε</mi><mo>=</mo></math>​<span class="math-nowrap"><math><mn>0.16</mn><mtext> N</mtext><mo lspace="0" rspace="0">/</mo><msup><mtext>mm</mtext><mn>2</mn></msup></math>,</span> equivalently 0.16 N·mm/mm³.
+      A virtual-work integrand instead uses <math><mi>σ</mi><mo>:</mo><mi>ε</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>w</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></math> without that half.
       Using tensor shear in a six-component engineering pairing would miss
       half the shear contribution.</p>
 

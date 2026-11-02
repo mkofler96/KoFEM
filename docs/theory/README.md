@@ -13,7 +13,8 @@ Public articles live under `/theory/`, with source modules in `web/theory/`.
 The published articles are `foundations/model-and-units`, the separate
 `foundations/consistent-units` comparison, `notation`, and four focused operator
 articles: gradients/divergence, tensor products, integration by parts, and
-reference-element mappings. General FEM introductions can use standalone
+reference-element mappings, and the numerical-methods articles
+`elements-and-quadrature` and `assembly`. General FEM introductions can use standalone
 physical models; KoFEM examples and
 implementation sections are included when relevant. Remaining topics stay marked
 as planned until reviewed.
@@ -30,6 +31,12 @@ examples in `/theory/operators/`; keep both directions of these links. Wrap
 display math in a labelled, focusable `.equation` region so long expressions scroll by keyboard.
 Sections use explicit permanent IDs, code uses `pre`/`code`, and figures have
 alt text and captions. Never copy measured results from the generated examples.
+
+Write links to a planned topic with its permanent URL. The generator points them
+at the topic's planned overview entry until the article is published, and fails
+on links to unknown `/theory/` pages. Numerical-methods articles pin their
+source links in `web/theory/numerical-methods/sources.mjs`; update its revision
+and line numbers together with the articles' review dates.
 
 These files version with the code; Linear remains the source of truth for
 issue planning and architecture decision records (ADRs).
