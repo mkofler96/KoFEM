@@ -150,12 +150,12 @@ export function useGeometryEdit() {
   }
 
   // Divide the cone tips a failed mesh reported.
-  async function splitConeTips(faceIds: number[]): Promise<boolean> {
+  function splitConeTips(faceIds: number[]): Promise<boolean> {
     if (!stepBytes) {
       setSplitError(
         "Cannot split the cone tips: the geometry file is not available (a saved analysis carries none). Re-import the STEP file to edit its geometry.",
       );
-      return false;
+      return Promise.resolve(false);
     }
     return run("split_cone_tips", { faceIds });
   }

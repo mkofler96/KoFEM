@@ -45,6 +45,9 @@ assert.deepEqual(hingeRepairs([surface]), []);
 const cone = { ...surface, kind: "cone", faceIds: new Int32Array([7, 8]) };
 assert.deepEqual(coneTipFaces([surface, hinge, cone]), [7, 8]);
 assert.deepEqual(coneTipFaces([surface, hinge]), []);
+// Separate overlaps on one face still name it once: the engine refuses duplicates.
+const sameFace = { ...cone, faceIds: new Int32Array([8, 9]) };
+assert.deepEqual(coneTipFaces([cone, sameFace]), [7, 8, 9]);
 
 // The width follows the element size; no usable size means the field asks.
 assert.equal(defaultRepairWidth("2"), "3");
