@@ -194,7 +194,7 @@ export default {
       [
         "shape-functions",
         tex("N_a"),
-        'Scalar shape function for basis a; dimensionless field. The interpolation matrix <b>N</b> groups N<sub>a</sub> <b>I</b> blocks and has size 3 × n<sub>d</sub>, so <b>u</b>ʰ = <b>N d</b>. Upright N in a unit is a newton, not a shape function. See <a href="#discrete-displacement">coefficients</a>.',
+        'Scalar shape function for basis a; dimensionless field. The interpolation matrix <b>N</b> groups N<sub>a</sub> <b>I</b> blocks and has size 3 × n<sub>d</sub>, so <b>u</b>ʰ = <b>N d</b>. Upright N in a unit is a newton, not a shape function. See <a href="#discrete-displacement">coefficients</a>. <a href="/theory/numerical-methods/elements-and-quadrature/#shape-functions">Linear and quadratic shape functions</a>.',
         "1",
       ],
       [
@@ -206,26 +206,27 @@ export default {
       [
         "strain-displacement",
         bold("B"),
-        'Strain–displacement matrix; size 6 × n<sub>d</sub> in the <a href="#engineering-shear">engineering-shear convention</a> below. Spatial derivatives of the shape functions give ε<sub>eng</sub> = <b>B d</b>.',
+        'Strain–displacement matrix; size 6 × n<sub>d</sub> in the <a href="#engineering-shear">engineering-shear convention</a> below. Spatial derivatives of the shape functions give ε<sub>eng</sub> = <b>B d</b>. <a href="/theory/numerical-methods/elements-and-quadrature/#strain-displacement">B blocks and a worked element</a>.',
         "1/mm",
       ],
       [
         "stiffness",
         bold("K"),
-        'Global stiffness matrix; size n<sub>d</sub> × n<sub>d</sub>. It maps translational coefficients to force in <b>K d = f</b>, with constraints treated appropriately. See the <a href="#dimensional-check">dimensional check</a>.',
+        'Global stiffness matrix; size n<sub>d</sub> × n<sub>d</sub>. It maps translational coefficients to force in <b>K d = f</b>, with constraints treated appropriately. See the <a href="#dimensional-check">dimensional check</a>. <a href="/theory/numerical-methods/assembly/#bar-example">Assembly example</a>.',
         "N/mm",
       ],
       [
         "load-vector",
         bold("f"),
-        'Assembled load vector of length n<sub>d</sub>; it includes concentrated loads and work-equivalent surface or volume contributions. A traction is integrated with shape functions, not copied into a force entry. See <a href="#integral">integration</a>.',
+        'Assembled load vector of length n<sub>d</sub>; it includes concentrated loads and work-equivalent surface or volume contributions. A traction is integrated with shape functions, not copied into a force entry. See <a href="#integral">integration</a>. <a href="/theory/numerical-methods/elements-and-quadrature/#element-loads">Work-equivalent face loads</a>.',
         "N",
       ],
     ])}
     <p>The interpolation matrix above groups coefficients by basis:
       ${tex("(d_{1x},d_{1y},d_{1z},d_{2x},…)")}.
       Storage order is a numbering choice; changing it consistently leaves
-      the physical approximation unchanged.</p>
+      the physical approximation unchanged. See
+      <a href="/theory/numerical-methods/assembly/#dof-ordering">DOF ordering</a>.</p>
     <p>These matrix sizes and units describe a translational solid problem.
       Shells add rotations (radians, dimensionless) and moments (N·mm), so their
       stiffness blocks have different units. A display-tessellation vertex is

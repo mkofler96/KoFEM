@@ -105,3 +105,8 @@
     margin: 16px 0;
   }
 }
+
+.theory-docs .responsibility-table td:last-child {
+  min-width: 280px;
+  white-space: normal;
+}

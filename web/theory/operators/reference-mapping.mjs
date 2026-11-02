@@ -107,7 +107,9 @@ export default {
       ${tex("K^{(e)} = \\int_{Ω_e} B^T C B\\,dV")}.
       Here B maps displacement coefficients to engineering strain, and C maps
       engineering strain to stress. B has units 1/mm and C has units N/mm²,
-      so a solid translational stiffness entry has units N/mm.</p>
+      so a solid translational stiffness entry has units N/mm.
+      <a href="/theory/numerical-methods/elements-and-quadrature/#worked-element">Elements and quadrature</a>
+      evaluates this integral for one tetrahedron and explains the choice of rule.</p>
 
     <h2 id="mapping-limits">Check the mapping</h2>
     <p>A zero determinant means the local volume has collapsed and J cannot

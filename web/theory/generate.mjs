@@ -14,6 +14,8 @@ import gradientDivergence from "./operators/gradient-divergence.mjs";
 import tensorProducts from "./operators/tensor-products.mjs";
 import integrationByParts from "./operators/integration-by-parts.mjs";
 import referenceMapping from "./operators/reference-mapping.mjs";
+import elementsAndQuadrature from "./numerical-methods/elements-and-quadrature.mjs";
+import assembly from "./numerical-methods/assembly.mjs";
 
 const web = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const articles = [
@@ -24,12 +26,28 @@ const articles = [
   tensorProducts,
   integrationByParts,
   referenceMapping,
+  elementsAndQuadrature,
+  assembly,
 ];
 const sections = [...new Set(topics.map((topic) => topic.section))];
 const published = (topic) =>
   articles.some((article) => article.slug === topic.slug);
 const topicUrl = (topic) =>
   published(topic) ? articleUrl(topic) : `/theory/#${topicAnchor(topic)}`;
+// Articles link to a topic's permanent URL even before it is written. Until
+// then the link points at the topic's planned entry in the overview, so a
+// page never links to a missing article and goes live on regeneration.
+// Links to unknown /theory/ paths are typos and fail the build.
+function resolveTopicLinks(html) {
+  return html.replaceAll(
+    /href="\/theory\/([a-z0-9/-]+)\/(#[a-z0-9-]+)?"/g,
+    (match, slug) => {
+      const topic = topics.find((candidate) => candidate.slug === slug);
+      if (!topic) throw new Error(`Link to unknown theory page: ${match}`);
+      return published(topic) ? match : `href="${topicUrl(topic)}"`;
+    },
+  );
+}
 const escape = (value) =>
   value
     .replaceAll("&", "&amp;")
@@ -113,7 +131,7 @@ export function renderTheoryPages() {
     <p>Start with modelling assumptions and consistent units, then follow the
       mathematics from displacement and strain to the linear system and its
       results. Worked examples make each concept concrete.</p>
-    <p class="note">The guide is being written. The foundations, notation and operator articles linked below are available now;
+    <p class="note">The guide is being written. The foundations, notation, operator and first numerical-methods articles linked below are available now;
       planned topics below show the reading order. Shells and optimization follow the solid guide.</p>
     <p><a class="button" href="/theory/foundations/model-and-units/">Start reading: Model and units →</a></p>
     ${sections
@@ -168,7 +186,7 @@ export function renderTheoryPages() {
           article.sections,
           `<h1>${escape(topic.title)}</h1>
         <details class="article-contents"><summary>On this page</summary>${contents(article.sections)}</details>
-        ${article.body}${pager}`,
+        ${resolveTopicLinks(article.body)}${pager}`,
         ),
       }),
     ]);

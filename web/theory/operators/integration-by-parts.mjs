@@ -86,7 +86,8 @@ export default {
       Continuous displacement shape functions can have different slopes on
       neighbouring elements. Their stresses need not have a classical
       derivative at the shared face. Substitution of those shape functions
-      into the weak form produces element stiffness and load integrals.</p>
+      into the weak form produces element
+      <a href="/theory/numerical-methods/elements-and-quadrature/#element-stiffness">stiffness and load integrals</a>.</p>
     <p>The boundary term vanishes only where w is zero or the relevant traction
       work is zero. The identity does not justify removing loads, assuming
       rigid-body stability, or claiming that a computed solution is accurate.
