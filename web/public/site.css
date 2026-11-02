@@ -211,7 +211,25 @@ body {
   }
 }
 
+@media (max-width: 430px) {
+  .site-github {
+    display: none;
+  }
+}
+
 @media (max-width: 360px) {
+  .site-navigation {
+    gap: 10px;
+  }
+
+  .site-links {
+    gap: 8px;
+  }
+
+  .site-links .site-launch {
+    padding: 5px 8px;
+  }
+
   .site-github,
   .site-theme {
     display: none;

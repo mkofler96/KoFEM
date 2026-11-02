@@ -45,6 +45,9 @@ const STATIC_PAGES = [
   ...readdirSync(htmlEntry("./examples/"), { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => `examples/${entry.name}/index.html`),
+  ...readdirSync(htmlEntry("./theory/"), { recursive: true })
+    .filter((entry) => String(entry).endsWith("index.html"))
+    .map((entry) => `theory/${entry}`),
 ];
 
 // The files each example is opened and drawn from live outside web/, with
@@ -94,7 +97,15 @@ function validationRedirect(path: string): string | null {
 // A folder under /examples/ requested without its trailing slash gets one, as
 // nginx answers it in production.
 const slashRedirect = (path: string): string | null =>
-  path === "/examples" || /^\/examples\/[\w-]+$/.test(path) ? `${path}/` : null;
+  path === "/examples" ||
+  /^\/examples\/[\w-]+$/.test(path) ||
+  STATIC_PAGES.some(
+    (page) =>
+      page.startsWith("theory/") &&
+      path === `/${page.replace(/\/index\.html$/, "")}`,
+  )
+    ? `${path}/`
+    : null;
 
 // Permanent redirects shared by the dev and preview servers.
 const redirects: Connect.NextHandleFunction = (req, res, next) => {

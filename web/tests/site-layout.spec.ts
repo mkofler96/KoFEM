@@ -8,6 +8,8 @@ const PAGES = [
   "/examples/",
   "/examples/plate-with-hole/",
   "/examples/mbb-beam-topopt/",
+  "/theory/",
+  "/theory/foundations/model-and-units/",
 ];
 
 test.use({ javaScriptEnabled: false });
@@ -25,6 +27,9 @@ test("public pages share navigation and typography without JavaScript", async ({
     await expect(
       header.getByRole("link", { name: "Examples", exact: true }),
     ).toHaveAttribute("href", "/examples/");
+    await expect(
+      header.getByRole("link", { name: "Theory", exact: true }),
+    ).toHaveAttribute("href", "/theory/");
     const solver = header.getByRole("link", { name: /Start Solver/ });
     await expect(solver).toHaveAttribute("href", "/app/");
     await header.getByText("More", { exact: true }).click();
