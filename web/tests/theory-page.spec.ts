@@ -15,6 +15,7 @@ const OPERATOR_PAGES = [
 const NUMERICAL_PAGES = [
   "/theory/numerical-methods/elements-and-quadrature/",
   "/theory/numerical-methods/assembly/",
+  "/theory/numerical-methods/loads-and-constraints/",
 ];
 const PAGES = [
   "/theory/",
@@ -384,6 +385,45 @@ test("numerical-methods articles give checkable elements, assembly and planned l
   await expect(
     page.locator(`main a[href="${assembly}#dof-ordering"]`),
   ).toHaveCount(1);
+});
+
+test("loads and constraints give checkable worked examples and evidence", async ({
+  page,
+}) => {
+  const [, assembly, loads] = NUMERICAL_PAGES;
+  await page.goto(loads);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Loads and constraints",
+  );
+  // Nonzero prescribed displacement: the eliminated matrix keeps the diagonal.
+  const eliminated = page.getByRole("region", {
+    name: /^Eliminated system matrix/,
+  });
+  await expect(eliminated.locator("mtr")).toHaveCount(3);
+  await expect(eliminated.locator("mtr").nth(1).locator("mtd")).toHaveText([
+    "0",
+    "2",
+    "0",
+  ]);
+  // Force-to-traction: the nodal shares add back to the applied total.
+  const total = page.getByRole("row").filter({
+    has: page.getByRole("rowheader", { name: "Total", exact: true }),
+  });
+  await expect(total.locator("td").last()).toHaveText("1 000 000 N");
+  await expect(
+    page.getByRole("img", { name: "3-2-1 support on a block" }),
+  ).toBeVisible();
+  await expect(page.locator("main")).toContainText("KOF-218");
+  // Shell mechanics stay on their planned pages, never a 404.
+  await expect(
+    page.locator('main a[href="/theory/#shells-formulation"]'),
+  ).not.toHaveCount(0);
+  await expect(page.locator('.pager a[rel="prev"]')).toHaveAttribute(
+    "href",
+    assembly,
+  );
+  await page.goto(assembly);
+  await expect(page.locator(`main a[href="${loads}"]`)).not.toHaveCount(0);
 });
 
 test("the unit comparison is separate and explains SI stress defaults", async ({
