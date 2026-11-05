@@ -69,7 +69,9 @@ namespace nglib {
     extern int       Ng_GetNE(Ng_Mesh*);
     // Surface element queries (standard nglib API, Netgen v6.2+)
     extern int       Ng_GetNSE(Ng_Mesh*);
-    extern void      Ng_GetSurfaceElement(Ng_Mesh*, int, int*);
+    // Preserve the installed API's enum return type. Asyncify routes exception
+    // invokes through typed WASM trampolines, which enforce this signature.
+    extern decltype(::Ng_GetSurfaceElement) Ng_GetSurfaceElement;
 }
 
 // OCC meshing API (Netgen v6.2.2401, nglib/nglib_occ.cpp, namespace nglib).
