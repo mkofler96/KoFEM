@@ -224,11 +224,12 @@ CgResult cg_solve(SparseMatrix& K, const std::vector<double>& F, const CgOptions
     // solve still terminates — just not before a healthy one has had its chance.
     // (The real answer is a stronger preconditioner: no AMG in the WASM build,
     // tracked as KOF-173.)
-    const int maxit =
-        std::max(20000, static_cast<int>(400.0 * std::cbrt(static_cast<double>(n))));
+    CgContinuation continuation(opts.control,
+        std::max(20000, static_cast<int>(400.0 * std::cbrt(static_cast<double>(n)))));
+    continuation.observe(1.0);
     const double tol = rel_tol;
     CgResult res;
-    for (int it = 0; it < maxit; ++it) {
+    for (int it = 0; it < continuation.limit(); ++it) {
         matvec(p, Ap);
         double pAp = 0.0;
         for (int i = 0; i < n; ++i) pAp += p[i] * Ap[i];
@@ -254,6 +255,7 @@ CgResult cg_solve(SparseMatrix& K, const std::vector<double>& F, const CgOptions
         rnorm = std::sqrt(rnorm);
         res.iterations = it + 1;
         res.rel_residual = rnorm / bnorm;
+        continuation.observe(res.rel_residual);
         // Progress feed for the browser log panel — same role as the solid
         // path's CGLogMonitor, so a long coupled solve is visibly alive.
         if (it % 100 == 0) {
@@ -262,6 +264,9 @@ CgResult cg_solve(SparseMatrix& K, const std::vector<double>& F, const CgOptions
             fflush(stdout);
         }
         if (res.rel_residual < tol) { res.converged = true; break; }
+        if (res.iterations == continuation.limit() &&
+            !continuation.extend(res.iterations, res.rel_residual, tol))
+            break;
         apply_prec(r, z);
         double rz_new = 0.0;
         for (int i = 0; i < n; ++i) rz_new += r[i] * z[i];

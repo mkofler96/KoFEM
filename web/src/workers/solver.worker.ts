@@ -9,6 +9,7 @@ import type {
   EngineLoadProgress,
   KofemModule,
   TopOptResult,
+  CgLimitProgress,
 } from "../wasm/pkg/kofem_wasm.js";
 import type {
   Node,
@@ -43,6 +44,20 @@ import {
 } from "../lib/solve/solid.js";
 
 let Module: KofemModule | null = null;
+let activeTask: number | null = null;
+let cgRequestId = 0;
+let cgReply: { requestId: number; resolve: (extra: number) => void } | null =
+  null;
+
+function onCgLimit(progress: CgLimitProgress): Promise<number> {
+  if (activeTask === null || cgReply)
+    throw new Error("CG continuation requested outside an active solve");
+  const requestId = ++cgRequestId;
+  return new Promise((resolve) => {
+    cgReply = { requestId, resolve };
+    self.postMessage({ id: activeTask, cgLimit: { requestId, progress } });
+  });
+}
 
 // True once tessellate_step has loaded the OCCT STEP shape into THIS worker's
 // WASM module. The worker is torn down after every mesh (resetWorker in
@@ -114,6 +129,7 @@ async function initEngine() {
   const t0 = performance.now();
   try {
     Module = await createModule({
+      onCgLimit,
       print: (text: string) => {
         if (!isOverlapPairLine(text))
           self.postMessage({ id: 0, log: `[wasm] ${text}` });
@@ -499,7 +515,7 @@ function logTo(id: number): SolveLog {
 // one von Mises surface stress per element — so the store and viewport consume
 // it unchanged. elementOrder and tie connections do not apply to shells (the
 // DKT facet is what it is; ties join solid bodies) and are ignored.
-function handleShellSolve(id: number, payload: SolvePayload) {
+async function handleShellSolve(id: number, payload: SolvePayload) {
   const { nodes, elements } = payload;
   const { mesh, matJson, bcsJson } = buildShellEngineInputs(payload);
 
@@ -507,7 +523,7 @@ function handleShellSolve(id: number, payload: SolvePayload) {
     id,
     log: `Starting shell solve: ${nodes.length} nodes, ${elements.length} shell facets…`,
   });
-  const result = m().solve_shell(mesh, matJson, bcsJson);
+  const result = await m().solve_shell(mesh, matJson, bcsJson);
   if ("error" in result) throw new Error(result.error);
 
   self.postMessage({
@@ -523,7 +539,7 @@ function handleShellSolve(id: number, payload: SolvePayload) {
 // Solve a hand-mixed shell+solid model, or an all-solid model carrying a
 // surface-to-point coupling, through the engine's coupled solid-shell solver.
 // elementOrder does not apply (the coupled assembler is linear tets + DKT facets).
-function handleMixedSolve(id: number, payload: SolvePayload) {
+async function handleMixedSolve(id: number, payload: SolvePayload) {
   const inp = buildCoupledEngineInputs(payload, logTo(id));
 
   self.postMessage({
@@ -531,7 +547,7 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
     log: `[mixed] ${inp.solidElements.length} solid tets (${inp.solidMaterialNames.join(", ")}), ${inp.shellElements.length} shell facets → ${inp.model.pool.length / 3} pool nodes, ${inp.couplingCount} couplings (${inp.declaredCouplings} declared)…`,
   });
 
-  const result = m().solve_coupled(
+  const result = await m().solve_coupled(
     inp.mesh,
     inp.coupling,
     inp.bcs,
@@ -552,17 +568,17 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
 // (shells tied to solid bodies); if there is no solid domain to couple to (a
 // single thin body, or an all-shell assembly), idealise the thin walls and solve
 // them with the pure Kirchhoff shell solver. Returns false when neither applies.
-function handleAutoShellSolve(
+async function handleAutoShellSolve(
   id: number,
   payload: SolvePayload,
   shellBodyIds: Set<number>,
-): boolean {
+): Promise<boolean> {
   // The auto-shell progress lines have always gone to the shared log (id 0).
   const log = logTo(0);
   let fields: SolveResultFields | null = null;
   const coupled = prepareAutoCoupledSolve(payload, shellBodyIds, log);
   if (coupled) {
-    const result = m().solve_coupled(
+    const result = await m().solve_coupled(
       coupled.mesh,
       coupled.coupling,
       coupled.bcs,
@@ -573,7 +589,11 @@ function handleAutoShellSolve(
   } else {
     const pure = preparePureShellSolve(payload, shellBodyIds, log);
     if (pure) {
-      const result = m().solve_shell(pure.mesh, pure.matJson, pure.bcsJson);
+      const result = await m().solve_shell(
+        pure.mesh,
+        pure.matJson,
+        pure.bcsJson,
+      );
       if ("error" in result) throw new Error(result.error);
       fields = pure.mapResult(result);
     }
@@ -588,7 +608,7 @@ function handleAutoShellSolve(
 }
 
 // All-solid static solve (solve_linear_elastic), with tie connections welded.
-function handleSolidSolve(id: number, payload: SolvePayload) {
+async function handleSolidSolve(id: number, payload: SolvePayload) {
   const { nodes, elements } = payload;
   const tied = weldTies(nodes, elements, payload.tieGroups, logTo(id));
   const { mesh, matJson, bcsJson } = buildSolidEngineInputs(
@@ -613,7 +633,7 @@ function handleSolidSolve(id: number, payload: SolvePayload) {
   // Mesh as typed arrays; materials/BCs stay JSON (small). The result comes
   // back as Float64Arrays whose buffers are handed to the main thread via
   // the postMessage transfer list — zero-copy, no JSON round-trip.
-  const result = m().solve_linear_elastic(mesh, matJson, bcsJson, order);
+  const result = await m().solve_linear_elastic(mesh, matJson, bcsJson, order);
   if ("error" in result) throw new Error(result.error);
 
   // von Mises is per element; welding preserves element count and order, so it
@@ -630,22 +650,23 @@ function handleSolidSolve(id: number, payload: SolvePayload) {
   postSolveResult(id, { displacements, vonMises: result.von_mises });
 }
 
-function handleSolve(id: number, payload: SolvePayload) {
+async function handleSolve(id: number, payload: SolvePayload) {
+  m().cgIterationLimit = payload.cgIterationLimit;
   const route = routeSolve(payload);
   switch (route.path) {
     case "shell":
-      handleShellSolve(id, payload);
+      await handleShellSolve(id, payload);
       return;
     case "coupled":
-      handleMixedSolve(id, payload);
+      await handleMixedSolve(id, payload);
       return;
     case "auto-shell":
       // Neither shell idealisation applies (e.g. no surface mesh): all-solid.
-      if (!handleAutoShellSolve(id, payload, route.shellBodyIds))
-        handleSolidSolve(id, payload);
+      if (!(await handleAutoShellSolve(id, payload, route.shellBodyIds)))
+        await handleSolidSolve(id, payload);
       return;
     case "solid":
-      handleSolidSolve(id, payload);
+      await handleSolidSolve(id, payload);
       return;
     default: {
       // Compile-time exhaustiveness: a new route without a case fails to build.
@@ -794,9 +815,27 @@ function handleTestGenerateFemMesh(id: number) {
 
 self.onmessage = async (event: MessageEvent) => {
   const { id, type, payload } = event.data;
-
+  // Asyncify has suspended WASM. Only its matching decision may resume it;
+  // no other request may enter the engine while its C++ stack is retained.
+  if (type === "cg_continue") {
+    if (
+      id === activeTask &&
+      cgReply &&
+      cgReply.requestId === payload.requestId
+    ) {
+      const { resolve } = cgReply;
+      cgReply = null;
+      resolve(payload.extraIterations);
+    }
+    return;
+  }
+  let ownsTask = false;
   try {
     await ensureInit();
+    if (activeTask !== null)
+      throw new Error("The solver worker is busy with another operation");
+    activeTask = id;
+    ownsTask = true;
 
     if (type === "init") {
       self.postMessage({ id, ok: true });
@@ -813,7 +852,7 @@ self.onmessage = async (event: MessageEvent) => {
     } else if (type === "volume_mesh") {
       handleVolumeMesh(id, payload as VolumeMeshPayload);
     } else if (type === "solve") {
-      handleSolve(id, payload as SolvePayload);
+      await handleSolve(id, payload as SolvePayload);
     } else if (type === "optimize_topology") {
       handleTopOpt(id, payload as TopOptPayload);
     } else if (type === "test_generate_fem_mesh") {
@@ -845,6 +884,10 @@ self.onmessage = async (event: MessageEvent) => {
     }
     self.postMessage({ id, ok: false, error: errorMessage });
   } finally {
+    if (ownsTask) {
+      activeTask = null;
+      cgReply = null;
+    }
     flushCoverage();
   }
 };

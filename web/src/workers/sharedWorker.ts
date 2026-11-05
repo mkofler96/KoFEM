@@ -6,6 +6,8 @@
 // responses back to the correct Promise via a pending-call map.
 
 import { durationBucket, trackOnce } from "../lib/analytics";
+import { askCgContinuation, dismissCgContinuation } from "./cgContinuation";
+import type { CgLimitProgress } from "../wasm/pkg/kofem_wasm.js";
 import {
   failureHint,
   useEngineStatus,
@@ -14,6 +16,7 @@ import {
 
 let _worker: Worker | null = null;
 let _msgId = 0;
+let _cgTaskId: number | null = null;
 const _pending = new Map<
   number,
   { resolve: (v: unknown) => void; reject: (e: Error) => void }
@@ -94,14 +97,37 @@ function createWorker(): Worker {
       scope.__workerCoverage__.push(workerCov);
       return;
     }
-    const { id, ok, log, progress, engineStatus, ...rest } = e.data as {
-      id: number;
-      ok?: boolean;
-      log?: string;
-      progress?: WorkerProgress;
-      engineStatus?: EngineStatusMessage;
-      [k: string]: unknown;
-    };
+    const { id, ok, log, progress, engineStatus, cgLimit, ...rest } =
+      e.data as {
+        id: number;
+        ok?: boolean;
+        log?: string;
+        progress?: WorkerProgress;
+        engineStatus?: EngineStatusMessage;
+        cgLimit?: { requestId: number; progress: CgLimitProgress };
+        [k: string]: unknown;
+      };
+    if (cgLimit !== undefined) {
+      if (!_pending.has(id) || _worker !== worker) return;
+      _cgTaskId = id;
+      void askCgContinuation(cgLimit.progress)
+        .catch((error: unknown) => {
+          console.error("[worker] continuation prompt failed:", error);
+          return -1; // explicit protocol failure, decoded by the engine after resuming
+        })
+        .then((extraIterations) => {
+          if (_worker === worker && _pending.has(id))
+            worker.postMessage({
+              id,
+              type: "cg_continue",
+              payload: {
+                requestId: cgLimit.requestId,
+                extraIterations,
+              },
+            });
+        });
+      return;
+    }
     if (engineStatus !== undefined) {
       applyEngineStatus(engineStatus);
       return;
@@ -133,6 +159,10 @@ function createWorker(): Worker {
       return;
     }
     _pending.delete(id);
+    if (_cgTaskId === id) {
+      dismissCgContinuation();
+      _cgTaskId = null;
+    }
     if (ok) {
       pending.resolve(rest);
     } else {
@@ -144,6 +174,8 @@ function createWorker(): Worker {
   };
 
   worker.onerror = (e: ErrorEvent) => {
+    dismissCgContinuation();
+    _cgTaskId = null;
     console.error("[worker] crashed:", e.message, e);
     // eslint-disable-next-line kofem/no-silent-fallback -- fallback text for a worker that died without a message; this is the error path itself, not solver data
     const err = new Error(e.message ?? "Worker crashed");
@@ -217,6 +249,8 @@ export function retryEngine(): void {
 // replacement starts loading at once, so the next request — the solve after a
 // mesh — finds it compiled instead of waiting for it.
 export function resetWorker(): void {
+  dismissCgContinuation();
+  _cgTaskId = null;
   if (_worker) {
     _worker.terminate();
     _worker = null;

@@ -9,6 +9,7 @@ import { ModelTree } from "./components/panel/ModelTree";
 import { useTreeSelectionSync } from "./components/panel/modelTreeItems";
 import { Viewport } from "./components/viewport/Viewport";
 import { StatusBar } from "./components/statusbar/StatusBar";
+import { CgContinuationDialog } from "./components/CgContinuationDialog";
 import { useModelStore } from "./store/modelStore";
 import { SMALL_SCREEN_QUERY } from "./store/viewSlice";
 import { useMediaQuery } from "./hooks/useMediaQuery";
@@ -77,6 +78,7 @@ function Workspace() {
         <Sidebar />
       </div>
       <StatusBar />
+      <CgContinuationDialog />
     </div>
   );
 }

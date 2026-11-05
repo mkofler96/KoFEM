@@ -14,6 +14,8 @@
 #include "solve_mfem.h"
 
 #include "bc_validation.h"
+#include "cg_browser.h"
+#include "cg_mfem.h"
 #include "fem_bc_io.h"
 #include "fem_mesh_io.h"
 #include "json_util.h"
@@ -39,76 +41,12 @@ namespace {
 
 constexpr int dim = 3;
 
-// Streams CG convergence to the browser log panel (issue #278), giving the
-// solve the same live progress feed the mesher has. MFEM's own per-iteration
-// report goes to mfem::out (C++ iostreams), which this build avoids (see the
-// mesh-construction note below) — printf matches the rest of the pipeline and
-// reliably reaches the worker's log stream. The norm MFEM hands the monitor is
-// (B·r, r), the squared preconditioned residual, so the relative residual
-// shown is √(norm / norm₀).
-class CGLogMonitor : public mfem::IterativeSolverMonitor {
-    double norm0_ = 0.0;
-    int stride_;
-
-public:
-    explicit CGLogMonitor(int stride) : stride_(stride) {}
-
-    void MonitorResidual(int it, mfem::real_t norm, const mfem::Vector& /*r*/,
-                         bool final) override {
-        if (it == 0)
-            norm0_ = (double)norm;
-        // The final call repeats the last in-loop iteration; the summary
-        // printed after cg.Mult reports it instead.
-        if (final || it % stride_ != 0)
-            return;
-        double rel = norm0_ > 0.0 ? std::sqrt((double)norm / norm0_) : 0.0;
-        printf("[mfem] CG iteration %4d: relative residual %.3e\n", it, rel);
-        fflush(stdout);
-    }
-};
-
 // ── Solve / post-processing ───────────────────────────────────────────────────
 
 void run_cg_solve(mfem::SparseMatrix& A_mat, const mfem::Vector& B, mfem::Vector& X) {
-    // GSSmoother (Gauss-Seidel) is numerically robust for 3D elasticity after
-    // Dirichlet BC elimination.  DSmoother (Jacobi) diverges on ill-conditioned
-    // tet systems, producing NaN residuals that crash the WASM worker.
-    mfem::GSSmoother prec(A_mat);
-    mfem::CGSolver cg;
-    // 1e-6 for both element orders: anything looser leaves visible noise in the
-    // recovered stress field (#192, #306). MaxIter 5000 gives large or
-    // ill-conditioned meshes room to actually reach that tolerance; hitting the
-    // cap without converging is an error (checked after Mult below), not a
-    // silently returned best iterate (#313).
-    cg.SetRelTol(1e-6);
-    cg.SetMaxIter(5000);
-    // Errors/warnings only: iteration progress is streamed by CGLogMonitor via
-    // printf so it reaches the browser log panel (mfem::out iostream output
-    // does not survive this WASM build — see the mesh-construction note above).
-    cg.SetPrintLevel(0);
-    CGLogMonitor cg_monitor(/*stride=*/10);
-    cg.SetMonitor(cg_monitor);
-    cg.SetPreconditioner(prec);
-    cg.SetOperator(A_mat);
     printf("[mfem] starting CG solve (%d rows)…\n", A_mat.Height()); fflush(stdout);
     log_mem("solve: before CG solve");
-    cg.Mult(B, X);
-    // MFEM's CGSolver does not throw on hitting MaxIter — it returns the best
-    // iterate. Using that under-converged field would silently show wrong
-    // displacements/stresses, so fail the solve instead (#192, #313). The
-    // worker decodes this exception and the UI shows it in the error banner.
-    if (!cg.GetConverged()) {
-        std::array<char, 192> msg;
-        snprintf(msg.data(), msg.size(),
-                 "CG solver did not converge: relative residual %g after %d "
-                 "iterations (target 1e-6). The partial result was discarded — "
-                 "check that the model is fully constrained, or refine the mesh.",
-                 (double)cg.GetFinalRelNorm(), cg.GetNumIterations());
-        throw std::runtime_error(msg.data());
-    }
-    printf("[mfem] CG converged: %d iterations, relative residual %.3e\n",
-           cg.GetNumIterations(), (double)cg.GetFinalRelNorm());
-    fflush(stdout);
+    kofem::solve_mfem_cg(A_mat, B, X, browser_cg_control());
 }
 
 std::vector<double> extract_displacements(mfem::FiniteElementSpace& fespace,

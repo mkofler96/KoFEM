@@ -10,6 +10,7 @@
 // the solid physics in MFEM while the shell + coupling live in the MFEM-free core.
 
 #include "solve_coupled.h"
+#include "cg_browser.h"
 
 #include "json_util.h"
 #include "shell_core.h"
@@ -243,6 +244,7 @@ val solve_coupled(const val& mesh, const val& coupling, const val& bcs,
 
     kofem::shell::ShellResult r;
     try {
+        in.cg_control = browser_cg_control();
         r = kofem::shell::solve_solid_shell_core(in);
     } catch (const std::exception& e) {
         printf("[coupled] solve failed: %s\n", e.what());

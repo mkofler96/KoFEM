@@ -26,6 +26,7 @@
 #include <vector>
 
 #include "coupling_constraints.h"
+#include "cg_continuation.h"
 #include "tet_element.h"
 
 namespace kofem::shell {
@@ -34,6 +35,7 @@ namespace kofem::shell {
 // references are 0-based indices into the vertex array. DOF indices are
 // 6·node + component, component 0..5 = (u, v, w, θx, θy, θz).
 struct ShellInput {
+    CgControl cg_control;
     std::vector<double> vertices;   // 3·nNodes, xyz interleaved
     std::vector<int> triangles;     // 3·nTris, three 0-based vertex indices/tri
     double thickness = 0.0;         // uniform thickness (fallback when per-facet empty)
@@ -92,6 +94,7 @@ ShellResult solve_shell_core(const ShellInput& in);
 // triplets from tet_solid_stiffness.
 
 struct CoupledInput {
+    CgControl cg_control;
     int n_nodes = 0;                     // shared node pool size
     std::vector<double> vertices;        // 3·n_nodes, xyz interleaved
     std::vector<SolidTriplet> solid_stiffness;  // over 3·node+comp
