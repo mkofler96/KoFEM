@@ -39,12 +39,15 @@ published. Renames require redirects and preserved heading anchors.
 | Verification           | `/theory/verification/strategy/`                     | What does each benchmark establish, and what remains unverified?                                           |
 | Shells                 | `/theory/shells/formulation/`                        | How does KoFEM's flat-facet shell represent membrane and bending response?                                 |
 | Shells                 | `/theory/shells/solid-coupling/`                     | How are shell and solid degrees of freedom coupled?                                                        |
-| Optimization (later)   | `/theory/optimization/simp/`                         | How does SIMP turn a solid FEM problem into a density optimization problem?                                |
-| Optimization (later)   | `/theory/optimization/constraints-and-convergence/`  | How should filtering, constraints, convergence, and optimized results be interpreted?                      |
+| Optimization           | `/theory/optimization/simp/`                         | How does SIMP turn a solid FEM problem into a density optimization problem?                                |
+| Optimization           | `/theory/optimization/constraints-and-convergence/`  | How do filtering, constraints and convergence shape an optimized design?                                   |
+| Optimization           | `/theory/optimization/interpreting-designs/`         | What does an optimized density field tell you, and what must you check before using it?                    |
 
 The initial verified path ends at the axial-bar page. The strategy page can
 then branch to other existing benchmarks. Shell formulation and solid–shell
-coupling now extend that path with their own verification evidence and limitations. Optimization remains a planned extension.
+coupling now extend that path with their own verification evidence and limitations. The optimization chapter
+then explains SIMP, its loop and convergence, and how to interpret and re-check
+designs, with the existing MBB and cantilever benchmarks as evidence.
 
 ## Running example: axial bar in tension
 
@@ -89,7 +92,7 @@ article must review its narrower claims again and update its own revision.
 | Flat-facet Kirchhoff shells        | `engine/cpp/solve_shell.cpp`, `engine/cpp/shell_core.cpp`, `engine/cpp/shell_element.cpp`         | Triangular surface discretisation, six DOFs per node internally, membrane and bending response, scalar or per-facet thickness, force/moment loads, prescribed DOFs, surface von Mises stress                  |
 | Mixed solid–shell analysis         | `engine/cpp/solve_coupled.cpp`, `engine/cpp/coupling_constraints.cpp`                             | MFEM solid stiffness plus shell assembly and distributing, relaxed, kinematic, or shell-footprint coupling constraints                                                                                        |
 | Shell idealisation pipeline        | `web/src/lib/shellize/`                                                                           | Browser-side mid-surface and mixed-discretisation construction feeding shell/coupled solves                                                                                                                   |
-| SIMP topology optimization         | `engine/cpp/topology_simp.cpp`, `engine/cpp/topology_optimize.cpp`, `engine/cpp/topology_mma.cpp` | Density-based optimization with filtering/MMA and optional stress handling; later-guide topic                                                                                                                 |
+| SIMP topology optimization         | `engine/cpp/topology_simp.cpp`, `engine/cpp/topology_optimize.cpp`, `engine/cpp/topology_mma.cpp` | Density-based optimization with filtering/MMA and optional stress handling; documented under `/theory/optimization/`                                                                                          |
 | Level-set and shell topology paths | `engine/cpp/topology_levelset.cpp`, `engine/cpp/topology_shell.cpp`                               | Separate later-guide topics; do not infer their equations from the SIMP page                                                                                                                                  |
 | Public examples and verification   | `examples/validation/`, `examples/gallery/`, `web/examples/`                                      | Real WASM solves compared with analytical or published references; generated static pages and app fixtures                                                                                                    |
 

@@ -1,0 +1,129 @@
+{
+  "sourceRevision": "6ba4db0ed963d6c8c0cb3263edf6737763994b6c",
+  "recordedAt": "2026-11-06T22:02:24.533Z",
+  "engine": "engine-a5154f0787e6",
+  "execution": "Real WASM optimize_topology (SIMP, MMA, sensitivity filter) on the existing structured-hex benchmarks; normalized E = 1, ν = 0.3 and unit load",
+  "commands": [
+    "node examples/validation/topopt/run.mjs",
+    "cd web && bun theory/optimization/capture-evidence.mjs --report"
+  ],
+  "mbb": {
+    "elements": 432,
+    "settings": {
+      "objective": "min_compliance",
+      "constraints": {
+        "volumeFraction": 0.5
+      },
+      "penalty": 3,
+      "filterRadius": 0.3,
+      "moveLimit": 0.2,
+      "maxIterations": 80,
+      "tolerance": 0.01
+    },
+    "iterations": 50,
+    "converged": true,
+    "initialCompliance": 1802.414435386025,
+    "finalCompliance": 413.13269126587824,
+    "minimumCompliance": 413.13269126587824,
+    "finalVolumeFraction": 0.4999925907556367,
+    "finalMaxChange": 0.009938613073085856,
+    "solidElements": 134,
+    "voidElements": 134,
+    "meshDims": {
+      "L": 6,
+      "W": 2,
+      "H": 0.5,
+      "nx": 36,
+      "ny": 12,
+      "nz": 1
+    },
+    "checks": [
+      "converged within the iteration budget",
+      "volume fraction within 1 % of 0.5",
+      "compliance in band [351, 475]",
+      "compliance ratio < 0.3",
+      "ended at its stiffest design (final = min compliance)",
+      "material concentrated to solid and void",
+      "topology emerged (density std > 0.15)"
+    ],
+    "layout": "  #########################:          \n  ##########################:         \n  ######::::::::##############        \n    :###            :####::####       \n     :###          :####:   :###      \n      :###:       :####:     :###:    \n       :###:     :###:        :###:   \n        :####  :####:          :###:  \n        ::####:####              ####:\n  ###############:               :####\n  ###############:::::::::::::::::####\n  ####################################"
+  },
+  "meshIndependence": {
+    "box": {
+      "L": 2,
+      "H": 1,
+      "D": 1
+    },
+    "coarse": {
+      "elements": 250,
+      "settings": {
+        "objective": "min_compliance",
+        "constraints": {
+          "volumeFraction": 0.4
+        },
+        "penalty": 3,
+        "filterRadius": 0.4,
+        "moveLimit": 0.2,
+        "maxIterations": 80,
+        "tolerance": 0.01
+      },
+      "iterations": 45,
+      "converged": true,
+      "initialCompliance": 616.5547780527139,
+      "finalCompliance": 188.51230958290307,
+      "minimumCompliance": 188.51230958290307,
+      "finalVolumeFraction": 0.39999123102962486,
+      "finalMaxChange": 0.00546279574498304,
+      "solidElements": 14,
+      "voidElements": 46,
+      "meshDims": {
+        "L": 2,
+        "W": 1,
+        "H": 1,
+        "nx": 10,
+        "ny": 5,
+        "nz": 5
+      }
+    },
+    "fine": {
+      "elements": 2000,
+      "settings": {
+        "objective": "min_compliance",
+        "constraints": {
+          "volumeFraction": 0.4
+        },
+        "penalty": 3,
+        "filterRadius": 0.4,
+        "moveLimit": 0.2,
+        "maxIterations": 80,
+        "tolerance": 0.01
+      },
+      "iterations": 70,
+      "converged": true,
+      "initialCompliance": 650.7227199242496,
+      "finalCompliance": 190.12039083471944,
+      "minimumCompliance": 190.12039083471944,
+      "finalVolumeFraction": 0.3999957848718585,
+      "finalMaxChange": 0.007962162823732577,
+      "solidElements": 124,
+      "voidElements": 262,
+      "meshDims": {
+        "L": 2,
+        "W": 1,
+        "H": 1,
+        "nx": 20,
+        "ny": 10,
+        "nz": 10
+      }
+    },
+    "complianceDifferencePercent": 0.8530377965101414,
+    "densityCorrelation": 0.9939411435437113,
+    "solidIoU": 0.9484536082474226,
+    "checks": [
+      "both resolutions converged",
+      "compliance agrees within 5 %",
+      "density correlation > 0.9",
+      "solid-region IoU > 0.85"
+    ]
+  }
+}
