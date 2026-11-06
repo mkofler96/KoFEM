@@ -5,13 +5,14 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <functional>
 #include <stdexcept>
 
 namespace kofem {
 namespace {
 
 class CGLogMonitor : public mfem::IterativeSolverMonitor {
-    mfem::CGSolver& solver_;
+    std::reference_wrapper<mfem::CGSolver> solver_;
     CgContinuation continuation_;
     double norm0_ = 0.0;
     int iterations_ = 0;
@@ -19,7 +20,7 @@ class CGLogMonitor : public mfem::IterativeSolverMonitor {
 public:
     CGLogMonitor(mfem::CGSolver& solver, const CgControl& control)
         : solver_(solver), continuation_(control, 5000) {
-        solver_.SetMaxIter(continuation_.limit());
+        solver_.get().SetMaxIter(continuation_.limit());
     }
 
     int iterations() const { return iterations_; }
@@ -41,7 +42,7 @@ public:
         // here so Mult continues with its existing x, r and search direction,
         // and retains the ORIGINAL relative convergence target.
         if (it == continuation_.limit() && continuation_.extend(it, rel, 1e-6))
-            solver_.SetMaxIter(continuation_.limit());
+            solver_.get().SetMaxIter(continuation_.limit());
     }
 };
 

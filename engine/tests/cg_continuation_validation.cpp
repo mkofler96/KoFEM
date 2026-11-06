@@ -13,33 +13,32 @@
 #include <string>
 
 namespace {
-int failures = 0;
-void check(const char* name, bool pass) {
+void check(int& failures, const char* name, bool pass) {
     printf("[%s] %s\n", pass ? "PASS" : "FAIL", name);
     if (!pass) ++failures;
 }
 
-void policy() {
+void policy(int& failures) {
     int prompts = 0;
     kofem::CgControl control;
     control.on_limit = [&](const kofem::CgProgress&) { ++prompts; return 10; };
     for (double ratio : {1.0, 1.01, 0.999999999}) {
         kofem::CgContinuation stalled(control, 20);
         for (int i = 0; i <= 20; ++i) stalled.observe(std::pow(ratio, i));
-        check("flat/rising/noisy residual does not prompt",
+        check(failures, "flat/rising/noisy residual does not prompt",
               !stalled.extend(20, std::pow(ratio, 20), 1e-6));
     }
     kofem::CgContinuation plateau(control, 20);
     for (int i = 0; i < 20; ++i) plateau.observe(i < 5 ? 1.0 : 0.1);
-    check("early progress followed by plateau does not prompt", !plateau.extend(20, 0.1, 1e-6));
-    check("no stalled callbacks", prompts == 0);
+    check(failures, "early progress followed by plateau does not prompt", !plateau.extend(20, 0.1, 1e-6));
+    check(failures, "no stalled callbacks", prompts == 0);
     kofem::CgContinuation falling(control, 20);
     for (int i = 0; i <= 20; ++i) falling.observe(std::pow(0.9, i));
-    check("falling residual can extend", falling.extend(20, std::pow(0.9, 20), 1e-6));
-    check("budget extends by the selected amount", falling.limit() == 30 && prompts == 1);
+    check(failures, "falling residual can extend", falling.extend(20, std::pow(0.9, 20), 1e-6));
+    check(failures, "budget extends by the selected amount", falling.limit() == 30 && prompts == 1);
     kofem::CgContinuation slow(control, 20);
     for (int i = 0; i <= 20; ++i) slow.observe(std::pow(0.9999, i));
-    check("slow but steady progress can extend", slow.extend(20, std::pow(0.9999, 20), 1e-6));
+    check(failures, "slow but steady progress can extend", slow.extend(20, std::pow(0.9999, 20), 1e-6));
     control.on_limit = [](const kofem::CgProgress&) { return 0; };
     kofem::CgContinuation stop(control, 2);
     stop.observe(1.0); stop.observe(0.5);
@@ -48,7 +47,7 @@ void policy() {
     catch (const std::runtime_error& error) {
         rejected = std::string(error.what()).find("discarded") != std::string::npos;
     }
-    check("Stop produces an explicit discard error", rejected);
+    check(failures, "Stop produces an explicit discard error", rejected);
 }
 
 kofem::shell::ShellInput shell_model() {
@@ -93,9 +92,9 @@ kofem::shell::CoupledInput coupled_model() {
 }
 
 template <typename Input, typename Solve>
-void resume_path(const char* name, Input input, Solve solve) {
+void resume_path(int& failures, const char* name, Input input, Solve solve) {
     const auto baseline = solve(input);
-    check(name, baseline.converged && baseline.iterations > 4);
+    check(failures, name, baseline.converged && baseline.iterations > 4);
     // Put the cap late enough to be in the asymptotic descending part of CG,
     // but before convergence. Extending must reproduce the uninterrupted run
     // EXACTLY: even a warm restart changes search directions/iteration count.
@@ -104,28 +103,28 @@ void resume_path(const char* name, Input input, Solve solve) {
     int prompts = 0;
     input.cg_control.on_limit = [&](const kofem::CgProgress& progress) {
         ++prompts;
-        check("prompt reports original target and total iterations",
+        check(failures, "prompt reports original target and total iterations",
               progress.target == input.cg_rel_tol && progress.iterations == cap);
         return 1000;
     };
     const auto resumed = solve(input);
-    check("cap prompts and continuation converges", prompts == 1 && resumed.converged);
-    check("resume preserves all CG state", resumed.iterations == baseline.iterations &&
+    check(failures, "cap prompts and continuation converges", prompts == 1 && resumed.converged);
+    check(failures, "resume preserves all CG state", resumed.iterations == baseline.iterations &&
           resumed.dofs == baseline.dofs && resumed.rel_residual == baseline.rel_residual);
     input.cg_control.on_limit = {};
     const auto capped = solve(input);
-    check("no callback keeps non-convergence at the cap", !capped.converged && capped.iterations == cap);
+    check(failures, "no callback keeps non-convergence at the cap", !capped.converged && capped.iterations == cap);
     input.cg_control.on_limit = [](const kofem::CgProgress&) { return 0; };
     bool stopped = false;
     try { solve(input); }
     catch (const std::runtime_error& error) {
         stopped = std::string(error.what()).find("stopped by user") != std::string::npos;
     }
-    check("stop rejects the partial solve", stopped);
+    check(failures, "stop rejects the partial solve", stopped);
 }
 
 #ifdef KOFEM_TEST_MFEM
-void solid() {
+void solid(int& failures) {
     constexpr int size = 160;
     mfem::SparseMatrix matrix(size);
     mfem::Vector rhs(size), reference(size), resumed(size);
@@ -144,13 +143,13 @@ void solid() {
     int prompts = 0;
     control.on_limit = [&](const kofem::CgProgress& progress) {
         ++prompts;
-        check("solid prompt retains original tolerance", progress.target == 1e-6);
+        check(failures, "solid prompt retains original tolerance", progress.target == 1e-6);
         return 1000;
     };
     const int total = kofem::solve_mfem_cg(matrix, rhs, resumed, control);
     bool identical = total == baseline;
     for (int i = 0; i < size; ++i) identical = identical && reference[i] == resumed[i];
-    check("solid resumes exact CG state to convergence", prompts == 1 && identical);
+    check(failures, "solid resumes exact CG state to convergence", prompts == 1 && identical);
     control.on_limit = [](const kofem::CgProgress&) { return 0; };
     bool stopped = false;
     resumed = 0.0;
@@ -158,7 +157,7 @@ void solid() {
     catch (const std::runtime_error& error) {
         stopped = std::string(error.what()).find("discarded") != std::string::npos;
     }
-    check("solid Stop discards", stopped);
+    check(failures, "solid Stop discards", stopped);
     control.on_limit = {};
     bool failed = false;
     resumed = 0.0;
@@ -166,17 +165,18 @@ void solid() {
     catch (const std::runtime_error& error) {
         failed = std::string(error.what()).find("CG solver did not converge") != std::string::npos;
     }
-    check("solid cap without a callback keeps existing error", failed);
+    check(failures, "solid cap without a callback keeps existing error", failed);
 }
 #endif
 }  // namespace
 
 int main() {
-    policy();
-    resume_path("shell baseline", shell_model(), kofem::shell::solve_shell_core);
-    resume_path("coupled baseline", coupled_model(), kofem::shell::solve_solid_shell_core);
+    int failures = 0;
+    policy(failures);
+    resume_path(failures, "shell baseline", shell_model(), kofem::shell::solve_shell_core);
+    resume_path(failures, "coupled baseline", coupled_model(), kofem::shell::solve_solid_shell_core);
 #ifdef KOFEM_TEST_MFEM
-    solid();
+    solid(failures);
 #endif
     return failures == 0 ? 0 : 1;
 }

@@ -110,7 +110,7 @@ function createWorker(): Worker {
     if (cgLimit !== undefined) {
       if (!_pending.has(id) || _worker !== worker) return;
       _cgTaskId = id;
-      void askCgContinuation(cgLimit.progress)
+      return askCgContinuation(cgLimit.progress)
         .catch((error: unknown) => {
           console.error("[worker] continuation prompt failed:", error);
           return -1; // explicit protocol failure, decoded by the engine after resuming
@@ -126,7 +126,6 @@ function createWorker(): Worker {
               },
             });
         });
-      return;
     }
     if (engineStatus !== undefined) {
       applyEngineStatus(engineStatus);

@@ -31,7 +31,7 @@ async function startSolve(
     ({ model, cap }) => {
       const scope = window as TestWindow;
       delete scope.__cgOutcome;
-      void scope.__kofem
+      scope.__kofem
         .sendToWorker("solve", { ...model, cgIterationLimit: cap })
         .then(
           (result) => {
@@ -53,7 +53,25 @@ async function startSolve(
 
 async function outcome(page: Page): Promise<Outcome> {
   await page.waitForFunction(() => (window as TestWindow).__cgOutcome);
-  return page.evaluate(() => (window as TestWindow).__cgOutcome!);
+  return page.evaluate(() => {
+    const result = (window as TestWindow).__cgOutcome;
+    if (result === undefined)
+      throw new Error("The solve outcome disappeared before it could be read");
+    return result;
+  });
+}
+
+function convergenceIterations(logs: string[], prefix: string): number {
+  const summary = logs.find((line) => line.includes(prefix));
+  if (summary === undefined)
+    throw new Error(`Missing solver convergence log: ${prefix}`);
+  const match = /converged: (\d+) iterations/.exec(summary);
+  if (match === null)
+    throw new Error(`Invalid solver convergence log: ${summary}`);
+  const iterations = Number(match[1]);
+  if (!Number.isSafeInteger(iterations) || iterations <= 0)
+    throw new Error(`Invalid solver iteration count: ${match[1]}`);
+  return iterations;
 }
 
 test("CG pauses, resumes repeatedly without changing results, and stops explicitly", async ({
@@ -74,12 +92,7 @@ test("CG pauses, resumes repeatedly without changing results, and stops explicit
       vonMises: Array.from(result.vonMises),
     };
   }, buildCantilever());
-  const summary = logs.find((line) =>
-    /CG converged: \d+ iterations/.test(line),
-  );
-  expect(summary).toBeDefined();
-  const match = /CG converged: (\d+) iterations/.exec(summary!);
-  const iterations = Number(match![1]);
+  const iterations = convergenceIterations(logs, "[mfem] CG converged:");
   expect(iterations).toBeGreaterThan(10);
   const cap = iterations - 5;
   await startSolve(page, cap);
@@ -248,10 +261,7 @@ for (const path of ["shell", "coupled"] as const) {
         vonMises: Array.from(result.vonMises),
       };
     }, model);
-    const summary = logs.find((line) => line.includes(`[${path}] converged:`));
-    expect(summary).toBeDefined();
-    const match = /converged: (\d+) iterations/.exec(summary!);
-    const cap = Number(match![1]) - 5;
+    const cap = convergenceIterations(logs, `[${path}] converged:`) - 5;
     await startSolve(page, cap, model);
     const dialog = page.getByRole("dialog", { name: "Keep solving?" });
     await expect(dialog).toBeVisible();

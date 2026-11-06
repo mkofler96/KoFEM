@@ -29,11 +29,25 @@ export default [
     },
   },
   {
-    // Keep the extracted overlays below DeepSource's high-risk threshold.
+    // Keep the extracted overlays and worker dispatch below DeepSource's
+    // high-risk threshold.
     files: [
       "src/components/viewport/{BcFaceHighlights,BcNodeMarkers,BoundaryConditionLayer,CouplingOverlay,FaceOverlay,LoadArrows,PickHighlights,TieOverlay,bcOverlayShared}.{ts,tsx}",
+      "src/workers/solver.worker.ts",
     ],
     rules: { complexity: ["error", 20] },
+  },
+  {
+    // Mirror the DeepSource findings on the CG continuation protocol and tests.
+    files: [
+      "src/workers/{sharedWorker,solver.worker}.ts",
+      "tests/cg-continuation.spec.ts",
+    ],
+    plugins: { "@typescript-eslint": tseslint.plugin },
+    rules: {
+      "no-void": "error",
+      "@typescript-eslint/no-non-null-assertion": "error",
+    },
   },
   {
     // Mirrors DeepSource JS-C1003 (issue #341). Covers tests/ as well —

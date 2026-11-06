@@ -813,20 +813,103 @@ function handleTestGenerateFemMesh(id: number) {
 
 // ── Message handler ───────────────────────────────────────────────────────────
 
-self.onmessage = async (event: MessageEvent) => {
+interface WorkerRequest {
+  id: number;
+  type: string;
+  payload: unknown;
+}
+
+interface CgContinuationReply {
+  requestId: number;
+  extraIterations: number;
+}
+
+function handleCgReply(id: number, payload: CgContinuationReply): void {
+  if (id !== activeTask || !cgReply || cgReply.requestId !== payload.requestId)
+    return;
+  const { resolve } = cgReply;
+  cgReply = null;
+  resolve(payload.extraIterations);
+}
+
+// Synchronous operations stay synchronous, including requests queued behind
+// ensureInit(). Only a solve retains task ownership across an async pause.
+function dispatchRequest({
+  id,
+  type,
+  payload,
+}: WorkerRequest): void | Promise<void> {
+  switch (type) {
+    case "init":
+      self.postMessage({ id, ok: true });
+      return;
+    case "parse_step":
+      handleParseStep(id, payload as ParseStepPayload);
+      return;
+    case "split_geometry":
+      handleSplitGeometry(id, payload as SplitGeometryPayload);
+      return;
+    case "boolean_geometry":
+      handleBooleanGeometry(id, payload as BooleanGeometryPayload);
+      return;
+    case "repair_hinges":
+      handleRepairHinges(id, payload as RepairHingesPayload);
+      return;
+    case "split_cone_tips":
+      handleSplitConeTips(id, payload as SplitConeTipsPayload);
+      return;
+    case "volume_mesh":
+      handleVolumeMesh(id, payload as VolumeMeshPayload);
+      return;
+    case "solve":
+      return handleSolve(id, payload as SolvePayload);
+    case "optimize_topology":
+      handleTopOpt(id, payload as TopOptPayload);
+      return;
+    case "test_generate_fem_mesh":
+      handleTestGenerateFemMesh(id);
+      return;
+    default:
+      throw new Error(`Unknown worker message type: ${type}`);
+  }
+}
+
+function isWasmTrap(err: unknown): boolean {
+  if (!(err instanceof Error) || err.name !== "RuntimeError") return false;
+  return [
+    "memory access out of bounds",
+    "integer overflow",
+    "integer divide by zero",
+    "unreachable",
+    "null function or function signature mismatch",
+    "table index is out of bounds",
+  ].some((message) => err.message.includes(message));
+}
+
+function reportTaskError(id: number, type: string, err: unknown): void {
+  const trap = isWasmTrap(err);
+  const detail =
+    err instanceof EngineLoadError
+      ? `The solver engine failed to load: ${err.message} Retry from the status bar.`
+      : describeError(err);
+  const errorMessage = trap
+    ? `WASM trap (code bug, not OOM): ${detail}`
+    : detail;
+  console.error(
+    trap
+      ? `[solver.worker] WASM trap in ${type}:`
+      : `[solver.worker] ${type} failed:`,
+    detail,
+  );
+  self.postMessage({ id, ok: false, error: errorMessage });
+}
+
+self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   const { id, type, payload } = event.data;
   // Asyncify has suspended WASM. Only its matching decision may resume it;
   // no other request may enter the engine while its C++ stack is retained.
   if (type === "cg_continue") {
-    if (
-      id === activeTask &&
-      cgReply &&
-      cgReply.requestId === payload.requestId
-    ) {
-      const { resolve } = cgReply;
-      cgReply = null;
-      resolve(payload.extraIterations);
-    }
+    handleCgReply(id, payload as CgContinuationReply);
     return;
   }
   let ownsTask = false;
@@ -836,53 +919,10 @@ self.onmessage = async (event: MessageEvent) => {
       throw new Error("The solver worker is busy with another operation");
     activeTask = id;
     ownsTask = true;
-
-    if (type === "init") {
-      self.postMessage({ id, ok: true });
-    } else if (type === "parse_step") {
-      handleParseStep(id, payload as ParseStepPayload);
-    } else if (type === "split_geometry") {
-      handleSplitGeometry(id, payload as SplitGeometryPayload);
-    } else if (type === "boolean_geometry") {
-      handleBooleanGeometry(id, payload as BooleanGeometryPayload);
-    } else if (type === "repair_hinges") {
-      handleRepairHinges(id, payload as RepairHingesPayload);
-    } else if (type === "split_cone_tips") {
-      handleSplitConeTips(id, payload as SplitConeTipsPayload);
-    } else if (type === "volume_mesh") {
-      handleVolumeMesh(id, payload as VolumeMeshPayload);
-    } else if (type === "solve") {
-      await handleSolve(id, payload as SolvePayload);
-    } else if (type === "optimize_topology") {
-      handleTopOpt(id, payload as TopOptPayload);
-    } else if (type === "test_generate_fem_mesh") {
-      handleTestGenerateFemMesh(id);
-    } else {
-      throw new Error(`Unknown worker message type: ${type}`);
-    }
+    const operation = dispatchRequest(event.data);
+    if (operation !== undefined) await operation;
   } catch (err) {
-    const isRuntimeError = err instanceof Error && err.name === "RuntimeError";
-    const isWasmTrap =
-      isRuntimeError &&
-      (err.message.includes("memory access out of bounds") ||
-        err.message.includes("integer overflow") ||
-        err.message.includes("integer divide by zero") ||
-        err.message.includes("unreachable") ||
-        err.message.includes("null function or function signature mismatch") ||
-        err.message.includes("table index is out of bounds"));
-    const detail =
-      err instanceof EngineLoadError
-        ? `The solver engine failed to load: ${err.message} Retry from the status bar.`
-        : describeError(err);
-    const errorMessage = isWasmTrap
-      ? `WASM trap (code bug, not OOM): ${detail}`
-      : detail;
-    if (isWasmTrap) {
-      console.error(`[solver.worker] WASM trap in ${type}:`, detail);
-    } else {
-      console.error(`[solver.worker] ${type} failed:`, detail);
-    }
-    self.postMessage({ id, ok: false, error: errorMessage });
+    reportTaskError(id, type, err);
   } finally {
     if (ownsTask) {
       activeTask = null;
