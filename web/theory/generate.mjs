@@ -17,6 +17,7 @@ import referenceMapping from "./operators/reference-mapping.mjs";
 import elementsAndQuadrature from "./numerical-methods/elements-and-quadrature.mjs";
 import assembly from "./numerical-methods/assembly.mjs";
 import loadsAndConstraints from "./numerical-methods/loads-and-constraints.mjs";
+import linearSolve from "./numerical-methods/linear-solve.mjs";
 
 const web = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const articles = [
@@ -30,6 +31,7 @@ const articles = [
   elementsAndQuadrature,
   assembly,
   loadsAndConstraints,
+  linearSolve,
 ];
 const sections = [...new Set(topics.map((topic) => topic.section))];
 const published = (topic) =>

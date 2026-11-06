@@ -16,6 +16,7 @@ const NUMERICAL_PAGES = [
   "/theory/numerical-methods/elements-and-quadrature/",
   "/theory/numerical-methods/assembly/",
   "/theory/numerical-methods/loads-and-constraints/",
+  "/theory/numerical-methods/linear-solve/",
 ];
 const PAGES = [
   "/theory/",
@@ -424,6 +425,54 @@ test("loads and constraints give checkable worked examples and evidence", async 
   );
   await page.goto(assembly);
   await expect(page.locator(`main a[href="${loads}"]`)).not.toHaveCount(0);
+});
+
+test("linear solve links the residual calculation, settings and failure evidence", async ({
+  page,
+}) => {
+  const [, , loads, solve] = NUMERICAL_PAGES;
+  await page.goto(solve);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Linear solve",
+  );
+  await expect(
+    page.getByRole("region", { name: /^Stop when the squared/ }),
+  ).toBeVisible();
+  const calculation = page.getByRole("region", {
+    name: /^Two-DOF bar residual/,
+  });
+  const firstStep = calculation.getByRole("row").filter({
+    has: page.getByRole("rowheader", { name: "1", exact: true }),
+  });
+  await expect(firstStep.locator("td").last()).toHaveText("0.326357");
+  await expect(firstStep.locator("td").nth(2)).toHaveText("99/338");
+  const absolute = page.getByRole("row").filter({
+    has: page.getByRole("rowheader", {
+      name: "Absolute tolerance",
+      exact: true,
+    }),
+  });
+  await expect(absolute.locator("td").first()).toHaveText("0");
+  await expect(page.locator('main a[href*="cg_mfem.cpp"]')).toHaveAttribute(
+    "href",
+    /blob\/8b542d8836f39ec4e9c7ae67c5896d39ce970078\//,
+  );
+  await expect(
+    page.locator('main a[href*="cg-continuation.spec.ts"]'),
+  ).toHaveCount(1);
+  await expect(page.locator('.pager a[rel="prev"]')).toHaveAttribute(
+    "href",
+    loads,
+  );
+  await expect(page.locator('.pager a[rel="next"]')).toHaveAttribute(
+    "href",
+    "/theory/#results-displacement-and-stress",
+  );
+  await page.goto(loads);
+  await expect(page.locator('.pager a[rel="next"]')).toHaveAttribute(
+    "href",
+    solve,
+  );
 });
 
 test("the unit comparison is separate and explains SI stress defaults", async ({
