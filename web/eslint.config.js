@@ -45,6 +45,7 @@ export default [
     ],
     plugins: { "@typescript-eslint": tseslint.plugin },
     rules: {
+      "consistent-return": "error",
       "no-void": "error",
       "@typescript-eslint/no-non-null-assertion": "error",
     },

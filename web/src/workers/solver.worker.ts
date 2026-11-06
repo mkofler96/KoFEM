@@ -838,37 +838,37 @@ function dispatchRequest({
   id,
   type,
   payload,
-}: WorkerRequest): void | Promise<void> {
+}: WorkerRequest): Promise<void> | null {
   switch (type) {
     case "init":
       self.postMessage({ id, ok: true });
-      return;
+      return null;
     case "parse_step":
       handleParseStep(id, payload as ParseStepPayload);
-      return;
+      return null;
     case "split_geometry":
       handleSplitGeometry(id, payload as SplitGeometryPayload);
-      return;
+      return null;
     case "boolean_geometry":
       handleBooleanGeometry(id, payload as BooleanGeometryPayload);
-      return;
+      return null;
     case "repair_hinges":
       handleRepairHinges(id, payload as RepairHingesPayload);
-      return;
+      return null;
     case "split_cone_tips":
       handleSplitConeTips(id, payload as SplitConeTipsPayload);
-      return;
+      return null;
     case "volume_mesh":
       handleVolumeMesh(id, payload as VolumeMeshPayload);
-      return;
+      return null;
     case "solve":
       return handleSolve(id, payload as SolvePayload);
     case "optimize_topology":
       handleTopOpt(id, payload as TopOptPayload);
-      return;
+      return null;
     case "test_generate_fem_mesh":
       handleTestGenerateFemMesh(id);
-      return;
+      return null;
     default:
       throw new Error(`Unknown worker message type: ${type}`);
   }
@@ -920,7 +920,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     activeTask = id;
     ownsTask = true;
     const operation = dispatchRequest(event.data);
-    if (operation !== undefined) await operation;
+    if (operation !== null) await operation;
   } catch (err) {
     reportTaskError(id, type, err);
   } finally {
