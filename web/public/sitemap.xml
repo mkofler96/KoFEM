@@ -70,5 +70,6 @@
   <url><loc>https://kofem.org/theory/numerical-methods/elements-and-quadrature/</loc></url>
   <url><loc>https://kofem.org/theory/numerical-methods/assembly/</loc></url>
   <url><loc>https://kofem.org/theory/numerical-methods/loads-and-constraints/</loc></url>
+  <url><loc>https://kofem.org/theory/numerical-methods/linear-solve/</loc></url>
   <!-- theory:end -->
 </urlset>
