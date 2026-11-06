@@ -63,7 +63,10 @@ export function MeshPanel() {
         </div>
       )}
 
-      <MeshOverlapCard maxElementSize={maxElementSize} />
+      <MeshOverlapCard
+        maxElementSize={maxElementSize}
+        minElementSize={minElementSize}
+      />
 
       {stepSurface ? (
         <>

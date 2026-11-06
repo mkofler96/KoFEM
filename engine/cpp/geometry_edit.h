@@ -86,3 +86,17 @@ emscripten::val repair_hinges(const std::string& opts_json);
 // Returns { bytes: Uint8Array } (STEP AP214 of the edited shape) and releases
 // the cached shape, exactly like split_geometry.
 emscripten::val split_cone_tips(const std::string& opts_json);
+
+// Remove faces that a failed mesh reported as unmeshed (see mesh_overlap.h) —
+// slivers far narrower than an element — by extending the faces around them
+// until they close the gap (OCCT defeaturing). The shape changes by about the
+// removed faces' width, so this is for faces too small to matter to the
+// analysis; the bodies and their order stay the same.
+//
+// opts_json:
+//   { "faceIds": [..] }   1-based ids, at least one.
+//
+// Returns { bytes: Uint8Array } (STEP AP214 of the edited shape) and releases
+// the cached shape, exactly like split_geometry. Throws when OCCT cannot close
+// the gap or leaves invalid geometry, so the user knows to fix it in CAD.
+emscripten::val remove_faces(const std::string& opts_json);

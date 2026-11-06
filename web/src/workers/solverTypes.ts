@@ -97,6 +97,12 @@ export interface SplitConeTipsPayload {
   format: string;
   faceIds: number[];
 }
+export interface RemoveFacesPayload {
+  // The current geometry file and its format — reloaded before the removal.
+  bytes: Uint8Array;
+  format: string;
+  faceIds: number[];
+}
 export interface VolumeMeshPayload {
   bytes?: Uint8Array;
   format?: string;

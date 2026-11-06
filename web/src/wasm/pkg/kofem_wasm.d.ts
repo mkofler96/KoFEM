@@ -48,12 +48,15 @@ export interface BooleanGeometryOptions {
  *  is a straight tangent contact between two CAD faces, located exactly in
  *  `hinge` (mm) and repairable with {@link KofemModule.repair_hinges}. A "cone"
  *  holds a full cone face closing at its tip, which Netgen can fail on; repairable
- *  with {@link KofemModule.split_cone_tips}. */
+ *  with {@link KofemModule.split_cone_tips}. An "unmeshed" entry is one CAD face
+ *  Netgen gave up on, with `positions` from its display tessellation and its
+ *  `width` (mm, 2·area/perimeter); a cone tip it gave up on comes as "cone". */
 export interface MeshOverlap {
-  kind: "hinge" | "cone" | "surface"
+  kind: "hinge" | "cone" | "surface" | "unmeshed"
   faceIds: Int32Array
   bodyId: number
   positions: Float64Array
+  width?: number
   hinge?: {
     start: Float64Array
     end: Float64Array
@@ -223,7 +226,8 @@ export interface KofemModule {
   tessellate_step(cad_bytes: Uint8Array, opts_json: string): StepTessellation
   /** Generate a FEM surface mesh + volume mesh directly from the stored STEP geometry
    *  using Netgen's native OCC integration.  Must call tessellate_step first.
-   *  Returns `{ overlaps }` instead of a mesh when the surface mesh overlaps itself.
+   *  Returns `{ overlaps }` instead of a mesh when the surface mesh overlaps itself
+   *  or Netgen could not mesh some faces (kind "unmeshed").
    *  @param opts_json JSON `{ max_element_size, min_element_size, grading, second_order, elementsperedge, elementspercurve, optsteps_2d, optsteps_3d }`
    */
   generate_fem_mesh(opts_json: string): FemMesh | { overlaps: MeshOverlap[] }
@@ -251,6 +255,12 @@ export interface KofemModule {
    *  shape, like split_geometry.
    *  @param opts_json JSON-stringified `{ faceIds: number[] }`. */
   split_cone_tips(opts_json: string): { bytes: Uint8Array }
+  /** Remove "unmeshed" faces reported by generate_fem_mesh by extending the faces
+   *  around them (OCCT defeaturing) and return the edited geometry as STEP AP214
+   *  bytes. The shape changes by about the faces' width. Throws when the gap
+   *  can't be closed. Releases the cached shape, like split_geometry.
+   *  @param opts_json JSON-stringified `{ faceIds: number[] }`. */
+  remove_faces(opts_json: string): { bytes: Uint8Array }
   /** Release the OCCT shape + STEP byte cache from WASM heap.
    *  Call this after meshing is complete and before solving to free ~10–30 MB
    *  of WASM memory that is no longer needed.

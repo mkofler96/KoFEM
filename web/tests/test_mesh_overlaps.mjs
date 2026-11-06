@@ -9,6 +9,10 @@ import {
   coneTipFaces,
   defaultRepairWidth,
   hingeRepairs,
+  narrowestUnmeshedWidth,
+  removableUnmeshedFaces,
+  soupOutline,
+  unmeshedFaces,
 } from "../src/lib/meshOverlaps.ts";
 
 const hinge = {
@@ -48,6 +52,54 @@ assert.deepEqual(coneTipFaces([surface, hinge]), []);
 // Separate overlaps on one face still name it once: the engine refuses duplicates.
 const sameFace = { ...cone, faceIds: new Int32Array([8, 9]) };
 assert.deepEqual(coneTipFaces([cone, sameFace]), [7, 8, 9]);
+
+// Faces the mesher gave up on are counted once each, apart from overlaps.
+const unmeshed = {
+  ...surface,
+  kind: "unmeshed",
+  faceIds: new Int32Array([60]),
+  width: 0.01,
+};
+const unmeshedToo = {
+  ...unmeshed,
+  faceIds: new Int32Array([113]),
+  width: 0.001,
+};
+assert.deepEqual(
+  unmeshedFaces([surface, hinge, cone, unmeshed, unmeshedToo]),
+  [60, 113],
+);
+assert.deepEqual(unmeshedFaces([unmeshed, unmeshed]), [60]);
+assert.deepEqual(unmeshedFaces([surface, hinge, cone]), []);
+assert.deepEqual(hingeRepairs([unmeshed]), []);
+assert.deepEqual(coneTipFaces([unmeshed]), []);
+// The message quotes the narrowest of them; a face without a width is a bug.
+assert.equal(narrowestUnmeshedWidth([surface, unmeshed, unmeshedToo]), 0.001);
+assert.equal(narrowestUnmeshedWidth([surface, hinge]), null);
+assert.throws(() =>
+  narrowestUnmeshedWidth([{ ...unmeshed, width: undefined }]),
+);
+// Only faces narrower than the minimum element size are offered for removal:
+// a wider face needs smaller elements, not a different shape.
+const wide = { ...unmeshed, faceIds: new Int32Array([6]), width: 7.3 };
+assert.deepEqual(
+  removableUnmeshedFaces([unmeshed, unmeshedToo, wide, hinge], "0.12"),
+  [60, 113],
+);
+assert.deepEqual(removableUnmeshedFaces([wide], "2"), []);
+assert.deepEqual(removableUnmeshedFaces([unmeshed], ""), []);
+assert.deepEqual(removableUnmeshedFaces([unmeshed], "0"), []);
+
+// A face's outline from its triangle soup: a unit square of two triangles has
+// four boundary edges; the shared diagonal is not one of them.
+const square = [0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0];
+const outline = soupOutline(square);
+assert.equal(outline.length, 4 * 6);
+for (let at = 0; at < outline.length; at += 6) {
+  const [x0, y0, , x1, y1] = outline.slice(at, at + 6);
+  assert.ok(!(x0 !== x1 && y0 !== y1), "the diagonal is not an outline edge");
+}
+assert.throws(() => soupOutline([0, 0, 0]));
 
 // The width follows the element size; no usable size means the field asks.
 assert.equal(defaultRepairWidth("2"), "3");
