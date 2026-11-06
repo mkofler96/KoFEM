@@ -119,6 +119,8 @@ export interface VolumeMeshPayload {
   properties?: Property[];
 }
 export interface SolvePayload {
+  /** Optional initial CG budget; absent uses each solver's built-in cap. */
+  cgIterationLimit?: number;
   nodes: Node[];
   elements: Element[];
   materials: Material[];

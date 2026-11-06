@@ -216,6 +216,8 @@ export type ShellSolveResult =
 
 /** Runtime interface of the initialised Emscripten/Embind module. */
 export interface KofemModule {
+  /** Optional initial static CG budget; absent uses each solver's usual cap. */
+  cgIterationLimit?: number
   /** Load a STEP or IGES file and tessellate it for display.
    *  @param cad_bytes Raw STEP/IGES file bytes.
    *  @param opts_json JSON `{ deflection_relative?, linear_deflection?, angular_deflection?, format?: "step" | "iges" }`.
@@ -273,7 +275,7 @@ export interface KofemModule {
     mat_json: string,
     bcs_json: string,
     order: number,
-  ): StaticSolveResult
+  ): StaticSolveResult | Promise<StaticSolveResult>
   /** Kirchhoff flat-facet shell solve on a triangle surface mesh. `mat_json` is
    *  `{ young_modulus, poisson_ratio, thickness }`; `bcs_json` is
    *  `{ fixed_vertices?, fixed_dofs?, prescribed_dofs?, point_loads? }` with DOF
@@ -285,7 +287,7 @@ export interface KofemModule {
     mesh: ShellMesh,
     mat_json: string,
     bcs_json: string,
-  ): ShellSolveResult
+  ): ShellSolveResult | Promise<ShellSolveResult>
   /** Coupled solid(tet)+shell solve. MFEM assembles the solid; DKT shells and
    *  RBE3 distributing couplings are added and solved together.
    *   mesh:     { vertices, tets, triangles, thicknesses?, attributes? }
@@ -337,14 +339,7 @@ export interface KofemModule {
       prescribed_vals?: Float64Array
     },
     mat_json: string,
-  ):
-    | {
-        displacements: Float64Array
-        von_mises_tets: Float64Array
-        von_mises_tris: Float64Array
-        iterations: number
-      }
-    | { error: string }
+  ): CoupledSolveResult | Promise<CoupledSolveResult>
   /** SIMP topology optimization (KOF-226 epic, ADR-0002). Takes the same
    *  mesh/material/BC inputs as `solve_linear_elastic` plus a `topopt_json` TO
    *  settings block (see {@link TopOptSettings}); iterates a per-element density
@@ -438,10 +433,31 @@ export class EngineLoadError extends Error {
   readonly stage: EngineLoadStage
 }
 
+export type CoupledSolveResult =
+  | {
+      displacements: Float64Array
+      von_mises_tets: Float64Array
+      von_mises_tris: Float64Array
+      iterations: number
+    }
+  | { error: string }
+
 export interface ModuleOverrides {
+  /** Initial static-solve budget. Omitted: each solver's built-in cap. */
+  cgIterationLimit?: number
+  /** Zero stops and discards; a positive integer extends the live CG loop. */
+  onCgLimit?: (progress: CgLimitProgress) => Promise<number>
   print?: (text: string) => void
   printErr?: (text: string) => void
   onProgress?: (progress: EngineLoadProgress) => void
+}
+
+export interface CgLimitProgress {
+  iterations: number
+  relativeResidual: number
+  target: number
+  elapsedSeconds: number
+  suggestedIterations: number
 }
 
 /** Initialise the WASM module and return it. Must be awaited before using any function. */

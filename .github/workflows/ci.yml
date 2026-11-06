@@ -64,6 +64,9 @@ jobs:
       - name: Shell element validation
         run: bash scripts/test-shell.sh
 
+      - name: Shell and coupled CG continuation
+        run: bash scripts/test-cg-continuation.sh
+
       - name: Topology filter validation
         run: bash scripts/test-topology-filter.sh
 
@@ -87,6 +90,9 @@ jobs:
 
       - name: SIMP core validation
         run: bash scripts/test-topology.sh
+
+      - name: CG continuation including MFEM solid
+        run: bash scripts/test-cg-continuation.sh --mfem
 
       - name: Topology optimization loop validation
         run: bash scripts/test-topology-optimize.sh

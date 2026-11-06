@@ -30,6 +30,7 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 using emscripten::val;
@@ -75,8 +76,14 @@ namespace nglib {
     extern int       Ng_GetNE(Ng_Mesh*);
     // Surface element queries (standard nglib API, Netgen v6.2+)
     extern int       Ng_GetNSE(Ng_Mesh*);
-    extern void      Ng_GetSurfaceElement(Ng_Mesh*, int, int*);
+    // Preserve the installed API's enum return type. Asyncify routes exception
+    // invokes through typed WASM trampolines, which enforce this signature.
+    extern ::Ng_Surface_Element_Type Ng_GetSurfaceElement(Ng_Mesh*, int, int*);
 }
+
+static_assert(std::is_same_v<decltype(nglib::Ng_GetSurfaceElement),
+                             decltype(::Ng_GetSurfaceElement)>,
+              "The Netgen surface query declaration must match nglib.h");
 
 // OCC meshing API (Netgen v6.2.2401, nglib/nglib_occ.cpp, namespace nglib).
 // Ng_OCC_GenerateMesh does not exist — meshing is split into four steps:
