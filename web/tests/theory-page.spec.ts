@@ -27,6 +27,10 @@ const RESULT_PAGES = [
   "/theory/results/displacement-and-stress/",
   "/theory/results/interpretation-and-convergence/",
 ];
+const SHELL_PAGES = [
+  "/theory/shells/formulation/",
+  "/theory/shells/solid-coupling/",
+];
 const PAGES = [
   "/theory/",
   ARTICLE,
@@ -37,6 +41,7 @@ const PAGES = [
   ...NUMERICAL_PAGES,
   ...RESULT_PAGES,
   ...VERIFICATION_PAGES,
+  ...SHELL_PAGES,
 ];
 
 test.describe("static theory content", () => {
@@ -247,6 +252,7 @@ for (const width of [320, 390, 1440]) {
       ...RESULT_PAGES,
       READING_PAGE,
       ...VERIFICATION_PAGES,
+      ...SHELL_PAGES,
     ]) {
       await page.goto(path);
       await page.evaluate(() => document.fonts.ready);
@@ -299,6 +305,12 @@ test("shared symbols and operators have unique, usable deep links", async ({
     "integral",
     "reference-coordinates",
     "jacobian",
+    "shell-quantities",
+    "shell-thickness",
+    "shell-rotation",
+    "shell-curvature",
+    "shell-force-resultant",
+    "shell-moment-resultant",
   ];
   for (const anchor of anchors) {
     await expect(page.locator(`#${anchor}`), anchor).toHaveCount(1);
@@ -457,9 +469,9 @@ test("loads and constraints give checkable worked examples and evidence", async 
     page.getByRole("img", { name: "3-2-1 support on a block" }),
   ).toBeVisible();
   await expect(page.locator("main")).toContainText("KOF-218");
-  // Shell mechanics stay on their planned pages, never a 404.
+  // The published shell chapter resolves to its permanent article URL.
   await expect(
-    page.locator('main a[href="/theory/#shells-formulation"]'),
+    page.locator('main a[href="/theory/shells/formulation/"]'),
   ).not.toHaveCount(0);
   await expect(page.locator('.pager a[rel="prev"]')).toHaveAttribute(
     "href",

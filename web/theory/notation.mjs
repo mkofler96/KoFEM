@@ -28,6 +28,7 @@ export default {
     ["geometry-and-fields", "Geometry and physical fields"],
     ["materials-and-loads", "Materials and loads"],
     ["discrete-quantities", "Finite element quantities"],
+    ["shell-quantities", "Shell rotations and resultants"],
     ["operators", "Operator reference"],
     ["components-and-signs", "Components, shear and signs"],
     ["kofem-units", "KoFEM units and a dimensional check"],
@@ -229,6 +230,50 @@ export default {
       Shells add rotations (radians, dimensionless) and moments (N·mm), so their
       stiffness blocks have different units. A display-tessellation vertex is
       not automatically an FEM node, and a node identifier is not a DOF index.</p>
+
+    <h2 id="shell-quantities">Shell rotations and resultants</h2>
+    <p>These symbols extend the solid notation for the
+      <a href="/theory/shells/formulation/">flat-facet shell formulation</a>.
+      Shell fields use each facet’s local right-handed basis; a local thickness
+      coordinate is distinct from global ${tex("z")}.</p>
+    ${table("Shell quantities", [
+      [
+        "shell-thickness",
+        tex("t"),
+        "Positive section thickness; it may vary per facet. Membrane stiffness scales with thickness and bending stiffness with its cube.",
+        "mm",
+      ],
+      [
+        "shell-rotation",
+        tex("θ"),
+        `Small rotation vector, with three coefficients per shell node. Local ${tex("θ_x,θ_y")} describe bending; ${tex("θ_z")} is the numerically stabilized drilling rotation about the facet normal. Rotation components and force moments use the right-hand rule.`,
+        "rad (1)",
+      ],
+      [
+        "shell-curvature",
+        tex("κ"),
+        `Three-component engineering curvature vector, ordered ${tex("xx,yy,xy")}; the last component includes both twisting derivatives. In the centred section law ${tex("ε(z)=ε_m+zκ")}, ${tex("ε_m")} is membrane engineering strain.`,
+        "1/mm",
+      ],
+      [
+        "shell-force-resultant",
+        tex("n"),
+        `Local three-component in-plane force resultant ${tex("n=\\int_{-t/2}^{t/2}σ_p\\,dz")}, ordered ${tex("xx,yy,xy")}. Here ${tex("σ_p")} is plane-stress vector ${tex("(σ_{xx},σ_{yy},τ_{xy})")}. Lowercase ${tex("n")} is a section resultant, distinct from the bold boundary normal.`,
+        "N/mm",
+      ],
+      [
+        "shell-moment-resultant",
+        tex("m"),
+        `Local moment resultant per unit length ${tex("m=\\int_{-t/2}^{t/2}zσ_p\\,dz")}, in the same order. Its sign depends on the facet normal and thickness coordinate. A total nodal moment instead has units N·mm and is work-conjugate to a rotation.`,
+        "N·mm/mm",
+      ],
+    ])}
+    <p>Resultants above explain the section law; the current static output
+      returns translations and surface-maximum von Mises, not separate
+      resultant or rotation fields. For shell unknowns, stiffness translation–translation,
+      translation–rotation and rotation–rotation blocks have units N/mm, N
+      and N·mm respectively. See
+      <a href="/theory/shells/solid-coupling/#reduction">coupling virtual work</a>.</p>
 
     <h2 id="operators">Operator reference</h2>
     <p>The definitions below fix the convention used by this guide. Detailed

@@ -67,6 +67,18 @@
   white-space: normal;
 }
 
+.theory-docs .shell-table td {
+  min-width: 80px;
+  max-width: 360px;
+  white-space: normal;
+}
+
+.theory-docs .shell-table th {
+  min-width: 100px;
+  max-width: 220px;
+  white-space: normal;
+}
+
 .operator-definitions dt {
   margin-top: 20px;
   font-weight: 600;
