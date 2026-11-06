@@ -70,9 +70,13 @@ This case is preferred because it is small, has an analytical reference, uses
 the real WASM solid solver, and is already a generated public example and CI
 regression fixture. It exercises material stiffness, a fixed support, a face
 force converted to work-equivalent traction, assembly, solve, and displacement
-recovery. It does **not** verify general stress recovery, bending, quadratic
-elements, shells, coupling, or optimization; those claims need their own
-examples.
+recovery. The additional `examples/validation/axial-bar-study.mjs` checks unsmoothed
+centre von Mises values in the fixed 400–600 mm middle region against 100 MPa.
+It adds three order-1 meshes and one diagnostic Q2 hex row; the latter leaves
+support face-centre DOFs free and is not an equivalent-clamp order study.
+This does **not** verify general stress recovery, bending, complete quadratic
+constraints, shells, coupling, or optimization; those claims need their own
+examples. Full-precision evidence lives in `web/public/theory/axial-bar.json`.
 
 ## Reviewed implementation inventory
 
@@ -145,8 +149,10 @@ meaning must not depend on color or a rendered glyph alone.
 
 - Public theory pages and this map live with website code and change in the
   same PR as implementation behavior they describe.
-- Each article records the exact reviewed solver commit and source links. A
-  later code change updates affected pages or opens a follow-up issue.
+- Articles with product claims record the exact reviewed solver commit and
+  source links. Update affected pages and evidence in the behavior-changing PR;
+  record deferred scope explicitly in Linear. The executable workflow and
+  change-to-page mapping are in [README.md](README.md#updating-behavior-pages-and-evidence).
 - Linear owns sequencing and ADRs. An article may summarize an established
   decision but links the Linear ADR rather than becoming a competing record.
 - Generated example pages remain owned by the validation/gallery generators;

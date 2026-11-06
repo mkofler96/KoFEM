@@ -8,6 +8,9 @@ import { renderDocsPage } from "../docs-layout.mjs";
 import { siteHeader, siteFooter } from "../site-layout.mjs";
 import { topics, topicAnchor, articleUrl } from "./content.mjs";
 import modelAndUnits from "./model-and-units.mjs";
+import readingAStudy from "./reading-a-study.mjs";
+import axialBar from "./verification/axial-bar.mjs";
+import verificationStrategy from "./verification/strategy.mjs";
 import consistentUnits from "./consistent-units.mjs";
 import notation from "./notation.mjs";
 import gradientDivergence from "./operators/gradient-divergence.mjs";
@@ -25,6 +28,7 @@ const web = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const articles = [
   modelAndUnits,
   consistentUnits,
+  readingAStudy,
   notation,
   gradientDivergence,
   tensorProducts,
@@ -36,6 +40,8 @@ const articles = [
   linearSolve,
   displacementAndStress,
   interpretationAndConvergence,
+  axialBar,
+  verificationStrategy,
 ];
 const sections = [...new Set(topics.map((topic) => topic.section))];
 const published = (topic) =>
@@ -147,9 +153,10 @@ export function renderTheoryPages() {
     <p>Start with modelling assumptions and consistent units, then follow the
       mathematics from displacement and strain to the linear system and its
       results. Worked examples make each concept concrete.</p>
-    <p class="note">The guide is being written. The foundations, notation, operator, numerical-methods and results articles linked below are available now;
-      planned topics below show the reading order. Shells and optimization follow the solid guide.</p>
+    <p class="note">Follow the axial-bar path through the published articles below.
+      Planned topics remain visible in the contents. Shells and optimization follow the solid guide.</p>
     <p><a class="button" href="/theory/foundations/model-and-units/">Start reading: Model and units →</a></p>
+    <p><a href="/theory/foundations/reading-a-study/">Follow one complete study</a> from assumptions to <a href="/theory/verification/axial-bar/">executed displacement and stress checks</a>.</p>
     ${sections
       .map(
         (section) => `<section aria-labelledby="${sectionId(section)}">
@@ -191,8 +198,9 @@ export function renderTheoryPages() {
         `${article.slug}: a TeX \\; spacing command lost its backslash; write "\\\\;" in the source`,
       );
     const topic = topics[index];
-    const previous = topics[index - 1];
-    const next = topics[index + 1];
+    // Keep the reading path continuous while planned topics remain in the contents.
+    const previous = topics.slice(0, index).findLast(published);
+    const next = topics.slice(index + 1).find(published);
     const pager = `<nav class="pager" aria-label="Reading order">
       <a class="prev" rel="prev" href="${previous ? topicUrl(previous) : "/theory/"}"><small>Previous</small>← ${previous ? escape(previous.title) : "Theory overview"}</a>
       ${next ? `<a class="next" rel="next" href="${topicUrl(next)}"><small>Next${published(next) ? "" : " · planned"}</small>${escape(next.title)} →</a>` : ""}</nav>`;

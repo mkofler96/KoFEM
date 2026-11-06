@@ -16,7 +16,10 @@ export default {
         The answer involves only the load, the length, the cross-section and
         Young's modulus. If a solver gets this one wrong, the fault is in its
         bookkeeping (units, material, supports or how the load reaches the
-        nodes), not in the finite element approximation.</p>`,
+        nodes), not in the finite element approximation.</p>
+        <p>Follow the <a href="/theory/verification/axial-bar/">Theory Guide’s complete axial-bar study</a>
+        for the path from assumptions to the solve, interior stress checks,
+        a mesh/order comparison and pinned implementation sources.</p>`,
   theory: ({ tex, texBlock, n, inp }) => {
     const [W, H] = inp("W × H");
     const A = W * H;

@@ -5,6 +5,11 @@ import { test, expect } from "./coverage";
 
 const ARTICLE = "/theory/foundations/model-and-units/";
 const UNIT_PAGE = "/theory/foundations/consistent-units/";
+const READING_PAGE = "/theory/foundations/reading-a-study/";
+const VERIFICATION_PAGES = [
+  "/theory/verification/axial-bar/",
+  "/theory/verification/strategy/",
+];
 const NOTATION_PAGE = "/theory/notation/";
 const OPERATOR_PAGES = [
   "/theory/operators/gradient-divergence/",
@@ -26,10 +31,12 @@ const PAGES = [
   "/theory/",
   ARTICLE,
   UNIT_PAGE,
+  READING_PAGE,
   NOTATION_PAGE,
   ...OPERATOR_PAGES,
   ...NUMERICAL_PAGES,
   ...RESULT_PAGES,
+  ...VERIFICATION_PAGES,
 ];
 
 test.describe("static theory content", () => {
@@ -38,7 +45,7 @@ test.describe("static theory content", () => {
   test("direct URLs are indexable and every local article link resolves", async ({
     page,
   }) => {
-    for (const path of PAGES) {
+    for (const [index, path] of PAGES.entries()) {
       const response = await page.goto(path);
       expect(response?.status()).toBe(200);
       expect(await response?.text()).toContain("<h1>");
@@ -64,6 +71,31 @@ test.describe("static theory content", () => {
       ).toMatchObject({
         "@context": "https://schema.org",
       });
+      if (index < PAGES.length - 1) {
+        await expect(page.locator('.pager a[rel="next"]')).toHaveAttribute(
+          "href",
+          PAGES[index + 1],
+        );
+      } else {
+        await expect(page.locator('.pager a[rel="next"]')).toHaveCount(0);
+      }
+      if (index > 0) {
+        await expect(page.locator('.pager a[rel="prev"]')).toHaveAttribute(
+          "href",
+          PAGES[index - 1],
+        );
+      }
+      const ids = await page
+        .locator("[id]")
+        .evaluateAll((elements) => elements.map((element) => element.id));
+      expect(new Set(ids).size, path).toBe(ids.length);
+      await expect(page.locator("h2 a, h3 a")).toHaveCount(0);
+      await expect(page.locator("main")).not.toContainText(/prerequisites/i);
+      await expect(
+        page.locator(
+          'main .equation:not([aria-label]), main .equation:not([tabindex="0"])',
+        ),
+      ).toHaveCount(0);
       const links = await page
         .locator("main a[href]")
         .evaluateAll((elements) =>
@@ -129,11 +161,10 @@ test.describe("static theory content", () => {
     await expect(page.locator("h2#units")).toBeInViewport();
     await page.locator('.pager a[rel="next"]').click();
     await expect(page).toHaveURL(UNIT_PAGE);
-    await page.getByRole("link", { name: /Next · planned/ }).click();
-    await expect(page).toHaveURL("/theory/#foundations-reading-a-study");
-    await expect(page.locator("#foundations-reading-a-study")).toContainText(
-      "Planned",
-    );
+    await page.locator('.pager a[rel="next"]').click();
+    await expect(page).toHaveURL(READING_PAGE);
+    await page.locator('.pager a[rel="next"]').click();
+    await expect(page).toHaveURL(NOTATION_PAGE);
   });
 });
 
@@ -214,6 +245,8 @@ for (const width of [320, 390, 1440]) {
       ...OPERATOR_PAGES,
       ...NUMERICAL_PAGES,
       ...RESULT_PAGES,
+      READING_PAGE,
+      ...VERIFICATION_PAGES,
     ]) {
       await page.goto(path);
       await page.evaluate(() => document.fonts.ready);
@@ -569,4 +602,37 @@ test("Theory keeps the examples' theme choice and canonical redirects", async ({
     expect(response.status()).toBe(301);
     expect(response.headers()["location"]).toBe(path);
   }
+});
+
+test("verified reading path reaches reproducible displacement and stress evidence", async ({
+  page,
+}) => {
+  await page.goto("/theory/foundations/reading-a-study/");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Reading a study",
+  );
+  await page
+    .getByRole("link", { name: "axial-bar verification", exact: true })
+    .click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Axial-bar verification",
+  );
+  await expect(page.locator("#comparison").locator("..")).toContainText(
+    "von Mises",
+  );
+  await expect(
+    page.locator('main a[href="/theory/verification/strategy/"]'),
+  ).not.toHaveCount(0);
+  await page
+    .getByRole("link", { name: "public axial-bar example", exact: true })
+    .click();
+  await expect(
+    page.getByRole("link", {
+      name: "Theory Guide’s complete axial-bar study",
+      exact: true,
+    }),
+  ).toHaveAttribute("href", "/theory/verification/axial-bar/");
+  await expect(
+    page.locator('main a[href="/app/?example=axial-bar"]'),
+  ).not.toHaveCount(0);
 });
