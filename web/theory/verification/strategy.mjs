@@ -57,6 +57,11 @@ export default {
         about agreement on one mesh. Its existing study crosses the reference
         under refinement, so that isolated pass is a regression check rather
         than resolved convergence evidence.</li>
+      <li><a href="/theory/shells/formulation/#plate-example">Square shell plate</a>:
+        centre deflection and a centre-near surface stress against thin-plate
+        theory. The <a href="/theory/shells/solid-coupling/#verification">planar
+        transition study</a> separately compares a retained solid root with a
+        same-mesh all-solid model. Neither establishes arbitrary junction-stress accuracy.</li>
     </ul>
     <p>These links reuse the existing studies; they do not claim new runs of
       those refinement sequences. See each example’s engine record. Claims

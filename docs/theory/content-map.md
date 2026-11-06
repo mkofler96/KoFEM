@@ -37,15 +37,14 @@ published. Renames require redirects and preserved heading anchors.
 | Results                | `/theory/results/interpretation-and-convergence/`    | Which conclusions are justified by a result, and when must the FEM discretisation be refined?              |
 | Verification           | `/theory/verification/axial-bar/`                    | Does the complete KoFEM path reproduce the analytical extension of a bar in tension?                       |
 | Verification           | `/theory/verification/strategy/`                     | What does each benchmark establish, and what remains unverified?                                           |
-| Shells (later)         | `/theory/shells/formulation/`                        | How does KoFEM's flat-facet shell represent membrane and bending response?                                 |
-| Shells (later)         | `/theory/shells/solid-coupling/`                     | How are shell and solid degrees of freedom coupled?                                                        |
+| Shells                 | `/theory/shells/formulation/`                        | How does KoFEM's flat-facet shell represent membrane and bending response?                                 |
+| Shells                 | `/theory/shells/solid-coupling/`                     | How are shell and solid degrees of freedom coupled?                                                        |
 | Optimization (later)   | `/theory/optimization/simp/`                         | How does SIMP turn a solid FEM problem into a density optimization problem?                                |
 | Optimization (later)   | `/theory/optimization/constraints-and-convergence/`  | How should filtering, constraints, convergence, and optimized results be interpreted?                      |
 
 The initial verified path ends at the axial-bar page. The strategy page can
-then branch to other existing benchmarks. Shell/coupling and optimization stay
-visible in the map but are explicitly later extensions, not implied support in
-the initial solid guide.
+then branch to other existing benchmarks. Shell formulation and solid–shell
+coupling now extend that path with their own verification evidence and limitations. Optimization remains a planned extension.
 
 ## Running example: axial bar in tension
 

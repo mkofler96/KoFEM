@@ -54,8 +54,8 @@ export const topics = [
   ],
   ["Verification", "verification/axial-bar", "Axial-bar verification"],
   ["Verification", "verification/strategy", "Verification strategy"],
-  ["Shells (later)", "shells/formulation", "Shell formulation"],
-  ["Shells (later)", "shells/solid-coupling", "Solid–shell coupling"],
+  ["Shells", "shells/formulation", "Shell formulation"],
+  ["Shells", "shells/solid-coupling", "Solid–shell coupling"],
   ["Optimization (later)", "optimization/simp", "SIMP"],
   [
     "Optimization (later)",

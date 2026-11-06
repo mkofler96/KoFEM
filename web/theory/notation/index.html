@@ -966,7 +966,7 @@
     </details><details class="docs-group">
       <summary>Verification</summary><ul><li><a href="/theory/verification/axial-bar/">Axial-bar verification</a></li><li><a href="/theory/verification/strategy/">Verification strategy</a></li></ul>
     </details><details class="docs-group">
-      <summary>Shells (later)</summary><ul><li><a href="/theory/#shells-formulation">Shell formulation <small class="planned">(planned)</small></a></li><li><a href="/theory/#shells-solid-coupling">Solid–shell coupling <small class="planned">(planned)</small></a></li></ul>
+      <summary>Shells</summary><ul><li><a href="/theory/shells/formulation/">Shell formulation</a></li><li><a href="/theory/shells/solid-coupling/">Solid–shell coupling</a></li></ul>
     </details><details class="docs-group">
       <summary>Optimization (later)</summary><ul><li><a href="/theory/#optimization-simp">SIMP <small class="planned">(planned)</small></a></li><li><a href="/theory/#optimization-constraints-and-convergence">Constraints and convergence <small class="planned">(planned)</small></a></li></ul>
     </details></nav>
@@ -986,7 +986,7 @@
     </details><details class="docs-group">
       <summary>Verification</summary><ul><li><a href="/theory/verification/axial-bar/">Axial-bar verification</a></li><li><a href="/theory/verification/strategy/">Verification strategy</a></li></ul>
     </details><details class="docs-group">
-      <summary>Shells (later)</summary><ul><li><a href="/theory/#shells-formulation">Shell formulation <small class="planned">(planned)</small></a></li><li><a href="/theory/#shells-solid-coupling">Solid–shell coupling <small class="planned">(planned)</small></a></li></ul>
+      <summary>Shells</summary><ul><li><a href="/theory/shells/formulation/">Shell formulation</a></li><li><a href="/theory/shells/solid-coupling/">Solid–shell coupling</a></li></ul>
     </details><details class="docs-group">
       <summary>Optimization (later)</summary><ul><li><a href="/theory/#optimization-simp">SIMP <small class="planned">(planned)</small></a></li><li><a href="/theory/#optimization-constraints-and-convergence">Constraints and convergence <small class="planned">(planned)</small></a></li></ul>
     </details></nav>
@@ -994,7 +994,7 @@
         </div></details>
         <nav class="crumbs" aria-label="Breadcrumb"><a href="/">KoFEM</a> / <a href="/theory/">Theory</a> / Notation and operators / Notation</nav>
         <h1>Notation</h1>
-        <details class="article-contents"><summary>On this page</summary><ul><li><a href="#reading-notation">How to read the notation</a></li><li><a href="#geometry-and-fields">Geometry and physical fields</a></li><li><a href="#materials-and-loads">Materials and loads</a></li><li><a href="#discrete-quantities">Finite element quantities</a></li><li><a href="#operators">Operator reference</a></li><li><a href="#components-and-signs">Components, shear and signs</a></li><li><a href="#kofem-units">KoFEM units and a dimensional check</a></li><li><a href="#code-names">Reading the implementation</a></li><li><a href="#references">Sources and further reading</a></li></ul></details>
+        <details class="article-contents"><summary>On this page</summary><ul><li><a href="#reading-notation">How to read the notation</a></li><li><a href="#geometry-and-fields">Geometry and physical fields</a></li><li><a href="#materials-and-loads">Materials and loads</a></li><li><a href="#discrete-quantities">Finite element quantities</a></li><li><a href="#shell-quantities">Shell rotations and resultants</a></li><li><a href="#operators">Operator reference</a></li><li><a href="#components-and-signs">Components, shear and signs</a></li><li><a href="#kofem-units">KoFEM units and a dimensional check</a></li><li><a href="#code-names">Reading the implementation</a></li><li><a href="#references">Sources and further reading</a></li></ul></details>
 
     <p class="lede">What do the shared symbols, indices, coordinate conventions and units mean?</p>
     <p>Use this page as a lookup reference while reading the guide. Each article
@@ -1067,6 +1067,23 @@
       Shells add rotations (radians, dimensionless) and moments (N·mm), so their
       stiffness blocks have different units. A display-tessellation vertex is
       not automatically an FEM node, and a node identifier is not a DOF index.</p>
+
+    <h2 id="shell-quantities">Shell rotations and resultants</h2>
+    <p>These symbols extend the solid notation for the
+      <a href="/theory/shells/formulation/">flat-facet shell formulation</a>.
+      Shell fields use each facet’s local right-handed basis; a local thickness
+      coordinate is distinct from global <span class="math-nowrap"><math><mi>z</mi></math>.</span></p>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="Shell quantities; scroll horizontally if needed">
+    <table class="notation-table"><caption>Shell quantities</caption>
+      <thead><tr><th scope="col">Symbol</th><th scope="col">Meaning and type</th><th scope="col">Units</th></tr></thead>
+      <tbody><tr id="shell-thickness"><th scope="row"><math><mi>t</mi></math></th><td>Positive section thickness; it may vary per facet. Membrane stiffness scales with thickness and bending stiffness with its cube.</td><td>mm</td></tr><tr id="shell-rotation"><th scope="row"><math><mi>θ</mi></math></th><td>Small rotation vector, with three coefficients per shell node. Local <math><msub><mi>θ</mi><mi>x</mi></msub><mo>,</mo><msub><mi>θ</mi><mi>y</mi></msub></math> describe bending; <math><msub><mi>θ</mi><mi>z</mi></msub></math> is the numerically stabilized drilling rotation about the facet normal. Rotation components and force moments use the right-hand rule.</td><td>rad (1)</td></tr><tr id="shell-curvature"><th scope="row"><math><mi>κ</mi></math></th><td>Three-component engineering curvature vector, ordered <span class="math-nowrap"><math><mi>x</mi><mi>x</mi><mo>,</mo><mi>y</mi><mi>y</mi><mo>,</mo><mi>x</mi><mi>y</mi></math>;</span> the last component includes both twisting derivatives. In the centred section law <math><mi>ε</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>z</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo>=</mo></math>​<span class="math-nowrap"><math><msub><mi>ε</mi><mi>m</mi></msub><mo>+</mo><mi>z</mi><mi>κ</mi></math>,</span> <math><msub><mi>ε</mi><mi>m</mi></msub></math> is membrane engineering strain.</td><td>1/mm</td></tr><tr id="shell-force-resultant"><th scope="row"><math><mi>n</mi></math></th><td>Local three-component in-plane force resultant <math><mi>n</mi><mo>=</mo></math>​<span class="math-nowrap"><math><msubsup><mo largeop="true">∫</mo><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mi>t</mi><mo lspace="0" rspace="0">/</mo><mn>2</mn></mrow><mrow><mi>t</mi><mo lspace="0" rspace="0">/</mo><mn>2</mn></mrow></msubsup><msub><mi>σ</mi><mi>p</mi></msub><mspace width="0.17em"/><mi>d</mi><mi>z</mi></math>,</span> ordered <span class="math-nowrap"><math><mi>x</mi><mi>x</mi><mo>,</mo><mi>y</mi><mi>y</mi><mo>,</mo><mi>x</mi><mi>y</mi></math>.</span> Here <math><msub><mi>σ</mi><mi>p</mi></msub></math> is plane-stress vector <span class="math-nowrap"><math><mo stretchy="false" lspace="0" rspace="0">(</mo><msub><mi>σ</mi><mrow><mi>x</mi><mi>x</mi></mrow></msub><mo>,</mo><msub><mi>σ</mi><mrow><mi>y</mi><mi>y</mi></mrow></msub><mo>,</mo><msub><mi>τ</mi><mrow><mi>x</mi><mi>y</mi></mrow></msub><mo stretchy="false" lspace="0" rspace="0">)</mo></math>.</span> Lowercase <math><mi>n</mi></math> is a section resultant, distinct from the bold boundary normal.</td><td>N/mm</td></tr><tr id="shell-moment-resultant"><th scope="row"><math><mi>m</mi></math></th><td>Local moment resultant per unit length <math><mi>m</mi><mo>=</mo></math>​<span class="math-nowrap"><math><msubsup><mo largeop="true">∫</mo><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mi>t</mi><mo lspace="0" rspace="0">/</mo><mn>2</mn></mrow><mrow><mi>t</mi><mo lspace="0" rspace="0">/</mo><mn>2</mn></mrow></msubsup><mi>z</mi><msub><mi>σ</mi><mi>p</mi></msub><mspace width="0.17em"/><mi>d</mi><mi>z</mi></math>,</span> in the same order. Its sign depends on the facet normal and thickness coordinate. A total nodal moment instead has units N·mm and is work-conjugate to a rotation.</td><td>N·mm/mm</td></tr></tbody>
+    </table></div>
+    <p>Resultants above explain the section law; the current static output
+      returns translations and surface-maximum von Mises, not separate
+      resultant or rotation fields. For shell unknowns, stiffness translation–translation,
+      translation–rotation and rotation–rotation blocks have units N/mm, N
+      and N·mm respectively. See
+      <a href="/theory/shells/solid-coupling/#reduction">coupling virtual work</a>.</p>
 
     <h2 id="operators">Operator reference</h2>
     <p>The definitions below fix the convention used by this guide. Detailed
@@ -1256,7 +1273,7 @@
       <a class="prev" rel="prev" href="/theory/foundations/reading-a-study/"><small>Previous</small>← Reading a study</a>
       <a class="next" rel="next" href="/theory/operators/gradient-divergence/"><small>Next</small>Gradient and divergence →</a></nav>
       </main>
-      <nav class="docs-toc" aria-label="On this page"><p>On this page</p><ul><li><a href="#reading-notation">How to read the notation</a></li><li><a href="#geometry-and-fields">Geometry and physical fields</a></li><li><a href="#materials-and-loads">Materials and loads</a></li><li><a href="#discrete-quantities">Finite element quantities</a></li><li><a href="#operators">Operator reference</a></li><li><a href="#components-and-signs">Components, shear and signs</a></li><li><a href="#kofem-units">KoFEM units and a dimensional check</a></li><li><a href="#code-names">Reading the implementation</a></li><li><a href="#references">Sources and further reading</a></li></ul></nav>
+      <nav class="docs-toc" aria-label="On this page"><p>On this page</p><ul><li><a href="#reading-notation">How to read the notation</a></li><li><a href="#geometry-and-fields">Geometry and physical fields</a></li><li><a href="#materials-and-loads">Materials and loads</a></li><li><a href="#discrete-quantities">Finite element quantities</a></li><li><a href="#shell-quantities">Shell rotations and resultants</a></li><li><a href="#operators">Operator reference</a></li><li><a href="#components-and-signs">Components, shear and signs</a></li><li><a href="#kofem-units">KoFEM units and a dimensional check</a></li><li><a href="#code-names">Reading the implementation</a></li><li><a href="#references">Sources and further reading</a></li></ul></nav>
     </div><footer class="site-footer">
       <span>KoFEM — finite element analysis in your browser</span>
       <nav aria-label="Footer">

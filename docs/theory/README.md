@@ -17,7 +17,9 @@ reference-element mappings, and the numerical-methods articles
 `elements-and-quadrature`, `assembly`, `loads-and-constraints` and `linear-solve`,
 and the results articles `displacement-and-stress` and
 `interpretation-and-convergence`. The `reading-a-study` introduction connects
-these topics to `verification/axial-bar` and `verification/strategy`. General FEM introductions can use standalone
+these topics to `verification/axial-bar` and `verification/strategy`. The shell
+extension adds `shells/formulation` and `shells/solid-coupling`, with native plate
+and planar transition evidence. General FEM introductions can use standalone
 physical models; KoFEM examples and
 implementation sections are included when relevant. Remaining topics stay marked
 as planned until reviewed.
@@ -124,3 +126,32 @@ source review and reused evidence. Include the failing/passing reading-path
 check, site build, selected numerical output, screenshots at desktop/mobile
 widths, exact tested revision and any unresolved limitation. The public guide
 explains the numerical limitation; Linear keeps its follow-up plan.
+
+## Shell and coupling evidence
+
+Shell articles pin implementation links to the source revision in
+`web/public/theory/shells.json`. The native production-core checks feed that
+record directly; its compiler and printed precision are explicit. Run:
+
+```sh
+node web/theory/shells/capture-evidence.mjs
+```
+
+This checks the existing square-plate cases and the planar wall-on-block study
+at refinements 1 and 2 against the committed record. It uses `CXX` (default
+`g++`). For an intentional evidence update with reviewed, committed solver
+sources, use `--report`, regenerate the Theory pages and review the record.
+Keep native execution separate from CAD extraction and WASM wrapper evidence:
+
+```sh
+cd web
+bun tests/test_shell_footprint.mjs --wasm
+```
+
+Review both shell articles and the shared shell notation when changing section
+kinematics, thickness, materials, loads, extraction, or coupling. Re-run the
+affected comparisons, retaining their sampling regions and reference limits.
+Same-mesh planar transition agreement does not verify arbitrary junction-stress
+accuracy or general distributing coupling. The full shell-core suite and the
+app footprint check remain part of existing CI; the native record comparison
+above is an additional contributor check.

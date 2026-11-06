@@ -23,6 +23,8 @@ import loadsAndConstraints from "./numerical-methods/loads-and-constraints.mjs";
 import linearSolve from "./numerical-methods/linear-solve.mjs";
 import displacementAndStress from "./results/displacement-and-stress.mjs";
 import interpretationAndConvergence from "./results/interpretation-and-convergence.mjs";
+import shellFormulation from "./shells/formulation.mjs";
+import solidCoupling from "./shells/solid-coupling.mjs";
 
 const web = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const articles = [
@@ -42,6 +44,8 @@ const articles = [
   interpretationAndConvergence,
   axialBar,
   verificationStrategy,
+  shellFormulation,
+  solidCoupling,
 ];
 const sections = [...new Set(topics.map((topic) => topic.section))];
 const published = (topic) =>
@@ -143,10 +147,13 @@ function page({ title, description, path, body, article = false }) {
 
 export function renderTheoryPages() {
   const sectionId = (section) =>
-    section
-      .toLowerCase()
-      .replaceAll(/[^a-z]+/g, "-")
-      .replace(/-$/, "");
+    // Preserve overview bookmarks from when this extension was planned.
+    section === "Shells"
+      ? "shells-later"
+      : section
+          .toLowerCase()
+          .replaceAll(/[^a-z]+/g, "-")
+          .replace(/-$/, "");
   const overview = `
     <h1>Theory Guide</h1>
     <p class="lede">The mathematics and numerical choices behind a KoFEM study.</p>
@@ -154,7 +161,7 @@ export function renderTheoryPages() {
       mathematics from displacement and strain to the linear system and its
       results. Worked examples make each concept concrete.</p>
     <p class="note">Follow the axial-bar path through the published articles below.
-      Planned topics remain visible in the contents. Shells and optimization follow the solid guide.</p>
+      Planned topics remain visible in the contents. Shell formulations and coupling follow the solid path; optimization remains planned.</p>
     <p><a class="button" href="/theory/foundations/model-and-units/">Start reading: Model and units →</a></p>
     <p><a href="/theory/foundations/reading-a-study/">Follow one complete study</a> from assumptions to <a href="/theory/verification/axial-bar/">executed displacement and stress checks</a>.</p>
     ${sections
