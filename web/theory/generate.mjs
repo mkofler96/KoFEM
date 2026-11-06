@@ -18,6 +18,8 @@ import elementsAndQuadrature from "./numerical-methods/elements-and-quadrature.m
 import assembly from "./numerical-methods/assembly.mjs";
 import loadsAndConstraints from "./numerical-methods/loads-and-constraints.mjs";
 import linearSolve from "./numerical-methods/linear-solve.mjs";
+import displacementAndStress from "./results/displacement-and-stress.mjs";
+import interpretationAndConvergence from "./results/interpretation-and-convergence.mjs";
 
 const web = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const articles = [
@@ -32,6 +34,8 @@ const articles = [
   assembly,
   loadsAndConstraints,
   linearSolve,
+  displacementAndStress,
+  interpretationAndConvergence,
 ];
 const sections = [...new Set(topics.map((topic) => topic.section))];
 const published = (topic) =>
@@ -143,7 +147,7 @@ export function renderTheoryPages() {
     <p>Start with modelling assumptions and consistent units, then follow the
       mathematics from displacement and strain to the linear system and its
       results. Worked examples make each concept concrete.</p>
-    <p class="note">The guide is being written. The foundations, notation, operator and numerical-methods articles linked below are available now;
+    <p class="note">The guide is being written. The foundations, notation, operator, numerical-methods and results articles linked below are available now;
       planned topics below show the reading order. Shells and optimization follow the solid guide.</p>
     <p><a class="button" href="/theory/foundations/model-and-units/">Start reading: Model and units →</a></p>
     ${sections

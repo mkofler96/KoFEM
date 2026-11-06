@@ -14,13 +14,15 @@ The published articles are `foundations/model-and-units`, the separate
 `foundations/consistent-units` comparison, `notation`, and four focused operator
 articles: gradients/divergence, tensor products, integration by parts, and
 reference-element mappings, and the numerical-methods articles
-`elements-and-quadrature`, `assembly`, `loads-and-constraints` and `linear-solve`. General FEM introductions can use standalone
+`elements-and-quadrature`, `assembly`, `loads-and-constraints` and `linear-solve`,
+and the results articles `displacement-and-stress` and
+`interpretation-and-convergence`. General FEM introductions can use standalone
 physical models; KoFEM examples and
 implementation sections are included when relevant. Remaining topics stay marked
 as planned until reviewed.
 Run `cd web && bun run theory:generate` after editing, and commit generated
 HTML and sitemap. `bun run test:theory` checks output, content-map alignment
-and the worked linear-solve calculation.
+and the worked linear-solve and stress calculations.
 
 Articles use the existing examples' native MathML renderer (`tex` / `texBlock`)
 and self-hosted math font. Its supported TeX subset is documented in
@@ -37,7 +39,8 @@ Write links to a planned topic with its permanent URL. The generator points them
 at the topic's planned overview entry until the article is published, and fails
 on links to unknown `/theory/` pages. Numerical-methods articles pin their
 source links in `web/theory/numerical-methods/sources.mjs`; update its revision
-and line numbers together with the articles' review dates.
+and line numbers together with the articles' review dates. Results articles
+use their own snapshot in `web/theory/results/sources.mjs`.
 
 These files version with the code; Linear remains the source of truth for
 issue planning and architecture decision records (ADRs).

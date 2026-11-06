@@ -71,5 +71,7 @@
   <url><loc>https://kofem.org/theory/numerical-methods/assembly/</loc></url>
   <url><loc>https://kofem.org/theory/numerical-methods/loads-and-constraints/</loc></url>
   <url><loc>https://kofem.org/theory/numerical-methods/linear-solve/</loc></url>
+  <url><loc>https://kofem.org/theory/results/displacement-and-stress/</loc></url>
+  <url><loc>https://kofem.org/theory/results/interpretation-and-convergence/</loc></url>
   <!-- theory:end -->
 </urlset>
