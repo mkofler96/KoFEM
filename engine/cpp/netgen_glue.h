@@ -42,6 +42,12 @@ struct KofemSurfaceTriangle {
 // The surface elements of an Ng_Mesh that intersect another surface element.
 std::vector<KofemSurfaceTriangle> kofem_overlapping_surface_elements(void* mesh);
 
+// The 1-based OCC faces Netgen's surface mesher gave up on, from the
+// netgen::OCCGeometry the surface mesh was generated from. Netgen reports a
+// failed face only on stdout and still returns NG_OK, keeping whatever it made
+// of the face, so the caller has to ask.
+std::vector<int> kofem_unmeshed_faces(void* geom);
+
 // Destroy an Ng_Mesh. Use this instead of nglib::Ng_DeleteMesh, which calls
 // Mesh::DeleteMesh() AND then ~Mesh(): both loops `delete` every bcnames /
 // materials / cd2names string* (NgArray<string*> holds raw pointers), so the

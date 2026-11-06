@@ -45,6 +45,7 @@ EMSCRIPTEN_BINDINGS(kofem) {
     emscripten::function("boolean_geometry",       &boolean_geometry);
     emscripten::function("repair_hinges",          &repair_hinges);
     emscripten::function("split_cone_tips",        &split_cone_tips);
+    emscripten::function("remove_faces",           &remove_faces);
     emscripten::function("solve_linear_elastic",   &solve_linear_elastic);
     emscripten::function("solve_shell",            &solve_shell);
     emscripten::function("solve_coupled",          &solve_coupled);

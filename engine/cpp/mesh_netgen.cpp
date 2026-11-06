@@ -17,6 +17,12 @@
 // Netgen internal-API glue (face indices, geometry from shape) — see netgen_glue.h
 #include "netgen_glue.h"
 
+#include <Precision.hxx>
+#include <TopAbs_ShapeEnum.hxx>
+#include <TopExp.hxx>
+#include <TopTools_IndexedMapOfShape.hxx>
+#include <TopoDS.hxx>
+#include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
 
 #include <array>
@@ -200,6 +206,39 @@ val generate_fem_mesh(const std::string& opts_json)
     printf("[netgen] step 3/4: surface mesh done — %d surface nodes\n", nglib::Ng_GetNP(mesh));
     fflush(stdout);
     log_mem("generate_fem_mesh: step 3 done");
+
+    // Netgen returns NG_OK even when it gave up on faces ("NOT ALL FACES HAVE
+    // BEEN MESHED"), keeping their half-made or overfilled elements. The volume
+    // fill must not run on that: it throws "Illegal position in Geomsearch" and
+    // corrupts the heap, or flags those elements as overlaps that are not in the
+    // geometry. Report the faces instead, so the caller can show them.
+    //
+    // A face narrower than OCCT's own tolerance is not a feature but noise a
+    // Boolean left behind (hinge "connect" leaves ~1e-9 mm ones); the volume
+    // fill closes over it, so it is logged and meshing goes on.
+    TopTools_IndexedMapOfShape shape_faces;
+    TopExp::MapShapes(cached_shape(), TopAbs_FACE, shape_faces);
+    std::vector<int> unmeshed;
+    for (const int id : kofem_unmeshed_faces(static_cast<void*>(geom))) {
+        const double width = face_width(TopoDS::Face(shape_faces(id)));
+        if (width >= Precision::Confusion()) {
+            unmeshed.push_back(id);
+            continue;
+        }
+        printf("[netgen] face %d could not be meshed, but it is %.2g mm wide — below the "
+               "geometry tolerance, so the volume fill goes on\n", id, width);
+        fflush(stdout);
+    }
+    if (!unmeshed.empty()) {
+        printf("[netgen] %d faces could not be meshed; skipping the volume fill\n",
+               (int)unmeshed.size());
+        fflush(stdout);
+        kofem_delete_mesh(static_cast<void*>(mesh));
+        kofem_occ_geometry_delete(static_cast<void*>(geom));
+        val unmeshed_result = val::object();
+        unmeshed_result.set("overlaps", describe_unmeshed_faces(unmeshed, cached_shape()));
+        return unmeshed_result;
+    }
 
     // Step 4: fill volume.
     // Keep geom alive: Netgen stores OCC geometry references in the mesh during

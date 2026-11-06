@@ -28,6 +28,9 @@ const HINGE_FREE_END = path.resolve("..", "test_files", "hinge_free_end.step");
 // A block with a blind hole ending in a sharp cone: one full cone face closing at
 // its tip, which Netgen's surface mesh fails on at every element size.
 const CONE_TIP = path.resolve("..", "test_files", "cone_tip_bore.step");
+// tube.stp with two face splits 0.01 mm apart across its outer cylinder: a ring
+// far narrower than any element, which Netgen's surface mesh gives up on.
+const SLIVER_RING = path.resolve("..", "test_files", "tube_sliver_ring.step");
 
 async function setSizes(page: Page, max: string, min: string): Promise<void> {
   await page.getByTestId("max-element-size").fill(max);
@@ -151,6 +154,53 @@ test("splitting a sharp cone tip lets the part mesh", async ({ page }) => {
 
   await mesh(page);
   await expectMeshed(page);
+});
+
+// Netgen reported success with the ring unmeshed, and the volume fill ran on the
+// rest: a broken mesh, a Geomsearch trap or overlaps that aren't there (KOF-292).
+test("a face too narrow to mesh is named instead of volume-filled", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  await importStep(page, SLIVER_RING);
+  await setSizes(page, "5", "0.5");
+  await mesh(page);
+  await expect(page.getByTestId("unmeshed-warning")).toContainText(
+    "couldn't mesh 1 face, highlighted in the view (0.01 mm wide)",
+    { timeout: 120_000 },
+  );
+  await expect(page.getByTestId("meshing-error")).toHaveCount(0);
+  await expect(page.getByTestId("surface-overlap-warning")).toHaveCount(0);
+  await expect(
+    page.getByRole("button").filter({ hasText: "Re-mesh STEP volume" }),
+  ).toHaveCount(0);
+
+  // Narrower than the 0.5 mm minimum element size: removal is offered, with
+  // the accuracy note, and the part meshes after it.
+  await expect(page.getByTestId("unmeshed-remove-note")).toContainText(
+    "fix it in CAD",
+  );
+  await page.getByTestId("unmeshed-remove").click();
+  await expect
+    .poll(async () => (await geometryCounts(page)).edits, { timeout: 60_000 })
+    .toBe(1);
+  await expect(page.getByTestId("mesh-overlap-card")).toHaveCount(0);
+  await mesh(page);
+  await expectMeshed(page);
+});
+
+test("a face wider than the minimum element size is not offered for removal", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  await importStep(page, SLIVER_RING);
+  await setSizes(page, "5", "0.005");
+  await mesh(page);
+  await expect(page.getByTestId("unmeshed-warning")).toContainText(
+    "Try a smaller element size",
+    { timeout: 120_000 },
+  );
+  await expect(page.getByTestId("unmeshed-remove")).toHaveCount(0);
 });
 
 // OCCT stored this part's contact as an edge the two faces share. Cutting through

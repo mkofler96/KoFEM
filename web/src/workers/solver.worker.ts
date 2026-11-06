@@ -18,6 +18,7 @@ import type {
   BooleanGeometryPayload,
   RepairHingesPayload,
   SplitConeTipsPayload,
+  RemoveFacesPayload,
   VolumeMeshPayload,
   SolvePayload,
   TopOptPayload,
@@ -257,6 +258,21 @@ function handleSplitConeTips(id: number, payload: SplitConeTipsPayload) {
     JSON.stringify({ faceIds: payload.faceIds }),
   );
   geometryLoaded = false; // split_cone_tips released the pre-edit shape
+  self.postMessage({
+    id,
+    ok: true,
+    bytes,
+    ...loadGeometry(bytes, "step"),
+  });
+}
+
+// Remove faces a failed mesh could not mesh — the same round trip as a split.
+function handleRemoveFaces(id: number, payload: RemoveFacesPayload) {
+  reloadForEdit(payload.bytes, payload.format);
+  const { bytes } = m().remove_faces(
+    JSON.stringify({ faceIds: payload.faceIds }),
+  );
+  geometryLoaded = false; // remove_faces released the pre-edit shape
   self.postMessage({
     id,
     ok: true,
@@ -810,6 +826,8 @@ self.onmessage = async (event: MessageEvent) => {
       handleRepairHinges(id, payload as RepairHingesPayload);
     } else if (type === "split_cone_tips") {
       handleSplitConeTips(id, payload as SplitConeTipsPayload);
+    } else if (type === "remove_faces") {
+      handleRemoveFaces(id, payload as RemoveFacesPayload);
     } else if (type === "volume_mesh") {
       handleVolumeMesh(id, payload as VolumeMeshPayload);
     } else if (type === "solve") {
