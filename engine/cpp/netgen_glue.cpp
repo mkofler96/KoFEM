@@ -26,6 +26,9 @@
 #include <TopoDS.hxx>
 #include <TopoDS_Edge.hxx>
 
+#include <stdexcept>
+#include <string>
+
 // Netgen does not install occ_edge.hpp. These are the data members of its
 // netgen::OCCEdge (libsrc/occ/occ_edge.hpp, pinned at v6.2.2401), which
 // OCCGeometry stores behind every GeometryEdge. Never constructed here.
@@ -92,6 +95,22 @@ std::vector<KofemSurfaceTriangle> kofem_overlapping_surface_elements(void* mesh)
         out.push_back(triangle);
     }
     return out;
+}
+
+std::vector<int> kofem_unmeshed_faces(void* geom) {
+    const auto* geometry = static_cast<const netgen::OCCGeometry*>(geom);
+    // OCCGeometry::MeshFace sets the status to -1 when both its parameter-space
+    // and plane-space attempts fail, and to 1 when one succeeds.
+    if (geometry->facemeshstatus.Size() != geometry->fmap.Extent())
+        throw std::runtime_error("kofem_unmeshed_faces: Netgen holds a mesh status for " +
+                                 std::to_string(geometry->facemeshstatus.Size()) +
+                                 " faces, but the geometry has " +
+                                 std::to_string(geometry->fmap.Extent()));
+    std::vector<int> failed;
+    for (int i = 0; i < geometry->fmap.Extent(); ++i)
+        if (geometry->facemeshstatus[i] == -1)
+            failed.push_back(i + 1);
+    return failed;
 }
 
 void kofem_delete_mesh(void* mesh) {

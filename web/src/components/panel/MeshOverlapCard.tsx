@@ -8,6 +8,9 @@ import {
   coneTipFaces,
   hingeRepairs,
   defaultRepairWidth,
+  narrowestUnmeshedWidth,
+  removableUnmeshedFaces,
+  unmeshedFaces,
 } from "../../lib/meshOverlaps";
 import type { RepairHingesOptions } from "../../wasm/pkg/kofem_wasm";
 import styles from "./Panel.module.css";
@@ -17,8 +20,10 @@ import styles from "./Panel.module.css";
 // undone, and the next mesh runs on the repaired file.
 export function MeshOverlapCard({
   maxElementSize,
+  minElementSize,
 }: {
   maxElementSize: string;
+  minElementSize: string;
 }) {
   const overlaps = useModelStore((s) => s.meshOverlaps);
   const isRunning = useModelStore((s) => s.isRunning);
@@ -26,6 +31,7 @@ export function MeshOverlapCard({
   const {
     repairHinges,
     splitConeTips,
+    removeFaces,
     isSplitting,
     splitError,
     setSplitError,
@@ -38,7 +44,12 @@ export function MeshOverlapCard({
   const hinges = hingeRepairs(overlaps);
   const coneFaces = coneTipFaces(overlaps);
   const cones = overlaps.filter((overlap) => overlap.kind === "cone").length;
-  const others = overlaps.length - hinges.length - cones;
+  const unmeshed = unmeshedFaces(overlaps).length;
+  const removable = removableUnmeshedFaces(overlaps, minElementSize);
+  const narrowest = narrowestUnmeshedWidth(overlaps);
+  const others = overlaps.filter(
+    (overlap) => overlap.kind === "surface",
+  ).length;
   const width = typedWidth ?? defaultRepairWidth(maxElementSize);
   const busy = isSplitting || isRunning || isMeshing;
 
@@ -122,6 +133,44 @@ export function MeshOverlapCard({
           </div>
         </>
       )}
+      {unmeshed > 0 && (
+        <>
+          <div className={styles.errorBanner} data-testid="unmeshed-warning">
+            <span>
+              The mesher couldn&apos;t mesh {unmeshed}{" "}
+              {unmeshed === 1 ? "face" : "faces"}, highlighted in the view
+              {narrowest !== null &&
+                ` (${unmeshed === 1 ? "" : "narrowest "}${formatWidth(narrowest)} mm wide)`}
+              .{" "}
+              {removable.length === unmeshed
+                ? `${unmeshed === 1 ? "It is" : "They are"} narrower than the minimum element size.`
+                : "Try a smaller element size."}
+            </span>
+          </div>
+          {removable.length > 0 && (
+            <>
+              <div className={styles.formBtns}>
+                <button
+                  className={styles.outlineBtn}
+                  data-testid="unmeshed-remove"
+                  disabled={busy}
+                  title="Extend the surrounding faces to close the gap."
+                  onClick={() => removeFaces(removable)}
+                >
+                  Remove{" "}
+                  {removable.length === 1
+                    ? "narrow face"
+                    : `${removable.length} narrow faces`}
+                </button>
+              </div>
+              <div className={styles.hint} data-testid="unmeshed-remove-note">
+                Changes the shape by about the face width, which can affect
+                results right next to it. If that detail matters, fix it in CAD.
+              </div>
+            </>
+          )}
+        </>
+      )}
       {others > 0 && (
         <div
           className={styles.errorBanner}
@@ -136,4 +185,9 @@ export function MeshOverlapCard({
       )}
     </div>
   );
+}
+
+// A face width for the message: enough digits to tell 0.001 mm from 0.01 mm.
+function formatWidth(width: number): string {
+  return String(Number(width.toPrecision(2)));
 }

@@ -160,6 +160,18 @@ export function useGeometryEdit() {
     return run("split_cone_tips", { faceIds });
   }
 
+  // Remove the faces a failed mesh could not mesh, closing the gap with the
+  // faces around them. Changes the shape slightly: the card says so.
+  function removeFaces(faceIds: number[]): Promise<boolean> {
+    if (!stepBytes) {
+      setSplitError(
+        "Cannot remove the faces: the geometry file is not available (a saved analysis carries none). Re-import the STEP file to edit its geometry.",
+      );
+      return Promise.resolve(false);
+    }
+    return run("remove_faces", { faceIds });
+  }
+
   // `bodySources` maps the edited model's bodies back to the old ones when the
   // edit knows it (a Boolean, a hinge repair), so their settings survive the
   // renumbering.
@@ -168,7 +180,8 @@ export function useGeometryEdit() {
       | "split_geometry"
       | "boolean_geometry"
       | "repair_hinges"
-      | "split_cone_tips",
+      | "split_cone_tips"
+      | "remove_faces",
     edit: Record<string, unknown>,
     bodySources?: (reply: Reply) => number[],
   ): Promise<boolean> {
@@ -222,6 +235,7 @@ export function useGeometryEdit() {
     combine,
     repairHinges,
     splitConeTips,
+    removeFaces,
     undo,
     isSplitting,
     splitError,

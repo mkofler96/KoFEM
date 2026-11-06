@@ -31,6 +31,7 @@
 #include <BRepAlgoAPI_BooleanOperation.hxx>
 #include <BRepAlgoAPI_Common.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
+#include <BRepAlgoAPI_Defeaturing.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepGProp.hxx>
 #include <GProp_GProps.hxx>
@@ -645,6 +646,79 @@ val split_cone_tips(const std::string& opts_json) {
         throw std::runtime_error(
             "Splitting the cone tips left invalid geometry. Simplify them in CAD and re-import.");
     (void)printf("[occt] split %d cone tip(s)\n", n_cones);
+    (void)fflush(stdout);
+
+    const std::vector<uint8_t> bytes = step_bytes(edited);
+    // As for a split: the edit lives in the returned file from here on.
+    free_geometry_cache();
+
+    val result = val::object();
+    result.set("bytes", uint8_array(bytes));
+    return result;
+}
+
+val remove_faces(const std::string& opts_json) {
+    const val opts = parse_json(opts_json);
+    const std::vector<int> face_ids = id_list(opts, "faceIds");
+    if (face_ids.empty())
+        throw std::runtime_error("remove_faces: no faces given");
+    const TopoDS_Shape& shape = cached_shape();
+    TopTools_IndexedMapOfShape faces;
+    TopExp::MapShapes(shape, TopAbs_FACE, faces);
+    require_unique_in_range("remove_faces", face_ids, faces.Extent(), "face");
+    TopTools_IndexedMapOfShape solids;
+    TopExp::MapShapes(shape, TopAbs_SOLID, solids);
+    if (solids.IsEmpty())
+        throw std::runtime_error(
+            "remove_faces: the model has no solid body — surface-only geometry has no "
+            "neighbouring faces to close the gap with");
+
+    // One body at a time, so the result keeps the input's solid order (body ids
+    // carry per-body materials) without relying on defeaturing history.
+    BRep_Builder builder;
+    TopoDS_Compound edited;
+    builder.MakeCompound(edited);
+    std::set<int> removed;
+    for (int i = 1; i <= solids.Extent(); ++i) {
+        const TopoDS_Shape& solid = solids(i);
+        TopTools_IndexedMapOfShape solid_faces;
+        TopExp::MapShapes(solid, TopAbs_FACE, solid_faces);
+        BRepAlgoAPI_Defeaturing defeaturing;
+        defeaturing.SetShape(solid);
+        defeaturing.SetRunParallel(false);
+        std::vector<int> in_solid;
+        for (const int id : face_ids)
+            if (solid_faces.Contains(faces(id))) {
+                defeaturing.AddFaceToRemove(faces(id));
+                removed.insert(id);
+                in_solid.push_back(id);
+            }
+        if (in_solid.empty()) {
+            builder.Add(edited, solid);
+            continue;
+        }
+        defeaturing.Build();
+        if (!defeaturing.IsDone() || defeaturing.HasErrors())
+            throw std::runtime_error(
+                "Removing the faces didn't work: the faces around them can't be extended to "
+                "close the gap. Fix them in CAD and re-import.");
+        // Defeaturing can report success and hand the solid back unchanged
+        // when it can't extend the neighbours: that is a failure, not an edit.
+        for (const int id : in_solid)
+            if (!defeaturing.IsDeleted(faces(id)))
+                throw std::runtime_error(
+                    "Face " + std::to_string(id) +
+                    " couldn't be removed: the faces around it can't be extended to close the "
+                    "gap. Fix it in CAD and re-import.");
+        for (TopExp_Explorer e(defeaturing.Shape(), TopAbs_SOLID); e.More(); e.Next())
+            builder.Add(edited, e.Current());
+    }
+    if (removed.size() != face_ids.size())
+        throw std::runtime_error("remove_faces: some faces belong to no solid body");
+    if (!BRepCheck_Analyzer(edited).IsValid())
+        throw std::runtime_error(
+            "Removing the faces left invalid geometry. Fix them in CAD and re-import.");
+    (void)printf("[occt] removed %d face(s)\n", (int)face_ids.size());
     (void)fflush(stdout);
 
     const std::vector<uint8_t> bytes = step_bytes(edited);

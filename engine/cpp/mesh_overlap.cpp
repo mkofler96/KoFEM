@@ -11,10 +11,14 @@
 #include <BRepAdaptor_Curve.hxx>
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepAlgoAPI_Section.hxx>
+#include <BRepGProp.hxx>
 #include <BRep_Tool.hxx>
+#include <GProp_GProps.hxx>
 #include <GeomAPI_ProjectPointOnSurf.hxx>
 #include <GeomAbs_CurveType.hxx>
 #include <GeomAbs_SurfaceType.hxx>
+#include <Poly_Triangulation.hxx>
+#include <TopLoc_Location.hxx>
 #include <GeomLProp_SLProps.hxx>
 #include <Geom_Surface.hxx>
 #include <TopExp.hxx>
@@ -294,4 +298,127 @@ val describe_mesh_overlaps(const std::vector<KofemSurfaceTriangle>& triangles,
         overlaps.set(count++, overlap);
     }
     return overlaps;
+}
+
+namespace {
+
+// Append a face's display tessellation (xyz of 3 corners per triangle).
+void append_display_triangles(const TopoDS_Face& face, int id, std::vector<double>& positions) {
+    TopLoc_Location location;
+    const Handle(Poly_Triangulation) triangulation = BRep_Tool::Triangulation(face, location);
+    if (triangulation.IsNull())
+        throw std::runtime_error("describe_unmeshed_faces: face " + std::to_string(id) +
+                                 " has no display tessellation to highlight");
+    positions.reserve(positions.size() + 9 * triangulation->NbTriangles());
+    for (int t = 1; t <= triangulation->NbTriangles(); ++t) {
+        std::array<int, 3> nodes{};
+        triangulation->Triangle(t).Get(nodes[0], nodes[1], nodes[2]);
+        for (const int node : nodes) {
+            const gp_Pnt point = triangulation->Node(node).Transformed(location.Transformation());
+            positions.insert(positions.end(), {point.X(), point.Y(), point.Z()});
+        }
+    }
+}
+
+bool share_an_edge(const TopoDS_Face& a, const TopoDS_Face& b) {
+    for (TopExp_Explorer ea(a, TopAbs_EDGE); ea.More(); ea.Next())
+        for (TopExp_Explorer eb(b, TopAbs_EDGE); eb.More(); eb.Next())
+            if (ea.Current().IsSame(eb.Current()))
+                return true;
+    return false;
+}
+
+}  // namespace
+
+double face_width(const TopoDS_Face& face) {
+    GProp_GProps area;
+    BRepGProp::SurfaceProperties(face, area);
+    GProp_GProps perimeter;
+    BRepGProp::LinearProperties(face, perimeter);
+    if (perimeter.Mass() <= 0.0)
+        throw std::runtime_error("face_width: the face has no boundary length");
+    return 2.0 * area.Mass() / perimeter.Mass();
+}
+
+val describe_unmeshed_faces(const std::vector<int>& face_ids, const TopoDS_Shape& shape) {
+    TopTools_IndexedMapOfShape faces;
+    TopExp::MapShapes(shape, TopAbs_FACE, faces);
+    TopTools_IndexedMapOfShape solids;
+    TopExp::MapShapes(shape, TopAbs_SOLID, solids);
+    TopTools_IndexedDataMapOfShapeListOfShape face_solids;
+    TopExp::MapShapesAndAncestors(shape, TopAbs_FACE, TopAbs_SOLID, face_solids);
+    for (const int id : face_ids)
+        if (id < 1 || id > faces.Extent())
+            throw std::runtime_error("describe_unmeshed_faces: face " + std::to_string(id) +
+                                     ", but the shape has " + std::to_string(faces.Extent()) +
+                                     " faces");
+    auto face_of = [&](int id) { return TopoDS::Face(faces(id)); };
+    auto body_of = [&](int id) {
+        const TopTools_ListOfShape& owners = face_solids.FindFromKey(faces(id));
+        return owners.IsEmpty() ? 0 : solids.FindIndex(owners.First());
+    };
+
+    val described = val::array();
+    int count = 0;
+    std::set<int> reported;
+
+    // A hinge makes Netgen give up on the two faces touching along it, and often
+    // on faces next to them: report those as the hinge, so it can be repaired
+    // like one the volume fill's overlap check found.
+    if (face_ids.size() <= MAX_REGION_FACES)
+        for (size_t i = 0; i < face_ids.size(); ++i)
+            for (size_t j = i + 1; j < face_ids.size(); ++j) {
+                const int a = face_ids[i];
+                const int b = face_ids[j];
+                if (reported.count(a) > 0 || reported.count(b) > 0)
+                    continue;
+                const std::optional<Hinge> hinge = hinge_between(face_of(a), face_of(b));
+                if (!hinge)
+                    continue;
+                std::vector<int> region{a, b};
+                for (const int other : face_ids)
+                    if (other != a && other != b && reported.count(other) == 0 &&
+                        (share_an_edge(face_of(other), face_of(a)) ||
+                         share_an_edge(face_of(other), face_of(b))))
+                        region.push_back(other);
+                std::sort(region.begin(), region.end());
+                std::vector<double> positions;
+                for (const int id : region) {
+                    append_display_triangles(face_of(id), id, positions);
+                    reported.insert(id);
+                }
+                val line = val::object();
+                line.set("start", point_array(hinge->start.XYZ()));
+                line.set("end", point_array(hinge->end.XYZ()));
+                line.set("normal", point_array(hinge->normal.XYZ()));
+                line.set("length", hinge->start.Distance(hinge->end));
+                val entry = val::object();
+                entry.set("kind", "hinge");
+                entry.set("faceIds", int32_array(region));
+                entry.set("bodyId", body_of(a));
+                entry.set("positions", float64_array(positions));
+                entry.set("hinge", line);
+                described.set(count++, entry);
+            }
+
+    for (const int id : face_ids) {
+        if (reported.count(id) > 0)
+            continue;
+        const TopoDS_Face face = face_of(id);
+        std::vector<double> positions;
+        append_display_triangles(face, id, positions);
+        // A closed cone tip is a face Netgen fails on at any size, and one the
+        // cone split repairs: report it as a cone, exactly like the overlaps
+        // it caused before this check stopped the volume fill.
+        val entry = val::object();
+        entry.set("kind", is_closed_cone_tip(face) ? "cone" : "unmeshed");
+        // The faces Netgen gives up on are mostly slivers far narrower than an
+        // element, and the width is what tells the user so.
+        entry.set("width", face_width(face));
+        entry.set("faceIds", int32_array(std::vector<int>{id}));
+        entry.set("bodyId", body_of(id));
+        entry.set("positions", float64_array(positions));
+        described.set(count++, entry);
+    }
+    return described;
 }
