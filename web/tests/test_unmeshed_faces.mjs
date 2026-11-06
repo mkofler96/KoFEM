@@ -21,10 +21,13 @@ const wasmPkg = join(__dirname, "../src/wasm/pkg");
 const { default: createModule } = await import(
   join(wasmPkg, "kofem_wasm_emcc.js")
 );
+// The engine's log is kept quiet and shown only if a check fails, where
+// Netgen's "GIVING UP" / "NOT ALL FACES HAVE BEEN MESHED" lines explain it.
+const engineLog = [];
 const engine = await createModule({
   wasmBinary: readFileSync(join(wasmPkg, "kofem_wasm_emcc.wasm")).buffer,
-  print: () => {},
-  printErr: () => {},
+  print: (line) => engineLog.push(line),
+  printErr: (line) => engineLog.push(line),
 });
 
 let failed = 0;
@@ -156,6 +159,7 @@ try {
 check("an unknown face is refused", refused !== "", refused);
 
 if (failed > 0) {
+  console.error(engineLog.join("\n"));
   console.error(`${failed} check(s) failed`);
   process.exit(1);
 }
