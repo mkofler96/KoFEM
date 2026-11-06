@@ -92,7 +92,7 @@ export default {
       rigid-body stability, or claiming that a computed solution is accurate.
       Singular loads, nonsmooth fields and interfaces require their appropriate
       weak interpretation. A full elastic problem and its boundary choices
-      are developed in the later solid-mechanics chapter.</p>
+      are developed in <a href="/theory/solid-mechanics/equilibrium-and-weak-form/">Equilibrium and weak form</a>.</p>
 
     <h2 id="references">Sources and further reading</h2>
     <ol class="refs">

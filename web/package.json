@@ -37,7 +37,7 @@
     "test:mesh-report": "playwright test mesh-report.spec.ts",
     "test:showcase": "playwright test showcase.spec.ts",
     "theory:generate": "bun theory/generate.mjs",
-    "test:theory": "bun theory/generate.mjs --check && bun theory/numerical-methods/linear-solve-example.mjs && bun theory/results/stress-example.mjs && bun ../examples/validation/axial-bar-study.mjs"
+    "test:theory": "bun theory/generate.mjs --check && bun theory/solid-mechanics/elasticity-example.mjs && bun theory/numerical-methods/linear-solve-example.mjs && bun theory/results/stress-example.mjs && bun ../examples/validation/axial-bar-study.mjs"
   },
   "packageManager": "bun",
   "dependencies": {

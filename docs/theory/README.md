@@ -13,7 +13,8 @@ Public articles live under `/theory/`, with source modules in `web/theory/`.
 The published articles are `foundations/model-and-units`, the separate
 `foundations/consistent-units` comparison, `notation`, and four focused operator
 articles: gradients/divergence, tensor products, integration by parts, and
-reference-element mappings, and the numerical-methods articles
+reference-element mappings, the solid-mechanics articles `linear-elasticity`
+and `equilibrium-and-weak-form`, the numerical-methods articles
 `elements-and-quadrature`, `assembly`, `loads-and-constraints` and `linear-solve`,
 and the results articles `displacement-and-stress` and
 `interpretation-and-convergence`. The `reading-a-study` introduction connects
@@ -25,9 +26,8 @@ implementation sections are included when relevant. Remaining topics stay marked
 as planned until reviewed.
 Run `cd web && bun run theory:generate` after editing, and commit generated
 HTML and sitemap. `bun run test:theory` checks output, content-map alignment
-and the worked linear-solve and stress calculations, then executes the four
-axial-bar WASM solves. The two full solid-mechanics chapters remain planned;
-the connected path currently uses the published integration-by-parts derivation.
+and the worked elasticity, linear-solve and stress calculations, then executes the four
+axial-bar WASM solves.
 
 Articles use the existing examples' native MathML renderer (`tex` / `texBlock`)
 and self-hosted math font. Its supported TeX subset is documented in
@@ -44,8 +44,9 @@ Write links to a planned topic with its permanent URL. The generator points them
 at the topic's planned overview entry until the article is published, and fails
 on links to unknown `/theory/` pages. Numerical-methods articles pin their
 source links in `web/theory/numerical-methods/sources.mjs`; update its revision
-and line numbers together with the articles' review dates. Results articles
-use their own snapshot in `web/theory/results/sources.mjs`.
+and line numbers together with the articles' review dates. Results and
+solid-mechanics articles use their own snapshots in
+`web/theory/results/sources.mjs` and `web/theory/solid-mechanics/sources.mjs`.
 
 These files version with the code; Linear remains the source of truth for
 issue planning and architecture decision records (ADRs).
@@ -55,14 +56,14 @@ issue planning and architecture decision records (ADRs).
 Use the same PR for an implementation change and the descriptions of its final
 behavior. Review this mapping before deciding which articles to update:
 
-| Changed behavior                                              | Review these articles and evidence                                                                                 |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Formulation, strain/material law, geometry or unit convention | Model/units, notation, relevant operators, elasticity chapters when published, and the bar’s reference assumptions |
-| Element family/order, quadrature or assembly                  | Reference mapping, elements/quadrature, assembly, affected mesh/order studies and DOF counts                       |
-| Loads, constraints or their defaults                          | Loads/constraints, reading-a-study, bar setup, source references and numerical bands                               |
-| Solver method, tolerance, continuation or failure behavior    | Linear solve, benchmark solver settings, live numerical checks and reviewed engine identity                        |
-| Result arrays, sampling, field names, averaging or display    | Displacement/stress, interpretation/convergence, bar measurement, app readout and example reproduction             |
-| A measured number or numerical default                        | Investigate the difference, rerun the affected case/studies, explain the trend and review all dependent pages      |
+| Changed behavior                                              | Review these articles and evidence                                                                                       |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Formulation, strain/material law, geometry or unit convention | Model/units, notation, relevant operators, linear elasticity, equilibrium/weak form, and the bar’s reference assumptions |
+| Element family/order, quadrature or assembly                  | Reference mapping, elements/quadrature, assembly, affected mesh/order studies and DOF counts                             |
+| Loads, constraints or their defaults                          | Loads/constraints, reading-a-study, bar setup, source references and numerical bands                                     |
+| Solver method, tolerance, continuation or failure behavior    | Linear solve, benchmark solver settings, live numerical checks and reviewed engine identity                              |
+| Result arrays, sampling, field names, averaging or display    | Displacement/stress, interpretation/convergence, bar measurement, app readout and example reproduction                   |
+| A measured number or numerical default                        | Investigate the difference, rerun the affected case/studies, explain the trend and review all dependent pages            |
 
 A source edit does not itself verify a numerical claim. Run the affected case
 through the production engine and preserve the command, engine ID and exact
