@@ -62,6 +62,7 @@
   <url><loc>https://kofem.org/theory/</loc></url>
   <url><loc>https://kofem.org/theory/foundations/model-and-units/</loc></url>
   <url><loc>https://kofem.org/theory/foundations/consistent-units/</loc></url>
+  <url><loc>https://kofem.org/theory/foundations/reading-a-study/</loc></url>
   <url><loc>https://kofem.org/theory/notation/</loc></url>
   <url><loc>https://kofem.org/theory/operators/gradient-divergence/</loc></url>
   <url><loc>https://kofem.org/theory/operators/tensor-products/</loc></url>
@@ -73,5 +74,7 @@
   <url><loc>https://kofem.org/theory/numerical-methods/linear-solve/</loc></url>
   <url><loc>https://kofem.org/theory/results/displacement-and-stress/</loc></url>
   <url><loc>https://kofem.org/theory/results/interpretation-and-convergence/</loc></url>
+  <url><loc>https://kofem.org/theory/verification/axial-bar/</loc></url>
+  <url><loc>https://kofem.org/theory/verification/strategy/</loc></url>
   <!-- theory:end -->
 </urlset>

@@ -16,13 +16,16 @@ articles: gradients/divergence, tensor products, integration by parts, and
 reference-element mappings, and the numerical-methods articles
 `elements-and-quadrature`, `assembly`, `loads-and-constraints` and `linear-solve`,
 and the results articles `displacement-and-stress` and
-`interpretation-and-convergence`. General FEM introductions can use standalone
+`interpretation-and-convergence`. The `reading-a-study` introduction connects
+these topics to `verification/axial-bar` and `verification/strategy`. General FEM introductions can use standalone
 physical models; KoFEM examples and
 implementation sections are included when relevant. Remaining topics stay marked
 as planned until reviewed.
 Run `cd web && bun run theory:generate` after editing, and commit generated
 HTML and sitemap. `bun run test:theory` checks output, content-map alignment
-and the worked linear-solve and stress calculations.
+and the worked linear-solve and stress calculations, then executes the four
+axial-bar WASM solves. The two full solid-mechanics chapters remain planned;
+the connected path currently uses the published integration-by-parts derivation.
 
 Articles use the existing examples' native MathML renderer (`tex` / `texBlock`)
 and self-hosted math font. Its supported TeX subset is documented in
@@ -44,3 +47,80 @@ use their own snapshot in `web/theory/results/sources.mjs`.
 
 These files version with the code; Linear remains the source of truth for
 issue planning and architecture decision records (ADRs).
+
+## Updating behavior, pages and evidence
+
+Use the same PR for an implementation change and the descriptions of its final
+behavior. Review this mapping before deciding which articles to update:
+
+| Changed behavior                                              | Review these articles and evidence                                                                                 |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Formulation, strain/material law, geometry or unit convention | Model/units, notation, relevant operators, elasticity chapters when published, and the bar’s reference assumptions |
+| Element family/order, quadrature or assembly                  | Reference mapping, elements/quadrature, assembly, affected mesh/order studies and DOF counts                       |
+| Loads, constraints or their defaults                          | Loads/constraints, reading-a-study, bar setup, source references and numerical bands                               |
+| Solver method, tolerance, continuation or failure behavior    | Linear solve, benchmark solver settings, live numerical checks and reviewed engine identity                        |
+| Result arrays, sampling, field names, averaging or display    | Displacement/stress, interpretation/convergence, bar measurement, app readout and example reproduction             |
+| A measured number or numerical default                        | Investigate the difference, rerun the affected case/studies, explain the trend and review all dependent pages      |
+
+A source edit does not itself verify a numerical claim. Run the affected case
+through the production engine and preserve the command, engine ID and exact
+source revision in the evidence. Do not widen a band just to make a changed
+number pass. Tolerances belong to the measured quantity and reference model;
+the bar’s 2% extension band accommodates a fully clamped 3D end absent from the
+1D formula. Its 0.5% stress band applies to every unsmoothed centre sample in
+the fixed 400–600 mm region. The Q2 hex row is diagnostic because the existing
+constraint extension leaves face-centre DOFs free; it is not evidence for order
+convergence with the same clamp.
+
+From the repository root, after fetching/building the matching engine:
+
+```sh
+bash scripts/fetch-wasm-engine.sh
+bun examples/validation/run.mjs --case axial-bar
+bun examples/validation/axial-bar-study.mjs
+```
+
+The study checks the engine source ID, all result lengths and finiteness, the
+reference bands, and the committed numerical snapshot. It reuses the public
+case builder, app-model adapter, mesh statistics and real WASM loader. To update
+its snapshot, first commit the reviewed code/measurement changes so the recorded
+revision contains the code that ran. Then run:
+
+```sh
+bun examples/validation/axial-bar-study.mjs --report
+cd web
+bun run theory:generate
+bun run test:theory
+bun run typecheck && bun run lint && bun run format:check
+bun x playwright test tests/theory-page.spec.ts
+```
+
+`--report` records that checkout’s HEAD, matching engine, timestamp, inputs,
+settings, full-precision results and command in
+`web/public/theory/axial-bar.json`. The Theory article renders that record;
+never type measured numbers into article prose. A later documentation-only
+commit may contain the generated snapshot. Compare published displacement
+against `web/public/examples/results.json` as well; the public case and the
+20 × 4 × 4 order-1 row must agree. The existing validation runner enforces the
+example record and saved analysis against a fresh solve.
+
+For changes to example inputs, textbook text or measured behavior, edit the
+case/generator sources and run `cd web && bun run validate:report`; review and
+commit the affected HTML, records and saved analyses. Never hand-edit generated
+pages or VTU results. Existing other benchmark studies may be linked without
+rerunning them, but name them as existing evidence and retain their own engine
+record.
+
+The browser Theory suite checks every published page’s local main-content
+links and fragments, metadata, unique IDs, equations and reading order. It also
+checks mobile widths, native MathML, keyboard navigation, theme and canonical
+redirects. Extend its page lists when publishing an article. Keep symbol/operator
+anchors consistent, introduce necessary concepts in the explanation, omit
+prerequisite labels and visible heading permalinks, and preserve published IDs.
+Check pinned source links against the recorded revision, including line numbers.
+
+In the PR and the issue’s single evidence comment, distinguish executed tests,
+source review and reused evidence. Include the failing/passing reading-path
+check, site build, selected numerical output, screenshots at desktop/mobile
+widths, exact tested revision and any unresolved limitation. The public guide
+explains the numerical limitation; Linear keeps its follow-up plan.

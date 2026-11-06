@@ -24,6 +24,29 @@ const DIV = [20, 4, 4]; // elements along x, y, z
 
 const mean = (nodes, f) => nodes.reduce((s, v) => s + f(v), 0) / nodes.length;
 
+// Shared by the public case and the Theory Guide's mesh/order comparison.
+export function axialBarModel(title, divisions = DIV, order = 1) {
+  const m = boxHexMesh(L, W, H, ...divisions);
+  return {
+    title,
+    mesh: { vertices: m.vertices, hexahedra: m.hexahedra },
+    material: STEEL,
+    order,
+    support: {
+      nodes: nodesWhere(m.vertices, (x) => x <= 1e-9),
+      label: "Fixed end x = 0",
+    },
+    load: {
+      kind: "force",
+      axis: 0,
+      value: P,
+      nodes: nodesWhere(m.vertices, (x) => x >= L - 1e-9),
+      label: "Axial load (+X)",
+    },
+    resultType: "Displacement (magnitude)",
+  };
+}
+
 export default {
   id: "axial-bar",
   name: "Axial bar in tension",
@@ -52,25 +75,7 @@ export default {
     grid: DIV,
   },
   model() {
-    const m = boxHexMesh(L, W, H, ...DIV);
-    return {
-      title: this.name,
-      mesh: { vertices: m.vertices, hexahedra: m.hexahedra },
-      material: STEEL,
-      order: 1,
-      support: {
-        nodes: nodesWhere(m.vertices, (x) => x <= 1e-9),
-        label: "Fixed end x = 0",
-      },
-      load: {
-        kind: "force",
-        axis: 0,
-        value: P,
-        nodes: nodesWhere(m.vertices, (x) => x >= L - 1e-9),
-        label: "Axial load (+X)",
-      },
-      resultType: "Displacement (magnitude)",
-    };
+    return axialBarModel(this.name);
   },
   measure(model, result) {
     return mean(model.load.nodes, (v) => result.displacements[3 * v]);

@@ -93,5 +93,7 @@ Link an established Linear ADR when one exists; do not create a parallel ADR.
 - [ ] Product-specific claims trace to production sources at the recorded revision.
 - [ ] Limitations and practical consequences are specific.
 - [ ] Any worked example is reproducible and its reference is cited.
+- [ ] Numerical claims record executed commands, exact source revision, engine identity, quantity/location, units and justified tolerances.
+- [ ] Changed behavior updates affected pages and generated evidence using the [maintenance workflow](README.md#updating-behavior-pages-and-evidence).
 - [ ] Any decision section links the owning Linear ADR.
 - [ ] Solid, shell, coupled, and optimization scope is not overstated.
