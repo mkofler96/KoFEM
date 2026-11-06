@@ -78,5 +78,8 @@
   <url><loc>https://kofem.org/theory/verification/strategy/</loc></url>
   <url><loc>https://kofem.org/theory/shells/formulation/</loc></url>
   <url><loc>https://kofem.org/theory/shells/solid-coupling/</loc></url>
+  <url><loc>https://kofem.org/theory/optimization/simp/</loc></url>
+  <url><loc>https://kofem.org/theory/optimization/constraints-and-convergence/</loc></url>
+  <url><loc>https://kofem.org/theory/optimization/interpreting-designs/</loc></url>
   <!-- theory:end -->
 </urlset>

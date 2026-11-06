@@ -29,6 +29,7 @@ export default {
     ["materials-and-loads", "Materials and loads"],
     ["discrete-quantities", "Finite element quantities"],
     ["shell-quantities", "Shell rotations and resultants"],
+    ["optimization-quantities", "Topology optimization quantities"],
     ["operators", "Operator reference"],
     ["components-and-signs", "Components, shear and signs"],
     ["kofem-units", "KoFEM units and a dimensional check"],
@@ -154,7 +155,7 @@ export default {
       [
         "density",
         tex("ρ"),
-        'Mass density; scalar mass per volume. With seconds as the time unit, N–mm uses tonnes. This is distinct from dimensionless relative density in topology optimization. See <a href="#kofem-units">current app behaviour</a>.',
+        'Mass density; scalar mass per volume. With seconds as the time unit, N–mm uses tonnes. This is distinct from the dimensionless <a href="#design-density">design density</a> in topology optimization. See <a href="#kofem-units">current app behaviour</a>.',
         "tonne/mm³",
       ],
       [
@@ -274,6 +275,55 @@ export default {
       translation–rotation and rotation–rotation blocks have units N/mm, N
       and N·mm respectively. See
       <a href="/theory/shells/solid-coupling/#reduction">coupling virtual work</a>.</p>
+
+    <h2 id="optimization-quantities">Topology optimization quantities</h2>
+    <p>These symbols belong to <a href="/theory/optimization/simp/">SIMP topology optimization</a>.
+      Subscript ${tex("e")} is an element index. The design density is a
+      dimensionless fraction and is never written without its element subscript.</p>
+    ${table("Topology optimization quantities", [
+      [
+        "design-density",
+        tex("ρ_e"),
+        `Design (relative) density of element ${tex("e")}; scalar between 0 (void) and 1 (solid). It scales stiffness, not mass, and is distinct from the <a href="#density">mass density</a>. Stress-constrained runs distinguish design variables from the filtered density that is analysed. <a href="/theory/optimization/simp/#design-variables">Design variables</a>.`,
+        "1",
+      ],
+      [
+        "simp-penalty",
+        tex("p"),
+        `SIMP penalty exponent in ${tex("E(ρ_e)=E_{\\mathrm{min}}+ρ_e^{p}(E_0-E_{\\mathrm{min}})")}; default 3. Not a pressure or a polynomial order. <a href="/theory/optimization/simp/#interpolation">Penalized stiffness</a>.`,
+        "1",
+      ],
+      [
+        "stiffness-floor",
+        tex("E_{\\mathrm{min}}"),
+        `Stiffness of a void element; KoFEM fixes ${tex("E_{\\mathrm{min}}/E_0=10^{-9}")}, where ${tex("E_0")} is the full-material <a href="#young-modulus">Young’s modulus</a>. It keeps the global stiffness positive definite.`,
+        "MPa",
+      ],
+      [
+        "compliance",
+        tex("c"),
+        `Compliance ${tex("c=\\mathbf{f}^{\\mathrm{T}}\\mathbf{d}")}: work of the <a href="#load-vector">load vector</a> on the <a href="#discrete-displacement">displacement</a>, twice the strain energy. Lower is stiffer. <a href="/theory/optimization/simp/#problems">Objectives</a>.`,
+        "N·mm",
+      ],
+      [
+        "element-strain-energy",
+        tex("q_e"),
+        `Full-material element energy measure ${tex("q_e=\\mathbf{d}_e^{\\mathrm{T}}\\mathbf{K}_e^0\\mathbf{d}_e")}, using the element’s displacement coefficients. Compliance sensitivity is ${tex("-s'(ρ_e)q_e")}. <a href="/theory/optimization/simp/#sensitivities">Sensitivities</a>.`,
+        "N·mm",
+      ],
+      [
+        "volume-fraction",
+        tex("v_{\\mathrm{f}}"),
+        `Target material volume ${tex("\\sum_e ρ_eV_e")} as a fraction of the meshed design-space volume ${tex("\\sum_e V_e")}. Not the volume shown after thresholding.`,
+        "1",
+      ],
+      [
+        "filter-radius",
+        tex("r_{\\mathrm{min}}"),
+        `Filter radius: centroids closer than it share sensitivity (or density) information with linear weights. An absolute model length in the app. <a href="/theory/optimization/constraints-and-convergence/#filtering">Filtering and mesh dependence</a>.`,
+        "mm",
+      ],
+    ])}
 
     <h2 id="operators">Operator reference</h2>
     <p>The definitions below fix the convention used by this guide. Detailed

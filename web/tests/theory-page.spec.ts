@@ -31,6 +31,11 @@ const SHELL_PAGES = [
   "/theory/shells/formulation/",
   "/theory/shells/solid-coupling/",
 ];
+const OPTIMIZATION_PAGES = [
+  "/theory/optimization/simp/",
+  "/theory/optimization/constraints-and-convergence/",
+  "/theory/optimization/interpreting-designs/",
+];
 const PAGES = [
   "/theory/",
   ARTICLE,
@@ -42,6 +47,7 @@ const PAGES = [
   ...RESULT_PAGES,
   ...VERIFICATION_PAGES,
   ...SHELL_PAGES,
+  ...OPTIMIZATION_PAGES,
 ];
 
 test.describe("static theory content", () => {
@@ -253,6 +259,7 @@ for (const width of [320, 390, 1440]) {
       READING_PAGE,
       ...VERIFICATION_PAGES,
       ...SHELL_PAGES,
+      ...OPTIMIZATION_PAGES,
     ]) {
       await page.goto(path);
       await page.evaluate(() => document.fonts.ready);
@@ -311,6 +318,14 @@ test("shared symbols and operators have unique, usable deep links", async ({
     "shell-curvature",
     "shell-force-resultant",
     "shell-moment-resultant",
+    "optimization-quantities",
+    "design-density",
+    "simp-penalty",
+    "stiffness-floor",
+    "compliance",
+    "element-strain-energy",
+    "volume-fraction",
+    "filter-radius",
   ];
   for (const anchor of anchors) {
     await expect(page.locator(`#${anchor}`), anchor).toHaveCount(1);
@@ -647,4 +662,45 @@ test("verified reading path reaches reproducible displacement and stress evidenc
   await expect(
     page.locator('main a[href="/app/?example=axial-bar"]'),
   ).not.toHaveCount(0);
+});
+
+test("optimization chapter links theory, worked numbers, benchmarks and limits", async ({
+  page,
+}) => {
+  await page.goto("/theory/optimization/simp/");
+  const simp = page.locator("main");
+  // Two-bar worked calculation rendered from the checked example module.
+  await expect(simp.locator("#worked-example").locator("..")).toContainText(
+    "−120",
+  );
+  for (const value of ["250", "0.4", "40", "10"])
+    await expect(simp.locator("table").first()).toContainText(value);
+  await expect(
+    simp.locator('a[href="/theory/notation/#design-density"]'),
+  ).not.toHaveCount(0);
+  await expect(simp).toContainText("KOF-238");
+  await expect(
+    simp.locator('a[href*="adr-0002-simp-topology-optimization"]'),
+  ).not.toHaveCount(0);
+
+  await page.goto("/theory/optimization/constraints-and-convergence/");
+  const loop = page.locator("main");
+  await expect(
+    page.getByRole("img", { name: /MBB half-beam densities/ }),
+  ).toBeVisible();
+  await expect(
+    loop.locator('a[href="/examples/mbb-beam-topopt/"]'),
+  ).toHaveCount(1);
+  await expect(loop.locator('a[href="/theory/optimization.json"]')).toHaveCount(
+    1,
+  );
+  await expect(loop).toContainText("KOF-251");
+  await expect(loop).toContainText("global optimum");
+
+  await page.goto("/theory/optimization/interpreting-designs/");
+  const interpret = page.locator("main");
+  await expect(interpret.locator("#reanalysis")).toBeVisible();
+  for (const issue of ["KOF-238", "KOF-251"])
+    await expect(interpret).toContainText(issue);
+  await expect(page.locator('.pager a[rel="next"]')).toHaveCount(0);
 });

@@ -19,14 +19,16 @@ and the results articles `displacement-and-stress` and
 `interpretation-and-convergence`. The `reading-a-study` introduction connects
 these topics to `verification/axial-bar` and `verification/strategy`. The shell
 extension adds `shells/formulation` and `shells/solid-coupling`, with native plate
-and planar transition evidence. General FEM introductions can use standalone
+and planar transition evidence. The optimization chapter adds `optimization/simp`,
+`optimization/constraints-and-convergence` and `optimization/interpreting-designs`,
+with a checked two-bar calculation and recorded WASM benchmark evidence. General FEM introductions can use standalone
 physical models; KoFEM examples and
 implementation sections are included when relevant. Remaining topics stay marked
 as planned until reviewed.
 Run `cd web && bun run theory:generate` after editing, and commit generated
 HTML and sitemap. `bun run test:theory` checks output, content-map alignment
-and the worked linear-solve and stress calculations, then executes the four
-axial-bar WASM solves. The two full solid-mechanics chapters remain planned;
+and the worked linear-solve, stress and SIMP calculations, then executes the four
+axial-bar WASM solves and the recorded topology-optimization benchmarks. The two full solid-mechanics chapters remain planned;
 the connected path currently uses the published integration-by-parts derivation.
 
 Articles use the existing examples' native MathML renderer (`tex` / `texBlock`)
@@ -155,3 +157,28 @@ Same-mesh planar transition agreement does not verify arbitrary junction-stress
 accuracy or general distributing coupling. The full shell-core suite and the
 app footprint check remain part of existing CI; the native record comparison
 above is an additional contributor check.
+
+## Topology optimization evidence
+
+Optimization articles pin source links to the revision in
+`web/public/theory/optimization.json`. The record comes from the existing MBB
+and cantilever mesh-independence benchmarks in `examples/validation/topopt/`,
+run through the real WASM `optimize_topology` entry. From `web/`:
+
+```sh
+bun theory/optimization/simp-example.mjs
+bun theory/optimization/capture-evidence.mjs
+```
+
+The first checks the two-bar worked calculation and its finite-difference
+sensitivities. The second re-runs both benchmarks, asserts their own checks and
+compares every recorded number with the fresh run; it fails if the engine
+identity changed. For an intentional update with committed engine and benchmark
+sources, use `--report`, regenerate the Theory pages and review the record.
+
+Review all three optimization articles when changing the SIMP interpolation,
+objectives, sensitivities, filter, MMA settings, stopping rules, stress
+constraint, supported domains, app defaults, density display or export. The
+articles describe shipped behaviour; ADR-0002 in Linear remains the
+architecture record. Keep open work (for example KOF-238 and KOF-251) out of
+shipped-behaviour statements until it merges.

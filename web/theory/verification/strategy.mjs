@@ -62,10 +62,14 @@ export default {
         theory. The <a href="/theory/shells/solid-coupling/#verification">planar
         transition study</a> separately compares a retained solid root with a
         same-mesh all-solid model. Neither establishes arbitrary junction-stress accuracy.</li>
+      <li><a href="/theory/optimization/constraints-and-convergence/#benchmarks">MBB beam and cantilever optimizations</a>:
+        published truss layout and agreement across one factor-2 refinement
+        with a fixed filter radius. Neither establishes physical adequacy of
+        an optimized part.</li>
     </ul>
     <p>These links reuse the existing studies; they do not claim new runs of
       those refinement sequences. See each example’s engine record. Claims
-      about shells, coupling, optimization, singular stresses or physical
+      beyond these cases about shells, coupling, optimization, singular stresses or physical
       strength need suitable evidence of their own.</p>
 
     <h2 id="record">Keep a reproducible record</h2>
