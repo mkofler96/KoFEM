@@ -56,11 +56,16 @@ export const topics = [
   ["Verification", "verification/strategy", "Verification strategy"],
   ["Shells", "shells/formulation", "Shell formulation"],
   ["Shells", "shells/solid-coupling", "Solid–shell coupling"],
-  ["Optimization (later)", "optimization/simp", "SIMP"],
+  ["Optimization", "optimization/simp", "SIMP"],
   [
-    "Optimization (later)",
+    "Optimization",
     "optimization/constraints-and-convergence",
     "Constraints and convergence",
+  ],
+  [
+    "Optimization",
+    "optimization/interpreting-designs",
+    "Interpreting optimized designs",
   ],
 ].map(([section, slug, title]) => ({ section, slug, title }));
 
