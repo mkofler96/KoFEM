@@ -18,6 +18,10 @@ const NUMERICAL_PAGES = [
   "/theory/numerical-methods/loads-and-constraints/",
   "/theory/numerical-methods/linear-solve/",
 ];
+const RESULT_PAGES = [
+  "/theory/results/displacement-and-stress/",
+  "/theory/results/interpretation-and-convergence/",
+];
 const PAGES = [
   "/theory/",
   ARTICLE,
@@ -25,6 +29,7 @@ const PAGES = [
   NOTATION_PAGE,
   ...OPERATOR_PAGES,
   ...NUMERICAL_PAGES,
+  ...RESULT_PAGES,
 ];
 
 test.describe("static theory content", () => {
@@ -205,7 +210,11 @@ for (const width of [320, 390, 1440]) {
       ),
     ).toBe(true);
     await expect(page.locator("main math").first()).toBeVisible();
-    for (const path of [...OPERATOR_PAGES, ...NUMERICAL_PAGES]) {
+    for (const path of [
+      ...OPERATOR_PAGES,
+      ...NUMERICAL_PAGES,
+      ...RESULT_PAGES,
+    ]) {
       await page.goto(path);
       await page.evaluate(() => document.fonts.ready);
       expect(
@@ -466,12 +475,53 @@ test("linear solve links the residual calculation, settings and failure evidence
   );
   await expect(page.locator('.pager a[rel="next"]')).toHaveAttribute(
     "href",
-    "/theory/#results-displacement-and-stress",
+    RESULT_PAGES[0],
   );
   await page.goto(loads);
   await expect(page.locator('.pager a[rel="next"]')).toHaveAttribute(
     "href",
     solve,
+  );
+});
+
+test("stress recovery separates solver samples from displayed averages", async ({
+  page,
+}) => {
+  const [stress, interpretation] = RESULT_PAGES;
+  await page.goto(stress);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Displacement and stress",
+  );
+  const tensor = page.getByRole("region", {
+    name: /^Recovered stress tensor in MPa/,
+  });
+  await expect(tensor.locator("mtr").first().locator("mtd")).toHaveText([
+    "120",
+    "30",
+    "0",
+  ]);
+  await expect(page.locator("#worked-example").locator("..")).toContainText(
+    "116.19",
+  );
+  await expect(page.locator("main")).toContainText("137.5 MPa");
+  await expect(
+    page.locator('main a[href*="solve_mfem.cpp"]').first(),
+  ).toHaveAttribute("href", /blob\/[a-f0-9]{40}\//);
+  await expect(
+    page.locator('main a[href="/examples/plate-with-hole/"]'),
+  ).toHaveCount(1);
+  await expect(page.locator('.pager a[rel="next"]')).toHaveAttribute(
+    "href",
+    interpretation,
+  );
+  await page.goto(interpretation);
+  await expect(page.locator("#singularities")).toHaveText(
+    "Concentration or singularity?",
+  );
+  await expect(page.locator("main")).toContainText("same physical location");
+  await expect(page.locator('.pager a[rel="prev"]')).toHaveAttribute(
+    "href",
+    stress,
   );
 });
 
