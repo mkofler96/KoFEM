@@ -17,6 +17,10 @@ const OPERATOR_PAGES = [
   "/theory/operators/integration-by-parts/",
   "/theory/operators/reference-mapping/",
 ];
+const SOLID_PAGES = [
+  "/theory/solid-mechanics/linear-elasticity/",
+  "/theory/solid-mechanics/equilibrium-and-weak-form/",
+];
 const NUMERICAL_PAGES = [
   "/theory/numerical-methods/elements-and-quadrature/",
   "/theory/numerical-methods/assembly/",
@@ -43,6 +47,7 @@ const PAGES = [
   READING_PAGE,
   NOTATION_PAGE,
   ...OPERATOR_PAGES,
+  ...SOLID_PAGES,
   ...NUMERICAL_PAGES,
   ...RESULT_PAGES,
   ...VERIFICATION_PAGES,
@@ -254,6 +259,7 @@ for (const width of [320, 390, 1440]) {
     await expect(page.locator("main math").first()).toBeVisible();
     for (const path of [
       ...OPERATOR_PAGES,
+      ...SOLID_PAGES,
       ...NUMERICAL_PAGES,
       ...RESULT_PAGES,
       READING_PAGE,
@@ -390,6 +396,48 @@ test("operator articles connect notation, worked equations and reading order", a
   );
 });
 
+test("solid-mechanics articles check the elastic law and the weak form", async ({
+  page,
+}) => {
+  const [elasticity, weakForm] = SOLID_PAGES;
+  await page.goto(elasticity);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Linear elasticity",
+  );
+  const lateral = page.getByRole("region", {
+    name: /^Forward check of lateral stress/,
+  });
+  await expect(lateral.locator("math")).toContainText("300");
+  await expect(
+    page
+      .getByRole("region", { name: /^Isotropic elasticity matrix D/ })
+      .locator("mtr"),
+  ).toHaveCount(6);
+  await expect(page.locator("main")).toContainText("238095");
+  await expect(page.locator('.pager a[rel="next"]')).toHaveAttribute(
+    "href",
+    weakForm,
+  );
+
+  await page.goto(weakForm);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Equilibrium and weak form",
+  );
+  await expect(
+    page.getByRole("region", { name: /^Principle of virtual work/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("row").filter({
+      has: page.getByRole("rowheader", { name: "Aluminium", exact: true }),
+    }),
+  ).toContainText("0.7143 mm");
+  await expect(page.locator("#decision")).toBeVisible();
+  await expect(page.locator('.pager a[rel="next"]')).toHaveAttribute(
+    "href",
+    NUMERICAL_PAGES[0],
+  );
+});
+
 test("numerical-methods articles give checkable elements, assembly and planned links", async ({
   page,
 }) => {
@@ -411,12 +459,12 @@ test("numerical-methods articles give checkable elements, assembly and planned l
   await expect(k22.locator("mtr").nth(1).locator("mtd").nth(1)).toHaveText(
     "500/3",
   );
-  // Unwritten topics resolve to their planned overview entry, never a 404.
+  // Links to published topics resolve to the article, not its overview entry.
   await expect(
-    page.locator('main a[href="/theory/#solid-mechanics-linear-elasticity"]'),
+    page.locator('main a[href="/theory/solid-mechanics/linear-elasticity/"]'),
   ).not.toHaveCount(0);
   await expect(
-    page.locator('main a[href^="/theory/solid-mechanics/"]'),
+    page.locator('main a[href^="/theory/#solid-mechanics"]'),
   ).toHaveCount(0);
   await expect(page.locator("main")).toContainText("KOF-274");
   await expect(page.locator('.pager a[rel="next"]')).toHaveAttribute(
@@ -440,7 +488,12 @@ test("numerical-methods articles give checkable elements, assembly and planned l
   await expect(t2.locator("th")).toContainText("(1, 2, 3, 4)");
   await expect(t2.locator("td").last()).toHaveText("11, 12, 13, 14");
   // Inline math is typeset, never plain text with <sub>/<sup> tags.
-  for (const path of [...NUMERICAL_PAGES, ...OPERATOR_PAGES, NOTATION_PAGE]) {
+  for (const path of [
+    ...NUMERICAL_PAGES,
+    ...OPERATOR_PAGES,
+    ...SOLID_PAGES,
+    NOTATION_PAGE,
+  ]) {
     await page.goto(path);
     await expect(
       page.locator("main p sub, main p sup, main li sub, main li sup"),

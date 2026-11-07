@@ -57,8 +57,9 @@ export default {
       loaded end prescribes traction. Multiplying equilibrium by a test
       displacement and <a href="/theory/operators/integration-by-parts/#weak-form">integrating by parts</a>
       gives the weak form: internal virtual work equals applied virtual work.
-      The full linear-elasticity and equilibrium chapters are still planned;
-      this linked derivation supplies the weak form used in this study.</p>
+      <a href="/theory/solid-mechanics/linear-elasticity/">Linear elasticity</a> and
+      <a href="/theory/solid-mechanics/equilibrium-and-weak-form/">Equilibrium and weak form</a>
+      develop both steps in full.</p>
 
     <h2 id="discretization">Build and solve a discrete study</h2>
     <p>Split the volume into hexahedra and approximate displacement with

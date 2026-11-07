@@ -17,6 +17,8 @@ import gradientDivergence from "./operators/gradient-divergence.mjs";
 import tensorProducts from "./operators/tensor-products.mjs";
 import integrationByParts from "./operators/integration-by-parts.mjs";
 import referenceMapping from "./operators/reference-mapping.mjs";
+import linearElasticity from "./solid-mechanics/linear-elasticity.mjs";
+import equilibriumAndWeakForm from "./solid-mechanics/equilibrium-and-weak-form.mjs";
 import elementsAndQuadrature from "./numerical-methods/elements-and-quadrature.mjs";
 import assembly from "./numerical-methods/assembly.mjs";
 import loadsAndConstraints from "./numerical-methods/loads-and-constraints.mjs";
@@ -39,6 +41,8 @@ const articles = [
   tensorProducts,
   integrationByParts,
   referenceMapping,
+  linearElasticity,
+  equilibriumAndWeakForm,
   elementsAndQuadrature,
   assembly,
   loadsAndConstraints,
