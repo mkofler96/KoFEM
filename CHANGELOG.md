@@ -11,6 +11,63 @@ Versions 0.1.0 to 0.3.0 were tagged after the fact, on the commits that complete
 each theme. kofem.org was deployed continuously from `main` throughout, so their
 dates are when the work landed, not when anything was shipped.
 
+## [0.6.0] - 2026-11-07
+
+Meshing diagnostics and repairs, continuation for slow solves, and a public
+Theory Guide.
+
+### Added
+
+- A Theory Guide at `/theory/` connects FEM fundamentals, units, elements,
+  loads, solving, stress interpretation, shells and topology optimization.
+  Worked examples, 27 figures and four interactive 3D result viewers connect
+  the explanations to the public verification cases. Theory and example
+  diagrams are available as image files for search engines and sharing.
+- Failed meshing highlights problem faces and straight hinges. **Connect**
+  and **Separate** repair supported hinges, **Split face** handles sharp cone
+  tips, and **Remove narrow faces** can remove details smaller than the
+  minimum element size. Repairs can be undone.
+- **Continue / Stop** lets a progressing solid, shell or coupled solve run
+  beyond its iteration budget. Continue adds an adjustable number of
+  iterations to the live solve; Stop discards the partial result.
+
+### Changed
+
+- Meshing stops before the volume fill when a boundary face could not be
+  meshed. Previously, these failures could crash, report misleading overlaps,
+  or return an incomplete volume mesh. Re-mesh and re-solve affected models;
+  a newly reported failure may identify a mesh the previous version accepted
+  incorrectly. Degenerate-edge fixes can also change the generated mesh.
+- Geometry repairs can change results. Connect adds material, Separate
+  removes it, and removing narrow faces changes the local shape. Inspect the
+  repaired geometry, supports and loads, then re-mesh and re-solve. Splitting
+  a cone tip preserves its shape but can change face numbering. Existing
+  saved results do not update automatically.
+- Continued solves retain their iterate, search direction, preconditioner
+  and original convergence tolerance. Tests match uninterrupted results;
+  stalled solves still fail, and unconverged fields are not accepted.
+
+### Fixed
+
+- Meshing no longer traps on degenerate CAD edges with no 3D curve.
+- Large overlap reports no longer flood the page log and freeze the UI.
+- Connect repairs can recover an invalid fuse by merging faces on the same
+  surface, while leaving already valid fuses intact.
+- Failed narrow-face meshes are reported with their face widths instead of
+  raw Netgen geometry-search errors or false overlap reports.
+
+### Known limitations
+
+- Coarse linear tetrahedra can make thin-walled models too stiff. Use
+  quadratic elements or an appropriate Shell idealisation and check
+  convergence. This release does not add the proposed thin-wall warning or
+  change the default element order.
+- Only one body per model can be a Shell. The planar shell/solid transition
+  checks do not establish junction-stress accuracy for every geometry or
+  generic distributing coupling.
+- Some geometry still needs correction in CAD. The repair actions do not
+  establish the accuracy or suitability of the repaired engineering model.
+
 ## [0.5.0] - 2026-11-01
 
 A guided first simulation, public validation examples, and corrections to loads
