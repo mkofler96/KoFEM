@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { equation, tex } from "../operators/math.mjs";
-import { evidence, number, reviewed, source, table } from "./evidence.mjs";
+import { evidence, number, source, table } from "./evidence.mjs";
+import { figure } from "../figures/index.mjs";
 
 const { mbb, meshIndependence: mi } = evidence;
 const count = (value) => value.toLocaleString("en-US");
@@ -19,7 +20,7 @@ export default {
     ["stress-constraint", "Maximum-stress constraints"],
     ["termination", "When a run stops"],
     ["benchmarks", "Check the MBB beam and mesh independence"],
-    ["references", "Reviewed implementation and references"],
+    ["references", "Implementation and references"],
   ],
   body: `
     <p class="lede">How do filtering, constraints and convergence shape an optimized design?</p>
@@ -69,17 +70,14 @@ export default {
     <p>The tradeoff is control. A single blocking call cannot pause, so
       cancelling a run terminates the worker and discards it. Progress is
       visible because the engine logs one line per iteration and passes each
-      analysed density to an optional callback. The decision, its later
-      streaming revision and when to revisit it are recorded in
-      <a href="https://linear.app/kofem/document/adr-0002-simp-topology-optimization-runs-as-an-in-engine-loop-dbb4630d0dfb">ADR-0002</a>.
-      Revisit it if a design space stops fitting one in-memory solve, or when
-      multiple load cases and manufacturing constraints arrive.</p>
+      analysed density to an optional callback.</p>
 
     <h2 id="filtering">Filtering, radius and mesh dependence</h2>
     <p>Unfiltered SIMP has two well-known failures. Checkerboards — alternating
       solid and void elements — look artificially stiff to low-order elements.
       And refining the mesh lets ever thinner members appear, so the answer
       changes with the mesh instead of converging to one design.</p>
+    ${figure("density-filter", "Filter weights around element e: they fall linearly with distance and vanish at the radius r<sub>min</sub>. Features thinner than about the radius cannot form.")}
     <p>KoFEM’s filter introduces a physical length, the
       <a href="/theory/notation/#filter-radius">filter radius</a>
       ${tex("r_{\\mathrm{min}}")}. Elements whose centroids
@@ -150,8 +148,7 @@ export default {
       ${tex("ρ_{\\mathrm{min}}=10^{-3}")} rather than 0. The constraint
       controls a relaxed, element-centre, aggregated measure. It does not
       bound the peak stress of a smoothed, re-meshed part, and it is not
-      available for shell or coupled models
-      (<a href="https://linear.app/kofem/issue/KOF-251">KOF-251</a>).</p>
+      available for shell or coupled models.</p>
 
     <h2 id="termination">When a run stops</h2>
     <p>A run is reported as <em>converged</em> when the largest density change
@@ -229,12 +226,7 @@ export default {
         ],
       ],
     )}
-    <figure>
-      <pre tabindex="0" role="img" aria-label="Text plot of the MBB half-beam densities: a solid top chord, a bottom tie and diagonal members between them" class="layout-art"><code>${mbb.layout}</code></pre>
-      <figcaption>MBB half-beam, top row first: <code>#</code> density above 0.5,
-        <code>:</code> 0.25–0.5, blank below 0.25. The symmetry plane is on the
-        left, the roller at bottom right.</figcaption>
-    </figure>
+    ${figure("mbb-half-beam-layout", "The recorded MBB half-beam densities, one square per element: black above 0.5, grey 0.25–0.5, white below 0.25. The symmetry plane is on the left, the load at its top and the roller at bottom right.")}
     <p>The MBB run reproduces the published layout: a compression chord along
       the top, a tension tie along the bottom and diagonals between them. Its
       compliance falls to ${number((100 * mbb.finalCompliance) / mbb.initialCompliance, 3)}%
@@ -250,16 +242,12 @@ export default {
       refinement of one problem on structured hexahedra. It does not establish
       mesh independence for unstructured Netgen tetrahedra, other filter radii,
       shells or stress-constrained runs.</p>
-    <pre><code>node examples/validation/topopt/run.mjs
-cd web &amp;&amp; bun theory/optimization/capture-evidence.mjs</code></pre>
-    <p>The first command runs every benchmark with its tolerance bands; the
-      second checks the <a href="/theory/optimization.json">recorded numbers</a>
-      against a fresh run and fails if the engine changed. The public
+    <p>KoFEM’s automated tests rerun both benchmarks with their tolerance
+      bands and compare them with the <a href="/theory/optimization.json">recorded numbers</a>. The public
       <a href="/examples/mbb-beam-topopt/">MBB beam example</a> solves the full
       beam from a STEP model on a Netgen mesh in the app.</p>
 
-    <h2 id="references">Reviewed implementation and references</h2>
-    <p>${reviewed}</p>
+    <h2 id="references">Implementation and references</h2>
     <ol class="refs">
       <li>Sigmund (2001), <cite>A 99 line topology optimization code written in Matlab</cite>, Structural and Multidisciplinary Optimization 21, 120–127; and Andreassen et al. (2011), <cite>Efficient topology optimization in MATLAB using 88 lines of code</cite>, Structural and Multidisciplinary Optimization 43, 1–16.</li>
       <li>Svanberg (1987), <cite>The method of moving asymptotes — a new method for structural optimization</cite>, International Journal for Numerical Methods in Engineering 24, 359–373.</li>
@@ -272,12 +260,6 @@ cd web &amp;&amp; bun theory/optimization/capture-evidence.mjs</code></pre>
         ${source("engine/cpp/topology_stress.cpp", 95, "relaxed, aggregated stress and adjoint")} and
         ${source("engine/cpp/topology_simp.cpp", 320, "stress density floor")}.</li>
       <li>${source("web/src/store/topOptSlice.ts", 72, "app defaults")} and
-        ${source("examples/validation/topopt/README.md", 1, "benchmark descriptions and bands")}.
-        Native loop, filter and MMA checks run in CI through
-        <code>scripts/test-topology-optimize.sh</code>,
-        <code>scripts/test-topology-filter.sh</code> and
-        <code>scripts/test-topology-mma.sh</code>.</li>
-      <li>Architecture record: <a href="https://linear.app/kofem/document/adr-0002-simp-topology-optimization-runs-as-an-in-engine-loop-dbb4630d0dfb">ADR-0002</a>.
-        This page follows the code at the reviewed revision.</li>
+        ${source("examples/validation/topopt/README.md", 1, "benchmark descriptions and bands")}.</li>
     </ol>`,
 };

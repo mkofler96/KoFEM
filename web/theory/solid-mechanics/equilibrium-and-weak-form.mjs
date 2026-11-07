@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { equation, tex } from "../operators/math.mjs";
-import { revision, reviewed, source, mfemSource } from "./sources.mjs";
+import { source, mfemSource } from "./sources.mjs";
+import { figure } from "../figures/index.mjs";
 
 export default {
   slug: "solid-mechanics/equilibrium-and-weak-form",
@@ -68,6 +69,7 @@ export default {
       face force ${tex("\\mathbf{F}")} becomes the uniform traction ${tex("\\mathbf{F}/A")} over the
       face area ${tex("A")}; <a href="/theory/numerical-methods/loads-and-constraints/#force-to-traction">Loads and constraints</a>
       works through that conversion.</p>
+    ${figure("boundary-value-problem", "A body Ω with a prescribed displacement on Γ<sub>D</sub>, a traction t on Γ<sub>N</sub>, a body force b and the outward normal n. Every boundary point belongs to Γ<sub>D</sub> or Γ<sub>N</sub> for each displacement component.")}
 
     <h2 id="strong-form">The complete boundary-value problem</h2>
     <p>Collecting the pieces gives the <em>strong form</em>: find a
@@ -193,9 +195,7 @@ export default {
       differently in each material near the interface, which this 1D model ignores.</p>
 
     <h2 id="implementation">KoFEM implementation</h2>
-    <p>Reviewed on ${reviewed} at
-      <a href="https://github.com/mkofler96/KoFEM/tree/${revision}"><code>${revision.slice(0, 7)}</code></a>,
-      against MFEM 4.7. The solid solver builds ${tex("a")} and ${tex("ℓ")} directly.</p>
+    <p>KoFEM uses MFEM 4.7. The solid solver builds ${tex("a")} and ${tex("ℓ")} directly.</p>
     <ul>
       <li><strong>Bilinear form.</strong> MFEM’s elasticity integrator implements
         exactly ${tex("a(\\mathbf{u}, \\mathbf{w})")} above
@@ -221,7 +221,7 @@ export default {
     <p>The shell path solves a different weak form with rotations; see
       <a href="/theory/shells/formulation/">Shell formulation</a>. The
       <a href="/examples/axial-bar/">axial bar example</a> runs this complete
-      solid path: <code>node examples/validation/run.mjs --case axial-bar</code>.</p>
+      solid path in the browser engine.</p>
 
     <h2 id="decision">Decision: a displacement formulation</h2>
     <ul>

@@ -3,6 +3,7 @@
 
 import { equation, tex } from "../operators/math.mjs";
 import { evidence, number, percentError, source, table } from "./evidence.mjs";
+import { figure } from "../figures/index.mjs";
 
 const comparisons = evidence.transition.filter((row) => row.collar_mm === 6);
 const referenceFor = (row) =>
@@ -25,7 +26,7 @@ export default {
     ["inputs", "Materials, loads and constraints"],
     ["verification", "Check the planar wall-on-block case"],
     ["limits", "What this evidence establishes"],
-    ["references", "Reviewed implementation and references"],
+    ["references", "Implementation and references"],
   ],
   body: `
     <p class="lede">How are shell and solid degrees of freedom coupled?</p>
@@ -81,33 +82,7 @@ export default {
       three-dimensional material around the joint and counts the replaced wall
       volume once. The placement is a current algorithmic choice, not a theorem
       that three thicknesses suffice for every geometry.</p>
-    <figure class="model-sketch">
-      <svg role="img" aria-labelledby="transition-title" aria-describedby="transition-description" viewBox="0 0 600 310">
-        <title id="transition-title">Solid root retained below a shell transition</title>
-        <desc id="transition-description">Cross section through a thin wall on a block. The wall remains solid for three wall thicknesses above the block. Above that cut, a shell mid-surface carries the wall. Two solid nodes across the cut follow interpolated shell-edge motion plus the rotation offset.</desc>
-        <g fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M80 250H360V290H80Z" fill="currentColor" fill-opacity="0.08"/>
-          <path d="M190 250V155H230V250" fill="currentColor" fill-opacity="0.08"/>
-          <path d="M190 155V40H230V155" stroke-dasharray="5 5"/>
-          <path d="M210 155V40" stroke-width="4"/>
-          <path d="M170 155H250" stroke-dasharray="3 3"/>
-          <path d="M140 160V245M134 160H146M134 245H146"/>
-          <path d="M190 26H230M190 20V32M230 20V32"/>
-          <circle cx="190" cy="155" r="4" fill="currentColor"/>
-          <circle cx="230" cy="155" r="4" fill="currentColor"/>
-          <path d="M240 155H345M220 75H345M240 207H345" stroke-width="1"/>
-        </g>
-        <g fill="currentColor" font-family="sans-serif" font-size="16">
-          <text x="205" y="17">t</text><text x="107" y="208">3t</text>
-          <text x="355" y="80">Shell mid-surface</text>
-          <text x="355" y="160">Section footprint</text>
-          <text x="355" y="212">Retained solid wall</text>
-          <text x="100" y="276">Solid block</text>
-        </g>
-      </svg>
-      <figcaption>Cross section, not to scale. Keep the joint three-dimensional;
-        impose shell section kinematics at the cut above it.</figcaption>
-    </figure>
+    ${figure("solid-shell-transition", "Cross section, not to scale. The wall stays solid for three thicknesses above the block; above the cut it is a shell mid-surface. Rigid links make the solid section nodes S follow the shell edge node A: its translation plus its rotation crossed with the offset r.")}
     <p>The <strong>physical-footprint</strong> constraint (engine kind 3)
       makes each solid section node dependent on the two shell edge nodes.
       Let ${tex("N_1=1-s")} and ${tex("N_2=s")} be the linear edge weights
@@ -130,7 +105,7 @@ export default {
 
     <h2 id="other-couplings">Distinguish the other coupling methods</h2>
     ${table(
-      "Coupling kinematics at the reviewed revision",
+      "Coupling kinematics in KoFEM",
       ["Method", "Dependent motion", "Consequence"],
       [
         [
@@ -173,7 +148,7 @@ export default {
       tip motion alongside severely low local solid stress. The current planar
       transition addresses that model with retained solid material and a section
       footprint. It does not establish a general repair to arbitrary distributing
-      patches. See <a href="https://linear.app/kofem/issue/KOF-215">the issue and its evidence</a>.</p>
+      patches.</p>
 
     <h2 id="inputs">Materials, loads and constraints</h2>
     <ul>
@@ -264,12 +239,6 @@ export default {
       ${tex("10^{-6}")}. The
       <a href="/theory/shells.json">full record</a> retains all four placements,
       peaks, gauge means and balance errors, rather than only the favorable rows.</p>
-    <pre><code>CXX=g++ bash scripts/study-shell-solid-footprint.sh 2
-node web/theory/shells/capture-evidence.mjs
-
-# Separate app-pipeline check using the matching WASM engine:
-cd web
-bun tests/test_shell_footprint.mjs --wasm</code></pre>
     <p>The numerical table comes from the native production-core study with
       a conforming planar footprint. Its separate asymmetric-patch checks concern
       kinematic coupling rigid motions and six force/moment loads. The shell
@@ -299,10 +268,7 @@ bun tests/test_shell_footprint.mjs --wasm</code></pre>
       <a href="/theory/verification/strategy/">verification strategy</a> and
       <a href="/theory/results/interpretation-and-convergence/">result interpretation</a>.</p>
 
-    <h2 id="references">Reviewed implementation and references</h2>
-    <p>Reviewed on 6 November 2026 at
-      <a href="https://github.com/mkofler96/KoFEM/tree/${evidence.sourceRevision}"><code>${evidence.sourceRevision.slice(0, 12)}</code></a>.
-      The record names native execution separately from WASM/browser checks.</p>
+    <h2 id="references">Implementation and references</h2>
     <ol class="refs">
       <li>${source("web/src/lib/shellize/transition.ts", 23, "three-thickness retained section")},
         ${source("web/src/lib/shellize/footprint.ts", 78, "physical footprint detection")},
@@ -320,7 +286,5 @@ bun tests/test_shell_footprint.mjs --wasm</code></pre>
         ${source("engine/tests/shell_validation.cpp", 555, "footprint motion checks")} and
         ${source("web/tests/test_shell_footprint.mjs", 1, "app-pipeline and WASM fixture")}.</li>
       <li>Lu, Zhang and Yang (2023), <cite>A Relaxed MPC Method for Non-rigid Shell to Solid Coupling</cite>, Journal of Physics: Conference Series 2528, 012064. KoFEM’s centroid-weighted nonconforming seam is an implementation adaptation; it is not the paper’s coincident-node construction.</li>
-      <li><a href="https://linear.app/kofem/issue/KOF-215">Distributing-junction investigation and planar-transition follow-up</a>.
-        Its completion does not imply validation of arbitrary distributing patches.</li>
     </ol>`,
 };

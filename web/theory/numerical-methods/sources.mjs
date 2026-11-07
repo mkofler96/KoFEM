@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Pinned source links for the numerical-methods articles. Update the revision,
-// line numbers and the review date in each article together after re-review.
+// and line numbers together when the implementation changes.
 export const revision = "41aa05f99bc99210995b21d1aded942d45ef4729";
 export const mfemVersion = "v4.7";
 // Continuation merged after the earlier chapters' review. Keep their snapshots.

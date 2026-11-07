@@ -2,11 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { equation, matrixEquation, tex } from "../operators/math.mjs";
-import {
-  linearSolveRevision as revision,
-  linearSolveSource as source,
-  mfemSource,
-} from "./sources.mjs";
+import { linearSolveSource as source, mfemSource } from "./sources.mjs";
+import { figure } from "../figures/index.mjs";
 
 export default {
   slug: "numerical-methods/linear-solve",
@@ -21,8 +18,8 @@ export default {
     ["conditioning", "Conditioning, scaling and rigid modes"],
     ["failure", "Iteration budgets and failure"],
     ["accuracy", "Three different accuracy questions"],
-    ["implementation", "Implementation and reproducible evidence"],
-    ["decision", "Decision: the current solid method"],
+    ["implementation", "KoFEM implementation"],
+    ["decision", "Why KoFEM uses this method"],
     ["references", "Sources and further reading"],
   ],
   body: `
@@ -58,6 +55,7 @@ export default {
       arithmetic, CG solves a positive-definite system in at most as many steps
       as there are unknowns. Rounding and poor conditioning make that bound an
       impractical iteration budget.</p>
+    ${figure("cg-convergence", "Conjugate gradients on the plane-elasticity system of a small triangular mesh, clamped at one end and loaded at the other. Symmetric Gauss–Seidel preconditioning, as in KoFEM, reaches the 10<sup>−6</sup> relative tolerance in far fewer iterations. Computed for this figure; the residual is the preconditioned norm relative to its initial value.")}
     <p>CG assumes a <strong>symmetric positive-definite</strong> matrix:
       ${tex("\\mathbf{v}^{T}\\mathbf{A}\\mathbf{v} > 0")} for every nonzero vector ${tex("\\mathbf{v}")}.
       For elastic solids this means every admissible nonzero deformation costs
@@ -100,7 +98,7 @@ export default {
       digits of displacement or stress.</p>
     <div class="table-wrap" tabindex="0" role="region" aria-label="Solid solver settings and user controls; scroll horizontally if needed">
       <table>
-        <caption>Ordinary solid solve at the reviewed revision</caption>
+        <caption>Ordinary solid solve in KoFEM</caption>
         <thead><tr><th scope="col">Setting</th><th scope="col">Value</th><th scope="col">Control</th></tr></thead>
         <tbody>
           <tr><th scope="row">Relative tolerance</th><td><code>1e-6</code></td><td>Fixed internally by <code>SetRelTol</code></td></tr>
@@ -253,11 +251,8 @@ export default {
       <a href="/theory/results/interpretation-and-convergence/">result interpretation chapter</a>
       develops these checks further.</p>
 
-    <h2 id="implementation">Implementation and reproducible evidence</h2>
-    <p>Reviewed on 6 November 2026 at
-      <a href="https://github.com/mkofler96/KoFEM/tree/${revision}"><code>${revision.slice(0, 7)}</code></a>,
-      with MFEM 4.7. Earlier numerical-methods articles retain their own review
-      snapshots.</p>
+    <h2 id="implementation">KoFEM implementation</h2>
+    <p>KoFEM uses MFEM 4.7 for the solid solve.</p>
     <ul>
       <li>${source("engine/cpp/solve_mfem.cpp", 229, "FormLinearSystem → CG → RecoverFEMSolution")}
         connects assembly to the solid solve.
@@ -282,50 +277,30 @@ export default {
         ${source("web/src/workers/solver.worker.ts", 907, "returns errors to the caller")}
         rather than returning a partial field.</li>
     </ul>
-    <p>From the repository root, reproduce the bar calculation and stopping
-      checks with:</p>
-    <pre><code>bun web/theory/numerical-methods/linear-solve-example.mjs</code></pre>
-    <p><a href="https://github.com/mkofler96/KoFEM/blob/develop/web/theory/numerical-methods/linear-solve-example.mjs">The educational calculation</a>
-      checks the analytical displacements, hand-derived iterates, absolute and
-      relative stopping, and a one-step failure. It illustrates the equations;
-      it does not run the production solver.</p>
-    <p>For the actual solid wrapper, the existing
-      ${source("engine/tests/cg_continuation_validation.cpp", 126, "160-row MFEM fixture")}
-      and ${source("scripts/test-cg-continuation.sh", 18, "MFEM harness")}
-      exercise successful continuation, identical final fields, Stop and budget
-      failure. With Emscripten and the project’s MFEM dependencies installed:</p>
-    <pre><code>bash scripts/test-cg-continuation.sh --mfem</code></pre>
-    <p>The ${source("web/tests/cg-continuation.spec.ts", 77, "browser continuation regression")}
-      also drives the real solid WASM path with a deliberately smaller budget:</p>
-    <pre><code>cd web
-bun x playwright test cg-continuation.spec.ts --grep "CG pauses"</code></pre>
-    <p>It reproduces a budget stop without requiring a huge or private model.
-      A historical large-model stagnation report,
-      <a href="https://linear.app/kofem/issue/KOF-173">KOF-173</a>, records about
-      209 000 DOFs and a residual plateau near 0.04–0.05. Those figures describe
-      that model and old run, not a universal DOF limit or a fresh benchmark.
-      <a href="https://linear.app/kofem/issue/KOF-291">KOF-291</a> records the
-      later continuation decision.</p>
+    <p>The worked example above was checked independently of the
+      production solver; it illustrates the equations, not KoFEM’s code path.
+      KoFEM’s automated tests drive the real solid solver through successful
+      continuation, Stop and an exhausted iteration budget, and check that a
+      continued solve gives the same final field as an uninterrupted one.</p>
 
-    <h2 id="decision">Decision: the current solid method</h2>
+    <h2 id="decision">Why KoFEM uses this method</h2>
     <p><strong>Choice and rationale.</strong> Sparse CG with symmetric
       Gauss–Seidel suits a constrained, positive-definite elastic system and
       keeps storage and per-step work modest in the browser. The implementation
       has a fixed accuracy target, checks convergence and lets a progressing
       solve continue without restarting.</p>
-    <p><strong>Tradeoff and recorded alternatives.</strong> Local smoothing
-      gives no mesh-independent iteration guarantee. KOF-173 records algebraic
+    <p><strong>Tradeoff and alternatives.</strong> Local smoothing
+      gives no mesh-independent iteration guarantee. Algebraic
       multigrid with elasticity near-null-space information, geometric
-      multigrid and stronger smoothing as alternatives, with WASM dependency
-      or mesh-hierarchy work. Sparse direct factorization is another general
+      multigrid and stronger smoothing are alternatives, at the cost of
+      extra WebAssembly dependencies or a mesh hierarchy. Sparse direct factorization is another general
       option, with fill-in and memory costs; the current solid path does not
       select it as a fallback. These are options, not evidence of a completed
       comparative benchmark.</p>
-    <p><strong>Revisit when</strong> representative, correctly constrained
-      models repeatedly stagnate, require many extensions or exceed browser
-      time or memory budgets. Compare methods on those models with measured
-      residuals, accuracy, time and memory. Continuation cannot repair a rigid
-      mode or make a wrong physical model accurate.</p>
+    <p><strong>Limits.</strong> A correctly constrained but very large or
+      poorly conditioned model may still stagnate or need many extensions.
+      Continuation cannot repair a rigid mode or make a wrong physical model
+      accurate.</p>
 
     <h2 id="references">Sources and further reading</h2>
     <ol class="refs">

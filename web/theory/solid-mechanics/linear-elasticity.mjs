@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { equation, matrixEquation, tex } from "../operators/math.mjs";
-import { revision, reviewed, source } from "./sources.mjs";
+import { source } from "./sources.mjs";
+import { figure } from "../figures/index.mjs";
 
 export default {
   slug: "solid-mechanics/linear-elasticity",
@@ -105,6 +106,7 @@ export default {
       small cube makes the stress symmetric, ${tex("σ_{ij} = σ_{ji}")}, so it has six
       independent components. The scalar <a href="/theory/notation/#von-mises">von Mises stress</a>
       summarises them for yield checks; it is not a tensor component and has no sign.</p>
+    ${figure("stress-cube", "Stress components on the faces of a small cube. On each face, one normal stress (red) acts along the face normal and two shear stresses (blue) act in the face.")}
 
     <h2 id="isotropic-law">The isotropic linear-elastic law</h2>
     <p>A linear-elastic material maps strain to stress linearly. For an
@@ -230,8 +232,6 @@ export default {
     </ul>
 
     <h2 id="implementation">KoFEM implementation</h2>
-    <p>Reviewed on ${reviewed} at
-      <a href="https://github.com/mkofler96/KoFEM/tree/${revision}"><code>${revision.slice(0, 7)}</code></a>.</p>
     <ul>
       <li>Each material stores ${tex("E")} (MPa), ${tex("ν")} and a density. The material form
         rejects ${tex("E ≤ 0")} and ${tex("ν")} outside ${tex("(-1, 0.5)")}
@@ -252,7 +252,7 @@ export default {
         explains where it is sampled.</li>
     </ul>
     <p>KoFEM has no thermal, plastic, anisotropic, hyperelastic or
-      geometrically nonlinear material model at this revision, and no
+      geometrically nonlinear material model, and no
       separate treatment for nearly incompressible materials.</p>
 
     <h2 id="references">Sources and further reading</h2>

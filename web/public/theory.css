@@ -127,3 +127,115 @@
 .theory-docs .math-nowrap {
   white-space: nowrap;
 }
+
+/* Textbook figures: standalone SVG images drawn for a light background.
+   The dark theme inverts their lightness and keeps their hues. */
+.theory-docs figure.theory-figure {
+  margin: 26px 0;
+}
+.theory-docs figure.theory-figure .figure-link {
+  display: block;
+}
+.theory-docs figure.theory-figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+.theory-docs figure.theory-figure.narrow img {
+  max-width: 560px;
+}
+.theory-docs figure.theory-figure figcaption {
+  text-align: left;
+}
+:root[data-theme="dark"] .theory-docs figure.theory-figure img {
+  filter: invert(0.88) hue-rotate(180deg);
+}
+
+/* Interactive result viewers (public/theory/viewer.js). Without script or
+   WebGL, the example's own figure stays in place. */
+.theory-docs figure.result-viewer {
+  margin: 26px 0;
+}
+.result-viewer .viewer-stage {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--panel2);
+}
+.result-viewer .viewer-stage > img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.result-viewer .viewer-stage > img[hidden] {
+  display: none;
+}
+.result-viewer .viewer-stage canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  cursor: grab;
+  touch-action: pan-y;
+}
+.result-viewer .viewer-stage canvas:active {
+  cursor: grabbing;
+}
+.result-viewer .viewer-legend {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  pointer-events: none;
+}
+.result-viewer .viewer-legend span:not(.viewer-bar) {
+  background: color-mix(in srgb, var(--bg) 75%, transparent);
+  padding: 0 4px;
+  border-radius: 3px;
+}
+.result-viewer .viewer-bar {
+  width: 12px;
+  height: 110px;
+  border-radius: 2px;
+  /* The app's contour scale, low (bottom) → high (top). */
+  background: linear-gradient(
+    to top,
+    hsl(240 100% 50%),
+    hsl(180 100% 50%),
+    hsl(120 100% 50%),
+    hsl(60 100% 50%),
+    hsl(0 100% 50%)
+  );
+}
+.result-viewer .viewer-hint {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--bg) 75%, transparent);
+  padding: 1px 6px;
+  border-radius: 4px;
+  pointer-events: none;
+}
+.result-viewer .viewer-reset {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line2);
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+}

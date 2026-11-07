@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { equation, matrixEquation, tex } from "../operators/math.mjs";
-import { revision, source, mfemSource } from "./sources.mjs";
+import { source, mfemSource } from "./sources.mjs";
+import { figure } from "../figures/index.mjs";
 
 export default {
   slug: "numerical-methods/loads-and-constraints",
@@ -103,8 +104,8 @@ export default {
       <li>A load on a constrained DOF has no effect on the displacement. It goes
         straight into the support. A force on a fully fixed face, for example,
         does nothing.</li>
-      <li>Reactions are not part of the solve. KoFEM does not report them at the
-        reviewed revision; check support forces with a free-body diagram.</li>
+      <li>Reactions are not part of the solve. KoFEM does not currently report them;
+        check support forces with a free-body diagram.</li>
     </ul>
 
     <h2 id="prescribed-example">Worked example: a prescribed displacement</h2>
@@ -149,7 +150,7 @@ export default {
       type of input decides how the load is distributed:</p>
     <div class="table-wrap" tabindex="0" role="region" aria-label="Load types, their input and how they reach the load vector; scroll horizontally if needed">
       <table>
-        <caption>Load types on a solid at the reviewed revision</caption>
+        <caption>Load types on a solid in KoFEM</caption>
         <thead><tr><th scope="col">Load</th><th scope="col">Input</th><th scope="col">Into ${tex("\\mathbf{f}")}</th></tr></thead>
         <tbody>
           <tr><th scope="row">Force on faces</th><td>Total vector ${tex("\\mathbf{F}")}, N</td><td>Uniform traction ${tex("\\mathbf{t} = \\mathbf{F}/A")} over the group’s whole area ${tex("A")}, integrated as ${tex("\\int N_a\\mathbf{t}\\,dS")}</td></tr>
@@ -216,31 +217,12 @@ export default {
       so ${tex("\\mathbf{K}\\mathbf{d}_{\\mathrm{rigid}} = \\mathbf{0}")}. In the bar, ${tex("\\mathbf{d} = (1, 1, 1)")}
       is a rigid translation, and each row of ${tex("\\mathbf{K}")} sums to zero. A rigid mode
       costs no energy, so nothing in ${tex("\\mathbf{K}")} resists it. Only constraints can.</p>
+    ${figure("rigid-body-modes", "In a plane, a free body has three rigid-body modes: two translations and one rotation (dashed outlines). A pin and a roller remove all three without restraining deformation. A solid in 3D has six.")}
     <p>Every body that is not connected to another must be held against all six
       modes. A <strong>3-2-1 support</strong> does exactly this with six
       components at three points: A fixes Ux, Uy and Uz; B, along ${tex("x")} from A,
       fixes Uy and Uz; C, offset from that line in ${tex("y")}, fixes Uz.</p>
-    <figure class="model-sketch">
-      <svg role="img" aria-labelledby="support-title" aria-describedby="support-description" viewBox="0 0 600 220">
-        <title id="support-title">3-2-1 support on a block</title>
-        <desc id="support-description">A block along x pulled by equal and opposite forces at its two ends. Point A at the near bottom-left corner fixes three components, point B at the near bottom-right corner fixes two, and point C at the hidden far bottom-left corner, offset from A in y, fixes one.</desc>
-        <defs><marker id="support-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="currentColor" /></marker></defs>
-        <path d="M150 80H450V150H150Z M150 80 190 45H490L450 80Z M450 80 490 45V115L450 150Z" fill="var(--panel2)" stroke="currentColor" stroke-linejoin="round" />
-        <path d="M150 150 190 115H490 M190 115V45" fill="none" stroke="currentColor" stroke-dasharray="5 4" opacity="0.6" />
-        <path d="M150 98H60 M470 98H560" stroke="currentColor" stroke-width="2" marker-end="url(#support-arrow)" />
-        <circle cx="150" cy="150" r="6" fill="currentColor" />
-        <circle cx="450" cy="150" r="6" fill="currentColor" />
-        <circle cx="190" cy="115" r="6" fill="currentColor" />
-        <text x="105" y="180" fill="currentColor">A: Ux Uy Uz</text>
-        <text x="415" y="180" fill="currentColor">B: Uy Uz</text>
-        <text x="202" y="138" fill="currentColor">C: Uz</text>
-        <text x="62" y="88" fill="currentColor">−P</text>
-        <text x="545" y="88" fill="currentColor">P</text>
-        <text x="300" y="194" fill="currentColor">x →</text>
-      </svg>
-      <figcaption>A 3-2-1 support removes the six rigid-body modes and no more.
-        Under balanced loads, it produces no reactions.</figcaption>
-    </figure>
+    ${figure("three-two-one-support", "A 3-2-1 support removes the six rigid-body modes and no more. Under balanced loads, it produces no reactions.")}
     <p>For a balanced load, such as equal and opposite forces on two faces, a
       3-2-1 support carries no reaction and does not disturb the stress. In
       KoFEM, the 1000 mm bar pulled by ${tex("±10^6\\text{ N}")} on its end faces and held this way
@@ -304,8 +286,7 @@ export default {
 
     <h2 id="conflicts">Conflicting constraints and unmatched selections</h2>
     <p>Several groups can name the same DOF, for example at the nodes on the
-      edge shared by two selected faces. At the reviewed revision, the solid
-      solve handles overlaps and stale selections as follows:</p>
+      edge shared by two selected faces. The solid solve handles overlaps and stale selections as follows:</p>
     <ul>
       <li><strong>Same DOF, same value in two groups:</strong> accepted and
         merged into one constraint.</li>
@@ -360,9 +341,7 @@ export default {
       how the solver reports failure.</p>
 
     <h2 id="implementation">KoFEM implementation and evidence</h2>
-    <p>Reviewed on 2 November 2026 at
-      <a href="https://github.com/mkofler96/KoFEM/tree/${revision}"><code>${revision.slice(0, 7)}</code></a>,
-      against MFEM 4.7. The solid solve is
+    <p>KoFEM uses MFEM 4.7. The solid solve is
       ${source("engine/cpp/solve_mfem.cpp", 182, "solve_linear_elastic")}.</p>
     <ul>
       <li><strong>Groups to payload.</strong> Each node of a support group gets
@@ -399,28 +378,13 @@ export default {
         ${tex("\\mathbf{f}")} after assembly
         (${source("engine/cpp/fem_bc_io.cpp", 425, "apply_point_loads")}).</li>
     </ul>
-    <div class="table-wrap" tabindex="0" role="region" aria-label="Validation evidence for loads and constraints; scroll horizontally if needed">
-      <table>
-        <caption>Evidence that runs the real engine</caption>
-        <thead><tr><th scope="col">Claim</th><th scope="col">Evidence</th></tr></thead>
-        <tbody>
-          <tr><th scope="row">Fixed face and face force</th><td><a href="/examples/axial-bar/">Axial bar</a> against ${tex("PL/(EA)")}</td></tr>
-          <tr><th scope="row">Pressure sign and per-area scaling</th><td><a href="/examples/surface-pressure/">Bar under end pressure</a></td></tr>
-          <tr><th scope="row">Per-component supports</th><td><code>examples/validation/dof-constraint.test.mjs</code></td></tr>
-          <tr><th scope="row">Non-zero prescribed displacement</th><td><code>examples/validation/prescribed-displacement.test.mjs</code></td></tr>
-          <tr><th scope="row">Overlapping loads; supports without a load</th><td><code>examples/validation/multiple-loads.test.mjs</code></td></tr>
-          <tr><th scope="row">Conflicts and invalid indices</th><td><code>web/tests/test_bc_validation.mjs</code>, <code>scripts/test-bc-validation.sh</code></td></tr>
-        </tbody>
-      </table>
-    </div>
-    <p>The tests run in CI with <code>cd web &amp;&amp; bun run test:validation</code>.
-      The 3-2-1, sliding-support, under-constrained and point-support results on
-      this page were computed with the same engine build for this review; they
-      are not part of the test suite. Historical issues: prescribed values
-      were once silently pinned to zero (KOF-210), overlapping loads dropped
-      (KOF-216), unmatched faces dropped without a count (KOF-220) and
-      conflicting constraints resolved silently (KOF-218). All are fixed at the
-      reviewed revision.</p>
+    <p>Two public examples exercise these paths in the browser engine: the
+      <a href="/examples/axial-bar/">axial bar</a> checks a fixed face and a
+      face force against ${tex("PL/(EA)")}, and the
+      <a href="/examples/surface-pressure/">bar under end pressure</a> checks
+      the pressure sign and its per-area scaling. Per-component supports,
+      prescribed displacements, overlapping loads and conflicting constraints
+      are covered by KoFEM’s automated engine tests.</p>
 
     <h2 id="references">Sources and further reading</h2>
     <ol class="refs">

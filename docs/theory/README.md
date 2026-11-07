@@ -10,7 +10,8 @@ one long manual.
   for an article.
 
 Public articles live under `/theory/`, with source modules in `web/theory/`.
-The published articles are `foundations/model-and-units`, the separate
+The published articles are `foundations/what-is-fem` (formerly
+`foundations/model-and-units`, which redirects), the separate
 `foundations/consistent-units` comparison, `notation`, and four focused operator
 articles: gradients/divergence, tensor products, integration by parts, and
 reference-element mappings, the solid-mechanics articles `linear-elasticity`
@@ -27,7 +28,7 @@ physical models; KoFEM examples and
 implementation sections are included when relevant. Remaining topics stay marked
 as planned until reviewed.
 Run `cd web && bun run theory:generate` after editing, and commit generated
-HTML and sitemap. `bun run test:theory` checks output, content-map alignment
+HTML, figures, viewer data and sitemap. `bun run test:theory` checks output, content-map alignment
 and the worked elasticity, linear-solve, stress and SIMP calculations, then executes the four
 axial-bar WASM solves and the recorded topology-optimization benchmarks.
 
@@ -42,11 +43,47 @@ display math in a labelled, focusable `.equation` region so long expressions scr
 Sections use explicit permanent IDs, code uses `pre`/`code`, and figures have
 alt text and captions. Never copy measured results from the generated examples.
 
+Pages are read on the website and next to the app. Keep command lines,
+review dates, commit hashes and Linear issue references out of article text;
+they belong in this README, the PR and the Linear evidence comment. Source
+links may stay, pinned to the reviewed revision.
+
+## Figures and result viewers
+
+Figures are textbook-style drawings, one module per article group in
+`web/theory/figures/` (shared drawing helpers in `svg.mjs`, a small
+deterministic triangulator in `mesh2d.mjs`). Register a figure there with its
+title, alt text and size, and place it in an article with
+`figure(id, caption)`. The generator publishes it through
+`web/figure-assets.mjs`, as for the example pages: `public/theory/figures/<id>.svg`
+with subsets of the site fonts (IBM Plex Sans, KoFEM Math) embedded, for the
+browser, and `<id>.png` at twice its size, the crawlable fallback, both in one
+`<picture>`. The sitemap lists each figure's PNG as an image of its article;
+the generator fails on a figure no page uses and, with `--check`, on any file
+that differs from what the sources render. Figures are drawn for a light
+background; `theory.css` inverts them for the dark theme. Compute plotted
+curves and meshes from their formulas rather than drawing them by hand, and
+say in the caption when a plot is schematic.
+
+Labels use the site fonts only, so the SVG and PNG look the same: class `sym`
+sets a symbol in math italic (`text(p, "u = u_D", "sym")`, where `_D` is an
+upright subscript); Greek letters in other labels go to the math font
+automatically; powers of ten use `powerOfTen`. Characters a font lacks
+(for example ⁻⁶ or ∝) fail the build with the label to change.
+
+`resultViewer(id, { caption })` from `web/theory/viewers/index.mjs` embeds a
+solved public example in 3D: the generator extracts the boundary surface and
+the field of the example's own figure from `examples/gallery/site/<id>.vtu` into
+`web/public/theory/viewers/<id>.json`. `web/public/theory/viewer.js` draws it
+with three.js, served from `node_modules` at `/vendor/three/` (see
+`vite.config.ts`), and leaves the example's static figure in place without
+JavaScript or WebGL. Regenerate the Theory pages after re-running the examples.
+
 Write links to a planned topic with its permanent URL. The generator points them
 at the topic's planned overview entry until the article is published, and fails
 on links to unknown `/theory/` pages. Numerical-methods articles pin their
 source links in `web/theory/numerical-methods/sources.mjs`; update its revision
-and line numbers together with the articles' review dates. Results and
+and line numbers together when the implementation changes. Results and
 solid-mechanics articles use their own snapshots in
 `web/theory/results/sources.mjs` and `web/theory/solid-mechanics/sources.mjs`.
 
@@ -60,7 +97,7 @@ behavior. Review this mapping before deciding which articles to update:
 
 | Changed behavior                                              | Review these articles and evidence                                                                                       |
 | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Formulation, strain/material law, geometry or unit convention | Model/units, notation, relevant operators, linear elasticity, equilibrium/weak form, and the bar’s reference assumptions |
+| Formulation, strain/material law, geometry or unit convention | What is FEM?, notation, relevant operators, linear elasticity, equilibrium/weak form, and the bar’s reference assumptions |
 | Element family/order, quadrature or assembly                  | Reference mapping, elements/quadrature, assembly, affected mesh/order studies and DOF counts                             |
 | Loads, constraints or their defaults                          | Loads/constraints, reading-a-study, bar setup, source references and numerical bands                                     |
 | Solver method, tolerance, continuation or failure behavior    | Linear solve, benchmark solver settings, live numerical checks and reviewed engine identity                              |
