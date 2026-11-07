@@ -954,7 +954,7 @@
     <div class="docs theory-docs">
       <nav class="docs-nav" aria-label="Theory topics"><ul><li><a href="/theory/">Theory overview</a></li></ul>
     <details class="docs-group">
-      <summary>Foundations</summary><ul><li><a href="/theory/foundations/model-and-units/">Model and units</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
+      <summary>Foundations</summary><ul><li><a href="/theory/foundations/what-is-fem/">What is FEM?</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
     </details><details class="docs-group" open>
       <summary>Notation and operators</summary><ul><li><a href="/theory/notation/">Notation</a></li><li><a href="/theory/operators/gradient-divergence/" aria-current="page">Gradient and divergence</a></li><li><a href="/theory/operators/tensor-products/">Tensor products and contractions</a></li><li><a href="/theory/operators/integration-by-parts/">Integration and the weak form</a></li><li><a href="/theory/operators/reference-mapping/">Reference elements and Jacobians</a></li></ul>
     </details><details class="docs-group">
@@ -974,7 +974,7 @@
         <details class="docs-menu"><summary>Theory contents</summary><div>
           <nav aria-label="Theory topics (mobile)"><ul><li><a href="/theory/">Theory overview</a></li></ul>
     <details class="docs-group">
-      <summary>Foundations</summary><ul><li><a href="/theory/foundations/model-and-units/">Model and units</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
+      <summary>Foundations</summary><ul><li><a href="/theory/foundations/what-is-fem/">What is FEM?</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
     </details><details class="docs-group" open>
       <summary>Notation and operators</summary><ul><li><a href="/theory/notation/">Notation</a></li><li><a href="/theory/operators/gradient-divergence/" aria-current="page">Gradient and divergence</a></li><li><a href="/theory/operators/tensor-products/">Tensor products and contractions</a></li><li><a href="/theory/operators/integration-by-parts/">Integration and the weak form</a></li><li><a href="/theory/operators/reference-mapping/">Reference elements and Jacobians</a></li></ul>
     </details><details class="docs-group">
@@ -1013,6 +1013,10 @@
       <math><mi>q</mi><mo>=</mo></math>​<math><mn>7</mn></math> and <math><mo lspace="0" rspace="0">∇</mo><mi>q</mi><mo>=</mo></math>​<span class="math-nowrap"><math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>4</mn><mo>,</mo><mn>3</mn><mo>,</mo><mn>0</mn><msup><mo stretchy="false" lspace="0" rspace="0">)</mo><mi>T</mi></msup></math>.</span> A small step <math><mi>h</mi></math> along <math><mi>x</mi></math> changes <math><mi>q</mi></math> by
       approximately <span class="math-nowrap"><math><mn>4</mn><mi>h</mi></math>;</span> a step along <math><mi>z</mi></math> does not change it. The gradient points
       toward the steepest local increase.</p>
+    <figure class="theory-figure full" id="figure-scalar-gradient">
+      <a href="/theory/figures/scalar-gradient.svg" class="figure-link"><img src="/theory/figures/scalar-gradient.svg" width="520" height="345" alt="Elliptical contour lines of a scalar field phi. Blue arrows at points on one contour show the gradient, perpendicular to the contour and pointing outwards towards larger phi." loading="lazy" decoding="async" /></a>
+      <figcaption>Level sets of a scalar field φ and its gradient at points on one of them. The gradient is normal to the level set and points towards larger values; its length is the rate of increase.</figcaption>
+    </figure>
     <p>Units divide by length: a pressure gradient has units MPa/mm.
       In FEM, the gradient of a dimensionless
       <a href="/theory/notation/#shape-functions">shape function <math><msub><mi>N</mi><mi>a</mi></msub></math></a>
@@ -1082,8 +1086,8 @@
         gradient, divergence and flux.</li>
       <li><a href="https://ocw.mit.edu/courses/2-080j-structural-mechanics-fall-2013/">MIT OpenCourseWare: Structural Mechanics</a>,
         infinitesimal strain and stress equilibrium.</li>
-      <li>KoFEM’s solid recovery at reviewed revision
-        <a href="https://github.com/mkofler96/KoFEM/blob/77ff67ed76c724924decc8c2691f0f5fbd4aea5b/engine/cpp/solve_mfem.cpp#L127">77ff67e (2 November 2026)</a>
+      <li>KoFEM’s
+        <a href="https://github.com/mkofler96/KoFEM/blob/77ff67ed76c724924decc8c2691f0f5fbd4aea5b/engine/cpp/solve_mfem.cpp#L127">solid stress recovery</a>
         obtains a displacement gradient, symmetrises it and applies the Lamé
         material law. The explicit
         <a href="https://github.com/mkofler96/KoFEM/blob/77ff67ed76c724924decc8c2691f0f5fbd4aea5b/engine/cpp/tet_element.cpp#L139">coupled-solid gradient</a>

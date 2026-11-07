@@ -954,7 +954,7 @@
     <div class="docs theory-docs">
       <nav class="docs-nav" aria-label="Theory topics"><ul><li><a href="/theory/">Theory overview</a></li></ul>
     <details class="docs-group">
-      <summary>Foundations</summary><ul><li><a href="/theory/foundations/model-and-units/">Model and units</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
+      <summary>Foundations</summary><ul><li><a href="/theory/foundations/what-is-fem/">What is FEM?</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
     </details><details class="docs-group">
       <summary>Notation and operators</summary><ul><li><a href="/theory/notation/">Notation</a></li><li><a href="/theory/operators/gradient-divergence/">Gradient and divergence</a></li><li><a href="/theory/operators/tensor-products/">Tensor products and contractions</a></li><li><a href="/theory/operators/integration-by-parts/">Integration and the weak form</a></li><li><a href="/theory/operators/reference-mapping/">Reference elements and Jacobians</a></li></ul>
     </details><details class="docs-group">
@@ -974,7 +974,7 @@
         <details class="docs-menu"><summary>Theory contents</summary><div>
           <nav aria-label="Theory topics (mobile)"><ul><li><a href="/theory/">Theory overview</a></li></ul>
     <details class="docs-group">
-      <summary>Foundations</summary><ul><li><a href="/theory/foundations/model-and-units/">Model and units</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
+      <summary>Foundations</summary><ul><li><a href="/theory/foundations/what-is-fem/">What is FEM?</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
     </details><details class="docs-group">
       <summary>Notation and operators</summary><ul><li><a href="/theory/notation/">Notation</a></li><li><a href="/theory/operators/gradient-divergence/">Gradient and divergence</a></li><li><a href="/theory/operators/tensor-products/">Tensor products and contractions</a></li><li><a href="/theory/operators/integration-by-parts/">Integration and the weak form</a></li><li><a href="/theory/operators/reference-mapping/">Reference elements and Jacobians</a></li></ul>
     </details><details class="docs-group">
@@ -994,7 +994,7 @@
         </div></details>
         <nav class="crumbs" aria-label="Breadcrumb"><a href="/">KoFEM</a> / <a href="/theory/">Theory</a> / Optimization / Constraints and convergence</nav>
         <h1>Constraints and convergence</h1>
-        <details class="article-contents"><summary>On this page</summary><ul><li><a href="#iteration">One iteration, step by step</a></li><li><a href="#in-engine">Why the loop runs in the engine</a></li><li><a href="#filtering">Filtering, radius and mesh dependence</a></li><li><a href="#mma">Updating densities with MMA</a></li><li><a href="#stress-constraint">Maximum-stress constraints</a></li><li><a href="#termination">When a run stops</a></li><li><a href="#benchmarks">Check the MBB beam and mesh independence</a></li><li><a href="#references">Reviewed implementation and references</a></li></ul></details>
+        <details class="article-contents"><summary>On this page</summary><ul><li><a href="#iteration">One iteration, step by step</a></li><li><a href="#in-engine">Why the loop runs in the engine</a></li><li><a href="#filtering">Filtering, radius and mesh dependence</a></li><li><a href="#mma">Updating densities with MMA</a></li><li><a href="#stress-constraint">Maximum-stress constraints</a></li><li><a href="#termination">When a run stops</a></li><li><a href="#benchmarks">Check the MBB beam and mesh independence</a></li><li><a href="#references">Implementation and references</a></li></ul></details>
 
     <p class="lede">How do filtering, constraints and convergence shape an optimized design?</p>
     <p><a href="/theory/optimization/simp/">SIMP</a> defines the design
@@ -1043,17 +1043,17 @@
     <p>The tradeoff is control. A single blocking call cannot pause, so
       cancelling a run terminates the worker and discards it. Progress is
       visible because the engine logs one line per iteration and passes each
-      analysed density to an optional callback. The decision, its later
-      streaming revision and when to revisit it are recorded in
-      <a href="https://linear.app/kofem/document/adr-0002-simp-topology-optimization-runs-as-an-in-engine-loop-dbb4630d0dfb">ADR-0002</a>.
-      Revisit it if a design space stops fitting one in-memory solve, or when
-      multiple load cases and manufacturing constraints arrive.</p>
+      analysed density to an optional callback.</p>
 
     <h2 id="filtering">Filtering, radius and mesh dependence</h2>
     <p>Unfiltered SIMP has two well-known failures. Checkerboards — alternating
       solid and void elements — look artificially stiff to low-order elements.
       And refining the mesh lets ever thinner members appear, so the answer
       changes with the mesh instead of converging to one design.</p>
+    <figure class="theory-figure full" id="figure-density-filter">
+      <a href="/theory/figures/density-filter.svg" class="figure-link"><img src="/theory/figures/density-filter.svg" width="400" height="290" alt="A grid of elements with a circle of radius r min around element e. Elements inside the circle are shaded blue, darkest at the centre, showing filter weights that fall linearly with distance to zero at the radius." loading="lazy" decoding="async" /></a>
+      <figcaption>Filter weights around element e: they fall linearly with distance and vanish at the radius r<sub>min</sub>. Features thinner than about the radius cannot form.</figcaption>
+    </figure>
     <p>KoFEM’s filter introduces a physical length, the
       <a href="/theory/notation/#filter-radius">filter radius</a>
       <span class="math-nowrap"><math><msub><mi>r</mi><mrow><mi mathvariant="normal">min</mi></mrow></msub></math>.</span> Elements whose centroids
@@ -1124,8 +1124,7 @@
       <math><msub><mi>ρ</mi><mrow><mi mathvariant="normal">min</mi></mrow></msub><mo>=</mo></math>​<math><msup><mn>10</mn><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>3</mn></mrow></msup></math> rather than 0. The constraint
       controls a relaxed, element-centre, aggregated measure. It does not
       bound the peak stress of a smoothed, re-meshed part, and it is not
-      available for shell or coupled models
-      (<a href="https://linear.app/kofem/issue/KOF-251">KOF-251</a>).</p>
+      available for shell or coupled models.</p>
 
     <h2 id="termination">When a run stops</h2>
     <p>A run is reported as <em>converged</em> when the largest density change
@@ -1173,22 +1172,9 @@
     <div class="table-wrap" tabindex="0" role="region" aria-label="Executed topology-optimization benchmarks; scroll horizontally if needed"><table class="shell-table">
     <caption>Executed topology-optimization benchmarks</caption><thead><tr><th scope="col">Case</th><th scope="col">Elements</th><th scope="col">Iterations</th><th scope="col">Compliance: start → end</th><th scope="col">Final volume fraction</th></tr></thead>
     <tbody><tr><th scope="row">MBB half-beam</th><td>432</td><td>50, converged</td><td>1802 → 413.1</td><td>0.5</td></tr><tr><th scope="row">Cantilever, 10 × 5 × 5</th><td>250</td><td>45, converged</td><td>616.6 → 188.5</td><td>0.4</td></tr><tr><th scope="row">Cantilever, 20 × 10 × 10</th><td>2,000</td><td>70, converged</td><td>650.7 → 190.1</td><td>0.4</td></tr></tbody></table></div>
-    <figure>
-      <pre tabindex="0" role="img" aria-label="Text plot of the MBB half-beam densities: a solid top chord, a bottom tie and diagonal members between them" class="layout-art"><code>  #########################:
-  ##########################:
-  ######::::::::##############
-    :###            :####::####
-     :###          :####:   :###
-      :###:       :####:     :###:
-       :###:     :###:        :###:
-        :####  :####:          :###:
-        ::####:####              ####:
-  ###############:               :####
-  ###############:::::::::::::::::####
-  ####################################</code></pre>
-      <figcaption>MBB half-beam, top row first: <code>#</code> density above 0.5,
-        <code>:</code> 0.25–0.5, blank below 0.25. The symmetry plane is on the
-        left, the roller at bottom right.</figcaption>
+    <figure class="theory-figure full" id="figure-mbb-half-beam-layout">
+      <a href="/theory/figures/mbb-half-beam-layout.svg" class="figure-link"><img src="/theory/figures/mbb-half-beam-layout.svg" width="660" height="330" alt="The optimized density of the MBB half-beam on a 36 by 12 element grid. Dark elements form a top chord, a bottom tie and diagonal members; the symmetry plane is on the left, the load on the top left and a roller at the bottom right." loading="lazy" decoding="async" /></a>
+      <figcaption>The recorded MBB half-beam densities, one square per element: black above 0.5, grey 0.25–0.5, white below 0.25. The symmetry plane is on the left, the load at its top and the roller at bottom right.</figcaption>
     </figure>
     <p>The MBB run reproduces the published layout: a compression chord along
       the top, a tension tie along the bottom and diagonals between them. Its
@@ -1205,18 +1191,12 @@
       refinement of one problem on structured hexahedra. It does not establish
       mesh independence for unstructured Netgen tetrahedra, other filter radii,
       shells or stress-constrained runs.</p>
-    <pre><code>node examples/validation/topopt/run.mjs
-cd web &amp;&amp; bun theory/optimization/capture-evidence.mjs</code></pre>
-    <p>The first command runs every benchmark with its tolerance bands; the
-      second checks the <a href="/theory/optimization.json">recorded numbers</a>
-      against a fresh run and fails if the engine changed. The public
+    <p>KoFEM’s automated tests rerun both benchmarks with their tolerance
+      bands and compare them with the <a href="/theory/optimization.json">recorded numbers</a>. The public
       <a href="/examples/mbb-beam-topopt/">MBB beam example</a> solves the full
       beam from a STEP model on a Netgen mesh in the app.</p>
 
-    <h2 id="references">Reviewed implementation and references</h2>
-    <p>Reviewed on 6 November 2026 at
-      <a href="https://github.com/mkofler96/KoFEM/tree/6ba4db0ed963d6c8c0cb3263edf6737763994b6c"><code>6ba4db0ed963</code></a>
-      (engine <code>engine-a5154f0787e6</code>).</p>
+    <h2 id="references">Implementation and references</h2>
     <ol class="refs">
       <li>Sigmund (2001), <cite>A 99 line topology optimization code written in Matlab</cite>, Structural and Multidisciplinary Optimization 21, 120–127; and Andreassen et al. (2011), <cite>Efficient topology optimization in MATLAB using 88 lines of code</cite>, Structural and Multidisciplinary Optimization 43, 1–16.</li>
       <li>Svanberg (1987), <cite>The method of moving asymptotes — a new method for structural optimization</cite>, International Journal for Numerical Methods in Engineering 24, 359–373.</li>
@@ -1229,18 +1209,12 @@ cd web &amp;&amp; bun theory/optimization/capture-evidence.mjs</code></pre>
         <a href="https://github.com/mkofler96/KoFEM/blob/6ba4db0ed963d6c8c0cb3263edf6737763994b6c/engine/cpp/topology_stress.cpp#L95">relaxed, aggregated stress and adjoint</a> and
         <a href="https://github.com/mkofler96/KoFEM/blob/6ba4db0ed963d6c8c0cb3263edf6737763994b6c/engine/cpp/topology_simp.cpp#L320">stress density floor</a>.</li>
       <li><a href="https://github.com/mkofler96/KoFEM/blob/6ba4db0ed963d6c8c0cb3263edf6737763994b6c/web/src/store/topOptSlice.ts#L72">app defaults</a> and
-        <a href="https://github.com/mkofler96/KoFEM/blob/6ba4db0ed963d6c8c0cb3263edf6737763994b6c/examples/validation/topopt/README.md#L1">benchmark descriptions and bands</a>.
-        Native loop, filter and MMA checks run in CI through
-        <code>scripts/test-topology-optimize.sh</code>,
-        <code>scripts/test-topology-filter.sh</code> and
-        <code>scripts/test-topology-mma.sh</code>.</li>
-      <li>Architecture record: <a href="https://linear.app/kofem/document/adr-0002-simp-topology-optimization-runs-as-an-in-engine-loop-dbb4630d0dfb">ADR-0002</a>.
-        This page follows the code at the reviewed revision.</li>
+        <a href="https://github.com/mkofler96/KoFEM/blob/6ba4db0ed963d6c8c0cb3263edf6737763994b6c/examples/validation/topopt/README.md#L1">benchmark descriptions and bands</a>.</li>
     </ol><nav class="pager" aria-label="Reading order">
       <a class="prev" rel="prev" href="/theory/optimization/simp/"><small>Previous</small>← SIMP</a>
       <a class="next" rel="next" href="/theory/optimization/interpreting-designs/"><small>Next</small>Interpreting optimized designs →</a></nav>
       </main>
-      <nav class="docs-toc" aria-label="On this page"><p>On this page</p><ul><li><a href="#iteration">One iteration, step by step</a></li><li><a href="#in-engine">Why the loop runs in the engine</a></li><li><a href="#filtering">Filtering, radius and mesh dependence</a></li><li><a href="#mma">Updating densities with MMA</a></li><li><a href="#stress-constraint">Maximum-stress constraints</a></li><li><a href="#termination">When a run stops</a></li><li><a href="#benchmarks">Check the MBB beam and mesh independence</a></li><li><a href="#references">Reviewed implementation and references</a></li></ul></nav>
+      <nav class="docs-toc" aria-label="On this page"><p>On this page</p><ul><li><a href="#iteration">One iteration, step by step</a></li><li><a href="#in-engine">Why the loop runs in the engine</a></li><li><a href="#filtering">Filtering, radius and mesh dependence</a></li><li><a href="#mma">Updating densities with MMA</a></li><li><a href="#stress-constraint">Maximum-stress constraints</a></li><li><a href="#termination">When a run stops</a></li><li><a href="#benchmarks">Check the MBB beam and mesh independence</a></li><li><a href="#references">Implementation and references</a></li></ul></nav>
     </div><footer class="site-footer">
       <span>KoFEM — finite element analysis in your browser</span>
       <nav aria-label="Footer">

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 345" width="640" height="345" role="img" aria-labelledby="title desc">
+<title id="title">Convergence of conjugate gradients with and without preconditioning</title>
+<desc id="desc">Relative residual against iteration on a logarithmic scale for a small plane-elasticity problem. Conjugate gradients without a preconditioner needs many more iterations to reach the 10 to the minus 6 tolerance than conjugate gradients preconditioned with symmetric Gauss–Seidel.</desc>
+<style>text { font-family: "Helvetica Neue", Helvetica, Arial, "Segoe UI", Roboto, sans-serif; font-size: 13px; fill: #1f2933; } .sym { font-family: "Latin Modern Math", "STIX Two Math", "Cambria Math", "Times New Roman", Times, serif; font-style: italic; font-size: 17px; } .sym.up { font-style: normal; } .bold { font-weight: 700; } .halo { paint-order: stroke; stroke: #ffffff; stroke-width: 4px; stroke-linejoin: round; } .small { font-size: 11px; } .lbl { fill: #5f6b7a; } .title { font-size: 14px; font-weight: 600; } .load-text { fill: #c62828; font-weight: 700; font-style: italic; } .accent-text { fill: #1d5bbf; } .accent2-text { fill: #c4561f; } .body { fill: #dce8f4; stroke: #1f2933; stroke-width: 1.6; stroke-linejoin: round; } .body-alt { fill: #eef2f6; stroke: #1f2933; stroke-width: 1.4; stroke-linejoin: round; } .side { fill: #c3d5e8; stroke: #1f2933; stroke-width: 1.2; stroke-linejoin: round; } .outline { fill: none; stroke: #1f2933; stroke-width: 1.6; stroke-linejoin: round; } .mesh { fill: none; stroke: #3e4c5b; stroke-width: 0.8; stroke-linejoin: round; } .ink { fill: none; stroke: #1f2933; stroke-width: 1.3; } .thin { fill: none; stroke: #1f2933; stroke-width: 0.8; } .dash { fill: none; stroke: #5f6b7a; stroke-width: 1; stroke-dasharray: 5 4; } .grid { fill: none; stroke: #d5dbe2; stroke-width: 0.8; } .axis { fill: none; stroke: #1f2933; stroke-width: 1.2; } .dim { fill: none; stroke: #5f6b7a; stroke-width: 1; } .load { fill: none; stroke: #c62828; stroke-width: 2; } .accent { fill: none; stroke: #1d5bbf; stroke-width: 2; } .accent2 { fill: none; stroke: #c4561f; stroke-width: 2; } .accent3 { fill: none; stroke: #2e7d32; stroke-width: 2; } .accent4 { fill: none; stroke: #7b3fa0; stroke-width: 2; } .node { fill: #1f2933; } .node-open { fill: #ffffff; stroke: #1f2933; stroke-width: 1.4; } .node-accent { fill: #c4561f; } .gauss { fill: #c62828; } .hatch-fill { fill: url(#hatch); stroke: none; } .ground { fill: none; stroke: #1f2933; stroke-width: 1.6; }</style>
+<defs><marker id="a-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1f2933"/></marker><marker id="a-muted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#5f6b7a"/></marker><marker id="a-load" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#c62828"/></marker><marker id="a-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1d5bbf"/></marker><marker id="a-accent2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#c4561f"/></marker><marker id="a-accent3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#2e7d32"/></marker><marker id="a-accent4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#7b3fa0"/></marker><pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="#5f6b7a" stroke-width="1.2"/></pattern></defs>
+<line x1="80" y1="290" x2="600" y2="290" class="grid"/>
+<text x="72" y="294" text-anchor="end" class="small lbl">10⁻⁹</text>
+<line x1="80" y1="264" x2="600" y2="264" class="grid"/>
+<line x1="80" y1="238" x2="600" y2="238" class="grid"/>
+<line x1="80" y1="212" x2="600" y2="212" class="grid"/>
+<text x="72" y="216" text-anchor="end" class="small lbl">10⁻⁶</text>
+<line x1="80" y1="186" x2="600" y2="186" class="grid"/>
+<line x1="80" y1="160" x2="600" y2="160" class="grid"/>
+<line x1="80" y1="134" x2="600" y2="134" class="grid"/>
+<text x="72" y="138" text-anchor="end" class="small lbl">10⁻³</text>
+<line x1="80" y1="108" x2="600" y2="108" class="grid"/>
+<line x1="80" y1="82" x2="600" y2="82" class="grid"/>
+<line x1="80" y1="56" x2="600" y2="56" class="grid"/>
+<text x="72" y="60" text-anchor="end" class="small lbl">1</text>
+<line x1="80" y1="30" x2="600" y2="30" class="grid"/>
+<line x1="80" y1="290" x2="80" y2="295" class="thin"/>
+<text x="80" y="310" text-anchor="middle" class="small lbl">0</text>
+<line x1="218.3" y1="290" x2="218.3" y2="295" class="thin"/>
+<text x="218.3" y="310" text-anchor="middle" class="small lbl">25</text>
+<line x1="356.6" y1="290" x2="356.6" y2="295" class="thin"/>
+<text x="356.6" y="310" text-anchor="middle" class="small lbl">50</text>
+<line x1="494.89" y1="290" x2="494.89" y2="295" class="thin"/>
+<text x="494.89" y="310" text-anchor="middle" class="small lbl">75</text>
+<line x1="80" y1="290" x2="600" y2="290" class="axis"/>
+<line x1="80" y1="30" x2="80" y2="290" class="axis"/>
+<text x="340" y="336" text-anchor="middle" class="lbl">iteration</text>
+<text x="24" y="160" text-anchor="middle" class="lbl" transform="rotate(-90 24 160)">relative residual</text>
+<line x1="80" y1="212" x2="600" y2="212" class="dash" style="stroke:#c62828"/>
+<text x="596" y="206" text-anchor="end" class="small load-text">KoFEM stops at 10⁻⁶</text>
+<polyline points="80,56 85.53,60.17 91.06,59.94 96.6,58.74 102.13,58.77 107.66,58.45 113.19,57.49 118.72,57.06 124.26,57.09 129.79,55.78 135.32,55.75 140.85,54.95 146.38,54 151.91,53.52 157.45,53.76 162.98,53.53 168.51,54.9 174.04,54.79 179.57,55.03 185.11,55.68 190.64,57.18 196.17,57.1 201.7,54.1 207.23,51.74 212.77,49.14 218.3,49.61 223.83,48.65 229.36,49.23 234.89,51.05 240.43,52.99 245.96,54.31 251.49,56.4 257.02,58.98 262.55,59.98 268.09,60.83 273.62,62.8 279.15,64.26 284.68,66.24 290.21,67.87 295.74,68.21 301.28,69.07 306.81,66.86 312.34,65.77 317.87,66.54 323.4,67.73 328.94,69.01 334.47,69.38 340,70.43 345.53,74.31 351.06,79.22 356.6,86.46 362.13,90.8 367.66,98.34 373.19,103.15 378.72,106.48 384.26,108.5 389.79,110.83 395.32,114.11 400.85,119.38 406.38,122.4 411.91,126.57 417.45,130.8 422.98,136.75 428.51,139.97 434.04,143.65 439.57,147.08 445.11,150.44 450.64,155.46 456.17,161.23 461.7,167.02 467.23,173.07 472.77,180.08 478.3,184.45 483.83,187.31 489.36,190.49 494.89,196.46 500.43,201.3 505.96,206.36 511.49,210.22 517.02,215.49 522.55,222.23 528.09,227.88 533.62,233.38 539.15,236.62 544.68,240.04 550.21,246.91 555.74,253.75 561.28,260.69 566.81,266.39 572.34,270.74 577.87,276.99 583.4,283.77 588.94,289.04 594.47,290" class="accent2"/>
+<polyline points="80,56 85.53,60.79 91.06,60.09 96.6,58.35 102.13,56.59 107.66,56.74 113.19,58.08 118.72,56.57 124.26,52.04 129.79,51.56 135.32,57.8 140.85,62.26 146.38,66.75 151.91,69.09 157.45,69.42 162.98,69.21 168.51,74.98 174.04,87.07 179.57,98.78 185.11,106.05 190.64,118.45 196.17,129.87 201.7,143.14 207.23,154.58 212.77,169.16 218.3,184.32 223.83,199.06 229.36,216.42 234.89,230.13 240.43,243.88 245.96,256.8 251.49,269.52 257.02,286.6 262.55,290" class="accent"/>
+<text x="366" y="86.34" text-anchor="start" class="small accent2-text">CG, no preconditioner</text>
+<text x="276.09" y="268" text-anchor="start" class="small accent-text">CG + symmetric Gauss–Seidel</text>
+</svg>

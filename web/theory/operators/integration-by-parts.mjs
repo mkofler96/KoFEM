@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { equation, tex } from "./math.mjs";
+import { figure } from "../figures/index.mjs";
 
 export default {
   slug: "operators/integration-by-parts",
@@ -49,6 +50,7 @@ export default {
       The divergence is 1, so the volume integral is 1.
       On ${tex("x = 1")}, ${tex("v\\cdot n = 1")} over unit area; on ${tex("x = 0")} it is zero;
       on the other four faces ${tex("v\\cdot n = 0")}. Boundary flux is therefore also 1.</p>
+    ${figure("divergence-theorem", "A vector field q and a body Ω with boundary Γ. The divergence theorem equates the total divergence of q inside Ω with the net outflow q · n through Γ, where n is the outward unit normal.")}
     <p>The outward sign matters. With traction ${tex("t = σn")}, tensile stress
       pulls outward on opposite faces in opposite directions. A common
       constant vector need not represent both face tractions.</p>

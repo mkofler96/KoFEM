@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 340" width="800" height="340" role="img" aria-labelledby="title desc">
+<title id="title">Mapping a reference element to a physical element</title>
+<desc id="desc">Left: the reference square with coordinates xi and eta from minus one to one. Right: a four-node physical quadrilateral. A curved arrow labelled x equals F of xi maps one to the other; dashed grid lines of constant xi and eta become curved lines, and two arrows show the mapped xi and eta directions.</desc>
+<style>text { font-family: "Helvetica Neue", Helvetica, Arial, "Segoe UI", Roboto, sans-serif; font-size: 13px; fill: #1f2933; } .sym { font-family: "Latin Modern Math", "STIX Two Math", "Cambria Math", "Times New Roman", Times, serif; font-style: italic; font-size: 17px; } .sym.up { font-style: normal; } .bold { font-weight: 700; } .halo { paint-order: stroke; stroke: #ffffff; stroke-width: 4px; stroke-linejoin: round; } .small { font-size: 11px; } .lbl { fill: #5f6b7a; } .title { font-size: 14px; font-weight: 600; } .load-text { fill: #c62828; font-weight: 700; font-style: italic; } .accent-text { fill: #1d5bbf; } .accent2-text { fill: #c4561f; } .body { fill: #dce8f4; stroke: #1f2933; stroke-width: 1.6; stroke-linejoin: round; } .body-alt { fill: #eef2f6; stroke: #1f2933; stroke-width: 1.4; stroke-linejoin: round; } .side { fill: #c3d5e8; stroke: #1f2933; stroke-width: 1.2; stroke-linejoin: round; } .outline { fill: none; stroke: #1f2933; stroke-width: 1.6; stroke-linejoin: round; } .mesh { fill: none; stroke: #3e4c5b; stroke-width: 0.8; stroke-linejoin: round; } .ink { fill: none; stroke: #1f2933; stroke-width: 1.3; } .thin { fill: none; stroke: #1f2933; stroke-width: 0.8; } .dash { fill: none; stroke: #5f6b7a; stroke-width: 1; stroke-dasharray: 5 4; } .grid { fill: none; stroke: #d5dbe2; stroke-width: 0.8; } .axis { fill: none; stroke: #1f2933; stroke-width: 1.2; } .dim { fill: none; stroke: #5f6b7a; stroke-width: 1; } .load { fill: none; stroke: #c62828; stroke-width: 2; } .accent { fill: none; stroke: #1d5bbf; stroke-width: 2; } .accent2 { fill: none; stroke: #c4561f; stroke-width: 2; } .accent3 { fill: none; stroke: #2e7d32; stroke-width: 2; } .accent4 { fill: none; stroke: #7b3fa0; stroke-width: 2; } .node { fill: #1f2933; } .node-open { fill: #ffffff; stroke: #1f2933; stroke-width: 1.4; } .node-accent { fill: #c4561f; } .gauss { fill: #c62828; } .hatch-fill { fill: url(#hatch); stroke: none; } .ground { fill: none; stroke: #1f2933; stroke-width: 1.6; }</style>
+<defs><marker id="a-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1f2933"/></marker><marker id="a-muted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#5f6b7a"/></marker><marker id="a-load" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#c62828"/></marker><marker id="a-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1d5bbf"/></marker><marker id="a-accent2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#c4561f"/></marker><marker id="a-accent3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#2e7d32"/></marker><marker id="a-accent4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#7b3fa0"/></marker><pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="#5f6b7a" stroke-width="1.2"/></pattern></defs>
+<polygon points="55,270 245,270 245,80 55,80" class="body" style="fill:#c9d6f2"/>
+<line x1="102.5" y1="270" x2="102.5" y2="80" class="dash"/>
+<line x1="55" y1="222.5" x2="245" y2="222.5" class="dash"/>
+<line x1="197.5" y1="270" x2="197.5" y2="80" class="dash"/>
+<line x1="55" y1="127.5" x2="245" y2="127.5" class="dash"/>
+<line x1="25" y1="175" x2="283" y2="175" class="ink" marker-end="url(#a-ink)"/>
+<line x1="150" y1="300" x2="150" y2="46" class="ink" marker-end="url(#a-ink)"/>
+<text x="289" y="180" text-anchor="start" class="sym">ξ</text>
+<text x="156" y="42" text-anchor="start" class="sym">η</text>
+<text x="249" y="193" text-anchor="start">1</text>
+<text x="51" y="193" text-anchor="end">−1</text>
+<text x="142" y="74" text-anchor="end">1</text>
+<text x="142" y="288" text-anchor="end">−1</text>
+<text x="102.5" y="228.5" text-anchor="middle" class="sym">Ω<tspan dy="-8" font-size="65%" font-style="normal">r</tspan></text>
+<text x="94.5" y="72" text-anchor="middle" class="sym">Γ<tspan dy="-8" font-size="65%" font-style="normal">r</tspan></text>
+<circle cx="55" cy="270" r="4.5" class="node"/>
+<circle cx="245" cy="270" r="4.5" class="node"/>
+<circle cx="245" cy="80" r="4.5" class="node"/>
+<circle cx="55" cy="80" r="4.5" class="node"/>
+<polygon points="600,300 735,228 738,98 508,140" class="body"/>
+<path d="M633.75 282L630.34 274.38L626.93 266.75L623.51 259.13L620.1 251.5L616.69 243.88L613.28 236.25L609.86 228.63L606.45 221L603.04 213.38L599.63 205.75L596.21 198.12L592.8 190.5L589.39 182.88L585.97 175.25L582.56 167.63L579.15 160L575.74 152.38L572.33 144.75L568.91 137.13L565.5 129.5" class="dash"/>
+<path d="M577 260L584.94 256.77L592.88 253.55L600.81 250.33L608.75 247.1L616.69 243.88L624.62 240.65L632.56 237.43L640.5 234.2L648.44 230.98L656.38 227.75L664.31 224.53L672.25 221.3L680.19 218.08L688.13 214.85L696.06 211.63L704 208.4L711.94 205.18L719.88 201.95L727.81 198.73L735.75 195.5" class="dash"/>
+<path d="M667.5 264L665.28 256.75L663.05 249.5L660.83 242.25L658.6 235L656.38 227.75L654.15 220.5L651.92 213.25L649.7 206L647.47 198.75L645.25 191.5L643.03 184.25L640.8 177L638.58 169.75L636.35 162.5L634.13 155.25L631.9 148L629.67 140.75L627.45 133.5L625.23 126.25L623 119" class="dash"/>
+<path d="M554 220L563.13 217.15L572.25 214.3L581.38 211.45L590.5 208.6L599.63 205.75L608.75 202.9L617.88 200.05L627 197.2L636.13 194.35L645.25 191.5L654.38 188.65L663.5 185.8L672.63 182.95L681.75 180.1L690.88 177.25L700 174.4L709.13 171.55L718.25 168.7L727.38 165.85L736.5 163" class="dash"/>
+<path d="M701.25 246L700.21 239.13L699.18 232.25L698.14 225.38L697.1 218.5L696.06 211.63L695.03 204.75L693.99 197.88L692.95 191L691.91 184.13L690.88 177.25L689.84 170.38L688.8 163.5L687.76 156.63L686.72 149.75L685.69 142.88L684.65 136L683.61 129.13L682.58 122.25L681.54 115.38L680.5 108.5" class="dash"/>
+<path d="M531 180L541.31 177.52L551.63 175.05L561.94 172.58L572.25 170.1L582.56 167.63L592.87 165.15L603.19 162.68L613.5 160.2L623.81 157.73L634.13 155.25L644.44 152.78L654.75 150.3L665.06 147.83L675.38 145.35L685.69 142.88L696 140.4L706.31 137.92L716.63 135.45L726.94 132.98L737.25 130.5" class="dash"/>
+<circle cx="600" cy="300" r="4.5" class="node"/>
+<circle cx="735" cy="228" r="4.5" class="node"/>
+<circle cx="738" cy="98" r="4.5" class="node"/>
+<circle cx="508" cy="140" r="4.5" class="node"/>
+<text x="602" y="322" text-anchor="middle" class="bold">1</text>
+<text x="749" y="234" text-anchor="start" class="bold">2</text>
+<text x="748" y="92" text-anchor="start" class="bold">3</text>
+<text x="496" y="144" text-anchor="end" class="bold">4</text>
+<text x="618.39" y="247.69" text-anchor="middle" class="sym">Ω<tspan dy="4" font-size="70%">e</tspan></text>
+<text x="628" y="104" text-anchor="middle" class="sym">Γ<tspan dy="4" font-size="70%">e</tspan></text>
+<line x1="500" y1="300" x2="538" y2="300" class="ink" marker-end="url(#a-ink)"/><line x1="500" y1="300" x2="500" y2="262" class="ink" marker-end="url(#a-ink)"/><text x="542" y="305" text-anchor="start" class="sym">x</text><text x="497" y="258" text-anchor="middle" class="sym">y</text>
+<line x1="645.25" y1="191.5" x2="686.31" y2="178.68" class="accent" marker-end="url(#a-accent)"/>
+<line x1="645.25" y1="191.5" x2="635.24" y2="158.88" class="accent2" marker-end="url(#a-accent2)"/>
+<text x="692.31" y="194.68" text-anchor="start" class="sym accent-text" font-size="14">∂x/∂ξ</text>
+<text x="631.24" y="150.88" text-anchor="end" class="sym accent2-text" font-size="14">∂x/∂η</text>
+<path d="M222 70C300 6 430 14 520 92" class="load" marker-end="url(#a-load)"/>
+<text x="370" y="30" text-anchor="middle" class="sym load-text" font-size="18">x = F(ξ)</text>
+</svg>

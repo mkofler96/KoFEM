@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { equation, matrixEquation, tex } from "./math.mjs";
+import { figure } from "../figures/index.mjs";
 
 export default {
   slug: "operators/gradient-divergence",
@@ -33,6 +34,7 @@ export default {
       ${tex("q = 7")} and ${tex("∇q = (4, 3, 0)^T")}. A small step ${tex("h")} along ${tex("x")} changes ${tex("q")} by
       approximately ${tex("4h")}; a step along ${tex("z")} does not change it. The gradient points
       toward the steepest local increase.</p>
+    ${figure("scalar-gradient", "Level sets of a scalar field φ and its gradient at points on one of them. The gradient is normal to the level set and points towards larger values; its length is the rate of increase.")}
     <p>Units divide by length: a pressure gradient has units MPa/mm.
       In FEM, the gradient of a dimensionless
       <a href="/theory/notation/#shape-functions">shape function ${tex("N_a")}</a>
@@ -126,8 +128,8 @@ export default {
         gradient, divergence and flux.</li>
       <li><a href="https://ocw.mit.edu/courses/2-080j-structural-mechanics-fall-2013/">MIT OpenCourseWare: Structural Mechanics</a>,
         infinitesimal strain and stress equilibrium.</li>
-      <li>KoFEM’s solid recovery at reviewed revision
-        <a href="https://github.com/mkofler96/KoFEM/blob/77ff67ed76c724924decc8c2691f0f5fbd4aea5b/engine/cpp/solve_mfem.cpp#L127">77ff67e (2 November 2026)</a>
+      <li>KoFEM’s
+        <a href="https://github.com/mkofler96/KoFEM/blob/77ff67ed76c724924decc8c2691f0f5fbd4aea5b/engine/cpp/solve_mfem.cpp#L127">solid stress recovery</a>
         obtains a displacement gradient, symmetrises it and applies the Lamé
         material law. The explicit
         <a href="https://github.com/mkofler96/KoFEM/blob/77ff67ed76c724924decc8c2691f0f5fbd4aea5b/engine/cpp/tet_element.cpp#L139">coupled-solid gradient</a>

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 250" width="680" height="250" role="img" aria-labelledby="title desc">
+<title id="title">Membrane and bending stress through a shell's thickness</title>
+<desc id="desc">Three through-thickness stress profiles: a uniform membrane stress, a bending stress varying linearly from tension at one surface to compression at the other, and their sum, largest at one surface.</desc>
+<style>text { font-family: "Helvetica Neue", Helvetica, Arial, "Segoe UI", Roboto, sans-serif; font-size: 13px; fill: #1f2933; } .sym { font-family: "Latin Modern Math", "STIX Two Math", "Cambria Math", "Times New Roman", Times, serif; font-style: italic; font-size: 17px; } .sym.up { font-style: normal; } .bold { font-weight: 700; } .halo { paint-order: stroke; stroke: #ffffff; stroke-width: 4px; stroke-linejoin: round; } .small { font-size: 11px; } .lbl { fill: #5f6b7a; } .title { font-size: 14px; font-weight: 600; } .load-text { fill: #c62828; font-weight: 700; font-style: italic; } .accent-text { fill: #1d5bbf; } .accent2-text { fill: #c4561f; } .body { fill: #dce8f4; stroke: #1f2933; stroke-width: 1.6; stroke-linejoin: round; } .body-alt { fill: #eef2f6; stroke: #1f2933; stroke-width: 1.4; stroke-linejoin: round; } .side { fill: #c3d5e8; stroke: #1f2933; stroke-width: 1.2; stroke-linejoin: round; } .outline { fill: none; stroke: #1f2933; stroke-width: 1.6; stroke-linejoin: round; } .mesh { fill: none; stroke: #3e4c5b; stroke-width: 0.8; stroke-linejoin: round; } .ink { fill: none; stroke: #1f2933; stroke-width: 1.3; } .thin { fill: none; stroke: #1f2933; stroke-width: 0.8; } .dash { fill: none; stroke: #5f6b7a; stroke-width: 1; stroke-dasharray: 5 4; } .grid { fill: none; stroke: #d5dbe2; stroke-width: 0.8; } .axis { fill: none; stroke: #1f2933; stroke-width: 1.2; } .dim { fill: none; stroke: #5f6b7a; stroke-width: 1; } .load { fill: none; stroke: #c62828; stroke-width: 2; } .accent { fill: none; stroke: #1d5bbf; stroke-width: 2; } .accent2 { fill: none; stroke: #c4561f; stroke-width: 2; } .accent3 { fill: none; stroke: #2e7d32; stroke-width: 2; } .accent4 { fill: none; stroke: #7b3fa0; stroke-width: 2; } .node { fill: #1f2933; } .node-open { fill: #ffffff; stroke: #1f2933; stroke-width: 1.4; } .node-accent { fill: #c4561f; } .gauss { fill: #c62828; } .hatch-fill { fill: url(#hatch); stroke: none; } .ground { fill: none; stroke: #1f2933; stroke-width: 1.6; }</style>
+<defs><marker id="a-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1f2933"/></marker><marker id="a-muted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#5f6b7a"/></marker><marker id="a-load" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#c62828"/></marker><marker id="a-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1d5bbf"/></marker><marker id="a-accent2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#c4561f"/></marker><marker id="a-accent3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#2e7d32"/></marker><marker id="a-accent4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#7b3fa0"/></marker><pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="#5f6b7a" stroke-width="1.2"/></pattern></defs>
+<line x1="130" y1="50" x2="130" y2="200" class="ink" style="stroke-width:2"/>
+<line x1="100" y1="125" x2="240" y2="125" class="dash"/>
+<line x1="130" y1="50" x2="178" y2="50" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="130" y1="80" x2="178" y2="80" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="130" y1="110" x2="178" y2="110" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="130" y1="140" x2="178" y2="140" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="130" y1="170" x2="178" y2="170" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="130" y1="200" x2="178" y2="200" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<polygon points="130,50 178,50 178,65 178,80 178,95 178,110 178,125 178,140 178,155 178,170 178,185 178,200 130,200" class="" style="fill:#c62828;opacity:0.12"/>
+<polyline points="178,50 178,65 178,80 178,95 178,110 178,125 178,140 178,155 178,170 178,185 178,200" class="load"/>
+<text x="130" y="232" text-anchor="middle" class="lbl">membrane: uniform</text>
+<text x="245" y="111" text-anchor="middle" class="title" font-size="26">+</text>
+<line x1="320" y1="50" x2="320" y2="200" class="ink" style="stroke-width:2"/>
+<line x1="290" y1="125" x2="430" y2="125" class="dash"/>
+<line x1="320" y1="50" x2="374" y2="50" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="320" y1="80" x2="352.4" y2="80" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="320" y1="110" x2="330.8" y2="110" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="320" y1="140" x2="309.2" y2="140" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="320" y1="170" x2="287.6" y2="170" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="320" y1="200" x2="266" y2="200" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<polygon points="320,50 374,50 363.2,65 352.4,80 341.6,95 330.8,110 320,125 309.2,140 298.4,155 287.6,170 276.8,185 266,200 320,200" class="" style="fill:#c62828;opacity:0.12"/>
+<polyline points="374,50 363.2,65 352.4,80 341.6,95 330.8,110 320,125 309.2,140 298.4,155 287.6,170 276.8,185 266,200" class="load"/>
+<text x="320" y="232" text-anchor="middle" class="lbl">bending: linear</text>
+<text x="440" y="111" text-anchor="middle" class="title" font-size="26">=</text>
+<line x1="520" y1="50" x2="520" y2="200" class="ink" style="stroke-width:2"/>
+<line x1="490" y1="125" x2="630" y2="125" class="dash"/>
+<line x1="520" y1="50" x2="622" y2="50" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="520" y1="80" x2="600.4" y2="80" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="520" y1="110" x2="578.8" y2="110" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="520" y1="140" x2="557.2" y2="140" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="520" y1="170" x2="535.6" y2="170" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="520" y1="200" x2="514" y2="200" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<polygon points="520,50 622,50 611.2,65 600.4,80 589.6,95 578.8,110 568,125 557.2,140 546.4,155 535.6,170 524.8,185 514,200 520,200" class="" style="fill:#c62828;opacity:0.12"/>
+<polyline points="622,50 611.2,65 600.4,80 589.6,95 578.8,110 568,125 557.2,140 546.4,155 535.6,170 524.8,185 514,200" class="load"/>
+<text x="520" y="232" text-anchor="middle" class="lbl">shell surface stress</text>
+<text x="96" y="54" text-anchor="end" class="small lbl">top</text>
+<text x="96" y="204" text-anchor="end" class="small lbl">bottom</text>
+<text x="96" y="129" text-anchor="end" class="small lbl">mid-surface</text>
+<line x1="24" y1="50" x2="24" y2="200" class="dim" marker-start="url(#a-muted)" marker-end="url(#a-muted)"/>
+<text x="16" y="130" text-anchor="end" class="sym">t</text>
+</svg>

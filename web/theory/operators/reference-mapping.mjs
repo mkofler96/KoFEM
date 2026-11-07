@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { equation, matrixEquation, tex } from "./math.mjs";
+import { figure } from "../figures/index.mjs";
 
 export default {
   slug: "operators/reference-mapping",
@@ -27,6 +28,7 @@ export default {
       <a href="/theory/notation/#reference-coordinates">reference coordinates</a>. The map
       ${tex("x = F(ξ)")} takes a reference point (3-vector) to a physical position
       (3-vector, mm). For an isoparametric element,</p>
+    ${figure("reference-mapping", "One map takes the reference square to a physical quadrilateral. Lines of constant ξ and η (dashed) become the mapped grid; the arrows are the columns of the Jacobian, the mapped ξ and η directions. Shown in two dimensions for clarity.")}
     ${equation("x_i = F_i(ξ) = \\sum_a N_a^{\\mathrm{r}}(ξ) x_{ai}.", "Physical position interpolates nodal positions using reference shape functions")}
     <p>Here ${tex("x_a")} is physical node ${tex("a")}’s position and ${tex("N_a^{\\mathrm{r}}")} is its reference
       <a href="/theory/notation/#shape-functions">shape function</a>.

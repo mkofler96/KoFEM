@@ -954,7 +954,7 @@
     <div class="docs theory-docs">
       <nav class="docs-nav" aria-label="Theory topics"><ul><li><a href="/theory/">Theory overview</a></li></ul>
     <details class="docs-group">
-      <summary>Foundations</summary><ul><li><a href="/theory/foundations/model-and-units/">Model and units</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
+      <summary>Foundations</summary><ul><li><a href="/theory/foundations/what-is-fem/">What is FEM?</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
     </details><details class="docs-group">
       <summary>Notation and operators</summary><ul><li><a href="/theory/notation/">Notation</a></li><li><a href="/theory/operators/gradient-divergence/">Gradient and divergence</a></li><li><a href="/theory/operators/tensor-products/">Tensor products and contractions</a></li><li><a href="/theory/operators/integration-by-parts/">Integration and the weak form</a></li><li><a href="/theory/operators/reference-mapping/">Reference elements and Jacobians</a></li></ul>
     </details><details class="docs-group">
@@ -974,7 +974,7 @@
         <details class="docs-menu"><summary>Theory contents</summary><div>
           <nav aria-label="Theory topics (mobile)"><ul><li><a href="/theory/">Theory overview</a></li></ul>
     <details class="docs-group">
-      <summary>Foundations</summary><ul><li><a href="/theory/foundations/model-and-units/">Model and units</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
+      <summary>Foundations</summary><ul><li><a href="/theory/foundations/what-is-fem/">What is FEM?</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
     </details><details class="docs-group">
       <summary>Notation and operators</summary><ul><li><a href="/theory/notation/">Notation</a></li><li><a href="/theory/operators/gradient-divergence/">Gradient and divergence</a></li><li><a href="/theory/operators/tensor-products/">Tensor products and contractions</a></li><li><a href="/theory/operators/integration-by-parts/">Integration and the weak form</a></li><li><a href="/theory/operators/reference-mapping/">Reference elements and Jacobians</a></li></ul>
     </details><details class="docs-group">
@@ -1075,8 +1075,8 @@
       <li>A load on a constrained DOF has no effect on the displacement. It goes
         straight into the support. A force on a fully fixed face, for example,
         does nothing.</li>
-      <li>Reactions are not part of the solve. KoFEM does not report them at the
-        reviewed revision; check support forces with a free-body diagram.</li>
+      <li>Reactions are not part of the solve. KoFEM does not currently report them;
+        check support forces with a free-body diagram.</li>
     </ul>
 
     <h2 id="prescribed-example">Worked example: a prescribed displacement</h2>
@@ -1105,7 +1105,7 @@
       type of input decides how the load is distributed:</p>
     <div class="table-wrap" tabindex="0" role="region" aria-label="Load types, their input and how they reach the load vector; scroll horizontally if needed">
       <table>
-        <caption>Load types on a solid at the reviewed revision</caption>
+        <caption>Load types on a solid in KoFEM</caption>
         <thead><tr><th scope="col">Load</th><th scope="col">Input</th><th scope="col">Into <math><mi mathvariant="bold" class="math-bold">f</mi></math></th></tr></thead>
         <tbody>
           <tr><th scope="row">Force on faces</th><td>Total vector <span class="math-nowrap"><math><mi mathvariant="bold" class="math-bold">F</mi></math>,</span> N</td><td>Uniform traction <math><mi mathvariant="bold" class="math-bold">t</mi><mo>=</mo></math>​<math><mi mathvariant="bold" class="math-bold">F</mi><mo lspace="0" rspace="0">/</mo><mi>A</mi></math> over the group’s whole area <span class="math-nowrap"><math><mi>A</mi></math>,</span> integrated as <math><mo largeop="true">∫</mo><msub><mi>N</mi><mi>a</mi></msub><mi mathvariant="bold" class="math-bold">t</mi><mspace width="0.17em"/><mi>d</mi><mi>S</mi></math></td></tr>
@@ -1172,30 +1172,17 @@
       so <math><mi mathvariant="bold" class="math-bold">K</mi><msub><mi mathvariant="bold" class="math-bold">d</mi><mrow><mi mathvariant="normal">rigid</mi></mrow></msub><mo>=</mo></math>​<span class="math-nowrap"><math><mi mathvariant="bold" class="math-bold">0</mi></math>.</span> In the bar, <math><mi mathvariant="bold" class="math-bold">d</mi><mo>=</mo></math>​<math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>1</mn><mo>,</mo><mn>1</mn><mo>,</mo><mn>1</mn><mo stretchy="false" lspace="0" rspace="0">)</mo></math>
       is a rigid translation, and each row of <math><mi mathvariant="bold" class="math-bold">K</mi></math> sums to zero. A rigid mode
       costs no energy, so nothing in <math><mi mathvariant="bold" class="math-bold">K</mi></math> resists it. Only constraints can.</p>
+    <figure class="theory-figure full" id="figure-rigid-body-modes">
+      <a href="/theory/figures/rigid-body-modes.svg" class="figure-link"><img src="/theory/figures/rigid-body-modes.svg" width="870" height="230" alt="A free body can translate in x, translate in y or rotate without straining, shown by dashed displaced outlines. A pin and a roller together remove all three motions." loading="lazy" decoding="async" /></a>
+      <figcaption>In a plane, a free body has three rigid-body modes: two translations and one rotation (dashed outlines). A pin and a roller remove all three without restraining deformation. A solid in 3D has six.</figcaption>
+    </figure>
     <p>Every body that is not connected to another must be held against all six
       modes. A <strong>3-2-1 support</strong> does exactly this with six
       components at three points: A fixes Ux, Uy and Uz; B, along <math><mi>x</mi></math> from A,
       fixes Uy and Uz; C, offset from that line in <span class="math-nowrap"><math><mi>y</mi></math>,</span> fixes Uz.</p>
-    <figure class="model-sketch">
-      <svg role="img" aria-labelledby="support-title" aria-describedby="support-description" viewBox="0 0 600 220">
-        <title id="support-title">3-2-1 support on a block</title>
-        <desc id="support-description">A block along x pulled by equal and opposite forces at its two ends. Point A at the near bottom-left corner fixes three components, point B at the near bottom-right corner fixes two, and point C at the hidden far bottom-left corner, offset from A in y, fixes one.</desc>
-        <defs><marker id="support-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" fill="currentColor" /></marker></defs>
-        <path d="M150 80H450V150H150Z M150 80 190 45H490L450 80Z M450 80 490 45V115L450 150Z" fill="var(--panel2)" stroke="currentColor" stroke-linejoin="round" />
-        <path d="M150 150 190 115H490 M190 115V45" fill="none" stroke="currentColor" stroke-dasharray="5 4" opacity="0.6" />
-        <path d="M150 98H60 M470 98H560" stroke="currentColor" stroke-width="2" marker-end="url(#support-arrow)" />
-        <circle cx="150" cy="150" r="6" fill="currentColor" />
-        <circle cx="450" cy="150" r="6" fill="currentColor" />
-        <circle cx="190" cy="115" r="6" fill="currentColor" />
-        <text x="105" y="180" fill="currentColor">A: Ux Uy Uz</text>
-        <text x="415" y="180" fill="currentColor">B: Uy Uz</text>
-        <text x="202" y="138" fill="currentColor">C: Uz</text>
-        <text x="62" y="88" fill="currentColor">−P</text>
-        <text x="545" y="88" fill="currentColor">P</text>
-        <text x="300" y="194" fill="currentColor">x →</text>
-      </svg>
-      <figcaption>A 3-2-1 support removes the six rigid-body modes and no more.
-        Under balanced loads, it produces no reactions.</figcaption>
+    <figure class="theory-figure full" id="figure-three-two-one-support">
+      <a href="/theory/figures/three-two-one-support.svg" class="figure-link"><img src="/theory/figures/three-two-one-support.svg" width="640" height="270" alt="A block along x, pulled by equal and opposite forces P at its two ends. Point A at the near bottom-left corner fixes Ux, Uy and Uz; point B at the near bottom-right corner fixes Uy and Uz; point C at the hidden far bottom-left corner fixes only Uz." loading="lazy" decoding="async" /></a>
+      <figcaption>A 3-2-1 support removes the six rigid-body modes and no more. Under balanced loads, it produces no reactions.</figcaption>
     </figure>
     <p>For a balanced load, such as equal and opposite forces on two faces, a
       3-2-1 support carries no reaction and does not disturb the stress. In
@@ -1260,8 +1247,7 @@
 
     <h2 id="conflicts">Conflicting constraints and unmatched selections</h2>
     <p>Several groups can name the same DOF, for example at the nodes on the
-      edge shared by two selected faces. At the reviewed revision, the solid
-      solve handles overlaps and stale selections as follows:</p>
+      edge shared by two selected faces. The solid solve handles overlaps and stale selections as follows:</p>
     <ul>
       <li><strong>Same DOF, same value in two groups:</strong> accepted and
         merged into one constraint.</li>
@@ -1316,9 +1302,7 @@
       how the solver reports failure.</p>
 
     <h2 id="implementation">KoFEM implementation and evidence</h2>
-    <p>Reviewed on 2 November 2026 at
-      <a href="https://github.com/mkofler96/KoFEM/tree/41aa05f99bc99210995b21d1aded942d45ef4729"><code>41aa05f</code></a>,
-      against MFEM 4.7. The solid solve is
+    <p>KoFEM uses MFEM 4.7. The solid solve is
       <a href="https://github.com/mkofler96/KoFEM/blob/41aa05f99bc99210995b21d1aded942d45ef4729/engine/cpp/solve_mfem.cpp#L182">solve_linear_elastic</a>.</p>
     <ul>
       <li><strong>Groups to payload.</strong> Each node of a support group gets
@@ -1355,28 +1339,13 @@
         <math><mi mathvariant="bold" class="math-bold">f</mi></math> after assembly
         (<a href="https://github.com/mkofler96/KoFEM/blob/41aa05f99bc99210995b21d1aded942d45ef4729/engine/cpp/fem_bc_io.cpp#L425">apply_point_loads</a>).</li>
     </ul>
-    <div class="table-wrap" tabindex="0" role="region" aria-label="Validation evidence for loads and constraints; scroll horizontally if needed">
-      <table>
-        <caption>Evidence that runs the real engine</caption>
-        <thead><tr><th scope="col">Claim</th><th scope="col">Evidence</th></tr></thead>
-        <tbody>
-          <tr><th scope="row">Fixed face and face force</th><td><a href="/examples/axial-bar/">Axial bar</a> against <math><mi>P</mi><mi>L</mi><mo lspace="0" rspace="0">/</mo><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>E</mi><mi>A</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></math></td></tr>
-          <tr><th scope="row">Pressure sign and per-area scaling</th><td><a href="/examples/surface-pressure/">Bar under end pressure</a></td></tr>
-          <tr><th scope="row">Per-component supports</th><td><code>examples/validation/dof-constraint.test.mjs</code></td></tr>
-          <tr><th scope="row">Non-zero prescribed displacement</th><td><code>examples/validation/prescribed-displacement.test.mjs</code></td></tr>
-          <tr><th scope="row">Overlapping loads; supports without a load</th><td><code>examples/validation/multiple-loads.test.mjs</code></td></tr>
-          <tr><th scope="row">Conflicts and invalid indices</th><td><code>web/tests/test_bc_validation.mjs</code>, <code>scripts/test-bc-validation.sh</code></td></tr>
-        </tbody>
-      </table>
-    </div>
-    <p>The tests run in CI with <code>cd web &amp;&amp; bun run test:validation</code>.
-      The 3-2-1, sliding-support, under-constrained and point-support results on
-      this page were computed with the same engine build for this review; they
-      are not part of the test suite. Historical issues: prescribed values
-      were once silently pinned to zero (KOF-210), overlapping loads dropped
-      (KOF-216), unmatched faces dropped without a count (KOF-220) and
-      conflicting constraints resolved silently (KOF-218). All are fixed at the
-      reviewed revision.</p>
+    <p>Two public examples exercise these paths in the browser engine: the
+      <a href="/examples/axial-bar/">axial bar</a> checks a fixed face and a
+      face force against <span class="math-nowrap"><math><mi>P</mi><mi>L</mi><mo lspace="0" rspace="0">/</mo><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>E</mi><mi>A</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></math>,</span> and the
+      <a href="/examples/surface-pressure/">bar under end pressure</a> checks
+      the pressure sign and its per-area scaling. Per-component supports,
+      prescribed displacements, overlapping loads and conflicting constraints
+      are covered by KoFEM’s automated engine tests.</p>
 
     <h2 id="references">Sources and further reading</h2>
     <ol class="refs">

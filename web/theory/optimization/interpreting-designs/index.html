@@ -954,7 +954,7 @@
     <div class="docs theory-docs">
       <nav class="docs-nav" aria-label="Theory topics"><ul><li><a href="/theory/">Theory overview</a></li></ul>
     <details class="docs-group">
-      <summary>Foundations</summary><ul><li><a href="/theory/foundations/model-and-units/">Model and units</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
+      <summary>Foundations</summary><ul><li><a href="/theory/foundations/what-is-fem/">What is FEM?</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
     </details><details class="docs-group">
       <summary>Notation and operators</summary><ul><li><a href="/theory/notation/">Notation</a></li><li><a href="/theory/operators/gradient-divergence/">Gradient and divergence</a></li><li><a href="/theory/operators/tensor-products/">Tensor products and contractions</a></li><li><a href="/theory/operators/integration-by-parts/">Integration and the weak form</a></li><li><a href="/theory/operators/reference-mapping/">Reference elements and Jacobians</a></li></ul>
     </details><details class="docs-group">
@@ -974,7 +974,7 @@
         <details class="docs-menu"><summary>Theory contents</summary><div>
           <nav aria-label="Theory topics (mobile)"><ul><li><a href="/theory/">Theory overview</a></li></ul>
     <details class="docs-group">
-      <summary>Foundations</summary><ul><li><a href="/theory/foundations/model-and-units/">Model and units</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
+      <summary>Foundations</summary><ul><li><a href="/theory/foundations/what-is-fem/">What is FEM?</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
     </details><details class="docs-group">
       <summary>Notation and operators</summary><ul><li><a href="/theory/notation/">Notation</a></li><li><a href="/theory/operators/gradient-divergence/">Gradient and divergence</a></li><li><a href="/theory/operators/tensor-products/">Tensor products and contractions</a></li><li><a href="/theory/operators/integration-by-parts/">Integration and the weak form</a></li><li><a href="/theory/operators/reference-mapping/">Reference elements and Jacobians</a></li></ul>
     </details><details class="docs-group">
@@ -994,7 +994,7 @@
         </div></details>
         <nav class="crumbs" aria-label="Breadcrumb"><a href="/">KoFEM</a> / <a href="/theory/">Theory</a> / Optimization / Interpreting optimized designs</nav>
         <h1>Interpreting optimized designs</h1>
-        <details class="article-contents"><summary>On this page</summary><ul><li><a href="#during-a-run">Watching and cancelling a run</a></li><li><a href="#threshold">Densities, gray elements and the threshold</a></li><li><a href="#export">Exporting the shape</a></li><li><a href="#reanalysis">Re-analyse before trusting a design</a></li><li><a href="#adequacy">Why convergence is not adequacy</a></li><li><a href="#open-work">Current limits and open work</a></li><li><a href="#references">Reviewed implementation and references</a></li></ul></details>
+        <details class="article-contents"><summary>On this page</summary><ul><li><a href="#during-a-run">Watching and cancelling a run</a></li><li><a href="#threshold">Densities, gray elements and the threshold</a></li><li><a href="#export">Exporting the shape</a></li><li><a href="#reanalysis">Re-analyse before trusting a design</a></li><li><a href="#adequacy">Why convergence is not adequacy</a></li><li><a href="#open-work">Current limits</a></li><li><a href="#references">Implementation and references</a></li></ul></details>
 
     <p class="lede">What does an optimized density field tell you, and what must you check before using it?</p>
     <p>A SIMP run returns one density per element and the history of its
@@ -1093,18 +1093,14 @@
       <a href="#reanalysis">re-analysis</a> and by engineering checks, not by
       the optimizer’s convergence flag or volume fraction.</p>
 
-    <h2 id="open-work">Current limits and open work</h2>
-    <div class="table-wrap" tabindex="0" role="region" aria-label="Optimization scope at the reviewed revision; scroll horizontally if needed"><table class="shell-table">
-    <caption>Optimization scope at the reviewed revision</caption><thead><tr><th scope="col">Topic</th><th scope="col">Shipped behavior</th><th scope="col">Open work</th></tr></thead>
-    <tbody><tr><th scope="row">Design domain</th><td>Every element is a design variable. The engine accepts element indices pinned solid or void, but the app sends none.</td><td>Keep-in and keep-out regions in the app (<a href="https://linear.app/kofem/issue/KOF-238">KOF-238</a>).</td></tr><tr><th scope="row">Stress limit</th><td>All-solid SIMP models only.</td><td>Shell and coupled stress constraints (<a href="https://linear.app/kofem/issue/KOF-251">KOF-251</a>).</td></tr><tr><th scope="row">Loads and supports</th><td>One load case; fixed supports with zero displacement; design-independent loads.</td><td>Not scheduled: multiple load cases, prescribed displacements, self-weight.</td></tr><tr><th scope="row">Materials</th><td>One material per solid domain and one per shell domain.</td><td>Not scheduled: per-body design materials.</td></tr><tr><th scope="row">Result and export</th><td>Density, history and STL of the thresholded surface. No automatic reanalysis or CAD output.</td><td>Re-analysis is a manual workflow.</td></tr></tbody></table></div>
-    <p>“Not scheduled” means no issue currently plans the item; it is not a
-      commitment. <a href="/theory/verification/strategy/">Verification strategy</a>
+    <h2 id="open-work">Current limits</h2>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="Optimization scope in KoFEM; scroll horizontally if needed"><table class="shell-table">
+    <caption>Optimization scope in KoFEM</caption><thead><tr><th scope="col">Topic</th><th scope="col">Current behaviour</th><th scope="col">Not yet available</th></tr></thead>
+    <tbody><tr><th scope="row">Design domain</th><td>Every element is a design variable. The engine accepts element indices pinned solid or void, but the app sends none.</td><td>Keep-in and keep-out regions in the app.</td></tr><tr><th scope="row">Stress limit</th><td>All-solid SIMP models only.</td><td>Shell and coupled stress constraints.</td></tr><tr><th scope="row">Loads and supports</th><td>One load case; fixed supports with zero displacement; design-independent loads.</td><td>Multiple load cases, prescribed displacements, self-weight.</td></tr><tr><th scope="row">Materials</th><td>One material per solid domain and one per shell domain.</td><td>Per-body design materials.</td></tr><tr><th scope="row">Result and export</th><td>Density, history and STL of the thresholded surface. No automatic reanalysis or CAD output.</td><td>Re-analysis is a manual workflow.</td></tr></tbody></table></div>
+    <p><a href="/theory/verification/strategy/">Verification strategy</a>
       explains how evidence for the static solver is organised.</p>
 
-    <h2 id="references">Reviewed implementation and references</h2>
-    <p>Reviewed on 6 November 2026 at
-      <a href="https://github.com/mkofler96/KoFEM/tree/6ba4db0ed963d6c8c0cb3263edf6737763994b6c"><code>6ba4db0ed963</code></a>
-      (engine <code>engine-a5154f0787e6</code>).</p>
+    <h2 id="references">Implementation and references</h2>
     <ol class="refs">
       <li><a href="https://github.com/mkofler96/KoFEM/blob/6ba4db0ed963d6c8c0cb3263edf6737763994b6c/engine/cpp/topology_stream.h#L1">density streaming</a> and
         <a href="https://github.com/mkofler96/KoFEM/blob/6ba4db0ed963d6c8c0cb3263edf6737763994b6c/web/src/hooks/useTopOpt.ts#L332">cancellation</a>.</li>
@@ -1117,7 +1113,7 @@
       <a class="prev" rel="prev" href="/theory/optimization/constraints-and-convergence/"><small>Previous</small>← Constraints and convergence</a>
       </nav>
       </main>
-      <nav class="docs-toc" aria-label="On this page"><p>On this page</p><ul><li><a href="#during-a-run">Watching and cancelling a run</a></li><li><a href="#threshold">Densities, gray elements and the threshold</a></li><li><a href="#export">Exporting the shape</a></li><li><a href="#reanalysis">Re-analyse before trusting a design</a></li><li><a href="#adequacy">Why convergence is not adequacy</a></li><li><a href="#open-work">Current limits and open work</a></li><li><a href="#references">Reviewed implementation and references</a></li></ul></nav>
+      <nav class="docs-toc" aria-label="On this page"><p>On this page</p><ul><li><a href="#during-a-run">Watching and cancelling a run</a></li><li><a href="#threshold">Densities, gray elements and the threshold</a></li><li><a href="#export">Exporting the shape</a></li><li><a href="#reanalysis">Re-analyse before trusting a design</a></li><li><a href="#adequacy">Why convergence is not adequacy</a></li><li><a href="#open-work">Current limits</a></li><li><a href="#references">Implementation and references</a></li></ul></nav>
     </div><footer class="site-footer">
       <span>KoFEM — finite element analysis in your browser</span>
       <nav aria-label="Footer">

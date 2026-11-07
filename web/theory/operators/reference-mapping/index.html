@@ -954,7 +954,7 @@
     <div class="docs theory-docs">
       <nav class="docs-nav" aria-label="Theory topics"><ul><li><a href="/theory/">Theory overview</a></li></ul>
     <details class="docs-group">
-      <summary>Foundations</summary><ul><li><a href="/theory/foundations/model-and-units/">Model and units</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
+      <summary>Foundations</summary><ul><li><a href="/theory/foundations/what-is-fem/">What is FEM?</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
     </details><details class="docs-group" open>
       <summary>Notation and operators</summary><ul><li><a href="/theory/notation/">Notation</a></li><li><a href="/theory/operators/gradient-divergence/">Gradient and divergence</a></li><li><a href="/theory/operators/tensor-products/">Tensor products and contractions</a></li><li><a href="/theory/operators/integration-by-parts/">Integration and the weak form</a></li><li><a href="/theory/operators/reference-mapping/" aria-current="page">Reference elements and Jacobians</a></li></ul>
     </details><details class="docs-group">
@@ -974,7 +974,7 @@
         <details class="docs-menu"><summary>Theory contents</summary><div>
           <nav aria-label="Theory topics (mobile)"><ul><li><a href="/theory/">Theory overview</a></li></ul>
     <details class="docs-group">
-      <summary>Foundations</summary><ul><li><a href="/theory/foundations/model-and-units/">Model and units</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
+      <summary>Foundations</summary><ul><li><a href="/theory/foundations/what-is-fem/">What is FEM?</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
     </details><details class="docs-group" open>
       <summary>Notation and operators</summary><ul><li><a href="/theory/notation/">Notation</a></li><li><a href="/theory/operators/gradient-divergence/">Gradient and divergence</a></li><li><a href="/theory/operators/tensor-products/">Tensor products and contractions</a></li><li><a href="/theory/operators/integration-by-parts/">Integration and the weak form</a></li><li><a href="/theory/operators/reference-mapping/" aria-current="page">Reference elements and Jacobians</a></li></ul>
     </details><details class="docs-group">
@@ -1007,6 +1007,10 @@
       <a href="/theory/notation/#reference-coordinates">reference coordinates</a>. The map
       <math><mi>x</mi><mo>=</mo></math>​<math><mi>F</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>ξ</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></math> takes a reference point (3-vector) to a physical position
       (3-vector, mm). For an isoparametric element,</p>
+    <figure class="theory-figure full" id="figure-reference-mapping">
+      <a href="/theory/figures/reference-mapping.svg" class="figure-link"><img src="/theory/figures/reference-mapping.svg" width="800" height="340" alt="Left: the reference square with coordinates xi and eta from minus one to one. Right: a four-node physical quadrilateral. A curved arrow labelled x equals F of xi maps one to the other; dashed grid lines of constant xi and eta become curved lines, and two arrows show the mapped xi and eta directions." loading="lazy" decoding="async" /></a>
+      <figcaption>One map takes the reference square to a physical quadrilateral. Lines of constant ξ and η (dashed) become the mapped grid; the arrows are the columns of the Jacobian, the mapped ξ and η directions. Shown in two dimensions for clarity.</figcaption>
+    </figure>
     <div class="equation" tabindex="0" role="region" aria-label="Physical position interpolates nodal positions using reference shape functions; scroll horizontally if needed"><math display="block"><msub><mi>x</mi><mi>i</mi></msub><mo>=</mo><msub><mi>F</mi><mi>i</mi></msub><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>ξ</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo>=</mo><msub><mo largeop="true">∑</mo><mi>a</mi></msub><msubsup><mi>N</mi><mi>a</mi><mrow><mi mathvariant="normal">r</mi></mrow></msubsup><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>ξ</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><msub><mi>x</mi><mrow><mi>a</mi><mi>i</mi></mrow></msub><mo lspace="0" rspace="0">.</mo></math></div>
     <p>Here <math><msub><mi>x</mi><mi>a</mi></msub></math> is physical node <math><mi>a</mi></math>’s position and <math><msubsup><mi>N</mi><mi>a</mi><mrow><mi mathvariant="normal">r</mi></mrow></msubsup></math> is its reference
       <a href="/theory/notation/#shape-functions">shape function</a>.

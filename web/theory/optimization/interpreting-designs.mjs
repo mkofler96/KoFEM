@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { tex } from "../operators/math.mjs";
-import { reviewed, source, table } from "./evidence.mjs";
+import { source, table } from "./evidence.mjs";
 
 export default {
   slug: "optimization/interpreting-designs",
@@ -14,8 +14,8 @@ export default {
     ["export", "Exporting the shape"],
     ["reanalysis", "Re-analyse before trusting a design"],
     ["adequacy", "Why convergence is not adequacy"],
-    ["open-work", "Current limits and open work"],
-    ["references", "Reviewed implementation and references"],
+    ["open-work", "Current limits"],
+    ["references", "Implementation and references"],
   ],
   body: `
     <p class="lede">What does an optimized density field tell you, and what must you check before using it?</p>
@@ -115,30 +115,30 @@ export default {
       <a href="#reanalysis">re-analysis</a> and by engineering checks, not by
       the optimizer’s convergence flag or volume fraction.</p>
 
-    <h2 id="open-work">Current limits and open work</h2>
+    <h2 id="open-work">Current limits</h2>
     ${table(
-      "Optimization scope at the reviewed revision",
-      ["Topic", "Shipped behavior", "Open work"],
+      "Optimization scope in KoFEM",
+      ["Topic", "Current behaviour", "Not yet available"],
       [
         [
           "Design domain",
           "Every element is a design variable. The engine accepts element indices pinned solid or void, but the app sends none.",
-          `Keep-in and keep-out regions in the app (<a href="https://linear.app/kofem/issue/KOF-238">KOF-238</a>).`,
+          "Keep-in and keep-out regions in the app.",
         ],
         [
           "Stress limit",
           "All-solid SIMP models only.",
-          `Shell and coupled stress constraints (<a href="https://linear.app/kofem/issue/KOF-251">KOF-251</a>).`,
+          "Shell and coupled stress constraints.",
         ],
         [
           "Loads and supports",
           "One load case; fixed supports with zero displacement; design-independent loads.",
-          "Not scheduled: multiple load cases, prescribed displacements, self-weight.",
+          "Multiple load cases, prescribed displacements, self-weight.",
         ],
         [
           "Materials",
           "One material per solid domain and one per shell domain.",
-          "Not scheduled: per-body design materials.",
+          "Per-body design materials.",
         ],
         [
           "Result and export",
@@ -147,12 +147,10 @@ export default {
         ],
       ],
     )}
-    <p>“Not scheduled” means no issue currently plans the item; it is not a
-      commitment. <a href="/theory/verification/strategy/">Verification strategy</a>
+    <p><a href="/theory/verification/strategy/">Verification strategy</a>
       explains how evidence for the static solver is organised.</p>
 
-    <h2 id="references">Reviewed implementation and references</h2>
-    <p>${reviewed}</p>
+    <h2 id="references">Implementation and references</h2>
     <ol class="refs">
       <li>${source("engine/cpp/topology_stream.h", 1, "density streaming")} and
         ${source("web/src/hooks/useTopOpt.ts", 332, "cancellation")}.</li>

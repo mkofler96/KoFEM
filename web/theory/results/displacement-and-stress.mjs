@@ -3,7 +3,9 @@
 
 import { equation, matrixEquation, tex } from "../operators/math.mjs";
 import { gradient, worked } from "./stress-example.mjs";
-import { revision, source } from "./sources.mjs";
+import { source } from "./sources.mjs";
+import { figure } from "../figures/index.mjs";
+import { resultViewer } from "../viewers/index.mjs";
 
 export default {
   slug: "results/displacement-and-stress",
@@ -17,7 +19,7 @@ export default {
     ["averaging", "From element samples to a contour"],
     ["display", "Fields, units and deformation scale"],
     ["verification", "A public stress verification case"],
-    ["sources", "Reviewed implementation and references"],
+    ["sources", "Implementation and references"],
   ],
   body: `
     <p class="lede">How are nodal displacement and element von Mises stress produced and displayed?</p>
@@ -89,10 +91,9 @@ export default {
     <p>The mean normal stress is 60 MPa, so the deviatoric diagonal is
       (60, 0, −60) MPa. The shear terms contribute twice:</p>
     ${equation("σ_{\\mathrm{vm}} = \\sqrt{\\frac{3}{2}(60^2+0^2+(-60)^2+2 × 30^2)} = \\sqrt{13500} \\approx 116.19\\,\\mathrm{MPa}.", "The example has von Mises stress square root of 13500, approximately 116.19 MPa")}
-    <p>The <a href="https://github.com/mkofler96/KoFEM/blob/develop/web/theory/results/stress-example.mjs">checkable calculation</a>
+    <p>A <a href="https://github.com/mkofler96/KoFEM/blob/develop/web/theory/results/stress-example.mjs">checkable calculation</a>
       verifies the tensor, shear factor and invariant, including hydrostatic,
-      pure-shear and reversed-sign checks:</p>
-    <pre><code>bun web/theory/results/stress-example.mjs</code></pre>
+      pure-shear and reversed-sign checks.</p>
 
     <h2 id="sampling">What the solid solver returns</h2>
     <p>The ordinary solid wrapper exports three translations per mesh vertex
@@ -112,9 +113,7 @@ export default {
       ${tex("U_x")}, ${tex("U_y")}, ${tex("U_z")} and von Mises stress.
       Strain and tensor stress are intermediate calculations here, not shipped
       static contour fields. Individual stress components, principal stresses
-      and reaction-force fields are not returned by this solid result interface.
-      Component output remains tracked in
-      <a href="https://linear.app/kofem/issue/KOF-213">KOF-213</a>.</p>
+      and reaction-force fields are not returned by this solid result interface.</p>
 
     <h2 id="averaging">From element samples to a contour</h2>
     <p>The web viewer first averages the <em>scalar von Mises samples</em>
@@ -124,6 +123,7 @@ export default {
       averaging weight. Tetrahedra use absolute volume; triangular facets use
       area. Other element types, including hexahedra, currently use unit
       weights. Consequently “volume-weighted” does not describe every mesh.</p>
+    ${figure("stress-averaging", "Four elements share a node: one at 100 MPa and three at 150 MPa. Equal weights give the same 137.5 MPa as the volume-weighted example below. The contour interpolates the averaged nodal values and hides the jump between elements.")}
     <p>For two tetrahedra of volumes 1 and 3 mm³ with samples 100 and
       150 MPa, a shared node receives ${tex("(1 × 100 + 3 × 150)/4")}, or
       <strong>137.5 MPa</strong>. This is an average of equivalent stresses,
@@ -166,19 +166,22 @@ export default {
       around the hole, divided by nominal tension, with Kirsch’s infinite-plate
       concentration factor of 3. At the free edge’s peak in that ideal problem,
       the remaining tangential stress is uniaxial, so its magnitude equals von Mises.</p>
+    ${figure("plate-hole-concentration", "Kirsch’s solution for a circular hole in an infinite plate under remote tension. The stress along the line above the hole is three times the remote stress at the hole edge and falls quickly with distance.")}
     <p>The finite plate, support and element-centre sampling differ from the
       ideal boundary value. The public case explains sampling and discretization
       errors; its tolerance applies to that benchmark. Its measured peak is
       <em>unsmoothed</em>, whereas the app summary uses nodal averaging. Compare
-      like measures before interpreting a difference. Reproduce the benchmark with:</p>
-    <pre><code>bun examples/validation/run.mjs --case plate-with-hole</code></pre>
+      like measures before interpreting a difference. Open the case in the
+      app to reproduce it.</p>
+    ${resultViewer("plate-with-hole", {
+      caption:
+        "Von Mises stress of the plate-with-hole case, averaged at the nodes as the app displays it. The peak sits at the hole edge, on the line across the plate perpendicular to the load.",
+    })}
     <p>Continue with <a href="/theory/results/interpretation-and-convergence/">interpretation and convergence</a>
       before using a peak for a design decision.</p>
 
-    <h2 id="sources">Reviewed implementation and references</h2>
-    <p>Reviewed on 6 November 2026 at
-      <a href="https://github.com/mkofler96/KoFEM/tree/${revision}"><code>${revision.slice(0, 7)}</code></a>,
-      using MFEM 4.7.</p>
+    <h2 id="sources">Implementation and references</h2>
+    <p>KoFEM uses MFEM 4.7 for the solid solve.</p>
     <ul class="refs">
       <li>${source("engine/cpp/solve_mfem.cpp", 52, "Vertex extraction and element-centre recovery")},
         and ${source("engine/cpp/solve_mfem.cpp", 239, "result arrays after the linear solve")}.</li>

@@ -19,7 +19,7 @@ published. Renames require redirects and preserved heading anchors.
 
 | Section                | Stable URL                                           | Main question                                                                                              |
 | ---------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Foundations            | `/theory/foundations/model-and-units/`               | What makes a useful finite element model?                                                                  |
+| Foundations            | `/theory/foundations/what-is-fem/`                   | What is the finite element method, and what makes a useful model?                                          |
 | Foundations            | `/theory/foundations/consistent-units/`              | Which combinations of units can be used together in a finite element model?                                |
 | Foundations            | `/theory/foundations/reading-a-study/`               | How do geometry, materials, constraints, loads, the FEM discretisation, and results form one study?        |
 | Notation and operators | `/theory/notation/`                                  | What do the shared symbols, indices, coordinate conventions, and units mean?                               |

@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 330" width="640" height="330" role="img" aria-labelledby="title desc">
+<title id="title">A shell facet: mid-surface, local axes and six DOFs per node</title>
+<desc id="desc">A thin plate of thickness t with a triangular facet on its mid-surface. Local axes e1, e2 and e3 start at the first node, e3 normal to the facet. At another node, red arrows show the three translations and orange double arrows the three rotations.</desc>
+<style>text { font-family: "Helvetica Neue", Helvetica, Arial, "Segoe UI", Roboto, sans-serif; font-size: 13px; fill: #1f2933; } .sym { font-family: "Latin Modern Math", "STIX Two Math", "Cambria Math", "Times New Roman", Times, serif; font-style: italic; font-size: 17px; } .sym.up { font-style: normal; } .bold { font-weight: 700; } .halo { paint-order: stroke; stroke: #ffffff; stroke-width: 4px; stroke-linejoin: round; } .small { font-size: 11px; } .lbl { fill: #5f6b7a; } .title { font-size: 14px; font-weight: 600; } .load-text { fill: #c62828; font-weight: 700; font-style: italic; } .accent-text { fill: #1d5bbf; } .accent2-text { fill: #c4561f; } .body { fill: #dce8f4; stroke: #1f2933; stroke-width: 1.6; stroke-linejoin: round; } .body-alt { fill: #eef2f6; stroke: #1f2933; stroke-width: 1.4; stroke-linejoin: round; } .side { fill: #c3d5e8; stroke: #1f2933; stroke-width: 1.2; stroke-linejoin: round; } .outline { fill: none; stroke: #1f2933; stroke-width: 1.6; stroke-linejoin: round; } .mesh { fill: none; stroke: #3e4c5b; stroke-width: 0.8; stroke-linejoin: round; } .ink { fill: none; stroke: #1f2933; stroke-width: 1.3; } .thin { fill: none; stroke: #1f2933; stroke-width: 0.8; } .dash { fill: none; stroke: #5f6b7a; stroke-width: 1; stroke-dasharray: 5 4; } .grid { fill: none; stroke: #d5dbe2; stroke-width: 0.8; } .axis { fill: none; stroke: #1f2933; stroke-width: 1.2; } .dim { fill: none; stroke: #5f6b7a; stroke-width: 1; } .load { fill: none; stroke: #c62828; stroke-width: 2; } .accent { fill: none; stroke: #1d5bbf; stroke-width: 2; } .accent2 { fill: none; stroke: #c4561f; stroke-width: 2; } .accent3 { fill: none; stroke: #2e7d32; stroke-width: 2; } .accent4 { fill: none; stroke: #7b3fa0; stroke-width: 2; } .node { fill: #1f2933; } .node-open { fill: #ffffff; stroke: #1f2933; stroke-width: 1.4; } .node-accent { fill: #c4561f; } .gauss { fill: #c62828; } .hatch-fill { fill: url(#hatch); stroke: none; } .ground { fill: none; stroke: #1f2933; stroke-width: 1.6; }</style>
+<defs><marker id="a-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1f2933"/></marker><marker id="a-muted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#5f6b7a"/></marker><marker id="a-load" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#c62828"/></marker><marker id="a-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1d5bbf"/></marker><marker id="a-accent2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#c4561f"/></marker><marker id="a-accent3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#2e7d32"/></marker><marker id="a-accent4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#7b3fa0"/></marker><pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="#5f6b7a" stroke-width="1.2"/></pattern></defs>
+<polygon points="190,288 589,288 589,272 190,272" class="side"/>
+<polygon points="589,288 454,198 454,182 589,272" class="side" style="fill:#b3c8de"/>
+<polygon points="190,272 589,272 454,182 55,182" class="body-alt"/>
+<polygon points="206,251 495,260 277,197" class="body" style="fill:#cfe0f5"/>
+<circle cx="206" cy="251" r="5" class="node"/>
+<circle cx="495" cy="260" r="5" class="node"/>
+<circle cx="277" cy="197" r="5" class="node"/>
+<line x1="206" y1="251" x2="315.04" y2="254.4" class="accent" marker-end="url(#a-accent)"/>
+<line x1="206" y1="251" x2="153.52" y2="206.24" class="accent" marker-end="url(#a-accent)"/>
+<line x1="206" y1="251" x2="206" y2="181" class="accent" marker-end="url(#a-accent)"/>
+<text x="311.04" y="274.4" text-anchor="middle" class="sym accent-text">e<tspan dy="4" font-size="70%">1</tspan></text>
+<text x="145.52" y="204.24" text-anchor="end" class="sym accent-text">e<tspan dy="4" font-size="70%">2</tspan></text>
+<text x="214" y="185" text-anchor="start" class="sym accent-text">e<tspan dy="4" font-size="70%">3</tspan></text>
+<line x1="277" y1="197" x2="343.5" y2="197" class="load" marker-end="url(#a-load)"/>
+<line x1="277" y1="197" x2="227.5" y2="164" class="load" marker-end="url(#a-load)"/>
+<line x1="277" y1="197" x2="277" y2="137" class="load" marker-end="url(#a-load)"/>
+<text x="285" y="141" text-anchor="start" class="sym load-text">u, v, w</text>
+<line x1="495" y1="260" x2="561.5" y2="260" class="accent2" marker-end="url(#a-accent2)"/>
+<line x1="495" y1="260" x2="549.53" y2="260" class="accent2" marker-end="url(#a-accent2)"/>
+<line x1="495" y1="260" x2="445.5" y2="227" class="accent2" marker-end="url(#a-accent2)"/>
+<line x1="495" y1="260" x2="454.41" y2="232.94" class="accent2" marker-end="url(#a-accent2)"/>
+<line x1="495" y1="260" x2="495" y2="200" class="accent2" marker-end="url(#a-accent2)"/>
+<line x1="495" y1="260" x2="495" y2="210.8" class="accent2" marker-end="url(#a-accent2)"/>
+<text x="503" y="204" text-anchor="start" class="sym accent2-text">θx, θy, θz</text>
+<line x1="607" y1="296" x2="607" y2="264" class="dim" marker-start="url(#a-muted)" marker-end="url(#a-muted)"/>
+<text x="615" y="285" text-anchor="start" class="sym">t</text>
+</svg>

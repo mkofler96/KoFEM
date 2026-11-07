@@ -60,6 +60,11 @@ server {
         try_files $uri $uri/ /app/index.html;
     }
 
+    # "Model and units" became "What is FEM?"; old links keep working.
+    location ^~ /theory/foundations/model-and-units {
+        return 301 /theory/foundations/what-is-fem/;
+    }
+
     # Theory articles are static documents. Unpublished slugs must return 404.
     location /theory/ {
         add_header Cache-Control "no-cache";

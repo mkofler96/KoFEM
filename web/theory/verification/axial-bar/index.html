@@ -926,6 +926,8 @@
       } catch (e) {}
     </script>
   <link href="/theory.css" rel="stylesheet" />
+    <script type="importmap">{"imports":{"three":"/vendor/three/three.module.min.js","three/addons/controls/OrbitControls.js":"/vendor/three/OrbitControls.js"}}</script>
+    <script type="module" src="/theory/viewer.js"></script>
   </head>
   <body>
     <a class="skip-link" href="#main-content">Skip to content</a>
@@ -954,7 +956,7 @@
     <div class="docs theory-docs">
       <nav class="docs-nav" aria-label="Theory topics"><ul><li><a href="/theory/">Theory overview</a></li></ul>
     <details class="docs-group">
-      <summary>Foundations</summary><ul><li><a href="/theory/foundations/model-and-units/">Model and units</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
+      <summary>Foundations</summary><ul><li><a href="/theory/foundations/what-is-fem/">What is FEM?</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
     </details><details class="docs-group">
       <summary>Notation and operators</summary><ul><li><a href="/theory/notation/">Notation</a></li><li><a href="/theory/operators/gradient-divergence/">Gradient and divergence</a></li><li><a href="/theory/operators/tensor-products/">Tensor products and contractions</a></li><li><a href="/theory/operators/integration-by-parts/">Integration and the weak form</a></li><li><a href="/theory/operators/reference-mapping/">Reference elements and Jacobians</a></li></ul>
     </details><details class="docs-group">
@@ -974,7 +976,7 @@
         <details class="docs-menu"><summary>Theory contents</summary><div>
           <nav aria-label="Theory topics (mobile)"><ul><li><a href="/theory/">Theory overview</a></li></ul>
     <details class="docs-group">
-      <summary>Foundations</summary><ul><li><a href="/theory/foundations/model-and-units/">Model and units</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
+      <summary>Foundations</summary><ul><li><a href="/theory/foundations/what-is-fem/">What is FEM?</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
     </details><details class="docs-group">
       <summary>Notation and operators</summary><ul><li><a href="/theory/notation/">Notation</a></li><li><a href="/theory/operators/gradient-divergence/">Gradient and divergence</a></li><li><a href="/theory/operators/tensor-products/">Tensor products and contractions</a></li><li><a href="/theory/operators/integration-by-parts/">Integration and the weak form</a></li><li><a href="/theory/operators/reference-mapping/">Reference elements and Jacobians</a></li></ul>
     </details><details class="docs-group">
@@ -994,7 +996,7 @@
         </div></details>
         <nav class="crumbs" aria-label="Breadcrumb"><a href="/">KoFEM</a> / <a href="/theory/">Theory</a> / Verification / Axial-bar verification</nav>
         <h1>Axial-bar verification</h1>
-        <details class="article-contents"><summary>On this page</summary><ul><li><a href="#model">The model and the reference</a></li><li><a href="#pipeline">Trace the complete solve</a></li><li><a href="#comparison">Measured displacement and stress</a></li><li><a href="#limits">What the comparison establishes</a></li><li><a href="#reproduce">Open and reproduce the study</a></li><li><a href="#sources">Run record and sources</a></li></ul></details>
+        <details class="article-contents"><summary>On this page</summary><ul><li><a href="#model">The model and the reference</a></li><li><a href="#pipeline">Trace the complete solve</a></li><li><a href="#comparison">Measured displacement and stress</a></li><li><a href="#limits">What the comparison establishes</a></li><li><a href="#reproduce">Open the study in KoFEM</a></li><li><a href="#sources">Run record and sources</a></li></ul></details>
 
     <p class="lede">Does the complete KoFEM path reproduce a bar in tension?</p>
     <p>The <a href="/theory/foundations/reading-a-study/">connected reading path</a>
@@ -1009,6 +1011,10 @@
       There is no body force. All translations on <math><mi>x</mi><mo>=</mo></math>​<math><mn>0</mn></math> are zero;
       the <math><mi>x</mi><mo>=</mo></math>​<math><mn>1000</mn><mtext> mm</mtext></math> face carries a total force in +x.
       The other faces are traction-free.</p>
+    <figure class="theory-figure narrow" id="figure-axial-bar">
+      <a href="/theory/figures/axial-bar.svg" class="figure-link"><img src="/theory/figures/axial-bar.svg" width="620" height="200" alt="A straight bar of length L, Young's modulus E and cross-sectional area A, clamped at its left end and pulled to the right by a force P. Its free end moves by the extension delta." loading="lazy" decoding="async" /></a>
+      <figcaption>The one-dimensional reference model: a bar of length L, modulus E and area A, clamped at one end and pulled by P.</figcaption>
+    </figure>
     <div class="table-wrap" tabindex="0" role="region" aria-label="Axial-bar inputs; scroll horizontally if needed">
       <table><caption>Coherent N–mm–MPa inputs</caption>
         <thead><tr><th scope="col">Input</th><th scope="col">Value</th><th scope="col">Unit</th></tr></thead>
@@ -1078,6 +1084,17 @@
       selected sample, not just the mean. These regression tolerances are
       chosen for this benchmark, not for a design’s safety margin.</p>
 
+    <figure class="result-viewer" data-viewer="/theory/viewers/axial-bar.json" id="viewer-axial-bar">
+      <div class="viewer-stage">
+        <img src="/examples/axial-bar.png" width="1200" height="401" alt="Axial bar: displacement magnitude on the solved model, coloured from blue (low) to red (high)." loading="lazy" decoding="async" />
+        <div class="viewer-legend" aria-hidden="true"><span>0.474 mm</span><span class="viewer-bar"></span><span>0 mm</span></div>
+        <p class="viewer-hint" hidden>Drag to rotate · scroll to zoom</p>
+      </div>
+      <figcaption>Displacement magnitude of the public axial-bar case. The extension grows linearly along the bar; near the clamp, the suppressed lateral contraction disturbs the uniform state. Displacements enlarged 200×.
+        <a href="/examples/axial-bar/">Axial bar example</a> ·
+        <a href="/app/?example=axial-bar">Open in KoFEM</a></figcaption>
+    </figure>
+
     <h2 id="limits">What the comparison establishes</h2>
     <p>The three order-1 meshes halve the cell size in each direction. Their
       extensions approach the reference from below, with a smaller change
@@ -1085,7 +1102,7 @@
       contraction and differs from the analytical bar, so refinement alone
       need not remove the remaining discrepancy. These three levels do not
       establish an asymptotic rate or a continuum error bound.</p>
-    <p><strong>The order-2 hex row is diagnostic.</strong> At this revision,
+    <p><strong>The order-2 hex row is diagnostic.</strong> Currently,
       <a href="https://github.com/mkofler96/KoFEM/blob/5d4874f2099ef573e6c0cbb1d473a697259fe314/engine/cpp/fem_bc_io.cpp#L169">Dirichlet extension</a>
       constrains vertices and edge DOFs but leaves Q2 face-centre DOFs free.
       That support differs from a fully clamped face. Its extension therefore
@@ -1100,30 +1117,21 @@
       The <a href="/theory/verification/strategy/">verification strategy</a>
       separates these checks from physical validation.</p>
 
-    <h2 id="reproduce">Open and reproduce the study</h2>
+    <h2 id="reproduce">Open the study in KoFEM</h2>
     <p><a class="button" href="/app/?example=axial-bar">Open the axial bar in KoFEM →</a></p>
     <p>The <a href="/examples/axial-bar/">example page</a> also offers the saved
       analysis. Solve at order 1 and select Ux: the public case’s maximum
       readout is <code>4.736e-1 mm</code>. Its reference comparison uses the mean
-      end displacement. The middle-region stress statistic is computed by
-      the script below; the app’s global smoothed maximum is a different quantity.</p>
-    <pre><code># From a checkout of the recorded source revision, with Bun installed:
-bash scripts/fetch-wasm-engine.sh
-bun examples/validation/run.mjs --case axial-bar
-bun examples/validation/axial-bar-study.mjs</code></pre>
-    <p>The second command checks the public case. The third executes all four
-      mesh/order solves, checks the bands, and compares them with the committed
-      record. A missing or mismatched engine, invalid result or stale record
-      fails explicitly. Historical engines that are unavailable must be built
-      from the recorded sources.</p>
+      end displacement. The middle-region stress statistic uses the
+      unsmoothed element samples; the app’s global smoothed maximum is a
+      different quantity.</p>
+    <p>KoFEM’s automated tests rerun all four mesh/order solves in the browser
+      engine, check the bands and compare the results with the published
+      record.</p>
 
     <h2 id="sources">Run record and sources</h2>
-    <p>Executed on 2026-11-06 using
-      <code>engine-a5154f0787e6</code>. Source reviewed at
-      <a href="https://github.com/mkofler96/KoFEM/tree/5d4874f2099ef573e6c0cbb1d473a697259fe314"><code>5d4874f2099ef573e6c0cbb1d473a697259fe314</code></a>.
-      <a href="/theory/axial-bar.json">Download inputs, solver settings and full-precision results</a>.
-      The record names the exact command and revision; it reports executed
-      solves, not source inspection as numerical evidence.</p>
+    <p><a href="/theory/axial-bar.json">Download inputs, solver settings and full-precision results</a>
+      of the four solves.</p>
     <p><a href="https://github.com/mkofler96/KoFEM/blob/5d4874f2099ef573e6c0cbb1d473a697259fe314/examples/validation/axial-bar-study.mjs#L1">Study and measurement source</a>
       reuses the public fixture and solver wrapper. See also
       <a href="https://github.com/mkofler96/KoFEM/blob/5d4874f2099ef573e6c0cbb1d473a697259fe314/web/src/lib/resultField.ts#L83">app averaging and extrema</a>
@@ -1134,7 +1142,7 @@ bun examples/validation/axial-bar-study.mjs</code></pre>
       <a class="prev" rel="prev" href="/theory/results/interpretation-and-convergence/"><small>Previous</small>← Interpretation and convergence</a>
       <a class="next" rel="next" href="/theory/verification/strategy/"><small>Next</small>Verification strategy →</a></nav>
       </main>
-      <nav class="docs-toc" aria-label="On this page"><p>On this page</p><ul><li><a href="#model">The model and the reference</a></li><li><a href="#pipeline">Trace the complete solve</a></li><li><a href="#comparison">Measured displacement and stress</a></li><li><a href="#limits">What the comparison establishes</a></li><li><a href="#reproduce">Open and reproduce the study</a></li><li><a href="#sources">Run record and sources</a></li></ul></nav>
+      <nav class="docs-toc" aria-label="On this page"><p>On this page</p><ul><li><a href="#model">The model and the reference</a></li><li><a href="#pipeline">Trace the complete solve</a></li><li><a href="#comparison">Measured displacement and stress</a></li><li><a href="#limits">What the comparison establishes</a></li><li><a href="#reproduce">Open the study in KoFEM</a></li><li><a href="#sources">Run record and sources</a></li></ul></nav>
     </div><footer class="site-footer">
       <span>KoFEM — finite element analysis in your browser</span>
       <nav aria-label="Footer">

@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 445" width="820" height="445" role="img" aria-labelledby="title desc">
+<title id="title">A body discretised into finite elements</title>
+<desc id="desc">A smooth two-dimensional body divided into triangular elements. Black dots mark the nodes; red arrows load the upper-left edge; a pinned and a roller support hold the bottom; arrows u and v at two nodes show their degrees of freedom.</desc>
+<style>text { font-family: "Helvetica Neue", Helvetica, Arial, "Segoe UI", Roboto, sans-serif; font-size: 13px; fill: #1f2933; } .sym { font-family: "Latin Modern Math", "STIX Two Math", "Cambria Math", "Times New Roman", Times, serif; font-style: italic; font-size: 17px; } .sym.up { font-style: normal; } .bold { font-weight: 700; } .halo { paint-order: stroke; stroke: #ffffff; stroke-width: 4px; stroke-linejoin: round; } .small { font-size: 11px; } .lbl { fill: #5f6b7a; } .title { font-size: 14px; font-weight: 600; } .load-text { fill: #c62828; font-weight: 700; font-style: italic; } .accent-text { fill: #1d5bbf; } .accent2-text { fill: #c4561f; } .body { fill: #dce8f4; stroke: #1f2933; stroke-width: 1.6; stroke-linejoin: round; } .body-alt { fill: #eef2f6; stroke: #1f2933; stroke-width: 1.4; stroke-linejoin: round; } .side { fill: #c3d5e8; stroke: #1f2933; stroke-width: 1.2; stroke-linejoin: round; } .outline { fill: none; stroke: #1f2933; stroke-width: 1.6; stroke-linejoin: round; } .mesh { fill: none; stroke: #3e4c5b; stroke-width: 0.8; stroke-linejoin: round; } .ink { fill: none; stroke: #1f2933; stroke-width: 1.3; } .thin { fill: none; stroke: #1f2933; stroke-width: 0.8; } .dash { fill: none; stroke: #5f6b7a; stroke-width: 1; stroke-dasharray: 5 4; } .grid { fill: none; stroke: #d5dbe2; stroke-width: 0.8; } .axis { fill: none; stroke: #1f2933; stroke-width: 1.2; } .dim { fill: none; stroke: #5f6b7a; stroke-width: 1; } .load { fill: none; stroke: #c62828; stroke-width: 2; } .accent { fill: none; stroke: #1d5bbf; stroke-width: 2; } .accent2 { fill: none; stroke: #c4561f; stroke-width: 2; } .accent3 { fill: none; stroke: #2e7d32; stroke-width: 2; } .accent4 { fill: none; stroke: #7b3fa0; stroke-width: 2; } .node { fill: #1f2933; } .node-open { fill: #ffffff; stroke: #1f2933; stroke-width: 1.4; } .node-accent { fill: #c4561f; } .gauss { fill: #c62828; } .hatch-fill { fill: url(#hatch); stroke: none; } .ground { fill: none; stroke: #1f2933; stroke-width: 1.6; }</style>
+<defs><marker id="a-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1f2933"/></marker><marker id="a-muted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#5f6b7a"/></marker><marker id="a-load" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#c62828"/></marker><marker id="a-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1d5bbf"/></marker><marker id="a-accent2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#c4561f"/></marker><marker id="a-accent3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#2e7d32"/></marker><marker id="a-accent4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#7b3fa0"/></marker><pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="#5f6b7a" stroke-width="1.2"/></pattern></defs>
+<path d="M678.38 238C686.16 225.22 694.65 210.96 696.64 196.73C698.63 182.5 696.54 165.41 690.32 152.63C684.11 139.85 671.36 128.64 659.35 120.04C647.34 111.43 632.51 105.72 618.25 101.01C604 96.3 588.8 93.6 573.83 91.79C558.87 89.98 543.55 89.6 528.47 90.15C513.38 90.71 498.21 92.48 483.34 95.11C468.46 97.74 453.76 101.71 439.23 105.92C424.7 110.14 410.69 116.21 396.17 120.43C381.65 124.64 367.02 129.28 352.12 131.19C337.21 133.09 321.86 132.22 306.74 131.86C291.62 131.5 276.52 129.67 261.39 129.04C246.26 128.41 231.09 127.64 215.97 128.07C200.86 128.5 185.58 129.18 170.7 131.62C155.83 134.05 140.16 136.54 126.73 142.69C113.31 148.83 96 157.08 90.14 168.48C84.28 179.89 86.1 198.59 91.6 211.11C97.09 223.63 113 232.47 123.12 243.59C133.24 254.71 143.79 265.55 152.32 277.85C160.84 290.14 164.44 306.5 174.29 317.35C184.14 328.19 197.97 336.53 211.41 342.92C224.85 349.31 240.17 352.58 254.93 355.69C269.68 358.79 284.92 359.82 299.97 361.55C315.01 363.28 330.23 363.8 345.17 366.07C360.12 368.34 374.95 371.6 389.66 375.17C404.36 378.74 418.67 384.01 433.39 387.49C448.11 390.96 463 394.74 477.98 396.02C492.96 397.3 508.68 397.95 523.28 395.18C537.87 392.41 553.31 387.47 565.52 379.39C577.74 371.31 587.33 358.52 596.57 346.69C605.81 334.85 612.07 320.58 620.97 308.37C629.88 296.16 640.41 285.15 649.98 273.43C659.55 261.7 670.6 250.78 678.38 238Z" class="body" style="fill:#d9f0ee"/>
+<path d="M215.97 128.07L261.39 129.04M261.39 129.04L267.39 160.93M267.39 160.93L215.97 128.07M261.39 129.04L306.74 131.86M306.74 131.86L267.39 160.93M352.12 131.19L396.17 120.43M396.17 120.43L411.08 153.32M411.08 153.32L352.12 131.19M396.17 120.43L439.23 105.92M439.23 105.92L411.08 153.32M439.23 105.92L483.34 95.11M483.34 95.11L464.21 149.11M464.21 149.11L439.23 105.92M464.21 149.11L411.08 153.32M483.34 95.11L528.47 90.15M528.47 90.15L509.99 158.45M509.99 158.45L483.34 95.11M509.99 158.45L464.21 149.11M573.83 91.79L618.25 101.01M618.25 101.01L563.5 154.19M563.5 154.19L573.83 91.79M528.47 90.15L573.83 91.79M563.5 154.19L528.47 90.15M563.5 154.19L509.99 158.45M659.35 120.04L690.32 152.63M690.32 152.63L614.75 160.68M614.75 160.68L659.35 120.04M618.25 101.01L659.35 120.04M614.75 160.68L618.25 101.01M614.75 160.68L563.5 154.19M90.14 168.48L126.73 142.69M126.73 142.69L135.62 193.82M135.62 193.82L90.14 168.48M91.6 211.11L90.14 168.48M135.62 193.82L91.6 211.11M126.73 142.69L170.7 131.62M170.7 131.62L135.62 193.82M123.12 243.59L91.6 211.11M135.62 193.82L123.12 243.59M170.7 131.62L215.97 128.07M215.97 128.07L195.3 196.19M195.3 196.19L170.7 131.62M195.3 196.19L135.62 193.82M267.39 160.93L236.27 200.06M236.27 200.06L215.97 128.07M236.27 200.06L195.3 196.19M306.74 131.86L288.1 192.7M288.1 192.7L267.39 160.93M288.1 192.7L236.27 200.06M306.74 131.86L352.12 131.19M352.12 131.19L342.44 203.67M342.44 203.67L306.74 131.86M342.44 203.67L288.1 192.7M411.08 153.32L390.74 202.49M390.74 202.49L352.12 131.19M390.74 202.49L342.44 203.67M464.21 149.11L442.08 203.65M442.08 203.65L411.08 153.32M442.08 203.65L390.74 202.49M509.99 158.45L485.35 198.78M485.35 198.78L464.21 149.11M485.35 198.78L442.08 203.65M563.5 154.19L542 203.29M542 203.29L509.99 158.45M542 203.29L485.35 198.78M614.75 160.68L595.9 202.63M595.9 202.63L563.5 154.19M595.9 202.63L542 203.29M696.64 196.73L678.38 238M678.38 238L641.32 204.2M641.32 204.2L696.64 196.73M690.32 152.63L696.64 196.73M641.32 204.2L690.32 152.63M641.32 204.2L614.75 160.68M641.32 204.2L595.9 202.63M152.32 277.85L123.12 243.59M123.12 243.59L165.34 239.56M165.34 239.56L152.32 277.85M135.62 193.82L165.34 239.56M195.3 196.19L165.34 239.56M174.29 317.35L152.32 277.85M152.32 277.85L217.94 242.32M217.94 242.32L174.29 317.35M165.34 239.56L217.94 242.32M236.27 200.06L217.94 242.32M217.94 242.32L195.3 196.19M288.1 192.7L268.33 247.67M268.33 247.67L236.27 200.06M268.33 247.67L217.94 242.32M342.44 203.67L315.86 245.75M315.86 245.75L288.1 192.7M315.86 245.75L268.33 247.67M390.74 202.49L364.26 243.49M364.26 243.49L342.44 203.67M364.26 243.49L315.86 245.75M442.08 203.65L418.12 242.35M418.12 242.35L390.74 202.49M418.12 242.35L364.26 243.49M485.35 198.78L462.79 238.42M462.79 238.42L442.08 203.65M462.79 238.42L418.12 242.35M542 203.29L509.01 235.76M509.01 235.76L485.35 198.78M509.01 235.76L462.79 238.42M595.9 202.63L570.68 245.87M570.68 245.87L542 203.29M570.68 245.87L509.01 235.76M678.38 238L649.98 273.43M649.98 273.43L616.77 235.64M616.77 235.64L678.38 238M616.77 235.64L641.32 204.2M616.77 235.64L595.9 202.63M616.77 235.64L570.68 245.87M211.41 342.92L174.29 317.35M174.29 317.35L241.69 289.13M241.69 289.13L211.41 342.92M217.94 242.32L241.69 289.13M268.33 247.67L241.69 289.13M315.86 245.75L285.63 291.18M285.63 291.18L268.33 247.67M285.63 291.18L241.69 289.13M364.26 243.49L340.23 285.84M340.23 285.84L315.86 245.75M340.23 285.84L285.63 291.18M418.12 242.35L385.9 283.71M385.9 283.71L364.26 243.49M385.9 283.71L340.23 285.84M462.79 238.42L436.52 288.93M436.52 288.93L418.12 242.35M436.52 288.93L385.9 283.71M509.01 235.76L494.66 287.96M494.66 287.96L462.79 238.42M494.66 287.96L436.52 288.93M570.68 245.87L542.12 291.14M542.12 291.14L509.01 235.76M542.12 291.14L494.66 287.96M649.98 273.43L620.97 308.37M620.97 308.37L591.51 287.96M591.51 287.96L649.98 273.43M591.51 287.96L616.77 235.64M591.51 287.96L570.68 245.87M620.97 308.37L596.57 346.69M596.57 346.69L591.51 287.96M591.51 287.96L542.12 291.14M254.93 355.69L211.41 342.92M211.41 342.92L261.14 325.19M261.14 325.19L254.93 355.69M241.69 289.13L261.14 325.19M299.97 361.55L254.93 355.69M261.14 325.19L299.97 361.55M285.63 291.18L261.14 325.19M345.17 366.07L299.97 361.55M299.97 361.55L314.38 328.03M314.38 328.03L345.17 366.07M340.23 285.84L314.38 328.03M314.38 328.03L285.63 291.18M261.14 325.19L314.38 328.03M389.66 375.17L345.17 366.07M345.17 366.07L361.03 322.1M361.03 322.1L389.66 375.17M385.9 283.71L361.03 322.1M361.03 322.1L340.23 285.84M314.38 328.03L361.03 322.1M433.39 387.49L389.66 375.17M389.66 375.17L411.05 322.36M411.05 322.36L433.39 387.49M436.52 288.93L411.05 322.36M411.05 322.36L385.9 283.71M411.05 322.36L361.03 322.1M477.98 396.02L433.39 387.49M433.39 387.49L460.23 333.01M460.23 333.01L477.98 396.02M411.05 322.36L460.23 333.01M494.66 287.96L460.23 333.01M460.23 333.01L436.52 288.93M565.52 379.39L523.28 395.18M523.28 395.18L521.18 322.81M521.18 322.81L565.52 379.39M523.28 395.18L477.98 396.02M477.98 396.02L521.18 322.81M460.23 333.01L521.18 322.81M542.12 291.14L521.18 322.81M521.18 322.81L494.66 287.96M591.51 287.96L561.07 327.12M561.07 327.12L542.12 291.14M596.57 346.69L561.07 327.12M596.57 346.69L565.52 379.39M565.52 379.39L561.07 327.12M521.18 322.81L561.07 327.12" class="mesh"/>
+<path d="M678.38 238C686.16 225.22 694.65 210.96 696.64 196.73C698.63 182.5 696.54 165.41 690.32 152.63C684.11 139.85 671.36 128.64 659.35 120.04C647.34 111.43 632.51 105.72 618.25 101.01C604 96.3 588.8 93.6 573.83 91.79C558.87 89.98 543.55 89.6 528.47 90.15C513.38 90.71 498.21 92.48 483.34 95.11C468.46 97.74 453.76 101.71 439.23 105.92C424.7 110.14 410.69 116.21 396.17 120.43C381.65 124.64 367.02 129.28 352.12 131.19C337.21 133.09 321.86 132.22 306.74 131.86C291.62 131.5 276.52 129.67 261.39 129.04C246.26 128.41 231.09 127.64 215.97 128.07C200.86 128.5 185.58 129.18 170.7 131.62C155.83 134.05 140.16 136.54 126.73 142.69C113.31 148.83 96 157.08 90.14 168.48C84.28 179.89 86.1 198.59 91.6 211.11C97.09 223.63 113 232.47 123.12 243.59C133.24 254.71 143.79 265.55 152.32 277.85C160.84 290.14 164.44 306.5 174.29 317.35C184.14 328.19 197.97 336.53 211.41 342.92C224.85 349.31 240.17 352.58 254.93 355.69C269.68 358.79 284.92 359.82 299.97 361.55C315.01 363.28 330.23 363.8 345.17 366.07C360.12 368.34 374.95 371.6 389.66 375.17C404.36 378.74 418.67 384.01 433.39 387.49C448.11 390.96 463 394.74 477.98 396.02C492.96 397.3 508.68 397.95 523.28 395.18C537.87 392.41 553.31 387.47 565.52 379.39C577.74 371.31 587.33 358.52 596.57 346.69C605.81 334.85 612.07 320.58 620.97 308.37C629.88 296.16 640.41 285.15 649.98 273.43C659.55 261.7 670.6 250.78 678.38 238Z" class="outline" style="stroke-width:2.2"/>
+<circle cx="678.38" cy="238" r="4.2" class="node"/>
+<circle cx="696.64" cy="196.73" r="4.2" class="node"/>
+<circle cx="690.32" cy="152.63" r="4.2" class="node"/>
+<circle cx="659.35" cy="120.04" r="4.2" class="node"/>
+<circle cx="618.25" cy="101.01" r="4.2" class="node"/>
+<circle cx="573.83" cy="91.79" r="4.2" class="node"/>
+<circle cx="528.47" cy="90.15" r="4.2" class="node"/>
+<circle cx="483.34" cy="95.11" r="4.2" class="node"/>
+<circle cx="439.23" cy="105.92" r="4.2" class="node"/>
+<circle cx="396.17" cy="120.43" r="4.2" class="node"/>
+<circle cx="352.12" cy="131.19" r="4.2" class="node"/>
+<circle cx="306.74" cy="131.86" r="4.2" class="node"/>
+<circle cx="261.39" cy="129.04" r="4.2" class="node"/>
+<circle cx="215.97" cy="128.07" r="4.2" class="node"/>
+<circle cx="170.7" cy="131.62" r="4.2" class="node"/>
+<circle cx="126.73" cy="142.69" r="4.2" class="node"/>
+<circle cx="90.14" cy="168.48" r="4.2" class="node"/>
+<circle cx="91.6" cy="211.11" r="4.2" class="node"/>
+<circle cx="123.12" cy="243.59" r="4.2" class="node"/>
+<circle cx="152.32" cy="277.85" r="4.2" class="node"/>
+<circle cx="174.29" cy="317.35" r="4.2" class="node"/>
+<circle cx="211.41" cy="342.92" r="4.2" class="node"/>
+<circle cx="254.93" cy="355.69" r="4.2" class="node"/>
+<circle cx="299.97" cy="361.55" r="4.2" class="node"/>
+<circle cx="345.17" cy="366.07" r="4.2" class="node"/>
+<circle cx="389.66" cy="375.17" r="4.2" class="node"/>
+<circle cx="433.39" cy="387.49" r="4.2" class="node"/>
+<circle cx="477.98" cy="396.02" r="4.2" class="node"/>
+<circle cx="523.28" cy="395.18" r="4.2" class="node"/>
+<circle cx="565.52" cy="379.39" r="4.2" class="node"/>
+<circle cx="596.57" cy="346.69" r="4.2" class="node"/>
+<circle cx="620.97" cy="308.37" r="4.2" class="node"/>
+<circle cx="649.98" cy="273.43" r="4.2" class="node"/>
+<circle cx="267.39" cy="160.93" r="4.2" class="node"/>
+<circle cx="411.08" cy="153.32" r="4.2" class="node"/>
+<circle cx="464.21" cy="149.11" r="4.2" class="node"/>
+<circle cx="509.99" cy="158.45" r="4.2" class="node"/>
+<circle cx="563.5" cy="154.19" r="4.2" class="node"/>
+<circle cx="614.75" cy="160.68" r="4.2" class="node"/>
+<circle cx="135.62" cy="193.82" r="4.2" class="node"/>
+<circle cx="195.3" cy="196.19" r="4.2" class="node"/>
+<circle cx="236.27" cy="200.06" r="4.2" class="node"/>
+<circle cx="288.1" cy="192.7" r="4.2" class="node"/>
+<circle cx="342.44" cy="203.67" r="4.2" class="node"/>
+<circle cx="390.74" cy="202.49" r="4.2" class="node"/>
+<circle cx="442.08" cy="203.65" r="4.2" class="node"/>
+<circle cx="485.35" cy="198.78" r="4.2" class="node"/>
+<circle cx="542" cy="203.29" r="4.2" class="node"/>
+<circle cx="595.9" cy="202.63" r="4.2" class="node"/>
+<circle cx="641.32" cy="204.2" r="4.2" class="node"/>
+<circle cx="165.34" cy="239.56" r="4.2" class="node"/>
+<circle cx="217.94" cy="242.32" r="4.2" class="node"/>
+<circle cx="268.33" cy="247.67" r="4.2" class="node"/>
+<circle cx="315.86" cy="245.75" r="4.2" class="node"/>
+<circle cx="364.26" cy="243.49" r="4.2" class="node"/>
+<circle cx="418.12" cy="242.35" r="4.2" class="node"/>
+<circle cx="462.79" cy="238.42" r="4.2" class="node"/>
+<circle cx="509.01" cy="235.76" r="4.2" class="node"/>
+<circle cx="570.68" cy="245.87" r="4.2" class="node"/>
+<circle cx="616.77" cy="235.64" r="4.2" class="node"/>
+<circle cx="241.69" cy="289.13" r="4.2" class="node"/>
+<circle cx="285.63" cy="291.18" r="4.2" class="node"/>
+<circle cx="340.23" cy="285.84" r="4.2" class="node"/>
+<circle cx="385.9" cy="283.71" r="4.2" class="node"/>
+<circle cx="436.52" cy="288.93" r="4.2" class="node"/>
+<circle cx="494.66" cy="287.96" r="4.2" class="node"/>
+<circle cx="542.12" cy="291.14" r="4.2" class="node"/>
+<circle cx="591.51" cy="287.96" r="4.2" class="node"/>
+<circle cx="261.14" cy="325.19" r="4.2" class="node"/>
+<circle cx="314.38" cy="328.03" r="4.2" class="node"/>
+<circle cx="361.03" cy="322.1" r="4.2" class="node"/>
+<circle cx="411.05" cy="322.36" r="4.2" class="node"/>
+<circle cx="460.23" cy="333.01" r="4.2" class="node"/>
+<circle cx="521.18" cy="322.81" r="4.2" class="node"/>
+<circle cx="561.07" cy="327.12" r="4.2" class="node"/>
+<line x1="167.95" y1="66.6" x2="212.28" y2="123.34" class="load" marker-end="url(#a-load)"/>
+<line x1="64.22" y1="96.05" x2="121.92" y2="139.1" class="load" marker-end="url(#a-load)"/>
+<line x1="16.76" y1="189.13" x2="85.84" y2="209.42" class="load" marker-end="url(#a-load)"/>
+<line x1="74.72" y1="285.81" x2="146.35" y2="278.46" class="load" marker-end="url(#a-load)"/>
+<text x="70" y="72" text-anchor="middle" class="load-text" font-size="19">Loads</text>
+<polygon points="389.66,379.17 377.66,395.17 401.66,395.17" class="body-alt"/><rect x="370.46" y="395.17" width="38.4" height="7.2" class="hatch-fill"/><line x1="370.46" y1="395.17" x2="408.86" y2="395.17" class="ground"/>
+<polygon points="477.98,400.02 466.78,412.82 489.18,412.82" class="body-alt"/><circle cx="471.9" cy="415.7" r="2.88" class="node-open"/><circle cx="484.06" cy="415.7" r="2.88" class="node-open"/><rect x="458.78" y="418.58" width="38.4" height="7.2" class="hatch-fill"/><line x1="458.78" y1="418.58" x2="497.18" y2="418.58" class="ground"/>
+<text x="511.98" y="426.02" text-anchor="start" class="bold" font-size="16" font-style="italic">Boundary conditions</text>
+<line x1="690.32" y1="152.63" x2="724.32" y2="152.63" class="ink" marker-end="url(#a-ink)"/>
+<line x1="690.32" y1="152.63" x2="690.32" y2="118.63" class="ink" marker-end="url(#a-ink)"/>
+<text x="730.32" y="157.63" text-anchor="start" class="sym bold">u</text>
+<text x="694.32" y="112.63" text-anchor="start" class="sym bold">v</text>
+<line x1="618.25" y1="101.01" x2="652.25" y2="101.01" class="ink" marker-end="url(#a-ink)"/>
+<line x1="618.25" y1="101.01" x2="618.25" y2="67.01" class="ink" marker-end="url(#a-ink)"/>
+<text x="658.25" y="106.01" text-anchor="start" class="sym bold">u</text>
+<text x="622.25" y="61.01" text-anchor="start" class="sym bold">v</text>
+<text x="770" y="112" text-anchor="middle" class="bold" font-size="16" font-style="italic">DOFs</text>
+<text x="406.17" y="42" text-anchor="middle" class="bold" font-size="16" font-style="italic">Nodes</text>
+<line x1="404.17" y1="50" x2="397.17" y2="114.43" class="ink" marker-end="url(#a-ink)"/>
+<text x="700" y="400" text-anchor="start" class="bold" font-size="16" font-style="italic">Elements</text>
+<line x1="696" y1="392" x2="553.26" y2="345.11" class="ink" marker-end="url(#a-ink)"/>
+</svg>

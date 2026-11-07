@@ -954,7 +954,7 @@
     <div class="docs theory-docs">
       <nav class="docs-nav" aria-label="Theory topics"><ul><li><a href="/theory/">Theory overview</a></li></ul>
     <details class="docs-group">
-      <summary>Foundations</summary><ul><li><a href="/theory/foundations/model-and-units/">Model and units</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
+      <summary>Foundations</summary><ul><li><a href="/theory/foundations/what-is-fem/">What is FEM?</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
     </details><details class="docs-group" open>
       <summary>Notation and operators</summary><ul><li><a href="/theory/notation/">Notation</a></li><li><a href="/theory/operators/gradient-divergence/">Gradient and divergence</a></li><li><a href="/theory/operators/tensor-products/">Tensor products and contractions</a></li><li><a href="/theory/operators/integration-by-parts/" aria-current="page">Integration and the weak form</a></li><li><a href="/theory/operators/reference-mapping/">Reference elements and Jacobians</a></li></ul>
     </details><details class="docs-group">
@@ -974,7 +974,7 @@
         <details class="docs-menu"><summary>Theory contents</summary><div>
           <nav aria-label="Theory topics (mobile)"><ul><li><a href="/theory/">Theory overview</a></li></ul>
     <details class="docs-group">
-      <summary>Foundations</summary><ul><li><a href="/theory/foundations/model-and-units/">Model and units</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
+      <summary>Foundations</summary><ul><li><a href="/theory/foundations/what-is-fem/">What is FEM?</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
     </details><details class="docs-group" open>
       <summary>Notation and operators</summary><ul><li><a href="/theory/notation/">Notation</a></li><li><a href="/theory/operators/gradient-divergence/">Gradient and divergence</a></li><li><a href="/theory/operators/tensor-products/">Tensor products and contractions</a></li><li><a href="/theory/operators/integration-by-parts/" aria-current="page">Integration and the weak form</a></li><li><a href="/theory/operators/reference-mapping/">Reference elements and Jacobians</a></li></ul>
     </details><details class="docs-group">
@@ -1030,6 +1030,10 @@
       The divergence is 1, so the volume integral is 1.
       On <math><mi>x</mi><mo>=</mo></math>​<span class="math-nowrap"><math><mn>1</mn></math>,</span> <math><mi>v</mi><mo>·</mo><mi>n</mi><mo>=</mo></math>​<math><mn>1</mn></math> over unit area; on <math><mi>x</mi><mo>=</mo></math>​<math><mn>0</mn></math> it is zero;
       on the other four faces <math><mi>v</mi><mo>·</mo><mi>n</mi><mo>=</mo></math>​<span class="math-nowrap"><math><mn>0</mn></math>.</span> Boundary flux is therefore also 1.</p>
+    <figure class="theory-figure full" id="figure-divergence-theorem">
+      <a href="/theory/figures/divergence-theorem.svg" class="figure-link"><img src="/theory/figures/divergence-theorem.svg" width="520" height="350" alt="A body Omega with boundary Gamma in a grey vector field q. Blue arrows show the outward unit normal n at points on the boundary; the net outflow of q through Gamma equals the integral of the divergence of q over Omega." loading="lazy" decoding="async" /></a>
+      <figcaption>A vector field q and a body Ω with boundary Γ. The divergence theorem equates the total divergence of q inside Ω with the net outflow q · n through Γ, where n is the outward unit normal.</figcaption>
+    </figure>
     <p>The outward sign matters. With traction <math><mi>t</mi><mo>=</mo></math>​<span class="math-nowrap"><math><mi>σ</mi><mi>n</mi></math>,</span> tensile stress
       pulls outward on opposite faces in opposite directions. A common
       constant vector need not represent both face tractions.</p>

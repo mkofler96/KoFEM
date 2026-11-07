@@ -18,6 +18,3 @@ export const table = (caption, headings, rows) =>
   `<div class="table-wrap" tabindex="0" role="region" aria-label="${caption}; scroll horizontally if needed"><table class="shell-table">
     <caption>${caption}</caption><thead><tr>${headings.map((heading) => `<th scope="col">${heading}</th>`).join("")}</tr></thead>
     <tbody>${rows.map(([label, ...cells]) => `<tr><th scope="row">${label}</th>${cells.map((cell) => `<td>${cell}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
-export const reviewed = `Reviewed on 6 November 2026 at
-      <a href="https://github.com/mkofler96/KoFEM/tree/${revision}"><code>${revision.slice(0, 12)}</code></a>
-      (engine <code>${evidence.engine}</code>).`;

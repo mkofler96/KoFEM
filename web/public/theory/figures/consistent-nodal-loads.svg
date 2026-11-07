@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 280" width="700" height="280" role="img" aria-labelledby="title desc">
+<title id="title">Consistent nodal loads from a uniform traction</title>
+<desc id="desc">A uniform traction q on an edge of length L becomes nodal forces. A linear two-node edge receives qL/2 at each node. A quadratic three-node edge receives qL/6 at each end and 2qL/3 at the midpoint.</desc>
+<style>text { font-family: "Helvetica Neue", Helvetica, Arial, "Segoe UI", Roboto, sans-serif; font-size: 13px; fill: #1f2933; } .sym { font-family: "Latin Modern Math", "STIX Two Math", "Cambria Math", "Times New Roman", Times, serif; font-style: italic; font-size: 17px; } .sym.up { font-style: normal; } .bold { font-weight: 700; } .halo { paint-order: stroke; stroke: #ffffff; stroke-width: 4px; stroke-linejoin: round; } .small { font-size: 11px; } .lbl { fill: #5f6b7a; } .title { font-size: 14px; font-weight: 600; } .load-text { fill: #c62828; font-weight: 700; font-style: italic; } .accent-text { fill: #1d5bbf; } .accent2-text { fill: #c4561f; } .body { fill: #dce8f4; stroke: #1f2933; stroke-width: 1.6; stroke-linejoin: round; } .body-alt { fill: #eef2f6; stroke: #1f2933; stroke-width: 1.4; stroke-linejoin: round; } .side { fill: #c3d5e8; stroke: #1f2933; stroke-width: 1.2; stroke-linejoin: round; } .outline { fill: none; stroke: #1f2933; stroke-width: 1.6; stroke-linejoin: round; } .mesh { fill: none; stroke: #3e4c5b; stroke-width: 0.8; stroke-linejoin: round; } .ink { fill: none; stroke: #1f2933; stroke-width: 1.3; } .thin { fill: none; stroke: #1f2933; stroke-width: 0.8; } .dash { fill: none; stroke: #5f6b7a; stroke-width: 1; stroke-dasharray: 5 4; } .grid { fill: none; stroke: #d5dbe2; stroke-width: 0.8; } .axis { fill: none; stroke: #1f2933; stroke-width: 1.2; } .dim { fill: none; stroke: #5f6b7a; stroke-width: 1; } .load { fill: none; stroke: #c62828; stroke-width: 2; } .accent { fill: none; stroke: #1d5bbf; stroke-width: 2; } .accent2 { fill: none; stroke: #c4561f; stroke-width: 2; } .accent3 { fill: none; stroke: #2e7d32; stroke-width: 2; } .accent4 { fill: none; stroke: #7b3fa0; stroke-width: 2; } .node { fill: #1f2933; } .node-open { fill: #ffffff; stroke: #1f2933; stroke-width: 1.4; } .node-accent { fill: #c4561f; } .gauss { fill: #c62828; } .hatch-fill { fill: url(#hatch); stroke: none; } .ground { fill: none; stroke: #1f2933; stroke-width: 1.6; }</style>
+<defs><marker id="a-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1f2933"/></marker><marker id="a-muted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#5f6b7a"/></marker><marker id="a-load" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#c62828"/></marker><marker id="a-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1d5bbf"/></marker><marker id="a-accent2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#c4561f"/></marker><marker id="a-accent3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#2e7d32"/></marker><marker id="a-accent4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#7b3fa0"/></marker><pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="#5f6b7a" stroke-width="1.2"/></pattern></defs>
+<line x1="40" y1="112" x2="300" y2="112" class="ink" style="stroke-width:3"/>
+<line x1="40" y1="40" x2="40" y2="64" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="72.5" y1="40" x2="72.5" y2="64" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="105" y1="40" x2="105" y2="64" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="137.5" y1="40" x2="137.5" y2="64" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="170" y1="40" x2="170" y2="64" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="202.5" y1="40" x2="202.5" y2="64" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="235" y1="40" x2="235" y2="64" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="267.5" y1="40" x2="267.5" y2="64" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="300" y1="40" x2="300" y2="64" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="40" y1="40" x2="300" y2="40" class="load" style="stroke-width:1.4"/>
+<text x="170" y="30" text-anchor="middle" class="small load-text">uniform traction q over length L</text>
+<circle cx="40" cy="112" r="5" class="node"/>
+<line x1="40" y1="122" x2="40" y2="182" class="load" marker-end="url(#a-load)"/>
+<text x="40" y="202" text-anchor="middle" class="sym load-text" font-size="15">qL/2</text>
+<circle cx="300" cy="112" r="5" class="node"/>
+<line x1="300" y1="122" x2="300" y2="182" class="load" marker-end="url(#a-load)"/>
+<text x="300" y="202" text-anchor="middle" class="sym load-text" font-size="15">qL/2</text>
+<text x="170" y="262" text-anchor="middle" class="title">Linear edge: 2 nodes</text>
+<line x1="380" y1="112" x2="640" y2="112" class="ink" style="stroke-width:3"/>
+<line x1="380" y1="40" x2="380" y2="64" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="412.5" y1="40" x2="412.5" y2="64" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="445" y1="40" x2="445" y2="64" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="477.5" y1="40" x2="477.5" y2="64" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="510" y1="40" x2="510" y2="64" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="542.5" y1="40" x2="542.5" y2="64" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="575" y1="40" x2="575" y2="64" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="607.5" y1="40" x2="607.5" y2="64" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="640" y1="40" x2="640" y2="64" class="load" marker-end="url(#a-load)" style="stroke-width:1.4"/>
+<line x1="380" y1="40" x2="640" y2="40" class="load" style="stroke-width:1.4"/>
+<text x="510" y="30" text-anchor="middle" class="small load-text">uniform traction q over length L</text>
+<circle cx="380" cy="112" r="5" class="node"/>
+<line x1="380" y1="122" x2="380" y2="142" class="load" marker-end="url(#a-load)"/>
+<text x="380" y="162" text-anchor="middle" class="sym load-text" font-size="15">qL/6</text>
+<circle cx="510" cy="112" r="5" class="node"/>
+<line x1="510" y1="122" x2="510" y2="202" class="load" marker-end="url(#a-load)"/>
+<text x="510" y="222" text-anchor="middle" class="sym load-text" font-size="15">2qL/3</text>
+<circle cx="640" cy="112" r="5" class="node"/>
+<line x1="640" y1="122" x2="640" y2="142" class="load" marker-end="url(#a-load)"/>
+<text x="640" y="162" text-anchor="middle" class="sym load-text" font-size="15">qL/6</text>
+<text x="510" y="262" text-anchor="middle" class="title">Quadratic edge: 3 nodes</text>
+</svg>

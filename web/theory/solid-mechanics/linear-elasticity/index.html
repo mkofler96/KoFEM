@@ -954,7 +954,7 @@
     <div class="docs theory-docs">
       <nav class="docs-nav" aria-label="Theory topics"><ul><li><a href="/theory/">Theory overview</a></li></ul>
     <details class="docs-group">
-      <summary>Foundations</summary><ul><li><a href="/theory/foundations/model-and-units/">Model and units</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
+      <summary>Foundations</summary><ul><li><a href="/theory/foundations/what-is-fem/">What is FEM?</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
     </details><details class="docs-group">
       <summary>Notation and operators</summary><ul><li><a href="/theory/notation/">Notation</a></li><li><a href="/theory/operators/gradient-divergence/">Gradient and divergence</a></li><li><a href="/theory/operators/tensor-products/">Tensor products and contractions</a></li><li><a href="/theory/operators/integration-by-parts/">Integration and the weak form</a></li><li><a href="/theory/operators/reference-mapping/">Reference elements and Jacobians</a></li></ul>
     </details><details class="docs-group" open>
@@ -974,7 +974,7 @@
         <details class="docs-menu"><summary>Theory contents</summary><div>
           <nav aria-label="Theory topics (mobile)"><ul><li><a href="/theory/">Theory overview</a></li></ul>
     <details class="docs-group">
-      <summary>Foundations</summary><ul><li><a href="/theory/foundations/model-and-units/">Model and units</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
+      <summary>Foundations</summary><ul><li><a href="/theory/foundations/what-is-fem/">What is FEM?</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
     </details><details class="docs-group">
       <summary>Notation and operators</summary><ul><li><a href="/theory/notation/">Notation</a></li><li><a href="/theory/operators/gradient-divergence/">Gradient and divergence</a></li><li><a href="/theory/operators/tensor-products/">Tensor products and contractions</a></li><li><a href="/theory/operators/integration-by-parts/">Integration and the weak form</a></li><li><a href="/theory/operators/reference-mapping/">Reference elements and Jacobians</a></li></ul>
     </details><details class="docs-group" open>
@@ -1079,6 +1079,10 @@
       small cube makes the stress symmetric, <math><msub><mi>σ</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub><mo>=</mo></math>​<span class="math-nowrap"><math><msub><mi>σ</mi><mrow><mi>j</mi><mi>i</mi></mrow></msub></math>,</span> so it has six
       independent components. The scalar <a href="/theory/notation/#von-mises">von Mises stress</a>
       summarises them for yield checks; it is not a tensor component and has no sign.</p>
+    <figure class="theory-figure full" id="figure-stress-cube">
+      <a href="/theory/figures/stress-cube.svg" class="figure-link"><img src="/theory/figures/stress-cube.svg" width="520" height="400" alt="A small cube aligned with the x, y and z axes. On each visible face a red arrow shows the normal stress, sigma xx, sigma yy or sigma zz, and two blue arrows show the shear stresses tau acting in the face." loading="lazy" decoding="async" /></a>
+      <figcaption>Stress components on the faces of a small cube. On each face, one normal stress (red) acts along the face normal and two shear stresses (blue) act in the face.</figcaption>
+    </figure>
 
     <h2 id="isotropic-law">The isotropic linear-elastic law</h2>
     <p>A linear-elastic material maps strain to stress linearly. For an
@@ -1193,8 +1197,6 @@
     </ul>
 
     <h2 id="implementation">KoFEM implementation</h2>
-    <p>Reviewed on 6 November 2026 at
-      <a href="https://github.com/mkofler96/KoFEM/tree/6ba4db0ed963d6c8c0cb3263edf6737763994b6c"><code>6ba4db0</code></a>.</p>
     <ul>
       <li>Each material stores <math><mi>E</mi></math> (MPa), <math><mi>ν</mi></math> and a density. The material form
         rejects <math><mi>E</mi><mo>≤</mo></math>​<math><mn>0</mn></math> and <math><mi>ν</mi></math> outside <math><mo stretchy="false" lspace="0" rspace="0">(</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mn>1</mn><mo>,</mo><mn>0.5</mn><mo stretchy="false" lspace="0" rspace="0">)</mo></math>
@@ -1215,7 +1217,7 @@
         explains where it is sampled.</li>
     </ul>
     <p>KoFEM has no thermal, plastic, anisotropic, hyperelastic or
-      geometrically nonlinear material model at this revision, and no
+      geometrically nonlinear material model, and no
       separate treatment for nearly incompressible materials.</p>
 
     <h2 id="references">Sources and further reading</h2>

@@ -3,6 +3,8 @@
 
 import { equation, tex } from "../operators/math.mjs";
 import { evidence, source, number, publicCase } from "./evidence.mjs";
+import { figure } from "../figures/index.mjs";
+import { resultViewer } from "../viewers/index.mjs";
 
 const { setup, runs } = evidence;
 const baseline = runs.find((run) => run.order === 1 && run.elements === 320);
@@ -18,7 +20,7 @@ export default {
     ["pipeline", "Trace the complete solve"],
     ["comparison", "Measured displacement and stress"],
     ["limits", "What the comparison establishes"],
-    ["reproduce", "Open and reproduce the study"],
+    ["reproduce", "Open the study in KoFEM"],
     ["sources", "Run record and sources"],
   ],
   body: `
@@ -35,6 +37,7 @@ export default {
       There is no body force. All translations on ${tex("x = 0")} are zero;
       the ${tex("x = 1000\\text{ mm}")} face carries a total force in +x.
       The other faces are traction-free.</p>
+    ${figure("axial-bar", "The one-dimensional reference model: a bar of length L, modulus E and area A, clamped at one end and pulled by P.", "narrow")}
     <div class="table-wrap" tabindex="0" role="region" aria-label="Axial-bar inputs; scroll horizontally if needed">
       <table><caption>Coherent N–mm–MPa inputs</caption>
         <thead><tr><th scope="col">Input</th><th scope="col">Value</th><th scope="col">Unit</th></tr></thead>
@@ -104,6 +107,11 @@ export default {
       selected sample, not just the mean. These regression tolerances are
       chosen for this benchmark, not for a design’s safety margin.</p>
 
+    ${resultViewer("axial-bar", {
+      caption:
+        "Displacement magnitude of the public axial-bar case. The extension grows linearly along the bar; near the clamp, the suppressed lateral contraction disturbs the uniform state.",
+    })}
+
     <h2 id="limits">What the comparison establishes</h2>
     <p>The three order-1 meshes halve the cell size in each direction. Their
       extensions approach the reference from below, with a smaller change
@@ -111,7 +119,7 @@ export default {
       contraction and differs from the analytical bar, so refinement alone
       need not remove the remaining discrepancy. These three levels do not
       establish an asymptotic rate or a continuum error bound.</p>
-    <p><strong>The order-2 hex row is diagnostic.</strong> At this revision,
+    <p><strong>The order-2 hex row is diagnostic.</strong> Currently,
       ${source("engine/cpp/fem_bc_io.cpp", 169, "Dirichlet extension")}
       constrains vertices and edge DOFs but leaves Q2 face-centre DOFs free.
       That support differs from a fully clamped face. Its extension therefore
@@ -126,30 +134,21 @@ export default {
       The <a href="/theory/verification/strategy/">verification strategy</a>
       separates these checks from physical validation.</p>
 
-    <h2 id="reproduce">Open and reproduce the study</h2>
+    <h2 id="reproduce">Open the study in KoFEM</h2>
     <p><a class="button" href="/app/?example=axial-bar">Open the axial bar in KoFEM →</a></p>
     <p>The <a href="/examples/axial-bar/">example page</a> also offers the saved
       analysis. Solve at order 1 and select Ux: the public case’s maximum
       readout is <code>${publicCase.readout.value}</code>. Its reference comparison uses the mean
-      end displacement. The middle-region stress statistic is computed by
-      the script below; the app’s global smoothed maximum is a different quantity.</p>
-    <pre><code># From a checkout of the recorded source revision, with Bun installed:
-bash scripts/fetch-wasm-engine.sh
-bun examples/validation/run.mjs --case axial-bar
-bun examples/validation/axial-bar-study.mjs</code></pre>
-    <p>The second command checks the public case. The third executes all four
-      mesh/order solves, checks the bands, and compares them with the committed
-      record. A missing or mismatched engine, invalid result or stale record
-      fails explicitly. Historical engines that are unavailable must be built
-      from the recorded sources.</p>
+      end displacement. The middle-region stress statistic uses the
+      unsmoothed element samples; the app’s global smoothed maximum is a
+      different quantity.</p>
+    <p>KoFEM’s automated tests rerun all four mesh/order solves in the browser
+      engine, check the bands and compare the results with the published
+      record.</p>
 
     <h2 id="sources">Run record and sources</h2>
-    <p>Executed on ${evidence.generated.slice(0, 10)} using
-      <code>${evidence.engine}</code>. Source reviewed at
-      <a href="https://github.com/mkofler96/KoFEM/tree/${evidence.sourceRevision}"><code>${evidence.sourceRevision}</code></a>.
-      <a href="/theory/axial-bar.json">Download inputs, solver settings and full-precision results</a>.
-      The record names the exact command and revision; it reports executed
-      solves, not source inspection as numerical evidence.</p>
+    <p><a href="/theory/axial-bar.json">Download inputs, solver settings and full-precision results</a>
+      of the four solves.</p>
     <p>${source("examples/validation/axial-bar-study.mjs", 1, "Study and measurement source")}
       reuses the public fixture and solver wrapper. See also
       ${source("web/src/lib/resultField.ts", 83, "app averaging and extrema")}

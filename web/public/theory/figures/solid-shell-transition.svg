@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 340" width="600" height="340" role="img" aria-labelledby="title desc">
+<title id="title">A shell wall joined to a solid through a retained solid section</title>
+<desc id="desc">A wall rising from a solid block. Its lowest three thicknesses stay solid; above them the wall is a shell mid-surface line with nodes. At the cut, red links tie the solid section nodes S to the shell edge node A, so they follow its translation and rotation.</desc>
+<style>text { font-family: "Helvetica Neue", Helvetica, Arial, "Segoe UI", Roboto, sans-serif; font-size: 13px; fill: #1f2933; } .sym { font-family: "Latin Modern Math", "STIX Two Math", "Cambria Math", "Times New Roman", Times, serif; font-style: italic; font-size: 17px; } .sym.up { font-style: normal; } .bold { font-weight: 700; } .halo { paint-order: stroke; stroke: #ffffff; stroke-width: 4px; stroke-linejoin: round; } .small { font-size: 11px; } .lbl { fill: #5f6b7a; } .title { font-size: 14px; font-weight: 600; } .load-text { fill: #c62828; font-weight: 700; font-style: italic; } .accent-text { fill: #1d5bbf; } .accent2-text { fill: #c4561f; } .body { fill: #dce8f4; stroke: #1f2933; stroke-width: 1.6; stroke-linejoin: round; } .body-alt { fill: #eef2f6; stroke: #1f2933; stroke-width: 1.4; stroke-linejoin: round; } .side { fill: #c3d5e8; stroke: #1f2933; stroke-width: 1.2; stroke-linejoin: round; } .outline { fill: none; stroke: #1f2933; stroke-width: 1.6; stroke-linejoin: round; } .mesh { fill: none; stroke: #3e4c5b; stroke-width: 0.8; stroke-linejoin: round; } .ink { fill: none; stroke: #1f2933; stroke-width: 1.3; } .thin { fill: none; stroke: #1f2933; stroke-width: 0.8; } .dash { fill: none; stroke: #5f6b7a; stroke-width: 1; stroke-dasharray: 5 4; } .grid { fill: none; stroke: #d5dbe2; stroke-width: 0.8; } .axis { fill: none; stroke: #1f2933; stroke-width: 1.2; } .dim { fill: none; stroke: #5f6b7a; stroke-width: 1; } .load { fill: none; stroke: #c62828; stroke-width: 2; } .accent { fill: none; stroke: #1d5bbf; stroke-width: 2; } .accent2 { fill: none; stroke: #c4561f; stroke-width: 2; } .accent3 { fill: none; stroke: #2e7d32; stroke-width: 2; } .accent4 { fill: none; stroke: #7b3fa0; stroke-width: 2; } .node { fill: #1f2933; } .node-open { fill: #ffffff; stroke: #1f2933; stroke-width: 1.4; } .node-accent { fill: #c4561f; } .gauss { fill: #c62828; } .hatch-fill { fill: url(#hatch); stroke: none; } .ground { fill: none; stroke: #1f2933; stroke-width: 1.6; }</style>
+<defs><marker id="a-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1f2933"/></marker><marker id="a-muted" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#5f6b7a"/></marker><marker id="a-load" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#c62828"/></marker><marker id="a-accent" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1d5bbf"/></marker><marker id="a-accent2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#c4561f"/></marker><marker id="a-accent3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#2e7d32"/></marker><marker id="a-accent4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#7b3fa0"/></marker><pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="#5f6b7a" stroke-width="1.2"/></pattern></defs>
+<rect x="60" y="250" width="420" height="80" class="body"/>
+<rect x="248" y="178" width="24" height="72" class="body"/>
+<line x1="248" y1="226" x2="272" y2="226" class="mesh"/>
+<line x1="248" y1="202" x2="272" y2="202" class="mesh"/>
+<line x1="260" y1="178" x2="260" y2="250" class="mesh"/>
+<line x1="260" y1="178" x2="260" y2="40" class="accent" style="stroke-width:3"/>
+<circle cx="260" cy="178" r="5" class="node-accent"/>
+<circle cx="260" cy="132" r="5" class="node-accent"/>
+<circle cx="260" cy="86" r="5" class="node-accent"/>
+<circle cx="260" cy="40" r="5" class="node-accent"/>
+<rect x="248" y="40" width="24" height="138" style="fill:none;stroke:#1d5bbf;stroke-width:1;stroke-dasharray:4 3"/>
+<line x1="260" y1="178" x2="248" y2="178" class="load" style="stroke-width:1.6"/>
+<circle cx="248" cy="178" r="4.5" class="node"/>
+<line x1="260" y1="178" x2="272" y2="178" class="load" style="stroke-width:1.6"/>
+<circle cx="272" cy="178" r="4.5" class="node"/>
+<circle cx="260" cy="178" r="6" class="node-accent"/>
+<text x="300" y="80" text-anchor="start" class="accent-text">shell mid-surface</text>
+<text x="300" y="98" text-anchor="start" class="small lbl">(6 DOFs per node)</text>
+<text x="300" y="182" class="sym load-text" style="font-weight:400">u<tspan dy="4" font-size="70%">S</tspan><tspan dy="-4"> = u</tspan><tspan dy="4" font-size="70%">A</tspan><tspan dy="-4"> + θ</tspan><tspan dy="4" font-size="70%">A</tspan><tspan dy="-4"> × r</tspan></text>
+<text x="300" y="202" text-anchor="start" class="small lbl">rigid link to the shell edge</text>
+<text x="220" y="218" text-anchor="end" class="small lbl">retained solid</text>
+<text x="220" y="234" text-anchor="end" class="small lbl">section, 3t</text>
+<text x="270" y="300" text-anchor="middle" class="lbl">solid block</text>
+<text x="252" y="170" text-anchor="end" class="sym">A</text>
+<text x="276" y="196" text-anchor="start" class="sym">S</text>
+<line x1="248" y1="26" x2="272" y2="26" class="dim" marker-start="url(#a-muted)" marker-end="url(#a-muted)"/>
+<text x="260" y="20" text-anchor="middle" class="sym">t</text>
+</svg>

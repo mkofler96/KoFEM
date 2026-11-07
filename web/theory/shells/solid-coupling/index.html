@@ -954,7 +954,7 @@
     <div class="docs theory-docs">
       <nav class="docs-nav" aria-label="Theory topics"><ul><li><a href="/theory/">Theory overview</a></li></ul>
     <details class="docs-group">
-      <summary>Foundations</summary><ul><li><a href="/theory/foundations/model-and-units/">Model and units</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
+      <summary>Foundations</summary><ul><li><a href="/theory/foundations/what-is-fem/">What is FEM?</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
     </details><details class="docs-group">
       <summary>Notation and operators</summary><ul><li><a href="/theory/notation/">Notation</a></li><li><a href="/theory/operators/gradient-divergence/">Gradient and divergence</a></li><li><a href="/theory/operators/tensor-products/">Tensor products and contractions</a></li><li><a href="/theory/operators/integration-by-parts/">Integration and the weak form</a></li><li><a href="/theory/operators/reference-mapping/">Reference elements and Jacobians</a></li></ul>
     </details><details class="docs-group">
@@ -974,7 +974,7 @@
         <details class="docs-menu"><summary>Theory contents</summary><div>
           <nav aria-label="Theory topics (mobile)"><ul><li><a href="/theory/">Theory overview</a></li></ul>
     <details class="docs-group">
-      <summary>Foundations</summary><ul><li><a href="/theory/foundations/model-and-units/">Model and units</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
+      <summary>Foundations</summary><ul><li><a href="/theory/foundations/what-is-fem/">What is FEM?</a></li><li><a href="/theory/foundations/consistent-units/">Consistent unit systems</a></li><li><a href="/theory/foundations/reading-a-study/">Reading a study</a></li></ul>
     </details><details class="docs-group">
       <summary>Notation and operators</summary><ul><li><a href="/theory/notation/">Notation</a></li><li><a href="/theory/operators/gradient-divergence/">Gradient and divergence</a></li><li><a href="/theory/operators/tensor-products/">Tensor products and contractions</a></li><li><a href="/theory/operators/integration-by-parts/">Integration and the weak form</a></li><li><a href="/theory/operators/reference-mapping/">Reference elements and Jacobians</a></li></ul>
     </details><details class="docs-group">
@@ -994,7 +994,7 @@
         </div></details>
         <nav class="crumbs" aria-label="Breadcrumb"><a href="/">KoFEM</a> / <a href="/theory/">Theory</a> / Shells / Solid–shell coupling</nav>
         <h1>Solid–shell coupling</h1>
-        <details class="article-contents"><summary>On this page</summary><ul><li><a href="#load-path">Choose the connection’s physical meaning</a></li><li><a href="#reduction">Motion constraints also transfer loads</a></li><li><a href="#transition">Retain solid material at the joint</a></li><li><a href="#other-couplings">Distinguish the other coupling methods</a></li><li><a href="#inputs">Materials, loads and constraints</a></li><li><a href="#verification">Check the planar wall-on-block case</a></li><li><a href="#limits">What this evidence establishes</a></li><li><a href="#references">Reviewed implementation and references</a></li></ul></details>
+        <details class="article-contents"><summary>On this page</summary><ul><li><a href="#load-path">Choose the connection’s physical meaning</a></li><li><a href="#reduction">Motion constraints also transfer loads</a></li><li><a href="#transition">Retain solid material at the joint</a></li><li><a href="#other-couplings">Distinguish the other coupling methods</a></li><li><a href="#inputs">Materials, loads and constraints</a></li><li><a href="#verification">Check the planar wall-on-block case</a></li><li><a href="#limits">What this evidence establishes</a></li><li><a href="#references">Implementation and references</a></li></ul></details>
 
     <p class="lede">How are shell and solid degrees of freedom coupled?</p>
     <p>A shell carries translations and rotations at its mid-surface; a solid
@@ -1049,32 +1049,9 @@
       three-dimensional material around the joint and counts the replaced wall
       volume once. The placement is a current algorithmic choice, not a theorem
       that three thicknesses suffice for every geometry.</p>
-    <figure class="model-sketch">
-      <svg role="img" aria-labelledby="transition-title" aria-describedby="transition-description" viewBox="0 0 600 310">
-        <title id="transition-title">Solid root retained below a shell transition</title>
-        <desc id="transition-description">Cross section through a thin wall on a block. The wall remains solid for three wall thicknesses above the block. Above that cut, a shell mid-surface carries the wall. Two solid nodes across the cut follow interpolated shell-edge motion plus the rotation offset.</desc>
-        <g fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M80 250H360V290H80Z" fill="currentColor" fill-opacity="0.08"/>
-          <path d="M190 250V155H230V250" fill="currentColor" fill-opacity="0.08"/>
-          <path d="M190 155V40H230V155" stroke-dasharray="5 5"/>
-          <path d="M210 155V40" stroke-width="4"/>
-          <path d="M170 155H250" stroke-dasharray="3 3"/>
-          <path d="M140 160V245M134 160H146M134 245H146"/>
-          <path d="M190 26H230M190 20V32M230 20V32"/>
-          <circle cx="190" cy="155" r="4" fill="currentColor"/>
-          <circle cx="230" cy="155" r="4" fill="currentColor"/>
-          <path d="M240 155H345M220 75H345M240 207H345" stroke-width="1"/>
-        </g>
-        <g fill="currentColor" font-family="sans-serif" font-size="16">
-          <text x="205" y="17">t</text><text x="107" y="208">3t</text>
-          <text x="355" y="80">Shell mid-surface</text>
-          <text x="355" y="160">Section footprint</text>
-          <text x="355" y="212">Retained solid wall</text>
-          <text x="100" y="276">Solid block</text>
-        </g>
-      </svg>
-      <figcaption>Cross section, not to scale. Keep the joint three-dimensional;
-        impose shell section kinematics at the cut above it.</figcaption>
+    <figure class="theory-figure full" id="figure-solid-shell-transition">
+      <a href="/theory/figures/solid-shell-transition.svg" class="figure-link"><img src="/theory/figures/solid-shell-transition.svg" width="600" height="340" alt="A wall rising from a solid block. Its lowest three thicknesses stay solid; above them the wall is a shell mid-surface line with nodes. At the cut, red links tie the solid section nodes S to the shell edge node A, so they follow its translation and rotation." loading="lazy" decoding="async" /></a>
+      <figcaption>Cross section, not to scale. The wall stays solid for three thicknesses above the block; above the cut it is a shell mid-surface. Rigid links make the solid section nodes S follow the shell edge node A: its translation plus its rotation crossed with the offset r.</figcaption>
     </figure>
     <p>The <strong>physical-footprint</strong> constraint (engine kind 3)
       makes each solid section node dependent on the two shell edge nodes.
@@ -1097,8 +1074,8 @@
       this is not an arbitrary surface-to-surface transition implementation.</p>
 
     <h2 id="other-couplings">Distinguish the other coupling methods</h2>
-    <div class="table-wrap" tabindex="0" role="region" aria-label="Coupling kinematics at the reviewed revision; scroll horizontally if needed"><table class="shell-table">
-    <caption>Coupling kinematics at the reviewed revision</caption><thead><tr><th scope="col">Method</th><th scope="col">Dependent motion</th><th scope="col">Consequence</th></tr></thead>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="Coupling kinematics in KoFEM; scroll horizontally if needed"><table class="shell-table">
+    <caption>Coupling kinematics in KoFEM</caption><thead><tr><th scope="col">Method</th><th scope="col">Dependent motion</th><th scope="col">Consequence</th></tr></thead>
     <tbody><tr><th scope="row">Physical footprint (kind 3)</th><td>Solid section translations follow two interpolated shell-edge nodes and their rotations.</td><td>Transfers the shell section kinematics over its thickness; suppresses warping at the cut. Used for recognized section footprints.</td></tr><tr><th scope="row">Relaxed seam MPC (kind 1)</th><td>All six shell reference coefficients follow a distance-weighted solid-patch centroid translation and a scaled least-squares patch rotation.</td><td>Localizes the older seam tie. It is not a rigid section footprint and does not tie to an arbitrary nearest face node.</td></tr><tr><th scope="row">Distributing, RBE3 style (kind 0)</th><td>Reference translation is a weighted average of patch translations; reference rotation is computed from relative patch motion by the implemented least-squares map.</td><td>Allows patch deformation; the dependent reference can be loaded, but cannot be directly fixed or driven. Automatic partner sets use equal weights. Patch geometry, reach and eccentricity affect behavior.</td></tr><tr><th scope="row">Kinematic, RBE2 style (kind 2)</th><td>Selected target translations follow reference translation plus reference rotation crossed with their offsets.</td><td>The independent reference can be fixed, driven or loaded. It makes the selected patch rigid. Rotation-mask bits only tie rotations where those DOFs exist.</td></tr></tbody></table></div>
     <p>For the relaxed seam MPC, base weights are multiplied by
       <span class="math-nowrap"><math><mn>1</mn><mo lspace="0" rspace="0">/</mo><mo stretchy="false" lspace="0" rspace="0">(</mo><msubsup><mi>d</mi><mi>i</mi><mn>2</mn></msubsup><mo>+</mo><msup><mi>ε</mi><mn>2</mn></msup><mo stretchy="false" lspace="0" rspace="0">)</mo></math>,</span> with <math><msub><mi>d</mi><mi>i</mi></msub></math> the partner distance from
@@ -1118,7 +1095,7 @@
       tip motion alongside severely low local solid stress. The current planar
       transition addresses that model with retained solid material and a section
       footprint. It does not establish a general repair to arbitrary distributing
-      patches. See <a href="https://linear.app/kofem/issue/KOF-215">the issue and its evidence</a>.</p>
+      patches.</p>
 
     <h2 id="inputs">Materials, loads and constraints</h2>
     <ul>
@@ -1188,12 +1165,6 @@
       <span class="math-nowrap"><math><msup><mn>10</mn><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>6</mn></mrow></msup></math>.</span> The
       <a href="/theory/shells.json">full record</a> retains all four placements,
       peaks, gauge means and balance errors, rather than only the favorable rows.</p>
-    <pre><code>CXX=g++ bash scripts/study-shell-solid-footprint.sh 2
-node web/theory/shells/capture-evidence.mjs
-
-# Separate app-pipeline check using the matching WASM engine:
-cd web
-bun tests/test_shell_footprint.mjs --wasm</code></pre>
     <p>The numerical table comes from the native production-core study with
       a conforming planar footprint. Its separate asymmetric-patch checks concern
       kinematic coupling rigid motions and six force/moment loads. The shell
@@ -1223,10 +1194,7 @@ bun tests/test_shell_footprint.mjs --wasm</code></pre>
       <a href="/theory/verification/strategy/">verification strategy</a> and
       <a href="/theory/results/interpretation-and-convergence/">result interpretation</a>.</p>
 
-    <h2 id="references">Reviewed implementation and references</h2>
-    <p>Reviewed on 6 November 2026 at
-      <a href="https://github.com/mkofler96/KoFEM/tree/697d96077af3493710aa099191fe9903132a54f7"><code>697d96077af3</code></a>.
-      The record names native execution separately from WASM/browser checks.</p>
+    <h2 id="references">Implementation and references</h2>
     <ol class="refs">
       <li><a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/web/src/lib/shellize/transition.ts#L23">three-thickness retained section</a>,
         <a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/web/src/lib/shellize/footprint.ts#L78">physical footprint detection</a>,
@@ -1244,13 +1212,11 @@ bun tests/test_shell_footprint.mjs --wasm</code></pre>
         <a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/engine/tests/shell_validation.cpp#L555">footprint motion checks</a> and
         <a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/web/tests/test_shell_footprint.mjs#L1">app-pipeline and WASM fixture</a>.</li>
       <li>Lu, Zhang and Yang (2023), <cite>A Relaxed MPC Method for Non-rigid Shell to Solid Coupling</cite>, Journal of Physics: Conference Series 2528, 012064. KoFEM’s centroid-weighted nonconforming seam is an implementation adaptation; it is not the paper’s coincident-node construction.</li>
-      <li><a href="https://linear.app/kofem/issue/KOF-215">Distributing-junction investigation and planar-transition follow-up</a>.
-        Its completion does not imply validation of arbitrary distributing patches.</li>
     </ol><nav class="pager" aria-label="Reading order">
       <a class="prev" rel="prev" href="/theory/shells/formulation/"><small>Previous</small>← Shell formulation</a>
       <a class="next" rel="next" href="/theory/optimization/simp/"><small>Next</small>SIMP →</a></nav>
       </main>
-      <nav class="docs-toc" aria-label="On this page"><p>On this page</p><ul><li><a href="#load-path">Choose the connection’s physical meaning</a></li><li><a href="#reduction">Motion constraints also transfer loads</a></li><li><a href="#transition">Retain solid material at the joint</a></li><li><a href="#other-couplings">Distinguish the other coupling methods</a></li><li><a href="#inputs">Materials, loads and constraints</a></li><li><a href="#verification">Check the planar wall-on-block case</a></li><li><a href="#limits">What this evidence establishes</a></li><li><a href="#references">Reviewed implementation and references</a></li></ul></nav>
+      <nav class="docs-toc" aria-label="On this page"><p>On this page</p><ul><li><a href="#load-path">Choose the connection’s physical meaning</a></li><li><a href="#reduction">Motion constraints also transfer loads</a></li><li><a href="#transition">Retain solid material at the joint</a></li><li><a href="#other-couplings">Distinguish the other coupling methods</a></li><li><a href="#inputs">Materials, loads and constraints</a></li><li><a href="#verification">Check the planar wall-on-block case</a></li><li><a href="#limits">What this evidence establishes</a></li><li><a href="#references">Implementation and references</a></li></ul></nav>
     </div><footer class="site-footer">
       <span>KoFEM — finite element analysis in your browser</span>
       <nav aria-label="Footer">
