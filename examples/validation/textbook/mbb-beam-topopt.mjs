@@ -34,7 +34,7 @@ function historyChart(history) {
   const path = c
     .map((v, i) => `${i ? "L" : "M"}${f(X(i))} ${f(Y(v))}`)
     .join(" ");
-  return `<svg class="conv" viewBox="0 0 ${W} ${H}" role="img" aria-label="Compliance against optimizer iteration: it falls steeply in the first iterations and levels off">
+  return `<svg class="conv" viewBox="0 0 ${W} ${H}" data-name="compliance-history" role="img" aria-label="Compliance against optimizer iteration: it falls steeply in the first iterations and levels off">
             <text class="axis-title" x="${l}" y="${t - 9}">compliance (N·mm)</text>
             ${grid.join("\n            ")}
             <line class="axis" x1="${l}" x2="${W - r}" y1="${H - b}" y2="${H - b}"/>

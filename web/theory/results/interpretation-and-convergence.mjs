@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { equation, tex } from "../operators/math.mjs";
-import { revision, source } from "./sources.mjs";
+import { source } from "./sources.mjs";
+import { figure } from "../figures/index.mjs";
 
 export default {
   slug: "results/interpretation-and-convergence",
@@ -30,6 +31,7 @@ export default {
       question. For a ductile yield check, von Mises may be appropriate; brittle
       or fatigue assessments need other material data and stress measures.
       See <a href="/theory/results/displacement-and-stress/#von-mises">what von Mises measures</a>.</p>
+    ${figure("convergence-rates", "Expected error against element size for a smooth solution, on logarithmic axes. A singular peak stress grows instead of converging. Schematic; not a KoFEM measurement.")}
     <p>Record whether the value is a point sample, a regional average or a
       maximum, and whether it is smoothed. KoFEM’s ordinary solid result has
       vertex translations and centre-sampled element von Mises stress; the
@@ -148,16 +150,14 @@ export default {
     </dl>
 
     <h2 id="evidence">Evidence and further reading</h2>
-    <p>KoFEM-specific statements were reviewed on 6 November 2026 at
-      <a href="https://github.com/mkofler96/KoFEM/tree/${revision}"><code>${revision.slice(0, 7)}</code></a>.
-      ${source("engine/cpp/solve_mfem.cpp", 64, "Solid recovery")}
+    <p>${source("engine/cpp/solve_mfem.cpp", 64, "Solid recovery")}
       supplies centre samples; ${source("web/src/lib/resultField.ts", 83, "nodal averaging and extrema")}
       defines the app’s summarized measure. The preceding
       <a href="/theory/results/displacement-and-stress/#sources">source inventory</a>
       traces the display and shell/coupled distinctions.</p>
     <p>The hole benchmark and its
       ${source("examples/validation/cases/plate-with-hole.mjs", 90, "measurement code")}
-      provide a reproducible comparison. A smooth hole is a finite concentration;
+      provide a comparison you can reproduce in the app. A smooth hole is a finite concentration;
       this case does not verify singular stresses, plasticity, arbitrary
       material interfaces or every recovery method.</p>
     <ul class="refs">

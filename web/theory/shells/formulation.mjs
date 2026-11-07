@@ -3,6 +3,8 @@
 
 import { equation, matrixEquation, tex } from "../operators/math.mjs";
 import { evidence, number, percentError, source, table } from "./evidence.mjs";
+import { figure } from "../figures/index.mjs";
+import { resultViewer } from "../viewers/index.mjs";
 
 export default {
   slug: "shells/formulation",
@@ -15,7 +17,7 @@ export default {
     ["stress", "Stress resultants and surface stress"],
     ["supported-models", "Current inputs and limitations"],
     ["plate-example", "Check a uniformly loaded square plate"],
-    ["references", "Reviewed implementation and references"],
+    ["references", "Implementation and references"],
   ],
   body: `
     <p class="lede">How does a flat triangular shell represent membrane and bending response?</p>
@@ -48,6 +50,7 @@ export default {
       Kirchhoff–Love assumption: a line initially normal to the mid-surface
       stays straight, normal and unstretched. There is no transverse-shear
       energy, geometric nonlinearity, plasticity, buckling analysis or laminate law.</p>
+    ${figure("shell-kinematics", "A shell facet on the mid-surface of a thin wall of thickness t. Local axes e<sub>1</sub>, e<sub>2</sub> and e<sub>3</sub> start at the first node, e<sub>3</sub> normal to the facet. Each node has six DOFs: three translations and three rotations.")}
     <p>Each three-node facet has six unknowns per node: three translations and
       three small rotations, giving an 18-component element vector. Both vectors
       are stored in global axes. Locally, ${tex("e_1")} runs from node 0 to node 1,
@@ -105,6 +108,7 @@ export default {
       Facets in different orientations still interact through shared global
       unknowns. Curved geometry is approximated by flat facets and needs
       geometric refinement as well as a displacement check.</p>
+    ${figure("membrane-bending", "Through the thickness, the membrane part of a shell stress is uniform and the bending part varies linearly. Their sum is largest at one surface, where KoFEM reports it.")}
     <p><strong>Thickness matters strongly:</strong> membrane stiffness scales
       with ${tex("t")}, bending stiffness with ${tex("t^3")}.
       Doubling thickness multiplies these by 2 and 8. Thickness is a section
@@ -129,9 +133,14 @@ export default {
       it is not a three-dimensional junction-stress estimate. Viewport smoothing
       adds the separate <a href="/theory/results/displacement-and-stress/#averaging">display recovery</a>.</p>
 
+    ${resultViewer("plate-with-hole-shell", {
+      caption:
+        "The plate with a hole modelled with shell facets and loaded in its own plane, where the shell reduces to plane stress. Von Mises stress at the worse surface, averaged at the nodes for display.",
+    })}
+
     <h2 id="supported-models">Current inputs and limitations</h2>
     ${table(
-      "Shell support at the reviewed revision",
+      "Shell support in KoFEM",
       ["Input", "Current behavior"],
       [
         [
@@ -209,18 +218,13 @@ export default {
       convergence rate. The linear calculation also omits membrane stretching
       caused by large deflection; scale load down when a physical study needs
       deflection much smaller than thickness.</p>
-    <pre><code>CXX=g++ bash scripts/test-shell.sh
-node web/theory/shells/capture-evidence.mjs</code></pre>
-    <p>The <a href="/theory/shells.json">executed numerical record</a> stores the
-      commands, compiler, timestamp, printed precision and source revision.
-      These runs exercise the production C++ core natively; they do not exercise
+    <p>The <a href="/theory/shells.json">numerical record</a> stores every
+      measured value. These runs exercise the production C++ core natively; they do not exercise
       CAD extraction or the browser/WASM wrappers. The
       <a href="/theory/shells/solid-coupling/#verification">transition comparison</a>
       addresses a separate load-transfer question.</p>
 
-    <h2 id="references">Reviewed implementation and references</h2>
-    <p>Reviewed on 6 November 2026 at
-      <a href="https://github.com/mkofler96/KoFEM/tree/${evidence.sourceRevision}"><code>${evidence.sourceRevision.slice(0, 12)}</code></a>.</p>
+    <h2 id="references">Implementation and references</h2>
     <ol class="refs">
       <li>Batoz, Bathe and Ho (1980), <cite>A study of three-node triangular plate bending elements</cite>, International Journal for Numerical Methods in Engineering 15, 1771–1812. This is the DKT reference, not a validation of KoFEM’s complete shell workflow.</li>
       <li>Timoshenko and Woinowsky-Krieger, <cite>Theory of Plates and Shells</cite>, 2nd ed. (1959), uniformly loaded square plates.</li>
@@ -235,10 +239,5 @@ node web/theory/shells/capture-evidence.mjs</code></pre>
         ${source("web/src/lib/shellize/midSurface.ts", 72, "mid-surface construction")},
         ${source("web/src/lib/solveLoads.ts", 20, "load distribution")} and
         ${source("engine/tests/shell_validation.cpp", 635, "executed plate cases")}.</li>
-      <li>Current scope context:
-        <a href="https://linear.app/kofem/issue/KOF-258">explicit Shell selection</a>,
-        <a href="https://linear.app/kofem/issue/KOF-195">multiple shell materials</a> and
-        <a href="https://linear.app/kofem/issue/KOF-205">split-wall and T-junction extraction</a>.
-        The supported behavior above follows code at the reviewed revision.</li>
     </ol>`,
 };

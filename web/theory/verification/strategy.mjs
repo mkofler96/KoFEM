@@ -2,12 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { tex } from "../operators/math.mjs";
-import { source } from "./evidence.mjs";
+import { figure } from "../figures/index.mjs";
 
 export default {
   slug: "verification/strategy",
   description:
-    "Distinguish FEM verification from physical validation, choose benchmarks that test the claimed quantity, and maintain theory pages, executable evidence and source revisions together.",
+    "Distinguish FEM verification from physical validation, choose benchmarks that test the claimed quantity, and keep a reproducible record of every check.",
   sections: [
     [
       "verification-validation",
@@ -15,7 +15,6 @@ export default {
     ],
     ["coverage", "Choose evidence for the claim"],
     ["record", "Keep a reproducible record"],
-    ["maintenance", "Update the explanation with the behavior"],
     ["references", "Further reading"],
   ],
   body: `
@@ -29,14 +28,15 @@ export default {
       and solved correctly. An analytical solution can test loads, stiffness,
       boundary conditions and recovery. Mesh studies probe discretization
       sensitivity; the algebraic residual concerns only one discrete system.</p>
+    ${figure("verification-validation", "Verification checks that the equations of the mathematical model are solved correctly. Validation checks that the model represents the physical system well enough for its purpose.")}
     <p><strong>Validation</strong> asks whether those equations and assumptions
       describe the real system well enough for the intended use. It requires
       comparison with physical observations, including uncertainty in geometry,
       materials, supports, loads and measurement. Agreement with another code
       or a textbook formula alone supplies no experimental validation.</p>
-    <p>The repository calls its executable benchmark infrastructure the
-      “validation suite.” Its analytical and published numerical comparisons
-      primarily provide verification and regression evidence in this distinction.</p>
+    <p>KoFEM’s <a href="/examples/">examples</a> compare results with
+      analytical and published numerical solutions. In this distinction they
+      are verification evidence, not physical validation.</p>
 
     <h2 id="coverage">Choose evidence for the claim</h2>
     <ul>
@@ -77,7 +77,7 @@ export default {
       support and load distribution, element family/order and local resolution,
       solver settings, reference assumptions, measured quantity and location,
       recovery/averaging, tolerances and their reasons. Preserve full-precision
-      values, commands, engine identity and exact source revision.
+      values and the KoFEM version that produced them.
       The <a href="/theory/axial-bar.json">bar’s machine-readable record</a>
       shows this for an executed comparison.</p>
     <p>Report discrepancies and excluded claims with the numbers. A small
@@ -85,23 +85,6 @@ export default {
       meshes can miss the same physics. Use the
       <a href="/theory/results/interpretation-and-convergence/#comparison">comparison checklist</a>
       to keep locations, units and recovery measures consistent.</p>
-
-    <h2 id="maintenance">Update the explanation with the behavior</h2>
-    <p>Contributors keep theory and evidence with the code. A change to a
-      formulation, material law, boundary condition, default, result field or
-      numerical behavior must review the affected articles, examples and
-      executable checks in the same PR. Update assumptions, equations, symbol
-      links, limitations and reviewed source references wherever the claim changes.</p>
-    <p>When a result moves, investigate before replacing its reference or
-      widening a tolerance. Re-run the affected benchmarks with the matching
-      engine; regenerate the numerical record and pages from their sources.
-      Preserve stable URLs and section IDs, and check links, reading order,
-      notation and mathematical rendering. Conceptual pages without changed
-      product claims do not need an artificial solver revision bump.</p>
-    <p>The ${source("docs/theory/README.md", 1, "contributor workflow")}
-      lists change-to-page mappings, commands and the evidence required in
-      review. Linear owns planning and architecture decisions; the website
-      repository owns the explanations and reproducible checks.</p>
 
     <h2 id="references">Further reading</h2>
     <ul class="refs"><li>ASME V&amp;V 10-2019, <cite>Standard for Verification and Validation in Computational Solid Mechanics</cite>.</li>

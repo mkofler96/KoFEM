@@ -7,7 +7,14 @@ import { fileURLToPath } from "node:url";
 import { renderDocsPage } from "../docs-layout.mjs";
 import { siteHeader, siteFooter } from "../site-layout.mjs";
 import { topics, topicAnchor, articleUrl } from "./content.mjs";
-import modelAndUnits from "./model-and-units.mjs";
+import { figures, figureFiles, figureUrl } from "./figures/index.mjs";
+import {
+  imageEntries,
+  sameFile,
+  withImageNamespace,
+} from "../figure-assets.mjs";
+import { viewerData, viewerIds, viewerUrl } from "./viewers/index.mjs";
+import whatIsFem from "./what-is-fem.mjs";
 import readingAStudy from "./reading-a-study.mjs";
 import axialBar from "./verification/axial-bar.mjs";
 import verificationStrategy from "./verification/strategy.mjs";
@@ -33,7 +40,7 @@ import interpretingDesigns from "./optimization/interpreting-designs.mjs";
 
 const web = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const articles = [
-  modelAndUnits,
+  whatIsFem,
   consistentUnits,
   readingAStudy,
   notation,
@@ -132,7 +139,13 @@ function frame(slug, sectionList, body) {
     </div>${siteFooter()}`;
 }
 
+// Pages with an interactive result viewer load three.js from /vendor/three/
+// (see vite.config.ts) through an import map, then public/theory/viewer.js.
+const viewerHead = `<script type="importmap">{"imports":{"three":"/vendor/three/three.module.min.js","three/addons/controls/OrbitControls.js":"/vendor/three/OrbitControls.js"}}</script>
+    <script type="module" src="/theory/viewer.js"></script>`;
+
 function page({ title, description, path, body, article = false }) {
+  const head = `<link href="/theory.css" rel="stylesheet" />${body.includes('class="result-viewer"') ? `\n    ${viewerHead}` : ""}`;
   return renderDocsPage({
     title: `${title} | KoFEM Theory Guide`,
     description,
@@ -148,10 +161,7 @@ function page({ title, description, path, body, article = false }) {
     },
     body,
   })
-    .replace(
-      "</head>",
-      '<link href="/theory.css" rel="stylesheet" />\n  </head>',
-    )
+    .replace("</head>", `${head}\n  </head>`)
     .replace(/[ \t]+$/gm, "");
 }
 
@@ -174,7 +184,7 @@ export function renderTheoryPages() {
       results. Worked examples make each concept concrete.</p>
     <p class="note">Follow the axial-bar path through the published articles below.
       Planned topics remain visible in the contents. Shell formulations and coupling follow the solid path, then SIMP topology optimization.</p>
-    <p><a class="button" href="/theory/foundations/model-and-units/">Start reading: Model and units →</a></p>
+    <p><a class="button" href="/theory/foundations/what-is-fem/">Start reading: What is FEM? →</a></p>
     <p><a href="/theory/foundations/reading-a-study/">Follow one complete study</a> from assumptions to <a href="/theory/verification/axial-bar/">executed displacement and stress checks</a>.</p>
     ${sections
       .map(
@@ -190,7 +200,7 @@ export function renderTheoryPages() {
     </section>`,
       )
       .join("")}
-    <nav class="pager" aria-label="Reading order"><a class="next" rel="next" href="/theory/foundations/model-and-units/"><small>Next</small>Model and units →</a></nav>`;
+    <nav class="pager" aria-label="Reading order"><a class="next" rel="next" href="/theory/foundations/what-is-fem/"><small>Next</small>What is FEM? →</a></nav>`;
   const pages = [
     [
       "theory/index.html",
@@ -261,19 +271,52 @@ if (
       "Theory navigation differs from docs/theory/content-map.md",
     );
   const pages = renderTheoryPages();
+  // Every figure must appear on a page; an unused one is dead weight.
+  const used = new Set(
+    pages.flatMap(([, html]) =>
+      [...html.matchAll(/src="\/theory\/figures\/([a-z0-9-]+)\.png"/g)].map(
+        (match) => match[1],
+      ),
+    ),
+  );
+  for (const id of figures.keys())
+    if (!used.has(id)) throw new Error(`Theory figure ${id} is not used`);
   const sitemapPath = resolve(web, "public/sitemap.xml");
-  const sitemap = readFileSync(sitemapPath, "utf8");
-  const block = `<!-- theory:start -->\n${pages.map(([path]) => `  <url><loc>https://kofem.org/${path.replace(/index.html$/, "")}</loc></url>`).join("\n")}\n  <!-- theory:end -->`;
+  const sitemap = withImageNamespace(readFileSync(sitemapPath, "utf8"));
+  // Each article lists its figures' PNGs as images, for image search.
+  const pageImages = (html) => [
+    ...new Set(
+      [...html.matchAll(/src="(\/theory\/figures\/[a-z0-9-]+\.png)"/g)].map(
+        (match) => `https://kofem.org${match[1]}`,
+      ),
+    ),
+  ];
+  const block = `<!-- theory:start -->\n${pages.map(([path, html]) => `  <url><loc>https://kofem.org/${path.replace(/index.html$/, "")}</loc>${imageEntries(pageImages(html))}</url>`).join("\n")}\n  <!-- theory:end -->`;
   const nextSitemap = sitemap.includes("<!-- theory:start -->")
     ? sitemap.replace(/<!-- theory:start -->[\s\S]*?<!-- theory:end -->/, block)
     : sitemap.replace("</urlset>", `  ${block}\n</urlset>`);
   const outputs = [
     ...pages.map(([path, html]) => [resolve(web, path), html]),
+    ...(
+      await Promise.all(
+        [...figures.keys()].map(async (id) => {
+          const { svg, png } = await figureFiles(id);
+          return [
+            [resolve(web, `public${figureUrl(id)}`), svg],
+            [resolve(web, `public${figureUrl(id, "png")}`), png],
+          ];
+        }),
+      )
+    ).flat(),
+    ...viewerIds().map((id) => [
+      resolve(web, `public${viewerUrl(id)}`),
+      `${JSON.stringify(viewerData(id))}\n`,
+    ]),
     [sitemapPath, nextSitemap],
   ];
   for (const [path, output] of outputs) {
     if (process.argv.includes("--check")) {
-      if (readFileSync(path, "utf8") !== output)
+      if (!sameFile(path, output))
         throw new Error(
           `Stale generated page: ${path}; run bun run theory:generate`,
         );
@@ -283,6 +326,6 @@ if (
     }
   }
   console.log(
-    `${process.argv.includes("--check") ? "Checked" : "Generated"} ${pages.length} theory pages and sitemap.`,
+    `${process.argv.includes("--check") ? "Checked" : "Generated"} ${pages.length} theory pages, ${figures.size} figures, ${viewerIds().length} viewers and sitemap.`,
   );
 }

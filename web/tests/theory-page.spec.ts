@@ -3,7 +3,7 @@
 
 import { test, expect } from "./coverage";
 
-const ARTICLE = "/theory/foundations/model-and-units/";
+const ARTICLE = "/theory/foundations/what-is-fem/";
 const UNIT_PAGE = "/theory/foundations/consistent-units/";
 const READING_PAGE = "/theory/foundations/reading-a-study/";
 const VERIFICATION_PAGES = [
@@ -129,12 +129,52 @@ test.describe("static theory content", () => {
       }
       const sitemap = await (await page.request.get("/sitemap.xml")).text();
       expect(sitemap).toContain(`<loc>https://kofem.org${path}</loc>`);
+      // The guide is read from the website: no command lines, review stamps
+      // or internal issue references.
+      await expect(page.locator("main pre")).toHaveCount(0);
+      await expect(page.locator("main")).not.toContainText(
+        /Reviewed on|KOF-\d/,
+      );
+      // Every figure is an SVG for the browser with a 2× PNG fallback for
+      // crawlers, alt text, and the PNG listed in the sitemap.
+      for (const picture of await page
+        .locator("main figure.theory-figure picture")
+        .all()) {
+        const svg =
+          (await picture
+            .locator('source[type="image/svg+xml"]')
+            .getAttribute("srcset")) ?? "";
+        const img = picture.locator("img");
+        const png = (await img.getAttribute("src")) ?? "";
+        expect(svg).toMatch(/^\/theory\/figures\/[a-z0-9-]+\.svg$/);
+        expect(png).toBe(svg.replace(/\.svg$/, ".png"));
+        expect((await img.getAttribute("alt"))?.length).toBeGreaterThan(40);
+        const vector = await page.request.get(svg);
+        expect(vector.status(), svg).toBe(200);
+        expect(vector.headers()["content-type"]).toContain("image/svg+xml");
+        expect(await vector.text()).toContain("@font-face");
+        const raster = await page.request.get(png);
+        expect(raster.headers()["content-type"]).toBe("image/png");
+        expect((await raster.body()).readUInt32BE(16)).toBe(
+          2 * Number(await img.getAttribute("width")),
+        );
+        expect(sitemap).toContain(
+          `<image:loc>https://kofem.org${png}</image:loc>`,
+        );
+      }
     }
     await page.goto(ARTICLE);
     await expect(
-      page.getByRole("img", { name: "Idealised bar under axial tension" }),
+      page.getByRole("img", { name: /bar of length L, Young's modulus E/ }),
     ).toBeVisible();
-    await expect(page.locator("figure figcaption")).not.toBeEmpty();
+    // Browsers show the vector SVG, not the PNG fallback.
+    const first = page.locator("main figure.theory-figure img").first();
+    await first.scrollIntoViewIfNeeded();
+    await expect
+      .poll(() => first.evaluate((e) => (e as HTMLImageElement).currentSrc))
+      .toMatch(/\.svg$/);
+    for (const caption of await page.locator("main figure figcaption").all())
+      await expect(caption).not.toBeEmpty();
     await expect(page.locator("main")).not.toContainText(
       "KoFEM implementation",
     );
@@ -161,7 +201,7 @@ test.describe("static theory content", () => {
       exact: true,
     });
     await expect(
-      mobileNav.getByRole("link", { name: "Model and units", exact: true }),
+      mobileNav.getByRole("link", { name: "What is FEM?", exact: true }),
     ).toBeVisible();
     await expect(mobileNav.locator('[aria-current="page"]')).toHaveAttribute(
       "href",
@@ -203,8 +243,8 @@ for (const width of [320, 390, 1440]) {
     ).toContain("KoFEM Math");
     expect(
       await page
-        .locator(".equation math")
-        .first()
+        .getByRole("region", { name: /Axial extension equation/ })
+        .locator("math")
         .evaluate((element) => {
           const selection = window.getSelection();
           const range = document.createRange();
@@ -466,7 +506,6 @@ test("numerical-methods articles give checkable elements, assembly and planned l
   await expect(
     page.locator('main a[href^="/theory/#solid-mechanics"]'),
   ).toHaveCount(0);
-  await expect(page.locator("main")).toContainText("KOF-274");
   await expect(page.locator('.pager a[rel="next"]')).toHaveAttribute(
     "href",
     assembly,
@@ -534,9 +573,8 @@ test("loads and constraints give checkable worked examples and evidence", async 
   });
   await expect(total.locator("td").last()).toHaveText("1 000 000 N");
   await expect(
-    page.getByRole("img", { name: "3-2-1 support on a block" }),
+    page.getByRole("img", { name: /A block along x, pulled by equal/ }),
   ).toBeVisible();
-  await expect(page.locator("main")).toContainText("KOF-218");
   // The published shell chapter resolves to its permanent article URL.
   await expect(
     page.locator('main a[href="/theory/shells/formulation/"]'),
@@ -579,9 +617,9 @@ test("linear solve links the residual calculation, settings and failure evidence
     "href",
     /blob\/8b542d8836f39ec4e9c7ae67c5896d39ce970078\//,
   );
-  await expect(
-    page.locator('main a[href*="cg-continuation.spec.ts"]'),
-  ).toHaveCount(1);
+  await expect(page.locator("main")).toContainText(
+    "successful continuation, Stop and an exhausted iteration budget",
+  );
   await expect(page.locator('.pager a[rel="prev"]')).toHaveAttribute(
     "href",
     loads,
@@ -622,7 +660,7 @@ test("stress recovery separates solver samples from displayed averages", async (
   ).toHaveAttribute("href", /blob\/[a-f0-9]{40}\//);
   await expect(
     page.locator('main a[href="/examples/plate-with-hole/"]'),
-  ).toHaveCount(1);
+  ).not.toHaveCount(0);
   await expect(page.locator('.pager a[rel="next"]')).toHaveAttribute(
     "href",
     interpretation,
@@ -684,6 +722,42 @@ test("Theory keeps the examples' theme choice and canonical redirects", async ({
   }
 });
 
+test("the renamed introduction keeps its old address", async ({ page }) => {
+  const response = await page.request.get(
+    "/theory/foundations/model-and-units/",
+    { maxRedirects: 0 },
+  );
+  expect(response.status()).toBe(301);
+  expect(response.headers()["location"]).toBe(ARTICLE);
+});
+
+test("result viewers show the solved example in 3D with its colour bar", async ({
+  page,
+}) => {
+  await page.goto(ARTICLE);
+  const viewer = page.locator("#viewer-cantilever");
+  // Without script the example's own figure is shown, with the legend.
+  await expect(viewer.locator(".viewer-legend")).toContainText("mm");
+  await expect(
+    viewer.locator('a[href="/app/?example=cantilever"]'),
+  ).toHaveCount(1);
+  await viewer.scrollIntoViewIfNeeded();
+  const canvas = viewer.locator("canvas");
+  await expect(canvas).toBeVisible();
+  await expect(viewer.locator(".viewer-stage > img")).toBeHidden();
+  const before = await canvas.screenshot();
+  const box = await canvas.boundingBox();
+  if (!box) throw new Error("viewer canvas has no box");
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 120, box.y + box.height / 2, {
+    steps: 6,
+  });
+  await page.mouse.up();
+  expect((await canvas.screenshot()).equals(before)).toBe(false);
+  await viewer.getByRole("button", { name: "Reset view" }).click();
+});
+
 test("verified reading path reaches reproducible displacement and stress evidence", async ({
   page,
 }) => {
@@ -731,15 +805,12 @@ test("optimization chapter links theory, worked numbers, benchmarks and limits",
   await expect(
     simp.locator('a[href="/theory/notation/#design-density"]'),
   ).not.toHaveCount(0);
-  await expect(simp).toContainText("KOF-238");
-  await expect(
-    simp.locator('a[href*="adr-0002-simp-topology-optimization"]'),
-  ).not.toHaveCount(0);
+  await expect(simp).toContainText("no keep-in/keep-out picker yet");
 
   await page.goto("/theory/optimization/constraints-and-convergence/");
   const loop = page.locator("main");
   await expect(
-    page.getByRole("img", { name: /MBB half-beam densities/ }),
+    page.getByRole("img", { name: /density of the MBB half-beam/ }),
   ).toBeVisible();
   await expect(
     loop.locator('a[href="/examples/mbb-beam-topopt/"]'),
@@ -747,13 +818,16 @@ test("optimization chapter links theory, worked numbers, benchmarks and limits",
   await expect(loop.locator('a[href="/theory/optimization.json"]')).toHaveCount(
     1,
   );
-  await expect(loop).toContainText("KOF-251");
+  await expect(loop).toContainText("available for shell or coupled models");
   await expect(loop).toContainText("global optimum");
 
   await page.goto("/theory/optimization/interpreting-designs/");
   const interpret = page.locator("main");
   await expect(interpret.locator("#reanalysis")).toBeVisible();
-  for (const issue of ["KOF-238", "KOF-251"])
-    await expect(interpret).toContainText(issue);
+  for (const limit of [
+    "Keep-in and keep-out regions in the app.",
+    "Shell and coupled stress constraints.",
+  ])
+    await expect(interpret).toContainText(limit);
   await expect(page.locator('.pager a[rel="next"]')).toHaveCount(0);
 });

@@ -137,7 +137,7 @@ export default {
       [
         "young-modulus",
         tex("E"),
-        'Young’s modulus; scalar stiffness for isotropic linear elasticity. See the <a href="/theory/foundations/model-and-units/#axial-bar">axial bar</a>.',
+        'Young’s modulus; scalar stiffness for isotropic linear elasticity. See the <a href="/theory/foundations/what-is-fem/#axial-bar">axial bar</a>.',
         "MPa",
       ],
       [
@@ -435,7 +435,7 @@ export default {
       numbers for both material input and stress output while preserving the
       physical quantities. This does not imply a unit-system selector in KoFEM.</p>
     <h3 id="dimensional-check">Follow force through stiffness to displacement</h3>
-    <p>Use the <a href="/theory/foundations/model-and-units/#axial-bar">uniform axial bar</a>
+    <p>Use the <a href="/theory/foundations/what-is-fem/#axial-bar">uniform axial bar</a>
       with ${tex("P = 1000\\text{ N}")}, length ${tex("L = 1000\\text{ mm}")}, area ${tex("A = 100\\text{ mm}^2")} and ${tex("E = 210000\\text{ MPa}")}.
       Here ${tex("A")} is area, not a stiffness matrix. Its axial stiffness is a scalar:</p>
     ${equation("k_{\\mathrm{bar}} = \\frac{EA}{L} = \\frac{210000\\text{ N}/\\text{mm}^2 × 100\\text{ mm}^2}{1000\\text{ mm}} = 21000\\text{ N}/\\text{mm}.", "Axial stiffness equals modulus times area divided by length and has units of force per length")}

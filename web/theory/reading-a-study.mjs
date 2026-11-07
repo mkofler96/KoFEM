@@ -36,7 +36,7 @@ export default {
       The remaining faces are traction-free. Ignore gravity, inertia,
       plasticity and thermal effects.</p>
     <p>The numbers use N, mm and MPa. The
-      <a href="/theory/foundations/model-and-units/">model introduction</a>
+      <a href="/theory/foundations/what-is-fem/">model introduction</a>
       explains assumptions; the <a href="/theory/foundations/consistent-units/">unit reference</a>
       explains how coherent systems differ. KoFEM does not convert an inconsistent set of inputs.</p>
 

@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { equation, matrixEquation, tex } from "../operators/math.mjs";
-import { revision, source, mfemSource } from "./sources.mjs";
+import { source, mfemSource } from "./sources.mjs";
+import { figure } from "../figures/index.mjs";
 
 export default {
   slug: "numerical-methods/elements-and-quadrature",
@@ -55,6 +56,7 @@ export default {
       the opposite face; they sum to 1. With the
       <a href="/theory/operators/reference-mapping/#element-map">reference coordinates</a>
       ${tex("ξ, η, ζ")}, they are ${tex("1 - ξ - η - ζ")}, ${tex("ξ")}, ${tex("η")} and ${tex("ζ")}.</p>
+    ${figure("lagrange-shape-functions", "One-dimensional Lagrange shape functions. Each equals 1 at its own node and 0 at every other node, so the coefficient of a shape function is the value at that node. Solid elements use products or barycentric versions of the same idea.")}
     <ul>
       <li><strong>Order 1 (linear):</strong> ${tex("N_a = L_a")} at
         the four corners.</li>
@@ -74,9 +76,10 @@ export default {
       solver-level validation cases. Each scalar basis function carries three
       translational coefficients, so an element with ${tex("n_e")} functions
       has ${tex("3n_e")} DOFs.</p>
+    ${figure("element-node-layouts", "Node layouts of linear and quadratic tetrahedra and hexahedra. Quadratic elements add nodes at the edge midpoints; the 27-node hexahedron also has face and centre nodes. Open circles are hidden behind the element.")}
     <div class="table-wrap" tabindex="0" role="region" aria-label="Supported solid elements, their degrees of freedom and default stiffness quadrature; scroll horizontally if needed">
       <table>
-        <caption>Solid elements at the reviewed revision</caption>
+        <caption>Solid elements in KoFEM</caption>
         <thead><tr><th scope="col">Element</th><th scope="col">Nodes</th><th scope="col">Element DOFs</th><th scope="col">Element stiffness</th><th scope="col">Stiffness rule</th></tr></thead>
         <tbody>
           <tr><th scope="row">Tetrahedron, order 1</th><td>4</td><td>12</td><td>12 × 12</td><td>1 point</td></tr>
@@ -214,6 +217,7 @@ export default {
       values. A rule of degree ${tex("p")} integrates every polynomial up to degree ${tex("p")}
       exactly. The cheapest safe choice integrates the stiffness integrand
       exactly when it is a polynomial.</p>
+    ${figure("quadrature-points", "Gauss integration points (red) on reference elements. More points integrate higher-degree polynomials exactly.")}
     <p>On a straight-edged order-2 tetrahedron, each ${tex("\\mathbf{B}")} entry is linear in ${tex("ξ")},
       so ${tex("\\mathbf{B}^T C\\mathbf{B}")} is quadratic. Test a quadratic over the
       reference tetrahedron (volume 1/6):</p>
@@ -251,6 +255,7 @@ export default {
       applies no body force: density is stored but unused. How loads and
       supports enter the global system is covered in
       <a href="/theory/numerical-methods/loads-and-constraints/">Loads and constraints</a>.</p>
+    ${figure("consistent-nodal-loads", "A uniform traction on an element edge becomes consistent nodal forces. The shares follow from integrating each shape function along the edge; a quadratic midpoint node takes two thirds of the load.")}
 
     <h2 id="size-and-order">Mesh size versus element order</h2>
     <p>Two controls reduce discretisation error: smaller elements
@@ -262,15 +267,16 @@ export default {
       loads and point supports create singularities: the local stress never
       converges, and rates elsewhere drop. Halving ${tex("h")} at order 1 should
       roughly halve the stress error; at order 2 it should roughly quarter it.</p>
+    ${figure("convergence-rates", "Expected error against element size for a smooth solution, on logarithmic axes: the slope is the convergence rate. A singular peak stress, as at a re-entrant corner, grows instead. Schematic; not a KoFEM measurement.")}
     <p>Order 2 costs more per element: a 30 × 30 instead of a 12 × 12
       tetrahedral stiffness, and more unknowns because every edge adds a
       node. In a typical tetrahedral mesh there are several edges per vertex,
       so the same mesh has several times as many DOFs at order 2. The
       <a href="/examples/cantilever/">cantilever beam example</a> shows a
-      measured h- and order-study on hexahedra. Run it with
-      <code>node examples/validation/run.mjs --case cantilever</code>, or
-      <code>--case cantilever-p2</code>.</p>
-    <p>At the reviewed revision, KoFEM returns solid displacement at element
+      measured h- and order-study on hexahedra; the
+      <a href="/examples/cantilever-p2/">quadratic variant</a> solves the same
+      beam at order 2.</p>
+    <p>KoFEM currently returns solid displacement at element
       corners only, and one von Mises stress at each element centre. The
       order-2 edge coefficients are solved but are not part of the returned
       field; see
@@ -289,11 +295,9 @@ export default {
       between successive order-1 meshes is not, by itself, evidence of
       accuracy.</p>
     <p><strong>Measured in KoFEM.</strong> An internal study of a 3 mm
-      sheet-metal bracket (develop at <code>1e9ae5d</code>, 1 November 2026)
-      found that order 2 on the same tetrahedral mesh about doubled the
+      sheet-metal bracket found that order 2 on the same tetrahedral mesh about doubled the
       maximum displacement. Halving the order-1 element size changed it by
-      only 2.6%. The study is tracked as issue KOF-274. At the reviewed
-      revision, KoFEM does not warn about this case.</p>
+      only 2.6%. KoFEM does not currently warn about this case.</p>
     <p>For a thin-walled or bending-dominated solid:</p>
     <ul>
       <li>compare order 1 with order 2 on the same mesh before trusting the
@@ -303,9 +307,7 @@ export default {
     </ul>
 
     <h2 id="implementation">KoFEM implementation</h2>
-    <p>Reviewed on 2 November 2026 at
-      <a href="https://github.com/mkofler96/KoFEM/tree/${revision}"><code>${revision.slice(0, 7)}</code></a>,
-      against MFEM 4.7. KoFEM chooses the element order and passes it
+    <p>KoFEM uses MFEM 4.7. KoFEM chooses the element order and passes it
       unchanged to MFEM. MFEM supplies shape functions, quadrature and element
       integrals.</p>
     <ul>

@@ -146,7 +146,9 @@ test("every example has its own indexable page with figure, model and result", a
       "references",
     ])
       await expect(page.locator(`h2#${section}`)).toBeVisible();
-    await expect(page.locator("figure.diagram svg").first()).toBeVisible();
+    await expect(
+      page.locator("figure.diagram picture.theme-light img").first(),
+    ).toBeVisible();
     await expect(page.locator("main math").first()).toBeVisible();
     if (i === 0) {
       // Equations are set in the self-hosted LaTeX math font, not a fallback.
@@ -175,9 +177,75 @@ test("every example has its own indexable page with figure, model and result", a
     await expect(page.locator("[data-study]")).toHaveCount(studies.length);
     for (const s of studies)
       await expect(
-        page.locator(`[data-study="${s.id}"] figure.chart svg`),
+        page.locator(
+          `[data-study="${s.id}"] figure.chart picture.theme-light img`,
+        ),
       ).toBeVisible();
   }
+});
+
+test("diagrams and charts are SVG images with a crawlable PNG, in both themes", async ({
+  page,
+}) => {
+  const sitemap = await (await page.request.get("/sitemap.xml")).text();
+  expect(sitemap).toContain(
+    'xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"',
+  );
+  for (const id of IDS) {
+    await page.goto(`/examples/${id}/`);
+    // No figure is left inline: every content SVG became an image file.
+    await expect(page.locator('main svg[role="img"]')).toHaveCount(0);
+    const pictures = page.locator("main picture.figure-image.theme-light");
+    const count = await pictures.count();
+    expect(count, id).toBeGreaterThan(0);
+    for (let k = 0; k < count; k++) {
+      const picture = pictures.nth(k);
+      const svg = await picture
+        .locator('source[type="image/svg+xml"]')
+        .getAttribute("srcset");
+      const img = picture.locator("img");
+      const png = await img.getAttribute("src");
+      // Descriptive file names under the example's own folder.
+      expect(svg).toMatch(
+        new RegExp(`^/examples/${id}/${id}-[a-z0-9-]+\\.svg$`),
+      );
+      expect(png).toBe(svg?.replace(/\.svg$/, ".png"));
+      expect((await img.getAttribute("alt"))?.length ?? 0).toBeGreaterThan(30);
+      // The browser shows the SVG; the PNG is twice its display size.
+      await expect
+        .poll(() => img.evaluate((e) => (e as HTMLImageElement).currentSrc))
+        .toContain(svg ?? "");
+      const width = Number(await img.getAttribute("width"));
+      const raster = await page.request.get(png ?? "");
+      expect(raster.headers()["content-type"]).toBe("image/png");
+      const bytes = await raster.body();
+      expect(bytes.readUInt32BE(16)).toBe(2 * width);
+      const vector = await page.request.get(svg ?? "");
+      expect(vector.headers()["content-type"]).toContain("image/svg+xml");
+      expect(await vector.text()).toContain("@font-face");
+      expect(sitemap).toContain(
+        `<image:loc>https://kofem.org${png}</image:loc>`,
+      );
+    }
+    expect(sitemap).toContain(
+      `<image:loc>https://kofem.org/examples/${id}.png</image:loc>`,
+    );
+  }
+
+  // The dark theme swaps in each figure's dark SVG.
+  await page.goto("/examples/plate-with-hole/");
+  const light = page.locator("figure.diagram picture.theme-light img").first();
+  const dark = page.locator("figure.diagram picture.theme-dark img").first();
+  await expect(light).toBeVisible();
+  await expect(dark).toBeHidden();
+  await page.evaluate(() =>
+    document.documentElement.setAttribute("data-theme", "dark"),
+  );
+  await expect(light).toBeHidden();
+  await expect(dark).toBeVisible();
+  await expect
+    .poll(() => dark.evaluate((e) => (e as HTMLImageElement).currentSrc))
+    .toContain("-dark.svg");
 });
 
 test("the contents open only the section of the current page", async ({

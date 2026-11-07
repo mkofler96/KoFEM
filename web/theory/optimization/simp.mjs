@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { equation, tex } from "../operators/math.mjs";
-import { reviewed, source, table } from "./evidence.mjs";
+import { source, table } from "./evidence.mjs";
 import {
   barStiffness,
   gray,
@@ -10,6 +10,7 @@ import {
   linearGray,
   solidVoid,
 } from "./simp-example.mjs";
+import { figure } from "../figures/index.mjs";
 
 const n = (value) => Number(value.toPrecision(6)).toString().replace("-", "−");
 
@@ -24,7 +25,7 @@ export default {
     ["sensitivities", "Compliance sensitivity without an extra solve"],
     ["worked-example", "Two bars sharing one load"],
     ["domains", "Solid, shell and coupled design domains"],
-    ["references", "Reviewed implementation and references"],
+    ["references", "Implementation and references"],
   ],
   body: `
     <p class="lede">How does SIMP turn a solid FEM problem into a density optimization problem?</p>
@@ -64,6 +65,7 @@ export default {
       as solid and void; the worked example below shows this. KoFEM uses the
       power law as a numerical device for reaching a solid–void layout; a
       gray element is not a validated porous material.</p>
+    ${figure("simp-interpolation", "SIMP stiffness against density for several penalties. With p = 3, half density gives only one eighth of the stiffness, so intermediate densities are poor value and the optimizer drives elements towards 0 or 1.")}
     <p>The <a href="/theory/notation/#stiffness-floor">stiffness floor</a>
       ${tex("E_{\\mathrm{min}}/E_0=10^{-9}")} is fixed in the engine and is
       not a user input. Without it a void element would contribute zero
@@ -180,19 +182,17 @@ export default {
       ${tex("s'(0)=0")}, so a void element receives no direct
       signal to return. Filtering spreads neighbouring information into it;
       see <a href="/theory/optimization/constraints-and-convergence/#filtering">filtering</a>.
-      The repository script below checks every number above and compares each
-      sensitivity with a central finite difference of the compliance:</p>
-    <pre><code>cd web &amp;&amp; bun theory/optimization/simp-example.mjs</code></pre>
-    <p>This verifies the article’s arithmetic and the sensitivity formula, not
-      the production optimizer. The engine’s own finite-difference checks are
-      in the native test suites listed below.</p>
+      Every number above was checked by script, and each sensitivity was
+      compared with a central finite difference of the compliance. That
+      verifies the arithmetic and the sensitivity formula, not the production
+      optimizer, which has its own finite-difference tests.</p>
 
     <h2 id="domains">Solid, shell and coupled design domains</h2>
     <p>The app routes an optimization the same way as a static solve: by the
       element mix of the FEM discretisation. Each element in the model is a
       design variable; there is no separate design-space selection yet.</p>
     ${table(
-      "Design domains at the reviewed revision",
+      "Design domains in KoFEM",
       ["Model", "Design variables and current rules"],
       [
         [
@@ -216,11 +216,9 @@ export default {
       <a href="/theory/shells/solid-coupling/">solid–shell coupling</a>.
       Supported and loaded elements are design variables too: the app does not
       yet pin any element solid or void. The engine already accepts such
-      passive regions, but the keep-in/keep-out picker that would fill them is
-      open work (<a href="https://linear.app/kofem/issue/KOF-238">KOF-238</a>).</p>
+      passive regions, but the app has no keep-in/keep-out picker yet.</p>
 
-    <h2 id="references">Reviewed implementation and references</h2>
-    <p>${reviewed}</p>
+    <h2 id="references">Implementation and references</h2>
     <ol class="refs">
       <li>Bendsøe and Sigmund, <cite>Topology Optimization: Theory, Methods and Applications</cite>, Springer (2003); and Bendsøe and Sigmund (1999), <cite>Material interpolation schemes in topology optimization</cite>, Archive of Applied Mechanics 69, 635–654.</li>
       <li>Andreassen, Clausen, Schevenels, Lazarov and Sigmund (2011), <cite>Efficient topology optimization in MATLAB using 88 lines of code</cite>, Structural and Multidisciplinary Optimization 43, 1–16. Source of the modified SIMP form used here.</li>
@@ -235,10 +233,6 @@ export default {
         ${source("web/src/hooks/useTopOpt.ts", 227, "one-material-per-domain check")}.</li>
       <li>Native checks of the per-iteration math, including finite-difference
         sensitivities: ${source("engine/tests/topology_simp_validation.cpp", 1, "solid SIMP core")} and
-        ${source("engine/tests/topology_shell_validation.cpp", 1, "shell and coupled core")},
-        run by <code>scripts/test-topology.sh</code> and
-        <code>scripts/test-topology-shell.sh</code> in CI.</li>
-      <li>Architecture record: <a href="https://linear.app/kofem/document/adr-0002-simp-topology-optimization-runs-as-an-in-engine-loop-dbb4630d0dfb">ADR-0002 — SIMP topology optimization runs as an in-engine loop</a>.
-        Statements on this page follow the code at the reviewed revision.</li>
+        ${source("engine/tests/topology_shell_validation.cpp", 1, "shell and coupled core")}.</li>
     </ol>`,
 };

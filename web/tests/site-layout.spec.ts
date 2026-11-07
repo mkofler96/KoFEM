@@ -9,7 +9,7 @@ const PAGES = [
   "/examples/plate-with-hole/",
   "/examples/mbb-beam-topopt/",
   "/theory/",
-  "/theory/foundations/model-and-units/",
+  "/theory/foundations/what-is-fem/",
   "/theory/foundations/consistent-units/",
 ];
 

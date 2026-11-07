@@ -20,7 +20,7 @@ Keep common unit-system comparisons on the separate
 
 **Question:** _One sentence ending in a question mark._
 
-**Reviewed solver revision (when applicable):** _Full Git commit SHA and review date for product-specific claims._
+**Reviewed solver revision (when applicable):** _Full Git commit SHA and review date for product-specific claims. Record these in the PR and the Linear evidence comment, and pin source links to the revision; never print them on the page._
 
 **Implementation (when applicable):** _Links to exact production C++/WASM and web source files._
 
@@ -43,6 +43,10 @@ _Equation or derivation, with all terms defined._
 
 Connect the physical problem to the formulation, then to the numerical method.
 Do not use a display tessellation as evidence about the FEM discretisation.
+
+Illustrate the key idea with a textbook-style figure from
+`web/theory/figures/` (see the README), and embed a solved example with
+`resultViewer` when a result makes the point clearer than a drawing.
 
 ## KoFEM implementation (optional)
 
@@ -68,7 +72,8 @@ Do not use the deferred Rust stubs as evidence for production behavior.
 ## Example and references
 
 - **Worked example (when useful):** _A standalone calculation or physical model;
-  use a KoFEM example URL and command when relevant to the article._
+  link a KoFEM example page or `/app/?example=<id>` when relevant. Readers use
+  the website and the app: no command lines on the page._
 - **Reference result:** _Analytical or published value, assumptions, and units._
 - **Sources:** _Primary references and implementation links._
 - **Related guide pages:** _Previous, next, and deeper pages._
@@ -93,7 +98,9 @@ Link an established Linear ADR when one exists; do not create a parallel ADR.
 - [ ] Product-specific claims trace to production sources at the recorded revision.
 - [ ] Limitations and practical consequences are specific.
 - [ ] Any worked example is reproducible and its reference is cited.
-- [ ] Numerical claims record executed commands, exact source revision, engine identity, quantity/location, units and justified tolerances.
+- [ ] Numerical claims record executed commands, exact source revision, engine identity, quantity/location, units and justified tolerances in the evidence record, PR and Linear comment, not in the article text.
+- [ ] The page has no command lines, review dates, commit hashes or Linear issue references.
+- [ ] Figures come from `web/theory/figures/`, with alt text and a caption.
 - [ ] Changed behavior updates affected pages and generated evidence using the [maintenance workflow](README.md#updating-behavior-pages-and-evidence).
 - [ ] Any decision section links the owning Linear ADR.
 - [ ] Solid, shell, coupled, and optimization scope is not overstated.

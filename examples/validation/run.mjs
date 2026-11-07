@@ -11,6 +11,9 @@
 //                                                 # each case's analysis file and
 //                                                 # figure, and the pages
 //                                                 # /examples/ and /examples/<id>/
+//   node examples/validation/run.mjs --pages      # only re-render the pages and
+//                                                 # their diagram/chart files from
+//                                                 # the published results (no solve)
 //
 // Exits non-zero if any case falls outside its tolerance band, so CI fails on a
 // solver regression — or if the numbers published on /examples/ no longer
@@ -49,6 +52,12 @@ import {
 import { resultFigure } from "./lib/render.mjs";
 import { renderExamplePage, renderIndexPage } from "./lib/page.mjs";
 import { ORDER, SITE_DIR, catalog } from "./catalog.mjs";
+import {
+  figureAssets,
+  imageEntries,
+  sameFile,
+  withImageNamespace,
+} from "../../web/figure-assets.mjs";
 import cases from "./cases/index.mjs";
 import textbook from "./textbook/index.mjs";
 import studies from "./convergence.mjs";
@@ -68,6 +77,20 @@ const ENGINE_STAMP = join(repo, "web/src/wasm/pkg/.engine-id");
 const PUBLISHED_RTOL = 1e-4;
 
 const report = process.argv.includes("--report");
+
+// Page text or figure changes need no new solve: render from the published
+// results.json and stop.
+if (process.argv.includes("--pages")) {
+  if (report || process.argv.includes("--case"))
+    throw new Error("--pages renders from published data; use it alone");
+  const published = JSON.parse(readFileSync(DATA, "utf8"));
+  const written = await publishPages(published);
+  console.log(
+    `Rendered ${written.pages} pages and ${written.figures} diagram/chart files from ${relative(repo, DATA)} (no solve).`,
+  );
+  process.exit(0);
+}
+
 const caseFlag = process.argv.indexOf("--case");
 const only = caseFlag >= 0 ? process.argv[caseFlag + 1] : null;
 if (caseFlag >= 0 && !only)
@@ -214,29 +237,19 @@ if (report) {
 
   mkdirSync(dirname(DATA), { recursive: true });
   writeFileSync(DATA, JSON.stringify(data, null, 2) + "\n");
-  const pages = renderPages(data);
-  // One page per example; an example that no longer exists loses its page.
-  mkdirSync(PAGES, { recursive: true });
-  for (const entry of readdirSync(PAGES, { withFileTypes: true }))
-    if (entry.isDirectory() && !ORDER.includes(entry.name))
-      rmSync(join(PAGES, entry.name), { recursive: true });
-  for (const [file, html] of pages) {
-    mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(file, html);
-  }
-  writeFileSync(SITEMAP, sitemapWithExamples(readFileSync(SITEMAP, "utf8")));
+  const written = await publishPages(data);
   writeFileSync(REPORT, markdownReport(rows));
   console.log(
-    `\nWrote ${rel(DATA)}, ${pages.length} pages in ${rel(PAGES)}, ${rows.length} analysis files and figures in ${rel(SITE_DIR)}, ${rel(SITEMAP)} and ${rel(REPORT)}`,
+    `\nWrote ${rel(DATA)}, ${written.pages} pages in ${rel(PAGES)}, ${rows.length} analysis files and figures and ${written.figures} diagram/chart files in ${rel(SITE_DIR)}, ${rel(SITEMAP)} and ${rel(REPORT)}`,
   );
 } else {
-  const stale = checkPublished();
+  const stale = await checkPublished();
   if (stale.length) {
     console.error(
       `\nThe example pages /examples/ are out of date with this run or their sources:\n` +
         stale.map((s) => `  • ${s}`).join("\n") +
         `\nRegenerate the pages and commit the result:\n` +
-        `  cd web && bun run validate:report\n` +
+        `  cd web && bun run validate:report   (validate:pages if only page text or figures changed)\n` +
         `  git add web/examples web/public/examples/results.json web/public/sitemap.xml examples/gallery/site examples/gallery/showcase examples/validation/REPORT.md`,
     );
     process.exit(1);
@@ -248,21 +261,55 @@ if (report) {
 
 process.exit(failed ? 1 : 0);
 
-/** Every page, as [file, html], rendered from published data. */
+/**
+ * Every page, as [file, html], rendered from published data, and the figure
+ * assets the pages show (web/figure-assets.mjs).
+ */
 function renderPages(data) {
   const entries = catalog(data.cases);
-  return [
+  const assets = figureAssets({ dir: SITE_DIR, url: "/examples/" });
+  const pages = [
     [INDEX, renderIndexPage(data, entries)],
     ...entries.map((e) => [
       join(PAGES, e.id, "index.html"),
-      renderExamplePage(data, entries, { studies, textbook }, e.id),
+      renderExamplePage(data, entries, { studies, textbook, assets }, e.id),
     ]),
   ];
+  return { pages, assets };
+}
+
+/**
+ * Write the pages, their diagram/chart files (site/<id>/, which holds nothing
+ * else, so a renamed figure leaves no stale file) and the sitemap block.
+ */
+async function publishPages(data) {
+  const { pages, assets } = renderPages(data);
+  for (const id of ORDER)
+    rmSync(join(SITE_DIR, id), { recursive: true, force: true });
+  const figureFiles = await assets.files();
+  for (const [file, content] of figureFiles) {
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, content);
+  }
+  // One page per example; an example that no longer exists loses its page.
+  mkdirSync(PAGES, { recursive: true });
+  for (const entry of readdirSync(PAGES, { withFileTypes: true }))
+    if (entry.isDirectory() && !ORDER.includes(entry.name))
+      rmSync(join(PAGES, entry.name), { recursive: true });
+  for (const [file, html] of pages) {
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, html);
+  }
+  writeFileSync(
+    SITEMAP,
+    sitemapWithExamples(readFileSync(SITEMAP, "utf8"), assets),
+  );
+  return { pages: pages.length, figures: figureFiles.length };
 }
 
 // Differences between the committed data, pages and analysis files and this
 // run, as messages.
-function checkPublished() {
+async function checkPublished() {
   if (!existsSync(DATA)) return [`${rel(DATA)} does not exist`];
   const published = JSON.parse(readFileSync(DATA, "utf8"));
   const out = [];
@@ -308,27 +355,55 @@ function checkPublished() {
       out.push(`${rel(pngPath(id))} does not exist`);
   // The committed HTML must be what the current sources render from the
   // committed data, so a text or layout change cannot ship without the pages.
-  for (const [file, html] of renderPages(published))
+  const { pages, assets } = renderPages(published);
+  for (const [file, html] of pages)
     if (!existsSync(file) || readFileSync(file, "utf8") !== html)
       out.push(`${rel(file)} differs from what the page sources render`);
+  // The diagram and chart files must be what the figure sources render, and
+  // nothing else may sit beside them.
+  const expected = new Set();
+  for (const [file, content] of await assets.files()) {
+    expected.add(file);
+    if (!sameFile(file, content))
+      out.push(`${rel(file)} differs from what the figure sources render`);
+  }
+  for (const id of ORDER) {
+    const folder = join(SITE_DIR, id);
+    if (!existsSync(folder)) continue;
+    for (const name of readdirSync(folder))
+      if (!expected.has(join(folder, name)))
+        out.push(`${rel(join(folder, name))} is no longer a figure of a page`);
+  }
+  if (
+    readFileSync(SITEMAP, "utf8") !==
+    sitemapWithExamples(readFileSync(SITEMAP, "utf8"), assets)
+  )
+    out.push(`${rel(SITEMAP)} does not list the current pages and images`);
   return out;
 }
 
 // The sitemap's examples block (between the examples markers) lists the index
-// and every example page.
-function sitemapWithExamples(xml) {
+// and every example page, with the page's result figure and the PNGs of its
+// diagrams and charts as images.
+function sitemapWithExamples(sitemap, assets) {
+  const xml = withImageNamespace(sitemap);
   const start = "<!-- examples:start -->",
     end = "<!-- examples:end -->";
   const i = xml.indexOf(start),
     j = xml.indexOf(end);
   if (i < 0 || j < i)
     throw new Error(`${rel(SITEMAP)} has no ${start} … ${end} block`);
-  const url = (path, priority) =>
-    `  <url>\n    <loc>${SITE}${path}</loc>\n    <priority>${priority}</priority>\n  </url>`;
+  const url = (path, priority, images = []) =>
+    `  <url>\n    <loc>${SITE}${path}</loc>\n    <priority>${priority}</priority>${images.length ? `\n    ${imageEntries(images.map((image) => `${SITE}${image}`))}` : ""}\n  </url>`;
   const block = [
     start,
     url("/examples/", "0.8"),
-    ...ORDER.map((id) => url(`/examples/${id}/`, "0.6")),
+    ...ORDER.map((id) =>
+      url(`/examples/${id}/`, "0.6", [
+        `/examples/${id}.png`,
+        ...assets.images(id),
+      ]),
+    ),
     `  ${end}`,
   ].join("\n");
   return xml.slice(0, i) + block + xml.slice(j + end.length);

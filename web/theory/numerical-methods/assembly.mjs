@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { equation, matrixEquation, tex } from "../operators/math.mjs";
-import { revision, source, mfemSource } from "./sources.mjs";
+import { source, mfemSource } from "./sources.mjs";
+import { figure } from "../figures/index.mjs";
 
 export default {
   slug: "numerical-methods/assembly",
@@ -42,7 +43,7 @@ export default {
       21 × 5 × 5 lattice: 525 functions and 1575 DOFs.</p>
 
     <h2 id="bar-example">Worked example: two bar elements</h2>
-    <p>Use the axial bar from <a href="/theory/foundations/model-and-units/#axial-bar">Model and units</a>:
+    <p>Use the axial bar from <a href="/theory/foundations/what-is-fem/#axial-bar">What is FEM?</a>:
       length ${tex("L = 1000\\text{ mm}")}, area ${tex("A = 10000\\text{ mm}^2")}, ${tex("E = 210000\\text{ MPa}")} and end force
       ${tex("P = 10^6\\text{ N}")}. Split it into two 500 mm elements with nodes 1, 2 and 3.
       Each node has one DOF, its axial displacement in mm.
@@ -79,6 +80,7 @@ export default {
       ${tex("P")}. Linear elements are exact here because the true displacement of a
       uniform bar without body load is linear. Supports are treated in detail in
       <a href="/theory/numerical-methods/loads-and-constraints/">Loads and constraints</a>.</p>
+    ${figure("assembly-two-bars", "Assembly of the two-element bar. Each element matrix is added into the rows and columns of its nodes; at the shared node 2 both contributions add.")}
 
     <h2 id="scatter">Assembly as gather and scatter</h2>
     <p>Formally, a Boolean matrix ${tex("A_e")} of size ${tex("3n_e × n_d")}
@@ -154,11 +156,10 @@ export default {
       uses its own body’s ${tex("λ")} and ${tex("μ")}, and contributions add at shared nodes.
       The <a href="/theory/numerical-methods/linear-solve/">Linear solve</a>
       page explains how the constrained system is solved.</p>
+    ${figure("mesh-sparsity", "A small triangular mesh and the nonzero pattern of its plane-elasticity stiffness matrix, two DOFs per node. A node couples only to the nodes of its own elements (highlighted), so most entries are zero. Numbering the nodes from left to right keeps the nonzeros near the diagonal.")}
 
     <h2 id="implementation">KoFEM and MFEM responsibilities</h2>
-    <p>Reviewed on 2 November 2026 at
-      <a href="https://github.com/mkofler96/KoFEM/tree/${revision}"><code>${revision.slice(0, 7)}</code></a>,
-      against MFEM 4.7. The solid solve is
+    <p>KoFEM uses MFEM 4.7. The solid solve is
       ${source("engine/cpp/solve_mfem.cpp", 182, "solve_linear_elastic")}.</p>
     <div class="table-wrap" tabindex="0" role="region" aria-label="Map from textbook steps to the KoFEM and MFEM implementation; scroll horizontally if needed">
       <table class="responsibility-table">
@@ -191,8 +192,8 @@ export default {
       mapping, the conversion of face forces to tractions and the treatment of
       supports. Shape functions, quadrature and the scatter-add are MFEM’s.
       The <a href="/examples/axial-bar/">axial bar example</a> runs this
-      complete path in the browser engine; reproduce it with
-      <code>node examples/validation/run.mjs --case axial-bar</code>.</p>
+      complete path in the browser engine; open it in the app and run it
+      yourself.</p>
 
     <h2 id="references">Sources and further reading</h2>
     <ol class="refs">

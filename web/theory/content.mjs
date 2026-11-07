@@ -4,7 +4,7 @@
 // Reading order and permanent slugs from docs/theory/content-map.md.
 // Unwritten topics link to their overview entry, never to an empty article.
 export const topics = [
-  ["Foundations", "foundations/model-and-units", "Model and units"],
+  ["Foundations", "foundations/what-is-fem", "What is FEM?"],
   ["Foundations", "foundations/consistent-units", "Consistent unit systems"],
   ["Foundations", "foundations/reading-a-study", "Reading a study"],
   ["Notation and operators", "notation", "Notation"],

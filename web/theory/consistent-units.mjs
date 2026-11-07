@@ -110,7 +110,7 @@ export default {
       <li>Check a simple calculation in two systems and convert the outputs back
         to the same unit. They should represent the same physical answer.</li>
     </ul>
-    <p>For example, the bar in <a href="/theory/foundations/model-and-units/#axial-bar">Model and units</a>
+    <p>For example, the bar in <a href="/theory/foundations/what-is-fem/#axial-bar">What is FEM?</a>
       has length 1 m, area 0.0001 m², force 1000 N and modulus
       ${tex("210 × 10^9\\text{ Pa}")} in SI. Its extension is approximately
       ${tex("4.7619 × 10^{-5}\\text{ m} = 0.047619\\text{ mm}")} in either system.</p>
@@ -161,7 +161,7 @@ export default {
         <a href="https://doi.org/10.1098/rspa.1950.0049">I. Theoretical discussion</a>,
         <cite>Proceedings of the Royal Society A</cite> 201, 159–174 (1950), and
         <a href="https://doi.org/10.1098/rspa.1950.0050">II. The atomic explosion of 1945</a>, 175–186 (1950).</li>
-      <li><a href="/theory/foundations/model-and-units/">Model and units</a>,
+      <li><a href="/theory/foundations/what-is-fem/">What is FEM?</a>,
         modelling assumptions and a worked analytical bar calculation.</li>
     </ol>`,
 };
