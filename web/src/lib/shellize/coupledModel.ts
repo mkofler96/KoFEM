@@ -10,6 +10,7 @@ import { concatCouplings, type CouplingSet } from "./couplingSet.js";
 import { shellFootprintCouplings } from "./footprint.js";
 import {
   dist2,
+  largest,
   medianTetEdge,
   pt,
   tetMeshBoundary,
@@ -102,10 +103,7 @@ function domainCouplings(
   // as far as the solid mesh's own spacing to find its partners.
   const tolerance =
     seamToleranceOverride ??
-    seamTolerance(
-      thicknesses.length > 0 ? Math.max(...thicknesses) : 0,
-      medEdge,
-    );
+    seamTolerance(thicknesses.length > 0 ? largest(thicknesses) : 0, medEdge);
   const seam = seamShellNodes(
     ppt,
     seamCandidates,

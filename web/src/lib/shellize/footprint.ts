@@ -6,7 +6,7 @@
 // (coupling kind 3) instead of a search-ball tie.
 
 import type { CouplingSet } from "./couplingSet.js";
-import { pt, tetMeshBoundary, type Vec3 } from "./geometry.js";
+import { largest, pt, tetMeshBoundary, type Vec3 } from "./geometry.js";
 
 export interface ShellBoundaryEdge {
   first: number;
@@ -95,7 +95,7 @@ export function shellFootprintCouplings(
     return { coupling, shellNodes };
   const boundary = [...new Set(tetMeshBoundary(tets))];
   const edges = shellBoundaryEdges(vertices, triangles, thicknesses);
-  const tolerance = Math.max(...thicknesses) * 1e-6;
+  const tolerance = largest(thicknesses) * 1e-6;
   const shellSet = new Set(triangles);
   const groups: {
     edge: ShellBoundaryEdge;

@@ -392,3 +392,19 @@ assert.ok(
   couplingMpcCodes(twoEnds.coupling).includes(1),
   "a footprint must not suppress a distinct seam elsewhere on the shell",
 );
+
+// Mesh-sized reductions must not spread into Math.max/Math.min: one argument
+// per element overflows the call stack (V8 at ~120k, JSC at ~1M), which failed
+// mesh-time shell idealisation on large shell meshes.
+const { largest, smallest } = await import("../src/lib/shellize/geometry.ts");
+const many = Array.from({ length: 2_000_000 }, (_, index) => index % 997);
+many[1_234_567] = 5000;
+many[42] = -3;
+assert.equal(largest(many), 5000);
+assert.equal(
+  smallest(new Map(many.map((value, i) => [i, value])).values()),
+  -3,
+);
+assert.equal(largest([]), -Infinity);
+assert.equal(smallest([]), Infinity);
+console.log("mesh-sized largest/smallest passed");

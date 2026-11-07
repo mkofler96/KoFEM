@@ -61,6 +61,28 @@ export default [
     },
   },
   {
+    // Math.max(...values) passes one argument per element and overflows the
+    // call stack on mesh-sized arrays (V8 at ~120k): use largest/smallest from
+    // src/lib/shellize/geometry.ts or a loop.
+    files: [
+      "src/workers/**",
+      "src/store/**",
+      "src/lib/shellize/**",
+      "src/lib/solve/**",
+    ],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "CallExpression[callee.object.name='Math'][callee.property.name=/^(max|min)$/] > SpreadElement",
+          message:
+            "Spreading into Math.max/Math.min overflows the stack on mesh-sized arrays; use largest/smallest or a loop.",
+        },
+      ],
+    },
+  },
+  {
     // Solver-critical paths: everything that feeds the solver or derives
     // displayed results. Here any `??`/`||` fabricating a plausible value
     // default is an error; genuinely optional fields carry an

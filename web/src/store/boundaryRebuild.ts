@@ -211,7 +211,8 @@ export function rebuildLoads(
     // becomes equivalent nodal forces.
     if (kind !== "moment") continue;
     const meshFaces = g.faces.filter((face) => !pointFaces.has(face));
-    result.push(...momentToNodalForces(vector, meshFaces, nodeById, g.name));
+    const forces = momentToNodalForces(vector, meshFaces, nodeById, g.name);
+    for (const force of forces) result.push(force);
   }
   return result;
 }

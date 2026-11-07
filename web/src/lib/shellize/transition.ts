@@ -11,6 +11,7 @@ import { buildCoupledModel, type CoupledModel } from "./coupledModel.js";
 import { couplingMpcCodes } from "./couplingSet.js";
 import { shellBoundaryEdges } from "./footprint.js";
 import {
+  largest,
   pt,
   tetMeshBoundary,
   type ShellizeMesh,
@@ -29,15 +30,17 @@ export function buildShellTransitionModel(
   const retained: number[] = [];
   for (let element = 0; element < mesh.body.length; element++)
     if (!replaced.has(element))
-      retained.push(...mesh.tet.slice(4 * element, 4 * element + 4));
+      for (let corner = 0; corner < 4; corner++)
+        retained.push(mesh.tet[4 * element + corner]);
   if (retained.length === 0)
     return { mesh, model: buildCoupledModel(mesh, shells, replaced) };
   const boundary = tetMeshBoundary(retained);
-  const tolerance = Math.max(...shells.shellThk) * 1e-7;
+  const thickest = largest(shells.shellThk);
+  const tolerance = thickest * 1e-7;
   const grid = new TriangleGrid(
     boundary.length / 3,
     (triangle, corner) => pt(mesh.V, boundary[3 * triangle + corner]),
-    Math.max(...shells.shellThk),
+    thickest,
   );
   const planes: TransitionPlane[] = [];
   for (const edge of shellBoundaryEdges(

@@ -6,7 +6,7 @@
 
 import { SpatialGrid } from "../spatialGrid.js";
 import { concatCouplings, type CouplingSet } from "./couplingSet.js";
-import { dist2, type Vec3 } from "./geometry.js";
+import { dist2, smallest, type Vec3 } from "./geometry.js";
 import { autoDetectCouplings, partnerSearchRadius } from "./partners.js";
 
 // One tie connection, as the coupled builders need it: the two surfaces the user
@@ -202,7 +202,7 @@ export function tieCouplings(
       continue;
     }
 
-    const gap = Math.min(...distances.values());
+    const gap = smallest(distances.values());
     const kept = [...distances]
       .filter(([, distance]) => distance <= tie.reach)
       .map(([pi]) => pi);

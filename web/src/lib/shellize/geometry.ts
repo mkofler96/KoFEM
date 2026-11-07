@@ -31,6 +31,22 @@ export function dist2(a: Vec3, b: Vec3): number {
   return (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2;
 }
 
+// Largest / smallest of a list, as Math.max / Math.min (-Infinity / Infinity
+// when empty) but by iteration: spreading a mesh-sized array into Math.max
+// passes one argument per element and overflows the call stack (RangeError:
+// Maximum call stack size exceeded) once the shell mesh has ~100k triangles.
+export function largest(values: Iterable<number>): number {
+  let result = -Infinity;
+  for (const value of values) result = Math.max(result, value);
+  return result;
+}
+
+export function smallest(values: Iterable<number>): number {
+  let result = Infinity;
+  for (const value of values) result = Math.min(result, value);
+  return result;
+}
+
 // Map get-or-insert without non-null assertions: returns the existing value or
 // stores and returns a freshly made one.
 export function getOrInit<K, T>(map: Map<K, T>, key: K, make: () => T): T {
