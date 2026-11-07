@@ -36,6 +36,7 @@ add_executable(kofem_wasm_emcc
     cpp/geometry_cache.cpp
     cpp/geometry_edit.cpp
     cpp/mesh_netgen.cpp
+    cpp/mesh_overlap.cpp
     cpp/fem_mesh_io.cpp
     cpp/fem_bc_io.cpp
     cpp/solve_mfem.cpp
@@ -46,6 +47,8 @@ add_executable(kofem_wasm_emcc
     cpp/tet_element.cpp
     cpp/coupling_constraints.cpp
     cpp/sparse_cg.cpp
+    cpp/cg_browser.cpp
+    cpp/cg_mfem.cpp
     cpp/spatial_grid.cpp
     cpp/topology_simp_core.cpp
     cpp/topology_filter.cpp
@@ -258,6 +261,13 @@ target_link_options(kofem_wasm_emcc PRIVATE
     # what() text instead of showing an opaque number like "Error: 12190840".
     -sEXPORT_EXCEPTION_HANDLING_HELPERS=1
     -sMODULARIZE=1
+    -sASYNCIFY=1
+    -sASYNCIFY_STACK_SIZE=8388608
+    # Only static CG can suspend. Instrument its possible stack frames,
+    # including MFEM's virtual monitor and std::function/Embind trampolines.
+    # The default indirect-call analysis otherwise instruments OCCT/Netgen too.
+    # Browser continuation tests exercise each exported solver through this list.
+    "-sASYNCIFY_ONLY=['*solve_linear_elastic*','*solve_shell*','*solve_coupled*','*run_cg_solve*','*kofem::*','*browser_cg_control*','*std::__2::function*','*std::__2::__function::*','*std::__2::__invoke*','*emscripten::internal::Invoker*','*mfem::CGSolver::Mult*','*mfem::IterativeSolver::Monitor*','dynCall*']"
     -sEXPORT_ES6=1
     -sENVIRONMENT=web,worker
     -sINITIAL_MEMORY=134217728      # 128 MB starting heap

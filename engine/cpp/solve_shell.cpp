@@ -13,6 +13,7 @@
 #include "solve_shell.h"
 
 #include "bc_validation.h"
+#include "cg_browser.h"
 #include "json_util.h"
 #include "shell_core.h"
 #include "shell_element.h"
@@ -166,6 +167,7 @@ val solve_shell(const val& mesh, const std::string& mat_json, const std::string&
 
     kofem::shell::ShellResult r;
     try {
+        in.cg_control = browser_cg_control();
         r = kofem::shell::solve_shell_core(in);
     } catch (const std::exception& e) {
         printf("[shell] solve failed: %s\n", e.what());

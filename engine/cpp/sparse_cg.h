@@ -15,6 +15,8 @@
 #include <utility>
 #include <vector>
 
+#include "cg_continuation.h"
+
 namespace kofem::sparse {
 
 // Sorted-vector rows for assembly; cg_solve flattens these to CSR before
@@ -45,6 +47,7 @@ void apply_essential_bc(SparseMatrix& K, std::vector<double>& F,
                         const std::vector<char>& fixed, const std::vector<double>& values);
 
 struct CgOptions {
+    CgControl control;
     // Relative-residual target ‖r‖/‖F‖. Must be finite and positive.
     double rel_tol = 1e-10;
     // Prefix of the progress log lines ("[<tag>] CG iteration …") and of the

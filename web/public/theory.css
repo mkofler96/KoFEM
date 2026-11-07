@@ -1,0 +1,241 @@
+/* SPDX-FileCopyrightText: 2026 Michael Kofler
+ * SPDX-License-Identifier: AGPL-3.0-or-later */
+
+/* Theory uses the examples' shared docs layout; only article-specific rules live here. */
+.skip-link {
+  position: fixed;
+  top: -100px;
+  left: 16px;
+  z-index: 100;
+  padding: 8px 16px;
+  color: var(--text);
+  background: var(--bg);
+}
+
+.skip-link:focus {
+  top: 8px;
+}
+
+.theory-docs main {
+  overflow-wrap: anywhere;
+}
+
+.theory-docs :target {
+  scroll-margin-top: 110px;
+}
+
+.theory-docs summary:focus-visible,
+.theory-docs [tabindex="0"]:focus-visible,
+.theory-docs button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.planned {
+  color: var(--muted);
+  font-size: 0.85em;
+  font-weight: 400;
+}
+
+.theory-topics {
+  padding-left: 22px;
+}
+
+.theory-topics li {
+  margin: 8px 0;
+}
+
+/* Keep unit names and values together; the table region handles narrow screens. */
+.theory-docs table th,
+.theory-docs table td {
+  overflow-wrap: normal;
+  white-space: nowrap;
+}
+
+.symbols {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 8px 16px;
+}
+
+.symbols dd {
+  margin: 0;
+}
+
+.theory-docs .notation-table td:nth-child(2) {
+  min-width: 240px;
+  white-space: normal;
+}
+
+.theory-docs .shell-table td {
+  min-width: 80px;
+  max-width: 360px;
+  white-space: normal;
+}
+
+.theory-docs .shell-table th {
+  min-width: 100px;
+  max-width: 220px;
+  white-space: normal;
+}
+
+.operator-definitions dt {
+  margin-top: 20px;
+  font-weight: 600;
+}
+
+.operator-definitions dd {
+  margin: 6px 0 0;
+}
+
+/* MathML Core only standardises mathvariant="normal"; also set the CSS weight. */
+.theory-docs mi.math-bold {
+  font-weight: 700;
+}
+
+.theory-docs .equation {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 20px 0;
+  padding: 10px 2px;
+}
+
+.theory-docs .equation math {
+  width: max-content;
+  min-width: 100%;
+  margin: 0;
+  overflow: visible;
+}
+
+.article-contents {
+  display: none;
+}
+
+@media (max-width: 1240px) {
+  .article-contents {
+    display: block;
+    margin: 16px 0;
+  }
+}
+
+.theory-docs .responsibility-table td:last-child {
+  min-width: 280px;
+  white-space: normal;
+}
+
+/* Inline math plus its trailing punctuation; see bindMathPunctuation. */
+.theory-docs .math-nowrap {
+  white-space: nowrap;
+}
+
+/* Textbook figures: standalone SVG images drawn for a light background.
+   The dark theme inverts their lightness and keeps their hues. */
+.theory-docs figure.theory-figure {
+  margin: 26px 0;
+}
+.theory-docs figure.theory-figure .figure-link {
+  display: block;
+}
+.theory-docs figure.theory-figure img {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+.theory-docs figure.theory-figure.narrow img {
+  max-width: 560px;
+}
+.theory-docs figure.theory-figure figcaption {
+  text-align: left;
+}
+:root[data-theme="dark"] .theory-docs figure.theory-figure img {
+  filter: invert(0.88) hue-rotate(180deg);
+}
+
+/* Interactive result viewers (public/theory/viewer.js). Without script or
+   WebGL, the example's own figure stays in place. */
+.theory-docs figure.result-viewer {
+  margin: 26px 0;
+}
+.result-viewer .viewer-stage {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--panel2);
+}
+.result-viewer .viewer-stage > img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.result-viewer .viewer-stage > img[hidden] {
+  display: none;
+}
+.result-viewer .viewer-stage canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  cursor: grab;
+  touch-action: pan-y;
+}
+.result-viewer .viewer-stage canvas:active {
+  cursor: grabbing;
+}
+.result-viewer .viewer-legend {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  pointer-events: none;
+}
+.result-viewer .viewer-legend span:not(.viewer-bar) {
+  background: color-mix(in srgb, var(--bg) 75%, transparent);
+  padding: 0 4px;
+  border-radius: 3px;
+}
+.result-viewer .viewer-bar {
+  width: 12px;
+  height: 110px;
+  border-radius: 2px;
+  /* The app's contour scale, low (bottom) → high (top). */
+  background: linear-gradient(
+    to top,
+    hsl(240 100% 50%),
+    hsl(180 100% 50%),
+    hsl(120 100% 50%),
+    hsl(60 100% 50%),
+    hsl(0 100% 50%)
+  );
+}
+.result-viewer .viewer-hint {
+  position: absolute;
+  left: 10px;
+  bottom: 8px;
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--bg) 75%, transparent);
+  padding: 1px 6px;
+  border-radius: 4px;
+  pointer-events: none;
+}
+.result-viewer .viewer-reset {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line2);
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+}

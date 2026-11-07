@@ -4,6 +4,7 @@
 import type {
   SplitGeometryOptions,
   BooleanGeometryOptions,
+  RepairHingesOptions,
   TopOptSettings,
 } from "../wasm/pkg/kofem_wasm.js";
 import type { TieDefinition } from "../lib/tie.js";
@@ -84,6 +85,24 @@ export interface BooleanGeometryPayload {
   format: string;
   boolean: BooleanGeometryOptions;
 }
+export interface RepairHingesPayload {
+  // The current geometry file and its format — reloaded before the repair.
+  bytes: Uint8Array;
+  format: string;
+  repair: RepairHingesOptions;
+}
+export interface SplitConeTipsPayload {
+  // The current geometry file and its format — reloaded before the split.
+  bytes: Uint8Array;
+  format: string;
+  faceIds: number[];
+}
+export interface RemoveFacesPayload {
+  // The current geometry file and its format — reloaded before the removal.
+  bytes: Uint8Array;
+  format: string;
+  faceIds: number[];
+}
 export interface VolumeMeshPayload {
   bytes?: Uint8Array;
   format?: string;
@@ -100,6 +119,8 @@ export interface VolumeMeshPayload {
   properties?: Property[];
 }
 export interface SolvePayload {
+  /** Optional initial CG budget; absent uses each solver's built-in cap. */
+  cgIterationLimit?: number;
   nodes: Node[];
   elements: Element[];
   materials: Material[];

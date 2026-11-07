@@ -8,6 +8,7 @@ import { current } from "immer";
 import type { ModelState, SliceCreator } from "./modelStore";
 import { addSelection } from "./viewSlice";
 import { carryGroupsToMesh, remeshNotice } from "../lib/remeshGroups";
+import type { MeshOverlap } from "../wasm/pkg/kofem_wasm";
 import {
   rebuildConstraints,
   rebuildLoads,
@@ -198,6 +199,9 @@ export interface GeometrySlice {
   // carried over on their CAD faces and which the user has to pick again.
   // Null when the mesh had nothing to carry. Shown by the mesh panel.
   remeshNotice: string | null;
+  // Where the last mesh attempt found the surface overlapping itself. Drawn in
+  // the viewport and offered for repair by the mesh panel; empty otherwise.
+  meshOverlaps: MeshOverlap[];
   // The CAD bodies that were suppressed when the current mesh was made — and
   // so are missing from it. Compared with the bodies' suppression now to tell
   // whether the mesh still matches the model (suppressionMismatch).
@@ -241,6 +245,7 @@ export interface GeometrySlice {
   setSplitDraft(draft: { axis: 0 | 1 | 2; position: number } | null): void;
   setSplitError(message: string | null): void;
   setRemeshNotice(notice: string | null): void;
+  setMeshOverlaps(overlaps: MeshOverlap[]): void;
   applyMeshResult(
     nodes: Node[],
     elements: Element[],
@@ -304,6 +309,7 @@ function dropAnalysis(s: ModelState): void {
   s.splitFaceIds = [];
   s.splitError = null;
   s.remeshNotice = null;
+  s.meshOverlaps = [];
   // A pick session picks on the mesh that is now gone — and an edit can land
   // while one is open on the Constraints step (a split answers after an
   // await), whose BC/load sections then unmount and could no longer end it.
@@ -335,6 +341,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
   splitDraft: null,
   splitError: null,
   remeshNotice: null,
+  meshOverlaps: [],
   meshSuppressedIds: [],
 
   addNode: (node) =>
@@ -455,11 +462,11 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       // The engine writes every edit as STEP, whatever the source format was.
       s.geometryFormat = "step";
       s.stepSurface = tessellation;
-      // An edit that maps its bodies (a Boolean) carries each body's settings
-      // to its new id. A face split keeps the bodies, so their materials and
-      // element types stay; only the shell sections a mesh derived go, with the
-      // mesh. A body split renumbers the bodies — start the table over, as an
-      // import would.
+      // An edit that maps its bodies (a Boolean, a hinge repair) carries each
+      // body's settings to its new id. A face split keeps the bodies, so their
+      // materials and element types stay; only the shell sections a mesh derived
+      // go, with the mesh. A body split renumbers the bodies — start the table
+      // over, as an import would.
       if (bodySources) {
         if (bodySources.length !== Math.max(1, bodyCount))
           throw new Error(
@@ -516,6 +523,10 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
   setRemeshNotice: (notice) =>
     set((s) => {
       s.remeshNotice = notice;
+    }),
+  setMeshOverlaps: (overlaps) =>
+    set((s) => {
+      s.meshOverlaps = overlaps;
     }),
 
   applyMeshResult: (

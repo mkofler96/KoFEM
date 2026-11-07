@@ -43,6 +43,42 @@ export interface BooleanGeometryOptions {
   keepTools?: boolean
 }
 
+/** A place where the surface mesh overlaps itself, so no volume mesh exists.
+ *  `positions` holds xyz of 3 corners per overlapping surface element. A "hinge"
+ *  is a straight tangent contact between two CAD faces, located exactly in
+ *  `hinge` (mm) and repairable with {@link KofemModule.repair_hinges}. A "cone"
+ *  holds a full cone face closing at its tip, which Netgen can fail on; repairable
+ *  with {@link KofemModule.split_cone_tips}. An "unmeshed" entry is one CAD face
+ *  Netgen gave up on, with `positions` from its display tessellation and its
+ *  `width` (mm, 2·area/perimeter); a cone tip it gave up on comes as "cone". */
+export interface MeshOverlap {
+  kind: "hinge" | "cone" | "surface" | "unmeshed"
+  faceIds: Int32Array
+  bodyId: number
+  positions: Float64Array
+  width?: number
+  hinge?: {
+    start: Float64Array
+    end: Float64Array
+    normal: Float64Array
+    length: number
+  }
+}
+
+/** Hinge repair requested of {@link KofemModule.repair_hinges}, JSON-stringified.
+ *  "connect" welds the two sides with a box along each line, "separate" cuts one
+ *  out to open a gap. `width` is the box's width across the line in mm. */
+export interface RepairHingesOptions {
+  op: "connect" | "separate"
+  width: number
+  hinges: {
+    bodyId: number
+    start: number[]
+    end: number[]
+    normal: number[]
+  }[]
+}
+
 /** FEM volume mesh returned as flat typed arrays (binary, no JSON text — issue #166).
  *  `vertices` is xyz interleaved (length 3·nNodes); `tetrahedra` is four 0-based
  *  vertex indices per tet (length 4·nTets); `bodyIds` is the 1-based body
@@ -180,6 +216,8 @@ export type ShellSolveResult =
 
 /** Runtime interface of the initialised Emscripten/Embind module. */
 export interface KofemModule {
+  /** Optional initial static CG budget; absent uses each solver's usual cap. */
+  cgIterationLimit?: number
   /** Load a STEP or IGES file and tessellate it for display.
    *  @param cad_bytes Raw STEP/IGES file bytes.
    *  @param opts_json JSON `{ deflection_relative?, linear_deflection?, angular_deflection?, format?: "step" | "iges" }`.
@@ -188,9 +226,11 @@ export interface KofemModule {
   tessellate_step(cad_bytes: Uint8Array, opts_json: string): StepTessellation
   /** Generate a FEM surface mesh + volume mesh directly from the stored STEP geometry
    *  using Netgen's native OCC integration.  Must call tessellate_step first.
+   *  Returns `{ overlaps }` instead of a mesh when the surface mesh overlaps itself
+   *  or Netgen could not mesh some faces (kind "unmeshed").
    *  @param opts_json JSON `{ max_element_size, min_element_size, grading, second_order, elementsperedge, elementspercurve, optsteps_2d, optsteps_3d }`
    */
-  generate_fem_mesh(opts_json: string): FemMesh
+  generate_fem_mesh(opts_json: string): FemMesh | { overlaps: MeshOverlap[] }
   /** Split faces or bodies of the loaded shape with a plane (see
    *  {@link SplitGeometryOptions}) and return the edited geometry as STEP
    *  AP214 bytes. Throws, naming the face or body, when the plane leaves any
@@ -204,6 +244,23 @@ export interface KofemModule {
    *  nothing. Releases the cached shape, like split_geometry.
    *  @param opts_json JSON-stringified {@link BooleanGeometryOptions}. */
   boolean_geometry(opts_json: string): { bytes: Uint8Array }
+  /** Remove hinges reported by generate_fem_mesh and return the edited geometry
+   *  as STEP AP214 bytes. `bodySources[j]` is the old id of new Body j+1: a body
+   *  that came apart appears once per piece. Releases the cached shape, like
+   *  split_geometry.
+   *  @param opts_json JSON-stringified {@link RepairHingesOptions}. */
+  repair_hinges(opts_json: string): { bytes: Uint8Array; bodySources: number[] }
+  /** Divide cone faces reported by generate_fem_mesh into pieces Netgen can mesh
+   *  and return the edited geometry as STEP AP214 bytes. Releases the cached
+   *  shape, like split_geometry.
+   *  @param opts_json JSON-stringified `{ faceIds: number[] }`. */
+  split_cone_tips(opts_json: string): { bytes: Uint8Array }
+  /** Remove "unmeshed" faces reported by generate_fem_mesh by extending the faces
+   *  around them (OCCT defeaturing) and return the edited geometry as STEP AP214
+   *  bytes. The shape changes by about the faces' width. Throws when the gap
+   *  can't be closed. Releases the cached shape, like split_geometry.
+   *  @param opts_json JSON-stringified `{ faceIds: number[] }`. */
+  remove_faces(opts_json: string): { bytes: Uint8Array }
   /** Release the OCCT shape + STEP byte cache from WASM heap.
    *  Call this after meshing is complete and before solving to free ~10–30 MB
    *  of WASM memory that is no longer needed.
@@ -218,7 +275,7 @@ export interface KofemModule {
     mat_json: string,
     bcs_json: string,
     order: number,
-  ): StaticSolveResult
+  ): StaticSolveResult | Promise<StaticSolveResult>
   /** Kirchhoff flat-facet shell solve on a triangle surface mesh. `mat_json` is
    *  `{ young_modulus, poisson_ratio, thickness }`; `bcs_json` is
    *  `{ fixed_vertices?, fixed_dofs?, prescribed_dofs?, point_loads? }` with DOF
@@ -230,7 +287,7 @@ export interface KofemModule {
     mesh: ShellMesh,
     mat_json: string,
     bcs_json: string,
-  ): ShellSolveResult
+  ): ShellSolveResult | Promise<ShellSolveResult>
   /** Coupled solid(tet)+shell solve. MFEM assembles the solid; DKT shells and
    *  RBE3 distributing couplings are added and solved together.
    *   mesh:     { vertices, tets, triangles, thicknesses?, attributes? }
@@ -282,14 +339,7 @@ export interface KofemModule {
       prescribed_vals?: Float64Array
     },
     mat_json: string,
-  ):
-    | {
-        displacements: Float64Array
-        von_mises_tets: Float64Array
-        von_mises_tris: Float64Array
-        iterations: number
-      }
-    | { error: string }
+  ): CoupledSolveResult | Promise<CoupledSolveResult>
   /** SIMP topology optimization (KOF-226 epic, ADR-0002). Takes the same
    *  mesh/material/BC inputs as `solve_linear_elastic` plus a `topopt_json` TO
    *  settings block (see {@link TopOptSettings}); iterates a per-element density
@@ -383,10 +433,31 @@ export class EngineLoadError extends Error {
   readonly stage: EngineLoadStage
 }
 
+export type CoupledSolveResult =
+  | {
+      displacements: Float64Array
+      von_mises_tets: Float64Array
+      von_mises_tris: Float64Array
+      iterations: number
+    }
+  | { error: string }
+
 export interface ModuleOverrides {
+  /** Initial static-solve budget. Omitted: each solver's built-in cap. */
+  cgIterationLimit?: number
+  /** Zero stops and discards; a positive integer extends the live CG loop. */
+  onCgLimit?: (progress: CgLimitProgress) => Promise<number>
   print?: (text: string) => void
   printErr?: (text: string) => void
   onProgress?: (progress: EngineLoadProgress) => void
+}
+
+export interface CgLimitProgress {
+  iterations: number
+  relativeResidual: number
+  target: number
+  elapsedSeconds: number
+  suggestedIterations: number
 }
 
 /** Initialise the WASM module and return it. Must be awaited before using any function. */

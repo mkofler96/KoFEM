@@ -18,6 +18,7 @@ as the source of the numbers on the public example pages,
 node examples/validation/run.mjs                 # run all cases, print a table
 node examples/validation/run.mjs --case <id>     # run one case, e.g. axial-bar
 node examples/validation/run.mjs --report        # also regenerate the pages, figures, .vtu files + REPORT.md
+node examples/validation/run.mjs --pages         # only re-render pages and diagram/chart files (no solve)
 ```
 
 It exits non-zero if any case leaves its tolerance band, or if the public
@@ -52,6 +53,7 @@ its README), which write their own records.
 | `web/examples/<id>/index.html`     | one page per example: problem, derivation, model, results, discussion       |
 | `examples/gallery/site/<id>.vtu`   | each case as the app opens it, solved                                       |
 | `examples/gallery/site/<id>.png`   | each case's figure (`lib/render.mjs`), drawn from the same solve            |
+| `examples/gallery/site/<id>/`      | the page's diagrams and charts as image files (below); nothing else         |
 | `web/public/examples/results.json` | every number on the case pages, plus the engine id; linked as the raw data  |
 | `web/public/sitemap.xml`           | the block between the `examples` markers lists the index and every page     |
 | `REPORT.md`                        | the results table in Markdown                                               |
@@ -69,7 +71,31 @@ run. Change the sources and regenerate — never edit the outputs by hand:
 
 ```bash
 cd web && bun run validate:report    # ~40 s: the convergence studies dominate
+cd web && bun run validate:pages     # seconds: page text or a figure changed, no new solve
 ```
+
+### Diagrams and charts as image files
+
+The sketches (`lib/figures.mjs`) and charts (`lib/page.mjs`, `textbook/*.mjs`)
+are written as SVG markup with `role="img"` and an `aria-label`, styled by the
+figure CSS in `web/docs-layout.mjs`. `web/figure-assets.mjs` turns each one into
+files in `examples/gallery/site/<id>/`, served at `/examples/<id>/`:
+
+- `<id>-<name>.svg` and `<id>-<name>-dark.svg`: the figure CSS with that
+  theme's colours resolved, and subsets of the page fonts (IBM Plex, KoFEM
+  Math) embedded, so each renders as the inline figure did;
+- `<id>-<name>.png`: the light SVG rasterised by resvg at twice its size with
+  the same font subsets, a crawlable fallback.
+
+The page shows them with one `<picture>` per theme (SVG `<source>`, PNG
+`<img>` with the aria-label as `alt`); the theme switch hides the other one, which
+is then never fetched. The sitemap lists each page's result figure and figure
+PNGs as images, and the JSON-LD names them. `<name>` is the SVG's `data-name`
+(`svg(…, { name })` in `lib/figures.mjs`), else `diagram` or `chart`, numbered
+when a page has several. Any new figure on any example page gets the same
+treatment: write SVG with an aria-label and regenerate. The PNG and SVG bytes
+are deterministic, so the plain run checks them like the pages, and reports
+files no figure produces any more.
 
 Every plain run compares itself with the committed `results.json` — each case's
 value to 1e-4 relative, its reference, band, mesh and inputs, and the read-out
@@ -78,7 +104,7 @@ model, and re-renders every page from the committed data and records, which
 must match the committed HTML. It fails with the list of differences when any
 disagrees. So an engine change that moves a published number, or a text or
 layout change, fails CI until the pages are regenerated. The convergence
-studies and the figures are only refreshed by `--report`.
+studies and the result figures are only refreshed by `--report`.
 `web/tests/examples-page.spec.ts` checks that the pages are served, complete and
 indexable, that the old `/validation/` addresses redirect to them, and that
 opening each example in the app and solving it shows the read-out its page

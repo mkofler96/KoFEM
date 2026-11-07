@@ -45,6 +45,9 @@ const STATIC_PAGES = [
   ...readdirSync(htmlEntry("./examples/"), { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => `examples/${entry.name}/index.html`),
+  ...readdirSync(htmlEntry("./theory/"), { recursive: true })
+    .filter((entry) => String(entry).endsWith("index.html"))
+    .map((entry) => `theory/${entry}`),
 ];
 
 // The files each example is opened and drawn from live outside web/, with
@@ -55,11 +58,26 @@ const STATIC_PAGES = [
 // (web/Dockerfile).
 const GALLERY_SITE = htmlEntry("../examples/gallery/site/");
 
+// three.js for the Theory Guide's result viewers (public/theory/viewer.js),
+// served from the installed package rather than a CDN: an import map on those
+// pages maps "three" to /vendor/three/. The app bundles its own copy.
+const THREE_VENDOR: Record<string, string> = {
+  "three.module.min.js": htmlEntry(
+    "./node_modules/three/build/three.module.min.js",
+  ),
+  "OrbitControls.js": htmlEntry(
+    "./node_modules/three/examples/jsm/controls/OrbitControls.js",
+  ),
+};
+
 const copyStaticPages = (snippet: string): PluginOption => ({
   name: "copy-static-pages",
   apply: "build",
   closeBundle() {
     cpSync(GALLERY_SITE, htmlEntry("./dist/examples/"), { recursive: true });
+    mkdirSync(htmlEntry("./dist/vendor/three/"), { recursive: true });
+    for (const [name, file] of Object.entries(THREE_VENDOR))
+      cpSync(file, htmlEntry(`./dist/vendor/three/${name}`));
     for (const page of STATIC_PAGES) {
       const html = injectAnalytics(
         injectSiteLayout(
@@ -78,6 +96,7 @@ const GALLERY_TYPES: Record<string, string> = {
   ".vtu": "application/xml",
   ".step": "application/octet-stream",
   ".png": "image/png",
+  ".svg": "image/svg+xml",
 };
 
 // Where an address of the retired /validation/ pages now lives, or null for
@@ -91,15 +110,31 @@ function validationRedirect(path: string): string | null {
   return `/examples${rest}`;
 }
 
+// The Theory Guide's first article moved from "Model and units" to "What is
+// FEM?". nginx.conf.template redirects the same way in production.
+const theoryRedirect = (path: string): string | null =>
+  /^\/theory\/foundations\/model-and-units(\/.*)?$/.test(path)
+    ? "/theory/foundations/what-is-fem/"
+    : null;
+
 // A folder under /examples/ requested without its trailing slash gets one, as
 // nginx answers it in production.
 const slashRedirect = (path: string): string | null =>
-  path === "/examples" || /^\/examples\/[\w-]+$/.test(path) ? `${path}/` : null;
+  path === "/examples" ||
+  /^\/examples\/[\w-]+$/.test(path) ||
+  STATIC_PAGES.some(
+    (page) =>
+      page.startsWith("theory/") &&
+      path === `/${page.replace(/\/index\.html$/, "")}`,
+  )
+    ? `${path}/`
+    : null;
 
 // Permanent redirects shared by the dev and preview servers.
 const redirects: Connect.NextHandleFunction = (req, res, next) => {
   const [path, query] = (req.originalUrl ?? "").split("?");
-  const target = validationRedirect(path) ?? slashRedirect(path);
+  const target =
+    validationRedirect(path) ?? theoryRedirect(path) ?? slashRedirect(path);
   if (!target) {
     next();
     return;
@@ -117,6 +152,13 @@ const serveGallery = (): PluginOption => ({
   name: "serve-gallery",
   configureServer(server) {
     server.middlewares.use(redirects);
+    server.middlewares.use("/vendor/three", (req, res, next) => {
+      const name = (req.url ?? "/").split("?")[0].slice(1);
+      const file = THREE_VENDOR[name];
+      if (!file) return next();
+      res.setHeader("Content-Type", "text/javascript");
+      res.end(readFileSync(file));
+    });
     server.middlewares.use("/examples", (req, res, next) => {
       const path = decodeURIComponent((req.url ?? "/").split("?")[0]);
       const type = GALLERY_TYPES[extname(path)];

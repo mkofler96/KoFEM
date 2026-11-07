@@ -1,0 +1,136 @@
+{
+  "generated": "2026-11-06T19:27:21.886Z",
+  "sourceRevision": "5d4874f2099ef573e6c0cbb1d473a697259fe314",
+  "engine": "engine-a5154f0787e6",
+  "command": "bun examples/validation/axial-bar-study.mjs --report",
+  "setup": {
+    "inputs": [
+      [
+        "L",
+        1000,
+        "mm"
+      ],
+      [
+        "W × H",
+        "100 × 100",
+        "mm"
+      ],
+      [
+        "E",
+        210000,
+        "MPa"
+      ],
+      [
+        "ν",
+        0.3,
+        ""
+      ],
+      [
+        "P",
+        1000000,
+        "N"
+      ]
+    ],
+    "supports": "x = 0 face fixed (Ux, Uy, Uz).",
+    "load": "P in +x as a force on the x = L face.",
+    "displacementMeasure": "Mean x-displacement of the x = L face.",
+    "stressMeasure": "Unsmoothed element-centre von Mises values, centres in 400 ≤ x ≤ 600 mm; equal-volume mean, minimum and maximum",
+    "regionMm": [
+      400,
+      600
+    ],
+    "referenceDisplacementMm": 0.47619047619047616,
+    "referenceStressMpa": 100,
+    "displacementTolerancePct": 2,
+    "stressTolerancePct": 0.5,
+    "solver": {
+      "method": "MFEM CG",
+      "preconditioner": "GSSmoother",
+      "relativeTolerance": 0.000001,
+      "absoluteTolerance": 0,
+      "initialIterationBudget": 5000
+    }
+  },
+  "runs": [
+    {
+      "grid": [
+        10,
+        2,
+        2
+      ],
+      "role": "order-1 refinement with fully fixed end",
+      "order": 1,
+      "elements": 40,
+      "vertices": 99,
+      "nodes": 99,
+      "dofs": 297,
+      "displacementMm": 0.4717635290807476,
+      "displacementErrorPct": -0.9296588930430005,
+      "stressSamples": 8,
+      "stressMeanMpa": 100.00109059875294,
+      "stressMinMpa": 99.9986671371466,
+      "stressMaxMpa": 100.00351344044799,
+      "stressWorstErrorPct": 0.003513440447989069
+    },
+    {
+      "grid": [
+        20,
+        4,
+        4
+      ],
+      "role": "order-1 refinement with fully fixed end",
+      "order": 1,
+      "elements": 320,
+      "vertices": 525,
+      "nodes": 525,
+      "dofs": 1575,
+      "displacementMm": 0.47357718453249403,
+      "displacementErrorPct": -0.5487912481762475,
+      "stressSamples": 64,
+      "stressMeanMpa": 99.99999076118497,
+      "stressMinMpa": 99.997446777435,
+      "stressMaxMpa": 100.00253117309194,
+      "stressWorstErrorPct": 0.0025532225649982365
+    },
+    {
+      "grid": [
+        40,
+        8,
+        8
+      ],
+      "role": "order-1 refinement with fully fixed end",
+      "order": 1,
+      "elements": 2560,
+      "vertices": 3321,
+      "nodes": 3321,
+      "dofs": 9963,
+      "displacementMm": 0.4743261397665007,
+      "displacementErrorPct": -0.39151064903485244,
+      "stressSamples": 512,
+      "stressMeanMpa": 99.99999982587467,
+      "stressMinMpa": 99.99956121902167,
+      "stressMaxMpa": 100.00043566563289,
+      "stressWorstErrorPct": 0.0004387809783281682
+    },
+    {
+      "grid": [
+        10,
+        2,
+        2
+      ],
+      "role": "diagnostic: Q2 clamp face-centre DOFs remain free",
+      "order": 2,
+      "elements": 40,
+      "vertices": 99,
+      "nodes": 525,
+      "dofs": 1575,
+      "displacementMm": 0.4795494602539422,
+      "displacementErrorPct": 0.7053866533278641,
+      "stressSamples": 8,
+      "stressMeanMpa": 99.99995924541777,
+      "stressMinMpa": 99.99767526691403,
+      "stressMaxMpa": 100.0019579528558,
+      "stressWorstErrorPct": 0.002324733085970365
+    }
+  ]
+}

@@ -8,6 +8,7 @@
 
 #include "geometry_cache.h"
 #include "json_util.h"
+#include "mesh_overlap.h"
 #include "wasm_util.h"
 
 // Netgen (C API)
@@ -16,6 +17,12 @@
 // Netgen internal-API glue (face indices, geometry from shape) — see netgen_glue.h
 #include "netgen_glue.h"
 
+#include <Precision.hxx>
+#include <TopAbs_ShapeEnum.hxx>
+#include <TopExp.hxx>
+#include <TopTools_IndexedMapOfShape.hxx>
+#include <TopoDS.hxx>
+#include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
 
 #include <array>
@@ -23,6 +30,7 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 using emscripten::val;
@@ -68,8 +76,14 @@ namespace nglib {
     extern int       Ng_GetNE(Ng_Mesh*);
     // Surface element queries (standard nglib API, Netgen v6.2+)
     extern int       Ng_GetNSE(Ng_Mesh*);
-    extern void      Ng_GetSurfaceElement(Ng_Mesh*, int, int*);
+    // Preserve the installed API's enum return type. Asyncify routes exception
+    // invokes through typed WASM trampolines, which enforce this signature.
+    extern ::Ng_Surface_Element_Type Ng_GetSurfaceElement(Ng_Mesh*, int, int*);
 }
+
+static_assert(std::is_same_v<decltype(nglib::Ng_GetSurfaceElement),
+                             decltype(::Ng_GetSurfaceElement)>,
+              "The Netgen surface query declaration must match nglib.h");
 
 // OCC meshing API (Netgen v6.2.2401, nglib/nglib_occ.cpp, namespace nglib).
 // Ng_OCC_GenerateMesh does not exist — meshing is split into four steps:
@@ -200,6 +214,39 @@ val generate_fem_mesh(const std::string& opts_json)
     fflush(stdout);
     log_mem("generate_fem_mesh: step 3 done");
 
+    // Netgen returns NG_OK even when it gave up on faces ("NOT ALL FACES HAVE
+    // BEEN MESHED"), keeping their half-made or overfilled elements. The volume
+    // fill must not run on that: it throws "Illegal position in Geomsearch" and
+    // corrupts the heap, or flags those elements as overlaps that are not in the
+    // geometry. Report the faces instead, so the caller can show them.
+    //
+    // A face narrower than OCCT's own tolerance is not a feature but noise a
+    // Boolean left behind (hinge "connect" leaves ~1e-9 mm ones); the volume
+    // fill closes over it, so it is logged and meshing goes on.
+    TopTools_IndexedMapOfShape shape_faces;
+    TopExp::MapShapes(cached_shape(), TopAbs_FACE, shape_faces);
+    std::vector<int> unmeshed;
+    for (const int id : kofem_unmeshed_faces(static_cast<void*>(geom))) {
+        const double width = face_width(TopoDS::Face(shape_faces(id)));
+        if (width >= Precision::Confusion()) {
+            unmeshed.push_back(id);
+            continue;
+        }
+        printf("[netgen] face %d could not be meshed, but it is %.2g mm wide — below the "
+               "geometry tolerance, so the volume fill goes on\n", id, width);
+        fflush(stdout);
+    }
+    if (!unmeshed.empty()) {
+        printf("[netgen] %d faces could not be meshed; skipping the volume fill\n",
+               (int)unmeshed.size());
+        fflush(stdout);
+        kofem_delete_mesh(static_cast<void*>(mesh));
+        kofem_occ_geometry_delete(static_cast<void*>(geom));
+        val unmeshed_result = val::object();
+        unmeshed_result.set("overlaps", describe_unmeshed_faces(unmeshed, cached_shape()));
+        return unmeshed_result;
+    }
+
     // Step 4: fill volume.
     // Keep geom alive: Netgen stores OCC geometry references in the mesh during
     // step 3 and accesses them during BOTH Delaunay insertion and mesh
@@ -227,6 +274,20 @@ val generate_fem_mesh(const std::string& opts_json)
     int ne = nglib::Ng_GetNE(mesh);
     printf("[netgen] step 4/4: volume mesh done — %d nodes, %d tetrahedra\n", np, ne);
     fflush(stdout);
+
+    // Netgen catches its own "boundary mesh is overlapping" exception and returns
+    // NG_OK with no tetrahedra. Tell that apart from an open shell below: report
+    // where the surface overlaps so the caller can show it and offer a repair.
+    if (ne == 0) {
+        const std::vector<KofemSurfaceTriangle> overlapping =
+            kofem_overlapping_surface_elements(static_cast<void*>(mesh));
+        if (!overlapping.empty()) {
+            kofem_delete_mesh(static_cast<void*>(mesh));
+            val overlap_result = val::object();
+            overlap_result.set("overlaps", describe_mesh_overlaps(overlapping, cached_shape()));
+            return overlap_result;
+        }
+    }
 
     // A surface mesh with no tetrahedra means the geometry enclosed no volume:
     // the boundary surfaces did not sew into a watertight solid (typical of

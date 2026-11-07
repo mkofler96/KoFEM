@@ -15,28 +15,38 @@
 //
 // boolean_geometry runs the matching BRepAlgoAPI operation (Fuse, Cut, Common)
 // of one target body with tool bodies and puts the result in the target's place.
+//
+// repair_hinges removes line contacts (see mesh_overlap.h) with a small box along
+// each line: fused it welds the two sides, cut out it opens a gap between them.
 
 #include "geometry_edit.h"
 
 #include "cad_io.h"
 #include "geometry_cache.h"
 #include "json_util.h"
+#include "mesh_overlap.h"
 #include "wasm_util.h"
 
 #include <BOPAlgo_Splitter.hxx>
 #include <BRepAlgoAPI_BooleanOperation.hxx>
 #include <BRepAlgoAPI_Common.hxx>
 #include <BRepAlgoAPI_Cut.hxx>
+#include <BRepAlgoAPI_Defeaturing.hxx>
 #include <BRepAlgoAPI_Fuse.hxx>
 #include <BRepGProp.hxx>
 #include <GProp_GProps.hxx>
 #include <BRepAdaptor_Surface.hxx>
 #include <BRepAlgoAPI_Section.hxx>
 #include <BRepBndLib.hxx>
+#include <BRepBuilderAPI_MakeEdge.hxx>
 #include <BRepBuilderAPI_MakeFace.hxx>
+#include <BRepCheck_Analyzer.hxx>
+#include <BRepPrimAPI_MakeBox.hxx>
 #include <BRep_Builder.hxx>
+#include <BRep_Tool.hxx>
 #include <Bnd_Box.hxx>
 #include <GeomAbs_SurfaceType.hxx>
+#include <Geom_Surface.hxx>
 #include <IFSelect_ReturnStatus.hxx>
 #include <STEPControl_Writer.hxx>
 #include <TopExp.hxx>
@@ -46,9 +56,11 @@
 #include <TopoDS.hxx>
 #include <TopoDS_Compound.hxx>
 #include <TopoDS_Face.hxx>
+#include <gp_Ax2.hxx>
 #include <gp_Dir.hxx>
 #include <gp_Pln.hxx>
 #include <gp_Pnt.hxx>
+#include <gp_Vec.hxx>
 
 #include <array>
 #include <cmath>
@@ -58,6 +70,7 @@
 #include <cstring>
 #include <fstream>
 #include <iterator>
+#include <map>
 #include <memory>
 #include <set>
 #include <sstream>
@@ -74,15 +87,16 @@ constexpr double AXIS_TOLERANCE = 1e-9;
 // Two planes whose normals differ by less than this (radians) are parallel.
 constexpr double PARALLEL_ANGLE = 1e-6;
 
-std::array<double, 3> vec3(const val& opts, const char* key) {
+std::array<double, 3> vec3(const val& opts, const char* key,
+                           const char* caller = "split_geometry") {
     const std::vector<double> v = f64_vector(opts[key], key);
     if (v.size() != 3)
-        throw std::runtime_error(std::string("split_geometry: \"") + key +
+        throw std::runtime_error(std::string(caller) + ": \"" + key +
                                  "\" must be an array of 3 numbers, got " +
                                  std::to_string(v.size()));
     for (const double c : v)
         if (!std::isfinite(c))
-            throw std::runtime_error(std::string("split_geometry: \"") + key +
+            throw std::runtime_error(std::string(caller) + ": \"" + key +
                                      "\" contains a non-finite number");
     return {v[0], v[1], v[2]};
 }
@@ -441,7 +455,297 @@ TopoDS_Shape combine_bodies(const TopoDS_Shape& shape, const std::string& op, in
     return out;
 }
 
+// ── Cone tips ───────────────────────────────────────────────────────────────
+
+// Lines from the tip to the rim, away from the seam, open a closed cone face up
+// into pieces that Netgen can mesh.
+constexpr std::array<double, 2> CONE_CUT_FRACTIONS = {1.0 / 3.0, 2.0 / 3.0};
+
+// ── Hinge repair ─────────────────────────────────────────────────────────────
+
+// How deep the tool reaches to each side of the contact, per unit of its width.
+// A weld has to reach into the material on both sides past the thin wedge next
+// to the contact; a gap only has to be wide enough to mesh.
+constexpr double CONNECT_DEPTH_RATIO = 0.5;
+constexpr double SEPARATE_DEPTH_RATIO = 0.1;
+
+struct HingeLine {
+    int body;
+    gp_Pnt start;
+    gp_Pnt end;
+    gp_Dir normal;
+};
+
+gp_Pnt to_point(const std::array<double, 3>& p) {
+    return {p[0], p[1], p[2]};
+}
+
+std::vector<HingeLine> hinge_lines(const val& opts) {
+    const val list = opts["hinges"];
+    if (list.isUndefined() || list.isNull() || list["length"].as<int>() == 0)
+        throw std::runtime_error("repair_hinges: no hinge to repair");
+    std::vector<HingeLine> hinges;
+    for (int i = 0; i < list["length"].as<int>(); ++i) {
+        const val hinge = list[i];
+        const gp_Pnt start = to_point(vec3(hinge, "start", "repair_hinges"));
+        const gp_Pnt end = to_point(vec3(hinge, "end", "repair_hinges"));
+        const std::array<double, 3> n = vec3(hinge, "normal", "repair_hinges");
+        if (start.Distance(end) < 1e-9)
+            throw std::runtime_error("repair_hinges: hinge " + std::to_string(i + 1) +
+                                     " has no length");
+        // Square the normal up against the line so the box is a true box.
+        const gp_Vec along(start, end);
+        const gp_Vec normal(n[0], n[1], n[2]);
+        const gp_Vec square = normal - along.Normalized() * normal.Dot(along.Normalized());
+        if (square.Magnitude() < 1e-9)
+            throw std::runtime_error("repair_hinges: the normal of hinge " +
+                                     std::to_string(i + 1) + " lies along the hinge");
+        hinges.push_back({jint(hinge, "bodyId", 0), start, end, gp_Dir(square)});
+    }
+    return hinges;
+}
+
+TopoDS_Shape hinge_tool(const HingeLine& hinge, double width, double depth) {
+    const gp_Vec along(hinge.start, hinge.end);
+    const gp_Dir direction(along);
+    const gp_Dir side = direction.Crossed(hinge.normal);
+    const gp_Pnt corner = hinge.start.Translated(gp_Vec(hinge.normal) * -depth +
+                                                 gp_Vec(side) * (-width / 2.0));
+    // Box axes: X along the normal, Y across the line, Z along the line.
+    return BRepPrimAPI_MakeBox(gp_Ax2(corner, direction, hinge.normal), 2.0 * depth, width,
+                               along.Magnitude())
+        .Shape();
+}
+
+TopoDS_Shape apply_hinge_tool(const TopoDS_Shape& solid, const std::string& op,
+                              const TopoDS_Shape& tool) {
+    std::unique_ptr<BRepAlgoAPI_BooleanOperation> operation;
+    if (op == "connect")
+        operation = std::make_unique<BRepAlgoAPI_Fuse>();
+    else
+        operation = std::make_unique<BRepAlgoAPI_Cut>();
+    TopTools_ListOfShape arguments;
+    arguments.Append(solid);
+    TopTools_ListOfShape tools;
+    tools.Append(tool);
+    operation->SetArguments(arguments);
+    operation->SetTools(tools);
+    operation->SetRunParallel(false);  // single-threaded WASM build
+    operation->Build();
+    if (operation->HasErrors() || !operation->IsDone()) {
+        std::ostringstream alerts;
+        operation->DumpErrors(alerts);
+        throw std::runtime_error("repair_hinges: the OCCT Boolean failed. OCCT reports: " +
+                                 alerts.str());
+    }
+    // The box's sides split the faces it lands on along the contact. Fusing can
+    // leave an invalid wire there, whatever the width; merging the faces that lie
+    // on one surface removes it. Only then: the merge can itself break a part the
+    // fuse left valid.
+    if (op == "connect" && !BRepCheck_Analyzer(operation->Shape()).IsValid())
+        operation->SimplifyResult();
+    const TopoDS_Shape result = operation->Shape();
+    if (count_solids(result) == 0 || !BRepCheck_Analyzer(result).IsValid())
+        throw std::runtime_error(op == "connect"
+                                     ? "Connecting here left invalid geometry. Try another "
+                                       "width, or Separate."
+                                     : "Separating here left invalid geometry. Try another "
+                                       "width, or Connect.");
+    return result;
+}
+
+struct RepairedShape {
+    TopoDS_Shape shape;
+    std::vector<int> body_sources;  // entry j: the old id of new body j+1
+};
+
+RepairedShape repair_hinge_lines(const TopoDS_Shape& shape, const std::string& op, double width,
+                                 const std::vector<HingeLine>& hinges) {
+    if (op != "connect" && op != "separate")
+        throw std::runtime_error(
+            R"(repair_hinges: "op" must be "connect" or "separate", got ')" + op + "'");
+    if (!std::isfinite(width) || width <= 0.0)
+        throw std::runtime_error("repair_hinges: the width must be a positive number of mm");
+    TopTools_IndexedMapOfShape solids;
+    TopExp::MapShapes(shape, TopAbs_SOLID, solids);
+    const double depth =
+        width * (op == "connect" ? CONNECT_DEPTH_RATIO : SEPARATE_DEPTH_RATIO);
+
+    std::map<int, std::vector<TopoDS_Shape>> tools_of_body;
+    for (const HingeLine& hinge : hinges) {
+        if (hinge.body < 1 || hinge.body > solids.Extent())
+            throw std::runtime_error("repair_hinges: body " + std::to_string(hinge.body) +
+                                     " does not exist — the model has " +
+                                     std::to_string(solids.Extent()) + " bodies");
+        tools_of_body[hinge.body].push_back(hinge_tool(hinge, width, depth));
+    }
+
+    // Body ids are the solids' order in the file: a repaired body keeps its place,
+    // and the pieces of one that came apart take that place together.
+    BRep_Builder builder;
+    TopoDS_Compound out;
+    builder.MakeCompound(out);
+    std::vector<int> body_sources;
+    for (int i = 1; i <= solids.Extent(); ++i) {
+        const auto tools = tools_of_body.find(i);
+        if (tools == tools_of_body.end()) {
+            builder.Add(out, solids(i));
+            body_sources.push_back(i);
+            continue;
+        }
+        // One tool at a time: OCCT left invalid geometry when fusing several
+        // boxes into a real part in one operation, and valid geometry this way.
+        TopoDS_Shape repaired = solids(i);
+        for (const TopoDS_Shape& tool : tools->second)
+            repaired = apply_hinge_tool(repaired, op, tool);
+        for (TopExp_Explorer e(repaired, TopAbs_SOLID); e.More(); e.Next()) {
+            builder.Add(out, e.Current());
+            body_sources.push_back(i);
+        }
+    }
+    (void)printf("[occt] hinge repair: %s %d hinge(s), width %g mm → %d bodies\n", op.c_str(),
+                 static_cast<int>(hinges.size()), width, count_solids(out));
+    (void)fflush(stdout);
+    return {out, body_sources};
+}
+
 }  // namespace
+
+val split_cone_tips(const std::string& opts_json) {
+    const val opts = parse_json(opts_json);
+    const std::vector<int> face_ids = id_list(opts, "faceIds");
+    const TopoDS_Shape& shape = cached_shape();
+    TopTools_IndexedMapOfShape faces;
+    TopExp::MapShapes(shape, TopAbs_FACE, faces);
+    require_unique_in_range("split_cone_tips", face_ids, faces.Extent(), "face");
+
+    BOPAlgo_Splitter splitter;
+    splitter.AddArgument(shape);
+    int n_cones = 0;
+    for (const int id : face_ids) {
+        const TopoDS_Face& face = TopoDS::Face(faces(id));
+        // An overlap region can reach the faces next to the cone.
+        if (!is_closed_cone_tip(face))
+            continue;
+        ++n_cones;
+        const BRepAdaptor_Surface bounds(face);
+        const Handle(Geom_Surface) surface = BRep_Tool::Surface(face);
+        for (const double fraction : CONE_CUT_FRACTIONS) {
+            const double u = bounds.FirstUParameter() +
+                             fraction * (bounds.LastUParameter() - bounds.FirstUParameter());
+            splitter.AddTool(BRepBuilderAPI_MakeEdge(surface->UIso(u), bounds.FirstVParameter(),
+                                                     bounds.LastVParameter())
+                                 .Edge());
+        }
+    }
+    if (n_cones == 0)
+        throw std::runtime_error("split_cone_tips: none of the given faces is a cone with a tip");
+    run_splitter(splitter);
+    const TopoDS_Shape edited = in_solid_order(shape, splitter);
+    if (!BRepCheck_Analyzer(edited).IsValid())
+        throw std::runtime_error(
+            "Splitting the cone tips left invalid geometry. Simplify them in CAD and re-import.");
+    (void)printf("[occt] split %d cone tip(s)\n", n_cones);
+    (void)fflush(stdout);
+
+    const std::vector<uint8_t> bytes = step_bytes(edited);
+    // As for a split: the edit lives in the returned file from here on.
+    free_geometry_cache();
+
+    val result = val::object();
+    result.set("bytes", uint8_array(bytes));
+    return result;
+}
+
+val remove_faces(const std::string& opts_json) {
+    const val opts = parse_json(opts_json);
+    const std::vector<int> face_ids = id_list(opts, "faceIds");
+    if (face_ids.empty())
+        throw std::runtime_error("remove_faces: no faces given");
+    const TopoDS_Shape& shape = cached_shape();
+    TopTools_IndexedMapOfShape faces;
+    TopExp::MapShapes(shape, TopAbs_FACE, faces);
+    require_unique_in_range("remove_faces", face_ids, faces.Extent(), "face");
+    TopTools_IndexedMapOfShape solids;
+    TopExp::MapShapes(shape, TopAbs_SOLID, solids);
+    if (solids.IsEmpty())
+        throw std::runtime_error(
+            "remove_faces: the model has no solid body — surface-only geometry has no "
+            "neighbouring faces to close the gap with");
+
+    // One body at a time, so the result keeps the input's solid order (body ids
+    // carry per-body materials) without relying on defeaturing history.
+    BRep_Builder builder;
+    TopoDS_Compound edited;
+    builder.MakeCompound(edited);
+    std::set<int> removed;
+    for (int i = 1; i <= solids.Extent(); ++i) {
+        const TopoDS_Shape& solid = solids(i);
+        TopTools_IndexedMapOfShape solid_faces;
+        TopExp::MapShapes(solid, TopAbs_FACE, solid_faces);
+        BRepAlgoAPI_Defeaturing defeaturing;
+        defeaturing.SetShape(solid);
+        defeaturing.SetRunParallel(false);
+        std::vector<int> in_solid;
+        for (const int id : face_ids)
+            if (solid_faces.Contains(faces(id))) {
+                defeaturing.AddFaceToRemove(faces(id));
+                removed.insert(id);
+                in_solid.push_back(id);
+            }
+        if (in_solid.empty()) {
+            builder.Add(edited, solid);
+            continue;
+        }
+        defeaturing.Build();
+        if (!defeaturing.IsDone() || defeaturing.HasErrors())
+            throw std::runtime_error(
+                "Removing the faces didn't work: the faces around them can't be extended to "
+                "close the gap. Fix them in CAD and re-import.");
+        // Defeaturing can report success and hand the solid back unchanged
+        // when it can't extend the neighbours: that is a failure, not an edit.
+        for (const int id : in_solid)
+            if (!defeaturing.IsDeleted(faces(id)))
+                throw std::runtime_error(
+                    "Face " + std::to_string(id) +
+                    " couldn't be removed: the faces around it can't be extended to close the "
+                    "gap. Fix it in CAD and re-import.");
+        for (TopExp_Explorer e(defeaturing.Shape(), TopAbs_SOLID); e.More(); e.Next())
+            builder.Add(edited, e.Current());
+    }
+    if (removed.size() != face_ids.size())
+        throw std::runtime_error("remove_faces: some faces belong to no solid body");
+    if (!BRepCheck_Analyzer(edited).IsValid())
+        throw std::runtime_error(
+            "Removing the faces left invalid geometry. Fix them in CAD and re-import.");
+    (void)printf("[occt] removed %d face(s)\n", (int)face_ids.size());
+    (void)fflush(stdout);
+
+    const std::vector<uint8_t> bytes = step_bytes(edited);
+    // As for a split: the edit lives in the returned file from here on.
+    free_geometry_cache();
+
+    val result = val::object();
+    result.set("bytes", uint8_array(bytes));
+    return result;
+}
+
+val repair_hinges(const std::string& opts_json) {
+    const val opts = parse_json(opts_json);
+    const std::string op = jstring(opts, "op", "");
+    const double width = jdouble(opts, "width", 0.0);
+    const std::vector<HingeLine> hinges = hinge_lines(opts);
+    const RepairedShape edited = repair_hinge_lines(cached_shape(), op, width, hinges);
+
+    const std::vector<uint8_t> bytes = step_bytes(edited.shape);
+    // As for a split: the edit lives in the returned file from here on.
+    free_geometry_cache();
+
+    val result = val::object();
+    result.set("bytes", uint8_array(bytes));
+    result.set("bodySources", val::array(edited.body_sources));
+    return result;
+}
 
 val boolean_geometry(const std::string& opts_json) {
     const val opts = parse_json(opts_json);

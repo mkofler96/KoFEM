@@ -9,6 +9,7 @@
 //   ResultsColormap        — result-field vertex colours on the deformed surface
 //   BoundaryConditionLayer — BC/load face highlights, markers and load arrows
 //   SampleGuideTargets     — the faces the sample guide asks to pick
+//   MeshOverlapLayer       — where the last mesh attempt found an overlap
 
 import { useMemo } from "react";
 import { useModelStore } from "../../store/modelStore";
@@ -21,6 +22,7 @@ import { ResultsColormap } from "./ResultsColormap";
 import { DensityField } from "./DensityField";
 import { BoundaryConditionLayer } from "./BoundaryConditionLayer";
 import { SampleGuideTargets } from "./SampleGuideTargets";
+import { MeshOverlapLayer } from "./MeshOverlapLayer";
 import { useDisplayedDensity } from "./useDisplayedDensity";
 
 const TARGET_DEFORM_FRACTION = 0.2;
@@ -143,6 +145,7 @@ export function MeshScene() {
           highlightBodyId={highlightBody}
         />
       )}
+      <MeshOverlapLayer />
     </group>
   );
 }

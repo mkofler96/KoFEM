@@ -7,6 +7,9 @@
 // already includes MFEM and Embind).
 #pragma once
 
+#include <array>
+#include <vector>
+
 class TopoDS_Shape;
 
 // Build a netgen::OCCGeometry directly from an already-transferred OCCT shape.
@@ -28,6 +31,22 @@ int kofem_surface_element_face_index(void* mesh, int i);
 // (issue #353). Sibling of kofem_surface_element_face_index: nglib exposes no
 // accessor for it either.
 int kofem_volume_element_domain_index(void* mesh, int i);
+
+// A surface element Netgen's overlap check flagged: its corners and the 1-based
+// OCC face it belongs to.
+struct KofemSurfaceTriangle {
+    std::array<std::array<double, 3>, 3> points;
+    int face;
+};
+
+// The surface elements of an Ng_Mesh that intersect another surface element.
+std::vector<KofemSurfaceTriangle> kofem_overlapping_surface_elements(void* mesh);
+
+// The 1-based OCC faces Netgen's surface mesher gave up on, from the
+// netgen::OCCGeometry the surface mesh was generated from. Netgen reports a
+// failed face only on stdout and still returns NG_OK, keeping whatever it made
+// of the face, so the caller has to ask.
+std::vector<int> kofem_unmeshed_faces(void* geom);
 
 // Destroy an Ng_Mesh. Use this instead of nglib::Ng_DeleteMesh, which calls
 // Mesh::DeleteMesh() AND then ~Mesh(): both loops `delete` every bcnames /

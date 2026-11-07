@@ -94,6 +94,12 @@ directly; update their generators and regenerate the HTML after a template chang
 Article typography lives in `web/public/case-page.css`, and the landing animation
 has its own rules in `web/public/landing/landing.css`.
 
+Theory pages at `/theory/` use the examples' shared reading styles and theme
+in `web/docs-layout.mjs`, plus `web/public/theory.css`. Edit the sources in
+`web/theory/`, then run `cd web && bun run theory:generate` and commit the
+generated HTML and sitemap. `bun run test:theory` checks that they match their
+sources and that the navigation follows `docs/theory/content-map.md`.
+
 ## Pull requests
 
 - The PR template asks you to confirm, per changed code path, that missing or

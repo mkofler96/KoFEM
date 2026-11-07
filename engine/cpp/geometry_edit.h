@@ -60,3 +60,43 @@ emscripten::val split_geometry(const std::string& opts_json);
 // Returns { bytes: Uint8Array } (STEP AP214 of the edited shape) and releases
 // the cached shape, exactly like split_geometry.
 emscripten::val boolean_geometry(const std::string& opts_json);
+
+// Remove line contacts that generate_fem_mesh reported (see mesh_overlap.h).
+//
+// opts_json:
+//   { "op":     "connect" | "separate",
+//     "width":  w,                       width of the repair across the line (mm)
+//     "hinges": [{ "bodyId", "start", "end", "normal" }, ..] }
+//
+// "connect" fuses a box along each line, welding the two sides together with new
+// material. "separate" cuts one out, opening a gap between them; if the line was
+// the only connection, the body falls apart into several.
+//
+// Returns { bytes: Uint8Array } (STEP AP214 of the edited shape) and releases
+// the cached shape, exactly like split_geometry.
+emscripten::val repair_hinges(const std::string& opts_json);
+
+// Divide cone faces that a failed mesh reported (see mesh_overlap.h) into pieces
+// Netgen can mesh. The shape itself does not change, and neither do the bodies.
+//
+// opts_json:
+//   { "faceIds": [..] }   1-based ids; faces that aren't closed cone tips are left
+//                         alone, but at least one must be.
+//
+// Returns { bytes: Uint8Array } (STEP AP214 of the edited shape) and releases
+// the cached shape, exactly like split_geometry.
+emscripten::val split_cone_tips(const std::string& opts_json);
+
+// Remove faces that a failed mesh reported as unmeshed (see mesh_overlap.h) —
+// slivers far narrower than an element — by extending the faces around them
+// until they close the gap (OCCT defeaturing). The shape changes by about the
+// removed faces' width, so this is for faces too small to matter to the
+// analysis; the bodies and their order stay the same.
+//
+// opts_json:
+//   { "faceIds": [..] }   1-based ids, at least one.
+//
+// Returns { bytes: Uint8Array } (STEP AP214 of the edited shape) and releases
+// the cached shape, exactly like split_geometry. Throws when OCCT cannot close
+// the gap or leaves invalid geometry, so the user knows to fix it in CAD.
+emscripten::val remove_faces(const std::string& opts_json);

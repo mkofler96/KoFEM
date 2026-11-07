@@ -13,4 +13,7 @@
 // volume). Returns {vertices, tetrahedra, surfaceTriangles, surfaceFaceIds}
 // as flat typed arrays (Float64 xyz per vertex, Int32 indices) — binary
 // transfer, no JSON text (issue #166).
+// When the surface mesh overlaps itself, or Netgen could not mesh some faces,
+// no volume mesh exists: returns { overlaps: [..] } instead (see mesh_overlap.h;
+// faces that failed to mesh have kind "unmeshed").
 emscripten::val generate_fem_mesh(const std::string& opts_json);

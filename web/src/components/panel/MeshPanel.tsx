@@ -7,6 +7,7 @@ import { useEngineGate } from "../../store/engineStore";
 import { estimateElementCount } from "../../lib/meshSizing";
 import type { GeometryMeasure } from "../../lib/meshSizing";
 import { LogSection } from "./LogSection";
+import { MeshOverlapCard } from "./MeshOverlapCard";
 import styles from "./Panel.module.css";
 
 // Bounding box of the import, as "x × y × z". Three significant digits keep a
@@ -61,6 +62,11 @@ export function MeshPanel() {
           <button onClick={() => setMeshError(null)}>×</button>
         </div>
       )}
+
+      <MeshOverlapCard
+        maxElementSize={maxElementSize}
+        minElementSize={minElementSize}
+      />
 
       {stepSurface ? (
         <>

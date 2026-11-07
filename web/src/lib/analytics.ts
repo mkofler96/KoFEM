@@ -21,6 +21,7 @@ export type ErrorCategory =
   | "unsupported_format"
   | "resource_limit"
   | "numerical_failure"
+  | "geometry_defect"
   | "worker_failure"
   | "unknown";
 export type DurationBucket =

@@ -69,9 +69,11 @@ void add_prescribed(const std::vector<std::pair<int, double>>& prescribed, int n
 
 // CG on an assembled shell/coupled system, its result in the ShellResult layout.
 ShellResult solve_cg(SparseMatrix& K, const std::vector<double>& F, double rel_tol,
+                     const CgControl& control,
                      std::string breakdown_hint = {}) {
     sparse::CgOptions opts;
     opts.rel_tol = rel_tol;
+    opts.control = control;
     opts.log_tag = "shell";
     opts.breakdown_hint = std::move(breakdown_hint);
     sparse::CgResult r = sparse::cg_solve(K, F, opts);
@@ -90,7 +92,8 @@ ShellResult solve_cg(SparseMatrix& K, const std::vector<double>& F, double rel_t
 ShellResult solve_reduced_system(SparseMatrix& K, const std::vector<double>& F,
                                  const std::vector<char>& fixed,
                                  const std::vector<double>& values,
-                                 const CouplingConstraints& C, int nDof, double rel_tol) {
+                                 const CouplingConstraints& C, int nDof, double rel_tol,
+                                 const CgControl& control) {
     std::vector<int> red(nDof, -1);
     int nIndep = 0;
     for (int i = 0; i < nDof; ++i)
@@ -167,7 +170,7 @@ ShellResult solve_reduced_system(SparseMatrix& K, const std::vector<double>& F,
     }
     sparse::apply_essential_bc(Kr, Fr, fr, vr);
 
-    ShellResult rr = solve_cg(Kr, Fr, rel_tol,
+    ShellResult rr = solve_cg(Kr, Fr, rel_tol, control,
                               "Check the coupling constraints: a coupling whose reference "
                               "node carries structural stiffness, or whose target patch is "
                               "degenerate, destroys definiteness of Kᵣ = TᵀKT.");
@@ -237,7 +240,7 @@ ShellResult solve_shell_core(const ShellInput& in) {
     add_prescribed(in.prescribed_dofs, nDof, "shell", fixed, values);
     sparse::apply_essential_bc(K, F, fixed, values);
 
-    ShellResult res = solve_cg(K, F, in.cg_rel_tol);
+    ShellResult res = solve_cg(K, F, in.cg_rel_tol, in.cg_control);
     if (res.dofs.empty()) res.dofs.assign(nDof, 0.0);
     return res;
 }
@@ -315,7 +318,8 @@ ShellResult solve_solid_shell_core(const CoupledInput& in) {
     CouplingConstraints constraints =
         build_coupling_constraints(in.vertices, in.couplings, nDof, has_rotation);
     resolve_constraint_chains(constraints, nDof);
-    return solve_reduced_system(K, F, fixed, values, constraints, nDof, in.cg_rel_tol);
+    return solve_reduced_system(K, F, fixed, values, constraints, nDof, in.cg_rel_tol,
+                                in.cg_control);
 }
 
 }  // namespace kofem::shell

@@ -9,6 +9,7 @@ import type {
   EngineLoadProgress,
   KofemModule,
   TopOptResult,
+  CgLimitProgress,
 } from "../wasm/pkg/kofem_wasm.js";
 import type {
   Node,
@@ -16,6 +17,9 @@ import type {
   ParseStepPayload,
   SplitGeometryPayload,
   BooleanGeometryPayload,
+  RepairHingesPayload,
+  SplitConeTipsPayload,
+  RemoveFacesPayload,
   VolumeMeshPayload,
   SolvePayload,
   TopOptPayload,
@@ -41,6 +45,20 @@ import {
 } from "../lib/solve/solid.js";
 
 let Module: KofemModule | null = null;
+let activeTask: number | null = null;
+let cgRequestId = 0;
+let cgReply: { requestId: number; resolve: (extra: number) => void } | null =
+  null;
+
+function onCgLimit(progress: CgLimitProgress): Promise<number> {
+  if (activeTask === null || cgReply)
+    throw new Error("CG continuation requested outside an active solve");
+  const requestId = ++cgRequestId;
+  return new Promise((resolve) => {
+    cgReply = { requestId, resolve };
+    self.postMessage({ id: activeTask, cgLimit: { requestId, progress } });
+  });
+}
 
 // True once tessellate_step has loaded the OCCT STEP shape into THIS worker's
 // WASM module. The worker is torn down after every mesh (resetWorker in
@@ -98,12 +116,25 @@ function ensureInit(): Promise<void> {
   return initPromise;
 }
 
+// Netgen prints four lines per overlapping pair of surface elements, and a bad
+// surface has thousands of pairs: forwarding them freezes the page. The mesh
+// result reports the overlaps themselves.
+const OVERLAP_PAIR_LINE =
+  /^\s*(?:WARNING: Intersecting elements |el[12] = np = |layer[12] = )/;
+
+function isOverlapPairLine(text: string): boolean {
+  return OVERLAP_PAIR_LINE.test(text);
+}
+
 async function initEngine() {
   const t0 = performance.now();
   try {
     Module = await createModule({
-      print: (text: string) =>
-        self.postMessage({ id: 0, log: `[wasm] ${text}` }),
+      onCgLimit,
+      print: (text: string) => {
+        if (!isOverlapPairLine(text))
+          self.postMessage({ id: 0, log: `[wasm] ${text}` });
+      },
       printErr: (text: string) =>
         self.postMessage({ id: 0, log: `[wasm:err] ${text}` }),
       onProgress: (progress) =>
@@ -220,6 +251,52 @@ function handleBooleanGeometry(id: number, payload: BooleanGeometryPayload) {
   });
 }
 
+// Remove hinges a failed mesh reported — the same round trip as a split.
+function handleRepairHinges(id: number, payload: RepairHingesPayload) {
+  reloadForEdit(payload.bytes, payload.format);
+  const { bytes, bodySources } = m().repair_hinges(
+    JSON.stringify(payload.repair),
+  );
+  geometryLoaded = false; // repair_hinges released the pre-edit shape
+  self.postMessage({
+    id,
+    ok: true,
+    bytes,
+    bodySources,
+    ...loadGeometry(bytes, "step"),
+  });
+}
+
+// Divide cone tips a failed mesh reported — the same round trip as a split.
+function handleSplitConeTips(id: number, payload: SplitConeTipsPayload) {
+  reloadForEdit(payload.bytes, payload.format);
+  const { bytes } = m().split_cone_tips(
+    JSON.stringify({ faceIds: payload.faceIds }),
+  );
+  geometryLoaded = false; // split_cone_tips released the pre-edit shape
+  self.postMessage({
+    id,
+    ok: true,
+    bytes,
+    ...loadGeometry(bytes, "step"),
+  });
+}
+
+// Remove faces a failed mesh could not mesh — the same round trip as a split.
+function handleRemoveFaces(id: number, payload: RemoveFacesPayload) {
+  reloadForEdit(payload.bytes, payload.format);
+  const { bytes } = m().remove_faces(
+    JSON.stringify({ faceIds: payload.faceIds }),
+  );
+  geometryLoaded = false; // remove_faces released the pre-edit shape
+  self.postMessage({
+    id,
+    ok: true,
+    bytes,
+    ...loadGeometry(bytes, "step"),
+  });
+}
+
 // Load exactly the bytes an edit's ids were read from into the engine.
 function reloadForEdit(bytes: Uint8Array, format: string) {
   m().tessellate_step(
@@ -317,6 +394,11 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
   // surface-element order (NOT tet boundary order); surfaceFaceIds holds
   // the 1-based OCC face index per surface triangle.
   const dto = m().generate_fem_mesh(opts);
+  if ("overlaps" in dto) {
+    flushCoverage();
+    self.postMessage({ id, ok: true, overlaps: dto.overlaps });
+    return;
+  }
   const nNodes = dto.vertices.length / 3;
   const nTets = dto.tetrahedra.length / 4;
 
@@ -449,7 +531,7 @@ function logTo(id: number): SolveLog {
 // one von Mises surface stress per element — so the store and viewport consume
 // it unchanged. elementOrder and tie connections do not apply to shells (the
 // DKT facet is what it is; ties join solid bodies) and are ignored.
-function handleShellSolve(id: number, payload: SolvePayload) {
+async function handleShellSolve(id: number, payload: SolvePayload) {
   const { nodes, elements } = payload;
   const { mesh, matJson, bcsJson } = buildShellEngineInputs(payload);
 
@@ -457,7 +539,7 @@ function handleShellSolve(id: number, payload: SolvePayload) {
     id,
     log: `Starting shell solve: ${nodes.length} nodes, ${elements.length} shell facets…`,
   });
-  const result = m().solve_shell(mesh, matJson, bcsJson);
+  const result = await m().solve_shell(mesh, matJson, bcsJson);
   if ("error" in result) throw new Error(result.error);
 
   self.postMessage({
@@ -473,7 +555,7 @@ function handleShellSolve(id: number, payload: SolvePayload) {
 // Solve a hand-mixed shell+solid model, or an all-solid model carrying a
 // surface-to-point coupling, through the engine's coupled solid-shell solver.
 // elementOrder does not apply (the coupled assembler is linear tets + DKT facets).
-function handleMixedSolve(id: number, payload: SolvePayload) {
+async function handleMixedSolve(id: number, payload: SolvePayload) {
   const inp = buildCoupledEngineInputs(payload, logTo(id));
 
   self.postMessage({
@@ -481,7 +563,7 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
     log: `[mixed] ${inp.solidElements.length} solid tets (${inp.solidMaterialNames.join(", ")}), ${inp.shellElements.length} shell facets → ${inp.model.pool.length / 3} pool nodes, ${inp.couplingCount} couplings (${inp.declaredCouplings} declared)…`,
   });
 
-  const result = m().solve_coupled(
+  const result = await m().solve_coupled(
     inp.mesh,
     inp.coupling,
     inp.bcs,
@@ -502,17 +584,17 @@ function handleMixedSolve(id: number, payload: SolvePayload) {
 // (shells tied to solid bodies); if there is no solid domain to couple to (a
 // single thin body, or an all-shell assembly), idealise the thin walls and solve
 // them with the pure Kirchhoff shell solver. Returns false when neither applies.
-function handleAutoShellSolve(
+async function handleAutoShellSolve(
   id: number,
   payload: SolvePayload,
   shellBodyIds: Set<number>,
-): boolean {
+): Promise<boolean> {
   // The auto-shell progress lines have always gone to the shared log (id 0).
   const log = logTo(0);
   let fields: SolveResultFields | null = null;
   const coupled = prepareAutoCoupledSolve(payload, shellBodyIds, log);
   if (coupled) {
-    const result = m().solve_coupled(
+    const result = await m().solve_coupled(
       coupled.mesh,
       coupled.coupling,
       coupled.bcs,
@@ -523,7 +605,11 @@ function handleAutoShellSolve(
   } else {
     const pure = preparePureShellSolve(payload, shellBodyIds, log);
     if (pure) {
-      const result = m().solve_shell(pure.mesh, pure.matJson, pure.bcsJson);
+      const result = await m().solve_shell(
+        pure.mesh,
+        pure.matJson,
+        pure.bcsJson,
+      );
       if ("error" in result) throw new Error(result.error);
       fields = pure.mapResult(result);
     }
@@ -538,7 +624,7 @@ function handleAutoShellSolve(
 }
 
 // All-solid static solve (solve_linear_elastic), with tie connections welded.
-function handleSolidSolve(id: number, payload: SolvePayload) {
+async function handleSolidSolve(id: number, payload: SolvePayload) {
   const { nodes, elements } = payload;
   const tied = weldTies(nodes, elements, payload.tieGroups, logTo(id));
   const { mesh, matJson, bcsJson } = buildSolidEngineInputs(
@@ -563,7 +649,7 @@ function handleSolidSolve(id: number, payload: SolvePayload) {
   // Mesh as typed arrays; materials/BCs stay JSON (small). The result comes
   // back as Float64Arrays whose buffers are handed to the main thread via
   // the postMessage transfer list — zero-copy, no JSON round-trip.
-  const result = m().solve_linear_elastic(mesh, matJson, bcsJson, order);
+  const result = await m().solve_linear_elastic(mesh, matJson, bcsJson, order);
   if ("error" in result) throw new Error(result.error);
 
   // von Mises is per element; welding preserves element count and order, so it
@@ -580,22 +666,23 @@ function handleSolidSolve(id: number, payload: SolvePayload) {
   postSolveResult(id, { displacements, vonMises: result.von_mises });
 }
 
-function handleSolve(id: number, payload: SolvePayload) {
+async function handleSolve(id: number, payload: SolvePayload) {
+  m().cgIterationLimit = payload.cgIterationLimit;
   const route = routeSolve(payload);
   switch (route.path) {
     case "shell":
-      handleShellSolve(id, payload);
+      await handleShellSolve(id, payload);
       return;
     case "coupled":
-      handleMixedSolve(id, payload);
+      await handleMixedSolve(id, payload);
       return;
     case "auto-shell":
       // Neither shell idealisation applies (e.g. no surface mesh): all-solid.
-      if (!handleAutoShellSolve(id, payload, route.shellBodyIds))
-        handleSolidSolve(id, payload);
+      if (!(await handleAutoShellSolve(id, payload, route.shellBodyIds)))
+        await handleSolidSolve(id, payload);
       return;
     case "solid":
-      handleSolidSolve(id, payload);
+      await handleSolidSolve(id, payload);
       return;
     default: {
       // Compile-time exhaustiveness: a new route without a case fails to build.
@@ -727,6 +814,10 @@ function handleTestGenerateFemMesh(id: number) {
     optsteps_3d: 0,
   });
   const dto = m().generate_fem_mesh(opts);
+  if ("overlaps" in dto)
+    throw new Error(
+      `test_generate_fem_mesh: the surface mesh overlaps itself in ${dto.overlaps.length} places`,
+    );
   self.postMessage({
     id,
     ok: true,
@@ -738,55 +829,124 @@ function handleTestGenerateFemMesh(id: number) {
 
 // ── Message handler ───────────────────────────────────────────────────────────
 
-self.onmessage = async (event: MessageEvent) => {
-  const { id, type, payload } = event.data;
+interface WorkerRequest {
+  id: number;
+  type: string;
+  payload: unknown;
+}
 
+interface CgContinuationReply {
+  requestId: number;
+  extraIterations: number;
+}
+
+function handleCgReply(id: number, payload: CgContinuationReply): void {
+  if (id !== activeTask || !cgReply || cgReply.requestId !== payload.requestId)
+    return;
+  const { resolve } = cgReply;
+  cgReply = null;
+  resolve(payload.extraIterations);
+}
+
+// Synchronous operations stay synchronous, including requests queued behind
+// ensureInit(). Only a solve retains task ownership across an async pause.
+function dispatchRequest({
+  id,
+  type,
+  payload,
+}: WorkerRequest): Promise<void> | null {
+  switch (type) {
+    case "init":
+      self.postMessage({ id, ok: true });
+      return null;
+    case "parse_step":
+      handleParseStep(id, payload as ParseStepPayload);
+      return null;
+    case "split_geometry":
+      handleSplitGeometry(id, payload as SplitGeometryPayload);
+      return null;
+    case "boolean_geometry":
+      handleBooleanGeometry(id, payload as BooleanGeometryPayload);
+      return null;
+    case "repair_hinges":
+      handleRepairHinges(id, payload as RepairHingesPayload);
+      return null;
+    case "split_cone_tips":
+      handleSplitConeTips(id, payload as SplitConeTipsPayload);
+      return null;
+    case "remove_faces":
+      handleRemoveFaces(id, payload as RemoveFacesPayload);
+      return null;
+    case "volume_mesh":
+      handleVolumeMesh(id, payload as VolumeMeshPayload);
+      return null;
+    case "solve":
+      return handleSolve(id, payload as SolvePayload);
+    case "optimize_topology":
+      handleTopOpt(id, payload as TopOptPayload);
+      return null;
+    case "test_generate_fem_mesh":
+      handleTestGenerateFemMesh(id);
+      return null;
+    default:
+      throw new Error(`Unknown worker message type: ${type}`);
+  }
+}
+
+function isWasmTrap(err: unknown): boolean {
+  if (!(err instanceof Error) || err.name !== "RuntimeError") return false;
+  return [
+    "memory access out of bounds",
+    "integer overflow",
+    "integer divide by zero",
+    "unreachable",
+    "null function or function signature mismatch",
+    "table index is out of bounds",
+  ].some((message) => err.message.includes(message));
+}
+
+function reportTaskError(id: number, type: string, err: unknown): void {
+  const trap = isWasmTrap(err);
+  const detail =
+    err instanceof EngineLoadError
+      ? `The solver engine failed to load: ${err.message} Retry from the status bar.`
+      : describeError(err);
+  const errorMessage = trap
+    ? `WASM trap (code bug, not OOM): ${detail}`
+    : detail;
+  console.error(
+    trap
+      ? `[solver.worker] WASM trap in ${type}:`
+      : `[solver.worker] ${type} failed:`,
+    detail,
+  );
+  self.postMessage({ id, ok: false, error: errorMessage });
+}
+
+self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
+  const { id, type, payload } = event.data;
+  // Asyncify has suspended WASM. Only its matching decision may resume it;
+  // no other request may enter the engine while its C++ stack is retained.
+  if (type === "cg_continue") {
+    handleCgReply(id, payload as CgContinuationReply);
+    return;
+  }
+  let ownsTask = false;
   try {
     await ensureInit();
-
-    if (type === "init") {
-      self.postMessage({ id, ok: true });
-    } else if (type === "parse_step") {
-      handleParseStep(id, payload as ParseStepPayload);
-    } else if (type === "split_geometry") {
-      handleSplitGeometry(id, payload as SplitGeometryPayload);
-    } else if (type === "boolean_geometry") {
-      handleBooleanGeometry(id, payload as BooleanGeometryPayload);
-    } else if (type === "volume_mesh") {
-      handleVolumeMesh(id, payload as VolumeMeshPayload);
-    } else if (type === "solve") {
-      handleSolve(id, payload as SolvePayload);
-    } else if (type === "optimize_topology") {
-      handleTopOpt(id, payload as TopOptPayload);
-    } else if (type === "test_generate_fem_mesh") {
-      handleTestGenerateFemMesh(id);
-    } else {
-      throw new Error(`Unknown worker message type: ${type}`);
-    }
+    if (activeTask !== null)
+      throw new Error("The solver worker is busy with another operation");
+    activeTask = id;
+    ownsTask = true;
+    const operation = dispatchRequest(event.data);
+    if (operation !== null) await operation;
   } catch (err) {
-    const isRuntimeError = err instanceof Error && err.name === "RuntimeError";
-    const isWasmTrap =
-      isRuntimeError &&
-      (err.message.includes("memory access out of bounds") ||
-        err.message.includes("integer overflow") ||
-        err.message.includes("integer divide by zero") ||
-        err.message.includes("unreachable") ||
-        err.message.includes("null function or function signature mismatch") ||
-        err.message.includes("table index is out of bounds"));
-    const detail =
-      err instanceof EngineLoadError
-        ? `The solver engine failed to load: ${err.message} Retry from the status bar.`
-        : describeError(err);
-    const errorMessage = isWasmTrap
-      ? `WASM trap (code bug, not OOM): ${detail}`
-      : detail;
-    if (isWasmTrap) {
-      console.error(`[solver.worker] WASM trap in ${type}:`, detail);
-    } else {
-      console.error(`[solver.worker] ${type} failed:`, detail);
-    }
-    self.postMessage({ id, ok: false, error: errorMessage });
+    reportTaskError(id, type, err);
   } finally {
+    if (ownsTask) {
+      activeTask = null;
+      cgReply = null;
+    }
     flushCoverage();
   }
 };
