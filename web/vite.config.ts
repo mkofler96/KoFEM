@@ -96,6 +96,7 @@ const GALLERY_TYPES: Record<string, string> = {
   ".vtu": "application/xml",
   ".step": "application/octet-stream",
   ".png": "image/png",
+  ".svg": "image/svg+xml",
 };
 
 // Where an address of the retired /validation/ pages now lives, or null for

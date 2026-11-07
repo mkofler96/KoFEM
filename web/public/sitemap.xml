@@ -12,46 +12,57 @@
   <url>
     <loc>https://kofem.org/examples/axial-bar/</loc>
     <priority>0.6</priority>
+    <image:image><image:loc>https://kofem.org/examples/axial-bar.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/axial-bar/axial-bar-diagram.png</image:loc></image:image>
   </url>
   <url>
     <loc>https://kofem.org/examples/surface-pressure/</loc>
     <priority>0.6</priority>
+    <image:image><image:loc>https://kofem.org/examples/surface-pressure.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/surface-pressure/surface-pressure-diagram.png</image:loc></image:image>
   </url>
   <url>
     <loc>https://kofem.org/examples/cantilever/</loc>
     <priority>0.6</priority>
+    <image:image><image:loc>https://kofem.org/examples/cantilever.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/cantilever/cantilever-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/cantilever/cantilever-mesh-convergence.png</image:loc></image:image>
   </url>
   <url>
     <loc>https://kofem.org/examples/cantilever-p2/</loc>
     <priority>0.6</priority>
+    <image:image><image:loc>https://kofem.org/examples/cantilever-p2.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/cantilever-p2/cantilever-p2-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/cantilever-p2/cantilever-p2-mesh-convergence.png</image:loc></image:image>
   </url>
   <url>
     <loc>https://kofem.org/examples/cantilever-beam/</loc>
     <priority>0.6</priority>
+    <image:image><image:loc>https://kofem.org/examples/cantilever-beam.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/cantilever-beam/cantilever-beam-diagram.png</image:loc></image:image>
   </url>
   <url>
     <loc>https://kofem.org/examples/beam-torsion/</loc>
     <priority>0.6</priority>
+    <image:image><image:loc>https://kofem.org/examples/beam-torsion.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/beam-torsion/beam-torsion-diagram.png</image:loc></image:image>
   </url>
   <url>
     <loc>https://kofem.org/examples/shaft-torsion/</loc>
     <priority>0.6</priority>
+    <image:image><image:loc>https://kofem.org/examples/shaft-torsion.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/shaft-torsion/shaft-torsion-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/shaft-torsion/shaft-torsion-mesh-convergence.png</image:loc></image:image>
   </url>
   <url>
     <loc>https://kofem.org/examples/plate-with-hole/</loc>
     <priority>0.6</priority>
+    <image:image><image:loc>https://kofem.org/examples/plate-with-hole.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/plate-with-hole/plate-with-hole-plate-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/plate-with-hole/plate-with-hole-kirsch-stress-distribution.png</image:loc></image:image>
   </url>
   <url>
     <loc>https://kofem.org/examples/plate-with-hole-shell/</loc>
     <priority>0.6</priority>
+    <image:image><image:loc>https://kofem.org/examples/plate-with-hole-shell.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/plate-with-hole-shell/plate-with-hole-shell-plate-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/plate-with-hole-shell/plate-with-hole-shell-kirsch-stress-distribution.png</image:loc></image:image>
   </url>
   <url>
     <loc>https://kofem.org/examples/cooks-membrane/</loc>
     <priority>0.6</priority>
+    <image:image><image:loc>https://kofem.org/examples/cooks-membrane.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/cooks-membrane/cooks-membrane-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/cooks-membrane/cooks-membrane-mesh-convergence.png</image:loc></image:image>
   </url>
   <url>
     <loc>https://kofem.org/examples/mbb-beam-topopt/</loc>
     <priority>0.6</priority>
+    <image:image><image:loc>https://kofem.org/examples/mbb-beam-topopt.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/mbb-beam-topopt/mbb-beam-topopt-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/mbb-beam-topopt/mbb-beam-topopt-compliance-history.png</image:loc></image:image>
   </url>
   <!-- examples:end -->
   <url>

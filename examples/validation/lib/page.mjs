@@ -356,7 +356,7 @@ function chart(study, tolPct) {
     })
     .join("");
 
-  return `<svg class="conv" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(`${study.title}: difference from the reference against degrees of freedom, logarithmic axes`)}">
+  return `<svg class="conv" viewBox="0 0 ${W} ${H}" data-name="mesh-convergence" role="img" aria-label="${esc(`${study.title}: difference from the reference against degrees of freedom, logarithmic axes`)}">
             <text class="axis-title" x="${PAD.l}" y="${PAD.t - 11}">|difference| %</text>
             ${grid.join("\n            ")}
             <line class="axis" x1="${PAD.l}" x2="${PAD.l + pw}" y1="${PAD.t + ph}" y2="${PAD.t + ph}"/>
@@ -649,7 +649,18 @@ function reproduceCommand(e) {
   return `cd web &amp;&amp; bun install &amp;&amp; bun run ${esc(e.script)}`;
 }
 
-export function renderExamplePage(data, allEntries, { studies, textbook }, id) {
+/**
+ * One example page. `assets` (web/figure-assets.mjs) turns its diagrams and
+ * charts into SVG and PNG files and records them for writing.
+ */
+export function renderExamplePage(
+  data,
+  allEntries,
+  { studies, textbook, assets },
+  id,
+) {
+  if (!assets)
+    throw new Error("renderExamplePage needs a figure asset collector");
   const entries = contentsOrder(allEntries);
   const index = entries.findIndex((x) => x.id === id);
   if (index < 0) throw new Error(`no example "${id}"`);
@@ -752,6 +763,9 @@ ${esc(consoleRow(e))}</code></pre>`
       <nav class="pager" aria-label="Other examples">${prev ? `\n        <a class="prev" href="${pageUrl(prev.id)}"><small>Previous</small>${esc(prev.name)}</a>` : ""}${next ? `\n        <a class="next" href="${pageUrl(next.id)}"><small>Next</small>${esc(next.name)}</a>` : ""}
       </nav>`;
 
+  // Diagrams and charts become image files the page shows with <picture>.
+  const content = assets.extract(body, { page: e.id });
+
   return layout({
     title: `${e.name} | KoFEM examples`,
     description: text.description,
@@ -765,7 +779,9 @@ ${esc(consoleRow(e))}</code></pre>`
           headline: e.name,
           description: text.description,
           url: `${SITE}${pageUrl(e.id)}`,
-          image: `${SITE}${imagePath(e.id)}`,
+          image: [imagePath(e.id), ...assets.images(e.id)].map(
+            (path) => `${SITE}${path}`,
+          ),
           dateModified: e.generated ?? data.generated,
           isPartOf: { "@type": "CollectionPage", url: `${SITE}/examples/` },
           publisher: { "@type": "Organization", name: "KoFEM", url: SITE },
@@ -777,6 +793,6 @@ ${esc(consoleRow(e))}</code></pre>`
         ]),
       ],
     },
-    body: docsBody({ entries, currentId: e.id, sections: toc, body }),
+    body: docsBody({ entries, currentId: e.id, sections: toc, body: content }),
   });
 }

@@ -21,6 +21,7 @@
     "validate": "bun ../examples/validation/run.mjs",
     "prevalidate:report": "bun run wasm:fetch",
     "validate:report": "bun ../examples/validation/run.mjs --report",
+    "validate:pages": "bun ../examples/validation/run.mjs --pages",
     "examples:generate-crane-shell": "bun ../examples/unvalidated/crane-hook/generate-crane-shell.mjs",
     "examples:generate-plate-hole-shell": "bun ../examples/gallery/generate-plate-hole-shell.mjs",
     "examples:generate-mbb-topopt": "bun ../examples/gallery/generate-mbb-topopt.mjs",
@@ -54,6 +55,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
+    "@resvg/resvg-js": "2.6.2",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "@types/three": "^0.167.0",
@@ -61,6 +63,7 @@
     "eslint": "^9.39.0",
     "nyc": "^18.0.0",
     "prettier": "^3.6.0",
+    "subset-font": "2.9.0",
     "tsx": "^4.21.0",
     "typescript": "^5.5.0",
     "typescript-eslint": "^8.46.0",

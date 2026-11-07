@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Shared reading layout, typography, MathML font and theme for Examples and Theory.
+import { readFileSync } from "node:fs";
+
 const SITE = "https://kofem.org";
 
 const esc = (s) =>
@@ -11,25 +13,21 @@ const esc = (s) =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
-const STYLE = `
-      /* Equations and figure symbols: a subset of New Computer Modern Math,
-         the LaTeX look (web/public/fonts/README.md). */
-      @font-face {
+// The KoFEM Math face, shared by the pages and the figure files.
+const MATH_FONT_FACE = `@font-face {
         font-family: "KoFEM Math";
         font-style: normal;
         font-weight: 400;
         font-display: swap;
         src: url(/fonts/kofem-math.woff2) format("woff2");
-      }
-      /* Light by default, under the site's variable names
-         (web/public/site.css), so the shared header and footer follow it:
-         --text for headings and numbers, --body for prose, --accent for
-         links. The dark theme (data-theme="dark", the theme switch) is the
-         site's own palette. */
-      :root {
+      }`;
+
+// Custom properties: shared, then the light palette (the default) and the
+// dark theme's additions to the site palette of web/public/site.css.
+const ROOT_VARIABLES = `
         --math: "KoFEM Math", math;
-      }
-      :root:not([data-theme="dark"]) {
+      `;
+const LIGHT_VARIABLES = `
         color-scheme: light;
         --bg: #ffffff;
         --bg2: #f7f8fa;
@@ -49,37 +47,295 @@ const STYLE = `
         --caution: #b7791f;
         --s1: #2563c9;
         --s2: #c4561f;
-      }
-      :root[data-theme="dark"] {
+      `;
+const DARK_VARIABLES = `
         --pass: #6fcf97;
         --fail: #f28b82;
         --caution: #e5c07b;
         --s1: #4a90e2;
         --s2: #cf6d2c;
+      `;
+
+// The inside of the diagrams (svg.fig) and charts (svg.conv) of the example
+// pages. Pages show them as image files: figure-assets.mjs writes this CSS,
+// with one theme's colours resolved, into each file.
+const FIGURE_SVG_STYLE = `
+      svg.fig .body {
+        fill: var(--panel2);
+        stroke: #4f5966;
+        stroke-width: 1.3;
       }
-      :root[data-theme="dark"] svg.fig .body,
-      :root[data-theme="dark"] svg.fig .hole,
-      :root[data-theme="dark"] svg.fig .wall {
+      svg.fig .body.top {
+        fill: #e3e8ee;
+      }
+      svg.fig .body.end {
+        fill: #d9dfe7;
+      }
+      svg.fig .hole {
+        fill: var(--bg);
+        stroke: #4f5966;
+        stroke-width: 1.3;
+      }
+      svg.fig .mesh {
+        stroke: #c5ccd5;
+        stroke-width: 0.7;
+        fill: none;
+      }
+      svg.fig .clamp {
+        fill: url(#hatch);
+      }
+      svg.fig .hatch {
+        stroke: #7d8693;
+        stroke-width: 1.1;
+      }
+      svg.fig .wall {
+        stroke: #4f5966;
+        stroke-width: 2;
+      }
+      svg.fig .load {
+        stroke: var(--s1);
+        stroke-width: 1.7;
+        fill: none;
+      }
+      svg.fig .m-load {
+        fill: var(--s1);
+      }
+      svg.fig .dim {
+        stroke: var(--muted);
+        stroke-width: 1;
+      }
+      svg.fig .m-dim {
+        fill: var(--muted);
+      }
+      svg.fig .m-def {
+        fill: var(--s2);
+      }
+      svg.fig .ext {
+        stroke: #b5bcc6;
+        stroke-width: 1;
+      }
+      svg.fig .deformed {
+        stroke: var(--s2);
+        stroke-width: 1.5;
+        stroke-dasharray: 5 4;
+        fill: none;
+      }
+      svg.fig .axis {
+        stroke: #9aa2ad;
+        stroke-width: 1;
+        stroke-dasharray: 8 3 2 3;
+      }
+      svg.fig text {
+        font-family: var(--sans);
+      }
+      svg.fig .lbl {
+        fill: var(--muted);
+        font-size: 12px;
+      }
+      svg.fig .sym,
+      svg.fig .axis-lbl {
+        fill: var(--text);
+        font-family: var(--math);
+        font-size: 17px;
+      }
+      svg.fig .sub {
+        font-size: 70%;
+      }
+      svg.fig .m {
+        font-family: var(--math);
+        font-size: 14px;
+      }
+      svg.fig .axis-lbl {
+        fill: var(--muted);
+        font-size: 14px;
+      }
+      svg.fig .tick,
+      svg.fig .coord {
+        fill: var(--muted);
+        font-family: var(--mono);
+        font-size: 10.5px;
+      }
+      svg.fig .warp {
+        fill: var(--s1);
+        font-size: 17px;
+        font-weight: 600;
+      }
+      svg.fig .pt {
+        fill: var(--s1);
+        stroke: var(--bg);
+        stroke-width: 1.5;
+      }
+      svg.fig .curve {
+        stroke: var(--s1);
+        stroke-width: 2;
+        fill: none;
+      }
+      svg.fig .chart-axis {
+        stroke: var(--line2);
+      }
+      svg.fig .chart-grid {
+        stroke: var(--line);
+      }
+      svg.conv .grid {
+        stroke: var(--line);
+        stroke-width: 1;
+      }
+      svg.conv .axis {
+        stroke: var(--line2);
+        stroke-width: 1;
+      }
+      svg.conv .tick,
+      svg.conv .axis-title {
+        fill: var(--muted);
+        font-size: 11px;
+        font-family: var(--mono);
+      }
+      svg.conv .tol {
+        stroke: var(--caution);
+        stroke-width: 1;
+        stroke-dasharray: 4 3;
+      }
+      svg.conv .tol-label {
+        fill: var(--muted);
+        font-size: 10.5px;
+        font-family: var(--sans);
+      }
+      svg.conv .ci-ring {
+        fill: none;
+        stroke: var(--text);
+        stroke-width: 1.2;
+      }
+      svg.conv .line {
+        fill: none;
+        stroke-width: 2;
+        stroke-linejoin: round;
+        stroke-linecap: round;
+      }
+      svg.conv .line.s1 {
+        stroke: var(--s1);
+      }
+      svg.conv .line.s2 {
+        stroke: var(--s2);
+      }
+      svg.conv .mark {
+        stroke-width: 2;
+      }
+      svg.conv .mark.s1.under {
+        fill: var(--s1);
+        stroke: var(--bg);
+      }
+      svg.conv .mark.s2.under {
+        fill: var(--s2);
+        stroke: var(--bg);
+      }
+      svg.conv .mark.over {
+        fill: var(--bg);
+      }
+      svg.conv .mark.s1.over {
+        stroke: var(--s1);
+      }
+      svg.conv .mark.s2.over {
+        stroke: var(--s2);
+      }
+      svg.conv .hit {
+        fill: transparent;
+      }`;
+const FIGURE_SVG_DARK_STYLE = `
+      svg.fig .body,
+      svg.fig .hole,
+      svg.fig .wall {
         stroke: #8fa3b5;
       }
-      :root[data-theme="dark"] svg.fig .body.top {
+      svg.fig .body.top {
         fill: #1b2733;
       }
-      :root[data-theme="dark"] svg.fig .body.end {
+      svg.fig .body.end {
         fill: #1f2d3b;
       }
-      :root[data-theme="dark"] svg.fig .mesh {
+      svg.fig .mesh {
         stroke: #2c3b4a;
       }
-      :root[data-theme="dark"] svg.fig .hatch {
+      svg.fig .hatch {
         stroke: #5f6d7a;
       }
-      :root[data-theme="dark"] svg.fig .ext {
+      svg.fig .ext {
         stroke: #3d4a57;
       }
-      :root[data-theme="dark"] svg.fig .axis {
+      svg.fig .axis {
         stroke: #4a5866;
-      }
+      }`;
+
+/** The figure CSS for one theme, still with var() references. */
+export const figureSvgStyle = (theme) =>
+  theme === "dark"
+    ? `${FIGURE_SVG_STYLE}${FIGURE_SVG_DARK_STYLE}`
+    : FIGURE_SVG_STYLE;
+
+const declarations = (css) =>
+  new Map(
+    [...css.matchAll(/--([a-z0-9-]+):\s*([^;]+);/g)].map(([, name, value]) => [
+      name,
+      value.trim(),
+    ]),
+  );
+
+/** One theme's custom properties, as the page resolves them. */
+export function themeVariables(theme) {
+  const site = readFileSync(
+    new URL("./public/site.css", import.meta.url),
+    "utf8",
+  );
+  const siteRoot = site.match(/^:root\s*\{([^}]*)\}/m);
+  if (!siteRoot) throw new Error("web/public/site.css has no :root block");
+  return new Map([
+    ...declarations(siteRoot[1]),
+    ...declarations(ROOT_VARIABLES),
+    ...declarations(theme === "dark" ? DARK_VARIABLES : LIGHT_VARIABLES),
+  ]);
+}
+
+const unicodeRanges = (value) =>
+  value.split(",").map((range) => {
+    const [lo, hi = lo] = range.trim().replace(/^U\+/i, "").split("-");
+    return [parseInt(lo, 16), parseInt(hi, 16)];
+  });
+
+/**
+ * The page fonts as { family, weight, file, ranges }: the IBM Plex faces of
+ * web/public/fonts/ibm-plex.css and KoFEM Math. `file` is relative to web/.
+ */
+export const FIGURE_FONT_FACES = [
+  ...readFileSync(
+    new URL("./public/fonts/ibm-plex.css", import.meta.url),
+    "utf8",
+  ).matchAll(/@font-face\s*\{([^}]*)\}/g),
+  ...MATH_FONT_FACE.matchAll(/@font-face\s*\{([^}]*)\}/g),
+].map(([, rule]) => {
+  const field = (name) =>
+    rule.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1].trim();
+  const src = field("src")?.match(/url\(\/fonts\/([^)]+)\)/)?.[1];
+  if (!src) throw new Error(`Font face without a /fonts/ source: ${rule}`);
+  const range = field("unicode-range");
+  return {
+    family: field("font-family").replace(/^["']|["']$/g, ""),
+    weight: Number(field("font-weight") ?? 400),
+    file: `public/fonts/${src}`,
+    ranges: range ? unicodeRanges(range) : null,
+  };
+});
+
+const STYLE = `
+      /* Equations and figure symbols: a subset of New Computer Modern Math,
+         the LaTeX look (web/public/fonts/README.md). */
+      ${MATH_FONT_FACE}
+      /* Light by default, under the site's variable names
+         (web/public/site.css), so the shared header and footer follow it:
+         --text for headings and numbers, --body for prose, --accent for
+         links. The dark theme (data-theme="dark", the theme switch) is the
+         site's own palette. */
+      :root {${ROOT_VARIABLES}}
+      :root:not([data-theme="dark"]) {${LIGHT_VARIABLES}}
+      :root[data-theme="dark"] {${DARK_VARIABLES}}
       .theme-toggle {
         margin: 14px 10px 0;
         font: inherit;
@@ -463,6 +719,23 @@ const STYLE = `
         width: 100%;
         height: auto;
       }
+      /* Diagrams and charts are image files (figure-assets.mjs): one
+         <picture> per theme, the other hidden and never fetched. */
+      picture.figure-image {
+        display: block;
+      }
+      picture.figure-image img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+      picture.figure-image.theme-dark,
+      :root[data-theme="dark"] picture.figure-image.theme-light {
+        display: none;
+      }
+      :root[data-theme="dark"] picture.figure-image.theme-dark {
+        display: block;
+      }
       figure.result img {
         display: block;
         width: 100%;
@@ -503,126 +776,9 @@ const STYLE = `
         flex-wrap: wrap;
         gap: 8px 0;
       }
-      .fig-row svg.half {
+      .fig-row picture.half {
         flex: 1 1 280px;
-        width: auto;
         max-width: 100%;
-      }
-      svg.fig .body {
-        fill: var(--panel2);
-        stroke: #4f5966;
-        stroke-width: 1.3;
-      }
-      svg.fig .body.top {
-        fill: #e3e8ee;
-      }
-      svg.fig .body.end {
-        fill: #d9dfe7;
-      }
-      svg.fig .hole {
-        fill: var(--bg);
-        stroke: #4f5966;
-        stroke-width: 1.3;
-      }
-      svg.fig .mesh {
-        stroke: #c5ccd5;
-        stroke-width: 0.7;
-        fill: none;
-      }
-      svg.fig .clamp {
-        fill: url(#hatch);
-      }
-      svg.fig .hatch {
-        stroke: #7d8693;
-        stroke-width: 1.1;
-      }
-      svg.fig .wall {
-        stroke: #4f5966;
-        stroke-width: 2;
-      }
-      svg.fig .load {
-        stroke: var(--s1);
-        stroke-width: 1.7;
-        fill: none;
-      }
-      svg.fig .m-load {
-        fill: var(--s1);
-      }
-      svg.fig .dim {
-        stroke: var(--muted);
-        stroke-width: 1;
-      }
-      svg.fig .m-dim {
-        fill: var(--muted);
-      }
-      svg.fig .m-def {
-        fill: var(--s2);
-      }
-      svg.fig .ext {
-        stroke: #b5bcc6;
-        stroke-width: 1;
-      }
-      svg.fig .deformed {
-        stroke: var(--s2);
-        stroke-width: 1.5;
-        stroke-dasharray: 5 4;
-        fill: none;
-      }
-      svg.fig .axis {
-        stroke: #9aa2ad;
-        stroke-width: 1;
-        stroke-dasharray: 8 3 2 3;
-      }
-      svg.fig text {
-        font-family: var(--sans);
-      }
-      svg.fig .lbl {
-        fill: var(--muted);
-        font-size: 12px;
-      }
-      svg.fig .sym,
-      svg.fig .axis-lbl {
-        fill: var(--text);
-        font-family: var(--math);
-        font-size: 17px;
-      }
-      svg.fig .sub {
-        font-size: 70%;
-      }
-      svg.fig .m {
-        font-family: var(--math);
-        font-size: 14px;
-      }
-      svg.fig .axis-lbl {
-        fill: var(--muted);
-        font-size: 14px;
-      }
-      svg.fig .tick,
-      svg.fig .coord {
-        fill: var(--muted);
-        font-family: var(--mono);
-        font-size: 10.5px;
-      }
-      svg.fig .warp {
-        fill: var(--s1);
-        font-size: 17px;
-        font-weight: 600;
-      }
-      svg.fig .pt {
-        fill: var(--s1);
-        stroke: var(--bg);
-        stroke-width: 1.5;
-      }
-      svg.fig .curve {
-        stroke: var(--s1);
-        stroke-width: 2;
-        fill: none;
-      }
-      svg.fig .chart-axis {
-        stroke: var(--line2);
-      }
-      svg.fig .chart-grid {
-        stroke: var(--line);
       }
 
       /* Charts. */
@@ -657,73 +813,9 @@ const STYLE = `
       .dot.under {
         background: var(--muted);
       }
-      svg.conv .grid {
-        stroke: var(--line);
-        stroke-width: 1;
-      }
-      svg.conv .axis {
-        stroke: var(--line2);
-        stroke-width: 1;
-      }
-      svg.conv .tick,
-      svg.conv .axis-title {
-        fill: var(--muted);
-        font-size: 11px;
-        font-family: var(--mono);
-      }
-      svg.conv .tol {
-        stroke: var(--caution);
-        stroke-width: 1;
-        stroke-dasharray: 4 3;
-      }
-      svg.conv .tol-label {
-        fill: var(--muted);
-        font-size: 10.5px;
-        font-family: var(--sans);
-      }
-      svg.conv .ci-ring {
-        fill: none;
-        stroke: var(--text);
-        stroke-width: 1.2;
-      }
-      figure.chart svg.conv {
+      figure.chart picture.conv img {
         max-width: 560px;
         margin: 0 auto;
-      }
-      svg.conv .line {
-        fill: none;
-        stroke-width: 2;
-        stroke-linejoin: round;
-        stroke-linecap: round;
-      }
-      svg.conv .line.s1 {
-        stroke: var(--s1);
-      }
-      svg.conv .line.s2 {
-        stroke: var(--s2);
-      }
-      svg.conv .mark {
-        stroke-width: 2;
-      }
-      svg.conv .mark.s1.under {
-        fill: var(--s1);
-        stroke: var(--bg);
-      }
-      svg.conv .mark.s2.under {
-        fill: var(--s2);
-        stroke: var(--bg);
-      }
-      svg.conv .mark.over {
-        fill: var(--bg);
-      }
-      svg.conv .mark.s1.over {
-        stroke: var(--s1);
-      }
-      svg.conv .mark.s2.over {
-        stroke: var(--s2);
-      }
-      svg.conv .hit {
-        fill: transparent;
       }
       main details {
         margin: 0 0 8px;
@@ -877,7 +969,7 @@ const STYLE = `
           overflow-x: auto;
           padding: 10px 8px 8px;
         }
-        figure.diagram > svg.fig {
+        figure.diagram > picture.fig img {
           min-width: 540px;
         }
       }`;

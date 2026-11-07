@@ -35,6 +35,8 @@ no longer matches its sources or a case's `.vtu` no longer matches its model.
 
 A page's figure is drawn by `examples/validation/lib/render.mjs` from the solved
 model, coloured as the app colours it, so the page needs no script or WebGL.
+Its diagrams and charts are published as SVG and PNG files in `site/<id>/`
+(`web/figure-assets.mjs`; see `examples/validation/README.md`).
 
 ## Examples are built the way a user builds them
 

@@ -1,9 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Schematic figures for the example pages (inline SVG, styled by the page's
-// CSS classes). Sketches, not to scale: they show the model, supports, load
-// and measured quantity, with a structured mesh drawn faintly where it fits.
+// Schematic figures for the example pages, written as SVG markup styled by
+// the CSS classes of docs-layout.mjs. The page generator publishes each as
+// SVG and PNG files (web/figure-assets.mjs), named <page>-<name> from the
+// `name` option (default "diagram"). Sketches, not to scale: they show the
+// model, supports, load and measured quantity, with a structured mesh drawn
+// faintly where it fits.
 
 const f = (v) => (Math.round(v * 10) / 10).toString();
 
@@ -14,8 +17,8 @@ const DEFS = `<defs>
       <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" class="hatch"/></pattern>
     </defs>`;
 
-const svg = (w, h, label, body, { defs = true, cls = "fig" } = {}) =>
-  `<svg class="${cls}" viewBox="0 0 ${w} ${h}" role="img" aria-label="${label}">
+const svg = (w, h, label, body, { defs = true, cls = "fig", name } = {}) =>
+  `<svg class="${cls}" viewBox="0 0 ${w} ${h}" role="img" aria-label="${label}"${name ? ` data-name="${name}"` : ""}>
     ${defs ? DEFS : ""}
     ${body}
   </svg>`;
@@ -416,7 +419,7 @@ export function plateFigure() {
     270,
     "Plate with a central hole under tension, clamped on the left; points A at the top and bottom of the hole carry the peak stress",
     parts.join("\n    "),
-    { cls: "fig half" },
+    { cls: "fig half", name: "plate-diagram" },
   );
 
   // σxx / σ along the transverse axis (x = 0), y / a from 1 to 5.
@@ -460,7 +463,7 @@ export function plateFigure() {
     270,
     "The Kirsch stress along the transverse axis falls from 3σ at the hole edge towards σ",
     g.join("\n    "),
-    { defs: false, cls: "fig half" },
+    { defs: false, cls: "fig half", name: "kirsch-stress-distribution" },
   );
   return `<div class="fig-row">${plate}${graph}</div>`;
 }
