@@ -25,6 +25,10 @@
 // A figure's file name is <page>-<name>, where <name> is the SVG's
 // data-name attribute, or "diagram"/"chart" from its class (numbered when a
 // page has several).
+//
+// Generators with their own figure registry (the Theory Guide,
+// web/theory/figures/index.mjs) call renderFigureFiles directly with the
+// figure markup and its CSS.
 
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -75,9 +79,9 @@ function resolveVariables(css, variables) {
 }
 
 /**
- * Only the rules that can match this figure: selectors whose root class
- * (svg.fig, svg.conv) the figure has and whose other classes and elements
- * it uses.
+ * Only the rules that can match this figure: every compound of a selector
+ * names elements and classes the figure uses; an svg.<class> root must be
+ * one of the figure's own classes.
  */
 function relevantCss(css, figure) {
   const roots = new Set(figure.className.split(/\s+/).filter(Boolean));
@@ -89,22 +93,18 @@ function relevantCss(css, figure) {
   const elements = new Set(
     [...figure.body.matchAll(/<([a-zA-Z]+)[\s>/]/g)].map((match) => match[1]),
   );
-  const matches = (selector) => {
-    const [root, ...rest] = selector.split(/\s+/);
-    const rootClass = root.match(/^svg\.([a-z0-9-]+)$/)?.[1];
-    if (!rootClass)
-      throw new Error(`Figure CSS selector without an svg root: ${selector}`);
-    return (
-      roots.has(rootClass) &&
-      rest.every((part) => {
-        const [element, ...classes] = part.split(".");
-        return (
-          (!element || elements.has(element)) &&
-          classes.every((name) => used.has(name))
-        );
-      })
-    );
-  };
+  const matches = (selector) =>
+    selector.split(/\s+/).every((part, index) => {
+      if (!/^[a-zA-Z]*(\.[a-z0-9-]+)*$/.test(part))
+        throw new Error(`Unsupported figure CSS selector: ${selector}`);
+      const [element, ...classes] = part.split(".");
+      if (index === 0 && element === "svg" && classes.length)
+        return classes.every((name) => roots.has(name));
+      return (
+        (!element || elements.has(element)) &&
+        classes.every((name) => used.has(name))
+      );
+    });
   return [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)]
     .map(([, selectors, declarations]) => {
       const kept = selectors
@@ -158,35 +158,123 @@ function cmapCodePoints(font) {
   return points;
 }
 
+const tableTags = (font) => {
+  const count = new DataView(font.buffer, font.byteOffset).getUint16(4);
+  return Array.from({ length: count }, (_, i) =>
+    String.fromCharCode(...font.subarray(12 + 16 * i, 16 + 16 * i)),
+  );
+};
+
 const inRanges = (ranges, code) =>
   !ranges || ranges.some(([lo, hi]) => code >= lo && code <= hi);
 
+const pageFamilies = new Set(FIGURE_FONT_FACES.map((face) => face.family));
+
 /**
- * Subsets of the page fonts for the characters of one figure: the faces of
- * every family its CSS names, deduplicated by file. Returns the CSS
- * @font-face rules (WOFF2 data URIs) and the TrueType subsets for resvg.
+ * The characters each page font draws in a figure: the font family of every
+ * <text> and <tspan> follows from the figure CSS (the last matching rule, as
+ * the figures use no competing selectors), its own attributes, and
+ * inheritance. Each family is the first page font of its font-family list.
  */
-async function embeddedFonts(characters, css) {
-  const families = new Set(
-    [...css.matchAll(/font-family:\s*([^;}]+)/g)].flatMap((match) =>
-      match[1]
-        .split(",")
-        .map((name) => name.trim().replace(/^["']|["']$/g, "")),
-    ),
+function charactersByFamily(body, css) {
+  const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].flatMap(
+    ([, selectors, declarations]) => {
+      const family = declarations.match(/font-family:\s*([^;]+)/)?.[1];
+      return family
+        ? selectors.split(",").map((selector) => {
+            const [element, ...classes] = selector
+              .trim()
+              .split(/\s+/)
+              .at(-1)
+              .split(".");
+            return { element, classes, family };
+          })
+        : [];
+    },
   );
+  const familyOf = (tag, attributes, inherited) => {
+    const classes = new Set(
+      attributes.match(/\sclass="([^"]*)"/)?.[1].split(/\s+/),
+    );
+    let stack =
+      attributes.match(/\sfont-family="([^"]*)"/)?.[1] ??
+      attributes.match(/font-family:\s*([^;"]+)/)?.[1];
+    if (!stack)
+      for (const rule of rules)
+        if (
+          (!rule.element || rule.element === tag) &&
+          rule.classes.every((name) => classes.has(name))
+        )
+          stack = rule.family;
+    if (!stack) return inherited;
+    const family = stack
+      .split(",")
+      .map((name) => name.trim().replace(/^["']|["']$/g, ""))
+      .find((name) => pageFamilies.has(name));
+    if (!family)
+      throw new Error(`Figure text uses no page font (font-family: ${stack})`);
+    return family;
+  };
+  const out = new Map();
+  const add = (family, value) => {
+    const characters = decodeEntities(value).replace(/\s/g, "");
+    if (!characters) return;
+    if (!family) throw new Error(`Figure text has no font family: ${value}`);
+    const set = out.get(family) ?? new Set([" "]);
+    for (const c of characters) set.add(c);
+    out.set(family, set);
+  };
+  for (const [, attributes, content] of body.matchAll(
+    /<text\b([^>]*)>([\s\S]*?)<\/text>/g,
+  )) {
+    const family = familyOf("text", attributes, null);
+    for (const [, spanAttributes, spanText, plain] of content.matchAll(
+      /<tspan\b([^>]*)>([^<]*)<\/tspan>|([^<]+)/g,
+    ))
+      if (plain !== undefined) add(family, plain);
+      else add(familyOf("tspan", spanAttributes, family), spanText);
+  }
+  return out;
+}
+
+/**
+ * Subsets of the page fonts for one figure: each family's faces subset to
+ * the characters that family draws (charactersByFamily), deduplicated by
+ * file. Returns the CSS @font-face rules (WOFF2 data URIs) and the TrueType
+ * subsets for resvg. Subsetting by family also matters to resvg: given a
+ * font that holds a whole line, it would draw the line in it.
+ */
+async function embeddedFonts(byFamily, css, body) {
   const weights = new Set([
     400,
-    ...[...css.matchAll(/font-weight:\s*(\d+)/g)].map((match) =>
-      Number(match[1]),
+    ...[...`${css}${body}`.matchAll(/font-weight[:=]\s*"?(\d+)/g)].map(
+      (match) => Number(match[1]),
     ),
   ]);
-  const codes = [...characters].map((c) => c.codePointAt(0));
   // Faces of one family with the same bytes (a variable font listed under
   // several weights) are embedded once, for all of those weights.
+  // A face serves the used weights nearest to its own, as a browser picks.
+  const nearest = (family, weight) =>
+    FIGURE_FONT_FACES.filter((face) => face.family === family).reduce(
+      (best, face) =>
+        Math.abs(face.weight - weight) < Math.abs(best - weight)
+          ? face.weight
+          : best,
+      Infinity,
+    );
   const byFile = new Map();
   for (const face of FIGURE_FONT_FACES) {
-    if (!families.has(face.family) || !weights.has(face.weight)) continue;
-    const wanted = codes.filter((code) => inRanges(face.ranges, code));
+    const characters = byFamily.get(face.family);
+    if (
+      !characters ||
+      ![...weights].some(
+        (weight) => nearest(face.family, weight) === face.weight,
+      )
+    )
+      continue;
+    const wanted = [...characters]
+      .map((c) => c.codePointAt(0))
+      .filter((code) => inRanges(face.ranges, code));
     if (!wanted.length) continue;
     const bytes = readFileSync(new URL(face.file, web));
     const key = `${face.family}|${bytes.toString("base64")}`;
@@ -201,26 +289,42 @@ async function embeddedFonts(characters, css) {
   }
   const rules = [];
   const truetype = [];
-  const covered = new Set();
+  const covered = new Map();
   for (const face of [...byFile.values()].sort((a, b) =>
     `${a.family}${a.file}`.localeCompare(`${b.family}${b.file}`),
   )) {
     const source = face.bytes;
     const text = String.fromCodePoint(...face.codes);
     const ttf = await subsetFont(source, text, { targetFormat: "truetype" });
-    for (const code of cmapCodePoints(ttf)) covered.add(code);
+    const familyCovered = covered.get(face.family) ?? new Set();
+    for (const code of cmapCodePoints(ttf)) familyCovered.add(code);
+    covered.set(face.family, familyCovered);
     const woff2 = await subsetFont(source, text, { targetFormat: "woff2" });
-    const weights = [...face.weights].sort((a, b) => a - b);
+    const faceWeights = [...face.weights].sort((a, b) => a - b);
     rules.push(
-      `@font-face{font-family:"${face.family}";font-weight:${weights.length > 1 ? `${weights[0]} ${weights.at(-1)}` : weights[0]};src:url(data:font/woff2;base64,${woff2.toString("base64")}) format("woff2")}`,
+      `@font-face{font-family:"${face.family}";font-weight:${faceWeights.length > 1 ? `${faceWeights[0]} ${faceWeights.at(-1)}` : faceWeights[0]};src:url(data:font/woff2;base64,${woff2.toString("base64")}) format("woff2")}`,
     );
-    truetype.push(ttf);
+    // resvg does not apply variation axes: give it one static instance per
+    // weight this variable font serves, as the browser would draw them.
+    if (tableTags(ttf).includes("fvar"))
+      for (const weight of faceWeights)
+        truetype.push(
+          await subsetFont(source, text, {
+            targetFormat: "truetype",
+            variationAxes: { wght: weight },
+          }),
+        );
+    else truetype.push(ttf);
   }
-  const missing = codes.filter((code) => !covered.has(code));
-  if (missing.length)
-    throw new Error(
-      `No page font has the figure characters ${JSON.stringify(String.fromCodePoint(...missing))}; add a font face or change the label`,
+  for (const [family, characters] of byFamily) {
+    const missing = [...characters].filter(
+      (c) => !covered.get(family)?.has(c.codePointAt(0)),
     );
+    if (missing.length)
+      throw new Error(
+        `${family} has no glyph for the figure characters ${JSON.stringify(missing.join(""))}; set them in another page font or change the label`,
+      );
+  }
   return { rules: rules.join(""), truetype };
 }
 
@@ -269,25 +373,27 @@ function parseFigure(svg) {
   };
 }
 
-async function renderFigure(figure) {
-  const characters = new Set(
-    decodeEntities(
-      figure.body
-        .replace(/<title>[\s\S]*?<\/title>/g, "")
-        .replace(/<[^>]+>/g, ""),
-    ).replace(/\s/g, ""),
-  );
+/**
+ * The files of one figure. `figure`: { body, width, height, alt, className }
+ * (the inner SVG markup and its size); `styles`: { light, dark? }, the CSS
+ * for each theme (custom properties resolved); `background`: the PNG's
+ * background colour. Returns { light, dark?, png }: the standalone SVG of
+ * each theme and the light one rasterised at 2×.
+ */
+export async function renderFigureFiles(figure, { styles, background }) {
+  if (!styles.light) throw new Error("A figure needs at least a light style");
   const themed = {};
   let fonts = null;
-  for (const theme of THEMES) {
-    const css = resolveVariables(
-      relevantCss(figureSvgStyle(theme), figure),
-      themeVariables(theme),
+  for (const [theme, style] of Object.entries(styles)) {
+    const css = relevantCss(style, figure);
+    fonts ??= await embeddedFonts(
+      charactersByFamily(figure.body, css),
+      css,
+      figure.body,
     );
-    fonts ??= await embeddedFonts(characters, css);
     themed[theme] = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" class="${figure.className}" viewBox="0 0 ${figure.width} ${figure.height}" width="${figure.width}" height="${figure.height}">
-<title>${escapeAttr(figure.alt)}</title>
+<title>${escapeAttr(figure.title ?? figure.alt)}</title>${figure.title ? `\n<desc>${escapeAttr(figure.alt)}</desc>` : ""}
 <style>${fonts.rules}${css.replace(/\s+/g, " ").trim()}</style>
 ${normaliseMarkers(figure.body).trim()}
 </svg>
@@ -303,13 +409,13 @@ ${normaliseMarkers(figure.body).trim()}
     });
     const png = new Resvg(themed.light, {
       fitTo: { mode: "zoom", value: PNG_SCALE },
-      background: themeVariables("light").get("bg"),
+      background,
       font: { loadSystemFonts: false, fontFiles },
       logLevel: "off",
     })
       .render()
       .asPng();
-    return { light: themed.light, dark: themed.dark, png };
+    return { ...themed, png };
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
@@ -366,7 +472,15 @@ export function figureAssets({ dir, url }) {
       for (const [base, { figure }] of [...figures].sort(([a], [b]) =>
         a.localeCompare(b),
       )) {
-        const { light, dark, png } = await renderFigure(figure);
+        const { light, dark, png } = await renderFigureFiles(figure, {
+          styles: Object.fromEntries(
+            THEMES.map((theme) => [
+              theme,
+              resolveVariables(figureSvgStyle(theme), themeVariables(theme)),
+            ]),
+          ),
+          background: themeVariables("light").get("bg"),
+        });
         out.push(
           [join(root, `${base}.svg`), light],
           [join(root, `${base}-dark.svg`), dark],

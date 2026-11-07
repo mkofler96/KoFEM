@@ -843,7 +843,7 @@
       <a href="/theory/operators/reference-mapping/#element-map">reference coordinates</a>
       <span class="math-nowrap"><math><mi>ξ</mi><mo>,</mo><mi>η</mi><mo>,</mo><mi>ζ</mi></math>,</span> they are <span class="math-nowrap"><math><mn>1</mn><mo>−</mo><mi>ξ</mi><mo>−</mo><mi>η</mi><mo>−</mo><mi>ζ</mi></math>,</span> <span class="math-nowrap"><math><mi>ξ</mi></math>,</span> <math><mi>η</mi></math> and <span class="math-nowrap"><math><mi>ζ</mi></math>.</span></p>
     <figure class="theory-figure full" id="figure-lagrange-shape-functions">
-      <a href="/theory/figures/lagrange-shape-functions.svg" class="figure-link"><img src="/theory/figures/lagrange-shape-functions.svg" width="840" height="315" alt="Left: the three quadratic shape functions of a three-node element; each equals one at its own node and zero at the others. Right: the four cubic shape functions of a four-node element, with the same property." loading="lazy" decoding="async" /></a>
+      <a href="/theory/figures/lagrange-shape-functions.svg" class="figure-link"><picture class="figure-image"><source srcset="/theory/figures/lagrange-shape-functions.svg" type="image/svg+xml" /><img src="/theory/figures/lagrange-shape-functions.png" width="840" height="315" alt="Left: the three quadratic shape functions of a three-node element; each equals one at its own node and zero at the others. Right: the four cubic shape functions of a four-node element, with the same property." loading="lazy" decoding="async" /></picture></a>
       <figcaption>One-dimensional Lagrange shape functions. Each equals 1 at its own node and 0 at every other node, so the coefficient of a shape function is the value at that node. Solid elements use products or barycentric versions of the same idea.</figcaption>
     </figure>
     <ul>
@@ -866,7 +866,7 @@
       translational coefficients, so an element with <math><msub><mi>n</mi><mi>e</mi></msub></math> functions
       has <math><mn>3</mn><msub><mi>n</mi><mi>e</mi></msub></math> DOFs.</p>
     <figure class="theory-figure full" id="figure-element-node-layouts">
-      <a href="/theory/figures/element-node-layouts.svg" class="figure-link"><img src="/theory/figures/element-node-layouts.svg" width="860" height="270" alt="Four solid elements with their nodes: a linear tetrahedron with 4 corner nodes, a quadratic tetrahedron with 10 nodes at corners and edge midpoints, a trilinear hexahedron with 8 corner nodes and a quadratic hexahedron with 27 nodes at corners, edges, faces and centre. Hidden nodes are drawn open." loading="lazy" decoding="async" /></a>
+      <a href="/theory/figures/element-node-layouts.svg" class="figure-link"><picture class="figure-image"><source srcset="/theory/figures/element-node-layouts.svg" type="image/svg+xml" /><img src="/theory/figures/element-node-layouts.png" width="860" height="270" alt="Four solid elements with their nodes: a linear tetrahedron with 4 corner nodes, a quadratic tetrahedron with 10 nodes at corners and edge midpoints, a trilinear hexahedron with 8 corner nodes and a quadratic hexahedron with 27 nodes at corners, edges, faces and centre. Hidden nodes are drawn open." loading="lazy" decoding="async" /></picture></a>
       <figcaption>Node layouts of linear and quadratic tetrahedra and hexahedra. Quadratic elements add nodes at the edge midpoints; the 27-node hexahedron also has face and centre nodes. Open circles are hidden behind the element.</figcaption>
     </figure>
     <div class="table-wrap" tabindex="0" role="region" aria-label="Supported solid elements, their degrees of freedom and default stiffness quadrature; scroll horizontally if needed">
@@ -964,7 +964,7 @@
       exactly. The cheapest safe choice integrates the stiffness integrand
       exactly when it is a polynomial.</p>
     <figure class="theory-figure full" id="figure-quadrature-points">
-      <a href="/theory/figures/quadrature-points.svg" class="figure-link"><img src="/theory/figures/quadrature-points.svg" width="760" height="215" alt="Reference triangles with one and three integration points, and reference squares with two-by-two and three-by-three Gauss points, marked as red dots." loading="lazy" decoding="async" /></a>
+      <a href="/theory/figures/quadrature-points.svg" class="figure-link"><picture class="figure-image"><source srcset="/theory/figures/quadrature-points.svg" type="image/svg+xml" /><img src="/theory/figures/quadrature-points.png" width="760" height="215" alt="Reference triangles with one and three integration points, and reference squares with two-by-two and three-by-three Gauss points, marked as red dots." loading="lazy" decoding="async" /></picture></a>
       <figcaption>Gauss integration points (red) on reference elements. More points integrate higher-degree polynomials exactly.</figcaption>
     </figure>
     <p>On a straight-edged order-2 tetrahedron, each <math><mi mathvariant="bold" class="math-bold">B</mi></math> entry is linear in <span class="math-nowrap"><math><mi>ξ</mi></math>,</span>
@@ -1005,7 +1005,7 @@
       supports enter the global system is covered in
       <a href="/theory/numerical-methods/loads-and-constraints/">Loads and constraints</a>.</p>
     <figure class="theory-figure full" id="figure-consistent-nodal-loads">
-      <a href="/theory/figures/consistent-nodal-loads.svg" class="figure-link"><img src="/theory/figures/consistent-nodal-loads.svg" width="700" height="280" alt="A uniform traction q on an edge of length L becomes nodal forces. A linear two-node edge receives qL/2 at each node. A quadratic three-node edge receives qL/6 at each end and 2qL/3 at the midpoint." loading="lazy" decoding="async" /></a>
+      <a href="/theory/figures/consistent-nodal-loads.svg" class="figure-link"><picture class="figure-image"><source srcset="/theory/figures/consistent-nodal-loads.svg" type="image/svg+xml" /><img src="/theory/figures/consistent-nodal-loads.png" width="700" height="280" alt="A uniform traction q on an edge of length L becomes nodal forces. A linear two-node edge receives qL/2 at each node. A quadratic three-node edge receives qL/6 at each end and 2qL/3 at the midpoint." loading="lazy" decoding="async" /></picture></a>
       <figcaption>A uniform traction on an element edge becomes consistent nodal forces. The shares follow from integrating each shape function along the edge; a quadratic midpoint node takes two thirds of the load.</figcaption>
     </figure>
 
@@ -1020,7 +1020,7 @@
       converges, and rates elsewhere drop. Halving <math><mi>h</mi></math> at order 1 should
       roughly halve the stress error; at order 2 it should roughly quarter it.</p>
     <figure class="theory-figure full" id="figure-convergence-rates">
-      <a href="/theory/figures/convergence-rates.svg" class="figure-link"><img src="/theory/figures/convergence-rates.svg" width="600" height="430" alt="Log–log plot of relative error against element size. Straight lines of slope 1, 2 and 3 show the expected rates for stress and displacement at element orders 1 and 2. A dashed red line shows a peak stress at a re-entrant corner growing as the elements get smaller." loading="lazy" decoding="async" /></a>
+      <a href="/theory/figures/convergence-rates.svg" class="figure-link"><picture class="figure-image"><source srcset="/theory/figures/convergence-rates.svg" type="image/svg+xml" /><img src="/theory/figures/convergence-rates.png" width="600" height="430" alt="Log–log plot of relative error against element size. Straight lines of slope 1, 2 and 3 show the expected rates for stress and displacement at element orders 1 and 2. A dashed red line shows a peak stress at a re-entrant corner growing as the elements get smaller." loading="lazy" decoding="async" /></picture></a>
       <figcaption>Expected error against element size for a smooth solution, on logarithmic axes: the slope is the convergence rate. A singular peak stress, as at a re-entrant corner, grows instead. Schematic; not a KoFEM measurement.</figcaption>
     </figure>
     <p>Order 2 costs more per element: a 30 × 30 instead of a 12 × 12

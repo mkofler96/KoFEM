@@ -134,7 +134,7 @@ function referenceMapping() {
   // The map itself.
   parts.push(
     path("M222 70C300 6 430 14 520 92", "load", 'marker-end="url(#a-load)"'),
-    text([370, 30], "x = F(ξ)", "sym load-text", "middle", 'font-size="18"'),
+    text([370, 24], "x = F(ξ)", "sym load-text halo", "middle", 'font-size="18"'),
   );
   return parts.join("\n");
 }
@@ -309,7 +309,7 @@ function boundaryValueProblem() {
   parts.push(
     text([330, 190], "Ω", "sym", "middle", 'font-size="24"'),
     text([xWall - 26, y0 - 22], ["Γ", "D"], "sym", "middle"),
-    text([xWall - 26, y1 + 34], "u = ū", "sym", "middle", 'font-size="15"'),
+    text([xWall - 26, y1 + 34], "u = u_D", "sym", "middle", 'font-size="15"'),
     text([600, 82], ["Γ", "N"], "sym load-text", "start"),
     text([602, 300], "σn = t", "sym load-text", "start", 'font-size="15"'),
     text([614, 196], "t", "sym load-text", "start", 'font-size="19"'),

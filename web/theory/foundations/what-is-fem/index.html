@@ -820,7 +820,7 @@
       quadrilaterals in two dimensions, tetrahedra or hexahedra in three.
       Neighbouring elements share corner points called <strong>nodes</strong>.</p>
     <figure class="theory-figure full" id="figure-fem-domain-mesh">
-      <a href="/theory/figures/fem-domain-mesh.svg" class="figure-link"><img src="/theory/figures/fem-domain-mesh.svg" width="820" height="445" alt="A smooth two-dimensional body divided into triangular elements. Black dots mark the nodes; red arrows load the upper-left edge; a pinned and a roller support hold the bottom; arrows u and v at two nodes show their degrees of freedom." loading="lazy" decoding="async" /></a>
+      <a href="/theory/figures/fem-domain-mesh.svg" class="figure-link"><picture class="figure-image"><source srcset="/theory/figures/fem-domain-mesh.svg" type="image/svg+xml" /><img src="/theory/figures/fem-domain-mesh.png" width="820" height="445" alt="A smooth two-dimensional body divided into triangular elements. Black dots mark the nodes; red arrows load the upper-left edge; a pinned and a roller support hold the bottom; arrows u and v at two nodes show their degrees of freedom." loading="lazy" decoding="async" /></picture></a>
       <figcaption>A body divided into triangular elements. The nodes carry the unknowns: each node can move in x and y, so it has two degrees of freedom (DOFs), u and v. Loads act on the boundary; supports prescribe the motion of some nodes.</figcaption>
     </figure>
     <p>The unknowns are the displacements of the nodes. Each independent
@@ -857,7 +857,7 @@
       at each corner and one at the middle of each edge, so its edges can bend
       and its strain can vary linearly inside it.</p>
     <figure class="theory-figure full" id="figure-fem-geometry-to-mesh">
-      <a href="/theory/figures/fem-geometry-to-mesh.svg" class="figure-link"><img src="/theory/figures/fem-geometry-to-mesh.svg" width="940" height="320" alt="Left: a plate with a hole as CAD geometry. Middle: the same plate covered by a triangulated surface mesh. Right: one quadratic tetrahedron with ten numbered nodes, four at its corners and six at its edge midpoints." loading="lazy" decoding="async" /></a>
+      <a href="/theory/figures/fem-geometry-to-mesh.svg" class="figure-link"><picture class="figure-image"><source srcset="/theory/figures/fem-geometry-to-mesh.svg" type="image/svg+xml" /><img src="/theory/figures/fem-geometry-to-mesh.png" width="940" height="320" alt="Left: a plate with a hole as CAD geometry. Middle: the same plate covered by a triangulated surface mesh. Right: one quadratic tetrahedron with ten numbered nodes, four at its corners and six at its edge midpoints." loading="lazy" decoding="async" /></picture></a>
       <figcaption>CAD geometry (left) is filled with tetrahedral elements (middle; the lines are the element faces on the surface). Each quadratic tetrahedron (right) has 10 nodes: 4 at its corners and 6 at its edge midpoints. Node 7 lies on the hidden edge.</figcaption>
     </figure>
     <p>KoFEM follows the same path in the browser: import a STEP file, mesh it,
@@ -921,7 +921,7 @@
       <dt id="area"><math><mi>A</mi></math></dt><dd>Cross-sectional area.</dd>
     </dl>
     <figure class="theory-figure narrow" id="figure-axial-bar">
-      <a href="/theory/figures/axial-bar.svg" class="figure-link"><img src="/theory/figures/axial-bar.svg" width="620" height="200" alt="A straight bar of length L, Young's modulus E and cross-sectional area A, clamped at its left end and pulled to the right by a force P. Its free end moves by the extension delta." loading="lazy" decoding="async" /></a>
+      <a href="/theory/figures/axial-bar.svg" class="figure-link"><picture class="figure-image"><source srcset="/theory/figures/axial-bar.svg" type="image/svg+xml" /><img src="/theory/figures/axial-bar.png" width="620" height="200" alt="A straight bar of length L, Young's modulus E and cross-sectional area A, clamped at its left end and pulled to the right by a force P. Its free end moves by the extension delta." loading="lazy" decoding="async" /></picture></a>
       <figcaption>A one-dimensional idealisation of a bar in tension. The drawing describes the physical model, not a finite element discretisation.</figcaption>
     </figure>
     <p>For a generic example, take

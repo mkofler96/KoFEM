@@ -40,7 +40,7 @@ const label = (x, y, s, { anchor = "middle", cls = "lbl" } = {}) =>
 // Mathematical italic code points, so symbols are set in the math font's
 // italic as in LaTeX rather than slanted by the browser. Planck's h has its
 // own code point (U+210E); the slot in the italic block is reserved.
-function italic(c) {
+export function italic(c) {
   const code = c.codePointAt(0);
   if (c === "h") return "\u210E";
   if (code >= 0x41 && code <= 0x5a)

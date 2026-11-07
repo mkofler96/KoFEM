@@ -17,15 +17,14 @@ import {
   path,
   polygon,
   polyline,
+  powerOfTen,
   rollerSupport,
   scale,
+  mathLetters,
   text,
   textSup,
 } from "./svg.mjs";
 import { sampleCurve } from "./mesh2d.mjs";
-
-const superscript = (value) =>
-  String(value).replace(/[-\d]/g, (c) => (c === "-" ? "⁻" : "⁰¹²³⁴⁵⁶⁷⁸⁹"[c]));
 
 // ── The axial bar ────────────────────────────────────────────────────────────
 
@@ -212,21 +211,9 @@ function convergenceRates() {
   for (const e of [-6, -4, -2, 0])
     parts.push(
       line([80, Y(10 ** e)], [560, Y(10 ** e)], "grid"),
-      text(
-        [72, Y(10 ** e) + 4],
-        e === 0 ? "1" : `10${superscript(e)}`,
-        "small lbl",
-        "end",
-      ),
+      powerOfTen([72, Y(10 ** e) + 4], e, "small lbl", "end"),
     );
-  for (const e of [-2, -1, 0])
-    parts.push(
-      text(
-        [X(10 ** e), 318],
-        e === 0 ? "1" : `10${superscript(e)}`,
-        "small lbl",
-      ),
-    );
+  for (const e of [-2, -1, 0]) parts.push(powerOfTen([X(10 ** e), 318], e));
   parts.push(
     line([80, 300], [560, 300], "axis"),
     line([80, 30], [80, 300], "axis"),
@@ -240,14 +227,19 @@ function convergenceRates() {
     ),
   );
   const series = [
-    { slope: 1, c: 0.5, cls: "accent2", label: "order 1: stress ∝ h" },
+    { slope: 1, c: 0.5, cls: "accent2", label: "order 1: stress (slope 1)" },
     {
       slope: 2,
       c: 0.25,
       cls: "accent",
-      label: "order 1: displacement ∝ h², order 2: stress ∝ h²",
+      label: "order 1: displacement and order 2: stress (slope 2)",
     },
-    { slope: 3, c: 0.12, cls: "accent3", label: "order 2: displacement ∝ h³" },
+    {
+      slope: 3,
+      c: 0.12,
+      cls: "accent3",
+      label: "order 2: displacement (slope 3)",
+    },
   ];
   for (const { slope, c, cls } of series) {
     const pts = [0.01, 1].map((h) => [X(h), Y(Math.max(1e-6, c * h ** slope))]);
@@ -383,7 +375,7 @@ function shellKinematics() {
   }
   const rz = along(n1, [0, 0, 1], 60);
   parts.push(
-    text([rz[0] + 8, rz[1] + 4], "θx, θy, θz", "sym accent2-text", "start"),
+    text([rz[0] + 8, rz[1] + 4], "θ_x, θ_y, θ_z", "sym accent2-text", "start"),
   );
   // Thickness.
   const edge = P([420, 0, -t / 2]);
@@ -486,7 +478,7 @@ function solidShellTransition() {
   parts.push(
     text([wx + 40, 80], "shell mid-surface", "accent-text", "start"),
     text([wx + 40, 98], "(6 DOFs per node)", "small lbl", "start"),
-    `<text x="${wx + 40}" y="${cut + 4}" class="sym load-text" style="font-weight:400">u<tspan dy="4" font-size="70%">S</tspan><tspan dy="-4"> = u</tspan><tspan dy="4" font-size="70%">A</tspan><tspan dy="-4"> + θ</tspan><tspan dy="4" font-size="70%">A</tspan><tspan dy="-4"> × r</tspan></text>`,
+    `<text x="${wx + 40}" y="${cut + 4}" class="sym load-text" style="font-weight:400">${mathLetters("u")}<tspan dy="4" font-size="70%">S</tspan><tspan dy="-4"> = ${mathLetters("u")}</tspan><tspan dy="4" font-size="70%">A</tspan><tspan dy="-4"> + ${mathLetters("θ")}</tspan><tspan dy="4" font-size="70%">A</tspan><tspan dy="-4"> × ${mathLetters("r")}</tspan></text>`,
     text(
       [wx + 40, cut + 24],
       "rigid link to the shell edge",
@@ -563,7 +555,7 @@ function simpCurves() {
   });
   parts.push(
     dot([X(0.5), Y(0.125)], 4.5, "node-accent"),
-    line([X(0.5), Y(0.125)], [X(0.3), Y(0.62)], "thin"),
+    line([X(0.5), Y(0.125)], [X(0.3), Y(0.62) + 13], "thin"),
     text(
       [X(0.3) - 4, Y(0.62) - 8],
       "ρ = 0.5 gives 12.5% of the",

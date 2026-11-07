@@ -135,18 +135,31 @@ test.describe("static theory content", () => {
       await expect(page.locator("main")).not.toContainText(
         /Reviewed on|KOF-\d/,
       );
-      // Every figure is a standalone SVG with alt text, listed in the sitemap.
-      for (const figure of await page
-        .locator("main figure.theory-figure img")
+      // Every figure is an SVG for the browser with a 2× PNG fallback for
+      // crawlers, alt text, and the PNG listed in the sitemap.
+      for (const picture of await page
+        .locator("main figure.theory-figure picture")
         .all()) {
-        const src = (await figure.getAttribute("src")) ?? "";
-        expect(src).toMatch(/^\/theory\/figures\/[a-z0-9-]+\.svg$/);
-        expect((await figure.getAttribute("alt"))?.length).toBeGreaterThan(40);
-        const svg = await page.request.get(src);
-        expect(svg.status(), src).toBe(200);
-        expect(svg.headers()["content-type"]).toContain("image/svg+xml");
+        const svg =
+          (await picture
+            .locator('source[type="image/svg+xml"]')
+            .getAttribute("srcset")) ?? "";
+        const img = picture.locator("img");
+        const png = (await img.getAttribute("src")) ?? "";
+        expect(svg).toMatch(/^\/theory\/figures\/[a-z0-9-]+\.svg$/);
+        expect(png).toBe(svg.replace(/\.svg$/, ".png"));
+        expect((await img.getAttribute("alt"))?.length).toBeGreaterThan(40);
+        const vector = await page.request.get(svg);
+        expect(vector.status(), svg).toBe(200);
+        expect(vector.headers()["content-type"]).toContain("image/svg+xml");
+        expect(await vector.text()).toContain("@font-face");
+        const raster = await page.request.get(png);
+        expect(raster.headers()["content-type"]).toBe("image/png");
+        expect((await raster.body()).readUInt32BE(16)).toBe(
+          2 * Number(await img.getAttribute("width")),
+        );
         expect(sitemap).toContain(
-          `<image:loc>https://kofem.org${src}</image:loc>`,
+          `<image:loc>https://kofem.org${png}</image:loc>`,
         );
       }
     }
@@ -154,6 +167,12 @@ test.describe("static theory content", () => {
     await expect(
       page.getByRole("img", { name: /bar of length L, Young's modulus E/ }),
     ).toBeVisible();
+    // Browsers show the vector SVG, not the PNG fallback.
+    const first = page.locator("main figure.theory-figure img").first();
+    await first.scrollIntoViewIfNeeded();
+    await expect
+      .poll(() => first.evaluate((e) => (e as HTMLImageElement).currentSrc))
+      .toMatch(/\.svg$/);
     for (const caption of await page.locator("main figure figcaption").all())
       await expect(caption).not.toBeEmpty();
     await expect(page.locator("main")).not.toContainText(

@@ -842,7 +842,7 @@
       as there are unknowns. Rounding and poor conditioning make that bound an
       impractical iteration budget.</p>
     <figure class="theory-figure full" id="figure-cg-convergence">
-      <a href="/theory/figures/cg-convergence.svg" class="figure-link"><img src="/theory/figures/cg-convergence.svg" width="640" height="345" alt="Relative residual against iteration on a logarithmic scale for a small plane-elasticity problem. Conjugate gradients without a preconditioner needs many more iterations to reach the 10 to the minus 6 tolerance than conjugate gradients preconditioned with symmetric Gauss–Seidel." loading="lazy" decoding="async" /></a>
+      <a href="/theory/figures/cg-convergence.svg" class="figure-link"><picture class="figure-image"><source srcset="/theory/figures/cg-convergence.svg" type="image/svg+xml" /><img src="/theory/figures/cg-convergence.png" width="640" height="345" alt="Relative residual against iteration on a logarithmic scale for a small plane-elasticity problem. Conjugate gradients without a preconditioner needs many more iterations to reach the 10 to the minus 6 tolerance than conjugate gradients preconditioned with symmetric Gauss–Seidel." loading="lazy" decoding="async" /></picture></a>
       <figcaption>Conjugate gradients on the plane-elasticity system of a small triangular mesh, clamped at one end and loaded at the other. Symmetric Gauss–Seidel preconditioning, as in KoFEM, reaches the 10<sup>−6</sup> relative tolerance in far fewer iterations. Computed for this figure; the residual is the preconditioned norm relative to its initial value.</figcaption>
     </figure>
     <p>CG assumes a <strong>symmetric positive-definite</strong> matrix:

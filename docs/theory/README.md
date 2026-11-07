@@ -50,16 +50,26 @@ links may stay, pinned to the reviewed revision.
 
 ## Figures and result viewers
 
-Figures are textbook-style drawings generated as standalone SVG files, one
-module per article group in `web/theory/figures/` (shared drawing helpers in
-`svg.mjs`, a small deterministic triangulator in `mesh2d.mjs`). Register a
-figure there with its title, alt text and size, and place it in an article with
-`figure(id, caption)`. The generator writes `web/public/theory/figures/<id>.svg`,
-lists each figure as an image of its page in the sitemap so search engines
-index it, and fails on a figure no page uses. Figures are drawn for a light
+Figures are textbook-style drawings, one module per article group in
+`web/theory/figures/` (shared drawing helpers in `svg.mjs`, a small
+deterministic triangulator in `mesh2d.mjs`). Register a figure there with its
+title, alt text and size, and place it in an article with
+`figure(id, caption)`. The generator publishes it through
+`web/figure-assets.mjs`, as for the example pages: `public/theory/figures/<id>.svg`
+with subsets of the site fonts (IBM Plex Sans, KoFEM Math) embedded, for the
+browser, and `<id>.png` at twice its size, the crawlable fallback, both in one
+`<picture>`. The sitemap lists each figure's PNG as an image of its article;
+the generator fails on a figure no page uses and, with `--check`, on any file
+that differs from what the sources render. Figures are drawn for a light
 background; `theory.css` inverts them for the dark theme. Compute plotted
-curves and meshes from their formulas rather than drawing them by hand, and say
-in the caption when a plot is schematic.
+curves and meshes from their formulas rather than drawing them by hand, and
+say in the caption when a plot is schematic.
+
+Labels use the site fonts only, so the SVG and PNG look the same: class `sym`
+sets a symbol in math italic (`text(p, "u = u_D", "sym")`, where `_D` is an
+upright subscript); Greek letters in other labels go to the math font
+automatically; powers of ten use `powerOfTen`. Characters a font lacks
+(for example ⁻⁶ or ∝) fail the build with the label to change.
 
 `resultViewer(id, { caption })` from `web/theory/viewers/index.mjs` embeds a
 solved public example in 3D: the generator extracts the boundary surface and

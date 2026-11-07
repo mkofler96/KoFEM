@@ -1,10 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Shared drawing vocabulary for the Theory Guide figures. Each figure is a
-// standalone SVG file (public/theory/figures/<id>.svg) so it stays vector,
-// renders without the page's CSS and can be indexed as an image. Colours are
-// for a light background; theory.css inverts them for the dark theme.
+// Shared drawing vocabulary for the Theory Guide figures. figures/index.mjs
+// publishes each as a standalone SVG with the site fonts embedded and a PNG
+// (web/figure-assets.mjs). Colours are for a light background; theory.css
+// inverts them for the dark theme.
+
+import { italic } from "../../../examples/validation/lib/figures.mjs";
 
 const fmt = (value) => {
   if (!Number.isFinite(value))
@@ -37,15 +39,16 @@ export const palette = {
 };
 
 const style = `
-  text { font-family: "Helvetica Neue", Helvetica, Arial, "Segoe UI", Roboto, sans-serif; font-size: 13px; fill: ${palette.ink}; }
-  .sym { font-family: "Latin Modern Math", "STIX Two Math", "Cambria Math", "Times New Roman", Times, serif; font-style: italic; font-size: 17px; }
-  .sym.up { font-style: normal; }
+  text { font-family: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif; font-size: 13px; fill: ${palette.ink}; }
+  .sym { font-family: "KoFEM Math", math; font-size: 17px; }
+  .m { font-family: "KoFEM Math", math; }
+  .sym.bold { font-weight: 400; }
   .bold { font-weight: 700; }
   .halo { paint-order: stroke; stroke: #ffffff; stroke-width: 4px; stroke-linejoin: round; }
   .small { font-size: 11px; }
   .lbl { fill: ${palette.muted}; }
   .title { font-size: 14px; font-weight: 600; }
-  .load-text { fill: ${palette.load}; font-weight: 700; font-style: italic; }
+  .load-text { fill: ${palette.load}; font-weight: 700; }
   .accent-text { fill: ${palette.accent}; }
   .accent2-text { fill: ${palette.accent2}; }
   .body { fill: ${palette.body}; stroke: ${palette.ink}; stroke-width: 1.6; stroke-linejoin: round; }
@@ -90,18 +93,9 @@ const markers = Object.entries({
 
 const defs = `<defs>${markers}<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="${palette.muted}" stroke-width="1.2"/></pattern></defs>`;
 
-/** A complete standalone SVG document. */
-export function svgDocument({ width, height, title, description, body }) {
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-labelledby="title desc">
-<title id="title">${escapeXml(title)}</title>
-<desc id="desc">${escapeXml(description)}</desc>
-<style>${style.replace(/\s+/g, " ").trim()}</style>
-${defs}
-${body}
-</svg>
-`;
-}
+/** The CSS and shared <defs> of every Theory figure (figures/index.mjs). */
+export const FIGURE_STYLE = style;
+export const FIGURE_DEFS = defs;
 
 // ── Primitives ────────────────────────────────────────────────────────────────
 
@@ -139,21 +133,87 @@ export const circle = ([x, y], r, cls) =>
 
 export const dot = (p, r = 3.2, cls = "node") => circle(p, r, cls);
 
+// Symbols are set in the math font's italic letters, as in LaTeX, rather
+// than slanted by a renderer: the site fonts have no italic face, and the
+// PNG renderer does not synthesise one. The math font has one weight, so a
+// "bold" symbol stays regular (.sym.bold below) in the browser and the PNG.
+export const mathLetters = (value) =>
+  value.replace(/[A-Za-zΑ-Ωα-ω]/g, (c) => italic(c));
+
+// An oblique label: the same 12° slant a browser gives a font without italic.
+const oblique = (x, y) =>
+  `transform="translate(${fmt(x)} ${fmt(y)}) skewX(-12) translate(${fmt(-x)} ${fmt(-y)})"`;
+
 /**
  * Text at a point. `anchor` is start | middle | end; `cls` adds classes.
- * Subscripts: pass [base, sub] as `content` to typeset base with a lowered sub.
+ * Subscripts: pass [base, sub] as `content` to typeset base with a lowered
+ * sub. With class "sym", letters of the base become math italic and
+ * subscripts stay upright; "_x" inside a symbol is a subscript too. Other text with class
+ * "load-text" or font-style="italic" in `extra` is slanted.
  */
 export function text([x, y], content, cls = "", anchor = "middle", extra = "") {
+  const classes = cls.split(/\s+/);
+  const symbol = classes.includes("sym");
+  // In a symbol, letters become math italic; in a label, Greek letters and
+  // math signs (absent from the sans font) are set in the math font.
+  // A symbol's "_x" is an upright subscript: k_1 + k_2.
+  const subscripts = (value) => {
+    const [head, ...rest] = value.split(/_(\w)/);
+    let out = escapeXml(mathLetters(head));
+    for (let i = 0; i < rest.length; i += 2)
+      out += `<tspan dy="4" font-size="70%">${escapeXml(rest[i])}</tspan><tspan dy="-4">${escapeXml(mathLetters(rest[i + 1]))}</tspan>`;
+    return out;
+  };
+  const letters = (value) =>
+    symbol
+      ? subscripts(value)
+      : escapeXml(value).replace(
+          /[Α-Ωα-ω∂∇∞]+/g,
+          (run) => `<tspan class="m">${mathLetters(run)}</tspan>`,
+        );
   const body = Array.isArray(content)
-    ? `${escapeXml(content[0])}<tspan dy="4" font-size="70%">${escapeXml(content[1])}</tspan>${content[2] ? `<tspan dy="-4">${escapeXml(content[2])}</tspan>` : ""}`
-    : escapeXml(content);
-  return `<text x="${fmt(x)}" y="${fmt(y)}" text-anchor="${anchor}"${cls ? ` class="${cls}"` : ""}${extra ? ` ${extra}` : ""}>${body}</text>`;
+    ? `${letters(content[0])}<tspan dy="4" font-size="70%">${escapeXml(content[1])}</tspan>${content[2] ? `<tspan dy="-4">${letters(content[2])}</tspan>` : ""}`
+    : letters(content);
+  const slanted =
+    !symbol &&
+    (classes.includes("load-text") || extra.includes('font-style="italic"'));
+  const attributes = [
+    extra.replace(/\s*font-style="italic"/, "").trim(),
+    slanted ? oblique(x, y) : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  return `<text x="${fmt(x)}" y="${fmt(y)}" text-anchor="${anchor}"${cls ? ` class="${cls}"` : ""}${attributes ? ` ${attributes}` : ""}>${body}</text>`;
 }
 
-/** Text with a raised superscript, e.g. Ω with an upright r. */
-export function textSup([x, y], base, sup, cls = "", anchor = "middle") {
-  return `<text x="${fmt(x)}" y="${fmt(y)}" text-anchor="${anchor}"${cls ? ` class="${cls}"` : ""}>${escapeXml(base)}<tspan dy="-8" font-size="65%" font-style="normal">${escapeXml(sup)}</tspan></text>`;
+/**
+ * Text with a raised superscript, e.g. Ω with an upright r, or a power of
+ * ten. `rise` is how far the superscript is raised (default 8).
+ */
+export function textSup(
+  [x, y],
+  base,
+  sup,
+  cls = "",
+  anchor = "middle",
+  rise = 8,
+) {
+  const classes = cls.split(/\s+/);
+  const symbol = classes.includes("sym");
+  const slanted = !symbol && classes.includes("load-text");
+  return `<text x="${fmt(x)}" y="${fmt(y)}" text-anchor="${anchor}"${cls ? ` class="${cls}"` : ""}${slanted ? ` ${oblique(x, y)}` : ""}>${escapeXml(symbol ? mathLetters(base) : base)}<tspan dy="${-rise}" font-size="65%">${escapeXml(sup)}</tspan></text>`;
 }
+
+/** An axis label 10^e (or 1), the exponent raised; site fonts have no ⁻⁶. */
+export const powerOfTen = (
+  point,
+  exponent,
+  cls = "small lbl",
+  anchor = "middle",
+) =>
+  exponent === 0
+    ? text(point, "1", cls, anchor)
+    : textSup(point, "10", String(exponent).replace("-", "−"), cls, anchor, 5);
 
 /** Smooth closed curve through points (Catmull–Rom converted to Béziers). */
 export function smoothClosed(points) {

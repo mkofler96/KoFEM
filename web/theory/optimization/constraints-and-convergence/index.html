@@ -864,7 +864,7 @@
       And refining the mesh lets ever thinner members appear, so the answer
       changes with the mesh instead of converging to one design.</p>
     <figure class="theory-figure full" id="figure-density-filter">
-      <a href="/theory/figures/density-filter.svg" class="figure-link"><img src="/theory/figures/density-filter.svg" width="400" height="290" alt="A grid of elements with a circle of radius r min around element e. Elements inside the circle are shaded blue, darkest at the centre, showing filter weights that fall linearly with distance to zero at the radius." loading="lazy" decoding="async" /></a>
+      <a href="/theory/figures/density-filter.svg" class="figure-link"><picture class="figure-image"><source srcset="/theory/figures/density-filter.svg" type="image/svg+xml" /><img src="/theory/figures/density-filter.png" width="400" height="290" alt="A grid of elements with a circle of radius r min around element e. Elements inside the circle are shaded blue, darkest at the centre, showing filter weights that fall linearly with distance to zero at the radius." loading="lazy" decoding="async" /></picture></a>
       <figcaption>Filter weights around element e: they fall linearly with distance and vanish at the radius r<sub>min</sub>. Features thinner than about the radius cannot form.</figcaption>
     </figure>
     <p>KoFEM’s filter introduces a physical length, the
@@ -986,7 +986,7 @@
     <caption>Executed topology-optimization benchmarks</caption><thead><tr><th scope="col">Case</th><th scope="col">Elements</th><th scope="col">Iterations</th><th scope="col">Compliance: start → end</th><th scope="col">Final volume fraction</th></tr></thead>
     <tbody><tr><th scope="row">MBB half-beam</th><td>432</td><td>50, converged</td><td>1802 → 413.1</td><td>0.5</td></tr><tr><th scope="row">Cantilever, 10 × 5 × 5</th><td>250</td><td>45, converged</td><td>616.6 → 188.5</td><td>0.4</td></tr><tr><th scope="row">Cantilever, 20 × 10 × 10</th><td>2,000</td><td>70, converged</td><td>650.7 → 190.1</td><td>0.4</td></tr></tbody></table></div>
     <figure class="theory-figure full" id="figure-mbb-half-beam-layout">
-      <a href="/theory/figures/mbb-half-beam-layout.svg" class="figure-link"><img src="/theory/figures/mbb-half-beam-layout.svg" width="660" height="330" alt="The optimized density of the MBB half-beam on a 36 by 12 element grid. Dark elements form a top chord, a bottom tie and diagonal members; the symmetry plane is on the left, the load on the top left and a roller at the bottom right." loading="lazy" decoding="async" /></a>
+      <a href="/theory/figures/mbb-half-beam-layout.svg" class="figure-link"><picture class="figure-image"><source srcset="/theory/figures/mbb-half-beam-layout.svg" type="image/svg+xml" /><img src="/theory/figures/mbb-half-beam-layout.png" width="660" height="330" alt="The optimized density of the MBB half-beam on a 36 by 12 element grid. Dark elements form a top chord, a bottom tie and diagonal members; the symmetry plane is on the left, the load on the top left and a roller at the bottom right." loading="lazy" decoding="async" /></picture></a>
       <figcaption>The recorded MBB half-beam densities, one square per element: black above 0.5, grey 0.25–0.5, white below 0.25. The symmetry plane is on the left, the load at its top and the roller at bottom right.</figcaption>
     </figure>
     <p>The MBB run reproduces the published layout: a compression chord along

@@ -7,7 +7,12 @@ import { fileURLToPath } from "node:url";
 import { renderDocsPage } from "../docs-layout.mjs";
 import { siteHeader, siteFooter } from "../site-layout.mjs";
 import { topics, topicAnchor, articleUrl } from "./content.mjs";
-import { figures, figureSvg, figureUrl } from "./figures/index.mjs";
+import { figures, figureFiles, figureUrl } from "./figures/index.mjs";
+import {
+  imageEntries,
+  sameFile,
+  withImageNamespace,
+} from "../figure-assets.mjs";
 import { viewerData, viewerIds, viewerUrl } from "./viewers/index.mjs";
 import whatIsFem from "./what-is-fem.mjs";
 import readingAStudy from "./reading-a-study.mjs";
@@ -269,7 +274,7 @@ if (
   // Every figure must appear on a page; an unused one is dead weight.
   const used = new Set(
     pages.flatMap(([, html]) =>
-      [...html.matchAll(/src="\/theory\/figures\/([a-z0-9-]+)\.svg"/g)].map(
+      [...html.matchAll(/src="\/theory\/figures\/([a-z0-9-]+)\.png"/g)].map(
         (match) => match[1],
       ),
     ),
@@ -277,34 +282,32 @@ if (
   for (const id of figures.keys())
     if (!used.has(id)) throw new Error(`Theory figure ${id} is not used`);
   const sitemapPath = resolve(web, "public/sitemap.xml");
-  const sitemap = readFileSync(sitemapPath, "utf8").replace(
-    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">',
-  );
-  // Image entries let search engines find each figure from its article.
-  const imageEntries = (html) =>
-    [
-      ...new Set(
-        [...html.matchAll(/src="(\/theory\/figures\/[a-z0-9-]+\.svg)"/g)].map(
-          (match) => match[1],
-        ),
+  const sitemap = withImageNamespace(readFileSync(sitemapPath, "utf8"));
+  // Each article lists its figures' PNGs as images, for image search.
+  const pageImages = (html) => [
+    ...new Set(
+      [...html.matchAll(/src="(\/theory\/figures\/[a-z0-9-]+\.png)"/g)].map(
+        (match) => `https://kofem.org${match[1]}`,
       ),
-    ]
-      .map(
-        (src) =>
-          `<image:image><image:loc>https://kofem.org${src}</image:loc></image:image>`,
-      )
-      .join("");
-  const block = `<!-- theory:start -->\n${pages.map(([path, html]) => `  <url><loc>https://kofem.org/${path.replace(/index.html$/, "")}</loc>${imageEntries(html)}</url>`).join("\n")}\n  <!-- theory:end -->`;
+    ),
+  ];
+  const block = `<!-- theory:start -->\n${pages.map(([path, html]) => `  <url><loc>https://kofem.org/${path.replace(/index.html$/, "")}</loc>${imageEntries(pageImages(html))}</url>`).join("\n")}\n  <!-- theory:end -->`;
   const nextSitemap = sitemap.includes("<!-- theory:start -->")
     ? sitemap.replace(/<!-- theory:start -->[\s\S]*?<!-- theory:end -->/, block)
     : sitemap.replace("</urlset>", `  ${block}\n</urlset>`);
   const outputs = [
     ...pages.map(([path, html]) => [resolve(web, path), html]),
-    ...[...figures.keys()].map((id) => [
-      resolve(web, `public${figureUrl(id)}`),
-      figureSvg(id),
-    ]),
+    ...(
+      await Promise.all(
+        [...figures.keys()].map(async (id) => {
+          const { svg, png } = await figureFiles(id);
+          return [
+            [resolve(web, `public${figureUrl(id)}`), svg],
+            [resolve(web, `public${figureUrl(id, "png")}`), png],
+          ];
+        }),
+      )
+    ).flat(),
     ...viewerIds().map((id) => [
       resolve(web, `public${viewerUrl(id)}`),
       `${JSON.stringify(viewerData(id))}\n`,
@@ -313,7 +316,7 @@ if (
   ];
   for (const [path, output] of outputs) {
     if (process.argv.includes("--check")) {
-      if (readFileSync(path, "utf8") !== output)
+      if (!sameFile(path, output))
         throw new Error(
           `Stale generated page: ${path}; run bun run theory:generate`,
         );

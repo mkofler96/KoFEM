@@ -1,11 +1,13 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Registry of the Theory Guide figures. Each is written by generate.mjs to
-// public/theory/figures/<id>.svg and embedded with an <img>, so search
-// engines index it as an image and it stays a crisp vector drawing.
+// Registry of the Theory Guide figures. generate.mjs publishes each through
+// web/figure-assets.mjs as public/theory/figures/<id>.svg (site fonts
+// embedded) and <id>.png (2×, the crawlable fallback); articles show them
+// with a <picture>.
 
-import { esc, svgDocument } from "./svg.mjs";
+import { renderFigureFiles } from "../../figure-assets.mjs";
+import { esc, FIGURE_DEFS, FIGURE_STYLE } from "./svg.mjs";
 import intro from "./intro.mjs";
 import mechanics from "./mechanics.mjs";
 import numerics from "./numerics.mjs";
@@ -23,30 +25,37 @@ for (const definition of all) {
   figures.set(definition.id, definition);
 }
 
-export const figureUrl = (id) => `/theory/figures/${id}.svg`;
+export const figureUrl = (id, format = "svg") =>
+  `/theory/figures/${id}.${format}`;
 
-/** The standalone SVG file of a figure. */
-export function figureSvg(id) {
+/** A figure's files: { svg, png }, rendered from its definition. */
+export async function figureFiles(id) {
   const definition = figures.get(id);
   if (!definition) throw new Error(`Unknown theory figure: ${id}`);
-  return svgDocument({
-    width: definition.width,
-    height: definition.height,
-    title: definition.title,
-    description: definition.alt,
-    body: definition.body,
-  });
+  const { light, png } = await renderFigureFiles(
+    {
+      body: `${FIGURE_DEFS}\n${definition.body}`,
+      width: definition.width,
+      height: definition.height,
+      title: definition.title,
+      alt: definition.alt,
+      className: "",
+    },
+    { styles: { light: FIGURE_STYLE }, background: "#ffffff" },
+  );
+  return { svg: light, png };
 }
 
 /**
- * An article figure: the SVG as an image with its alt text and a caption.
+ * An article figure: the SVG for the browser, the PNG as the crawlable
+ * fallback, alt text and a caption. The link opens the full-size SVG.
  * `size` is "full" (full column, default) or "narrow" (centred, smaller).
  */
 export function figure(id, caption, size = "full") {
   const definition = figures.get(id);
   if (!definition) throw new Error(`Unknown theory figure: ${id}`);
   return `<figure class="theory-figure ${size}" id="figure-${id}">
-      <a href="${figureUrl(id)}" class="figure-link"><img src="${figureUrl(id)}" width="${definition.width}" height="${definition.height}" alt="${esc(definition.alt)}" loading="lazy" decoding="async" /></a>
+      <a href="${figureUrl(id)}" class="figure-link"><picture class="figure-image"><source srcset="${figureUrl(id)}" type="image/svg+xml" /><img src="${figureUrl(id, "png")}" width="${definition.width}" height="${definition.height}" alt="${esc(definition.alt)}" loading="lazy" decoding="async" /></picture></a>
       <figcaption>${caption}</figcaption>
     </figure>`;
 }

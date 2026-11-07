@@ -19,6 +19,7 @@ import {
   pointsPath,
   polygon,
   polyline,
+  powerOfTen,
   rollerSupport,
   scale,
   smoothClosed,
@@ -286,12 +287,12 @@ function assemblyBars() {
   const blue = "#d8e5fb";
   const orange = "#f8dfd2";
   const k1 = [
-    ["k₁", "−k₁"],
-    ["−k₁", "k₁"],
+    ["k_1", "−k_1"],
+    ["−k_1", "k_1"],
   ];
   const k2 = [
-    ["k₂", "−k₂"],
-    ["−k₂", "k₂"],
+    ["k_2", "−k_2"],
+    ["−k_2", "k_2"],
   ];
   parts.push(
     textSup([95, 150], "K", "(1)", "sym bold"),
@@ -316,9 +317,9 @@ function assemblyBars() {
     text([341, 200], "add", "small lbl"),
   );
   const glabels = [
-    ["k₁", "−k₁", ""],
-    ["−k₁", "k₁+k₂", "−k₂"],
-    ["", "−k₂", "k₂"],
+    ["k_1", "−k_1", ""],
+    ["−k_1", "k_1+k_2", "−k_2"],
+    ["", "−k_2", "k_2"],
   ];
   const gfill = (r, c) => {
     const in1 = r < 2 && c < 2;
@@ -709,18 +710,7 @@ function cgConvergence() {
   for (let e = -9; e <= 1; e++) {
     parts.push(line([80, Y(10 ** e)], [600, Y(10 ** e)], "grid"));
     if (e % 3 === 0 || e === 0)
-      parts.push(
-        text(
-          [72, Y(10 ** e) + 4],
-          e === 0
-            ? "1"
-            : `10${String(e)
-                .replace("-", "⁻")
-                .replace(/\d/g, (d) => "⁰¹²³⁴⁵⁶⁷⁸⁹"[d])}`,
-          "small lbl",
-          "end",
-        ),
-      );
+      parts.push(powerOfTen([72, Y(10 ** e) + 4], e, "small lbl", "end"));
   }
   const step = kmax > 200 ? 100 : kmax > 120 ? 50 : 25;
   for (let k = 0; k <= kmax; k += step) {
@@ -746,7 +736,14 @@ function cgConvergence() {
       "dash",
       `style="stroke:${palette.load}"`,
     ),
-    text([596, Y(1e-6) - 6], "KoFEM stops at 10⁻⁶", "small load-text", "end"),
+    textSup(
+      [596, Y(1e-6) - 6],
+      "KoFEM stops at 10",
+      "−6",
+      "small load-text",
+      "end",
+      5,
+    ),
   );
   const curve = (h, cls) =>
     polyline(

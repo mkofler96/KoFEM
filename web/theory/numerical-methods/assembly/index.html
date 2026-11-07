@@ -855,7 +855,7 @@
       uniform bar without body load is linear. Supports are treated in detail in
       <a href="/theory/numerical-methods/loads-and-constraints/">Loads and constraints</a>.</p>
     <figure class="theory-figure full" id="figure-assembly-two-bars">
-      <a href="/theory/figures/assembly-two-bars.svg" class="figure-link"><img src="/theory/figures/assembly-two-bars.svg" width="560" height="320" alt="A bar fixed at node 1 and pulled at node 3, made of two elements. Each element's two-by-two stiffness matrix is added into the three-by-three global matrix; the entries of the shared node 2 overlap and add to k1 plus k2." loading="lazy" decoding="async" /></a>
+      <a href="/theory/figures/assembly-two-bars.svg" class="figure-link"><picture class="figure-image"><source srcset="/theory/figures/assembly-two-bars.svg" type="image/svg+xml" /><img src="/theory/figures/assembly-two-bars.png" width="560" height="320" alt="A bar fixed at node 1 and pulled at node 3, made of two elements. Each element's two-by-two stiffness matrix is added into the three-by-three global matrix; the entries of the shared node 2 overlap and add to k1 plus k2." loading="lazy" decoding="async" /></picture></a>
       <figcaption>Assembly of the two-element bar. Each element matrix is added into the rows and columns of its nodes; at the shared node 2 both contributions add.</figcaption>
     </figure>
 
@@ -934,7 +934,7 @@
       The <a href="/theory/numerical-methods/linear-solve/">Linear solve</a>
       page explains how the constrained system is solved.</p>
     <figure class="theory-figure full" id="figure-mesh-sparsity">
-      <a href="/theory/figures/mesh-sparsity.svg" class="figure-link"><img src="/theory/figures/mesh-sparsity.svg" width="640" height="300" alt="Left: a triangular mesh with one node and its neighbours highlighted. Right: the sparsity pattern of the plane-elasticity stiffness matrix of that mesh; nonzero entries cluster in a band around the diagonal, and the highlighted node's two rows have nonzeros only for its neighbours." loading="lazy" decoding="async" /></a>
+      <a href="/theory/figures/mesh-sparsity.svg" class="figure-link"><picture class="figure-image"><source srcset="/theory/figures/mesh-sparsity.svg" type="image/svg+xml" /><img src="/theory/figures/mesh-sparsity.png" width="640" height="300" alt="Left: a triangular mesh with one node and its neighbours highlighted. Right: the sparsity pattern of the plane-elasticity stiffness matrix of that mesh; nonzero entries cluster in a band around the diagonal, and the highlighted node's two rows have nonzeros only for its neighbours." loading="lazy" decoding="async" /></picture></a>
       <figcaption>A small triangular mesh and the nonzero pattern of its plane-elasticity stiffness matrix, two DOFs per node. A node couples only to the nodes of its own elements (highlighted), so most entries are zero. Numbering the nodes from left to right keeps the nonzeros near the diagonal.</figcaption>
     </figure>
 
