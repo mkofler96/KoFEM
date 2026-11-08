@@ -5,6 +5,7 @@
 // Runs kofem-wasm off the main thread so heavy solves don't freeze the UI.
 
 import createModule, { EngineLoadError } from "../wasm/pkg/kofem_wasm.js";
+import initFem, { ElasticModel, SolveOptions } from "../wasm/fem/kofem_wasm.js";
 import type {
   EngineLoadProgress,
   KofemModule,
@@ -38,6 +39,12 @@ import {
 } from "../lib/solve/coupled.js";
 import { routeSolve, routeTopOpt, topOptStartLog } from "../lib/solve/route.js";
 import { buildShellEngineInputs } from "../lib/solve/shell.js";
+import {
+  amgUnavailableReason,
+  isSolverMethod,
+  solveSolidWithAmg,
+  type SolverMethod,
+} from "../lib/solve/amg.js";
 import {
   buildSolidEngineInputs,
   expandTiedDisplacements,
@@ -623,10 +630,64 @@ async function handleAutoShellSolve(
   return true;
 }
 
-// All-solid static solve (solve_linear_elastic), with tie connections welded.
+// The Rust finite-element module (AMG solver): small, so it is loaded on the
+// first AMG solve rather than with the engine. One load per worker.
+let femInit: Promise<unknown> | null = null;
+
+function ensureFem(): Promise<unknown> {
+  if (!femInit) femInit = initFem();
+  return femInit;
+}
+
+// The solver the request asks for. The app always names one; a request without
+// it is refused rather than guessed, since the two differ in method and speed.
+function requestedSolver(payload: SolvePayload): SolverMethod {
+  if (!isSolverMethod(payload.solverMethod))
+    throw new Error(
+      `solve: solverMethod must be "amg" or "gauss-seidel", got ${JSON.stringify(payload.solverMethod)}`,
+    );
+  return payload.solverMethod;
+}
+
+// Why AMG does not apply to this request, or null when it does.
+function amgReason(payload: SolvePayload): string | null {
+  return amgUnavailableReason({
+    elements: payload.elements,
+    properties: payload.properties,
+    // eslint-disable-next-line kofem/no-silent-fallback -- elementOrder is optional in the solve message; the documented default is linear elements
+    elementOrder: payload.elementOrder ?? 1,
+    // eslint-disable-next-line kofem/no-silent-fallback -- `couplings` is optional in the solve message; a model with none is the ordinary case
+    couplingCount: payload.couplings?.length ?? 0,
+  });
+}
+
+// All-solid static solve, with tie connections welded: the Rust AMG solver for
+// linear tets when it was chosen, otherwise the engine's solve_linear_elastic.
 async function handleSolidSolve(id: number, payload: SolvePayload) {
   const { nodes, elements } = payload;
   const tied = weldTies(nodes, elements, payload.tieGroups, logTo(id));
+  if (requestedSolver(payload) === "amg" && amgReason(payload) === null) {
+    await ensureFem();
+    const result = solveSolidWithAmg(
+      { ElasticModel, SolveOptions },
+      { ...payload, nodes: tied.solveNodes, elements: tied.tiedElements },
+      tied.vid,
+      tied.vidTied,
+      payload.cgIterationLimit,
+      logTo(id),
+    );
+    const displacements = expandTiedDisplacements(
+      nodes,
+      tied,
+      result.displacements,
+    );
+    self.postMessage({
+      id,
+      log: `Solve complete: ${displacements.length / 3} vertex displacements, ${result.vonMises.length} element stresses`,
+    });
+    postSolveResult(id, { displacements, vonMises: result.vonMises });
+    return;
+  }
   const { mesh, matJson, bcsJson } = buildSolidEngineInputs(
     { ...payload, nodes: tied.solveNodes, elements: tied.tiedElements },
     tied.vid,
@@ -668,6 +729,12 @@ async function handleSolidSolve(id: number, payload: SolvePayload) {
 
 async function handleSolve(id: number, payload: SolvePayload) {
   m().cgIterationLimit = payload.cgIterationLimit;
+  const reason = amgReason(payload);
+  if (requestedSolver(payload) === "amg" && reason !== null)
+    self.postMessage({
+      id,
+      log: `AMG is not available for this model (${reason}) — solving with Gauss–Seidel.`,
+    });
   const route = routeSolve(payload);
   switch (route.path) {
     case "shell":

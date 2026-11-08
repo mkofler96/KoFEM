@@ -9,6 +9,7 @@ import type {
 } from "../wasm/pkg/kofem_wasm.js";
 import type { TieDefinition } from "../lib/tie.js";
 import type { CouplingDefinition } from "../lib/coupling.js";
+import type { SolverMethod } from "../lib/solve/amg.js";
 
 export interface Node {
   id: number;
@@ -118,7 +119,9 @@ export interface VolumeMeshPayload {
   suppressedBodyIds?: number[];
   properties?: Property[];
 }
-export interface SolvePayload {
+// The model a solve (or a topology optimization) works on — everything in the
+// solve request except the choice of solver.
+export interface SolveModel {
   /** Optional initial CG budget; absent uses each solver's built-in cap. */
   cgIterationLimit?: number;
   nodes: Node[];
@@ -142,6 +145,13 @@ export interface SolvePayload {
   // needed to detect thin-walled bodies and idealise them as shells (auto-shell).
   surfaceTriangles?: [number, number, number][] | null;
   surfaceFaceIds?: number[] | null;
+}
+
+export interface SolvePayload extends SolveModel {
+  // Which CG preconditioner to use: smoothed-aggregation multigrid in the Rust
+  // module, or the engine's Gauss–Seidel. AMG covers all-solid linear-tet
+  // models (amgUnavailableReason); others solve with Gauss–Seidel and say so.
+  solverMethod: SolverMethod;
 }
 
 // Topology-optimization request: the same model the static solve takes (mesh +

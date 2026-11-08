@@ -64,11 +64,13 @@ test("mixed worker applies total force, traction and pressure like equivalent no
     for (const { surface, nodal } of cases) {
       const viaSurface = await worker.sendToWorker("solve", {
         ...model,
+        solverMethod: "gauss-seidel",
         loads: [],
         surfaceLoads: [surface],
       });
       const viaNodes = await worker.sendToWorker("solve", {
         ...model,
+        solverMethod: "gauss-seidel",
         loads: faces[0].flatMap((nodeId) =>
           nodal.map((value, dof) => ({ nodeId, dof, value })),
         ),

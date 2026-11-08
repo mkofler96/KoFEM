@@ -22,6 +22,8 @@ pub mod material;
 pub mod mesh;
 pub mod sparse;
 pub mod static_solve;
+pub mod stress;
+pub mod surface;
 
 pub use amg::{AmgSettings, LevelInfo, Preconditioner, SmoothedAggregation, SymmetricGaussSeidel};
 pub use assembly::assemble_stiffness;
@@ -32,3 +34,5 @@ pub use material::Isotropic;
 pub use mesh::TetMesh;
 pub use sparse::CsrMatrix;
 pub use static_solve::{solve_static, PreconditionerChoice, StaticSolution};
+pub use stress::von_mises;
+pub use surface::{BoundaryFaces, SurfaceLoadKind, SurfaceLoadReport};

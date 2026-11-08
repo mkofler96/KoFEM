@@ -107,6 +107,7 @@ test("i-beam solid: import STEP, mesh, cantilever tip load, all-solid solve", as
       }));
 
       const res = (await win.__kofem.sendToWorker("solve", {
+        solverMethod: "gauss-seidel",
         nodes: st.nodes,
         elements: st.elements,
         materials: st.materials,

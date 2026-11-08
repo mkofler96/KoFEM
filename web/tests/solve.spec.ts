@@ -96,6 +96,7 @@ test("results panel switches to von Mises stress", async ({ page }) => {
         };
       }
     ).__kofem.sendToWorker("solve", {
+      solverMethod: "gauss-seidel",
       nodes: state.nodes,
       elements: state.elements,
       materials: state.materials,

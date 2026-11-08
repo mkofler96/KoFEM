@@ -8,6 +8,7 @@ import type { SliceCreator } from "./modelStore";
 import type { HandCheck } from "../lib/handCheck";
 import { modeSelection, applyTreeSelection } from "./viewSlice";
 import { ensurePlot } from "./studySlice";
+import { DEFAULT_SOLVER_METHOD, type SolverMethod } from "../lib/solve/amg";
 
 export interface SolverResult {
   displacements: Float64Array;
@@ -48,6 +49,9 @@ export interface ResultsSlice {
   // Quadratic elements resolve bending and stress gradients far better at the
   // cost of more DOFs and a slower solve (issue #215).
   elementOrder: number;
+  // CG preconditioner for static solves (Solve panel). AMG is the default; it
+  // covers all-solid linear-tet models, and others use Gauss–Seidel.
+  solverMethod: SolverMethod;
   // Colorbar limits for the displayed field, or null for the field's own
   // min/max. A single stress concentration otherwise takes the whole colour
   // map and flattens everything else to blue, hiding the second-highest
@@ -63,6 +67,7 @@ export interface ResultsSlice {
   setResultType(t: ResultType): void;
   setRunning(v: boolean): void;
   setElementOrder(order: number): void;
+  setSolverMethod(method: SolverMethod): void;
   setLegendRange(range: LegendRange | null): void;
 
   // Mode navigation
@@ -77,6 +82,7 @@ export const createResultsSlice: SliceCreator<ResultsSlice> = (set) => ({
   // Default to linear: it's fast and reliable for every mesh size. Quadratic is
   // an opt-in upgrade (Solver settings) — far more accurate but ~8× the DOFs.
   elementOrder: 1,
+  solverMethod: DEFAULT_SOLVER_METHOD,
   legendRange: null,
   mode: "geometry",
   hasStarted: false,
@@ -106,6 +112,10 @@ export const createResultsSlice: SliceCreator<ResultsSlice> = (set) => ({
   setElementOrder: (order) =>
     set((s) => {
       s.elementOrder = order;
+    }),
+  setSolverMethod: (method) =>
+    set((s) => {
+      s.solverMethod = method;
     }),
   setLegendRange: (range) =>
     set((s) => {

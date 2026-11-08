@@ -39,6 +39,7 @@ test("solve worker returns displacements and von Mises for the cantilever", asyn
       }
     ).__kofem;
     return kofem.sendToWorker("solve", {
+      solverMethod: "gauss-seidel",
       nodes: m.nodes,
       elements: m.elements,
       materials: m.materials,

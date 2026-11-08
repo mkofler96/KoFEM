@@ -216,7 +216,7 @@ test("a suppressed Shell body does not block solving or optimizing the rest", as
         }
       };
       return {
-        solve: await run("solve", model),
+        solve: await run("solve", { ...model, solverMethod: "gauss-seidel" }),
         optimize: await run("optimize_topology", {
           ...model,
           settings: {

@@ -10,7 +10,7 @@
 import type {
   Element,
   Property,
-  SolvePayload,
+  SolveModel,
 } from "../../workers/solverTypes.js";
 import { mixedCoupledMaterials } from "../coupledMaterials.js";
 import { bodyMembership, tieLimit, tieSides } from "../tie.js";
@@ -196,7 +196,7 @@ export interface CoupledEngineInputs {
 // zero shell triangles. Nothing else about the path changes — the shell arrays
 // are simply empty.
 export function buildCoupledEngineInputs(
-  payload: SolvePayload,
+  payload: SolveModel,
   log: SolveLog,
 ): CoupledEngineInputs {
   const {
@@ -342,7 +342,7 @@ export function buildCoupledEngineInputs(
 // shell triangles) — walk the original element list and pull from whichever
 // field the element type selects.
 export function mapMixedResult(
-  payload: Pick<SolvePayload, "nodes" | "elements">,
+  payload: Pick<SolveModel, "nodes" | "elements">,
   model: CoupledEngineInputs["model"],
   result: {
     displacements: Float64Array;

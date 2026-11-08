@@ -210,6 +210,7 @@ test("solve completes with a componentwise force load", async ({ page }) => {
       }
     ).__kofem;
     return kofem.sendToWorker("solve", {
+      solverMethod: "gauss-seidel",
       nodes: state.nodes,
       elements: state.elements,
       materials: state.materials,

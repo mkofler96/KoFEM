@@ -11,8 +11,8 @@
 //! `../kofem-fem/LICENSE-MFEM`, also shipped beside the generated WASM module.
 
 use kofem_fem::{
-    assemble_stiffness, solve_static, AmgSettings, CgSettings, CsrMatrix, FemError, Isotropic,
-    PreconditionerChoice, StoppingRule, TetMesh,
+    assemble_stiffness, solve_static, von_mises, AmgSettings, BoundaryFaces, CgSettings, CsrMatrix,
+    FemError, Isotropic, PreconditionerChoice, StoppingRule, SurfaceLoadKind, TetMesh,
 };
 use wasm_bindgen::prelude::*;
 
@@ -25,6 +25,8 @@ fn to_js(error: &FemError) -> JsError {
 pub struct ElasticModel {
     mesh: TetMesh,
     stiffness: Option<CsrMatrix>,
+    /// Built on the first surface load and kept for the next ones.
+    boundary: Option<BoundaryFaces>,
 }
 
 #[wasm_bindgen]
@@ -60,6 +62,7 @@ impl ElasticModel {
         Ok(ElasticModel {
             mesh,
             stiffness: None,
+            boundary: None,
         })
     }
 
@@ -67,6 +70,87 @@ impl ElasticModel {
     #[must_use]
     pub fn dof_count(&self) -> usize {
         3 * self.mesh.vertex_count()
+    }
+
+    /// Add the work-equivalent nodal forces of one surface load to `forces`
+    /// (3 per vertex), with the MFEM engine's semantics. `faces` holds the
+    /// selected triangles as vertex-index triples; `kind` is `"pressure"`
+    /// (`values` = [p], positive pushing in), `"traction"` (force per area)
+    /// or `"force"` (total force, spread over the faces' area). `load` names
+    /// the load in errors. Returns how many selected faces are not on the
+    /// boundary (stale or interior selections), for the caller to report.
+    ///
+    /// # Errors
+    /// A malformed face list or value array, an unknown kind, or a load that
+    /// matches no boundary face or spreads a force over zero area.
+    #[wasm_bindgen(js_name = addSurfaceLoad)]
+    pub fn add_surface_load(
+        &mut self,
+        forces: &mut [f64],
+        load: usize,
+        faces: &[u32],
+        kind: &str,
+        values: &[f64],
+    ) -> Result<usize, JsError> {
+        if !faces.len().is_multiple_of(3) {
+            return Err(JsError::new(&format!(
+                "surface load {load}: {} face indices are not vertex triples",
+                faces.len()
+            )));
+        }
+        let vector = |values: &[f64]| -> Result<[f64; 3], JsError> {
+            <[f64; 3]>::try_from(values).map_err(|_| {
+                JsError::new(&format!(
+                    "surface load {load} ({kind}): expected 3 components, got {}",
+                    values.len()
+                ))
+            })
+        };
+        let parsed = match kind {
+            "pressure" => match values {
+                [pressure] => SurfaceLoadKind::Pressure(*pressure),
+                _ => {
+                    return Err(JsError::new(&format!(
+                        "surface load {load} (pressure): expected 1 value, got {}",
+                        values.len()
+                    )))
+                }
+            },
+            "traction" => SurfaceLoadKind::Traction(vector(values)?),
+            "force" => SurfaceLoadKind::Force(vector(values)?),
+            other => {
+                return Err(JsError::new(&format!(
+                    "surface load {load}: unknown kind \"{other}\"; expected \"pressure\", \
+                     \"traction\" or \"force\""
+                )))
+            }
+        };
+        let vertex_count = self.mesh.vertex_count();
+        if let Some(&vertex) = faces
+            .iter()
+            .find(|&&vertex| vertex as usize >= vertex_count)
+        {
+            return Err(JsError::new(&format!(
+                "surface load {load}: face vertex {vertex} is out of range (the mesh has \
+                 {vertex_count} vertices)"
+            )));
+        }
+        let boundary = self
+            .boundary
+            .get_or_insert_with(|| BoundaryFaces::new(&self.mesh));
+        let report = boundary
+            .apply(&self.mesh, load, faces.as_chunks::<3>().0, parsed, forces)
+            .map_err(|error| to_js(&error))?;
+        Ok(report.unmatched)
+    }
+
+    /// Von Mises stress of every tet for the given displacements (3 per vertex).
+    ///
+    /// # Errors
+    /// A displacement array that does not fit the mesh.
+    #[wasm_bindgen(js_name = vonMises)]
+    pub fn von_mises(&self, displacements: &[f64]) -> Result<Vec<f64>, JsError> {
+        von_mises(&self.mesh, displacements).map_err(|error| to_js(&error))
     }
 
     /// Assemble the global stiffness matrix; returns its non-zero count.

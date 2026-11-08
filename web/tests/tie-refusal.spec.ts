@@ -46,6 +46,7 @@ interface SolvePayload {
   loads: unknown[];
   surfaceLoads: unknown[];
   tieGroups: TieGroup[];
+  solverMethod: "amg" | "gauss-seidel";
 }
 
 // Splitting a hex cell into 6 tets (Kuhn), the same decomposition the builder
@@ -159,6 +160,7 @@ function payloadFor(
     loads: [],
     surfaceLoads: [],
     tieGroups: [tie],
+    solverMethod: "gauss-seidel",
   };
 }
 

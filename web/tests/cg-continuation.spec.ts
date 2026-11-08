@@ -4,7 +4,7 @@
 import { test, expect } from "./coverage";
 import type { Page } from "@playwright/test";
 import { buildCantilever } from "./fixtures/cantilever";
-import type { SolvePayload } from "../src/workers/solverTypes";
+import type { SolveModel } from "../src/workers/solverTypes";
 
 type Fields = { displacements: number[]; vonMises: number[] };
 type Outcome = { fields: Fields } | { error: string };
@@ -25,14 +25,18 @@ type TestWindow = Window & {
 async function startSolve(
   page: Page,
   cap: number,
-  model: SolvePayload = buildCantilever(),
+  model: SolveModel = buildCantilever(),
 ) {
   await page.evaluate(
     ({ model, cap }) => {
       const scope = window as TestWindow;
       delete scope.__cgOutcome;
       scope.__kofem
-        .sendToWorker("solve", { ...model, cgIterationLimit: cap })
+        .sendToWorker("solve", {
+          ...model,
+          solverMethod: "gauss-seidel",
+          cgIterationLimit: cap,
+        })
         .then(
           (result) => {
             scope.__cgOutcome = {
@@ -83,10 +87,10 @@ test("CG pauses, resumes repeatedly without changing results, and stops explicit
   await page.goto("/app/");
   await page.waitForFunction(() => Boolean((window as TestWindow).__kofem));
   const baseline = await page.evaluate(async (model) => {
-    const result = await (window as TestWindow).__kofem.sendToWorker(
-      "solve",
-      model,
-    );
+    const result = await (window as TestWindow).__kofem.sendToWorker("solve", {
+      ...model,
+      solverMethod: "gauss-seidel",
+    });
     return {
       displacements: Array.from(result.displacements),
       vonMises: Array.from(result.vonMises),
@@ -177,8 +181,8 @@ test("CG pauses, resumes repeatedly without changing results, and stops explicit
   await expect(dialog).toBeHidden();
 });
 
-function shellModel(coupled: boolean): SolvePayload {
-  const model: SolvePayload = {
+function shellModel(coupled: boolean): SolveModel {
+  const model: SolveModel = {
     nodes: [],
     elements: [],
     materials: buildCantilever().materials,
@@ -254,7 +258,7 @@ for (const path of ["shell", "coupled"] as const) {
     const baseline = await page.evaluate(async (model) => {
       const result = await (window as TestWindow).__kofem.sendToWorker(
         "solve",
-        model,
+        { ...model, solverMethod: "gauss-seidel" },
       );
       return {
         displacements: Array.from(result.displacements),

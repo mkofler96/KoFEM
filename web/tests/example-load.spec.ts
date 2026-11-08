@@ -101,6 +101,7 @@ test("re-solving a loaded example does not trap on its node ids (#288)", async (
     const st = win.__kofemStore.getState();
     try {
       const res = (await win.__kofem.sendToWorker("solve", {
+        solverMethod: "gauss-seidel",
         nodes: st.nodes,
         elements: st.elements,
         materials: st.materials,
@@ -169,6 +170,7 @@ test("a pure-shell (CTRIA3) example re-solves through the shell path", async ({
     };
     try {
       const res = (await win.__kofem.sendToWorker("solve", {
+        solverMethod: "gauss-seidel",
         nodes: st.nodes,
         elements: st.elements,
         materials: st.materials,
@@ -249,6 +251,7 @@ test("a mixed shell/solid (CTRIA3 + CTETRA) example re-solves through the couple
     };
     try {
       const res = (await win.__kofem.sendToWorker("solve", {
+        solverMethod: "gauss-seidel",
         nodes: st.nodes,
         elements: st.elements,
         materials: st.materials,

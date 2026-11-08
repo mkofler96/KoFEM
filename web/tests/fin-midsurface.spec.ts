@@ -170,6 +170,7 @@ test("mesh-time auto-shell: the fin is stored as a mid-surface shell mesh", asyn
     for (const n of tip)
       loads.push({ nodeId: n.id, dof: 1, value: 500 / tip.length });
     const result = (await win.__kofem.sendToWorker("solve", {
+      solverMethod: "gauss-seidel",
       nodes: state.nodes,
       elements: state.elements,
       materials: state.materials,

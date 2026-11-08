@@ -260,6 +260,7 @@ test("solve worker completes when loads include a moment (Mz)", async ({
       }
     ).__kofem;
     return kofem.sendToWorker("solve", {
+      solverMethod: "gauss-seidel",
       nodes: freshState.nodes,
       elements: freshState.elements,
       materials: freshState.materials,

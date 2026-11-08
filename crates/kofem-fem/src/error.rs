@@ -65,6 +65,18 @@ pub enum FemError {
     },
     #[error("CG settings are invalid: {reason}")]
     InvalidSettings { reason: &'static str },
+    #[error(
+        "surface load {load}: none of the {faces} selected face(s) is on the mesh boundary, \
+         so the load would apply no force at all — a stale face selection after a remesh?"
+    )]
+    SurfaceLoadUnmatched { load: usize, faces: usize },
+    #[error(
+        "surface load {load}: the selected faces have a total area of {area}, so a total \
+         force cannot be spread over them"
+    )]
+    SurfaceLoadArea { load: usize, area: f64 },
+    #[error("displacement vector has {len} entries, but the model has {count} degrees of freedom")]
+    DisplacementLength { len: usize, count: usize },
     #[error("multigrid setup input is invalid: {reason}")]
     AmgInput { reason: &'static str },
     #[error(
