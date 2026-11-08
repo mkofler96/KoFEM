@@ -50,14 +50,9 @@ impl TetMesh {
                 value,
             });
         }
-        let points: Vec<[f64; 3]> = vertices
-            .chunks_exact(3)
-            .map(|xyz| [xyz[0], xyz[1], xyz[2]])
-            .collect();
-        let elements: Vec<[u32; 4]> = tets
-            .chunks_exact(4)
-            .map(|ids| [ids[0], ids[1], ids[2], ids[3]])
-            .collect();
+        // The lengths were checked above, so there is no remainder to drop.
+        let points: Vec<[f64; 3]> = vertices.as_chunks::<3>().0.to_vec();
+        let elements: Vec<[u32; 4]> = tets.as_chunks::<4>().0.to_vec();
         if material_of_tet.len() != elements.len() {
             return Err(FemError::MaterialIdCount {
                 count: material_of_tet.len(),

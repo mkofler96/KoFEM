@@ -44,7 +44,9 @@ impl ElasticModel {
             )));
         }
         let parsed = materials
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .enumerate()
             .map(|(index, pair)| Isotropic::new(index, pair[0], pair[1]))
             .collect::<Result<Vec<_>, _>>()

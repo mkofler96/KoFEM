@@ -176,7 +176,8 @@ mod tests {
                 .map(|(force, motion)| force * motion)
                 .sum::<f64>();
         let (lambda, mu) = material.lame();
-        let expected = 0.5 * (lambda + 2.0 * mu) * strain * strain / 6.0;
+        // ½·(λ+2μ)·ε²·V with V = 1/6.
+        let expected = (lambda + 2.0 * mu) * strain * strain / 12.0;
         assert!((energy - expected).abs() <= 1e-12 * expected.max(1.0));
     }
 }
