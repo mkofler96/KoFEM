@@ -3,7 +3,7 @@ name = "kofem-fem"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
-license.workspace = true
+license = "AGPL-3.0-or-later AND BSD-3-Clause"
 description = "Linear-elastic finite-element assembly and solvers for KoFEM"
 
 [dependencies]

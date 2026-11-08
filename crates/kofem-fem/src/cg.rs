@@ -1,9 +1,14 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2010-2024 Lawrence Livermore National Security, LLC
+// SPDX-License-Identifier: AGPL-3.0-or-later AND BSD-3-Clause
 
 //! Conjugate gradients preconditioned by one symmetric Gauss–Seidel sweep —
 //! the same method and stopping rule as the engine's MFEM solve
 //! (`mfem::CGSolver` + `mfem::GSSmoother`), so iteration counts compare.
+//!
+//! MFEM reference: `CGSolver::Mult` in `linalg/solvers.cpp` (MFEM v4.7).
+//! MFEM copyright (c) 2010-2024, Lawrence Livermore National Security, LLC.
+//! All rights reserved. See `../NOTICE.md` and `../LICENSE-MFEM` (BSD-3-Clause).
 
 use crate::error::FemError;
 use crate::sparse::CsrMatrix;

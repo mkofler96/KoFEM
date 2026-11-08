@@ -5,6 +5,10 @@
 //! WASM memory once); every failure reaches JS as an `Error` carrying the
 //! `FemError` message. Assembly and solve are separate calls so the caller can
 //! time them and keep the assembled matrix for several load cases.
+//!
+//! Numerical implementation based on KoFEM's MFEM solver approach; upstream
+//! credit and BSD-3-Clause terms are retained in `../kofem-fem/NOTICE.md` and
+//! `../kofem-fem/LICENSE-MFEM`, also shipped beside the generated WASM module.
 
 use kofem_fem::{
     assemble_stiffness, solve_static, CgSettings, CsrMatrix, FemError, Isotropic, TetMesh,

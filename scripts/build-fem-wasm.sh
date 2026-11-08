@@ -53,4 +53,8 @@ rm -rf "$OUT_DIR"
 wasm-bindgen --target web --out-dir "$OUT_DIR" \
     "$REPO_ROOT/target/wasm32-unknown-unknown/release/kofem_wasm.wasm"
 
+# Keep MFEM's attribution and complete BSD notice with the binary artifact.
+cp "$REPO_ROOT/crates/kofem-fem/LICENSE-MFEM" "$OUT_DIR/LICENSE-MFEM"
+cp "$REPO_ROOT/crates/kofem-fem/NOTICE.md" "$OUT_DIR/NOTICE.md"
+
 echo "Done: $OUT_DIR ($(du -h "$OUT_DIR/kofem_wasm_bg.wasm" | cut -f1) wasm)"

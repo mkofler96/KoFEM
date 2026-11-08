@@ -91,6 +91,12 @@ exception), **Netgen** (LGPL-2.1), and **MFEM** (BSD-3-Clause) — each retainin
 its own license. See [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) for the
 full attribution and compatibility notes.
 
+The Rust finite-element module reimplements the formulation and solver
+approach of KoFEM's MFEM-based engine. We credit **MFEM and its contributors**
+as the upstream numerical implementation reference. See the
+[module notice](crates/kofem-fem/NOTICE.md) for source references and the
+retained [MFEM BSD-3-Clause license](crates/kofem-fem/LICENSE-MFEM).
+
 ## Funding
 
 If you enjoyed what I built, consider [buying me a coffee ☕](https://buymeacoffee.com/mkofler). Thanks for your support!

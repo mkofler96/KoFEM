@@ -1,9 +1,16 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2010-2024 Lawrence Livermore National Security, LLC
+// SPDX-License-Identifier: AGPL-3.0-or-later AND BSD-3-Clause
 
 //! Compressed sparse row matrix with a node-block pattern: DOF 3·n + c is
 //! component c of node n, and every pair of nodes that shares an element
 //! couples all nine of its component pairs.
+//!
+//! MFEM reference for the symmetric Gauss-Seidel preconditioner:
+//! `SparseMatrix::Gauss_Seidel_forw` and `Gauss_Seidel_back` in
+//! `linalg/sparsemat.cpp` (MFEM v4.7).
+//! MFEM copyright (c) 2010-2024, Lawrence Livermore National Security, LLC.
+//! All rights reserved. See `../NOTICE.md` and `../LICENSE-MFEM` (BSD-3-Clause).
 
 /// Square CSR matrix. Column indices are sorted within each row, and every row
 /// stores its diagonal.

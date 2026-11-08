@@ -5,6 +5,12 @@
 //! assembly, Dirichlet elimination and a preconditioned conjugate-gradient
 //! solve. Pure Rust with no I/O or clock, so the same code runs natively under
 //! `cargo test` and in the browser through `kofem-wasm`.
+//!
+//! MFEM attribution: this module reimplements the linear-elastic formulation
+//! and iterative-solver approach used by KoFEM's MFEM-based engine. MFEM and
+//! its contributors are the upstream numerical implementation reference.
+//! See `../NOTICE.md` for source references and `../LICENSE-MFEM` for MFEM's
+//! copyright notice and BSD-3-Clause terms, retained alongside KoFEM's license.
 
 pub mod assembly;
 pub mod cg;

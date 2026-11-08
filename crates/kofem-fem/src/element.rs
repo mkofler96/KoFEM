@@ -1,5 +1,6 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
-// SPDX-License-Identifier: AGPL-3.0-or-later
+// SPDX-FileCopyrightText: 2010-2024 Lawrence Livermore National Security, LLC
+// SPDX-License-Identifier: AGPL-3.0-or-later AND BSD-3-Clause
 
 //! Linear (4-node) tetrahedron. Its shape-function gradients are constant, so
 //! the stiffness is exact with one evaluation:
@@ -9,6 +10,11 @@
 //! ```
 //!
 //! where `g_a` is the physical gradient of shape function `a` and `V` the volume.
+//!
+//! MFEM reference: `ElasticityIntegrator::AssembleElementMatrix` in
+//! `fem/bilininteg.cpp` (MFEM v4.7), specialized here to a linear tetrahedron.
+//! MFEM copyright (c) 2010-2024, Lawrence Livermore National Security, LLC.
+//! All rights reserved. See `../NOTICE.md` and `../LICENSE-MFEM` (BSD-3-Clause).
 
 use crate::material::Isotropic;
 use crate::mesh::{cross, dot, signed_volume, sub};
