@@ -18,7 +18,7 @@ import type { SolveMesh } from "../../wasm/pkg/kofem_wasm.js";
 import {
   buildTie,
   remapElement,
-  assertNoCollapsedElements,
+  assertValidTiedMesh,
   tiedId,
   expandToOriginalNodes,
   type TieDefinition,
@@ -110,7 +110,7 @@ export function weldTies(
     tie.repOf.size > 0
       ? elements.map((el) => remapElement(el, tie.repOf))
       : elements;
-  if (tie.repOf.size > 0) assertNoCollapsedElements(tiedElements);
+  assertValidTiedMesh(nodes, elements, tie);
   for (const report of tie.reports) {
     if (report.nPaired === 0 && report.nShared === 0)
       throw new Error(

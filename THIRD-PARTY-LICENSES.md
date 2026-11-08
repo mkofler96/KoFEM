@@ -44,6 +44,28 @@ lockfile; their license texts are installed under `web/node_modules/<pkg>/`.
 
 ## Rust crates
 
-The native crates (`kofem-core`, `kofem-geom`, `kofem-mesh`) are part of KoFEM
-and are licensed under AGPL-3.0-or-later. Their Cargo dependencies (`serde`,
-`thiserror`, `log`) are dual MIT/Apache-2.0 licensed.
+The Rust crates (`kofem-core`, `kofem-geom`, `kofem-mesh`, `kofem-fem`, and
+`kofem-wasm`) are part of KoFEM. KoFEM's additions are licensed under
+AGPL-3.0-or-later. Their Cargo dependencies, including `serde`, `thiserror`,
+`log`, and `wasm-bindgen`, retain their own MIT/Apache-2.0 licenses.
+
+### MFEM attribution in the Rust finite-element module
+
+`kofem-fem` reimplements the linear-elastic formulation and iterative-solver
+approach used by KoFEM's MFEM-based engine. MFEM and its contributors are
+credited as the upstream numerical implementation reference in the
+[module notice](crates/kofem-fem/NOTICE.md) and beside the element, CG, and
+Gauss-Seidel implementations. The notice links to the relevant MFEM v4.7
+source routines and describes the scope of the reimplementation.
+
+MFEM copyright (c) 2010-2024, Lawrence Livermore National Security, LLC.
+All rights reserved. The complete upstream BSD-3-Clause notice, conditions,
+and disclaimer are retained in
+[LICENSE-MFEM](crates/kofem-fem/LICENSE-MFEM). MFEM-derived portions retain
+those terms alongside the AGPL-3.0-or-later terms for KoFEM's additions.
+
+`scripts/build-fem-wasm.sh` includes `NOTICE.md` and `LICENSE-MFEM` beside
+the generated WASM module, so they accompany the downloadable build artifact.
+The public web distribution also ships the license at
+[`/licenses/mfem.txt`](web/public/licenses/mfem.txt). MFEM attribution does
+not imply endorsement by its copyright holder or contributors.
