@@ -108,3 +108,31 @@ test("a file picked while the engine downloads waits for it", async ({
   ).toBeVisible({ timeout: 60_000 });
   await expect(status(page)).toHaveAttribute("data-phase", "ready");
 });
+
+// The Rust module (shell idealisation) loads with the engine. Without it a
+// Shell body cannot be meshed or solved, so the engine is not ready until both
+// are, and its failure gets the same failed status and Retry.
+test("a blocked Rust module download fails the engine, and Retry recovers", async ({
+  page,
+  context,
+}) => {
+  test.setTimeout(120_000);
+  let blocked = true;
+  await context.route(/kofem_wasm_bg[^/]*\.wasm$/, (route) =>
+    blocked ? route.abort("failed") : route.continue(),
+  );
+  await gotoApp(page);
+
+  const error = page.getByTestId("engine-error");
+  await expect(error).toBeVisible({ timeout: 30_000 });
+  await expect(error).toContainText("Engine failed: download blocked");
+  await expect(error).toHaveAttribute("title", /Rust finite-element module/);
+  await expect(importCard(page)).toBeDisabled();
+
+  blocked = false;
+  await error.getByRole("button", { name: "Retry" }).click();
+  await expect(status(page)).toHaveAttribute("data-phase", "ready", {
+    timeout: 60_000,
+  });
+  await expect(importCard(page)).toBeEnabled();
+});
