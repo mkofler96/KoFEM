@@ -79,6 +79,25 @@ justification:
 /* eslint-disable kofem/min-identifier-length -- symbols from the Euler–Bernoulli formula above: δ = P·L³/(3·E·I), I = b·h³/12 */
 ```
 
+### Rust
+
+Crates that opt in with `[lints] workspace = true` (the finite-element crates)
+get the same rules through Clippy, configured in the root `Cargo.toml` and
+`clippy.toml`, and CI denies every warning:
+
+- `clippy::min_ident_chars` mirrors `kofem/min-identifier-length` (only `i`,
+  `j`, `k`, `n` may be one letter).
+- `clippy::unwrap_used`, `expect_used` and `panic` keep failures explicit:
+  return a typed error (`FemError`) instead. Tests are exempt.
+- `clippy::allow_attributes_without_reason` makes every exception state why,
+  like an ESLint disable comment needs a `-- justification`:
+
+```rust
+#[allow(clippy::float_cmp, reason = "a DOF prescribed twice is consistent only with the identical value")]
+```
+
+- `unsafe_code` is forbidden, and the `clippy::pedantic` group is on.
+
 ## Issues live in Linear
 
 Work is tracked in Linear (team `KOF`), not in GitHub Issues. Pick up or file

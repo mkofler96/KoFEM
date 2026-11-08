@@ -15,7 +15,12 @@ const kofem = {
 export default [
   {
     // Generated Emscripten bundle and third-party output are not linted.
-    ignores: ["src/wasm/pkg/**", "dist/**", "node_modules/**"],
+    ignores: [
+      "src/wasm/pkg/**",
+      "src/wasm/fem/**",
+      "dist/**",
+      "node_modules/**",
+    ],
   },
   {
     files: ["src/**/*.{ts,tsx}"],

@@ -1,0 +1,17 @@
+[package]
+name = "kofem-wasm"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Browser bindings (wasm-bindgen) for KoFEM's Rust finite-element code"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+kofem-fem = { workspace = true }
+wasm-bindgen = { workspace = true }
+
+[lints]
+workspace = true
