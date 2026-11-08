@@ -138,7 +138,7 @@ fn main() {
             .collect();
         let start = Instant::now();
         let amg = SmoothedAggregation::new(
-            &eliminated,
+            eliminated,
             mesh.vertices(),
             &constrained,
             AmgSettings {
@@ -153,7 +153,6 @@ fn main() {
             amg.operator_complexity()
         );
         drop(amg);
-        drop(eliminated);
 
         let mut reference: Option<Vec<f64>> = None;
         let choices = [

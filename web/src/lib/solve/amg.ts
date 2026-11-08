@@ -21,7 +21,12 @@ import type {
   Property,
   SurfaceLoad,
 } from "../../workers/solverTypes.js";
-import type { ElasticModel, SolveOptions } from "../../wasm/fem/kofem_wasm.js";
+import type {
+  ElasticModel,
+  SolveOptions,
+  SolveRun,
+} from "../../wasm/fem/kofem_wasm.js";
+import type { CgLimitProgress } from "../../wasm/pkg/kofem_wasm.js";
 import {
   groupDirichlet,
   groupPointLoads,
@@ -87,26 +92,38 @@ export interface AmgSolidModel {
   surfaceLoads?: SurfaceLoad[];
 }
 
-// The CG budget when the solve request names none. AMG converges in tens to a
-// few hundred iterations; running out is a real failure and is reported.
+// The CG budget when the solve request names none — the MFEM path's cap. AMG
+// converges in tens to a few hundred iterations, so reaching it is rare; when
+// it happens the user is asked whether to go on, as on the MFEM path.
 const DEFAULT_ITERATION_LIMIT = 5000;
+// Progress is logged every this many iterations, as the MFEM path does.
+const LOG_EVERY = 10;
+// How long the solve may run without handing control back to the worker's
+// event loop, so messages (a continuation answer) are never starved.
+const YIELD_AFTER_MS = 200;
 // Stop on the force residual ‖f − K·u‖ / ‖f‖, which means the same accuracy
 // whatever the preconditioner (see StoppingRule in crates/kofem-fem/src/cg.rs).
 const RELATIVE_TOLERANCE = 1e-6;
+
+// Asked when the iteration budget runs out while the residual is still
+// falling: resolves to the number of extra iterations, or 0 to stop. The
+// worker routes it to the same "continue solving?" dialog as the MFEM path.
+export type ContinuationPrompt = (progress: CgLimitProgress) => Promise<number>;
 
 // Solve one all-solid, linear-tet model with AMG. `vid` indexes element
 // connectivity; `refVid` resolves constraint, load and surface-face node
 // references (a tie maps them to their representative first). Returns one
 // displacement triple per node of `model.nodes` and one von Mises stress per
 // element, in element order — the same layout as the MFEM solve.
-export function solveSolidWithAmg(
+export async function solveSolidWithAmg(
   fem: FemModule,
   model: AmgSolidModel,
   vid: VertexIndexer,
   refVid: VertexIndexer,
   iterationLimit: number | undefined,
+  askToContinue: ContinuationPrompt,
   log: (line: string) => void,
-): { displacements: Float64Array; vonMises: Float64Array } {
+): Promise<{ displacements: Float64Array; vonMises: Float64Array }> {
   const reason = amgUnavailableReason({
     elements: model.elements,
     properties: model.properties,
@@ -196,38 +213,125 @@ export function solveSolidWithAmg(
       },
     );
 
+    // eslint-disable-next-line kofem/no-silent-fallback -- cgIterationLimit is optional in the solve message; absent means the solver's own budget, as for the MFEM path
+    const budget = iterationLimit ?? DEFAULT_ITERATION_LIMIT;
     const options = new fem.SolveOptions(
       RELATIVE_TOLERANCE,
-      // eslint-disable-next-line kofem/no-silent-fallback -- cgIterationLimit is optional in the solve message; absent means the solver's own budget, as for the MFEM path
-      iterationLimit ?? DEFAULT_ITERATION_LIMIT,
+      budget,
       "amg",
       "residual",
     );
+    // The hierarchy is built in one call; on large models that takes seconds,
+    // so say what is happening before it starts.
+    log("Building the AMG preconditioner…");
+    let run: SolveRun;
     try {
-      const solution = elastic.solve(
+      run = elastic.startSolve(
         Uint32Array.from(fixedDofList),
         Float64Array.from(fixedValueList),
         forces,
         options,
       );
+    } finally {
+      options.free();
+    }
+    log(
+      `AMG preconditioner ready: multigrid levels [${Array.from(run.levelSizes).join(", ")}] unknowns`,
+    );
+    let finished = false;
+    try {
+      await iterate(run, budget, started, askToContinue, log);
+      finished = true;
+      const solution = run.finish();
       try {
         const displacements = solution.displacements;
         const vonMises = elastic.vonMises(displacements);
         const seconds = (performance.now() - started) / 1000;
         log(
           `AMG CG converged: ${solution.iterations} iterations, force residual ` +
-            `${solution.relativeResidual.toExponential(2)}, multigrid levels ` +
-            `[${Array.from(solution.levelSizes).join(", ")}], ${seconds.toFixed(2)} s`,
+            `${solution.relativeResidual.toExponential(2)}, ${seconds.toFixed(2)} s`,
         );
         return { displacements, vonMises };
       } finally {
         solution.free();
       }
     } finally {
-      options.free();
+      // finish() consumes the run; free it only when it was not reached.
+      if (!finished) run.free();
     }
   } finally {
     elastic.free();
+  }
+}
+
+// Advance the run to convergence: log progress every LOG_EVERY iterations,
+// hand control back to the event loop now and then, and when the budget runs
+// out either ask to continue (residual still falling) or fail (stalled) — the
+// MFEM path's continuation policy (engine/cpp/cg_continuation.h).
+async function iterate(
+  run: SolveRun,
+  initialBudget: number,
+  started: number,
+  askToContinue: ContinuationPrompt,
+  log: (line: string) => void,
+): Promise<void> {
+  if (!Number.isSafeInteger(initialBudget) || initialBudget <= 0)
+    throw new Error(
+      `The CG iteration limit must be a positive integer, got ${initialBudget}`,
+    );
+  // The C++ engine's window: half the first budget, between 2 and 100.
+  const window = Math.min(100, Math.max(2, Math.floor(initialBudget / 2)));
+  let limit = initialBudget;
+  let budget = initialBudget;
+  let waitedMs = 0;
+  let lastYield = performance.now();
+  for (;;) {
+    // Stop at the next multiple of LOG_EVERY (or the budget), so progress
+    // lines keep their cadence after a pause at an arbitrary budget.
+    const steps = Math.min(
+      LOG_EVERY - (run.iterations % LOG_EVERY),
+      limit - run.iterations,
+    );
+    const converged = run.advance(steps);
+    if (converged) return;
+    if (run.iterations % LOG_EVERY === 0)
+      log(
+        `[amg] CG iteration ${String(run.iterations).padStart(4)}: relative residual ` +
+          run.relativeResidual.toExponential(3),
+      );
+    if (run.iterations >= limit) {
+      if (!run.stillDescending(window))
+        throw new Error(
+          `CG did not converge: relative residual ${run.relativeResidual.toExponential(3)} ` +
+            `after ${run.iterations} iterations (target ${run.tolerance.toExponential(0)}) ` +
+            "and is no longer improving. The partial result was discarded — check that the " +
+            "model is fully constrained, or refine the mesh.",
+        );
+      const asked = performance.now();
+      const extra = await askToContinue({
+        iterations: run.iterations,
+        relativeResidual: run.relativeResidual,
+        target: run.tolerance,
+        elapsedSeconds: (asked - started - waitedMs) / 1000,
+        suggestedIterations: budget,
+      });
+      waitedMs += performance.now() - asked;
+      lastYield = performance.now();
+      if (extra === 0)
+        throw new Error(
+          "Solve stopped by user. The partial result was discarded.",
+        );
+      if (!Number.isSafeInteger(extra) || extra < 0 || extra > 1_000_000)
+        throw new Error(
+          "Extra CG iterations must be an integer from 1 to 1000000",
+        );
+      log(`Continuing the solve for ${extra} more iterations…`);
+      budget = extra;
+      limit += extra;
+    } else if (performance.now() - lastYield >= YIELD_AFTER_MS) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      lastYield = performance.now();
+    }
   }
 }
 

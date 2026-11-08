@@ -11,8 +11,9 @@
 //! `../kofem-fem/LICENSE-MFEM`, also shipped beside the generated WASM module.
 
 use kofem_fem::{
-    assemble_stiffness, solve_static, von_mises, AmgSettings, BoundaryFaces, CgSettings, CsrMatrix,
-    FemError, Isotropic, PreconditionerChoice, StoppingRule, SurfaceLoadKind, TetMesh,
+    assemble_stiffness, prepare_static, solve_static, von_mises, AmgSettings, BoundaryFaces,
+    CgSettings, CsrMatrix, FemError, Isotropic, PcgRun, PcgStatus, PreconditionerChoice,
+    PreparedStatic, StoppingRule, SurfaceLoadKind, TetMesh,
 };
 use wasm_bindgen::prelude::*;
 
@@ -193,6 +194,126 @@ impl ElasticModel {
             relative_residual: solution.relative_residual,
             unused_vertices: solution.unused_vertices,
             level_sizes: solution.levels.iter().map(|level| level.unknowns).collect(),
+        })
+    }
+
+    /// Set up the same solve as `solve`, but return it as a run the caller
+    /// advances in steps — to report progress between steps and to ask the
+    /// user before going past an iteration budget. The options' tolerance,
+    /// preconditioner and stopping rule apply; their iteration budget does
+    /// not, since the caller decides how far to advance.
+    ///
+    /// # Errors
+    /// Missing assembly, malformed constraints or forces, or a multigrid
+    /// setup that finds the model under-constrained.
+    #[wasm_bindgen(js_name = startSolve)]
+    pub fn start_solve(
+        &self,
+        fixed_dofs: &[u32],
+        fixed_values: &[f64],
+        forces: &[f64],
+        options: &SolveOptions,
+    ) -> Result<SolveRun, JsError> {
+        let assembled = self
+            .stiffness
+            .as_ref()
+            .ok_or_else(|| JsError::new("assemble() must be called before startSolve()"))?;
+        let mut prepared = prepare_static(
+            &self.mesh,
+            assembled,
+            fixed_dofs,
+            fixed_values,
+            forces,
+            options.preconditioner,
+        )
+        .map_err(|error| to_js(&error))?;
+        let run = PcgRun::start(
+            prepared.system.as_mut(),
+            &prepared.rhs,
+            options.settings.relative_tolerance,
+            options.settings.stopping,
+        )
+        .map_err(|error| to_js(&error))?;
+        Ok(SolveRun { prepared, run })
+    }
+}
+
+/// A CG solve in progress (from `ElasticModel.startSolve`).
+#[wasm_bindgen]
+pub struct SolveRun {
+    prepared: PreparedStatic,
+    run: PcgRun,
+}
+
+#[wasm_bindgen]
+impl SolveRun {
+    /// Run up to `steps` more iterations; returns whether the tolerance is met.
+    ///
+    /// # Errors
+    /// A CG breakdown (the model is not positive definite).
+    pub fn advance(&mut self, steps: usize) -> Result<bool, JsError> {
+        let until = self.run.iterations().saturating_add(steps);
+        let status = self
+            .run
+            .advance(self.prepared.system.as_mut(), until)
+            .map_err(|error| to_js(&error))?;
+        Ok(status == PcgStatus::Converged)
+    }
+
+    #[wasm_bindgen(getter)]
+    #[must_use]
+    pub fn iterations(&self) -> usize {
+        self.run.iterations()
+    }
+
+    /// Current relative residual, in the options' stopping measure.
+    #[wasm_bindgen(getter, js_name = relativeResidual)]
+    #[must_use]
+    pub fn relative_residual(&self) -> f64 {
+        self.run.relative_residual()
+    }
+
+    /// The relative residual the run stops at.
+    #[wasm_bindgen(getter)]
+    #[must_use]
+    pub fn tolerance(&self) -> f64 {
+        self.run.tolerance()
+    }
+
+    /// Whether the residual still fell over the last `window` iterations
+    /// (at most 100), i.e. whether more iterations are worth offering. The
+    /// MFEM engine's rule for its "continue solving?" prompt.
+    #[wasm_bindgen(js_name = stillDescending)]
+    #[must_use]
+    pub fn still_descending(&self, window: usize) -> bool {
+        self.run.still_descending(window)
+    }
+
+    /// Unknowns per multigrid level, finest first; empty for Gauss–Seidel.
+    #[wasm_bindgen(getter, js_name = levelSizes)]
+    #[must_use]
+    pub fn level_sizes(&self) -> Vec<usize> {
+        self.prepared
+            .levels
+            .iter()
+            .map(|level| level.unknowns)
+            .collect()
+    }
+
+    /// The solution, once converged. Consumes the run.
+    ///
+    /// # Errors
+    /// The run has not converged.
+    pub fn finish(self) -> Result<ElasticSolution, JsError> {
+        let level_sizes = self.level_sizes();
+        let unused_vertices = self.prepared.unused_vertices;
+        let (displacements, outcome) = self.run.into_solution().map_err(|error| to_js(&error))?;
+        Ok(ElasticSolution {
+            displacements,
+            iterations: outcome.iterations,
+            relative_residual: outcome.relative_residual,
+            unused_vertices,
+            level_sizes,
         })
     }
 }

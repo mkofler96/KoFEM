@@ -203,8 +203,18 @@ await fem.default({
 });
 const log = [];
 started = performance.now();
-const amg = solveSolidWithAmg(fem, model, vid, vid, undefined, (line) =>
-  log.push(line),
+// The default budget is never reached here: asking would be a failure.
+const neverAsk = () => {
+  throw new Error("FAIL: the continuation prompt must not appear");
+};
+const amg = await solveSolidWithAmg(
+  fem,
+  model,
+  vid,
+  vid,
+  undefined,
+  neverAsk,
+  (line) => log.push(line),
 );
 const amgSeconds = (performance.now() - started) / 1000;
 for (const line of log) console.log(`  ${line}`);
@@ -248,7 +258,7 @@ assert(
 // A surface load selecting only interior or stale faces is refused, as in MFEM.
 let refusal = "";
 try {
-  solveSolidWithAmg(
+  await solveSolidWithAmg(
     fem,
     {
       ...model,
@@ -268,6 +278,7 @@ try {
     vid,
     vid,
     undefined,
+    neverAsk,
     () => {},
   );
 } catch (error) {
@@ -284,5 +295,72 @@ assert(
   refusal === "" || /no force at all/.test(refusal),
   `unexpected error: ${refusal}`,
 );
+
+// ── Progress and the "continue solving?" prompt ───────────────────────────────
+// A budget of 5 iterations runs out long before convergence while the residual
+// is still falling, so the user is asked, exactly as on the MFEM path.
+const asked = [];
+const progress = [];
+const continued = await solveSolidWithAmg(
+  fem,
+  model,
+  vid,
+  vid,
+  5,
+  async (state) => {
+    asked.push(state);
+    return 1000;
+  },
+  (line) => progress.push(line),
+);
+assert(asked.length === 1, `expected one prompt, got ${asked.length}`);
+assert(
+  asked[0].iterations === 5 &&
+    asked[0].suggestedIterations === 5 &&
+    asked[0].relativeResidual > asked[0].target &&
+    asked[0].elapsedSeconds >= 0,
+  `prompt state ${JSON.stringify(asked[0])}`,
+);
+assert(
+  progress.some((line) =>
+    /\[amg\] CG iteration +10: relative residual/.test(line),
+  ),
+  `progress lines expected, got:\n${progress.join("\n")}`,
+);
+assert(
+  progress.some((line) =>
+    /Continuing the solve for 1000 more iterations/.test(line),
+  ),
+  "the continuation is logged",
+);
+const resumed = maxDifference(amg.displacements, continued.displacements);
+assert(
+  resumed.relative === 0,
+  `a paused and resumed solve must give the identical field, differs by ${resumed.relative}`,
+);
+console.log(
+  `budget 5: asked once at ${asked[0].iterations} iterations ` +
+    `(residual ${asked[0].relativeResidual.toExponential(2)}), resumed to the identical field`,
+);
+
+let stopped = "";
+try {
+  await solveSolidWithAmg(
+    fem,
+    model,
+    vid,
+    vid,
+    5,
+    async () => 0,
+    () => {},
+  );
+} catch (error) {
+  stopped = String(error);
+}
+assert(
+  /Solve stopped by user/.test(stopped),
+  `answering 0 must stop the solve, got "${stopped}"`,
+);
+console.log(`answering 0 stops: ${stopped}`);
 
 console.log("\nPASS");

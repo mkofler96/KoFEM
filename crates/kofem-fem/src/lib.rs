@@ -27,12 +27,14 @@ pub mod surface;
 
 pub use amg::{AmgSettings, LevelInfo, Preconditioner, SmoothedAggregation, SymmetricGaussSeidel};
 pub use assembly::assemble_stiffness;
-pub use cg::{solve_pcg, solve_pcg_with, CgOutcome, CgSettings, StoppingRule};
+pub use cg::{solve_pcg, solve_pcg_with, CgOutcome, CgSettings, PcgRun, PcgStatus, StoppingRule};
 pub use constraints::{apply_dirichlet, Dirichlet};
 pub use error::FemError;
 pub use material::Isotropic;
 pub use mesh::TetMesh;
 pub use sparse::CsrMatrix;
-pub use static_solve::{solve_static, PreconditionerChoice, StaticSolution};
+pub use static_solve::{
+    prepare_static, solve_static, PreconditionerChoice, PreparedStatic, StaticSolution,
+};
 pub use stress::von_mises;
 pub use surface::{BoundaryFaces, SurfaceLoadKind, SurfaceLoadReport};

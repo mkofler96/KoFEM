@@ -12,9 +12,9 @@
 mod support;
 
 use kofem_fem::{
-    apply_dirichlet, assemble_stiffness, solve_static, AmgSettings, CgSettings, CsrMatrix,
-    Dirichlet, FemError, Isotropic, Preconditioner, PreconditionerChoice, SmoothedAggregation,
-    StaticSolution, StoppingRule,
+    apply_dirichlet, assemble_stiffness, prepare_static, solve_static, AmgSettings, CgSettings,
+    CsrMatrix, Dirichlet, FemError, Isotropic, PcgRun, PcgStatus, Preconditioner,
+    PreconditionerChoice, SmoothedAggregation, StaticSolution, StoppingRule,
 };
 use support::{box_mesh, BoxMesh};
 
@@ -203,8 +203,9 @@ fn eliminated_cantilever(built: &BoxMesh) -> (CsrMatrix, Vec<bool>) {
 fn v_cycle_is_symmetric_positive_definite() {
     let built = box_mesh([10, 3, 3], [50.0, 10.0, 10.0], steel());
     let (matrix, constrained) = eliminated_cantilever(&built);
-    let mut amg = SmoothedAggregation::new(&matrix, built.mesh.vertices(), &constrained, DEEP)
-        .expect("hierarchy builds");
+    let mut amg =
+        SmoothedAggregation::new(matrix.clone(), built.mesh.vertices(), &constrained, DEEP)
+            .expect("hierarchy builds");
     assert!(amg.levels().len() >= 3, "levels {:?}", amg.levels());
     let size = matrix.rows();
     let first: Vec<f64> = (0..size)
@@ -266,11 +267,11 @@ fn mismatched_setup_input_is_refused() {
     let (matrix, constrained) = eliminated_cantilever(&built);
     let points = built.mesh.vertices();
     assert!(matches!(
-        SmoothedAggregation::new(&matrix, &points[1..], &constrained, DEEP).err(),
+        SmoothedAggregation::new(matrix.clone(), &points[1..], &constrained, DEEP).err(),
         Some(FemError::AmgInput { .. })
     ));
     assert!(matches!(
-        SmoothedAggregation::new(&matrix, points, &constrained[1..], DEEP).err(),
+        SmoothedAggregation::new(matrix, points, &constrained[1..], DEEP).err(),
         Some(FemError::AmgInput { .. })
     ));
 }
@@ -324,4 +325,97 @@ fn residual_rule_reaches_the_same_force_balance_with_either_preconditioner() {
     }
     let difference = max_relative_difference(&results[0], &results[1]);
     assert!(difference < 1e-6, "GS and AMG differ by {difference}");
+}
+
+/// A run advanced in small steps (as the browser drives it, to log progress
+/// and ask before going past the budget) ends exactly where one call does.
+#[test]
+fn stepwise_run_matches_a_single_solve() {
+    let built = box_mesh([12, 3, 3], [60.0, 10.0, 10.0], steel());
+    let (fixed, forces) = cantilever(&built);
+    let stiffness = assemble_stiffness(&built.mesh);
+    let values = vec![0.0; fixed.len()];
+    let choice = PreconditionerChoice::SmoothedAggregation(DEEP);
+    let mut prepared = prepare_static(&built.mesh, &stiffness, &fixed, &values, &forces, choice)
+        .expect("prepares");
+    let mut run = PcgRun::start(
+        prepared.system.as_mut(),
+        &prepared.rhs,
+        1e-8,
+        StoppingRule::ResidualNorm,
+    )
+    .expect("starts");
+    let mut calls = 0;
+    while run
+        .advance(prepared.system.as_mut(), run.iterations() + 3)
+        .expect("advances")
+        == PcgStatus::Running
+    {
+        calls += 1;
+        assert!(calls < 1000, "never converged");
+    }
+    assert!(calls > 1, "the run should have taken several steps");
+    let iterations = run.iterations();
+    let (stepwise, _) = run.into_solution().expect("converged");
+
+    let settings = CgSettings {
+        relative_tolerance: 1e-8,
+        max_iterations: 1000,
+        stopping: StoppingRule::ResidualNorm,
+    };
+    let single = solve_static(
+        &built.mesh,
+        &stiffness,
+        &fixed,
+        &values,
+        &forces,
+        settings,
+        choice,
+    )
+    .expect("solves");
+    assert_eq!(single.iterations, iterations);
+    assert_eq!(single.displacements, stepwise);
+}
+
+/// The continuation test offers more iterations to a run that is still
+/// converging, never to one that has converged, and refuses to hand out a
+/// solution before convergence.
+#[test]
+fn continuation_is_offered_only_while_descending() {
+    let built = box_mesh([16, 3, 3], [80.0, 10.0, 10.0], steel());
+    let (fixed, forces) = cantilever(&built);
+    let stiffness = assemble_stiffness(&built.mesh);
+    let mut prepared = prepare_static(
+        &built.mesh,
+        &stiffness,
+        &fixed,
+        &vec![0.0; fixed.len()],
+        &forces,
+        PreconditionerChoice::SymmetricGaussSeidel,
+    )
+    .expect("prepares");
+    let mut run = PcgRun::start(
+        prepared.system.as_mut(),
+        &prepared.rhs,
+        1e-10,
+        StoppingRule::ResidualNorm,
+    )
+    .expect("starts");
+    // Gauss–Seidel on a slender beam: far from converged after 60 iterations,
+    // but still clearly descending.
+    assert_eq!(
+        run.advance(prepared.system.as_mut(), 60).expect("advances"),
+        PcgStatus::Running
+    );
+    assert!(
+        !run.still_descending(100),
+        "fewer than 100 residuals recorded"
+    );
+    assert!(run.still_descending(30));
+    let unfinished = run.clone().into_solution().err();
+    assert!(matches!(unfinished, Some(FemError::NotConverged { .. })));
+    run.advance(prepared.system.as_mut(), 100_000)
+        .expect("advances");
+    assert!(run.is_converged());
+    assert!(!run.still_descending(30));
 }

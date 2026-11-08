@@ -668,12 +668,13 @@ async function handleSolidSolve(id: number, payload: SolvePayload) {
   const tied = weldTies(nodes, elements, payload.tieGroups, logTo(id));
   if (requestedSolver(payload) === "amg" && amgReason(payload) === null) {
     await ensureFem();
-    const result = solveSolidWithAmg(
+    const result = await solveSolidWithAmg(
       { ElasticModel, SolveOptions },
       { ...payload, nodes: tied.solveNodes, elements: tied.tiedElements },
       tied.vid,
       tied.vidTied,
       payload.cgIterationLimit,
+      onCgLimit,
       logTo(id),
     );
     const displacements = expandTiedDisplacements(

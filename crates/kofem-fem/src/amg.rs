@@ -57,25 +57,31 @@ pub struct LevelInfo {
     pub nonzeros: usize,
 }
 
-/// Something CG can precondition with: z ≈ A⁻¹·r. Must be symmetric positive
-/// definite.
+/// A system matrix A together with a preconditioner for it: z ≈ A⁻¹·r. The
+/// preconditioner must be symmetric positive definite. Each owns its matrix,
+/// so a CG run can be paused and resumed (from JS) without borrowing.
 pub trait Preconditioner {
+    fn matrix(&self) -> &CsrMatrix;
     fn apply(&mut self, residual: &[f64], out: &mut [f64]);
 }
 
 /// One symmetric Gauss–Seidel sweep, the engine's (MFEM `GSSmoother`) choice.
-pub struct SymmetricGaussSeidel<'matrix> {
-    matrix: &'matrix CsrMatrix,
+pub struct SymmetricGaussSeidel {
+    matrix: CsrMatrix,
 }
 
-impl<'matrix> SymmetricGaussSeidel<'matrix> {
+impl SymmetricGaussSeidel {
     #[must_use]
-    pub fn new(matrix: &'matrix CsrMatrix) -> Self {
+    pub fn new(matrix: CsrMatrix) -> Self {
         Self { matrix }
     }
 }
 
-impl Preconditioner for SymmetricGaussSeidel<'_> {
+impl Preconditioner for SymmetricGaussSeidel {
+    fn matrix(&self) -> &CsrMatrix {
+        &self.matrix
+    }
+
     fn apply(&mut self, residual: &[f64], out: &mut [f64]) {
         self.matrix.symmetric_gauss_seidel(residual, out);
     }
@@ -726,8 +732,8 @@ impl Work {
 
 /// SA-AMG V-cycle preconditioner for a linear-elastic stiffness matrix with
 /// its Dirichlet conditions already eliminated (`apply_dirichlet`).
-pub struct SmoothedAggregation<'matrix> {
-    fine: &'matrix CsrMatrix,
+pub struct SmoothedAggregation {
+    fine: CsrMatrix,
     /// `A₁ … A_L`; the last one is the coarsest, solved directly.
     coarse: Vec<Csr>,
     /// D⁻¹ of A₀ … A_{L−1} (the smoothed levels).
@@ -738,7 +744,7 @@ pub struct SmoothedAggregation<'matrix> {
     work: Vec<Work>,
 }
 
-impl<'matrix> SmoothedAggregation<'matrix> {
+impl SmoothedAggregation {
     /// Build the hierarchy. `coordinates` holds one point per node (DOF
     /// 3·node + component); `constrained` marks the eliminated DOFs.
     ///
@@ -747,7 +753,7 @@ impl<'matrix> SmoothedAggregation<'matrix> {
     /// [`FemError::CoarseNotPositiveDefinite`] when the coarsest matrix is
     /// singular (an under-constrained model).
     pub fn new(
-        matrix: &'matrix CsrMatrix,
+        matrix: CsrMatrix,
         coordinates: &[[f64; 3]],
         constrained: &[bool],
         settings: AmgSettings,
@@ -769,7 +775,7 @@ impl<'matrix> SmoothedAggregation<'matrix> {
         let mut dead = constrained.to_vec();
         let mut block = 3;
         while prolongators.len() + 1 < settings.max_levels {
-            let current: &dyn Rows = coarse.last().map_or(matrix as &dyn Rows, |last| last);
+            let current: &dyn Rows = coarse.last().map_or(&matrix as &dyn Rows, |last| last);
             let size = current.row_count();
             if size <= settings.coarse_size {
                 break;
@@ -801,7 +807,7 @@ impl<'matrix> SmoothedAggregation<'matrix> {
             dead = tentative.coarse_dead;
             block = MODES;
         }
-        let coarsest: &dyn Rows = coarse.last().map_or(matrix as &dyn Rows, |last| last);
+        let coarsest: &dyn Rows = coarse.last().map_or(&matrix as &dyn Rows, |last| last);
         let direct = DenseCholesky::factor(coarsest)?;
         let mut work = vec![Work::new(matrix.rows())];
         work.extend(coarse.iter().map(|level| Work::new(level.row_count())));
@@ -843,14 +849,18 @@ impl<'matrix> SmoothedAggregation<'matrix> {
 
     fn level(&self, index: usize) -> &dyn Rows {
         if index == 0 {
-            self.fine
+            &self.fine
         } else {
             &self.coarse[index - 1]
         }
     }
 }
 
-impl Preconditioner for SmoothedAggregation<'_> {
+impl Preconditioner for SmoothedAggregation {
+    fn matrix(&self) -> &CsrMatrix {
+        &self.fine
+    }
+
     fn apply(&mut self, residual: &[f64], out: &mut [f64]) {
         let depth = self.prolongators.len();
         let mut work = std::mem::take(&mut self.work);
