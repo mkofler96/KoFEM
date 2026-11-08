@@ -1,0 +1,13 @@
+[package]
+name = "kofem-fem"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Linear-elastic finite-element assembly and solvers for KoFEM"
+
+[dependencies]
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

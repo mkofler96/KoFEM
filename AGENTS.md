@@ -1,7 +1,9 @@
 # KoFEM
 
 Browser FEA: STEP → OCCT → Netgen → MFEM. Production code is C++/WASM in
-`engine/cpp/`; `crates/` contains Rust stubs, not product extension points.
+`engine/cpp/`. Finite-element code is moving to Rust: `crates/kofem-fem` (core)
+and `crates/kofem-wasm` (browser bindings, a separate WASM module joined to the
+engine in TS) — not yet used by the app. The other crates are stubs.
 The React/TypeScript/Three.js frontend is in `web/`. Use **bun**, not npm.
 
 ## Implementation
@@ -38,7 +40,10 @@ with Emscripten and dependencies installed). Never commit generated WASM/JS.
 Run checks appropriate to the change; CI definitions are in
 [.github/workflows/ci.yml](.github/workflows/ci.yml):
 
-- Rust: `cargo fmt --all --check` and `cargo clippy --workspace --all-targets -- -D warnings`.
+- Rust: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`
+  and `cargo test --workspace`. Build the browser module with
+  `bash scripts/build-fem-wasm.sh`, then check it against MFEM with
+  `bun tests/test_fem_wasm.mjs` from `web/`.
 - C++: `bash scripts/clang-tidy.sh` and relevant `scripts/test-*.sh` suites.
 - Frontend, from `web/`: `bun run typecheck && bun run lint && bun run format:check && bun run test`.
 
