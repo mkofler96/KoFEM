@@ -120,6 +120,12 @@ impl TetMesh {
         self.used.iter().filter(|&&used| !used).count()
     }
 
+    /// Vertex coordinates.
+    #[must_use]
+    pub fn vertices(&self) -> &[[f64; 3]] {
+        &self.vertices
+    }
+
     #[must_use]
     pub fn tets(&self) -> &[[u32; 4]] {
         &self.tets

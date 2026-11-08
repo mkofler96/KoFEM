@@ -11,7 +11,8 @@
 //! `../kofem-fem/LICENSE-MFEM`, also shipped beside the generated WASM module.
 
 use kofem_fem::{
-    assemble_stiffness, solve_static, CgSettings, CsrMatrix, FemError, Isotropic, TetMesh,
+    assemble_stiffness, solve_static, AmgSettings, CgSettings, CsrMatrix, FemError, Isotropic,
+    PreconditionerChoice, TetMesh,
 };
 use wasm_bindgen::prelude::*;
 
@@ -77,10 +78,12 @@ impl ElasticModel {
     }
 
     /// Solve K·u = f with the given DOFs (3·vertex + component) prescribed.
+    /// `preconditioner` is `"gauss-seidel"` (the MFEM engine's method) or
+    /// `"amg"` (smoothed-aggregation multigrid).
     ///
     /// # Errors
-    /// Missing assembly, malformed constraints or forces, or a solve that
-    /// breaks down or does not converge.
+    /// Missing assembly, an unknown preconditioner, malformed constraints or
+    /// forces, or a solve that breaks down or does not converge.
     pub fn solve(
         &self,
         fixed_dofs: &[u32],
@@ -88,7 +91,17 @@ impl ElasticModel {
         forces: &[f64],
         relative_tolerance: f64,
         max_iterations: usize,
+        preconditioner: &str,
     ) -> Result<ElasticSolution, JsError> {
+        let choice = match preconditioner {
+            "gauss-seidel" => PreconditionerChoice::SymmetricGaussSeidel,
+            "amg" => PreconditionerChoice::SmoothedAggregation(AmgSettings::default()),
+            other => {
+                return Err(JsError::new(&format!(
+                    "unknown preconditioner \"{other}\"; expected \"gauss-seidel\" or \"amg\""
+                )))
+            }
+        };
         let assembled = self
             .stiffness
             .as_ref()
@@ -104,6 +117,7 @@ impl ElasticModel {
             fixed_values,
             forces,
             settings,
+            choice,
         )
         .map_err(|error| to_js(&error))?;
         Ok(ElasticSolution {
@@ -111,6 +125,7 @@ impl ElasticModel {
             iterations: solution.iterations,
             relative_residual: solution.relative_residual,
             unused_vertices: solution.unused_vertices,
+            level_sizes: solution.levels.iter().map(|level| level.unknowns).collect(),
         })
     }
 }
@@ -121,6 +136,7 @@ pub struct ElasticSolution {
     iterations: usize,
     relative_residual: f64,
     unused_vertices: usize,
+    level_sizes: Vec<usize>,
 }
 
 #[wasm_bindgen]
@@ -143,6 +159,13 @@ impl ElasticSolution {
     #[must_use]
     pub fn unused_vertices(&self) -> usize {
         self.unused_vertices
+    }
+
+    /// Unknowns per multigrid level, finest first; empty for Gauss–Seidel.
+    #[wasm_bindgen(getter, js_name = levelSizes)]
+    #[must_use]
+    pub fn level_sizes(&self) -> Vec<usize> {
+        self.level_sizes.clone()
     }
 
     #[wasm_bindgen(getter, js_name = relativeResidual)]

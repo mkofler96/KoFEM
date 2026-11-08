@@ -7,7 +7,8 @@
 // loads, the same CG method (one symmetric Gauss–Seidel sweep, relative
 // tolerance 1e-6 in the preconditioned norm). Their displacements must agree
 // to the solver tolerance, so any difference in the element, the assembly or
-// the boundary-condition handling shows up here. A clamped cantilever of
+// the boundary-condition handling shows up here. The Rust multigrid
+// preconditioner (SA-AMG) must reach the same displacements. A clamped cantilever of
 // linear tets is stiff in bending, so the beam-theory check only bounds the
 // result from above.
 //
@@ -109,6 +110,15 @@ const rust = model.solve(
   forces,
   1e-6,
   20000,
+  "gauss-seidel",
+);
+const amg = model.solve(
+  fixedDofs,
+  new Float64Array(fixedDofs.length),
+  forces,
+  1e-6,
+  20000,
+  "amg",
 );
 
 // ── Compare ───────────────────────────────────────────────────────────────────
@@ -131,6 +141,43 @@ assert(
   `Rust and MFEM displacements differ by ${relative} relative`,
 );
 
+let maxAmgDifference = 0;
+for (let i = 0; i < amg.displacements.length; i++)
+  maxAmgDifference = Math.max(
+    maxAmgDifference,
+    Math.abs(amg.displacements[i] - mfem.displacements[i]),
+  );
+const amgRelative = maxAmgDifference / maxMfem;
+console.log(
+  `AMG − MFEM ${amgRelative.toExponential(2)} relative, AMG CG ${amg.iterations} iterations, ` +
+    `levels [${Array.from(amg.levelSizes).join(", ")}]`,
+);
+assert(
+  amgRelative < 1e-5,
+  `Rust AMG and MFEM displacements differ by ${amgRelative} relative`,
+);
+assert(
+  amg.iterations < rust.iterations,
+  `AMG took ${amg.iterations} iterations, Gauss–Seidel ${rust.iterations}`,
+);
+let unknown = "";
+try {
+  model.solve(
+    fixedDofs,
+    new Float64Array(fixedDofs.length),
+    forces,
+    1e-6,
+    10,
+    "ilu",
+  );
+} catch (error) {
+  unknown = String(error);
+}
+assert(
+  /unknown preconditioner/.test(unknown),
+  `an unknown preconditioner must throw, got "${unknown}"`,
+);
+
 const inertia = (WIDTH * HEIGHT ** 3) / 12;
 const beamTip = (Math.abs(TIP_FORCE) * LENGTH ** 3) / (3 * YOUNG * inertia);
 assert(
@@ -141,7 +188,14 @@ assert(
 // ── A floating model is refused, not solved ───────────────────────────────────
 let refused = "";
 try {
-  model.solve(new Uint32Array(0), new Float64Array(0), forces, 1e-6, 2000);
+  model.solve(
+    new Uint32Array(0),
+    new Float64Array(0),
+    forces,
+    1e-6,
+    2000,
+    "gauss-seidel",
+  );
 } catch (error) {
   refused = String(error);
 }

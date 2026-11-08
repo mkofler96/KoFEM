@@ -3,11 +3,21 @@
 
 //! One linear-elastic load case on an assembled stiffness matrix.
 
-use crate::cg::{solve_pcg, CgSettings};
+use crate::amg::{AmgSettings, SmoothedAggregation, SymmetricGaussSeidel};
+use crate::cg::{solve_pcg_with, CgSettings};
 use crate::constraints::{apply_dirichlet, Dirichlet};
 use crate::error::FemError;
 use crate::mesh::TetMesh;
 use crate::sparse::CsrMatrix;
+
+/// Which preconditioner the CG solve uses.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PreconditionerChoice {
+    /// One symmetric Gauss–Seidel sweep — the MFEM engine's method.
+    SymmetricGaussSeidel,
+    /// Smoothed-aggregation algebraic multigrid, one V-cycle.
+    SmoothedAggregation(AmgSettings),
+}
 
 #[derive(Debug, Clone)]
 pub struct StaticSolution {
@@ -17,6 +27,9 @@ pub struct StaticSolution {
     pub iterations: usize,
     pub relative_residual: f64,
     pub unused_vertices: usize,
+    /// Multigrid levels (unknowns, non-zeros), finest first; empty for
+    /// Gauss–Seidel.
+    pub levels: Vec<crate::amg::LevelInfo>,
 }
 
 /// Solve K·u = f with the given DOFs (3·vertex + component) prescribed.
@@ -34,6 +47,7 @@ pub fn solve_static(
     fixed_values: &[f64],
     forces: &[f64],
     settings: CgSettings,
+    preconditioner: PreconditionerChoice,
 ) -> Result<StaticSolution, FemError> {
     let dof_count = 3 * mesh.vertex_count();
     if forces.len() != dof_count {
@@ -85,11 +99,32 @@ pub fn solve_static(
     let mut matrix = stiffness.clone();
     let mut rhs = forces.to_vec();
     apply_dirichlet(&mut matrix, &mut rhs, &constraints);
-    let (displacements, outcome) = solve_pcg(&matrix, &rhs, settings)?;
+    let (displacements, outcome, levels) = match preconditioner {
+        PreconditionerChoice::SymmetricGaussSeidel => {
+            let (solution, outcome) = solve_pcg_with(
+                &matrix,
+                &rhs,
+                settings,
+                &mut SymmetricGaussSeidel::new(&matrix),
+            )?;
+            (solution, outcome, Vec::new())
+        }
+        PreconditionerChoice::SmoothedAggregation(amg_settings) => {
+            let constrained: Vec<bool> = (0..dof_count)
+                .map(|dof| constraints.value(dof).is_some())
+                .collect();
+            let mut amg =
+                SmoothedAggregation::new(&matrix, mesh.vertices(), &constrained, amg_settings)?;
+            let levels = amg.levels();
+            let (solution, outcome) = solve_pcg_with(&matrix, &rhs, settings, &mut amg)?;
+            (solution, outcome, levels)
+        }
+    };
     Ok(StaticSolution {
         displacements,
         iterations: outcome.iterations,
         relative_residual: outcome.relative_residual,
         unused_vertices: mesh.unused_vertex_count(),
+        levels,
     })
 }

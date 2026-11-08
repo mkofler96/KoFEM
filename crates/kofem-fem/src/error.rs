@@ -65,4 +65,11 @@ pub enum FemError {
     },
     #[error("CG settings are invalid: {reason}")]
     InvalidSettings { reason: &'static str },
+    #[error("multigrid setup input is invalid: {reason}")]
+    AmgInput { reason: &'static str },
+    #[error(
+        "the coarsest multigrid matrix ({unknowns} unknowns) is not positive definite — \
+         the model is probably not fully constrained"
+    )]
+    CoarseNotPositiveDefinite { unknowns: usize },
 }

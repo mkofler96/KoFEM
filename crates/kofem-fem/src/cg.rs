@@ -2,14 +2,16 @@
 // SPDX-FileCopyrightText: 2010-2024 Lawrence Livermore National Security, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later AND BSD-3-Clause
 
-//! Conjugate gradients preconditioned by one symmetric Gauss–Seidel sweep —
-//! the same method and stopping rule as the engine's MFEM solve
-//! (`mfem::CGSolver` + `mfem::GSSmoother`), so iteration counts compare.
+//! Preconditioned conjugate gradients with the engine's MFEM stopping rule
+//! (`mfem::CGSolver`). [`solve_pcg`] uses one symmetric Gauss–Seidel sweep, as
+//! the engine does (`mfem::GSSmoother`), so iteration counts compare;
+//! [`solve_pcg_with`] takes any [`Preconditioner`], such as multigrid.
 //!
 //! MFEM reference: `CGSolver::Mult` in `linalg/solvers.cpp` (MFEM v4.7).
 //! MFEM copyright (c) 2010-2024, Lawrence Livermore National Security, LLC.
 //! All rights reserved. See `../NOTICE.md` and `../LICENSE-MFEM` (BSD-3-Clause).
 
+use crate::amg::{Preconditioner, SymmetricGaussSeidel};
 use crate::error::FemError;
 use crate::sparse::CsrMatrix;
 
@@ -26,17 +28,37 @@ pub struct CgOutcome {
     pub relative_residual: f64,
 }
 
-/// Solve A·x = b from x = 0.
+/// Solve A·x = b from x = 0, preconditioned by one symmetric Gauss–Seidel sweep.
+///
+/// # Errors
+/// As [`solve_pcg_with`].
+pub fn solve_pcg(
+    matrix: &CsrMatrix,
+    rhs: &[f64],
+    settings: CgSettings,
+) -> Result<(Vec<f64>, CgOutcome), FemError> {
+    solve_pcg_with(
+        matrix,
+        rhs,
+        settings,
+        &mut SymmetricGaussSeidel::new(matrix),
+    )
+}
+
+/// Solve A·x = b from x = 0 with the given preconditioner M. The stopping rule
+/// is measured in M's norm, so tolerances compare only between runs with the
+/// same preconditioner.
 ///
 /// # Errors
 /// [`FemError::NotPositiveDefinite`] on a breakdown (pᵀAp ≤ 0, typically an
 /// unconstrained model), [`FemError::NotConverged`] when the iteration budget
 /// runs out, [`FemError::InvalidSettings`] for a non-positive tolerance or
 /// budget.
-pub fn solve_pcg(
+pub fn solve_pcg_with(
     matrix: &CsrMatrix,
     rhs: &[f64],
     settings: CgSettings,
+    precondition: &mut dyn Preconditioner,
 ) -> Result<(Vec<f64>, CgOutcome), FemError> {
     if !(settings.relative_tolerance.is_finite() && settings.relative_tolerance > 0.0) {
         return Err(FemError::InvalidSettings {
@@ -52,7 +74,7 @@ pub fn solve_pcg(
     let mut solution = vec![0.0; size];
     let mut residual = rhs.to_vec();
     let mut preconditioned = vec![0.0; size];
-    matrix.symmetric_gauss_seidel(&residual, &mut preconditioned);
+    precondition.apply(&residual, &mut preconditioned);
     let mut direction = preconditioned.clone();
     let mut product = vec![0.0; size];
     let mut rho = dot(&residual, &preconditioned);
@@ -80,7 +102,7 @@ pub fn solve_pcg(
             solution[index] += step * direction[index];
             residual[index] -= step * product[index];
         }
-        matrix.symmetric_gauss_seidel(&residual, &mut preconditioned);
+        precondition.apply(&residual, &mut preconditioned);
         let rho_next = dot(&residual, &preconditioned);
         if rho_next <= target {
             return Ok((
