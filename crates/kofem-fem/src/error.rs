@@ -39,6 +39,10 @@ pub enum FemError {
     DofOutOfRange { dof: u32, count: usize },
     #[error("degree of freedom {dof} is constrained twice, to {first} and {second}")]
     ConflictingConstraint { dof: u32, first: f64, second: f64 },
+    #[error("vertex {vertex} is constrained, but no element uses it")]
+    ConstraintOnUnusedVertex { vertex: usize },
+    #[error("vertex {vertex} carries a load, but no element uses it — the load would be lost")]
+    LoadOnUnusedVertex { vertex: usize },
     #[error("{values} constraint values given for {dofs} constrained degrees of freedom")]
     ConstraintValueCount { dofs: usize, values: usize },
     #[error("force vector has {len} entries, but the model has {count} degrees of freedom")]

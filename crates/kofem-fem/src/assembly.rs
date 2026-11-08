@@ -6,7 +6,8 @@ use crate::mesh::TetMesh;
 use crate::sparse::CsrMatrix;
 
 /// Sorted neighbour list of every node (including itself): the nodes it shares
-/// an element with.
+/// an element with. A vertex no element uses lists only itself, so its rows
+/// keep a (zero) diagonal block for the solve to hold it.
 #[must_use]
 pub fn node_neighbours(mesh: &TetMesh) -> Vec<Vec<u32>> {
     let mut neighbours: Vec<Vec<u32>> = vec![Vec::new(); mesh.vertex_count()];
@@ -15,7 +16,14 @@ pub fn node_neighbours(mesh: &TetMesh) -> Vec<Vec<u32>> {
             neighbours[node as usize].extend_from_slice(tet);
         }
     }
-    for list in &mut neighbours {
+    for (node, list) in neighbours.iter_mut().enumerate() {
+        if list.is_empty() {
+            #[allow(
+                clippy::cast_possible_truncation,
+                reason = "TetMesh::new caps the vertex count at MAX_VERTICES"
+            )]
+            list.push(node as u32);
+        }
         list.sort_unstable();
         list.dedup();
     }

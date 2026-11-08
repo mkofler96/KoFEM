@@ -12,6 +12,7 @@ pub struct TetMesh {
     tets: Vec<[u32; 4]>,
     material_of_tet: Vec<u32>,
     materials: Vec<Isotropic>,
+    used: Vec<bool>,
 }
 
 impl TetMesh {
@@ -84,17 +85,39 @@ impl TetMesh {
             }
         }
 
+        // Meshers can leave vertices that no element uses (Netgen does). They
+        // carry no stiffness, so the solve must hold them explicitly.
+        let mut used = vec![false; points.len()];
+        for ids in &elements {
+            for &vertex in ids {
+                used[vertex as usize] = true;
+            }
+        }
+
         Ok(Self {
             vertices: points,
             tets: elements,
             material_of_tet: material_of_tet.to_vec(),
             materials,
+            used,
         })
     }
 
     #[must_use]
     pub fn vertex_count(&self) -> usize {
         self.vertices.len()
+    }
+
+    /// Whether any element uses `vertex`.
+    #[must_use]
+    pub fn is_used(&self, vertex: usize) -> bool {
+        self.used[vertex]
+    }
+
+    /// Vertices that no element uses.
+    #[must_use]
+    pub fn unused_vertex_count(&self) -> usize {
+        self.used.iter().filter(|&&used| !used).count()
     }
 
     #[must_use]

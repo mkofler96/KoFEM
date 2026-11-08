@@ -7,8 +7,7 @@
 //! time them and keep the assembled matrix for several load cases.
 
 use kofem_fem::{
-    apply_dirichlet, assemble_stiffness, solve_pcg, CgSettings, CsrMatrix, Dirichlet, FemError,
-    Isotropic, TetMesh,
+    assemble_stiffness, solve_static, CgSettings, CsrMatrix, FemError, Isotropic, TetMesh,
 };
 use wasm_bindgen::prelude::*;
 
@@ -90,36 +89,24 @@ impl ElasticModel {
             .stiffness
             .as_ref()
             .ok_or_else(|| JsError::new("assemble() must be called before solve()"))?;
-        let dof_count = self.dof_count();
-        if forces.len() != dof_count {
-            return Err(to_js(&FemError::ForceLength {
-                len: forces.len(),
-                count: dof_count,
-            }));
-        }
-        if let Some(&value) = forces.iter().find(|value| !value.is_finite()) {
-            return Err(to_js(&FemError::NonFinite {
-                what: "a force component",
-                value,
-            }));
-        }
-        let constraints =
-            Dirichlet::new(dof_count, fixed_dofs, fixed_values).map_err(|error| to_js(&error))?;
-        // Elimination edits the matrix, so solve on a copy: the assembled
-        // stiffness stays reusable for further load cases.
-        let mut matrix = assembled.clone();
-        let mut rhs = forces.to_vec();
-        apply_dirichlet(&mut matrix, &mut rhs, &constraints);
         let settings = CgSettings {
             relative_tolerance,
             max_iterations,
         };
-        let (displacements, outcome) =
-            solve_pcg(&matrix, &rhs, settings).map_err(|error| to_js(&error))?;
+        let solution = solve_static(
+            &self.mesh,
+            assembled,
+            fixed_dofs,
+            fixed_values,
+            forces,
+            settings,
+        )
+        .map_err(|error| to_js(&error))?;
         Ok(ElasticSolution {
-            displacements,
-            iterations: outcome.iterations,
-            relative_residual: outcome.relative_residual,
+            displacements: solution.displacements,
+            iterations: solution.iterations,
+            relative_residual: solution.relative_residual,
+            unused_vertices: solution.unused_vertices,
         })
     }
 }
@@ -129,6 +116,7 @@ pub struct ElasticSolution {
     displacements: Vec<f64>,
     iterations: usize,
     relative_residual: f64,
+    unused_vertices: usize,
 }
 
 #[wasm_bindgen]
@@ -144,6 +132,13 @@ impl ElasticSolution {
     #[must_use]
     pub fn iterations(&self) -> usize {
         self.iterations
+    }
+
+    /// Vertices no element uses: held at zero displacement, never loaded.
+    #[wasm_bindgen(getter, js_name = unusedVertices)]
+    #[must_use]
+    pub fn unused_vertices(&self) -> usize {
+        self.unused_vertices
     }
 
     #[wasm_bindgen(getter, js_name = relativeResidual)]

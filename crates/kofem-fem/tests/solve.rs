@@ -12,8 +12,8 @@
 mod support;
 
 use kofem_fem::{
-    apply_dirichlet, assemble_stiffness, solve_pcg, CgSettings, Dirichlet, FemError, Isotropic,
-    TetMesh,
+    apply_dirichlet, assemble_stiffness, solve_pcg, solve_static, CgSettings, Dirichlet, FemError,
+    Isotropic, TetMesh,
 };
 use support::box_mesh;
 
@@ -206,5 +206,69 @@ fn malformed_input_is_refused_with_its_reason() {
     assert_eq!(
         Dirichlet::new(12, &[12], &[0.0]).err(),
         Some(FemError::DofOutOfRange { dof: 12, count: 12 })
+    );
+}
+
+/// Meshers can leave vertices no element uses (Netgen did on a 208k-tet NIST
+/// model, KOF-299). They have no stiffness: the solve must hold them, not
+/// index past an empty matrix row, and must refuse to load or support them.
+#[test]
+fn vertices_no_element_uses_are_held_and_cannot_be_loaded() {
+    let built = box_mesh([2, 2, 2], [1.0, 1.0, 1.0], steel());
+    let mut flat: Vec<f64> = built.vertices.iter().flatten().copied().collect();
+    flat.extend_from_slice(&[5.0, 5.0, 5.0]); // the stray vertex
+    let stray = built.vertices.len();
+    let tets: Vec<u32> = built.mesh.tets().iter().flatten().copied().collect();
+    let mesh = TetMesh::new(&flat, &tets, &vec![0; tets.len() / 4], vec![steel()]).expect("valid");
+    assert_eq!(mesh.unused_vertex_count(), 1);
+
+    // The patch field again, prescribed on the box boundary only.
+    let field = |point: [f64; 3]| [1e-3 * point[0], -3e-4 * point[1], 2e-4 * point[2]];
+    let mut dofs = Vec::new();
+    let mut values = Vec::new();
+    for (node, point) in built.vertices.iter().enumerate() {
+        if on_boundary(*point, built.size) {
+            for (component, value) in field(*point).into_iter().enumerate() {
+                dofs.push((3 * node + component) as u32);
+                values.push(value);
+            }
+        }
+    }
+    let stiffness = assemble_stiffness(&mesh);
+    let forces = vec![0.0; 3 * mesh.vertex_count()];
+    let solution =
+        solve_static(&mesh, &stiffness, &dofs, &values, &forces, SETTINGS).expect("solves");
+    assert_eq!(solution.unused_vertices, 1);
+    assert_eq!(
+        &solution.displacements[3 * stray..3 * stray + 3],
+        &[0.0, 0.0, 0.0]
+    );
+    for (node, point) in built.vertices.iter().enumerate() {
+        for (component, expected) in field(*point).into_iter().enumerate() {
+            assert!((solution.displacements[3 * node + component] - expected).abs() < 1e-9);
+        }
+    }
+
+    let mut loaded = forces.clone();
+    loaded[3 * stray + 1] = 1.0;
+    assert_eq!(
+        solve_static(&mesh, &stiffness, &dofs, &values, &loaded, SETTINGS).err(),
+        Some(FemError::LoadOnUnusedVertex { vertex: stray })
+    );
+    let mut supported = dofs.clone();
+    supported.push((3 * stray) as u32);
+    let mut supported_values = values.clone();
+    supported_values.push(0.0);
+    assert_eq!(
+        solve_static(
+            &mesh,
+            &stiffness,
+            &supported,
+            &supported_values,
+            &forces,
+            SETTINGS
+        )
+        .err(),
+        Some(FemError::ConstraintOnUnusedVertex { vertex: stray })
     );
 }

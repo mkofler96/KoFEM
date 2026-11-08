@@ -14,6 +14,7 @@ pub mod error;
 pub mod material;
 pub mod mesh;
 pub mod sparse;
+pub mod static_solve;
 
 pub use assembly::assemble_stiffness;
 pub use cg::{solve_pcg, CgOutcome, CgSettings};
@@ -22,3 +23,4 @@ pub use error::FemError;
 pub use material::Isotropic;
 pub use mesh::TetMesh;
 pub use sparse::CsrMatrix;
+pub use static_solve::{solve_static, StaticSolution};
