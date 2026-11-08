@@ -14,13 +14,14 @@ mod support;
 use kofem_fem::{
     apply_dirichlet, assemble_stiffness, solve_static, AmgSettings, CgSettings, CsrMatrix,
     Dirichlet, FemError, Isotropic, Preconditioner, PreconditionerChoice, SmoothedAggregation,
-    StaticSolution,
+    StaticSolution, StoppingRule,
 };
 use support::{box_mesh, BoxMesh};
 
 const SETTINGS: CgSettings = CgSettings {
     relative_tolerance: 1e-8,
     max_iterations: 20_000,
+    stopping: StoppingRule::PreconditionedNorm,
 };
 
 /// Small enough that the test meshes get three or more levels.
@@ -272,4 +273,55 @@ fn mismatched_setup_input_is_refused() {
         SmoothedAggregation::new(&matrix, points, &constrained[1..], DEEP).err(),
         Some(FemError::AmgInput { .. })
     ));
+}
+
+/// The residual rule stops on ‖f − K·u‖ / ‖f‖, whatever the preconditioner:
+/// both must actually reach it, and then agree with each other.
+#[test]
+fn residual_rule_reaches_the_same_force_balance_with_either_preconditioner() {
+    let built = box_mesh([16, 3, 3], [80.0, 10.0, 10.0], steel());
+    let (fixed, forces) = cantilever(&built);
+    let tolerance = 1e-7;
+    let settings = CgSettings {
+        relative_tolerance: tolerance,
+        max_iterations: 20_000,
+        stopping: StoppingRule::ResidualNorm,
+    };
+    let stiffness = assemble_stiffness(&built.mesh);
+    let values = vec![0.0; fixed.len()];
+    let mut is_fixed = vec![false; forces.len()];
+    for &dof in &fixed {
+        is_fixed[dof as usize] = true;
+    }
+    let mut results = Vec::new();
+    for choice in [
+        PreconditionerChoice::SymmetricGaussSeidel,
+        PreconditionerChoice::SmoothedAggregation(DEEP),
+    ] {
+        let solution = solve_static(
+            &built.mesh,
+            &stiffness,
+            &fixed,
+            &values,
+            &forces,
+            settings,
+            choice,
+        )
+        .expect("solves");
+        let mut product = vec![0.0; forces.len()];
+        stiffness.mul_vec(&solution.displacements, &mut product);
+        let (mut residual, mut load) = (0.0, 0.0);
+        for dof in (0..forces.len()).filter(|&dof| !is_fixed[dof]) {
+            residual += (forces[dof] - product[dof]).powi(2);
+            load += forces[dof].powi(2);
+        }
+        let relative = (residual / load).sqrt();
+        assert!(
+            relative <= 1.01 * tolerance,
+            "{choice:?}: true residual {relative} above {tolerance}"
+        );
+        results.push(solution.displacements);
+    }
+    let difference = max_relative_difference(&results[0], &results[1]);
+    assert!(difference < 1e-6, "GS and AMG differ by {difference}");
 }

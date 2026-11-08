@@ -8,7 +8,8 @@
 // tolerance 1e-6 in the preconditioned norm). Their displacements must agree
 // to the solver tolerance, so any difference in the element, the assembly or
 // the boundary-condition handling shows up here. The Rust multigrid
-// preconditioner (SA-AMG) must reach the same displacements. A clamped cantilever of
+// preconditioner (SA-AMG), stopped on the force residual ‖f − K·u‖/‖f‖, must
+// reach the same displacements. A clamped cantilever of
 // linear tets is stiff in bending, so the beam-theory check only bounds the
 // result from above.
 //
@@ -86,9 +87,11 @@ const mfem = engine.solve_linear_elastic(
 assert(!("error" in mfem), `MFEM solve failed: ${mfem.error}`);
 
 // ── Rust module ───────────────────────────────────────────────────────────────
-const { default: init, ElasticModel } = await import(
-  join(femPkg, "kofem_wasm.js")
-);
+const {
+  default: init,
+  ElasticModel,
+  SolveOptions,
+} = await import(join(femPkg, "kofem_wasm.js"));
 await init({
   module_or_path: readFileSync(join(femPkg, "kofem_wasm_bg.wasm")),
 });
@@ -104,21 +107,18 @@ const fixedDofs = new Uint32Array(
 );
 const forces = new Float64Array(model.dofCount);
 for (const node of tip) forces[3 * node + 2] = perNode;
+// MFEM's method and stopping rule, so the two must agree to the tolerance.
 const rust = model.solve(
   fixedDofs,
   new Float64Array(fixedDofs.length),
   forces,
-  1e-6,
-  20000,
-  "gauss-seidel",
+  new SolveOptions(1e-6, 20000, "gauss-seidel", "preconditioned"),
 );
 const amg = model.solve(
   fixedDofs,
   new Float64Array(fixedDofs.length),
   forces,
-  1e-6,
-  20000,
-  "amg",
+  new SolveOptions(1e-6, 20000, "amg", "residual"),
 );
 
 // ── Compare ───────────────────────────────────────────────────────────────────
@@ -160,23 +160,21 @@ assert(
   amg.iterations < rust.iterations,
   `AMG took ${amg.iterations} iterations, Gauss–Seidel ${rust.iterations}`,
 );
-let unknown = "";
-try {
-  model.solve(
-    fixedDofs,
-    new Float64Array(fixedDofs.length),
-    forces,
-    1e-6,
-    10,
-    "ilu",
+for (const [preconditioner, stopping, pattern] of [
+  ["ilu", "residual", /unknown preconditioner/],
+  ["amg", "energy", /unknown stopping rule/],
+]) {
+  let refusal = "";
+  try {
+    new SolveOptions(1e-6, 10, preconditioner, stopping);
+  } catch (error) {
+    refusal = String(error);
+  }
+  assert(
+    pattern.test(refusal),
+    `SolveOptions(${preconditioner}, ${stopping}) must throw, got "${refusal}"`,
   );
-} catch (error) {
-  unknown = String(error);
 }
-assert(
-  /unknown preconditioner/.test(unknown),
-  `an unknown preconditioner must throw, got "${unknown}"`,
-);
 
 const inertia = (WIDTH * HEIGHT ** 3) / 12;
 const beamTip = (Math.abs(TIP_FORCE) * LENGTH ** 3) / (3 * YOUNG * inertia);
@@ -192,9 +190,7 @@ try {
     new Uint32Array(0),
     new Float64Array(0),
     forces,
-    1e-6,
-    2000,
-    "gauss-seidel",
+    new SolveOptions(1e-6, 2000, "gauss-seidel", "preconditioned"),
   );
 } catch (error) {
   refused = String(error);

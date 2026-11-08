@@ -13,7 +13,7 @@ mod support;
 
 use kofem_fem::{
     apply_dirichlet, assemble_stiffness, solve_pcg, solve_static, CgSettings, Dirichlet, FemError,
-    Isotropic, PreconditionerChoice, TetMesh,
+    Isotropic, PreconditionerChoice, StoppingRule, TetMesh,
 };
 
 const GS: PreconditionerChoice = PreconditionerChoice::SymmetricGaussSeidel;
@@ -22,6 +22,7 @@ use support::box_mesh;
 const SETTINGS: CgSettings = CgSettings {
     relative_tolerance: 1e-10,
     max_iterations: 10_000,
+    stopping: StoppingRule::PreconditionedNorm,
 };
 
 fn steel() -> Isotropic {
@@ -158,6 +159,7 @@ fn unconstrained_model_is_refused() {
     let settings = CgSettings {
         relative_tolerance: 1e-10,
         max_iterations: 500,
+        stopping: StoppingRule::PreconditionedNorm,
     };
     let result = solve_pcg(&matrix, &rhs, settings);
     assert!(

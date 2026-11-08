@@ -17,6 +17,7 @@
     clippy::cast_precision_loss,
     clippy::cast_possible_truncation,
     clippy::print_stdout,
+    clippy::panic,
     clippy::too_many_lines,
     reason = "a linear benchmark script: a bad input file should abort, and it reports on stdout"
 )]
@@ -25,7 +26,7 @@ use std::time::Instant;
 
 use kofem_fem::{
     apply_dirichlet, assemble_stiffness, solve_static, AmgSettings, CgSettings, Dirichlet,
-    Isotropic, PreconditionerChoice, SmoothedAggregation, TetMesh,
+    Isotropic, PreconditionerChoice, SmoothedAggregation, StoppingRule, TetMesh,
 };
 
 /// Peak resident memory in MB (Linux), for a rough comparison of the two runs.
@@ -62,6 +63,12 @@ fn main() {
     let settings = CgSettings {
         relative_tolerance: 1e-6,
         max_iterations: 50_000,
+        // SWEEP_STOP=residual stops on ‖f − K·u‖/‖f‖ instead of MFEM's rule.
+        stopping: match std::env::var("SWEEP_STOP").as_deref() {
+            Ok("residual") => StoppingRule::ResidualNorm,
+            Ok("preconditioned") | Err(_) => StoppingRule::PreconditionedNorm,
+            Ok(other) => panic!("SWEEP_STOP must be residual or preconditioned, got {other}"),
+        },
     };
     let threshold: f64 = std::env::var("AMG_THETA")
         .ok()

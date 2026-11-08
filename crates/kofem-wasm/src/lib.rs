@@ -12,7 +12,7 @@
 
 use kofem_fem::{
     assemble_stiffness, solve_static, AmgSettings, CgSettings, CsrMatrix, FemError, Isotropic,
-    PreconditionerChoice, TetMesh,
+    PreconditionerChoice, StoppingRule, TetMesh,
 };
 use wasm_bindgen::prelude::*;
 
@@ -78,46 +78,29 @@ impl ElasticModel {
     }
 
     /// Solve K·u = f with the given DOFs (3·vertex + component) prescribed.
-    /// `preconditioner` is `"gauss-seidel"` (the MFEM engine's method) or
-    /// `"amg"` (smoothed-aggregation multigrid).
     ///
     /// # Errors
-    /// Missing assembly, an unknown preconditioner, malformed constraints or
-    /// forces, or a solve that breaks down or does not converge.
+    /// Missing assembly, malformed constraints or forces, or a solve that
+    /// breaks down or does not converge.
     pub fn solve(
         &self,
         fixed_dofs: &[u32],
         fixed_values: &[f64],
         forces: &[f64],
-        relative_tolerance: f64,
-        max_iterations: usize,
-        preconditioner: &str,
+        options: &SolveOptions,
     ) -> Result<ElasticSolution, JsError> {
-        let choice = match preconditioner {
-            "gauss-seidel" => PreconditionerChoice::SymmetricGaussSeidel,
-            "amg" => PreconditionerChoice::SmoothedAggregation(AmgSettings::default()),
-            other => {
-                return Err(JsError::new(&format!(
-                    "unknown preconditioner \"{other}\"; expected \"gauss-seidel\" or \"amg\""
-                )))
-            }
-        };
         let assembled = self
             .stiffness
             .as_ref()
             .ok_or_else(|| JsError::new("assemble() must be called before solve()"))?;
-        let settings = CgSettings {
-            relative_tolerance,
-            max_iterations,
-        };
         let solution = solve_static(
             &self.mesh,
             assembled,
             fixed_dofs,
             fixed_values,
             forces,
-            settings,
-            choice,
+            options.settings,
+            options.preconditioner,
         )
         .map_err(|error| to_js(&error))?;
         Ok(ElasticSolution {
@@ -126,6 +109,59 @@ impl ElasticModel {
             relative_residual: solution.relative_residual,
             unused_vertices: solution.unused_vertices,
             level_sizes: solution.levels.iter().map(|level| level.unknowns).collect(),
+        })
+    }
+}
+
+/// How `ElasticModel.solve` iterates. Checked on construction, so a typo in a
+/// name fails before any work is done.
+#[wasm_bindgen]
+pub struct SolveOptions {
+    settings: CgSettings,
+    preconditioner: PreconditionerChoice,
+}
+
+#[wasm_bindgen]
+impl SolveOptions {
+    /// `preconditioner`: `"gauss-seidel"` (the MFEM engine's method) or
+    /// `"amg"` (smoothed-aggregation multigrid). `stopping`:
+    /// `"preconditioned"` (MFEM's rule, √((M⁻¹r, r)/(M⁻¹r₀, r₀)), whose
+    /// meaning depends on the preconditioner) or `"residual"` (‖f − K·u‖ / ‖f‖).
+    ///
+    /// # Errors
+    /// An unknown preconditioner or stopping rule.
+    #[wasm_bindgen(constructor)]
+    pub fn new(
+        relative_tolerance: f64,
+        max_iterations: usize,
+        preconditioner: &str,
+        stopping: &str,
+    ) -> Result<SolveOptions, JsError> {
+        let preconditioner = match preconditioner {
+            "gauss-seidel" => PreconditionerChoice::SymmetricGaussSeidel,
+            "amg" => PreconditionerChoice::SmoothedAggregation(AmgSettings::default()),
+            other => {
+                return Err(JsError::new(&format!(
+                    "unknown preconditioner \"{other}\"; expected \"gauss-seidel\" or \"amg\""
+                )))
+            }
+        };
+        let stopping = match stopping {
+            "preconditioned" => StoppingRule::PreconditionedNorm,
+            "residual" => StoppingRule::ResidualNorm,
+            other => {
+                return Err(JsError::new(&format!(
+                    "unknown stopping rule \"{other}\"; expected \"preconditioned\" or \"residual\""
+                )))
+            }
+        };
+        Ok(SolveOptions {
+            settings: CgSettings {
+                relative_tolerance,
+                max_iterations,
+                stopping,
+            },
+            preconditioner,
         })
     }
 }

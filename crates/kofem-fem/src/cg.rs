@@ -15,11 +15,24 @@ use crate::amg::{Preconditioner, SymmetricGaussSeidel};
 use crate::error::FemError;
 use crate::sparse::CsrMatrix;
 
+/// What `relative_tolerance` is measured against.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StoppingRule {
+    /// √((M⁻¹r, r) / (M⁻¹r₀, r₀)): MFEM's rule. Its meaning depends on the
+    /// preconditioner M, so the same tolerance is a different accuracy for
+    /// Gauss–Seidel and for multigrid.
+    PreconditionedNorm,
+    /// ‖r‖ / ‖b‖: the out-of-balance force relative to the load, the same
+    /// accuracy whatever the preconditioner.
+    ResidualNorm,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct CgSettings {
-    /// Stop when √((M⁻¹r, r) / (M⁻¹r₀, r₀)) ≤ this.
+    /// Stop when the measure chosen by `stopping` falls to this.
     pub relative_tolerance: f64,
     pub max_iterations: usize,
+    pub stopping: StoppingRule,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -45,9 +58,10 @@ pub fn solve_pcg(
     )
 }
 
-/// Solve A·x = b from x = 0 with the given preconditioner M. The stopping rule
-/// is measured in M's norm, so tolerances compare only between runs with the
-/// same preconditioner.
+/// Solve A·x = b from x = 0 with the given preconditioner M. With
+/// [`StoppingRule::PreconditionedNorm`] the tolerance is measured in M's norm,
+/// so it compares only between runs with the same preconditioner;
+/// [`StoppingRule::ResidualNorm`] compares across preconditioners.
 ///
 /// # Errors
 /// [`FemError::NotPositiveDefinite`] on a breakdown (pᵀAp ≤ 0, typically an
@@ -89,7 +103,15 @@ pub fn solve_pcg_with(
             },
         ));
     }
-    let target = settings.relative_tolerance * settings.relative_tolerance * rho_initial;
+    let load_squared = dot(rhs, rhs);
+    // Squared relative residual in the chosen measure, from (r, M⁻¹r) and r.
+    let measure = |rho_now: f64, residual_now: &[f64]| -> f64 {
+        match settings.stopping {
+            StoppingRule::PreconditionedNorm => rho_now / rho_initial,
+            StoppingRule::ResidualNorm => dot(residual_now, residual_now) / load_squared,
+        }
+    };
+    let target = settings.relative_tolerance * settings.relative_tolerance;
 
     for iteration in 1..=settings.max_iterations {
         matrix.mul_vec(&direction, &mut product);
@@ -104,12 +126,13 @@ pub fn solve_pcg_with(
         }
         precondition.apply(&residual, &mut preconditioned);
         let rho_next = dot(&residual, &preconditioned);
-        if rho_next <= target {
+        let reached = measure(rho_next, &residual);
+        if reached <= target {
             return Ok((
                 solution,
                 CgOutcome {
                     iterations: iteration,
-                    relative_residual: (rho_next / rho_initial).sqrt(),
+                    relative_residual: reached.sqrt(),
                 },
             ));
         }
@@ -121,7 +144,7 @@ pub fn solve_pcg_with(
     }
     Err(FemError::NotConverged {
         iterations: settings.max_iterations,
-        relative_residual: (rho / rho_initial).sqrt(),
+        relative_residual: measure(rho, &residual).sqrt(),
         target: settings.relative_tolerance,
     })
 }

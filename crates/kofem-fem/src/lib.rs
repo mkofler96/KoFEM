@@ -25,7 +25,7 @@ pub mod static_solve;
 
 pub use amg::{AmgSettings, LevelInfo, Preconditioner, SmoothedAggregation, SymmetricGaussSeidel};
 pub use assembly::assemble_stiffness;
-pub use cg::{solve_pcg, solve_pcg_with, CgOutcome, CgSettings};
+pub use cg::{solve_pcg, solve_pcg_with, CgOutcome, CgSettings, StoppingRule};
 pub use constraints::{apply_dirichlet, Dirichlet};
 pub use error::FemError;
 pub use material::Isotropic;
