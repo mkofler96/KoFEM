@@ -35,6 +35,17 @@ if [ "$INSTALLED" != "$PINNED" ]; then
     exit 1
 fi
 
+if ! command -v cargo >/dev/null; then
+    echo "ERROR: cargo not found. Install Rust from https://rustup.rs" >&2
+    exit 1
+fi
+if command -v rustup >/dev/null &&
+    ! rustup target list --installed | grep -qx wasm32-unknown-unknown; then
+    echo "ERROR: the Rust target wasm32-unknown-unknown is not installed." >&2
+    echo "Install it with: rustup target add wasm32-unknown-unknown" >&2
+    exit 1
+fi
+
 cargo build --manifest-path "$REPO_ROOT/Cargo.toml" --locked --release \
     --package kofem-wasm --target wasm32-unknown-unknown
 

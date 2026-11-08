@@ -35,8 +35,10 @@ docker run ghcr.io/mkofler96/kofem-web:latest
 Option B — Build it yourself
 
 ```bash
-# Fetch the prebuilt engine into web/src/wasm/pkg/ (see Development below).
+# Fetch the prebuilt engine into web/src/wasm/pkg/ and build the Rust
+# finite-element module into web/src/wasm/fem/ (see Development below).
 bash scripts/fetch-wasm-engine.sh
+bash scripts/build-fem-wasm.sh
 
 # Build context is web/ (Dockerfile lives at web/Dockerfile), plus the /examples/
 # gallery as the named context "gallery". Run from the repository root.
@@ -46,14 +48,20 @@ docker run kofem-web
 
 ## Development
 
+You need [Bun](https://bun.sh) and [Rust](https://rustup.rs), plus the browser
+target and the `wasm-bindgen` CLI pinned in `Cargo.toml`:
+
 ```bash
+rustup target add wasm32-unknown-unknown
+cargo install wasm-bindgen-cli --version 0.2.129 --locked
 cd web && bun install && bun run dev
 ```
 
-That is all you need — the compiled engine (~34 MB) is a build output, so it is
-published as a GitHub Release rather than committed, and `bun run dev`, `build`
-and `test` download the one matching your checkout via
-`scripts/fetch-wasm-engine.sh`. You can also run that script directly.
+`bun run dev`, `build` and `test` prepare both WebAssembly modules first. The
+compiled C++ engine (~34 MB) is a build output, so it is published as a GitHub
+Release rather than committed; they download the one matching your checkout via
+`scripts/fetch-wasm-engine.sh`. The Rust finite-element module (`crates/`) is
+built locally by `scripts/build-fem-wasm.sh` in a few seconds.
 
 To change the engine you do need the C++ toolchain. `bash scripts/docker-build-wasm.sh`
 compiles it inside a Docker container and writes `web/src/wasm/pkg/` itself; from

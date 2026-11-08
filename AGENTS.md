@@ -33,17 +33,18 @@ git config core.hooksPath .githooks
 cd web && bun install && bun run dev
 ```
 
-Web scripts fetch the matching compiled engine automatically. After engine
-changes, build with `bash scripts/docker-build-wasm.sh` (or `build-wasm.sh`
-with Emscripten and dependencies installed). Never commit generated WASM/JS.
+Web scripts fetch the matching compiled engine and build the Rust module
+(`scripts/build-fem-wasm.sh`; needs Rust, the `wasm32-unknown-unknown` target
+and the pinned `wasm-bindgen` CLI). After engine changes, build with
+`bash scripts/docker-build-wasm.sh` (or `build-wasm.sh` with Emscripten and
+dependencies installed). Never commit generated WASM/JS.
 
 Run checks appropriate to the change; CI definitions are in
 [.github/workflows/ci.yml](.github/workflows/ci.yml):
 
 - Rust: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`
-  and `cargo test --workspace`. Build the browser module with
-  `bash scripts/build-fem-wasm.sh`, then check it against MFEM with
-  `bun tests/test_fem_wasm.mjs` from `web/`.
+  and `cargo test --workspace`. `bun run test:validation` includes the
+  Rust-vs-MFEM check (`tests/test_fem_wasm.mjs`).
 - C++: `bash scripts/clang-tidy.sh` and relevant `scripts/test-*.sh` suites.
 - Frontend, from `web/`: `bun run typecheck && bun run lint && bun run format:check && bun run test`.
 

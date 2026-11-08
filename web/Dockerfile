@@ -30,14 +30,16 @@ COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 
 # Copy the rest of the source. src/wasm/pkg must already hold the compiled engine
-# — it is a build output published as a GitHub Release rather than committed
-# (KOF-186), so populate it before building the image:
+# (a build output published as a GitHub Release rather than committed, KOF-186)
+# and src/wasm/fem the Rust finite-element module, so populate both first:
 #
-#   bash scripts/fetch-wasm-engine.sh && docker build --build-context gallery=./examples/gallery/site ./web
+#   bash scripts/fetch-wasm-engine.sh && bash scripts/build-fem-wasm.sh &&
+#     docker build --build-context gallery=./examples/gallery/site ./web
 #
-# The `bun run build` below would normally fetch it via its package.json pre-hook,
-# but the build context is web/ alone and the repo's scripts/ is not in it; the
-# hook detects that and leaves whatever was copied in place. No Emscripten needed.
+# The `bun run build` below would normally prepare them via its package.json
+# pre-hook, but the build context is web/ alone and the repo's scripts/ is not in
+# it; the hook detects that and uses what was copied in (and fails if the Rust
+# module is missing). No Emscripten or Rust needed inside the image.
 COPY . .
 # vite.config.ts reads the gallery from ../examples/gallery/site.
 COPY --from=gallery . /examples/gallery/site
