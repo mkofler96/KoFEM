@@ -218,7 +218,11 @@ fn plate_on_block_couples_through_its_footprint() {
     let footprints: Vec<usize> = (0..coupling.len())
         .filter(|&k| coupling.kind[k] == CouplingKind::Footprint)
         .collect();
-    assert!(!footprints.is_empty());
+    assert_ne!(
+        footprints,
+        [] as [usize; 0],
+        "the cut section follows the shell edge"
+    );
     for k in footprints {
         let range = coupling.offsets[k]..coupling.offsets[k + 1];
         assert_eq!(range.len(), 2);
