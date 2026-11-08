@@ -600,6 +600,14 @@ jobs:
           name: kofem-wasm-pkg
           path: web/src/wasm/pkg/
 
+      # The Docker build's pre-hook needs the Rust module beside the engine,
+      # exactly as in the `image` smoke test (via setup-web) that gated this.
+      - name: Download the Rust finite-element module
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: kofem-fem-pkg
+          path: web/src/wasm/fem/
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
