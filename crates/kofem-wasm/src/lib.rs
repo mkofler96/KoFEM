@@ -10,6 +10,10 @@
 //! credit and BSD-3-Clause terms are retained in `../kofem-fem/NOTICE.md` and
 //! `../kofem-fem/LICENSE-MFEM`, also shipped beside the generated WASM module.
 
+mod shellize;
+
+pub use shellize::{CoupledResult, ShellTransitionResult};
+
 use kofem_fem::{
     assemble_stiffness, solve_static, CgSettings, CsrMatrix, FemError, Isotropic, TetMesh,
 };

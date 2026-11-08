@@ -1,9 +1,10 @@
 # KoFEM
 
 Browser FEA: STEP → OCCT → Netgen → MFEM. Production code is C++/WASM in
-`engine/cpp/`. Finite-element code is moving to Rust: `crates/kofem-fem` (core)
-and `crates/kofem-wasm` (browser bindings, a separate WASM module joined to the
-engine in TS) — not yet used by the app. The other crates are stubs.
+`engine/cpp/`. Finite-element code is moving to Rust: `crates/kofem-fem` (core),
+`crates/kofem-shellize` (shell idealisation) and `crates/kofem-wasm` (browser
+bindings, a separate WASM module joined to the engine in TS) — not yet used by
+the app. The other crates are stubs.
 The React/TypeScript/Three.js frontend is in `web/`. Use **bun**, not npm.
 
 ## Implementation
@@ -14,6 +15,8 @@ The React/TypeScript/Three.js frontend is in `web/`. Use **bun**, not npm.
 - Shell is an explicit per-body choice. Mid-surface and mixed-mesh assembly
   live in `web/src/lib/shellize/` (one module per stage, re-exported by
   `web/src/lib/shellize.ts`); shell element math is in `shell_core.cpp`.
+  `crates/kofem-shellize` is its Rust port; until the app switches over,
+  change both and keep `web/tests/test_shellize_rust.mjs` passing.
 - Geometry tessellation is for display. Never call it a mesh; surface and
   volume meshes are FEM discretisations.
 - Use strict TypeScript without `any`, C++ `std::array` instead of C arrays,
