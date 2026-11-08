@@ -5,6 +5,7 @@ members = [
     "crates/kofem-geom",
     "crates/kofem-mesh",
     "crates/kofem-fem",
+    "crates/kofem-shellize",
     "crates/kofem-wasm",
 ]
 
@@ -19,6 +20,7 @@ kofem-core = { path = "crates/kofem-core" }
 kofem-mesh = { path = "crates/kofem-mesh" }
 kofem-geom = { path = "crates/kofem-geom" }
 kofem-fem = { path = "crates/kofem-fem" }
+kofem-shellize = { path = "crates/kofem-shellize" }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 log = "0.4"

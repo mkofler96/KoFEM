@@ -40,6 +40,10 @@ import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { buildExplicitCoupledModel } from "../src/lib/shellize.ts";
+import { loadFemModule } from "../src/lib/femModule.ts";
+
+// The shell idealisation runs in the Rust module (crates/kofem-shellize).
+await loadFemModule();
 import {
   buildReferenceCouplings,
   referencePointOptions,

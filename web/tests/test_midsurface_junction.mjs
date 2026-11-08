@@ -28,6 +28,10 @@ import {
   shellBodyTets,
   shellWallTets,
 } from "../src/lib/shellize.ts";
+import { loadFemModule } from "../src/lib/femModule.ts";
+
+// The shell idealisation runs in the Rust module (crates/kofem-shellize).
+await loadFemModule();
 
 let failures = 0;
 function check(name, cond, detail = "") {
