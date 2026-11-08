@@ -27,6 +27,10 @@ import {
   shellWallTets,
   tieCouplingProblem,
 } from "../src/lib/shellize.ts";
+import { loadFemModule } from "../src/lib/femModule.ts";
+
+// The shell idealisation runs in the Rust module (crates/kofem-shellize).
+await loadFemModule();
 
 let failures = 0;
 function check(name, cond, detail = "") {
@@ -596,8 +600,8 @@ check(
     shellVerts,
     shellTris,
     shellThk,
-    shellSrc: [],
-    shellTriSrc: [],
+    shellSrc: new Array(shellVerts.length / 3).fill(1),
+    shellTriSrc: new Array(shellThk.length).fill(1),
   });
   let wallHigh = 0,
     wallLow = 0;

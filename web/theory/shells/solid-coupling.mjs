@@ -270,13 +270,13 @@ export default {
 
     <h2 id="references">Implementation and references</h2>
     <ol class="refs">
-      <li>${source("web/src/lib/shellize/transition.ts", 23, "three-thickness retained section")},
-        ${source("web/src/lib/shellize/footprint.ts", 78, "physical footprint detection")},
+      <li>${source("crates/kofem-shellize/src/transition.rs", 79, "three-thickness retained section")},
+        ${source("crates/kofem-shellize/src/footprint.rs", 185, "physical footprint detection")},
         ${source("engine/cpp/coupling_constraints.cpp", 43, "footprint equations")},
         ${source("engine/cpp/shell_core.cpp", 92, "constraint reduction")} and
         ${source("engine/cpp/solve_coupled.cpp", 1, "MFEM/WASM coupled assembler")}.</li>
       <li>${source("engine/cpp/coupling_constraints.cpp", 149, "relaxed seam MPC and distributing equations")},
-        ${source("web/src/lib/shellize/ties.ts", 157, "coupled surface ties")},
+        ${source("crates/kofem-shellize/src/ties.rs", 153, "coupled surface ties")},
         ${source("web/src/lib/solve/solid.ts", 101, "solid tie welding")},
         ${source("web/src/lib/solve/coupled.ts", 39, "app relaxation setting")},
         ${source("web/src/lib/coupledMaterials.ts", 75, "mixed-model materials")},

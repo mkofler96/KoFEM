@@ -47,10 +47,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "kofem-shellize"
+version = "0.6.0"
+dependencies = [
+ "thiserror",
+]
+
+[[package]]
 name = "kofem-wasm"
 version = "0.6.0"
 dependencies = [
  "kofem-fem",
+ "kofem-shellize",
  "wasm-bindgen",
 ]
 

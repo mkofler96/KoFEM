@@ -11,6 +11,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 kofem-fem = { workspace = true }
+kofem-shellize = { workspace = true }
 wasm-bindgen = { workspace = true }
 
 [lints]

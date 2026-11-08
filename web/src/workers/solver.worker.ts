@@ -5,7 +5,8 @@
 // Runs kofem-wasm off the main thread so heavy solves don't freeze the UI.
 
 import createModule, { EngineLoadError } from "../wasm/pkg/kofem_wasm.js";
-import initFem, { ElasticModel, SolveOptions } from "../wasm/fem/kofem_wasm.js";
+import { ElasticModel, SolveOptions } from "../wasm/fem/kofem_wasm.js";
+import { FemLoadError, loadFemModule } from "../lib/femModule.js";
 import type {
   EngineLoadProgress,
   KofemModule,
@@ -133,32 +134,51 @@ function isOverlapPairLine(text: string): boolean {
   return OVERLAP_PAIR_LINE.test(text);
 }
 
+// Load the engine and the Rust module (shell idealisation) together. Neither
+// is ready without the other, so "ready" is held back until both are, and a
+// failure of either is reported as the engine's failed status — the status
+// bar's Retry then replaces the worker and loads both again.
 async function initEngine() {
   const t0 = performance.now();
+  let engineReady: Extract<EngineLoadProgress, { phase: "ready" }> | undefined;
+  // The Rust module is small and can fail while the engine still downloads;
+  // its later progress must not paint over the failure.
+  let failed = false;
   try {
-    Module = await createModule({
-      onCgLimit,
-      print: (text: string) => {
-        if (!isOverlapPairLine(text))
-          self.postMessage({ id: 0, log: `[wasm] ${text}` });
-      },
-      printErr: (text: string) =>
-        self.postMessage({ id: 0, log: `[wasm:err] ${text}` }),
-      onProgress: (progress) =>
-        postEngineStatus(
-          progress.phase === "ready"
-            ? { ...progress, initMs: performance.now() - t0 }
-            : progress,
-        ),
-    });
+    // Promise.all, so a failure of either is caught here and the other's
+    // later rejection is still handled.
+    const [engine] = await Promise.all([
+      createModule({
+        onCgLimit,
+        print: (text: string) => {
+          if (!isOverlapPairLine(text))
+            self.postMessage({ id: 0, log: `[wasm] ${text}` });
+        },
+        printErr: (text: string) =>
+          self.postMessage({ id: 0, log: `[wasm:err] ${text}` }),
+        onProgress: (progress) => {
+          if (progress.phase === "ready") engineReady = progress;
+          else if (!failed) postEngineStatus(progress);
+        },
+      }),
+      loadFemModule(),
+    ]);
+    Module = engine;
+    if (!engineReady)
+      throw new Error("The engine finished loading without reporting ready");
   } catch (err) {
+    failed = true;
     postEngineStatus({
       phase: "failed",
-      stage: err instanceof EngineLoadError ? err.stage : "instantiate",
+      stage:
+        err instanceof EngineLoadError || err instanceof FemLoadError
+          ? err.stage
+          : "instantiate",
       detail: err instanceof Error ? err.message : String(err),
     });
     throw err;
   }
+  postEngineStatus({ ...engineReady, initMs: performance.now() - t0 });
 }
 function m(): KofemModule {
   if (!Module)
@@ -630,15 +650,6 @@ async function handleAutoShellSolve(
   return true;
 }
 
-// The Rust finite-element module (AMG solver): small, so it is loaded on the
-// first AMG solve rather than with the engine. One load per worker.
-let femInit: Promise<unknown> | null = null;
-
-function ensureFem(): Promise<unknown> {
-  if (!femInit) femInit = initFem();
-  return femInit;
-}
-
 // The solver the request asks for. The app always names one; a request without
 // it is refused rather than guessed, since the two differ in method and speed.
 function requestedSolver(payload: SolvePayload): SolverMethod {
@@ -667,7 +678,6 @@ async function handleSolidSolve(id: number, payload: SolvePayload) {
   const { nodes, elements } = payload;
   const tied = weldTies(nodes, elements, payload.tieGroups, logTo(id));
   if (requestedSolver(payload) === "amg" && amgReason(payload) === null) {
-    await ensureFem();
     const result = await solveSolidWithAmg(
       { ElasticModel, SolveOptions },
       { ...payload, nodes: tied.solveNodes, elements: tied.tiedElements },

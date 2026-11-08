@@ -235,8 +235,8 @@ export default {
         ${source("engine/cpp/solve_shell.cpp", 1, "WASM inputs and outputs")}.</li>
       <li>${source("web/src/lib/solve/autoShell.ts", 72, "one-Shell-body guard")},
         ${source("web/src/lib/solve/shell.ts", 25, "shell material and thickness resolution")},
-        ${source("web/src/lib/shellize/walls.ts", 111, "wall pairing")},
-        ${source("web/src/lib/shellize/midSurface.ts", 72, "mid-surface construction")},
+        ${source("crates/kofem-shellize/src/walls.rs", 98, "wall pairing")},
+        ${source("crates/kofem-shellize/src/mid_surface.rs", 58, "mid-surface construction")},
         ${source("web/src/lib/solveLoads.ts", 20, "load distribution")} and
         ${source("engine/tests/shell_validation.cpp", 635, "executed plate cases")}.</li>
     </ol>`,
