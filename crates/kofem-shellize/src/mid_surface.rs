@@ -249,3 +249,72 @@ pub fn extract_thin_wall_shells(
         ..collapsed
     })
 }
+
+impl ShellExtraction {
+    /// Rebuild an extraction handed back from JS: flat facets over its own
+    /// nodes, one thickness and source face per facet, one source face per
+    /// node, and the walls it was collapsed from.
+    ///
+    /// # Errors
+    /// The first malformed array or out-of-range index.
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "one argument per field of the flat wire form"
+    )]
+    pub fn from_parts(
+        shell_body: Option<i32>,
+        walls: Vec<Wall>,
+        vertices: &[f64],
+        triangles: &[u32],
+        thicknesses: &[f64],
+        node_source: &[i32],
+        triangle_source: &[i32],
+    ) -> Result<Self, ShellizeError> {
+        if !vertices.len().is_multiple_of(3) {
+            return Err(ShellizeError::ArrayLength {
+                what: "shell vertex array",
+                len: vertices.len(),
+                stride: 3,
+            });
+        }
+        if let Some(&value) = vertices
+            .iter()
+            .chain(thicknesses)
+            .find(|value| !value.is_finite())
+        {
+            return Err(ShellizeError::NonFinite {
+                what: "a shell vertex coordinate or thickness",
+                value,
+            });
+        }
+        let points: Vec<Vec3> = vertices.as_chunks::<3>().0.to_vec();
+        let triangles =
+            crate::geometry::checked_groups::<3>(triangles, points.len(), "shell triangle array")?;
+        for (what, len, expected) in [
+            ("shell thickness array", thicknesses.len(), triangles.len()),
+            (
+                "shell facet source array",
+                triangle_source.len(),
+                triangles.len(),
+            ),
+            ("shell node source array", node_source.len(), points.len()),
+        ] {
+            if len != expected {
+                return Err(ShellizeError::ArrayCount {
+                    what,
+                    len,
+                    expected,
+                });
+            }
+        }
+        Ok(Self {
+            walls,
+            shell_body,
+            vertices: points,
+            triangles,
+            thicknesses: thicknesses.to_vec(),
+            node_source: node_source.to_vec(),
+            triangle_source: triangle_source.to_vec(),
+        })
+    }
+}

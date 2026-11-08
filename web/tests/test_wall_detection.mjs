@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Thin-wall detection (src/lib/shellize/walls.ts, through extractThinWallShells).
+// Thin-wall detection (crates/kofem-shellize/src/walls.rs, through extractThinWallShells).
 //
 // A body the user marks Shell is collapsed to the mid-surface of the walls this
 // detector finds: pairs of opposite planar CAD faces of one body, no further
@@ -15,6 +15,10 @@
 // Run:  bun tests/test_wall_detection.mjs
 
 import { extractThinWallShells } from "../src/lib/shellize.ts";
+import { loadFemModule } from "../src/lib/femModule.ts";
+
+// The shell idealisation runs in the Rust module (crates/kofem-shellize).
+await loadFemModule();
 
 let failures = 0;
 function check(name, cond, detail = "") {

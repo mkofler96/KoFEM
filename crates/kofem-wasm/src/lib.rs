@@ -12,7 +12,10 @@
 
 mod shellize;
 
-pub use shellize::{CoupledResult, ShellTransitionResult};
+pub use shellize::{
+    CoupledResult, CouplingInput, ExplicitCoupledResult, ShellSet, ShellTransitionResult,
+    ShellizeInput,
+};
 
 use kofem_fem::{
     assemble_stiffness, solve_static, CgSettings, CsrMatrix, FemError, Isotropic, TetMesh,

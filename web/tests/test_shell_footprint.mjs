@@ -6,6 +6,10 @@ import {
   couplingMpcCodes,
   dropCouplingsOnFixedNodes,
 } from "../src/lib/shellize.ts";
+import { loadFemModule } from "../src/lib/femModule.ts";
+
+// The shell idealisation runs in the Rust module (crates/kofem-shellize).
+await loadFemModule();
 
 // A non-conforming solid section: the middle row has no coincident shell node.
 const vertices = [
@@ -47,10 +51,11 @@ for (const wallStep of [3, 4]) {
     shellBodyIds: new Set([1]),
   });
   assert.equal(shells.shellBody, 1);
-  const { mesh: clipped, model: mixed } = buildShellTransitionModel(
-    original,
-    shells,
-  );
+  const {
+    mesh: clipped,
+    shells: clippedShells,
+    model: mixed,
+  } = buildShellTransitionModel(original, shells);
   const retainedVolume = clipped.body.reduce(
     (sum, body, index) =>
       sum +
@@ -64,7 +69,7 @@ for (const wallStep of [3, 4]) {
     `retain exactly the physical 6 mm solid section, got ${retainedVolume}`,
   );
   assert.ok(
-    shells.shellVerts.every(
+    clippedShells.shellVerts.every(
       (value, index) => index % 3 !== 2 || value >= 12 - 1e-7,
     ),
   );

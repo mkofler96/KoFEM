@@ -6,7 +6,8 @@
 //! thickness per wall), keep the other bodies as solid tets, and build the
 //! node pool and couplings of the coupled shell/solid solve.
 //!
-//! A port of the TypeScript pipeline in `web/src/lib/shellize/` (KOF-297).
+//! Ported from the TypeScript pipeline that lived in `web/src/lib/shellize/`
+//! (KOF-297); the app reaches it through `web/src/lib/shellize.ts`.
 //! Stages, bottom-up:
 //!   [`walls`]          thin-wall detection (opposite planar CAD-face pairs)
 //!   [`mid_surface`]    collapse the walls to welded mid-surface facets

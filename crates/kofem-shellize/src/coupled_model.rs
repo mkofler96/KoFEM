@@ -370,15 +370,16 @@ impl ShellNodeLocator {
     /// # Errors
     /// Never in practice (the cell size is a positive constant).
     pub fn new(model: &CoupledModel) -> Result<Self, ShellizeError> {
+        Self::build(model.pool.clone(), &model.shell_pool)
+    }
+
+    fn build(pool: Vec<Vec3>, shell_pool: &[usize]) -> Result<Self, ShellizeError> {
         let grid = SpatialGrid::new(
-            model.shell_pool.iter().copied(),
-            |index| model.pool[index],
+            shell_pool.iter().copied(),
+            |index| pool[index],
             LOCATOR_CELL,
         )?;
-        Ok(Self {
-            grid,
-            pool: model.pool.clone(),
-        })
+        Ok(Self { grid, pool })
     }
 
     /// # Errors

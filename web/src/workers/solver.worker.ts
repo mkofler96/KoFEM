@@ -5,6 +5,7 @@
 // Runs kofem-wasm off the main thread so heavy solves don't freeze the UI.
 
 import createModule, { EngineLoadError } from "../wasm/pkg/kofem_wasm.js";
+import { loadFemModule } from "../lib/femModule.js";
 import type {
   EngineLoadProgress,
   KofemModule,
@@ -112,7 +113,12 @@ function postEngineStatus(engineStatus: EngineStatusMessage) {
 let initPromise: Promise<void> | null = null;
 
 function ensureInit(): Promise<void> {
-  if (!initPromise) initPromise = initEngine();
+  // The Rust module (shell idealisation) loads alongside the engine; both are
+  // needed before any request that meshes or solves a Shell body.
+  if (!initPromise)
+    initPromise = Promise.all([initEngine(), loadFemModule()]).then(
+      () => undefined,
+    );
   return initPromise;
 }
 

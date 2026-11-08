@@ -1009,13 +1009,13 @@
 
     <h2 id="references">Implementation and references</h2>
     <ol class="refs">
-      <li><a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/web/src/lib/shellize/transition.ts#L23">three-thickness retained section</a>,
-        <a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/web/src/lib/shellize/footprint.ts#L78">physical footprint detection</a>,
+      <li><a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/crates/kofem-shellize/src/transition.rs#L79">three-thickness retained section</a>,
+        <a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/crates/kofem-shellize/src/footprint.rs#L185">physical footprint detection</a>,
         <a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/engine/cpp/coupling_constraints.cpp#L43">footprint equations</a>,
         <a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/engine/cpp/shell_core.cpp#L92">constraint reduction</a> and
         <a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/engine/cpp/solve_coupled.cpp#L1">MFEM/WASM coupled assembler</a>.</li>
       <li><a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/engine/cpp/coupling_constraints.cpp#L149">relaxed seam MPC and distributing equations</a>,
-        <a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/web/src/lib/shellize/ties.ts#L157">coupled surface ties</a>,
+        <a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/crates/kofem-shellize/src/ties.rs#L153">coupled surface ties</a>,
         <a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/web/src/lib/solve/solid.ts#L101">solid tie welding</a>,
         <a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/web/src/lib/solve/coupled.ts#L39">app relaxation setting</a>,
         <a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/web/src/lib/coupledMaterials.ts#L75">mixed-model materials</a>,

@@ -186,12 +186,14 @@ export function buildMeshTimeShellModel(
     surfaceFaceIds,
     vid,
   );
-  const shells = extractShellsOrThrow(mesh, shellBodyIds);
   // No ties here: this runs at MESH time, before any surface can have been
   // picked. It only needs the pool's node/element layout — the couplings are
   // rebuilt at solve time from the connections the user defined by then.
-  const transition = buildShellTransitionModel(mesh, shells);
-  const model = transition.model;
+  const transition = buildShellTransitionModel(
+    mesh,
+    extractShellsOrThrow(mesh, shellBodyIds),
+  );
+  const { model, shells } = transition;
 
   // Nodes: the coupled pool (solid nodes first, then the shell mid-surface nodes).
   const poolNodes: Node[] = [];
