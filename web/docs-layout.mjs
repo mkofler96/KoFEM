@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Shared reading layout, typography, MathML font and theme for Examples and Theory.
+// Shared reading layout, typography, MathML font and theme for Examples, Theory and Blog.
 import { readFileSync } from "node:fs";
 
 const SITE = "https://kofem.org";

@@ -95,4 +95,8 @@
   <url><loc>https://kofem.org/theory/optimization/constraints-and-convergence/</loc><image:image><image:loc>https://kofem.org/theory/figures/density-filter.png</image:loc></image:image><image:image><image:loc>https://kofem.org/theory/figures/mbb-half-beam-layout.png</image:loc></image:image></url>
   <url><loc>https://kofem.org/theory/optimization/interpreting-designs/</loc></url>
   <!-- theory:end -->
+  <!-- blog:start -->
+  <url><loc>https://kofem.org/blog/</loc></url>
+  <url><loc>https://kofem.org/blog/rewriting-kofem-solver-in-rust/</loc></url>
+  <!-- blog:end -->
 </urlset>

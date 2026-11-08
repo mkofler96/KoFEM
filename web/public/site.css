@@ -211,6 +211,19 @@ body {
   }
 }
 
+@media (max-width: 540px) {
+  .site-navigation {
+    flex-wrap: wrap;
+    row-gap: 12px;
+  }
+
+  .site-links {
+    width: 100%;
+    justify-content: space-between;
+    gap: 8px;
+  }
+}
+
 @media (max-width: 430px) {
   .site-github {
     display: none;

@@ -16,6 +16,7 @@ export function siteHeader(current = "", { themeSwitch = false } = {}) {
       <nav class="site-links" aria-label="Main navigation">
         <a href="/examples/"${active("examples")}>Examples</a>
         <a href="/theory/"${active("theory")}>Theory</a>
+        <a href="/blog/"${active("blog")}>Blog</a>
         <details class="site-more">
           <summary>More</summary>
           <div>
@@ -39,6 +40,7 @@ export function siteFooter() {
         <a href="/">Home</a>
         <a href="/examples/">Examples</a>
         <a href="/theory/">Theory</a>
+        <a href="/blog/">Blog</a>
         <a href="/privacy/">Privacy</a>
         <a href="https://github.com/mkofler96/KoFEM">GitHub</a>
       </nav>
@@ -50,7 +52,9 @@ export function injectSiteLayout(html, path = "/") {
     ? "examples"
     : path.startsWith("/theory/")
       ? "theory"
-      : "";
+      : path.startsWith("/blog/")
+        ? "blog"
+        : "";
   return html
     .replace("<!-- site-header -->", siteHeader(current))
     .replace("<!-- site-footer -->", siteFooter());

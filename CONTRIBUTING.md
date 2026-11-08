@@ -100,6 +100,12 @@ in `web/docs-layout.mjs`, plus `web/public/theory.css`. Edit the sources in
 generated HTML and sitemap. `bun run test:theory` checks that they match their
 sources and that the navigation follows `docs/theory/content-map.md`.
 
+Blog pages at `/blog/` use the same shared reading styles and theme. Edit
+article modules in `web/blog/posts/`, register them in `web/blog/posts.mjs`,
+then run `cd web && bun run blog:generate` and commit the generated HTML and
+sitemap. `bun run test:blog` checks for stale output. See
+[docs/blog/README.md](docs/blog/README.md) for the publishing workflow.
+
 ## Pull requests
 
 - The PR template asks you to confirm, per changed code path, that missing or

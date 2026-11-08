@@ -26,9 +26,7 @@ import {
 
 const htmlEntry = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 
-// The static pages (index.html, privacy/index.html, and examples/index.html
-// plus one examples/<id>/index.html per example, which
-// examples/validation/run.mjs --report generates) are fully static — Vite
+// The landing, privacy, examples, theory, and blog pages are fully static — Vite
 // emits them byte-for-byte, they import no hashed assets. Feeding them as extra
 // MPA rollup inputs is flaky (in some environments rollup crosses the
 // landing/app chunk names and drops the landing HTML entirely, leaving "/" on
@@ -48,6 +46,9 @@ const STATIC_PAGES = [
   ...readdirSync(htmlEntry("./theory/"), { recursive: true })
     .filter((entry) => String(entry).endsWith("index.html"))
     .map((entry) => `theory/${entry}`),
+  ...readdirSync(htmlEntry("./blog/"), { recursive: true })
+    .filter((entry) => String(entry).endsWith("index.html"))
+    .map((entry) => `blog/${entry}`),
 ];
 
 // The files each example is opened and drawn from live outside web/, with
@@ -124,7 +125,7 @@ const slashRedirect = (path: string): string | null =>
   /^\/examples\/[\w-]+$/.test(path) ||
   STATIC_PAGES.some(
     (page) =>
-      page.startsWith("theory/") &&
+      (page.startsWith("theory/") || page.startsWith("blog/")) &&
       path === `/${page.replace(/\/index\.html$/, "")}`,
   )
     ? `${path}/`

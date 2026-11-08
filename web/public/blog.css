@@ -1,0 +1,146 @@
+body {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.skip-link {
+  position: fixed;
+  top: -100px;
+  left: 16px;
+  z-index: 100;
+  padding: 8px 16px;
+  color: var(--text);
+  background: var(--bg);
+}
+
+.skip-link:focus {
+  top: 8px;
+}
+
+.blog-main {
+  flex: 1;
+  width: calc(100% - 48px);
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 48px 0 80px;
+}
+
+.blog-heading {
+  margin-bottom: 32px;
+}
+
+.blog-heading h1 {
+  max-width: 720px;
+  font-size: clamp(30px, 4vw, 42px);
+  line-height: 1.15;
+}
+
+.blog-meta {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.blog-posts {
+  border-top: 1px solid var(--line);
+}
+
+.blog-entry {
+  padding: 28px 0 32px;
+  border-bottom: 1px solid var(--line);
+}
+
+.blog-entry .blog-meta {
+  margin-bottom: 8px;
+}
+
+.blog-entry h2 {
+  margin: 0 0 12px;
+}
+
+.blog-entry h2 a {
+  color: var(--text);
+}
+
+.blog-entry > p:not(.blog-meta) {
+  max-width: 660px;
+}
+
+.blog-read {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.blog-main h2 {
+  scroll-margin-top: 130px;
+}
+
+.blog-main .table-wrap:focus-visible,
+.blog-main .equation:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.blog-main .table-wrap th:first-child,
+.blog-main .table-wrap td:first-child {
+  min-width: 145px;
+}
+
+.blog-pipeline {
+  margin: 28px 0;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg2);
+}
+
+.blog-pipeline > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.blog-pipeline strong,
+.blog-pipeline small {
+  display: block;
+}
+
+.blog-pipeline strong {
+  font-size: 14px;
+}
+
+.blog-pipeline small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.blog-pipeline figcaption {
+  margin: 16px 0 0;
+  font-size: 13px;
+}
+
+.blog-back {
+  margin-top: 40px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+}
+
+@media (max-width: 540px) {
+  .blog-main {
+    width: calc(100% - 32px);
+    padding-top: 28px;
+  }
+
+  .blog-pipeline > div {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .blog-pipeline .blog-arrow {
+    transform: rotate(90deg);
+  }
+}

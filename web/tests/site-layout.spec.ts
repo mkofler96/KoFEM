@@ -11,6 +11,8 @@ const PAGES = [
   "/theory/",
   "/theory/foundations/what-is-fem/",
   "/theory/foundations/consistent-units/",
+  "/blog/",
+  "/blog/rewriting-kofem-solver-in-rust/",
 ];
 
 test.use({ javaScriptEnabled: false });
@@ -32,6 +34,12 @@ test("public pages share navigation and typography without JavaScript", async ({
       header.getByRole("link", { name: "Theory", exact: true }),
     ).toHaveAttribute("href", "/theory/");
     const solver = header.getByRole("link", { name: /Start Solver/ });
+    await expect(
+      header.getByRole("link", { name: "Blog", exact: true }),
+    ).toHaveAttribute("href", "/blog/");
+    await expect(
+      header.locator(".site-links > a:not([class]), .site-more > summary"),
+    ).toHaveText(["Examples", "Theory", "Blog", "More"]);
     await expect(solver).toHaveAttribute("href", "/app/");
     await header.getByText("More", { exact: true }).click();
     await expect(

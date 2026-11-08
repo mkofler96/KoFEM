@@ -71,6 +71,12 @@ server {
         try_files $uri $uri/ =404;
     }
 
+    # Blog posts are static documents; unknown article URLs return 404.
+    location /blog/ {
+        add_header Cache-Control "no-cache";
+        try_files $uri $uri/ =404;
+    }
+
     # Static marketing landing fallback. Its /landing/ files keep their names
     # across deploys, and each .json describes the layout of its .bin. Without
     # revalidation a browser can pair a cached .json with a newer .bin.
