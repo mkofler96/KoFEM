@@ -217,6 +217,7 @@ test("auto-shell: thin plate on a block solves through the coupled path", async 
       };
     };
     const res = (await win.__kofem.sendToWorker("solve", {
+      solverMethod: "gauss-seidel",
       nodes,
       elements,
       materials: [

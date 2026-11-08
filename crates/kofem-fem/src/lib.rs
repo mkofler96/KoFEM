@@ -12,6 +12,7 @@
 //! See `../NOTICE.md` for source references and `../LICENSE-MFEM` for MFEM's
 //! copyright notice and BSD-3-Clause terms, retained alongside KoFEM's license.
 
+pub mod amg;
 pub mod assembly;
 pub mod cg;
 pub mod constraints;
@@ -21,12 +22,19 @@ pub mod material;
 pub mod mesh;
 pub mod sparse;
 pub mod static_solve;
+pub mod stress;
+pub mod surface;
 
+pub use amg::{AmgSettings, LevelInfo, Preconditioner, SmoothedAggregation, SymmetricGaussSeidel};
 pub use assembly::assemble_stiffness;
-pub use cg::{solve_pcg, CgOutcome, CgSettings};
+pub use cg::{solve_pcg, solve_pcg_with, CgOutcome, CgSettings, PcgRun, PcgStatus, StoppingRule};
 pub use constraints::{apply_dirichlet, Dirichlet};
 pub use error::FemError;
 pub use material::Isotropic;
 pub use mesh::TetMesh;
 pub use sparse::CsrMatrix;
-pub use static_solve::{solve_static, StaticSolution};
+pub use static_solve::{
+    prepare_static, solve_static, PreconditionerChoice, PreparedStatic, StaticSolution,
+};
+pub use stress::von_mises;
+pub use surface::{BoundaryFaces, SurfaceLoadKind, SurfaceLoadReport};

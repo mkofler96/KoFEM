@@ -116,6 +116,7 @@ test("i-beam shell: import STEP, mesh, mark Shell, solve through the shell path"
       const solveWith = async (discretization: "shell" | "solid") => {
         const properties = props.map((p) => ({ ...p, discretization }));
         const res = (await win.__kofem.sendToWorker("solve", {
+          solverMethod: "gauss-seidel",
           nodes: st.nodes,
           elements: st.elements,
           materials: st.materials,

@@ -7,6 +7,7 @@ import { useSolver } from "../../hooks/useSolver";
 import { useEngineGate } from "../../store/engineStore";
 import { LogSection } from "./LogSection";
 import { PreflightChecks } from "./PreflightChecks";
+import { isSolverMethod, SOLVER_METHODS } from "../../lib/solve/amg";
 import styles from "./Panel.module.css";
 
 // One static study: the pre-flight check, the solver settings and the run.
@@ -28,6 +29,9 @@ export function SolvePanel({
     allOk,
     checks,
     elementOrder,
+    solverMethod,
+    setSolverMethod,
+    amgUnavailable,
     logs,
   } = useSolver();
   const engine = useEngineGate();
@@ -51,10 +55,32 @@ export function SolvePanel({
           <span className={styles.statKey}>Step</span>
           <span className={styles.statVal}>Static · {study.name}</span>
         </div>
-        <div className={styles.statRow}>
-          <span className={styles.statKey}>Solver</span>
-          <span className={styles.statVal}>Direct</span>
+        <div className={styles.formRow}>
+          <span className={styles.formLabel}>Solver</span>
+          <select
+            className={styles.formSelect}
+            data-testid="solver-method"
+            value={solverMethod}
+            disabled={isRunning}
+            onChange={(e) => {
+              if (isSolverMethod(e.target.value))
+                setSolverMethod(e.target.value);
+            }}
+            title="Both solve the same equations to the same accuracy. AMG multigrid needs far fewer iterations on large and thin-walled models."
+          >
+            {SOLVER_METHODS.map(({ value, label }) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
         </div>
+        {solverMethod === "amg" && amgUnavailable !== null && (
+          <div className={styles.formNote} data-testid="solver-method-note">
+            AMG is not available for this model ({amgUnavailable}). It will
+            solve with Gauss–Seidel.
+          </div>
+        )}
         <div className={styles.statRow}>
           <span className={styles.statKey}>Output</span>
           <span className={styles.statVal}>U, S, RF</span>

@@ -9,7 +9,7 @@ import type {
   Element,
   Material,
   Property,
-  SolvePayload,
+  SolveModel,
 } from "../../workers/solverTypes.js";
 import type { ShellMesh } from "../../wasm/pkg/kofem_wasm.js";
 import { buildVertexIndexer } from "../solveMeshPacking.js";
@@ -74,9 +74,7 @@ export interface ShellEngineInputs {
   bcsJson: string;
 }
 
-export function buildShellEngineInputs(
-  payload: SolvePayload,
-): ShellEngineInputs {
+export function buildShellEngineInputs(payload: SolveModel): ShellEngineInputs {
   const {
     nodes,
     elements,

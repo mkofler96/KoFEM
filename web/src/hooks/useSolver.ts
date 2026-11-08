@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { useModelStore } from "../store/modelStore";
 import { fmt, loadsSummary } from "../lib/modelDisplay";
 import { sendToWorker } from "../workers/sharedWorker";
+import type { SolvePayload } from "../workers/solverTypes";
+import { amgUnavailableReason } from "../lib/solve/amg";
 import { useWorkerLogs } from "./useWorkerLogs";
 import {
   categorizeError,
@@ -34,6 +36,8 @@ export function useSolver() {
   const setResult = useModelStore((s) => s.setResult);
   const setMode = useModelStore((s) => s.setMode);
   const elementOrder = useModelStore((s) => s.elementOrder);
+  const solverMethod = useModelStore((s) => s.solverMethod);
+  const setSolverMethod = useModelStore((s) => s.setSolverMethod);
   const tieGroups = useModelStore((s) => s.tieGroups);
   const couplingGroups = useModelStore((s) => s.couplingGroups);
   // Surface mesh + CAD face ids drive auto-shell idealisation of thin bodies
@@ -73,24 +77,26 @@ export function useSolver() {
     const workflow = currentWorkflow();
     const elapsed = startTimer();
     track("solve_started", { workflow, analysis_type: "static" });
+    const payload: SolvePayload = {
+      nodes,
+      elements,
+      materials,
+      properties,
+      constraints,
+      loads,
+      surfaceLoads,
+      elementOrder,
+      solverMethod,
+      tieGroups,
+      couplings: couplingGroups,
+      surfaceTriangles,
+      surfaceFaceIds,
+    };
     // The worker transfers the solver's Float64Array buffers here zero-copy
     // (issue #166) — store them as-is, no per-element copy.
     sendToWorker<{ displacements: Float64Array; vonMises: Float64Array }>(
       "solve",
-      {
-        nodes,
-        elements,
-        materials,
-        properties,
-        constraints,
-        loads,
-        surfaceLoads,
-        elementOrder,
-        tieGroups,
-        couplings: couplingGroups,
-        surfaceTriangles,
-        surfaceFaceIds,
-      },
+      payload,
     )
       .then(({ displacements, vonMises }) => {
         setResult({ displacements, vonMises });
@@ -155,6 +161,18 @@ export function useSolver() {
     ],
   ];
 
+  // Why the chosen AMG solver will not take this model (shown under the solver
+  // choice), or null. Only computed with a mesh: before one there is no model.
+  const amgUnavailable =
+    nodes.length > 0
+      ? amgUnavailableReason({
+          elements,
+          properties,
+          elementOrder,
+          couplingCount: couplingGroups.length,
+        })
+      : null;
+
   return {
     solve,
     error,
@@ -163,6 +181,9 @@ export function useSolver() {
     allOk,
     checks,
     elementOrder,
+    solverMethod,
+    setSolverMethod,
+    amgUnavailable,
     logs,
   };
 }

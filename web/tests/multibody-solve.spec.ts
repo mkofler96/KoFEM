@@ -141,6 +141,7 @@ test("a tie connection makes a disconnected two-body solve converge", async ({
         try {
           const result = (await win.__kofem.sendToWorker("solve", {
             ...model,
+            solverMethod: "gauss-seidel",
             tieGroups: ties,
           })) as { displacements: Float64Array };
           return { ok: true as const, nDisp: result.displacements.length };

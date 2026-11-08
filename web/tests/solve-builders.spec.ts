@@ -12,7 +12,7 @@ import type {
   Material,
   Node,
   Property,
-  SolvePayload,
+  SolveModel,
   TopOptPayload,
 } from "../src/workers/solverTypes";
 import {
@@ -63,7 +63,7 @@ const shellElements: Element[] = [
   { id: 2, type: "CTRIA3", nodeIds: [11, 13, 14], propertyId: 5 },
 ];
 
-function payload(over: Partial<SolvePayload>): SolvePayload {
+function payload(over: Partial<SolveModel>): SolveModel {
   return {
     nodes: quadNodes,
     elements: shellElements,
@@ -428,7 +428,7 @@ test("solve routing follows the element mix, couplings and Shell choice", () => 
     kind: "kinematic",
     referencePoint: 99,
     nodes: [11],
-  } as unknown as NonNullable<SolvePayload["couplings"]>[number];
+  } as unknown as NonNullable<SolveModel["couplings"]>[number];
   expect(routeSolve(payload({}))).toEqual({ path: "shell" });
   expect(() => routeSolve(payload({ couplings: [coupling] }))).toThrow(
     /all shell elements and declares 1/,

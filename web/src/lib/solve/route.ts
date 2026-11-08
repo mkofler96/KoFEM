@@ -5,7 +5,7 @@
 // and the per-body Shell/Solid choice — shared by the static solve and the
 // topology optimizer so both route the same model the same way.
 
-import type { SolvePayload, TopOptPayload } from "../../workers/solverTypes.js";
+import type { SolveModel, TopOptPayload } from "../../workers/solverTypes.js";
 import { shellMarkedBodies, requireOneShellBody } from "./autoShell.js";
 
 export type SolveRoute =
@@ -20,7 +20,7 @@ export type SolveRoute =
   // All solid, no Shell body, no coupling → solve_linear_elastic.
   | { path: "solid" };
 
-export function routeSolve(payload: SolvePayload): SolveRoute {
+export function routeSolve(payload: SolveModel): SolveRoute {
   // Shell models route away from the all-solid path. A model that is ALL CTRIA3
   // solves via the Kirchhoff shell solver; a model that MIXES CTRIA3 shells with
   // solid elements solves via the coupled solid-shell solver (the shells are

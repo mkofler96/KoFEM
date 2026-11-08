@@ -13,13 +13,16 @@ mod support;
 
 use kofem_fem::{
     apply_dirichlet, assemble_stiffness, solve_pcg, solve_static, CgSettings, Dirichlet, FemError,
-    Isotropic, TetMesh,
+    Isotropic, PreconditionerChoice, StoppingRule, TetMesh,
 };
+
+const GS: PreconditionerChoice = PreconditionerChoice::SymmetricGaussSeidel;
 use support::box_mesh;
 
 const SETTINGS: CgSettings = CgSettings {
     relative_tolerance: 1e-10,
     max_iterations: 10_000,
+    stopping: StoppingRule::PreconditionedNorm,
 };
 
 fn steel() -> Isotropic {
@@ -156,6 +159,7 @@ fn unconstrained_model_is_refused() {
     let settings = CgSettings {
         relative_tolerance: 1e-10,
         max_iterations: 500,
+        stopping: StoppingRule::PreconditionedNorm,
     };
     let result = solve_pcg(&matrix, &rhs, settings);
     assert!(
@@ -237,7 +241,7 @@ fn vertices_no_element_uses_are_held_and_cannot_be_loaded() {
     let stiffness = assemble_stiffness(&mesh);
     let forces = vec![0.0; 3 * mesh.vertex_count()];
     let solution =
-        solve_static(&mesh, &stiffness, &dofs, &values, &forces, SETTINGS).expect("solves");
+        solve_static(&mesh, &stiffness, &dofs, &values, &forces, SETTINGS, GS).expect("solves");
     assert_eq!(solution.unused_vertices, 1);
     assert_eq!(
         &solution.displacements[3 * stray..3 * stray + 3],
@@ -252,7 +256,7 @@ fn vertices_no_element_uses_are_held_and_cannot_be_loaded() {
     let mut loaded = forces.clone();
     loaded[3 * stray + 1] = 1.0;
     assert_eq!(
-        solve_static(&mesh, &stiffness, &dofs, &values, &loaded, SETTINGS).err(),
+        solve_static(&mesh, &stiffness, &dofs, &values, &loaded, SETTINGS, GS).err(),
         Some(FemError::LoadOnUnusedVertex { vertex: stray })
     );
     let mut supported = dofs.clone();
@@ -266,7 +270,8 @@ fn vertices_no_element_uses_are_held_and_cannot_be_loaded() {
             &supported,
             &supported_values,
             &forces,
-            SETTINGS
+            SETTINGS,
+            GS
         )
         .err(),
         Some(FemError::ConstraintOnUnusedVertex { vertex: stray })
