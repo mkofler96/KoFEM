@@ -43,19 +43,35 @@ fn peak_megabytes() -> String {
         .map_or_else(|| "n/a".to_owned(), |kb| format!("{:.0}", kb / 1024.0))
 }
 
+/// Environment variables the sweep reads (named once, so a typo cannot
+/// silently disable one).
+const SWEEP_STOP: &str = "SWEEP_STOP";
+const AMG_THETA: &str = "AMG_THETA";
+const SWEEP_MEMORY: &str = "SWEEP_MEMORY";
+
 fn read_f64(path: &str) -> Vec<f64> {
-    std::fs::read(path)
-        .expect("readable vertex file")
-        .chunks_exact(8)
-        .map(|bytes| f64::from_le_bytes(bytes.try_into().expect("8 bytes")))
+    let bytes = std::fs::read(path).expect("readable vertex file");
+    let (chunks, rest) = bytes.as_chunks::<8>();
+    assert!(
+        rest.is_empty(),
+        "{path} is not a whole number of f64 values"
+    );
+    chunks
+        .iter()
+        .map(|chunk| f64::from_le_bytes(*chunk))
         .collect()
 }
 
 fn read_u32(path: &str) -> Vec<u32> {
-    std::fs::read(path)
-        .expect("readable tet file")
-        .chunks_exact(4)
-        .map(|bytes| u32::from_le_bytes(bytes.try_into().expect("4 bytes")))
+    let bytes = std::fs::read(path).expect("readable tet file");
+    let (chunks, rest) = bytes.as_chunks::<4>();
+    assert!(
+        rest.is_empty(),
+        "{path} is not a whole number of u32 values"
+    );
+    chunks
+        .iter()
+        .map(|chunk| u32::from_le_bytes(*chunk))
         .collect()
 }
 
@@ -64,13 +80,13 @@ fn main() {
         relative_tolerance: 1e-6,
         max_iterations: 50_000,
         // SWEEP_STOP=residual stops on ‖f − K·u‖/‖f‖ instead of MFEM's rule.
-        stopping: match std::env::var("SWEEP_STOP").as_deref() {
+        stopping: match std::env::var(SWEEP_STOP).as_deref() {
             Ok("residual") => StoppingRule::ResidualNorm,
             Ok("preconditioned") | Err(_) => StoppingRule::PreconditionedNorm,
             Ok(other) => panic!("SWEEP_STOP must be residual or preconditioned, got {other}"),
         },
     };
-    let threshold: f64 = std::env::var("AMG_THETA")
+    let threshold: f64 = std::env::var(AMG_THETA)
         .ok()
         .map_or(AmgSettings::default().strength_threshold, |text| {
             text.parse().expect("AMG_THETA is a number")
@@ -208,7 +224,7 @@ fn main() {
                 (residual / load).sqrt(),
                 levels.join(", ")
             );
-            if std::env::var("SWEEP_MEMORY").is_ok() {
+            if std::env::var(SWEEP_MEMORY).is_ok() {
                 println!("  peak RSS so far {} MB", peak_megabytes());
             }
             if reference.is_none() {

@@ -283,6 +283,14 @@ fn diagonal_of(matrix: &(impl Rows + ?Sized)) -> Vec<f64> {
         .collect()
 }
 
+/// D⁻¹, taking 1 where a row has no (or a zero) diagonal.
+fn inverse_diagonal_of(matrix: &(impl Rows + ?Sized)) -> Vec<f64> {
+    diagonal_of(matrix)
+        .into_iter()
+        .map(|value| if value == 0.0 { 1.0 } else { 1.0 / value })
+        .collect()
+}
+
 #[allow(
     clippy::cast_possible_truncation,
     reason = "every index here is a DOF or aggregate number, bounded by the fine DOF count, \
@@ -612,6 +620,26 @@ fn galerkin(matrix: &(impl Rows + ?Sized), prolongator: &Csr, dead: &[bool]) -> 
     )
 }
 
+/// Largest coarsest level that is factored densely: the factor holds n²
+/// doubles (32 MB here). Coarsening normally stops near `coarse_size`, far
+/// below this, but it can stop early — on a fully constrained model nothing is
+/// left to aggregate, so the "coarsest" level is the whole fine matrix.
+const DENSE_LIMIT: usize = 2000;
+
+/// Symmetric Gauss–Seidel sweep pairs on a coarsest level too large to factor.
+const COARSE_SWEEPS: usize = 4;
+
+/// How the coarsest level is solved.
+enum CoarseSolve {
+    /// Exactly, by dense Cholesky.
+    Direct(DenseCholesky),
+    /// Approximately, by `COARSE_SWEEPS` symmetric Gauss–Seidel sweep pairs
+    /// from zero: a symmetric positive-definite operator, so the V-cycle
+    /// stays a valid CG preconditioner. Exact where the level is diagonal
+    /// (the identity rows of a fully constrained model).
+    Relax { inverse_diagonal: Vec<f64> },
+}
+
 /// Dense Cholesky factor L (row-major lower triangle) of the coarsest matrix.
 struct DenseCholesky {
     size: usize,
@@ -734,13 +762,13 @@ impl Work {
 /// its Dirichlet conditions already eliminated (`apply_dirichlet`).
 pub struct SmoothedAggregation {
     fine: CsrMatrix,
-    /// `A₁ … A_L`; the last one is the coarsest, solved directly.
+    /// `A₁ … A_L`; the last one is the coarsest (see `CoarseSolve`).
     coarse: Vec<Csr>,
     /// D⁻¹ of A₀ … A_{L−1} (the smoothed levels).
     inverse_diagonals: Vec<Vec<f64>>,
     /// `P_k` maps level k+1 to level k.
     prolongators: Vec<Csr>,
-    direct: DenseCholesky,
+    coarse_solve: CoarseSolve,
     work: Vec<Work>,
 }
 
@@ -793,10 +821,7 @@ impl SmoothedAggregation {
                 break; // no longer coarsening
             }
             let tentative = tentative_prolongator(&owner, aggregates, block, &modes);
-            let inverse_diagonal: Vec<f64> = diagonal_of(current)
-                .into_iter()
-                .map(|value| if value == 0.0 { 1.0 } else { 1.0 / value })
-                .collect();
+            let inverse_diagonal = inverse_diagonal_of(current);
             let prolongator =
                 smooth_prolongator(current, &inverse_diagonal, &tentative.prolongator);
             let next = galerkin(current, &prolongator, &tentative.coarse_dead);
@@ -808,7 +833,13 @@ impl SmoothedAggregation {
             block = MODES;
         }
         let coarsest: &dyn Rows = coarse.last().map_or(&matrix as &dyn Rows, |last| last);
-        let direct = DenseCholesky::factor(coarsest)?;
+        let coarse_solve = if coarsest.row_count() <= DENSE_LIMIT {
+            CoarseSolve::Direct(DenseCholesky::factor(coarsest)?)
+        } else {
+            CoarseSolve::Relax {
+                inverse_diagonal: inverse_diagonal_of(coarsest),
+            }
+        };
         let mut work = vec![Work::new(matrix.rows())];
         work.extend(coarse.iter().map(|level| Work::new(level.row_count())));
         Ok(Self {
@@ -816,7 +847,7 @@ impl SmoothedAggregation {
             coarse,
             inverse_diagonals,
             prolongators,
-            direct,
+            coarse_solve,
             work,
         })
     }
@@ -890,7 +921,33 @@ impl Preconditioner for SmoothedAggregation {
             }
         }
         let bottom = &mut work[depth];
-        self.direct.solve(&bottom.rhs, &mut bottom.solution);
+        match &self.coarse_solve {
+            CoarseSolve::Direct(factor) => factor.solve(&bottom.rhs, &mut bottom.solution),
+            CoarseSolve::Relax { inverse_diagonal } => {
+                let matrix = self.level(depth);
+                bottom.solution.fill(0.0);
+                for _pair in 0..COARSE_SWEEPS {
+                    for row in 0..matrix.row_count() {
+                        relax(
+                            matrix,
+                            inverse_diagonal,
+                            row,
+                            &bottom.rhs,
+                            &mut bottom.solution,
+                        );
+                    }
+                    for row in (0..matrix.row_count()).rev() {
+                        relax(
+                            matrix,
+                            inverse_diagonal,
+                            row,
+                            &bottom.rhs,
+                            &mut bottom.solution,
+                        );
+                    }
+                }
+            }
+        }
         // Up: prolongate the correction, post-smooth (backward Gauss–Seidel).
         for index in (0..depth).rev() {
             let matrix = self.level(index);

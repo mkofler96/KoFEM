@@ -45,7 +45,7 @@ pub fn von_mises(mesh: &TetMesh, displacements: &[f64]) -> Result<Vec<f64>, FemE
             let mut sum = 0.0;
             for (row, entries) in gradient.iter().enumerate() {
                 for (col, _) in entries.iter().enumerate() {
-                    let strain = 0.5 * (gradient[row][col] + gradient[col][row]);
+                    let strain = f64::midpoint(gradient[row][col], gradient[col][row]);
                     let spherical = if row == col { trace / 3.0 } else { 0.0 };
                     let deviator = 2.0 * mu * (strain - spherical);
                     sum += deviator * deviator;

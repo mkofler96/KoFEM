@@ -419,3 +419,68 @@ fn continuation_is_offered_only_while_descending() {
     assert!(run.is_converged());
     assert!(!run.still_descending(30));
 }
+
+/// A fully constrained model leaves nothing to aggregate, so the whole fine
+/// matrix is the coarsest level. It must not be factored densely (a large
+/// model would need gigabytes); relaxation solves its identity rows exactly.
+#[test]
+fn fully_constrained_model_solves_without_a_dense_factor() {
+    let built = box_mesh([30, 4, 4], [60.0, 8.0, 8.0], steel());
+    let dof_count = 3 * built.vertices.len();
+    assert!(
+        dof_count > 2000,
+        "the fine level must exceed the dense limit"
+    );
+    let fixed: Vec<u32> = (0..dof_count).map(|dof| dof as u32).collect();
+    let values: Vec<f64> = (0..dof_count).map(|dof| 1e-3 * (dof % 7) as f64).collect();
+    let stiffness = assemble_stiffness(&built.mesh);
+    let settings = CgSettings {
+        relative_tolerance: 1e-10,
+        max_iterations: 10,
+        stopping: StoppingRule::ResidualNorm,
+    };
+    let solution = solve_static(
+        &built.mesh,
+        &stiffness,
+        &fixed,
+        &values,
+        &vec![0.0; dof_count],
+        settings,
+        PreconditionerChoice::SmoothedAggregation(AmgSettings::default()),
+    )
+    .expect("solves");
+    assert_eq!(solution.levels.len(), 1, "nothing to coarsen");
+    assert!(solution.iterations <= 1);
+    assert_eq!(solution.displacements, values);
+}
+
+/// When coarsening stops above the dense limit, the coarsest level is relaxed
+/// instead of factored, and the solve still matches Gauss–Seidel.
+#[test]
+fn large_coarsest_level_is_relaxed_and_still_converges() {
+    let built = box_mesh([30, 4, 4], [60.0, 8.0, 8.0], steel());
+    let (fixed, forces) = cantilever(&built);
+    let no_coarsening = AmgSettings {
+        coarse_size: usize::MAX,
+        ..AmgSettings::default()
+    };
+    let relaxed = solve(
+        &built,
+        &fixed,
+        &forces,
+        PreconditionerChoice::SmoothedAggregation(no_coarsening),
+    );
+    assert_eq!(relaxed.levels.len(), 1);
+    assert!(relaxed.levels[0].unknowns > 2000);
+    let gauss_seidel = solve(
+        &built,
+        &fixed,
+        &forces,
+        PreconditionerChoice::SymmetricGaussSeidel,
+    );
+    let difference = max_relative_difference(&gauss_seidel.displacements, &relaxed.displacements);
+    assert!(
+        difference < 1e-6,
+        "relaxed AMG and GS differ by {difference}"
+    );
+}
