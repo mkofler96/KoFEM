@@ -22,10 +22,16 @@ const pkg = join(
   "../../../web/src/wasm/pkg",
 );
 const { default: createModule } = await import(join(pkg, "kofem_wasm_emcc.js"));
+// The engine's own log is kept back and shown only if meshing fails, so a
+// successful run prints just the summary line.
+const engineLog = [];
 const engine = await createModule({
   wasmBinary: readFileSync(join(pkg, "kofem_wasm_emcc.wasm")).buffer,
-  print: () => {},
-  printErr: () => {},
+  print: (line) => engineLog.push(line),
+  printErr: (line) => engineLog.push(line),
+});
+process.on("exit", (code) => {
+  if (code !== 0) console.error(engineLog.join("\n"));
 });
 const tessellation = engine.tessellate_step(
   new Uint8Array(readFileSync(stepPath)),

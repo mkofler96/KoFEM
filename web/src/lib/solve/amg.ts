@@ -296,8 +296,7 @@ async function iterate(
     if (converged) return;
     if (run.iterations % LOG_EVERY === 0)
       log(
-        `[amg] CG iteration ${String(run.iterations).padStart(4)}: relative residual ` +
-          run.relativeResidual.toExponential(3),
+        `[amg] CG iteration ${String(run.iterations).padStart(4)}: relative residual ${run.relativeResidual.toExponential(3)}`,
       );
     if (run.iterations >= limit) {
       if (!run.stillDescending(window))

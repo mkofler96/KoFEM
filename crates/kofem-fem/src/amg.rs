@@ -803,7 +803,10 @@ impl SmoothedAggregation {
         let mut dead = constrained.to_vec();
         let mut block = 3;
         while prolongators.len() + 1 < settings.max_levels {
-            let current: &dyn Rows = coarse.last().map_or(&matrix as &dyn Rows, |last| last);
+            let current: &dyn Rows = match coarse.last() {
+                Some(last) => last,
+                None => &matrix,
+            };
             let size = current.row_count();
             if size <= settings.coarse_size {
                 break;
@@ -832,7 +835,10 @@ impl SmoothedAggregation {
             dead = tentative.coarse_dead;
             block = MODES;
         }
-        let coarsest: &dyn Rows = coarse.last().map_or(&matrix as &dyn Rows, |last| last);
+        let coarsest: &dyn Rows = match coarse.last() {
+            Some(last) => last,
+            None => &matrix,
+        };
         let coarse_solve = if coarsest.row_count() <= DENSE_LIMIT {
             CoarseSolve::Direct(DenseCholesky::factor(coarsest)?)
         } else {
