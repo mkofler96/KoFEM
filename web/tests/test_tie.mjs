@@ -19,7 +19,7 @@ import { dirname, join } from "path";
 import {
   buildTie,
   remapElement,
-  assertNoCollapsedElements,
+  assertValidTiedMesh,
   tiedId,
   expandToOriginalNodes,
 } from "../src/lib/tie.ts";
@@ -101,7 +101,7 @@ assert(
   `the connection should report 9 pairs, got ${tie.reports[0].nPaired}`,
 );
 const tiedElements = elements.map((el) => remapElement(el, tie.repOf));
-assertNoCollapsedElements(tiedElements);
+assertValidTiedMesh(nodes, elements, tie);
 
 // A search distance below the gap reaches nothing — the connection welds no
 // pair, which is exactly what the solve path turns into an actionable error.

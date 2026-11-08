@@ -303,6 +303,84 @@ test("a tie that joins nothing is refused", () => {
   ).toThrow(/Tie "far" connected no nodes/);
 });
 
+// KOF-298: a weld that bridges a gap wider than the elements beside it must be
+// refused with the tie's name, not handed to the engine as an invalid mesh.
+test("a tie that makes an element face shared by three elements is refused", () => {
+  // Two tets of one body share the face 1-2-3; a third tet of another body has a
+  // face 6-7-8 just beside it. Welding 6-7-8 onto 1-2-3 gives that face three
+  // elements, the mesh MFEM aborts on ("Invalid mesh topology").
+  const nodes: Node[] = [
+    { id: 1, x: 0, y: 0, z: 0 },
+    { id: 2, x: 1, y: 0, z: 0 },
+    { id: 3, x: 0, y: 1, z: 0 },
+    { id: 4, x: 0, y: 0, z: 1 },
+    { id: 5, x: 0, y: 0, z: -1 },
+    { id: 6, x: 0, y: 0, z: 0.01 },
+    { id: 7, x: 1, y: 0, z: 0.01 },
+    { id: 8, x: 0, y: 1, z: 0.01 },
+    { id: 9, x: 0.3, y: 0.3, z: 0.5 },
+  ];
+  const elements: Element[] = [
+    { id: 1, type: "CTETRA", nodeIds: [1, 2, 3, 4], propertyId: 1 },
+    { id: 2, type: "CTETRA", nodeIds: [1, 3, 2, 5], propertyId: 1 },
+    { id: 3, type: "CTETRA", nodeIds: [6, 7, 8, 9], propertyId: 2 },
+  ];
+  expect(() =>
+    weldTies(
+      nodes,
+      elements,
+      [
+        {
+          name: "inner",
+          facesA: [{ nodeIds: [1, 2, 3] }],
+          facesB: [{ nodeIds: [6, 7, 8] }],
+          extent: "full",
+          searchDistance: 0,
+        },
+      ],
+      () => undefined,
+    ),
+  ).toThrow(/Tie "inner" pulls nodes .* face shared by three elements/);
+});
+
+test("a tie that turns an element inside out is refused", () => {
+  // The apex of the first tet is welded to a node 2.5 mm below it; the midpoint
+  // lies under the tet's base, so the tet inverts. Nodes 10 and 11 widen each
+  // side so its search grid reaches across the gap; they pair with nothing.
+  const nodes: Node[] = [
+    { id: 1, x: 0, y: 0, z: 0 },
+    { id: 2, x: 1, y: 0, z: 0 },
+    { id: 3, x: 0, y: 1, z: 0 },
+    { id: 4, x: 0, y: 0, z: 1 },
+    { id: 5, x: 0, y: 0, z: -1.5 },
+    { id: 6, x: 0, y: 0, z: -2.5 },
+    { id: 7, x: 1, y: 0, z: -2.5 },
+    { id: 8, x: 0, y: 1, z: -2.5 },
+    { id: 10, x: 20, y: 0, z: -1.5 },
+    { id: 11, x: -20, y: 0, z: 1 },
+  ];
+  const elements: Element[] = [
+    { id: 1, type: "CTETRA", nodeIds: [1, 2, 3, 4], propertyId: 1 },
+    { id: 2, type: "CTETRA", nodeIds: [6, 7, 8, 5], propertyId: 2 },
+  ];
+  expect(() =>
+    weldTies(
+      nodes,
+      elements,
+      [
+        {
+          name: "gap",
+          facesA: [{ nodeIds: [4, 11] }],
+          facesB: [{ nodeIds: [5, 10] }],
+          extent: "full",
+          searchDistance: 0,
+        },
+      ],
+      () => undefined,
+    ),
+  ).toThrow(/Tie "gap" pulls nodes up to 2\.50 mm .* inside out/);
+});
+
 test("mixed result mapping follows element type order", () => {
   const mixed = mapMixedResult(
     {
