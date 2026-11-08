@@ -18,6 +18,31 @@ Work in two layers, structure first. A perfectly plain sentence in the wrong pla
 - **Layer 1 — structure**: what the point is, where it goes, what the reader must do. See `references/structure-and-tone.md`.
 - **Layer 2 — sentences**: the five principles below.
 
+## Computational-engineering articles
+
+For KoFEM blog posts, numerical-method explanations, and academic engineering
+prose, also read `references/kofler-academic-style.md`. This is the maintainer's
+supplied guide to a calm, technical, sequential register based on broad stylistic
+features of Kofler et al. (2025). Follow an explicit user style request first.
+
+- Use "we" for implementation decisions and impersonal prose for physical or
+  mathematical facts. Explain each methodological choice and its purpose.
+- Introduce concepts before equations; define symbols and interpret the result.
+- Present results as observation, interpretation, and qualification. Keep
+  limitations beside the claims they constrain, and distinguish an available
+  feature from a proposed implementation.
+- Credit upstream libraries and numerical implementations where their role
+  becomes relevant. Preserve provenance and license distinctions when describing
+  a rewrite; benchmark agreement alone does not establish source-code derivation.
+- For blog posts, keep the guide's explanatory rhythm while using a direct
+  opening and readable sections. Scale signposting to the article instead of
+  mechanically adding paper-style section announcements.
+- Apply these register choices to engineering prose; retain the general plain
+  writing workflow for other communication.
+
+The reference is a user-supplied style guide, not the paper itself. Do not copy
+distinctive wording or invent a bibliographic citation for the underlying paper.
+
 ## Layer 1: get the structure right first
 
 Do this before touching any sentence.
@@ -129,6 +154,7 @@ See `references/grammar-traps.md`.
 - If a passage is already plain, say so and leave it alone.
 
 ## References
+- `references/kofler-academic-style.md` — maintainer-supplied computational-engineering style guide, including drafting prompts and a revision checklist.
 - `references/structure-and-tone.md` — main point above / context below, minimum viable backstory, signposting words, robot voice, context calibration (Wes Kao).
 - `references/word-substitutions.md` — complex → simple word table, sentence length.
 - `references/fluff-and-redundancy.md` — fluff, clichés, redundancy tables.
