@@ -27,6 +27,10 @@ import type {
   TopOptPayload,
 } from "./solverTypes.js";
 import { buildVertexIndexer } from "../lib/solveMeshPacking.js";
+import {
+  thinWallFindings,
+  type ThinWallCheckInput,
+} from "../lib/solve/thinWall.js";
 import { dropSuppressedBodies } from "../lib/suppressBodies.js";
 import {
   buildMeshTimeShellModel,
@@ -960,6 +964,13 @@ function dispatchRequest({
       return null;
     case "solve":
       return handleSolve(id, payload as SolvePayload);
+    case "thin_wall_check":
+      self.postMessage({
+        id,
+        ok: true,
+        findings: thinWallFindings(payload as ThinWallCheckInput),
+      });
+      return null;
     case "optimize_topology":
       handleTopOpt(id, payload as TopOptPayload);
       return null;
