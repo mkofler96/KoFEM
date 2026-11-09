@@ -184,6 +184,25 @@ console.log("linear thin-wall check:");
   check("suppressed body: not checked", thinWallFindings(input).length === 0);
 }
 
+{
+  // A huge neighbour must not hide the thin plate: the detector drops faces
+  // under 1 % of the largest face in its input.
+  const slabSpec = { ...slab([60, 40], [6, 4, 1]), body: 1, faceBase: 0 };
+  const hugeSpec = {
+    min: [0, 100, 0],
+    max: [2000, 600, 500],
+    cells: [2, 2, 2],
+    body: 2,
+    faceBase: 10,
+  };
+  const found = thinWallFindings(model(boxes([slabSpec, hugeSpec]), 1));
+  check(
+    "thin plate beside a huge body: still flagged",
+    found.some((f) => f.bodyId === 1),
+    JSON.stringify(found),
+  );
+}
+
 console.log(
   failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) FAILED.`,
 );

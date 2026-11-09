@@ -74,30 +74,30 @@ export function thinWallFindings(input: ThinWallCheckInput): ThinWallFinding[] {
   if (surfaceFaceIds.length !== surfaceTriangles.length) return [];
   if (elements.some((e) => e.type !== "CTETRA")) return [];
 
-  const mesh = buildShellizeMesh(
-    nodes,
-    elements,
-    surfaceTriangles,
-    surfaceFaceIds,
-    buildVertexIndexer(nodes),
-  );
-  const bodiesWithTets = new Set(elements.map((e) => e.propertyId));
+  const vid = buildVertexIndexer(nodes);
   const findings: ThinWallFinding[] = [];
   for (const property of properties) {
     if (property.suppressed || property.discretization === "shell") continue;
-    if (!bodiesWithTets.has(property.id)) continue;
+    const bodyTets = elements.filter((e) => e.propertyId === property.id);
+    if (bodyTets.length === 0) continue;
+    // Only this body goes to the detector: it drops faces under 1 % of the
+    // largest face it sees, so a big neighbour would hide a small body's walls.
+    const bodyNodes = new Set(bodyTets.flatMap((e) => e.nodeIds));
+    const bodyTris: [number, number, number][] = [];
+    const bodyFaces: number[] = [];
+    surfaceTriangles.forEach((tri, t) => {
+      if (!tri.every((id) => bodyNodes.has(id))) return;
+      bodyTris.push(tri);
+      bodyFaces.push(surfaceFaceIds[t]);
+    });
+    const mesh = buildShellizeMesh(nodes, bodyTets, bodyTris, bodyFaces, vid);
     const { walls } = extractThinWallShells(mesh, {
       shellBodyIds: new Set([property.id]),
     });
     let worst: ThinWallFinding | null = null;
     for (const wall of walls) {
       if (wall.body !== property.id) continue;
-      const edge = meanFaceEdge(
-        nodes,
-        surfaceTriangles,
-        surfaceFaceIds,
-        wall.keep,
-      );
+      const edge = meanFaceEdge(nodes, bodyTris, bodyFaces, wall.keep);
       const elementsThrough = wall.thk / edge;
       if (worst === null || elementsThrough < worst.elementsThrough)
         worst = { bodyId: property.id, thickness: wall.thk, elementsThrough };
