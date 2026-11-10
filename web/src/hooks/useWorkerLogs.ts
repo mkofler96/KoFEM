@@ -1,11 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect } from "react";
 import { create } from "zustand";
 import { setLogCallback } from "../workers/sharedWorker";
-
-export type LogChannel = "mesh" | "solve" | "optimize";
 
 // A worker log line with a monotonically increasing id, so log lists can use
 // a stable React key even though the text itself may repeat.
@@ -52,7 +50,7 @@ const NO_LOGS: WorkerLogEntry[] = [];
 // single log-callback slot always belongs to whichever panel is active — the
 // mesh log while meshing on the Geometry tab, the solver log while solving on
 // the Solve tab, the optimizer log while optimizing on the Optimize tab.
-export function useWorkerLogs(channel: LogChannel) {
+export function useWorkerLogs(channel: "mesh" | "solve" | "optimize") {
   const logs = useWorkerLogStore((s) => s.channels[channel] ?? NO_LOGS);
   const append = useWorkerLogStore((s) => s.append);
   const clear = useWorkerLogStore((s) => s.clear);
@@ -65,57 +63,4 @@ export function useWorkerLogs(channel: LogChannel) {
   const clearLogs = useCallback(() => clear(channel), [channel, clear]);
 
   return { logs, clearLogs };
-}
-
-export const LOG_CHANNEL_LABELS: Record<LogChannel, string> = {
-  mesh: "Mesh",
-  solve: "Solve",
-  optimize: "Optimize",
-};
-
-export interface TaggedLogEntry extends WorkerLogEntry {
-  channel: LogChannel;
-}
-
-// All channels merged into one chronological stream (ids increase across
-// channels), for the log drawer.
-export function mergeChannels(
-  channels: Record<string, WorkerLogEntry[]>,
-): TaggedLogEntry[] {
-  const merged: TaggedLogEntry[] = [];
-  for (const channel of Object.keys(LOG_CHANNEL_LABELS) as LogChannel[]) {
-    for (const entry of channels[channel] ?? NO_LOGS) {
-      merged.push({ ...entry, channel });
-    }
-  }
-  return merged.sort((a, b) => a.id - b.id);
-}
-
-// Whether the right-hand log drawer is open. Hidden by default.
-interface LogDrawerState {
-  open: boolean;
-  // Lines with an id below this are hidden (drawer "Clear").
-  clearedBefore: number;
-  toggle: () => void;
-}
-
-export const useLogDrawer = create<LogDrawerState>((set) => ({
-  open: false,
-  clearedBefore: 0,
-  toggle: () => set((s) => ({ open: !s.open })),
-}));
-
-// "Clear" in the drawer only hides what is shown so far: the channels keep
-// their lines, because the optimizer's convergence plot is derived from them.
-export function useAllLogs() {
-  const channels = useWorkerLogStore((s) => s.channels);
-  const clearedBefore = useLogDrawer((s) => s.clearedBefore);
-  return useMemo(
-    () => mergeChannels(channels).filter((e) => e.id >= clearedBefore),
-    [channels, clearedBefore],
-  );
-}
-
-export function clearAllLogs() {
-  useLogDrawer.setState({ clearedBefore: useWorkerLogStore.getState().nextId });
 }

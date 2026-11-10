@@ -1019,6 +1019,99 @@
   cursor: not-allowed;
 }
 
+/* ── Log panel (VSCode-style collapsable) ───────────────────── */
+
+.logSection {
+  margin-top: 14px;
+  border: 1px solid #30363d;
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+
+.logHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 10px;
+  background: #161b22;
+  border: none;
+  border-bottom: 1px solid #30363d;
+  cursor: pointer;
+  user-select: none;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #8b949e;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  text-align: left;
+  transition: background 100ms;
+}
+
+.logHeader:hover {
+  background: #21262d;
+}
+
+.logChevron {
+  font-size: 7px;
+  display: inline-block;
+  transition: transform 150ms ease;
+  color: #6e7681;
+  flex-shrink: 0;
+}
+
+.logChevronOpen {
+  transform: rotate(90deg);
+}
+
+.logSpinner {
+  margin-left: 2px;
+  color: var(--accent);
+  animation: logPulse 1s ease-in-out infinite;
+}
+
+@keyframes logPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.logBadge {
+  margin-left: auto;
+  background: #21262d;
+  color: #8b949e;
+  border-radius: 10px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.logBody {
+  background: #161b22;
+  padding: 8px 10px;
+  max-height: 180px;
+  overflow-y: auto;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 11.5px;
+  line-height: 1.7;
+}
+
+.logLine {
+  color: #c9d1d9;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.logEmpty {
+  color: #6e7681;
+  font-style: italic;
+}
+
 /* ── "+ Add" type chooser (Boundary conditions) ─────────────── */
 
 .addChooser {

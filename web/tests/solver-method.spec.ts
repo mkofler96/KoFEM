@@ -81,10 +81,8 @@ test("AMG is the recommended default and matches Gauss–Seidel", async ({
   );
   await expect(page.getByTestId("solver-method-note")).toHaveCount(0);
   const multigrid = await solveAndRead(page);
-  // The solve log survives the switch to Results; go back and read it in the
-  // log drawer (hidden by default, and it stays open from here on).
+  // The solve log survives the switch to Results; go back and read it.
   await backToSolve(page);
-  await page.getByRole("button", { name: /^Logs/ }).click();
   await expect(page.getByText(/AMG CG converged/)).toBeVisible();
 
   // The same model with Gauss–Seidel gives the same displacements.

@@ -53,7 +53,7 @@ export function useMesh() {
     String(DEFAULT_MIN_ELEMENT_SIZE),
   );
   const [meshError, setMeshError] = useState<string | null>(null);
-  const { clearLogs } = useWorkerLogs("mesh");
+  const { logs, clearLogs } = useWorkerLogs("mesh");
 
   // Element sizes suggested by the imported geometry itself, aimed at
   // TARGET_ELEMENT_COUNT elements. Recomputed per import — stepSurface is
@@ -232,6 +232,7 @@ export function useMesh() {
     geometryMeasure: suggestion?.measure ?? null,
     meshError,
     setMeshError,
+    logs,
     meshVolume,
   };
 }

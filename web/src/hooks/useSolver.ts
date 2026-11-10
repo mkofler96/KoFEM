@@ -45,7 +45,7 @@ export function useSolver() {
   const surfaceTriangles = useModelStore((s) => s.surfaceTriangles);
   const surfaceFaceIds = useModelStore((s) => s.surfaceFaceIds);
   const [error, setError] = useState<string | null>(null);
-  const { clearLogs } = useWorkerLogs("solve");
+  const { logs, clearLogs } = useWorkerLogs("solve");
 
   // A body suppressed or restored after meshing makes the mesh a different
   // assembly from the model — solving it would analyse the wrong one.
@@ -184,5 +184,6 @@ export function useSolver() {
     solverMethod,
     setSolverMethod,
     amgUnavailable,
+    logs,
   };
 }

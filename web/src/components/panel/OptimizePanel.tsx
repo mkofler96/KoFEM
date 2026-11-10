@@ -9,6 +9,7 @@ import { resultUnit } from "../../lib/resultField";
 import { convergenceFromLogs } from "../../lib/topOptProgress";
 import { ConvergencePlot } from "./ConvergencePlot";
 import { DensityThresholdControl } from "./DensityThresholdControl";
+import { LogSection } from "./LogSection";
 import { PreflightChecks } from "./PreflightChecks";
 import styles from "./Panel.module.css";
 
@@ -350,6 +351,7 @@ export function OptimizePanel({
           </>
         )}
 
+        <LogSection logs={logs} busy={isOptimizing} />
         {footer}
       </div>
     </div>

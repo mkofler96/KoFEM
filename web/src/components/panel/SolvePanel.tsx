@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import type { Study } from "../../store/modelStore";
 import { useSolver } from "../../hooks/useSolver";
 import { useEngineGate } from "../../store/engineStore";
+import { LogSection } from "./LogSection";
 import { PreflightChecks } from "./PreflightChecks";
 import { isSolverMethod, SOLVER_METHODS } from "../../lib/solve/amg";
 import styles from "./Panel.module.css";
@@ -31,6 +32,7 @@ export function SolvePanel({
     solverMethod,
     setSolverMethod,
     amgUnavailable,
+    logs,
   } = useSolver();
   const engine = useEngineGate();
 
@@ -103,6 +105,7 @@ export function SolvePanel({
           {isRunning ? "Solving…" : "▶  Run static solve"}
         </button>
 
+        <LogSection logs={logs} busy={isRunning} />
         {footer}
       </div>
     </div>

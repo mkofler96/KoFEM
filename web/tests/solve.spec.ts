@@ -125,10 +125,11 @@ test("results panel switches to von Mises stress", async ({ page }) => {
 });
 
 // The solve streams its progress — including the CG residual minimization —
-// into the shared log drawer (issue #278, KOF-241). A successful solve
+// into a LOGS panel like the mesher's (issue #278). A successful solve
 // auto-switches to Results, unmounting the SolvePanel, so the log must live
-// outside component state and still be shown after the tab switch.
-test("log drawer streams CG residuals and survives tab switches", async ({
+// outside component state and still be shown when the user returns to the
+// Solve tab.
+test("solver log panel streams CG residuals and survives tab switches", async ({
   page,
 }) => {
   const fatal = watchForErrors(page, "solve-logs");
@@ -143,14 +144,9 @@ test("log drawer streams CG residuals and survives tab switches", async ({
     fatal,
   ]);
 
-  // Back on the Solve tab, the drawer (hidden by default) shows the full log.
+  // Back on the Solve tab, the full solve log is still there.
   await goToSolvePanel(page);
-  await expect(page.getByTestId("log-drawer")).toBeHidden();
-  await page.getByRole("button", { name: /^Logs/ }).click();
-  await Promise.race([
-    expect(page.getByTestId("log-drawer")).toBeVisible(),
-    fatal,
-  ]);
+  await Promise.race([expect(page.getByText("LOGS")).toBeVisible(), fatal]);
   await Promise.race([
     expect(
       page.getByText(/CG iteration\s+\d+: relative residual/).first(),

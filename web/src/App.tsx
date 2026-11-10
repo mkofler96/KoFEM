@@ -8,7 +8,6 @@ import { Sidebar } from "./components/panel/Sidebar";
 import { ModelTree } from "./components/panel/ModelTree";
 import { useTreeSelectionSync } from "./components/panel/modelTreeItems";
 import { Viewport } from "./components/viewport/Viewport";
-import { LogDrawer } from "./components/logs/LogDrawer";
 import { StatusBar } from "./components/statusbar/StatusBar";
 import { CgContinuationDialog } from "./components/CgContinuationDialog";
 import { useModelStore } from "./store/modelStore";
@@ -77,7 +76,6 @@ function Workspace() {
           <Viewport />
         </main>
         <Sidebar />
-        <LogDrawer />
       </div>
       <StatusBar />
       <CgContinuationDialog />
