@@ -16,10 +16,13 @@ export function LogDrawer() {
   const open = useLogDrawer((s) => s.open);
   const toggle = useLogDrawer((s) => s.toggle);
   const logs = useAllLogs();
-  const endRef = useRef<HTMLDivElement | null>(null);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
 
+  // Follow the newest line. Scroll the log body itself: scrollIntoView would
+  // also scroll the overflow-hidden ancestors and shift the whole layout.
   useEffect(() => {
-    if (open) endRef.current?.scrollIntoView({ behavior: "smooth" });
+    const body = bodyRef.current;
+    if (open && body) body.scrollTop = body.scrollHeight;
   }, [logs, open]);
 
   if (!open) return null;
@@ -43,7 +46,7 @@ export function LogDrawer() {
           ✕
         </button>
       </div>
-      <div className={styles.body}>
+      <div className={styles.body} ref={bodyRef}>
         {logs.length === 0 ? (
           <div className={styles.empty}>No log output yet.</div>
         ) : (
@@ -56,7 +59,6 @@ export function LogDrawer() {
             </div>
           ))
         )}
-        <div ref={endRef} />
       </div>
     </aside>
   );
