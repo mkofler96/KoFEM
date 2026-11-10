@@ -5,6 +5,8 @@ import { useCallback, useEffect, useMemo } from "react";
 import { create } from "zustand";
 import { setLogCallback } from "../workers/sharedWorker";
 
+export type LogChannel = "mesh" | "solve" | "optimize";
+
 // A worker log line with a monotonically increasing id, so log lists can use
 // a stable React key even though the text itself may repeat.
 export interface WorkerLogEntry {
@@ -65,8 +67,6 @@ export function useWorkerLogs(channel: LogChannel) {
   return { logs, clearLogs };
 }
 
-export type LogChannel = "mesh" | "solve" | "optimize";
-
 export const LOG_CHANNEL_LABELS: Record<LogChannel, string> = {
   mesh: "Mesh",
   solve: "Solve",
@@ -91,6 +91,20 @@ export function mergeChannels(
   return merged.sort((a, b) => a.id - b.id);
 }
 
+// Whether the right-hand log drawer is open. Hidden by default.
+interface LogDrawerState {
+  open: boolean;
+  // Lines with an id below this are hidden (drawer "Clear").
+  clearedBefore: number;
+  toggle: () => void;
+}
+
+export const useLogDrawer = create<LogDrawerState>((set) => ({
+  open: false,
+  clearedBefore: 0,
+  toggle: () => set((s) => ({ open: !s.open })),
+}));
+
 // "Clear" in the drawer only hides what is shown so far: the channels keep
 // their lines, because the optimizer's convergence plot is derived from them.
 export function useAllLogs() {
@@ -105,17 +119,3 @@ export function useAllLogs() {
 export function clearAllLogs() {
   useLogDrawer.setState({ clearedBefore: useWorkerLogStore.getState().nextId });
 }
-
-// Whether the right-hand log drawer is open. Hidden by default.
-interface LogDrawerState {
-  open: boolean;
-  // Lines with an id below this are hidden (drawer "Clear").
-  clearedBefore: number;
-  toggle: () => void;
-}
-
-export const useLogDrawer = create<LogDrawerState>((set) => ({
-  open: false,
-  clearedBefore: 0,
-  toggle: () => set((s) => ({ open: !s.open })),
-}));
