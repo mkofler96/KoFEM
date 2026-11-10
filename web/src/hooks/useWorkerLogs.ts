@@ -91,23 +91,31 @@ export function mergeChannels(
   return merged.sort((a, b) => a.id - b.id);
 }
 
+// "Clear" in the drawer only hides what is shown so far: the channels keep
+// their lines, because the optimizer's convergence plot is derived from them.
 export function useAllLogs() {
   const channels = useWorkerLogStore((s) => s.channels);
-  return useMemo(() => mergeChannels(channels), [channels]);
+  const clearedBefore = useLogDrawer((s) => s.clearedBefore);
+  return useMemo(
+    () => mergeChannels(channels).filter((e) => e.id >= clearedBefore),
+    [channels, clearedBefore],
+  );
 }
 
 export function clearAllLogs() {
-  const { clear } = useWorkerLogStore.getState();
-  for (const channel of Object.keys(LOG_CHANNEL_LABELS)) clear(channel);
+  useLogDrawer.setState({ clearedBefore: useWorkerLogStore.getState().nextId });
 }
 
 // Whether the right-hand log drawer is open. Hidden by default.
 interface LogDrawerState {
   open: boolean;
+  // Lines with an id below this are hidden (drawer "Clear").
+  clearedBefore: number;
   toggle: () => void;
 }
 
 export const useLogDrawer = create<LogDrawerState>((set) => ({
   open: false,
+  clearedBefore: 0,
   toggle: () => set((s) => ({ open: !s.open })),
 }));

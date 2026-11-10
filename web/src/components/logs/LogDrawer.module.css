@@ -84,6 +84,6 @@
     right: 0;
     bottom: 0;
     width: min(340px, 100%);
-    z-index: 20;
+    z-index: 40; /* above the sidebar overlay (30) and its backdrop (29) */
   }
 }
