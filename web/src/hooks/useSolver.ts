@@ -7,6 +7,7 @@ import { fmt, loadsSummary } from "../lib/modelDisplay";
 import { sendToWorker } from "../workers/sharedWorker";
 import type { SolvePayload } from "../workers/solverTypes";
 import { amgUnavailableReason } from "../lib/solve/amg";
+import { thinWallMessage, type ThinWallFinding } from "../lib/solve/thinWall";
 import { useWorkerLogs } from "./useWorkerLogs";
 import {
   categorizeError,
@@ -46,6 +47,7 @@ export function useSolver() {
   const surfaceFaceIds = useModelStore((s) => s.surfaceFaceIds);
   const [error, setError] = useState<string | null>(null);
   const { logs, clearLogs } = useWorkerLogs("solve");
+  const [thinWalls, setThinWalls] = useState<ThinWallFinding[]>([]);
 
   // A body suppressed or restored after meshing makes the mesh a different
   // assembly from the model — solving it would analyse the wrong one.
@@ -70,6 +72,41 @@ export function useSolver() {
   const prescribedOk = constraints.some((c) => (c.prescribedValue ?? 0) !== 0);
   const drivingOk = loadOk || prescribedOk;
   const allOk = meshOk && matOk && bcOk && drivingOk;
+
+  // Linear tets on a thin wall give too-stiff results (KOF-274): check the
+  // meshed model for walls spanned by too few elements.
+  useEffect(() => {
+    let current = true;
+    if (nodes.length === 0 || elementOrder !== 1) {
+      setThinWalls([]);
+      return;
+    }
+    sendToWorker<{ findings: ThinWallFinding[] }>("thin_wall_check", {
+      nodes,
+      elements,
+      properties,
+      surfaceTriangles,
+      surfaceFaceIds,
+      elementOrder,
+    })
+      .then(({ findings }) => {
+        if (current) setThinWalls(findings);
+      })
+      .catch((err: Error) => {
+        console.error("[thin-wall check] failed:", err.message);
+        if (current) setThinWalls([]);
+      });
+    return () => {
+      current = false;
+    };
+  }, [
+    nodes,
+    elements,
+    properties,
+    surfaceTriangles,
+    surfaceFaceIds,
+    elementOrder,
+  ]);
 
   function solve() {
     setRunning(true);
@@ -159,6 +196,7 @@ export function useSolver() {
           ? "Prescribed displacement drives the model"
           : "No loads or prescribed displacement",
     ],
+    ...thinWalls.map((f): [boolean, string] => [false, thinWallMessage(f)]),
   ];
 
   // Why the chosen AMG solver will not take this model (shown under the solver
