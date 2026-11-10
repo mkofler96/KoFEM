@@ -353,9 +353,9 @@ test("a ZIP that is not a KoFEM report is refused with the reason", async ({
   page,
 }) => {
   let dialogMessage = "";
-  page.on("dialog", (d) => {
+  page.on("dialog", async (d) => {
     dialogMessage = d.message();
-    void d.dismiss();
+    await d.dismiss();
   });
   await gotoApp(page);
   // An empty ZIP: just the end record.
@@ -376,7 +376,9 @@ test("a report carries only the current model's log, not one from before New ana
   page,
 }) => {
   test.setTimeout(180_000);
-  page.on("dialog", (d) => void d.accept());
+  page.on("dialog", async (d) => {
+    await d.accept();
+  });
   await gotoApp(page);
   const importTube = () =>
     page.locator('input[type="file"][accept=".stp,.step"]').setInputFiles({

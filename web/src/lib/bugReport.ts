@@ -107,7 +107,7 @@ export function formatReportLog(
 }
 
 /** Build the report ZIP. */
-export async function buildReport(input: ReportInput): Promise<Uint8Array> {
+export function buildReport(input: ReportInput): Promise<Uint8Array> {
   const diag = input.diagnostics;
   const manifest: ReportManifest = {
     format: REPORT_FORMAT,

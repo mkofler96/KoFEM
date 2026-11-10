@@ -21,14 +21,22 @@ import { createZip, crc32, looksLikeZip, readZip } from "../src/lib/zip.ts";
 // and an empty storage.
 globalThis.localStorage ??= {
   getItem: () => null,
-  setItem() {},
-  removeItem() {},
+  setItem() {
+    // Nothing is persisted in this test.
+  },
+  removeItem() {
+    // Nothing is persisted in this test.
+  },
 };
 globalThis.window ??= {
   matchMedia: () => ({
     matches: false,
-    addEventListener() {},
-    removeEventListener() {},
+    addEventListener() {
+      // The screen size never changes in this test.
+    },
+    removeEventListener() {
+      // The screen size never changes in this test.
+    },
   }),
 };
 const {
@@ -251,7 +259,7 @@ check(
 );
 
 console.log("refusals");
-async function zipOf(entries) {
+function zipOf(entries) {
   return createZip(
     entries.map(([name, text]) => ({ name, data: enc.encode(text) })),
     created,
