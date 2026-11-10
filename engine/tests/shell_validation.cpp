@@ -629,6 +629,42 @@ bool shell_identical_duplicates_solve() {
     }
 }
 
+// A per-facet thickness field that does not cover every triangle must be
+// rejected (KOF-294). It used to be ignored silently in favour of the uniform
+// thickness — or of 0 on the coupled path, which sets no uniform value.
+bool shell_wrong_length_thickness_field_throws() {
+    std::vector<double> V; std::vector<int> T;
+    plate_mesh(1.0, 2, V, T);
+    ShellInput in;
+    in.vertices = V; in.triangles = T; in.thickness = 0.01; in.young = 1e7; in.poisson = 0.3;
+    in.thicknesses.assign(T.size() / 3 - 1, 0.01);
+    for (int c = 0; c < 6; ++c) in.fixed_dofs.push_back(c);
+    try {
+        solve_shell_core(in);
+    } catch (const std::exception& e) {
+        return std::string(e.what()).find("per-facet thickness field has 7 entries for 8 "
+                                          "triangles") != std::string::npos;
+    }
+    return false;
+}
+
+bool coupled_wrong_length_thickness_field_throws() {
+    std::vector<double> V; std::vector<int> T;
+    plate_mesh(1.0, 2, V, T);
+    CoupledInput in;
+    in.n_nodes = static_cast<int>(V.size() / 3);
+    in.vertices = V; in.triangles = T; in.shell_young = 1e7; in.shell_poisson = 0.3;
+    in.thicknesses.assign(T.size() / 3 + 1, 0.01);
+    for (int c = 0; c < 6; ++c) in.fixed_dofs.push_back(c);
+    try {
+        solve_solid_shell_core(in);
+    } catch (const std::exception& e) {
+        return std::string(e.what()).find("per-facet thickness field has 9 entries for 8 "
+                                          "triangles") != std::string::npos;
+    }
+    return false;
+}
+
 }  // namespace
 
 int main() {
@@ -725,6 +761,18 @@ int main() {
         printf("  [%s] %-28s %s\n", duplicates ? "PASS" : "FAIL",
                "identical duplicates solve",
                duplicates ? "solved, value honoured" : "rejected or value lost");
+    }
+    {
+        const bool shell_thk = shell_wrong_length_thickness_field_throws();
+        if (!shell_thk) ++failures;
+        printf("  [%s] %-28s %s\n", shell_thk ? "PASS" : "FAIL",
+               "shell bad thickness field",
+               shell_thk ? "rejected as expected" : "did NOT throw a length mismatch");
+        const bool coupled_thk = coupled_wrong_length_thickness_field_throws();
+        if (!coupled_thk) ++failures;
+        printf("  [%s] %-28s %s\n", coupled_thk ? "PASS" : "FAIL",
+               "coupled bad thickness field",
+               coupled_thk ? "rejected as expected" : "did NOT throw a length mismatch");
     }
 
     printf(failures != 0 ? "\n%d check(s) FAILED\n" : "\nall checks passed\n", failures);

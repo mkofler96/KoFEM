@@ -4,7 +4,7 @@
 import { test, expect } from "./coverage";
 import path from "path";
 import fs from "fs";
-import { gotoApp } from "./fixtures/app";
+import { fixturePath, gotoApp } from "./fixtures/app";
 import { openTree } from "./fixtures/tree";
 
 // Captures the landing-page tutorial figures by driving the real app through a
@@ -22,8 +22,7 @@ import { openTree } from "./fixtures/tree";
 //   HOLE_FACES — the three bolt-hole bores (radius ~8 mm, on the mounting plate)
 //   TUBE_FACES — the coaxial bore cylinders of the hub at the far end
 const OUT_DIR = path.resolve("public", "tutorial");
-const STEP_FILES_DIR = path.resolve("..", "test_files");
-const BRACKET = path.join(STEP_FILES_DIR, "Wall Bracket.stp");
+const BRACKET_FIXTURE = "Wall Bracket.stp";
 const HOLE_FACES = [34, 35, 36];
 const TUBE_FACES = [3, 37];
 
@@ -39,10 +38,7 @@ test.describe("Tutorial figure capture", () => {
   }) => {
     test.setTimeout(600_000);
 
-    if (!fs.existsSync(BRACKET)) {
-      test.skip();
-      return;
-    }
+    const BRACKET = fixturePath(BRACKET_FIXTURE);
 
     const shot = (name: string) =>
       page.screenshot({ path: path.join(OUT_DIR, name) });

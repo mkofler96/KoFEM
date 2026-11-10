@@ -38,8 +38,8 @@ struct ShellInput {
     CgControl cg_control;
     std::vector<double> vertices;   // 3·nNodes, xyz interleaved
     std::vector<int> triangles;     // 3·nTris, three 0-based vertex indices/tri
-    double thickness = 0.0;         // uniform thickness (fallback when per-facet empty)
-    std::vector<double> thicknesses;  // optional per-triangle thickness (length nTris)
+    double thickness = 0.0;         // uniform thickness, used only when `thicknesses` is empty
+    std::vector<double> thicknesses;  // per-triangle thickness (length nTris) or empty
     double young = 0.0;             // Young's modulus E
     double poisson = 0.0;           // Poisson ratio ν
     // Optional per-facet stiffness multiplier (length nTris). Empty ⇒ every facet
@@ -101,8 +101,8 @@ struct CoupledInput {
     std::vector<int> triangles;          // 3·nTris, 0-based node indices (shell)
     double shell_young = 0.0;
     double shell_poisson = 0.0;
-    double thickness = 0.0;              // uniform thickness (fallback)
-    std::vector<double> thicknesses;     // optional per-triangle thickness
+    double thickness = 0.0;              // uniform thickness, used only when `thicknesses` is empty
+    std::vector<double> thicknesses;     // per-triangle thickness (length nTris) or empty
     // Optional per-facet stiffness multiplier (length nTris), as ShellInput. The
     // solid tets are scaled independently by pre-scaling `solid_stiffness` (each
     // tet's stiffness is linear in E), so a single SIMP density field can span

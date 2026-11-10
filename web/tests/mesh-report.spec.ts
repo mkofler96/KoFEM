@@ -4,12 +4,11 @@
 import { test, expect } from "./coverage";
 import path from "path";
 import fs from "fs";
-import { importStep } from "./fixtures/app";
+import { fixturePath, importStep } from "./fixtures/app";
 
 interface Geom {
   file: string;
   label: string;
-  subdir?: string;
 }
 
 const GEOMETRIES: Geom[] = [
@@ -25,7 +24,6 @@ const NIST_GEOMETRIES: Geom[] = [
 
 const ALL_GEOMETRIES: Geom[] = [...GEOMETRIES, ...NIST_GEOMETRIES];
 
-const STEP_FILES_DIR = path.resolve("..", "test_files");
 const OUT_DIR = path.join("playwright-results", "screenshots", "report");
 
 test.describe("Mesh capabilities report", () => {
@@ -34,14 +32,9 @@ test.describe("Mesh capabilities report", () => {
   });
 
   for (const geom of ALL_GEOMETRIES) {
-    const stepFile = path.join(STEP_FILES_DIR, geom.subdir ?? "", geom.file);
-    if (!fs.existsSync(stepFile)) {
-      test.skip(`${geom.label} — file not found: ${stepFile}`);
-      continue;
-    }
-
     test(geom.label, async ({ page }) => {
       test.setTimeout(90_000); // complex STEP imports can take >20 s in CI
+      const stepFile = fixturePath(geom.file);
       const t0 = Date.now();
       const elapsed = () => `+${((Date.now() - t0) / 1000).toFixed(1)}s`;
 

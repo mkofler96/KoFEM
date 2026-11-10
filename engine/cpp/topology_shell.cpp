@@ -96,19 +96,8 @@ ShellStiffnessCache build_shell_stiffness_cache(const ShellTopOptInput& in) {
     // the same rule solve_shell_core enforces. A zero/negative/non-finite value
     // would give a zero-or-negative facet volume and a degenerate stiffness, so
     // refuse it with a clear error rather than optimize on garbage.
-    const bool per_facet = static_cast<int>(in.thicknesses.size()) == n_facets;
-    if (n_facets > 0) {
-        if (per_facet) {
-            for (const double tk : in.thicknesses)
-                if (!std::isfinite(tk) || tk <= 0.0)
-                    throw std::runtime_error(
-                        "build_shell_stiffness_cache: every per-facet shell thickness must be "
-                        "finite and positive");
-        } else if (!std::isfinite(in.thickness) || in.thickness <= 0.0) {
-            throw std::runtime_error(
-                "build_shell_stiffness_cache: shell thickness must be finite and positive");
-        }
-    }
+    const std::vector<double> facet_t = kofem::shell::facet_thicknesses(
+        n_facets, in.thickness, in.thicknesses, "build_shell_stiffness_cache");
 
     ShellStiffnessCache cache;
     cache.n_tets = n_tets;
@@ -157,7 +146,7 @@ ShellStiffnessCache build_shell_stiffness_cache(const ShellTopOptInput& in) {
         const size_t f3 = 3 * static_cast<size_t>(f);
         const std::array<int, 3> nd = {in.triangles[f3], in.triangles[f3 + 1],
                                        in.triangles[f3 + 2]};
-        const double t = per_facet ? in.thicknesses[f] : in.thickness;
+        const double t = facet_t[f];
         const auto Ke = kofem::shell::facet_global_stiffness(in.vertices, nd[0], nd[1], nd[2], t,
                                                              in.shell_young, in.shell_poisson);
         std::vector<double>& k0 = cache.k0[e];

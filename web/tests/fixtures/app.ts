@@ -1,10 +1,23 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import fs from "fs";
+import path from "path";
 import { expect, type Page } from "@playwright/test";
 
 // The solver app is served at /app/ (the marketing landing lives at "/").
 export const APP_PATH = "/app/";
+
+// Absolute path of a committed CAD fixture in `test_files/`. Throws when the
+// file is missing so a deleted or renamed fixture fails the test instead of
+// skipping it.
+export function fixturePath(name: string): string {
+  const file = path.resolve("..", "test_files", name);
+  if (!fs.existsSync(file)) {
+    throw new Error(`Test fixture not found: ${file}`);
+  }
+  return file;
+}
 
 // Open the solver app with an empty model.
 export async function gotoApp(page: Page): Promise<void> {

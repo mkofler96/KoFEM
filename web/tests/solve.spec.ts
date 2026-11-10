@@ -2,10 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { test, expect } from "./coverage";
-import path from "path";
-import fs from "fs";
 import { bootstrapCantilever } from "./fixtures/cantilever";
-import { gotoApp, importStep } from "./fixtures/app";
+import { fixturePath, gotoApp, importStep } from "./fixtures/app";
 import { openTree } from "./fixtures/tree";
 
 // Navigate to the "04 Solve" mode tab in the top navigation bar
@@ -164,11 +162,9 @@ test("solver log panel streams CG residuals and survives tab switches", async ({
 // the Node.js script test_wall_bracket.mjs, which runs synchronously with no
 // browser async layer and surfaces raw WASM errors directly.
 
-const STEP_FILE = path.resolve("..", "test_files", "tube.stp");
-
 test("vol mesh stores FEM nodes in the store for solving", async ({ page }) => {
   test.setTimeout(180_000);
-  test.skip(!fs.existsSync(STEP_FILE), `STEP fixture not found: ${STEP_FILE}`);
+  const STEP_FILE = fixturePath("tube.stp");
 
   const t0 = Date.now();
   const elapsed = () => `+${((Date.now() - t0) / 1000).toFixed(1)}s`;

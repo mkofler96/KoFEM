@@ -10,6 +10,7 @@
 #include <array>
 #include <cmath>
 #include <stdexcept>
+#include <string>
 
 #include "small_linalg.h"
 
@@ -267,6 +268,28 @@ std::array<std::array<double, 18>, 18> facet_global_stiffness(
     return KG;
 }
 
+std::vector<double> facet_thicknesses(int n_tris, double thickness,
+                                      const std::vector<double>& thicknesses,
+                                      const char* who) {
+    const std::string prefix = std::string(who) + ": ";
+    if (!thicknesses.empty()) {
+        if (static_cast<int>(thicknesses.size()) != n_tris)
+            throw std::runtime_error(prefix + "per-facet thickness field has " +
+                                     std::to_string(thicknesses.size()) + " entries for " +
+                                     std::to_string(n_tris) + " triangles");
+        for (const double tk : thicknesses)
+            if (!std::isfinite(tk) || tk <= 0.0)
+                throw std::runtime_error(prefix +
+                                         "every per-facet shell thickness must be finite and "
+                                         "positive");
+        return thicknesses;
+    }
+    if (n_tris == 0) return {};
+    if (!std::isfinite(thickness) || thickness <= 0.0)
+        throw std::runtime_error(prefix + "shell thickness must be finite and positive");
+    return std::vector<double>(static_cast<size_t>(n_tris), thickness);
+}
+
 std::vector<double> shell_von_mises(const std::vector<double>& vertices,
                                     const std::vector<int>& triangles,
                                     double thickness,
@@ -274,7 +297,8 @@ std::vector<double> shell_von_mises(const std::vector<double>& vertices,
                                     double young, double poisson,
                                     const std::vector<double>& dofs) {
     const int nTris = static_cast<int>(triangles.size() / 3);
-    const bool per_facet = static_cast<int>(thicknesses.size()) == nTris;
+    const std::vector<double> facet_t =
+        facet_thicknesses(nTris, thickness, thicknesses, "shell_von_mises");
     // plane-stress von Mises of (σx, σy, τ)
     auto vm = [](double sx, double sy, double txy) {
         return std::sqrt(sx * sx - sx * sy + sy * sy + 3.0 * txy * txy);
@@ -343,7 +367,7 @@ std::vector<double> shell_von_mises(const std::vector<double>& vertices,
         // σ(z) = D_pl·(ε_m + z·κ) at z = ±t/2 — report the worse surface. Taking
         // the max over both surfaces makes the result independent of the DKT
         // curvature sign convention.
-        const double t = per_facet ? thicknesses[e] : thickness;
+        const double t = facet_t[e];
         double worst = 0.0;
         for (const double z : {+0.5 * t, -0.5 * t}) {
             const std::array<double, 3> strain = {em[0] + z * kap[0], em[1] + z * kap[1],

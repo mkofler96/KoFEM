@@ -152,8 +152,14 @@ val optimize_topology_shell(val mesh, const std::string& mat_json, const std::st
     if (nu.isNull() || nu.isUndefined()) return error_result("material is missing poisson_ratio");
     in.shell_young = E.as<double>();
     in.shell_poisson = nu.as<double>();
-    const bool has_per_facet = static_cast<int>(in.thicknesses.size()) == n_tris;
-    if (!has_per_facet) {
+    if (!in.thicknesses.empty()) {
+        // The per-triangle field is the thickness source (see solve_shell).
+        if (static_cast<int>(in.thicknesses.size()) != n_tris)
+            return error_result("mesh.thicknesses has " + std::to_string(in.thicknesses.size()) +
+                                " entries for " + std::to_string(n_tris) + " triangles");
+        if (!th.isNull() && !th.isUndefined())
+            return error_result("give either mesh.thicknesses or material thickness, not both");
+    } else {
         if (th.isNull() || th.isUndefined())
             return error_result("material is missing thickness (required for shell elements)");
         in.thickness = th.as<double>();

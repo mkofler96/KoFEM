@@ -99,8 +99,8 @@ struct ShellTopOptInput {
     // the RELATIVE stiffness of the two, so both are kept.
     double solid_young = 0.0, solid_poisson = 0.0;  // used iff tets present
     double shell_young = 0.0, shell_poisson = 0.0;  // used iff triangles present
-    double thickness = 0.0;               // uniform shell thickness (fallback)
-    std::vector<double> thicknesses;      // optional per-facet thickness (nTris)
+    double thickness = 0.0;               // uniform shell thickness, used only when `thicknesses` is empty
+    std::vector<double> thicknesses;      // per-facet thickness (nTris) or empty
 
     std::vector<kofem::shell::Coupling> couplings;  // NOT design variables
 
