@@ -2,17 +2,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { test, expect } from "./coverage";
-import path from "path";
 import fs from "fs";
-import { importIges } from "./fixtures/app";
-
-const IGES_FILE = path.resolve("..", "test_files", "ruled_surface.igs");
+import { fixturePath, importIges } from "./fixtures/app";
 
 test("WASM IGES import: ruled-surface entity (type 118) converts to real geometry", async ({
   page,
 }) => {
   test.setTimeout(120_000);
-  test.skip(!fs.existsSync(IGES_FILE), `IGES fixture not found: ${IGES_FILE}`);
+  const IGES_FILE = fixturePath("ruled_surface.igs");
 
   const logs: string[] = [];
   page.on("console", (msg) => {

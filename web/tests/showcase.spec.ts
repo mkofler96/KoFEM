@@ -4,16 +4,15 @@
 import { test, expect } from "./coverage";
 import path from "path";
 import fs from "fs";
-import { gotoApp } from "./fixtures/app";
+import { fixturePath, gotoApp } from "./fixtures/app";
 import { bootstrapCantilever } from "./fixtures/cantilever";
 import { openTree } from "./fixtures/tree";
 
 const OUT_DIR = path.join("playwright-results", "screenshots", "showcase");
-const STEP_FILES_DIR = path.resolve("..", "test_files");
 // tube.stp produces ~760 tets / 274 nodes — small enough for a fast CI solve.
 // Wall Bracket produces ~50K tets regardless of element size (geometry-driven)
 // which overloads the CI runner's disk and memory budget.
-const TUBE = path.join(STEP_FILES_DIR, "tube.stp");
+const TUBE_FIXTURE = "tube.stp";
 
 test.describe("Full workflow showcase", () => {
   test.beforeAll(() => {
@@ -25,10 +24,7 @@ test.describe("Full workflow showcase", () => {
   }) => {
     test.setTimeout(600_000);
 
-    if (!fs.existsSync(TUBE)) {
-      test.skip();
-      return;
-    }
+    const TUBE = fixturePath(TUBE_FIXTURE);
 
     const t0 = Date.now();
     const elapsed = () => `+${((Date.now() - t0) / 1000).toFixed(1)}s`;

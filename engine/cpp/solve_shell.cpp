@@ -115,7 +115,8 @@ val solve_shell(const val& mesh, const std::string& mat_json, const std::string&
     in.vertices = f64_vector(mesh["vertices"], "mesh.vertices");
     in.triangles = i32_vector(mesh["triangles"], "mesh.triangles");
     // Optional per-triangle thickness (thin walls of differing gauge become one
-    // shell mesh with a thickness field); falls back to the scalar in mat_json.
+    // shell mesh with a thickness field). Without it, mat_json must carry a
+    // uniform thickness; with it, the field is the only thickness source.
     val thick_js = mesh["thicknesses"];
     if (!thick_js.isUndefined() && !thick_js.isNull())
         in.thicknesses = f64_vector(thick_js, "mesh.thicknesses");
@@ -141,16 +142,20 @@ val solve_shell(const val& mesh, const std::string& mat_json, const std::string&
     in.young = E.as<double>();
     in.poisson = nu.as<double>();
     const int n_tris = static_cast<int>(in.triangles.size() / 3);
-    const bool has_per_facet = static_cast<int>(in.thicknesses.size()) == n_tris;
-    // A uniform thickness is required unless a valid per-triangle field is given.
-    if (!has_per_facet) {
+    if (!in.thicknesses.empty()) {
+        // The per-triangle field is the thickness source: it must cover every
+        // triangle, and a uniform thickness alongside it would be ambiguous.
+        if (static_cast<int>(in.thicknesses.size()) != n_tris)
+            return error_result("mesh.thicknesses has " + std::to_string(in.thicknesses.size()) +
+                                " entries for " + std::to_string(n_tris) + " triangles");
+        if (!th.isNull() && !th.isUndefined())
+            return error_result("give either mesh.thicknesses or material thickness, not both");
+    } else {
         if (th.isNull() || th.isUndefined())
             return error_result("material is missing thickness (required for shell elements)");
         in.thickness = th.as<double>();
         if (in.thickness <= 0.0)
             return error_result("shell thickness must be positive");
-    } else if (!th.isNull() && !th.isUndefined()) {
-        in.thickness = th.as<double>();  // kept as a fallback; per-facet field wins
     }
 
     val bcs = parse_json(bcs_json);

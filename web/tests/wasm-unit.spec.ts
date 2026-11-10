@@ -2,17 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { test, expect } from "./coverage";
-import path from "path";
-import fs from "fs";
-import { importStep } from "./fixtures/app";
-
-const STEP_FILE = path.resolve("..", "test_files", "tube.stp");
+import { fixturePath, importStep } from "./fixtures/app";
 
 test("WASM OCC generate_fem_mesh: end-to-end smoke test on built-in example", async ({
   page,
 }) => {
   test.setTimeout(120_000);
-  test.skip(!fs.existsSync(STEP_FILE), `STEP fixture not found: ${STEP_FILE}`);
+  const STEP_FILE = fixturePath("tube.stp");
 
   const logs: string[] = [];
   page.on("console", (msg) => {

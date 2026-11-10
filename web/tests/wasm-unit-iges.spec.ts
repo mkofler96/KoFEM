@@ -2,17 +2,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { test, expect } from "./coverage";
-import path from "path";
-import fs from "fs";
-import { importIges } from "./fixtures/app";
-
-const IGES_FILE = path.resolve("..", "test_files", "cube_surfaces.igs");
+import { fixturePath, importIges } from "./fixtures/app";
 
 test("WASM OCC generate_fem_mesh: end-to-end smoke test on surface-only IGES fixture", async ({
   page,
 }) => {
   test.setTimeout(120_000);
-  test.skip(!fs.existsSync(IGES_FILE), `IGES fixture not found: ${IGES_FILE}`);
+  const IGES_FILE = fixturePath("cube_surfaces.igs");
 
   const logs: string[] = [];
   page.on("console", (msg) => {
