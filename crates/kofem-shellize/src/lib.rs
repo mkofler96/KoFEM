@@ -11,6 +11,7 @@
 //! Stages, bottom-up:
 //!   [`walls`]          thin-wall detection (opposite planar CAD-face pairs)
 //!   [`mid_surface`]    collapse the walls to welded mid-surface facets
+//!   `junction`         imprint T-junctions into the wall they stand on
 //!   [`wall_tets`]      which solid tets the shell facets replace
 //!   [`transition`]     cut retained solid at a wall root ([`clip`])
 //!   [`coupled_model`]  the coupled node pool and the couplings joining it
@@ -33,6 +34,7 @@ pub mod error;
 pub mod footprint;
 pub mod geometry;
 pub mod grid;
+mod junction;
 pub mod mid_surface;
 pub mod partners;
 pub mod seam;

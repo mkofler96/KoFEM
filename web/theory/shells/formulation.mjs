@@ -153,7 +153,7 @@ export default {
         ],
         [
           "Geometry extraction",
-          "Opposite planar faces are paired one to one, with planarity/area guards and a wall-separation cap of 15 in the app’s mm coordinates. Convex corners can share mid-surface nodes. Split faces and T-junctions, including I-section flanges, are not generally reconstructed; a converged web-only result does not establish a complete section.",
+          "Opposite planar faces are paired one to one, with planarity/area guards and a wall-separation cap of 15 in the app’s mm coordinates. A face whose opposite side is split by a wall standing on it, such as an I-section flange, pairs with the split pieces together. Convex corners share mid-surface nodes. At a planar T-junction the standing wall’s mid-surface is extended to the other wall’s mid-plane and imprinted into its facets. Curved walls and other branched sections are not reconstructed; check the reported wall count before trusting a section.",
         ],
         [
           "Surface loads",
