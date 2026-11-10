@@ -2,18 +2,19 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Full STEP → mesh → solve roundtrip of the I-beam idealised as SHELLS.
-//   1. Import I_beam.step (a single body, 300 mm long, 80×80 mm I-section).
+//   1. Import I_beam.step (a single body, 300 mm long, 80×80 mm I-section:
+//      web in the z = 0 plane, flanges at y = ±35).
 //   2. Mesh the STEP volume.
-//   3. Mark the body "Shell" and pull the x = 300 end in +x (axial tension),
-//      fully fixing the x = 0 end.
+//   3. Mark the body "Shell", fully fix the x = 0 end and load the x = 300 end
+//      in −y: a cantilever bent about its strong axis, where the flanges carry
+//      most of the stiffness.
 //   4. Solve. A single thin-walled body has no solid body to couple to, so the
 //      worker idealises its thin walls to a mid-surface Kirchhoff shell mesh and
-//      solves them directly (the pure auto-shell path). Before this path existed,
-//      marking a single body "Shell" silently fell back to the all-solid solve —
-//      the choice did nothing. So this test also guards that regression: the
-//      shell run must log [auto-shell] AND be more compliant than the same model
-//      solved Solid (a shell carries the axial load on the thin wall alone, not
-//      the full solid cross-section), proving it is genuinely a different model.
+//      solves them directly (the pure auto-shell path). The idealisation must
+//      find all three plates — web and both flanges — and weld them along the
+//      two web/flange T-junctions (KOF-205). It used to find the web alone, so
+//      the shell bent several times further than the solid.
+//   5. Solve the same model Solid and compare the tip deflections.
 
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -23,7 +24,12 @@ const here = dirname(fileURLToPath(import.meta.url));
 const STEP_PATH = join(here, "../../test_files/I_beam.step");
 
 const LENGTH = 300; // beam length along x (mm)
-const AXIAL_LOAD_N = 100_000; // 100 kN total, +x (axial tension)
+const TIP_LOAD_N = 5000; // 5 kN total, −y (strong-axis bending)
+// Timoshenko cantilever with the default steel (E = 210 GPa, ν = 0.3):
+// bending P·L³/(3·E·I) = 0.096 mm with I = 2.24e6 mm⁴, plus shear
+// P·L/(G·A_web) = 0.018 mm — 0.113 mm in all. The web alone (I = 4.3e5 mm⁴)
+// would bend about 0.52 mm.
+const BEAM_THEORY_TIP_MM = 0.113;
 
 interface Node {
   id: number;
@@ -83,10 +89,10 @@ test("i-beam shell: import STEP, mesh, mark Shell, solve through the shell path"
     )
     .toBeGreaterThan(0);
 
-  // 3 + 4. Solve axial tension twice — once with the body marked Shell (the
-  // feature under test) and once Solid (the baseline) — through the real worker.
+  // 3–5. Solve the cantilever twice — once with the body marked Shell (the
+  // feature under test) and once Solid (the reference) — through the real worker.
   const result = await page.evaluate(
-    async ({ length, axialLoad }) => {
+    async ({ length, tipLoad }) => {
       const win = window as unknown as {
         __kofem: {
           sendToWorker(name: string, payload: object): Promise<unknown>;
@@ -109,8 +115,8 @@ test("i-beam shell: import STEP, mesh, mark Shell, solve through the shell path"
       );
       const loads = end.map((n) => ({
         nodeId: n.id,
-        dof: 0, // +x axial tension
-        value: axialLoad / end.length,
+        dof: 1, // −y: bends the beam about its strong axis
+        value: -tipLoad / end.length,
       }));
 
       const solveWith = async (discretization: "shell" | "solid") => {
@@ -129,14 +135,9 @@ test("i-beam shell: import STEP, mesh, mark Shell, solve through the shell path"
           surfaceFaceIds: st.surfaceFaceIds,
         })) as { displacements: Float64Array; vonMises: Float64Array };
         const disp = res.displacements;
-        let endUx = 0; // largest +x extension at the loaded end
-        for (const n of end) {
-          const i = nodes.indexOf(n);
-          endUx = Math.max(endUx, disp[3 * i]);
-        }
-        let maxU = 0;
-        for (let i = 0; i < disp.length; i += 3)
-          maxU = Math.max(maxU, Math.hypot(disp[i], disp[i + 1], disp[i + 2]));
+        let tipUy = 0; // mean deflection of the loaded end, along the load
+        for (const n of end) tipUy += disp[3 * nodes.indexOf(n) + 1];
+        tipUy /= end.length;
         let maxVm = 0;
         for (const vm of res.vonMises) maxVm = Math.max(maxVm, vm);
         return {
@@ -145,8 +146,7 @@ test("i-beam shell: import STEP, mesh, mark Shell, solve through the shell path"
           allFinite:
             [...disp].every(Number.isFinite) &&
             [...res.vonMises].every(Number.isFinite),
-          endUx,
-          maxU,
+          tipUy,
           maxVm,
         };
       };
@@ -161,32 +161,32 @@ test("i-beam shell: import STEP, mesh, mark Shell, solve through the shell path"
         solid,
       };
     },
-    { length: LENGTH, axialLoad: AXIAL_LOAD_N },
+    { length: LENGTH, tipLoad: TIP_LOAD_N },
   );
 
   if (!result.ok) throw new Error(result.error);
   const { shell, solid } = result;
 
   // The pure auto-shell path carried the shell solve (not the silent all-solid
-  // fallback that existed before): its log names the thin-wall idealisation.
-  expect(logs.some((l) => l.includes("[auto-shell]"))).toBe(true);
+  // fallback that existed before), with the web and both flanges as walls.
+  expect(
+    logs.some((l) => /\[auto-shell\] body \d+: 3 thin walls/.test(l)),
+  ).toBe(true);
 
   // Result contract is preserved: three translations per store node, one von
   // Mises per store element, all finite (a converged solve).
   expect(shell.nDisp).toBe(result.nNodes * 3);
   expect(shell.nVm).toBe(result.nElems);
   expect(shell.allFinite).toBe(true);
-
-  // The beam extends in +x under axial tension — non-trivial and bounded.
-  expect(shell.endUx).toBeGreaterThan(0);
-  expect(shell.maxU).toBeGreaterThan(1e-4);
-  expect(shell.maxU).toBeLessThan(5);
   expect(shell.maxVm).toBeGreaterThan(0);
 
-  // The shell idealisation is genuinely a different (more compliant) model than
-  // the solid: the thin wall carries the axial load on a fraction of the full
-  // cross-section, so it extends noticeably more. Were the "Shell" choice still
-  // silently solving solid, the two would be identical.
-  expect(solid.endUx).toBeGreaterThan(0);
-  expect(shell.endUx).toBeGreaterThan(1.3 * solid.endUx);
+  // The tip deflects along the load, as far as beam theory and the solid say.
+  // A shell that lost the flanges, or whose plates were not welded at the
+  // web/flange junctions, would bend several times further (or not solve).
+  expect(shell.tipUy).toBeLessThan(0);
+  expect(-shell.tipUy).toBeGreaterThan(0.85 * BEAM_THEORY_TIP_MM);
+  expect(-shell.tipUy).toBeLessThan(1.15 * BEAM_THEORY_TIP_MM);
+  expect(solid.tipUy).toBeLessThan(0);
+  expect(shell.tipUy / solid.tipUy).toBeGreaterThan(0.85);
+  expect(shell.tipUy / solid.tipUy).toBeLessThan(1.15);
 });

@@ -62,12 +62,18 @@ fn plate_is_one_wall_at_its_mid_plane() {
 }
 
 /// The wall-thickness window: 20 mm is no wall at max 15 but one at max 25,
-/// and 0.04 mm is below the 0.05 mm floor.
+/// 0.04 mm is below the 0.05 mm floor, and a wall exactly max thick is a wall
+/// even when its measured gap rounds a few ulps above it.
 #[test]
 fn wall_thickness_window() {
     let block = boxes(&[plate(20.0, 1, 0, [0.0; 3])]);
     assert_eq!(extract(&block, 15.0, None).shell_body, None);
     assert_eq!(extract(&block, 25.0, None).shell_body, Some(1));
+    let limit = boxes(&[plate(15.0, 1, 0, [0.0; 3])]);
+    assert_eq!(
+        extract(&limit, 15.0 * (1.0 - 1e-9), None).shell_body,
+        Some(1)
+    );
     let sliver = boxes(&[plate(0.04, 1, 0, [0.0; 3])]);
     assert_eq!(extract(&sliver, 15.0, None).shell_body, None);
 }
@@ -149,6 +155,215 @@ fn junction_lands_on_both_mid_planes() {
     assert_eq!(corner_nodes, 5, "one junction node per y grid line");
     let wall_tets = shell_wall_tets(&mesh, &shells, 1.0).expect("grid");
     assert_eq!(wall_tets.len(), mesh.tets().len());
+}
+
+/// An I-section `length` mm long (6 cells along it), labelled as `test_files/I_beam.step`'s B-rep is:
+/// each flange's inner side is two faces split by the web (KOF-205). Web
+/// y ∈ [−30, 30], 15 mm thick about z = 0; flanges z ∈ [−40, 40], 10 mm thick
+/// about y = ±35. The flange grid has no line at z = 0, so the web's mid-surface
+/// edge lands inside the flange facets and must be imprinted there.
+fn i_beam(length: f64) -> ShellizeMesh {
+    let near = |value: f64, at: f64| (value - at).abs() < 1e-9;
+    let label = |corners: [[f64; 3]; 3]| -> i32 {
+        let all = |axis: usize, at: f64| corners.iter().all(|point| near(point[axis], at));
+        let positive_z = corners.iter().all(|point| point[2] >= 7.5 - 1e-9);
+        let top = corners.iter().all(|point| point[1] > 0.0);
+        if all(1, 40.0) {
+            8
+        } else if all(1, -40.0) {
+            2
+        } else if all(1, 30.0) {
+            if positive_z {
+                10
+            } else {
+                6
+            }
+        } else if all(1, -30.0) {
+            if positive_z {
+                12
+            } else {
+                4
+            }
+        } else if all(2, 7.5) {
+            11
+        } else if all(2, -7.5) {
+            5
+        } else if all(2, 40.0) {
+            if top {
+                9
+            } else {
+                1
+            }
+        } else if all(2, -40.0) {
+            if top {
+                7
+            } else {
+                3
+            }
+        } else if all(0, 0.0) {
+            14
+        } else if all(0, length) {
+            13
+        } else {
+            // Off the I-section: the fixture itself is wrong.
+            0
+        }
+    };
+    let piece = |span_y: [f64; 2], span_z: [f64; 2], cells: [usize; 3]| BoxSpec {
+        min: [0.0, span_y[0], span_z[0]],
+        max: [length, span_y[1], span_z[1]],
+        cells,
+        body: 1,
+        face_base: 0,
+    };
+    let mut specs = vec![piece([-30.0, 30.0], [-7.5, 7.5], [6, 6, 1])];
+    for flange in [[30.0, 40.0], [-40.0, -30.0]] {
+        specs.push(piece(flange, [-40.0, -7.5], [6, 1, 3]));
+        specs.push(piece(flange, [-7.5, 7.5], [6, 1, 1]));
+        specs.push(piece(flange, [7.5, 40.0], [6, 1, 3]));
+    }
+    boxes_labelled(&specs, label)
+}
+
+/// Union–find root with path halving.
+fn find(root: &mut [usize], mut node: usize) -> usize {
+    while root[node] != node {
+        root[node] = root[root[node]];
+        node = root[node];
+    }
+    node
+}
+
+/// Each I-beam junction line (6 web facet edges along x) is carried by 3
+/// facets — the web and the flange on both sides.
+fn assert_conforming_junctions(shells: &ShellExtraction) {
+    let on_junction = |node: usize| {
+        let vertex = shells.vertices[node];
+        vertex[2].abs() < 1e-9 && (vertex[1].abs() - 35.0).abs() < 1e-9
+    };
+    let junction: Vec<usize> = edge_uses(shells)
+        .into_iter()
+        .filter(|&((first, second), _)| on_junction(first) && on_junction(second))
+        .map(|(_, uses)| uses)
+        .collect();
+    assert_eq!(junction, vec![3; 12], "two junction lines of 6 edges each");
+}
+
+/// Facet edges as unordered node pairs, with the number of facets on each.
+fn edge_uses(shells: &ShellExtraction) -> std::collections::HashMap<(usize, usize), usize> {
+    let mut uses = std::collections::HashMap::new();
+    for tri in &shells.triangles {
+        for corner in 0..3 {
+            let (first, second) = (tri[corner], tri[(corner + 1) % 3]);
+            *uses
+                .entry((first.min(second), first.max(second)))
+                .or_insert(0) += 1;
+        }
+    }
+    uses
+}
+
+/// The I-beam idealises as web + both flanges, welded into ONE shell along the
+/// two T-junction lines: the web's mid-surface reaches the flange mid-planes
+/// (y = ±35) and every web edge on a junction line is a flange facet edge too.
+#[test]
+fn i_beam_flanges_pair_and_weld_at_t_junctions() {
+    let mesh = i_beam(60.0);
+    assert!(
+        !mesh.surface_faces().contains(&0),
+        "every boundary triangle labelled"
+    );
+    let shells = extract(&mesh, 15.0, None);
+    let mut walls: Vec<(i32, f64)> = shells
+        .walls
+        .iter()
+        .map(|wall| (wall.keep, wall.thickness))
+        .collect();
+    walls.sort_by_key(|wall| wall.0);
+    assert_eq!(walls.len(), 3, "web and both flanges: {walls:?}");
+    let expected = [(2, 10.0), (5, 15.0), (8, 10.0)];
+    for (wall, (keep, thickness)) in walls.iter().zip(expected) {
+        // Flanges keep their full outer face; the web either of its sides.
+        assert!(wall.0 == keep || (keep == 5 && wall.0 == 11), "{walls:?}");
+        assert!((wall.1 - thickness).abs() < 1e-9, "{walls:?}");
+    }
+
+    // Every node on a mid-plane: web z = 0, flanges y = ±35.
+    assert!(shells
+        .vertices
+        .iter()
+        .all(|vertex| { vertex[2].abs() < 1e-9 || (vertex[1].abs() - 35.0).abs() < 1e-9 }));
+    let web_reach = shells
+        .vertices
+        .iter()
+        .filter(|vertex| vertex[2].abs() < 1e-9)
+        .map(|vertex| vertex[1].abs())
+        .fold(0.0, f64::max);
+    assert!(
+        (web_reach - 35.0).abs() < 1e-9,
+        "web reaches the flange mid-planes"
+    );
+
+    // One connected shell.
+    let mut root: Vec<usize> = (0..shells.vertices.len()).collect();
+    for tri in &shells.triangles {
+        for corner in 1..3 {
+            let (first, second) = (find(&mut root, tri[0]), find(&mut root, tri[corner]));
+            root[first] = second;
+        }
+    }
+    let components: std::collections::HashSet<usize> =
+        (0..root.len()).map(|node| find(&mut root, node)).collect();
+    assert_eq!(components.len(), 1, "web and flanges are one shell");
+
+    assert_conforming_junctions(&shells);
+
+    // No sliver facets from the imprint.
+    for tri in &shells.triangles {
+        let corners = tri.map(|node| shells.vertices[node]);
+        let side = |first: usize, second: usize| {
+            let delta = [0, 1, 2].map(|axis| corners[first][axis] - corners[second][axis]);
+            delta.iter().map(|value| value * value).sum::<f64>()
+        };
+        let squared = side(0, 1) + side(1, 2) + side(2, 0);
+        let edge_a = [0, 1, 2].map(|axis| corners[1][axis] - corners[0][axis]);
+        let edge_b = [0, 1, 2].map(|axis| corners[2][axis] - corners[0][axis]);
+        let normal = [
+            edge_a[1] * edge_b[2] - edge_a[2] * edge_b[1],
+            edge_a[2] * edge_b[0] - edge_a[0] * edge_b[2],
+            edge_a[0] * edge_b[1] - edge_a[1] * edge_b[0],
+        ];
+        let area = 0.5 * normal.iter().map(|value| value * value).sum::<f64>().sqrt();
+        let quality = 4.0 * 3.0_f64.sqrt() * area / squared;
+        assert!(
+            quality > 0.2,
+            "sliver facet {corners:?} (quality {quality})"
+        );
+    }
+
+    // The three walls cover the whole body, junction blocks included.
+    let tets = shell_body_tets(&mesh, &shells).expect("fully covered");
+    assert_eq!(tets.len(), mesh.tets().len());
+}
+
+/// Whether a junction is welded depends on where it runs, not on how long its
+/// facet edges are: a 6 m I-beam with six cells along it (1 m facet edges,
+/// far longer than their distance to the flange edges) welds the same way.
+#[test]
+fn long_coarse_i_beam_still_welds() {
+    let shells = extract(&i_beam(6000.0), 15.0, None);
+    assert_eq!(shells.walls.len(), 3, "{:?}", shells.walls);
+    let web_reach = shells
+        .vertices
+        .iter()
+        .filter(|vertex| vertex[2].abs() < 1e-9)
+        .map(|vertex| vertex[1].abs())
+        .fold(0.0, f64::max);
+    assert!(
+        (web_reach - 35.0).abs() < 1e-9,
+        "web reaches the flange mid-planes"
+    );
+    assert_conforming_junctions(&shells);
 }
 
 /// A Shell body with a thick block the walls do not cover is refused, with the

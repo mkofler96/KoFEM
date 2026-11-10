@@ -44,6 +44,11 @@ pub enum ShellizeError {
         total: usize,
         percent: f64,
     },
+    #[error(
+        "Two thin walls of the Shell body meet at a T-junction that could not be welded into a \
+         conforming shell mesh. Remesh with a different element size, or set the body to Solid."
+    )]
+    UnweldableJunction,
     #[error("Degenerate shell triangle at transition")]
     DegenerateShellTriangle,
     #[error(

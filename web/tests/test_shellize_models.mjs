@@ -100,7 +100,20 @@ const CASES = [
     shellBody: 1,
     refuses: 'Body 1 is marked "Shell", but 8047 of its 38206 elements (17.8 %',
   },
-  { step: "I_beam.step", size: 10, shellBody: -1 },
+  // The web and both flanges, welded along the two web/flange T-junctions
+  // (KOF-205). Before, the 15 mm web just missed maxWall = 15 and the split
+  // flange faces never paired, so no wall was found at all.
+  {
+    step: "I_beam.step",
+    size: 10,
+    shellBody: 1,
+    walls: 3,
+    shellNodes: 884,
+    facets: 1652,
+    solidTets: 0,
+    couplings: "0/0/0/0",
+    surfaceTriangles: 3286,
+  },
 ];
 
 const meshes = new Map();

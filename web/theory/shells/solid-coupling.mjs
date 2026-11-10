@@ -259,8 +259,8 @@ export default {
       establish arbitrary three-dimensional junction stresses, curved cuts,
       general distributing coupling, out-of-plane joint response, or accurate
       extraction of every branched thin-walled section. The
-      <a href="/theory/shells/formulation/#supported-models">T-junction wall-extraction limitation</a>
-      is separate from retaining a solid root in a successfully detected wall.</p>
+      <a href="/theory/shells/formulation/#supported-models">wall-extraction limits</a>
+      are separate from retaining a solid root in a successfully detected wall.</p>
     <p>Choose a quantity and fixed sampling region before comparing models.
       Check reactions, motion, stress away from the artificial cut and sensitivity
       to both mesh and transition placement. Keep the region solid when those
