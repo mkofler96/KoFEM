@@ -5,6 +5,7 @@ import { create } from "zustand";
 import { useModelStore } from "../store/modelStore";
 import { parseAnalysisFile } from "./analysisFile";
 import { categorizeError, setWorkflow, startTimer, track } from "./analytics";
+import { clearWorkerLogs } from "../hooks/useWorkerLogs";
 
 // Opening an example (examples/gallery/site/, served at /examples/) in the
 // app, from the `/app/?example=<id>` deep-link the example pages' "Open in
@@ -39,6 +40,7 @@ export async function openExample(
     if (signal?.aborted) return;
     const store = useModelStore.getState();
     store.loadAnalysis(parseAnalysisFile(text));
+    clearWorkerLogs();
     setWorkflow("example");
     track("example_loaded", {
       example_id: id,

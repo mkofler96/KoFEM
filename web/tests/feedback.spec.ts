@@ -371,3 +371,45 @@ test("a ZIP that is not a KoFEM report is refused with the reason", async ({
     .poll(() => dialogMessage)
     .toContain("not a KoFEM problem report");
 });
+
+test("a report carries only the current model's log, not one from before New analysis", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  page.on("dialog", (d) => void d.accept());
+  await gotoApp(page);
+  const importTube = () =>
+    page.locator('input[type="file"][accept=".stp,.step"]').setInputFiles({
+      name: SECRET_FILE,
+      mimeType: "application/octet-stream",
+      buffer: TUBE,
+    });
+  await importTube();
+  const meshButton = page.getByRole("button", { name: /Mesh STEP volume/ });
+  await expect(meshButton).toBeVisible({ timeout: 60_000 });
+  await meshButton.click();
+  await expect
+    .poll(() => nodeCount(page), { timeout: 90_000 })
+    .toBeGreaterThan(0);
+  await recordMailto(page);
+
+  const logOf = (entries: { name: string; data: Uint8Array }[]) =>
+    new TextDecoder().decode(entries.find((e) => e.name === "log.txt")?.data);
+
+  await openReport(page);
+  const meshed = await saveReport(page, "report-save");
+  expect(logOf(meshed.entries)).toContain("== mesh ==");
+  await page.getByRole("button", { name: "Done" }).click();
+
+  // A new analysis with a new part: the old mesh log is gone from the report.
+  await page.getByRole("button", { name: "New analysis" }).click();
+  await importTube();
+  await expect(
+    page.getByRole("button", { name: /Mesh STEP volume/ }),
+  ).toBeVisible({
+    timeout: 60_000,
+  });
+  await openReport(page);
+  const fresh = await saveReport(page, "report-save");
+  expect(logOf(fresh.entries)).toBe("(no log)\n");
+});

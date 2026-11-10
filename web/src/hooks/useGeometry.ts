@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { useModelStore } from "../store/modelStore";
 import { sendToWorker } from "../workers/sharedWorker";
+import { clearWorkerLogs } from "./useWorkerLogs";
 import {
   categorizeError,
   setWorkflow,
@@ -75,6 +76,8 @@ export function useGeometry() {
         setStepBytes(bytes);
         setGeometryFormat(format);
         setStepSurface({ points, triangles, bodyIds, faceIds });
+        // A new part is a new model: the previous one's logs no longer apply.
+        clearWorkerLogs();
         // One property per body (#353), all solid until the user says otherwise.
         setBodies(bodyCount);
         if (exampleId) {

@@ -12,6 +12,7 @@ import { parseReport } from "../../lib/bugReport";
 import { looksLikeZip } from "../../lib/zip";
 import { resetWorker } from "../../workers/sharedWorker";
 import { setWorkflow } from "../../lib/analytics";
+import { clearWorkerLogs } from "../../hooks/useWorkerLogs";
 import { FeedbackMenu } from "./FeedbackMenu";
 import styles from "./TopBar.module.css";
 
@@ -41,6 +42,7 @@ export function TopBar() {
     // in-flight mesh/solve belongs to the analysis being discarded.
     resetWorker();
     store.reset();
+    clearWorkerLogs();
     setWorkflow("none");
   }
 
@@ -68,6 +70,7 @@ export function TopBar() {
         // was built from, so the model can be re-meshed and solved again.
         const report = await parseReport(bytes);
         loadAnalysis(report.analysis);
+        clearWorkerLogs();
         if (report.cad) {
           const store = useModelStore.getState();
           store.setGeometryFormat(report.cad.format);
@@ -75,6 +78,7 @@ export function TopBar() {
         }
       } else {
         loadAnalysis(parseAnalysisFile(new TextDecoder("utf-8").decode(bytes)));
+        clearWorkerLogs();
       }
       setWorkflow("saved_file");
     } catch (err) {
