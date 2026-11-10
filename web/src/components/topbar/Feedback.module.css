@@ -1,4 +1,5 @@
-/* Top-bar Feedback entry: a quiet text button, its menu, and the report dialog. */
+/* Top-bar Feedback entry: a quiet text button, its menu, and the report dialog
+   (email report first, the public GitHub issue folded below). */
 
 .wrap {
   position: relative;
@@ -156,6 +157,7 @@
 .actions {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -191,6 +193,60 @@
 
 .primary:hover {
   background: #1750b3;
+}
+
+.secondary:disabled,
+.primary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.listTitle {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #3a4150;
+}
+
+.contents {
+  margin: 0 0 16px;
+  padding-left: 18px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: #3a4150;
+}
+
+.error {
+  margin: 0 0 12px;
+  font-size: 12.5px;
+  color: #b42318;
+}
+
+.text strong {
+  font-weight: 600;
+  color: #0d1117;
+  overflow-wrap: anywhere;
+}
+
+/* The public alternative, folded away below the email report. */
+.github {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #eef0f4;
+}
+
+.github summary {
+  font-size: 12.5px;
+  color: #6b7280;
+  cursor: pointer;
+}
+
+.github[open] summary {
+  margin-bottom: 10px;
+}
+
+.github .text {
+  margin-bottom: 10px;
 }
 
 @media (max-width: 768px) {

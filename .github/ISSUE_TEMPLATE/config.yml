@@ -3,3 +3,6 @@ contact_links:
   - name: Privacy
     url: https://kofem.org/privacy/#feedback
     about: What a bug report from KoFEM includes.
+  - name: Report a problem privately
+    url: mailto:support@kofem.org
+    about: Use Feedback → Report a problem in the app to email a report with your model to support@kofem.org instead of posting it publicly.

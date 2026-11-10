@@ -55,7 +55,9 @@ test("save → load → re-save round-trips the analysis losslessly", async ({
   await expect(
     page.getByRole("button", { name: "Load analysis" }),
   ).toBeVisible();
-  await page.locator('input[type="file"][accept=".vtu"]').setInputFiles(file1);
+  await page
+    .locator('input[type="file"][accept=".vtu,.zip"]')
+    .setInputFiles(file1);
 
   // Saved in results mode → restored session shows the result stats again
   await expect(page.getByText(/Max \|U\|/)).toBeVisible({ timeout: 10_000 });
@@ -124,7 +126,9 @@ test("loading a non-KoFEM file shows a clear error", async ({ page }) => {
   });
 
   await gotoApp(page);
-  await page.locator('input[type="file"][accept=".vtu"]').setInputFiles(bogus);
+  await page
+    .locator('input[type="file"][accept=".vtu,.zip"]')
+    .setInputFiles(bogus);
 
   await expect.poll(() => dialogMessage).toContain("Not a KoFEM analysis file");
 });
@@ -184,7 +188,9 @@ test("max-stress TO settings round-trip; older files load with it off", async ({
   });
 
   await gotoApp(page);
-  await page.locator('input[type="file"][accept=".vtu"]').setInputFiles(file1);
+  await page
+    .locator('input[type="file"][accept=".vtu,.zip"]')
+    .setInputFiles(file1);
   await expect(page.getByText("Cantilever Beam")).toBeVisible();
   expect(await readTopOpt()).toMatchObject(meta.topOpt);
 
@@ -214,7 +220,9 @@ test("max-stress TO settings round-trip; older files load with it off", async ({
   fs.writeFileSync(file2, legacy);
 
   await gotoApp(page);
-  await page.locator('input[type="file"][accept=".vtu"]').setInputFiles(file2);
+  await page
+    .locator('input[type="file"][accept=".vtu,.zip"]')
+    .setInputFiles(file2);
   await expect(page.getByText("Cantilever Beam")).toBeVisible();
   expect(await readTopOpt()).toMatchObject({
     volumeFraction: "0.35",

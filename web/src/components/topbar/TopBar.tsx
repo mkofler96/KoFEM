@@ -8,6 +8,8 @@ import {
   parseAnalysisFile,
   serializeAnalysis,
 } from "../../lib/analysisFile";
+import { parseReport } from "../../lib/bugReport";
+import { looksLikeZip } from "../../lib/zip";
 import { resetWorker } from "../../workers/sharedWorker";
 import { setWorkflow } from "../../lib/analytics";
 import { FeedbackMenu } from "./FeedbackMenu";
@@ -60,7 +62,20 @@ export function TopBar() {
     if (!file) return;
     e.target.value = "";
     try {
-      loadAnalysis(parseAnalysisFile(await file.text()));
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      if (looksLikeZip(bytes)) {
+        // A problem report (lib/bugReport): its analysis, then the CAD file it
+        // was built from, so the model can be re-meshed and solved again.
+        const report = await parseReport(bytes);
+        loadAnalysis(report.analysis);
+        if (report.cad) {
+          const store = useModelStore.getState();
+          store.setGeometryFormat(report.cad.format);
+          store.setStepBytes(report.cad.bytes);
+        }
+      } else {
+        loadAnalysis(parseAnalysisFile(new TextDecoder("utf-8").decode(bytes)));
+      }
       setWorkflow("saved_file");
     } catch (err) {
       window.alert(`Could not load analysis: ${(err as Error).message}`);
@@ -101,7 +116,8 @@ export function TopBar() {
         <input
           ref={loadInputRef}
           type="file"
-          accept=".vtu"
+          accept=".vtu,.zip"
+          data-testid="load-analysis-input"
           style={{ display: "none" }}
           onChange={handleLoadFile}
         />
@@ -157,7 +173,7 @@ export function TopBar() {
         </button>
         <button
           className={styles.iconBtn}
-          title="Load analysis (.vtu)"
+          title="Load analysis (.vtu) or problem report (.zip)"
           aria-label="Load analysis"
           onClick={() => loadInputRef.current?.click()}
         >
