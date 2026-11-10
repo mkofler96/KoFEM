@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { create } from "zustand";
 import { setLogCallback } from "../workers/sharedWorker";
 
@@ -50,7 +50,7 @@ const NO_LOGS: WorkerLogEntry[] = [];
 // single log-callback slot always belongs to whichever panel is active — the
 // mesh log while meshing on the Geometry tab, the solver log while solving on
 // the Solve tab, the optimizer log while optimizing on the Optimize tab.
-export function useWorkerLogs(channel: "mesh" | "solve" | "optimize") {
+export function useWorkerLogs(channel: LogChannel) {
   const logs = useWorkerLogStore((s) => s.channels[channel] ?? NO_LOGS);
   const append = useWorkerLogStore((s) => s.append);
   const clear = useWorkerLogStore((s) => s.clear);
@@ -64,3 +64,50 @@ export function useWorkerLogs(channel: "mesh" | "solve" | "optimize") {
 
   return { logs, clearLogs };
 }
+
+export type LogChannel = "mesh" | "solve" | "optimize";
+
+export const LOG_CHANNEL_LABELS: Record<LogChannel, string> = {
+  mesh: "Mesh",
+  solve: "Solve",
+  optimize: "Optimize",
+};
+
+export interface TaggedLogEntry extends WorkerLogEntry {
+  channel: LogChannel;
+}
+
+// All channels merged into one chronological stream (ids increase across
+// channels), for the log drawer.
+export function mergeChannels(
+  channels: Record<string, WorkerLogEntry[]>,
+): TaggedLogEntry[] {
+  const merged: TaggedLogEntry[] = [];
+  for (const channel of Object.keys(LOG_CHANNEL_LABELS) as LogChannel[]) {
+    for (const entry of channels[channel] ?? NO_LOGS) {
+      merged.push({ ...entry, channel });
+    }
+  }
+  return merged.sort((a, b) => a.id - b.id);
+}
+
+export function useAllLogs() {
+  const channels = useWorkerLogStore((s) => s.channels);
+  return useMemo(() => mergeChannels(channels), [channels]);
+}
+
+export function clearAllLogs() {
+  const { clear } = useWorkerLogStore.getState();
+  for (const channel of Object.keys(LOG_CHANNEL_LABELS)) clear(channel);
+}
+
+// Whether the right-hand log drawer is open. Hidden by default.
+interface LogDrawerState {
+  open: boolean;
+  toggle: () => void;
+}
+
+export const useLogDrawer = create<LogDrawerState>((set) => ({
+  open: false,
+  toggle: () => set((s) => ({ open: !s.open })),
+}));

@@ -7,6 +7,7 @@ import type { PickMode } from "../../store/modelStore";
 import { APP_VERSION } from "../../lib/version";
 import { consentBanner } from "../../lib/analytics";
 import { loadCounts } from "../../lib/modelDisplay";
+import { useAllLogs, useLogDrawer } from "../../hooks/useWorkerLogs";
 import { EngineStatus } from "./EngineStatus";
 import styles from "./StatusBar.module.css";
 
@@ -140,6 +141,10 @@ export function StatusBar() {
   const loadDisplay = useModelStore((s) => s.loadDisplay);
   const setLoadDisplay = useModelStore((s) => s.setLoadDisplay);
   const stepSurface = useModelStore((s) => s.stepSurface);
+
+  const logDrawerOpen = useLogDrawer((s) => s.open);
+  const toggleLogDrawer = useLogDrawer((s) => s.toggle);
+  const logCount = useAllLogs().length;
 
   const hasGeometry = nodes.length > 0 || !!stepSurface;
   const hasSurface = nodes.length > 0;
@@ -323,6 +328,13 @@ export function StatusBar() {
             Mesh OK
           </span>
         ) : null}
+        <button
+          className={`${styles.discLink} ${styles.logToggle}`}
+          aria-pressed={logDrawerOpen}
+          onClick={toggleLogDrawer}
+        >
+          Logs{logCount > 0 ? ` (${logCount})` : ""}
+        </button>
         <EngineStatus />
         <span className={styles.muted}>m · N · Pa · {APP_VERSION}</span>
         <a

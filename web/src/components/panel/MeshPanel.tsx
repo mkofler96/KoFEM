@@ -6,7 +6,6 @@ import { useMesh } from "../../hooks/useMesh";
 import { useEngineGate } from "../../store/engineStore";
 import { estimateElementCount } from "../../lib/meshSizing";
 import type { GeometryMeasure } from "../../lib/meshSizing";
-import { LogSection } from "./LogSection";
 import { MeshOverlapCard } from "./MeshOverlapCard";
 import styles from "./Panel.module.css";
 
@@ -50,7 +49,6 @@ export function MeshPanel() {
     geometryMeasure,
     meshError,
     setMeshError,
-    logs,
     meshVolume,
   } = useMesh();
 
@@ -157,8 +155,6 @@ export function MeshPanel() {
           </div>
         )
       )}
-
-      <LogSection logs={logs} busy={isMeshing} />
     </>
   );
 }
