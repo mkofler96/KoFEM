@@ -120,10 +120,6 @@ fn from_mid_plane(point: Vec3, wall: &Wall, kept: &FaceProp) -> f64 {
 /// web on a flange) no node is shared: the standing wall's edge nodes are moved
 /// onto the other wall's mid-plane and imprinted into its facets
 /// ([`crate::junction`]).
-#[allow(
-    clippy::too_many_lines,
-    reason = "one pass per stage of the collapse; splitting it would only thread its tables through helpers"
-)]
 fn collapse_walls_to_mid_surface(
     mesh: &ShellizeMesh,
     walls: &[PairedWall],
@@ -134,82 +130,9 @@ fn collapse_walls_to_mid_surface(
         .map(|paired| (paired.wall.keep, paired.wall))
         .collect();
     let face_of: HashMap<i32, &FaceProp> = faces.iter().map(|face| (face.id, face)).collect();
-    let kept_face = |wall: &Wall| {
-        face_of
-            .get(&wall.keep)
-            .copied()
-            .ok_or(ShellizeError::UnknownWallFace { face: wall.keep })
-    };
-    // Inner (partner) face → the wall it belongs to.
-    let partner_wall: HashMap<i32, i32> = walls
-        .iter()
-        .flat_map(|paired| {
-            paired
-                .partners
-                .iter()
-                .map(move |&partner| (partner, paired.wall.keep))
-        })
-        .collect();
+    let placement = wall_nodes(mesh, walls, &keep, &face_of)?;
 
-    // Every kept wall each node lies on — a junction node belongs to several —
-    // and every wall whose inner face it lies on.
-    let mut walls_of_node: OrderedMap<usize, BTreeSet<i32>> = OrderedMap::new();
-    let mut inner_walls_of_node: HashMap<usize, BTreeSet<i32>> = HashMap::new();
-    for (triangle, tri) in mesh.surf_tris.iter().enumerate() {
-        let face = mesh.surf_face[triangle];
-        if keep.contains_key(&face) {
-            for &vertex in tri {
-                walls_of_node
-                    .get_or_insert_with(vertex, BTreeSet::new)
-                    .insert(face);
-            }
-        } else if let Some(&wall) = partner_wall.get(&face) {
-            for &vertex in tri {
-                inner_walls_of_node.entry(vertex).or_default().insert(wall);
-            }
-        }
-    }
-    // Where each node sits on its kept walls' mid-planes; and, for a node
-    // that also lies on another wall's inner face, where it sits once that
-    // wall's mid-plane is added (its place if it turns out to be a T-junction).
-    let mut offset_of_node: HashMap<usize, Vec3> = HashMap::with_capacity(walls_of_node.len());
-    let mut junction_offset: HashMap<usize, Vec3> = HashMap::new();
-    for (&vertex, node_walls) in walls_of_node.iter() {
-        let mut constraints = Vec::with_capacity(node_walls.len());
-        for face in node_walls {
-            let wall = keep
-                .get(face)
-                .ok_or(ShellizeError::UnknownWallFace { face: *face })?;
-            constraints.push(Constraint {
-                normal: wall.normal,
-                target: -wall.thickness / 2.0,
-            });
-        }
-        offset_of_node.insert(vertex, mid_surface_offset(&constraints));
-        let kept_only = constraints.len();
-        for face in inner_walls_of_node.get(&vertex).into_iter().flatten() {
-            if node_walls.contains(face) {
-                continue;
-            }
-            let wall = keep
-                .get(face)
-                .ok_or(ShellizeError::UnknownWallFace { face: *face })?;
-            constraints.push(Constraint {
-                normal: wall.normal,
-                target: -from_mid_plane(mesh.vertices[vertex], wall, kept_face(wall)?),
-            });
-        }
-        if constraints.len() > kept_only {
-            junction_offset.insert(vertex, mid_surface_offset(&constraints));
-        }
-    }
-
-    let mut raw_vertices: Vec<Vec3> = Vec::new();
-    let mut raw_source: Vec<i32> = Vec::new();
-    let mut raw_original: Vec<usize> = Vec::new();
-    let mut raw_triangles: Vec<[usize; 3]> = Vec::new();
-    let mut raw_thickness: Vec<f64> = Vec::new();
-    let mut raw_triangle_source: Vec<i32> = Vec::new();
+    let mut raw = RawShell::default();
     let mut node_of: HashMap<(i32, usize), usize> = HashMap::new();
     for (triangle, tri) in mesh.surf_tris.iter().enumerate() {
         let Some(wall) = keep.get(&mesh.surf_face[triangle]) else {
@@ -221,24 +144,35 @@ fn collapse_walls_to_mid_surface(
                 existing
             } else {
                 // Every node of a kept face was given an offset above.
-                let delta = offset_of_node
+                let delta = placement
+                    .offset_of_node
                     .get(&original)
                     .copied()
                     .ok_or(ShellizeError::UnknownWallFace { face: wall.keep })?;
-                let id = raw_vertices.len();
+                let id = raw.vertices.len();
                 node_of.insert((wall.keep, original), id);
-                raw_vertices.push(add(mesh.vertices[original], delta));
-                raw_source.push(wall.keep);
-                raw_original.push(original);
+                raw.vertices.push(add(mesh.vertices[original], delta));
+                raw.source.push(wall.keep);
+                raw.original.push(original);
                 id
             };
         }
-        raw_triangles.push(nodes);
-        raw_thickness.push(wall.thickness);
-        raw_triangle_source.push(wall.keep);
+        raw.triangles.push(nodes);
+        raw.thickness.push(wall.thickness);
+        raw.triangle_source.push(wall.keep);
     }
 
-    let mut representative: Vec<usize> = (0..raw_vertices.len()).collect();
+    let merged = weld_t_junctions(
+        &mut raw,
+        &Junctions {
+            mesh,
+            keep: &keep,
+            face_of: &face_of,
+            nodes: &placement,
+        },
+    )?;
+
+    let mut representative: Vec<usize> = (0..raw.vertices.len()).collect();
     let union = |representative: &mut Vec<usize>, first: usize, second: usize| {
         let root_a = find(representative, first);
         let root_b = find(representative, second);
@@ -246,55 +180,293 @@ fn collapse_walls_to_mid_surface(
             representative[root_a.max(root_b)] = root_a.min(root_b);
         }
     };
-
-    let mut by_original: OrderedMap<usize, Vec<usize>> = OrderedMap::new();
-    for (node, &original) in raw_original.iter().enumerate() {
-        by_original
-            .get_or_insert_with(original, Vec::new)
-            .push(node);
+    for (point, onto) in merged {
+        union(&mut representative, point, onto);
+    }
+    for group in raw.by_original().values() {
+        for &member in &group[1..] {
+            union(&mut representative, group[0], member);
+        }
     }
 
-    // T-junctions: a standing wall's node on a base wall's inner face reaches
-    // the base wall's mid-plane and is imprinted into the base wall's facets —
-    // where the standing wall's edge runs through the base wall's mid-surface.
-    // Along the base's own edge (a wall standing on the face that was KEPT,
-    // say) the walls already meet at shared nodes, and the node stays put.
-    let mut candidates: OrderedMap<i32, HashMap<usize, Vec3>> = OrderedMap::new();
-    for (node, &original) in raw_original.iter().enumerate() {
-        let Some(&delta) = junction_offset.get(&original) else {
+    let mut extraction = ShellExtraction::default();
+    let mut compact: HashMap<usize, usize> = HashMap::new();
+    for (triangle, nodes) in raw.triangles.iter().enumerate() {
+        // Every corner gets its compact id before the degeneracy check, as in
+        // the TS pipeline, so the node numbering matches it exactly.
+        let mut ids = [0usize; 3];
+        for (corner, &node) in nodes.iter().enumerate() {
+            let root = find(&mut representative, node);
+            ids[corner] = *compact.entry(root).or_insert_with(|| {
+                extraction.vertices.push(raw.vertices[root]);
+                extraction.node_source.push(raw.source[root]);
+                extraction.vertices.len() - 1
+            });
+        }
+        if ids[0] == ids[1] || ids[1] == ids[2] || ids[0] == ids[2] {
             continue;
-        };
-        let position = add(mesh.vertices[original], delta);
-        for base in inner_walls_of_node.get(&original).into_iter().flatten() {
-            let Some(wall) = keep.get(base) else {
+        }
+        extraction.triangles.push(ids);
+        extraction.thicknesses.push(raw.thickness[triangle]);
+        extraction
+            .triangle_source
+            .push(raw.triangle_source[triangle]);
+    }
+    Ok(extraction)
+}
+
+/// Which walls each original node lies on, and where it moves.
+struct WallNodes {
+    /// Every kept wall the node lies on — a junction node belongs to several.
+    walls_of_node: OrderedMap<usize, BTreeSet<i32>>,
+    /// Every wall whose inner (partner) face the node lies on.
+    inner_walls_of_node: HashMap<usize, BTreeSet<i32>>,
+    /// Offset onto the node's kept walls' mid-planes.
+    offset_of_node: HashMap<usize, Vec3>,
+    /// For a node that also lies on another wall's inner face, the offset
+    /// with that wall's mid-plane added: its place if it is a T-junction.
+    junction_offset: HashMap<usize, Vec3>,
+}
+
+fn wall_nodes(
+    mesh: &ShellizeMesh,
+    walls: &[PairedWall],
+    keep: &HashMap<i32, Wall>,
+    face_of: &HashMap<i32, &FaceProp>,
+) -> Result<WallNodes, ShellizeError> {
+    let wall = |face: i32| {
+        keep.get(&face)
+            .ok_or(ShellizeError::UnknownWallFace { face })
+    };
+    // Inner (partner) face → the wall it belongs to.
+    let partner_wall: HashMap<i32, i32> = walls
+        .iter()
+        .flat_map(|paired| {
+            paired
+                .partners
+                .iter()
+                .map(move |&partner| (partner, paired.wall.keep))
+        })
+        .collect();
+    let mut walls_of_node: OrderedMap<usize, BTreeSet<i32>> = OrderedMap::new();
+    let mut inner_walls_of_node: HashMap<usize, BTreeSet<i32>> = HashMap::new();
+    for (triangle, tri) in mesh.surf_tris.iter().enumerate() {
+        let face = mesh.surf_face[triangle];
+        if keep.contains_key(&face) {
+            for &vertex in tri {
+                walls_of_node
+                    .get_or_insert_with(vertex, BTreeSet::new)
+                    .insert(face);
+            }
+        } else if let Some(&owner) = partner_wall.get(&face) {
+            for &vertex in tri {
+                inner_walls_of_node.entry(vertex).or_default().insert(owner);
+            }
+        }
+    }
+    let mut offset_of_node: HashMap<usize, Vec3> = HashMap::with_capacity(walls_of_node.len());
+    let mut junction_offset: HashMap<usize, Vec3> = HashMap::new();
+    for (&vertex, node_walls) in walls_of_node.iter() {
+        let mut constraints = Vec::with_capacity(node_walls.len());
+        for &face in node_walls {
+            let kept = wall(face)?;
+            constraints.push(Constraint {
+                normal: kept.normal,
+                target: -kept.thickness / 2.0,
+            });
+        }
+        offset_of_node.insert(vertex, mid_surface_offset(&constraints));
+        let kept_only = constraints.len();
+        for &face in inner_walls_of_node.get(&vertex).into_iter().flatten() {
+            if node_walls.contains(&face) {
+                continue;
+            }
+            let base = wall(face)?;
+            let kept_face = face_of
+                .get(&face)
+                .ok_or(ShellizeError::UnknownWallFace { face })?;
+            constraints.push(Constraint {
+                normal: base.normal,
+                target: -from_mid_plane(mesh.vertices[vertex], base, kept_face),
+            });
+        }
+        if constraints.len() > kept_only {
+            junction_offset.insert(vertex, mid_surface_offset(&constraints));
+        }
+    }
+    Ok(WallNodes {
+        walls_of_node,
+        inner_walls_of_node,
+        offset_of_node,
+        junction_offset,
+    })
+}
+
+/// The collapsed walls before welding: one node per (wall, original node).
+#[derive(Default)]
+struct RawShell {
+    vertices: Vec<Vec3>,
+    /// Kept face (wall) per node.
+    source: Vec<i32>,
+    /// Original mesh node per node.
+    original: Vec<usize>,
+    triangles: Vec<[usize; 3]>,
+    thickness: Vec<f64>,
+    triangle_source: Vec<i32>,
+}
+
+impl RawShell {
+    /// Nodes per original mesh node, in first-seen order.
+    fn by_original(&self) -> OrderedMap<usize, Vec<usize>> {
+        let mut groups: OrderedMap<usize, Vec<usize>> = OrderedMap::new();
+        for (node, &original) in self.original.iter().enumerate() {
+            groups.get_or_insert_with(original, Vec::new).push(node);
+        }
+        groups
+    }
+
+    /// The facets of one wall.
+    fn wall_triangles(&self, wall: i32) -> Vec<[usize; 3]> {
+        self.triangles
+            .iter()
+            .zip(&self.triangle_source)
+            .filter(|&(_, &source)| source == wall)
+            .map(|(&tri, _)| tri)
+            .collect()
+    }
+}
+
+/// What the T-junction weld reads about the walls.
+struct Junctions<'walls> {
+    mesh: &'walls ShellizeMesh,
+    keep: &'walls HashMap<i32, Wall>,
+    face_of: &'walls HashMap<i32, &'walls FaceProp>,
+    nodes: &'walls WallNodes,
+}
+
+impl Junctions<'_> {
+    fn wall(&self, face: i32) -> Result<&Wall, ShellizeError> {
+        self.keep
+            .get(&face)
+            .ok_or(ShellizeError::UnknownWallFace { face })
+    }
+
+    fn kept_face(&self, wall: &Wall) -> Result<&FaceProp, ShellizeError> {
+        self.face_of
+            .get(&wall.keep)
+            .copied()
+            .ok_or(ShellizeError::UnknownWallFace { face: wall.keep })
+    }
+}
+
+/// T-junctions: a standing wall's node on a base wall's inner face reaches
+/// the base wall's mid-plane and is imprinted into the base wall's facets —
+/// where the standing wall's edge runs through the base wall's mid-surface,
+/// clear of its outline by a quarter of its thickness. Along the base's own
+/// outline (a wall standing on the face that was KEPT, say) the walls already
+/// meet at shared nodes, and the node stays put. Returns the junction nodes
+/// welded onto base nodes, to be joined with them.
+fn weld_t_junctions(
+    raw: &mut RawShell,
+    walls: &Junctions<'_>,
+) -> Result<Vec<(usize, usize)>, ShellizeError> {
+    let junctions = junction_candidates(raw, walls)?;
+    if junctions.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Move the accepted junction nodes — every copy of their original node,
+    // so the copies still weld — onto the base walls' mid-planes.
+    let by_original = raw.by_original();
+    for (_, points, _) in junctions.values() {
+        for &node in points {
+            let original = raw.original[node];
+            let Some(&delta) = walls.nodes.junction_offset.get(&original) else {
                 continue;
             };
+            for &copy in by_original.get(&original).into_iter().flatten() {
+                raw.vertices[copy] = add(walls.mesh.vertices[original], delta);
+            }
+        }
+    }
+
+    let mut merged = Vec::new();
+    let mut splits: Vec<([usize; 2], Vec<usize>)> = Vec::new();
+    let mut rebuilt: HashMap<i32, Vec<[usize; 3]>> = HashMap::new();
+    for (&base, (base_triangles, points, segments)) in junctions.iter() {
+        let wall = walls.wall(base)?;
+        // A base node no other wall touches may be nudged in its plane.
+        let movable = |node: usize| {
+            let original = raw.original[node];
+            raw.source[node] == base
+                && walls
+                    .nodes
+                    .walls_of_node
+                    .get(&original)
+                    .is_some_and(|kept| kept.len() == 1)
+                && !walls.nodes.inner_walls_of_node.contains_key(&original)
+        };
+        let mut vertices = std::mem::take(&mut raw.vertices);
+        let imprinted = imprint(
+            &mut vertices,
+            &Imprint {
+                normal: wall.normal,
+                triangles: base_triangles,
+                points,
+                segments,
+            },
+            &movable,
+        );
+        raw.vertices = vertices;
+        let imprinted = imprinted?;
+        merged.extend(imprinted.merged);
+        splits.extend(imprinted.splits);
+        rebuilt.insert(base, imprinted.triangles);
+    }
+
+    swap_imprinted(raw, &mut rebuilt, &splits);
+    Ok(merged)
+}
+
+/// Each base wall's junction: the standing walls' nodes that reach its
+/// mid-plane, and their facet edges that run through its mid-surface.
+fn junction_candidates(
+    raw: &RawShell,
+    walls: &Junctions<'_>,
+) -> Result<OrderedMap<i32, Junction>, ShellizeError> {
+    let mut candidates: OrderedMap<i32, HashMap<usize, Vec3>> = OrderedMap::new();
+    for (node, &original) in raw.original.iter().enumerate() {
+        let Some(&delta) = walls.nodes.junction_offset.get(&original) else {
+            continue;
+        };
+        let position = add(walls.mesh.vertices[original], delta);
+        for &base in walls
+            .nodes
+            .inner_walls_of_node
+            .get(&original)
+            .into_iter()
+            .flatten()
+        {
+            let wall = walls.wall(base)?;
             let reach = 1e-6 * wall.thickness.max(1.0);
-            if *base != raw_source[node]
-                && from_mid_plane(position, wall, kept_face(wall)?).abs() <= reach
+            if base != raw.source[node]
+                && from_mid_plane(position, wall, walls.kept_face(wall)?).abs() <= reach
             {
                 candidates
-                    .get_or_insert_with(*base, HashMap::new)
+                    .get_or_insert_with(base, HashMap::new)
                     .insert(node, position);
             }
         }
     }
-    // Per base wall: its facets, and the junction nodes and segments to imprint.
-    let mut junction_nodes: OrderedMap<i32, Junction> = OrderedMap::new();
+    let mut junctions: OrderedMap<i32, Junction> = OrderedMap::new();
     for (&base, on_base) in candidates.iter() {
-        let wall = keep
-            .get(&base)
-            .ok_or(ShellizeError::UnknownWallFace { face: base })?;
-        let base_triangles: Vec<[usize; 3]> = raw_triangles
-            .iter()
-            .zip(&raw_triangle_source)
-            .filter(|&(_, &source)| source == base)
-            .map(|(&tri, _)| tri)
-            .collect();
+        let wall = walls.wall(base)?;
+        let base_triangles = raw.wall_triangles(base);
+        let inside = |point: Vec3| clearance(&raw.vertices, &base_triangles, wall.normal, point);
         // The standing walls' facet edges that run along the junction.
         let mut segments: Vec<[usize; 2]> = Vec::new();
         let mut seen: HashSet<(usize, usize)> = HashSet::new();
-        for tri in &raw_triangles {
+        for tri in &raw.triangles {
             for corner in 0..3 {
                 let edge = [tri[corner], tri[(corner + 1) % 3]];
                 let (Some(&start), Some(&end)) = (on_base.get(&edge[0]), on_base.get(&edge[1]))
@@ -304,9 +476,9 @@ fn collapse_walls_to_mid_surface(
                 if !seen.insert((edge[0].min(edge[1]), edge[0].max(edge[1]))) {
                     continue;
                 }
-                let middle = scale(add(start, end), 0.5);
-                let inside = clearance(&raw_vertices, &base_triangles, wall.normal, middle);
-                if inside.is_some_and(|inside| inside >= 0.1 * norm(sub(end, start))) {
+                let through = inside(scale(add(start, end), 0.5))
+                    .is_some_and(|depth| depth > 0.25 * wall.thickness);
+                if through && inside(start).is_some() && inside(end).is_some() {
                     segments.push(edge);
                 }
             }
@@ -315,106 +487,75 @@ fn collapse_walls_to_mid_surface(
         points.sort_unstable();
         points.dedup();
         if !points.is_empty() {
-            junction_nodes.insert(base, (base_triangles, points, segments));
+            junctions.insert(base, (base_triangles, points, segments));
         }
     }
-    // Move the accepted junction nodes — every copy of their original node,
-    // so the copies still weld — onto the base walls' mid-planes.
-    for (_, points, _) in junction_nodes.values() {
-        for &node in points {
-            let original = raw_original[node];
-            let Some(&delta) = junction_offset.get(&original) else {
-                continue;
-            };
-            for &copy in by_original.get(&original).into_iter().flatten() {
-                raw_vertices[copy] = add(mesh.vertices[original], delta);
-            }
-        }
-    }
-    if !junction_nodes.is_empty() {
-        let mut rebuilt: HashMap<i32, Vec<[usize; 3]>> = HashMap::new();
-        for (&base, (base_triangles, points, segments)) in junction_nodes.iter() {
-            let wall = keep
-                .get(&base)
-                .ok_or(ShellizeError::UnknownWallFace { face: base })?;
-            // A base node no other wall touches may be nudged in its plane.
-            let movable = |node: usize| {
-                let original = raw_original[node];
-                raw_source[node] == base
-                    && walls_of_node
-                        .get(&original)
-                        .is_some_and(|walls| walls.len() == 1)
-                    && !inner_walls_of_node.contains_key(&original)
-            };
-            let imprinted = imprint(
-                &mut raw_vertices,
-                &Imprint {
-                    normal: wall.normal,
-                    triangles: base_triangles,
-                    points,
-                    segments,
-                },
-                &movable,
-            );
-            for (point, onto) in imprinted.merged {
-                union(&mut representative, point, onto);
-            }
-            rebuilt.insert(base, imprinted.triangles);
-        }
-        // Swap each base wall's facets for its imprinted ones, in place of
-        // its first facet, so the facet order stays wall by wall.
-        let mut triangles = Vec::with_capacity(raw_triangles.len());
-        let mut thickness = Vec::with_capacity(raw_triangles.len());
-        let mut source = Vec::with_capacity(raw_triangles.len());
-        for (index, &tri) in raw_triangles.iter().enumerate() {
-            let face = raw_triangle_source[index];
-            let Some(replacement) = rebuilt.get_mut(&face) else {
-                triangles.push(tri);
-                thickness.push(raw_thickness[index]);
-                source.push(face);
-                continue;
-            };
-            for tri in replacement.drain(..) {
-                triangles.push(tri);
-                thickness.push(raw_thickness[index]);
-                source.push(face);
-            }
-        }
-        raw_triangles = triangles;
-        raw_thickness = thickness;
-        raw_triangle_source = source;
-    }
+    Ok(junctions)
+}
 
-    for group in by_original.values() {
-        for &member in &group[1..] {
-            union(&mut representative, group[0], member);
+/// Swap each base wall's facets for its imprinted ones, in place of its first
+/// facet, so the facet order stays wall by wall; and split each standing-wall
+/// facet on a junction edge that base nodes lie on.
+fn swap_imprinted(
+    raw: &mut RawShell,
+    rebuilt: &mut HashMap<i32, Vec<[usize; 3]>>,
+    splits: &[([usize; 2], Vec<usize>)],
+) {
+    let split_of: HashMap<(usize, usize), &Vec<usize>> = splits
+        .iter()
+        .flat_map(|([start, end], between)| [((*start, *end), between), ((*end, *start), between)])
+        .collect();
+    let mut triangles = Vec::with_capacity(raw.triangles.len());
+    let mut thickness = Vec::with_capacity(raw.triangles.len());
+    let mut source = Vec::with_capacity(raw.triangles.len());
+    for (index, &tri) in raw.triangles.iter().enumerate() {
+        let face = raw.triangle_source[index];
+        let pieces: Vec<[usize; 3]> = if let Some(replacement) = rebuilt.get_mut(&face) {
+            std::mem::take(replacement)
+        } else {
+            split_facet(tri, &split_of, splits)
+        };
+        for piece in pieces {
+            triangles.push(piece);
+            thickness.push(raw.thickness[index]);
+            source.push(face);
         }
     }
+    raw.triangles = triangles;
+    raw.thickness = thickness;
+    raw.triangle_source = source;
+}
 
-    let mut extraction = ShellExtraction::default();
-    let mut compact: HashMap<usize, usize> = HashMap::new();
-    for (triangle, raw) in raw_triangles.iter().enumerate() {
-        // Every corner gets its compact id before the degeneracy check, as in
-        // the TS pipeline, so the node numbering matches it exactly.
-        let mut ids = [0usize; 3];
-        for (corner, &node) in raw.iter().enumerate() {
-            let root = find(&mut representative, node);
-            ids[corner] = *compact.entry(root).or_insert_with(|| {
-                extraction.vertices.push(raw_vertices[root]);
-                extraction.node_source.push(raw_source[root]);
-                extraction.vertices.len() - 1
-            });
-        }
-        if ids[0] == ids[1] || ids[1] == ids[2] || ids[0] == ids[2] {
+/// Fan-split a facet whose edge carries base nodes (`split_of`, keyed by the
+/// edge in either direction); a facet with no such edge comes back whole.
+fn split_facet(
+    tri: [usize; 3],
+    split_of: &HashMap<(usize, usize), &Vec<usize>>,
+    splits: &[([usize; 2], Vec<usize>)],
+) -> Vec<[usize; 3]> {
+    for corner in 0..3 {
+        let (start, end) = (tri[corner], tri[(corner + 1) % 3]);
+        let Some(between) = split_of.get(&(start, end)) else {
             continue;
+        };
+        // `between` runs from the segment's start; walk it along this edge.
+        let forward = splits
+            .iter()
+            .any(|(segment, nodes)| *segment == [start, end] && nodes == *between);
+        let mut chain = vec![start];
+        if forward {
+            chain.extend(between.iter().copied());
+        } else {
+            chain.extend(between.iter().rev().copied());
         }
-        extraction.triangles.push(ids);
-        extraction.thicknesses.push(raw_thickness[triangle]);
-        extraction
-            .triangle_source
-            .push(raw_triangle_source[triangle]);
+        chain.push(end);
+        let apex = tri[(corner + 2) % 3];
+        return chain
+            .windows(2)
+            .map(|piece| [piece[0], piece[1], apex])
+            .collect();
     }
-    Ok(extraction)
+    vec![tri]
 }
 
 /// Detect thin walls (opposite planar CAD-face pairs) and collapse each to a

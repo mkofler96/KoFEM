@@ -10,6 +10,7 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
+use crate::error::ShellizeError;
 use crate::geometry::{add, cross, dot, norm, scale, sub, Vec3};
 
 type Point2 = [f64; 2];
@@ -64,6 +65,10 @@ pub(crate) struct Imprint<'input> {
 pub(crate) struct Imprinted {
     pub triangles: Vec<[usize; 3]>,
     pub merged: Vec<(usize, usize)>,
+    /// Standing-wall edges (as given in [`Imprint::segments`]) that base nodes
+    /// lie on, with those nodes in order from the edge's start: the standing
+    /// wall's facets on that edge must be split at them to stay conforming.
+    pub splits: Vec<([usize; 2], Vec<usize>)>,
 }
 
 /// A planar triangulation with directed-edge adjacency: facet `[a, b, c]`
@@ -428,6 +433,31 @@ impl Triangulation<'_> {
         Placement::Inserted
     }
 
+    /// The facet nodes lying on the open segment `start`–`end`, in order from
+    /// `start`. No sequence of flips can make such a segment one facet edge.
+    fn on_segment(&self, [start, end]: [usize; 2]) -> Vec<usize> {
+        let [from, to] = [start, end].map(|node| self.point(node));
+        let along = [to[0] - from[0], to[1] - from[1]];
+        let length2 = along[0] * along[0] + along[1] * along[1];
+        let mut nodes: Vec<usize> = self.triangles.iter().flatten().flatten().copied().collect();
+        nodes.sort_unstable();
+        nodes.dedup();
+        let mut inside: Vec<(f64, usize)> = nodes
+            .into_iter()
+            .filter(|&node| node != start && node != end)
+            .filter_map(|node| {
+                let point = self.point(node);
+                let offset = [point[0] - from[0], point[1] - from[1]];
+                let fraction = (offset[0] * along[0] + offset[1] * along[1]) / length2;
+                let off_line = orient(from, to, point).abs();
+                (fraction > 1e-9 && fraction < 1.0 - 1e-9 && off_line <= 1e-7 * length2)
+                    .then_some((fraction, node))
+            })
+            .collect();
+        inside.sort_by(|left, right| left.0.total_cmp(&right.0));
+        inside.into_iter().map(|(_, node)| node).collect()
+    }
+
     /// Does the edge `first`–`second` cross the open segment `start`–`end`?
     fn crosses(&self, [first, second]: [usize; 2], [start, end]: [usize; 2]) -> bool {
         if [first, second]
@@ -561,15 +591,18 @@ pub(crate) fn clearance(
     Some(nearest)
 }
 
-/// Imprint the junction nodes and segments of one base wall. A node outside
-/// the base wall's facets is left where it is (not welded); `movable` says
-/// which base nodes are interior to their CAD face and may be nudged onto a
-/// junction node right next to them.
+/// Imprint the junction nodes and segments of one base wall; `movable` says
+/// which base nodes no other wall touches, so they may be nudged in the plane.
+///
+/// # Errors
+/// [`ShellizeError::UnweldableJunction`] when a node lies outside the base
+/// wall's facets or a junction edge cannot be made a facet edge — never a
+/// silently non-conforming weld.
 pub(crate) fn imprint(
     vertices: &mut [Vec3],
     imprint: &Imprint<'_>,
     movable: &dyn Fn(usize) -> bool,
-) -> Imprinted {
+) -> Result<Imprinted, ShellizeError> {
     let normal = imprint.normal;
     let origin = imprint
         .triangles
@@ -589,8 +622,8 @@ pub(crate) fn imprint(
         mesh.add(triangle);
     }
     let mut merged = Vec::new();
-    // Where each placed junction node ended up: itself, or the base node it
-    // was welded onto. A node outside the base wall is not placed.
+    // Where each junction node ended up: itself, or the base node it was
+    // welded onto.
     let mut placed: HashMap<usize, usize> = HashMap::new();
     for &node in imprint.points {
         match mesh.insert(node, movable) {
@@ -601,20 +634,101 @@ pub(crate) fn imprint(
             Placement::Inserted => {
                 placed.insert(node, node);
             }
-            Placement::Outside => {}
+            // The caller only passes nodes it found inside the base wall.
+            Placement::Outside => return Err(ShellizeError::UnweldableJunction),
         }
     }
-    for &[start, end] in imprint.segments {
-        let (Some(&start), Some(&end)) = (placed.get(&start), placed.get(&end)) else {
-            continue;
+    let mut splits = Vec::new();
+    for &segment in imprint.segments {
+        let ends = segment.map(|node| placed.get(&node).copied());
+        let [Some(start), Some(end)] = ends else {
+            return Err(ShellizeError::UnweldableJunction);
         };
-        if start != end {
-            mesh.recover([start, end]);
+        if start == end {
+            continue;
+        }
+        // A base node right on the junction line splits it: recover each
+        // piece, and have the standing wall's facet split there too.
+        let between = mesh.on_segment([start, end]);
+        let chain: Vec<usize> = std::iter::once(start)
+            .chain(between.iter().copied())
+            .chain(std::iter::once(end))
+            .collect();
+        for piece in chain.windows(2) {
+            if !mesh.recover([piece[0], piece[1]]) {
+                return Err(ShellizeError::UnweldableJunction);
+            }
+        }
+        if !between.is_empty() {
+            mesh.pinned.extend(between.iter().copied());
+            splits.push((segment, between));
         }
     }
     mesh.smooth(movable);
-    Imprinted {
+    Ok(Imprinted {
         triangles: mesh.triangles.into_iter().flatten().collect(),
         merged,
+        splits,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(
+        clippy::expect_used,
+        reason = "a test that cannot imprint should abort with the error"
+    )]
+
+    use super::{imprint, Imprint};
+    use crate::geometry::Vec3;
+
+    /// A base node lying ON a junction edge cannot be flipped out of the way:
+    /// the edge is recovered in two pieces through it, and reported so the
+    /// standing wall's facet is split there too.
+    #[test]
+    fn base_node_on_a_junction_edge_splits_it() {
+        // A 2×2 square fanned around its centre (node 4); the junction runs
+        // from the middle of its left side (5) to the middle of its right (6),
+        // straight through the centre.
+        let mut vertices: Vec<Vec3> = vec![
+            [0.0, 0.0, 0.0],
+            [2.0, 0.0, 0.0],
+            [2.0, 2.0, 0.0],
+            [0.0, 2.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [2.0, 1.0, 0.0],
+        ];
+        let triangles = [[0, 1, 4], [1, 2, 4], [2, 3, 4], [3, 0, 4]];
+        let imprinted = imprint(
+            &mut vertices,
+            &Imprint {
+                normal: [0.0, 0.0, 1.0],
+                triangles: &triangles,
+                points: &[5, 6],
+                segments: &[[5, 6]],
+            },
+            &|_| false,
+        )
+        .expect("imprinted");
+        assert_eq!(imprinted.splits, vec![([5, 6], vec![4])]);
+        let has_edge = |first: usize, second: usize| {
+            imprinted.triangles.iter().any(|tri| {
+                (0..3).any(|corner| {
+                    let edge = (tri[corner], tri[(corner + 1) % 3]);
+                    edge == (first, second) || edge == (second, first)
+                })
+            })
+        };
+        assert!(
+            has_edge(5, 4) && has_edge(4, 6),
+            "{:?}",
+            imprinted.triangles
+        );
+        assert_eq!(
+            imprinted.triangles.len(),
+            6,
+            "two edge splits of a 4-facet fan"
+        );
     }
 }
