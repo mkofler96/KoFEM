@@ -58,6 +58,10 @@ Run checks appropriate to the change; CI definitions are in
 - When you start work on a Linear issue, move it to **In Progress** before
   writing code. After that, let the GitHub integration manage its status.
 - Record meaningful evidence on the Linear issue, editing one comment in place.
+- Any change a user can see in the UI needs before/after screenshots
+  (Playwright, desktop and phone width) on that Linear evidence comment before
+  the PR is opened. GitHub does not always accept images, so Linear is the
+  record; the PR only links to the comment.
 - Feature PRs do not edit `CHANGELOG.md`. Releases require an explicit request;
   `prepare-release` creates the Linear plan and readiness tasks;
   `create-release` rechecks them and opens the version/changelog PR. The legacy
