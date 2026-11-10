@@ -1023,7 +1023,7 @@
 
 .logSection {
   margin-top: 14px;
-  border: 1px solid var(--border);
+  border: 1px solid #30363d;
   border-radius: var(--r-md);
   overflow: hidden;
 }
@@ -1034,29 +1034,30 @@
   gap: 6px;
   width: 100%;
   padding: 5px 10px;
-  background: var(--surface-3);
+  background: #161b22;
   border: none;
+  border-bottom: 1px solid #30363d;
   cursor: pointer;
   user-select: none;
   font-size: 10.5px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  color: var(--muted);
+  color: #8b949e;
   font-family: "IBM Plex Mono", ui-monospace, monospace;
   text-align: left;
   transition: background 100ms;
 }
 
 .logHeader:hover {
-  background: var(--hover);
+  background: #21262d;
 }
 
 .logChevron {
   font-size: 7px;
   display: inline-block;
   transition: transform 150ms ease;
-  color: var(--muted-2);
+  color: #6e7681;
   flex-shrink: 0;
 }
 
@@ -1082,8 +1083,8 @@
 
 .logBadge {
   margin-left: auto;
-  background: var(--border);
-  color: var(--muted);
+  background: #21262d;
+  color: #8b949e;
   border-radius: 10px;
   padding: 1px 6px;
   font-size: 10px;
@@ -1101,17 +1102,13 @@
 }
 
 .logLine {
-  color: #6e7681;
+  color: #c9d1d9;
   white-space: pre-wrap;
   word-break: break-all;
 }
 
-.logLineLast {
-  color: #c9d1d9;
-}
-
 .logEmpty {
-  color: #3d444d;
+  color: #6e7681;
   font-style: italic;
 }
 

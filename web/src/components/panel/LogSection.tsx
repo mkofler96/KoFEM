@@ -44,11 +44,8 @@ export function LogSection({
           {logs.length === 0 ? (
             <div className={styles.logEmpty}>Waiting…</div>
           ) : (
-            logs.map((entry, i) => (
-              <div
-                key={entry.id}
-                className={`${styles.logLine} ${i === logs.length - 1 ? styles.logLineLast : ""}`}
-              >
+            logs.map((entry) => (
+              <div key={entry.id} className={styles.logLine}>
                 {entry.text}
               </div>
             ))
