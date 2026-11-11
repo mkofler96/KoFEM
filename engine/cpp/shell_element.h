@@ -39,11 +39,39 @@ std::vector<double> facet_thicknesses(int n_tris, double thickness,
                                       const std::vector<double>& thicknesses,
                                       const char* who);
 
+// Elastic constants of each of `n_tris` facets, one entry per facet.
+struct FacetMaterials {
+    std::vector<double> young;
+    std::vector<double> poisson;
+};
+
+// Material of each of `n_tris` facets, mirroring facet_thicknesses. Non-empty
+// `youngs`/`poissons` fields are the material source (several shell bodies of
+// different materials in one mesh): both must be given and hold exactly one
+// value per facet; the uniform `young`/`poisson` are then ignored. Two empty
+// fields mean every facet takes the uniform pair. Every E must be finite and
+// positive and every ν finite with |ν| < 1 (the plane-stress law divides by
+// 1 − ν²). Throws std::runtime_error, prefixed with `who`, on any other input.
+FacetMaterials facet_materials(int n_tris, double young, double poisson,
+                               const std::vector<double>& youngs,
+                               const std::vector<double>& poissons, const char* who);
+
 // One value per shell triangle: plane-stress von Mises at the worse of the two
 // surfaces z = ±t/2, combining the CST membrane strain with the DKT bending
 // curvature at the facet centroid (σ(z) = D·(ε_m + z·κ)). `dofs` holds 6 values
 // per node (the ShellResult::dofs layout); the thickness inputs follow
-// facet_thicknesses.
+// facet_thicknesses and the material inputs follow facet_materials, so each
+// facet's stress uses its own (E, ν).
+std::vector<double> shell_von_mises(const std::vector<double>& vertices,
+                                    const std::vector<int>& triangles,
+                                    double thickness,
+                                    const std::vector<double>& thicknesses,
+                                    double young, double poisson,
+                                    const std::vector<double>& youngs,
+                                    const std::vector<double>& poissons,
+                                    const std::vector<double>& dofs);
+
+// Single-material form: every facet uses the uniform (young, poisson).
 std::vector<double> shell_von_mises(const std::vector<double>& vertices,
                                     const std::vector<int>& triangles,
                                     double thickness,

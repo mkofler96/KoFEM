@@ -16,20 +16,26 @@ import { buildVertexIndexer } from "../solveMeshPacking.js";
 import { shellPointLoads } from "../solveLoads.js";
 import { shellDirichlet } from "./bcs.js";
 
-// Resolve the shell section: one (E, ν) pair plus the per-facet thickness
-// field. The engine's shell solver takes a single material for the whole mesh;
-// a model whose shell elements span several materials cannot be honoured, so
-// refuse loudly instead of solving part of it with the wrong stiffness
-// (mirrors coupledMaterials, issue #376). Thickness lives on each element's
+// Resolve the shell section per facet: the distinct materials the shell
+// elements use (in first-use order), one 1-based index into them per element
+// (the engine's mesh.attributes contract, as for solids), and the per-facet
+// thickness field. Shell bodies of different materials share one shell mesh;
+// each facet keeps its own body's (E, ν). Thickness lives on each element's
 // property (PSHELL semantics) and must be a positive number.
 export function resolveShellSection(
   shellElements: Element[],
   materials: Material[],
   properties: Property[],
-): { young: number; poisson: number; thicknesses: Float64Array } {
+): {
+  materials: Material[];
+  attributes: Int32Array;
+  thicknesses: Float64Array;
+} {
   const propById = new Map(properties.map((p) => [p.id, p]));
   const matById = new Map(materials.map((mat) => [mat.id, mat]));
-  const usedMats = new Map<number, Material>();
+  const usedMats: Material[] = [];
+  const indexByMatId = new Map<number, number>();
+  const attributes = new Int32Array(shellElements.length);
   const thicknesses = new Float64Array(shellElements.length);
   for (let i = 0; i < shellElements.length; i++) {
     const el = shellElements[i];
@@ -51,17 +57,14 @@ export function resolveShellSection(
         `shell solve: property ${prop.id} references material ${prop.materialId}, ` +
           "which does not exist",
       );
-    usedMats.set(mat.id, mat);
+    let index = indexByMatId.get(mat.id);
+    if (index === undefined) {
+      index = usedMats.push(mat);
+      indexByMatId.set(mat.id, index);
+    }
+    attributes[i] = index;
   }
-  if (usedMats.size > 1) {
-    const names = [...usedMats.values()].map((mat) => mat.name).join(", ");
-    throw new Error(
-      "shell solve: the shell solver supports one material, but the shell elements span " +
-        `${usedMats.size} distinct materials (${names}) — assign a single material to the shell body`,
-    );
-  }
-  const mat = [...usedMats.values()][0];
-  return { young: mat.young, poisson: mat.poisson, thicknesses };
+  return { materials: usedMats, attributes, thicknesses };
 }
 
 // Pack a pure-shell (all-CTRIA3) model into the { mesh, mat_json, bcs_json }
@@ -103,11 +106,11 @@ export function buildShellEngineInputs(payload: SolveModel): ShellEngineInputs {
       triangles[3 * i + k] = vid(nodeIds[k], "CTRIA3 element");
   }
 
-  const { young, poisson, thicknesses } = resolveShellSection(
-    elements,
-    materials,
-    properties,
-  );
+  const {
+    materials: shellMaterials,
+    attributes,
+    thicknesses,
+  } = resolveShellSection(elements, materials, properties);
   const { fixed_vertices, fixed_dofs, prescribed_dofs } = shellDirichlet(
     constraints,
     vid,
@@ -119,8 +122,13 @@ export function buildShellEngineInputs(payload: SolveModel): ShellEngineInputs {
   const point_loads = shellPointLoads(loads, surfaceLoads, posOf, vid);
 
   return {
-    mesh: { vertices, triangles, thicknesses },
-    matJson: JSON.stringify({ young_modulus: young, poisson_ratio: poisson }),
+    mesh: { vertices, triangles, thicknesses, attributes },
+    matJson: JSON.stringify(
+      shellMaterials.map((mat) => ({
+        young_modulus: mat.young,
+        poisson_ratio: mat.poisson,
+      })),
+    ),
     bcsJson: JSON.stringify({
       fixed_vertices,
       fixed_dofs,
