@@ -1,7 +1,7 @@
 {
-  "sourceRevision": "22e02409385b1171f9352851c7928ad220dd8fe8",
-  "recordedAt": "2026-11-11T18:38:50.964Z",
-  "engine": "engine-274b992a8a59",
+  "sourceRevision": "d00086c05f528e2ce23e81b709320f6c79150d17",
+  "recordedAt": "2026-11-11T18:55:53.610Z",
+  "engine": "engine-c082bfd24820",
   "execution": "Real WASM optimize_topology (SIMP, MMA, sensitivity filter) on the existing structured-hex benchmarks; normalized E = 1, ν = 0.3 and unit load",
   "commands": [
     "node examples/validation/topopt/run.mjs",

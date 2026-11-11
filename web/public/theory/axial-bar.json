@@ -1,7 +1,7 @@
 {
-  "generated": "2026-11-11T18:38:26.887Z",
-  "sourceRevision": "22e02409385b1171f9352851c7928ad220dd8fe8",
-  "engine": "engine-274b992a8a59",
+  "generated": "2026-11-11T18:55:30.148Z",
+  "sourceRevision": "d00086c05f528e2ce23e81b709320f6c79150d17",
+  "engine": "engine-c082bfd24820",
   "command": "bun examples/validation/axial-bar-study.mjs --report",
   "setup": {
     "inputs": [
