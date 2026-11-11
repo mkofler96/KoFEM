@@ -693,6 +693,13 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
             extraPiece && piecesAs === "bodies" ? nextBody++ : bodyOf(source);
           return { ...source, id: j + 1, body };
         });
+        // A Boolean that fuses bodies leaves gaps in the numbering: number the
+        // bodies 1, 2, … again, in the order of their first solid.
+        const renumber = new Map<number, number>();
+        for (const p of s.properties)
+          if (!renumber.has(bodyOf(p)))
+            renumber.set(bodyOf(p), renumber.size + 1);
+        for (const p of s.properties) p.body = renumber.get(bodyOf(p));
       } else
         s.properties =
           cadBodies.length === Math.max(1, bodyCount)

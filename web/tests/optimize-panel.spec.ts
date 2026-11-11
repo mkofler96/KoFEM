@@ -284,18 +284,25 @@ test("Optimize panel: a Keep solid region stays at full density", async ({
     timeout: 90_000,
   });
 
-  // All-hex model: the design order is the store order.
-  const density = await page.evaluate(() =>
-    Array.from(
-      (
-        window as unknown as {
-          __kofemStore: {
-            getState(): { densityResult: { density: Float64Array } | null };
-          };
-        }
-      ).__kofemStore.getState().densityResult?.density ?? [],
-    ),
-  );
+  // All-hex model: the design order is the store order. The threshold control
+  // already shows the live density while the run goes on, so wait for the
+  // final result in the store.
+  const readDensity = () =>
+    page.evaluate(() =>
+      Array.from(
+        (
+          window as unknown as {
+            __kofemStore: {
+              getState(): { densityResult: { density: Float64Array } | null };
+            };
+          }
+        ).__kofemStore.getState().densityResult?.density ?? [],
+      ),
+    );
+  await expect
+    .poll(async () => (await readDensity()).length, { timeout: 90_000 })
+    .toBe(kept.length);
+  const density = await readDensity();
   expect(density.length).toBe(kept.length);
   expect(density.filter((_, i) => kept[i]).every((d) => d === 1)).toBe(true);
   expect(density.filter((_, i) => !kept[i]).some((d) => d < 1)).toBe(true);
