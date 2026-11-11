@@ -108,7 +108,7 @@ test("split a body in two: the halves are separate bodies, bonded on mesh", asyn
   await page.getByRole("button", { name: "Close" }).click();
   await openTree(page, "mesh");
   await page.getByTestId("max-element-size").fill("20");
-  await page.getByRole("button", { name: /mesh STEP volume/i }).click();
+  await page.getByRole("button", { name: /generate mesh/i }).click();
   await expect
     .poll(
       () =>
@@ -243,7 +243,7 @@ test("a split that lands during a BC pick ends the pick session", async ({
   await importStepText(page, BLOCK);
   await page.getByTestId("max-element-size").fill("20");
   await page.getByTestId("min-element-size").fill("2");
-  await page.getByRole("button", { name: /mesh STEP volume/i }).click();
+  await page.getByRole("button", { name: /generate mesh/i }).click();
   await expect
     .poll(
       () =>
