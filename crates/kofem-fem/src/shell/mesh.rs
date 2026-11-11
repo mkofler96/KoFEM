@@ -52,7 +52,7 @@ impl ShellMesh {
             return Err(FemError::EmptyShellMesh);
         }
         if vertices.len() / 3 > MAX_SHELL_VERTICES {
-            return Err(FemError::TooManyVertices {
+            return Err(FemError::TooManyNodes {
                 count: vertices.len() / 3,
                 max: MAX_SHELL_VERTICES,
             });
