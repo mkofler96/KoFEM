@@ -40,8 +40,13 @@ struct ShellInput {
     std::vector<int> triangles;     // 3·nTris, three 0-based vertex indices/tri
     double thickness = 0.0;         // uniform thickness, used only when `thicknesses` is empty
     std::vector<double> thicknesses;  // per-triangle thickness (length nTris) or empty
-    double young = 0.0;             // Young's modulus E
-    double poisson = 0.0;           // Poisson ratio ν
+    double young = 0.0;             // uniform Young's modulus E, used only when `youngs` is empty
+    double poisson = 0.0;           // uniform Poisson ratio ν, used only when `poissons` is empty
+    // Per-triangle (E, ν) (length nTris each) or both empty: shell bodies of
+    // different materials become one shell mesh with a material field, exactly
+    // as walls of differing gauge share one mesh through `thicknesses`.
+    std::vector<double> youngs;
+    std::vector<double> poissons;
     // Optional per-facet stiffness multiplier (length nTris). Empty ⇒ every facet
     // at full modulus. The facet stiffness is linear in E, so a SIMP density ρ_e
     // enters as element_scale[e] = E(ρ_e)/E₀ and scales the whole 18×18 element
@@ -99,8 +104,11 @@ struct CoupledInput {
     std::vector<double> vertices;        // 3·n_nodes, xyz interleaved
     std::vector<SolidTriplet> solid_stiffness;  // over 3·node+comp
     std::vector<int> triangles;          // 3·nTris, 0-based node indices (shell)
-    double shell_young = 0.0;
-    double shell_poisson = 0.0;
+    double shell_young = 0.0;            // uniform shell E, used only when `shell_youngs` is empty
+    double shell_poisson = 0.0;          // uniform shell ν, used only when `shell_poissons` is empty
+    // Per-triangle shell (E, ν) (length nTris each) or both empty, as ShellInput.
+    std::vector<double> shell_youngs;
+    std::vector<double> shell_poissons;
     double thickness = 0.0;              // uniform thickness, used only when `thicknesses` is empty
     std::vector<double> thicknesses;     // per-triangle thickness (length nTris) or empty
     // Optional per-facet stiffness multiplier (length nTris), as ShellInput. The

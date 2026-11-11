@@ -17,31 +17,6 @@ export default {
   ],
   body: `
     <p class="lede">Which combinations of units can be used together in a finite element model?</p>
-
-    <h2 id="consistency">What consistency means</h2>
-    <p>A consistent system makes the governing equations work directly on the
-      numerical values, without hidden conversion factors. Choose mass, length
-      and time units; force, stress, energy and density then follow. With square
-      brackets denoting the unit of a quantity:</p>
-    <div class="equation" tabindex="0" role="region" aria-label="Force units equal mass times length divided by time squared">
-      ${texBlock("[F] = \\frac{[M][L]}{[T]^2}.")}
-    </div>
-    <p>Here ${tex("F")} is force, ${tex("M")} is mass,
-      ${tex("L")} is length and ${tex("T")} is time. Stress and Young’s modulus
-      have force-per-area units; energy has force-times-length units; mass density
-      has mass-per-volume units:</p>
-    <div class="equation" tabindex="0" role="region" aria-label="Units of stress, Young’s modulus, energy and mass density">
-      ${texBlock("[σ] = [E] = \\frac{[F]}{[L]^2}, \\quad [W] = [F][L], \\quad [ρ] = \\frac{[M]}{[L]^3}.")}
-    </div>
-    <p>The symbols ${tex("σ")}, ${tex("E")}, ${tex("W")} and ${tex("ρ")}
-      denote stress, Young’s modulus, energy and mass density respectively.
-      One can instead choose force, length and time and derive the mass unit.
-      This is why N–mm–s uses tonnes, while N–mm–ms uses grams.</p>
-    <p>For the general method, see <a href="#ref-barenblatt">Barenblatt’s textbook</a>
-      and <a href="#ref-buckingham">Buckingham’s dimensional-analysis paper</a>.
-      Matching dimensions is a necessary check on an equation; it cannot by
-      itself establish the physical model or determine a dimensionless factor.</p>
-
     <h2 id="systems">Common unit systems</h2>
     <p>Each row is a complete, consistent choice. The alternatives below are a
       general FEM reference; they do not imply that a particular program offers
@@ -114,6 +89,31 @@ export default {
       has length 1 m, area 0.0001 m², force 1000 N and modulus
       ${tex("210 × 10^9\\text{ Pa}")} in SI. Its extension is approximately
       ${tex("4.7619 × 10^{-5}\\text{ m} = 0.047619\\text{ mm}")} in either system.</p>
+    <h2 id="consistency">What consistency means</h2>
+    <p>A consistent system makes the governing equations work directly on the
+      numerical values, without hidden conversion factors. Choose mass, length
+      and time units; force, stress, energy and density then follow. With square
+      brackets denoting the unit of a quantity:</p>
+    <div class="equation" tabindex="0" role="region" aria-label="Force units equal mass times length divided by time squared">
+      ${texBlock("[F] = \\frac{[M][L]}{[T]^2}.")}
+    </div>
+    <p>Here ${tex("F")} is force, ${tex("M")} is mass,
+      ${tex("L")} is length and ${tex("T")} is time. Stress and Young’s modulus
+      have force-per-area units; energy has force-times-length units; mass density
+      has mass-per-volume units:</p>
+    <div class="equation" tabindex="0" role="region" aria-label="Units of stress, Young’s modulus, energy and mass density">
+      ${texBlock("[σ] = [E] = \\frac{[F]}{[L]^2}, \\quad [W] = [F][L], \\quad [ρ] = \\frac{[M]}{[L]^3}.")}
+    </div>
+    <p>The symbols ${tex("σ")}, ${tex("E")}, ${tex("W")} and ${tex("ρ")}
+      denote stress, Young’s modulus, energy and mass density respectively.
+      One can instead choose force, length and time and derive the mass unit.
+      This is why N–mm–s uses tonnes, while N–mm–ms uses grams.</p>
+    <p>For the general method, see <a href="#ref-barenblatt">Barenblatt’s textbook</a>
+      and <a href="#ref-buckingham">Buckingham’s dimensional-analysis paper</a>.
+      Matching dimensions is a necessary check on an equation; it cannot by
+      itself establish the physical model or determine a dimensionless factor.</p>
+
+
 
     <h2 id="dimensional-analysis-example">Example: blast-wave scaling</h2>
     <p>The famous historical example is G. I. Taylor’s analysis of the 1945

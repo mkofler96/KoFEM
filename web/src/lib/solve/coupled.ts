@@ -172,6 +172,7 @@ export interface CoupledEngineInputs {
     triangles: Int32Array;
     thicknesses: Float64Array;
     attributes: Int32Array;
+    shell_attributes: Int32Array;
   };
   coupling: EngineCoupling;
   bcs: EngineCoupledBcs;
@@ -180,6 +181,7 @@ export interface CoupledEngineInputs {
   solidElements: Element[];
   shellElements: Element[];
   solidMaterialNames: string[];
+  shellMaterialNames: string[];
   couplingCount: number;
   declaredCouplings: number;
 }
@@ -308,7 +310,13 @@ export function buildCoupledEngineInputs(
     nodes,
     vid,
   );
-  const { mat, solidAttributes, solidMaterialNames } = mixedCoupledMaterials(
+  const {
+    mat,
+    solidAttributes,
+    shellAttributes,
+    solidMaterialNames,
+    shellMaterialNames,
+  } = mixedCoupledMaterials(
     materials,
     properties,
     shellElements,
@@ -322,6 +330,7 @@ export function buildCoupledEngineInputs(
       triangles: Int32Array.from(model.triangles),
       thicknesses: Float64Array.from(model.thicknesses),
       attributes: Int32Array.from(solidAttributes),
+      shell_attributes: Int32Array.from(shellAttributes),
     },
     coupling: engineCoupling(coupling),
     bcs: engineCoupledBcs(dirichlet, nodalLoads),
@@ -330,6 +339,7 @@ export function buildCoupledEngineInputs(
     solidElements,
     shellElements,
     solidMaterialNames,
+    shellMaterialNames,
     couplingCount: coupling.ref.length,
     declaredCouplings: couplings.length,
   };

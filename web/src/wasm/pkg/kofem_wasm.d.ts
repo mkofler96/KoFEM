@@ -195,11 +195,14 @@ export type TopOptResult =
  *  interleaved (length 3·nNodes); `triangles` is three 0-based vertex indices
  *  per triangle (length 3·nTris). `thicknesses` is an optional per-triangle
  *  thickness field (length nTris) for walls of differing gauge; when omitted the
- *  scalar thickness in the material JSON is used. */
+ *  scalar thickness in the material JSON is used. `attributes` is one 1-based
+ *  material index per triangle for shell bodies of different materials; it is
+ *  required when the material JSON is an array of more than one material. */
 export interface ShellMesh {
   vertices: Float64Array
   triangles: Int32Array
   thicknesses?: Float64Array
+  attributes?: Int32Array
 }
 
 /** Shell solve output: three translation components (u,v,w) per vertex
@@ -280,7 +283,9 @@ export interface KofemModule {
     order: number,
   ): StaticSolveResult | Promise<StaticSolveResult>
   /** Kirchhoff flat-facet shell solve on a triangle surface mesh. `mat_json` is
-   *  `{ young_modulus, poisson_ratio, thickness }`; `bcs_json` is
+   *  `{ young_modulus, poisson_ratio, thickness? }`, or an array of
+   *  `{ young_modulus, poisson_ratio }` selected per triangle by
+   *  `mesh.attributes` (thickness then comes from `mesh.thicknesses`); `bcs_json` is
    *  `{ fixed_vertices?, fixed_dofs?, prescribed_dofs?, point_loads? }` with DOF
    *  components 0..5 = (u,v,w,θx,θy,θz). `fixed_*` always mean u = 0;
    *  `prescribed_dofs: [{vertex, dof, value}]` drives a DOF to a non-zero value
@@ -293,10 +298,13 @@ export interface KofemModule {
   ): ShellSolveResult | Promise<ShellSolveResult>
   /** Coupled solid(tet)+shell solve. MFEM assembles the solid; DKT shells and
    *  RBE3 distributing couplings are added and solved together.
-   *   mesh:     { vertices, tets, triangles, thicknesses?, attributes? }
+   *   mesh:     { vertices, tets, triangles, thicknesses?, attributes?,
+   *               shell_attributes? }
    *             `attributes` is one 1-based solid-material index per TET, into
    *             the `mat_json.solid` array; omitted means every tet uses the
-   *             first material.
+   *             first material. `shell_attributes` is the same per shell
+   *             TRIANGLE into the `mat_json.shell` array, and is required when
+   *             that array holds more than one material.
    *   coupling: { ref, offsets, solid, mpc?, weights?, dof_mask?, relaxation? }  CSR-style:
    *             reference node ref[k] ties to solid[offsets[k]..offsets[k+1]).
    *             Optional mpc[k] = 1 selects the relaxed shell-to-solid MPC
@@ -313,10 +321,10 @@ export interface KofemModule {
    *               prescribed_vals? }  (DOF = 6·node+component). fixed_dofs are
    *               constrained to ZERO; prescribed_dofs[k] is driven to
    *               prescribed_vals[k] (inhomogeneous essential BC).
-   *   mat_json: { solid, shell:{young_modulus,poisson_ratio} } — `solid` is
-   *             either one material object (every tet uses it) or an ARRAY of
-   *             materials selected per tet by `mesh.attributes`. The shell side
-   *             stays single: a solve idealises one body as shells (#376). */
+   *   mat_json: { solid, shell } — each is either one material object
+   *             `{young_modulus,poisson_ratio}` (the whole domain uses it) or an
+   *             ARRAY of materials, selected per tet by `mesh.attributes` and
+   *             per shell triangle by `mesh.shell_attributes`. */
   solve_coupled(
     mesh: {
       vertices: Float64Array
@@ -324,6 +332,7 @@ export interface KofemModule {
       triangles: Int32Array
       thicknesses?: Float64Array
       attributes?: Int32Array
+      shell_attributes?: Int32Array
     },
     coupling: {
       weights?: Float64Array
@@ -387,6 +396,7 @@ export interface KofemModule {
       triangles: Int32Array
       thicknesses?: Float64Array
       attributes?: Int32Array
+      shell_attributes?: Int32Array
     },
     coupling: {
       weights?: Float64Array

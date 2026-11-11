@@ -810,31 +810,6 @@
         <details class="article-contents"><summary>On this page</summary><ul><li><a href="#consistency">What consistency means</a></li><li><a href="#systems">Common unit systems</a></li><li><a href="#material-values">The same material in different units</a></li><li><a href="#practical-checks">Practical checks</a></li><li><a href="#dimensional-analysis-example">Example: blast-wave scaling</a></li><li><a href="#references">References</a></li></ul></details>
 
     <p class="lede">Which combinations of units can be used together in a finite element model?</p>
-
-    <h2 id="consistency">What consistency means</h2>
-    <p>A consistent system makes the governing equations work directly on the
-      numerical values, without hidden conversion factors. Choose mass, length
-      and time units; force, stress, energy and density then follow. With square
-      brackets denoting the unit of a quantity:</p>
-    <div class="equation" tabindex="0" role="region" aria-label="Force units equal mass times length divided by time squared">
-      <math display="block"><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>F</mi><mo stretchy="false" lspace="0" rspace="0">]</mo><mo>=</mo><mfrac><mrow><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>M</mi><mo stretchy="false" lspace="0" rspace="0">]</mo><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>L</mi><mo stretchy="false" lspace="0" rspace="0">]</mo></mrow><mrow><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>T</mi><msup><mo stretchy="false" lspace="0" rspace="0">]</mo><mn>2</mn></msup></mrow></mfrac><mo lspace="0" rspace="0">.</mo></math>
-    </div>
-    <p>Here <math><mi>F</mi></math> is force, <math><mi>M</mi></math> is mass,
-      <math><mi>L</mi></math> is length and <math><mi>T</mi></math> is time. Stress and Young’s modulus
-      have force-per-area units; energy has force-times-length units; mass density
-      has mass-per-volume units:</p>
-    <div class="equation" tabindex="0" role="region" aria-label="Units of stress, Young’s modulus, energy and mass density">
-      <math display="block"><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>σ</mi><mo stretchy="false" lspace="0" rspace="0">]</mo><mo>=</mo><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>E</mi><mo stretchy="false" lspace="0" rspace="0">]</mo><mo>=</mo><mfrac><mrow><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>F</mi><mo stretchy="false" lspace="0" rspace="0">]</mo></mrow><mrow><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>L</mi><msup><mo stretchy="false" lspace="0" rspace="0">]</mo><mn>2</mn></msup></mrow></mfrac><mo>,</mo><mspace width="1em"/><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>W</mi><mo stretchy="false" lspace="0" rspace="0">]</mo><mo>=</mo><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>F</mi><mo stretchy="false" lspace="0" rspace="0">]</mo><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>L</mi><mo stretchy="false" lspace="0" rspace="0">]</mo><mo>,</mo><mspace width="1em"/><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>ρ</mi><mo stretchy="false" lspace="0" rspace="0">]</mo><mo>=</mo><mfrac><mrow><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>M</mi><mo stretchy="false" lspace="0" rspace="0">]</mo></mrow><mrow><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>L</mi><msup><mo stretchy="false" lspace="0" rspace="0">]</mo><mn>3</mn></msup></mrow></mfrac><mo lspace="0" rspace="0">.</mo></math>
-    </div>
-    <p>The symbols <span class="math-nowrap"><math><mi>σ</mi></math>,</span> <span class="math-nowrap"><math><mi>E</mi></math>,</span> <math><mi>W</mi></math> and <math><mi>ρ</mi></math>
-      denote stress, Young’s modulus, energy and mass density respectively.
-      One can instead choose force, length and time and derive the mass unit.
-      This is why N–mm–s uses tonnes, while N–mm–ms uses grams.</p>
-    <p>For the general method, see <a href="#ref-barenblatt">Barenblatt’s textbook</a>
-      and <a href="#ref-buckingham">Buckingham’s dimensional-analysis paper</a>.
-      Matching dimensions is a necessary check on an equation; it cannot by
-      itself establish the physical model or determine a dimensionless factor.</p>
-
     <h2 id="systems">Common unit systems</h2>
     <p>Each row is a complete, consistent choice. The alternatives below are a
       general FEM reference; they do not imply that a particular program offers
@@ -907,6 +882,31 @@
       has length 1 m, area 0.0001 m², force 1000 N and modulus
       <math><mn>210</mn><mo>×</mo><msup><mn>10</mn><mn>9</mn></msup><mtext> Pa</mtext></math> in SI. Its extension is approximately
       <math><mn>4.7619</mn><mo>×</mo><msup><mn>10</mn><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>5</mn></mrow></msup><mtext> m</mtext><mo>=</mo><mn>0.047619</mn><mtext> mm</mtext></math> in either system.</p>
+    <h2 id="consistency">What consistency means</h2>
+    <p>A consistent system makes the governing equations work directly on the
+      numerical values, without hidden conversion factors. Choose mass, length
+      and time units; force, stress, energy and density then follow. With square
+      brackets denoting the unit of a quantity:</p>
+    <div class="equation" tabindex="0" role="region" aria-label="Force units equal mass times length divided by time squared">
+      <math display="block"><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>F</mi><mo stretchy="false" lspace="0" rspace="0">]</mo><mo>=</mo><mfrac><mrow><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>M</mi><mo stretchy="false" lspace="0" rspace="0">]</mo><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>L</mi><mo stretchy="false" lspace="0" rspace="0">]</mo></mrow><mrow><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>T</mi><msup><mo stretchy="false" lspace="0" rspace="0">]</mo><mn>2</mn></msup></mrow></mfrac><mo lspace="0" rspace="0">.</mo></math>
+    </div>
+    <p>Here <math><mi>F</mi></math> is force, <math><mi>M</mi></math> is mass,
+      <math><mi>L</mi></math> is length and <math><mi>T</mi></math> is time. Stress and Young’s modulus
+      have force-per-area units; energy has force-times-length units; mass density
+      has mass-per-volume units:</p>
+    <div class="equation" tabindex="0" role="region" aria-label="Units of stress, Young’s modulus, energy and mass density">
+      <math display="block"><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>σ</mi><mo stretchy="false" lspace="0" rspace="0">]</mo><mo>=</mo><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>E</mi><mo stretchy="false" lspace="0" rspace="0">]</mo><mo>=</mo><mfrac><mrow><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>F</mi><mo stretchy="false" lspace="0" rspace="0">]</mo></mrow><mrow><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>L</mi><msup><mo stretchy="false" lspace="0" rspace="0">]</mo><mn>2</mn></msup></mrow></mfrac><mo>,</mo><mspace width="1em"/><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>W</mi><mo stretchy="false" lspace="0" rspace="0">]</mo><mo>=</mo><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>F</mi><mo stretchy="false" lspace="0" rspace="0">]</mo><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>L</mi><mo stretchy="false" lspace="0" rspace="0">]</mo><mo>,</mo><mspace width="1em"/><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>ρ</mi><mo stretchy="false" lspace="0" rspace="0">]</mo><mo>=</mo><mfrac><mrow><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>M</mi><mo stretchy="false" lspace="0" rspace="0">]</mo></mrow><mrow><mo stretchy="false" lspace="0" rspace="0">[</mo><mi>L</mi><msup><mo stretchy="false" lspace="0" rspace="0">]</mo><mn>3</mn></msup></mrow></mfrac><mo lspace="0" rspace="0">.</mo></math>
+    </div>
+    <p>The symbols <span class="math-nowrap"><math><mi>σ</mi></math>,</span> <span class="math-nowrap"><math><mi>E</mi></math>,</span> <math><mi>W</mi></math> and <math><mi>ρ</mi></math>
+      denote stress, Young’s modulus, energy and mass density respectively.
+      One can instead choose force, length and time and derive the mass unit.
+      This is why N–mm–s uses tonnes, while N–mm–ms uses grams.</p>
+    <p>For the general method, see <a href="#ref-barenblatt">Barenblatt’s textbook</a>
+      and <a href="#ref-buckingham">Buckingham’s dimensional-analysis paper</a>.
+      Matching dimensions is a necessary check on an equation; it cannot by
+      itself establish the physical model or determine a dimensionless factor.</p>
+
+
 
     <h2 id="dimensional-analysis-example">Example: blast-wave scaling</h2>
     <p>The famous historical example is G. I. Taylor’s analysis of the 1945

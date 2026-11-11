@@ -17,8 +17,11 @@
 #include "json_util.h"
 #include "shell_core.h"
 #include "shell_element.h"
+#include "shell_material_js.h"
 #include "wasm_util.h"
 
+#include <array>
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -131,17 +134,20 @@ val solve_shell(const val& mesh, const std::string& mat_json, const std::string&
     if (n_nodes == 0 || in.triangles.empty())
         return error_result("shell mesh has no nodes or no triangles");
 
-    val mat = parse_json(mat_json);
-    val E = mat["young_modulus"];
-    val nu = mat["poisson_ratio"];
-    val th = mat["thickness"];
-    if (E.isNull() || E.isUndefined())
-        return error_result("material is missing young_modulus");
-    if (nu.isNull() || nu.isUndefined())
-        return error_result("material is missing poisson_ratio");
-    in.young = E.as<double>();
-    in.poisson = nu.as<double>();
     const int n_tris = static_cast<int>(in.triangles.size() / 3);
+    // One material object, or an array selected per triangle by mesh.attributes
+    // (shell bodies of different materials in one mesh, issue #389).
+    val mat = parse_json(mat_json);
+    const kofem::shell::ShellMaterialPayload materials =
+        kofem::shell::read_shell_materials(mat, mesh["attributes"], "mesh.attributes", n_tris);
+    if (!materials.error.empty())
+        return error_result(materials.error);
+    in.young = materials.young;
+    in.poisson = materials.poisson;
+    in.youngs = materials.youngs;
+    in.poissons = materials.poissons;
+    // A uniform thickness rides on the single material object only.
+    val th = val::global("Array").call<bool>("isArray", mat) ? val::undefined() : mat["thickness"];
     if (!in.thicknesses.empty()) {
         // The per-triangle field is the thickness source: it must cover every
         // triangle, and a uniform thickness alongside it would be ambiguous.
@@ -164,10 +170,24 @@ val solve_shell(const val& mesh, const std::string& mat_json, const std::string&
     add_prescribed_dofs(bcs["prescribed_dofs"], n_nodes, in.prescribed_dofs);
     add_point_loads(bcs["point_loads"], n_nodes, in.loads);
 
-    printf("[shell] solve: %d nodes, %d triangles, t=%g, E=%g, nu=%g; "
+    // Name the uniform value only when it is the one in use: with a per-facet
+    // field the scalar is unused and printing it would mislead.
+    std::array<char, 96> thickness_desc{};
+    if (in.thicknesses.empty())
+        snprintf(thickness_desc.data(), thickness_desc.size(), "t=%g", in.thickness);
+    else
+        snprintf(thickness_desc.data(), thickness_desc.size(), "per-facet thickness");
+    std::array<char, 96> material_desc{};
+    if (in.youngs.empty())
+        snprintf(material_desc.data(), material_desc.size(), "E=%g, nu=%g", in.young,
+                 in.poisson);
+    else
+        snprintf(material_desc.data(), material_desc.size(), "%u materials (per facet)",
+                 materials.n_materials);
+    printf("[shell] solve: %d nodes, %d triangles, %s, %s; "
            "%zu fixed DOFs, %zu prescribed DOFs, %zu loads\n",
-           n_nodes, (int)(in.triangles.size() / 3), in.thickness, in.young,
-           in.poisson, in.fixed_dofs.size(), in.prescribed_dofs.size(), in.loads.size());
+           n_nodes, n_tris, thickness_desc.data(), material_desc.data(),
+           in.fixed_dofs.size(), in.prescribed_dofs.size(), in.loads.size());
     fflush(stdout);
 
     kofem::shell::ShellResult r;
@@ -203,7 +223,7 @@ val solve_shell(const val& mesh, const std::string& mat_json, const std::string&
     // per-element contract, so the same result pipeline consumes both.
     const std::vector<double> von_mises = kofem::shell::shell_von_mises(
         in.vertices, in.triangles, in.thickness, in.thicknesses, in.young,
-        in.poisson, r.dofs);
+        in.poisson, in.youngs, in.poissons, r.dofs);
 
     val result = val::object();
     result.set("displacements", float64_array(displacements));

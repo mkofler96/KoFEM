@@ -7,6 +7,7 @@
 #include "topology_shell_entry.h"
 
 #include "json_util.h"
+#include "shell_material_js.h"
 #include "topology_shell.h"
 #include "topology_stream_js.h"
 #include "wasm_util.h"
@@ -146,12 +147,18 @@ val optimize_topology_shell(val mesh, const std::string& mat_json, const std::st
         return error_result("shell topology optimization needs a triangle surface mesh, "
                             "but this mesh has no nodes or no facets");
 
+    // Same material payload as solve_shell, but TO optimizes ONE design material
+    // per domain: refuse several rather than optimize with the first.
     val mat = parse_json(mat_json);
-    val E = mat["young_modulus"], nu = mat["poisson_ratio"], th = mat["thickness"];
-    if (E.isNull() || E.isUndefined()) return error_result("material is missing young_modulus");
-    if (nu.isNull() || nu.isUndefined()) return error_result("material is missing poisson_ratio");
-    in.shell_young = E.as<double>();
-    in.shell_poisson = nu.as<double>();
+    const kofem::shell::ShellMaterialPayload materials =
+        kofem::shell::read_shell_materials(mat, mesh["attributes"], "mesh.attributes", n_tris);
+    if (!materials.error.empty()) return error_result(materials.error);
+    if (materials.n_materials > 1)
+        return error_result("shell topology optimization uses one design material, but the "
+                            "shell mesh spans " + std::to_string(materials.n_materials));
+    in.shell_young = materials.young;
+    in.shell_poisson = materials.poisson;
+    val th = val::global("Array").call<bool>("isArray", mat) ? val::undefined() : mat["thickness"];
     if (!in.thicknesses.empty()) {
         // The per-triangle field is the thickness source (see solve_shell).
         if (static_cast<int>(in.thicknesses.size()) != n_tris)
@@ -261,8 +268,8 @@ val optimize_topology_coupled(val mesh, val coupling, val bcs, const std::string
 
     // Materials: one design stiffness per sub-domain. mat.solid is a single object
     // or an array (the first entry sets the solid design stiffness, as the solid
-    // path does — TO optimizes one design material per domain in v1); mat.shell is
-    // a single object.
+    // path does — TO optimizes one design material per domain in v1); mat.shell
+    // follows solve_coupled's payload but must resolve to one material.
     val mat = parse_json(mat_json);
     val solid = mat["solid"], shell = mat["shell"];
     if (in.tets.size() > 0) {
@@ -277,8 +284,18 @@ val optimize_topology_coupled(val mesh, val coupling, val bcs, const std::string
         if (shell.isUndefined() || shell.isNull())
             return error_result("coupled topology optimization: mat.shell is required for a "
                                 "domain with shell elements");
-        in.shell_young = shell["young_modulus"].as<double>();
-        in.shell_poisson = shell["poisson_ratio"].as<double>();
+        const kofem::shell::ShellMaterialPayload shell_materials =
+            kofem::shell::read_shell_materials(shell, mesh["shell_attributes"],
+                                               "mesh.shell_attributes",
+                                               static_cast<int>(in.triangles.size() / 3));
+        if (!shell_materials.error.empty())
+            return error_result("coupled topology optimization: " + shell_materials.error);
+        if (shell_materials.n_materials > 1)
+            return error_result("coupled topology optimization uses one shell design material, "
+                                "but the shell domain spans " +
+                                std::to_string(shell_materials.n_materials));
+        in.shell_young = shell_materials.young;
+        in.shell_poisson = shell_materials.poisson;
     }
 
     // Couplings (CSR-style), matching solve_coupled's contract: optional per-coupling

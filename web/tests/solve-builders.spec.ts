@@ -200,10 +200,10 @@ test("shell builder packs remapped facets, thickness, material and BCs", () => {
   );
   expect([...inp.mesh.triangles]).toEqual([0, 1, 2, 0, 2, 3]);
   expect([...inp.mesh.thicknesses]).toEqual([2, 2]);
-  expect(JSON.parse(inp.matJson)).toEqual({
-    young_modulus: 210000,
-    poisson_ratio: 0.3,
-  });
+  expect([...inp.mesh.attributes]).toEqual([1, 1]);
+  expect(JSON.parse(inp.matJson)).toEqual([
+    { young_modulus: 210000, poisson_ratio: 0.3 },
+  ]);
   expect(JSON.parse(inp.bcsJson)).toEqual({
     fixed_vertices: [0],
     fixed_dofs: [],
@@ -213,6 +213,36 @@ test("shell builder packs remapped facets, thickness, material and BCs", () => {
   expect(() =>
     buildShellEngineInputs(payload({ properties: [{ id: 5, materialId: 1 }] })),
   ).toThrow(/no positive shell thickness/);
+});
+
+test("shell builder keeps each shell body's own material per facet", () => {
+  const aluminium: Material = {
+    id: 2,
+    name: "Aluminium",
+    young: 70000,
+    poisson: 0.33,
+    density: 2700,
+  };
+  const inp = buildShellEngineInputs(
+    payload({
+      elements: [
+        { id: 1, type: "CTRIA3", nodeIds: [11, 12, 13], propertyId: 6 },
+        { id: 2, type: "CTRIA3", nodeIds: [11, 13, 14], propertyId: 5 },
+      ],
+      materials: [steel, aluminium],
+      properties: [
+        { id: 5, materialId: 1, thickness: 2 },
+        { id: 6, materialId: 2, thickness: 3 },
+      ],
+    }),
+  );
+  // Materials in first-use order; attributes are 1-based indices into them.
+  expect(JSON.parse(inp.matJson)).toEqual([
+    { young_modulus: 70000, poisson_ratio: 0.33 },
+    { young_modulus: 210000, poisson_ratio: 0.3 },
+  ]);
+  expect([...inp.mesh.attributes]).toEqual([1, 2]);
+  expect([...inp.mesh.thicknesses]).toEqual([3, 2]);
 });
 
 // Two tets sharing no nodes, one per body, with a coincident face pair at x = 1.

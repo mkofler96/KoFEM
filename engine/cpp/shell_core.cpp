@@ -209,6 +209,9 @@ ShellResult solve_shell_core(const ShellInput& in) {
     // Thickness is either a valid per-facet field or a positive uniform scalar.
     const std::vector<double> facet_t =
         facet_thicknesses(nTris, in.thickness, in.thicknesses, "shell");
+    // Material likewise: a valid per-facet (E, ν) field or one uniform pair.
+    const FacetMaterials facet_mat =
+        facet_materials(nTris, in.young, in.poisson, in.youngs, in.poissons, "shell");
     // Optional per-facet stiffness scale (SIMP density interpolation); empty ⇒ 1.
     const bool scaled = static_cast<int>(in.element_scale.size()) == nTris;
     if (!in.element_scale.empty() && !scaled)
@@ -218,7 +221,8 @@ ShellResult solve_shell_core(const ShellInput& in) {
         const size_t e3 = 3 * static_cast<size_t>(e);
         assemble_shell_element(K, in.vertices, in.triangles[e3], in.triangles[e3 + 1],
                                in.triangles[e3 + 2], facet_t[e],
-                               in.young, in.poisson, scaled ? in.element_scale[e] : 1.0);
+                               facet_mat.young[e], facet_mat.poisson[e],
+                               scaled ? in.element_scale[e] : 1.0);
     }
 
     std::vector<double> F(nDof, 0.0);
@@ -262,6 +266,8 @@ ShellResult solve_solid_shell_core(const CoupledInput& in) {
     const int nTris = static_cast<int>(in.triangles.size() / 3);
     const std::vector<double> facet_t =
         facet_thicknesses(nTris, in.thickness, in.thicknesses, "coupled");
+    const FacetMaterials facet_mat = facet_materials(
+        nTris, in.shell_young, in.shell_poisson, in.shell_youngs, in.shell_poissons, "coupled");
     // Optional per-facet stiffness scale (SIMP); the solid tets are scaled by the
     // caller pre-scaling in.solid_stiffness, so one density field spans both.
     const bool scaled = static_cast<int>(in.shell_scale.size()) == nTris;
@@ -271,7 +277,8 @@ ShellResult solve_solid_shell_core(const CoupledInput& in) {
         const size_t e3 = 3 * static_cast<size_t>(e);
         const int a = in.triangles[e3], b = in.triangles[e3 + 1], c = in.triangles[e3 + 2];
         assemble_shell_element(K, in.vertices, a, b, c, facet_t[e],
-                               in.shell_young, in.shell_poisson, scaled ? in.shell_scale[e] : 1.0);
+                               facet_mat.young[e], facet_mat.poisson[e],
+                               scaled ? in.shell_scale[e] : 1.0);
         is_shell[a] = is_shell[b] = is_shell[c] = 1;
     }
 
