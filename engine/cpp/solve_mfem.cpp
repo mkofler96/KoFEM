@@ -6,7 +6,9 @@
 // solve_linear_elastic is a thin orchestrator over the pipeline stages below
 // (issue #293): copy in the mesh typed arrays → build the MFEM mesh → collect essential
 // (Dirichlet) DOFs → assemble loads → CG solve → recover displacements and
-// von Mises stress. Two orderings are load-bearing and owned by the
+// von Mises stress. A model with tie constraints (issue #357) takes the same
+// stages but solves the master-slave reduced system TᵀKT instead — see
+// solve_tied_system. Two orderings are load-bearing and owned by the
 // orchestrator, not the helpers: the surface-load coefficient/marker storage
 // must outlive b.Assemble(), and prescribed displacement values must be seeded
 // into the solution GridFunction before FormLinearSystem.
@@ -19,6 +21,7 @@
 #include "fem_bc_io.h"
 #include "fem_mesh_io.h"
 #include "json_util.h"
+#include "tie_constraints.h"
 #include "wasm_util.h"
 
 #include <mfem.hpp>
@@ -102,6 +105,251 @@ std::vector<double> compute_von_mises(mfem::Mesh& mesh, const mfem::GridFunction
         von_mises[e] = std::sqrt(1.5 * vm2);
     }
     return von_mises;
+}
+
+// ── Tie constraints (issue #357) ──────────────────────────────────────────────
+
+// Plain JSON number array → vector. `what` names the field in the error.
+template <typename T>
+std::vector<T> json_array(const val& array_js, const char* what) {
+    if (!val::global("Array").call<bool>("isArray", array_js))
+        throw std::runtime_error(std::string("solve: ") + what + " must be an array");
+    const unsigned n = array_js["length"].as<unsigned>();
+    std::vector<T> out(n);
+    for (unsigned i = 0; i < n; ++i) out[i] = array_js[i].as<T>();
+    return out;
+}
+
+// bcs.tie_constraints = { slave, offsets, master, weights } — CSR, see
+// tie_constraints.h: vertex slave[k] projects onto the element face with the
+// vertices master[..], at the point Σ weights·(master position). Optional: a
+// model with no constraint tie omits it.
+kofem::fem::NodeTies parse_tie_constraints(const val& ties_js) {
+    kofem::fem::NodeTies ties;
+    if (ties_js.isUndefined() || ties_js.isNull()) return ties;
+    ties.slave   = json_array<int>(ties_js["slave"], "tie_constraints.slave");
+    ties.offsets = json_array<int>(ties_js["offsets"], "tie_constraints.offsets");
+    ties.master  = json_array<int>(ties_js["master"], "tie_constraints.master");
+    ties.weights = json_array<double>(ties_js["weights"], "tie_constraints.weights");
+    return ties;
+}
+
+// Turn the vertex ties of the payload into ties between the NODES of the FE
+// space (its scalar DOFs: vertices, and for a quadratic space edge midpoints
+// and quadrilateral face centres).
+//
+// The payload names, per tied vertex, the vertices of the face it projects onto
+// and the linear weights of the projection. That is the tie itself only for
+// linear triangles. In general the vertex must follow the face's displacement
+// FIELD, so the projection point is mapped back into the face and the face's
+// own shape functions are evaluated there — bilinear on a quadrilateral,
+// quadratic on a second-order face. (Interpolating a quadratic face from its
+// corners alone would load it at the corners only and leave the joint soft.)
+//
+// A quadratic space also has nodes ON the tied surface that no vertex tie
+// reaches. Where every vertex of an edge or quadrilateral face is tied, that
+// edge/face node is tied to the mean of its vertices — its value in the linear
+// field they define — so the whole surface follows, not just its corners.
+// Mirrors extend_dirichlet_to_edge_dofs for essential BCs.
+kofem::fem::NodeTies fe_node_ties(mfem::FiniteElementSpace& fespace,
+                                  const kofem::fem::NodeTies& vertex_ties, int order) {
+    mfem::Mesh& mesh = *fespace.GetMesh();
+    const int n_verts = mesh.GetNV();
+    kofem::fem::validate_node_ties(vertex_ties, n_verts);
+    if (order > 2)
+        throw std::runtime_error(
+            "tie constraints support linear and quadratic elements, not order " +
+            std::to_string(order));
+
+    std::vector<int> vertex_node((size_t)n_verts);
+    mfem::Array<int> dofs;
+    for (int vi = 0; vi < n_verts; ++vi) {
+        fespace.GetVertexDofs(vi, dofs);
+        vertex_node[vi] = dofs[0];
+    }
+    // Boundary faces around each vertex, to find the face a tie projects onto.
+    std::vector<std::vector<int>> faces_of((size_t)n_verts);
+    mfem::Array<int> face_vertices;
+    for (int be = 0; be < mesh.GetNBE(); ++be) {
+        mesh.GetBdrElementVertices(be, face_vertices);
+        for (int v : face_vertices) faces_of[v].push_back(be);
+    }
+
+    kofem::fem::NodeTies out;
+    out.offsets.push_back(0);
+    std::vector<char> tied((size_t)n_verts, 0);
+    mfem::Vector point(dim), shape;
+    for (size_t k = 0; k < vertex_ties.slave.size(); ++k) {
+        const int slave = vertex_ties.slave[k];
+        const int begin = vertex_ties.offsets[k];
+        const int end = vertex_ties.offsets[k + 1];
+        tied[slave] = 1;
+
+        // The free face that holds every master of this tie, and the point on it.
+        int face = -1;
+        for (int be : faces_of[vertex_ties.master[begin]]) {
+            mesh.GetBdrElementVertices(be, face_vertices);
+            bool holds_all = true;
+            for (int i = begin; i < end && holds_all; ++i)
+                holds_all = face_vertices.Find(vertex_ties.master[i]) >= 0;
+            if (holds_all) {
+                face = be;
+                break;
+            }
+        }
+        if (face < 0)
+            throw std::runtime_error(
+                "tie constraints: the nodes vertex " + std::to_string(slave) +
+                " is tied to do not lie on one free element face");
+        point = 0.0;
+        for (int i = begin; i < end; ++i)
+            for (int c = 0; c < dim; ++c)
+                point[c] += vertex_ties.weights[i] * mesh.GetVertex(vertex_ties.master[i])[c];
+
+        mfem::ElementTransformation* transformation = mesh.GetBdrElementTransformation(face);
+        mfem::IntegrationPoint ip;
+        transformation->TransformBack(point, ip);
+        // The point lies on the face by construction; this only absorbs the
+        // round-off of a projection onto its edge or corner.
+        mfem::Geometry::ProjectPoint(mesh.GetBdrElementGeometry(face), ip);
+        const mfem::FiniteElement* element = fespace.GetBE(face);
+        shape.SetSize(element->GetDof());
+        element->CalcShape(ip, shape);
+        fespace.GetBdrElementDofs(face, dofs);
+
+        out.slave.push_back(vertex_node[slave]);
+        double sum = 0.0;
+        const size_t first = out.master.size();
+        for (int i = 0; i < dofs.Size(); ++i) {
+            if (std::abs(shape[i]) < 1e-12) continue;
+            out.master.push_back(dofs[i]);
+            out.weights.push_back(shape[i]);
+            sum += shape[i];
+        }
+        // Shape functions sum to one; dropping the negligible ones must not
+        // break that, or the tie would resist a rigid motion.
+        for (size_t i = first; i < out.weights.size(); ++i) out.weights[i] /= sum;
+        out.offsets.push_back((int)out.master.size());
+    }
+
+    if (order == 2) {
+        const auto tie_to_vertices = [&](const mfem::Array<int>& vertices,
+                                         const mfem::Array<int>& interior) {
+            if (interior.Size() != 1) return;
+            for (int v : vertices)
+                if (tied[v] == 0) return;
+            out.slave.push_back(interior[0]);
+            for (int v : vertices) {
+                out.master.push_back(vertex_node[v]);
+                out.weights.push_back(1.0 / vertices.Size());
+            }
+            out.offsets.push_back((int)out.master.size());
+        };
+        mfem::Array<int> vertices, interior;
+        for (int e = 0; e < mesh.GetNEdges(); ++e) {
+            mesh.GetEdgeVertices(e, vertices);
+            fespace.GetEdgeInteriorDofs(e, interior);
+            tie_to_vertices(vertices, interior);
+        }
+        for (int f = 0; f < mesh.GetNFaces(); ++f) {
+            mesh.GetFaceVertices(f, vertices);
+            fespace.GetFaceInteriorDofs(f, interior);
+            tie_to_vertices(vertices, interior);
+        }
+    }
+    return out;
+}
+
+// Impose q[i] = values[i] on the rows marked essential: the known columns move
+// to the right-hand side and each essential row/column becomes the identity,
+// which keeps the system symmetric. One pass over the stored entries;
+// SparseMatrix::EliminateRowCol is not used because it aborts unless every
+// stored entry has a stored transpose, and finalizing the assembled stiffness
+// drops exact zeros whose transpose is round-off (seen on hexahedra).
+void eliminate_essential(mfem::SparseMatrix& A, mfem::Vector& rhs,
+                         const std::vector<char>& is_essential, const mfem::Vector& values) {
+    const int* I = A.GetI();
+    const int* J = A.GetJ();
+    mfem::real_t* data = A.GetData();
+    for (int row = 0; row < A.Height(); ++row) {
+        if (is_essential[row] != 0) {
+            for (int k = I[row]; k < I[row + 1]; ++k) data[k] = J[k] == row ? 1.0 : 0.0;
+            rhs[row] = values[row];
+            continue;
+        }
+        for (int k = I[row]; k < I[row + 1]; ++k) {
+            if (is_essential[J[k]] == 0) continue;
+            rhs[row] -= data[k] * values[J[k]];
+            data[k] = 0.0;
+        }
+    }
+}
+
+// Solve K·u = f under the tie constraints u = T·q and the essential BCs, and
+// write u into `x`.
+//
+// The slave DOFs are eliminated first (K_r = TᵀKT, f_r = Tᵀf) and the essential
+// BCs are applied to the reduced system — in that order, so a prescribed value
+// on a master reaches its slaves through T, and a slave that is itself
+// prescribed simply keeps its BC (build_tie_reduction leaves it untied).
+// Takes ownership of the assembled stiffness so K and K_r are not both alive
+// during the CG solve.
+void solve_tied_system(std::unique_ptr<mfem::SparseMatrix> K, const mfem::Vector& f,
+                       const kofem::fem::NodeTies& vertex_ties,
+                       const kofem::fem::EssentialBcs& ess,
+                       mfem::FiniteElementSpace& fespace, int order, mfem::GridFunction& x) {
+    const int n_nodes = fespace.GetNDofs();
+    const int n_dofs = fespace.GetVSize();
+
+    const kofem::fem::NodeTies ties = fe_node_ties(fespace, vertex_ties, order);
+    std::vector<int> node_dof(3 * (size_t)n_nodes);
+    for (int node = 0; node < n_nodes; ++node)
+        for (int c = 0; c < dim; ++c) node_dof[3 * (size_t)node + c] = fespace.DofToVDof(node, c);
+    std::vector<char> essential((size_t)n_dofs, 0);
+    for (int i = 0; i < ess.ess_tdof.Size(); ++i) essential[ess.ess_tdof[i]] = 1;
+
+    const kofem::fem::TieReduction reduction =
+        kofem::fem::build_tie_reduction(ties, n_nodes, node_dof, essential);
+    printf("[mfem] tie constraints: %zu tied node(s), %d DOF(s) eliminated → %d unknowns\n",
+           vertex_ties.slave.size(), reduction.n_eliminated, reduction.n_reduced);
+    if (reduction.n_prescribed > 0)
+        printf("[mfem] %d tied DOF(s) are also fixed or prescribed — the boundary "
+               "condition applies there\n", reduction.n_prescribed);
+    fflush(stdout);
+
+    mfem::SparseMatrix T(n_dofs, reduction.n_reduced);
+    for (int dof = 0; dof < n_dofs; ++dof) {
+        if (reduction.reduced_of[dof] >= 0) {
+            T.Add(dof, reduction.reduced_of[dof], 1.0);
+            continue;
+        }
+        for (const auto& [index, weight] : reduction.rows[dof]) T.Add(dof, index, weight);
+    }
+    T.Finalize();
+
+    std::unique_ptr<mfem::SparseMatrix> K_reduced(mfem::RAP(T, *K, T));
+    K.reset();
+    K_reduced->SortColumnIndices();
+    mfem::Vector f_reduced(reduction.n_reduced);
+    T.MultTranspose(f, f_reduced);
+    log_mem("solve: after tie reduction");
+
+    // Essential DOFs are never eliminated, so each has a reduced index.
+    std::map<int, double> prescribed(ess.prescribed_vals.begin(), ess.prescribed_vals.end());
+    std::vector<char> is_essential((size_t)reduction.n_reduced, 0);
+    mfem::Vector q(reduction.n_reduced);
+    q = 0.0;
+    for (int i = 0; i < ess.ess_tdof.Size(); ++i) {
+        const int dof = ess.ess_tdof[i];
+        const auto found = prescribed.find(dof);
+        const int index = reduction.reduced_of[dof];
+        is_essential[index] = 1;
+        q[index] = found == prescribed.end() ? 0.0 : found->second;
+    }
+    eliminate_essential(*K_reduced, f_reduced, is_essential, q);
+
+    run_cg_solve(*K_reduced, f_reduced, q);
+    T.Mult(q, x);
 }
 
 }  // namespace
@@ -201,6 +449,7 @@ val solve_linear_elastic(
 
     kofem::fem::EssentialBcs ess =
         kofem::fem::collect_essential_dofs(bcs_js, mfem_mesh, fespace, order);
+    const kofem::fem::NodeTies ties = parse_tie_constraints(bcs_js["tie_constraints"]);
 
     GridFunction x(&fespace);
     x = 0.0;
@@ -230,12 +479,18 @@ val solve_linear_elastic(
     printf("[mfem] assembly done\n"); fflush(stdout);
     log_mem("solve: after stiffness assembly");
 
-    OperatorPtr A;
-    Vector B, X;
-    a.FormLinearSystem(ess.ess_tdof, x, b, A, X, B);
+    if (ties.empty()) {
+        OperatorPtr A;
+        Vector B, X;
+        a.FormLinearSystem(ess.ess_tdof, x, b, A, X, B);
 
-    run_cg_solve(*A.As<SparseMatrix>(), B, X);
-    a.RecoverFEMSolution(X, b, x);
+        run_cg_solve(*A.As<SparseMatrix>(), B, X);
+        a.RecoverFEMSolution(X, b, x);
+    } else {
+        a.Finalize();
+        solve_tied_system(std::unique_ptr<SparseMatrix>(a.LoseMat()), b, ties, ess,
+                          fespace, order, x);
+    }
     printf("[mfem] CG done — computing von Mises stress…\n"); fflush(stdout);
     log_mem("solve: after CG solve");
 

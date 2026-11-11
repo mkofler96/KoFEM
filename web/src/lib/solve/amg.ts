@@ -62,6 +62,8 @@ export function amgUnavailableReason(model: {
   properties: Property[];
   elementOrder: number;
   couplingCount: number;
+  // Tie connections joined by constraint (tieMethod "mpc"), not by node-merge.
+  constraintTieCount: number;
 }): string | null {
   if (model.elementOrder !== 1) return "it supports linear elements only";
   if (model.elements.some((element) => element.type === "CTRIA3"))
@@ -70,6 +72,8 @@ export function amgUnavailableReason(model: {
     return "it supports tetrahedral meshes only";
   if (model.couplingCount > 0)
     return "it does not support surface-to-point couplings";
+  if (model.constraintTieCount > 0)
+    return "it does not support constraint (MPC) ties";
   if (shellMarkedBodies(model.properties).length > 0)
     return "it does not support bodies solved as shells";
   return null;
@@ -129,6 +133,7 @@ export async function solveSolidWithAmg(
     properties: model.properties,
     elementOrder: 1,
     couplingCount: 0,
+    constraintTieCount: 0,
   });
   if (reason !== null)
     throw new Error(`The AMG solver cannot solve this model: ${reason}.`);

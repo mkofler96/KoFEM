@@ -11,7 +11,9 @@
 
 // Solve linear elasticity on the given mesh. `mesh` is a JS object of flat
 // typed arrays {vertices: Float64Array, tetrahedra: Int32Array, hexahedra?:
-// Int32Array}; material and BCs stay JSON (small payloads). Returns
+// Int32Array}; material and BCs stay JSON (small payloads). The BCs may carry
+// `tie_constraints` {slave, offsets, master, weights} — CSR node ties, see
+// tie_constraints.h — which are eliminated before the solve. Returns
 // {displacements: Float64Array, von_mises: Float64Array} — binary transfer,
 // no JSON text (issue #166) — or {error: string} when the material inputs
 // are incomplete.

@@ -116,7 +116,7 @@ test("a tie connection makes a disconnected two-body solve converge", async ({
 
   const { tieSurfaces, ...model } = twoGappedBoxes();
   // A connection between the two facing surfaces, or none at all.
-  const tieGroups = (searchDistance: number | null) =>
+  const tieGroups = (searchDistance: number | null, method: "merge" | "mpc") =>
     searchDistance === null
       ? []
       : [
@@ -127,12 +127,17 @@ test("a tie connection makes a disconnected two-body solve converge", async ({
             facesB: tieSurfaces.b,
             extent: "region" as const,
             searchDistance,
+            method,
           },
         ];
 
-  const solve = (searchDistance: number | null) =>
+  const solve = (
+    searchDistance: number | null,
+    method: "merge" | "mpc" = "merge",
+    solverMethod: "gauss-seidel" | "amg" = "gauss-seidel",
+  ) =>
     page.evaluate(
-      async ({ model, ties }) => {
+      async ({ model, ties, solverMethod }) => {
         const win = window as unknown as {
           __kofem: {
             sendToWorker(name: string, payload: object): Promise<unknown>;
@@ -141,7 +146,7 @@ test("a tie connection makes a disconnected two-body solve converge", async ({
         try {
           const result = (await win.__kofem.sendToWorker("solve", {
             ...model,
-            solverMethod: "gauss-seidel",
+            solverMethod,
             tieGroups: ties,
           })) as { displacements: Float64Array };
           return { ok: true as const, nDisp: result.displacements.length };
@@ -149,7 +154,7 @@ test("a tie connection makes a disconnected two-body solve converge", async ({
           return { ok: false as const, error: (err as Error).message };
         }
       },
-      { model, ties: tieGroups(searchDistance) },
+      { model, ties: tieGroups(searchDistance, method), solverMethod },
     );
 
   // Without a connection, box B is disconnected → the solve cannot converge.
@@ -167,6 +172,21 @@ test("a tie connection makes a disconnected two-body solve converge", async ({
   const tied = await solve(0.6);
   expect(tied.ok).toBe(true);
   if (tied.ok) expect(tied.nDisp).toBe(model.nodes.length * 3);
+
+  // The same connection as a constraint (MPC) tie joins the bodies without
+  // merging a node, and is refused the same way when it reaches nothing.
+  const constrained = await solve(0.6, "mpc");
+  expect(constrained.ok).toBe(true);
+  if (constrained.ok) expect(constrained.nDisp).toBe(model.nodes.length * 3);
+  const constrainedTooShort = await solve(0.1, "mpc");
+  expect(constrainedTooShort.ok).toBe(false);
+  if (!constrainedTooShort.ok)
+    expect(constrainedTooShort.error).toContain("connected no nodes");
+
+  // AMG cannot carry a constraint tie; asking for it still solves, through the
+  // engine's solver.
+  const constrainedAmg = await solve(0.6, "mpc", "amg");
+  expect(constrainedAmg.ok).toBe(true);
 });
 
 test("meshing a two-body part and toggling a body's visibility", async ({

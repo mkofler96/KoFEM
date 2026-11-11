@@ -7,6 +7,7 @@ import { fmt, loadsSummary } from "../lib/modelDisplay";
 import { sendToWorker } from "../workers/sharedWorker";
 import type { SolvePayload } from "../workers/solverTypes";
 import { amgUnavailableReason } from "../lib/solve/amg";
+import { constraintTieCount } from "../lib/tie";
 import { thinWallMessage, type ThinWallFinding } from "../lib/solve/thinWall";
 import { useWorkerLogs } from "./useWorkerLogs";
 import {
@@ -208,6 +209,7 @@ export function useSolver() {
           properties,
           elementOrder,
           couplingCount: couplingGroups.length,
+          constraintTieCount: constraintTieCount(tieGroups),
         })
       : null;
 

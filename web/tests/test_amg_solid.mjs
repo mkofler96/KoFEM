@@ -169,6 +169,7 @@ assert(
     properties,
     elementOrder: 1,
     couplingCount: 0,
+    constraintTieCount: 0,
   }) === null,
   "AMG must accept a linear-tet solid model",
 );
@@ -176,8 +177,19 @@ assert(
   amgUnavailableReason({
     elements,
     properties,
+    elementOrder: 1,
+    couplingCount: 0,
+    constraintTieCount: 1,
+  }) !== null,
+  "AMG must refuse a model with a constraint tie",
+);
+assert(
+  amgUnavailableReason({
+    elements,
+    properties,
     elementOrder: 2,
     couplingCount: 0,
+    constraintTieCount: 0,
   }) !== null,
   "AMG must refuse quadratic elements",
 );

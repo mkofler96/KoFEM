@@ -46,6 +46,7 @@ add_executable(kofem_wasm_emcc
     cpp/shell_element.cpp
     cpp/tet_element.cpp
     cpp/coupling_constraints.cpp
+    cpp/tie_constraints.cpp
     cpp/sparse_cg.cpp
     cpp/cg_browser.cpp
     cpp/cg_mfem.cpp

@@ -269,7 +269,10 @@ export interface KofemModule {
   /** Linear-elastic solve. The mesh crosses the boundary as flat typed arrays;
    *  materials and boundary conditions stay JSON (small payloads). `mat_json`
    *  is an array of materials — `mesh.attributes` selects per element, 1-based —
-   *  or a single material object (legacy single-material contract). */
+   *  or a single material object (legacy single-material contract).
+   *  `bcs_json` may carry `tie_constraints: { slave, offsets, master, weights }`
+   *  (CSR): vertex slave[k] follows Σ weights[i]·master[i] over
+   *  i ∈ [offsets[k], offsets[k+1]), eliminated from the system (#357). */
   solve_linear_elastic(
     mesh: SolveMesh,
     mat_json: string,

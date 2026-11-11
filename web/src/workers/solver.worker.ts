@@ -50,6 +50,7 @@ import {
   solveSolidWithAmg,
   type SolverMethod,
 } from "../lib/solve/amg.js";
+import { constraintTieCount } from "../lib/tie.js";
 import {
   buildSolidEngineInputs,
   expandTiedDisplacements,
@@ -673,11 +674,13 @@ function amgReason(payload: SolvePayload): string | null {
     elementOrder: payload.elementOrder ?? 1,
     // eslint-disable-next-line kofem/no-silent-fallback -- `couplings` is optional in the solve message; a model with none is the ordinary case
     couplingCount: payload.couplings?.length ?? 0,
+    constraintTieCount: constraintTieCount(payload.tieGroups),
   });
 }
 
-// All-solid static solve, with tie connections welded: the Rust AMG solver for
-// linear tets when it was chosen, otherwise the engine's solve_linear_elastic.
+// All-solid static solve, with tie connections applied: the Rust AMG solver for
+// linear tets when it was chosen, otherwise the engine's solve_linear_elastic
+// (the only one that carries constraint ties).
 async function handleSolidSolve(id: number, payload: SolvePayload) {
   const { nodes, elements } = payload;
   const tied = weldTies(nodes, elements, payload.tieGroups, logTo(id));
@@ -707,6 +710,7 @@ async function handleSolidSolve(id: number, payload: SolvePayload) {
     { ...payload, nodes: tied.solveNodes, elements: tied.tiedElements },
     tied.vid,
     tied.vidTied,
+    tied.constraints,
   );
 
   // FE polynomial order, chosen in the frontend (Solver settings). Order 2
@@ -728,7 +732,7 @@ async function handleSolidSolve(id: number, payload: SolvePayload) {
   const result = await m().solve_linear_elastic(mesh, matJson, bcsJson, order);
   if ("error" in result) throw new Error(result.error);
 
-  // von Mises is per element; welding preserves element count and order, so it
+  // von Mises is per element; a tie preserves element count and order, so it
   // passes through unchanged.
   const displacements = expandTiedDisplacements(
     nodes,
