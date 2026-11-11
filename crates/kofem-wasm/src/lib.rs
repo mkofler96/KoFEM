@@ -10,8 +10,10 @@
 //! credit and BSD-3-Clause terms are retained in `../kofem-fem/NOTICE.md` and
 //! `../kofem-fem/LICENSE-MFEM`, also shipped beside the generated WASM module.
 
+mod shell;
 mod shellize;
 
+pub use shell::ShellModel;
 pub use shellize::{
     CoupledResult, CouplingInput, ExplicitCoupledResult, ShellSet, ShellTransitionResult,
     ShellizeInput,
@@ -26,6 +28,24 @@ use wasm_bindgen::prelude::*;
 
 fn to_js(error: &FemError) -> JsError {
     JsError::new(&error.to_string())
+}
+
+/// Materials from flat (E, ν) pairs.
+fn parse_materials(materials: &[f64]) -> Result<Vec<Isotropic>, JsError> {
+    if !materials.len().is_multiple_of(2) {
+        return Err(JsError::new(&format!(
+            "materials has {} values; expected (E, ν) pairs",
+            materials.len()
+        )));
+    }
+    materials
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .enumerate()
+        .map(|(index, pair)| Isotropic::new(index, pair[0], pair[1]))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|error| to_js(&error))
 }
 
 /// A validated linear-elastic tetrahedral model.
@@ -51,20 +71,7 @@ impl ElasticModel {
         material_of_tet: &[u32],
         materials: &[f64],
     ) -> Result<ElasticModel, JsError> {
-        if !materials.len().is_multiple_of(2) {
-            return Err(JsError::new(&format!(
-                "materials has {} values; expected (E, ν) pairs",
-                materials.len()
-            )));
-        }
-        let parsed = materials
-            .as_chunks::<2>()
-            .0
-            .iter()
-            .enumerate()
-            .map(|(index, pair)| Isotropic::new(index, pair[0], pair[1]))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|error| to_js(&error))?;
+        let parsed = parse_materials(materials)?;
         let mesh =
             TetMesh::new(vertices, tets, material_of_tet, parsed).map_err(|error| to_js(&error))?;
         Ok(ElasticModel {
@@ -241,15 +248,26 @@ impl ElasticModel {
             options.settings.stopping,
         )
         .map_err(|error| to_js(&error))?;
-        Ok(SolveRun { prepared, run })
+        let preconditioner = match options.preconditioner {
+            PreconditionerChoice::SymmetricGaussSeidel => "symmetric Gauss–Seidel",
+            PreconditionerChoice::SmoothedAggregation(_) => "smoothed-aggregation AMG",
+        };
+        Ok(SolveRun {
+            prepared,
+            run,
+            preconditioner: preconditioner.to_owned(),
+        })
     }
 }
 
-/// A CG solve in progress (from `ElasticModel.startSolve`).
+/// A CG solve in progress (from `ElasticModel.startSolve` or
+/// `ShellModel.startSolve`).
 #[wasm_bindgen]
 pub struct SolveRun {
     prepared: PreparedStatic,
     run: PcgRun,
+    /// The preconditioner, in words for the solve log.
+    preconditioner: String,
 }
 
 #[wasm_bindgen]
@@ -294,6 +312,13 @@ impl SolveRun {
     #[must_use]
     pub fn still_descending(&self, window: usize) -> bool {
         self.run.still_descending(window)
+    }
+
+    /// The preconditioner the run uses, in words for the solve log.
+    #[wasm_bindgen(getter)]
+    #[must_use]
+    pub fn preconditioner(&self) -> String {
+        self.preconditioner.clone()
     }
 
     /// Unknowns per multigrid level, finest first; empty for Gauss–Seidel.
@@ -389,7 +414,8 @@ pub struct ElasticSolution {
 
 #[wasm_bindgen]
 impl ElasticSolution {
-    /// Displacement per vertex, x,y,z interleaved (copied out as a `Float64Array`).
+    /// The solution vector, copied out as a `Float64Array`: x,y,z per vertex
+    /// for `ElasticModel`; u,v,w,θx,θy,θz per vertex for `ShellModel`.
     #[wasm_bindgen(getter)]
     #[must_use]
     pub fn displacements(&self) -> Vec<f64> {
