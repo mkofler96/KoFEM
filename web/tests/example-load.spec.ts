@@ -580,7 +580,12 @@ test.beforeAll(async () => {
     .filter((file) => file.endsWith(".vtu"))
     .map((file) => ({ id: file.slice(0, -".vtu".length) }));
 });
+// Opening, settling and capturing one example takes a few seconds on CI; the
+// budget grows with the gallery instead of failing when an example is added.
+const SECONDS_PER_EXAMPLE = 8;
+
 test("capture screenshots of all examples", async ({ page }) => {
+  test.setTimeout(EXAMPLE_ANALYSES.length * SECONDS_PER_EXAMPLE * 1000);
   // Open the app and import the STEP file via the Geometry panel.
   for (const analysis of EXAMPLE_ANALYSES) {
     await page.goto(`/app/?example=${analysis.id}`);
