@@ -505,8 +505,10 @@ impl SolveRun {
             None => solution,
             Some(reduction) => reduction
                 .expand(&solution)
-                .chunks_exact(DOFS_PER_NODE)
-                .flat_map(|dofs| dofs[..3].to_vec())
+                .as_chunks::<DOFS_PER_NODE>()
+                .0
+                .iter()
+                .flat_map(|dofs| [dofs[0], dofs[1], dofs[2]])
                 .collect(),
         };
         Ok(ElasticSolution {
