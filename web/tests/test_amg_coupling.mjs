@@ -30,7 +30,11 @@ import {
   amgUnavailableReason,
   solveCoupledSolidWithAmg,
 } from "../src/lib/solve/amg.ts";
-import * as fem from "../src/wasm/fem/kofem_wasm.js";
+import {
+  Couplings,
+  ElasticModel,
+  SolveOptions,
+} from "../src/wasm/fem/kofem_wasm.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const enginePkg = join(here, "../src/wasm/pkg");
@@ -41,6 +45,7 @@ const { default: createModule } = await import(
   join(enginePkg, "kofem_wasm_emcc.js")
 );
 const wasmBinary = readFileSync(join(enginePkg, "kofem_wasm_emcc.wasm")).buffer;
+const fem = { Couplings, ElasticModel, SolveOptions };
 const quiet = () => ({ wasmBinary, print: () => {}, printErr: () => {} });
 const engine = await createModule(quiet());
 
@@ -221,7 +226,6 @@ async function compare(label, model) {
     stress.relative < 1e-4,
     `${stress.relative}`,
   );
-  return { model, inputs, rust, mfem };
 }
 
 const LENGTH = 100;
@@ -565,7 +569,9 @@ console.log("\nWhat AMG refuses");
     dof: 0,
     value: 2000 / tip.length,
   }));
-  const inputs = buildCoupledEngineInputs(model, () => {});
+  // The solver log is not needed for these refusal checks.
+  const discard = () => undefined;
+  const inputs = buildCoupledEngineInputs(model, discard);
   const mfem = engine.solve_coupled(
     inputs.mesh,
     inputs.coupling,
@@ -579,7 +585,7 @@ console.log("\nWhat AMG refuses");
   );
   let refusal = "";
   try {
-    await solveCoupledSolidWithAmg(fem, inputs, undefined, neverAsk, () => {});
+    await solveCoupledSolidWithAmg(fem, inputs, undefined, neverAsk, discard);
   } catch (error) {
     refusal = error instanceof Error ? error.message : String(error);
   }

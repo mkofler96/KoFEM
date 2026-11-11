@@ -246,7 +246,7 @@ impl CouplingConstraints {
             )
         })?;
         let skew_moment = skew(moment);
-        let mut rows: [Vec<(usize, f64)>; DOFS_PER_NODE] = Default::default();
+        let mut rows = <[Vec<(usize, f64)>; DOFS_PER_NODE]>::default();
         for ((&node, offset), &weight) in coupling.nodes.iter().zip(&offsets).zip(&weights) {
             let share = weight / total;
             // U_R = Σ (wᵢ/W) uᵢ.
