@@ -42,6 +42,7 @@ import {
   topOptStartLog,
 } from "../src/lib/solve/route";
 import { buildVertexIndexer } from "../src/lib/solveMeshPacking";
+import { amgUnavailableReason } from "../src/lib/solve/amg";
 
 const steel: Material = {
   id: 1,
@@ -490,6 +491,27 @@ test("solve routing follows the element mix, couplings and Shell choice", () => 
       properties: twoBodies.map((p) => ({ ...p, discretization: "shell" })),
     }),
   ).toThrow(/are all marked "Shell"/);
+});
+
+test("AMG takes surface-to-point couplings on linear solid models only", () => {
+  const solid = { elements: tetElements, properties: twoBodies };
+  expect(
+    amgUnavailableReason({ ...solid, elementOrder: 1, couplingCount: 2 }),
+  ).toBeNull();
+  expect(
+    amgUnavailableReason({ ...solid, elementOrder: 2, couplingCount: 2 }),
+  ).toBe("it supports surface-to-point couplings on linear elements only");
+  expect(
+    amgUnavailableReason({ ...solid, elementOrder: 2, couplingCount: 0 }),
+  ).toBeNull();
+  expect(
+    amgUnavailableReason({
+      elements: [...tetElements, shellElements[0]],
+      properties: twoBodies,
+      elementOrder: 1,
+      couplingCount: 1,
+    }),
+  ).toBe("it does not support shell elements");
 });
 
 test("topology optimization routing refuses models it would optimize wrongly", () => {

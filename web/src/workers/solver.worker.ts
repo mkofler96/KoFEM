@@ -5,7 +5,11 @@
 // Runs kofem-wasm off the main thread so heavy solves don't freeze the UI.
 
 import createModule, { EngineLoadError } from "../wasm/pkg/kofem_wasm.js";
-import { ElasticModel, SolveOptions } from "../wasm/fem/kofem_wasm.js";
+import {
+  Couplings,
+  ElasticModel,
+  SolveOptions,
+} from "../wasm/fem/kofem_wasm.js";
 import { FemLoadError, loadFemModule } from "../lib/femModule.js";
 import type {
   EngineLoadProgress,
@@ -47,6 +51,7 @@ import { buildShellEngineInputs } from "../lib/solve/shell.js";
 import {
   amgUnavailableReason,
   isSolverMethod,
+  solveCoupledSolidWithAmg,
   solveSolidWithAmg,
   type SolverMethod,
 } from "../lib/solve/amg.js";
@@ -584,8 +589,10 @@ async function handleShellSolve(id: number, payload: SolvePayload) {
 }
 
 // Solve a hand-mixed shell+solid model, or an all-solid model carrying a
-// surface-to-point coupling, through the engine's coupled solid-shell solver.
-// elementOrder does not apply (the coupled assembler is linear tets + DKT facets).
+// surface-to-point coupling, through the engine's coupled solid-shell solver —
+// or, for the all-solid model with AMG chosen, through the Rust solver on the
+// same inputs. elementOrder does not apply (the coupled assembler is linear
+// tets + DKT facets; AMG takes couplings on linear elements only).
 async function handleMixedSolve(id: number, payload: SolvePayload) {
   const inp = buildCoupledEngineInputs(payload, logTo(id));
 
@@ -594,12 +601,16 @@ async function handleMixedSolve(id: number, payload: SolvePayload) {
     log: `[mixed] ${inp.solidElements.length} solid tets (${inp.solidMaterialNames.join(", ")}), ${inp.shellElements.length} shell facets${inp.shellMaterialNames.length > 0 ? ` (${inp.shellMaterialNames.join(", ")})` : ""} → ${inp.model.pool.length / 3} pool nodes, ${inp.couplingCount} couplings (${inp.declaredCouplings} declared)…`,
   });
 
-  const result = await m().solve_coupled(
-    inp.mesh,
-    inp.coupling,
-    inp.bcs,
-    inp.matJson,
-  );
+  const result =
+    requestedSolver(payload) === "amg" && amgReason(payload) === null
+      ? await solveCoupledSolidWithAmg(
+          { ElasticModel, SolveOptions, Couplings },
+          inp,
+          payload.cgIterationLimit,
+          onCgLimit,
+          logTo(id),
+        )
+      : await m().solve_coupled(inp.mesh, inp.coupling, inp.bcs, inp.matJson);
   if ("error" in result) throw new Error(result.error);
   const fields = mapMixedResult(payload, inp.model, result);
 

@@ -84,4 +84,45 @@ pub enum FemError {
          the model is probably not fully constrained"
     )]
     CoarseNotPositiveDefinite { unknowns: usize },
+    #[error("coupling {coupling}: {reason}")]
+    Coupling { coupling: usize, reason: String },
+    #[error("coupling input is invalid: {reason}")]
+    CouplingInput { reason: String },
+    #[error(
+        "node {node} DOF {component} is eliminated by two couplings — a DOF can be eliminated \
+         by only one constraint. Make one of them distributing, or pick surfaces that do not \
+         overlap"
+    )]
+    CouplingDofConflict { node: usize, component: usize },
+    #[error(
+        "couplings form a cycle — node {first} and node {second} each depend on the other. \
+         Break the loop: a chain of couplings must end at nodes that are free"
+    )]
+    CouplingCycle { first: usize, second: usize },
+    #[error(
+        "{what} DOF {component} of node {node} lies on a node that follows a distributing or \
+         kinematic coupling — its motion is governed by the coupling, so the condition cannot \
+         be honoured. Constrain the coupled nodes or a kinematic reference point instead"
+    )]
+    ConstraintOnCoupledDof {
+        node: usize,
+        component: usize,
+        what: &'static str,
+    },
+    #[error(
+        "node {node} has no rotational degree of freedom, but a {what} acts on its DOF \
+         {component} — only a coupling reference point carries rotations"
+    )]
+    RotationWithoutDof {
+        node: usize,
+        component: usize,
+        what: &'static str,
+    },
+    #[error(
+        "node {node} DOF {component} carries a load, but no element or coupling stiffens it — \
+         the load would be lost"
+    )]
+    LoadWithoutStiffness { node: usize, component: usize },
+    #[error("couplings are supported on linear tetrahedra only, but this mesh is quadratic")]
+    CouplingOnQuadraticMesh,
 }
