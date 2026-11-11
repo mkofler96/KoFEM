@@ -17,17 +17,24 @@
 #     older clang-tidy front-ends (Ubuntu 24.04's default is 18) cannot parse.
 #   - the Emscripten SDK + WASM deps at their image paths
 #     (bash scripts/fetch-wasm-deps.sh puts them at /emsdk and /opt/kofem-deps).
+#
+# Without that toolchain, run scripts/docker-clang-tidy.sh, which runs this
+# script inside the kofem-dependencies image.
+#
+# KOFEM_TIDY_BUILD_DIR overrides where the compile database is configured
+# (default: target/wasm-build, shared with scripts/build-wasm.sh).
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BUILD_DIR="$REPO_ROOT/target/wasm-build"
+BUILD_DIR="${KOFEM_TIDY_BUILD_DIR:-$REPO_ROOT/target/wasm-build}"
 
 EMSDK="${EMSDK:-/emsdk}"
 SYSROOT="$EMSDK/upstream/emscripten/cache/sysroot"
 if [ ! -d "$SYSROOT" ]; then
     echo "ERROR: Emscripten sysroot not found at ${SYSROOT}." >&2
     echo "Set EMSDK or run: bash scripts/fetch-wasm-deps.sh" >&2
+    echo "With Docker instead, run: bash scripts/docker-clang-tidy.sh" >&2
     exit 1
 fi
 
@@ -47,6 +54,7 @@ if [ -z "$TIDY" ]; then
     echo "ERROR: clang-tidy >= 20 not found (checked clang-tidy-2{2,1,0} and clang-tidy)." >&2
     echo "Install it with: sudo apt-get install clang-tidy-20" >&2
     echo "or point CLANG_TIDY at a suitable binary." >&2
+    echo "With Docker instead, run: bash scripts/docker-clang-tidy.sh" >&2
     exit 1
 fi
 
