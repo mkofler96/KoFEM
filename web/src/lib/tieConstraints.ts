@@ -63,6 +63,9 @@ interface Triangle {
   area: number;
 }
 
+// Nodes of a shell facet (CTRIA3).
+const SHELL_FACET_NODES = 3;
+
 // Local face → node indices of the supported solid elements.
 const TET_FACES: readonly (readonly number[])[] = [
   [0, 1, 2],
@@ -144,6 +147,10 @@ function sideSurfaces(
     { ids: number[]; side: number; count: number; elementCentroid: Point3 }
   >();
   for (const el of elements) {
+    // A shell facet (CTRIA3) bounds no solid: shells are tied to their
+    // neighbours by couplings in the coupled solve (lib/solve/coupled.ts),
+    // never by these constraints, so a facet on a picked surface adds no face.
+    if (el.nodeIds.length === SHELL_FACET_NODES) continue;
     // A face needs three nodes on a side, so most elements are skipped here.
     let onSides = 0;
     for (const id of el.nodeIds) if (sideOf(id) >= 0) onSides++;

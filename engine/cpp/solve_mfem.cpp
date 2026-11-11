@@ -31,6 +31,7 @@
 #include <cmath>
 #include <cstdio>
 #include <deque>
+#include <limits>
 #include <map>
 #include <memory>
 #include <stdexcept>
@@ -152,9 +153,8 @@ kofem::fem::NodeTies parse_tie_constraints(const val& ties_js) {
 //
 // A quadratic space also has nodes ON the tied surface that no vertex tie
 // reaches. Where every vertex of an edge or quadrilateral face is tied, that
-// edge/face node is tied to the mean of its vertices — its value in the linear
-// field they define — so the whole surface follows, not just its corners.
-// Mirrors extend_dirichlet_to_edge_dofs for essential BCs.
+// edge/face node follows the master field too, at the mean of its vertices'
+// projections — so the whole surface follows, not just its corners.
 kofem::fem::NodeTies fe_node_ties(mfem::FiniteElementSpace& fespace,
                                   const kofem::fem::NodeTies& vertex_ties, int order) {
     mfem::Mesh& mesh = *fespace.GetMesh();
@@ -187,47 +187,38 @@ kofem::fem::NodeTies fe_node_ties(mfem::FiniteElementSpace& fespace,
 
     kofem::fem::NodeTies out;
     out.offsets.push_back(0);
-    std::vector<char> tied((size_t)n_verts, 0);
-    mfem::Vector point(dim), shape;
-    for (size_t k = 0; k < vertex_ties.slave.size(); ++k) {
-        const int slave = vertex_ties.slave[k];
-        const int begin = vertex_ties.offsets[k];
-        const int end = vertex_ties.offsets[k + 1];
-        tied[slave] = 1;
-
-        // The free face that holds every master of this tie, and the point on it.
-        int face = -1;
-        for (int be : faces_of[vertex_ties.master[begin]]) {
-            mesh.GetBdrElementVertices(be, face_vertices);
-            bool holds_all = true;
-            for (int i = begin; i < end && holds_all; ++i)
-                holds_all = face_vertices.Find(vertex_ties.master[i]) >= 0;
-            if (holds_all) {
-                face = be;
-                break;
+    // Tie the FE node `slave_dof` to the master surface's displacement field at
+    // `target`: of the candidate free faces, the one the point projects onto
+    // most closely, with that face's own shape functions (bilinear,
+    // quadratic, …) evaluated at the projection.
+    mfem::Vector shape, mapped(dim);
+    const auto tie_to_field = [&](int slave_dof, const mfem::Vector& target,
+                                  const std::vector<int>& candidates, int what) {
+        int best_face = -1;
+        double best_distance = std::numeric_limits<double>::infinity();
+        mfem::IntegrationPoint best_ip;
+        for (int be : candidates) {
+            mfem::ElementTransformation* transformation = mesh.GetBdrElementTransformation(be);
+            mfem::IntegrationPoint ip;
+            transformation->TransformBack(target, ip);
+            mfem::Geometry::ProjectPoint(mesh.GetBdrElementGeometry(be), ip);
+            transformation->SetIntPoint(&ip);
+            transformation->Transform(ip, mapped);
+            const double distance = mapped.DistanceTo(target);
+            if (distance < best_distance) {
+                best_distance = distance;
+                best_face = be;
+                best_ip = ip;
             }
         }
-        if (face < 0)
-            throw std::runtime_error(
-                "tie constraints: the nodes vertex " + std::to_string(slave) +
-                " is tied to do not lie on one free element face");
-        point = 0.0;
-        for (int i = begin; i < end; ++i)
-            for (int c = 0; c < dim; ++c)
-                point[c] += vertex_ties.weights[i] * mesh.GetVertex(vertex_ties.master[i])[c];
-
-        mfem::ElementTransformation* transformation = mesh.GetBdrElementTransformation(face);
-        mfem::IntegrationPoint ip;
-        transformation->TransformBack(point, ip);
-        // The point lies on the face by construction; this only absorbs the
-        // round-off of a projection onto its edge or corner.
-        mfem::Geometry::ProjectPoint(mesh.GetBdrElementGeometry(face), ip);
-        const mfem::FiniteElement* element = fespace.GetBE(face);
+        if (best_face < 0)
+            throw std::runtime_error("tie constraints: no master face for tied node " +
+                                     std::to_string(what));
+        const mfem::FiniteElement* element = fespace.GetBE(best_face);
         shape.SetSize(element->GetDof());
-        element->CalcShape(ip, shape);
-        fespace.GetBdrElementDofs(face, dofs);
-
-        out.slave.push_back(vertex_node[slave]);
+        element->CalcShape(best_ip, shape);
+        fespace.GetBdrElementDofs(best_face, dofs);
+        out.slave.push_back(slave_dof);
         double sum = 0.0;
         const size_t first = out.master.size();
         for (int i = 0; i < dofs.Size(); ++i) {
@@ -240,31 +231,80 @@ kofem::fem::NodeTies fe_node_ties(mfem::FiniteElementSpace& fespace,
         // break that, or the tie would resist a rigid motion.
         for (size_t i = first; i < out.weights.size(); ++i) out.weights[i] /= sum;
         out.offsets.push_back((int)out.master.size());
+        return best_face;
+    };
+
+    // Per tied vertex: the point it projects onto, and the master faces around
+    // the face it lands on — where its edge and face neighbours land too.
+    std::vector<char> tied((size_t)n_verts, 0);
+    std::vector<mfem::Vector> projected((size_t)n_verts);
+    std::vector<std::vector<int>> nearby_faces((size_t)n_verts);
+    for (size_t k = 0; k < vertex_ties.slave.size(); ++k) {
+        const int slave = vertex_ties.slave[k];
+        const int begin = vertex_ties.offsets[k];
+        const int end = vertex_ties.offsets[k + 1];
+        tied[slave] = 1;
+
+        // The free faces that hold every master of this tie.
+        std::vector<int> holding;
+        for (int be : faces_of[vertex_ties.master[begin]]) {
+            mesh.GetBdrElementVertices(be, face_vertices);
+            bool holds_all = true;
+            for (int i = begin; i < end && holds_all; ++i)
+                holds_all = face_vertices.Find(vertex_ties.master[i]) >= 0;
+            if (holds_all) holding.push_back(be);
+        }
+        if (holding.empty())
+            throw std::runtime_error(
+                "tie constraints: the nodes vertex " + std::to_string(slave) +
+                " is tied to do not lie on one free element face");
+        mfem::Vector& point = projected[slave];
+        point.SetSize(dim);
+        point = 0.0;
+        for (int i = begin; i < end; ++i)
+            for (int c = 0; c < dim; ++c)
+                point[c] += vertex_ties.weights[i] * mesh.GetVertex(vertex_ties.master[i])[c];
+        const int face = tie_to_field(vertex_node[slave], point, holding, slave);
+
+        mesh.GetBdrElementVertices(face, face_vertices);
+        std::vector<int>& around = nearby_faces[slave];
+        for (int v : face_vertices)
+            for (int be : faces_of[v])
+                if (std::find(around.begin(), around.end(), be) == around.end())
+                    around.push_back(be);
     }
 
     if (order == 2) {
-        const auto tie_to_vertices = [&](const mfem::Array<int>& vertices,
-                                         const mfem::Array<int>& interior) {
+        // An edge midpoint or quadrilateral face centre whose vertices are all
+        // tied follows the master field at the mean of their projections —
+        // the master's quadratic field, not the mean of the slave vertices,
+        // which would open a gap wherever the master face curves.
+        const auto tie_interior = [&](const mfem::Array<int>& vertices,
+                                      const mfem::Array<int>& interior) {
             if (interior.Size() != 1) return;
             for (int v : vertices)
                 if (tied[v] == 0) return;
-            out.slave.push_back(interior[0]);
+            mfem::Vector target(dim);
+            target = 0.0;
+            std::vector<int> candidates;
             for (int v : vertices) {
-                out.master.push_back(vertex_node[v]);
-                out.weights.push_back(1.0 / vertices.Size());
+                target.Add(1.0 / vertices.Size(), projected[v]);
+                for (int be : nearby_faces[v])
+                    if (std::find(candidates.begin(), candidates.end(), be) == candidates.end())
+                        candidates.push_back(be);
             }
-            out.offsets.push_back((int)out.master.size());
+            tie_to_field(interior[0], target, candidates, vertices[0]);
         };
         mfem::Array<int> vertices, interior;
         for (int e = 0; e < mesh.GetNEdges(); ++e) {
             mesh.GetEdgeVertices(e, vertices);
             fespace.GetEdgeInteriorDofs(e, interior);
-            tie_to_vertices(vertices, interior);
+            tie_interior(vertices, interior);
         }
         for (int f = 0; f < mesh.GetNFaces(); ++f) {
             mesh.GetFaceVertices(f, vertices);
             fespace.GetFaceInteriorDofs(f, interior);
-            tie_to_vertices(vertices, interior);
+            tie_interior(vertices, interior);
         }
     }
     return out;

@@ -894,8 +894,8 @@
           <tbody>
             <tr>
               <td class="num">−1.9048&nbsp;mm</td>
-              <td class="num"><strong data-testid="fe-value">−1.9442&nbsp;mm</strong></td>
-              <td class="num">+2.07&nbsp;%<br /><span class="band pass">within ±4&nbsp;%</span></td>
+              <td class="num"><strong data-testid="fe-value">−1.9402&nbsp;mm</strong></td>
+              <td class="num">+1.86&nbsp;%<br /><span class="band pass">within ±4&nbsp;%</span></td>
             </tr>
           </tbody>
         </table>
@@ -959,7 +959,7 @@
           <tr><th scope="row">Mesh</th><td>5 × 2 × 2 and 5 × 3 × 3 grids, tied: 65 quadratic 27-node hexahedra (P2)</td></tr>
           <tr><th scope="row">Unknowns</th><td>814 nodes, 2,442 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>KoFEM engine (MFEM), the WebAssembly build the app runs: engine-568ab7153860</td></tr>
+          <tr><th scope="row">Solver</th><td>KoFEM engine (MFEM), the WebAssembly build the app runs: engine-cb36c1e084cb</td></tr>
         </table>
       </div>
         <p>Each node of the finer face is tied to the face it projects onto,
@@ -975,19 +975,19 @@
         <table class="spec">
           <tr><th scope="row">Quantity</th><td>tip deflection δ</td></tr>
           <tr><th scope="row">Reference</th><td>δ = P·L³ / (3·E·I) = −1.9048&nbsp;mm <span class="meta">(Euler–Bernoulli beam theory)</span></td></tr>
-          <tr><th scope="row">KoFEM</th><td>−1.9442&nbsp;mm</td></tr>
-          <tr><th scope="row">Difference</th><td>+2.07&nbsp;% <span class="band pass">within ±4&nbsp;%</span></td></tr>
+          <tr><th scope="row">KoFEM</th><td>−1.9402&nbsp;mm</td></tr>
+          <tr><th scope="row">Difference</th><td>+1.86&nbsp;% <span class="band pass">within ±4&nbsp;%</span></td></tr>
         </table>
       </div>
 
       <h2 id="discussion">Discussion</h2>
-        <p>The tied beam deflects +2.07&nbsp;% from the
+        <p>The tied beam deflects +1.86&nbsp;% from the
         Euler–Bernoulli value; the
         <a href="/examples/cantilever-p2/">uncut beam</a> on a similar mesh
         deflects +1.84&nbsp;%. The uncut beam's difference is the model, not
         the tie: shear deformation, which Euler–Bernoulli theory leaves out,
         and the 3-D stress state at the clamp and the loaded end. Cutting the
-        beam and tying it adds 0.23&nbsp;% of the
+        beam and tying it adds 0.02&nbsp;% of the
         reference deflection.</p>
         <p>A deflection averages over the whole beam. Expect the stress right
         at a quadratic tie to be less accurate than this, until the mortar
@@ -998,14 +998,14 @@
         In the app: <a href="/app/?example=tie-cantilever" data-testid="reproduce-open">open the model</a>,
         then Studies → Static 1 → Run static solve, select the result plot and set Field to
         Uy. The Result summary shows
-        <span class="readout" data-testid="app-readout" data-field="Uy" data-stat="Min Uy" data-value="-1.944e+0 mm">Min Uy -1.944e+0 mm</span>.
+        <span class="readout" data-testid="app-readout" data-field="Uy" data-stat="Min Uy" data-value="-1.940e+0 mm">Min Uy -1.940e+0 mm</span>.
       </p>
       <p>From a clone (Bun, bash, curl), this solves the model with the same engine and prints its line:</p>
       <pre><code>git clone https://github.com/mkofler96/KoFEM.git &amp;&amp; cd KoFEM
 bash scripts/fetch-wasm-engine.sh
 cd web &amp;&amp; bun install &amp;&amp; bun ../examples/validation/run.mjs --case tie-cantilever</code></pre>
       <pre class="console"><code>Case                                  Quantity                                  FE   Reference     Err%  Tol%  Status
-Tied cantilever, quadratic hexahedra  tip deflection δ                     -1.9442     -1.9048    +2.07     4  PASS</code></pre>
+Tied cantilever, quadratic hexahedra  tip deflection δ                     -1.9402     -1.9048    +1.86     4  PASS</code></pre>
 
       <h2 id="references">References</h2>
       <ol class="refs">

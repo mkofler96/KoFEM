@@ -22,4 +22,4 @@ node examples/validation/run.mjs --report
 | Cook's membrane | top-corner deflection | 24.042 | converged ≈ 23.9 | +0.59% | 6% | ✅ |
 | Tie patch test | stress uniformity σmax / σmin | 1.0000 | uniform σ (exact) | +0.00% | 0.01% | ✅ |
 | Tied thick-walled cylinder | bore radial displacement u(a) | 0.045244 mm | Lamé, plane strain | -0.34% | 2% | ✅ |
-| Tied cantilever, quadratic hexahedra | tip deflection δ | -1.9442 mm | δ = P·L³ / (3·E·I) | +2.07% | 4% | ✅ |
+| Tied cantilever, quadratic hexahedra | tip deflection δ | -1.9402 mm | δ = P·L³ / (3·E·I) | +1.86% | 4% | ✅ |

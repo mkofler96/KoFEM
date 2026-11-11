@@ -1,6 +1,6 @@
 {
   "generated": "2026-11-11",
-  "engine": "engine-568ab7153860",
+  "engine": "engine-cb36c1e084cb",
   "cases": [
     {
       "id": "axial-bar",
@@ -638,8 +638,8 @@
       "reference": -1.9047619047619047,
       "referenceLabel": "δ = P·L³ / (3·E·I)",
       "tolPct": 4,
-      "fe": -1.9442072647373396,
-      "errPct": 2.070881398710336,
+      "fe": -1.9402209744706482,
+      "errPct": 1.8616011597090376,
       "pass": true,
       "mesh": {
         "order": 2,
@@ -678,13 +678,13 @@
       "readout": {
         "field": "Uy",
         "stat": "Min",
-        "value": "-1.944e+0 mm"
+        "value": "-1.940e+0 mm"
       },
       "figure": {
         "field": "displacement",
         "unit": "mm",
         "min": 0,
-        "max": 1.9496358966414036,
+        "max": 1.9456339127568678,
         "deform": 50,
         "width": 1200,
         "height": 526

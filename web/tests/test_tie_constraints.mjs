@@ -237,8 +237,25 @@ function tieBetween(nodes, extent, searchDistance) {
     ),
     "on matching meshes the mortar tie is node to node",
   );
+  // A shell facet on a picked surface (a mixed model) is not a solid face: it
+  // is skipped, not a reason to throw while the viewport draws the tie.
+  const facetA = onPlane(nodes, LENGTH).slice(0, 3);
+  const withShell = [
+    ...elements,
+    { id: 99999, type: "CTRIA3", nodeIds: facetA, propertyId: 3 },
+  ];
+  const shellMixed = tieConstraints(
+    nodes,
+    withShell,
+    tieBetween(nodes, "full", 0),
+    "mortar",
+  );
+  assert(
+    shellMixed.constraints.length === 16,
+    `a shell facet on the surface must not change the tie, got ${shellMixed.constraints.length}`,
+  );
   console.log(
-    "constraints: 16 node-to-face, 9 node-to-node, mortar consistent — ok",
+    "constraints: 16 node-to-face, 9 node-to-node, mortar consistent, shell facet skipped — ok",
   );
 }
 
