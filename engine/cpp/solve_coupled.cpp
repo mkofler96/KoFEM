@@ -15,6 +15,7 @@
 #include "json_util.h"
 #include "shell_core.h"
 #include "shell_element.h"
+#include "shell_material_js.h"
 #include "tet_element.h"
 #include "wasm_util.h"
 
@@ -117,8 +118,8 @@ val solve_coupled(const val& mesh, const val& coupling, const val& bcs,
 
     // `mat.solid` is either one material object (every tet uses it) or an ARRAY
     // of materials selected per tet by `mesh.attributes` (1-based), matching
-    // solve_linear_elastic's contract. Only the solid side is per-body: a solve
-    // shells exactly one body (#376), so one shell material covers it.
+    // solve_linear_elastic's contract. `mat.shell` follows the same rule per
+    // shell TRIANGLE through `mesh.shell_attributes` (issue #389).
     val mat = parse_json(mat_json);
     val solid = mat["solid"], shell = mat["shell"];
     std::vector<double> solidE, solidNu;
@@ -146,8 +147,16 @@ val solve_coupled(const val& mesh, const val& coupling, const val& bcs,
             return error_result("coupled: tet " + std::to_string(e) + " selects material " +
                                 std::to_string(attributes[e]) + ", outside 1.." +
                                 std::to_string(solidE.size()));
-    in.shell_young = shell["young_modulus"].as<double>();
-    in.shell_poisson = shell["poisson_ratio"].as<double>();
+    const kofem::shell::ShellMaterialPayload shell_materials =
+        kofem::shell::read_shell_materials(shell, mesh["shell_attributes"],
+                                           "mesh.shell_attributes",
+                                           static_cast<int>(in.triangles.size() / 3));
+    if (!shell_materials.error.empty())
+        return error_result("coupled: " + shell_materials.error);
+    in.shell_young = shell_materials.young;
+    in.shell_poisson = shell_materials.poisson;
+    in.shell_youngs = shell_materials.youngs;
+    in.shell_poissons = shell_materials.poissons;
 
     // Couplings (CSR-style). Optional per-coupling `mpc` kind (0/absent ⇒
     // distributing RBE3, 1 ⇒ relaxed shell-to-solid MPC, 2 ⇒ kinematic RBE2 —
@@ -269,7 +278,7 @@ val solve_coupled(const val& mesh, const val& coupling, const val& bcs,
         kofem::shell::tet_von_mises(in.vertices, tets, solidE, solidNu, attributes, r.dofs);
     const std::vector<double> vm_tris = kofem::shell::shell_von_mises(
         in.vertices, in.triangles, in.thickness, in.thicknesses, in.shell_young,
-        in.shell_poisson, r.dofs);
+        in.shell_poisson, in.shell_youngs, in.shell_poissons, r.dofs);
 
     val result = val::object();
     result.set("displacements", float64_array(disp));

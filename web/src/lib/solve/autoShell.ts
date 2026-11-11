@@ -66,9 +66,8 @@ export function shellMarkedBodies(properties: Property[]): Property[] {
   );
 }
 
-// The coupled and shell solvers take a single shell material (#376), so one body
-// is idealised per model. Marking a second would leave it solid behind the
-// user's back — refuse instead.
+// The thin-wall extraction idealises one body per model (extractThinWallShells).
+// Marking a second would leave it solid behind the user's back — refuse instead.
 export function requireOneShellBody(shellBodyIds: Set<number>): void {
   if (shellBodyIds.size > 1)
     throw new Error(
@@ -576,7 +575,7 @@ export function prepareAutoCoupledSolve(
 // ── Solve-time pure auto-shell (thin single body / all-shell → solve_shell) ───
 
 export interface PureShellSolve {
-  mesh: Required<ShellMesh>;
+  mesh: ShellMesh & { thicknesses: Float64Array };
   matJson: string;
   bcsJson: string;
   mapResult: (result: {

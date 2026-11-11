@@ -665,6 +665,174 @@ bool coupled_wrong_length_thickness_field_throws() {
     return false;
 }
 
+// ── Per-facet materials (issue #389) ─────────────────────────────────────────
+//
+// A strip of two materials in one shell mesh, ν = 0 so every reference is exact
+// bar theory. Split ACROSS the length the halves act in series (compliances
+// add); split ALONG the length they act in parallel (stiffnesses add).
+struct BimaterialStrip {
+    static constexpr double L = 1.0, b = 0.25, t = 0.01, E1 = 210e9, E2 = 70e9;
+    static constexpr int nx = 8, ny = 2;
+    std::vector<double> V;
+    std::vector<int> T;
+    std::vector<double> youngs, poissons;
+
+    static int id(int i, int j) { return i * (ny + 1) + j; }
+    static int n_nodes() { return (nx + 1) * (ny + 1); }
+
+    explicit BimaterialStrip(bool series) {
+        for (int i = 0; i <= nx; ++i)
+            for (int j = 0; j <= ny; ++j) {
+                V.push_back(L * i / nx); V.push_back(b * j / ny); V.push_back(0.0);
+            }
+        for (int i = 0; i < nx; ++i)
+            for (int j = 0; j < ny; ++j) {
+                const int a0 = id(i, j), a1 = id(i + 1, j), a2 = id(i + 1, j + 1),
+                          a3 = id(i, j + 1);
+                T.push_back(a0); T.push_back(a1); T.push_back(a2);
+                T.push_back(a0); T.push_back(a2); T.push_back(a3);
+                // Both facets of a cell share its material, so the material
+                // interface runs along mesh edges.
+                const bool first = series ? i < nx / 2 : j < ny / 2;
+                for (int k = 0; k < 2; ++k) {
+                    youngs.push_back(first ? E1 : E2);
+                    poissons.push_back(0.0);
+                }
+            }
+    }
+};
+
+struct SeriesResult {
+    double ux_end;  // mean ux on the x = L edge
+    double vm_min, vm_max;
+};
+
+// Uniaxial tension σ across a steel|aluminium series strip, membrane only.
+// `coupled` runs the same model through the coupled assembler (no tets, no
+// couplings) to cover its per-facet material field too.
+SeriesResult bimaterial_series_tension(double sigma, bool coupled) {
+    const BimaterialStrip m(true);
+    const int nx = BimaterialStrip::nx, ny = BimaterialStrip::ny;
+    std::vector<int> fixed;
+    std::vector<std::pair<int, double>> loads;
+    for (int nd = 0; nd < BimaterialStrip::n_nodes(); ++nd)
+        for (int c : {2, 3, 4, 5}) fixed.push_back(6 * nd + c);
+    for (int j = 0; j <= ny; ++j) fixed.push_back(6 * BimaterialStrip::id(0, j) + 0);
+    for (int i = 0; i <= nx; ++i) fixed.push_back(6 * BimaterialStrip::id(i, 0) + 1);
+    const double Ftot = sigma * BimaterialStrip::b * BimaterialStrip::t;
+    for (int j = 0; j <= ny; ++j) {
+        const double wgt = (j == 0 || j == ny) ? 0.5 : 1.0;
+        loads.emplace_back(6 * BimaterialStrip::id(nx, j) + 0, Ftot * wgt / ny);
+    }
+    ShellResult r;
+    if (coupled) {
+        CoupledInput in;
+        in.n_nodes = BimaterialStrip::n_nodes();
+        in.vertices = m.V; in.triangles = m.T; in.thickness = BimaterialStrip::t;
+        in.shell_youngs = m.youngs; in.shell_poissons = m.poissons;
+        in.fixed_dofs = fixed; in.loads = loads;
+        r = solve_solid_shell_core(in);
+    } else {
+        ShellInput in;
+        in.vertices = m.V; in.triangles = m.T; in.thickness = BimaterialStrip::t;
+        in.youngs = m.youngs; in.poissons = m.poissons;
+        in.fixed_dofs = fixed; in.loads = loads;
+        r = solve_shell_core(in);
+    }
+    SeriesResult out{0.0, 0.0, 0.0};
+    for (int j = 0; j <= ny; ++j)
+        out.ux_end += r.dofs[6 * static_cast<size_t>(BimaterialStrip::id(nx, j))] / (ny + 1);
+    const std::vector<double> vm = shell_von_mises(m.V, m.T, BimaterialStrip::t, {}, 0.0, 0.0,
+                                                   m.youngs, m.poissons, r.dofs);
+    out.vm_min = *std::min_element(vm.begin(), vm.end());
+    out.vm_max = *std::max_element(vm.begin(), vm.end());
+    return out;
+}
+
+struct ParallelResult {
+    double ux_min, ux_max;  // over the x = L edge — equal iff the strips share the load by stiffness
+    double vm_min, vm_max;
+};
+
+// A steel strip beside an aluminium strip, each pulled by its own share of the
+// load (σ_i = E_i·ε): the end must move as one, by ε·L.
+ParallelResult bimaterial_parallel_tension(double eps) {
+    const BimaterialStrip m(false);
+    const int nx = BimaterialStrip::nx, ny = BimaterialStrip::ny;
+    ShellInput in;
+    in.vertices = m.V; in.triangles = m.T; in.thickness = BimaterialStrip::t;
+    in.youngs = m.youngs; in.poissons = m.poissons;
+    for (int nd = 0; nd < BimaterialStrip::n_nodes(); ++nd)
+        for (int c : {2, 3, 4, 5}) in.fixed_dofs.push_back(6 * nd + c);
+    for (int j = 0; j <= ny; ++j) in.fixed_dofs.push_back(6 * BimaterialStrip::id(0, j) + 0);
+    for (int i = 0; i <= nx; ++i) in.fixed_dofs.push_back(6 * BimaterialStrip::id(i, 0) + 1);
+    // Consistent end loads: each edge segment carries σ_i·h·t, half to each node.
+    const double h = BimaterialStrip::b / ny;
+    for (int j = 0; j < ny; ++j) {
+        const double seg = (j < ny / 2 ? BimaterialStrip::E1 : BimaterialStrip::E2) * eps * h *
+                           BimaterialStrip::t;
+        in.loads.emplace_back(6 * BimaterialStrip::id(nx, j) + 0, 0.5 * seg);
+        in.loads.emplace_back(6 * BimaterialStrip::id(nx, j + 1) + 0, 0.5 * seg);
+    }
+    const ShellResult r = solve_shell_core(in);
+    ParallelResult out{1e300, -1e300, 0.0, 0.0};
+    for (int j = 0; j <= ny; ++j) {
+        const double u = r.dofs[6 * static_cast<size_t>(BimaterialStrip::id(nx, j))];
+        out.ux_min = std::min(out.ux_min, u);
+        out.ux_max = std::max(out.ux_max, u);
+    }
+    const std::vector<double> vm = shell_von_mises(m.V, m.T, BimaterialStrip::t, {}, 0.0, 0.0,
+                                                   m.youngs, m.poissons, r.dofs);
+    out.vm_min = *std::min_element(vm.begin(), vm.end());
+    out.vm_max = *std::max_element(vm.begin(), vm.end());
+    return out;
+}
+
+// Bending counterpart of the series case: a cantilever clamped at x = 0 with an
+// end moment M. The curvature is M/(E_i·I) in each half, so the tip rotation is
+// the sum of the two halves' — the DKT part must see the per-facet modulus too.
+double bimaterial_series_bending_rotation(double M) {
+    const BimaterialStrip m(true);
+    const int nx = BimaterialStrip::nx, ny = BimaterialStrip::ny;
+    ShellInput in;
+    in.vertices = m.V; in.triangles = m.T; in.thickness = BimaterialStrip::t;
+    in.youngs = m.youngs; in.poissons = m.poissons;
+    for (int j = 0; j <= ny; ++j)
+        for (int c = 0; c < 6; ++c) in.fixed_dofs.push_back(6 * BimaterialStrip::id(0, j) + c);
+    for (int j = 0; j <= ny; ++j) {
+        const double wgt = (j == 0 || j == ny) ? 0.5 : 1.0;
+        in.loads.emplace_back(6 * BimaterialStrip::id(nx, j) + 4, M * wgt / ny);
+    }
+    const ShellResult r = solve_shell_core(in);
+    double theta = 0.0;
+    for (int j = 0; j <= ny; ++j)
+        theta += r.dofs[6 * static_cast<size_t>(BimaterialStrip::id(nx, j)) + 4] / (ny + 1);
+    return std::fabs(theta);
+}
+
+// A per-facet material field that does not cover every triangle, or that gives
+// only one of (E, ν), must be rejected rather than replaced by the uniform pair.
+bool shell_bad_material_field_throws() {
+    std::vector<double> V; std::vector<int> T;
+    plate_mesh(1.0, 2, V, T);
+    auto rejects = [&](size_t n_young, size_t n_poisson) {
+        ShellInput in;
+        in.vertices = V; in.triangles = T; in.thickness = 0.01; in.young = 1e7; in.poisson = 0.3;
+        in.youngs.assign(n_young, 1e7);
+        in.poissons.assign(n_poisson, 0.3);
+        for (int c = 0; c < 6; ++c) in.fixed_dofs.push_back(c);
+        try {
+            solve_shell_core(in);
+        } catch (const std::exception& e) {
+            return std::string(e.what()).find("per-facet material field has") !=
+                   std::string::npos;
+        }
+        return false;
+    };
+    const size_t n = T.size() / 3;
+    return rejects(n - 1, n - 1) && rejects(n, 0) && rejects(0, n);
+}
+
 }  // namespace
 
 int main() {
@@ -773,6 +941,37 @@ int main() {
         printf("  [%s] %-28s %s\n", coupled_thk ? "PASS" : "FAIL",
                "coupled bad thickness field",
                coupled_thk ? "rejected as expected" : "did NOT throw a length mismatch");
+    }
+
+    printf("Per-facet shell materials (issue #389):\n");
+    {
+        const double E1 = BimaterialStrip::E1, E2 = BimaterialStrip::E2, L = BimaterialStrip::L;
+        const double sigma = 1.0e6;
+        const double series_ref = sigma * 0.5 * L * (1.0 / E1 + 1.0 / E2);
+        const SeriesResult ser = bimaterial_series_tension(sigma, false);
+        check(failures, "bimaterial-series-extension", ser.ux_end, series_ref, 0.01);
+        check(failures, "bimaterial-series-vm-min", ser.vm_min, sigma, 0.01);
+        check(failures, "bimaterial-series-vm-max", ser.vm_max, sigma, 0.01);
+        check(failures, "bimaterial-series-coupled",
+              bimaterial_series_tension(sigma, true).ux_end, series_ref, 0.01);
+
+        const double eps = 1.0e-4;
+        const ParallelResult par = bimaterial_parallel_tension(eps);
+        check(failures, "bimaterial-parallel-ux-min", par.ux_min, eps * L, 0.01);
+        check(failures, "bimaterial-parallel-ux-max", par.ux_max, eps * L, 0.01);
+        check(failures, "bimaterial-parallel-vm-alu", par.vm_min, E2 * eps, 0.01);
+        check(failures, "bimaterial-parallel-vm-steel", par.vm_max, E1 * eps, 0.01);
+
+        const double M = 1.0;
+        const double I = BimaterialStrip::b * std::pow(BimaterialStrip::t, 3) / 12.0;
+        check(failures, "bimaterial-series-bending",
+              bimaterial_series_bending_rotation(M),
+              M * 0.5 * L * (1.0 / (E1 * I) + 1.0 / (E2 * I)), 0.5);
+
+        const bool bad_field = shell_bad_material_field_throws();
+        if (!bad_field) ++failures;
+        printf("  [%s] %-28s %s\n", bad_field ? "PASS" : "FAIL", "shell bad material field",
+               bad_field ? "rejected as expected" : "did NOT throw a length mismatch");
     }
 
     printf(failures != 0 ? "\n%d check(s) FAILED\n" : "\nall checks passed\n", failures);

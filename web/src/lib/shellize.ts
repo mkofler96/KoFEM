@@ -323,8 +323,8 @@ function pairMap(keys: Uint32Array, values: Uint32Array): Map<number, number> {
 // empty extraction (shellBody = -1) when no thin wall is found.
 // `shellBodyIds` names the bodies to idealise as shells (the app passes the
 // per-body Shell/Solid choice; omitted, the largest thin-walled body is used).
-// Only ONE body is shelled per solve — the coupled solver takes a single shell
-// material (#376) — so among the requested bodies the one with the largest
+// Only ONE body is shelled per solve — this extraction carries one shell body
+// and its material — so among the requested bodies the one with the largest
 // thin wall is used.
 export function extractThinWallShells(
   m: ShellizeMesh,
