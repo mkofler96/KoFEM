@@ -9,13 +9,21 @@ import {
   shellSectionsOf,
   suppressionMismatch,
 } from "../../store/geometrySlice";
-import type { TreeTarget } from "../../store/viewSlice";
+import { itemSelection, type TreeTarget } from "../../store/viewSlice";
 import { useGeometry } from "../../hooks/useGeometry";
 import { useEngineGate } from "../../store/engineStore";
 import { SplitSection } from "./SplitSection";
 import { BooleanSection } from "./BooleanSection";
 import { EYE_ICON, EYE_OFF_ICON } from "./bodyIcons";
 import { unconnectedBodies } from "../../lib/interfaces";
+import {
+  bodyGroupOf,
+  bodyGroups,
+  OPTIMIZATION_ROLE_LABELS,
+  roleOf,
+  type BodyGroup,
+  type OptimizationRole,
+} from "../../lib/regions";
 import styles from "./Panel.module.css";
 
 const SUPPRESS_TIP =
@@ -31,6 +39,24 @@ const BODIES_NOTE =
 
 const UNBONDED_NOTE =
   "Not bonded to any other body — it floats unless a support or tie holds it.";
+
+const REGIONS_NOTE =
+  "A split cut this body into regions. They stay connected at the cuts and " +
+  "are meshed together. Open a region to give it its own material, element " +
+  "type, element size or optimization role.";
+
+const REGION_SIZE_TIP =
+  "Max element size for this region, in mm. Leave blank to use the size in " +
+  "the Mesh settings. It may be finer or coarser than that size.";
+
+const ROLE_TIP =
+  "What topology optimization may do here: Design lets it remove material, " +
+  "Keep solid fixes the region at full material (a mounting boss, a flange), " +
+  "Keep empty keeps it free of material.";
+
+const PROMOTE_TIP =
+  "Make this region a body of its own. The cut becomes an interface between " +
+  "the two bodies, listed under Boundary conditions. The mesh does not change.";
 
 const ELEMENT_TYPE_TIP =
   "Solid uses tetrahedra. Shell uses wall mid-surfaces and retains solid material " +
@@ -173,7 +199,19 @@ function BodyDetail({ id }: { id: number }) {
   const meshSuppressedIds = useModelStore((s) => s.meshSuppressedIds);
   const nodeCount = useModelStore((s) => s.nodes.length);
   const interfaces = useModelStore((s) => s.interfaces);
+  const globalMaxSize = useModelStore((s) => s.maxElementSize);
+  const setRegionMaxElementSize = useModelStore(
+    (s) => s.setRegionMaxElementSize,
+  );
+  const setRegionOptimizationRole = useModelStore(
+    (s) => s.setRegionOptimizationRole,
+  );
+  const promoteRegion = useModelStore((s) => s.promoteRegion);
+  const selectTreeNode = useModelStore((s) => s.selectTreeNode);
   if (!prop) return null;
+  // A region of a body with several: it can be promoted to a body of its own.
+  const group = bodyGroupOf(properties, prop.id);
+  const isRegion = group.regions.length > 1;
 
   const hidden = hiddenBodyIds.includes(prop.id);
   const bodies = properties.filter(isCadBody);
@@ -265,6 +303,62 @@ function BodyDetail({ id }: { id: number }) {
         </select>
       </div>
       {tip && <p className={styles.formNote}>{tip}</p>}
+      <div className={styles.formRow} title={REGION_SIZE_TIP}>
+        <span className={styles.formLabel}>Max element size</span>
+        <input
+          className={styles.formInput}
+          data-testid={`region-max-size-${prop.id}`}
+          type="number"
+          step="any"
+          // An empty field is how "use the global size" is shown.
+          value={prop.maxElementSize ?? ""}
+          placeholder={`${globalMaxSize} (mesh setting)`}
+          onChange={(e) => setRegionMaxElementSize(prop.id, e.target.value)}
+        />
+        <span className={styles.toleranceUnit}>mm</span>
+      </div>
+      <div className={styles.formRow} title={ROLE_TIP}>
+        <span className={styles.formLabel}>Optimization</span>
+        <select
+          className={styles.formSelect}
+          data-testid={`region-role-${prop.id}`}
+          value={roleOf(prop)}
+          onChange={(e) =>
+            setRegionOptimizationRole(
+              prop.id,
+              e.target.value as OptimizationRole,
+            )
+          }
+        >
+          {(
+            Object.entries(OPTIMIZATION_ROLE_LABELS) as [
+              OptimizationRole,
+              string,
+            ][]
+          ).map(([role, label]) => (
+            <option key={role} value={role}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </div>
+      {isRegion && (
+        <button
+          className={styles.outlineBtn}
+          data-testid={`region-promote-${prop.id}`}
+          title={PROMOTE_TIP}
+          onClick={() => {
+            promoteRegion(prop.id);
+            const promoted = useModelStore
+              .getState()
+              .properties.find((p) => p.id === prop.id);
+            if (promoted?.body !== undefined)
+              selectTreeNode(itemSelection("geometry", "body", promoted.body));
+          }}
+        >
+          Promote to body
+        </button>
+      )}
       {unbonded ? (
         <p className={styles.fieldError} data-testid="body-unbonded-note">
           {UNBONDED_NOTE}
@@ -275,6 +369,85 @@ function BodyDetail({ id }: { id: number }) {
       {!suppressed && <SplitSection bodyId={prop.id} />}
     </>
   );
+}
+
+// A body a split cut into regions: what holds for the whole body (visibility,
+// suppression) and its regions, each opened from the tree or the list here.
+function RegionedBody({ group }: { group: BodyGroup }) {
+  const properties = useModelStore((s) => s.properties);
+  const hiddenBodyIds = useModelStore((s) => s.hiddenBodyIds);
+  const setBodiesHidden = useModelStore((s) => s.setBodiesHidden);
+  const setBodySuppressed = useModelStore((s) => s.setBodySuppressed);
+  const selectTreeNode = useModelStore((s) => s.selectTreeNode);
+  const ids = group.regions.map((r) => r.id);
+  const hidden = ids.every((id) => hiddenBodyIds.includes(id));
+  const suppressed = group.regions.every((r) => r.suppressed === true);
+  // The last body still in the model cannot go — there would be nothing left.
+  const lastBody =
+    !suppressed &&
+    bodyGroups(properties).every(
+      (g) => g.body === group.body || g.regions.every((r) => r.suppressed),
+    );
+  return (
+    <>
+      <div className={styles.formRow}>
+        <span className={styles.formLabel}>Visible</span>
+        <button
+          className={`${styles.visBtn}${hidden ? ` ${styles.visBtnOff}` : ""}`}
+          data-testid={`body-visibility-${group.body}`}
+          title={hidden ? "Show body" : "Hide body"}
+          aria-pressed={hidden}
+          onClick={() => setBodiesHidden(ids, !hidden)}
+        >
+          {hidden ? EYE_OFF_ICON : EYE_ICON}
+        </button>
+      </div>
+      <label
+        className={styles.formRow}
+        title={
+          lastBody
+            ? "The last body in the model cannot be suppressed"
+            : SUPPRESS_TIP
+        }
+      >
+        <span className={styles.formLabel}>Suppressed</span>
+        <input
+          type="checkbox"
+          data-testid={`body-suppressed-${group.body}`}
+          checked={suppressed}
+          disabled={lastBody}
+          onChange={(e) => {
+            for (const id of ids) setBodySuppressed(id, e.target.checked);
+          }}
+        />
+      </label>
+      <p className={styles.formNote}>{REGIONS_NOTE}</p>
+      <div className={styles.sectionLabel}>Regions</div>
+      {group.regions.map((r, k) => (
+        <button
+          key={r.id}
+          className={styles.outlineBtn}
+          data-testid={`body-region-${r.id}`}
+          onClick={() =>
+            selectTreeNode(itemSelection("geometry", "region", r.id))
+          }
+        >
+          Region {k + 1}
+        </button>
+      ))}
+    </>
+  );
+}
+
+// A body entry of the tree: the body's own settings when it is one region,
+// the regioned view when a split cut it.
+function BodyEntry({ body }: { body: number }) {
+  const properties = useModelStore((s) => s.properties);
+  const group = bodyGroups(properties).find((g) => g.body === body);
+  if (!group) return null;
+  if (group.regions.length === 1)
+    return <BodyDetail id={group.regions[0].id} />;
+  return <RegionedBody group={group} />;
 }
 
 // Geometry → + Add: import a CAD file (replacing the current model) or make a
@@ -318,7 +491,12 @@ export function GeometryPanel({ target }: { target: TreeTarget }) {
     <div className={styles.panel}>
       <div className={styles.tabContent}>
         {target.type === "add" && <AddGeometry />}
-        {target.type === "item" && <BodyDetail id={target.id} />}
+        {target.type === "item" && target.kind === "body" && (
+          <BodyEntry body={target.id} />
+        )}
+        {target.type === "item" && target.kind === "region" && (
+          <BodyDetail id={target.id} />
+        )}
       </div>
     </div>
   );

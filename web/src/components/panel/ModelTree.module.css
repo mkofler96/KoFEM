@@ -211,3 +211,8 @@
 .nodeDimmed .swatch {
   opacity: 0.45;
 }
+
+/* A region under its body (KOF-257). */
+.entryRow .nodeNested {
+  padding-left: 37px;
+}

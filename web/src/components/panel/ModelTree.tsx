@@ -75,6 +75,7 @@ export function ModelTree() {
     properties.filter((p) => p.suppressed).map((p) => p.id),
   );
   const toggleBodyVisibility = useModelStore((s) => s.toggleBodyVisibility);
+  const setBodiesHidden = useModelStore((s) => s.setBodiesHidden);
   const items = useTreeItems();
   const [collapsed, setCollapsed] = useState<TreeGroup[]>([]);
 
@@ -104,6 +105,7 @@ export function ModelTree() {
     onHover,
     dimmed,
     trailing,
+    nested,
   }: {
     key: string;
     active: boolean;
@@ -117,6 +119,8 @@ export function ModelTree() {
     // A control at the row's end (the body eye) — a sibling of the entry
     // button, since a button may not contain another.
     trailing?: ReactNode;
+    // A region under its body: indented.
+    nested?: boolean;
   }) {
     return (
       <li
@@ -126,7 +130,7 @@ export function ModelTree() {
         onMouseLeave={onHover && (() => onHover(false))}
       >
         <button
-          className={`${styles.node} ${active ? styles.nodeActive : ""} ${dimmed ? styles.nodeDimmed : ""}`}
+          className={`${styles.node} ${active ? styles.nodeActive : ""} ${dimmed ? styles.nodeDimmed : ""} ${nested ? styles.nodeNested : ""}`}
           aria-current={active ? "true" : undefined}
           data-testid={testId}
           onClick={onClick}
@@ -159,13 +163,17 @@ export function ModelTree() {
             {open && (
               <ul className={styles.list}>
                 {items[id].map((item) => {
-                  const isBody = item.kind === "body";
+                  // A body or region stands for its CAD solids (KOF-257).
+                  const solids = item.solidIds ?? [];
+                  const isBody = solids.length > 0;
                   const isInterface = item.kind === "interface";
                   const inactive = item.inactive === true;
-                  const hidden = isBody && hiddenBodyIds.includes(item.id);
+                  const hidden =
+                    isBody && solids.every((s) => hiddenBodyIds.includes(s));
                   // Suppressed: as good as deleted, so no eye — it is brought
                   // back from its panel (Suppressed), not shown.
-                  const suppressed = isBody && suppressedIds.has(item.id);
+                  const suppressed =
+                    isBody && solids.every((s) => suppressedIds.has(s));
                   return entry({
                     key: `${item.kind}:${item.id}`,
                     active: isItem(id, item.kind, item.id),
@@ -188,24 +196,29 @@ export function ModelTree() {
                       />
                     ),
                     label: item.label,
-                    // Hovering a body highlights it in the viewport (#353),
-                    // hovering an interface its shared faces.
+                    // Hovering a single-solid body or a region highlights it in
+                    // the viewport (#353), hovering an interface its faces.
                     onHover:
-                      isBody && !suppressed
-                        ? (on) => setHighlightBodyId(on ? item.id : null)
+                      isBody && solids.length === 1 && !suppressed
+                        ? (on) => setHighlightBodyId(on ? solids[0] : null)
                         : isInterface && !inactive
                           ? (on) => setHighlightInterfaceId(on ? item.id : null)
                           : undefined,
                     detail: suppressed ? "suppressed" : item.detail,
                     dimmed: hidden || suppressed || inactive,
+                    nested: item.nested,
                     trailing: isBody && !suppressed && (
                       <button
                         className={`${styles.eye} ${hidden ? styles.eyeOff : ""}`}
-                        data-testid={`tree-eye-body-${item.id}`}
-                        title={hidden ? "Show body" : "Hide body"}
+                        data-testid={`tree-eye-${item.kind}-${item.id}`}
+                        title={hidden ? "Show" : "Hide"}
                         aria-label={`${hidden ? "Show" : "Hide"} ${item.label}`}
                         aria-pressed={hidden}
-                        onClick={() => toggleBodyVisibility(item.id)}
+                        onClick={() =>
+                          solids.length === 1
+                            ? toggleBodyVisibility(solids[0])
+                            : setBodiesHidden(solids, !hidden)
+                        }
                       >
                         {hidden ? EYE_OFF_ICON : EYE_ICON}
                       </button>

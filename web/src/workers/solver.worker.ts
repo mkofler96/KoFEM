@@ -258,12 +258,15 @@ function handleParseStep(id: number, payload: ParseStepPayload) {
 // loaded straight away, so the reply carries both the new file and its view.
 function handleSplitGeometry(id: number, payload: SplitGeometryPayload) {
   reloadForEdit(payload.bytes, payload.format);
-  const { bytes } = m().split_geometry(JSON.stringify(payload.split));
+  const { bytes, bodySources } = m().split_geometry(
+    JSON.stringify(payload.split),
+  );
   geometryLoaded = false; // split_geometry released the pre-edit shape
   self.postMessage({
     id,
     ok: true,
     bytes,
+    bodySources,
     ...loadGeometry(bytes, "step"),
   });
 }
@@ -404,6 +407,9 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
   const opts = JSON.stringify({
     max_element_size: maxElementSize,
     min_element_size: minSize,
+    ...(payload.solidMaxSizes
+      ? { solid_max_sizes: payload.solidMaxSizes }
+      : {}),
     grading: 0.3,
     second_order: false,
     elementsperedge: 2.0,

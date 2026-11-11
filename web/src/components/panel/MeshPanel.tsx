@@ -10,6 +10,7 @@ import {
   type MeshSizes,
 } from "../../store/geometrySlice";
 import { estimateElementCount } from "../../lib/meshSizing";
+import { solidName } from "../../lib/regions";
 import type { GeometryMeasure } from "../../lib/meshSizing";
 import { LogSection } from "./LogSection";
 import { MeshOverlapCard } from "./MeshOverlapCard";
@@ -101,6 +102,7 @@ function MeshSummary() {
   const nodeCount = useModelStore((s) => s.nodes.length);
   const elementCount = useModelStore((s) => s.elements.length);
   const meshSizes = useModelStore((s) => s.meshSizes);
+  const properties = useModelStore((s) => s.properties);
   return (
     <div data-testid="mesh-summary">
       <div className={styles.statRow}>
@@ -123,6 +125,22 @@ function MeshSummary() {
           </span>
         </div>
       )}
+      {meshSizes &&
+        Object.entries(meshSizes.regions)
+          .filter(([id]) => properties.some((p) => p.id === Number(id)))
+          .map(([id, size]) => (
+            <div key={id} className={styles.statRow}>
+              <span className={styles.statKey}>
+                {solidName(properties, Number(id))}
+              </span>
+              <span
+                className={styles.statVal}
+                data-testid={`mesh-region-size-${id}`}
+              >
+                max {size} mm
+              </span>
+            </div>
+          ))}
     </div>
   );
 }
@@ -161,7 +179,8 @@ function MeshSettings({
   } = mesh;
 
   const sizesChanged =
-    hasMesh && meshSizesChanged(meshSizes, maxElementSize, minElementSize);
+    hasMesh &&
+    meshSizesChanged(meshSizes, maxElementSize, minElementSize, properties);
   const bodies = suppressionMismatch(properties, meshSuppressedIds, hasMesh);
   const bodiesChanged =
     bodies.stillMeshed.length > 0 || bodies.missing.length > 0;

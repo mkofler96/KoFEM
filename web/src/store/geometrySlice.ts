@@ -9,6 +9,13 @@ import type { ModelState, SliceCreator } from "./modelStore";
 import { addSelection } from "./viewSlice";
 import { carryGroupsToMesh, remeshNotice } from "../lib/remeshGroups";
 import {
+  bodyGroupOf,
+  bodyOf,
+  nextBodyNumber,
+  solidName,
+  type OptimizationRole,
+} from "../lib/regions";
+import {
   DEFAULT_MAX_ELEMENT_SIZE,
   DEFAULT_MIN_ELEMENT_SIZE,
   suggestElementSizes,
@@ -70,6 +77,15 @@ export interface Property {
   // bodies themselves, whose own id already is the body id. The geometry view
   // needs it because a derived PSHELL has no tessellation of its own.
   sourceBodyId?: number;
+  // CAD solids only (KOF-257, lib/regions). The body this solid is a region
+  // of; absent, the solid is a body of its own. A body split keeps the pieces
+  // in their body; promoting a region gives it a new number.
+  body?: number;
+  // The region's max element size in mm, as typed; absent or blank meshes it at
+  // the global size. Validated when meshing starts.
+  maxElementSize?: string;
+  // What topology optimization may do with the region; absent is "design".
+  optimizationRole?: OptimizationRole;
 }
 
 // A property the user owns: one CAD body of the imported file. Everything else
@@ -103,11 +119,15 @@ export function suppressionMismatch(
 }
 
 // The pre-flight line for a mesh that disagrees with the suppression, or null.
-export function suppressionMismatchMessage(m: {
-  stillMeshed: number[];
-  missing: number[];
-}): string | null {
-  const bodies = (ids: number[]) => ids.map((id) => `Body ${id}`).join(", ");
+export function suppressionMismatchMessage(
+  m: {
+    stillMeshed: number[];
+    missing: number[];
+  },
+  properties: Property[],
+): string | null {
+  const bodies = (ids: number[]) =>
+    ids.map((id) => solidName(properties, id)).join(", ");
   if (m.stillMeshed.length > 0)
     return `Re-mesh: suppressed ${bodies(m.stillMeshed)} still in the mesh`;
   if (m.missing.length > 0)
@@ -115,10 +135,33 @@ export function suppressionMismatchMessage(m: {
   return null;
 }
 
+// What a mesh is made of: tetrahedra (and hexahedra) only, shell triangles
+// only, or both — a model with some bodies idealised as shells.
+export type MeshKind = "volume" | "shell" | "mixed";
+
+export const MESH_KIND_LABEL: Record<MeshKind, string> = {
+  volume: "Volume mesh",
+  shell: "Shell mesh",
+  mixed: "Mixed mesh",
+};
+
+export function meshKind(elements: { type: ElementType }[]): MeshKind {
+  let shell = false;
+  let solid = false;
+  for (const e of elements) {
+    if (e.type === "CTRIA3") shell = true;
+    else solid = true;
+    if (shell && solid) return "mixed";
+  }
+  return shell ? "shell" : "volume";
+}
+
 // The element sizes a mesh was made with, in mm.
 export interface MeshSizes {
   max: number;
   min: number;
+  // The regions meshed at a size of their own, by solid id.
+  regions: Record<number, number>;
 }
 
 // Whether the sizes typed in the mesh settings differ from the ones the current
@@ -130,11 +173,23 @@ export function meshSizesChanged(
   meshSizes: MeshSizes | null,
   maxElementSize: string,
   minElementSize: string,
+  properties: Property[],
 ): boolean {
   if (!meshSizes) return false;
-  return (
+  if (
     parseFloat(maxElementSize) !== meshSizes.max ||
     parseFloat(minElementSize) !== meshSizes.min
+  )
+    return true;
+  const typed = new Map<number, number>();
+  for (const p of properties.filter(isCadBody)) {
+    const raw = p.maxElementSize?.trim();
+    if (raw !== undefined && raw !== "") typed.set(p.id, parseFloat(raw));
+  }
+  const meshed = Object.entries(meshSizes.regions);
+  return (
+    typed.size !== meshed.length ||
+    meshed.some(([id, size]) => typed.get(Number(id)) !== size)
   );
 }
 
@@ -283,6 +338,11 @@ export interface GeometrySlice {
   assignBodyMaterial(propertyId: number, materialId: number): void;
   setBodySuppressed(propertyId: number, suppressed: boolean): void;
   setBodyDiscretization(propertyId: number, disc: BodyDiscretization): void;
+  setRegionMaxElementSize(propertyId: number, size: string): void;
+  setRegionOptimizationRole(propertyId: number, role: OptimizationRole): void;
+  // Make a region of a body with several regions a body of its own: its cut
+  // then becomes an interface between two bodies.
+  promoteRegion(propertyId: number): void;
   setInterfaceType(interfaceId: number, type: InterfaceType): void;
   setStepSurface(tessellation: StepTessellation | null): void;
   setStepBytes(bytes: Uint8Array | null): void;
@@ -302,9 +362,14 @@ export interface GeometrySlice {
     bytes: Uint8Array,
     tessellation: StepTessellation,
     bodyCount: number,
-    // For an edit that knows where each new body came from (a Boolean): entry
-    // j is the old id of new Body j+1, whose settings it inherits.
+    // For an edit that knows where each new body came from (a split, a
+    // Boolean, a hinge repair): entry j is the old id of new solid j+1, whose
+    // settings it inherits.
     bodySources?: number[],
+    // What the pieces of one solid become: regions of its body (a body split —
+    // they stay connected at the cut), or bodies of their own (a hinge repair
+    // that separates them).
+    piecesAs?: "regions" | "bodies",
   ): void;
   undoGeometryEdit(): void;
   setSplitPicking(on: boolean): void;
@@ -453,6 +518,38 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
         );
       prop.discretization = disc;
     }),
+  setRegionMaxElementSize: (propertyId, size) =>
+    set((s) => {
+      const prop = s.properties.find((p) => p.id === propertyId);
+      if (!prop || !isCadBody(prop))
+        throw new Error(
+          `Cannot set the element size: region ${propertyId} does not exist`,
+        );
+      if (size.trim() === "") delete prop.maxElementSize;
+      else prop.maxElementSize = size;
+    }),
+  setRegionOptimizationRole: (propertyId, role) =>
+    set((s) => {
+      const prop = s.properties.find((p) => p.id === propertyId);
+      if (!prop || !isCadBody(prop))
+        throw new Error(
+          `Cannot set the optimization role: region ${propertyId} does not exist`,
+        );
+      if (role === "design") delete prop.optimizationRole;
+      else prop.optimizationRole = role;
+    }),
+  promoteRegion: (propertyId) =>
+    set((s) => {
+      const group = bodyGroupOf(s.properties, propertyId);
+      if (group.regions.length < 2)
+        throw new Error(
+          `Cannot promote: Body ${group.body} has only one region — it is a body already`,
+        );
+      const prop = s.properties.find((p) => p.id === propertyId);
+      if (!prop)
+        throw new Error(`Cannot promote: region ${propertyId} does not exist`);
+      prop.body = nextBodyNumber(s.properties);
+    }),
   setInterfaceType: (interfaceId, type) =>
     set((s) => {
       const iface = s.interfaces?.find((i) => i.id === interfaceId);
@@ -542,7 +639,13 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
     set((s) => {
       s.stepImportError = msg;
     }),
-  applyGeometryEdit: (bytes, tessellation, bodyCount, bodySources) =>
+  applyGeometryEdit: (
+    bytes,
+    tessellation,
+    bodyCount,
+    bodySources,
+    piecesAs = "bodies",
+  ) =>
     set((s) => {
       if (!s.stepBytes || !s.stepSurface)
         throw new Error(
@@ -573,13 +676,22 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
           throw new Error(
             `Geometry edit: ${bodySources.length} body sources for ${bodyCount} bodies`,
           );
+        // Body numbers stay as they were: the pieces of a split solid join its
+        // body as regions, or — after a hinge repair — every piece past the
+        // first becomes a body of its own.
+        let nextBody = nextBodyNumber(cadBodies);
+        const seen = new Set<number>();
         s.properties = bodySources.map((sourceId, j) => {
           const source = cadBodies.find((p) => p.id === sourceId);
           if (!source)
             throw new Error(
               `Geometry edit: new Body ${j + 1} comes from Body ${sourceId}, which does not exist`,
             );
-          return { ...source, id: j + 1 };
+          const extraPiece = seen.has(sourceId);
+          seen.add(sourceId);
+          const body =
+            extraPiece && piecesAs === "bodies" ? nextBody++ : bodyOf(source);
+          return { ...source, id: j + 1, body };
         });
       } else
         s.properties =

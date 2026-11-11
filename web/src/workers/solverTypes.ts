@@ -109,6 +109,9 @@ export interface VolumeMeshPayload {
   format?: string;
   maxElementSize?: number;
   minElementSize?: number;
+  // Per-region sizes (KOF-257): entry k is the max element size of CAD solid
+  // k+1. Absent: every solid meshes at maxElementSize.
+  solidMaxSizes?: number[];
   // Bodies marked Shell (Property.discretization === "shell") and the current
   // property table. With these, meshing idealises those bodies' thin walls to a
   // mid-surface shell mesh and stores the MIXED CTRIA3 + CTETRA model, instead of

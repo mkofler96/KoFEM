@@ -5,10 +5,11 @@ import { useMemo, useState } from "react";
 import { useModelStore } from "../store/modelStore";
 import type { Node, Element, Property } from "../store/modelStore";
 import type { MeshOverlap } from "../wasm/pkg/kofem_wasm";
-import { isCadBody } from "../store/geometrySlice";
+import { isCadBody, MESH_KIND_LABEL, meshKind } from "../store/geometrySlice";
 import { sendToWorker, resetWorker } from "../workers/sharedWorker";
 import { useWorkerLogs } from "./useWorkerLogs";
 import { measureTessellation } from "../lib/meshSizing";
+import { regionMaxSizes, solidName } from "../lib/regions";
 import {
   categorizeError,
   currentWorkflow,
@@ -117,6 +118,34 @@ export function useMesh() {
       );
       return;
     }
+    // Regions with a size of their own (KOF-257). The min size stays global —
+    // Netgen has one — so no region may go below it.
+    let regionSizes: Map<number, number>;
+    try {
+      regionSizes = regionMaxSizes(properties);
+    } catch (err) {
+      rejectInput(err instanceof Error ? err.message : String(err));
+      return;
+    }
+    for (const [id, size] of regionSizes)
+      if (minSize > size) {
+        rejectInput(
+          `Min element size (${minSize} mm) must not exceed the max element size of ${solidName(properties, id)} (${size} mm).`,
+        );
+        return;
+      }
+    // One size per CAD solid, in solid order: the region's own, else the global.
+    const solidIds = properties
+      .filter(isCadBody)
+      .map((p) => p.id)
+      .sort((a, b) => a - b);
+    const solidMaxSizes =
+      regionSizes.size > 0
+        ? solidIds.map((id) => {
+            const own = regionSizes.get(id);
+            return own === undefined ? maxSize : own;
+          })
+        : undefined;
 
     setMeshError(null);
     setMeshOverlaps([]);
@@ -143,6 +172,7 @@ export function useMesh() {
         format: geometryFormat,
         maxElementSize: maxSize,
         minElementSize: minSize,
+        solidMaxSizes,
         // Bodies the user marked Shell, plus the property table: meshing
         // idealises them to a mid-surface
         // shell mesh and returns the mixed CTRIA3 + CTETRA model (#397). Only CAD
@@ -175,8 +205,12 @@ export function useMesh() {
       applyMeshResult(
         meshNodes,
         meshElements,
-        "STEP Volume Mesh",
-        { max: maxSize, min: minSize },
+        MESH_KIND_LABEL[meshKind(meshElements)],
+        {
+          max: maxSize,
+          min: minSize,
+          regions: Object.fromEntries(regionSizes),
+        },
         surfaceTriangles,
         surfaceFaceIds,
         meshProperties,
