@@ -334,7 +334,8 @@ mod tests {
                 })
                 .sum::<f64>();
         let (lambda, mu) = material.lame();
-        let expected = 0.5 * (lambda + 2.0 * mu) * 4.0 * strain * strain / 60.0;
+        // ½·(λ+2μ)·4ε²/60, with the ½·4 folded.
+        let expected = 2.0 * (lambda + 2.0 * mu) * strain * strain / 60.0;
         assert!((energy - expected).abs() <= 1e-12 * expected.max(1.0));
     }
 

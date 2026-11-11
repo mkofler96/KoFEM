@@ -110,7 +110,7 @@ fn quadratic_mesh_numbers_vertices_first_then_one_node_per_edge() {
                 mesh.vertices()[second as usize],
             );
             for axis in 0..3 {
-                assert!((point[axis] - 0.5 * (lhs[axis] + rhs[axis])).abs() < 1e-15);
+                assert!((point[axis] - f64::midpoint(lhs[axis], rhs[axis])).abs() < 1e-15);
             }
         }
     }
@@ -173,7 +173,7 @@ fn linear_field_is_reproduced_exactly_from_vertex_conditions() {
     let trace = gradient[0][0] + gradient[1][1] + gradient[2][2];
     let sigma: [[f64; 3]; 3] = std::array::from_fn(|row| {
         std::array::from_fn(|col| {
-            let strain = 0.5 * (gradient[row][col] + gradient[col][row]);
+            let strain = f64::midpoint(gradient[row][col], gradient[col][row]);
             2.0 * mu * strain + if row == col { lambda * trace } else { 0.0 }
         })
     });
@@ -278,7 +278,7 @@ fn surface_load_on_six_node_faces_goes_to_the_edge_nodes() {
         .expect("applies");
     assert_eq!(report.matched, faces.len());
     let mut total = [0.0; 3];
-    for (node, chunk) in forces.chunks_exact(3).enumerate() {
+    for (node, chunk) in forces.as_chunks::<3>().0.iter().enumerate() {
         for axis in 0..3 {
             total[axis] += chunk[axis];
         }
