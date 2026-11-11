@@ -12,8 +12,12 @@
 #include <string>
 
 // Solve a Kirchhoff shell on the given triangle surface mesh. `mesh` is a JS
-// object of flat typed arrays {vertices: Float64Array, triangles: Int32Array}.
-// `mat_json` is {young_modulus, poisson_ratio, thickness}. `bcs_json` is
+// object of flat typed arrays {vertices: Float64Array, triangles: Int32Array,
+// thicknesses?: Float64Array, attributes?: Int32Array}.
+// `mat_json` is {young_modulus, poisson_ratio, thickness?}, or an ARRAY of
+// {young_modulus, poisson_ratio} selected per triangle by the 1-based
+// `mesh.attributes` (shell bodies of different materials; the thickness then
+// comes from `mesh.thicknesses`). `bcs_json` is
 // {fixed_vertices?: int[], fixed_dofs?: [{vertex, dofs:int[]}],
 //  prescribed_dofs?: [{vertex, dof, value}],
 //  point_loads?: [{vertex, force:[fx,fy,fz], moment?:[mx,my,mz]}]} where DOF

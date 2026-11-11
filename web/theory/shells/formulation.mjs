@@ -149,7 +149,7 @@ export default {
         ],
         [
           "Materials and sections",
-          "Explicit all-CTRIA3 models may have several section properties and per-facet thicknesses, but must reference one material ID. Multiple shell material IDs are rejected. Mixed models also require one shell material; their explicit solid domain supports per-tet materials.",
+          "Explicit all-CTRIA3 models may have several section properties, each with its own thickness and material: every facet uses its own body’s E and ν in the stiffness and the stress recovery. Mixed models do the same for their shell facets, and their explicit solid domain supports per-tet materials. Topology optimization still needs one shell material.",
         ],
         [
           "Geometry extraction",

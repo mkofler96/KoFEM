@@ -121,19 +121,26 @@ test("mixed domains preserve per-tet material ordering and the pure-solid coupli
       { young_modulus: 70000, poisson_ratio: 0.33 },
       { young_modulus: 210000, poisson_ratio: 0.3 },
     ],
-    shell: { young_modulus: 210000, poisson_ratio: 0.3 },
+    shell: [{ young_modulus: 210000, poisson_ratio: 0.3 }],
   });
-  expect(
-    mixedCoupledMaterials(materials, properties, [], solids).mat.shell,
-  ).toEqual(mixed.mat.solid[0]);
-  expect(() =>
-    mixedCoupledMaterials(
-      materials,
-      properties,
-      [element(5, 10), element(6, 20)],
-      solids,
-    ),
-  ).toThrow(/shell domain spans 2 distinct materials \(Steel, Aluminium\)/);
+  expect(mixed.shellAttributes).toEqual([1, 1]);
+  expect(mixed.shellMaterialNames).toEqual(["Steel"]);
+  const solidOnly = mixedCoupledMaterials(materials, properties, [], solids);
+  expect(solidOnly.mat.shell).toEqual([mixed.mat.solid[0]]);
+  expect(solidOnly.shellAttributes).toEqual([]);
+  // Shell bodies of different materials keep their own material per facet.
+  const twoShellMaterials = mixedCoupledMaterials(
+    materials,
+    properties,
+    [element(5, 20), element(6, 10), element(7, 20)],
+    solids,
+  );
+  expect(twoShellMaterials.mat.shell).toEqual([
+    { young_modulus: 70000, poisson_ratio: 0.33 },
+    { young_modulus: 210000, poisson_ratio: 0.3 },
+  ]);
+  expect(twoShellMaterials.shellAttributes).toEqual([1, 2, 1]);
+  expect(twoShellMaterials.shellMaterialNames).toEqual(["Aluminium", "Steel"]);
   expect(() => mixedCoupledMaterials(materials, properties, [], [])).toThrow(
     /no solid element/,
   );

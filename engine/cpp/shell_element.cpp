@@ -290,29 +290,77 @@ std::vector<double> facet_thicknesses(int n_tris, double thickness,
     return std::vector<double>(static_cast<size_t>(n_tris), thickness);
 }
 
+FacetMaterials facet_materials(int n_tris, double young, double poisson,
+                               const std::vector<double>& youngs,
+                               const std::vector<double>& poissons, const char* who) {
+    const std::string prefix = std::string(who) + ": ";
+    auto require_valid = [&](double E, double nu) {
+        if (!std::isfinite(E) || E <= 0.0)
+            throw std::runtime_error(prefix +
+                                     "every shell Young's modulus must be finite and positive");
+        if (!std::isfinite(nu) || std::fabs(nu) >= 1.0)
+            throw std::runtime_error(prefix +
+                                     "every shell Poisson ratio must be finite with |nu| < 1");
+    };
+    FacetMaterials out;
+    if (!youngs.empty() || !poissons.empty()) {
+        if (static_cast<int>(youngs.size()) != n_tris ||
+            static_cast<int>(poissons.size()) != n_tris)
+            throw std::runtime_error(prefix + "per-facet material field has " +
+                                     std::to_string(youngs.size()) + " Young's moduli and " +
+                                     std::to_string(poissons.size()) + " Poisson ratios for " +
+                                     std::to_string(n_tris) + " triangles");
+        for (int e = 0; e < n_tris; ++e) require_valid(youngs[e], poissons[e]);
+        out.young = youngs;
+        out.poisson = poissons;
+        return out;
+    }
+    if (n_tris == 0) return out;
+    require_valid(young, poisson);
+    out.young.assign(static_cast<size_t>(n_tris), young);
+    out.poisson.assign(static_cast<size_t>(n_tris), poisson);
+    return out;
+}
+
 std::vector<double> shell_von_mises(const std::vector<double>& vertices,
                                     const std::vector<int>& triangles,
                                     double thickness,
                                     const std::vector<double>& thicknesses,
                                     double young, double poisson,
                                     const std::vector<double>& dofs) {
+    return shell_von_mises(vertices, triangles, thickness, thicknesses, young, poisson, {}, {},
+                           dofs);
+}
+
+std::vector<double> shell_von_mises(const std::vector<double>& vertices,
+                                    const std::vector<int>& triangles,
+                                    double thickness,
+                                    const std::vector<double>& thicknesses,
+                                    double young, double poisson,
+                                    const std::vector<double>& youngs,
+                                    const std::vector<double>& poissons,
+                                    const std::vector<double>& dofs) {
     const int nTris = static_cast<int>(triangles.size() / 3);
     const std::vector<double> facet_t =
         facet_thicknesses(nTris, thickness, thicknesses, "shell_von_mises");
+    const FacetMaterials facet_mat =
+        facet_materials(nTris, young, poisson, youngs, poissons, "shell_von_mises");
     // plane-stress von Mises of (σx, σy, τ)
     auto vm = [](double sx, double sy, double txy) {
         return std::sqrt(sx * sx - sx * sy + sy * sy + 3.0 * txy * txy);
     };
-    const auto Dpl = constitutive(young / (1.0 - poisson * poisson), poisson);
-    auto stress = [&](const std::array<double, 3>& strain) -> std::array<double, 3> {
-        std::array<double, 3> s{};
-        for (int a = 0; a < 3; ++a)
-            for (int b = 0; b < 3; ++b) s[a] += Dpl[a][b] * strain[b];
-        return s;
-    };
 
     std::vector<double> out(nTris);
     for (int e = 0; e < nTris; ++e) {
+        // Plane-stress law of THIS facet's material.
+        const double E = facet_mat.young[e], nu = facet_mat.poisson[e];
+        const auto Dpl = constitutive(E / (1.0 - nu * nu), nu);
+        auto stress = [&](const std::array<double, 3>& strain) -> std::array<double, 3> {
+            std::array<double, 3> s{};
+            for (int a = 0; a < 3; ++a)
+                for (int b = 0; b < 3; ++b) s[a] += Dpl[a][b] * strain[b];
+            return s;
+        };
         const size_t e3idx = 3 * static_cast<size_t>(e);
         const std::array<int, 3> nd = {triangles[e3idx], triangles[e3idx + 1],
                                        triangles[e3idx + 2]};
