@@ -677,14 +677,24 @@ function amgReason(payload: SolvePayload): string | null {
 }
 
 // All-solid static solve, with tie connections welded: the Rust AMG solver for
-// linear tets when it was chosen, otherwise the engine's solve_linear_elastic.
+// tets when it was chosen, otherwise the engine's solve_linear_elastic.
 async function handleSolidSolve(id: number, payload: SolvePayload) {
   const { nodes, elements } = payload;
   const tied = weldTies(nodes, elements, payload.tieGroups, logTo(id));
+  // FE polynomial order, chosen in the frontend (Solver settings). Order 2
+  // (quadratic / second-order) adds edge-midpoint DOFs that resolve bending
+  // and stress gradients far better than linear tets, which lock in bending
+  // and smear stress concentrations to a single constant value per element
+  // (issue #215), at the cost of a slower solve. Both solvers extend the
+  // vertex Dirichlet BCs to the new edge DOFs so clamped/prescribed faces
+  // stay fully constrained. Defaults to 1 (linear) when the payload omits it.
+  // eslint-disable-next-line kofem/no-silent-fallback -- elementOrder is optional in the solve message; the documented default is linear elements
+  const order = payload.elementOrder ?? 1;
   if (requestedSolver(payload) === "amg" && amgReason(payload) === null) {
     const result = await solveSolidWithAmg(
       { ElasticModel, SolveOptions },
       { ...payload, nodes: tied.solveNodes, elements: tied.tiedElements },
+      order,
       tied.vid,
       tied.vidTied,
       payload.cgIterationLimit,
@@ -709,15 +719,6 @@ async function handleSolidSolve(id: number, payload: SolvePayload) {
     tied.vidTied,
   );
 
-  // FE polynomial order, chosen in the frontend (Solver settings). Order 2
-  // (quadratic / second-order) adds edge-midpoint DOFs that resolve bending
-  // and stress gradients far better than linear tets, which lock in bending
-  // and smear stress concentrations to a single constant value per element
-  // (issue #215), at the cost of a slower solve. The engine extends the
-  // vertex Dirichlet BCs to the new edge DOFs so clamped/prescribed faces
-  // stay fully constrained. Defaults to 1 (linear) when the payload omits it.
-  // eslint-disable-next-line kofem/no-silent-fallback -- elementOrder is optional in the solve message; the documented default is linear elements
-  const order = payload.elementOrder ?? 1;
   self.postMessage({
     id,
     log: `Starting static solve: ${nodes.length} nodes, ${elements.length} elements (order ${order})…`,

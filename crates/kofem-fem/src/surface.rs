@@ -1,9 +1,12 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! Surface loads on the boundary of a linear-tet mesh, turned into
-//! work-equivalent nodal forces: `f_a = ∫_S N_a·t dS`. For a constant traction t
-//! on a flat 3-node triangle of area A that is exactly t·A/3 per corner.
+//! Surface loads on the boundary of a tet mesh, turned into work-equivalent
+//! nodal forces: `f_a = ∫_S N_a·t dS`. For a constant traction t on a flat
+//! triangle of area A that is exactly t·A/3 per corner of a 3-node (linear)
+//! face. On a 6-node (quadratic) face the corner shape functions integrate to
+//! zero and each mid-edge function to A/3, so the corners get nothing and each
+//! edge node t·A/3 — what MFEM's boundary integrator gives on order-2 faces.
 //!
 //! The semantics follow the MFEM engine's `apply_surface_loads`
 //! (`engine/cpp/fem_bc_io.cpp`), so both solvers load a model identically:
@@ -17,7 +20,7 @@
 //! * overlapping loads simply add up.
 
 use crate::error::FemError;
-use crate::mesh::{cross, dot, sub, TetMesh};
+use crate::mesh::{cross, dot, local_edge, sub, ElementOrder, TetMesh};
 
 /// What one surface load applies.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -46,6 +49,9 @@ struct BoundaryFace {
     key: [u32; 3],
     corners: [u32; 3],
     opposite: u32,
+    /// The nodes that carry the face's load: its corners on a linear mesh,
+    /// its three edge nodes on a quadratic one (see the module notes).
+    loaded: [u32; 3],
 }
 
 /// The exterior faces of a tet mesh (faces used by exactly one tet), sorted by
@@ -68,13 +74,20 @@ impl BoundaryFaces {
     #[must_use]
     pub fn new(mesh: &TetMesh) -> Self {
         let mut all: Vec<BoundaryFace> = Vec::with_capacity(4 * mesh.tets().len());
-        for tet in mesh.tets() {
+        for (index, tet) in mesh.tets().iter().enumerate() {
+            let nodes = mesh.element_nodes(index);
             for (opposite, local) in FACES_OF_TET.iter().enumerate() {
                 let corners = local.map(|corner| tet[corner]);
+                let loaded = match mesh.order() {
+                    ElementOrder::Linear => corners,
+                    ElementOrder::Quadratic => [[0, 1], [1, 2], [0, 2]]
+                        .map(|[first, second]| nodes[4 + local_edge(local[first], local[second])]),
+                };
                 all.push(BoundaryFace {
                     key: sorted(corners),
                     corners,
                     opposite: tet[opposite],
+                    loaded,
                 });
             }
         }
@@ -120,7 +133,7 @@ impl BoundaryFaces {
         doubled.map(|component| if inward { -0.5 } else { 0.5 } * component)
     }
 
-    /// Add the nodal forces of one surface load to `forces` (3 per vertex).
+    /// Add the nodal forces of one surface load to `forces` (3 per node).
     /// `faces` holds the selected triangles as vertex triples; `load` names the
     /// load in errors.
     ///
@@ -137,7 +150,7 @@ impl BoundaryFaces {
         kind: SurfaceLoadKind,
         forces: &mut [f64],
     ) -> Result<SurfaceLoadReport, FemError> {
-        let count = 3 * mesh.vertex_count();
+        let count = mesh.dof_count();
         if forces.len() != count {
             return Err(FemError::ForceLength {
                 len: forces.len(),
@@ -183,7 +196,7 @@ impl BoundaryFaces {
         }
         for (&index, area_vector) in matched.iter().zip(&area_vectors) {
             let area = dot(*area_vector, *area_vector).sqrt();
-            // Force on the whole face, a third to each corner.
+            // Force on the whole face, a third to each loaded node.
             let face_force = match kind {
                 // −p·n·A = −p·(outward area vector).
                 SurfaceLoadKind::Pressure(pressure) => {
@@ -194,9 +207,9 @@ impl BoundaryFaces {
                     force.map(|component| component * area / total_area)
                 }
             };
-            for vertex in self.faces[index].corners {
+            for node in self.faces[index].loaded {
                 for axis in 0..3 {
-                    forces[3 * vertex as usize + axis] += face_force[axis] / 3.0;
+                    forces[3 * node as usize + axis] += face_force[axis] / 3.0;
                 }
             }
         }

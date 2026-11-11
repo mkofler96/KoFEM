@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // The Solve panel's solver choice: AMG multigrid is preselected and marked
-// recommended, it solves linear-tet models through the Rust module, it says so
-// when a model is outside its reach, and Gauss–Seidel gives the same field.
+// recommended, it solves linear- and quadratic-tet models through the Rust
+// module, it says so when a model is outside its reach, and Gauss–Seidel gives
+// the same field.
 
 import type { Page } from "@playwright/test";
 import { test, expect } from "./coverage";
@@ -14,7 +15,9 @@ interface StoreWindow {
       stepBytes: Uint8Array | null;
       result: { displacements: Float64Array } | null;
       isRunning: boolean;
-      setElementOrder(order: number): void;
+      elementOrder: number;
+      properties: { id: number }[];
+      setBodyDiscretization(propertyId: number, disc: "solid" | "shell"): void;
       setMode(mode: "solve"): void;
     };
   };
@@ -67,22 +70,32 @@ test("AMG is the recommended default and matches Gauss–Seidel", async ({
     "AMG multigrid (recommended)",
   );
 
-  // The example opens with quadratic elements, which AMG does not cover: the
-  // panel says so before the solve.
+  // A body solved as a shell is outside AMG's reach: the panel says so before
+  // the solve.
+  const setDiscretization = (disc: "solid" | "shell") =>
+    page.evaluate((value) => {
+      const state = (window as unknown as StoreWindow).__kofemStore.getState();
+      state.setBodyDiscretization(state.properties[0].id, value);
+    }, disc);
+  await setDiscretization("shell");
   await expect(page.getByTestId("solver-method-note")).toContainText(
-    "linear elements only",
+    "does not support bodies solved as shells",
   );
+  await setDiscretization("solid");
 
-  // Linear elements: AMG applies, and the solve runs through it.
-  await page.evaluate(() =>
-    (window as unknown as StoreWindow).__kofemStore
-      .getState()
-      .setElementOrder(1),
-  );
+  // The example opens with quadratic elements, which AMG covers: no note, and
+  // the solve runs through it.
+  expect(
+    await page.evaluate(
+      () =>
+        (window as unknown as StoreWindow).__kofemStore.getState().elementOrder,
+    ),
+  ).toBe(2);
   await expect(page.getByTestId("solver-method-note")).toHaveCount(0);
   const multigrid = await solveAndRead(page);
   // The solve log survives the switch to Results; go back and read it.
   await backToSolve(page);
+  await expect(page.getByText(/tetrahedra \(order 2\)/)).toBeVisible();
   await expect(page.getByText(/AMG CG converged/)).toBeVisible();
 
   // The same model with Gauss–Seidel gives the same displacements.

@@ -31,8 +31,8 @@ pub enum FemError {
     YoungsModulus { index: usize, value: f64 },
     #[error("material {index}: Poisson's ratio must lie in (-1, 0.5), got {value}")]
     PoissonRatio { index: usize, value: f64 },
-    #[error("the mesh has {count} vertices; at most {max} are supported")]
-    TooManyVertices { count: usize, max: usize },
+    #[error("the mesh has {count} nodes; at most {max} are supported")]
+    TooManyNodes { count: usize, max: usize },
     #[error("the mesh has no tetrahedra")]
     EmptyMesh,
     #[error("constrained degree of freedom {dof} is out of range (the model has {count})")]

@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! Linear-elastic finite elements for KoFEM: element stiffness, sparse
-//! assembly, Dirichlet elimination and a preconditioned conjugate-gradient
+//! Linear-elastic finite elements for KoFEM: linear and quadratic tetrahedra,
+//! sparse assembly, Dirichlet elimination and a preconditioned conjugate-gradient
 //! solve. Pure Rust with no I/O or clock, so the same code runs natively under
 //! `cargo test` and in the browser through `kofem-wasm`.
 //!
@@ -31,7 +31,7 @@ pub use cg::{solve_pcg, solve_pcg_with, CgOutcome, CgSettings, PcgRun, PcgStatus
 pub use constraints::{apply_dirichlet, Dirichlet};
 pub use error::FemError;
 pub use material::Isotropic;
-pub use mesh::TetMesh;
+pub use mesh::{ElementOrder, TetMesh};
 pub use sparse::CsrMatrix;
 pub use static_solve::{
     prepare_static, solve_static, PreconditionerChoice, PreparedStatic, StaticSolution,

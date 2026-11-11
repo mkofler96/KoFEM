@@ -3,10 +3,11 @@
 
 // Static solve through the Rust finite-element module (crates/kofem-wasm) with
 // the smoothed-aggregation multigrid (AMG) preconditioner, and the rule for
-// which models it covers. The Rust module handles linear tetrahedra with
-// per-body materials, supports (fixed, roller, prescribed), nodal loads and
-// surface loads; anything else (quadratic or hex elements, shells, couplings)
-// still solves with the MFEM engine's Gauss–Seidel CG, and the solve says so.
+// which models it covers. The Rust module handles linear and quadratic
+// tetrahedra with per-body materials, supports (fixed, roller, prescribed),
+// nodal loads and surface loads; anything else (hex elements, shells,
+// couplings) still solves with the MFEM engine's Gauss–Seidel CG, and the
+// solve says so.
 //
 // The inputs are built by the same helpers as the MFEM payload
 // (packSolveMesh, resolveMaterials, groupDirichlet, groupPointLoads,
@@ -63,7 +64,8 @@ export function amgUnavailableReason(model: {
   elementOrder: number;
   couplingCount: number;
 }): string | null {
-  if (model.elementOrder !== 1) return "it supports linear elements only";
+  if (model.elementOrder !== 1 && model.elementOrder !== 2)
+    return "it supports linear and quadratic elements only";
   if (model.elements.some((element) => element.type === "CTRIA3"))
     return "it does not support shell elements";
   if (model.elements.some((element) => element.type !== "CTETRA"))
@@ -110,14 +112,17 @@ const RELATIVE_TOLERANCE = 1e-6;
 // worker routes it to the same "continue solving?" dialog as the MFEM path.
 export type ContinuationPrompt = (progress: CgLimitProgress) => Promise<number>;
 
-// Solve one all-solid, linear-tet model with AMG. `vid` indexes element
-// connectivity; `refVid` resolves constraint, load and surface-face node
-// references (a tie maps them to their representative first). Returns one
-// displacement triple per node of `model.nodes` and one von Mises stress per
-// element, in element order — the same layout as the MFEM solve.
+// Solve one all-solid tet model with AMG, with elements of `elementOrder`
+// (1 linear, 2 quadratic). `vid` indexes element connectivity; `refVid`
+// resolves constraint, load and surface-face node references (a tie maps them
+// to their representative first). Returns one displacement triple per node of
+// `model.nodes` and one von Mises stress per element, in element order — the
+// same layout as the MFEM solve. Quadratic elements add edge nodes inside the
+// Rust module, as MFEM's order-2 space does; their displacements stay there.
 export async function solveSolidWithAmg(
   fem: FemModule,
   model: AmgSolidModel,
+  elementOrder: number,
   vid: VertexIndexer,
   refVid: VertexIndexer,
   iterationLimit: number | undefined,
@@ -127,7 +132,7 @@ export async function solveSolidWithAmg(
   const reason = amgUnavailableReason({
     elements: model.elements,
     properties: model.properties,
-    elementOrder: 1,
+    elementOrder,
     couplingCount: 0,
   });
   if (reason !== null)
@@ -152,12 +157,18 @@ export async function solveSolidWithAmg(
         material.poisson_ratio,
       ]),
     ),
+    elementOrder,
   );
   try {
+    if (elastic.vertexCount !== model.nodes.length)
+      throw new Error(
+        `The AMG solver received ${elastic.vertexCount} vertices for ${model.nodes.length} nodes`,
+      );
     const started = performance.now();
     const nonzeros = elastic.assemble();
     log(
-      `AMG solve: ${model.nodes.length} nodes, ${model.elements.length} tetrahedra, ` +
+      `AMG solve: ${model.nodes.length} nodes, ${model.elements.length} tetrahedra ` +
+        `(order ${elementOrder}), ${elastic.dofCount} unknowns, ` +
         `${nonzeros} stiffness entries assembled`,
     );
 
@@ -244,8 +255,10 @@ export async function solveSolidWithAmg(
       finished = true;
       const solution = run.finish();
       try {
-        const displacements = solution.displacements;
-        const vonMises = elastic.vonMises(displacements);
+        // One triple per node: the vertices first, then any edge nodes.
+        const nodal = solution.displacements;
+        const vonMises = elastic.vonMises(nodal);
+        const displacements = nodal.slice(0, 3 * elastic.vertexCount);
         const seconds = (performance.now() - started) / 1000;
         log(
           `AMG CG converged: ${solution.iterations} iterations, force residual ` +
