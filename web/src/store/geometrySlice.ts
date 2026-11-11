@@ -10,6 +10,12 @@ import { addSelection } from "./viewSlice";
 import { carryGroupsToMesh, remeshNotice } from "../lib/remeshGroups";
 import type { MeshOverlap } from "../wasm/pkg/kofem_wasm";
 import {
+  detectInterfaces,
+  INTERFACE_TYPES,
+  type BodyInterface,
+  type InterfaceType,
+} from "../lib/interfaces";
+import {
   rebuildConstraints,
   rebuildLoads,
   rebuildSurfaceLoads,
@@ -146,6 +152,7 @@ export interface GeometryVersion {
   geometryFormat: GeometryFormat;
   stepSurface: StepTessellation;
   properties: Property[];
+  interfaces: BodyInterface[] | null;
 }
 
 // How the split tool cuts: imprint the plane on the picked faces (the part stays
@@ -180,6 +187,10 @@ export interface GeometrySlice {
   surfaceTriangles: [number, number, number][] | null;
   surfaceFaceIds: number[] | null;
   stepImportError: string | null;
+  // The body-to-body interfaces of the geometry (lib/interfaces), detected
+  // whenever the geometry changes; each carries the user's interface type.
+  // null when the geometry cannot tell (a tessellation saved without face ids).
+  interfaces: BodyInterface[] | null;
   // Geometry edits (the split tool), newest last — each entry is the geometry
   // as it was BEFORE that edit, so undo pops one. Cleared by an import or a
   // loaded analysis, which start a new geometry history.
@@ -218,6 +229,7 @@ export interface GeometrySlice {
   assignBodyMaterial(propertyId: number, materialId: number): void;
   setBodySuppressed(propertyId: number, suppressed: boolean): void;
   setBodyDiscretization(propertyId: number, disc: BodyDiscretization): void;
+  setInterfaceType(interfaceId: number, type: InterfaceType): void;
   setStepSurface(tessellation: StepTessellation | null): void;
   setStepBytes(bytes: Uint8Array | null): void;
   setGeometryFormat(format: GeometryFormat): void;
@@ -282,6 +294,7 @@ function dropAnalysis(s: ModelState): void {
   s.viewRepr = "geometry";
   s.stepImportError = null;
   s.highlightBodyId = null;
+  s.highlightInterfaceId = null;
   s.hiddenBodyIds = [];
   s.nodes = [];
   s.elements = [];
@@ -335,6 +348,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
   surfaceTriangles: null,
   surfaceFaceIds: null,
   stepImportError: null,
+  interfaces: [],
   geometryHistory: [],
   splitPicking: false,
   splitFaceIds: [],
@@ -377,6 +391,17 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
         );
       prop.discretization = disc;
     }),
+  setInterfaceType: (interfaceId, type) =>
+    set((s) => {
+      const iface = s.interfaces?.find((i) => i.id === interfaceId);
+      if (!iface)
+        throw new Error(
+          `Cannot set interface type: interface ${interfaceId} does not exist`,
+        );
+      if (!INTERFACE_TYPES.includes(type))
+        throw new Error(`Cannot set interface type: unknown type "${type}"`);
+      iface.type = type;
+    }),
   assignBodyMaterial: (propertyId, materialId) =>
     set((s) => {
       const prop = s.properties.find((p) => p.id === propertyId);
@@ -407,6 +432,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
   setStepSurface: (tessellation) =>
     set((s) => {
       s.stepSurface = tessellation;
+      s.interfaces = detectInterfaces(tessellation);
       // Clearing the geometry also drops the retained STEP bytes — keeping the
       // invariant "no surface ⇒ nothing left to re-mesh from".
       if (!tessellation) {
@@ -457,11 +483,15 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
         geometryFormat: s.geometryFormat,
         stepSurface: s.stepSurface,
         properties: cadBodies,
+        interfaces: s.interfaces,
       });
       s.stepBytes = bytes;
       // The engine writes every edit as STEP, whatever the source format was.
       s.geometryFormat = "step";
       s.stepSurface = tessellation;
+      // The edit changed the faces, so the interfaces are detected afresh. Only
+      // one interface type exists, so no choice is lost.
+      s.interfaces = detectInterfaces(tessellation);
       // An edit that maps its bodies (a Boolean, a hinge repair) carries each
       // body's settings to its new id. A face split keeps the bodies, so their
       // materials and element types stay; only the shell sections a mesh derived
@@ -496,6 +526,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       s.geometryFormat = previous.geometryFormat;
       s.stepSurface = previous.stepSurface;
       s.properties = previous.properties;
+      s.interfaces = previous.interfaces;
       dropAnalysis(s);
     }),
   setSplitPicking: (on) =>

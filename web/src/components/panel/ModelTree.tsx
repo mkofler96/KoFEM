@@ -29,6 +29,7 @@ const KIND_DOT: Partial<Record<TreeItemKind, string>> = {
   load: styles.kindLoad,
   tie: styles.kindTie,
   coupling: styles.kindCoupling,
+  interface: styles.kindInterface,
 };
 
 // Analysis objects carry the hollow square instead of a dot.
@@ -61,6 +62,9 @@ export function ModelTree() {
   const selection = useModelStore((s) => s.treeSelection);
   const selectTreeNode = useModelStore((s) => s.selectTreeNode);
   const setHighlightBodyId = useModelStore((s) => s.setHighlightBodyId);
+  const setHighlightInterfaceId = useModelStore(
+    (s) => s.setHighlightInterfaceId,
+  );
   const hiddenBodyIds = useModelStore((s) => s.hiddenBodyIds);
   const properties = useModelStore((s) => s.properties);
   const suppressedIds = new Set(
@@ -152,6 +156,8 @@ export function ModelTree() {
               <ul className={styles.list}>
                 {items[id].map((item) => {
                   const isBody = item.kind === "body";
+                  const isInterface = item.kind === "interface";
+                  const inactive = item.inactive === true;
                   const hidden = isBody && hiddenBodyIds.includes(item.id);
                   // Suppressed: as good as deleted, so no eye — it is brought
                   // back from its panel (Suppressed), not shown.
@@ -178,13 +184,16 @@ export function ModelTree() {
                       />
                     ),
                     label: item.label,
-                    // Hovering a body highlights it in the viewport (#353).
+                    // Hovering a body highlights it in the viewport (#353),
+                    // hovering an interface its shared faces.
                     onHover:
                       isBody && !suppressed
                         ? (on) => setHighlightBodyId(on ? item.id : null)
-                        : undefined,
+                        : isInterface && !inactive
+                          ? (on) => setHighlightInterfaceId(on ? item.id : null)
+                          : undefined,
                     detail: suppressed ? "suppressed" : item.detail,
-                    dimmed: hidden || suppressed,
+                    dimmed: hidden || suppressed || inactive,
                     trailing: isBody && !suppressed && (
                       <button
                         className={`${styles.eye} ${hidden ? styles.eyeOff : ""}`}
