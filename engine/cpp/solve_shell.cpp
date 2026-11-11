@@ -20,6 +20,8 @@
 #include "shell_material_js.h"
 #include "wasm_util.h"
 
+#include <array>
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -168,10 +170,24 @@ val solve_shell(const val& mesh, const std::string& mat_json, const std::string&
     add_prescribed_dofs(bcs["prescribed_dofs"], n_nodes, in.prescribed_dofs);
     add_point_loads(bcs["point_loads"], n_nodes, in.loads);
 
-    printf("[shell] solve: %d nodes, %d triangles, t=%g, %u material(s), E=%g, nu=%g; "
+    // Name the uniform value only when it is the one in use: with a per-facet
+    // field the scalar is unused and printing it would mislead.
+    std::array<char, 96> thickness_desc{};
+    if (in.thicknesses.empty())
+        snprintf(thickness_desc.data(), thickness_desc.size(), "t=%g", in.thickness);
+    else
+        snprintf(thickness_desc.data(), thickness_desc.size(), "per-facet thickness");
+    std::array<char, 96> material_desc{};
+    if (in.youngs.empty())
+        snprintf(material_desc.data(), material_desc.size(), "E=%g, nu=%g", in.young,
+                 in.poisson);
+    else
+        snprintf(material_desc.data(), material_desc.size(), "%u materials (per facet)",
+                 materials.n_materials);
+    printf("[shell] solve: %d nodes, %d triangles, %s, %s; "
            "%zu fixed DOFs, %zu prescribed DOFs, %zu loads\n",
-           n_nodes, n_tris, in.thickness, materials.n_materials, in.young,
-           in.poisson, in.fixed_dofs.size(), in.prescribed_dofs.size(), in.loads.size());
+           n_nodes, n_tris, thickness_desc.data(), material_desc.data(),
+           in.fixed_dofs.size(), in.prescribed_dofs.size(), in.loads.size());
     fflush(stdout);
 
     kofem::shell::ShellResult r;
