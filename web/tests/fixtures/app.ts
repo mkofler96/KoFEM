@@ -36,9 +36,9 @@ export async function importStep(
   await page
     .locator('input[type="file"][accept=".stp,.step"]')
     .setInputFiles(stepFile);
-  // Tessellation done → the mesh controls (and "Mesh STEP volume") appear.
+  // Tessellation done → the mesh controls (and "Generate mesh") appear.
   await expect(
-    page.getByRole("button").filter({ hasText: "Mesh STEP volume" }),
+    page.getByRole("button").filter({ hasText: "Generate mesh" }),
   ).toBeVisible({ timeout });
 
   const stepErr = page.getByTestId("step-error");
@@ -57,9 +57,9 @@ export async function importIges(
   await page
     .locator('input[type="file"][accept=".igs,.iges"]')
     .setInputFiles(igesFile);
-  // Tessellation done → the mesh controls (and "Mesh STEP volume") appear.
+  // Tessellation done → the mesh controls (and "Generate mesh") appear.
   await expect(
-    page.getByRole("button").filter({ hasText: "Mesh STEP volume" }),
+    page.getByRole("button").filter({ hasText: "Generate mesh" }),
   ).toBeVisible({ timeout });
 
   const stepErr = page.getByTestId("step-error");

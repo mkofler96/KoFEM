@@ -3,7 +3,11 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import { useModelStore } from "../../store/modelStore";
-import { isCadBody } from "../../store/geometrySlice";
+import {
+  isCadBody,
+  meshSizesChanged,
+  suppressionMismatch,
+} from "../../store/geometrySlice";
 import { plotLabel } from "../../store/studySlice";
 import {
   INTERFACE_TYPE_LABELS,
@@ -24,7 +28,8 @@ export interface TreeItem {
   label: string;
   // Swatch colour (bodies and materials carry their material's colour).
   color?: string;
-  // Muted text at the row's end (the mesh's node count).
+  // Muted text at the row's end (the mesh's node count, or that it is out of
+  // date).
   detail?: string;
   // Out of the analysis (an interface of a suppressed body): drawn dimmed and
   // not highlighted on hover.
@@ -45,6 +50,7 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
   const tieGroups = useModelStore((s) => s.tieGroups);
   const couplingGroups = useModelStore((s) => s.couplingGroups);
   const nodeCount = useModelStore((s) => s.nodes.length);
+  const meshOutOfDate = useMeshOutOfDate();
   const studies = useModelStore((s) => s.studies);
   const resultPlots = useModelStore((s) => s.resultPlots);
 
@@ -77,7 +83,9 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
                 kind: "mesh" as const,
                 id: MESH_ITEM_ID,
                 label: "Volume mesh",
-                detail: `${nodeCount.toLocaleString("en-US")} nodes`,
+                detail: meshOutOfDate
+                  ? "out of date"
+                  : `${nodeCount.toLocaleString("en-US")} nodes`,
               },
             ]
           : [],
@@ -138,9 +146,25 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
     tieGroups,
     couplingGroups,
     nodeCount,
+    meshOutOfDate,
     studies,
     resultPlots,
   ]);
+}
+
+// Whether the current mesh no longer matches the model: the mesh settings have
+// changed since it was made, or a body was suppressed or restored after it.
+// Regenerating the mesh brings it back in line. False without a mesh.
+export function useMeshOutOfDate(): boolean {
+  return useModelStore((s) => {
+    if (s.nodes.length === 0) return false;
+    const bodies = suppressionMismatch(s.properties, s.meshSuppressedIds, true);
+    return (
+      meshSizesChanged(s.meshSizes, s.maxElementSize, s.minElementSize) ||
+      bodies.stillMeshed.length > 0 ||
+      bodies.missing.length > 0
+    );
+  });
 }
 
 // Keeps the tree selection pointing at something that exists: an object that

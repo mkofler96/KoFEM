@@ -25,7 +25,7 @@ const STEP_TEXT: Record<Step, { title: string; how: string; action: string }> =
   {
     mesh: {
       title: "Mesh",
-      how: "Fill the solid with elements: press Mesh STEP volume.",
+      how: "Fill the solid with elements: press Generate mesh.",
       action: "Open mesh",
     },
     support: {

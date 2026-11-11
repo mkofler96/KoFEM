@@ -8,6 +8,11 @@ import { current } from "immer";
 import type { ModelState, SliceCreator } from "./modelStore";
 import { addSelection } from "./viewSlice";
 import { carryGroupsToMesh, remeshNotice } from "../lib/remeshGroups";
+import {
+  DEFAULT_MAX_ELEMENT_SIZE,
+  DEFAULT_MIN_ELEMENT_SIZE,
+  suggestElementSizes,
+} from "../lib/meshSizing";
 import type { MeshOverlap } from "../wasm/pkg/kofem_wasm";
 import {
   detectInterfaces,
@@ -108,6 +113,45 @@ export function suppressionMismatchMessage(m: {
   if (m.missing.length > 0)
     return `Re-mesh: restored ${bodies(m.missing)} not in the mesh`;
   return null;
+}
+
+// The element sizes a mesh was made with, in mm.
+export interface MeshSizes {
+  max: number;
+  min: number;
+}
+
+// Whether the sizes typed in the mesh settings differ from the ones the current
+// mesh was made with — the mesh then no longer shows what the settings say, and
+// Regenerate applies them. False without a mesh or when its sizes are unknown
+// (a loaded analysis). Text that is not a number counts as changed: meshing
+// rejects it with its own message.
+export function meshSizesChanged(
+  meshSizes: MeshSizes | null,
+  maxElementSize: string,
+  minElementSize: string,
+): boolean {
+  if (!meshSizes) return false;
+  return (
+    parseFloat(maxElementSize) !== meshSizes.max ||
+    parseFloat(minElementSize) !== meshSizes.min
+  );
+}
+
+// Start the mesh settings at the sizes a new geometry suggests (KOF-222): a
+// 1 mm cube and a 2 m weldment need element sizes three orders of magnitude
+// apart, so the previous part's numbers are never right. A geometry the
+// estimate cannot measure keeps the sizes it had.
+export function suggestSizes(
+  s: ModelState,
+  tessellation: StepTessellation | null,
+): void {
+  const suggestion = tessellation
+    ? suggestElementSizes(tessellation.points, tessellation.triangles)
+    : null;
+  if (!suggestion) return;
+  s.maxElementSize = suggestion.max;
+  s.minElementSize = suggestion.min;
 }
 
 // The section properties the mesh derived from `bodyId`, in id order.
@@ -217,6 +261,16 @@ export interface GeometrySlice {
   // so are missing from it. Compared with the bodies' suppression now to tell
   // whether the mesh still matches the model (suppressionMismatch).
   meshSuppressedIds: number[];
+  // The element sizes in the mesh settings, held as typed text: a 1 mm part
+  // needs 0.1 mm elements and a 2 m weldment 80 mm ones, so there is no range
+  // to clamp typing to (KOF-222). Validated when meshing starts. A new geometry
+  // starts them at its own suggestion (lib/meshSizing).
+  maxElementSize: string;
+  minElementSize: string;
+  // The sizes the current mesh was made with, to tell when the settings have
+  // moved on (meshSizesChanged). Null without a mesh, and for a loaded
+  // analysis, whose file does not record them.
+  meshSizes: MeshSizes | null;
 
   addNode(node: Node): void;
   addElement(el: Element): void;
@@ -236,6 +290,8 @@ export interface GeometrySlice {
   setVolMesh(mesh: VolMesh | null): void;
   setSurfaceFaceIds(ids: number[] | null): void;
   setMeshing(v: boolean): void;
+  setMaxElementSize(size: string): void;
+  setMinElementSize(size: string): void;
   setStepImportError(msg: string | null): void;
   // Replace the geometry with the result of an edit (a split): the new file and
   // its tessellation. The mesh, groups and results of the old geometry are
@@ -262,6 +318,8 @@ export interface GeometrySlice {
     nodes: Node[],
     elements: Element[],
     modelName: string,
+    // The element sizes the mesh request used.
+    meshSizes: MeshSizes,
     surfaceTriangles?: [number, number, number][] | null,
     surfaceFaceIds?: number[] | null,
     // Property table returned by a mesh that idealised thin walls as shells
@@ -299,6 +357,7 @@ function dropAnalysis(s: ModelState): void {
   s.nodes = [];
   s.elements = [];
   s.meshSuppressedIds = [];
+  s.meshSizes = null;
   s.surfaceTriangles = null;
   s.surfaceFaceIds = null;
   s.bcGroups = [];
@@ -357,6 +416,9 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
   remeshNotice: null,
   meshOverlaps: [],
   meshSuppressedIds: [],
+  maxElementSize: String(DEFAULT_MAX_ELEMENT_SIZE),
+  minElementSize: String(DEFAULT_MIN_ELEMENT_SIZE),
+  meshSizes: null,
 
   addNode: (node) =>
     set((s) => {
@@ -444,6 +506,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       // not this one's to undo.
       dropAnalysis(s);
       s.geometryHistory = [];
+      suggestSizes(s, tessellation);
       if (tessellation) {
         // A new part is a new model: an example's hand check no longer applies.
         s.handCheck = null;
@@ -466,6 +529,14 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
   setMeshing: (v) =>
     set((s) => {
       s.isMeshing = v;
+    }),
+  setMaxElementSize: (size) =>
+    set((s) => {
+      s.maxElementSize = size;
+    }),
+  setMinElementSize: (size) =>
+    set((s) => {
+      s.minElementSize = size;
     }),
   setStepImportError: (msg) =>
     set((s) => {
@@ -516,6 +587,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
             ? cadBodies
             : freshBodies(s, bodyCount);
       dropAnalysis(s);
+      suggestSizes(s, tessellation);
     }),
   undoGeometryEdit: () =>
     set((s) => {
@@ -528,6 +600,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       s.properties = previous.properties;
       s.interfaces = previous.interfaces;
       dropAnalysis(s);
+      suggestSizes(s, previous.stepSurface);
     }),
   setSplitPicking: (on) =>
     set((s) => {
@@ -564,6 +637,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
     nodes,
     elements,
     name,
+    meshSizes,
     surfaceTriangles,
     surfaceFaceIds,
     properties,
@@ -571,6 +645,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
   ) =>
     set((s) => {
       s.nodes = nodes;
+      s.meshSizes = meshSizes;
       s.meshSuppressedIds = meshSuppressedIds ?? [];
       s.elements = elements;
       if (properties) s.properties = properties;

@@ -224,14 +224,14 @@ function BodyDetail({ id }: { id: number }) {
       </label>
       {stillMeshed && (
         <p className={styles.formNote} data-testid="suppressed-remesh-note">
-          Re-mesh to take it out of the analysis — the current mesh still
-          contains it.
+          Regenerate the mesh to take it out of the analysis — the current mesh
+          still contains it.
         </p>
       )}
       {notMeshed && (
         <p className={styles.formNote} data-testid="restored-remesh-note">
-          Re-mesh to bring it back into the analysis — the current mesh was made
-          without it.
+          Regenerate the mesh to bring it back into the analysis — the current
+          mesh was made without it.
         </p>
       )}
       <div className={styles.formRow}>

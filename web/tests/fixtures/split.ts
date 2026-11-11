@@ -18,7 +18,7 @@ export async function importStepText(page: Page, step: string): Promise<void> {
     buffer: Buffer.from(step),
   });
   await expect(
-    page.getByRole("button").filter({ hasText: "Mesh STEP volume" }),
+    page.getByRole("button").filter({ hasText: "Generate mesh" }),
   ).toBeVisible({ timeout: 60_000 });
 }
 

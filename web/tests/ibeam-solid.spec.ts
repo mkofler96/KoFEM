@@ -62,7 +62,7 @@ test("i-beam solid: import STEP, mesh, cantilever tip load, all-solid solve", as
     .toBe(1); // the I-beam is a single body
 
   // 2. Mesh the STEP volume.
-  await page.getByRole("button", { name: /Mesh STEP volume/i }).click();
+  await page.getByRole("button", { name: /Generate mesh/i }).click();
   await expect
     .poll(
       async () =>

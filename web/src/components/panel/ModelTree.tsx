@@ -32,6 +32,10 @@ const KIND_DOT: Partial<Record<TreeItemKind, string>> = {
   interface: styles.kindInterface,
 };
 
+// Groups that hold at most one object: a model has one mesh, so once it exists
+// it is regenerated from its own entry and "+ Add" goes.
+const SINGLE_ITEM_GROUPS: TreeGroup[] = ["mesh"];
+
 // Analysis objects carry the hollow square instead of a dot.
 const SQUARE_KINDS: TreeItemKind[] = ["mesh", "study", "plot"];
 
@@ -208,14 +212,15 @@ export function ModelTree() {
                     ),
                   });
                 })}
-                {entry({
-                  key: "add",
-                  active: isAdd(id),
-                  testId: `tree-add-${id}`,
-                  onClick: () => selectTreeNode(addSelection(id)),
-                  marker: <span className={styles.addIcon}>+</span>,
-                  label: "Add",
-                })}
+                {!(SINGLE_ITEM_GROUPS.includes(id) && items[id].length > 0) &&
+                  entry({
+                    key: "add",
+                    active: isAdd(id),
+                    testId: `tree-add-${id}`,
+                    onClick: () => selectTreeNode(addSelection(id)),
+                    marker: <span className={styles.addIcon}>+</span>,
+                    label: "Add",
+                  })}
               </ul>
             )}
           </section>
