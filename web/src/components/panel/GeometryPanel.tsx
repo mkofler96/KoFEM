@@ -215,7 +215,9 @@ function BodyDetail({ id }: { id: number }) {
 
   const hidden = hiddenBodyIds.includes(prop.id);
   const bodies = properties.filter(isCadBody);
-  const assembly = bodies.length > 1;
+  // Several bodies, not just several regions of one: the regions of a body are
+  // connected by construction, so the bonding note is about bodies only.
+  const assembly = bodyGroups(properties).length > 1;
   const suppressed = prop.suppressed === true;
   // The last body still in the model cannot go — there would be nothing left.
   const lastBody =
@@ -342,6 +344,13 @@ function BodyDetail({ id }: { id: number }) {
           ))}
         </select>
       </div>
+      {unbonded ? (
+        <p className={styles.fieldError} data-testid="body-unbonded-note">
+          {UNBONDED_NOTE}
+        </p>
+      ) : (
+        assembly && <p className={styles.formNote}>{BODIES_NOTE}</p>
+      )}
       {isRegion && (
         <button
           className={styles.outlineBtn}
@@ -358,13 +367,6 @@ function BodyDetail({ id }: { id: number }) {
         >
           Promote to body
         </button>
-      )}
-      {unbonded ? (
-        <p className={styles.fieldError} data-testid="body-unbonded-note">
-          {UNBONDED_NOTE}
-        </p>
-      ) : (
-        assembly && <p className={styles.formNote}>{BODIES_NOTE}</p>
       )}
       {!suppressed && <SplitSection bodyId={prop.id} />}
     </>
