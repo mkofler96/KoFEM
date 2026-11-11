@@ -160,6 +160,10 @@
   background: #059669;
 }
 
+.kindInterface {
+  background: #0891b2;
+}
+
 .addIcon {
   width: 8px;
   flex-shrink: 0;

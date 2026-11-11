@@ -22,6 +22,7 @@ import type {
 } from "../store/modelStore";
 import { DEFAULT_TOPOPT_SETTINGS, RESULT_TYPES } from "../store/modelStore";
 import { parseHandCheck, type HandCheck } from "./handCheck";
+import { restoreInterfaces, type BodyInterface } from "./interfaces";
 
 // ── KoFEM analysis file format (.vtu) ─────────────────────────────────────────
 //
@@ -86,6 +87,9 @@ export interface AnalysisState {
   nextFaceEntryId: number;
   nextMatId: number;
   stepSurface: StepTessellation | null;
+  // Body-to-body interfaces of stepSurface (lib/interfaces); null when the
+  // tessellation carries no face ids to find them by.
+  interfaces: BodyInterface[] | null;
   volMesh: VolMesh | null;
   surfaceTriangles: [number, number, number][] | null;
   surfaceFaceIds: number[] | null;
@@ -131,6 +135,11 @@ interface KofemFieldDataV1 {
   nextFaceEntryId: number;
   nextMatId: number;
   stepSurface: StepTessellation | null;
+  // The body-to-body interfaces and their types. Written only when the
+  // geometry has some, so single-body files are unchanged; absent in files
+  // written before interfaces existed (all bonded, as re-detection yields).
+  // Validated against the interfaces re-detected from stepSurface on load.
+  interfaces?: BodyInterface[];
   volMesh: VolMesh | null;
   surfaceTriangles: [number, number, number][] | null;
   surfaceFaceIds: number[] | null;
@@ -278,6 +287,9 @@ export function serializeAnalysis(state: AnalysisState): string {
     nextFaceEntryId: state.nextFaceEntryId,
     nextMatId: state.nextMatId,
     stepSurface: state.stepSurface,
+    ...(state.interfaces && state.interfaces.length > 0
+      ? { interfaces: state.interfaces }
+      : {}),
     volMesh: state.volMesh,
     surfaceTriangles: state.surfaceTriangles,
     surfaceFaceIds: state.surfaceFaceIds,
@@ -675,6 +687,7 @@ export function parseAnalysisFile(text: string): AnalysisState {
     nextFaceEntryId: meta.nextFaceEntryId,
     nextMatId: meta.nextMatId,
     stepSurface: meta.stepSurface,
+    interfaces: restoreInterfaces(meta.stepSurface, meta.interfaces),
     volMesh: meta.volMesh,
     surfaceTriangles: meta.surfaceTriangles,
     surfaceFaceIds: meta.surfaceFaceIds,
