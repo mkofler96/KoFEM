@@ -240,7 +240,11 @@ export interface KofemModule {
    *  requested one whole. Releases the cached shape: load the returned bytes
    *  with tessellate_step before meshing or splitting again.
    *  @param opts_json JSON-stringified {@link SplitGeometryOptions}. */
-  split_geometry(opts_json: string): { bytes: Uint8Array }
+  split_geometry(opts_json: string): {
+    bytes: Uint8Array
+    /** Entry j is the old id of new body j+1: a body cut in two appears twice. */
+    bodySources: number[]
+  }
   /** Combine bodies of the loaded shape with a Boolean (see
    *  {@link BooleanGeometryOptions}) and return the edited geometry as STEP
    *  AP214 bytes. Throws, naming the bodies, when the operation would change

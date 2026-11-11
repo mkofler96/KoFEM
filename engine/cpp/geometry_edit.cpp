@@ -62,6 +62,7 @@
 #include <gp_Pnt.hxx>
 #include <gp_Vec.hxx>
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -192,6 +193,33 @@ TopoDS_Shape in_solid_order(const TopoDS_Shape& input, BOPAlgo_Splitter& splitte
     return out;
 }
 
+// Entry j: the 1-based input solid that solid j+1 of in_solid_order(input,
+// splitter) came from — a body cut in two has two entries, both its id. The app
+// carries each body's settings to its pieces with it. Surface-only geometry has
+// no solids to trace: it is one body before and after.
+std::vector<int> solid_sources(const TopoDS_Shape& input, BOPAlgo_Splitter& splitter) {
+    TopTools_IndexedMapOfShape solids;
+    TopExp::MapShapes(input, TopAbs_SOLID, solids);
+    if (solids.IsEmpty())
+        return {1};
+    std::vector<int> sources;
+    for (int i = 1; i <= solids.Extent(); ++i) {
+        const int pieces = std::max(1, splitter.Modified(solids(i)).Extent());
+        sources.insert(sources.end(), static_cast<size_t>(pieces), i);
+    }
+    return sources;
+}
+
+// A split's result in the input's solid order, and where each solid came from.
+struct SplitShape {
+    TopoDS_Shape shape;
+    std::vector<int> body_sources;  // entry j: the old id of new body j+1
+};
+
+SplitShape split_result(const TopoDS_Shape& input, BOPAlgo_Splitter& splitter) {
+    return {in_solid_order(input, splitter), solid_sources(input, splitter)};
+}
+
 // Why the plane left `face` whole, for an error that tells the user what to
 // change rather than just that nothing happened.
 std::string why_not_split(const TopoDS_Face& face, const gp_Pln& plane, int n_section_edges) {
@@ -207,7 +235,7 @@ std::string why_not_split(const TopoDS_Face& face, const gp_Pln& plane, int n_se
            " along its boundary — move the plane inside the face";
 }
 
-TopoDS_Shape split_faces(const TopoDS_Shape& shape, const std::vector<int>& face_ids,
+SplitShape split_faces(const TopoDS_Shape& shape, const std::vector<int>& face_ids,
                          const gp_Pln& plane) {
     if (face_ids.empty())
         throw std::runtime_error("split_geometry: no face to split — pick at least one face");
@@ -251,10 +279,10 @@ TopoDS_Shape split_faces(const TopoDS_Shape& shape, const std::vector<int>& face
                      describe_plane(plane).c_str());
     }
     (void)fflush(stdout);
-    return in_solid_order(shape, splitter);
+    return split_result(shape, splitter);
 }
 
-TopoDS_Shape split_bodies(const TopoDS_Shape& shape, const std::vector<int>& body_ids,
+SplitShape split_bodies(const TopoDS_Shape& shape, const std::vector<int>& body_ids,
                           const gp_Pln& plane) {
     TopTools_IndexedMapOfShape solids;
     TopExp::MapShapes(shape, TopAbs_SOLID, solids);
@@ -299,7 +327,7 @@ TopoDS_Shape split_bodies(const TopoDS_Shape& shape, const std::vector<int>& bod
     if (n_split == 0)
         throw std::runtime_error("No body is crossed by " + describe_plane(plane) +
                                  " — move the plane inside the model");
-    return in_solid_order(shape, splitter);
+    return split_result(shape, splitter);
 }
 
 // STEP AP214 text of `shape`, through Emscripten's in-memory /tmp — the writer,
@@ -329,7 +357,7 @@ std::vector<uint8_t> step_bytes(const TopoDS_Shape& shape) {
     return bytes;
 }
 
-TopoDS_Shape split_by_mode(const std::string& mode, const TopoDS_Shape& shape,
+SplitShape split_by_mode(const std::string& mode, const TopoDS_Shape& shape,
                            const val& opts, const gp_Pln& plane) {
     if (mode == "faces")
         return split_faces(shape, id_list(opts, "faceIds"), plane);
@@ -772,9 +800,9 @@ val split_geometry(const std::string& opts_json) {
     const std::string mode = jstring(opts, "mode", "");
     const gp_Pln plane = plane_from(opts);
     const TopoDS_Shape& shape = cached_shape();
-    const TopoDS_Shape edited = split_by_mode(mode, shape, opts, plane);
+    const SplitShape edited = split_by_mode(mode, shape, opts, plane);
 
-    const std::vector<uint8_t> bytes = step_bytes(edited);
+    const std::vector<uint8_t> bytes = step_bytes(edited.shape);
     // The edit lives in the returned file from here on. Drop the pre-edit shape
     // so a caller that forgets to load the bytes fails loudly at the next mesh
     // instead of meshing the geometry the user just changed.
@@ -782,5 +810,6 @@ val split_geometry(const std::string& opts_json) {
 
     val result = val::object();
     result.set("bytes", uint8_array(bytes));
+    result.set("bodySources", val::array(edited.body_sources));
     return result;
 }
