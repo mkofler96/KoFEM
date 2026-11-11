@@ -28,7 +28,8 @@ const pkg = join(here, "../../../web/src/wasm/pkg");
  *               point_loads:[{vertex, force:[fx,fy,fz]}...],
  *               surface_loads:[{ type:"force"|"pressure"|"traction",
  *                                faces:[[a,b,c(,d)]...],
- *                                force?:[fx,fy,fz], pressure?:p }...] }
+ *                                force?:[fx,fy,fz], pressure?:p }...],
+ *               tie_constraints?:{ slave, offsets, master, weights } } // CSR ties
  *   order:    FE polynomial order (default 1). Order 2 (quadratic) elements use
  *             the engine's tight 1e-6 CG tolerance and are exercised by the
  *             cantilever-bending-p2 case (see solve_mfem.cpp, order ≥ 2 path).
@@ -52,6 +53,7 @@ export async function loadSolver() {
       prescribed_dofs: bcs.prescribed_dofs ?? [],
       point_loads: bcs.point_loads ?? [],
       surface_loads: bcs.surface_loads ?? [],
+      ...(bcs.tie_constraints ? { tie_constraints: bcs.tie_constraints } : {}),
     });
     const result = Module.solve_linear_elastic(
       meshArrays,

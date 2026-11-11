@@ -120,10 +120,10 @@ std::vector<T> json_array(const val& array_js, const char* what) {
     return out;
 }
 
-// bcs.tie_constraints = { slave, offsets, master, weights } — CSR, see
-// tie_constraints.h: vertex slave[k] projects onto the element face with the
-// vertices master[..], at the point Σ weights·(master position). Optional: a
-// model with no constraint tie omits it.
+// bcs.tie_constraints = { slave, offsets, master, weights } — CSR node ties
+// over mesh vertices, see tie_constraints.h and fe_node_ties for how the
+// weights are read at each element order. Optional: a model with no constraint
+// tie omits it.
 kofem::fem::NodeTies parse_tie_constraints(const val& ties_js) {
     kofem::fem::NodeTies ties;
     if (ties_js.isUndefined() || ties_js.isNull()) return ties;
@@ -138,9 +138,13 @@ kofem::fem::NodeTies parse_tie_constraints(const val& ties_js) {
 // space (its scalar DOFs: vertices, and for a quadratic space edge midpoints
 // and quadrilateral face centres).
 //
-// The payload names, per tied vertex, the vertices of the face it projects onto
-// and the linear weights of the projection. That is the tie itself only for
-// linear triangles. In general the vertex must follow the face's displacement
+// Linear elements (order 1): the payload's weights ARE the tie — the dual
+// mortar weights the frontend integrates over the interface
+// (web/src/lib/tieMortar.ts) — and are applied as sent.
+//
+// Quadratic elements (order 2): the payload names, per tied vertex, the
+// vertices of the face it projects onto and the linear weights of the
+// projection (node-to-surface). The vertex must follow the face's displacement
 // FIELD, so the projection point is mapped back into the face and the face's
 // own shape functions are evaluated there — bilinear on a quadrilateral,
 // quadratic on a second-order face. (Interpolating a quadratic face from its
@@ -166,6 +170,12 @@ kofem::fem::NodeTies fe_node_ties(mfem::FiniteElementSpace& fespace,
     for (int vi = 0; vi < n_verts; ++vi) {
         fespace.GetVertexDofs(vi, dofs);
         vertex_node[vi] = dofs[0];
+    }
+    if (order == 1) {
+        kofem::fem::NodeTies out = vertex_ties;
+        for (int& slave : out.slave) slave = vertex_node[slave];
+        for (int& master : out.master) master = vertex_node[master];
+        return out;
     }
     // Boundary faces around each vertex, to find the face a tie projects onto.
     std::vector<std::vector<int>> faces_of((size_t)n_verts);

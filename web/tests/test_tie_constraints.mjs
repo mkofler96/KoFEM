@@ -121,6 +121,7 @@ function tieBetween(nodes, extent, searchDistance) {
     nodes,
     elements,
     tieBetween(nodes, "region", 0.6),
+    "projection",
   );
   // Box B's face is the finer one (4×4 nodes against 3×3), so it follows.
   assert(
@@ -160,12 +161,18 @@ function tieBetween(nodes, extent, searchDistance) {
     nodes,
     elements,
     tieBetween(nodes, "region", 0.1),
+    "projection",
   );
   assert(
     tooShort.constraints.length === 0,
     "a 0.1 mm search distance must not span the 0.5 mm gap",
   );
-  const full = tieConstraints(nodes, elements, tieBetween(nodes, "full", 0));
+  const full = tieConstraints(
+    nodes,
+    elements,
+    tieBetween(nodes, "full", 0),
+    "projection",
+  );
   assert(
     full.constraints.length === 16,
     `a full-surface tie constrains all 16 nodes, got ${full.constraints.length}`,
@@ -177,6 +184,7 @@ function tieBetween(nodes, extent, searchDistance) {
     matching.nodes,
     matching.elements,
     tieBetween(matching.nodes, "full", 0),
+    "projection",
   );
   assert(
     nodeToNode.constraints.length === 9 &&
@@ -186,7 +194,52 @@ function tieBetween(nodes, extent, searchDistance) {
       ),
     "facing nodes are tied one to one",
   );
-  console.log("constraints: 16 node-to-face, 9 node-to-node — ok");
+  // The mortar formulation ties the same 16 nodes. Its weights come from the
+  // dual basis, so some are negative, but each set sums to one and reproduces
+  // a linear field: Σ w·x_master is the node's own (y, z) on the facing plane.
+  const mortar = tieConstraints(
+    nodes,
+    elements,
+    tieBetween(nodes, "full", 0),
+    "mortar",
+  );
+  assert(
+    mortar.constraints.length === 16,
+    `the mortar tie constrains all 16 nodes, got ${mortar.constraints.length}`,
+  );
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  for (const constraint of mortar.constraints) {
+    const sum = constraint.weights.reduce((total, w) => total + w, 0);
+    assert(Math.abs(sum - 1) < 1e-12, `mortar weights sum to ${sum}`);
+    const slave = byId.get(constraint.slaveId);
+    for (const axis of ["y", "z"]) {
+      const followed = constraint.masterIds.reduce(
+        (total, id, k) => total + constraint.weights[k] * byId.get(id)[axis],
+        0,
+      );
+      assert(
+        Math.abs(followed - slave[axis]) < 1e-9,
+        `mortar weights must reproduce a linear field (${axis}: ${followed} vs ${slave[axis]})`,
+      );
+    }
+  }
+  const mortarMatching = tieConstraints(
+    matching.nodes,
+    matching.elements,
+    tieBetween(matching.nodes, "full", 0),
+    "mortar",
+  );
+  assert(
+    mortarMatching.constraints.every(
+      (constraint) =>
+        constraint.masterIds.length === 1 &&
+        Math.abs(constraint.weights[0] - 1) < 1e-12,
+    ),
+    "on matching meshes the mortar tie is node to node",
+  );
+  console.log(
+    "constraints: 16 node-to-face, 9 node-to-node, mortar consistent — ok",
+  );
 }
 
 // ── Solve ─────────────────────────────────────────────────────────────────────
@@ -209,7 +262,9 @@ async function solve(
   const { nodes, elements } = gappedBoxes(elementType, 3);
   const tieGroups = tied ? tieBetween(nodes, "region", 0.6) : [];
   const logs = [];
-  const model = weldTies(nodes, elements, tieGroups, (line) => logs.push(line));
+  const model = weldTies(nodes, elements, tieGroups, order, (line) =>
+    logs.push(line),
+  );
   assert(
     model.solveNodes.length === nodes.length,
     "a constraint tie must not merge any node",
@@ -265,38 +320,16 @@ async function solve(
   const disp = result.displacements;
   const indexOf = new Map(nodes.map((node, i) => [node.id, i]));
   const ux = (id) => disp[3 * indexOf.get(id)];
-  // What a tied node must equal: the displacement of the master face at its
-  // projection. On a triangle (tet face) that is the tie's own linear weights;
-  // on a quadrilateral (hex face) the engine interpolates bilinearly, here over
-  // box A's 3×3 face grid (spacing SIDE / 2). A quadratic face needs its edge
-  // values, which the result does not carry, so order 2 is checked by the
-  // position of the tie alone.
-  const masterFace = new Map(
-    nodes
-      .filter((node) => Math.abs(node.x - LENGTH) < 1e-9)
-      .map((node) => [`${node.y},${node.z}`, node.id]),
-  );
-  const cell = SIDE / 2;
-  const masterField = (constraint, component) => {
-    const value = (id) => disp[3 * indexOf.get(id) + component];
-    if (elementType === "CTETRA")
-      return constraint.masterIds.reduce(
-        (sum, id, k) => sum + constraint.weights[k] * value(id),
-        0,
-      );
-    const [, y, z] = constraint.point;
-    const y0 = Math.min(Math.floor(y / cell), 1) * cell;
-    const z0 = Math.min(Math.floor(z / cell), 1) * cell;
-    const ty = (y - y0) / cell;
-    const tz = (z - z0) / cell;
-    const corner = (dy, dz) => value(masterFace.get(`${y0 + dy},${z0 + dz}`));
-    return (
-      (1 - ty) * (1 - tz) * corner(0, 0) +
-      ty * (1 - tz) * corner(cell, 0) +
-      (1 - ty) * tz * corner(0, cell) +
-      ty * tz * corner(cell, cell)
+  // What a tied node must equal on linear elements: the weighted displacement
+  // of its masters, with the weights the solve sent. A quadratic face needs
+  // its edge values, which the result does not carry, so order 2 is checked by
+  // the position of the tie alone.
+  const masterField = (constraint, component) =>
+    constraint.masterIds.reduce(
+      (sum, id, k) =>
+        sum + constraint.weights[k] * disp[3 * indexOf.get(id) + component],
+      0,
     );
-  };
   let worst = 0;
   if (order === 1)
     for (const constraint of model.constraints) {

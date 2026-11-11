@@ -1,6 +1,6 @@
 {
-  "generated": "2026-11-01",
-  "engine": "engine-5ceb743373dd",
+  "generated": "2026-11-11",
+  "engine": "engine-274b992a8a59",
   "cases": [
     {
       "id": "axial-bar",
@@ -310,8 +310,8 @@
       "reference": 3,
       "referenceLabel": "Kt = 3 (infinite plate)",
       "tolPct": 15,
-      "fe": 2.7749798552633758,
-      "errPct": -7.500671491220808,
+      "fe": 2.7749798552632647,
+      "errPct": -7.500671491224509,
       "pass": true,
       "mesh": {
         "order": 1,
@@ -360,8 +360,8 @@
       "figure": {
         "field": "vonMises",
         "unit": "MPa",
-        "min": 24.25504636312101,
-        "max": 277.4003602817979,
+        "min": 24.255046363120005,
+        "max": 277.4003602818001,
         "deform": 0,
         "width": 1200,
         "height": 720
@@ -375,8 +375,8 @@
       "reference": 0.0014488895379514283,
       "referenceLabel": "θ = T·L / (G·J)",
       "tolPct": 5,
-      "fe": 0.001468288244624205,
-      "errPct": 1.3388671920569095,
+      "fe": 0.0014682882446241865,
+      "errPct": 1.3388671920556374,
       "pass": true,
       "mesh": {
         "order": 1,
@@ -426,7 +426,7 @@
         "field": "displacement",
         "unit": "mm",
         "min": 0,
-        "max": 0.07343407396973886,
+        "max": 0.07343407396973586,
         "deform": 500,
         "width": 1200,
         "height": 900
@@ -485,6 +485,209 @@
         "deform": 0.2,
         "width": 1200,
         "height": 900
+      }
+    },
+    {
+      "id": "tie-patch-test",
+      "name": "Tie patch test",
+      "quantity": "stress uniformity σmax / σmin",
+      "unit": "",
+      "reference": 1,
+      "referenceLabel": "uniform σ (exact)",
+      "tolPct": 0.01,
+      "fe": 1.0000008229885424,
+      "errPct": 0.00008229885424260175,
+      "pass": true,
+      "mesh": {
+        "order": 1,
+        "elements": 116,
+        "vertices": 230,
+        "nodes": 230,
+        "dofs": 690
+      },
+      "inputs": [
+        {
+          "symbol": "L",
+          "value": 100,
+          "unit": "mm"
+        },
+        {
+          "symbol": "W × H",
+          "value": "40 × 40",
+          "unit": "mm"
+        },
+        {
+          "symbol": "E",
+          "value": 210000,
+          "unit": "MPa"
+        },
+        {
+          "symbol": "ν",
+          "value": 0.3,
+          "unit": ""
+        },
+        {
+          "symbol": "σ",
+          "value": 100,
+          "unit": "MPa"
+        }
+      ],
+      "readout": {
+        "field": "Ux",
+        "stat": "Max",
+        "value": "4.762e-2 mm"
+      },
+      "extras": {
+        "displacementErrPct": 0.00003128706597523359,
+        "stressMin": 99.99996409478669,
+        "stressMax": 100.00004639361138,
+        "projectionStressMin": 89.34747199512219,
+        "projectionStressMax": 107.22508142896322
+      },
+      "figure": {
+        "field": "displacement",
+        "unit": "mm",
+        "min": 0,
+        "max": 0.04829988900928952,
+        "deform": 200,
+        "width": 1200,
+        "height": 737
+      }
+    },
+    {
+      "id": "tie-lame-cylinder",
+      "name": "Tied thick-walled cylinder",
+      "quantity": "bore radial displacement u(a)",
+      "unit": "mm",
+      "reference": 0.0453968253968254,
+      "referenceLabel": "Lamé, plane strain",
+      "tolPct": 2,
+      "fe": 0.04524391487871213,
+      "errPct": -0.3368308615781902,
+      "pass": true,
+      "mesh": {
+        "order": 1,
+        "elements": 100,
+        "vertices": 264,
+        "nodes": 264,
+        "dofs": 792
+      },
+      "inputs": [
+        {
+          "symbol": "a",
+          "value": 50,
+          "unit": "mm"
+        },
+        {
+          "symbol": "c",
+          "value": 75,
+          "unit": "mm"
+        },
+        {
+          "symbol": "b",
+          "value": 100,
+          "unit": "mm"
+        },
+        {
+          "symbol": "t",
+          "value": 10,
+          "unit": "mm"
+        },
+        {
+          "symbol": "E",
+          "value": 210000,
+          "unit": "MPa"
+        },
+        {
+          "symbol": "ν",
+          "value": 0.3,
+          "unit": ""
+        },
+        {
+          "symbol": "p",
+          "value": 100,
+          "unit": "MPa"
+        }
+      ],
+      "readout": {
+        "field": "|U|",
+        "stat": "Max",
+        "value": "4.524e-2 mm"
+      },
+      "extras": {
+        "interfaceStressErrPct": 0.30006314470268913,
+        "otherStressErrPct": 0.32052092939619525,
+        "projectionInterfaceStressErrPct": 1.1991278796851468,
+        "projectionBoreErrPct": -0.3925918743770018
+      },
+      "figure": {
+        "field": "vonMises",
+        "unit": "MPa",
+        "min": 62.10564243488326,
+        "max": 209.57601026400144,
+        "deform": 0,
+        "width": 1200,
+        "height": 900
+      }
+    },
+    {
+      "id": "tie-cantilever",
+      "name": "Tied cantilever, quadratic hexahedra",
+      "quantity": "tip deflection δ",
+      "unit": "mm",
+      "reference": -1.9047619047619047,
+      "referenceLabel": "δ = P·L³ / (3·E·I)",
+      "tolPct": 4,
+      "fe": -1.9442072647373396,
+      "errPct": 2.070881398710336,
+      "pass": true,
+      "mesh": {
+        "order": 2,
+        "elements": 65,
+        "vertices": 150,
+        "nodes": 814,
+        "dofs": 2442
+      },
+      "inputs": [
+        {
+          "symbol": "L",
+          "value": 1000,
+          "unit": "mm"
+        },
+        {
+          "symbol": "b × h",
+          "value": "100 × 100",
+          "unit": "mm"
+        },
+        {
+          "symbol": "E",
+          "value": 210000,
+          "unit": "MPa"
+        },
+        {
+          "symbol": "ν",
+          "value": 0.3,
+          "unit": ""
+        },
+        {
+          "symbol": "P",
+          "value": 10000,
+          "unit": "N"
+        }
+      ],
+      "readout": {
+        "field": "Uy",
+        "stat": "Min",
+        "value": "-1.944e+0 mm"
+      },
+      "figure": {
+        "field": "displacement",
+        "unit": "mm",
+        "min": 0,
+        "max": 1.9496358966414036,
+        "deform": 50,
+        "width": 1200,
+        "height": 526
       }
     }
   ],
@@ -626,8 +829,8 @@
               "vertices": 1664,
               "nodes": 1664,
               "dofs": 4992,
-              "fe": 0.001468288244624205,
-              "errPct": 1.3388671920569095,
+              "fe": 0.0014682882446241865,
+              "errPct": 1.3388671920556374,
               "ci": true
             },
             {
@@ -637,8 +840,8 @@
               "vertices": 8000,
               "nodes": 8000,
               "dofs": 24000,
-              "fe": 0.0014545860106313434,
-              "errPct": 0.39316128184411336,
+              "fe": 0.0014545860106313538,
+              "errPct": 0.3931612818448318,
               "ci": false
             }
           ]
@@ -759,6 +962,64 @@
               "dofs": 9801,
               "fe": 25.166071790883443,
               "errPct": 5.297371509972571,
+              "ci": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tie-lame-cylinder",
+      "caseId": "tie-lame-cylinder",
+      "title": "Tied thick-walled cylinder",
+      "series": [
+        {
+          "label": "P1 (linear)",
+          "caseId": "tie-lame-cylinder",
+          "order": 1,
+          "points": [
+            {
+              "mesh": "1× refined",
+              "order": 1,
+              "elements": 100,
+              "vertices": 264,
+              "nodes": 264,
+              "dofs": 792,
+              "fe": 0.04524391487871213,
+              "errPct": -0.3368308615781902,
+              "ci": true
+            },
+            {
+              "mesh": "2× refined",
+              "order": 1,
+              "elements": 400,
+              "vertices": 924,
+              "nodes": 924,
+              "dofs": 2772,
+              "fe": 0.04535851278321191,
+              "errPct": -0.08439491809965027,
+              "ci": false
+            },
+            {
+              "mesh": "3× refined",
+              "order": 1,
+              "elements": 900,
+              "vertices": 1984,
+              "nodes": 1984,
+              "dofs": 5952,
+              "fe": 0.045379793697178046,
+              "errPct": -0.03751738034207487,
+              "ci": false
+            },
+            {
+              "mesh": "4× refined",
+              "order": 1,
+              "elements": 1600,
+              "vertices": 3444,
+              "nodes": 3444,
+              "dofs": 10332,
+              "fe": 0.04538724473739292,
+              "errPct": -0.02110424979882603,
               "ci": false
             }
           ]

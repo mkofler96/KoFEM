@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import { useModelStore } from "../store/modelStore";
 import { tieMethod, tiedNodePairs } from "../lib/tie";
 import type { TiePair, TieReport } from "../lib/tie";
-import { tieConstraints } from "../lib/tieConstraints";
+import { tieConstraints, tieFormulation } from "../lib/tieConstraints";
 import type { TieConstraint } from "../lib/tieConstraints";
 
 // What the model's tie connections join: the node pairs the node-merge ties
@@ -23,6 +23,7 @@ export function useTiePairs(): {
   const nodes = useModelStore((s) => s.nodes);
   const elements = useModelStore((s) => s.elements);
   const tieGroups = useModelStore((s) => s.tieGroups);
+  const elementOrder = useModelStore((s) => s.elementOrder);
   return useMemo(() => {
     const isMerge = tieGroups.map((group) => tieMethod(group) === "merge");
     const merged = tiedNodePairs(
@@ -36,6 +37,7 @@ export function useTiePairs(): {
       nodes,
       elements,
       tieGroups.filter((_, index) => !isMerge[index]),
+      tieFormulation(elementOrder),
       welded,
     );
     // Back into tie-group order: each list holds its reports in that order.
@@ -51,5 +53,5 @@ export function useTiePairs(): {
       constraints: constrained.constraints,
       reports,
     };
-  }, [nodes, elements, tieGroups]);
+  }, [nodes, elements, tieGroups, elementOrder]);
 }

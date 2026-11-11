@@ -299,3 +299,64 @@ export function distributeForce(nodeIds, force) {
   ];
   return nodeIds.map((vertex) => ({ vertex, force: per }));
 }
+
+/**
+ * Quarter of an annulus ri→ro (θ from 0 to 90°), thickness t along +z:
+ * nr radial × nth circumferential × nz axial linear hexes. The cut faces lie on
+ * the planes y = 0 (θ = 0) and x = 0 (θ = 90°), where symmetry supports go.
+ */
+export function quarterAnnulusHexMesh(ri, ro, t, nr, nth, nz) {
+  const id = (i, j, k) => i * (nth + 1) * (nz + 1) + j * (nz + 1) + k;
+  const vertices = [];
+  for (let i = 0; i <= nr; i++) {
+    const r = ri + ((ro - ri) * i) / nr;
+    for (let j = 0; j <= nth; j++) {
+      const th = (Math.PI / 2) * (j / nth);
+      // Exact zeros on the cut planes, so the symmetry supports find them.
+      const x = j === nth ? 0 : r * Math.cos(th);
+      const y = j === 0 ? 0 : r * Math.sin(th);
+      for (let k = 0; k <= nz; k++) vertices.push([x, y, (t * k) / nz]);
+    }
+  }
+  const hexahedra = [];
+  for (let i = 0; i < nr; i++)
+    for (let j = 0; j < nth; j++)
+      for (let k = 0; k < nz; k++)
+        hexahedra.push([
+          id(i, j, k),
+          id(i + 1, j, k),
+          id(i + 1, j + 1, k),
+          id(i, j + 1, k),
+          id(i, j, k + 1),
+          id(i + 1, j, k + 1),
+          id(i + 1, j + 1, k + 1),
+          id(i, j + 1, k + 1),
+        ]);
+  return { vertices, hexahedra, id };
+}
+
+/**
+ * Separately meshed parts as one multibody mesh, the way the app holds an
+ * assembly: the vertex lists are concatenated without merging anything (parts
+ * that touch share no node), and hex e of part p is in body p + 1. Each part is
+ * `{ mesh, offset? }`, `offset` a translation [dx, dy, dz]. Returns the joined
+ * `{ vertices, hexahedra, bodies }` and, per part, the index of its first
+ * vertex.
+ */
+export function joinParts(parts) {
+  const vertices = [];
+  const hexahedra = [];
+  const bodies = [];
+  const firstVertex = [];
+  parts.forEach(({ mesh, offset = [0, 0, 0] }, p) => {
+    const base = vertices.length;
+    firstVertex.push(base);
+    for (const [x, y, z] of mesh.vertices)
+      vertices.push([x + offset[0], y + offset[1], z + offset[2]]);
+    for (const hex of mesh.hexahedra) {
+      hexahedra.push(hex.map((v) => v + base));
+      bodies.push(p + 1);
+    }
+  });
+  return { vertices, hexahedra, bodies, firstVertex };
+}

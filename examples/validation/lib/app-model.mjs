@@ -14,15 +14,110 @@
 //
 //   { title,                                  the model name in the app
 //     mesh: { vertices, hexahedra },          8-node hexahedra
+//     bodies?,                                body (property id) per hex; all 1
 //     material: { name, young_modulus, poisson_ratio, density },
 //     order,                                  1 linear, 2 quadratic
 //     support: { nodes, label },              Ux Uy Uz fixed
+//       or supports: [{ nodes, label, dofs }] each fixing the listed DOFs
 //     load: { kind, axis, value, nodes, label },
+//     ties?: [{ name, a: { nodes, label }, b: { nodes, label },
+//               extent, searchDistance, method }],
+//     tieFormulation?,                        override how ties weigh their
+//                                             nodes ("mortar" | "projection");
+//                                             the app picks it from the order
 //     resultType }                            the field the app shows
 //
 // `load.kind` is "force" (value in N along `axis`), "moment" (N·mm about
 // `axis`) or "pressure" (MPa, along the inward normal; no axis). Node lists are
-// 0-based vertex indices.
+// 0-based vertex indices. A tie joins two separately meshed bodies exactly as
+// the app's Tie connection does (web/src/lib/tie.ts); only the constraint
+// method ("mpc", web/src/lib/tieConstraints.ts) is supported here, and it is
+// computed by the app's own code — so a model with ties runs under Bun, which
+// loads that TypeScript directly.
+
+// The app's constraint tie, loaded only when Bun can run its TypeScript; the
+// examples without ties keep running under plain Node.
+const appTies = globalThis.Bun
+  ? await import("../../../web/src/lib/tieConstraints.ts")
+  : null;
+
+/** The supports of a model: `supports`, or the single clamp `support`. */
+export function supportsOf(model) {
+  if (model.supports) return model.supports;
+  return [{ ...model.support, dofs: [0, 1, 2] }];
+}
+
+/** The body (property id) of every hex. */
+export function bodiesOf(model) {
+  const bodies = model.bodies ?? model.mesh.hexahedra.map(() => 1);
+  if (bodies.length !== model.mesh.hexahedra.length)
+    throw new Error(
+      `model "${model.title}": ${bodies.length} bodies for ${model.mesh.hexahedra.length} hexahedra`,
+    );
+  return bodies;
+}
+
+// The app's tie definitions for a model (web/src/lib/tie.ts TieDefinition),
+// in 0-based vertex ids.
+function tieDefinitions(model) {
+  return model.ties.map((tie) => {
+    if (tie.method !== "mpc")
+      throw new Error(
+        `tie "${tie.name}": the validation models support the constraint method only, got "${tie.method}"`,
+      );
+    return {
+      name: tie.name,
+      facesA: [{ nodeIds: tie.a.nodes }],
+      facesB: [{ nodeIds: tie.b.nodes }],
+      extent: tie.extent,
+      searchDistance: tie.searchDistance,
+      method: tie.method,
+    };
+  });
+}
+
+/**
+ * The constraints the model's ties make, computed by the app's own code: one
+ * per tied node, `{ tie, slaveId, masterIds, weights, point, distance }`
+ * (web/src/lib/tieConstraints.ts), in vertex indices. Refuses a tie that
+ * joins nothing, as the app's solve does.
+ */
+export function tieConstraintsOf(model) {
+  if (!model.ties?.length) return [];
+  if (!appTies)
+    throw new Error(
+      `model "${model.title}" has ties, which are computed by the app's TypeScript: run it with Bun (cd web && bun ../examples/validation/run.mjs)`,
+    );
+  const bodies = bodiesOf(model);
+  const { constraints, reports } = appTies.tieConstraints(
+    model.mesh.vertices.map(([x, y, z], id) => ({ id, x, y, z })),
+    model.mesh.hexahedra.map((nodeIds, e) => ({
+      nodeIds,
+      propertyId: bodies[e],
+    })),
+    tieDefinitions(model),
+    model.tieFormulation ?? appTies.tieFormulation(model.order),
+  );
+  for (const report of reports)
+    if (report.nPaired === 0 && report.nShared === 0)
+      throw new Error(`tie "${report.name}" connected no nodes`);
+  return constraints;
+}
+
+// The engine's CSR form of the tie constraints (engine/cpp/tie_constraints.h).
+function engineTieConstraints(constraints) {
+  const slave = [];
+  const offsets = [0];
+  const master = [];
+  const weights = [];
+  for (const c of constraints) {
+    slave.push(c.slaveId);
+    master.push(...c.masterIds);
+    weights.push(...c.weights);
+    offsets.push(master.length);
+  }
+  return { slave, offsets, master, weights };
+}
 
 // Steel as the app seeds it (web/src/store/modelStore.ts).
 export const STEEL = {
@@ -91,7 +186,21 @@ function momentForces(vertices, nodes, axis, moment) {
 export function solverBcs(model) {
   const { vertices, hexahedra } = model.mesh;
   const { kind, axis, value, nodes } = model.load;
-  const bcs = { fixed_vertices: model.support.nodes };
+  // The app's groupDirichlet(): the DOFs every support fixes, per node; a node
+  // with all three is fully fixed.
+  const dofsByNode = new Map();
+  for (const support of supportsOf(model))
+    for (const v of support.nodes) {
+      const dofs = dofsByNode.get(v) ?? new Set();
+      for (const dof of support.dofs) dofs.add(dof);
+      dofsByNode.set(v, dofs);
+    }
+  const bcs = { fixed_vertices: [], fixed_dofs: [] };
+  for (const [vertex, dofs] of dofsByNode)
+    if (dofs.size === 3) bcs.fixed_vertices.push(vertex);
+    else bcs.fixed_dofs.push({ vertex, dofs: [...dofs].sort() });
+  const ties = tieConstraintsOf(model);
+  if (ties.length) bcs.tie_constraints = engineTieConstraints(ties);
   if (kind === "force") {
     const force = [0, 0, 0];
     force[axis] = value;
@@ -141,6 +250,33 @@ export function analysisSetup(model) {
     kind === "pressure"
       ? { dof: 0, totalForce: value, kind }
       : { dof: kind === "moment" ? 3 + axis : axis, totalForce: value, kind };
+  // Face entries are numbered across every group, as the app numbers them.
+  let faceId = 0;
+  const entry = ({ label, nodes }) => ({
+    id: ++faceId,
+    label,
+    nodeIds: ids(nodes),
+  });
+  const bcGroups = supportsOf(model).map((support, i) => ({
+    id: i + 1,
+    name: `BC${i + 1}`,
+    dofs: support.dofs,
+    value: 0,
+    faces: [entry(support)],
+  }));
+  const loadGroups = [
+    { id: 1, name: "Load1", ...group, faces: [entry(model.load)] },
+  ];
+  const tieGroups = (model.ties ?? []).map((tie, i) => ({
+    id: i + 1,
+    name: tie.name,
+    facesA: [entry(tie.a)],
+    facesB: [entry(tie.b)],
+    extent: tie.extent,
+    searchDistance: tie.searchDistance,
+    method: tie.method,
+  }));
+  const bodyIds = [...new Set(bodiesOf(model))].sort((p, q) => p - q);
   return {
     format: "kofem-analysis",
     version: 1,
@@ -158,35 +294,15 @@ export function analysisSetup(model) {
         density: model.material.density,
       },
     ],
-    properties: [{ id: 1, type: "PSOLID", materialId: 1 }],
-    bcGroups: [
-      {
-        id: 1,
-        name: "BC1",
-        dofs: [0, 1, 2],
-        value: 0,
-        faces: [
-          {
-            id: 1,
-            label: model.support.label,
-            nodeIds: ids(model.support.nodes),
-          },
-        ],
-      },
-    ],
-    loadGroups: [
-      {
-        id: 1,
-        name: "Load1",
-        ...group,
-        faces: [
-          { id: 2, label: model.load.label, nodeIds: ids(model.load.nodes) },
-        ],
-      },
-    ],
-    nextBcGroupId: 2,
+    properties: bodyIds.map((id) => ({ id, type: "PSOLID", materialId: 1 })),
+    bcGroups,
+    loadGroups,
+    nextBcGroupId: bcGroups.length + 1,
     nextLoadGroupId: 2,
-    nextFaceEntryId: 3,
+    ...(tieGroups.length
+      ? { tieGroups, nextTieGroupId: tieGroups.length + 1 }
+      : {}),
+    nextFaceEntryId: faceId + 1,
     nextMatId: 2,
     stepSurface: null,
     volMesh: null,
@@ -237,7 +353,7 @@ export function analysisFile(model, result) {
     `</PointData>`,
     `<CellData>`,
     dataArray("Int64", "ElementId", hexahedra.map((_, i) => i + 1).join(" ")),
-    dataArray("Int64", "PropertyId", hexahedra.map(() => 1).join(" ")),
+    dataArray("Int64", "PropertyId", bodiesOf(model).join(" ")),
     dataArray("Float64", "VonMises", tuples(result.von_mises, 1)),
     `</CellData>`,
     `</Piece>`,

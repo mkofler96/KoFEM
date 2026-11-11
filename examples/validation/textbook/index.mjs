@@ -22,6 +22,9 @@ import cantileverBeam from "./cantilever-beam.mjs";
 import plateWithHoleShell from "./plate-with-hole-shell.mjs";
 import mbbBeamTopopt from "./mbb-beam-topopt.mjs";
 import surfacePressure from "./surface-pressure.mjs";
+import tiePatchTest from "./tie-patch-test.mjs";
+import tieLameCylinder from "./tie-lame-cylinder.mjs";
+import tieCantilever from "./tie-cantilever.mjs";
 
 export default new Map([
   ["axial-bar", axialBar],
@@ -35,4 +38,7 @@ export default new Map([
   ["plate-with-hole-shell", plateWithHoleShell],
   ["mbb-beam-topopt", mbbBeamTopopt],
   ["surface-pressure", surfacePressure],
+  ["tie-patch-test", tiePatchTest],
+  ["tie-lame-cylinder", tieLameCylinder],
+  ["tie-cantilever", tieCantilever],
 ]);

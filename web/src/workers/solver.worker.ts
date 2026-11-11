@@ -683,7 +683,9 @@ function amgReason(payload: SolvePayload): string | null {
 // (the only one that carries constraint ties).
 async function handleSolidSolve(id: number, payload: SolvePayload) {
   const { nodes, elements } = payload;
-  const tied = weldTies(nodes, elements, payload.tieGroups, logTo(id));
+  // eslint-disable-next-line kofem/no-silent-fallback -- elementOrder is optional in the solve message; the documented default is linear elements
+  const order = payload.elementOrder ?? 1;
+  const tied = weldTies(nodes, elements, payload.tieGroups, order, logTo(id));
   if (requestedSolver(payload) === "amg" && amgReason(payload) === null) {
     const result = await solveSolidWithAmg(
       { ElasticModel, SolveOptions },
@@ -720,8 +722,6 @@ async function handleSolidSolve(id: number, payload: SolvePayload) {
   // (issue #215), at the cost of a slower solve. The engine extends the
   // vertex Dirichlet BCs to the new edge DOFs so clamped/prescribed faces
   // stay fully constrained. Defaults to 1 (linear) when the payload omits it.
-  // eslint-disable-next-line kofem/no-silent-fallback -- elementOrder is optional in the solve message; the documented default is linear elements
-  const order = payload.elementOrder ?? 1;
   self.postMessage({
     id,
     log: `Starting static solve: ${nodes.length} nodes, ${elements.length} elements (order ${order})…`,

@@ -644,6 +644,9 @@ function meshRows(e) {
 }
 
 function reproduceCommand(e) {
+  // A tie is computed by the app's TypeScript, which Bun runs directly.
+  if (e.kind === "case" && e.page.ties)
+    return `cd web &amp;&amp; bun install &amp;&amp; bun ../examples/validation/run.mjs --case ${e.id}`;
   if (e.kind === "case")
     return `node examples/validation/run.mjs --case ${e.id}`;
   return `cd web &amp;&amp; bun install &amp;&amp; bun run ${esc(e.script)}`;
@@ -736,7 +739,7 @@ export function renderExamplePage(
   sections.push(`
       <h2 id="reproduce">Reproduce</h2>
       ${inApp(e)}
-      <p>From a clone (Node.js 20+, bash, curl)${e.kind === "case" ? ", this solves the model with the same engine and prints its line" : ", this rebuilds the model and its figure"}:</p>
+      <p>From a clone (${e.page?.ties ? "Bun" : "Node.js 20+"}, bash, curl)${e.kind === "case" ? ", this solves the model with the same engine and prints its line" : ", this rebuilds the model and its figure"}:</p>
       ${cloneSteps(reproduceCommand(e))}${
         e.kind === "case"
           ? `

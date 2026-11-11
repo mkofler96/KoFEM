@@ -2,15 +2,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Tie constraints of the all-solid solve (issue #357): a tied (slave) node
-// follows a point of the surface it is tied to,
+// follows the surface it is tied to,
 //
-//     u_slave = Σ wᵢ · u_masterᵢ ,   Σ wᵢ = 1 ,
+//     u_slave = Σ wᵢ · u_masterᵢ ,   Σ wᵢ = 1 .
 //
-// where the masters are the nodes of the element face the slave projects onto
-// and wᵢ that face's shape functions at the projection (one master with w = 1 is
-// a node-to-node tie; a quadratic face has negative wᵢ at its corners). No node
-// moves — unlike the node-merge tie, the two surfaces keep their geometry and
-// only their displacements are coupled.
+// On linear elements the weights are dual mortar weights, integrated over the
+// interface by the frontend (web/src/lib/tieMortar.ts); on quadratic elements
+// they are the master face's shape functions at the slave node's projection
+// (solve_mfem.cpp, fe_node_ties). Either way some wᵢ can be negative, and one
+// master with w = 1 is a node-to-node tie. No node moves — unlike the
+// node-merge tie, the two surfaces keep their geometry and only their
+// displacements are coupled.
 //
 // The equations are applied by master-slave elimination, u = T·q: the slave
 // DOFs leave the system and the reduced one, TᵀKT·q = Tᵀf, stays symmetric

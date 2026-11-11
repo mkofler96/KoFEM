@@ -4,27 +4,31 @@
 // Constraint ("MPC") tie between two picked surfaces (issue #357) — the
 // geometry-preserving alternative to the node-merge of lib/tie.ts.
 //
-// Every node of one surface (the slave side) is projected onto the element
-// faces of the other (the master side) and constrained to follow its
-// projection:
+// Every node of one surface (the slave side) is constrained to follow the
+// other (the master side),
 //
-//     u_slave = Σ Nᵢ · u_masterᵢ
+//     u_slave = Σ w_k · u_master_k ,   Σ w_k = 1 .
 //
-// with Nᵢ the face's shape functions at the projected point. No node moves and
-// no element changes shape, so the mesh the solver sees is the mesh the user
-// meshed; the engine eliminates the slave DOFs (engine/cpp/tie_constraints.h).
-// Because a slave projects onto a FACE, the two meshes need no matching nodes —
-// the pin/hook line contact of the crane assembly ties without distortion.
+// No node moves and no element changes shape, so the mesh the solver sees is
+// the mesh the user meshed; the engine eliminates the slave DOFs
+// (engine/cpp/tie_constraints.h). The two meshes need no matching nodes — the
+// pin/hook line contact of the crane assembly ties without distortion.
+//
+// The weights w come from one of two formulations (TieFormulation):
+//
+//   mortar      linear elements. Dual mortar integrals over the interface
+//               (lib/tieMortar.ts): a constant traction crosses the tie
+//               exactly, so the patch test is passed across non-matching meshes.
+//   projection  quadratic elements. The node follows the point of the master
+//               surface it projects onto (node-to-surface). Exact at the nodes,
+//               but between them the faces interpolate differently, so it does
+//               not pass the patch test on non-matching meshes.
 //
 // The finer surface is the slave side: constraining the coarse side to the fine
 // one would leave fine-side nodes free to pass through the coarse faces.
-//
-// Quadrilateral (hex) faces are split into two triangles for the projection, so
-// the weights are linear over each half rather than bilinear over the quad.
-// They still sum to one and reproduce any linear displacement field, which is
-// what a tie needs.
 
 import { SpatialGrid, type Point3 } from "./spatialGrid.js";
+import { mortarWeights, type MortarFace } from "./tieMortar.js";
 import {
   bodyMembership,
   tieLimit,
@@ -123,19 +127,21 @@ function makeTriangle(
   return { ids, a: cornerA, b: cornerB, c: cornerC, centroid, radius, area };
 }
 
-// The free surface of each side as triangles: the element faces whose nodes all
-// lie on that side and that belong to ONE element. (A face used by two elements
-// is interior, even when all its nodes happen to sit on the picked surface.)
-function sideTriangles(
+// The free surface of each side: the element faces whose nodes all lie on that
+// side and that belong to ONE element (a face used by two elements is interior,
+// even when all its nodes happen to sit on the picked surface) — as the faces
+// themselves, for the mortar integrals, and split into triangles, for the
+// closest-point search.
+function sideSurfaces(
   elements: TieElement[],
   sides: readonly Set<number>[],
   positionOf: (id: number) => Point3,
-): Triangle[][] {
+): { faces: MortarFace[]; triangles: Triangle[] }[] {
   const sideOf = (id: number): number =>
     sides.findIndex((side) => side.has(id));
   const faces = new Map<
     string,
-    { ids: number[]; side: number; count: number }
+    { ids: number[]; side: number; count: number; elementCentroid: Point3 }
   >();
   for (const el of elements) {
     // A face needs three nodes on a side, so most elements are skipped here.
@@ -149,16 +155,35 @@ function sideTriangles(
       const key = [...ids].sort((first, second) => first - second).join(",");
       const seen = faces.get(key);
       if (seen) seen.count++;
-      else faces.set(key, { ids, side, count: 1 });
+      else {
+        const corners = el.nodeIds.map(positionOf);
+        const mean = (axis: number) =>
+          corners.reduce((sum, corner) => sum + corner[axis], 0) /
+          corners.length;
+        const elementCentroid: Point3 = [mean(0), mean(1), mean(2)];
+        faces.set(key, { ids, side, count: 1, elementCentroid });
+      }
     }
   }
 
-  const out: Triangle[][] = sides.map(() => []);
-  for (const { ids, side, count } of faces.values()) {
+  const out = sides.map(() => ({
+    faces: [] as MortarFace[],
+    triangles: [] as Triangle[],
+  }));
+  for (const { ids, side, count, elementCentroid } of faces.values()) {
     if (count !== 1) continue;
-    out[side].push(makeTriangle([ids[0], ids[1], ids[2]], positionOf));
+    out[side].faces.push({
+      ids,
+      points: ids.map(positionOf),
+      elementCentroid,
+    });
+    out[side].triangles.push(
+      makeTriangle([ids[0], ids[1], ids[2]], positionOf),
+    );
     if (ids.length === 4)
-      out[side].push(makeTriangle([ids[0], ids[2], ids[3]], positionOf));
+      out[side].triangles.push(
+        makeTriangle([ids[0], ids[2], ids[3]], positionOf),
+      );
   }
   return out;
 }
@@ -287,9 +312,27 @@ const meanArea = (triangles: Triangle[]): number =>
 // corner; the node they belong to plays no part in the constraint.
 const NEGLIGIBLE_WEIGHT = 1e-9;
 
+// How a tied node's weights are found: by the dual mortar integrals
+// (lib/tieMortar.ts), which pass the patch test, on linear elements; by the
+// node-to-surface projection on quadratic ones, whose faces the mortar
+// integrals here do not cover — the engine then evaluates the master face's own
+// quadratic shape functions at the projected point.
+export type TieFormulation = "mortar" | "projection";
+
+/** The formulation a solve at element order `order` uses. */
+export function tieFormulation(order: number): TieFormulation {
+  if (order === 1) return "mortar";
+  if (order === 2) return "projection";
+  throw new Error(
+    `tie: constraint ties support element order 1 and 2, not ${order}`,
+  );
+}
+
 // The constraints of every "mpc" connection in `ties`, and what each found.
 // Exported on its own because the viewport draws exactly this — which nodes a
 // connection constrains, and to where — and the solve applies the same list.
+// `point` and `distance` are always the node's closest point on the opposite
+// surface; the weights follow `formulation`.
 //
 // `taken` holds nodes that must not be constrained: nodes a node-merge tie has
 // already welded. A node is constrained by one connection only, and a node that
@@ -300,6 +343,7 @@ export function tieConstraints(
   nodes: TieNode[],
   elements: TieElement[],
   ties: TieDefinition[],
+  formulation: TieFormulation,
   taken: ReadonlySet<number> = new Set(),
 ): { constraints: TieConstraint[]; reports: TieReport[] } {
   const constraints: TieConstraint[] = [];
@@ -334,11 +378,9 @@ export function tieConstraints(
     if (a.length === 0 || b.length === 0) continue;
 
     const sideIds = [new Set(a), new Set(b)];
-    const [trianglesA, trianglesB] = sideTriangles(
-      elements,
-      sideIds,
-      positionOf,
-    );
+    const [surfaceA, surfaceB] = sideSurfaces(elements, sideIds, positionOf);
+    const trianglesA = surfaceA.triangles;
+    const trianglesB = surfaceB.triangles;
     // Slave = the finer side, provided the other has faces to project onto.
     // A side picked so narrowly that it holds no whole element face (an edge)
     // can only follow, never lead.
@@ -351,22 +393,39 @@ export function tieConstraints(
     const search = new SurfaceSearch(slaveSide === 0 ? trianglesB : trianglesA);
 
     const limit = tieLimit(tie);
+    const mortar =
+      formulation === "mortar"
+        ? mortarWeights(
+            (slaveSide === 0 ? surfaceA : surfaceB).faces,
+            (slaveSide === 0 ? surfaceB : surfaceA).faces,
+            limit,
+          )
+        : null;
     for (const slaveId of slaveIds) {
       if (taken.has(slaveId) || slaves.has(slaveId) || masters.has(slaveId))
         continue;
       const hit = search.closest(positionOf(slaveId), limit);
       if (!hit) continue;
 
-      const masterIds: number[] = [];
-      const weights: number[] = [];
-      let total = 0;
-      for (let k = 0; k < 3; k++) {
-        if (hit.weights[k] <= NEGLIGIBLE_WEIGHT) continue;
-        masterIds.push(hit.triangle.ids[k]);
-        weights.push(hit.weights[k]);
-        total += hit.weights[k];
+      let masterIds: number[] = [];
+      let weights: number[] = [];
+      if (mortar) {
+        // A node at the ragged edge of a partial contact, whose multiplier
+        // support the master surface barely covers, is not tied.
+        const row = mortar.get(slaveId);
+        if (!row) continue;
+        masterIds = row.masterIds;
+        weights = row.weights;
+      } else {
+        let total = 0;
+        for (let k = 0; k < 3; k++) {
+          if (hit.weights[k] <= NEGLIGIBLE_WEIGHT) continue;
+          masterIds.push(hit.triangle.ids[k]);
+          weights.push(hit.weights[k]);
+          total += hit.weights[k];
+        }
+        for (let k = 0; k < weights.length; k++) weights[k] /= total;
       }
-      for (let k = 0; k < weights.length; k++) weights[k] /= total;
 
       slaves.add(slaveId);
       for (const id of masterIds) masters.add(id);

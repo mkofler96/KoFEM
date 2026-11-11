@@ -45,7 +45,7 @@
               "https://kofem.org/examples/beam-torsion.png",
               "https://kofem.org/examples/beam-torsion/beam-torsion-diagram.png"
             ],
-            "dateModified": "2026-11-01",
+            "dateModified": "2026-11-11",
             "isPartOf": {
               "@type": "CollectionPage",
               "url": "https://kofem.org/examples/"
@@ -817,6 +817,9 @@
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
             <li><a href="/examples/plate-with-hole-shell/">Plate with a hole, shell elements</a></li>
             <li><a href="/examples/cooks-membrane/">Cook's membrane</a></li>
+            <li><a href="/examples/tie-patch-test/">Tie patch test</a></li>
+            <li><a href="/examples/tie-lame-cylinder/">Tied thick-walled cylinder</a></li>
+            <li><a href="/examples/tie-cantilever/">Tied cantilever, quadratic hexahedra</a></li>
           </ul>
         </details>
         <details class="docs-group" data-section="examples">
@@ -846,6 +849,9 @@
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
             <li><a href="/examples/plate-with-hole-shell/">Plate with a hole, shell elements</a></li>
             <li><a href="/examples/cooks-membrane/">Cook's membrane</a></li>
+            <li><a href="/examples/tie-patch-test/">Tie patch test</a></li>
+            <li><a href="/examples/tie-lame-cylinder/">Tied thick-walled cylinder</a></li>
+            <li><a href="/examples/tie-cantilever/">Tied cantilever, quadratic hexahedra</a></li>
           </ul>
         </details>
         <details class="docs-group" data-section="examples">
@@ -857,7 +863,7 @@
         <button type="button" class="theme-toggle" hidden>Dark theme</button>
         </div>
       </details>
-      <p class="crumbs"><a href="/examples/#validation">Validation</a> / 6 of 10</p>
+      <p class="crumbs"><a href="/examples/#validation">Validation</a> / 6 of 13</p>
       <h1>Square beam under torsion</h1>
       <div class="lede">
         <p>Twisting a bar with a square section is the simplest torsion
@@ -956,7 +962,7 @@
           <tr><th scope="row">Mesh</th><td>20 × 6 × 6 grid: 720 linear 8-node hexahedra (P1)</td></tr>
           <tr><th scope="row">Unknowns</th><td>1,029 nodes, 3,087 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>KoFEM engine (MFEM), the WebAssembly build the app runs: engine-5ceb743373dd</td></tr>
+          <tr><th scope="row">Solver</th><td>KoFEM engine (MFEM), the WebAssembly build the app runs: engine-274b992a8a59</td></tr>
         </table>
       </div>
         <p>The torque is applied as tangential nodal forces on the end face,

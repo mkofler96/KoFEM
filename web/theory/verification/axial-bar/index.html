@@ -848,28 +848,28 @@
 
     <h2 id="pipeline">Trace the complete solve</h2>
     <ol>
-      <li><a href="https://github.com/mkofler96/KoFEM/blob/76f72bb42d0dc9abfd4366d29171280dd60282f1/examples/validation/cases/axial-bar.mjs#L29">The shared case builder</a>
+      <li><a href="https://github.com/mkofler96/KoFEM/blob/a3b872380fe8bf89af5b9a965c808f9351c1ef57/examples/validation/cases/axial-bar.mjs#L29">The shared case builder</a>
         makes a structured hex volume mesh, material, support and end-force group.
         The public example uses order 1 on a 20 × 4 × 4 grid: 320 elements,
         525 vertices and 1575 displacement DOFs before elimination.</li>
-      <li><a href="https://github.com/mkofler96/KoFEM/blob/76f72bb42d0dc9abfd4366d29171280dd60282f1/examples/validation/lib/app-model.mjs#L91">The app-model adapter</a>
+      <li><a href="https://github.com/mkofler96/KoFEM/blob/a3b872380fe8bf89af5b9a965c808f9351c1ef57/examples/validation/lib/app-model.mjs#L91">The app-model adapter</a>
         selects the loaded boundary quads and sends a face-force group.
-        <a href="https://github.com/mkofler96/KoFEM/blob/76f72bb42d0dc9abfd4366d29171280dd60282f1/engine/cpp/fem_bc_io.cpp#L259">Boundary assembly</a>
+        <a href="https://github.com/mkofler96/KoFEM/blob/a3b872380fe8bf89af5b9a965c808f9351c1ef57/engine/cpp/fem_bc_io.cpp#L259">Boundary assembly</a>
         divides force by selected area and integrates
         <math><msub><mi>f</mi><mrow><mi>a</mi><mi>i</mi></mrow></msub><mo>=</mo></math>​<span class="math-nowrap"><math><msub><mo largeop="true">∫</mo><mrow><msub><mi>Γ</mi><mi>N</mi></msub></mrow></msub><msub><mi>N</mi><mi>a</mi></msub><msub><mi>t</mi><mi>i</mi></msub><mspace width="0.17em"/><mi>d</mi><mi>S</mi></math>.</span>
         Thus the traction is 100 MPa and nodal contributions sum to 1000000 N.
         See <a href="/theory/numerical-methods/loads-and-constraints/">loads and constraints</a>.</li>
-      <li><a href="https://github.com/mkofler96/KoFEM/blob/76f72bb42d0dc9abfd4366d29171280dd60282f1/engine/cpp/solve_mfem.cpp#L192">The solid orchestrator</a>
+      <li><a href="https://github.com/mkofler96/KoFEM/blob/a3b872380fe8bf89af5b9a965c808f9351c1ef57/engine/cpp/solve_mfem.cpp#L192">The solid orchestrator</a>
         creates an H1 displacement space, assembles isotropic elasticity and
         forms the constrained system. The
         <a href="/theory/operators/integration-by-parts/#weak-form">weak form</a>
         and <a href="/theory/numerical-methods/assembly/">assembly page</a>
         explain these steps.</li>
-      <li><a href="https://github.com/mkofler96/KoFEM/blob/76f72bb42d0dc9abfd4366d29171280dd60282f1/engine/cpp/cg_mfem.cpp#L54">MFEM CG with symmetric Gauss–Seidel</a>
+      <li><a href="https://github.com/mkofler96/KoFEM/blob/a3b872380fe8bf89af5b9a965c808f9351c1ef57/engine/cpp/cg_mfem.cpp#L54">MFEM CG with symmetric Gauss–Seidel</a>
         uses relative tolerance <span class="math-nowrap"><math><msup><mn>10</mn><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>6</mn></mrow></msup></math>,</span> absolute tolerance 0, and
         an initial 5000-iteration budget. This small study does not request
         continuation. See <a href="/theory/numerical-methods/linear-solve/#residual">which residual is tested</a>.</li>
-      <li><a href="https://github.com/mkofler96/KoFEM/blob/76f72bb42d0dc9abfd4366d29171280dd60282f1/engine/cpp/solve_mfem.cpp#L51">Recovery</a>
+      <li><a href="https://github.com/mkofler96/KoFEM/blob/a3b872380fe8bf89af5b9a965c808f9351c1ef57/engine/cpp/solve_mfem.cpp#L51">Recovery</a>
         returns vertex translations and one von Mises sample per element centre.
         The study measures those arrays directly, before the app’s
         <a href="/theory/results/displacement-and-stress/#averaging">nodal averaging</a>.</li>
@@ -916,7 +916,7 @@
       need not remove the remaining discrepancy. These three levels do not
       establish an asymptotic rate or a continuum error bound.</p>
     <p><strong>The order-2 hex row is diagnostic.</strong> Currently,
-      <a href="https://github.com/mkofler96/KoFEM/blob/76f72bb42d0dc9abfd4366d29171280dd60282f1/engine/cpp/fem_bc_io.cpp#L169">Dirichlet extension</a>
+      <a href="https://github.com/mkofler96/KoFEM/blob/a3b872380fe8bf89af5b9a965c808f9351c1ef57/engine/cpp/fem_bc_io.cpp#L169">Dirichlet extension</a>
       constrains vertices and edge DOFs but leaves Q2 face-centre DOFs free.
       That support differs from a fully clamped face. Its extension therefore
       cannot establish order convergence for the same boundary-value problem,
@@ -945,9 +945,9 @@
     <h2 id="sources">Run record and sources</h2>
     <p><a href="/theory/axial-bar.json">Download inputs, solver settings and full-precision results</a>
       of the four solves.</p>
-    <p><a href="https://github.com/mkofler96/KoFEM/blob/76f72bb42d0dc9abfd4366d29171280dd60282f1/examples/validation/axial-bar-study.mjs#L1">Study and measurement source</a>
+    <p><a href="https://github.com/mkofler96/KoFEM/blob/a3b872380fe8bf89af5b9a965c808f9351c1ef57/examples/validation/axial-bar-study.mjs#L1">Study and measurement source</a>
       reuses the public fixture and solver wrapper. See also
-      <a href="https://github.com/mkofler96/KoFEM/blob/76f72bb42d0dc9abfd4366d29171280dd60282f1/web/src/lib/resultField.ts#L83">app averaging and extrema</a>
+      <a href="https://github.com/mkofler96/KoFEM/blob/a3b872380fe8bf89af5b9a965c808f9351c1ef57/web/src/lib/resultField.ts#L83">app averaging and extrema</a>
       and the <a href="/theory/foundations/reading-a-study/">complete reading path</a>.</p>
     <ul class="refs"><li>Gere and Goodno, <cite>Mechanics of Materials</cite>, axially loaded members.</li>
       <li>Timoshenko and Goodier, <cite>Theory of Elasticity</cite>, third edition (1970), Saint-Venant’s principle and end effects.</li>

@@ -20,6 +20,9 @@ import plateWithHole from "./plate-with-hole.mjs";
 import shaftTorsion from "./shaft-torsion.mjs";
 import cooksMembrane from "./cooks-membrane.mjs";
 import surfacePressure from "./surface-pressure.mjs";
+import tiePatchTest from "./tie-patch-test.mjs";
+import tieLameCylinder from "./tie-lame-cylinder.mjs";
+import tieCantilever from "./tie-cantilever.mjs";
 
 export default [
   axialBar,
@@ -30,4 +33,7 @@ export default [
   plateWithHole,
   shaftTorsion,
   cooksMembrane,
+  tiePatchTest,
+  tieLameCylinder,
+  tieCantilever,
 ];

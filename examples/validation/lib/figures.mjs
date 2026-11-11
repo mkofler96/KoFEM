@@ -576,3 +576,152 @@ export function mbbFigure() {
     parts.join("\n    "),
   );
 }
+
+// ── Tied bodies (constraint tie between non-matching meshes) ─────────────────
+
+/** Symmetry support on a vertical edge: wheels between the body and a wall. */
+function rollerColumn(x, y1, y2, count = 3) {
+  const out = [line(x - 13, y1 - 4, x - 13, y2 + 4, "wall")];
+  for (let k = 0; k < count; k++) {
+    const y = y1 + ((y2 - y1) * (k + 0.5)) / count;
+    out.push(`<circle class="body" cx="${f(x - 6)}" cy="${f(y)}" r="5"/>`);
+  }
+  return out.join("");
+}
+
+/** Symmetry support on a horizontal edge: wheels between the body and ground. */
+function rollerRow(y, x1, x2, count = 4) {
+  const out = [line(x1 - 4, y + 13, x2 + 4, y + 13, "wall")];
+  for (let k = 0; k < count; k++) {
+    const x = x1 + ((x2 - x1) * (k + 0.5)) / count;
+    out.push(`<circle class="body" cx="${f(x)}" cy="${f(y + 6)}" r="5"/>`);
+  }
+  return out.join("");
+}
+
+/**
+ * The tie patch test: a block in two bodies with different meshes, tied on
+ * the plane between them, on symmetry supports and pulled by a traction.
+ * `divA`, `divB`: the [nx, ny] grids of the two halves.
+ */
+export function tiePatchFigure({ divA, divB }) {
+  const x0 = 110,
+    xm = 280,
+    x1 = 450,
+    y0 = 50,
+    y1 = 150;
+  const parts = [
+    `<rect class="body" x="${x0}" y="${y0}" width="${x1 - x0}" height="${y1 - y0}"/>`,
+    rectMesh(x0, y0, xm, y1, divA[0], divA[1]),
+    rectMesh(xm, y0, x1, y1, divB[0], divB[1]),
+    line(xm, y0 - 14, xm, y1 + 14, "deformed"),
+    label(xm, y0 - 20, "tie"),
+    rollerColumn(x0, y0, y1),
+    rollerRow(y1, x0, x1, 6),
+  ];
+  for (let j = 0; j <= 6; j++) {
+    const y = y0 + 4 + ((y1 - y0 - 8) * j) / 6;
+    parts.push(arrow(x1, y, x1 + 30, y));
+  }
+  parts.push(
+    sym(x1 + 40, (y0 + y1) / 2 + 5, "σ", "start"),
+    dim(x0, y1 + 40, x1, y1 + 40),
+    sym((x0 + x1) / 2, y1 + 34, "L"),
+    label((x0 + xm) / 2, y0 - 20, "body 1"),
+    label((xm + x1) / 2, y0 - 20, "body 2"),
+    triad(30, 236),
+  );
+  return svg(
+    560,
+    260,
+    "A block in uniaxial tension made of two bodies with different element meshes, joined by a tie on the plane between them and held by symmetry rollers",
+    parts.join("\n    "),
+  );
+}
+
+/**
+ * Quarter of a thick-walled cylinder in two rings tied at radius c, with the
+ * rings' meshes (`inner`, `outer`: { nr, nth }) and the bore pressure.
+ */
+export function tieCylinderFigure({ inner, outer }) {
+  const cx = 150,
+    cy = 220,
+    R = 170; // outer radius on the page
+  const a = R / 2,
+    c = (3 * R) / 4;
+  const at = (r, th) => [cx + r * Math.cos(th), cy - r * Math.sin(th)];
+  const arc = (r, n) =>
+    Array.from({ length: n + 1 }, (_, k) => at(r, ((Math.PI / 2) * k) / n));
+  const ring = (ri, ro, { nr, nth }) => {
+    const out = [];
+    for (let i = 1; i < nr; i++)
+      out.push(polyline(arc(ri + ((ro - ri) * i) / nr, nth), "mesh"));
+    for (let k = 1; k < nth; k++) {
+      const th = ((Math.PI / 2) * k) / nth;
+      out.push(line(...at(ri, th), ...at(ro, th), "mesh"));
+    }
+    return out.join("");
+  };
+  const outline = [...arc(R, outer.nth), ...arc(a, inner.nth).reverse()];
+  const parts = [
+    poly(outline, "body"),
+    ring(a, c, inner),
+    ring(c, R, outer),
+    polyline(arc(c, inner.nth), "deformed"),
+    polyline(arc(c, outer.nth), "deformed"),
+  ];
+  for (let k = 1; k < 6; k++) {
+    const th = ((Math.PI / 2) * k) / 6;
+    parts.push(arrow(...at(a - 34, th), ...at(a - 3, th)));
+  }
+  parts.push(
+    sym(...at(a - 46, Math.PI / 4), "p"),
+    rollerRow(cy, cx + a, cx + R, 3),
+    rollerColumn(cx, cy - R, cy - a, 3),
+    line(...at(c, Math.PI / 3), ...at(R + 22, Math.PI / 3), "ext"),
+    label(...at(R + 30, Math.PI / 3), "tie", { anchor: "start" }),
+    dim(cx + 2, cy + 36, cx + a, cy + 36),
+    sym(cx + a / 2, cy + 30, "a"),
+    dim(cx + 2, cy + 58, cx + c, cy + 58),
+    sym(cx + c / 2, cy + 52, "c"),
+    dim(cx + 2, cy + 80, cx + R, cy + 80),
+    sym(cx + R / 2, cy + 74, "b"),
+  );
+  return svg(
+    400,
+    310,
+    "Quarter of a thick-walled cylinder under internal pressure, made of an inner and an outer ring with different element meshes, tied along the circle between them and held by symmetry rollers on the cut faces",
+    parts.join("\n    "),
+  );
+}
+
+/**
+ * The cantilever cut at mid-span into two bodies with different meshes
+ * (`divA`, `divB`: [nx, ny] in the side view), tied across the cut.
+ */
+export function tieCantileverFigure({ divA, divB }) {
+  const x0 = 90,
+    xm = 280,
+    x1 = 470,
+    yc = 92,
+    hh = 22;
+  const parts = [
+    `<rect class="body" x="${x0}" y="${yc - hh}" width="${x1 - x0}" height="${2 * hh}"/>`,
+    rectMesh(x0, yc - hh, xm, yc + hh, divA[0], divA[1]),
+    rectMesh(xm, yc - hh, x1, yc + hh, divB[0], divB[1]),
+    line(xm, yc - hh - 14, xm, yc + hh + 14, "deformed"),
+    label(xm, yc + hh + 30, "tie"),
+    clamp(x0, yc - hh, yc + hh),
+    arrow(x1, yc - hh - 52, x1, yc - hh - 2),
+    sym(x1 + 10, yc - hh - 34, "P", "start"),
+    dim(x0, yc + hh + 52, x1, yc + hh + 52),
+    sym((x0 + x1) / 2, yc + hh + 46, "L"),
+    triad(30, 220),
+  ];
+  return svg(
+    560,
+    240,
+    "Cantilever beam cut at mid-span into two bodies with different element meshes, tied across the cut, clamped at the left end with a downward tip load",
+    parts.join("\n    "),
+  );
+}

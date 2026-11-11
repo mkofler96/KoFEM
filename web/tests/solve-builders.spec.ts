@@ -249,6 +249,7 @@ test("solid builder welds tie connections and maps BCs through them", () => {
         searchDistance: 0.01,
       },
     ],
+    1,
     (line) => logs.push(line),
   );
   expect(tied.solveNodes.length).toBe(5);
@@ -298,6 +299,7 @@ test("a tie that joins nothing is refused", () => {
           searchDistance: 0.01,
         },
       ],
+      1,
       () => undefined,
     ),
   ).toThrow(/Tie "far" connected no nodes/);
@@ -338,6 +340,7 @@ test("a tie that makes an element face shared by three elements is refused", () 
           searchDistance: 0,
         },
       ],
+      1,
       () => undefined,
     ),
   ).toThrow(/Tie "inner" pulls nodes .* face shared by three elements/);
@@ -376,6 +379,7 @@ test("a tie that turns an element inside out is refused", () => {
           searchDistance: 0,
         },
       ],
+      1,
       () => undefined,
     ),
   ).toThrow(/Tie "gap" pulls nodes up to 2\.50 mm .* inside out/);

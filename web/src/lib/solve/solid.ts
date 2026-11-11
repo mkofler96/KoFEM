@@ -26,7 +26,11 @@ import {
   type TieDefinition,
   type TieResult,
 } from "../tie.js";
-import { tieConstraints, type TieConstraint } from "../tieConstraints.js";
+import {
+  tieConstraints,
+  tieFormulation,
+  type TieConstraint,
+} from "../tieConstraints.js";
 import {
   buildVertexIndexer,
   packSolveMesh,
@@ -131,10 +135,14 @@ export interface TiedSolidModel {
 // model has none, in which case solveNodes/tiedElements are the originals. A
 // connection that joins nothing AND shares no nodes leaves the assembly split
 // and the solve would fail far from the cause, so it is refused.
+//
+// `order` is the element order of the solve: it picks how constraint ties
+// weigh their nodes (tieFormulation).
 export function weldTies(
   nodes: Node[],
   elements: Element[],
   tieGroups: TieDefinition[] | undefined,
+  order: number,
   log: (line: string) => void,
 ): TiedSolidModel {
   const ties = tieGroups ?? [];
@@ -175,6 +183,7 @@ export function weldTies(
     nodes,
     elements,
     ties.filter((group) => tieMethod(group) === "mpc"),
+    tieFormulation(order),
     welded,
   );
   for (const report of constrained.reports) {

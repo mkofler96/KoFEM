@@ -41,7 +41,7 @@
             "name": "KoFEM examples",
             "description": "Finite element examples you can open in KoFEM, and validation cases compared with a known result: axial bar, cantilever beams, torsion, a plate with a hole, Cook's membrane, topology optimization.",
             "url": "https://kofem.org/examples/",
-            "dateModified": "2026-11-01",
+            "dateModified": "2026-11-11",
             "hasPart": [
               {
                 "@type": "TechArticle",
@@ -92,6 +92,21 @@
                 "@type": "TechArticle",
                 "headline": "Cook's membrane",
                 "url": "https://kofem.org/examples/cooks-membrane/"
+              },
+              {
+                "@type": "TechArticle",
+                "headline": "Tie patch test",
+                "url": "https://kofem.org/examples/tie-patch-test/"
+              },
+              {
+                "@type": "TechArticle",
+                "headline": "Tied thick-walled cylinder",
+                "url": "https://kofem.org/examples/tie-lame-cylinder/"
+              },
+              {
+                "@type": "TechArticle",
+                "headline": "Tied cantilever, quadratic hexahedra",
+                "url": "https://kofem.org/examples/tie-cantilever/"
               },
               {
                 "@type": "TechArticle",
@@ -855,6 +870,9 @@
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
             <li><a href="/examples/plate-with-hole-shell/">Plate with a hole, shell elements</a></li>
             <li><a href="/examples/cooks-membrane/">Cook's membrane</a></li>
+            <li><a href="/examples/tie-patch-test/">Tie patch test</a></li>
+            <li><a href="/examples/tie-lame-cylinder/">Tied thick-walled cylinder</a></li>
+            <li><a href="/examples/tie-cantilever/">Tied cantilever, quadratic hexahedra</a></li>
           </ul>
         </details>
         <details class="docs-group" data-section="examples">
@@ -884,6 +902,9 @@
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
             <li><a href="/examples/plate-with-hole-shell/">Plate with a hole, shell elements</a></li>
             <li><a href="/examples/cooks-membrane/">Cook's membrane</a></li>
+            <li><a href="/examples/tie-patch-test/">Tie patch test</a></li>
+            <li><a href="/examples/tie-lame-cylinder/">Tied thick-walled cylinder</a></li>
+            <li><a href="/examples/tie-cantilever/">Tied cantilever, quadratic hexahedra</a></li>
           </ul>
         </details>
         <details class="docs-group" data-section="examples">
@@ -905,8 +926,8 @@
       <p>Problems with a known answer, from theory or the literature. Each page
       derives the answer and compares KoFEM's result with it.</p>
       <p class="meta">
-        8 of 8 benchmarks within their tolerance ·
-        engine engine-5ceb743373dd · 2026-11-01 ·
+        11 of 11 benchmarks within their tolerance ·
+        engine engine-274b992a8a59 · 2026-11-11 ·
         <a href="/examples/results.json">results.json</a> ·
         <a href="https://github.com/mkofler96/KoFEM/tree/develop/examples">source</a>
       </p>
@@ -970,6 +991,24 @@
           <h3><a href="/examples/cooks-membrane/">Cook's membrane</a></h3>
           <p>Tapered, skewed cantilever in shear. A standard distortion benchmark, dimensionless.</p>
           <p class="meta">Top-corner deflection: 24.042, +0.59&nbsp;% from the reference</p>
+        </li>
+        <li data-entry="tie-patch-test">
+          <a href="/examples/tie-patch-test/" tabindex="-1" aria-hidden="true"><img src="/examples/tie-patch-test.png" width="1200" height="737" alt="" loading="lazy" /></a>
+          <h3><a href="/examples/tie-patch-test/">Tie patch test</a></h3>
+          <p>Uniform tension across a tie between non-matching meshes. The exact answer is reproduced to round-off.</p>
+          <p class="meta">Stress uniformity σmax / σmin: 1.0000, +0.00&nbsp;% from the reference</p>
+        </li>
+        <li data-entry="tie-lame-cylinder">
+          <a href="/examples/tie-lame-cylinder/" tabindex="-1" aria-hidden="true"><img src="/examples/tie-lame-cylinder.png" width="1200" height="900" alt="" loading="lazy" /></a>
+          <h3><a href="/examples/tie-lame-cylinder/">Tied thick-walled cylinder</a></h3>
+          <p>Two rings tied along a curved, non-matching interface behave as one cylinder under pressure.</p>
+          <p class="meta">Bore radial displacement u(a): 0.045244&nbsp;mm, −0.34&nbsp;% from the reference</p>
+        </li>
+        <li data-entry="tie-cantilever">
+          <a href="/examples/tie-cantilever/" tabindex="-1" aria-hidden="true"><img src="/examples/tie-cantilever.png" width="1200" height="526" alt="" loading="lazy" /></a>
+          <h3><a href="/examples/tie-cantilever/">Tied cantilever, quadratic hexahedra</a></h3>
+          <p>A beam cut in two and tied across non-matching quadratic meshes deflects as the uncut beam.</p>
+          <p class="meta">Tip deflection δ: −1.9442&nbsp;mm, +2.07&nbsp;% from the reference</p>
         </li>
       </ul>
 
@@ -1068,6 +1107,27 @@
               <td class="num" data-label="Reference">23.900</td>
               <td class="num" data-label="KoFEM">24.042</td>
               <td class="num" data-label="Difference">+0.59&nbsp;%</td>
+            </tr>
+            <tr>
+              <th scope="row"><a href="/examples/tie-patch-test/">Tie patch test</a></th>
+              <td class="wide">stress uniformity σmax / σmin</td>
+              <td class="num" data-label="Reference">1.0000</td>
+              <td class="num" data-label="KoFEM">1.0000</td>
+              <td class="num" data-label="Difference">+0.00&nbsp;%</td>
+            </tr>
+            <tr>
+              <th scope="row"><a href="/examples/tie-lame-cylinder/">Tied thick-walled cylinder</a></th>
+              <td class="wide">bore radial displacement u(a)</td>
+              <td class="num" data-label="Reference">0.045397&nbsp;mm</td>
+              <td class="num" data-label="KoFEM">0.045244&nbsp;mm</td>
+              <td class="num" data-label="Difference">−0.34&nbsp;%</td>
+            </tr>
+            <tr>
+              <th scope="row"><a href="/examples/tie-cantilever/">Tied cantilever, quadratic hexahedra</a></th>
+              <td class="wide">tip deflection δ</td>
+              <td class="num" data-label="Reference">−1.9048&nbsp;mm</td>
+              <td class="num" data-label="KoFEM">−1.9442&nbsp;mm</td>
+              <td class="num" data-label="Difference">+2.07&nbsp;%</td>
             </tr>
           </tbody>
         </table>

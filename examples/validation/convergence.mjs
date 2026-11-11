@@ -14,6 +14,7 @@ import { solveModel } from "./lib/app-model.mjs";
 import { cantileverModel, cantileverTip } from "./cases/cantilever-bending.mjs";
 import { shaftModel, shaftTwist } from "./cases/shaft-torsion.mjs";
 import { cookCorner, cookModel } from "./cases/cooks-membrane.mjs";
+import { boreDisplacement, lameModel } from "./cases/tie-lame-cylinder.mjs";
 
 const grid = (d) => d.join(" × ");
 
@@ -98,5 +99,21 @@ export default [
     ],
     meshLabel: (n) => `${n} × ${n}`,
     solve: study(cookModel, cookCorner),
+  },
+  {
+    id: "tie-lame-cylinder",
+    caseId: "tie-lame-cylinder",
+    title: "Tied thick-walled cylinder",
+    note: "Both rings are refined together, so the interface stays non-matching on every mesh; the error falls as for an untied mesh.",
+    series: [
+      {
+        label: "P1 (linear)",
+        caseId: "tie-lame-cylinder",
+        order: 1,
+        levels: [1, 2, 3, 4],
+      },
+    ],
+    meshLabel: (level) => `${level}× refined`,
+    solve: study((title, level) => lameModel(title, level), boreDisplacement),
   },
 ];

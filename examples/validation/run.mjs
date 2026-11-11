@@ -132,6 +132,9 @@ const runs = selected.map((c) => {
       stat: c.readout.stat,
       value: appReadout(result, c.readout.field, c.readout.stat),
     },
+    // Further numbers a page quotes, from this solve or from variants of the
+    // model solved alongside it (cases/<id>.mjs `extras`).
+    ...(c.extras ? { extras: c.extras(model, result, solve) } : {}),
   };
   return { c, model, result, row };
 });
@@ -332,6 +335,16 @@ async function checkPublished() {
       );
     if (JSON.stringify(r.inputs) !== JSON.stringify(p.inputs))
       out.push(`${r.name}: inputs changed`);
+    const extraKeys = Object.keys({ ...r.extras, ...p.extras });
+    for (const key of extraKeys)
+      if (
+        typeof r.extras?.[key] !== "number" ||
+        typeof p.extras?.[key] !== "number" ||
+        !close(r.extras[key], p.extras[key])
+      )
+        out.push(
+          `${r.name}: ${key} published ${p.extras?.[key]}, this run ${r.extras?.[key]}`,
+        );
     if (r.readout.value !== p.readout.value)
       out.push(
         `${r.name}: the app shows ${r.readout.stat} ${r.readout.field} ${r.readout.value}, the page says ${p.readout.value}`,

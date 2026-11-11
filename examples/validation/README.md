@@ -21,6 +21,11 @@ node examples/validation/run.mjs --report        # also regenerate the pages, fi
 node examples/validation/run.mjs --pages         # only re-render pages and diagram/chart files (no solve)
 ```
 
+The tie cases compute their constraints with the app's own TypeScript
+(`web/src/lib/tieConstraints.ts`), so they need Bun: from `web/`, run
+`bun ../examples/validation/run.mjs` (the `validate*` scripts do). Under plain
+Node they stop with a message saying so.
+
 It exits non-zero if any case leaves its tolerance band, or if the public
 pages no longer match the run or their sources (below). CI runs it (and the
 single-DOF test below) via `bun run test` in `web/`.
@@ -37,6 +42,9 @@ single-DOF test below) via `bun run test` in `web/`.
 | Plate with a hole    | stress-concentration Kt ≈ 3     | Kirsch / Timoshenko & Goodier |
 | Hollow shaft torsion | angle of twist θ = T·L/(G·J)    | Saint-Venant torsion          |
 | Cook's membrane      | top-corner deflection ≈ 23.9    | Cook (1974)                   |
+| Tie patch test       | uniform σ across a tie          | patch test; Puso (2004)       |
+| Tied cylinder        | bore u(a), interface stress     | Lamé; Timoshenko & Goodier    |
+| Tied cantilever (P2) | δ across a quadratic tie        | Euler–Bernoulli               |
 
 See `REPORT.md` for the latest FE-vs-reference numbers.
 
