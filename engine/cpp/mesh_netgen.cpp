@@ -141,16 +141,17 @@ val generate_fem_mesh(const std::string& opts_json)
     // Netgen's own reader (Ng_OCC_Load_STEP) parsed the whole file a second
     // time and doubled peak geometry memory.
 
-    // Every solid gets a size, the global one where no region size is given, so
-    // Netgen's static size table never keeps one from an earlier mesh. The
-    // global maxh caps every size, so it becomes the largest of them: a region
-    // may be coarser than the rest of the model as well as finer.
+    // With region sizes, every solid gets one — the global size where no region
+    // size is given — and the global maxh, which caps every size, becomes the
+    // largest of them: a region may be coarser than the rest as well as finer.
+    // Without, every size is reset to Netgen's default, so the mesh is the one
+    // the global settings alone make. Either way Netgen's static size table
+    // keeps nothing from an earlier mesh.
     {
         TopTools_IndexedMapOfShape solids;
         TopExp::MapShapes(cached_shape(), TopAbs_SOLID, solids);
-        if (solid_max_sizes.empty())
-            solid_max_sizes.assign(static_cast<size_t>(solids.Extent()), max_size);
-        if (static_cast<int>(solid_max_sizes.size()) != solids.Extent())
+        if (!solid_max_sizes.empty() &&
+            static_cast<int>(solid_max_sizes.size()) != solids.Extent())
             throw std::runtime_error(
                 "generate_fem_mesh: solid_max_sizes has " + std::to_string(solid_max_sizes.size()) +
                 " entries but the geometry has " + std::to_string(solids.Extent()) + " solids");

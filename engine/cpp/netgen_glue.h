@@ -27,6 +27,8 @@ void kofem_occ_geometry_delete(void* geom);
 // static table keyed by shape, so call this before every mesh: every solid,
 // face and edge is set, and nothing from an earlier mesh carries over. Netgen's
 // global maxh still caps every size, so set it to at least the largest one.
+// An empty `max_sizes` resets every size to Netgen's default (no limit), which
+// meshes exactly as if no size had ever been set.
 void kofem_set_solid_max_sizes(const TopoDS_Shape& shape, const std::vector<double>& max_sizes);
 
 // OCC face index (1-based) of surface element i (1-based) of an Ng_Mesh.

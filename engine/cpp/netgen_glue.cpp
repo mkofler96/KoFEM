@@ -71,12 +71,23 @@ void kofem_set_solid_max_sizes(const TopoDS_Shape& shape, const std::vector<doub
     TopExp::MapShapes(shape, TopAbs_SOLID, solids);
     TopExp::MapShapes(shape, TopAbs_FACE, faces);
     TopExp::MapShapes(shape, TopAbs_EDGE, edges);
+    // Netgen's "no limit" (ShapeProperties::maxh's default).
+    constexpr double NO_LIMIT = 1e99;
+    if (max_sizes.empty()) {
+        // No region sizes: back to Netgen's defaults everywhere, so the mesh is
+        // exactly what it was before regions existed.
+        for (int i = 1; i <= solids.Extent(); ++i)
+            netgen::OCCGeometry::GetProperties(solids(i)).maxh = NO_LIMIT;
+        for (int k = 1; k <= faces.Extent(); ++k)
+            netgen::OCCGeometry::GetProperties(faces(k)).maxh = NO_LIMIT;
+        for (int k = 1; k <= edges.Extent(); ++k)
+            netgen::OCCGeometry::GetProperties(edges(k)).maxh = NO_LIMIT;
+        return;
+    }
     if (static_cast<int>(max_sizes.size()) != solids.Extent())
         throw std::runtime_error("kofem_set_solid_max_sizes: " + std::to_string(max_sizes.size()) +
                                  " sizes for " + std::to_string(solids.Extent()) + " solids");
 
-    // Netgen's "no limit" (ShapeProperties::maxh's default).
-    constexpr double NO_LIMIT = 1e99;
     std::vector<double> face_h(static_cast<size_t>(faces.Extent()), NO_LIMIT);
     std::vector<double> edge_h(static_cast<size_t>(edges.Extent()), NO_LIMIT);
     for (int i = 1; i <= solids.Extent(); ++i) {
