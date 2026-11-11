@@ -46,7 +46,8 @@ Run checks appropriate to the change; CI definitions are in
 - Rust: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`
   and `cargo test --workspace`. `bun run test:validation` includes the
   Rust-vs-MFEM check (`tests/test_fem_wasm.mjs`).
-- C++: `bash scripts/clang-tidy.sh` and relevant `scripts/test-*.sh` suites.
+- C++: `bash scripts/clang-tidy.sh` (`docker-clang-tidy.sh` without a local
+  emsdk) and relevant `scripts/test-*.sh` suites.
 - Frontend, from `web/`: `bun run typecheck && bun run lint && bun run format:check && bun run test`.
 
 ## Workflow
