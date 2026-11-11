@@ -54,8 +54,12 @@ const { default: createModule } = await import(
 );
 const engine = await createModule({
   wasmBinary: readFileSync(join(enginePkg, "kofem_wasm_emcc.wasm")).buffer,
-  print: () => {},
-  printErr: () => {},
+  print: () => {
+    /* per-solve engine log; the checks below assert on results */
+  },
+  printErr: () => {
+    /* the refusal cases EXPECT failures; they are asserted from the result */
+  },
 });
 const { default: init, ShellModel } = await import(
   join(femPkg, "kofem_wasm.js")
@@ -94,7 +98,9 @@ async function solveBoth(inputs) {
       inputs,
       undefined,
       neverContinue,
-      () => {},
+      () => {
+        /* solve log lines; the comparison checks results only */
+      },
     );
   } catch (error) {
     rustError = String(error);
@@ -351,7 +357,9 @@ await compare(
     surfaceTriangles,
     surfaceFaceIds: Array.from(meshed.surfFace),
   };
-  const pure = preparePureShellSolve(payload, new Set([1]), () => {});
+  const pure = preparePureShellSolve(payload, new Set([1]), () => {
+    /* auto-shell progress lines are not asserted on */
+  });
   check("single fin: idealised as a pure shell", pure !== null);
   if (pure) {
     const result = await compare("single fin (auto-shell)", pure);

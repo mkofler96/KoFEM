@@ -172,8 +172,11 @@ pub fn shell_translations(mesh: &ShellMesh, dofs: &[f64]) -> Result<Vec<f64>, Fe
             count,
         });
     }
+    // The length check above leaves no remainder.
     Ok(dofs
-        .chunks_exact(SHELL_NODE_DOFS)
+        .as_chunks::<SHELL_NODE_DOFS>()
+        .0
+        .iter()
         .flat_map(|node| [node[0], node[1], node[2]])
         .collect())
 }

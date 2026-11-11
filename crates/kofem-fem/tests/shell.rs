@@ -194,7 +194,7 @@ fn plate_centre(cells: usize, clamped: bool) -> (f64, f64) {
             }
         }
     }
-    for triangle in model.triangles.clone().chunks_exact(3) {
+    for triangle in model.triangles.clone().as_chunks::<3>().0 {
         let corners = [0, 1, 2].map(|k| model.vertices[triangle[k] as usize]);
         let share = pressure * triangle_area(corners) / 3.0;
         for &node in triangle {
@@ -228,7 +228,7 @@ fn flexural_rigidity() -> f64 {
 
 #[test]
 fn clamped_square_plate_matches_plate_theory() {
-    let (side, _, _, _, pressure) = PLATE;
+    let (side, .., pressure) = PLATE;
     let (deflection, _) = plate_centre(32, true);
     let reference = 0.00126 * pressure * side.powi(4) / flexural_rigidity();
     assert_within("clamped plate", deflection, reference, 1.5);
@@ -236,7 +236,7 @@ fn clamped_square_plate_matches_plate_theory() {
 
 #[test]
 fn simply_supported_square_plate_matches_plate_theory() {
-    let (side, thickness, _, _, pressure) = PLATE;
+    let (side, thickness, .., pressure) = PLATE;
     let (deflection, stress) = plate_centre(32, false);
     let reference = 0.00406 * pressure * side.powi(4) / flexural_rigidity();
     assert_within("simply supported plate", deflection, reference, 1.0);
@@ -409,7 +409,7 @@ fn bending_patch_test_reproduces_constant_curvature() {
     let local = |point: [f64; 3]| -> (f64, f64) { (dot(point, ex), dot(point, ey)) };
     let field = |point: [f64; 3]| -> [f64; 6] {
         let (px, py) = local(point);
-        let deflection = 0.5 * (kx * px * px + ky * py * py) + kxy * px * py;
+        let deflection = f64::midpoint(kx * px * px, ky * py * py) + kxy * px * py;
         let slope_x = kx * px + kxy * py;
         let slope_y = ky * py + kxy * px;
         let translation: [f64; 3] = std::array::from_fn(|k| deflection * normal[k]);
@@ -541,7 +541,7 @@ fn strip_uniaxial(by_displacement: bool, delta: f64) -> (f64, f64) {
 
 #[test]
 fn prescribed_extension_is_honoured_and_matches_the_force_drive() {
-    let (length, width, _, _, poisson) = STRIP;
+    let (length, width, .., poisson) = STRIP;
     let delta = 1e-4;
     let (extension, contraction) = strip_uniaxial(true, delta);
     assert_within("prescribed extension", extension, delta, 0.01);
@@ -716,7 +716,7 @@ const BIMATERIAL: (f64, f64) = (210e9, 70e9);
 /// The C++ `BimaterialStrip`: ν = 0, split across the length (`series`) or
 /// along it.
 fn bimaterial_strip(series: bool) -> Model {
-    let (length, width, thickness, _, _) = STRIP;
+    let (length, width, thickness, ..) = STRIP;
     let (steel, aluminium) = BIMATERIAL;
     let [nx, ny] = STRIP_CELLS;
     let mut model = Model::grid(
@@ -760,7 +760,7 @@ fn extremes(values: &[f64]) -> (f64, f64) {
 
 #[test]
 fn bimaterial_strip_in_series_adds_compliances() {
-    let (length, width, thickness, _, _) = STRIP;
+    let (length, width, thickness, ..) = STRIP;
     let (steel, aluminium) = BIMATERIAL;
     let [nx, ny] = STRIP_CELLS;
     let stress = 1.0e6;
@@ -788,7 +788,7 @@ fn bimaterial_strip_in_series_adds_compliances() {
 
 #[test]
 fn bimaterial_strip_in_parallel_adds_stiffnesses() {
-    let (length, width, thickness, _, _) = STRIP;
+    let (length, width, thickness, ..) = STRIP;
     let (steel, aluminium) = BIMATERIAL;
     let [nx, ny] = STRIP_CELLS;
     let strain = 1.0e-4;
@@ -820,7 +820,7 @@ fn bimaterial_strip_in_parallel_adds_stiffnesses() {
 
 #[test]
 fn bimaterial_strip_in_series_bends_by_both_halves() {
-    let (length, width, thickness, _, _) = STRIP;
+    let (length, width, thickness, ..) = STRIP;
     let (steel, aluminium) = BIMATERIAL;
     let [nx, ny] = STRIP_CELLS;
     let moment = 1.0;
