@@ -18,6 +18,7 @@ import type { ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import { useModelStore } from "../../store/modelStore";
 import type { BodyInterface } from "../../lib/interfaces";
+import { FaceOverlay } from "./FaceOverlay";
 import {
   cadFaceOutline,
   cadFaceTriangles,
@@ -300,21 +301,12 @@ export function GeometryLayer({
         </mesh>
       )}
       {interfaceFaces && (
-        <mesh renderOrder={1}>
-          <bufferGeometry>
-            <bufferAttribute
-              attach="attributes-position"
-              args={[interfaceFaces, 3]}
-            />
-          </bufferGeometry>
-          <meshBasicMaterial
-            color={INTERFACE_COLOR}
-            transparent
-            opacity={0.6}
-            depthTest={false}
-            side={THREE.DoubleSide}
-          />
-        </mesh>
+        <FaceOverlay
+          positions={interfaceFaces}
+          color={INTERFACE_COLOR}
+          opacity={0.6}
+          renderOrder={1}
+        />
       )}
       {plane && (
         <mesh renderOrder={2}>

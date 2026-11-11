@@ -192,9 +192,12 @@ check(
 
 console.log("\nrestoreInterfaces");
 
+// A file written before interfaces existed has no "interfaces" entry.
+const savedBeforeInterfaces = undefined;
 check(
   "files before interfaces: re-detected",
-  JSON.stringify(restoreInterfaces(row, undefined)) === JSON.stringify(found),
+  JSON.stringify(restoreInterfaces(row, savedBeforeInterfaces)) ===
+    JSON.stringify(found),
 );
 check(
   "a matching saved list round-trips",
