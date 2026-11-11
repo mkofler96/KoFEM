@@ -50,7 +50,7 @@ impl CsrMatrix {
                         }
                         #[allow(
                             clippy::cast_possible_truncation,
-                            reason = "TetMesh::new caps the vertex count at MAX_VERTICES, so every DOF fits in u32"
+                            reason = "TetMesh caps the node count at MAX_NODES, so every DOF fits in u32"
                         )]
                         columns.push(column as u32);
                     }
