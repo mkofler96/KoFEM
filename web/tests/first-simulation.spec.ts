@@ -280,7 +280,9 @@ test("a saved cantilever keeps its element order and hand check", async ({
 
   // Reopened in a fresh session: still quadratic, still checked.
   await gotoApp(page);
-  await page.locator('input[type="file"][accept=".vtu"]').setInputFiles(file);
+  await page
+    .locator('input[type="file"][accept=".vtu,.zip"]')
+    .setInputFiles(file);
   await expect
     .poll(async () => (await readModel(page)).modelName, { timeout: 15_000 })
     .toBe("Cantilever beam under tip load");

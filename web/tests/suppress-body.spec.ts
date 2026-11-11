@@ -108,7 +108,9 @@ test("a suppression made after meshing still blocks the solve after save and loa
   await (await download).saveAs(file);
 
   await gotoApp(page);
-  await page.locator('input[type="file"][accept=".vtu"]').setInputFiles(file);
+  await page
+    .locator('input[type="file"][accept=".vtu,.zip"]')
+    .setInputFiles(file);
   await expect.poll(async () => (await state(page)).nodes).toBeGreaterThan(0);
   const loaded = await state(page);
   expect(loaded.bodies).toEqual([1, 2]);

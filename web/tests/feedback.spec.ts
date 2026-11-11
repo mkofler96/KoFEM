@@ -5,12 +5,18 @@ import { readFileSync } from "fs";
 import type { Page } from "@playwright/test";
 import { test, expect } from "./coverage";
 import { gotoApp } from "./fixtures/app";
+import { readZip } from "../src/lib/zip";
 
 // KOF-265: the top bar's Feedback entry leads to the GitHub issue forms. KoFEM
-// sends nothing itself; a report carries diagnostics only when the user ticks
-// them in, and never geometry, file names or results. github.com is stubbed,
-// so the test only inspects the URL the app opens. The diagnostics builder is
-// unit-tested in tests/test_feedback.mjs.
+// sends nothing itself; a public report carries diagnostics only when the user
+// ticks them in, and never geometry, file names or results. github.com is
+// stubbed, so the test only inspects the URL the app opens. The diagnostics
+// builder is unit-tested in tests/test_feedback.mjs.
+//
+// KOF-202: "Report a problem" saves a report ZIP (analysis, CAD file unless
+// left out, versions, log, last error) and opens the email program addressed
+// to support@kofem.org; the Load button opens the ZIP again. The ZIP format is
+// unit-tested in tests/test_bug_report.mjs.
 
 const TUBE = readFileSync(new URL("./fixtures/tube.stp", import.meta.url));
 // The tube, imported under a name that must not reach the report.
@@ -53,6 +59,12 @@ async function openReport(page: Page) {
   await page.getByTestId("feedback-button").click();
   await page.getByRole("menuitem", { name: /Report a problem/ }).click();
   await expect(page.getByTestId("feedback-dialog")).toBeVisible();
+}
+
+// The public GitHub path is folded below the email report.
+async function showGitHub(page: Page) {
+  await page.getByText("Report publicly on GitHub instead").click();
+  await expect(page.getByTestId("feedback-include")).toBeVisible();
 }
 
 // Follow a link that opens in a new tab and return the URL it opened.
@@ -100,6 +112,7 @@ test("a problem report previews its diagnostics and opens the prefilled bug form
   const nodes = await nodeCount(page);
 
   await openReport(page);
+  await showGitHub(page);
   const include = page.getByTestId("feedback-include");
   await expect(include).not.toBeChecked();
   const preview = (await page.getByTestId("feedback-diagnostics").innerText())
@@ -133,6 +146,7 @@ test("a problem report previews its diagnostics and opens the prefilled bug form
 
   // Not opted in (the default): the form opens empty.
   await openReport(page);
+  await showGitHub(page);
   const bare = await urlOpenedBy(page, "feedback-continue");
   expect(bare.href).toBe(`${ISSUE_PAGE}?template=bug_report.yml`);
 });
@@ -169,6 +183,7 @@ test("an error shown in the UI reaches the preview with names and coordinates re
   await expect(page.getByTestId("step-error")).toBeVisible();
 
   await openReport(page);
+  await showGitHub(page);
   const preview = await page.getByTestId("feedback-diagnostics").innerText();
   expect(preview).toContain(
     'Last error: Could not read [file]: Coupling "[redacted]" on [name] near [coordinates]',
@@ -198,4 +213,205 @@ test("Suggest an improvement opens the feature form with nothing else attached",
   const url = await urlOpenedBy(page, "feedback-suggest");
   expect(url.href).toBe(`${ISSUE_PAGE}?template=feature_request.yml`);
   await expect(page.getByTestId("feedback-menu")).toBeHidden();
+});
+
+// The mail link the app hands to the email program, recorded instead of
+// followed: a headless browser has no email program.
+async function recordMailto(page: Page) {
+  await page.evaluate(() => {
+    const opened: string[] = [];
+    (window as unknown as { __mailto: string[] }).__mailto = opened;
+    const click = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
+      if (this.href.startsWith("mailto:")) opened.push(this.href);
+      else click.call(this);
+    };
+  });
+}
+
+function mailtoOpened(page: Page): Promise<string[]> {
+  return page.evaluate(
+    () => (window as unknown as { __mailto: string[] }).__mailto,
+  );
+}
+
+async function saveReport(page: Page, testId: string) {
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.getByTestId(testId).click(),
+  ]);
+  const file = await download.path();
+  return {
+    name: download.suggestedFilename(),
+    file,
+    entries: await readZip(new Uint8Array(readFileSync(file))),
+  };
+}
+
+test("Report a problem saves a report with the CAD file, opens the email to support, and the report reopens", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await gotoApp(page);
+  await page.locator('input[type="file"][accept=".stp,.step"]').setInputFiles({
+    name: SECRET_FILE,
+    mimeType: "application/octet-stream",
+    buffer: TUBE,
+  });
+  await expect(
+    page.getByRole("button", { name: /Mesh STEP volume/ }),
+  ).toBeVisible({
+    timeout: 60_000,
+  });
+  await recordMailto(page);
+
+  await openReport(page);
+  await expect(page.getByTestId("feedback-dialog")).toContainText(
+    "support@kofem.org",
+  );
+  await expect(page.getByTestId("report-contents")).toContainText(
+    "Your CAD file",
+  );
+  const report = await saveReport(page, "report-save");
+  expect(report.name).toMatch(/^kofem-report-(?:[\w-]+-)?\d{8}-\d{4}\.zip$/);
+  expect(report.entries.map((e) => e.name)).toEqual([
+    "report.json",
+    "analysis.vtu",
+    "geometry.step",
+    "log.txt",
+  ]);
+  const cad = report.entries.find((e) => e.name === "geometry.step");
+  expect(Buffer.from(cad?.data ?? []).equals(TUBE)).toBe(true);
+  const manifestEntry = report.entries.find((e) => e.name === "report.json");
+  const manifest = JSON.parse(
+    new TextDecoder().decode(manifestEntry?.data),
+  ) as Record<string, unknown>;
+  expect(manifest).toMatchObject({
+    format: "kofem-report",
+    version: 1,
+    webAssembly: true,
+    cad: { file: "geometry.step", format: "step" },
+  });
+
+  // The email program opens addressed to support, naming the file to attach.
+  const saved = page.getByTestId("report-saved");
+  await expect(saved).toContainText(report.name);
+  const mailto = await page.getByTestId("report-mailto").getAttribute("href");
+  expect(await mailtoOpened(page)).toEqual([mailto]);
+  const mail = new URL(mailto ?? "");
+  expect(mail.protocol).toBe("mailto:");
+  expect(mail.pathname).toBe("support@kofem.org");
+  expect(mail.searchParams.get("body")).toContain(report.name);
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page.getByTestId("feedback-dialog")).toBeHidden();
+
+  // Without CAD: the same report minus the CAD file.
+  await openReport(page);
+  const bare = await saveReport(page, "report-without-cad");
+  expect(bare.entries.map((e) => e.name)).toEqual([
+    "report.json",
+    "analysis.vtu",
+    "log.txt",
+  ]);
+  await page.getByRole("button", { name: "Done" }).click();
+
+  // The report reopens: the geometry and its CAD file are back, so the model
+  // can be meshed again.
+  await page.evaluate(() =>
+    (
+      window as unknown as { __kofemStore: { getState(): { reset(): void } } }
+    ).__kofemStore
+      .getState()
+      .reset(),
+  );
+  await page.getByTestId("load-analysis-input").setInputFiles(report.file);
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const store = (
+          window as unknown as {
+            __kofemStore: {
+              getState(): {
+                stepBytes: Uint8Array | null;
+                stepSurface: object | null;
+                geometryFormat: string;
+              };
+            };
+          }
+        ).__kofemStore.getState();
+        return {
+          cadBytes: store.stepBytes?.length ?? 0,
+          surface: store.stepSurface !== null,
+          format: store.geometryFormat,
+        };
+      }),
+    )
+    .toEqual({ cadBytes: TUBE.length, surface: true, format: "step" });
+});
+
+test("a ZIP that is not a KoFEM report is refused with the reason", async ({
+  page,
+}) => {
+  let dialogMessage = "";
+  page.on("dialog", async (d) => {
+    dialogMessage = d.message();
+    await d.dismiss();
+  });
+  await gotoApp(page);
+  // An empty ZIP: just the end record.
+  const empty = Buffer.alloc(22);
+  empty.writeUInt32LE(0x06054b50, 0);
+  const local = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
+  await page.getByTestId("load-analysis-input").setInputFiles({
+    name: "other.zip",
+    mimeType: "application/zip",
+    buffer: Buffer.concat([local, empty]),
+  });
+  await expect
+    .poll(() => dialogMessage)
+    .toContain("not a KoFEM problem report");
+});
+
+test("a report carries only the current model's log, not one from before New analysis", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  page.on("dialog", async (d) => {
+    await d.accept();
+  });
+  await gotoApp(page);
+  const importTube = () =>
+    page.locator('input[type="file"][accept=".stp,.step"]').setInputFiles({
+      name: SECRET_FILE,
+      mimeType: "application/octet-stream",
+      buffer: TUBE,
+    });
+  await importTube();
+  const meshButton = page.getByRole("button", { name: /Mesh STEP volume/ });
+  await expect(meshButton).toBeVisible({ timeout: 60_000 });
+  await meshButton.click();
+  await expect
+    .poll(() => nodeCount(page), { timeout: 90_000 })
+    .toBeGreaterThan(0);
+  await recordMailto(page);
+
+  const logOf = (entries: { name: string; data: Uint8Array }[]) =>
+    new TextDecoder().decode(entries.find((e) => e.name === "log.txt")?.data);
+
+  await openReport(page);
+  const meshed = await saveReport(page, "report-save");
+  expect(logOf(meshed.entries)).toContain("== mesh ==");
+  await page.getByRole("button", { name: "Done" }).click();
+
+  // A new analysis with a new part: the old mesh log is gone from the report.
+  await page.getByRole("button", { name: "New analysis" }).click();
+  await importTube();
+  await expect(
+    page.getByRole("button", { name: /Mesh STEP volume/ }),
+  ).toBeVisible({
+    timeout: 60_000,
+  });
+  await openReport(page);
+  const fresh = await saveReport(page, "report-save");
+  expect(logOf(fresh.entries)).toBe("(no log)\n");
 });

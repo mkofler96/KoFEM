@@ -39,6 +39,24 @@ const useWorkerLogStore = create<WorkerLogState>((set) => ({
     set((s) => ({ channels: { ...s.channels, [channel]: [] } })),
 }));
 
+/**
+ * Forget every log. Called when the model is replaced (new analysis, a loaded
+ * file or example, a new CAD import): the old model's mesh and solve logs no
+ * longer describe the current one, and a problem report must not carry them.
+ */
+export function clearWorkerLogs(): void {
+  useWorkerLogStore.setState({ channels: {} });
+}
+
+/** Every log's lines, oldest first — what a problem report carries. */
+export function workerLogLines(): Record<string, string[]> {
+  return Object.fromEntries(
+    Object.entries(useWorkerLogStore.getState().channels).map(
+      ([channel, entries]) => [channel, entries.map((e) => e.text)],
+    ),
+  );
+}
+
 // Stable empty result for channels that have no lines yet — a fresh [] per
 // selector call would change identity on every store update and re-render
 // (or loop) subscribers.
