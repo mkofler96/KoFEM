@@ -6,7 +6,8 @@
 // solids that touch on the full 10×10 face at x=20.
 //
 // Verifies:
-//   1. import reports two bodies (bodyCount)
+//   1. import reports two bodies (bodyCount) and one bonded interface between
+//      them on the shared face
 //   2. touching faces are imprinted → ONE conforming mesh: the interface nodes
 //      are shared (no duplicated coordinates), tets carry per-body ids {1, 2}
 //   3. per-body materials reach the solve: softening one body's E makes the
@@ -18,6 +19,7 @@
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+import { detectInterfaces } from "../src/lib/interfaces.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -57,6 +59,32 @@ console.log(
   `tessellate_step:  ${tess.vertices.length / 3} vertices, ${nTris} triangles, ${tess.bodyCount} bodies`,
 );
 assert(tess.bodyCount === 2, `expected bodyCount 2, got ${tess.bodyCount}`);
+
+// 1b. Interfaces (KOF-170): the imprinted 10×10 contact face is owned by both
+// bodies, so the face → body ownership the tessellation reports yields one
+// bonded interface between Body 1 and Body 2 on a single CAD face.
+const triangles = [];
+for (let t = 0; t < nTris; t++)
+  triangles.push([
+    tess.triangles[3 * t],
+    tess.triangles[3 * t + 1],
+    tess.triangles[3 * t + 2],
+  ]);
+const interfaces = detectInterfaces({
+  points: [],
+  triangles,
+  bodyIds: Array.from(tess.triangleBodyIds),
+  faceIds: Array.from(tess.triangleFaceIds),
+});
+console.log(`interfaces:       ${JSON.stringify(interfaces)}`);
+assert(
+  interfaces.length === 1 &&
+    interfaces[0].bodyA === 1 &&
+    interfaces[0].bodyB === 2 &&
+    interfaces[0].faceIds.length === 1 &&
+    interfaces[0].type === "bonded",
+  `expected one bonded Body 1 ↔ Body 2 interface on one face, got ${JSON.stringify(interfaces)}`,
+);
 
 // Per-triangle body ids drive per-body colour/highlight/hide in the geometry
 // view — one 1-based id per display triangle, both bodies represented.

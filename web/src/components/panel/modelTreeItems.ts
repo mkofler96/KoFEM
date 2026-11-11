@@ -6,6 +6,12 @@ import { useModelStore } from "../../store/modelStore";
 import { isCadBody } from "../../store/geometrySlice";
 import { plotLabel } from "../../store/studySlice";
 import {
+  INTERFACE_TYPE_LABELS,
+  interfaceLabel,
+  isInterfaceActive,
+  unconnectedBodies,
+} from "../../lib/interfaces";
+import {
   addSelection,
   MESH_ITEM_ID,
   type TreeGroup,
@@ -20,6 +26,9 @@ export interface TreeItem {
   color?: string;
   // Muted text at the row's end (the mesh's node count).
   detail?: string;
+  // Out of the analysis (an interface of a suppressed body): drawn dimmed and
+  // not highlighted on hover.
+  inactive?: boolean;
 }
 
 // The model objects listed under each tree group. Groups without objects map
@@ -29,6 +38,7 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
     (s) => s.stepSurface !== null || s.nodes.length > 0,
   );
   const properties = useModelStore((s) => s.properties);
+  const interfaces = useModelStore((s) => s.interfaces);
   const materials = useModelStore((s) => s.materials);
   const bcGroups = useModelStore((s) => s.bcGroups);
   const loadGroups = useModelStore((s) => s.loadGroups);
@@ -41,6 +51,7 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
   return useMemo(() => {
     const colorOf = (materialId: number) =>
       materials.find((m) => m.id === materialId)?.color;
+    const unbonded = new Set(unconnectedBodies(interfaces, properties));
     return {
       // The store always carries a default body; it is only a body of the
       // model once there is geometry.
@@ -50,6 +61,7 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
             id: p.id,
             label: `Body ${p.id}`,
             color: colorOf(p.materialId),
+            detail: unbonded.has(p.id) ? "unbonded" : undefined,
           }))
         : [],
       materials: materials.map((m) => ({
@@ -90,6 +102,20 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
           id: g.id,
           label: g.name,
         })),
+        // The interface conditions between bodies, detected from the geometry
+        // and marked with their type.
+        ...(interfaces ?? []).map((i) => {
+          const active = isInterfaceActive(i, properties);
+          return {
+            kind: "interface" as const,
+            id: i.id,
+            label: interfaceLabel(i),
+            detail: active
+              ? INTERFACE_TYPE_LABELS[i.type].toLowerCase()
+              : "inactive",
+            inactive: !active,
+          };
+        }),
       ],
       studies: studies.map((st) => ({
         kind: "study" as const,
@@ -105,6 +131,7 @@ export function useTreeItems(): Record<TreeGroup, TreeItem[]> {
   }, [
     hasGeometry,
     properties,
+    interfaces,
     materials,
     bcGroups,
     loadGroups,
@@ -144,6 +171,8 @@ export function useTreeSelectionSync(): void {
       (i) =>
         !known.has(`${i.kind}:${i.id}`) &&
         // A boundary "+ Add" creates its own kind; materials have one kind.
+        // Interfaces are detected, never created by a form.
+        i.kind !== "interface" &&
         (target.kind === null || i.kind === target.kind),
     );
     // Import replaces the bodies wholesale and moves on to Mesh by itself.

@@ -172,6 +172,8 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.nextFaceEntryId = a.nextFaceEntryId;
       s.nextMatId = a.nextMatId;
       s.stepSurface = a.stepSurface;
+      s.interfaces = a.interfaces;
+      s.highlightInterfaceId = null;
       // Saved analyses carry the tessellated surface but not the original STEP
       // file, so re-meshing a loaded analysis requires re-importing the STEP.
       s.stepBytes = null;
@@ -270,6 +272,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.densityResult = null;
       s.liveDensity = null;
       s.stepSurface = null;
+      s.interfaces = [];
       s.stepBytes = null;
       s.geometryFormat = "step";
       s.geometryHistory = [];
@@ -306,6 +309,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.isMeshing = false;
       s.hasStarted = false;
       s.highlightBodyId = null;
+      s.highlightInterfaceId = null;
       s.hiddenBodyIds = [];
     }),
 });

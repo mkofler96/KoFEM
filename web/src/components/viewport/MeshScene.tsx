@@ -14,6 +14,7 @@
 import { useMemo } from "react";
 import { useModelStore } from "../../store/modelStore";
 import { resolveHighlightedBody } from "../../lib/bodyHighlight";
+import { isInterfaceActive } from "../../lib/interfaces";
 import { useMeshTopology } from "./useMeshTopology";
 import { useFacePick } from "./useFacePick";
 import { GeometryLayer } from "./GeometryLayer";
@@ -36,6 +37,20 @@ export function MeshScene() {
   const viewRepr = useModelStore((s) => s.viewRepr);
   const highlightBodyId = useModelStore((s) => s.highlightBodyId);
   const properties = useModelStore((s) => s.properties);
+  // The interface to show: the hovered row, else the one open in the panel —
+  // unless one of its bodies is suppressed: its faces are then out of the
+  // model, and drawing them would show geometry the analysis excludes.
+  const highlightInterface = useModelStore((s) => {
+    const sel = s.treeSelection.target;
+    const id =
+      s.highlightInterfaceId ??
+      (sel.type === "item" && sel.kind === "interface" ? sel.id : null);
+    if (id === null || !s.interfaces) return null;
+    const found = s.interfaces.find((i) => i.id === id);
+    return found === undefined || !isInterfaceActive(found, s.properties)
+      ? null
+      : found;
+  });
 
   const density = useDisplayedDensity();
   const topology = useMeshTopology();
@@ -100,7 +115,10 @@ export function MeshScene() {
     properties,
     stepSurface,
   );
-  const repr = highlightBody !== null && !showResult ? "geometry" : viewRepr;
+  const repr =
+    (highlightBody !== null || highlightInterface !== null) && !showResult
+      ? "geometry"
+      : viewRepr;
 
   // The CAD tessellation stands in for the geometry representation (and is the
   // only thing to show before a mesh exists). It must never paint over a solved
@@ -143,6 +161,7 @@ export function MeshScene() {
         <GeometryLayer
           wireframe={viewRepr === "wireframe"}
           highlightBodyId={highlightBody}
+          highlightInterface={highlightInterface}
         />
       )}
       <MeshOverlapLayer />

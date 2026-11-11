@@ -15,6 +15,7 @@ import { useEngineGate } from "../../store/engineStore";
 import { SplitSection } from "./SplitSection";
 import { BooleanSection } from "./BooleanSection";
 import { EYE_ICON, EYE_OFF_ICON } from "./bodyIcons";
+import { unconnectedBodies } from "../../lib/interfaces";
 import styles from "./Panel.module.css";
 
 const SUPPRESS_TIP =
@@ -27,6 +28,9 @@ const SUPPRESS_TIP =
 const BODIES_NOTE =
   "Touching bodies are bonded at their shared faces — a body that touches " +
   "nothing floats, so constrain it or check the assembly.";
+
+const UNBONDED_NOTE =
+  "Not bonded to any other body — it floats unless a support or tie holds it.";
 
 const ELEMENT_TYPE_TIP =
   "Solid uses tetrahedra. Shell uses wall mid-surfaces and retains solid material " +
@@ -168,6 +172,7 @@ function BodyDetail({ id }: { id: number }) {
   const setBodySuppressed = useModelStore((s) => s.setBodySuppressed);
   const meshSuppressedIds = useModelStore((s) => s.meshSuppressedIds);
   const nodeCount = useModelStore((s) => s.nodes.length);
+  const interfaces = useModelStore((s) => s.interfaces);
   if (!prop) return null;
 
   const hidden = hiddenBodyIds.includes(prop.id);
@@ -185,6 +190,7 @@ function BodyDetail({ id }: { id: number }) {
   const stillMeshed = mismatch.stillMeshed.includes(prop.id);
   const notMeshed = mismatch.missing.includes(prop.id);
   const tip = sectionsTip(shellSectionsOf(properties, prop.id));
+  const unbonded = unconnectedBodies(interfaces, properties).includes(prop.id);
   return (
     <>
       <div className={styles.formRow}>
@@ -259,7 +265,13 @@ function BodyDetail({ id }: { id: number }) {
         </select>
       </div>
       {tip && <p className={styles.formNote}>{tip}</p>}
-      {assembly && <p className={styles.formNote}>{BODIES_NOTE}</p>}
+      {unbonded ? (
+        <p className={styles.fieldError} data-testid="body-unbonded-note">
+          {UNBONDED_NOTE}
+        </p>
+      ) : (
+        assembly && <p className={styles.formNote}>{BODIES_NOTE}</p>
+      )}
       {!suppressed && <SplitSection bodyId={prop.id} />}
     </>
   );

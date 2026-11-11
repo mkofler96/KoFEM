@@ -18,6 +18,7 @@ import styles from "./Panel.module.css";
 
 const KIND_LABEL: Record<TreeItemKind, string> = {
   body: "Body",
+  interface: "Interface",
   material: "Material",
   mesh: "Mesh",
   bc: "Support",
