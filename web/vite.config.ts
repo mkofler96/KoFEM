@@ -145,6 +145,23 @@ const redirects: Connect.NextHandleFunction = (req, res, next) => {
   res.end();
 };
 
+// Preview server: an address with no file in dist/ gets the "Page not found"
+// page with a 404, as nginx answers it in production (error_page 404 in
+// nginx.conf.template). Runs after Vite's static and HTML-fallback middleware,
+// so a page it rewrote (/privacy/ -> /privacy/index.html) arrives as a file.
+const DIST = htmlEntry("./dist/");
+const notFoundPage: Connect.NextHandleFunction = (req, res, next) => {
+  const path = (req.url ?? "/").split("?")[0];
+  const file = join(DIST, path.endsWith("/") ? `${path}index.html` : path);
+  if (file.startsWith(DIST) && existsSync(file)) {
+    next();
+    return;
+  }
+  res.statusCode = 404;
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.end(readFileSync(join(DIST, "404.html")));
+};
+
 // Dev server: the example files from examples/gallery/site/; the pages
 // themselves are under web/examples/ and served by Vite, which expands the
 // site layout placeholders through transformIndexHtml. `vite preview` serves
@@ -173,6 +190,7 @@ const serveGallery = (): PluginOption => ({
   },
   configurePreviewServer(server) {
     server.middlewares.use(redirects);
+    return () => server.middlewares.use(notFoundPage);
   },
 });
 
