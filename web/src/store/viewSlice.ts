@@ -41,6 +41,7 @@ export type TreeGroup =
 
 export type TreeItemKind =
   | "body"
+  | "region"
   | "interface"
   | "material"
   | "mesh"
@@ -216,6 +217,8 @@ export interface ViewSlice {
   setHighlightBodyId(id: number | null): void;
   setHighlightInterfaceId(id: number | null): void;
   toggleBodyVisibility(id: number): void;
+  // Hide or show several CAD solids at once — the regions of one body.
+  setBodiesHidden(ids: number[], hidden: boolean): void;
   setAllBodiesVisible(): void;
   setDensityThreshold(v: number): void;
   setDensitySmooth(v: boolean): void;
@@ -299,6 +302,11 @@ export const createViewSlice: SliceCreator<ViewSlice> = (set) => ({
       s.hiddenBodyIds = s.hiddenBodyIds.includes(id)
         ? s.hiddenBodyIds.filter((b) => b !== id)
         : [...s.hiddenBodyIds, id];
+    }),
+  setBodiesHidden: (ids, hidden) =>
+    set((s) => {
+      const rest = s.hiddenBodyIds.filter((b) => !ids.includes(b));
+      s.hiddenBodyIds = hidden ? [...rest, ...ids] : rest;
     }),
   setAllBodiesVisible: () =>
     set((s) => {

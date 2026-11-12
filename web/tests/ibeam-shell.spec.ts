@@ -73,7 +73,7 @@ test("i-beam shell: import STEP, mesh, mark Shell, solve through the shell path"
     )
     .toBe(1);
 
-  await page.getByRole("button", { name: /Mesh STEP volume/i }).click();
+  await page.getByRole("button", { name: /Generate mesh/i }).click();
   await expect
     .poll(
       async () =>

@@ -704,17 +704,31 @@ impl DenseCholesky {
 /// The six rigid-body modes at every node, centred on the centroid and scaled
 /// by the RMS radius so that translations and rotations have similar size.
 /// Rows of constrained unknowns are zero: the coarse space must not move them.
-fn rigid_body_modes(coordinates: &[[f64; 3]], constrained: &[bool]) -> Vec<[f64; MODES]> {
+/// A node flagged in `rotation_nodes` holds three rotations instead of three
+/// translations (a coupling reference point's rotations): it does not move
+/// under a translation and turns by the mode's angle under a rotation.
+fn rigid_body_modes(
+    coordinates: &[[f64; 3]],
+    rotation_nodes: &[bool],
+    constrained: &[bool],
+) -> Vec<[f64; MODES]> {
+    let is_rotation = |node: usize| rotation_nodes.get(node).copied().unwrap_or(false);
+    let translation_nodes = || {
+        coordinates
+            .iter()
+            .enumerate()
+            .filter(|&(node, _)| !is_rotation(node))
+            .map(|(_, point)| point)
+    };
     #[allow(clippy::cast_precision_loss, reason = "a node count is far below 2^52")]
-    let count = coordinates.len().max(1) as f64;
+    let count = translation_nodes().count().max(1) as f64;
     let mut centre = [0.0; 3];
-    for point in coordinates {
+    for point in translation_nodes() {
         for axis in 0..3 {
             centre[axis] += point[axis] / count;
         }
     }
-    let radius = (coordinates
-        .iter()
+    let radius = (translation_nodes()
         .map(|point| {
             (0..3)
                 .map(|axis| (point[axis] - centre[axis]).powi(2))
@@ -726,6 +740,14 @@ fn rigid_body_modes(coordinates: &[[f64; 3]], constrained: &[bool]) -> Vec<[f64;
     let scale = if radius > 0.0 { 1.0 / radius } else { 1.0 };
     let mut modes = vec![[0.0; MODES]; 3 * coordinates.len()];
     for (node, point) in coordinates.iter().enumerate() {
+        if is_rotation(node) {
+            // A rotation mode of angle `scale` about each axis (the scaled
+            // positions make the translation-node columns that rotation).
+            modes[3 * node] = [0.0, 0.0, 0.0, scale, 0.0, 0.0];
+            modes[3 * node + 1] = [0.0, 0.0, 0.0, 0.0, scale, 0.0];
+            modes[3 * node + 2] = [0.0, 0.0, 0.0, 0.0, 0.0, scale];
+            continue;
+        }
         let [px, py, pz] = [0, 1, 2].map(|axis| (point[axis] - centre[axis]) * scale);
         // Columns: translations x, y, z; rotations about x, y, z.
         modes[3 * node] = [1.0, 0.0, 0.0, 0.0, pz, -py];
@@ -786,6 +808,28 @@ impl SmoothedAggregation {
         constrained: &[bool],
         settings: AmgSettings,
     ) -> Result<Self, FemError> {
+        Self::with_rotation_nodes(matrix, coordinates, &[], constrained, settings)
+    }
+
+    /// As [`SmoothedAggregation::new`], for a system in which some nodes
+    /// carry three rotations instead of three translations — the rotation
+    /// block of a coupling reference point. `rotation_nodes[n]` flags them
+    /// (an empty slice flags none); their coordinates are not used.
+    ///
+    /// # Errors
+    /// As [`SmoothedAggregation::new`].
+    pub fn with_rotation_nodes(
+        matrix: CsrMatrix,
+        coordinates: &[[f64; 3]],
+        rotation_nodes: &[bool],
+        constrained: &[bool],
+        settings: AmgSettings,
+    ) -> Result<Self, FemError> {
+        if !rotation_nodes.is_empty() && rotation_nodes.len() != coordinates.len() {
+            return Err(FemError::AmgInput {
+                reason: "one rotation flag per node is required",
+            });
+        }
         if 3 * coordinates.len() != matrix.rows() {
             return Err(FemError::AmgInput {
                 reason: "one coordinate triple per node is required",
@@ -799,7 +843,7 @@ impl SmoothedAggregation {
         let mut coarse: Vec<Csr> = Vec::new();
         let mut inverse_diagonals = Vec::new();
         let mut prolongators = Vec::new();
-        let mut modes = rigid_body_modes(coordinates, constrained);
+        let mut modes = rigid_body_modes(coordinates, rotation_nodes, constrained);
         let mut dead = constrained.to_vec();
         let mut block = 3;
         while prolongators.len() + 1 < settings.max_levels {

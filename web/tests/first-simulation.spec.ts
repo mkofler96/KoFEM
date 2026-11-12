@@ -158,7 +158,7 @@ test("a newcomer takes the CAD sample from mesh to result with the guide", async
   expect(opened).toEqual({ geometry: true, nodes: 0, boundary: 0, studies: 0 });
 
   // 1. Mesh, from the panel the import opened.
-  await page.getByRole("button", { name: /Mesh STEP volume/ }).click();
+  await page.getByRole("button", { name: /Generate mesh/ }).click();
   await expect(guideAt(page, "support")).toBeVisible({ timeout: 120_000 });
 
   // 2. The guide's shortcut starts a support; the user clicks the three

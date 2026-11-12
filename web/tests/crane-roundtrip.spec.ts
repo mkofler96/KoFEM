@@ -45,7 +45,7 @@ test("a crane holder marked Shell whole is refused: its thick block is not a wal
 
   await setElementType(page, 1, "shell");
   await openTree(page, "mesh");
-  await page.getByRole("button", { name: /Mesh STEP volume/i }).click();
+  await page.getByRole("button", { name: /Generate mesh/i }).click();
 
   const error = page.getByTestId("meshing-error");
   await expect(error).toContainText('Body 1 is marked "Shell"', {

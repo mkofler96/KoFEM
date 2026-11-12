@@ -10,6 +10,7 @@
 import {
   detectInterfaces,
   interfaceLabel,
+  isInternalInterface,
   restoreInterfaces,
   unconnectedBodies,
 } from "../src/lib/interfaces.ts";
@@ -92,7 +93,17 @@ check(
 );
 check(
   "label names both bodies",
-  interfaceLabel(found[0]) === "Body 1 ↔ Body 2",
+  interfaceLabel(found[0], bodies(3)) === "Body 1 ↔ Body 2",
+);
+check(
+  "label names the regions of a split body",
+  interfaceLabel(found[0], bodies(3, { 1: { body: 1 }, 2: { body: 1 } })) ===
+    "Body 1 · Region 1 ↔ Body 1 · Region 2",
+);
+check(
+  "an interface inside a body is internal, one between bodies is not",
+  isInternalInterface(found[0], bodies(3, { 2: { body: 1 } })) &&
+    !isInternalInterface(found[1], bodies(3, { 2: { body: 1 } })),
 );
 
 check(
@@ -181,6 +192,18 @@ check(
 check(
   "interfaces unknown: no flag",
   unconnectedBodies(null, bodies(3)).length === 0,
+);
+check(
+  "regions bonded only to each other leave their body unbonded",
+  JSON.stringify(
+    unconnectedBodies(withLoose, bodies(4, { 2: { body: 1 }, 3: { body: 3 } })),
+  ) === "[4]" &&
+    JSON.stringify(
+      unconnectedBodies(
+        withLoose,
+        bodies(4, { 2: { body: 1 }, 3: { body: 1 }, 4: { body: 4 } }),
+      ),
+    ) === "[1,2,3,4]",
 );
 check(
   "a derived shell section is not a body",

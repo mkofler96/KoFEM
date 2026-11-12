@@ -176,7 +176,7 @@ test("re-meshing without the original STEP shows an actionable banner (issue #25
   });
 
   await openTree(page, "mesh");
-  await page.getByRole("button", { name: /Re-mesh STEP volume/ }).click();
+  await page.getByRole("button", { name: /Regenerate mesh/ }).click();
 
   await expect(page.getByTestId("meshing-error")).toContainText(
     "original STEP file is no longer available",

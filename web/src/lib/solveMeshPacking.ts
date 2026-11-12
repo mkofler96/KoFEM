@@ -45,7 +45,7 @@ export function packSolveMesh(
   if (tetElements.length === 0 && hexElements.length === 0) {
     throw new Error(
       "No supported elements found. MFEM requires CTETRA or CHEXA elements — " +
-        'import a STEP file and click "Mesh STEP volume" first.',
+        'import a STEP file and click "Generate mesh" first.',
     );
   }
   const vertices = new Float64Array(3 * nodes.length);
