@@ -20,14 +20,23 @@ pub use shellize::{
 };
 
 use kofem_fem::{
-    assemble_stiffness, prepare_static, solve_static, von_mises, AmgSettings, BoundaryFaces,
-    CgSettings, CsrMatrix, ElementOrder, FemError, Isotropic, PcgRun, PcgStatus,
-    PreconditionerChoice, PreparedStatic, StoppingRule, SurfaceLoadKind, TetMesh,
+    assemble_stiffness, prepare_coupled_static, prepare_static, solve_static, von_mises,
+    AmgSettings, BoundaryFaces, CgSettings, CoupledReduction, Coupling, CouplingKind, CsrMatrix,
+    ElementOrder, FemError, Isotropic, PcgRun, PcgStatus, PreconditionerChoice, PreparedCoupled,
+    PreparedStatic, StoppingRule, SurfaceLoadKind, TetMesh, DOFS_PER_NODE,
 };
 use wasm_bindgen::prelude::*;
 
 fn to_js(error: &FemError) -> JsError {
     JsError::new(&error.to_string())
+}
+
+/// A solid solve's preconditioner, in words for the solve log.
+fn preconditioner_name(choice: PreconditionerChoice) -> &'static str {
+    match choice {
+        PreconditionerChoice::SymmetricGaussSeidel => "symmetric Gauss–Seidel",
+        PreconditionerChoice::SmoothedAggregation(_) => "smoothed-aggregation AMG",
+    }
 }
 
 /// Materials from flat (E, ν) pairs.
@@ -276,26 +285,176 @@ impl ElasticModel {
             options.settings.stopping,
         )
         .map_err(|error| to_js(&error))?;
-        let preconditioner = match options.preconditioner {
-            PreconditionerChoice::SymmetricGaussSeidel => "symmetric Gauss–Seidel",
-            PreconditionerChoice::SmoothedAggregation(_) => "smoothed-aggregation AMG",
-        };
         Ok(SolveRun {
             prepared,
             run,
-            preconditioner: preconditioner.to_owned(),
+            preconditioner: preconditioner_name(options.preconditioner).to_owned(),
+            reduction: None,
+        })
+    }
+
+    /// As `startSolve`, for a linear model with surface-to-point couplings
+    /// (the engine's `solve_coupled` on an all-solid model). Constraints and
+    /// forces use 6 DOFs per vertex (6·vertex + component, components 3..5
+    /// the rotations): `forces` has one entry per such DOF, and a rotation
+    /// is fixed, prescribed or loaded on a coupling reference point only.
+    /// The run's solution has 3 translations per vertex, the reference
+    /// points' rotations solved but not returned.
+    ///
+    /// # Errors
+    /// Missing assembly, a quadratic model, malformed couplings, constraints
+    /// or forces, a condition the couplings make impossible, or a multigrid
+    /// setup that finds the model under-constrained.
+    #[wasm_bindgen(js_name = startCoupledSolve)]
+    pub fn start_coupled_solve(
+        &self,
+        couplings: &Couplings,
+        fixed_dofs: &[u32],
+        fixed_values: &[f64],
+        forces: &[f64],
+        options: &SolveOptions,
+    ) -> Result<SolveRun, JsError> {
+        let assembled = self
+            .stiffness
+            .as_ref()
+            .ok_or_else(|| JsError::new("assemble() must be called before startCoupledSolve()"))?;
+        let PreparedCoupled {
+            mut prepared,
+            reduction,
+        } = prepare_coupled_static(
+            &self.mesh,
+            assembled,
+            &couplings.couplings,
+            fixed_dofs,
+            fixed_values,
+            forces,
+            options.preconditioner,
+        )
+        .map_err(|error| to_js(&error))?;
+        let run = PcgRun::start(
+            prepared.system.as_mut(),
+            &prepared.rhs,
+            options.settings.relative_tolerance,
+            options.settings.stopping,
+        )
+        .map_err(|error| to_js(&error))?;
+        Ok(SolveRun {
+            prepared,
+            run,
+            preconditioner: preconditioner_name(options.preconditioner).to_owned(),
+            reduction: Some(reduction),
         })
     }
 }
 
+/// Surface-to-point couplings for `ElasticModel.startCoupledSolve`, in the
+/// CSR layout of the engine's `solve_coupled`: coupling k ties vertex
+/// `reference[k]` to vertices `nodes[offsets[k]..offsets[k + 1]]`.
+#[wasm_bindgen]
+pub struct Couplings {
+    couplings: Vec<Coupling>,
+}
+
+#[wasm_bindgen]
+impl Couplings {
+    /// `kinds[k]`: 0 distributing (RBE3), 2 kinematic (RBE2) — the engine's
+    /// `mpc` codes; 1 and 3 tie shells to solids and need shell elements.
+    /// `dof_masks[k]`: the DOFs (bits 0..5) a kinematic coupling ties.
+    /// `weights`: one per coupled node, or empty for equal weights.
+    ///
+    /// # Errors
+    /// Arrays that disagree in length, offsets that do not partition
+    /// `nodes`, or an unknown or shell-only kind.
+    #[wasm_bindgen(constructor)]
+    pub fn new(
+        reference: &[u32],
+        offsets: &[u32],
+        nodes: &[u32],
+        kinds: &[i32],
+        dof_masks: &[u32],
+        weights: &[f64],
+    ) -> Result<Couplings, JsError> {
+        let count = reference.len();
+        if offsets.len() != count + 1 || kinds.len() != count || dof_masks.len() != count {
+            return Err(JsError::new(&format!(
+                "couplings: {count} references need {} offsets and {count} kinds and DOF masks, \
+                 got {}, {} and {}",
+                count + 1,
+                offsets.len(),
+                kinds.len(),
+                dof_masks.len()
+            )));
+        }
+        if offsets.first() != Some(&0)
+            || offsets.last().map(|&last| last as usize) != Some(nodes.len())
+            || offsets.windows(2).any(|pair| pair[1] < pair[0])
+        {
+            return Err(JsError::new(
+                "couplings: offsets must rise from 0 to the number of coupled nodes",
+            ));
+        }
+        if !weights.is_empty() && weights.len() != nodes.len() {
+            return Err(JsError::new(&format!(
+                "couplings: {} weights for {} coupled nodes",
+                weights.len(),
+                nodes.len()
+            )));
+        }
+        let mut couplings = Vec::with_capacity(count);
+        for index in 0..count {
+            let range = offsets[index] as usize..offsets[index + 1] as usize;
+            let kind = match kinds[index] {
+                0 => CouplingKind::Distributing,
+                2 => CouplingKind::Kinematic {
+                    dof_mask: u8::try_from(dof_masks[index] & 0x3f).unwrap_or(0),
+                },
+                code @ (1 | 3) => {
+                    return Err(JsError::new(&format!(
+                        "coupling {index}: kind {code} ties shell elements to solids, which the \
+                         Rust solid solve does not have"
+                    )))
+                }
+                code => {
+                    return Err(JsError::new(&format!(
+                        "coupling {index}: unknown kind {code} (0 distributing, 2 kinematic)"
+                    )))
+                }
+            };
+            couplings.push(Coupling {
+                reference: reference[index] as usize,
+                nodes: nodes[range.clone()]
+                    .iter()
+                    .map(|&node| node as usize)
+                    .collect(),
+                weights: if weights.is_empty() {
+                    Vec::new()
+                } else {
+                    weights[range].to_vec()
+                },
+                kind,
+            });
+        }
+        Ok(Couplings { couplings })
+    }
+
+    /// DOFs per vertex in a coupled solve's constraints and forces.
+    #[wasm_bindgen(getter, js_name = dofsPerVertex)]
+    #[must_use]
+    pub fn dofs_per_vertex(&self) -> usize {
+        DOFS_PER_NODE
+    }
+}
+
 /// A CG solve in progress (from `ElasticModel.startSolve` or
-/// `ShellModel.startSolve`).
+/// `startCoupledSolve`, or `ShellModel.startSolve`).
 #[wasm_bindgen]
 pub struct SolveRun {
     prepared: PreparedStatic,
     run: PcgRun,
     /// The preconditioner, in words for the solve log.
     preconditioner: String,
+    /// How a coupled solve's reduced unknowns expand to the vertices.
+    reduction: Option<CoupledReduction>,
 }
 
 #[wasm_bindgen]
@@ -367,7 +526,17 @@ impl SolveRun {
     pub fn finish(self) -> Result<ElasticSolution, JsError> {
         let level_sizes = self.level_sizes();
         let unused_vertices = self.prepared.unused_vertices;
-        let (displacements, outcome) = self.run.into_solution().map_err(|error| to_js(&error))?;
+        let (solution, outcome) = self.run.into_solution().map_err(|error| to_js(&error))?;
+        let displacements = match &self.reduction {
+            None => solution,
+            Some(reduction) => reduction
+                .expand(&solution)
+                .as_chunks::<DOFS_PER_NODE>()
+                .0
+                .iter()
+                .flat_map(|dofs| [dofs[0], dofs[1], dofs[2]])
+                .collect(),
+        };
         Ok(ElasticSolution {
             displacements,
             iterations: outcome.iterations,
