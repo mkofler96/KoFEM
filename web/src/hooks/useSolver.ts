@@ -6,7 +6,11 @@ import { useModelStore } from "../store/modelStore";
 import { fmt, loadsSummary } from "../lib/modelDisplay";
 import { sendToWorker } from "../workers/sharedWorker";
 import type { SolvePayload } from "../workers/solverTypes";
-import { amgUnavailableReason } from "../lib/solve/amg";
+import {
+  amgFallbackPreconditioner,
+  amgUnavailableReason,
+  FALLBACK_PRECONDITIONER_LABEL,
+} from "../lib/solve/amg";
 import { thinWallMessage, type ThinWallFinding } from "../lib/solve/thinWall";
 import { useWorkerLogs } from "./useWorkerLogs";
 import {
@@ -199,17 +203,24 @@ export function useSolver() {
     ...thinWalls.map((f): [boolean, string] => [false, thinWallMessage(f)]),
   ];
 
-  // Why the chosen AMG solver will not take this model (shown under the solver
-  // choice), or null. Only computed with a mesh: before one there is no model.
+  // Why the chosen AMG solver will not take this model and what the solve uses
+  // instead (shown under the solver choice), or null. Only computed with a
+  // mesh: before one there is no model.
+  const amgModel = {
+    elements,
+    properties,
+    elementOrder,
+    couplingCount: couplingGroups.length,
+  };
+  const amgReason = nodes.length > 0 ? amgUnavailableReason(amgModel) : null;
   const amgUnavailable =
-    nodes.length > 0
-      ? amgUnavailableReason({
-          elements,
-          properties,
-          elementOrder,
-          couplingCount: couplingGroups.length,
-        })
-      : null;
+    amgReason === null
+      ? null
+      : {
+          reason: amgReason,
+          fallback:
+            FALLBACK_PRECONDITIONER_LABEL[amgFallbackPreconditioner(amgModel)],
+        };
 
   return {
     solve,

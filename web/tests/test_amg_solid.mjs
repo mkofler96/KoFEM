@@ -22,6 +22,7 @@ import { dirname, join } from "path";
 import { buildVertexIndexer } from "../src/lib/solveMeshPacking.ts";
 import { buildSolidEngineInputs } from "../src/lib/solve/solid.ts";
 import {
+  amgFallbackPreconditioner,
   amgUnavailableReason,
   solveSolidWithAmg,
 } from "../src/lib/solve/amg.ts";
@@ -208,6 +209,35 @@ assert(
     couplingCount: 0,
   }) !== null,
   "AMG must refuse element orders other than 1 and 2",
+);
+
+// Without AMG, a solid model solves with Gauss–Seidel; shells, bodies solved
+// as shells and couplings take the shell/coupled solvers' incomplete Cholesky.
+assert(
+  amgFallbackPreconditioner({ elements, properties, couplingCount: 0 }) ===
+    "gauss-seidel",
+  "a solid model must fall back to Gauss–Seidel",
+);
+assert(
+  amgFallbackPreconditioner({ elements, properties, couplingCount: 1 }) ===
+    "incomplete-cholesky",
+  "a model with a coupling must fall back to incomplete Cholesky",
+);
+assert(
+  amgFallbackPreconditioner({
+    elements,
+    properties: properties.map((p) => ({ ...p, discretization: "shell" })),
+    couplingCount: 0,
+  }) === "incomplete-cholesky",
+  "a body solved as a shell must fall back to incomplete Cholesky",
+);
+assert(
+  amgFallbackPreconditioner({
+    elements: [{ id: 1, type: "CTRIA3", nodeIds: [1, 2, 3], propertyId: 1 }],
+    properties,
+    couplingCount: 0,
+  }) === "incomplete-cholesky",
+  "a shell-element model must fall back to incomplete Cholesky",
 );
 
 // ── MFEM engine (fresh instance, as the worker does after meshing) ────────────

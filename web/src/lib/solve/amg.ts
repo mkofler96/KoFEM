@@ -5,9 +5,10 @@
 // the smoothed-aggregation multigrid (AMG) preconditioner, and the rule for
 // which models it covers. The Rust module handles linear and quadratic
 // tetrahedra with per-body materials, supports (fixed, roller, prescribed),
-// nodal loads and surface loads; hex elements and couplings still solve with
-// the MFEM engine's Gauss–Seidel CG, and the solve says so. Pure-shell models
-// take the Rust shell solve (shellRust.ts) instead.
+// nodal loads and surface loads; hex elements still solve with the MFEM
+// engine's Gauss–Seidel CG, and the solve says so. Pure-shell models take the
+// Rust shell solve (shellRust.ts), and couplings and bodies solved as shells
+// the coupled solver, both preconditioned with incomplete Cholesky.
 //
 // The inputs are built by the same helpers as the MFEM payload
 // (packSolveMesh, resolveMaterials, groupDirichlet, groupPointLoads,
@@ -78,6 +79,36 @@ export function amgUnavailableReason(model: {
     return "it does not support bodies solved as shells";
   return null;
 }
+
+// The preconditioner a solve uses when AMG cannot take the model. Shell
+// elements, bodies solved as shells and surface-to-point couplings route to the
+// shell or coupled solver, which use incomplete Cholesky IC(0) (SSOR only if
+// the factorisation breaks down); every other model solves with the MFEM
+// engine's Gauss–Seidel CG. Mirrors routeSolve (route.ts).
+export type FallbackPreconditioner = "incomplete-cholesky" | "gauss-seidel";
+
+export function amgFallbackPreconditioner(model: {
+  elements: Element[];
+  properties: Property[];
+  couplingCount: number;
+}): FallbackPreconditioner {
+  if (
+    model.elements.some((element) => element.type === "CTRIA3") ||
+    model.couplingCount > 0 ||
+    shellMarkedBodies(model.properties).length > 0
+  )
+    return "incomplete-cholesky";
+  return "gauss-seidel";
+}
+
+// The fallback preconditioner in words for the user.
+export const FALLBACK_PRECONDITIONER_LABEL: Record<
+  FallbackPreconditioner,
+  string
+> = {
+  "incomplete-cholesky": "an incomplete Cholesky preconditioner",
+  "gauss-seidel": "Gauss–Seidel",
+};
 
 // The two classes of the Rust module the solve needs, passed in so the worker
 // and the node-side tests can each load the module their own way.
