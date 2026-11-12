@@ -4,15 +4,21 @@
 // The rules every example on /examples/ meets (KOF-322: every example can be
 // rebuilt from scratch in the KoFEM GUI alone):
 //
-//   recipe     it is a validation case with a recipe (lib/recipe.mjs), so the
-//              build and the GUI test follow the same steps;
-//   step       examples/gallery/site/<id>.step exists — the file a user imports;
+//   recipe     it is a validation case with a recipe (lib/recipe.mjs), or a
+//              showcase with one (examples/gallery/recipes/), so the build and
+//              the GUI test follow the same steps;
+//   step       examples/gallery/site/<id>.step exists and is the recipe's STEP
+//              — the file a user imports;
 //   no hexes   its analysis file holds no hexahedra (Netgen meshes tetrahedra);
 //   CAD faces  every support and load face entry is a whole CAD face
 //              (cadFaceId), so it survives a re-mesh as in the app;
 //   handCheck  its analysis file carries a hand check in the probe shape the
 //              Results panel reads ({ quantity, formula, reference, unit,
-//              probe: { kind, … }, assumes }).
+//              probe: { kind, … }, assumes }). A topology optimisation (a
+//              recipe with `optimize`) has no closed form: its read-out is the
+//              final compliance the Results panel shows after the run, so its
+//              analysis file instead opens on the Optimize step with the
+//              recipe's settings, and its record publishes that value (fe).
 //
 //   bun examples/validation/rules.mjs
 //
@@ -22,7 +28,13 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { ORDER, SITE_DIR } from "./catalog.mjs";
+import {
+  ORDER,
+  SHOWCASE_IDS,
+  SITE_DIR,
+  showcaseRecipe,
+  showcaseRecord,
+} from "./catalog.mjs";
 import cases from "./cases/index.mjs";
 import { readAnalysisSetup } from "./lib/app-model.mjs";
 
@@ -38,7 +50,6 @@ const PENDING = [
   "plate-with-hole",
   "plate-with-hole-shell",
   "cooks-membrane",
-  "mbb-beam-topopt",
 ];
 
 const VTK_HEXAHEDRON = 12;
@@ -48,16 +59,22 @@ const VTK_QUADRATIC_HEXAHEDRON = 25;
 function violations(id) {
   const out = [];
   const c = cases.find((x) => x.id === id);
-  if (!c?.recipe)
+  const recipe = c ? c.recipe : showcaseRecipe(id);
+  if (!recipe)
     out.push(
       c
         ? "is a case without a recipe"
-        : "is not a validation case with a recipe",
+        : "is a showcase without a recipe (examples/gallery/recipes/)",
     );
   const step = join(SITE_DIR, `${id}.step`);
   if (!existsSync(step)) out.push(`has no ${id}.step`);
-  else if (!readFileSync(step, "utf8").startsWith("ISO-10303-21"))
-    out.push(`${id}.step is not a STEP file`);
+  else {
+    const text = readFileSync(step, "utf8");
+    if (!text.startsWith("ISO-10303-21"))
+      out.push(`${id}.step is not a STEP file`);
+    else if (recipe && text !== recipe.step())
+      out.push(`${id}.step is not the STEP file its recipe imports`);
+  }
   const vtuFile = join(SITE_DIR, `${id}.vtu`);
   if (!existsSync(vtuFile)) {
     out.push(`has no ${id}.vtu`);
@@ -93,7 +110,8 @@ function violations(id) {
           `${kind} "${group.name}", ${face.label}: not a whole CAD face (no cadFaceId)`,
         );
   const hc = setup.handCheck;
-  if (!hc) out.push(`${id}.vtu has no handCheck`);
+  if (recipe?.optimize) out.push(...optimizationViolations(id, recipe, setup));
+  else if (!hc) out.push(`${id}.vtu has no handCheck`);
   else {
     const missing = ["quantity", "formula", "unit"].filter(
       (key) => typeof hc[key] !== "string",
@@ -104,6 +122,47 @@ function violations(id) {
     if (missing.length)
       out.push(
         `${id}.vtu: handCheck is not in the probe shape (lacks ${missing.join(", ")})`,
+      );
+  }
+  return out;
+}
+
+// A topology optimisation's read-out is the Results panel's final compliance
+// after the run: the analysis file opens on the Optimize step with the
+// recipe's settings, as a user types them, and the published record carries
+// the run's final compliance.
+function optimizationViolations(id, recipe, setup) {
+  const out = [];
+  const o = recipe.optimize;
+  if (setup.handCheck !== undefined)
+    out.push(`${id}.vtu: an optimisation carries no handCheck`);
+  if (setup.mode !== "optimize")
+    out.push(`${id}.vtu opens in "${setup.mode}", not on the Optimize step`);
+  const expected = {
+    method: "simp",
+    objective: o.objective,
+    volumeFraction: String(o.volumeFraction),
+    penalty: String(o.penalty),
+    filterRadius: String(o.filterRadius),
+    moveLimit: String(o.moveLimit),
+    maxIterations: String(o.maxIterations),
+    tolerance: String(o.tolerance),
+  };
+  for (const [key, value] of Object.entries(expected))
+    if (setup.topOpt?.[key] !== value)
+      out.push(
+        `${id}.vtu: topOpt.${key} is ${JSON.stringify(setup.topOpt?.[key])}, the recipe says ${JSON.stringify(value)}`,
+      );
+  if (!SHOWCASE_IDS.includes(id))
+    out.push("an optimisation is published as a showcase record");
+  else {
+    const record = showcaseRecord(id);
+    const last = record.history?.at(-1)?.objective;
+    if (!Number.isFinite(record.fe))
+      out.push(`showcase/${id}.json publishes no final compliance (fe)`);
+    else if (record.fe !== last)
+      out.push(
+        `showcase/${id}.json: fe ${record.fe} is not the last iteration's compliance ${last}`,
       );
   }
   return out;

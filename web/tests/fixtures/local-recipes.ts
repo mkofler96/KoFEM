@@ -13,7 +13,7 @@
 //                     checked against their closed-form result.
 
 import { prismStep } from "../../../examples/gallery/step-prism.mjs";
-import type { Recipe } from "./recipe";
+import type { Recipe, StaticRecipe } from "./recipe";
 
 // Steel exactly as the app seeds it (N · mm · MPa · tonne).
 const STEEL = {
@@ -86,7 +86,7 @@ export const SHOWCASE_RECIPES: Record<string, Recipe> = {
 // ── Driver self-tests ─────────────────────────────────────────────────────────
 
 export interface DriverRecipe {
-  recipe: Recipe;
+  recipe: StaticRecipe;
   // How far the FE value may sit from the closed form, in percent.
   tolPct: number;
 }

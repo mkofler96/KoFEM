@@ -100,7 +100,13 @@ function TopOptSummary({
             </div>
             <div className={styles.statRow}>
               <span className={styles.statKey}>Final compliance</span>
-              <span className={styles.statVal}>
+              {/* data-value: the unrounded number, which the examples' GUI
+                  test compares with the published one (KOF-322). */}
+              <span
+                className={styles.statVal}
+                data-testid="topopt-final-compliance"
+                data-value={last.compliance}
+              >
                 {last.compliance.toExponential(3)}
               </span>
             </div>

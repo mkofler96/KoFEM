@@ -89,11 +89,31 @@
 //   Any probe may carry `divideBy` (a positive number, e.g. the nominal
 //   stress, to read Kt) and must carry `unit` ("mm", "rad", "MPa", "").
 //
+//   A topology optimisation (`optimize`) is read out by one more kind:
+//   { kind: "compliance", unit: "N·mm" }
+//       the final compliance F·u of the run: the last iteration's compliance,
+//       which the Results panel's Run summary shows as "Final compliance".
+//       An optimum has no closed form, so this read-out carries no formula
+//       and no reference; the page publishes the app's own value.
+//
 // @typedef {object} Readout             the hand check on the example's page
 // @property {string} quantity           e.g. "Tip deflection"
 // @property {Probe} probe
-// @property {string} formula            e.g. "−P·L³ / (3·E·I)"
-// @property {number} reference          signed like the probe, in its unit
+// @property {string} [formula]          e.g. "−P·L³ / (3·E·I)"; none for compliance
+// @property {number} [reference]        signed like the probe, in its unit;
+//                                       none for compliance
+//
+// @typedef {object} Optimize            the Optimize panel of a topology-optimisation
+//                                       study (SIMP, minimum compliance): the values
+//                                       a user types. The run takes the place of the
+//                                       static solve.
+// @property {"min_compliance"} objective
+// @property {number} volumeFraction     "Volume frac.", in (0, 1)
+// @property {number} penalty            "Penalty p", ≥ 1
+// @property {number} filterRadius       "Filter r_min", mm, > 0
+// @property {number} moveLimit          Advanced → "Move limit", in (0, 1]
+// @property {number} maxIterations      Advanced → "Max iters", a whole number > 0
+// @property {number} tolerance          Advanced → "Tolerance", > 0
 //
 // @typedef {object} Recipe
 // @property {() => string} step         the STEP text of the geometry file the
@@ -104,6 +124,8 @@
 // @property {Material} material
 // @property {Support[]} supports
 // @property {Load[]} loads
+// @property {Optimize} [optimize]       a topology optimisation instead of the
+//                                       static solve; read out by "compliance"
 // @property {Readout} readout
 
 /** Steel as the app seeds it (web/src/store/materialSlice.ts DEFAULT_MATERIAL). */
@@ -307,6 +329,8 @@ export function validateRecipe(id, r) {
       throw new Error(`${w}: kind must be force, pressure or moment`);
   });
   const ro = r.readout;
+  if (r.optimize !== undefined || ro?.probe?.kind === "compliance")
+    return validateOptimization(at, r);
   if (!ro || typeof ro.quantity !== "string" || typeof ro.formula !== "string")
     throw new Error(`${at}: readout needs quantity and formula`);
   if (!Number.isFinite(ro.reference))
@@ -336,4 +360,49 @@ export function validateRecipe(id, r) {
       );
     if (p.faces !== undefined) faceRefs(p.faces, `${at}.readout.probe`);
   } else throw new Error(`${at}: unknown probe kind "${p.kind}"`);
+}
+
+// A topology-optimisation recipe: the Optimize panel's settings, read out by
+// the final compliance, and nothing a static read-out has.
+function validateOptimization(at, r) {
+  const o = r.optimize;
+  if (!o || typeof o !== "object")
+    throw new Error(
+      `${at}: a compliance read-out needs an optimize step (the Optimize panel's settings)`,
+    );
+  if (o.objective !== "min_compliance")
+    throw new Error(
+      `${at}: optimize.objective must be "min_compliance", the objective a compliance read-out reports`,
+    );
+  const check = (key, ok, requirement) => {
+    if (typeof o[key] !== "number" || !ok(o[key]))
+      throw new Error(`${at}: optimize.${key} must be ${requirement}`);
+  };
+  check("volumeFraction", (v) => v > 0 && v < 1, "in (0, 1)");
+  check("penalty", (v) => v >= 1, "≥ 1");
+  check("filterRadius", (v) => v > 0, "positive");
+  check("moveLimit", (v) => v > 0 && v <= 1, "in (0, 1]");
+  check(
+    "maxIterations",
+    (v) => Number.isInteger(v) && v > 0,
+    "a whole number > 0",
+  );
+  check("tolerance", (v) => v > 0, "positive");
+  if (r.mesh.order !== 1)
+    throw new Error(
+      `${at}: the optimizer runs on linear tetrahedra; mesh.order must be 1`,
+    );
+  const ro = r.readout;
+  if (!ro || typeof ro.quantity !== "string")
+    throw new Error(`${at}: readout needs a quantity`);
+  if (ro.probe?.kind !== "compliance" || ro.probe.unit !== "N·mm")
+    throw new Error(
+      `${at}: an optimisation is read out by its final compliance, probe { kind: "compliance", unit: "N·mm" }`,
+    );
+  if (ro.probe.divideBy !== undefined)
+    throw new Error(`${at}: a compliance probe takes no divideBy`);
+  if (ro.formula !== undefined || ro.reference !== undefined)
+    throw new Error(
+      `${at}: an optimum has no closed form, so a compliance read-out carries no formula or reference`,
+    );
 }

@@ -14,7 +14,9 @@
 //
 // A model built by clicks carries no hand check (that comes only with an
 // example file), so the read-out is computed here from the solved state. If the
-// Results panel shows one, it must agree.
+// Results panel shows one, it must agree. A topology optimization (a recipe with
+// an optimize step) runs the optimizer instead of the static solve and is read
+// out where the Results panel shows it: the run summary's final compliance.
 //
 // The driver self-tests at the end are not examples: they prove each load kind
 // and a split against closed-form results.
@@ -30,6 +32,7 @@ import {
   compareWithNodeMesh,
   groupFaces,
   probeValue,
+  readFinalCompliance,
   recipeFaceIds,
   snapshot,
   type BuildReport,
@@ -39,6 +42,7 @@ import { DRIVER_RECIPES, SHOWCASE_RECIPES } from "./fixtures/local-recipes";
 import {
   ORDER,
   SHOWCASE_IDS,
+  showcaseRecipe,
   showcaseRecord,
 } from "../../examples/validation/catalog.mjs";
 import cases from "../../examples/validation/cases/index.mjs";
@@ -68,13 +72,16 @@ function publishedFe(id: string): number {
   return fe;
 }
 
-// An example's recipe: exported by its case module, else carried locally for a
-// showcase whose generator has none yet; null when there is none.
+// An example's recipe: exported by its case module or, for a showcase, by
+// examples/gallery/recipes/, else carried locally for a showcase whose generator
+// has none yet; null when there is none.
 function recipeFor(id: string): Recipe | null {
   const mod = (cases as { id: string; recipe?: unknown }[]).find(
     (c) => c.id === id,
   );
   if (mod?.recipe !== undefined) return asRecipe(id, mod.recipe);
+  const showcase: unknown = showcaseRecipe(id);
+  if (showcase !== undefined) return asRecipe(id, showcase);
   if (id in SHOWCASE_RECIPES) return asRecipe(id, SHOWCASE_RECIPES[id]);
   return null;
 }
@@ -155,7 +162,10 @@ async function rebuild(
   const start = Date.now();
   const report = await buildByHand(page, recipe);
   await checkBuild(page, recipe, report);
-  const value = probeValue(await snapshot(page), recipe.readout.probe);
+  const value =
+    recipe.optimize === undefined
+      ? probeValue(await snapshot(page), recipe.readout.probe)
+      : await readFinalCompliance(page);
 
   // Should the Results panel show a hand check, it reads the same number.
   const handCheck = page.getByTestId("hand-check-fe");

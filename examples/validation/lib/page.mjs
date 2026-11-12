@@ -443,7 +443,12 @@ function inApp(e) {
 const DOF_NAMES = ["Ux", "Uy", "Uz"];
 const AXES = ["x", "y", "z"];
 
-/** The GUI steps that rebuild a recipe case from its STEP file (lib/recipe.mjs). */
+/** A recipe's optimization study, as the Optimize panel asks for it. */
+function optimizeStep(o) {
+  return `Add an optimization study and run it: minimum compliance, volume fraction ${trim(o.volumeFraction)}, penalty p = ${trim(o.penalty)}, filter r<sub>min</sub> = ${trim(o.filterRadius)} mm; under Advanced, move limit ${trim(o.moveLimit)}, at most ${trim(o.maxIterations)} iterations, tolerance ${trim(o.tolerance)}.`;
+}
+
+/** The GUI steps that rebuild a recipe example from its STEP file (lib/recipe.mjs). */
 function byHand(e) {
   const r = e.recipe;
   const point = (p) => `(${p.map(trim).join(", ")})`;
@@ -478,7 +483,9 @@ function byHand(e) {
     ...r.loads.map(
       (l) => `Load “${esc(l.name)}”: ${load(l)} on ${faces(l.faces)}.`,
     ),
-    `Run the static study. The Results panel compares ${esc(r.readout.quantity.toLowerCase())} with ${esc(r.readout.formula)}.`,
+    r.optimize
+      ? `${optimizeStep(r.optimize)} The Results panel's run summary shows the ${esc(r.readout.quantity.toLowerCase())}.`
+      : `Run the static study. The Results panel compares ${esc(r.readout.quantity.toLowerCase())} with ${esc(r.readout.formula)}.`,
   ];
   return `
       <p>Or build it yourself, as this page's number was built:</p>
@@ -706,6 +713,8 @@ function meshRows(e) {
 // The solver line: a recipe case is solved as the app solves it.
 function solverText(e, data) {
   const engine = esc(e.engine ?? data.engine);
+  if (e.recipe?.optimize)
+    return `The app's topology optimizer (SIMP with MMA, KoFEM engine); geometry, mesh and optimizer in the WebAssembly build the app runs: ${engine}`;
   return e.recipe
     ? `The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: ${engine}`
     : `KoFEM engine (MFEM), the WebAssembly build the app runs: ${engine}`;

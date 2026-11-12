@@ -73,27 +73,35 @@ guide walks the user through meshing, supports, load and run.
 ## The MBB beam (topology optimization)
 
 `generate-mbb-topopt.mjs` builds the classical MBB minimum-compliance benchmark
-with KoFEM's own pipeline only, by the steps a user takes in the app:
+from its recipe, `recipes/mbb-beam-topopt.mjs`, through
+`examples/validation/lib/pipeline.mjs`: the steps a user takes in the app.
 
 1. **Geometry → Import STEP**: a plain 300 × 50 × 10 mm block (`step-prism.mjs`),
    six faces.
 2. **Split faces or bodies with a plane… → Faces**, cutting plane `x = …`: the
    bottom face at x = 5, then its long piece at x = 295 (the pin and roller
    pads); the top face at x = 145, then its right piece at x = 155 (the 10 mm
-   load pad). The generator sends the worker's exact `split_geometry` requests.
+   load pad).
 3. **Mesh** at a 5 mm max element size (the app's mesher options → ~8k tets).
 4. **Constraints**: the left pad Ux Uy Uz, the right pad Uy; **Load**: Fy = −1000 N
    on the mid-span pad.
-5. **Optimize**: volume fraction 0.5, p = 3, r_min = 10 mm; fails if it does not
-   converge or no topology emerges.
+5. **Optimize**: volume fraction 0.5, p = 3, r_min = 10 mm, at most 100
+   iterations; fails if it does not converge or no topology emerges.
 
-`web/tests/mbb-by-hand.spec.ts` walks these steps through the UI with real
-clicks and checks the result is the model the gallery ships, face for face.
+The page's number is the final compliance, which the Results panel's run
+summary shows after the run. An optimum has no closed form, so there is no
+reference to compare with; `web/tests/examples-by-hand.spec.ts` walks the
+recipe with real clicks and must get the published value.
+`web/tests/mbb-by-hand.spec.ts` checks that the supports and the load survive a
+re-mesh.
 
-It ships `mbb-beam-topopt.step` — the split block, as the engine wrote it — next
-to the `.vtu`, so the example opens in the Optimize step ready to run **and** can
-be re-meshed: the supports and the load are whole CAD faces and follow them onto
-the new mesh. The run converges 192.6 → 47.5 N·mm in 88 iterations.
+It ships `mbb-beam-topopt.step`, the plain block the page links, and
+`mbb-beam-topopt.model.step`, the block after the four splits, whose CAD faces
+the `.vtu`'s supports and load name. The example opens in the Optimize step,
+ready to run. The run converges 192.6 → 47.5 N·mm in 88 iterations.
+
+Showcase recipes are listed in `recipes/index.mjs`, where the rule check
+(`examples/validation/rules.mjs`), the page and the GUI test find them.
 
 The half-model regression benchmark on a structured hex grid lives in
 `examples/validation/topopt/cases/mbb-beam.mjs`.

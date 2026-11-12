@@ -17,6 +17,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import cases from "./cases/index.mjs";
+import showcaseRecipes from "../gallery/recipes/index.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 export const SITE_DIR = join(here, "../gallery/site");
@@ -42,8 +43,18 @@ export const SHOWCASE_IDS = ORDER.filter((id) => !caseIds.has(id));
 for (const c of cases)
   if (!ORDER.includes(c.id))
     throw new Error(`case "${c.id}" is missing from the example order`);
+for (const id of Object.keys(showcaseRecipes))
+  if (!SHOWCASE_IDS.includes(id))
+    throw new Error(
+      `examples/gallery/recipes names "${id}", which is not a showcase in the example order`,
+    );
 
-/** The record a showcase generator wrote. */
+/** A showcase's recipe (examples/gallery/recipes/), or undefined. */
+export function showcaseRecipe(id) {
+  return Object.hasOwn(showcaseRecipes, id) ? showcaseRecipes[id] : undefined;
+}
+
+/** The record a showcase generator wrote, with its recipe if it has one. */
 export function showcaseRecord(id) {
   const file = join(SHOWCASE_DIR, `${id}.json`);
   if (!existsSync(file))
@@ -53,7 +64,8 @@ export function showcaseRecord(id) {
   const record = JSON.parse(readFileSync(file, "utf8"));
   if (record.id !== id)
     throw new Error(`${file} describes "${record.id}", not "${id}"`);
-  return { ...record, kind: "showcase" };
+  const recipe = showcaseRecipe(id);
+  return { ...record, kind: "showcase", ...(recipe ? { recipe } : {}) };
 }
 
 /** Every example in page order, from the published case rows and the records. */

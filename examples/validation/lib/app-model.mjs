@@ -398,7 +398,29 @@ export function buildAnalysisSetup(build, title) {
     surfaceTriangles: build.surfaceTriangles,
     surfaceFaceIds: build.surfaceFaceIds,
     elementOrder: build.meshSettings.order,
-    handCheck: build.handCheck,
+    ...(build.optimization
+      ? optimizeSetup(build.optimization.settings)
+      : { handCheck: build.handCheck }),
+  };
+}
+
+// A recipe with an optimize step opens on its optimization study instead,
+// with the Optimize panel filled in as a user types it (strings, as the
+// store holds them), ready to run; it carries no hand check.
+function optimizeSetup(settings) {
+  return {
+    mode: "optimize",
+    topOpt: {
+      method: settings.method,
+      objective: settings.objective,
+      volumeFraction: String(settings.constraints.volumeFraction),
+      complianceLimit: "",
+      penalty: String(settings.penalty),
+      filterRadius: String(settings.filterRadius),
+      moveLimit: String(settings.moveLimit),
+      maxIterations: String(settings.maxIterations),
+      tolerance: String(settings.tolerance),
+    },
   };
 }
 

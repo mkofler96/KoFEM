@@ -82,7 +82,22 @@ export interface Readout {
   formula: string;
   reference: number;
 }
-export interface Recipe {
+// The Optimize panel's settings (SIMP, minimum compliance).
+export interface OptimizeStep {
+  objective: "min_compliance";
+  volumeFraction: number;
+  penalty: number;
+  filterRadius: number;
+  moveLimit: number;
+  maxIterations: number;
+  tolerance: number;
+}
+// An optimum has no closed form: the read-out is the run's final compliance.
+export interface ComplianceReadout {
+  quantity: string;
+  probe: { kind: "compliance"; unit: "N·mm" };
+}
+interface RecipeSteps {
   step: () => string;
   splits: Split[];
   discretization: Discretization;
@@ -90,8 +105,16 @@ export interface Recipe {
   material: Material;
   supports: Support[];
   loads: Load[];
+}
+export interface StaticRecipe extends RecipeSteps {
+  optimize?: undefined;
   readout: Readout;
 }
+export interface OptimizationRecipe extends RecipeSteps {
+  optimize: OptimizeStep;
+  readout: ComplianceReadout;
+}
+export type Recipe = StaticRecipe | OptimizationRecipe;
 
 // A recipe from a case module (plain JS): checked by the contract's own
 // validator, which throws a precise error on the first problem.
@@ -727,6 +750,96 @@ async function solve(page: Page): Promise<void> {
     .toBe(true);
 }
 
+// Studies → + Add → Optimization: SIMP, minimum compliance, the recipe's
+// settings typed into the Optimize panel, then Run optimization. The store's
+// settings must then read exactly as typed.
+async function optimize(page: Page, step: OptimizeStep): Promise<void> {
+  await openTree(page, "topopt");
+  await page.getByRole("button", { name: "SIMP", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Min compliance", exact: true })
+    .click();
+  const stress = page.getByTestId("topopt-stress-constraint");
+  if (await stress.isChecked()) await stress.click();
+  const fields: [string, number][] = [
+    ["Volume frac.", step.volumeFraction],
+    ["Penalty p", step.penalty],
+    ["Filter r_min", step.filterRadius],
+  ];
+  for (const [label, value] of fields)
+    await page.getByLabel(label, { exact: true }).fill(String(value));
+  await page.getByRole("button", { name: "Advanced" }).click();
+  const advanced: [string, number][] = [
+    ["Move limit", step.moveLimit],
+    ["Max iters", step.maxIterations],
+    ["Tolerance", step.tolerance],
+  ];
+  for (const [label, value] of advanced)
+    await page.getByLabel(label, { exact: true }).fill(String(value));
+  const typed = await page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __kofemStore: { getState(): { topOpt: Record<string, unknown> } };
+        }
+      ).__kofemStore.getState().topOpt,
+  );
+  expect(typed).toMatchObject({
+    method: "simp",
+    objective: step.objective,
+    stressConstraint: false,
+    volumeFraction: String(step.volumeFraction),
+    penalty: String(step.penalty),
+    filterRadius: String(step.filterRadius),
+    moveLimit: String(step.moveLimit),
+    maxIterations: String(step.maxIterations),
+    tolerance: String(step.tolerance),
+  });
+  const run = page.getByRole("button", { name: /Run optimization/ });
+  await expect(run).toBeEnabled({ timeout: 15_000 });
+  await run.click();
+  const failed = page.getByText(/^Optimization error:/);
+  await expect
+    .poll(
+      async () => {
+        if (await failed.isVisible())
+          throw new Error((await failed.textContent()) as string);
+        return page.getByTestId("topopt-final-compliance").count();
+      },
+      // ~100 iterations at about half a second each in the browser.
+      { timeout: 300_000 },
+    )
+    .toBe(1);
+}
+
+// The final compliance the Results panel's run summary shows after an
+// optimization (its unrounded data-value), checked against the run's history
+// in the store.
+export async function readFinalCompliance(page: Page): Promise<number> {
+  const shown = page.getByTestId("topopt-final-compliance");
+  const value = Number(await shown.getAttribute("data-value"));
+  const last = await page.evaluate(() => {
+    const result = (
+      window as unknown as {
+        __kofemStore: {
+          getState(): {
+            densityResult: {
+              history: { compliance: number; max_change: number }[];
+            } | null;
+          };
+        };
+      }
+    ).__kofemStore.getState().densityResult;
+    return result ? result.history[result.history.length - 1] : null;
+  });
+  if (!last) throw new Error("the Results panel shows no optimization result");
+  expect(value, "the panel shows the last iteration's compliance").toBe(
+    last.compliance,
+  );
+  await expect(shown).toHaveText(last.compliance.toExponential(3));
+  return value;
+}
+
 export interface BuildReport {
   // Geometry after the import and after each split.
   counts: Counts[];
@@ -734,7 +847,8 @@ export interface BuildReport {
   seconds: Record<string, number>;
 }
 
-// Perform every step of the recipe through the UI, then run the static solve.
+// Perform every step of the recipe through the UI, then run the static solve,
+// or the optimization of a recipe with an optimize step.
 export async function buildByHand(
   page: Page,
   recipe: Recipe,
@@ -763,8 +877,13 @@ export async function buildByHand(
   for (const support of recipe.supports) await addSupport(page, support);
   for (const load of recipe.loads) await addLoad(page, load);
   lap("boundary");
-  await solve(page);
-  lap("solve");
+  if (recipe.optimize === undefined) {
+    await solve(page);
+    lap("solve");
+  } else {
+    await optimize(page, recipe.optimize);
+    lap("optimize");
+  }
   return { counts, seconds };
 }
 
