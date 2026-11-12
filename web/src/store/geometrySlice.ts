@@ -8,6 +8,7 @@ import { current } from "immer";
 import type { ModelState, SliceCreator } from "./modelStore";
 import { addSelection } from "./viewSlice";
 import { carryGroupsToMesh, remeshNotice } from "../lib/remeshGroups";
+import { modelShellRim } from "../lib/shellRim";
 import type { MeshOverlap } from "../wasm/pkg/kofem_wasm";
 import {
   detectInterfaces,
@@ -592,6 +593,15 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
         surfaceTriangles ?? null,
         surfaceFaceIds ?? null,
         new Set(nodes.map((n) => n.id)),
+        modelShellRim(
+          {
+            nodes,
+            elements,
+            surfaceTriangles: surfaceTriangles ?? null,
+            surfaceFaceIds: surfaceFaceIds ?? null,
+          },
+          before.stepSurface,
+        ).nodesByFace,
       );
       s.bcGroups = carried.bcGroups;
       s.loadGroups = carried.loadGroups;

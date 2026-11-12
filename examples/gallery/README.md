@@ -36,10 +36,9 @@ a `.vtu`, `.png`, record or page; change the case, generator or page text
 (`examples/validation/textbook/<id>.mjs`) and regenerate. CI fails when a page
 no longer matches its sources or a case's `.vtu` no longer matches its model.
 
-| Generator                       | Example                         | Run (in `web/`)                              |
-| ------------------------------- | ------------------------------- | -------------------------------------------- |
-| `generate-plate-hole-shell.mjs` | plate with a hole, shells       | `bun run examples:generate-plate-hole-shell` |
-| `generate-mbb-topopt.mjs`       | MBB beam, topology optimization | `bun run examples:generate-mbb-topopt`       |
+| Generator                 | Example                         | Run (in `web/`)                        |
+| ------------------------- | ------------------------------- | -------------------------------------- |
+| `generate-mbb-topopt.mjs` | MBB beam, topology optimization | `bun run examples:generate-mbb-topopt` |
 
 A page's figure is drawn by `examples/validation/lib/render.mjs` from the solved
 model, coloured as the app colours it, so the page needs no script or WebGL.
@@ -55,7 +54,8 @@ Face entries then carry their `cadFaceId`, so an opened example keeps its
 supports and loads through a re-mesh.
 
 The MBB beam and every validation case with a recipe follow this. The
-remaining validation cases and the shell plate with a hole do not yet (KOF-322, `examples/validation/rules.mjs` lists them): they are structured meshes with node-set
+remaining validation cases do not yet (KOF-322,
+`examples/validation/rules.mjs` lists them): they are structured meshes with node-set
 boundary conditions, which the app's Netgen pipeline cannot reproduce. Their
 loads are still built exactly as the app builds them
 (`examples/validation/lib/app-model.mjs`), so solving an opened example gives

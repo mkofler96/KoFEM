@@ -7,19 +7,27 @@
 // shows after a user rebuilds the example by hand.
 //
 //   import      tessellate_step on the recipe's STEP text (the worker's
-//               loadGeometry), one property per CAD body, all Steel/solid;
+//               loadGeometry), one property per CAD body, all Steel, each
+//               Solid or Shell as the recipe's discretization says;
 //   split       for each split: reload the current bytes, split_geometry with
 //               the request the split tool sends, tessellate the new bytes;
 //   mesh        generate_fem_mesh with the worker's exact options, in the same
 //               engine instance, as the worker does after an import or edit;
+//               a Shell body is then idealised to its mid-surface as the
+//               worker does (buildMeshTimeShellModel), and the thickness it
+//               measured is checked against the recipe's;
 //   material    the recipe's material, assigned to every body;
 //   supports,   one group per support / load, each face entry a whole CAD face
-//   loads       (cadFaceId), its nodes those of the face on the mesh; the solver
+//   loads       (cadFaceId), its nodes those of the face on the mesh — or, for a
+//               face a shell collapsed to its rim, an Edge entry with the rim
+//               nodes of that face (web/src/lib/shellRim.ts); the solver
 //               arrays are built by the app's own rebuildConstraints,
 //               rebuildLoads (momentToNodalForces) and rebuildSurfaceLoads;
 //   solve       the app's default solver: the all-solid AMG path of the worker
 //               (weldTies → solveSolidWithAmg → expandTiedDisplacements) in the
-//               Rust module, with the recipe's element order;
+//               Rust module, with the recipe's element order; an all-shell
+//               model takes the worker's pure-shell path instead
+//               (buildShellEngineInputs → solveShellInRust);
 //   read-out    the recipe's probe, evaluated as lib/recipe.mjs defines it.
 //
 // The app code is imported from web/src (bun runs TypeScript), so a change to
@@ -54,6 +62,10 @@ import {
   weldTies,
 } from "../../../web/src/lib/solve/solid.ts";
 import { nodeVonMisesField } from "../../../web/src/lib/resultField.ts";
+import { buildMeshTimeShellModel } from "../../../web/src/lib/solve/autoShell.ts";
+import { buildShellEngineInputs } from "../../../web/src/lib/solve/shell.ts";
+import { solveShellInRust } from "../../../web/src/lib/solve/shellRust.ts";
+import { shellRimFaces } from "../../../web/src/lib/shellRim.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ENGINE = join(here, "../../../web/src/wasm/pkg");
@@ -153,7 +165,9 @@ function resolveOnTessellation(at, tess, where) {
  *                                        the display tessellation, as the store holds it
  * @property {number} bodyCount
  * @property {{id, x, y, z}[]} nodes      node id = vertex index, as after meshing
- * @property {{id, type, nodeIds, propertyId}[]} elements   CTETRA, propertyId = CAD body
+ * @property {{id, type, nodeIds, propertyId}[]} elements   CTETRA (propertyId = CAD
+ *                                        body), or CTRIA3 shell facets (propertyId =
+ *                                        the PSHELL section of the idealised body)
  * @property {[number, number, number][]} surfaceTriangles
  * @property {number[]} surfaceFaceIds    CAD face of each surface triangle
  * @property {{maxElementSize, minElementSize, order}} meshSettings
@@ -169,8 +183,11 @@ function resolveOnTessellation(at, tess, where) {
 export async function buildFromRecipe(id, recipe) {
   validateRecipe(id, recipe);
   const where = `recipe "${id}"`;
-  if (recipe.discretization.kind === "shell")
-    throw new Error("shell recipes: not yet supported");
+  const shell = recipe.discretization.kind === "shell";
+  if (shell && recipe.mesh.order !== 1)
+    throw new Error(
+      `${where}: a shell facet is linear whatever element order the mesh panel shows — give a shell recipe mesh.order 1`,
+    );
   if (recipe.mesh.localSizes !== undefined)
     throw new Error(
       `${where}: mesh.localSizes — the app's mesher offers no per-face sizes, so a user could not set them`,
@@ -238,24 +255,57 @@ export async function buildFromRecipe(id, recipe) {
       `${where}: Netgen reports ${dto.overlaps.length} surface-mesh overlaps — the app would ask the user to repair the geometry`,
     );
   mesher.free_geometry_cache();
-  const nNodes = dto.vertices.length / 3;
-  const nodes = Array.from({ length: nNodes }, (_, i) => ({
+  let nodes = Array.from({ length: dto.vertices.length / 3 }, (_, i) => ({
     id: i,
     x: dto.vertices[3 * i],
     y: dto.vertices[3 * i + 1],
     z: dto.vertices[3 * i + 2],
   }));
-  const elements = Array.from(
-    { length: dto.tetrahedra.length / 4 },
-    (_, i) => ({
-      id: i,
-      type: "CTETRA",
-      nodeIds: Array.from(dto.tetrahedra.subarray(4 * i, 4 * i + 4)),
-      propertyId: dto.bodyIds[i],
-    }),
+  let elements = Array.from({ length: dto.tetrahedra.length / 4 }, (_, i) => ({
+    id: i,
+    type: "CTETRA",
+    nodeIds: Array.from(dto.tetrahedra.subarray(4 * i, 4 * i + 4)),
+    propertyId: dto.bodyIds[i],
+  }));
+  let surfaceTriangles = chunk3(Array.from(dto.surfaceTriangles));
+  let surfaceFaceIds = Array.from(dto.surfaceFaceIds);
+
+  // ── Body types and the shell idealisation (the worker's handleVolumeMesh) ──
+  // The recipe's element type applies to every CAD body; meshing idealises the
+  // Shell bodies and returns the CTRIA3 (+ CTETRA) model the store keeps.
+  const bodyIds = Array.from(
+    { length: Math.max(1, tess.bodyCount) },
+    (_, i) => i + 1,
   );
-  const surfaceTriangles = chunk3(Array.from(dto.surfaceTriangles));
-  const surfaceFaceIds = Array.from(dto.surfaceFaceIds);
+  let properties = bodyIds.map((bodyId) => ({
+    id: bodyId,
+    materialId: 1,
+    discretization: recipe.discretization.kind,
+  }));
+  if (shell) {
+    await rustFem(); // the shell idealisation runs in the Rust module
+    const mixed = buildMeshTimeShellModel(
+      nodes,
+      elements,
+      surfaceTriangles,
+      surfaceFaceIds,
+      new Set(bodyIds),
+      properties,
+      () => {},
+    );
+    if (!mixed)
+      throw new Error(
+        `${where}: the body is marked Shell, but meshing did not idealise it`,
+      );
+    ({ nodes, elements, properties, surfaceTriangles, surfaceFaceIds } = mixed);
+    checkShellThickness(properties, recipe.discretization.thickness, where);
+  }
+  const nNodes = nodes.length;
+  // The faces a shell collapsed to the rim of its mid-surface (none for solids).
+  const rim = shellRimFaces(
+    { nodes, elements, surfaceTriangles, surfaceFaceIds },
+    tess,
+  );
   const meshSurface = {
     points: nodes.map((n) => [n.x, n.y, n.z]),
     triangles: surfaceTriangles,
@@ -272,11 +322,13 @@ export async function buildFromRecipe(id, recipe) {
     if (!nodesOfFace.has(face)) nodesOfFace.set(face, new Set());
     for (const v of tri) nodesOfFace.get(face).add(v);
   });
-  const resolve = (refs, at) =>
+  const resolve = (refs, at, { rimFaces = false } = {}) =>
     distinct(
       refs.map((ref, k) => {
         const label = `${at}.faces[${k}]`;
         const face = resolveOnTessellation(ref.at, tess, label);
+        // A face a shell collapsed to its rim: picked as an Edge selection.
+        if (rimFaces && isRimFace(face)) return face;
         const nearest = faceDistances(meshSurface, ref.at)[0];
         if (!nearest || nearest[0] !== face)
           throw new Error(
@@ -284,13 +336,15 @@ export async function buildFromRecipe(id, recipe) {
           );
         if (!nodesOfFace.has(face))
           throw new Error(
-            `${label}: CAD face ${face} is not on the mesh's surface`,
+            `${label}: CAD face ${face} is not on the mesh's surface${shell ? " nor on the rim of its shell mid-surface" : ""}`,
           );
         return face;
       }),
       `${at}.faces`,
     );
   const faceNodes = (face) => [...nodesOfFace.get(face)].sort((a, b) => a - b);
+  const isRimFace = (face) =>
+    !nodesOfFace.has(face) && rim.nodesByFace.has(face);
 
   // ── Model: material, bodies, supports, loads (the store's groups) ──────────
   const m = recipe.material;
@@ -304,45 +358,54 @@ export async function buildFromRecipe(id, recipe) {
       color: MATERIAL_PALETTE[0],
     },
   ];
-  const properties = Array.from(
-    { length: Math.max(1, tess.bodyCount) },
-    (_, i) => ({
-      id: i + 1,
-      materialId: 1,
-      discretization: "solid",
-    }),
-  );
   let nextFaceEntryId = 1;
-  // toFaceEntries: one entry per picked whole CAD face, labelled "Face n".
-  const entries = (faces) =>
-    faces.map((cadFaceId, k) => ({
+  // toFaceEntries: one entry per pick, labelled "Face n" for a whole CAD face
+  // on the mesh surface, "Edge n" for the rim a shell collapsed a face to. A
+  // selection holds faces or edges, not both: the panel picks one or the other.
+  const entries = (faces, at) => {
+    const edges = faces.filter(isRimFace);
+    if (edges.length > 0 && edges.length !== faces.length)
+      throw new Error(
+        `${at}: mixes faces on the mesh surface with faces a shell collapsed to its rim — the panel picks Faces or Edges, not both`,
+      );
+    const geometry = edges.length > 0 ? "edge" : "face";
+    return faces.map((cadFaceId, k) => ({
       id: nextFaceEntryId++,
-      label: `Face ${k + 1}`,
-      nodeIds: faceNodes(cadFaceId),
-      geometry: "face",
+      label: `${geometry === "edge" ? "Edge" : "Face"} ${k + 1}`,
+      nodeIds:
+        geometry === "edge"
+          ? rim.nodesByFace.get(cadFaceId)
+          : faceNodes(cadFaceId),
+      geometry,
       cadFaceId,
     }));
+  };
   const supportFaces = recipe.supports.map((s, i) =>
-    resolve(s.faces, `${where}.supports[${i}]`),
+    resolve(s.faces, `${where}.supports[${i}]`, { rimFaces: shell }),
   );
   const loadFaces = recipe.loads.map((l, i) =>
-    resolve(l.faces, `${where}.loads[${i}]`),
+    resolve(l.faces, `${where}.loads[${i}]`, { rimFaces: shell }),
   );
+  // The panel offers Rx, Ry, Rz on shell models only.
+  const hasShells = elements.some((e) => e.type === "CTRIA3");
+  const dofLimit = hasShells ? 5 : 2;
   const bcGroups = recipe.supports.map((s, i) => {
-    if (!s.dofs.every((d) => d === 0 || d === 1 || d === 2))
+    if (!s.dofs.every((d) => Number.isInteger(d) && d >= 0 && d <= dofLimit))
       throw new Error(
-        `${where}.supports[${i}]: a solid support fixes Ux, Uy, Uz (dofs 0, 1, 2) only, got [${s.dofs.join(", ")}]`,
+        hasShells
+          ? `${where}.supports[${i}]: a shell support fixes Ux … Rz (dofs 0 … 5), got [${s.dofs.join(", ")}]`
+          : `${where}.supports[${i}]: a solid support fixes Ux, Uy, Uz (dofs 0, 1, 2) only, got [${s.dofs.join(", ")}]`,
       );
     return {
       id: i + 1,
       name: s.name,
       dofs: [...s.dofs],
       value: s.value,
-      faces: entries(supportFaces[i]),
+      faces: entries(supportFaces[i], `${where}.supports[${i}]`),
     };
   });
   const loadGroups = recipe.loads.map((l, i) => {
-    const faces = entries(loadFaces[i]);
+    const faces = entries(loadFaces[i], `${where}.loads[${i}]`);
     const group = { id: i + 1, name: l.name };
     if (l.kind === "pressure")
       return { ...group, dof: 0, totalForce: l.value, faces, kind: "pressure" };
@@ -378,45 +441,14 @@ export async function buildFromRecipe(id, recipe) {
     solverMethod: DEFAULT_SOLVER_METHOD,
   };
 
-  // ── Solve (the worker's handleSolve → handleSolidSolve, AMG) ───────────────
+  // ── Solve (the worker's handleSolve) ───────────────────────────────────────
   const route = routeSolve(payload);
-  if (route.path !== "solid")
-    throw new Error(
-      `${where}: the app would solve this model on the "${route.path}" path; only all-solid recipes are built here`,
-    );
-  if (payload.solverMethod !== "amg")
-    throw new Error(
-      `${where}: the app's default solver is "${payload.solverMethod}"; this build mirrors only the AMG path`,
-    );
-  const reason = amgUnavailableReason({
-    elements,
-    properties,
-    elementOrder,
-    couplingCount: 0,
-  });
-  if (reason !== null)
-    throw new Error(
-      `${where}: the app would not use AMG for this model (${reason})`,
-    );
-  const log = () => {};
-  const tied = weldTies(nodes, elements, payload.tieGroups, log);
-  const neverAsk = () => {
-    throw new Error(`${where}: the AMG solve reached its iteration limit`);
-  };
-  const solved = await solveSolidWithAmg(
-    await rustFem(),
-    { ...payload, nodes: tied.solveNodes, elements: tied.tiedElements },
-    elementOrder,
-    tied.vid,
-    tied.vidTied,
-    undefined, // the app sends no cgIterationLimit unless the user set one
-    neverAsk,
-    log,
-  );
-  const result = {
-    displacements: expandTiedDisplacements(nodes, tied, solved.displacements),
-    vonMises: solved.vonMises,
-  };
+  const result =
+    route.path === "shell"
+      ? await solveShell(payload, where)
+      : route.path === "solid"
+        ? await solveSolid(payload, where)
+        : unsupportedRoute(route.path, where);
   if (result.displacements.length !== 3 * nNodes)
     throw new Error(
       `${where}: the solve returned ${result.displacements.length / 3} displacements for ${nNodes} nodes`,
@@ -487,6 +519,86 @@ export async function buildFromRecipe(id, recipe) {
     result,
     fe,
   };
+}
+
+// The worker's handleSolidSolve on its default (AMG) path.
+async function solveSolid(payload, where) {
+  const { nodes, elements, properties, elementOrder } = payload;
+  if (payload.solverMethod !== "amg")
+    throw new Error(
+      `${where}: the app's default solver is "${payload.solverMethod}"; this build mirrors only the AMG path`,
+    );
+  const reason = amgUnavailableReason({
+    elements,
+    properties,
+    elementOrder,
+    couplingCount: 0,
+  });
+  if (reason !== null)
+    throw new Error(
+      `${where}: the app would not use AMG for this model (${reason})`,
+    );
+  const log = () => {};
+  const tied = weldTies(nodes, elements, payload.tieGroups, log);
+  const neverAsk = () => {
+    throw new Error(`${where}: the AMG solve reached its iteration limit`);
+  };
+  const solved = await solveSolidWithAmg(
+    await rustFem(),
+    { ...payload, nodes: tied.solveNodes, elements: tied.tiedElements },
+    elementOrder,
+    tied.vid,
+    tied.vidTied,
+    undefined, // the app sends no cgIterationLimit unless the user set one
+    neverAsk,
+    log,
+  );
+  return {
+    displacements: expandTiedDisplacements(nodes, tied, solved.displacements),
+    vonMises: solved.vonMises,
+  };
+}
+
+// The worker's handleShellSolve: an all-CTRIA3 model, packed by the app's
+// buildShellEngineInputs and solved by the Rust shell solver. elementOrder does
+// not apply to shells (a DKT facet is what it is).
+async function solveShell(payload, where) {
+  const fem = await rustFem();
+  const neverAsk = () => {
+    throw new Error(`${where}: the shell solve reached its iteration limit`);
+  };
+  const solved = await solveShellInRust(
+    { ShellModel: fem.ShellModel },
+    buildShellEngineInputs(payload),
+    undefined, // the app sends no cgIterationLimit unless the user set one
+    neverAsk,
+    () => {},
+  );
+  return { displacements: solved.displacements, vonMises: solved.von_mises };
+}
+
+function unsupportedRoute(path, where) {
+  throw new Error(
+    `${where}: the app would solve this model on the "${path}" path; only all-solid and all-shell recipes are built here`,
+  );
+}
+
+// The app measures a shell's thickness from the wall it idealises and offers no
+// thickness input: every shell section the mesh made must have the recipe's.
+function checkShellThickness(properties, thickness, where) {
+  const sections = properties.filter((p) => p.sourceBodyId !== undefined);
+  if (sections.length === 0)
+    throw new Error(
+      `${where}: the body is marked Shell but the mesh made no shell section`,
+    );
+  for (const s of sections)
+    if (
+      !(typeof s.thickness === "number") ||
+      Math.abs(s.thickness - thickness) > 1e-6 * thickness
+    )
+      throw new Error(
+        `${where}: the app measured a ${s.thickness} mm wall, the recipe says ${thickness} mm — the GUI has no thickness input to change it`,
+      );
 }
 
 // The worker's loadGeometry: tessellate the bytes and keep what the store keeps

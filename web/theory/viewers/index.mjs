@@ -27,7 +27,7 @@ const sources = {
   "plate-with-hole": { title: "Plate with a hole", record: "case" },
   "plate-with-hole-shell": {
     title: "Plate with a hole, shell model",
-    record: "showcase",
+    record: "case",
   },
   "axial-bar": { title: "Axial bar", record: "case" },
 };

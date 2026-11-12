@@ -37,7 +37,6 @@ import { modelStepPath, sameModelStep } from "./lib/model-step.mjs";
 // KOF-322: examples still built the old way. This list must be empty when
 // KOF-322 is done; then delete it and the PENDING handling below.
 const PENDING = [
-  "plate-with-hole-shell",
   "cooks-membrane",
   "mbb-beam-topopt",
 ];

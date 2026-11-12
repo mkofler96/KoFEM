@@ -221,11 +221,10 @@ assert(
 
 // ── Test 6: the real plate-with-hole shell mesh (#386 target case) ───────────
 //
-// The exact mesh the plate-with-hole-shell gallery card ships (same generator
-// call as generate-plate-hole-shell.mjs): an annulus from the hole rim out to a
-// square outer boundary. It reproduces the motivating problem — a flat shell is
-// one face-pick region — and proves edge picking grabs the rim the saved
-// analysis loads (the pulled right edge) instead of the whole plate.
+// The structured shell mesh the plate-with-hole-shell example used to ship: an
+// annulus from the hole rim out to a square outer boundary. It reproduces the
+// motivating problem — a flat shell is one face-pick region — and proves edge
+// picking grabs the rim (the pulled right edge) instead of the whole plate.
 
 console.log("\nTest 6: real plate-with-hole shell mesh");
 

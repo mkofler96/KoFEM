@@ -35,6 +35,7 @@ import cantileverP2 from "./cantilever-bending-p2.mjs";
 import cantileverBeam from "./cantilever-beam.mjs";
 import beamTorsion from "./beam-torsion.mjs";
 import plateWithHole from "./plate-with-hole.mjs";
+import plateWithHoleShell from "./plate-with-hole-shell.mjs";
 import shaftTorsion from "./shaft-torsion.mjs";
 import cooksMembrane from "./cooks-membrane.mjs";
 import surfacePressure from "./surface-pressure.mjs";
@@ -87,6 +88,7 @@ export default [
   cantileverBeam,
   beamTorsion,
   plateWithHole,
+  plateWithHoleShell,
   shaftTorsion,
   cooksMembrane,
 ].map(register);

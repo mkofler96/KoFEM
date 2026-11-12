@@ -440,7 +440,7 @@ function inApp(e) {
       </p>`;
 }
 
-const DOF_NAMES = ["Ux", "Uy", "Uz"];
+const DOF_NAMES = ["Ux", "Uy", "Uz", "Rx", "Ry", "Rz"];
 const AXES = ["x", "y", "z"];
 
 /** The GUI steps that rebuild a recipe case from its STEP file (lib/recipe.mjs). */
@@ -462,6 +462,7 @@ function byHand(e) {
     return `moment M${AXES[l.axis]} = ${trim(l.value)} N·mm`;
   };
   const m = r.material;
+  const d = r.discretization;
   const steps = [
     `Import <a href="/examples/${encodeURIComponent(e.id)}.step" download>${esc(e.id)}.step</a>.`,
     ...r.splits.map((s) =>
@@ -469,6 +470,11 @@ function byHand(e) {
         ? `Split ${faces(s.faces)} with ${plane(s)}.`
         : `Split the bodies with ${plane(s)}.`,
     ),
+    ...(d.kind === "shell"
+      ? [
+          `Set the body to Shell. Meshing measures the ${trim(d.thickness)} mm wall and replaces it by its mid-surface; the faces through the wall become the shell's edges, which you pick as Edges.`,
+        ]
+      : []),
     `Mesh with a ${trim(r.mesh.maxElementSize)} mm maximum element size${r.mesh.minElementSize === undefined ? "" : ` and a ${trim(r.mesh.minElementSize)} mm minimum`}, ${r.mesh.order === 2 ? "quadratic" : "linear"} elements.`,
     `Material ${esc(m.name)}: E = ${trim(m.young)} MPa, ν = ${trim(m.poisson)}.`,
     ...r.supports.map(
@@ -681,6 +687,9 @@ const ELEMENTS = {
     1: "linear 8-node hexahedra (P1)",
     2: "quadratic 27-node hexahedra (P2)",
   },
+  CTRIA3: {
+    1: "linear 3-node shell triangles (CST membrane, DKT bending)",
+  },
 };
 
 // A recipe case's mesh line comes from its Netgen mesh; a legacy case's from
@@ -714,6 +723,8 @@ function solverText(e, data) {
     throw new Error(
       `${e.id}: solved by the Rust module, but the published data names no build of it (fem); regenerate with bun run validate:report`,
     );
+  if (e.recipe && e.mesh.elementType === "CTRIA3")
+    return `The app's shell solver (conjugate gradients, KoFEM's Rust module, build ${esc(fem)}); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: ${engine}`;
   return fem
     ? `The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build ${esc(fem)}); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: ${engine}`
     : `KoFEM engine (MFEM), the WebAssembly build the app runs: ${engine}`;

@@ -8,7 +8,9 @@
 // came back with no supports and no loads. An entry picked as a whole CAD face
 // remembers that face (BcFaceEntry.cadFaceId), and the new mesh says which of
 // its surface triangles lie on which CAD face (surfaceFaceIds), so the entry is
-// re-resolved to the new mesh's nodes of the same face. Everything else is
+// re-resolved to the new mesh's nodes of the same face. An Edge entry picked on
+// the rim a shell collapsed a CAD face to (lib/shellRim) remembers that face
+// too, and is re-resolved to the face's rim on the new mesh. Everything else is
 // dropped and named, so the user knows exactly what to pick again:
 //   - an edge or node pick, or a flood-fill face (no CAD face behind it)
 //   - a face the new mesh does not have on its surface — e.g. a wall the mesh
@@ -63,6 +65,8 @@ function nodesByCadFace(
 }
 
 function whyNotCarried(entry: BcFaceEntry): string {
+  if (entry.cadFaceId !== undefined && entry.geometry === "edge")
+    return `CAD face ${entry.cadFaceId} is not on the new mesh's shell rim`;
   if (entry.cadFaceId !== undefined)
     return `CAD face ${entry.cadFaceId} is not on the new mesh's surface`;
   if (entry.geometry === "edge") return "an edge pick";
@@ -80,6 +84,9 @@ export function carryGroupsToMesh(
   surfaceTriangles: [number, number, number][] | null,
   surfaceFaceIds: number[] | null,
   nodeIds: Set<number>,
+  // The rim nodes of each CAD face a shell collapsed (lib/shellRim) on the new
+  // mesh.
+  rimNodesByFace: Map<number, number[]> = new Map(),
 ): CarriedGroups {
   const faceNodes =
     surfaceTriangles && surfaceFaceIds
@@ -92,9 +99,11 @@ export function carryGroupsToMesh(
     const out: BcFaceEntry[] = [];
     for (const entry of entries) {
       const nodes =
-        entry.cadFaceId !== undefined
-          ? faceNodes.get(entry.cadFaceId)
-          : undefined;
+        entry.cadFaceId === undefined
+          ? undefined
+          : entry.geometry === "edge"
+            ? rimNodesByFace.get(entry.cadFaceId)
+            : faceNodes.get(entry.cadFaceId);
       if (!nodes) {
         dropped.push(`${owner} ${entry.label} (${whyNotCarried(entry)})`);
         continue;

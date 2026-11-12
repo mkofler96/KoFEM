@@ -6,7 +6,9 @@
 // mesh, material, supports, loads, solve — is a real click or keystroke in the
 // app. Faces are picked by clicking the screen projection of the recipe's `at`
 // point, from a camera direction that shows it, and every pick is checked
-// against the CAD face that point lies on.
+// against the CAD face that point lies on. On a shell, a face through the wall
+// is not on the mesh: it collapsed to an edge of the mid-surface, which is
+// picked with Edge selection, by clicking the shell next to that edge.
 //
 // The store is only READ here (to verify picks and to compute the read-out), never
 // written. Where the app has no control for a step the recipe asks for, the
@@ -20,6 +22,7 @@ import {
   validateRecipe,
 } from "../../../examples/validation/lib/recipe.mjs";
 import { loadEngine } from "../../../examples/shell-coupling/lib.mjs";
+import { shellRimFaces, type ShellRim } from "../../src/lib/shellRim";
 
 // ── The recipe contract, typed (mirrors the JSDoc in lib/recipe.mjs) ──────────
 
@@ -121,6 +124,7 @@ interface StoreNode {
 }
 interface StoreFace {
   cadFaceId?: number;
+  geometry?: string;
   nodeIds: number[];
 }
 export interface Snapshot {
@@ -305,6 +309,20 @@ function nodesOfFaces(snap: Snapshot, cadFaceIds: number[]): number[] {
   return [...out].sort((a, b) => a - b);
 }
 
+// The CAD faces the shell idealisation collapsed onto the mesh's rim — what the
+// app's edge pick selects whole (src/lib/shellRim.ts, the app's own code).
+function snapshotRim(snap: Snapshot): ShellRim {
+  return shellRimFaces(
+    {
+      nodes: snap.nodes,
+      elements: snap.elements,
+      surfaceTriangles: snap.surfaceTriangles,
+      surfaceFaceIds: snap.surfaceFaceIds,
+    },
+    snap.tess,
+  );
+}
+
 // ── Picking a face by clicking it ─────────────────────────────────────────────
 
 type PickTarget = "split" | "boundary";
@@ -413,15 +431,14 @@ async function clickFace(
   const snap = await snapshot(page);
   const face = resolveFace(snap, at);
   // A support or load is picked on the mesh. A shell body's mesh is its
-  // mid-surface: the faces through the wall thickness (a plate's edges) are not
-  // in it, and its rim can only be picked as an Edge selection, which carries no
-  // CAD face — not the whole-face pick the recipe contract asks for.
+  // mid-surface: a face through the wall thickness (a plate's edge face) is
+  // not in it but collapsed to its rim, picked as an Edge (clickRimFace).
   if (target === "boundary" && !snap.surfaceFaceIds.includes(face.cadFaceId))
     throw new MissingUiCapability(
       `pick the face at [${at.join(", ")}] (CAD face ${face.cadFaceId}) for a support or load`,
       `the mesh has no element on that CAD face (mesh faces: ${[...new Set(snap.surfaceFaceIds)].join(", ")})` +
         (snap.elements.some((e) => e.type === "CTRIA3")
-          ? " — the shell idealisation replaced it by the mid-surface, whose rim the UI picks only as an Edge selection with no CAD face id"
+          ? ", and it is not on the rim of the shell mid-surface either"
           : ""),
     );
   const before = await pickedFaceIds(page, target);
@@ -475,6 +492,115 @@ async function clickFace(
     `click the face at [${at.join(", ")}] (CAD face ${face.cadFaceId})`,
     `no camera direction shows it unobstructed — tried ${tried.length}, e.g. ${tried.slice(0, 6).join("; ")}`,
   );
+}
+
+// Click the shell next to the edge a wall face collapsed to, in Edge pick mode,
+// so the app selects that face's whole rim. The click lands on the facet that
+// owns the rim edge nearest `at`, at its centroid, seen square onto the shell.
+async function clickRimFace(page: Page, at: Point): Promise<number> {
+  const snap = await snapshot(page);
+  const face = resolveFace(snap, at);
+  const rim = snapshotRim(snap);
+  const rimNodes = rim.nodesByFace.get(face.cadFaceId);
+  if (!rimNodes)
+    throw new Error(
+      `face at [${at.join(", ")}] (CAD face ${face.cadFaceId}) is not on the rim of the shell mid-surface`,
+    );
+  const index = new Map(snap.nodes.map((n, i) => [n.id, i]));
+  const pos = (id: number): Point => {
+    const i = index.get(id);
+    if (i === undefined) throw new Error(`rim node ${id} is not in the mesh`);
+    const n = snap.nodes[i];
+    return [n.x, n.y, n.z];
+  };
+  // The rim edge of this face nearest `at`, and the facet that owns it.
+  let best: { facet: number[]; dist: number } | null = null;
+  for (const el of snap.elements) {
+    if (el.type !== "CTRIA3") continue;
+    for (let k = 0; k < 3; k++) {
+      const [na, nb] = [el.nodeIds[k], el.nodeIds[(k + 1) % 3]];
+      const key = na < nb ? `${na},${nb}` : `${nb},${na}`;
+      if (rim.faceOfEdge.get(key) !== face.cadFaceId) continue;
+      const mid = scale(add(pos(na), pos(nb)), 0.5);
+      const dist = norm(sub(mid, at));
+      if (!best || dist < best.dist) best = { facet: el.nodeIds, dist };
+    }
+  }
+  if (!best)
+    throw new Error(`CAD face ${face.cadFaceId} has no rim edge on the shell`);
+  const [pa, pb, pc] = best.facet.map(pos);
+  const centroid = scale(add(add(pa, pb), pc), 1 / 3);
+  const normal = unit(cross(sub(pb, pa), sub(pc, pa)));
+  const before = await pickedFaceIds(page, "boundary");
+  if (before.includes(face.cadFaceId))
+    throw new Error(
+      `face at [${at.join(", ")}] (CAD face ${face.cadFaceId}) is already in the pick — the recipe names it twice`,
+    );
+  const tried: string[] = [];
+  for (const dir of viewDirections(normal).slice(0, 18)) {
+    await lookFrom(page, dir);
+    await nextFrames(page);
+    const screen = await canvasPixel(page, centroid);
+    if (!screen) {
+      tried.push(`[${dir.map((v) => v.toFixed(2))}]: off-canvas`);
+      continue;
+    }
+    await page.mouse.click(screen.x, screen.y);
+    const after = await pickedFaceIds(page, "boundary");
+    if (after.includes(face.cadFaceId)) {
+      expect(after.length, "one click adds exactly one edge").toBe(
+        before.length + 1,
+      );
+      return face.cadFaceId;
+    }
+    tried.push(
+      `[${dir.map((v) => v.toFixed(2))}]: picked ${after.filter((id) => !before.includes(id)).join(", ") || "nothing"}`,
+    );
+    if (after.join() !== before.join()) {
+      await page.getByTitle("Remove face", { exact: true }).last().click();
+      expect(await pickedFaceIds(page, "boundary")).toEqual(before);
+    }
+  }
+  throw new MissingUiCapability(
+    `pick the edge CAD face ${face.cadFaceId} collapsed to`,
+    `no click next to it selected it — ${tried.slice(0, 6).join("; ")}`,
+  );
+}
+
+// Whether a support's or load's faces are picked as Faces (on the mesh
+// surface) or as Edges (collapsed to the shell's rim): one or the other, as
+// the panel's pick mode is.
+async function pickGeometryFor(
+  page: Page,
+  faces: FaceRef[],
+  what: string,
+): Promise<"face" | "edge"> {
+  const snap = await snapshot(page);
+  if (!snap.elements.some((e) => e.type === "CTRIA3")) return "face";
+  const rim = snapshotRim(snap);
+  const onRim = faces.map((f) =>
+    rim.nodesByFace.has(resolveFace(snap, f.at).cadFaceId),
+  );
+  if (onRim.every((v) => v)) return "edge";
+  if (onRim.some((v) => v))
+    throw new MissingUiCapability(
+      `pick both faces and edges for ${what}`,
+      "the panel picks Faces or Edges in one selection, not both",
+    );
+  return "face";
+}
+
+// Pick a support's or load's faces in the open panel.
+async function pickBoundary(
+  page: Page,
+  faces: FaceRef[],
+  what: string,
+): Promise<void> {
+  const geometry = await pickGeometryFor(page, faces, what);
+  if (geometry === "edge") {
+    await page.getByTestId("pick-geometry-edge").click();
+    for (const face of faces) await clickRimFace(page, face.at);
+  } else for (const face of faces) await clickFace(page, face.at, "boundary");
 }
 
 // ── The steps ─────────────────────────────────────────────────────────────────
@@ -643,7 +769,7 @@ const DOF_LABELS = ["Ux", "Uy", "Uz", "Rx", "Ry", "Rz"];
 
 async function addSupport(page: Page, support: Support): Promise<void> {
   await addBoundary(page, "bc");
-  for (const face of support.faces) await clickFace(page, face.at, "boundary");
+  await pickBoundary(page, support.faces, `"${support.name}"`);
   for (let dof = 0; dof < DOF_LABELS.length; dof++) {
     const box = page.getByLabel(DOF_LABELS[dof], { exact: true });
     const wanted = support.dofs.includes(dof);
@@ -685,7 +811,7 @@ function loadVector(load: Load): Point {
 
 async function addLoad(page: Page, load: Load): Promise<void> {
   await addBoundary(page, "load");
-  for (const face of load.faces) await clickFace(page, face.at, "boundary");
+  await pickBoundary(page, load.faces, `"${load.name}"`);
   await page
     .getByText("Type", { exact: true })
     .locator("..")
@@ -779,16 +905,22 @@ export async function buildByHand(
 export interface FaceCheck {
   cadFaceId: number | null;
   // The entry's nodes are exactly the current mesh's nodes of its CAD face —
-  // what a fresh pick of that face gives.
+  // what a fresh pick of that face gives (an Edge entry: the face's rim on
+  // the shell).
   onMesh: boolean;
 }
 
 export function groupFaces(snap: Snapshot, faces: StoreFace[]): FaceCheck[] {
+  const rim = faces.some((f) => f.geometry === "edge")
+    ? snapshotRim(snap)
+    : null;
   return faces.map((f) => {
     if (f.cadFaceId === undefined) return { cadFaceId: null, onMesh: false };
-    const expected = nodesOfFaces(snap, [f.cadFaceId])
-      .map((i) => snap.nodes[i].id)
-      .join(",");
+    const expected = (
+      rim && f.geometry === "edge"
+        ? (rim.nodesByFace.get(f.cadFaceId) ?? [])
+        : nodesOfFaces(snap, [f.cadFaceId]).map((i) => snap.nodes[i].id)
+    ).join(",");
     return {
       cadFaceId: f.cadFaceId,
       onMesh: [...f.nodeIds].sort((a, b) => a - b).join(",") === expected,
