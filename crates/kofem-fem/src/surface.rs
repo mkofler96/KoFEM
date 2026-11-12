@@ -290,19 +290,24 @@ impl BoundaryFaces {
                 area: total_area,
             });
         }
-        // Force per unit area along the outward unit normal `unit`.
-        let traction = |unit: [f64; 3]| -> [f64; 3] {
+        // The load on a patch with outward area vector `area_vector` (normal ×
+        // area) and area `area`.
+        let patch_force = |area_vector: [f64; 3], area: f64| -> [f64; 3] {
             match kind {
-                SurfaceLoadKind::Pressure(pressure) => unit.map(|component| -pressure * component),
-                SurfaceLoadKind::Traction(traction) => traction,
-                SurfaceLoadKind::Force(force) => force.map(|component| component / total_area),
+                // −p·n·A = −p·(outward area vector).
+                SurfaceLoadKind::Pressure(pressure) => {
+                    area_vector.map(|component| -pressure * component)
+                }
+                SurfaceLoadKind::Traction(traction) => traction.map(|component| component * area),
+                SurfaceLoadKind::Force(force) => {
+                    force.map(|component| component * area / total_area)
+                }
             }
         };
         for (&index, area_vector) in matched_triangles.iter().zip(&area_vectors) {
             let area = dot(*area_vector, *area_vector).sqrt();
             // Force on the whole face, a third to each loaded node.
-            let face_force = traction(area_vector.map(|component| component / area))
-                .map(|component| component * area);
+            let face_force = patch_force(*area_vector, area);
             for node in self.triangles[index].loaded {
                 for axis in 0..3 {
                     forces[3 * node as usize + axis] += face_force[axis] / 3.0;
@@ -320,10 +325,9 @@ impl BoundaryFaces {
                 &face.nodes[..4]
             };
             for &(point, weight) in &rule {
-                let normal = patch.normal(point);
-                let scale = dot(normal, normal).sqrt();
-                let density = traction(normal.map(|component| component / scale))
-                    .map(|component| component * scale * weight);
+                // The area element of this point, as an outward area vector.
+                let element = patch.normal(point).map(|component| component * weight);
+                let density = patch_force(element, dot(element, element).sqrt());
                 for (&node, shape) in nodes.iter().zip(quad_face_shape(quadratic, point)) {
                     for axis in 0..3 {
                         forces[3 * node as usize + axis] += shape * density[axis];
