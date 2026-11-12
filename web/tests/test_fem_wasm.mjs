@@ -20,7 +20,8 @@
 //
 // Hexahedra (8- and 27-node) follow, on a distorted hex cantilever and on a
 // mixed one (tets at the root, hexes at the tip, two materials), loaded by a
-// total force on quadrilateral faces and a pressure on warped ones.
+// total force on quadrilateral faces and a pressure on warped ones, and on a
+// bar whose tip hex is collapsed into a wedge.
 //
 // Usage:  bash ../scripts/build-fem-wasm.sh && bun tests/test_fem_wasm.mjs
 //         (from web/; the MFEM engine comes from scripts/fetch-wasm-engine.sh)
@@ -484,6 +485,9 @@ function compareSolid(name, mesh, order, materials, bcs) {
     for (let component = 0; component < 3; component++)
       dofs.push(3 * vertex + component);
   const loads = new Float64Array(solid.dofCount);
+  for (const { vertex, force } of bcs.point_loads)
+    for (let component = 0; component < 3; component++)
+      loads[3 * vertex + component] += force[component];
   bcs.surface_loads.forEach((load, index) => {
     const triangles = load.faces.filter((face) => face.length === 3);
     const quads = load.faces.filter((face) => face.length === 4);
@@ -633,6 +637,50 @@ for (const order of [1, 2])
     hexLoads(mixedTop),
   );
 
+// A wedge written as a hex: the tip hex of a 4 × 1 × 1 bar has its top x = L
+// edge collapsed onto the x = L − 10 one (corner 5 := 4, 6 := 7). Its
+// Jacobian vanishes only along that edge, never at a Gauss point, so MFEM
+// solves it and Rust must too. Root clamped, tip pulled down at its two
+// bottom corners.
+const bar = boxHexMesh(40, 10, 10, 4, 1, 1);
+const barHexes = bar.hexahedra.map((hex) => [...hex]);
+const tipHex = barHexes[barHexes.length - 1];
+const loadedCorners = [tipHex[1], tipHex[2]];
+tipHex[5] = tipHex[4];
+tipHex[6] = tipHex[7];
+const wedgeBar = {
+  points: bar.vertices,
+  vertices: new Float64Array(bar.vertices.flat()),
+  tets: [],
+  hexes: barHexes.flat(),
+  attributes: barHexes.map(() => 1),
+};
+const wedgeLoads = {
+  fixed_vertices: bar.vertices.flatMap(([x], vertex) =>
+    Math.abs(x) < 1e-9 ? [vertex] : [],
+  ),
+  point_loads: loadedCorners.map((vertex) => ({ vertex, force: [0, 0, -10] })),
+  surface_loads: [],
+};
+// MFEM's peak displacement on this bar, as measured when the case was set up.
+for (const [order, peak] of [
+  [1, 1.6256e-3],
+  [2, 2.7492e-3],
+]) {
+  const reference = compareSolid(
+    "collapsed (wedge) tip hex",
+    wedgeBar,
+    order,
+    [steel],
+    wedgeLoads,
+  );
+  const largest = Math.max(...Array.from(reference.displacements, Math.abs));
+  assert(
+    Math.abs(largest - peak) < 1e-4 * peak,
+    `collapsed tip hex, order ${order}: MFEM max |u| ${largest}, expected ${peak}`,
+  );
+}
+
 // Malformed hexahedra are refused with the reason.
 let flatHex = "";
 try {
@@ -648,7 +696,7 @@ try {
   flatHex = String(error);
 }
 assert(
-  /hexahedron 0 is degenerate or folded/.test(flatHex),
+  /hexahedron 0 is flat or folded/.test(flatHex),
   `a flat hex must be refused, got "${flatHex}"`,
 );
 

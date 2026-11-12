@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-use crate::element::{hex8_reference_gradients, hex_jacobian, HEX_CORNERS};
+use crate::element::{
+    cube_rule, hex8_reference_gradients, hex_jacobian, HEX27_RULE_POINTS, HEX8_RULE_POINTS,
+};
 use crate::error::FemError;
 use crate::material::Isotropic;
 
@@ -234,7 +236,10 @@ impl TetMesh {
                     count: materials.len(),
                 });
             }
-            if !hex_is_valid(&ids.map(|vertex| points[vertex as usize])) {
+            if !hex_is_valid(
+                &ids.map(|vertex| points[vertex as usize]),
+                ElementOrder::Linear,
+            ) {
                 return Err(FemError::DegenerateHex { hex });
             }
         }
@@ -293,6 +298,12 @@ impl TetMesh {
     }
 
     fn into_quadratic(self) -> Result<Self, FemError> {
+        // The 27-node rule samples the hex at other points than the 8-node one.
+        if let Some(hex) = (0..self.hexes.len())
+            .find(|&hex| !hex_is_valid(&self.hex_corners(hex), ElementOrder::Quadratic))
+        {
+            return Err(FemError::DegenerateHex { hex });
+        }
         let sorted_pair = |first: u32, second: u32| [first.min(second), first.max(second)];
         let mut edges: Vec<[u32; 2]> = self
             .tets
@@ -551,15 +562,27 @@ fn mean_point(points: &[[f64; 3]], corners: &[u32]) -> [f64; 3] {
     sum.map(|total| total / count)
 }
 
-/// Whether a hex is a proper element: the Jacobian of its trilinear map has
-/// the same sign at all eight corners and the centre, and is not vanishingly
-/// small anywhere there. Either sign is accepted (a mirrored hex is valid).
-fn hex_is_valid(corners: &[[f64; 3]; 8]) -> bool {
+/// Whether a hex can be integrated at `order`: the Jacobian of its trilinear
+/// map has one sign, and is not vanishingly small, at every point the element
+/// is evaluated at — the Gauss points of its stiffness rule and the centre,
+/// where its stress is recovered. Either sign is accepted (a mirrored hex is
+/// valid). Corners are not checked: a wedge written as a hex with a collapsed
+/// edge, or a hex with a slightly non-convex face, has a vanishing or turned
+/// Jacobian only there, and integrates (in MFEM too) like any other element.
+fn hex_is_valid(corners: &[[f64; 3]; 8], order: ElementOrder) -> bool {
     let threshold = degenerate_volume(corners);
     let mut signs = [0_i8; 2];
+    let points_per_axis = match order {
+        ElementOrder::Linear => HEX8_RULE_POINTS,
+        ElementOrder::Quadratic => HEX27_RULE_POINTS,
+    };
+    let rule = cube_rule(points_per_axis);
     let centre = [0.5; 3];
-    let reference = HEX_CORNERS.map(|corner| corner.map(f64::from));
-    for point in reference.iter().copied().chain(std::iter::once(centre)) {
+    for point in rule
+        .iter()
+        .map(|(point, _)| *point)
+        .chain(std::iter::once(centre))
+    {
         let jacobian = hex_jacobian(corners, &hex8_reference_gradients(point));
         let det = determinant(&jacobian);
         if det.abs() <= threshold {

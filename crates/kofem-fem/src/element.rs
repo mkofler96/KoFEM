@@ -373,16 +373,32 @@ fn hex_stiffness<const N: usize, const DOFS: usize>(
     stiffness
 }
 
+/// Gauss points per axis of the 8-node hex stiffness rule (MFEM's order 4).
+pub const HEX8_RULE_POINTS: usize = 3;
+
+/// Gauss points per axis of the 27-node hex stiffness rule (MFEM's order 6).
+pub const HEX27_RULE_POINTS: usize = 4;
+
 /// Stiffness of an 8-node hex with corners `corners` (3³-point rule).
 #[must_use]
 pub fn hex8_stiffness(corners: &[[f64; 3]; 8], material: &Isotropic) -> Hex8Stiffness {
-    hex_stiffness(corners, material, 3, hex8_reference_gradients)
+    hex_stiffness(
+        corners,
+        material,
+        HEX8_RULE_POINTS,
+        hex8_reference_gradients,
+    )
 }
 
 /// Stiffness of a 27-node hex with corners `corners` (4³-point rule).
 #[must_use]
 pub fn hex27_stiffness(corners: &[[f64; 3]; 8], material: &Isotropic) -> Hex27Stiffness {
-    hex_stiffness(corners, material, 4, hex27_reference_gradients)
+    hex_stiffness(
+        corners,
+        material,
+        HEX27_RULE_POINTS,
+        hex27_reference_gradients,
+    )
 }
 
 /// Values of the shape functions of a quadrilateral face at `point` of the

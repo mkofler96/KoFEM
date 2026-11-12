@@ -903,3 +903,71 @@ fn malformed_hexes_are_refused_with_their_reason() {
         Some(FemError::EmptyMesh)
     );
 }
+
+/// Hexes whose Jacobian vanishes or turns only at a corner — a wedge written
+/// as a hex with one edge collapsed, a hex with a slightly non-convex face —
+/// are integrable: every point the element is integrated (and its stress
+/// recovered) at has a positive Jacobian, so MFEM solves them and so must
+/// this solver. A uniform strain stores the exact energy of their volume.
+#[test]
+fn collapsed_and_slightly_non_convex_hexes_are_accepted() {
+    let box_corners = [
+        [0.0, 0.0, 0.0],
+        [2.0, 0.0, 0.0],
+        [2.0, 1.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 3.0],
+        [2.0, 0.0, 3.0],
+        [2.0, 1.0, 3.0],
+        [0.0, 1.0, 3.0],
+    ];
+    // The top face's x = 2 edge collapsed onto its x = 0 edge: a wedge of
+    // half the box, 2·1·3 / 2 = 3.
+    let wedge: Vec<u32> = vec![0, 1, 2, 3, 4, 4, 7, 7];
+    // Corner 2 of the bottom face pushed inward, past the diagonal 1–3: the
+    // face turns non-convex there, so the Jacobian at that corner is negative.
+    let mut dented = box_corners;
+    dented[2] = [1.3, 0.3, 0.0];
+    let material = steel();
+    let (lambda, mu) = material.lame();
+    let strain = 1e-3;
+    for order in [ElementOrder::Linear, ElementOrder::Quadratic] {
+        let mesh = TetMesh::with_hexahedra(&flat(&box_corners), &[], &wedge, &[0], vec![steel()])
+            .and_then(|mesh| mesh.with_order(order))
+            .expect("a collapsed hex is a proper element");
+        let mut stretch = vec![0.0; mesh.dof_count()];
+        for (node, point) in mesh.node_coordinates().iter().enumerate() {
+            stretch[3 * node] = strain * point[0];
+        }
+        let stored = energy(&assemble_stiffness(&mesh), &stretch);
+        let expected = (lambda + 2.0 * mu) * strain * strain * 3.0 / 2.0;
+        assert!(
+            (stored - expected).abs() < 1e-12 * expected,
+            "{order:?}: wedge energy {stored} vs {expected}"
+        );
+        let stresses = von_mises(&mesh, &stretch).expect("fits");
+        assert!(stresses[0].is_finite() && stresses[0] > 0.0);
+
+        let mesh = TetMesh::with_hexahedra(
+            &flat(&dented),
+            &[],
+            &(0..8).collect::<Vec<u32>>(),
+            &[0],
+            vec![steel()],
+        )
+        .and_then(|mesh| mesh.with_order(order))
+        .expect("a slightly non-convex hex is a proper element");
+        let stiffness = assemble_stiffness(&mesh);
+        // A stretch stores energy; a rigid translation of similar size none.
+        let mut stretch = vec![0.0; mesh.dof_count()];
+        for (node, point) in mesh.node_coordinates().iter().enumerate() {
+            stretch[3 * node] = point[0];
+        }
+        let stretched = energy(&stiffness, &stretch);
+        assert!(stretched > 0.0);
+        let shift: Vec<f64> = (0..mesh.dof_count())
+            .map(|dof| [1.0, -2.0, 0.5][dof % 3])
+            .collect();
+        assert!(energy(&stiffness, &shift).abs() < 1e-12 * stretched);
+    }
+}

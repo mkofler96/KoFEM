@@ -36,8 +36,8 @@ pub enum FemError {
         count: usize,
     },
     #[error(
-        "hexahedron {hex} is degenerate or folded: its volume vanishes or turns inside out at a \
-         corner — check the order of its eight vertices (bottom face, then the top face above it)"
+        "hexahedron {hex} is flat or folded: its volume vanishes or turns inside out within the \
+         element, so it has no stiffness to integrate"
     )]
     DegenerateHex { hex: usize },
     #[error("hexahedron {hex} uses material {material}, but only {count} materials are defined")]
