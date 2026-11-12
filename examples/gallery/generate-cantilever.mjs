@@ -266,14 +266,15 @@ function buildVtu() {
     surfaceTriangles: chunk(surfTri, 3),
     surfaceFaceIds: surfFace,
     elementOrder: ELEMENT_ORDER,
-    // The tip deflection, read as the mean Uy of the loaded end face.
+    // The tip deflection, read as the mean Uy of the loaded end face's nodes.
     handCheck: {
       quantity: "Tip deflection",
-      probe: { loadGroupId: 1, component: 1 },
+      probe: { kind: "displacement", component: 1, cadFaceIds: [loadFace] },
       formula: "−P·L³ / (3·E·I)",
       reference: REFERENCE,
+      unit: "mm",
       assumes: {
-        loads: [{ force: [0, -P, 0], cadFaceIds: [loadFace] }],
+        loads: [{ kind: "force", force: [0, -P, 0], cadFaceIds: [loadFace] }],
         supports: [{ dofs: [0, 1, 2], value: 0, cadFaceIds: [fixedFace] }],
         young: STEEL.young,
       },
