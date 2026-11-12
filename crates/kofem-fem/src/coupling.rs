@@ -19,6 +19,12 @@
 //!   reference node as a rigid body, `u_i = u_R + θ_R × r_i`. The point stays
 //!   independent, so it can be fixed, loaded or tied onward; the coupled
 //!   surface becomes rigid.
+//! * Relaxed MPC: the shell-to-solid seam variant of the distributing
+//!   coupling (Lu, Zhang & Yang 2023) — a shell node follows the
+//!   distance-weighted centroid of its solid patch and a relaxed
+//!   least-squares rotation of it, so the tie stays local.
+//! * Shell footprint: a solid node on the footprint of a shell edge follows
+//!   that edge with Kirchhoff section kinematics, `u = Σ Nᵢ (uᵢ + θᵢ × r)`.
 
 use std::collections::BTreeMap;
 
@@ -32,7 +38,7 @@ pub const DOFS_PER_NODE: usize = 6;
 pub const ALL_DOFS: u8 = 0x3f;
 
 /// How a coupling joins its reference node to its coupled nodes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CouplingKind {
     /// RBE3: the reference node follows the weighted mean of the coupled nodes.
     Distributing,
@@ -41,6 +47,21 @@ pub enum CouplingKind {
     /// coupled node. A rotation bit only acts on a coupled node that has
     /// rotational DOFs (another reference node); a solid node has none.
     Kinematic { dof_mask: u8 },
+    /// Relaxed shell-to-solid MPC (Lu, Zhang & Yang, "A Relaxed MPC Method
+    /// for Non-rigid Shell to Solid Coupling", J. Phys.: Conf. Ser. 2528
+    /// 012064, 2023), generalised to a non-conforming seam: the reference
+    /// (shell) node's translations follow the 1/(d² + ε²)-weighted centroid
+    /// of its coupled solid nodes, and its rotations `relaxation` times their
+    /// weighted least-squares rotation about it. Anchoring on the centroid
+    /// rather than the nearest node keeps an equidistant pair of wall-face
+    /// nodes from welding the mid-surface to one face (KOF-212).
+    RelaxedMpc { relaxation: f64 },
+    /// Shell footprint: the reference node is a solid node on a shell edge's
+    /// footprint, and its translations follow the two edge nodes (the
+    /// coupled nodes, with partition-of-unity `weights`) as a Kirchhoff
+    /// section, `u = Σ wᵢ (uᵢ + θᵢ × (x − Σ wⱼ xⱼ))`. Its rotations are not
+    /// tied: a solid node has none.
+    ShellFootprint,
 }
 
 /// One coupling over node indices.
@@ -129,6 +150,12 @@ impl CouplingConstraints {
                 CouplingKind::Distributing => {
                     constraints.add_distributing(points, coupling, &fail)?;
                 }
+                CouplingKind::RelaxedMpc { relaxation } => {
+                    constraints.add_relaxed_mpc(points, coupling, relaxation, &fail)?;
+                }
+                CouplingKind::ShellFootprint => {
+                    constraints.add_shell_footprint(points, coupling, has_rotation, &fail)?;
+                }
             }
         }
         Ok(constraints)
@@ -191,34 +218,8 @@ impl CouplingConstraints {
         coupling: &Coupling,
         fail: &impl Fn(String) -> FemError,
     ) -> Result<(), FemError> {
-        let count = coupling.nodes.len();
-        if count < 3 {
-            return Err(fail(format!(
-                "a distributing coupling needs at least 3 coupled nodes, got {count}"
-            )));
-        }
-        let weights = if coupling.weights.is_empty() {
-            vec![1.0; count]
-        } else if coupling.weights.len() == count {
-            coupling.weights.clone()
-        } else {
-            return Err(fail(format!(
-                "{} weights for {count} coupled nodes",
-                coupling.weights.len()
-            )));
-        };
-        if let Some(&weight) = weights
-            .iter()
-            .find(|&&weight| !(weight.is_finite() && weight >= 0.0))
-        {
-            return Err(fail(format!(
-                "weights must be finite and non-negative, got {weight}"
-            )));
-        }
+        let weights = patch_weights(coupling, "distributing", fail)?;
         let total: f64 = weights.iter().sum();
-        if total <= 0.0 {
-            return Err(fail("the weights sum to zero".into()));
-        }
         let origin = points[coupling.reference];
         let offsets: Vec<[f64; 3]> = coupling
             .nodes
@@ -270,6 +271,155 @@ impl CouplingConstraints {
             }
         }
         for (component, row) in rows.into_iter().enumerate() {
+            self.add_row(coupling.reference, component, row)?;
+        }
+        Ok(())
+    }
+
+    /// The relaxed shell-to-solid MPC (see [`CouplingKind::RelaxedMpc`]),
+    /// as `coupling_constraints.cpp` builds it.
+    fn add_relaxed_mpc(
+        &mut self,
+        points: &[[f64; 3]],
+        coupling: &Coupling,
+        relaxation: f64,
+        fail: &impl Fn(String) -> FemError,
+    ) -> Result<(), FemError> {
+        if !relaxation.is_finite() {
+            return Err(fail(format!(
+                "the relaxation must be finite, got {relaxation}"
+            )));
+        }
+        let mut weights = patch_weights(coupling, "shell-to-solid MPC", fail)?;
+        let origin = points[coupling.reference];
+        let radius = coupling
+            .nodes
+            .iter()
+            .map(|&node| norm(sub(points[node], origin)))
+            .fold(0.0, f64::max);
+        if radius <= 0.0 {
+            return Err(fail(format!(
+                "every coupled node sits on the reference point {}, so the patch has no extent \
+                 and no rotation can be measured from it",
+                coupling.reference
+            )));
+        }
+        // ε softens the kernel at d → 0 and is a fraction of the patch's own
+        // radius, so the weighting is scale-free.
+        let softening = (0.05 * radius).powi(2);
+        for (weight, &node) in weights.iter_mut().zip(&coupling.nodes) {
+            let offset = sub(points[node], origin);
+            *weight /= dot(offset, offset) + softening;
+        }
+        let total: f64 = weights.iter().sum();
+        if !(total.is_finite() && total > 0.0) {
+            return Err(fail("the weights sum to zero".into()));
+        }
+        // Anchor on the weighted centroid: Σ wᵢ rᵢ = 0 about it, which drops
+        // the translation out of the least-squares rotation.
+        let mut anchor = [0.0; 3];
+        for (&weight, &node) in weights.iter().zip(&coupling.nodes) {
+            for (axis, value) in anchor.iter_mut().enumerate() {
+                *value += weight / total * points[node][axis];
+            }
+        }
+        let offsets: Vec<[f64; 3]> = coupling
+            .nodes
+            .iter()
+            .map(|&node| sub(points[node], anchor))
+            .collect();
+        let mut inertia = [[0.0; 3]; 3];
+        for (offset, &weight) in offsets.iter().zip(&weights) {
+            let squared = dot(*offset, *offset);
+            for row in 0..3 {
+                for column in 0..3 {
+                    let identity = if row == column { squared } else { 0.0 };
+                    inertia[row][column] += weight * (identity - offset[row] * offset[column]);
+                }
+            }
+        }
+        let inverse = invert(&inertia).ok_or_else(|| {
+            fail(
+                "the coupled solid nodes lie on one line, so no rotation can be measured from \
+                 them"
+                    .into(),
+            )
+        })?;
+        let mut rows = <[Vec<(usize, f64)>; DOFS_PER_NODE]>::default();
+        for ((&node, offset), &weight) in coupling.nodes.iter().zip(&offsets).zip(&weights) {
+            // U_R = Σ (wᵢ/W) uᵢ.
+            for (component, row) in rows.iter_mut().take(3).enumerate() {
+                row.push((DOFS_PER_NODE * node + component, weight / total));
+            }
+            // Θ_R = ψ · H⁻¹ · Σ wᵢ [rᵢ]× uᵢ.
+            let map = multiply(&inverse, &skew(*offset));
+            for (axis, row) in rows.iter_mut().skip(3).enumerate() {
+                for (component, &coefficient) in map[axis].iter().enumerate() {
+                    row.push((
+                        DOFS_PER_NODE * node + component,
+                        relaxation * weight * coefficient,
+                    ));
+                }
+            }
+        }
+        for (component, row) in rows.into_iter().enumerate() {
+            self.add_row(coupling.reference, component, row)?;
+        }
+        Ok(())
+    }
+
+    /// The shell footprint (see [`CouplingKind::ShellFootprint`]), as
+    /// `coupling_constraints.cpp` builds it.
+    fn add_shell_footprint(
+        &mut self,
+        points: &[[f64; 3]],
+        coupling: &Coupling,
+        has_rotation: &[bool],
+        fail: &impl Fn(String) -> FemError,
+    ) -> Result<(), FemError> {
+        if coupling.nodes.len() != 2 || coupling.weights.len() != 2 {
+            return Err(fail(format!(
+                "a shell footprint needs two shell edge nodes and two weights, got {} and {}",
+                coupling.nodes.len(),
+                coupling.weights.len()
+            )));
+        }
+        let mut anchor = [0.0; 3];
+        let mut total = 0.0;
+        for (&node, &weight) in coupling.nodes.iter().zip(&coupling.weights) {
+            if !has_rotation[node] {
+                return Err(fail(format!(
+                    "edge node {node} is not a shell node, so it has no rotation for the \
+                     section to follow"
+                )));
+            }
+            if !(weight.is_finite() && (0.0..=1.0).contains(&weight)) {
+                return Err(fail(format!(
+                    "footprint weights must lie in [0, 1], got {weight}"
+                )));
+            }
+            total += weight;
+            for (axis, value) in anchor.iter_mut().enumerate() {
+                *value += weight * points[node][axis];
+            }
+        }
+        if (total - 1.0).abs() > 1e-10 {
+            return Err(fail(format!(
+                "footprint weights must sum to one, got {total}"
+            )));
+        }
+        // u_S = Σ Nᵢ (uᵢ + θᵢ × r) = Σ Nᵢ (uᵢ − [r]× θᵢ): partition of unity
+        // and interpolation of the anchor reproduce rigid motion, and the
+        // transpose transfers the same resultant and moment.
+        let rotation = skew(sub(points[coupling.reference], anchor));
+        for (component, rotation_row) in rotation.iter().enumerate() {
+            let mut row = Vec::with_capacity(8);
+            for (&node, &weight) in coupling.nodes.iter().zip(&coupling.weights) {
+                row.push((DOFS_PER_NODE * node + component, weight));
+                for (axis, &entry) in rotation_row.iter().enumerate() {
+                    row.push((DOFS_PER_NODE * node + 3 + axis, -weight * entry));
+                }
+            }
             self.add_row(coupling.reference, component, row)?;
         }
         Ok(())
@@ -383,6 +533,43 @@ impl CouplingConstraints {
     }
 }
 
+/// The weights of a patch coupling (distributing or relaxed MPC): one per
+/// coupled node, finite and non-negative, not all zero; equal when absent.
+fn patch_weights(
+    coupling: &Coupling,
+    what: &str,
+    fail: &impl Fn(String) -> FemError,
+) -> Result<Vec<f64>, FemError> {
+    let count = coupling.nodes.len();
+    if count < 3 {
+        return Err(fail(format!(
+            "a {what} coupling needs at least 3 coupled nodes, got {count}"
+        )));
+    }
+    let weights = if coupling.weights.is_empty() {
+        vec![1.0; count]
+    } else if coupling.weights.len() == count {
+        coupling.weights.clone()
+    } else {
+        return Err(fail(format!(
+            "{} weights for {count} coupled nodes",
+            coupling.weights.len()
+        )));
+    };
+    if let Some(&weight) = weights
+        .iter()
+        .find(|&&weight| !(weight.is_finite() && weight >= 0.0))
+    {
+        return Err(fail(format!(
+            "weights must be finite and non-negative, got {weight}"
+        )));
+    }
+    if weights.iter().sum::<f64>() <= 0.0 {
+        return Err(fail("the weights sum to zero".into()));
+    }
+    Ok(weights)
+}
+
 fn to_u32(index: usize) -> u32 {
     #[allow(
         clippy::cast_possible_truncation,
@@ -398,6 +585,10 @@ fn sub(lhs: [f64; 3], rhs: [f64; 3]) -> [f64; 3] {
 
 fn dot(lhs: [f64; 3], rhs: [f64; 3]) -> f64 {
     lhs[0] * rhs[0] + lhs[1] * rhs[1] + lhs[2] * rhs[2]
+}
+
+fn norm(vector: [f64; 3]) -> f64 {
+    dot(vector, vector).sqrt()
 }
 
 /// [a]×, so that [a]×·b = a × b.

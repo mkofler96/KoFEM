@@ -35,8 +35,9 @@ pub use assembly::assemble_stiffness;
 pub use cg::{solve_pcg, solve_pcg_with, CgOutcome, CgSettings, PcgRun, PcgStatus, StoppingRule};
 pub use constraints::{apply_dirichlet, Dirichlet};
 pub use coupled_static::{
-    prepare_coupled_static, solve_coupled_static, CoupledReduction, CoupledSolution,
-    PreparedCoupled,
+    prepare_coupled_static, prepare_mixed_static, solve_coupled_static, solve_mixed_static,
+    AppliedPreconditioner, CoupledReduction, CoupledSolution, MixedPreconditioner, PreparedCoupled,
+    PreparedMixed, ShellPart,
 };
 pub use coupling::{Coupling, CouplingConstraints, CouplingKind, ALL_DOFS, DOFS_PER_NODE};
 pub use error::FemError;

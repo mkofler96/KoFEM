@@ -689,6 +689,29 @@ fn couplings_that_depend_on_each_other_are_a_cycle() {
 }
 
 #[test]
+fn shell_to_solid_couplings_need_shell_elements() {
+    // The relaxed MPC and the shell footprint tie a shell to a solid; an
+    // all-solid model has no shell for them to tie (the mixed solve does).
+    let (model, point, tip, fixed) = tip_coupled_cantilever();
+    for kind in [
+        CouplingKind::RelaxedMpc { relaxation: 1.0 },
+        CouplingKind::ShellFootprint,
+    ] {
+        let coupling = Coupling {
+            reference: point,
+            nodes: tip.clone(),
+            weights: Vec::new(),
+            kind,
+        };
+        let error = expect_error(&model, &[coupling], &fixed, &vec![0.0; model.dof_count()]);
+        assert!(
+            matches!(error, FemError::Coupling { coupling: 0, ref reason } if reason.contains("shell")),
+            "{error}"
+        );
+    }
+}
+
+#[test]
 fn couplings_need_a_linear_mesh() {
     let (model, point, tip, fixed) = tip_coupled_cantilever();
     let quadratic = model

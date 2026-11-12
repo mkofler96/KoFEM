@@ -111,7 +111,7 @@ pub enum FemError {
     },
     #[error(
         "node {node} has no rotational degree of freedom, but a {what} acts on its DOF \
-         {component} — only a coupling reference point carries rotations"
+         {component} — only shell nodes and coupling reference points carry rotations"
     )]
     RotationWithoutDof {
         node: usize,

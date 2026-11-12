@@ -132,6 +132,11 @@ impl ShellMesh {
         self.vertices.len()
     }
 
+    #[must_use]
+    pub fn vertices(&self) -> &[[f64; 3]] {
+        &self.vertices
+    }
+
     /// Whether any facet uses `vertex`.
     #[must_use]
     pub fn is_used(&self, vertex: usize) -> bool {
