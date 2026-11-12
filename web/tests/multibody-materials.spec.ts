@@ -92,7 +92,7 @@ const drawnFraction = (page: import("@playwright/test").Page) =>
     return opaque / (copy.width * copy.height);
   });
 
-// Playwright runs from web/; test_files sits one level up (see screenshot.spec).
+// Playwright runs from web/; test_files sits one level up.
 const TWO_BOXES = path.resolve("..", "test_files", "two_boxes.stp");
 // A solid base plus a 2 mm fin: marked Shell, the fin is idealised at mesh time, so
 // the meshed model carries a derived PSHELL property alongside the two CAD

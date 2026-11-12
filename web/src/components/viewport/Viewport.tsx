@@ -47,7 +47,12 @@ export function Viewport() {
       <EmptyState />
       <SampleGuide />
 
+      {/* Render on demand, not every frame: nothing in the scene animates on
+          its own. R3F redraws on prop changes, OrbitControls and the gizmo
+          ask for frames themselves, and code that moves the camera directly
+          calls invalidate(). Continuous rendering kept a CPU core busy. */}
       <Canvas
+        frameloop="demand"
         camera={{ position: [5, 5, 5], fov: 45 }}
         gl={{ antialias: true, preserveDrawingBuffer: true }}
         style={{

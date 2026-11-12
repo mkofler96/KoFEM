@@ -580,8 +580,10 @@ test.beforeAll(async () => {
     .filter((file) => file.endsWith(".vtu"))
     .map((file) => ({ id: file.slice(0, -".vtu".length) }));
 });
-test("capture screenshots of all examples", async ({ page }) => {
-  // Open the app and import the STEP file via the Geometry panel.
+// Regenerates the README screenshots (web/screenshots/). On demand only —
+// `bun run capture:readme` — so a routine run does not rewrite them;
+// examples-page.spec.ts already opens every example in the app.
+test("capture screenshots of all examples @capture", async ({ page }) => {
   for (const analysis of EXAMPLE_ANALYSES) {
     await page.goto(`/app/?example=${analysis.id}`);
 

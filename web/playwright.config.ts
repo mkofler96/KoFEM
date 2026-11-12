@@ -14,6 +14,10 @@ export default defineConfig({
   testDir: "./tests",
   outputDir: "./playwright-results",
   timeout: 30_000,
+  // Schedule tests one by one, not file by file. CI splits the suite with
+  // --shard, which cuts by test count: with whole files, one shard drew the
+  // slow solver files and ran ~3x longer than the lightest one.
+  fullyParallel: true,
   // Default suite runs everything except the on-demand figure capture (tagged
   // @capture), which writes committed PNGs and would otherwise churn them on a
   // routine `bun run test`. Run it with `bun run capture:tutorial`.

@@ -1,9 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { test, expect } from "./coverage";
-import path from "path";
-import fs from "fs";
+import { test } from "./coverage";
 import { fixturePath, importStep } from "./fixtures/app";
 
 interface Geom {
@@ -24,19 +22,12 @@ const NIST_GEOMETRIES: Geom[] = [
 
 const ALL_GEOMETRIES: Geom[] = [...GEOMETRIES, ...NIST_GEOMETRIES];
 
-const OUT_DIR = path.join("playwright-results", "screenshots", "report");
-
-test.describe("Mesh capabilities report", () => {
-  test.beforeAll(() => {
-    fs.mkdirSync(OUT_DIR, { recursive: true });
-  });
-
+// Real CAD files, including two NIST AP242 test cases, import without error.
+test.describe("STEP import of real CAD files", () => {
   for (const geom of ALL_GEOMETRIES) {
     test(geom.label, async ({ page }) => {
       test.setTimeout(90_000); // complex STEP imports can take >20 s in CI
       const stepFile = fixturePath(geom.file);
-      const t0 = Date.now();
-      const elapsed = () => `+${((Date.now() - t0) / 1000).toFixed(1)}s`;
 
       page.on("console", (msg) => {
         if (msg.type() === "error")
@@ -46,54 +37,16 @@ test.describe("Mesh capabilities report", () => {
         console.error(`[${geom.label}] page exception: ${err.message}`),
       );
 
-      console.log(`[${geom.label}] importing ${stepFile}`);
-      // Open the app and import the STEP file. Complex geometries can take
-      // >10 s in CI.
+      // Complex geometries can take >10 s in CI.
       await importStep(page, stepFile, 60_000);
-      console.log(`[${geom.label}] ${elapsed()} import done`);
 
-      // Fail fast if the worker surfaced an error in the UI banner.
+      // The worker reports a failed import in the UI banner.
       const errorBanner = page.getByTestId("step-error");
       if (await errorBanner.isVisible()) {
         throw new Error(
           `STEP import failed for ${geom.label}: ${await errorBanner.textContent()}`,
         );
       }
-
-      // Fit and settle
-      await page.getByRole("button", { name: "Fit View" }).click();
-      await page.waitForTimeout(600);
-
-      const slug = geom.file.replace(".stp", "");
-
-      // ── Solid (geometry) screenshot ─────────────────────────────────────────
-      await page.screenshot({
-        path: path.join(OUT_DIR, `${slug}-geometry.png`),
-        clip: await getViewportClip(page),
-      });
-      console.log(`[${geom.label}] ${elapsed()} geometry screenshot done`);
-
-      // ── Wireframe (mesh) screenshot ─────────────────────────────────────────
-      await page.getByRole("button", { name: "Wireframe" }).click();
-      await page.waitForTimeout(200);
-
-      await page.screenshot({
-        path: path.join(OUT_DIR, `${slug}-mesh.png`),
-        clip: await getViewportClip(page),
-      });
-      console.log(`[${geom.label}] ${elapsed()} mesh screenshot done`);
-
-      console.log(`[${geom.label}] ${elapsed()} DONE`);
     });
   }
 });
-
-async function getViewportClip(page: import("@playwright/test").Page) {
-  // Clip to the Three.js canvas area (main viewport panel).
-  // Use a short explicit timeout so a missing canvas returns null quickly
-  // rather than blocking until the whole test budget is exhausted.
-  const canvas = page.locator("canvas").first();
-  const box = await canvas.boundingBox({ timeout: 5_000 }).catch(() => null);
-  if (!box) return undefined;
-  return { x: box.x, y: box.y, width: box.width, height: box.height };
-}
