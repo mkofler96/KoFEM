@@ -721,7 +721,7 @@ async function meshIt(page: Page, mesh: MeshStep): Promise<void> {
     .locator("..")
     .locator("select")
     .selectOption(String(mesh.order));
-  await page.getByRole("button", { name: /Mesh STEP volume/ }).click();
+  await page.getByTestId("mesh-generate").click();
   await expect
     .poll(
       () =>

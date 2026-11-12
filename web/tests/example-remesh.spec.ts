@@ -196,7 +196,7 @@ test("an example with a split re-meshes with its groups on the same CAD faces", 
   await openTree(page, "mesh");
   await page.getByTestId("max-element-size").fill(String(REMESH));
   await page.getByTestId("min-element-size").fill(String(REMESH / 10));
-  await page.getByRole("button", { name: /Re-mesh STEP volume/ }).click();
+  await page.getByTestId("mesh-generate").click();
   await expect
     .poll(
       async () => {
@@ -307,7 +307,7 @@ for (const id of ORDER as string[]) {
     await openTree(page, "mesh");
     await page.getByTestId("max-element-size").fill(String(size));
     await page.getByTestId("min-element-size").fill(String(size / 10));
-    await page.getByRole("button", { name: /Re-mesh STEP volume/ }).click();
+    await page.getByTestId("mesh-generate").click();
     await expect
       .poll(
         async () => {

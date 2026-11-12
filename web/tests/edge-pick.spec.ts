@@ -251,7 +251,7 @@ test("edges on a shell's collapsed side faces survive a re-mesh", async ({
   await openTree(page, "mesh");
   await page.getByTestId("max-element-size").fill("2");
   await page.getByTestId("min-element-size").fill("0.2");
-  await page.getByRole("button", { name: /mesh STEP volume/i }).click();
+  await page.getByTestId("mesh-generate").click();
   await expect
     .poll(async () => (await readGroups()).nodes, { timeout: 120_000 })
     .toBeLessThan(shipped.nodes);
