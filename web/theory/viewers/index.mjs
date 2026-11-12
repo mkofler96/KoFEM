@@ -2,14 +2,16 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Interactive result viewers for the Theory Guide. generate.mjs extracts the
-// boundary surface of a solved public example (examples/gallery/site/<id>.vtu)
-// into public/theory/viewers/<id>.json; public/theory/viewer.js draws it with
+// boundary surface of a solved public example (examples/gallery/site/<id>.vtu,
+// or examples/validation/surfaces/<id>.json for one whose analysis file opens
+// unsolved) into public/theory/viewers/<id>.json; public/theory/viewer.js draws it with
 // three.js. Without JavaScript or WebGL, the example's own figure is shown.
 
 import { readFileSync } from "node:fs";
 
 const repo = new URL("../../../", import.meta.url);
 const site = new URL("examples/gallery/site/", repo);
+const surfaces = new URL("examples/validation/surfaces/", repo);
 const caseRecords = JSON.parse(
   readFileSync(new URL("web/public/examples/results.json", repo), "utf8"),
 ).cases;
@@ -81,10 +83,46 @@ const cellFaces = {
 
 const round = (value, digits) => Number(value.toPrecision(digits));
 
+// The payload of an example whose analysis file opens unsolved (one built from
+// its recipe, KOF-322): examples/validation/run.mjs --report writes its solved
+// boundary surface, already rounded as below, to examples/validation/surfaces/.
+function solvedSurfaceData(id, meta) {
+  const surface = JSON.parse(
+    readFileSync(new URL(`${id}.json`, surfaces), "utf8"),
+  );
+  if (surface.id !== id || surface.field !== meta.field)
+    throw new Error(
+      `${id}: the solved surface is "${surface.id}" / ${surface.field}, the figure shows ${meta.field}`,
+    );
+  const edges = new Set();
+  const { triangles } = surface;
+  for (let t = 0; t < triangles.length; t += 3)
+    for (let k = 0; k < 3; k++) {
+      const a = triangles[t + k];
+      const b = triangles[t + ((k + 1) % 3)];
+      edges.add(a < b ? `${a},${b}` : `${b},${a}`);
+    }
+  return {
+    id,
+    title: meta.title,
+    field: fieldNames[meta.field],
+    unit: meta.unit,
+    min: Math.min(...surface.values),
+    max: Math.max(...surface.values),
+    deformScale: meta.deform,
+    positions: surface.positions,
+    displacements: surface.displacements,
+    values: surface.values,
+    triangles,
+    edges: [...edges].flatMap((key) => key.split(",").map(Number)),
+  };
+}
+
 /** The viewer payload of one solved example. */
 export function viewerData(id) {
   const meta = figureMeta(id);
   const xml = readFileSync(new URL(`${id}.vtu`, site), "utf8");
+  if (!xml.includes('Name="Displacement"')) return solvedSurfaceData(id, meta);
   const points = dataArray(xml, "Points");
   const connectivity = dataArray(xml, "connectivity");
   const offsets = dataArray(xml, "offsets");

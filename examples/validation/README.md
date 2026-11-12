@@ -1,29 +1,48 @@
 # KoFEM validation suite
 
-Each case here is solved by the **real MFEM WASM engine** — the same binary the
-browser app runs — and compared against a closed-form or published reference.
-No solver is re-implemented: each case is a model in the app's units
-(N · mm · MPa), with its loads built exactly as the app builds them
-(`lib/app-model.mjs`: a force on a face is a work-equivalent traction, a moment
-is tangential nodal forces, a pressure acts along the inward normal), fed to
-`solve_linear_elastic`, and the result is checked against theory. The same
-model is the example the app opens at `/app/?example=<id>`, so solving it in
-the app gives the number on its page. This doubles as a CI regression gate and
-as the source of the numbers on the public example pages,
-[kofem.org/examples/](https://kofem.org/examples/).
+Each case here is built the way a user builds it in the app (KOF-322): one
+STEP file imported, optionally split, meshed by Netgen with tetrahedra, a
+material, supports and loads on whole CAD faces, the static solve, and the
+number the Results panel's hand check reads. The steps are the case's
+**recipe** (`lib/recipe.mjs`); `lib/pipeline.mjs` runs them through the real
+WASM engine and the app's own TypeScript (the load builders, the default AMG
+solver, the nodal stress averaging), so nothing is re-implemented and solving
+the opened example in the app gives the number on its page. This doubles as a
+CI regression gate and as the source of the numbers on the public example
+pages, [kofem.org/examples/](https://kofem.org/examples/).
+
+Cases not yet rebuilt this way are still structured hexahedral models with
+node-set boundary conditions solved by `solve_linear_elastic`
+(`lib/app-model.mjs`, `lib/mesh.mjs`); `rules.mjs` lists them as pending.
 
 ## Run
 
+From `web/`, with Bun (run.mjs imports the app's TypeScript); the pre-hook
+fetches the engine and builds the Rust module (`bun run wasm:prepare`):
+
 ```bash
-node examples/validation/run.mjs                 # run all cases, print a table
-node examples/validation/run.mjs --case <id>     # run one case, e.g. axial-bar
-node examples/validation/run.mjs --report        # also regenerate the pages, figures, .vtu files + REPORT.md
-node examples/validation/run.mjs --pages         # only re-render pages and diagram/chart files (no solve)
+bun run validate                  # run all cases, print a table
+bun run validate --case <id>      # run one case, e.g. axial-bar
+bun run validate:report           # also regenerate the pages, figures, .vtu/.step files + REPORT.md
+bun run validate:pages            # only re-render pages and diagram/chart files (no solve)
+bun ../examples/validation/rules.mjs   # the KOF-322 rules every example meets
 ```
 
 It exits non-zero if any case leaves its tolerance band, or if the public
-pages no longer match the run or their sources (below). CI runs it (and the
-single-DOF test below) via `bun run test` in `web/`.
+pages, analysis files or STEP files no longer match the run or their sources
+(below). Netgen is deterministic within one engine build, so a recipe case's
+`.vtu` must match byte for byte. CI runs it, the rule check and the single-DOF
+test below via `bun run test:validation` in `web/`.
+
+## Adding or converting a case
+
+A case is `{ id, name, quantity, unit, tolPct, readout?, figure?, page, recipe }`
+(see `cases/index.mjs`); the reference and its label come from
+`recipe.readout`. Converting a legacy case means rewriting its case file as a
+recipe, its page text in `textbook/<id>.mjs` (no `page.grid`), its convergence
+study in `convergence.mjs` if it has one (`recipeStudy`, levels are max
+element sizes), taking it off `PENDING` in `rules.mjs`, and
+`bun run validate:report`.
 
 ## Cases
 
@@ -51,7 +70,9 @@ its README), which write their own records.
 | ---------------------------------- | --------------------------------------------------------------------------- |
 | `web/examples/index.html`          | the index at `/examples/`: every example with its figure, the results table |
 | `web/examples/<id>/index.html`     | one page per example: problem, derivation, model, results, discussion       |
-| `examples/gallery/site/<id>.vtu`   | each case as the app opens it, solved                                       |
+| `examples/gallery/site/<id>.vtu`   | each case as the app opens it (recipe cases: unsolved, on the static study) |
+| `examples/gallery/site/<id>.step`  | a recipe case's STEP file, the one a user imports                           |
+| `examples/validation/surfaces/`    | a recipe case's solved surface, for the Theory Guide's 3D viewer            |
 | `examples/gallery/site/<id>.png`   | each case's figure (`lib/render.mjs`), drawn from the same solve            |
 | `examples/gallery/site/<id>/`      | the page's diagrams and charts as image files (below); nothing else         |
 | `web/public/examples/results.json` | every number on the case pages, plus the engine id; linked as the raw data  |
@@ -61,16 +82,16 @@ its README), which write their own records.
 Vite copies every `web/examples/**/index.html` into the build (`STATIC_PAGES`)
 and `examples/gallery/site/` next to them. The text comes from the sources:
 each case's `page` block (model, inputs, supports, load, measured quantity,
-source, mesh grid, optional note), `textbook/<id>.mjs` (the page: introduction,
+source, optional note; a legacy case also its mesh grid), `textbook/<id>.mjs` (the page: introduction,
 derivation, model notes, discussion, references and the sketch from
 `lib/figures.mjs`), `convergence.mjs` (the mesh-refinement studies, which reuse
-the case builders) and `lib/page.mjs` (layout). Equations are written in a small
+the case recipes) and `lib/page.mjs` (layout). Equations are written in a small
 TeX subset that `lib/tex.mjs` turns into MathML, so the pages stay static and
 crawlable. Every number in the text is computed from the case inputs or the
 run. Change the sources and regenerate — never edit the outputs by hand:
 
 ```bash
-cd web && bun run validate:report    # ~40 s: the convergence studies dominate
+cd web && bun run validate:report    # ~1 min: the convergence studies dominate
 cd web && bun run validate:pages     # seconds: page text or a figure changed, no new solve
 ```
 

@@ -12,9 +12,11 @@ place: the problem, the reference solution, KoFEM's result and a figure of the
 solved model. There is one list, in `examples/validation/catalog.mjs`, and two
 kinds of example:
 
-- **Validation cases** (`examples/validation/cases/`): structured hex models
-  solved on every CI run. `bun run validate:report` (in `web/`) writes their
-  `.vtu` and `.png` here, the pages (`web/examples/`) and
+- **Validation cases** (`examples/validation/cases/`): built from their recipe
+  (a STEP file and the GUI's steps, `examples/validation/lib/recipe.mjs`) on
+  every CI run; a few are still structured hex models until KOF-322 converts
+  them. `bun run validate:report` (in `web/`) writes their `.vtu`, `.step` and
+  `.png` here, the pages (`web/examples/`) and
   `web/public/examples/results.json`.
 - **Showcases**, each built by a generator in this folder through the app's own
   pipeline. A generator writes `site/<id>.vtu` (plus `.step` where the model
@@ -46,8 +48,9 @@ whole-CAD-face picks — never from geometry or node sets the app cannot produce
 Face entries then carry their `cadFaceId`, so an opened example keeps its
 supports and loads through a re-mesh.
 
-The MBB beam and the cantilever beam follow this. The validation cases and the
-shell plate with a hole do not: they are structured meshes with node-set
+The MBB beam, the cantilever beam and every validation case with a recipe
+follow this. The remaining validation cases and the shell plate with a hole do
+not yet (KOF-322, `examples/validation/rules.mjs` lists them): they are structured meshes with node-set
 boundary conditions, which the app's Netgen pipeline cannot reproduce. Their
 loads are still built exactly as the app builds them
 (`examples/validation/lib/app-model.mjs`), so solving an opened example gives

@@ -9,7 +9,7 @@ import { REF } from "./refs.mjs";
 export default {
   description:
     "A steel bar in uniaxial tension, δ = PL/(EA): derivation, how a face load becomes nodal forces, and KoFEM's result against the closed-form solution.",
-  figure: ({ page }) => barFigure({ load: "traction", div: page.grid }),
+  figure: () => barFigure({ load: "traction", div: null }),
   intro: () => `
         <p>A straight bar pulled along its axis is the simplest problem in
         solid mechanics, so it is the first thing a solver has to get right.
@@ -50,20 +50,22 @@ export default {
         in a bar ten times longer than it is wide they change ${tex("δ")} only
         slightly.</p>`;
   },
-  model: ({ tex, texBlock, page }) => `
-        <p>The force is applied the way the app applies a force to a face: as
-        a uniform traction ${tex("t = P / A")}, integrated over the
-        ${page.grid[1] * page.grid[2]} element faces of the end face. In the
-        finite element method a traction enters through the work it does, so
-        the force on node ${tex("i")} is</p>
+  model: ({ tex, texBlock }) => `
+        <p>The bar is the STEP file a user imports, meshed by Netgen with
+        tetrahedra; the support and the load each sit on one whole CAD face.
+        The force is applied the way the app applies a force to a face: as a
+        uniform traction ${tex("t = P / A")}, integrated over the triangles of
+        the end face's surface mesh. In the finite element method a traction
+        enters through the work it does, so the force on node ${tex("i")}
+        is</p>
         ${texBlock("f_{i} = \\int_{Γ} N_{i}\\, t \\;\\mathrm{d}S,")}
-        <p>where ${tex("N_{i}")} is the shape function of that node. On linear
-        quadrilateral faces of size ${tex("h × h")}, a node collects
-        ${tex("t h^2 / 4")} from each face it touches: an interior node of the
-        end face gets ${tex("t h^2")}, an edge node ${tex("t h^2 / 2")} and a
-        corner node ${tex("t h^2 / 4")}. The forces add up to
-        ${tex("t A = P")}. Splitting ${tex("P")} equally over the nodes instead
-        would get the total right but overload the edges and corners.</p>`,
+        <p>where ${tex("N_{i}")} is the shape function of that node. On a
+        linear triangle of area ${tex("A_{e}")}, each of its three nodes
+        collects ${tex("t A_{e} / 3")}, so a node gets a third of the area of
+        the triangles around it. On an unstructured mesh those areas differ
+        from node to node; the forces still add up to ${tex("t A = P")}.
+        Splitting ${tex("P")} equally over the nodes instead would get the
+        total right but load small and large patches alike.</p>`,
   discussion: ({ row, rowOf, pct, tex, url }) => `
         <p>KoFEM's extension differs from ${tex("P L / (E A)")} by
         ${pct(row.errPct)}. Linear elements represent a linearly varying
@@ -75,7 +77,7 @@ export default {
         the 3-D body and the 1-D theory, so a finer mesh does not remove
         it.</p>
         <p>The <a href="${url("surface-pressure")}">same bar under an end
-        pressure</a> comes out ${pct(rowOf("surface-pressure").errPct)}: the
-        pressure path builds the same load vector.</p>`,
+        pressure</a> comes out ${pct(rowOf("surface-pressure").errPct)}: a
+        pressure is integrated over the end face the same way as a force.</p>`,
   references: [REF.gere, REF.timoshenkoGoodier, REF.hughes],
 };

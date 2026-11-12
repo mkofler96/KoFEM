@@ -63,7 +63,13 @@ export function catalog(rows) {
     if (!caseIds.has(id)) return showcaseRecord(id);
     const row = rowById.get(id);
     if (!row) throw new Error(`no published row for case "${id}"`);
-    return { ...row, kind: "case", page: cases.find((c) => c.id === id).page };
+    const c = cases.find((x) => x.id === id);
+    return {
+      ...row,
+      kind: "case",
+      page: c.page,
+      ...(c.recipe ? { recipe: c.recipe } : {}),
+    };
   });
 }
 

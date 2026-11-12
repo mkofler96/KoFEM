@@ -1,16 +1,28 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// An example as the app holds it, and the three things made from it:
+// An example as the app holds it, and the things made from it. Two kinds:
 //
-//   solveModel()    the solve, with the loads built exactly as the app builds
-//                   them (web/src/store/boundarySlice.ts), so the number on an
-//                   example's page is the number the app computes;
+// A recipe build (lib/pipeline.mjs buildFromRecipe — every example once
+// KOF-322 is done): a STEP file meshed by Netgen, supports and loads on whole
+// CAD faces, solved by the app's own code.
+//
+//   buildAnalysisFile()   the .vtu that /app/?example=<id> opens: geometry,
+//                         mesh, groups and the static study, UNSOLVED, with
+//                         the hand check the Results panel reads;
+//   buildResultSurface()  the solved boundary surface, for the page's figure;
+//   buildMeshStats()      elements, nodes and DOFs of the solved mesh.
+//
+// KOF-322: legacy hex path, removed when all cases are recipes — a structured
+// hex model built by hand (lib/mesh.mjs) with node-set BCs:
+//
+//   solveModel()    the solve, with the loads built as the app builds them
+//                   (web/src/store/boundarySlice.ts);
 //   analysisFile()  the .vtu that /app/?example=<id> opens (the format of
 //                   web/src/lib/analysisFile.ts);
 //   resultSurface() the solved boundary surface, for the page's figure.
 //
-// A model, in the app's units (N · mm · MPa · tonne):
+// A legacy model, in the app's units (N · mm · MPa · tonne):
 //
 //   { title,                                  the model name in the app
 //     mesh: { vertices, hexahedra },          8-node hexahedra
@@ -350,4 +362,152 @@ export function resultSurface(model, result, field = "displacement") {
     edgeMask.push(0b101, 0b011);
   }
   return { positions, displacements, scalars, triangles, edgeMask };
+}
+
+// ── Recipe builds (lib/pipeline.mjs) ──────────────────────────────────────────
+
+/**
+ * The setup block of a recipe build's analysis file: what the app holds after
+ * the recipe's steps (import, splits, mesh, material, supports, loads), opening
+ * UNSOLVED on the static study, so the first thing to do is press Run. The
+ * fields follow web/src/lib/analysisFile.ts.
+ */
+export function buildAnalysisSetup(build, title) {
+  return {
+    format: "kofem-analysis",
+    version: 1,
+    modelName: title,
+    mode: "solve",
+    viewRepr: "surface",
+    resultType: "Displacement (magnitude)",
+    elementTypes: build.elements.map((e) => e.type),
+    materials: build.materials,
+    properties: build.properties,
+    bcGroups: build.bcGroups,
+    loadGroups: build.loadGroups,
+    tieGroups: [],
+    couplingGroups: [],
+    nextBcGroupId: build.bcGroups.length + 1,
+    nextLoadGroupId: build.loadGroups.length + 1,
+    nextTieGroupId: 1,
+    nextCouplingGroupId: 1,
+    nextFaceEntryId: build.nextFaceEntryId,
+    nextMatId: build.materials.length + 1,
+    stepSurface: build.stepSurface,
+    volMesh: null,
+    surfaceTriangles: build.surfaceTriangles,
+    surfaceFaceIds: build.surfaceFaceIds,
+    elementOrder: build.meshSettings.order,
+    handCheck: build.handCheck,
+  };
+}
+
+const VTK_TETRA = 10;
+
+/** The .vtu of a recipe build, unsolved: no result arrays. */
+export function buildAnalysisFile(build, title) {
+  const { nodes, elements } = build;
+  for (const e of elements)
+    if (e.type !== "CTETRA" || e.nodeIds.length !== 4)
+      throw new Error(
+        `analysis file: element ${e.id} is a ${e.nodeIds.length}-node ${e.type}, not a 4-node tetrahedron`,
+      );
+  const encoded = fieldData(JSON.stringify(buildAnalysisSetup(build, title)));
+  return [
+    `<?xml version="1.0"?>`,
+    `<VTKFile type="UnstructuredGrid" version="1.0" byte_order="LittleEndian" header_type="UInt32">`,
+    `<UnstructuredGrid>`,
+    `<FieldData>`,
+    `<DataArray type="UInt8" Name="KoFEM" NumberOfTuples="${encoded.byteLength}" format="binary">`,
+    encoded.b64,
+    `</DataArray>`,
+    `</FieldData>`,
+    `<Piece NumberOfPoints="${nodes.length}" NumberOfCells="${elements.length}">`,
+    `<Points>`,
+    dataArray(
+      "Float64",
+      "Points",
+      nodes.map((n) => `${n.x} ${n.y} ${n.z}`).join("\n"),
+      3,
+    ),
+    `</Points>`,
+    `<Cells>`,
+    // Node ids equal point indices, as after meshing in the app.
+    dataArray(
+      "Int64",
+      "connectivity",
+      elements.map((e) => e.nodeIds.join(" ")).join("\n"),
+    ),
+    dataArray(
+      "Int64",
+      "offsets",
+      elements.map((_, i) => 4 * (i + 1)).join(" "),
+    ),
+    dataArray("UInt8", "types", elements.map(() => VTK_TETRA).join(" ")),
+    `</Cells>`,
+    `<PointData>`,
+    dataArray("Int64", "NodeId", nodes.map((n) => n.id).join(" ")),
+    `</PointData>`,
+    `<CellData>`,
+    dataArray("Int64", "ElementId", elements.map((e) => e.id).join(" ")),
+    dataArray(
+      "Int64",
+      "PropertyId",
+      elements.map((e) => e.propertyId).join(" "),
+    ),
+    `</CellData>`,
+    `</Piece>`,
+    `</UnstructuredGrid>`,
+    `</VTKFile>`,
+    ``,
+  ].join("\n");
+}
+
+/**
+ * The solved boundary of a recipe build for lib/render.mjs: the mesh's surface
+ * triangles with the displacement magnitude, or the nodal von Mises stress the
+ * caller averaged as the app does (pipeline nodalVonMises).
+ */
+export function buildResultSurface(build, field, nodalVonMises) {
+  const d = build.result.displacements;
+  let scalars;
+  if (field === "displacement")
+    scalars = build.nodes.map((_, i) =>
+      Math.hypot(d[3 * i], d[3 * i + 1], d[3 * i + 2]),
+    );
+  else if (field === "vonMises") scalars = Array.from(nodalVonMises);
+  else throw new Error(`unknown surface field "${field}"`);
+  return {
+    positions: build.nodes.flatMap((n) => [n.x, n.y, n.z]),
+    displacements: Array.from(d),
+    scalars,
+    triangles: build.surfaceTriangles.flat(),
+  };
+}
+
+/**
+ * Elements, nodes and DOFs of a recipe build — a quadratic tetrahedron adds a
+ * node on every edge — and the mesher settings, so the page states them.
+ */
+export function buildMeshStats(build) {
+  const { order, maxElementSize, minElementSize } = build.meshSettings;
+  let nodes = build.nodes.length;
+  if (order === 2) {
+    const edges = new Set();
+    for (const { nodeIds: t } of build.elements)
+      for (let i = 0; i < 4; i++)
+        for (let j = i + 1; j < 4; j++)
+          edges.add(t[i] < t[j] ? `${t[i]},${t[j]}` : `${t[j]},${t[i]}`);
+    nodes += edges.size;
+  }
+  return {
+    order,
+    elementType: "CTETRA",
+    elements: build.elements.length,
+    vertices: build.nodes.length,
+    nodes,
+    dofs: 3 * nodes,
+    maxElementSize,
+    minElementSize,
+  };
 }
