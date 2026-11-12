@@ -10,9 +10,11 @@
 //! credit and BSD-3-Clause terms are retained in `../kofem-fem/NOTICE.md` and
 //! `../kofem-fem/LICENSE-MFEM`, also shipped beside the generated WASM module.
 
+mod mixed;
 mod shell;
 mod shellize;
 
+pub use mixed::MixedModel;
 pub use shell::ShellModel;
 pub use shellize::{
     CoupledResult, CouplingInput, ExplicitCoupledResult, ShellSet, ShellTransitionResult,
@@ -290,6 +292,7 @@ impl ElasticModel {
             run,
             preconditioner: preconditioner_name(options.preconditioner).to_owned(),
             reduction: None,
+            output: RunOutput::Translations,
         })
     }
 
@@ -343,13 +346,15 @@ impl ElasticModel {
             run,
             preconditioner: preconditioner_name(options.preconditioner).to_owned(),
             reduction: Some(reduction),
+            output: RunOutput::Translations,
         })
     }
 }
 
-/// Surface-to-point couplings for `ElasticModel.startCoupledSolve`, in the
-/// CSR layout of the engine's `solve_coupled`: coupling k ties vertex
-/// `reference[k]` to vertices `nodes[offsets[k]..offsets[k + 1]]`.
+/// Couplings for `ElasticModel.startCoupledSolve` and
+/// `MixedModel.startSolve`, in the CSR layout of the engine's
+/// `solve_coupled`: coupling k ties vertex `reference[k]` to vertices
+/// `nodes[offsets[k]..offsets[k + 1]]`.
 #[wasm_bindgen]
 pub struct Couplings {
     couplings: Vec<Coupling>,
@@ -357,14 +362,15 @@ pub struct Couplings {
 
 #[wasm_bindgen]
 impl Couplings {
-    /// `kinds[k]`: 0 distributing (RBE3), 2 kinematic (RBE2) — the engine's
-    /// `mpc` codes; 1 and 3 tie shells to solids and need shell elements.
-    /// `dof_masks[k]`: the DOFs (bits 0..5) a kinematic coupling ties.
-    /// `weights`: one per coupled node, or empty for equal weights.
+    /// `kinds[k]`: the engine's `mpc` codes — 0 distributing (RBE3), 1 relaxed
+    /// shell-to-solid MPC with rotation transfer `relaxation`, 2 kinematic
+    /// (RBE2), 3 shell footprint; 1 and 3 tie shells to solids and need shell
+    /// elements. `dof_masks[k]`: the DOFs (bits 0..5) a kinematic coupling
+    /// ties. `weights`: one per coupled node, or empty for equal weights.
     ///
     /// # Errors
     /// Arrays that disagree in length, offsets that do not partition
-    /// `nodes`, or an unknown or shell-only kind.
+    /// `nodes`, an unknown kind, or a kinematic coupling that ties no DOF.
     #[wasm_bindgen(constructor)]
     pub fn new(
         reference: &[u32],
@@ -373,6 +379,7 @@ impl Couplings {
         kinds: &[i32],
         dof_masks: &[u32],
         weights: &[f64],
+        relaxation: f64,
     ) -> Result<Couplings, JsError> {
         let count = reference.len();
         if offsets.len() != count + 1 || kinds.len() != count || dof_masks.len() != count {
@@ -405,18 +412,15 @@ impl Couplings {
             let range = offsets[index] as usize..offsets[index + 1] as usize;
             let kind = match kinds[index] {
                 0 => CouplingKind::Distributing,
+                1 => CouplingKind::RelaxedMpc { relaxation },
                 2 => CouplingKind::Kinematic {
                     dof_mask: u8::try_from(dof_masks[index] & 0x3f).unwrap_or(0),
                 },
-                code @ (1 | 3) => {
-                    return Err(JsError::new(&format!(
-                        "coupling {index}: kind {code} ties shell elements to solids, which the \
-                         Rust solid solve does not have"
-                    )))
-                }
+                3 => CouplingKind::ShellFootprint,
                 code => {
                     return Err(JsError::new(&format!(
-                        "coupling {index}: unknown kind {code} (0 distributing, 2 kinematic)"
+                        "coupling {index}: unknown kind {code} (0 distributing, 1 relaxed MPC, \
+                         2 kinematic, 3 shell footprint)"
                     )))
                 }
             };
@@ -445,8 +449,19 @@ impl Couplings {
     }
 }
 
+/// What a run's solution holds once expanded through the coupling
+/// reduction (a run without one returns its solution as it is).
+#[derive(Clone, Copy)]
+enum RunOutput {
+    /// Three translations per vertex: a coupled solid solve.
+    Translations,
+    /// All six DOFs per vertex: a mixed solve, whose shell stress needs the
+    /// rotations.
+    AllDofs,
+}
+
 /// A CG solve in progress (from `ElasticModel.startSolve` or
-/// `startCoupledSolve`, or `ShellModel.startSolve`).
+/// `startCoupledSolve`, `ShellModel.startSolve` or `MixedModel.startSolve`).
 #[wasm_bindgen]
 pub struct SolveRun {
     prepared: PreparedStatic,
@@ -455,6 +470,7 @@ pub struct SolveRun {
     preconditioner: String,
     /// How a coupled solve's reduced unknowns expand to the vertices.
     reduction: Option<CoupledReduction>,
+    output: RunOutput,
 }
 
 #[wasm_bindgen]
@@ -527,9 +543,10 @@ impl SolveRun {
         let level_sizes = self.level_sizes();
         let unused_vertices = self.prepared.unused_vertices;
         let (solution, outcome) = self.run.into_solution().map_err(|error| to_js(&error))?;
-        let displacements = match &self.reduction {
-            None => solution,
-            Some(reduction) => reduction
+        let displacements = match (&self.reduction, self.output) {
+            (None, _) => solution,
+            (Some(reduction), RunOutput::AllDofs) => reduction.expand(&solution),
+            (Some(reduction), RunOutput::Translations) => reduction
                 .expand(&solution)
                 .as_chunks::<DOFS_PER_NODE>()
                 .0
@@ -613,7 +630,7 @@ pub struct ElasticSolution {
 impl ElasticSolution {
     /// The solution vector, copied out as a `Float64Array`: x,y,z per node,
     /// vertices first, for `ElasticModel`; u,v,w,θx,θy,θz per vertex for
-    /// `ShellModel`.
+    /// `ShellModel` and `MixedModel`.
     #[wasm_bindgen(getter)]
     #[must_use]
     pub fn displacements(&self) -> Vec<f64> {
