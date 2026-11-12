@@ -26,7 +26,7 @@ import {
   plateWithHoleStep,
   prismStep,
   profileArea,
-  quarterPlateWithHoleStep,
+  quarterStripWithHoleStep,
 } from "./step-prism.mjs";
 
 /** @type {{ name: string, ok: boolean, detail?: string }[]} */
@@ -301,7 +301,7 @@ const onR =
   );
 }
 
-// ── Plate with a hole (examples/validation/cases/plate-with-hole.mjs) ─────────
+// ── Plate with a hole (examples/validation/cases/plate-with-hole*.mjs) ────────
 const a = 1000;
 const b = 10000;
 const t = 500;
@@ -326,14 +326,16 @@ const t = 500;
   );
 }
 {
-  const A = b * b - (Math.PI * a * a) / 4;
+  // The strip of plate-with-hole.mjs and plate-with-hole-shell.mjs: L = 3b.
+  const L = 3 * b;
+  const A = L * b - (Math.PI * a * a) / 4;
   checkPart(
-    "quarterPlateWithHoleStep",
-    quarterPlateWithHoleStep(a, b, t, "Quarter plate with a hole"),
+    "quarterStripWithHoleStep",
+    quarterStripWithHoleStep(a, b, L, t, "Quarter strip with a hole"),
     [
-      { label: "symmetry edge y = 0", distance: onY(0), area: (b - a) * t },
-      { label: "edge x = b", distance: onX(b), area: b * t },
-      { label: "edge y = b", distance: onY(b), area: b * t },
+      { label: "symmetry edge y = 0", distance: onY(0), area: (L - a) * t },
+      { label: "edge x = L", distance: onX(L), area: b * t },
+      { label: "edge y = b", distance: onY(b), area: L * t },
       { label: "symmetry edge x = 0", distance: onX(0), area: (b - a) * t },
       {
         label: "quarter hole r = a",
@@ -344,7 +346,7 @@ const t = 500;
       { label: "face z = t", distance: onZ(t), area: A },
     ],
     A * t,
-    b,
+    L,
     1000,
   );
 }

@@ -40,7 +40,7 @@
 // References: Kirsch (1898); Howland, Phil. Trans. R. Soc. A 229 (1930) 49–86;
 // Pilkey & Pilkey, Peterson's Stress Concentration Factors, chart 4.1.
 
-import { extrudedProfileStep, line, arc } from "../../gallery/step-prism.mjs";
+import { quarterStripWithHoleStep } from "../../gallery/step-prism.mjs";
 import { APP_STEEL } from "../lib/recipe.mjs";
 
 const E = APP_STEEL.young; // MPa
@@ -103,17 +103,10 @@ export default {
   },
   recipe: {
     step: () =>
-      extrudedProfileStep(
-        {
-          outer: [
-            line([L, 0]),
-            line([L, b]),
-            line([0, b]),
-            line([0, a]),
-            arc([a, 0], [0, 0], false),
-          ],
-          holes: [],
-        },
+      quarterStripWithHoleStep(
+        a,
+        b,
+        L,
         depth,
         "Plate with a hole (one eighth)",
       ),

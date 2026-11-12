@@ -7,7 +7,7 @@
 //   extrudedProfileStep  an outer loop with holes, each loop made of straight
 //                        lines and circular arcs (full circles allowed),
 //                        extruded along +z.
-//   annulusStep, plateWithHoleStep, quarterPlateWithHoleStep
+//   annulusStep, plateWithHoleStep, quarterStripWithHoleStep
 //                        the curved stock the examples use, built on the above.
 //
 // Every line or arc of a loop becomes its own side face, so a user can pick one
@@ -604,34 +604,39 @@ export function plateWithHoleStep(holeRadius, halfWidth, thickness, name) {
 }
 
 /**
- * The quarter of plateWithHoleStep in x, y ≥ 0, for a model with symmetry
- * supports on x = 0 and y = 0. Seven faces: 1 symmetry edge y = 0,
- * 2 edge x = halfWidth, 3 edge y = halfWidth, 4 symmetry edge x = 0,
- * 5 quarter hole (r = holeRadius), 6 face z = 0, 7 face z = thickness.
+ * The quarter x, y ≥ 0 of a strip −halfLength ≤ x ≤ halfLength,
+ * −halfWidth ≤ y ≤ halfWidth with a central circular through hole of radius
+ * holeRadius, from z = 0 to z = thickness: a model with symmetry supports on
+ * x = 0 and y = 0. Seven faces: 1 symmetry edge y = 0, 2 edge x = halfLength,
+ * 3 edge y = halfWidth, 4 symmetry edge x = 0, 5 quarter hole
+ * (r = holeRadius), 6 face z = 0, 7 face z = thickness.
  *
  * @param {number} holeRadius  hole radius a (mm)
- * @param {number} halfWidth   plate half-width b (mm), b > a
+ * @param {number} halfWidth   strip half-width b (mm), b > a
+ * @param {number} halfLength  strip half-length L (mm), L > a
  * @param {number} thickness   plate thickness t along +z (mm)
  * @param {string} name        product name written into the file
  * @returns {string} the STEP file text
  */
-export function quarterPlateWithHoleStep(
+export function quarterStripWithHoleStep(
   holeRadius,
   halfWidth,
+  halfLength,
   thickness,
   name,
 ) {
-  if (!(holeRadius > 0 && halfWidth > holeRadius))
+  if (!(holeRadius > 0 && halfWidth > holeRadius && halfLength > holeRadius))
     throw new Error(
-      `plate with a hole needs 0 < holeRadius < halfWidth, got ${holeRadius}, ${halfWidth}`,
+      `strip with a hole needs 0 < holeRadius < halfWidth, halfLength, got ${holeRadius}, ${halfWidth}, ${halfLength}`,
     );
   const a = holeRadius;
   const b = halfWidth;
+  const L = halfLength;
   return extrudedProfileStep(
     {
       outer: [
-        line([b, 0]),
-        line([b, b]),
+        line([L, 0]),
+        line([L, b]),
         line([0, b]),
         line([0, a]),
         arc([a, 0], [0, 0], false),

@@ -157,13 +157,13 @@ export default [
     id: "plate-with-hole-shell",
     caseId: "plate-with-hole-shell",
     title: "Plate with a hole, shell triangles",
-    note: "Kt rises towards 3 as the mesh is refined: each triangle has one stress, and averaging them to the nodes reads the peak low until the triangles at the hole are small.",
+    note: "Kt scatters a few percent either side of Howland's 3.14 instead of converging: the 1 mm wall gives sub-millimetre triangles at the hole on every mesh, and the read-out is the constant stress of the one or two triangles that meet at the peak. From 0.75 mm two meet there and the average reads low.",
     series: [
       {
         label: "Shell (linear)",
         caseId: "plate-with-hole-shell",
         order: 1,
-        levels: [4, 2, 1, 0.75],
+        levels: [4, 2, 1.5, 1, 0.75, 0.5],
       },
     ],
   }),

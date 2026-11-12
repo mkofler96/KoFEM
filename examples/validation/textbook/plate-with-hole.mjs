@@ -101,7 +101,7 @@ export default {
         the hole face and divides it by ${tex("σ")}. At A the surface is free
         and the only stress is ${tex("σ_{θθ}")}, so there the von Mises
         stress equals ${tex("σ_{θθ}")}.</p>`,
-  discussion: ({ row, pct, pctAbs, tex, study }) => {
+  discussion: ({ row, pct, pctAbs, tex, url, study }) => {
     const errs = p2Errors(study);
     const lo = Math.min(...errs.map(Math.abs)),
       hi = Math.max(...errs.map(Math.abs));
@@ -120,7 +120,8 @@ export default {
         the same meshes: their constant stress per element is noisy where the
         stress changes fast. For a peak stress in a design, use quadratic
         elements and refine at the stress raiser until the peak stops
-        changing.</p>`;
+        changing. The <a href="${url("plate-with-hole-shell")}">shell
+        page</a> models the same strip with linear shell triangles.</p>`;
   },
   references: [REF.kirsch, REF.howland, REF.timoshenkoGoodier, REF.peterson],
 };

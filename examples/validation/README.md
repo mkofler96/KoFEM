@@ -62,7 +62,7 @@ must be the case's own mesh), its id in `catalog.mjs`, and run
 | Square beam torsion        | angle of twist θ = T·L/(G·K)     | Saint-Venant torsion (square) |
 | Hollow shaft torsion       | angle of twist θ = T·L/(G·J)     | Saint-Venant torsion          |
 | Plate with a hole          | Kt = 3.14 in a strip, 2a/W = 0.2 | Howland (1930), Peterson's    |
-| Plate with a hole (shells) | Kt ≈ 3 on a shell mid-surface    | Kirsch / Timoshenko & Goodier |
+| Plate with a hole (shells) | the same strip as a shell        | Howland (1930), Peterson's    |
 | Cook's membrane            | loaded-edge deflection ≈ 23.96   | Cook (1974), Belytschko 2014  |
 
 See `REPORT.md` for the latest FE-vs-reference numbers.
