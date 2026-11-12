@@ -276,8 +276,7 @@ function storeFlags(page: Page) {
 // Every example opens with its body drawn and its STEP file restored, and
 // re-meshes with each support and load on the same CAD faces, on exactly that
 // face's nodes of the new mesh. The re-mesh is twice the example's own element
-// size: a genuinely different mesh, and quick (the shell plate's own 1 mm mesh
-// takes about a minute).
+// size: a genuinely different mesh, and quicker than the example's own mesh.
 for (const id of ORDER as string[]) {
   test(`${id} opens with its geometry and re-meshes with its groups on the same CAD faces`, async ({
     page,

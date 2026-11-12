@@ -456,10 +456,13 @@ function byHand(e) {
       `${e.id}: no recipe; every example is built from its STEP file in the GUI's steps`,
     );
   const point = (p) => `(${p.map(trim).join(", ")})`;
+  // On a shell the faces through the wall collapse to the shell's edges, and
+  // the user picks those edges (Edge mode).
+  const what = r.discretization.kind === "shell" ? "edge" : "face";
   const faces = (refs) =>
     refs.length === 1
-      ? `the face through ${point(refs[0].at)}`
-      : `the faces through ${refs.map((f) => point(f.at)).join(", ")}`;
+      ? `the ${what} through ${point(refs[0].at)}`
+      : `the ${what}s through ${refs.map((f) => point(f.at)).join(", ")}`;
   const plane = (s) => {
     const axis = s.normal.findIndex((v) => v === 1);
     return `the plane ${AXES[axis]} = ${trim(s.origin[axis])} mm`;

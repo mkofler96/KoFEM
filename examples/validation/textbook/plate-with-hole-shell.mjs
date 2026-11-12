@@ -47,9 +47,9 @@ export default {
         wall by its mid-surface. The faces through the wall, the cut edges and
         the hole, become the edges of the shell, so each support and the load
         is picked as an Edge. Netgen puts at least two elements along every
-        edge, so the thin wall makes the triangles at the hole smaller than a
-        millimetre on every mesh, while the plate away from the hole stays
-        coarse.</p>
+        edge, so next to the ${inp("t")}&nbsp;mm cut edge the triangle at A
+        stays about 0.6&nbsp;mm on every mesh: a smaller maximum element size
+        refines the rest of the hole but not the peak.</p>
         <p>Each of the ${row.mesh.elements.toLocaleString("en-US")} triangles
         combines a CST membrane, with one constant strain and stress per
         triangle, and a DKT plate-bending element; in this load case only the
@@ -76,8 +76,9 @@ export default {
         the solid model reads the peak slightly low on every mesh. A linear
         triangle has one stress. At A only one or two triangles meet, so the
         nodal value is their stress, and it lands above or below 3.14
-        depending on how the mesher cuts that corner. Over the mesh study
-        above it ranges from ${pctAbs(lo, 1)} below to ${pctAbs(hi, 1)} above,
+        depending on how the mesher cuts that corner; on the finest meshes the
+        peak moves to the next node along the hole. Over the mesh study above
+        it ranges from ${pctAbs(lo, 1)} below to ${pctAbs(hi, 1)} above,
         without settling, which is why the band is
         ±${row.tolPct}&nbsp;%.</p>
         <p>For a peak stress in a flat part loaded in its plane, use solid
