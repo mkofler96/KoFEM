@@ -37,6 +37,7 @@
     "test:ui": "playwright test --ui",
     "test:screenshot": "playwright test screenshot.spec.ts",
     "capture:tutorial": "playwright test -c playwright.capture.config.ts tutorial-capture.spec.ts",
+    "capture:og": "playwright test -c playwright.capture.config.ts og-image-capture.spec.ts",
     "test:mesh-report": "playwright test mesh-report.spec.ts",
     "test:showcase": "playwright test showcase.spec.ts",
     "theory:generate": "bun theory/generate.mjs",
