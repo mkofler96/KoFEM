@@ -13,18 +13,18 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
     <title>Plate with a hole (shells) | KoFEM examples</title>
-    <meta name="description" content="Kirsch's plate with a hole meshed as a shell: the app collapses the plate to its mid-surface, and KoFEM's shell triangles give the stress concentration Kt = 3." />
+    <meta name="description" content="The strip from the solid plate-with-hole page, meshed as a shell: KoFEM's linear shell triangles against Howland's Kt = 3.14, beside the solid page's quadratic tetrahedra." />
     <link rel="canonical" href="https://kofem.org/examples/plate-with-hole-shell/" />
     <meta name="robots" content="index, follow" />
 
     <meta property="og:type" content="article" />
     <meta property="og:title" content="Plate with a hole (shells) | KoFEM examples" />
-    <meta property="og:description" content="Kirsch's plate with a hole meshed as a shell: the app collapses the plate to its mid-surface, and KoFEM's shell triangles give the stress concentration Kt = 3." />
+    <meta property="og:description" content="The strip from the solid plate-with-hole page, meshed as a shell: KoFEM's linear shell triangles against Howland's Kt = 3.14, beside the solid page's quadratic tetrahedra." />
     <meta property="og:url" content="https://kofem.org/examples/plate-with-hole-shell/" />
     <meta property="og:image" content="https://kofem.org/examples/plate-with-hole-shell.png" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Plate with a hole (shells) | KoFEM examples" />
-    <meta name="twitter:description" content="Kirsch's plate with a hole meshed as a shell: the app collapses the plate to its mid-surface, and KoFEM's shell triangles give the stress concentration Kt = 3." />
+    <meta name="twitter:description" content="The strip from the solid plate-with-hole page, meshed as a shell: KoFEM's linear shell triangles against Howland's Kt = 3.14, beside the solid page's quadratic tetrahedra." />
     <meta name="twitter:image" content="https://kofem.org/examples/plate-with-hole-shell.png" />
 
     <!-- Self-hosted fonts (SIL OFL) — see public/fonts/README.md -->
@@ -39,7 +39,7 @@
           {
             "@type": "TechArticle",
             "headline": "Plate with a hole (shells)",
-            "description": "Kirsch's plate with a hole meshed as a shell: the app collapses the plate to its mid-surface, and KoFEM's shell triangles give the stress concentration Kt = 3.",
+            "description": "The strip from the solid plate-with-hole page, meshed as a shell: KoFEM's linear shell triangles against Howland's Kt = 3.14, beside the solid page's quadratic tetrahedra.",
             "url": "https://kofem.org/examples/plate-with-hole-shell/",
             "image": [
               "https://kofem.org/examples/plate-with-hole-shell.png",
@@ -857,23 +857,24 @@
       <p class="crumbs"><a href="/examples/#validation">Validation</a> / 7 of 8</p>
       <h1>Plate with a hole (shells)</h1>
       <div class="lede">
-        <p>Kirsch's plate with a hole, modelled as a thin-walled part usually
-        is: one layer of shell elements on the mid-surface, with the thickness
-        as a property, instead of solid elements through the thickness.
-        Loaded in its own plane, the shell carries the load as membrane
-        stress, so Kirsch's <math><msub><mi>K</mi><mrow><mi mathvariant="normal">t</mi></mrow></msub><mo>=</mo><mn>3</mn></math> is the
-        reference.</p>
+        <p>The same strip as on the
+        <a href="/examples/plate-with-hole/">solid plate with a hole</a>
+        page, modelled as a thin-walled part usually is: one layer of shell
+        triangles on the mid-surface, with the thickness as a property.
+        Same plate, same load, same reference,
+        <math><msub><mi>K</mi><mrow><mi mathvariant="normal">t</mi></mrow></msub><mo>=</mo><mn>3.14</mn></math>. The two pages show what each element
+        type does with a stress peak.</p>
       </div>
       
       <figure class="result">
-        <img src="/examples/plate-with-hole-shell.png" width="1200" height="1200" alt="Plate with a hole (shells): von mises stress on the undeformed shape" />
-        <div class="colorbar"><span>25.7&nbsp;MPa</span><span class="bar" aria-hidden="true"></span><span>282&nbsp;MPa</span></div>
+        <img src="/examples/plate-with-hole-shell.png" width="1200" height="720" alt="Plate with a hole (shells): von mises stress on the undeformed shape" />
+        <div class="colorbar"><span>26.8&nbsp;MPa</span><span class="bar" aria-hidden="true"></span><span>318&nbsp;MPa</span></div>
         <figcaption>Von Mises stress, undeformed shape. The result of running the model that Open in KoFEM loads.</figcaption>
       </figure>
       
       <div class="table-wrap">
         <table class="key-result" data-entry="plate-with-hole-shell">
-          <caption>Stress-concentration factor Kt; reference Kt = 3 (infinite plate)</caption>
+          <caption>Stress-concentration factor Kt; reference Howland's Kt for 2a/W = 0.2</caption>
           <thead>
             <tr>
               <th scope="col" class="num">Reference</th>
@@ -883,9 +884,9 @@
           </thead>
           <tbody>
             <tr>
-              <td class="num">3.0000</td>
-              <td class="num"><strong data-testid="fe-value">2.8185</strong></td>
-              <td class="num">−6.05&nbsp;%<br /><span class="band pass">within ±8&nbsp;%</span></td>
+              <td class="num">3.1400</td>
+              <td class="num"><strong data-testid="fe-value">3.1766</strong></td>
+              <td class="num">+1.17&nbsp;%<br /><span class="band pass">within ±7&nbsp;%</span></td>
             </tr>
           </tbody>
         </table>
@@ -894,15 +895,16 @@
       
       <h2 id="problem">The problem</h2>
       <figure class="diagram">
-        <picture class="figure-image theme-light fig half"><source srcset="/examples/plate-with-hole-shell/plate-with-hole-shell-quarter-plate-diagram.svg" type="image/svg+xml" /><img src="/examples/plate-with-hole-shell/plate-with-hole-shell-quarter-plate-diagram.png" width="330" height="270" alt="Quarter of a plate with a central hole under tension σ, with symmetry supports on the cut edges; point A, where the hole meets the vertical cut, carries the peak stress" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark fig half"><source srcset="/examples/plate-with-hole-shell/plate-with-hole-shell-quarter-plate-diagram-dark.svg" type="image/svg+xml" /><img src="/examples/plate-with-hole-shell/plate-with-hole-shell-quarter-plate-diagram.png" width="330" height="270" alt="Quarter of a plate with a central hole under tension σ, with symmetry supports on the cut edges; point A, where the hole meets the vertical cut, carries the peak stress" loading="lazy" decoding="async" /></picture>
-        <figcaption>Quarter of a square plate of half-width b and wall thickness t with a central hole of radius a, meshed as a shell. Sketch, not to scale.</figcaption>
+        <picture class="figure-image theme-light fig half"><source srcset="/examples/plate-with-hole-shell/plate-with-hole-shell-quarter-plate-diagram.svg" type="image/svg+xml" /><img src="/examples/plate-with-hole-shell/plate-with-hole-shell-quarter-plate-diagram.png" width="330" height="200" alt="Quarter of a long strip with a central hole under tension σ, with symmetry supports on the cut edges; point A, where the hole meets the vertical cut, carries the peak stress" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark fig half"><source srcset="/examples/plate-with-hole-shell/plate-with-hole-shell-quarter-plate-diagram-dark.svg" type="image/svg+xml" /><img src="/examples/plate-with-hole-shell/plate-with-hole-shell-quarter-plate-diagram.png" width="330" height="200" alt="Quarter of a long strip with a central hole under tension σ, with symmetry supports on the cut edges; point A, where the hole meets the vertical cut, carries the peak stress" loading="lazy" decoding="async" /></picture>
+        <figcaption>Quarter of a long strip with a central hole, x, y ≥ 0, full thickness, meshed as a shell. Sketch, not to scale.</figcaption>
       </figure>
       
       <div class="table-wrap">
         <table class="spec inputs">
             <tr><th scope="row"><math><mi>a</mi></math></th><td>10&nbsp;mm</td></tr>
-            <tr><th scope="row"><math><mi>b</mi></math></th><td>100&nbsp;mm</td></tr>
-            <tr><th scope="row"><math><mi>t</mi></math></th><td>5&nbsp;mm</td></tr>
+            <tr><th scope="row"><math><mi>b</mi></math></th><td>50&nbsp;mm</td></tr>
+            <tr><th scope="row"><math><mi>L</mi></math></th><td>150&nbsp;mm</td></tr>
+            <tr><th scope="row"><math><mi>t</mi></math></th><td>1&nbsp;mm</td></tr>
             <tr><th scope="row"><math><mi>E</mi></math></th><td>210&nbsp;GPa</td></tr>
             <tr><th scope="row"><math><mi>ν</mi></math></th><td>0.3</td></tr>
             <tr><th scope="row"><math><mi>σ</mi></math></th><td>100&nbsp;MPa</td></tr>
@@ -912,7 +914,7 @@
       <div class="table-wrap">
         <table class="spec">
           <tr><th scope="row">Supports</th><td>Symmetry on the edges x = 0 (Ux, Ry, Rz) and y = 0 (Uy, Rx, Rz); Uz fixed on both.</td></tr>
-          <tr><th scope="row">Load</th><td>σ·b·t in +x as a force on the edge x = b.</td></tr>
+          <tr><th scope="row">Load</th><td>σ·b·t in +x as a force on the edge x = L.</td></tr>
           <tr><th scope="row">Measured</th><td>Largest nodal von Mises stress, divided by σ.</td></tr>
         </table>
       </div>
@@ -920,53 +922,51 @@
       <h2 id="theory">Analytical solution</h2>
         <p>The derivation is on the
         <a href="/examples/plate-with-hole/#theory">solid plate's page</a>. On
-        the edge of the hole the hoop stress is
-        <math><msub><mi>σ</mi><mrow><mi>θ</mi><mi>θ</mi></mrow></msub><mo>=</mo><mi>σ</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>1</mn><mo>−</mo><mn>2</mn><mspace width="0.1667em"/><mi>cos</mi><mspace width="0.1667em"/><mn>2</mn><mi>θ</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></math>, largest at
-        <math><mi>θ</mi><mo>=</mo><mo form="prefix" lspace="0" rspace="0">±</mo><mn>90</mn><mo lspace="0" rspace="0">°</mo></math>, so <math><msub><mi>K</mi><mrow><mi mathvariant="normal">t</mi></mrow></msub><mo>=</mo><mn>3</mn></math>. The solution
-        is a plane-stress solution, which is exactly the state of a flat shell
-        loaded in its plane. It is for an infinite plate: only the ratio of
-        the hole to the plate matters, and at <math><mi>a</mi><mo lspace="0" rspace="0">/</mo><mi>b</mi><mo>=</mo><mn>0.1</mn></math> this plate
-        is close to Kirsch's infinite one. The solid example is a narrower
-        strip, so its reference is Howland's value for that width
-        instead.</p>
+        the edge of the hole the hoop stress peaks at the points A across the
+        load. In a strip with <math><mn>2</mn><mi>a</mi><mo lspace="0" rspace="0">/</mo><mi>W</mi><mo>=</mo><mn>0.2</mn></math>, Howland's solution puts
+        that peak at <math><msub><mi>K</mi><mrow><mi mathvariant="normal">t</mi></mrow></msub><mo>=</mo><mn>3.14</mn></math> times the stress
+        <math><mi>σ</mi></math> at the ends. It is a plane-stress solution, which is
+        exactly the state of a flat shell loaded in its own plane.</p>
 
       <h2 id="model">Finite element model</h2>
       
       <div class="table-wrap">
         <table class="spec">
-          <tr><th scope="row">Mesh</th><td>Netgen, 1 mm maximum element size: 23,196 linear 3-node shell triangles (CST membrane, DKT bending)</td></tr>
-          <tr><th scope="row">Unknowns</th><td>11,797 nodes, 70,782 degrees of freedom</td></tr>
+          <tr><th scope="row">Mesh</th><td>Netgen, 1 mm maximum element size: 17,283 linear 3-node shell triangles (CST membrane, DKT bending)</td></tr>
+          <tr><th scope="row">Unknowns</th><td>8,843 nodes, 53,058 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
           <tr><th scope="row">Solver</th><td>The app's shell solver (conjugate gradients, KoFEM's Rust module, build fem-acb6b9a64d43); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-7303b4976800</td></tr>
         </table>
       </div>
-        <p>The plate is a square of half-width
-        <math><mi>b</mi><mo>=</mo><mn>10</mn><mi>a</mi></math>, and <math><mi>t</mi></math> =
-        5&nbsp;mm thick, thin enough for the app to treat as a shell
-        (walls up to 15 mm). By symmetry, a quarter of it is enough: the cut
-        edges keep their symmetry, and the edge <math><mi>x</mi><mo>=</mo><mi>b</mi></math> is pulled
-        with <math><mi>σ</mi><mi>b</mi><mi>t</mi></math>.</p>
-        <p>Netgen meshes the solid quarter plate, and the app then measures
-        the 5&nbsp;mm wall and replaces it by its mid-surface. The
-        faces through the wall, such as the edge faces and the hole, become
-        the edges of the shell, so each support and the load is picked as an
-        Edge. A force on an edge is spread as a uniform line load
-        <math><mi>q</mi><mo>=</mo><mi>σ</mi><mi>t</mi></math>.</p>
-        <p>Each of the 23,196 triangles
-        combines a CST membrane, which carries in-plane loads with constant
-        strain, and a DKT plate-bending element; in this load case only the
-        membrane part works. Shell nodes carry six degrees of freedom, three
-        translations and three rotations. The out-of-plane ones are held on
-        the symmetry edges, which changes nothing here but keeps the plate from
-        floating.</p>
+        <p>The strip is symmetric about <math><mi>x</mi><mo>=</mo><mn>0</mn></math> and <math><mi>y</mi><mo>=</mo><mn>0</mn></math>,
+        so the model keeps the quarter <math><mi>x</mi><mo>,</mo><mi>y</mi><mo>≥</mo><mn>0</mn></math>. Unlike the solid
+        model it keeps the whole 1&nbsp;mm thickness: a shell is
+        its mid-surface, so there is no mid-plane to cut at. The edge
+        <math><mi>x</mi><mo>=</mo><mi>L</mi></math> is pulled with <math><mi>σ</mi><mi>b</mi><mi>t</mi></math>, spread as a uniform
+        line load <math><mi>q</mi><mo>=</mo><mi>σ</mi><mi>t</mi></math>.</p>
+        <p>The app builds the shell from a solid mesh: Netgen fills the
+        1&nbsp;mm wall with tetrahedra, and the app replaces the
+        wall by its mid-surface. The faces through the wall, the cut edges and
+        the hole, become the edges of the shell, so each support and the load
+        is picked as an Edge. Netgen puts at least two elements along every
+        edge, so the thin wall makes the triangles at the hole smaller than a
+        millimetre on every mesh, while the plate away from the hole stays
+        coarse.</p>
+        <p>Each of the 17,283 triangles
+        combines a CST membrane, with one constant strain and stress per
+        triangle, and a DKT plate-bending element; in this load case only the
+        membrane part works. Shell nodes carry six degrees of freedom. The
+        symmetry edges fix the displacement across the cut and the rotations a
+        mirror plane forbids, plus <math><msub><mi>u</mi><mrow><mi>z</mi></mrow></msub></math>, which only stops the plate
+        floating: an in-plane load never moves it out of its plane.</p>
 
       <h2 id="results">Results</h2>
       <div class="table-wrap">
         <table class="spec">
           <tr><th scope="row">Quantity</th><td>stress-concentration factor Kt</td></tr>
-          <tr><th scope="row">Reference</th><td>Kt = 3 (infinite plate) <span class="meta">(Kirsch (1898); Timoshenko &amp; Goodier)</span></td></tr>
-          <tr><th scope="row">KoFEM</th><td>2.8185</td></tr>
-          <tr><th scope="row">Difference</th><td>−6.05&nbsp;% <span class="band pass">within ±8&nbsp;%</span></td></tr>
+          <tr><th scope="row">Reference</th><td>Howland's Kt for 2a/W = 0.2 = 3.1400 <span class="meta">(Kirsch (1898); Howland (1930); Peterson's)</span></td></tr>
+          <tr><th scope="row">KoFEM</th><td>3.1766</td></tr>
+          <tr><th scope="row">Difference</th><td>+1.17&nbsp;% <span class="band pass">within ±7&nbsp;%</span></td></tr>
         </table>
       </div>
       <section class="study" id="convergence" data-study="plate-with-hole-shell">
@@ -976,7 +976,7 @@
           <picture class="figure-image theme-light conv"><source srcset="/examples/plate-with-hole-shell/plate-with-hole-shell-mesh-convergence.svg" type="image/svg+xml" /><img src="/examples/plate-with-hole-shell/plate-with-hole-shell-mesh-convergence.png" width="440" height="250" alt="Plate with a hole, shell triangles: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark conv"><source srcset="/examples/plate-with-hole-shell/plate-with-hole-shell-mesh-convergence-dark.svg" type="image/svg+xml" /><img src="/examples/plate-with-hole-shell/plate-with-hole-shell-mesh-convergence.png" width="440" height="250" alt="Plate with a hole, shell triangles: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture>
           <figcaption>Difference from the reference on refined meshes, logarithmic axes. The ringed point is this example's mesh.</figcaption>
         </figure>
-        <p>Kt rises towards 3 as the mesh is refined: each triangle has one stress, and averaging them to the nodes reads the peak low until the triangles at the hole are small.</p>
+        <p>Kt scatters a few percent either side of Howland's 3.14 instead of converging: the 1 mm wall gives sub-millimetre triangles at the hole on every mesh, and the read-out is the constant stress of the one or two triangles that meet at the peak. From 0.75 mm two meet there and the average reads low.</p>
         <details>
           <summary>Data</summary>
           <div class="table-wrap">
@@ -994,30 +994,44 @@
                 <tr>
                   <td>Shell (linear)</td>
                   <td>4 mm</td>
-                  <td class="num">4,596</td>
-                  <td class="num">2.2028</td>
-                  <td class="num">−26.57&nbsp;%</td>
+                  <td class="num">3,960</td>
+                  <td class="num">3.2159</td>
+                  <td class="num">+2.42&nbsp;%</td>
                 </tr>
                 <tr>
                   <td>Shell (linear)</td>
                   <td>2 mm</td>
-                  <td class="num">18,366</td>
-                  <td class="num">2.5101</td>
-                  <td class="num">−16.33&nbsp;%</td>
+                  <td class="num">13,614</td>
+                  <td class="num">3.3374</td>
+                  <td class="num">+6.29&nbsp;%</td>
+                </tr>
+                <tr>
+                  <td>Shell (linear)</td>
+                  <td>1.5 mm</td>
+                  <td class="num">23,766</td>
+                  <td class="num">3.2159</td>
+                  <td class="num">+2.42&nbsp;%</td>
                 </tr>
                 <tr>
                   <td>Shell (linear)</td>
                   <td>1 mm (this example)</td>
-                  <td class="num">70,782</td>
-                  <td class="num">2.8185</td>
-                  <td class="num">−6.05&nbsp;%</td>
+                  <td class="num">53,058</td>
+                  <td class="num">3.1766</td>
+                  <td class="num">+1.17&nbsp;%</td>
                 </tr>
                 <tr>
                   <td>Shell (linear)</td>
                   <td>0.75 mm</td>
-                  <td class="num">123,072</td>
-                  <td class="num">2.8885</td>
-                  <td class="num">−3.72&nbsp;%</td>
+                  <td class="num">92,664</td>
+                  <td class="num">2.9657</td>
+                  <td class="num">−5.55&nbsp;%</td>
+                </tr>
+                <tr>
+                  <td>Shell (linear)</td>
+                  <td>0.5 mm</td>
+                  <td class="num">206,406</td>
+                  <td class="num">3.0179</td>
+                  <td class="num">−3.89&nbsp;%</td>
                 </tr>
               </tbody>
             </table>
@@ -1026,28 +1040,25 @@
       </section>
 
       <h2 id="discussion">Discussion</h2>
-        <p>KoFEM's <math><msub><mi>K</mi><mrow><mi mathvariant="normal">t</mi></mrow></msub></math> is −6.05&nbsp;% from 3, read
-        as the Results panel reads it: the largest nodal von Mises stress.
-        Each triangle has one stress, the one at its centroid, and the app
-        averages those to the nodes. At the hole edge the stress falls off
-        steeply, so the triangles around the peak node have centroids where it
-        is already lower, and the average reads the peak low. The mesh study
-        above shows <math><msub><mi>K</mi><mrow><mi mathvariant="normal">t</mi></mrow></msub></math> rising towards 3 as the triangles
-        shrink.</p>
-        <p>The mesh panel sets one element size for the whole plate, and Netgen
-        meshes the solid plate in tetrahedra before the app collapses it, so a
-        finer mesh at the hole costs a finer mesh everywhere. The 1 mm mesh
-        here is the finest that solves in about a minute. The tolerance band
-        allows for the discretisation error left at that size.</p>
-        <p>The <a href="/examples/plate-with-hole/">solid plate with a
-        hole</a> is a different model: a narrower strip, an eighth of it in
-        quadratic tetrahedra, checked against Howland's 3.14 for its width.
-        It comes out −0.42&nbsp;%. This page shows
-        what one layer of linear shell triangles does with the same kind of
-        peak.
-        Shells pay off when a thin wall bends: one layer of shell elements
-        bends by construction, while solid elements need several layers
-        through the thickness, or quadratic elements, to do the same (see the
+        <p>KoFEM's <math><msub><mi>K</mi><mrow><mi mathvariant="normal">t</mi></mrow></msub></math> is +1.17&nbsp;% from
+        3.14, read as the Results panel reads it: the largest nodal von Mises
+        stress. The <a href="/examples/plate-with-hole/">solid page</a>, with
+        quadratic tetrahedra, comes out
+        −0.42&nbsp;%.</p>
+        <p>The difference is in the elements. A quadratic tetrahedron's stress
+        varies inside it, so it follows the steep drop away from the hole, and
+        the solid model reads the peak slightly low on every mesh. A linear
+        triangle has one stress. At A only one or two triangles meet, so the
+        nodal value is their stress, and it lands above or below 3.14
+        depending on how the mesher cuts that corner. Over the mesh study
+        above it ranges from 5.6&nbsp;% below to 6.3&nbsp;% above,
+        without settling, which is why the band is
+        ±7&nbsp;%.</p>
+        <p>For a peak stress in a flat part loaded in its plane, use solid
+        quadratic elements, or check that the shell peak stops changing on
+        finer meshes. Shells pay off when a thin wall bends: one layer of
+        shell elements bends by construction, while solid elements need
+        several layers or quadratic elements to do the same (see the
         <a href="/examples/cantilever-beam/">cantilever</a>).</p>
 
       <h2 id="reproduce">Reproduce</h2>
@@ -1055,25 +1066,26 @@
       <p>Or build it yourself, as this page's number was built:</p>
       <ol class="steps">
         <li>Import <a href="/examples/plate-with-hole-shell.step" download>plate-with-hole-shell.step</a>.</li>
-        <li>Set the body to Shell. Meshing measures the 5 mm wall and replaces it by its mid-surface; the faces through the wall become the shell's edges, which you pick as Edges.</li>
+        <li>Set the body to Shell. Meshing measures the 1 mm wall and replaces it by its mid-surface; the faces through the wall become the shell's edges, which you pick as Edges.</li>
         <li>Mesh with a 1 mm maximum element size, linear elements.</li>
         <li>Material Steel: E = 210000 MPa, ν = 0.3.</li>
-        <li>Support “Symmetry x = 0”: Ux, Uz, Ry, Rz = 0 on the face through (0, 55, 2.5).</li>
-        <li>Support “Symmetry y = 0”: Uy, Uz, Rx, Rz = 0 on the face through (55, 0, 2.5).</li>
-        <li>Load “Tension”: force (50000, 0, 0) N on the face through (100, 50, 2.5).</li>
-        <li>Run the static study. The Results panel compares stress-concentration factor with Kt = 3 (infinite plate).</li>
+        <li>Support “Symmetry x = 0”: Ux, Uz, Ry, Rz = 0 on the face through (0, 30, 0.5).</li>
+        <li>Support “Symmetry y = 0”: Uy, Uz, Rx, Rz = 0 on the face through (80, 0, 0.5).</li>
+        <li>Load “Tension”: force (5000, 0, 0) N on the face through (150, 25, 0.5).</li>
+        <li>Run the static study. The Results panel compares stress-concentration factor with Howland's Kt for 2a/W = 0.2.</li>
       </ol>
       <p>From a clone (Bun, bash, curl and Rust), this builds and solves the model with the same engine and prints its line:</p>
       <pre><code>git clone https://github.com/mkofler96/KoFEM.git &amp;&amp; cd KoFEM
 bash scripts/fetch-wasm-engine.sh
 cd web &amp;&amp; bun install &amp;&amp; bun run validate --case plate-with-hole-shell</code></pre>
       <pre class="console"><code>Case                                  Quantity                                  FE   Reference     Err%  Tol%  Status
-Plate with a hole (shells)            stress-concentration factor Kt        2.8185      3.0000    -6.05     8  PASS</code></pre>
+Plate with a hole (shells)            stress-concentration factor Kt        3.1766      3.1400    +1.17     7  PASS</code></pre>
 
       <h2 id="references">References</h2>
       <ol class="refs">
         <li>G. Kirsch, “Die Theorie der Elastizität und die Bedürfnisse der Festigkeitslehre”, <cite>Zeitschrift des Vereines deutscher Ingenieure</cite> 42 (1898) 797–807.</li>
-        <li>S. P. Timoshenko and J. N. Goodier, <cite>Theory of Elasticity</cite>, 3rd ed., McGraw-Hill, 1970.</li>
+        <li>R. C. J. Howland, “On the stresses in the neighbourhood of a circular hole in a strip under tension”, <cite>Philosophical Transactions of the Royal Society of London A</cite> 229 (1930) 49–86.</li>
+        <li>W. D. Pilkey and D. F. Pilkey, <cite>Peterson’s Stress Concentration Factors</cite>, 3rd ed., Wiley, 2008.</li>
         <li>J.-L. Batoz, K.-J. Bathe and L.-W. Ho, “A study of three-node triangular plate bending elements”, <cite>International Journal for Numerical Methods in Engineering</cite> 15 (1980) 1771–1812.</li>
         <li>R. D. Cook, D. S. Malkus, M. E. Plesha and R. J. Witt, <cite>Concepts and Applications of Finite Element Analysis</cite>, 4th ed., Wiley, 2002.</li>
       </ol>

@@ -18,6 +18,6 @@ cd web && bun run validate:report
 | Cantilever beam under tip load | tip deflection δ | -1.9040 mm | −P·L³ / (3·E·I) | -0.04% | 1% | ✅ |
 | Square beam under torsion | angle of twist θ | 8.8561e-4 rad | θ = T·L / (G·K) | +0.74% | 5% | ✅ |
 | Plate with a hole | stress-concentration factor Kt | 3.1268 | Howland's Kt for 2a/W = 0.2 | -0.42% | 3% | ✅ |
-| Plate with a hole (shells) | stress-concentration factor Kt | 2.8185 | Kt = 3 (infinite plate) | -6.05% | 8% | ✅ |
+| Plate with a hole (shells) | stress-concentration factor Kt | 3.1766 | Howland's Kt for 2a/W = 0.2 | +1.17% | 7% | ✅ |
 | Hollow shaft under torsion | angle of twist θ | 1.4774e-3 rad | θ = T·L / (G·J) | +1.97% | 5% | ✅ |
 | Cook's membrane | loaded-edge deflection | 23.936 mm | converged plane-stress value | -0.10% | 1% | ✅ |
