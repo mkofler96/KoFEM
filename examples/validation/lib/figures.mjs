@@ -470,7 +470,12 @@ export function plateFigure() {
 
 // ── Cook's membrane ──────────────────────────────────────────────────────────
 
-export function cookFigure({ n }) {
+/**
+ * The panel, its clamp and shear load, the point M where the deflection is
+ * read (the middle of the loaded edge) and the corner C. `div`: a structured
+ * div × div grid to draw on it, or null for a Netgen-meshed case (no grid).
+ */
+export function cookFigure({ div }) {
   const k = 3.4,
     ox = 150,
     oy = 236;
@@ -478,7 +483,8 @@ export function cookFigure({ n }) {
   const A = [0, 0],
     B = [48, 44],
     C = [48, 60],
-    D = [0, 44];
+    D = [0, 44],
+    M = [48, 52];
   const at = (s, t) =>
     P([
       (1 - s) * (1 - t) * A[0] +
@@ -491,9 +497,9 @@ export function cookFigure({ n }) {
         (1 - s) * t * D[1],
     ]);
   const parts = [poly([A, B, C, D].map(P), "body")];
-  for (let i = 1; i < n; i++) {
-    parts.push(line(...at(i / n, 0), ...at(i / n, 1), "mesh"));
-    parts.push(line(...at(0, i / n), ...at(1, i / n), "mesh"));
+  for (let i = 1; div && i < div; i++) {
+    parts.push(line(...at(i / div, 0), ...at(i / div, 1), "mesh"));
+    parts.push(line(...at(0, i / div), ...at(1, i / div), "mesh"));
   }
   const [lx, ly0] = P(A),
     [, ly1] = P(D);
@@ -506,8 +512,12 @@ export function cookFigure({ n }) {
   }
   parts.push(
     sym(rx + 26, (ry0 + ry1) / 2 + 5, "F", "start"),
-    `<circle class="pt" cx="${f(P(C)[0])}" cy="${f(P(C)[1])}" r="3.5"/>`,
-    label(P(C)[0] + 10, P(C)[1] - 8, "C (48, 60)", { anchor: "start" }),
+    `<circle class="pt" cx="${f(P(M)[0])}" cy="${f(P(M)[1])}" r="3.5"/>`,
+    label(P(M)[0] - 8, P(M)[1] + 4, "M (48, 52)", { anchor: "end" }),
+    label(P(C)[0] + 10, P(C)[1] - 8, "C (48, 60)", {
+      anchor: "start",
+      cls: "coord",
+    }),
     label(P(A)[0] - 20, P(A)[1] + 4, "(0, 0)", { anchor: "end", cls: "coord" }),
     label(P(D)[0] - 20, P(D)[1] + 4, "(0, 44)", {
       anchor: "end",
@@ -522,7 +532,7 @@ export function cookFigure({ n }) {
   return svg(
     640,
     260,
-    "Cook's membrane: a tapered panel clamped on its left edge with a uniform shear load F on its right edge; C is the top-right corner where the deflection is measured",
+    "Cook's membrane: a tapered panel clamped on its left edge with a uniform shear load F on its right edge; M, the middle of the loaded edge, is where the deflection is measured, C the top-right corner",
     parts.join("\n    "),
   );
 }

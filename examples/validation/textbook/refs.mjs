@@ -17,6 +17,8 @@ export const REF = {
     "W. D. Pilkey and D. F. Pilkey, <cite>Peterson’s Stress Concentration Factors</cite>, 3rd ed., Wiley, 2008.",
   cook1974:
     "R. D. Cook, “Improved two-dimensional finite element”, <cite>Journal of the Structural Division (ASCE)</cite> 100 (1974) 1851–1863.",
+  belytschko:
+    "T. Belytschko, W. K. Liu, B. Moran and K. I. Elkhodary, <cite>Nonlinear Finite Elements for Continua and Structures</cite>, 2nd ed., Wiley, 2014, §8.4.",
   cmpw: "R. D. Cook, D. S. Malkus, M. E. Plesha and R. J. Witt, <cite>Concepts and Applications of Finite Element Analysis</cite>, 4th ed., Wiley, 2002.",
   batoz:
     "J.-L. Batoz, K.-J. Bathe and L.-W. Ho, “A study of three-node triangular plate bending elements”, <cite>International Journal for Numerical Methods in Engineering</cite> 15 (1980) 1771–1812.",

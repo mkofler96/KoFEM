@@ -24,7 +24,6 @@
 import { solveModel } from "./lib/app-model.mjs";
 import { cantileverModel, cantileverTip } from "./cases/cantilever-bending.mjs";
 import { shaftModel, shaftTwist } from "./cases/shaft-torsion.mjs";
-import { cookCorner, cookModel } from "./cases/cooks-membrane.mjs";
 
 /** A study of recipe cases: levels are max element sizes (mm). */
 export function recipeStudy(study) {
@@ -121,26 +120,24 @@ export default [
     meshLabel: grid,
     solve: study(shaftModel, shaftTwist),
   },
-  {
+  recipeStudy({
     id: "cooks-membrane",
     caseId: "cooks-membrane",
-    title: "Cook's membrane",
-    note: "Both orders rise past the 23.9 reference under refinement, so the pass on the 16 × 16 CI mesh is a cancellation of errors; treat this case as a regression check until the reference is reconciled.",
+    title: "Cook's membrane, P1 vs. P2",
+    note: "Linear elements lock in the panel's bending and approach from below; quadratic ones are within half a percent even at 16 mm and level off at 23.94, 0.1 % under the plane-stress reference, since the slab clamped over its whole end face is slightly stiffer than the plane-stress panel.",
     series: [
       {
         label: "P1 (linear)",
         caseId: "cooks-membrane",
         order: 1,
-        levels: [4, 8, 16, 32, 64],
+        levels: [8, 4, 2, 1],
       },
       {
         label: "P2 (quadratic)",
         caseId: "cooks-membrane",
         order: 2,
-        levels: [2, 4, 8, 16],
+        levels: [16, 8, 4, 2, 1],
       },
     ],
-    meshLabel: (n) => `${n} × ${n}`,
-    solve: study(cookModel, cookCorner),
-  },
+  }),
 ];
