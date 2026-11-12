@@ -516,6 +516,8 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
             ? cadBodies
             : freshBodies(s, bodyCount);
       dropAnalysis(s);
+      // An edit renumbers the CAD faces an example's hand check is written on.
+      s.handCheck = null;
     }),
   undoGeometryEdit: () =>
     set((s) => {
