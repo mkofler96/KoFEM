@@ -5,12 +5,15 @@ import { useModelStore } from "../../store/modelStore";
 import { useMesh } from "../../hooks/useMesh";
 import { useEngineGate } from "../../store/engineStore";
 import {
+  isCadBody,
   meshSizesChanged,
   suppressionMismatch,
   type MeshSizes,
 } from "../../store/geometrySlice";
 import { estimateElementCount } from "../../lib/meshSizing";
-import { solidName } from "../../lib/regions";
+import { bodyGroupOf, solidName, solidsWithOwnSize } from "../../lib/regions";
+import { itemSelection } from "../../store/viewSlice";
+import type { Property } from "../../store/modelStore";
 import type { GeometryMeasure } from "../../lib/meshSizing";
 import { LogSection } from "./LogSection";
 import { MeshOverlapCard } from "./MeshOverlapCard";
@@ -38,6 +41,41 @@ function formatEstimate(measure: GeometryMeasure, size: string): string | null {
 
 function formatSizes({ max, min }: MeshSizes): string {
   return `max ${max} mm, min ${min} mm`;
+}
+
+// Whether the model has more than one body or region. Only then do sizes per
+// body matter next to the global one: a single body just meshes at its size.
+function hasSeveralSolids(properties: Property[]): boolean {
+  return properties.filter(isCadBody).length > 1;
+}
+
+// A solid of a body a split cut into several regions; otherwise the solid is
+// the whole body.
+function isRegion(properties: Property[], solidId: number): boolean {
+  return bodyGroupOf(properties, solidId).regions.length > 1;
+}
+
+// What Apply to all changes, in the words the model tree uses: "1 body: Body 2",
+// "2 regions: Body 1 · Region 1, Body 1 · Region 2". Past three names the rest
+// is a count, so the note stays one or two lines.
+function describeSolids(properties: Property[], solids: Property[]): string {
+  const names = solids.map((p) => solidName(properties, p.id));
+  const regions = solids.filter((p) => isRegion(properties, p.id)).length;
+  const bodies = names.length - regions;
+  const plural = names.length > 1;
+  const noun =
+    regions === 0
+      ? plural
+        ? "bodies"
+        : "body"
+      : bodies === 0
+        ? plural
+          ? "regions"
+          : "region"
+        : "bodies and regions";
+  const shown = names.slice(0, 3).join(", ");
+  const rest = names.length > 3 ? ` and ${names.length - 3} more` : "";
+  return `${names.length} ${noun}: ${shown}${rest}`;
 }
 
 // The Mesh entry of the model tree. Before there is a mesh it is the mesh
@@ -103,6 +141,16 @@ function MeshSummary() {
   const elementCount = useModelStore((s) => s.elements.length);
   const meshSizes = useModelStore((s) => s.meshSizes);
   const properties = useModelStore((s) => s.properties);
+  const selectTreeNode = useModelStore((s) => s.selectTreeNode);
+  const editable = hasSeveralSolids(properties);
+  // A region's size is edited on its own tree entry; a body of one region has
+  // only the body entry.
+  const openSolid = (id: number) =>
+    selectTreeNode(
+      isRegion(properties, id)
+        ? itemSelection("geometry", "region", id)
+        : itemSelection("geometry", "body", bodyGroupOf(properties, id).body),
+    );
   return (
     <div data-testid="mesh-summary">
       <div className={styles.statRow}>
@@ -128,19 +176,34 @@ function MeshSummary() {
       {meshSizes &&
         Object.entries(meshSizes.regions)
           .filter(([id]) => properties.some((p) => p.id === Number(id)))
-          .map(([id, size]) => (
-            <div key={id} className={styles.statRow}>
-              <span className={styles.statKey}>
-                {solidName(properties, Number(id))}
-              </span>
-              <span
-                className={styles.statVal}
-                data-testid={`mesh-region-size-${id}`}
-              >
-                max {size} mm
-              </span>
-            </div>
-          ))}
+          .map(([key, size]) => {
+            const id = Number(key);
+            const name = solidName(properties, id);
+            return (
+              <div key={id} className={styles.statRow}>
+                <span className={styles.statKey}>{name}</span>
+                <span className={styles.statValWithAction}>
+                  <span
+                    className={styles.statVal}
+                    data-testid={`mesh-region-size-${id}`}
+                  >
+                    max {size} mm
+                  </span>
+                  {editable && (
+                    <button
+                      className={styles.iconBtn}
+                      data-testid={`mesh-region-edit-${id}`}
+                      title={`Edit the element size of ${name}`}
+                      aria-label={`Edit the element size of ${name}`}
+                      onClick={() => openSolid(id)}
+                    >
+                      ✎
+                    </button>
+                  )}
+                </span>
+              </div>
+            );
+          })}
     </div>
   );
 }
@@ -166,6 +229,9 @@ function MeshSettings({
   const meshSizes = useModelStore((s) => s.meshSizes);
   const properties = useModelStore((s) => s.properties);
   const meshSuppressedIds = useModelStore((s) => s.meshSuppressedIds);
+  const clearRegionMaxElementSizes = useModelStore(
+    (s) => s.clearRegionMaxElementSizes,
+  );
   const engine = useEngineGate();
   const {
     elementOrder,
@@ -186,6 +252,11 @@ function MeshSettings({
     bodies.stillMeshed.length > 0 || bodies.missing.length > 0;
   const estimate =
     geometryMeasure && formatEstimate(geometryMeasure, maxElementSize);
+  // Bodies and regions with a size of their own ignore the max size here;
+  // a single body is left as it is.
+  const ownSize = hasSeveralSolids(properties)
+    ? solidsWithOwnSize(properties)
+    : [];
 
   return (
     <>
@@ -210,6 +281,25 @@ function MeshSettings({
         />
         <span className={styles.toleranceUnit}>mm</span>
       </div>
+      {ownSize.length > 0 && (
+        <div className={styles.applyAll}>
+          <button
+            className={styles.applyAllBtn}
+            data-testid="mesh-size-apply-all"
+            disabled={isMeshing}
+            title="Clear the max element size each body and region sets, so the whole model uses this one."
+            onClick={clearRegionMaxElementSizes}
+          >
+            Apply to all bodies
+          </button>
+          <span
+            className={styles.applyAllNote}
+            data-testid="mesh-size-apply-all-note"
+          >
+            ⚠ Changes {describeSolids(properties, ownSize)}.
+          </span>
+        </div>
+      )}
       <div className={styles.formRow}>
         <span className={styles.formLabel}>Min element size</span>
         <input
