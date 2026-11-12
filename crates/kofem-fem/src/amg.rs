@@ -50,6 +50,25 @@ impl Default for AmgSettings {
     }
 }
 
+impl AmgSettings {
+    /// Settings for SIMP topology optimization, whose element stiffness spans
+    /// the solid modulus down to a void floor (1e-9 of it). A strength
+    /// threshold of 0 treats every coupling as strong, so the aggregates follow
+    /// the sparsity pattern and not the densities: the hierarchy coarsens
+    /// through void regions and can be reused across iterations
+    /// ([`SmoothedAggregation::replace_fine_matrix`]). Measured in KOF-341 on
+    /// a 56k-DOF cantilever: as fast as the best positive threshold, with no
+    /// tuning per design.
+    #[must_use]
+    pub const fn topology_optimization() -> Self {
+        Self {
+            strength_threshold: 0.0,
+            coarse_size: 600,
+            max_levels: 10,
+        }
+    }
+}
+
 /// Size of one level of the hierarchy, for logging and tests.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LevelInfo {
@@ -394,10 +413,11 @@ fn aggregate(couplings: &[Vec<(u32, f64)>], excluded: &[bool]) -> (Vec<Option<u3
             owner[node] = Some(id);
         }
     }
-    // Phase 3: whatever is left forms aggregates with its free neighbours; a
-    // node with no strong coupling at all becomes an aggregate of its own.
+    // Phase 3: whatever is left forms aggregates with its free neighbours. A
+    // node with no strong coupling at all joins no aggregate: the smoother
+    // handles it, and a singleton aggregate would never coarsen (KOF-341).
     for node in 0..nodes {
-        if excluded[node] || owner[node].is_some() {
+        if excluded[node] || owner[node].is_some() || couplings[node].is_empty() {
             continue;
         }
         let id = Some(to_u32(count));
@@ -900,6 +920,36 @@ impl SmoothedAggregation {
             coarse_solve,
             work,
         })
+    }
+
+    /// Replace the finest-level matrix with one of the same size, keeping the
+    /// coarse hierarchy built for the previous matrix. The V-cycle smooths
+    /// with the new matrix and corrects with the old coarse levels, so it
+    /// stays symmetric positive definite (the fine smoother is Gauss–Seidel)
+    /// while skipping the setup. Meant for a sequence of systems that differ
+    /// only in their values, such as the iterations of a SIMP topology
+    /// optimization; rebuild the hierarchy when its iterations climb.
+    ///
+    /// # Errors
+    /// [`FemError::AmgInput`] when the new matrix has a different size,
+    /// [`FemError::CoarseNotPositiveDefinite`] when a one-level hierarchy
+    /// cannot factor it.
+    pub fn replace_fine_matrix(&mut self, matrix: CsrMatrix) -> Result<(), FemError> {
+        if matrix.rows() != self.fine.rows() {
+            return Err(FemError::AmgInput {
+                reason: "the replacement matrix must have the same size",
+            });
+        }
+        if let Some(first) = self.inverse_diagonals.first_mut() {
+            *first = inverse_diagonal_of(&matrix);
+        } else if let CoarseSolve::Relax { inverse_diagonal } = &mut self.coarse_solve {
+            *inverse_diagonal = inverse_diagonal_of(&matrix);
+        } else {
+            // A one-level hierarchy factors the matrix itself: refactor it.
+            self.coarse_solve = CoarseSolve::Direct(DenseCholesky::factor(&matrix)?);
+        }
+        self.fine = matrix;
+        Ok(())
     }
 
     /// Unknowns and non-zeros per level, finest first.
