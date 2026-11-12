@@ -7,6 +7,10 @@
 //   recipe     it is a validation case with a recipe (lib/recipe.mjs), so the
 //              build and the GUI test follow the same steps;
 //   step       examples/gallery/site/<id>.step exists — the file a user imports;
+//   geometry   its analysis file carries the imported geometry (stepSurface)
+//              and the CAD face of every boundary triangle (surfaceFaceIds),
+//              so the opened example shows its body, can be re-meshed and
+//              changed — not just a mesh;
 //   no hexes   its analysis file holds no hexahedra (Netgen meshes tetrahedra);
 //   CAD faces  every support and load face entry is a whole CAD face
 //              (cadFaceId), so it survives a re-mesh as in the app;
@@ -43,6 +47,53 @@ const PENDING = [
 
 const VTK_HEXAHEDRON = 12;
 const VTK_QUADRATIC_HEXAHEDRON = 25;
+
+/**
+ * The CAD faces of the geometry an analysis file carries, or null (with the
+ * problem pushed onto `out`) when the file has no usable geometry: then the app
+ * cannot show the body, re-mesh it or change it.
+ */
+function geometryFaceIds(id, setup, out) {
+  const surface = setup.stepSurface;
+  if (!surface) {
+    out.push(`${id}.vtu carries no geometry (stepSurface)`);
+    return null;
+  }
+  const { points, triangles, faceIds } = surface;
+  if (
+    !Array.isArray(points) ||
+    !Array.isArray(triangles) ||
+    !Array.isArray(faceIds) ||
+    points.length === 0 ||
+    triangles.length === 0 ||
+    faceIds.length !== triangles.length
+  ) {
+    out.push(
+      `${id}.vtu: stepSurface needs points, triangles and one face id per triangle`,
+    );
+    return null;
+  }
+  const faces = new Set(faceIds);
+  const meshTris = setup.surfaceTriangles;
+  const meshFaces = setup.surfaceFaceIds;
+  if (
+    !Array.isArray(meshTris) ||
+    !Array.isArray(meshFaces) ||
+    meshFaces.length !== meshTris.length ||
+    meshFaces.length === 0
+  )
+    out.push(
+      `${id}.vtu: the mesh's boundary triangles need their CAD faces (surfaceTriangles, surfaceFaceIds)`,
+    );
+  else {
+    const stray = [...new Set(meshFaces)].filter((f) => !faces.has(f));
+    if (stray.length)
+      out.push(
+        `${id}.vtu: mesh boundary faces [${stray.join(", ")}] are not faces of its geometry`,
+      );
+  }
+  return faces;
+}
 
 /** The rules `id` breaks, as messages (empty: it meets them all). */
 function violations(id) {
@@ -82,6 +133,7 @@ function violations(id) {
     out.push(`${id}.vtu has hexahedral cells`);
   if (setup.elementTypes.some((t) => t === "CHEXA"))
     out.push(`${id}.vtu lists CHEXA elements`);
+  const geometryFaces = geometryFaceIds(id, setup, out);
   const entries = [
     ...setup.bcGroups.map((g) => ["support", g]),
     ...setup.loadGroups.map((g) => ["load", g]),
@@ -91,6 +143,10 @@ function violations(id) {
       if (!Number.isInteger(face.cadFaceId))
         out.push(
           `${kind} "${group.name}", ${face.label}: not a whole CAD face (no cadFaceId)`,
+        );
+      else if (geometryFaces && !geometryFaces.has(face.cadFaceId))
+        out.push(
+          `${kind} "${group.name}", ${face.label}: CAD face ${face.cadFaceId} is not in the example's geometry`,
         );
   const hc = setup.handCheck;
   if (!hc) out.push(`${id}.vtu has no handCheck`);
