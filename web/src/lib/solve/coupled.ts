@@ -177,6 +177,8 @@ export interface CoupledEngineInputs {
   coupling: EngineCoupling;
   bcs: EngineCoupledBcs;
   matJson: string;
+  // `mat.solid` of matJson: one material per 1-based `mesh.attributes` value.
+  solidMaterials: { young_modulus: number; poisson_ratio: number }[];
   model: ReturnType<typeof buildExplicitCoupledModel>;
   solidElements: Element[];
   shellElements: Element[];
@@ -335,6 +337,7 @@ export function buildCoupledEngineInputs(
     coupling: engineCoupling(coupling),
     bcs: engineCoupledBcs(dirichlet, nodalLoads),
     matJson: JSON.stringify(mat),
+    solidMaterials: mat.solid,
     model,
     solidElements,
     shellElements,
