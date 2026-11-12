@@ -85,7 +85,8 @@ impl CoupledReduction {
     /// full DOFs `dofs` and full loads `forces` (both 6 per node): the force
     /// (or moment) a support must apply there. Zero at free DOFs, up to the
     /// solver tolerance; zero at dependent DOFs, whose reaction is carried
-    /// by the independent DOFs they follow.
+    /// by the independent DOFs they follow. `stiffness` is the solid one (3
+    /// per node), so this holds for a model without shell facets only.
     ///
     /// # Errors
     /// Vectors of the wrong length.

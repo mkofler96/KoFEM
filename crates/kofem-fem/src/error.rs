@@ -100,9 +100,10 @@ pub enum FemError {
     )]
     CouplingCycle { first: usize, second: usize },
     #[error(
-        "{what} DOF {component} of node {node} lies on a node that follows a distributing or \
-         kinematic coupling — its motion is governed by the coupling, so the condition cannot \
-         be honoured. Constrain the coupled nodes or a kinematic reference point instead"
+        "{what} DOF {component} of node {node} lies on a node that follows a coupling \
+         (distributing, kinematic, or a shell-to-solid seam or footprint) — its motion is \
+         governed by the coupling, so the condition cannot be honoured. Constrain the coupled \
+         nodes or a kinematic reference point instead"
     )]
     ConstraintOnCoupledDof {
         node: usize,

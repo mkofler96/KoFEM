@@ -759,7 +759,7 @@ function finLoads(nodes) {
           ]),
         },
       },
-      /governed by the coupling|follows a distributing or kinematic coupling/,
+      /lies on a node that follows a coupling/,
     );
   }
   await refuses(
