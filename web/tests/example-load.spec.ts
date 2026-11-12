@@ -3,6 +3,7 @@
 
 import { test, expect } from "./coverage";
 import { gotoApp } from "./fixtures/app";
+import { openTree } from "./fixtures/tree";
 import { serveUnvalidatedExample } from "./fixtures/unvalidated-examples";
 import { readdir } from "node:fs/promises";
 
@@ -437,6 +438,88 @@ test("?example= with an unknown id surfaces a clear load error", async ({
     .poll(() => dialogMessage, { timeout: 15_000 })
     .toContain("Could not load example");
   expect((await readStore(page)).nodes).toBe(0);
+});
+
+// An analysis file with its geometry removed: the KoFEM field data decoded,
+// stepSurface cleared, and re-encoded (UInt32 length prefix, base64).
+function withoutGeometry(vtu: string): string {
+  const field =
+    /(<DataArray type="UInt8" Name="KoFEM" NumberOfTuples=")\d+("[^>]*>\n)([^<\n]+)/;
+  const match = field.exec(vtu);
+  if (!match) throw new Error("not a KoFEM analysis file");
+  const bytes = Buffer.from(match[3], "base64");
+  const meta = JSON.parse(
+    bytes.subarray(4, 4 + bytes.readUInt32LE(0)).toString("utf8"),
+  ) as Record<string, unknown>;
+  meta.stepSurface = null;
+  const json = Buffer.from(JSON.stringify(meta), "utf8");
+  const out = Buffer.alloc(4 + json.length);
+  out.writeUInt32LE(json.length, 0);
+  json.copy(out, 4);
+  return vtu.replace(
+    field,
+    `${match[1]}${json.length}${match[2]}${out.toString("base64")}`,
+  );
+}
+
+test("an example without its STEP file is refused", async ({ page }) => {
+  // Every example ships the geometry it is built from (KOF-322); opening one
+  // without it would show no body and offer no re-mesh.
+  let dialogMessage = "";
+  page.on("dialog", (d) => {
+    dialogMessage = d.message();
+    void d.dismiss();
+  });
+  await page.route("**/examples/axial-bar.step", (route) =>
+    route.fulfill({ status: 404, body: "" }),
+  );
+  await page.goto("/app/?example=axial-bar");
+  await expect
+    .poll(() => dialogMessage, { timeout: 15_000 })
+    .toContain('example "axial-bar" ships no geometry');
+  expect((await readStore(page)).nodes).toBe(0);
+});
+
+test("an example whose file carries no geometry is refused", async ({
+  page,
+}) => {
+  let dialogMessage = "";
+  page.on("dialog", (d) => {
+    dialogMessage = d.message();
+    void d.dismiss();
+  });
+  await page.route("**/examples/axial-bar.vtu", async (route) => {
+    const original = await route.fetch();
+    await route.fulfill({
+      response: original,
+      body: withoutGeometry(await original.text()),
+    });
+  });
+  await page.goto("/app/?example=axial-bar");
+  await expect
+    .poll(() => dialogMessage, { timeout: 15_000 })
+    .toContain('example "axial-bar" carries no geometry to mesh on');
+  expect((await readStore(page)).nodes).toBe(0);
+});
+
+test("a mesh without geometry says it cannot be re-meshed", async ({
+  page,
+}) => {
+  // A model opened from a file that has a mesh but no geometry: the mesh
+  // controls are replaced by an explicit message instead of vanishing.
+  const original = await page.request.get("/examples/axial-bar.vtu");
+  const file = test.info().outputPath("no-geometry.vtu");
+  const { writeFile } = await import("node:fs/promises");
+  await writeFile(file, withoutGeometry(await original.text()));
+  await gotoApp(page);
+  await page
+    .locator('input[type="file"][accept=".vtu,.zip"]')
+    .setInputFiles(file);
+  await expect
+    .poll(async () => (await readStore(page)).nodes, { timeout: 15_000 })
+    .toBeGreaterThan(0);
+  await openTree(page, "mesh");
+  await expect(page.getByTestId("mesh-no-geometry")).toBeVisible();
 });
 
 test("the app opens normally when no ?example= is present", async ({

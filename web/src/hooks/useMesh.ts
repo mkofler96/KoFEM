@@ -109,7 +109,12 @@ export function useMesh() {
   }
 
   async function meshVolume() {
-    if (!stepSurface) return;
+    if (!stepSurface) {
+      rejectInput(
+        "Cannot mesh: this model has no geometry to mesh on. Import a STEP file to mesh it.",
+      );
+      return;
+    }
     if (!stepBytes) {
       rejectInput(
         "Cannot mesh: the original STEP file is no longer available (e.g. after loading a saved analysis). Re-import the STEP file to mesh.",

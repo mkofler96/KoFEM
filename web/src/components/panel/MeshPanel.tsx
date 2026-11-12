@@ -150,12 +150,20 @@ export function MeshPanel() {
             </div>
           )}
         </>
+      ) : hasMesh ? (
+        // A mesh with no geometry behind it (no example ships one; a model
+        // opened from elsewhere can) cannot be re-meshed. Say so instead of
+        // silently leaving out the mesh controls.
+        <div className={styles.errorBanner} data-testid="mesh-no-geometry">
+          <span>
+            This mesh has no geometry, so it cannot be re-meshed. Import the
+            STEP file to mesh it again.
+          </span>
+        </div>
       ) : (
-        !hasMesh && (
-          <div className={styles.empty}>
-            No mesh — import a STEP file to mesh.
-          </div>
-        )
+        <div className={styles.empty}>
+          No mesh — import a STEP file to mesh.
+        </div>
       )}
 
       <LogSection logs={logs} busy={isMeshing} />
