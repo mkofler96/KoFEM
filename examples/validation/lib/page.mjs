@@ -440,6 +440,52 @@ function inApp(e) {
       </p>`;
 }
 
+const DOF_NAMES = ["Ux", "Uy", "Uz"];
+const AXES = ["x", "y", "z"];
+
+/** The GUI steps that rebuild a recipe case from its STEP file (lib/recipe.mjs). */
+function byHand(e) {
+  const r = e.recipe;
+  const point = (p) => `(${p.map(trim).join(", ")})`;
+  const faces = (refs) =>
+    refs.length === 1
+      ? `the face through ${point(refs[0].at)}`
+      : `the faces through ${refs.map((f) => point(f.at)).join(", ")}`;
+  const plane = (s) => {
+    const axis = s.normal.findIndex((v) => v === 1);
+    return `the plane ${AXES[axis]} = ${trim(s.origin[axis])} mm`;
+  };
+  const load = (l) => {
+    if (l.kind === "force")
+      return `force (${l.components.map(trim).join(", ")}) N`;
+    if (l.kind === "pressure") return `pressure ${trim(l.value)} MPa`;
+    return `moment M${AXES[l.axis]} = ${trim(l.value)} N·mm`;
+  };
+  const m = r.material;
+  const steps = [
+    `Import <a href="/examples/${encodeURIComponent(e.id)}.step" download>${esc(e.id)}.step</a>.`,
+    ...r.splits.map((s) =>
+      s.mode === "faces"
+        ? `Split ${faces(s.faces)} with ${plane(s)}.`
+        : `Split the bodies with ${plane(s)}.`,
+    ),
+    `Mesh with a ${trim(r.mesh.maxElementSize)} mm maximum element size${r.mesh.minElementSize === undefined ? "" : ` and a ${trim(r.mesh.minElementSize)} mm minimum`}, ${r.mesh.order === 2 ? "quadratic" : "linear"} elements.`,
+    `Material ${esc(m.name)}: E = ${trim(m.young)} MPa, ν = ${trim(m.poisson)}.`,
+    ...r.supports.map(
+      (s) =>
+        `Support “${esc(s.name)}”: ${s.dofs.map((d) => DOF_NAMES[d]).join(", ")} = ${trim(s.value)}${s.value === 0 ? "" : " mm"} on ${faces(s.faces)}.`,
+    ),
+    ...r.loads.map(
+      (l) => `Load “${esc(l.name)}”: ${load(l)} on ${faces(l.faces)}.`,
+    ),
+    `Run the static study. The Results panel compares ${esc(r.readout.quantity.toLowerCase())} with ${esc(r.readout.formula)}.`,
+  ];
+  return `
+      <p>Or build it yourself, as this page's number was built:</p>
+      <ol class="steps">${steps.map((s) => `\n        <li>${s}</li>`).join("")}
+      </ol>`;
+}
+
 // ── /examples/ ────────────────────────────────────────────────────────────────
 
 export function renderIndexPage(data, allEntries) {
@@ -496,8 +542,8 @@ export function renderIndexPage(data, allEntries) {
 
       <h2 id="reproduce">Reproduce</h2>
       <p>The benchmarks run in CI on every change. To run them yourself
-      (Node.js 20+, bash, curl):</p>
-      ${cloneSteps("node examples/validation/run.mjs")}
+      (Bun, bash, curl and Rust):</p>
+      ${cloneSteps("cd web &amp;&amp; bun install &amp;&amp; bun run validate")}
       <p>It prints one line per benchmark, for example:</p>
       <pre class="console" data-testid="console-line"><code>${esc(consoleHeader())}
 ${esc(consoleRow(benchmarks[0]))}</code></pre>`;
@@ -625,27 +671,49 @@ const specTable = (rows) => `
         </table>
       </div>`;
 
+// Element names by solved element type; a legacy hex row has none recorded.
 const ELEMENTS = {
-  1: "linear 8-node hexahedra (P1)",
-  2: "quadratic 27-node hexahedra (P2)",
+  CTETRA: {
+    1: "linear 4-node tetrahedra (P1)",
+    2: "quadratic 10-node tetrahedra (P2)",
+  },
+  CHEXA: {
+    1: "linear 8-node hexahedra (P1)",
+    2: "quadratic 27-node hexahedra (P2)",
+  },
 };
+
+// A recipe case's mesh line comes from its Netgen mesh; a legacy case's from
+// its page text (KOF-322: legacy hex path, removed when all cases are recipes).
+const meshText = (e) =>
+  e.recipe
+    ? `Netgen, ${trim(e.mesh.maxElementSize)} mm maximum element size`
+    : esc(e.page.mesh);
 
 /** "Mesh" and "Unknowns": from the solved mesh, or as the generator wrote them. */
 function meshRows(e) {
   const m = e.mesh;
   const elements =
     e.kind === "case"
-      ? `${int(m.elements)} ${ELEMENTS[m.order]}`
+      ? `${int(m.elements)} ${ELEMENTS[m.elementType ?? "CHEXA"][m.order]}`
       : esc(m.elements);
   return [
-    ["Mesh", `${esc(e.page.mesh)}: ${elements}`],
+    ["Mesh", `${meshText(e)}: ${elements}`],
     ["Unknowns", `${int(m.nodes)} nodes, ${int(m.dofs)} degrees of freedom`],
   ];
 }
 
+// The solver line: a recipe case is solved as the app solves it.
+function solverText(e, data) {
+  const engine = esc(e.engine ?? data.engine);
+  return e.recipe
+    ? `The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: ${engine}`
+    : `KoFEM engine (MFEM), the WebAssembly build the app runs: ${engine}`;
+}
+
 function reproduceCommand(e) {
   if (e.kind === "case")
-    return `node examples/validation/run.mjs --case ${e.id}`;
+    return `cd web &amp;&amp; bun install &amp;&amp; bun run validate --case ${e.id}`;
   return `cd web &amp;&amp; bun install &amp;&amp; bun run ${esc(e.script)}`;
 }
 
@@ -710,10 +778,7 @@ export function renderExamplePage(
       ${specTable([
         ...meshRows(e),
         ["Material", esc(e.material ?? "Linear elastic, isotropic")],
-        [
-          "Solver",
-          `KoFEM engine (MFEM), the WebAssembly build the app runs: ${esc(e.engine ?? data.engine)}`,
-        ],
+        ["Solver", solverText(e, data)],
       ])}${text.model(ctx)}`);
   const results = text.results
     ? text.results(ctx)
@@ -735,8 +800,8 @@ export function renderExamplePage(
       <h2 id="discussion">Discussion</h2>${text.discussion(ctx)}`);
   sections.push(`
       <h2 id="reproduce">Reproduce</h2>
-      ${inApp(e)}
-      <p>From a clone (Node.js 20+, bash, curl)${e.kind === "case" ? ", this solves the model with the same engine and prints its line" : ", this rebuilds the model and its figure"}:</p>
+      ${inApp(e)}${e.recipe ? byHand(e) : ""}
+      <p>From a clone (${e.kind === "case" ? "Bun, bash, curl and Rust), this builds and solves the model with the same engine and prints its line" : "Bun, bash, curl), this rebuilds the model and its figure"}:</p>
       ${cloneSteps(reproduceCommand(e))}${
         e.kind === "case"
           ? `

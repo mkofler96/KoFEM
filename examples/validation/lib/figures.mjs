@@ -110,9 +110,9 @@ const triad = (x, y, [a, b] = ["x", "y"]) =>
 /**
  * Side view of the prismatic bar. `load`: "traction" (a uniform traction, how
  * the app applies a force to a face) or "pressure" (pressure on the end face).
+ * `div`: the structured mesh to draw, or null for an unstructured one.
  */
 export function barFigure({ load, div }) {
-  const [nx, ny] = div;
   const x0 = 90,
     x1 = 410,
     yc = 112,
@@ -122,7 +122,7 @@ export function barFigure({ load, div }) {
     bot = yc + hh;
   const parts = [
     `<rect class="body" x="${x0}" y="${top}" width="${x1 - x0}" height="${2 * hh}"/>`,
-    rectMesh(x0, top, x1, bot, nx, ny),
+    div ? rectMesh(x0, top, x1, bot, div[0], div[1]) : "",
     clamp(x0, top, bot),
     // Deformed outline: the end face moves by δ, the section contracts (or,
     // in compression, bulges) away from the clamp.

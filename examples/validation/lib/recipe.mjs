@@ -18,10 +18,16 @@
 // Units are the app's: N · mm · MPa · tonne.
 //
 // Faces are named by a point on them (`at`), never by an id: an id depends on
-// OCCT's numbering after a split, a point is what a user clicks. The build
-// resolves `at` to the CAD face whose display tessellation contains the point
-// (exactly one face within 1e-6 · model size, or it throws); the GUI test
-// clicks the screen projection of the same point.
+// OCCT's numbering after a split, a point is what a user clicks. Both the
+// build and the GUI test resolve `at` with resolveFaceAt() below: the CAD face
+// of the display tessellation's triangles nearest the point, within the
+// tessellation's chordal deflection (the worker's deflection_relative 0.001 ×
+// model size, the bounding-box diagonal of the tessellation — so a point on
+// the true surface of a curved face resolves even where the facets cut inside
+// it). Exactly one face may lie within that tolerance; none, or two (a point
+// on or near an edge), throws. Keep `at` well inside its face, farther than
+// that tolerance from every edge. The GUI test clicks the screen projection of
+// the same point.
 //
 // @typedef {[number, number, number]} Point
 //
@@ -35,6 +41,9 @@
 //
 // @typedef {object} MeshStep            the mesher options a user sets
 // @property {number} maxElementSize     mm
+// @property {number} [minElementSize]   mm; absent: maxElementSize / 10 (the
+//                                       worker's default; the GUI test types
+//                                       it into the Mesh panel's min field)
 // @property {1 | 2} order               linear or quadratic elements
 // @property {{ faces: FaceRef[], size: number }[]} [localSizes]
 //                                       per-face sizes, only if the app's
@@ -66,12 +75,14 @@
 // @typedef {object} Probe               what the Results panel's hand check reads
 //   One of:
 //   { kind: "displacement", component: 0|1|2, faces: FaceRef[] }
-//       mean displacement component over the nodes of the faces (mm)
+//       mean displacement component over the nodes of the faces (mm) — the
+//       distinct mesh vertices of the faces' surface triangles
 //   { kind: "displacement", component: 0|1|2, at: Point }
 //       the displacement component at the mesh node nearest `at` (mm)
 //   { kind: "twist", axis: 0|1|2, faces: FaceRef[] }
 //       mean rotation about `axis` through the faces' node centroid:
-//       mean over nodes off the axis of (r × u)_axis / |r⊥|² (rad)
+//       mean over nodes off the axis of (r × u)_axis / |r⊥|² (rad), where a
+//       node is off the axis when |r⊥| exceeds 1e-6 of the largest |r⊥|
 //   { kind: "stress", field: "vonMises", stat: "max", faces?: FaceRef[] }
 //       the largest nodal von Mises stress (averaged to the nodes as the app
 //       averages it), over the faces' nodes or the whole model (MPa)
@@ -94,6 +105,124 @@
 // @property {Support[]} supports
 // @property {Load[]} loads
 // @property {Readout} readout
+
+/** Steel as the app seeds it (web/src/store/materialSlice.ts DEFAULT_MATERIAL). */
+export const APP_STEEL = Object.freeze({
+  name: "Steel",
+  young: 210000,
+  poisson: 0.3,
+  density: 7.85e-9,
+});
+
+// ── Resolving a face from a point ─────────────────────────────────────────────
+
+/** The worker's tessellation chord tolerance, relative to the model size. */
+export const DEFLECTION_RELATIVE = 0.001;
+
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+
+/**
+ * Distance from p to triangle abc (closest point by Voronoi region, Ericson,
+ * Real-Time Collision Detection §5.1.5).
+ */
+export function triangleDistance(p, a, b, c) {
+  const ab = sub(b, a),
+    ac = sub(c, a),
+    ap = sub(p, a);
+  const d1 = dot(ab, ap),
+    d2 = dot(ac, ap);
+  const bp = sub(p, b);
+  const d3 = dot(ab, bp),
+    d4 = dot(ac, bp);
+  const cp = sub(p, c);
+  const d5 = dot(ab, cp),
+    d6 = dot(ac, cp);
+  const vc = d1 * d4 - d3 * d2;
+  const vb = d5 * d2 - d1 * d6;
+  const va = d3 * d6 - d5 * d4;
+  const along = (o, d, t) => [
+    o[0] + t * d[0],
+    o[1] + t * d[1],
+    o[2] + t * d[2],
+  ];
+  let q;
+  if (d1 <= 0 && d2 <= 0) q = a;
+  else if (d3 >= 0 && d4 <= d3) q = b;
+  else if (d6 >= 0 && d5 <= d6) q = c;
+  else if (vc <= 0 && d1 >= 0 && d3 <= 0) q = along(a, ab, d1 / (d1 - d3));
+  else if (vb <= 0 && d2 >= 0 && d6 <= 0) q = along(a, ac, d2 / (d2 - d6));
+  else if (va <= 0 && d4 - d3 >= 0 && d5 - d6 >= 0)
+    q = along(b, sub(c, b), (d4 - d3) / (d4 - d3 + (d5 - d6)));
+  else {
+    const denom = 1 / (va + vb + vc);
+    q = along(along(a, ab, vb * denom), ac, vc * denom);
+  }
+  return Math.sqrt(dot(sub(p, q), sub(p, q)));
+}
+
+/** Bounding-box diagonal of points: the "model size". */
+export function modelSize(points) {
+  const lo = [Infinity, Infinity, Infinity];
+  const hi = [-Infinity, -Infinity, -Infinity];
+  for (const p of points)
+    for (let k = 0; k < 3; k++) {
+      lo[k] = Math.min(lo[k], p[k]);
+      hi[k] = Math.max(hi[k], p[k]);
+    }
+  return Math.hypot(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
+}
+
+/**
+ * The distance from `at` to the nearest triangle of every face, nearest
+ * first: [[faceId, distance], …]. `surface` is { points: Point[], triangles:
+ * [i, j, k][], faceIds: number[] } — a display tessellation as the store holds
+ * it (stepSurface), or a mesh's surface triangles with their CAD face ids.
+ */
+export function faceDistances(surface, at) {
+  const { points, triangles, faceIds } = surface;
+  if (triangles.length !== faceIds.length)
+    throw new Error(
+      `faceDistances: ${triangles.length} triangles but ${faceIds.length} face ids`,
+    );
+  const best = new Map();
+  triangles.forEach(([i, j, k], t) => {
+    const d = triangleDistance(at, points[i], points[j], points[k]);
+    const prev = best.get(faceIds[t]);
+    if (prev === undefined || d < prev) best.set(faceIds[t], d);
+  });
+  return [...best].sort((x, y) => x[1] - y[1]);
+}
+
+/**
+ * The CAD face (its 1-based id in `tess.faceIds`) a recipe's `at` names: the
+ * one face of the display tessellation within its chordal deflection
+ * (DEFLECTION_RELATIVE × model size) of the point. Throws when no face, or more
+ * than one (a point on or near an edge), lies within it.
+ * @param {{ points: Point[], triangles: [number, number, number][], faceIds: number[] }} tess
+ * @param {Point} at
+ * @returns {number}
+ */
+export function resolveFaceAt(tess, at) {
+  if (!isPoint(at))
+    throw new Error(
+      `resolveFaceAt: expected a point, got ${JSON.stringify(at)}`,
+    );
+  const tol = DEFLECTION_RELATIVE * modelSize(tess.points);
+  const dist = faceDistances(tess, at);
+  const near = dist.filter(([, d]) => d <= tol).map(([id]) => id);
+  if (near.length !== 1) {
+    const nearest = dist
+      .slice(0, 3)
+      .map(([id, d]) => `face ${id} at ${d.toPrecision(3)} mm`)
+      .join(", ");
+    throw new Error(
+      `the point [${at.join(", ")}] must lie on exactly one CAD face (within ${tol.toPrecision(3)} mm), ` +
+        `found ${near.length ? `faces [${near.join(", ")}]` : "none"}; nearest: ${nearest}`,
+    );
+  }
+  return near[0];
+}
 
 const isPoint = (p) =>
   Array.isArray(p) && p.length === 3 && p.every((v) => Number.isFinite(v));
@@ -134,6 +263,16 @@ export function validateRecipe(id, r) {
     throw new Error(`${at}: a shell needs a positive thickness`);
   if (!(r.mesh?.maxElementSize > 0))
     throw new Error(`${at}: mesh.maxElementSize must be positive`);
+  if (
+    r.mesh.minElementSize !== undefined &&
+    !(
+      r.mesh.minElementSize >= 0 &&
+      r.mesh.minElementSize <= r.mesh.maxElementSize
+    )
+  )
+    throw new Error(
+      `${at}: mesh.minElementSize must lie in [0, maxElementSize]`,
+    );
   if (r.mesh.order !== 1 && r.mesh.order !== 2)
     throw new Error(`${at}: mesh.order must be 1 or 2`);
   const m = r.material;

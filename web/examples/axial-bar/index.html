@@ -43,9 +43,10 @@
             "url": "https://kofem.org/examples/axial-bar/",
             "image": [
               "https://kofem.org/examples/axial-bar.png",
-              "https://kofem.org/examples/axial-bar/axial-bar-diagram.png"
+              "https://kofem.org/examples/axial-bar/axial-bar-diagram.png",
+              "https://kofem.org/examples/axial-bar/axial-bar-mesh-convergence.png"
             ],
-            "dateModified": "2026-11-01",
+            "dateModified": "2026-11-12",
             "isPartOf": {
               "@type": "CollectionPage",
               "url": "https://kofem.org/examples/"
@@ -872,7 +873,7 @@
       </div>
       
       <figure class="result">
-        <img src="/examples/axial-bar.png" width="1200" height="401" alt="Axial bar in tension: displacement magnitude |u| on the deformed shape, displacements drawn 200 times enlarged" />
+        <img src="/examples/axial-bar.png" width="1200" height="402" alt="Axial bar in tension: displacement magnitude |u| on the deformed shape, displacements drawn 200 times enlarged" />
         <div class="colorbar"><span>0.00&nbsp;mm</span><span class="bar" aria-hidden="true"></span><span>0.474&nbsp;mm</span></div>
         <figcaption>Displacement magnitude |U|, deformed shape, displacements drawn 200 times enlarged. Drawn from the analysis file that Open in KoFEM loads.</figcaption>
       </figure>
@@ -890,8 +891,8 @@
           <tbody>
             <tr>
               <td class="num">0.47619&nbsp;mm</td>
-              <td class="num"><strong data-testid="fe-value">0.47358&nbsp;mm</strong></td>
-              <td class="num">−0.55&nbsp;%<br /><span class="band pass">within ±2&nbsp;%</span></td>
+              <td class="num"><strong data-testid="fe-value">0.47380&nbsp;mm</strong></td>
+              <td class="num">−0.50&nbsp;%<br /><span class="band pass">within ±2&nbsp;%</span></td>
             </tr>
           </tbody>
         </table>
@@ -901,7 +902,7 @@
       <h2 id="problem">The problem</h2>
       <figure class="diagram">
         <picture class="figure-image theme-light fig"><source srcset="/examples/axial-bar/axial-bar-diagram.svg" type="image/svg+xml" /><img src="/examples/axial-bar/axial-bar-diagram.png" width="640" height="214" alt="Prismatic bar clamped at the left end and loaded axially at the right end" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark fig"><source srcset="/examples/axial-bar/axial-bar-diagram-dark.svg" type="image/svg+xml" /><img src="/examples/axial-bar/axial-bar-diagram.png" width="640" height="214" alt="Prismatic bar clamped at the left end and loaded axially at the right end" loading="lazy" decoding="async" /></picture>
-        <figcaption>Prismatic bar of length L along x, W × H section. Sketch, not to scale; thin lines show the element mesh.</figcaption>
+        <figcaption>Prismatic bar of length L along x, W × H section. Sketch, not to scale.</figcaption>
       </figure>
       
       <div class="table-wrap">
@@ -953,39 +954,103 @@
       
       <div class="table-wrap">
         <table class="spec">
-          <tr><th scope="row">Mesh</th><td>20 × 4 × 4 grid: 320 linear 8-node hexahedra (P1)</td></tr>
-          <tr><th scope="row">Unknowns</th><td>525 nodes, 1,575 degrees of freedom</td></tr>
+          <tr><th scope="row">Mesh</th><td>Netgen, 25 mm maximum element size: 2,991 linear 4-node tetrahedra (P1)</td></tr>
+          <tr><th scope="row">Unknowns</th><td>911 nodes, 2,733 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>KoFEM engine (MFEM), the WebAssembly build the app runs: engine-5ceb743373dd</td></tr>
+          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-7303b4976800</td></tr>
         </table>
       </div>
-        <p>The force is applied the way the app applies a force to a face: as
-        a uniform traction <math><mi>t</mi><mo>=</mo><mi>P</mi><mo lspace="0" rspace="0">/</mo><mi>A</mi></math>, integrated over the
-        16 element faces of the end face. In the
-        finite element method a traction enters through the work it does, so
-        the force on node <math><mi>i</mi></math> is</p>
+        <p>The bar is the STEP file a user imports, meshed by Netgen with
+        tetrahedra; the support and the load each sit on one whole CAD face.
+        The force is applied the way the app applies a force to a face: as a
+        uniform traction <math><mi>t</mi><mo>=</mo><mi>P</mi><mo lspace="0" rspace="0">/</mo><mi>A</mi></math>, integrated over the triangles of
+        the end face's surface mesh. In the finite element method a traction
+        enters through the work it does, so the force on node <math><mi>i</mi></math>
+        is</p>
         <math display="block"><msub><mi>f</mi><mrow><mi>i</mi></mrow></msub><mo>=</mo><msub><mo largeop="true">∫</mo><mrow><mi>Γ</mi></mrow></msub><msub><mi>N</mi><mrow><mi>i</mi></mrow></msub><mspace width="0.17em"/><mi>t</mi><mspace width="0.28em"/><mi mathvariant="normal">d</mi><mi>S</mi><mo>,</mo></math>
-        <p>where <math><msub><mi>N</mi><mrow><mi>i</mi></mrow></msub></math> is the shape function of that node. On linear
-        quadrilateral faces of size <math><mi>h</mi><mo>×</mo><mi>h</mi></math>, a node collects
-        <math><mi>t</mi><msup><mi>h</mi><mn>2</mn></msup><mo lspace="0" rspace="0">/</mo><mn>4</mn></math> from each face it touches: an interior node of the
-        end face gets <math><mi>t</mi><msup><mi>h</mi><mn>2</mn></msup></math>, an edge node <math><mi>t</mi><msup><mi>h</mi><mn>2</mn></msup><mo lspace="0" rspace="0">/</mo><mn>2</mn></math> and a
-        corner node <math><mi>t</mi><msup><mi>h</mi><mn>2</mn></msup><mo lspace="0" rspace="0">/</mo><mn>4</mn></math>. The forces add up to
-        <math><mi>t</mi><mi>A</mi><mo>=</mo><mi>P</mi></math>. Splitting <math><mi>P</mi></math> equally over the nodes instead
-        would get the total right but overload the edges and corners.</p>
+        <p>where <math><msub><mi>N</mi><mrow><mi>i</mi></mrow></msub></math> is the shape function of that node. On a
+        linear triangle of area <math><msub><mi>A</mi><mrow><mi>e</mi></mrow></msub></math>, each of its three nodes
+        collects <math><mi>t</mi><msub><mi>A</mi><mrow><mi>e</mi></mrow></msub><mo lspace="0" rspace="0">/</mo><mn>3</mn></math>, so a node gets a third of the area of
+        the triangles around it. On an unstructured mesh those areas differ
+        from node to node; the forces still add up to <math><mi>t</mi><mi>A</mi><mo>=</mo><mi>P</mi></math>.
+        Splitting <math><mi>P</mi></math> equally over the nodes instead would get the
+        total right but load small and large patches alike.</p>
 
       <h2 id="results">Results</h2>
       <div class="table-wrap">
         <table class="spec">
           <tr><th scope="row">Quantity</th><td>tip extension δ</td></tr>
           <tr><th scope="row">Reference</th><td>δ = P·L / (E·A) = 0.47619&nbsp;mm <span class="meta">(Gere &amp; Goodno, Mechanics of Materials)</span></td></tr>
-          <tr><th scope="row">KoFEM</th><td>0.47358&nbsp;mm</td></tr>
-          <tr><th scope="row">Difference</th><td>−0.55&nbsp;% <span class="band pass">within ±2&nbsp;%</span></td></tr>
+          <tr><th scope="row">KoFEM</th><td>0.47380&nbsp;mm</td></tr>
+          <tr><th scope="row">Difference</th><td>−0.50&nbsp;% <span class="band pass">within ±2&nbsp;%</span></td></tr>
         </table>
       </div>
+      <section class="study" id="convergence" data-study="axial-bar">
+        <h3>Mesh convergence: Axial bar, P1 vs. P2</h3>
+        <figure class="chart">
+          <div class="legend"><span class="key"><span class="swatch s1"></span>P1 (linear)</span><span class="key"><span class="swatch s2"></span>P2 (quadratic)</span><span class="key"><span class="dot under"></span>below the reference</span><span class="key"><span class="dot over"></span>above</span></div>
+          <picture class="figure-image theme-light conv"><source srcset="/examples/axial-bar/axial-bar-mesh-convergence.svg" type="image/svg+xml" /><img src="/examples/axial-bar/axial-bar-mesh-convergence.png" width="440" height="250" alt="Axial bar, P1 vs. P2: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark conv"><source srcset="/examples/axial-bar/axial-bar-mesh-convergence-dark.svg" type="image/svg+xml" /><img src="/examples/axial-bar/axial-bar-mesh-convergence.png" width="440" height="250" alt="Axial bar, P1 vs. P2: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture>
+          <figcaption>Difference from the reference on refined meshes, logarithmic axes. The ringed point is this example's mesh.</figcaption>
+        </figure>
+        <p>Both orders level off a few tenths of a percent below P·L/(E·A): what remains is the clamp, which stops the lateral contraction at x = 0, not the mesh.</p>
+        <details>
+          <summary>Data</summary>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Order</th>
+                  <th scope="col">Mesh</th>
+                  <th scope="col" class="num">DOFs</th>
+                  <th scope="col" class="num">KoFEM</th>
+                  <th scope="col" class="num">Difference</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>P1 (linear)</td>
+                  <td>50 mm</td>
+                  <td class="num">939</td>
+                  <td class="num">0.47273&nbsp;mm</td>
+                  <td class="num">−0.73&nbsp;%</td>
+                </tr>
+                <tr>
+                  <td>P1 (linear)</td>
+                  <td>25 mm (this example)</td>
+                  <td class="num">2,733</td>
+                  <td class="num">0.47380&nbsp;mm</td>
+                  <td class="num">−0.50&nbsp;%</td>
+                </tr>
+                <tr>
+                  <td>P1 (linear)</td>
+                  <td>12.5 mm</td>
+                  <td class="num">19,269</td>
+                  <td class="num">0.47441&nbsp;mm</td>
+                  <td class="num">−0.37&nbsp;%</td>
+                </tr>
+                <tr>
+                  <td>P2 (quadratic)</td>
+                  <td>50 mm</td>
+                  <td class="num">5,904</td>
+                  <td class="num">0.47434&nbsp;mm</td>
+                  <td class="num">−0.39&nbsp;%</td>
+                </tr>
+                <tr>
+                  <td>P2 (quadratic)</td>
+                  <td>25 mm</td>
+                  <td class="num">16,596</td>
+                  <td class="num">0.47461&nbsp;mm</td>
+                  <td class="num">−0.33&nbsp;%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </section>
 
       <h2 id="discussion">Discussion</h2>
         <p>KoFEM's extension differs from <math><mi>P</mi><mi>L</mi><mo lspace="0" rspace="0">/</mo><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>E</mi><mi>A</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></math> by
-        −0.55&nbsp;%. Linear elements represent a linearly varying
+        −0.50&nbsp;%. Linear elements represent a linearly varying
         displacement exactly, so the uniform state inside the bar carries no
         discretisation error. What remains is the clamp. The x = 0 face is
         fully fixed, so near it the bar cannot contract sideways. That
@@ -994,22 +1059,31 @@
         the 3-D body and the 1-D theory, so a finer mesh does not remove
         it.</p>
         <p>The <a href="/examples/surface-pressure/">same bar under an end
-        pressure</a> comes out −0.55&nbsp;%: the
-        pressure path builds the same load vector.</p>
+        pressure</a> comes out −0.55&nbsp;%: a
+        pressure is integrated over the end face the same way as a force.</p>
 
       <h2 id="reproduce">Reproduce</h2>
       <p>
         In the app: <a href="/app/?example=axial-bar" data-testid="reproduce-open">open the model</a>,
         then Studies → Static 1 → Run static solve, select the result plot and set Field to
         Ux. The Result summary shows
-        <span class="readout" data-testid="app-readout" data-field="Ux" data-stat="Max Ux" data-value="4.736e-1 mm">Max Ux 4.736e-1 mm</span>.
+        <span class="readout" data-testid="app-readout" data-field="Ux" data-stat="Max Ux" data-value="4.739e-1 mm">Max Ux 4.739e-1 mm</span>.
       </p>
-      <p>From a clone (Node.js 20+, bash, curl), this solves the model with the same engine and prints its line:</p>
+      <p>Or build it yourself, as this page's number was built:</p>
+      <ol class="steps">
+        <li>Import <a href="/examples/axial-bar.step" download>axial-bar.step</a>.</li>
+        <li>Mesh with a 25 mm maximum element size, linear elements.</li>
+        <li>Material Steel: E = 210000 MPa, ν = 0.3.</li>
+        <li>Support “Fixed end”: Ux, Uy, Uz = 0 on the face through (0, 50, 50).</li>
+        <li>Load “Axial load”: force (1000000, 0, 0) N on the face through (1000, 50, 50).</li>
+        <li>Run the static study. The Results panel compares tip extension with δ = P·L / (E·A).</li>
+      </ol>
+      <p>From a clone (Bun, bash, curl and Rust), this builds and solves the model with the same engine and prints its line:</p>
       <pre><code>git clone https://github.com/mkofler96/KoFEM.git &amp;&amp; cd KoFEM
 bash scripts/fetch-wasm-engine.sh
-node examples/validation/run.mjs --case axial-bar</code></pre>
+cd web &amp;&amp; bun install &amp;&amp; bun run validate --case axial-bar</code></pre>
       <pre class="console"><code>Case                                  Quantity                                  FE   Reference     Err%  Tol%  Status
-Axial bar in tension                  tip extension δ                      0.47358     0.47619    -0.55     2  PASS</code></pre>
+Axial bar in tension                  tip extension δ                      0.47380     0.47619    -0.50     2  PASS</code></pre>
 
       <h2 id="references">References</h2>
       <ol class="refs">

@@ -46,7 +46,7 @@
               "https://kofem.org/examples/cantilever/cantilever-diagram.png",
               "https://kofem.org/examples/cantilever/cantilever-mesh-convergence.png"
             ],
-            "dateModified": "2026-11-01",
+            "dateModified": "2026-11-12",
             "isPartOf": {
               "@type": "CollectionPage",
               "url": "https://kofem.org/examples/"
@@ -950,7 +950,7 @@
           <tr><th scope="row">Mesh</th><td>40 × 4 × 4 grid: 640 linear 8-node hexahedra (P1)</td></tr>
           <tr><th scope="row">Unknowns</th><td>1,025 nodes, 3,075 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>KoFEM engine (MFEM), the WebAssembly build the app runs: engine-5ceb743373dd</td></tr>
+          <tr><th scope="row">Solver</th><td>KoFEM engine (MFEM), the WebAssembly build the app runs: engine-7303b4976800</td></tr>
         </table>
       </div>
         <p>The beam is meshed with linear 8-node hexahedra. Each element is a
@@ -1074,10 +1074,10 @@
         Uy. The Result summary shows
         <span class="readout" data-testid="app-readout" data-field="Uy" data-stat="Min Uy" data-value="-1.838e+0 mm">Min Uy -1.838e+0 mm</span>.
       </p>
-      <p>From a clone (Node.js 20+, bash, curl), this solves the model with the same engine and prints its line:</p>
+      <p>From a clone (Bun, bash, curl and Rust), this builds and solves the model with the same engine and prints its line:</p>
       <pre><code>git clone https://github.com/mkofler96/KoFEM.git &amp;&amp; cd KoFEM
 bash scripts/fetch-wasm-engine.sh
-node examples/validation/run.mjs --case cantilever</code></pre>
+cd web &amp;&amp; bun install &amp;&amp; bun run validate --case cantilever</code></pre>
       <pre class="console"><code>Case                                  Quantity                                  FE   Reference     Err%  Tol%  Status
 Cantilever beam, linear hexahedra     tip deflection δ                     -1.8378     -1.9048    -3.51     6  PASS</code></pre>
 
