@@ -617,8 +617,9 @@ async function handleShellSolve(id: number, payload: SolvePayload) {
 // Solve a hand-mixed shell+solid model, or an all-solid model carrying a
 // surface-to-point coupling, through the engine's coupled solid-shell solver —
 // or, for the all-solid model with AMG chosen, through the Rust solver on the
-// same inputs. elementOrder does not apply (the coupled assembler is linear
-// tets + DKT facets; AMG takes couplings on linear elements only).
+// same inputs, with the chosen element order. The engine's coupled assembler
+// is linear tets + DKT facets, so elementOrder does not apply there, and the
+// solve says so.
 async function handleMixedSolve(id: number, payload: SolvePayload) {
   const inp = buildCoupledEngineInputs(payload, logTo(id));
 
@@ -627,16 +628,25 @@ async function handleMixedSolve(id: number, payload: SolvePayload) {
     log: `[mixed] ${inp.solidElements.length} solid tets (${inp.solidMaterialNames.join(", ")}), ${inp.shellElements.length} shell facets${inp.shellMaterialNames.length > 0 ? ` (${inp.shellMaterialNames.join(", ")})` : ""} → ${inp.model.pool.length / 3} pool nodes, ${inp.couplingCount} couplings (${inp.declaredCouplings} declared)…`,
   });
 
-  const result =
-    requestedSolver(payload) === "amg" && amgReason(payload) === null
-      ? await solveCoupledSolidWithAmg(
-          { ElasticModel, SolveOptions, Couplings },
-          inp,
-          payload.cgIterationLimit,
-          onCgLimit,
-          logTo(id),
-        )
-      : await m().solve_coupled(inp.mesh, inp.coupling, inp.bcs, inp.matJson);
+  // eslint-disable-next-line kofem/no-silent-fallback -- elementOrder is optional in the solve message; the documented default is linear elements
+  const order = payload.elementOrder ?? 1;
+  const useAmg =
+    requestedSolver(payload) === "amg" && amgReason(payload) === null;
+  if (!useAmg && order !== 1)
+    self.postMessage({
+      id,
+      log: `The coupled solver has linear elements only — solving with linear instead of order-${order} elements.`,
+    });
+  const result = useAmg
+    ? await solveCoupledSolidWithAmg(
+        { ElasticModel, SolveOptions, Couplings },
+        inp,
+        order,
+        payload.cgIterationLimit,
+        onCgLimit,
+        logTo(id),
+      )
+    : await m().solve_coupled(inp.mesh, inp.coupling, inp.bcs, inp.matJson);
   if ("error" in result) throw new Error(result.error);
   const fields = mapMixedResult(payload, inp.model, result);
 

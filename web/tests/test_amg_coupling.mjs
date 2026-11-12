@@ -11,9 +11,11 @@
 // rigid point-to-point connection between two separately meshed beams, a tie
 // across a gap together with a coupling, and a Netgen mesh of the wall
 // bracket — with two materials, prescribed displacements and surface loads
-// along the way. Then what AMG refuses: a hinged point-to-point joint, which
-// leaves a mechanism (the MFEM path's Gauss–Seidel CG still converges on it
-// when the load does not excite the mechanism), and quadratic elements.
+// along the way. Then quadratic elements, against the MFEM solid solve at
+// order 2 (the engine's coupled solve is linear only, see below), and what
+// AMG refuses: a hinged point-to-point joint, which leaves a mechanism (the
+// MFEM path's Gauss–Seidel CG still converges on it when the load does not
+// excite the mechanism).
 //
 // Usage:  bash ../scripts/build-fem-wasm.sh && bun tests/test_amg_coupling.mjs
 //         (from web/; the MFEM engine comes from scripts/fetch-wasm-engine.sh)
@@ -30,6 +32,8 @@ import {
   amgUnavailableReason,
   solveCoupledSolidWithAmg,
 } from "../src/lib/solve/amg.ts";
+import { buildSolidEngineInputs } from "../src/lib/solve/solid.ts";
+import { buildVertexIndexer } from "../src/lib/solveMeshPacking.ts";
 import {
   Couplings,
   ElasticModel,
@@ -200,6 +204,7 @@ async function compare(label, model) {
   const rustRaw = await solveCoupledSolidWithAmg(
     fem,
     inputs,
+    1,
     undefined,
     neverAsk,
     (line) => lines.push(line),
@@ -440,10 +445,10 @@ function jointedBeams(connectorDofs) {
   await compare("A tie across a gap together with a coupling", model);
 }
 
-{
-  // The wall bracket, meshed by Netgen: clamped at one end, its far end
-  // coupled kinematically to a point carrying a force and a moment, and a
-  // band of its surface coupled distributingly to a second, loaded point.
+// The wall bracket meshed by Netgen at `maxElementSize` (mm), as a store
+// model with two materials (split halfway along its length), and the helpers
+// the cases pick nodes with.
+async function bracketModel(maxElementSize) {
   const mesher = await createModule(quiet());
   mesher.tessellate_step(
     new Uint8Array(
@@ -453,8 +458,8 @@ function jointedBeams(connectorDofs) {
   );
   const mesh = mesher.generate_fem_mesh(
     JSON.stringify({
-      max_element_size: 20,
-      min_element_size: 2,
+      max_element_size: maxElementSize,
+      min_element_size: maxElementSize / 10,
       grading: 0.3,
       second_order: false,
       elementsperedge: 2.0,
@@ -512,6 +517,15 @@ function jointedBeams(connectorDofs) {
           0,
         ) / ids.length,
     );
+  return { model, used, surface, along, centroidOf, longest };
+}
+
+{
+  // The wall bracket, meshed by Netgen: clamped at one end, its far end
+  // coupled kinematically to a point carrying a force and a moment, and a
+  // band of its surface coupled distributingly to a second, loaded point.
+  const { model, used, surface, along, centroidOf, longest } =
+    await bracketModel(20);
   model.constraints = clampAll(
     model.nodes
       .filter((node) => used.has(node.id) && along(node) <= 0.03)
@@ -557,6 +571,326 @@ function jointedBeams(connectorDofs) {
   await compare("Wall bracket (Netgen mesh) with two couplings", model);
 }
 
+// ── Quadratic elements ────────────────────────────────────────────────────────
+//
+// The engine's coupled solve has linear tets only, so a coupled quadratic model
+// is checked against the MFEM solid solve at order 2 on the model the coupling
+// stands for. A kinematic point that is fixed or driven moves the surface it
+// grips as a rigid body — exactly the clamp or the prescribed rigid
+// displacement MFEM applies to those vertices and extends to their edge nodes —
+// so the two are one discrete problem and must agree to solver precision. A
+// distributing point loaded by a force stands for that force spread over the
+// face; it puts the load on the face's nodes in equal shares rather than as a
+// uniform traction, which only changes the field near the face (Saint-Venant),
+// so away from it the two agree to a fraction of a percent.
+
+const QUADRATIC = 2;
+
+// Boundary faces (as tet-face node-id triples) whose nodes all satisfy `on`.
+function facesWhere(model, on) {
+  const faces = [];
+  for (const element of model.elements)
+    for (const face of [
+      [0, 1, 2],
+      [0, 1, 3],
+      [0, 2, 3],
+      [1, 2, 3],
+    ]) {
+      const ids = face.map((corner) => element.nodeIds[corner]);
+      if (ids.every((id) => on(model.nodes[id - 1000]))) faces.push(ids);
+    }
+  return faces;
+}
+
+async function solveQuadraticCoupled(model) {
+  const lines = [];
+  const inputs = buildCoupledEngineInputs(model, (line) => lines.push(line));
+  const started = performance.now();
+  const raw = await solveCoupledSolidWithAmg(
+    fem,
+    inputs,
+    QUADRATIC,
+    undefined,
+    neverAsk,
+    (line) => lines.push(line),
+  );
+  const seconds = (performance.now() - started) / 1000;
+  for (const line of lines) console.log(`    ${line}`);
+  return { ...mapMixedResult(model, inputs.model, raw), seconds };
+}
+
+function solveMfemQuadratic(model) {
+  const vid = buildVertexIndexer(model.nodes);
+  const inputs = buildSolidEngineInputs(model, vid);
+  const started = performance.now();
+  const raw = engine.solve_linear_elastic(
+    inputs.mesh,
+    inputs.matJson,
+    inputs.bcsJson,
+    QUADRATIC,
+  );
+  if ("error" in raw) throw new Error(`MFEM order 2: ${raw.error}`);
+  return {
+    displacements: raw.displacements,
+    vonMises: raw.von_mises,
+    seconds: (performance.now() - started) / 1000,
+  };
+}
+
+// The coupled model (its reference point is its last node) through Rust at
+// order 2, against `equivalent` (the same model without the point) through
+// MFEM at order 2.
+async function compareQuadratic(label, coupled, equivalent) {
+  console.log(`\n${label}`);
+  const reason = amgUnavailableReason({
+    elements: coupled.elements,
+    properties: coupled.properties,
+    elementOrder: QUADRATIC,
+    couplingCount: coupled.couplings.length,
+  });
+  check("AMG accepts couplings on quadratic elements", reason === null, reason);
+  const rust = await solveQuadraticCoupled(coupled);
+  const mfem = solveMfemQuadratic(equivalent);
+  const vertices = 3 * equivalent.nodes.length;
+  const displacement = maxDifference(
+    mfem.displacements,
+    rust.displacements.subarray(0, vertices),
+  );
+  const stress = maxDifference(mfem.vonMises, rust.vonMises);
+  console.log(
+    `    max |u| ${displacement.peak.toExponential(4)} mm, AMG − MFEM ` +
+      `${displacement.relative.toExponential(2)}; max von Mises ` +
+      `${stress.peak.toExponential(4)} MPa, AMG − MFEM ${stress.relative.toExponential(2)}; ` +
+      `MFEM ${mfem.seconds.toFixed(2)} s, AMG ${rust.seconds.toFixed(2)} s`,
+  );
+  check(
+    "displacements agree",
+    displacement.peak > 0 && displacement.relative < 1e-5,
+    `${displacement.relative}`,
+  );
+  check(
+    "von Mises stresses agree",
+    stress.relative < 1e-4,
+    `${stress.relative}`,
+  );
+  return { rust, mfem };
+}
+
+// The two-material beam with its root face (x = 0) coupled kinematically to a
+// point at its centre, and the same loads on the tip: a corner force, a
+// pressure on the top and a total force on the tip face.
+function rootCoupled() {
+  const model = emptyModel();
+  addBeam(model, { x0: 0, length: LENGTH, height: HEIGHT, nx: 8, split: 60 });
+  const point = addPoint(model, 0, HEIGHT / 2, HEIGHT / 2);
+  const root = idsWhere(model, (node) => node.id !== point && near(node.x, 0));
+  model.couplings = [
+    {
+      name: "Root",
+      kind: "kinematic",
+      dofs: [0, 1, 2, 3, 4, 5],
+      refNodeId: point,
+      faces: [{ nodeIds: root }],
+    },
+  ];
+  const corner = idsWhere(
+    model,
+    (node) =>
+      near(node.x, LENGTH) && near(node.y, HEIGHT) && near(node.z, HEIGHT),
+  )[0];
+  model.loads = [
+    { nodeId: corner, dof: 1, value: 300 },
+    { nodeId: corner, dof: 2, value: -900 },
+  ];
+  model.surfaceLoads = [
+    {
+      type: "pressure",
+      faces: facesWhere(model, (node) => near(node.y, HEIGHT) && node.x > 40),
+      pressure: 1.5,
+    },
+    {
+      type: "force",
+      faces: facesWhere(model, (node) => near(node.x, LENGTH)),
+      force: [400, 0, -1200],
+    },
+  ];
+  return { model, point, root };
+}
+
+// The coupled model without its reference point and coupling.
+function withoutPoint(model, point) {
+  return {
+    ...model,
+    nodes: model.nodes.filter((node) => node.id !== point),
+    couplings: [],
+    constraints: [],
+    loads: model.loads.filter((load) => load.nodeId !== point),
+  };
+}
+
+{
+  const { model, point, root } = rootCoupled();
+  model.constraints = [0, 1, 2, 3, 4, 5].map((dof) => ({ nodeId: point, dof }));
+  const clamped = withoutPoint(model, point);
+  clamped.constraints = clampAll(root);
+  await compareQuadratic(
+    "Quadratic: a fixed kinematic point clamps the face it grips",
+    model,
+    clamped,
+  );
+}
+
+{
+  const { model, point, root } = rootCoupled();
+  const translation = [0.02, -0.01, 0.015];
+  const rotation = [0.0005, 0.0004, -0.0003];
+  model.constraints = [
+    ...translation.map((value, dof) => ({
+      nodeId: point,
+      dof,
+      prescribedValue: value,
+    })),
+    ...rotation.map((value, axis) => ({
+      nodeId: point,
+      dof: 3 + axis,
+      prescribedValue: value,
+    })),
+  ];
+  // u = d + θ × r at each root vertex, r from the point.
+  const centre = model.nodes.find((node) => node.id === point);
+  const driven = withoutPoint(model, point);
+  driven.constraints = root.flatMap((nodeId) => {
+    const node = model.nodes[nodeId - 1000];
+    const arm = [node.x - centre.x, node.y - centre.y, node.z - centre.z];
+    const turn = [
+      rotation[1] * arm[2] - rotation[2] * arm[1],
+      rotation[2] * arm[0] - rotation[0] * arm[2],
+      rotation[0] * arm[1] - rotation[1] * arm[0],
+    ];
+    return [0, 1, 2].map((dof) => ({
+      nodeId,
+      dof,
+      prescribedValue: translation[dof] + turn[dof],
+    }));
+  });
+  await compareQuadratic(
+    "Quadratic: a driven kinematic point moves its face as a rigid body",
+    model,
+    driven,
+  );
+}
+
+{
+  // A force at a distributing point on the tip face, against the same total
+  // force spread over the face as a surface load.
+  const model = emptyModel();
+  addBeam(model, { x0: 0, length: LENGTH, height: HEIGHT, nx: 8, split: 60 });
+  const tip = idsWhere(model, (node) => near(node.x, LENGTH));
+  const point = addPoint(model, LENGTH, HEIGHT / 2, HEIGHT / 2);
+  const root = idsWhere(model, (node) => node.id !== point && near(node.x, 0));
+  model.constraints = clampAll(root);
+  model.couplings = [
+    {
+      name: "Tip",
+      kind: "distributing",
+      dofs: [0, 1, 2, 3, 4, 5],
+      refNodeId: point,
+      faces: [{ nodeIds: tip }],
+    },
+  ];
+  const force = [500, 200, -1500];
+  model.loads = force.map((value, dof) => ({ nodeId: point, dof, value }));
+  const spread = withoutPoint(model, point);
+  spread.constraints = model.constraints;
+  spread.surfaceLoads = [
+    {
+      type: "force",
+      faces: facesWhere(model, (node) => near(node.x, LENGTH)),
+      force,
+    },
+  ];
+  console.log(
+    "\nQuadratic: a force at a distributing point against the same force spread over the face",
+  );
+  const rust = await solveQuadraticCoupled(model);
+  const mfem = solveMfemQuadratic(spread);
+  // Away from the loaded face (x ≤ 3L/4) the fields agree.
+  let peak = 0;
+  let difference = 0;
+  spread.nodes.forEach((node, index) => {
+    if (node.x > 0.75 * LENGTH) return;
+    for (let axis = 0; axis < 3; axis++) {
+      peak = Math.max(peak, Math.abs(mfem.displacements[3 * index + axis]));
+      difference = Math.max(
+        difference,
+        Math.abs(
+          mfem.displacements[3 * index + axis] -
+            rust.displacements[3 * index + axis],
+        ),
+      );
+    }
+  });
+  const mean = (field) =>
+    tip.reduce((sum, nodeId) => sum + field[3 * (nodeId - 1000) + 2], 0) /
+    tip.length;
+  const tipRust = mean(rust.displacements);
+  const tipMfem = mean(mfem.displacements);
+  console.log(
+    `    displacement for x ≤ 3L/4: max ${peak.toExponential(4)} mm, AMG − MFEM ` +
+      `${(difference / peak).toExponential(2)} relative; mean tip u_z AMG ` +
+      `${tipRust.toExponential(5)} mm, MFEM ${tipMfem.toExponential(5)} mm`,
+  );
+  check(
+    "away from the face, the displacements agree within 0.5%",
+    peak > 0 && difference / peak < 5e-3,
+    `${difference / peak}`,
+  );
+  check(
+    "the mean tip deflection agrees within 0.5%",
+    Math.abs(tipRust - tipMfem) < 5e-3 * Math.abs(tipMfem),
+    `${tipRust} against ${tipMfem}`,
+  );
+}
+
+{
+  // The wall bracket at order 2, its near end held by a kinematic coupling to
+  // a clamped point, its far end loaded: the same as clamping the near end.
+  const { model, used, along, centroidOf } = await bracketModel(40);
+  const heldEnd = model.nodes
+    .filter((node) => used.has(node.id) && along(node) <= 0.1)
+    .map((node) => node.id);
+  const far = model.nodes
+    .filter((node) => used.has(node.id) && along(node) >= 0.97)
+    .map((node) => node.id);
+  const point = addPoint(model, ...centroidOf(heldEnd));
+  model.couplings = [
+    {
+      name: "Bolted end",
+      kind: "kinematic",
+      dofs: [0, 1, 2, 3, 4, 5],
+      refNodeId: point,
+      faces: [{ nodeIds: heldEnd }],
+    },
+  ];
+  model.constraints = [0, 1, 2, 3, 4, 5].map((dof) => ({ nodeId: point, dof }));
+  model.loads = far.flatMap((nodeId) => [
+    { nodeId, dof: 0, value: 800 / far.length },
+    { nodeId, dof: 1, value: -1500 / far.length },
+    { nodeId, dof: 2, value: 600 / far.length },
+  ]);
+  const clamped = withoutPoint(model, point);
+  clamped.constraints = clampAll(heldEnd);
+  console.log(
+    `\nwall bracket at order 2: ${used.size} vertices, ${model.elements.length} tets, ` +
+      `${heldEnd.length} coupled vertices`,
+  );
+  await compareQuadratic(
+    "Quadratic wall bracket (Netgen mesh): a clamped kinematic point holds one end",
+    model,
+    clamped,
+  );
+}
+
 // ── What AMG refuses ──────────────────────────────────────────────────────────
 
 console.log("\nWhat AMG refuses");
@@ -587,7 +921,14 @@ console.log("\nWhat AMG refuses");
   );
   let refusal = "";
   try {
-    await solveCoupledSolidWithAmg(fem, inputs, undefined, neverAsk, discard);
+    await solveCoupledSolidWithAmg(
+      fem,
+      inputs,
+      1,
+      undefined,
+      neverAsk,
+      discard,
+    );
   } catch (error) {
     refusal = error instanceof Error ? error.message : String(error);
   }
@@ -597,21 +938,6 @@ console.log("\nWhat AMG refuses");
     refusal || "it solved",
   );
 }
-{
-  const { model } = tipCoupled("kinematic");
-  const reason = amgUnavailableReason({
-    elements: model.elements,
-    properties: model.properties,
-    elementOrder: 2,
-    couplingCount: 1,
-  });
-  check(
-    "quadratic elements with a coupling stay on the MFEM path",
-    reason === "it supports surface-to-point couplings on linear elements only",
-    String(reason),
-  );
-}
-
 console.log(
   failures === 0 ? "\nAll checks passed." : `\n${failures} check(s) FAILED`,
 );

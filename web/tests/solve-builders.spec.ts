@@ -493,14 +493,14 @@ test("solve routing follows the element mix, couplings and Shell choice", () => 
   ).toThrow(/are all marked "Shell"/);
 });
 
-test("AMG takes surface-to-point couplings on linear solid models only", () => {
+test("AMG takes surface-to-point couplings on linear and quadratic solid models", () => {
   const solid = { elements: tetElements, properties: twoBodies };
   expect(
     amgUnavailableReason({ ...solid, elementOrder: 1, couplingCount: 2 }),
   ).toBeNull();
   expect(
     amgUnavailableReason({ ...solid, elementOrder: 2, couplingCount: 2 }),
-  ).toBe("it supports surface-to-point couplings on linear elements only");
+  ).toBeNull();
   expect(
     amgUnavailableReason({ ...solid, elementOrder: 2, couplingCount: 0 }),
   ).toBeNull();
