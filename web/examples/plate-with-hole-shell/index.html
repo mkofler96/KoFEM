@@ -886,7 +886,7 @@
             <tr>
               <td class="num">3.1400</td>
               <td class="num"><strong data-testid="fe-value">3.1766</strong></td>
-              <td class="num">+1.17&nbsp;%<br /><span class="band pass">within ±7&nbsp;%</span></td>
+              <td class="num">+1.17&nbsp;%<br /><span class="band pass">within ±8&nbsp;%</span></td>
             </tr>
           </tbody>
         </table>
@@ -949,9 +949,9 @@
         wall by its mid-surface. The faces through the wall, the cut edges and
         the hole, become the edges of the shell, so each support and the load
         is picked as an Edge. Netgen puts at least two elements along every
-        edge, so the thin wall makes the triangles at the hole smaller than a
-        millimetre on every mesh, while the plate away from the hole stays
-        coarse.</p>
+        edge, so next to the 1&nbsp;mm cut edge the triangle at A
+        stays about 0.6&nbsp;mm on every mesh: a smaller maximum element size
+        refines the rest of the hole but not the peak.</p>
         <p>Each of the 17,283 triangles
         combines a CST membrane, with one constant strain and stress per
         triangle, and a DKT plate-bending element; in this load case only the
@@ -966,7 +966,7 @@
           <tr><th scope="row">Quantity</th><td>stress-concentration factor Kt</td></tr>
           <tr><th scope="row">Reference</th><td>Howland's Kt for 2a/W = 0.2 = 3.1400 <span class="meta">(Kirsch (1898); Howland (1930); Peterson's)</span></td></tr>
           <tr><th scope="row">KoFEM</th><td>3.1766</td></tr>
-          <tr><th scope="row">Difference</th><td>+1.17&nbsp;% <span class="band pass">within ±7&nbsp;%</span></td></tr>
+          <tr><th scope="row">Difference</th><td>+1.17&nbsp;% <span class="band pass">within ±8&nbsp;%</span></td></tr>
         </table>
       </div>
       <section class="study" id="convergence" data-study="plate-with-hole-shell">
@@ -976,7 +976,7 @@
           <picture class="figure-image theme-light conv"><source srcset="/examples/plate-with-hole-shell/plate-with-hole-shell-mesh-convergence.svg" type="image/svg+xml" /><img src="/examples/plate-with-hole-shell/plate-with-hole-shell-mesh-convergence.png" width="440" height="250" alt="Plate with a hole, shell triangles: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark conv"><source srcset="/examples/plate-with-hole-shell/plate-with-hole-shell-mesh-convergence-dark.svg" type="image/svg+xml" /><img src="/examples/plate-with-hole-shell/plate-with-hole-shell-mesh-convergence.png" width="440" height="250" alt="Plate with a hole, shell triangles: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture>
           <figcaption>Difference from the reference on refined meshes, logarithmic axes. The ringed point is this example's mesh.</figcaption>
         </figure>
-        <p>Kt scatters a few percent either side of Howland's 3.14 instead of converging: the 1 mm wall gives sub-millimetre triangles at the hole on every mesh, and the read-out is the constant stress of the one or two triangles that meet at the peak. From 0.75 mm two meet there and the average reads low.</p>
+        <p>Kt scatters a few percent either side of Howland's 3.14 instead of converging: next to the 1 mm cut edge the triangle at the peak stays about 0.6 mm on every mesh, and the read-out is the constant stress of the one or two triangles that meet there. On the finest meshes the peak node is shared by more triangles and reads low.</p>
         <details>
           <summary>Data</summary>
           <div class="table-wrap">
@@ -997,6 +997,13 @@
                   <td class="num">3,960</td>
                   <td class="num">3.2159</td>
                   <td class="num">+2.42&nbsp;%</td>
+                </tr>
+                <tr>
+                  <td>Shell (linear)</td>
+                  <td>2.5 mm</td>
+                  <td class="num">8,958</td>
+                  <td class="num">3.3638</td>
+                  <td class="num">+7.13&nbsp;%</td>
                 </tr>
                 <tr>
                   <td>Shell (linear)</td>
@@ -1050,10 +1057,11 @@
         the solid model reads the peak slightly low on every mesh. A linear
         triangle has one stress. At A only one or two triangles meet, so the
         nodal value is their stress, and it lands above or below 3.14
-        depending on how the mesher cuts that corner. Over the mesh study
-        above it ranges from 5.6&nbsp;% below to 6.3&nbsp;% above,
+        depending on how the mesher cuts that corner; on the finest meshes the
+        peak moves to the next node along the hole. Over the mesh study above
+        it ranges from 5.6&nbsp;% below to 7.1&nbsp;% above,
         without settling, which is why the band is
-        ±7&nbsp;%.</p>
+        ±8&nbsp;%.</p>
         <p>For a peak stress in a flat part loaded in its plane, use solid
         quadratic elements, or check that the shell peak stops changing on
         finer meshes. Shells pay off when a thin wall bends: one layer of
@@ -1069,9 +1077,9 @@
         <li>Set the body to Shell. Meshing measures the 1 mm wall and replaces it by its mid-surface; the faces through the wall become the shell's edges, which you pick as Edges.</li>
         <li>Mesh with a 1 mm maximum element size, linear elements.</li>
         <li>Material Steel: E = 210000 MPa, ν = 0.3.</li>
-        <li>Support “Symmetry x = 0”: Ux, Uz, Ry, Rz = 0 on the face through (0, 30, 0.5).</li>
-        <li>Support “Symmetry y = 0”: Uy, Uz, Rx, Rz = 0 on the face through (80, 0, 0.5).</li>
-        <li>Load “Tension”: force (5000, 0, 0) N on the face through (150, 25, 0.5).</li>
+        <li>Support “Symmetry x = 0”: Ux, Uz, Ry, Rz = 0 on the edge through (0, 30, 0.5).</li>
+        <li>Support “Symmetry y = 0”: Uy, Uz, Rx, Rz = 0 on the edge through (80, 0, 0.5).</li>
+        <li>Load “Tension”: force (5000, 0, 0) N on the edge through (150, 25, 0.5).</li>
         <li>Run the static study. The Results panel compares stress-concentration factor with Howland's Kt for 2a/W = 0.2.</li>
       </ol>
       <p>From a clone (Bun, bash, curl and Rust), this builds and solves the model with the same engine and prints its line:</p>
@@ -1079,7 +1087,7 @@
 bash scripts/fetch-wasm-engine.sh
 cd web &amp;&amp; bun install &amp;&amp; bun run validate --case plate-with-hole-shell</code></pre>
       <pre class="console"><code>Case                                  Quantity                                  FE   Reference     Err%  Tol%  Status
-Plate with a hole (shells)            stress-concentration factor Kt        3.1766      3.1400    +1.17     7  PASS</code></pre>
+Plate with a hole (shells)            stress-concentration factor Kt        3.1766      3.1400    +1.17     8  PASS</code></pre>
 
       <h2 id="references">References</h2>
       <ol class="refs">

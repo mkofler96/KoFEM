@@ -330,7 +330,7 @@
       "unit": "",
       "reference": 3.14,
       "referenceLabel": "Howland's Kt for 2a/W = 0.2",
-      "tolPct": 7,
+      "tolPct": 8,
       "fe": 3.1766020602643383,
       "errPct": 1.165670709055357,
       "pass": true,
@@ -1255,6 +1255,20 @@
               "minElementSize": 0.4,
               "fe": 3.2159156194513834,
               "errPct": 2.4176948869867276,
+              "ci": false
+            },
+            {
+              "mesh": "2.5 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 2805,
+              "vertices": 1493,
+              "nodes": 1493,
+              "dofs": 8958,
+              "maxElementSize": 2.5,
+              "minElementSize": 0.25,
+              "fe": 3.363820638559156,
+              "errPct": 7.128045813985849,
               "ci": false
             },
             {
