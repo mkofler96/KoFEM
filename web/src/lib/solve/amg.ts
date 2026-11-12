@@ -221,10 +221,17 @@ export async function solveSolidWithAmg(
       );
     const started = performance.now();
     const nonzeros = elastic.assemble();
+    // The element kinds the model has, e.g. "24 tetrahedra and 4 hexahedra".
+    const elementCounts = [
+      [tetElements.length, "tetrahedra"],
+      [hexElements.length, "hexahedra"],
+    ]
+      .filter(([count]) => count !== 0)
+      .map(([count, kind]) => `${count} ${kind}`)
+      .join(" and ");
     log(
-      `AMG solve: ${model.nodes.length} nodes, ${tetElements.length} tetrahedra and ` +
-        `${hexElements.length} hexahedra (order ${elementOrder}), ${elastic.dofCount} unknowns, ` +
-        `${nonzeros} stiffness entries assembled`,
+      `AMG solve: ${model.nodes.length} nodes, ${elementCounts} (order ${elementOrder}), ` +
+        `${elastic.dofCount} unknowns, ${nonzeros} stiffness entries assembled`,
     );
 
     const { fixed_vertices, fixed_dofs, prescribed_dofs } = groupDirichlet(
