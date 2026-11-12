@@ -35,7 +35,6 @@ const PENDING = [
   "cantilever-beam",
   "beam-torsion",
   "shaft-torsion",
-  "plate-with-hole",
   "plate-with-hole-shell",
   "cooks-membrane",
   "mbb-beam-topopt",

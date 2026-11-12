@@ -388,7 +388,64 @@ export function hollowShaftFigure({ div }) {
 
 // ── Plate with a hole, and the Kirsch stress along the transverse axis ───────
 
-export function plateFigure() {
+// A long strip with a central hole, pulled at both ends: the quarter x, y ≥ 0
+// the model keeps is shaded, the symmetry lines are dash-dotted.
+function stripDiagram() {
+  const px = 46,
+    py = 60,
+    w = 214,
+    h = 130,
+    a = 13,
+    cx = px + w / 2,
+    cy = py + h / 2;
+  const parts = [
+    `<path class="body" fill-rule="evenodd" d="M${px} ${py}h${w}v${h}h${-w}Z M${cx + a} ${cy}A${a} ${a} 0 1 0 ${cx - a} ${cy}A${a} ${a} 0 1 0 ${cx + a} ${cy}Z"/>`,
+    `<path class="body top" d="M${cx + a} ${cy}H${px + w}V${py}H${cx}V${cy - a}A${a} ${a} 0 0 1 ${cx + a} ${cy}Z"/>`,
+    line(cx, py - 12, cx, py + h + 12, "axis"),
+    line(px - 30, cy, px + w + 30, cy, "axis"),
+    label(cx + (px + w - cx) / 2, py + 24, "model"),
+  ];
+  for (let j = 0; j <= 5; j++) {
+    const y = py + 6 + ((h - 12) * j) / 5;
+    parts.push(
+      arrow(px + w + 2, y, px + w + 28, y),
+      arrow(px - 2, y, px - 28, y),
+    );
+  }
+  parts.push(
+    sym(px + w + 36, cy - 6, "σ", "start"),
+    sym(px - 36, cy - 6, "σ", "end"),
+    `<circle class="pt" cx="${cx}" cy="${cy - a}" r="3.5"/>`,
+    `<circle class="pt" cx="${cx}" cy="${cy + a}" r="3.5"/>`,
+    label(cx - 8, cy - a - 6, "A", { anchor: "end" }),
+    label(cx - 8, cy + a + 16, "A", { anchor: "end" }),
+    dim(cx, cy, cx + a * Math.cos(2.4), cy + a * Math.sin(2.4)),
+    sym(cx - a - 6, cy + a + 4, "a", "end"),
+    dim(px, py + h + 24, px + w, py + h + 24),
+    sym(cx + 40, py + h + 18, "2L"),
+    dim(px + 16, py, px + 16, py + h),
+    sym(px + 22, py + h - 12, "2b", "start"),
+  );
+  return svg(
+    310,
+    270,
+    "Long strip with a central hole pulled at both ends; dash-dotted symmetry lines through the hole centre, the modelled quarter x, y ≥ 0 shaded; points A at the top and bottom of the hole carry the peak stress",
+    parts.join("\n    "),
+    { cls: "fig half", name: "plate-diagram" },
+  );
+}
+
+/**
+ * Left: the plate — `model` "clamped" (default), a square plate fixed on the
+ * left and pulled on the right, or "strip", a long strip pulled at both ends
+ * with the modelled quarter shaded. Right: Kirsch's stress along the
+ * transverse axis.
+ */
+export function plateFigure({ model = "clamped" } = {}) {
+  if (model !== "clamped" && model !== "strip")
+    throw new Error(
+      `plateFigure: model must be "clamped" or "strip", got "${model}"`,
+    );
   const px = 50,
     py = 30,
     side = 200,
@@ -414,13 +471,16 @@ export function plateFigure() {
     dim(px, py + side + 22, px + side, py + side + 22),
     sym(cx, py + side + 16, "2b"),
   );
-  const plate = svg(
-    310,
-    270,
-    "Plate with a central hole under tension, clamped on the left; points A at the top and bottom of the hole carry the peak stress",
-    parts.join("\n    "),
-    { cls: "fig half", name: "plate-diagram" },
-  );
+  const plate =
+    model === "strip"
+      ? stripDiagram()
+      : svg(
+          310,
+          270,
+          "Plate with a central hole under tension, clamped on the left; points A at the top and bottom of the hole carry the peak stress",
+          parts.join("\n    "),
+          { cls: "fig half", name: "plate-diagram" },
+        );
 
   // σxx / σ along the transverse axis (x = 0), y / a from 1 to 5.
   const g = [];

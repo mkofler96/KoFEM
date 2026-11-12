@@ -15,7 +15,10 @@
 import { expect, type Page } from "@playwright/test";
 import { geometryCounts, importStepText, lookFrom } from "./split";
 import { addBoundary, addMaterial, openBody, openTree } from "./tree";
-import { validateRecipe } from "../../../examples/validation/lib/recipe.mjs";
+import {
+  DEFLECTION_RELATIVE,
+  validateRecipe,
+} from "../../../examples/validation/lib/recipe.mjs";
 import { loadEngine } from "../../../examples/shell-coupling/lib.mjs";
 
 // ── The recipe contract, typed (mirrors the JSDoc in lib/recipe.mjs) ──────────
@@ -254,18 +257,21 @@ export interface ResolvedFace {
 }
 
 // The CAD face whose display tessellation contains `at`: exactly one face within
-// 1e-6 · model size, as the contract (and the node-side build) resolve it.
+// the tessellation's chordal deflection (DEFLECTION_RELATIVE · model size), as
+// the contract's resolveFaceAt (and the node-side build) resolve it, so a point
+// on the true surface of a curved face resolves where the facets cut inside it.
 export function resolveFace(snap: Snapshot, at: Point): ResolvedFace {
   const { points, triangles, faceIds } = snap.tess;
-  const tol = 1e-6 * modelSize(points);
-  const hits = new Map<number, Point>();
+  const tol = DEFLECTION_RELATIVE * modelSize(points);
+  const hits = new Map<number, { dist: number; normal: Point }>();
   let nearest = Infinity;
   triangles.forEach((tri, t) => {
     const [a, b, c] = tri.map((i) => points[i]) as [Point, Point, Point];
     const dist = norm(sub(closestOnTriangle(at, a, b, c), at));
     nearest = Math.min(nearest, dist);
-    if (dist <= tol && !hits.has(faceIds[t]))
-      hits.set(faceIds[t], unit(cross(sub(b, a), sub(c, a))));
+    const prev = hits.get(faceIds[t]);
+    if (dist <= tol && (prev === undefined || dist < prev.dist))
+      hits.set(faceIds[t], { dist, normal: unit(cross(sub(b, a), sub(c, a))) });
   });
   if (hits.size !== 1)
     throw new Error(
@@ -274,7 +280,7 @@ export function resolveFace(snap: Snapshot, at: Point): ResolvedFace {
           ? `found none (nearest display triangle is ${nearest.toExponential(3)} mm away)`
           : `found faces ${[...hits.keys()].join(", ")} (the point lies on an edge between them)`),
     );
-  const [[cadFaceId, normal]] = [...hits.entries()];
+  const [[cadFaceId, { normal }]] = [...hits.entries()];
   return { cadFaceId, normal };
 }
 
