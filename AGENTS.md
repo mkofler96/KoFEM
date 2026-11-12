@@ -16,10 +16,12 @@ The React/TypeScript/Three.js frontend is in `web/`. Use **bun**, not npm.
   models solve in Rust by default (`lib/solve/amg.ts`); MFEM
   (`solve_mfem.cpp`) is the other choice and takes the solid models Rust does
   not cover. Pure shells solve in Rust (`lib/solve/shellRust.ts`), with
-  `solve_shell.cpp` as their test oracle. Mixed models (`solve_coupled.cpp`)
-  and topology optimization are still C++. Cover all applicable paths for
-  materials, BCs, loads, and solve payload changes, including per-body
-  materials.
+  `solve_shell.cpp` as their test oracle. Mixed shell/solid models solve in
+  Rust (`lib/solve/coupledRust.ts`), with `solve_coupled.cpp` as their test
+  oracle; all-solid models with couplings that AMG cannot take still use
+  `solve_coupled.cpp`. Topology optimization is still C++. Cover all
+  applicable paths for materials, BCs, loads, and solve payload changes,
+  including per-body materials.
 - Shell is an explicit per-body choice. Mid-surface and mixed-mesh assembly
   live in `crates/kofem-shellize` (one module per stage), reached through
   `web/src/lib/shellize.ts`; shell element math is in
@@ -55,7 +57,7 @@ Run checks appropriate to the change; CI definitions are in
 - Rust: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`
   and `cargo test --workspace`. `bun run test:validation` includes the
   Rust-vs-C++ checks (`tests/test_fem_wasm.mjs`, `test_amg_solid.mjs`,
-  `test_amg_coupling.mjs`, `test_shell_rust.mjs`).
+  `test_amg_coupling.mjs`, `test_shell_rust.mjs`, `test_coupled_rust.mjs`).
 - C++: `bash scripts/clang-tidy.sh` (`docker-clang-tidy.sh` without a local
   emsdk) and relevant `scripts/test-*.sh` suites.
 - Frontend, from `web/`: `bun run typecheck && bun run lint && bun run format:check && bun run test`.
