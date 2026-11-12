@@ -46,7 +46,9 @@ const { default: createModule } = await import(
 );
 const wasmBinary = readFileSync(join(enginePkg, "kofem_wasm_emcc.wasm")).buffer;
 const fem = { Couplings, ElasticModel, SolveOptions };
-const quiet = () => ({ wasmBinary, print: () => {}, printErr: () => {} });
+// Swallows the engine's console output; these tests print their own report.
+const silent = () => undefined;
+const quiet = () => ({ wasmBinary, print: silent, printErr: silent });
 const engine = await createModule(quiet());
 
 let failures = 0;
