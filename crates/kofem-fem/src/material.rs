@@ -30,6 +30,16 @@ impl Isotropic {
         Ok(Self { young, poisson })
     }
 
+    #[must_use]
+    pub fn young(&self) -> f64 {
+        self.young
+    }
+
+    #[must_use]
+    pub fn poisson(&self) -> f64 {
+        self.poisson
+    }
+
     /// Lamé constants (λ, μ).
     #[must_use]
     pub fn lame(&self) -> (f64, f64) {
