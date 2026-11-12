@@ -144,3 +144,31 @@ for (const path of ["/", "/examples/", "/examples/axial-bar/", "/privacy/"]) {
     expect(await page.content()).not.toContain("example.com");
   });
 }
+
+// Facebook, LinkedIn, X, Slack and Discord show no SVG previews: shared links
+// need a raster og:image, and the large card needs summary_large_image.
+test("social previews use the 1200×630 PNG card", async ({ page }) => {
+  for (const path of [
+    "/",
+    "/theory/",
+    "/theory/solid-mechanics/linear-elasticity/",
+  ]) {
+    await page.goto(path);
+    const og = await page
+      .locator('meta[property="og:image"]')
+      .getAttribute("content");
+    expect(og, path).toBe("https://kofem.org/og-image.png");
+    await expect(
+      page.locator('meta[name="twitter:image"]'),
+      path,
+    ).toHaveAttribute("content", og ?? "");
+    await expect(
+      page.locator('meta[name="twitter:card"]'),
+      path,
+    ).toHaveAttribute("content", "summary_large_image");
+  }
+  const card = await page.request.get("/og-image.png");
+  expect(card.headers()["content-type"]).toBe("image/png");
+  const png = await card.body();
+  expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([1200, 630]);
+});

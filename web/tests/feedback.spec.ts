@@ -90,7 +90,7 @@ test("a problem report previews its diagnostics and opens the prefilled bug form
     mimeType: "application/octet-stream",
     buffer: TUBE,
   });
-  const meshButton = page.getByRole("button", { name: /Mesh STEP volume/ });
+  const meshButton = page.getByRole("button", { name: /Generate mesh/ });
   await expect(meshButton).toBeVisible({ timeout: 60_000 });
 
   // A refused element size puts a real error on screen; it is the last one the
@@ -258,11 +258,11 @@ test("Report a problem saves a report with the CAD file, opens the email to supp
     mimeType: "application/octet-stream",
     buffer: TUBE,
   });
-  await expect(
-    page.getByRole("button", { name: /Mesh STEP volume/ }),
-  ).toBeVisible({
-    timeout: 60_000,
-  });
+  await expect(page.getByRole("button", { name: /Generate mesh/ })).toBeVisible(
+    {
+      timeout: 60_000,
+    },
+  );
   await recordMailto(page);
 
   await openReport(page);
@@ -387,7 +387,7 @@ test("a report carries only the current model's log, not one from before New ana
       buffer: TUBE,
     });
   await importTube();
-  const meshButton = page.getByRole("button", { name: /Mesh STEP volume/ });
+  const meshButton = page.getByRole("button", { name: /Generate mesh/ });
   await expect(meshButton).toBeVisible({ timeout: 60_000 });
   await meshButton.click();
   await expect
@@ -406,11 +406,11 @@ test("a report carries only the current model's log, not one from before New ana
   // A new analysis with a new part: the old mesh log is gone from the report.
   await page.getByRole("button", { name: "New analysis" }).click();
   await importTube();
-  await expect(
-    page.getByRole("button", { name: /Mesh STEP volume/ }),
-  ).toBeVisible({
-    timeout: 60_000,
-  });
+  await expect(page.getByRole("button", { name: /Generate mesh/ })).toBeVisible(
+    {
+      timeout: 60_000,
+    },
+  );
   await openReport(page);
   const fresh = await saveReport(page, "report-save");
   expect(logOf(fresh.entries)).toBe("(no log)\n");

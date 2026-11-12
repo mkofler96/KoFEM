@@ -62,8 +62,8 @@ async function meshOnce(page: import("@playwright/test").Page) {
   await openTree(page, "mesh");
   await page
     .getByRole("button")
-    // "Mesh STEP volume" before the first mesh, "Re-mesh STEP volume" after.
-    .filter({ hasText: /(re-)?mesh STEP volume/i })
+    // "Generate mesh" before the first mesh, "Regenerate mesh" after.
+    .filter({ hasText: /generate mesh/i })
     .click();
   await expect
     .poll(async () => meshGeneration(page), { timeout: 180_000 })
@@ -92,7 +92,7 @@ const drawnFraction = (page: import("@playwright/test").Page) =>
     return opaque / (copy.width * copy.height);
   });
 
-// Playwright runs from web/; test_files sits one level up (see screenshot.spec).
+// Playwright runs from web/; test_files sits one level up.
 const TWO_BOXES = path.resolve("..", "test_files", "two_boxes.stp");
 // A solid base plus a 2 mm fin: marked Shell, the fin is idealised at mesh time, so
 // the meshed model carries a derived PSHELL property alongside the two CAD

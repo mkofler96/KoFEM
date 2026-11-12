@@ -322,7 +322,7 @@ test.describe("workflow events", () => {
     const maxSize = page.getByTestId("max-element-size");
     const suggested = await maxSize.inputValue();
     await maxSize.fill("0");
-    await page.getByRole("button", { name: /Mesh STEP volume/ }).click();
+    await page.getByRole("button", { name: /Generate mesh/ }).click();
     await expect.poll(() => eventNames(page)).toContain("mesh_failed");
     const meshFailed = (await gaEvents(page)).find(
       (e) => e.name === "mesh_failed",
@@ -334,7 +334,7 @@ test.describe("workflow events", () => {
     });
 
     await maxSize.fill(suggested);
-    await page.getByRole("button", { name: /Mesh STEP volume/ }).click();
+    await page.getByRole("button", { name: /Generate mesh/ }).click();
     await expect
       .poll(() => eventNames(page), { timeout: 90_000 })
       .toContain("mesh_completed");

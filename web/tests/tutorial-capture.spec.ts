@@ -72,7 +72,7 @@ test.describe("Tutorial figure capture", () => {
       .setInputFiles(BRACKET);
     await Promise.race([
       expect(
-        page.getByRole("button").filter({ hasText: "Mesh STEP volume" }),
+        page.getByRole("button").filter({ hasText: "Generate mesh" }),
       ).toBeVisible({ timeout: 60_000 }),
       fatalError,
     ]);
@@ -86,10 +86,7 @@ test.describe("Tutorial figure capture", () => {
     await shot("02-geometry.png");
 
     // 3. Mesh — fill the solid with tetrahedra.
-    await page
-      .getByRole("button")
-      .filter({ hasText: "Mesh STEP volume" })
-      .click();
+    await page.getByRole("button").filter({ hasText: "Generate mesh" }).click();
     const meshErr = page.getByTestId("meshing-error");
     await Promise.race([
       expect(page.getByText("Mesh OK")).toBeVisible({

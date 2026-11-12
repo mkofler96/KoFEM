@@ -19,6 +19,7 @@
 
 import type { Property, StepTessellation } from "../store/geometrySlice";
 import { isCadBody } from "../store/geometrySlice";
+import { bodyOf, sameBody, solidName } from "./regions";
 
 export const INTERFACE_TYPES = ["bonded"] as const;
 export type InterfaceType = (typeof INTERFACE_TYPES)[number];
@@ -102,8 +103,21 @@ export function detectInterfaces(
     }));
 }
 
-export function interfaceLabel(i: { bodyA: number; bodyB: number }): string {
-  return `Body ${i.bodyA} ↔ Body ${i.bodyB}`;
+export function interfaceLabel(
+  i: { bodyA: number; bodyB: number },
+  properties: Property[],
+): string {
+  return `${solidName(properties, i.bodyA)} ↔ ${solidName(properties, i.bodyB)}`;
+}
+
+// An interface between two regions of one body (KOF-257): the cut of a body
+// split. The regions are connected there by construction, so it is not
+// something the user sets up — it is kept off the interface list.
+export function isInternalInterface(
+  i: BodyInterface,
+  properties: Property[],
+): boolean {
+  return sameBody(properties, i.bodyA, i.bodyB);
 }
 
 function suppressedIds(properties: Property[]): Set<number> {
@@ -121,26 +135,32 @@ export function isInterfaceActive(
   return !off.has(i.bodyA) && !off.has(i.bodyB);
 }
 
-// The bodies of an assembly that share no active interface with any other
+// The regions of the bodies that share no active interface with any other
 // body: nothing bonds them to the rest, so they float unless a support or tie
-// holds them. Empty for a single-body model (nothing to bond to), and when the
-// interfaces are unknown (null) — a flag there would be a guess.
+// holds them. A body's own regions are connected at their cuts, but that does
+// not hold the body to anything else. Empty for a single-body model (nothing to
+// bond to), and when the interfaces are unknown (null) — a flag there would be
+// a guess.
 export function unconnectedBodies(
   interfaces: BodyInterface[] | null,
   properties: Property[],
 ): number[] {
   if (interfaces === null) return [];
   const active = properties.filter((p) => isCadBody(p) && !p.suppressed);
-  if (active.length < 2) return [];
+  if (new Set(active.map(bodyOf)).size < 2) return [];
+  const bodyOfSolid = new Map(active.map((p) => [p.id, bodyOf(p)]));
   const connected = new Set<number>();
-  for (const i of interfaces)
-    if (isInterfaceActive(i, properties)) {
-      connected.add(i.bodyA);
-      connected.add(i.bodyB);
-    }
+  for (const i of interfaces) {
+    if (!isInterfaceActive(i, properties)) continue;
+    const bodyA = bodyOfSolid.get(i.bodyA);
+    const bodyB = bodyOfSolid.get(i.bodyB);
+    if (bodyA === undefined || bodyB === undefined || bodyA === bodyB) continue;
+    connected.add(bodyA);
+    connected.add(bodyB);
+  }
   return active
+    .filter((p) => !connected.has(bodyOf(p)))
     .map((p) => p.id)
-    .filter((id) => !connected.has(id))
     .sort((a, b) => a - b);
 }
 
@@ -183,7 +203,7 @@ export function restoreInterfaces(
     if (entry.bodyA !== d.bodyA || entry.bodyB !== d.bodyB || !sameFaces)
       throw new Error(
         `Invalid analysis file: interface ${k + 1} does not match the geometry ` +
-          `(expected ${interfaceLabel(d)} on faces ${d.faceIds.join(", ")})`,
+          `(expected solids ${d.bodyA} ↔ ${d.bodyB} on faces ${d.faceIds.join(", ")})`,
       );
     if (!INTERFACE_TYPES.includes(entry.type as InterfaceType))
       throw new Error(

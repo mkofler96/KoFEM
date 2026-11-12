@@ -9,6 +9,18 @@ import type { ModelState, SliceCreator } from "./modelStore";
 import { addSelection } from "./viewSlice";
 import { carryGroupsToMesh, remeshNotice } from "../lib/remeshGroups";
 import { modelShellRim } from "../lib/shellRim";
+import {
+  bodyGroupOf,
+  bodyOf,
+  nextBodyNumber,
+  solidName,
+  type OptimizationRole,
+} from "../lib/regions";
+import {
+  DEFAULT_MAX_ELEMENT_SIZE,
+  DEFAULT_MIN_ELEMENT_SIZE,
+  suggestElementSizes,
+} from "../lib/meshSizing";
 import type { MeshOverlap } from "../wasm/pkg/kofem_wasm";
 import {
   detectInterfaces,
@@ -66,6 +78,15 @@ export interface Property {
   // bodies themselves, whose own id already is the body id. The geometry view
   // needs it because a derived PSHELL has no tessellation of its own.
   sourceBodyId?: number;
+  // CAD solids only (KOF-257, lib/regions). The body this solid is a region
+  // of; absent, the solid is a body of its own. A body split keeps the pieces
+  // in their body; promoting a region gives it a new number.
+  body?: number;
+  // The region's max element size in mm, as typed; absent or blank meshes it at
+  // the global size. Validated when meshing starts.
+  maxElementSize?: string;
+  // What topology optimization may do with the region; absent is "design".
+  optimizationRole?: OptimizationRole;
 }
 
 // A property the user owns: one CAD body of the imported file. Everything else
@@ -99,16 +120,94 @@ export function suppressionMismatch(
 }
 
 // The pre-flight line for a mesh that disagrees with the suppression, or null.
-export function suppressionMismatchMessage(m: {
-  stillMeshed: number[];
-  missing: number[];
-}): string | null {
-  const bodies = (ids: number[]) => ids.map((id) => `Body ${id}`).join(", ");
+export function suppressionMismatchMessage(
+  m: {
+    stillMeshed: number[];
+    missing: number[];
+  },
+  properties: Property[],
+): string | null {
+  const bodies = (ids: number[]) =>
+    ids.map((id) => solidName(properties, id)).join(", ");
   if (m.stillMeshed.length > 0)
     return `Re-mesh: suppressed ${bodies(m.stillMeshed)} still in the mesh`;
   if (m.missing.length > 0)
     return `Re-mesh: restored ${bodies(m.missing)} not in the mesh`;
   return null;
+}
+
+// What a mesh is made of: tetrahedra (and hexahedra) only, shell triangles
+// only, or both — a model with some bodies idealised as shells.
+export type MeshKind = "volume" | "shell" | "mixed";
+
+export const MESH_KIND_LABEL: Record<MeshKind, string> = {
+  volume: "Volume mesh",
+  shell: "Shell mesh",
+  mixed: "Mixed mesh",
+};
+
+export function meshKind(elements: { type: ElementType }[]): MeshKind {
+  let shell = false;
+  let solid = false;
+  for (const e of elements) {
+    if (e.type === "CTRIA3") shell = true;
+    else solid = true;
+    if (shell && solid) return "mixed";
+  }
+  return shell ? "shell" : "volume";
+}
+
+// The element sizes a mesh was made with, in mm.
+export interface MeshSizes {
+  max: number;
+  min: number;
+  // The regions meshed at a size of their own, by solid id.
+  regions: Record<number, number>;
+}
+
+// Whether the sizes typed in the mesh settings differ from the ones the current
+// mesh was made with — the mesh then no longer shows what the settings say, and
+// Regenerate applies them. False without a mesh or when its sizes are unknown
+// (a loaded analysis). Text that is not a number counts as changed: meshing
+// rejects it with its own message.
+export function meshSizesChanged(
+  meshSizes: MeshSizes | null,
+  maxElementSize: string,
+  minElementSize: string,
+  properties: Property[],
+): boolean {
+  if (!meshSizes) return false;
+  if (
+    parseFloat(maxElementSize) !== meshSizes.max ||
+    parseFloat(minElementSize) !== meshSizes.min
+  )
+    return true;
+  const typed = new Map<number, number>();
+  for (const p of properties.filter(isCadBody)) {
+    const raw = p.maxElementSize?.trim();
+    if (raw !== undefined && raw !== "") typed.set(p.id, parseFloat(raw));
+  }
+  const meshed = Object.entries(meshSizes.regions);
+  return (
+    typed.size !== meshed.length ||
+    meshed.some(([id, size]) => typed.get(Number(id)) !== size)
+  );
+}
+
+// Start the mesh settings at the sizes a new geometry suggests (KOF-222): a
+// 1 mm cube and a 2 m weldment need element sizes three orders of magnitude
+// apart, so the previous part's numbers are never right. A geometry the
+// estimate cannot measure keeps the sizes it had.
+export function suggestSizes(
+  s: ModelState,
+  tessellation: StepTessellation | null,
+): void {
+  const suggestion = tessellation
+    ? suggestElementSizes(tessellation.points, tessellation.triangles)
+    : null;
+  if (!suggestion) return;
+  s.maxElementSize = suggestion.max;
+  s.minElementSize = suggestion.min;
 }
 
 // The section properties the mesh derived from `bodyId`, in id order.
@@ -218,6 +317,16 @@ export interface GeometrySlice {
   // so are missing from it. Compared with the bodies' suppression now to tell
   // whether the mesh still matches the model (suppressionMismatch).
   meshSuppressedIds: number[];
+  // The element sizes in the mesh settings, held as typed text: a 1 mm part
+  // needs 0.1 mm elements and a 2 m weldment 80 mm ones, so there is no range
+  // to clamp typing to (KOF-222). Validated when meshing starts. A new geometry
+  // starts them at its own suggestion (lib/meshSizing).
+  maxElementSize: string;
+  minElementSize: string;
+  // The sizes the current mesh was made with, to tell when the settings have
+  // moved on (meshSizesChanged). Null without a mesh, and for a loaded
+  // analysis, whose file does not record them.
+  meshSizes: MeshSizes | null;
 
   addNode(node: Node): void;
   addElement(el: Element): void;
@@ -230,6 +339,11 @@ export interface GeometrySlice {
   assignBodyMaterial(propertyId: number, materialId: number): void;
   setBodySuppressed(propertyId: number, suppressed: boolean): void;
   setBodyDiscretization(propertyId: number, disc: BodyDiscretization): void;
+  setRegionMaxElementSize(propertyId: number, size: string): void;
+  setRegionOptimizationRole(propertyId: number, role: OptimizationRole): void;
+  // Make a region of a body with several regions a body of its own: its cut
+  // then becomes an interface between two bodies.
+  promoteRegion(propertyId: number): void;
   setInterfaceType(interfaceId: number, type: InterfaceType): void;
   setStepSurface(tessellation: StepTessellation | null): void;
   setStepBytes(bytes: Uint8Array | null): void;
@@ -237,6 +351,8 @@ export interface GeometrySlice {
   setVolMesh(mesh: VolMesh | null): void;
   setSurfaceFaceIds(ids: number[] | null): void;
   setMeshing(v: boolean): void;
+  setMaxElementSize(size: string): void;
+  setMinElementSize(size: string): void;
   setStepImportError(msg: string | null): void;
   // Replace the geometry with the result of an edit (a split): the new file and
   // its tessellation. The mesh, groups and results of the old geometry are
@@ -247,9 +363,14 @@ export interface GeometrySlice {
     bytes: Uint8Array,
     tessellation: StepTessellation,
     bodyCount: number,
-    // For an edit that knows where each new body came from (a Boolean): entry
-    // j is the old id of new Body j+1, whose settings it inherits.
+    // For an edit that knows where each new body came from (a split, a
+    // Boolean, a hinge repair): entry j is the old id of new solid j+1, whose
+    // settings it inherits.
     bodySources?: number[],
+    // What the pieces of one solid become: regions of its body (a body split —
+    // they stay connected at the cut), or bodies of their own (a hinge repair
+    // that separates them).
+    piecesAs?: "regions" | "bodies",
   ): void;
   undoGeometryEdit(): void;
   setSplitPicking(on: boolean): void;
@@ -263,6 +384,8 @@ export interface GeometrySlice {
     nodes: Node[],
     elements: Element[],
     modelName: string,
+    // The element sizes the mesh request used.
+    meshSizes: MeshSizes,
     surfaceTriangles?: [number, number, number][] | null,
     surfaceFaceIds?: number[] | null,
     // Property table returned by a mesh that idealised thin walls as shells
@@ -300,6 +423,7 @@ function dropAnalysis(s: ModelState): void {
   s.nodes = [];
   s.elements = [];
   s.meshSuppressedIds = [];
+  s.meshSizes = null;
   s.surfaceTriangles = null;
   s.surfaceFaceIds = null;
   s.bcGroups = [];
@@ -358,6 +482,9 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
   remeshNotice: null,
   meshOverlaps: [],
   meshSuppressedIds: [],
+  maxElementSize: String(DEFAULT_MAX_ELEMENT_SIZE),
+  minElementSize: String(DEFAULT_MIN_ELEMENT_SIZE),
+  meshSizes: null,
 
   addNode: (node) =>
     set((s) => {
@@ -391,6 +518,38 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
           `Cannot set element type: body ${propertyId} does not exist`,
         );
       prop.discretization = disc;
+    }),
+  setRegionMaxElementSize: (propertyId, size) =>
+    set((s) => {
+      const prop = s.properties.find((p) => p.id === propertyId);
+      if (!prop || !isCadBody(prop))
+        throw new Error(
+          `Cannot set the element size: region ${propertyId} does not exist`,
+        );
+      if (size.trim() === "") delete prop.maxElementSize;
+      else prop.maxElementSize = size;
+    }),
+  setRegionOptimizationRole: (propertyId, role) =>
+    set((s) => {
+      const prop = s.properties.find((p) => p.id === propertyId);
+      if (!prop || !isCadBody(prop))
+        throw new Error(
+          `Cannot set the optimization role: region ${propertyId} does not exist`,
+        );
+      if (role === "design") delete prop.optimizationRole;
+      else prop.optimizationRole = role;
+    }),
+  promoteRegion: (propertyId) =>
+    set((s) => {
+      const group = bodyGroupOf(s.properties, propertyId);
+      if (group.regions.length < 2)
+        throw new Error(
+          `Cannot promote: Body ${group.body} has only one region — it is a body already`,
+        );
+      const prop = s.properties.find((p) => p.id === propertyId);
+      if (!prop)
+        throw new Error(`Cannot promote: region ${propertyId} does not exist`);
+      prop.body = nextBodyNumber(s.properties);
     }),
   setInterfaceType: (interfaceId, type) =>
     set((s) => {
@@ -445,6 +604,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       // not this one's to undo.
       dropAnalysis(s);
       s.geometryHistory = [];
+      suggestSizes(s, tessellation);
       if (tessellation) {
         // A new part is a new model: an example's hand check no longer applies.
         s.handCheck = null;
@@ -468,11 +628,25 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
     set((s) => {
       s.isMeshing = v;
     }),
+  setMaxElementSize: (size) =>
+    set((s) => {
+      s.maxElementSize = size;
+    }),
+  setMinElementSize: (size) =>
+    set((s) => {
+      s.minElementSize = size;
+    }),
   setStepImportError: (msg) =>
     set((s) => {
       s.stepImportError = msg;
     }),
-  applyGeometryEdit: (bytes, tessellation, bodyCount, bodySources) =>
+  applyGeometryEdit: (
+    bytes,
+    tessellation,
+    bodyCount,
+    bodySources,
+    piecesAs = "bodies",
+  ) =>
     set((s) => {
       if (!s.stepBytes || !s.stepSurface)
         throw new Error(
@@ -503,14 +677,30 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
           throw new Error(
             `Geometry edit: ${bodySources.length} body sources for ${bodyCount} bodies`,
           );
+        // Body numbers stay as they were: the pieces of a split solid join its
+        // body as regions, or — after a hinge repair — every piece past the
+        // first becomes a body of its own.
+        let nextBody = nextBodyNumber(cadBodies);
+        const seen = new Set<number>();
         s.properties = bodySources.map((sourceId, j) => {
           const source = cadBodies.find((p) => p.id === sourceId);
           if (!source)
             throw new Error(
               `Geometry edit: new Body ${j + 1} comes from Body ${sourceId}, which does not exist`,
             );
-          return { ...source, id: j + 1 };
+          const extraPiece = seen.has(sourceId);
+          seen.add(sourceId);
+          const body =
+            extraPiece && piecesAs === "bodies" ? nextBody++ : bodyOf(source);
+          return { ...source, id: j + 1, body };
         });
+        // A Boolean that fuses bodies leaves gaps in the numbering: number the
+        // bodies 1, 2, … again, in the order of their first solid.
+        const renumber = new Map<number, number>();
+        for (const p of s.properties)
+          if (!renumber.has(bodyOf(p)))
+            renumber.set(bodyOf(p), renumber.size + 1);
+        for (const p of s.properties) p.body = renumber.get(bodyOf(p));
       } else
         s.properties =
           cadBodies.length === Math.max(1, bodyCount)
@@ -519,6 +709,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       dropAnalysis(s);
       // An edit renumbers the CAD faces an example's hand check is written on.
       s.handCheck = null;
+      suggestSizes(s, tessellation);
     }),
   undoGeometryEdit: () =>
     set((s) => {
@@ -531,6 +722,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       s.properties = previous.properties;
       s.interfaces = previous.interfaces;
       dropAnalysis(s);
+      suggestSizes(s, previous.stepSurface);
     }),
   setSplitPicking: (on) =>
     set((s) => {
@@ -567,6 +759,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
     nodes,
     elements,
     name,
+    meshSizes,
     surfaceTriangles,
     surfaceFaceIds,
     properties,
@@ -574,6 +767,7 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
   ) =>
     set((s) => {
       s.nodes = nodes;
+      s.meshSizes = meshSizes;
       s.meshSuppressedIds = meshSuppressedIds ?? [];
       s.elements = elements;
       if (properties) s.properties = properties;

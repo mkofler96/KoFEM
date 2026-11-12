@@ -25,7 +25,15 @@ import type { StateCreator } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import type { AnalysisState } from "../lib/analysisFile";
 import { bodiesLeftOutOfMesh } from "../lib/suppressBodies";
-import { createGeometrySlice, type GeometrySlice } from "./geometrySlice";
+import {
+  DEFAULT_MAX_ELEMENT_SIZE,
+  DEFAULT_MIN_ELEMENT_SIZE,
+} from "../lib/meshSizing";
+import {
+  createGeometrySlice,
+  suggestSizes,
+  type GeometrySlice,
+} from "./geometrySlice";
 import {
   createMaterialSlice,
   DEFAULT_MATERIAL,
@@ -172,6 +180,9 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.nextFaceEntryId = a.nextFaceEntryId;
       s.nextMatId = a.nextMatId;
       s.stepSurface = a.stepSurface;
+      // The file does not record the sizes the mesh was made with.
+      s.meshSizes = null;
+      suggestSizes(s, a.stepSurface);
       s.interfaces = a.interfaces;
       s.highlightInterfaceId = null;
       // Saved analyses carry the tessellated surface but not the original STEP
@@ -250,6 +261,9 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.materials = [DEFAULT_MATERIAL];
       s.properties = [{ id: 1, materialId: 1 }];
       s.meshSuppressedIds = [];
+      s.meshSizes = null;
+      s.maxElementSize = String(DEFAULT_MAX_ELEMENT_SIZE);
+      s.minElementSize = String(DEFAULT_MIN_ELEMENT_SIZE);
       s.bcGroups = [];
       s.loadGroups = [];
       s.tieGroups = [];

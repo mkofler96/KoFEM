@@ -21,11 +21,11 @@
     <meta property="og:title" content="SIMP | KoFEM Theory Guide" />
     <meta property="og:description" content="How SIMP topology optimization turns a linear-elastic FEM model into a density design problem: element densities, the penalized stiffness with a floor, compliance and volume objectives, and the self-adjoint sensitivity, with a two-bar worked calculation." />
     <meta property="og:url" content="https://kofem.org/theory/optimization/simp/" />
-    <meta property="og:image" content="https://kofem.org/kofem_logo.svg" />
-    <meta name="twitter:card" content="summary" />
+    <meta property="og:image" content="https://kofem.org/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="SIMP | KoFEM Theory Guide" />
     <meta name="twitter:description" content="How SIMP topology optimization turns a linear-elastic FEM model into a density design problem: element densities, the penalized stiffness with a floor, compliance and volume objectives, and the self-adjoint sensitivity, with a two-bar worked calculation." />
-    <meta name="twitter:image" content="https://kofem.org/kofem_logo.svg" />
+    <meta name="twitter:image" content="https://kofem.org/og-image.png" />
 
     <!-- Self-hosted fonts (SIL OFL) — see public/fonts/README.md -->
     <link href="/fonts/ibm-plex.css" rel="stylesheet" />
@@ -967,18 +967,18 @@
     <ol class="refs">
       <li>Bendsøe and Sigmund, <cite>Topology Optimization: Theory, Methods and Applications</cite>, Springer (2003); and Bendsøe and Sigmund (1999), <cite>Material interpolation schemes in topology optimization</cite>, Archive of Applied Mechanics 69, 635–654.</li>
       <li>Andreassen, Clausen, Schevenels, Lazarov and Sigmund (2011), <cite>Efficient topology optimization in MATLAB using 88 lines of code</cite>, Structural and Multidisciplinary Optimization 43, 1–16. Source of the modified SIMP form used here.</li>
-      <li><a href="https://github.com/mkofler96/KoFEM/blob/0f44284ec8c6fa25813e1c4c4062a54898fb0ee0/engine/cpp/topology_simp_core.cpp#L72">interpolation and slope</a>,
-        <a href="https://github.com/mkofler96/KoFEM/blob/0f44284ec8c6fa25813e1c4c4062a54898fb0ee0/engine/cpp/topology_simp_core.cpp#L80">once-per-run element stiffness cache</a>,
-        <a href="https://github.com/mkofler96/KoFEM/blob/0f44284ec8c6fa25813e1c4c4062a54898fb0ee0/engine/cpp/topology_simp_core.cpp#L148">compliance and self-adjoint sensitivity</a>,
-        <a href="https://github.com/mkofler96/KoFEM/blob/0f44284ec8c6fa25813e1c4c4062a54898fb0ee0/engine/cpp/topology_formulation.h#L1">objective and constraint rows</a> and
-        <a href="https://github.com/mkofler96/KoFEM/blob/0f44284ec8c6fa25813e1c4c4062a54898fb0ee0/engine/cpp/topology_simp.cpp#L192">order-1 design space</a> with its
-        <a href="https://github.com/mkofler96/KoFEM/blob/0f44284ec8c6fa25813e1c4c4062a54898fb0ee0/engine/cpp/topology_simp.cpp#L204">prescribed-displacement guard</a>.</li>
-      <li><a href="https://github.com/mkofler96/KoFEM/blob/0f44284ec8c6fa25813e1c4c4062a54898fb0ee0/engine/cpp/topology_shell.h#L1">shell and coupled SIMP</a>,
-        <a href="https://github.com/mkofler96/KoFEM/blob/0f44284ec8c6fa25813e1c4c4062a54898fb0ee0/web/src/lib/solve/route.ts#L76">design-domain routing</a> and
-        <a href="https://github.com/mkofler96/KoFEM/blob/0f44284ec8c6fa25813e1c4c4062a54898fb0ee0/web/src/hooks/useTopOpt.ts#L227">one-material-per-domain check</a>.</li>
+      <li><a href="https://github.com/mkofler96/KoFEM/blob/c4f63a0ad9ed6793aa724d2fdecb2ad0bcf4e0dc/engine/cpp/topology_simp_core.cpp#L72">interpolation and slope</a>,
+        <a href="https://github.com/mkofler96/KoFEM/blob/c4f63a0ad9ed6793aa724d2fdecb2ad0bcf4e0dc/engine/cpp/topology_simp_core.cpp#L80">once-per-run element stiffness cache</a>,
+        <a href="https://github.com/mkofler96/KoFEM/blob/c4f63a0ad9ed6793aa724d2fdecb2ad0bcf4e0dc/engine/cpp/topology_simp_core.cpp#L148">compliance and self-adjoint sensitivity</a>,
+        <a href="https://github.com/mkofler96/KoFEM/blob/c4f63a0ad9ed6793aa724d2fdecb2ad0bcf4e0dc/engine/cpp/topology_formulation.h#L1">objective and constraint rows</a> and
+        <a href="https://github.com/mkofler96/KoFEM/blob/c4f63a0ad9ed6793aa724d2fdecb2ad0bcf4e0dc/engine/cpp/topology_simp.cpp#L192">order-1 design space</a> with its
+        <a href="https://github.com/mkofler96/KoFEM/blob/c4f63a0ad9ed6793aa724d2fdecb2ad0bcf4e0dc/engine/cpp/topology_simp.cpp#L204">prescribed-displacement guard</a>.</li>
+      <li><a href="https://github.com/mkofler96/KoFEM/blob/c4f63a0ad9ed6793aa724d2fdecb2ad0bcf4e0dc/engine/cpp/topology_shell.h#L1">shell and coupled SIMP</a>,
+        <a href="https://github.com/mkofler96/KoFEM/blob/c4f63a0ad9ed6793aa724d2fdecb2ad0bcf4e0dc/web/src/lib/solve/route.ts#L76">design-domain routing</a> and
+        <a href="https://github.com/mkofler96/KoFEM/blob/c4f63a0ad9ed6793aa724d2fdecb2ad0bcf4e0dc/web/src/hooks/useTopOpt.ts#L227">one-material-per-domain check</a>.</li>
       <li>Native checks of the per-iteration math, including finite-difference
-        sensitivities: <a href="https://github.com/mkofler96/KoFEM/blob/0f44284ec8c6fa25813e1c4c4062a54898fb0ee0/engine/tests/topology_simp_validation.cpp#L1">solid SIMP core</a> and
-        <a href="https://github.com/mkofler96/KoFEM/blob/0f44284ec8c6fa25813e1c4c4062a54898fb0ee0/engine/tests/topology_shell_validation.cpp#L1">shell and coupled core</a>.</li>
+        sensitivities: <a href="https://github.com/mkofler96/KoFEM/blob/c4f63a0ad9ed6793aa724d2fdecb2ad0bcf4e0dc/engine/tests/topology_simp_validation.cpp#L1">solid SIMP core</a> and
+        <a href="https://github.com/mkofler96/KoFEM/blob/c4f63a0ad9ed6793aa724d2fdecb2ad0bcf4e0dc/engine/tests/topology_shell_validation.cpp#L1">shell and coupled core</a>.</li>
     </ol><nav class="pager" aria-label="Reading order">
       <a class="prev" rel="prev" href="/theory/shells/solid-coupling/"><small>Previous</small>← Solid–shell coupling</a>
       <a class="next" rel="next" href="/theory/optimization/constraints-and-convergence/"><small>Next</small>Constraints and convergence →</a></nav>

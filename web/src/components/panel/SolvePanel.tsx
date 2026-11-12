@@ -77,8 +77,8 @@ export function SolvePanel({
         </div>
         {solverMethod === "amg" && amgUnavailable !== null && (
           <div className={styles.formNote} data-testid="solver-method-note">
-            AMG is not available for this model ({amgUnavailable}). It will
-            solve with Gauss–Seidel.
+            AMG is not available for this model ({amgUnavailable.reason}). It
+            will solve with {amgUnavailable.fallback}.
           </div>
         )}
         <div className={styles.statRow}>

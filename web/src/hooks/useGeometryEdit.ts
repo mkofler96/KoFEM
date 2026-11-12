@@ -73,14 +73,21 @@ export function useGeometryEdit() {
       setSplitError("Pick at least one face to split.");
       return false;
     }
-    return run("split_geometry", {
-      split: {
-        mode,
-        ...splitPlane(axis, position),
-        ...(mode === "faces" ? { faceIds } : {}),
-        ...(mode === "bodies" && bodyIds.length > 0 ? { bodyIds } : {}),
+    // The pieces of a split body stay regions of it (KOF-257): connected at
+    // the cut, each with the settings of the body it came from.
+    return run<EditReply & { bodySources: number[] }>(
+      "split_geometry",
+      {
+        split: {
+          mode,
+          ...splitPlane(axis, position),
+          ...(mode === "faces" ? { faceIds } : {}),
+          ...(mode === "bodies" && bodyIds.length > 0 ? { bodyIds } : {}),
+        },
       },
-    });
+      (reply) => reply.bodySources,
+      "regions",
+    );
   }
 
   // Combine `target` with `tools`; the result replaces the target body.
@@ -184,6 +191,7 @@ export function useGeometryEdit() {
       | "remove_faces",
     edit: Record<string, unknown>,
     bodySources?: (reply: Reply) => number[],
+    piecesAs?: "regions" | "bodies",
   ): Promise<boolean> {
     setSplitError(null);
     setIsSplitting(true);
@@ -204,6 +212,7 @@ export function useGeometryEdit() {
         },
         reply.bodyCount,
         bodySources?.(reply),
+        piecesAs,
       );
       return true;
     } catch (err) {

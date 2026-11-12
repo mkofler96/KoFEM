@@ -5,13 +5,16 @@
 // the smoothed-aggregation multigrid (AMG) preconditioner, and the rule for
 // which models it covers. The Rust module handles linear and quadratic
 // tetrahedra with per-body materials, supports (fixed, roller, prescribed),
-// nodal loads and surface loads; hex elements and couplings still solve with
-// the MFEM engine's Gauss–Seidel CG, and the solve says so. Pure-shell models
-// take the Rust shell solve (shellRust.ts) instead.
+// nodal loads and surface loads, and surface-to-point couplings on linear
+// tetrahedra; hex elements still solve with the MFEM engine's Gauss–Seidel CG,
+// and the solve says so. Pure-shell models take the Rust shell solve
+// (shellRust.ts), and shells, bodies solved as shells and couplings AMG cannot
+// take go to the coupled solver, both preconditioned with incomplete Cholesky.
 //
 // The inputs are built by the same helpers as the MFEM payload
 // (packSolveMesh, resolveMaterials, groupDirichlet, groupPointLoads,
-// surfaceLoadsToVertices), so both solvers see an identical model.
+// surfaceLoadsToVertices for the solid solve; buildCoupledEngineInputs for a
+// model with couplings), so both solvers see an identical model.
 
 import type {
   Constraint,
@@ -23,7 +26,9 @@ import type {
   SurfaceLoad,
 } from "../../workers/solverTypes.js";
 import type {
+  Couplings,
   ElasticModel,
+  ElasticSolution,
   SolveOptions,
   SolveRun,
 } from "../../wasm/fem/kofem_wasm.js";
@@ -36,6 +41,7 @@ import {
 } from "../solveMeshPacking.js";
 import { surfaceLoadsToVertices } from "./bcs.js";
 import { shellMarkedBodies } from "./autoShell.js";
+import type { EngineCoupledBcs, EngineCoupling } from "./coupled.js";
 import { iterateToConvergence, type ContinuationPrompt } from "./cgRun.js";
 
 export type { ContinuationPrompt } from "./cgRun.js";
@@ -72,18 +78,57 @@ export function amgUnavailableReason(model: {
     return "it does not support shell elements";
   if (model.elements.some((element) => element.type !== "CTETRA"))
     return "it supports tetrahedral meshes only";
-  if (model.couplingCount > 0)
-    return "it does not support surface-to-point couplings";
+  // A coupling ties the corner nodes of the picked faces; the edge nodes of
+  // quadratic elements would not follow (the MFEM coupled path solves such a
+  // model with linear elements).
+  if (model.couplingCount > 0 && model.elementOrder !== 1)
+    return "it supports surface-to-point couplings on linear elements only";
   if (shellMarkedBodies(model.properties).length > 0)
     return "it does not support bodies solved as shells";
   return null;
 }
+
+// The preconditioner a solve uses when AMG cannot take the model. Shell
+// elements, bodies solved as shells and surface-to-point couplings (on
+// quadratic elements, the case AMG refuses) route to the shell or coupled
+// solver, which use incomplete Cholesky IC(0) (SSOR only if
+// the factorisation breaks down); every other model solves with the MFEM
+// engine's Gauss–Seidel CG. Mirrors routeSolve (route.ts).
+export type FallbackPreconditioner = "incomplete-cholesky" | "gauss-seidel";
+
+export function amgFallbackPreconditioner(model: {
+  elements: Element[];
+  properties: Property[];
+  couplingCount: number;
+}): FallbackPreconditioner {
+  if (
+    model.elements.some((element) => element.type === "CTRIA3") ||
+    model.couplingCount > 0 ||
+    shellMarkedBodies(model.properties).length > 0
+  )
+    return "incomplete-cholesky";
+  return "gauss-seidel";
+}
+
+// The fallback preconditioner in words for the user.
+export const FALLBACK_PRECONDITIONER_LABEL: Record<
+  FallbackPreconditioner,
+  string
+> = {
+  "incomplete-cholesky": "an incomplete Cholesky preconditioner",
+  "gauss-seidel": "Gauss–Seidel",
+};
 
 // The two classes of the Rust module the solve needs, passed in so the worker
 // and the node-side tests can each load the module their own way.
 export interface FemModule {
   ElasticModel: typeof ElasticModel;
   SolveOptions: typeof SolveOptions;
+}
+
+// The coupled solve needs the coupling set too.
+export interface CoupledFemModule extends FemModule {
+  Couplings: typeof Couplings;
 }
 
 export interface AmgSolidModel {
@@ -218,61 +263,204 @@ export async function solveSolidWithAmg(
       },
     );
 
-    // eslint-disable-next-line kofem/no-silent-fallback -- cgIterationLimit is optional in the solve message; absent means the solver's own budget, as for the MFEM path
-    const budget = iterationLimit ?? DEFAULT_ITERATION_LIMIT;
-    const options = new fem.SolveOptions(
-      RELATIVE_TOLERANCE,
-      budget,
-      "amg",
-      "residual",
-    );
-    // The hierarchy is built in one call; on large models that takes seconds,
-    // so say what is happening before it starts.
-    log("Building the AMG preconditioner…");
-    let run: SolveRun;
-    try {
-      run = elastic.startSolve(
-        Uint32Array.from(fixedDofList),
-        Float64Array.from(fixedValueList),
-        forces,
-        options,
-      );
-    } finally {
-      options.free();
-    }
-    log(
-      `AMG preconditioner ready: multigrid levels [${Array.from(run.levelSizes).join(", ")}] unknowns`,
-    );
-    let finished = false;
-    try {
-      await iterateToConvergence(
-        run,
-        { initialBudget: budget, logEvery: LOG_EVERY, tag: "[amg]", started },
-        askToContinue,
-        log,
-      );
-      finished = true;
-      const solution = run.finish();
-      try {
+    return await runAmgSolve(
+      fem,
+      iterationLimit,
+      (options) =>
+        elastic.startSolve(
+          Uint32Array.from(fixedDofList),
+          Float64Array.from(fixedValueList),
+          forces,
+          options,
+        ),
+      started,
+      askToContinue,
+      log,
+      (solution) => {
         // One triple per node: the vertices first, then any edge nodes.
         const nodal = solution.displacements;
-        const vonMises = elastic.vonMises(nodal);
-        const displacements = nodal.slice(0, 3 * elastic.vertexCount);
-        const seconds = (performance.now() - started) / 1000;
-        log(
-          `AMG CG converged: ${solution.iterations} iterations, force residual ` +
-            `${solution.relativeResidual.toExponential(2)}, ${seconds.toFixed(2)} s`,
-        );
-        return { displacements, vonMises };
-      } finally {
-        solution.free();
-      }
+        return {
+          displacements: nodal.slice(0, 3 * elastic.vertexCount),
+          vonMises: elastic.vonMises(nodal),
+        };
+      },
+    );
+  } finally {
+    elastic.free();
+  }
+}
+
+// What the Rust coupled solve reads: the coupled assembler's inputs
+// (CoupledEngineInputs, from buildCoupledEngineInputs) without the shell
+// fields, so the MFEM and the Rust solve take the identical model.
+export interface AmgCoupledInputs {
+  mesh: {
+    vertices: Float64Array;
+    tets: Int32Array;
+    triangles: Int32Array;
+    attributes: Int32Array;
+  };
+  coupling: EngineCoupling;
+  bcs: EngineCoupledBcs;
+  // One material per 1-based `mesh.attributes` value.
+  solidMaterials: { young_modulus: number; poisson_ratio: number }[];
+}
+
+// Solve an all-solid model with surface-to-point couplings with AMG — what
+// the engine's solve_coupled does for it. Returns the same fields: three
+// translations per pool node and one von Mises stress per tet (no shell
+// facets).
+export async function solveCoupledSolidWithAmg(
+  fem: CoupledFemModule,
+  input: AmgCoupledInputs,
+  iterationLimit: number | undefined,
+  askToContinue: ContinuationPrompt,
+  log: (line: string) => void,
+): Promise<{
+  displacements: Float64Array;
+  von_mises_tets: Float64Array;
+  von_mises_tris: Float64Array;
+}> {
+  const { mesh, coupling, bcs, solidMaterials } = input;
+  if (mesh.triangles.length > 0)
+    throw new Error(
+      "The AMG solver cannot solve this model: it does not support shell elements.",
+    );
+  const elastic = new fem.ElasticModel(
+    mesh.vertices,
+    Uint32Array.from(mesh.tets),
+    // The coupled assembler numbers materials from 1; Rust from 0.
+    Uint32Array.from(mesh.attributes, (attribute) => attribute - 1),
+    Float64Array.from(
+      solidMaterials.flatMap((material) => [
+        material.young_modulus,
+        material.poisson_ratio,
+      ]),
+    ),
+    1,
+  );
+  try {
+    const started = performance.now();
+    const nonzeros = elastic.assemble();
+    const pointCount = elastic.vertexCount;
+    log(
+      `AMG solve: ${pointCount} nodes, ${mesh.tets.length / 4} tetrahedra, ` +
+        `${coupling.ref.length} couplings, ${nonzeros} stiffness entries assembled`,
+    );
+    const couplings = new fem.Couplings(
+      Uint32Array.from(coupling.ref),
+      Uint32Array.from(coupling.offsets),
+      Uint32Array.from(coupling.solid),
+      Int32Array.from(coupling.mpc),
+      Uint32Array.from(coupling.dof_mask),
+      // eslint-disable-next-line kofem/no-silent-fallback -- weights are optional in the coupling set; absent means equal weights, as for solve_coupled
+      coupling.weights ?? new Float64Array(0),
+    );
+    try {
+      const perVertex = couplings.dofsPerVertex;
+      const fixedDofs = Uint32Array.from([
+        ...bcs.fixed_dofs,
+        ...bcs.prescribed_dofs,
+      ]);
+      const fixedValues = Float64Array.from([
+        ...Array.from(bcs.fixed_dofs, () => 0),
+        ...bcs.prescribed_vals,
+      ]);
+      const forces = new Float64Array(perVertex * pointCount);
+      bcs.load_dofs.forEach((dof, index) => {
+        if (dof < 0 || dof >= forces.length)
+          throw new Error(
+            `Load DOF ${dof} is out of range (the model has ${forces.length})`,
+          );
+        forces[dof] += bcs.load_vals[index];
+      });
+      return await runAmgSolve(
+        fem,
+        iterationLimit,
+        (options) =>
+          elastic.startCoupledSolve(
+            couplings,
+            fixedDofs,
+            fixedValues,
+            forces,
+            options,
+          ),
+        started,
+        askToContinue,
+        log,
+        (solution) => {
+          const displacements = solution.displacements;
+          return {
+            displacements,
+            von_mises_tets: elastic.vonMises(displacements),
+            von_mises_tris: new Float64Array(0),
+          };
+        },
+      );
     } finally {
-      // finish() consumes the run; free it only when it was not reached.
-      if (!finished) run.free();
+      couplings.free();
     }
   } finally {
     elastic.free();
+  }
+}
+
+// Set up the AMG run with `start`, advance it to convergence (asking to go on
+// past the iteration budget) and read the result with `read`. Frees the
+// options, the run and the solution whatever happens.
+async function runAmgSolve<T>(
+  fem: FemModule,
+  iterationLimit: number | undefined,
+  start: (options: SolveOptions) => SolveRun,
+  started: number,
+  askToContinue: ContinuationPrompt,
+  log: (line: string) => void,
+  read: (solution: ElasticSolution) => T,
+): Promise<T> {
+  // eslint-disable-next-line kofem/no-silent-fallback -- cgIterationLimit is optional in the solve message; absent means the solver's own budget, as for the MFEM path
+  const budget = iterationLimit ?? DEFAULT_ITERATION_LIMIT;
+  const options = new fem.SolveOptions(
+    RELATIVE_TOLERANCE,
+    budget,
+    "amg",
+    "residual",
+  );
+  // The hierarchy is built in one call; on large models that takes seconds,
+  // so say what is happening before it starts.
+  log("Building the AMG preconditioner…");
+  let run: SolveRun;
+  try {
+    run = start(options);
+  } finally {
+    options.free();
+  }
+  log(
+    `AMG preconditioner ready: multigrid levels [${Array.from(run.levelSizes).join(", ")}] unknowns`,
+  );
+  let finished = false;
+  try {
+    await iterateToConvergence(
+      run,
+      { initialBudget: budget, logEvery: LOG_EVERY, tag: "[amg]", started },
+      askToContinue,
+      log,
+    );
+    finished = true;
+    const solution = run.finish();
+    try {
+      const result = read(solution);
+      const seconds = (performance.now() - started) / 1000;
+      log(
+        `AMG CG converged: ${solution.iterations} iterations, force residual ` +
+          `${solution.relativeResidual.toExponential(2)}, ${seconds.toFixed(2)} s`,
+      );
+      return result;
+    } finally {
+      solution.free();
+    }
+  } finally {
+    // finish() consumes the run; free it only when it was not reached.
+    if (!finished) run.free();
   }
 }
 

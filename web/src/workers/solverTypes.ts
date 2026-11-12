@@ -109,6 +109,9 @@ export interface VolumeMeshPayload {
   format?: string;
   maxElementSize?: number;
   minElementSize?: number;
+  // Per-region sizes (KOF-257): entry k is the max element size of CAD solid
+  // k+1. Absent: every solid meshes at maxElementSize.
+  solidMaxSizes?: number[];
   // Bodies marked Shell (Property.discretization === "shell") and the current
   // property table. With these, meshing idealises those bodies' thin walls to a
   // mid-surface shell mesh and stores the MIXED CTRIA3 + CTETRA model, instead of
@@ -150,8 +153,8 @@ export interface SolveModel {
 export interface SolvePayload extends SolveModel {
   // Which CG preconditioner to use: smoothed-aggregation multigrid in the Rust
   // module, or the engine's Gauss–Seidel. AMG covers all-solid tet models of
-  // order 1 or 2 (amgUnavailableReason); others solve with Gauss–Seidel and
-  // say so.
+  // order 1 or 2 (amgUnavailableReason); others solve with the preconditioner
+  // amgFallbackPreconditioner names and say so.
   solverMethod: SolverMethod;
 }
 

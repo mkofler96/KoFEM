@@ -23,7 +23,7 @@ async function importTube(page: Page) {
     .locator('input[type="file"][accept=".stp,.step"]')
     .setInputFiles(STEP_FILE);
   await expect(
-    page.getByRole("button").filter({ hasText: "Mesh STEP volume" }),
+    page.getByRole("button").filter({ hasText: "Generate mesh" }),
   ).toBeVisible({ timeout: 60_000 });
 }
 
@@ -104,7 +104,7 @@ test("a file picked while the engine downloads waits for it", async ({
 
   release();
   await expect(
-    page.getByRole("button").filter({ hasText: "Mesh STEP volume" }),
+    page.getByRole("button").filter({ hasText: "Generate mesh" }),
   ).toBeVisible({ timeout: 60_000 });
   await expect(status(page)).toHaveAttribute("data-phase", "ready");
 });

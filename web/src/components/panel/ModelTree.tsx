@@ -32,6 +32,10 @@ const KIND_DOT: Partial<Record<TreeItemKind, string>> = {
   interface: styles.kindInterface,
 };
 
+// Groups that hold at most one object: a model has one mesh, so once it exists
+// it is regenerated from its own entry and "+ Add" goes.
+const SINGLE_ITEM_GROUPS: TreeGroup[] = ["mesh"];
+
 // Analysis objects carry the hollow square instead of a dot.
 const SQUARE_KINDS: TreeItemKind[] = ["mesh", "study", "plot"];
 
@@ -71,6 +75,7 @@ export function ModelTree() {
     properties.filter((p) => p.suppressed).map((p) => p.id),
   );
   const toggleBodyVisibility = useModelStore((s) => s.toggleBodyVisibility);
+  const setBodiesHidden = useModelStore((s) => s.setBodiesHidden);
   const items = useTreeItems();
   const [collapsed, setCollapsed] = useState<TreeGroup[]>([]);
 
@@ -100,6 +105,8 @@ export function ModelTree() {
     onHover,
     dimmed,
     trailing,
+    nested,
+    rowClass,
   }: {
     key: string;
     active: boolean;
@@ -113,16 +120,21 @@ export function ModelTree() {
     // A control at the row's end (the body eye) — a sibling of the entry
     // button, since a button may not contain another.
     trailing?: ReactNode;
+    // A region under its body: indented.
+    nested?: boolean;
+    // The row's place in a body's subtree: the body over its regions, a
+    // region, the last region.
+    rowClass?: string;
   }) {
     return (
       <li
         key={key}
-        className={styles.entryRow}
+        className={`${styles.entryRow} ${rowClass ?? ""}`}
         onMouseEnter={onHover && (() => onHover(true))}
         onMouseLeave={onHover && (() => onHover(false))}
       >
         <button
-          className={`${styles.node} ${active ? styles.nodeActive : ""} ${dimmed ? styles.nodeDimmed : ""}`}
+          className={`${styles.node} ${active ? styles.nodeActive : ""} ${dimmed ? styles.nodeDimmed : ""} ${nested ? styles.nodeNested : ""}`}
           aria-current={active ? "true" : undefined}
           data-testid={testId}
           onClick={onClick}
@@ -154,16 +166,31 @@ export function ModelTree() {
             </button>
             {open && (
               <ul className={styles.list}>
-                {items[id].map((item) => {
-                  const isBody = item.kind === "body";
+                {items[id].map((item, k, list) => {
+                  // A body's regions follow it: the body opens its subtree,
+                  // the last region closes it.
+                  const next = list[k + 1];
+                  const rowClass = item.nested
+                    ? next?.nested
+                      ? styles.regionRow
+                      : `${styles.regionRow} ${styles.regionLast}`
+                    : next?.nested
+                      ? styles.bodyWithRegions
+                      : undefined;
+                  // A body or region stands for its CAD solids (KOF-257).
+                  const solids = item.solidIds ?? [];
+                  const isBody = solids.length > 0;
                   const isInterface = item.kind === "interface";
                   const inactive = item.inactive === true;
-                  const hidden = isBody && hiddenBodyIds.includes(item.id);
+                  const hidden =
+                    isBody && solids.every((s) => hiddenBodyIds.includes(s));
                   // Suppressed: as good as deleted, so no eye — it is brought
                   // back from its panel (Suppressed), not shown.
-                  const suppressed = isBody && suppressedIds.has(item.id);
+                  const suppressed =
+                    isBody && solids.every((s) => suppressedIds.has(s));
                   return entry({
                     key: `${item.kind}:${item.id}`,
+                    rowClass,
                     active: isItem(id, item.kind, item.id),
                     testId: `tree-${item.kind}-${item.id}`,
                     onClick: () =>
@@ -184,38 +211,44 @@ export function ModelTree() {
                       />
                     ),
                     label: item.label,
-                    // Hovering a body highlights it in the viewport (#353),
-                    // hovering an interface its shared faces.
+                    // Hovering a single-solid body or a region highlights it in
+                    // the viewport (#353), hovering an interface its faces.
                     onHover:
-                      isBody && !suppressed
-                        ? (on) => setHighlightBodyId(on ? item.id : null)
+                      isBody && solids.length === 1 && !suppressed
+                        ? (on) => setHighlightBodyId(on ? solids[0] : null)
                         : isInterface && !inactive
                           ? (on) => setHighlightInterfaceId(on ? item.id : null)
                           : undefined,
                     detail: suppressed ? "suppressed" : item.detail,
                     dimmed: hidden || suppressed || inactive,
+                    nested: item.nested,
                     trailing: isBody && !suppressed && (
                       <button
                         className={`${styles.eye} ${hidden ? styles.eyeOff : ""}`}
-                        data-testid={`tree-eye-body-${item.id}`}
-                        title={hidden ? "Show body" : "Hide body"}
+                        data-testid={`tree-eye-${item.kind}-${item.id}`}
+                        title={hidden ? "Show" : "Hide"}
                         aria-label={`${hidden ? "Show" : "Hide"} ${item.label}`}
                         aria-pressed={hidden}
-                        onClick={() => toggleBodyVisibility(item.id)}
+                        onClick={() =>
+                          solids.length === 1
+                            ? toggleBodyVisibility(solids[0])
+                            : setBodiesHidden(solids, !hidden)
+                        }
                       >
                         {hidden ? EYE_OFF_ICON : EYE_ICON}
                       </button>
                     ),
                   });
                 })}
-                {entry({
-                  key: "add",
-                  active: isAdd(id),
-                  testId: `tree-add-${id}`,
-                  onClick: () => selectTreeNode(addSelection(id)),
-                  marker: <span className={styles.addIcon}>+</span>,
-                  label: "Add",
-                })}
+                {!(SINGLE_ITEM_GROUPS.includes(id) && items[id].length > 0) &&
+                  entry({
+                    key: "add",
+                    active: isAdd(id),
+                    testId: `tree-add-${id}`,
+                    onClick: () => selectTreeNode(addSelection(id)),
+                    marker: <span className={styles.addIcon}>+</span>,
+                    label: "Add",
+                  })}
               </ul>
             )}
           </section>
