@@ -39,6 +39,8 @@ export interface Split {
 }
 export interface MeshStep {
   maxElementSize: number;
+  // Absent: maxElementSize / 10, the worker's default (recipe.mjs MeshStep).
+  minElementSize?: number;
   order: 1 | 2;
   localSizes?: { faces: FaceRef[]; size: number }[];
 }
@@ -696,6 +698,12 @@ async function chooseElementType(
   }
 }
 
+// The floor Netgen refines curvature to: the recipe's, or max / 10 when it
+// sets none (the worker's own default and what the node-side build passes,
+// pipeline.mjs minSizeOf).
+const minElementSizeOf = (mesh: MeshStep): number =>
+  mesh.minElementSize ?? mesh.maxElementSize / 10;
+
 async function meshIt(page: Page, mesh: MeshStep): Promise<void> {
   if (mesh.localSizes && mesh.localSizes.length > 0)
     throw new MissingUiCapability(
@@ -704,12 +712,10 @@ async function meshIt(page: Page, mesh: MeshStep): Promise<void> {
     );
   await openTree(page, "mesh");
   await page.getByTestId("max-element-size").fill(String(mesh.maxElementSize));
-  // The floor Netgen refines curvature to: max/10, the worker's own default and
-  // what the node-side build passes. The import suggests its own value, so it
-  // is typed here like the max.
+  // The import suggests its own minimum, so the recipe's is typed like the max.
   await page
     .getByTestId("min-element-size")
-    .fill(String(mesh.maxElementSize / 10));
+    .fill(String(minElementSizeOf(mesh)));
   await page
     .getByText("Element order", { exact: true })
     .locator("..")
@@ -1219,7 +1225,7 @@ export async function compareWithNodeMesh(
   const dto = engine.generate_fem_mesh(
     JSON.stringify({
       max_element_size: mesh.maxElementSize,
-      min_element_size: mesh.maxElementSize / 10,
+      min_element_size: minElementSizeOf(mesh),
       grading: 0.3,
       second_order: false,
       elementsperedge: 2.0,

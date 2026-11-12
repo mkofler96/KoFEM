@@ -21,7 +21,9 @@
 //              (cadFaceId), so it survives a re-mesh as in the app;
 //   handCheck  its analysis file carries a hand check in the probe shape the
 //              Results panel reads ({ quantity, formula, reference, unit,
-//              probe: { kind, … }, assumes }). A topology optimisation (a
+//              probe: { kind, … }, assumes }), whose assumptions name the
+//              material's E and ν (assumes.young, assumes.poisson), so editing
+//              either withholds the check. A topology optimisation (a
 //              recipe with `optimize`) has no closed form: its read-out is the
 //              final compliance the Results panel shows after the run, so its
 //              analysis file instead opens on the Optimize step with the
@@ -176,6 +178,9 @@ function violations(id) {
     if (!Number.isFinite(hc.reference)) missing.push("reference");
     if (typeof hc.probe?.kind !== "string") missing.push("probe.kind");
     if (!hc.assumes) missing.push("assumes");
+    else
+      for (const key of ["young", "poisson"])
+        if (!Number.isFinite(hc.assumes[key])) missing.push(`assumes.${key}`);
     if (missing.length)
       out.push(
         `${id}.vtu: handCheck is not in the probe shape (lacks ${missing.join(", ")})`,

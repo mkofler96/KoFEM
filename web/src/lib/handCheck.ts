@@ -64,15 +64,26 @@ export interface HandCheck {
   divideBy?: number;
   probe: HandCheckProbe;
   // The problem the formula was worked out for: every load and every support,
-  // each on whole CAD faces, and the Young's modulus of every body. Once the
-  // model differs in any of them, the hand calculation no longer describes it
-  // and is withheld.
+  // each on whole CAD faces, and the Young's modulus and Poisson's ratio of
+  // every body. Once the model differs in any of them, the hand calculation no
+  // longer describes it and is withheld.
   assumes: {
     loads: AssumedLoad[];
     supports: AssumedSupport[];
     young: number;
+    // Required, except on a block migrated from v0.5/v0.6 (`migratedFrom`):
+    // those were bending checks, δ = P·L³ / (3·E·I), independent of ν, so they
+    // assume none and ν is not compared.
+    poisson?: number;
   };
+  // Set only on a block migrated from the shape released in v0.5.0 / v0.6.0
+  // (migrateLegacyHandCheck). It is kept when the file is saved again, so the
+  // migrated block, which assumes no ν, still opens.
+  migratedFrom?: typeof LEGACY_SHAPE;
 }
+
+// The `migratedFrom` value of a block migrated from the v0.5.0 / v0.6.0 shape.
+export const LEGACY_SHAPE = "v0.6";
 
 export type HandCheckOutcome =
   { kind: "compare"; fe: number } | { kind: "changed" };
@@ -217,10 +228,106 @@ function parseLoad(raw: unknown, i: number): AssumedLoad {
   }
 }
 
-// Validates the `handCheck` block of an analysis file.
+function parseSupport(raw: unknown, i: number): AssumedSupport {
+  const field = `assumes.supports[${i}]`;
+  const support = expectObject(raw, field);
+  return {
+    dofs: expectNumbers(support.dofs, `${field}.dofs`),
+    value: expectFinite(support.value, `${field}.value`),
+    cadFaceIds: expectFaceIds(support.cadFaceIds, `${field}.cadFaceIds`),
+  };
+}
+
+// Whether a handCheck block is in the shape released in v0.5.0 and v0.6.0: no
+// unit, and a probe that names a load group and a component but no kind.
+function isLegacyShape(check: Record<string, unknown>): boolean {
+  const probe = check.probe;
+  return (
+    check.unit === undefined &&
+    typeof probe === "object" &&
+    probe !== null &&
+    !Array.isArray(probe) &&
+    "loadGroupId" in probe &&
+    "component" in probe &&
+    !("kind" in probe)
+  );
+}
+
+// Migrates a handCheck block in the v0.5.0 / v0.6.0 shape:
+//
+//   { quantity, formula, reference,
+//     probe: { loadGroupId, component },
+//     assumes: { loads: [{ force, cadFaceIds }], supports, young } }
+//
+// That shape could only express a deflection of a force-loaded model: a
+// displacement in mm, the mean `component` over the nodes of the probed load
+// group's faces. So the unit is "mm", each load is a force, and the probe reads
+// the faces of the one assumed load: while the loads are as assumed (the check
+// is withheld otherwise), that load is the probed group. A block with no or
+// several assumed loads does not say which faces the probe read and is
+// rejected. The checks shipped in that shape were bending checks, independent
+// of ν, so the migrated block assumes no ν.
+function migrateLegacyHandCheck(check: Record<string, unknown>): HandCheck {
+  const probe = expectObject(check.probe, "probe");
+  const assumes = expectObject(check.assumes, "assumes");
+  const loadGroupId = expectFinite(probe.loadGroupId, "probe.loadGroupId");
+  const loads = expectArray(assumes.loads, "assumes.loads").map((raw, i) => {
+    const field = `assumes.loads[${i}]`;
+    const load = expectObject(raw, field);
+    if (load.kind !== undefined)
+      fail(
+        `${field}.kind is set, but the block is in the v0.5/v0.6 shape (no unit, a probe of load group ${loadGroupId}), whose loads are forces without a kind`,
+      );
+    return {
+      kind: "force" as const,
+      force: expectVector(load.force, `${field}.force`),
+      cadFaceIds: expectFaceIds(load.cadFaceIds, `${field}.cadFaceIds`),
+    };
+  });
+  if (loads.length !== 1)
+    fail(
+      `probe reads load group ${loadGroupId} (the v0.5/v0.6 shape), but the block assumes ${loads.length} loads, so the faces it read are unknown: it must assume exactly one load`,
+    );
+  if (assumes.poisson !== undefined)
+    fail(
+      "assumes.poisson is set, but the block is in the v0.5/v0.6 shape, which assumes no Poisson's ratio",
+    );
+  return {
+    quantity: expectString(check.quantity, "quantity"),
+    formula: expectString(check.formula, "formula"),
+    reference: expectFinite(check.reference, "reference"),
+    unit: "mm",
+    probe: {
+      kind: "displacement",
+      component: expectAxis(probe.component, "probe.component"),
+      cadFaceIds: [...loads[0].cadFaceIds],
+    },
+    assumes: {
+      loads,
+      supports: expectArray(assumes.supports, "assumes.supports").map(
+        parseSupport,
+      ),
+      young: expectFinite(assumes.young, "assumes.young"),
+    },
+    migratedFrom: LEGACY_SHAPE,
+  };
+}
+
+// Validates the `handCheck` block of an analysis file; a block in the shape
+// released in v0.5.0 / v0.6.0 is migrated first (migrateLegacyHandCheck).
 export function parseHandCheck(raw: unknown): HandCheck {
   const check = expectObject(raw, "");
+  if (isLegacyShape(check)) return migrateLegacyHandCheck(check);
   const assumes = expectObject(check.assumes, "assumes");
+  if (check.migratedFrom !== undefined && check.migratedFrom !== LEGACY_SHAPE)
+    fail(
+      `migratedFrom must be "${LEGACY_SHAPE}" when set, got ${JSON.stringify(check.migratedFrom)}`,
+    );
+  const migrated = check.migratedFrom === LEGACY_SHAPE;
+  if (migrated && assumes.poisson !== undefined)
+    fail(
+      `assumes.poisson is set, but the block is migrated from ${LEGACY_SHAPE}, which assumes no Poisson's ratio`,
+    );
   if (!UNITS.includes(check.unit as HandCheckUnit))
     fail(
       `unit must be "mm", "rad", "MPa" or "" (dimensionless), got ${JSON.stringify(check.unit)}`,
@@ -234,22 +341,14 @@ export function parseHandCheck(raw: unknown): HandCheck {
     assumes: {
       loads: expectArray(assumes.loads, "assumes.loads").map(parseLoad),
       supports: expectArray(assumes.supports, "assumes.supports").map(
-        (raw, i) => {
-          const field = `assumes.supports[${i}]`;
-          const support = expectObject(raw, field);
-          return {
-            dofs: expectNumbers(support.dofs, `${field}.dofs`),
-            value: expectFinite(support.value, `${field}.value`),
-            cadFaceIds: expectFaceIds(
-              support.cadFaceIds,
-              `${field}.cadFaceIds`,
-            ),
-          };
-        },
+        parseSupport,
       ),
       young: expectFinite(assumes.young, "assumes.young"),
     },
   };
+  if (migrated) parsed.migratedFrom = LEGACY_SHAPE;
+  else
+    parsed.assumes.poisson = expectFinite(assumes.poisson, "assumes.poisson");
   if (check.divideBy !== undefined) {
     const divideBy = expectFinite(check.divideBy, "divideBy");
     if (divideBy <= 0) fail(`divideBy must be greater than 0, got ${divideBy}`);
@@ -452,7 +551,8 @@ function readProbe(probe: HandCheckProbe, model: HandCheckModel): number {
 }
 
 // The FE value of the check on the solved field, or "changed" when a load, a
-// support or a body's material no longer is the one the formula assumes.
+// support or a body's material (E, and ν unless the check assumes none) no
+// longer is the one the formula assumes.
 // Throws when the probe cannot be read on this mesh and result.
 export function evaluateHandCheck(
   check: HandCheck,
@@ -471,10 +571,14 @@ export function evaluateHandCheck(
       sameValue(g.value, support.value) &&
       onFaces(g.faces, support.cadFaceIds),
   );
+  const { young, poisson } = check.assumes;
   const materialUnchanged = model.properties.every((prop) => {
     const material = model.materials.find((m) => m.id === prop.materialId);
     return (
-      material !== undefined && sameValue(material.young, check.assumes.young)
+      material !== undefined &&
+      sameValue(material.young, young) &&
+      // A migrated v0.5/v0.6 bending check assumes no ν (HandCheck.assumes).
+      (poisson === undefined || sameValue(material.poisson, poisson))
     );
   });
   if (!loadsUnchanged || !supportsUnchanged || !materialUnchanged)

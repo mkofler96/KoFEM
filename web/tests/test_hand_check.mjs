@@ -44,6 +44,7 @@ const assumes = {
   loads: [{ kind: "force", force: [0, -10000, 0], cadFaceIds: [2] }],
   supports: [{ dofs: [0, 1, 2], value: 0, cadFaceIds: [1] }],
   young: 210000,
+  poisson: 0.3,
 };
 const handCheck = (overrides = {}) =>
   parseHandCheck({
@@ -298,7 +299,7 @@ const shellModel = model({
 const shellCheck = (probe) =>
   handCheck({
     probe,
-    assumes: { loads: [], supports: [], young: 210000 },
+    assumes: { loads: [], supports: [], young: 210000, poisson: 0.3 },
   });
 const shellPeak = evaluateHandCheck(
   shellCheck({ kind: "stress", field: "vonMises", stat: "max" }),
@@ -393,6 +394,7 @@ const mixedAssumes = {
   ],
   supports: [{ dofs: [0, 1, 2], value: 0, cadFaceIds: [1] }],
   young: 210000,
+  poisson: 0.3,
 };
 const pressure = (overrides = {}) => ({
   id: 2,
@@ -514,6 +516,18 @@ const changedCases = [
       materials: [{ id: 1, name: "Aluminium", young: 70000, poisson: 0.33 }],
     }),
   ],
+  [
+    "only Poisson's ratio is edited (a twist depends on G = E / (2(1 + ν)))",
+    handCheck({
+      quantity: "End twist",
+      unit: "rad",
+      reference: THETA,
+      probe: { kind: "twist", axis: 2, cadFaceIds: [2] },
+    }),
+    model({
+      materials: [{ id: 1, name: "Steel", young: 210000, poisson: 0.25 }],
+    }),
+  ],
 ];
 for (const [name, hc, changedModel] of changedCases) {
   const outcome = evaluateHandCheck(hc, changedModel);
@@ -536,9 +550,24 @@ const valid = {
 };
 const parseCases = [
   [
-    "the legacy load-group probe",
+    "a load-group probe in a check with a unit (not the legacy shape)",
     { ...valid, probe: { loadGroupId: 1, component: 1 } },
     'handCheck.probe.kind must be "displacement", "twist" or "stress"',
+  ],
+  [
+    "a check without Poisson's ratio",
+    { ...valid, assumes: { ...assumes, poisson: undefined } },
+    "handCheck.assumes.poisson must be a finite number",
+  ],
+  [
+    "a migrated check that assumes a Poisson's ratio",
+    { ...valid, migratedFrom: "v0.6" },
+    "handCheck.assumes.poisson is set, but the block is migrated from v0.6",
+  ],
+  [
+    "an unknown migration source",
+    { ...valid, migratedFrom: "v0.4" },
+    'handCheck.migratedFrom must be "v0.6" when set',
   ],
   [
     "a load without its kind",
@@ -623,6 +652,139 @@ check(
     parsed.probe.cadFaceIds === undefined,
   JSON.stringify(parsed),
 );
+
+console.log("\n=== Hand check: v0.5.0 / v0.6.0 analysis files ===");
+
+// The handCheck block of examples/gallery/site/cantilever-beam.vtu as released
+// in v0.6.0 (identical in v0.5.0), decoded from its KoFEM field data: the
+// probe reads the mean Uy over load group 1's faces, the loads carry no kind
+// and the block no unit. Its load is on CAD face 2, its clamp on CAD face 4.
+const V060_CANTILEVER = {
+  quantity: "Tip deflection",
+  probe: { loadGroupId: 1, component: 1 },
+  formula: "−P·L³ / (3·E·I)",
+  reference: -1.9047619047619047,
+  assumes: {
+    loads: [{ force: [0, -10000, 0], cadFaceIds: [2] }],
+    supports: [{ dofs: [0, 1, 2], value: 0, cadFaceIds: [4] }],
+    young: 210000,
+  },
+};
+const legacy = parseHandCheck(structuredClone(V060_CANTILEVER));
+check(
+  "the v0.6.0 block migrates to a force load and a displacement probe of its faces",
+  legacy.unit === "mm" &&
+    legacy.migratedFrom === "v0.6" &&
+    legacy.assumes.poisson === undefined &&
+    legacy.assumes.loads[0].kind === "force" &&
+    legacy.probe.kind === "displacement" &&
+    legacy.probe.component === 1 &&
+    JSON.stringify(legacy.probe.cadFaceIds) === "[2]",
+  JSON.stringify(legacy),
+);
+// The same check written in the current shape.
+const current = parseHandCheck({
+  quantity: "Tip deflection",
+  formula: "−P·L³ / (3·E·I)",
+  reference: -1.9047619047619047,
+  unit: "mm",
+  probe: { kind: "displacement", component: 1, cadFaceIds: [2] },
+  assumes: {
+    loads: [{ kind: "force", force: [0, -10000, 0], cadFaceIds: [2] }],
+    supports: [{ dofs: [0, 1, 2], value: 0, cadFaceIds: [4] }],
+    young: 210000,
+    poisson: 0.3,
+  },
+});
+// The test cantilever with its clamp on CAD face 4, as in the v0.6.0 model.
+const legacyModel = (overrides = {}) =>
+  model({
+    surfaceFaceIds: [4, 2, 2, 2, 2],
+    bcGroups: [clamp({ faces: [face(1, 4, [1, 2, 3])] })],
+    ...overrides,
+  });
+const legacyOutcome = evaluateHandCheck(legacy, legacyModel());
+const currentOutcome = evaluateHandCheck(current, legacyModel());
+check(
+  "the migrated block reads what v0.6.0 read: the mean Uy over the load group's faces",
+  legacyOutcome.kind === "compare" &&
+    currentOutcome.kind === "compare" &&
+    legacyOutcome.fe === currentOutcome.fe &&
+    close(legacyOutcome.fe, meanTipUy),
+  `${compared(legacyOutcome)} vs ${compared(currentOutcome)} vs ${meanTipUy}`,
+);
+const resaved = parseHandCheck(JSON.parse(JSON.stringify(legacy)));
+check(
+  "a migrated block saved again opens unchanged",
+  JSON.stringify(resaved) === JSON.stringify(legacy),
+  JSON.stringify(resaved),
+);
+const legacyNu = evaluateHandCheck(
+  legacy,
+  legacyModel({
+    materials: [{ id: 1, name: "Steel", young: 210000, poisson: 0.25 }],
+  }),
+);
+check(
+  "a migrated bending check assumes no ν: editing ν keeps it",
+  legacyNu.kind === "compare",
+  JSON.stringify(legacyNu),
+);
+const legacyE = evaluateHandCheck(
+  legacy,
+  legacyModel({
+    materials: [{ id: 1, name: "Steel", young: 200000, poisson: 0.3 }],
+  }),
+);
+check(
+  "a migrated check is still withheld once E is edited",
+  legacyE.kind === "changed",
+  JSON.stringify(legacyE),
+);
+
+const legacyCases = [
+  [
+    "a v0.6.0 block that assumes two loads",
+    {
+      ...V060_CANTILEVER,
+      assumes: {
+        ...V060_CANTILEVER.assumes,
+        loads: [
+          { force: [0, -10000, 0], cadFaceIds: [2] },
+          { force: [0, -5000, 0], cadFaceIds: [3] },
+        ],
+      },
+    },
+    "handCheck.probe reads load group 1 (the v0.5/v0.6 shape), but the block assumes 2 loads, so the faces it read are unknown: it must assume exactly one load",
+  ],
+  [
+    "a v0.6.0 block that assumes no load",
+    {
+      ...V060_CANTILEVER,
+      assumes: { ...V060_CANTILEVER.assumes, loads: [] },
+    },
+    "but the block assumes 0 loads",
+  ],
+  [
+    "a v0.6.0 block whose load has a kind",
+    {
+      ...V060_CANTILEVER,
+      assumes: {
+        ...V060_CANTILEVER.assumes,
+        loads: [{ kind: "force", force: [0, -10000, 0], cadFaceIds: [2] }],
+      },
+    },
+    "handCheck.assumes.loads[0].kind is set, but the block is in the v0.5/v0.6 shape",
+  ],
+];
+for (const [name, raw, expected] of legacyCases) {
+  const message = thrown(() => parseHandCheck(raw));
+  check(
+    `${name} is rejected, not guessed`,
+    message.includes(expected),
+    message,
+  );
+}
 
 console.log("\n=== Hand check: formatting ===");
 

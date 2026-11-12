@@ -49,14 +49,33 @@ function stepEntities(num) {
 }
 
 /**
+ * `text` as the contents of an ISO 10303-21 string literal. The standard
+ * writes an apostrophe in a string twice ("Cook's" → 'Cook''s') and a
+ * backslash twice. Characters outside printable ASCII would need its \X2\
+ * encoding, which this writer does not emit, so they are rejected.
+ *
+ * @param {string} text
+ * @returns {string}
+ */
+export function stepString(text) {
+  const bad = [...text].find((char) => char < " " || char > "~");
+  if (bad !== undefined)
+    throw new Error(
+      `STEP string ${JSON.stringify(text)}: ${JSON.stringify(bad)} is not printable ASCII, which this writer cannot encode`,
+    );
+  return text.replaceAll("\\", "\\\\").replaceAll("'", "''");
+}
+
+/**
  * The closed shell, solid, units, product and file envelope around the faces.
  *
  * @param {ReturnType<typeof stepEntities>} step
- * @param {number[]} faces  ADVANCED_FACE ids
- * @param {string} name     product name written into the file
+ * @param {number[]} faces        ADVANCED_FACE ids
+ * @param {string} productName    product name written into the file (escaped)
  * @returns {string} the STEP file text
  */
-function stepFile({ lines, add, point, dir }, faces, name) {
+function stepFile({ lines, add, point, dir }, faces, productName) {
+  const name = stepString(productName);
   const shell = add(
     `CLOSED_SHELL('',(${faces.map((f) => `#${f}`).join(",")}))`,
   );

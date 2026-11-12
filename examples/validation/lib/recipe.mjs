@@ -67,9 +67,10 @@
 // @property {string} name
 // @property {"force" | "pressure" | "moment"} kind
 // @property {FaceRef[]} faces
-// @property {Point} [components]        kind "force": total force [Fx, Fy, Fz] in N
+// @property {Point} [components]        kind "force": total force [Fx, Fy, Fz] in N,
+//                                       not all zero
 // @property {number} [value]            kind "pressure": MPa along the inward normal;
-//                                       kind "moment": N·mm about `axis`
+//                                       kind "moment": N·mm about `axis`; non-zero
 // @property {0 | 1 | 2} [axis]          kind "moment"
 //
 // @typedef {object} Probe               what the Results panel's hand check reads
@@ -313,18 +314,28 @@ export function validateRecipe(id, r) {
   });
   if (!Array.isArray(r.loads) || r.loads.length === 0)
     throw new Error(`${at}: needs at least one load`);
+  // A load the app's Load panel would refuse is refused here too, by the same
+  // rule (web/src/components/panel/bcFormUtils.ts): a pressure must be non-zero
+  // (parsePressure), a force or moment vector must not be all zero
+  // (parseLoadVector) — a recipe's moment is one non-zero component.
   r.loads.forEach((l, i) => {
     const w = `${at}.loads[${i}]`;
     faceRefs(l.faces, w);
     if (l.kind === "force" && !isPoint(l.components))
       throw new Error(`${w}: a force needs components [Fx, Fy, Fz]`);
+    if (l.kind === "force" && l.components.every((v) => v === 0))
+      throw new Error(`${w}: an all-zero force — the app rejects it`);
     if (l.kind === "pressure" && !Number.isFinite(l.value))
       throw new Error(`${w}: a pressure needs a value`);
+    if (l.kind === "pressure" && l.value === 0)
+      throw new Error(`${w}: a zero pressure — the app rejects it`);
     if (
       l.kind === "moment" &&
       (![0, 1, 2].includes(l.axis) || !Number.isFinite(l.value))
     )
       throw new Error(`${w}: a moment needs an axis (0, 1, 2) and a value`);
+    if (l.kind === "moment" && l.value === 0)
+      throw new Error(`${w}: a zero moment — the app rejects it`);
     if (!["force", "pressure", "moment"].includes(l.kind))
       throw new Error(`${w}: kind must be force, pressure or moment`);
   });
