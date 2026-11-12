@@ -31,6 +31,7 @@ import { buildVertexIndexer, type VertexIndexer } from "../solveMeshPacking.js";
 import {
   coupledFixedDofs,
   coupledLoads,
+  solidFacesOutward,
   type CoupledDirichlet,
 } from "./bcs.js";
 
@@ -313,7 +314,7 @@ export function buildCoupledEngineInputs(
   );
   const nodalLoads = coupledLoads(
     loads,
-    surfaceLoads,
+    solidFacesOutward(surfaceLoads, elements, nodes, vid),
     poolOf,
     isRefPoint,
     nodes,

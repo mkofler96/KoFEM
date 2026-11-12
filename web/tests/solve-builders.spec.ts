@@ -17,6 +17,8 @@ import type {
 } from "../src/workers/solverTypes";
 import {
   coupledFixedDofs,
+  coupledLoads,
+  solidFacesOutward,
   coupledToShellDirichlet,
   coupledToShellPointLoads,
   shellDirichlet,
@@ -451,6 +453,79 @@ test("coupled builder refuses non-tet solids and models with no solid", () => {
   expect(() => buildCoupledEngineInputs(payload({}), () => undefined)).toThrow(
     /no solid \(CTETRA\) elements/,
   );
+});
+
+test("coupled loads push a pressure into the solid whatever the face winding", () => {
+  // A unit cube of six tets, each face of the selection in the winding of
+  // its tet's local face list (as rebuildSurfaceLoads winds them) — so some
+  // faces are wound inward — and the same cube with mirrored tets (negative
+  // volume).
+  const nodes: Node[] = [0, 1, 2, 3, 4, 5, 6, 7].map((bits) => ({
+    id: 50 + bits,
+    x: bits & 1,
+    y: (bits >> 1) & 1,
+    z: (bits >> 2) & 1,
+  }));
+  const vid = buildVertexIndexer(nodes);
+  const kuhn = [
+    [0, 1, 3, 7],
+    [0, 3, 2, 7],
+    [0, 2, 6, 7],
+    [0, 6, 4, 7],
+    [0, 4, 5, 7],
+    [0, 5, 1, 7],
+  ];
+  const localFaces = [
+    [0, 1, 2],
+    [0, 1, 3],
+    [0, 2, 3],
+    [1, 2, 3],
+  ];
+  for (const mirror of [false, true]) {
+    const elements: Element[] = kuhn.map((tet, index) => ({
+      id: index + 1,
+      type: "CTETRA",
+      nodeIds: (mirror ? [tet[1], tet[0], tet[2], tet[3]] : tet).map(
+        (corner) => 50 + corner,
+      ),
+      propertyId: 1,
+    }));
+    const facesAt = (level: number) =>
+      elements.flatMap((element) =>
+        localFaces
+          .map((face) => face.map((corner) => element.nodeIds[corner]))
+          .filter((face) => face.every((id) => nodes[id - 50].z === level)),
+      );
+    const { load_dofs, load_vals } = coupledLoads(
+      [],
+      solidFacesOutward(
+        [
+          { type: "pressure", pressure: 2, faces: facesAt(0) },
+          { type: "pressure", pressure: 3, faces: facesAt(1) },
+        ],
+        elements,
+        nodes,
+        vid,
+      ),
+      (nodeId) => vid(nodeId, "test"),
+      () => false,
+      nodes,
+      vid,
+    );
+    // Resultant of the nodal loads on the bottom (z = 0) and top (z = 1).
+    const resultant = (level: number) => {
+      const total = [0, 0, 0];
+      load_dofs.forEach((dof, index) => {
+        if (dof % 6 < 3 && nodes[Math.floor(dof / 6)].z === level)
+          total[dof % 6] += load_vals[index];
+      });
+      return total.map((value) => Math.round(value * 1e12) / 1e12 + 0);
+    };
+    // A positive pressure pushes into the body: up on the bottom face, down
+    // on the top face, p·A in size.
+    expect(resultant(0), `mirror ${mirror}: bottom`).toEqual([0, 0, 2]);
+    expect(resultant(1), `mirror ${mirror}: top`).toEqual([0, 0, -3]);
+  }
 });
 
 test("solve routing follows the element mix, couplings and Shell choice", () => {

@@ -677,8 +677,10 @@ async function compareQuadratic(label, coupled, equivalent) {
 }
 
 // The two-material beam with its root face (x = 0) coupled kinematically to a
-// point at its centre, and the same loads on the tip: a corner force, a
-// pressure on the top and a total force on the tip face.
+// point at its centre, and the same loads on the tip: a corner force,
+// pressures on the top and on the bottom and a side (whose faces come wound
+// inward from their tets' local face lists), and a total force on the tip
+// face.
 function rootCoupled() {
   const model = emptyModel();
   addBeam(model, { x0: 0, length: LENGTH, height: HEIGHT, nx: 8, split: 60 });
@@ -707,6 +709,14 @@ function rootCoupled() {
       type: "pressure",
       faces: facesWhere(model, (node) => near(node.y, HEIGHT) && node.x > 40),
       pressure: 1.5,
+    },
+    {
+      type: "pressure",
+      faces: [
+        ...facesWhere(model, (node) => near(node.y, 0) && node.x > 50),
+        ...facesWhere(model, (node) => near(node.z, 0) && node.x > 50),
+      ],
+      pressure: 0.8,
     },
     {
       type: "force",
@@ -738,6 +748,60 @@ function withoutPoint(model, point) {
     model,
     clamped,
   );
+
+  // The same at order 1, through the engine's coupled solve and Rust, against
+  // the MFEM solid solve. The coupled path spreads the pressure itself, from
+  // the winding of each face; the faces come in their tet's local winding
+  // (inward on some), so this also checks the pressure pushes into the body
+  // on every face, as the solid solve's does.
+  console.log(
+    "\nLinear: a fixed kinematic point clamps the face it grips, with a pressure",
+  );
+  const lines = [];
+  const inputs = buildCoupledEngineInputs(model, (line) => lines.push(line));
+  const engineRaw = engine.solve_coupled(
+    inputs.mesh,
+    inputs.coupling,
+    inputs.bcs,
+    inputs.matJson,
+  );
+  if ("error" in engineRaw) throw new Error(engineRaw.error);
+  const rustRaw = await solveCoupledSolidWithAmg(
+    fem,
+    inputs,
+    1,
+    undefined,
+    neverAsk,
+    (line) => lines.push(line),
+  );
+  const vid = buildVertexIndexer(clamped.nodes);
+  const solidInputs = buildSolidEngineInputs(clamped, vid);
+  const solidRaw = engine.solve_linear_elastic(
+    solidInputs.mesh,
+    solidInputs.matJson,
+    solidInputs.bcsJson,
+    1,
+  );
+  if ("error" in solidRaw) throw new Error(solidRaw.error);
+  const vertices = 3 * clamped.nodes.length;
+  for (const [name, raw] of [
+    ["engine coupled", engineRaw],
+    ["AMG coupled", rustRaw],
+  ]) {
+    const mapped = mapMixedResult(model, inputs.model, raw);
+    const difference = maxDifference(
+      solidRaw.displacements,
+      mapped.displacements.subarray(0, vertices),
+    );
+    console.log(
+      `    ${name} − MFEM solid: ${difference.relative.toExponential(2)} relative`,
+    );
+    check(
+      `${name} matches the clamped solid solve`,
+      difference.peak > 0 && difference.relative < 1e-5,
+      `${difference.relative}`,
+    );
+  }
 }
 
 {
