@@ -30,6 +30,11 @@
 //               (buildShellEngineInputs → solveShellInRust);
 //   read-out    the recipe's probe, evaluated as lib/recipe.mjs defines it.
 //
+// A recipe with an `optimize` step runs the topology optimisation in place of
+// the static solve, as the worker's handleTopOpt runs it: the app's solid
+// engine inputs (buildSolidEngineInputs) and the Optimize panel's settings, in
+// a fresh engine instance, read out by the final compliance.
+//
 // The app code is imported from web/src (bun runs TypeScript), so a change to
 // how the app builds a load changes the published number with it — the build
 // never re-implements it. Run under bun: `bun examples/validation/run.mjs`.
@@ -51,16 +56,18 @@ import {
 } from "../../../web/src/store/boundaryRebuild.ts";
 import { summarizeComponents } from "../../../web/src/store/boundaryGroups.ts";
 import { MATERIAL_PALETTE } from "../../../web/src/store/materialSlice.ts";
-import { routeSolve } from "../../../web/src/lib/solve/route.ts";
+import { routeSolve, routeTopOpt } from "../../../web/src/lib/solve/route.ts";
 import {
   amgUnavailableReason,
   DEFAULT_SOLVER_METHOD,
   solveSolidWithAmg,
 } from "../../../web/src/lib/solve/amg.ts";
 import {
+  buildSolidEngineInputs,
   expandTiedDisplacements,
   weldTies,
 } from "../../../web/src/lib/solve/solid.ts";
+import { buildVertexIndexer } from "../../../web/src/lib/solveMeshPacking.ts";
 import { nodeVonMisesField } from "../../../web/src/lib/resultField.ts";
 import { buildMeshTimeShellModel } from "../../../web/src/lib/solve/autoShell.ts";
 import { buildShellEngineInputs } from "../../../web/src/lib/solve/shell.ts";
@@ -176,9 +183,14 @@ function resolveOnTessellation(at, tess, where) {
  * @property {object[]} bcGroups          NamedBcGroup[]
  * @property {object[]} loadGroups        NamedLoadGroup[]
  * @property {number} nextFaceEntryId
- * @property {object} handCheck           the analysis file's handCheck block
- * @property {{displacements: Float64Array, vonMises: Float64Array}} result
- * @property {number} fe                  the probe's value (÷ divideBy)
+ * @property {object | null} handCheck    the analysis file's handCheck block
+ *                                        (null for an optimisation)
+ * @property {{displacements: Float64Array, vonMises: Float64Array} | null} result
+ *                                        the static solve (null for an optimisation)
+ * @property {{settings, density, history, seconds}} [optimization]
+ *                                        the run, for a recipe with `optimize`
+ * @property {number} fe                  the probe's value (÷ divideBy), or the
+ *                                        final compliance of an optimisation
  */
 export async function buildFromRecipe(id, recipe) {
   validateRecipe(id, recipe);
@@ -440,6 +452,45 @@ export async function buildFromRecipe(id, recipe) {
     elementOrder,
     solverMethod: DEFAULT_SOLVER_METHOD,
   };
+  // What the app holds once the model is set up, solved or not.
+  const model = () => ({
+    id,
+    stepText,
+    stepBytes,
+    stepSurface: {
+      points: tess.points,
+      triangles: tess.triangles,
+      bodyIds: tess.bodyIds,
+      faceIds: tess.faceIds,
+    },
+    bodyCount: tess.bodyCount,
+    nodes,
+    elements,
+    surfaceTriangles,
+    surfaceFaceIds,
+    meshSettings: { maxElementSize, minElementSize, order: elementOrder },
+    materials,
+    properties,
+    bcGroups,
+    loadGroups,
+    nextFaceEntryId,
+  });
+
+  // ── Optimize (the worker's handleTopOpt), in place of the static solve ─────
+  if (recipe.optimize) {
+    const optimization = await optimizeLikeTheApp(
+      where,
+      payload,
+      recipe.optimize,
+    );
+    return {
+      ...model(),
+      handCheck: null,
+      result: null,
+      optimization,
+      fe: optimization.history.at(-1).compliance,
+    };
+  }
 
   // ── Solve (the worker's handleSolve) ───────────────────────────────────────
   const route = routeSolve(payload);
@@ -494,31 +545,71 @@ export async function buildFromRecipe(id, recipe) {
     },
   };
 
-  return {
-    id,
-    stepText,
-    stepBytes,
-    stepSurface: {
-      points: tess.points,
-      triangles: tess.triangles,
-      bodyIds: tess.bodyIds,
-      faceIds: tess.faceIds,
-    },
-    bodyCount: tess.bodyCount,
-    nodes,
-    elements,
-    surfaceTriangles,
-    surfaceFaceIds,
-    meshSettings: { maxElementSize, minElementSize, order: elementOrder },
-    materials,
-    properties,
-    bcGroups,
-    loadGroups,
-    nextFaceEntryId,
-    handCheck,
-    result,
-    fe,
+  return { ...model(), handCheck, result, fe };
+}
+
+/**
+ * The topology optimisation as the app runs it (useTopOpt → the worker's
+ * handleTopOpt): the settings object useTopOpt's parseSettings sends for a SIMP
+ * minimum-compliance study, the solid design domain's engine inputs built by
+ * the app's buildSolidEngineInputs, and optimize_topology in a fresh engine
+ * instance (the app resets its worker after meshing). Throws unless the run
+ * converges: a published optimum must be one.
+ *
+ * @returns {Promise<{settings: object, density: number[], history: {it, objective, compliance, volume, max_change}[], seconds: number}>}
+ */
+async function optimizeLikeTheApp(where, payload, optimize) {
+  const settings = {
+    method: "simp",
+    objective: optimize.objective,
+    constraints: { volumeFraction: optimize.volumeFraction },
+    penalty: optimize.penalty,
+    filterRadius: optimize.filterRadius,
+    moveLimit: optimize.moveLimit,
+    maxIterations: optimize.maxIterations,
+    tolerance: optimize.tolerance,
   };
+  const topOptPayload = {
+    nodes: payload.nodes,
+    elements: payload.elements,
+    materials: payload.materials,
+    properties: payload.properties,
+    constraints: payload.constraints,
+    loads: payload.loads,
+    surfaceLoads: payload.surfaceLoads,
+    tieGroups: payload.tieGroups,
+    couplings: payload.couplings,
+    settings,
+  };
+  const domain = routeTopOpt(topOptPayload);
+  if (domain !== "solid")
+    throw new Error(
+      `${where}: the app would optimize this model on the "${domain}" path; only solid design domains are built here`,
+    );
+  const inputs = buildSolidEngineInputs(
+    topOptPayload,
+    buildVertexIndexer(topOptPayload.nodes),
+  );
+  const engine = await freshEngine();
+  const start = performance.now();
+  const result = engine.optimize_topology(
+    inputs.mesh,
+    inputs.matJson,
+    inputs.bcsJson,
+    JSON.stringify(settings),
+    null, // the app streams the density to the viewport; nothing to show here
+  );
+  const seconds = (performance.now() - start) / 1000;
+  if ("error" in result)
+    throw new Error(`${where}: the optimizer failed: ${result.error}`);
+  const history = result.history.map((h) => ({ ...h }));
+  const last = history.at(-1);
+  if (!last) throw new Error(`${where}: the optimizer returned no iterations`);
+  if (!(last.max_change < optimize.tolerance))
+    throw new Error(
+      `${where}: the optimization did not converge in ${history.length} iterations (largest density change ${last.max_change}, tolerance ${optimize.tolerance})`,
+    );
+  return { settings, density: Array.from(result.density), history, seconds };
 }
 
 // The worker's handleSolidSolve on its default (AMG) path.
