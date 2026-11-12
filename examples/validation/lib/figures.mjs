@@ -319,8 +319,13 @@ export function squareTorsionFigure({ div }) {
   );
 }
 
+/**
+ * `div`: the structured mesh to draw, or null for an unstructured one; then the
+ * inset shows the true circles with a coarse inscribed polygon, a sketch of
+ * what straight element edges do to them.
+ */
 export function hollowShaftFigure({ div }) {
-  const [nr, nth] = div;
+  const [nr, nth] = div ?? [1, 10];
   const x0 = 100,
     x1 = 400,
     yc = 112,
@@ -345,7 +350,8 @@ export function hollowShaftFigure({ div }) {
     sym((x0 + x1) / 2, yc + ro + 20, "L"),
   ];
   // Section inset: the case's mesh, nr rings × nth segments with straight
-  // sides — the circle becomes a polygon.
+  // sides — the circle becomes a polygon. Unstructured: a 10-gon over the
+  // true circles.
   const sx = 560,
     Ro = 56,
     Ri = (Ro * ri) / ro;
@@ -369,19 +375,32 @@ export function hollowShaftFigure({ div }) {
         "mesh",
       ),
     );
-  for (let k = 0; k < nth; k++)
-    parts.push(line(...inner[k], ...outer[k], "mesh"));
+  if (div)
+    for (let k = 0; k < nth; k++)
+      parts.push(line(...inner[k], ...outer[k], "mesh"));
   parts.push(
     arrow(sx, yc, sx + Ri * Math.cos(-2.2), yc + Ri * Math.sin(-2.2), "dim"),
     sym(sx - 18, yc - 2, "r", "end", "i"),
     arrow(sx, yc, sx + Ro * Math.cos(0.5), yc + Ro * Math.sin(0.5), "dim"),
     sym(sx + Ro * 0.62, yc + Ro * 0.62 + 18, "r", "start", "o"),
-    label(sx, yc - Ro - 12, `section mesh, ${nth} segments`),
+    label(
+      sx,
+      yc - Ro - 12,
+      div ? `section mesh, ${nth} segments` : "straight edges: a polygon",
+    ),
   );
+  if (!div)
+    parts.push(
+      `<circle class="axis" cx="${sx}" cy="${yc}" r="${f(Ro)}" fill="none"/>`,
+      `<circle class="axis" cx="${sx}" cy="${yc}" r="${f(Ri)}" fill="none"/>`,
+    );
   return svg(
     640,
     230,
-    "Hollow circular shaft clamped at the left end and twisted by a torque at the right end; inset shows the polygonal section mesh",
+    "Hollow circular shaft clamped at the left end and twisted by a torque at the right end; " +
+      (div
+        ? "inset shows the polygonal section mesh"
+        : "inset shows how straight element edges turn the circles into polygons"),
     parts.join("\n    "),
   );
 }

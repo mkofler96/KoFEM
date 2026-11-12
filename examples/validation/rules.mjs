@@ -34,7 +34,6 @@ const PENDING = [
   "cantilever-p2",
   "cantilever-beam",
   "beam-torsion",
-  "shaft-torsion",
   "plate-with-hole",
   "plate-with-hole-shell",
   "cooks-membrane",

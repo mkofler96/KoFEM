@@ -23,7 +23,6 @@
 
 import { solveModel } from "./lib/app-model.mjs";
 import { cantileverModel, cantileverTip } from "./cases/cantilever-bending.mjs";
-import { shaftModel, shaftTwist } from "./cases/shaft-torsion.mjs";
 import { cookCorner, cookModel } from "./cases/cooks-membrane.mjs";
 
 /** A study of recipe cases: levels are max element sizes (mm). */
@@ -100,27 +99,26 @@ export default [
     meshLabel: grid,
     solve: study(cantileverModel, cantileverTip),
   },
-  {
+  recipeStudy({
     id: "shaft-torsion",
     caseId: "shaft-torsion",
-    title: "Hollow shaft",
-    note: "The error falls steadily as the straight-sided elements approach the circle.",
+    title: "Hollow shaft, P1 vs. P2",
+    note: "Quadratic elements approach the reference from above as the polygons of the circles close in on them. Linear elements are too stiff in torsion and approach from below, so their errors partly cancel.",
     series: [
       {
         label: "P1 (linear)",
         caseId: "shaft-torsion",
         order: 1,
-        levels: [
-          [1, 8, 3],
-          [2, 16, 6],
-          [3, 32, 12],
-          [4, 64, 24],
-        ],
+        levels: [20, 10, 7.5],
+      },
+      {
+        label: "P2 (quadratic)",
+        caseId: "shaft-torsion",
+        order: 2,
+        levels: [20, 15, 10, 7.5, 5],
       },
     ],
-    meshLabel: grid,
-    solve: study(shaftModel, shaftTwist),
-  },
+  }),
   {
     id: "cooks-membrane",
     caseId: "cooks-membrane",
