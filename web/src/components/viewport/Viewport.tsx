@@ -6,6 +6,7 @@ import { OrbitControls, GizmoHelper, GizmoViewport } from "@react-three/drei";
 import { MeshScene } from "./MeshScene";
 import { FitCamera } from "./FitCamera";
 import { ViewportTestHooks } from "./ViewportTestHooks";
+import { pickingEvents } from "./pickingEvents";
 import { ColorBar } from "./ColorBar";
 import { DensityColorBar } from "./DensityColorBar";
 import { EmptyState } from "./EmptyState";
@@ -50,9 +51,12 @@ export function Viewport() {
       {/* Render on demand, not every frame: nothing in the scene animates on
           its own. R3F redraws on prop changes, OrbitControls and the gizmo
           ask for frames themselves, and code that moves the camera directly
-          calls invalidate(). Continuous rendering kept a CPU core busy. */}
+          calls invalidate(). Continuous rendering kept a CPU core busy.
+          Picking refreshes the world matrices itself (pickingEvents), since
+          a click can come before the next frame. */}
       <Canvas
         frameloop="demand"
+        events={pickingEvents}
         camera={{ position: [5, 5, 5], fov: 45 }}
         gl={{ antialias: true, preserveDrawingBuffer: true }}
         style={{
