@@ -107,6 +107,17 @@ export function nextBodyNumber(properties: Property[]): number {
   return Math.max(0, ...properties.filter(isCadBody).map((p) => bodyOf(p))) + 1;
 }
 
+// The CAD solids that set a max element size of their own, in solid-id order:
+// the ones the global size in the Mesh settings does not reach.
+export function solidsWithOwnSize(properties: Property[]): Property[] {
+  return properties
+    .filter(isCadBody)
+    .filter(
+      (p) => p.maxElementSize !== undefined && p.maxElementSize.trim() !== "",
+    )
+    .sort((a, b) => a.id - b.id);
+}
+
 // The region max element sizes as numbers, keyed by solid id: only the regions
 // that set one. Throws, naming the region, on a size that is not a positive
 // number — meshing must not guess what was meant.

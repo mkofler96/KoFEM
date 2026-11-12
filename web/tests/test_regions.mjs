@@ -15,6 +15,7 @@ import {
   regionMaxSizes,
   sameBody,
   solidName,
+  solidsWithOwnSize,
 } from "../src/lib/regions.ts";
 import { meshKind, meshSizesChanged } from "../src/store/geometrySlice.ts";
 
@@ -81,6 +82,17 @@ check(
       { id: 3, materialId: 1 },
     ]),
   ]) === "[[1,2.5]]",
+);
+check(
+  "own sizes: the CAD solids that set one, not blanks or shell sections",
+  JSON.stringify(
+    solidsWithOwnSize([
+      { id: 3, materialId: 1, maxElementSize: "4" },
+      { id: 1, materialId: 1, maxElementSize: "2.5" },
+      { id: 2, materialId: 1, maxElementSize: " " },
+      { id: 4, materialId: 1, sourceBodyId: 1, maxElementSize: "1" },
+    ]).map((p) => p.id),
+  ) === "[1,3]",
 );
 throws(
   "a region size that is not a positive number is refused, naming the region",
