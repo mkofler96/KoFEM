@@ -111,6 +111,7 @@ impl ShellModel {
             prepared: shell.prepared,
             run,
             preconditioner,
+            reduction: None,
         })
     }
 
