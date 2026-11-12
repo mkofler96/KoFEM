@@ -15,8 +15,8 @@ test("solve worker returns displacements and von Mises for the cantilever", asyn
   page,
 }) => {
   await page.goto("/app/");
-  await page.waitForFunction(
-    () => !!(window as unknown as { __kofem?: unknown }).__kofem,
+  await page.waitForFunction(() =>
+    Boolean((window as unknown as { __kofem?: unknown }).__kofem),
   );
 
   // Collect the worker log stream that feeds the UI log panels (issue #278):
@@ -108,8 +108,8 @@ test("AMG solves the hex cantilever and matches Gauss–Seidel", async ({
   page,
 }) => {
   await page.goto("/app/");
-  await page.waitForFunction(
-    () => !!(window as unknown as { __kofem?: unknown }).__kofem,
+  await page.waitForFunction(() =>
+    Boolean((window as unknown as { __kofem?: unknown }).__kofem),
   );
   const wasmLogs: string[] = [];
   page.on("console", (msg) => {

@@ -434,8 +434,8 @@ compareQuadratic("thin wall", wall, {
 // triangles), with the root clamped.
 const HEX_TOP = [4, 5, 6, 7];
 function distortedHexBox(length, width, height, nx, ny, nz) {
-  const box = boxHexMesh(length, width, height, nx, ny, nz);
-  const points = box.vertices.map(([x, y, z]) => {
+  const hexBox = boxHexMesh(length, width, height, nx, ny, nz);
+  const points = hexBox.vertices.map(([x, y, z]) => {
     if (Math.abs(x) < 1e-9 || Math.abs(x - length) < 1e-9) return [x, y, z];
     return [
       x + 0.15 * (length / nx) * Math.sin(0.7 * y + 0.3 * z),
@@ -443,7 +443,7 @@ function distortedHexBox(length, width, height, nx, ny, nz) {
       z + 0.1 * (height / nz) * Math.cos(0.13 * x + y),
     ];
   });
-  return { box, points, vertices: new Float64Array(points.flat()) };
+  return { box: hexBox, points, vertices: new Float64Array(points.flat()) };
 }
 
 // Solve `mesh` ({ points, vertices, tets, hexes, attributes }) at `order` in
@@ -556,8 +556,9 @@ hexBeam.box.vertices.forEach(([x], vertex) => {
 const tipQuads = [];
 const topQuads = [];
 hexBeam.box.hexahedra.forEach((hex, index) => {
-  const tip = [1, 2, 6, 5].map((corner) => hex[corner]);
-  if (tip.every((vertex) => hexTipNodes.has(vertex))) tipQuads.push(tip);
+  const tipFace = [1, 2, 6, 5].map((corner) => hex[corner]);
+  if (tipFace.every((vertex) => hexTipNodes.has(vertex)))
+    tipQuads.push(tipFace);
   if (index % NZ === NZ - 1)
     topQuads.push(HEX_TOP.map((corner) => hex[corner]));
 });
@@ -584,11 +585,11 @@ for (const order of [1, 2]) {
     [steel],
     hexLoads(topQuads),
   );
-  let tipSum = 0;
+  let hexTipSum = 0;
   for (const vertex of hexTipNodes)
-    tipSum += reference.displacements[3 * vertex + 2];
+    hexTipSum += reference.displacements[3 * vertex + 2];
   console.log(
-    `hex cantilever, order ${order}: tip deflection ${(tipSum / hexTipNodes.size).toExponential(4)} mm`,
+    `hex cantilever, order ${order}: tip deflection ${(hexTipSum / hexTipNodes.size).toExponential(4)} mm`,
   );
 }
 

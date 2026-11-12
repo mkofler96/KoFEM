@@ -526,7 +526,7 @@ function beamModel(tetRoot) {
   const tip = [];
   const onPlane = (axis, value) => (vertex) =>
     Math.abs(beam.vertices[vertex][axis] - value) < 1e-9;
-  beam.hexahedra.forEach((hex, index) => {
+  beam.hexahedra.forEach((hex) => {
     const propertyId = beam.vertices[hex[0]][0] < 50 ? 1 : 2;
     const tipFace = [1, 2, 6, 5].map((corner) => hex[corner]);
     if (tipFace.every(onPlane(0, 100))) tip.push(tipFace);
@@ -545,20 +545,22 @@ function beamModel(tetRoot) {
       if (topFace.every(onPlane(2, 10))) top.push(topFace);
     }
   });
-  const elements = [...hexElements, ...tetElements].map((element, index) => ({
-    ...element,
-    id: index + 1,
-    nodeIds: element.nodeIds.map((vertex) => vertex + ID),
-  }));
-  const constraints = [];
+  const beamElements = [...hexElements, ...tetElements].map(
+    (element, index) => ({
+      ...element,
+      id: index + 1,
+      nodeIds: element.nodeIds.map((vertex) => vertex + ID),
+    }),
+  );
+  const beamConstraints = [];
   for (const node of beamNodes) {
     if (Math.abs(node.x) < 1e-9)
       for (let dof = 0; dof < 3; dof++)
-        constraints.push({ nodeId: node.id, dof });
+        beamConstraints.push({ nodeId: node.id, dof });
     else if (Math.abs(node.x - 100) < 1e-9 && Math.abs(node.y) < 1e-9)
-      constraints.push({ nodeId: node.id, dof: 1 });
+      beamConstraints.push({ nodeId: node.id, dof: 1 });
   }
-  constraints.push({
+  beamConstraints.push({
     nodeId: beamNodes.find((node) => node.x === 100 && node.z === 10).id,
     dof: 0,
     prescribedValue: 0.01,
@@ -567,10 +569,10 @@ function beamModel(tetRoot) {
     faces.map((face) => face.map((vertex) => vertex + ID));
   return {
     nodes: beamNodes,
-    elements,
+    elements: beamElements,
     materials: model.materials,
     properties: model.properties,
-    constraints,
+    constraints: beamConstraints,
     loads: [{ nodeId: beamNodes[beamNodes.length - 1].id, dof: 2, value: 50 }],
     surfaceLoads: [
       { type: "pressure", faces: toIds(top), pressure: 0.4 },
