@@ -963,10 +963,11 @@ impl Preconditioner for SmoothedAggregation {
             let below = &mut lower[0];
             below.rhs.fill(0.0);
             let prolongator = &self.prolongators[index];
-            for row in 0..prolongator.row_count() {
+            // P has one row per unknown of this level, as the work vectors.
+            for (row, &residual) in here.scratch.iter().enumerate() {
                 let (cols, vals) = prolongator.row(row);
                 for (&column, &value) in cols.iter().zip(vals) {
-                    below.rhs[column as usize] += value * here.scratch[row];
+                    below.rhs[column as usize] += value * residual;
                 }
             }
         }
@@ -1006,14 +1007,14 @@ impl Preconditioner for SmoothedAggregation {
             let here = &mut upper[index];
             let below = &lower[0];
             let prolongator = &self.prolongators[index];
-            for row in 0..prolongator.row_count() {
+            for (row, solution) in here.solution.iter_mut().enumerate() {
                 let (cols, vals) = prolongator.row(row);
                 let correction: f64 = cols
                     .iter()
                     .zip(vals)
                     .map(|(&column, &value)| value * below.solution[column as usize])
                     .sum();
-                here.solution[row] += correction;
+                *solution += correction;
             }
             for row in (0..matrix.row_count()).rev() {
                 relax(matrix, inverse_diagonal, row, &here.rhs, &mut here.solution);
