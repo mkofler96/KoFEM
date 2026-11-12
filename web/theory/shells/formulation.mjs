@@ -225,6 +225,10 @@ export default {
       addresses a separate load-transfer question.</p>
 
     <h2 id="references">Implementation and references</h2>
+    <p class="note">The app now solves pure-shell models with a Rust port of this
+      element (<code>crates/kofem-fem/src/shell/</code>). The links below still point
+      to the C++ engine, which remains the reference implementation. They will be
+      updated once the Rust migration is complete.</p>
     <ol class="refs">
       <li>Batoz, Bathe and Ho (1980), <cite>A study of three-node triangular plate bending elements</cite>, International Journal for Numerical Methods in Engineering 15, 1771–1812. This is the DKT reference, not a validation of KoFEM’s complete shell workflow.</li>
       <li>Timoshenko and Woinowsky-Krieger, <cite>Theory of Plates and Shells</cite>, 2nd ed. (1959), uniformly loaded square plates.</li>
