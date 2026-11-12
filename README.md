@@ -49,7 +49,8 @@ docker run kofem-web
 ## Development
 
 You need [Bun](https://bun.sh) and [Rust](https://rustup.rs), plus the browser
-target and the `wasm-bindgen` CLI pinned in `Cargo.toml`:
+target and the `wasm-bindgen` CLI pinned in `Cargo.toml`. In this repository,
+rustup uses the Rust version pinned in `rust-toolchain.toml`, which CI uses too:
 
 ```bash
 rustup target add wasm32-unknown-unknown

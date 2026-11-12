@@ -32,11 +32,12 @@ enabled = true
 name = "cxx"
 enabled = true
 
-[[code_formatters]]
-name = "rustfmt"
-enabled = true
-
 # No prettier formatter: DeepSource's bundled Prettier disagrees with the
 # lockfile-pinned version the pre-commit hook and Frontend CI enforce, so the
 # autofix bot and CI reformatted the same lines in opposite directions in an
 # endless loop (see PR #348). Formatting is already gated locally and in CI.
+
+# No rustfmt formatter either: DeepSource runs its own bundled rustfmt, and with
+# the toolchain pinned in rust-toolchain.toml its "Code Formatters" run failed on
+# every PR without a reason we could see. CI's Format check runs `cargo fmt` with
+# the pinned toolchain, and the pre-commit hook runs it locally.
