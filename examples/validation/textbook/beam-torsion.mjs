@@ -12,7 +12,7 @@ const BETA = 1 / 3 - 0.21 * (1 - 1 / 12);
 export default {
   description:
     "Saint-Venant torsion of a square bar, θ = TL/(GK): warping, the Prandtl stress function, the torsion constant and KoFEM's result.",
-  figure: ({ page }) => squareTorsionFigure({ div: page.grid }),
+  figure: () => squareTorsionFigure({ div: null }),
   intro: () => `
         <p>Twisting a bar with a square section is the simplest torsion
         problem that the circular-shaft formula gets wrong. The sections do
@@ -57,25 +57,50 @@ export default {
         corners, where it is zero.</p>`;
   },
   model: ({ tex }) => `
-        <p>The torque is applied as tangential nodal forces on the end face,
-        proportional to each node's distance ${tex("r")} from the axis and
-        scaled so the net force is zero and the moment is ${tex("T")}. That is
-        how the app applies a moment to a face. It is not the exact Saint-Venant
-        stress distribution over a square, but by Saint-Venant's principle
-        the difference only affects the region near the loaded end. The
-        twist is the mean in-plane rotation of the end-face nodes,
+        <p>The beam is the STEP file a user imports, meshed by Netgen with
+        quadratic tetrahedra; the clamp and the torque each sit on one whole
+        CAD face. The torque is a moment load on the end face. The app turns
+        it into one tangential force per node of the face's surface mesh,
+        proportional to the node's distance ${tex("r")} from the centroid of
+        those nodes and scaled so the net force is zero and the moment is
+        ${tex("T")}. That is not the exact Saint-Venant stress distribution
+        over a square, but by Saint-Venant's principle the difference only
+        affects the region near the loaded end.</p>
+        <p>The Results panel reads the twist as the mean in-plane rotation of
+        the end face's nodes about the same centroid,
         ${tex("(y u_{z} - z u_{y}) / r^2")}.</p>`,
-  discussion: ({ row, pct, pctAbs, tex }) => `
-        <p>KoFEM's twist differs from the reference by ${pct(row.errPct)}. The main
-        reason is physical, not numerical. Saint-Venant's solution assumes
-        that every section warps freely, but the clamp holds the
-        ${tex("x = 0")} section flat. Restraining the warping stiffens the bar
-        over a length comparable to the section size, here a tenth of the
-        bar, so the whole bar twists slightly less. A converged 3-D solution
-        therefore lies below ${tex("T L / (G K)")}; the ±${row.tolPct}&nbsp;%
-        band allows for that.</p>
-        <p>The reference itself carries Roark's fit: the series value
-        ${tex("β = 0.1406")} would raise it by
-        ${pctAbs((BETA / 0.1406 - 1) * 100)}.</p>`,
+  discussion: ({ row, pct, pctAbs, tex, study }) => {
+    const series = (order) => {
+      const s = study.series.find((x) => x.order === order);
+      if (!s)
+        throw new Error(`beam-torsion study has no order-${order} series`);
+      return s.points;
+    };
+    const errs = (points) => points.map((p) => pct(p.errPct)).join(" → ");
+    return `
+        <p>KoFEM's twist differs from the reference by ${pct(row.errPct)}.
+        Linear tetrahedra would be far too stiff: in the convergence study
+        above their error goes ${errs(series(1))} as the element size halves.
+        A linear tetrahedron has constant strain, so it follows the shear
+        that varies across a twisted section poorly and locks. The case
+        therefore uses quadratic tetrahedra, which are within a few percent
+        on every mesh (${errs(series(2))}).</p>
+        <p>From 25&nbsp;mm down, the quadratic series comes down to the
+        reference from above. Sections inside the bar rotate at the
+        Saint-Venant rate to within a few tenths of a percent; the excess is
+        on the loaded face itself. The torque reaches that face as point
+        forces at its nodes, which deform it locally. The finer the mesh, the
+        smaller each force and its local effect. The coarsest mesh, two
+        elements across the section, lands close to the reference by chance,
+        before this trend sets in.</p>
+        <p>Two smaller effects remain in a converged result. Saint-Venant's
+        solution assumes that every section warps freely, but the clamp
+        holds the ${tex("x = 0")} section flat, which stiffens the bar near
+        it. A square section warps little, so this costs only a few tenths
+        of a percent. And Roark's fit for ${tex("β")} is larger than the
+        series value 0.1406, so the reference is
+        ${pctAbs((BETA / 0.1406 - 1) * 100)} low. The ±${row.tolPct}&nbsp;%
+        band covers all three.</p>`;
+  },
   references: [REF.timoshenkoGoodier, REF.roark, REF.gere],
 };

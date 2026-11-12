@@ -69,6 +69,26 @@ export default [
       },
     ],
   }),
+  recipeStudy({
+    id: "beam-torsion",
+    caseId: "beam-torsion",
+    title: "Square beam in torsion, P1 vs. P2",
+    note: "Linear tetrahedra lock and twist far too little. Quadratic ones are within 1.5 % on every mesh and, from 25 mm down, settle towards the reference from above as the loaded face's local deformation shrinks.",
+    series: [
+      {
+        label: "P1 (linear)",
+        caseId: "beam-torsion",
+        order: 1,
+        levels: [50, 25, 12.5],
+      },
+      {
+        label: "P2 (quadratic)",
+        caseId: "beam-torsion",
+        order: 2,
+        levels: [50, 25, 12.5, 10],
+      },
+    ],
+  }),
   {
     id: "cantilever",
     caseId: "cantilever",
