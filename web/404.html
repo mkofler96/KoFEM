@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/svg+xml" href="/kofem_logo.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <title>Page not found | KoFEM</title>
+    <meta name="robots" content="noindex" />
+
+    <!-- Self-hosted fonts (SIL OFL) — see public/fonts/README.md -->
+    <link href="/fonts/ibm-plex.css" rel="stylesheet" />
+    <link href="/site.css" rel="stylesheet" />
+    <style>
+      body {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .not-found {
+        flex: 1;
+        width: min(640px, 100% - 32px);
+        margin: 0 auto;
+        padding: 18vh 0 40px;
+      }
+
+      .not-found-code {
+        margin: 0 0 12px;
+        font: 500 12px var(--mono);
+        letter-spacing: 0.08em;
+        color: var(--accent);
+      }
+
+      .not-found h1 {
+        margin: 0 0 16px;
+        font-size: clamp(28px, 5vw, 40px);
+        font-weight: 500;
+        letter-spacing: -0.01em;
+      }
+
+      .not-found p {
+        margin: 0;
+        color: var(--body);
+        line-height: 1.6;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- site-header -->
+    <main class="not-found">
+      <p class="not-found-code">404</p>
+      <h1>Page not found</h1>
+      <p>This page doesn't exist or has moved.</p>
+    </main>
+    <!-- site-footer -->
+  </body>
+</html>
