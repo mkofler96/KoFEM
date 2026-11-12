@@ -541,6 +541,7 @@ function parseMetadata(xml: string): KofemFieldDataV1 {
     throw new Error(
       `Invalid analysis file: "elementOrder" must be 1 or 2, got ${JSON.stringify(meta.elementOrder)}`,
     );
+  // Legacy: a block in the v0.5.0 / v0.6.0 shape is migrated by parseHandCheck.
   if (meta.handCheck !== undefined)
     meta.handCheck = parseHandCheck(meta.handCheck);
 

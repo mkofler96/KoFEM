@@ -167,9 +167,7 @@ test("every example has its own indexable page with figure, model and result", a
     const isCase = data.cases.some((c) => c.id === id);
     if (isCase) {
       await expect(page.getByTestId("fe-value")).not.toBeEmpty();
-      await expect(page.locator("pre").first()).toContainText(
-        `run.mjs --case ${id}`,
-      );
+      await expect(page.locator("pre").first()).toContainText(`--case ${id}`);
     }
     const studies = data.convergence.filter((s) =>
       s.series.some((x) => x.caseId === id),
@@ -211,6 +209,8 @@ test("diagrams and charts are SVG images with a crawlable PNG, in both themes", 
       );
       expect(png).toBe(svg?.replace(/\.svg$/, ".png"));
       expect((await img.getAttribute("alt"))?.length ?? 0).toBeGreaterThan(30);
+      // Lazy images far down a long page load only once scrolled near.
+      await img.scrollIntoViewIfNeeded();
       // The browser shows the SVG; the PNG is twice its display size.
       await expect
         .poll(() => img.evaluate((e) => (e as HTMLImageElement).currentSrc))
@@ -253,12 +253,12 @@ test("the contents open only the section of the current page", async ({
 }) => {
   const group = (section: string) =>
     page.locator(`.docs-nav details[data-section="${section}"]`);
-  await page.goto("/examples/cantilever/");
+  await page.goto("/examples/cantilever-beam/");
   await expect(group("validation")).toHaveAttribute("open", "");
   await expect(group("examples")).not.toHaveAttribute("open");
   await expect(
     page.locator('.docs-nav a[aria-current="page"]'),
-  ).toHaveAttribute("href", "/examples/cantilever/");
+  ).toHaveAttribute("href", "/examples/cantilever-beam/");
   await page.goto("/examples/mbb-beam-topopt/");
   await expect(group("examples")).toHaveAttribute("open", "");
   await expect(group("validation")).not.toHaveAttribute("open");
@@ -269,7 +269,7 @@ test("the pages are light by default and remember a switch to dark", async ({
 }) => {
   const background = () =>
     page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  await page.goto("/examples/cantilever/");
+  await page.goto("/examples/cantilever-beam/");
   expect(await background()).toBe("rgb(255, 255, 255)");
   const toggle = page.getByRole("button", {
     name: "Switch to the dark theme",
@@ -288,7 +288,8 @@ test("the retired /validation/ addresses redirect to the example pages", async (
 }) => {
   for (const [from, to] of [
     ["/validation/", "/examples/"],
-    ["/validation/cantilever/", "/examples/cantilever/"],
+    ["/validation/beam-torsion/", "/examples/beam-torsion/"],
+    ["/validation/cantilever-beam/", "/examples/cantilever-beam/"],
     ["/validation/surface-traction/", "/examples/axial-bar/"],
     ["/examples/plate-with-hole", "/examples/plate-with-hole/"],
   ]) {

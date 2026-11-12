@@ -15,6 +15,7 @@ import {
   mapTrianglesToCadFaces,
 } from "../../lib/facePick";
 import type { BoundaryMeshTopo, Tri, Vec3 } from "../../lib/facePick";
+import { modelShellRim, type ShellRim } from "../../lib/shellRim";
 
 export type NodeMap = Map<number, { n: Node; i: number }>;
 
@@ -27,6 +28,9 @@ export interface MeshTopology {
   boundaryQuadFaceIds: [number, number, number, number][];
   boundaryTriFaceIds: [number, number, number][];
   boundaryMeshTopo: BoundaryMeshTopo | null;
+  // The CAD faces a shell idealisation collapsed onto the mesh's rim, for edge
+  // picking (lib/shellRim).
+  shellRim: ShellRim;
 }
 
 // ── CHEXA geometry ────────────────────────────────────────────────────────────
@@ -161,6 +165,7 @@ export function useMeshTopology(): MeshTopology {
   const elements = useModelStore((s) => s.elements);
   const surfaceTriangles = useModelStore((s) => s.surfaceTriangles);
   const surfaceFaceIds = useModelStore((s) => s.surfaceFaceIds);
+  const stepSurface = useModelStore((s) => s.stepSurface);
 
   const nodeMap = useMemo(
     () => new Map(nodes.map((n, i) => [n.id, { n, i }])),
@@ -294,6 +299,17 @@ export function useMeshTopology(): MeshTopology {
     surfaceFaceIds,
   ]);
 
+  // Over the whole mesh, like the groups it serves: a support on a collapsed
+  // face holds its rim nodes whether or not the body is shown.
+  const shellRim = useMemo(
+    () =>
+      modelShellRim(
+        { nodes, elements, surfaceTriangles, surfaceFaceIds },
+        stepSurface,
+      ),
+    [nodes, elements, surfaceTriangles, surfaceFaceIds, stepSurface],
+  );
+
   return useMemo(
     () => ({
       nodeMap,
@@ -304,6 +320,7 @@ export function useMeshTopology(): MeshTopology {
       boundaryQuadFaceIds,
       boundaryTriFaceIds,
       boundaryMeshTopo,
+      shellRim,
     }),
     [
       nodeMap,
@@ -314,6 +331,7 @@ export function useMeshTopology(): MeshTopology {
       boundaryQuadFaceIds,
       boundaryTriFaceIds,
       boundaryMeshTopo,
+      shellRim,
     ],
   );
 }

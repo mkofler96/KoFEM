@@ -1027,10 +1027,9 @@
       tetrahedral stiffness, and more unknowns because every edge adds a
       node. In a typical tetrahedral mesh there are several edges per vertex,
       so the same mesh has several times as many DOFs at order 2. The
-      <a href="/examples/cantilever/">cantilever beam example</a> shows a
-      measured h- and order-study on hexahedra; the
-      <a href="/examples/cantilever-p2/">quadratic variant</a> solves the same
-      beam at order 2.</p>
+      <a href="/examples/cantilever-beam/">cantilever beam example</a> shows a
+      measured h- and order-study on tetrahedra, solving the same beam at
+      order 1 and order 2.</p>
     <p>KoFEM currently returns solid displacement at element
       corners only, and one von Mises stress at each element centre. The
       order-2 edge coefficients are solved but are not part of the returned

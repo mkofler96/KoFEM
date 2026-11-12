@@ -53,8 +53,8 @@ const STATIC_PAGES = [
 
 // The files each example is opened and drawn from live outside web/, with
 // everything else example-related (examples/gallery/site/): the <id>.vtu (and
-// optional <id>.step) the app's `?example=` loader fetches and the <id>.png
-// figure of its page. They are served at /examples/, next to the pages. The
+// optional <id>.model.step) the app's `?example=` loader fetches, the <id>.step
+// its page offers for import and the <id>.png figure of its page. They are served at /examples/, next to the pages. The
 // Docker build receives the folder as the named build context "gallery"
 // (web/Dockerfile).
 const GALLERY_SITE = htmlEntry("../examples/gallery/site/");

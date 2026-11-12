@@ -1,42 +1,69 @@
 # KoFEM validation suite
 
-Each case here is solved by the **real MFEM WASM engine** — the same binary the
-browser app runs — and compared against a closed-form or published reference.
-No solver is re-implemented: each case is a model in the app's units
-(N · mm · MPa), with its loads built exactly as the app builds them
-(`lib/app-model.mjs`: a force on a face is a work-equivalent traction, a moment
-is tangential nodal forces, a pressure acts along the inward normal), fed to
-`solve_linear_elastic`, and the result is checked against theory. The same
-model is the example the app opens at `/app/?example=<id>`, so solving it in
-the app gives the number on its page. This doubles as a CI regression gate and
-as the source of the numbers on the public example pages,
-[kofem.org/examples/](https://kofem.org/examples/).
+Each case here is built the way a user builds it in the app: one
+STEP file imported, optionally split, meshed by Netgen with tetrahedra (a body
+marked Shell is then collapsed to its mid-surface, as the app does), a
+material, supports and loads on whole CAD faces, the static solve, and the
+number the Results panel's hand check reads. The steps are the case's
+**recipe** (`lib/recipe.mjs`); `lib/pipeline.mjs` runs them through the real
+WASM engine and the app's own TypeScript (the load builders, the default AMG
+solver, the nodal stress averaging), so nothing is re-implemented and solving
+the opened example in the app gives the number on its page. This doubles as a
+CI regression gate and as the source of the numbers on the public example
+pages, [kofem.org/examples/](https://kofem.org/examples/).
+
+Every example is built this way, with no exceptions: `rules.mjs` fails on an
+example without a recipe, and `web/tests/examples-by-hand.spec.ts` rebuilds
+each one with real clicks in the GUI.
 
 ## Run
 
+From `web/`, with Bun (run.mjs imports the app's TypeScript); the pre-hook
+fetches the engine and builds the Rust module (`bun run wasm:prepare`):
+
 ```bash
-node examples/validation/run.mjs                 # run all cases, print a table
-node examples/validation/run.mjs --case <id>     # run one case, e.g. axial-bar
-node examples/validation/run.mjs --report        # also regenerate the pages, figures, .vtu files + REPORT.md
-node examples/validation/run.mjs --pages         # only re-render pages and diagram/chart files (no solve)
+bun run validate                  # run all cases, print a table
+bun run validate --case <id>      # run one case, e.g. axial-bar
+bun run validate:report           # also regenerate the pages, figures, .vtu/.step files + REPORT.md
+bun run validate:pages            # only re-render pages and diagram/chart files (no solve)
+bun ../examples/validation/rules.mjs   # the rules every example meets
+```
+
+The MBB showcase's record is written by its own generator, so to regenerate
+everything run it before the report:
+
+```bash
+bun run examples:generate-mbb-topopt && bun run validate:report
 ```
 
 It exits non-zero if any case leaves its tolerance band, or if the public
-pages no longer match the run or their sources (below). CI runs it (and the
-single-DOF test below) via `bun run test` in `web/`.
+pages, analysis files or STEP files no longer match the run or their sources
+(below). Netgen is deterministic within one engine build, so a case's `.vtu`
+must match byte for byte. CI runs it, the rule check and the single-DOF
+test below via `bun run test:validation` in `web/`.
+
+## Adding a case
+
+A case is `{ id, name, quantity, unit, tolPct, readout?, figure?, page, recipe }`
+(see `cases/index.mjs`); the reference and its label come from
+`recipe.readout`, and a case without a recipe is an error. Add the case file,
+its page text in `textbook/<id>.mjs`, optionally a convergence study in
+`convergence.mjs` (`recipeStudy`: levels are max element sizes, and one level
+must be the case's own mesh), its id in `catalog.mjs`, and run
+`bun run validate:report`.
 
 ## Cases
 
-| Case                 | Validates                       | Reference                     |
-| -------------------- | ------------------------------- | ----------------------------- |
-| Axial bar            | tip extension δ = P·L/(E·A)     | mechanics of materials        |
-| Bar under pressure   | u = −p·L/E, pressure sign       | mechanics of materials        |
-| Cantilever beam      | tip deflection δ = P·L³/(3·E·I) | Euler–Bernoulli               |
-| Cantilever beam (P2) | δ on a coarse mesh, order 2     | Euler–Bernoulli               |
-| Square beam torsion  | angle of twist θ = T·L/(G·K)    | Saint-Venant torsion (square) |
-| Plate with a hole    | stress-concentration Kt ≈ 3     | Kirsch / Timoshenko & Goodier |
-| Hollow shaft torsion | angle of twist θ = T·L/(G·J)    | Saint-Venant torsion          |
-| Cook's membrane      | top-corner deflection ≈ 23.9    | Cook (1974)                   |
+| Case                       | Validates                        | Reference                     |
+| -------------------------- | -------------------------------- | ----------------------------- |
+| Axial bar                  | tip extension δ = P·L/(E·A)      | mechanics of materials        |
+| Bar under pressure         | u = −p·L/E, pressure sign        | mechanics of materials        |
+| Cantilever beam            | tip deflection δ = P·L³/(3·E·I)  | Euler–Bernoulli               |
+| Square beam torsion        | angle of twist θ = T·L/(G·K)     | Saint-Venant torsion (square) |
+| Hollow shaft torsion       | angle of twist θ = T·L/(G·J)     | Saint-Venant torsion          |
+| Plate with a hole          | Kt = 3.14 in a strip, 2a/W = 0.2 | Howland (1930), Peterson's    |
+| Plate with a hole (shells) | the same strip as a shell        | Howland (1930), Peterson's    |
+| Cook's membrane            | loaded-edge deflection ≈ 23.96   | Cook (1974), Belytschko 2014  |
 
 See `REPORT.md` for the latest FE-vs-reference numbers.
 
@@ -51,26 +78,36 @@ its README), which write their own records.
 | ---------------------------------- | --------------------------------------------------------------------------- |
 | `web/examples/index.html`          | the index at `/examples/`: every example with its figure, the results table |
 | `web/examples/<id>/index.html`     | one page per example: problem, derivation, model, results, discussion       |
-| `examples/gallery/site/<id>.vtu`   | each case as the app opens it, solved                                       |
+| `examples/gallery/site/<id>.vtu`   | each case as the app opens it: unsolved, on the static study                |
+| `examples/gallery/site/<id>.step`  | each case's STEP file, the one a user imports                               |
+| `examples/validation/surfaces/`    | each case's solved surface, for the Theory Guide's 3D viewer                |
 | `examples/gallery/site/<id>.png`   | each case's figure (`lib/render.mjs`), drawn from the same solve            |
 | `examples/gallery/site/<id>/`      | the page's diagrams and charts as image files (below); nothing else         |
 | `web/public/examples/results.json` | every number on the case pages, plus the engine id; linked as the raw data  |
 | `web/public/sitemap.xml`           | the block between the `examples` markers lists the index and every page     |
 | `REPORT.md`                        | the results table in Markdown                                               |
 
+Next to each `<id>.step`, `<id>.model.step` holds the geometry after the
+recipe's splits: the one the `.vtu`'s CAD faces refer to, which the app
+re-meshes an opened case from (`lib/model-step.mjs`).
+
+`results.json` names the builds behind its numbers (`lib/provenance.mjs`):
+`engine`, the C++ engine, and `fem`, the Rust module that solves the cases
+(a hash of the compiled module, which has no version id of its own).
+
 Vite copies every `web/examples/**/index.html` into the build (`STATIC_PAGES`)
 and `examples/gallery/site/` next to them. The text comes from the sources:
 each case's `page` block (model, inputs, supports, load, measured quantity,
-source, mesh grid, optional note), `textbook/<id>.mjs` (the page: introduction,
+source, optional note), `textbook/<id>.mjs` (the page: introduction,
 derivation, model notes, discussion, references and the sketch from
 `lib/figures.mjs`), `convergence.mjs` (the mesh-refinement studies, which reuse
-the case builders) and `lib/page.mjs` (layout). Equations are written in a small
+the case recipes) and `lib/page.mjs` (layout). Equations are written in a small
 TeX subset that `lib/tex.mjs` turns into MathML, so the pages stay static and
 crawlable. Every number in the text is computed from the case inputs or the
 run. Change the sources and regenerate — never edit the outputs by hand:
 
 ```bash
-cd web && bun run validate:report    # ~40 s: the convergence studies dominate
+cd web && bun run validate:report    # ~1 min: the convergence studies dominate
 cd web && bun run validate:pages     # seconds: page text or a figure changed, no new solve
 ```
 
@@ -110,10 +147,10 @@ indexable, that the old `/validation/` addresses redirect to them, and that
 opening each example in the app and solving it shows the read-out its page
 publishes.
 
-The Cook's membrane study shows that refining the mesh moves KoFEM's result past
-the 23.9 reference (to ≈ 25 at 64 × 64 linear and 16 × 16 quadratic elements).
-The page says so; the case stays a regression check until the reference and the
-model definition are reconciled.
+Cook's membrane is measured at the middle of the loaded edge, (48, 52), where
+the published 23.96 belongs; the top corner converges to about 25.2. The case
+used to compare the corner with 23.9, which is why its study crossed the
+reference. Quadratic tetrahedra now level off 0.1 % below it.
 
 ## Topology-optimization benchmarks
 
@@ -132,15 +169,16 @@ node examples/validation/topopt/run.mjs
 The engine targets interactive, in-browser solves, which sets two limits the
 cases are designed around:
 
-- **Mostly order 1.** Most cases use linear elements and refine the mesh, which
-  matches the fast interactive default. The **Cantilever beam (P2)** case opts
-  into order-2 elements, which the engine solves with a tighter 1e-6 CG
-  tolerance — on its deliberately coarse mesh, P1 shear-locks to ~30% error
-  while P2 lands under 2%, exercising the quadratic DOF path (edge-midpoint
-  Dirichlet extension) that the order-1 cases never reach.
+- **Quadratic where linear tetrahedra fail.** The bars and the shell plate use
+  linear elements, the fast interactive default. Bending, torsion and stress
+  peaks use quadratic (P2) tetrahedra: linear ones lock in bending (the
+  cantilever's study: −15% at 25 mm, still −3.9% at 12.5 mm) and read stress
+  peaks noisily, while P2 lands within a percent on meshes that solve in
+  seconds. The convergence studies show both orders.
 - **Displacement validates tighter than stress.** Displacements are the primary
   CG unknowns and land within a few percent (often < 1%). Element-wise stress is
-  noisier, so the one stress case (plate with a hole) carries a wider band.
+  noisier, so the stress cases (the plate with a hole, solid and shell) carry
+  wider bands.
 
 Cases that need symmetry / roller boundary conditions (NAFEMS LE1/LE10, the
 MacNeal–Harder thin curved/twisted beams, a Lamé pressure cylinder) are the

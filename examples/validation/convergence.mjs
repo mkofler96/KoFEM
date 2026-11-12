@@ -3,100 +3,168 @@
 
 // Mesh-convergence studies for the example pages (/examples/<id>/).
 //
-// Each study re-solves one validation case on a sequence of meshes through the
-// case's own model builder, so the model is exactly the CI case with only the
-// mesh changed. Errors are against the reference of the series' case, and every
-// study includes the mesh that case is gated on in CI. Run by
-// `run.mjs --report`; a full run takes about half a minute, which is why the
-// default CI run does not repeat it.
+// Each study re-solves cases on a sequence of meshes, so the model is exactly
+// the CI case with only the mesh changed. Errors are against the reference of
+// the series' case, and every study includes the mesh that case is gated on in
+// CI (run.mjs checks that one level reproduces it). Run by `run.mjs --report`;
+// a full run takes about half a minute, which is why the default CI run does
+// not repeat it.
+//
+// A study is data only (recipeStudy below): each level is a Netgen max
+// element size in mm, solved through lib/pipeline.mjs with the series' element
+// order and the case's recipe otherwise unchanged. A series may solve its
+// case at another order than the case's own (the cantilever's P1 series), as
+// long as one level of the study is the case's own mesh:
+//
+//   recipeStudy({ id, caseId, title, note,
+//                 series: [{ label, caseId, order: 1 | 2, levels: [mm, …] }] })
 
-import { solveModel } from "./lib/app-model.mjs";
-import { cantileverModel, cantileverTip } from "./cases/cantilever-bending.mjs";
-import { shaftModel, shaftTwist } from "./cases/shaft-torsion.mjs";
-import { cookCorner, cookModel } from "./cases/cooks-membrane.mjs";
-
-const grid = (d) => d.join(" × ");
-
-// solve(solver, level, order): the study's model at one mesh level, solved
-// with the app's loads, and the case's measured value read off it.
-const study = (build, measure) => (solver, level, order) => {
-  const model = build("study", level, order);
-  return measure(model, solveModel(solver, model));
-};
+/** A convergence study: levels are max element sizes (mm). */
+export function recipeStudy(study) {
+  for (const s of study.series) {
+    if (s.order !== 1 && s.order !== 2)
+      throw new Error(`study "${study.id}", ${s.label}: order must be 1 or 2`);
+    if (!s.levels.length || !s.levels.every((h) => h > 0))
+      throw new Error(
+        `study "${study.id}", ${s.label}: levels must be positive element sizes in mm`,
+      );
+  }
+  return study;
+}
 
 export default [
-  {
-    id: "cantilever",
-    caseId: "cantilever",
-    title: "Cantilever beam, P1 vs. P2",
-    note: "Linear elements lock in bending and approach from far below; quadratic ones are within a few percent on every mesh and level off slightly above the reference, since Euler–Bernoulli theory neglects shear deformation.",
+  recipeStudy({
+    id: "axial-bar",
+    caseId: "axial-bar",
+    title: "Axial bar, P1 vs. P2",
+    note: "Both orders level off a few tenths of a percent below P·L/(E·A): what remains is the clamp, which stops the lateral contraction at x = 0, not the mesh.",
     series: [
       {
         label: "P1 (linear)",
-        caseId: "cantilever",
+        caseId: "axial-bar",
         order: 1,
-        levels: [
-          [10, 1, 1],
-          [20, 2, 2],
-          [40, 4, 4],
-          [80, 8, 8],
-        ],
+        levels: [50, 25, 12.5],
       },
       {
         label: "P2 (quadratic)",
-        caseId: "cantilever-p2",
+        caseId: "axial-bar",
         order: 2,
-        levels: [
-          [5, 1, 1],
-          [10, 2, 2],
-          [20, 4, 4],
-        ],
+        levels: [50, 25],
       },
     ],
-    meshLabel: grid,
-    solve: study(cantileverModel, cantileverTip),
-  },
-  {
+  }),
+  recipeStudy({
+    id: "beam-torsion",
+    caseId: "beam-torsion",
+    title: "Square beam in torsion, P1 vs. P2",
+    note: "Linear tetrahedra lock and twist far too little. Quadratic ones are within 1.5 % on every mesh and, from 25 mm down, settle towards the reference from above as the loaded face's local deformation shrinks.",
+    series: [
+      {
+        label: "P1 (linear)",
+        caseId: "beam-torsion",
+        order: 1,
+        levels: [50, 25, 12.5],
+      },
+      {
+        label: "P2 (quadratic)",
+        caseId: "beam-torsion",
+        order: 2,
+        levels: [50, 25, 12.5, 10],
+      },
+    ],
+  }),
+  recipeStudy({
+    id: "plate-with-hole",
+    caseId: "plate-with-hole",
+    title: "Plate with a hole, P1 vs. P2",
+    note: "Quadratic elements stay within 2 % below Howland's 3.14 on every mesh; the nodal average of element-centre stresses keeps them slightly low. Linear elements overshoot by several percent and come down only slowly.",
+    series: [
+      {
+        label: "P1 (linear)",
+        caseId: "plate-with-hole",
+        order: 1,
+        levels: [4, 2, 1],
+      },
+      {
+        label: "P2 (quadratic)",
+        caseId: "plate-with-hole",
+        order: 2,
+        levels: [4, 2, 1],
+      },
+    ],
+  }),
+  recipeStudy({
+    id: "cantilever-beam",
+    caseId: "cantilever-beam",
+    title: "Cantilever beam, P1 vs. P2",
+    note: "Linear tetrahedra lock in bending and approach from far below; quadratic ones are within half a percent on every mesh and level off just above the reference.",
+    series: [
+      {
+        label: "P1 (linear)",
+        caseId: "cantilever-beam",
+        order: 1,
+        levels: [50, 25, 12.5, 8],
+      },
+      {
+        label: "P2 (quadratic)",
+        caseId: "cantilever-beam",
+        order: 2,
+        levels: [50, 25, 12.5],
+      },
+    ],
+  }),
+  recipeStudy({
     id: "shaft-torsion",
     caseId: "shaft-torsion",
-    title: "Hollow shaft",
-    note: "The error falls steadily as the straight-sided elements approach the circle.",
+    title: "Hollow shaft, P1 vs. P2",
+    note: "Quadratic elements approach the reference from above as the polygons of the circles close in on them. Linear elements are too stiff in torsion and approach from below, so their errors partly cancel.",
     series: [
       {
         label: "P1 (linear)",
         caseId: "shaft-torsion",
         order: 1,
-        levels: [
-          [1, 8, 3],
-          [2, 16, 6],
-          [3, 32, 12],
-          [4, 64, 24],
-        ],
+        levels: [20, 10, 7.5],
+      },
+      {
+        label: "P2 (quadratic)",
+        caseId: "shaft-torsion",
+        order: 2,
+        levels: [20, 15, 10, 7.5, 5],
       },
     ],
-    meshLabel: grid,
-    solve: study(shaftModel, shaftTwist),
-  },
-  {
+  }),
+  recipeStudy({
     id: "cooks-membrane",
     caseId: "cooks-membrane",
-    title: "Cook's membrane",
-    note: "Both orders rise past the 23.9 reference under refinement, so the pass on the 16 × 16 CI mesh is a cancellation of errors; treat this case as a regression check until the reference is reconciled.",
+    title: "Cook's membrane, P1 vs. P2",
+    note: "Linear elements lock in the panel's bending and approach from below; quadratic ones are within half a percent even at 16 mm and level off at 23.94, 0.1 % under the plane-stress reference, since the slab clamped over its whole end face is slightly stiffer than the plane-stress panel.",
     series: [
       {
         label: "P1 (linear)",
         caseId: "cooks-membrane",
         order: 1,
-        levels: [4, 8, 16, 32, 64],
+        levels: [8, 4, 2, 1],
       },
       {
         label: "P2 (quadratic)",
         caseId: "cooks-membrane",
         order: 2,
-        levels: [2, 4, 8, 16],
+        levels: [16, 8, 4, 2, 1],
       },
     ],
-    meshLabel: (n) => `${n} × ${n}`,
-    solve: study(cookModel, cookCorner),
-  },
+  }),
+  recipeStudy({
+    id: "plate-with-hole-shell",
+    caseId: "plate-with-hole-shell",
+    title: "Plate with a hole, shell triangles",
+    note: "Kt scatters a few percent either side of Howland's 3.14 instead of converging: next to the 1 mm cut edge the triangle at the peak stays about 0.6 mm on every mesh, and the read-out is the constant stress of the one or two triangles that meet there. On the finest meshes the peak node is shared by more triangles and reads low.",
+    series: [
+      {
+        label: "Shell (linear)",
+        caseId: "plate-with-hole-shell",
+        order: 1,
+        levels: [4, 2.5, 2, 1.5, 1, 0.75, 0.5],
+      },
+    ],
+  }),
 ];

@@ -47,16 +47,16 @@ export default {
       <li><a href="/examples/surface-pressure/">End pressure</a>: compression and
         pressure direction. Von Mises alone cannot verify the sign; inspect
         the signed displacement as well.</li>
-      <li><a href="/examples/cantilever/">Cantilever</a>: bending displacement
+      <li><a href="/examples/cantilever-beam/">Cantilever</a>: bending displacement
         and existing order/refinement data. Euler–Bernoulli neglects shear;
         a fine 3D solution need not approach that reference exactly.</li>
       <li><a href="/examples/plate-with-hole/">Plate with a hole</a>: a finite
         stress concentration. Match sampling location and finite geometry to
         the assumptions of the infinite-plate reference.</li>
-      <li><a href="/examples/cooks-membrane/">Cook’s membrane</a>: a caution
-        about agreement on one mesh. Its existing study crosses the reference
-        under refinement, so that isolated pass is a regression check rather
-        than resolved convergence evidence.</li>
+      <li><a href="/examples/cooks-membrane/">Cook’s membrane</a>: bending and
+        shear on skewed elements, without a closed form. Check that the
+        reference belongs to the point you measure: the published value is the
+        deflection at the middle of the loaded edge, not at the top corner.</li>
       <li><a href="/theory/shells/formulation/#plate-example">Square shell plate</a>:
         centre deflection and a centre-near surface stress against thin-plate
         theory. The <a href="/theory/shells/solid-coupling/#verification">planar

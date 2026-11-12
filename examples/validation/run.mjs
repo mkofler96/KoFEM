@@ -1,25 +1,29 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Validation runner: solves every case through the real WASM engine, with the
-// loads built as the app builds them, and checks the finite-element result
-// against its closed-form / published reference.
+// Validation runner: builds every case from its recipe as a user builds it in
+// the GUI — STEP import, splits, Netgen mesh, supports and loads on whole CAD
+// faces, the app's own solve (lib/pipeline.mjs) — and checks the
+// finite-element result against its closed-form / published reference.
 //
-//   node examples/validation/run.mjs              # run + print table + check pages
-//   node examples/validation/run.mjs --case <id>  # run one case (no page check)
-//   node examples/validation/run.mjs --report     # also regenerate REPORT.md,
-//                                                 # each case's analysis file and
-//                                                 # figure, and the pages
-//                                                 # /examples/ and /examples/<id>/
-//   node examples/validation/run.mjs --pages      # only re-render the pages and
-//                                                 # their diagram/chart files from
-//                                                 # the published results (no solve)
+// Run with bun from web/ (it imports the app's TypeScript), after
+// `bun run wasm:prepare` (engine + Rust module):
+//
+//   bun run validate                  # run + print table + check pages
+//   bun run validate --case <id>      # run one case (no page check)
+//   bun run validate:report           # also regenerate REPORT.md, each case's
+//                                     # analysis file, .step, .model.step and
+//                                     # figure, and the pages /examples/ and
+//                                     # /examples/<id>/
+//   bun run validate:pages            # only re-render the pages and their
+//                                     # diagram/chart files from the published
+//                                     # results (no solve)
 //
 // Exits non-zero if any case falls outside its tolerance band, so CI fails on a
 // solver regression — or if the numbers published on /examples/ no longer
-// match a fresh run, or a page or analysis file no longer matches its sources,
-// so the public pages and the models the app opens cannot drift from the
-// engine. See README.md for what each case validates.
+// match a fresh run, or a page, analysis file or STEP file no longer matches
+// its sources, so the public pages and the models the app opens cannot drift
+// from the engine. See README.md for what each case validates.
 
 import {
   existsSync,
@@ -31,8 +35,6 @@ import {
 } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, relative } from "node:path";
-import { loadSolver } from "./lib/solver.mjs";
-import { meshStats } from "./lib/mesh.mjs";
 import {
   CONSOLE_RULE,
   consoleHeader,
@@ -42,13 +44,18 @@ import {
   relErrPct,
 } from "./lib/format.mjs";
 import {
-  analysisFile,
-  analysisSetup,
   appReadout,
-  readAnalysisSetup,
-  resultSurface,
-  solveModel,
+  buildAnalysisFile,
+  buildMeshStats,
+  buildResultSurface,
 } from "./lib/app-model.mjs";
+import { buildFromRecipe, nodalVonMises, withMesh } from "./lib/pipeline.mjs";
+import {
+  modelStepPath,
+  sameModelStep,
+  writeModelStep,
+} from "./lib/model-step.mjs";
+import { engineId, femModuleId } from "./lib/provenance.mjs";
 import { resultFigure } from "./lib/render.mjs";
 import { renderExamplePage, renderIndexPage } from "./lib/page.mjs";
 import { ORDER, SITE_DIR, catalog } from "./catalog.mjs";
@@ -70,7 +77,8 @@ const SITEMAP = join(repo, "web/public/sitemap.xml");
 const SITE = "https://kofem.org";
 const DATA = join(repo, "web/public/examples/results.json");
 const REPORT = join(here, "REPORT.md");
-const ENGINE_STAMP = join(repo, "web/src/wasm/pkg/.engine-id");
+// Solved surfaces of the cases, for the Theory Guide's 3D viewers.
+const SURFACE_DIR = join(here, "surfaces");
 
 // A published FE value counts as current when a fresh run reproduces it to
 // this relative tolerance — tighter than the page's five significant digits.
@@ -102,14 +110,16 @@ if (!selected.length)
   throw new Error(
     `unknown case "${only}"; cases: ${cases.map((c) => c.id).join(", ")}`,
   );
-const solve = await loadSolver();
+const started = performance.now();
+const runs = [];
+for (const c of selected) runs.push(await runCase(c));
+const rows = runs.map((r) => r.row);
+const seconds = (performance.now() - started) / 1000;
 
-const runs = selected.map((c) => {
-  const model = c.model();
-  const result = solveModel(solve, model);
-  const fe = c.measure(model, result);
+// The published row of a case, from its FE value, solved mesh and result.
+function caseRow(c, fe, mesh, result) {
   const errPct = relErrPct(fe, c.reference);
-  const row = {
+  return {
     id: c.id,
     name: c.name,
     quantity: c.quantity,
@@ -120,22 +130,64 @@ const runs = selected.map((c) => {
     fe,
     errPct,
     pass: Math.abs(errPct) <= c.tolPct,
-    mesh: meshStats(model.mesh, model.order),
+    mesh,
     inputs: c.page.inputs.map(([symbol, value, unit]) => ({
       symbol,
       value,
       unit,
     })),
     // What the app's Result summary shows after a fresh solve of the file.
-    readout: {
-      field: c.readout.field,
-      stat: c.readout.stat,
-      value: appReadout(result, c.readout.field, c.readout.stat),
-    },
+    ...(c.readout
+      ? {
+          readout: {
+            field: c.readout.field,
+            stat: c.readout.stat,
+            value: appReadout(result, c.readout.field, c.readout.stat),
+          },
+        }
+      : {}),
   };
-  return { c, model, result, row };
-});
-const rows = runs.map((r) => r.row);
+}
+
+async function runCase(c) {
+  const build = await buildFromRecipe(c.id, c.recipe);
+  const row = caseRow(c, build.fe, buildMeshStats(build), build.result);
+  return { c, build, row };
+}
+
+// One level of a convergence study: the case's recipe with only the mesher
+// settings changed (`level` is the max element size, mm).
+async function studyLevel(caseId, level, order) {
+  const c = cases.find((x) => x.id === caseId);
+  if (!c) throw new Error(`convergence study: unknown case "${caseId}"`);
+  const build = await buildFromRecipe(
+    caseId,
+    withMesh(c.recipe, { maxElementSize: level, order }),
+  );
+  return { fe: build.fe, mesh: buildMeshStats(build) };
+}
+
+// The solved boundary of a case for the Theory Guide's 3D viewer
+// (web/theory/viewers): its analysis file opens unsolved, so the viewer reads
+// the solve from here: the surface vertices only, rounded as the viewer
+// rounds them.
+function solvedSurfaceJson(id, field, surface) {
+  const round = (v, digits) => Number(v.toPrecision(digits));
+  const index = new Map();
+  const out = { id, field, positions: [], displacements: [], values: [] };
+  const triangles = surface.triangles.map((v) => {
+    if (!index.has(v)) {
+      index.set(v, index.size);
+      for (let k = 0; k < 3; k++) {
+        out.positions.push(round(surface.positions[3 * v + k], 7));
+        out.displacements.push(round(surface.displacements[3 * v + k], 5));
+      }
+      out.values.push(round(surface.scalars[v], 5));
+    }
+    return index.get(v);
+  });
+  return JSON.stringify({ ...out, triangles }) + "\n";
+}
 const failed = rows.filter((r) => !r.pass).length;
 
 // ── Console table ─────────────────────────────────────────────────────────────
@@ -146,22 +198,35 @@ for (const r of rows) console.log(consoleRow(r));
 console.log(CONSOLE_RULE);
 console.log(
   `${rows.length - failed}/${rows.length} passed` +
-    (failed ? `  —  ${failed} FAILED` : "  —  all within tolerance"),
+    (failed ? `  —  ${failed} FAILED` : "  —  all within tolerance") +
+    `  (${seconds.toFixed(1)} s)`,
 );
 
 const rel = (p) => relative(repo, p);
 const vtuPath = (id) => join(SITE_DIR, `${id}.vtu`);
 const pngPath = (id) => join(SITE_DIR, `${id}.png`);
+const stepPath = (id) => join(SITE_DIR, `${id}.step`);
+const surfacePath = (id) => join(SURFACE_DIR, `${id}.json`);
 
 if (only) process.exit(failed ? 1 : 0);
 
 if (report) {
-  // ── Analysis files and figures ──────────────────────────────────────────────
-  for (const { c, model, result, row } of runs) {
-    writeFileSync(vtuPath(c.id), analysisFile(model, result));
+  // ── Analysis files, STEP files, figures, solved surfaces ───────────────────
+  mkdirSync(SURFACE_DIR, { recursive: true });
+  for (const run of runs) {
+    const { c, row } = run;
     const fig = c.figure ?? {};
     const field = fig.field ?? "displacement";
-    const { png, meta } = resultFigure(resultSurface(model, result, field), {
+    writeFileSync(vtuPath(c.id), buildAnalysisFile(run.build, c.name));
+    writeFileSync(stepPath(c.id), run.build.stepText);
+    writeModelStep(modelStepPath(SITE_DIR, c.id), run.build.stepBytes);
+    const surface = buildResultSurface(
+      run.build,
+      field,
+      field === "vonMises" ? nodalVonMises(run.build) : null,
+    );
+    writeFileSync(surfacePath(c.id), solvedSurfaceJson(c.id, field, surface));
+    const { png, meta } = resultFigure(surface, {
       field,
       unit: fig.unit ?? (field === "vonMises" ? "MPa" : "mm"),
       view: fig.view,
@@ -174,63 +239,56 @@ if (report) {
 
   // ── Convergence studies (slow: ~half a minute) ──────────────────────────────
   const byId = new Map(rows.map((r) => [r.id, r]));
-  const caseRow = (id) => {
+  const rowOf = (id) => {
     const r = byId.get(id);
     if (!r) throw new Error(`convergence study refers to unknown case "${id}"`);
     return r;
   };
   console.log("\nConvergence studies");
-  const convergence = studies.map((study) => ({
-    id: study.id,
-    caseId: study.caseId,
-    title: study.title,
-    series: study.series.map((s) => {
-      const ref = caseRow(s.caseId);
-      return {
-        label: s.label,
-        caseId: s.caseId,
-        order: s.order,
-        points: s.levels.map((level) => {
-          // Record the mesh the study solves, so the page states its size.
-          let mesh = null;
-          const fe = study.solve(
-            (m, mat, bcs, order) => {
-              if (mesh) throw new Error("a study level must solve once");
-              mesh = meshStats(m, order);
-              return solve(m, mat, bcs, order);
-            },
-            level,
-            s.order,
-          );
-          const errPct = relErrPct(fe, ref.reference);
-          const ci =
-            mesh.order === ref.mesh.order &&
-            mesh.elements === ref.mesh.elements &&
-            mesh.vertices === ref.mesh.vertices;
-          const label = study.meshLabel(level);
-          console.log(
-            `  ${study.id.padEnd(16)} ${s.label.padEnd(15)} ${label.padEnd(12)} ` +
-              `${String(mesh.dofs).padStart(7)} DOFs  ${fmt(fe).padStart(11)}  ${fmtErr(errPct).padStart(7)}%` +
-              (ci ? "  (case mesh)" : ""),
-          );
-          return { mesh: label, ...mesh, fe, errPct, ci };
-        }),
-      };
-    }),
-  }));
+  const convergence = [];
+  for (const study of studies) {
+    const series = [];
+    for (const s of study.series) {
+      const ref = rowOf(s.caseId);
+      const points = [];
+      for (const level of s.levels) {
+        const { fe, mesh } = await studyLevel(s.caseId, level, s.order);
+        const errPct = relErrPct(fe, ref.reference);
+        const ci =
+          mesh.order === ref.mesh.order &&
+          mesh.elements === ref.mesh.elements &&
+          mesh.vertices === ref.mesh.vertices;
+        const label = `${level} mm`;
+        console.log(
+          `  ${study.id.padEnd(16)} ${s.label.padEnd(15)} ${label.padEnd(12)} ` +
+            `${String(mesh.dofs).padStart(7)} DOFs  ${fmt(fe).padStart(11)}  ${fmtErr(errPct).padStart(7)}%` +
+            (ci ? "  (case mesh)" : ""),
+        );
+        points.push({ mesh: label, ...mesh, fe, errPct, ci });
+      }
+      series.push({ label: s.label, caseId: s.caseId, order: s.order, points });
+    }
+    convergence.push({
+      id: study.id,
+      caseId: study.caseId,
+      title: study.title,
+      series,
+    });
+  }
   for (const s of convergence)
     if (!s.series.some((series) => series.points.some((p) => p.ci)))
       throw new Error(
         `convergence study "${s.id}": no level matches the mesh its case is gated on — include it so the study connects to the published result`,
       );
 
-  if (!existsSync(ENGINE_STAMP))
-    throw new Error(
-      `${rel(ENGINE_STAMP)} is missing, so the engine build behind these numbers is unknown. Install the engine with scripts/fetch-wasm-engine.sh (or build it) before --report.`,
-    );
+  // The builds behind these numbers (lib/provenance.mjs): the C++ engine
+  // meshes every case; the Rust module solves it. Like the engine id, the module id is a record, not part of
+  // the staleness check (the pages render it from this file): a rebuilt
+  // module that reproduces the published numbers leaves the pages current.
   const data = {
     generated: new Date().toISOString().slice(0, 10),
-    engine: readFileSync(ENGINE_STAMP, "utf8").trim(),
+    engine: engineId(),
+    fem: femModuleId(),
     cases: rows,
     convergence,
   };
@@ -250,7 +308,7 @@ if (report) {
         stale.map((s) => `  • ${s}`).join("\n") +
         `\nRegenerate the pages and commit the result:\n` +
         `  cd web && bun run validate:report   (validate:pages if only page text or figures changed)\n` +
-        `  git add web/examples web/public/examples/results.json web/public/sitemap.xml examples/gallery/site examples/gallery/showcase examples/validation/REPORT.md`,
+        `  git add web/examples web/public/examples/results.json web/public/sitemap.xml examples/gallery/site examples/gallery/showcase examples/validation/surfaces examples/validation/REPORT.md`,
     );
     process.exit(1);
   }
@@ -332,24 +390,51 @@ async function checkPublished() {
       );
     if (JSON.stringify(r.inputs) !== JSON.stringify(p.inputs))
       out.push(`${r.name}: inputs changed`);
-    if (r.readout.value !== p.readout.value)
+    if (JSON.stringify(r.readout) !== JSON.stringify(p.readout))
       out.push(
-        `${r.name}: the app shows ${r.readout.stat} ${r.readout.field} ${r.readout.value}, the page says ${p.readout.value}`,
+        r.readout
+          ? `${r.name}: the app shows ${r.readout.stat} ${r.readout.field} ${r.readout.value}, the page says ${p.readout?.value}`
+          : `${r.name}: the page states a Result-summary line the case no longer has`,
       );
   });
   // The model the app opens must be the model this run solved.
-  for (const { c, model } of runs) {
+  for (const run of runs) {
+    const { c } = run;
     const file = vtuPath(c.id);
     if (!existsSync(file)) {
       out.push(`${rel(file)} does not exist`);
       continue;
     }
-    if (
-      JSON.stringify(readAnalysisSetup(readFileSync(file, "utf8"))) !==
-      JSON.stringify(analysisSetup(model))
-    )
+    // Netgen is deterministic within one engine build, so the file this run
+    // would write is byte for byte the committed one.
+    const same = (path, text) =>
+      existsSync(path) && readFileSync(path, "utf8") === text;
+    if (!same(file, buildAnalysisFile(run.build, c.name)))
       out.push(`${rel(file)}: its model differs from case "${c.id}"`);
+    if (!same(stepPath(c.id), run.build.stepText))
+      out.push(`${rel(stepPath(c.id))} differs from case "${c.id}"'s STEP`);
+    // The geometry the app re-meshes from must be the one the .vtu's CAD
+    // face ids refer to: the import after the splits (lib/model-step.mjs).
+    const model = modelStepPath(SITE_DIR, c.id);
+    if (!sameModelStep(model, run.build.stepBytes))
+      out.push(
+        `${rel(model)} differs from case "${c.id}"'s geometry after its splits`,
+      );
+    const fig = c.figure ?? {};
+    const field = fig.field ?? "displacement";
+    const surface = buildResultSurface(
+      run.build,
+      field,
+      field === "vonMises" ? nodalVonMises(run.build) : null,
+    );
+    if (!same(surfacePath(c.id), solvedSurfaceJson(c.id, field, surface)))
+      out.push(`${rel(surfacePath(c.id))} differs from this run's solve`);
   }
+  // A solved surface no case writes is left over from one.
+  if (existsSync(SURFACE_DIR))
+    for (const name of readdirSync(SURFACE_DIR))
+      if (!runs.some((run) => `${run.c.id}.json` === name))
+        out.push(`${rel(join(SURFACE_DIR, name))} belongs to no case`);
   for (const id of ORDER)
     if (!existsSync(pngPath(id)))
       out.push(`${rel(pngPath(id))} does not exist`);
@@ -413,14 +498,15 @@ function markdownReport(rs) {
   return [
     "# KoFEM validation results",
     "",
-    "Each case is solved by the real MFEM WASM engine, with its loads applied as",
-    "the app applies them, and compared against its closed-form or published",
+    "Each case is built as a user builds it in the app — a STEP file meshed by",
+    "Netgen, supports and loads on whole CAD faces, solved by the app's own code",
+    "and the real WASM engine — and compared against its closed-form or published",
     "reference. The same numbers are published at <https://kofem.org/examples/>,",
     "with one page per example (derivation, model, mesh convergence, discussion,",
     "how to reproduce). Regenerate them with:",
     "",
     "```bash",
-    "node examples/validation/run.mjs --report",
+    "cd web && bun run validate:report",
     "```",
     "",
     "| Case | Quantity | FE result | Reference | Error | Tol | Status |",

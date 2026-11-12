@@ -230,21 +230,17 @@ test.describe("consent", () => {
 });
 
 test.describe("workflow events", () => {
-  test("example: loaded, results viewed, re-solved", async ({ page }) => {
+  test("example: loaded, solved, results viewed", async ({ page }) => {
     test.setTimeout(90_000);
     await withAnalytics(page);
     await setConsent(page, "granted");
     await page.goto("/app/?example=axial-bar");
 
+    // The example opens ready to run (KOF-322), so loading it reports no
+    // results yet; the first solve does.
     await expect
       .poll(() => eventNames(page), { timeout: 15_000 })
-      .toEqual(
-        expect.arrayContaining([
-          "solver_opened",
-          "example_loaded",
-          "results_viewed",
-        ]),
-      );
+      .toEqual(expect.arrayContaining(["solver_opened", "example_loaded"]));
     const events = await gaEvents(page);
     expect(events.find((e) => e.name === "solver_opened")?.params.entry).toBe(
       "example",
@@ -252,14 +248,12 @@ test.describe("workflow events", () => {
     expect(
       events.find((e) => e.name === "example_loaded")?.params.example_id,
     ).toBe("axial-bar");
-    expect(
-      events.find((e) => e.name === "results_viewed")?.params.workflow,
-    ).toBe("example");
+    expect(events.map((e) => e.name)).not.toContain("results_viewed");
 
     await triggerSolve(page);
     await expect
       .poll(() => eventNames(page), { timeout: 60_000 })
-      .toContain("solve_completed");
+      .toEqual(expect.arrayContaining(["solve_completed", "results_viewed"]));
     const after = await gaEvents(page);
     const started = after.find((e) => e.name === "solve_started");
     const completed = after.find((e) => e.name === "solve_completed");
@@ -269,6 +263,9 @@ test.describe("workflow events", () => {
     });
     expect(completed?.params.workflow).toBe("example");
     expect(completed?.params.duration_bucket).toMatch(/^[a-z0-9_]+$/);
+    expect(
+      after.find((e) => e.name === "results_viewed")?.params.workflow,
+    ).toBe("example");
     expect(after.map((e) => e.name)).toContain("engine_ready");
     expect(after.map((e) => e.name)).not.toContain("solve_failed");
   });

@@ -36,31 +36,47 @@ export async function openExample(
   try {
     const res = await fetch(`/examples/${id}.vtu`);
     if (!res.ok) throw new Error(`example "${id}" returned HTTP ${res.status}`);
-    const text = await res.text();
+    const analysis = parseAnalysisFile(await res.text());
     if (signal?.aborted) return;
+    // Every example is built from a STEP file a user can import (KOF-322). A
+    // model without its geometry shows no body and cannot be re-meshed or
+    // changed, so it is refused rather than opened half-usable. A missing
+    // file, or the dev server's SPA fallback to index.html, fails here.
+    //
+    // The app restores <id>.model.step, not the <id>.step the page offers for
+    // import: it is the imported file after the recipe's splits, the geometry
+    // the analysis file's CAD face ids refer to, so a re-mesh carries every
+    // support and load onto the same faces (examples/validation/lib/model-step.mjs).
+    if (analysis.stepSurface === null)
+      throw new Error(`example "${id}" carries no geometry to mesh on`);
+    const stepRes = await fetch(`/examples/${id}.model.step`);
+    if (!stepRes.ok)
+      throw new Error(
+        `example "${id}" ships no geometry: ${id}.model.step returned HTTP ${stepRes.status}`,
+      );
+    const stepBytes = new Uint8Array(await stepRes.arrayBuffer());
+    if (
+      !new TextDecoder()
+        .decode(stepBytes.slice(0, 16))
+        .startsWith("ISO-10303-21")
+    )
+      throw new Error(
+        `example "${id}" ships no geometry: ${id}.model.step is not a STEP file`,
+      );
+    if (signal?.aborted) return;
+
+    // A saved .vtu carries the tessellation but not the STEP file, so
+    // loadAnalysis drops stepBytes; the example's own file restores it.
     const store = useModelStore.getState();
-    store.loadAnalysis(parseAnalysisFile(text));
+    store.loadAnalysis(analysis);
+    store.setGeometryFormat("step");
+    store.setStepBytes(stepBytes);
     clearWorkerLogs();
     setWorkflow("example");
     track("example_loaded", {
       example_id: id,
       duration_bucket: elapsed(),
     });
-
-    // A saved .vtu carries no STEP, so loadAnalysis drops stepBytes and the
-    // loaded model can't be re-meshed. Examples that ship their source CAD
-    // (e.g. cantilever-beam.step) restore it here so the user can re-mesh and
-    // re-solve. Procedurally-generated benchmarks have no .step: a 404 (or
-    // dev-server SPA fallback to index.html) fails the ISO-10303-21 header
-    // check and the model simply stays non-re-meshable.
-    const stepRes = await fetch(`/examples/${id}.step`);
-    if (signal?.aborted || !stepRes.ok) return;
-    const buf = await stepRes.arrayBuffer();
-    const head = new TextDecoder().decode(buf.slice(0, 16));
-    if (!signal?.aborted && head.startsWith("ISO-10303-21")) {
-      store.setGeometryFormat("step");
-      store.setStepBytes(new Uint8Array(buf));
-    }
   } catch (err) {
     window.alert(`Could not load example: ${(err as Error).message}`);
     track("example_load_failed", {

@@ -5,8 +5,8 @@
 // the CSS classes of docs-layout.mjs. The page generator publishes each as
 // SVG and PNG files (web/figure-assets.mjs), named <page>-<name> from the
 // `name` option (default "diagram"). Sketches, not to scale: they show the
-// model, supports, load and measured quantity, with a structured mesh drawn
-// faintly where it fits.
+// model, supports, load and measured quantity; no mesh, as every example is
+// meshed by Netgen.
 
 const f = (v) => (Math.round(v * 10) / 10).toString();
 
@@ -82,20 +82,6 @@ const poly = (pts, cls) =>
 const polyline = (pts, cls) =>
   `<polyline class="${cls}" points="${pts.map(([x, y]) => `${f(x)},${f(y)}`).join(" ")}"/>`;
 
-/** Grid lines of an nx × ny structured mesh on the rectangle. */
-function rectMesh(x0, y0, x1, y1, nx, ny) {
-  const out = [];
-  for (let i = 1; i < nx; i++) {
-    const x = x0 + ((x1 - x0) * i) / nx;
-    out.push(line(x, y0, x, y1, "mesh"));
-  }
-  for (let j = 1; j < ny; j++) {
-    const y = y0 + ((y1 - y0) * j) / ny;
-    out.push(line(x0, y, x1, y, "mesh"));
-  }
-  return out.join("");
-}
-
 /** x–y axis triad at (x, y). */
 const triad = (x, y, [a, b] = ["x", "y"]) =>
   [
@@ -111,8 +97,7 @@ const triad = (x, y, [a, b] = ["x", "y"]) =>
  * Side view of the prismatic bar. `load`: "traction" (a uniform traction, how
  * the app applies a force to a face) or "pressure" (pressure on the end face).
  */
-export function barFigure({ load, div }) {
-  const [nx, ny] = div;
+export function barFigure({ load }) {
   const x0 = 90,
     x1 = 410,
     yc = 112,
@@ -122,7 +107,6 @@ export function barFigure({ load, div }) {
     bot = yc + hh;
   const parts = [
     `<rect class="body" x="${x0}" y="${top}" width="${x1 - x0}" height="${2 * hh}"/>`,
-    rectMesh(x0, top, x1, bot, nx, ny),
     clamp(x0, top, bot),
     // Deformed outline: the end face moves by δ, the section contracts (or,
     // in compression, bulges) away from the clamp.
@@ -183,9 +167,7 @@ export function barFigure({ load, div }) {
 
 // ── Cantilever ───────────────────────────────────────────────────────────────
 
-/** `div`: the structured mesh to draw, or null for an unstructured one. */
-export function cantileverFigure({ div }) {
-  const [nx, ny] = div ?? [1, 1];
+export function cantileverFigure() {
   const x0 = 90,
     x1 = 470,
     yc = 92,
@@ -198,7 +180,6 @@ export function cantileverFigure({ div }) {
   const xs = Array.from({ length: 41 }, (_, i) => x0 + ((x1 - x0) * i) / 40);
   const parts = [
     `<rect class="body" x="${x0}" y="${yc - hh}" width="${x1 - x0}" height="${2 * hh}"/>`,
-    rectMesh(x0, yc - hh, x1, yc + hh, nx, ny),
     clamp(x0, yc - hh, yc + hh),
     polyline(
       xs.map((x) => [x, yc - hh + w(x)]),
@@ -251,8 +232,7 @@ function torqueArc(cx, cy, rx, ry) {
   return `<polyline class="load" points="${pts.map(([x, y]) => `${f(x)},${f(y)}`).join(" ")}" marker-end="url(#arr-load)"/>`;
 }
 
-export function squareTorsionFigure({ div }) {
-  const [nx, ny] = div;
+export function squareTorsionFigure() {
   const x0 = 100,
     x1 = 420,
     yc = 120,
@@ -264,7 +244,6 @@ export function squareTorsionFigure({ div }) {
   const parts = [
     // Side face, top face, end face.
     `<rect class="body" x="${x0}" y="${top}" width="${x1 - x0}" height="${s}"/>`,
-    rectMesh(x0, top, x1, bot, nx, ny),
     poly(
       [
         [x0, top],
@@ -319,8 +298,12 @@ export function squareTorsionFigure({ div }) {
   );
 }
 
-export function hollowShaftFigure({ div }) {
-  const [nr, nth] = div;
+/**
+ * The shaft and its section; the inset shows the true circles with a coarse
+ * inscribed polygon, a sketch of what straight element edges do to them.
+ */
+export function hollowShaftFigure() {
+  const nth = 10;
   const x0 = 100,
     x1 = 400,
     yc = 112,
@@ -344,8 +327,8 @@ export function hollowShaftFigure({ div }) {
     dim(x0, yc + ro + 26, x1, yc + ro + 26),
     sym((x0 + x1) / 2, yc + ro + 20, "L"),
   ];
-  // Section inset: the case's mesh, nr rings × nth segments with straight
-  // sides — the circle becomes a polygon.
+  // Section inset: a 10-gon over the true circles — straight element edges
+  // turn the circle into a polygon.
   const sx = 560,
     Ro = 56,
     Ri = (Ro * ri) / ro;
@@ -359,36 +342,83 @@ export function hollowShaftFigure({ div }) {
   parts.push(
     `<path class="body" fill-rule="evenodd" d="M${outer.map(([x, y]) => `${f(x)} ${f(y)}`).join("L")}Z M${inner.map(([x, y]) => `${f(x)} ${f(y)}`).join("L")}Z"/>`,
   );
-  for (let i = 1; i < nr; i++)
-    parts.push(
-      polyline(
-        [
-          ...ring(Ri + ((Ro - Ri) * i) / nr),
-          ring(Ri + ((Ro - Ri) * i) / nr)[0],
-        ],
-        "mesh",
-      ),
-    );
-  for (let k = 0; k < nth; k++)
-    parts.push(line(...inner[k], ...outer[k], "mesh"));
   parts.push(
     arrow(sx, yc, sx + Ri * Math.cos(-2.2), yc + Ri * Math.sin(-2.2), "dim"),
     sym(sx - 18, yc - 2, "r", "end", "i"),
     arrow(sx, yc, sx + Ro * Math.cos(0.5), yc + Ro * Math.sin(0.5), "dim"),
     sym(sx + Ro * 0.62, yc + Ro * 0.62 + 18, "r", "start", "o"),
-    label(sx, yc - Ro - 12, `section mesh, ${nth} segments`),
+    label(sx, yc - Ro - 12, "straight edges: a polygon"),
+    `<circle class="axis" cx="${sx}" cy="${yc}" r="${f(Ro)}" fill="none"/>`,
+    `<circle class="axis" cx="${sx}" cy="${yc}" r="${f(Ri)}" fill="none"/>`,
   );
   return svg(
     640,
     230,
-    "Hollow circular shaft clamped at the left end and twisted by a torque at the right end; inset shows the polygonal section mesh",
+    "Hollow circular shaft clamped at the left end and twisted by a torque at the right end; inset shows how straight element edges turn the circles into polygons",
     parts.join("\n    "),
   );
 }
 
 // ── Plate with a hole, and the Kirsch stress along the transverse axis ───────
 
-export function plateFigure() {
+// A long strip with a central hole, pulled at both ends: the quarter x, y ≥ 0
+// the model keeps is shaded, the symmetry lines are dash-dotted.
+function stripDiagram() {
+  const px = 46,
+    py = 60,
+    w = 214,
+    h = 130,
+    a = 13,
+    cx = px + w / 2,
+    cy = py + h / 2;
+  const parts = [
+    `<path class="body" fill-rule="evenodd" d="M${px} ${py}h${w}v${h}h${-w}Z M${cx + a} ${cy}A${a} ${a} 0 1 0 ${cx - a} ${cy}A${a} ${a} 0 1 0 ${cx + a} ${cy}Z"/>`,
+    `<path class="body top" d="M${cx + a} ${cy}H${px + w}V${py}H${cx}V${cy - a}A${a} ${a} 0 0 1 ${cx + a} ${cy}Z"/>`,
+    line(cx, py - 12, cx, py + h + 12, "axis"),
+    line(px - 30, cy, px + w + 30, cy, "axis"),
+    label(cx + (px + w - cx) / 2, py + 24, "model"),
+  ];
+  for (let j = 0; j <= 5; j++) {
+    const y = py + 6 + ((h - 12) * j) / 5;
+    parts.push(
+      arrow(px + w + 2, y, px + w + 28, y),
+      arrow(px - 2, y, px - 28, y),
+    );
+  }
+  parts.push(
+    sym(px + w + 36, cy - 6, "σ", "start"),
+    sym(px - 36, cy - 6, "σ", "end"),
+    `<circle class="pt" cx="${cx}" cy="${cy - a}" r="3.5"/>`,
+    `<circle class="pt" cx="${cx}" cy="${cy + a}" r="3.5"/>`,
+    label(cx - 8, cy - a - 6, "A", { anchor: "end" }),
+    label(cx - 8, cy + a + 16, "A", { anchor: "end" }),
+    dim(cx, cy, cx + a * Math.cos(2.4), cy + a * Math.sin(2.4)),
+    sym(cx - a - 6, cy + a + 4, "a", "end"),
+    dim(px, py + h + 24, px + w, py + h + 24),
+    sym(cx + 40, py + h + 18, "2L"),
+    dim(px + 16, py, px + 16, py + h),
+    sym(px + 22, py + h - 12, "2b", "start"),
+  );
+  return svg(
+    310,
+    270,
+    "Long strip with a central hole pulled at both ends; dash-dotted symmetry lines through the hole centre, the modelled quarter x, y ≥ 0 shaded; points A at the top and bottom of the hole carry the peak stress",
+    parts.join("\n    "),
+    { cls: "fig half", name: "plate-diagram" },
+  );
+}
+
+/**
+ * Left: the plate — `model` "clamped" (default), a square plate fixed on the
+ * left and pulled on the right, or "strip", a long strip pulled at both ends
+ * with the modelled quarter shaded. Right: Kirsch's stress along the
+ * transverse axis.
+ */
+export function plateFigure({ model = "clamped" } = {}) {
+  if (model !== "clamped" && model !== "strip")
+    throw new Error(
+      `plateFigure: model must be "clamped" or "strip", got "${model}"`,
+    );
   const px = 50,
     py = 30,
     side = 200,
@@ -414,13 +444,16 @@ export function plateFigure() {
     dim(px, py + side + 22, px + side, py + side + 22),
     sym(cx, py + side + 16, "2b"),
   );
-  const plate = svg(
-    310,
-    270,
-    "Plate with a central hole under tension, clamped on the left; points A at the top and bottom of the hole carry the peak stress",
-    parts.join("\n    "),
-    { cls: "fig half", name: "plate-diagram" },
-  );
+  const plate =
+    model === "strip"
+      ? stripDiagram()
+      : svg(
+          310,
+          270,
+          "Plate with a central hole under tension, clamped on the left; points A at the top and bottom of the hole carry the peak stress",
+          parts.join("\n    "),
+          { cls: "fig half", name: "plate-diagram" },
+        );
 
   // σxx / σ along the transverse axis (x = 0), y / a from 1 to 5.
   const g = [];
@@ -468,9 +501,66 @@ export function plateFigure() {
   return `<div class="fig-row">${plate}${graph}</div>`;
 }
 
+/**
+ * The quarter x, y ≥ 0 of the long strip with a hole that the shell model
+ * keeps, to scale (L = 3b, a = b/5): symmetry supports (rollers) on the cut
+ * edges x = 0 and y = 0, the tension σ on the edge x = L, and the peak at A,
+ * where the hole meets x = 0.
+ */
+export function quarterPlateFigure() {
+  const px = 52,
+    py = 62,
+    w = 228,
+    hgt = w / 3,
+    a = hgt / 5,
+    bottom = py + hgt;
+  const rollers = [];
+  for (let k = 0; k < 3; k++) {
+    const y = py + 10 + ((hgt - a - 20) * k) / 2;
+    rollers.push(`<circle class="hole" cx="${f(px - 6)}" cy="${f(y)}" r="5"/>`);
+  }
+  for (let k = 0; k < 9; k++) {
+    const x = px + a + 12 + ((w - a - 24) * k) / 8;
+    rollers.push(
+      `<circle class="hole" cx="${f(x)}" cy="${f(bottom + 6)}" r="5"/>`,
+    );
+  }
+  const parts = [
+    `<path class="body" d="M${f(px + a)} ${f(bottom)}H${px + w}V${py}H${px}V${f(bottom - a)}A${f(a)} ${f(a)} 0 0 1 ${f(px + a)} ${f(bottom)}Z"/>`,
+    ...rollers,
+    line(px - 12, py + 4, px - 12, bottom - a - 4, "wall"),
+    line(px + a + 4, bottom + 12, px + w - 4, bottom + 12, "wall"),
+  ];
+  for (let j = 0; j <= 3; j++) {
+    const y = py + 6 + ((hgt - 12) * j) / 3;
+    parts.push(arrow(px + w + 2, y, px + w + 28, y));
+  }
+  parts.push(
+    sym(px + w + 36, py + hgt / 2 + 5, "σ", "start"),
+    `<circle class="pt" cx="${px}" cy="${f(bottom - a)}" r="3.5"/>`,
+    label(px + 10, bottom - a - 6, "A", { anchor: "start" }),
+    dim(px - 26, py, px - 26, bottom),
+    sym(px - 32, py + hgt / 2 + 5, "b", "end"),
+    dim(px, bottom + 30, px + w, bottom + 30),
+    sym(px + w / 2, bottom + 24, "L"),
+    triad(px + 4, py - 16),
+  );
+  return svg(
+    330,
+    200,
+    "Quarter of a long strip with a central hole under tension σ, with symmetry supports on the cut edges; point A, where the hole meets the vertical cut, carries the peak stress",
+    parts.join("\n    "),
+    { cls: "fig half", name: "quarter-plate-diagram" },
+  );
+}
+
 // ── Cook's membrane ──────────────────────────────────────────────────────────
 
-export function cookFigure({ n }) {
+/**
+ * The panel, its clamp and shear load, the point M where the deflection is
+ * read (the middle of the loaded edge) and the corner C.
+ */
+export function cookFigure() {
   const k = 3.4,
     ox = 150,
     oy = 236;
@@ -478,23 +568,9 @@ export function cookFigure({ n }) {
   const A = [0, 0],
     B = [48, 44],
     C = [48, 60],
-    D = [0, 44];
-  const at = (s, t) =>
-    P([
-      (1 - s) * (1 - t) * A[0] +
-        s * (1 - t) * B[0] +
-        s * t * C[0] +
-        (1 - s) * t * D[0],
-      (1 - s) * (1 - t) * A[1] +
-        s * (1 - t) * B[1] +
-        s * t * C[1] +
-        (1 - s) * t * D[1],
-    ]);
+    D = [0, 44],
+    M = [48, 52];
   const parts = [poly([A, B, C, D].map(P), "body")];
-  for (let i = 1; i < n; i++) {
-    parts.push(line(...at(i / n, 0), ...at(i / n, 1), "mesh"));
-    parts.push(line(...at(0, i / n), ...at(1, i / n), "mesh"));
-  }
   const [lx, ly0] = P(A),
     [, ly1] = P(D);
   parts.push(clamp(lx, ly1, ly0));
@@ -506,8 +582,12 @@ export function cookFigure({ n }) {
   }
   parts.push(
     sym(rx + 26, (ry0 + ry1) / 2 + 5, "F", "start"),
-    `<circle class="pt" cx="${f(P(C)[0])}" cy="${f(P(C)[1])}" r="3.5"/>`,
-    label(P(C)[0] + 10, P(C)[1] - 8, "C (48, 60)", { anchor: "start" }),
+    `<circle class="pt" cx="${f(P(M)[0])}" cy="${f(P(M)[1])}" r="3.5"/>`,
+    label(P(M)[0] - 8, P(M)[1] + 4, "M (48, 52)", { anchor: "end" }),
+    label(P(C)[0] + 10, P(C)[1] - 8, "C (48, 60)", {
+      anchor: "start",
+      cls: "coord",
+    }),
     label(P(A)[0] - 20, P(A)[1] + 4, "(0, 0)", { anchor: "end", cls: "coord" }),
     label(P(D)[0] - 20, P(D)[1] + 4, "(0, 44)", {
       anchor: "end",
@@ -522,7 +602,7 @@ export function cookFigure({ n }) {
   return svg(
     640,
     260,
-    "Cook's membrane: a tapered panel clamped on its left edge with a uniform shear load F on its right edge; C is the top-right corner where the deflection is measured",
+    "Cook's membrane: a tapered panel clamped on its left edge with a uniform shear load F on its right edge; M, the middle of the loaded edge, is where the deflection is measured, C the top-right corner",
     parts.join("\n    "),
   );
 }

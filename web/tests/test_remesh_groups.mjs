@@ -220,6 +220,56 @@ check(
     noSurface.loadGroups.length === 0,
 );
 
+// A shell rim: an Edge entry picked on the rim a shell collapsed CAD face 4 to
+// follows that face's rim on the new mesh. An Edge entry is resolved from the
+// rim only — CAD face 2 is on the new mesh's surface but has no rim, so the
+// entry naming it is dropped and named.
+const rimGroups = {
+  bcGroups: [
+    {
+      id: 1,
+      name: "Rim",
+      dofs: [0],
+      value: 0,
+      faces: [face(1, "Edge 1", 4, [0, 1], "edge")],
+    },
+  ],
+  loadGroups: [
+    {
+      id: 1,
+      name: "Pull",
+      dof: 0,
+      totalForce: 1,
+      components: [1, 0, 0],
+      kind: "force",
+      faces: [face(2, "Edge 1", 2, [2, 3], "edge")],
+    },
+  ],
+  tieGroups: [],
+  couplingGroups: [],
+};
+const rim = carryGroupsToMesh(
+  rimGroups,
+  surfaceTriangles,
+  surfaceFaceIds,
+  nodeIds,
+  new Map([[4, [10, 11]]]),
+);
+check(
+  "an Edge entry on a collapsed CAD face follows the face's rim",
+  rim.bcGroups.length === 1 &&
+    same(rim.bcGroups[0].faces[0], face(1, "Edge 1", 4, [10, 11], "edge")),
+  JSON.stringify(rim.bcGroups),
+);
+check(
+  "an Edge entry is resolved from the rim, never from a surface face",
+  rim.loadGroups.length === 0 &&
+    rim.dropped.includes(
+      "Pull Edge 1 (CAD face 2 is not on the new mesh's shell rim)",
+    ),
+  JSON.stringify(rim.dropped),
+);
+
 if (failed > 0) {
   console.error(`\n${failed} check(s) failed`);
   process.exit(1);

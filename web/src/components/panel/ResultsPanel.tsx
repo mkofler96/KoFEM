@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import { useModelStore, RESULT_TYPES } from "../../store/modelStore";
 import type {
   DensityResult,
@@ -15,7 +15,11 @@ import {
   resultFieldSymbol,
   resultUnit,
 } from "../../lib/resultField";
-import { evaluateHandCheck, type HandCheck } from "../../lib/handCheck";
+import {
+  evaluateHandCheck,
+  formatHandCheckValue,
+  type HandCheck,
+} from "../../lib/handCheck";
 import type { ConvergencePoint } from "../../lib/topOptProgress";
 import {
   buildDensityStl,
@@ -96,7 +100,13 @@ function TopOptSummary({
             </div>
             <div className={styles.statRow}>
               <span className={styles.statKey}>Final compliance</span>
-              <span className={styles.statVal}>
+              {/* data-value: the unrounded number, which the examples' GUI
+                  test compares with the published one (KOF-322). */}
+              <span
+                className={styles.statVal}
+                data-testid="topopt-final-compliance"
+                data-value={last.compliance}
+              >
                 {last.compliance.toExponential(3)}
               </span>
             </div>
@@ -247,31 +257,67 @@ function HandCheckNote({
   result: SolverResult;
 }) {
   const nodes = useModelStore((s) => s.nodes);
+  const elements = useModelStore((s) => s.elements);
+  const surfaceTriangles = useModelStore((s) => s.surfaceTriangles);
+  const surfaceFaceIds = useModelStore((s) => s.surfaceFaceIds);
   const loadGroups = useModelStore((s) => s.loadGroups);
   const bcGroups = useModelStore((s) => s.bcGroups);
   const materials = useModelStore((s) => s.materials);
   const properties = useModelStore((s) => s.properties);
-  const outcome = evaluateHandCheck(check, {
+  // A probe that cannot be read on this mesh is shown as such, with the reason,
+  // rather than taking the whole panel down.
+  const outcome = useMemo(() => {
+    try {
+      return evaluateHandCheck(check, {
+        nodes,
+        elements,
+        surfaceTriangles,
+        surfaceFaceIds,
+        loadGroups,
+        bcGroups,
+        materials,
+        properties,
+        result,
+      });
+    } catch (err) {
+      return {
+        kind: "unreadable" as const,
+        reason: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }, [
+    check,
     nodes,
+    elements,
+    surfaceTriangles,
+    surfaceFaceIds,
     loadGroups,
     bcGroups,
     materials,
     properties,
     result,
-  });
-  if (outcome === null) return null;
-  // With a typographic minus, like the formula's.
-  const mm = (value: number) => `${value.toFixed(3).replace("-", "−")} mm`;
+  ]);
+  const shown = (value: number) => formatHandCheckValue(value, check.unit);
   return (
     <p className={styles.handCheck} data-testid="hand-check">
       {outcome.kind === "changed" ? (
         "The loads, supports or material changed, so the hand calculation no longer applies."
+      ) : outcome.kind === "unreadable" ? (
+        `The hand calculation cannot be compared on this mesh. ${outcome.reason}`
       ) : (
         <>
           {check.quantity}{" "}
-          <span data-testid="hand-check-fe">{mm(outcome.fe)}</span>; hand
-          calculation {check.formula} ={" "}
-          <span data-testid="hand-check-reference">{mm(check.reference)}</span>.
+          <span data-testid="hand-check-fe" data-value={String(outcome.fe)}>
+            {shown(outcome.fe)}
+          </span>
+          ; hand calculation {check.formula} ={" "}
+          <span
+            data-testid="hand-check-reference"
+            data-value={String(check.reference)}
+          >
+            {shown(check.reference)}
+          </span>
+          .
         </>
       )}
     </p>

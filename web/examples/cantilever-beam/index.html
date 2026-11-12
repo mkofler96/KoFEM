@@ -12,19 +12,19 @@
     <link rel="icon" type="image/svg+xml" href="/kofem_logo.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
-    <title>Cantilever beam from a STEP file | KoFEM examples</title>
-    <meta name="description" content="A cantilever built the way you build a model in KoFEM: a STEP block, a Netgen mesh of quadratic tetrahedra, a support and a tip load on CAD faces. Compared with δ = PL³/(3EI)." />
+    <title>Cantilever beam under tip load | KoFEM examples</title>
+    <meta name="description" content="A cantilever with a tip load, δ = PL³/(3EI): Euler–Bernoulli derivation, why linear tetrahedra lock in bending, mesh convergence of linear and quadratic elements, and KoFEM's result." />
     <link rel="canonical" href="https://kofem.org/examples/cantilever-beam/" />
     <meta name="robots" content="index, follow" />
 
     <meta property="og:type" content="article" />
-    <meta property="og:title" content="Cantilever beam from a STEP file | KoFEM examples" />
-    <meta property="og:description" content="A cantilever built the way you build a model in KoFEM: a STEP block, a Netgen mesh of quadratic tetrahedra, a support and a tip load on CAD faces. Compared with δ = PL³/(3EI)." />
+    <meta property="og:title" content="Cantilever beam under tip load | KoFEM examples" />
+    <meta property="og:description" content="A cantilever with a tip load, δ = PL³/(3EI): Euler–Bernoulli derivation, why linear tetrahedra lock in bending, mesh convergence of linear and quadratic elements, and KoFEM's result." />
     <meta property="og:url" content="https://kofem.org/examples/cantilever-beam/" />
     <meta property="og:image" content="https://kofem.org/examples/cantilever-beam.png" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Cantilever beam from a STEP file | KoFEM examples" />
-    <meta name="twitter:description" content="A cantilever built the way you build a model in KoFEM: a STEP block, a Netgen mesh of quadratic tetrahedra, a support and a tip load on CAD faces. Compared with δ = PL³/(3EI)." />
+    <meta name="twitter:title" content="Cantilever beam under tip load | KoFEM examples" />
+    <meta name="twitter:description" content="A cantilever with a tip load, δ = PL³/(3EI): Euler–Bernoulli derivation, why linear tetrahedra lock in bending, mesh convergence of linear and quadratic elements, and KoFEM's result." />
     <meta name="twitter:image" content="https://kofem.org/examples/cantilever-beam.png" />
 
     <!-- Self-hosted fonts (SIL OFL) — see public/fonts/README.md -->
@@ -38,14 +38,15 @@
         "@graph": [
           {
             "@type": "TechArticle",
-            "headline": "Cantilever beam from a STEP file",
-            "description": "A cantilever built the way you build a model in KoFEM: a STEP block, a Netgen mesh of quadratic tetrahedra, a support and a tip load on CAD faces. Compared with δ = PL³/(3EI).",
+            "headline": "Cantilever beam under tip load",
+            "description": "A cantilever with a tip load, δ = PL³/(3EI): Euler–Bernoulli derivation, why linear tetrahedra lock in bending, mesh convergence of linear and quadratic elements, and KoFEM's result.",
             "url": "https://kofem.org/examples/cantilever-beam/",
             "image": [
               "https://kofem.org/examples/cantilever-beam.png",
-              "https://kofem.org/examples/cantilever-beam/cantilever-beam-diagram.png"
+              "https://kofem.org/examples/cantilever-beam/cantilever-beam-diagram.png",
+              "https://kofem.org/examples/cantilever-beam/cantilever-beam-mesh-convergence.png"
             ],
-            "dateModified": "2026-11-01",
+            "dateModified": "2026-11-12",
             "isPartOf": {
               "@type": "CollectionPage",
               "url": "https://kofem.org/examples/"
@@ -74,7 +75,7 @@
               {
                 "@type": "ListItem",
                 "position": 3,
-                "name": "Cantilever beam from a STEP file",
+                "name": "Cantilever beam under tip load",
                 "item": "https://kofem.org/examples/cantilever-beam/"
               }
             ]
@@ -809,13 +810,11 @@
           <ul>
             <li><a href="/examples/axial-bar/">Axial bar in tension</a></li>
             <li><a href="/examples/surface-pressure/">Bar under end pressure</a></li>
-            <li><a href="/examples/cantilever/">Cantilever beam, linear hexahedra</a></li>
-            <li><a href="/examples/cantilever-p2/">Cantilever beam, quadratic hexahedra</a></li>
-            <li><a href="/examples/cantilever-beam/" aria-current="page">Cantilever beam from a STEP file</a></li>
+            <li><a href="/examples/cantilever-beam/" aria-current="page">Cantilever beam under tip load</a></li>
             <li><a href="/examples/beam-torsion/">Square beam under torsion</a></li>
             <li><a href="/examples/shaft-torsion/">Hollow shaft under torsion</a></li>
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
-            <li><a href="/examples/plate-with-hole-shell/">Plate with a hole, shell elements</a></li>
+            <li><a href="/examples/plate-with-hole-shell/">Plate with a hole (shells)</a></li>
             <li><a href="/examples/cooks-membrane/">Cook's membrane</a></li>
           </ul>
         </details>
@@ -838,13 +837,11 @@
           <ul>
             <li><a href="/examples/axial-bar/">Axial bar in tension</a></li>
             <li><a href="/examples/surface-pressure/">Bar under end pressure</a></li>
-            <li><a href="/examples/cantilever/">Cantilever beam, linear hexahedra</a></li>
-            <li><a href="/examples/cantilever-p2/">Cantilever beam, quadratic hexahedra</a></li>
-            <li><a href="/examples/cantilever-beam/" aria-current="page">Cantilever beam from a STEP file</a></li>
+            <li><a href="/examples/cantilever-beam/" aria-current="page">Cantilever beam under tip load</a></li>
             <li><a href="/examples/beam-torsion/">Square beam under torsion</a></li>
             <li><a href="/examples/shaft-torsion/">Hollow shaft under torsion</a></li>
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
-            <li><a href="/examples/plate-with-hole-shell/">Plate with a hole, shell elements</a></li>
+            <li><a href="/examples/plate-with-hole-shell/">Plate with a hole (shells)</a></li>
             <li><a href="/examples/cooks-membrane/">Cook's membrane</a></li>
           </ul>
         </details>
@@ -857,26 +854,25 @@
         <button type="button" class="theme-toggle" hidden>Dark theme</button>
         </div>
       </details>
-      <p class="crumbs"><a href="/examples/#validation">Validation</a> / 5 of 10</p>
-      <h1>Cantilever beam from a STEP file</h1>
+      <p class="crumbs"><a href="/examples/#validation">Validation</a> / 3 of 8</p>
+      <h1>Cantilever beam under tip load</h1>
       <div class="lede">
-        <p>The <a href="/examples/cantilever/">cantilever</a> again, but built
-        the way you build a model in the app: import a STEP block, mesh it,
-        fix one end face and load the other. The mesh is an unstructured
-        Netgen mesh of tetrahedra rather than a hand-made grid. The model
-        opens ready to solve, and after the solve the Results panel compares
-        the tip deflection with the hand formula.</p>
+        <p>A beam clamped at one end and loaded at the other is the standard
+        bending benchmark. Bending is where simple solid elements struggle,
+        so this case tests the element as much as the solver. Press Run, and
+        the Results panel compares the tip deflection with the hand
+        formula.</p>
       </div>
       
       <figure class="result">
-        <img src="/examples/cantilever-beam.png" width="1200" height="523" alt="Cantilever beam from a STEP file: displacement magnitude |u| on the deformed shape, displacements drawn 50 times enlarged" />
+        <img src="/examples/cantilever-beam.png" width="1200" height="523" alt="Cantilever beam under tip load: displacement magnitude |u| on the deformed shape, displacements drawn 50 times enlarged" />
         <div class="colorbar"><span>0.00&nbsp;mm</span><span class="bar" aria-hidden="true"></span><span>1.91&nbsp;mm</span></div>
-        <figcaption>Displacement magnitude |U|, deformed shape, displacements drawn 50 times enlarged. Drawn from the analysis file that Open in KoFEM loads.</figcaption>
+        <figcaption>Displacement magnitude |U|, deformed shape, displacements drawn 50 times enlarged. The result of running the model that Open in KoFEM loads.</figcaption>
       </figure>
       
       <div class="table-wrap">
         <table class="key-result" data-entry="cantilever-beam">
-          <caption>Tip deflection δ; reference δ = P·L³ / (3·E·I)</caption>
+          <caption>Tip deflection δ; reference −P·L³ / (3·E·I)</caption>
           <thead>
             <tr>
               <th scope="col" class="num">Reference</th>
@@ -888,17 +884,17 @@
             <tr>
               <td class="num">−1.9048&nbsp;mm</td>
               <td class="num"><strong data-testid="fe-value">−1.9040&nbsp;mm</strong></td>
-              <td class="num">−0.04&nbsp;%</td>
+              <td class="num">−0.04&nbsp;%<br /><span class="band pass">within ±1&nbsp;%</span></td>
             </tr>
           </tbody>
         </table>
       </div>
-      <p class="actions"><a class="button" href="/app/?example=cantilever-beam" data-testid="open-in-app">Open in KoFEM</a><span class="meta">Opens the model in the app, ready to solve.</span></p>
+      <p class="actions"><a class="button" href="/app/?example=cantilever-beam" data-testid="open-in-app">Open in KoFEM</a><span class="meta">Opens the model in the app, ready to run.</span></p>
       
       <h2 id="problem">The problem</h2>
       <figure class="diagram">
         <picture class="figure-image theme-light fig"><source srcset="/examples/cantilever-beam/cantilever-beam-diagram.svg" type="image/svg+xml" /><img src="/examples/cantilever-beam/cantilever-beam-diagram.png" width="640" height="260" alt="Cantilever beam clamped at the left end with a downward tip load; the deflected shape is dashed" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark fig"><source srcset="/examples/cantilever-beam/cantilever-beam-diagram-dark.svg" type="image/svg+xml" /><img src="/examples/cantilever-beam/cantilever-beam-diagram.png" width="640" height="260" alt="Cantilever beam clamped at the left end with a downward tip load; the deflected shape is dashed" loading="lazy" decoding="async" /></picture>
-        <figcaption>Block of length L along x, b × h section, I = b·h³/12. Sketch, not to scale.</figcaption>
+        <figcaption>Beam of span L along x, b × h section, I = b·h³/12. Sketch, not to scale.</figcaption>
       </figure>
       
       <div class="table-wrap">
@@ -913,8 +909,8 @@
       
       <div class="table-wrap">
         <table class="spec">
-          <tr><th scope="row">Supports</th><td>x = 0 face fixed (Ux, Uy, Uz), picked as one CAD face.</td></tr>
-          <tr><th scope="row">Load</th><td>P in −y as a force on the x = L face, picked as one CAD face.</td></tr>
+          <tr><th scope="row">Supports</th><td>x = 0 face fixed (Ux, Uy, Uz).</td></tr>
+          <tr><th scope="row">Load</th><td>P in −y as a force on the x = L face.</td></tr>
           <tr><th scope="row">Measured</th><td>Mean y-displacement of the x = L face.</td></tr>
         </table>
       </div>
@@ -952,41 +948,126 @@
           <tr><th scope="row">Mesh</th><td>Netgen, 25 mm maximum element size: 2,991 quadratic 10-node tetrahedra (P2)</td></tr>
           <tr><th scope="row">Unknowns</th><td>5,532 nodes, 16,596 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>KoFEM engine (MFEM), the WebAssembly build the app runs: engine-5ceb743373dd</td></tr>
+          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build fem-b229cd7ba59c); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-3397ae8ea1eb</td></tr>
         </table>
       </div>
-        <p>Netgen meshes the block with a 25&nbsp;mm
-        maximum element size, about 4
-        elements across the section. The
-        elements are quadratic: linear tetrahedra lock in bending even more
-        than the <a href="/examples/cantilever/">linear hexahedra</a> do. The
-        support and the load are each one CAD face, picked with one click, so
-        they stay on the model when you change the element size and mesh it
-        again. The deflection is the mean <math><msub><mi>u</mi><mrow><mi>y</mi></mrow></msub></math> of the loaded face,
-        which is what the app's hand check reads.</p>
+        <p>The beam is the STEP file a user imports, meshed by Netgen with a
+        25&nbsp;mm maximum element size, about
+        4 elements through the
+        depth. The elements are quadratic tetrahedra with 10 nodes, four at
+        the corners and six at the edge midpoints, so an element can curve
+        and its strain can vary inside it. The support and the load are each
+        one CAD face, picked with one click, so they stay on the model when
+        you change the element size and mesh it again. The tip load is a
+        force on the end face, which the app integrates as a uniform
+        traction. The deflection is the mean <math><msub><mi>u</mi><mrow><mi>y</mi></mrow></msub></math> of the loaded
+        face, which is what the app's hand check reads.</p>
 
       <h2 id="results">Results</h2>
       <div class="table-wrap">
         <table class="spec">
           <tr><th scope="row">Quantity</th><td>tip deflection δ</td></tr>
-          <tr><th scope="row">Reference</th><td>δ = P·L³ / (3·E·I) = −1.9048&nbsp;mm <span class="meta">(Euler–Bernoulli beam theory)</span></td></tr>
+          <tr><th scope="row">Reference</th><td>−P·L³ / (3·E·I) = −1.9048&nbsp;mm <span class="meta">(Euler–Bernoulli beam theory)</span></td></tr>
           <tr><th scope="row">KoFEM</th><td>−1.9040&nbsp;mm</td></tr>
-          <tr><th scope="row">Difference</th><td>−0.04&nbsp;%</td></tr>
+          <tr><th scope="row">Difference</th><td>−0.04&nbsp;% <span class="band pass">within ±1&nbsp;%</span></td></tr>
         </table>
       </div>
+      <section class="study" id="convergence" data-study="cantilever-beam">
+        <h3>Mesh convergence: Cantilever beam, P1 vs. P2</h3>
+        <figure class="chart">
+          <div class="legend"><span class="key"><span class="swatch s1"></span>P1 (linear)</span><span class="key"><span class="swatch s2"></span>P2 (quadratic)</span><span class="key"><span class="dot under"></span>below the reference</span><span class="key"><span class="dot over"></span>above</span></div>
+          <picture class="figure-image theme-light conv"><source srcset="/examples/cantilever-beam/cantilever-beam-mesh-convergence.svg" type="image/svg+xml" /><img src="/examples/cantilever-beam/cantilever-beam-mesh-convergence.png" width="440" height="250" alt="Cantilever beam, P1 vs. P2: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark conv"><source srcset="/examples/cantilever-beam/cantilever-beam-mesh-convergence-dark.svg" type="image/svg+xml" /><img src="/examples/cantilever-beam/cantilever-beam-mesh-convergence.png" width="440" height="250" alt="Cantilever beam, P1 vs. P2: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture>
+          <figcaption>Difference from the reference on refined meshes, logarithmic axes. The ringed point is this example's mesh.</figcaption>
+        </figure>
+        <p>Linear tetrahedra lock in bending and approach from far below; quadratic ones are within half a percent on every mesh and level off just above the reference.</p>
+        <details>
+          <summary>Data</summary>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Order</th>
+                  <th scope="col">Mesh</th>
+                  <th scope="col" class="num">DOFs</th>
+                  <th scope="col" class="num">KoFEM</th>
+                  <th scope="col" class="num">Difference</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>P1 (linear)</td>
+                  <td>50 mm</td>
+                  <td class="num">939</td>
+                  <td class="num">−1.3817&nbsp;mm</td>
+                  <td class="num">−27.46&nbsp;%</td>
+                </tr>
+                <tr>
+                  <td>P1 (linear)</td>
+                  <td>25 mm</td>
+                  <td class="num">2,733</td>
+                  <td class="num">−1.6219&nbsp;mm</td>
+                  <td class="num">−14.85&nbsp;%</td>
+                </tr>
+                <tr>
+                  <td>P1 (linear)</td>
+                  <td>12.5 mm</td>
+                  <td class="num">19,269</td>
+                  <td class="num">−1.8313&nbsp;mm</td>
+                  <td class="num">−3.86&nbsp;%</td>
+                </tr>
+                <tr>
+                  <td>P1 (linear)</td>
+                  <td>8 mm</td>
+                  <td class="num">75,624</td>
+                  <td class="num">−1.8793&nbsp;mm</td>
+                  <td class="num">−1.34&nbsp;%</td>
+                </tr>
+                <tr>
+                  <td>P2 (quadratic)</td>
+                  <td>50 mm</td>
+                  <td class="num">5,904</td>
+                  <td class="num">−1.8985&nbsp;mm</td>
+                  <td class="num">−0.33&nbsp;%</td>
+                </tr>
+                <tr>
+                  <td>P2 (quadratic)</td>
+                  <td>25 mm (this example)</td>
+                  <td class="num">16,596</td>
+                  <td class="num">−1.9040&nbsp;mm</td>
+                  <td class="num">−0.04&nbsp;%</td>
+                </tr>
+                <tr>
+                  <td>P2 (quadratic)</td>
+                  <td>12.5 mm</td>
+                  <td class="num">133,131</td>
+                  <td class="num">−1.9058&nbsp;mm</td>
+                  <td class="num">+0.05&nbsp;%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </section>
 
       <h2 id="discussion">Discussion</h2>
-        <p>KoFEM's tip deflection differs from <math><mi>P</mi><msup><mi>L</mi><mn>3</mn></msup><mo lspace="0" rspace="0">/</mo><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>3</mn><mi>E</mi><mi>I</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></math> by
-        −0.04&nbsp;%. The beam-theory value is not the whole story:
-        the shear deformation it leaves out adds
-        +0.78&nbsp;%, so a converged solid model would
-        deflect slightly more. Against the Timoshenko value the result
-        differs by −0.81&nbsp;%, which is what
-        the mesh still leaves out at this element size.</p>
-        <p>The <a href="/examples/cantilever-p2/">quadratic hexahedra</a> on a
-        coarse grid come out +1.84&nbsp;%. Both show
-        the same thing: in bending, second-order elements are accurate on
-        meshes coarse enough to solve in a second.</p>
+        <p>KoFEM's tip deflection differs from the Euler–Bernoulli value by
+        −0.04&nbsp;%; the quadratic series in the convergence study
+        levels off at +0.05&nbsp;%. The shear deformation that
+        Euler–Bernoulli theory leaves out would add
+        +0.78&nbsp;%, yet the 3-D result stays below
+        that Timoshenko value: its fully clamped end face also stops the
+        section from contracting sideways and from warping, which neither
+        beam theory models.</p>
+        <p>The example uses quadratic elements because linear tetrahedra
+        <em>lock</em> in bending. A linear tetrahedron has straight edges and
+        the same strain everywhere inside it, so a patch of them can only
+        bend by also shearing. That spurious shear stores energy the real
+        beam does not have, and the mesh is too stiff: on this
+        25&nbsp;mm mesh linear tetrahedra give
+        −14.85&nbsp;%, and still
+        −3.86&nbsp;% at 12.5&nbsp;mm.
+        Quadratic elements curve, so they bend without parasitic shear. For
+        bending-dominated parts they give more accuracy per unknown.</p>
 
       <h2 id="reproduce">Reproduce</h2>
       <p>
@@ -995,10 +1076,21 @@
         Uy. The Result summary shows
         <span class="readout" data-testid="app-readout" data-field="Uy" data-stat="Min Uy" data-value="-1.904e+0 mm">Min Uy -1.904e+0 mm</span>.
       </p>
-      <p>From a clone (Node.js 20+, bash, curl), this rebuilds the model and its figure:</p>
+      <p>Or build it yourself, as this page's number was built:</p>
+      <ol class="steps">
+        <li>Import <a href="/examples/cantilever-beam.step" download>cantilever-beam.step</a>.</li>
+        <li>Mesh with a 25 mm maximum element size, quadratic elements.</li>
+        <li>Material Steel: E = 210000 MPa, ν = 0.3.</li>
+        <li>Support “Clamped end”: Ux, Uy, Uz = 0 on the face through (0, 50, 50).</li>
+        <li>Load “Tip load”: force (0, −10000, 0) N on the face through (1000, 50, 50).</li>
+        <li>Run the static study. The Results panel compares tip deflection with −P·L³ / (3·E·I).</li>
+      </ol>
+      <p>From a clone (Bun, bash, curl and Rust), this builds and solves the model with the same engine and prints its line:</p>
       <pre><code>git clone https://github.com/mkofler96/KoFEM.git &amp;&amp; cd KoFEM
 bash scripts/fetch-wasm-engine.sh
-cd web &amp;&amp; bun install &amp;&amp; bun run examples:generate-cantilever</code></pre>
+cd web &amp;&amp; bun install &amp;&amp; bun run validate --case cantilever-beam</code></pre>
+      <pre class="console"><code>Case                                  Quantity                                  FE   Reference     Err%  Tol%  Status
+Cantilever beam under tip load        tip deflection δ                     -1.9040     -1.9048    -0.04     1  PASS</code></pre>
 
       <h2 id="references">References</h2>
       <ol class="refs">
@@ -1006,6 +1098,7 @@ cd web &amp;&amp; bun install &amp;&amp; bun run examples:generate-cantilever</c
         <li>S. P. Timoshenko, “On the correction for shear of the differential equation for transverse vibrations of prismatic bars”, <cite>Philosophical Magazine</cite> 41 (1921) 744–746.</li>
         <li>J. Schöberl, “NETGEN: An advancing front 2D/3D-mesh generator based on abstract rules”, <cite>Computing and Visualization in Science</cite> 1 (1997) 41–52.</li>
         <li>R. D. Cook, D. S. Malkus, M. E. Plesha and R. J. Witt, <cite>Concepts and Applications of Finite Element Analysis</cite>, 4th ed., Wiley, 2002.</li>
+        <li>T. J. R. Hughes, <cite>The Finite Element Method: Linear Static and Dynamic Finite Element Analysis</cite>, Dover, 2000.</li>
       </ol>
       <p class="note" data-testid="disclaimer">
         KoFEM is research software and is not certified for safety-critical
@@ -1014,7 +1107,7 @@ cd web &amp;&amp; bun install &amp;&amp; bun run examples:generate-cantilever</c
       </p>
 
       <nav class="pager" aria-label="Other examples">
-        <a class="prev" href="/examples/cantilever-p2/"><small>Previous</small>Cantilever beam, quadratic hexahedra</a>
+        <a class="prev" href="/examples/surface-pressure/"><small>Previous</small>Bar under end pressure</a>
         <a class="next" href="/examples/beam-torsion/"><small>Next</small>Square beam under torsion</a>
       </nav>
       </main>

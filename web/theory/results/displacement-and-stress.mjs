@@ -162,17 +162,16 @@ export default {
 
     <h2 id="verification">A public stress verification case</h2>
     <p>The <a href="/examples/plate-with-hole/">plate-with-hole verification case</a>
-      compares the largest element-centre von Mises sample in the first ring
-      around the hole, divided by nominal tension, with Kirsch’s infinite-plate
-      concentration factor of 3. At the free edge’s peak in that ideal problem,
-      the remaining tangential stress is uniaxial, so its magnitude equals von Mises.</p>
+      compares the largest nodal von Mises stress on the hole face, divided by
+      nominal tension, with the concentration factor of its strip, 3.14
+      (Kirsch’s infinite plate gives 3). At the free edge’s peak the remaining
+      tangential stress is uniaxial, so its magnitude equals von Mises.</p>
     ${figure("plate-hole-concentration", "Kirsch’s solution for a circular hole in an infinite plate under remote tension. The stress along the line above the hole is three times the remote stress at the hole edge and falls quickly with distance.")}
-    <p>The finite plate, support and element-centre sampling differ from the
-      ideal boundary value. The public case explains sampling and discretization
-      errors; its tolerance applies to that benchmark. Its measured peak is
-      <em>unsmoothed</em>, whereas the app summary uses nodal averaging. Compare
-      like measures before interpreting a difference. Open the case in the
-      app to reproduce it.</p>
+    <p>Averaging centre samples to the nodes reads the boundary peak slightly
+      low. The public case explains this and its discretization error; its
+      tolerance applies to that benchmark. Its measured peak is the app’s
+      nodal average, the value the Results panel’s hand check shows, so you
+      compare like with like when you open the case in the app.</p>
     ${resultViewer("plate-with-hole", {
       caption:
         "Von Mises stress of the plate-with-hole case, averaged at the nodes as the app displays it. The peak sits at the hole edge, on the line across the plate perpendicular to the load.",
@@ -191,8 +190,6 @@ export default {
         ${source("web/src/components/viewport/useMeshTopology.ts", 170, "model span")},
         ${source("web/src/components/panel/ResultsPanel.tsx", 372, "summary and display controls")}
         and ${source("web/src/store/resultsSlice.ts", 12, "static result interface")}.</li>
-      <li>${source("examples/validation/cases/plate-with-hole.mjs", 90, "Benchmark measurement")}
-        selects unsmoothed samples, not the app’s nodal extrema.</li>
       <li>Shells use membrane-plus-bending stress at the worse of their two
         surfaces: ${source("engine/cpp/solve_shell.cpp", 195, "shell result")}
         and ${source("engine/cpp/solve_coupled.cpp", 265, "coupled result")}. Auto-shell

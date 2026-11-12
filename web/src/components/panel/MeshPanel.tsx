@@ -107,9 +107,15 @@ export function MeshPanel() {
       {stepSurface ? (
         <MeshSettings hasMesh={hasMesh} isMeshing={isMeshing} mesh={mesh} />
       ) : hasMesh ? (
-        <p className={styles.hint}>
-          Import the STEP file again to regenerate this mesh.
-        </p>
+        // A mesh with no geometry behind it (no example ships one; a model
+        // opened from elsewhere can) cannot be re-meshed. Say so instead of
+        // silently leaving out the mesh controls.
+        <div className={styles.errorBanner} data-testid="mesh-no-geometry">
+          <span>
+            This mesh has no geometry, so it cannot be re-meshed. Import the
+            STEP file to mesh it again.
+          </span>
+        </div>
       ) : (
         <div className={styles.empty}>
           No mesh — import a STEP file to mesh.

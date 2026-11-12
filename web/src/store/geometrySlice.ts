@@ -8,6 +8,7 @@ import { current } from "immer";
 import type { ModelState, SliceCreator } from "./modelStore";
 import { addSelection } from "./viewSlice";
 import { carryGroupsToMesh, remeshNotice } from "../lib/remeshGroups";
+import { modelShellRim } from "../lib/shellRim";
 import {
   bodyGroupOf,
   bodyOf,
@@ -714,6 +715,8 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
             ? cadBodies
             : freshBodies(s, bodyCount);
       dropAnalysis(s);
+      // An edit renumbers the CAD faces an example's hand check is written on.
+      s.handCheck = null;
       suggestSizes(s, tessellation);
     }),
   undoGeometryEdit: () =>
@@ -792,6 +795,15 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
         surfaceTriangles ?? null,
         surfaceFaceIds ?? null,
         new Set(nodes.map((n) => n.id)),
+        modelShellRim(
+          {
+            nodes,
+            elements,
+            surfaceTriangles: surfaceTriangles ?? null,
+            surfaceFaceIds: surfaceFaceIds ?? null,
+          },
+          before.stepSurface,
+        ).nodesByFace,
       );
       s.bcGroups = carried.bcGroups;
       s.loadGroups = carried.loadGroups;

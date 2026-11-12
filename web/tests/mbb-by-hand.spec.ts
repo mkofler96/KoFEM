@@ -3,7 +3,9 @@
 
 // The MBB beam gallery example, built by hand: every step a user takes, through
 // the UI, with real clicks on the faces — the recipe in
-// examples/gallery/generate-mbb-topopt.mjs. It proves two things:
+// examples/gallery/recipes/mbb-beam-topopt.mjs. examples-by-hand.spec.ts walks
+// that recipe to the optimization and gets the published final compliance;
+// this test covers what that one does not. It proves two things:
 //
 //   1. the example is something a user can make: from a plain block, the split
 //      tool carves the pads, the pick panels put the supports and the load on
@@ -21,19 +23,11 @@ import {
   lookFrom,
   splitFaceAt,
 } from "./fixtures/split";
-import { prismStep } from "../../examples/gallery/step-prism.mjs";
+import mbbRecipe from "../../examples/gallery/recipes/mbb-beam-topopt.mjs";
 import { openTree, addBoundary } from "./fixtures/tree";
 
-const BLOCK = prismStep(
-  [
-    [0, 0],
-    [300, 0],
-    [300, 50],
-    [0, 50],
-  ],
-  10,
-  "block",
-);
+// The plain 300 × 50 × 10 mm block the example's page links.
+const BLOCK = mbbRecipe.step();
 const FROM_BELOW: [number, number, number] = [0.3, -1, 0.6];
 const FROM_ABOVE: [number, number, number] = [0.3, 1, 0.6];
 

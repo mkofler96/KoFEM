@@ -49,7 +49,7 @@ function readStore(page: import("@playwright/test").Page) {
   });
 }
 
-// Load a pre-solved example so the store carries a full analysis to discard.
+// Load an example so the store carries a full analysis to discard.
 async function loadExample(page: import("@playwright/test").Page) {
   await page.goto("/app/?example=axial-bar");
   await expect(page.locator("nav")).toBeVisible();
@@ -101,10 +101,14 @@ test("dismissing the confirm keeps the current analysis", async ({ page }) => {
   });
   await page.getByRole("button", { name: "New analysis" }).click();
 
+  // The example opens ready to run (KOF-322): its mesh, support, load and
+  // study must all still be there.
   const snapshot = await readStore(page);
   expect(snapshot.nodes).toBeGreaterThan(0);
   expect(snapshot.modelName).toBe("Axial bar in tension");
-  expect(snapshot.hasResult).toBe(true);
+  expect(snapshot.mode).toBe("solve");
+  expect(snapshot.bcGroups).toBe(1);
+  expect(snapshot.loadGroups).toBe(1);
 });
 
 test("with an empty workspace no confirmation is asked", async ({ page }) => {
