@@ -43,7 +43,8 @@
             "url": "https://kofem.org/examples/beam-torsion/",
             "image": [
               "https://kofem.org/examples/beam-torsion.png",
-              "https://kofem.org/examples/beam-torsion/beam-torsion-diagram.png"
+              "https://kofem.org/examples/beam-torsion/beam-torsion-diagram.png",
+              "https://kofem.org/examples/beam-torsion/beam-torsion-mesh-convergence.png"
             ],
             "dateModified": "2026-11-12",
             "isPartOf": {
@@ -809,9 +810,9 @@
           <ul>
             <li><a href="/examples/axial-bar/">Axial bar in tension</a></li>
             <li><a href="/examples/surface-pressure/">Bar under end pressure</a></li>
-            <li><a href="/examples/cantilever/">Cantilever beam, linear hexahedra</a></li>
-            <li><a href="/examples/cantilever-p2/">Cantilever beam, quadratic hexahedra</a></li>
-            <li><a href="/examples/cantilever-beam/">Cantilever beam from a STEP file</a></li>
+            <li><a href="/examples/cantilever/">Cantilever beam, linear tetrahedra</a></li>
+            <li><a href="/examples/cantilever-p2/">Cantilever beam, quadratic tetrahedra</a></li>
+            <li><a href="/examples/cantilever-beam/">Cantilever beam under tip load</a></li>
             <li><a href="/examples/beam-torsion/" aria-current="page">Square beam under torsion</a></li>
             <li><a href="/examples/shaft-torsion/">Hollow shaft under torsion</a></li>
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
@@ -838,9 +839,9 @@
           <ul>
             <li><a href="/examples/axial-bar/">Axial bar in tension</a></li>
             <li><a href="/examples/surface-pressure/">Bar under end pressure</a></li>
-            <li><a href="/examples/cantilever/">Cantilever beam, linear hexahedra</a></li>
-            <li><a href="/examples/cantilever-p2/">Cantilever beam, quadratic hexahedra</a></li>
-            <li><a href="/examples/cantilever-beam/">Cantilever beam from a STEP file</a></li>
+            <li><a href="/examples/cantilever/">Cantilever beam, linear tetrahedra</a></li>
+            <li><a href="/examples/cantilever-p2/">Cantilever beam, quadratic tetrahedra</a></li>
+            <li><a href="/examples/cantilever-beam/">Cantilever beam under tip load</a></li>
             <li><a href="/examples/beam-torsion/" aria-current="page">Square beam under torsion</a></li>
             <li><a href="/examples/shaft-torsion/">Hollow shaft under torsion</a></li>
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
@@ -868,8 +869,8 @@
       </div>
       
       <figure class="result">
-        <img src="/examples/beam-torsion.png" width="1200" height="458" alt="Square beam under torsion: displacement magnitude |u| on the deformed shape, displacements drawn 2,000 times enlarged" />
-        <div class="colorbar"><span>0.00&nbsp;mm</span><span class="bar" aria-hidden="true"></span><span>0.0614&nbsp;mm</span></div>
+        <img src="/examples/beam-torsion.png" width="1200" height="461" alt="Square beam under torsion: displacement magnitude |u| on the deformed shape, displacements drawn 2,000 times enlarged" />
+        <div class="colorbar"><span>0.00&nbsp;mm</span><span class="bar" aria-hidden="true"></span><span>0.0647&nbsp;mm</span></div>
         <figcaption>Displacement magnitude |U|, deformed shape, displacements drawn 2,000 times enlarged. Drawn from the analysis file that Open in KoFEM loads.</figcaption>
       </figure>
       
@@ -886,8 +887,8 @@
           <tbody>
             <tr>
               <td class="num">8.7912&thinsp;×&thinsp;10<sup>−4</sup>&nbsp;rad</td>
-              <td class="num"><strong data-testid="fe-value">8.5783&thinsp;×&thinsp;10<sup>−4</sup>&nbsp;rad</strong></td>
-              <td class="num">−2.42&nbsp;%<br /><span class="band pass">within ±5&nbsp;%</span></td>
+              <td class="num"><strong data-testid="fe-value">8.8561&thinsp;×&thinsp;10<sup>−4</sup>&nbsp;rad</strong></td>
+              <td class="num">+0.74&nbsp;%<br /><span class="band pass">within ±5&nbsp;%</span></td>
             </tr>
           </tbody>
         </table>
@@ -897,7 +898,7 @@
       <h2 id="problem">The problem</h2>
       <figure class="diagram">
         <picture class="figure-image theme-light fig"><source srcset="/examples/beam-torsion/beam-torsion-diagram.svg" type="image/svg+xml" /><img src="/examples/beam-torsion/beam-torsion-diagram.png" width="640" height="230" alt="Square bar clamped at the left end and twisted by a torque at the right end; inset shows the sign of the out-of-plane warping over the section" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark fig"><source srcset="/examples/beam-torsion/beam-torsion-diagram-dark.svg" type="image/svg+xml" /><img src="/examples/beam-torsion/beam-torsion-diagram.png" width="640" height="230" alt="Square bar clamped at the left end and twisted by a torque at the right end; inset shows the sign of the out-of-plane warping over the section" loading="lazy" decoding="async" /></picture>
-        <figcaption>Beam of length L along x, square b × b section; K = β·b⁴, β = 1/3 − 0.21·(1 − 1/12). Sketch, not to scale; thin lines show the element mesh.</figcaption>
+        <figcaption>Beam of length L along x, square b × b section; K = β·b⁴, β = 1/3 − 0.21·(1 − 1/12). Sketch, not to scale.</figcaption>
       </figure>
       
       <div class="table-wrap">
@@ -914,7 +915,7 @@
         <table class="spec">
           <tr><th scope="row">Supports</th><td>x = 0 face fixed (Ux, Uy, Uz).</td></tr>
           <tr><th scope="row">Load</th><td>Torque T about x as a moment on the x = L face.</td></tr>
-          <tr><th scope="row">Measured</th><td>Mean rotation of the x = L face about the axis.</td></tr>
+          <tr><th scope="row">Measured</th><td>Mean rotation of the x = L face about its centre.</td></tr>
         </table>
       </div>
 
@@ -953,19 +954,23 @@
       
       <div class="table-wrap">
         <table class="spec">
-          <tr><th scope="row">Mesh</th><td>20 × 6 × 6 grid: 720 linear 8-node hexahedra (P1)</td></tr>
-          <tr><th scope="row">Unknowns</th><td>1,029 nodes, 3,087 degrees of freedom</td></tr>
+          <tr><th scope="row">Mesh</th><td>Netgen, 12.5 mm maximum element size: 28,470 quadratic 10-node tetrahedra (P2)</td></tr>
+          <tr><th scope="row">Unknowns</th><td>44,377 nodes, 133,131 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>KoFEM engine (MFEM), the WebAssembly build the app runs: engine-7303b4976800</td></tr>
+          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build fem-acb6b9a64d43); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-7303b4976800</td></tr>
         </table>
       </div>
-        <p>The torque is applied as tangential nodal forces on the end face,
-        proportional to each node's distance <math><mi>r</mi></math> from the axis and
-        scaled so the net force is zero and the moment is <math><mi>T</mi></math>. That is
-        how the app applies a moment to a face. It is not the exact Saint-Venant
-        stress distribution over a square, but by Saint-Venant's principle
-        the difference only affects the region near the loaded end. The
-        twist is the mean in-plane rotation of the end-face nodes,
+        <p>The beam is the STEP file a user imports, meshed by Netgen with
+        quadratic tetrahedra; the clamp and the torque each sit on one whole
+        CAD face. The torque is a moment load on the end face. The app turns
+        it into one tangential force per node of the face's surface mesh,
+        proportional to the node's distance <math><mi>r</mi></math> from the centroid of
+        those nodes and scaled so the net force is zero and the moment is
+        <math><mi>T</mi></math>. That is not the exact Saint-Venant stress distribution
+        over a square, but by Saint-Venant's principle the difference only
+        affects the region near the loaded end.</p>
+        <p>The Results panel reads the twist as the mean in-plane rotation of
+        the end face's nodes about the same centroid,
         <math><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>y</mi><msub><mi>u</mi><mrow><mi>z</mi></mrow></msub><mo>−</mo><mi>z</mi><msub><mi>u</mi><mrow><mi>y</mi></mrow></msub><mo stretchy="false" lspace="0" rspace="0">)</mo><mo lspace="0" rspace="0">/</mo><msup><mi>r</mi><mn>2</mn></msup></math>.</p>
 
       <h2 id="results">Results</h2>
@@ -973,37 +978,129 @@
         <table class="spec">
           <tr><th scope="row">Quantity</th><td>angle of twist θ</td></tr>
           <tr><th scope="row">Reference</th><td>θ = T·L / (G·K) = 8.7912&thinsp;×&thinsp;10<sup>−4</sup>&nbsp;rad <span class="meta">(Timoshenko &amp; Goodier, Theory of Elasticity; Roark)</span></td></tr>
-          <tr><th scope="row">KoFEM</th><td>8.5783&thinsp;×&thinsp;10<sup>−4</sup>&nbsp;rad</td></tr>
-          <tr><th scope="row">Difference</th><td>−2.42&nbsp;% <span class="band pass">within ±5&nbsp;%</span></td></tr>
+          <tr><th scope="row">KoFEM</th><td>8.8561&thinsp;×&thinsp;10<sup>−4</sup>&nbsp;rad</td></tr>
+          <tr><th scope="row">Difference</th><td>+0.74&nbsp;% <span class="band pass">within ±5&nbsp;%</span></td></tr>
         </table>
       </div>
+      <section class="study" id="convergence" data-study="beam-torsion">
+        <h3>Mesh convergence: Square beam in torsion, P1 vs. P2</h3>
+        <figure class="chart">
+          <div class="legend"><span class="key"><span class="swatch s1"></span>P1 (linear)</span><span class="key"><span class="swatch s2"></span>P2 (quadratic)</span><span class="key"><span class="dot under"></span>below the reference</span><span class="key"><span class="dot over"></span>above</span></div>
+          <picture class="figure-image theme-light conv"><source srcset="/examples/beam-torsion/beam-torsion-mesh-convergence.svg" type="image/svg+xml" /><img src="/examples/beam-torsion/beam-torsion-mesh-convergence.png" width="440" height="250" alt="Square beam in torsion, P1 vs. P2: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark conv"><source srcset="/examples/beam-torsion/beam-torsion-mesh-convergence-dark.svg" type="image/svg+xml" /><img src="/examples/beam-torsion/beam-torsion-mesh-convergence.png" width="440" height="250" alt="Square beam in torsion, P1 vs. P2: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture>
+          <figcaption>Difference from the reference on refined meshes, logarithmic axes. The ringed point is this example's mesh.</figcaption>
+        </figure>
+        <p>Linear tetrahedra lock and twist far too little. Quadratic ones are within 1.5 % on every mesh and, from 25 mm down, settle towards the reference from above as the loaded face's local deformation shrinks.</p>
+        <details>
+          <summary>Data</summary>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Order</th>
+                  <th scope="col">Mesh</th>
+                  <th scope="col" class="num">DOFs</th>
+                  <th scope="col" class="num">KoFEM</th>
+                  <th scope="col" class="num">Difference</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>P1 (linear)</td>
+                  <td>50 mm</td>
+                  <td class="num">939</td>
+                  <td class="num">4.8436&thinsp;×&thinsp;10<sup>−4</sup>&nbsp;rad</td>
+                  <td class="num">−44.90&nbsp;%</td>
+                </tr>
+                <tr>
+                  <td>P1 (linear)</td>
+                  <td>25 mm</td>
+                  <td class="num">2,733</td>
+                  <td class="num">6.4448&thinsp;×&thinsp;10<sup>−4</sup>&nbsp;rad</td>
+                  <td class="num">−26.69&nbsp;%</td>
+                </tr>
+                <tr>
+                  <td>P1 (linear)</td>
+                  <td>12.5 mm</td>
+                  <td class="num">19,269</td>
+                  <td class="num">8.1083&thinsp;×&thinsp;10<sup>−4</sup>&nbsp;rad</td>
+                  <td class="num">−7.77&nbsp;%</td>
+                </tr>
+                <tr>
+                  <td>P2 (quadratic)</td>
+                  <td>50 mm</td>
+                  <td class="num">5,904</td>
+                  <td class="num">8.7987&thinsp;×&thinsp;10<sup>−4</sup>&nbsp;rad</td>
+                  <td class="num">+0.08&nbsp;%</td>
+                </tr>
+                <tr>
+                  <td>P2 (quadratic)</td>
+                  <td>25 mm</td>
+                  <td class="num">16,596</td>
+                  <td class="num">8.9174&thinsp;×&thinsp;10<sup>−4</sup>&nbsp;rad</td>
+                  <td class="num">+1.44&nbsp;%</td>
+                </tr>
+                <tr>
+                  <td>P2 (quadratic)</td>
+                  <td>12.5 mm (this example)</td>
+                  <td class="num">133,131</td>
+                  <td class="num">8.8561&thinsp;×&thinsp;10<sup>−4</sup>&nbsp;rad</td>
+                  <td class="num">+0.74&nbsp;%</td>
+                </tr>
+                <tr>
+                  <td>P2 (quadratic)</td>
+                  <td>10 mm</td>
+                  <td class="num">221,763</td>
+                  <td class="num">8.8333&thinsp;×&thinsp;10<sup>−4</sup>&nbsp;rad</td>
+                  <td class="num">+0.48&nbsp;%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </section>
 
       <h2 id="discussion">Discussion</h2>
-        <p>KoFEM's twist differs from the reference by −2.42&nbsp;%. The main
-        reason is physical, not numerical. Saint-Venant's solution assumes
-        that every section warps freely, but the clamp holds the
-        <math><mi>x</mi><mo>=</mo><mn>0</mn></math> section flat. Restraining the warping stiffens the bar
-        over a length comparable to the section size, here a tenth of the
-        bar, so the whole bar twists slightly less. A converged 3-D solution
-        therefore lies below <math><mi>T</mi><mi>L</mi><mo lspace="0" rspace="0">/</mo><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>G</mi><mi>K</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></math>; the ±5&nbsp;%
-        band allows for that.</p>
-        <p>The reference itself carries Roark's fit: the series value
-        <math><mi>β</mi><mo>=</mo><mn>0.1406</mn></math> would raise it by
-        0.17&nbsp;%.</p>
+        <p>KoFEM's twist differs from the reference by +0.74&nbsp;%.
+        Linear tetrahedra would be far too stiff: in the convergence study
+        above their error goes −44.90&nbsp;% → −26.69&nbsp;% → −7.77&nbsp;% as the element size halves.
+        A linear tetrahedron has constant strain, so it follows the shear
+        that varies across a twisted section poorly and locks. The case
+        therefore uses quadratic tetrahedra, which are within a few percent
+        on every mesh (+0.08&nbsp;% → +1.44&nbsp;% → +0.74&nbsp;% → +0.48&nbsp;%).</p>
+        <p>From 25&nbsp;mm down, the quadratic series comes down to the
+        reference from above. Sections inside the bar rotate at the
+        Saint-Venant rate to within a few tenths of a percent; the excess is
+        on the loaded face itself. The torque reaches that face as point
+        forces at its nodes, which deform it locally. The finer the mesh, the
+        smaller each force and its local effect. The coarsest mesh, two
+        elements across the section, lands close to the reference by chance,
+        before this trend sets in.</p>
+        <p>Two smaller effects remain in a converged result. Saint-Venant's
+        solution assumes that every section warps freely, but the clamp
+        holds the <math><mi>x</mi><mo>=</mo><mn>0</mn></math> section flat, which stiffens the bar near
+        it. A square section warps little, so this costs only a few tenths
+        of a percent. And Roark's fit for <math><mi>β</mi></math> is larger than the
+        series value 0.1406, so the reference is
+        0.17&nbsp;% low. The ±5&nbsp;%
+        band covers all three.</p>
 
       <h2 id="reproduce">Reproduce</h2>
-      <p>
-        In the app: <a href="/app/?example=beam-torsion" data-testid="reproduce-open">open the model</a>,
-        then Studies → Static 1 → Run static solve, select the result plot and set Field to
-        Displacement (magnitude). The Result summary shows
-        <span class="readout" data-testid="app-readout" data-field="Displacement (magnitude)" data-stat="Max |U|" data-value="6.144e-2 mm">Max |U| 6.144e-2 mm</span>.
-      </p>
+      <p>In the app: <a href="/app/?example=beam-torsion" data-testid="reproduce-open">open the model</a>, with its supports, loads and settings.</p>
+      <p>Or build it yourself, as this page's number was built:</p>
+      <ol class="steps">
+        <li>Import <a href="/examples/beam-torsion.step" download>beam-torsion.step</a>.</li>
+        <li>Mesh with a 12.5 mm maximum element size, quadratic elements.</li>
+        <li>Material Steel: E = 210000 MPa, ν = 0.3.</li>
+        <li>Support “Clamped end”: Ux, Uy, Uz = 0 on the face through (0, 50, 50).</li>
+        <li>Load “Torque”: moment Mx = 1000000 N·mm on the face through (1000, 50, 50).</li>
+        <li>Run the static study. The Results panel compares angle of twist with θ = T·L / (G·K).</li>
+      </ol>
       <p>From a clone (Bun, bash, curl and Rust), this builds and solves the model with the same engine and prints its line:</p>
       <pre><code>git clone https://github.com/mkofler96/KoFEM.git &amp;&amp; cd KoFEM
 bash scripts/fetch-wasm-engine.sh
 cd web &amp;&amp; bun install &amp;&amp; bun run validate --case beam-torsion</code></pre>
       <pre class="console"><code>Case                                  Quantity                                  FE   Reference     Err%  Tol%  Status
-Square beam under torsion             angle of twist θ                   8.5783e-4   8.7912e-4    -2.42     5  PASS</code></pre>
+Square beam under torsion             angle of twist θ                   8.8561e-4   8.7912e-4    +0.74     5  PASS</code></pre>
 
       <h2 id="references">References</h2>
       <ol class="refs">
@@ -1018,7 +1115,7 @@ Square beam under torsion             angle of twist θ                   8.5783
       </p>
 
       <nav class="pager" aria-label="Other examples">
-        <a class="prev" href="/examples/cantilever-beam/"><small>Previous</small>Cantilever beam from a STEP file</a>
+        <a class="prev" href="/examples/cantilever-beam/"><small>Previous</small>Cantilever beam under tip load</a>
         <a class="next" href="/examples/shaft-torsion/"><small>Next</small>Hollow shaft under torsion</a>
       </nav>
       </main>

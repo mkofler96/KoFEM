@@ -55,17 +55,17 @@
               },
               {
                 "@type": "TechArticle",
-                "headline": "Cantilever beam, linear hexahedra",
+                "headline": "Cantilever beam, linear tetrahedra",
                 "url": "https://kofem.org/examples/cantilever/"
               },
               {
                 "@type": "TechArticle",
-                "headline": "Cantilever beam, quadratic hexahedra",
+                "headline": "Cantilever beam, quadratic tetrahedra",
                 "url": "https://kofem.org/examples/cantilever-p2/"
               },
               {
                 "@type": "TechArticle",
-                "headline": "Cantilever beam from a STEP file",
+                "headline": "Cantilever beam under tip load",
                 "url": "https://kofem.org/examples/cantilever-beam/"
               },
               {
@@ -847,9 +847,9 @@
           <ul>
             <li><a href="/examples/axial-bar/">Axial bar in tension</a></li>
             <li><a href="/examples/surface-pressure/">Bar under end pressure</a></li>
-            <li><a href="/examples/cantilever/">Cantilever beam, linear hexahedra</a></li>
-            <li><a href="/examples/cantilever-p2/">Cantilever beam, quadratic hexahedra</a></li>
-            <li><a href="/examples/cantilever-beam/">Cantilever beam from a STEP file</a></li>
+            <li><a href="/examples/cantilever/">Cantilever beam, linear tetrahedra</a></li>
+            <li><a href="/examples/cantilever-p2/">Cantilever beam, quadratic tetrahedra</a></li>
+            <li><a href="/examples/cantilever-beam/">Cantilever beam under tip load</a></li>
             <li><a href="/examples/beam-torsion/">Square beam under torsion</a></li>
             <li><a href="/examples/shaft-torsion/">Hollow shaft under torsion</a></li>
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
@@ -876,9 +876,9 @@
           <ul>
             <li><a href="/examples/axial-bar/">Axial bar in tension</a></li>
             <li><a href="/examples/surface-pressure/">Bar under end pressure</a></li>
-            <li><a href="/examples/cantilever/">Cantilever beam, linear hexahedra</a></li>
-            <li><a href="/examples/cantilever-p2/">Cantilever beam, quadratic hexahedra</a></li>
-            <li><a href="/examples/cantilever-beam/">Cantilever beam from a STEP file</a></li>
+            <li><a href="/examples/cantilever/">Cantilever beam, linear tetrahedra</a></li>
+            <li><a href="/examples/cantilever-p2/">Cantilever beam, quadratic tetrahedra</a></li>
+            <li><a href="/examples/cantilever-beam/">Cantilever beam under tip load</a></li>
             <li><a href="/examples/beam-torsion/">Square beam under torsion</a></li>
             <li><a href="/examples/shaft-torsion/">Hollow shaft under torsion</a></li>
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
@@ -905,7 +905,7 @@
       <p>Problems with a known answer, from theory or the literature. Each page
       derives the answer and compares KoFEM's result with it.</p>
       <p class="meta">
-        8 of 8 benchmarks within their tolerance ·
+        9 of 9 benchmarks within their tolerance ·
         engine engine-7303b4976800 · 2026-11-12 ·
         <a href="/examples/results.json">results.json</a> ·
         <a href="https://github.com/mkofler96/KoFEM/tree/develop/examples">source</a>
@@ -918,40 +918,40 @@
           <p class="meta">Tip extension δ: 0.47380&nbsp;mm, −0.50&nbsp;% from the reference</p>
         </li>
         <li data-entry="surface-pressure">
-          <a href="/examples/surface-pressure/" tabindex="-1" aria-hidden="true"><img src="/examples/surface-pressure.png" width="1200" height="433" alt="" loading="lazy" /></a>
+          <a href="/examples/surface-pressure/" tabindex="-1" aria-hidden="true"><img src="/examples/surface-pressure.png" width="1200" height="432" alt="" loading="lazy" /></a>
           <h3><a href="/examples/surface-pressure/">Bar under end pressure</a></h3>
           <p>The bar pushed by a pressure. Checks the sign and the per-area scaling of pressure loads.</p>
-          <p class="meta">Tip displacement u: −4.7358&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;mm, −0.55&nbsp;% from the reference</p>
+          <p class="meta">Tip displacement u: −4.7380&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;mm, −0.50&nbsp;% from the reference</p>
         </li>
         <li data-entry="cantilever">
-          <a href="/examples/cantilever/" tabindex="-1" aria-hidden="true"><img src="/examples/cantilever.png" width="1200" height="520" alt="" loading="lazy" /></a>
-          <h3><a href="/examples/cantilever/">Cantilever beam, linear hexahedra</a></h3>
+          <a href="/examples/cantilever/" tabindex="-1" aria-hidden="true"><img src="/examples/cantilever.png" width="1200" height="519" alt="" loading="lazy" /></a>
+          <h3><a href="/examples/cantilever/">Cantilever beam, linear tetrahedra</a></h3>
           <p>Bending with linear elements, which are too stiff in bending (shear locking).</p>
-          <p class="meta">Tip deflection δ: −1.8378&nbsp;mm, −3.51&nbsp;% from the reference</p>
+          <p class="meta">Tip deflection δ: −1.8313&nbsp;mm, −3.86&nbsp;% from the reference</p>
         </li>
         <li data-entry="cantilever-p2">
-          <a href="/examples/cantilever-p2/" tabindex="-1" aria-hidden="true"><img src="/examples/cantilever-p2.png" width="1200" height="526" alt="" loading="lazy" /></a>
-          <h3><a href="/examples/cantilever-p2/">Cantilever beam, quadratic hexahedra</a></h3>
+          <a href="/examples/cantilever-p2/" tabindex="-1" aria-hidden="true"><img src="/examples/cantilever-p2.png" width="1200" height="523" alt="" loading="lazy" /></a>
+          <h3><a href="/examples/cantilever-p2/">Cantilever beam, quadratic tetrahedra</a></h3>
           <p>The same beam on a coarse mesh of quadratic elements, which do not lock.</p>
-          <p class="meta">Tip deflection δ: −1.9398&nbsp;mm, +1.84&nbsp;% from the reference</p>
+          <p class="meta">Tip deflection δ: −1.8985&nbsp;mm, −0.33&nbsp;% from the reference</p>
         </li>
         <li data-entry="cantilever-beam">
           <a href="/examples/cantilever-beam/" tabindex="-1" aria-hidden="true"><img src="/examples/cantilever-beam.png" width="1200" height="523" alt="" loading="lazy" /></a>
-          <h3><a href="/examples/cantilever-beam/">Cantilever beam from a STEP file</a></h3>
-          <p>The cantilever built as you would build it: a STEP block, a Netgen mesh, a support and a load on CAD faces.</p>
+          <h3><a href="/examples/cantilever-beam/">Cantilever beam under tip load</a></h3>
+          <p>The cantilever that opens ready to run, with a hand check in the Results panel.</p>
           <p class="meta">Tip deflection δ: −1.9040&nbsp;mm, −0.04&nbsp;% from the reference</p>
         </li>
         <li data-entry="beam-torsion">
-          <a href="/examples/beam-torsion/" tabindex="-1" aria-hidden="true"><img src="/examples/beam-torsion.png" width="1200" height="458" alt="" loading="lazy" /></a>
+          <a href="/examples/beam-torsion/" tabindex="-1" aria-hidden="true"><img src="/examples/beam-torsion.png" width="1200" height="461" alt="" loading="lazy" /></a>
           <h3><a href="/examples/beam-torsion/">Square beam under torsion</a></h3>
           <p>Torsion of a square section, which warps. The clamp holds the warping back.</p>
-          <p class="meta">Angle of twist θ: 8.5783&thinsp;×&thinsp;10<sup>−4</sup>&nbsp;rad, −2.42&nbsp;% from the reference</p>
+          <p class="meta">Angle of twist θ: 8.8561&thinsp;×&thinsp;10<sup>−4</sup>&nbsp;rad, +0.74&nbsp;% from the reference</p>
         </li>
         <li data-entry="shaft-torsion">
           <a href="/examples/shaft-torsion/" tabindex="-1" aria-hidden="true"><img src="/examples/shaft-torsion.png" width="1200" height="900" alt="" loading="lazy" /></a>
           <h3><a href="/examples/shaft-torsion/">Hollow shaft under torsion</a></h3>
           <p>Torsion of a tube. Straight-sided elements make the circle a polygon.</p>
-          <p class="meta">Angle of twist θ: 1.4683&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;rad, +1.34&nbsp;% from the reference</p>
+          <p class="meta">Angle of twist θ: 1.4774&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;rad, +1.97&nbsp;% from the reference</p>
         </li>
         <li data-entry="plate-with-hole">
           <a href="/examples/plate-with-hole/" tabindex="-1" aria-hidden="true"><img src="/examples/plate-with-hole.png" width="1200" height="720" alt="" loading="lazy" /></a>
@@ -1010,25 +1010,25 @@
               <th scope="row"><a href="/examples/surface-pressure/">Bar under end pressure</a></th>
               <td class="wide">tip displacement u</td>
               <td class="num" data-label="Reference">−4.7619&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;mm</td>
-              <td class="num" data-label="KoFEM">−4.7358&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;mm</td>
-              <td class="num" data-label="Difference">−0.55&nbsp;%</td>
+              <td class="num" data-label="KoFEM">−4.7380&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;mm</td>
+              <td class="num" data-label="Difference">−0.50&nbsp;%</td>
             </tr>
             <tr>
-              <th scope="row"><a href="/examples/cantilever/">Cantilever beam, linear hexahedra</a></th>
+              <th scope="row"><a href="/examples/cantilever/">Cantilever beam, linear tetrahedra</a></th>
               <td class="wide">tip deflection δ</td>
               <td class="num" data-label="Reference">−1.9048&nbsp;mm</td>
-              <td class="num" data-label="KoFEM">−1.8378&nbsp;mm</td>
-              <td class="num" data-label="Difference">−3.51&nbsp;%</td>
+              <td class="num" data-label="KoFEM">−1.8313&nbsp;mm</td>
+              <td class="num" data-label="Difference">−3.86&nbsp;%</td>
             </tr>
             <tr>
-              <th scope="row"><a href="/examples/cantilever-p2/">Cantilever beam, quadratic hexahedra</a></th>
+              <th scope="row"><a href="/examples/cantilever-p2/">Cantilever beam, quadratic tetrahedra</a></th>
               <td class="wide">tip deflection δ</td>
               <td class="num" data-label="Reference">−1.9048&nbsp;mm</td>
-              <td class="num" data-label="KoFEM">−1.9398&nbsp;mm</td>
-              <td class="num" data-label="Difference">+1.84&nbsp;%</td>
+              <td class="num" data-label="KoFEM">−1.8985&nbsp;mm</td>
+              <td class="num" data-label="Difference">−0.33&nbsp;%</td>
             </tr>
             <tr>
-              <th scope="row"><a href="/examples/cantilever-beam/">Cantilever beam from a STEP file</a></th>
+              <th scope="row"><a href="/examples/cantilever-beam/">Cantilever beam under tip load</a></th>
               <td class="wide">tip deflection δ</td>
               <td class="num" data-label="Reference">−1.9048&nbsp;mm</td>
               <td class="num" data-label="KoFEM">−1.9040&nbsp;mm</td>
@@ -1038,15 +1038,15 @@
               <th scope="row"><a href="/examples/beam-torsion/">Square beam under torsion</a></th>
               <td class="wide">angle of twist θ</td>
               <td class="num" data-label="Reference">8.7912&thinsp;×&thinsp;10<sup>−4</sup>&nbsp;rad</td>
-              <td class="num" data-label="KoFEM">8.5783&thinsp;×&thinsp;10<sup>−4</sup>&nbsp;rad</td>
-              <td class="num" data-label="Difference">−2.42&nbsp;%</td>
+              <td class="num" data-label="KoFEM">8.8561&thinsp;×&thinsp;10<sup>−4</sup>&nbsp;rad</td>
+              <td class="num" data-label="Difference">+0.74&nbsp;%</td>
             </tr>
             <tr>
               <th scope="row"><a href="/examples/shaft-torsion/">Hollow shaft under torsion</a></th>
               <td class="wide">angle of twist θ</td>
               <td class="num" data-label="Reference">1.4489&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;rad</td>
-              <td class="num" data-label="KoFEM">1.4683&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;rad</td>
-              <td class="num" data-label="Difference">+1.34&nbsp;%</td>
+              <td class="num" data-label="KoFEM">1.4774&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;rad</td>
+              <td class="num" data-label="Difference">+1.97&nbsp;%</td>
             </tr>
             <tr>
               <th scope="row"><a href="/examples/plate-with-hole/">Plate with a hole</a></th>

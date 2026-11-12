@@ -810,9 +810,9 @@
           <ul>
             <li><a href="/examples/axial-bar/" aria-current="page">Axial bar in tension</a></li>
             <li><a href="/examples/surface-pressure/">Bar under end pressure</a></li>
-            <li><a href="/examples/cantilever/">Cantilever beam, linear hexahedra</a></li>
-            <li><a href="/examples/cantilever-p2/">Cantilever beam, quadratic hexahedra</a></li>
-            <li><a href="/examples/cantilever-beam/">Cantilever beam from a STEP file</a></li>
+            <li><a href="/examples/cantilever/">Cantilever beam, linear tetrahedra</a></li>
+            <li><a href="/examples/cantilever-p2/">Cantilever beam, quadratic tetrahedra</a></li>
+            <li><a href="/examples/cantilever-beam/">Cantilever beam under tip load</a></li>
             <li><a href="/examples/beam-torsion/">Square beam under torsion</a></li>
             <li><a href="/examples/shaft-torsion/">Hollow shaft under torsion</a></li>
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
@@ -839,9 +839,9 @@
           <ul>
             <li><a href="/examples/axial-bar/" aria-current="page">Axial bar in tension</a></li>
             <li><a href="/examples/surface-pressure/">Bar under end pressure</a></li>
-            <li><a href="/examples/cantilever/">Cantilever beam, linear hexahedra</a></li>
-            <li><a href="/examples/cantilever-p2/">Cantilever beam, quadratic hexahedra</a></li>
-            <li><a href="/examples/cantilever-beam/">Cantilever beam from a STEP file</a></li>
+            <li><a href="/examples/cantilever/">Cantilever beam, linear tetrahedra</a></li>
+            <li><a href="/examples/cantilever-p2/">Cantilever beam, quadratic tetrahedra</a></li>
+            <li><a href="/examples/cantilever-beam/">Cantilever beam under tip load</a></li>
             <li><a href="/examples/beam-torsion/">Square beam under torsion</a></li>
             <li><a href="/examples/shaft-torsion/">Hollow shaft under torsion</a></li>
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
@@ -957,7 +957,7 @@
           <tr><th scope="row">Mesh</th><td>Netgen, 25 mm maximum element size: 2,991 linear 4-node tetrahedra (P1)</td></tr>
           <tr><th scope="row">Unknowns</th><td>911 nodes, 2,733 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-7303b4976800</td></tr>
+          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build fem-acb6b9a64d43); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-7303b4976800</td></tr>
         </table>
       </div>
         <p>The bar is the STEP file a user imports, meshed by Netgen with
@@ -1059,7 +1059,7 @@
         the 3-D body and the 1-D theory, so a finer mesh does not remove
         it.</p>
         <p>The <a href="/examples/surface-pressure/">same bar under an end
-        pressure</a> comes out −0.55&nbsp;%: a
+        pressure</a> comes out −0.50&nbsp;%: a
         pressure is integrated over the end face the same way as a force.</p>
 
       <h2 id="reproduce">Reproduce</h2>

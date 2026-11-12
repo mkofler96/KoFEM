@@ -37,7 +37,7 @@
   <url>
     <loc>https://kofem.org/examples/beam-torsion/</loc>
     <priority>0.6</priority>
-    <image:image><image:loc>https://kofem.org/examples/beam-torsion.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/beam-torsion/beam-torsion-diagram.png</image:loc></image:image>
+    <image:image><image:loc>https://kofem.org/examples/beam-torsion.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/beam-torsion/beam-torsion-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/beam-torsion/beam-torsion-mesh-convergence.png</image:loc></image:image>
   </url>
   <url>
     <loc>https://kofem.org/examples/shaft-torsion/</loc>

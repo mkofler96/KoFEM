@@ -809,9 +809,9 @@
           <ul>
             <li><a href="/examples/axial-bar/">Axial bar in tension</a></li>
             <li><a href="/examples/surface-pressure/" aria-current="page">Bar under end pressure</a></li>
-            <li><a href="/examples/cantilever/">Cantilever beam, linear hexahedra</a></li>
-            <li><a href="/examples/cantilever-p2/">Cantilever beam, quadratic hexahedra</a></li>
-            <li><a href="/examples/cantilever-beam/">Cantilever beam from a STEP file</a></li>
+            <li><a href="/examples/cantilever/">Cantilever beam, linear tetrahedra</a></li>
+            <li><a href="/examples/cantilever-p2/">Cantilever beam, quadratic tetrahedra</a></li>
+            <li><a href="/examples/cantilever-beam/">Cantilever beam under tip load</a></li>
             <li><a href="/examples/beam-torsion/">Square beam under torsion</a></li>
             <li><a href="/examples/shaft-torsion/">Hollow shaft under torsion</a></li>
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
@@ -838,9 +838,9 @@
           <ul>
             <li><a href="/examples/axial-bar/">Axial bar in tension</a></li>
             <li><a href="/examples/surface-pressure/" aria-current="page">Bar under end pressure</a></li>
-            <li><a href="/examples/cantilever/">Cantilever beam, linear hexahedra</a></li>
-            <li><a href="/examples/cantilever-p2/">Cantilever beam, quadratic hexahedra</a></li>
-            <li><a href="/examples/cantilever-beam/">Cantilever beam from a STEP file</a></li>
+            <li><a href="/examples/cantilever/">Cantilever beam, linear tetrahedra</a></li>
+            <li><a href="/examples/cantilever-p2/">Cantilever beam, quadratic tetrahedra</a></li>
+            <li><a href="/examples/cantilever-beam/">Cantilever beam under tip load</a></li>
             <li><a href="/examples/beam-torsion/">Square beam under torsion</a></li>
             <li><a href="/examples/shaft-torsion/">Hollow shaft under torsion</a></li>
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
@@ -868,7 +868,7 @@
       </div>
       
       <figure class="result">
-        <img src="/examples/surface-pressure.png" width="1200" height="433" alt="Bar under end pressure: displacement magnitude |u| on the deformed shape, displacements drawn 20,000 times enlarged" />
+        <img src="/examples/surface-pressure.png" width="1200" height="432" alt="Bar under end pressure: displacement magnitude |u| on the deformed shape, displacements drawn 20,000 times enlarged" />
         <div class="colorbar"><span>0.00&nbsp;mm</span><span class="bar" aria-hidden="true"></span><span>0.00474&nbsp;mm</span></div>
         <figcaption>Displacement magnitude |U|, deformed shape, displacements drawn 20,000 times enlarged. Drawn from the analysis file that Open in KoFEM loads.</figcaption>
       </figure>
@@ -886,8 +886,8 @@
           <tbody>
             <tr>
               <td class="num">−4.7619&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;mm</td>
-              <td class="num"><strong data-testid="fe-value">−4.7358&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;mm</strong></td>
-              <td class="num">−0.55&nbsp;%<br /><span class="band pass">within ±2&nbsp;%</span></td>
+              <td class="num"><strong data-testid="fe-value">−4.7380&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;mm</strong></td>
+              <td class="num">−0.50&nbsp;%<br /><span class="band pass">within ±2&nbsp;%</span></td>
             </tr>
           </tbody>
         </table>
@@ -897,7 +897,7 @@
       <h2 id="problem">The problem</h2>
       <figure class="diagram">
         <picture class="figure-image theme-light fig"><source srcset="/examples/surface-pressure/surface-pressure-diagram.svg" type="image/svg+xml" /><img src="/examples/surface-pressure/surface-pressure-diagram.png" width="640" height="214" alt="Prismatic bar clamped at the left end and loaded axially at the right end" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark fig"><source srcset="/examples/surface-pressure/surface-pressure-diagram-dark.svg" type="image/svg+xml" /><img src="/examples/surface-pressure/surface-pressure-diagram.png" width="640" height="214" alt="Prismatic bar clamped at the left end and loaded axially at the right end" loading="lazy" decoding="async" /></picture>
-        <figcaption>Prismatic bar of length L along x, W × H section. Sketch, not to scale; thin lines show the element mesh.</figcaption>
+        <figcaption>Prismatic bar of length L along x, W × H section. Sketch, not to scale.</figcaption>
       </figure>
       
       <div class="table-wrap">
@@ -934,13 +934,15 @@
       
       <div class="table-wrap">
         <table class="spec">
-          <tr><th scope="row">Mesh</th><td>20 × 4 × 4 grid: 320 linear 8-node hexahedra (P1)</td></tr>
-          <tr><th scope="row">Unknowns</th><td>525 nodes, 1,575 degrees of freedom</td></tr>
+          <tr><th scope="row">Mesh</th><td>Netgen, 25 mm maximum element size: 2,991 linear 4-node tetrahedra (P1)</td></tr>
+          <tr><th scope="row">Unknowns</th><td>911 nodes, 2,733 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>KoFEM engine (MFEM), the WebAssembly build the app runs: engine-7303b4976800</td></tr>
+          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build fem-acb6b9a64d43); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-7303b4976800</td></tr>
         </table>
       </div>
-        <p>The pressure is integrated over the end face with the same
+        <p>The bar, its Netgen mesh and its clamp are the
+        <a href="/examples/axial-bar/">axial bar's</a>; the pressure sits on the
+        whole end face. It is integrated over that face with the same
         boundary integrator as the
         <a href="/examples/axial-bar/">axial bar's</a> force, with the traction
         <math><mi>t</mi><mo>=</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mi>p</mi><mi>n</mi></math> built from each face's normal.</p>
@@ -950,13 +952,13 @@
         <table class="spec">
           <tr><th scope="row">Quantity</th><td>tip displacement u</td></tr>
           <tr><th scope="row">Reference</th><td>u = −p·L / E = −4.7619&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;mm <span class="meta">(Gere &amp; Goodno, Mechanics of Materials)</span></td></tr>
-          <tr><th scope="row">KoFEM</th><td>−4.7358&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;mm</td></tr>
-          <tr><th scope="row">Difference</th><td>−0.55&nbsp;% <span class="band pass">within ±2&nbsp;%</span></td></tr>
+          <tr><th scope="row">KoFEM</th><td>−4.7380&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;mm</td></tr>
+          <tr><th scope="row">Difference</th><td>−0.50&nbsp;% <span class="band pass">within ±2&nbsp;%</span></td></tr>
         </table>
       </div>
 
       <h2 id="discussion">Discussion</h2>
-        <p>The difference, −0.55&nbsp;%, matches the axial bar in tension
+        <p>The difference, −0.50&nbsp;%, matches the axial bar in tension
         (−0.50&nbsp;%). That is what linearity predicts:
         the resultant here is <math><mi>p</mi><mi>A</mi><mo>=</mo><mn>10</mn><mtext> kN</mtext></math>
         instead of <math><mi>P</mi><mo>=</mo><mn>1000</mn><mtext> kN</mtext></math>, and every displacement scales with the load. An
@@ -973,14 +975,23 @@
         In the app: <a href="/app/?example=surface-pressure" data-testid="reproduce-open">open the model</a>,
         then Studies → Static 1 → Run static solve, select the result plot and set Field to
         Ux. The Result summary shows
-        <span class="readout" data-testid="app-readout" data-field="Ux" data-stat="Min Ux" data-value="-4.736e-3 mm">Min Ux -4.736e-3 mm</span>.
+        <span class="readout" data-testid="app-readout" data-field="Ux" data-stat="Min Ux" data-value="-4.739e-3 mm">Min Ux -4.739e-3 mm</span>.
       </p>
+      <p>Or build it yourself, as this page's number was built:</p>
+      <ol class="steps">
+        <li>Import <a href="/examples/surface-pressure.step" download>surface-pressure.step</a>.</li>
+        <li>Mesh with a 25 mm maximum element size, linear elements.</li>
+        <li>Material Steel: E = 210000 MPa, ν = 0.3.</li>
+        <li>Support “Fixed end”: Ux, Uy, Uz = 0 on the face through (0, 50, 50).</li>
+        <li>Load “End pressure”: pressure 1 MPa on the face through (1000, 50, 50).</li>
+        <li>Run the static study. The Results panel compares tip displacement with u = −p·L / E.</li>
+      </ol>
       <p>From a clone (Bun, bash, curl and Rust), this builds and solves the model with the same engine and prints its line:</p>
       <pre><code>git clone https://github.com/mkofler96/KoFEM.git &amp;&amp; cd KoFEM
 bash scripts/fetch-wasm-engine.sh
 cd web &amp;&amp; bun install &amp;&amp; bun run validate --case surface-pressure</code></pre>
       <pre class="console"><code>Case                                  Quantity                                  FE   Reference     Err%  Tol%  Status
-Bar under end pressure                tip displacement u                -4.7358e-3  -4.7619e-3    -0.55     2  PASS</code></pre>
+Bar under end pressure                tip displacement u                -4.7380e-3  -4.7619e-3    -0.50     2  PASS</code></pre>
 
       <h2 id="references">References</h2>
       <ol class="refs">
@@ -994,7 +1005,7 @@ Bar under end pressure                tip displacement u                -4.7358e
 
       <nav class="pager" aria-label="Other examples">
         <a class="prev" href="/examples/axial-bar/"><small>Previous</small>Axial bar in tension</a>
-        <a class="next" href="/examples/cantilever/"><small>Next</small>Cantilever beam, linear hexahedra</a>
+        <a class="next" href="/examples/cantilever/"><small>Next</small>Cantilever beam, linear tetrahedra</a>
       </nav>
       </main>
       <nav class="docs-toc" aria-label="On this page">
