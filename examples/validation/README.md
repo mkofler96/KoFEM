@@ -58,7 +58,7 @@ element sizes), taking it off `PENDING` in `rules.mjs`, and
 | Plate with a hole          | stress-concentration Kt ≈ 3     | Kirsch / Timoshenko & Goodier |
 | Plate with a hole (shells) | Kt ≈ 3 on a shell mid-surface   | Kirsch / Timoshenko & Goodier |
 | Hollow shaft torsion       | angle of twist θ = T·L/(G·J)    | Saint-Venant torsion          |
-| Cook's membrane            | top-corner deflection ≈ 23.9    | Cook (1974)                   |
+| Cook's membrane            | loaded-edge deflection ≈ 23.96  | Cook (1974), Belytschko 2014  |
 
 See `REPORT.md` for the latest FE-vs-reference numbers.
 
@@ -142,10 +142,10 @@ indexable, that the old `/validation/` addresses redirect to them, and that
 opening each example in the app and solving it shows the read-out its page
 publishes.
 
-The Cook's membrane study shows that refining the mesh moves KoFEM's result past
-the 23.9 reference (to ≈ 25 at 64 × 64 linear and 16 × 16 quadratic elements).
-The page says so; the case stays a regression check until the reference and the
-model definition are reconciled.
+Cook's membrane is measured at the middle of the loaded edge, (48, 52), where
+the published 23.96 belongs; the top corner converges to about 25.2. The case
+used to compare the corner with 23.9, which is why its study crossed the
+reference. Quadratic tetrahedra now level off 0.1 % below it.
 
 ## Topology-optimization benchmarks
 

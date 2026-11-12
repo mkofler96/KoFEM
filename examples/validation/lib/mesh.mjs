@@ -155,49 +155,6 @@ export function annulusHexMesh(ri, ro, Lz, nr, nth, nz) {
   return { vertices, hexahedra, id, nr, nth, nz };
 }
 
-/**
- * Cook's membrane: tapered quad (0,0)-(48,44)-(48,60)-(0,44), thickness t,
- * extruded one layer in z. ξ runs left(clamp)→right(load), η runs bottom→top.
- * Returns corner() helper for the loaded top-right node.
- */
-export function cookMembraneMesh(nx, ny, t) {
-  const P00 = [0, 0],
-    P10 = [48, 44],
-    P11 = [48, 60],
-    P01 = [0, 44];
-  const at = (xi, eta) => [
-    (1 - xi) * (1 - eta) * P00[0] +
-      xi * (1 - eta) * P10[0] +
-      xi * eta * P11[0] +
-      (1 - xi) * eta * P01[0],
-    (1 - xi) * (1 - eta) * P00[1] +
-      xi * (1 - eta) * P10[1] +
-      xi * eta * P11[1] +
-      (1 - xi) * eta * P01[1],
-  ];
-  const nid = (i, j, k) => i * (ny + 1) * 2 + j * 2 + k;
-  const vertices = [];
-  for (let i = 0; i <= nx; i++)
-    for (let j = 0; j <= ny; j++) {
-      const [x, y] = at(i / nx, j / ny);
-      for (let k = 0; k < 2; k++) vertices.push([x, y, k * t]);
-    }
-  const hexahedra = [];
-  for (let i = 0; i < nx; i++)
-    for (let j = 0; j < ny; j++)
-      hexahedra.push([
-        nid(i, j, 0),
-        nid(i + 1, j, 0),
-        nid(i + 1, j + 1, 0),
-        nid(i, j + 1, 0),
-        nid(i, j, 1),
-        nid(i + 1, j, 1),
-        nid(i + 1, j + 1, 1),
-        nid(i, j + 1, 1),
-      ]);
-  return { vertices, hexahedra, nid, nx, ny };
-}
-
 const HEX_EDGES = [
   [0, 1],
   [1, 2],
