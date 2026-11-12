@@ -56,6 +56,7 @@ import {
   solveModel,
 } from "./lib/app-model.mjs";
 import { buildFromRecipe, nodalVonMises, withMesh } from "./lib/pipeline.mjs";
+import { engineId, femModuleId } from "./lib/provenance.mjs";
 import { resultFigure } from "./lib/render.mjs";
 import { renderExamplePage, renderIndexPage } from "./lib/page.mjs";
 import { ORDER, SITE_DIR, catalog } from "./catalog.mjs";
@@ -77,7 +78,6 @@ const SITEMAP = join(repo, "web/public/sitemap.xml");
 const SITE = "https://kofem.org";
 const DATA = join(repo, "web/public/examples/results.json");
 const REPORT = join(here, "REPORT.md");
-const ENGINE_STAMP = join(repo, "web/src/wasm/pkg/.engine-id");
 // Solved surfaces of the recipe cases, for the Theory Guide's 3D viewers.
 const SURFACE_DIR = join(here, "surfaces");
 
@@ -323,13 +323,15 @@ if (report) {
         `convergence study "${s.id}": no level matches the mesh its case is gated on — include it so the study connects to the published result`,
       );
 
-  if (!existsSync(ENGINE_STAMP))
-    throw new Error(
-      `${rel(ENGINE_STAMP)} is missing, so the engine build behind these numbers is unknown. Install the engine with scripts/fetch-wasm-engine.sh (or build it) before --report.`,
-    );
+  // The builds behind these numbers (lib/provenance.mjs): the C++ engine
+  // meshes every case and solves the legacy ones; the Rust module solves every
+  // recipe case. Like the engine id, the module id is a record, not part of
+  // the staleness check (the pages render it from this file): a rebuilt
+  // module that reproduces the published numbers leaves the pages current.
   const data = {
     generated: new Date().toISOString().slice(0, 10),
-    engine: readFileSync(ENGINE_STAMP, "utf8").trim(),
+    engine: engineId(),
+    fem: femModuleId(),
     cases: rows,
     convergence,
   };
