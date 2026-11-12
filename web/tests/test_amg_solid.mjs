@@ -8,7 +8,8 @@
 //
 // The model exercises everything the AMG path supports: two bodies with
 // different materials, a clamped end, a roller, a prescribed displacement, a
-// point load, a pressure and a total-force surface load. Node ids are offset
+// point load, a pressure and a total-force surface load — with linear and
+// with quadratic elements. Node ids are offset
 // from vertex indices, as in saved analyses, so the id → vertex mapping is
 // exercised too.
 //
@@ -40,125 +41,143 @@ const { default: createModule } = await import(
 const wasmBinary = readFileSync(join(enginePkg, "kofem_wasm_emcc.wasm")).buffer;
 // Emscripten keeps (and mutates) its options object, so each instance gets its own.
 const quiet = () => ({ wasmBinary, print: () => {}, printErr: () => {} });
-const mesher = await createModule(quiet());
-mesher.tessellate_step(
-  new Uint8Array(readFileSync(join(here, "../../test_files/Wall Bracket.stp"))),
-  JSON.stringify({ deflection_relative: 0.001, angular_deflection: 0.5 }),
-);
-const mesh = mesher.generate_fem_mesh(
-  JSON.stringify({
-    max_element_size: 20,
-    min_element_size: 2,
-    grading: 0.3,
-    second_order: false,
-    elementsperedge: 2.0,
-    elementspercurve: 2.0,
-    optsteps_2d: 3,
-    optsteps_3d: 3,
-  }),
-);
-mesher.free_geometry_cache();
-
-// ── Store model ───────────────────────────────────────────────────────────────
-const ID_OFFSET = 1000;
-const nodeCount = mesh.vertices.length / 3;
-const nodes = Array.from({ length: nodeCount }, (_, i) => ({
-  id: i + ID_OFFSET,
-  x: mesh.vertices[3 * i],
-  y: mesh.vertices[3 * i + 1],
-  z: mesh.vertices[3 * i + 2],
-}));
-const low = [Infinity, Infinity, Infinity];
-const high = [-Infinity, -Infinity, -Infinity];
-for (const node of nodes)
-  ["x", "y", "z"].forEach((key, axis) => {
-    low[axis] = Math.min(low[axis], node[key]);
-    high[axis] = Math.max(high[axis], node[key]);
-  });
-const extent = [0, 1, 2].map((axis) => high[axis] - low[axis]);
-const longest = extent.indexOf(Math.max(...extent));
-const key = ["x", "y", "z"][longest];
-const along = (node) => (node[key] - low[longest]) / extent[longest];
-
-// Two bodies: the elements whose centroid lies in the first half are steel,
-// the rest aluminium.
-const tetCount = mesh.tetrahedra.length / 4;
-const elements = Array.from({ length: tetCount }, (_, e) => {
-  const nodeIds = Array.from(
-    mesh.tetrahedra.subarray(4 * e, 4 * e + 4),
-    (vertex) => vertex + ID_OFFSET,
+// Mesh the wall bracket at `maxElementSize` (mm) and build the store model on
+// it: the same bodies, supports and loads at any mesh size.
+async function bracketModel(maxElementSize) {
+  const mesher = await createModule(quiet());
+  mesher.tessellate_step(
+    new Uint8Array(
+      readFileSync(join(here, "../../test_files/Wall Bracket.stp")),
+    ),
+    JSON.stringify({ deflection_relative: 0.001, angular_deflection: 0.5 }),
   );
-  const centroid =
-    nodeIds.reduce((sum, id) => sum + along(nodes[id - ID_OFFSET]), 0) / 4;
-  return {
-    id: e + 1,
-    type: "CTETRA",
-    nodeIds,
-    propertyId: centroid < 0.5 ? 1 : 2,
-  };
-});
-const materials = [
-  { id: 1, name: "Steel", young: 210000, poisson: 0.3, density: 7.85e-9 },
-  { id: 2, name: "Aluminium", young: 70000, poisson: 0.33, density: 2.7e-9 },
-];
-const properties = [
-  { id: 1, materialId: 1 },
-  { id: 2, materialId: 2 },
-];
+  const mesh = mesher.generate_fem_mesh(
+    JSON.stringify({
+      max_element_size: maxElementSize,
+      min_element_size: maxElementSize / 10,
+      grading: 0.3,
+      second_order: false,
+      elementsperedge: 2.0,
+      elementspercurve: 2.0,
+      optsteps_2d: 3,
+      optsteps_3d: 3,
+    }),
+  );
+  mesher.free_geometry_cache();
 
-// Clamp the first 3 %; hold the far end on a roller (the shortest axis only);
-// pull one node of the far end along the longest axis by a prescribed amount.
-const shortest = extent.indexOf(Math.min(...extent));
-const constraints = [];
-const farEnd = [];
-for (const node of nodes) {
-  if (along(node) <= 0.03)
-    for (let dof = 0; dof < 3; dof++)
-      constraints.push({ nodeId: node.id, dof });
-  else if (along(node) >= 0.97) farEnd.push(node);
-}
-for (const node of farEnd) constraints.push({ nodeId: node.id, dof: shortest });
-constraints.push({
-  nodeId: farEnd[0].id,
-  dof: longest,
-  prescribedValue: 0.002,
-});
-const loads = [
-  { nodeId: farEnd[farEnd.length - 1].id, dof: (longest + 1) % 3, value: 500 },
-];
+  // ── Store model ───────────────────────────────────────────────────────────────
+  const ID_OFFSET = 1000;
+  const nodeCount = mesh.vertices.length / 3;
+  const nodes = Array.from({ length: nodeCount }, (_, i) => ({
+    id: i + ID_OFFSET,
+    x: mesh.vertices[3 * i],
+    y: mesh.vertices[3 * i + 1],
+    z: mesh.vertices[3 * i + 2],
+  }));
+  const low = [Infinity, Infinity, Infinity];
+  const high = [-Infinity, -Infinity, -Infinity];
+  for (const node of nodes)
+    ["x", "y", "z"].forEach((key, axis) => {
+      low[axis] = Math.min(low[axis], node[key]);
+      high[axis] = Math.max(high[axis], node[key]);
+    });
+  const extent = [0, 1, 2].map((axis) => high[axis] - low[axis]);
+  const longest = extent.indexOf(Math.max(...extent));
+  const key = ["x", "y", "z"][longest];
+  const along = (node) => (node[key] - low[longest]) / extent[longest];
 
-// Surface loads on boundary triangles selected by centroid: a pressure on the
-// band at 60–70 % of the length, a total force on the band at 80–90 %.
-const band = (from, to) => {
-  const faces = [];
-  for (let t = 0; t < mesh.surfaceTriangles.length / 3; t++) {
-    const ids = Array.from(
-      mesh.surfaceTriangles.subarray(3 * t, 3 * t + 3),
+  // Two bodies: the elements whose centroid lies in the first half are steel,
+  // the rest aluminium.
+  const tetCount = mesh.tetrahedra.length / 4;
+  const elements = Array.from({ length: tetCount }, (_, e) => {
+    const nodeIds = Array.from(
+      mesh.tetrahedra.subarray(4 * e, 4 * e + 4),
       (vertex) => vertex + ID_OFFSET,
     );
     const centroid =
-      ids.reduce((sum, id) => sum + along(nodes[id - ID_OFFSET]), 0) / 3;
-    if (centroid >= from && centroid < to) faces.push(ids);
+      nodeIds.reduce((sum, id) => sum + along(nodes[id - ID_OFFSET]), 0) / 4;
+    return {
+      id: e + 1,
+      type: "CTETRA",
+      nodeIds,
+      propertyId: centroid < 0.5 ? 1 : 2,
+    };
+  });
+  const materials = [
+    { id: 1, name: "Steel", young: 210000, poisson: 0.3, density: 7.85e-9 },
+    { id: 2, name: "Aluminium", young: 70000, poisson: 0.33, density: 2.7e-9 },
+  ];
+  const properties = [
+    { id: 1, materialId: 1 },
+    { id: 2, materialId: 2 },
+  ];
+
+  // Clamp the first 3 %; hold the far end on a roller (the shortest axis only);
+  // pull one node of the far end along the longest axis by a prescribed amount.
+  const shortest = extent.indexOf(Math.min(...extent));
+  const constraints = [];
+  const farEnd = [];
+  for (const node of nodes) {
+    if (along(node) <= 0.03)
+      for (let dof = 0; dof < 3; dof++)
+        constraints.push({ nodeId: node.id, dof });
+    else if (along(node) >= 0.97) farEnd.push(node);
   }
-  return faces;
-};
-const surfaceLoads = [
-  { type: "pressure", faces: band(0.6, 0.7), pressure: 10 },
-  { type: "force", faces: band(0.8, 0.9), force: [0, 0, -4000] },
-];
-assert(
-  surfaceLoads.every((load) => load.faces.length > 0),
-  "both surface-load bands must select boundary triangles",
-);
-const model = {
-  nodes,
-  elements,
-  materials,
-  properties,
-  constraints,
-  loads,
-  surfaceLoads,
-};
+  for (const node of farEnd)
+    constraints.push({ nodeId: node.id, dof: shortest });
+  constraints.push({
+    nodeId: farEnd[0].id,
+    dof: longest,
+    prescribedValue: 0.002,
+  });
+  const loads = [
+    {
+      nodeId: farEnd[farEnd.length - 1].id,
+      dof: (longest + 1) % 3,
+      value: 500,
+    },
+  ];
+
+  // Surface loads on boundary triangles selected by centroid: a pressure on the
+  // band at 60–70 % of the length, a total force on the band at 80–90 %.
+  const band = (from, to) => {
+    const faces = [];
+    for (let t = 0; t < mesh.surfaceTriangles.length / 3; t++) {
+      const ids = Array.from(
+        mesh.surfaceTriangles.subarray(3 * t, 3 * t + 3),
+        (vertex) => vertex + ID_OFFSET,
+      );
+      const centroid =
+        ids.reduce((sum, id) => sum + along(nodes[id - ID_OFFSET]), 0) / 3;
+      if (centroid >= from && centroid < to) faces.push(ids);
+    }
+    return faces;
+  };
+  const surfaceLoads = [
+    { type: "pressure", faces: band(0.6, 0.7), pressure: 10 },
+    { type: "force", faces: band(0.8, 0.9), force: [0, 0, -4000] },
+  ];
+  assert(
+    surfaceLoads.every((load) => load.faces.length > 0),
+    "both surface-load bands must select boundary triangles",
+  );
+  return {
+    model: {
+      nodes,
+      elements,
+      materials,
+      properties,
+      constraints,
+      loads,
+      surfaceLoads,
+    },
+    nodeCount,
+    tetCount,
+  };
+}
+
+const { model, nodeCount, tetCount } = await bracketModel(20);
+const { elements, properties, constraints, surfaceLoads } = model;
 console.log(
   `wall bracket: ${nodeCount} nodes, ${tetCount} tets, ${constraints.length} constrained DOFs, ` +
     `${surfaceLoads[0].faces.length} + ${surfaceLoads[1].faces.length} loaded faces`,
@@ -178,12 +197,21 @@ assert(
     properties,
     elementOrder: 2,
     couplingCount: 0,
+  }) === null,
+  "AMG must accept a quadratic-tet solid model",
+);
+assert(
+  amgUnavailableReason({
+    elements,
+    properties,
+    elementOrder: 3,
+    couplingCount: 0,
   }) !== null,
-  "AMG must refuse quadratic elements",
+  "AMG must refuse element orders other than 1 and 2",
 );
 
 // ── MFEM engine (fresh instance, as the worker does after meshing) ────────────
-const vid = buildVertexIndexer(nodes);
+const vid = buildVertexIndexer(model.nodes);
 const engine = await createModule(quiet());
 const inputs = buildSolidEngineInputs(model, vid);
 let started = performance.now();
@@ -210,6 +238,7 @@ const neverAsk = () => {
 const amg = await solveSolidWithAmg(
   fem,
   model,
+  1,
   vid,
   vid,
   undefined,
@@ -255,6 +284,73 @@ assert(
   `von Mises stresses differ by ${stress.relative} relative`,
 );
 
+// ── Quadratic elements: the same model at order 2 ─────────────────────────────
+// Both solvers add the edge nodes themselves and extend the supports to them;
+// the prescribed displacement, roller and both surface loads all reach them.
+// On a coarser mesh, since MFEM's Gauss–Seidel CG is slow at order 2.
+const coarse = await bracketModel(40);
+const coarseVid = buildVertexIndexer(coarse.model.nodes);
+const coarseInputs = buildSolidEngineInputs(coarse.model, coarseVid);
+console.log(
+  `order 2 on a coarser mesh: ${coarse.nodeCount} vertices, ${coarse.tetCount} tets`,
+);
+started = performance.now();
+const mfemQuadratic = engine.solve_linear_elastic(
+  coarseInputs.mesh,
+  coarseInputs.matJson,
+  coarseInputs.bcsJson,
+  2,
+);
+assert(
+  !("error" in mfemQuadratic),
+  `MFEM order-2 solve failed: ${mfemQuadratic.error}`,
+);
+const mfemQuadraticSeconds = (performance.now() - started) / 1000;
+const quadraticLog = [];
+started = performance.now();
+const amgQuadratic = await solveSolidWithAmg(
+  fem,
+  coarse.model,
+  2,
+  coarseVid,
+  coarseVid,
+  undefined,
+  neverAsk,
+  (line) => quadraticLog.push(line),
+);
+const amgQuadraticSeconds = (performance.now() - started) / 1000;
+for (const line of quadraticLog) console.log(`  ${line}`);
+assert(
+  amgQuadratic.displacements.length === mfemQuadratic.displacements.length &&
+    amgQuadratic.vonMises.length === mfemQuadratic.von_mises.length,
+  "order 2: one displacement per vertex and one stress per element, as MFEM",
+);
+const quadraticDisplacement = maxDifference(
+  mfemQuadratic.displacements,
+  amgQuadratic.displacements,
+);
+const quadraticStress = maxDifference(
+  mfemQuadratic.von_mises,
+  amgQuadratic.vonMises,
+);
+console.log(
+  `order 2: max |u| ${quadraticDisplacement.peak.toExponential(4)} mm, AMG − MFEM ` +
+    `${quadraticDisplacement.relative.toExponential(2)} relative; max von Mises ` +
+    `${quadraticStress.peak.toExponential(4)} MPa, AMG − MFEM ` +
+    `${quadraticStress.relative.toExponential(2)} relative`,
+);
+console.log(
+  `order 2: MFEM ${mfemQuadraticSeconds.toFixed(2)} s, AMG ${amgQuadraticSeconds.toFixed(2)} s`,
+);
+assert(
+  quadraticDisplacement.relative < 1e-5,
+  `order 2: displacements differ by ${quadraticDisplacement.relative} relative`,
+);
+assert(
+  quadraticStress.relative < 1e-4,
+  `order 2: von Mises stresses differ by ${quadraticStress.relative} relative`,
+);
+
 // A surface load selecting only interior or stale faces is refused, as in MFEM.
 let refusal = "";
 try {
@@ -275,6 +371,7 @@ try {
         },
       ],
     },
+    1,
     vid,
     vid,
     undefined,
@@ -304,6 +401,7 @@ const progress = [];
 const continued = await solveSolidWithAmg(
   fem,
   model,
+  1,
   vid,
   vid,
   5,
@@ -348,6 +446,7 @@ try {
   await solveSolidWithAmg(
     fem,
     model,
+    1,
     vid,
     vid,
     5,

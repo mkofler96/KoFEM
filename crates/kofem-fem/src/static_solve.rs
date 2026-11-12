@@ -23,8 +23,9 @@ pub enum PreconditionerChoice {
 
 #[derive(Debug, Clone)]
 pub struct StaticSolution {
-    /// Displacement per vertex, x,y,z interleaved. Vertices no element uses
-    /// are held at zero; `unused_vertices` says how many there were.
+    /// Displacement per node, x,y,z interleaved: the vertices first, then any
+    /// edge nodes. Vertices no element uses are held at zero;
+    /// `unused_vertices` says how many there were.
     pub displacements: Vec<f64>,
     pub iterations: usize,
     pub relative_residual: f64,
@@ -46,7 +47,9 @@ pub struct PreparedStatic {
     pub unused_vertices: usize,
 }
 
-/// Solve K·u = f with the given DOFs (3·vertex + component) prescribed.
+/// Solve K·u = f with the given DOFs (3·node + component) prescribed. On a
+/// quadratic mesh a condition on both ends of an edge extends to its edge
+/// node (see [`prepare_static`]).
 /// `stiffness` is the matrix `assemble_stiffness` built for `mesh`; it is left
 /// unchanged, so it can serve further load cases.
 ///
@@ -82,6 +85,13 @@ pub fn solve_static(
 
 /// Check one load case and set it up for CG (see [`PreparedStatic`]).
 ///
+/// On a quadratic mesh, the MFEM engine's rule extends vertex conditions to
+/// the edge nodes: where both ends of an edge prescribe the same component,
+/// the edge node gets it too, at the mean of the two values — exact for a
+/// clamped face or a uniform or linear prescribed displacement. An edge with
+/// only one end constrained (the border of a support) stays free, and an edge
+/// node DOF the caller prescribes itself keeps the caller's value.
+///
 /// # Errors
 /// Malformed forces or constraints, a support or load on a vertex no element
 /// uses (it has no stiffness: a load there would vanish), or a multigrid
@@ -94,7 +104,7 @@ pub fn prepare_static(
     forces: &[f64],
     preconditioner: PreconditionerChoice,
 ) -> Result<PreparedStatic, FemError> {
-    let dof_count = 3 * mesh.vertex_count();
+    let dof_count = mesh.dof_count();
     if forces.len() != dof_count {
         return Err(FemError::ForceLength {
             len: forces.len(),
@@ -107,16 +117,23 @@ pub fn prepare_static(
             value,
         });
     }
+    if fixed_dofs.len() != fixed_values.len() {
+        return Err(FemError::ConstraintValueCount {
+            dofs: fixed_dofs.len(),
+            values: fixed_values.len(),
+        });
+    }
     for &dof in fixed_dofs {
-        let vertex = dof as usize / 3;
-        if vertex < mesh.vertex_count() && !mesh.is_used(vertex) {
-            return Err(FemError::ConstraintOnUnusedVertex { vertex });
+        let node = dof as usize / 3;
+        if node < mesh.node_count() && !mesh.is_used(node) {
+            return Err(FemError::ConstraintOnUnusedVertex { vertex: node });
         }
     }
 
-    // Hold every unused vertex at zero, after checking nothing loads it.
     let mut dofs = fixed_dofs.to_vec();
     let mut values = fixed_values.to_vec();
+    extend_to_edge_nodes(mesh, fixed_dofs, fixed_values, &mut dofs, &mut values);
+    // Hold every unused vertex at zero, after checking nothing loads it.
     for vertex in (0..mesh.vertex_count()).filter(|&vertex| !mesh.is_used(vertex)) {
         if forces[3 * vertex..3 * vertex + 3]
             .iter()
@@ -125,19 +142,9 @@ pub fn prepare_static(
             return Err(FemError::LoadOnUnusedVertex { vertex });
         }
         for component in 0..3 {
-            #[allow(
-                clippy::cast_possible_truncation,
-                reason = "TetMesh::new caps the vertex count at MAX_VERTICES, so every DOF fits in u32"
-            )]
-            dofs.push((3 * vertex + component) as u32);
+            dofs.push(dof_number(vertex, component));
             values.push(0.0);
         }
-    }
-    if fixed_dofs.len() != fixed_values.len() {
-        return Err(FemError::ConstraintValueCount {
-            dofs: fixed_dofs.len(),
-            values: fixed_values.len(),
-        });
     }
     let constraints = Dirichlet::new(dof_count, &dofs, &values)?;
 
@@ -152,8 +159,12 @@ pub fn prepare_static(
             let constrained: Vec<bool> = (0..dof_count)
                 .map(|dof| constraints.value(dof).is_some())
                 .collect();
-            let amg =
-                SmoothedAggregation::new(matrix, mesh.vertices(), &constrained, amg_settings)?;
+            let amg = SmoothedAggregation::new(
+                matrix,
+                mesh.node_coordinates(),
+                &constrained,
+                amg_settings,
+            )?;
             let levels = amg.levels();
             (Box::new(amg), levels)
         }
@@ -164,4 +175,47 @@ pub fn prepare_static(
         levels,
         unused_vertices: mesh.unused_vertex_count(),
     })
+}
+
+/// DOF number of `component` at `node`.
+fn dof_number(node: usize, component: usize) -> u32 {
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "TetMesh caps the node count at MAX_NODES, so every DOF fits in u32"
+    )]
+    let dof = (3 * node + component) as u32;
+    dof
+}
+
+/// Append to `dofs`/`values` the edge-node conditions implied by the given
+/// vertex conditions (see [`prepare_static`]). Nothing on a linear mesh.
+fn extend_to_edge_nodes(
+    mesh: &TetMesh,
+    fixed_dofs: &[u32],
+    fixed_values: &[f64],
+    dofs: &mut Vec<u32>,
+    values: &mut Vec<f64>,
+) {
+    if mesh.edges().is_empty() {
+        return;
+    }
+    // First value per node component; a conflicting second value is refused
+    // later by `Dirichlet::new`, so which one is kept does not matter.
+    let mut prescribed = vec![[None::<f64>; 3]; mesh.node_count()];
+    for (&dof, &value) in fixed_dofs.iter().zip(fixed_values) {
+        let (node, component) = (dof as usize / 3, dof as usize % 3);
+        if let Some(slot) = prescribed.get_mut(node) {
+            slot[component].get_or_insert(value);
+        }
+    }
+    for (edge, &[first, second]) in mesh.edges().iter().enumerate() {
+        let node = mesh.vertex_count() + edge;
+        let (lhs, rhs) = (prescribed[first as usize], prescribed[second as usize]);
+        for (component, own) in prescribed[node].iter().enumerate() {
+            if let (None, Some(lhs), Some(rhs)) = (own, lhs[component], rhs[component]) {
+                dofs.push(dof_number(node, component));
+                values.push(f64::midpoint(lhs, rhs));
+            }
+        }
+    }
 }

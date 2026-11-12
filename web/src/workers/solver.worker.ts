@@ -5,7 +5,11 @@
 // Runs kofem-wasm off the main thread so heavy solves don't freeze the UI.
 
 import createModule, { EngineLoadError } from "../wasm/pkg/kofem_wasm.js";
-import { ElasticModel, SolveOptions } from "../wasm/fem/kofem_wasm.js";
+import {
+  ElasticModel,
+  ShellModel,
+  SolveOptions,
+} from "../wasm/fem/kofem_wasm.js";
 import { FemLoadError, loadFemModule } from "../lib/femModule.js";
 import type {
   EngineLoadProgress,
@@ -44,6 +48,7 @@ import {
 } from "../lib/solve/coupled.js";
 import { routeSolve, routeTopOpt, topOptStartLog } from "../lib/solve/route.js";
 import { buildShellEngineInputs } from "../lib/solve/shell.js";
+import { solveShellInRust } from "../lib/solve/shellRust.js";
 import {
   amgUnavailableReason,
   isSolverMethod,
@@ -563,21 +568,37 @@ function logTo(id: number): SolveLog {
   return (line) => self.postMessage({ id, log: line });
 }
 
-// Solve a pure-shell (all-CTRIA3) model via the engine's Kirchhoff shell
-// solver. The result matches the solid contract — three translations per node,
-// one von Mises surface stress per element — so the store and viewport consume
-// it unchanged. elementOrder and tie connections do not apply to shells (the
-// DKT facet is what it is; ties join solid bodies) and are ignored.
+// The Kirchhoff shell solve of a { mesh, mat_json, bcs_json } payload, through
+// the Rust module (KOF-306). The C++ engine's solve_shell takes the same
+// payload and stays the test oracle (tests/test_shell_rust.mjs).
+function solveShell(
+  inputs: Parameters<typeof solveShellInRust>[1],
+  payload: SolvePayload,
+  log: SolveLog,
+) {
+  return solveShellInRust(
+    { ShellModel },
+    inputs,
+    payload.cgIterationLimit,
+    onCgLimit,
+    log,
+  );
+}
+
+// Solve a pure-shell (all-CTRIA3) model with the Kirchhoff shell solver. The
+// result matches the solid contract — three translations per node, one von
+// Mises surface stress per element — so the store and viewport consume it
+// unchanged. elementOrder and tie connections do not apply to shells (the DKT
+// facet is what it is; ties join solid bodies) and are ignored.
 async function handleShellSolve(id: number, payload: SolvePayload) {
   const { nodes, elements } = payload;
-  const { mesh, matJson, bcsJson } = buildShellEngineInputs(payload);
+  const inputs = buildShellEngineInputs(payload);
 
   self.postMessage({
     id,
     log: `Starting shell solve: ${nodes.length} nodes, ${elements.length} shell facets…`,
   });
-  const result = await m().solve_shell(mesh, matJson, bcsJson);
-  if ("error" in result) throw new Error(result.error);
+  const result = await solveShell(inputs, payload, logTo(id));
 
   self.postMessage({
     id,
@@ -641,15 +662,7 @@ async function handleAutoShellSolve(
     fields = coupled.mapResult(result);
   } else {
     const pure = preparePureShellSolve(payload, shellBodyIds, log);
-    if (pure) {
-      const result = await m().solve_shell(
-        pure.mesh,
-        pure.matJson,
-        pure.bcsJson,
-      );
-      if ("error" in result) throw new Error(result.error);
-      fields = pure.mapResult(result);
-    }
+    if (pure) fields = pure.mapResult(await solveShell(pure, payload, log));
   }
   if (!fields) return false;
   self.postMessage({
@@ -683,14 +696,24 @@ function amgReason(payload: SolvePayload): string | null {
 }
 
 // All-solid static solve, with tie connections welded: the Rust AMG solver for
-// linear tets when it was chosen, otherwise the engine's solve_linear_elastic.
+// tets when it was chosen, otherwise the engine's solve_linear_elastic.
 async function handleSolidSolve(id: number, payload: SolvePayload) {
   const { nodes, elements } = payload;
   const tied = weldTies(nodes, elements, payload.tieGroups, logTo(id));
+  // FE polynomial order, chosen in the frontend (Solver settings). Order 2
+  // (quadratic / second-order) adds edge-midpoint DOFs that resolve bending
+  // and stress gradients far better than linear tets, which lock in bending
+  // and smear stress concentrations to a single constant value per element
+  // (issue #215), at the cost of a slower solve. Both solvers extend the
+  // vertex Dirichlet BCs to the new edge DOFs so clamped/prescribed faces
+  // stay fully constrained. Defaults to 1 (linear) when the payload omits it.
+  // eslint-disable-next-line kofem/no-silent-fallback -- elementOrder is optional in the solve message; the documented default is linear elements
+  const order = payload.elementOrder ?? 1;
   if (requestedSolver(payload) === "amg" && amgReason(payload) === null) {
     const result = await solveSolidWithAmg(
       { ElasticModel, SolveOptions },
       { ...payload, nodes: tied.solveNodes, elements: tied.tiedElements },
+      order,
       tied.vid,
       tied.vidTied,
       payload.cgIterationLimit,
@@ -715,15 +738,6 @@ async function handleSolidSolve(id: number, payload: SolvePayload) {
     tied.vidTied,
   );
 
-  // FE polynomial order, chosen in the frontend (Solver settings). Order 2
-  // (quadratic / second-order) adds edge-midpoint DOFs that resolve bending
-  // and stress gradients far better than linear tets, which lock in bending
-  // and smear stress concentrations to a single constant value per element
-  // (issue #215), at the cost of a slower solve. The engine extends the
-  // vertex Dirichlet BCs to the new edge DOFs so clamped/prescribed faces
-  // stay fully constrained. Defaults to 1 (linear) when the payload omits it.
-  // eslint-disable-next-line kofem/no-silent-fallback -- elementOrder is optional in the solve message; the documented default is linear elements
-  const order = payload.elementOrder ?? 1;
   self.postMessage({
     id,
     log: `Starting static solve: ${nodes.length} nodes, ${elements.length} elements (order ${order})…`,
@@ -751,12 +765,18 @@ async function handleSolidSolve(id: number, payload: SolvePayload) {
 async function handleSolve(id: number, payload: SolvePayload) {
   m().cgIterationLimit = payload.cgIterationLimit;
   const reason = amgReason(payload);
-  if (requestedSolver(payload) === "amg" && reason !== null)
+  const route = routeSolve(payload);
+  // The shell solve logs its own preconditioner (IC(0)); the Gauss–Seidel
+  // note is for the solid and coupled paths.
+  if (
+    requestedSolver(payload) === "amg" &&
+    reason !== null &&
+    route.path !== "shell"
+  )
     self.postMessage({
       id,
       log: `AMG is not available for this model (${reason}) — solving with Gauss–Seidel.`,
     });
-  const route = routeSolve(payload);
   switch (route.path) {
     case "shell":
       await handleShellSolve(id, payload);

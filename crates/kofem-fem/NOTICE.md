@@ -5,10 +5,11 @@ and iterative-solver approach used by KoFEM's existing
 [MFEM](https://mfem.org/) engine. We credit MFEM and its contributors as the
 upstream implementation reference for this work.
 
-The Rust module reimplements a limited subset: linear tetrahedral elasticity,
-sparse assembly, prescribed displacements, and preconditioned conjugate
-gradients. MFEM remains the numerical reference used in the comparison tests.
-This module does not provide MFEM's full feature set.
+The Rust module reimplements a limited subset: linear and quadratic
+(10-node) tetrahedral elasticity, sparse assembly, prescribed displacements,
+and preconditioned conjugate gradients. MFEM remains the numerical reference
+used in the comparison tests. This module does not provide MFEM's full
+feature set.
 
 ## Upstream references
 

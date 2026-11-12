@@ -31,8 +31,8 @@ pub enum FemError {
     YoungsModulus { index: usize, value: f64 },
     #[error("material {index}: Poisson's ratio must lie in (-1, 0.5), got {value}")]
     PoissonRatio { index: usize, value: f64 },
-    #[error("the mesh has {count} vertices; at most {max} are supported")]
-    TooManyVertices { count: usize, max: usize },
+    #[error("the mesh has {count} nodes; at most {max} are supported")]
+    TooManyNodes { count: usize, max: usize },
     #[error("the mesh has no tetrahedra")]
     EmptyMesh,
     #[error("constrained degree of freedom {dof} is out of range (the model has {count})")]
@@ -84,4 +84,30 @@ pub enum FemError {
          the model is probably not fully constrained"
     )]
     CoarseNotPositiveDefinite { unknowns: usize },
+    #[error("triangle array has {len} indices, which is not a multiple of 3")]
+    TriangleArrayLength { len: usize },
+    #[error("the shell mesh has no triangles")]
+    EmptyShellMesh,
+    #[error("triangle {triangle} references vertex {vertex}, but the mesh has {count} vertices")]
+    TriangleVertexOutOfRange {
+        triangle: usize,
+        vertex: u32,
+        count: usize,
+    },
+    #[error("triangle {triangle} has zero area (its three vertices are collinear or coincide)")]
+    DegenerateTriangle { triangle: usize },
+    #[error("{count} shell thicknesses given for {triangles} triangles")]
+    ThicknessCount { count: usize, triangles: usize },
+    #[error("triangle {triangle}: shell thickness must be positive and finite, got {value}")]
+    Thickness { triangle: usize, value: f64 },
+    #[error("{count} material ids given for {triangles} triangles")]
+    ShellMaterialIdCount { count: usize, triangles: usize },
+    #[error(
+        "triangle {triangle} uses material {material}, but only {count} materials are defined"
+    )]
+    ShellMaterialOutOfRange {
+        triangle: usize,
+        material: u32,
+        count: usize,
+    },
 }

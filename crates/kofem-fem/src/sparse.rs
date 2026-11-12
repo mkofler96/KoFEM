@@ -2,9 +2,9 @@
 // SPDX-FileCopyrightText: 2010-2024 Lawrence Livermore National Security, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later AND BSD-3-Clause
 
-//! Compressed sparse row matrix with a node-block pattern: DOF 3·n + c is
-//! component c of node n, and every pair of nodes that shares an element
-//! couples all nine of its component pairs.
+//! Compressed sparse row matrix with a node-block pattern: DOF b·n + c is
+//! component c of node n (b = 3 for solids, 6 for shells), and every pair of
+//! nodes that shares an element couples all of its component pairs.
 //!
 //! MFEM reference for the symmetric Gauss-Seidel preconditioner:
 //! `SparseMatrix::Gauss_Seidel_forw` and `Gauss_Seidel_back` in
@@ -27,30 +27,38 @@ impl CsrMatrix {
     /// node itself) expanded to 3×3 component blocks.
     #[must_use]
     pub fn from_node_pattern(node_neighbours: &[Vec<u32>]) -> Self {
-        let rows = 3 * node_neighbours.len();
+        Self::from_node_blocks(node_neighbours, 3)
+    }
+
+    /// Zero matrix with the pattern of `node_neighbours` (sorted, including the
+    /// node itself) expanded to `block`×`block` component blocks: DOF
+    /// `block`·n + c is component c of node n. Solids use 3, shells 6.
+    #[must_use]
+    pub fn from_node_blocks(node_neighbours: &[Vec<u32>], block: usize) -> Self {
+        let rows = block * node_neighbours.len();
         let mut row_start = Vec::with_capacity(rows + 1);
         let mut nnz = 0;
         row_start.push(nnz);
         for neighbours in node_neighbours {
-            for _component in 0..3 {
-                nnz += 3 * neighbours.len();
+            for _component in 0..block {
+                nnz += block * neighbours.len();
                 row_start.push(nnz);
             }
         }
         let mut columns = Vec::with_capacity(nnz);
         let mut diagonal_at = Vec::with_capacity(rows);
         for (node, neighbours) in node_neighbours.iter().enumerate() {
-            for component in 0..3 {
-                let row = 3 * node + component;
+            for component in 0..block {
+                let row = block * node + component;
                 for &other in neighbours {
-                    for other_component in 0..3 {
-                        let column = 3 * other as usize + other_component;
+                    for other_component in 0..block {
+                        let column = block * other as usize + other_component;
                         if column == row {
                             diagonal_at.push(columns.len());
                         }
                         #[allow(
                             clippy::cast_possible_truncation,
-                            reason = "TetMesh::new caps the vertex count at MAX_VERTICES, so every DOF fits in u32"
+                            reason = "the mesh constructors cap the vertex count so every DOF fits in u32"
                         )]
                         columns.push(column as u32);
                     }
@@ -98,6 +106,12 @@ impl CsrMatrix {
     #[must_use]
     pub fn diagonal(&self, row: usize) -> f64 {
         self.values[self.diagonal_at[row]]
+    }
+
+    /// Position of row `row`'s diagonal entry in `columns()` / `values()`.
+    #[must_use]
+    pub fn diagonal_position(&self, row: usize) -> usize {
+        self.diagonal_at[row]
     }
 
     /// Pattern and values at once, for in-place edits that read the pattern:
