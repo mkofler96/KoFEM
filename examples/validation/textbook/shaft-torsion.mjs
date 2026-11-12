@@ -6,16 +6,17 @@
 import { hollowShaftFigure } from "../lib/figures.mjs";
 import { REF } from "./refs.mjs";
 
-/** Polar moment of a regular n-gon inscribed in a circle of radius r. */
-const polygonJ = (r, n) => {
-  const a = (2 * Math.PI) / n;
-  return ((n * r ** 4) / 12) * Math.sin(a) * (2 + Math.cos(a));
+/** The study's series of one element order. */
+const seriesOf = (study, order) => {
+  const s = study.series.find((x) => x.order === order);
+  if (!s) throw new Error(`shaft-torsion study has no order-${order} series`);
+  return s;
 };
 
 export default {
   description:
-    "Torsion of a hollow circular shaft, θ = TL/(GJ): derivation, and how the polygonal mesh of a circle explains almost all of KoFEM's error.",
-  figure: ({ page }) => hollowShaftFigure({ div: page.grid }),
+    "Torsion of a hollow circular shaft, θ = TL/(GJ): derivation, why linear tetrahedra are too stiff here, and how the polygonal mesh of a circle explains most of KoFEM's error.",
+  figure: () => hollowShaftFigure({ div: null }),
   intro: ({ url }) => `
         <p>Torsion of a circular tube is the shaft problem from every
         mechanics-of-materials course. Unlike the
@@ -49,65 +50,80 @@ export default {
         at the outer surface, is
         ${tex(`τ_{\\mathrm{max}} = T r_{\\mathrm{o}} / J = ${n((T * ro) / J)}\\text{ MPa}`)}.</p>`;
   },
-  model: ({ tex, page }) => {
-    const [nr, nth, nz] = page.grid;
-    return `
-        <p>The tube is meshed with ${nr} elements through the wall,
-        ${nth} around and ${nz} along the axis. The nodes lie on the true
-        circles, but the element edges between them are straight. The torque
-        is applied as tangential nodal forces on the end ring, proportional to
-        the radius ${tex("r")} (the ${tex("τ ∝ r")} distribution of the exact
-        solution) and scaled so the moment is ${tex("T")}, which is how the app
-        applies a moment to a face. The twist is the
-        mean rotation of the end-ring nodes.</p>`;
-  },
+  model: ({ tex }) => `
+        <p>The tube is the STEP file a user imports, meshed by Netgen with
+        quadratic tetrahedra. The z = 0 end face is fixed and the moment sits
+        on the z = L end face. The app applies a moment to a face as
+        tangential forces at the face's nodes, proportional to their distance
+        ${tex("r")} from the centre of the face (the ${tex("τ ∝ r")} of the exact solution)
+        and scaled so their moment is ${tex("T")}. The twist is the mean
+        rotation of the end face's nodes about the axis.</p>
+        <p>The mesh nodes lie on the true circles, but the element edges
+        between them are straight, so the section of the mesh is the ring
+        between two polygons. Quadratic elements are used because linear ones
+        are too stiff here; see the discussion.</p>`,
   discussion: ({ row, pct, tex, texBlock, study, studyDef, inp }) => {
     const ri = inp("rᵢ"),
       ro = inp("rₒ");
-    const J = (Math.PI * (ro ** 4 - ri ** 4)) / 2;
-    const levels = studyDef.series[0].levels;
-    const rows = study.series[0].points
+    const p1 = seriesOf(study, 1).points;
+    const p2 = seriesOf(study, 2).points;
+    const levels = seriesOf(studyDef, 2).levels;
+    if (levels.length !== p2.length)
+      throw new Error("shaft-torsion study: P2 levels and points differ");
+    const size = row.mesh.maxElementSize;
+    const p1Here = p1.find((p) => p.mesh === `${size} mm`);
+    if (!p1Here)
+      throw new Error(
+        `shaft-torsion study: no P1 point at the case's ${size} mm`,
+      );
+    // Edges of length h on a circle of radius r cut its polar moment by
+    // about h²/(3r²), so the ring twists more by h²/(3(rₒ² + rᵢ²)).
+    const rows = p2
       .map((p, i) => {
-        const nth = levels[i][1]; // [radial, around, axial]
-        const geom = (J / (polygonJ(ro, nth) - polygonJ(ri, nth)) - 1) * 100;
+        const geom = (100 * levels[i] ** 2) / (3 * (ro ** 2 + ri ** 2));
         return `
               <tr${p.ci ? ' class="ci"' : ""}>
-                <td class="num">${nth}</td>
+                <td class="num">${p.mesh}</td>
                 <td class="num">${pct(geom)}</td>
                 <td class="num">${pct(p.errPct)}</td>
               </tr>`;
       })
       .join("");
     return `
-        <p>KoFEM's twist differs from the reference by ${pct(row.errPct)}, and almost
-        all of it is geometry. With straight element edges, the section of the
-        mesh is the ring between two regular polygons inscribed in the true
-        circles. Its polar moment is smaller than ${tex("J")}, so it twists
-        more. The polar moment of a regular ${tex("n")}-gon inscribed in a
-        circle of radius ${tex("r")} is</p>
-        ${texBlock("J_{n} = \\frac{n r^4}{12}\\sin\\frac{2π}{n}\\left(2 + \\cos\\frac{2π}{n}\\right),")}
-        <p>which tends to ${tex("π r^4 / 2")} as ${tex("n")} grows. The twist
-        the polygon alone predicts, ${tex("J / J_{n} - 1")}, matches KoFEM's
-        error on every mesh of the convergence study:</p>
+        <p>KoFEM's twist differs from the reference by ${pct(row.errPct)}.
+        Most of that is geometry. The polar moment of a regular
+        ${tex("n")}-gon inscribed in a circle of radius ${tex("r")} is</p>
+        ${texBlock("J_{n} = \\frac{n r^4}{12}\\sin\\frac{2π}{n}\\left(2 + \\cos\\frac{2π}{n}\\right) ≈ \\frac{π r^4}{2}\\left(1 - \\frac{h^2}{3 r^2}\\right),")}
+        <p>with the edge length ${tex("h ≈ 2π r / n")}. Netgen makes the edges
+        on each circle about as long as the element size, so the ring of
+        polygons twists more than the tube by about
+        ${tex("h^2 / \\left(3 (r_{\\mathrm{o}}^2 + r_{\\mathrm{i}}^2)\\right)")}:</p>
         <div class="table-wrap">
           <table class="data">
             <thead>
               <tr>
-                <th scope="col" class="num">Segments</th>
+                <th scope="col" class="num">Element size</th>
                 <th scope="col" class="num">Polygon alone</th>
-                <th scope="col" class="num">KoFEM</th>
+                <th scope="col" class="num">KoFEM (P2)</th>
               </tr>
             </thead>
             <tbody>${rows}
             </tbody>
           </table>
         </div>
-        <p>What the elements add on top is under a tenth of a percent. The
-        geometric error falls with the square of the segment angle, which is
-        the factor of four per refinement in the convergence plot. More
-        segments, or curved higher-order elements, remove it. The same holds
-        for any curved surface in a model: the mesh replaces it with facets,
-        and stiffness follows the facets.</p>`;
+        <p>The polygon error falls with the square of the element size. The
+        rest, about a percent, comes from the loaded end: the moment arrives
+        as forces at single nodes, and the twist is read at those same nodes,
+        which give a little under them. Away from the end, the twist rate is
+        close to what the polygon alone predicts. This end part shrinks too,
+        but more slowly than the polygon error.</p>
+        <p>Linear tetrahedra behave differently. With two elements through
+        the wall they are far too stiff in torsion, and come out
+        ${pct(p1Here.errPct)} on the same mesh. They approach the reference
+        from below while the polygon pushes the other way, so a linear mesh
+        that lands near the reference does so by cancellation, not
+        convergence. Quadratic elements converge steadily, which is why this
+        example uses them.</p>`;
   },
   references: [REF.gere, REF.timoshenkoGoodier],
 };
