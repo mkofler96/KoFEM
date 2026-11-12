@@ -26,7 +26,7 @@ import {
 
 const htmlEntry = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 
-// The static pages (index.html, privacy/index.html, and examples/index.html
+// The static pages (index.html, 404.html, privacy/index.html, and examples/index.html
 // plus one examples/<id>/index.html per example, which
 // examples/validation/run.mjs --report generates) are fully static — Vite
 // emits them byte-for-byte, they import no hashed assets. Feeding them as extra
@@ -40,6 +40,7 @@ const htmlEntry = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 // the filesystem, and transformIndexHtml injects analytics there instead.
 const STATIC_PAGES = [
   "index.html",
+  "404.html",
   "privacy/index.html",
   "examples/index.html",
   ...readdirSync(htmlEntry("./examples/"), { withFileTypes: true })
