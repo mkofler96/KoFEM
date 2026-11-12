@@ -124,9 +124,10 @@ bun examples/validation/axial-bar-study.mjs
 
 The study checks the engine source ID, all result lengths and finiteness, the
 reference bands, and the committed numerical snapshot. It reuses the public
-case builder, app-model adapter, mesh statistics and real WASM loader. To update
-its snapshot, first commit the reviewed code/measurement changes so the recorded
-revision contains the code that ran. Then run:
+case's inputs, the structured hex adapter in `app-model.mjs`, mesh statistics
+and the real WASM loader. To update its snapshot, first commit the reviewed
+code/measurement changes so the recorded revision contains the code that ran.
+Then run:
 
 ```sh
 bun examples/validation/axial-bar-study.mjs --report

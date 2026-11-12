@@ -10,19 +10,26 @@ and one page per example, `/examples/<id>/`. Each example is a model the app
 opens at `/app/?example=<id>`, with a static, crawlable page in the same
 place: the problem, the reference solution, KoFEM's result and a figure of the
 solved model. There is one list, in `examples/validation/catalog.mjs`, and two
-kinds of example:
+kinds of example, both built from a **recipe**: one STEP file and the GUI's
+steps (`examples/validation/lib/recipe.mjs`):
 
-- **Validation cases** (`examples/validation/cases/`): built from their recipe
-  (a STEP file and the GUI's steps, `examples/validation/lib/recipe.mjs`) on
-  every CI run; a few are still structured hex models until KOF-322 converts
-  them. `bun run validate:report` (in `web/`) writes their `.vtu`, `.step`,
-  `.model.step` and `.png` here, the pages (`web/examples/`) and
+- **Validation cases** (`examples/validation/cases/`), built and checked on
+  every CI run. `bun run validate:report` (in `web/`) writes their `.vtu`,
+  `.step`, `.model.step` and `.png` here, the pages (`web/examples/`) and
   `web/public/examples/results.json`.
-- **Showcases**, each built by a generator in this folder through the app's own
-  pipeline. A generator writes `site/<id>.vtu` (plus `.step` and `.model.step`
-  where the model can be re-meshed), `site/<id>.png` and `showcase/<id>.json`,
-  the numbers on its page. Run `bun run validate:report` afterwards to
-  re-render the pages.
+- **Showcases**, models without a closed-form answer, each built from its
+  recipe in `recipes/` by a generator in this folder. A generator writes
+  `site/<id>.vtu`, `.step`, `.model.step`, `site/<id>.png` and
+  `showcase/<id>.json`, the numbers on its page.
+
+To regenerate everything, run the generators first, then the report, which
+renders every page from the case runs and the showcase records:
+
+```bash
+cd web
+bun run examples:generate-mbb-topopt
+bun run validate:report
+```
 
 An example built from a STEP file ships two: `<id>.step`, the file a user
 imports (the page links it), and `<id>.model.step`, the geometry after the
@@ -32,9 +39,10 @@ opens the example, so a re-mesh keeps every support and load on its face
 
 `site/` is served at `/examples/`, next to the pages: Vite serves it in dev and
 copies it into `dist/examples/` on build (`web/vite.config.ts`). Never hand-edit
-a `.vtu`, `.png`, record or page; change the case, generator or page text
-(`examples/validation/textbook/<id>.mjs`) and regenerate. CI fails when a page
-no longer matches its sources or a case's `.vtu` no longer matches its model.
+a `.vtu`, `.png`, record or page; change the case, recipe, generator or page
+text (`examples/validation/textbook/<id>.mjs`) and regenerate. CI fails when a
+page no longer matches its sources or a case's `.vtu` no longer matches its
+model.
 
 | Generator                 | Example                         | Run (in `web/`)                        |
 | ------------------------- | ------------------------------- | -------------------------------------- |
@@ -47,29 +55,32 @@ Its diagrams and charts are published as SVG and PNG files in `site/<id>/`
 
 ## Examples are built the way a user builds them
 
-Every showcase should be one a user can make in the app: a generator
-creates it through the same engine calls the UI makes — import, the split tool,
-whole-CAD-face picks — never from geometry or node sets the app cannot produce.
-Face entries then carry their `cadFaceId`, so an opened example keeps its
-supports and loads through a re-mesh.
+Every example is built through the app's steps from its STEP file: import,
+split, mesh, material, supports and loads on whole CAD faces, run. The build
+(`examples/validation/lib/pipeline.mjs`) makes the same engine calls the UI
+makes and solves with the app's own code, so solving an opened example gives
+the number on its page, and every face entry carries its `cadFaceId`, so a
+re-mesh keeps every support and load. There are no exceptions:
 
-The MBB beam and every validation case with a recipe follow this. The
-remaining validation cases do not yet (KOF-322,
-`examples/validation/rules.mjs` lists them): they are structured meshes with node-set
-boundary conditions, which the app's Netgen pipeline cannot reproduce. Their
-loads are still built exactly as the app builds them
-(`examples/validation/lib/app-model.mjs`), so solving an opened example gives
-the number on its page.
+- `examples/validation/rules.mjs` fails if an example has no recipe, no STEP
+  file, no geometry in its `.vtu`, a hexahedron, a support or load that is not
+  a whole CAD face, or no hand check (or, for an optimization, no Optimize
+  settings);
+- `web/tests/examples-by-hand.spec.ts` rebuilds every example from its recipe
+  with real clicks and must get the published number;
+- `web/tests/example-remesh.spec.ts` opens every example and re-meshes it with
+  its supports and loads on the same CAD faces.
 
 ## The cantilever beam (with a hand check)
 
-The cantilever beam (`cantilever-beam`) is a validation case with a recipe
-(`examples/validation/cases/cantilever-beam.mjs`): a 1000 × 100 × 100 mm
-block meshed at 25 mm with quadratic tetrahedra, the face x = 0 clamped, the
-face x = 1000 loaded with Fy = −10 kN. Like every recipe case, its `.vtu` is
-saved **unsolved**, on the static study, with a `handCheck` block
-(`web/src/lib/handCheck.ts`) the Results panel compares the tip deflection
-with, and it ships its `.step` and `.model.step`, so it can be re-meshed.
+The cantilever beam (`cantilever-beam`) is a 1000 × 100 × 100 mm block meshed
+at 25 mm with quadratic tetrahedra, the face x = 0 clamped, the face x = 1000
+loaded with Fy = −10 kN (`examples/validation/cases/cantilever-beam.mjs`).
+Like every example, its `.vtu` is saved **unsolved**, on the static study, with
+a `handCheck` block (`web/src/lib/handCheck.ts`) the Results panel compares the
+tip deflection with. Its page carries the P1-vs-P2 convergence study: linear
+tetrahedra lock in bending, which is why the example uses quadratic ones. The
+app's tests open it as the standard solved-in-seconds model.
 
 The empty app's "Try a sample simulation" is not one of these examples: it opens
 the wall bracket's CAD file (`web/public/samples/`) with nothing set up, and a
@@ -108,5 +119,5 @@ ready to run. The run converges 192.6 → 47.5 N·mm in 88 iterations.
 Showcase recipes are listed in `recipes/index.mjs`, where the rule check
 (`examples/validation/rules.mjs`), the page and the GUI test find them.
 
-The half-model regression benchmark on a structured hex grid lives in
-`examples/validation/topopt/cases/mbb-beam.mjs`.
+The optimizer's own regression benchmark, a half-model on a structured hex grid
+and not an example, lives in `examples/validation/topopt/cases/mbb-beam.mjs`.
