@@ -425,10 +425,8 @@ export async function buildFromRecipe(id, recipe) {
       l.kind === "force"
         ? [...l.components]
         : [0, 1, 2].map((axis) => (axis === l.axis ? l.value : 0));
-    if (components.every((v) => v === 0))
-      throw new Error(
-        `${where}.loads[${i}]: an all-zero ${l.kind} — the app rejects it`,
-      );
+    // validateRecipe has refused a load the app rejects (a zero pressure, an
+    // all-zero force or moment).
     return {
       ...group,
       ...summarizeComponents(components, l.kind),
@@ -542,6 +540,7 @@ export async function buildFromRecipe(id, recipe) {
         cadFaceIds: supportFaces[i],
       })),
       young: m.young,
+      poisson: m.poisson,
     },
   };
 

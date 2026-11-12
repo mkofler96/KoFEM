@@ -11,7 +11,9 @@
 //   - generate_fem_mesh (Netgen, the worker's options) gives a tet mesh with one
 //     body, consistently oriented tets, every CAD face meshed on its surface, and
 //     a total volume within 0.5 % of the analytic volume;
-//   - prismStep still writes byte-identical files, and invalid profiles throw.
+//   - prismStep still writes byte-identical files, and invalid profiles throw;
+//   - product names are escaped as ISO 10303-21 strings (an apostrophe written
+//     twice), and such a file still imports.
 //
 // Run: bun examples/gallery/step-prism.test.mjs
 
@@ -27,6 +29,7 @@ import {
   prismStep,
   profileArea,
   quarterStripWithHoleStep,
+  stepString,
 } from "./step-prism.mjs";
 
 /** @type {{ name: string, ok: boolean, detail?: string }[]} */
@@ -256,6 +259,54 @@ function checkPart(label, step, faces, volume, size, maxElementSize) {
     `${meshIds.length} faces, max distance ${off.toExponential(2)} mm`,
   );
 }
+
+// ── Product names are escaped as ISO 10303-21 strings ────────────────────────
+// An apostrophe inside a string is written twice ('Cook''s membrane'); the
+// file still imports as the one solid it describes.
+{
+  const step = prismStep(
+    [
+      [0, 0],
+      [48, 44],
+      [48, 60],
+      [0, 44],
+    ],
+    1,
+    "Cook's membrane",
+  );
+  const named = step.split("\n").filter((row) => row.includes("Cook"));
+  check(
+    "an apostrophe in the product name is written twice in every string",
+    named.length === 4 &&
+      named.every((row) => row.includes("'Cook''s membrane'")) &&
+      !/[^']'s membrane/.test(step),
+    named.join(" | "),
+  );
+  const tess = engine.tessellate_step(
+    new TextEncoder().encode(step),
+    JSON.stringify({
+      deflection_relative: 0.001,
+      angular_deflection: 0.5,
+      format: "step",
+    }),
+  );
+  const faceCount = new Set(tess.triangleFaceIds).size;
+  check(
+    "a product name with an apostrophe imports: one body, six CAD faces",
+    tess.bodyCount === 1 && faceCount === 6,
+    `${tess.bodyCount} bodies, ${faceCount} faces`,
+  );
+}
+check(
+  "a backslash in a STEP string is written twice",
+  stepString("a\\b's") === "a\\\\b''s",
+  stepString("a\\b's"),
+);
+throws(
+  "a name outside printable ASCII is rejected, not mis-encoded",
+  () => stepString("Träger"),
+  /"ä" is not printable ASCII/,
+);
 
 /** Distance helpers: 0 on the surface. */
 const onX = (/** @type {number} */ x0) => (/** @type {number} */ x) => x - x0;
