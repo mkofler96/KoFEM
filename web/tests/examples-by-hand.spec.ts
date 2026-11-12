@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Every example can be rebuilt from scratch in the GUI alone (KOF-322). For each
-// example on /examples/ that has a recipe, this walks the recipe's steps with
-// real clicks (fixtures/recipe.ts) — import the STEP file, split, mesh, material,
+// example on /examples/, this walks its recipe's steps with real clicks (fixtures/recipe.ts) — import the STEP file, split, mesh, material,
 // supports, loads, solve — and checks that:
 //
 //   - the geometry has the faces and bodies the splits should give;
@@ -38,7 +37,7 @@ import {
   type BuildReport,
   type Recipe,
 } from "./fixtures/recipe";
-import { DRIVER_RECIPES, SHOWCASE_RECIPES } from "./fixtures/local-recipes";
+import { DRIVER_RECIPES } from "./fixtures/local-recipes";
 import {
   ORDER,
   SHOWCASE_IDS,
@@ -73,17 +72,17 @@ function publishedFe(id: string): number {
 }
 
 // An example's recipe: exported by its case module or, for a showcase, by
-// examples/gallery/recipes/, else carried locally for a showcase whose generator
-// has none yet; null when there is none.
-function recipeFor(id: string): Recipe | null {
+// examples/gallery/recipes/. Every example has one; one without is an error.
+function recipeFor(id: string): Recipe {
   const mod = (cases as { id: string; recipe?: unknown }[]).find(
     (c) => c.id === id,
   );
   if (mod?.recipe !== undefined) return asRecipe(id, mod.recipe);
   const showcase: unknown = showcaseRecipe(id);
   if (showcase !== undefined) return asRecipe(id, showcase);
-  if (id in SHOWCASE_RECIPES) return asRecipe(id, SHOWCASE_RECIPES[id]);
-  return null;
+  throw new Error(
+    `example "${id}" has no recipe: every example is built from its STEP file in the GUI's steps (examples/validation/lib/recipe.mjs)`,
+  );
 }
 
 // Geometry, mesh and boundary conditions as the recipe should have made them.
@@ -197,16 +196,10 @@ async function rebuild(
 
 // ── The examples, in page order ───────────────────────────────────────────────
 
-const missing: string[] = [];
 for (const id of ORDER as string[]) {
-  const recipe = recipeFor(id);
-  if (!recipe) {
-    missing.push(id);
-    test.fixme(`${id}: no recipe yet (KOF-322)`, () => {});
-    continue;
-  }
   test(`${id} rebuilt by hand gives the published number`, async ({ page }) => {
     test.setTimeout(600_000);
+    const recipe = recipeFor(id);
     const published = publishedFe(id);
     const value = await rebuild(page, id, recipe);
     console.log(`[examples-by-hand] ${id}: published ${published}`);
@@ -216,10 +209,6 @@ for (const id of ORDER as string[]) {
     ).toBeLessThanOrEqual(1e-3 * Math.abs(published));
   });
 }
-if (missing.length > 0)
-  console.log(
-    `[examples-by-hand] no recipe yet (KOF-322): ${missing.join(", ")}`,
-  );
 
 // ── Driver self-tests: each load kind, and a split ───────────────────────────
 

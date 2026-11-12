@@ -9,7 +9,7 @@ import { REF } from "./refs.mjs";
 export default {
   description:
     "A steel bar in uniaxial tension, δ = PL/(EA): derivation, how a face load becomes nodal forces, and KoFEM's result against the closed-form solution.",
-  figure: () => barFigure({ load: "traction", div: null }),
+  figure: () => barFigure({ load: "traction" }),
   intro: () => `
         <p>A straight bar pulled along its axis is the simplest problem in
         solid mechanics, so it is the first thing a solver has to get right.

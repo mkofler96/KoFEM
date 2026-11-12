@@ -16,7 +16,7 @@ const seriesOf = (study, order) => {
 export default {
   description:
     "Torsion of a hollow circular shaft, θ = TL/(GJ): derivation, why linear tetrahedra are too stiff here, and how the polygonal mesh of a circle explains most of KoFEM's error.",
-  figure: () => hollowShaftFigure({ div: null }),
+  figure: () => hollowShaftFigure(),
   intro: ({ url }) => `
         <p>Torsion of a circular tube is the shaft problem from every
         mechanics-of-materials course. Unlike the

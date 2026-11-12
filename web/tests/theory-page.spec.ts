@@ -735,11 +735,11 @@ test("result viewers show the solved example in 3D with its colour bar", async (
   page,
 }) => {
   await page.goto(ARTICLE);
-  const viewer = page.locator("#viewer-cantilever");
+  const viewer = page.locator("#viewer-cantilever-beam");
   // Without script the example's own figure is shown, with the legend.
   await expect(viewer.locator(".viewer-legend")).toContainText("mm");
   await expect(
-    viewer.locator('a[href="/app/?example=cantilever"]'),
+    viewer.locator('a[href="/app/?example=cantilever-beam"]'),
   ).toHaveCount(1);
   await viewer.scrollIntoViewIfNeeded();
   const canvas = viewer.locator("canvas");

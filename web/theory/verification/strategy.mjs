@@ -47,7 +47,7 @@ export default {
       <li><a href="/examples/surface-pressure/">End pressure</a>: compression and
         pressure direction. Von Mises alone cannot verify the sign; inspect
         the signed displacement as well.</li>
-      <li><a href="/examples/cantilever/">Cantilever</a>: bending displacement
+      <li><a href="/examples/cantilever-beam/">Cantilever</a>: bending displacement
         and existing order/refinement data. Euler–Bernoulli neglects shear;
         a fine 3D solution need not approach that reference exactly.</li>
       <li><a href="/examples/plate-with-hole/">Plate with a hole</a>: a finite

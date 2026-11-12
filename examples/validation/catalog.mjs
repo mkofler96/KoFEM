@@ -5,11 +5,13 @@
 //
 //   case      a validation case (./cases/): run.mjs solves it on every CI run
 //             and writes its analysis file, figure and published row;
-//   showcase  a model built by its own generator in examples/gallery/ (a CAD
-//             import, a shell mesh, a topology optimization), which writes
-//             its analysis file, figure and a record in
+//   showcase  a model without a closed-form answer (the topology
+//             optimization), built from its recipe in
+//             examples/gallery/recipes/ by its generator in examples/gallery/,
+//             which writes its analysis file, figure and a record in
 //             examples/gallery/showcase/<id>.json.
 //
+// Both are built from one STEP file in the GUI's steps (lib/recipe.mjs).
 // Every example is opened by /app/?example=<id> from examples/gallery/site/,
 // and has a page /examples/<id>/ with text from ./textbook/<id>.mjs.
 
@@ -27,8 +29,6 @@ export const SHOWCASE_DIR = join(here, "../gallery/showcase");
 export const ORDER = [
   "axial-bar",
   "surface-pressure",
-  "cantilever",
-  "cantilever-p2",
   "cantilever-beam",
   "beam-torsion",
   "shaft-torsion",
@@ -77,12 +77,7 @@ export function catalog(rows) {
     const row = rowById.get(id);
     if (!row) throw new Error(`no published row for case "${id}"`);
     const c = cases.find((x) => x.id === id);
-    return {
-      ...row,
-      kind: "case",
-      page: c.page,
-      ...(c.recipe ? { recipe: c.recipe } : {}),
-    };
+    return { ...row, kind: "case", page: c.page, recipe: c.recipe };
   });
 }
 

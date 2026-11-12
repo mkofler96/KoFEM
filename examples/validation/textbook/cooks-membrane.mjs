@@ -9,7 +9,7 @@ import { REF } from "./refs.mjs";
 export default {
   description:
     "Cook's membrane, the tapered-panel benchmark for skewed elements in bending and shear: setup, reference value, mesh convergence and KoFEM's result.",
-  figure: () => cookFigure({ div: null }),
+  figure: () => cookFigure(),
   intro: () => `
         <p>Cook's membrane (1974) is a tapered panel, clamped on one edge and
         sheared on the other. It has no closed-form solution. The finite
@@ -34,7 +34,7 @@ export default {
         moves more.</p>
         <p>The panel behaves like a short, tapered cantilever: span 48, depth
         tapering from 44 to 16. Linear elements lock in its bending, as in the
-        <a href="${url("cantilever")}">cantilever</a>, and every element is
+        <a href="${url("cantilever-beam")}">cantilever</a>, and every element is
         skewed, so elements whose accuracy depends on rectangular shapes do
         poorly. Coarse meshes of simple elements land far below 23.96.</p>`,
   model: ({ tex }) => `

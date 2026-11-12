@@ -5,8 +5,8 @@
 // the CSS classes of docs-layout.mjs. The page generator publishes each as
 // SVG and PNG files (web/figure-assets.mjs), named <page>-<name> from the
 // `name` option (default "diagram"). Sketches, not to scale: they show the
-// model, supports, load and measured quantity, with a structured mesh drawn
-// faintly where it fits.
+// model, supports, load and measured quantity; no mesh, as every example is
+// meshed by Netgen.
 
 const f = (v) => (Math.round(v * 10) / 10).toString();
 
@@ -82,20 +82,6 @@ const poly = (pts, cls) =>
 const polyline = (pts, cls) =>
   `<polyline class="${cls}" points="${pts.map(([x, y]) => `${f(x)},${f(y)}`).join(" ")}"/>`;
 
-/** Grid lines of an nx × ny structured mesh on the rectangle. */
-function rectMesh(x0, y0, x1, y1, nx, ny) {
-  const out = [];
-  for (let i = 1; i < nx; i++) {
-    const x = x0 + ((x1 - x0) * i) / nx;
-    out.push(line(x, y0, x, y1, "mesh"));
-  }
-  for (let j = 1; j < ny; j++) {
-    const y = y0 + ((y1 - y0) * j) / ny;
-    out.push(line(x0, y, x1, y, "mesh"));
-  }
-  return out.join("");
-}
-
 /** x–y axis triad at (x, y). */
 const triad = (x, y, [a, b] = ["x", "y"]) =>
   [
@@ -110,9 +96,8 @@ const triad = (x, y, [a, b] = ["x", "y"]) =>
 /**
  * Side view of the prismatic bar. `load`: "traction" (a uniform traction, how
  * the app applies a force to a face) or "pressure" (pressure on the end face).
- * `div`: the structured mesh to draw, or null for an unstructured one.
  */
-export function barFigure({ load, div }) {
+export function barFigure({ load }) {
   const x0 = 90,
     x1 = 410,
     yc = 112,
@@ -122,7 +107,6 @@ export function barFigure({ load, div }) {
     bot = yc + hh;
   const parts = [
     `<rect class="body" x="${x0}" y="${top}" width="${x1 - x0}" height="${2 * hh}"/>`,
-    div ? rectMesh(x0, top, x1, bot, div[0], div[1]) : "",
     clamp(x0, top, bot),
     // Deformed outline: the end face moves by δ, the section contracts (or,
     // in compression, bulges) away from the clamp.
@@ -183,9 +167,7 @@ export function barFigure({ load, div }) {
 
 // ── Cantilever ───────────────────────────────────────────────────────────────
 
-/** `div`: the structured mesh to draw, or null for an unstructured one. */
-export function cantileverFigure({ div }) {
-  const [nx, ny] = div ?? [1, 1];
+export function cantileverFigure() {
   const x0 = 90,
     x1 = 470,
     yc = 92,
@@ -198,7 +180,6 @@ export function cantileverFigure({ div }) {
   const xs = Array.from({ length: 41 }, (_, i) => x0 + ((x1 - x0) * i) / 40);
   const parts = [
     `<rect class="body" x="${x0}" y="${yc - hh}" width="${x1 - x0}" height="${2 * hh}"/>`,
-    rectMesh(x0, yc - hh, x1, yc + hh, nx, ny),
     clamp(x0, yc - hh, yc + hh),
     polyline(
       xs.map((x) => [x, yc - hh + w(x)]),
@@ -251,8 +232,7 @@ function torqueArc(cx, cy, rx, ry) {
   return `<polyline class="load" points="${pts.map(([x, y]) => `${f(x)},${f(y)}`).join(" ")}" marker-end="url(#arr-load)"/>`;
 }
 
-/** `div`: the structured mesh to draw, or null for an unstructured one. */
-export function squareTorsionFigure({ div }) {
+export function squareTorsionFigure() {
   const x0 = 100,
     x1 = 420,
     yc = 120,
@@ -264,7 +244,6 @@ export function squareTorsionFigure({ div }) {
   const parts = [
     // Side face, top face, end face.
     `<rect class="body" x="${x0}" y="${top}" width="${x1 - x0}" height="${s}"/>`,
-    div ? rectMesh(x0, top, x1, bot, div[0], div[1]) : "",
     poly(
       [
         [x0, top],
@@ -320,12 +299,11 @@ export function squareTorsionFigure({ div }) {
 }
 
 /**
- * `div`: the structured mesh to draw, or null for an unstructured one; then the
- * inset shows the true circles with a coarse inscribed polygon, a sketch of
- * what straight element edges do to them.
+ * The shaft and its section; the inset shows the true circles with a coarse
+ * inscribed polygon, a sketch of what straight element edges do to them.
  */
-export function hollowShaftFigure({ div }) {
-  const [nr, nth] = div ?? [1, 10];
+export function hollowShaftFigure() {
+  const nth = 10;
   const x0 = 100,
     x1 = 400,
     yc = 112,
@@ -349,9 +327,8 @@ export function hollowShaftFigure({ div }) {
     dim(x0, yc + ro + 26, x1, yc + ro + 26),
     sym((x0 + x1) / 2, yc + ro + 20, "L"),
   ];
-  // Section inset: the case's mesh, nr rings × nth segments with straight
-  // sides — the circle becomes a polygon. Unstructured: a 10-gon over the
-  // true circles.
+  // Section inset: a 10-gon over the true circles — straight element edges
+  // turn the circle into a polygon.
   const sx = 560,
     Ro = 56,
     Ri = (Ro * ri) / ro;
@@ -365,42 +342,19 @@ export function hollowShaftFigure({ div }) {
   parts.push(
     `<path class="body" fill-rule="evenodd" d="M${outer.map(([x, y]) => `${f(x)} ${f(y)}`).join("L")}Z M${inner.map(([x, y]) => `${f(x)} ${f(y)}`).join("L")}Z"/>`,
   );
-  for (let i = 1; i < nr; i++)
-    parts.push(
-      polyline(
-        [
-          ...ring(Ri + ((Ro - Ri) * i) / nr),
-          ring(Ri + ((Ro - Ri) * i) / nr)[0],
-        ],
-        "mesh",
-      ),
-    );
-  if (div)
-    for (let k = 0; k < nth; k++)
-      parts.push(line(...inner[k], ...outer[k], "mesh"));
   parts.push(
     arrow(sx, yc, sx + Ri * Math.cos(-2.2), yc + Ri * Math.sin(-2.2), "dim"),
     sym(sx - 18, yc - 2, "r", "end", "i"),
     arrow(sx, yc, sx + Ro * Math.cos(0.5), yc + Ro * Math.sin(0.5), "dim"),
     sym(sx + Ro * 0.62, yc + Ro * 0.62 + 18, "r", "start", "o"),
-    label(
-      sx,
-      yc - Ro - 12,
-      div ? `section mesh, ${nth} segments` : "straight edges: a polygon",
-    ),
+    label(sx, yc - Ro - 12, "straight edges: a polygon"),
+    `<circle class="axis" cx="${sx}" cy="${yc}" r="${f(Ro)}" fill="none"/>`,
+    `<circle class="axis" cx="${sx}" cy="${yc}" r="${f(Ri)}" fill="none"/>`,
   );
-  if (!div)
-    parts.push(
-      `<circle class="axis" cx="${sx}" cy="${yc}" r="${f(Ro)}" fill="none"/>`,
-      `<circle class="axis" cx="${sx}" cy="${yc}" r="${f(Ri)}" fill="none"/>`,
-    );
   return svg(
     640,
     230,
-    "Hollow circular shaft clamped at the left end and twisted by a torque at the right end; " +
-      (div
-        ? "inset shows the polygonal section mesh"
-        : "inset shows how straight element edges turn the circles into polygons"),
+    "Hollow circular shaft clamped at the left end and twisted by a torque at the right end; inset shows how straight element edges turn the circles into polygons",
     parts.join("\n    "),
   );
 }
@@ -602,10 +556,9 @@ export function quarterPlateFigure() {
 
 /**
  * The panel, its clamp and shear load, the point M where the deflection is
- * read (the middle of the loaded edge) and the corner C. `div`: a structured
- * div × div grid to draw on it, or null for a Netgen-meshed case (no grid).
+ * read (the middle of the loaded edge) and the corner C.
  */
-export function cookFigure({ div }) {
+export function cookFigure() {
   const k = 3.4,
     ox = 150,
     oy = 236;
@@ -615,22 +568,7 @@ export function cookFigure({ div }) {
     C = [48, 60],
     D = [0, 44],
     M = [48, 52];
-  const at = (s, t) =>
-    P([
-      (1 - s) * (1 - t) * A[0] +
-        s * (1 - t) * B[0] +
-        s * t * C[0] +
-        (1 - s) * t * D[0],
-      (1 - s) * (1 - t) * A[1] +
-        s * (1 - t) * B[1] +
-        s * t * C[1] +
-        (1 - s) * t * D[1],
-    ]);
   const parts = [poly([A, B, C, D].map(P), "body")];
-  for (let i = 1; div && i < div; i++) {
-    parts.push(line(...at(i / div, 0), ...at(i / div, 1), "mesh"));
-    parts.push(line(...at(0, i / div), ...at(1, i / div), "mesh"));
-  }
   const [lx, ly0] = P(A),
     [, ly1] = P(D);
   parts.push(clamp(lx, ly1, ly0));

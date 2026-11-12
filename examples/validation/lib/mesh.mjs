@@ -1,10 +1,13 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Structured hex-mesh generators and node selectors for the validation cases.
+// Structured mesh generators and node selectors for the solver tests, the
+// topology-optimization benchmarks and the Theory Guide's axial-bar study.
+// The examples on /examples/ are not built from these: each is a STEP file
+// meshed by Netgen (lib/pipeline.mjs).
 //
-// Every generator returns { vertices: [[x,y,z]...], hexahedra: [[..8]...] } plus
-// any helpers a case needs to pick boundary nodes. Hex vertex ordering matches
+// A hex generator returns { vertices: [[x,y,z]...], hexahedra: [[..8]...] }
+// plus any helpers a caller needs to pick boundary nodes. Hex vertex ordering matches
 // MFEM's AddHex: bottom face CCW, then the matching top face.
 
 /** Axis-aligned box [0,L]×[0,W]×[0,H], nx·ny·nz linear hexes. */
@@ -33,62 +36,13 @@ export function boxHexMesh(L, W, H, nx, ny, nz) {
 }
 
 /**
- * Square plate of half-width b with a central circular hole of radius a,
- * thickness t. O-grid: rings blend from the hole (s=0) to the square outer
- * boundary (s=1); `grade` clusters rings near the hole where the stress
- * gradient is steep. Single hole-ring of elements is index 0..nth-1, so the
- * peak stress sits in the first nth hexes.
- */
-export function plateWithHoleMesh(a, b, t, nr, nth, grade = 2) {
-  const idx = new Map();
-  const key = (i, j, k) => `${i},${((j % nth) + nth) % nth},${k}`;
-  const square = (th) => {
-    const c = Math.cos(th),
-      s = Math.sin(th);
-    const m = Math.max(Math.abs(c), Math.abs(s));
-    return [(b * c) / m, (b * s) / m];
-  };
-  const vertices = [];
-  let id = 0;
-  for (let i = 0; i <= nr; i++) {
-    const s = Math.pow(i / nr, grade);
-    for (let j = 0; j < nth; j++) {
-      const th = (2 * Math.PI * j) / nth;
-      const [cx, cy] = [a * Math.cos(th), a * Math.sin(th)];
-      const [sx, sy] = square(th);
-      const x = (1 - s) * cx + s * sx;
-      const y = (1 - s) * cy + s * sy;
-      for (let k = 0; k < 2; k++) {
-        idx.set(key(i, j, k), id++);
-        vertices.push([x, y, k * t]);
-      }
-    }
-  }
-  const n = (i, j, k) => idx.get(key(i, j, k));
-  const hexahedra = [];
-  for (let i = 0; i < nr; i++)
-    for (let j = 0; j < nth; j++)
-      hexahedra.push([
-        n(i, j, 0),
-        n(i + 1, j, 0),
-        n(i + 1, j + 1, 0),
-        n(i, j + 1, 0),
-        n(i, j, 1),
-        n(i + 1, j, 1),
-        n(i + 1, j + 1, 1),
-        n(i, j + 1, 1),
-      ]);
-  return { vertices, hexahedra, nth, nr };
-}
-
-/**
- * Mid-surface of the same square-plate-with-a-hole geometry as plateWithHoleMesh,
- * but as a single-layer flat TRIANGLE surface mesh (z = 0) for the Kirchhoff shell
- * solver instead of a through-thickness hex volume. Same O-grid: rings blend from
- * the hole (s=0) to the square outer boundary (s=1), `grade` clusters rings near
- * the hole. Each ring quad is split into two triangles, so the hole-ring elements
- * — where the peak in-plane (membrane) stress sits — are the first 2·nth triangles.
- * Loaded in its own plane this is the plane-stress Kirsch problem, membrane-only.
+ * Mid-surface of a square plate of half-width b with a central circular hole
+ * of radius a, as a single-layer flat TRIANGLE surface mesh (z = 0) for the
+ * Kirchhoff shell solver. O-grid: rings blend from the hole (s=0) to the
+ * square outer boundary (s=1), `grade` clusters rings near the hole. Each
+ * ring quad is split into two triangles, so the hole-ring elements — where the
+ * peak in-plane (membrane) stress sits — are the first 2·nth triangles. Loaded
+ * in its own plane this is the plane-stress Kirsch problem, membrane-only.
  */
 export function plateWithHoleShellMesh(a, b, nr, nth, grade = 2) {
   const idx = new Map();
@@ -119,40 +73,6 @@ export function plateWithHoleShellMesh(a, b, nr, nth, grade = 2) {
       triangles.push([n(i, j), n(i + 1, j + 1), n(i, j + 1)]);
     }
   return { vertices, triangles, nth, nr };
-}
-
-/**
- * Hollow circular shaft (annulus) ri→ro, length Lz along +z.
- * nr radial × nth circumferential × nz axial linear hexes.
- * Returns helpers ring(k) → node indices at axial layer k.
- */
-export function annulusHexMesh(ri, ro, Lz, nr, nth, nz) {
-  const id = (i, j, k) =>
-    i * nth * (nz + 1) + (((j % nth) + nth) % nth) * (nz + 1) + k;
-  const vertices = [];
-  for (let i = 0; i <= nr; i++) {
-    const r = ri + ((ro - ri) * i) / nr;
-    for (let j = 0; j < nth; j++) {
-      const th = (2 * Math.PI * j) / nth;
-      for (let k = 0; k <= nz; k++)
-        vertices.push([r * Math.cos(th), r * Math.sin(th), (Lz * k) / nz]);
-    }
-  }
-  const hexahedra = [];
-  for (let i = 0; i < nr; i++)
-    for (let j = 0; j < nth; j++)
-      for (let k = 0; k < nz; k++)
-        hexahedra.push([
-          id(i, j, k),
-          id(i + 1, j, k),
-          id(i + 1, j + 1, k),
-          id(i, j + 1, k),
-          id(i, j, k + 1),
-          id(i + 1, j, k + 1),
-          id(i + 1, j + 1, k + 1),
-          id(i, j + 1, k + 1),
-        ]);
-  return { vertices, hexahedra, id, nr, nth, nz };
 }
 
 const HEX_EDGES = [
@@ -226,25 +146,6 @@ export function nodesWhere(vertices, pred) {
     if (pred(v[0], v[1], v[2], i)) out.push(i);
   });
   return out;
-}
-
-/**
- * Quad boundary faces (4 node ids each) on the x = max face of a
- * boxHexMesh(…, nx, ny, nz). Vertex order is irrelevant to the engine — it
- * matches faces by sorted vertex set and integrates area from the element
- * transformation — so these are handed over as-is for surface_loads.
- */
-export function boxMaxXQuads(nid, nx, ny, nz) {
-  const quads = [];
-  for (let j = 0; j < ny; j++)
-    for (let k = 0; k < nz; k++)
-      quads.push([
-        nid(nx, j, k),
-        nid(nx, j + 1, k),
-        nid(nx, j + 1, k + 1),
-        nid(nx, j, k + 1),
-      ]);
-  return quads;
 }
 
 /** Distribute a total force vector evenly over the given nodes. */

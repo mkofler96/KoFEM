@@ -253,12 +253,12 @@ test("the contents open only the section of the current page", async ({
 }) => {
   const group = (section: string) =>
     page.locator(`.docs-nav details[data-section="${section}"]`);
-  await page.goto("/examples/cantilever/");
+  await page.goto("/examples/cantilever-beam/");
   await expect(group("validation")).toHaveAttribute("open", "");
   await expect(group("examples")).not.toHaveAttribute("open");
   await expect(
     page.locator('.docs-nav a[aria-current="page"]'),
-  ).toHaveAttribute("href", "/examples/cantilever/");
+  ).toHaveAttribute("href", "/examples/cantilever-beam/");
   await page.goto("/examples/mbb-beam-topopt/");
   await expect(group("examples")).toHaveAttribute("open", "");
   await expect(group("validation")).not.toHaveAttribute("open");
@@ -269,7 +269,7 @@ test("the pages are light by default and remember a switch to dark", async ({
 }) => {
   const background = () =>
     page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  await page.goto("/examples/cantilever/");
+  await page.goto("/examples/cantilever-beam/");
   expect(await background()).toBe("rgb(255, 255, 255)");
   const toggle = page.getByRole("button", {
     name: "Switch to the dark theme",
@@ -283,12 +283,15 @@ test("the pages are light by default and remember a switch to dark", async ({
   expect(await background()).toBe("rgb(255, 255, 255)");
 });
 
-test("the retired /validation/ addresses redirect to the example pages", async ({
+test("the retired /validation/ addresses and merged pages redirect to the example pages", async ({
   page,
 }) => {
   for (const [from, to] of [
     ["/validation/", "/examples/"],
-    ["/validation/cantilever/", "/examples/cantilever/"],
+    ["/validation/beam-torsion/", "/examples/beam-torsion/"],
+    ["/validation/cantilever/", "/examples/cantilever-beam/"],
+    ["/examples/cantilever/", "/examples/cantilever-beam/"],
+    ["/examples/cantilever-p2/", "/examples/cantilever-beam/"],
     ["/validation/surface-traction/", "/examples/axial-bar/"],
     ["/examples/plate-with-hole", "/examples/plate-with-hole/"],
   ]) {

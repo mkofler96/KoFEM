@@ -216,7 +216,7 @@ function resultFigure(e) {
       <figure class="result">
         <img src="${imagePath(e.id)}" width="${fig.width}" height="${fig.height}" alt="${esc(`${e.name}: ${name.toLowerCase()} on the ${shape}`)}" />
         <div class="colorbar">${fieldRange(fig)}</div>
-        <figcaption>${esc(name)}, ${esc(shape)}. Drawn from the analysis file that Open in KoFEM loads.</figcaption>
+        <figcaption>${esc(name)}, ${esc(shape)}. The result of running the model that Open in KoFEM loads.</figcaption>
       </figure>`;
 }
 
@@ -451,6 +451,10 @@ function optimizeStep(o) {
 /** The GUI steps that rebuild a recipe example from its STEP file (lib/recipe.mjs). */
 function byHand(e) {
   const r = e.recipe;
+  if (!r)
+    throw new Error(
+      `${e.id}: no recipe; every example is built from its STEP file in the GUI's steps`,
+    );
   const point = (p) => `(${p.map(trim).join(", ")})`;
   const faces = (refs) =>
     refs.length === 1
@@ -505,7 +509,7 @@ export function renderIndexPage(data, allEntries) {
   const entries = contentsOrder(allEntries);
   const benchmarks = entries.filter((e) => e.kind === "case");
   const passed = benchmarks.filter((e) => e.pass).length;
-  const description = `Finite element examples you can open in KoFEM, and validation cases compared with a known result: axial bar, cantilever beams, torsion, a plate with a hole, Cook's membrane, topology optimization.`;
+  const description = `Finite element examples you can open in KoFEM, and validation cases compared with a known result: axial bar, a cantilever beam, torsion, a plate with a hole, Cook's membrane, topology optimization.`;
 
   const item = (e) => {
     const line = hasReference(e)
@@ -684,59 +688,53 @@ const specTable = (rows) => `
         </table>
       </div>`;
 
-// Element names by solved element type; a legacy hex row has none recorded.
+// Element names by solved element type and order.
 const ELEMENTS = {
   CTETRA: {
     1: "linear 4-node tetrahedra (P1)",
     2: "quadratic 10-node tetrahedra (P2)",
-  },
-  CHEXA: {
-    1: "linear 8-node hexahedra (P1)",
-    2: "quadratic 27-node hexahedra (P2)",
   },
   CTRIA3: {
     1: "linear 3-node shell triangles (CST membrane, DKT bending)",
   },
 };
 
-// A recipe case's mesh line comes from its Netgen mesh; a legacy case's from
-// its page text (KOF-322: legacy hex path, removed when all cases are recipes).
-const meshText = (e) =>
-  e.recipe
-    ? `Netgen, ${trim(e.mesh.maxElementSize)} mm maximum element size`
-    : esc(e.page.mesh);
-
 /** "Mesh" and "Unknowns": from the solved mesh, or as the generator wrote them. */
 function meshRows(e) {
   const m = e.mesh;
-  const elements =
-    e.kind === "case"
-      ? `${int(m.elements)} ${ELEMENTS[m.elementType ?? "CHEXA"][m.order]}`
-      : esc(m.elements);
+  let elements = esc(m.elements);
+  if (e.kind === "case") {
+    const name = ELEMENTS[m.elementType]?.[m.order];
+    if (!name)
+      throw new Error(
+        `${e.id}: no element name for order-${m.order} ${m.elementType} (regenerate with bun run validate:report)`,
+      );
+    elements = `${int(m.elements)} ${name}`;
+  }
   return [
-    ["Mesh", `${meshText(e)}: ${elements}`],
+    [
+      "Mesh",
+      `Netgen, ${trim(e.mesh.maxElementSize)} mm maximum element size: ${elements}`,
+    ],
     ["Unknowns", `${int(m.nodes)} nodes, ${int(m.dofs)} degrees of freedom`],
   ];
 }
 
-// The solver line: a recipe case is solved as the app solves it.
+// The solver line: every example is solved as the app solves it.
 function solverText(e, data) {
   const engine = esc(e.engine ?? data.engine);
   if (e.recipe?.optimize)
     return `The app's topology optimizer (SIMP with MMA, KoFEM engine); geometry, mesh and optimizer in the WebAssembly build the app runs: ${engine}`;
-  // The Rust module's build (lib/provenance.mjs): a recipe case's comes with
-  // the results, a showcase's with its record when its generator solved
-  // through the module.
-  const fem = e.recipe ? (e.fem ?? data.fem) : e.fem;
-  if (e.recipe && !fem)
+  // The Rust module's build (lib/provenance.mjs): a case's comes with the
+  // results, a showcase's with its record.
+  const fem = e.kind === "case" ? (e.fem ?? data.fem) : e.fem;
+  if (!fem)
     throw new Error(
       `${e.id}: solved by the Rust module, but the published data names no build of it (fem); regenerate with bun run validate:report`,
     );
-  if (e.recipe && e.mesh.elementType === "CTRIA3")
+  if (e.mesh.elementType === "CTRIA3")
     return `The app's shell solver (conjugate gradients, KoFEM's Rust module, build ${esc(fem)}); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: ${engine}`;
-  return fem
-    ? `The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build ${esc(fem)}); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: ${engine}`
-    : `KoFEM engine (MFEM), the WebAssembly build the app runs: ${engine}`;
+  return `The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build ${esc(fem)}); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: ${engine}`;
 }
 
 function reproduceCommand(e) {
@@ -790,7 +788,7 @@ export function renderExamplePage(
       <h2 id="problem">The problem</h2>
       <figure class="diagram">
         ${text.figure(ctx)}
-        <figcaption>${esc(page.model)} Sketch, not to scale${page.grid ? "; thin lines show the element mesh" : ""}.</figcaption>
+        <figcaption>${esc(page.model)} Sketch, not to scale.</figcaption>
       </figure>
       ${inputsTable(e)}
       ${specTable([
@@ -828,7 +826,7 @@ export function renderExamplePage(
       <h2 id="discussion">Discussion</h2>${text.discussion(ctx)}`);
   sections.push(`
       <h2 id="reproduce">Reproduce</h2>
-      ${inApp(e)}${e.recipe ? byHand(e) : ""}
+      ${inApp(e)}${byHand(e)}
       <p>From a clone (${e.kind === "case" ? "Bun, bash, curl and Rust), this builds and solves the model with the same engine and prints its line" : "Bun, bash, curl), this rebuilds the model and its figure"}:</p>
       ${cloneSteps(reproduceCommand(e))}${
         e.kind === "case"
@@ -850,7 +848,7 @@ ${esc(consoleRow(e))}</code></pre>`
       </div>
       ${resultFigure(e)}
       ${keyResult(e)}
-      <p class="actions">${openButton(e.id)}<span class="meta">${esc(text.opens ?? "Opens the solved model in the app.")}</span></p>
+      <p class="actions">${openButton(e.id)}<span class="meta">${esc(text.opens ?? "Opens the model in the app, ready to run.")}</span></p>
       ${sections.join("\n")}
 
       <nav class="pager" aria-label="Other examples">${prev ? `\n        <a class="prev" href="${pageUrl(prev.id)}"><small>Previous</small>${esc(prev.name)}</a>` : ""}${next ? `\n        <a class="next" href="${pageUrl(next.id)}"><small>Next</small>${esc(next.name)}</a>` : ""}

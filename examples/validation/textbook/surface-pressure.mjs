@@ -9,7 +9,7 @@ import { REF } from "./refs.mjs";
 export default {
   description:
     "A bar compressed by a uniform end pressure, u = −pL/E: the sign and area scaling of pressure loads, checked against KoFEM.",
-  figure: () => barFigure({ load: "pressure", div: null }),
+  figure: () => barFigure({ load: "pressure" }),
   intro: ({ url }) => `
         <p>The <a href="${url("axial-bar")}">axial bar</a> again, now
         compressed by a uniform pressure on its end face. Pressure pushes along

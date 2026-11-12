@@ -1,19 +1,14 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Recipes the GUI harness (examples-by-hand.spec.ts) carries itself until the
-// example modules export them (KOF-322):
-//
-//   SHOWCASE_RECIPES  published examples whose generator has no recipe yet. Each
-//                     transcribes its generator step by step; the published
-//                     number is still read from the example's own record. Drop
-//                     an entry once the example's module exports `recipe`.
-//   DRIVER_RECIPES    throwaway models, not examples: they prove the driver on
-//                     each load kind (force, pressure, moment) and on a split,
-//                     checked against their closed-form result.
+// Recipes the GUI harness (examples-by-hand.spec.ts) carries itself: throwaway
+// models, not examples. They prove the driver on each load kind (force,
+// pressure, moment) and on a split, checked against their closed-form result.
+// The examples' own recipes live in their modules (examples/validation/cases/,
+// examples/gallery/recipes/).
 
 import { prismStep } from "../../../examples/gallery/step-prism.mjs";
-import type { Recipe, StaticRecipe } from "./recipe";
+import type { StaticRecipe } from "./recipe";
 
 // Steel exactly as the app seeds it (N · mm · MPa · tonne).
 const STEEL = {
@@ -35,10 +30,6 @@ const block = (length: number, height: number, depth: number, name: string) =>
     depth,
     name,
   );
-
-// The cantilever beam, the last entry, is a recipe case now
-// (examples/validation/cases/cantilever-beam.mjs).
-export const SHOWCASE_RECIPES: Record<string, Recipe> = {};
 
 // ── Driver self-tests ─────────────────────────────────────────────────────────
 

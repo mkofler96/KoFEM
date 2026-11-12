@@ -3,7 +3,7 @@
 
 // Page text for every example, /examples/<id>/, keyed by id. Each entry:
 // description (meta), opens (optional: what Open in KoFEM opens, if not the
-// solved model), figure (the sketch), intro, theory (optional, with an
+// model ready to run), figure (the sketch), intro, theory (optional, with an
 // optional theoryTitle), model (notes on the finite element model), results
 // (optional; replaces the default results table), discussion and references.
 // The functions receive the page context built in ../lib/page.mjs: the
@@ -12,8 +12,6 @@
 // typed.
 
 import axialBar from "./axial-bar.mjs";
-import cantilever from "./cantilever.mjs";
-import cantileverP2 from "./cantilever-p2.mjs";
 import beamTorsion from "./beam-torsion.mjs";
 import plateWithHole from "./plate-with-hole.mjs";
 import shaftTorsion from "./shaft-torsion.mjs";
@@ -25,8 +23,6 @@ import surfacePressure from "./surface-pressure.mjs";
 
 export default new Map([
   ["axial-bar", axialBar],
-  ["cantilever", cantilever],
-  ["cantilever-p2", cantileverP2],
   ["beam-torsion", beamTorsion],
   ["plate-with-hole", plateWithHole],
   ["shaft-torsion", shaftTorsion],

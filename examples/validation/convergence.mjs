@@ -10,14 +10,16 @@
 // a full run takes about half a minute, which is why the default CI run does
 // not repeat it.
 //
-// A study of recipe cases is data only (recipeStudy below): each level is a
-// Netgen max element size in mm, solved through lib/pipeline.mjs with the
-// series' element order and the case's recipe otherwise unchanged:
+// A study is data only (recipeStudy below): each level is a Netgen max
+// element size in mm, solved through lib/pipeline.mjs with the series' element
+// order and the case's recipe otherwise unchanged. A series may solve its
+// case at another order than the case's own (the cantilever's P1 series), as
+// long as one level of the study is the case's own mesh:
 //
 //   recipeStudy({ id, caseId, title, note,
 //                 series: [{ label, caseId, order: 1 | 2, levels: [mm, …] }] })
 
-/** A study of recipe cases: levels are max element sizes (mm). */
+/** A convergence study: levels are max element sizes (mm). */
 export function recipeStudy(study) {
   for (const s of study.series) {
     if (s.order !== 1 && s.order !== 2)
@@ -27,7 +29,7 @@ export function recipeStudy(study) {
         `study "${study.id}", ${s.label}: levels must be positive element sizes in mm`,
       );
   }
-  return { ...study, meshLabel: (h) => `${h} mm` };
+  return study;
 }
 
 export default [
@@ -92,20 +94,20 @@ export default [
     ],
   }),
   recipeStudy({
-    id: "cantilever",
-    caseId: "cantilever",
+    id: "cantilever-beam",
+    caseId: "cantilever-beam",
     title: "Cantilever beam, P1 vs. P2",
     note: "Linear tetrahedra lock in bending and approach from far below; quadratic ones are within half a percent on every mesh and level off just above the reference.",
     series: [
       {
         label: "P1 (linear)",
-        caseId: "cantilever",
+        caseId: "cantilever-beam",
         order: 1,
         levels: [50, 25, 12.5, 8],
       },
       {
         label: "P2 (quadratic)",
-        caseId: "cantilever-p2",
+        caseId: "cantilever-beam",
         order: 2,
         levels: [50, 25, 12.5],
       },

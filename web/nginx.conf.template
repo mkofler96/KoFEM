@@ -41,13 +41,18 @@ server {
     }
 
     # The validation pages became the example pages (/examples/<id>/); the
-    # surface-traction case became the axial bar's page. Old links and search
-    # results land on the same content. vite.config.ts redirects alike in dev.
+    # surface-traction case became the axial bar's page, and the linear and
+    # quadratic cantilevers became the one cantilever beam page. Old links and
+    # search results land on the same content. vite.config.ts redirects alike
+    # in dev.
     location = /validation {
         return 301 /examples/;
     }
     location ^~ /validation/surface-traction {
         return 301 /examples/axial-bar/;
+    }
+    location ~ ^/(validation|examples)/cantilever(-p2)?/?$ {
+        return 301 /examples/cantilever-beam/;
     }
     location ~ ^/validation/(.*)$ {
         return 301 /examples/$1;

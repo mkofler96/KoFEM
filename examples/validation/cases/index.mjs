@@ -23,15 +23,8 @@
 //             the solved mesh (Netgen max element size, element count).
 //
 // The page's longer text lives in ../textbook/<id>.mjs.
-//
-// KOF-322: legacy hex path, removed when all cases are recipes. A case without
-// a recipe instead carries { reference, referenceLabel, model(), measure() }
-// and page.mesh / page.grid: model() is the structured hex model the app opens
-// (../lib/app-model.mjs), measure() reads the value off its solve.
 
 import axialBar from "./axial-bar.mjs";
-import cantilever from "./cantilever-bending.mjs";
-import cantileverP2 from "./cantilever-bending-p2.mjs";
 import cantileverBeam from "./cantilever-beam.mjs";
 import beamTorsion from "./beam-torsion.mjs";
 import plateWithHole from "./plate-with-hole.mjs";
@@ -41,7 +34,7 @@ import cooksMembrane from "./cooks-membrane.mjs";
 import surfacePressure from "./surface-pressure.mjs";
 import { validateRecipe } from "../lib/recipe.mjs";
 
-const RECIPE_CASE_KEYS = new Set([
+const CASE_KEYS = new Set([
   "id",
   "name",
   "quantity",
@@ -53,15 +46,19 @@ const RECIPE_CASE_KEYS = new Set([
   "recipe",
 ]);
 
-// A recipe case, checked and completed with what its recipe implies; a legacy
-// case as it is.
+// A case, checked and completed with what its recipe implies. Every example
+// is built from its STEP file in the GUI's steps, so a case without a recipe
+// is an error.
 function register(c) {
-  if (!c.recipe) return c; // KOF-322: legacy hex path, removed when all cases are recipes
   const at = `case "${c.id}"`;
+  if (c.recipe === undefined)
+    throw new Error(
+      `${at} has no recipe: every example is built from its STEP file in the GUI's steps (../lib/recipe.mjs)`,
+    );
   for (const key of Object.keys(c))
-    if (!RECIPE_CASE_KEYS.has(key))
+    if (!CASE_KEYS.has(key))
       throw new Error(
-        `${at}: "${key}" does not belong in a recipe case (the recipe defines the model, reference and read-out)`,
+        `${at}: "${key}" does not belong in a case (the recipe defines the model, reference and read-out)`,
       );
   for (const key of ["id", "name", "quantity"])
     if (typeof c[key] !== "string" || !c[key])
@@ -75,7 +72,7 @@ function register(c) {
     );
   if (c.page.grid !== undefined || c.page.mesh !== undefined)
     throw new Error(
-      `${at}: page.grid / page.mesh describe a hand-made mesh; a recipe case's mesh line comes from its Netgen mesh`,
+      `${at}: page.grid / page.mesh are not page fields; the mesh line comes from the case's Netgen mesh`,
     );
   return { ...c, reference: ro.reference, referenceLabel: ro.formula };
 }
@@ -83,8 +80,6 @@ function register(c) {
 export default [
   axialBar,
   surfacePressure,
-  cantilever,
-  cantileverP2,
   cantileverBeam,
   beamTorsion,
   plateWithHole,

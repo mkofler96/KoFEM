@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// An opened example whose recipe splits the imported geometry re-meshes with
-// every support and load on the same CAD faces (KOF-322).
+// An opened example re-meshes with every support and load on the same CAD
+// faces (KOF-322): every published example, and a throwaway whose recipe
+// splits the imported geometry.
 //
 // The .vtu's CAD face ids number the faces of the geometry after the splits.
 // The app must therefore restore <id>.model.step (that geometry), not <id>.step
@@ -21,7 +22,15 @@ import { prismStep } from "../../examples/gallery/step-prism.mjs";
 import { buildFromRecipe } from "../../examples/validation/lib/pipeline.mjs";
 import { buildAnalysisFile } from "../../examples/validation/lib/app-model.mjs";
 import { openTree } from "./fixtures/tree";
-import type { Recipe } from "./fixtures/recipe";
+import {
+  asRecipe,
+  groupFaces,
+  snapshot,
+  type Recipe,
+  type Snapshot,
+} from "./fixtures/recipe";
+import { ORDER, showcaseRecipe } from "../../examples/validation/catalog.mjs";
+import cases from "../../examples/validation/cases/index.mjs";
 
 const ID = "remesh-after-split";
 const LENGTH = 200;
@@ -217,3 +226,112 @@ test("an example with a split re-meshes with its groups on the same CAD faces", 
     padNodes(remeshed, "right"),
   );
 });
+
+// ── Every published example ──────────────────────────────────────────────────
+
+// An example's own recipe (its case module, or examples/gallery/recipes/).
+function exampleRecipe(id: string): Recipe {
+  const mod = (cases as { id: string; recipe?: unknown }[]).find(
+    (c) => c.id === id,
+  );
+  const raw: unknown = mod ? mod.recipe : showcaseRecipe(id);
+  if (raw === undefined) throw new Error(`example "${id}" has no recipe`);
+  return asRecipe(id, raw);
+}
+
+// Every support and load entry: its CAD face, and whether its nodes are
+// exactly that face's nodes on the current mesh (an Edge entry: the face's
+// rim on the shell).
+function groupEntries(snap: Snapshot) {
+  return [...snap.bcGroups, ...snap.loadGroups].map((group) =>
+    groupFaces(snap, group.faces),
+  );
+}
+
+function storeFlags(page: Page) {
+  return page.evaluate(() => {
+    const st = (
+      window as unknown as {
+        __kofemStore: {
+          getState(): {
+            stepBytes: Uint8Array | null;
+            stepSurface: { triangles: unknown[] } | null;
+            isMeshing: boolean;
+            nodes: unknown[];
+            remeshNotice: string | null;
+          };
+        };
+      }
+    ).__kofemStore.getState();
+    return {
+      stepBytes: st.stepBytes?.length ?? 0,
+      stepTriangles: st.stepSurface?.triangles.length ?? 0,
+      isMeshing: st.isMeshing,
+      nodes: st.nodes.length,
+      remeshNotice: st.remeshNotice,
+    };
+  });
+}
+
+// Every example opens with its body drawn and its STEP file restored, and
+// re-meshes with each support and load on the same CAD faces, on exactly that
+// face's nodes of the new mesh. The re-mesh is twice the example's own element
+// size: a genuinely different mesh, and quick (the shell plate's own 1 mm mesh
+// takes about a minute).
+for (const id of ORDER as string[]) {
+  test(`${id} opens with its geometry and re-meshes with its groups on the same CAD faces`, async ({
+    page,
+  }) => {
+    test.setTimeout(240_000);
+    const recipe = exampleRecipe(id);
+    await page.goto(`/app/?example=${id}`);
+    await expect(page.locator("nav")).toBeVisible();
+    await expect
+      .poll(async () => (await storeFlags(page)).stepBytes, {
+        timeout: 30_000,
+      })
+      .toBeGreaterThan(0);
+    const opened = await storeFlags(page);
+    expect(opened.stepTriangles, "the body is drawn").toBeGreaterThan(0);
+    expect(opened.nodes).toBeGreaterThan(0);
+
+    const before = await snapshot(page);
+    const entries = groupEntries(before);
+    expect(entries.length).toBe(recipe.supports.length + recipe.loads.length);
+    for (const faces of entries)
+      for (const face of faces) {
+        expect(face.cadFaceId, "a whole CAD face").not.toBeNull();
+        expect(face.onMesh, "on the opened mesh").toBe(true);
+      }
+
+    const size = 2 * recipe.mesh.maxElementSize;
+    await openTree(page, "mesh");
+    await page.getByTestId("max-element-size").fill(String(size));
+    await page.getByTestId("min-element-size").fill(String(size / 10));
+    await page.getByRole("button", { name: /Re-mesh STEP volume/ }).click();
+    await expect
+      .poll(
+        async () => {
+          const st = await storeFlags(page);
+          return !st.isMeshing && st.nodes !== opened.nodes;
+        },
+        { timeout: 180_000 },
+      )
+      .toBe(true);
+    await expect(page.getByTestId("meshing-error")).toHaveCount(0);
+
+    const groups = entries.length;
+    expect((await storeFlags(page)).remeshNotice, "every group kept").toBe(
+      `Kept ${groups} support/load/tie group${groups === 1 ? "" : "s"} on their CAD faces.`,
+    );
+    const after = groupEntries(await snapshot(page));
+    expect(after.map((faces) => faces.map((f) => f.cadFaceId))).toEqual(
+      entries.map((faces) => faces.map((f) => f.cadFaceId)),
+    );
+    for (const faces of after)
+      for (const face of faces)
+        expect(face.onMesh, `CAD face ${face.cadFaceId} on the new mesh`).toBe(
+          true,
+        );
+  });
+}

@@ -4,12 +4,14 @@
 // Plate with a hole as a shell — Kirsch's stress concentration on a shell
 // mid-surface.
 //
-//   The plate of the solid plate-with-hole case at 1 : 100: a/b = 0.1, so the
-//   hole edge transverse to a remote tension σ reaches σ_max = Kt·σ with the
-//   infinite-plate Kt = 3. Kt does not depend on the scale; the scale does let
-//   the app idealise the plate as a shell, since it treats walls up to 15 mm
-//   thick as thin. Loaded in its own plane, a flat shell is in plane stress,
-//   the state Kirsch's solution describes.
+//   A square plate of half-width b = 10·a with a central hole of radius a,
+//   pulled by a remote tension σ: a/b = 0.1, so the hole edge transverse to
+//   the load reaches σ_max = Kt·σ with Kirsch's infinite-plate Kt = 3. The
+//   5 mm wall is thin enough for the app to idealise the plate as a shell (it
+//   treats walls up to 15 mm thick as thin). Loaded in its own plane, a flat
+//   shell is in plane stress, the state Kirsch's solution describes. (The
+//   solid plate-with-hole case is a different model: an eighth of a narrower
+//   strip, 2a/W = 0.2, against Howland's Kt = 3.14 for that width.)
 //
 // Built as a user builds it in the GUI (lib/recipe.mjs): import the quarter
 // plate as a STEP file, mark the body Shell, mesh it (the app measures the

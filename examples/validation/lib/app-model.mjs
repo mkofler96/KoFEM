@@ -1,36 +1,29 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// An example as the app holds it, and the things made from it. Two kinds:
-//
-// A recipe build (lib/pipeline.mjs buildFromRecipe — every example once
-// KOF-322 is done): a STEP file meshed by Netgen, supports and loads on whole
-// CAD faces, solved by the app's own code.
+// An example as the app holds it, and the things made from it: a STEP file
+// meshed by Netgen, supports and loads on whole CAD faces, solved by the app's
+// own code (lib/pipeline.mjs buildFromRecipe).
 //
 //   buildAnalysisFile()   the .vtu that /app/?example=<id> opens: geometry,
 //                         mesh, groups and the static study, UNSOLVED, with
 //                         the hand check the Results panel reads;
 //   buildResultSurface()  the solved boundary surface, for the page's figure;
-//   buildMeshStats()      elements, nodes and DOFs of the solved mesh.
+//   buildMeshStats()      elements, nodes and DOFs of the solved mesh;
+//   appReadout()          a Result-summary line of the solved model.
 //
-// KOF-322: legacy hex path, removed when all cases are recipes — a structured
-// hex model built by hand (lib/mesh.mjs) with node-set BCs:
+// The structured hex adapter below (solveModel) is not an example: it serves
+// the Theory Guide's axial-bar mesh study (../axial-bar-study.mjs), which
+// needs meshes that halve exactly. A hex model, in the app's units
+// (N · mm · MPa · tonne):
 //
-//   solveModel()    the solve, with the loads built as the app builds them
-//                   (web/src/store/boundarySlice.ts);
-//   analysisFile()  the .vtu that /app/?example=<id> opens (the format of
-//                   web/src/lib/analysisFile.ts);
-//   resultSurface() the solved boundary surface, for the page's figure.
-//
-// A legacy model, in the app's units (N · mm · MPa · tonne):
-//
-//   { title,                                  the model name in the app
+//   { title,                                  the model name
 //     mesh: { vertices, hexahedra },          8-node hexahedra
 //     material: { name, young_modulus, poisson_ratio, density },
 //     order,                                  1 linear, 2 quadratic
 //     support: { nodes, label },              Ux Uy Uz fixed
 //     load: { kind, axis, value, nodes, label },
-//     resultType }                            the field the app shows
+//     resultType }
 //
 // `load.kind` is "force" (value in N along `axis`), "moment" (N·mm about
 // `axis`) or "pressure" (MPa, along the inward normal; no axis). Node lists are
@@ -137,129 +130,7 @@ function fieldData(json) {
 const dataArray = (type, name, body, components) =>
   `<DataArray type="${type}" Name="${name}"${components === undefined ? "" : ` NumberOfComponents="${components}"`} format="ascii">\n${body}\n</DataArray>`;
 
-const tuples = (values, stride) => {
-  const lines = [];
-  for (let i = 0; i < values.length; i += stride)
-    lines.push(values.slice(i, i + stride).join(" "));
-  return lines.join("\n");
-};
-
-/** The setup the app restores from the file: materials, support, load. */
-export function analysisSetup(model) {
-  const { hexahedra } = model.mesh;
-  const { kind, axis, value } = model.load;
-  const ids = (nodes) => nodes.map((v) => v + 1); // node ids are 1-based
-  const group =
-    kind === "pressure"
-      ? { dof: 0, totalForce: value, kind }
-      : { dof: kind === "moment" ? 3 + axis : axis, totalForce: value, kind };
-  return {
-    format: "kofem-analysis",
-    version: 1,
-    modelName: model.title,
-    mode: "results",
-    viewRepr: "surface",
-    resultType: model.resultType,
-    elementTypes: hexahedra.map(() => "CHEXA"),
-    materials: [
-      {
-        id: 1,
-        name: model.material.name,
-        young: model.material.young_modulus,
-        poisson: model.material.poisson_ratio,
-        density: model.material.density,
-      },
-    ],
-    properties: [{ id: 1, type: "PSOLID", materialId: 1 }],
-    bcGroups: [
-      {
-        id: 1,
-        name: "BC1",
-        dofs: [0, 1, 2],
-        value: 0,
-        faces: [
-          {
-            id: 1,
-            label: model.support.label,
-            nodeIds: ids(model.support.nodes),
-          },
-        ],
-      },
-    ],
-    loadGroups: [
-      {
-        id: 1,
-        name: "Load1",
-        ...group,
-        faces: [
-          { id: 2, label: model.load.label, nodeIds: ids(model.load.nodes) },
-        ],
-      },
-    ],
-    nextBcGroupId: 2,
-    nextLoadGroupId: 2,
-    nextFaceEntryId: 3,
-    nextMatId: 2,
-    stepSurface: null,
-    volMesh: null,
-    surfaceTriangles: null,
-    surfaceFaceIds: null,
-    elementOrder: model.order,
-  };
-}
-
-/** The .vtu the app opens: the model, solved. */
-export function analysisFile(model, result) {
-  const { vertices, hexahedra } = model.mesh;
-  const encoded = fieldData(JSON.stringify(analysisSetup(model)));
-  return [
-    `<?xml version="1.0"?>`,
-    `<VTKFile type="UnstructuredGrid" version="1.0" byte_order="LittleEndian" header_type="UInt32">`,
-    `<UnstructuredGrid>`,
-    `<FieldData>`,
-    `<DataArray type="UInt8" Name="KoFEM" NumberOfTuples="${encoded.byteLength}" format="binary">`,
-    encoded.b64,
-    `</DataArray>`,
-    `</FieldData>`,
-    `<Piece NumberOfPoints="${vertices.length}" NumberOfCells="${hexahedra.length}">`,
-    `<Points>`,
-    dataArray(
-      "Float64",
-      "Points",
-      vertices.map((v) => v.join(" ")).join("\n"),
-      3,
-    ),
-    `</Points>`,
-    `<Cells>`,
-    dataArray(
-      "Int64",
-      "connectivity",
-      hexahedra.map((h) => h.join(" ")).join("\n"),
-    ),
-    dataArray(
-      "Int64",
-      "offsets",
-      hexahedra.map((_, i) => 8 * (i + 1)).join(" "),
-    ),
-    dataArray("UInt8", "types", hexahedra.map(() => 12).join(" ")), // VTK_HEXAHEDRON
-    `</Cells>`,
-    `<PointData>`,
-    dataArray("Int64", "NodeId", vertices.map((_, i) => i + 1).join(" ")),
-    dataArray("Float64", "Displacement", tuples(result.displacements, 3), 3),
-    `</PointData>`,
-    `<CellData>`,
-    dataArray("Int64", "ElementId", hexahedra.map((_, i) => i + 1).join(" ")),
-    dataArray("Int64", "PropertyId", hexahedra.map(() => 1).join(" ")),
-    dataArray("Float64", "VonMises", tuples(result.von_mises, 1)),
-    `</CellData>`,
-    `</Piece>`,
-    `</UnstructuredGrid>`,
-    `</VTKFile>`,
-    ``,
-  ].join("\n");
-}
-
-/** The setup block embedded in an analysis file, for checking it against a model. */
+/** The setup block embedded in an analysis file. */
 export function readAnalysisSetup(vtu) {
   const m = /<DataArray type="UInt8" Name="KoFEM"[^>]*>\n([^<\n]+)\n/.exec(vtu);
   if (!m) throw new Error("not a KoFEM analysis file: no KoFEM field data");
@@ -294,77 +165,7 @@ export function appReadout(result, field, stat) {
   return `${out.toExponential(3)} mm`;
 }
 
-// ── The solved surface, for the figure ────────────────────────────────────────
-
-/**
- * The boundary of a solved hex model as triangles, for lib/render.mjs:
- * undeformed positions, displacements and one scalar per vertex — the
- * displacement magnitude, or the element von Mises stress averaged to the
- * nodes as the app averages it.
- */
-export function resultSurface(model, result, field = "displacement") {
-  const { vertices, hexahedra } = model.mesh;
-  const faces = new Map();
-  hexahedra.forEach((hex, e) => {
-    for (const local of HEX_FACES) {
-      const face = local.map((i) => hex[i]);
-      const key = [...face].sort((a, b) => a - b).join(",");
-      const entry = faces.get(key);
-      if (entry) entry.count++;
-      else faces.set(key, { face, count: 1, e });
-    }
-  });
-  let nodal;
-  if (field === "displacement") {
-    const d = result.displacements;
-    nodal = vertices.map((_, i) =>
-      Math.hypot(d[3 * i], d[3 * i + 1], d[3 * i + 2]),
-    );
-  } else if (field === "vonMises") {
-    const sum = new Float64Array(vertices.length);
-    const count = new Uint32Array(vertices.length);
-    hexahedra.forEach((hex, e) => {
-      for (const v of hex) {
-        sum[v] += result.von_mises[e];
-        count[v]++;
-      }
-    });
-    nodal = Array.from(sum, (s, i) => s / count[i]);
-  } else throw new Error(`unknown surface field "${field}"`);
-
-  const index = new Map();
-  const positions = [];
-  const displacements = [];
-  const scalars = [];
-  const at = (v) => {
-    let i = index.get(v);
-    if (i === undefined) {
-      i = index.size;
-      index.set(v, i);
-      positions.push(...vertices[v]);
-      displacements.push(
-        result.displacements[3 * v],
-        result.displacements[3 * v + 1],
-        result.displacements[3 * v + 2],
-      );
-      scalars.push(nodal[v]);
-    }
-    return i;
-  };
-  // Each boundary quad as two triangles; the edge mask leaves out the
-  // diagonal a–c (bit i: the edge opposite the triangle's i-th vertex).
-  const triangles = [];
-  const edgeMask = [];
-  for (const { face, count } of faces.values()) {
-    if (count !== 1) continue;
-    const [a, b, c, d] = face.map(at);
-    triangles.push(a, b, c, a, c, d);
-    edgeMask.push(0b101, 0b011);
-  }
-  return { positions, displacements, scalars, triangles, edgeMask };
-}
-
-// ── Recipe builds (lib/pipeline.mjs) ──────────────────────────────────────────
+// ── Builds from a recipe (lib/pipeline.mjs) ───────────────────────────────────
 
 /**
  * The setup block of a recipe build's analysis file: what the app holds after

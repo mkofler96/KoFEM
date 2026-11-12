@@ -12,7 +12,7 @@ const BETA = 1 / 3 - 0.21 * (1 - 1 / 12);
 export default {
   description:
     "Saint-Venant torsion of a square bar, θ = TL/(GK): warping, the Prandtl stress function, the torsion constant and KoFEM's result.",
-  figure: () => squareTorsionFigure({ div: null }),
+  figure: () => squareTorsionFigure(),
   intro: () => `
         <p>Twisting a bar with a square section is the simplest torsion
         problem that the circular-shaft formula gets wrong. The sections do

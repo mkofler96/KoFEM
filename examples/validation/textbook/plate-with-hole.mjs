@@ -112,7 +112,7 @@ export default {
         the plate, where the stress has already started to fall, and with
         the steep drop ${tex("7 σ / a")} even a small distance counts. Finer
         elements at A would move the centres closer to the edge.</p>
-        <p>The mesh convergence study below changes only the maximum element
+        <p>The mesh convergence study above changes only the maximum element
         size. With quadratic elements the result stays between
         ${pctAbs(lo, 1)} and ${pctAbs(hi, 1)} below 3.14 on every mesh,
         because the elements at A keep their size. That is why the band is

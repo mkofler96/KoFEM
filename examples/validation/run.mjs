@@ -35,8 +35,6 @@ import {
 } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, relative } from "node:path";
-import { loadSolver } from "./lib/solver.mjs";
-import { meshStats } from "./lib/mesh.mjs";
 import {
   CONSOLE_RULE,
   consoleHeader,
@@ -46,15 +44,10 @@ import {
   relErrPct,
 } from "./lib/format.mjs";
 import {
-  analysisFile,
-  analysisSetup,
   appReadout,
   buildAnalysisFile,
   buildMeshStats,
   buildResultSurface,
-  readAnalysisSetup,
-  resultSurface,
-  solveModel,
 } from "./lib/app-model.mjs";
 import { buildFromRecipe, nodalVonMises, withMesh } from "./lib/pipeline.mjs";
 import {
@@ -84,7 +77,7 @@ const SITEMAP = join(repo, "web/public/sitemap.xml");
 const SITE = "https://kofem.org";
 const DATA = join(repo, "web/public/examples/results.json");
 const REPORT = join(here, "REPORT.md");
-// Solved surfaces of the recipe cases, for the Theory Guide's 3D viewers.
+// Solved surfaces of the cases, for the Theory Guide's 3D viewers.
 const SURFACE_DIR = join(here, "surfaces");
 
 // A published FE value counts as current when a fresh run reproduces it to
@@ -117,13 +110,9 @@ if (!selected.length)
   throw new Error(
     `unknown case "${only}"; cases: ${cases.map((c) => c.id).join(", ")}`,
   );
-// KOF-322: legacy hex path, removed when all cases are recipes.
-const solve = selected.some((c) => !c.recipe) ? await loadSolver() : null;
-
 const started = performance.now();
 const runs = [];
-for (const c of selected)
-  runs.push(c.recipe ? await runRecipe(c) : runLegacy(c));
+for (const c of selected) runs.push(await runCase(c));
 const rows = runs.map((r) => r.row);
 const seconds = (performance.now() - started) / 1000;
 
@@ -160,29 +149,17 @@ function caseRow(c, fe, mesh, result) {
   };
 }
 
-async function runRecipe(c) {
+async function runCase(c) {
   const build = await buildFromRecipe(c.id, c.recipe);
   const row = caseRow(c, build.fe, buildMeshStats(build), build.result);
   return { c, build, row };
 }
 
-// KOF-322: legacy hex path, removed when all cases are recipes.
-function runLegacy(c) {
-  const model = c.model();
-  const result = solveModel(solve, model);
-  const fe = c.measure(model, result);
-  const row = caseRow(c, fe, meshStats(model.mesh, model.order), result);
-  return { c, model, result, row };
-}
-
-// One level of a convergence study of a recipe case: the case's recipe with
-// only the mesher settings changed (`level` is the max element size, mm).
-async function recipeStudyLevel(caseId, level, order) {
+// One level of a convergence study: the case's recipe with only the mesher
+// settings changed (`level` is the max element size, mm).
+async function studyLevel(caseId, level, order) {
   const c = cases.find((x) => x.id === caseId);
-  if (!c?.recipe)
-    throw new Error(
-      `convergence study: case "${caseId}" has no recipe — a study of a legacy case needs a solve()`,
-    );
+  if (!c) throw new Error(`convergence study: unknown case "${caseId}"`);
   const build = await buildFromRecipe(
     caseId,
     withMesh(c.recipe, { maxElementSize: level, order }),
@@ -190,24 +167,7 @@ async function recipeStudyLevel(caseId, level, order) {
   return { fe: build.fe, mesh: buildMeshStats(build) };
 }
 
-// KOF-322: legacy hex path, removed when all cases are recipes.
-function legacyStudyLevel(study, level, order) {
-  if (!solve) throw new Error("legacy convergence study without the solver");
-  // Record the mesh the study solves, so the page states its size.
-  let mesh = null;
-  const fe = study.solve(
-    (m, mat, bcs, o) => {
-      if (mesh) throw new Error("a study level must solve once");
-      mesh = meshStats(m, o);
-      return solve(m, mat, bcs, o);
-    },
-    level,
-    order,
-  );
-  return { fe, mesh };
-}
-
-// The solved boundary of a recipe case for the Theory Guide's 3D viewer
+// The solved boundary of a case for the Theory Guide's 3D viewer
 // (web/theory/viewers): its analysis file opens unsolved, so the viewer reads
 // the solve from here: the surface vertices only, rounded as the viewer
 // rounds them.
@@ -257,22 +217,15 @@ if (report) {
     const { c, row } = run;
     const fig = c.figure ?? {};
     const field = fig.field ?? "displacement";
-    let surface;
-    if (run.build) {
-      writeFileSync(vtuPath(c.id), buildAnalysisFile(run.build, c.name));
-      writeFileSync(stepPath(c.id), run.build.stepText);
-      writeModelStep(modelStepPath(SITE_DIR, c.id), run.build.stepBytes);
-      surface = buildResultSurface(
-        run.build,
-        field,
-        field === "vonMises" ? nodalVonMises(run.build) : null,
-      );
-      writeFileSync(surfacePath(c.id), solvedSurfaceJson(c.id, field, surface));
-    } else {
-      // KOF-322: legacy hex path, removed when all cases are recipes.
-      writeFileSync(vtuPath(c.id), analysisFile(run.model, run.result));
-      surface = resultSurface(run.model, run.result, field);
-    }
+    writeFileSync(vtuPath(c.id), buildAnalysisFile(run.build, c.name));
+    writeFileSync(stepPath(c.id), run.build.stepText);
+    writeModelStep(modelStepPath(SITE_DIR, c.id), run.build.stepBytes);
+    const surface = buildResultSurface(
+      run.build,
+      field,
+      field === "vonMises" ? nodalVonMises(run.build) : null,
+    );
+    writeFileSync(surfacePath(c.id), solvedSurfaceJson(c.id, field, surface));
     const { png, meta } = resultFigure(surface, {
       field,
       unit: fig.unit ?? (field === "vonMises" ? "MPa" : "mm"),
@@ -299,15 +252,13 @@ if (report) {
       const ref = rowOf(s.caseId);
       const points = [];
       for (const level of s.levels) {
-        const { fe, mesh } = study.solve
-          ? legacyStudyLevel(study, level, s.order)
-          : await recipeStudyLevel(s.caseId, level, s.order);
+        const { fe, mesh } = await studyLevel(s.caseId, level, s.order);
         const errPct = relErrPct(fe, ref.reference);
         const ci =
           mesh.order === ref.mesh.order &&
           mesh.elements === ref.mesh.elements &&
           mesh.vertices === ref.mesh.vertices;
-        const label = study.meshLabel(level);
+        const label = `${level} mm`;
         console.log(
           `  ${study.id.padEnd(16)} ${s.label.padEnd(15)} ${label.padEnd(12)} ` +
             `${String(mesh.dofs).padStart(7)} DOFs  ${fmt(fe).padStart(11)}  ${fmtErr(errPct).padStart(7)}%` +
@@ -331,8 +282,7 @@ if (report) {
       );
 
   // The builds behind these numbers (lib/provenance.mjs): the C++ engine
-  // meshes every case and solves the legacy ones; the Rust module solves every
-  // recipe case. Like the engine id, the module id is a record, not part of
+  // meshes every case; the Rust module solves it. Like the engine id, the module id is a record, not part of
   // the staleness check (the pages render it from this file): a rebuilt
   // module that reproduces the published numbers leaves the pages current.
   const data = {
@@ -455,43 +405,36 @@ async function checkPublished() {
       out.push(`${rel(file)} does not exist`);
       continue;
     }
-    if (run.build) {
-      // Netgen is deterministic within one engine build, so the file this run
-      // would write is byte for byte the committed one.
-      const same = (path, text) =>
-        existsSync(path) && readFileSync(path, "utf8") === text;
-      if (!same(file, buildAnalysisFile(run.build, c.name)))
-        out.push(`${rel(file)}: its model differs from case "${c.id}"`);
-      if (!same(stepPath(c.id), run.build.stepText))
-        out.push(`${rel(stepPath(c.id))} differs from case "${c.id}"'s STEP`);
-      // The geometry the app re-meshes from must be the one the .vtu's CAD
-      // face ids refer to: the import after the splits (lib/model-step.mjs).
-      const model = modelStepPath(SITE_DIR, c.id);
-      if (!sameModelStep(model, run.build.stepBytes))
-        out.push(
-          `${rel(model)} differs from case "${c.id}"'s geometry after its splits`,
-        );
-      const fig = c.figure ?? {};
-      const field = fig.field ?? "displacement";
-      const surface = buildResultSurface(
-        run.build,
-        field,
-        field === "vonMises" ? nodalVonMises(run.build) : null,
-      );
-      if (!same(surfacePath(c.id), solvedSurfaceJson(c.id, field, surface)))
-        out.push(`${rel(surfacePath(c.id))} differs from this run's solve`);
-    } else if (
-      // KOF-322: legacy hex path, removed when all cases are recipes.
-      JSON.stringify(readAnalysisSetup(readFileSync(file, "utf8"))) !==
-      JSON.stringify(analysisSetup(run.model))
-    )
+    // Netgen is deterministic within one engine build, so the file this run
+    // would write is byte for byte the committed one.
+    const same = (path, text) =>
+      existsSync(path) && readFileSync(path, "utf8") === text;
+    if (!same(file, buildAnalysisFile(run.build, c.name)))
       out.push(`${rel(file)}: its model differs from case "${c.id}"`);
+    if (!same(stepPath(c.id), run.build.stepText))
+      out.push(`${rel(stepPath(c.id))} differs from case "${c.id}"'s STEP`);
+    // The geometry the app re-meshes from must be the one the .vtu's CAD
+    // face ids refer to: the import after the splits (lib/model-step.mjs).
+    const model = modelStepPath(SITE_DIR, c.id);
+    if (!sameModelStep(model, run.build.stepBytes))
+      out.push(
+        `${rel(model)} differs from case "${c.id}"'s geometry after its splits`,
+      );
+    const fig = c.figure ?? {};
+    const field = fig.field ?? "displacement";
+    const surface = buildResultSurface(
+      run.build,
+      field,
+      field === "vonMises" ? nodalVonMises(run.build) : null,
+    );
+    if (!same(surfacePath(c.id), solvedSurfaceJson(c.id, field, surface)))
+      out.push(`${rel(surfacePath(c.id))} differs from this run's solve`);
   }
-  // A solved surface no recipe case writes is left over from one.
+  // A solved surface no case writes is left over from one.
   if (existsSync(SURFACE_DIR))
     for (const name of readdirSync(SURFACE_DIR))
-      if (!runs.some((run) => run.build && `${run.c.id}.json` === name))
-        out.push(`${rel(join(SURFACE_DIR, name))} belongs to no recipe case`);
+      if (!runs.some((run) => `${run.c.id}.json` === name))
+        out.push(`${rel(join(SURFACE_DIR, name))} belongs to no case`);
   for (const id of ORDER)
     if (!existsSync(pngPath(id)))
       out.push(`${rel(pngPath(id))} does not exist`);
@@ -558,10 +501,9 @@ function markdownReport(rs) {
     "Each case is built as a user builds it in the app — a STEP file meshed by",
     "Netgen, supports and loads on whole CAD faces, solved by the app's own code",
     "and the real WASM engine — and compared against its closed-form or published",
-    "reference. (Cases not yet rebuilt this way, KOF-322, are still structured",
-    "hexahedral models solved by the MFEM engine.) The same numbers are published",
-    "at <https://kofem.org/examples/>, with one page per example (derivation,",
-    "model, mesh convergence, discussion, how to reproduce). Regenerate them with:",
+    "reference. The same numbers are published at <https://kofem.org/examples/>,",
+    "with one page per example (derivation, model, mesh convergence, discussion,",
+    "how to reproduce). Regenerate them with:",
     "",
     "```bash",
     "cd web && bun run validate:report",

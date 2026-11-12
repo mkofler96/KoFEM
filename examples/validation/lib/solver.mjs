@@ -4,8 +4,9 @@
 // Loads the committed KoFEM WASM engine and exposes a thin solve() wrapper.
 //
 // This is the same module the browser worker (web/src/workers/solver.worker.ts)
-// drives — we just call it from Node so each validation case runs the real MFEM
-// solver, not a re-implementation. See test_wall_bracket.mjs for the original
+// drives — we just call it from Node so the solver tests and the axial-bar
+// study run the real MFEM solver, not a re-implementation. (The examples are
+// solved through lib/pipeline.mjs, as the app solves them.) See test_wall_bracket.mjs for the original
 // "run the WASM under Node" pattern this follows.
 
 import { readFileSync } from "node:fs";
@@ -30,8 +31,8 @@ const pkg = join(here, "../../../web/src/wasm/pkg");
  *                                faces:[[a,b,c(,d)]...],
  *                                force?:[fx,fy,fz], pressure?:p }...] }
  *   order:    FE polynomial order (default 1). Order 2 (quadratic) elements use
- *             the engine's tight 1e-6 CG tolerance and are exercised by the
- *             cantilever-bending-p2 case (see solve_mfem.cpp, order ≥ 2 path).
+ *             the engine's tight 1e-6 CG tolerance (see solve_mfem.cpp,
+ *             order ≥ 2 path).
  * Returns { displacements:number[] (3/node), von_mises:number[] (1/elem) }.
  */
 export async function loadSolver() {
