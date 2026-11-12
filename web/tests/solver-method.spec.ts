@@ -72,7 +72,7 @@ test("AMG is the recommended default and matches Gauss–Seidel", async ({
   );
 
   // A body solved as a shell is outside AMG's reach: the panel says so before
-  // the solve.
+  // the solve, and names the shell solver's incomplete Cholesky preconditioner.
   const setDiscretization = (disc: "solid" | "shell") =>
     page.evaluate((value) => {
       const state = (window as unknown as StoreWindow).__kofemStore.getState();
@@ -81,6 +81,9 @@ test("AMG is the recommended default and matches Gauss–Seidel", async ({
   await setDiscretization("shell");
   await expect(page.getByTestId("solver-method-note")).toContainText(
     "does not support bodies solved as shells",
+  );
+  await expect(page.getByTestId("solver-method-note")).toContainText(
+    "incomplete Cholesky preconditioner",
   );
   await setDiscretization("solid");
 

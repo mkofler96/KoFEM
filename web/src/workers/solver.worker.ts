@@ -51,7 +51,9 @@ import { routeSolve, routeTopOpt, topOptStartLog } from "../lib/solve/route.js";
 import { buildShellEngineInputs } from "../lib/solve/shell.js";
 import { solveShellInRust } from "../lib/solve/shellRust.js";
 import {
+  amgFallbackPreconditioner,
   amgUnavailableReason,
+  FALLBACK_PRECONDITIONER_LABEL,
   isSolverMethod,
   solveCoupledSolidWithAmg,
   solveSolidWithAmg,
@@ -774,17 +776,18 @@ async function handleSolve(id: number, payload: SolvePayload) {
   m().cgIterationLimit = payload.cgIterationLimit;
   const reason = amgReason(payload);
   const route = routeSolve(payload);
-  // The shell solve logs its own preconditioner (IC(0)); the Gauss–Seidel
-  // note is for the solid and coupled paths.
-  if (
-    requestedSolver(payload) === "amg" &&
-    reason !== null &&
-    route.path !== "shell"
-  )
+  if (requestedSolver(payload) === "amg" && reason !== null) {
+    const fallback = amgFallbackPreconditioner({
+      elements: payload.elements,
+      properties: payload.properties,
+      // eslint-disable-next-line kofem/no-silent-fallback -- `couplings` is optional in the solve message; a model with none is the ordinary case
+      couplingCount: payload.couplings?.length ?? 0,
+    });
     self.postMessage({
       id,
-      log: `AMG is not available for this model (${reason}) — solving with Gauss–Seidel.`,
+      log: `AMG is not available for this model (${reason}) — solving with ${FALLBACK_PRECONDITIONER_LABEL[fallback]}.`,
     });
+  }
   switch (route.path) {
     case "shell":
       await handleShellSolve(id, payload);
@@ -794,8 +797,13 @@ async function handleSolve(id: number, payload: SolvePayload) {
       return;
     case "auto-shell":
       // Neither shell idealisation applies (e.g. no surface mesh): all-solid.
-      if (!(await handleAutoShellSolve(id, payload, route.shellBodyIds)))
+      if (!(await handleAutoShellSolve(id, payload, route.shellBodyIds))) {
+        self.postMessage({
+          id,
+          log: "No shell idealisation applies — solving all-solid with Gauss–Seidel.",
+        });
         await handleSolidSolve(id, payload);
+      }
       return;
     case "solid":
       await handleSolidSolve(id, payload);
