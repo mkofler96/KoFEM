@@ -60,15 +60,45 @@ Run checks appropriate to the change; CI definitions are in
   emsdk) and relevant `scripts/test-*.sh` suites.
 - Frontend, from `web/`: `bun run typecheck && bun run lint && bun run format:check && bun run test`.
 
+## Test-driven development
+
+Work red → green → refactor: write a failing test that specifies the behaviour
+before any production code (it must compile and fail for the right reason),
+write the minimal code that makes it pass, then clean up with the suite green.
+
+- Never implement a feature without a test written first. When a Linear issue
+  gives acceptance criteria as a test, copy it verbatim into the test file
+  before touching implementation code.
+- Run the relevant test after every change. For Rust solver code, start with
+  `cargo test -p <crate>`. For everything that ships, run
+  `cd web && bunx playwright test <spec>` or a script under
+  `examples/validation/`: shipped behaviour runs through the web app and both
+  WASM modules.
+- `cargo test` does not cover the `kofem-wasm` browser bindings, the C++
+  engine, or how the app calls either module. A green `cargo test` alone is
+  not coverage of a solver path; also run its Rust-vs-C++ check under
+  `web/tests/`.
+- Prefer small, focused tests, so a failure pinpoints the broken unit.
+
 ## Workflow
 
 - Linear holds issues, specs, and decisions; GitHub holds code and PRs.
   Keep task-specific findings out of this file.
 - Branch from `develop` and target PRs there. Use `Fixes KOF-nn` only when
-  the PR resolves that issue.
+  the PR resolves that issue, and `Refs KOF-nn` otherwise: the link starts the
+  issue and queues it to close on merge. Mention ongoing operational issues
+  in prose.
 - When you start work on a Linear issue, move it to **In Progress** before
   writing code. After that, let the GitHub integration manage its status.
-- Record meaningful evidence on the Linear issue, editing one comment in place.
+- Record meaningful evidence on the Linear issue in one comment, edited in
+  place on later pushes; a comment per push buries the record. Say what the
+  reader is looking at and what it proves, for example: "Auto-shell now
+  detects the I-beam flanges as thin-walled (t/L = 0.04, below the 0.1
+  threshold). Left: previous solid mesh, 48k tets. Right: mixed
+  CTRIA3+CTETRA, 3.1k elements, tip deflection within 2% of the solid
+  reference." Keep CI failure screenshots (they stay as the run's GitHub
+  Actions artifact), routine green-run screenshots and progress narration off
+  the issue.
 - Any change a user can see in the UI needs before/after screenshots
   (Playwright, desktop and phone width) on that Linear evidence comment before
   the PR is opened. GitHub does not always accept images, so Linear is the
