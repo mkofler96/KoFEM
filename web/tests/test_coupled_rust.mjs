@@ -117,20 +117,18 @@ async function compare(label, args, { preconditioner = "amg" } = {}) {
   }
   const lines = [];
   started = performance.now();
-  let rust;
-  try {
-    rust = await solveCoupledInRust(
-      fem,
-      args,
-      preconditioner,
-      undefined,
-      neverAsk,
-      (line) => lines.push(line),
-    );
-  } catch (error) {
+  const rust = await solveCoupledInRust(
+    fem,
+    args,
+    preconditioner,
+    undefined,
+    neverAsk,
+    (line) => lines.push(line),
+  ).catch((error) => {
     check("Rust solves the model", false, String(error));
     return null;
-  }
+  });
+  if (rust === null) return null;
   const rustSeconds = (performance.now() - started) / 1000;
   for (const line of lines) console.log(`    ${line}`);
   const displacement = maxDifference(cpp.displacements, rust.displacements);

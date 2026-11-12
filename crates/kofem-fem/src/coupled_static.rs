@@ -419,7 +419,6 @@ pub fn prepare_mixed_static(
         });
     }
     let mut matrix = reduced_stiffness(&reduction, &parts, blocks.points.len())?;
-    drop(parts);
     let mut rhs = reduced_load(&reduction, forces)?;
     let mut prescribed = reduced_constraints(&reduction, fixed_dofs, fixed_values)?;
     let held_nodes = hold_unstiffened(&reduction, &blocks, &matrix, &rhs, &mut prescribed)?;
