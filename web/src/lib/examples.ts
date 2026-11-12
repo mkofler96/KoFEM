@@ -48,12 +48,15 @@ export async function openExample(
     });
 
     // A saved .vtu carries no STEP, so loadAnalysis drops stepBytes and the
-    // loaded model can't be re-meshed. Examples that ship their source CAD
-    // (e.g. cantilever-beam.step) restore it here so the user can re-mesh and
-    // re-solve. Procedurally-generated benchmarks have no .step: a 404 (or
+    // loaded model can't be re-meshed. An example built from a STEP file ships
+    // <id>.model.step: the geometry its CAD face ids refer to, i.e. the
+    // imported file after any splits (examples/validation/lib/model-step.mjs).
+    // Restoring that one, not the <id>.step the page offers for import, lets a
+    // re-mesh carry every support and load onto the same CAD faces. Examples
+    // still built from a structured mesh (KOF-322) have none: a 404 (or
     // dev-server SPA fallback to index.html) fails the ISO-10303-21 header
     // check and the model simply stays non-re-meshable.
-    const stepRes = await fetch(`/examples/${id}.step`);
+    const stepRes = await fetch(`/examples/${id}.model.step`);
     if (signal?.aborted || !stepRes.ok) return;
     const buf = await stepRes.arrayBuffer();
     const head = new TextDecoder().decode(buf.slice(0, 16));

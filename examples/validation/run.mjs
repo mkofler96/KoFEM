@@ -12,8 +12,9 @@
 //   bun run validate                  # run + print table + check pages
 //   bun run validate --case <id>      # run one case (no page check)
 //   bun run validate:report           # also regenerate REPORT.md, each case's
-//                                     # analysis file, .step and figure, and
-//                                     # the pages /examples/ and /examples/<id>/
+//                                     # analysis file, .step, .model.step and
+//                                     # figure, and the pages /examples/ and
+//                                     # /examples/<id>/
 //   bun run validate:pages            # only re-render the pages and their
 //                                     # diagram/chart files from the published
 //                                     # results (no solve)
@@ -56,6 +57,11 @@ import {
   solveModel,
 } from "./lib/app-model.mjs";
 import { buildFromRecipe, nodalVonMises, withMesh } from "./lib/pipeline.mjs";
+import {
+  modelStepPath,
+  sameModelStep,
+  writeModelStep,
+} from "./lib/model-step.mjs";
 import { engineId, femModuleId } from "./lib/provenance.mjs";
 import { resultFigure } from "./lib/render.mjs";
 import { renderExamplePage, renderIndexPage } from "./lib/page.mjs";
@@ -255,6 +261,7 @@ if (report) {
     if (run.build) {
       writeFileSync(vtuPath(c.id), buildAnalysisFile(run.build, c.name));
       writeFileSync(stepPath(c.id), run.build.stepText);
+      writeModelStep(modelStepPath(SITE_DIR, c.id), run.build.stepBytes);
       surface = buildResultSurface(
         run.build,
         field,
@@ -457,6 +464,13 @@ async function checkPublished() {
         out.push(`${rel(file)}: its model differs from case "${c.id}"`);
       if (!same(stepPath(c.id), run.build.stepText))
         out.push(`${rel(stepPath(c.id))} differs from case "${c.id}"'s STEP`);
+      // The geometry the app re-meshes from must be the one the .vtu's CAD
+      // face ids refer to: the import after the splits (lib/model-step.mjs).
+      const model = modelStepPath(SITE_DIR, c.id);
+      if (!sameModelStep(model, run.build.stepBytes))
+        out.push(
+          `${rel(model)} differs from case "${c.id}"'s geometry after its splits`,
+        );
       const fig = c.figure ?? {};
       const field = fig.field ?? "displacement";
       const surface = buildResultSurface(

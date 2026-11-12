@@ -79,6 +79,10 @@ its README), which write their own records.
 | `web/public/sitemap.xml`           | the block between the `examples` markers lists the index and every page     |
 | `REPORT.md`                        | the results table in Markdown                                               |
 
+Next to each `<id>.step`, `<id>.model.step` holds the geometry after the
+recipe's splits: the one the `.vtu`'s CAD faces refer to, which the app
+re-meshes an opened case from (`lib/model-step.mjs`).
+
 `results.json` names the builds behind its numbers (`lib/provenance.mjs`):
 `engine`, the C++ engine, and `fem`, the Rust module that solves the recipe
 cases (a hash of the compiled module, which has no version id of its own).

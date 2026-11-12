@@ -15,8 +15,9 @@
 //                          the Netgen mesh, the tessellation and CAD face ids
 //                          (face picking), the support/load groups and the
 //                          optimization settings. It opens in the Optimize step,
-//                          ready to run; the .step next to it is restored by
-//                          App.tsx, so the model can also be re-meshed.
+//                          ready to run; the split block is also written as
+//                          mbb-beam-topopt.model.step, which the app restores
+//                          (lib/examples.ts), so the model can be re-meshed.
 //   mbb-beam-topopt.png  — the figure on /examples/mbb-beam-topopt/: the
 //                          OPTIMIZED design, the boundary of every tet with
 //                          density ≥ 0.5;
@@ -59,6 +60,10 @@ import { loadEngine } from "../shell-coupling/lib.mjs";
 import { prismStep } from "./step-prism.mjs";
 import { resultFigure } from "../validation/lib/render.mjs";
 import { writeShowcase } from "../validation/catalog.mjs";
+import {
+  modelStepPath,
+  writeModelStep,
+} from "../validation/lib/model-step.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const outDir = join(here, "site");
@@ -492,6 +497,7 @@ const { png, meta: figure } = resultFigure(
 );
 
 writeFileSync(join(outDir, `${ID}.step`), step);
+writeModelStep(modelStepPath(outDir, ID), stepBytes);
 writeFileSync(join(outDir, `${ID}.vtu`), buildVtu());
 writeShowcase(
   {

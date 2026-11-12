@@ -309,8 +309,8 @@ test("a STEP-backed example (crane) restores its geometry and re-meshes", async 
   // The crane fixture ships its source STEP next to the .vtu. Loading it must
   // restore stepBytes — a saved .vtu carries none, so loadAnalysis drops them —
   // so the loaded model is re-meshable instead of hitting the "original STEP file
-  // is no longer available" guard. Procedural benchmarks (cantilever below) have
-  // no .step and correctly stay non-re-meshable.
+  // is no longer available" guard. Examples without one (below) correctly stay
+  // non-re-meshable.
   await serveUnvalidatedExample(page, "crane-hook-shell");
   await page.goto("/app/?example=crane-hook-shell");
   await expect(page.locator("nav")).toBeVisible();
@@ -377,11 +377,14 @@ test("a STEP-backed example (crane) restores its geometry and re-meshes", async 
   expect(mesh.nElems).toBeGreaterThan(0);
 });
 
-test("a procedural example (axial bar) has no re-meshable STEP", async ({
-  page,
-}) => {
-  // The mirror of the crane test: a benchmark generated in code ships no .step,
-  // so stepBytes stays null and the model is (correctly) not re-meshable.
+test("an example without a model.step is not re-meshable", async ({ page }) => {
+  // The mirror of the crane test: an example still built from a structured
+  // mesh (KOF-322) ships no <id>.model.step, so stepBytes stays null and the
+  // model is (correctly) not re-meshable. The axial bar ships one, so its
+  // request is answered with a 404 here.
+  await page.route("**/examples/axial-bar.model.step", (route) =>
+    route.fulfill({ status: 404, body: "" }),
+  );
   await page.goto("/app/?example=axial-bar");
   await expect(page.locator("nav")).toBeVisible();
   await expect

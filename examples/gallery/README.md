@@ -15,13 +15,20 @@ kinds of example:
 - **Validation cases** (`examples/validation/cases/`): built from their recipe
   (a STEP file and the GUI's steps, `examples/validation/lib/recipe.mjs`) on
   every CI run; a few are still structured hex models until KOF-322 converts
-  them. `bun run validate:report` (in `web/`) writes their `.vtu`, `.step` and
-  `.png` here, the pages (`web/examples/`) and
+  them. `bun run validate:report` (in `web/`) writes their `.vtu`, `.step`,
+  `.model.step` and `.png` here, the pages (`web/examples/`) and
   `web/public/examples/results.json`.
 - **Showcases**, each built by a generator in this folder through the app's own
-  pipeline. A generator writes `site/<id>.vtu` (plus `.step` where the model
-  can be re-meshed), `site/<id>.png` and `showcase/<id>.json`, the numbers on
-  its page. Run `bun run validate:report` afterwards to re-render the pages.
+  pipeline. A generator writes `site/<id>.vtu` (plus `.step` and `.model.step`
+  where the model can be re-meshed), `site/<id>.png` and `showcase/<id>.json`,
+  the numbers on its page. Run `bun run validate:report` afterwards to
+  re-render the pages.
+
+An example built from a STEP file ships two: `<id>.step`, the file a user
+imports (the page links it), and `<id>.model.step`, the geometry after the
+splits that the `.vtu`'s CAD faces refer to. The app restores the second when it
+opens the example, so a re-mesh keeps every support and load on its face
+(`examples/validation/lib/model-step.mjs`).
 
 `site/` is served at `/examples/`, next to the pages: Vite serves it in dev and
 copies it into `dist/examples/` on build (`web/vite.config.ts`). Never hand-edit
@@ -63,8 +70,8 @@ the number on its page.
 ones lock in bending), clamp the face x = 0, load the face x = 1000 with
 Fy = −10 kN. It opens ready to run, so its `.vtu` is saved **unsolved**, on
 the static study, with a `handCheck` block (`web/src/lib/handCheck.ts`) the
-Results panel compares the tip deflection with. It ships `cantilever-beam.step`,
-so it can be re-meshed.
+Results panel compares the tip deflection with. It ships `cantilever-beam.step`
+and the same block as `cantilever-beam.model.step`, so it can be re-meshed.
 
 The empty app's "Try a sample simulation" is not one of these examples: it opens
 the wall bracket's CAD file (`web/public/samples/`) with nothing set up, and a
@@ -90,8 +97,8 @@ with KoFEM's own pipeline only, by the steps a user takes in the app:
 `web/tests/mbb-by-hand.spec.ts` walks these steps through the UI with real
 clicks and checks the result is the model the gallery ships, face for face.
 
-It ships `mbb-beam-topopt.step` — the split block, as the engine wrote it — next
-to the `.vtu`, so the example opens in the Optimize step ready to run **and** can
+It ships `mbb-beam-topopt.step` and `mbb-beam-topopt.model.step` — the split
+block, as the engine wrote it — next to the `.vtu`, so the example opens in the Optimize step ready to run **and** can
 be re-meshed: the supports and the load are whole CAD faces and follow them onto
 the new mesh. The run converges 192.6 → 47.5 N·mm in 88 iterations.
 

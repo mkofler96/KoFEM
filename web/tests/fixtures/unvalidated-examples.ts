@@ -14,7 +14,8 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const CRANE_DIR = join(here, "../../../examples/unvalidated/crane-hook");
 
-// id → the files the loader asks for. The .step is optional in the app (a 404
+// id → the files the loader asks for. The STEP (served as <id>.model.step, the
+// geometry the .vtu's CAD faces refer to) is optional in the app (a 404
 // just leaves the model non-re-meshable), so only list one where it exists.
 const FIXTURES: Record<string, { vtu: string; step?: string }> = {
   "crane-hook-shell": {
@@ -37,7 +38,7 @@ export async function serveUnvalidatedExample(
   );
   const step = files.step;
   if (step)
-    await page.route(`**/examples/${id}.step`, async (route) =>
+    await page.route(`**/examples/${id}.model.step`, async (route) =>
       route.fulfill({
         body: await readFile(step),
         contentType: "application/octet-stream",

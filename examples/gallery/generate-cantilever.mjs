@@ -16,12 +16,14 @@
 // load follow them through a re-mesh.
 //
 //   cantilever-beam.step — the block, as a user would import it.
+//   cantilever-beam.model.step — the geometry the .vtu's CAD faces refer to
+//                          (the same block: no split), restored by the app so
+//                          the model can be re-meshed (lib/model-step.mjs).
 //   cantilever-beam.vtu  — what "Open in KoFEM web" loads: geometry, mesh, support, load and the static
 //                          study, UNSOLVED — it opens on the study, ready to run.
 //                          It also carries the hand check (δ = P·L³ / (3·E·I))
 //                          the Results panel compares the solved tip deflection
-//                          with. The .step next to it is restored by the app, so
-//                          the model can be re-meshed.
+//                          with.
 //   cantilever-beam.png  — the solved beam, the figure on /examples/cantilever-beam/;
 //   showcase/cantilever-beam.json — the numbers on that page: the solve here,
 //                          the FE-vs-hand-calculation difference, the mesh.
@@ -45,6 +47,10 @@ import { prismStep } from "./step-prism.mjs";
 import { appReadout } from "../validation/lib/app-model.mjs";
 import { resultFigure } from "../validation/lib/render.mjs";
 import { writeShowcase } from "../validation/catalog.mjs";
+import {
+  modelStepPath,
+  writeModelStep,
+} from "../validation/lib/model-step.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const outDir = join(here, "site");
@@ -356,6 +362,7 @@ for (let e = 0; e < nTets; e++)
 const nodes = nNodes + edges.size;
 
 writeFileSync(join(outDir, `${ID}.step`), step);
+writeModelStep(modelStepPath(outDir, ID), new TextEncoder().encode(step));
 writeFileSync(join(outDir, `${ID}.vtu`), buildVtu());
 writeShowcase(
   {
