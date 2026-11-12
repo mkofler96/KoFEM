@@ -61,3 +61,24 @@ test("production bundle boots and runs the WASM pipeline end-to-end", async ({
     `Failed asset requests:\n${badRequests.join("\n")}`,
   ).toEqual([]);
 });
+
+// nginx answers an unknown address with a real 404 and the "Page not found"
+// page. Serving the landing page with a 200 instead makes search engines index
+// every mistyped or stale address as a duplicate of the homepage.
+test("unknown addresses return 404 with the Page not found page", async ({
+  request,
+}) => {
+  for (const path of [
+    "/this-page-does-not-exist",
+    "/theory/no-such-article/",
+  ]) {
+    const res = await request.get(path);
+    expect(res.status(), path).toBe(404);
+    const html = await res.text();
+    expect(html, path).toContain("<h1>Page not found</h1>");
+    expect(html, path).toContain('<meta name="robots" content="noindex" />');
+  }
+  for (const path of ["/", "/examples/", "/theory/", "/privacy/", "/app/"]) {
+    expect((await request.get(path)).status(), path).toBe(200);
+  }
+});
