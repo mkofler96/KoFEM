@@ -15,13 +15,28 @@
 //! aggregates; a rotation block gets rotation near-null-space modes. A block
 //! of which a coupling eliminates only some components keeps those as rows
 //! held at zero, and the coupling restores their value after the solve.
+//!
+//! On a quadratic mesh the edge nodes are nodes of the numbering too
+//! (vertices first, then one node per edge, as in [`TetMesh`]). Callers name
+//! vertices only, so the solve brings the edge nodes along, as the uncoupled
+//! solve extends vertex supports to them:
+//!
+//! * an edge whose two ends a coupling grips joins that coupling (with the
+//!   mean of its ends' weights, when the coupling has weights) — a kinematic
+//!   surface stays rigid between its corners, and a distributing coupling
+//!   averages over, and loads, the edge nodes as well;
+//! * an edge node whose two ends follow couplings in a translation, and that
+//!   no coupling grips itself, follows their mean in it — the linear
+//!   interpolation along the edge, e.g. across the face of a tie;
+//! * where both ends of an edge are fixed or prescribed in a translation,
+//!   the edge node gets the mean of the two values.
 
 use crate::amg::{Preconditioner, SmoothedAggregation, SymmetricGaussSeidel};
 use crate::cg::{solve_pcg_with, CgSettings};
 use crate::constraints::{apply_dirichlet, Dirichlet};
 use crate::coupling::{Coupling, CouplingConstraints, DOFS_PER_NODE};
 use crate::error::FemError;
-use crate::mesh::{ElementOrder, TetMesh};
+use crate::mesh::TetMesh;
 use crate::sparse::CsrMatrix;
 use crate::static_solve::{PreconditionerChoice, PreparedStatic};
 use crate::LevelInfo;
@@ -204,8 +219,10 @@ pub fn solve_coupled_static(
 
 /// Check one coupled load case and set up its reduced system for CG.
 ///
-/// `stiffness` is what `assemble_stiffness` built for the linear `mesh`.
-/// `fixed_dofs`/`fixed_values` and `forces` use the 6-per-node numbering:
+/// `stiffness` is what `assemble_stiffness` built for `mesh`, of linear or
+/// quadratic elements. `fixed_dofs`/`fixed_values` and `forces` use the
+/// 6-per-node numbering over every node, edge nodes included (see the
+/// module notes for how vertex couplings and supports reach those):
 /// a fixed or prescribed rotation, or a moment, is valid on a coupling
 /// reference point only — except a zero rotation on another node, which
 /// holds a DOF that is held anyway. Every other node that nothing stiffens
@@ -213,7 +230,7 @@ pub fn solve_coupled_static(
 /// that nothing loads it.
 ///
 /// # Errors
-/// A quadratic mesh, malformed couplings (see [`CouplingConstraints::build`])
+/// Malformed couplings (see [`CouplingConstraints::build`])
 /// or a cycle of them, malformed forces or constraints, a constraint on a DOF
 /// a coupling eliminates, a rotation load or prescribed rotation on a node
 /// without rotations, a load on a DOF nothing stiffens, or a multigrid setup
@@ -231,7 +248,8 @@ pub fn prepare_coupled_static(
     let (reduction, blocks) = CoupledReduction::new(mesh, couplings)?;
     let mut matrix = reduced_stiffness(&reduction, mesh, stiffness, blocks.points.len())?;
     let mut rhs = reduced_load(&reduction, forces)?;
-    let mut prescribed = reduced_constraints(&reduction, fixed_dofs, fixed_values)?;
+    let (fixed_dofs, fixed_values) = supports_with_edge_nodes(mesh, fixed_dofs, fixed_values);
+    let mut prescribed = reduced_constraints(&reduction, &fixed_dofs, &fixed_values)?;
     let held_nodes = hold_unstiffened(&reduction, &blocks, &matrix, &rhs, &mut prescribed)?;
     let (dofs, values): (Vec<u32>, Vec<f64>) = prescribed
         .iter()
@@ -277,10 +295,7 @@ fn check_load_case(
     fixed_values: &[f64],
     forces: &[f64],
 ) -> Result<(), FemError> {
-    if mesh.order() != ElementOrder::Linear {
-        return Err(FemError::CouplingOnQuadraticMesh);
-    }
-    let nodes = mesh.vertex_count();
+    let nodes = mesh.node_count();
     let max_nodes = u32::MAX as usize / DOFS_PER_NODE;
     if nodes > max_nodes {
         return Err(FemError::TooManyNodes {
@@ -329,17 +344,23 @@ struct Blocks {
 impl CoupledReduction {
     /// The couplings' equations and the reduced blocks: a node's translations
     /// unless a coupling eliminates all three, and a reference point's
-    /// rotations likewise.
+    /// rotations likewise. On a quadratic mesh the couplings reach the edge
+    /// nodes first (see the module notes).
     fn new(mesh: &TetMesh, couplings: &[Coupling]) -> Result<(Self, Blocks), FemError> {
-        let nodes = mesh.vertex_count();
+        let nodes = mesh.node_count();
         let mut has_rotation = vec![false; nodes];
         for coupling in couplings {
             if let Some(flag) = has_rotation.get_mut(coupling.reference) {
                 *flag = true;
             }
         }
+        let extended = couplings_with_edge_nodes(mesh, couplings);
         let mut constraints =
-            CouplingConstraints::build(mesh.vertices(), couplings, &has_rotation)?;
+            CouplingConstraints::build(mesh.node_coordinates(), &extended, &has_rotation)?;
+        let vertices = mesh.vertex_count();
+        for (edge, &[first, second]) in mesh.edges().iter().enumerate() {
+            constraints.follow_edge_ends(vertices + edge, [first as usize, second as usize])?;
+        }
         constraints.resolve_chains()?;
 
         let mut slot_of = vec![NO_SLOT; DOFS_PER_NODE * nodes];
@@ -348,7 +369,12 @@ impl CoupledReduction {
             points: Vec::new(),
             rotation: Vec::new(),
         };
-        for (node, (&point, &rotates)) in mesh.vertices().iter().zip(&has_rotation).enumerate() {
+        for (node, (&point, &rotates)) in mesh
+            .node_coordinates()
+            .iter()
+            .zip(&has_rotation)
+            .enumerate()
+        {
             for rotation in [false, true] {
                 if rotation && !rotates {
                     continue;
@@ -525,7 +551,7 @@ fn reduced_stiffness(
     stiffness: &CsrMatrix,
     blocks: usize,
 ) -> Result<CsrMatrix, FemError> {
-    let nodes = mesh.vertex_count();
+    let nodes = mesh.node_count();
     // Blocks each node's translations reach: its own, or those it follows.
     let blocks_of_node: Vec<Vec<u32>> = (0..nodes)
         .map(|node| {
@@ -606,6 +632,118 @@ fn reduced_stiffness(
         }
     }
     Ok(matrix)
+}
+
+/// On a quadratic mesh, each coupling with every edge node whose two ends it
+/// grips: the edge node joins with the mean of its ends' weights (when the
+/// coupling has weights). An edge node the coupling already names keeps its
+/// place. The couplings unchanged on a linear mesh.
+fn couplings_with_edge_nodes(mesh: &TetMesh, couplings: &[Coupling]) -> Vec<Coupling> {
+    let edges = mesh.edges();
+    if edges.is_empty() {
+        return couplings.to_vec();
+    }
+    let vertices = mesh.vertex_count();
+    // Edges at each vertex, as (edge, other end), in CSR form.
+    let mut start = vec![0usize; vertices + 1];
+    for &[first, second] in edges {
+        start[first as usize + 1] += 1;
+        start[second as usize + 1] += 1;
+    }
+    for vertex in 0..vertices {
+        start[vertex + 1] += start[vertex];
+    }
+    let mut fill = start.clone();
+    let mut incident = vec![(0usize, 0usize); start[vertices]];
+    for (edge, &[first, second]) in edges.iter().enumerate() {
+        let (first, second) = (first as usize, second as usize);
+        incident[fill[first]] = (edge, second);
+        fill[first] += 1;
+        incident[fill[second]] = (edge, first);
+        fill[second] += 1;
+    }
+    // Position + 1 of each node in the coupling being extended, 0 for none;
+    // cleared again after each coupling.
+    let mut position = vec![0usize; mesh.node_count()];
+    couplings
+        .iter()
+        .map(|coupling| {
+            let mut extended = coupling.clone();
+            for (index, &node) in coupling.nodes.iter().enumerate() {
+                if let Some(slot) = position.get_mut(node) {
+                    if *slot == 0 {
+                        *slot = index + 1;
+                    }
+                }
+            }
+            for &node in &coupling.nodes {
+                if node >= vertices {
+                    continue;
+                }
+                for &(edge, other) in &incident[start[node]..start[node + 1]] {
+                    let edge_node = vertices + edge;
+                    if other < node || position[other] == 0 || position[edge_node] != 0 {
+                        continue;
+                    }
+                    if !coupling.weights.is_empty() {
+                        let weight = |at: usize| coupling.weights.get(position[at] - 1).copied();
+                        // A weight list of the wrong length is refused by
+                        // CouplingConstraints::build, which still sees it so.
+                        if let (Some(lhs), Some(rhs)) = (weight(node), weight(other)) {
+                            extended.weights.push(f64::midpoint(lhs, rhs));
+                        }
+                    }
+                    extended.nodes.push(edge_node);
+                    position[edge_node] = extended.nodes.len();
+                }
+            }
+            for &node in &extended.nodes {
+                if let Some(slot) = position.get_mut(node) {
+                    *slot = 0;
+                }
+            }
+            extended
+        })
+        .collect()
+}
+
+/// The caller's supports plus, on a quadratic mesh, the translations of every
+/// edge node whose two ends prescribe the same component, at the mean of the
+/// two values — the rule of the uncoupled solve (`prepare_static`). An edge
+/// node DOF the caller prescribes keeps the caller's value. DOFs out of range
+/// pass through for `reduced_constraints` to refuse.
+fn supports_with_edge_nodes(
+    mesh: &TetMesh,
+    fixed_dofs: &[u32],
+    fixed_values: &[f64],
+) -> (Vec<u32>, Vec<f64>) {
+    let mut dofs = fixed_dofs.to_vec();
+    let mut values = fixed_values.to_vec();
+    if mesh.edges().is_empty() {
+        return (dofs, values);
+    }
+    // First value per node translation; a conflicting second value is refused
+    // by `reduced_constraints`, so which one is kept here does not matter.
+    let mut prescribed = vec![[None::<f64>; 3]; mesh.node_count()];
+    for (&dof, &value) in fixed_dofs.iter().zip(fixed_values) {
+        let (node, component) = (dof as usize / DOFS_PER_NODE, dof as usize % DOFS_PER_NODE);
+        if component < 3 {
+            if let Some(slot) = prescribed.get_mut(node) {
+                slot[component].get_or_insert(value);
+            }
+        }
+    }
+    for (edge, &[first, second]) in mesh.edges().iter().enumerate() {
+        let node = mesh.vertex_count() + edge;
+        let (lhs, rhs) = (prescribed[first as usize], prescribed[second as usize]);
+        for (component, own) in prescribed[node].iter().enumerate() {
+            if let (None, Some(lhs), Some(rhs)) = (own, lhs[component], rhs[component]) {
+                dofs.push(to_u32(DOFS_PER_NODE * node + component));
+                values.push(f64::midpoint(lhs, rhs));
+            }
+        }
+    }
+    (dofs, values)
 }
 
 /// The full (6 per node) DOF of a 3-per-node stiffness row.

@@ -293,16 +293,19 @@ impl ElasticModel {
         })
     }
 
-    /// As `startSolve`, for a linear model with surface-to-point couplings
-    /// (the engine's `solve_coupled` on an all-solid model). Constraints and
-    /// forces use 6 DOFs per vertex (6·vertex + component, components 3..5
-    /// the rotations): `forces` has one entry per such DOF, and a rotation
-    /// is fixed, prescribed or loaded on a coupling reference point only.
-    /// The run's solution has 3 translations per vertex, the reference
-    /// points' rotations solved but not returned.
+    /// As `startSolve`, for a model with surface-to-point couplings (the
+    /// engine's `solve_coupled` on an all-solid model). Constraints and
+    /// forces use 6 DOFs per node (6·node + component, components 3..5 the
+    /// rotations), over the vertices and then, on a quadratic model, the edge
+    /// nodes: `forces` has one entry per such DOF, and a rotation is fixed,
+    /// prescribed or loaded on a coupling reference point only. Couplings
+    /// and supports name vertices; on a quadratic model they reach the edge
+    /// nodes as `kofem_fem::coupled_static` describes. The run's solution has
+    /// 3 translations per node, the reference points' rotations solved but
+    /// not returned.
     ///
     /// # Errors
-    /// Missing assembly, a quadratic model, malformed couplings, constraints
+    /// Missing assembly, malformed couplings, constraints
     /// or forces, a condition the couplings make impossible, or a multigrid
     /// setup that finds the model under-constrained.
     #[wasm_bindgen(js_name = startCoupledSolve)]
