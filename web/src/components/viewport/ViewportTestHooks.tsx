@@ -25,8 +25,11 @@ export function ViewportTestHooks() {
       project(point) {
         // The canvas renders on demand, so the camera matrices may not have
         // caught up with a move made since the last frame (e.g. lookFrom).
-        camera.updateMatrixWorld();
-        const ndc = new Vector3(...point).project(camera);
+        // Project with an up-to-date copy: updating the live camera here
+        // would hide a pick that raycasts with stale matrices.
+        const view = camera.clone();
+        view.updateMatrixWorld();
+        const ndc = new Vector3(...point).project(view);
         if (ndc.z > 1) return null;
         const rect = gl.domElement.getBoundingClientRect();
         return {

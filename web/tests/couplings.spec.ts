@@ -363,14 +363,6 @@ for (const scenario of [
       ),
     );
     await page.getByRole("button", { name: "Fit View", exact: true }).click();
-    // Let the camera effect and the scene's world matrices reach a rendered
-    // frame before projecting the marker and dispatching the pointer event.
-    await page.evaluate(
-      () =>
-        new Promise<void>((resolve) => {
-          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-        }),
-    );
 
     expect((await state(page)).selectedFace).toBeNull();
     await clickModelAt(page, reference.point);
