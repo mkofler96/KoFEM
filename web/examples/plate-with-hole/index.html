@@ -46,7 +46,7 @@
               "https://kofem.org/examples/plate-with-hole/plate-with-hole-plate-diagram.png",
               "https://kofem.org/examples/plate-with-hole/plate-with-hole-kirsch-stress-distribution.png"
             ],
-            "dateModified": "2026-11-01",
+            "dateModified": "2026-11-12",
             "isPartOf": {
               "@type": "CollectionPage",
               "url": "https://kofem.org/examples/"
@@ -954,7 +954,7 @@
           <tr><th scope="row">Mesh</th><td>O-grid, 12 rings × 64 around the hole, 1 through t: 768 linear 8-node hexahedra (P1)</td></tr>
           <tr><th scope="row">Unknowns</th><td>1,664 nodes, 4,992 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>KoFEM engine (MFEM), the WebAssembly build the app runs: engine-5ceb743373dd</td></tr>
+          <tr><th scope="row">Solver</th><td>KoFEM engine (MFEM), the WebAssembly build the app runs: engine-7303b4976800</td></tr>
         </table>
       </div>
         <p>The O-grid has 12 rings of 64 elements, graded so the rings
@@ -1002,10 +1002,10 @@
         Ux. The Result summary shows
         <span class="readout" data-testid="app-readout" data-field="Ux" data-stat="Max Ux" data-value="9.688e+0 mm">Max Ux 9.688e+0 mm</span>.
       </p>
-      <p>From a clone (Node.js 20+, bash, curl), this solves the model with the same engine and prints its line:</p>
+      <p>From a clone (Bun, bash, curl and Rust), this builds and solves the model with the same engine and prints its line:</p>
       <pre><code>git clone https://github.com/mkofler96/KoFEM.git &amp;&amp; cd KoFEM
 bash scripts/fetch-wasm-engine.sh
-node examples/validation/run.mjs --case plate-with-hole</code></pre>
+cd web &amp;&amp; bun install &amp;&amp; bun run validate --case plate-with-hole</code></pre>
       <pre class="console"><code>Case                                  Quantity                                  FE   Reference     Err%  Tol%  Status
 Plate with a hole                     stress-concentration factor Kt        2.7750      3.0000    -7.50    15  PASS</code></pre>
 

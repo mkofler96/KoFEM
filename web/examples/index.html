@@ -41,7 +41,7 @@
             "name": "KoFEM examples",
             "description": "Finite element examples you can open in KoFEM, and validation cases compared with a known result: axial bar, cantilever beams, torsion, a plate with a hole, Cook's membrane, topology optimization.",
             "url": "https://kofem.org/examples/",
-            "dateModified": "2026-11-01",
+            "dateModified": "2026-11-12",
             "hasPart": [
               {
                 "@type": "TechArticle",
@@ -906,16 +906,16 @@
       derives the answer and compares KoFEM's result with it.</p>
       <p class="meta">
         8 of 8 benchmarks within their tolerance ·
-        engine engine-5ceb743373dd · 2026-11-01 ·
+        engine engine-7303b4976800 · 2026-11-12 ·
         <a href="/examples/results.json">results.json</a> ·
         <a href="https://github.com/mkofler96/KoFEM/tree/develop/examples">source</a>
       </p>
       <ul class="examples">
         <li data-entry="axial-bar">
-          <a href="/examples/axial-bar/" tabindex="-1" aria-hidden="true"><img src="/examples/axial-bar.png" width="1200" height="401" alt="" loading="lazy" /></a>
+          <a href="/examples/axial-bar/" tabindex="-1" aria-hidden="true"><img src="/examples/axial-bar.png" width="1200" height="402" alt="" loading="lazy" /></a>
           <h3><a href="/examples/axial-bar/">Axial bar in tension</a></h3>
           <p>Uniform tension. Checks material, supports and how a face load reaches the nodes.</p>
-          <p class="meta">Tip extension δ: 0.47358&nbsp;mm, −0.55&nbsp;% from the reference</p>
+          <p class="meta">Tip extension δ: 0.47380&nbsp;mm, −0.50&nbsp;% from the reference</p>
         </li>
         <li data-entry="surface-pressure">
           <a href="/examples/surface-pressure/" tabindex="-1" aria-hidden="true"><img src="/examples/surface-pressure.png" width="1200" height="433" alt="" loading="lazy" /></a>
@@ -1003,8 +1003,8 @@
               <th scope="row"><a href="/examples/axial-bar/">Axial bar in tension</a></th>
               <td class="wide">tip extension δ</td>
               <td class="num" data-label="Reference">0.47619&nbsp;mm</td>
-              <td class="num" data-label="KoFEM">0.47358&nbsp;mm</td>
-              <td class="num" data-label="Difference">−0.55&nbsp;%</td>
+              <td class="num" data-label="KoFEM">0.47380&nbsp;mm</td>
+              <td class="num" data-label="Difference">−0.50&nbsp;%</td>
             </tr>
             <tr>
               <th scope="row"><a href="/examples/surface-pressure/">Bar under end pressure</a></th>
@@ -1080,13 +1080,13 @@
 
       <h2 id="reproduce">Reproduce</h2>
       <p>The benchmarks run in CI on every change. To run them yourself
-      (Node.js 20+, bash, curl):</p>
+      (Bun, bash, curl and Rust):</p>
       <pre><code>git clone https://github.com/mkofler96/KoFEM.git &amp;&amp; cd KoFEM
 bash scripts/fetch-wasm-engine.sh
-node examples/validation/run.mjs</code></pre>
+cd web &amp;&amp; bun install &amp;&amp; bun run validate</code></pre>
       <p>It prints one line per benchmark, for example:</p>
       <pre class="console" data-testid="console-line"><code>Case                                  Quantity                                  FE   Reference     Err%  Tol%  Status
-Axial bar in tension                  tip extension δ                      0.47358     0.47619    -0.55     2  PASS</code></pre>
+Axial bar in tension                  tip extension δ                      0.47380     0.47619    -0.50     2  PASS</code></pre>
       </main>
       <nav class="docs-toc" aria-label="On this page">
         <p>On this page</p>

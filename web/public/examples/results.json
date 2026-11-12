@@ -1,6 +1,6 @@
 {
-  "generated": "2026-11-01",
-  "engine": "engine-5ceb743373dd",
+  "generated": "2026-11-12",
+  "engine": "engine-7303b4976800",
   "cases": [
     {
       "id": "axial-bar",
@@ -10,15 +10,18 @@
       "reference": 0.47619047619047616,
       "referenceLabel": "δ = P·L / (E·A)",
       "tolPct": 2,
-      "fe": 0.47357718453249403,
-      "errPct": -0.5487912481762475,
+      "fe": 0.47379881907171906,
+      "errPct": -0.5022479949389924,
       "pass": true,
       "mesh": {
         "order": 1,
-        "elements": 320,
-        "vertices": 525,
-        "nodes": 525,
-        "dofs": 1575
+        "elementType": "CTETRA",
+        "elements": 2991,
+        "vertices": 911,
+        "nodes": 911,
+        "dofs": 2733,
+        "maxElementSize": 25,
+        "minElementSize": 2.5
       },
       "inputs": [
         {
@@ -50,16 +53,16 @@
       "readout": {
         "field": "Ux",
         "stat": "Max",
-        "value": "4.736e-1 mm"
+        "value": "4.739e-1 mm"
       },
       "figure": {
         "field": "displacement",
         "unit": "mm",
         "min": 0,
-        "max": 0.4737026149378106,
+        "max": 0.47408463316867994,
         "deform": 200,
         "width": 1200,
-        "height": 401
+        "height": 402
       }
     },
     {
@@ -310,8 +313,8 @@
       "reference": 3,
       "referenceLabel": "Kt = 3 (infinite plate)",
       "tolPct": 15,
-      "fe": 2.7749798552633758,
-      "errPct": -7.500671491220808,
+      "fe": 2.7749798552632647,
+      "errPct": -7.500671491224509,
       "pass": true,
       "mesh": {
         "order": 1,
@@ -360,8 +363,8 @@
       "figure": {
         "field": "vonMises",
         "unit": "MPa",
-        "min": 24.25504636312101,
-        "max": 277.4003602817979,
+        "min": 24.255046363120005,
+        "max": 277.4003602818001,
         "deform": 0,
         "width": 1200,
         "height": 720
@@ -375,8 +378,8 @@
       "reference": 0.0014488895379514283,
       "referenceLabel": "θ = T·L / (G·J)",
       "tolPct": 5,
-      "fe": 0.001468288244624205,
-      "errPct": 1.3388671920569095,
+      "fe": 0.0014682882446241865,
+      "errPct": 1.3388671920556374,
       "pass": true,
       "mesh": {
         "order": 1,
@@ -426,7 +429,7 @@
         "field": "displacement",
         "unit": "mm",
         "min": 0,
-        "max": 0.07343407396973886,
+        "max": 0.07343407396973586,
         "deform": 500,
         "width": 1200,
         "height": 900
@@ -489,6 +492,97 @@
     }
   ],
   "convergence": [
+    {
+      "id": "axial-bar",
+      "caseId": "axial-bar",
+      "title": "Axial bar, P1 vs. P2",
+      "series": [
+        {
+          "label": "P1 (linear)",
+          "caseId": "axial-bar",
+          "order": 1,
+          "points": [
+            {
+              "mesh": "50 mm",
+              "order": 1,
+              "elementType": "CTETRA",
+              "elements": 1181,
+              "vertices": 313,
+              "nodes": 313,
+              "dofs": 939,
+              "maxElementSize": 50,
+              "minElementSize": 5,
+              "fe": 0.4727332130076295,
+              "errPct": -0.7260252683978008,
+              "ci": false
+            },
+            {
+              "mesh": "25 mm",
+              "order": 1,
+              "elementType": "CTETRA",
+              "elements": 2991,
+              "vertices": 911,
+              "nodes": 911,
+              "dofs": 2733,
+              "maxElementSize": 25,
+              "minElementSize": 2.5,
+              "fe": 0.47379881907171906,
+              "errPct": -0.5022479949389924,
+              "ci": true
+            },
+            {
+              "mesh": "12.5 mm",
+              "order": 1,
+              "elementType": "CTETRA",
+              "elements": 28470,
+              "vertices": 6423,
+              "nodes": 6423,
+              "dofs": 19269,
+              "maxElementSize": 12.5,
+              "minElementSize": 1.25,
+              "fe": 0.474407019019144,
+              "errPct": -0.3745260059797534,
+              "ci": false
+            }
+          ]
+        },
+        {
+          "label": "P2 (quadratic)",
+          "caseId": "axial-bar",
+          "order": 2,
+          "points": [
+            {
+              "mesh": "50 mm",
+              "order": 2,
+              "elementType": "CTETRA",
+              "elements": 1181,
+              "vertices": 313,
+              "nodes": 1968,
+              "dofs": 5904,
+              "maxElementSize": 50,
+              "minElementSize": 5,
+              "fe": 0.4743444765936089,
+              "errPct": -0.3876599153421256,
+              "ci": false
+            },
+            {
+              "mesh": "25 mm",
+              "order": 2,
+              "elementType": "CTETRA",
+              "elements": 2991,
+              "vertices": 911,
+              "nodes": 5532,
+              "dofs": 16596,
+              "maxElementSize": 25,
+              "minElementSize": 2.5,
+              "fe": 0.4746107548942458,
+              "errPct": -0.33174147220837397,
+              "ci": false
+            }
+          ]
+        }
+      ]
+    },
     {
       "id": "cantilever",
       "caseId": "cantilever",
@@ -626,8 +720,8 @@
               "vertices": 1664,
               "nodes": 1664,
               "dofs": 4992,
-              "fe": 0.001468288244624205,
-              "errPct": 1.3388671920569095,
+              "fe": 0.0014682882446241865,
+              "errPct": 1.3388671920556374,
               "ci": true
             },
             {
@@ -637,8 +731,8 @@
               "vertices": 8000,
               "nodes": 8000,
               "dofs": 24000,
-              "fe": 0.0014545860106313434,
-              "errPct": 0.39316128184411336,
+              "fe": 0.0014545860106313538,
+              "errPct": 0.3931612818448318,
               "ci": false
             }
           ]
