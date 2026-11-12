@@ -36,52 +36,9 @@ const block = (length: number, height: number, depth: number, name: string) =>
     name,
   );
 
-/* eslint-disable kofem/min-identifier-length -- symbols of the closed-form results quoted beside each recipe */
-// examples/gallery/generate-cantilever.mjs: δ = P·L³ / (3·E·I), mean Uy of the
-// loaded end face.
-const L = 1000;
-const H = 100;
-const B = 100;
-const P = 10000;
-const I = (B * H ** 3) / 12;
-const cantileverBeam: Recipe = {
-  step: () => block(L, H, B, "Cantilever beam"),
-  splits: [],
-  discretization: { kind: "solid" },
-  mesh: { maxElementSize: 25, order: 2 },
-  material: STEEL,
-  supports: [
-    {
-      name: "Clamped end",
-      faces: [{ at: [0, 50, 50] }],
-      dofs: [0, 1, 2],
-      value: 0,
-    },
-  ],
-  loads: [
-    {
-      name: "Tip load",
-      kind: "force",
-      faces: [{ at: [L, 50, 50] }],
-      components: [0, -P, 0],
-    },
-  ],
-  readout: {
-    quantity: "Tip deflection",
-    probe: {
-      kind: "displacement",
-      component: 1,
-      faces: [{ at: [L, 50, 50] }],
-      unit: "mm",
-    },
-    formula: "−P·L³ / (3·E·I)",
-    reference: -(P * L ** 3) / (3 * STEEL.young * I),
-  },
-};
-
-export const SHOWCASE_RECIPES: Record<string, Recipe> = {
-  "cantilever-beam": cantileverBeam,
-};
+// The cantilever beam, the last entry, is a recipe case now
+// (examples/validation/cases/cantilever-beam.mjs).
+export const SHOWCASE_RECIPES: Record<string, Recipe> = {};
 
 // ── Driver self-tests ─────────────────────────────────────────────────────────
 
@@ -90,6 +47,9 @@ export interface DriverRecipe {
   // How far the FE value may sit from the closed form, in percent.
   tolPct: number;
 }
+
+/* eslint-disable kofem/min-identifier-length -- symbols of the closed-form results quoted beside each recipe */
+const L = 1000; // every driver block's length along x (mm)
 
 // Axial bar: δ = P·L / (E·A), a force on the end face.
 const axialP = 1e6;
