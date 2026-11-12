@@ -49,7 +49,9 @@ function readStore(page: import("@playwright/test").Page) {
   });
 }
 
-test("?example= loads a pre-solved example into the app", async ({ page }) => {
+test("?example= loads an example into the app, ready to run", async ({
+  page,
+}) => {
   test.setTimeout(60_000);
 
   await page.goto("/app/?example=axial-bar");
@@ -60,16 +62,15 @@ test("?example= loads a pre-solved example into the app", async ({ page }) => {
     .poll(async () => (await readStore(page)).nodes, { timeout: 15_000 })
     .toBeGreaterThan(0);
 
+  // A recipe example (KOF-322) opens as a user leaves it before pressing Run:
+  // meshed, with its support and load, on the static study, unsolved.
   const snapshot = await readStore(page);
   expect(snapshot.modelName).toBe("Axial bar in tension");
   expect(snapshot.elements).toBeGreaterThan(0);
-  expect(snapshot.hasResult).toBe(true); // saved in results mode with displacements
-  expect(snapshot.mode).toBe("results");
+  expect(snapshot.hasResult).toBe(false);
+  expect(snapshot.mode).toBe("solve");
   expect(snapshot.bcGroups).toBe(1); // fixed face restored as a BC group
   expect(snapshot.loadGroups).toBe(1); // tip load restored as a load group
-
-  // The restored result renders the results read-out.
-  await expect(page.getByText(/Max \|U\|/)).toBeVisible({ timeout: 10_000 });
 });
 
 test("re-solving a loaded example does not trap on its node ids (#288)", async ({
@@ -377,26 +378,29 @@ test("a STEP-backed example (crane) restores its geometry and re-meshes", async 
   expect(mesh.nElems).toBeGreaterThan(0);
 });
 
-test("a procedural example (axial bar) has no re-meshable STEP", async ({
+test("a recipe example (axial bar) restores its STEP for re-meshing", async ({
   page,
 }) => {
-  // The mirror of the crane test: a benchmark generated in code ships no .step,
-  // so stepBytes stays null and the model is (correctly) not re-meshable.
+  // Every example ships the STEP file it is built from (KOF-322), so the
+  // opened model keeps its geometry and can be re-meshed.
   await page.goto("/app/?example=axial-bar");
   await expect(page.locator("nav")).toBeVisible();
   await expect
     .poll(async () => (await readStore(page)).nodes, { timeout: 15_000 })
     .toBeGreaterThan(0);
 
-  const hasBytes = await page.evaluate(
-    () =>
-      (
-        window as unknown as {
-          __kofemStore: { getState(): { stepBytes: Uint8Array | null } };
-        }
-      ).__kofemStore.getState().stepBytes !== null,
-  );
-  expect(hasBytes).toBe(false);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              __kofemStore: { getState(): { stepBytes: Uint8Array | null } };
+            }
+          ).__kofemStore.getState().stepBytes !== null,
+      ),
+    )
+    .toBe(true);
 });
 
 test("?example= with an invalid id is rejected without a fetch", async ({
@@ -581,6 +585,8 @@ test.beforeAll(async () => {
     .map((file) => ({ id: file.slice(0, -".vtu".length) }));
 });
 test("capture screenshots of all examples", async ({ page }) => {
+  // Eleven examples, each fetched, parsed and (with a STEP) re-tessellated.
+  test.setTimeout(180_000);
   // Open the app and import the STEP file via the Geometry panel.
   for (const analysis of EXAMPLE_ANALYSES) {
     await page.goto(`/app/?example=${analysis.id}`);

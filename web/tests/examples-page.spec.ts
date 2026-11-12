@@ -167,9 +167,7 @@ test("every example has its own indexable page with figure, model and result", a
     const isCase = data.cases.some((c) => c.id === id);
     if (isCase) {
       await expect(page.getByTestId("fe-value")).not.toBeEmpty();
-      await expect(page.locator("pre").first()).toContainText(
-        `run.mjs --case ${id}`,
-      );
+      await expect(page.locator("pre").first()).toContainText(`--case ${id}`);
     }
     const studies = data.convergence.filter((s) =>
       s.series.some((x) => x.caseId === id),
