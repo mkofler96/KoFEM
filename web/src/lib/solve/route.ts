@@ -12,7 +12,9 @@ export type SolveRoute =
   // All CTRIA3 → the Kirchhoff shell solver (solve_shell).
   | { path: "shell" }
   // CTRIA3 mixed with solids, or any surface-to-point coupling → the coupled
-  // solid-shell assembler (solve_coupled).
+  // solid-shell solve: the Rust mixed solve (coupledRust.ts) for shells with
+  // solids, the Rust AMG or the engine's solve_coupled for an all-solid model
+  // with couplings; solve_coupled stays the test oracle.
   | { path: "coupled" }
   // All solid with a body marked Shell → idealised at solve time, coupled to the
   // solid bodies or as a pure shell.

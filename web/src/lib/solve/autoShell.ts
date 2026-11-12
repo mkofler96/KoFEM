@@ -336,7 +336,7 @@ export function rebuildPoolSurface(
   return { surfaceTriangles: outTris, surfaceFaceIds: outFaces };
 }
 
-// ── Solve-time auto-shell coupled to the solid bodies (→ solve_coupled) ───────
+// ── Solve-time auto-shell coupled to the solid bodies (→ Rust mixed solve) ────
 
 // Map pool displacements onto every original store node: solid nodes directly,
 // the shelled body's nodes from their nearest mid-surface node.
