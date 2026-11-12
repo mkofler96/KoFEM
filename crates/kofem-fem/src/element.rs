@@ -2,8 +2,8 @@
 // SPDX-FileCopyrightText: 2010-2024 Lawrence Livermore National Security, LLC
 // SPDX-License-Identifier: AGPL-3.0-or-later AND BSD-3-Clause
 
-//! Linear (4-node) and quadratic (10-node) tetrahedra. The stiffness of
-//! either is
+//! Linear (4-node) and quadratic (10-node) tetrahedra, and linear (8-node)
+//! and quadratic (27-node) hexahedra. The stiffness of each is
 //!
 //! ```text
 //! K_ab[i][j] = ∫ ( λ·g_a[i]·g_b[j] + μ·g_a[j]·g_b[i] + μ·δ_ij·(g_a · g_b) ) dV
@@ -15,14 +15,29 @@
 //! gradients and a quadratic integrand, which the 4-point degree-2 rule
 //! integrates exactly — the same rule order MFEM picks (2·order − 2).
 //!
+//! A hex maps the unit cube [0, 1]³ trilinearly onto its eight corners (the
+//! extra nodes of a 27-node hex sit where that map puts the edge midpoints,
+//! face centres and centre, so its geometry stays trilinear). Its Lagrange
+//! shape functions are tensor products of 1D ones on {0, 1} or {0, ½, 1}.
+//! The Jacobian varies over a distorted hex, so the integrand is rational
+//! and no rule is exact; the stiffness uses MFEM's choice, the tensor
+//! Gauss–Legendre rule of order 2·(order + 1): 3³ points for an 8-node hex,
+//! 4³ for a 27-node one.
+//!
 //! MFEM reference: `ElasticityIntegrator::AssembleElementMatrix` in
-//! `fem/bilininteg.cpp` (MFEM v4.7), specialized here to tetrahedra, and the
-//! order-2 `H1_TetrahedronElement` nodal basis (corners and edge midpoints).
-//! MFEM copyright (c) 2010-2024, Lawrence Livermore National Security, LLC.
-//! All rights reserved. See `../NOTICE.md` and `../LICENSE-MFEM` (BSD-3-Clause).
+//! `fem/bilininteg.cpp` (MFEM v4.7), with its integration order
+//! `2·OrderGrad` from `IsoparametricTransformation::OrderGrad` in
+//! `fem/eltrans.cpp` and the tensor rules of `fem/intrules.cpp`; the order-2
+//! `H1_TetrahedronElement` nodal basis (corners and edge midpoints) and the
+//! `H1_HexahedronElement` bases of order 1 and 2 (whose Gauss–Lobatto nodes
+//! are 0, ½ and 1). MFEM copyright (c) 2010-2024, Lawrence Livermore National
+//! Security, LLC. All rights reserved. See `../NOTICE.md` and
+//! `../LICENSE-MFEM` (BSD-3-Clause).
 
 use crate::material::Isotropic;
-use crate::mesh::{cross, dot, signed_volume, sub, EDGES_OF_TET};
+use crate::mesh::{
+    cross, determinant, dot, signed_volume, sub, EDGES_OF_HEX, EDGES_OF_TET, FACES_OF_HEX,
+};
 
 /// Element stiffness, 12×12 with DOFs ordered (node, component): row
 /// 3·a + i is component i of corner a.
@@ -132,6 +147,273 @@ pub fn tet10_stiffness(corners: &[[f64; 3]; 4], material: &Isotropic) -> Tet10St
         add_point(&mut stiffness, &gradients, 0.25 * volume, material);
     }
     stiffness
+}
+
+/// Linear hex stiffness, 24×24, ordered like [`Tet4Stiffness`] over the
+/// eight corners.
+pub type Hex8Stiffness = [[f64; 24]; 24];
+
+/// Quadratic hex stiffness, 81×81, ordered like [`Tet4Stiffness`] over the
+/// 27 nodes: corners, edges in `EDGES_OF_HEX` order, faces in `FACES_OF_HEX`
+/// order, centre.
+pub type Hex27Stiffness = [[f64; 81]; 81];
+
+/// Reference coordinates (in the unit cube) of the hex corners, in MFEM /
+/// CHEXA order.
+pub const HEX_CORNERS: [[u8; 3]; 8] = [
+    [0, 0, 0],
+    [1, 0, 0],
+    [1, 1, 0],
+    [0, 1, 0],
+    [0, 0, 1],
+    [1, 0, 1],
+    [1, 1, 1],
+    [0, 1, 1],
+];
+
+/// Reference point of the hex centre, where stresses are recovered.
+pub const HEX_CENTRE: [f64; 3] = [0.5; 3];
+
+/// Reference position of each 27-node hex node, in halves (0, 1 or 2 for the
+/// coordinates 0, ½ and 1): the mean of the corners of its corner, edge, face
+/// or the whole cell.
+fn hex27_half_positions() -> [[u8; 3]; 27] {
+    let mean = |corners: &[usize]| -> [u8; 3] {
+        let mut sum = [0_u8; 3];
+        for &corner in corners {
+            for (axis, total) in sum.iter_mut().enumerate() {
+                *total += HEX_CORNERS[corner][axis];
+            }
+        }
+        #[allow(
+            clippy::cast_possible_truncation,
+            reason = "an entity has at most eight corners"
+        )]
+        let count = corners.len() as u8;
+        sum.map(|total| 2 * total / count)
+    };
+    let mut positions = [[0_u8; 3]; 27];
+    for (corner, position) in positions.iter_mut().take(8).enumerate() {
+        *position = mean(&[corner]);
+    }
+    for (edge, corners) in EDGES_OF_HEX.iter().enumerate() {
+        positions[8 + edge] = mean(corners);
+    }
+    for (face, corners) in FACES_OF_HEX.iter().enumerate() {
+        positions[20 + face] = mean(corners);
+    }
+    positions[26] = mean(&[0, 1, 2, 3, 4, 5, 6, 7]);
+    positions
+}
+
+/// 1D linear Lagrange function of node `node` (0 or 1) and its derivative.
+fn linear_basis(node: u8, coordinate: f64) -> (f64, f64) {
+    if node == 0 {
+        (1.0 - coordinate, -1.0)
+    } else {
+        (coordinate, 1.0)
+    }
+}
+
+/// 1D quadratic Lagrange function on the nodes {0, ½, 1} of the node at
+/// `half`/2, and its derivative.
+fn quadratic_basis(half: u8, coordinate: f64) -> (f64, f64) {
+    let point = coordinate;
+    match half {
+        0 => ((2.0 * point - 1.0) * (point - 1.0), 4.0 * point - 3.0),
+        1 => (4.0 * point * (1.0 - point), 4.0 - 8.0 * point),
+        _ => (point * (2.0 * point - 1.0), 4.0 * point - 1.0),
+    }
+}
+
+/// Values and reference gradients of tensor-product shape functions whose
+/// 1D factors `basis` gives for each node's per-axis index in `positions`.
+fn tensor_shape<const N: usize>(
+    positions: &[[u8; 3]; N],
+    basis: fn(u8, f64) -> (f64, f64),
+    point: [f64; 3],
+) -> ([f64; N], [[f64; 3]; N]) {
+    let mut values = [0.0; N];
+    let mut gradients = [[0.0; 3]; N];
+    for (node, position) in positions.iter().enumerate() {
+        let factors: [(f64, f64); 3] =
+            std::array::from_fn(|axis| basis(position[axis], point[axis]));
+        values[node] = factors[0].0 * factors[1].0 * factors[2].0;
+        gradients[node] = [
+            factors[0].1 * factors[1].0 * factors[2].0,
+            factors[0].0 * factors[1].1 * factors[2].0,
+            factors[0].0 * factors[1].0 * factors[2].1,
+        ];
+    }
+    (values, gradients)
+}
+
+/// Gradients, in the unit-cube coordinates, of the eight trilinear shape
+/// functions at reference point `point`.
+#[must_use]
+pub fn hex8_reference_gradients(point: [f64; 3]) -> [[f64; 3]; 8] {
+    tensor_shape(&HEX_CORNERS, linear_basis, point).1
+}
+
+/// Gradients, in the unit-cube coordinates, of the 27 triquadratic shape
+/// functions at reference point `point`, in 27-node order.
+#[must_use]
+pub fn hex27_reference_gradients(point: [f64; 3]) -> [[f64; 3]; 27] {
+    tensor_shape(&hex27_half_positions(), quadratic_basis, point).1
+}
+
+/// Jacobian `∂x_i/∂ξ_j` of the trilinear map of a hex with corners `corners`,
+/// given the trilinear reference gradients at the point.
+#[must_use]
+pub fn hex_jacobian(corners: &[[f64; 3]; 8], gradients: &[[f64; 3]; 8]) -> [[f64; 3]; 3] {
+    let mut jacobian = [[0.0; 3]; 3];
+    for (corner, gradient) in corners.iter().zip(gradients) {
+        for (row, entries) in jacobian.iter_mut().enumerate() {
+            for (col, entry) in entries.iter_mut().enumerate() {
+                *entry += corner[row] * gradient[col];
+            }
+        }
+    }
+    jacobian
+}
+
+/// Physical gradients of shape functions whose reference gradients at
+/// `point` are `reference`, on the hex with corners `corners`, and |det J|
+/// there (the volume scale). Independent of the hex's handedness.
+#[must_use]
+pub fn hex_gradients<const N: usize>(
+    corners: &[[f64; 3]; 8],
+    reference: &[[f64; 3]; N],
+    point: [f64; 3],
+) -> ([[f64; 3]; N], f64) {
+    let jacobian = hex_jacobian(corners, &hex8_reference_gradients(point));
+    let det = determinant(&jacobian);
+    // (J⁻¹)ᵀ by cofactors: row k of J⁻¹ᵀ is (col_{k+1} × col_{k+2}) / det,
+    // with col_j the columns of J (∂x/∂ξ_j).
+    let column = |axis: usize| [jacobian[0][axis], jacobian[1][axis], jacobian[2][axis]];
+    let dual: [[f64; 3]; 3] = std::array::from_fn(|axis| {
+        cross(column((axis + 1) % 3), column((axis + 2) % 3)).map(|entry| entry / det)
+    });
+    // ∇N = Σ_j ∂N/∂ξ_j · ∇ξ_j, and ∇ξ_j is dual[j].
+    let gradients = reference.map(|local| {
+        std::array::from_fn(|axis| {
+            (0..3)
+                .map(|ref_axis| local[ref_axis] * dual[ref_axis][axis])
+                .sum()
+        })
+    });
+    (gradients, det.abs())
+}
+
+/// Gauss–Legendre points and weights on [0, 1], for 2, 3 or 4 points.
+fn gauss_legendre(count: usize) -> Vec<(f64, f64)> {
+    let symmetric: Vec<(f64, f64)> = match count {
+        2 => vec![(1.0 / 3.0_f64.sqrt(), 1.0)],
+        3 => vec![(0.0, 8.0 / 9.0), ((3.0_f64 / 5.0).sqrt(), 5.0 / 9.0)],
+        4 => {
+            let offset = 2.0 * (6.0_f64 / 5.0).sqrt();
+            let root = 30.0_f64.sqrt();
+            vec![
+                (((3.0 - offset) / 7.0).sqrt(), (18.0 + root) / 36.0),
+                (((3.0 + offset) / 7.0).sqrt(), (18.0 - root) / 36.0),
+            ]
+        }
+        _ => unreachable!("Gauss–Legendre rules of 2 to 4 points only"),
+    };
+    // Points ±t on [−1, 1] map to (1 ± t)/2 on [0, 1], weights halve.
+    let mut rule = Vec::with_capacity(count);
+    for (offset, weight) in symmetric {
+        if offset == 0.0 {
+            rule.push((0.5, 0.5 * weight));
+        } else {
+            rule.push((f64::midpoint(1.0, -offset), 0.5 * weight));
+            rule.push((f64::midpoint(1.0, offset), 0.5 * weight));
+        }
+    }
+    rule
+}
+
+/// The tensor Gauss–Legendre rule of `count`³ points on the unit cube.
+pub(crate) fn cube_rule(count: usize) -> Vec<([f64; 3], f64)> {
+    let line = gauss_legendre(count);
+    let mut rule = Vec::with_capacity(count.pow(3));
+    for &(along_z, weight_z) in &line {
+        for &(along_y, weight_y) in &line {
+            for &(along_x, weight_x) in &line {
+                rule.push(([along_x, along_y, along_z], weight_x * weight_y * weight_z));
+            }
+        }
+    }
+    rule
+}
+
+/// The tensor Gauss–Legendre rule of `count`² points on the unit square.
+pub(crate) fn square_rule(count: usize) -> Vec<([f64; 2], f64)> {
+    let line = gauss_legendre(count);
+    let mut rule = Vec::with_capacity(count.pow(2));
+    for &(along_t, weight_t) in &line {
+        for &(along_s, weight_s) in &line {
+            rule.push(([along_s, along_t], weight_s * weight_t));
+        }
+    }
+    rule
+}
+
+fn hex_stiffness<const N: usize, const DOFS: usize>(
+    corners: &[[f64; 3]; 8],
+    material: &Isotropic,
+    points_per_axis: usize,
+    reference_gradients: fn([f64; 3]) -> [[f64; 3]; N],
+) -> [[f64; DOFS]; DOFS] {
+    let mut stiffness = [[0.0; DOFS]; DOFS];
+    for (point, weight) in cube_rule(points_per_axis) {
+        let (gradients, scale) = hex_gradients(corners, &reference_gradients(point), point);
+        add_point(&mut stiffness, &gradients, weight * scale, material);
+    }
+    stiffness
+}
+
+/// Stiffness of an 8-node hex with corners `corners` (3³-point rule).
+#[must_use]
+pub fn hex8_stiffness(corners: &[[f64; 3]; 8], material: &Isotropic) -> Hex8Stiffness {
+    hex_stiffness(corners, material, 3, hex8_reference_gradients)
+}
+
+/// Stiffness of a 27-node hex with corners `corners` (4³-point rule).
+#[must_use]
+pub fn hex27_stiffness(corners: &[[f64; 3]; 8], material: &Isotropic) -> Hex27Stiffness {
+    hex_stiffness(corners, material, 4, hex27_reference_gradients)
+}
+
+/// Values of the shape functions of a quadrilateral face at `point` of the
+/// unit square, for a face whose corners run (0,0), (1,0), (1,1), (0,1): the
+/// four bilinear ones, or the nine biquadratic ones ordered corners, then the
+/// edge nodes between consecutive corners, then the centre.
+#[must_use]
+pub fn quad_face_shape(quadratic: bool, point: [f64; 2]) -> Vec<f64> {
+    // Per-axis node indices (halves for quadratic) in the order above.
+    const CORNERS: [[u8; 2]; 4] = [[0, 0], [1, 0], [1, 1], [0, 1]];
+    const NINE: [[u8; 2]; 9] = [
+        [0, 0],
+        [2, 0],
+        [2, 2],
+        [0, 2],
+        [1, 0],
+        [2, 1],
+        [1, 2],
+        [0, 1],
+        [1, 1],
+    ];
+    if quadratic {
+        NINE.iter()
+            .map(|node| quadratic_basis(node[0], point[0]).0 * quadratic_basis(node[1], point[1]).0)
+            .collect()
+    } else {
+        CORNERS
+            .iter()
+            .map(|node| linear_basis(node[0], point[0]).0 * linear_basis(node[1], point[1]).0)
+            .collect()
+    }
 }
 
 #[cfg(test)]
@@ -366,5 +648,180 @@ mod tests {
         // ½·(λ+2μ)·ε²·V with V = 1/6.
         let expected = (lambda + 2.0 * mu) * strain * strain / 12.0;
         assert!((energy - expected).abs() <= 1e-12 * expected.max(1.0));
+    }
+
+    /// A hex that is not a parallelepiped: its Jacobian varies.
+    fn distorted_hex() -> [[f64; 3]; 8] {
+        [
+            [0.0, 0.0, 0.0],
+            [1.2, 0.1, -0.1],
+            [1.1, 1.0, 0.1],
+            [-0.1, 0.9, 0.0],
+            [0.1, -0.1, 1.0],
+            [1.0, 0.0, 1.2],
+            [1.3, 1.2, 0.9],
+            [0.0, 1.0, 1.1],
+        ]
+    }
+
+    /// Positions of the 27 nodes of a hex under its trilinear map.
+    fn hex27_points(corners: &[[f64; 3]; 8]) -> [[f64; 3]; 27] {
+        hex27_half_positions().map(|half| {
+            let reference = half.map(|value| f64::from(value) / 2.0);
+            let (values, _) = tensor_shape(&HEX_CORNERS, linear_basis, reference);
+            std::array::from_fn(|axis| {
+                values
+                    .iter()
+                    .zip(corners)
+                    .map(|(value, corner)| value * corner[axis])
+                    .sum()
+            })
+        })
+    }
+
+    fn nodal<const N: usize, const DOFS: usize>(
+        points: &[[f64; 3]; N],
+        field: impl Fn([f64; 3]) -> [f64; 3],
+    ) -> [f64; DOFS] {
+        let mut values = [0.0; DOFS];
+        for (node, point) in points.iter().enumerate() {
+            values[3 * node..3 * node + 3].copy_from_slice(&field(*point));
+        }
+        values
+    }
+
+    fn quadratic_form<const DOFS: usize>(
+        stiffness: &[[f64; DOFS]; DOFS],
+        displacement: &[f64; DOFS],
+    ) -> f64 {
+        stiffness
+            .iter()
+            .zip(displacement)
+            .map(|(row, motion)| {
+                motion
+                    * row
+                        .iter()
+                        .zip(displacement)
+                        .map(|(entry, value)| entry * value)
+                        .sum::<f64>()
+            })
+            .sum()
+    }
+
+    fn assert_symmetric_with_rigid_modes<const N: usize, const DOFS: usize>(
+        stiffness: &[[f64; DOFS]; DOFS],
+        points: &[[f64; 3]; N],
+    ) {
+        let scale = stiffness[0][0].abs();
+        for (row, entries) in stiffness.iter().enumerate() {
+            for (col, entry) in entries.iter().enumerate() {
+                assert!((entry - stiffness[col][row]).abs() <= 1e-12 * scale);
+            }
+        }
+        for axis in 0..3 {
+            let mut omega = [0.0; 3];
+            omega[axis] = 1.0;
+            let translation: [f64; DOFS] = nodal(points, |_| omega);
+            let rotation: [f64; DOFS] = nodal(points, |point| cross(omega, point));
+            for mode in [translation, rotation] {
+                for row in stiffness {
+                    let force: f64 = row
+                        .iter()
+                        .zip(&mode)
+                        .map(|(entry, value)| entry * value)
+                        .sum();
+                    assert!(
+                        force.abs() <= 1e-10 * scale,
+                        "rigid mode produced force {force}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn hex_shape_functions_interpolate_their_nodes() {
+        let half = hex27_half_positions();
+        for (node, position) in half.iter().enumerate() {
+            let point = position.map(|value| f64::from(value) / 2.0);
+            let (values, gradients) = tensor_shape(&half, quadratic_basis, point);
+            for (other, value) in values.iter().enumerate() {
+                let expected = if other == node { 1.0 } else { 0.0 };
+                assert!((value - expected).abs() < 1e-14);
+            }
+            let sum: [f64; 3] =
+                std::array::from_fn(|axis| gradients.iter().map(|gradient| gradient[axis]).sum());
+            assert!(sum.iter().all(|component| component.abs() < 1e-12));
+        }
+        // The 27 positions are distinct: every grid point of {0, ½, 1}³.
+        let mut sorted = half.to_vec();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(sorted.len(), 27);
+    }
+
+    #[test]
+    fn hex8_stiffness_is_symmetric_with_six_rigid_modes() {
+        let corners = distorted_hex();
+        assert_symmetric_with_rigid_modes(&hex8_stiffness(&corners, &steel()), &corners);
+    }
+
+    #[test]
+    fn hex27_stiffness_is_symmetric_with_six_rigid_modes() {
+        let corners = distorted_hex();
+        assert_symmetric_with_rigid_modes(
+            &hex27_stiffness(&corners, &steel()),
+            &hex27_points(&corners),
+        );
+    }
+
+    #[test]
+    fn mirrored_hex_has_the_same_stiffness() {
+        let corners = distorted_hex();
+        // Swapping the bottom and top faces mirrors the reference cube.
+        let perm = [4, 5, 6, 7, 0, 1, 2, 3];
+        let mirrored = perm.map(|corner| corners[corner]);
+        let forward = hex8_stiffness(&corners, &steel());
+        let backward = hex8_stiffness(&mirrored, &steel());
+        for node_a in 0..8 {
+            for node_b in 0..8 {
+                for row in 0..3 {
+                    for col in 0..3 {
+                        let lhs = forward[3 * perm[node_a] + row][3 * perm[node_b] + col];
+                        let rhs = backward[3 * node_a + row][3 * node_b + col];
+                        assert!((lhs - rhs).abs() <= 1e-9 * forward[0][0].abs());
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn hex_strain_energy_matches_continuum() {
+        // A 2 × 1 × 3 box: u_x = ε·x stores ½·(λ+2μ)·ε²·V on either element,
+        // and u_x = ε·x² stores ½·(λ+2μ)·∫(2εx)² dV = 2(λ+2μ)ε²·(8/3)·3 on
+        // the 27-node one.
+        let size = [2.0, 1.0, 3.0];
+        let corners = HEX_CORNERS
+            .map(|corner| std::array::from_fn(|axis| size[axis] * f64::from(corner[axis])));
+        let material = steel();
+        let (lambda, mu) = material.lame();
+        let strain = 1e-3;
+        let volume = size[0] * size[1] * size[2];
+        let expected = (lambda + 2.0 * mu) * strain * strain * volume / 2.0;
+        let stretch = |point: [f64; 3]| [strain * point[0], 0.0, 0.0];
+        let linear: [f64; 24] = nodal(&corners, stretch);
+        let energy = 0.5 * quadratic_form(&hex8_stiffness(&corners, &material), &linear);
+        assert!((energy - expected).abs() <= 1e-12 * expected);
+        let points = hex27_points(&corners);
+        let stiffness = hex27_stiffness(&corners, &material);
+        let quadratic: [f64; 81] = nodal(&points, stretch);
+        let energy = 0.5 * quadratic_form(&stiffness, &quadratic);
+        assert!((energy - expected).abs() <= 1e-12 * expected);
+        let curved: [f64; 81] = nodal(&points, |point| [strain * point[0] * point[0], 0.0, 0.0]);
+        let energy = 0.5 * quadratic_form(&stiffness, &curved);
+        // ∫x² dV over the box = (2³/3)·1·3 = 8.
+        let expected = 2.0 * (lambda + 2.0 * mu) * strain * strain * 8.0;
+        assert!((energy - expected).abs() <= 1e-12 * expected);
     }
 }

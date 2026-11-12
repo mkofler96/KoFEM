@@ -188,7 +188,14 @@ impl ElasticModel {
             .boundary
             .get_or_insert_with(|| BoundaryFaces::new(&self.mesh));
         let report = boundary
-            .apply(&self.mesh, load, faces.as_chunks::<3>().0, parsed, forces)
+            .apply(
+                &self.mesh,
+                load,
+                faces.as_chunks::<3>().0,
+                &[],
+                parsed,
+                forces,
+            )
             .map_err(|error| to_js(&error))?;
         Ok(report.unmatched)
     }
