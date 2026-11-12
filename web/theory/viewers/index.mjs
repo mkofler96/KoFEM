@@ -1,33 +1,27 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Interactive result viewers for the Theory Guide. generate.mjs extracts the
-// boundary surface of a solved public example (examples/gallery/site/<id>.vtu)
-// into public/theory/viewers/<id>.json; public/theory/viewer.js draws it with
-// three.js. Without JavaScript or WebGL, the example's own figure is shown.
+// Interactive result viewers for the Theory Guide. Every example's analysis
+// file opens unsolved, so examples/validation/run.mjs --report writes the
+// solved boundary surface of each case to examples/validation/surfaces/<id>.json;
+// generate.mjs turns it into public/theory/viewers/<id>.json, and
+// public/theory/viewer.js draws it with three.js. Without JavaScript or WebGL,
+// the example's own figure is shown.
 
 import { readFileSync } from "node:fs";
 
 const repo = new URL("../../../", import.meta.url);
-const site = new URL("examples/gallery/site/", repo);
+const surfaces = new URL("examples/validation/surfaces/", repo);
 const caseRecords = JSON.parse(
   readFileSync(new URL("web/public/examples/results.json", repo), "utf8"),
 ).cases;
-const showcaseRecord = (id) =>
-  JSON.parse(
-    readFileSync(new URL(`examples/gallery/showcase/${id}.json`, repo), "utf8"),
-  );
 
-// The solved examples a Theory article may embed, with the field the
-// example's own figure shows.
+// The solved validation cases a Theory article may embed, with their titles.
 const sources = {
-  cantilever: { title: "Cantilever beam", record: "case" },
-  "plate-with-hole": { title: "Plate with a hole", record: "case" },
-  "plate-with-hole-shell": {
-    title: "Plate with a hole, shell model",
-    record: "showcase",
-  },
-  "axial-bar": { title: "Axial bar", record: "case" },
+  "cantilever-beam": { title: "Cantilever beam" },
+  "plate-with-hole": { title: "Plate with a hole" },
+  "plate-with-hole-shell": { title: "Plate with a hole, shell model" },
+  "axial-bar": { title: "Axial bar" },
 };
 
 const fieldNames = {
@@ -38,142 +32,41 @@ const fieldNames = {
 function figureMeta(id) {
   const source = sources[id];
   if (!source) throw new Error(`No theory viewer source for example "${id}"`);
-  const record =
-    source.record === "case"
-      ? caseRecords.find((entry) => entry.id === id)
-      : showcaseRecord(id);
+  const record = caseRecords.find((entry) => entry.id === id);
   if (!record?.figure)
     throw new Error(`Example "${id}" has no figure record to match`);
   return { ...source, ...record.figure };
 }
 
-// ── A minimal reader for the ASCII arrays of a KoFEM analysis file ──────────
-
-function dataArray(xml, name) {
-  const match = xml.match(
-    new RegExp(`<DataArray[^>]*Name="${name}"[^>]*>([\\s\\S]*?)</DataArray>`),
-  );
-  if (!match) throw new Error(`Analysis file is missing DataArray "${name}"`);
-  const values = match[1].trim().split(/\s+/).map(Number);
-  if (values.some(Number.isNaN))
-    throw new Error(`DataArray "${name}" has a non-numeric value`);
-  return values;
-}
-
-// Corner-node faces of each VTK cell type, outward-ordered.
-const cellFaces = {
-  12: [
-    [0, 3, 2, 1],
-    [4, 5, 6, 7],
-    [0, 1, 5, 4],
-    [1, 2, 6, 5],
-    [2, 3, 7, 6],
-    [3, 0, 4, 7],
-  ],
-  10: [
-    [0, 2, 1],
-    [0, 1, 3],
-    [1, 2, 3],
-    [0, 3, 2],
-  ],
-  5: [[0, 1, 2]],
-};
-
-const round = (value, digits) => Number(value.toPrecision(digits));
-
-/** The viewer payload of one solved example. */
+/** The viewer payload of one solved example: its surface from run.mjs. */
 export function viewerData(id) {
   const meta = figureMeta(id);
-  const xml = readFileSync(new URL(`${id}.vtu`, site), "utf8");
-  const points = dataArray(xml, "Points");
-  const connectivity = dataArray(xml, "connectivity");
-  const offsets = dataArray(xml, "offsets");
-  const types = dataArray(xml, "types");
-  const displacement = dataArray(xml, "Displacement");
-  const nPoints = points.length / 3;
-  if (displacement.length !== points.length)
-    throw new Error(`${id}: displacement does not match the point count`);
-
-  const cells = [];
-  let start = 0;
-  offsets.forEach((end, c) => {
-    if (!cellFaces[types[c]])
-      throw new Error(`${id}: unsupported VTK cell type ${types[c]}`);
-    cells.push({ type: types[c], nodes: connectivity.slice(start, end) });
-    start = end;
-  });
-
-  let nodal;
-  if (meta.field === "displacement") {
-    nodal = Array.from({ length: nPoints }, (_, i) =>
-      Math.hypot(
-        displacement[3 * i],
-        displacement[3 * i + 1],
-        displacement[3 * i + 2],
-      ),
+  const surface = JSON.parse(
+    readFileSync(new URL(`${id}.json`, surfaces), "utf8"),
+  );
+  if (surface.id !== id || surface.field !== meta.field)
+    throw new Error(
+      `${id}: the solved surface is "${surface.id}" / ${surface.field}, the figure shows ${meta.field}`,
     );
-  } else if (meta.field === "vonMises") {
-    const vonMises = dataArray(xml, "VonMises");
-    if (vonMises.length !== cells.length)
-      throw new Error(`${id}: one von Mises value per element expected`);
-    const sum = new Float64Array(nPoints);
-    const count = new Uint32Array(nPoints);
-    cells.forEach(({ nodes }, c) => {
-      for (const v of nodes) {
-        sum[v] += vonMises[c];
-        count[v]++;
-      }
-    });
-    nodal = Array.from(sum, (s, i) => (count[i] ? s / count[i] : 0));
-  } else throw new Error(`${id}: unknown field "${meta.field}"`);
-
-  // Boundary faces: faces used once (all faces of shell triangles).
-  const faces = new Map();
-  for (const { type, nodes } of cells)
-    for (const local of cellFaces[type]) {
-      const face = local.map((k) => nodes[k]);
-      const key = [...face].sort((a, b) => a - b).join(",");
-      const entry = faces.get(key);
-      if (entry) entry.count++;
-      else faces.set(key, { face, count: 1 });
-    }
-  const index = new Map();
-  const surface = { positions: [], displacements: [], values: [] };
-  const vertex = (v) => {
-    if (!index.has(v)) {
-      index.set(v, index.size);
-      for (let k = 0; k < 3; k++) {
-        surface.positions.push(round(points[3 * v + k], 7));
-        surface.displacements.push(round(displacement[3 * v + k], 5));
-      }
-      surface.values.push(round(nodal[v], 5));
-    }
-    return index.get(v);
-  };
-  const triangles = [];
   const edges = new Set();
-  for (const { face, count } of faces.values()) {
-    if (count !== 1) continue;
-    const ids = face.map(vertex);
-    for (let k = 1; k + 1 < ids.length; k++)
-      triangles.push(ids[0], ids[k], ids[k + 1]);
-    ids.forEach((a, k) => {
-      const b = ids[(k + 1) % ids.length];
+  const { triangles } = surface;
+  for (let t = 0; t < triangles.length; t += 3)
+    for (let k = 0; k < 3; k++) {
+      const a = triangles[t + k];
+      const b = triangles[t + ((k + 1) % 3)];
       edges.add(a < b ? `${a},${b}` : `${b},${a}`);
-    });
-  }
-  const values = surface.values;
+    }
   return {
     id,
     title: meta.title,
     field: fieldNames[meta.field],
     unit: meta.unit,
-    min: Math.min(...values),
-    max: Math.max(...values),
+    min: Math.min(...surface.values),
+    max: Math.max(...surface.values),
     deformScale: meta.deform,
     positions: surface.positions,
     displacements: surface.displacements,
-    values,
+    values: surface.values,
     triangles,
     edges: [...edges].flatMap((key) => key.split(",").map(Number)),
   };

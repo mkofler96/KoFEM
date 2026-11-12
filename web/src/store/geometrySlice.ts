@@ -8,6 +8,7 @@ import { current } from "immer";
 import type { ModelState, SliceCreator } from "./modelStore";
 import { addSelection } from "./viewSlice";
 import { carryGroupsToMesh, remeshNotice } from "../lib/remeshGroups";
+import { modelShellRim } from "../lib/shellRim";
 import {
   bodyGroupOf,
   bodyOf,
@@ -339,6 +340,9 @@ export interface GeometrySlice {
   setBodySuppressed(propertyId: number, suppressed: boolean): void;
   setBodyDiscretization(propertyId: number, disc: BodyDiscretization): void;
   setRegionMaxElementSize(propertyId: number, size: string): void;
+  // Clear every body's and region's own max element size, so the whole model
+  // meshes at the size in the Mesh settings.
+  clearRegionMaxElementSizes(): void;
   setRegionOptimizationRole(propertyId: number, role: OptimizationRole): void;
   // Make a region of a body with several regions a body of its own: its cut
   // then becomes an interface between two bodies.
@@ -528,6 +532,11 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       if (size.trim() === "") delete prop.maxElementSize;
       else prop.maxElementSize = size;
     }),
+  clearRegionMaxElementSizes: () =>
+    set((s) => {
+      for (const prop of s.properties.filter(isCadBody))
+        delete prop.maxElementSize;
+    }),
   setRegionOptimizationRole: (propertyId, role) =>
     set((s) => {
       const prop = s.properties.find((p) => p.id === propertyId);
@@ -706,6 +715,8 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
             ? cadBodies
             : freshBodies(s, bodyCount);
       dropAnalysis(s);
+      // An edit renumbers the CAD faces an example's hand check is written on.
+      s.handCheck = null;
       suggestSizes(s, tessellation);
     }),
   undoGeometryEdit: () =>
@@ -784,6 +795,15 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
         surfaceTriangles ?? null,
         surfaceFaceIds ?? null,
         new Set(nodes.map((n) => n.id)),
+        modelShellRim(
+          {
+            nodes,
+            elements,
+            surfaceTriangles: surfaceTriangles ?? null,
+            surfaceFaceIds: surfaceFaceIds ?? null,
+          },
+          before.stepSurface,
+        ).nodesByFace,
       );
       s.bcGroups = carried.bcGroups;
       s.loadGroups = carried.loadGroups;

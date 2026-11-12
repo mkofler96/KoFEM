@@ -813,10 +813,11 @@
 
     <p class="lede">Does the complete KoFEM path reproduce a bar in tension?</p>
     <p>The <a href="/theory/foundations/reading-a-study/">connected reading path</a>
-      leads here from assumptions to results. This study uses the existing
-      <a href="/examples/axial-bar/">public axial-bar example</a> and the real
-      C++/WASM solid solver. It checks end extension and stress away from the
-      support, with separate limits for each claim.</p>
+      leads here from assumptions to results. This study solves the bar of the
+      <a href="/examples/axial-bar/">public axial-bar example</a> on structured
+      hexahedral meshes with the real C++/WASM solid solver. It checks end
+      extension and stress away from the support, with separate limits for
+      each claim.</p>
 
     <h2 id="model">The model and the reference</h2>
     <p>The bar occupies <math><mn>0</mn><mo>≤</mo></math>​<math><mi>x</mi><mo>≤</mo></math>​<math><mn>1000</mn><mtext> mm</mtext></math> with a 100 mm × 100 mm
@@ -850,8 +851,10 @@
     <ol>
       <li><a href="https://github.com/mkofler96/KoFEM/blob/c4f63a0ad9ed6793aa724d2fdecb2ad0bcf4e0dc/examples/validation/cases/axial-bar.mjs#L29">The shared case builder</a>
         makes a structured hex volume mesh, material, support and end-force group.
-        The public example uses order 1 on a 20 × 4 × 4 grid: 320 elements,
-        525 vertices and 1575 displacement DOFs before elimination.</li>
+        The baseline is order 1 on a 20 × 4 × 4 grid: 320 elements,
+        525 vertices and 1575 displacement DOFs before elimination. (The public
+        example is now built from its STEP file, meshed by Netgen with
+        tetrahedra, as a user builds it in the app.)</li>
       <li><a href="https://github.com/mkofler96/KoFEM/blob/c4f63a0ad9ed6793aa724d2fdecb2ad0bcf4e0dc/examples/validation/lib/app-model.mjs#L91">The app-model adapter</a>
         selects the loaded boundary quads and sends a face-force group.
         <a href="https://github.com/mkofler96/KoFEM/blob/c4f63a0ad9ed6793aa724d2fdecb2ad0bcf4e0dc/engine/cpp/fem_bc_io.cpp#L259">Boundary assembly</a>
@@ -885,7 +888,7 @@
     <div class="table-wrap" tabindex="0" role="region" aria-label="Axial-bar mesh and order comparison; scroll horizontally if needed">
       <table><caption>Executed WASM solves; stress error is the worst sample in the middle region</caption>
         <thead><tr><th scope="col">Grid</th><th scope="col">Order</th><th scope="col">DOFs</th><th scope="col">Extension<br />(mm)</th><th scope="col">Error<br />(%)</th><th scope="col">Mean von Mises<br />(MPa)</th><th scope="col">Worst stress<br />error (%)</th></tr></thead>
-        <tbody><tr><th scope="row">10 × 2 × 2</th><td>1</td><td>297</td><td>0.4717635</td><td>-0.9297</td><td>100.00109</td><td>0.003513</td></tr><tr><th scope="row">20 × 4 × 4<br /><small>public case</small></th><td>1</td><td>1575</td><td>0.4735772</td><td>-0.5488</td><td>99.999991</td><td>0.002553</td></tr><tr><th scope="row">40 × 8 × 8</th><td>1</td><td>9963</td><td>0.4743261</td><td>-0.3915</td><td>100</td><td>0.0004388</td></tr><tr><th scope="row">10 × 2 × 2</th><td>2<br /><small>diagnostic</small></td><td>1575</td><td>0.4795495</td><td>0.7054</td><td>99.999959</td><td>0.002325</td></tr></tbody>
+        <tbody><tr><th scope="row">10 × 2 × 2</th><td>1</td><td>297</td><td>0.4717635</td><td>-0.9297</td><td>100.00109</td><td>0.003513</td></tr><tr><th scope="row">20 × 4 × 4<br /><small>baseline</small></th><td>1</td><td>1575</td><td>0.4735772</td><td>-0.5488</td><td>99.999991</td><td>0.002553</td></tr><tr><th scope="row">40 × 8 × 8</th><td>1</td><td>9963</td><td>0.4743261</td><td>-0.3915</td><td>100</td><td>0.0004388</td></tr><tr><th scope="row">10 × 2 × 2</th><td>2<br /><small>diagnostic</small></td><td>1575</td><td>0.4795495</td><td>0.7054</td><td>99.999959</td><td>0.002325</td></tr></tbody>
       </table>
     </div>
     <p>Displacement error is <span class="math-nowrap"><math><mn>100</mn><mo stretchy="false" lspace="0" rspace="0">(</mo><msub><mi>δ</mi><mi>h</mi></msub><mo>−</mo><mi>δ</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo lspace="0" rspace="0">/</mo><mi>δ</mi></math>;</span> stress error is the largest
@@ -899,7 +902,7 @@
 
     <figure class="result-viewer" data-viewer="/theory/viewers/axial-bar.json" id="viewer-axial-bar">
       <div class="viewer-stage">
-        <img src="/examples/axial-bar.png" width="1200" height="401" alt="Axial bar: displacement magnitude on the solved model, coloured from blue (low) to red (high)." loading="lazy" decoding="async" />
+        <img src="/examples/axial-bar.png" width="1200" height="402" alt="Axial bar: displacement magnitude on the solved model, coloured from blue (low) to red (high)." loading="lazy" decoding="async" />
         <div class="viewer-legend" aria-hidden="true"><span>0.474 mm</span><span class="viewer-bar"></span><span>0 mm</span></div>
         <p class="viewer-hint" hidden>Drag to rotate · scroll to zoom</p>
       </div>
@@ -934,7 +937,7 @@
     <p><a class="button" href="/app/?example=axial-bar">Open the axial bar in KoFEM →</a></p>
     <p>The <a href="/examples/axial-bar/">example page</a> also offers the saved
       analysis. Solve at order 1 and select Ux: the public case’s maximum
-      readout is <code>4.736e-1 mm</code>. Its reference comparison uses the mean
+      readout is <code>4.739e-1 mm</code>. Its reference comparison uses the mean
       end displacement. The middle-region stress statistic uses the
       unsmoothed element samples; the app’s global smoothed maximum is a
       different quantity.</p>
@@ -946,7 +949,7 @@
     <p><a href="/theory/axial-bar.json">Download inputs, solver settings and full-precision results</a>
       of the four solves.</p>
     <p><a href="https://github.com/mkofler96/KoFEM/blob/c4f63a0ad9ed6793aa724d2fdecb2ad0bcf4e0dc/examples/validation/axial-bar-study.mjs#L1">Study and measurement source</a>
-      reuses the public fixture and solver wrapper. See also
+      reuses the public case’s inputs and the solver wrapper. See also
       <a href="https://github.com/mkofler96/KoFEM/blob/c4f63a0ad9ed6793aa724d2fdecb2ad0bcf4e0dc/web/src/lib/resultField.ts#L83">app averaging and extrema</a>
       and the <a href="/theory/foundations/reading-a-study/">complete reading path</a>.</p>
     <ul class="refs"><li>Gere and Goodno, <cite>Mechanics of Materials</cite>, axially loaded members.</li>

@@ -9,7 +9,7 @@ import { resultViewer } from "../viewers/index.mjs";
 const { setup, runs } = evidence;
 const baseline = runs.find((run) => run.order === 1 && run.elements === 320);
 if (!baseline)
-  throw new Error("Axial-bar evidence lacks the public example's mesh");
+  throw new Error("Axial-bar evidence lacks its 20 × 4 × 4 baseline mesh");
 
 export default {
   slug: "verification/axial-bar",
@@ -26,10 +26,11 @@ export default {
   body: `
     <p class="lede">Does the complete KoFEM path reproduce a bar in tension?</p>
     <p>The <a href="/theory/foundations/reading-a-study/">connected reading path</a>
-      leads here from assumptions to results. This study uses the existing
-      <a href="/examples/axial-bar/">public axial-bar example</a> and the real
-      C++/WASM solid solver. It checks end extension and stress away from the
-      support, with separate limits for each claim.</p>
+      leads here from assumptions to results. This study solves the bar of the
+      <a href="/examples/axial-bar/">public axial-bar example</a> on structured
+      hexahedral meshes with the real C++/WASM solid solver. It checks end
+      extension and stress away from the support, with separate limits for
+      each claim.</p>
 
     <h2 id="model">The model and the reference</h2>
     <p>The bar occupies ${tex("0 ≤ x ≤ 1000\\text{ mm}")} with a 100 mm × 100 mm
@@ -60,8 +61,10 @@ export default {
     <ol>
       <li>${source("examples/validation/cases/axial-bar.mjs", 29, "The shared case builder")}
         makes a structured hex volume mesh, material, support and end-force group.
-        The public example uses order 1 on a 20 × 4 × 4 grid: 320 elements,
-        525 vertices and 1575 displacement DOFs before elimination.</li>
+        The baseline is order 1 on a 20 × 4 × 4 grid: 320 elements,
+        525 vertices and 1575 displacement DOFs before elimination. (The public
+        example is now built from its STEP file, meshed by Netgen with
+        tetrahedra, as a user builds it in the app.)</li>
       <li>${source("examples/validation/lib/app-model.mjs", 91, "The app-model adapter")}
         selects the loaded boundary quads and sends a face-force group.
         ${source("engine/cpp/fem_bc_io.cpp", 259, "Boundary assembly")}
@@ -95,7 +98,7 @@ export default {
     <div class="table-wrap" tabindex="0" role="region" aria-label="Axial-bar mesh and order comparison; scroll horizontally if needed">
       <table><caption>Executed WASM solves; stress error is the worst sample in the middle region</caption>
         <thead><tr><th scope="col">Grid</th><th scope="col">Order</th><th scope="col">DOFs</th><th scope="col">Extension<br />(mm)</th><th scope="col">Error<br />(%)</th><th scope="col">Mean von Mises<br />(MPa)</th><th scope="col">Worst stress<br />error (%)</th></tr></thead>
-        <tbody>${runs.map((run) => `<tr><th scope="row">${run.grid.join(" × ")}${run === baseline ? "<br /><small>public case</small>" : ""}</th><td>${run.order}${run.order === 2 ? "<br /><small>diagnostic</small>" : ""}</td><td>${run.dofs}</td><td>${number(run.displacementMm, 7)}</td><td>${number(run.displacementErrorPct, 4)}</td><td>${number(run.stressMeanMpa, 8)}</td><td>${number(run.stressWorstErrorPct, 4)}</td></tr>`).join("")}</tbody>
+        <tbody>${runs.map((run) => `<tr><th scope="row">${run.grid.join(" × ")}${run === baseline ? "<br /><small>baseline</small>" : ""}</th><td>${run.order}${run.order === 2 ? "<br /><small>diagnostic</small>" : ""}</td><td>${run.dofs}</td><td>${number(run.displacementMm, 7)}</td><td>${number(run.displacementErrorPct, 4)}</td><td>${number(run.stressMeanMpa, 8)}</td><td>${number(run.stressWorstErrorPct, 4)}</td></tr>`).join("")}</tbody>
       </table>
     </div>
     <p>Displacement error is ${tex("100(δ_h-δ)/δ")}; stress error is the largest
@@ -150,7 +153,7 @@ export default {
     <p><a href="/theory/axial-bar.json">Download inputs, solver settings and full-precision results</a>
       of the four solves.</p>
     <p>${source("examples/validation/axial-bar-study.mjs", 1, "Study and measurement source")}
-      reuses the public fixture and solver wrapper. See also
+      reuses the public case’s inputs and the solver wrapper. See also
       ${source("web/src/lib/resultField.ts", 83, "app averaging and extrema")}
       and the <a href="/theory/foundations/reading-a-study/">complete reading path</a>.</p>
     <ul class="refs"><li>Gere and Goodno, <cite>Mechanics of Materials</cite>, axially loaded members.</li>

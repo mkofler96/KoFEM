@@ -69,7 +69,11 @@ export function MeshScene() {
       },
     [nodeMap],
   );
-  const onFacePick = useFacePick(topology.boundaryMeshTopo, getPos);
+  const onFacePick = useFacePick(
+    topology.boundaryMeshTopo,
+    getPos,
+    topology.shellRim,
+  );
 
   // Automatic fit-to-view scale (max displacement → TARGET_DEFORM_FRACTION of the
   // model size) multiplied by the user-controlled deformScaleFactor. A factor of

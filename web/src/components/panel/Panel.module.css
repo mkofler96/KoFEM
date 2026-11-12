@@ -330,6 +330,43 @@
   line-height: 1.4;
 }
 
+/* Apply to all bodies under the mesh max size: a small button and a note on
+   what it changes, aligned with the input above (past the 80px label + gap). */
+.applyAll {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: -2px 0 8px 88px;
+}
+
+.applyAllBtn {
+  padding: 3px 8px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  color: var(--ink-2);
+  font-size: 11.5px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.applyAllBtn:hover:not(:disabled) {
+  background: var(--hover);
+  border-color: var(--border-2);
+}
+
+.applyAllBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.applyAllNote {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
 /* Collapsible "Advanced" sub-header: a section label that toggles a group of
    less-common settings (Optimize panel's SIMP move limit / iterations / tol). */
 .advancedToggle {
@@ -893,6 +930,14 @@
   font-family: "IBM Plex Mono", ui-monospace, monospace;
   color: var(--ink-2);
   font-weight: 500;
+}
+
+/* A stat value with an action after it, such as the edit button of a region's
+   element size in the mesh summary. */
+.statValWithAction {
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 
 /* ── Pre-flight ─────────────────────────────────────────────── */

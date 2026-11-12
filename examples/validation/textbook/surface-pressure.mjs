@@ -9,7 +9,7 @@ import { REF } from "./refs.mjs";
 export default {
   description:
     "A bar compressed by a uniform end pressure, u = −pL/E: the sign and area scaling of pressure loads, checked against KoFEM.",
-  figure: ({ page }) => barFigure({ load: "pressure", div: page.grid }),
+  figure: () => barFigure({ load: "pressure" }),
   intro: ({ url }) => `
         <p>The <a href="${url("axial-bar")}">axial bar</a> again, now
         compressed by a uniform pressure on its end face. Pressure pushes along
@@ -28,7 +28,9 @@ export default {
         ${tex(`p = ${n(inp("p"))}\\text{ MPa}`)}, the tip moves by
         ${tex(`u(L) = ${n(row.reference)}\\text{ mm}`)}.</p>`,
   model: ({ tex, url }) => `
-        <p>The pressure is integrated over the end face with the same
+        <p>The bar, its Netgen mesh and its clamp are the
+        <a href="${url("axial-bar")}">axial bar's</a>; the pressure sits on the
+        whole end face. It is integrated over that face with the same
         boundary integrator as the
         <a href="${url("axial-bar")}">axial bar's</a> force, with the traction
         ${tex("t = -p n")} built from each face's normal.</p>`,

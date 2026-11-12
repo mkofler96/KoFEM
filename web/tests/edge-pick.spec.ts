@@ -3,7 +3,7 @@
 
 import { test, expect } from "./coverage";
 import type { Page } from "@playwright/test";
-import { addBoundary } from "./fixtures/tree";
+import { addBoundary, openTree } from "./fixtures/tree";
 
 // End-to-end coverage for edge picking (#386): a flat shell sheet is one
 // face-pick region, so grabbing its rim (an edge load or a supported-edge BC)
@@ -201,4 +201,71 @@ test("a coupling can grip a picked shell edge", async ({ page }) => {
   expect(gripped.label.startsWith("Edge")).toBe(true);
   expect(gripped.count).toBeGreaterThan(2);
   expect(gripped.count).toBeLessThan(totalNodes * 0.5);
+});
+
+// The plate's side faces collapse to the shell's edges when the body is meshed
+// as a shell. An Edge pick there remembers the CAD face (lib/shellRim), so the
+// example's supports and load follow those faces onto a new mesh, as face
+// picks do on a solid.
+test("edges on a shell's collapsed side faces survive a re-mesh", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+
+  type GroupState = {
+    faces: { geometry?: string; cadFaceId?: number; nodeIds: number[] }[];
+  };
+  const readGroups = () =>
+    page.evaluate(() => {
+      const state = (
+        window as unknown as {
+          __kofemStore: {
+            getState(): {
+              nodes: unknown[];
+              bcGroups: GroupState[];
+              loadGroups: GroupState[];
+            };
+          };
+        }
+      ).__kofemStore.getState();
+      return {
+        nodes: state.nodes.length,
+        faces: [...state.bcGroups, ...state.loadGroups].map((g) =>
+          g.faces.map((f) => ({
+            geometry: f.geometry,
+            cadFaceId: f.cadFaceId,
+            count: f.nodeIds.length,
+          })),
+        ),
+      };
+    });
+
+  await page.goto("/app/?example=plate-with-hole-shell");
+  await expect(page.locator("nav")).toBeVisible();
+  await expect
+    .poll(async () => (await readGroups()).nodes, { timeout: 15_000 })
+    .toBeGreaterThan(0);
+  const shipped = await readGroups();
+  expect(shipped.faces.flat().every((f) => f.geometry === "edge")).toBe(true);
+
+  await openTree(page, "mesh");
+  await page.getByTestId("max-element-size").fill("2");
+  await page.getByTestId("min-element-size").fill("0.2");
+  await page.getByTestId("mesh-generate").click();
+  await expect
+    .poll(async () => (await readGroups()).nodes, { timeout: 120_000 })
+    .toBeLessThan(shipped.nodes);
+  const coarser = await readGroups();
+  // The same CAD faces, each re-resolved to the coarser mesh's rim.
+  const faceIds = (model: typeof shipped) =>
+    model.faces.map((g) => g.map((f) => [f.geometry, f.cadFaceId]));
+  expect(faceIds(coarser)).toEqual(faceIds(shipped));
+  const before = shipped.faces.flat();
+  coarser.faces.flat().forEach((f, i) => {
+    expect(f.count).toBeGreaterThan(2);
+    expect(f.count).toBeLessThan(before[i].count);
+  });
+  await expect(page.getByTestId("remesh-notice")).toContainText(
+    "Kept 3 support/load/tie groups on their CAD faces.",
+  );
 });

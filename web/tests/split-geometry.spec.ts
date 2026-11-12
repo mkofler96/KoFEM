@@ -156,6 +156,10 @@ test("split a body into regions: one body, connected, each meshed at its own siz
   const counts = await elementsPerRegion(page);
   expect(counts[1]).toBeGreaterThan(3 * counts[2]);
   await expect(page.getByTestId("mesh-region-size-1")).toHaveText("max 6 mm");
+  // Its ✎ opens the region, where the size is edited (KOF-342).
+  await page.getByTestId("mesh-region-edit-1").click();
+  await expect(page.getByTestId("panel-title")).toHaveText("Region 1");
+  await expect(page.getByTestId("region-max-size-1")).toHaveValue("6");
 
   // Changing the region size marks the mesh out of date.
   await page.getByTestId("tree-region-1").click();

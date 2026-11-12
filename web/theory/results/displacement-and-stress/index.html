@@ -950,24 +950,23 @@
 
     <h2 id="verification">A public stress verification case</h2>
     <p>The <a href="/examples/plate-with-hole/">plate-with-hole verification case</a>
-      compares the largest element-centre von Mises sample in the first ring
-      around the hole, divided by nominal tension, with Kirsch’s infinite-plate
-      concentration factor of 3. At the free edge’s peak in that ideal problem,
-      the remaining tangential stress is uniaxial, so its magnitude equals von Mises.</p>
+      compares the largest nodal von Mises stress on the hole face, divided by
+      nominal tension, with the concentration factor of its strip, 3.14
+      (Kirsch’s infinite plate gives 3). At the free edge’s peak the remaining
+      tangential stress is uniaxial, so its magnitude equals von Mises.</p>
     <figure class="theory-figure full" id="figure-plate-hole-concentration">
       <a href="/theory/figures/plate-hole-concentration.svg" class="figure-link"><picture class="figure-image"><source srcset="/theory/figures/plate-hole-concentration.svg" type="image/svg+xml" /><img src="/theory/figures/plate-hole-concentration.png" width="700" height="350" alt="Left: a plate with a circular hole of radius a under remote tension sigma infinity. Right: the stress along the line above the hole falls from three times the remote stress at the hole edge towards the remote value further away." loading="lazy" decoding="async" /></picture></a>
       <figcaption>Kirsch’s solution for a circular hole in an infinite plate under remote tension. The stress along the line above the hole is three times the remote stress at the hole edge and falls quickly with distance.</figcaption>
     </figure>
-    <p>The finite plate, support and element-centre sampling differ from the
-      ideal boundary value. The public case explains sampling and discretization
-      errors; its tolerance applies to that benchmark. Its measured peak is
-      <em>unsmoothed</em>, whereas the app summary uses nodal averaging. Compare
-      like measures before interpreting a difference. Open the case in the
-      app to reproduce it.</p>
+    <p>Averaging centre samples to the nodes reads the boundary peak slightly
+      low. The public case explains this and its discretization error; its
+      tolerance applies to that benchmark. Its measured peak is the app’s
+      nodal average, the value the Results panel’s hand check shows, so you
+      compare like with like when you open the case in the app.</p>
     <figure class="result-viewer" data-viewer="/theory/viewers/plate-with-hole.json" id="viewer-plate-with-hole">
       <div class="viewer-stage">
         <img src="/examples/plate-with-hole.png" width="1200" height="720" alt="Plate with a hole: von mises stress on the solved model, coloured from blue (low) to red (high)." loading="lazy" decoding="async" />
-        <div class="viewer-legend" aria-hidden="true"><span>277 MPa</span><span class="viewer-bar"></span><span>24.3 MPa</span></div>
+        <div class="viewer-legend" aria-hidden="true"><span>313 MPa</span><span class="viewer-bar"></span><span>27.9 MPa</span></div>
         <p class="viewer-hint" hidden>Drag to rotate · scroll to zoom</p>
       </div>
       <figcaption>Von Mises stress of the plate-with-hole case, averaged at the nodes as the app displays it. The peak sits at the hole edge, on the line across the plate perpendicular to the load. Undeformed shape.
@@ -988,8 +987,6 @@
         <a href="https://github.com/mkofler96/KoFEM/blob/0db1e95ae2016d2c625932babf68d8ff672d9f69/web/src/components/viewport/useMeshTopology.ts#L170">model span</a>,
         <a href="https://github.com/mkofler96/KoFEM/blob/0db1e95ae2016d2c625932babf68d8ff672d9f69/web/src/components/panel/ResultsPanel.tsx#L372">summary and display controls</a>
         and <a href="https://github.com/mkofler96/KoFEM/blob/0db1e95ae2016d2c625932babf68d8ff672d9f69/web/src/store/resultsSlice.ts#L12">static result interface</a>.</li>
-      <li><a href="https://github.com/mkofler96/KoFEM/blob/0db1e95ae2016d2c625932babf68d8ff672d9f69/examples/validation/cases/plate-with-hole.mjs#L90">Benchmark measurement</a>
-        selects unsmoothed samples, not the app’s nodal extrema.</li>
       <li>Shells use membrane-plus-bending stress at the worse of their two
         surfaces: <a href="https://github.com/mkofler96/KoFEM/blob/0db1e95ae2016d2c625932babf68d8ff672d9f69/engine/cpp/solve_shell.cpp#L195">shell result</a>
         and <a href="https://github.com/mkofler96/KoFEM/blob/0db1e95ae2016d2c625932babf68d8ff672d9f69/engine/cpp/solve_coupled.cpp#L265">coupled result</a>. Auto-shell

@@ -3,8 +3,9 @@
 
 import { test, expect } from "./coverage";
 import { gotoApp } from "./fixtures/app";
-import { serveUnvalidatedExample } from "./fixtures/unvalidated-examples";
-import { readdir } from "node:fs/promises";
+import { openTree } from "./fixtures/tree";
+import { UNVALIDATED_CRANE_SHELL } from "./fixtures/unvalidated-examples";
+import { readdir, readFile } from "node:fs/promises";
 
 // Coverage for the `?example=<id>` deep-link (App.tsx useExampleFromUrl), the
 // target of the "Open in KoFEM" links on the example pages. Exercises
@@ -49,7 +50,9 @@ function readStore(page: import("@playwright/test").Page) {
   });
 }
 
-test("?example= loads a pre-solved example into the app", async ({ page }) => {
+test("?example= loads an example into the app, ready to run", async ({
+  page,
+}) => {
   test.setTimeout(60_000);
 
   await page.goto("/app/?example=axial-bar");
@@ -60,16 +63,15 @@ test("?example= loads a pre-solved example into the app", async ({ page }) => {
     .poll(async () => (await readStore(page)).nodes, { timeout: 15_000 })
     .toBeGreaterThan(0);
 
+  // A recipe example (KOF-322) opens as a user leaves it before pressing Run:
+  // meshed, with its support and load, on the static study, unsolved.
   const snapshot = await readStore(page);
   expect(snapshot.modelName).toBe("Axial bar in tension");
   expect(snapshot.elements).toBeGreaterThan(0);
-  expect(snapshot.hasResult).toBe(true); // saved in results mode with displacements
-  expect(snapshot.mode).toBe("results");
+  expect(snapshot.hasResult).toBe(false);
+  expect(snapshot.mode).toBe("solve");
   expect(snapshot.bcGroups).toBe(1); // fixed face restored as a BC group
   expect(snapshot.loadGroups).toBe(1); // tip load restored as a load group
-
-  // The restored result renders the results read-out.
-  await expect(page.getByText(/Max \|U\|/)).toBeVisible({ timeout: 10_000 });
 });
 
 test("re-solving a loaded example does not trap on its node ids (#288)", async ({
@@ -77,11 +79,11 @@ test("re-solving a loaded example does not trap on its node ids (#288)", async (
 }) => {
   test.setTimeout(60_000);
 
-  // The hex-mesh example .vtu numbers nodes 1-based, so a node id is NOT its
-  // 0-based vertex index. Re-running the solve used to hand those ids to the
-  // engine as vertex indices, reading past the vertex array and trapping with
-  // "memory access out of bounds". Load the example, then drive a fresh solve
-  // straight from the restored store state exactly as the Solve button does.
+  // Re-running the solve of a loaded example used to hand its node ids to the
+  // engine as vertex indices; the 1-based ids of the old hex examples read
+  // past the vertex array and trapped with "memory access out of bounds".
+  // Load the example, then drive a fresh solve straight from the restored
+  // store state exactly as the Solve button does.
   await page.goto("/app/?example=axial-bar");
   await expect(page.locator("nav")).toBeVisible();
   await page.waitForFunction(
@@ -131,81 +133,71 @@ test("re-solving a loaded example does not trap on its node ids (#288)", async (
   }
 });
 
-test("a pure-shell (CTRIA3) example re-solves through the shell path", async ({
+test("a pure-shell (CTRIA3) example solves through the shell path to its published Kt", async ({
   page,
 }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(180_000);
 
-  // Loads the CTRIA3 shell plate and re-runs the solve exactly as the Solve
-  // button does. This exercises the whole shell pipeline end-to-end: CTRIA3
-  // parsing, the edge fallback of rebuildSurfaceLoads (the pulled edge is a
-  // node polyline containing no whole facet), the worker's work-equivalent
-  // line-load distribution, and the engine's Kirchhoff shell solve. Same mesh,
-  // BCs and load derivation as the generator → the fresh field must reproduce
-  // the one saved in the .vtu.
+  // Opens the shell plate with a hole — built from its STEP file with the body
+  // marked Shell, so its mesh is the CTRIA3 mid-surface and its supports and
+  // load are Edge picks of whole CAD faces — and solves it with the Run button.
+  // This exercises the whole shell pipeline end-to-end: CTRIA3 parsing, the
+  // edge fallback of rebuildSurfaceLoads (the pulled edge is a node polyline
+  // containing no whole facet), the worker's work-equivalent line-load
+  // distribution and the Rust shell solve. The Results panel's hand check must
+  // read the Kt the example page publishes.
   await page.goto("/app/?example=plate-with-hole-shell");
   await expect(page.locator("nav")).toBeVisible();
-  await page.waitForFunction(
-    () => !!(window as unknown as { __kofem?: unknown }).__kofem,
-  );
   await expect
     .poll(async () => (await readStore(page)).nodes, { timeout: 15_000 })
     .toBeGreaterThan(0);
-
-  const outcome = await page.evaluate(async () => {
-    const win = window as unknown as {
-      __kofem: {
-        sendToWorker(name: string, payload: object): Promise<unknown>;
-      };
-      __kofemStore: { getState(): Record<string, unknown> };
+  const setup = await page.evaluate(() => {
+    const st = (
+      window as unknown as {
+        __kofemStore: {
+          getState(): {
+            elements: { type: string }[];
+            result: unknown;
+            bcGroups: { faces: { cadFaceId?: number; geometry?: string }[] }[];
+            loadGroups: {
+              faces: { cadFaceId?: number; geometry?: string }[];
+            }[];
+          };
+        };
+      }
+    ).__kofemStore.getState();
+    const faces = [...st.bcGroups, ...st.loadGroups].flatMap((g) => g.faces);
+    return {
+      allShells: st.elements.every((el) => el.type === "CTRIA3"),
+      solved: st.result !== null,
+      // Edges a wall face collapsed to, each remembering that CAD face.
+      wholeFaceEdges: faces.every(
+        (f) => f.geometry === "edge" && typeof f.cadFaceId === "number",
+      ),
     };
-    const st = win.__kofemStore.getState();
-    const elements = st.elements as { type: string }[];
-    const saved = st.result as { displacements: Float64Array };
-    const maxU = (disp: Float64Array): number => {
-      let max = 0;
-      for (let i = 0; i < disp.length; i += 3)
-        max = Math.max(max, Math.hypot(disp[i], disp[i + 1], disp[i + 2]));
-      return max;
-    };
-    try {
-      const res = (await win.__kofem.sendToWorker("solve", {
-        solverMethod: "gauss-seidel",
-        nodes: st.nodes,
-        elements: st.elements,
-        materials: st.materials,
-        properties: st.properties,
-        constraints: st.constraints,
-        loads: st.loads,
-        surfaceLoads: st.surfaceLoads,
-      })) as { displacements: Float64Array; vonMises: Float64Array };
-      return {
-        ok: true as const,
-        allShells: elements.every((el) => el.type === "CTRIA3"),
-        nNodes: (st.nodes as unknown[]).length,
-        nElems: elements.length,
-        nDisp: res.displacements.length,
-        nVm: res.vonMises.length,
-        savedMaxU: maxU(saved.displacements),
-        freshMaxU: maxU(res.displacements),
-      };
-    } catch (err) {
-      return { ok: false as const, error: (err as Error).message };
-    }
+  });
+  expect(setup).toEqual({
+    allShells: true,
+    solved: false,
+    wholeFaceEdges: true,
   });
 
-  expect(outcome.ok).toBe(true);
-  if (outcome.ok) {
-    expect(outcome.allShells).toBe(true); // guard: the file really is a shell model
-    expect(outcome.nDisp).toBe(outcome.nNodes * 3);
-    expect(outcome.nVm).toBe(outcome.nElems);
-    // Identical inputs through a deterministic solver — only summation-order
-    // noise is tolerated.
-    expect(
-      Math.abs(outcome.freshMaxU - outcome.savedMaxU) /
-        Math.abs(outcome.savedMaxU),
-    ).toBeLessThan(1e-6);
-  }
+  const run = page.getByRole("button", { name: /Run static solve/ });
+  await expect(run).toBeEnabled({ timeout: 15_000 });
+  await run.click();
+  const handCheck = page.getByTestId("hand-check-fe");
+  await expect(handCheck).toBeVisible({ timeout: 120_000 });
+  const shown = Number(await handCheck.getAttribute("data-value"));
+  const published = (
+    JSON.parse(await readFile("public/examples/results.json", "utf8")) as {
+      cases: { id: string; fe: number }[];
+    }
+  ).cases.find((c) => c.id === "plate-with-hole-shell")?.fe;
+  if (published === undefined)
+    throw new Error("results.json has no plate-with-hole-shell row");
+  expect(Math.abs(shown - published)).toBeLessThanOrEqual(
+    1e-6 * Math.abs(published),
+  );
 });
 
 test("a mixed shell/solid (CTRIA3 + CTETRA) example re-solves through the coupled path", async ({
@@ -223,9 +215,13 @@ test("a mixed shell/solid (CTRIA3 + CTETRA) example re-solves through the couple
   const logs: string[] = [];
   page.on("console", (msg) => logs.push(msg.text()));
 
-  await serveUnvalidatedExample(page, "crane-hook-shell");
-  await page.goto("/app/?example=crane-hook-shell");
-  await expect(page.locator("nav")).toBeVisible();
+  // A regression fixture, not an example: it carries no geometry, so it is
+  // opened as a saved analysis file (Open), not through ?example=, which
+  // refuses a model without its geometry.
+  await gotoApp(page);
+  await page
+    .locator('input[type="file"][accept=".vtu,.zip"]')
+    .setInputFiles(UNVALIDATED_CRANE_SHELL);
   await page.waitForFunction(() =>
     Boolean((window as unknown as { __kofem?: unknown }).__kofem),
   );
@@ -301,102 +297,29 @@ test("a mixed shell/solid (CTRIA3 + CTETRA) example re-solves through the couple
   }
 });
 
-test("a STEP-backed example (crane) restores its geometry and re-meshes", async ({
+test("a recipe example (axial bar) restores its STEP for re-meshing", async ({
   page,
 }) => {
-  test.setTimeout(180_000);
-
-  // The crane fixture ships its source STEP next to the .vtu. Loading it must
-  // restore stepBytes — a saved .vtu carries none, so loadAnalysis drops them —
-  // so the loaded model is re-meshable instead of hitting the "original STEP file
-  // is no longer available" guard. Procedural benchmarks (cantilever below) have
-  // no .step and correctly stay non-re-meshable.
-  await serveUnvalidatedExample(page, "crane-hook-shell");
-  await page.goto("/app/?example=crane-hook-shell");
-  await expect(page.locator("nav")).toBeVisible();
-  await page.waitForFunction(() =>
-    Boolean((window as unknown as { __kofem?: unknown }).__kofem),
-  );
-  await expect
-    .poll(async () => (await readStore(page)).nodes, { timeout: 30_000 })
-    .toBeGreaterThan(0);
-
-  // stepBytes is restored by a second fetch that resolves shortly after the .vtu
-  // loads (nodes appear), so poll for it rather than reading once.
-  await expect
-    .poll(
-      () =>
-        page.evaluate(() => {
-          const bytes = (
-            window as unknown as {
-              __kofemStore: { getState(): { stepBytes: Uint8Array | null } };
-            }
-          ).__kofemStore.getState().stepBytes;
-          return bytes instanceof Uint8Array ? bytes.length : 0;
-        }),
-      { timeout: 15_000 },
-    )
-    .toBeGreaterThan(0);
-
-  const step = await page.evaluate(() => {
-    const st = (
-      window as unknown as {
-        __kofemStore: {
-          getState(): { stepBytes: Uint8Array | null; geometryFormat: string };
-        };
-      }
-    ).__kofemStore.getState();
-    const bytes = st.stepBytes;
-    return {
-      header: bytes ? new TextDecoder().decode(bytes.slice(0, 13)) : "",
-      format: st.geometryFormat,
-    };
-  });
-  expect(step.header).toBe("ISO-10303-21;"); // a genuine STEP, not index.html
-  expect(step.format).toBe("step");
-
-  // Re-mesh through the real worker path with the restored bytes: proof the
-  // geometry genuinely meshes, i.e. the Re-mesh button now works.
-  const mesh = await page.evaluate(async () => {
-    const win = window as unknown as {
-      __kofem: {
-        sendToWorker(name: string, payload: object): Promise<unknown>;
-      };
-      __kofemStore: { getState(): Record<string, unknown> };
-    };
-    const st = win.__kofemStore.getState();
-    const res = (await win.__kofem.sendToWorker("volume_mesh", {
-      bytes: st.stepBytes,
-      format: st.geometryFormat,
-      maxElementSize: 20,
-      minElementSize: 2,
-    })) as { nodes: unknown[]; elements: unknown[] };
-    return { nNodes: res.nodes.length, nElems: res.elements.length };
-  });
-  expect(mesh.nNodes).toBeGreaterThan(0);
-  expect(mesh.nElems).toBeGreaterThan(0);
-});
-
-test("a procedural example (axial bar) has no re-meshable STEP", async ({
-  page,
-}) => {
-  // The mirror of the crane test: a benchmark generated in code ships no .step,
-  // so stepBytes stays null and the model is (correctly) not re-meshable.
+  // Every example ships the STEP file it is built from (KOF-322), so the
+  // opened model keeps its geometry and can be re-meshed.
   await page.goto("/app/?example=axial-bar");
   await expect(page.locator("nav")).toBeVisible();
   await expect
     .poll(async () => (await readStore(page)).nodes, { timeout: 15_000 })
     .toBeGreaterThan(0);
 
-  const hasBytes = await page.evaluate(
-    () =>
-      (
-        window as unknown as {
-          __kofemStore: { getState(): { stepBytes: Uint8Array | null } };
-        }
-      ).__kofemStore.getState().stepBytes !== null,
-  );
-  expect(hasBytes).toBe(false);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              __kofemStore: { getState(): { stepBytes: Uint8Array | null } };
+            }
+          ).__kofemStore.getState().stepBytes !== null,
+      ),
+    )
+    .toBe(true);
 });
 
 test("?example= with an invalid id is rejected without a fetch", async ({
@@ -433,6 +356,88 @@ test("?example= with an unknown id surfaces a clear load error", async ({
     .poll(() => dialogMessage, { timeout: 15_000 })
     .toContain("Could not load example");
   expect((await readStore(page)).nodes).toBe(0);
+});
+
+// An analysis file with its geometry removed: the KoFEM field data decoded,
+// stepSurface cleared, and re-encoded (UInt32 length prefix, base64).
+function withoutGeometry(vtu: string): string {
+  const field =
+    /(<DataArray type="UInt8" Name="KoFEM" NumberOfTuples=")\d+("[^>]*>\n)([^<\n]+)/;
+  const match = field.exec(vtu);
+  if (!match) throw new Error("not a KoFEM analysis file");
+  const bytes = Buffer.from(match[3], "base64");
+  const meta = JSON.parse(
+    bytes.subarray(4, 4 + bytes.readUInt32LE(0)).toString("utf8"),
+  ) as Record<string, unknown>;
+  meta.stepSurface = null;
+  const json = Buffer.from(JSON.stringify(meta), "utf8");
+  const out = Buffer.alloc(4 + json.length);
+  out.writeUInt32LE(json.length, 0);
+  json.copy(out, 4);
+  return vtu.replace(
+    field,
+    `${match[1]}${json.length}${match[2]}${out.toString("base64")}`,
+  );
+}
+
+test("an example without its model STEP file is refused", async ({ page }) => {
+  // Every example ships the geometry it is built from (KOF-322); opening one
+  // without it would show no body and offer no re-mesh.
+  let dialogMessage = "";
+  page.on("dialog", (d) => {
+    dialogMessage = d.message();
+    void d.dismiss();
+  });
+  await page.route("**/examples/axial-bar.model.step", (route) =>
+    route.fulfill({ status: 404, body: "" }),
+  );
+  await page.goto("/app/?example=axial-bar");
+  await expect
+    .poll(() => dialogMessage, { timeout: 15_000 })
+    .toContain('example "axial-bar" ships no geometry');
+  expect((await readStore(page)).nodes).toBe(0);
+});
+
+test("an example whose file carries no geometry is refused", async ({
+  page,
+}) => {
+  let dialogMessage = "";
+  page.on("dialog", (d) => {
+    dialogMessage = d.message();
+    void d.dismiss();
+  });
+  await page.route("**/examples/axial-bar.vtu", async (route) => {
+    const original = await route.fetch();
+    await route.fulfill({
+      response: original,
+      body: withoutGeometry(await original.text()),
+    });
+  });
+  await page.goto("/app/?example=axial-bar");
+  await expect
+    .poll(() => dialogMessage, { timeout: 15_000 })
+    .toContain('example "axial-bar" carries no geometry to mesh on');
+  expect((await readStore(page)).nodes).toBe(0);
+});
+
+test("a mesh without geometry says it cannot be re-meshed", async ({
+  page,
+}) => {
+  // A model opened from a file that has a mesh but no geometry: the mesh
+  // controls are replaced by an explicit message instead of vanishing.
+  const original = await page.request.get("/examples/axial-bar.vtu");
+  const file = test.info().outputPath("no-geometry.vtu");
+  const { writeFile } = await import("node:fs/promises");
+  await writeFile(file, withoutGeometry(await original.text()));
+  await gotoApp(page);
+  await page
+    .locator('input[type="file"][accept=".vtu,.zip"]')
+    .setInputFiles(file);
+  await expect
+    .poll(async () => (await readStore(page)).nodes, { timeout: 15_000 })
+    .toBeGreaterThan(0);
+  await openTree(page, "mesh");
+  await expect(page.getByTestId("mesh-no-geometry")).toBeVisible();
 });
 
 test("the app opens normally when no ?example= is present", async ({
@@ -514,7 +519,7 @@ test("the cantilever example opens ready to run and re-mesh", async ({
   test.setTimeout(60_000);
 
   // cantilever-beam opens ready to run with a hand check (KOF-261), built
-  // with the app's own pipeline (examples/gallery/generate-cantilever.mjs). It
+  // from its recipe (examples/validation/cases/cantilever-beam.mjs). It
   // must open unsolved on its static study with the clamp, the tip load, the quadratic
   // element order and its hand check restored, and get its STEP back.
   await page.goto("/app/?example=cantilever-beam");
@@ -584,22 +589,18 @@ test.beforeAll(async () => {
 // `bun run capture:readme` — so a routine run does not rewrite them;
 // examples-page.spec.ts already opens every example in the app.
 test("capture screenshots of all examples @capture", async ({ page }) => {
+  // Every example, each fetched, parsed and its STEP file restored.
+  test.setTimeout(180_000);
   for (const analysis of EXAMPLE_ANALYSES) {
     await page.goto(`/app/?example=${analysis.id}`);
 
     await expect
       .poll(async () => (await readStore(page)).nodes, { timeout: 15_000 })
       .toBeGreaterThan(0);
+    // Every example opens unsolved, ready to run.
+    expect((await readStore(page)).hasResult).toBe(false);
     // Allow the camera reposition and a render frame to settle
     await page.waitForTimeout(100);
-    // The overlay toggle exists only for a solved model; a topology-optimization
-    // example (mbb-beam-topopt) opens unsolved, in the Optimize step.
-    if ((await readStore(page)).hasResult)
-      await page
-        .getByRole("button", {
-          name: "Toggle undeformed overlay",
-        })
-        .click();
     await page.mouse.move(0, 0);
     await page.evaluate(() => {
       const store = (window as any).__kofemStore;

@@ -216,7 +216,7 @@ function resultFigure(e) {
       <figure class="result">
         <img src="${imagePath(e.id)}" width="${fig.width}" height="${fig.height}" alt="${esc(`${e.name}: ${name.toLowerCase()} on the ${shape}`)}" />
         <div class="colorbar">${fieldRange(fig)}</div>
-        <figcaption>${esc(name)}, ${esc(shape)}. Drawn from the analysis file that Open in KoFEM loads.</figcaption>
+        <figcaption>${esc(name)}, ${esc(shape)}. The result of running the model that Open in KoFEM loads.</figcaption>
       </figure>`;
 }
 
@@ -440,13 +440,79 @@ function inApp(e) {
       </p>`;
 }
 
+const DOF_NAMES = ["Ux", "Uy", "Uz", "Rx", "Ry", "Rz"];
+const AXES = ["x", "y", "z"];
+
+/** A recipe's optimization study, as the Optimize panel asks for it. */
+function optimizeStep(o) {
+  return `Add an optimization study and run it: minimum compliance, volume fraction ${trim(o.volumeFraction)}, penalty p = ${trim(o.penalty)}, filter r<sub>min</sub> = ${trim(o.filterRadius)} mm; under Advanced, move limit ${trim(o.moveLimit)}, at most ${trim(o.maxIterations)} iterations, tolerance ${trim(o.tolerance)}.`;
+}
+
+/** The GUI steps that rebuild a recipe example from its STEP file (lib/recipe.mjs). */
+function byHand(e) {
+  const r = e.recipe;
+  if (!r)
+    throw new Error(
+      `${e.id}: no recipe; every example is built from its STEP file in the GUI's steps`,
+    );
+  const point = (p) => `(${p.map(trim).join(", ")})`;
+  // On a shell the faces through the wall collapse to the shell's edges, and
+  // the user picks those edges (Edge mode).
+  const what = r.discretization.kind === "shell" ? "edge" : "face";
+  const faces = (refs) =>
+    refs.length === 1
+      ? `the ${what} through ${point(refs[0].at)}`
+      : `the ${what}s through ${refs.map((f) => point(f.at)).join(", ")}`;
+  const plane = (s) => {
+    const axis = s.normal.findIndex((v) => v === 1);
+    return `the plane ${AXES[axis]} = ${trim(s.origin[axis])} mm`;
+  };
+  const load = (l) => {
+    if (l.kind === "force")
+      return `force (${l.components.map(trim).join(", ")}) N`;
+    if (l.kind === "pressure") return `pressure ${trim(l.value)} MPa`;
+    return `moment M${AXES[l.axis]} = ${trim(l.value)} N·mm`;
+  };
+  const m = r.material;
+  const d = r.discretization;
+  const steps = [
+    `Import <a href="/examples/${encodeURIComponent(e.id)}.step" download>${esc(e.id)}.step</a>.`,
+    ...r.splits.map((s) =>
+      s.mode === "faces"
+        ? `Split ${faces(s.faces)} with ${plane(s)}.`
+        : `Split the bodies with ${plane(s)}.`,
+    ),
+    ...(d.kind === "shell"
+      ? [
+          `Set the body to Shell. Meshing measures the ${trim(d.thickness)} mm wall and replaces it by its mid-surface; the faces through the wall become the shell's edges, which you pick as Edges.`,
+        ]
+      : []),
+    `Mesh with a ${trim(r.mesh.maxElementSize)} mm maximum element size${r.mesh.minElementSize === undefined ? "" : ` and a ${trim(r.mesh.minElementSize)} mm minimum`}, ${r.mesh.order === 2 ? "quadratic" : "linear"} elements.`,
+    `Material ${esc(m.name)}: E = ${trim(m.young)} MPa, ν = ${trim(m.poisson)}.`,
+    ...r.supports.map(
+      (s) =>
+        `Support “${esc(s.name)}”: ${s.dofs.map((d) => DOF_NAMES[d]).join(", ")} = ${trim(s.value)}${s.value === 0 ? "" : " mm"} on ${faces(s.faces)}.`,
+    ),
+    ...r.loads.map(
+      (l) => `Load “${esc(l.name)}”: ${load(l)} on ${faces(l.faces)}.`,
+    ),
+    r.optimize
+      ? `${optimizeStep(r.optimize)} The Results panel's run summary shows the ${esc(r.readout.quantity.toLowerCase())}.`
+      : `Run the static study. The Results panel compares ${esc(r.readout.quantity.toLowerCase())} with ${esc(r.readout.formula)}.`,
+  ];
+  return `
+      <p>Or build it yourself, as this page's number was built:</p>
+      <ol class="steps">${steps.map((s) => `\n        <li>${s}</li>`).join("")}
+      </ol>`;
+}
+
 // ── /examples/ ────────────────────────────────────────────────────────────────
 
 export function renderIndexPage(data, allEntries) {
   const entries = contentsOrder(allEntries);
   const benchmarks = entries.filter((e) => e.kind === "case");
   const passed = benchmarks.filter((e) => e.pass).length;
-  const description = `Finite element examples you can open in KoFEM, and validation cases compared with a known result: axial bar, cantilever beams, torsion, a plate with a hole, Cook's membrane, topology optimization.`;
+  const description = `Finite element examples you can open in KoFEM, and validation cases compared with a known result: axial bar, a cantilever beam, torsion, a plate with a hole, Cook's membrane, topology optimization.`;
 
   const item = (e) => {
     const line = hasReference(e)
@@ -496,8 +562,8 @@ export function renderIndexPage(data, allEntries) {
 
       <h2 id="reproduce">Reproduce</h2>
       <p>The benchmarks run in CI on every change. To run them yourself
-      (Node.js 20+, bash, curl):</p>
-      ${cloneSteps("node examples/validation/run.mjs")}
+      (Bun, bash, curl and Rust):</p>
+      ${cloneSteps("cd web &amp;&amp; bun install &amp;&amp; bun run validate")}
       <p>It prints one line per benchmark, for example:</p>
       <pre class="console" data-testid="console-line"><code>${esc(consoleHeader())}
 ${esc(consoleRow(benchmarks[0]))}</code></pre>`;
@@ -625,27 +691,58 @@ const specTable = (rows) => `
         </table>
       </div>`;
 
+// Element names by solved element type and order.
 const ELEMENTS = {
-  1: "linear 8-node hexahedra (P1)",
-  2: "quadratic 27-node hexahedra (P2)",
+  CTETRA: {
+    1: "linear 4-node tetrahedra (P1)",
+    2: "quadratic 10-node tetrahedra (P2)",
+  },
+  CTRIA3: {
+    1: "linear 3-node shell triangles (CST membrane, DKT bending)",
+  },
 };
 
 /** "Mesh" and "Unknowns": from the solved mesh, or as the generator wrote them. */
 function meshRows(e) {
   const m = e.mesh;
-  const elements =
-    e.kind === "case"
-      ? `${int(m.elements)} ${ELEMENTS[m.order]}`
-      : esc(m.elements);
+  let elements = esc(m.elements);
+  if (e.kind === "case") {
+    const name = ELEMENTS[m.elementType]?.[m.order];
+    if (!name)
+      throw new Error(
+        `${e.id}: no element name for order-${m.order} ${m.elementType} (regenerate with bun run validate:report)`,
+      );
+    elements = `${int(m.elements)} ${name}`;
+  }
   return [
-    ["Mesh", `${esc(e.page.mesh)}: ${elements}`],
+    [
+      "Mesh",
+      `Netgen, ${trim(e.mesh.maxElementSize)} mm maximum element size: ${elements}`,
+    ],
     ["Unknowns", `${int(m.nodes)} nodes, ${int(m.dofs)} degrees of freedom`],
   ];
 }
 
+// The solver line: every example is solved as the app solves it.
+function solverText(e, data) {
+  const engine = esc(e.engine ?? data.engine);
+  if (e.recipe?.optimize)
+    return `The app's topology optimizer (SIMP with MMA, KoFEM engine); geometry, mesh and optimizer in the WebAssembly build the app runs: ${engine}`;
+  // The Rust module's build (lib/provenance.mjs): a case's comes with the
+  // results, a showcase's with its record.
+  const fem = e.kind === "case" ? (e.fem ?? data.fem) : e.fem;
+  if (!fem)
+    throw new Error(
+      `${e.id}: solved by the Rust module, but the published data names no build of it (fem); regenerate with bun run validate:report`,
+    );
+  if (e.mesh.elementType === "CTRIA3")
+    return `The app's shell solver (conjugate gradients, KoFEM's Rust module, build ${esc(fem)}); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: ${engine}`;
+  return `The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build ${esc(fem)}); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: ${engine}`;
+}
+
 function reproduceCommand(e) {
   if (e.kind === "case")
-    return `node examples/validation/run.mjs --case ${e.id}`;
+    return `cd web &amp;&amp; bun install &amp;&amp; bun run validate --case ${e.id}`;
   return `cd web &amp;&amp; bun install &amp;&amp; bun run ${esc(e.script)}`;
 }
 
@@ -694,7 +791,7 @@ export function renderExamplePage(
       <h2 id="problem">The problem</h2>
       <figure class="diagram">
         ${text.figure(ctx)}
-        <figcaption>${esc(page.model)} Sketch, not to scale${page.grid ? "; thin lines show the element mesh" : ""}.</figcaption>
+        <figcaption>${esc(page.model)} Sketch, not to scale.</figcaption>
       </figure>
       ${inputsTable(e)}
       ${specTable([
@@ -710,10 +807,7 @@ export function renderExamplePage(
       ${specTable([
         ...meshRows(e),
         ["Material", esc(e.material ?? "Linear elastic, isotropic")],
-        [
-          "Solver",
-          `KoFEM engine (MFEM), the WebAssembly build the app runs: ${esc(e.engine ?? data.engine)}`,
-        ],
+        ["Solver", solverText(e, data)],
       ])}${text.model(ctx)}`);
   const results = text.results
     ? text.results(ctx)
@@ -735,8 +829,8 @@ export function renderExamplePage(
       <h2 id="discussion">Discussion</h2>${text.discussion(ctx)}`);
   sections.push(`
       <h2 id="reproduce">Reproduce</h2>
-      ${inApp(e)}
-      <p>From a clone (Node.js 20+, bash, curl)${e.kind === "case" ? ", this solves the model with the same engine and prints its line" : ", this rebuilds the model and its figure"}:</p>
+      ${inApp(e)}${byHand(e)}
+      <p>From a clone (${e.kind === "case" ? "Bun, bash, curl and Rust), this builds and solves the model with the same engine and prints its line" : "Bun, bash, curl), this rebuilds the model and its figure"}:</p>
       ${cloneSteps(reproduceCommand(e))}${
         e.kind === "case"
           ? `
@@ -757,7 +851,7 @@ ${esc(consoleRow(e))}</code></pre>`
       </div>
       ${resultFigure(e)}
       ${keyResult(e)}
-      <p class="actions">${openButton(e.id)}<span class="meta">${esc(text.opens ?? "Opens the solved model in the app.")}</span></p>
+      <p class="actions">${openButton(e.id)}<span class="meta">${esc(text.opens ?? "Opens the model in the app, ready to run.")}</span></p>
       ${sections.join("\n")}
 
       <nav class="pager" aria-label="Other examples">${prev ? `\n        <a class="prev" href="${pageUrl(prev.id)}"><small>Previous</small>${esc(prev.name)}</a>` : ""}${next ? `\n        <a class="next" href="${pageUrl(next.id)}"><small>Next</small>${esc(next.name)}</a>` : ""}

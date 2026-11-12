@@ -13,18 +13,18 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
     <title>Hollow shaft under torsion | KoFEM examples</title>
-    <meta name="description" content="Torsion of a hollow circular shaft, θ = TL/(GJ): derivation, and how the polygonal mesh of a circle explains almost all of KoFEM's error." />
+    <meta name="description" content="Torsion of a hollow circular shaft, θ = TL/(GJ): derivation, why linear tetrahedra are too stiff here, and how the polygonal mesh of a circle explains most of KoFEM's error." />
     <link rel="canonical" href="https://kofem.org/examples/shaft-torsion/" />
     <meta name="robots" content="index, follow" />
 
     <meta property="og:type" content="article" />
     <meta property="og:title" content="Hollow shaft under torsion | KoFEM examples" />
-    <meta property="og:description" content="Torsion of a hollow circular shaft, θ = TL/(GJ): derivation, and how the polygonal mesh of a circle explains almost all of KoFEM's error." />
+    <meta property="og:description" content="Torsion of a hollow circular shaft, θ = TL/(GJ): derivation, why linear tetrahedra are too stiff here, and how the polygonal mesh of a circle explains most of KoFEM's error." />
     <meta property="og:url" content="https://kofem.org/examples/shaft-torsion/" />
     <meta property="og:image" content="https://kofem.org/examples/shaft-torsion.png" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Hollow shaft under torsion | KoFEM examples" />
-    <meta name="twitter:description" content="Torsion of a hollow circular shaft, θ = TL/(GJ): derivation, and how the polygonal mesh of a circle explains almost all of KoFEM's error." />
+    <meta name="twitter:description" content="Torsion of a hollow circular shaft, θ = TL/(GJ): derivation, why linear tetrahedra are too stiff here, and how the polygonal mesh of a circle explains most of KoFEM's error." />
     <meta name="twitter:image" content="https://kofem.org/examples/shaft-torsion.png" />
 
     <!-- Self-hosted fonts (SIL OFL) — see public/fonts/README.md -->
@@ -39,14 +39,14 @@
           {
             "@type": "TechArticle",
             "headline": "Hollow shaft under torsion",
-            "description": "Torsion of a hollow circular shaft, θ = TL/(GJ): derivation, and how the polygonal mesh of a circle explains almost all of KoFEM's error.",
+            "description": "Torsion of a hollow circular shaft, θ = TL/(GJ): derivation, why linear tetrahedra are too stiff here, and how the polygonal mesh of a circle explains most of KoFEM's error.",
             "url": "https://kofem.org/examples/shaft-torsion/",
             "image": [
               "https://kofem.org/examples/shaft-torsion.png",
               "https://kofem.org/examples/shaft-torsion/shaft-torsion-diagram.png",
               "https://kofem.org/examples/shaft-torsion/shaft-torsion-mesh-convergence.png"
             ],
-            "dateModified": "2026-11-01",
+            "dateModified": "2026-11-12",
             "isPartOf": {
               "@type": "CollectionPage",
               "url": "https://kofem.org/examples/"
@@ -810,13 +810,11 @@
           <ul>
             <li><a href="/examples/axial-bar/">Axial bar in tension</a></li>
             <li><a href="/examples/surface-pressure/">Bar under end pressure</a></li>
-            <li><a href="/examples/cantilever/">Cantilever beam, linear hexahedra</a></li>
-            <li><a href="/examples/cantilever-p2/">Cantilever beam, quadratic hexahedra</a></li>
-            <li><a href="/examples/cantilever-beam/">Cantilever beam from a STEP file</a></li>
+            <li><a href="/examples/cantilever-beam/">Cantilever beam under tip load</a></li>
             <li><a href="/examples/beam-torsion/">Square beam under torsion</a></li>
             <li><a href="/examples/shaft-torsion/" aria-current="page">Hollow shaft under torsion</a></li>
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
-            <li><a href="/examples/plate-with-hole-shell/">Plate with a hole, shell elements</a></li>
+            <li><a href="/examples/plate-with-hole-shell/">Plate with a hole (shells)</a></li>
             <li><a href="/examples/cooks-membrane/">Cook's membrane</a></li>
           </ul>
         </details>
@@ -839,13 +837,11 @@
           <ul>
             <li><a href="/examples/axial-bar/">Axial bar in tension</a></li>
             <li><a href="/examples/surface-pressure/">Bar under end pressure</a></li>
-            <li><a href="/examples/cantilever/">Cantilever beam, linear hexahedra</a></li>
-            <li><a href="/examples/cantilever-p2/">Cantilever beam, quadratic hexahedra</a></li>
-            <li><a href="/examples/cantilever-beam/">Cantilever beam from a STEP file</a></li>
+            <li><a href="/examples/cantilever-beam/">Cantilever beam under tip load</a></li>
             <li><a href="/examples/beam-torsion/">Square beam under torsion</a></li>
             <li><a href="/examples/shaft-torsion/" aria-current="page">Hollow shaft under torsion</a></li>
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
-            <li><a href="/examples/plate-with-hole-shell/">Plate with a hole, shell elements</a></li>
+            <li><a href="/examples/plate-with-hole-shell/">Plate with a hole (shells)</a></li>
             <li><a href="/examples/cooks-membrane/">Cook's membrane</a></li>
           </ul>
         </details>
@@ -858,7 +854,7 @@
         <button type="button" class="theme-toggle" hidden>Dark theme</button>
         </div>
       </details>
-      <p class="crumbs"><a href="/examples/#validation">Validation</a> / 7 of 10</p>
+      <p class="crumbs"><a href="/examples/#validation">Validation</a> / 5 of 8</p>
       <h1>Hollow shaft under torsion</h1>
       <div class="lede">
         <p>Torsion of a circular tube is the shaft problem from every
@@ -871,8 +867,8 @@
       
       <figure class="result">
         <img src="/examples/shaft-torsion.png" width="1200" height="900" alt="Hollow shaft under torsion: displacement magnitude |u| on the deformed shape, displacements drawn 500 times enlarged" />
-        <div class="colorbar"><span>0.00&nbsp;mm</span><span class="bar" aria-hidden="true"></span><span>0.0734&nbsp;mm</span></div>
-        <figcaption>Displacement magnitude |U|, deformed shape, displacements drawn 500 times enlarged. Drawn from the analysis file that Open in KoFEM loads.</figcaption>
+        <div class="colorbar"><span>0.00&nbsp;mm</span><span class="bar" aria-hidden="true"></span><span>0.0750&nbsp;mm</span></div>
+        <figcaption>Displacement magnitude |U|, deformed shape, displacements drawn 500 times enlarged. The result of running the model that Open in KoFEM loads.</figcaption>
       </figure>
       
       <div class="table-wrap">
@@ -888,18 +884,18 @@
           <tbody>
             <tr>
               <td class="num">1.4489&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;rad</td>
-              <td class="num"><strong data-testid="fe-value">1.4683&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;rad</strong></td>
-              <td class="num">+1.34&nbsp;%<br /><span class="band pass">within ±5&nbsp;%</span></td>
+              <td class="num"><strong data-testid="fe-value">1.4774&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;rad</strong></td>
+              <td class="num">+1.97&nbsp;%<br /><span class="band pass">within ±5&nbsp;%</span></td>
             </tr>
           </tbody>
         </table>
       </div>
-      <p class="actions"><a class="button" href="/app/?example=shaft-torsion" data-testid="open-in-app">Open in KoFEM</a><span class="meta">Opens the solved model in the app.</span></p>
+      <p class="actions"><a class="button" href="/app/?example=shaft-torsion" data-testid="open-in-app">Open in KoFEM</a><span class="meta">Opens the model in the app, ready to run.</span></p>
       
       <h2 id="problem">The problem</h2>
       <figure class="diagram">
-        <picture class="figure-image theme-light fig"><source srcset="/examples/shaft-torsion/shaft-torsion-diagram.svg" type="image/svg+xml" /><img src="/examples/shaft-torsion/shaft-torsion-diagram.png" width="640" height="230" alt="Hollow circular shaft clamped at the left end and twisted by a torque at the right end; inset shows the polygonal section mesh" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark fig"><source srcset="/examples/shaft-torsion/shaft-torsion-diagram-dark.svg" type="image/svg+xml" /><img src="/examples/shaft-torsion/shaft-torsion-diagram.png" width="640" height="230" alt="Hollow circular shaft clamped at the left end and twisted by a torque at the right end; inset shows the polygonal section mesh" loading="lazy" decoding="async" /></picture>
-        <figcaption>Tube of length L along z, radii rᵢ and rₒ; J = π·(rₒ⁴ − rᵢ⁴)/2. Sketch, not to scale; thin lines show the element mesh.</figcaption>
+        <picture class="figure-image theme-light fig"><source srcset="/examples/shaft-torsion/shaft-torsion-diagram.svg" type="image/svg+xml" /><img src="/examples/shaft-torsion/shaft-torsion-diagram.png" width="640" height="230" alt="Hollow circular shaft clamped at the left end and twisted by a torque at the right end; inset shows how straight element edges turn the circles into polygons" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark fig"><source srcset="/examples/shaft-torsion/shaft-torsion-diagram-dark.svg" type="image/svg+xml" /><img src="/examples/shaft-torsion/shaft-torsion-diagram.png" width="640" height="230" alt="Hollow circular shaft clamped at the left end and twisted by a torque at the right end; inset shows how straight element edges turn the circles into polygons" loading="lazy" decoding="async" /></picture>
+        <figcaption>Tube of length L along z, radii rᵢ and rₒ; J = π·(rₒ⁴ − rᵢ⁴)/2. Sketch, not to scale.</figcaption>
       </figure>
       
       <div class="table-wrap">
@@ -915,9 +911,9 @@
       
       <div class="table-wrap">
         <table class="spec">
-          <tr><th scope="row">Supports</th><td>z = 0 end fixed (Ux, Uy, Uz).</td></tr>
-          <tr><th scope="row">Load</th><td>Torque T about z as a moment on the z = L end.</td></tr>
-          <tr><th scope="row">Measured</th><td>Mean rotation of the z = L end about the axis.</td></tr>
+          <tr><th scope="row">Supports</th><td>z = 0 end face fixed (Ux, Uy, Uz).</td></tr>
+          <tr><th scope="row">Load</th><td>Torque T about z as a moment on the z = L end face.</td></tr>
+          <tr><th scope="row">Measured</th><td>Mean rotation of the z = L end face about the axis.</td></tr>
         </table>
       </div>
 
@@ -943,38 +939,42 @@
       
       <div class="table-wrap">
         <table class="spec">
-          <tr><th scope="row">Mesh</th><td>3 × 32 × 12 grid (radial × around × axial): 1,152 linear 8-node hexahedra (P1)</td></tr>
-          <tr><th scope="row">Unknowns</th><td>1,664 nodes, 4,992 degrees of freedom</td></tr>
+          <tr><th scope="row">Mesh</th><td>Netgen, 10 mm maximum element size: 9,570 quadratic 10-node tetrahedra (P2)</td></tr>
+          <tr><th scope="row">Unknowns</th><td>18,898 nodes, 56,694 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>KoFEM engine (MFEM), the WebAssembly build the app runs: engine-5ceb743373dd</td></tr>
+          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build fem-b229cd7ba59c); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-3397ae8ea1eb</td></tr>
         </table>
       </div>
-        <p>The tube is meshed with 3 elements through the wall,
-        32 around and 12 along the axis. The nodes lie on the true
-        circles, but the element edges between them are straight. The torque
-        is applied as tangential nodal forces on the end ring, proportional to
-        the radius <math><mi>r</mi></math> (the <math><mi>τ</mi><mo>∝</mo><mi>r</mi></math> distribution of the exact
-        solution) and scaled so the moment is <math><mi>T</mi></math>, which is how the app
-        applies a moment to a face. The twist is the
-        mean rotation of the end-ring nodes.</p>
+        <p>The tube is the STEP file a user imports, meshed by Netgen with
+        quadratic tetrahedra. The z = 0 end face is fixed and the moment sits
+        on the z = L end face. The app applies a moment to a face as
+        tangential forces at the face's nodes, proportional to their distance
+        <math><mi>r</mi></math> from the centre of the face (the <math><mi>τ</mi><mo>∝</mo><mi>r</mi></math> of the exact solution)
+        and scaled so their moment is <math><mi>T</mi></math>. The twist is the mean
+        rotation of the end face's nodes about the axis.</p>
+        <p>The mesh nodes lie on the true circles, but the element edges
+        between them are straight, so the section of the mesh is the ring
+        between two polygons. Quadratic elements are used because linear ones
+        are too stiff here; see the discussion.</p>
 
       <h2 id="results">Results</h2>
       <div class="table-wrap">
         <table class="spec">
           <tr><th scope="row">Quantity</th><td>angle of twist θ</td></tr>
           <tr><th scope="row">Reference</th><td>θ = T·L / (G·J) = 1.4489&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;rad <span class="meta">(Gere &amp; Goodno, Mechanics of Materials)</span></td></tr>
-          <tr><th scope="row">KoFEM</th><td>1.4683&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;rad</td></tr>
-          <tr><th scope="row">Difference</th><td>+1.34&nbsp;% <span class="band pass">within ±5&nbsp;%</span></td></tr>
+          <tr><th scope="row">KoFEM</th><td>1.4774&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;rad</td></tr>
+          <tr><th scope="row">Difference</th><td>+1.97&nbsp;% <span class="band pass">within ±5&nbsp;%</span></td></tr>
         </table>
       </div>
+      <p>Quadratic elements: linear tetrahedra are too stiff in torsion with two elements through the wall.</p>
       <section class="study" id="convergence" data-study="shaft-torsion">
-        <h3>Mesh convergence: Hollow shaft</h3>
+        <h3>Mesh convergence: Hollow shaft, P1 vs. P2</h3>
         <figure class="chart">
-          <div class="legend"><span class="key"><span class="swatch s1"></span>P1 (linear)</span><span class="key"><span class="dot under"></span>below the reference</span><span class="key"><span class="dot over"></span>above</span></div>
-          <picture class="figure-image theme-light conv"><source srcset="/examples/shaft-torsion/shaft-torsion-mesh-convergence.svg" type="image/svg+xml" /><img src="/examples/shaft-torsion/shaft-torsion-mesh-convergence.png" width="440" height="250" alt="Hollow shaft: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark conv"><source srcset="/examples/shaft-torsion/shaft-torsion-mesh-convergence-dark.svg" type="image/svg+xml" /><img src="/examples/shaft-torsion/shaft-torsion-mesh-convergence.png" width="440" height="250" alt="Hollow shaft: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture>
+          <div class="legend"><span class="key"><span class="swatch s1"></span>P1 (linear)</span><span class="key"><span class="swatch s2"></span>P2 (quadratic)</span><span class="key"><span class="dot under"></span>below the reference</span><span class="key"><span class="dot over"></span>above</span></div>
+          <picture class="figure-image theme-light conv"><source srcset="/examples/shaft-torsion/shaft-torsion-mesh-convergence.svg" type="image/svg+xml" /><img src="/examples/shaft-torsion/shaft-torsion-mesh-convergence.png" width="440" height="250" alt="Hollow shaft, P1 vs. P2: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark conv"><source srcset="/examples/shaft-torsion/shaft-torsion-mesh-convergence-dark.svg" type="image/svg+xml" /><img src="/examples/shaft-torsion/shaft-torsion-mesh-convergence.png" width="440" height="250" alt="Hollow shaft, P1 vs. P2: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture>
           <figcaption>Difference from the reference on refined meshes, logarithmic axes. The ringed point is this example's mesh.</figcaption>
         </figure>
-        <p>The error falls steadily as the straight-sided elements approach the circle.</p>
+        <p>Quadratic elements approach the reference from above as the polygons of the circles close in on them. Linear elements are too stiff in torsion and approach from below, so their errors partly cancel.</p>
         <details>
           <summary>Data</summary>
           <div class="table-wrap">
@@ -991,31 +991,59 @@
               <tbody>
                 <tr>
                   <td>P1 (linear)</td>
-                  <td>1 × 8 × 3</td>
-                  <td class="num">192</td>
-                  <td class="num">1.7832&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;rad</td>
-                  <td class="num">+23.08&nbsp;%</td>
+                  <td>20 mm</td>
+                  <td class="num">2,907</td>
+                  <td class="num">1.3568&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;rad</td>
+                  <td class="num">−6.35&nbsp;%</td>
                 </tr>
                 <tr>
                   <td>P1 (linear)</td>
-                  <td>2 × 16 × 6</td>
-                  <td class="num">1,008</td>
-                  <td class="num">1.5259&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;rad</td>
-                  <td class="num">+5.31&nbsp;%</td>
+                  <td>10 mm</td>
+                  <td class="num">9,432</td>
+                  <td class="num">1.3632&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;rad</td>
+                  <td class="num">−5.91&nbsp;%</td>
                 </tr>
                 <tr>
                   <td>P1 (linear)</td>
-                  <td>3 × 32 × 12 (this example)</td>
-                  <td class="num">4,992</td>
-                  <td class="num">1.4683&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;rad</td>
-                  <td class="num">+1.34&nbsp;%</td>
+                  <td>7.5 mm</td>
+                  <td class="num">23,373</td>
+                  <td class="num">1.4226&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;rad</td>
+                  <td class="num">−1.82&nbsp;%</td>
                 </tr>
                 <tr>
-                  <td>P1 (linear)</td>
-                  <td>4 × 64 × 24</td>
-                  <td class="num">24,000</td>
-                  <td class="num">1.4546&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;rad</td>
-                  <td class="num">+0.39&nbsp;%</td>
+                  <td>P2 (quadratic)</td>
+                  <td>20 mm</td>
+                  <td class="num">17,274</td>
+                  <td class="num">1.5289&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;rad</td>
+                  <td class="num">+5.53&nbsp;%</td>
+                </tr>
+                <tr>
+                  <td>P2 (quadratic)</td>
+                  <td>15 mm</td>
+                  <td class="num">23,487</td>
+                  <td class="num">1.4919&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;rad</td>
+                  <td class="num">+2.97&nbsp;%</td>
+                </tr>
+                <tr>
+                  <td>P2 (quadratic)</td>
+                  <td>10 mm (this example)</td>
+                  <td class="num">56,694</td>
+                  <td class="num">1.4774&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;rad</td>
+                  <td class="num">+1.97&nbsp;%</td>
+                </tr>
+                <tr>
+                  <td>P2 (quadratic)</td>
+                  <td>7.5 mm</td>
+                  <td class="num">153,312</td>
+                  <td class="num">1.4687&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;rad</td>
+                  <td class="num">+1.37&nbsp;%</td>
+                </tr>
+                <tr>
+                  <td>P2 (quadratic)</td>
+                  <td>5 mm</td>
+                  <td class="num">345,183</td>
+                  <td class="num">1.4593&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;rad</td>
+                  <td class="num">+0.72&nbsp;%</td>
                 </tr>
               </tbody>
             </table>
@@ -1024,69 +1052,88 @@
       </section>
 
       <h2 id="discussion">Discussion</h2>
-        <p>KoFEM's twist differs from the reference by +1.34&nbsp;%, and almost
-        all of it is geometry. With straight element edges, the section of the
-        mesh is the ring between two regular polygons inscribed in the true
-        circles. Its polar moment is smaller than <math><mi>J</mi></math>, so it twists
-        more. The polar moment of a regular <math><mi>n</mi></math>-gon inscribed in a
-        circle of radius <math><mi>r</mi></math> is</p>
-        <math display="block"><msub><mi>J</mi><mrow><mi>n</mi></mrow></msub><mo>=</mo><mfrac><mrow><mi>n</mi><msup><mi>r</mi><mn>4</mn></msup></mrow><mrow><mn>12</mn></mrow></mfrac><mspace width="0.1667em"/><mi>sin</mi><mspace width="0.1667em"/><mfrac><mrow><mn>2</mn><mi>π</mi></mrow><mrow><mi>n</mi></mrow></mfrac><mrow><mo stretchy="true" lspace="0" rspace="0">(</mo><mn>2</mn><mo>+</mo><mi>cos</mi><mspace width="0.1667em"/><mfrac><mrow><mn>2</mn><mi>π</mi></mrow><mrow><mi>n</mi></mrow></mfrac><mo stretchy="true" lspace="0" rspace="0">)</mo></mrow><mo>,</mo></math>
-        <p>which tends to <math><mi>π</mi><msup><mi>r</mi><mn>4</mn></msup><mo lspace="0" rspace="0">/</mo><mn>2</mn></math> as <math><mi>n</mi></math> grows. The twist
-        the polygon alone predicts, <math><mi>J</mi><mo lspace="0" rspace="0">/</mo><msub><mi>J</mi><mrow><mi>n</mi></mrow></msub><mo>−</mo><mn>1</mn></math>, matches KoFEM's
-        error on every mesh of the convergence study:</p>
+        <p>KoFEM's twist differs from the reference by +1.97&nbsp;%.
+        Most of that is geometry. The polar moment of a regular
+        <math><mi>n</mi></math>-gon inscribed in a circle of radius <math><mi>r</mi></math> is</p>
+        <math display="block"><msub><mi>J</mi><mrow><mi>n</mi></mrow></msub><mo>=</mo><mfrac><mrow><mi>n</mi><msup><mi>r</mi><mn>4</mn></msup></mrow><mrow><mn>12</mn></mrow></mfrac><mspace width="0.1667em"/><mi>sin</mi><mspace width="0.1667em"/><mfrac><mrow><mn>2</mn><mi>π</mi></mrow><mrow><mi>n</mi></mrow></mfrac><mrow><mo stretchy="true" lspace="0" rspace="0">(</mo><mn>2</mn><mo>+</mo><mi>cos</mi><mspace width="0.1667em"/><mfrac><mrow><mn>2</mn><mi>π</mi></mrow><mrow><mi>n</mi></mrow></mfrac><mo stretchy="true" lspace="0" rspace="0">)</mo></mrow><mo>≈</mo><mfrac><mrow><mi>π</mi><msup><mi>r</mi><mn>4</mn></msup></mrow><mrow><mn>2</mn></mrow></mfrac><mrow><mo stretchy="true" lspace="0" rspace="0">(</mo><mn>1</mn><mo>−</mo><mfrac><mrow><msup><mi>h</mi><mn>2</mn></msup></mrow><mrow><mn>3</mn><msup><mi>r</mi><mn>2</mn></msup></mrow></mfrac><mo stretchy="true" lspace="0" rspace="0">)</mo></mrow><mo>,</mo></math>
+        <p>with the edge length <math><mi>h</mi><mo>≈</mo><mn>2</mn><mi>π</mi><mi>r</mi><mo lspace="0" rspace="0">/</mo><mi>n</mi></math>. Netgen makes the edges
+        on each circle about as long as the element size, so the ring of
+        polygons twists more than the tube by about
+        <math><msup><mi>h</mi><mn>2</mn></msup><mo lspace="0" rspace="0">/</mo><mrow><mo stretchy="true" lspace="0" rspace="0">(</mo><mn>3</mn><mo stretchy="false" lspace="0" rspace="0">(</mo><msubsup><mi>r</mi><mrow><mi mathvariant="normal">o</mi></mrow><mn>2</mn></msubsup><mo>+</mo><msubsup><mi>r</mi><mrow><mi mathvariant="normal">i</mi></mrow><mn>2</mn></msubsup><mo stretchy="false" lspace="0" rspace="0">)</mo><mo stretchy="true" lspace="0" rspace="0">)</mo></mrow></math>:</p>
         <div class="table-wrap">
           <table class="data">
             <thead>
               <tr>
-                <th scope="col" class="num">Segments</th>
+                <th scope="col" class="num">Element size</th>
                 <th scope="col" class="num">Polygon alone</th>
-                <th scope="col" class="num">KoFEM</th>
+                <th scope="col" class="num">KoFEM (P2)</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td class="num">8</td>
-                <td class="num">+23.09&nbsp;%</td>
-                <td class="num">+23.08&nbsp;%</td>
+                <td class="num">20 mm</td>
+                <td class="num">+3.92&nbsp;%</td>
+                <td class="num">+5.53&nbsp;%</td>
               </tr>
               <tr>
-                <td class="num">16</td>
-                <td class="num">+5.29&nbsp;%</td>
-                <td class="num">+5.31&nbsp;%</td>
+                <td class="num">15 mm</td>
+                <td class="num">+2.21&nbsp;%</td>
+                <td class="num">+2.97&nbsp;%</td>
               </tr>
               <tr class="ci">
-                <td class="num">32</td>
-                <td class="num">+1.29&nbsp;%</td>
-                <td class="num">+1.34&nbsp;%</td>
+                <td class="num">10 mm</td>
+                <td class="num">+0.98&nbsp;%</td>
+                <td class="num">+1.97&nbsp;%</td>
               </tr>
               <tr>
-                <td class="num">64</td>
-                <td class="num">+0.32&nbsp;%</td>
-                <td class="num">+0.39&nbsp;%</td>
+                <td class="num">7.5 mm</td>
+                <td class="num">+0.55&nbsp;%</td>
+                <td class="num">+1.37&nbsp;%</td>
+              </tr>
+              <tr>
+                <td class="num">5 mm</td>
+                <td class="num">+0.25&nbsp;%</td>
+                <td class="num">+0.72&nbsp;%</td>
               </tr>
             </tbody>
           </table>
         </div>
-        <p>What the elements add on top is under a tenth of a percent. The
-        geometric error falls with the square of the segment angle, which is
-        the factor of four per refinement in the convergence plot. More
-        segments, or curved higher-order elements, remove it. The same holds
-        for any curved surface in a model: the mesh replaces it with facets,
-        and stiffness follows the facets.</p>
+        <p>The polygon error falls with the square of the element size. The
+        rest, about a percent, comes from the loaded end: the moment arrives
+        as forces at single nodes, and the twist is read at those same nodes,
+        which give a little under them. Away from the end, the twist rate is
+        close to what the polygon alone predicts. This end part shrinks too,
+        but more slowly than the polygon error.</p>
+        <p>Linear tetrahedra behave differently. With two elements through
+        the wall they are far too stiff in torsion, and come out
+        −5.91&nbsp;% on the same mesh. They approach the reference
+        from below while the polygon pushes the other way, so a linear mesh
+        that lands near the reference does so by cancellation, not
+        convergence. Quadratic elements converge steadily, which is why this
+        example uses them.</p>
 
       <h2 id="reproduce">Reproduce</h2>
       <p>
         In the app: <a href="/app/?example=shaft-torsion" data-testid="reproduce-open">open the model</a>,
         then Studies → Static 1 → Run static solve, select the result plot and set Field to
         Displacement (magnitude). The Result summary shows
-        <span class="readout" data-testid="app-readout" data-field="Displacement (magnitude)" data-stat="Max |U|" data-value="7.343e-2 mm">Max |U| 7.343e-2 mm</span>.
+        <span class="readout" data-testid="app-readout" data-field="Displacement (magnitude)" data-stat="Max |U|" data-value="7.500e-2 mm">Max |U| 7.500e-2 mm</span>.
       </p>
-      <p>From a clone (Node.js 20+, bash, curl), this solves the model with the same engine and prints its line:</p>
+      <p>Or build it yourself, as this page's number was built:</p>
+      <ol class="steps">
+        <li>Import <a href="/examples/shaft-torsion.step" download>shaft-torsion.step</a>.</li>
+        <li>Mesh with a 10 mm maximum element size, quadratic elements.</li>
+        <li>Material Steel: E = 210000 MPa, ν = 0.3.</li>
+        <li>Support “Fixed end”: Ux, Uy, Uz = 0 on the face through (0, 40, 0).</li>
+        <li>Load “Torque”: moment Mz = 2000000 N·mm on the face through (0, 40, 500).</li>
+        <li>Run the static study. The Results panel compares angle of twist with θ = T·L / (G·J).</li>
+      </ol>
+      <p>From a clone (Bun, bash, curl and Rust), this builds and solves the model with the same engine and prints its line:</p>
       <pre><code>git clone https://github.com/mkofler96/KoFEM.git &amp;&amp; cd KoFEM
 bash scripts/fetch-wasm-engine.sh
-node examples/validation/run.mjs --case shaft-torsion</code></pre>
+cd web &amp;&amp; bun install &amp;&amp; bun run validate --case shaft-torsion</code></pre>
       <pre class="console"><code>Case                                  Quantity                                  FE   Reference     Err%  Tol%  Status
-Hollow shaft under torsion            angle of twist θ                   1.4683e-3   1.4489e-3    +1.34     5  PASS</code></pre>
+Hollow shaft under torsion            angle of twist θ                   1.4774e-3   1.4489e-3    +1.97     5  PASS</code></pre>
 
       <h2 id="references">References</h2>
       <ol class="refs">

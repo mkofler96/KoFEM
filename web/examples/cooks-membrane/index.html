@@ -46,7 +46,7 @@
               "https://kofem.org/examples/cooks-membrane/cooks-membrane-diagram.png",
               "https://kofem.org/examples/cooks-membrane/cooks-membrane-mesh-convergence.png"
             ],
-            "dateModified": "2026-11-01",
+            "dateModified": "2026-11-12",
             "isPartOf": {
               "@type": "CollectionPage",
               "url": "https://kofem.org/examples/"
@@ -810,13 +810,11 @@
           <ul>
             <li><a href="/examples/axial-bar/">Axial bar in tension</a></li>
             <li><a href="/examples/surface-pressure/">Bar under end pressure</a></li>
-            <li><a href="/examples/cantilever/">Cantilever beam, linear hexahedra</a></li>
-            <li><a href="/examples/cantilever-p2/">Cantilever beam, quadratic hexahedra</a></li>
-            <li><a href="/examples/cantilever-beam/">Cantilever beam from a STEP file</a></li>
+            <li><a href="/examples/cantilever-beam/">Cantilever beam under tip load</a></li>
             <li><a href="/examples/beam-torsion/">Square beam under torsion</a></li>
             <li><a href="/examples/shaft-torsion/">Hollow shaft under torsion</a></li>
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
-            <li><a href="/examples/plate-with-hole-shell/">Plate with a hole, shell elements</a></li>
+            <li><a href="/examples/plate-with-hole-shell/">Plate with a hole (shells)</a></li>
             <li><a href="/examples/cooks-membrane/" aria-current="page">Cook's membrane</a></li>
           </ul>
         </details>
@@ -839,13 +837,11 @@
           <ul>
             <li><a href="/examples/axial-bar/">Axial bar in tension</a></li>
             <li><a href="/examples/surface-pressure/">Bar under end pressure</a></li>
-            <li><a href="/examples/cantilever/">Cantilever beam, linear hexahedra</a></li>
-            <li><a href="/examples/cantilever-p2/">Cantilever beam, quadratic hexahedra</a></li>
-            <li><a href="/examples/cantilever-beam/">Cantilever beam from a STEP file</a></li>
+            <li><a href="/examples/cantilever-beam/">Cantilever beam under tip load</a></li>
             <li><a href="/examples/beam-torsion/">Square beam under torsion</a></li>
             <li><a href="/examples/shaft-torsion/">Hollow shaft under torsion</a></li>
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
-            <li><a href="/examples/plate-with-hole-shell/">Plate with a hole, shell elements</a></li>
+            <li><a href="/examples/plate-with-hole-shell/">Plate with a hole (shells)</a></li>
             <li><a href="/examples/cooks-membrane/" aria-current="page">Cook's membrane</a></li>
           </ul>
         </details>
@@ -858,7 +854,7 @@
         <button type="button" class="theme-toggle" hidden>Dark theme</button>
         </div>
       </details>
-      <p class="crumbs"><a href="/examples/#validation">Validation</a> / 10 of 10</p>
+      <p class="crumbs"><a href="/examples/#validation">Validation</a> / 8 of 8</p>
       <h1>Cook's membrane</h1>
       <div class="lede">
         <p>Cook's membrane (1974) is a tapered panel, clamped on one edge and
@@ -870,13 +866,13 @@
       
       <figure class="result">
         <img src="/examples/cooks-membrane.png" width="1200" height="900" alt="Cook's membrane: displacement magnitude |u| on the deformed shape, displacements drawn 0.2 times enlarged" />
-        <div class="colorbar"><span>0.00</span><span class="bar" aria-hidden="true"></span><span>29.9</span></div>
-        <figcaption>Displacement magnitude |U|, deformed shape, displacements drawn 0.2 times enlarged. Drawn from the analysis file that Open in KoFEM loads.</figcaption>
+        <div class="colorbar"><span>0.00&nbsp;mm</span><span class="bar" aria-hidden="true"></span><span>31.4&nbsp;mm</span></div>
+        <figcaption>Displacement magnitude |U|, deformed shape, displacements drawn 0.2 times enlarged. The result of running the model that Open in KoFEM loads.</figcaption>
       </figure>
       
       <div class="table-wrap">
         <table class="key-result" data-entry="cooks-membrane">
-          <caption>Top-corner deflection; reference converged ≈ 23.9</caption>
+          <caption>Loaded-edge deflection; reference converged plane-stress value</caption>
           <thead>
             <tr>
               <th scope="col" class="num">Reference</th>
@@ -886,88 +882,100 @@
           </thead>
           <tbody>
             <tr>
-              <td class="num">23.900</td>
-              <td class="num"><strong data-testid="fe-value">24.042</strong></td>
-              <td class="num">+0.59&nbsp;%<br /><span class="band pass">within ±6&nbsp;%</span></td>
+              <td class="num">23.960&nbsp;mm</td>
+              <td class="num"><strong data-testid="fe-value">23.936&nbsp;mm</strong></td>
+              <td class="num">−0.10&nbsp;%<br /><span class="band pass">within ±1&nbsp;%</span></td>
             </tr>
           </tbody>
         </table>
       </div>
-      <p class="actions"><a class="button" href="/app/?example=cooks-membrane" data-testid="open-in-app">Open in KoFEM</a><span class="meta">Opens the solved model in the app.</span></p>
+      <p class="actions"><a class="button" href="/app/?example=cooks-membrane" data-testid="open-in-app">Open in KoFEM</a><span class="meta">Opens the model in the app, ready to run.</span></p>
       
       <h2 id="problem">The problem</h2>
       <figure class="diagram">
-        <picture class="figure-image theme-light fig"><source srcset="/examples/cooks-membrane/cooks-membrane-diagram.svg" type="image/svg+xml" /><img src="/examples/cooks-membrane/cooks-membrane-diagram.png" width="640" height="260" alt="Cook's membrane: a tapered panel clamped on its left edge with a uniform shear load F on its right edge; C is the top-right corner where the deflection is measured" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark fig"><source srcset="/examples/cooks-membrane/cooks-membrane-diagram-dark.svg" type="image/svg+xml" /><img src="/examples/cooks-membrane/cooks-membrane-diagram.png" width="640" height="260" alt="Cook's membrane: a tapered panel clamped on its left edge with a uniform shear load F on its right edge; C is the top-right corner where the deflection is measured" loading="lazy" decoding="async" /></picture>
-        <figcaption>Trapezoid (0, 0)–(48, 44)–(48, 60)–(0, 44), thickness t. Sketch, not to scale; thin lines show the element mesh.</figcaption>
+        <picture class="figure-image theme-light fig"><source srcset="/examples/cooks-membrane/cooks-membrane-diagram.svg" type="image/svg+xml" /><img src="/examples/cooks-membrane/cooks-membrane-diagram.png" width="640" height="260" alt="Cook's membrane: a tapered panel clamped on its left edge with a uniform shear load F on its right edge; M, the middle of the loaded edge, is where the deflection is measured, C the top-right corner" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark fig"><source srcset="/examples/cooks-membrane/cooks-membrane-diagram-dark.svg" type="image/svg+xml" /><img src="/examples/cooks-membrane/cooks-membrane-diagram.png" width="640" height="260" alt="Cook's membrane: a tapered panel clamped on its left edge with a uniform shear load F on its right edge; M, the middle of the loaded edge, is where the deflection is measured, C the top-right corner" loading="lazy" decoding="async" /></picture>
+        <figcaption>Trapezoid (0, 0)–(48, 44)–(48, 60)–(0, 44), extruded by t. Sketch, not to scale.</figcaption>
       </figure>
       
       <div class="table-wrap">
         <table class="spec inputs">
-            <tr><th scope="row"><math><mi>t</mi></math></th><td>1</td></tr>
-            <tr><th scope="row"><math><mi>E</mi></math></th><td>1</td></tr>
+            <tr><th scope="row"><math><mi>t</mi></math></th><td>1&nbsp;mm</td></tr>
+            <tr><th scope="row"><math><mi>E</mi></math></th><td>1&nbsp;MPa</td></tr>
             <tr><th scope="row"><math><mi>ν</mi></math></th><td>0.333333</td></tr>
-            <tr><th scope="row"><math><mi>F</mi></math></th><td>1</td></tr>
+            <tr><th scope="row"><math><mi>F</mi></math></th><td>1&nbsp;N</td></tr>
         </table>
       </div>
       
       <div class="table-wrap">
         <table class="spec">
           <tr><th scope="row">Supports</th><td>x = 0 face fixed (Ux, Uy, Uz).</td></tr>
-          <tr><th scope="row">Load</th><td>F in +y as a force on the x = 48 face.</td></tr>
-          <tr><th scope="row">Measured</th><td>y-displacement of the corner (48, 60).</td></tr>
+          <tr><th scope="row">Load</th><td>F in +y as one force on the x = 48 face, split at y = 52 into two halves.</td></tr>
+          <tr><th scope="row">Measured</th><td>y-displacement at M (48, 52, 0), the middle of the loaded edge.</td></tr>
         </table>
       </div>
 
       <h2 id="theory">Analytical solution</h2>
         <p>The panel is the quadrilateral with corners (0, 0), (48, 44),
         (48, 60) and (0, 44), of unit thickness, with <math><mi>E</mi><mo>=</mo><mn>1</mn></math> and
-        <math><mi>ν</mi><mo>=</mo><mn>1</mn><mo lspace="0" rspace="0">/</mo><mn>3</mn></math>. A total shear force <math><mi>F</mi><mo>=</mo><mn>1</mn></math> is spread
-        uniformly over the right edge, and the left edge is clamped. All
-        quantities are dimensionless. The result compared is the vertical
-        displacement of the top-right corner C.</p>
+        <math><mi>ν</mi><mo>=</mo><mn>1</mn><mo lspace="0" rspace="0">/</mo><mn>3</mn></math>, in plane stress. A total shear force
+        <math><mi>F</mi><mo>=</mo><mn>1</mn></math> is spread uniformly over the right edge, and the left
+        edge is clamped. The benchmark is dimensionless; in KoFEM's units it
+        is <math><mi>E</mi><mo>=</mo><mn>1</mn></math> MPa, <math><mi>F</mi><mo>=</mo><mn>1</mn></math> N and lengths in mm, so the
+        deflection reads in mm.</p>
         <p>Without an analytical solution, the reference is the converged
         value of very fine plane-stress meshes reported in the literature,
-        about 23.9.</p>
+        23.96 (older sources round it to 23.91). It is the vertical deflection
+        at M, the middle of the loaded edge. Many descriptions put the point
+        at the top corner C instead, but the tables of standard elements
+        compared with 23.96 (bilinear quadrilaterals: 18.29, 22.08 and 23.43
+        on 4 × 4, 8 × 8 and 16 × 16 meshes) are deflections at M; the corner
+        moves more.</p>
         <p>The panel behaves like a short, tapered cantilever: span 48, depth
         tapering from 44 to 16. Linear elements lock in its bending, as in the
-        <a href="/examples/cantilever/">cantilever</a>, and every element is
+        <a href="/examples/cantilever-beam/">cantilever</a>, and every element is
         skewed, so elements whose accuracy depends on rectangular shapes do
-        poorly. Coarse meshes of simple elements land far below 23.9.</p>
+        poorly. Coarse meshes of simple elements land far below 23.96.</p>
 
       <h2 id="model">Finite element model</h2>
       
       <div class="table-wrap">
         <table class="spec">
-          <tr><th scope="row">Mesh</th><td>16 × 16 grid, 1 through t: 256 linear 8-node hexahedra (P1)</td></tr>
-          <tr><th scope="row">Unknowns</th><td>578 nodes, 1,734 degrees of freedom</td></tr>
+          <tr><th scope="row">Mesh</th><td>Netgen, 2 mm maximum element size: 2,697 quadratic 10-node tetrahedra (P2)</td></tr>
+          <tr><th scope="row">Unknowns</th><td>5,711 nodes, 17,133 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>KoFEM engine (MFEM), the WebAssembly build the app runs: engine-5ceb743373dd</td></tr>
+          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build fem-b229cd7ba59c); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-3397ae8ea1eb</td></tr>
         </table>
       </div>
         <p>KoFEM is a 3-D solver, so the panel is a slab of thickness
-        <math><mi>t</mi><mo>=</mo><mn>1</mn></math> with one element through the thickness, clamped over
-        the whole <math><mi>x</mi><mo>=</mo><mn>0</mn></math> face. The load <math><mi>F</mi></math> is a force on the
-        <math><mi>x</mi><mo>=</mo><mn>48</mn></math> face, integrated as a uniform traction, and the result
-        is the mean vertical displacement of the two nodes at C.</p>
+        <math><mi>t</mi><mo>=</mo><mn>1</mn></math>, meshed by Netgen with quadratic tetrahedra and clamped
+        over the whole <math><mi>x</mi><mo>=</mo><mn>0</mn></math> face. The <math><mi>x</mi><mo>=</mo><mn>48</mn></math> face is split
+        at <math><mi>y</mi><mo>=</mo><mn>52</mn></math>, so M is a corner of the geometry and therefore a
+        node of every mesh. The load <math><mi>F</mi></math> is one force on both halves of
+        that face, integrated as a uniform traction. The result is the
+        vertical displacement of the node at M on the <math><mi>z</mi><mo>=</mo><mn>0</mn></math> face;
+        the slab is symmetric about its mid-plane, so the <math><mi>z</mi><mo>=</mo><mi>t</mi></math> face
+        gives the same value.</p>
+        <p>A thin slab with free faces is close to plane stress, but not
+        exactly: the clamp also holds the through-thickness contraction at
+        <math><mi>x</mi><mo>=</mo><mn>0</mn></math>, which stiffens the slab a little.</p>
 
       <h2 id="results">Results</h2>
       <div class="table-wrap">
         <table class="spec">
-          <tr><th scope="row">Quantity</th><td>top-corner deflection</td></tr>
-          <tr><th scope="row">Reference</th><td>converged ≈ 23.9 <span class="meta">(Cook (1974))</span></td></tr>
-          <tr><th scope="row">KoFEM</th><td>24.042</td></tr>
-          <tr><th scope="row">Difference</th><td>+0.59&nbsp;% <span class="band pass">within ±6&nbsp;%</span></td></tr>
+          <tr><th scope="row">Quantity</th><td>loaded-edge deflection</td></tr>
+          <tr><th scope="row">Reference</th><td>converged plane-stress value = 23.960&nbsp;mm <span class="meta">(Cook (1974); Belytschko et al. (2014), Table 8.1)</span></td></tr>
+          <tr><th scope="row">KoFEM</th><td>23.936&nbsp;mm</td></tr>
+          <tr><th scope="row">Difference</th><td>−0.10&nbsp;% <span class="band pass">within ±1&nbsp;%</span></td></tr>
         </table>
       </div>
-      <p>Finer meshes move past the reference (see the convergence study): a regression check, not evidence of accuracy.</p>
       <section class="study" id="convergence" data-study="cooks-membrane">
-        <h3>Mesh convergence: Cook's membrane</h3>
+        <h3>Mesh convergence: Cook's membrane, P1 vs. P2</h3>
         <figure class="chart">
           <div class="legend"><span class="key"><span class="swatch s1"></span>P1 (linear)</span><span class="key"><span class="swatch s2"></span>P2 (quadratic)</span><span class="key"><span class="dot under"></span>below the reference</span><span class="key"><span class="dot over"></span>above</span></div>
-          <picture class="figure-image theme-light conv"><source srcset="/examples/cooks-membrane/cooks-membrane-mesh-convergence.svg" type="image/svg+xml" /><img src="/examples/cooks-membrane/cooks-membrane-mesh-convergence.png" width="440" height="250" alt="Cook's membrane: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark conv"><source srcset="/examples/cooks-membrane/cooks-membrane-mesh-convergence-dark.svg" type="image/svg+xml" /><img src="/examples/cooks-membrane/cooks-membrane-mesh-convergence.png" width="440" height="250" alt="Cook's membrane: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture>
+          <picture class="figure-image theme-light conv"><source srcset="/examples/cooks-membrane/cooks-membrane-mesh-convergence.svg" type="image/svg+xml" /><img src="/examples/cooks-membrane/cooks-membrane-mesh-convergence.png" width="440" height="250" alt="Cook's membrane, P1 vs. P2: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark conv"><source srcset="/examples/cooks-membrane/cooks-membrane-mesh-convergence-dark.svg" type="image/svg+xml" /><img src="/examples/cooks-membrane/cooks-membrane-mesh-convergence.png" width="440" height="250" alt="Cook's membrane, P1 vs. P2: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture>
           <figcaption>Difference from the reference on refined meshes, logarithmic axes. The ringed point is this example's mesh.</figcaption>
         </figure>
-        <p>Both orders rise past the 23.9 reference under refinement, so the pass on the 16 × 16 CI mesh is a cancellation of errors; treat this case as a regression check until the reference is reconciled.</p>
+        <p>Linear elements lock in the panel's bending and approach from below; quadratic ones are within half a percent even at 16 mm and level off at 23.94, 0.1 % under the plane-stress reference, since the slab clamped over its whole end face is slightly stiffer than the plane-stress panel.</p>
         <details>
           <summary>Data</summary>
           <div class="table-wrap">
@@ -984,66 +992,66 @@
               <tbody>
                 <tr>
                   <td>P1 (linear)</td>
-                  <td>4 × 4</td>
-                  <td class="num">150</td>
-                  <td class="num">17.621</td>
-                  <td class="num">−26.27&nbsp;%</td>
+                  <td>8 mm</td>
+                  <td class="num">621</td>
+                  <td class="num">19.452&nbsp;mm</td>
+                  <td class="num">−18.81&nbsp;%</td>
                 </tr>
                 <tr>
                   <td>P1 (linear)</td>
-                  <td>8 × 8</td>
-                  <td class="num">486</td>
-                  <td class="num">22.132</td>
-                  <td class="num">−7.40&nbsp;%</td>
+                  <td>4 mm</td>
+                  <td class="num">1,287</td>
+                  <td class="num">23.090&nbsp;mm</td>
+                  <td class="num">−3.63&nbsp;%</td>
                 </tr>
                 <tr>
                   <td>P1 (linear)</td>
-                  <td>16 × 16 (this example)</td>
-                  <td class="num">1,734</td>
-                  <td class="num">24.042</td>
-                  <td class="num">+0.59&nbsp;%</td>
+                  <td>2 mm</td>
+                  <td class="num">3,018</td>
+                  <td class="num">23.699&nbsp;mm</td>
+                  <td class="num">−1.09&nbsp;%</td>
                 </tr>
                 <tr>
                   <td>P1 (linear)</td>
-                  <td>32 × 32</td>
-                  <td class="num">6,534</td>
-                  <td class="num">24.734</td>
-                  <td class="num">+3.49&nbsp;%</td>
-                </tr>
-                <tr>
-                  <td>P1 (linear)</td>
-                  <td>64 × 64</td>
-                  <td class="num">25,350</td>
-                  <td class="num">24.989</td>
-                  <td class="num">+4.56&nbsp;%</td>
+                  <td>1 mm</td>
+                  <td class="num">10,749</td>
+                  <td class="num">23.833&nbsp;mm</td>
+                  <td class="num">−0.53&nbsp;%</td>
                 </tr>
                 <tr>
                   <td>P2 (quadratic)</td>
-                  <td>2 × 2</td>
-                  <td class="num">225</td>
-                  <td class="num">23.439</td>
-                  <td class="num">−1.93&nbsp;%</td>
+                  <td>16 mm</td>
+                  <td class="num">2,166</td>
+                  <td class="num">23.841&nbsp;mm</td>
+                  <td class="num">−0.50&nbsp;%</td>
                 </tr>
                 <tr>
                   <td>P2 (quadratic)</td>
-                  <td>4 × 4</td>
-                  <td class="num">729</td>
-                  <td class="num">24.481</td>
-                  <td class="num">+2.43&nbsp;%</td>
+                  <td>8 mm</td>
+                  <td class="num">3,252</td>
+                  <td class="num">23.904&nbsp;mm</td>
+                  <td class="num">−0.23&nbsp;%</td>
                 </tr>
                 <tr>
                   <td>P2 (quadratic)</td>
-                  <td>8 × 8</td>
-                  <td class="num">2,601</td>
-                  <td class="num">24.920</td>
-                  <td class="num">+4.27&nbsp;%</td>
+                  <td>4 mm</td>
+                  <td class="num">7,029</td>
+                  <td class="num">23.930&nbsp;mm</td>
+                  <td class="num">−0.13&nbsp;%</td>
                 </tr>
                 <tr>
                   <td>P2 (quadratic)</td>
-                  <td>16 × 16</td>
-                  <td class="num">9,801</td>
-                  <td class="num">25.166</td>
-                  <td class="num">+5.30&nbsp;%</td>
+                  <td>2 mm (this example)</td>
+                  <td class="num">17,133</td>
+                  <td class="num">23.936&nbsp;mm</td>
+                  <td class="num">−0.10&nbsp;%</td>
+                </tr>
+                <tr>
+                  <td>P2 (quadratic)</td>
+                  <td>1 mm</td>
+                  <td class="num">62,859</td>
+                  <td class="num">23.942&nbsp;mm</td>
+                  <td class="num">−0.08&nbsp;%</td>
                 </tr>
               </tbody>
             </table>
@@ -1052,40 +1060,49 @@
       </section>
 
       <h2 id="discussion">Discussion</h2>
-        <p>On the 16 × 16 case mesh
-        KoFEM gives 24.04, which differs from 23.9 by
-        +0.59&nbsp;%. The
-        convergence study shows that this agreement is partly coincidence.
-        Under refinement both linear and quadratic elements move past the
-        reference, to 24.99 (linear, 64 × 64) and
-        25.17 (quadratic, 16 × 16), and they have not yet
-        levelled off at a common value.</p>
-        <p>A converging discretisation of the same problem would approach one
-        value from both element orders. So the 3-D model here is not yet the
-        problem the 23.9 reference solves. Possible causes, not yet resolved,
-        are the 3-D slab clamped over a face versus the 2-D plane-stress
-        model, and the clamp itself, which fixes all three displacement
-        components along the edge rather than the in-plane ones only. Until
-        this is reconciled the example is a regression check: it catches a change in the solver's answer,
-        but it is not evidence of accuracy.</p>
+        <p>KoFEM gives 23.936 mm at M, −0.10&nbsp;% from 23.96.
+        In the convergence study quadratic tetrahedra level off at
+        23.942 mm (1 mm, −0.08&nbsp;%). That small remaining
+        difference is the 3-D slab, which is slightly stiffer than the
+        plane-stress panel the reference solves; the mesh no longer changes
+        it. Linear tetrahedra lock in the bending and approach from below:
+        23.833 mm at 1 mm (−0.53&nbsp;%), no closer than
+        quadratic ones at 16 mm (−0.50&nbsp;%) with
+        5 times fewer unknowns. That is why the example uses quadratic elements.</p>
+        <p>The largest vertical displacement, at the top corner C, is
+        25.130 mm (Max Uy in the Result summary),
+        +4.88&nbsp;% from 23.96.
+        An earlier version of this page compared C with the reference, so
+        refinement moved past it.</p>
 
       <h2 id="reproduce">Reproduce</h2>
       <p>
         In the app: <a href="/app/?example=cooks-membrane" data-testid="reproduce-open">open the model</a>,
         then Studies → Static 1 → Run static solve, select the result plot and set Field to
         Uy. The Result summary shows
-        <span class="readout" data-testid="app-readout" data-field="Uy" data-stat="Max Uy" data-value="2.404e+1 mm">Max Uy 2.404e+1 mm</span>.
+        <span class="readout" data-testid="app-readout" data-field="Uy" data-stat="Max Uy" data-value="2.513e+1 mm">Max Uy 2.513e+1 mm</span>.
       </p>
-      <p>From a clone (Node.js 20+, bash, curl), this solves the model with the same engine and prints its line:</p>
+      <p>Or build it yourself, as this page's number was built:</p>
+      <ol class="steps">
+        <li>Import <a href="/examples/cooks-membrane.step" download>cooks-membrane.step</a>.</li>
+        <li>Split the face through (48, 50, 0.5) with the plane y = 52 mm.</li>
+        <li>Mesh with a 2 mm maximum element size, quadratic elements.</li>
+        <li>Material Membrane: E = 1 MPa, ν = 0.333333.</li>
+        <li>Support “Clamp”: Ux, Uy, Uz = 0 on the face through (0, 22, 0.5).</li>
+        <li>Load “Shear”: force (0, 1, 0) N on the faces through (48, 48, 0.5), (48, 56, 0.5).</li>
+        <li>Run the static study. The Results panel compares deflection at m with converged plane-stress value.</li>
+      </ol>
+      <p>From a clone (Bun, bash, curl and Rust), this builds and solves the model with the same engine and prints its line:</p>
       <pre><code>git clone https://github.com/mkofler96/KoFEM.git &amp;&amp; cd KoFEM
 bash scripts/fetch-wasm-engine.sh
-node examples/validation/run.mjs --case cooks-membrane</code></pre>
+cd web &amp;&amp; bun install &amp;&amp; bun run validate --case cooks-membrane</code></pre>
       <pre class="console"><code>Case                                  Quantity                                  FE   Reference     Err%  Tol%  Status
-Cook's membrane                       top-corner deflection                 24.042      23.900    +0.59     6  PASS</code></pre>
+Cook's membrane                       loaded-edge deflection                23.936      23.960    -0.10     1  PASS</code></pre>
 
       <h2 id="references">References</h2>
       <ol class="refs">
         <li>R. D. Cook, “Improved two-dimensional finite element”, <cite>Journal of the Structural Division (ASCE)</cite> 100 (1974) 1851–1863.</li>
+        <li>T. Belytschko, W. K. Liu, B. Moran and K. I. Elkhodary, <cite>Nonlinear Finite Elements for Continua and Structures</cite>, 2nd ed., Wiley, 2014, §8.4.</li>
         <li>R. D. Cook, D. S. Malkus, M. E. Plesha and R. J. Witt, <cite>Concepts and Applications of Finite Element Analysis</cite>, 4th ed., Wiley, 2002.</li>
       </ol>
       <p class="note" data-testid="disclaimer">
@@ -1095,7 +1112,7 @@ Cook's membrane                       top-corner deflection                 24.0
       </p>
 
       <nav class="pager" aria-label="Other examples">
-        <a class="prev" href="/examples/plate-with-hole-shell/"><small>Previous</small>Plate with a hole, shell elements</a>
+        <a class="prev" href="/examples/plate-with-hole-shell/"><small>Previous</small>Plate with a hole (shells)</a>
         <a class="next" href="/examples/mbb-beam-topopt/"><small>Next</small>MBB beam, topology optimization</a>
       </nav>
       </main>

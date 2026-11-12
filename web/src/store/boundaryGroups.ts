@@ -19,10 +19,12 @@ export interface BcFaceEntry {
   // both integrable — so absence reads correctly as "not a point".
   geometry?: PickGeometry;
   // The CAD face this entry is, when it was picked as one whole CAD face (the
-  // mesh's surfaceFaceIds numbering). It is what lets the entry outlive its
-  // mesh: a re-mesh re-resolves `nodeIds` from this face of the new mesh
-  // (lib/remeshGroups) instead of dropping the group. Absent on edge, node and
-  // flood-fill picks, whose node sets mean nothing on another mesh.
+  // mesh's surfaceFaceIds numbering) — or, on an "edge" entry, as the whole
+  // rim a shell idealisation collapsed that face to (lib/shellRim). It is what
+  // lets the entry outlive its mesh: a re-mesh re-resolves `nodeIds` from this
+  // face of the new mesh (lib/remeshGroups) instead of dropping the group.
+  // Absent on other edge picks, node and flood-fill picks, whose node sets
+  // mean nothing on another mesh.
   cadFaceId?: number;
 }
 

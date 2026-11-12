@@ -166,7 +166,7 @@ check(
 
 console.log("report");
 const vtu = readFileSync(
-  new URL("../../examples/gallery/site/cantilever.vtu", import.meta.url),
+  new URL("../../examples/gallery/site/cantilever-beam.vtu", import.meta.url),
   "utf8",
 );
 const analysis = parseAnalysisFile(vtu);
