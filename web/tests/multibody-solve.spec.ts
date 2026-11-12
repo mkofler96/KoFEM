@@ -177,10 +177,7 @@ test("meshing a two-body part and toggling a body's visibility", async ({
 
   // Mesh the assembly so the FEM surface exists (exercises applyMeshResult's
   // per-body property backfill and the mesh render layers).
-  await page
-    .getByRole("button")
-    .filter({ hasText: "Mesh STEP volume" })
-    .click();
+  await page.getByRole("button").filter({ hasText: "Generate mesh" }).click();
   await page.waitForFunction(
     () =>
       ((

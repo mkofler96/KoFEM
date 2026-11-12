@@ -224,7 +224,7 @@ async function oneLoad(context, profile, opts, userDataDir) {
     const geometry = await page.waitForFunction(
       () =>
         [...document.querySelectorAll("button")].some((btn) =>
-          btn.textContent?.includes("Mesh STEP volume"),
+          btn.textContent?.includes("Generate mesh"),
         ) && performance.now(),
       null,
       { polling: "raf", timeout: capMs },

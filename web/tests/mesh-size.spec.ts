@@ -9,7 +9,7 @@
 
 import { test, expect } from "./coverage";
 import { gotoApp, importStep } from "./fixtures/app";
-import { openTree } from "./fixtures/tree";
+import { fakeImport } from "./fixtures/mesh";
 import { fileURLToPath } from "url";
 
 const STEP_FILE = fileURLToPath(
@@ -18,51 +18,6 @@ const STEP_FILE = fileURLToPath(
 
 const maxSize = "max-element-size";
 const minSize = "min-element-size";
-
-// Put the panel in the meshable state without paying for a real STEP import:
-// a tessellated surface plus retained bytes is exactly what an import leaves
-// behind, and it is what makes the mesh controls render.
-async function fakeImport(page: import("@playwright/test").Page) {
-  await page.evaluate(() => {
-    (
-      window as unknown as {
-        __kofemStore: { setState(partial: Record<string, unknown>): void };
-      }
-    ).__kofemStore.setState({
-      mode: "geometry",
-      // A 1 mm cube, the part from the issue: two triangles per face.
-      stepSurface: {
-        points: [
-          [0, 0, 0],
-          [1, 0, 0],
-          [1, 1, 0],
-          [0, 1, 0],
-          [0, 0, 1],
-          [1, 0, 1],
-          [1, 1, 1],
-          [0, 1, 1],
-        ],
-        triangles: [
-          [0, 2, 1],
-          [0, 3, 2],
-          [4, 5, 6],
-          [4, 6, 7],
-          [0, 1, 5],
-          [0, 5, 4],
-          [3, 7, 6],
-          [3, 6, 2],
-          [0, 4, 7],
-          [0, 7, 3],
-          [1, 2, 6],
-          [1, 6, 5],
-        ],
-      },
-      stepBytes: new Uint8Array([1, 2, 3]),
-    });
-  });
-  // A real import lands on the mesh entry; the injected one has to go there.
-  await openTree(page, "mesh");
-}
 
 test("a sub-millimetre element size can be typed and kept (KOF-222)", async ({
   page,
@@ -112,7 +67,7 @@ test("an unusable element size is refused with a specific message (KOF-222)", as
   await fakeImport(page);
 
   await page.getByTestId(maxSize).fill("0");
-  await page.getByRole("button", { name: /Mesh STEP volume/ }).click();
+  await page.getByRole("button", { name: /Generate mesh/ }).click();
   await expect(page.getByTestId("meshing-error")).toContainText(
     "Max element size must be a positive number",
   );
@@ -120,7 +75,7 @@ test("an unusable element size is refused with a specific message (KOF-222)", as
   // Min above max would silently invert the size field inside Netgen.
   await page.getByTestId(maxSize).fill("2");
   await page.getByTestId(minSize).fill("5");
-  await page.getByRole("button", { name: /Mesh STEP volume/ }).click();
+  await page.getByRole("button", { name: /Generate mesh/ }).click();
   await expect(page.getByTestId("meshing-error")).toContainText(
     "must not exceed max element size",
   );
@@ -176,7 +131,7 @@ test("a real import is meshed at its suggested size (KOF-222)", async ({
         ).__kofemStore.getState().elements.length,
     )) as number;
 
-  await page.getByRole("button", { name: /Mesh STEP volume/ }).click();
+  await page.getByRole("button", { name: /Generate mesh/ }).click();
   await expect.poll(elementCount, { timeout: 240_000 }).toBeGreaterThan(0);
 
   // The suggestion aims at TARGET_ELEMENT_COUNT (50K). Netgen's actual density

@@ -109,7 +109,7 @@ async function mesh(page: Page, maxSize: string): Promise<void> {
   await openTree(page, "mesh");
   await page.getByTestId("max-element-size").fill(maxSize);
   await page.getByTestId("min-element-size").fill(String(Number(maxSize) / 10));
-  await page.getByRole("button", { name: /mesh STEP volume/i }).click();
+  await page.getByRole("button", { name: /generate mesh/i }).click();
   await expect
     .poll(async () => (await readModel(page)).nodes, { timeout: 120_000 })
     .not.toBe(before);

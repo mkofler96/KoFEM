@@ -1,14 +1,15 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useModelStore } from "../store/modelStore";
 import type { Node, Element, Property } from "../store/modelStore";
 import type { MeshOverlap } from "../wasm/pkg/kofem_wasm";
-import { isCadBody } from "../store/geometrySlice";
+import { isCadBody, MESH_KIND_LABEL, meshKind } from "../store/geometrySlice";
 import { sendToWorker, resetWorker } from "../workers/sharedWorker";
 import { useWorkerLogs } from "./useWorkerLogs";
-import { suggestElementSizes } from "../lib/meshSizing";
+import { measureTessellation } from "../lib/meshSizing";
+import { regionMaxSizes, solidName } from "../lib/regions";
 import {
   categorizeError,
   currentWorkflow,
@@ -20,15 +21,10 @@ import {
   type ModelType,
 } from "../lib/analytics";
 
-// Sizes shown before any geometry is imported. The mesh controls only render
-// once a part is loaded, at which point the import's own suggestion (sized to
-// TARGET_ELEMENT_COUNT, see lib/meshSizing) replaces both.
-export const DEFAULT_MAX_ELEMENT_SIZE = 20;
-export const DEFAULT_MIN_ELEMENT_SIZE = 2;
-
-// Volume meshing: owns the mesh sizing parameters, the meshing-in-flight and
-// log state, and the worker's volume_mesh protocol (including the mandatory
-// worker reset after Netgen runs).
+// Volume meshing: the meshing-in-flight and log state, and the worker's
+// volume_mesh protocol (including the mandatory worker reset after Netgen
+// runs). The element sizes live in the store, so the settings survive leaving
+// the Mesh entry and can be compared with the sizes of the current mesh.
 export function useMesh() {
   const stepSurface = useModelStore((s) => s.stepSurface);
   const stepBytes = useModelStore((s) => s.stepBytes);
@@ -41,41 +37,26 @@ export function useMesh() {
   const elementOrder = useModelStore((s) => s.elementOrder);
   const setElementOrder = useModelStore((s) => s.setElementOrder);
 
-  // Both sizes are held as text, not numbers: a 1 mm part needs 0.1 mm elements
-  // and a 2 m weldment needs 80 mm ones, so there is no meaningful range to clamp
-  // typing to (KOF-222). They are parsed and validated when meshing starts.
-  const [maxElementSize, setMaxElementSize] = useState(
-    String(DEFAULT_MAX_ELEMENT_SIZE),
-  );
-  // Floor for curvature-driven refinement; 0 lets Netgen refine fillets without
-  // limit, which can produce >10x more elements than the max size suggests.
-  const [minElementSize, setMinElementSize] = useState(
-    String(DEFAULT_MIN_ELEMENT_SIZE),
-  );
+  // Typed text (see GeometrySlice.maxElementSize), validated when meshing
+  // starts. The min size floors curvature-driven refinement; 0 lets Netgen
+  // refine fillets without limit, which can produce >10x more elements than the
+  // max size suggests.
+  const maxElementSize = useModelStore((s) => s.maxElementSize);
+  const setMaxElementSize = useModelStore((s) => s.setMaxElementSize);
+  const minElementSize = useModelStore((s) => s.minElementSize);
+  const setMinElementSize = useModelStore((s) => s.setMinElementSize);
   const [meshError, setMeshError] = useState<string | null>(null);
   const { logs, clearLogs } = useWorkerLogs("mesh");
 
-  // Element sizes suggested by the imported geometry itself, aimed at
-  // TARGET_ELEMENT_COUNT elements. Recomputed per import — stepSurface is
-  // replaced wholesale when a part is loaded — and applied by the effect below.
-  const suggestion = useMemo(
+  // Size of the imported geometry, for the extent and element-count estimate.
+  // stepSurface is replaced wholesale when the geometry changes.
+  const geometryMeasure = useMemo(
     () =>
       stepSurface
-        ? suggestElementSizes(stepSurface.points, stepSurface.triangles)
+        ? measureTessellation(stepSurface.points, stepSurface.triangles)
         : null,
     [stepSurface],
   );
-
-  // A new import re-sizes both fields: a 1 mm cube and a 2 m weldment need
-  // element sizes three orders of magnitude apart, so carrying the previous
-  // part's numbers over (or a fixed 20 mm) is never right (KOF-222). Typed
-  // values survive until the next import — this runs on stepSurface identity,
-  // which only changes when geometry is loaded.
-  useEffect(() => {
-    if (!suggestion) return;
-    setMaxElementSize(suggestion.max);
-    setMinElementSize(suggestion.min);
-  }, [suggestion]);
 
   // What the user asked to mesh; the result's element types say the same once
   // there is a result.
@@ -137,6 +118,34 @@ export function useMesh() {
       );
       return;
     }
+    // Regions with a size of their own (KOF-257). The min size stays global —
+    // Netgen has one — so no region may go below it.
+    let regionSizes: Map<number, number>;
+    try {
+      regionSizes = regionMaxSizes(properties);
+    } catch (err) {
+      rejectInput(err instanceof Error ? err.message : String(err));
+      return;
+    }
+    for (const [id, size] of regionSizes)
+      if (minSize > size) {
+        rejectInput(
+          `Min element size (${minSize} mm) must not exceed the max element size of ${solidName(properties, id)} (${size} mm).`,
+        );
+        return;
+      }
+    // One size per CAD solid, in solid order: the region's own, else the global.
+    const solidIds = properties
+      .filter(isCadBody)
+      .map((p) => p.id)
+      .sort((a, b) => a - b);
+    const solidMaxSizes =
+      regionSizes.size > 0
+        ? solidIds.map((id) => {
+            const own = regionSizes.get(id);
+            return own === undefined ? maxSize : own;
+          })
+        : undefined;
 
     setMeshError(null);
     setMeshOverlaps([]);
@@ -163,6 +172,7 @@ export function useMesh() {
         format: geometryFormat,
         maxElementSize: maxSize,
         minElementSize: minSize,
+        solidMaxSizes,
         // Bodies the user marked Shell, plus the property table: meshing
         // idealises them to a mid-surface
         // shell mesh and returns the mixed CTRIA3 + CTETRA model (#397). Only CAD
@@ -195,7 +205,12 @@ export function useMesh() {
       applyMeshResult(
         meshNodes,
         meshElements,
-        "STEP Volume Mesh",
+        MESH_KIND_LABEL[meshKind(meshElements)],
+        {
+          max: maxSize,
+          min: minSize,
+          regions: Object.fromEntries(regionSizes),
+        },
         surfaceTriangles,
         surfaceFaceIds,
         meshProperties,
@@ -229,7 +244,7 @@ export function useMesh() {
     setMaxElementSize,
     minElementSize,
     setMinElementSize,
-    geometryMeasure: suggestion?.measure ?? null,
+    geometryMeasure,
     meshError,
     setMeshError,
     logs,

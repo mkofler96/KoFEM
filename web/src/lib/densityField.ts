@@ -9,6 +9,7 @@
 
 import * as THREE from "three";
 import type { Element, Node } from "../store/modelStore";
+import { orderedDesignElements } from "./designElements";
 
 // Grayscale density ramp: low density → light, full density (1) → near-black.
 // A neutral gray map (rather than the blue→red result ramp) keeps the reading
@@ -21,19 +22,7 @@ export function densityColor(t: number): THREE.Color {
   return new THREE.Color().setHSL(0, 0, lightness);
 }
 
-// The design elements in the exact order the optimizer returns one density per
-// element, so density[i] belongs to orderedDesignElements(elements)[i]. That
-// order is: solid tets, then hexes, then shell facets (KOF-237) — matching how
-// the solid entry packs its mesh (CTETRA then CHEXA), the coupled entry its
-// design domain (tets then facets), and the pure-shell entry (facets only). A
-// coupled model carries no hexes and a solid model no facets, so the single
-// concatenation covers all three domains.
-export function orderedDesignElements(elements: Element[]): Element[] {
-  const tets = elements.filter((e) => e.type === "CTETRA");
-  const hexes = elements.filter((e) => e.type === "CHEXA");
-  const shells = elements.filter((e) => e.type === "CTRIA3");
-  return [...tets, ...hexes, ...shells];
-}
+export { orderedDesignElements };
 
 // Number of elements kept at a given threshold — the count the viewport draws.
 // Shared with the Results panel's readout so the two never disagree.

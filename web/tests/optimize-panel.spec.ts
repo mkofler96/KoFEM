@@ -229,3 +229,81 @@ test("Optimize panel: max-stress constraint", async ({ page }) => {
   await expect(page.getByTestId("topopt-stress-constraint")).toHaveCount(0);
   await expect(page.getByText(/σ_vm ≤/u)).toHaveCount(0);
 });
+
+// KOF-257: a region set to Keep solid is left out of the design — every one of
+// its elements comes back at full density while the rest is optimized.
+test("Optimize panel: a Keep solid region stays at full density", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await bootstrapCantilever(page);
+
+  // Split the beam's free half off as Region 2 of the same body, kept solid.
+  const kept = await page.evaluate(() => {
+    const store = (
+      window as unknown as {
+        __kofemStore: {
+          getState(): {
+            elements: {
+              id: number;
+              type: string;
+              nodeIds: number[];
+              propertyId: number;
+            }[];
+            nodes: { id: number; x: number }[];
+          };
+          setState(partial: Record<string, unknown>): void;
+        };
+      }
+    ).__kofemStore;
+    const { elements, nodes } = store.getState();
+    const nodeX = new Map(nodes.map((n) => [n.id, n.x]));
+    const centreX = (e: { nodeIds: number[] }) =>
+      e.nodeIds.reduce((sum, id) => sum + (nodeX.get(id) ?? 0), 0) /
+      e.nodeIds.length;
+    const next = elements.map((e) =>
+      centreX(e) > 0.5 ? { ...e, propertyId: 2 } : e,
+    );
+    store.setState({
+      elements: next,
+      properties: [
+        { id: 1, materialId: 1, body: 1 },
+        { id: 2, materialId: 1, body: 1, optimizationRole: "solid" },
+      ],
+    });
+    return next.map((e) => e.propertyId === 2);
+  });
+  expect(kept.filter(Boolean).length).toBeGreaterThan(0);
+
+  await goToOptimizePanel(page);
+  await page.getByLabel("Filter r_min").fill("0.15");
+  await page.getByRole("button", { name: "Advanced" }).click();
+  await page.getByLabel("Max iters").fill("8");
+  await page.getByRole("button", { name: /Run optimization/ }).click();
+  await expect(page.getByText("Density threshold")).toBeVisible({
+    timeout: 90_000,
+  });
+
+  // All-hex model: the design order is the store order. The threshold control
+  // already shows the live density while the run goes on, so wait for the
+  // final result in the store.
+  const readDensity = () =>
+    page.evaluate(() =>
+      Array.from(
+        (
+          window as unknown as {
+            __kofemStore: {
+              getState(): { densityResult: { density: Float64Array } | null };
+            };
+          }
+        ).__kofemStore.getState().densityResult?.density ?? [],
+      ),
+    );
+  await expect
+    .poll(async () => (await readDensity()).length, { timeout: 90_000 })
+    .toBe(kept.length);
+  const density = await readDensity();
+  expect(density.length).toBe(kept.length);
+  expect(density.filter((_, i) => kept[i]).every((d) => d === 1)).toBe(true);
+  expect(density.filter((_, i) => !kept[i]).some((d) => d < 1)).toBe(true);
+});

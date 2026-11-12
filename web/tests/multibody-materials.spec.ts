@@ -62,8 +62,8 @@ async function meshOnce(page: import("@playwright/test").Page) {
   await openTree(page, "mesh");
   await page
     .getByRole("button")
-    // "Mesh STEP volume" before the first mesh, "Re-mesh STEP volume" after.
-    .filter({ hasText: /(re-)?mesh STEP volume/i })
+    // "Generate mesh" before the first mesh, "Regenerate mesh" after.
+    .filter({ hasText: /generate mesh/i })
     .click();
   await expect
     .poll(async () => meshGeneration(page), { timeout: 180_000 })

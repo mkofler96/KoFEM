@@ -54,6 +54,7 @@ export function useSolver() {
   const meshSuppressedIds = useModelStore((s) => s.meshSuppressedIds);
   const suppressionStale = suppressionMismatchMessage(
     suppressionMismatch(properties, meshSuppressedIds, nodes.length > 0),
+    properties,
   );
   const meshOk = nodes.length > 0 && suppressionStale === null;
   // Every body must resolve to an existing material — a body left pointing at

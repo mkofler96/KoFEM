@@ -68,7 +68,7 @@ test.describe("Full workflow showcase", () => {
       .setInputFiles(TUBE);
     await Promise.race([
       expect(
-        page.getByRole("button").filter({ hasText: "Mesh STEP volume" }),
+        page.getByRole("button").filter({ hasText: "Generate mesh" }),
       ).toBeVisible({ timeout: 60_000 }),
       fatalError,
     ]);
@@ -91,13 +91,10 @@ test.describe("Full workflow showcase", () => {
 
     // 3. Mesh — trigger volume meshing (controls live in the Geometry panel)
     await expect(
-      page.getByRole("button").filter({ hasText: "Mesh STEP volume" }),
+      page.getByRole("button").filter({ hasText: "Generate mesh" }),
     ).toBeVisible();
-    console.log(`[showcase] ${elapsed()} 03 clicking Mesh STEP volume…`);
-    await page
-      .getByRole("button")
-      .filter({ hasText: "Mesh STEP volume" })
-      .click();
+    console.log(`[showcase] ${elapsed()} 03 clicking Generate mesh…`);
+    await page.getByRole("button").filter({ hasText: "Generate mesh" }).click();
 
     const meshingErrorBanner = page.getByTestId("meshing-error");
     await Promise.race([
