@@ -117,7 +117,8 @@ stale state is available, say so and lower confidence.
 
 ## Return a decision-ready CEO memo
 
-Aim for 700–1,000 words, shorter for a quiet week. Lead with your recommendation.
+Write it so the CEO can read it in one sitting, shorter for a quiet week. Lead
+with your recommendation.
 
 1. **Executive readout:** overall product/delivery health, the most important
    change, biggest risk and the main decision needed. State when health is unknown.
