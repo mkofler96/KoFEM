@@ -311,8 +311,8 @@ test("a STEP-backed example (crane) restores its geometry and re-meshes", async 
   // The crane fixture ships its source STEP next to the .vtu. Loading it must
   // restore stepBytes — a saved .vtu carries none, so loadAnalysis drops them —
   // so the loaded model is re-meshable instead of hitting the "original STEP file
-  // is no longer available" guard. Procedural benchmarks (cantilever below) have
-  // no .step and correctly stay non-re-meshable.
+  // is no longer available" guard. Examples without one (below) correctly stay
+  // non-re-meshable.
   await serveUnvalidatedExample(page, "crane-hook-shell");
   await page.goto("/app/?example=crane-hook-shell");
   await expect(page.locator("nav")).toBeVisible();
@@ -462,7 +462,7 @@ function withoutGeometry(vtu: string): string {
   );
 }
 
-test("an example without its STEP file is refused", async ({ page }) => {
+test("an example without its model STEP file is refused", async ({ page }) => {
   // Every example ships the geometry it is built from (KOF-322); opening one
   // without it would show no body and offer no re-mesh.
   let dialogMessage = "";
@@ -470,7 +470,7 @@ test("an example without its STEP file is refused", async ({ page }) => {
     dialogMessage = d.message();
     void d.dismiss();
   });
-  await page.route("**/examples/axial-bar.step", (route) =>
+  await page.route("**/examples/axial-bar.model.step", (route) =>
     route.fulfill({ status: 404, body: "" }),
   );
   await page.goto("/app/?example=axial-bar");

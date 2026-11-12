@@ -182,7 +182,7 @@ export async function buildFromRecipe(id, recipe) {
     throw new Error(`${where}: step() must return ISO-10303-21 STEP text`);
   const mesher = await freshEngine();
   let stepBytes = new TextEncoder().encode(stepText);
-  let tess = loadGeometry(mesher, stepBytes);
+  let tess = loadGeometry(mesher, stepBytes, `${where}: import`);
 
   // ── Splits (the worker's handleSplitGeometry) ──────────────────────────────
   recipe.splits.forEach((split, i) => {
@@ -197,32 +197,41 @@ export async function buildFromRecipe(id, recipe) {
             `${at}.faces`,
           )
         : [];
-    mesher.tessellate_step(stepBytes, TESSELLATE); // reloadForEdit
-    const { bytes } = mesher.split_geometry(
-      JSON.stringify({
-        mode: split.mode,
-        ...plane,
-        ...(split.mode === "faces" ? { faceIds } : {}),
-      }),
+    engineCall(mesher, `${at}: reloading the geometry`, () =>
+      mesher.tessellate_step(stepBytes, TESSELLATE),
+    ); // reloadForEdit
+    const { bytes } = engineCall(mesher, `${at}: split_geometry`, () =>
+      mesher.split_geometry(
+        JSON.stringify({
+          mode: split.mode,
+          ...plane,
+          ...(split.mode === "faces" ? { faceIds } : {}),
+        }),
+      ),
     );
     stepBytes = bytes;
-    tess = loadGeometry(mesher, stepBytes);
+    tess = loadGeometry(mesher, stepBytes, at);
   });
 
   // ── Mesh (the worker's handleVolumeMesh) ───────────────────────────────────
   const maxElementSize = recipe.mesh.maxElementSize;
   const minElementSize = minSizeOf(recipe);
-  const dto = mesher.generate_fem_mesh(
-    JSON.stringify({
-      max_element_size: maxElementSize,
-      min_element_size: minElementSize,
-      grading: 0.3,
-      second_order: false,
-      elementsperedge: 2.0,
-      elementspercurve: 2.0,
-      optsteps_2d: 3,
-      optsteps_3d: 3,
-    }),
+  const dto = engineCall(
+    mesher,
+    `${where}: Netgen could not mesh the geometry at max element size ${maxElementSize} mm (min ${minElementSize} mm)`,
+    () =>
+      mesher.generate_fem_mesh(
+        JSON.stringify({
+          max_element_size: maxElementSize,
+          min_element_size: minElementSize,
+          grading: 0.3,
+          second_order: false,
+          elementsperedge: 2.0,
+          elementspercurve: 2.0,
+          optsteps_2d: 3,
+          optsteps_3d: 3,
+        }),
+      ),
   );
   if ("overlaps" in dto)
     throw new Error(
@@ -482,8 +491,10 @@ export async function buildFromRecipe(id, recipe) {
 
 // The worker's loadGeometry: tessellate the bytes and keep what the store keeps
 // (stepSurface: nested points / triangles, a body and a face id per triangle).
-function loadGeometry(engine, bytes) {
-  const t = engine.tessellate_step(bytes, TESSELLATE);
+function loadGeometry(engine, bytes, where) {
+  const t = engineCall(engine, `${where}: tessellate_step`, () =>
+    engine.tessellate_step(bytes, TESSELLATE),
+  );
   return {
     points: chunk3(Array.from(t.vertices)),
     triangles: chunk3(Array.from(t.triangles)),
@@ -491,6 +502,30 @@ function loadGeometry(engine, bytes) {
     faceIds: Array.from(t.triangleFaceIds),
     bodyCount: t.bodyCount,
   };
+}
+
+// An engine call whose C++ exception reaches JS readable. Emscripten
+// (-fexceptions) throws an uncaught C++ exception into JS as the bare heap
+// pointer of the exception object, a number such as 12584968; the worker
+// decodes it with the engine's getExceptionMessage (solver.worker.ts
+// describeError), and so does this build.
+function engineCall(engine, what, call) {
+  try {
+    return call();
+  } catch (err) {
+    if (typeof err !== "number") throw err;
+    throw new Error(`${what}: ${cxxExceptionText(engine, err)}`);
+  }
+}
+
+/** "type: what()" of the C++ exception at heap pointer `ptr`. */
+export function cxxExceptionText(engine, ptr) {
+  if (typeof engine.getExceptionMessage !== "function")
+    throw new Error(
+      `the engine threw C++ exception ${ptr}, but this build exports no getExceptionMessage to decode it (-sEXPORT_EXCEPTION_HANDLING_HELPERS, engine/CMakeLists.txt)`,
+    );
+  const [type, message] = engine.getExceptionMessage(ptr);
+  return message ? `${type}: ${message}` : type;
 }
 
 // The split tool cuts with an axis-aligned plane at a position along the axis

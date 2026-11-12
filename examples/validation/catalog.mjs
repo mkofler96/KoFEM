@@ -17,6 +17,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import cases from "./cases/index.mjs";
+import { engineId, femModuleId } from "./lib/provenance.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 export const SITE_DIR = join(here, "../gallery/site");
@@ -75,20 +76,28 @@ export function catalog(rows) {
 
 /**
  * Write a showcase's record and figure (generators in examples/gallery/). The
- * record carries the engine build and the date, like the case rows.
+ * record carries the builds behind it (lib/provenance.mjs) and the date, like
+ * the case rows: always the C++ engine, and the Rust module when the
+ * generator solved through it (`solver: "rust"`, e.g. lib/pipeline.mjs
+ * buildFromRecipe) rather than through the engine (`solver: "engine"`).
  */
-export function writeShowcase(record, png) {
+export function writeShowcase(record, png, { solver = "engine" } = {}) {
   if (!ORDER.includes(record.id) || caseIds.has(record.id))
     throw new Error(`"${record.id}" is not a showcase in the example order`);
-  const engine = readFileSync(
-    join(here, "../../web/src/wasm/pkg/.engine-id"),
-    "utf8",
-  ).trim();
+  if (solver !== "engine" && solver !== "rust")
+    throw new Error(
+      `writeShowcase "${record.id}": solver must be "engine" or "rust", got ${JSON.stringify(solver)}`,
+    );
   mkdirSync(SHOWCASE_DIR, { recursive: true });
   writeFileSync(
     join(SHOWCASE_DIR, `${record.id}.json`),
     JSON.stringify(
-      { ...record, engine, generated: new Date().toISOString().slice(0, 10) },
+      {
+        ...record,
+        engine: engineId(),
+        ...(solver === "rust" ? { fem: femModuleId() } : {}),
+        generated: new Date().toISOString().slice(0, 10),
+      },
       null,
       2,
     ) + "\n",

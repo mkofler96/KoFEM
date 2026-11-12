@@ -42,12 +42,17 @@ export async function openExample(
     // model without its geometry shows no body and cannot be re-meshed or
     // changed, so it is refused rather than opened half-usable. A missing
     // file, or the dev server's SPA fallback to index.html, fails here.
+    //
+    // The app restores <id>.model.step, not the <id>.step the page offers for
+    // import: it is the imported file after the recipe's splits, the geometry
+    // the analysis file's CAD face ids refer to, so a re-mesh carries every
+    // support and load onto the same faces (examples/validation/lib/model-step.mjs).
     if (analysis.stepSurface === null)
       throw new Error(`example "${id}" carries no geometry to mesh on`);
-    const stepRes = await fetch(`/examples/${id}.step`);
+    const stepRes = await fetch(`/examples/${id}.model.step`);
     if (!stepRes.ok)
       throw new Error(
-        `example "${id}" ships no geometry: ${id}.step returned HTTP ${stepRes.status}`,
+        `example "${id}" ships no geometry: ${id}.model.step returned HTTP ${stepRes.status}`,
       );
     const stepBytes = new Uint8Array(await stepRes.arrayBuffer());
     if (
@@ -56,7 +61,7 @@ export async function openExample(
         .startsWith("ISO-10303-21")
     )
       throw new Error(
-        `example "${id}" ships no geometry: ${id}.step is not a STEP file`,
+        `example "${id}" ships no geometry: ${id}.model.step is not a STEP file`,
       );
     if (signal?.aborted) return;
 

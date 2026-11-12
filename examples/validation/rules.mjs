@@ -7,6 +7,9 @@
 //   recipe     it is a validation case with a recipe (lib/recipe.mjs), so the
 //              build and the GUI test follow the same steps;
 //   step       examples/gallery/site/<id>.step exists — the file a user imports;
+//   model step <id>.model.step exists — the geometry the app re-meshes an
+//              opened example from: the import after the recipe's splits
+//              (lib/model-step.mjs; run.mjs checks it against the build);
 //   geometry   its analysis file carries the imported geometry (stepSurface)
 //              and the CAD face of every boundary triangle (surfaceFaceIds),
 //              so the opened example shows its body, can be re-meshed and
@@ -29,6 +32,7 @@ import { join } from "node:path";
 import { ORDER, SITE_DIR } from "./catalog.mjs";
 import cases from "./cases/index.mjs";
 import { readAnalysisSetup } from "./lib/app-model.mjs";
+import { modelStepPath, sameModelStep } from "./lib/model-step.mjs";
 
 // KOF-322: examples still built the old way. This list must be empty when
 // KOF-322 is done; then delete it and the PENDING handling below.
@@ -109,6 +113,19 @@ function violations(id) {
   if (!existsSync(step)) out.push(`has no ${id}.step`);
   else if (!readFileSync(step, "utf8").startsWith("ISO-10303-21"))
     out.push(`${id}.step is not a STEP file`);
+  const model = modelStepPath(SITE_DIR, id);
+  if (!existsSync(model)) out.push(`has no ${id}.model.step`);
+  else if (!readFileSync(model, "utf8").startsWith("ISO-10303-21"))
+    out.push(`${id}.model.step is not a STEP file`);
+  else if (
+    c?.recipe &&
+    c.recipe.splits.length === 0 &&
+    existsSync(step) &&
+    !sameModelStep(model, readFileSync(step))
+  )
+    out.push(
+      `${id}.model.step is not ${id}.step, though the recipe has no splits`,
+    );
   const vtuFile = join(SITE_DIR, `${id}.vtu`);
   if (!existsSync(vtuFile)) {
     out.push(`has no ${id}.vtu`);

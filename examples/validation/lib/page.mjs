@@ -706,8 +706,16 @@ function meshRows(e) {
 // The solver line: a recipe case is solved as the app solves it.
 function solverText(e, data) {
   const engine = esc(e.engine ?? data.engine);
-  return e.recipe
-    ? `The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: ${engine}`
+  // The Rust module's build (lib/provenance.mjs): a recipe case's comes with
+  // the results, a showcase's with its record when its generator solved
+  // through the module.
+  const fem = e.recipe ? (e.fem ?? data.fem) : e.fem;
+  if (e.recipe && !fem)
+    throw new Error(
+      `${e.id}: solved by the Rust module, but the published data names no build of it (fem); regenerate with bun run validate:report`,
+    );
+  return fem
+    ? `The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build ${esc(fem)}); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: ${engine}`
     : `KoFEM engine (MFEM), the WebAssembly build the app runs: ${engine}`;
 }
 
