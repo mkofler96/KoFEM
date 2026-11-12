@@ -216,3 +216,44 @@
 .entryRow .nodeNested {
   padding-left: 37px;
 }
+
+/* A body's regions hang off a line from under the body's marker, branching
+   to each region (├ └). The body marker's centre sits 25px into the row. */
+.regionRow,
+.bodyWithRegions {
+  position: relative;
+}
+
+.regionRow::before,
+.regionRow::after,
+.bodyWithRegions::after {
+  content: "";
+  position: absolute;
+  left: 25px;
+  pointer-events: none;
+  border-color: var(--border-2);
+  border-style: solid;
+  border-width: 0;
+}
+
+.regionRow::before {
+  top: 0;
+  bottom: 0;
+  border-left-width: 1px;
+}
+
+.regionLast::before {
+  bottom: 50%;
+}
+
+.regionRow::after {
+  top: 50%;
+  width: 9px;
+  border-top-width: 1px;
+}
+
+.bodyWithRegions::after {
+  top: calc(50% + 7px);
+  bottom: 0;
+  border-left-width: 1px;
+}

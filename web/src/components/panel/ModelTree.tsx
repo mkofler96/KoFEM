@@ -106,6 +106,7 @@ export function ModelTree() {
     dimmed,
     trailing,
     nested,
+    rowClass,
   }: {
     key: string;
     active: boolean;
@@ -121,11 +122,14 @@ export function ModelTree() {
     trailing?: ReactNode;
     // A region under its body: indented.
     nested?: boolean;
+    // The row's place in a body's subtree: the body over its regions, a
+    // region, the last region.
+    rowClass?: string;
   }) {
     return (
       <li
         key={key}
-        className={styles.entryRow}
+        className={`${styles.entryRow} ${rowClass ?? ""}`}
         onMouseEnter={onHover && (() => onHover(true))}
         onMouseLeave={onHover && (() => onHover(false))}
       >
@@ -162,7 +166,17 @@ export function ModelTree() {
             </button>
             {open && (
               <ul className={styles.list}>
-                {items[id].map((item) => {
+                {items[id].map((item, k, list) => {
+                  // A body's regions follow it: the body opens its subtree,
+                  // the last region closes it.
+                  const next = list[k + 1];
+                  const rowClass = item.nested
+                    ? next?.nested
+                      ? styles.regionRow
+                      : `${styles.regionRow} ${styles.regionLast}`
+                    : next?.nested
+                      ? styles.bodyWithRegions
+                      : undefined;
                   // A body or region stands for its CAD solids (KOF-257).
                   const solids = item.solidIds ?? [];
                   const isBody = solids.length > 0;
@@ -176,6 +190,7 @@ export function ModelTree() {
                     isBody && solids.every((s) => suppressedIds.has(s));
                   return entry({
                     key: `${item.kind}:${item.id}`,
+                    rowClass,
                     active: isItem(id, item.kind, item.id),
                     testId: `tree-${item.kind}-${item.id}`,
                     onClick: () =>
