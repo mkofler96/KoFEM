@@ -13,7 +13,8 @@
 //     two solid materials (per-body) with an explicit CTRIA3 wall standing on
 //     it, a clamp, a prescribed displacement, point forces, a moment on a
 //     shell node, a pressure on the block and a kinematic reference-point
-//     coupling loaded by a moment;
+//     coupling loaded by a moment — and the same model with its wall in two
+//     shell materials (per-facet mesh.shell_attributes);
 //   - the KOF-215 planar transition study (fixtures/shell-junction.mjs, the
 //     model of engine/tests/shell_solid_footprint_study.cpp): a 2 mm wall on
 //     a block, cut into a retained solid section and a shell, tied by shell
@@ -196,8 +197,9 @@ const near = (lhs, rhs) => Math.abs(lhs - rhs) < 1e-6;
 // Block [0, 40]×[0, 20]×[0, 10] of Kuhn tets (5 mm cells), steel for x < 20
 // (body 1) and aluminium beyond (body 2), with a 2 mm CTRIA3 wall (body 3) on
 // its top along y = 10, x ∈ [0, 40], z ∈ [10, 40]. The wall's bottom edge
-// coincides with block nodes; the builder ties it to the block.
-function handMixedModel() {
+// coincides with block nodes; the builder ties it to the block. With
+// `twoShellMaterials` the wall's x ≥ 20 half is its own aluminium body 4.
+function handMixedModel({ twoShellMaterials = false } = {}) {
   const nodes = [];
   const elements = [];
   const index = new Map();
@@ -260,7 +262,7 @@ function handMixedModel() {
           id: elements.length + 1,
           type: "CTRIA3",
           nodeIds: tri.map((c) => quad[c]),
-          propertyId: 3,
+          propertyId: twoShellMaterials && i >= 4 ? 4 : 3,
         });
     }
   const reference = nodes.length + 1;
@@ -313,6 +315,9 @@ function handMixedModel() {
       { id: 1, materialId: 1 },
       { id: 2, materialId: 2 },
       { id: 3, materialId: 1, thickness: 2, discretization: "shell" },
+      ...(twoShellMaterials
+        ? [{ id: 4, materialId: 2, thickness: 2, discretization: "shell" }]
+        : []),
     ],
     constraints,
     loads,
@@ -378,6 +383,31 @@ function handMixedModel() {
       softer.relative > 1e-2,
       `${softer.relative}`,
     );
+
+    // Per-body shell materials: the wall in two bodies of steel and
+    // aluminium, selected per facet through mesh.shell_attributes.
+    const twoShells = handMixedModel({ twoShellMaterials: true });
+    const twoShellInputs = buildCoupledEngineInputs(twoShells, () => undefined);
+    check(
+      "the wall's facets select two shell materials",
+      new Set(twoShellInputs.mesh.shell_attributes).size === 2 &&
+        JSON.parse(twoShellInputs.matJson).shell.length === 2,
+    );
+    const shellBoth = await compare(
+      "Hand-mixed model with two shell materials (steel and aluminium wall)",
+      twoShellInputs,
+    );
+    if (shellBoth) {
+      const changed = maxDifference(
+        shellBoth.rust.displacements,
+        both.rust.displacements,
+      );
+      check(
+        "per-body shell materials change the result",
+        changed.relative > 1e-2,
+        `${changed.relative}`,
+      );
+    }
   }
 }
 
