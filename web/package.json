@@ -36,6 +36,7 @@
     "coverage:report": "nyc report && bun scripts/coverage-dead-code.ts",
     "test:ui": "playwright test --ui",
     "capture:tutorial": "playwright test -c playwright.capture.config.ts tutorial-capture.spec.ts",
+    "capture:readme": "playwright test -c playwright.capture.config.ts example-load.spec.ts",
     "test:mesh-report": "playwright test mesh-report.spec.ts",
     "test:showcase": "playwright test showcase.spec.ts",
     "theory:generate": "bun theory/generate.mjs",
