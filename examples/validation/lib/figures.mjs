@@ -251,8 +251,8 @@ function torqueArc(cx, cy, rx, ry) {
   return `<polyline class="load" points="${pts.map(([x, y]) => `${f(x)},${f(y)}`).join(" ")}" marker-end="url(#arr-load)"/>`;
 }
 
+/** `div`: the structured mesh to draw, or null for an unstructured one. */
 export function squareTorsionFigure({ div }) {
-  const [nx, ny] = div;
   const x0 = 100,
     x1 = 420,
     yc = 120,
@@ -264,7 +264,7 @@ export function squareTorsionFigure({ div }) {
   const parts = [
     // Side face, top face, end face.
     `<rect class="body" x="${x0}" y="${top}" width="${x1 - x0}" height="${s}"/>`,
-    rectMesh(x0, top, x1, bot, nx, ny),
+    div ? rectMesh(x0, top, x1, bot, div[0], div[1]) : "",
     poly(
       [
         [x0, top],

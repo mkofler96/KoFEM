@@ -29,11 +29,9 @@ import { readAnalysisSetup } from "./lib/app-model.mjs";
 // KOF-322: examples still built the old way. This list must be empty when
 // KOF-322 is done; then delete it and the PENDING handling below.
 const PENDING = [
-  "surface-pressure",
   "cantilever",
   "cantilever-p2",
   "cantilever-beam",
-  "beam-torsion",
   "shaft-torsion",
   "plate-with-hole",
   "plate-with-hole-shell",
