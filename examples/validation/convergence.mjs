@@ -87,6 +87,26 @@ export default [
     ],
   }),
   recipeStudy({
+    id: "plate-with-hole",
+    caseId: "plate-with-hole",
+    title: "Plate with a hole, P1 vs. P2",
+    note: "Quadratic elements stay within 2 % below Howland's 3.14 on every mesh; the nodal average of element-centre stresses keeps them slightly low. Linear elements overshoot by several percent and come down only slowly.",
+    series: [
+      {
+        label: "P1 (linear)",
+        caseId: "plate-with-hole",
+        order: 1,
+        levels: [4, 2, 1],
+      },
+      {
+        label: "P2 (quadratic)",
+        caseId: "plate-with-hole",
+        order: 2,
+        levels: [4, 2, 1],
+      },
+    ],
+  }),
+  recipeStudy({
     id: "cantilever",
     caseId: "cantilever",
     title: "Cantilever beam, P1 vs. P2",

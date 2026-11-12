@@ -13,6 +13,8 @@ export const REF = {
     "W. C. Young and R. G. Budynas, <cite>Roark’s Formulas for Stress and Strain</cite>, 7th ed., McGraw-Hill, 2002.",
   kirsch:
     "G. Kirsch, “Die Theorie der Elastizität und die Bedürfnisse der Festigkeitslehre”, <cite>Zeitschrift des Vereines deutscher Ingenieure</cite> 42 (1898) 797–807.",
+  howland:
+    "R. C. J. Howland, “On the stresses in the neighbourhood of a circular hole in a strip under tension”, <cite>Philosophical Transactions of the Royal Society of London A</cite> 229 (1930) 49–86.",
   peterson:
     "W. D. Pilkey and D. F. Pilkey, <cite>Peterson’s Stress Concentration Factors</cite>, 3rd ed., Wiley, 2008.",
   cook1974:

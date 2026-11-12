@@ -209,6 +209,8 @@ test("diagrams and charts are SVG images with a crawlable PNG, in both themes", 
       );
       expect(png).toBe(svg?.replace(/\.svg$/, ".png"));
       expect((await img.getAttribute("alt"))?.length ?? 0).toBeGreaterThan(30);
+      // Lazy images far down a long page load only once scrolled near.
+      await img.scrollIntoViewIfNeeded();
       // The browser shows the SVG; the PNG is twice its display size.
       await expect
         .poll(() => img.evaluate((e) => (e as HTMLImageElement).currentSrc))
