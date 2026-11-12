@@ -16,12 +16,15 @@ Follow strict red-green TDD for all implementation work:
 
 - Never implement a feature without a corresponding test written first.
 - Run the relevant test command after every change to confirm the transition
-  red → green. In practice that is `cd web && bunx playwright test <spec>` or a
+  red → green. For Rust solver code that is `cargo test -p <crate>` first. For
+  everything that ships it is `cd web && bunx playwright test <spec>` or a
   script under `examples/validation/` — the behaviour that ships is exercised
-  through the web app and the WASM engine.
-- `cargo test` covers only the `crates/` stubs (see AGENTS.md): their shared
-  types and the explicit errors their native bridges return. It does not cover
-  the shipped engine, so do not treat a green `cargo test` as coverage of it.
+  through the web app and both WASM modules.
+- `cargo test` covers the Rust solver crates `kofem-fem` and `kofem-shellize`
+  (see AGENTS.md). It does not cover the browser bindings in `kofem-wasm`, the
+  C++ engine, or how the app calls either module. So a green `cargo test` alone
+  is not coverage of a solver path: also run its Rust-vs-C++ check under
+  `web/tests/`.
 - For acceptance criteria given in a Linear issue, copy the test verbatim into
   the test file before touching implementation code.
 - Prefer small, focused tests over large integration tests so failures pinpoint the broken unit.

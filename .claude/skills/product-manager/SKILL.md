@@ -67,9 +67,11 @@ stale state is available, say so and lower confidence.
    Numerical correctness and explicit failure outrank growth in an FEA product:
    a plausible wrong result is a serious product defect even with few reports.
    Then weigh first successful simulation, workflow reliability, usability,
-   retention and feature demand against maintainer cost. Keep the C++/WASM
-   production pipeline distinct from the deferred Rust migration. Do not rank
-   work by issue count, commit volume, stars or the loudest request alone.
+   retention and feature demand against maintainer cost. The Rust migration of
+   the solver side is committed roadmap work (C++ keeps OCCT and Netgen): say
+   which solver paths have switched and which of those are released. Research
+   features are roadmap work in their own right, not only demand-driven. Do not
+   rank work by issue count, commit volume, stars or the loudest request alone.
 
 4. **Tradeoffs and capacity.** State what to continue, start, defer or stop, and
    what gets displaced by a new priority. Check unfinished work and maintainer
