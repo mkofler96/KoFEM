@@ -18,11 +18,14 @@ export interface ViewportHooks {
 // Exposes the viewport camera to Playwright as window.__kofemViewport, beside
 // the store (__kofemStore) and the worker (__kofem) already exposed.
 export function ViewportTestHooks() {
-  const { camera, controls, gl } = useThree();
+  const { camera, controls, gl, invalidate } = useThree();
 
   useEffect(() => {
     const hooks: ViewportHooks = {
       project(point) {
+        // The canvas renders on demand, so the camera matrices may not have
+        // caught up with a move made since the last frame (e.g. lookFrom).
+        camera.updateMatrixWorld();
         const ndc = new Vector3(...point).project(camera);
         if (ndc.z > 1) return null;
         const rect = gl.domElement.getBoundingClientRect();
@@ -43,11 +46,12 @@ export function ViewportTestHooks() {
           .copy(orbit.target)
           .addScaledVector(new Vector3(...direction).normalize(), distance);
         orbit.update();
+        invalidate();
       },
     };
     (window as Window & { __kofemViewport?: ViewportHooks }).__kofemViewport =
       hooks;
-  }, [camera, controls, gl]);
+  }, [camera, controls, gl, invalidate]);
 
   return null;
 }
