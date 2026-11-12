@@ -283,15 +283,13 @@ test("the pages are light by default and remember a switch to dark", async ({
   expect(await background()).toBe("rgb(255, 255, 255)");
 });
 
-test("the retired /validation/ addresses and merged pages redirect to the example pages", async ({
+test("the retired /validation/ addresses redirect to the example pages", async ({
   page,
 }) => {
   for (const [from, to] of [
     ["/validation/", "/examples/"],
     ["/validation/beam-torsion/", "/examples/beam-torsion/"],
-    ["/validation/cantilever/", "/examples/cantilever-beam/"],
-    ["/examples/cantilever/", "/examples/cantilever-beam/"],
-    ["/examples/cantilever-p2/", "/examples/cantilever-beam/"],
+    ["/validation/cantilever-beam/", "/examples/cantilever-beam/"],
     ["/validation/surface-traction/", "/examples/axial-bar/"],
     ["/examples/plate-with-hole", "/examples/plate-with-hole/"],
   ]) {

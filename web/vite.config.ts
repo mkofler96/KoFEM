@@ -99,14 +99,10 @@ const GALLERY_TYPES: Record<string, string> = {
   ".svg": "image/svg+xml",
 };
 
-// Where an address of the retired /validation/ pages, or of a merged example
-// page, now lives, or null for any other path. The surface-traction case
-// became the axial bar's page; the linear and quadratic cantilevers became the
-// one cantilever beam page. nginx.conf.template redirects the same way in
-// production.
+// Where an address of the retired /validation/ pages now lives, or null for
+// any other path. The surface-traction case became the axial bar's page.
+// nginx.conf.template redirects the same way in production.
 function validationRedirect(path: string): string | null {
-  if (/^\/(validation|examples)\/cantilever(-p2)?\/?$/.test(path))
-    return "/examples/cantilever-beam/";
   const m = /^\/validation(\/.*)?$/.exec(path);
   if (!m) return null;
   const rest = m[1] ?? "/";
