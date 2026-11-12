@@ -4,7 +4,7 @@
 import { test, expect } from "./coverage";
 import { gotoApp } from "./fixtures/app";
 import { serveUnvalidatedExample } from "./fixtures/unvalidated-examples";
-import { readdir } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 
 // Coverage for the `?example=<id>` deep-link (App.tsx useExampleFromUrl), the
 // target of the "Open in KoFEM" links on the example pages. Exercises
@@ -131,81 +131,71 @@ test("re-solving a loaded example does not trap on its node ids (#288)", async (
   }
 });
 
-test("a pure-shell (CTRIA3) example re-solves through the shell path", async ({
+test("a pure-shell (CTRIA3) example solves through the shell path to its published Kt", async ({
   page,
 }) => {
-  test.setTimeout(60_000);
+  test.setTimeout(180_000);
 
-  // Loads the CTRIA3 shell plate and re-runs the solve exactly as the Solve
-  // button does. This exercises the whole shell pipeline end-to-end: CTRIA3
-  // parsing, the edge fallback of rebuildSurfaceLoads (the pulled edge is a
-  // node polyline containing no whole facet), the worker's work-equivalent
-  // line-load distribution, and the engine's Kirchhoff shell solve. Same mesh,
-  // BCs and load derivation as the generator → the fresh field must reproduce
-  // the one saved in the .vtu.
+  // Opens the shell plate with a hole — built from its STEP file with the body
+  // marked Shell, so its mesh is the CTRIA3 mid-surface and its supports and
+  // load are Edge picks of whole CAD faces — and solves it with the Run button.
+  // This exercises the whole shell pipeline end-to-end: CTRIA3 parsing, the
+  // edge fallback of rebuildSurfaceLoads (the pulled edge is a node polyline
+  // containing no whole facet), the worker's work-equivalent line-load
+  // distribution and the Rust shell solve. The Results panel's hand check must
+  // read the Kt the example page publishes.
   await page.goto("/app/?example=plate-with-hole-shell");
   await expect(page.locator("nav")).toBeVisible();
-  await page.waitForFunction(
-    () => !!(window as unknown as { __kofem?: unknown }).__kofem,
-  );
   await expect
     .poll(async () => (await readStore(page)).nodes, { timeout: 15_000 })
     .toBeGreaterThan(0);
-
-  const outcome = await page.evaluate(async () => {
-    const win = window as unknown as {
-      __kofem: {
-        sendToWorker(name: string, payload: object): Promise<unknown>;
-      };
-      __kofemStore: { getState(): Record<string, unknown> };
+  const setup = await page.evaluate(() => {
+    const st = (
+      window as unknown as {
+        __kofemStore: {
+          getState(): {
+            elements: { type: string }[];
+            result: unknown;
+            bcGroups: { faces: { cadFaceId?: number; geometry?: string }[] }[];
+            loadGroups: {
+              faces: { cadFaceId?: number; geometry?: string }[];
+            }[];
+          };
+        };
+      }
+    ).__kofemStore.getState();
+    const faces = [...st.bcGroups, ...st.loadGroups].flatMap((g) => g.faces);
+    return {
+      allShells: st.elements.every((el) => el.type === "CTRIA3"),
+      solved: st.result !== null,
+      // Edges a wall face collapsed to, each remembering that CAD face.
+      wholeFaceEdges: faces.every(
+        (f) => f.geometry === "edge" && typeof f.cadFaceId === "number",
+      ),
     };
-    const st = win.__kofemStore.getState();
-    const elements = st.elements as { type: string }[];
-    const saved = st.result as { displacements: Float64Array };
-    const maxU = (disp: Float64Array): number => {
-      let max = 0;
-      for (let i = 0; i < disp.length; i += 3)
-        max = Math.max(max, Math.hypot(disp[i], disp[i + 1], disp[i + 2]));
-      return max;
-    };
-    try {
-      const res = (await win.__kofem.sendToWorker("solve", {
-        solverMethod: "gauss-seidel",
-        nodes: st.nodes,
-        elements: st.elements,
-        materials: st.materials,
-        properties: st.properties,
-        constraints: st.constraints,
-        loads: st.loads,
-        surfaceLoads: st.surfaceLoads,
-      })) as { displacements: Float64Array; vonMises: Float64Array };
-      return {
-        ok: true as const,
-        allShells: elements.every((el) => el.type === "CTRIA3"),
-        nNodes: (st.nodes as unknown[]).length,
-        nElems: elements.length,
-        nDisp: res.displacements.length,
-        nVm: res.vonMises.length,
-        savedMaxU: maxU(saved.displacements),
-        freshMaxU: maxU(res.displacements),
-      };
-    } catch (err) {
-      return { ok: false as const, error: (err as Error).message };
-    }
+  });
+  expect(setup).toEqual({
+    allShells: true,
+    solved: false,
+    wholeFaceEdges: true,
   });
 
-  expect(outcome.ok).toBe(true);
-  if (outcome.ok) {
-    expect(outcome.allShells).toBe(true); // guard: the file really is a shell model
-    expect(outcome.nDisp).toBe(outcome.nNodes * 3);
-    expect(outcome.nVm).toBe(outcome.nElems);
-    // Identical inputs through a deterministic solver — only summation-order
-    // noise is tolerated.
-    expect(
-      Math.abs(outcome.freshMaxU - outcome.savedMaxU) /
-        Math.abs(outcome.savedMaxU),
-    ).toBeLessThan(1e-6);
-  }
+  const run = page.getByRole("button", { name: /Run static solve/ });
+  await expect(run).toBeEnabled({ timeout: 15_000 });
+  await run.click();
+  const handCheck = page.getByTestId("hand-check-fe");
+  await expect(handCheck).toBeVisible({ timeout: 120_000 });
+  const shown = Number(await handCheck.getAttribute("data-value"));
+  const published = (
+    JSON.parse(await readFile("public/examples/results.json", "utf8")) as {
+      cases: { id: string; fe: number }[];
+    }
+  ).cases.find((c) => c.id === "plate-with-hole-shell")?.fe;
+  if (published === undefined)
+    throw new Error("results.json has no plate-with-hole-shell row");
+  expect(Math.abs(shown - published)).toBeLessThanOrEqual(
+    1e-6 * Math.abs(published),
+  );
 });
 
 test("a mixed shell/solid (CTRIA3 + CTETRA) example re-solves through the coupled path", async ({

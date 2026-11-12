@@ -1,7 +1,8 @@
 # KoFEM validation suite
 
 Each case here is built the way a user builds it in the app (KOF-322): one
-STEP file imported, optionally split, meshed by Netgen with tetrahedra, a
+STEP file imported, optionally split, meshed by Netgen with tetrahedra (a body
+marked Shell is then collapsed to its mid-surface, as the app does), a
 material, supports and loads on whole CAD faces, the static solve, and the
 number the Results panel's hand check reads. The steps are the case's
 **recipe** (`lib/recipe.mjs`); `lib/pipeline.mjs` runs them through the real
@@ -46,16 +47,17 @@ element sizes), taking it off `PENDING` in `rules.mjs`, and
 
 ## Cases
 
-| Case                 | Validates                       | Reference                     |
-| -------------------- | ------------------------------- | ----------------------------- |
-| Axial bar            | tip extension δ = P·L/(E·A)     | mechanics of materials        |
-| Bar under pressure   | u = −p·L/E, pressure sign       | mechanics of materials        |
-| Cantilever beam      | tip deflection δ = P·L³/(3·E·I) | Euler–Bernoulli               |
-| Cantilever beam (P2) | δ on a coarse mesh, order 2     | Euler–Bernoulli               |
-| Square beam torsion  | angle of twist θ = T·L/(G·K)    | Saint-Venant torsion (square) |
-| Plate with a hole    | stress-concentration Kt ≈ 3     | Kirsch / Timoshenko & Goodier |
-| Hollow shaft torsion | angle of twist θ = T·L/(G·J)    | Saint-Venant torsion          |
-| Cook's membrane      | top-corner deflection ≈ 23.9    | Cook (1974)                   |
+| Case                       | Validates                       | Reference                     |
+| -------------------------- | ------------------------------- | ----------------------------- |
+| Axial bar                  | tip extension δ = P·L/(E·A)     | mechanics of materials        |
+| Bar under pressure         | u = −p·L/E, pressure sign       | mechanics of materials        |
+| Cantilever beam            | tip deflection δ = P·L³/(3·E·I) | Euler–Bernoulli               |
+| Cantilever beam (P2)       | δ on a coarse mesh, order 2     | Euler–Bernoulli               |
+| Square beam torsion        | angle of twist θ = T·L/(G·K)    | Saint-Venant torsion (square) |
+| Plate with a hole          | stress-concentration Kt ≈ 3     | Kirsch / Timoshenko & Goodier |
+| Plate with a hole (shells) | Kt ≈ 3 on a shell mid-surface   | Kirsch / Timoshenko & Goodier |
+| Hollow shaft torsion       | angle of twist θ = T·L/(G·J)    | Saint-Venant torsion          |
+| Cook's membrane            | top-corner deflection ≈ 23.9    | Cook (1974)                   |
 
 See `REPORT.md` for the latest FE-vs-reference numbers.
 
@@ -161,7 +163,8 @@ cases are designed around:
   Dirichlet extension) that the order-1 cases never reach.
 - **Displacement validates tighter than stress.** Displacements are the primary
   CG unknowns and land within a few percent (often < 1%). Element-wise stress is
-  noisier, so the one stress case (plate with a hole) carries a wider band.
+  noisier, so the stress cases (the plate with a hole, solid and shell) carry
+  wider bands.
 
 Cases that need symmetry / roller boundary conditions (NAFEMS LE1/LE10, the
 MacNeal–Harder thin curved/twisted beams, a Lamé pressure cylinder) are the

@@ -143,4 +143,18 @@ export default [
     meshLabel: (n) => `${n} × ${n}`,
     solve: study(cookModel, cookCorner),
   },
+  recipeStudy({
+    id: "plate-with-hole-shell",
+    caseId: "plate-with-hole-shell",
+    title: "Plate with a hole, shell triangles",
+    note: "Kt rises towards 3 as the mesh is refined: each triangle has one stress, and averaging them to the nodes reads the peak low until the triangles at the hole are small.",
+    series: [
+      {
+        label: "Shell (linear)",
+        caseId: "plate-with-hole-shell",
+        order: 1,
+        levels: [4, 2, 1, 0.75],
+      },
+    ],
+  }),
 ];

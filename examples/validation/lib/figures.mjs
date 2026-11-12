@@ -468,6 +468,57 @@ export function plateFigure() {
   return `<div class="fig-row">${plate}${graph}</div>`;
 }
 
+/**
+ * The quarter of the plate with a hole that a symmetric model keeps: symmetry
+ * supports (rollers) on the cut edges x = 0 and y = 0, the remote tension σ on
+ * the edge x = b, and the peak at A, where the hole meets x = 0.
+ */
+export function quarterPlateFigure() {
+  const px = 64,
+    py = 24,
+    side = 190,
+    a = 42,
+    bottom = py + side;
+  const rollers = [];
+  for (let k = 0; k < 6; k++) {
+    const y = py + 14 + ((side - a - 28) * k) / 5;
+    rollers.push(`<circle class="hole" cx="${f(px - 6)}" cy="${f(y)}" r="5"/>`);
+  }
+  for (let k = 0; k < 6; k++) {
+    const x = px + a + 14 + ((side - a - 28) * k) / 5;
+    rollers.push(
+      `<circle class="hole" cx="${f(x)}" cy="${f(bottom + 6)}" r="5"/>`,
+    );
+  }
+  const parts = [
+    `<path class="body" d="M${px + a} ${bottom}H${px + side}V${py}H${px}V${bottom - a}A${a} ${a} 0 0 1 ${px + a} ${bottom}Z"/>`,
+    ...rollers,
+    line(px - 12, py + 4, px - 12, bottom - a - 4, "wall"),
+    line(px + a + 4, bottom + 12, px + side - 4, bottom + 12, "wall"),
+  ];
+  for (let j = 0; j <= 5; j++) {
+    const y = py + 8 + ((side - 16) * j) / 5;
+    parts.push(arrow(px + side + 2, y, px + side + 32, y));
+  }
+  parts.push(
+    sym(px + side + 40, py + side / 2 + 5, "σ", "start"),
+    `<circle class="pt" cx="${px}" cy="${bottom - a}" r="3.5"/>`,
+    label(px + 12, bottom - a - 8, "A", { anchor: "start" }),
+    dim(px, bottom, px + a * Math.cos(-0.8), bottom + a * Math.sin(-0.8)),
+    sym(px + 12, bottom - 10, "a", "start"),
+    dim(px, bottom + 34, px + side, bottom + 34),
+    sym(px + side / 2, bottom + 28, "b"),
+    triad(px + side - 80, py + 50),
+  );
+  return svg(
+    330,
+    270,
+    "Quarter of a plate with a central hole under tension σ, with symmetry supports on the cut edges; point A, where the hole meets the vertical cut, carries the peak stress",
+    parts.join("\n    "),
+    { cls: "fig half", name: "quarter-plate-diagram" },
+  );
+}
+
 // ── Cook's membrane ──────────────────────────────────────────────────────────
 
 export function cookFigure({ n }) {

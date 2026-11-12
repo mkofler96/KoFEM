@@ -402,16 +402,24 @@ export function buildAnalysisSetup(build, title) {
   };
 }
 
-const VTK_TETRA = 10;
+// The element types a recipe build makes: Netgen's tetrahedra, and the shell
+// facets the app idealises a Shell body into (web/src/lib/analysisFile.ts
+// vtkCellType).
+const VTK_CELL = {
+  CTETRA: { nodes: 4, type: 10 }, // VTK_TETRA
+  CTRIA3: { nodes: 3, type: 5 }, // VTK_TRIANGLE
+};
 
 /** The .vtu of a recipe build, unsolved: no result arrays. */
 export function buildAnalysisFile(build, title) {
   const { nodes, elements } = build;
   for (const e of elements)
-    if (e.type !== "CTETRA" || e.nodeIds.length !== 4)
+    if (VTK_CELL[e.type]?.nodes !== e.nodeIds.length)
       throw new Error(
-        `analysis file: element ${e.id} is a ${e.nodeIds.length}-node ${e.type}, not a 4-node tetrahedron`,
+        `analysis file: element ${e.id} is a ${e.nodeIds.length}-node ${e.type}, not a 4-node tetrahedron or a 3-node shell facet`,
       );
+  let offset = 0;
+  const offsets = elements.map((e) => (offset += e.nodeIds.length));
   const encoded = fieldData(JSON.stringify(buildAnalysisSetup(build, title)));
   return [
     `<?xml version="1.0"?>`,
@@ -438,12 +446,12 @@ export function buildAnalysisFile(build, title) {
       "connectivity",
       elements.map((e) => e.nodeIds.join(" ")).join("\n"),
     ),
+    dataArray("Int64", "offsets", offsets.join(" ")),
     dataArray(
-      "Int64",
-      "offsets",
-      elements.map((_, i) => 4 * (i + 1)).join(" "),
+      "UInt8",
+      "types",
+      elements.map((e) => VTK_CELL[e.type].type).join(" "),
     ),
-    dataArray("UInt8", "types", elements.map(() => VTK_TETRA).join(" ")),
     `</Cells>`,
     `<PointData>`,
     dataArray("Int64", "NodeId", nodes.map((n) => n.id).join(" ")),
@@ -487,10 +495,30 @@ export function buildResultSurface(build, field, nodalVonMises) {
 
 /**
  * Elements, nodes and DOFs of a recipe build — a quadratic tetrahedron adds a
- * node on every edge — and the mesher settings, so the page states them.
+ * node on every edge, a shell node carries six DOFs — and the mesher settings,
+ * so the page states them.
  */
 export function buildMeshStats(build) {
   const { order, maxElementSize, minElementSize } = build.meshSettings;
+  const types = new Set(build.elements.map((e) => e.type));
+  if (types.size !== 1 || !(types.has("CTETRA") || types.has("CTRIA3")))
+    throw new Error(
+      `mesh stats: a recipe build is all tetrahedra or all shell facets, got ${[...types].join(", ")}`,
+    );
+  if (types.has("CTRIA3")) {
+    // A DKT/CST facet is linear whatever order the mesh panel shows.
+    const shellNodes = build.nodes.length;
+    return {
+      order: 1,
+      elementType: "CTRIA3",
+      elements: build.elements.length,
+      vertices: shellNodes,
+      nodes: shellNodes,
+      dofs: 6 * shellNodes,
+      maxElementSize,
+      minElementSize,
+    };
+  }
   let nodes = build.nodes.length;
   if (order === 2) {
     const edges = new Set();

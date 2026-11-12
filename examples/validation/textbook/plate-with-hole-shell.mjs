@@ -1,17 +1,16 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Page text: the plate with a hole as a shell mid-surface
-// (examples/gallery/generate-plate-hole-shell.mjs).
+// Page text: the plate with a hole as a shell mid-surface.
 
-import { plateFigure } from "../lib/figures.mjs";
+import { quarterPlateFigure } from "../lib/figures.mjs";
 import { REF } from "./refs.mjs";
 
 export default {
   description:
-    "Kirsch's plate with a hole modelled with Kirchhoff shell triangles instead of solid elements: stress concentration Kt = 3 against KoFEM's shell solver.",
-  opens: "Opens the solved model in the app.",
-  figure: () => plateFigure(),
+    "Kirsch's plate with a hole meshed as a shell: the app collapses the plate to its mid-surface, and KoFEM's shell triangles give the stress concentration Kt = 3.",
+  opens: "Opens the model, set up and ready to run.",
+  figure: () => quarterPlateFigure(),
   intro: ({ tex, url }) => `
         <p>The <a href="${url("plate-with-hole")}">plate with a hole</a>,
         modelled as a thin-walled part usually is: one layer of shell
@@ -26,35 +25,46 @@ export default {
         ${tex("σ_{θθ} = σ (1 - 2 \\cos 2θ)")}, largest at
         ${tex("θ = ±90°")}, so ${tex("K_{\\mathrm{t}} = 3")}. The solution
         is a plane-stress solution, which is exactly the state of a flat shell
-        loaded in its plane.</p>`,
+        loaded in its plane. It holds for a plate of any size: only the ratio
+        of the hole to the plate matters, and at ${tex("a/b = 0.1")} the plate
+        is close to Kirsch's infinite one.</p>`,
   model: ({ row, tex }) => `
-        <p>Each triangle combines a CST membrane, which carries in-plane
-        loads with constant strain, and a DKT plate-bending element. In this
-        load case only the membrane part works. The mesh is the solid plate's
-        O-grid (${row.mesh.rings} rings × ${row.mesh.around} around the hole)
-        with every quad split into two triangles, so the hole edge is a
-        polygon of ${row.mesh.around} sides. Shell nodes carry six degrees of
-        freedom, three translations and three rotations. The load is a force on
-        the right edge, which the app spreads as a uniform line load
-        ${tex("q = σ t")}.</p>`,
+        <p>This plate is the solid one at 1 : 100, so that it is thin enough
+        for the app to treat as a shell (walls up to 15 mm). By symmetry, a
+        quarter of it is enough: the cut edges keep their symmetry, and the
+        edge ${tex("x = b")} is pulled with ${tex("σ b t")}.</p>
+        <p>Netgen meshes the solid quarter plate, and the app then measures
+        the ${tex("t")} = 5 mm wall and replaces it by its mid-surface. The
+        faces through the wall, such as the edge faces and the hole, become
+        the edges of the shell, so each support and the load is picked as an
+        Edge. A force on an edge is spread as a uniform line load
+        ${tex("q = σ t")}.</p>
+        <p>Each of the ${row.mesh.elements.toLocaleString("en-US")} triangles
+        combines a CST membrane, which carries in-plane loads with constant
+        strain, and a DKT plate-bending element; in this load case only the
+        membrane part works. Shell nodes carry six degrees of freedom, three
+        translations and three rotations. The out-of-plane ones are held on
+        the symmetry edges, which changes nothing here but keeps the plate from
+        floating.</p>`,
   discussion: ({ row, rowOf, pct, tex, url }) => `
-        <p>KoFEM's ${tex("K_{\\mathrm{t}}")} differs from 3 by ${pct(row.errPct)};
-        the <a href="${url("plate-with-hole")}">solid model</a> of the same
-        plate comes out ${pct(rowOf("plate-with-hole").errPct)}. Both measure
-        an element value, so both sit a little away from the edge, where the
-        stress has started to fall. A CST triangle has one stress, at its
-        centroid, and the first ring of triangles is split from thin quads,
-        so half of its centroids sit a third of the way across the ring, closer
-        to the edge than the centres of the solid hexahedra. That is one
-        reason the shell gets nearer to 3 on the same grid.</p>
-        <p>The two models have ${row.mesh.dofs.toLocaleString("en-US")} and
-        ${rowOf("plate-with-hole").mesh.dofs.toLocaleString("en-US")} unknowns:
-        the shell's ${row.mesh.nodes.toLocaleString("en-US")} nodes carry six
-        degrees of freedom each, the solid's
-        ${rowOf("plate-with-hole").mesh.nodes.toLocaleString("en-US")} nodes
-        three. Shells pay off when a thin wall bends: one layer of shell
-        elements bends by construction, while solid elements need several
-        layers through the thickness, or quadratic elements, to do the same
-        (see the <a href="${url("cantilever")}">cantilever</a>).</p>`,
+        <p>KoFEM's ${tex("K_{\\mathrm{t}}")} is ${pct(row.errPct)} from 3, read
+        as the Results panel reads it: the largest nodal von Mises stress.
+        Each triangle has one stress, the one at its centroid, and the app
+        averages those to the nodes. At the hole edge the stress falls off
+        steeply, so the triangles around the peak node have centroids where it
+        is already lower, and the average reads the peak low. The mesh study
+        above shows ${tex("K_{\\mathrm{t}}")} rising towards 3 as the triangles
+        shrink.</p>
+        <p>The mesh panel sets one element size for the whole plate, and Netgen
+        meshes the solid plate in tetrahedra before the app collapses it, so a
+        finer mesh at the hole costs a finer mesh everywhere. The 1 mm mesh
+        here is the finest that solves in about a minute. The tolerance band
+        allows for the discretisation error left at that size.</p>
+        <p>The <a href="${url("plate-with-hole")}">solid model</a> of the same
+        plate comes out ${pct(rowOf("plate-with-hole").errPct)}. Shells pay off
+        when a thin wall bends: one layer of shell elements bends by
+        construction, while solid elements need several layers through the
+        thickness, or quadratic elements, to do the same (see the
+        <a href="${url("cantilever")}">cantilever</a>).</p>`,
   references: [REF.kirsch, REF.timoshenkoGoodier, REF.batoz, REF.cmpw],
 };
