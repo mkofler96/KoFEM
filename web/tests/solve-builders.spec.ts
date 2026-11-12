@@ -504,14 +504,41 @@ test("AMG takes surface-to-point couplings on linear solid models only", () => {
   expect(
     amgUnavailableReason({ ...solid, elementOrder: 2, couplingCount: 0 }),
   ).toBeNull();
+});
+
+test("AMG takes mixed shell/solid models, not shell-only ones", () => {
+  const mixed = {
+    elements: [...tetElements, shellElements[0]],
+    properties: [
+      ...twoBodies,
+      { id: 3, materialId: 1, thickness: 2, discretization: "shell" as const },
+    ],
+  };
+  // The mixed solve (KOF-308) is linear tets + DKT facets with the shell
+  // seams as couplings, whatever the element order and declared couplings.
+  for (const elementOrder of [1, 2])
+    for (const couplingCount of [0, 1])
+      expect(
+        amgUnavailableReason({ ...mixed, elementOrder, couplingCount }),
+      ).toBeNull();
   expect(
     amgUnavailableReason({
-      elements: [...tetElements, shellElements[0]],
+      elements: shellElements,
       properties: twoBodies,
       elementOrder: 1,
-      couplingCount: 1,
+      couplingCount: 0,
     }),
-  ).toBe("it does not support shell elements");
+  ).toBe("it does not support shell-only models");
+  // A body marked Shell but not yet idealised may become a pure shell model
+  // at solve time.
+  expect(
+    amgUnavailableReason({
+      elements: tetElements,
+      properties: [{ ...twoBodies[0], discretization: "shell" }, twoBodies[1]],
+      elementOrder: 1,
+      couplingCount: 0,
+    }),
+  ).toBe("it does not support bodies solved as shells");
 });
 
 test("topology optimization routing refuses models it would optimize wrongly", () => {

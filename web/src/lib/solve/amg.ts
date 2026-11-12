@@ -7,9 +7,10 @@
 // tetrahedra with per-body materials, supports (fixed, roller, prescribed),
 // nodal loads and surface loads, and surface-to-point couplings on linear
 // tetrahedra; hex elements still solve with the MFEM engine's Gauss–Seidel CG,
-// and the solve says so. Pure-shell models take the Rust shell solve
-// (shellRust.ts), and shells, bodies solved as shells and couplings AMG cannot
-// take go to the coupled solver, both preconditioned with incomplete Cholesky.
+// and the solve says so. Shells mixed with tets take the Rust mixed solve
+// (coupledRust.ts) with AMG too. Pure-shell models take the Rust shell solve
+// (shellRust.ts), and bodies solved as shells and couplings AMG cannot take
+// go to the coupled solver, both preconditioned with incomplete Cholesky.
 //
 // The inputs are built by the same helpers as the MFEM payload
 // (packSolveMesh, resolveMaterials, groupDirichlet, groupPointLoads,
@@ -74,10 +75,21 @@ export function amgUnavailableReason(model: {
 }): string | null {
   if (model.elementOrder !== 1 && model.elementOrder !== 2)
     return "it supports linear and quadratic elements only";
-  if (model.elements.some((element) => element.type === "CTRIA3"))
-    return "it does not support shell elements";
-  if (model.elements.some((element) => element.type !== "CTETRA"))
+  const shellCount = model.elements.filter(
+    (element) => element.type === "CTRIA3",
+  ).length;
+  if (shellCount > 0 && shellCount === model.elements.length)
+    return "it does not support shell-only models";
+  if (
+    model.elements.some(
+      (element) => element.type !== "CTETRA" && element.type !== "CTRIA3",
+    )
+  )
     return "it supports tetrahedral meshes only";
+  // Shells mixed with tets take the Rust mixed solve (coupledRust.ts), which
+  // is linear tets + DKT facets with every coupling, whatever the element
+  // order (as the engine's solve_coupled).
+  if (shellCount > 0) return null;
   // A coupling ties the corner nodes of the picked faces; the edge nodes of
   // quadratic elements would not follow (the MFEM coupled path solves such a
   // model with linear elements).

@@ -62,9 +62,12 @@ test("mixed worker applies total force, traction and pressure like equivalent no
     ];
     const results = [];
     for (const { surface, nodal } of cases) {
+      // AMG on one side, incomplete Cholesky (what a Gauss–Seidel request
+      // gives a mixed model) on the other: the two preconditioners of the
+      // Rust mixed solve must agree too.
       const viaSurface = await worker.sendToWorker("solve", {
         ...model,
-        solverMethod: "gauss-seidel",
+        solverMethod: "amg",
         loads: [],
         surfaceLoads: [surface],
       });

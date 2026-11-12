@@ -274,6 +274,8 @@ test("auto-shell: thin plate on a block solves through the coupled path", async 
   expect(autoShell).toBeTruthy();
   expect(autoShell).toContain("body 1: 1 thin walls");
   expect(autoShell).toContain("384 solid tets");
+  // …through the Rust mixed solve (KOF-308), not the engine's solve_coupled.
+  expect(logs.some((l) => l.includes("[coupled] Rust solve"))).toBe(true);
 
   expect(summary.dispLen).toBe(3 * summary.nNodes);
   expect(summary.vmLen).toBe(summary.nElements);
