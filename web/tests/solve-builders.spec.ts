@@ -514,6 +514,34 @@ test("AMG takes surface-to-point couplings on linear solid models only", () => {
   ).toBe("it does not support shell elements");
 });
 
+test("AMG takes hexahedral and mixed tet/hex solid models", () => {
+  const hex: Element = {
+    id: 3,
+    type: "CHEXA",
+    nodeIds: [1, 2, 3, 4, 5, 6, 7, 8],
+    propertyId: 2,
+  };
+  for (const elements of [[hex], [...tetElements, hex]])
+    for (const elementOrder of [1, 2])
+      expect(
+        amgUnavailableReason({
+          elements,
+          properties: twoBodies,
+          elementOrder,
+          couplingCount: 0,
+        }),
+      ).toBeNull();
+  // Couplings go through the coupled solver's inputs, which take tets only.
+  expect(
+    amgUnavailableReason({
+      elements: [...tetElements, hex],
+      properties: twoBodies,
+      elementOrder: 1,
+      couplingCount: 1,
+    }),
+  ).toBe("it supports surface-to-point couplings on tetrahedral meshes only");
+});
+
 test("topology optimization routing refuses models it would optimize wrongly", () => {
   const settings: TopOptPayload["settings"] = {
     objective: "min_compliance",
