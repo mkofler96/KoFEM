@@ -31,7 +31,7 @@ test("switching between geometry and mesh entries switches the viewport", async 
 }) => {
   test.setTimeout(120_000);
   await importStep(page, TWO_BOXES);
-  await page.getByRole("button", { name: /mesh STEP volume/i }).click();
+  await page.getByRole("button", { name: /generate mesh/i }).click();
   await page.waitForFunction(
     () =>
       (

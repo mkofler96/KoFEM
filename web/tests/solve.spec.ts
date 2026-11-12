@@ -176,11 +176,8 @@ test("vol mesh stores FEM nodes in the store for solving", async ({ page }) => {
   console.log(`[vol-mesh] ${elapsed()} STEP tessellation done`);
 
   // ── 2. Compute volume mesh (controls live in the Geometry panel) ──────────
-  await page
-    .getByRole("button")
-    .filter({ hasText: "Mesh STEP volume" })
-    .click();
-  console.log(`[vol-mesh] ${elapsed()} clicked Mesh STEP volume`);
+  await page.getByRole("button").filter({ hasText: "Generate mesh" }).click();
+  console.log(`[vol-mesh] ${elapsed()} clicked Generate mesh`);
 
   // "Meshing…" is a transient label that can vanish before Playwright polls for
   // it when the WASM worker completes very quickly.  Wait for the stable

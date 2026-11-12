@@ -25,6 +25,7 @@
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Shape.hxx>
 
+#include <algorithm>
 #include <array>
 #include <cstdio>
 #include <set>
@@ -120,6 +121,12 @@ val generate_fem_mesh(const std::string& opts_json)
     double elems_per_curve = jdouble(opts, "elementspercurve",    2.0);
     int    optsteps_2d     = jint   (opts, "optsteps_2d",           0);
     int    optsteps_3d     = jint   (opts, "optsteps_3d",           0);
+    // Per-region sizes (KOF-257): entry k is the max element size of solid k+1.
+    // Absent: every solid meshes at max_element_size.
+    const val solid_sizes_js = opts["solid_max_sizes"];
+    std::vector<double> solid_max_sizes;
+    if (!solid_sizes_js.isUndefined() && !solid_sizes_js.isNull())
+        solid_max_sizes = f64_vector(solid_sizes_js, "solid_max_sizes");
 
 #ifdef KOFEM_NETGEN_OCC
     // ── OCC path: Netgen meshes the CAD geometry directly ────────────────────
@@ -133,6 +140,25 @@ val generate_fem_mesh(const std::string& opts_json)
     // tessellate_step already transferred — re-reading the STEP file through
     // Netgen's own reader (Ng_OCC_Load_STEP) parsed the whole file a second
     // time and doubled peak geometry memory.
+
+    // With region sizes, every solid gets one — the global size where no region
+    // size is given — and the global maxh, which caps every size, becomes the
+    // largest of them: a region may be coarser than the rest as well as finer.
+    // Without, every size is reset to Netgen's default, so the mesh is the one
+    // the global settings alone make. Either way Netgen's static size table
+    // keeps nothing from an earlier mesh.
+    {
+        TopTools_IndexedMapOfShape solids;
+        TopExp::MapShapes(cached_shape(), TopAbs_SOLID, solids);
+        if (!solid_max_sizes.empty() &&
+            static_cast<int>(solid_max_sizes.size()) != solids.Extent())
+            throw std::runtime_error(
+                "generate_fem_mesh: solid_max_sizes has " + std::to_string(solid_max_sizes.size()) +
+                " entries but the geometry has " + std::to_string(solids.Extent()) + " solids");
+        kofem_set_solid_max_sizes(cached_shape(), solid_max_sizes);
+        for (const double h : solid_max_sizes)
+            max_size = std::max(max_size, h);
+    }
 
     log_mem("generate_fem_mesh: before OCC geometry build");
     nglib::Ng_OCC_Geometry* geom =

@@ -26,9 +26,11 @@ import {
   track,
 } from "../lib/analytics";
 import {
+  isCadBody,
   suppressionMismatch,
   suppressionMismatchMessage,
 } from "../store/geometrySlice";
+import { passiveElements, roleOf } from "../lib/regions";
 
 export type FieldErrors = Partial<Record<TopOptNumericField, string>>;
 
@@ -194,6 +196,7 @@ export function useTopOpt() {
   const meshSuppressedIds = useModelStore((s) => s.meshSuppressedIds);
   const suppressionStale = suppressionMismatchMessage(
     suppressionMismatch(properties, meshSuppressedIds, nodes.length > 0),
+    properties,
   );
   const meshOk = nodes.length > 0 && suppressionStale === null;
   // Every body must resolve to an existing material — same rule as the solve.
@@ -254,7 +257,13 @@ export function useTopOpt() {
   const levelSetCouplingBlock = levelSet && couplingGroups.length > 0;
   const levelSetObjectiveBlock =
     levelSet && topOpt.objective !== "min_compliance";
+  // Regions fixed as Keep solid / Keep empty (KOF-257) are left out of the
+  // design; with none left to shape there is nothing to optimize.
+  const noDesignRegion = properties
+    .filter((p) => isCadBody(p) && !p.suppressed)
+    .every((p) => roleOf(p) !== "design");
   const allOk =
+    !noDesignRegion &&
     !levelSetShellBlock &&
     !levelSetCouplingBlock &&
     !levelSetObjectiveBlock &&
@@ -299,7 +308,7 @@ export function useTopOpt() {
       surfaceLoads,
       tieGroups,
       couplings: couplingGroups,
-      settings,
+      settings: { ...settings, passive: passiveElements(elements, properties) },
     })
       .then(({ density, levelSet, history }) => {
         setDensityResult({ density, levelSet, history });
@@ -430,6 +439,11 @@ export function useTopOpt() {
         `Topology optimization uses one material per design domain — the solid domain spans ${solidMaterialIds.size} and the shell domain ${shellMaterialIds.size}; assign a single material to each`,
       ]);
   }
+  if (noDesignRegion)
+    checks.push([
+      false,
+      "Every region is set to Keep solid or Keep empty — set at least one to Design so the optimizer has material to shape",
+    ]);
   if (levelSetShellBlock)
     checks.push([
       false,

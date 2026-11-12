@@ -86,6 +86,19 @@ test("bodies keep their settings when a Boolean renumbers them", async ({
   await expect
     .poll(async () => (await geometryCounts(page)).bodies, { timeout: 60_000 })
     .toBe(3);
+  // The Boolean picker names the solids as the tree does, so a region of
+  // the split body is never mistaken for another body.
+  await page.getByTestId("tree-add-geometry").click();
+  await page.getByTestId("add-geometry-boolean").click();
+  await expect(page.getByTestId("boolean-target").locator("option")).toHaveText(
+    ["Body 1", "Body 2 · Region 1", "Body 2 · Region 2"],
+  );
+
+  // The split made two regions of Body 2 (KOF-257); promote the second to
+  // Body 3 of its own.
+  await page.getByTestId("tree-region-3").click();
+  await page.getByTestId("region-promote-3").click();
+  await expect(page.getByTestId("tree-body-3")).toBeVisible();
 
   // Body 3 gets a material of its own and is suppressed.
   await addMaterial(page);
@@ -134,4 +147,7 @@ test("bodies keep their settings when a Boolean renumbers them", async ({
     { id: 1, materialId: 1, suppressed: false },
     { id: 2, materialId: 2, suppressed: true },
   ]);
+  // The bodies are numbered 1, 2 again — no gap where the fused one was.
+  await expect(page.getByTestId("tree-body-2")).toBeVisible();
+  await expect(page.getByTestId("tree-body-3")).toHaveCount(0);
 });

@@ -56,7 +56,7 @@ test("mesh-time auto-shell: the fin is stored as a mid-surface shell mesh", asyn
   // Body 2 is the fin; the user marks it Shell.
   await setElementType(page, 2, "shell");
   await openTree(page, "mesh");
-  await page.getByRole("button", { name: /Mesh STEP volume/i }).click();
+  await page.getByRole("button", { name: /Generate mesh/i }).click();
   await expect
     .poll(
       async () =>

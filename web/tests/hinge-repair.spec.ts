@@ -38,15 +38,12 @@ async function setSizes(page: Page, max: string, min: string): Promise<void> {
 }
 
 async function mesh(page: Page): Promise<void> {
-  await page
-    .getByRole("button")
-    .filter({ hasText: "Mesh STEP volume" })
-    .click();
+  await page.getByRole("button").filter({ hasText: "Generate mesh" }).click();
 }
 
 async function expectMeshed(page: Page): Promise<void> {
   await expect(
-    page.getByRole("button").filter({ hasText: "Re-mesh STEP volume" }),
+    page.getByRole("button").filter({ hasText: "Regenerate mesh" }),
   ).toBeVisible({ timeout: 120_000 });
   await expect(page.getByTestId("meshing-error")).toHaveCount(0);
   await expect(page.getByTestId("mesh-overlap-card")).toHaveCount(0);
@@ -172,7 +169,7 @@ test("a face too narrow to mesh is named instead of volume-filled", async ({
   await expect(page.getByTestId("meshing-error")).toHaveCount(0);
   await expect(page.getByTestId("surface-overlap-warning")).toHaveCount(0);
   await expect(
-    page.getByRole("button").filter({ hasText: "Re-mesh STEP volume" }),
+    page.getByRole("button").filter({ hasText: "Regenerate mesh" }),
   ).toHaveCount(0);
 
   // Narrower than the 0.5 mm minimum element size: removal is offered, with

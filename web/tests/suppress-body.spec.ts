@@ -40,7 +40,7 @@ async function mesh(page: Page): Promise<void> {
   await openTree(page, "mesh");
   await page
     .getByRole("button")
-    .filter({ hasText: /(re-)?mesh STEP volume/i })
+    .filter({ hasText: /generate mesh/i })
     .click();
   await expect
     .poll(async () => (await state(page)).generation, { timeout: 90_000 })

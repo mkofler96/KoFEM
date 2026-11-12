@@ -10,6 +10,12 @@
 // coarse enough to mesh and solve in the browser.
 export const TARGET_ELEMENT_COUNT = 50_000;
 
+// Sizes in the mesh settings before any geometry is imported. The settings
+// only show once a part is loaded, and its own suggestion (suggestElementSizes)
+// replaces both.
+export const DEFAULT_MAX_ELEMENT_SIZE = 20;
+export const DEFAULT_MIN_ELEMENT_SIZE = 2;
+
 // Default ratio between the two size fields. min_element_size floors Netgen's
 // curvature-driven refinement; h/10 is what the worker assumes when a caller
 // sends no minimum.
