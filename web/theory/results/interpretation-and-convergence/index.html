@@ -838,7 +838,7 @@
       <strong>stress concentration</strong>. Refinement should resolve the
       geometry and stress gradient until the chosen measure stabilizes. The
       <a href="/examples/plate-with-hole/">plate-with-hole case</a> shows how
-      centre sampling alone can miss a finite boundary peak.</p>
+      nodal averages of centre samples read a finite boundary peak slightly low.</p>
     <p>An ideal point force in a 3D continuum, a sharp re-entrant corner, or
       an abrupt change between fixed and free boundary conditions can produce
       a <strong>stress singularity</strong>: the ideal elastic stress grows
@@ -949,9 +949,8 @@
       defines the app’s summarized measure. The preceding
       <a href="/theory/results/displacement-and-stress/#sources">source inventory</a>
       traces the display and shell/coupled distinctions.</p>
-    <p>The hole benchmark and its
-      <a href="https://github.com/mkofler96/KoFEM/blob/0db1e95ae2016d2c625932babf68d8ff672d9f69/examples/validation/cases/plate-with-hole.mjs#L90">measurement code</a>
-      provide a comparison you can reproduce in the app. A smooth hole is a finite concentration;
+    <p>The hole benchmark reads the app’s own nodal field, so its result
+      is a comparison you can reproduce in the app. A smooth hole is a finite concentration;
       this case does not verify singular stresses, plasticity, arbitrary
       material interfaces or every recovery method.</p>
     <ul class="refs">

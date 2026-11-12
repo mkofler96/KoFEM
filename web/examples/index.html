@@ -13,18 +13,18 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
     <title>Examples and validation | KoFEM</title>
-    <meta name="description" content="Finite element examples you can open in KoFEM, and validation cases compared with a known result: axial bar, cantilever beams, torsion, a plate with a hole, Cook's membrane, topology optimization." />
+    <meta name="description" content="Finite element examples you can open in KoFEM, and validation cases compared with a known result: axial bar, a cantilever beam, torsion, a plate with a hole, Cook's membrane, topology optimization." />
     <link rel="canonical" href="https://kofem.org/examples/" />
     <meta name="robots" content="index, follow" />
 
     <meta property="og:type" content="article" />
     <meta property="og:title" content="Examples and validation | KoFEM" />
-    <meta property="og:description" content="Finite element examples you can open in KoFEM, and validation cases compared with a known result: axial bar, cantilever beams, torsion, a plate with a hole, Cook's membrane, topology optimization." />
+    <meta property="og:description" content="Finite element examples you can open in KoFEM, and validation cases compared with a known result: axial bar, a cantilever beam, torsion, a plate with a hole, Cook's membrane, topology optimization." />
     <meta property="og:url" content="https://kofem.org/examples/" />
     <meta property="og:image" content="https://kofem.org/examples/axial-bar.png" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Examples and validation | KoFEM" />
-    <meta name="twitter:description" content="Finite element examples you can open in KoFEM, and validation cases compared with a known result: axial bar, cantilever beams, torsion, a plate with a hole, Cook's membrane, topology optimization." />
+    <meta name="twitter:description" content="Finite element examples you can open in KoFEM, and validation cases compared with a known result: axial bar, a cantilever beam, torsion, a plate with a hole, Cook's membrane, topology optimization." />
     <meta name="twitter:image" content="https://kofem.org/examples/axial-bar.png" />
 
     <!-- Self-hosted fonts (SIL OFL) — see public/fonts/README.md -->
@@ -39,7 +39,7 @@
           {
             "@type": "CollectionPage",
             "name": "KoFEM examples",
-            "description": "Finite element examples you can open in KoFEM, and validation cases compared with a known result: axial bar, cantilever beams, torsion, a plate with a hole, Cook's membrane, topology optimization.",
+            "description": "Finite element examples you can open in KoFEM, and validation cases compared with a known result: axial bar, a cantilever beam, torsion, a plate with a hole, Cook's membrane, topology optimization.",
             "url": "https://kofem.org/examples/",
             "dateModified": "2026-11-12",
             "hasPart": [
@@ -52,16 +52,6 @@
                 "@type": "TechArticle",
                 "headline": "Bar under end pressure",
                 "url": "https://kofem.org/examples/surface-pressure/"
-              },
-              {
-                "@type": "TechArticle",
-                "headline": "Cantilever beam, linear tetrahedra",
-                "url": "https://kofem.org/examples/cantilever/"
-              },
-              {
-                "@type": "TechArticle",
-                "headline": "Cantilever beam, quadratic tetrahedra",
-                "url": "https://kofem.org/examples/cantilever-p2/"
               },
               {
                 "@type": "TechArticle",
@@ -85,7 +75,7 @@
               },
               {
                 "@type": "TechArticle",
-                "headline": "Plate with a hole, shell elements",
+                "headline": "Plate with a hole (shells)",
                 "url": "https://kofem.org/examples/plate-with-hole-shell/"
               },
               {
@@ -847,13 +837,11 @@
           <ul>
             <li><a href="/examples/axial-bar/">Axial bar in tension</a></li>
             <li><a href="/examples/surface-pressure/">Bar under end pressure</a></li>
-            <li><a href="/examples/cantilever/">Cantilever beam, linear tetrahedra</a></li>
-            <li><a href="/examples/cantilever-p2/">Cantilever beam, quadratic tetrahedra</a></li>
             <li><a href="/examples/cantilever-beam/">Cantilever beam under tip load</a></li>
             <li><a href="/examples/beam-torsion/">Square beam under torsion</a></li>
             <li><a href="/examples/shaft-torsion/">Hollow shaft under torsion</a></li>
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
-            <li><a href="/examples/plate-with-hole-shell/">Plate with a hole, shell elements</a></li>
+            <li><a href="/examples/plate-with-hole-shell/">Plate with a hole (shells)</a></li>
             <li><a href="/examples/cooks-membrane/">Cook's membrane</a></li>
           </ul>
         </details>
@@ -876,13 +864,11 @@
           <ul>
             <li><a href="/examples/axial-bar/">Axial bar in tension</a></li>
             <li><a href="/examples/surface-pressure/">Bar under end pressure</a></li>
-            <li><a href="/examples/cantilever/">Cantilever beam, linear tetrahedra</a></li>
-            <li><a href="/examples/cantilever-p2/">Cantilever beam, quadratic tetrahedra</a></li>
             <li><a href="/examples/cantilever-beam/">Cantilever beam under tip load</a></li>
             <li><a href="/examples/beam-torsion/">Square beam under torsion</a></li>
             <li><a href="/examples/shaft-torsion/">Hollow shaft under torsion</a></li>
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
-            <li><a href="/examples/plate-with-hole-shell/">Plate with a hole, shell elements</a></li>
+            <li><a href="/examples/plate-with-hole-shell/">Plate with a hole (shells)</a></li>
             <li><a href="/examples/cooks-membrane/">Cook's membrane</a></li>
           </ul>
         </details>
@@ -905,7 +891,7 @@
       <p>Problems with a known answer, from theory or the literature. Each page
       derives the answer and compares KoFEM's result with it.</p>
       <p class="meta">
-        9 of 9 benchmarks within their tolerance ·
+        8 of 8 benchmarks within their tolerance ·
         engine engine-7303b4976800 · 2026-11-12 ·
         <a href="/examples/results.json">results.json</a> ·
         <a href="https://github.com/mkofler96/KoFEM/tree/develop/examples">source</a>
@@ -923,22 +909,10 @@
           <p>The bar pushed by a pressure. Checks the sign and the per-area scaling of pressure loads.</p>
           <p class="meta">Tip displacement u: −4.7380&thinsp;×&thinsp;10<sup>−3</sup>&nbsp;mm, −0.50&nbsp;% from the reference</p>
         </li>
-        <li data-entry="cantilever">
-          <a href="/examples/cantilever/" tabindex="-1" aria-hidden="true"><img src="/examples/cantilever.png" width="1200" height="519" alt="" loading="lazy" /></a>
-          <h3><a href="/examples/cantilever/">Cantilever beam, linear tetrahedra</a></h3>
-          <p>Bending with linear elements, which are too stiff in bending (shear locking).</p>
-          <p class="meta">Tip deflection δ: −1.8313&nbsp;mm, −3.86&nbsp;% from the reference</p>
-        </li>
-        <li data-entry="cantilever-p2">
-          <a href="/examples/cantilever-p2/" tabindex="-1" aria-hidden="true"><img src="/examples/cantilever-p2.png" width="1200" height="523" alt="" loading="lazy" /></a>
-          <h3><a href="/examples/cantilever-p2/">Cantilever beam, quadratic tetrahedra</a></h3>
-          <p>The same beam on a coarse mesh of quadratic elements, which do not lock.</p>
-          <p class="meta">Tip deflection δ: −1.8985&nbsp;mm, −0.33&nbsp;% from the reference</p>
-        </li>
         <li data-entry="cantilever-beam">
           <a href="/examples/cantilever-beam/" tabindex="-1" aria-hidden="true"><img src="/examples/cantilever-beam.png" width="1200" height="523" alt="" loading="lazy" /></a>
           <h3><a href="/examples/cantilever-beam/">Cantilever beam under tip load</a></h3>
-          <p>The cantilever that opens ready to run, with a hand check in the Results panel.</p>
+          <p>Bending on quadratic elements; linear ones lock and are far too stiff.</p>
           <p class="meta">Tip deflection δ: −1.9040&nbsp;mm, −0.04&nbsp;% from the reference</p>
         </li>
         <li data-entry="beam-torsion">
@@ -956,20 +930,20 @@
         <li data-entry="plate-with-hole">
           <a href="/examples/plate-with-hole/" tabindex="-1" aria-hidden="true"><img src="/examples/plate-with-hole.png" width="1200" height="720" alt="" loading="lazy" /></a>
           <h3><a href="/examples/plate-with-hole/">Plate with a hole</a></h3>
-          <p>Kirsch's stress concentration at a hole. The one stress-based case, hence the wider band.</p>
-          <p class="meta">Stress-concentration factor Kt: 2.7750, −7.50&nbsp;% from the reference</p>
+          <p>Kirsch's stress concentration at a hole, in a strip of finite width. A peak stress, read as the app shows it.</p>
+          <p class="meta">Stress-concentration factor Kt: 3.1268, −0.42&nbsp;% from the reference</p>
         </li>
         <li data-entry="plate-with-hole-shell">
-          <a href="/examples/plate-with-hole-shell/" tabindex="-1" aria-hidden="true"><img src="/examples/plate-with-hole-shell.png" width="1200" height="720" alt="" loading="lazy" /></a>
-          <h3><a href="/examples/plate-with-hole-shell/">Plate with a hole, shell elements</a></h3>
-          <p>The same plate as a single layer of shell triangles on its mid-surface instead of solid elements.</p>
-          <p class="meta">Stress-concentration factor Kt: 2.9387, −2.04&nbsp;% from the reference</p>
+          <a href="/examples/plate-with-hole-shell/" tabindex="-1" aria-hidden="true"><img src="/examples/plate-with-hole-shell.png" width="1200" height="1200" alt="" loading="lazy" /></a>
+          <h3><a href="/examples/plate-with-hole-shell/">Plate with a hole (shells)</a></h3>
+          <p>The plate with a hole as a shell mid-surface: Kirsch's Kt = 3 from shell triangles.</p>
+          <p class="meta">Stress-concentration factor Kt: 2.8185, −6.05&nbsp;% from the reference</p>
         </li>
         <li data-entry="cooks-membrane">
           <a href="/examples/cooks-membrane/" tabindex="-1" aria-hidden="true"><img src="/examples/cooks-membrane.png" width="1200" height="900" alt="" loading="lazy" /></a>
           <h3><a href="/examples/cooks-membrane/">Cook's membrane</a></h3>
-          <p>Tapered, skewed cantilever in shear. A standard distortion benchmark, dimensionless.</p>
-          <p class="meta">Top-corner deflection: 24.042, +0.59&nbsp;% from the reference</p>
+          <p>Tapered, skewed cantilever in shear. A standard distortion benchmark.</p>
+          <p class="meta">Loaded-edge deflection: 23.936&nbsp;mm, −0.10&nbsp;% from the reference</p>
         </li>
       </ul>
 
@@ -1014,20 +988,6 @@
               <td class="num" data-label="Difference">−0.50&nbsp;%</td>
             </tr>
             <tr>
-              <th scope="row"><a href="/examples/cantilever/">Cantilever beam, linear tetrahedra</a></th>
-              <td class="wide">tip deflection δ</td>
-              <td class="num" data-label="Reference">−1.9048&nbsp;mm</td>
-              <td class="num" data-label="KoFEM">−1.8313&nbsp;mm</td>
-              <td class="num" data-label="Difference">−3.86&nbsp;%</td>
-            </tr>
-            <tr>
-              <th scope="row"><a href="/examples/cantilever-p2/">Cantilever beam, quadratic tetrahedra</a></th>
-              <td class="wide">tip deflection δ</td>
-              <td class="num" data-label="Reference">−1.9048&nbsp;mm</td>
-              <td class="num" data-label="KoFEM">−1.8985&nbsp;mm</td>
-              <td class="num" data-label="Difference">−0.33&nbsp;%</td>
-            </tr>
-            <tr>
               <th scope="row"><a href="/examples/cantilever-beam/">Cantilever beam under tip load</a></th>
               <td class="wide">tip deflection δ</td>
               <td class="num" data-label="Reference">−1.9048&nbsp;mm</td>
@@ -1051,23 +1011,23 @@
             <tr>
               <th scope="row"><a href="/examples/plate-with-hole/">Plate with a hole</a></th>
               <td class="wide">stress-concentration factor Kt</td>
-              <td class="num" data-label="Reference">3.0000</td>
-              <td class="num" data-label="KoFEM">2.7750</td>
-              <td class="num" data-label="Difference">−7.50&nbsp;%</td>
+              <td class="num" data-label="Reference">3.1400</td>
+              <td class="num" data-label="KoFEM">3.1268</td>
+              <td class="num" data-label="Difference">−0.42&nbsp;%</td>
             </tr>
             <tr>
-              <th scope="row"><a href="/examples/plate-with-hole-shell/">Plate with a hole, shell elements</a></th>
+              <th scope="row"><a href="/examples/plate-with-hole-shell/">Plate with a hole (shells)</a></th>
               <td class="wide">stress-concentration factor Kt</td>
               <td class="num" data-label="Reference">3.0000</td>
-              <td class="num" data-label="KoFEM">2.9387</td>
-              <td class="num" data-label="Difference">−2.04&nbsp;%</td>
+              <td class="num" data-label="KoFEM">2.8185</td>
+              <td class="num" data-label="Difference">−6.05&nbsp;%</td>
             </tr>
             <tr>
               <th scope="row"><a href="/examples/cooks-membrane/">Cook's membrane</a></th>
-              <td class="wide">top-corner deflection</td>
-              <td class="num" data-label="Reference">23.900</td>
-              <td class="num" data-label="KoFEM">24.042</td>
-              <td class="num" data-label="Difference">+0.59&nbsp;%</td>
+              <td class="wide">loaded-edge deflection</td>
+              <td class="num" data-label="Reference">23.960&nbsp;mm</td>
+              <td class="num" data-label="KoFEM">23.936&nbsp;mm</td>
+              <td class="num" data-label="Difference">−0.10&nbsp;%</td>
             </tr>
           </tbody>
         </table>

@@ -130,132 +130,6 @@
       }
     },
     {
-      "id": "cantilever",
-      "name": "Cantilever beam, linear tetrahedra",
-      "quantity": "tip deflection δ",
-      "unit": "mm",
-      "reference": -1.9047619047619047,
-      "referenceLabel": "−P·L³ / (3·E·I)",
-      "tolPct": 5,
-      "fe": -1.8313265917640142,
-      "errPct": -3.8553539323892467,
-      "pass": true,
-      "mesh": {
-        "order": 1,
-        "elementType": "CTETRA",
-        "elements": 28470,
-        "vertices": 6423,
-        "nodes": 6423,
-        "dofs": 19269,
-        "maxElementSize": 12.5,
-        "minElementSize": 1.25
-      },
-      "inputs": [
-        {
-          "symbol": "L",
-          "value": 1000,
-          "unit": "mm"
-        },
-        {
-          "symbol": "b × h",
-          "value": "100 × 100",
-          "unit": "mm"
-        },
-        {
-          "symbol": "E",
-          "value": 210000,
-          "unit": "MPa"
-        },
-        {
-          "symbol": "ν",
-          "value": 0.3,
-          "unit": ""
-        },
-        {
-          "symbol": "P",
-          "value": 10000,
-          "unit": "N"
-        }
-      ],
-      "readout": {
-        "field": "Uy",
-        "stat": "Min",
-        "value": "-1.831e+0 mm"
-      },
-      "figure": {
-        "field": "displacement",
-        "unit": "mm",
-        "min": 0,
-        "max": 1.8365477550760647,
-        "deform": 50,
-        "width": 1200,
-        "height": 519
-      }
-    },
-    {
-      "id": "cantilever-p2",
-      "name": "Cantilever beam, quadratic tetrahedra",
-      "quantity": "tip deflection δ",
-      "unit": "mm",
-      "reference": -1.9047619047619047,
-      "referenceLabel": "−P·L³ / (3·E·I)",
-      "tolPct": 1,
-      "fe": -1.8984576326984421,
-      "errPct": -0.3309742833317819,
-      "pass": true,
-      "mesh": {
-        "order": 2,
-        "elementType": "CTETRA",
-        "elements": 1181,
-        "vertices": 313,
-        "nodes": 1968,
-        "dofs": 5904,
-        "maxElementSize": 50,
-        "minElementSize": 5
-      },
-      "inputs": [
-        {
-          "symbol": "L",
-          "value": 1000,
-          "unit": "mm"
-        },
-        {
-          "symbol": "b × h",
-          "value": "100 × 100",
-          "unit": "mm"
-        },
-        {
-          "symbol": "E",
-          "value": 210000,
-          "unit": "MPa"
-        },
-        {
-          "symbol": "ν",
-          "value": 0.3,
-          "unit": ""
-        },
-        {
-          "symbol": "P",
-          "value": 10000,
-          "unit": "N"
-        }
-      ],
-      "readout": {
-        "field": "Uy",
-        "stat": "Min",
-        "value": "-1.899e+0 mm"
-      },
-      "figure": {
-        "field": "displacement",
-        "unit": "mm",
-        "min": 0,
-        "max": 1.9038381777615618,
-        "deform": 50,
-        "width": 1200,
-        "height": 523
-      }
-    },
-    {
       "id": "cantilever-beam",
       "name": "Cantilever beam under tip load",
       "quantity": "tip deflection δ",
@@ -381,33 +255,41 @@
       "name": "Plate with a hole",
       "quantity": "stress-concentration factor Kt",
       "unit": "",
-      "reference": 3,
-      "referenceLabel": "Kt = 3 (infinite plate)",
-      "tolPct": 15,
-      "fe": 2.7749798552632647,
-      "errPct": -7.500671491224509,
+      "reference": 3.14,
+      "referenceLabel": "Howland's Kt for 2a/W = 0.2",
+      "tolPct": 3,
+      "fe": 3.1268496034992173,
+      "errPct": -0.41880243633066455,
       "pass": true,
       "mesh": {
-        "order": 1,
-        "elements": 768,
-        "vertices": 1664,
-        "nodes": 1664,
-        "dofs": 4992
+        "order": 2,
+        "elementType": "CTETRA",
+        "elements": 13522,
+        "vertices": 4733,
+        "nodes": 27705,
+        "dofs": 83115,
+        "maxElementSize": 2,
+        "minElementSize": 0.2
       },
       "inputs": [
         {
           "symbol": "a",
-          "value": 1000,
+          "value": 10,
           "unit": "mm"
         },
         {
           "symbol": "b",
-          "value": 10000,
+          "value": 50,
+          "unit": "mm"
+        },
+        {
+          "symbol": "L",
+          "value": 150,
           "unit": "mm"
         },
         {
           "symbol": "t",
-          "value": 500,
+          "value": 1,
           "unit": "mm"
         },
         {
@@ -429,16 +311,79 @@
       "readout": {
         "field": "Ux",
         "stat": "Max",
-        "value": "9.688e+0 mm"
+        "value": "7.380e-2 mm"
       },
       "figure": {
         "field": "vonMises",
         "unit": "MPa",
-        "min": 24.255046363120005,
-        "max": 277.4003602818001,
+        "min": 27.93861978386936,
+        "max": 312.6849603499217,
         "deform": 0,
         "width": 1200,
         "height": 720
+      }
+    },
+    {
+      "id": "plate-with-hole-shell",
+      "name": "Plate with a hole (shells)",
+      "quantity": "stress-concentration factor Kt",
+      "unit": "",
+      "reference": 3,
+      "referenceLabel": "Kt = 3 (infinite plate)",
+      "tolPct": 8,
+      "fe": 2.818517674074655,
+      "errPct": -6.049410864178162,
+      "pass": true,
+      "mesh": {
+        "order": 1,
+        "elementType": "CTRIA3",
+        "elements": 23196,
+        "vertices": 11797,
+        "nodes": 11797,
+        "dofs": 70782,
+        "maxElementSize": 1,
+        "minElementSize": 0.1
+      },
+      "inputs": [
+        {
+          "symbol": "a",
+          "value": 10,
+          "unit": "mm"
+        },
+        {
+          "symbol": "b",
+          "value": 100,
+          "unit": "mm"
+        },
+        {
+          "symbol": "t",
+          "value": 5,
+          "unit": "mm"
+        },
+        {
+          "symbol": "E",
+          "value": 210000,
+          "unit": "MPa"
+        },
+        {
+          "symbol": "ν",
+          "value": 0.3,
+          "unit": ""
+        },
+        {
+          "symbol": "σ",
+          "value": 100,
+          "unit": "MPa"
+        }
+      ],
+      "figure": {
+        "field": "vonMises",
+        "unit": "MPa",
+        "min": 25.718594233540234,
+        "max": 281.8517674074655,
+        "deform": 0,
+        "width": 1200,
+        "height": 1200
       }
     },
     {
@@ -512,31 +457,34 @@
     {
       "id": "cooks-membrane",
       "name": "Cook's membrane",
-      "quantity": "top-corner deflection",
-      "unit": "",
-      "reference": 23.9,
-      "referenceLabel": "converged ≈ 23.9",
-      "tolPct": 6,
-      "fe": 24.04151821967759,
-      "errPct": 0.5921264421656613,
+      "quantity": "loaded-edge deflection",
+      "unit": "mm",
+      "reference": 23.96,
+      "referenceLabel": "converged plane-stress value",
+      "tolPct": 1,
+      "fe": 23.935836506640076,
+      "errPct": -0.10084930450719978,
       "pass": true,
       "mesh": {
-        "order": 1,
-        "elements": 256,
-        "vertices": 578,
-        "nodes": 578,
-        "dofs": 1734
+        "order": 2,
+        "elementType": "CTETRA",
+        "elements": 2697,
+        "vertices": 1006,
+        "nodes": 5711,
+        "dofs": 17133,
+        "maxElementSize": 2,
+        "minElementSize": 0.2
       },
       "inputs": [
         {
           "symbol": "t",
           "value": 1,
-          "unit": ""
+          "unit": "mm"
         },
         {
           "symbol": "E",
           "value": 1,
-          "unit": ""
+          "unit": "MPa"
         },
         {
           "symbol": "ν",
@@ -546,19 +494,19 @@
         {
           "symbol": "F",
           "value": 1,
-          "unit": ""
+          "unit": "N"
         }
       ],
       "readout": {
         "field": "Uy",
         "stat": "Max",
-        "value": "2.404e+1 mm"
+        "value": "2.513e+1 mm"
       },
       "figure": {
         "field": "displacement",
-        "unit": "",
+        "unit": "mm",
         "min": 0,
-        "max": 29.901296763815733,
+        "max": 31.41772069207448,
         "deform": 0.2,
         "width": 1200,
         "height": 900
@@ -777,13 +725,118 @@
       ]
     },
     {
-      "id": "cantilever",
-      "caseId": "cantilever",
+      "id": "plate-with-hole",
+      "caseId": "plate-with-hole",
+      "title": "Plate with a hole, P1 vs. P2",
+      "series": [
+        {
+          "label": "P1 (linear)",
+          "caseId": "plate-with-hole",
+          "order": 1,
+          "points": [
+            {
+              "mesh": "4 mm",
+              "order": 1,
+              "elementType": "CTETRA",
+              "elements": 3507,
+              "vertices": 1298,
+              "nodes": 1298,
+              "dofs": 3894,
+              "maxElementSize": 4,
+              "minElementSize": 0.4,
+              "fe": 3.3691462349776566,
+              "errPct": 7.297650795466767,
+              "ci": false
+            },
+            {
+              "mesh": "2 mm",
+              "order": 1,
+              "elementType": "CTETRA",
+              "elements": 13522,
+              "vertices": 4733,
+              "nodes": 4733,
+              "dofs": 14199,
+              "maxElementSize": 2,
+              "minElementSize": 0.2,
+              "fe": 3.345440950136068,
+              "errPct": 6.54270541834611,
+              "ci": false
+            },
+            {
+              "mesh": "1 mm",
+              "order": 1,
+              "elementType": "CTETRA",
+              "elements": 51558,
+              "vertices": 17601,
+              "nodes": 17601,
+              "dofs": 52803,
+              "maxElementSize": 1,
+              "minElementSize": 0.1,
+              "fe": 3.2231204820750476,
+              "errPct": 2.6471491106703033,
+              "ci": false
+            }
+          ]
+        },
+        {
+          "label": "P2 (quadratic)",
+          "caseId": "plate-with-hole",
+          "order": 2,
+          "points": [
+            {
+              "mesh": "4 mm",
+              "order": 2,
+              "elementType": "CTETRA",
+              "elements": 3507,
+              "vertices": 1298,
+              "nodes": 7393,
+              "dofs": 22179,
+              "maxElementSize": 4,
+              "minElementSize": 0.4,
+              "fe": 3.0909365102791693,
+              "errPct": -1.5625315197716834,
+              "ci": false
+            },
+            {
+              "mesh": "2 mm",
+              "order": 2,
+              "elementType": "CTETRA",
+              "elements": 13522,
+              "vertices": 4733,
+              "nodes": 27705,
+              "dofs": 83115,
+              "maxElementSize": 2,
+              "minElementSize": 0.2,
+              "fe": 3.1268496034992173,
+              "errPct": -0.41880243633066455,
+              "ci": true
+            },
+            {
+              "mesh": "1 mm",
+              "order": 2,
+              "elementType": "CTETRA",
+              "elements": 51558,
+              "vertices": 17601,
+              "nodes": 104347,
+              "dofs": 313041,
+              "maxElementSize": 1,
+              "minElementSize": 0.1,
+              "fe": 3.1025304390947075,
+              "errPct": -1.19329811800295,
+              "ci": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cantilever-beam",
+      "caseId": "cantilever-beam",
       "title": "Cantilever beam, P1 vs. P2",
       "series": [
         {
           "label": "P1 (linear)",
-          "caseId": "cantilever",
+          "caseId": "cantilever-beam",
           "order": 1,
           "points": [
             {
@@ -826,7 +879,7 @@
               "minElementSize": 1.25,
               "fe": -1.8313265917640142,
               "errPct": -3.8553539323892467,
-              "ci": true
+              "ci": false
             },
             {
               "mesh": "8 mm",
@@ -846,7 +899,7 @@
         },
         {
           "label": "P2 (quadratic)",
-          "caseId": "cantilever-p2",
+          "caseId": "cantilever-beam",
           "order": 2,
           "points": [
             {
@@ -861,7 +914,7 @@
               "minElementSize": 5,
               "fe": -1.8984576326984421,
               "errPct": -0.3309742833317819,
-              "ci": true
+              "ci": false
             },
             {
               "mesh": "25 mm",
@@ -875,7 +928,7 @@
               "minElementSize": 2.5,
               "fe": -1.9040270178249952,
               "errPct": -0.03858156418774794,
-              "ci": false
+              "ci": true
             },
             {
               "mesh": "12.5 mm",
@@ -1031,7 +1084,7 @@
     {
       "id": "cooks-membrane",
       "caseId": "cooks-membrane",
-      "title": "Cook's membrane",
+      "title": "Cook's membrane, P1 vs. P2",
       "series": [
         {
           "label": "P1 (linear)",
@@ -1039,58 +1092,59 @@
           "order": 1,
           "points": [
             {
-              "mesh": "4 × 4",
+              "mesh": "8 mm",
               "order": 1,
-              "elements": 16,
-              "vertices": 50,
-              "nodes": 50,
-              "dofs": 150,
-              "fe": 17.62065110895012,
-              "errPct": -26.27342632238443,
+              "elementType": "CTETRA",
+              "elements": 466,
+              "vertices": 207,
+              "nodes": 207,
+              "dofs": 621,
+              "maxElementSize": 8,
+              "minElementSize": 0.8,
+              "fe": 19.45232949616535,
+              "errPct": -18.813315959243113,
               "ci": false
             },
             {
-              "mesh": "8 × 8",
+              "mesh": "4 mm",
               "order": 1,
-              "elements": 64,
-              "vertices": 162,
-              "nodes": 162,
-              "dofs": 486,
-              "fe": 22.132249722742337,
-              "errPct": -7.39644467471825,
+              "elementType": "CTETRA",
+              "elements": 1061,
+              "vertices": 429,
+              "nodes": 429,
+              "dofs": 1287,
+              "maxElementSize": 4,
+              "minElementSize": 0.4,
+              "fe": 23.090370108545628,
+              "errPct": -3.6295070594923753,
               "ci": false
             },
             {
-              "mesh": "16 × 16",
+              "mesh": "2 mm",
               "order": 1,
-              "elements": 256,
-              "vertices": 578,
-              "nodes": 578,
-              "dofs": 1734,
-              "fe": 24.04151821967759,
-              "errPct": 0.5921264421656613,
-              "ci": true
-            },
-            {
-              "mesh": "32 × 32",
-              "order": 1,
-              "elements": 1024,
-              "vertices": 2178,
-              "nodes": 2178,
-              "dofs": 6534,
-              "fe": 24.73428461310442,
-              "errPct": 3.4907305987632746,
+              "elementType": "CTETRA",
+              "elements": 2697,
+              "vertices": 1006,
+              "nodes": 1006,
+              "dofs": 3018,
+              "maxElementSize": 2,
+              "minElementSize": 0.2,
+              "fe": 23.699037304497853,
+              "errPct": -1.0891598309772437,
               "ci": false
             },
             {
-              "mesh": "64 × 64",
+              "mesh": "1 mm",
               "order": 1,
-              "elements": 4096,
-              "vertices": 8450,
-              "nodes": 8450,
-              "dofs": 25350,
-              "fe": 24.98942465512955,
-              "errPct": 4.5582621553537725,
+              "elementType": "CTETRA",
+              "elements": 10218,
+              "vertices": 3583,
+              "nodes": 3583,
+              "dofs": 10749,
+              "maxElementSize": 1,
+              "minElementSize": 0.1,
+              "fe": 23.832893639058465,
+              "errPct": -0.5304939939129203,
               "ci": false
             }
           ]
@@ -1101,47 +1155,143 @@
           "order": 2,
           "points": [
             {
-              "mesh": "2 × 2",
+              "mesh": "16 mm",
               "order": 2,
-              "elements": 4,
-              "vertices": 18,
-              "nodes": 75,
-              "dofs": 225,
-              "fe": 23.439259653544738,
-              "errPct": -1.9277838763818427,
+              "elementType": "CTETRA",
+              "elements": 302,
+              "vertices": 141,
+              "nodes": 722,
+              "dofs": 2166,
+              "maxElementSize": 16,
+              "minElementSize": 1.6,
+              "fe": 23.84101252931699,
+              "errPct": -0.49660880919453104,
               "ci": false
             },
             {
-              "mesh": "4 × 4",
+              "mesh": "8 mm",
               "order": 2,
-              "elements": 16,
-              "vertices": 50,
-              "nodes": 243,
-              "dofs": 729,
-              "fe": 24.480858005895577,
-              "errPct": 2.430368225504512,
+              "elementType": "CTETRA",
+              "elements": 466,
+              "vertices": 207,
+              "nodes": 1084,
+              "dofs": 3252,
+              "maxElementSize": 8,
+              "minElementSize": 0.8,
+              "fe": 23.90437742169714,
+              "errPct": -0.2321476556880611,
               "ci": false
             },
             {
-              "mesh": "8 × 8",
+              "mesh": "4 mm",
               "order": 2,
-              "elements": 64,
-              "vertices": 162,
-              "nodes": 867,
-              "dofs": 2601,
-              "fe": 24.919884240951866,
-              "errPct": 4.267298079296517,
+              "elementType": "CTETRA",
+              "elements": 1061,
+              "vertices": 429,
+              "nodes": 2343,
+              "dofs": 7029,
+              "maxElementSize": 4,
+              "minElementSize": 0.4,
+              "fe": 23.92994160308214,
+              "errPct": -0.12545240783748954,
               "ci": false
             },
             {
-              "mesh": "16 × 16",
+              "mesh": "2 mm",
               "order": 2,
-              "elements": 256,
-              "vertices": 578,
-              "nodes": 3267,
-              "dofs": 9801,
-              "fe": 25.166071790883443,
-              "errPct": 5.297371509972571,
+              "elementType": "CTETRA",
+              "elements": 2697,
+              "vertices": 1006,
+              "nodes": 5711,
+              "dofs": 17133,
+              "maxElementSize": 2,
+              "minElementSize": 0.2,
+              "fe": 23.935836506640076,
+              "errPct": -0.10084930450719978,
+              "ci": true
+            },
+            {
+              "mesh": "1 mm",
+              "order": 2,
+              "elementType": "CTETRA",
+              "elements": 10218,
+              "vertices": 3583,
+              "nodes": 20953,
+              "dofs": 62859,
+              "maxElementSize": 1,
+              "minElementSize": 0.1,
+              "fe": 23.94163833106575,
+              "errPct": -0.0766346783566391,
+              "ci": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "plate-with-hole-shell",
+      "caseId": "plate-with-hole-shell",
+      "title": "Plate with a hole, shell triangles",
+      "series": [
+        {
+          "label": "Shell (linear)",
+          "caseId": "plate-with-hole-shell",
+          "order": 1,
+          "points": [
+            {
+              "mesh": "4 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 1430,
+              "vertices": 766,
+              "nodes": 766,
+              "dofs": 4596,
+              "maxElementSize": 4,
+              "minElementSize": 0.4,
+              "fe": 2.2028371632829815,
+              "errPct": -26.57209455723395,
+              "ci": false
+            },
+            {
+              "mesh": "2 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 5922,
+              "vertices": 3061,
+              "nodes": 3061,
+              "dofs": 18366,
+              "maxElementSize": 2,
+              "minElementSize": 0.2,
+              "fe": 2.510125498868931,
+              "errPct": -16.3291500377023,
+              "ci": false
+            },
+            {
+              "mesh": "1 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 23196,
+              "vertices": 11797,
+              "nodes": 11797,
+              "dofs": 70782,
+              "maxElementSize": 1,
+              "minElementSize": 0.1,
+              "fe": 2.818517674074655,
+              "errPct": -6.049410864178162,
+              "ci": true
+            },
+            {
+              "mesh": "0.75 mm",
+              "order": 1,
+              "elementType": "CTRIA3",
+              "elements": 40495,
+              "vertices": 20512,
+              "nodes": 20512,
+              "dofs": 123072,
+              "maxElementSize": 0.75,
+              "minElementSize": 0.075,
+              "fe": 2.8884920262941414,
+              "errPct": -3.7169324568619544,
               "ci": false
             }
           ]

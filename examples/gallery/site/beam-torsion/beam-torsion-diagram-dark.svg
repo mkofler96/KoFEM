@@ -9,7 +9,6 @@
       <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" class="hatch"/></pattern>
     </defs>
     <rect class="body" x="100" y="90" width="320" height="60"/>
-    
     <polygon class="body top" points="100,90 126,70 446,70 420,90"/>
     <polygon class="body end" points="420,90 446,70 446,130 420,150"/>
     <rect class="clamp" x="86" y="64" width="14" height="92"/><line class="wall" x1="100" y1="64" x2="100" y2="156"/>

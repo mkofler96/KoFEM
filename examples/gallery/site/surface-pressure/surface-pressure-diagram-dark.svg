@@ -9,7 +9,6 @@
       <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" class="hatch"/></pattern>
     </defs>
     <rect class="body" x="90" y="78" width="320" height="68"/>
-    
     <rect class="clamp" x="76" y="72" width="14" height="80"/><line class="wall" x1="90" y1="72" x2="90" y2="152"/>
     <polyline class="deformed" points="90,78 388,75 388,149 90,146"/>
     <line class="load" x1="450" y1="82" x2="414" y2="82" marker-end="url(#arr-load)"/>

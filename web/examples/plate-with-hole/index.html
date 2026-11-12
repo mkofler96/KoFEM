@@ -13,18 +13,18 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
     <title>Plate with a hole | KoFEM examples</title>
-    <meta name="description" content="Kirsch's plate with a hole: stress concentration Kt = 3, the stress field around the hole, and how KoFEM's element stresses resolve the peak." />
+    <meta name="description" content="Kirsch's plate with a hole: stress concentration Kt = 3, Howland's 3.14 for a strip of finite width, and KoFEM's peak stress as the Results panel shows it." />
     <link rel="canonical" href="https://kofem.org/examples/plate-with-hole/" />
     <meta name="robots" content="index, follow" />
 
     <meta property="og:type" content="article" />
     <meta property="og:title" content="Plate with a hole | KoFEM examples" />
-    <meta property="og:description" content="Kirsch's plate with a hole: stress concentration Kt = 3, the stress field around the hole, and how KoFEM's element stresses resolve the peak." />
+    <meta property="og:description" content="Kirsch's plate with a hole: stress concentration Kt = 3, Howland's 3.14 for a strip of finite width, and KoFEM's peak stress as the Results panel shows it." />
     <meta property="og:url" content="https://kofem.org/examples/plate-with-hole/" />
     <meta property="og:image" content="https://kofem.org/examples/plate-with-hole.png" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Plate with a hole | KoFEM examples" />
-    <meta name="twitter:description" content="Kirsch's plate with a hole: stress concentration Kt = 3, the stress field around the hole, and how KoFEM's element stresses resolve the peak." />
+    <meta name="twitter:description" content="Kirsch's plate with a hole: stress concentration Kt = 3, Howland's 3.14 for a strip of finite width, and KoFEM's peak stress as the Results panel shows it." />
     <meta name="twitter:image" content="https://kofem.org/examples/plate-with-hole.png" />
 
     <!-- Self-hosted fonts (SIL OFL) — see public/fonts/README.md -->
@@ -39,12 +39,13 @@
           {
             "@type": "TechArticle",
             "headline": "Plate with a hole",
-            "description": "Kirsch's plate with a hole: stress concentration Kt = 3, the stress field around the hole, and how KoFEM's element stresses resolve the peak.",
+            "description": "Kirsch's plate with a hole: stress concentration Kt = 3, Howland's 3.14 for a strip of finite width, and KoFEM's peak stress as the Results panel shows it.",
             "url": "https://kofem.org/examples/plate-with-hole/",
             "image": [
               "https://kofem.org/examples/plate-with-hole.png",
               "https://kofem.org/examples/plate-with-hole/plate-with-hole-plate-diagram.png",
-              "https://kofem.org/examples/plate-with-hole/plate-with-hole-kirsch-stress-distribution.png"
+              "https://kofem.org/examples/plate-with-hole/plate-with-hole-kirsch-stress-distribution.png",
+              "https://kofem.org/examples/plate-with-hole/plate-with-hole-mesh-convergence.png"
             ],
             "dateModified": "2026-11-12",
             "isPartOf": {
@@ -810,13 +811,11 @@
           <ul>
             <li><a href="/examples/axial-bar/">Axial bar in tension</a></li>
             <li><a href="/examples/surface-pressure/">Bar under end pressure</a></li>
-            <li><a href="/examples/cantilever/">Cantilever beam, linear tetrahedra</a></li>
-            <li><a href="/examples/cantilever-p2/">Cantilever beam, quadratic tetrahedra</a></li>
             <li><a href="/examples/cantilever-beam/">Cantilever beam under tip load</a></li>
             <li><a href="/examples/beam-torsion/">Square beam under torsion</a></li>
             <li><a href="/examples/shaft-torsion/">Hollow shaft under torsion</a></li>
             <li><a href="/examples/plate-with-hole/" aria-current="page">Plate with a hole</a></li>
-            <li><a href="/examples/plate-with-hole-shell/">Plate with a hole, shell elements</a></li>
+            <li><a href="/examples/plate-with-hole-shell/">Plate with a hole (shells)</a></li>
             <li><a href="/examples/cooks-membrane/">Cook's membrane</a></li>
           </ul>
         </details>
@@ -839,13 +838,11 @@
           <ul>
             <li><a href="/examples/axial-bar/">Axial bar in tension</a></li>
             <li><a href="/examples/surface-pressure/">Bar under end pressure</a></li>
-            <li><a href="/examples/cantilever/">Cantilever beam, linear tetrahedra</a></li>
-            <li><a href="/examples/cantilever-p2/">Cantilever beam, quadratic tetrahedra</a></li>
             <li><a href="/examples/cantilever-beam/">Cantilever beam under tip load</a></li>
             <li><a href="/examples/beam-torsion/">Square beam under torsion</a></li>
             <li><a href="/examples/shaft-torsion/">Hollow shaft under torsion</a></li>
             <li><a href="/examples/plate-with-hole/" aria-current="page">Plate with a hole</a></li>
-            <li><a href="/examples/plate-with-hole-shell/">Plate with a hole, shell elements</a></li>
+            <li><a href="/examples/plate-with-hole-shell/">Plate with a hole (shells)</a></li>
             <li><a href="/examples/cooks-membrane/">Cook's membrane</a></li>
           </ul>
         </details>
@@ -858,7 +855,7 @@
         <button type="button" class="theme-toggle" hidden>Dark theme</button>
         </div>
       </details>
-      <p class="crumbs"><a href="/examples/#validation">Validation</a> / 8 of 10</p>
+      <p class="crumbs"><a href="/examples/#validation">Validation</a> / 6 of 8</p>
       <h1>Plate with a hole</h1>
       <div class="lede">
         <p>A small circular hole in a plate under tension raises the stress at
@@ -871,13 +868,13 @@
       
       <figure class="result">
         <img src="/examples/plate-with-hole.png" width="1200" height="720" alt="Plate with a hole: von mises stress on the undeformed shape" />
-        <div class="colorbar"><span>24.3&nbsp;MPa</span><span class="bar" aria-hidden="true"></span><span>277&nbsp;MPa</span></div>
-        <figcaption>Von Mises stress, undeformed shape. Drawn from the analysis file that Open in KoFEM loads.</figcaption>
+        <div class="colorbar"><span>27.9&nbsp;MPa</span><span class="bar" aria-hidden="true"></span><span>313&nbsp;MPa</span></div>
+        <figcaption>Von Mises stress, undeformed shape. The result of running the model that Open in KoFEM loads.</figcaption>
       </figure>
       
       <div class="table-wrap">
         <table class="key-result" data-entry="plate-with-hole">
-          <caption>Stress-concentration factor Kt; reference Kt = 3 (infinite plate)</caption>
+          <caption>Stress-concentration factor Kt; reference Howland's Kt for 2a/W = 0.2</caption>
           <thead>
             <tr>
               <th scope="col" class="num">Reference</th>
@@ -887,26 +884,27 @@
           </thead>
           <tbody>
             <tr>
-              <td class="num">3.0000</td>
-              <td class="num"><strong data-testid="fe-value">2.7750</strong></td>
-              <td class="num">−7.50&nbsp;%<br /><span class="band pass">within ±15&nbsp;%</span></td>
+              <td class="num">3.1400</td>
+              <td class="num"><strong data-testid="fe-value">3.1268</strong></td>
+              <td class="num">−0.42&nbsp;%<br /><span class="band pass">within ±3&nbsp;%</span></td>
             </tr>
           </tbody>
         </table>
       </div>
-      <p class="actions"><a class="button" href="/app/?example=plate-with-hole" data-testid="open-in-app">Open in KoFEM</a><span class="meta">Opens the solved model in the app.</span></p>
+      <p class="actions"><a class="button" href="/app/?example=plate-with-hole" data-testid="open-in-app">Open in KoFEM</a><span class="meta">Opens the model in the app, ready to run.</span></p>
       
       <h2 id="problem">The problem</h2>
       <figure class="diagram">
-        <div class="fig-row"><picture class="figure-image theme-light fig half"><source srcset="/examples/plate-with-hole/plate-with-hole-plate-diagram.svg" type="image/svg+xml" /><img src="/examples/plate-with-hole/plate-with-hole-plate-diagram.png" width="310" height="270" alt="Plate with a central hole under tension, clamped on the left; points A at the top and bottom of the hole carry the peak stress" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark fig half"><source srcset="/examples/plate-with-hole/plate-with-hole-plate-diagram-dark.svg" type="image/svg+xml" /><img src="/examples/plate-with-hole/plate-with-hole-plate-diagram.png" width="310" height="270" alt="Plate with a central hole under tension, clamped on the left; points A at the top and bottom of the hole carry the peak stress" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-light fig half"><source srcset="/examples/plate-with-hole/plate-with-hole-kirsch-stress-distribution.svg" type="image/svg+xml" /><img src="/examples/plate-with-hole/plate-with-hole-kirsch-stress-distribution.png" width="310" height="270" alt="The Kirsch stress along the transverse axis falls from 3σ at the hole edge towards σ" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark fig half"><source srcset="/examples/plate-with-hole/plate-with-hole-kirsch-stress-distribution-dark.svg" type="image/svg+xml" /><img src="/examples/plate-with-hole/plate-with-hole-kirsch-stress-distribution.png" width="310" height="270" alt="The Kirsch stress along the transverse axis falls from 3σ at the hole edge towards σ" loading="lazy" decoding="async" /></picture></div>
-        <figcaption>Square plate of half-width b and thickness t, central hole of radius a. Sketch, not to scale.</figcaption>
+        <div class="fig-row"><picture class="figure-image theme-light fig half"><source srcset="/examples/plate-with-hole/plate-with-hole-plate-diagram.svg" type="image/svg+xml" /><img src="/examples/plate-with-hole/plate-with-hole-plate-diagram.png" width="310" height="270" alt="Long strip with a central hole pulled at both ends; dash-dotted symmetry lines through the hole centre, the modelled quarter x, y ≥ 0 shaded; points A at the top and bottom of the hole carry the peak stress" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark fig half"><source srcset="/examples/plate-with-hole/plate-with-hole-plate-diagram-dark.svg" type="image/svg+xml" /><img src="/examples/plate-with-hole/plate-with-hole-plate-diagram.png" width="310" height="270" alt="Long strip with a central hole pulled at both ends; dash-dotted symmetry lines through the hole centre, the modelled quarter x, y ≥ 0 shaded; points A at the top and bottom of the hole carry the peak stress" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-light fig half"><source srcset="/examples/plate-with-hole/plate-with-hole-kirsch-stress-distribution.svg" type="image/svg+xml" /><img src="/examples/plate-with-hole/plate-with-hole-kirsch-stress-distribution.png" width="310" height="270" alt="The Kirsch stress along the transverse axis falls from 3σ at the hole edge towards σ" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark fig half"><source srcset="/examples/plate-with-hole/plate-with-hole-kirsch-stress-distribution-dark.svg" type="image/svg+xml" /><img src="/examples/plate-with-hole/plate-with-hole-kirsch-stress-distribution.png" width="310" height="270" alt="The Kirsch stress along the transverse axis falls from 3σ at the hole edge towards σ" loading="lazy" decoding="async" /></picture></div>
+        <figcaption>One eighth of a long strip with a central hole: the quarter x, y ≥ 0, upper half of the thickness. Sketch, not to scale.</figcaption>
       </figure>
       
       <div class="table-wrap">
         <table class="spec inputs">
-            <tr><th scope="row"><math><mi>a</mi></math></th><td>1000&nbsp;mm</td></tr>
-            <tr><th scope="row"><math><mi>b</mi></math></th><td>10000&nbsp;mm</td></tr>
-            <tr><th scope="row"><math><mi>t</mi></math></th><td>500&nbsp;mm</td></tr>
+            <tr><th scope="row"><math><mi>a</mi></math></th><td>10&nbsp;mm</td></tr>
+            <tr><th scope="row"><math><mi>b</mi></math></th><td>50&nbsp;mm</td></tr>
+            <tr><th scope="row"><math><mi>L</mi></math></th><td>150&nbsp;mm</td></tr>
+            <tr><th scope="row"><math><mi>t</mi></math></th><td>1&nbsp;mm</td></tr>
             <tr><th scope="row"><math><mi>E</mi></math></th><td>210&nbsp;GPa</td></tr>
             <tr><th scope="row"><math><mi>ν</mi></math></th><td>0.3</td></tr>
             <tr><th scope="row"><math><mi>σ</mi></math></th><td>100&nbsp;MPa</td></tr>
@@ -915,9 +913,9 @@
       
       <div class="table-wrap">
         <table class="spec">
-          <tr><th scope="row">Supports</th><td>x = −b face fixed (Ux, Uy, Uz).</td></tr>
-          <tr><th scope="row">Load</th><td>σ·2b·t in +x as a force on the x = +b face.</td></tr>
-          <tr><th scope="row">Measured</th><td>Peak element-centre von Mises stress around the hole, divided by σ.</td></tr>
+          <tr><th scope="row">Supports</th><td>Symmetry: Ux on the x = 0 face, Uy on the y = 0 face, Uz on the mid-plane z = 0.</td></tr>
+          <tr><th scope="row">Load</th><td>σ·b·t/2 in +x as a force on the x = L face.</td></tr>
+          <tr><th scope="row">Measured</th><td>Largest von Mises stress on the hole face, averaged to the nodes as the app shows it, divided by σ.</td></tr>
         </table>
       </div>
 
@@ -940,78 +938,182 @@
         <math display="block"><msub><mi>σ</mi><mrow><mi>x</mi><mi>x</mi></mrow></msub><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>0</mn><mo>,</mo><mi>y</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo>=</mo><mi>σ</mi><mrow><mo stretchy="true" lspace="0" rspace="0">(</mo><mn>1</mn><mo>+</mo><mfrac><mrow><msup><mi>a</mi><mn>2</mn></msup></mrow><mrow><mn>2</mn><msup><mi>y</mi><mn>2</mn></msup></mrow></mfrac><mo>+</mo><mfrac><mrow><mn>3</mn><msup><mi>a</mi><mn>4</mn></msup></mrow><mrow><mn>2</mn><msup><mi>y</mi><mn>4</mn></msup></mrow></mfrac><mo stretchy="true" lspace="0" rspace="0">)</mo></mrow><mo>,</mo></math>
         <p>to <math><mn>1.22</mn><mi>σ</mi></math> at <math><mi>y</mi><mo>=</mo><mn>2</mn><mi>a</mi></math> and
         <math><mn>1.04</mn><mi>σ</mi></math> at <math><mi>y</mi><mo>=</mo><mn>4</mn><mi>a</mi></math> (figure, right). At
-        the edge it falls steeply, <math><mi mathvariant="normal">d</mi><msub><mi>σ</mi><mrow><mi>x</mi><mi>x</mi></mrow></msub><mo lspace="0" rspace="0">/</mo><mi mathvariant="normal">d</mi><mi>y</mi><mo>=</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mn>7</mn><mi>σ</mi><mo lspace="0" rspace="0">/</mo><mi>a</mi></math>.</p>
-        <p>The solution does not depend on Poisson's ratio, so it holds in
-        plane stress and plane strain alike. A plate of finite half-width
-        <math><mi>b</mi></math> raises <math><msub><mi>K</mi><mrow><mi mathvariant="normal">t</mi></mrow></msub></math> slightly; for <math><mi>a</mi><mo lspace="0" rspace="0">/</mo><mi>b</mi><mo>=</mo><mn>0.1</mn></math>,
-        as here, by about 1&nbsp;% (Peterson's), so <math><msub><mi>K</mi><mrow><mi mathvariant="normal">t</mi></mrow></msub><mo>=</mo><mn>3</mn></math> is a
-        good reference.</p>
+        the edge it falls steeply, <math><mi mathvariant="normal">d</mi><msub><mi>σ</mi><mrow><mi>x</mi><mi>x</mi></mrow></msub><mo lspace="0" rspace="0">/</mo><mi mathvariant="normal">d</mi><mi>y</mi><mo>=</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mn>7</mn><mi>σ</mi><mo lspace="0" rspace="0">/</mo><mi>a</mi></math>.
+        The solution does not depend on Poisson's ratio, so it holds in
+        plane stress and plane strain alike.</p>
+        <p>A real plate has edges. In a long strip of width <math><mi>W</mi><mo>=</mo><mn>2</mn><mi>b</mi></math>
+        the load that the hole cannot carry has less room to flow around it,
+        so the peak rises. Howland (1930) solved the strip. On the gross
+        stress <math><mi>σ</mi></math> at the ends his factor grows with <math><mn>2</mn><mi>a</mi><mo lspace="0" rspace="0">/</mo><mi>W</mi></math>:
+        <math><mn>3.00</mn></math> at <math><mn>0.0</mn></math>, <math><mn>3.03</mn></math> at <math><mn>0.1</mn></math>, <math><mn>3.14</mn></math> at <math><mn>0.2</mn></math>, <math><mn>3.36</mn></math> at <math><mn>0.3</mn></math>, <math><mn>3.74</mn></math> at <math><mn>0.4</mn></math>, <math><mn>4.32</mn></math> at <math><mn>0.5</mn></math>.</p>
+        <p>This strip has <math><mn>2</mn><mi>a</mi><mo lspace="0" rspace="0">/</mo><mi>W</mi><mo>=</mo><mn>0.2</mn></math>, so its reference is
+        <math><msub><mi>K</mi><mrow><mi mathvariant="normal">t</mi></mrow></msub><mo>=</mo><mn>3.14</mn></math>. Heywood's and Peterson's fits to
+        later solutions give the same value. The strip has to be long for
+        this: its ends must be far enough from the hole that the uniform end
+        tension has become the strip's own stress field. Built as a square
+        plate of the same width, this model reads about 3.3.</p>
 
       <h2 id="model">Finite element model</h2>
       
       <div class="table-wrap">
         <table class="spec">
-          <tr><th scope="row">Mesh</th><td>O-grid, 12 rings × 64 around the hole, 1 through t: 768 linear 8-node hexahedra (P1)</td></tr>
-          <tr><th scope="row">Unknowns</th><td>1,664 nodes, 4,992 degrees of freedom</td></tr>
+          <tr><th scope="row">Mesh</th><td>Netgen, 2 mm maximum element size: 13,522 quadratic 10-node tetrahedra (P2)</td></tr>
+          <tr><th scope="row">Unknowns</th><td>27,705 nodes, 83,115 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>KoFEM engine (MFEM), the WebAssembly build the app runs: engine-7303b4976800</td></tr>
+          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build fem-acb6b9a64d43); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-7303b4976800</td></tr>
         </table>
       </div>
-        <p>The O-grid has 12 rings of 64 elements, graded so the rings
-        are thinnest at the hole, with one element through the thickness.
-        KoFEM reports one von Mises stress per element, at its centre; the
-        case takes the largest value in the ring around the hole and divides
-        it by <math><mi>σ</mi></math>. At A the surface is free and the only stress is
-        <math><msub><mi>σ</mi><mrow><mi>θ</mi><mi>θ</mi></mrow></msub></math>, so there the von Mises stress equals
-        <math><msub><mi>σ</mi><mrow><mi>θ</mi><mi>θ</mi></mrow></msub></math> and its peak is <math><mn>3</mn><mi>σ</mi></math>.</p>
+        <p>The strip is symmetric about <math><mi>x</mi><mo>=</mo><mn>0</mn></math>, about <math><mi>y</mi><mo>=</mo><mn>0</mn></math>
+        and about its mid-plane, and so is the load. The model keeps one
+        eighth: the quarter <math><mi>x</mi><mo>,</mo><mi>y</mi><mo>≥</mo><mn>0</mn></math>, upper half of the
+        thickness. Each cut face gets a symmetry support that fixes only the
+        displacement across it: <math><msub><mi>u</mi><mrow><mi>x</mi></mrow></msub></math> on <math><mi>x</mi><mo>=</mo><mn>0</mn></math>,
+        <math><msub><mi>u</mi><mrow><mi>y</mi></mrow></msub></math> on <math><mi>y</mi><mo>=</mo><mn>0</mn></math> and <math><msub><mi>u</mi><mrow><mi>z</mi></mrow></msub></math> on the
+        mid-plane. Together they stop every rigid-body motion and restrain
+        nothing else, so the plate contracts freely, as in Kirsch's problem.
+        A fixed end would not. The strip reaches
+        <math><mi>L</mi><mo>=</mo><mn>3</mn><mi>b</mi></math> on each side of the hole, and
+        its thickness <math><mi>t</mi><mo>=</mo><mi>a</mi><mo lspace="0" rspace="0">/</mo><mn>10</mn></math> keeps it in
+        plane stress.</p>
+        <p>Netgen meshes it with quadratic tetrahedra and a
+        2&nbsp;mm maximum element size. The app has
+        no element size per face, but Netgen puts at least two elements along
+        every edge. The edge through the thickness at A is only
+        0.5&nbsp;mm long, so the elements there are a few tenths
+        of a millimetre, much finer than in the rest of the plate, where the
+        stress hardly changes.</p>
+        <p>The read-out is the one the Results panel shows. The solver gives
+        one von Mises stress per element, at its centre, and the app averages
+        these to the nodes. The hand check takes the largest nodal value on
+        the hole face and divides it by <math><mi>σ</mi></math>. At A the surface is free
+        and the only stress is <math><msub><mi>σ</mi><mrow><mi>θ</mi><mi>θ</mi></mrow></msub></math>, so there the von Mises
+        stress equals <math><msub><mi>σ</mi><mrow><mi>θ</mi><mi>θ</mi></mrow></msub></math>.</p>
 
       <h2 id="results">Results</h2>
       <div class="table-wrap">
         <table class="spec">
           <tr><th scope="row">Quantity</th><td>stress-concentration factor Kt</td></tr>
-          <tr><th scope="row">Reference</th><td>Kt = 3 (infinite plate) <span class="meta">(Kirsch (1898); Timoshenko &amp; Goodier)</span></td></tr>
-          <tr><th scope="row">KoFEM</th><td>2.7750</td></tr>
-          <tr><th scope="row">Difference</th><td>−7.50&nbsp;% <span class="band pass">within ±15&nbsp;%</span></td></tr>
+          <tr><th scope="row">Reference</th><td>Howland's Kt for 2a/W = 0.2 = 3.1400 <span class="meta">(Kirsch (1898); Howland (1930); Peterson's)</span></td></tr>
+          <tr><th scope="row">KoFEM</th><td>3.1268</td></tr>
+          <tr><th scope="row">Difference</th><td>−0.42&nbsp;% <span class="band pass">within ±3&nbsp;%</span></td></tr>
         </table>
       </div>
+      <section class="study" id="convergence" data-study="plate-with-hole">
+        <h3>Mesh convergence: Plate with a hole, P1 vs. P2</h3>
+        <figure class="chart">
+          <div class="legend"><span class="key"><span class="swatch s1"></span>P1 (linear)</span><span class="key"><span class="swatch s2"></span>P2 (quadratic)</span><span class="key"><span class="dot under"></span>below the reference</span><span class="key"><span class="dot over"></span>above</span></div>
+          <picture class="figure-image theme-light conv"><source srcset="/examples/plate-with-hole/plate-with-hole-mesh-convergence.svg" type="image/svg+xml" /><img src="/examples/plate-with-hole/plate-with-hole-mesh-convergence.png" width="440" height="250" alt="Plate with a hole, P1 vs. P2: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture><picture class="figure-image theme-dark conv"><source srcset="/examples/plate-with-hole/plate-with-hole-mesh-convergence-dark.svg" type="image/svg+xml" /><img src="/examples/plate-with-hole/plate-with-hole-mesh-convergence.png" width="440" height="250" alt="Plate with a hole, P1 vs. P2: difference from the reference against degrees of freedom, logarithmic axes" loading="lazy" decoding="async" /></picture>
+          <figcaption>Difference from the reference on refined meshes, logarithmic axes. The ringed point is this example's mesh.</figcaption>
+        </figure>
+        <p>Quadratic elements stay within 2 % below Howland's 3.14 on every mesh; the nodal average of element-centre stresses keeps them slightly low. Linear elements overshoot by several percent and come down only slowly.</p>
+        <details>
+          <summary>Data</summary>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Order</th>
+                  <th scope="col">Mesh</th>
+                  <th scope="col" class="num">DOFs</th>
+                  <th scope="col" class="num">KoFEM</th>
+                  <th scope="col" class="num">Difference</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>P1 (linear)</td>
+                  <td>4 mm</td>
+                  <td class="num">3,894</td>
+                  <td class="num">3.3691</td>
+                  <td class="num">+7.30&nbsp;%</td>
+                </tr>
+                <tr>
+                  <td>P1 (linear)</td>
+                  <td>2 mm</td>
+                  <td class="num">14,199</td>
+                  <td class="num">3.3454</td>
+                  <td class="num">+6.54&nbsp;%</td>
+                </tr>
+                <tr>
+                  <td>P1 (linear)</td>
+                  <td>1 mm</td>
+                  <td class="num">52,803</td>
+                  <td class="num">3.2231</td>
+                  <td class="num">+2.65&nbsp;%</td>
+                </tr>
+                <tr>
+                  <td>P2 (quadratic)</td>
+                  <td>4 mm</td>
+                  <td class="num">22,179</td>
+                  <td class="num">3.0909</td>
+                  <td class="num">−1.56&nbsp;%</td>
+                </tr>
+                <tr>
+                  <td>P2 (quadratic)</td>
+                  <td>2 mm (this example)</td>
+                  <td class="num">83,115</td>
+                  <td class="num">3.1268</td>
+                  <td class="num">−0.42&nbsp;%</td>
+                </tr>
+                <tr>
+                  <td>P2 (quadratic)</td>
+                  <td>1 mm</td>
+                  <td class="num">313,041</td>
+                  <td class="num">3.1025</td>
+                  <td class="num">−1.19&nbsp;%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
+      </section>
 
       <h2 id="discussion">Discussion</h2>
-        <p>KoFEM's <math><msub><mi>K</mi><mrow><mi mathvariant="normal">t</mi></mrow></msub></math> differs from 3 by −7.50&nbsp;%. Two effects
-        meet here. First, the measured stress is not the stress at the edge
-        but at the centre of the first element, a small distance away, where
-        the stress has already started to fall. Kirsch's solution at that
-        point, <math><mi>r</mi><mo>=</mo><mn>1031.250</mn><mi>a</mi></math> and
-        <math><mi>θ</mi><mo>=</mo><mn>87.2</mn><mo lspace="0" rspace="0">°</mo></math>, gives a von Mises stress of
-        <math><mn>2.75</mn><mi>σ</mi></math>, 8.4&nbsp;% below
-        the peak. Even exact element stresses could not reach 3 with this
-        measure.</p>
-        <p>Second, element stresses carry their own discretisation error.
-        Stress comes from derivatives of the displacement field, so it
-        converges more slowly than the displacement does; here it lands
-        above the exact value at the element
-        centre. The published 2.77
-        is the net of both. That is why this case has a wider ±15&nbsp;%
-        band. Treat it as a check that the peak is in the right place and of
-        the right size. To resolve a peak stress in a design, refine the mesh
-        at the stress raiser until the peak stops changing.</p>
+        <p>KoFEM's <math><msub><mi>K</mi><mrow><mi mathvariant="normal">t</mi></mrow></msub></math> differs from Howland's 3.14 by
+        −0.42&nbsp;%. The nodal average explains why it reads low. The
+        elements around A have their centres a fraction of an element inside
+        the plate, where the stress has already started to fall, and with
+        the steep drop <math><mn>7</mn><mi>σ</mi><mo lspace="0" rspace="0">/</mo><mi>a</mi></math> even a small distance counts. Finer
+        elements at A would move the centres closer to the edge.</p>
+        <p>The mesh convergence study above changes only the maximum element
+        size. With quadratic elements the result stays between
+        0.4&nbsp;% and 1.6&nbsp;% below 3.14 on every mesh,
+        because the elements at A keep their size. That is why the band is
+        ±3&nbsp;%. Linear elements read several percent high on
+        the same meshes: their constant stress per element is noisy where the
+        stress changes fast. For a peak stress in a design, use quadratic
+        elements and refine at the stress raiser until the peak stops
+        changing.</p>
 
       <h2 id="reproduce">Reproduce</h2>
       <p>
         In the app: <a href="/app/?example=plate-with-hole" data-testid="reproduce-open">open the model</a>,
         then Studies → Static 1 → Run static solve, select the result plot and set Field to
         Ux. The Result summary shows
-        <span class="readout" data-testid="app-readout" data-field="Ux" data-stat="Max Ux" data-value="9.688e+0 mm">Max Ux 9.688e+0 mm</span>.
+        <span class="readout" data-testid="app-readout" data-field="Ux" data-stat="Max Ux" data-value="7.380e-2 mm">Max Ux 7.380e-2 mm</span>.
       </p>
+      <p>Or build it yourself, as this page's number was built:</p>
+      <ol class="steps">
+        <li>Import <a href="/examples/plate-with-hole.step" download>plate-with-hole.step</a>.</li>
+        <li>Mesh with a 2 mm maximum element size, quadratic elements.</li>
+        <li>Material Steel: E = 210000 MPa, ν = 0.3.</li>
+        <li>Support “Symmetry x = 0”: Ux = 0 on the face through (0, 30, 0.25).</li>
+        <li>Support “Symmetry y = 0”: Uy = 0 on the face through (80, 0, 0.25).</li>
+        <li>Support “Mid-plane”: Uz = 0 on the face through (75, 25, 0).</li>
+        <li>Load “Tension”: force (2500, 0, 0) N on the face through (150, 25, 0.25).</li>
+        <li>Run the static study. The Results panel compares stress concentration σmax/σ with Howland's Kt for 2a/W = 0.2.</li>
+      </ol>
       <p>From a clone (Bun, bash, curl and Rust), this builds and solves the model with the same engine and prints its line:</p>
       <pre><code>git clone https://github.com/mkofler96/KoFEM.git &amp;&amp; cd KoFEM
 bash scripts/fetch-wasm-engine.sh
 cd web &amp;&amp; bun install &amp;&amp; bun run validate --case plate-with-hole</code></pre>
       <pre class="console"><code>Case                                  Quantity                                  FE   Reference     Err%  Tol%  Status
-Plate with a hole                     stress-concentration factor Kt        2.7750      3.0000    -7.50    15  PASS</code></pre>
+Plate with a hole                     stress-concentration factor Kt        3.1268      3.1400    -0.42     3  PASS</code></pre>
 
       <h2 id="references">References</h2>
       <ol class="refs">
         <li>G. Kirsch, “Die Theorie der Elastizität und die Bedürfnisse der Festigkeitslehre”, <cite>Zeitschrift des Vereines deutscher Ingenieure</cite> 42 (1898) 797–807.</li>
+        <li>R. C. J. Howland, “On the stresses in the neighbourhood of a circular hole in a strip under tension”, <cite>Philosophical Transactions of the Royal Society of London A</cite> 229 (1930) 49–86.</li>
         <li>S. P. Timoshenko and J. N. Goodier, <cite>Theory of Elasticity</cite>, 3rd ed., McGraw-Hill, 1970.</li>
         <li>W. D. Pilkey and D. F. Pilkey, <cite>Peterson’s Stress Concentration Factors</cite>, 3rd ed., Wiley, 2008.</li>
       </ol>
@@ -1023,7 +1125,7 @@ Plate with a hole                     stress-concentration factor Kt        2.77
 
       <nav class="pager" aria-label="Other examples">
         <a class="prev" href="/examples/shaft-torsion/"><small>Previous</small>Hollow shaft under torsion</a>
-        <a class="next" href="/examples/plate-with-hole-shell/"><small>Next</small>Plate with a hole, shell elements</a>
+        <a class="next" href="/examples/plate-with-hole-shell/"><small>Next</small>Plate with a hole (shells)</a>
       </nav>
       </main>
       <nav class="docs-toc" aria-label="On this page">
