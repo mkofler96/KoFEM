@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { equation, matrixEquation, tex } from "../operators/math.mjs";
-import { source, mfemSource } from "./sources.mjs";
+import { source, mfemSource, rustSource } from "./sources.mjs";
 import { figure } from "../figures/index.mjs";
 
 export default {
@@ -226,7 +226,7 @@ export default {
       ${tex("(α, β, β, β)")} and permutations, with ${tex("α = (5 + 3\\sqrt{5})/20 \\approx 0.5854")} and
       ${tex("β = (5 - \\sqrt{5})/20 \\approx 0.1382")}. Too few points underestimate such terms and
       can leave non-rigid deformation modes with zero computed energy.</p>
-    <p>KoFEM leaves the stiffness rule to MFEM’s default: degree ${tex("2(k - 1)")}
+    <p>KoFEM uses MFEM’s default stiffness rule: degree ${tex("2(k - 1)")}
       on straight-edged tetrahedra of order ${tex("k")}, which is exact. For hexahedra
       the rule is a tensor product of Gauss points. It is exact for
       parallelepipeds; on a distorted hexahedron ${tex("J")} varies and the integrand
@@ -306,25 +306,30 @@ export default {
     </ul>
 
     <h2 id="implementation">KoFEM implementation</h2>
-    <p>KoFEM uses MFEM 4.7. KoFEM chooses the element order and passes it
-      unchanged to MFEM. MFEM supplies shape functions, quadrature and element
-      integrals.</p>
+    <p>KoFEM’s solid solve runs in its own Rust finite-element module. It
+      implements the tetrahedra and hexahedra above with the shape functions
+      and quadrature rules of MFEM 4.7. MFEM stays available as the other
+      solver choice and is the reference the Rust results are tested against.</p>
     <ul>
       <li>The app offers <em>Linear (1st order)</em> and
         <em>Quadratic (2nd order)</em>; the worker sends that order to the
         solid solve
         (${source("web/src/workers/solver.worker.ts", 608, "solver.worker.ts")}).</li>
-      <li>The engine builds the order-${tex("k")} H1 vector space with three components
-        (${source("engine/cpp/solve_mfem.cpp", 258, "solve_mfem.cpp")}).
-        Element geometry comes from vertex positions only
-        (${source("engine/cpp/fem_mesh_io.cpp", 113, "fem_mesh_io.cpp")}).</li>
-      <li>Per-element ${tex("λ")} and ${tex("μ")} are computed from each body’s ${tex("E")} and ${tex("ν")}; MFEM’s
-        elasticity integrator assembles the element stiffness
-        (${source("engine/cpp/solve_mfem.cpp", 288, "solve_mfem.cpp")};
+      <li>The Rust module adds the order-2 edge, face and centre nodes from the
+        vertices, as MFEM’s order-${tex("k")} H1 space does; element geometry comes
+        from vertex positions only
+        (${rustSource("crates/kofem-fem/src/mesh.rs", "mesh.rs")}).</li>
+      <li>Per-element ${tex("λ")} and ${tex("μ")} are computed from each body’s ${tex("E")} and ${tex("ν")}, and the
+        element stiffness is integrated with the rules in the table above
+        (${rustSource("crates/kofem-fem/src/element.rs", "element.rs")};
         ${mfemSource("fem/bilininteg.cpp", 3054, "MFEM default rule")}).</li>
-      <li>Surface loads use MFEM’s boundary load integrator
-        (${source("engine/cpp/fem_bc_io.cpp", 416, "fem_bc_io.cpp")};
+      <li>Surface loads on triangular and quadrilateral faces use MFEM’s face
+        rule
+        (${rustSource("crates/kofem-fem/src/surface.rs", "surface.rs")};
         ${mfemSource("fem/lininteg.cpp", 387, "MFEM face rule")}).</li>
+      <li>The MFEM solve builds the same space and integrals
+        (${source("engine/cpp/solve_mfem.cpp", 258, "solve_mfem.cpp")}); tests compare the two
+        on tetrahedral, hexahedral and mixed meshes.</li>
       <li>The mixed solid–shell path uses the same integrator at order 1
         (${source("engine/cpp/solve_coupled.cpp", 59, "solve_coupled.cpp")}).</li>
     </ul>

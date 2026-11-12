@@ -975,7 +975,7 @@
       <math><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>α</mi><mo>,</mo><mi>β</mi><mo>,</mo><mi>β</mi><mo>,</mo><mi>β</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></math> and permutations, with <math><mi>α</mi><mo>=</mo></math>​<math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>5</mn><mo>+</mo><mn>3</mn><msqrt><mrow><mn>5</mn></mrow></msqrt><mo stretchy="false" lspace="0" rspace="0">)</mo><mo lspace="0" rspace="0">/</mo><mn>20</mn><mo>≈</mo></math>​<math><mn>0.5854</mn></math> and
       <math><mi>β</mi><mo>=</mo></math>​<math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>5</mn><mo>−</mo><msqrt><mrow><mn>5</mn></mrow></msqrt><mo stretchy="false" lspace="0" rspace="0">)</mo><mo lspace="0" rspace="0">/</mo><mn>20</mn><mo>≈</mo></math>​<span class="math-nowrap"><math><mn>0.1382</mn></math>.</span> Too few points underestimate such terms and
       can leave non-rigid deformation modes with zero computed energy.</p>
-    <p>KoFEM leaves the stiffness rule to MFEM’s default: degree <math><mn>2</mn><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>k</mi><mo>−</mo><mn>1</mn><mo stretchy="false" lspace="0" rspace="0">)</mo></math>
+    <p>KoFEM uses MFEM’s default stiffness rule: degree <math><mn>2</mn><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>k</mi><mo>−</mo><mn>1</mn><mo stretchy="false" lspace="0" rspace="0">)</mo></math>
       on straight-edged tetrahedra of order <span class="math-nowrap"><math><mi>k</mi></math>,</span> which is exact. For hexahedra
       the rule is a tensor product of Gauss points. It is exact for
       parallelepipeds; on a distorted hexahedron <math><mi>J</mi></math> varies and the integrand
@@ -1061,25 +1061,30 @@
     </ul>
 
     <h2 id="implementation">KoFEM implementation</h2>
-    <p>KoFEM uses MFEM 4.7. KoFEM chooses the element order and passes it
-      unchanged to MFEM. MFEM supplies shape functions, quadrature and element
-      integrals.</p>
+    <p>KoFEM’s solid solve runs in its own Rust finite-element module. It
+      implements the tetrahedra and hexahedra above with the shape functions
+      and quadrature rules of MFEM 4.7. MFEM stays available as the other
+      solver choice and is the reference the Rust results are tested against.</p>
     <ul>
       <li>The app offers <em>Linear (1st order)</em> and
         <em>Quadratic (2nd order)</em>; the worker sends that order to the
         solid solve
         (<a href="https://github.com/mkofler96/KoFEM/blob/41aa05f99bc99210995b21d1aded942d45ef4729/web/src/workers/solver.worker.ts#L608">solver.worker.ts</a>).</li>
-      <li>The engine builds the order-<math><mi>k</mi></math> H1 vector space with three components
-        (<a href="https://github.com/mkofler96/KoFEM/blob/41aa05f99bc99210995b21d1aded942d45ef4729/engine/cpp/solve_mfem.cpp#L258">solve_mfem.cpp</a>).
-        Element geometry comes from vertex positions only
-        (<a href="https://github.com/mkofler96/KoFEM/blob/41aa05f99bc99210995b21d1aded942d45ef4729/engine/cpp/fem_mesh_io.cpp#L113">fem_mesh_io.cpp</a>).</li>
-      <li>Per-element <math><mi>λ</mi></math> and <math><mi>μ</mi></math> are computed from each body’s <math><mi>E</mi></math> and <span class="math-nowrap"><math><mi>ν</mi></math>;</span> MFEM’s
-        elasticity integrator assembles the element stiffness
-        (<a href="https://github.com/mkofler96/KoFEM/blob/41aa05f99bc99210995b21d1aded942d45ef4729/engine/cpp/solve_mfem.cpp#L288">solve_mfem.cpp</a>;
+      <li>The Rust module adds the order-2 edge, face and centre nodes from the
+        vertices, as MFEM’s order-<math><mi>k</mi></math> H1 space does; element geometry comes
+        from vertex positions only
+        (<a href="https://github.com/mkofler96/KoFEM/blob/develop/crates/kofem-fem/src/mesh.rs">mesh.rs</a>).</li>
+      <li>Per-element <math><mi>λ</mi></math> and <math><mi>μ</mi></math> are computed from each body’s <math><mi>E</mi></math> and <span class="math-nowrap"><math><mi>ν</mi></math>,</span> and the
+        element stiffness is integrated with the rules in the table above
+        (<a href="https://github.com/mkofler96/KoFEM/blob/develop/crates/kofem-fem/src/element.rs">element.rs</a>;
         <a href="https://github.com/mfem/mfem/blob/v4.7/fem/bilininteg.cpp#L3054">MFEM default rule</a>).</li>
-      <li>Surface loads use MFEM’s boundary load integrator
-        (<a href="https://github.com/mkofler96/KoFEM/blob/41aa05f99bc99210995b21d1aded942d45ef4729/engine/cpp/fem_bc_io.cpp#L416">fem_bc_io.cpp</a>;
+      <li>Surface loads on triangular and quadrilateral faces use MFEM’s face
+        rule
+        (<a href="https://github.com/mkofler96/KoFEM/blob/develop/crates/kofem-fem/src/surface.rs">surface.rs</a>;
         <a href="https://github.com/mfem/mfem/blob/v4.7/fem/lininteg.cpp#L387">MFEM face rule</a>).</li>
+      <li>The MFEM solve builds the same space and integrals
+        (<a href="https://github.com/mkofler96/KoFEM/blob/41aa05f99bc99210995b21d1aded942d45ef4729/engine/cpp/solve_mfem.cpp#L258">solve_mfem.cpp</a>); tests compare the two
+        on tetrahedral, hexahedral and mixed meshes.</li>
       <li>The mixed solid–shell path uses the same integrator at order 1
         (<a href="https://github.com/mkofler96/KoFEM/blob/41aa05f99bc99210995b21d1aded942d45ef4729/engine/cpp/solve_coupled.cpp#L59">solve_coupled.cpp</a>).</li>
     </ul>

@@ -13,5 +13,10 @@ export const linearSolveSource = (path, line, label) =>
 export const source = (path, line, label) =>
   `<a href="https://github.com/mkofler96/KoFEM/blob/${revision}/${path}#L${line}">${label}</a>`;
 
+// The Rust finite-element module, linked by file on develop: the revision
+// above predates it. Pin these to a revision once that change has merged.
+export const rustSource = (path, label) =>
+  `<a href="https://github.com/mkofler96/KoFEM/blob/develop/${path}">${label}</a>`;
+
 export const mfemSource = (path, line, label) =>
   `<a href="https://github.com/mfem/mfem/blob/${mfemVersion}/${path}#L${line}">${label}</a>`;
