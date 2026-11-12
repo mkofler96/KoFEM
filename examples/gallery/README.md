@@ -36,11 +36,10 @@ a `.vtu`, `.png`, record or page; change the case, generator or page text
 (`examples/validation/textbook/<id>.mjs`) and regenerate. CI fails when a page
 no longer matches its sources or a case's `.vtu` no longer matches its model.
 
-| Generator                       | Example                          | Run (in `web/`)                              |
-| ------------------------------- | -------------------------------- | -------------------------------------------- |
-| `generate-cantilever.mjs`       | cantilever beam from a STEP file | `bun run examples:generate-cantilever`       |
-| `generate-plate-hole-shell.mjs` | plate with a hole, shells        | `bun run examples:generate-plate-hole-shell` |
-| `generate-mbb-topopt.mjs`       | MBB beam, topology optimization  | `bun run examples:generate-mbb-topopt`       |
+| Generator                       | Example                         | Run (in `web/`)                              |
+| ------------------------------- | ------------------------------- | -------------------------------------------- |
+| `generate-plate-hole-shell.mjs` | plate with a hole, shells       | `bun run examples:generate-plate-hole-shell` |
+| `generate-mbb-topopt.mjs`       | MBB beam, topology optimization | `bun run examples:generate-mbb-topopt`       |
 
 A page's figure is drawn by `examples/validation/lib/render.mjs` from the solved
 model, coloured as the app colours it, so the page needs no script or WebGL.
@@ -55,9 +54,8 @@ whole-CAD-face picks — never from geometry or node sets the app cannot produce
 Face entries then carry their `cadFaceId`, so an opened example keeps its
 supports and loads through a re-mesh.
 
-The MBB beam, the cantilever beam and every validation case with a recipe
-follow this. The remaining validation cases and the shell plate with a hole do
-not yet (KOF-322, `examples/validation/rules.mjs` lists them): they are structured meshes with node-set
+The MBB beam and every validation case with a recipe follow this. The
+remaining validation cases and the shell plate with a hole do not yet (KOF-322, `examples/validation/rules.mjs` lists them): they are structured meshes with node-set
 boundary conditions, which the app's Netgen pipeline cannot reproduce. Their
 loads are still built exactly as the app builds them
 (`examples/validation/lib/app-model.mjs`), so solving an opened example gives
@@ -65,13 +63,13 @@ the number on its page.
 
 ## The cantilever beam (with a hand check)
 
-`generate-cantilever.mjs` builds δ = P·L³ / (3·E·I) as a user would: import a
-1000 × 100 × 100 mm block, mesh it at 25 mm with quadratic tetrahedra (linear
-ones lock in bending), clamp the face x = 0, load the face x = 1000 with
-Fy = −10 kN. It opens ready to run, so its `.vtu` is saved **unsolved**, on
-the static study, with a `handCheck` block (`web/src/lib/handCheck.ts`) the
-Results panel compares the tip deflection with. It ships `cantilever-beam.step`
-and the same block as `cantilever-beam.model.step`, so it can be re-meshed.
+The cantilever beam (`cantilever-beam`) is a validation case with a recipe
+(`examples/validation/cases/cantilever-beam.mjs`): a 1000 × 100 × 100 mm
+block meshed at 25 mm with quadratic tetrahedra, the face x = 0 clamped, the
+face x = 1000 loaded with Fy = −10 kN. Like every recipe case, its `.vtu` is
+saved **unsolved**, on the static study, with a `handCheck` block
+(`web/src/lib/handCheck.ts`) the Results panel compares the tip deflection
+with, and it ships its `.step` and `.model.step`, so it can be re-meshed.
 
 The empty app's "Try a sample simulation" is not one of these examples: it opens
 the wall bracket's CAD file (`web/public/samples/`) with nothing set up, and a

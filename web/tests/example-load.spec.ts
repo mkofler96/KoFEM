@@ -601,7 +601,7 @@ test("the cantilever example opens ready to run and re-mesh", async ({
   test.setTimeout(60_000);
 
   // cantilever-beam opens ready to run with a hand check (KOF-261), built
-  // with the app's own pipeline (examples/gallery/generate-cantilever.mjs). It
+  // from its recipe (examples/validation/cases/cantilever-beam.mjs). It
   // must open unsolved on its static study with the clamp, the tip load, the quadratic
   // element order and its hand check restored, and get its STEP back.
   await page.goto("/app/?example=cantilever-beam");

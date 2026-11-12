@@ -52,6 +52,7 @@ element sizes), taking it off `PENDING` in `rules.mjs`, and
 | Bar under pressure   | u = −p·L/E, pressure sign       | mechanics of materials        |
 | Cantilever beam      | tip deflection δ = P·L³/(3·E·I) | Euler–Bernoulli               |
 | Cantilever beam (P2) | δ on a coarse mesh, order 2     | Euler–Bernoulli               |
+| Cantilever, tip load | δ at 25 mm, order 2, hand check | Euler–Bernoulli               |
 | Square beam torsion  | angle of twist θ = T·L/(G·K)    | Saint-Venant torsion (square) |
 | Plate with a hole    | stress-concentration Kt ≈ 3     | Kirsch / Timoshenko & Goodier |
 | Hollow shaft torsion | angle of twist θ = T·L/(G·J)    | Saint-Venant torsion          |
@@ -163,10 +164,12 @@ cases are designed around:
 
 - **Mostly order 1.** Most cases use linear elements and refine the mesh, which
   matches the fast interactive default. The **Cantilever beam (P2)** case opts
-  into order-2 elements, which the engine solves with a tighter 1e-6 CG
-  tolerance — on its deliberately coarse mesh, P1 shear-locks to ~30% error
-  while P2 lands under 2%, exercising the quadratic DOF path (edge-midpoint
-  Dirichlet extension) that the order-1 cases never reach.
+  into order-2 elements — on its deliberately coarse 50 mm mesh, linear
+  tetrahedra shear-lock to ~27% error while P2 lands within half a percent,
+  exercising the quadratic DOF path (edge-midpoint Dirichlet values) that the
+  order-1 cases never reach. Linear tetrahedra need a 12.5 mm mesh (eight
+  elements through the depth) to come within ~4%, which is why the linear
+  **Cantilever beam** case carries a 5% band.
 - **Displacement validates tighter than stress.** Displacements are the primary
   CG unknowns and land within a few percent (often < 1%). Element-wise stress is
   noisier, so the one stress case (plate with a hole) carries a wider band.

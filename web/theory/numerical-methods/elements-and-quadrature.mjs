@@ -273,7 +273,7 @@ export default {
       node. In a typical tetrahedral mesh there are several edges per vertex,
       so the same mesh has several times as many DOFs at order 2. The
       <a href="/examples/cantilever/">cantilever beam example</a> shows a
-      measured h- and order-study on hexahedra; the
+      measured h- and order-study on tetrahedra; the
       <a href="/examples/cantilever-p2/">quadratic variant</a> solves the same
       beam at order 2.</p>
     <p>KoFEM currently returns solid displacement at element

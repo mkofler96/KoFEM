@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Page text: cantilever beam, linear hexahedra. Shared beam theory with the
-// quadratic and CAD cantilevers (cantilever-p2.mjs, cantilever-beam.mjs).
+// Page text: cantilever beam, linear tetrahedra. Shared beam theory with the
+// quadratic cantilevers (cantilever-p2.mjs, cantilever-beam.mjs).
 
 import { cantileverFigure } from "../lib/figures.mjs";
 import { REF } from "./refs.mjs";
@@ -60,19 +60,36 @@ export const studySeries = (study, order) => {
   return s.points;
 };
 
+/** The study point of a series at one max element size (mm). */
+export const studyPoint = (points, maxElementSize) => {
+  const p = points.find((x) => x.maxElementSize === maxElementSize);
+  if (!p)
+    throw new Error(
+      `cantilever study has no ${maxElementSize} mm point in this series`,
+    );
+  return p;
+};
+
+/** About how many elements of max size `size` (mm) span the depth h. */
+export const acrossDepth = (inp, size) => Math.round(inp("b × h")[1] / size);
+
 export default {
   description:
-    "A cantilever with a tip load, δ = PL³/(3EI): Euler–Bernoulli derivation, shear locking of linear hexahedra, mesh convergence and KoFEM's result.",
-  figure: ({ page }) => cantileverFigure({ div: page.grid }),
+    "A cantilever with a tip load, δ = PL³/(3EI): Euler–Bernoulli derivation, shear locking of linear tetrahedra, mesh convergence and KoFEM's result.",
+  opens: "Opens the model in the app, ready to solve.",
+  figure: () => cantileverFigure({ div: null }),
   intro: () => `
         <p>A beam clamped at one end and loaded at the other is the standard
         bending benchmark. Bending is where simple solid elements struggle,
         so this case tests the element as much as the solver.</p>`,
   theory: beamTheory,
-  model: () => `
-        <p>The beam is meshed with linear 8-node hexahedra. Each element is a
-        cube with sides one quarter of the beam depth. The tip load is a force
-        on the end face, which the app integrates as a uniform traction.</p>`,
+  model: ({ row, inp }) => `
+        <p>The beam is the STEP file a user imports, meshed by Netgen with
+        linear 4-node tetrahedra at a ${row.mesh.maxElementSize}&nbsp;mm
+        maximum element size, about ${acrossDepth(inp, row.mesh.maxElementSize)}
+        elements through the depth. The support and the load each sit on one
+        whole CAD face. The tip load is a force on the end face, which the app
+        integrates as a uniform traction.</p>`,
   discussion: ({ row, pct, study, inp, url }) => {
     const p1 = studySeries(study, 1);
     const p2 = studySeries(study, 2);
@@ -80,27 +97,32 @@ export default {
     const last = p2[p2.length - 1];
     return `
         <p>KoFEM's deflection differs from the reference by
-        ${pct(row.errPct)}: the linear elements are too stiff. The reason is <em>shear locking</em>. The
-        edges of a linear hexahedron stay straight, so it cannot take the
-        curved shape of a bent piece of beam; to bend at all, it has to shear.
-        In a beam under pure bending the true shear strain is zero, so this
-        spurious, parasitic shear stores strain energy that the real beam
-        does not have, and the element is too stiff. The longer the element
-        compared with the depth it spans, the worse it gets.</p>
+        ${pct(row.errPct)}: the linear elements are too stiff. The reason is
+        <em>shear locking</em>. A linear tetrahedron has straight edges and
+        the same strain everywhere inside it, so it can follow neither the
+        curved shape of a bent piece of beam nor the strain that grows from
+        the neutral axis to the surface. To bend at all, a patch of them also
+        has to shear. In a slender beam the true shear strain is small, so
+        this spurious shear stores strain energy that the real beam does not
+        have, and the mesh is too stiff. The fewer elements span the depth,
+        the worse it gets. Linear tetrahedra lock more than linear
+        hexahedra, whose strain can vary inside the element, but Netgen
+        fills any CAD shape with tetrahedra.</p>
         <p>Refining the mesh cures it slowly. In the convergence study above
         the linear-element error goes ${p1.map((p) => pct(p.errPct)).join(" → ")}
-        as the element size halves, approaching a factor of four per step: the
-        second-order convergence of displacements with linear elements, once
-        locking is under control.</p>
+        as the maximum element size goes
+        ${p1.map((p) => p.maxElementSize).join(" → ")}&nbsp;mm. An
+        unstructured mesh does not refine in exact halves, so the steps are
+        uneven.</p>
         <p>Quadratic elements can bend, so they do not lock; see the
-        <a href="${url("cantilever-p2")}">quadratic hexahedra</a> and the
-        <a href="${url("cantilever-beam")}">beam meshed from a STEP file</a>.
-        Their series settles
-        near ${pct(last.errPct)}, above the reference. About
-        ${pct((k.shear / k.bending) * 100)} of
-        that is the shear deformation that Euler–Bernoulli theory leaves out.
-        The rest comes from the 3-D stress state at the clamped root and the
-        loaded end.</p>`;
+        <a href="${url("cantilever-p2")}">quadratic tetrahedra</a> and the
+        <a href="${url("cantilever-beam")}">cantilever that opens ready to
+        run</a>. Their series levels off at ${pct(last.errPct)}. The shear
+        deformation that Euler–Bernoulli theory leaves out would add
+        ${pct((k.shear / k.bending) * 100)}, yet the 3-D result stays below
+        that Timoshenko value: its fully clamped end face also stops the
+        section from contracting sideways and from warping, which neither
+        beam theory models.</p>`;
   },
   references: [REF.gere, REF.timoshenkoShear, REF.cmpw, REF.hughes],
 };

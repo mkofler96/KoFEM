@@ -22,7 +22,6 @@
 // levels of structured-grid divisions.
 
 import { solveModel } from "./lib/app-model.mjs";
-import { cantileverModel, cantileverTip } from "./cases/cantilever-bending.mjs";
 import { shaftModel, shaftTwist } from "./cases/shaft-torsion.mjs";
 import { cookCorner, cookModel } from "./cases/cooks-membrane.mjs";
 
@@ -89,37 +88,26 @@ export default [
       },
     ],
   }),
-  {
+  recipeStudy({
     id: "cantilever",
     caseId: "cantilever",
     title: "Cantilever beam, P1 vs. P2",
-    note: "Linear elements lock in bending and approach from far below; quadratic ones are within a few percent on every mesh and level off slightly above the reference, since Euler–Bernoulli theory neglects shear deformation.",
+    note: "Linear tetrahedra lock in bending and approach from far below; quadratic ones are within half a percent on every mesh and level off just above the reference.",
     series: [
       {
         label: "P1 (linear)",
         caseId: "cantilever",
         order: 1,
-        levels: [
-          [10, 1, 1],
-          [20, 2, 2],
-          [40, 4, 4],
-          [80, 8, 8],
-        ],
+        levels: [50, 25, 12.5, 8],
       },
       {
         label: "P2 (quadratic)",
         caseId: "cantilever-p2",
         order: 2,
-        levels: [
-          [5, 1, 1],
-          [10, 2, 2],
-          [20, 4, 4],
-        ],
+        levels: [50, 25, 12.5],
       },
     ],
-    meshLabel: grid,
-    solve: study(cantileverModel, cantileverTip),
-  },
+  }),
   {
     id: "shaft-torsion",
     caseId: "shaft-torsion",

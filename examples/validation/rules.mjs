@@ -37,9 +37,6 @@ import { modelStepPath, sameModelStep } from "./lib/model-step.mjs";
 // KOF-322: examples still built the old way. This list must be empty when
 // KOF-322 is done; then delete it and the PENDING handling below.
 const PENDING = [
-  "cantilever",
-  "cantilever-p2",
-  "cantilever-beam",
   "shaft-torsion",
   "plate-with-hole",
   "plate-with-hole-shell",
