@@ -1,20 +1,29 @@
 # KoFEM
 
-Browser FEA: STEP → OCCT → Netgen → MFEM. Production code is C++/WASM in
-`engine/cpp/`. Finite-element code is moving to Rust: `crates/kofem-fem` (core,
-not yet used by the app), `crates/kofem-shellize` (shell idealisation, used by
-the solver worker) and `crates/kofem-wasm` (browser bindings, a separate WASM
-module joined to the engine in TS). The other crates are stubs.
+Browser FEA: STEP → OCCT → Netgen → finite-element solve. Geometry and meshing
+are C++/WASM in `engine/cpp/` and stay there. The whole solver side is moving
+to Rust: `crates/kofem-fem` (elements, assembly, solvers, shells),
+`crates/kofem-shellize` (shell idealisation) and `crates/kofem-wasm` (browser
+bindings, a separate WASM module joined to the engine in TS). The other crates
+are stubs. Build new finite-element features in Rust only; the C++ solver code
+that remains gets bug fixes only. The Roadmap in Linear lists which solver
+paths have moved.
 The React/TypeScript/Three.js frontend is in `web/`. Use **bun**, not npm.
 
 ## Implementation
 
-- Solver paths: `solve_mfem.cpp` (solid), `solve_shell.cpp` (shell), and
-  `solve_coupled.cpp` (mixed). Cover all applicable paths for materials, BCs,
-  loads, and solve payload changes, including per-body materials.
+- Solver paths are routed in `web/src/lib/solve/route.ts`. Solid tetrahedral
+  models solve in Rust by default (`lib/solve/amg.ts`); MFEM
+  (`solve_mfem.cpp`) is the other choice and takes the solid models Rust does
+  not cover. Pure shells solve in Rust (`lib/solve/shellRust.ts`), with
+  `solve_shell.cpp` as their test oracle. Mixed models (`solve_coupled.cpp`)
+  and topology optimization are still C++. Cover all applicable paths for
+  materials, BCs, loads, and solve payload changes, including per-body
+  materials.
 - Shell is an explicit per-body choice. Mid-surface and mixed-mesh assembly
   live in `crates/kofem-shellize` (one module per stage), reached through
-  `web/src/lib/shellize.ts`; shell element math is in `shell_core.cpp`.
+  `web/src/lib/shellize.ts`; shell element math is in
+  `crates/kofem-fem/src/shell` and, for the C++ paths, `shell_core.cpp`.
 - Geometry tessellation is for display. Never call it a mesh; surface and
   volume meshes are FEM discretisations.
 - Use strict TypeScript without `any`, C++ `std::array` instead of C arrays,
@@ -45,7 +54,8 @@ Run checks appropriate to the change; CI definitions are in
 
 - Rust: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`
   and `cargo test --workspace`. `bun run test:validation` includes the
-  Rust-vs-MFEM check (`tests/test_fem_wasm.mjs`).
+  Rust-vs-C++ checks (`tests/test_fem_wasm.mjs`, `test_amg_solid.mjs`,
+  `test_amg_coupling.mjs`, `test_shell_rust.mjs`).
 - C++: `bash scripts/clang-tidy.sh` (`docker-clang-tidy.sh` without a local
   emsdk) and relevant `scripts/test-*.sh` suites.
 - Frontend, from `web/`: `bun run typecheck && bun run lint && bun run format:check && bun run test`.
