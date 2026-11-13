@@ -52,13 +52,13 @@ const TIE_HOOK_FACE = 65;
 const TIE_PIN_BODY = 2;
 const TIE_CLEARANCE = 3.0; // mm
 
-let Module;
-let mesh;
-let shells;
-let pinVerts;
-let hookVerts;
-let untied;
-let tied;
+let Module = null;
+let mesh = null;
+let shells = null;
+let pinVerts = null;
+let hookVerts = null;
+let untied = null;
+let tied = null;
 
 // ── Face-connected pieces of a tet mesh ───────────────────────────────────────
 // NODE connectivity hides this failure: two pieces meeting at a single node look
@@ -139,9 +139,9 @@ describe("the coupled crane assembly", () => {
 
   // ── 1. Structural: without a tie the hook is a hinge ────────────────────────
   describe("structure (no solve)", () => {
-    let pieces;
-    let bigPiece;
-    let smallPiece;
+    let pieces = null;
+    let bigPiece = null;
+    let smallPiece = null;
     beforeAll(() => {
       pieces = facePieces(untied.tets);
       [bigPiece, smallPiece] = pieces;
@@ -292,8 +292,8 @@ describe("the coupled crane assembly", () => {
 
   // ── 3. Solve: tied converges, untied does not ───────────────────────────────
   describe("solve", () => {
-    let tiedResult;
-    let untiedResult;
+    let tiedResult = null;
+    let untiedResult = null;
     beforeAll(() => {
       tiedResult = solve(tied);
       untiedResult = solve(untied);

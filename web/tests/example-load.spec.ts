@@ -7,6 +7,7 @@ import { openTree } from "./fixtures/tree";
 import { UNVALIDATED_CRANE_SHELL } from "./fixtures/unvalidated-examples";
 import { readdir, readFile } from "node:fs/promises";
 import { settleViewport } from "./fixtures/viewport";
+import type { useModelStore } from "../src/store/modelStore";
 
 // Coverage for the `?example=<id>` deep-link (App.tsx useExampleFromUrl), the
 // target of the "Open in KoFEM" links on the example pages. Exercises
@@ -83,8 +84,8 @@ test("re-solving a loaded example does not trap on its node ids (#288)", async (
   // store state exactly as the Solve button does.
   await page.goto("/app/?example=axial-bar");
   await expect(page.locator("nav")).toBeVisible();
-  await page.waitForFunction(
-    () => !!(window as unknown as { __kofem?: unknown }).__kofem,
+  await page.waitForFunction(() =>
+    Boolean((window as unknown as { __kofem?: unknown }).__kofem),
   );
   await expect
     .poll(async () => (await readStore(page)).nodes)
@@ -319,9 +320,9 @@ test("?example= with an invalid id is rejected without a fetch", async ({
   page,
 }) => {
   let dialogMessage = "";
-  page.on("dialog", (d) => {
+  page.on("dialog", async (d) => {
     dialogMessage = d.message();
-    void d.dismiss();
+    await d.dismiss();
   });
 
   // A slash fails the /^[\w-]+$/ guard, so no request is made.
@@ -337,9 +338,9 @@ test("?example= with an unknown id surfaces a clear load error", async ({
   page,
 }) => {
   let dialogMessage = "";
-  page.on("dialog", (d) => {
+  page.on("dialog", async (d) => {
     dialogMessage = d.message();
-    void d.dismiss();
+    await d.dismiss();
   });
 
   await page.goto("/app/?example=does-not-exist");
@@ -375,9 +376,9 @@ test("an example without its model STEP file is refused", async ({ page }) => {
   // Every example ships the geometry it is built from (KOF-322); opening one
   // without it would show no body and offer no re-mesh.
   let dialogMessage = "";
-  page.on("dialog", (d) => {
+  page.on("dialog", async (d) => {
     dialogMessage = d.message();
-    void d.dismiss();
+    await d.dismiss();
   });
   await page.route("**/examples/axial-bar.model.step", (route) =>
     route.fulfill({ status: 404, body: "" }),
@@ -393,9 +394,9 @@ test("an example whose file carries no geometry is refused", async ({
   page,
 }) => {
   let dialogMessage = "";
-  page.on("dialog", (d) => {
+  page.on("dialog", async (d) => {
     dialogMessage = d.message();
-    void d.dismiss();
+    await d.dismiss();
   });
   await page.route("**/examples/axial-bar.vtu", async (route) => {
     const original = await route.fetch();
@@ -587,7 +588,8 @@ test("capture screenshots of all examples @capture", async ({ page }) => {
     await settleViewport(page);
     await page.mouse.move(0, 0);
     await page.evaluate(() => {
-      const store = (window as any).__kofemStore;
+      const store = (window as Window & { __kofemStore: typeof useModelStore })
+        .__kofemStore;
       store.getState().setDeformScale(0);
     });
     await settleViewport(page);

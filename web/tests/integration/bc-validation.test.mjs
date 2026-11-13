@@ -9,7 +9,7 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { loadEngine } from "../support/wasm.mjs";
 
-let Module;
+let Module = null;
 beforeAll(async () => {
   Module = await loadEngine();
 });
@@ -42,7 +42,7 @@ function solve(overrides, order = 1) {
 // The solve must throw a C++ runtime_error whose message matches `expected`.
 function expectCppError(overrides, expected, order) {
   const context = `order ${order}, BCs ${JSON.stringify(overrides)}`;
-  let caught;
+  let caught = null;
   let thrown = false;
   try {
     solve(overrides, order);

@@ -46,8 +46,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 // One engine instance and the Rust module serve every test below. The engine's
 // log stays dropped: the tests assert on results, and the refusal cases EXPECT
 // failures.
-let engine;
-let ShellModel;
+let engine = null;
+let ShellModel = null;
 beforeAll(async () => {
   engine = await loadEngine();
   // The shell idealisation (kofem-shellize) runs in the same Rust module.
@@ -61,7 +61,7 @@ const neverContinue = () => {
 // Solve one payload with both solvers. Returns the two results, or the two
 // errors (null where a solver succeeded).
 async function solveBoth(inputs) {
-  let cpp;
+  let cpp = null;
   try {
     cpp = engine.solve_shell(inputs.mesh, inputs.matJson, inputs.bcsJson);
   } catch (thrown) {
@@ -310,7 +310,7 @@ function gridPlate(sizeX, sizeY, cellsX, cellsY) {
 }
 
 describe("folded bracket (app builder)", () => {
-  let result;
+  let result = null;
   beforeAll(async () => {
     result = await solveBoth(buildShellEngineInputs(foldedBracket()));
   });
@@ -318,8 +318,8 @@ describe("folded bracket (app builder)", () => {
 });
 
 describe("single fin (auto-shell)", () => {
-  let pure;
-  let result;
+  let pure = null;
+  let result = null;
   beforeAll(async () => {
     const meshed = meshStep(
       engine,
@@ -409,8 +409,8 @@ describe("plate with a hole (gallery example)", () => {
   const halfWidth = 10000;
   const thickness = 500;
   const stress = 100;
-  let plate;
-  let result;
+  let plate = null;
+  let result = null;
   beforeAll(async () => {
     plate = plateWithHoleShellMesh(radius, halfWidth, 12, 64, 2);
     const left = nodesWhere(plate.vertices, (x) => x <= -halfWidth + 1e-6);
@@ -463,8 +463,8 @@ describe("shell validation cases", () => {
     const cells = 16;
     const side = 1;
     const pressure = 1;
-    let plateId;
-    let result;
+    let plateId = null;
+    let result = null;
     beforeAll(async () => {
       const { vertices, triangles, id } = gridPlate(side, side, cells, cells);
       plateId = id;
@@ -519,8 +519,8 @@ describe("shell validation cases", () => {
   describe("prescribed strip", () => {
     const [nx, ny] = [8, 2];
     const delta = 1e-4;
-    let stripId;
-    let result;
+    let stripId = null;
+    let result = null;
     beforeAll(async () => {
       const { vertices, triangles, id } = gridPlate(1, 0.25, nx, ny);
       stripId = id;
@@ -764,7 +764,7 @@ describe("pressure on the auto-shell paths", () => {
 
   // Pure shell: the single fin's y = 51 wall (outward normal +y).
   describe("pure auto-shell", () => {
-    let finModel;
+    let finModel = null;
     beforeAll(() => {
       finModel = meshModel("single_fin.step", 4, () => 1, [
         { id: 1, materialId: 1, discretization: "shell" },
@@ -789,7 +789,7 @@ describe("pressure on the auto-shell paths", () => {
   // Coupled auto-shell: fin_two_parts with the fin (body 2) marked Shell; a
   // pressure on the base block's top (outward +z) and on the fin's wall.
   describe("coupled auto-shell", () => {
-    let model;
+    let model = null;
     const inBody = (body) => {
       const ids = new Set(
         model.elements

@@ -125,7 +125,7 @@ const shellZ = (shells) =>
 
 describe("thin-wall detection", () => {
   describe("a 2 mm plate", () => {
-    let shells;
+    let shells = null;
     beforeAll(() => {
       shells = extractThinWallShells(boxes([plate(1, 0, 0, 2)]), {
         shellBodyIds: new Set([1]),

@@ -57,7 +57,7 @@ const created = new Date(2026, 10, 10, 21, 14, 5);
 describe("zip", () => {
   const big = enc.encode("node ".repeat(10_000));
   const tiny = enc.encode("x");
-  let zip;
+  let zip = null;
 
   beforeAll(async () => {
     zip = await createZip(
@@ -146,14 +146,14 @@ describe("zip", () => {
 });
 
 describe("problem report", () => {
-  let vtu;
-  let analysis;
-  let step;
-  let diagnostics;
-  let rawError;
-  let withCad;
-  let withoutCad;
-  let manifest;
+  let vtu = null;
+  let analysis = null;
+  let step = null;
+  let diagnostics = null;
+  let rawError = null;
+  let withCad = null;
+  let withoutCad = null;
+  let manifest = null;
 
   beforeAll(async () => {
     vtu = readFileSync(

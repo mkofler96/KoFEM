@@ -77,8 +77,8 @@ const discriminator = nodesWhere(
 )[0];
 
 describe("single-DOF constraints (engine fixed_dofs)", () => {
-  let displacements;
-  let uxFace;
+  let displacements = null;
+  let uxFace = null;
   const disp = (vertex, component) => displacements[vertex * 3 + component];
 
   beforeAll(async () => {

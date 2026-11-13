@@ -61,8 +61,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 
 // The C++ engine is the oracle; the shell idealisation and the mixed solve
 // run in the Rust module. One engine serves the whole file.
-let engine;
-let fem;
+let engine = null;
+let fem = null;
 beforeAll(async () => {
   engine = await loadEngine();
   fem = await loadFem();
@@ -309,8 +309,8 @@ function handMixedModel({ twoShellMaterials = false } = {}) {
 
 describe("Hand-mixed block + wall: two solid materials, clamp, drive, forces, moments, pressure, RBE2", () => {
   const model = handMixedModel();
-  let inputs;
-  let both;
+  let inputs = null;
+  let both = null;
   beforeAll(async () => {
     inputs = buildCoupledEngineInputs(model, silent);
     both = await solveBoth(inputs);
@@ -344,8 +344,8 @@ describe("Hand-mixed block + wall: two solid materials, clamp, drive, forces, mo
   // Per-body shell materials: the wall in two bodies of steel and
   // aluminium, selected per facet through mesh.shell_attributes.
   describe("with two shell materials (steel and aluminium wall)", () => {
-    let twoShellInputs;
-    let shellBoth;
+    let twoShellInputs = null;
+    let shellBoth = null;
     beforeAll(async () => {
       const twoShells = handMixedModel({ twoShellMaterials: true });
       twoShellInputs = buildCoupledEngineInputs(twoShells, silent);
@@ -450,8 +450,8 @@ function junctionMeasures(candidate, result, tips, forces, axis) {
 
 for (const wallStep of [3, 4]) {
   describe(`KOF-215 transition, wall rows ${wallStep} mm`, () => {
-    let candidate;
-    let reference;
+    let candidate = null;
+    let reference = null;
     beforeAll(() => {
       const original = shellJunction(2, wallStep);
       const shells = extractThinWallShells(original, {
@@ -479,10 +479,10 @@ for (const wallStep of [3, 4]) {
       ["z", 2],
       ["x", 0],
     ])("load along %s", (_axisName, axis) => {
-      let mixedCase;
-      let both;
-      let solidCase;
-      let solid;
+      let mixedCase = null;
+      let both = null;
+      let solidCase = null;
+      let solid = null;
       beforeAll(async () => {
         mixedCase = junctionArgs(candidate, axis);
         both = await solveBoth(mixedCase.args);
@@ -588,7 +588,7 @@ describe("fin_two_parts.step, the fin marked Shell", () => {
     { id: 1, materialId: 1, discretization: "solid" },
     { id: 2, materialId: 2, discretization: "shell" },
   ];
-  let fin;
+  let fin = null;
   beforeAll(() => {
     fin = finStoreModel();
   });
@@ -596,8 +596,8 @@ describe("fin_two_parts.step, the fin marked Shell", () => {
   // Mesh time: the stored CTRIA3 + CTETRA model, solved as the worker's
   // mixed path does.
   describe("idealised at mesh time (stored mixed model)", () => {
-    let mixed;
-    let both;
+    let mixed = null;
+    let both = null;
     beforeAll(async () => {
       mixed = buildMeshTimeShellModel(
         fin.nodes,
@@ -633,8 +633,8 @@ describe("fin_two_parts.step, the fin marked Shell", () => {
 
   // Solve time: the all-tet model with the fin marked Shell.
   describe("idealised at solve time (auto-shell)", () => {
-    let auto;
-    let both;
+    let auto = null;
+    let both = null;
     beforeAll(async () => {
       auto = prepareAutoCoupledSolve(
         {
@@ -743,7 +743,7 @@ function craneHolderArgs() {
 }
 
 describe("Crane holder shell showcase", () => {
-  let both;
+  let both = null;
   beforeAll(async () => {
     both = await solveBoth(craneHolderArgs());
   });
@@ -753,7 +753,7 @@ describe("Crane holder shell showcase", () => {
 
 // ── 5. Every preconditioner, and refusals ────────────────────────────────────
 describe("every preconditioner of the Rust solve", () => {
-  let inputs;
+  let inputs = null;
   beforeAll(() => {
     inputs = buildCoupledEngineInputs(handMixedModel(), silent);
   });
@@ -761,7 +761,7 @@ describe("every preconditioner of the Rust solve", () => {
   describe.each(["incomplete-cholesky", "gauss-seidel"])(
     "Hand-mixed model with %s",
     (preconditioner) => {
-      let both;
+      let both = null;
       beforeAll(async () => {
         both = await solveBoth(inputs, preconditioner);
       });
@@ -772,7 +772,7 @@ describe("every preconditioner of the Rust solve", () => {
 });
 
 describe("payloads both solvers refuse", () => {
-  let inputs;
+  let inputs = null;
   beforeAll(() => {
     inputs = buildCoupledEngineInputs(handMixedModel(), silent);
   });
@@ -786,8 +786,8 @@ describe("payloads both solvers refuse", () => {
     } catch (error) {
       message = String(error);
     }
-    expect(cpp, `C++ solved the payload`).toHaveProperty("error");
-    expect(message, `Rust solved the payload`).toMatch(pattern);
+    expect(cpp, "C++ solved the payload").toHaveProperty("error");
+    expect(message, "Rust solved the payload").toMatch(pattern);
   }
 
   test("a support on a seam-dependent shell node: both refuse", async () => {

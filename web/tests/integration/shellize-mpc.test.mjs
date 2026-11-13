@@ -129,8 +129,8 @@ beforeAll(async () => {
 });
 
 describe("shellize coupling plumbing", () => {
-  let model;
-  let nSolidPool;
+  let model = null;
+  let nSolidPool = null;
   beforeAll(() => {
     const { mesh, shells } = baseAndPanel();
     model = buildCoupledModel(mesh, shells, new Set());
@@ -154,7 +154,7 @@ describe("shellize coupling plumbing", () => {
 
   // ── dropCouplingsOnFixedNodes keeps ref[] and mpc[] in step ─────────────────
   describe("dropCouplingsOnFixedNodes", () => {
-    let dropped;
+    let dropped = null;
     beforeAll(() => {
       dropped = dropCouplingsOnFixedNodes(model.coupling, [
         6 * model.coupling.ref[0],
@@ -192,7 +192,7 @@ describe("shellize coupling plumbing", () => {
 
 // ── Explicit (loaded mixed model) path tags the seam the same way ─────────────
 describe("explicit mixed model", () => {
-  let explicitModel;
+  let explicitModel = null;
   beforeAll(() => {
     const { verts, add: addV } = vertexPool();
     // one solid tet cluster + a detached shell triangle set nearby
@@ -255,12 +255,12 @@ describe("explicit mixed model", () => {
 // facing faces produces the distributing tie across the clearance.
 describe("tie connections between solid bodies", () => {
   const GAP = 1;
-  let verts;
-  let solidTets;
-  let faceAt;
-  let surfaceA;
-  let surfaceB;
-  let cube;
+  let verts = null;
+  let solidTets = null;
+  let faceAt = null;
+  let surfaceA = null;
+  let surfaceB = null;
+  let cube = null;
 
   // A named tie between two vertex lists.
   const tieOf = (name, verticesA, verticesB, maxSeparation) => ({
@@ -321,7 +321,7 @@ describe("tie connections between solid bodies", () => {
   });
 
   describe("a tie across the clearance", () => {
-    let tied;
+    let tied = null;
     beforeAll(() => {
       tied = buildExplicitCoupledModel(
         verts,
@@ -383,7 +383,7 @@ describe("tie connections between solid bodies", () => {
   describe("a declared tie that couples nothing is reported", () => {
     // A "within distance" connection shorter than the clearance reaches nothing.
     describe("search distance below the clearance", () => {
-      let tooShort;
+      let tooShort = null;
       beforeAll(() => {
         tooShort = buildExplicitCoupledModel(
           verts,
@@ -500,10 +500,10 @@ describe("tie connections between solid bodies", () => {
 
 // ── extractThinWallShells / wall split is thickness-driven, not body-driven ───
 describe("thin walls within one body", () => {
-  let verts;
-  let tet;
-  let oneBody;
-  let wallTets;
+  let verts = null;
+  let tet = null;
+  let oneBody = null;
+  let wallTets = null;
   beforeAll(() => {
     const pool = vertexPool();
     verts = pool.verts;

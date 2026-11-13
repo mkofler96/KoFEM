@@ -96,7 +96,7 @@ const FZ = -1e6;
 const FY = -5e5;
 
 describe("multiple surface loads in one solve (solve_mfem.cpp apply_surface_loads)", () => {
-  let run;
+  let run = null;
   beforeAll(async () => {
     const solve = await loadSolver();
     run = (bcs) =>

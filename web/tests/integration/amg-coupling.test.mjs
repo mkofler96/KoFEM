@@ -39,8 +39,8 @@ const WALL_BRACKET_STEP = new URL(
 // One engine instance runs every MFEM solve here, and the Rust module every
 // AMG solve. The coupled model builder (shell idealisation) runs in the Rust
 // module too.
-let engine;
-let fem;
+let engine = null;
+let fem = null;
 beforeAll(async () => {
   fem = await loadFem();
   engine = await loadEngine();
@@ -534,7 +534,7 @@ describe("linear elements", () => {
     ["A tie across a gap together with a coupling", tiedAcrossGap],
     ["Wall bracket (Netgen mesh) with two couplings", bracketWithTwoCouplings],
   ])("%s", (_label, buildModel) => {
-    let outcome;
+    let outcome = null;
     beforeAll(async () => {
       outcome = await compare(await buildModel());
     });
@@ -797,7 +797,7 @@ describe("quadratic elements", () => {
       bracketHeldAtOneEnd,
     ],
   ])("%s", (_label, buildModels) => {
-    let outcome;
+    let outcome = null;
     beforeAll(async () => {
       const { coupled, equivalent } = await buildModels();
       outcome = await compareQuadratic(coupled, equivalent);
@@ -877,8 +877,8 @@ describe("quadratic elements", () => {
   describe("Quadratic: a force at a distributing point against the same force spread over the face", () => {
     let peak = 0;
     let difference = 0;
-    let tipRust;
-    let tipMfem;
+    let tipRust = null;
+    let tipMfem = null;
     beforeAll(async () => {
       // A force at a distributing point on the tip face, against the same
       // total force spread over the face as a surface load.
@@ -961,8 +961,8 @@ describe("what AMG refuses", () => {
   // Under an axial pull the load does not excite that mechanism, and the MFEM
   // path's Gauss–Seidel CG converges anyway; the multigrid solve refuses the
   // under-constrained model instead of returning one of its many solutions.
-  let inputs;
-  let mfem;
+  let inputs = null;
+  let mfem = null;
   beforeAll(() => {
     const { model, tip } = jointedBeams([0, 1, 2]);
     model.loads = tip.map((nodeId) => ({

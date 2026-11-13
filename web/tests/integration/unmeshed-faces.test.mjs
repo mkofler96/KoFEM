@@ -60,14 +60,14 @@ function outerCylinderAbove(tessellation, from) {
 }
 
 describe("a face Netgen cannot mesh is reported, not volume-filled", () => {
-  let result;
-  let log;
-  let overlaps;
-  let ring;
-  let facesBefore;
-  let facesAfter;
-  let remeshed;
-  let refused;
+  let result = null;
+  let log = null;
+  let overlaps = null;
+  let ring = null;
+  let facesBefore = null;
+  let facesAfter = null;
+  let remeshed = null;
+  let refused = null;
 
   beforeAll(async () => {
     // The engine's log is kept and shown in the message of the first check,

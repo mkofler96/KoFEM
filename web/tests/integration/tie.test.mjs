@@ -137,7 +137,7 @@ async function solve(useTie) {
   }
   const bcs = JSON.stringify({ fixed_vertices: fixed, point_loads: loads });
 
-  let result;
+  let result = null;
   try {
     result = Module.solve_linear_elastic(
       { vertices, tetrahedra: new Int32Array(0), hexahedra },
@@ -167,8 +167,8 @@ async function solve(useTie) {
 }
 
 describe("solving the two boxes", () => {
-  let untied;
-  let tied;
+  let untied = null;
+  let tied = null;
   beforeAll(async () => {
     untied = await solve(false);
     tied = await solve(true);

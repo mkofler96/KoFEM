@@ -268,12 +268,12 @@ function beamModel(tetRoot) {
 }
 
 describe("wall bracket: Rust AMG against MFEM", () => {
-  let engine;
-  let fem;
-  let model;
-  let vid;
-  let mfem;
-  let amg;
+  let engine = null;
+  let fem = null;
+  let model = null;
+  let vid = null;
+  let mfem = null;
+  let amg = null;
 
   beforeAll(async () => {
     fem = await loadFem();
@@ -418,8 +418,8 @@ describe("wall bracket: Rust AMG against MFEM", () => {
   // the prescribed displacement, roller and both surface loads all reach them.
   // On a coarser mesh, since MFEM's Gauss–Seidel CG is slow at order 2.
   describe("quadratic elements: the same model at order 2", () => {
-    let mfemQuadratic;
-    let amgQuadratic;
+    let mfemQuadratic = null;
+    let amgQuadratic = null;
 
     beforeAll(async () => {
       const coarse = await bracketModel(40);
@@ -522,7 +522,7 @@ describe("wall bracket: Rust AMG against MFEM", () => {
   describe("progress and the continue-solving prompt", () => {
     const asked = [];
     const progress = [];
-    let continued;
+    let continued = null;
 
     beforeAll(async () => {
       continued = await solveSolidWithAmg(
@@ -532,9 +532,9 @@ describe("wall bracket: Rust AMG against MFEM", () => {
         vid,
         vid,
         5,
-        async (state) => {
+        (state) => {
           asked.push(state);
-          return 1000;
+          return Promise.resolve(1000);
         },
         (line) => progress.push(line),
       );
@@ -578,7 +578,7 @@ describe("wall bracket: Rust AMG against MFEM", () => {
           vid,
           vid,
           5,
-          async () => 0,
+          () => Promise.resolve(0),
           ignoreProgress,
         );
       } catch (error) {

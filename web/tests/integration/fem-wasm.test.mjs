@@ -113,7 +113,7 @@ function sideFaces(mesh, axis, value) {
   return faces;
 }
 
-let engine;
+let engine = null;
 beforeAll(async () => {
   engine = await loadEngine();
   await loadFem();
@@ -121,12 +121,12 @@ beforeAll(async () => {
 
 // ── Linear tets: Rust against MFEM on the same cantilever ─────────────────────
 describe("linear tet cantilever", () => {
-  let mfem;
-  let model;
-  let forces;
-  let rust;
-  let amg;
-  let maxMfem;
+  let mfem = null;
+  let model = null;
+  let forces = null;
+  let rust = null;
+  let amg = null;
+  let maxMfem = null;
 
   beforeAll(() => {
     mfem = engine.solve_linear_elastic(
@@ -374,7 +374,7 @@ describe("quadratic tetrahedra", () => {
         force: [0, 0, TIP_FORCE / cantileverTip.length],
       })),
     };
-    let reference;
+    let reference = null;
     beforeAll(() => {
       reference = solveReference(cantilever, bcs);
     });

@@ -107,7 +107,7 @@ describe("steps", () => {
 // The guide names faces by number, and those numbers are only right for the
 // file the app ships. Mesh it the way the app does and check them.
 describe("the shipped wall bracket", () => {
-  let mesh;
+  let mesh = null;
 
   beforeAll(async () => {
     const Module = await loadEngine();

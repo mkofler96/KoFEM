@@ -78,7 +78,7 @@ const disc = nodesWhere(
 )[0];
 
 describe("uniaxial extension driven by a prescribed displacement", () => {
-  let result;
+  let result = null;
   beforeAll(async () => {
     const solve = await loadSolver();
     result = solve(

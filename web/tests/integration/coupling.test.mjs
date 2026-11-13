@@ -99,7 +99,7 @@ function solve(Module, verts, tets, couplings, fixedDofs, loads) {
     loadDofs.push(dof);
     loadVals.push(value);
   }
-  let result;
+  let result = null;
   try {
     result = Module.solve_coupled(
       {
@@ -146,9 +146,9 @@ const maxDeflection = (disp, axis) => {
 // ── 1 + 2: one cantilever, its tip face idealised to a reference point ────────
 describe("kinematic coupling: force and moment through a reference point", () => {
   const FORCE = -500; // N, −Y
-  let direct;
-  let viaPoint;
-  let moment;
+  let direct = null;
+  let viaPoint = null;
+  let moment = null;
 
   beforeAll(async () => {
     const Module = await loadEngine();
@@ -271,11 +271,11 @@ describe("point-to-point connection: the DOF mask switches the hinge off", () =>
   const AXIAL = 4000; // N along the beams
   const RIGID = 0x3f;
   const HINGE = 0x07; // x, y, z only
-  let axialRigid;
-  let axialHinge;
-  let bendRigid;
-  let monolithic;
-  let bendHinge;
+  let axialRigid = null;
+  let axialHinge = null;
+  let bendRigid = null;
+  let monolithic = null;
+  let bendHinge = null;
 
   beforeAll(async () => {
     const Module = await loadEngine();

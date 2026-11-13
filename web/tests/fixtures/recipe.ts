@@ -303,13 +303,15 @@ export function resolveFace(snap: Snapshot, at: Point): ResolvedFace {
     if (dist <= tol && (prev === undefined || dist < prev.dist))
       hits.set(faceIds[t], { dist, normal: unit(cross(sub(b, a), sub(c, a))) });
   });
-  if (hits.size !== 1)
+  if (hits.size !== 1) {
+    const found =
+      hits.size === 0
+        ? `found none (nearest display triangle is ${nearest.toExponential(3)} mm away)`
+        : `found faces ${[...hits.keys()].join(", ")} (the point lies on an edge between them)`;
     throw new Error(
-      `face at [${at.join(", ")}]: expected exactly one CAD face within ${tol.toExponential(2)} mm, ` +
-        (hits.size === 0
-          ? `found none (nearest display triangle is ${nearest.toExponential(3)} mm away)`
-          : `found faces ${[...hits.keys()].join(", ")} (the point lies on an edge between them)`),
+      `face at [${at.join(", ")}]: expected exactly one CAD face within ${tol.toExponential(2)} mm, ${found}`,
     );
+  }
   const [[cadFaceId, { normal }]] = [...hits.entries()];
   return { cadFaceId, normal };
 }
@@ -449,14 +451,15 @@ async function clickFace(
   // A support or load is picked on the mesh. A shell body's mesh is its
   // mid-surface: a face through the wall thickness (a plate's edge face) is
   // not in it but collapsed to its rim, picked as an Edge (clickRimFace).
-  if (target === "boundary" && !snap.surfaceFaceIds.includes(face.cadFaceId))
+  if (target === "boundary" && !snap.surfaceFaceIds.includes(face.cadFaceId)) {
+    const shellNote = snap.elements.some((e) => e.type === "CTRIA3")
+      ? ", and it is not on the rim of the shell mid-surface either"
+      : "";
     throw new MissingUiCapability(
       `pick the face at [${at.join(", ")}] (CAD face ${face.cadFaceId}) for a support or load`,
-      `the mesh has no element on that CAD face (mesh faces: ${[...new Set(snap.surfaceFaceIds)].join(", ")})` +
-        (snap.elements.some((e) => e.type === "CTRIA3")
-          ? ", and it is not on the rim of the shell mid-surface either"
-          : ""),
+      `the mesh has no element on that CAD face (mesh faces: ${[...new Set(snap.surfaceFaceIds)].join(", ")})${shellNote}`,
     );
+  }
   const before = await pickedFaceIds(page, target);
   if (before.includes(face.cadFaceId))
     throw new Error(

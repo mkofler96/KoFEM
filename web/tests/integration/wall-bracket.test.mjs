@@ -16,8 +16,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const MAX_ELEMENT_SIZE = 20.0;
 
 describe("wall bracket pipeline", () => {
-  let mesh;
-  let result;
+  let mesh = null;
+  let result = null;
 
   beforeAll(async () => {
     // Meshing and solving run in SEPARATE module instances, mirroring production:

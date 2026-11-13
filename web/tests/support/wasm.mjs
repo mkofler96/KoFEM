@@ -36,7 +36,7 @@ const silent = () => undefined;
 
 // The engine's factory and binary are read once. The promise is stored before
 // anything is awaited, so tests that load at the same time share one read.
-let engineSource;
+let engineSource = null;
 
 function readEngine() {
   if (!engineSource) {
@@ -66,7 +66,7 @@ export async function loadEngine(options = {}) {
   });
 }
 
-let femModule;
+let femModule = null;
 
 /**
  * The Rust finite-element module, initialised. It is stateless between

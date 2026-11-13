@@ -99,7 +99,7 @@ const CASES = [
   },
 ];
 
-let Module;
+let Module = null;
 const meshes = new Map();
 
 // Meshes a STEP file once per file run; the explicit-tie tests reuse the
@@ -129,9 +129,9 @@ beforeAll(async () => {
 for (const expected of CASES) {
   const { step, size } = expected;
   describe(`${step} (max element size ${size} mm)`, () => {
-    let shells;
-    let transition;
-    let buildError;
+    let shells = null;
+    let transition = null;
+    let buildError = null;
 
     beforeAll(() => {
       const mesh = meshOf(step, size);
@@ -155,7 +155,9 @@ for (const expected of CASES) {
 
     if (expected.refuses !== undefined) {
       test("refused as the TS pipeline refused it", () => {
-        expect(buildError, "the model was built, not refused").toBeDefined();
+        expect(buildError, "the model was built, not refused").toBeInstanceOf(
+          Error,
+        );
         expect(buildError.message).toStartWith(expected.refuses);
       });
       return;
@@ -163,7 +165,7 @@ for (const expected of CASES) {
 
     test("built (the TS pipeline built it too)", () => {
       expect(buildError?.message).toBeUndefined();
-      expect(transition).toBeDefined();
+      expect(transition).toEqual(expect.any(Object));
     });
 
     test("walls", () => {
@@ -198,7 +200,7 @@ for (const expected of CASES) {
 // the explicit elements with the showcase's pin/eye tie, plus a tie whose
 // surface B has no node in the pool.
 describe("full-crane-hook.step — explicit mixed model with the pin/eye tie", () => {
-  let explicit;
+  let explicit = null;
 
   beforeAll(() => {
     const mesh = meshOf("full-crane-hook.step", 6);

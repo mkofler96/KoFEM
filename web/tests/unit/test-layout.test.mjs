@@ -8,6 +8,7 @@
 // the way the tests used to be, would exist and never run. These checks turn
 // that into a failure that says where the file belongs.
 
+import { spawnSync } from "bun";
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -16,7 +17,7 @@ const REPO = fileURLToPath(new URL("../../../", import.meta.url));
 
 // Tracked files and new ones that are not ignored, as repo-relative paths.
 function repoFiles() {
-  const listed = Bun.spawnSync(
+  const listed = spawnSync(
     ["git", "ls-files", "--cached", "--others", "--exclude-standard"],
     { cwd: REPO },
   );

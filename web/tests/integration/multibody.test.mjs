@@ -19,15 +19,15 @@ import { detectInterfaces } from "../../src/lib/interfaces.ts";
 import { loadEngine } from "../support/wasm.mjs";
 
 describe("two-box assembly", () => {
-  let tess;
-  let nTris;
-  let interfaces;
-  let mesh;
-  let nNodes;
-  let nTets;
-  let fixedVertices;
-  let tipLoads;
-  let bcs;
+  let tess = null;
+  let nTris = null;
+  let interfaces = null;
+  let mesh = null;
+  let nNodes = null;
+  let nTets = null;
+  let fixedVertices = null;
+  let tipLoads = null;
+  let bcs = null;
 
   // Mesh and solve run in separate module instances, mirroring production
   // (see wall-bracket.test.mjs for the Netgen-global-state rationale).
@@ -178,10 +178,10 @@ describe("two-box assembly", () => {
   describe("per-body materials reach the solve", () => {
     const steel = { young_modulus: 210000, poisson_ratio: 0.3 };
     const soft = { young_modulus: 21000, poisson_ratio: 0.3 };
-    let deflSame;
-    let deflSoft;
-    let vonMisesSame;
-    let vonMisesSoft;
+    let deflSame = null;
+    let deflSoft = null;
+    let vonMisesSame = null;
+    let vonMisesSoft = null;
 
     async function solveOnce(materials) {
       const SolveModule = await loadEngine();

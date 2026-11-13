@@ -73,7 +73,7 @@ for (let i = 0; i < nVerts; i++) {
   if (Math.abs(verts[3 * i]) < 1e-9) clamped.push(i);
   if (Math.abs(verts[3 * i] - NX * CELL) < 1e-9) tipNodes.push(i);
 }
-let Module;
+let Module = null;
 const TIP_FORCE = -100;
 
 const maxU = (disp) => {

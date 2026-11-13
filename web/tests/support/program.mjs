@@ -5,6 +5,7 @@
 // report and exit non-zero when a published number no longer holds. Their
 // tests run them at that boundary, the way their usage lines say.
 
+import { spawn } from "bun";
 import { fileURLToPath } from "node:url";
 
 const WEB_DIR = fileURLToPath(new URL("../../", import.meta.url));
@@ -14,7 +15,7 @@ const WEB_DIR = fileURLToPath(new URL("../../", import.meta.url));
  * output. `file` is relative to web/, as in the program's usage line.
  */
 export async function runProgram(file, args = []) {
-  const proc = Bun.spawn(["bun", file, ...args], {
+  const proc = spawn(["bun", file, ...args], {
     cwd: WEB_DIR,
     stdin: "ignore",
     stdout: "pipe",

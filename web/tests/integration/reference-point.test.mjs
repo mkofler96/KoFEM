@@ -355,13 +355,13 @@ describe("kinematic coupling on an all-solid cantilever", () => {
   // size — which is why the moment check below compares against THIS rather than
   // against the analytic beam: the ratio of the two load cases isolates the
   // coupling from the element's own stiffness error.
-  let forceDeflection;
+  let forceDeflection = null;
   // The same, with the force spread straight over the coupled face.
-  let uDirect;
+  let uDirect = null;
   // Tip deflection under the end moment.
-  let momentDeflection;
+  let momentDeflection = null;
   // Largest |u| over the tip face while the reference point is clamped.
-  let clampedTip;
+  let clampedTip = null;
 
   beforeAll(async () => {
     // The shell idealisation runs in the Rust module (crates/kofem-shellize).

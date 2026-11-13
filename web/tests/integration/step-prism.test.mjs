@@ -123,7 +123,7 @@ describe("STEP string escaping", () => {
   });
 
   describe("import", () => {
-    let tess;
+    let tess = null;
 
     beforeAll(async () => {
       const engine = await loadEngine();
@@ -172,10 +172,10 @@ function describePart(label, step, faces, volume, size, maxElementSize) {
   const tolerance = 4e-6 * size;
 
   describe(label, () => {
-    let tess;
-    let worst;
-    let area;
-    let dto;
+    let tess = null;
+    let worst = null;
+    let area = null;
+    let dto = null;
 
     beforeAll(async () => {
       const engine = await loadEngine();

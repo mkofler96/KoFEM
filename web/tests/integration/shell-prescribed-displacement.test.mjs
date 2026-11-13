@@ -101,7 +101,7 @@ const mid = nodesWhere(
 )[0];
 
 describe("shell membrane strip driven by a prescribed displacement", () => {
-  let result;
+  let result = null;
   beforeAll(async () => {
     const solveShell = await loadShellSolver();
     result = solveShell(

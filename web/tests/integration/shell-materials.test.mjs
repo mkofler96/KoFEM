@@ -16,7 +16,7 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { loadEngine } from "../support/wasm.mjs";
 
-let Module;
+let Module = null;
 beforeAll(async () => {
   Module = await loadEngine();
 });
@@ -94,11 +94,11 @@ const SERIES =
   SIGMA * (LENGTH / 2) * (1 / STEEL.young_modulus + 1 / ALU.young_modulus);
 
 describe("solve_shell — per-triangle materials", () => {
-  let series;
-  let swapped;
-  let single;
-  let arrayOfOne;
-  let allSecond;
+  let series = null;
+  let swapped = null;
+  let single = null;
+  let arrayOfOne = null;
+  let allSecond = null;
   beforeAll(() => {
     series = solveShell([STEEL, ALU], attributes);
     // The array order must not matter — only what each attribute selects.
@@ -227,9 +227,9 @@ describe("solve_coupled — per-triangle shell materials", () => {
       JSON.stringify({ solid: STEEL, shell }),
     );
 
-  let series;
-  let single;
-  let missing;
+  let series = null;
+  let single = null;
+  let missing = null;
   beforeAll(() => {
     series = coupled([STEEL, ALU], attributes);
     single = coupled(STEEL);

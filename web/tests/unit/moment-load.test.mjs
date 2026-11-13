@@ -147,7 +147,7 @@ describe("face whose nodes all lie on the moment axis is skipped", () => {
   ]);
   const warnings = [];
   const originalWarn = console.warn;
-  let loads;
+  let loads = null;
   try {
     console.warn = (message) => warnings.push(message);
     loads = momentToNodalForces(

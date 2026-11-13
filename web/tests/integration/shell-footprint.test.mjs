@@ -65,7 +65,7 @@ function bodyVolume(clipped, bodyId) {
 }
 
 describe("physical shell footprint", () => {
-  let model;
+  let model = null;
 
   beforeAll(async () => {
     await loadFem();
@@ -262,7 +262,7 @@ describe("automatic solid sections", () => {
 
 // The coupled solve and optimizer of the C++ engine on the same footprint.
 describe("footprint survives reload and passes the engine stress regression", () => {
-  let engine;
+  let engine = null;
 
   beforeAll(async () => {
     await loadFem();
