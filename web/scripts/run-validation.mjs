@@ -22,6 +22,7 @@
 import { existsSync, readdirSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { posix, resolve } from "node:path";
+import { spawn } from "bun";
 
 /** Theory-page checks; also `bun run test:theory` (`--group theory`). */
 export const THEORY_STEPS = [
@@ -182,6 +183,22 @@ const seconds = (ms) => `${(ms / 1000).toFixed(1)} s`;
 const megabytes = (bytes) =>
   bytes === null ? "–" : `${Math.round(bytes / 2 ** 20)} MB`;
 
+/** Spawn a step's command, or return why it could not start. */
+function startProcess(step, webDir) {
+  try {
+    return {
+      proc: spawn(step.argv, {
+        cwd: webDir,
+        stdin: "ignore",
+        stdout: "pipe",
+        stderr: "pipe",
+      }),
+    };
+  } catch (error) {
+    return { error: error instanceof Error ? error : new Error(String(error)) };
+  }
+}
+
 async function runStep(step, webDir) {
   const start = performance.now();
   // stdout and stderr go into one buffer in arrival order, printed when the
@@ -193,24 +210,17 @@ async function runStep(step, webDir) {
       chunks.push(decoder.decode(chunk, { stream: true }));
     chunks.push(decoder.decode());
   };
-  let proc;
-  try {
-    proc = Bun.spawn(step.argv, {
-      cwd: webDir,
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "pipe",
-    });
-  } catch (error) {
+  const started = startProcess(step, webDir);
+  if ("error" in started)
     return {
       step,
       ok: false,
       durationMs: performance.now() - start,
-      exit: `could not start: ${error.message}`,
+      exit: `could not start: ${started.error.message}`,
       maxRss: null,
       output: "",
     };
-  }
+  const { proc } = started;
   await Promise.all([collect(proc.stdout), collect(proc.stderr)]);
   const code = await proc.exited;
   const usage = proc.resourceUsage();
@@ -267,9 +277,7 @@ function printSummary(results, wallMs, jobs) {
       `  ${result.ok ? "PASS" : "FAIL"}  ${seconds(result.durationMs).padStart(8)}  ${megabytes(result.maxRss).padStart(7)}  ${result.ok ? result.step.name : `${result.step.name.padEnd(width)}  (${result.exit})`}`,
     );
   console.log(
-    `\n${results.length - failed.length}/${results.length} steps passed` +
-      (failed.length ? `, ${failed.length} FAILED` : "") +
-      ` in ${seconds(wallMs)} wall time (up to ${jobs} at once; columns: duration, peak memory)`,
+    `\n${results.length - failed.length}/${results.length} steps passed${failed.length ? `, ${failed.length} FAILED` : ""} in ${seconds(wallMs)} wall time (up to ${jobs} at once; columns: duration, peak memory)`,
   );
   if (failed.length) {
     console.log("Failed:");
