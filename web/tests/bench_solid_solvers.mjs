@@ -28,7 +28,11 @@ import { buildVertexIndexer } from "../src/lib/solveMeshPacking.ts";
 import { buildSolidEngineInputs } from "../src/lib/solve/solid.ts";
 import { solveSolidInRust } from "../src/lib/solve/amg.ts";
 import { loadFemModule } from "../src/lib/femModule.ts";
-import { ElasticModel, SolveOptions } from "../src/wasm/fem/kofem_wasm.js";
+import {
+  ElasticModel,
+  SolveOptions,
+  Ties,
+} from "../src/wasm/fem/kofem_wasm.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const enginePkg = join(here, "../src/wasm/pkg");
@@ -37,7 +41,7 @@ const { default: createModule } = await import(
 );
 const wasmBinary = readFileSync(join(enginePkg, "kofem_wasm_emcc.wasm")).buffer;
 await loadFemModule();
-const fem = { ElasticModel, SolveOptions };
+const fem = { ElasticModel, SolveOptions, Ties };
 
 const cases = process.argv.slice(2);
 if (cases.length === 0)

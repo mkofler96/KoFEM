@@ -202,6 +202,7 @@ impl MixedModel {
             preconditioner,
             reduction: Some(reduction),
             output: RunOutput::AllDofs,
+            tie_report: None,
         })
     }
 

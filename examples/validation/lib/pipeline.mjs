@@ -68,6 +68,8 @@ import {
   weldTies,
 } from "../../../web/src/lib/solve/solid.ts";
 import { buildVertexIndexer } from "../../../web/src/lib/solveMeshPacking.ts";
+import { constraintTieCount } from "../../../web/src/lib/tie.ts";
+import { tieWeighting } from "../../../web/src/lib/solve/tieMortar.ts";
 import { nodeVonMisesField } from "../../../web/src/lib/resultField.ts";
 import { buildMeshTimeShellModel } from "../../../web/src/lib/solve/autoShell.ts";
 import { buildShellEngineInputs } from "../../../web/src/lib/solve/shell.ts";
@@ -629,13 +631,27 @@ async function solveSolid(payload, where) {
       `${where}: the app would not use AMG for this model (${reason})`,
     );
   const log = () => {};
-  const tied = weldTies(nodes, elements, payload.tieGroups, log);
+  const fem = await rustFem();
+  const tied = weldTies(
+    nodes,
+    elements,
+    payload.tieGroups,
+    log,
+    constraintTieCount(payload.tieGroups) > 0
+      ? tieWeighting(elementOrder, fem)
+      : null,
+  );
   const neverAsk = () => {
     throw new Error(`${where}: the AMG solve reached its iteration limit`);
   };
   const solved = await solveSolidInRust(
-    await rustFem(),
-    { ...payload, nodes: tied.solveNodes, elements: tied.tiedElements },
+    fem,
+    {
+      ...payload,
+      nodes: tied.solveNodes,
+      elements: tied.tiedElements,
+      constraintTies: tied.constraints,
+    },
     elementOrder,
     "amg",
     tied.vid,

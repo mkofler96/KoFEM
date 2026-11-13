@@ -22,6 +22,7 @@ interface TieGroupState {
   facesB: { id: number; nodeIds: number[] }[];
   extent: "full" | "region";
   searchDistance: number;
+  method: "mpc" | "merge";
 }
 
 type Store = {
@@ -153,13 +154,15 @@ test("a tie connects two picked surfaces and reports the pairs it welds", async 
   expect(groups[0].name).toBe("Tie1");
   expect(groups[0].extent).toBe("region");
   expect(groups[0].searchDistance).toBe(0.6);
+  // A new tie joins by constraint unless the user chooses the node-merge.
+  expect(groups[0].method).toBe("mpc");
   expect(groups[0].facesA[0].nodeIds).toEqual(model.facingA);
   expect(groups[0].facesB[0].nodeIds).toEqual(model.facingB);
 
-  // The card names the connection and the node pairs it actually welds — the
-  // 3×3 interface of the two facing faces.
+  // The card names the connection and the nodes it actually ties — the 3×3
+  // interface of the two facing faces.
   await expect(page.getByTestId("tree-tie-1")).toHaveText("Tie1");
-  await expect(page.getByText("within 0.6 mm · 9 node pairs")).toBeVisible();
+  await expect(page.getByText("within 0.6 mm · 9 tied nodes")).toBeVisible();
 });
 
 test("a tie's extent is editable after creation, and the tie is deletable", async ({
@@ -187,6 +190,13 @@ test("a tie's extent is editable after creation, and the tie is deletable", asyn
 
   const edited = await tieState(page);
   expect(edited[0].extent).toBe("full");
+  await expect(page.getByText("full surface · 9 tied nodes")).toBeVisible();
+
+  // The method is editable too: a node-merge welds the same 3×3 interface.
+  await page.getByTitle("Edit tie").click();
+  await form.getByTestId("tie-method").selectOption("merge");
+  await form.getByRole("button", { name: "Save" }).click();
+  expect((await tieState(page))[0].method).toBe("merge");
   await expect(page.getByText("full surface · 9 node pairs")).toBeVisible();
 
   await page.getByTitle("Delete tie").click();
@@ -226,9 +236,9 @@ test("one picked interface splits between the two bodies that meet on it", async
   const groups = await tieState(page);
   expect(groups).toHaveLength(1);
   expect(groups[0].facesB).toHaveLength(0);
-  // The split found the 3x3 facing grids of the two boxes and welded them.
+  // The split found the 3x3 facing grids of the two boxes and tied them.
   await expect(
-    page.getByText("full surface · split by body · 9 node pairs"),
+    page.getByText("full surface · split by body · 9 tied nodes"),
   ).toBeVisible();
 });
 

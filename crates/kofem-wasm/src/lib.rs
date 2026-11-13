@@ -13,6 +13,7 @@
 mod mixed;
 mod shell;
 mod shellize;
+mod tie;
 
 pub use mixed::MixedModel;
 pub use shell::ShellModel;
@@ -20,12 +21,14 @@ pub use shellize::{
     CoupledResult, CouplingInput, ExplicitCoupledResult, ShellSet, ShellTransitionResult,
     ShellizeInput,
 };
+pub use tie::{tie_mortar_weights, MortarSurface, MortarTies, Ties};
 
 use kofem_fem::{
-    assemble_stiffness, prepare_coupled_static, prepare_static, solve_static, von_mises,
-    AmgSettings, BoundaryFaces, CgSettings, CoupledReduction, Coupling, CouplingKind, CsrMatrix,
-    ElementOrder, FemError, Isotropic, PcgRun, PcgStatus, PreconditionerChoice, PreparedCoupled,
-    PreparedStatic, StoppingRule, SurfaceLoadKind, TetMesh, DOFS_PER_NODE,
+    assemble_stiffness, prepare_coupled_static, prepare_static, prepare_tied_static, solve_static,
+    von_mises, AmgSettings, BoundaryFaces, CgSettings, CoupledReduction, Coupling, CouplingKind,
+    CsrMatrix, ElementOrder, FemError, Isotropic, PcgRun, PcgStatus, PreconditionerChoice,
+    PreparedCoupled, PreparedStatic, PreparedTied, StoppingRule, SurfaceLoadKind, TetMesh,
+    TieReport, VertexTies, DOFS_PER_NODE,
 };
 use wasm_bindgen::prelude::*;
 
@@ -315,6 +318,7 @@ impl ElasticModel {
             preconditioner: preconditioner_name(options.preconditioner).to_owned(),
             reduction: None,
             output: RunOutput::Translations,
+            tie_report: None,
         })
     }
 
@@ -372,6 +376,71 @@ impl ElasticModel {
             preconditioner: preconditioner_name(options.preconditioner).to_owned(),
             reduction: Some(reduction),
             output: RunOutput::Translations,
+            tie_report: None,
+        })
+    }
+
+    /// As `startSolve`, with the constraint ties `ties` eliminated
+    /// (`kofem_fem::tie`): constraints and forces as for `startSolve`, 3 per
+    /// node. A tied vertex DOF a support prescribes keeps its support. On a
+    /// quadratic model the tied vertices follow the master faces' quadratic
+    /// field, and the edge and face nodes of the tied surface are tied too.
+    /// The run's solution has 3 translations per node; its `tiedNodes`,
+    /// `tieEliminated` and `tiePrescribed` say what the elimination did.
+    ///
+    /// # Errors
+    /// Missing assembly, a malformed tie table or ties that do not fit the
+    /// mesh, ties in a cycle, malformed constraints or forces, or a
+    /// multigrid setup that finds the model under-constrained.
+    #[wasm_bindgen(js_name = startTiedSolve)]
+    pub fn start_tied_solve(
+        &self,
+        ties: &Ties,
+        fixed_dofs: &[u32],
+        fixed_values: &[f64],
+        forces: &[f64],
+        options: &SolveOptions,
+    ) -> Result<SolveRun, JsError> {
+        let assembled = self
+            .stiffness
+            .as_ref()
+            .ok_or_else(|| JsError::new("assemble() must be called before startTiedSolve()"))?;
+        let vertex_ties = VertexTies::new(
+            self.mesh.vertex_count(),
+            &ties.slaves,
+            &ties.offsets,
+            &ties.masters,
+            &ties.weights,
+        )
+        .map_err(|error| to_js(&error))?;
+        let PreparedTied {
+            mut prepared,
+            reduction,
+            report,
+        } = prepare_tied_static(
+            &self.mesh,
+            assembled,
+            &vertex_ties,
+            fixed_dofs,
+            fixed_values,
+            forces,
+            options.preconditioner,
+        )
+        .map_err(|error| to_js(&error))?;
+        let run = PcgRun::start(
+            prepared.system.as_mut(),
+            &prepared.rhs,
+            options.settings.relative_tolerance,
+            options.settings.stopping,
+        )
+        .map_err(|error| to_js(&error))?;
+        Ok(SolveRun {
+            prepared,
+            run,
+            preconditioner: preconditioner_name(options.preconditioner).to_owned(),
+            reduction: Some(reduction),
+            output: RunOutput::Translations,
+            tie_report: Some(report),
         })
     }
 }
@@ -496,6 +565,8 @@ pub struct SolveRun {
     /// How a coupled solve's reduced unknowns expand to the vertices.
     reduction: Option<CoupledReduction>,
     output: RunOutput,
+    /// What a tied solve's elimination did; `None` without ties.
+    tie_report: Option<TieReport>,
 }
 
 #[wasm_bindgen]
@@ -540,6 +611,29 @@ impl SolveRun {
     #[must_use]
     pub fn still_descending(&self, window: usize) -> bool {
         self.run.still_descending(window)
+    }
+
+    /// Nodes a tied solve ties (edge and face nodes included); 0 without
+    /// ties.
+    #[wasm_bindgen(getter, js_name = tiedNodes)]
+    #[must_use]
+    pub fn tied_nodes(&self) -> usize {
+        self.tie_report.map_or(0, |report| report.tied_nodes)
+    }
+
+    /// Slave DOFs a tied solve eliminates; 0 without ties.
+    #[wasm_bindgen(getter, js_name = tieEliminated)]
+    #[must_use]
+    pub fn tie_eliminated(&self) -> usize {
+        self.tie_report.map_or(0, |report| report.eliminated)
+    }
+
+    /// Slave DOFs a tied solve leaves to the support that prescribes them;
+    /// 0 without ties.
+    #[wasm_bindgen(getter, js_name = tiePrescribed)]
+    #[must_use]
+    pub fn tie_prescribed(&self) -> usize {
+        self.tie_report.map_or(0, |report| report.prescribed)
     }
 
     /// The preconditioner the run uses, in words for the solve log.

@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Node-merge ("bonded tie") between two EXPLICITLY SELECTED surfaces — the
-// connector condition the user defines in the Constraints panel, alongside the
-// fixed displacements and the loads.
+// Bonded tie between two EXPLICITLY SELECTED surfaces — the connector condition
+// the user defines in the Constraints panel, alongside the fixed displacements
+// and the loads.
 //
 // It replaces the former model-wide "tie distance" (issue #359), which welded
 // every near-contact node pair of every pair of bodies at once: a single number
@@ -11,25 +11,28 @@
 // had joined. A tie is now a named object with two picked surfaces, so what is
 // connected to what is a modelling decision the user states and can see.
 //
-// Each connection welds pairs of nodes — one from surface A, one from surface B
-// — into one shared node, fusing the meshes over the contact patch so load
-// transfers and the assembly is solvable. Two extents:
+// A connection joins the two surfaces by one of two methods:
 //
-//   "full"   — every mutual-nearest pair across the two surfaces is welded,
-//              whatever the gap. The whole selected surface is coupled.
-//   "region" — only pairs closer than `searchDistance` are welded, so a tie can
-//              be limited to the part of the surface that actually touches
-//              (a pin resting in a hook eye touches along a tangent line, not
-//              over the whole cylinder).
+//   "mpc"   — each node of one surface is CONSTRAINED to follow the point of
+//             the other surface it projects onto (lib/tieConstraints.ts). No
+//             node moves, so the geometry is preserved (issue #357).
+//   "merge" — pairs of nodes, one from each surface, are WELDED into one
+//             shared node (this file). It pulls the two surfaces together
+//             within the pairing distance and stiffens the joint locally —
+//             adequate for the overall load path, not for local stress.
 //
-// This is an approximation — it pulls the two surfaces together within the
-// pairing distance and stiffens the joint locally — adequate for the overall
-// load path but not for accurate local contact stress. A geometry-preserving
-// MPC tie is the accurate follow-up (issue tracked separately).
+// and over one of two extents:
+//
+//   "full"   — the whole selected surface is coupled, whatever the gap.
+//   "region" — only what lies within `searchDistance` of the other side, so a
+//              tie can be limited to the part of the surface that actually
+//              touches (a pin resting in a hook eye touches along a tangent
+//              line, not over the whole cylinder).
 
 import { SpatialGrid } from "./spatialGrid.js";
 
 export type TieExtent = "full" | "region";
+export type TieMethod = "mpc" | "merge";
 
 export interface TieNode {
   id: number;
@@ -51,6 +54,22 @@ export interface TieDefinition {
   facesB: { nodeIds: number[] }[];
   extent: TieExtent;
   searchDistance: number;
+  // Absent on connections defined before the constraint tie existed (saved
+  // analyses, hand-built payloads): those were node-merge ties and stay so.
+  method?: TieMethod;
+}
+
+// How a connection joins its surfaces (see the header).
+export function tieMethod(tie: TieDefinition): TieMethod {
+  // eslint-disable-next-line kofem/no-silent-fallback -- a connection without a method predates the constraint tie and was defined as a node-merge
+  return tie.method ?? "merge";
+}
+
+// How many of a model's connections are constraint ties — the ones only the
+// Rust solid solve carries (crates/kofem-fem/src/tie.rs).
+export function constraintTieCount(ties: TieDefinition[] | undefined): number {
+  if (!ties) return 0;
+  return ties.filter((tie) => tieMethod(tie) === "mpc").length;
 }
 
 // One welded node pair, in ORIGINAL node ids — what the viewport draws to show
@@ -66,6 +85,7 @@ export interface TiePair {
 // Per-connection outcome, for the solver log and for the panel's summary.
 export interface TieReport {
   name: string;
+  // Node pairs welded (merge) or nodes constrained (mpc).
   nPaired: number;
   // Nodes the two surfaces already have in common (a conforming interface):
   // they need no weld, and a connection that finds only these is not an error.

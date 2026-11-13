@@ -22,6 +22,7 @@ import type {
 } from "../store/modelStore";
 import { DEFAULT_TOPOPT_SETTINGS, RESULT_TYPES } from "../store/modelStore";
 import { parseHandCheck, type HandCheck } from "./handCheck";
+import { tieMethod, type TieMethod } from "./tie";
 import { restoreInterfaces, type BodyInterface } from "./interfaces";
 
 // ── KoFEM analysis file format (.vtu) ─────────────────────────────────────────
@@ -122,8 +123,9 @@ interface KofemFieldDataV1 {
   bcGroups: NamedBcGroup[];
   loadGroups: NamedLoadGroup[];
   // Tie (connector) conditions. Absent in files written before connections
-  // became a named model object — such a file simply has no ties.
-  tieGroups?: TieGroup[];
+  // became a named model object — such a file simply has no ties. A tie's
+  // `method` is absent in files written before the constraint tie existed.
+  tieGroups?: (Omit<TieGroup, "method"> & { method?: TieMethod })[];
   // Surface-to-point couplings. Absent in files written before couplings
   // existed — such a file simply has none. The reference points themselves need
   // no separate entry: they are nodes, and travel in the VTU point list.
@@ -660,7 +662,11 @@ export function parseAnalysisFile(text: string): AnalysisState {
   // A file written before ties existed carries none. The counter is then not
   // guessed but derived from the ties actually present, so an id can never be
   // reused whatever the file contained.
-  const tieGroups = meta.tieGroups ?? [];
+  // A tie saved before the constraint method existed was a node-merge.
+  const tieGroups = (meta.tieGroups ?? []).map((tie) => ({
+    ...tie,
+    method: tieMethod(tie),
+  }));
   const nextTieGroupId =
     meta.nextTieGroupId ??
     tieGroups.reduce((highest, tie) => Math.max(highest, tie.id), 0) + 1;
