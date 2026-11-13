@@ -6,6 +6,7 @@ import path from "path";
 import fs from "fs";
 import { fixturePath, gotoApp } from "./fixtures/app";
 import { openTree } from "./fixtures/tree";
+import { settleViewport } from "./fixtures/viewport";
 
 // Captures the landing-page tutorial figures by driving the real app through a
 // full analysis, exactly like the e2e showcase. Unlike showcase.spec.ts (whose
@@ -36,8 +37,6 @@ test.describe("Tutorial figure capture", () => {
   test("full workflow → committed tutorial figures @capture", async ({
     page,
   }) => {
-    test.setTimeout(600_000);
-
     const BRACKET = fixturePath(BRACKET_FIXTURE);
 
     const shot = (name: string) =>
@@ -73,14 +72,14 @@ test.describe("Tutorial figure capture", () => {
     await Promise.race([
       expect(
         page.getByRole("button").filter({ hasText: "Generate mesh" }),
-      ).toBeVisible({ timeout: 60_000 }),
+      ).toBeVisible(),
       fatalError,
     ]);
     const stepErr = page.getByTestId("step-error");
     if (await stepErr.isVisible()) {
       throw new Error(`STEP import failed: ${await stepErr.textContent()}`);
     }
-    await page.waitForTimeout(600);
+    await settleViewport(page);
 
     // 2. Geometry — the tessellated CAD surface in the viewport.
     await shot("02-geometry.png");
@@ -89,17 +88,15 @@ test.describe("Tutorial figure capture", () => {
     await page.getByRole("button").filter({ hasText: "Generate mesh" }).click();
     const meshErr = page.getByTestId("meshing-error");
     await Promise.race([
-      expect(page.getByText("Mesh OK")).toBeVisible({
-        timeout: 180_000,
-      }),
-      meshErr.waitFor({ state: "visible", timeout: 180_000 }).then(async () => {
+      expect(page.getByText("Mesh OK")).toBeVisible(),
+      meshErr.waitFor({ state: "visible" }).then(async () => {
         throw new Error(
           `Volume meshing failed: ${await meshErr.textContent()}`,
         );
       }),
       fatalError,
     ]);
-    await page.waitForTimeout(400);
+    await settleViewport(page);
     await shot("03-mesh.png");
 
     // 4. Constraints & loads — fix the three bolt holes, load the hub. Injected
@@ -184,12 +181,10 @@ test.describe("Tutorial figure capture", () => {
 
     await page.locator('[data-testid^="tree-bc-"]').first().click();
     await Promise.race([
-      expect(page.getByTitle("Delete BC")).toBeVisible({
-        timeout: 15_000,
-      }),
+      expect(page.getByTitle("Delete BC")).toBeVisible(),
       fatalError,
     ]);
-    await page.waitForTimeout(400);
+    await settleViewport(page);
     await shot("04-constraints.png");
 
     // 5. Solve → results. Trigger via the exposed hook (the showcase documents
@@ -200,7 +195,6 @@ test.describe("Tutorial figure capture", () => {
         () =>
           typeof (window as unknown as { __kofemTriggerSolve?: () => void })
             .__kofemTriggerSolve === "function",
-        { timeout: 15_000 },
       ),
       fatalError,
     ]);
@@ -210,12 +204,10 @@ test.describe("Tutorial figure capture", () => {
       ).__kofemTriggerSolve?.();
     });
     await Promise.race([
-      expect(page.getByText("Result summary")).toBeVisible({
-        timeout: 240_000,
-      }),
+      expect(page.getByText("Result summary")).toBeVisible(),
       fatalError,
     ]);
-    await page.waitForTimeout(600);
+    await settleViewport(page);
     await shot("05-results.png");
   });
 });

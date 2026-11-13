@@ -197,8 +197,9 @@ async function rebuild(
 // ── The examples, in page order ───────────────────────────────────────────────
 
 for (const id of ORDER as string[]) {
-  test(`${id} rebuilt by hand gives the published number`, async ({ page }) => {
-    test.setTimeout(600_000);
+  test(`${id} rebuilt by hand gives the published number @pipeline`, async ({
+    page,
+  }) => {
     const recipe = recipeFor(id);
     const published = publishedFe(id);
     const value = await rebuild(page, id, recipe);
@@ -214,10 +215,9 @@ for (const id of ORDER as string[]) {
 
 test.describe("recipe driver", () => {
   for (const [name, { recipe, tolPct }] of Object.entries(DRIVER_RECIPES)) {
-    test(`${name}: built by hand, matches its closed form`, async ({
+    test(`${name}: built by hand, matches its closed form @pipeline`, async ({
       page,
     }) => {
-      test.setTimeout(300_000);
       const value = await rebuild(page, name, recipe);
       const { reference } = recipe.readout;
       expect(

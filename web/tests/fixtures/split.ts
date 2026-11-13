@@ -6,8 +6,7 @@
 
 import { expect, type Page } from "@playwright/test";
 import { gotoApp } from "./app";
-
-export type Point = [number, number, number];
+import { clickModelAt, type Point } from "./viewport";
 
 // Import STEP text through the Geometry panel's import card.
 export async function importStepText(page: Page, step: string): Promise<void> {
@@ -19,7 +18,7 @@ export async function importStepText(page: Page, step: string): Promise<void> {
   });
   await expect(
     page.getByRole("button").filter({ hasText: "Generate mesh" }),
-  ).toBeVisible({ timeout: 60_000 });
+  ).toBeVisible();
 }
 
 // Distinct CAD faces of the geometry, and how many bodies it has.
@@ -44,40 +43,6 @@ export function geometryCounts(page: Page) {
   });
 }
 
-// Click the model where `point` (mm) lands on screen — a user's click on the
-// face that point lies on.
-export async function clickModelAt(page: Page, point: Point): Promise<void> {
-  await page.waitForFunction(
-    () =>
-      !!(window as unknown as { __kofemViewport?: unknown }).__kofemViewport,
-  );
-  const screen = await page.evaluate(
-    (p) =>
-      (
-        window as unknown as {
-          __kofemViewport: {
-            project(p: Point): { x: number; y: number } | null;
-          };
-        }
-      ).__kofemViewport.project(p),
-    point,
-  );
-  if (!screen) throw new Error(`point ${point} is behind the camera`);
-  await page.mouse.click(screen.x, screen.y);
-}
-
-export async function lookFrom(page: Page, direction: Point): Promise<void> {
-  await page.evaluate(
-    (d) =>
-      (
-        window as unknown as {
-          __kofemViewport: { lookFrom(d: Point): void };
-        }
-      ).__kofemViewport.lookFrom(d),
-    direction,
-  );
-}
-
 // Pick the face under `point`, cut it with `x = position`, wait for the edit.
 export async function splitFaceAt(
   page: Page,
@@ -91,6 +56,6 @@ export async function splitFaceAt(
   await expect(page.locator('[data-testid^="split-face-"]')).toHaveCount(1);
   await page.getByTestId("split-apply").click();
   await expect
-    .poll(async () => (await geometryCounts(page)).edits, { timeout: 30_000 })
+    .poll(async () => (await geometryCounts(page)).edits)
     .toBe(before + 1);
 }

@@ -108,7 +108,6 @@ function twoGappedBoxes() {
 test("a tie connection makes a disconnected two-body solve converge", async ({
   page,
 }) => {
-  test.setTimeout(60_000);
   await gotoApp(page);
   await page.waitForFunction(
     () => !!(window as unknown as { __kofem?: unknown }).__kofem,
@@ -169,10 +168,9 @@ test("a tie connection makes a disconnected two-body solve converge", async ({
   if (tied.ok) expect(tied.nDisp).toBe(model.nodes.length * 3);
 });
 
-test("meshing a two-body part and toggling a body's visibility", async ({
+test("meshing a two-body part and toggling a body's visibility @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(90_000);
   await importStep(page, TWO_BOXES);
 
   // Mesh the assembly so the FEM surface exists (exercises applyMeshResult's
@@ -185,7 +183,6 @@ test("meshing a two-body part and toggling a body's visibility", async ({
           __kofemStore: { getState(): { nodes: unknown[] } };
         }
       ).__kofemStore.getState().nodes.length ?? 0) > 0,
-    { timeout: 60_000 },
   );
 
   const readHidden = () =>

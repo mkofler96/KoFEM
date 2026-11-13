@@ -153,10 +153,9 @@ function padNodes(state: ModelState, side: "left" | "right"): number[] {
     .sort((a, b) => a - b);
 }
 
-test("an example with a split re-meshes with its groups on the same CAD faces", async ({
+test("an example with a split re-meshes with its groups on the same CAD faces @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(180_000);
   const build = await buildFromRecipe(ID, recipe);
   const vtu = buildAnalysisFile(build, "Re-mesh after a split");
   await page.route(`**/examples/${ID}.vtu`, (route) =>
@@ -180,9 +179,7 @@ test("an example with a split re-meshes with its groups on the same CAD faces", 
   await expect(page.locator("nav")).toBeVisible();
   // The geometry is restored by a second fetch after the .vtu has loaded.
   await expect
-    .poll(async () => (await modelState(page)).stepBytes?.length ?? 0, {
-      timeout: 30_000,
-    })
+    .poll(async () => (await modelState(page)).stepBytes?.length ?? 0)
     .toBeGreaterThan(0);
   const opened = await modelState(page);
   expect(
@@ -198,13 +195,10 @@ test("an example with a split re-meshes with its groups on the same CAD faces", 
   await page.getByTestId("min-element-size").fill(String(REMESH / 10));
   await page.getByTestId("mesh-generate").click();
   await expect
-    .poll(
-      async () => {
-        const st = await modelState(page);
-        return !st.isMeshing && st.nodes.length !== opened.nodes.length;
-      },
-      { timeout: 120_000 },
-    )
+    .poll(async () => {
+      const st = await modelState(page);
+      return !st.isMeshing && st.nodes.length !== opened.nodes.length;
+    })
     .toBe(true);
   await expect(page.getByTestId("meshing-error")).toHaveCount(0);
 
@@ -278,17 +272,14 @@ function storeFlags(page: Page) {
 // face's nodes of the new mesh. The re-mesh is twice the example's own element
 // size: a genuinely different mesh, and quicker than the example's own mesh.
 for (const id of ORDER as string[]) {
-  test(`${id} opens with its geometry and re-meshes with its groups on the same CAD faces`, async ({
+  test(`${id} opens with its geometry and re-meshes with its groups on the same CAD faces @pipeline`, async ({
     page,
   }) => {
-    test.setTimeout(240_000);
     const recipe = exampleRecipe(id);
     await page.goto(`/app/?example=${id}`);
     await expect(page.locator("nav")).toBeVisible();
     await expect
-      .poll(async () => (await storeFlags(page)).stepBytes, {
-        timeout: 30_000,
-      })
+      .poll(async () => (await storeFlags(page)).stepBytes)
       .toBeGreaterThan(0);
     const opened = await storeFlags(page);
     expect(opened.stepTriangles, "the body is drawn").toBeGreaterThan(0);
@@ -309,13 +300,10 @@ for (const id of ORDER as string[]) {
     await page.getByTestId("min-element-size").fill(String(size / 10));
     await page.getByTestId("mesh-generate").click();
     await expect
-      .poll(
-        async () => {
-          const st = await storeFlags(page);
-          return !st.isMeshing && st.nodes !== opened.nodes;
-        },
-        { timeout: 180_000 },
-      )
+      .poll(async () => {
+        const st = await storeFlags(page);
+        return !st.isMeshing && st.nodes !== opened.nodes;
+      })
       .toBe(true);
     await expect(page.getByTestId("meshing-error")).toHaveCount(0);
 

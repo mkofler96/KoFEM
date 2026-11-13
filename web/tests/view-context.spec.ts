@@ -26,10 +26,9 @@ const viewRepr = (page: Page) =>
 const statusRepr = (page: Page, name: string) =>
   page.getByRole("button", { name, exact: true }).click();
 
-test("switching between geometry and mesh entries switches the viewport", async ({
+test("switching between geometry and mesh entries switches the viewport @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
   await importStep(page, TWO_BOXES);
   await page.getByRole("button", { name: /generate mesh/i }).click();
   await page.waitForFunction(
@@ -40,7 +39,6 @@ test("switching between geometry and mesh entries switches the viewport", async 
         }
       ).__kofemStore.getState().nodes.length > 0,
     null,
-    { timeout: 90_000 },
   );
   expect(await viewRepr(page)).toBe("surface");
 

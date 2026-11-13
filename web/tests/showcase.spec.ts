@@ -7,6 +7,7 @@ import fs from "fs";
 import { fixturePath, gotoApp } from "./fixtures/app";
 import { bootstrapCantilever } from "./fixtures/cantilever";
 import { openTree } from "./fixtures/tree";
+import { settleViewport } from "./fixtures/viewport";
 
 const OUT_DIR = path.join("playwright-results", "screenshots", "showcase");
 // tube.stp produces ~760 tets / 274 nodes — small enough for a fast CI solve.
@@ -19,11 +20,9 @@ test.describe("Full workflow showcase", () => {
     fs.mkdirSync(OUT_DIR, { recursive: true });
   });
 
-  test("tube: import → geometry → mesh → constraints → results", async ({
+  test("tube: import → geometry → mesh → constraints → results @pipeline", async ({
     page,
   }) => {
-    test.setTimeout(600_000);
-
     const TUBE = fixturePath(TUBE_FIXTURE);
 
     const t0 = Date.now();
@@ -69,7 +68,7 @@ test.describe("Full workflow showcase", () => {
     await Promise.race([
       expect(
         page.getByRole("button").filter({ hasText: "Generate mesh" }),
-      ).toBeVisible({ timeout: 60_000 }),
+      ).toBeVisible(),
       fatalError,
     ]);
     console.log(`[showcase] ${elapsed()} tessellation done`);
@@ -81,7 +80,7 @@ test.describe("Full workflow showcase", () => {
       );
     }
 
-    await page.waitForTimeout(600);
+    await settleViewport(page);
 
     // 2. Geometry panel
     await page.screenshot({
@@ -98,16 +97,12 @@ test.describe("Full workflow showcase", () => {
 
     const meshingErrorBanner = page.getByTestId("meshing-error");
     await Promise.race([
-      expect(page.getByText("Mesh OK")).toBeVisible({
-        timeout: 60_000,
+      expect(page.getByText("Mesh OK")).toBeVisible(),
+      meshingErrorBanner.waitFor({ state: "visible" }).then(async () => {
+        throw new Error(
+          `Volume meshing failed: ${await meshingErrorBanner.textContent()}`,
+        );
       }),
-      meshingErrorBanner
-        .waitFor({ state: "visible", timeout: 60_000 })
-        .then(async () => {
-          throw new Error(
-            `Volume meshing failed: ${await meshingErrorBanner.textContent()}`,
-          );
-        }),
       fatalError,
     ]);
     console.log(`[showcase] ${elapsed()} 03 volume mesh complete`);
@@ -196,9 +191,7 @@ test.describe("Full workflow showcase", () => {
 
     await page.locator('[data-testid^="tree-load-"]').first().click();
     await Promise.race([
-      expect(page.getByTitle("Delete load")).toBeVisible({
-        timeout: 15_000,
-      }),
+      expect(page.getByTitle("Delete load")).toBeVisible(),
       fatalError,
     ]);
     await page.screenshot({
@@ -217,7 +210,6 @@ test.describe("Full workflow showcase", () => {
         () =>
           typeof (window as unknown as { __kofemTriggerSolve?: () => void })
             .__kofemTriggerSolve === "function",
-        { timeout: 15_000 },
       ),
       fatalError,
     ]);
@@ -264,9 +256,7 @@ test.describe("Full workflow showcase", () => {
     console.log(`[showcase] ${elapsed()} solver started…`);
 
     await Promise.race([
-      expect(page.getByText("Result summary")).toBeVisible({
-        timeout: 120_000,
-      }),
+      expect(page.getByText("Result summary")).toBeVisible(),
       fatalError,
     ]);
 
@@ -284,8 +274,6 @@ test.describe("Full workflow showcase", () => {
   test("optimize: density field, threshold and convergence plot", async ({
     page,
   }) => {
-    test.setTimeout(180_000);
-
     page.on("pageerror", (err) =>
       console.error(`[showcase] page exception: ${err.message}`),
     );
@@ -302,9 +290,7 @@ test.describe("Full workflow showcase", () => {
     await page.getByRole("button", { name: /Run optimization/ }).click();
 
     // Hand-off to the density Results view.
-    await expect(page.getByText("Density threshold")).toBeVisible({
-      timeout: 120_000,
-    });
+    await expect(page.getByText("Density threshold")).toBeVisible();
     await expect(page.getByTestId("density-colorbar")).toBeVisible();
     await expect(page.getByTestId("convergence-plot")).toBeVisible();
 
@@ -322,7 +308,7 @@ test.describe("Full workflow showcase", () => {
         .setDensityThreshold(0.4);
     });
     // Let the viewport rebuild the thresholded surface before capturing.
-    await page.waitForTimeout(400);
+    await settleViewport(page);
 
     await page.screenshot({ path: path.join(OUT_DIR, "06-optimization.png") });
   });

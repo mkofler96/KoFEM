@@ -82,7 +82,6 @@ function convergenceIterations(logs: string[], prefix: string): number {
 test("CG pauses, resumes repeatedly without changing results, and stops explicitly", async ({
   page,
 }, testInfo) => {
-  test.setTimeout(120_000);
   const logs: string[] = [];
   page.on("console", (message) => logs.push(message.text()));
   await page.goto("/app/");
@@ -250,7 +249,6 @@ for (const path of ["shell", "coupled"] as const) {
   test(`${path} WASM solve resumes to identical fields and Stop rejects`, async ({
     page,
   }) => {
-    test.setTimeout(120_000);
     const logs: string[] = [];
     page.on("console", (message) => logs.push(message.text()));
     await page.goto("/app/");
@@ -341,7 +339,6 @@ function tetBeam(): SolveModel {
 test("AMG solve logs progress, asks to continue, resumes to identical fields and Stop rejects", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
   const logs: string[] = [];
   page.on("console", (message) => logs.push(message.text()));
   await page.goto("/app/");

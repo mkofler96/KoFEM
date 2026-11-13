@@ -18,7 +18,6 @@ const TUBE = path.resolve("tests", "fixtures", "tube.stp");
 test("the mesh summary opens a body's own size; Apply to all clears them (KOF-342)", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
   await importStep(page, TWO_BOXES);
 
   // Coarse sizes keep the mesh quick; each body sets a finer size of its own.
@@ -37,9 +36,7 @@ test("the mesh summary opens a body's own size; Apply to all clears them (KOF-34
     "⚠ Changes 2 bodies: Body 1, Body 2.",
   );
   await page.getByRole("button", { name: /generate mesh/i }).click();
-  await expect(page.getByTestId("mesh-region-size-2")).toHaveText("max 4 mm", {
-    timeout: 90_000,
-  });
+  await expect(page.getByTestId("mesh-region-size-2")).toHaveText("max 4 mm");
 
   // ✎ opens the body, with its own size in the field.
   await page.getByTestId("mesh-region-edit-2").click();
@@ -62,7 +59,6 @@ test("the mesh summary opens a body's own size; Apply to all clears them (KOF-34
 test("a single body with its own size gets no edit link or Apply to all (KOF-342)", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
   await importStep(page, TUBE);
   await openTree(page, "mesh");
   await page.getByTestId("max-element-size").fill("10");
@@ -73,9 +69,7 @@ test("a single body with its own size gets no edit link or Apply to all (KOF-342
   await openTree(page, "mesh");
   await expect(page.getByTestId("mesh-size-apply-all")).toHaveCount(0);
   await page.getByRole("button", { name: /generate mesh/i }).click();
-  await expect(page.getByTestId("mesh-region-size-1")).toHaveText("max 8 mm", {
-    timeout: 90_000,
-  });
+  await expect(page.getByTestId("mesh-region-size-1")).toHaveText("max 8 mm");
   await expect(page.getByTestId("mesh-region-edit-1")).toHaveCount(0);
   await expect(page.getByTestId("mesh-size-apply-all")).toHaveCount(0);
 });

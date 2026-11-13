@@ -31,20 +31,15 @@ async function openCantilever(page: Page) {
       (window as unknown as StoreWindow).__kofemStore.getState().stepBytes !==
       null,
     null,
-    { timeout: 15_000 },
   );
 }
 
 async function solveAndRead(page: Page): Promise<number[]> {
   await page.getByRole("button", { name: /Run static solve/ }).click();
-  await page.waitForFunction(
-    () => {
-      const st = (window as unknown as StoreWindow).__kofemStore.getState();
-      return !st.isRunning && st.result !== null;
-    },
-    null,
-    { timeout: 60_000 },
-  );
+  await page.waitForFunction(() => {
+    const st = (window as unknown as StoreWindow).__kofemStore.getState();
+    return !st.isRunning && st.result !== null;
+  }, null);
   return page.evaluate(() =>
     Array.from(
       (window as unknown as StoreWindow).__kofemStore.getState().result
@@ -62,7 +57,6 @@ async function backToSolve(page: Page) {
 test("AMG is the recommended default and matches Gauss–Seidel", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
   await openCantilever(page);
 
   const select = page.getByTestId("solver-method");
@@ -200,7 +194,6 @@ function coupledTetBeam(): SolveModel {
 test("a solid model with a coupling solves with AMG and matches Gauss–Seidel", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
   const logs: string[] = [];
   page.on("console", (message) => logs.push(message.text()));
   await page.goto("/app/");

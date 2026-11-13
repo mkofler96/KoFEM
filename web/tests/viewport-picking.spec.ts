@@ -10,6 +10,7 @@ import type { Page } from "@playwright/test";
 import { boxHexMesh } from "../../examples/validation/lib/mesh.mjs";
 import { addBoundary } from "./fixtures/tree";
 import type { ViewportHooks } from "../src/components/viewport/ViewportTestHooks";
+import { settleViewport } from "./fixtures/viewport";
 
 type Point = [number, number, number];
 
@@ -54,24 +55,6 @@ async function openBox(page: Page) {
     },
     { nodes, elements },
   );
-}
-
-// Wait until `point` stays put on screen: Fit View moves the camera in an
-// effect, and a camera that moves between project() and the click would make
-// the click miss for a reason this test is not about.
-async function waitForSteadyView(page: Page, point: Point): Promise<void> {
-  await expect
-    .poll(() =>
-      page.evaluate(async (p) => {
-        const hooks = (window as unknown as { __kofemViewport: ViewportHooks })
-          .__kofemViewport;
-        const first = hooks.project(p);
-        await new Promise((resolve) => setTimeout(resolve, 50));
-        const second = hooks.project(p);
-        return JSON.stringify(first) === JSON.stringify(second);
-      }, point),
-    )
-    .toBe(true);
 }
 
 // Turn the camera and click `point` in the same task, so no frame can render
@@ -128,7 +111,7 @@ test("a click right after a camera turn picks the face under the cursor", async 
     ),
   );
   await page.getByRole("button", { name: "Fit View", exact: true }).click();
-  await waitForSteadyView(page, [0, 2, 2]);
+  await settleViewport(page);
 
   // The fitted view looks from (1, 1, 1); turn to the x = 0 end and click its
   // centre before the turned view has been drawn.
@@ -166,7 +149,7 @@ test("a click right after a pick session starts picks the face under the cursor"
   );
   await page.getByRole("button", { name: "Fit View", exact: true }).click();
   await page.getByTestId("tree-add-boundary").click();
-  await waitForSteadyView(page, [5, 4, 2]);
+  await settleViewport(page);
 
   // Boundary conditions → + Add → Fixed displacement starts the pick; click the
   // top face before the viewport has committed the session.
@@ -231,7 +214,7 @@ test("two quick clicks on two faces pick both", async ({ page }) => {
       ),
     )
     .toBe("bc");
-  await waitForSteadyView(page, [5, 4, 2]);
+  await settleViewport(page);
 
   // The top face, then the x = 10 end, in one task: the second click comes
   // before the viewport has committed the first pick.
@@ -264,4 +247,47 @@ test("two quick clicks on two faces pick both", async ({ page }) => {
   );
 
   expect(await selectedCount(page)).toBe(2);
+});
+
+// Fit View moves the camera in an effect of the viewport's React tree, which
+// runs in a task of its own. A test that projects a point before that task
+// clicks where the old camera put it. settled() applies what is pending and
+// waits for the frame, so the fixtures can project and click deterministically.
+test("settled() applies a pending Fit View before a point is projected", async ({
+  page,
+}) => {
+  await openBox(page);
+  await page.waitForFunction(() =>
+    Boolean(
+      (window as unknown as { __kofemViewport?: unknown }).__kofemViewport,
+    ),
+  );
+
+  const views = await page.evaluate(
+    async (point) => {
+      const win = window as unknown as {
+        __kofemViewport: ViewportHooks;
+        __kofemStore: { getState(): { triggerFitView(): void } };
+      };
+      const hooks = win.__kofemViewport;
+      await hooks.settled();
+      // Look along x, then ask for Fit View in the same task: the fit is
+      // pending and the camera still looks from the side.
+      hooks.lookFrom([-1, 0, 0]);
+      win.__kofemStore.getState().triggerFitView();
+      const pending = hooks.project(point);
+      await hooks.settled();
+      const settled = hooks.project(point);
+      await new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      );
+      return { pending, settled, later: hooks.project(point) };
+    },
+    [0, 2, 2] as Point,
+  );
+
+  expect(views.settled, "Fit View was not applied").not.toEqual(views.pending);
+  expect(views.later, "the view still moved after settled()").toEqual(
+    views.settled,
+  );
 });

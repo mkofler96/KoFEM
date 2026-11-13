@@ -25,8 +25,7 @@ const ALL_GEOMETRIES: Geom[] = [...GEOMETRIES, ...NIST_GEOMETRIES];
 // Real CAD files, including two NIST AP242 test cases, import without error.
 test.describe("STEP import of real CAD files", () => {
   for (const geom of ALL_GEOMETRIES) {
-    test(geom.label, async ({ page }) => {
-      test.setTimeout(90_000); // complex STEP imports can take >20 s in CI
+    test(`${geom.label} @pipeline`, async ({ page }) => {
       const stepFile = fixturePath(geom.file);
 
       page.on("console", (msg) => {
@@ -38,7 +37,7 @@ test.describe("STEP import of real CAD files", () => {
       );
 
       // Complex geometries can take >10 s in CI.
-      await importStep(page, stepFile, 60_000);
+      await importStep(page, stepFile);
 
       // The worker reports a failed import in the UI banner.
       const errorBanner = page.getByTestId("step-error");

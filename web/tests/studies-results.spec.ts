@@ -30,7 +30,6 @@ const state = (page: import("@playwright/test").Page) =>
 test("a static study runs and its result is plotted, field by field", async ({
   page,
 }) => {
-  test.setTimeout(90_000);
   await bootstrapCantilever(page);
   const title = page.getByTestId("panel-title");
 
@@ -45,9 +44,7 @@ test("a static study runs and its result is plotted, field by field", async ({
   await page.getByRole("button", { name: /Run static solve/ }).click();
 
   // The run lands on a plot of its displacement.
-  await expect(title).toHaveText("Displacement (magnitude)", {
-    timeout: 60_000,
-  });
+  await expect(title).toHaveText("Displacement (magnitude)");
   expect((await state(page)).plots).toEqual([
     { id: 1, source: "static", field: "Displacement (magnitude)" },
   ]);

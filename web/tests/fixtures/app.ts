@@ -27,11 +27,7 @@ export async function gotoApp(page: Page): Promise<void> {
 }
 
 // Open the app and import a STEP file via the Geometry panel's import card.
-export async function importStep(
-  page: Page,
-  stepFile: string,
-  timeout = 60_000,
-): Promise<void> {
+export async function importStep(page: Page, stepFile: string): Promise<void> {
   await gotoApp(page);
   await page
     .locator('input[type="file"][accept=".stp,.step"]')
@@ -39,7 +35,7 @@ export async function importStep(
   // Tessellation done → the mesh controls (and "Generate mesh") appear.
   await expect(
     page.getByRole("button").filter({ hasText: "Generate mesh" }),
-  ).toBeVisible({ timeout });
+  ).toBeVisible();
 
   const stepErr = page.getByTestId("step-error");
   if (await stepErr.isVisible()) {
@@ -48,11 +44,7 @@ export async function importStep(
 }
 
 // Open the app and import an IGES file via the Geometry panel's import card.
-export async function importIges(
-  page: Page,
-  igesFile: string,
-  timeout = 60_000,
-): Promise<void> {
+export async function importIges(page: Page, igesFile: string): Promise<void> {
   await gotoApp(page);
   await page
     .locator('input[type="file"][accept=".igs,.iges"]')
@@ -60,7 +52,7 @@ export async function importIges(
   // Tessellation done → the mesh controls (and "Generate mesh") appear.
   await expect(
     page.getByRole("button").filter({ hasText: "Generate mesh" }),
-  ).toBeVisible({ timeout });
+  ).toBeVisible();
 
   const stepErr = page.getByTestId("step-error");
   if (await stepErr.isVisible()) {

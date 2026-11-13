@@ -29,8 +29,6 @@ type Summary = {
 test("auto-shell: thin plate on a block solves through the coupled path", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
-
   const logs: string[] = [];
   page.on("console", (msg) => logs.push(msg.text()));
 

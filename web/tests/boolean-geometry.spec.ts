@@ -24,15 +24,12 @@ async function openBoolean(page: Page): Promise<void> {
 test("a union fuses two touching bodies into one, and undo restores both", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
   await openBoolean(page);
 
   await page.getByTestId("boolean-op-union").click();
   await page.getByTestId("boolean-tool-2").check();
   await page.getByTestId("boolean-apply").click();
-  await expect
-    .poll(async () => (await geometryCounts(page)).bodies, { timeout: 60_000 })
-    .toBe(1);
+  await expect.poll(async () => (await geometryCounts(page)).bodies).toBe(1);
   await expect(page.getByTestId("tree-body-2")).toHaveCount(0);
 
   await page.getByTestId("boolean-undo").click();
@@ -42,7 +39,6 @@ test("a union fuses two touching bodies into one, and undo restores both", async
 test("a Boolean that would change nothing is refused by name", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
   await openBoolean(page);
 
   // Touching is not overlapping: there is no common volume…
@@ -51,7 +47,6 @@ test("a Boolean that would change nothing is refused by name", async ({
   await page.getByTestId("boolean-apply").click();
   await expect(page.getByTestId("boolean-error")).toContainText(
     "Body 1 and Body 2 do not overlap",
-    { timeout: 60_000 },
   );
 
   // …and nothing to cut away.
@@ -59,7 +54,6 @@ test("a Boolean that would change nothing is refused by name", async ({
   await page.getByTestId("boolean-apply").click();
   await expect(page.getByTestId("boolean-error")).toContainText(
     "Body 2 does not overlap Body 1",
-    { timeout: 60_000 },
   );
   expect((await geometryCounts(page)).bodies).toBe(2);
 });
@@ -74,7 +68,6 @@ test("a single-body part has nothing to combine", async ({ page }) => {
 test("bodies keep their settings when a Boolean renumbers them", async ({
   page,
 }) => {
-  test.setTimeout(180_000);
   await importStep(page, TWO_BOXES);
   // Three bodies: cut the second box (x 20–40) in two at x = 30.
   await openBody(page, 2);
@@ -83,9 +76,7 @@ test("bodies keep their settings when a Boolean renumbers them", async ({
   await page.getByTestId("split-axis").selectOption("x");
   await page.getByTestId("split-position").fill("30");
   await page.getByTestId("split-apply").click();
-  await expect
-    .poll(async () => (await geometryCounts(page)).bodies, { timeout: 60_000 })
-    .toBe(3);
+  await expect.poll(async () => (await geometryCounts(page)).bodies).toBe(3);
   // The Boolean picker names the solids as the tree does, so a region of
   // the split body is never mistaken for another body.
   await page.getByTestId("tree-add-geometry").click();
@@ -118,9 +109,7 @@ test("bodies keep their settings when a Boolean renumbers them", async ({
   await page.getByTestId("boolean-op-union").click();
   await page.getByTestId("boolean-tool-2").check();
   await page.getByTestId("boolean-apply").click();
-  await expect
-    .poll(async () => (await geometryCounts(page)).bodies, { timeout: 60_000 })
-    .toBe(2);
+  await expect.poll(async () => (await geometryCounts(page)).bodies).toBe(2);
   const bodies = await page.evaluate(
     () =>
       (

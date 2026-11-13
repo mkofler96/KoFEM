@@ -16,13 +16,8 @@
 
 import { test, expect } from "./coverage";
 import type { Page } from "@playwright/test";
-import {
-  clickModelAt,
-  geometryCounts,
-  importStepText,
-  lookFrom,
-  splitFaceAt,
-} from "./fixtures/split";
+import { geometryCounts, importStepText, splitFaceAt } from "./fixtures/split";
+import { clickModelAt, lookFrom } from "./fixtures/viewport";
 import mbbRecipe from "../../examples/gallery/recipes/mbb-beam-topopt.mjs";
 import { openTree, addBoundary } from "./fixtures/tree";
 
@@ -104,9 +99,7 @@ async function mesh(page: Page, maxSize: string): Promise<void> {
   await page.getByTestId("max-element-size").fill(maxSize);
   await page.getByTestId("min-element-size").fill(String(Number(maxSize) / 10));
   await page.getByRole("button", { name: /generate mesh/i }).click();
-  await expect
-    .poll(async () => (await readModel(page)).nodes, { timeout: 120_000 })
-    .not.toBe(before);
+  await expect.poll(async () => (await readModel(page)).nodes).not.toBe(before);
 }
 
 async function pickSupport(
@@ -124,11 +117,9 @@ async function pickSupport(
   await page.getByRole("button", { name: "Apply BC" }).click();
 }
 
-test("the MBB beam example can be built by hand, and survives a finer re-mesh", async ({
+test("the MBB beam example can be built by hand, and survives a finer re-mesh @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(300_000);
-
   // ── Geometry: a plain block, four cuts ──────────────────────────────────────
   await importStepText(page, BLOCK);
   expect((await geometryCounts(page)).faces).toBe(6);
@@ -198,7 +189,7 @@ test("the MBB beam example can be built by hand, and survives a finer re-mesh", 
   // pads carry the same nodes as the hand-built 5 mm mesh did.
   await page.goto("/app/?example=mbb-beam-topopt");
   await expect
-    .poll(async () => (await readModel(page)).nodes, { timeout: 15_000 })
+    .poll(async () => (await readModel(page)).nodes)
     .toBeGreaterThan(0);
   const shipped = await readModel(page);
   expect(shipped.bc.map((g) => g.dofs)).toEqual([[0, 1, 2], [1]]);

@@ -4,6 +4,7 @@
 import { test, expect } from "./coverage";
 import type { Page } from "@playwright/test";
 import { addBoundary, openTree } from "./fixtures/tree";
+import { clickViewportAt } from "./fixtures/viewport";
 
 // End-to-end coverage for edge picking (#386): a flat shell sheet is one
 // face-pick region, so grabbing its rim (an edge load or a supported-edge BC)
@@ -78,7 +79,11 @@ async function edgePickOnViewport(page: Page): Promise<void> {
     [0.65, 0.6],
   ];
   for (const [fx, fy] of spots) {
-    await page.mouse.click(box.x + box.width * fx, box.y + box.height * fy);
+    await clickViewportAt(
+      page,
+      box.x + box.width * fx,
+      box.y + box.height * fy,
+    );
     const picked = await page
       .evaluate(
         () =>
@@ -92,7 +97,6 @@ async function edgePickOnViewport(page: Page): Promise<void> {
       )
       .catch(() => false);
     if (picked) return;
-    await page.waitForTimeout(150);
   }
   throw new Error(
     "no boundary edge was picked after trying every viewport spot",
@@ -102,17 +106,13 @@ async function edgePickOnViewport(page: Page): Promise<void> {
 test("edge picking a shell rim creates an edge BC and an edge load", async ({
   page,
 }) => {
-  test.setTimeout(90_000);
-
   await page.goto("/app/?example=plate-with-hole-shell");
   await expect(page.locator("nav")).toBeVisible();
   await page.waitForFunction(() =>
     Boolean((window as unknown as { __kofem?: unknown }).__kofem),
   );
   await expect
-    .poll(async () => (await readPickState(page)).nodeCount, {
-      timeout: 15_000,
-    })
+    .poll(async () => (await readPickState(page)).nodeCount)
     .toBeGreaterThan(0);
   const totalNodes = (await readPickState(page)).nodeCount;
 
@@ -164,17 +164,13 @@ test("edge picking a shell rim creates an edge BC and an edge load", async ({
 });
 
 test("a coupling can grip a picked shell edge", async ({ page }) => {
-  test.setTimeout(90_000);
-
   await page.goto("/app/?example=plate-with-hole-shell");
   await expect(page.locator("nav")).toBeVisible();
   await page.waitForFunction(() =>
     Boolean((window as unknown as { __kofem?: unknown }).__kofem),
   );
   await expect
-    .poll(async () => (await readPickState(page)).nodeCount, {
-      timeout: 15_000,
-    })
+    .poll(async () => (await readPickState(page)).nodeCount)
     .toBeGreaterThan(0);
   const totalNodes = (await readPickState(page)).nodeCount;
 
@@ -207,11 +203,9 @@ test("a coupling can grip a picked shell edge", async ({ page }) => {
 // as a shell. An Edge pick there remembers the CAD face (lib/shellRim), so the
 // example's supports and load follow those faces onto a new mesh, as face
 // picks do on a solid.
-test("edges on a shell's collapsed side faces survive a re-mesh", async ({
+test("edges on a shell's collapsed side faces survive a re-mesh @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(180_000);
-
   type GroupState = {
     faces: { geometry?: string; cadFaceId?: number; nodeIds: number[] }[];
   };
@@ -242,9 +236,7 @@ test("edges on a shell's collapsed side faces survive a re-mesh", async ({
 
   await page.goto("/app/?example=plate-with-hole-shell");
   await expect(page.locator("nav")).toBeVisible();
-  await expect
-    .poll(async () => (await readGroups()).nodes, { timeout: 15_000 })
-    .toBeGreaterThan(0);
+  await expect.poll(async () => (await readGroups()).nodes).toBeGreaterThan(0);
   const shipped = await readGroups();
   expect(shipped.faces.flat().every((f) => f.geometry === "edge")).toBe(true);
 
@@ -253,7 +245,7 @@ test("edges on a shell's collapsed side faces survive a re-mesh", async ({
   await page.getByTestId("min-element-size").fill("0.2");
   await page.getByTestId("mesh-generate").click();
   await expect
-    .poll(async () => (await readGroups()).nodes, { timeout: 120_000 })
+    .poll(async () => (await readGroups()).nodes)
     .toBeLessThan(shipped.nodes);
   const coarser = await readGroups();
   // The same CAD faces, each re-resolved to the coarser mesh's rim.

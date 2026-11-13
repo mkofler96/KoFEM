@@ -43,14 +43,13 @@ async function mesh(page: Page): Promise<void> {
     .filter({ hasText: /generate mesh/i })
     .click();
   await expect
-    .poll(async () => (await state(page)).generation, { timeout: 90_000 })
+    .poll(async () => (await state(page)).generation)
     .toBeGreaterThan(before);
 }
 
-test("a suppressed body is left out of the mesh and comes back when unsuppressed", async ({
+test("a suppressed body is left out of the mesh and comes back when unsuppressed @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(240_000);
   await importStep(page, TWO_BOXES);
   await mesh(page);
   const full = await state(page);
@@ -90,10 +89,9 @@ test("a suppressed body is left out of the mesh and comes back when unsuppressed
 // The saved file holds the mesh and the current flags. A body suppressed after
 // meshing and saved without re-meshing is still in that mesh, so the reopened
 // analysis must still refuse to solve it, as the session that saved it did.
-test("a suppression made after meshing still blocks the solve after save and load", async ({
+test("a suppression made after meshing still blocks the solve after save and load @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(240_000);
   await importStep(page, TWO_BOXES);
   await mesh(page);
   await openBody(page, 2);

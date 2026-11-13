@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect } from "react";
-import { useThree } from "@react-three/fiber";
+import { addTail, flushSync, useThree } from "@react-three/fiber";
 import { Vector3 } from "three";
 
 export interface ViewportHooks {
@@ -13,6 +13,12 @@ export interface ViewportHooks {
   // Turn the camera to look at the orbit target from `direction`, keeping its
   // distance — what clicking an axis of the view gizmo does.
   lookFrom(direction: [number, number, number]): void;
+  // Resolves once the viewport shows the store as it is now: the scene's React
+  // tree has applied every pending change (Fit View moves the camera in one of
+  // its effects), that state has been drawn, and nothing asks for another
+  // frame. The test fixtures await it before they project a point or click, so
+  // no test depends on how long the viewport takes to catch up.
+  settled(): Promise<void>;
 }
 
 // Exposes the viewport camera to Playwright as window.__kofemViewport, beside
@@ -50,6 +56,21 @@ export function ViewportTestHooks() {
           .addScaledVector(new Vector3(...direction).normalize(), distance);
         orbit.update();
         invalidate();
+      },
+      settled() {
+        // The scene's tree applies a store change in a scheduled task (see
+        // pickingEvents); apply it now, effects included.
+        flushSync(() => {});
+        // R3F runs its tail callbacks when a frame finds nothing left to
+        // draw and the render loop stops. Asking for one frame first makes
+        // sure the loop runs and the tail comes.
+        return new Promise<void>((resolve) => {
+          const unsubscribe = addTail(() => {
+            unsubscribe();
+            resolve();
+          });
+          invalidate();
+        });
       },
     };
     (window as Window & { __kofemViewport?: ViewportHooks }).__kofemViewport =

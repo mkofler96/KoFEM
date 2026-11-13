@@ -54,14 +54,13 @@ async function loadExample(page: import("@playwright/test").Page) {
   await page.goto("/app/?example=axial-bar");
   await expect(page.locator("nav")).toBeVisible();
   await expect
-    .poll(async () => (await readStore(page)).nodes, { timeout: 15_000 })
+    .poll(async () => (await readStore(page)).nodes)
     .toBeGreaterThan(0);
 }
 
 test("New analysis confirms, then clears the loaded analysis", async ({
   page,
 }) => {
-  test.setTimeout(60_000);
   await loadExample(page);
 
   let dialogMessage = "";
@@ -93,7 +92,6 @@ test("New analysis confirms, then clears the loaded analysis", async ({
 });
 
 test("dismissing the confirm keeps the current analysis", async ({ page }) => {
-  test.setTimeout(60_000);
   await loadExample(page);
 
   page.on("dialog", async (dialog) => {

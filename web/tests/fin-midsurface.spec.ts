@@ -23,11 +23,9 @@ const STEP_PATH = join(here, "../../test_files/fin_two_parts.step");
 const WALL_THICKNESS = 2; // fin walls at y = 49 / y = 51
 const MID_SURFACE_Y = 50;
 
-test("mesh-time auto-shell: the fin is stored as a mid-surface shell mesh", async ({
+test("mesh-time auto-shell: the fin is stored as a mid-surface shell mesh @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(240_000);
-
   const logs: string[] = [];
   page.on("console", (msg) => logs.push(msg.text()));
 
@@ -49,7 +47,6 @@ test("mesh-time auto-shell: the fin is stored as a mid-surface shell mesh", asyn
               }
             ).__kofemStore.getState().properties.length,
         )) as number,
-      { timeout: 60_000 },
     )
     .toBeGreaterThan(0);
 
@@ -68,7 +65,6 @@ test("mesh-time auto-shell: the fin is stored as a mid-surface shell mesh", asyn
               }
             ).__kofemStore.getState().nodes.length,
         )) as number,
-      { timeout: 180_000 },
     )
     .toBeGreaterThan(0);
 

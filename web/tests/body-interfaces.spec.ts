@@ -35,7 +35,6 @@ const interfaces = (page: Page) =>
 test("touching bodies list a bonded interface that opens, highlights and survives save and load", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
   await importStep(page, TWO_BOXES);
 
   const row = page.getByTestId("tree-interface-1");
@@ -89,7 +88,6 @@ test("touching bodies list a bonded interface that opens, highlights and survive
 test("a body that touches no other body is flagged as unbonded", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
   await importStep(page, CRANE_HOOK);
 
   await expect(page.getByTestId("tree-interface-1")).toContainText(

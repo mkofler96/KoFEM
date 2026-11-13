@@ -19,7 +19,7 @@ import { test, expect } from "./coverage";
 import type { Page } from "@playwright/test";
 import { boxHexMesh } from "../../examples/validation/lib/mesh.mjs";
 import { addBoundary } from "./fixtures/tree";
-import { clickModelAt } from "./fixtures/split";
+import { clickModelAt } from "./fixtures/viewport";
 
 interface CouplingGroupState {
   id: number;

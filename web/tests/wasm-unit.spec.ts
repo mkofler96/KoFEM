@@ -7,7 +7,6 @@ import { fixturePath, importStep } from "./fixtures/app";
 test("WASM OCC generate_fem_mesh: end-to-end smoke test on built-in example", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
   const STEP_FILE = fixturePath("tube.stp");
 
   const logs: string[] = [];
