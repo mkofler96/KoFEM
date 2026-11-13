@@ -132,6 +132,10 @@ export function selectSteps(steps, { group, filters }) {
     );
   const inGroup =
     group === null ? steps : steps.filter((step) => step.group === group);
+  if (group !== null && !inGroup.length)
+    throw new Error(
+      `run-validation: group "${group}" selects no steps; see --list`,
+    );
   if (!filters.length) return inGroup;
   for (const filter of filters)
     if (!inGroup.some((step) => step.name.includes(filter)))

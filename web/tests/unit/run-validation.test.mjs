@@ -18,6 +18,7 @@ import {
   parseCli,
   parseJobs,
   planSteps,
+  runSteps,
   selectSteps,
 } from "../../scripts/run-validation.mjs";
 
@@ -194,6 +195,13 @@ describe("selectSteps", () => {
     ]);
   });
 
+  test("a known group that selects nothing is an error", () => {
+    // This checkout has no tests/unit files, so the unit group is empty.
+    expect(() => selectSteps(steps, { group: "unit", filters: [] })).toThrow(
+      /group "unit" selects no steps/,
+    );
+  });
+
   test("a group selects its steps", () => {
     expect(
       commands(selectSteps(steps, { group: "theory", filters: [] })),
@@ -245,4 +253,33 @@ describe("parseCli", () => {
     expect(() => parseCli(["--lsit"])).toThrow(/--lsit/);
     expect(() => parseCli(["--group"])).toThrow(/--group/);
   });
+});
+
+describe("runSteps", () => {
+  function scriptWeb(scripts) {
+    const web = fakeWeb(Object.keys(scripts));
+    for (const [file, body] of Object.entries(scripts))
+      writeFileSync(join(web, file), body);
+    return web;
+  }
+
+  test("runs every step after a failure and reports each in step order", async () => {
+    const web = scriptWeb({
+      "tests/test_a_fails.mjs": 'console.log("broken"); process.exit(1);',
+      "tests/test_b_passes.mjs": 'console.log("fine");',
+      "tests/test_c_throws.mjs": 'throw new Error("boom");',
+      "tests/test_d_passes.mjs": "",
+    });
+    const steps = planSteps({ webDir: web, theory: [], explicit: [] });
+    const results = await runSteps(steps, { jobs: 2, webDir: web });
+    expect(results.map((result) => [result.step.name, result.ok])).toEqual([
+      ["tests/test_a_fails.mjs", false],
+      ["tests/test_b_passes.mjs", true],
+      ["tests/test_c_throws.mjs", false],
+      ["tests/test_d_passes.mjs", true],
+    ]);
+    expect(results[0].exit).toBe("exit 1");
+    expect(results[0].output).toContain("broken");
+    expect(results[2].output).toContain("boom");
+  }, 30_000);
 });
