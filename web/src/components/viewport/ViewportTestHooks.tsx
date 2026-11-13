@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect } from "react";
-import { addTail, flushSync, useThree } from "@react-three/fiber";
+import { addTail, useThree } from "@react-three/fiber";
 import { Vector3 } from "three";
+import { applyPendingSceneCommits } from "./pickingEvents";
 
 export interface ViewportHooks {
   // Where a model-space point lands on the page (client pixels), so an E2E test
@@ -60,7 +61,7 @@ export function ViewportTestHooks() {
       settled() {
         // The scene's tree applies a store change in a scheduled task (see
         // pickingEvents); apply it now, effects included.
-        flushSync(() => {});
+        applyPendingSceneCommits();
         // Whatever needs drawing has asked for a frame by now. With none
         // asked for, the canvas already shows this state. settled() draws
         // nothing itself: a test may call it hundreds of times.

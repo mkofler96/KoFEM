@@ -24,12 +24,12 @@ const face = (
   id,
   label,
   cadFaceId,
-  nodeIds = [0, 1, 2],
+  faceNodeIds = [0, 1, 2],
   geometry = "face",
 ) => ({
   id,
   label,
-  nodeIds,
+  nodeIds: faceNodeIds,
   geometry,
   ...(cadFaceId !== undefined ? { cadFaceId } : {}),
 });

@@ -332,28 +332,26 @@ describe("tie connections between solid bodies", () => {
       );
     });
 
+    // Whether a node of the coupled model's pool is a vertex of `surface`.
+    const onSurface = (surface, poolIndex) =>
+      surface.some((vertex) => tied.poolOfVertex.get(vertex) === poolIndex);
+
     test("couples the picked surface across the clearance", () => {
       expect(tied.coupling.ref).toHaveLength(surfaceB.length);
     });
 
     test("every reference is a node of the picked surface B", () => {
       for (const poolIndex of tied.coupling.ref)
-        expect(
-          surfaceB.some(
-            (vertex) => tied.poolOfVertex.get(vertex) === poolIndex,
-          ),
-          `reference ${poolIndex}`,
-        ).toBe(true);
+        expect(onSurface(surfaceB, poolIndex), `reference ${poolIndex}`).toBe(
+          true,
+        );
     });
 
     test("every partner is a node of the picked surface A", () => {
       for (const poolIndex of tied.coupling.solid)
-        expect(
-          surfaceA.some(
-            (vertex) => tied.poolOfVertex.get(vertex) === poolIndex,
-          ),
-          `partner ${poolIndex}`,
-        ).toBe(true);
+        expect(onSurface(surfaceA, poolIndex), `partner ${poolIndex}`).toBe(
+          true,
+        );
     });
 
     test("a solid tie is distributing, not the relaxed shell MPC", () => {

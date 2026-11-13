@@ -31,7 +31,8 @@ function requireBuilt(url, what) {
   return file;
 }
 
-const silent = () => {};
+// Drops a line of the engine's log.
+const silent = () => undefined;
 let engineBinary;
 let createEngine;
 

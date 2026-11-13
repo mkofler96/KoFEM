@@ -65,7 +65,7 @@ async function meshOnce(page: import("@playwright/test").Page) {
     // "Generate mesh" before the first mesh, "Regenerate mesh" after.
     .filter({ hasText: /generate mesh/i })
     .click();
-  await expect.poll(async () => meshGeneration(page)).toBeGreaterThan(before);
+  await expect.poll(() => meshGeneration(page)).toBeGreaterThan(before);
   expect((await store(page)).nodes.length).toBeGreaterThan(0);
 }
 

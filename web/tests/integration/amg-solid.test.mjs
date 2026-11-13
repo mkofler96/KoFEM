@@ -44,6 +44,9 @@ const neverAsk = () => {
   throw new Error("the continuation prompt must not appear");
 };
 
+// Takes a progress line that the test does not look at.
+const ignoreProgress = () => undefined;
+
 const maxDifference = (lhs, rhs) => {
   let peak = 0;
   let difference = 0;
@@ -293,7 +296,7 @@ describe("wall bracket: Rust AMG against MFEM", () => {
       vid,
       undefined,
       neverAsk,
-      () => {},
+      ignoreProgress,
     );
   });
 
@@ -437,7 +440,7 @@ describe("wall bracket: Rust AMG against MFEM", () => {
         coarseVid,
         undefined,
         neverAsk,
-        () => {},
+        ignoreProgress,
       );
     });
 
@@ -504,7 +507,7 @@ describe("wall bracket: Rust AMG against MFEM", () => {
         vid,
         undefined,
         neverAsk,
-        () => {},
+        ignoreProgress,
       );
     } catch (error) {
       refusal = String(error);
@@ -576,7 +579,7 @@ describe("wall bracket: Rust AMG against MFEM", () => {
           vid,
           5,
           async () => 0,
-          () => {},
+          ignoreProgress,
         );
       } catch (error) {
         stopped = String(error);

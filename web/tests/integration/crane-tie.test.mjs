@@ -81,17 +81,18 @@ function facePieces(tets) {
       (byFaceKey.get(k) ?? byFaceKey.set(k, []).get(k)).push(e);
     }
   const parent = [...Array(nT).keys()];
-  const find = (a) => {
-    while (parent[a] !== a) {
-      parent[a] = parent[parent[a]];
-      a = parent[a];
+  const find = (start) => {
+    let root = start;
+    while (parent[root] !== root) {
+      parent[root] = parent[parent[root]];
+      root = parent[root];
     }
-    return a;
+    return root;
   };
-  const union = (a, b) => {
-    a = find(a);
-    b = find(b);
-    if (a !== b) parent[a] = b;
+  const union = (first, second) => {
+    const firstRoot = find(first);
+    const secondRoot = find(second);
+    if (firstRoot !== secondRoot) parent[firstRoot] = secondRoot;
   };
   for (const [, es] of byFaceKey)
     for (let i = 1; i < es.length; i++) union(es[0], es[i]);

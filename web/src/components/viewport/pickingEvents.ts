@@ -8,6 +8,13 @@ import type { EventManager } from "@react-three/fiber";
 type R3FStore = Parameters<typeof pointerEvents>[0];
 type Handlers = NonNullable<EventManager<HTMLElement>["handlers"]>;
 
+// Apply what the scene's React tree still has pending, now. R3F's flushSync
+// runs its callback and then every commit that waits; the commits are what is
+// wanted, so the callback has nothing to do.
+export function applyPendingSceneCommits(): void {
+  flushSync(() => undefined);
+}
+
 // R3F's pointer events, raycasting against the scene as it is now.
 //
 // The viewport renders on demand (frameloop="demand"). World matrices are
@@ -35,7 +42,7 @@ export function pickingEvents(store: R3FStore): EventManager<HTMLElement> {
     Object.entries(base.handlers).map(([name, handle]) => [
       name,
       (event: Event) => {
-        flushSync(() => {});
+        applyPendingSceneCommits();
         handle(event);
       },
     ]),

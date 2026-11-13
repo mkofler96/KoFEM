@@ -475,59 +475,60 @@ for (const wallStep of [3, 4]) {
       };
     });
 
-    for (const axis of [2, 0]) {
-      describe(`load along ${"xyz"[axis]}`, () => {
-        let mixedCase;
-        let both;
-        let solidCase;
-        let solid;
-        beforeAll(async () => {
-          mixedCase = junctionArgs(candidate, axis);
-          both = await solveBoth(mixedCase.args);
-          // The study's own measure: the mixed model against the all-solid
-          // mesh.
-          solidCase = junctionArgs(reference, axis);
-          solid = solveInCpp(solidCase.args);
-        });
-
-        agreementTests(() => both);
-
-        const measures = () => ({
-          expected: junctionMeasures(
-            reference,
-            solid,
-            solidCase.tips,
-            solidCase.forces,
-            axis,
-          ),
-          actual: junctionMeasures(
-            candidate,
-            both.rust,
-            mixedCase.tips,
-            mixedCase.forces,
-            axis,
-          ),
-        });
-
-        test("the Rust junction peak is within 1 % of the all-solid reference", () => {
-          const { expected, actual } = measures();
-          const ratio = actual.peak / expected.peak;
-          expect(
-            Math.abs(ratio - 1),
-            `junction peak, Rust mixed / all-solid: ${ratio}`,
-          ).toBeLessThan(0.01);
-        });
-
-        test("the Rust tip displacement is within 2 % of the all-solid reference", () => {
-          const { expected, actual } = measures();
-          const ratio = actual.tip / expected.tip;
-          expect(
-            Math.abs(ratio - 1),
-            `tip displacement, Rust mixed / all-solid: ${ratio}`,
-          ).toBeLessThan(0.02);
-        });
+    describe.each([
+      ["z", 2],
+      ["x", 0],
+    ])("load along %s", (_axisName, axis) => {
+      let mixedCase;
+      let both;
+      let solidCase;
+      let solid;
+      beforeAll(async () => {
+        mixedCase = junctionArgs(candidate, axis);
+        both = await solveBoth(mixedCase.args);
+        // The study's own measure: the mixed model against the all-solid
+        // mesh.
+        solidCase = junctionArgs(reference, axis);
+        solid = solveInCpp(solidCase.args);
       });
-    }
+
+      agreementTests(() => both);
+
+      const measures = () => ({
+        expected: junctionMeasures(
+          reference,
+          solid,
+          solidCase.tips,
+          solidCase.forces,
+          axis,
+        ),
+        actual: junctionMeasures(
+          candidate,
+          both.rust,
+          mixedCase.tips,
+          mixedCase.forces,
+          axis,
+        ),
+      });
+
+      test("the Rust junction peak is within 1 % of the all-solid reference", () => {
+        const { expected, actual } = measures();
+        const ratio = actual.peak / expected.peak;
+        expect(
+          Math.abs(ratio - 1),
+          `junction peak, Rust mixed / all-solid: ${ratio}`,
+        ).toBeLessThan(0.01);
+      });
+
+      test("the Rust tip displacement is within 2 % of the all-solid reference", () => {
+        const { expected, actual } = measures();
+        const ratio = actual.tip / expected.tip;
+        expect(
+          Math.abs(ratio - 1),
+          `tip displacement, Rust mixed / all-solid: ${ratio}`,
+        ).toBeLessThan(0.02);
+      });
+    });
   });
 }
 
@@ -757,16 +758,17 @@ describe("every preconditioner of the Rust solve", () => {
     inputs = buildCoupledEngineInputs(handMixedModel(), silent);
   });
 
-  for (const preconditioner of ["incomplete-cholesky", "gauss-seidel"]) {
-    describe(`Hand-mixed model with ${preconditioner}`, () => {
+  describe.each(["incomplete-cholesky", "gauss-seidel"])(
+    "Hand-mixed model with %s",
+    (preconditioner) => {
       let both;
       beforeAll(async () => {
         both = await solveBoth(inputs, preconditioner);
       });
 
       agreementTests(() => both);
-    });
-  }
+    },
+  );
 });
 
 describe("payloads both solvers refuse", () => {
