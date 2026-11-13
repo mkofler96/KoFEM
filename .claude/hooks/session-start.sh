@@ -22,11 +22,19 @@ git -C "$REPO" config core.hooksPath .githooks
 
 bash "$REPO/scripts/fetch-wasm-deps.sh"
 
-# The compiled engine is not committed (KOF-186), so a fresh clone has none —
-# install the published one up front rather than making the first `bun run dev`
-# wait for it. --optional: a session branched off an unmerged engine change has no
-# release to fetch and must build instead, which is not a reason to fail startup.
-bash "$REPO/scripts/fetch-wasm-engine.sh" --optional
+# Everything a test run needs, so the first `just test-…` works without manual
+# steps: the pinned command-line tools (just, wasm-bindgen), the web
+# dependencies, the published engine (it is not committed, KOF-186) and the
+# Rust module. A session branched off an unmerged engine change has no engine
+# release to fetch and must build one (bash scripts/build-wasm.sh); that is
+# not a reason to fail startup, so a setup that does not finish is reported
+# and the session starts anyway.
+# The tools install into ~/.cargo/bin (or ~/.local/bin without rustup); both
+# are on a session's PATH, but not necessarily on this hook's.
+export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
+if ! { bash "$REPO/scripts/install-tools.sh" && (cd "$REPO" && just setup); }; then
+    echo "[setup] \`just setup\` did not finish — see the error above, fix it and run \`just setup\` again." >&2
+fi
 
 # clang-tidy >= 20 for scripts/clang-tidy.sh (the C++ engine linter, mirroring
 # the DeepSource rules — see .clang-tidy). The sandbox's default clang-tidy-18
