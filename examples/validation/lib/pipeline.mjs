@@ -24,7 +24,7 @@
 //               arrays are built by the app's own rebuildConstraints,
 //               rebuildLoads (momentToNodalForces) and rebuildSurfaceLoads;
 //   solve       the app's default solver: the all-solid AMG path of the worker
-//               (weldTies → solveSolidWithAmg → expandTiedDisplacements) in the
+//               (weldTies → solveSolidInRust → expandTiedDisplacements) in the
 //               Rust module, with the recipe's element order; an all-shell
 //               model takes the worker's pure-shell path instead
 //               (buildShellEngineInputs → solveShellInRust);
@@ -60,7 +60,7 @@ import { routeSolve, routeTopOpt } from "../../../web/src/lib/solve/route.ts";
 import {
   amgUnavailableReason,
   DEFAULT_SOLVER_METHOD,
-  solveSolidWithAmg,
+  solveSolidInRust,
 } from "../../../web/src/lib/solve/amg.ts";
 import {
   buildSolidEngineInputs,
@@ -633,10 +633,11 @@ async function solveSolid(payload, where) {
   const neverAsk = () => {
     throw new Error(`${where}: the AMG solve reached its iteration limit`);
   };
-  const solved = await solveSolidWithAmg(
+  const solved = await solveSolidInRust(
     await rustFem(),
     { ...payload, nodes: tied.solveNodes, elements: tied.tiedElements },
     elementOrder,
+    "amg",
     tied.vid,
     tied.vidTied,
     undefined, // the app sends no cgIterationLimit unless the user set one

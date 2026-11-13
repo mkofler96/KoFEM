@@ -3,8 +3,9 @@
 
 // The Solve panel's solver choice: AMG multigrid is preselected and marked
 // recommended, it solves linear- and quadratic-tet models through the Rust
-// module, it says so when a model is outside its reach, and Gauss–Seidel gives
-// the same field.
+// module, it says so when a model is outside its reach, and Gauss–Seidel
+// solves the same models in Rust too (not in the MFEM engine) to the same
+// field.
 
 import type { Page } from "@playwright/test";
 import { test, expect } from "./coverage";
@@ -96,12 +97,13 @@ test("AMG is the recommended default and matches Gauss–Seidel", async ({
   await expect(page.getByText(/tetrahedra \(order 2\)/)).toBeVisible();
   await expect(page.getByText(/AMG CG converged/)).toBeVisible();
 
-  // The same model with Gauss–Seidel gives the same displacements.
+  // The same model with Gauss–Seidel, in Rust, gives the same displacements.
   await page.getByTestId("solver-method").selectOption("gauss-seidel");
   const gaussSeidel = await solveAndRead(page);
   await backToSolve(page);
-  await expect(page.getByText(/\[mfem\] CG converged/)).toBeVisible();
+  await expect(page.getByText(/Gauss–Seidel CG converged/)).toBeVisible();
   await expect(page.getByText(/AMG CG converged/)).toHaveCount(0);
+  await expect(page.getByText(/\[mfem\]/)).toHaveCount(0);
 
   expect(multigrid.length).toBe(gaussSeidel.length);
   const peak = Math.max(...gaussSeidel.map(Math.abs));
@@ -222,6 +224,10 @@ test("a solid model with a coupling solves with AMG and matches Gauss–Seidel",
     false,
   );
   const gaussSeidel = await solve("gauss-seidel");
+  expect(
+    logs.some((line) => line.includes("Gauss–Seidel CG converged")),
+    "a Gauss–Seidel request solves the coupled model in Rust",
+  ).toBe(true);
 
   expect(multigrid.length).toBe(gaussSeidel.length);
   const peak = Math.max(...gaussSeidel.map(Math.abs));

@@ -96,7 +96,7 @@ test("CG pauses, resumes repeatedly without changing results, and stops explicit
       vonMises: Array.from(result.vonMises),
     };
   }, buildCantilever());
-  const iterations = convergenceIterations(logs, "[mfem] CG converged:");
+  const iterations = convergenceIterations(logs, "Gauss–Seidel CG converged:");
   expect(iterations).toBeGreaterThan(10);
   const cap = iterations - 5;
   await startSolve(page, cap);
@@ -112,7 +112,7 @@ test("CG pauses, resumes repeatedly without changing results, and stops explicit
       dialog.getByRole("button", { name: "Continue" }),
     ).toBeDisabled();
   }
-  // A competing request must fail without entering the suspended WASM stack.
+  // A competing request must fail while the solve waits for the answer.
   const busy = await page.evaluate(() =>
     (window as TestWindow).__kofem.sendToWorker("init", {}).then(
       () => "unexpected success",
@@ -146,8 +146,8 @@ test("CG pauses, resumes repeatedly without changing results, and stops explicit
     error: expect.stringContaining("discarded"),
   });
 
-  // A malformed protocol reply must restore the WASM stack and report an
-  // error. Rejecting inside Asyncify's Promise would leave it paused forever.
+  // A malformed protocol reply must end the solve with an error rather than
+  // leave it paused forever.
   await page.evaluate(() => {
     const original = Worker.prototype.postMessage;
     let corruptNext = true;
@@ -167,7 +167,9 @@ test("CG pauses, resumes repeatedly without changing results, and stops explicit
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Continue" }).click();
   expect(await outcome(page)).toEqual({
-    error: expect.stringContaining("CG continuation failed"),
+    error: expect.stringContaining(
+      "Extra CG iterations must be an integer from 1 to 1000000",
+    ),
   });
 
   // Cancellation dismisses the prompt, rejects the pending solve, and frees

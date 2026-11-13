@@ -151,10 +151,10 @@ export interface SolveModel {
 }
 
 export interface SolvePayload extends SolveModel {
-  // Which CG preconditioner to use: smoothed-aggregation multigrid in the Rust
-  // module, or the engine's Gauss–Seidel. AMG covers all-solid tet and hex
-  // models of order 1 or 2 (amgUnavailableReason); others solve with the
-  // preconditioner amgFallbackPreconditioner names and say so.
+  // Which CG preconditioner to use: smoothed-aggregation multigrid or
+  // symmetric Gauss–Seidel. Both solve in the Rust module the all-solid tet and
+  // hex models of order 1 or 2 it covers (amgUnavailableReason); others solve
+  // with the preconditioner amgFallbackPreconditioner names and say so.
   solverMethod: SolverMethod;
 }
 

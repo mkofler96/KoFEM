@@ -4,7 +4,7 @@
 // The app's all-solid solve through the Rust AMG solver must give the same
 // result as through the MFEM engine. Both take the SAME store model, built
 // into solver inputs by the app's own helpers (buildSolidEngineInputs for MFEM,
-// solveSolidWithAmg for Rust), on a real Netgen mesh of the wall bracket.
+// solveSolidInRust for Rust), on a real Netgen mesh of the wall bracket.
 //
 // The model exercises everything the AMG path supports: two bodies with
 // different materials, a clamped end, a roller, a prescribed displacement, a
@@ -23,7 +23,7 @@ import { buildSolidEngineInputs } from "../../src/lib/solve/solid.ts";
 import {
   amgFallbackPreconditioner,
   amgUnavailableReason,
-  solveSolidWithAmg,
+  solveSolidInRust,
 } from "../../src/lib/solve/amg.ts";
 import { boxHexMesh } from "../../../examples/validation/lib/mesh.mjs";
 import { loadEngine, loadFem } from "../support/wasm.mjs";
@@ -288,10 +288,11 @@ describe("wall bracket: Rust AMG against MFEM", () => {
       inputs.bcsJson,
       1,
     );
-    amg = await solveSolidWithAmg(
+    amg = await solveSolidInRust(
       fem,
       model,
       1,
+      "amg",
       vid,
       vid,
       undefined,
@@ -432,10 +433,11 @@ describe("wall bracket: Rust AMG against MFEM", () => {
         2,
       );
       if ("error" in mfemQuadratic) return;
-      amgQuadratic = await solveSolidWithAmg(
+      amgQuadratic = await solveSolidInRust(
         fem,
         coarse.model,
         2,
+        "amg",
         coarseVid,
         coarseVid,
         undefined,
@@ -483,11 +485,56 @@ describe("wall bracket: Rust AMG against MFEM", () => {
     });
   });
 
+  // The Solve panel's Gauss–Seidel choice solves in Rust too, with the MFEM
+  // engine's method, to the same field.
+  describe("Gauss–Seidel in Rust", () => {
+    const log = [];
+    let gaussSeidel = null;
+
+    beforeAll(async () => {
+      gaussSeidel = await solveSolidInRust(
+        fem,
+        model,
+        1,
+        "gauss-seidel",
+        vid,
+        vid,
+        undefined,
+        neverAsk,
+        (line) => log.push(line),
+      );
+    });
+
+    test("the log names Gauss–Seidel, not AMG", () => {
+      expect(log.join("\n")).toMatch(/Gauss–Seidel CG converged/);
+      expect(log.join("\n")).not.toMatch(/AMG/);
+    });
+
+    test("displacements agree with MFEM", () => {
+      const difference = maxDifference(
+        mfem.displacements,
+        gaussSeidel.displacements,
+      );
+      expect(
+        difference.relative,
+        `displacements differ by ${difference.relative} relative`,
+      ).toBeLessThan(1e-5);
+    });
+
+    test("von Mises stresses agree with MFEM", () => {
+      const difference = maxDifference(mfem.von_mises, gaussSeidel.vonMises);
+      expect(
+        difference.relative,
+        `von Mises stresses differ by ${difference.relative} relative`,
+      ).toBeLessThan(1e-4);
+    });
+  });
+
   test("a surface load selecting only interior or stale faces is refused, as in MFEM", async () => {
     const loaded = model.surfaceLoads[0].faces;
     let refusal = "";
     try {
-      await solveSolidWithAmg(
+      await solveSolidInRust(
         fem,
         {
           ...model,
@@ -503,6 +550,7 @@ describe("wall bracket: Rust AMG against MFEM", () => {
           ],
         },
         1,
+        "amg",
         vid,
         vid,
         undefined,
@@ -525,10 +573,11 @@ describe("wall bracket: Rust AMG against MFEM", () => {
     let continued = null;
 
     beforeAll(async () => {
-      continued = await solveSolidWithAmg(
+      continued = await solveSolidInRust(
         fem,
         model,
         1,
+        "amg",
         vid,
         vid,
         5,
@@ -571,10 +620,11 @@ describe("wall bracket: Rust AMG against MFEM", () => {
     test("answering 0 stops the solve", async () => {
       let stopped = "";
       try {
-        await solveSolidWithAmg(
+        await solveSolidInRust(
           fem,
           model,
           1,
+          "amg",
           vid,
           vid,
           5,
@@ -639,10 +689,11 @@ describe("wall bracket: Rust AMG against MFEM", () => {
         false,
       );
       const beamLog = [];
-      const rust = await solveSolidWithAmg(
+      const rust = await solveSolidInRust(
         fem,
         store,
         order,
+        "amg",
         beamVid,
         beamVid,
         undefined,

@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Static solve through the Rust finite-element module (crates/kofem-wasm) with
-// the smoothed-aggregation multigrid (AMG) preconditioner, and the rule for
-// which models it covers. The Rust module handles linear and quadratic
+// the smoothed-aggregation multigrid (AMG) or the symmetric Gauss–Seidel
+// preconditioner, and the rule for which models it covers (the same for both:
+// amgUnavailableReason). The Rust module handles linear and quadratic
 // tetrahedra and hexahedra (alone or mixed) with per-body materials, supports
 // (fixed, roller, prescribed), nodal loads and surface loads on triangular and
 // quadrilateral faces, and surface-to-point couplings on linear and quadratic
@@ -60,6 +61,12 @@ export const SOLVER_METHODS: readonly {
 ];
 
 export const DEFAULT_SOLVER_METHOD: SolverMethod = "amg";
+
+// The method in words for the solve log.
+const METHOD_LABEL: Record<SolverMethod, string> = {
+  amg: "AMG",
+  "gauss-seidel": "Gauss–Seidel",
+};
 
 export function isSolverMethod(value: unknown): value is SolverMethod {
   return value === "amg" || value === "gauss-seidel";
@@ -172,18 +179,20 @@ const LOG_EVERY = 10;
 // whatever the preconditioner (see StoppingRule in crates/kofem-fem/src/cg.rs).
 const RELATIVE_TOLERANCE = 1e-6;
 
-// Solve one all-solid model of tetrahedra and hexahedra with AMG, with
-// elements of `elementOrder` (1 linear, 2 quadratic). `vid` indexes element
+// Solve one all-solid model of tetrahedra and hexahedra in Rust, with
+// elements of `elementOrder` (1 linear, 2 quadratic) and CG preconditioned by
+// `method`. `vid` indexes element
 // connectivity; `refVid` resolves constraint, load and surface-face node
 // references (a tie maps them to their representative first). Returns one
 // displacement triple per node of `model.nodes` and one von Mises stress per
 // element, tets first, then hexes — the same layout as the MFEM solve.
 // Quadratic elements add edge (and hex face and centre) nodes inside the Rust
 // module, as MFEM's order-2 space does; their displacements stay there.
-export async function solveSolidWithAmg(
+export async function solveSolidInRust(
   fem: FemModule,
   model: AmgSolidModel,
   elementOrder: number,
+  method: SolverMethod,
   vid: VertexIndexer,
   refVid: VertexIndexer,
   iterationLimit: number | undefined,
@@ -197,7 +206,7 @@ export async function solveSolidWithAmg(
     couplingCount: 0,
   });
   if (reason !== null)
-    throw new Error(`The AMG solver cannot solve this model: ${reason}.`);
+    throw new Error(`The Rust solver cannot solve this model: ${reason}.`);
 
   // Tets first, then hexes, as buildSolidEngineInputs packs them for MFEM.
   const tetElements = model.elements.filter((e) => e.type === "CTETRA");
@@ -240,7 +249,7 @@ export async function solveSolidWithAmg(
       .map(([count, kind]) => `${count} ${kind}`)
       .join(" and ");
     log(
-      `AMG solve: ${model.nodes.length} nodes, ${elementCounts} (order ${elementOrder}), ` +
+      `${METHOD_LABEL[method]} solve: ${model.nodes.length} nodes, ${elementCounts} (order ${elementOrder}), ` +
         `${elastic.dofCount} unknowns, ${nonzeros} stiffness entries assembled`,
     );
 
@@ -276,8 +285,9 @@ export async function solveSolidWithAmg(
       log,
     );
 
-    return await runAmgSolve(
+    return await runRustSolve(
       fem,
+      method,
       iterationLimit,
       (options) =>
         elastic.startSolve(
@@ -323,9 +333,9 @@ export interface AmgCoupledInputs {
   solidMaterials: { young_modulus: number; poisson_ratio: number }[];
 }
 
-// Solve an all-solid model with surface-to-point couplings with AMG — what
+// Solve an all-solid model with surface-to-point couplings in Rust — what
 // the engine's solve_coupled does for it, with elements of `elementOrder` (1
-// linear, 2 quadratic). Returns the same fields: three translations per pool
+// linear, 2 quadratic) and CG preconditioned by `method`. Returns the same fields: three translations per pool
 // node and one von Mises stress per tet (no shell facets).
 //
 // The engine's coupled solve is linear only. At order 1 the forces are its
@@ -336,10 +346,11 @@ export interface AmgCoupledInputs {
 // (crates/kofem-fem/src/coupled_static.rs) extends kinematic couplings and
 // supports to the edge nodes; a distributing coupling keeps its corner nodes,
 // as at order 1.
-export async function solveCoupledSolidWithAmg(
+export async function solveCoupledSolidInRust(
   fem: CoupledFemModule,
   input: AmgCoupledInputs,
   elementOrder: number,
+  method: SolverMethod,
   iterationLimit: number | undefined,
   askToContinue: ContinuationPrompt,
   log: (line: string) => void,
@@ -351,11 +362,11 @@ export async function solveCoupledSolidWithAmg(
   const { mesh, coupling, bcs, solidMaterials } = input;
   if (mesh.triangles.length > 0)
     throw new Error(
-      "The AMG solver cannot solve this model: it does not support shell elements.",
+      "The Rust solver cannot solve this model: it does not support shell elements.",
     );
   if (elementOrder !== 1 && elementOrder !== 2)
     throw new Error(
-      `The AMG solver cannot solve this model: element order ${elementOrder} is not 1 or 2.`,
+      `The Rust solver cannot solve this model: element order ${elementOrder} is not 1 or 2.`,
     );
   const elastic = new fem.ElasticModel(
     mesh.vertices,
@@ -378,7 +389,7 @@ export async function solveCoupledSolidWithAmg(
     // Vertices, then (order 2) one node per edge.
     const nodeCount = elastic.dofCount / 3;
     log(
-      `AMG solve: ${pointCount} nodes, ${mesh.tets.length / 4} tetrahedra ` +
+      `${METHOD_LABEL[method]} solve: ${pointCount} nodes, ${mesh.tets.length / 4} tetrahedra ` +
         `(order ${elementOrder}), ${coupling.ref.length} couplings, ` +
         `${nonzeros} stiffness entries assembled`,
     );
@@ -423,8 +434,9 @@ export async function solveCoupledSolidWithAmg(
             forces[perVertex * node + component] +=
               translations[3 * node + component];
       }
-      return await runAmgSolve(
+      return await runRustSolve(
         fem,
+        method,
         iterationLimit,
         (options) =>
           elastic.startCoupledSolve(
@@ -455,11 +467,12 @@ export async function solveCoupledSolidWithAmg(
   }
 }
 
-// Set up the AMG run with `start`, advance it to convergence (asking to go on
-// past the iteration budget) and read the result with `read`. Frees the
-// options, the run and the solution whatever happens.
-async function runAmgSolve<T>(
+// Set up the run with `start`, preconditioned by `method`, advance it to
+// convergence (asking to go on past the iteration budget) and read the result
+// with `read`. Frees the options, the run and the solution whatever happens.
+async function runRustSolve<T>(
   fem: FemModule,
+  method: SolverMethod,
   iterationLimit: number | undefined,
   start: (options: SolveOptions) => SolveRun,
   started: number,
@@ -472,26 +485,32 @@ async function runAmgSolve<T>(
   const options = new fem.SolveOptions(
     RELATIVE_TOLERANCE,
     budget,
-    "amg",
+    method,
     "residual",
   );
   // The hierarchy is built in one call; on large models that takes seconds,
   // so say what is happening before it starts.
-  log("Building the AMG preconditioner…");
+  if (method === "amg") log("Building the AMG preconditioner…");
   let run: SolveRun;
   try {
     run = start(options);
   } finally {
     options.free();
   }
-  log(
-    `AMG preconditioner ready: multigrid levels [${Array.from(run.levelSizes).join(", ")}] unknowns`,
-  );
+  if (method === "amg")
+    log(
+      `AMG preconditioner ready: multigrid levels [${Array.from(run.levelSizes).join(", ")}] unknowns`,
+    );
   let finished = false;
   try {
     await iterateToConvergence(
       run,
-      { initialBudget: budget, logEvery: LOG_EVERY, tag: "[amg]", started },
+      {
+        initialBudget: budget,
+        logEvery: LOG_EVERY,
+        tag: `[${method}]`,
+        started,
+      },
       askToContinue,
       log,
     );
@@ -501,7 +520,7 @@ async function runAmgSolve<T>(
       const result = read(solution);
       const seconds = (performance.now() - started) / 1000;
       log(
-        `AMG CG converged: ${solution.iterations} iterations, force residual ` +
+        `${METHOD_LABEL[method]} CG converged: ${solution.iterations} iterations, force residual ` +
           `${solution.relativeResidual.toExponential(2)}, ${seconds.toFixed(2)} s`,
       );
       return result;

@@ -13,9 +13,10 @@ The React/TypeScript/Three.js frontend is in `web/`. Use **bun**, not npm.
 ## Implementation
 
 - Solver paths are routed in `web/src/lib/solve/route.ts`. Solid models of
-  tetrahedra, hexahedra or both solve in Rust by default (`lib/solve/amg.ts`;
-  couplings take tetrahedra only); MFEM (`solve_mfem.cpp`) is the other choice
-  and takes the solid models Rust does not cover. Pure shells solve in Rust
+  tetrahedra, hexahedra or both solve in Rust (`lib/solve/amg.ts`; couplings
+  take tetrahedra only) with either Solve-panel preconditioner, AMG or
+  Gauss–Seidel. MFEM (`solve_mfem.cpp`) takes only the solid models Rust does
+  not cover and is their test oracle. Pure shells solve in Rust
   (`lib/solve/shellRust.ts`), with `solve_shell.cpp` as their test oracle.
   Mixed shell/solid models solve in Rust (`lib/solve/coupledRust.ts`), with
   `solve_coupled.cpp` as their test oracle; all-solid models with couplings

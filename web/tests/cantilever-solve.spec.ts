@@ -103,7 +103,8 @@ test("solve worker returns displacements and von Mises for the cantilever", asyn
 
 // The same CHEXA cantilever through the Rust module's AMG solve: hexahedra are
 // in its reach, so it solves there (no "AMG is not available" note) and gives
-// the MFEM engine's Gauss–Seidel field, at order 1 and order 2.
+// the Gauss–Seidel field, at order 1 and order 2. Rust against MFEM on hexahedra
+// is checked in tests/integration/amg-solid.test.mjs.
 test("AMG solves the hex cantilever and matches Gauss–Seidel", async ({
   page,
 }) => {
