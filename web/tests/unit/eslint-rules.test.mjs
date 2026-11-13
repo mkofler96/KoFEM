@@ -10,10 +10,11 @@ import { RuleTester } from "eslint";
 import noTestTimeouts from "../../eslint-rules/no-test-timeouts.js";
 import viewportThroughFixture from "../../eslint-rules/viewport-through-fixture.js";
 
-// RuleTester reports each case through the host runner's describe/it.
+// RuleTester reports each case through the host runner's describe/it. Its
+// hook for exclusive cases stays unset: no case here is one, and bun refuses
+// to hand out an exclusive test on CI.
 RuleTester.describe = describe;
 RuleTester.it = test;
-RuleTester.itOnly = test.only;
 
 const ruleTester = new RuleTester({
   languageOptions: { ecmaVersion: "latest", sourceType: "module" },

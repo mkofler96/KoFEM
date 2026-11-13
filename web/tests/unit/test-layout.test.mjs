@@ -59,6 +59,23 @@ describe("every test file is where its runner looks", () => {
   });
 });
 
+describe("what the runner refuses on CI fails here first", () => {
+  // bun rejects an exclusive test when CI is set: the property throws when it
+  // is read, and a file that throws while it loads runs none of its tests.
+  const exclusive = /\b(?:test|it|describe)\.only\b/;
+
+  test("no bun test asks for an exclusive run", () => {
+    expect(
+      files
+        .filter((file) => BUN_TEST.test(file))
+        .filter((file) =>
+          exclusive.test(readFileSync(`${REPO}${file}`, "utf8")),
+        ),
+      "bun refuses `.only` on CI, and the file then runs no test at all; remove it from these",
+    ).toEqual([]);
+  });
+});
+
 describe("the unit folder holds tests without WebAssembly", () => {
   const loadsWasm = /support\/wasm\.mjs|src\/wasm\/(pkg|fem)\//;
 
