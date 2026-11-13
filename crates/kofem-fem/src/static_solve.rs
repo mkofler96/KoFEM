@@ -90,7 +90,10 @@ pub fn solve_static(
 /// the edge node gets it too, at the mean of the two values — exact for a
 /// clamped face or a uniform or linear prescribed displacement. An edge with
 /// only one end constrained (the border of a support) stays free, and an edge
-/// node DOF the caller prescribes itself keeps the caller's value.
+/// node DOF the caller prescribes itself keeps the caller's value. The face
+/// and centre nodes of 27-node hexes get no condition: the MFEM engine leaves
+/// a hex face's centre DOF free as well, so a support on a hex face holds its
+/// corners and edge nodes only. Prescribe a face node explicitly to hold it.
 ///
 /// # Errors
 /// Malformed forces or constraints, a support or load on a vertex no element

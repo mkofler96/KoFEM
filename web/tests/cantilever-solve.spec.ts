@@ -15,8 +15,8 @@ test("solve worker returns displacements and von Mises for the cantilever", asyn
   page,
 }) => {
   await page.goto("/app/");
-  await page.waitForFunction(
-    () => !!(window as unknown as { __kofem?: unknown }).__kofem,
+  await page.waitForFunction(() =>
+    Boolean((window as unknown as { __kofem?: unknown }).__kofem),
   );
 
   // Collect the worker log stream that feeds the UI log panels (issue #278):
@@ -99,4 +99,60 @@ test("solve worker returns displacements and von Mises for the cantilever", asyn
   expect(wasmLogs.some((l) => /CG converged: \d+ iterations/.test(l))).toBe(
     true,
   );
+});
+
+// The same CHEXA cantilever through the Rust module's AMG solve: hexahedra are
+// in its reach, so it solves there (no "AMG is not available" note) and gives
+// the MFEM engine's Gauss–Seidel field, at order 1 and order 2.
+test("AMG solves the hex cantilever and matches Gauss–Seidel", async ({
+  page,
+}) => {
+  await page.goto("/app/");
+  await page.waitForFunction(() =>
+    Boolean((window as unknown as { __kofem?: unknown }).__kofem),
+  );
+  const wasmLogs: string[] = [];
+  page.on("console", (msg) => {
+    const text = msg.text();
+    if (text.startsWith("[wasm]")) wasmLogs.push(text);
+  });
+  const model = buildCantilever();
+  for (const elementOrder of [1, 2]) {
+    const [amg, gaussSeidel] = (await page.evaluate(
+      async ({ m, order }) => {
+        const kofem = (
+          window as unknown as {
+            __kofem: {
+              sendToWorker(name: string, payload: object): Promise<unknown>;
+            };
+          }
+        ).__kofem;
+        const solve = (solverMethod: string) =>
+          kofem.sendToWorker("solve", {
+            solverMethod,
+            elementOrder: order,
+            nodes: m.nodes,
+            elements: m.elements,
+            materials: m.materials,
+            properties: m.properties,
+            constraints: m.constraints,
+            loads: m.loads,
+          });
+        return [await solve("amg"), await solve("gauss-seidel")];
+      },
+      { m: model, order: elementOrder },
+    )) as SolveResult[];
+    expect(amg.displacements.length).toBe(model.nodes.length * 3);
+    expect(amg.vonMises.length).toBe(model.elements.length);
+    const peak = Math.max(...gaussSeidel.displacements.map(Math.abs));
+    const difference = Math.max(
+      ...amg.displacements.map((value, i) =>
+        Math.abs(value - gaussSeidel.displacements[i]),
+      ),
+    );
+    expect(difference / peak).toBeLessThan(1e-5);
+  }
+  expect(wasmLogs.some((l) => /hexahedra \(order 2\)/.test(l))).toBe(true);
+  expect(wasmLogs.filter((l) => /AMG CG converged/.test(l))).toHaveLength(2);
+  expect(wasmLogs.some((l) => /AMG is not available/.test(l))).toBe(false);
 });

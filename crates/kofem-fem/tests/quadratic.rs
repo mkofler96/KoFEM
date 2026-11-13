@@ -272,6 +272,7 @@ fn surface_load_on_six_node_faces_goes_to_the_edge_nodes() {
             mesh,
             0,
             &faces,
+            &[],
             SurfaceLoadKind::Force([0.0, 0.0, -600.0]),
             &mut forces,
         )
@@ -322,6 +323,7 @@ fn cantilever_matches_beam_theory_at_order_2() {
                 mesh,
                 0,
                 &side(mesh, 0, size[0]),
+                &[],
                 SurfaceLoadKind::Force([0.0, 0.0, force]),
                 &mut forces,
             )

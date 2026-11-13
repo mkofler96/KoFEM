@@ -4,10 +4,10 @@
 // Static solve through the Rust finite-element module (crates/kofem-wasm) with
 // the smoothed-aggregation multigrid (AMG) preconditioner, and the rule for
 // which models it covers. The Rust module handles linear and quadratic
-// tetrahedra with per-body materials, supports (fixed, roller, prescribed),
-// nodal loads and surface loads, and surface-to-point couplings on linear
-// tetrahedra; hex elements still solve with the MFEM engine's Gauss–Seidel CG,
-// and the solve says so. Pure-shell models take the Rust shell solve
+// tetrahedra and hexahedra (alone or mixed) with per-body materials, supports
+// (fixed, roller, prescribed), nodal loads and surface loads on triangular and
+// quadrilateral faces, and surface-to-point couplings on linear tetrahedra.
+// Pure-shell models take the Rust shell solve
 // (shellRust.ts), and shells, bodies solved as shells and couplings AMG cannot
 // take go to the coupled solver, both preconditioned with incomplete Cholesky.
 //
@@ -76,13 +76,24 @@ export function amgUnavailableReason(model: {
     return "it supports linear and quadratic elements only";
   if (model.elements.some((element) => element.type === "CTRIA3"))
     return "it does not support shell elements";
-  if (model.elements.some((element) => element.type !== "CTETRA"))
-    return "it supports tetrahedral meshes only";
+  if (
+    model.elements.some(
+      (element) => element.type !== "CTETRA" && element.type !== "CHEXA",
+    )
+  )
+    return "it supports tetrahedral and hexahedral meshes only";
   // A coupling ties the corner nodes of the picked faces; the edge nodes of
   // quadratic elements would not follow (the MFEM coupled path solves such a
   // model with linear elements).
   if (model.couplingCount > 0 && model.elementOrder !== 1)
     return "it supports surface-to-point couplings on linear elements only";
+  // The coupled model is built by the coupled solver's input builder, which
+  // takes tetrahedra only.
+  if (
+    model.couplingCount > 0 &&
+    model.elements.some((element) => element.type === "CHEXA")
+  )
+    return "it supports surface-to-point couplings on tetrahedral meshes only";
   if (shellMarkedBodies(model.properties).length > 0)
     return "it does not support bodies solved as shells";
   return null;
@@ -151,13 +162,14 @@ const LOG_EVERY = 10;
 // whatever the preconditioner (see StoppingRule in crates/kofem-fem/src/cg.rs).
 const RELATIVE_TOLERANCE = 1e-6;
 
-// Solve one all-solid tet model with AMG, with elements of `elementOrder`
-// (1 linear, 2 quadratic). `vid` indexes element connectivity; `refVid`
-// resolves constraint, load and surface-face node references (a tie maps them
-// to their representative first). Returns one displacement triple per node of
-// `model.nodes` and one von Mises stress per element, in element order — the
-// same layout as the MFEM solve. Quadratic elements add edge nodes inside the
-// Rust module, as MFEM's order-2 space does; their displacements stay there.
+// Solve one all-solid model of tetrahedra and hexahedra with AMG, with
+// elements of `elementOrder` (1 linear, 2 quadratic). `vid` indexes element
+// connectivity; `refVid` resolves constraint, load and surface-face node
+// references (a tie maps them to their representative first). Returns one
+// displacement triple per node of `model.nodes` and one von Mises stress per
+// element, tets first, then hexes — the same layout as the MFEM solve.
+// Quadratic elements add edge (and hex face and centre) nodes inside the Rust
+// module, as MFEM's order-2 space does; their displacements stay there.
 export async function solveSolidWithAmg(
   fem: FemModule,
   model: AmgSolidModel,
@@ -177,19 +189,23 @@ export async function solveSolidWithAmg(
   if (reason !== null)
     throw new Error(`The AMG solver cannot solve this model: ${reason}.`);
 
-  const mesh = packSolveMesh(model.nodes, model.elements, [], vid);
+  // Tets first, then hexes, as buildSolidEngineInputs packs them for MFEM.
+  const tetElements = model.elements.filter((e) => e.type === "CTETRA");
+  const hexElements = model.elements.filter((e) => e.type === "CHEXA");
+  const mesh = packSolveMesh(model.nodes, tetElements, hexElements, vid);
   const { materials, attributes } = resolveMaterials(
-    model.elements,
+    [...tetElements, ...hexElements],
     model.materials,
     model.properties,
   );
   // resolveMaterials numbers materials from 1 (the MFEM attribute contract);
   // the Rust module indexes them from 0.
-  const materialOfTet = Uint32Array.from(attributes, (index) => index - 1);
+  const materialOfElement = Uint32Array.from(attributes, (index) => index - 1);
   const elastic = new fem.ElasticModel(
     mesh.vertices,
     Uint32Array.from(mesh.tetrahedra),
-    materialOfTet,
+    Uint32Array.from(mesh.hexahedra),
+    materialOfElement,
     Float64Array.from(
       materials.flatMap((material) => [
         material.young_modulus,
@@ -205,10 +221,17 @@ export async function solveSolidWithAmg(
       );
     const started = performance.now();
     const nonzeros = elastic.assemble();
+    // The element kinds the model has, e.g. "24 tetrahedra and 4 hexahedra".
+    const elementCounts = [
+      [tetElements.length, "tetrahedra"],
+      [hexElements.length, "hexahedra"],
+    ]
+      .filter(([count]) => count !== 0)
+      .map(([count, kind]) => `${count} ${kind}`)
+      .join(" and ");
     log(
-      `AMG solve: ${model.nodes.length} nodes, ${model.elements.length} tetrahedra ` +
-        `(order ${elementOrder}), ${elastic.dofCount} unknowns, ` +
-        `${nonzeros} stiffness entries assembled`,
+      `AMG solve: ${model.nodes.length} nodes, ${elementCounts} (order ${elementOrder}), ` +
+        `${elastic.dofCount} unknowns, ${nonzeros} stiffness entries assembled`,
     );
 
     const { fixed_vertices, fixed_dofs, prescribed_dofs } = groupDirichlet(
@@ -238,19 +261,24 @@ export async function solveSolidWithAmg(
         forces[3 * vertex + component] += force[component];
     surfaceLoadsToVertices(model.surfaceLoads, refVid).forEach(
       (surfaceLoad, index) => {
-        const faces = new Uint32Array(3 * surfaceLoad.faces.length);
+        // Tet faces are triangles, hex faces quadrilaterals.
+        const triangles: number[] = [];
+        const quadrilaterals: number[] = [];
         surfaceLoad.faces.forEach((face, faceIndex) => {
-          if (face.length !== 3)
+          if (face.length === 3) triangles.push(...face);
+          else if (face.length === 4) quadrilaterals.push(...face);
+          else
             throw new Error(
               `Surface load ${index}: face ${faceIndex} has ${face.length} nodes — ` +
-                "a tetrahedral mesh has triangular faces only",
+                "a solid mesh has triangular (tetrahedron) and quadrilateral " +
+                "(hexahedron) faces only",
             );
-          faces.set(face, 3 * faceIndex);
         });
         const unmatched = elastic.addSurfaceLoad(
           forces,
           index,
-          faces,
+          Uint32Array.from(triangles),
+          Uint32Array.from(quadrilaterals),
           surfaceLoad.type,
           surfaceLoadValues(surfaceLoad, index),
         );
@@ -329,6 +357,7 @@ export async function solveCoupledSolidWithAmg(
   const elastic = new fem.ElasticModel(
     mesh.vertices,
     Uint32Array.from(mesh.tets),
+    new Uint32Array(0),
     // The coupled assembler numbers materials from 1; Rust from 0.
     Uint32Array.from(mesh.attributes, (attribute) => attribute - 1),
     Float64Array.from(
