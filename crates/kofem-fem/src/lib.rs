@@ -3,7 +3,8 @@
 
 //! Linear-elastic finite elements for KoFEM: linear and quadratic tetrahedra
 //! and hexahedra, Kirchhoff shell facets, sparse assembly, Dirichlet elimination,
-//! surface-to-point couplings and a preconditioned conjugate-gradient solve.
+//! surface-to-point couplings, a preconditioned conjugate-gradient solve and
+//! SIMP topology optimization.
 //! Pure Rust with no I/O or clock, so the same code runs natively under
 //! `cargo test` and in the browser through `kofem-wasm`.
 //!
@@ -29,6 +30,7 @@ pub mod sparse;
 pub mod static_solve;
 pub mod stress;
 pub mod surface;
+pub mod topology;
 
 pub use amg::{AmgSettings, LevelInfo, Preconditioner, SmoothedAggregation, SymmetricGaussSeidel};
 pub use assembly::assemble_stiffness;

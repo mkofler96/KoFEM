@@ -11,6 +11,8 @@ import {
   MixedModel,
   ShellModel,
   SolveOptions,
+  TopologyRun,
+  TopologySettings,
 } from "../wasm/fem/kofem_wasm.js";
 import { FemLoadError, loadFemModule } from "../lib/femModule.js";
 import type {
@@ -69,6 +71,10 @@ import {
   expandTiedDisplacements,
   weldTies,
 } from "../lib/solve/solid.js";
+import {
+  optimizeSolidInRust,
+  usesRustTopOpt,
+} from "../lib/solve/topOptRust.js";
 
 let Module: KofemModule | null = null;
 let activeTask: number | null = null;
@@ -903,14 +909,15 @@ function postDensityResult(id: number, result: TopOptEngineResult) {
 
 // SIMP / level-set topology optimization (KOF-226 epic, ADR-0002). The design
 // domain follows the element mix, exactly as the static solve routes
-// (routeTopOpt). Each engine entry runs the whole loop in C++ (crossing the
-// JS↔WASM boundary only twice) and streams "[topopt] it N: …" progress over the
-// same print→log channel the solve uses. The design density streams per
-// iteration as { id, progress: { it, density } } messages (KOF-240) so the
+// (routeTopOpt). SIMP on a solid domain runs in Rust (topOptRust.ts), one
+// iteration per call; the shell and coupled domains and the level-set method
+// run the whole loop inside an engine entry. Both stream "[topopt] it N: …"
+// progress lines over the log channel the solve uses, and the design density
+// per iteration as { id, progress: { it, density } } messages (KOF-240) so the
 // viewport can draw the shape emerging.
 //
 // Cancellation is owned by the worker lifecycle, exactly as meshing is: the
-// optimize_topology* call is one blocking WASM call, so the app cancels it by
+// optimization runs synchronously in the worker, so the app cancels it by
 // calling resetWorker() (terminate), which discards the in-flight run; the
 // streamed live density is discarded with it — no best-so-far is kept.
 function handleTopOpt(id: number, payload: TopOptPayload) {
@@ -942,8 +949,18 @@ function handleTopOpt(id: number, payload: TopOptPayload) {
       settingsJson,
       onDensity,
     );
+  } else if (usesRustTopOpt(payload.settings)) {
+    // SIMP on a solid design domain runs in Rust (KOF-310). Ties are not
+    // applied to the solid design domain.
+    startLog(payload.elements.length);
+    result = optimizeSolidInRust(
+      { ElasticModel, TopologySettings, TopologyRun },
+      payload,
+      logTo(id),
+      onDensity,
+    );
   } else {
-    // Ties are not applied to the solid design domain.
+    // The level-set method is still the engine's.
     const inp = buildSolidEngineInputs(
       payload,
       buildVertexIndexer(payload.nodes),

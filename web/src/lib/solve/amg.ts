@@ -208,7 +208,62 @@ export async function solveSolidInRust(
   if (reason !== null)
     throw new Error(`The Rust solver cannot solve this model: ${reason}.`);
 
-  // Tets first, then hexes, as buildSolidEngineInputs packs them for MFEM.
+  const { elastic, tetCount, hexCount } = createRustSolidModel(
+    fem,
+    model,
+    elementOrder,
+    vid,
+  );
+  try {
+    if (elastic.vertexCount !== model.nodes.length)
+      throw new Error(
+        `The AMG solver received ${elastic.vertexCount} vertices for ${model.nodes.length} nodes`,
+      );
+    const started = performance.now();
+    const nonzeros = elastic.assemble();
+    log(
+      `${METHOD_LABEL[method]} solve: ${model.nodes.length} nodes, ${describeSolidElements(tetCount, hexCount)} (order ${elementOrder}), ` +
+        `${elastic.dofCount} unknowns, ${nonzeros} stiffness entries assembled`,
+    );
+    const { fixedDofs, fixedValues, forces } = rustSolidBoundaryConditions(
+      elastic,
+      model,
+      refVid,
+      log,
+    );
+
+    return await runRustSolve(
+      fem,
+      method,
+      iterationLimit,
+      (options) => elastic.startSolve(fixedDofs, fixedValues, forces, options),
+      started,
+      askToContinue,
+      log,
+      (solution) => {
+        // One triple per node: the vertices first, then any edge nodes.
+        const nodal = solution.displacements;
+        return {
+          displacements: nodal.slice(0, 3 * elastic.vertexCount),
+          vonMises: elastic.vonMises(nodal),
+        };
+      },
+    );
+  } finally {
+    elastic.free();
+  }
+}
+
+// The solid model of tetrahedra and hexahedra (tets first, then hexes, as
+// buildSolidEngineInputs packs them for MFEM) as a Rust ElasticModel with
+// elements of `elementOrder`. `vid` indexes element connectivity. The caller
+// frees the model.
+export function createRustSolidModel(
+  fem: Pick<FemModule, "ElasticModel">,
+  model: Pick<AmgSolidModel, "nodes" | "elements" | "materials" | "properties">,
+  elementOrder: number,
+  vid: VertexIndexer,
+): { elastic: ElasticModel; tetCount: number; hexCount: number } {
   const tetElements = model.elements.filter((e) => e.type === "CTETRA");
   const hexElements = model.elements.filter((e) => e.type === "CHEXA");
   const mesh = packSolveMesh(model.nodes, tetElements, hexElements, vid);
@@ -233,84 +288,70 @@ export async function solveSolidInRust(
     ),
     elementOrder,
   );
-  try {
-    if (elastic.vertexCount !== model.nodes.length)
-      throw new Error(
-        `The AMG solver received ${elastic.vertexCount} vertices for ${model.nodes.length} nodes`,
-      );
-    const started = performance.now();
-    const nonzeros = elastic.assemble();
-    // The element kinds the model has, e.g. "24 tetrahedra and 4 hexahedra".
-    const elementCounts = [
-      [tetElements.length, "tetrahedra"],
-      [hexElements.length, "hexahedra"],
-    ]
-      .filter(([count]) => count !== 0)
-      .map(([count, kind]) => `${count} ${kind}`)
-      .join(" and ");
-    log(
-      `${METHOD_LABEL[method]} solve: ${model.nodes.length} nodes, ${elementCounts} (order ${elementOrder}), ` +
-        `${elastic.dofCount} unknowns, ${nonzeros} stiffness entries assembled`,
-    );
+  return {
+    elastic,
+    tetCount: tetElements.length,
+    hexCount: hexElements.length,
+  };
+}
 
-    const { fixed_vertices, fixed_dofs, prescribed_dofs } = groupDirichlet(
-      model.constraints,
-      refVid,
-    );
-    const fixedDofList: number[] = [];
-    const fixedValueList: number[] = [];
-    for (const vertex of fixed_vertices)
-      for (let component = 0; component < 3; component++) {
-        fixedDofList.push(3 * vertex + component);
-        fixedValueList.push(0);
-      }
-    for (const { vertex, dofs } of fixed_dofs)
-      for (const component of dofs) {
-        fixedDofList.push(3 * vertex + component);
-        fixedValueList.push(0);
-      }
-    for (const { vertex, dof, value } of prescribed_dofs) {
-      fixedDofList.push(3 * vertex + dof);
-      fixedValueList.push(value);
+// The element kinds a model has, e.g. "24 tetrahedra and 4 hexahedra".
+export function describeSolidElements(
+  tetCount: number,
+  hexCount: number,
+): string {
+  return [[tetCount, "tetrahedra"] as const, [hexCount, "hexahedra"] as const]
+    .filter(([count]) => count !== 0)
+    .map(([count, kind]) => `${count} ${kind}`)
+    .join(" and ");
+}
+
+// The supports (3·vertex + component, with their prescribed values) and the
+// nodal forces (3 per node of `elastic`) of a solid model: point loads, and
+// surface loads integrated by the Rust module. `refVid` resolves constraint,
+// load and surface-face node references.
+export function rustSolidBoundaryConditions(
+  elastic: ElasticModel,
+  model: Pick<AmgSolidModel, "constraints" | "loads" | "surfaceLoads">,
+  refVid: VertexIndexer,
+  log: (line: string) => void,
+): { fixedDofs: Uint32Array; fixedValues: Float64Array; forces: Float64Array } {
+  const { fixed_vertices, fixed_dofs, prescribed_dofs } = groupDirichlet(
+    model.constraints,
+    refVid,
+  );
+  const fixedDofList: number[] = [];
+  const fixedValueList: number[] = [];
+  for (const vertex of fixed_vertices)
+    for (let component = 0; component < 3; component++) {
+      fixedDofList.push(3 * vertex + component);
+      fixedValueList.push(0);
     }
-
-    const forces = new Float64Array(elastic.dofCount);
-    for (const { vertex, force } of groupPointLoads(model.loads, refVid))
-      for (let component = 0; component < 3; component++)
-        forces[3 * vertex + component] += force[component];
-    addSurfaceLoads(
-      elastic,
-      forces,
-      surfaceLoadsToVertices(model.surfaceLoads, refVid),
-      log,
-    );
-
-    return await runRustSolve(
-      fem,
-      method,
-      iterationLimit,
-      (options) =>
-        elastic.startSolve(
-          Uint32Array.from(fixedDofList),
-          Float64Array.from(fixedValueList),
-          forces,
-          options,
-        ),
-      started,
-      askToContinue,
-      log,
-      (solution) => {
-        // One triple per node: the vertices first, then any edge nodes.
-        const nodal = solution.displacements;
-        return {
-          displacements: nodal.slice(0, 3 * elastic.vertexCount),
-          vonMises: elastic.vonMises(nodal),
-        };
-      },
-    );
-  } finally {
-    elastic.free();
+  for (const { vertex, dofs } of fixed_dofs)
+    for (const component of dofs) {
+      fixedDofList.push(3 * vertex + component);
+      fixedValueList.push(0);
+    }
+  for (const { vertex, dof, value } of prescribed_dofs) {
+    fixedDofList.push(3 * vertex + dof);
+    fixedValueList.push(value);
   }
+
+  const forces = new Float64Array(elastic.dofCount);
+  for (const { vertex, force } of groupPointLoads(model.loads, refVid))
+    for (let component = 0; component < 3; component++)
+      forces[3 * vertex + component] += force[component];
+  addSurfaceLoads(
+    elastic,
+    forces,
+    surfaceLoadsToVertices(model.surfaceLoads, refVid),
+    log,
+  );
+  return {
+    fixedDofs: Uint32Array.from(fixedDofList),
+    fixedValues: Float64Array.from(fixedValueList),
+    forces,
+  };
 }
 
 // What the Rust coupled solve reads: the coupled assembler's inputs

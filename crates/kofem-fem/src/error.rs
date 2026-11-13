@@ -174,4 +174,6 @@ pub enum FemError {
         material: u32,
         count: usize,
     },
+    #[error("topology optimization: {reason}")]
+    TopologyInput { reason: String },
 }

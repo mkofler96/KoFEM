@@ -71,8 +71,9 @@ export type TopOptDomain = "shell" | "coupled" | "solid";
 
 // The topology optimizer's design domain follows the element mix, exactly as
 // the static solve routes: all CTRIA3 → optimize_topology_shell; mixed
-// shell/solid or any coupling → optimize_topology_coupled; all solid →
-// optimize_topology. Unlike the solve, the optimizer never idealises a Shell
+// shell/solid or any coupling → optimize_topology_coupled; all solid → the
+// Rust SIMP optimizer (topOptRust.ts), or optimize_topology for the level-set
+// method. Unlike the solve, the optimizer never idealises a Shell
 // body itself, and the level-set method runs through the solid entry only —
 // both are refused here rather than optimizing the wrong model.
 export function routeTopOpt(payload: TopOptPayload): TopOptDomain {

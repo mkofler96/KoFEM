@@ -13,6 +13,7 @@
 mod mixed;
 mod shell;
 mod shellize;
+mod topology;
 
 pub use mixed::MixedModel;
 pub use shell::ShellModel;
@@ -20,6 +21,7 @@ pub use shellize::{
     CoupledResult, CouplingInput, ExplicitCoupledResult, ShellSet, ShellTransitionResult,
     ShellizeInput,
 };
+pub use topology::{TopologyRun, TopologySettings, TopologyStep};
 
 use kofem_fem::{
     assemble_stiffness, prepare_coupled_static, prepare_static, solve_static, von_mises,
