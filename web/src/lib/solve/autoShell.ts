@@ -36,6 +36,7 @@ import {
   coupledLoads,
   coupledToShellDirichlet,
   coupledToShellPointLoads,
+  solidFacesOutward,
 } from "./bcs.js";
 import {
   coupledTies,
@@ -510,9 +511,10 @@ export function prepareAutoCoupledSolve(
     ]),
     buildReferenceCouplings(couplings, (nodeId) => poolOf(nodeId)),
   );
+  // Faces wound outward from their tets, so a pressure pushes into the body.
   const nodalLoads = coupledLoads(
     loads,
-    surfaceLoads,
+    solidFacesOutward(surfaceLoads, elements, nodes, vid),
     poolOf,
     isRefPoint,
     nodes,
@@ -647,9 +649,10 @@ export function preparePureShellSolve(
   const dirichlet = coupledToShellDirichlet(
     coupledFixedDofs(constraints, shellOf, () => true, noReferencePoints),
   );
+  // Faces wound outward from their tets, so a pressure pushes into the body.
   const { load_dofs, load_vals } = coupledLoads(
     loads,
-    payload.surfaceLoads,
+    solidFacesOutward(payload.surfaceLoads, elements, nodes, vid),
     shellOf,
     noReferencePoints,
     nodes,
