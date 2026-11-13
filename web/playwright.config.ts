@@ -13,8 +13,9 @@ import { resolveChromiumExecutable } from "./playwright-browser";
 //   ui        interaction on small prepared models. A test has seconds of
 //             work; the timing-sensitive ones (picking, races) live here.
 //   pipeline  tests tagged @pipeline in their title: a real CAD import, a
-//             mesh of a real part, a full STEP-to-result flow. One at a time,
-//             so two meshers never compete for the machine.
+//             mesh of a real part, a full STEP-to-result flow. CI runs them
+//             in jobs of their own, so a `ui` test never shares a runner
+//             with a mesher.
 //
 // Time budgets are set here, once per project, and nowhere else. They are
 // watchdogs for a hung page, not performance targets: an assertion returns as
@@ -77,7 +78,6 @@ export default defineConfig({
       grepInvert: /@capture/,
       timeout: 600_000,
       expect: { timeout: 240_000 },
-      workers: 1,
     },
   ],
   webServer: {

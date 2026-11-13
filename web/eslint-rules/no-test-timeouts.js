@@ -6,9 +6,9 @@
 //
 // Flagged in tests/*.spec.ts and tests/fixtures:
 //
-// - `test.setTimeout(...)` and `test.slow()`: a per-test budget. A test that
-//   needs more than the `ui` project gives belongs in `pipeline` (tag its
-//   title `@pipeline`).
+// - `test.setTimeout(...)` and `test.slow()`, also through `testInfo` or
+//   `test.info()`: a per-test budget. A test that needs more than the `ui`
+//   project gives belongs in `pipeline` (tag its title `@pipeline`).
 // - a `timeout` property in an object passed to a call: a per-wait budget
 //   (`toBeVisible({ timeout })`, `expect.poll(fn, { timeout })`, …).
 // - `page.waitForTimeout(...)` and `setTimeout(...)`: a fixed sleep. Wait for
@@ -20,16 +20,46 @@
 // The justification after `--` is mandatory by convention, matching
 // kofem/no-silent-fallback.
 
-const TEST_BUDGET_METHODS = new Set(["setTimeout", "slow"]);
+// The page's own timer: `window.setTimeout(...)` is a sleep, not a budget.
+const GLOBAL_OBJECTS = new Set(["window", "globalThis", "self"]);
 
-function isMember(node, objectName, propertyNames) {
+function methodName(callee) {
+  return callee.type === "MemberExpression" &&
+    !callee.computed &&
+    callee.property.type === "Identifier"
+    ? callee.property.name
+    : null;
+}
+
+function isGlobalObject(node) {
+  return node.type === "Identifier" && GLOBAL_OBJECTS.has(node.name);
+}
+
+// `test`, `testInfo`, or `test.info()`.
+function isTestObject(node) {
+  if (node.type === "Identifier")
+    return node.name === "test" || node.name === "testInfo";
   return (
-    node.type === "MemberExpression" &&
-    !node.computed &&
-    node.object.type === "Identifier" &&
-    node.object.name === objectName &&
-    node.property.type === "Identifier" &&
-    propertyNames.has(node.property.name)
+    node.type === "CallExpression" &&
+    methodName(node.callee) === "info" &&
+    isTestObject(node.callee.object)
+  );
+}
+
+// `<anything but the page's globals>.setTimeout(...)`, and `.slow()` on the
+// test or its info object.
+function setsTestBudget(callee) {
+  const name = methodName(callee);
+  if (name === "setTimeout") return !isGlobalObject(callee.object);
+  return name === "slow" && isTestObject(callee.object);
+}
+
+function sleeps(callee) {
+  if (callee.type === "Identifier") return callee.name === "setTimeout";
+  const name = methodName(callee);
+  return (
+    name === "waitForTimeout" ||
+    (name === "setTimeout" && isGlobalObject(callee.object))
   );
 }
 
@@ -54,17 +84,11 @@ export default {
     return {
       CallExpression(node) {
         const callee = node.callee;
-        if (isMember(callee, "test", TEST_BUDGET_METHODS)) {
+        if (setsTestBudget(callee)) {
           context.report({ node, messageId: "testBudget" });
           return;
         }
-        const isSleep =
-          (callee.type === "Identifier" && callee.name === "setTimeout") ||
-          (callee.type === "MemberExpression" &&
-            !callee.computed &&
-            callee.property.type === "Identifier" &&
-            callee.property.name === "waitForTimeout");
-        if (isSleep) {
+        if (sleeps(callee)) {
           context.report({ node, messageId: "sleep" });
           return;
         }

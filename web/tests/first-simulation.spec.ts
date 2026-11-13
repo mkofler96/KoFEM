@@ -214,7 +214,7 @@ test("the guide goes away when another model replaces the sample", async ({
   await expect(page.getByTestId("sample-guide")).toHaveCount(0);
 });
 
-test("the hand check is withheld once the load no longer matches it", async ({
+test("the hand check is withheld once the load no longer matches it @pipeline", async ({
   page,
 }) => {
   await page.goto("/app/?example=cantilever-beam");

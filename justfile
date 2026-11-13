@@ -26,11 +26,16 @@ set positional-arguments := true
 default:
     @just --list --unsorted
 
+# The engine comes last: a checkout with unpublished engine changes has none
+# to fetch (build it: bash scripts/docker-build-wasm.sh), and everything else
+# is ready by then.
+
 # Pinned tools, web dependencies and both WebAssembly modules. Safe to re-run.
 setup:
     bash scripts/install-tools.sh
     cd web && bun install --frozen-lockfile
-    cd web && bun run wasm:prepare
+    cd web && bun run wasm:fem
+    cd web && bun run wasm:fetch
 
 # Formatters, linters and type checks for Rust and the web app.
 check: check-rust check-web
@@ -53,9 +58,12 @@ check-cpp:
 # Every suite: Rust, C++, node-side and browser.
 test: test-rust test-cpp test-web test-e2e
 
+# Without arguments every crate; with them, what they select
+# (`just test-rust -p kofem-fem shell`).
+
 # Rust: elements, assembly, solvers, shell idealisation.
 test-rust *args:
-    cargo test --workspace "$@"
+    cargo test {{ if args == "" { "--workspace" } else { "" } }} "$@"
 
 # C++: the engine units that build on their own, native and with MFEM.
 test-cpp: test-cpp-native test-cpp-wasm

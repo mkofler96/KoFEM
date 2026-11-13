@@ -73,8 +73,13 @@ export function ViewportTestHooks() {
         });
       },
     };
-    (window as Window & { __kofemViewport?: ViewportHooks }).__kofemViewport =
-      hooks;
+    const host = window as Window & { __kofemViewport?: ViewportHooks };
+    host.__kofemViewport = hooks;
+    // An unmounted canvas draws no frame, so its settled() would never
+    // resolve. Without hooks a test waits for the next mount instead.
+    return () => {
+      if (host.__kofemViewport === hooks) delete host.__kofemViewport;
+    };
   }, [camera, controls, gl, invalidate]);
 
   return null;

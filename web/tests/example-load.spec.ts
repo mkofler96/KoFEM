@@ -130,7 +130,7 @@ test("re-solving a loaded example does not trap on its node ids (#288)", async (
   }
 });
 
-test("a pure-shell (CTRIA3) example solves through the shell path to its published Kt", async ({
+test("a pure-shell (CTRIA3) example solves through the shell path to its published Kt @pipeline", async ({
   page,
 }) => {
   // Opens the shell plate with a hole — built from its STEP file with the body

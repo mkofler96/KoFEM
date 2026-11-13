@@ -22,20 +22,6 @@ git -C "$REPO" config core.hooksPath .githooks
 
 bash "$REPO/scripts/fetch-wasm-deps.sh"
 
-# Everything a test run needs, so the first `just test-…` works without manual
-# steps: the pinned command-line tools (just, wasm-bindgen), the web
-# dependencies, the published engine (it is not committed, KOF-186) and the
-# Rust module. A session branched off an unmerged engine change has no engine
-# release to fetch and must build one (bash scripts/build-wasm.sh); that is
-# not a reason to fail startup, so a setup that does not finish is reported
-# and the session starts anyway.
-# The tools install into ~/.cargo/bin (or ~/.local/bin without rustup); both
-# are on a session's PATH, but not necessarily on this hook's.
-export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
-if ! { bash "$REPO/scripts/install-tools.sh" && (cd "$REPO" && just setup); }; then
-    echo "[setup] \`just setup\` did not finish — see the error above, fix it and run \`just setup\` again." >&2
-fi
-
 # clang-tidy >= 20 for scripts/clang-tidy.sh (the C++ engine linter, mirroring
 # the DeepSource rules — see .clang-tidy). The sandbox's default clang-tidy-18
 # cannot parse the emsdk clang-22-era headers.
@@ -93,4 +79,19 @@ if ! command -v docker &>/dev/null || ! docker info &>/dev/null 2>&1; then
     if ! docker info &>/dev/null 2>&1; then
         echo "[docker-setup] Docker failed to start. Check /tmp/dockerd.log"
     fi
+fi
+
+# Everything a test run needs, so the first `just test-…` works without manual
+# steps: the pinned command-line tools (just, wasm-bindgen), the web
+# dependencies, the published engine (it is not committed, KOF-186) and the
+# Rust module. A session branched off an unmerged engine change has no engine
+# release to fetch and must build one (bash scripts/build-wasm.sh); that is
+# not a reason to fail startup, so a setup that does not finish is reported
+# and the session starts anyway. It runs last: the steps above are quick and
+# everything else depends on them, so they must not wait behind a build.
+# The tools install into ~/.cargo/bin (or ~/.local/bin without rustup); both
+# are on a session's PATH, but not necessarily on this hook's.
+export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
+if ! { bash "$REPO/scripts/install-tools.sh" && (cd "$REPO" && just setup); }; then
+    echo "[setup] \`just setup\` did not finish — see the error above, fix it and run \`just setup\` again." >&2
 fi

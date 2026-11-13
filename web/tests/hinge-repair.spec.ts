@@ -173,7 +173,7 @@ test("a face too narrow to mesh is named instead of volume-filled @pipeline", as
   await expectMeshed(page);
 });
 
-test("a face wider than the minimum element size is not offered for removal", async ({
+test("a face wider than the minimum element size is not offered for removal @pipeline", async ({
   page,
 }) => {
   await importStep(page, SLIVER_RING);
@@ -187,7 +187,7 @@ test("a face wider than the minimum element size is not offered for removal", as
 
 // OCCT stored this part's contact as an edge the two faces share. Cutting through
 // it leaves invalid geometry, which must be refused rather than handed to the mesher.
-test("a separate that leaves invalid geometry is refused and changes nothing", async ({
+test("a separate that leaves invalid geometry is refused and changes nothing @pipeline", async ({
   page,
 }) => {
   await meshIntoHingeWarning(page);

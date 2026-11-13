@@ -35,6 +35,16 @@ ruleTester.run("no-test-timeouts", noTestTimeouts, {
       errors: [{ messageId: "testBudget" }],
     },
     { code: "test.slow();", errors: [{ messageId: "testBudget" }] },
+    // The same budget through the test's info object.
+    {
+      code: "testInfo.setTimeout(500_000);",
+      errors: [{ messageId: "testBudget" }],
+    },
+    {
+      code: "test.info().setTimeout(500_000);",
+      errors: [{ messageId: "testBudget" }],
+    },
+    { code: "testInfo.slow();", errors: [{ messageId: "testBudget" }] },
     {
       code: "await expect(locator).toBeVisible({ timeout: 60_000 });",
       errors: [{ messageId: "waitBudget" }],
@@ -55,6 +65,10 @@ ruleTester.run("no-test-timeouts", noTestTimeouts, {
       code: "await new Promise((resolve) => setTimeout(resolve, 50));",
       errors: [{ messageId: "sleep" }],
     },
+    {
+      code: "await new Promise((resolve) => window.setTimeout(resolve, 50));",
+      errors: [{ messageId: "sleep" }],
+    },
   ],
 });
 
@@ -67,6 +81,9 @@ ruleTester.run("viewport-through-fixture", viewportThroughFixture, {
     // viewport click.
     "await page.mouse.move(0, 0);",
     "await page.mouse.down(); await page.mouse.up();",
+    // Looking at the canvas is not clicking it.
+    "await expect(page.locator('canvas')).toBeVisible();",
+    "const box = await page.locator('canvas').first().boundingBox();",
   ],
   invalid: [
     {
@@ -75,6 +92,23 @@ ruleTester.run("viewport-through-fixture", viewportThroughFixture, {
     },
     {
       code: "await page.mouse.dblclick(10, 20);",
+      errors: [{ messageId: "viaFixture" }],
+    },
+    // The same click by another route.
+    {
+      code: "const { mouse } = page; await mouse.click(10, 20);",
+      errors: [{ messageId: "viaFixture" }],
+    },
+    {
+      code: "await page.locator('canvas').click();",
+      errors: [{ messageId: "viaFixture" }],
+    },
+    {
+      code: "await page.locator('canvas').first().dblclick({ position: { x: 1, y: 2 } });",
+      errors: [{ messageId: "viaFixture" }],
+    },
+    {
+      code: "const canvas = page.locator('canvas'); await canvas.click();",
       errors: [{ messageId: "viaFixture" }],
     },
   ],

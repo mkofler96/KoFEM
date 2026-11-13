@@ -78,7 +78,7 @@ async function elementsPerRegion(page: Page): Promise<Record<number, number>> {
 // KOF-257: a body split makes regions of the same body — connected at the cut,
 // listed under the body, not as an interface — each with its own mesh size and
 // optimization role, and a region can be promoted to a body of its own.
-test("split a body into regions: one body, connected, each meshed at its own size", async ({
+test("split a body into regions: one body, connected, each meshed at its own size @pipeline", async ({
   page,
 }) => {
   await importStepText(page, BLOCK);

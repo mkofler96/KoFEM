@@ -17,7 +17,7 @@ function goToOptimizePanel(page: Page) {
   return openTree(page, "topopt");
 }
 
-test("Optimize panel: gates, runs, streams logs, hands off to Results", async ({
+test("Optimize panel: gates, runs, streams logs, hands off to Results @pipeline", async ({
   page,
 }) => {
   const logs: string[] = [];
@@ -182,7 +182,7 @@ test("Optimize panel: a non-zero prescribed displacement is blocked", async ({
 // error — no silent default), shows up in the pre-flight summary, and a run with
 // it reports the true max stress in Results next to the aggregated value in the
 // convergence plot.
-test("Optimize panel: max-stress constraint", async ({ page }) => {
+test("Optimize panel: max-stress constraint @pipeline", async ({ page }) => {
   await bootstrapCantilever(page);
   await goToOptimizePanel(page);
 
@@ -225,7 +225,7 @@ test("Optimize panel: max-stress constraint", async ({ page }) => {
 
 // KOF-257: a region set to Keep solid is left out of the design — every one of
 // its elements comes back at full density while the rest is optimized.
-test("Optimize panel: a Keep solid region stays at full density", async ({
+test("Optimize panel: a Keep solid region stays at full density @pipeline", async ({
   page,
 }) => {
   await bootstrapCantilever(page);

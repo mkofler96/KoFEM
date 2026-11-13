@@ -271,7 +271,7 @@ test.describe("Full workflow showcase", () => {
   // on the solid cantilever fixture instead — a fast, deterministic minimum-
   // compliance run — to show the density field, threshold and convergence plot.
   // Mirrors optimize-panel.spec.ts so it stays as robust as that passing test.
-  test("optimize: density field, threshold and convergence plot", async ({
+  test("optimize: density field, threshold and convergence plot @pipeline", async ({
     page,
   }) => {
     page.on("pageerror", (err) =>

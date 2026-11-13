@@ -7,15 +7,58 @@
 // 23% and 11% of their CI runs before the wait existed.
 //
 // Flagged in tests/*.spec.ts and tests/fixtures (except viewport.ts itself):
-// `page.mouse.click(...)` and `page.mouse.dblclick(...)`. Moving the pointer
-// and dragging (`move`, `down`, `up`) stay available: they are how a spec
-// leaves a hover or drags a panel edge.
+// a `click` or `dblclick` on the mouse (`page.mouse.click(...)`, or a `mouse`
+// taken out of the page first) and on a canvas (`page.locator("canvas")
+// .click()`, or a variable named for one). Moving the pointer and dragging
+// (`move`, `down`, `up`) stay available: they are how a spec leaves a hover
+// or drags a panel edge.
 //
 // A click at page coordinates that is not on the viewport (there should be
 // few: click DOM elements through locators) keeps its call with
 //   // eslint-disable-next-line kofem/viewport-through-fixture -- <what is clicked>
 
 const CLICKS = new Set(["click", "dblclick"]);
+const SELECTORS = new Set(["locator", "$", "$$", "querySelector"]);
+
+function methodName(callee) {
+  return callee.type === "MemberExpression" &&
+    !callee.computed &&
+    callee.property.type === "Identifier"
+    ? callee.property.name
+    : null;
+}
+
+// `page.mouse`, or a variable called `mouse`.
+function isMouse(node) {
+  if (node.type === "Identifier") return node.name === "mouse";
+  return methodName(node) === "mouse";
+}
+
+// A locator chain that selects a canvas (`page.locator("canvas").first()`),
+// or a variable named for one (`canvas`, `viewportCanvas`).
+function isCanvas(node) {
+  let current = node;
+  while (current) {
+    if (current.type === "Identifier") return /canvas/i.test(current.name);
+    if (current.type === "AwaitExpression") current = current.argument;
+    else if (current.type === "MemberExpression") current = current.object;
+    else if (current.type === "CallExpression") {
+      const selector = current.arguments[0];
+      if (
+        SELECTORS.has(methodName(current.callee)) &&
+        selector?.type === "Literal" &&
+        typeof selector.value === "string" &&
+        /canvas/i.test(selector.value)
+      )
+        return true;
+      current =
+        current.callee.type === "MemberExpression"
+          ? current.callee.object
+          : null;
+    } else return false;
+  }
+  return false;
+}
 
 export default {
   meta: {
@@ -34,16 +77,8 @@ export default {
     return {
       CallExpression(node) {
         const callee = node.callee;
-        if (
-          callee.type === "MemberExpression" &&
-          !callee.computed &&
-          callee.property.type === "Identifier" &&
-          CLICKS.has(callee.property.name) &&
-          callee.object.type === "MemberExpression" &&
-          !callee.object.computed &&
-          callee.object.property.type === "Identifier" &&
-          callee.object.property.name === "mouse"
-        )
+        if (!CLICKS.has(methodName(callee))) return;
+        if (isMouse(callee.object) || isCanvas(callee.object))
           context.report({ node, messageId: "viaFixture" });
       },
     };

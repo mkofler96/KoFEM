@@ -53,7 +53,7 @@ async function visibleCount(page: Page): Promise<number> {
   return n;
 }
 
-test("TO results: density field renders, threshold reveals the shape, convergence plot present", async ({
+test("TO results: density field renders, threshold reveals the shape, convergence plot present @pipeline", async ({
   page,
 }) => {
   page.on("pageerror", (e) =>
@@ -135,7 +135,7 @@ test("TO results: density field renders, threshold reveals the shape, convergenc
 // step draws each streamed iteration's density. Record every store update of the
 // live field before completion and check the viewport saw several iterations
 // and a changing visible-element count at a fixed cutoff — the shape emerging.
-test("TO live density: the viewport updates per iteration during the run", async ({
+test("TO live density: the viewport updates per iteration during the run @pipeline", async ({
   page,
 }) => {
   page.on("pageerror", (e) =>

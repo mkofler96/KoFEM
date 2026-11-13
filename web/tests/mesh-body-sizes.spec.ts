@@ -15,7 +15,7 @@ import { openBody, openTree } from "./fixtures/tree";
 const TWO_BOXES = path.resolve("..", "test_files", "two_boxes.stp");
 const TUBE = path.resolve("tests", "fixtures", "tube.stp");
 
-test("the mesh summary opens a body's own size; Apply to all clears them (KOF-342)", async ({
+test("the mesh summary opens a body's own size; Apply to all clears them (KOF-342) @pipeline", async ({
   page,
 }) => {
   await importStep(page, TWO_BOXES);
@@ -56,7 +56,7 @@ test("the mesh summary opens a body's own size; Apply to all clears them (KOF-34
   );
 });
 
-test("a single body with its own size gets no edit link or Apply to all (KOF-342)", async ({
+test("a single body with its own size gets no edit link or Apply to all (KOF-342) @pipeline", async ({
   page,
 }) => {
   await importStep(page, TUBE);
