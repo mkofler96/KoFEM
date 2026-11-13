@@ -168,6 +168,7 @@ function tetCantilever() {
 // its log.
 async function optimizeInEngine(model, settings) {
   const logs = [];
+  const streamed = [];
   const engine = await loadEngine({ print: (line) => logs.push(line) });
   const inputs = buildSolidEngineInputs(model, buildVertexIndexer(model.nodes));
   const result = engine.optimize_topology(
@@ -175,13 +176,15 @@ async function optimizeInEngine(model, settings) {
     inputs.matJson,
     inputs.bcsJson,
     JSON.stringify(settings),
-    null,
+    (iteration, density) =>
+      streamed.push({ iteration, density: Array.from(density) }),
   );
   if ("error" in result) throw new Error(result.error);
   return {
     density: Array.from(result.density),
     history: result.history.map((entry) => ({ ...entry })),
     logs,
+    streamed,
   };
 }
 
@@ -321,14 +324,26 @@ describe("solid topology optimization: Rust against the C++ engine", () => {
     expect(rust.history.at(-1).max_stress).toBeGreaterThan(0);
   });
 
-  test("streams on its cadence, and logs lines the progress plot parses", () => {
+  test("streams the engine's designs on its cadence, and logs lines the progress plot parses", async () => {
     const model = mbb();
-    const rust = optimizeInRust(model, {
-      ...MBB_SETTINGS,
-      maxIterations: 7,
-      streamEvery: 3,
-    });
+    const settings = { ...MBB_SETTINGS, maxIterations: 7, streamEvery: 3 };
+    const engine = await optimizeInEngine(model, settings);
+    const rust = optimizeInRust(model, settings);
     expect(rust.streamed.map(({ iteration }) => iteration)).toEqual([3, 6, 7]);
+    expect(engine.streamed.map(({ iteration }) => iteration)).toEqual([
+      3, 6, 7,
+    ]);
+    // Each streamed field is the design that iteration analysed, as the
+    // engine streams it — not the next one.
+    for (const [index, { density }] of rust.streamed.entries()) {
+      const reference = engine.streamed[index].density;
+      const largest = Math.max(
+        ...Array.from(density, (rho, element) =>
+          Math.abs(rho - reference[element]),
+        ),
+      );
+      expect(largest).toBeLessThan(1e-6);
+    }
     expect(Array.from(rust.streamed.at(-1).density)).toEqual(
       Array.from(rust.density),
     );

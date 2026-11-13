@@ -192,12 +192,14 @@ fn streams_on_its_cadence_and_always_the_final_design() {
         ..base_settings()
     };
     let mut streamed = Vec::new();
+    let mut streamed_designs = Vec::new();
     let mut last_density = Vec::new();
     let result = optimize(
         problem.model(SimpSolver::default()),
         &settings,
         |iteration, density| {
             streamed.push(iteration);
+            streamed_designs.push((iteration, density.to_vec()));
             last_density = density.to_vec();
         },
     )
@@ -206,6 +208,18 @@ fn streams_on_its_cadence_and_always_the_final_design() {
     assert!(earlier.iter().all(|iteration| iteration % 3 == 0));
     assert_eq!(*last, result.iterations);
     assert_eq!(last_density, result.density);
+
+    // Each streamed field is the design its iteration analysed: re-evaluating
+    // it reproduces that iteration's compliance.
+    for (iteration, density) in &streamed_designs {
+        let entry = result.history[iteration - 1];
+        let compliance = compliance_of(&problem, density, &settings);
+        assert!(
+            (compliance - entry.compliance).abs() <= 1e-6 * entry.compliance,
+            "streamed design of iteration {iteration}: c = {compliance}, history {}",
+            entry.compliance
+        );
+    }
 
     let plain = run(&problem, &base_settings()).expect("optimization");
     assert_eq!(

@@ -181,8 +181,10 @@ pub struct SimpOptimizer {
     design: Vec<f64>,
     /// Design field over every element (passives pinned).
     xfull: Vec<f64>,
-    /// The density the next step analyses (the last analysed once finished).
+    /// The design the last step analysed (before the first: the start).
     rho: Vec<f64>,
+    /// The MMA step the last step took, applied when the next one starts.
+    next_design: Option<Vec<f64>>,
     total_volume: f64,
     volume_cap: f64,
     has_compliance_limit: bool,
@@ -401,6 +403,7 @@ impl SimpOptimizer {
             displacements: Vec::new(),
             best_feasible: None,
             finished: false,
+            next_design: None,
             converged: false,
             settings,
         };
@@ -486,6 +489,13 @@ impl SimpOptimizer {
     pub fn step(&mut self) -> Result<StepReport, FemError> {
         if self.finished {
             return Err(topology_error("the optimization has already finished"));
+        }
+        if let Some(next) = self.next_design.take() {
+            for (&element, &value) in self.active.iter().zip(&next) {
+                self.xfull[element] = value;
+            }
+            self.design = next;
+            self.rho = self.physical(&self.xfull)?;
         }
         let iteration = self.history.len() + 1;
         let settings = &self.settings;
@@ -691,11 +701,9 @@ impl SimpOptimizer {
             self.finished = true;
             self.converged = converged;
         } else {
-            for (&element, &value) in self.active.iter().zip(&next) {
-                self.xfull[element] = value;
-            }
-            self.design = next;
-            self.rho = self.physical(&self.xfull)?;
+            // Applied by the next step, so `density` stays this step's design
+            // for the caller to show alongside this step's metrics.
+            self.next_design = Some(next);
         }
         Ok(StepReport {
             entry,
