@@ -28,7 +28,7 @@ physical models; KoFEM examples and
 implementation sections are included when relevant. Remaining topics stay marked
 as planned until reviewed.
 Run `cd web && bun run theory:generate` after editing, and commit generated
-HTML, figures, viewer data and sitemap. `bun run test:theory` checks output, content-map alignment
+HTML, figures, viewer data and sitemap. `just test-web theory` checks output, content-map alignment
 and the worked elasticity, linear-solve, stress and SIMP calculations, then executes the four
 axial-bar WASM solves and the recorded topology-optimization benchmarks.
 
@@ -133,9 +133,9 @@ Then run:
 bun examples/validation/axial-bar-study.mjs --report
 cd web
 bun run theory:generate
-bun run test:theory
-bun run typecheck && bun run lint && bun run format:check
-bun x playwright test tests/theory-page.spec.ts
+just test-web theory
+just check-web
+just test-e2e theory-page
 ```
 
 `--report` records that checkout’s HEAD, matching engine, timestamp, inputs,
@@ -186,7 +186,7 @@ Keep native execution separate from CAD extraction and WASM wrapper evidence:
 
 ```sh
 cd web
-bun tests/test_shell_footprint.mjs --wasm
+just test-web shell-footprint
 ```
 
 Review both shell articles and the shared shell notation when changing section

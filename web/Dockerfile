@@ -18,8 +18,13 @@
 # Base images are pinned by digest (the tag is kept for readability): a
 # rebuilt tag upstream must not change what ships without a reviewable diff.
 # Dependabot proposes the bumps (.github/dependabot.yml).
+#
+# The oven/bun tag below is the repository's one Bun pin: CI reads its version
+# from this line (.github/actions/setup-web) and `just setup` compares the
+# local Bun with it, so the image, CI and a developer's machine cannot drift
+# apart unnoticed.
 FROM node:26-bookworm-slim@sha256:bc0a2afd3b74ce12222fc8bab99271e66257f021078f5f4a5d687a77d280c1d9 AS builder
-COPY --from=oven/bun:1.3.6@sha256:f20d9cf365ab35529384f1717687c739c92e6f39157a35a95ef06f4049a10e4a /usr/local/bin/bun /usr/local/bin/bun
+COPY --from=oven/bun:1.4.4@sha256:1d22548f177f4ff38e0c15baa3c2c46c6c2060ba2d1bc573bb4720b407548f1d /usr/local/bin/bun /usr/local/bin/bun
 
 WORKDIR /app
 

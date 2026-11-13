@@ -23,7 +23,7 @@
 // is: the side faces of the outer loop in segment order, then the side faces of
 // each hole in segment order, then the bottom cap (z = 0), then the top cap
 // (z = depth). Generators should still pick faces by a point on them, as a user
-// clicks them; examples/gallery/step-prism.test.mjs checks this order.
+// clicks them; web/tests/integration/step-prism.test.mjs checks this order.
 
 /**
  * The entity table shared by the writers: `add` appends one entity and returns

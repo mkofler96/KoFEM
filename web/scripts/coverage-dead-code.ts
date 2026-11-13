@@ -36,7 +36,7 @@ function listSourceFiles(dir: string): string[] {
 
 if (!fs.existsSync(COVERAGE_JSON)) {
   console.error(
-    `${COVERAGE_JSON} not found — run "bun run test:coverage" first.\n` +
+    `${COVERAGE_JSON} not found — run "just coverage" first.\n` +
       "(Coverage data is only produced when the app is built with COVERAGE=1; " +
       "if a non-instrumented dev/preview server was reused by Playwright, " +
       "stop it and re-run.)",

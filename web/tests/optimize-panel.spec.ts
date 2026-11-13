@@ -17,11 +17,9 @@ function goToOptimizePanel(page: Page) {
   return openTree(page, "topopt");
 }
 
-test("Optimize panel: gates, runs, streams logs, hands off to Results", async ({
+test("Optimize panel: gates, runs, streams logs, hands off to Results @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
-
   const logs: string[] = [];
   page.on("console", (msg) => logs.push(msg.text()));
   page.on("pageerror", (e) =>
@@ -54,9 +52,7 @@ test("Optimize panel: gates, runs, streams logs, hands off to Results", async ({
   // the threshold slider and the run summary. Here it is enough that the hand-off
   // happened and the density reached the store; the density-field visualization
   // and threshold behaviour are covered by topology-optimize-results.spec.ts.
-  await expect(page.getByText("Density threshold")).toBeVisible({
-    timeout: 90_000,
-  });
+  await expect(page.getByText("Density threshold")).toBeVisible();
   await expect(page.getByText(/Iterations/)).toBeVisible();
 
   // The optimizer streamed at least one per-iteration progress line into the
@@ -186,8 +182,7 @@ test("Optimize panel: a non-zero prescribed displacement is blocked", async ({
 // error — no silent default), shows up in the pre-flight summary, and a run with
 // it reports the true max stress in Results next to the aggregated value in the
 // convergence plot.
-test("Optimize panel: max-stress constraint", async ({ page }) => {
-  test.setTimeout(120_000);
+test("Optimize panel: max-stress constraint @pipeline", async ({ page }) => {
   await bootstrapCantilever(page);
   await goToOptimizePanel(page);
 
@@ -216,9 +211,7 @@ test("Optimize panel: max-stress constraint", async ({ page }) => {
   await page.getByLabel("Max iters").fill("6");
 
   await runButton.click();
-  await expect(page.getByTestId("topopt-final-max-stress")).toBeVisible({
-    timeout: 90_000,
-  });
+  await expect(page.getByTestId("topopt-final-max-stress")).toBeVisible();
   await expect(page.getByTestId("convergence-max-stress")).toBeVisible();
   await expect(page.getByTestId("convergence-stress-limit")).toHaveCount(1);
 
@@ -232,10 +225,9 @@ test("Optimize panel: max-stress constraint", async ({ page }) => {
 
 // KOF-257: a region set to Keep solid is left out of the design — every one of
 // its elements comes back at full density while the rest is optimized.
-test("Optimize panel: a Keep solid region stays at full density", async ({
+test("Optimize panel: a Keep solid region stays at full density @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
   await bootstrapCantilever(page);
 
   // Split the beam's free half off as Region 2 of the same body, kept solid.
@@ -280,9 +272,7 @@ test("Optimize panel: a Keep solid region stays at full density", async ({
   await page.getByRole("button", { name: "Advanced" }).click();
   await page.getByLabel("Max iters").fill("8");
   await page.getByRole("button", { name: /Run optimization/ }).click();
-  await expect(page.getByText("Density threshold")).toBeVisible({
-    timeout: 90_000,
-  });
+  await expect(page.getByText("Density threshold")).toBeVisible();
 
   // All-hex model: the design order is the store order. The threshold control
   // already shows the live density while the run goes on, so wait for the
@@ -299,9 +289,7 @@ test("Optimize panel: a Keep solid region stays at full density", async ({
         ).__kofemStore.getState().densityResult?.density ?? [],
       ),
     );
-  await expect
-    .poll(async () => (await readDensity()).length, { timeout: 90_000 })
-    .toBe(kept.length);
+  await expect.poll(async () => (await readDensity()).length).toBe(kept.length);
   const density = await readDensity();
   expect(density.length).toBe(kept.length);
   expect(density.filter((_, i) => kept[i]).every((d) => d === 1)).toBe(true);

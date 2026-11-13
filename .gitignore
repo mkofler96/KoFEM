@@ -41,3 +41,6 @@ web/coverage/
 
 # Temp file written by scripts/docker-build-wasm.sh
 .docker-wasm-inner.sh
+
+# Playwright HTML report (just test-e2e)
+web/playwright-report/

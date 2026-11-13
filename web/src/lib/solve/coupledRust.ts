@@ -9,7 +9,7 @@
 // coupling, bcs, matJson }, built by buildCoupledEngineInputs or
 // prepareAutoCoupledSolve — and returns the same result layout, so both
 // solvers see one contract and the C++ entry stays the test oracle
-// (web/tests/test_coupled_rust.mjs).
+// (web/tests/integration/coupled-rust.test.mjs).
 //
 // Arguments, as engine/cpp/solve_coupled.cpp reads them:
 //   mesh      { vertices, tets, triangles, thicknesses?, attributes?,

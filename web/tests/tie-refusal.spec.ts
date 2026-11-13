@@ -6,7 +6,7 @@
 // carries its own sentence — and the refusal has to reach the user, which means
 // crossing the worker boundary the way the Solve button does.
 //
-// The builder-side unit checks live in tests/test_shellize_mpc.mjs; these pin
+// The builder-side unit checks live in tests/integration/shellize-mpc.test.mjs; these pin
 // the worker path: handleMixedSolve reports every tie BEFORE it solves, so a
 // declared connection that produced no load path is refused rather than solved
 // as a split assembly returning a plausible-looking but wrong shape.

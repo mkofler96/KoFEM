@@ -7,12 +7,8 @@
 
 import { test, expect } from "./coverage";
 import type { Page } from "@playwright/test";
-import {
-  clickModelAt,
-  geometryCounts,
-  importStepText,
-  splitFaceAt,
-} from "./fixtures/split";
+import { geometryCounts, importStepText, splitFaceAt } from "./fixtures/split";
+import { clickModelAt } from "./fixtures/viewport";
 import { prismStep } from "../../examples/gallery/step-prism.mjs";
 import { openTree, addBoundary } from "./fixtures/tree";
 
@@ -32,7 +28,6 @@ const BLOCK = prismStep(
 test("split a face with a plane, see the error for a plane that misses, undo", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
   await importStepText(page, BLOCK);
   expect(await geometryCounts(page)).toEqual({ faces: 6, bodies: 1, edits: 0 });
 
@@ -83,10 +78,9 @@ async function elementsPerRegion(page: Page): Promise<Record<number, number>> {
 // KOF-257: a body split makes regions of the same body — connected at the cut,
 // listed under the body, not as an interface — each with its own mesh size and
 // optimization role, and a region can be promoted to a body of its own.
-test("split a body into regions: one body, connected, each meshed at its own size", async ({
+test("split a body into regions: one body, connected, each meshed at its own size @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(240_000);
   await importStepText(page, BLOCK);
   await openTree(page, "split");
   await page.getByTestId("split-open").click();
@@ -95,9 +89,7 @@ test("split a body into regions: one body, connected, each meshed at its own siz
   await page.getByTestId("split-axis").selectOption("x");
   await page.getByTestId("split-position").fill("150");
   await page.getByTestId("split-apply").click();
-  await expect
-    .poll(async () => (await geometryCounts(page)).bodies, { timeout: 30_000 })
-    .toBe(2);
+  await expect.poll(async () => (await geometryCounts(page)).bodies).toBe(2);
   // 2 × 5 faces of the halves plus the cut, which the reload imprints into one
   // face shared by both — that shared face is what connects them in the mesh.
   expect((await geometryCounts(page)).faces).toBe(11);
@@ -147,9 +139,7 @@ test("split a body into regions: one body, connected, each meshed at its own siz
   await page.getByTestId("min-element-size").fill("2");
   await page.getByRole("button", { name: /generate mesh/i }).click();
   await expect
-    .poll(async () => Object.keys(await elementsPerRegion(page)).length, {
-      timeout: 120_000,
-    })
+    .poll(async () => Object.keys(await elementsPerRegion(page)).length)
     .toBe(2);
   // Same volume on both sides of the cut, so the finer region has many more
   // elements.
@@ -184,21 +174,41 @@ test("split a body into regions: one body, connected, each meshed at its own siz
 });
 
 // The split answers after an await. Hold every split_geometry request in the
-// page for a while, so the user's next action provably lands while the worker
-// is still busy — a fast machine must not turn these into tests of nothing.
-async function delaySplits(page: Page, ms: number): Promise<void> {
-  await page.addInitScript((delay) => {
+// page until the test releases it, so the user's next action provably lands
+// while the split is still in flight, on any machine and however busy it is.
+// The returned function lets the held requests go, and later ones straight
+// through.
+async function holdSplits(page: Page): Promise<() => Promise<void>> {
+  await page.addInitScript(() => {
     const post = Worker.prototype.postMessage;
+    const held: (() => void)[] = [];
+    let released = false;
     Worker.prototype.postMessage = function (
       this: Worker,
       ...args: Parameters<Worker["postMessage"]>
     ) {
       const type = (args[0] as { type?: string } | null)?.type;
-      if (type === "split_geometry")
-        setTimeout(() => post.apply(this, args), delay);
+      if (type === "split_geometry" && !released)
+        held.push(() => post.apply(this, args));
       else post.apply(this, args);
     } as Worker["postMessage"];
-  }, ms);
+    (window as unknown as { __releaseSplits: () => number }).__releaseSplits =
+      () => {
+        released = true;
+        const count = held.length;
+        for (const send of held.splice(0)) send();
+        return count;
+      };
+  });
+  return async () => {
+    const count = await page.evaluate(() =>
+      (
+        window as unknown as { __releaseSplits: () => number }
+      ).__releaseSplits(),
+    );
+    // A test that released nothing raced nothing.
+    expect(count, "no split request was waiting to be released").toBe(1);
+  };
 }
 
 function storeState(page: Page) {
@@ -255,16 +265,16 @@ for (const [action, act] of MID_SPLIT) {
   test(`a split that lands after the user ${action} leaves picking off`, async ({
     page,
   }) => {
-    test.setTimeout(120_000);
-    await delaySplits(page, 6000);
+    const releaseSplit = await holdSplits(page);
     await importStepText(page, BLOCK);
     const before = await startSplit(page, 150);
     await act(page);
     // Still in flight: the action really raced the split.
     expect((await geometryCounts(page)).edits).toBe(before);
+    await releaseSplit();
     // The split itself still lands — the user only stopped looking at it.
     await expect
-      .poll(async () => (await geometryCounts(page)).edits, { timeout: 30_000 })
+      .poll(async () => (await geometryCounts(page)).edits)
       .toBe(before + 1);
     expect((await storeState(page)).splitPicking).toBe(false);
   });
@@ -273,15 +283,14 @@ for (const [action, act] of MID_SPLIT) {
 test("a split that fails after the tool was closed still reports why", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
-  await delaySplits(page, 6000);
+  const releaseSplit = await holdSplits(page);
   await importStepText(page, BLOCK);
   await startSplit(page, 500); // misses the 300 mm face
   await page.getByRole("button", { name: "Close" }).click();
   await expect(page.getByTestId("split-form")).toBeHidden();
+  await releaseSplit();
   await expect(page.getByTestId("split-error")).toContainText(
     "is not crossed by the plane x = 500 mm",
-    { timeout: 30_000 },
   );
   // Reopening shows the error until the next split or a dismissal.
   await openTree(page, "split");
@@ -292,26 +301,21 @@ test("a split that fails after the tool was closed still reports why", async ({
 test("a split that lands during a BC pick ends the pick session", async ({
   page,
 }) => {
-  test.setTimeout(180_000);
-  // Long enough for the BC pick below to finish before the split lands, even
-  // with every worker of a full run competing for the CPU.
-  await delaySplits(page, 6000);
+  const releaseSplit = await holdSplits(page);
   await importStepText(page, BLOCK);
   await page.getByTestId("max-element-size").fill("20");
   await page.getByTestId("min-element-size").fill("2");
   await page.getByRole("button", { name: /generate mesh/i }).click();
   await expect
-    .poll(
-      () =>
-        page.evaluate(
-          () =>
-            (
-              window as unknown as {
-                __kofemStore: { getState(): { nodes: unknown[] } };
-              }
-            ).__kofemStore.getState().nodes.length,
-        ),
-      { timeout: 90_000 },
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              __kofemStore: { getState(): { nodes: unknown[] } };
+            }
+          ).__kofemStore.getState().nodes.length,
+      ),
     )
     .toBeGreaterThan(0);
 
@@ -324,8 +328,10 @@ test("a split that lands during a BC pick ends the pick session", async ({
   expect(await storeState(page)).toMatchObject({ pickMode: "bc", picked: 1 });
   expect((await geometryCounts(page)).edits).toBe(before);
 
+  // The pick is made; now the split lands.
+  await releaseSplit();
   await expect
-    .poll(async () => (await geometryCounts(page)).edits, { timeout: 30_000 })
+    .poll(async () => (await geometryCounts(page)).edits)
     .toBe(before + 1);
   // The mesh the pick was made on is gone, and with it the BC section that
   // could have cancelled the session.

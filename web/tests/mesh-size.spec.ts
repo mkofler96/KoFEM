@@ -84,12 +84,9 @@ test("an unusable element size is refused with a specific message (KOF-222)", as
 test("the worker rejects a non-positive element size (KOF-222)", async ({
   page,
 }) => {
-  test.setTimeout(60_000);
-
   await page.goto("/app/", { waitUntil: "domcontentloaded" });
-  await page.waitForFunction(
-    () => Boolean((window as Window & { __kofem?: unknown }).__kofem),
-    { timeout: 30_000 },
+  await page.waitForFunction(() =>
+    Boolean((window as Window & { __kofem?: unknown }).__kofem),
   );
 
   const message = await page.evaluate(async () => {
@@ -109,11 +106,9 @@ test("the worker rejects a non-positive element size (KOF-222)", async ({
   expect(message).toContain("max_element_size must be a positive number");
 });
 
-test("a real import is meshed at its suggested size (KOF-222)", async ({
+test("a real import is meshed at its suggested size (KOF-222) @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(300_000);
-
   await importStep(page, STEP_FILE);
 
   // The tube is ~40x40x60 mm; the old fixed default was 20 mm regardless.
@@ -132,7 +127,7 @@ test("a real import is meshed at its suggested size (KOF-222)", async ({
     )) as number;
 
   await page.getByRole("button", { name: /Generate mesh/ }).click();
-  await expect.poll(elementCount, { timeout: 240_000 }).toBeGreaterThan(0);
+  await expect.poll(elementCount).toBeGreaterThan(0);
 
   // The suggestion aims at TARGET_ELEMENT_COUNT (50K). Netgen's actual density
   // varies with geometry, so assert the order of magnitude, not the number.

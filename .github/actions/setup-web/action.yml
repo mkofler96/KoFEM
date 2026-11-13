@@ -2,7 +2,7 @@ name: Set up the web app
 description: >
   Provision both WebAssembly modules from this run's artifacts (the C++ engine
   from the `wasm` job, the Rust finite-element module from the `rust` job),
-  then install Bun and the web dependencies. Jobs using the modules set
+  then install Bun, the web dependencies and `just`. Jobs using the modules set
   KOFEM_WASM_SKIP_FETCH=1 so the package.json pre-hooks use them as provisioned.
 
 inputs:
@@ -27,10 +27,23 @@ runs:
         name: kofem-fem-pkg
         path: web/src/wasm/fem/
 
+    # The Bun version is pinned once, on the image line of web/Dockerfile, where
+    # Dependabot keeps it current. CI runs that version too.
+    - name: Read the pinned Bun version
+      id: bun
+      shell: bash
+      run: |
+        version="$(sed -n 's|^COPY --from=oven/bun:\([0-9][0-9.]*\)@sha256:.*|\1|p' web/Dockerfile)"
+        if [ -z "$version" ]; then
+          echo "ERROR: web/Dockerfile has no 'COPY --from=oven/bun:<version>@sha256:' line to read the Bun version from." >&2
+          exit 1
+        fi
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+
     - name: Setup Bun
       uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
       with:
-        bun-version: 1.4.4
+        bun-version: ${{ steps.bun.outputs.version }}
 
     - name: Cache Bun dependencies
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -38,10 +51,14 @@ runs:
         path: |
           ~/.bun/install/cache
           web/node_modules
-        key: bun-${{ runner.os }}-${{ hashFiles('web/bun.lock') }}
+        key: bun-${{ runner.os }}-${{ steps.bun.outputs.version }}-${{ hashFiles('web/bun.lock') }}
         restore-keys: |
-          bun-${{ runner.os }}-
+          bun-${{ runner.os }}-${{ steps.bun.outputs.version }}-
 
     - name: Install web dependencies
       shell: bash
       run: cd web && bun install --frozen-lockfile
+
+    - name: Install just (pinned)
+      shell: bash
+      run: bash scripts/install-tools.sh

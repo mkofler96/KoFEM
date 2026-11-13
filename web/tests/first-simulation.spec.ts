@@ -6,6 +6,7 @@ import os from "os";
 import path from "path";
 import { test, expect } from "./coverage";
 import { gotoApp } from "./fixtures/app";
+import { clickViewportAt } from "./fixtures/viewport";
 
 // The first simulation a newcomer runs (KOF-261): the empty workspace offers
 // the sample, the wall bracket's CAD file. The guide then walks them through
@@ -106,11 +107,11 @@ async function clickCadFace(page: Page, id: number): Promise<void> {
   const stride = Math.max(1, Math.floor(points.length / 40));
   for (let i = 0; i < points.length; i += stride) {
     const before = (await pickedCadFaces(page)).join();
-    await page.mouse.click(points[i].x, points[i].y);
+    await clickViewportAt(page, points[i].x, points[i].y);
     const after = await pickedCadFaces(page);
     if (after.includes(id)) return;
     if (after.join() !== before)
-      await page.mouse.click(points[i].x, points[i].y);
+      await clickViewportAt(page, points[i].x, points[i].y);
   }
   throw new Error(`CAD face ${id} could not be clicked in the viewport`);
 }
@@ -118,11 +119,9 @@ async function clickCadFace(page: Page, id: number): Promise<void> {
 const guideAt = (page: Page, step: string) =>
   page.locator(`[data-testid=sample-guide][data-step=${step}]`);
 
-test("a newcomer takes the CAD sample from mesh to result with the guide", async ({
+test("a newcomer takes the CAD sample from mesh to result with the guide @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(240_000);
-
   await gotoApp(page);
   const start = Date.now();
 
@@ -132,7 +131,7 @@ test("a newcomer takes the CAD sample from mesh to result with the guide", async
   await page.getByRole("button", { name: "Try a sample simulation" }).click();
 
   // It opens as CAD geometry only, with nothing set up, on the mesh controls.
-  await expect(guideAt(page, "mesh")).toBeVisible({ timeout: 30_000 });
+  await expect(guideAt(page, "mesh")).toBeVisible();
   await expect(emptyState).toBeHidden();
   const opened = await page.evaluate(() => {
     const st = (
@@ -159,7 +158,7 @@ test("a newcomer takes the CAD sample from mesh to result with the guide", async
 
   // 1. Mesh, from the panel the import opened.
   await page.getByRole("button", { name: /Generate mesh/ }).click();
-  await expect(guideAt(page, "support")).toBeVisible({ timeout: 120_000 });
+  await expect(guideAt(page, "support")).toBeVisible();
 
   // 2. The guide's shortcut starts a support; the user clicks the three
   //    highlighted bolt holes and applies it.
@@ -183,7 +182,7 @@ test("a newcomer takes the CAD sample from mesh to result with the guide", async
   // 4. The shortcut adds the static study; Run solves it.
   await page.getByTestId("sample-guide-action").click();
   await page.getByRole("button", { name: /Run static solve/ }).click();
-  await expect(guideAt(page, "done")).toBeVisible({ timeout: 120_000 });
+  await expect(guideAt(page, "done")).toBeVisible();
   await expect(page.getByTestId("sample-guide-done")).toBeVisible();
   const model = await readModel(page);
   expect(model.mode).toBe("results");
@@ -203,34 +202,26 @@ test("a newcomer takes the CAD sample from mesh to result with the guide", async
 test("the guide goes away when another model replaces the sample", async ({
   page,
 }) => {
-  test.setTimeout(60_000);
-
   await gotoApp(page);
   await page.getByRole("button", { name: "Try a sample simulation" }).click();
-  await expect(guideAt(page, "mesh")).toBeVisible({ timeout: 30_000 });
+  await expect(guideAt(page, "mesh")).toBeVisible();
 
   // The user's own part, imported over it.
   await page.getByTestId("tree-add-geometry").click();
   await page
     .locator('input[type="file"][accept=".stp,.step"]')
     .setInputFiles(path.resolve("..", "test_files", "two_boxes.stp"));
-  await expect(page.getByTestId("sample-guide")).toHaveCount(0, {
-    timeout: 30_000,
-  });
+  await expect(page.getByTestId("sample-guide")).toHaveCount(0);
 });
 
-test("the hand check is withheld once the load no longer matches it", async ({
+test("the hand check is withheld once the load no longer matches it @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
-
   await page.goto("/app/?example=cantilever-beam");
   const run = page.getByRole("button", { name: /Run static solve/ });
-  await expect(run).toBeEnabled({ timeout: 15_000 });
+  await expect(run).toBeEnabled();
   await run.click();
-  await expect(page.getByTestId("hand-check-fe")).toBeVisible({
-    timeout: 90_000,
-  });
+  await expect(page.getByTestId("hand-check-fe")).toBeVisible();
 
   // Twice the load, solved again: the formula's 10 kN no longer describes the
   // model.
@@ -257,7 +248,6 @@ test("the hand check is withheld once the load no longer matches it", async ({
   await run.click();
   await expect(page.getByTestId("hand-check")).toContainText(
     "no longer applies",
-    { timeout: 90_000 },
   );
   await expect(page.getByTestId("hand-check-fe")).toHaveCount(0);
 });
@@ -265,13 +255,12 @@ test("the hand check is withheld once the load no longer matches it", async ({
 test("a saved cantilever keeps its element order and hand check", async ({
   page,
 }) => {
-  test.setTimeout(60_000);
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "kofem-cantilever-"));
 
   await page.goto("/app/?example=cantilever-beam");
   await expect(
     page.getByRole("button", { name: /Run static solve/ }),
-  ).toBeEnabled({ timeout: 15_000 });
+  ).toBeEnabled();
 
   const file = path.join(tmpDir, "cantilever.vtu");
   const download = page.waitForEvent("download");
@@ -284,7 +273,7 @@ test("a saved cantilever keeps its element order and hand check", async ({
     .locator('input[type="file"][accept=".vtu,.zip"]')
     .setInputFiles(file);
   await expect
-    .poll(async () => (await readModel(page)).modelName, { timeout: 15_000 })
+    .poll(async () => (await readModel(page)).modelName)
     .toBe("Cantilever beam under tip load");
   const model = await readModel(page);
   expect(model.elementOrder).toBe(2);

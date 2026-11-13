@@ -42,25 +42,31 @@ The React/TypeScript/Three.js frontend is in `web/`. Use **bun**, not npm.
 
 ```sh
 git config core.hooksPath .githooks
-cd web && bun install && bun run dev
+bash scripts/install-tools.sh   # just and wasm-bindgen, pinned
+just setup                      # web dependencies, the engine, the Rust module
+cd web && bun run dev
 ```
+
+`just` is the one interface for checks and tests, and CI runs the same recipes
+([.github/workflows/ci.yml](.github/workflows/ci.yml)). `just` alone lists
+them; whatever follows a recipe name goes to its runner
+(`just test-e2e couplings --repeat-each 20`).
+
+| Command          | Runs                                                   | For changes to             |
+| ---------------- | ------------------------------------------------------ | -------------------------- |
+| `just check`     | `cargo fmt`, `clippy`, `tsc`, `eslint`, `prettier`     | anything                   |
+| `just check-cpp` | `clang-tidy` (`docker-clang-tidy.sh` without an emsdk) | `engine/cpp`               |
+| `just test-rust` | `cargo test --workspace`                               | `crates/`                  |
+| `just test-cpp`  | `ctest` on `engine/tests`, native and MFEM/WASM        | `engine/cpp`               |
+| `just test-web`  | `bun test`: `web/tests/unit`, `web/tests/integration`  | `web/src`, any solver path |
+| `just test-e2e`  | Playwright: `web/tests/*.spec.ts`                      | anything a user sees       |
+| `just test`      | all four                                               | several parts, before a PR |
 
 Web scripts fetch the matching compiled engine and build the Rust module
 (`scripts/build-fem-wasm.sh`; needs Rust, the `wasm32-unknown-unknown` target
 and the pinned `wasm-bindgen` CLI). After engine changes, build with
 `bash scripts/docker-build-wasm.sh` (or `build-wasm.sh` with Emscripten and
 dependencies installed). Never commit generated WASM/JS.
-
-Run checks appropriate to the change; CI definitions are in
-[.github/workflows/ci.yml](.github/workflows/ci.yml):
-
-- Rust: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`
-  and `cargo test --workspace`. `bun run test:validation` includes the
-  Rust-vs-C++ checks (`tests/test_fem_wasm.mjs`, `test_amg_solid.mjs`,
-  `test_amg_coupling.mjs`, `test_shell_rust.mjs`, `test_coupled_rust.mjs`).
-- C++: `bash scripts/clang-tidy.sh` (`docker-clang-tidy.sh` without a local
-  emsdk) and relevant `scripts/test-*.sh` suites.
-- Frontend, from `web/`: `bun run typecheck && bun run lint && bun run format:check && bun run test`.
 
 ## Test-driven development
 
@@ -72,18 +78,33 @@ write the minimal code that makes it pass, then clean up with the suite green.
   gives acceptance criteria as a test, copy it verbatim into the test file
   before touching implementation code.
 - Run the relevant test after every change. For Rust solver code, start with
-  `cargo test -p <crate>`. For everything that ships, run
-  `cd web && bunx playwright test <spec>` or a script under
-  `examples/validation/`: shipped behaviour runs through the web app and both
-  WASM modules.
+  `just test-rust -p <crate>`. For everything that ships, run
+  `just test-e2e <spec>` or `just test-web <name>`: shipped behaviour runs
+  through the web app and both WASM modules.
 - `cargo test` does not cover the `kofem-wasm` browser bindings, the C++
   engine, or how the app calls either module. A green `cargo test` alone is
-  not coverage of a solver path; also run its Rust-vs-C++ check under
-  `web/tests/`.
+  not coverage of a solver path; also run its Rust-vs-C++ check
+  (`web/tests/integration/{fem-wasm,amg-solid,amg-coupling,shell-rust,coupled-rust}.test.mjs`).
+- A new test goes where its runner looks, and nowhere lists test files:
+  - Rust numerics: `crates/<crate>/tests`.
+  - TypeScript logic without WebAssembly: `web/tests/unit/<name>.test.ts`.
+  - The engine or the Rust module without a browser:
+    `web/tests/integration/<name>.test.mjs`, loading them through
+    `web/tests/support/wasm.mjs`.
+  - What a user sees: `web/tests/<name>.spec.ts`. End the title with
+    `@pipeline` when the test imports real CAD, meshes a real part or runs a
+    full flow.
+  - A C++ unit: `engine/tests/<name>.cpp` and one `kofem_test()` line in
+    `engine/tests/CMakeLists.txt`.
 - Prefer small, focused tests, so a failure pinpoints the broken unit.
-- `bun run test:validation` (`web/scripts/run-validation.mjs`) finds
-  `web/tests/test_*.mjs` and the Bun tests in `web/tests/unit/` by itself.
-  Add a test file there; never list test files in `package.json`.
+- Tests wait on state, never on time. Time budgets are set once per runner
+  (`web/playwright.config.ts`, `web/tests/support/setup.mjs`); a spec sets no
+  timeout and never sleeps. Click the 3D viewport through
+  `web/tests/fixtures/viewport.ts`, which waits for the settled view. Test a
+  race with a gate the test releases, not a delay.
+- A flaky test is a bug in the test or the app. CI retries it and reports it;
+  the nightly flake hunt fails on it. Fix the cause: do not raise a budget, add
+  a retry or re-run until green.
 
 ## Workflow
 

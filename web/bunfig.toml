@@ -1,0 +1,8 @@
+# `bun test` runs the node-side tests: tests/unit (no WebAssembly) and
+# tests/integration (both WebAssembly modules, the example and theory
+# programs). Playwright owns tests/*.spec.ts, so bun must never collect those.
+# Run them through `just test-web`, which adds one process per test file.
+[test]
+root = "tests"
+pathIgnorePatterns = ["**/*.spec.ts"]
+preload = ["./tests/support/setup.mjs"]

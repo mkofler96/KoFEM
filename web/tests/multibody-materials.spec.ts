@@ -65,9 +65,7 @@ async function meshOnce(page: import("@playwright/test").Page) {
     // "Generate mesh" before the first mesh, "Regenerate mesh" after.
     .filter({ hasText: /generate mesh/i })
     .click();
-  await expect
-    .poll(async () => meshGeneration(page), { timeout: 180_000 })
-    .toBeGreaterThan(before);
+  await expect.poll(() => meshGeneration(page)).toBeGreaterThan(before);
   expect((await store(page)).nodes.length).toBeGreaterThan(0);
 }
 
@@ -157,10 +155,9 @@ test("the tree's eye hides and shows a body without opening it", async ({
 // the CAD tessellation; and the highlight ("dim every body except this one")
 // was handed the id of the derived PSHELL, which no tessellated body carries,
 // so every body dimmed to DIMMED_OPACITY and nothing was left to look at.
-test("hovering a body never blanks the viewport or changes the representation", async ({
+test("hovering a body never blanks the viewport or changes the representation @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(240_000);
   await importAndMeshFin(page);
 
   // Auto-shell replaced the fin's tets with a PSHELL carrying a fresh id; it
@@ -213,10 +210,9 @@ test("hovering a body never blanks the viewport or changes the representation", 
 // properties used to be listed as bodies of their own: the fin assembly grew a
 // third row for a part that has two, with a name, an eye and a material
 // dropdown that no longer reached the elements the body had become.
-test("a shell-idealised body stays one row that still owns its walls", async ({
+test("a shell-idealised body stays one row that still owns its walls @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(300_000);
   await importAndMeshFin(page);
 
   const meshed = await store(page);

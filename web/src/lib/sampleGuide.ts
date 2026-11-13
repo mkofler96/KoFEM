@@ -21,7 +21,7 @@ export const SAMPLE = {
   url: "/samples/wall-bracket.step",
   fileName: "wall-bracket.step",
   // CAD face ids of public/samples/wall-bracket.step (the mesh's
-  // surfaceFaceIds numbering; tests/test_sample_guide.mjs pins them).
+  // surfaceFaceIds numbering; tests/integration/sample-guide.test.mjs pins them).
   boltHoleFaces: [34, 35, 36],
   // The hub's bore (r = 10 mm), where a shaft would push on it.
   hubBoreFaces: [37],

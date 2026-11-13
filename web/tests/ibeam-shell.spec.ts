@@ -42,11 +42,9 @@ interface Property {
   discretization?: string;
 }
 
-test("i-beam shell: import STEP, mesh, mark Shell, solve through the shell path", async ({
+test("i-beam shell: import STEP, mesh, mark Shell, solve through the shell path @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(240_000);
-
   const logs: string[] = [];
   page.on("console", (msg) => logs.push(msg.text()));
 
@@ -69,7 +67,6 @@ test("i-beam shell: import STEP, mesh, mark Shell, solve through the shell path"
               }
             ).__kofemStore.getState().properties.length,
         )) as number,
-      { timeout: 60_000 },
     )
     .toBe(1);
 
@@ -85,7 +82,6 @@ test("i-beam shell: import STEP, mesh, mark Shell, solve through the shell path"
               }
             ).__kofemStore.getState().nodes.length,
         )) as number,
-      { timeout: 180_000 },
     )
     .toBeGreaterThan(0);
 

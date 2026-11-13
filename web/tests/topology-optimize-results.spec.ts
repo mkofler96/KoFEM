@@ -53,11 +53,9 @@ async function visibleCount(page: Page): Promise<number> {
   return n;
 }
 
-test("TO results: density field renders, threshold reveals the shape, convergence plot present", async ({
+test("TO results: density field renders, threshold reveals the shape, convergence plot present @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
-
   page.on("pageerror", (e) =>
     console.error(`[to-results] page error: ${e.message}`),
   );
@@ -74,9 +72,7 @@ test("TO results: density field renders, threshold reveals the shape, convergenc
   await page.getByRole("button", { name: /Run optimization/ }).click();
 
   // Hand-off to Results with the density view.
-  await expect(page.getByText("Density threshold")).toBeVisible({
-    timeout: 90_000,
-  });
+  await expect(page.getByText("Density threshold")).toBeVisible();
 
   // The density field is on screen: its legend mounts only when a density run is
   // the active result in the Results view.
@@ -139,10 +135,9 @@ test("TO results: density field renders, threshold reveals the shape, convergenc
 // step draws each streamed iteration's density. Record every store update of the
 // live field before completion and check the viewport saw several iterations
 // and a changing visible-element count at a fixed cutoff — the shape emerging.
-test("TO live density: the viewport updates per iteration during the run", async ({
+test("TO live density: the viewport updates per iteration during the run @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
   page.on("pageerror", (e) =>
     console.error(`[to-live] page error: ${e.message}`),
   );
@@ -185,7 +180,7 @@ test("TO live density: the viewport updates per iteration during the run", async
   // The cantilever optimizes in well under a second, too fast to catch the live
   // panel on screen reliably, so the store subscription above is the record.
   // Completion hands off to Results as before; the live field is cleared.
-  await expect(page.getByText("Run summary")).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByText("Run summary")).toBeVisible();
 
   const seen = await page.evaluate(
     () =>

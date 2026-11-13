@@ -58,7 +58,7 @@ const PAGES = [
 test.describe("static theory content", () => {
   test.use({ javaScriptEnabled: false });
 
-  test("direct URLs are indexable and every local article link resolves", async ({
+  test("direct URLs are indexable and every local article link resolves @pipeline", async ({
     page,
   }) => {
     for (const [index, path] of PAGES.entries()) {

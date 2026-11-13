@@ -24,7 +24,7 @@ async function importTube(page: Page) {
     .setInputFiles(STEP_FILE);
   await expect(
     page.getByRole("button").filter({ hasText: "Generate mesh" }),
-  ).toBeVisible({ timeout: 60_000 });
+  ).toBeVisible();
 }
 
 // The engine binary is fetched by the solver worker; a context route sees it.
@@ -39,7 +39,6 @@ test("a blocked engine download names the cause, and Retry recovers", async ({
   page,
   context,
 }) => {
-  test.setTimeout(120_000);
   let blocked = true;
   await routeEngine(context, (route) =>
     blocked ? route.abort("failed") : route.continue(),
@@ -47,7 +46,7 @@ test("a blocked engine download names the cause, and Retry recovers", async ({
   await gotoApp(page);
 
   const error = page.getByTestId("engine-error");
-  await expect(error).toBeVisible({ timeout: 30_000 });
+  await expect(error).toBeVisible();
   await expect(error).toContainText("Engine failed: download blocked");
   // The tooltip names the file that failed.
   await expect(error).toHaveAttribute("title", /kofem_wasm_emcc/);
@@ -58,9 +57,7 @@ test("a blocked engine download names the cause, and Retry recovers", async ({
 
   blocked = false;
   await error.getByRole("button", { name: "Retry" }).click();
-  await expect(status(page)).toHaveAttribute("data-phase", "ready", {
-    timeout: 60_000,
-  });
+  await expect(status(page)).toHaveAttribute("data-phase", "ready");
   await expect(error).toBeHidden();
   await expect(status(page)).toHaveText("Engine ready");
   await expect(importCard(page)).toBeEnabled();
@@ -76,7 +73,7 @@ test("a missing engine file says to reload the page", async ({
   );
   await gotoApp(page);
   const error = page.getByTestId("engine-error");
-  await expect(error).toContainText("reload the page", { timeout: 30_000 });
+  await expect(error).toContainText("reload the page");
   await expect(error).toHaveAttribute("title", /HTTP 404/);
 });
 
@@ -84,7 +81,6 @@ test("a file picked while the engine downloads waits for it", async ({
   page,
   context,
 }) => {
-  test.setTimeout(120_000);
   let release = () => {};
   const held = new Promise<void>((resolve) => {
     release = resolve;
@@ -105,7 +101,7 @@ test("a file picked while the engine downloads waits for it", async ({
   release();
   await expect(
     page.getByRole("button").filter({ hasText: "Generate mesh" }),
-  ).toBeVisible({ timeout: 60_000 });
+  ).toBeVisible();
   await expect(status(page)).toHaveAttribute("data-phase", "ready");
 });
 
@@ -116,7 +112,6 @@ test("a blocked Rust module download fails the engine, and Retry recovers", asyn
   page,
   context,
 }) => {
-  test.setTimeout(120_000);
   let blocked = true;
   await context.route(/kofem_wasm_bg[^/]*\.wasm$/, (route) =>
     blocked ? route.abort("failed") : route.continue(),
@@ -124,15 +119,13 @@ test("a blocked Rust module download fails the engine, and Retry recovers", asyn
   await gotoApp(page);
 
   const error = page.getByTestId("engine-error");
-  await expect(error).toBeVisible({ timeout: 30_000 });
+  await expect(error).toBeVisible();
   await expect(error).toContainText("Engine failed: download blocked");
   await expect(error).toHaveAttribute("title", /Rust finite-element module/);
   await expect(importCard(page)).toBeDisabled();
 
   blocked = false;
   await error.getByRole("button", { name: "Retry" }).click();
-  await expect(status(page)).toHaveAttribute("data-phase", "ready", {
-    timeout: 60_000,
-  });
+  await expect(status(page)).toHaveAttribute("data-phase", "ready");
   await expect(importCard(page)).toBeEnabled();
 });

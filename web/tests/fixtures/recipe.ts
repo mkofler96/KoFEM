@@ -15,7 +15,8 @@
 // driver throws a MissingUiCapability naming it instead of reaching around the UI.
 
 import { expect, type Page } from "@playwright/test";
-import { geometryCounts, importStepText, lookFrom } from "./split";
+import { geometryCounts, importStepText } from "./split";
+import { clickViewportAt, lookFrom } from "./viewport";
 import { addBoundary, addMaterial, openBody, openTree } from "./tree";
 import {
   DEFLECTION_RELATIVE,
@@ -302,13 +303,15 @@ export function resolveFace(snap: Snapshot, at: Point): ResolvedFace {
     if (dist <= tol && (prev === undefined || dist < prev.dist))
       hits.set(faceIds[t], { dist, normal: unit(cross(sub(b, a), sub(c, a))) });
   });
-  if (hits.size !== 1)
+  if (hits.size !== 1) {
+    const found =
+      hits.size === 0
+        ? `found none (nearest display triangle is ${nearest.toExponential(3)} mm away)`
+        : `found faces ${[...hits.keys()].join(", ")} (the point lies on an edge between them)`;
     throw new Error(
-      `face at [${at.join(", ")}]: expected exactly one CAD face within ${tol.toExponential(2)} mm, ` +
-        (hits.size === 0
-          ? `found none (nearest display triangle is ${nearest.toExponential(3)} mm away)`
-          : `found faces ${[...hits.keys()].join(", ")} (the point lies on an edge between them)`),
+      `face at [${at.join(", ")}]: expected exactly one CAD face within ${tol.toExponential(2)} mm, ${found}`,
     );
+  }
   const [[cadFaceId, { normal }]] = [...hits.entries()];
   return { cadFaceId, normal };
 }
@@ -372,16 +375,6 @@ function pickedFaceIds(page: Page, target: PickTarget): Promise<number[]> {
     // -1 marks a selection with no CAD face behind it (not a whole-face pick).
     return faces.map((f) => (f.cadFaceId === undefined ? -1 : f.cadFaceId));
   }, target);
-}
-
-// Let the viewport render the camera change before projecting / clicking.
-async function nextFrames(page: Page): Promise<void> {
-  await page.evaluate(
-    () =>
-      new Promise<void>((resolve) =>
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-      ),
-  );
 }
 
 // Where `point` lands on screen, if that pixel shows the viewport canvas (not
@@ -458,14 +451,15 @@ async function clickFace(
   // A support or load is picked on the mesh. A shell body's mesh is its
   // mid-surface: a face through the wall thickness (a plate's edge face) is
   // not in it but collapsed to its rim, picked as an Edge (clickRimFace).
-  if (target === "boundary" && !snap.surfaceFaceIds.includes(face.cadFaceId))
+  if (target === "boundary" && !snap.surfaceFaceIds.includes(face.cadFaceId)) {
+    const shellNote = snap.elements.some((e) => e.type === "CTRIA3")
+      ? ", and it is not on the rim of the shell mid-surface either"
+      : "";
     throw new MissingUiCapability(
       `pick the face at [${at.join(", ")}] (CAD face ${face.cadFaceId}) for a support or load`,
-      `the mesh has no element on that CAD face (mesh faces: ${[...new Set(snap.surfaceFaceIds)].join(", ")})` +
-        (snap.elements.some((e) => e.type === "CTRIA3")
-          ? ", and it is not on the rim of the shell mid-surface either"
-          : ""),
+      `the mesh has no element on that CAD face (mesh faces: ${[...new Set(snap.surfaceFaceIds)].join(", ")})${shellNote}`,
     );
+  }
   const before = await pickedFaceIds(page, target);
   if (before.includes(face.cadFaceId))
     throw new Error(
@@ -474,7 +468,6 @@ async function clickFace(
   const tried: string[] = [];
   for (const dir of viewDirections(face.normal)) {
     await lookFrom(page, dir);
-    await nextFrames(page);
     const screen = await canvasPixel(page, at);
     if (!screen) {
       tried.push(
@@ -482,7 +475,7 @@ async function clickFace(
       );
       continue;
     }
-    await page.mouse.click(screen.x, screen.y);
+    await clickViewportAt(page, screen.x, screen.y);
     const after = await pickedFaceIds(page, target);
     if (after.includes(face.cadFaceId)) {
       expect(after.length, "one click adds exactly one face").toBe(
@@ -564,13 +557,12 @@ async function clickRimFace(page: Page, at: Point): Promise<number> {
   const tried: string[] = [];
   for (const dir of viewDirections(normal).slice(0, 18)) {
     await lookFrom(page, dir);
-    await nextFrames(page);
     const screen = await canvasPixel(page, centroid);
     if (!screen) {
       tried.push(`[${dir.map((v) => v.toFixed(2))}]: off-canvas`);
       continue;
     }
-    await page.mouse.click(screen.x, screen.y);
+    await clickViewportAt(page, screen.x, screen.y);
     const after = await pickedFaceIds(page, "boundary");
     if (after.includes(face.cadFaceId)) {
       expect(after.length, "one click adds exactly one edge").toBe(
@@ -673,7 +665,7 @@ async function applySplit(page: Page, split: Split): Promise<void> {
   }
   await page.getByTestId("split-apply").click();
   await expect
-    .poll(async () => (await geometryCounts(page)).edits, { timeout: 60_000 })
+    .poll(async () => (await geometryCounts(page)).edits)
     .toBe(before.edits + 1);
   const splitError = page.getByTestId("split-error");
   if (await splitError.isVisible())
@@ -723,19 +715,17 @@ async function meshIt(page: Page, mesh: MeshStep): Promise<void> {
     .selectOption(String(mesh.order));
   await page.getByTestId("mesh-generate").click();
   await expect
-    .poll(
-      () =>
-        page.evaluate(() => {
-          const st = (
-            window as unknown as {
-              __kofemStore: {
-                getState(): { isMeshing: boolean; nodes: unknown[] };
-              };
-            }
-          ).__kofemStore.getState();
-          return !st.isMeshing && st.nodes.length > 0;
-        }),
-      { timeout: 300_000 },
+    .poll(() =>
+      page.evaluate(() => {
+        const st = (
+          window as unknown as {
+            __kofemStore: {
+              getState(): { isMeshing: boolean; nodes: unknown[] };
+            };
+          }
+        ).__kofemStore.getState();
+        return !st.isMeshing && st.nodes.length > 0;
+      }),
     )
     .toBe(true);
   const meshError = page.getByTestId("meshing-error");
@@ -864,27 +854,24 @@ async function addLoad(page: Page, load: Load): Promise<void> {
 async function solve(page: Page): Promise<void> {
   await openTree(page, "static");
   const run = page.getByRole("button", { name: /Run static solve/ });
-  await expect(run).toBeEnabled({ timeout: 15_000 });
+  await expect(run).toBeEnabled();
   await run.click();
   const failed = page.getByText(/^Solver error:/);
   await expect
-    .poll(
-      async () => {
-        if (await failed.isVisible())
-          throw new Error((await failed.textContent()) as string);
-        return page.evaluate(() => {
-          const st = (
-            window as unknown as {
-              __kofemStore: {
-                getState(): { isRunning: boolean; result: unknown };
-              };
-            }
-          ).__kofemStore.getState();
-          return !st.isRunning && st.result !== null;
-        });
-      },
-      { timeout: 300_000 },
-    )
+    .poll(async () => {
+      if (await failed.isVisible())
+        throw new Error((await failed.textContent()) as string);
+      return page.evaluate(() => {
+        const st = (
+          window as unknown as {
+            __kofemStore: {
+              getState(): { isRunning: boolean; result: unknown };
+            };
+          }
+        ).__kofemStore.getState();
+        return !st.isRunning && st.result !== null;
+      });
+    })
     .toBe(true);
 }
 
@@ -934,7 +921,7 @@ async function optimize(page: Page, step: OptimizeStep): Promise<void> {
     tolerance: String(step.tolerance),
   });
   const run = page.getByRole("button", { name: /Run optimization/ });
-  await expect(run).toBeEnabled({ timeout: 15_000 });
+  await expect(run).toBeEnabled();
   await run.click();
   const failed = page.getByText(/^Optimization error:/);
   await expect
@@ -944,7 +931,7 @@ async function optimize(page: Page, step: OptimizeStep): Promise<void> {
           throw new Error((await failed.textContent()) as string);
         return page.getByTestId("topopt-final-compliance").count();
       },
-      // ~100 iterations at about half a second each in the browser.
+      // eslint-disable-next-line kofem/no-test-timeouts -- ~100 iterations at about half a second each in the browser: longer than any other wait of the pipeline project
       { timeout: 300_000 },
     )
     .toBe(1);

@@ -29,12 +29,9 @@ const STEP_FILE = fileURLToPath(
 test("re-mesh succeeds after the worker is reset (issue #250)", async ({
   page,
 }) => {
-  test.setTimeout(180_000);
-
   await page.goto("/app/", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(
     () => !!(window as Window & { __kofem?: unknown }).__kofem,
-    { timeout: 30_000 },
   );
 
   const stepBytes = Array.from(fs.readFileSync(STEP_FILE));
@@ -77,12 +74,9 @@ test("re-mesh succeeds after the worker is reset (issue #250)", async ({
 test("volume_mesh without STEP bytes fails with an actionable message", async ({
   page,
 }) => {
-  test.setTimeout(60_000);
-
   await page.goto("/app/", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(
     () => !!(window as Window & { __kofem?: unknown }).__kofem,
-    { timeout: 30_000 },
   );
 
   const message = await page.evaluate(async () => {
@@ -116,12 +110,9 @@ test("volume_mesh without STEP bytes fails with an actionable message", async ({
 test("a C++ engine error surfaces as readable text, not a bare pointer (issue #250)", async ({
   page,
 }) => {
-  test.setTimeout(60_000);
-
   await page.goto("/app/", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(
     () => !!(window as Window & { __kofem?: unknown }).__kofem,
-    { timeout: 30_000 },
   );
 
   const message = await page.evaluate(async () => {
@@ -151,8 +142,6 @@ test("a C++ engine error surfaces as readable text, not a bare pointer (issue #2
 test("re-meshing without the original STEP shows an actionable banner (issue #250)", async ({
   page,
 }) => {
-  test.setTimeout(60_000);
-
   await gotoApp(page);
 
   // Reproduce the post-"open saved analysis" state: nodes + surface present,

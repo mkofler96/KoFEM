@@ -5,15 +5,76 @@ on:
     branches: [main, develop]
   pull_request:
 
+# A newer push to a pull request replaces the run in progress. Runs on main and
+# develop are never cancelled: each one publishes the artifacts of its commit.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   CARGO_TERM_COLOR: always
 
+# How this workflow is put together:
+#
+# - Every job checks out the same commit: on a pull request, GitHub's merge of
+#   the branch into its base. The engine, the Rust module and the tests that
+#   use them always come from one tree.
+# - Tests run through the `just` recipes developers and agents run locally
+#   (see justfile); the workflow adds only artifacts, caches and reporting.
+# - Jobs install nothing from apt at run time. Tools come from pinned release
+#   binaries (scripts/install-tools.sh), lockfiles, or the dependency image.
+# - `ci` at the end is the one status check to require on a branch. Coverage
+#   is reported next to it and never blocks a merge or a publish.
+
 jobs:
+  # A pull request that only touches prose skips the suites. Everything else,
+  # and every push to main or develop, runs them all.
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    # Reads the pull request's file list and nothing else.
+    permissions:
+      pull-requests: read
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          PULL_REQUEST: ${{ github.event.pull_request.number }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # A renamed file counts under both names: moving code onto the
+          # prose list is still a code change.
+          files="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PULL_REQUEST/files" --paginate --jq '.[] | .filename, (.previous_filename // empty)')"
+          if [ -z "$files" ]; then
+            echo "ERROR: GitHub listed no changed files for pull request $PULL_REQUEST" >&2
+            exit 1
+          fi
+          # Prose that no build, test or published page reads. Keep this list
+          # short and exact: a file a test reads must not be on it
+          # (docs/theory/content-map.md and the issue forms are read by
+          # tests, so they count as code). The formatting of these files is
+          # still checked (Frontend checks).
+          prose='^(AGENTS\.md|CLAUDE\.md|CONTRIBUTING\.md|README\.md|DISCLAIMER\.md|THIRD-PARTY-LICENSES\.md|docs/theory/README\.md|\.claude/skills/.*|\.agents/.*|\.github/pull_request_template\.md|\.github/FUNDING\.yml)$'
+          if printf '%s\n' "$files" | grep -qvE "$prose"; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+            echo "Only prose changed: the build and test jobs are skipped."
+          fi
+
   # The product version, from web/package.json — also checks that Cargo.toml and
   # CHANGELOG.md agree with it, so a half-done release PR fails here.
   version:
     name: Release version
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     outputs:
       version: ${{ steps.read.outputs.version }}
     steps:
@@ -22,40 +83,36 @@ jobs:
         run: echo "version=$(bash scripts/release-version.sh)" >> "$GITHUB_OUTPUT"
 
   rust:
-    name: Rust (native)
+    name: Rust
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
-        with:
-          # Pinned by commit, so the toolchain can no longer come from the ref.
-          toolchain: stable
-          components: clippy,rustfmt
-          targets: wasm32-unknown-unknown
+      # rustup reads the version, components and targets from
+      # rust-toolchain.toml; nothing here names a toolchain.
+      - name: Install the pinned Rust toolchain
+        run: |
+          rustup toolchain install || rustup show active-toolchain
+          rustc --version
+          cargo clippy --version
 
       - name: Cache Rust
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           shared-key: native-rust
 
-      - name: Format check
-        run: cargo fmt --all --check
+      - name: Install just and wasm-bindgen (pinned)
+        run: bash scripts/install-tools.sh
 
-      - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Format and Clippy
+        run: just check-rust
 
       - name: Tests
-        run: cargo test --workspace
-
-      - name: Install wasm-bindgen CLI (version pinned in Cargo.toml)
-        run: |
-          pinned="$(sed -n 's/^wasm-bindgen = "=\(.*\)"$/\1/p' Cargo.toml)"
-          if [ "$(wasm-bindgen --version 2>/dev/null | awk '{print $2}')" != "$pinned" ]; then
-            cargo install wasm-bindgen-cli --version "$pinned" --locked --force
-          fi
+        run: just test-rust
 
       - name: Build the Rust finite-element module for the browser
         run: bash scripts/build-fem-wasm.sh
@@ -68,113 +125,74 @@ jobs:
           retention-days: 7
           path: web/src/wasm/fem/
 
-  native-tests:
-    name: C++ numerical tests (native)
+  cpp-native:
+    name: C++ tests (native)
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     env:
       CXX: g++
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Boundary condition validation
-        run: bash scripts/test-bc-validation.sh
+      - name: Install just (pinned)
+        run: bash scripts/install-tools.sh
 
-      - name: Shell element validation
-        run: bash scripts/test-shell.sh
+      - name: C++ tests, host compiler
+        run: just test-cpp-native
 
-      - name: Shell and coupled CG continuation
-        run: bash scripts/test-cg-continuation.sh
-
-      - name: Topology filter validation
-        run: bash scripts/test-topology-filter.sh
-
-      - name: MMA optimizer validation
-        run: bash scripts/test-topology-mma.sh
-
-      - name: Shell and coupled topology validation
-        run: bash scripts/test-topology-shell.sh
-
-  # These harnesses link the precompiled MFEM WASM library, so they need em++
+  # These programs link the precompiled MFEM WASM library, so they need em++
   # and node from the dependency image. Run independently of the engine build:
   # a cached or published engine must never bypass numerical regression tests.
-  wasm-tests:
-    name: C++ numerical tests (MFEM/WASM)
+  cpp-wasm:
+    name: C++ tests (MFEM/WASM)
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     container:
       image: ghcr.io/mkofler96/kofem-dependencies:0.0.2
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: SIMP core validation
-        run: bash scripts/test-topology.sh
+      - name: Install just (pinned)
+        run: bash scripts/install-tools.sh
 
-      - name: CG continuation including MFEM solid
-        run: bash scripts/test-cg-continuation.sh --mfem
+      - name: C++ tests, Emscripten with MFEM
+        run: just test-cpp-wasm
 
-      - name: Topology optimization loop validation
-        run: bash scripts/test-topology-optimize.sh
-
-      - name: Stress-constrained topology validation
-        run: bash scripts/test-topology-stress.sh
-
-      - name: Level-set topology validation
-        run: bash scripts/test-topology-levelset.sh
-
+  # In the dependency image, which already holds the Emscripten sysroot and
+  # the engine's libraries. clang-tidy >= 20 is required to parse the emsdk
+  # clang-22-era headers; the PyPI wheel is the one scripts/docker-clang-tidy.sh
+  # uses for the pre-commit hook.
   clang-tidy:
     name: C++ clang-tidy
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    container:
+      image: ghcr.io/mkofler96/kofem-dependencies:0.0.2
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      # fetch-wasm-deps.sh writes to /emsdk and /opt/kofem-deps (the image's
-      # baked-in paths); pre-own them so the non-root fetch and the cache
-      # restore/save can both write there.
-      - name: Prepare toolchain dirs
-        run: sudo mkdir -p /emsdk /opt/kofem-deps && sudo chown -R "$USER" /emsdk /opt/kofem-deps
-
-      - name: Cache WASM toolchain
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            /emsdk
-            /opt/kofem-deps
-          key: wasm-toolchain-${{ runner.os }}-deps0.0.2
-
-      # Idempotent: exits immediately on a cache hit (checks .kofem-deps-tag).
-      - name: Fetch WASM deps
-        run: bash scripts/fetch-wasm-deps.sh
-
-      # clang-tidy >= 20 is required to parse the emsdk clang-22-era headers;
-      # ninja-build is needed by the emcmake configure that emits
-      # compile_commands.json (see scripts/clang-tidy.sh).
-      - name: Install clang-tidy-20
-        timeout-minutes: 5
+      - name: Install just (pinned) and clang-tidy
         run: |
-          # The runner's Azure mirror stalled LLVM downloads for >16 minutes.
-          # Use the main Ubuntu archive for this install, without changing the
-          # runner's sources or pulling LLVM's recommended development packages.
-          cat > "$RUNNER_TEMP/clang-tidy.sources" <<'EOF'
-          Types: deb
-          URIs: https://archive.ubuntu.com/ubuntu
-          Suites: noble noble-updates noble-security
-          Components: main universe
-          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
-          EOF
-          APT_OPTIONS=(
-            -o "Dir::Etc::sourcelist=$RUNNER_TEMP/clang-tidy.sources"
-            -o "Dir::Etc::sourceparts=-"
-            -o Acquire::Retries=2
-            -o Acquire::http::Timeout=30
-            -o Acquire::https::Timeout=30
-          )
-          sudo apt-get "${APT_OPTIONS[@]}" update
-          sudo apt-get "${APT_OPTIONS[@]}" install -y --no-install-recommends clang-tidy-20 ninja-build
+          bash scripts/install-tools.sh
+          # The image ships pip and ninja. If a future image drops one, say so
+          # and install it, rather than fail on a missing command.
+          if ! python3 -m pip --version >/dev/null 2>&1 || ! command -v ninja >/dev/null; then
+            echo "::warning::pip or ninja is missing from the dependency image; installing with apt"
+            apt-get update && apt-get install -y --no-install-recommends python3-pip ninja-build
+          fi
+          python3 -m pip install --no-cache-dir clang-tidy==20.1.0
 
       - name: clang-tidy
-        run: bash scripts/clang-tidy.sh
+        run: just check-cpp
 
   # The compiled engine is not committed (KOF-186) — it is published as the
   # release `engine-<id>` and pulled in by scripts/fetch-wasm-engine.sh. The ID is
@@ -183,7 +201,10 @@ jobs:
   # have no git metadata to hash.
   engine-id:
     name: Engine build ID
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     outputs:
       id: ${{ steps.compute.outputs.id }}
 
@@ -200,6 +221,8 @@ jobs:
     name: WASM (Emscripten)
     needs: [engine-id]
     runs-on: ubuntu-24.04
+    # A full engine build takes about 20 minutes.
+    timeout-minutes: 45
     container:
       image: ghcr.io/mkofler96/kofem-dependencies:0.0.2
 
@@ -269,9 +292,10 @@ jobs:
   # main would publish — main finds it and has nothing to do.
   publish-engine:
     name: Publish engine release
-    needs: [engine-id, wasm, native-tests, wasm-tests]
+    needs: [engine-id, wasm, cpp-native, cpp-wasm]
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
 
     permissions:
       contents: write
@@ -327,186 +351,131 @@ jobs:
           exit 1
 
   # --- Web frontend ---------------------------------------------------------
-  # The web gates run as parallel jobs: the static checks, the validation
-  # scripts, the Playwright suite split into shards, and the production-image
-  # smoke test. Coverage is merged from the shards afterwards, and an image is
-  # only published once every one of them has passed.
+  # The web gates run as parallel jobs: the static checks, the node-side tests,
+  # the browser tests split by project and shard, and the production-image
+  # smoke test. An image is only published once every one of them has passed.
+  #
+  # These jobs take the engine and the Rust module from the `wasm` and `rust`
+  # jobs' artifacts, so KOFEM_WASM_SKIP_FETCH=1 tells the package.json
+  # pre-hooks not to fetch a release on top of them — a PR that changes
+  # engine/ has no published release yet.
 
+  # Runs on every pull request, prose-only ones included: prettier also owns
+  # the repository's markdown.
   web-checks:
     name: Frontend checks
+    needs: [changes, wasm, rust]
+    if: ${{ !cancelled() && !failure() }}
     runs-on: ubuntu-24.04
-    needs: [wasm, rust]
-
+    timeout-minutes: 10
     env:
-      # These jobs take the engine from the `wasm` job's artifact, so the
-      # package.json pre-hooks must not try to fetch a release on top of it —
-      # a PR that changes engine/ has no published release yet.
       KOFEM_WASM_SKIP_FETCH: 1
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
 
-      - name: Set up the web app (engine + Rust module artifacts, Bun)
+      - name: Set up the web app (engine + Rust module artifacts, Bun, just)
         uses: ./.github/actions/setup-web
-
-      - name: Typecheck
-        run: cd web && bun run typecheck
-
-      - name: Lint
-        run: cd web && bun run lint
+        with:
+          wasm-artifacts: ${{ needs.changes.outputs.code }}
 
       - name: Format
         run: cd web && bun run format:check
 
+      - name: Typecheck and lint
+        if: needs.changes.outputs.code == 'true'
+        run: |
+          cd web
+          bun run typecheck
+          bun run lint
+
       - name: Build frontend
+        if: needs.changes.outputs.code == 'true'
         run: cd web && bun run build
 
-  # The engine-level validation benchmarks and the node-side checks
-  # (tests/test_*.mjs) — no browser, so they run beside the Playwright shards.
-  validation:
-    name: Validation scripts
-    runs-on: ubuntu-24.04
+  # TypeScript logic and both WebAssembly modules without a browser: unit and
+  # integration tests, the example checks and the Theory Guide's evidence.
+  web-tests:
+    name: Node-side tests
     needs: [wasm, rust]
-
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     env:
-      # These jobs take the engine from the `wasm` job's artifact, so the
-      # package.json pre-hooks must not try to fetch a release on top of it —
-      # a PR that changes engine/ has no published release yet.
       KOFEM_WASM_SKIP_FETCH: 1
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
 
-      - name: Set up the web app (engine + Rust module artifacts, Bun)
+      - name: Set up the web app (engine + Rust module artifacts, Bun, just)
         uses: ./.github/actions/setup-web
 
-      - name: Run validation scripts
-        run: cd web && bun run test:validation
+      - name: Node-side tests
+        run: just test-web
 
-  # The Playwright suite, split across parallel jobs (`--shard`). Code changes
-  # collect coverage for the aggregate job; Dependabot PRs run the same tests
-  # without coverage instrumentation or reporting.
+  # The browser suite. Its two projects run in jobs of their own, so the
+  # timing-sensitive interaction tests (`ui`) never share a machine with the
+  # heavy STEP-to-result flows (`pipeline`); see web/playwright.config.ts.
+  # A test that fails and then passes on retry is reported as flaky, with its
+  # trace in the uploaded report, and does not fail the job.
   e2e:
-    name: Playwright (${{ matrix.shard }}/4)
-    runs-on: ubuntu-24.04
+    name: Browser tests (${{ matrix.project }} ${{ matrix.shard }}/2)
     needs: [wasm, rust]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
 
     strategy:
       # Every shard reports, so one failure does not hide another.
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        project: [ui, pipeline]
+        shard: [1, 2]
 
     env:
-      # These jobs take the engine from the `wasm` job's artifact, so the
-      # package.json pre-hooks must not try to fetch a release on top of it —
-      # a PR that changes engine/ has no published release yet.
       KOFEM_WASM_SKIP_FETCH: 1
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
 
-      - name: Set up the web app (engine + Rust module artifacts, Bun)
+      - name: Set up the web app (engine + Rust module artifacts, Bun, just)
         uses: ./.github/actions/setup-web
 
       - name: Set up Playwright Chromium
         uses: ./.github/actions/setup-playwright
         timeout-minutes: 5
 
-      - name: Run Playwright shard
-        run: cd web && bunx playwright test --shard=${{ matrix.shard }}/4
-        env:
-          # Use the PR author so a maintainer's rerun or follow-up commit keeps
-          # the dependency-update policy. Vite disables Istanbul on an empty value.
-          COVERAGE: ${{ github.event.pull_request.user.login != 'dependabot[bot]' && '1' || '' }}
+      - name: Browser tests
+        run: just test-e2e --project=${{ matrix.project }} --shard=${{ matrix.shard }}/2
 
-      # `if: always()`: a failing shard still hands over the coverage it gathered.
-      - name: Upload coverage counters
-        if: ${{ always() && github.event.pull_request.user.login != 'dependabot[bot]' }}
+      # The HTML report with the trace of every retried test, and the raw
+      # results. Kept for green runs too: a flaky test leaves the job green.
+      # `overwrite`: a re-run of this job replaces the report of the attempt
+      # before it instead of failing on the name.
+      - name: Upload the Playwright report
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: coverage-shard-${{ matrix.shard }}
-          path: web/.nyc_output/
-          include-hidden-files: true
-          retention-days: 1
+          name: playwright-${{ matrix.project }}-${{ matrix.shard }}
+          path: |
+            web/playwright-report/
+            web/playwright-results/
+          retention-days: 7
           if-no-files-found: ignore
-
-      # Failure screenshots stay in the run that produced them. They used to be
-      # pushed to a chat channel on every run, which buried the signal; anyone
-      # investigating a red build downloads them from here instead.
-      - name: Upload Playwright results
-        if: failure()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: playwright-results-${{ github.run_id }}-shard-${{ matrix.shard }}
-          path: web/playwright-results/
-          retention-days: 3
-          if-no-files-found: ignore
-
-  # Prints per-file coverage and flags src files never loaded by any test
-  # (dead-code candidates), from all shards together. Runs even when a shard
-  # failed, on the coverage gathered up to that point. Dependency updates are
-  # gated by tests and smoke tests, without a coverage job or external upload.
-  coverage:
-    name: Coverage
-    runs-on: ubuntu-24.04
-    needs: [e2e]
-    if: ${{ !cancelled() && github.event.pull_request.user.login != 'dependabot[bot]' }}
-
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-
-      - name: Set up the web app
-        uses: ./.github/actions/setup-web
-        with:
-          wasm-artifacts: "false"
-
-      - name: Collect coverage from the shards
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          pattern: coverage-shard-*
-          merge-multiple: true
-          path: web/.nyc_output/
-
-      - name: Coverage report
-        run: cd web && bun run coverage:report
-
-      - name: Report coverage to DeepSource
-        run: |
-          curl -sSf https://deepsource.io/cli | sh
-          sed 's|^SF:|SF:web/|' web/coverage/lcov.info > web/coverage/lcov.deepsource.info
-          ./bin/deepsource report --analyzer test-coverage --key javascript \
-            --value-file web/coverage/lcov.deepsource.info
-        env:
-          DEEPSOURCE_DSN: ${{ secrets.DEEPSOURCE_DSN }}
+          overwrite: true
 
   # Build the real production image and smoke-test it, in parallel with the
   # tests. The image is built map-free in main mode by web/Dockerfile.
   image:
     name: Docker image
-    runs-on: ubuntu-24.04
     needs: [wasm, rust, version]
-
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     env:
-      # These jobs take the engine from the `wasm` job's artifact, so the
-      # package.json pre-hooks must not try to fetch a release on top of it —
-      # a PR that changes engine/ has no published release yet.
       KOFEM_WASM_SKIP_FETCH: 1
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
 
-      - name: Set up the web app (engine + Rust module artifacts, Bun)
+      - name: Set up the web app (engine + Rust module artifacts, Bun, just)
         uses: ./.github/actions/setup-web
 
       - name: Set up Playwright Chromium
@@ -542,8 +511,9 @@ jobs:
             curl -sf http://localhost:10000/ >/dev/null && break
             sleep 1
           done
-          cd web && SMOKE_BASE_URL=http://localhost:10000 \
-            bunx playwright test -c playwright.docker.config.ts
+          # A container that never came up fails here, with its log.
+          curl -sf http://localhost:10000/ >/dev/null || { docker logs kofem-smoke; exit 1; }
+          SMOKE_BASE_URL=http://localhost:10000 just test-e2e -c playwright.docker.config.ts
 
       # The same image as the dev deployment runs it (KOFEM_CHANNEL=dev): kept out
       # of search engines and marked, and an unknown channel refuses to start.
@@ -570,6 +540,99 @@ jobs:
         if: always()
         run: docker rm -f kofem-smoke kofem-smoke-dev || true
 
+  # The one check to require before merging: green only when every gate above
+  # passed (or was skipped because only prose changed). Coverage is not a gate.
+  ci:
+    name: ci
+    needs:
+      - changes
+      - version
+      - rust
+      - cpp-native
+      - cpp-wasm
+      - clang-tidy
+      - engine-id
+      - wasm
+      - web-checks
+      - web-tests
+      - e2e
+      - image
+    # Also when a gate failed, so the check reports red instead of pending. A
+    # cancelled run was replaced by a newer one, which reports for itself.
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Every gate passed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+          CODE: ${{ needs.changes.outputs.code }}
+        run: |
+          echo "$RESULTS" | jq -r 'to_entries[] | "\(.value.result)\t\(.key)"' | sort
+          failed="$(echo "$RESULTS" | jq -r 'to_entries[] | select(.value.result == "failure" or .value.result == "cancelled") | .key')"
+          if [ -n "$failed" ]; then
+            echo "ERROR: these jobs did not pass:" $failed >&2
+            exit 1
+          fi
+          # A skipped gate is only acceptable when the path filter skipped it.
+          skipped="$(echo "$RESULTS" | jq -r 'to_entries[] | select(.value.result == "skipped") | .key')"
+          if [ -n "$skipped" ] && [ "$CODE" != "false" ]; then
+            echo "ERROR: these jobs were skipped although code changed:" $skipped >&2
+            exit 1
+          fi
+
+  # Coverage of the browser suite, from an instrumented build run for that
+  # purpose, reported to DeepSource. It is not a gate: the tests are judged by
+  # the jobs above, on the build users get, and neither a flaky run here nor a
+  # DeepSource outage may turn a pull request or a publish red. Dependency
+  # updates carry no coverage report.
+  coverage:
+    name: Coverage
+    needs: [wasm, rust]
+    if: ${{ github.event.pull_request.user.login != 'dependabot[bot]' }}
+    runs-on: ubuntu-24.04
+    # The whole suite in one job, on the slower instrumented build.
+    timeout-minutes: 60
+    continue-on-error: true
+    env:
+      KOFEM_WASM_SKIP_FETCH: 1
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up the web app (engine + Rust module artifacts, Bun, just)
+        uses: ./.github/actions/setup-web
+
+      - name: Set up Playwright Chromium
+        uses: ./.github/actions/setup-playwright
+        timeout-minutes: 5
+
+      # Whether the tests pass is not this job's question; the recipe reports
+      # what they covered either way.
+      - name: Browser tests on the instrumented build, and their coverage
+        run: just coverage
+
+      # A pinned release binary, checked against its published SHA-256. The
+      # checkout is GitHub's merge commit, which DeepSource does not know, so
+      # the report names the pull request's head commit.
+      - name: Report coverage to DeepSource
+        env:
+          DEEPSOURCE_DSN: ${{ secrets.DEEPSOURCE_DSN }}
+          GHA_HEAD_COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+          DEEPSOURCE_CLI_VERSION: 0.10.2
+          DEEPSOURCE_CLI_SHA256: 031efbf3326b26af63bbb962a093f4d532fa1a096aa9fd4b08095f2aa85042a8
+        run: |
+          # Empty on a push to main or develop, where HEAD is the commit itself.
+          if [ -z "$GHA_HEAD_COMMIT_SHA" ]; then unset GHA_HEAD_COMMIT_SHA; fi
+          archive="deepsource_${DEEPSOURCE_CLI_VERSION}_linux_x86_64.tar.gz"
+          curl -fsSL --retry 3 --retry-delay 2 --max-time 120 -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/DeepSourceCorp/cli/releases/download/v${DEEPSOURCE_CLI_VERSION}/$archive"
+          echo "${DEEPSOURCE_CLI_SHA256}  $RUNNER_TEMP/$archive" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/deepsource"
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/deepsource" deepsource
+          sed 's|^SF:|SF:web/|' web/coverage/lcov.info > web/coverage/lcov.deepsource.info
+          "$RUNNER_TEMP/deepsource/deepsource" report --analyzer test-coverage --key javascript \
+            --value-file web/coverage/lcov.deepsource.info
 
   # Publish the image: main = :latest, develop = :dev; nothing for any other
   # branch or PR. Only after every gate passed on this commit, so a broken
@@ -578,8 +641,9 @@ jobs:
   publish-image:
     name: Publish image
     runs-on: ubuntu-24.04
-    needs: [version, native-tests, wasm-tests, web-checks, validation, e2e, coverage, image]
+    needs: [version, ci]
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    timeout-minutes: 20
 
     permissions:
       contents: read
@@ -591,8 +655,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Download WASM artifacts
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
@@ -682,9 +744,10 @@ jobs:
   # a no-op, so a later push to main can never take the tag.
   release:
     name: Publish product release
-    needs: [rust, clang-tidy, native-tests, wasm-tests, web-checks, validation, e2e, coverage, image, publish-image, publish-engine]
+    needs: [ci, publish-image, publish-engine]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
 
     permissions:
       contents: write

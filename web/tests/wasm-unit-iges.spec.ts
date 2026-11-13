@@ -7,7 +7,6 @@ import { fixturePath, importIges } from "./fixtures/app";
 test("WASM OCC generate_fem_mesh: end-to-end smoke test on surface-only IGES fixture", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
   const IGES_FILE = fixturePath("cube_surfaces.igs");
 
   const logs: string[] = [];

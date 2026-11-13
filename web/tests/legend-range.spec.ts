@@ -31,15 +31,13 @@ async function tickValue(
 test("the colorbar limits can be pinned, rejected when inverted, and reset (#390)", async ({
   page,
 }) => {
-  test.setTimeout(60_000);
-
   // The example opens ready to run (KOF-322); solve it to get a field.
   await page.goto("/app/?example=axial-bar");
   await expect(page.locator("nav")).toBeVisible();
   const run = page.getByRole("button", { name: /Run static solve/ });
-  await expect(run).toBeEnabled({ timeout: 20_000 });
+  await expect(run).toBeEnabled();
   await run.click();
-  await expect(page.getByTestId("colorbar")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId("colorbar")).toBeVisible();
 
   // Auto: the ticks span the field's own min/max and nothing is clamped.
   await expect(page.getByTestId("colorbar-manual")).toHaveCount(0);

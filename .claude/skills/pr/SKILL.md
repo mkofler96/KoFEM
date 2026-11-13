@@ -68,7 +68,7 @@ Fixes KOF-nn
 
 <UI change: link to the Linear evidence comment with before/after screenshots at desktop and phone width>
 
-<checks run: e.g. `bun run typecheck && bun run lint && bun run test` — pass>
+<checks run: e.g. `just check && just test-web && just test-e2e` — pass>
 
 ## Key Changes
 

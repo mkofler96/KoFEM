@@ -11,12 +11,12 @@ import { readZip } from "../src/lib/zip";
 // sends nothing itself; a public report carries diagnostics only when the user
 // ticks them in, and never geometry, file names or results. github.com is
 // stubbed, so the test only inspects the URL the app opens. The diagnostics
-// builder is unit-tested in tests/test_feedback.mjs.
+// builder is unit-tested in tests/unit/feedback.test.mjs.
 //
 // KOF-202: "Report a problem" saves a report ZIP (analysis, CAD file unless
 // left out, versions, log, last error) and opens the email program addressed
 // to support@kofem.org; the Load button opens the ZIP again. The ZIP format is
-// unit-tested in tests/test_bug_report.mjs.
+// unit-tested in tests/integration/bug-report.test.mjs.
 
 const TUBE = readFileSync(new URL("./fixtures/tube.stp", import.meta.url));
 // The tube, imported under a name that must not reach the report.
@@ -79,10 +79,9 @@ async function urlOpenedBy(page: Page, testId: string): Promise<URL> {
   return url;
 }
 
-test("a problem report previews its diagnostics and opens the prefilled bug form without model data", async ({
+test("a problem report previews its diagnostics and opens the prefilled bug form without model data @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(180_000);
   await stubGitHub(page);
   await gotoApp(page);
   await page.locator('input[type="file"][accept=".stp,.step"]').setInputFiles({
@@ -91,7 +90,7 @@ test("a problem report previews its diagnostics and opens the prefilled bug form
     buffer: TUBE,
   });
   const meshButton = page.getByRole("button", { name: /Generate mesh/ });
-  await expect(meshButton).toBeVisible({ timeout: 60_000 });
+  await expect(meshButton).toBeVisible();
 
   // A refused element size puts a real error on screen; it is the last one the
   // report sees, even after the banner is gone.
@@ -106,9 +105,7 @@ test("a problem report previews its diagnostics and opens the prefilled bug form
 
   await maxSize.fill(suggested);
   await meshButton.click();
-  await expect
-    .poll(() => nodeCount(page), { timeout: 90_000 })
-    .toBeGreaterThan(0);
+  await expect.poll(() => nodeCount(page)).toBeGreaterThan(0);
   const nodes = await nodeCount(page);
 
   await openReport(page);
@@ -251,7 +248,6 @@ async function saveReport(page: Page, testId: string) {
 test("Report a problem saves a report with the CAD file, opens the email to support, and the report reopens", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
   await gotoApp(page);
   await page.locator('input[type="file"][accept=".stp,.step"]').setInputFiles({
     name: SECRET_FILE,
@@ -259,9 +255,7 @@ test("Report a problem saves a report with the CAD file, opens the email to supp
     buffer: TUBE,
   });
   await expect(page.getByRole("button", { name: /Generate mesh/ })).toBeVisible(
-    {
-      timeout: 60_000,
-    },
+    {},
   );
   await recordMailto(page);
 
@@ -372,10 +366,9 @@ test("a ZIP that is not a KoFEM report is refused with the reason", async ({
     .toContain("not a KoFEM problem report");
 });
 
-test("a report carries only the current model's log, not one from before New analysis", async ({
+test("a report carries only the current model's log, not one from before New analysis @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(180_000);
   page.on("dialog", async (d) => {
     await d.accept();
   });
@@ -388,11 +381,9 @@ test("a report carries only the current model's log, not one from before New ana
     });
   await importTube();
   const meshButton = page.getByRole("button", { name: /Generate mesh/ });
-  await expect(meshButton).toBeVisible({ timeout: 60_000 });
+  await expect(meshButton).toBeVisible();
   await meshButton.click();
-  await expect
-    .poll(() => nodeCount(page), { timeout: 90_000 })
-    .toBeGreaterThan(0);
+  await expect.poll(() => nodeCount(page)).toBeGreaterThan(0);
   await recordMailto(page);
 
   const logOf = (entries: { name: string; data: Uint8Array }[]) =>
@@ -407,9 +398,7 @@ test("a report carries only the current model's log, not one from before New ana
   await page.getByRole("button", { name: "New analysis" }).click();
   await importTube();
   await expect(page.getByRole("button", { name: /Generate mesh/ })).toBeVisible(
-    {
-      timeout: 60_000,
-    },
+    {},
   );
   await openReport(page);
   const fresh = await saveReport(page, "report-save");

@@ -282,7 +282,7 @@ export default {
         in <code>crates/kofem-fem/src/coupled_static.rs</code>, the coupling
         equations in <code>crates/kofem-fem/src/coupling.rs</code> and the browser
         binding in <code>crates/kofem-wasm/src/mixed.rs</code>, compared against
-        it by <code>web/tests/test_coupled_rust.mjs</code>. The linked sources
+        it by <code>web/tests/integration/coupled-rust.test.mjs</code>. The linked sources
         are pinned to the revision of this page’s evidence, which predates the
         Rust mixed solve.</li>
       <li>${source("engine/cpp/coupling_constraints.cpp", 149, "relaxed seam MPC and distributing equations")},
@@ -294,7 +294,7 @@ export default {
         ${source("web/src/lib/solveLoads.ts", 156, "coupled loads")}.</li>
       <li>${source("engine/tests/shell_solid_footprint_study.cpp", 1, "planar transition study and its limits")},
         ${source("engine/tests/shell_validation.cpp", 555, "footprint motion checks")} and
-        ${source("web/tests/test_shell_footprint.mjs", 1, "app-pipeline and WASM fixture")}.</li>
+        ${source("web/tests/integration/shell-footprint.test.mjs", 1, "app-pipeline and WASM fixture")}.</li>
       <li>Lu, Zhang and Yang (2023), <cite>A Relaxed MPC Method for Non-rigid Shell to Solid Coupling</cite>, Journal of Physics: Conference Series 2528, 012064. KoFEM’s centroid-weighted nonconforming seam is an implementation adaptation; it is not the paper’s coincident-node construction.</li>
     </ol>`,
 };

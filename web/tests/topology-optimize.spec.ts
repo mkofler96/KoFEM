@@ -79,8 +79,6 @@ function makeBeam(nx: number, ny: number, nz: number) {
 test("optimize_topology worker: density field of element length + progress logs", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
-
   const logs: string[] = [];
   page.on("console", (msg) => logs.push(msg.text()));
   page.on("pageerror", (e) =>
@@ -168,7 +166,6 @@ test("optimize_topology worker: density field of element length + progress logs"
 test("a suppressed Shell body does not block solving or optimizing the rest", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
   await gotoApp(page);
   await page.waitForFunction(() =>
     Boolean((window as unknown as { __kofem?: unknown }).__kofem),
@@ -246,7 +243,6 @@ test("a suppressed Shell body does not block solving or optimizing the rest", as
 test("optimize_topology worker: level-set method returns a nodal level set", async ({
   page,
 }) => {
-  test.setTimeout(180_000);
   page.on("pageerror", (e) =>
     console.error(`[topopt-levelset] page error: ${e.message}`),
   );
@@ -327,7 +323,6 @@ test("optimize_topology worker: level-set method returns a nodal level set", asy
 test("optimize_topology worker: level set with a coupling is rejected clearly", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
   await gotoApp(page);
   await page.waitForFunction(() =>
     Boolean((window as unknown as KofemTestHooks).__kofem),
@@ -407,7 +402,6 @@ type KofemTestHooks = {
 test("optimize_topology worker: streams the density every iteration", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
   page.on("pageerror", (e) =>
     console.error(`[topopt-stream] page error: ${e.message}`),
   );
@@ -495,7 +489,6 @@ test("optimize_topology worker: streams the density every iteration", async ({
 test("optimize_topology worker: min_volume meets its compliance limit", async ({
   page,
 }) => {
-  test.setTimeout(180_000);
   await gotoApp(page);
   await page.waitForFunction(() =>
     Boolean((window as unknown as KofemTestHooks).__kofem),
@@ -611,7 +604,6 @@ test("optimize_topology worker: min_volume meets its compliance limit", async ({
 // limit) and must meet it while shedding material; and a limit no design can
 // reach ends in a clear error rather than a silently non-converged result.
 test("optimize_topology worker: max-stress constraint", async ({ page }) => {
-  test.setTimeout(180_000);
   await gotoApp(page);
   await page.waitForFunction(() =>
     Boolean((window as unknown as KofemTestHooks).__kofem),

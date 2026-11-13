@@ -8,7 +8,7 @@
 // vite.config.ts) — otherwise this fixture is a transparent no-op.  Each
 // test writes one JSON file into .nyc_output/; `nyc report` merges them.
 //
-// Run via:  bun run test:coverage
+// Run via:  just coverage
 import { test as base, expect } from "@playwright/test";
 import fs from "fs";
 import path from "path";

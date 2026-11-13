@@ -6,6 +6,8 @@ import { gotoApp } from "./fixtures/app";
 import { openTree } from "./fixtures/tree";
 import { UNVALIDATED_CRANE_SHELL } from "./fixtures/unvalidated-examples";
 import { readdir, readFile } from "node:fs/promises";
+import { settleViewport } from "./fixtures/viewport";
+import type { useModelStore } from "../src/store/modelStore";
 
 // Coverage for the `?example=<id>` deep-link (App.tsx useExampleFromUrl), the
 // target of the "Open in KoFEM" links on the example pages. Exercises
@@ -53,14 +55,12 @@ function readStore(page: import("@playwright/test").Page) {
 test("?example= loads an example into the app, ready to run", async ({
   page,
 }) => {
-  test.setTimeout(60_000);
-
   await page.goto("/app/?example=axial-bar");
   await expect(page.locator("nav")).toBeVisible();
 
   // The example .vtu is fetched, parsed and loaded into the store.
   await expect
-    .poll(async () => (await readStore(page)).nodes, { timeout: 15_000 })
+    .poll(async () => (await readStore(page)).nodes)
     .toBeGreaterThan(0);
 
   // A recipe example (KOF-322) opens as a user leaves it before pressing Run:
@@ -77,8 +77,6 @@ test("?example= loads an example into the app, ready to run", async ({
 test("re-solving a loaded example does not trap on its node ids (#288)", async ({
   page,
 }) => {
-  test.setTimeout(60_000);
-
   // Re-running the solve of a loaded example used to hand its node ids to the
   // engine as vertex indices; the 1-based ids of the old hex examples read
   // past the vertex array and trapped with "memory access out of bounds".
@@ -86,11 +84,11 @@ test("re-solving a loaded example does not trap on its node ids (#288)", async (
   // store state exactly as the Solve button does.
   await page.goto("/app/?example=axial-bar");
   await expect(page.locator("nav")).toBeVisible();
-  await page.waitForFunction(
-    () => !!(window as unknown as { __kofem?: unknown }).__kofem,
+  await page.waitForFunction(() =>
+    Boolean((window as unknown as { __kofem?: unknown }).__kofem),
   );
   await expect
-    .poll(async () => (await readStore(page)).nodes, { timeout: 15_000 })
+    .poll(async () => (await readStore(page)).nodes)
     .toBeGreaterThan(0);
 
   const outcome = await page.evaluate(async () => {
@@ -133,11 +131,9 @@ test("re-solving a loaded example does not trap on its node ids (#288)", async (
   }
 });
 
-test("a pure-shell (CTRIA3) example solves through the shell path to its published Kt", async ({
+test("a pure-shell (CTRIA3) example solves through the shell path to its published Kt @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(180_000);
-
   // Opens the shell plate with a hole — built from its STEP file with the body
   // marked Shell, so its mesh is the CTRIA3 mid-surface and its supports and
   // load are Edge picks of whole CAD faces — and solves it with the Run button.
@@ -149,7 +145,7 @@ test("a pure-shell (CTRIA3) example solves through the shell path to its publish
   await page.goto("/app/?example=plate-with-hole-shell");
   await expect(page.locator("nav")).toBeVisible();
   await expect
-    .poll(async () => (await readStore(page)).nodes, { timeout: 15_000 })
+    .poll(async () => (await readStore(page)).nodes)
     .toBeGreaterThan(0);
   const setup = await page.evaluate(() => {
     const st = (
@@ -183,10 +179,10 @@ test("a pure-shell (CTRIA3) example solves through the shell path to its publish
   });
 
   const run = page.getByRole("button", { name: /Run static solve/ });
-  await expect(run).toBeEnabled({ timeout: 15_000 });
+  await expect(run).toBeEnabled();
   await run.click();
   const handCheck = page.getByTestId("hand-check-fe");
-  await expect(handCheck).toBeVisible({ timeout: 120_000 });
+  await expect(handCheck).toBeVisible();
   const shown = Number(await handCheck.getAttribute("data-value"));
   const published = (
     JSON.parse(await readFile("public/examples/results.json", "utf8")) as {
@@ -200,11 +196,9 @@ test("a pure-shell (CTRIA3) example solves through the shell path to its publish
   );
 });
 
-test("a mixed shell/solid (CTRIA3 + CTETRA) example re-solves through the coupled path", async ({
+test("a mixed shell/solid (CTRIA3 + CTETRA) example re-solves through the coupled path @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(180_000);
-
   // Loads the coupled crane (thin holder as CTRIA3 shells, pin/hook as CTETRA
   // solids) and re-runs the solve exactly as the Solve button does. This
   // exercises the whole mixed shell/solid pipeline end-to-end: mixed-element
@@ -226,7 +220,7 @@ test("a mixed shell/solid (CTRIA3 + CTETRA) example re-solves through the couple
     Boolean((window as unknown as { __kofem?: unknown }).__kofem),
   );
   await expect
-    .poll(async () => (await readStore(page)).nodes, { timeout: 30_000 })
+    .poll(async () => (await readStore(page)).nodes)
     .toBeGreaterThan(0);
 
   const outcome = await page.evaluate(async () => {
@@ -305,7 +299,7 @@ test("a recipe example (axial bar) restores its STEP for re-meshing", async ({
   await page.goto("/app/?example=axial-bar");
   await expect(page.locator("nav")).toBeVisible();
   await expect
-    .poll(async () => (await readStore(page)).nodes, { timeout: 15_000 })
+    .poll(async () => (await readStore(page)).nodes)
     .toBeGreaterThan(0);
 
   await expect
@@ -326,9 +320,9 @@ test("?example= with an invalid id is rejected without a fetch", async ({
   page,
 }) => {
   let dialogMessage = "";
-  page.on("dialog", (d) => {
+  page.on("dialog", async (d) => {
     dialogMessage = d.message();
-    void d.dismiss();
+    await d.dismiss();
   });
 
   // A slash fails the /^[\w-]+$/ guard, so no request is made.
@@ -344,17 +338,15 @@ test("?example= with an unknown id surfaces a clear load error", async ({
   page,
 }) => {
   let dialogMessage = "";
-  page.on("dialog", (d) => {
+  page.on("dialog", async (d) => {
     dialogMessage = d.message();
-    void d.dismiss();
+    await d.dismiss();
   });
 
   await page.goto("/app/?example=does-not-exist");
   await expect(page.locator("nav")).toBeVisible();
 
-  await expect
-    .poll(() => dialogMessage, { timeout: 15_000 })
-    .toContain("Could not load example");
+  await expect.poll(() => dialogMessage).toContain("Could not load example");
   expect((await readStore(page)).nodes).toBe(0);
 });
 
@@ -384,16 +376,16 @@ test("an example without its model STEP file is refused", async ({ page }) => {
   // Every example ships the geometry it is built from (KOF-322); opening one
   // without it would show no body and offer no re-mesh.
   let dialogMessage = "";
-  page.on("dialog", (d) => {
+  page.on("dialog", async (d) => {
     dialogMessage = d.message();
-    void d.dismiss();
+    await d.dismiss();
   });
   await page.route("**/examples/axial-bar.model.step", (route) =>
     route.fulfill({ status: 404, body: "" }),
   );
   await page.goto("/app/?example=axial-bar");
   await expect
-    .poll(() => dialogMessage, { timeout: 15_000 })
+    .poll(() => dialogMessage)
     .toContain('example "axial-bar" ships no geometry');
   expect((await readStore(page)).nodes).toBe(0);
 });
@@ -402,9 +394,9 @@ test("an example whose file carries no geometry is refused", async ({
   page,
 }) => {
   let dialogMessage = "";
-  page.on("dialog", (d) => {
+  page.on("dialog", async (d) => {
     dialogMessage = d.message();
-    void d.dismiss();
+    await d.dismiss();
   });
   await page.route("**/examples/axial-bar.vtu", async (route) => {
     const original = await route.fetch();
@@ -415,7 +407,7 @@ test("an example whose file carries no geometry is refused", async ({
   });
   await page.goto("/app/?example=axial-bar");
   await expect
-    .poll(() => dialogMessage, { timeout: 15_000 })
+    .poll(() => dialogMessage)
     .toContain('example "axial-bar" carries no geometry to mesh on');
   expect((await readStore(page)).nodes).toBe(0);
 });
@@ -434,7 +426,7 @@ test("a mesh without geometry says it cannot be re-meshed", async ({
     .locator('input[type="file"][accept=".vtu,.zip"]')
     .setInputFiles(file);
   await expect
-    .poll(async () => (await readStore(page)).nodes, { timeout: 15_000 })
+    .poll(async () => (await readStore(page)).nodes)
     .toBeGreaterThan(0);
   await openTree(page, "mesh");
   await expect(page.getByTestId("mesh-no-geometry")).toBeVisible();
@@ -451,8 +443,6 @@ test("the app opens normally when no ?example= is present", async ({
 test("the MBB topology example opens ready to optimize and re-mesh", async ({
   page,
 }) => {
-  test.setTimeout(60_000);
-
   // mbb-beam-topopt is built with KoFEM's own pipeline (STEP → OCCT → Netgen,
   // examples/gallery/generate-mbb-topopt.mjs). It must open in the Optimize
   // step with its settings, supports and face load restored, carry the CAD face
@@ -467,7 +457,6 @@ test("the MBB topology example opens ready to optimize and re-mesh", async ({
         }
       ).__kofemStore.getState().stepBytes !== null,
     null,
-    { timeout: 15_000 },
   );
 
   const snapshot = await readStore(page);
@@ -516,8 +505,6 @@ test("the MBB topology example opens ready to optimize and re-mesh", async ({
 test("the cantilever example opens ready to run and re-mesh", async ({
   page,
 }) => {
-  test.setTimeout(60_000);
-
   // cantilever-beam opens ready to run with a hand check (KOF-261), built
   // from its recipe (examples/validation/cases/cantilever-beam.mjs). It
   // must open unsolved on its static study with the clamp, the tip load, the quadratic
@@ -532,7 +519,6 @@ test("the cantilever example opens ready to run and re-mesh", async ({
         }
       ).__kofemStore.getState().stepBytes !== null,
     null,
-    { timeout: 15_000 },
   );
 
   const snapshot = await readStore(page);
@@ -590,23 +576,23 @@ test.beforeAll(async () => {
 // examples-page.spec.ts already opens every example in the app.
 test("capture screenshots of all examples @capture", async ({ page }) => {
   // Every example, each fetched, parsed and its STEP file restored.
-  test.setTimeout(180_000);
   for (const analysis of EXAMPLE_ANALYSES) {
     await page.goto(`/app/?example=${analysis.id}`);
 
     await expect
-      .poll(async () => (await readStore(page)).nodes, { timeout: 15_000 })
+      .poll(async () => (await readStore(page)).nodes)
       .toBeGreaterThan(0);
     // Every example opens unsolved, ready to run.
     expect((await readStore(page)).hasResult).toBe(false);
     // Allow the camera reposition and a render frame to settle
-    await page.waitForTimeout(100);
+    await settleViewport(page);
     await page.mouse.move(0, 0);
     await page.evaluate(() => {
-      const store = (window as any).__kofemStore;
+      const store = (window as Window & { __kofemStore: typeof useModelStore })
+        .__kofemStore;
       store.getState().setDeformScale(0);
     });
-    await page.waitForTimeout(500);
+    await settleViewport(page);
     await page.screenshot({
       path: `screenshots/${analysis.id}_screenshot.png`,
     });

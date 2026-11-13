@@ -6,7 +6,7 @@
 // payload the C++ engine's solve_shell reads — { mesh, mat_json, bcs_json },
 // built by buildShellEngineInputs or preparePureShellSolve — and returns the
 // same result layout, so both solvers see one contract and the C++ entry
-// stays the test oracle (web/tests/test_shell_rust.mjs).
+// stays the test oracle (web/tests/integration/shell-rust.test.mjs).
 //
 // Payload, as engine/cpp/solve_shell.h documents it:
 //   mesh      { vertices, triangles, thicknesses?, attributes? }

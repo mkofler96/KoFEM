@@ -18,8 +18,6 @@ const STEP_FILE = fileURLToPath(
 test("production bundle boots and runs the WASM pipeline end-to-end", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
-
   // Any 4xx/5xx or transport failure on a fingerprinted asset (JS chunk, CSS,
   // worker, or the .wasm binary) means the build is mis-wired — fail loudly.
   const badRequests: string[] = [];
@@ -35,9 +33,6 @@ test("production bundle boots and runs the WASM pipeline end-to-end", async ({
   await page.goto("/app/", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(
     () => !!(window as Window & { __kofem?: unknown }).__kofem,
-    {
-      timeout: 30_000,
-    },
   );
 
   // Drive the real pipeline in the worker: STEP bytes → OCCT tessellation →

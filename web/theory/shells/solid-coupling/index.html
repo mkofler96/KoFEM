@@ -1021,7 +1021,7 @@
         in <code>crates/kofem-fem/src/coupled_static.rs</code>, the coupling
         equations in <code>crates/kofem-fem/src/coupling.rs</code> and the browser
         binding in <code>crates/kofem-wasm/src/mixed.rs</code>, compared against
-        it by <code>web/tests/test_coupled_rust.mjs</code>. The linked sources
+        it by <code>web/tests/integration/coupled-rust.test.mjs</code>. The linked sources
         are pinned to the revision of this page’s evidence, which predates the
         Rust mixed solve.</li>
       <li><a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/engine/cpp/coupling_constraints.cpp#L149">relaxed seam MPC and distributing equations</a>,
@@ -1033,7 +1033,7 @@
         <a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/web/src/lib/solveLoads.ts#L156">coupled loads</a>.</li>
       <li><a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/engine/tests/shell_solid_footprint_study.cpp#L1">planar transition study and its limits</a>,
         <a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/engine/tests/shell_validation.cpp#L555">footprint motion checks</a> and
-        <a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/web/tests/test_shell_footprint.mjs#L1">app-pipeline and WASM fixture</a>.</li>
+        <a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/web/tests/integration/shell-footprint.test.mjs#L1">app-pipeline and WASM fixture</a>.</li>
       <li>Lu, Zhang and Yang (2023), <cite>A Relaxed MPC Method for Non-rigid Shell to Solid Coupling</cite>, Journal of Physics: Conference Series 2528, 012064. KoFEM’s centroid-weighted nonconforming seam is an implementation adaptation; it is not the paper’s coincident-node construction.</li>
     </ol><nav class="pager" aria-label="Reading order">
       <a class="prev" rel="prev" href="/theory/shells/formulation/"><small>Previous</small>← Shell formulation</a>

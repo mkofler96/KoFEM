@@ -177,7 +177,6 @@ test.describe("consent", () => {
   test("withdrawn in the app: cookies go and later events are not sent", async ({
     page,
   }) => {
-    test.setTimeout(60_000);
     await withAnalytics(page);
     await setConsent(page, "granted");
     await page.goto("/app/");
@@ -196,17 +195,15 @@ test.describe("consent", () => {
     // worker answers.
     await triggerSolve(page);
     await expect
-      .poll(
-        () =>
-          page.evaluate(
-            () =>
-              (
-                window as unknown as {
-                  __kofemStore: { getState(): { isRunning: boolean } };
-                }
-              ).__kofemStore.getState().isRunning,
-          ),
-        { timeout: 45_000 },
+      .poll(() =>
+        page.evaluate(
+          () =>
+            (
+              window as unknown as {
+                __kofemStore: { getState(): { isRunning: boolean } };
+              }
+            ).__kofemStore.getState().isRunning,
+        ),
       )
       .toBe(false);
     expect(await eventNames(page)).toEqual(before);
@@ -231,7 +228,6 @@ test.describe("consent", () => {
 
 test.describe("workflow events", () => {
   test("example: loaded, solved, results viewed", async ({ page }) => {
-    test.setTimeout(90_000);
     await withAnalytics(page);
     await setConsent(page, "granted");
     await page.goto("/app/?example=axial-bar");
@@ -239,7 +235,7 @@ test.describe("workflow events", () => {
     // The example opens ready to run (KOF-322), so loading it reports no
     // results yet; the first solve does.
     await expect
-      .poll(() => eventNames(page), { timeout: 15_000 })
+      .poll(() => eventNames(page))
       .toEqual(expect.arrayContaining(["solver_opened", "example_loaded"]));
     const events = await gaEvents(page);
     expect(events.find((e) => e.name === "solver_opened")?.params.entry).toBe(
@@ -252,7 +248,7 @@ test.describe("workflow events", () => {
 
     await triggerSolve(page);
     await expect
-      .poll(() => eventNames(page), { timeout: 60_000 })
+      .poll(() => eventNames(page))
       .toEqual(expect.arrayContaining(["solve_completed", "results_viewed"]));
     const after = await gaEvents(page);
     const started = after.find((e) => e.name === "solve_started");
@@ -273,15 +269,12 @@ test.describe("workflow events", () => {
   test("the sample counts as an example, not as the user's CAD", async ({
     page,
   }) => {
-    test.setTimeout(60_000);
     await withAnalytics(page);
     await setConsent(page, "granted");
     await page.goto("/app/");
     await page.getByRole("button", { name: "Try a sample simulation" }).click();
 
-    await expect
-      .poll(() => eventNames(page), { timeout: 30_000 })
-      .toContain("example_loaded");
+    await expect.poll(() => eventNames(page)).toContain("example_loaded");
     const events = await gaEvents(page);
     expect(
       events.find((e) => e.name === "example_loaded")?.params.example_id,
@@ -289,10 +282,9 @@ test.describe("workflow events", () => {
     expect(events.map((e) => e.name)).not.toContain("geometry_import_success");
   });
 
-  test("CAD import: failure and success are told apart, nothing about the file is sent", async ({
+  test("CAD import: failure and success are told apart, nothing about the file is sent @pipeline", async ({
     page,
   }) => {
-    test.setTimeout(120_000);
     await withAnalytics(page);
     await setConsent(page, "granted");
 
@@ -305,7 +297,7 @@ test.describe("workflow events", () => {
         buffer: Buffer.from("this is not a STEP file"),
       });
     await expect
-      .poll(() => eventNames(page), { timeout: 45_000 })
+      .poll(() => eventNames(page))
       .toContain("geometry_import_failed");
     const failed = (await gaEvents(page)).find(
       (e) => e.name === "geometry_import_failed",
@@ -315,7 +307,7 @@ test.describe("workflow events", () => {
 
     await importStep(page, "tests/fixtures/tube.stp");
     await expect
-      .poll(() => eventNames(page), { timeout: 15_000 })
+      .poll(() => eventNames(page))
       .toContain("geometry_import_success");
 
     // A refused element size is a mesh failure caused by the input.
@@ -335,9 +327,7 @@ test.describe("workflow events", () => {
 
     await maxSize.fill(suggested);
     await page.getByRole("button", { name: /Generate mesh/ }).click();
-    await expect
-      .poll(() => eventNames(page), { timeout: 90_000 })
-      .toContain("mesh_completed");
+    await expect.poll(() => eventNames(page)).toContain("mesh_completed");
     const meshed = (await gaEvents(page)).find(
       (e) => e.name === "mesh_completed",
     );

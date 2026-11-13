@@ -8,7 +8,6 @@ import { fixturePath, importIges } from "./fixtures/app";
 test("WASM IGES import: ruled-surface entity (type 118) converts to real geometry", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
   const IGES_FILE = fixturePath("ruled_surface.igs");
 
   const logs: string[] = [];

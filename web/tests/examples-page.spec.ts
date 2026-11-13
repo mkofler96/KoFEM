@@ -301,10 +301,9 @@ test("the retired /validation/ addresses redirect to the example pages", async (
 
 // What each page says the app shows after a solve, and that the app shows it.
 for (const id of IDS)
-  test(`${id}: the app shows the read-out its page publishes`, async ({
+  test(`${id}: the app shows the read-out its page publishes @pipeline`, async ({
     page,
   }) => {
-    test.setTimeout(90_000);
     await page.goto(`/examples/${id}/`);
     const readout = page.getByTestId("app-readout");
     if ((await readout.count()) === 0) {
@@ -332,7 +331,6 @@ for (const id of IDS)
           }
         ).__kofemStore?.getState().nodes.length,
       null,
-      { timeout: 30_000 },
     );
 
     // Solve it in the browser (Studies → Static 1 → Run static solve), as the
@@ -346,18 +344,14 @@ for (const id of IDS)
     });
     await page.getByTestId("tree-study-1").click();
     await page.getByRole("button", { name: /Run static solve/ }).click();
-    await page.waitForFunction(
-      () => {
-        const win = window as unknown as {
-          __kofemStore: { getState(): { result: unknown } };
-          __storedResult: unknown;
-        };
-        const { result } = win.__kofemStore.getState();
-        return result !== null && result !== win.__storedResult;
-      },
-      null,
-      { timeout: 60_000 },
-    );
+    await page.waitForFunction(() => {
+      const win = window as unknown as {
+        __kofemStore: { getState(): { result: unknown } };
+        __storedResult: unknown;
+      };
+      const { result } = win.__kofemStore.getState();
+      return result !== null && result !== win.__storedResult;
+    }, null);
     await page.getByTestId("tree-plot-1").click();
     await page.getByTestId("plot-field").selectOption(field);
     await expect(summaryValue(page, stat)).toHaveText(value);

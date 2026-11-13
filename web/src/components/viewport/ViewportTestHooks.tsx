@@ -2,8 +2,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { useEffect } from "react";
-import { useThree } from "@react-three/fiber";
+import { addTail, useThree } from "@react-three/fiber";
 import { Vector3 } from "three";
+import { applyPendingSceneCommits } from "./pickingEvents";
 
 export interface ViewportHooks {
   // Where a model-space point lands on the page (client pixels), so an E2E test
@@ -13,12 +14,18 @@ export interface ViewportHooks {
   // Turn the camera to look at the orbit target from `direction`, keeping its
   // distance — what clicking an axis of the view gizmo does.
   lookFrom(direction: [number, number, number]): void;
+  // Resolves once the viewport shows the store as it is now: the scene's React
+  // tree has applied every pending change (Fit View moves the camera in one of
+  // its effects), that state has been drawn, and nothing asks for another
+  // frame. The test fixtures await it before they project a point or click, so
+  // no test depends on how long the viewport takes to catch up.
+  settled(): Promise<void>;
 }
 
 // Exposes the viewport camera to Playwright as window.__kofemViewport, beside
 // the store (__kofemStore) and the worker (__kofem) already exposed.
 export function ViewportTestHooks() {
-  const { camera, controls, gl, invalidate } = useThree();
+  const { camera, controls, gl, invalidate, get } = useThree();
 
   useEffect(() => {
     const hooks: ViewportHooks = {
@@ -51,10 +58,32 @@ export function ViewportTestHooks() {
         orbit.update();
         invalidate();
       },
+      settled() {
+        // The scene's tree applies a store change in a scheduled task (see
+        // pickingEvents); apply it now, effects included.
+        applyPendingSceneCommits();
+        // Whatever needs drawing has asked for a frame by now. With none
+        // asked for, the canvas already shows this state. settled() draws
+        // nothing itself: a test may call it hundreds of times.
+        if (get().internal.frames === 0) return Promise.resolve();
+        // R3F runs its tail callbacks when a frame finds nothing left to
+        // draw and the render loop stops.
+        return new Promise<void>((resolve) => {
+          const unsubscribe = addTail(() => {
+            unsubscribe();
+            resolve();
+          });
+        });
+      },
     };
-    (window as Window & { __kofemViewport?: ViewportHooks }).__kofemViewport =
-      hooks;
-  }, [camera, controls, gl, invalidate]);
+    const host = window as Window & { __kofemViewport?: ViewportHooks };
+    host.__kofemViewport = hooks;
+    // An unmounted canvas draws no frame, so its settled() would never
+    // resolve. Without hooks a test waits for the next mount instead.
+    return () => {
+      if (host.__kofemViewport === hooks) delete host.__kofemViewport;
+    };
+  }, [camera, controls, gl, invalidate, get]);
 
   return null;
 }

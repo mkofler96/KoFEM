@@ -27,7 +27,6 @@ async function saveAnalysis(
 test("save → load → re-save round-trips the analysis losslessly", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "kofem-save-load-"));
 
   // ── 1. Solve the cantilever fixture so the saved file contains results ────
@@ -38,7 +37,7 @@ test("save → load → re-save round-trips the analysis losslessly", async ({
     .filter({ hasText: "Run static solve" });
   await expect(solveBtn).toBeEnabled();
   await solveBtn.click();
-  await expect(page.getByText(/Max \|U\|/)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/Max \|U\|/)).toBeVisible();
 
   // ── 2. Save the analysis ──────────────────────────────────────────────────
   const file1 = path.join(tmpDir, "first.vtu");
@@ -60,7 +59,7 @@ test("save → load → re-save round-trips the analysis losslessly", async ({
     .setInputFiles(file1);
 
   // Saved in results mode → restored session shows the result stats again
-  await expect(page.getByText(/Max \|U\|/)).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText(/Max \|U\|/)).toBeVisible();
   await expect(page.getByText("Cantilever Beam")).toBeVisible();
 
   // ── 4. Re-save and verify byte-identical output ───────────────────────────
@@ -102,7 +101,7 @@ test("save → load → re-save round-trips the analysis losslessly", async ({
     .filter({ hasText: "Run static solve" });
   await expect(reSolveBtn).toBeEnabled();
   await reSolveBtn.click();
-  await expect(page.getByText(/Max \|U\|/)).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/Max \|U\|/)).toBeVisible();
 
   const reSolved = await readResult();
   expect(reSolved.displacements.length).toBe(loaded.displacements.length);
@@ -139,7 +138,6 @@ test("loading a non-KoFEM file shows a clear error", async ({ page }) => {
 test("max-stress TO settings round-trip; older files load with it off", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "kofem-save-stress-"));
 
   type TopOptState = {

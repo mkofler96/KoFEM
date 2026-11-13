@@ -23,7 +23,6 @@ test.use({
 test("landing results stage → committed social image @capture", async ({
   page,
 }) => {
-  test.setTimeout(60_000);
   await page.goto("/");
   const scene = page.locator("#scene");
   await expect(scene).toHaveAttribute("data-loaded", "true");

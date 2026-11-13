@@ -26,7 +26,6 @@ test("landing page renders and links to the solver app", async ({ page }) => {
 test("bracket turns 90 degrees during transfer and a full turn during optimization", async ({
   page,
 }) => {
-  test.setTimeout(60_000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/");
