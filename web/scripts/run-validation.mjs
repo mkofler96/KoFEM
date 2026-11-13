@@ -260,12 +260,12 @@ function printSummary(results, wallMs, jobs) {
   console.log("\n══ Validation summary");
   for (const result of results)
     console.log(
-      `  ${result.ok ? "PASS" : "FAIL"}  ${seconds(result.durationMs).padStart(8)}  ${megabytes(result.maxRss).padStart(7)}  ${result.step.name.padEnd(width)}${result.ok ? "" : `  (${result.exit})`}`,
+      `  ${result.ok ? "PASS" : "FAIL"}  ${seconds(result.durationMs).padStart(8)}  ${megabytes(result.maxRss).padStart(7)}  ${result.ok ? result.step.name : `${result.step.name.padEnd(width)}  (${result.exit})`}`,
     );
   console.log(
     `\n${results.length - failed.length}/${results.length} steps passed` +
       (failed.length ? `, ${failed.length} FAILED` : "") +
-      ` in ${seconds(wallMs)} wall time (${jobs} at once; columns: duration, peak memory)`,
+      ` in ${seconds(wallMs)} wall time (up to ${jobs} at once; columns: duration, peak memory)`,
   );
   if (failed.length) {
     console.log("Failed:");
@@ -284,7 +284,9 @@ async function main() {
   if (!hasUnitTests(webDir) && [null, "unit"].includes(options.group))
     console.log(`Note: no bun test files in ${UNIT_DIR}/; no unit step.`);
   const jobs = parseJobs(process.env.VALIDATION_JOBS, availableParallelism());
-  console.log(`Running ${steps.length} validation steps, ${jobs} at once.\n`);
+  console.log(
+    `Running ${steps.length} validation step(s), up to ${jobs} at once (VALIDATION_JOBS).\n`,
+  );
   const start = performance.now();
   const results = await runSteps(steps, { jobs, webDir });
   printSummary(results, performance.now() - start, jobs);
