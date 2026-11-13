@@ -291,3 +291,53 @@ test("settled() applies a pending Fit View before a point is projected", async (
     views.settled,
   );
 });
+
+// Every fixture click awaits settled() before and after, and a test that
+// scans a model for a face clicks hundreds of times. settled() must not draw
+// on its own account: it waits for the frames the viewport has asked for, and
+// returns at once when there are none.
+test("settled() draws nothing when the viewport is up to date, and waits for a frame that is due", async ({
+  page,
+}) => {
+  await openBox(page);
+  await page.waitForFunction(() =>
+    Boolean(
+      (window as unknown as { __kofemViewport?: unknown }).__kofemViewport,
+    ),
+  );
+
+  const drawn = await page.evaluate(async () => {
+    const hooks = (window as unknown as { __kofemViewport: ViewportHooks })
+      .__kofemViewport;
+    const canvas = document.querySelector("canvas");
+    if (!canvas) throw new Error("the viewport canvas is not mounted");
+    const gl = canvas.getContext("webgl2");
+    if (!gl) throw new Error("the viewport canvas has no WebGL 2 context");
+    await hooks.settled();
+
+    // Every rendered frame clears the canvas and draws the model.
+    let calls = 0;
+    const counted =
+      <Args extends unknown[]>(draw: (...args: Args) => void) =>
+      (...args: Args) => {
+        calls += 1;
+        draw(...args);
+      };
+    gl.clear = counted(gl.clear.bind(gl));
+    gl.drawElements = counted(gl.drawElements.bind(gl));
+    gl.drawArrays = counted(gl.drawArrays.bind(gl));
+
+    await hooks.settled();
+    await hooks.settled();
+    const upToDate = calls;
+    hooks.lookFrom([-1, 0, 0]);
+    await hooks.settled();
+    return { upToDate, afterTurn: calls - upToDate };
+  });
+
+  expect(drawn.upToDate, "settled() drew a frame nobody asked for").toBe(0);
+  expect(
+    drawn.afterTurn,
+    "settled() returned before the turned view was drawn",
+  ).toBeGreaterThan(0);
+});

@@ -24,7 +24,7 @@ export interface ViewportHooks {
 // Exposes the viewport camera to Playwright as window.__kofemViewport, beside
 // the store (__kofemStore) and the worker (__kofem) already exposed.
 export function ViewportTestHooks() {
-  const { camera, controls, gl, invalidate } = useThree();
+  const { camera, controls, gl, invalidate, get } = useThree();
 
   useEffect(() => {
     const hooks: ViewportHooks = {
@@ -61,15 +61,17 @@ export function ViewportTestHooks() {
         // The scene's tree applies a store change in a scheduled task (see
         // pickingEvents); apply it now, effects included.
         flushSync(() => {});
+        // Whatever needs drawing has asked for a frame by now. With none
+        // asked for, the canvas already shows this state. settled() draws
+        // nothing itself: a test may call it hundreds of times.
+        if (get().internal.frames === 0) return Promise.resolve();
         // R3F runs its tail callbacks when a frame finds nothing left to
-        // draw and the render loop stops. Asking for one frame first makes
-        // sure the loop runs and the tail comes.
+        // draw and the render loop stops.
         return new Promise<void>((resolve) => {
           const unsubscribe = addTail(() => {
             unsubscribe();
             resolve();
           });
-          invalidate();
         });
       },
     };
@@ -80,7 +82,7 @@ export function ViewportTestHooks() {
     return () => {
       if (host.__kofemViewport === hooks) delete host.__kofemViewport;
     };
-  }, [camera, controls, gl, invalidate]);
+  }, [camera, controls, gl, invalidate, get]);
 
   return null;
 }
