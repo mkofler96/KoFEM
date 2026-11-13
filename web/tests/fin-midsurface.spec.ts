@@ -170,7 +170,8 @@ test("mesh-time auto-shell: the fin is stored as a mid-surface shell mesh", asyn
     for (const n of tip)
       loads.push({ nodeId: n.id, dof: 1, value: 500 / tip.length });
     const result = (await win.__kofem.sendToWorker("solve", {
-      solverMethod: "gauss-seidel",
+      // The app's default solver: AMG takes mixed shell/solid models.
+      solverMethod: "amg",
       nodes: state.nodes,
       elements: state.elements,
       materials: state.materials,
@@ -195,4 +196,11 @@ test("mesh-time auto-shell: the fin is stored as a mid-surface shell mesh", asyn
   expect(solved.allFinite).toBe(true);
   expect(solved.maxMag).toBeGreaterThan(0);
   expect(logs.some((l) => l.includes("[coupled] converged"))).toBe(true);
+  // The Rust mixed solve (KOF-308) carried it, with AMG, the default solver.
+  expect(logs.some((l) => l.includes("[coupled] Rust solve"))).toBe(true);
+  expect(
+    logs.some((l) =>
+      l.includes("[coupled] preconditioner: smoothed-aggregation AMG"),
+    ),
+  ).toBe(true);
 });

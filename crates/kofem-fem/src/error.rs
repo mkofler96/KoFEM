@@ -119,9 +119,10 @@ pub enum FemError {
     )]
     CouplingCycle { first: usize, second: usize },
     #[error(
-        "{what} DOF {component} of node {node} lies on a node that follows a distributing or \
-         kinematic coupling — its motion is governed by the coupling, so the condition cannot \
-         be honoured. Constrain the coupled nodes or a kinematic reference point instead"
+        "{what} DOF {component} of node {node} lies on a node that follows a coupling \
+         (distributing, kinematic, or a shell-to-solid seam or footprint) — its motion is \
+         governed by the coupling, so the condition cannot be honoured. Constrain the coupled \
+         nodes or a kinematic reference point instead"
     )]
     ConstraintOnCoupledDof {
         node: usize,
@@ -130,7 +131,7 @@ pub enum FemError {
     },
     #[error(
         "node {node} has no rotational degree of freedom, but a {what} acts on its DOF \
-         {component} — only a coupling reference point carries rotations"
+         {component} — only shell nodes and coupling reference points carry rotations"
     )]
     RotationWithoutDof {
         node: usize,
@@ -142,6 +143,11 @@ pub enum FemError {
          the load would be lost"
     )]
     LoadWithoutStiffness { node: usize, component: usize },
+    #[error(
+        "shells mixed with solids are supported on linear tetrahedra only, but this mesh is \
+         quadratic"
+    )]
+    ShellOnQuadraticMesh,
     #[error("triangle array has {len} indices, which is not a multiple of 3")]
     TriangleArrayLength { len: usize },
     #[error("the shell mesh has no triangles")]

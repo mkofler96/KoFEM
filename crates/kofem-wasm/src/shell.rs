@@ -10,7 +10,7 @@ use kofem_fem::{
 };
 use wasm_bindgen::prelude::*;
 
-use crate::{parse_materials, to_js, SolveRun};
+use crate::{parse_materials, to_js, RunOutput, SolveRun};
 
 /// A validated Kirchhoff shell model (CST membrane + DKT bending facets).
 #[wasm_bindgen]
@@ -112,6 +112,7 @@ impl ShellModel {
             run,
             preconditioner,
             reduction: None,
+            output: RunOutput::Translations,
         })
     }
 

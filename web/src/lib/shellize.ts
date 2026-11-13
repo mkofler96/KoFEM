@@ -4,7 +4,8 @@
 // Solid → shell idealisation used by the solver worker: find the thin walls of
 // the body the user marked Shell, collapse them to a Kirchhoff shell
 // mid-surface (per-wall thickness), keep the other bodies as solid tets, and
-// build the inputs for the engine's coupled solve (engine/cpp/solve_coupled.cpp).
+// build the inputs for the coupled solve — the Rust mixed solve
+// (lib/solve/coupledRust.ts), with the engine's solve_coupled as its oracle.
 //
 // The geometry runs in Rust (crates/kofem-shellize, through the kofem-wasm
 // module; KOF-297). This file only converts between the app's arrays and that

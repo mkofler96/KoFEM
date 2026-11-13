@@ -838,9 +838,12 @@
     <p>The coupled solve uses six slots per pool node. Solid stiffness occupies
       the three translational slots; shell stiffness occupies the shell node’s
       translations and rotations. Unused rotations on solid-only nodes are
-      fixed, except at a coupling reference that needs them. MFEM assembles
-      linear tetrahedral solid stiffness, while the
-      <a href="/theory/shells/formulation/#stiffness">CST/DKT core</a> adds shells.</p>
+      fixed, except at a coupling reference that needs them. The app assembles
+      the linear tetrahedral solid stiffness and the
+      <a href="/theory/shells/formulation/#stiffness">CST/DKT shells</a> in its
+      Rust solver module and solves the reduced system there; the C++ engine’s
+      MFEM coupled assembler solves the same model and is kept as the reference
+      the Rust solve is checked against.</p>
     <p>A constraint expresses dependent coefficients as linear combinations of
       independent coefficients. Write the full vector as
       <math><mi mathvariant="bold" class="math-bold">d</mi><mo>=</mo></math>​<span class="math-nowrap"><math><mi mathvariant="bold" class="math-bold">T</mi><mi mathvariant="bold" class="math-bold">q</mi></math>,</span> where <math><mi mathvariant="bold" class="math-bold">q</mi></math>
@@ -1013,7 +1016,14 @@
         <a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/crates/kofem-shellize/src/footprint.rs#L185">physical footprint detection</a>,
         <a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/engine/cpp/coupling_constraints.cpp#L43">footprint equations</a>,
         <a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/engine/cpp/shell_core.cpp#L92">constraint reduction</a> and
-        <a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/engine/cpp/solve_coupled.cpp#L1">MFEM/WASM coupled assembler</a>.</li>
+        <a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/engine/cpp/solve_coupled.cpp#L1">MFEM/WASM coupled assembler</a>,
+        the C++ reference for the Rust mixed solve the app runs: the reduction
+        in <code>crates/kofem-fem/src/coupled_static.rs</code>, the coupling
+        equations in <code>crates/kofem-fem/src/coupling.rs</code> and the browser
+        binding in <code>crates/kofem-wasm/src/mixed.rs</code>, compared against
+        it by <code>web/tests/test_coupled_rust.mjs</code>. The linked sources
+        are pinned to the revision of this page’s evidence, which predates the
+        Rust mixed solve.</li>
       <li><a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/engine/cpp/coupling_constraints.cpp#L149">relaxed seam MPC and distributing equations</a>,
         <a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/crates/kofem-shellize/src/ties.rs#L153">coupled surface ties</a>,
         <a href="https://github.com/mkofler96/KoFEM/blob/697d96077af3493710aa099191fe9903132a54f7/web/src/lib/solve/solid.ts#L101">solid tie welding</a>,

@@ -8,6 +8,7 @@ import createModule, { EngineLoadError } from "../wasm/pkg/kofem_wasm.js";
 import {
   Couplings,
   ElasticModel,
+  MixedModel,
   ShellModel,
   SolveOptions,
 } from "../wasm/fem/kofem_wasm.js";
@@ -50,6 +51,10 @@ import {
 import { routeSolve, routeTopOpt, topOptStartLog } from "../lib/solve/route.js";
 import { buildShellEngineInputs } from "../lib/solve/shell.js";
 import { solveShellInRust } from "../lib/solve/shellRust.js";
+import {
+  solveCoupledInRust,
+  type MixedPreconditionerName,
+} from "../lib/solve/coupledRust.js";
 import {
   amgFallbackPreconditioner,
   amgUnavailableReason,
@@ -614,12 +619,35 @@ async function handleShellSolve(id: number, payload: SolvePayload) {
   });
 }
 
-// Solve a hand-mixed shell+solid model, or an all-solid model carrying a
-// surface-to-point coupling, through the engine's coupled solid-shell solver —
-// or, for the all-solid model with AMG chosen, through the Rust solver on the
-// same inputs, with the chosen element order. The engine's coupled assembler
-// is linear tets + DKT facets, so elementOrder does not apply there, and the
-// solve says so.
+// The mixed (solid + shell) Rust solve of the coupled assembler's inputs,
+// with AMG when it was chosen and covers the model, otherwise the engine's
+// incomplete Cholesky preconditioner. The C++ engine's solve_coupled takes
+// the same inputs and stays the test oracle (tests/test_coupled_rust.mjs).
+function solveMixed(
+  inputs: Parameters<typeof solveCoupledInRust>[1],
+  payload: SolvePayload,
+  log: SolveLog,
+) {
+  const preconditioner: MixedPreconditionerName =
+    requestedSolver(payload) === "amg" && amgReason(payload) === null
+      ? "amg"
+      : "incomplete-cholesky";
+  return solveCoupledInRust(
+    { MixedModel, Couplings },
+    inputs,
+    preconditioner,
+    payload.cgIterationLimit,
+    onCgLimit,
+    log,
+  );
+}
+
+// Solve a hand-mixed shell+solid model through the Rust mixed solve, or an
+// all-solid model carrying a surface-to-point coupling through the Rust AMG
+// solver (when chosen, with the chosen element order) or the engine's coupled
+// solver, all on the same inputs. The mixed solve and the engine's coupled
+// assembler are linear tets + DKT facets, so elementOrder does not apply
+// there, and the solve says so.
 async function handleMixedSolve(id: number, payload: SolvePayload) {
   const inp = buildCoupledEngineInputs(payload, logTo(id));
 
@@ -627,26 +655,33 @@ async function handleMixedSolve(id: number, payload: SolvePayload) {
     id,
     log: `[mixed] ${inp.solidElements.length} solid tets (${inp.solidMaterialNames.join(", ")}), ${inp.shellElements.length} shell facets${inp.shellMaterialNames.length > 0 ? ` (${inp.shellMaterialNames.join(", ")})` : ""} → ${inp.model.pool.length / 3} pool nodes, ${inp.couplingCount} couplings (${inp.declaredCouplings} declared)…`,
   });
-
   // eslint-disable-next-line kofem/no-silent-fallback -- elementOrder is optional in the solve message; the documented default is linear elements
   const order = payload.elementOrder ?? 1;
+  const hasShells = inp.shellElements.length > 0;
   const useAmg =
     requestedSolver(payload) === "amg" && amgReason(payload) === null;
-  if (!useAmg && order !== 1)
+  if (hasShells && order !== 1)
+    self.postMessage({
+      id,
+      log: "[mixed] Shell and solid elements solve together with linear tetrahedra; quadratic elements apply to all-solid models.",
+    });
+  else if (!useAmg && order !== 1)
     self.postMessage({
       id,
       log: `The coupled solver has linear elements only — solving with linear instead of order-${order} elements.`,
     });
-  const result = useAmg
-    ? await solveCoupledSolidWithAmg(
-        { ElasticModel, SolveOptions, Couplings },
-        inp,
-        order,
-        payload.cgIterationLimit,
-        onCgLimit,
-        logTo(id),
-      )
-    : await m().solve_coupled(inp.mesh, inp.coupling, inp.bcs, inp.matJson);
+  const result = hasShells
+    ? await solveMixed(inp, payload, logTo(id))
+    : useAmg
+      ? await solveCoupledSolidWithAmg(
+          { ElasticModel, SolveOptions, Couplings },
+          inp,
+          order,
+          payload.cgIterationLimit,
+          onCgLimit,
+          logTo(id),
+        )
+      : await m().solve_coupled(inp.mesh, inp.coupling, inp.bcs, inp.matJson);
   if ("error" in result) throw new Error(result.error);
   const fields = mapMixedResult(payload, inp.model, result);
 
@@ -672,14 +707,7 @@ async function handleAutoShellSolve(
   let fields: SolveResultFields | null = null;
   const coupled = prepareAutoCoupledSolve(payload, shellBodyIds, log);
   if (coupled) {
-    const result = await m().solve_coupled(
-      coupled.mesh,
-      coupled.coupling,
-      coupled.bcs,
-      coupled.matJson,
-    );
-    if ("error" in result) throw new Error(result.error);
-    fields = coupled.mapResult(result);
+    fields = coupled.mapResult(await solveMixed(coupled, payload, log));
   } else {
     const pure = preparePureShellSolve(payload, shellBodyIds, log);
     if (pure) fields = pure.mapResult(await solveShell(pure, payload, log));

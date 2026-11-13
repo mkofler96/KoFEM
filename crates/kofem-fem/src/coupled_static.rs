@@ -1,20 +1,23 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! One linear-elastic load case on a tetrahedral mesh with surface-to-point
-//! couplings — the master–slave reduction `K_r = TᵀKT` of the engine's coupled
-//! solve (`solve_reduced_system` in `shell_core.cpp`), arranged so the
-//! multigrid preconditioner can take it.
+//! One linear-elastic load case on a tetrahedral mesh with couplings, and
+//! optionally Kirchhoff shell facets over the same node pool — the
+//! master–slave reduction `K_r = TᵀKT` of the engine's coupled solve
+//! (`solve_solid_shell_core` and `solve_reduced_system` in `shell_core.cpp`),
+//! arranged so the multigrid preconditioner can take it.
 //!
 //! The full numbering has six DOFs per node (6·node + component). A node's
 //! translations are unknowns unless a coupling eliminates them; its rotations
-//! exist only on coupling reference points (elsewhere a solid node has no
-//! rotational stiffness, and they are held at zero). The reduced system keeps
-//! the independent DOFs in blocks of three — a node's translations, or a
-//! reference point's rotations — so the multigrid sees the node blocks it
-//! aggregates; a rotation block gets rotation near-null-space modes. A block
-//! of which a coupling eliminates only some components keeps those as rows
-//! held at zero, and the coupling restores their value after the solve.
+//! exist only on shell nodes and coupling reference points (elsewhere a solid
+//! node has no rotational stiffness, and they are held at zero). The solid
+//! tets stiffen the translations, the shell facets all six DOFs of their
+//! nodes. The reduced system keeps the independent DOFs in blocks of three —
+//! a node's translations, or its rotations — so the multigrid sees the node
+//! blocks it aggregates; a rotation block gets rotation near-null-space
+//! modes. A block of which a coupling eliminates only some components keeps
+//! those as rows held at zero, and the coupling restores their value after
+//! the solve.
 //!
 //! On a quadratic mesh the edge nodes are nodes of the numbering too
 //! (vertices first, then one node per edge, as in [`TetMesh`]). Callers name
@@ -37,13 +40,18 @@
 //!   interpolation along the edge, e.g. across the face of a tie;
 //! * where both ends of an edge are fixed or prescribed in a translation,
 //!   the edge node gets the mean of the two values.
+//!
+//! Shell facets join linear tetrahedra only, as in the engine's coupled
+//! solve: a quadratic mesh with shells is refused.
 
 use crate::amg::{Preconditioner, SmoothedAggregation, SymmetricGaussSeidel};
 use crate::cg::{solve_pcg_with, CgSettings};
 use crate::constraints::{apply_dirichlet, Dirichlet};
 use crate::coupling::{Coupling, CouplingConstraints, CouplingKind, DOFS_PER_NODE};
 use crate::error::FemError;
-use crate::mesh::TetMesh;
+use crate::incomplete_cholesky::IncompleteCholesky;
+use crate::mesh::{ElementOrder, TetMesh};
+use crate::shell::{ShellMesh, SHELL_NODE_DOFS};
 use crate::sparse::CsrMatrix;
 use crate::static_solve::{PreconditionerChoice, PreparedStatic};
 use crate::LevelInfo;
@@ -102,7 +110,8 @@ impl CoupledReduction {
     /// full DOFs `dofs` and full loads `forces` (both 6 per node): the force
     /// (or moment) a support must apply there. Zero at free DOFs, up to the
     /// solver tolerance; zero at dependent DOFs, whose reaction is carried
-    /// by the independent DOFs they follow.
+    /// by the independent DOFs they follow. `stiffness` is the solid one (3
+    /// per node), so this holds for a model without shell facets only.
     ///
     /// # Errors
     /// Vectors of the wrong length.
@@ -251,9 +260,199 @@ pub fn prepare_coupled_static(
     forces: &[f64],
     preconditioner: PreconditionerChoice,
 ) -> Result<PreparedCoupled, FemError> {
+    // The relaxed MPC and the shell footprint tie a shell to a solid.
+    if let Some(index) = couplings.iter().position(|coupling| {
+        matches!(
+            coupling.kind,
+            CouplingKind::RelaxedMpc { .. } | CouplingKind::ShellFootprint
+        )
+    }) {
+        return Err(FemError::Coupling {
+            coupling: index,
+            reason: "it ties a shell to a solid, but the model has no shell elements".into(),
+        });
+    }
+    let PreparedMixed {
+        prepared,
+        reduction,
+        ..
+    } = prepare_mixed_static(
+        mesh,
+        stiffness,
+        None,
+        couplings,
+        fixed_dofs,
+        fixed_values,
+        forces,
+        MixedPreconditioner::Choice(preconditioner),
+    )?;
+    Ok(PreparedCoupled {
+        prepared,
+        reduction,
+    })
+}
+
+/// The shell facets of a mixed model and their assembled stiffness
+/// (`assemble_shell_stiffness`), over the same node pool as the solid mesh.
+#[derive(Clone, Copy)]
+pub struct ShellPart<'a> {
+    pub mesh: &'a ShellMesh,
+    pub stiffness: &'a CsrMatrix,
+}
+
+/// The preconditioner a mixed solve asks for.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum MixedPreconditioner {
+    /// One of the solid solve's preconditioners.
+    Choice(PreconditionerChoice),
+    /// IC(0) of `K_r` + shift·diag, the C++ engine's choice for coupled
+    /// solves, falling back to symmetric Gauss–Seidel when no shift lets it
+    /// factor.
+    IncompleteCholesky,
+}
+
+/// The preconditioner a mixed solve ended up with.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum AppliedPreconditioner {
+    SymmetricGaussSeidel,
+    SmoothedAggregation,
+    /// IC(0) of `K_r` + shift·diag(`K_r`).
+    IncompleteCholesky {
+        shift: f64,
+    },
+    /// IC(0) was asked for, but every shift broke down.
+    GaussSeidelAfterIncompleteCholesky,
+}
+
+/// A mixed load case ready for CG (see [`prepare_mixed_static`]).
+pub struct PreparedMixed {
+    /// The reduced system, its preconditioner and right-hand side.
+    /// `unused_vertices` counts the nodes held at zero because nothing
+    /// stiffens them.
+    pub prepared: PreparedStatic,
+    pub reduction: CoupledReduction,
+    pub preconditioner: AppliedPreconditioner,
+}
+
+/// Solve one mixed load case in one go (see [`prepare_mixed_static`]).
+///
+/// # Errors
+/// As [`prepare_mixed_static`], plus a CG breakdown or non-convergence.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the coupled load case's parts plus the shell facets"
+)]
+pub fn solve_mixed_static(
+    mesh: &TetMesh,
+    stiffness: &CsrMatrix,
+    shell: Option<ShellPart<'_>>,
+    couplings: &[Coupling],
+    fixed_dofs: &[u32],
+    fixed_values: &[f64],
+    forces: &[f64],
+    settings: CgSettings,
+    preconditioner: MixedPreconditioner,
+) -> Result<CoupledSolution, FemError> {
+    let PreparedMixed {
+        mut prepared,
+        reduction,
+        ..
+    } = prepare_mixed_static(
+        mesh,
+        stiffness,
+        shell,
+        couplings,
+        fixed_dofs,
+        fixed_values,
+        forces,
+        preconditioner,
+    )?;
+    let (reduced, outcome) = solve_pcg_with(prepared.system.as_mut(), &prepared.rhs, settings)?;
+    Ok(CoupledSolution {
+        dofs: reduction.expand(&reduced),
+        iterations: outcome.iterations,
+        relative_residual: outcome.relative_residual,
+        levels: prepared.levels,
+    })
+}
+
+/// Check one mixed solid + shell load case and set up its reduced system for
+/// CG: the solid tets of `mesh` (stiffness from `assemble_stiffness`) and, if
+/// given, the shell facets of `shell` over the same node pool, joined by
+/// `couplings` — the engine's `solve_coupled`. Rotations are unknowns on
+/// shell nodes and on the reference points of every coupling but a shell
+/// footprint (whose reference is a solid node).
+///
+/// `fixed_dofs`/`fixed_values` and `forces` use the 6-per-node numbering: a
+/// fixed or prescribed rotation, or a moment, is valid on a node with
+/// rotations only — except a zero rotation on another node, which holds a
+/// DOF that is held anyway. Every node that nothing stiffens (no element or
+/// coupling uses it) is held at zero, after checking that nothing loads it.
+///
+/// `mesh` may be quadratic without shells (see the module notes for its edge
+/// nodes); shells join linear tetrahedra only.
+///
+/// # Errors
+/// Shells over a quadratic mesh, a shell mesh over another node pool, malformed
+/// couplings (see [`CouplingConstraints::build`]) or a cycle of them,
+/// malformed forces or constraints, a constraint on a DOF a coupling
+/// eliminates, a rotation load or prescribed rotation on a node without
+/// rotations, a load on a DOF nothing stiffens, or a multigrid setup that
+/// finds the model under-constrained.
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the coupled load case's parts plus the shell facets"
+)]
+pub fn prepare_mixed_static(
+    mesh: &TetMesh,
+    stiffness: &CsrMatrix,
+    shell: Option<ShellPart<'_>>,
+    couplings: &[Coupling],
+    fixed_dofs: &[u32],
+    fixed_values: &[f64],
+    forces: &[f64],
+    preconditioner: MixedPreconditioner,
+) -> Result<PreparedMixed, FemError> {
     check_load_case(mesh, stiffness, fixed_dofs, fixed_values, forces)?;
-    let (reduction, blocks) = CoupledReduction::new(mesh, couplings)?;
-    let mut matrix = reduced_stiffness(&reduction, mesh, stiffness, blocks.points.len())?;
+    if let Some(part) = shell {
+        if mesh.order() != ElementOrder::Linear {
+            return Err(FemError::ShellOnQuadraticMesh);
+        }
+        check_shell_part(mesh, part)?;
+    }
+    let solid_used: Vec<bool> = (0..mesh.node_count())
+        .map(|node| mesh.is_used(node))
+        .collect();
+    // With shells the mesh is linear, so its nodes are the shell's vertices.
+    let shell_used: Vec<bool> = shell.map_or_else(Vec::new, |part| {
+        (0..part.mesh.vertex_count())
+            .map(|node| part.mesh.is_used(node))
+            .collect()
+    });
+    let mut has_rotation = shell_used.clone();
+    has_rotation.resize(mesh.node_count(), false);
+    for coupling in couplings {
+        if coupling.kind == CouplingKind::ShellFootprint {
+            continue;
+        }
+        if let Some(flag) = has_rotation.get_mut(coupling.reference) {
+            *flag = true;
+        }
+    }
+    let (reduction, blocks) = CoupledReduction::new(mesh, &has_rotation, couplings)?;
+    let mut parts = vec![StiffnessPart {
+        matrix: stiffness,
+        node_dofs: 3,
+        used: &solid_used,
+    }];
+    if let Some(part) = shell {
+        parts.push(StiffnessPart {
+            matrix: part.stiffness,
+            node_dofs: SHELL_NODE_DOFS,
+            used: &shell_used,
+        });
+    }
+    let mut matrix = reduced_stiffness(&reduction, &parts, blocks.points.len())?;
     let mut rhs = reduced_load(&reduction, forces)?;
     let (fixed_dofs, fixed_values) = supports_with_edge_nodes(mesh, fixed_dofs, fixed_values);
     let mut prescribed = reduced_constraints(&reduction, &fixed_dofs, &fixed_values)?;
@@ -266,24 +465,10 @@ pub fn prepare_coupled_static(
     let dirichlet = Dirichlet::new(reduction.reduced_count(), &dofs, &values)?;
     apply_dirichlet(&mut matrix, &mut rhs, &dirichlet);
 
-    let (system, levels): (Box<dyn Preconditioner>, Vec<LevelInfo>) = match preconditioner {
-        PreconditionerChoice::SymmetricGaussSeidel => {
-            (Box::new(SymmetricGaussSeidel::new(matrix)), Vec::new())
-        }
-        PreconditionerChoice::SmoothedAggregation(amg_settings) => {
-            let constrained: Vec<bool> = prescribed.iter().map(Option::is_some).collect();
-            let amg = SmoothedAggregation::with_rotation_nodes(
-                matrix,
-                &blocks.points,
-                &blocks.rotation,
-                &constrained,
-                amg_settings,
-            )?;
-            let levels = amg.levels();
-            (Box::new(amg), levels)
-        }
-    };
-    Ok(PreparedCoupled {
+    let constrained: Vec<bool> = prescribed.iter().map(Option::is_some).collect();
+    let (system, levels, applied) =
+        mixed_preconditioner(matrix, &blocks, &constrained, preconditioner)?;
+    Ok(PreparedMixed {
         prepared: PreparedStatic {
             system,
             rhs,
@@ -291,7 +476,102 @@ pub fn prepare_coupled_static(
             unused_vertices: held_nodes,
         },
         reduction,
+        preconditioner: applied,
     })
+}
+
+/// A preconditioner over the reduced system, its multigrid levels (empty
+/// unless multigrid) and what it ended up as.
+type BuiltPreconditioner = (
+    Box<dyn Preconditioner>,
+    Vec<LevelInfo>,
+    AppliedPreconditioner,
+);
+
+/// The preconditioner of a mixed solve over the reduced `matrix`.
+/// `constrained` marks the reduced unknowns held by a Dirichlet condition.
+fn mixed_preconditioner(
+    matrix: CsrMatrix,
+    blocks: &Blocks,
+    constrained: &[bool],
+    preconditioner: MixedPreconditioner,
+) -> Result<BuiltPreconditioner, FemError> {
+    Ok(match preconditioner {
+        MixedPreconditioner::Choice(PreconditionerChoice::SymmetricGaussSeidel) => (
+            Box::new(SymmetricGaussSeidel::new(matrix)),
+            Vec::new(),
+            AppliedPreconditioner::SymmetricGaussSeidel,
+        ),
+        MixedPreconditioner::Choice(PreconditionerChoice::SmoothedAggregation(amg_settings)) => {
+            let amg = SmoothedAggregation::with_rotation_nodes(
+                matrix,
+                &blocks.points,
+                &blocks.rotation,
+                constrained,
+                amg_settings,
+            )?;
+            let levels = amg.levels();
+            (
+                Box::new(amg),
+                levels,
+                AppliedPreconditioner::SmoothedAggregation,
+            )
+        }
+        MixedPreconditioner::IncompleteCholesky => match IncompleteCholesky::new(matrix) {
+            Ok(factored) => {
+                let shift = factored.shift();
+                (
+                    Box::new(factored),
+                    Vec::new(),
+                    AppliedPreconditioner::IncompleteCholesky { shift },
+                )
+            }
+            Err(matrix) => (
+                Box::new(SymmetricGaussSeidel::new(matrix)),
+                Vec::new(),
+                AppliedPreconditioner::GaussSeidelAfterIncompleteCholesky,
+            ),
+        },
+    })
+}
+
+/// The shell mesh must be built over the solid mesh's node pool: the same
+/// vertices, in the same order.
+fn check_shell_part(mesh: &TetMesh, part: ShellPart<'_>) -> Result<(), FemError> {
+    let nodes = mesh.vertex_count();
+    if part.mesh.vertex_count() != nodes {
+        return Err(FemError::CouplingInput {
+            reason: format!(
+                "the shell mesh has {} vertices, but the solid mesh {nodes} — both must share \
+                 one node pool",
+                part.mesh.vertex_count()
+            ),
+        });
+    }
+    #[allow(
+        clippy::float_cmp,
+        reason = "one node pool means bit-identical coordinates, not nearby ones"
+    )]
+    let moved = (0..nodes).find(|&node| part.mesh.vertices()[node] != mesh.vertices()[node]);
+    if let Some(node) = moved {
+        return Err(FemError::CouplingInput {
+            reason: format!(
+                "vertex {node} lies at {:?} in the shell mesh but at {:?} in the solid mesh — \
+                 both must share one node pool",
+                part.mesh.vertices()[node],
+                mesh.vertices()[node]
+            ),
+        });
+    }
+    if part.stiffness.rows() != SHELL_NODE_DOFS * nodes {
+        return Err(FemError::CouplingInput {
+            reason: format!(
+                "the shell stiffness has {} rows for {nodes} nodes",
+                part.stiffness.rows()
+            ),
+        });
+    }
+    Ok(())
 }
 
 /// Check the parts of a coupled load case against the mesh.
@@ -350,20 +630,19 @@ struct Blocks {
 
 impl CoupledReduction {
     /// The couplings' equations and the reduced blocks: a node's translations
-    /// unless a coupling eliminates all three, and a reference point's
-    /// rotations likewise. On a quadratic mesh the couplings reach the edge
-    /// nodes first (see the module notes).
-    fn new(mesh: &TetMesh, couplings: &[Coupling]) -> Result<(Self, Blocks), FemError> {
-        let nodes = mesh.node_count();
-        let mut has_rotation = vec![false; nodes];
-        for coupling in couplings {
-            if let Some(flag) = has_rotation.get_mut(coupling.reference) {
-                *flag = true;
-            }
-        }
+    /// unless a coupling eliminates all three, and the rotations of a node
+    /// with rotations (`has_rotation`, one flag per node) likewise. On a
+    /// quadratic mesh the couplings reach the edge nodes first (see the
+    /// module notes).
+    fn new(
+        mesh: &TetMesh,
+        has_rotation: &[bool],
+        couplings: &[Coupling],
+    ) -> Result<(Self, Blocks), FemError> {
+        let points = mesh.node_coordinates();
+        let nodes = points.len();
         let extended = couplings_with_edge_nodes(mesh, couplings);
-        let mut constraints =
-            CouplingConstraints::build(mesh.node_coordinates(), &extended, &has_rotation)?;
+        let mut constraints = CouplingConstraints::build(points, &extended, has_rotation)?;
         let vertices = mesh.vertex_count();
         for (edge, &[first, second]) in mesh.edges().iter().enumerate() {
             constraints.follow_edge_ends(vertices + edge, [first as usize, second as usize])?;
@@ -376,12 +655,7 @@ impl CoupledReduction {
             points: Vec::new(),
             rotation: Vec::new(),
         };
-        for (node, (&point, &rotates)) in mesh
-            .node_coordinates()
-            .iter()
-            .zip(&has_rotation)
-            .enumerate()
-        {
+        for (node, (&point, &rotates)) in points.iter().zip(has_rotation).enumerate() {
             for rotation in [false, true] {
                 if rotation && !rotates {
                     continue;
@@ -550,49 +824,83 @@ fn hold_unstiffened(
     Ok(held_nodes)
 }
 
-/// `K_r = TᵀKT` over the reduced blocks: the pattern from the node graph of K
-/// through the coupling equations, then the values.
+/// One assembled stiffness over the node pool, `node_dofs` DOFs per node
+/// (3 for the solid tets, 6 for the shell facets): row `node_dofs·node + c`
+/// is full DOF `6·node + c`, and the matrix stores `node_dofs`-square node
+/// blocks. `used[node]` says whether any element of this part uses the node.
+struct StiffnessPart<'a> {
+    matrix: &'a CsrMatrix,
+    node_dofs: usize,
+    used: &'a [bool],
+}
+
+impl StiffnessPart<'_> {
+    /// The full (6 per node) DOF of a row or column of this part.
+    fn full_dof(&self, index: usize) -> usize {
+        DOFS_PER_NODE * (index / self.node_dofs) + index % self.node_dofs
+    }
+}
+
+/// `K_r = Σ TᵀKT` over the reduced blocks and every stiffness part: the
+/// pattern from the node graphs of the parts through the coupling equations,
+/// then the values.
 fn reduced_stiffness(
     reduction: &CoupledReduction,
-    mesh: &TetMesh,
-    stiffness: &CsrMatrix,
+    parts: &[StiffnessPart<'_>],
     blocks: usize,
 ) -> Result<CsrMatrix, FemError> {
-    let nodes = mesh.node_count();
-    // Blocks each node's translations reach: its own, or those it follows.
-    let blocks_of_node: Vec<Vec<u32>> = (0..nodes)
-        .map(|node| {
-            let mut list = Vec::new();
-            for component in 0..3 {
-                reduction.for_each_term(DOFS_PER_NODE * node + component, |slot, _| {
-                    list.push(to_u32(slot / 3));
-                });
-            }
-            list.sort_unstable();
-            list.dedup();
-            list
-        })
-        .collect();
+    let nodes = reduction.slot_of.len() / DOFS_PER_NODE;
+    // Blocks each node's DOFs reach, translations only or all six: its own,
+    // or those it follows.
+    let reach = |components: usize| -> Vec<Vec<u32>> {
+        (0..nodes)
+            .map(|node| {
+                let mut list = Vec::new();
+                for component in 0..components {
+                    reduction.for_each_term(DOFS_PER_NODE * node + component, |slot, _| {
+                        list.push(to_u32(slot / 3));
+                    });
+                }
+                list.sort_unstable();
+                list.dedup();
+                list
+            })
+            .collect()
+    };
+    let translation_blocks = reach(3);
+    let all_blocks = if parts.iter().any(|part| part.node_dofs == DOFS_PER_NODE) {
+        reach(DOFS_PER_NODE)
+    } else {
+        Vec::new()
+    };
     let mut adjacency: Vec<Vec<u32>> = (0..blocks).map(|block| vec![to_u32(block)]).collect();
     let mut reached: Vec<u32> = Vec::new();
-    for (node, own) in blocks_of_node.iter().enumerate() {
-        // A node no element uses has an all-zero stiffness row: it adds no
-        // entry. Skipping it matters for a distributing reference point, which
-        // would otherwise join every pair of its coupled nodes.
-        if own.is_empty() || !mesh.is_used(node) {
-            continue;
-        }
-        reached.clear();
-        // The pattern stores 3×3 node blocks: every third column of the
-        // node's first row is one neighbour.
-        let row = stiffness.row_range(3 * node);
-        for &column in stiffness.columns()[row].iter().step_by(3) {
-            reached.extend_from_slice(&blocks_of_node[column as usize / 3]);
-        }
-        reached.sort_unstable();
-        reached.dedup();
-        for &block in own {
-            adjacency[block as usize].extend_from_slice(&reached);
+    for part in parts {
+        let blocks_of_node = if part.node_dofs == DOFS_PER_NODE {
+            &all_blocks
+        } else {
+            &translation_blocks
+        };
+        for (node, own) in blocks_of_node.iter().enumerate() {
+            // A node no element of this part uses has all-zero rows here: it
+            // adds no entry. Skipping it matters for a distributing reference
+            // point, which would otherwise join every pair of its coupled
+            // nodes.
+            if own.is_empty() || !part.used[node] {
+                continue;
+            }
+            reached.clear();
+            // The pattern stores node blocks: every node_dofs-th column of
+            // the node's first row is one neighbour.
+            let row = part.matrix.row_range(part.node_dofs * node);
+            for &column in part.matrix.columns()[row].iter().step_by(part.node_dofs) {
+                reached.extend_from_slice(&blocks_of_node[column as usize / part.node_dofs]);
+            }
+            reached.sort_unstable();
+            reached.dedup();
+            for &block in own {
+                adjacency[block as usize].extend_from_slice(&reached);
+            }
         }
     }
     for list in &mut adjacency {
@@ -604,36 +912,39 @@ fn reduced_stiffness(
 
     let mut row_terms: Vec<(usize, f64)> = Vec::new();
     let mut column_terms: Vec<(usize, f64)> = Vec::new();
-    for row in 0..3 * nodes {
-        row_terms.clear();
-        reduction.for_each_term(full_dof(row), |slot, coefficient| {
-            row_terms.push((slot, coefficient));
-        });
-        if row_terms.is_empty() {
-            continue;
-        }
-        for index in stiffness.row_range(row) {
-            let value = stiffness.values()[index];
-            if value == 0.0 {
+    for part in parts {
+        let stiffness = part.matrix;
+        for row in 0..part.node_dofs * nodes {
+            row_terms.clear();
+            reduction.for_each_term(part.full_dof(row), |slot, coefficient| {
+                row_terms.push((slot, coefficient));
+            });
+            if row_terms.is_empty() {
                 continue;
             }
-            column_terms.clear();
-            reduction.for_each_term(
-                full_dof(stiffness.columns()[index] as usize),
-                |slot, coefficient| {
-                    column_terms.push((slot, coefficient));
-                },
-            );
-            for &(lhs, lhs_coefficient) in &row_terms {
-                for &(rhs, rhs_coefficient) in &column_terms {
-                    let at = matrix
-                        .find(lhs, rhs)
-                        .ok_or_else(|| FemError::CouplingInput {
-                            reason:
-                                "the reduced stiffness pattern misses an entry (internal error)"
+            for index in stiffness.row_range(row) {
+                let value = stiffness.values()[index];
+                if value == 0.0 {
+                    continue;
+                }
+                column_terms.clear();
+                reduction.for_each_term(
+                    part.full_dof(stiffness.columns()[index] as usize),
+                    |slot, coefficient| {
+                        column_terms.push((slot, coefficient));
+                    },
+                );
+                for &(lhs, lhs_coefficient) in &row_terms {
+                    for &(rhs, rhs_coefficient) in &column_terms {
+                        let at = matrix
+                            .find(lhs, rhs)
+                            .ok_or_else(|| FemError::CouplingInput {
+                                reason: "the reduced stiffness pattern misses an entry \
+                                         (internal error)"
                                     .into(),
-                        })?;
-                    matrix.values_mut()[at] += lhs_coefficient * rhs_coefficient * value;
+                            })?;
+                        matrix.values_mut()[at] += lhs_coefficient * rhs_coefficient * value;
+                    }
                 }
             }
         }
@@ -744,11 +1055,6 @@ fn supports_with_edge_nodes(
         }
     }
     (dofs, values)
-}
-
-/// The full (6 per node) DOF of a 3-per-node stiffness row.
-fn full_dof(row: usize) -> usize {
-    DOFS_PER_NODE * (row / 3) + row % 3
 }
 
 fn to_u32(index: usize) -> u32 {

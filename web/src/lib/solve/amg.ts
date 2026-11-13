@@ -6,10 +6,12 @@
 // which models it covers. The Rust module handles linear and quadratic
 // tetrahedra and hexahedra (alone or mixed) with per-body materials, supports
 // (fixed, roller, prescribed), nodal loads and surface loads on triangular and
-// quadrilateral faces, and surface-to-point couplings on tetrahedra. Pure-shell
-// models take the Rust shell solve (shellRust.ts), and shells, bodies solved
-// as shells and couplings AMG cannot take go to the coupled solver, both
-// preconditioned with incomplete Cholesky.
+// quadrilateral faces, and surface-to-point couplings on linear and quadratic
+// tetrahedra. Shells mixed with tets take the Rust mixed solve
+// (coupledRust.ts, linear tets only) with AMG too. Pure-shell models take the
+// Rust shell solve (shellRust.ts), and bodies solved as shells and couplings
+// AMG cannot take go to the coupled solver, both preconditioned with
+// incomplete Cholesky.
 //
 // The inputs are built by the same helpers as the MFEM payload
 // (packSolveMesh, resolveMaterials, groupDirichlet, groupPointLoads,
@@ -74,14 +76,27 @@ export function amgUnavailableReason(model: {
 }): string | null {
   if (model.elementOrder !== 1 && model.elementOrder !== 2)
     return "it supports linear and quadratic elements only";
-  if (model.elements.some((element) => element.type === "CTRIA3"))
-    return "it does not support shell elements";
+  const shellCount = model.elements.filter(
+    (element) => element.type === "CTRIA3",
+  ).length;
+  if (shellCount > 0 && shellCount === model.elements.length)
+    return "it does not support shell-only models";
   if (
     model.elements.some(
-      (element) => element.type !== "CTETRA" && element.type !== "CHEXA",
+      (element) =>
+        element.type !== "CTETRA" &&
+        element.type !== "CHEXA" &&
+        element.type !== "CTRIA3",
     )
   )
     return "it supports tetrahedral and hexahedral meshes only";
+  // Shells mixed with tets take the Rust mixed solve (coupledRust.ts), which
+  // is linear tets + DKT facets with every coupling, whatever the element
+  // order (as the engine's solve_coupled).
+  if (shellCount > 0)
+    return model.elements.some((element) => element.type === "CHEXA")
+      ? "it supports shells mixed with tetrahedra only"
+      : null;
   // The coupled model is built by the coupled solver's input builder, which
   // takes tetrahedra only.
   if (
@@ -375,6 +390,7 @@ export async function solveCoupledSolidWithAmg(
       Uint32Array.from(coupling.dof_mask),
       // eslint-disable-next-line kofem/no-silent-fallback -- weights are optional in the coupling set; absent means equal weights, as for solve_coupled
       coupling.weights ?? new Float64Array(0),
+      coupling.relaxation,
     );
     try {
       const perVertex = couplings.dofsPerVertex;

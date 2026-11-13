@@ -58,9 +58,12 @@ export default {
     <p>The coupled solve uses six slots per pool node. Solid stiffness occupies
       the three translational slots; shell stiffness occupies the shell node’s
       translations and rotations. Unused rotations on solid-only nodes are
-      fixed, except at a coupling reference that needs them. MFEM assembles
-      linear tetrahedral solid stiffness, while the
-      <a href="/theory/shells/formulation/#stiffness">CST/DKT core</a> adds shells.</p>
+      fixed, except at a coupling reference that needs them. The app assembles
+      the linear tetrahedral solid stiffness and the
+      <a href="/theory/shells/formulation/#stiffness">CST/DKT shells</a> in its
+      Rust solver module and solves the reduced system there; the C++ engine’s
+      MFEM coupled assembler solves the same model and is kept as the reference
+      the Rust solve is checked against.</p>
     <p>A constraint expresses dependent coefficients as linear combinations of
       independent coefficients. Write the full vector as
       ${tex("\\mathbf{d}=\\mathbf{T}\\mathbf{q}")}, where ${tex("\\mathbf{q}")}
@@ -274,7 +277,14 @@ export default {
         ${source("crates/kofem-shellize/src/footprint.rs", 185, "physical footprint detection")},
         ${source("engine/cpp/coupling_constraints.cpp", 43, "footprint equations")},
         ${source("engine/cpp/shell_core.cpp", 92, "constraint reduction")} and
-        ${source("engine/cpp/solve_coupled.cpp", 1, "MFEM/WASM coupled assembler")}.</li>
+        ${source("engine/cpp/solve_coupled.cpp", 1, "MFEM/WASM coupled assembler")},
+        the C++ reference for the Rust mixed solve the app runs: the reduction
+        in <code>crates/kofem-fem/src/coupled_static.rs</code>, the coupling
+        equations in <code>crates/kofem-fem/src/coupling.rs</code> and the browser
+        binding in <code>crates/kofem-wasm/src/mixed.rs</code>, compared against
+        it by <code>web/tests/test_coupled_rust.mjs</code>. The linked sources
+        are pinned to the revision of this page’s evidence, which predates the
+        Rust mixed solve.</li>
       <li>${source("engine/cpp/coupling_constraints.cpp", 149, "relaxed seam MPC and distributing equations")},
         ${source("crates/kofem-shellize/src/ties.rs", 153, "coupled surface ties")},
         ${source("web/src/lib/solve/solid.ts", 101, "solid tie welding")},
