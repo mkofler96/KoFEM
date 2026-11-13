@@ -579,7 +579,7 @@ function logTo(id: number): SolveLog {
 
 // The Kirchhoff shell solve of a { mesh, mat_json, bcs_json } payload, through
 // the Rust module (KOF-306). The C++ engine's solve_shell takes the same
-// payload and stays the test oracle (tests/test_shell_rust.mjs).
+// payload and stays the test oracle (tests/integration/shell-rust.test.mjs).
 function solveShell(
   inputs: Parameters<typeof solveShellInRust>[1],
   payload: SolvePayload,
@@ -622,7 +622,7 @@ async function handleShellSolve(id: number, payload: SolvePayload) {
 // The mixed (solid + shell) Rust solve of the coupled assembler's inputs,
 // with AMG when it was chosen and covers the model, otherwise the engine's
 // incomplete Cholesky preconditioner. The C++ engine's solve_coupled takes
-// the same inputs and stays the test oracle (tests/test_coupled_rust.mjs).
+// the same inputs and stays the test oracle (tests/integration/coupled-rust.test.mjs).
 function solveMixed(
   inputs: Parameters<typeof solveCoupledInRust>[1],
   payload: SolvePayload,

@@ -48,7 +48,7 @@ const size = sizeArg.startsWith("r")
   ? diagonal * Number(sizeArg.slice(1))
   : Number(sizeArg);
 if (!(size > 0)) throw new Error(`invalid element size "${sizeArg}"`);
-// Same mesher settings as test_wall_bracket.mjs / solver.worker.ts.
+// Same mesher settings as wall-bracket.test.mjs / solver.worker.ts.
 const mesh = engine.generate_fem_mesh(
   JSON.stringify({
     max_element_size: size,

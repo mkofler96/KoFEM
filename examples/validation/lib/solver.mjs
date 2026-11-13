@@ -6,7 +6,7 @@
 // This is the same module the browser worker (web/src/workers/solver.worker.ts)
 // drives — we just call it from Node so the solver tests and the axial-bar
 // study run the real MFEM solver, not a re-implementation. (The examples are
-// solved through lib/pipeline.mjs, as the app solves them.) See test_wall_bracket.mjs for the original
+// solved through lib/pipeline.mjs, as the app solves them.) See wall-bracket.test.mjs for the original
 // "run the WASM under Node" pattern this follows.
 
 import { readFileSync } from "node:fs";

@@ -1,6 +1,6 @@
 # Opened from the app by Feedback → Report a problem, which can prefill the
 # `diagnostics` field through the URL (web/src/lib/feedback.ts). Renaming a
-# field id breaks that prefill; tests/test_feedback.mjs checks it.
+# field id breaks that prefill; tests/unit/feedback.test.mjs checks it.
 name: Report a problem
 description: Something in KoFEM broke, or a result looks wrong.
 labels: ["bug"]
