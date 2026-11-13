@@ -41,7 +41,7 @@ export function packSolveMesh(
   tetElements: Element[],
   hexElements: Element[],
   vid: VertexIndexer,
-): SolveMesh {
+): SolveMesh & { hexahedra: Int32Array } {
   if (tetElements.length === 0 && hexElements.length === 0) {
     throw new Error(
       "No supported elements found. MFEM requires CTETRA or CHEXA elements — " +

@@ -67,6 +67,7 @@ fn pressure_pushes_along_the_inward_normal() {
             &built.mesh,
             0,
             &side(&built, 0, built.size[0]),
+            &[],
             SurfaceLoadKind::Pressure(5.0),
             &mut forces,
         )
@@ -80,6 +81,7 @@ fn pressure_pushes_along_the_inward_normal() {
             &built.mesh,
             1,
             &side(&built, 2, 0.0),
+            &[],
             SurfaceLoadKind::Pressure(1.0),
             &mut bottom,
         )
@@ -98,6 +100,7 @@ fn total_force_and_traction_have_the_right_resultant() {
             &built.mesh,
             0,
             &top,
+            &[],
             SurfaceLoadKind::Force([1.0, -2.0, 30.0]),
             &mut forces,
         )
@@ -109,6 +112,7 @@ fn total_force_and_traction_have_the_right_resultant() {
             &built.mesh,
             1,
             &top,
+            &[],
             SurfaceLoadKind::Traction([0.0, 0.5, 0.0]),
             &mut traction,
         )
@@ -133,6 +137,7 @@ fn duplicates_count_once_and_interior_faces_are_reported() {
             &built.mesh,
             0,
             &end,
+            &[],
             SurfaceLoadKind::Force([6.0, 0.0, 0.0]),
             &mut forces,
         )
@@ -147,6 +152,7 @@ fn duplicates_count_once_and_interior_faces_are_reported() {
                 &built.mesh,
                 3,
                 &interior,
+                &[],
                 SurfaceLoadKind::Pressure(1.0),
                 &mut forces
             )
@@ -180,6 +186,7 @@ fn uniaxial_tension_gives_uniform_von_mises() {
             &built.mesh,
             0,
             &side(&built, 0, built.size[0]),
+            &[],
             SurfaceLoadKind::Traction([stress, 0.0, 0.0]),
             &mut forces,
         )

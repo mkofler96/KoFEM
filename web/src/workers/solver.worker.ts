@@ -715,8 +715,9 @@ function amgReason(payload: SolvePayload): string | null {
   });
 }
 
-// All-solid static solve, with tie connections welded: the Rust AMG solver for
-// tets when it was chosen, otherwise the engine's solve_linear_elastic.
+// All-solid static solve, with tie connections welded: the Rust AMG solver
+// when it was chosen and takes the model, otherwise the engine's
+// solve_linear_elastic.
 async function handleSolidSolve(id: number, payload: SolvePayload) {
   const { nodes, elements } = payload;
   const tied = weldTies(nodes, elements, payload.tieGroups, logTo(id));

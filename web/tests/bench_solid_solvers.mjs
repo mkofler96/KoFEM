@@ -195,6 +195,7 @@ async function solveRust(model, order, preconditioner) {
   const elastic = new ElasticModel(
     mesh.vertices,
     Uint32Array.from(mesh.tetrahedra),
+    new Uint32Array(0),
     new Uint32Array(model.elements.length),
     Float64Array.of(210000, 0.3),
     order,

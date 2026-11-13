@@ -11,7 +11,8 @@
 // point load, a pressure and a total-force surface load — with linear and
 // with quadratic elements. Node ids are offset
 // from vertex indices, as in saved analyses, so the id → vertex mapping is
-// exercised too.
+// exercised too. A hand-built CHEXA beam, alone and with CTETRA at its root,
+// then checks hexahedra and loads on quadrilateral faces the same way.
 //
 // Usage:  bash ../scripts/build-fem-wasm.sh && bun tests/test_amg_solid.mjs
 //         (from web/; the MFEM engine comes from scripts/fetch-wasm-engine.sh)
@@ -26,6 +27,7 @@ import {
   amgUnavailableReason,
   solveSolidWithAmg,
 } from "../src/lib/solve/amg.ts";
+import { boxHexMesh } from "../../examples/validation/lib/mesh.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const enginePkg = join(here, "../src/wasm/pkg");
@@ -491,5 +493,164 @@ assert(
   `answering 0 must stop the solve, got "${stopped}"`,
 );
 console.log(`answering 0 stops: ${stopped}`);
+
+// ── Hexahedra (CHEXA), alone and mixed with tetrahedra ────────────────────────
+// A hand-built store model as the app holds it: a 100 × 10 × 10 mm beam of
+// CHEXA elements, and the same beam with its root half split into CTETRA
+// (listed after the hexes, so element order ≠ solve order). Two bodies,
+// node ids offset from vertex indices, a clamp, a roller, a prescribed
+// displacement, a point load, a pressure on quadrilateral (and triangular)
+// faces and a total force on the tip quadrilaterals. Both solvers number the
+// elements tets first, then hexes; their results must agree at orders 1 and 2.
+const beam = boxHexMesh(100, 10, 10, 20, 2, 2);
+const ID = 500;
+const beamNodes = beam.vertices.map(([x, y, z], index) => ({
+  id: index + ID,
+  x,
+  y,
+  z,
+}));
+const KUHN = [
+  [0, 1, 3, 7],
+  [0, 3, 2, 7],
+  [0, 2, 6, 7],
+  [0, 6, 4, 7],
+  [0, 4, 5, 7],
+  [0, 5, 1, 7],
+];
+const HEX_OF_CUBE_CORNER = [0, 1, 3, 2, 4, 5, 7, 6];
+function beamModel(tetRoot) {
+  const hexElements = [];
+  const tetElements = [];
+  const top = [];
+  const tip = [];
+  const onPlane = (axis, value) => (vertex) =>
+    Math.abs(beam.vertices[vertex][axis] - value) < 1e-9;
+  beam.hexahedra.forEach((hex) => {
+    const propertyId = beam.vertices[hex[0]][0] < 50 ? 1 : 2;
+    const tipFace = [1, 2, 6, 5].map((corner) => hex[corner]);
+    if (tipFace.every(onPlane(0, 100))) tip.push(tipFace);
+    if (tetRoot && propertyId === 1) {
+      for (const tet of KUHN) {
+        const corners = tet.map((corner) => hex[HEX_OF_CUBE_CORNER[corner]]);
+        tetElements.push({ type: "CTETRA", nodeIds: corners, propertyId });
+        for (let skip = 0; skip < 4; skip++) {
+          const face = corners.filter((_, corner) => corner !== skip);
+          if (face.every(onPlane(2, 10))) top.push(face);
+        }
+      }
+    } else {
+      hexElements.push({ type: "CHEXA", nodeIds: hex, propertyId });
+      const topFace = [4, 5, 6, 7].map((corner) => hex[corner]);
+      if (topFace.every(onPlane(2, 10))) top.push(topFace);
+    }
+  });
+  const beamElements = [...hexElements, ...tetElements].map(
+    (element, index) => ({
+      ...element,
+      id: index + 1,
+      nodeIds: element.nodeIds.map((vertex) => vertex + ID),
+    }),
+  );
+  const beamConstraints = [];
+  for (const node of beamNodes) {
+    if (Math.abs(node.x) < 1e-9)
+      for (let dof = 0; dof < 3; dof++)
+        beamConstraints.push({ nodeId: node.id, dof });
+    else if (Math.abs(node.x - 100) < 1e-9 && Math.abs(node.y) < 1e-9)
+      beamConstraints.push({ nodeId: node.id, dof: 1 });
+  }
+  beamConstraints.push({
+    nodeId: beamNodes.find((node) => node.x === 100 && node.z === 10).id,
+    dof: 0,
+    prescribedValue: 0.01,
+  });
+  const toIds = (faces) =>
+    faces.map((face) => face.map((vertex) => vertex + ID));
+  return {
+    nodes: beamNodes,
+    elements: beamElements,
+    materials: model.materials,
+    properties: model.properties,
+    constraints: beamConstraints,
+    loads: [{ nodeId: beamNodes[beamNodes.length - 1].id, dof: 2, value: 50 }],
+    surfaceLoads: [
+      { type: "pressure", faces: toIds(top), pressure: 0.4 },
+      { type: "force", faces: toIds(tip), force: [0, 0, -1000] },
+    ],
+  };
+}
+for (const [name, store] of [
+  ["CHEXA beam", beamModel(false)],
+  ["CHEXA + CTETRA beam", beamModel(true)],
+]) {
+  assert(
+    amgUnavailableReason({
+      elements: store.elements,
+      properties: store.properties,
+      elementOrder: 2,
+      couplingCount: 0,
+    }) === null,
+    `${name}: AMG must accept hexahedra`,
+  );
+  assert(
+    amgUnavailableReason({
+      elements: store.elements,
+      properties: store.properties,
+      elementOrder: 1,
+      couplingCount: 1,
+    }) === "it supports surface-to-point couplings on tetrahedral meshes only",
+    `${name}: couplings on hexahedra are refused (the coupled solver takes tets only)`,
+  );
+  const beamVid = buildVertexIndexer(store.nodes);
+  const beamInputs = buildSolidEngineInputs(store, beamVid);
+  for (const order of [1, 2]) {
+    const reference = engine.solve_linear_elastic(
+      beamInputs.mesh,
+      beamInputs.matJson,
+      beamInputs.bcsJson,
+      order,
+    );
+    assert(
+      !("error" in reference),
+      `${name}, order ${order}: MFEM failed: ${reference.error}`,
+    );
+    const beamLog = [];
+    const rust = await solveSolidWithAmg(
+      fem,
+      store,
+      order,
+      beamVid,
+      beamVid,
+      undefined,
+      neverAsk,
+      (line) => beamLog.push(line),
+    );
+    assert(
+      rust.displacements.length === reference.displacements.length &&
+        rust.vonMises.length === reference.von_mises.length,
+      `${name}, order ${order}: the result layout must match MFEM's`,
+    );
+    const motion = maxDifference(reference.displacements, rust.displacements);
+    const vonMises = maxDifference(reference.von_mises, rust.vonMises);
+    console.log(
+      `${name}, order ${order}: max |u| ${motion.peak.toExponential(4)} mm, AMG − MFEM ` +
+        `${motion.relative.toExponential(2)} relative; max von Mises ` +
+        `${vonMises.peak.toExponential(4)} MPa, AMG − MFEM ${vonMises.relative.toExponential(2)} relative`,
+    );
+    assert(
+      beamLog.some((line) => /hexahedra/.test(line)),
+      `${name}: the solve log names the hexahedra`,
+    );
+    assert(
+      motion.relative < 1e-5,
+      `${name}, order ${order}: displacements differ by ${motion.relative} relative`,
+    );
+    assert(
+      vonMises.relative < 1e-4,
+      `${name}, order ${order}: von Mises differs by ${vonMises.relative} relative`,
+    );
+  }
+}
 
 console.log("\nPASS");

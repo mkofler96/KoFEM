@@ -134,6 +134,9 @@ test("solver log panel streams CG residuals and survives tab switches", async ({
 
   await bootstrapCantilever(page);
   await goToSolvePanel(page);
+  // AMG solves this small hex model in one step, leaving no residual history
+  // to stream; Gauss–Seidel iterates.
+  await page.getByTestId("solver-method").selectOption("gauss-seidel");
   await page.getByRole("button", { name: /Run static solve/ }).click();
 
   // A successful solve hands off to Results mode automatically.
