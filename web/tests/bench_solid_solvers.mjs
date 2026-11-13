@@ -9,7 +9,7 @@
 // Load case (the KOF-300 sweep): clamp the vertices in the first 2 % of the
 // longest axis, and pull the last 2 % along the shortest axis with 1 kN in
 // total, steel. The app's own builders make both solvers' inputs
-// (buildSolidEngineInputs for MFEM, solveSolidWithAmg for Rust AMG). Each
+// (buildSolidEngineInputs for MFEM, solveSolidInRust for Rust AMG). Each
 // solver stops at a relative tolerance of 1e-6: MFEM in its preconditioned
 // norm, Rust on the force residual ‖f − K·u‖/‖f‖ (crates/kofem-fem/src/cg.rs).
 // Times include assembly and preconditioner setup; meshing is excluded.
@@ -26,7 +26,7 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { buildVertexIndexer } from "../src/lib/solveMeshPacking.ts";
 import { buildSolidEngineInputs } from "../src/lib/solve/solid.ts";
-import { solveSolidWithAmg } from "../src/lib/solve/amg.ts";
+import { solveSolidInRust } from "../src/lib/solve/amg.ts";
 import { loadFemModule } from "../src/lib/femModule.ts";
 import { ElasticModel, SolveOptions } from "../src/wasm/fem/kofem_wasm.js";
 
@@ -164,10 +164,11 @@ async function solveRust(model, order, preconditioner) {
   const lines = [];
   const started = performance.now();
   if (preconditioner === "amg") {
-    const result = await solveSolidWithAmg(
+    const result = await solveSolidInRust(
       fem,
       model,
       order,
+      "amg",
       vid,
       vid,
       BUDGET,

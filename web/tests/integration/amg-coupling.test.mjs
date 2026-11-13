@@ -25,7 +25,7 @@ import {
 } from "../../src/lib/solve/coupled.ts";
 import {
   amgUnavailableReason,
-  solveCoupledSolidWithAmg,
+  solveCoupledSolidInRust,
 } from "../../src/lib/solve/amg.ts";
 import { buildSolidEngineInputs } from "../../src/lib/solve/solid.ts";
 import { buildVertexIndexer } from "../../src/lib/solveMeshPacking.ts";
@@ -179,10 +179,11 @@ async function compare(model) {
     inputs.matJson,
   );
   if ("error" in mfemRaw) return { reason, mfemRaw };
-  const rustRaw = await solveCoupledSolidWithAmg(
+  const rustRaw = await solveCoupledSolidInRust(
     fem,
     inputs,
     1,
+    "amg",
     undefined,
     neverAsk,
     discard,
@@ -593,10 +594,11 @@ function facesWhere(model, on) {
 
 async function solveQuadraticCoupled(model) {
   const inputs = buildCoupledEngineInputs(model, discard);
-  const raw = await solveCoupledSolidWithAmg(
+  const raw = await solveCoupledSolidInRust(
     fem,
     inputs,
     QUADRATIC,
+    "amg",
     undefined,
     neverAsk,
     discard,
@@ -835,10 +837,11 @@ describe("quadratic elements", () => {
         inputs.matJson,
       );
       if ("error" in engineRaw) throw new Error(engineRaw.error);
-      const rustRaw = await solveCoupledSolidWithAmg(
+      const rustRaw = await solveCoupledSolidInRust(
         fem,
         inputs,
         1,
+        "amg",
         undefined,
         neverAsk,
         discard,
@@ -985,7 +988,45 @@ describe("what AMG refuses", () => {
 
   test("AMG refuses the mechanism as not fully constrained", async () => {
     await expect(
-      solveCoupledSolidWithAmg(fem, inputs, 1, undefined, neverAsk, discard),
+      solveCoupledSolidInRust(
+        fem,
+        inputs,
+        1,
+        "amg",
+        undefined,
+        neverAsk,
+        discard,
+      ),
     ).rejects.toThrow("not fully constrained");
+  });
+
+  // The Solve panel's Gauss–Seidel choice is for exactly this case: the Rust
+  // Gauss–Seidel CG converges on the load-compatible mechanism, as MFEM does,
+  // to the same field.
+  test("Rust Gauss–Seidel converges on the mechanism and matches MFEM", async () => {
+    const log = [];
+    const rust = await solveCoupledSolidInRust(
+      fem,
+      inputs,
+      1,
+      "gauss-seidel",
+      undefined,
+      neverAsk,
+      (line) => log.push(line),
+    );
+    expect(log.join("\n")).toMatch(/Gauss–Seidel CG converged/);
+    expect(rust.von_mises_tets).toHaveLength(mfem.von_mises_tets.length);
+    // The two solvers may land on different rotations about the hinge (the
+    // mechanism), which move the beam but do not strain it: compare stresses.
+    let peak = 0;
+    let difference = 0;
+    mfem.von_mises_tets.forEach((stress, index) => {
+      peak = Math.max(peak, Math.abs(stress));
+      difference = Math.max(
+        difference,
+        Math.abs(stress - rust.von_mises_tets[index]),
+      );
+    });
+    expect(difference / peak).toBeLessThan(1e-4);
   });
 });

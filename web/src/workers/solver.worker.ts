@@ -60,8 +60,8 @@ import {
   amgUnavailableReason,
   FALLBACK_PRECONDITIONER_LABEL,
   isSolverMethod,
-  solveCoupledSolidWithAmg,
-  solveSolidWithAmg,
+  solveCoupledSolidInRust,
+  solveSolidInRust,
   type SolverMethod,
 } from "../lib/solve/amg.js";
 import {
@@ -643,11 +643,11 @@ function solveMixed(
 }
 
 // Solve a hand-mixed shell+solid model through the Rust mixed solve, or an
-// all-solid model carrying a surface-to-point coupling through the Rust AMG
-// solver (when chosen, with the chosen element order) or the engine's coupled
-// solver, all on the same inputs. The mixed solve and the engine's coupled
-// assembler are linear tets + DKT facets, so elementOrder does not apply
-// there, and the solve says so.
+// all-solid model carrying a surface-to-point coupling through the Rust solid
+// solve (with the chosen preconditioner and element order) or, when Rust does
+// not cover it, the engine's coupled solver, all on the same inputs. The mixed
+// solve and the engine's coupled assembler are linear tets + DKT facets, so
+// elementOrder does not apply there, and the solve says so.
 async function handleMixedSolve(id: number, payload: SolvePayload) {
   const inp = buildCoupledEngineInputs(payload, logTo(id));
 
@@ -658,25 +658,25 @@ async function handleMixedSolve(id: number, payload: SolvePayload) {
   // eslint-disable-next-line kofem/no-silent-fallback -- elementOrder is optional in the solve message; the documented default is linear elements
   const order = payload.elementOrder ?? 1;
   const hasShells = inp.shellElements.length > 0;
-  const useAmg =
-    requestedSolver(payload) === "amg" && amgReason(payload) === null;
+  const inRust = amgReason(payload) === null;
   if (hasShells && order !== 1)
     self.postMessage({
       id,
       log: "[mixed] Shell and solid elements solve together with linear tetrahedra; quadratic elements apply to all-solid models.",
     });
-  else if (!useAmg && order !== 1)
+  else if (!inRust && order !== 1)
     self.postMessage({
       id,
       log: `The coupled solver has linear elements only — solving with linear instead of order-${order} elements.`,
     });
   const result = hasShells
     ? await solveMixed(inp, payload, logTo(id))
-    : useAmg
-      ? await solveCoupledSolidWithAmg(
+    : inRust
+      ? await solveCoupledSolidInRust(
           { ElasticModel, SolveOptions, Couplings },
           inp,
           order,
+          requestedSolver(payload),
           payload.cgIterationLimit,
           onCgLimit,
           logTo(id),
@@ -743,8 +743,8 @@ function amgReason(payload: SolvePayload): string | null {
   });
 }
 
-// All-solid static solve, with tie connections welded: the Rust AMG solver
-// when it was chosen and takes the model, otherwise the engine's
+// All-solid static solve, with tie connections welded: the Rust solver with
+// the chosen preconditioner when it covers the model, otherwise the engine's
 // solve_linear_elastic.
 async function handleSolidSolve(id: number, payload: SolvePayload) {
   const { nodes, elements } = payload;
@@ -758,11 +758,12 @@ async function handleSolidSolve(id: number, payload: SolvePayload) {
   // stay fully constrained. Defaults to 1 (linear) when the payload omits it.
   // eslint-disable-next-line kofem/no-silent-fallback -- elementOrder is optional in the solve message; the documented default is linear elements
   const order = payload.elementOrder ?? 1;
-  if (requestedSolver(payload) === "amg" && amgReason(payload) === null) {
-    const result = await solveSolidWithAmg(
+  if (amgReason(payload) === null) {
+    const result = await solveSolidInRust(
       { ElasticModel, SolveOptions },
       { ...payload, nodes: tied.solveNodes, elements: tied.tiedElements },
       order,
+      requestedSolver(payload),
       tied.vid,
       tied.vidTied,
       payload.cgIterationLimit,
