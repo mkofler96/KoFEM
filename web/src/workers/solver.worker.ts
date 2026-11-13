@@ -644,9 +644,10 @@ function solveMixed(
 
 // Solve a hand-mixed shell+solid model through the Rust mixed solve, or an
 // all-solid model carrying a surface-to-point coupling through the Rust AMG
-// solver (when chosen) or the engine's coupled solver, all on the same
-// inputs. The mixed solve is linear tets + DKT facets, as the engine's coupled
-// assembler; AMG takes all-solid couplings on linear elements only.
+// solver (when chosen, with the chosen element order) or the engine's coupled
+// solver, all on the same inputs. The mixed solve and the engine's coupled
+// assembler are linear tets + DKT facets, so elementOrder does not apply
+// there, and the solve says so.
 async function handleMixedSolve(id: number, payload: SolvePayload) {
   const inp = buildCoupledEngineInputs(payload, logTo(id));
 
@@ -654,24 +655,33 @@ async function handleMixedSolve(id: number, payload: SolvePayload) {
     id,
     log: `[mixed] ${inp.solidElements.length} solid tets (${inp.solidMaterialNames.join(", ")}), ${inp.shellElements.length} shell facets${inp.shellMaterialNames.length > 0 ? ` (${inp.shellMaterialNames.join(", ")})` : ""} → ${inp.model.pool.length / 3} pool nodes, ${inp.couplingCount} couplings (${inp.declaredCouplings} declared)…`,
   });
-  if (inp.shellElements.length > 0 && payload.elementOrder === 2)
+  // eslint-disable-next-line kofem/no-silent-fallback -- elementOrder is optional in the solve message; the documented default is linear elements
+  const order = payload.elementOrder ?? 1;
+  const hasShells = inp.shellElements.length > 0;
+  const useAmg =
+    requestedSolver(payload) === "amg" && amgReason(payload) === null;
+  if (hasShells && order !== 1)
     self.postMessage({
       id,
       log: "[mixed] Shell and solid elements solve together with linear tetrahedra; quadratic elements apply to all-solid models.",
     });
-
-  const result =
-    inp.shellElements.length > 0
-      ? await solveMixed(inp, payload, logTo(id))
-      : requestedSolver(payload) === "amg" && amgReason(payload) === null
-        ? await solveCoupledSolidWithAmg(
-            { ElasticModel, SolveOptions, Couplings },
-            inp,
-            payload.cgIterationLimit,
-            onCgLimit,
-            logTo(id),
-          )
-        : await m().solve_coupled(inp.mesh, inp.coupling, inp.bcs, inp.matJson);
+  else if (!useAmg && order !== 1)
+    self.postMessage({
+      id,
+      log: `The coupled solver has linear elements only — solving with linear instead of order-${order} elements.`,
+    });
+  const result = hasShells
+    ? await solveMixed(inp, payload, logTo(id))
+    : useAmg
+      ? await solveCoupledSolidWithAmg(
+          { ElasticModel, SolveOptions, Couplings },
+          inp,
+          order,
+          payload.cgIterationLimit,
+          onCgLimit,
+          logTo(id),
+        )
+      : await m().solve_coupled(inp.mesh, inp.coupling, inp.bcs, inp.matJson);
   if ("error" in result) throw new Error(result.error);
   const fields = mapMixedResult(payload, inp.model, result);
 

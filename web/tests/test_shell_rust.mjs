@@ -19,7 +19,10 @@
 //     loads it;
 //   - the shell cases of examples/validation and engine/tests/shell_validation:
 //     the simply supported plate and the prescribed-displacement strip;
-//   - payloads both must refuse.
+//   - payloads both must refuse;
+//   - a pressure on the pure and the coupled auto-shell paths (single fin,
+//     fin_two_parts), which must push into the body on every face whatever
+//     the winding the app gives the face.
 //
 // Usage:  bash ../scripts/build-fem-wasm.sh && bun tests/test_shell_rust.mjs
 //         (from web/; the C++ engine comes from scripts/fetch-wasm-engine.sh)
@@ -29,7 +32,11 @@ import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { buildShellEngineInputs } from "../src/lib/solve/shell.ts";
 import { solveShellInRust } from "../src/lib/solve/shellRust.ts";
-import { preparePureShellSolve } from "../src/lib/solve/autoShell.ts";
+import {
+  prepareAutoCoupledSolve,
+  preparePureShellSolve,
+} from "../src/lib/solve/autoShell.ts";
+import { rebuildSurfaceLoads } from "../src/store/boundaryRebuild.ts";
 import { loadFemModule } from "../src/lib/femModule.ts";
 import { meshStep } from "../../examples/shell-coupling/lib.mjs";
 import {
@@ -649,6 +656,177 @@ console.log("refusals:");
       cppRefused && rust === null && pattern.test(rustError),
       `C++ "${cppRefused ? cpp.error : "solved"}", Rust "${rustError ?? "solved"}"`,
     );
+  }
+}
+
+// ── 5. A pressure on the auto-shell paths pushes into the solid ──────────────
+// The surface-load faces come from the app's rebuildSurfaceLoads, wound as
+// their tets' local face lists (inward on some faces). Whatever the winding,
+// a pressure p on a face of outward normal n must add up to −p·A·n.
+{
+  const pressure = 0.5;
+  const meshModel = (file, size, propertyOf, properties) => {
+    const meshed = meshStep(engine, join(here, "../../test_files", file), {
+      maxElementSize: size,
+    });
+    const nodes = [];
+    for (let i = 0; i < meshed.V.length / 3; i++)
+      nodes.push({
+        id: i + 1,
+        x: meshed.V[3 * i],
+        y: meshed.V[3 * i + 1],
+        z: meshed.V[3 * i + 2],
+      });
+    const elements = [];
+    for (let e = 0; e < meshed.tet.length / 4; e++)
+      elements.push({
+        id: e + 1,
+        type: "CTETRA",
+        nodeIds: meshed.tet.slice(4 * e, 4 * e + 4).map((vertex) => vertex + 1),
+        propertyId: propertyOf(meshed, e),
+      });
+    const surfaceTriangles = [];
+    for (let t = 0; t < meshed.surfTri.length / 3; t++)
+      surfaceTriangles.push(
+        [0, 1, 2].map((k) => meshed.surfTri[3 * t + k] + 1),
+      );
+    return {
+      nodes,
+      elements,
+      materials: [
+        { id: 1, name: "Steel", young: 210000, poisson: 0.3, density: 7.85e-9 },
+      ],
+      properties,
+      constraints: [],
+      loads: [],
+      surfaceTriangles,
+      surfaceFaceIds: Array.from(meshed.surfFace),
+    };
+  };
+  // A pressure group on the nodes `on` selects, as the app builds it, and
+  // the area its faces cover.
+  const pressureOn = (model, on) => {
+    const nodeIds = model.nodes.filter(on).map((point) => point.id);
+    const [load] = rebuildSurfaceLoads(
+      [
+        {
+          id: 1,
+          name: "Pressure",
+          kind: "pressure",
+          dof: 0,
+          totalForce: pressure,
+          faces: [{ nodeIds }],
+        },
+      ],
+      model.elements,
+    );
+    const at = (id) => {
+      const point = model.nodes[id - 1];
+      return [point.x, point.y, point.z];
+    };
+    let area = 0;
+    for (const [a, b, c] of load.faces.map((face) => face.map(at))) {
+      const ab = [0, 1, 2].map((k) => b[k] - a[k]);
+      const ac = [0, 1, 2].map((k) => c[k] - a[k]);
+      area +=
+        Math.hypot(
+          ab[1] * ac[2] - ab[2] * ac[1],
+          ab[2] * ac[0] - ab[0] * ac[2],
+          ab[0] * ac[1] - ab[1] * ac[0],
+        ) / 2;
+    }
+    return { load, area };
+  };
+  const checkResultant = (name, resultant, expected) => {
+    const scale = Math.hypot(...expected);
+    const error = Math.hypot(...resultant.map((v, k) => v - expected[k]));
+    check(
+      name,
+      error < 1e-6 * scale,
+      `resultant [${resultant.map((v) => v.toFixed(3)).join(", ")}] against ` +
+        `[${expected.map((v) => v.toFixed(3)).join(", ")}]`,
+    );
+  };
+  const quiet = () => {
+    /* auto-shell progress lines are not asserted on */
+  };
+
+  // Pure shell: the single fin's y = 51 wall (outward normal +y).
+  {
+    const model = meshModel("single_fin.step", 4, () => 1, [
+      { id: 1, materialId: 1, discretization: "shell" },
+    ]);
+    const yMax = Math.max(...model.nodes.map((point) => point.y));
+    const { load, area } = pressureOn(model, (p) => p.y > yMax - 1e-6);
+    const pure = preparePureShellSolve(
+      { ...model, surfaceLoads: [load] },
+      new Set([1]),
+      quiet,
+    );
+    const resultant = [0, 0, 0];
+    for (const { force } of JSON.parse(pure.bcsJson).point_loads)
+      if (force) for (let k = 0; k < 3; k++) resultant[k] += force[k];
+    checkResultant(
+      `pure auto-shell: pressure on the fin's outer wall (${load.faces.length} faces)`,
+      resultant,
+      [0, -pressure * area, 0],
+    );
+  }
+
+  // Coupled auto-shell: fin_two_parts with the fin (body 2) marked Shell; a
+  // pressure on the base block's top (outward +z) and on the fin's wall.
+  {
+    const model = meshModel(
+      "fin_two_parts.step",
+      6,
+      (meshed, e) => meshed.body[e],
+      [
+        { id: 1, materialId: 1, discretization: "solid" },
+        { id: 2, materialId: 1, discretization: "shell" },
+      ],
+    );
+    const inBody = (body) => {
+      const ids = new Set(
+        model.elements
+          .filter((element) => element.propertyId === body)
+          .flatMap((element) => element.nodeIds),
+      );
+      return (point) => ids.has(point.id);
+    };
+    const zMax = Math.max(
+      ...model.nodes.filter(inBody(1)).map((point) => point.z),
+    );
+    const yMax = Math.max(
+      ...model.nodes.filter(inBody(2)).map((point) => point.y),
+    );
+    for (const [name, on, normal] of [
+      [
+        "the solid base's top",
+        (p) => inBody(1)(p) && p.z > zMax - 1e-6,
+        [0, 0, 1],
+      ],
+      [
+        "the shelled fin's wall",
+        (p) => inBody(2)(p) && p.y > yMax - 1e-6,
+        [0, 1, 0],
+      ],
+    ]) {
+      const { load, area } = pressureOn(model, on);
+      const coupled = prepareAutoCoupledSolve(
+        { ...model, surfaceLoads: [load] },
+        new Set([2]),
+        quiet,
+      );
+      const resultant = [0, 0, 0];
+      coupled.bcs.load_dofs.forEach((dof, index) => {
+        if (dof % 6 < 3) resultant[dof % 6] += coupled.bcs.load_vals[index];
+      });
+      checkResultant(
+        `coupled auto-shell: pressure on ${name} (${load.faces.length} faces)`,
+        resultant,
+        normal.map((component) => -pressure * area * component),
+      );
+    }
   }
 }
 

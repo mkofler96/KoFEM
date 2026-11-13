@@ -441,6 +441,47 @@ impl CouplingConstraints {
         Ok(())
     }
 
+    /// Make the translations of `node` follow the mean of the two `ends`
+    /// wherever both ends follow a coupling and `node` does not already:
+    /// the linear interpolation along an edge whose mid-edge node lies at
+    /// its middle. A component in which either end is independent stays
+    /// independent. Returns how many components were tied.
+    ///
+    /// # Errors
+    /// [`FemError::CouplingInput`] for a node or end out of range.
+    pub fn follow_edge_ends(&mut self, node: usize, ends: [usize; 2]) -> Result<usize, FemError> {
+        let node_count = self.row_of.len() / DOFS_PER_NODE;
+        if let Some(&outside) = [node, ends[0], ends[1]]
+            .iter()
+            .find(|&&index| index >= node_count)
+        {
+            return Err(FemError::CouplingInput {
+                reason: format!(
+                    "edge node {node} between {} and {}: node {outside} is out of range \
+                     (the model has {node_count} nodes)",
+                    ends[0], ends[1]
+                ),
+            });
+        }
+        let mut tied = 0;
+        for component in 0..3 {
+            let dof = |index: usize| DOFS_PER_NODE * index + component;
+            if self.is_dependent(dof(node))
+                || !self.is_dependent(dof(ends[0]))
+                || !self.is_dependent(dof(ends[1]))
+            {
+                continue;
+            }
+            self.add_row(
+                node,
+                component,
+                vec![(dof(ends[0]), 0.5), (dof(ends[1]), 0.5)],
+            )?;
+            tied += 1;
+        }
+        Ok(tied)
+    }
+
     /// Substitute dependent DOFs out of each other's rows until every row
     /// references independent DOFs only. Couplings compose — a reference
     /// point can idealise a surface and at the same time be tied to a second

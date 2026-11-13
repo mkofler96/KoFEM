@@ -19,8 +19,8 @@ mod support;
 
 use kofem_fem::{
     assemble_stiffness, prepare_coupled_static, solve_coupled_static, AmgSettings, CgSettings,
-    CoupledSolution, Coupling, CouplingKind, CsrMatrix, ElementOrder, FemError, Isotropic,
-    PreconditionerChoice, StoppingRule, TetMesh, ALL_DOFS, DOFS_PER_NODE,
+    CoupledSolution, Coupling, CouplingKind, CsrMatrix, FemError, Isotropic, PreconditionerChoice,
+    StoppingRule, TetMesh, ALL_DOFS, DOFS_PER_NODE,
 };
 use support::box_mesh;
 
@@ -709,27 +709,4 @@ fn shell_to_solid_couplings_need_shell_elements() {
             "{error}"
         );
     }
-}
-
-#[test]
-fn couplings_need_a_linear_mesh() {
-    let (model, point, tip, fixed) = tip_coupled_cantilever();
-    let quadratic = model
-        .mesh
-        .clone()
-        .with_order(ElementOrder::Quadratic)
-        .expect("quadratic mesh");
-    let stiffness = assemble_stiffness(&quadratic);
-    let dofs: Vec<u32> = fixed.iter().map(|&(dof, _)| dof as u32).collect();
-    let values = vec![0.0; dofs.len()];
-    let result = prepare_coupled_static(
-        &quadratic,
-        &stiffness,
-        &[kinematic(point, tip, ALL_DOFS)],
-        &dofs,
-        &values,
-        &vec![0.0; model.dof_count()],
-        amg(),
-    );
-    assert!(matches!(result, Err(FemError::CouplingOnQuadraticMesh)));
 }

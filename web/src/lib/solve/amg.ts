@@ -6,11 +6,12 @@
 // which models it covers. The Rust module handles linear and quadratic
 // tetrahedra and hexahedra (alone or mixed) with per-body materials, supports
 // (fixed, roller, prescribed), nodal loads and surface loads on triangular and
-// quadrilateral faces, and surface-to-point couplings on linear tetrahedra.
-// Shells mixed with tets take the Rust mixed solve (coupledRust.ts) with AMG
-// too. Pure-shell models take the Rust shell solve (shellRust.ts), and bodies
-// solved as shells and couplings AMG cannot take go to the coupled solver,
-// both preconditioned with incomplete Cholesky.
+// quadrilateral faces, and surface-to-point couplings on linear and quadratic
+// tetrahedra. Shells mixed with tets take the Rust mixed solve
+// (coupledRust.ts, linear tets only) with AMG too. Pure-shell models take the
+// Rust shell solve (shellRust.ts), and bodies solved as shells and couplings
+// AMG cannot take go to the coupled solver, both preconditioned with
+// incomplete Cholesky.
 //
 // The inputs are built by the same helpers as the MFEM payload
 // (packSolveMesh, resolveMaterials, groupDirichlet, groupPointLoads,
@@ -96,11 +97,6 @@ export function amgUnavailableReason(model: {
     return model.elements.some((element) => element.type === "CHEXA")
       ? "it supports shells mixed with tetrahedra only"
       : null;
-  // A coupling ties the corner nodes of the picked faces; the edge nodes of
-  // quadratic elements would not follow (the MFEM coupled path solves such a
-  // model with linear elements).
-  if (model.couplingCount > 0 && model.elementOrder !== 1)
-    return "it supports surface-to-point couplings on linear elements only";
   // The coupled model is built by the coupled solver's input builder, which
   // takes tetrahedra only.
   if (
@@ -113,12 +109,12 @@ export function amgUnavailableReason(model: {
   return null;
 }
 
-// The preconditioner a solve uses when AMG cannot take the model. Shell
-// elements, bodies solved as shells and surface-to-point couplings (on
-// quadratic elements, the case AMG refuses) route to the shell or coupled
-// solver, which use incomplete Cholesky IC(0) (SSOR only if
-// the factorisation breaks down); every other model solves with the MFEM
-// engine's Gauss–Seidel CG. Mirrors routeSolve (route.ts).
+// The preconditioner a solve uses when AMG is not chosen or cannot take the
+// model. Shell elements, bodies solved as shells and surface-to-point
+// couplings route to the shell or coupled solver, which use incomplete
+// Cholesky IC(0) (SSOR only if the factorisation breaks down); every other
+// model solves with the MFEM engine's Gauss–Seidel CG. Mirrors routeSolve
+// (route.ts).
 export type FallbackPreconditioner = "incomplete-cholesky" | "gauss-seidel";
 
 export function amgFallbackPreconditioner(model: {
@@ -273,36 +269,11 @@ export async function solveSolidWithAmg(
     for (const { vertex, force } of groupPointLoads(model.loads, refVid))
       for (let component = 0; component < 3; component++)
         forces[3 * vertex + component] += force[component];
-    surfaceLoadsToVertices(model.surfaceLoads, refVid).forEach(
-      (surfaceLoad, index) => {
-        // Tet faces are triangles, hex faces quadrilaterals.
-        const triangles: number[] = [];
-        const quadrilaterals: number[] = [];
-        surfaceLoad.faces.forEach((face, faceIndex) => {
-          if (face.length === 3) triangles.push(...face);
-          else if (face.length === 4) quadrilaterals.push(...face);
-          else
-            throw new Error(
-              `Surface load ${index}: face ${faceIndex} has ${face.length} nodes — ` +
-                "a solid mesh has triangular (tetrahedron) and quadrilateral " +
-                "(hexahedron) faces only",
-            );
-        });
-        const unmatched = elastic.addSurfaceLoad(
-          forces,
-          index,
-          Uint32Array.from(triangles),
-          Uint32Array.from(quadrilaterals),
-          surfaceLoad.type,
-          surfaceLoadValues(surfaceLoad, index),
-        );
-        if (unmatched > 0)
-          log(
-            `WARNING: surface load ${index}: ${unmatched} of ${surfaceLoad.faces.length} ` +
-              "selected face(s) are not on the mesh boundary and carry no load — " +
-              "check for stale or interior face selections",
-          );
-      },
+    addSurfaceLoads(
+      elastic,
+      forces,
+      surfaceLoadsToVertices(model.surfaceLoads, refVid),
+      log,
     );
 
     return await runAmgSolve(
@@ -344,17 +315,31 @@ export interface AmgCoupledInputs {
   };
   coupling: EngineCoupling;
   bcs: EngineCoupledBcs;
+  // The loads split for an order-2 solve: point loads (6·pool+dof) and
+  // surface loads over pool-index faces, which Rust integrates itself.
+  pointLoads: Pick<EngineCoupledBcs, "load_dofs" | "load_vals">;
+  poolSurfaceLoads: SurfaceLoad[];
   // One material per 1-based `mesh.attributes` value.
   solidMaterials: { young_modulus: number; poisson_ratio: number }[];
 }
 
 // Solve an all-solid model with surface-to-point couplings with AMG — what
-// the engine's solve_coupled does for it. Returns the same fields: three
-// translations per pool node and one von Mises stress per tet (no shell
-// facets).
+// the engine's solve_coupled does for it, with elements of `elementOrder` (1
+// linear, 2 quadratic). Returns the same fields: three translations per pool
+// node and one von Mises stress per tet (no shell facets).
+//
+// The engine's coupled solve is linear only. At order 1 the forces are its
+// own nodal loads, surface loads lumped onto the corners, so both solvers take
+// the identical model. At order 2 a surface load must reach the edge nodes,
+// so Rust integrates it over the 6-node faces as the MFEM solid solve does;
+// the couplings and supports name vertices, and the Rust module
+// (crates/kofem-fem/src/coupled_static.rs) extends kinematic couplings and
+// supports to the edge nodes; a distributing coupling keeps its corner nodes,
+// as at order 1.
 export async function solveCoupledSolidWithAmg(
   fem: CoupledFemModule,
   input: AmgCoupledInputs,
+  elementOrder: number,
   iterationLimit: number | undefined,
   askToContinue: ContinuationPrompt,
   log: (line: string) => void,
@@ -368,6 +353,10 @@ export async function solveCoupledSolidWithAmg(
     throw new Error(
       "The AMG solver cannot solve this model: it does not support shell elements.",
     );
+  if (elementOrder !== 1 && elementOrder !== 2)
+    throw new Error(
+      `The AMG solver cannot solve this model: element order ${elementOrder} is not 1 or 2.`,
+    );
   const elastic = new fem.ElasticModel(
     mesh.vertices,
     Uint32Array.from(mesh.tets),
@@ -380,15 +369,18 @@ export async function solveCoupledSolidWithAmg(
         material.poisson_ratio,
       ]),
     ),
-    1,
+    elementOrder,
   );
   try {
     const started = performance.now();
     const nonzeros = elastic.assemble();
     const pointCount = elastic.vertexCount;
+    // Vertices, then (order 2) one node per edge.
+    const nodeCount = elastic.dofCount / 3;
     log(
-      `AMG solve: ${pointCount} nodes, ${mesh.tets.length / 4} tetrahedra, ` +
-        `${coupling.ref.length} couplings, ${nonzeros} stiffness entries assembled`,
+      `AMG solve: ${pointCount} nodes, ${mesh.tets.length / 4} tetrahedra ` +
+        `(order ${elementOrder}), ${coupling.ref.length} couplings, ` +
+        `${nonzeros} stiffness entries assembled`,
     );
     const couplings = new fem.Couplings(
       Uint32Array.from(coupling.ref),
@@ -410,14 +402,27 @@ export async function solveCoupledSolidWithAmg(
         ...Array.from(bcs.fixed_dofs, () => 0),
         ...bcs.prescribed_vals,
       ]);
-      const forces = new Float64Array(perVertex * pointCount);
-      bcs.load_dofs.forEach((dof, index) => {
-        if (dof < 0 || dof >= forces.length)
-          throw new Error(
-            `Load DOF ${dof} is out of range (the model has ${forces.length})`,
-          );
-        forces[dof] += bcs.load_vals[index];
-      });
+      const forces = new Float64Array(perVertex * nodeCount);
+      const addLoads = (
+        loads: Pick<EngineCoupledBcs, "load_dofs" | "load_vals">,
+      ) =>
+        loads.load_dofs.forEach((dof, index) => {
+          if (dof < 0 || dof >= perVertex * pointCount)
+            throw new Error(
+              `Load DOF ${dof} is out of range (the model has ${perVertex * pointCount})`,
+            );
+          forces[dof] += loads.load_vals[index];
+        });
+      if (elementOrder === 1) addLoads(bcs);
+      else {
+        addLoads(input.pointLoads);
+        const translations = new Float64Array(elastic.dofCount);
+        addSurfaceLoads(elastic, translations, input.poolSurfaceLoads, log);
+        for (let node = 0; node < nodeCount; node++)
+          for (let component = 0; component < 3; component++)
+            forces[perVertex * node + component] +=
+              translations[3 * node + component];
+      }
       return await runAmgSolve(
         fem,
         iterationLimit,
@@ -433,10 +438,11 @@ export async function solveCoupledSolidWithAmg(
         askToContinue,
         log,
         (solution) => {
-          const displacements = solution.displacements;
+          // One triple per node: the pool vertices first, then any edge nodes.
+          const nodal = solution.displacements;
           return {
-            displacements,
-            von_mises_tets: elastic.vonMises(displacements),
+            displacements: nodal.slice(0, 3 * pointCount),
+            von_mises_tets: elastic.vonMises(nodal),
             von_mises_tris: new Float64Array(0),
           };
         },
@@ -506,6 +512,45 @@ async function runAmgSolve<T>(
     // finish() consumes the run; free it only when it was not reached.
     if (!finished) run.free();
   }
+}
+
+// Add the work-equivalent nodal forces of `surfaceLoads` (faces as vertex
+// indices) to `forces` (3 per node), warning about faces off the boundary.
+function addSurfaceLoads(
+  elastic: ElasticModel,
+  forces: Float64Array,
+  surfaceLoads: SurfaceLoad[],
+  log: (line: string) => void,
+): void {
+  surfaceLoads.forEach((surfaceLoad, index) => {
+    // Tet faces are triangles, hex faces quadrilaterals.
+    const triangles: number[] = [];
+    const quadrilaterals: number[] = [];
+    surfaceLoad.faces.forEach((face, faceIndex) => {
+      if (face.length === 3) triangles.push(...face);
+      else if (face.length === 4) quadrilaterals.push(...face);
+      else
+        throw new Error(
+          `Surface load ${index}: face ${faceIndex} has ${face.length} nodes — ` +
+            "a solid mesh has triangular (tetrahedron) and quadrilateral " +
+            "(hexahedron) faces only",
+        );
+    });
+    const unmatched = elastic.addSurfaceLoad(
+      forces,
+      index,
+      Uint32Array.from(triangles),
+      Uint32Array.from(quadrilaterals),
+      surfaceLoad.type,
+      surfaceLoadValues(surfaceLoad, index),
+    );
+    if (unmatched > 0)
+      log(
+        `WARNING: surface load ${index}: ${unmatched} of ${surfaceLoad.faces.length} ` +
+          "selected face(s) are not on the mesh boundary and carry no load — " +
+          "check for stale or interior face selections",
+      );
+  });
 }
 
 function surfaceLoadValues(

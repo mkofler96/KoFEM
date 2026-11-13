@@ -143,8 +143,11 @@ pub enum FemError {
          the load would be lost"
     )]
     LoadWithoutStiffness { node: usize, component: usize },
-    #[error("couplings are supported on linear tetrahedra only, but this mesh is quadratic")]
-    CouplingOnQuadraticMesh,
+    #[error(
+        "shells mixed with solids are supported on linear tetrahedra only, but this mesh is \
+         quadratic"
+    )]
+    ShellOnQuadraticMesh,
     #[error("triangle array has {len} indices, which is not a multiple of 3")]
     TriangleArrayLength { len: usize },
     #[error("the shell mesh has no triangles")]

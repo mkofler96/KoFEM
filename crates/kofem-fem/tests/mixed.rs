@@ -25,9 +25,9 @@ mod support;
 
 use kofem_fem::{
     assemble_shell_stiffness, assemble_stiffness, shell_von_mises, solve_mixed_static, von_mises,
-    AmgSettings, CgSettings, CoupledSolution, Coupling, CouplingKind, CsrMatrix, FemError,
-    Isotropic, MixedPreconditioner, PreconditionerChoice, ShellMesh, ShellPart, StoppingRule,
-    TetMesh, DOFS_PER_NODE,
+    AmgSettings, CgSettings, CoupledSolution, Coupling, CouplingKind, CsrMatrix, ElementOrder,
+    FemError, Isotropic, MixedPreconditioner, PreconditionerChoice, ShellMesh, ShellPart,
+    StoppingRule, TetMesh, DOFS_PER_NODE,
 };
 use support::KUHN;
 
@@ -735,6 +735,39 @@ fn the_shell_mesh_must_share_the_solid_node_pool() {
     let result = solve(&moved);
     assert!(
         matches!(&result, Err(FemError::CouplingInput { reason }) if reason.contains(&format!("vertex {last}"))),
+        "{result:?}"
+    );
+}
+
+#[test]
+fn shells_over_a_quadratic_mesh_are_refused() {
+    // The engine's coupled solve joins shells to linear tets only; the
+    // all-solid coupled solve takes quadratic tets, the mixed one does not.
+    let strip = root_coupled_cantilever(CouplingKind::Distributing);
+    let model = &strip.model;
+    let (solid, shell) = model.meshes().expect("valid meshes");
+    let shell = shell.expect("the strip has shell facets");
+    let quadratic = solid
+        .with_order(ElementOrder::Quadratic)
+        .expect("quadratic mesh");
+    let solid_stiffness = assemble_stiffness(&quadratic);
+    let shell_stiffness = assemble_shell_stiffness(&shell);
+    let result = solve_mixed_static(
+        &quadratic,
+        &solid_stiffness,
+        Some(ShellPart {
+            mesh: &shell,
+            stiffness: &shell_stiffness,
+        }),
+        &model.couplings,
+        &model.fixed,
+        &model.values,
+        &vec![0.0; DOFS_PER_NODE * quadratic.node_count()],
+        SETTINGS,
+        MixedPreconditioner::IncompleteCholesky,
+    );
+    assert!(
+        matches!(result, Err(FemError::ShellOnQuadraticMesh)),
         "{result:?}"
     );
 }
