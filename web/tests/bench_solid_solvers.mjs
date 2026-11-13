@@ -127,6 +127,9 @@ async function meshModel(file, size) {
   };
 }
 
+// Lines the MFEM engine prints, read back for its CG iteration count.
+const mfemLog = [];
+
 function solveMfem(model, order) {
   return createModule({
     wasmBinary,
@@ -155,7 +158,6 @@ function solveMfem(model, order) {
     return { displacements: raw.displacements, seconds, iterations };
   });
 }
-const mfemLog = [];
 
 async function solveRust(model, order, preconditioner) {
   const vid = buildVertexIndexer(model.nodes);
@@ -288,9 +290,7 @@ for (const spec of cases) {
         .map((match) => Number(match[1]))
         .pop();
       console.log(
-        `  ${name.padEnd(9)} stopped after ${seconds.toFixed(2)} s` +
-          (iterations ? ` (${iterations} iterations)` : "") +
-          `: ${error instanceof Error ? error.message : String(error)}`,
+        `  ${name.padEnd(9)} stopped after ${seconds.toFixed(2)} s${iterations ? ` (${iterations} iterations)` : ""}: ${error instanceof Error ? error.message : String(error)}`,
       );
       results[name] = {
         failed: true,
@@ -301,8 +301,7 @@ for (const spec of cases) {
     }
     const { seconds, iterations, detail } = results[name];
     console.log(
-      `  ${name.padEnd(9)} ${seconds.toFixed(2).padStart(8)} s, ${iterations} CG iterations` +
-        (detail ? ` (${detail})` : ""),
+      `  ${name.padEnd(9)} ${seconds.toFixed(2).padStart(8)} s, ${iterations} CG iterations${detail ? ` (${detail})` : ""}`,
     );
   }
   const solved = (name) =>
@@ -311,11 +310,10 @@ for (const spec of cases) {
   for (const name of ["rust-amg", "rust-gs"])
     if (solved(name) && reference && results[name] !== reference)
       console.log(
-        `  ${name} against ${solved("mfem") ? "mfem" : "rust-gs"}: max |Δu| / max |u| ` +
-          relativeDifference(
-            reference.displacements,
-            results[name].displacements,
-          ).toExponential(2),
+        `  ${name} against ${solved("mfem") ? "mfem" : "rust-gs"}: max |Δu| / max |u| ${relativeDifference(
+          reference.displacements,
+          results[name].displacements,
+        ).toExponential(2)}`,
       );
   rows.push({ spec, dofs, results });
 }
