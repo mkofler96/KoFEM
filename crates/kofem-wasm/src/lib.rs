@@ -59,9 +59,11 @@ fn parse_materials(materials: &[f64]) -> Result<Vec<Isotropic>, JsError> {
         .map_err(|error| to_js(&error))
 }
 
-/// A validated linear-elastic tetrahedral model of linear or quadratic
-/// elements. DOFs are numbered 3·node + component, with the vertices as the
-/// first `vertexCount` nodes; a quadratic model appends one node per edge.
+/// A validated linear-elastic model of tetrahedra and hexahedra, of linear or
+/// quadratic elements. DOFs are numbered 3·node + component, with the
+/// vertices as the first `vertexCount` nodes; a quadratic model appends one
+/// node per edge, then one per hex face and one per hex centre. Elements are
+/// numbered tets first, then hexes, as in the MFEM engine.
 #[wasm_bindgen]
 pub struct ElasticModel {
     mesh: TetMesh,
@@ -72,10 +74,13 @@ pub struct ElasticModel {
 
 #[wasm_bindgen]
 impl ElasticModel {
-    /// `vertices`: x,y,z per vertex. `tets`: four vertex indices per element
-    /// (corners only, for either order). `material_of_tet`: index into
-    /// `materials`, which holds (E, ν) pairs. `order`: 1 (linear) or 2
-    /// (quadratic, with edge nodes generated here as in MFEM's order-2 space).
+    /// `vertices`: x,y,z per vertex. `tets`: four vertex indices per
+    /// tetrahedron, `hexes`: eight per hexahedron in MFEM / CHEXA order (the
+    /// bottom face, then the top face above it) — corners only, for either
+    /// order; either may be empty. `material_of_element`: one index into
+    /// `materials` per element, tets first; `materials` holds (E, ν) pairs.
+    /// `order`: 1 (linear) or 2 (quadratic, with the extra nodes generated
+    /// here as in MFEM's order-2 space).
     ///
     /// # Errors
     /// The first malformed array, index, element or material, or an order
@@ -84,7 +89,8 @@ impl ElasticModel {
     pub fn new(
         vertices: &[f64],
         tets: &[u32],
-        material_of_tet: &[u32],
+        hexes: &[u32],
+        material_of_element: &[u32],
         materials: &[f64],
         order: u32,
     ) -> Result<ElasticModel, JsError> {
@@ -98,7 +104,7 @@ impl ElasticModel {
             }
         };
         let parsed = parse_materials(materials)?;
-        let mesh = TetMesh::new(vertices, tets, material_of_tet, parsed)
+        let mesh = TetMesh::with_hexahedra(vertices, tets, hexes, material_of_element, parsed)
             .and_then(|mesh| mesh.with_order(order))
             .map_err(|error| to_js(&error))?;
         Ok(ElasticModel {
@@ -108,7 +114,7 @@ impl ElasticModel {
         })
     }
 
-    /// Unknowns: 3 per node (vertices and, when quadratic, edge nodes).
+    /// Unknowns: 3 per node (vertices and, when quadratic, the added nodes).
     #[wasm_bindgen(getter, js_name = dofCount)]
     #[must_use]
     pub fn dof_count(&self) -> usize {
@@ -124,8 +130,9 @@ impl ElasticModel {
     }
 
     /// Add the work-equivalent nodal forces of one surface load to `forces`
-    /// (3 per node), with the MFEM engine's semantics. `faces` holds the
-    /// selected triangles as vertex-index triples; `kind` is `"pressure"`
+    /// (3 per node), with the MFEM engine's semantics. `triangles` holds the
+    /// selected tet faces as vertex-index triples, `quadrilaterals` the
+    /// selected hex faces as quadruples; `kind` is `"pressure"`
     /// (`values` = [p], positive pushing in), `"traction"` (force per area)
     /// or `"force"` (total force, spread over the faces' area). `load` names
     /// the load in errors. Returns how many selected faces are not on the
@@ -139,14 +146,21 @@ impl ElasticModel {
         &mut self,
         forces: &mut [f64],
         load: usize,
-        faces: &[u32],
+        triangles: &[u32],
+        quadrilaterals: &[u32],
         kind: &str,
         values: &[f64],
     ) -> Result<usize, JsError> {
-        if !faces.len().is_multiple_of(3) {
+        if !triangles.len().is_multiple_of(3) {
             return Err(JsError::new(&format!(
-                "surface load {load}: {} face indices are not vertex triples",
-                faces.len()
+                "surface load {load}: {} triangle indices are not vertex triples",
+                triangles.len()
+            )));
+        }
+        if !quadrilaterals.len().is_multiple_of(4) {
+            return Err(JsError::new(&format!(
+                "surface load {load}: {} quadrilateral indices are not vertex quadruples",
+                quadrilaterals.len()
             )));
         }
         let vector = |values: &[f64]| -> Result<[f64; 3], JsError> {
@@ -177,8 +191,9 @@ impl ElasticModel {
             }
         };
         let vertex_count = self.mesh.vertex_count();
-        if let Some(&vertex) = faces
+        if let Some(&vertex) = triangles
             .iter()
+            .chain(quadrilaterals)
             .find(|&&vertex| vertex as usize >= vertex_count)
         {
             return Err(JsError::new(&format!(
@@ -190,13 +205,20 @@ impl ElasticModel {
             .boundary
             .get_or_insert_with(|| BoundaryFaces::new(&self.mesh));
         let report = boundary
-            .apply(&self.mesh, load, faces.as_chunks::<3>().0, parsed, forces)
+            .apply(
+                &self.mesh,
+                load,
+                triangles.as_chunks::<3>().0,
+                quadrilaterals.as_chunks::<4>().0,
+                parsed,
+                forces,
+            )
             .map_err(|error| to_js(&error))?;
         Ok(report.unmatched)
     }
 
-    /// Von Mises stress of every tet, at its centre, for the given
-    /// displacements (3 per node).
+    /// Von Mises stress of every element (tets, then hexes), at its centre,
+    /// for the given displacements (3 per node).
     ///
     /// # Errors
     /// A displacement array that does not fit the mesh.

@@ -6,10 +6,10 @@ and iterative-solver approach used by KoFEM's existing
 upstream implementation reference for this work.
 
 The Rust module reimplements a limited subset: linear and quadratic
-(10-node) tetrahedral elasticity, sparse assembly, prescribed displacements,
-and preconditioned conjugate gradients. MFEM remains the numerical reference
-used in the comparison tests. This module does not provide MFEM's full
-feature set.
+tetrahedral (4- and 10-node) and hexahedral (8- and 27-node) elasticity,
+surface loads, sparse assembly, prescribed displacements, and preconditioned
+conjugate gradients. MFEM remains the numerical reference used in the
+comparison tests. This module does not provide MFEM's full feature set.
 
 ## Upstream references
 
@@ -18,11 +18,13 @@ claiming a line-for-line translation. They are pinned to MFEM v4.7, commit
 `dc9128ef596e84daf1138aa3046b826bba9d259f`, the version selected by the
 KoFEM-Dependencies builder:
 
-| KoFEM source     | MFEM reference                                                                                                                                                                                    |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/element.rs` | [`ElasticityIntegrator::AssembleElementMatrix`, `fem/bilininteg.cpp`](https://github.com/mfem/mfem/blob/dc9128ef596e84daf1138aa3046b826bba9d259f/fem/bilininteg.cpp#L3033)                        |
-| `src/cg.rs`      | [`CGSolver::Mult`, `linalg/solvers.cpp`](https://github.com/mfem/mfem/blob/dc9128ef596e84daf1138aa3046b826bba9d259f/linalg/solvers.cpp#L718), including the preconditioned residual stopping rule |
-| `src/sparse.rs`  | [`SparseMatrix::Gauss_Seidel_forw` and `Gauss_Seidel_back`, `linalg/sparsemat.cpp`](https://github.com/mfem/mfem/blob/dc9128ef596e84daf1138aa3046b826bba9d259f/linalg/sparsemat.cpp#L2443)        |
+| KoFEM source     | MFEM reference                                                                                                                                                                                                                                                                                                                                                        |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/element.rs` | [`ElasticityIntegrator::AssembleElementMatrix`, `fem/bilininteg.cpp`](https://github.com/mfem/mfem/blob/dc9128ef596e84daf1138aa3046b826bba9d259f/fem/bilininteg.cpp#L3033)                                                                                                                                                                                            |
+| `src/element.rs` | [`IsoparametricTransformation::OrderGrad`, `fem/eltrans.cpp`](https://github.com/mfem/mfem/blob/dc9128ef596e84daf1138aa3046b826bba9d259f/fem/eltrans.cpp#L467) and [`IntegrationRules::CubeIntegrationRule`, `fem/intrules.cpp`](https://github.com/mfem/mfem/blob/dc9128ef596e84daf1138aa3046b826bba9d259f/fem/intrules.cpp#L1849): the hexahedron integration rules |
+| `src/surface.rs` | [`VectorBoundaryLFIntegrator::AssembleRHSElementVect`, `fem/lininteg.cpp`](https://github.com/mfem/mfem/blob/dc9128ef596e84daf1138aa3046b826bba9d259f/fem/lininteg.cpp#L375): the quadrilateral face integration rule                                                                                                                                                 |
+| `src/cg.rs`      | [`CGSolver::Mult`, `linalg/solvers.cpp`](https://github.com/mfem/mfem/blob/dc9128ef596e84daf1138aa3046b826bba9d259f/linalg/solvers.cpp#L718), including the preconditioned residual stopping rule                                                                                                                                                                     |
+| `src/sparse.rs`  | [`SparseMatrix::Gauss_Seidel_forw` and `Gauss_Seidel_back`, `linalg/sparsemat.cpp`](https://github.com/mfem/mfem/blob/dc9128ef596e84daf1138aa3046b826bba9d259f/linalg/sparsemat.cpp#L2443)                                                                                                                                                                            |
 
 ## Copyright and license
 

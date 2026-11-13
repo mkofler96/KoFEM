@@ -19,11 +19,30 @@ pub enum FemError {
     },
     #[error("tetrahedron {tet} has zero volume (its four vertices are coplanar)")]
     DegenerateTet { tet: usize },
-    #[error("{count} material ids given for {tets} tetrahedra")]
-    MaterialIdCount { count: usize, tets: usize },
+    #[error("{count} material ids given for {elements} elements (tetrahedra, then hexahedra)")]
+    MaterialIdCount { count: usize, elements: usize },
     #[error("tetrahedron {tet} uses material {material}, but only {count} materials are defined")]
     MaterialOutOfRange {
         tet: usize,
+        material: u32,
+        count: usize,
+    },
+    #[error("hexahedron array has {len} indices, which is not a multiple of 8")]
+    HexArrayLength { len: usize },
+    #[error("hexahedron {hex} references vertex {vertex}, but the mesh has {count} vertices")]
+    HexVertexOutOfRange {
+        hex: usize,
+        vertex: u32,
+        count: usize,
+    },
+    #[error(
+        "hexahedron {hex} is flat or folded: its volume vanishes or turns inside out within the \
+         element, so it has no stiffness to integrate"
+    )]
+    DegenerateHex { hex: usize },
+    #[error("hexahedron {hex} uses material {material}, but only {count} materials are defined")]
+    HexMaterialOutOfRange {
+        hex: usize,
         material: u32,
         count: usize,
     },
@@ -33,7 +52,7 @@ pub enum FemError {
     PoissonRatio { index: usize, value: f64 },
     #[error("the mesh has {count} nodes; at most {max} are supported")]
     TooManyNodes { count: usize, max: usize },
-    #[error("the mesh has no tetrahedra")]
+    #[error("the mesh has no elements")]
     EmptyMesh,
     #[error("constrained degree of freedom {dof} is out of range (the model has {count})")]
     DofOutOfRange { dof: u32, count: usize },
