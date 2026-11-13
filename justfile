@@ -20,7 +20,7 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 # Recipe arguments reach the commands as "$@", so an argument with a space or
 # a `|` in it (`-g "pick|click"`) arrives as the one word it was typed as.
 
-set positional-arguments := true
+set positional-arguments
 
 [private]
 default:
@@ -72,9 +72,17 @@ test-cpp: test-cpp-native test-cpp-wasm
 test-cpp-native *args:
     @{{ just_executable() }} _ctest native "$@"
 
+# The SDK is at /emsdk in the dependency image and after
+# scripts/fetch-wasm-deps.sh; set EMSDK when yours is elsewhere.
+
 # C++ through Emscripten and node: the units that link MFEM.
 test-cpp-wasm *args:
-    @{{ just_executable() }} _ctest wasm "$@"
+    @export EMSDK="${EMSDK:-/emsdk}"; \
+    if [ ! -x "$EMSDK/upstream/emscripten/emcc" ]; then \
+        echo "ERROR: no Emscripten SDK at $EMSDK. Set EMSDK or run: bash scripts/fetch-wasm-deps.sh" >&2; \
+        exit 1; \
+    fi; \
+    {{ just_executable() }} _ctest wasm "$@"
 
 # TypeScript logic and both WebAssembly modules, without a browser.
 test-web *args: _wasm
