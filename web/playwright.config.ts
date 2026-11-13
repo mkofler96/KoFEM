@@ -1,14 +1,17 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { defineConfig } from "@playwright/test";
+import { chromium, defineConfig } from "@playwright/test";
 import fs from "fs";
+import { resolveChromiumExecutable } from "./playwright-browser";
 
-// Fall back to the pre-installed chromium when the headless-shell isn't available
-const FALLBACK_CHROME = "/opt/pw-browsers/chromium-1194/chrome-linux/chrome";
-const executablePath = fs.existsSync(FALLBACK_CHROME)
-  ? FALLBACK_CHROME
-  : undefined;
+// The pinned headless shell where installed (CI), else the pre-installed
+// Chromium of a cloud session; see playwright-browser.ts.
+const executablePath = resolveChromiumExecutable({
+  env: process.env,
+  pinnedChromium: chromium.executablePath(),
+  exists: (file) => fs.existsSync(file),
+});
 
 export default defineConfig({
   testDir: "./tests",
