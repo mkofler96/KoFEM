@@ -79,6 +79,9 @@ write the minimal code that makes it pass, then clean up with the suite green.
   not coverage of a solver path; also run its Rust-vs-C++ check under
   `web/tests/`.
 - Prefer small, focused tests, so a failure pinpoints the broken unit.
+- `bun run test:validation` (`web/scripts/run-validation.mjs`) finds
+  `web/tests/test_*.mjs` and the Bun tests in `web/tests/unit/` by itself.
+  Add a test file there; never list test files in `package.json`.
 
 ## Workflow
 
