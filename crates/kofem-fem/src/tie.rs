@@ -35,6 +35,8 @@
 //! Ported from the C++ engine's tie path (PR #547: `tie_constraints.cpp` and
 //! `fe_node_ties` in `solve_mfem.cpp`), which it replaces.
 
+use std::collections::HashSet;
+
 use crate::amg::LevelInfo;
 use crate::cg::{solve_pcg_with, CgSettings};
 use crate::coupled_static::{
@@ -68,6 +70,9 @@ pub struct NodeTie {
 pub struct VertexTies {
     vertex_count: usize,
     ties: Vec<NodeTie>,
+    /// The interface (tie connection) of each tie; all 0 unless set by
+    /// [`VertexTies::with_interfaces`].
+    interface_of: Vec<u32>,
 }
 
 fn tie_error(reason: String) -> FemError {
@@ -157,7 +162,30 @@ impl VertexTies {
                 weights: weights[begin..end].to_vec(),
             });
         }
-        Ok(Self { vertex_count, ties })
+        Ok(Self {
+            vertex_count,
+            interface_of: vec![0; ties.len()],
+            ties,
+        })
+    }
+
+    /// The same ties, each assigned to an interface (`interfaces[k]` for tie
+    /// k, e.g. the tie connection it comes from). On a quadratic mesh the
+    /// ties extend only over edges and faces of one interface (see
+    /// [`node_ties`]); without this call all ties form one interface.
+    ///
+    /// # Errors
+    /// [`FemError::Tie`] when there is not one interface per tie.
+    pub fn with_interfaces(mut self, interfaces: &[u32]) -> Result<Self, FemError> {
+        if interfaces.len() != self.ties.len() {
+            return Err(tie_error(format!(
+                "{} interfaces for {} tied nodes",
+                interfaces.len(),
+                self.ties.len()
+            )));
+        }
+        self.interface_of = interfaces.to_vec();
+        Ok(self)
     }
 
     /// Tied vertices.
@@ -287,21 +315,7 @@ pub fn node_ties(mesh: &TetMesh, ties: &VertexTies) -> Result<Vec<NodeTie>, FemE
     let mut projected: Vec<Option<[f64; 3]>> = vec![None; mesh.vertex_count()];
     let mut nearby: Vec<Vec<usize>> = vec![Vec::new(); mesh.vertex_count()];
     for tie in &ties.ties {
-        let holding: Vec<usize> = faces_of[tie.masters[0]]
-            .iter()
-            .copied()
-            .filter(|&face| {
-                tie.masters
-                    .iter()
-                    .all(|master| faces[face].corners.contains(master))
-            })
-            .collect();
-        if holding.is_empty() {
-            return Err(tie_error(format!(
-                "the nodes vertex {} is tied to do not lie on one free element face",
-                tie.node
-            )));
-        }
+        let holding = holding_faces(&faces, &faces_of, tie)?;
         let mut target = [0.0; 3];
         for (&master, &weight) in tie.masters.iter().zip(&tie.weights) {
             for (axis, value) in target.iter_mut().enumerate() {
@@ -319,10 +333,13 @@ pub fn node_ties(mesh: &TetMesh, ties: &VertexTies) -> Result<Vec<NodeTie>, FemE
             }
         }
     }
-    // An edge or hex face node whose vertices are all tied follows the master
-    // field at the mean of their projections: the master's quadratic field,
+    // An edge or hex face node of the tied surface follows the master field
+    // at the mean of its vertices' projections: the master's quadratic field,
     // not the mean of the slave vertices, which would open a gap wherever the
-    // master face curves.
+    // master face curves. The tied surface is the boundary faces whose corners
+    // are all tied within one interface — an edge between two interfaces (the
+    // through-thickness edge of a body tied on two sides) is not on it.
+    let on_surface = tied_surface(&faces, ties);
     let vertices = mesh.vertex_count();
     let interior = mesh
         .edges()
@@ -331,6 +348,10 @@ pub fn node_ties(mesh: &TetMesh, ties: &VertexTies) -> Result<Vec<NodeTie>, FemE
         .chain(mesh.faces().iter().map(|face| &face[..]))
         .enumerate();
     for (index, corners) in interior {
+        // Edge and face corners are stored sorted, as the keys are.
+        if !on_surface.contains(corners) {
+            continue;
+        }
         let Some(targets) = corners
             .iter()
             .map(|&corner| projected[corner as usize])
@@ -367,6 +388,64 @@ pub fn node_ties(mesh: &TetMesh, ties: &VertexTies) -> Result<Vec<NodeTie>, FemE
         )?;
     }
     Ok(out)
+}
+
+/// The boundary faces that hold every master of `tie`: the faces its
+/// projection can lie on.
+fn holding_faces(
+    faces: &[MasterFace],
+    faces_of: &[Vec<usize>],
+    tie: &NodeTie,
+) -> Result<Vec<usize>, FemError> {
+    let holding: Vec<usize> = faces_of[tie.masters[0]]
+        .iter()
+        .copied()
+        .filter(|&face| {
+            tie.masters
+                .iter()
+                .all(|master| faces[face].corners.contains(master))
+        })
+        .collect();
+    if holding.is_empty() {
+        return Err(tie_error(format!(
+            "the nodes vertex {} is tied to do not lie on one free element face",
+            tie.node
+        )));
+    }
+    Ok(holding)
+}
+
+/// The edges (sorted corner pairs) and hex faces (sorted corner quadruples) of
+/// the tied surface: the boundary faces whose corners are all tied within
+/// one interface.
+fn tied_surface(faces: &[MasterFace], ties: &VertexTies) -> HashSet<Vec<u32>> {
+    let mut interface: Vec<Option<u32>> = vec![None; ties.vertex_count];
+    for (tie, &id) in ties.ties.iter().zip(&ties.interface_of) {
+        interface[tie.node] = Some(id);
+    }
+    let mut on_surface: HashSet<Vec<u32>> = HashSet::new();
+    for face in faces {
+        let first = interface[face.corners[0]];
+        if first.is_none()
+            || face
+                .corners
+                .iter()
+                .any(|&corner| interface[corner] != first)
+        {
+            continue;
+        }
+        let count = face.corners.len();
+        for side in 0..count {
+            on_surface.insert(sorted_key(&[
+                face.corners[side],
+                face.corners[(side + 1) % count],
+            ]));
+        }
+        if count == 4 {
+            on_surface.insert(sorted_key(&face.corners));
+        }
+    }
+    on_surface
 }
 
 /// Tie `node` to the master field at `target`: of the `candidates`, the face

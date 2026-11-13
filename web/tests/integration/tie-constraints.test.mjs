@@ -28,6 +28,7 @@ import {
   tieWeighting,
 } from "../../src/lib/solve/tieMortar.ts";
 import { solveSolidInRust } from "../../src/lib/solve/amg.ts";
+import { buildCoupledEngineInputs } from "../../src/lib/solve/coupled.ts";
 import {
   expandTiedDisplacements,
   weldTies,
@@ -420,9 +421,7 @@ describe("the patch test across a non-matching mortar tie", () => {
           properties,
           constraints,
           loads: [],
-          surfaceLoads: [
-            { type: "traction", force: [STRESS, 0, 0], faces: faces },
-          ],
+          surfaceLoads: [{ type: "traction", force: [STRESS, 0, 0], faces }],
           constraintTies: model.constraints,
         },
         1,
@@ -438,4 +437,45 @@ describe("the patch test across a non-matching mortar tie", () => {
       );
       expect(worst).toBeLessThan(1e-4 * STRESS);
     });
+});
+
+// A model with a surface-to-point coupling takes the coupled solve, which joins
+// every tie by distributing couplings. A constraint tie there must say so, not
+// change its formulation silently.
+describe("a constraint tie in a model with a coupling", () => {
+  test("is joined by distributing couplings, and the log says so", () => {
+    const { nodes, elements } = gappedBoxes("CTETRA", 3);
+    const far = onPlane(nodes, 2 * LENGTH + GAP);
+    const refNodeId = 9999;
+    const logs = [];
+    buildCoupledEngineInputs(
+      {
+        nodes: [
+          ...nodes,
+          { id: refNodeId, x: 2 * LENGTH + GAP + 1, y: 2, z: 2 },
+        ],
+        elements,
+        materials,
+        properties,
+        constraints: [],
+        loads: [],
+        couplings: [
+          {
+            name: "Coupling1",
+            kind: "kinematic",
+            dofs: [0, 1, 2, 3, 4, 5],
+            refNodeId,
+            faces: [{ nodeIds: far }],
+          },
+        ],
+        tieGroups: tieBetween(nodes, "full", 0),
+      },
+      (line) => logs.push(line),
+    );
+    expect(
+      logs.some((line) =>
+        /Tie "Tie1": .*distributing couplings.*constraint \(MPC\)/.test(line),
+      ),
+    ).toBe(true);
+  });
 });

@@ -11,26 +11,36 @@ use crate::to_js;
 
 /// Constraint ties for `ElasticModel.startTiedSolve`, in CSR form: vertex
 /// `slaves[k]` follows Σ `weights[i]` · u(`masters[i]`) over
-/// i ∈ [`offsets[k]`, `offsets[k + 1]`). Checked against the mesh when the
-/// solve starts.
+/// i ∈ [`offsets[k]`, `offsets[k + 1]`), as part of interface
+/// `interfaces[k]` (its tie connection: on quadratic elements a tie extends
+/// over the edges and faces of one interface only). Checked against the mesh
+/// when the solve starts.
 #[wasm_bindgen]
 pub struct Ties {
     pub(crate) slaves: Vec<u32>,
     pub(crate) offsets: Vec<u32>,
     pub(crate) masters: Vec<u32>,
     pub(crate) weights: Vec<f64>,
+    pub(crate) interfaces: Vec<u32>,
 }
 
 #[wasm_bindgen]
 impl Ties {
     #[wasm_bindgen(constructor)]
     #[must_use]
-    pub fn new(slaves: &[u32], offsets: &[u32], masters: &[u32], weights: &[f64]) -> Ties {
+    pub fn new(
+        slaves: &[u32],
+        offsets: &[u32],
+        masters: &[u32],
+        weights: &[f64],
+        interfaces: &[u32],
+    ) -> Ties {
         Ties {
             slaves: slaves.to_vec(),
             offsets: offsets.to_vec(),
             masters: masters.to_vec(),
             weights: weights.to_vec(),
+            interfaces: interfaces.to_vec(),
         }
     }
 

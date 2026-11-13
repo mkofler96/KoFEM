@@ -93,8 +93,10 @@ export function buildSolidEngineInputs(
 
 // Constraint ties as the Rust solver's CSR tables (kofem-wasm `Ties`): vertex
 // slaves[k] follows masters[offsets[k]..offsets[k+1]) with the matching
-// weights. A master that a node-merge tie welded away resolves to its
-// representative through `refVid`.
+// weights, as part of interface interfaces[k] — one per tie connection, so a
+// quadratic tie extends only over its own connection's edges and faces. A
+// master that a node-merge tie welded away resolves to its representative
+// through `refVid`.
 export function rustTieTables(
   constraints: TieConstraint[],
   refVid: VertexIndexer,
@@ -103,12 +105,21 @@ export function rustTieTables(
   offsets: Uint32Array;
   masters: Uint32Array;
   weights: Float64Array;
+  interfaces: Uint32Array;
 } {
+  const interfaceOf = new Map<string, number>();
+  const interfaces: number[] = [];
   const slaves: number[] = [];
   const offsets: number[] = [0];
   const masters: number[] = [];
   const weights: number[] = [];
   for (const constraint of constraints) {
+    let index = interfaceOf.get(constraint.tie);
+    if (index === undefined) {
+      index = interfaceOf.size;
+      interfaceOf.set(constraint.tie, index);
+    }
+    interfaces.push(index);
     slaves.push(refVid(constraint.slaveId, "tie constraint"));
     constraint.masterIds.forEach((masterId, k) => {
       masters.push(refVid(masterId, "tie constraint"));
@@ -121,6 +132,7 @@ export function rustTieTables(
     offsets: Uint32Array.from(offsets),
     masters: Uint32Array.from(masters),
     weights: Float64Array.from(weights),
+    interfaces: Uint32Array.from(interfaces),
   };
 }
 

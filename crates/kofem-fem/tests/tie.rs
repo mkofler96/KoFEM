@@ -810,3 +810,69 @@ fn a_constant_traction_crosses_a_mortar_tie_exactly() {
     let projection = traction_patch(&model, &mesh, &model.vertex_ties());
     assert!(projection > 1e-4, "projection off by only {projection:e}");
 }
+
+#[test]
+fn quadratic_ties_extend_only_over_one_interface() {
+    // Three unit hexes along x with gaps: B, one element thick, is tied on
+    // its left face to A (interface 0) and on its right face to C (interface
+    // 1), node to node. Every corner of B is tied, but only the edge and face
+    // nodes of B's two tied faces may follow a master field — not its
+    // through-thickness edges or side faces, which join the two interfaces.
+    let starts = [0.0, 1.5, 3.0];
+    let mut vertices = Vec::new();
+    let mut hexes = Vec::new();
+    for &start in &starts {
+        let first = vertices.len() as u32;
+        for bits in 0..8usize {
+            vertices.push([
+                start + (bits & 1) as f64,
+                ((bits >> 1) & 1) as f64,
+                ((bits >> 2) & 1) as f64,
+            ]);
+        }
+        hexes.extend(HEX_CORNERS.map(|corner| first + corner as u32));
+    }
+    let flat: Vec<f64> = vertices.iter().flatten().copied().collect();
+    let mesh = TetMesh::with_hexahedra(
+        &flat,
+        &[],
+        &hexes,
+        &[0, 0, 0],
+        vec![Isotropic::new(0, YOUNG, POISSON).expect("valid material")],
+    )
+    .and_then(|mesh| mesh.with_order(ElementOrder::Quadratic))
+    .expect("valid hexes");
+    // B's corner at x-bit b follows A's right face (b = 0) or C's left face
+    // (b = 1), at the same (y, z).
+    let mut slaves = Vec::new();
+    let mut masters = Vec::new();
+    let mut interfaces = Vec::new();
+    for bits in 0..8u32 {
+        slaves.push(8 + bits);
+        let right = bits & 1;
+        masters.push(if right == 0 {
+            bits | 1
+        } else {
+            16 + (bits & !1)
+        });
+        interfaces.push(right);
+    }
+    let offsets: Vec<u32> = (0..=8).collect();
+    let ties = VertexTies::new(vertices.len(), &slaves, &offsets, &masters, &[1.0; 8])
+        .and_then(|ties| ties.with_interfaces(&interfaces))
+        .expect("valid ties");
+    let points = mesh.node_coordinates();
+    let tied_points: Vec<[f64; 3]> = node_ties(&mesh, &ties)
+        .expect("quadratic ties")
+        .iter()
+        .map(|tie| points[tie.node])
+        .collect();
+    // 9 nodes on each of B's two tied faces, all at x = 1.5 or x = 2.5.
+    assert_eq!(tied_points.len(), 18, "tied nodes: {tied_points:?}");
+    for point in tied_points {
+        assert!(
+            (point[0] - 1.5).abs() < 1e-12 || (point[0] - 2.5).abs() < 1e-12,
+            "node at {point:?} is off both tied faces"
+        );
+    }
+}

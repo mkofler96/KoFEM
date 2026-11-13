@@ -412,6 +412,7 @@ impl ElasticModel {
             &ties.masters,
             &ties.weights,
         )
+        .and_then(|vertex_ties| vertex_ties.with_interfaces(&ties.interfaces))
         .map_err(|error| to_js(&error))?;
         let PreparedTied {
             mut prepared,

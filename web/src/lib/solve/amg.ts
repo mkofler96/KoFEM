@@ -316,6 +316,7 @@ export async function solveSolidInRust(
               tables.offsets,
               tables.masters,
               tables.weights,
+              tables.interfaces,
             );
             try {
               const run = elastic.startTiedSolve(
@@ -325,11 +326,12 @@ export async function solveSolidInRust(
                 forces,
                 options,
               );
+              const prescribedNote =
+                run.tiePrescribed > 0
+                  ? `, ${run.tiePrescribed} tied DOF(s) also fixed or prescribed — the support applies there`
+                  : "";
               log(
-                `Tie constraints: ${run.tiedNodes} tied node(s), ${run.tieEliminated} DOF(s) eliminated` +
-                  (run.tiePrescribed > 0
-                    ? `, ${run.tiePrescribed} tied DOF(s) also fixed or prescribed — the support applies there`
-                    : ""),
+                `Tie constraints: ${run.tiedNodes} tied node(s), ${run.tieEliminated} DOF(s) eliminated${prescribedNote}`,
               );
               return run;
             } finally {

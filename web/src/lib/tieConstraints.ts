@@ -167,17 +167,20 @@ function makeTriangle(
 }
 
 // The free surface of each side: the element faces whose nodes all lie on that
-// side and that belong to ONE element (a face used by two elements is interior,
+// side (or are shared by both) and that belong to ONE element (a face used by two elements is interior,
 // even when all its nodes happen to sit on the picked surface) — as the faces
 // themselves, for the mortar integrals, and split into triangles, for the
 // closest-point search.
 function sideSurfaces(
   elements: TieElement[],
   sides: readonly Set<number>[],
+  shared: ReadonlySet<number>,
   positionOf: (id: number) => Point3,
 ): { faces: MortarFace[]; triangles: Triangle[] }[] {
-  const sideOf = (id: number): number =>
-    sides.findIndex((side) => side.has(id));
+  // A shared node (picked on both sides, already joined) bounds faces of
+  // either side: a face belongs to the side its other nodes are on.
+  const onSide = (id: number, side: number): boolean =>
+    sides[side].has(id) || shared.has(id);
   const faces = new Map<
     string,
     { ids: number[]; side: number; count: number; elementCentroid: Point3 }
@@ -188,13 +191,18 @@ function sideSurfaces(
     // never by these constraints, so a facet on a picked surface adds no face.
     if (el.nodeIds.length === SHELL_FACET_NODES) continue;
     // A face needs three nodes on a side, so most elements are skipped here.
-    let onSides = 0;
-    for (const id of el.nodeIds) if (sideOf(id) >= 0) onSides++;
-    if (onSides < 3) continue;
+    let picked = 0;
+    for (const id of el.nodeIds)
+      if (shared.has(id) || sides.some((side) => side.has(id))) picked++;
+    if (picked < 3) continue;
     for (const face of facesOf(el)) {
       const ids = face.map((k) => el.nodeIds[k]);
-      const side = sideOf(ids[0]);
-      if (side < 0 || !ids.every((id) => sides[side].has(id))) continue;
+      const side = sides.findIndex(
+        (members, index) =>
+          ids.some((id) => members.has(id)) &&
+          ids.every((id) => onSide(id, index)),
+      );
+      if (side < 0) continue;
       const key = [...ids].sort((first, second) => first - second).join(",");
       const seen = faces.get(key);
       if (seen) seen.count++;
@@ -408,7 +416,18 @@ export function tieConstraints(
     if (a.length === 0 || b.length === 0) continue;
 
     const sideIds = [new Set(a), new Set(b)];
-    const [surfaceA, surfaceB] = sideSurfaces(elements, sideIds, positionOf);
+    // Picked nodes on neither side are shared by the two (already joined):
+    // they are not tied, but the faces around them still bound each side.
+    const shared = new Set<number>();
+    for (const face of [...tie.facesA, ...tie.facesB])
+      for (const id of face.nodeIds)
+        if (!sideIds[0].has(id) && !sideIds[1].has(id)) shared.add(id);
+    const [surfaceA, surfaceB] = sideSurfaces(
+      elements,
+      sideIds,
+      shared,
+      positionOf,
+    );
     const trianglesA = surfaceA.triangles;
     const trianglesB = surfaceB.triangles;
     // Slave = the finer side, provided the other has faces to project onto.
