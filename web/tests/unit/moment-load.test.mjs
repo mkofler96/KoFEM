@@ -76,14 +76,14 @@ describe("Mz over a square face reproduces the moment exactly", () => {
   });
 
   test("zero net force", () => {
-    expect(Math.abs(force[0] - 0)).toBeLessThan(TOLERANCE);
-    expect(Math.abs(force[1] - 0)).toBeLessThan(TOLERANCE);
-    expect(Math.abs(force[2] - 0)).toBeLessThan(TOLERANCE);
+    expect(Math.abs(force[0])).toBeLessThan(TOLERANCE);
+    expect(Math.abs(force[1])).toBeLessThan(TOLERANCE);
+    expect(Math.abs(force[2])).toBeLessThan(TOLERANCE);
   });
 
   test("net moment equals applied Mz", () => {
-    expect(Math.abs(moment[0] - 0)).toBeLessThan(TOLERANCE);
-    expect(Math.abs(moment[1] - 0)).toBeLessThan(TOLERANCE);
+    expect(Math.abs(moment[0])).toBeLessThan(TOLERANCE);
+    expect(Math.abs(moment[1])).toBeLessThan(TOLERANCE);
     expect(Math.abs(moment[2] - appliedMoment)).toBeLessThan(TOLERANCE);
   });
 
@@ -102,14 +102,14 @@ describe("componentwise [Mx,0,Mz] superposes the per-axis loads", () => {
   const { force, moment } = resultants(combined, square);
 
   test("zero net force", () => {
-    expect(Math.abs(force[0] - 0)).toBeLessThan(TOLERANCE);
-    expect(Math.abs(force[1] - 0)).toBeLessThan(TOLERANCE);
-    expect(Math.abs(force[2] - 0)).toBeLessThan(TOLERANCE);
+    expect(Math.abs(force[0])).toBeLessThan(TOLERANCE);
+    expect(Math.abs(force[1])).toBeLessThan(TOLERANCE);
+    expect(Math.abs(force[2])).toBeLessThan(TOLERANCE);
   });
 
   test("net moment equals [300, 0, -200]", () => {
     expect(Math.abs(moment[0] - 300)).toBeLessThan(TOLERANCE);
-    expect(Math.abs(moment[1] - 0)).toBeLessThan(TOLERANCE);
+    expect(Math.abs(moment[1])).toBeLessThan(TOLERANCE);
     expect(Math.abs(moment[2] - -200)).toBeLessThan(TOLERANCE);
   });
 
@@ -196,9 +196,9 @@ describe("each face carries the full applied moment", () => {
   const { force, moment } = resultants(loads, nodes);
 
   test("zero net force", () => {
-    expect(Math.abs(force[0] - 0)).toBeLessThan(TOLERANCE);
-    expect(Math.abs(force[1] - 0)).toBeLessThan(TOLERANCE);
-    expect(Math.abs(force[2] - 0)).toBeLessThan(TOLERANCE);
+    expect(Math.abs(force[0])).toBeLessThan(TOLERANCE);
+    expect(Math.abs(force[1])).toBeLessThan(TOLERANCE);
+    expect(Math.abs(force[2])).toBeLessThan(TOLERANCE);
   });
 
   test("net moment is M per face (2*M total)", () => {

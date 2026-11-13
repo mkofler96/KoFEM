@@ -33,8 +33,22 @@ function requireBuilt(url, what) {
 
 // Drops a line of the engine's log.
 const silent = () => undefined;
-let engineBinary;
-let createEngine;
+
+// The engine's factory and binary are read once. The promise is stored before
+// anything is awaited, so tests that load at the same time share one read.
+let engineSource;
+
+function readEngine() {
+  if (!engineSource) {
+    const wasmBinary = readFileSync(
+      requireBuilt(ENGINE_WASM, "The C++ engine"),
+    ).buffer;
+    engineSource = import(requireBuilt(ENGINE_JS, "The C++ engine")).then(
+      (module) => ({ create: module.default, wasmBinary }),
+    );
+  }
+  return engineSource;
+}
 
 /**
  * A fresh instance of the C++ engine (OCCT, Netgen, the C++ solvers). Each
@@ -43,40 +57,36 @@ let createEngine;
  * log is dropped unless `print` / `printErr` are passed.
  */
 export async function loadEngine(options = {}) {
-  if (!createEngine) {
-    engineBinary = readFileSync(
-      requireBuilt(ENGINE_WASM, "The C++ engine"),
-    ).buffer;
-    ({ default: createEngine } = await import(
-      requireBuilt(ENGINE_JS, "The C++ engine")
-    ));
-  }
-  return createEngine({
-    wasmBinary: engineBinary,
+  const { create, wasmBinary } = await readEngine();
+  return create({
+    wasmBinary,
     print: silent,
     printErr: silent,
     ...options,
   });
 }
 
-let fem;
+let femModule;
 
 /**
  * The Rust finite-element module, initialised. It is stateless between
  * calls, so one instance serves a whole test file; later calls return the
  * same module. Its classes can also be imported by name from
  * src/wasm/fem/kofem_wasm.js once this has resolved.
+ *
+ * @returns {Promise<object>} the initialised module
  */
-export async function loadFem() {
-  if (!fem) {
+export function loadFem() {
+  if (!femModule) {
     const bytes = readFileSync(
       requireBuilt(FEM_WASM, "The Rust finite-element module"),
     );
-    const module = await import(
+    femModule = import(
       requireBuilt(FEM_JS, "The Rust finite-element module")
-    );
-    await module.default({ module_or_path: bytes });
-    fem = module;
+    ).then(async (module) => {
+      await module.default({ module_or_path: bytes });
+      return module;
+    });
   }
-  return fem;
+  return femModule;
 }

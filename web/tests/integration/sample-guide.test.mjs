@@ -184,6 +184,6 @@ describe("the shipped wall bracket", () => {
     expect(hub.rMax, detail).toBeLessThan(10.1);
     expect(Math.abs(hub.length - 54), detail).toBeLessThanOrEqual(0.01);
     expect(Math.abs(hub.centre[0] - 85), detail).toBeLessThanOrEqual(0.01);
-    expect(Math.abs(hub.centre[1] - 0), detail).toBeLessThanOrEqual(0.01);
+    expect(Math.abs(hub.centre[1]), detail).toBeLessThanOrEqual(0.01);
   });
 });
