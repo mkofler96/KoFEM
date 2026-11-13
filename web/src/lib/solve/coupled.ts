@@ -11,6 +11,7 @@ import type {
   Element,
   Property,
   SolveModel,
+  SurfaceLoad,
 } from "../../workers/solverTypes.js";
 import { mixedCoupledMaterials } from "../coupledMaterials.js";
 import { bodyMembership, tieLimit, tieSides } from "../tie.js";
@@ -30,6 +31,7 @@ import { buildVertexIndexer, type VertexIndexer } from "../solveMeshPacking.js";
 import {
   coupledFixedDofs,
   coupledLoads,
+  solidFacesOutward,
   type CoupledDirichlet,
 } from "./bcs.js";
 
@@ -176,6 +178,12 @@ export interface CoupledEngineInputs {
   };
   coupling: EngineCoupling;
   bcs: EngineCoupledBcs;
+  // The loads of `bcs` again, split for a solver that integrates surface loads
+  // itself (the Rust solve of quadratic elements): the point loads, with
+  // reference-point moments, as 6·pool+dof entries, and the surface loads with
+  // their faces as pool indices.
+  pointLoads: Pick<EngineCoupledBcs, "load_dofs" | "load_vals">;
+  poolSurfaceLoads: SurfaceLoad[];
   matJson: string;
   // `mat.solid` of matJson: one material per 1-based `mesh.attributes` value.
   solidMaterials: { young_modulus: number; poisson_ratio: number }[];
@@ -306,12 +314,24 @@ export function buildCoupledEngineInputs(
   );
   const nodalLoads = coupledLoads(
     loads,
-    surfaceLoads,
+    solidFacesOutward(surfaceLoads, elements, nodes, vid),
     poolOf,
     isRefPoint,
     nodes,
     vid,
   );
+  const pointLoads = coupledLoads(
+    loads,
+    undefined,
+    poolOf,
+    isRefPoint,
+    nodes,
+    vid,
+  );
+  const poolSurfaceLoads = (surfaceLoads ?? []).map((surfaceLoad) => ({
+    ...surfaceLoad,
+    faces: surfaceLoad.faces.map((face) => face.map(poolOf)),
+  }));
   const {
     mat,
     solidAttributes,
@@ -336,6 +356,11 @@ export function buildCoupledEngineInputs(
     },
     coupling: engineCoupling(coupling),
     bcs: engineCoupledBcs(dirichlet, nodalLoads),
+    pointLoads: {
+      load_dofs: Int32Array.from(pointLoads.load_dofs),
+      load_vals: Float64Array.from(pointLoads.load_vals),
+    },
+    poolSurfaceLoads,
     matJson: JSON.stringify(mat),
     solidMaterials: mat.solid,
     model,
