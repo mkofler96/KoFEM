@@ -72,16 +72,19 @@ test-cpp: test-cpp-native test-cpp-wasm
 test-cpp-native *args:
     @{{ just_executable() }} _ctest native "$@"
 
-# The SDK is at /emsdk in the dependency image and after
-# scripts/fetch-wasm-deps.sh; set EMSDK when yours is elsewhere.
+# The SDK and MFEM are at /emsdk and /opt/kofem-deps/mfem in the dependency
+# image and after scripts/fetch-wasm-deps.sh; set EMSDK and MFEM_WASM_ROOT
+# when yours are elsewhere. emsdk_env.sh puts the SDK's node on PATH, where
+# CMake looks for it to run the test programs.
 
 # C++ through Emscripten and node: the units that link MFEM.
 test-cpp-wasm *args:
-    @export EMSDK="${EMSDK:-/emsdk}"; \
-    if [ ! -x "$EMSDK/upstream/emscripten/emcc" ]; then \
+    @export EMSDK="${EMSDK:-/emsdk}" MFEM_WASM_ROOT="${MFEM_WASM_ROOT:-/opt/kofem-deps/mfem}"; \
+    if [ ! -f "$EMSDK/emsdk_env.sh" ]; then \
         echo "ERROR: no Emscripten SDK at $EMSDK. Set EMSDK or run: bash scripts/fetch-wasm-deps.sh" >&2; \
         exit 1; \
     fi; \
+    set +u; . "$EMSDK/emsdk_env.sh" >/dev/null 2>&1; set -u; \
     {{ just_executable() }} _ctest wasm "$@"
 
 # TypeScript logic and both WebAssembly modules, without a browser.
