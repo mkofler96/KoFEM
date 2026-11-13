@@ -57,8 +57,12 @@ export default [
   },
   {
     // Mirrors DeepSource JS-C1003 (issue #341). Covers tests/ as well —
-    // 3 of the 10 findings on #340 were in specs.
-    files: ["src/**/*.{ts,tsx}", "tests/**/*.{ts,mjs}"],
+    // 3 of the 10 findings on #340 were in specs — and the validation runner.
+    files: [
+      "src/**/*.{ts,tsx}",
+      "tests/**/*.{ts,mjs}",
+      "scripts/run-validation.mjs",
+    ],
     languageOptions: { parser: tseslint.parser },
     plugins: { kofem },
     rules: {
