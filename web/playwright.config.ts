@@ -15,6 +15,9 @@ const executablePath = resolveChromiumExecutable({
 
 export default defineConfig({
   testDir: "./tests",
+  // tests/unit holds bun test files (bun run test:validation runs them);
+  // their *.test.* names would otherwise match Playwright's default pattern.
+  testIgnore: "unit/**",
   outputDir: "./playwright-results",
   timeout: 30_000,
   // Schedule tests one by one, not file by file. CI splits the suite with
