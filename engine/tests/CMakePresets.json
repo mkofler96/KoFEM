@@ -1,0 +1,39 @@
+{
+  "version": 2,
+  "cmakeMinimumRequired": { "major": 3, "minor": 20, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "native",
+      "displayName": "Host compiler: the units without MFEM",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/../../target/cpp-tests/native"
+    },
+    {
+      "name": "wasm",
+      "displayName": "Emscripten: the units that link MFEM, run through node",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/../../target/cpp-tests/wasm",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "native", "configurePreset": "native" },
+    { "name": "wasm", "configurePreset": "wasm" }
+  ],
+  "testPresets": [
+    {
+      "name": "native",
+      "configurePreset": "native",
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error" }
+    },
+    {
+      "name": "wasm",
+      "configurePreset": "wasm",
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error" }
+    }
+  ]
+}

@@ -18,11 +18,25 @@ const run = (command, args) =>
     encoding: "utf8",
     maxBuffer: 8 * 1024 * 1024,
   });
+// The shell validation is one of the engine's ctest programs
+// (engine/tests/CMakeLists.txt). It is built here in a tree of its own with
+// the named compiler, so the record states exactly what ran.
+const buildDir = "target/cpp-tests/evidence";
 const commands = [
-  ["scripts/test-shell.sh"],
-  ["scripts/study-shell-solid-footprint.sh", "2"],
+  [
+    "cmake",
+    "-S",
+    "engine/tests",
+    "-B",
+    buildDir,
+    `-DCMAKE_CXX_COMPILER=${compiler}`,
+  ],
+  ["cmake", "--build", buildDir, "--target", "shell_validation"],
+  [`${buildDir}/shell_validation`],
+  ["bash", "scripts/study-shell-solid-footprint.sh", "2"],
 ];
-const [shellLog, footprintLog] = commands.map((args) => run("bash", args));
+const logs = commands.map(([command, ...args]) => run(command, args));
+const [shellLog, footprintLog] = logs.slice(2);
 assert.match(shellLog, /all checks passed/);
 assert.match(footprintLog, /PASS: rigid motion/);
 const plate = [
@@ -65,7 +79,7 @@ if (process.argv.includes("--report")) {
     "--",
     "engine/cpp",
     "engine/tests",
-    ...commands.map(([path]) => path),
+    "scripts/study-shell-solid-footprint.sh",
   ]);
   const record = {
     sourceRevision: run("git", ["rev-parse", "HEAD"]).trim(),
@@ -73,7 +87,13 @@ if (process.argv.includes("--report")) {
     execution:
       "Native production C++ shell/coupling core; no WASM wrapper or CAD extraction in these measurements",
     compiler: run(compiler, ["--version"]).split("\n")[0],
-    commands: commands.map((args) => `CXX=${compiler} bash ${args.join(" ")}`),
+    commands: [
+      commands
+        .slice(0, 3)
+        .map((args) => args.join(" "))
+        .join(" && "),
+      `CXX=${compiler} ${commands[3].join(" ")}`,
+    ],
     precision:
       "Values retain the precision printed by the existing native checks (7 significant figures for plates, 9 for transition values, 6 decimal places for ratios)",
     ...measured,
