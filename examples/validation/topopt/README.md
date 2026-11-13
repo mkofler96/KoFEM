@@ -97,13 +97,11 @@ stiffest design (the returned compliance is the minimum of the whole history).
 
 - **`engine/tests/topology_optimize_validation.cpp`** (KOF-230) is the native C++
   check of the loop's trajectory on a tiny MBB. It links MFEM and runs under node
-  via Emscripten (`scripts/test-topology-optimize.sh`); like the other
-  `engine/tests/`, CI does not run it yet (KOF-207). These `examples/` cases are
+  via Emscripten (`just test-cpp-wasm -R topology_optimize`), in CI too. These `examples/` cases are
   the web-side counterpart: they run against the fetched engine with no build
   step, and lock the visual "textbook truss" layout the native test defers here.
 - **`engine/tests/topology_stress_validation.cpp`** (KOF-236) is the native check
-  of the maximum-stress constraint (`scripts/test-topology-stress.sh`, not run by
-  CI either): a finite-difference check of the aggregated-stress adjoint (P-norm
+  of the maximum-stress constraint (`just test-cpp-wasm -R topology_stress`): a finite-difference check of the aggregated-stress adjoint (P-norm
   and KS), and the L-bracket stress-concentration benchmark — the
   compliance-only design peaks at the re-entrant corner, and minimizing volume
   subject to σ ≤ σ_allow meets the limit with a peak ≥ 10 % below a
@@ -112,7 +110,7 @@ stiffest design (the returned compliance is the minimum of the whole history).
   level-set optimizer (`method: "level_set"`) on the same MBB: exact element volume
   fractions of φ > 0, volume constraint, convergence, a crisper design than SIMP at
   comparable compliance, passive regions and streaming
-  (`scripts/test-topology-levelset.sh`; not run by CI either).
+  (`just test-cpp-wasm -R topology_levelset`).
 - **`web/tests/topology-benchmark.spec.ts`** is a fast Playwright guard that runs
   a small MBB through the solver worker and asserts the same trajectory shape, so
   the Playwright suite catches a regression on every CI run without the full

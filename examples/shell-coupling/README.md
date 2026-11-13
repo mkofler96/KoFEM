@@ -41,7 +41,7 @@ The reusable geometry steps live in `lib.mjs`; the engine solve is
 - `engine/cpp/shell_core.cpp` — shell and coupled solve drivers over the DKT+CST
   Kirchhoff shell (`shell_element.cpp`) and the RBE3 coupling
   (`coupling_constraints.cpp`); validated against plate/membrane theory and clamped-cantilever moment transfer
-  in `scripts/test-shell.sh`.
+  by `just test-cpp-native -R shell_validation`.
 - `engine/cpp/solve_coupled.cpp` — Option A coupling: MFEM solid stiffness handed
   to the shell/coupling assembler.
 

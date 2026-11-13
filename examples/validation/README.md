@@ -40,7 +40,7 @@ It exits non-zero if any case leaves its tolerance band, or if the public
 pages, analysis files or STEP files no longer match the run or their sources
 (below). Netgen is deterministic within one engine build, so a case's `.vtu`
 must match byte for byte. CI runs it, the rule check and the single-DOF
-test below via `bun run test:validation` in `web/`.
+test below via `just test-web`.
 
 ## Adding a case
 
@@ -193,7 +193,7 @@ by a single-DOF 3-2-1 restraint is pulled in x; a node fixed in **Ux only** must
 still contract in y and z under Poisson's effect.
 
 ```bash
-node examples/validation/dof-constraint.test.mjs
+just test-web dof-constraint
 ```
 
 This requires the `fixed_dofs` support in `engine/cpp/engine.cpp`, so it only
@@ -210,7 +210,7 @@ one face — with **no applied load** — and the loaded face must reach ux ≈ 
 the free transverse directions show Poisson contraction.
 
 ```bash
-node examples/validation/prescribed-displacement.test.mjs
+just test-web prescribed-displacement
 ```
 
 Like the single-DOF test, this needs the `prescribed_dofs` support compiled into
@@ -233,9 +233,9 @@ on the linear field δ/2, and the driven edge must still contract under Poisson'
 effect — proving it was driven, not clamped.
 
 ```bash
-node examples/validation/shell-prescribed-displacement.test.mjs
+just test-web shell-prescribed-displacement
 ```
 
 The element math behind it is also covered natively, without a WASM build, by
-`bash scripts/test-shell.sh` (the `shell-prescribed-*` and `coupled-prescribed-*`
+`just test-cpp-native -R shell_validation` (the `shell-prescribed-*` and `coupled-prescribed-*`
 checks in `engine/tests/shell_validation.cpp`).

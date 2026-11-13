@@ -48,17 +48,21 @@ docker run kofem-web
 
 ## Development
 
-You need [Bun](https://bun.sh) and [Rust](https://rustup.rs), plus the browser
-target and the `wasm-bindgen` CLI pinned in `Cargo.toml`. In this repository,
-rustup uses the Rust version pinned in `rust-toolchain.toml`, which CI uses too:
+You need [Bun](https://bun.sh) and [Rust](https://rustup.rs). rustup takes the
+Rust version, the browser target and the components from `rust-toolchain.toml`,
+and `scripts/install-tools.sh` installs [`just`](https://just.systems) and the
+`wasm-bindgen` CLI pinned in `Cargo.toml`. CI uses the same versions:
 
 ```bash
-rustup target add wasm32-unknown-unknown
-cargo install wasm-bindgen-cli --version 0.2.129 --locked
-cd web && bun install && bun run dev
+bash scripts/install-tools.sh   # just and the pinned wasm-bindgen CLI
+just setup                      # web dependencies and both WebAssembly modules
+cd web && bun run dev
 ```
 
-`bun run dev`, `build` and `test` prepare both WebAssembly modules first. The
+`just` lists the checks and tests (`just check`, `just test`, `just test-web`, …);
+[AGENTS.md](AGENTS.md) says which one covers what.
+
+`bun run dev` and `build` prepare both WebAssembly modules first. The
 compiled C++ engine (~34 MB) is a build output, so it is published as a GitHub
 Release rather than committed; they download the one matching your checkout via
 `scripts/fetch-wasm-engine.sh`. The Rust finite-element module (`crates/`) is
