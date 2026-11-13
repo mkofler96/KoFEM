@@ -294,8 +294,10 @@ export interface AmgCoupledInputs {
 // own nodal loads, surface loads lumped onto the corners, so both solvers take
 // the identical model. At order 2 a surface load must reach the edge nodes,
 // so Rust integrates it over the 6-node faces as the MFEM solid solve does;
-// the couplings and supports name vertices and reach the edge nodes inside
-// the Rust module (crates/kofem-fem/src/coupled_static.rs).
+// the couplings and supports name vertices, and the Rust module
+// (crates/kofem-fem/src/coupled_static.rs) extends kinematic couplings and
+// supports to the edge nodes; a distributing coupling keeps its corner nodes,
+// as at order 1.
 export async function solveCoupledSolidWithAmg(
   fem: CoupledFemModule,
   input: AmgCoupledInputs,

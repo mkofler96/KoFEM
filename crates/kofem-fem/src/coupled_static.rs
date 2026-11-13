@@ -21,10 +21,17 @@
 //! vertices only, so the solve brings the edge nodes along, as the uncoupled
 //! solve extends vertex supports to them:
 //!
-//! * an edge whose two ends a coupling grips joins that coupling (with the
-//!   mean of its ends' weights, when the coupling has weights) — a kinematic
-//!   surface stays rigid between its corners, and a distributing coupling
-//!   averages over, and loads, the edge nodes as well;
+//! * an edge whose two ends a kinematic coupling grips joins that coupling,
+//!   so the surface stays rigid between its corners. The edges are found by
+//!   vertex adjacency, not from the picked faces, so an edge off the surface
+//!   whose ends the coupling both grips (a chord through the solid) joins
+//!   too; on the rigid body its ends already move with, its midpoint
+//!   following that motion is consistent;
+//! * a distributing coupling keeps its corner nodes, as on linear elements:
+//!   it then transfers its point's force and moment exactly as it does
+//!   there. Adding edge nodes would move their weighted centroid off the
+//!   point (the app places it at the corners' centroid), and the RBE3
+//!   equations, which take the point as that centroid, would add a moment;
 //! * an edge node whose two ends follow couplings in a translation, and that
 //!   no coupling grips itself, follows their mean in it — the linear
 //!   interpolation along the edge, e.g. across the face of a tie;
@@ -34,7 +41,7 @@
 use crate::amg::{Preconditioner, SmoothedAggregation, SymmetricGaussSeidel};
 use crate::cg::{solve_pcg_with, CgSettings};
 use crate::constraints::{apply_dirichlet, Dirichlet};
-use crate::coupling::{Coupling, CouplingConstraints, DOFS_PER_NODE};
+use crate::coupling::{Coupling, CouplingConstraints, CouplingKind, DOFS_PER_NODE};
 use crate::error::FemError;
 use crate::mesh::TetMesh;
 use crate::sparse::CsrMatrix;
@@ -634,10 +641,10 @@ fn reduced_stiffness(
     Ok(matrix)
 }
 
-/// On a quadratic mesh, each coupling with every edge node whose two ends it
-/// grips: the edge node joins with the mean of its ends' weights (when the
-/// coupling has weights). An edge node the coupling already names keeps its
-/// place. The couplings unchanged on a linear mesh.
+/// On a quadratic mesh, each kinematic coupling with every edge node whose two
+/// ends it grips (see the module notes); an edge node the coupling already
+/// names keeps its place. Distributing couplings, and every coupling on a
+/// linear mesh, unchanged.
 fn couplings_with_edge_nodes(mesh: &TetMesh, couplings: &[Coupling]) -> Vec<Coupling> {
     let edges = mesh.edges();
     if edges.is_empty() {
@@ -662,18 +669,19 @@ fn couplings_with_edge_nodes(mesh: &TetMesh, couplings: &[Coupling]) -> Vec<Coup
         incident[fill[second]] = (edge, first);
         fill[second] += 1;
     }
-    // Position + 1 of each node in the coupling being extended, 0 for none;
-    // cleared again after each coupling.
-    let mut position = vec![0usize; mesh.node_count()];
+    // Whether a node is in the coupling being extended; cleared again after
+    // each coupling.
+    let mut member = vec![false; mesh.node_count()];
     couplings
         .iter()
         .map(|coupling| {
             let mut extended = coupling.clone();
-            for (index, &node) in coupling.nodes.iter().enumerate() {
-                if let Some(slot) = position.get_mut(node) {
-                    if *slot == 0 {
-                        *slot = index + 1;
-                    }
+            if coupling.kind == CouplingKind::Distributing {
+                return extended;
+            }
+            for &node in &coupling.nodes {
+                if let Some(flag) = member.get_mut(node) {
+                    *flag = true;
                 }
             }
             for &node in &coupling.nodes {
@@ -682,24 +690,16 @@ fn couplings_with_edge_nodes(mesh: &TetMesh, couplings: &[Coupling]) -> Vec<Coup
                 }
                 for &(edge, other) in &incident[start[node]..start[node + 1]] {
                     let edge_node = vertices + edge;
-                    if other < node || position[other] == 0 || position[edge_node] != 0 {
+                    if other < node || !member[other] || member[edge_node] {
                         continue;
                     }
-                    if !coupling.weights.is_empty() {
-                        let weight = |at: usize| coupling.weights.get(position[at] - 1).copied();
-                        // A weight list of the wrong length is refused by
-                        // CouplingConstraints::build, which still sees it so.
-                        if let (Some(lhs), Some(rhs)) = (weight(node), weight(other)) {
-                            extended.weights.push(f64::midpoint(lhs, rhs));
-                        }
-                    }
                     extended.nodes.push(edge_node);
-                    position[edge_node] = extended.nodes.len();
+                    member[edge_node] = true;
                 }
             }
             for &node in &extended.nodes {
-                if let Some(slot) = position.get_mut(node) {
-                    *slot = 0;
+                if let Some(flag) = member.get_mut(node) {
+                    *flag = false;
                 }
             }
             extended

@@ -4,9 +4,10 @@
 //! Surface-to-point couplings on quadratic (10-node) tetrahedra. The caller
 //! names vertices only; the coupled solve brings the edge nodes along:
 //!
-//! * an edge whose two ends a coupling grips joins that coupling, so a
-//!   kinematic surface stays rigid between its corners and a distributing
-//!   coupling spreads its load over the edge nodes as well;
+//! * an edge whose two ends a kinematic coupling grips joins that coupling,
+//!   so the surface stays rigid between its corners;
+//! * a distributing coupling keeps its corner nodes, as on linear elements,
+//!   and so transfers its point's force and moment exactly as there;
 //! * an edge node whose two ends follow couplings in a component follows
 //!   their mean in it (the linear interpolation along the edge);
 //! * vertex supports extend to edge nodes as in the uncoupled solve.
@@ -25,9 +26,9 @@
 mod support;
 
 use kofem_fem::{
-    assemble_stiffness, solve_coupled_static, solve_static, AmgSettings, CgSettings,
-    CoupledSolution, Coupling, CouplingKind, CsrMatrix, ElementOrder, FemError, Isotropic,
-    PreconditionerChoice, StoppingRule, TetMesh, ALL_DOFS, DOFS_PER_NODE,
+    assemble_stiffness, prepare_coupled_static, solve_coupled_static, solve_static, AmgSettings,
+    CgSettings, CoupledSolution, Coupling, CouplingKind, CsrMatrix, ElementOrder, FemError,
+    Isotropic, PreconditionerChoice, StoppingRule, TetMesh, ALL_DOFS, DOFS_PER_NODE,
 };
 use support::box_mesh;
 
@@ -66,6 +67,36 @@ struct Model {
 
 impl Model {
     fn new(starts: &[f64], cells: usize, free: &[[f64; 3]]) -> Self {
+        Self::build(starts, cells, free, |point| point, ElementOrder::Quadratic)
+    }
+
+    /// One bar of `cells` cubes along x whose middle row of vertices is moved
+    /// from y = H/2 to y = 0.3·H, so its section is not point-symmetric about
+    /// the centroid of its corner nodes, plus the free points.
+    fn uneven(cells: usize, free: &[[f64; 3]], order: ElementOrder) -> Self {
+        Self::build(
+            &[0.0],
+            cells,
+            free,
+            |point| {
+                let middle = (point[1] - HEIGHT / 2.0).abs() < 1e-9;
+                [
+                    point[0],
+                    if middle { 0.3 * HEIGHT } else { point[1] },
+                    point[2],
+                ]
+            },
+            order,
+        )
+    }
+
+    fn build(
+        starts: &[f64],
+        cells: usize,
+        free: &[[f64; 3]],
+        map: impl Fn([f64; 3]) -> [f64; 3],
+        order: ElementOrder,
+    ) -> Self {
         let mut points: Vec<[f64; 3]> = Vec::new();
         let mut tets: Vec<u32> = Vec::new();
         for &start in starts {
@@ -75,7 +106,7 @@ impl Model {
             points.extend(
                 bar.vertices
                     .iter()
-                    .map(|point| [point[0] + start, point[1], point[2]]),
+                    .map(|&point| map([point[0] + start, point[1], point[2]])),
             );
             tets.extend(
                 bar.mesh
@@ -89,7 +120,7 @@ impl Model {
         let flat: Vec<f64> = points.iter().flatten().copied().collect();
         let materials = vec![0; tets.len() / 4];
         let mesh = TetMesh::new(&flat, &tets, &materials, vec![steel()])
-            .and_then(|mesh| mesh.with_order(ElementOrder::Quadratic))
+            .and_then(|mesh| mesh.with_order(order))
             .expect("valid mesh");
         let stiffness = assemble_stiffness(&mesh);
         Self { mesh, stiffness }
@@ -325,17 +356,11 @@ fn a_driven_kinematic_point_moves_its_quadratic_face_as_a_rigid_body() {
 }
 
 #[test]
-fn a_distributing_point_spreads_its_load_over_the_corner_and_edge_nodes() {
+fn a_distributing_point_spreads_its_load_over_the_corner_nodes_only() {
     let centre = [LENGTH, HEIGHT / 2.0, HEIGHT / 2.0];
     let model = Model::new(&[0.0], 6, &[centre]);
     let point = model.mesh.vertex_count() - 1;
-    let tip_vertices = model.vertices_where(at_x(LENGTH));
-    let tip: Vec<usize> = tip_vertices
-        .iter()
-        .copied()
-        .chain(model.edge_nodes_where(at_x(LENGTH)))
-        .collect();
-    assert!(tip.len() > tip_vertices.len());
+    let tip = model.vertices_where(at_x(LENGTH));
     let root = model.vertices_where(at_x(0.0));
     let clamped: Vec<(usize, f64)> = root
         .iter()
@@ -348,14 +373,13 @@ fn a_distributing_point_spreads_its_load_over_the_corner_and_edge_nodes() {
         forces[six(point, axis)] = force[axis];
         forces[six(point, 3 + axis)] = moment[axis];
     }
-    // The coupling names the tip vertices only.
     let coupled = model
-        .coupled(&[distributing(point, tip_vertices)], &clamped, &forces)
+        .coupled(&[distributing(point, tip.clone())], &clamped, &forces)
         .expect("the coupled cantilever solves");
 
-    // RBE3 with equal weights over all tip nodes about their centroid (the
-    // face centre): node i carries F/N + (H⁻¹·M) × rᵢ, H diagonal for the
-    // plane x = L.
+    // RBE3 with equal weights over the tip corners about their centroid (the
+    // face centre), as on linear elements: corner i carries F/N + (H⁻¹·M) × rᵢ,
+    // H diagonal for the plane x = L; the edge nodes carry nothing.
     let arms: Vec<[f64; 3]> = tip
         .iter()
         .map(|&node| [0, 1, 2].map(|axis| model.point(node)[axis] - centre[axis]))
@@ -381,7 +405,7 @@ fn a_distributing_point_spreads_its_load_over_the_corner_and_edge_nodes() {
         .collect();
     let plain = model.plain(&plain_fixed, &direct);
     assert_same_field(&coupled, &plain, point);
-    // The point follows the mean of all tip nodes.
+    // The point follows the mean of the tip corners.
     let scale = largest(&plain);
     for axis in 0..3 {
         let mean = tip
@@ -529,48 +553,83 @@ fn a_quadratic_coupled_solve_takes_six_dofs_per_node_edge_nodes_included() {
     );
 }
 
-#[test]
-fn an_edge_node_joins_a_weighted_coupling_with_the_mean_weight_of_its_ends() {
-    let centre = [LENGTH, HEIGHT / 2.0, HEIGHT / 2.0];
-    let model = Model::new(&[0.0], 6, &[centre]);
-    let point = model.mesh.vertex_count() - 1;
-    let tip_vertices = model.vertices_where(at_x(LENGTH));
-    // A weight linear in y, so an edge node's mean weight is its own 1 + y/H.
-    let weight = |node: usize| 1.0 + model.point(node)[1] / HEIGHT;
-    let coupling = Coupling {
-        weights: tip_vertices.iter().map(|&node| weight(node)).collect(),
-        ..distributing(point, tip_vertices.clone())
-    };
-    let root = model.vertices_where(at_x(0.0));
-    let clamped: Vec<(usize, f64)> = root
-        .iter()
-        .flat_map(|&node| (0..3).map(move |axis| (six(node, axis), 0.0)))
-        .collect();
-    let force = [50.0, -30.0, -200.0];
-    let mut forces = vec![0.0; model.coupled_dof_count()];
-    for axis in 0..3 {
-        forces[six(point, axis)] = force[axis];
-    }
-    let coupled = model
-        .coupled(&[coupling], &clamped, &forces)
-        .expect("the coupled cantilever solves");
-
-    // A force at an RBE3 point reaches node i as F·wᵢ/Σw.
-    let tip: Vec<usize> = tip_vertices
-        .into_iter()
-        .chain(model.edge_nodes_where(at_x(LENGTH)))
-        .collect();
-    let total: f64 = tip.iter().map(|&node| weight(node)).sum();
-    let mut direct = vec![0.0; 3 * model.mesh.node_count()];
-    for &node in &tip {
+/// Force and moment the root (x = 0) nodes react, about `centre`.
+fn root_reaction(
+    model: &Model,
+    couplings: &[Coupling],
+    fixed: &[(usize, f64)],
+    forces: &[f64],
+    centre: [f64; 3],
+) -> ([f64; 3], [f64; 3]) {
+    let solution = model
+        .coupled(couplings, fixed, forces)
+        .expect("the model solves");
+    let (dofs, values) = split(fixed);
+    let prepared = prepare_coupled_static(
+        &model.mesh,
+        &model.stiffness,
+        couplings,
+        &dofs,
+        &values,
+        forces,
+        amg(),
+    )
+    .expect("the model is valid");
+    let reactions = prepared
+        .reduction
+        .reactions(&model.stiffness, &solution.dofs, forces)
+        .expect("vectors fit");
+    let mut force = [0.0; 3];
+    let mut moment = [0.0; 3];
+    for node in (0..model.mesh.node_count()).filter(|&node| at_x(0.0)(model.point(node))) {
+        let reaction = [0, 1, 2].map(|axis| reactions[six(node, axis)]);
+        let arm = [0, 1, 2].map(|axis| model.point(node)[axis] - centre[axis]);
+        let turn = cross(arm, reaction);
         for axis in 0..3 {
-            direct[three(node, axis)] = force[axis] * weight(node) / total;
+            force[axis] += reaction[axis];
+            moment[axis] += turn[axis];
         }
     }
-    let plain_fixed: Vec<(usize, f64)> = root
-        .iter()
-        .flat_map(|&node| (0..3).map(move |axis| (three(node, axis), 0.0)))
-        .collect();
-    let plain = model.plain(&plain_fixed, &direct);
-    assert_same_field(&coupled, &plain, point);
+    (force, moment)
+}
+
+#[test]
+fn a_distributing_point_transmits_force_and_moment_exactly_on_quadratic_tets() {
+    // A section whose corner nodes are not point-symmetric about their
+    // centroid: rows at y = 0, 3, 10. The point sits at that centroid, where
+    // the app puts it by default. Whatever the order, the root must react the
+    // point's force and moment exactly — the coupling may not add a moment.
+    let rows = [0.0, 0.3 * HEIGHT, HEIGHT];
+    let centre = [LENGTH, rows.iter().sum::<f64>() / 3.0, HEIGHT / 2.0];
+    for order in [ElementOrder::Linear, ElementOrder::Quadratic] {
+        let model = Model::uneven(6, &[centre], order);
+        let point = model.mesh.vertex_count() - 1;
+        let tip = model.vertices_where(at_x(LENGTH));
+        let couplings = [distributing(point, tip)];
+        let fixed: Vec<(usize, f64)> = (0..model.mesh.node_count())
+            .filter(|&node| node != point && at_x(0.0)(model.point(node)))
+            .flat_map(|node| (0..3).map(move |axis| (six(node, axis), 0.0)))
+            .collect();
+        for (force, moment) in [
+            ([0.0, 0.0, -1000.0], [0.0; 3]),
+            ([0.0; 3], [1.0e4, 1.0e4, 0.0]),
+        ] {
+            let mut forces = vec![0.0; model.coupled_dof_count()];
+            for axis in 0..3 {
+                forces[six(point, axis)] = force[axis];
+                forces[six(point, 3 + axis)] = moment[axis];
+            }
+            let (reaction, turn) = root_reaction(&model, &couplings, &fixed, &forces, centre);
+            for axis in 0..3 {
+                assert!(
+                    (reaction[axis] + force[axis]).abs() < 1e-6 * 1000.0,
+                    "{order:?}, F {force:?}, M {moment:?}: reaction force {reaction:?}"
+                );
+                assert!(
+                    (turn[axis] + moment[axis]).abs() < 1e-6 * 1.0e4,
+                    "{order:?}, F {force:?}, M {moment:?}: reaction moment {turn:?}"
+                );
+            }
+        }
+    }
 }

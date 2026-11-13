@@ -580,9 +580,9 @@ async function bracketModel(maxElementSize) {
 // displacement MFEM applies to those vertices and extends to their edge nodes —
 // so the two are one discrete problem and must agree to solver precision. A
 // distributing point loaded by a force stands for that force spread over the
-// face; it puts the load on the face's nodes in equal shares rather than as a
-// uniform traction, which only changes the field near the face (Saint-Venant),
-// so away from it the two agree to a fraction of a percent.
+// face; it puts the load on the face's corner nodes in equal shares (as on
+// linear elements) rather than as a uniform traction, which only changes the
+// field near the face (Saint-Venant), so away from it the two agree closely.
 
 const QUADRATIC = 2;
 
