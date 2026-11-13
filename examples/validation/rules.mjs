@@ -17,7 +17,7 @@
 //              so the opened example shows its body, can be re-meshed and
 //              changed — not just a mesh;
 //   no hexes   its analysis file holds no hexahedra (Netgen meshes tetrahedra);
-//   CAD faces  every support and load face entry is a whole CAD face
+//   CAD faces  every support, load and tie face entry is a whole CAD face
 //              (cadFaceId), so it survives a re-mesh as in the app;
 //   handCheck  its analysis file carries a hand check in the probe shape the
 //              Results panel reads ({ quantity, formula, reference, unit,
@@ -154,9 +154,15 @@ function violations(id) {
   if (setup.elementTypes.some((t) => t === "CHEXA"))
     out.push(`${id}.vtu lists CHEXA elements`);
   const geometryFaces = geometryFaceIds(id, setup, out);
+  // A tie's two surfaces are face picks like a support's.
+  const ties = (setup.tieGroups ?? []).flatMap((g) => [
+    ["tie", { name: `${g.name} A`, faces: g.facesA }],
+    ["tie", { name: `${g.name} B`, faces: g.facesB }],
+  ]);
   const entries = [
     ...setup.bcGroups.map((g) => ["support", g]),
     ...setup.loadGroups.map((g) => ["load", g]),
+    ...ties,
   ];
   for (const [kind, group] of entries)
     for (const face of group.faces)

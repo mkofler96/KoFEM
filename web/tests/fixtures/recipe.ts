@@ -106,6 +106,14 @@ export interface ComplianceReadout {
   quantity: string;
   probe: { kind: "compliance"; unit: "N·mm" };
 }
+export interface Tie {
+  name: string;
+  facesA: FaceRef[];
+  facesB: FaceRef[];
+  extent: "full" | "region";
+  searchDistance?: number;
+  method: "mpc" | "merge";
+}
 interface RecipeSteps {
   step: () => string;
   splits: Split[];
@@ -114,6 +122,8 @@ interface RecipeSteps {
   material: Material;
   supports: Support[];
   loads: Load[];
+  // Absent: the model has no tie (recipe.mjs Recipe).
+  ties?: Tie[];
 }
 export interface StaticRecipe extends RecipeSteps {
   optimize?: undefined;
@@ -175,6 +185,14 @@ export interface Snapshot {
     components?: Point;
     faces: StoreFace[];
   }[];
+  tieGroups: {
+    name: string;
+    facesA: StoreFace[];
+    facesB: StoreFace[];
+    extent: string;
+    searchDistance: number;
+    method: string;
+  }[];
   elementOrder: number;
   displacements: number[] | null;
   vonMises: number[] | null;
@@ -212,6 +230,7 @@ export function snapshot(page: Page): Promise<Snapshot> {
       materials: st.materials as Snapshot["materials"],
       bcGroups: st.bcGroups as Snapshot["bcGroups"],
       loadGroups: st.loadGroups as Snapshot["loadGroups"],
+      tieGroups: st.tieGroups as Snapshot["tieGroups"],
       elementOrder: st.elementOrder as number,
       displacements: result ? Array.from(result.displacements) : null,
       vonMises: result?.vonMises ? Array.from(result.vonMises) : null,
@@ -851,6 +870,61 @@ async function addLoad(page: Page, load: Load): Promise<void> {
   await expect(page.getByTestId("panel-title")).toHaveText(/^Load\d+$/);
 }
 
+// The CAD body a face belongs to: the body of an element at one of its mesh
+// nodes (a face bounds one body; touching bodies would share it).
+function bodyOfFace(snap: Snapshot, at: Point): number {
+  const { cadFaceId } = resolveFace(snap, at);
+  const node = snap.surfaceTriangles[snap.surfaceFaceIds.indexOf(cadFaceId)];
+  if (!node) throw new Error(`CAD face ${cadFaceId} has no mesh triangle`);
+  const element = snap.elements.find((e) => e.nodeIds.includes(node[0]));
+  if (!element) throw new Error(`mesh node ${node[0]} is in no element`);
+  return element.propertyId;
+}
+
+// Show or hide bodies with their eye in the model tree, as a user does to see
+// a face another body stands in front of.
+async function setBodiesHidden(
+  page: Page,
+  bodies: number[],
+  hidden: boolean,
+): Promise<void> {
+  for (const body of bodies) {
+    const eye = page.getByTestId(`tree-eye-body-${body}`);
+    if ((await eye.getAttribute("aria-pressed")) !== String(hidden))
+      await eye.click();
+    await expect(eye).toHaveAttribute("aria-pressed", String(hidden));
+  }
+}
+
+// Pick one side of a tie: each face with every other body hidden, since the
+// facing body stands right in front of it across the gap.
+async function pickTieFaces(page: Page, faces: FaceRef[]): Promise<void> {
+  const bodies = await cadBodyIds(page);
+  for (const face of faces) {
+    const own = bodyOfFace(await snapshot(page), face.at);
+    const others = bodies.filter((body) => body !== own);
+    await setBodiesHidden(page, others, true);
+    await clickFace(page, face.at, "boundary");
+    await setBodiesHidden(page, others, false);
+  }
+}
+
+async function addTie(page: Page, tie: Tie): Promise<void> {
+  await addBoundary(page, "tie");
+  await pickTieFaces(page, tie.facesA);
+  await page.getByTestId("tie-side-b").click();
+  await pickTieFaces(page, tie.facesB);
+  await page.getByTestId("tie-method").selectOption(tie.method);
+  await page.getByTestId("tie-extent").selectOption(tie.extent);
+  if (tie.extent === "region") {
+    if (tie.searchDistance === undefined)
+      throw new Error(`"${tie.name}": a region tie needs a searchDistance`);
+    await page.getByTestId("tie-distance").fill(String(tie.searchDistance));
+  }
+  await page.getByTestId("apply-tie").click();
+  await expect(page.getByTestId("panel-title")).toHaveText(/^Tie\d+$/);
+}
+
 async function solve(page: Page): Promise<void> {
   await openTree(page, "static");
   const run = page.getByRole("button", { name: /Run static solve/ });
@@ -1001,6 +1075,7 @@ export async function buildByHand(
   await setMaterial(page, recipe.material);
   for (const support of recipe.supports) await addSupport(page, support);
   for (const load of recipe.loads) await addLoad(page, load);
+  for (const tie of recipe.ties ?? []) await addTie(page, tie);
   lap("boundary");
   if (recipe.optimize === undefined) {
     await solve(page);

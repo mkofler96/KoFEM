@@ -1,7 +1,7 @@
 {
-  "generated": "2026-11-12",
+  "generated": "2026-11-13",
   "engine": "engine-3397ae8ea1eb",
-  "fem": "fem-b229cd7ba59c",
+  "fem": "fem-45b08a9e444e",
   "cases": [
     {
       "id": "axial-bar",
@@ -516,6 +516,220 @@
         "width": 1200,
         "height": 900
       }
+    },
+    {
+      "id": "tie-patch-test",
+      "name": "Tie patch test",
+      "quantity": "largest von Mises stress",
+      "unit": "MPa",
+      "reference": 100,
+      "referenceLabel": "σ (uniform)",
+      "tolPct": 0.01,
+      "fe": 100.00000778945649,
+      "errPct": 0.000007789456489604163,
+      "pass": true,
+      "mesh": {
+        "order": 1,
+        "elementType": "CTETRA",
+        "elements": 742,
+        "vertices": 276,
+        "nodes": 276,
+        "dofs": 828,
+        "maxElementSize": 10,
+        "minElementSize": 1
+      },
+      "inputs": [
+        {
+          "symbol": "L₁, L₂",
+          "value": "40, 60",
+          "unit": "mm"
+        },
+        {
+          "symbol": "gap",
+          "value": 1,
+          "unit": "mm"
+        },
+        {
+          "symbol": "W × H",
+          "value": "40 × 40",
+          "unit": "mm"
+        },
+        {
+          "symbol": "E",
+          "value": 210000,
+          "unit": "MPa"
+        },
+        {
+          "symbol": "ν",
+          "value": 0.3,
+          "unit": ""
+        },
+        {
+          "symbol": "σ",
+          "value": 100,
+          "unit": "MPa"
+        }
+      ],
+      "readout": {
+        "field": "Ux",
+        "stat": "Max",
+        "value": "4.762e-2 mm"
+      },
+      "figure": {
+        "field": "displacement",
+        "unit": "mm",
+        "min": 0,
+        "max": 0.0482998947694634,
+        "deform": 200,
+        "width": 1200,
+        "height": 733
+      }
+    },
+    {
+      "id": "tie-lame-cylinder",
+      "name": "Tied thick-walled cylinder",
+      "quantity": "bore radial displacement u(a)",
+      "unit": "mm",
+      "reference": 0.04591849751141781,
+      "referenceLabel": "u(a), Lamé rings tied at r = c",
+      "tolPct": 1,
+      "fe": 0.0456197106344201,
+      "errPct": -0.6506895765119891,
+      "pass": true,
+      "mesh": {
+        "order": 1,
+        "elementType": "CTETRA",
+        "elements": 2862,
+        "vertices": 1088,
+        "nodes": 1088,
+        "dofs": 3264,
+        "maxElementSize": 4,
+        "minElementSize": 0.4
+      },
+      "inputs": [
+        {
+          "symbol": "a",
+          "value": 50,
+          "unit": "mm"
+        },
+        {
+          "symbol": "c",
+          "value": 75,
+          "unit": "mm"
+        },
+        {
+          "symbol": "g",
+          "value": 1,
+          "unit": "mm"
+        },
+        {
+          "symbol": "b",
+          "value": 100,
+          "unit": "mm"
+        },
+        {
+          "symbol": "t",
+          "value": 10,
+          "unit": "mm"
+        },
+        {
+          "symbol": "E",
+          "value": 210000,
+          "unit": "MPa"
+        },
+        {
+          "symbol": "ν",
+          "value": 0.3,
+          "unit": ""
+        },
+        {
+          "symbol": "p",
+          "value": 100,
+          "unit": "MPa"
+        }
+      ],
+      "readout": {
+        "field": "|U|",
+        "stat": "Max",
+        "value": "4.589e-2 mm"
+      },
+      "figure": {
+        "field": "displacement",
+        "unit": "mm",
+        "min": 0.02935666397770141,
+        "max": 0.04588769951299779,
+        "deform": 200,
+        "width": 1200,
+        "height": 900
+      }
+    },
+    {
+      "id": "tie-cantilever",
+      "name": "Tied cantilever beam",
+      "quantity": "tip deflection δ",
+      "unit": "mm",
+      "reference": -1.9133447619047619,
+      "referenceLabel": "−P/(3·E·I)·((L+g)³ − (L/2+g)³ + (L/2)³)",
+      "tolPct": 1,
+      "fe": -1.9045491375412948,
+      "errPct": -0.4596988759470022,
+      "pass": true,
+      "mesh": {
+        "order": 2,
+        "elementType": "CTETRA",
+        "elements": 3036,
+        "vertices": 949,
+        "nodes": 5692,
+        "dofs": 17076,
+        "maxElementSize": 25,
+        "minElementSize": 2.5
+      },
+      "inputs": [
+        {
+          "symbol": "L",
+          "value": 1000,
+          "unit": "mm"
+        },
+        {
+          "symbol": "g",
+          "value": 2,
+          "unit": "mm"
+        },
+        {
+          "symbol": "b × h",
+          "value": "100 × 100",
+          "unit": "mm"
+        },
+        {
+          "symbol": "E",
+          "value": 210000,
+          "unit": "MPa"
+        },
+        {
+          "symbol": "ν",
+          "value": 0.3,
+          "unit": ""
+        },
+        {
+          "symbol": "P",
+          "value": 10000,
+          "unit": "N"
+        }
+      ],
+      "readout": {
+        "field": "Uy",
+        "stat": "Min",
+        "value": "-1.905e+0 mm"
+      },
+      "figure": {
+        "field": "displacement",
+        "unit": "mm",
+        "min": 0,
+        "max": 1.9099744511852916,
+        "deform": 50,
+        "width": 1200,
+        "height": 523
+      }
     }
   ],
   "convergence": [
@@ -749,8 +963,8 @@
               "dofs": 3894,
               "maxElementSize": 4,
               "minElementSize": 0.4,
-              "fe": 3.3691462349776566,
-              "errPct": 7.297650795466767,
+              "fe": 3.369146291607222,
+              "errPct": 7.297652598956114,
               "ci": false
             },
             {

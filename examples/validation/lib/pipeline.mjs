@@ -184,6 +184,7 @@ function resolveOnTessellation(at, tess, where) {
  * @property {object[]} properties        one per CAD body
  * @property {object[]} bcGroups          NamedBcGroup[]
  * @property {object[]} loadGroups        NamedLoadGroup[]
+ * @property {object[]} tieGroups         TieGroup[] (the recipe's ties)
  * @property {number} nextFaceEntryId
  * @property {object | null} handCheck    the analysis file's handCheck block
  *                                        (null for an optimisation)
@@ -438,6 +439,28 @@ export async function buildFromRecipe(id, recipe) {
     };
   });
 
+  // Ties as the Constraints panel makes them (tieSlice addTieGroup): the two
+  // picked surfaces as face entries, numbered after the supports' and loads'.
+  const tieGroups = (recipe.ties ?? []).map((t, i) => {
+    const facesA = entries(
+      resolve(t.facesA, `${where}.ties[${i}].facesA`),
+      `${where}.ties[${i}].facesA`,
+    );
+    const facesB = entries(
+      resolve(t.facesB, `${where}.ties[${i}].facesB`),
+      `${where}.ties[${i}].facesB`,
+    );
+    return {
+      id: i + 1,
+      name: t.name,
+      facesA,
+      facesB,
+      extent: t.extent,
+      searchDistance: t.extent === "region" ? t.searchDistance : 0,
+      method: t.method,
+    };
+  });
+
   const elementOrder = recipe.mesh.order;
   const payload = {
     nodes,
@@ -447,7 +470,7 @@ export async function buildFromRecipe(id, recipe) {
     constraints: rebuildConstraints(bcGroups),
     loads: rebuildLoads(loadGroups, nodes, []),
     surfaceLoads: rebuildSurfaceLoads(loadGroups, elements, []),
-    tieGroups: [],
+    tieGroups,
     couplings: [],
     elementOrder,
     solverMethod: DEFAULT_SOLVER_METHOD,
@@ -473,6 +496,7 @@ export async function buildFromRecipe(id, recipe) {
     properties,
     bcGroups,
     loadGroups,
+    tieGroups,
     nextFaceEntryId,
   });
 

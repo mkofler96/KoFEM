@@ -797,6 +797,7 @@ export function renderExamplePage(
       ${specTable([
         ["Supports", esc(page.supports)],
         ["Load", esc(page.loads)],
+        ...(page.ties ? [["Tie", esc(page.ties)]] : []),
         ["Measured", esc(page.measured)],
       ])}`);
   if (text.theory)
