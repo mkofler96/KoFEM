@@ -210,7 +210,7 @@ const WALL_SETTINGS = {
 };
 
 // Run one engine entry, keeping its log and stream.
-async function inEngine(entry, args, settings) {
+async function inEngine(domain, args, settings) {
   const logs = [];
   const streamed = [];
   const engine = await loadEngine({ print: (line) => logs.push(line) });
@@ -218,7 +218,7 @@ async function inEngine(entry, args, settings) {
     streamed.push({ iteration, density: Array.from(density) });
   const json = JSON.stringify(settings);
   const result =
-    entry === "shell"
+    domain === "shell"
       ? engine.optimize_topology_shell(
           args.mesh,
           args.matJson,
@@ -243,11 +243,11 @@ async function inEngine(entry, args, settings) {
   };
 }
 
-function inRust(entry, args, settings) {
+function inRust(domain, args, settings) {
   const logs = [];
   const streamed = [];
   const optimize =
-    entry === "shell" ? optimizeShellInRust : optimizeCoupledInRust;
+    domain === "shell" ? optimizeShellInRust : optimizeCoupledInRust;
   const result = optimize(
     fem,
     args,
