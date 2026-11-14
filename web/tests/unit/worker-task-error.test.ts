@@ -67,7 +67,10 @@ class FakeWorker {
   postMessage(message: { id: number; type: string }) {
     this.posted.push(message);
   }
-  terminate() {}
+  terminated = false;
+  terminate() {
+    this.terminated = true;
+  }
   reply(data: unknown) {
     if (!this.onmessage) throw new Error("sharedWorker set no onmessage");
     this.onmessage({ data });
