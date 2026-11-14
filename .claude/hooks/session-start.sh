@@ -40,7 +40,6 @@ if [ -n "${CLAUDE_ENV_FILE:-}" ]; then
         echo "export PATH=\"/emsdk:/emsdk/upstream/emscripten:${NODE_BIN}:\$PATH\""
         echo 'export OCCT_WASM_ROOT=/opt/kofem-deps/occt'
         echo 'export NETGEN_WASM_ROOT=/opt/kofem-deps/netgen'
-        echo 'export MFEM_WASM_ROOT=/opt/kofem-deps/mfem'
     } >>"$CLAUDE_ENV_FILE"
 fi
 

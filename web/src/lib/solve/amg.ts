@@ -662,9 +662,20 @@ function surfaceLoadValues(
       throw new Error(`Surface load ${index} (pressure) has no pressure value`);
     return Float64Array.of(surfaceLoad.pressure);
   }
-  if (surfaceLoad.force === undefined)
+  const force: unknown = surfaceLoad.force;
+  if (force === undefined)
     throw new Error(
       `Surface load ${index} (${surfaceLoad.type}) has no force vector`,
     );
-  return Float64Array.from(surfaceLoad.force);
+  // Exactly three finite numbers: Float64Array.from would read the string
+  // "123" as [1, 2, 3] and an object with a length as NaNs.
+  if (
+    !Array.isArray(force) ||
+    force.length !== 3 ||
+    !force.every((value) => typeof value === "number" && Number.isFinite(value))
+  )
+    throw new Error(
+      `Surface load ${index} (${surfaceLoad.type}): the force vector must be three finite numbers, got ${JSON.stringify(force)}`,
+    );
+  return Float64Array.from(force as number[]);
 }

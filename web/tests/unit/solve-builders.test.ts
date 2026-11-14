@@ -828,6 +828,40 @@ test("pure-shell models refuse ties", () => {
   ).toEqual({ path: "solid" });
 });
 
+test("routing refuses an all-solid model the Rust solver does not take", () => {
+  // The C++ solvers that took these left the engine (KOF-309): such a model
+  // is refused by name before the run, not solved on another path.
+  const coupling = {
+    name: "c",
+    kind: "kinematic",
+    referencePoint: 99,
+    nodes: [tetNodes[0].id],
+  } as unknown as NonNullable<SolveModel["couplings"]>[number];
+  const solid = payload({
+    nodes: tetNodes,
+    elements: tetElements,
+    properties: twoBodies,
+  });
+  expect(() => routeSolve({ ...solid, elementOrder: 3 })).toThrow(
+    "The solver cannot solve this model: it supports linear and quadratic elements only.",
+  );
+  const hex: Element = {
+    id: 99,
+    type: "CHEXA",
+    nodeIds: tetElements[0].nodeIds.concat(tetElements[0].nodeIds),
+    propertyId: tetElements[0].propertyId,
+  };
+  expect(() =>
+    routeSolve({
+      ...solid,
+      elements: [...tetElements, hex],
+      couplings: [coupling],
+    }),
+  ).toThrow(
+    "The solver cannot solve this model: it supports surface-to-point couplings on tetrahedral meshes only.",
+  );
+});
+
 test("the fallback preconditioner follows the solve route", () => {
   // Only the all-solid path solves with Gauss–Seidel; the shell, coupled and
   // auto-shell paths use incomplete Cholesky.

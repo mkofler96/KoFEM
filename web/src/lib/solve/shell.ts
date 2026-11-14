@@ -11,7 +11,7 @@ import type {
   Property,
   SolveModel,
 } from "../../workers/solverTypes.js";
-import type { ShellMesh } from "../../wasm/pkg/kofem_wasm.js";
+import type { ShellMesh } from "./contracts.js";
 import { buildVertexIndexer } from "../solveMeshPacking.js";
 import { shellPointLoads } from "../solveLoads.js";
 import { shellDirichlet } from "./bcs.js";

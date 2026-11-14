@@ -8,7 +8,7 @@
 // The density field the run produces is a transient result and is NOT
 // serialized; loading an analysis restores the settings but not a stale run.
 
-import type { TopOptHistoryEntry } from "../wasm/pkg/kofem_wasm.js";
+import type { TopOptHistoryEntry } from "../lib/solve/contracts.js";
 import type { SliceCreator } from "./modelStore";
 import { ensurePlot } from "./studySlice";
 

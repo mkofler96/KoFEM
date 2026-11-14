@@ -19,7 +19,7 @@
 // DOF components are 0..5 = (u, v, w, θx, θy, θz).
 
 import type { ShellModel } from "../../wasm/fem/kofem_wasm.js";
-import type { ShellMesh } from "../../wasm/pkg/kofem_wasm.js";
+import type { ShellMesh } from "./contracts.js";
 import { iterateToConvergence, type ContinuationPrompt } from "./cgRun.js";
 
 // The C++ shell solve's stopping rule: ‖f − K·u‖ / ‖f‖ below 1e-10.

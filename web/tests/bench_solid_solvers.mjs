@@ -1,23 +1,23 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Solve times of the all-solid solve, MFEM (Gauss–Seidel CG) against the Rust
-// module with AMG and with Gauss–Seidel, on Netgen meshes of the STEP files in
-// test_files/. A benchmark, not a test: it prints one table and checks only
-// that the three solvers agree.
+// Solve times of the all-solid solve in the Rust module, with AMG and with
+// Gauss–Seidel, on Netgen meshes of the STEP files in test_files/. A
+// benchmark, not a test: it prints one table and checks only that the two
+// agree. (MFEM was the third column until the C++ solvers left the engine,
+// KOF-309; KOF-307 records those timings.)
 //
 // Load case (the KOF-300 sweep): clamp the vertices in the first 2 % of the
 // longest axis, and pull the last 2 % along the shortest axis with 1 kN in
-// total, steel. The app's own builders make both solvers' inputs
-// (buildSolidEngineInputs for MFEM, solveSolidInRust for Rust AMG). Each
-// solver stops at a relative tolerance of 1e-6: MFEM in its preconditioned
-// norm, Rust on the force residual ‖f − K·u‖/‖f‖ (crates/kofem-fem/src/cg.rs).
+// total, steel. The app's own solveSolidInRust builds the solve, which stops
+// at a relative tolerance on the force residual ‖f − K·u‖/‖f‖
+// (crates/kofem-fem/src/cg.rs).
 // Times include assembly and preconditioner setup; meshing is excluded.
 //
 // Usage (from web/):
 //   bun tests/bench_solid_solvers.mjs "<step file>:<element size>:<order>" ...
 // e.g. bun tests/bench_solid_solvers.mjs "Wall Bracket.stp:20:1" "Wall Bracket.stp:20:2"
-// Set BENCH_SKIP=mfem,rust-gs to leave solvers out (the slow ones on big models),
+// Set BENCH_SKIP=rust-gs to leave a solver out (the slow one on big models),
 // and BENCH_BUDGET=<iterations> to stop each solve there (default 200000); a
 // solve that stops unconverged is reported with its time and iterations.
 
@@ -25,7 +25,6 @@ import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { buildVertexIndexer } from "../src/lib/solveMeshPacking.ts";
-import { buildSolidEngineInputs } from "../src/lib/solve/solid.ts";
 import { solveSolidInRust } from "../src/lib/solve/amg.ts";
 import { loadFemModule } from "../src/lib/femModule.ts";
 import {
@@ -129,38 +128,6 @@ async function meshModel(file, size) {
     })),
     surfaceLoads: [],
   };
-}
-
-// Lines the MFEM engine prints, read back for its CG iteration count.
-const mfemLog = [];
-
-function solveMfem(model, order) {
-  return createModule({
-    wasmBinary,
-    print: (line) => mfemLog.push(line),
-    printErr: (line) => mfemLog.push(line),
-    // The budget is the engine's cap; stop there rather than ask.
-    onCgLimit: async () => 0,
-  }).then((engine) => {
-    engine.cgIterationLimit = BUDGET;
-    const vid = buildVertexIndexer(model.nodes);
-    const inputs = buildSolidEngineInputs(model, vid);
-    const started = performance.now();
-    const raw = engine.solve_linear_elastic(
-      inputs.mesh,
-      inputs.matJson,
-      inputs.bcsJson,
-      order,
-    );
-    const seconds = (performance.now() - started) / 1000;
-    if ("error" in raw) throw new Error(`MFEM: ${raw.error}`);
-    const iterations = mfemLog
-      .map((line) => /(\d+)\s+iterations/.exec(line))
-      .filter((match) => match !== null)
-      .map((match) => Number(match[1]))
-      .pop();
-    return { displacements: raw.displacements, seconds, iterations };
-  });
 }
 
 async function solveRust(model, order, preconditioner) {
@@ -281,28 +248,17 @@ for (const spec of cases) {
   for (const [name, run] of [
     ["rust-amg", () => solveRust(model, order, "amg")],
     ["rust-gs", () => solveRust(model, order, "gauss-seidel")],
-    ["mfem", () => solveMfem(model, order)],
   ]) {
     if (skip.has(name)) continue;
-    mfemLog.length = 0;
     const started = performance.now();
     try {
       results[name] = await run();
     } catch (error) {
       const seconds = (performance.now() - started) / 1000;
-      const iterations = mfemLog
-        .map((line) => /CG iteration\s+(\d+)/.exec(line))
-        .filter((match) => match !== null)
-        .map((match) => Number(match[1]))
-        .pop();
       console.log(
-        `  ${name.padEnd(9)} stopped after ${seconds.toFixed(2)} s${iterations ? ` (${iterations} iterations)` : ""}: ${error instanceof Error ? error.message : String(error)}`,
+        `  ${name.padEnd(9)} stopped after ${seconds.toFixed(2)} s: ${error instanceof Error ? error.message : String(error)}`,
       );
-      results[name] = {
-        failed: true,
-        seconds,
-        iterations: iterations ?? BUDGET,
-      };
+      results[name] = { failed: true, seconds, iterations: BUDGET };
       continue;
     }
     const { seconds, iterations, detail } = results[name];
@@ -312,11 +268,11 @@ for (const spec of cases) {
   }
   const solved = (name) =>
     results[name] && !results[name].failed ? results[name] : undefined;
-  const reference = solved("mfem") ?? solved("rust-gs");
-  for (const name of ["rust-amg", "rust-gs"])
-    if (solved(name) && reference && results[name] !== reference)
+  const reference = solved("rust-gs");
+  for (const name of ["rust-amg"])
+    if (solved(name) && reference)
       console.log(
-        `  ${name} against ${solved("mfem") ? "mfem" : "rust-gs"}: max |Δu| / max |u| ${relativeDifference(
+        `  ${name} against rust-gs: max |Δu| / max |u| ${relativeDifference(
           reference.displacements,
           results[name].displacements,
         ).toExponential(2)}`,
@@ -324,15 +280,13 @@ for (const spec of cases) {
   rows.push({ spec, dofs, results });
 }
 
-console.log(
-  "\n| Model | DOF | MFEM GS | Rust GS | Rust AMG |\n| -- | -- | -- | -- | -- |",
-);
+console.log("\n| Model | DOF | Rust GS | Rust AMG |\n| -- | -- | -- | -- |");
 for (const { spec, dofs, results } of rows) {
   const cell = (name) =>
     results[name]
       ? `${results[name].failed ? "> " : ""}${results[name].seconds.toFixed(1)} s (${results[name].iterations} it.${results[name].failed ? ", stopped" : ""})`
       : "—";
   console.log(
-    `| ${spec} | ${dofs} | ${cell("mfem")} | ${cell("rust-gs")} | ${cell("rust-amg")} |`,
+    `| ${spec} | ${dofs} | ${cell("rust-gs")} | ${cell("rust-amg")} |`,
   );
 }

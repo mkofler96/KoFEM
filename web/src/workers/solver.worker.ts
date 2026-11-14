@@ -21,8 +21,8 @@ import { FemLoadError, loadFemModule } from "../lib/femModule.js";
 import type {
   EngineLoadProgress,
   KofemModule,
-  CgLimitProgress,
 } from "../wasm/pkg/kofem_wasm.js";
+import type { CgLimitProgress } from "../lib/solve/contracts.js";
 import type {
   Node,
   Element,
@@ -68,12 +68,9 @@ import {
   type SolverMethod,
 } from "../lib/solve/amg.js";
 import { constraintTieCount } from "../lib/tie.js";
+import { solidModelRefusal } from "../lib/solve/refusals.js";
 import { tieWeighting } from "../lib/solve/tieMortar.js";
-import {
-  buildSolidEngineInputs,
-  expandTiedDisplacements,
-  weldTies,
-} from "../lib/solve/solid.js";
+import { expandTiedDisplacements, weldTies } from "../lib/solve/solid.js";
 import {
   optimizeCoupledInRust,
   optimizeShellInRust,
@@ -178,7 +175,6 @@ async function initEngine() {
     // later rejection is still handled.
     const [engine] = await Promise.all([
       createModule({
-        onCgLimit,
         print: (text: string) => {
           if (!isOverlapPairLine(text))
             self.postMessage({ id: 0, log: `[wasm] ${text}` });
@@ -661,11 +657,10 @@ function solveMixed(
 
 // Solve a hand-mixed shell+solid model through the Rust mixed solve, or an
 // all-solid model carrying a surface-to-point coupling through the Rust solid
-// solve (with the chosen preconditioner and element order) or, when Rust does
-// not cover it, the engine's coupled solver, all on the same inputs. The mixed
-// solve and the engine's coupled assembler are linear tets + DKT facets:
-// routeSolve refuses element order 2 on a model with shells, and the engine's
-// coupled solver says when it solves linear instead.
+// solve (with the chosen preconditioner and element order), both on the same
+// inputs. The mixed solve is linear tets + DKT facets: routeSolve refuses
+// element order 2 on a model with shells, and an all-solid coupled model the
+// Rust solid solve does not take.
 async function handleMixedSolve(id: number, payload: SolvePayload) {
   const inp = buildCoupledEngineInputs(payload, logTo(id));
 
@@ -676,26 +671,19 @@ async function handleMixedSolve(id: number, payload: SolvePayload) {
   // eslint-disable-next-line kofem/no-silent-fallback -- elementOrder is optional in the solve message; the documented default is linear elements
   const order = payload.elementOrder ?? 1;
   const hasShells = inp.shellElements.length > 0;
-  const inRust = amgReason(payload) === null;
-  if (!hasShells && !inRust && order !== 1)
-    self.postMessage({
-      id,
-      log: `The coupled solver has linear elements only — solving with linear instead of order-${order} elements.`,
-    });
+  const reason = amgReason(payload);
+  if (!hasShells && reason !== null) throw new Error(solidModelRefusal(reason));
   const result = hasShells
     ? await solveMixed(inp, payload, logTo(id))
-    : inRust
-      ? await solveCoupledSolidInRust(
-          { ElasticModel, SolveOptions, Couplings },
-          inp,
-          order,
-          requestedSolver(payload),
-          payload.cgIterationLimit,
-          onCgLimit,
-          logTo(id),
-        )
-      : await m().solve_coupled(inp.mesh, inp.coupling, inp.bcs, inp.matJson);
-  if ("error" in result) throw new Error(result.error);
+    : await solveCoupledSolidInRust(
+        { ElasticModel, SolveOptions, Couplings },
+        inp,
+        order,
+        requestedSolver(payload),
+        payload.cgIterationLimit,
+        onCgLimit,
+        logTo(id),
+      );
   const fields = mapMixedResult(payload, inp.model, result);
 
   self.postMessage({
@@ -753,29 +741,23 @@ function amgReason(payload: SolvePayload): string | null {
   });
 }
 
-// All-solid static solve, with tie connections applied — node-merge ties
-// welded, constraint ties eliminated: the Rust solver with the chosen
-// preconditioner when it covers the model, otherwise the engine's
-// solve_linear_elastic, which takes no constraint tie.
+// All-solid static solve in Rust with the chosen preconditioner, with tie
+// connections applied: node-merge ties welded, constraint ties eliminated.
+// routeSolve has refused a model the Rust solver does not take.
 async function handleSolidSolve(id: number, payload: SolvePayload) {
   const { nodes, elements } = payload;
   // FE polynomial order, chosen in the frontend (Solver settings). Order 2
   // (quadratic / second-order) adds edge-midpoint DOFs that resolve bending
   // and stress gradients far better than linear tets, which lock in bending
   // and smear stress concentrations to a single constant value per element
-  // (issue #215), at the cost of a slower solve. Both solvers extend the
+  // (issue #215), at the cost of a slower solve. The solver extends the
   // vertex Dirichlet BCs to the new edge DOFs so clamped/prescribed faces
   // stay fully constrained. Defaults to 1 (linear) when the payload omits it.
   // eslint-disable-next-line kofem/no-silent-fallback -- elementOrder is optional in the solve message; the documented default is linear elements
   const order = payload.elementOrder ?? 1;
   const reason = amgReason(payload);
+  if (reason !== null) throw new Error(solidModelRefusal(reason));
   const constraintTies = constraintTieCount(payload.tieGroups);
-  if (reason !== null && constraintTies > 0)
-    throw new Error(
-      `This model has ${constraintTies} constraint (MPC) tie(s), which only the Rust ` +
-        `solver applies, and it cannot take this model: ${reason}. Change the ` +
-        "ties to node-merge, or make the model one the Rust solver takes.",
-    );
   const tied = weldTies(
     nodes,
     elements,
@@ -785,53 +767,22 @@ async function handleSolidSolve(id: number, payload: SolvePayload) {
       ? tieWeighting(order, { MortarSurface, tieMortarWeights })
       : null,
   );
-  if (reason === null) {
-    const result = await solveSolidInRust(
-      { ElasticModel, SolveOptions, Ties },
-      {
-        ...payload,
-        nodes: tied.solveNodes,
-        elements: tied.tiedElements,
-        constraintTies: tied.constraints,
-      },
-      order,
-      requestedSolver(payload),
-      tied.vid,
-      tied.vidTied,
-      payload.cgIterationLimit,
-      onCgLimit,
-      logTo(id),
-    );
-    const displacements = expandTiedDisplacements(
-      nodes,
-      tied,
-      result.displacements,
-    );
-    self.postMessage({
-      id,
-      log: `Solve complete: ${displacements.length / 3} vertex displacements, ${result.vonMises.length} element stresses`,
-    });
-    postSolveResult(id, { displacements, vonMises: result.vonMises });
-    return;
-  }
-  const { mesh, matJson, bcsJson } = buildSolidEngineInputs(
-    { ...payload, nodes: tied.solveNodes, elements: tied.tiedElements },
+  const result = await solveSolidInRust(
+    { ElasticModel, SolveOptions, Ties },
+    {
+      ...payload,
+      nodes: tied.solveNodes,
+      elements: tied.tiedElements,
+      constraintTies: tied.constraints,
+    },
+    order,
+    requestedSolver(payload),
     tied.vid,
     tied.vidTied,
+    payload.cgIterationLimit,
+    onCgLimit,
+    logTo(id),
   );
-
-  self.postMessage({
-    id,
-    log: `Starting static solve: ${nodes.length} nodes, ${elements.length} elements (order ${order})…`,
-  });
-  // Mesh as typed arrays; materials/BCs stay JSON (small). The result comes
-  // back as Float64Arrays whose buffers are handed to the main thread via
-  // the postMessage transfer list — zero-copy, no JSON round-trip.
-  const result = await m().solve_linear_elastic(mesh, matJson, bcsJson, order);
-  if ("error" in result) throw new Error(result.error);
-
-  // von Mises is per element; welding preserves element count and order, so it
-  // passes through unchanged.
   const displacements = expandTiedDisplacements(
     nodes,
     tied,
@@ -839,13 +790,12 @@ async function handleSolidSolve(id: number, payload: SolvePayload) {
   );
   self.postMessage({
     id,
-    log: `Solve complete: ${displacements.length / 3} vertex displacements, ${result.von_mises.length} element stresses`,
+    log: `Solve complete: ${displacements.length / 3} vertex displacements, ${result.vonMises.length} element stresses`,
   });
-  postSolveResult(id, { displacements, vonMises: result.von_mises });
+  postSolveResult(id, { displacements, vonMises: result.vonMises });
 }
 
 async function handleSolve(id: number, payload: SolvePayload) {
-  m().cgIterationLimit = payload.cgIterationLimit;
   const reason = amgReason(payload);
   const route = routeSolve(payload);
   if (requestedSolver(payload) === "amg" && reason !== null) {

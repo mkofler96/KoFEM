@@ -13,7 +13,7 @@
 // Exits non-zero if the run does not converge, leaves the volume constraint, or
 // fails to separate solid from void — so it doubles as a verification gate.
 
-import { loadEngine, plateMesh, optimizeShell, densityStats } from "./lib.mjs";
+import { loadOptimizer, plateMesh, optimizeShell, densityStats } from "./lib.mjs";
 
 const a = 100.0; // plate edge, mm
 const n = 24; // cells per edge
@@ -21,7 +21,7 @@ const t = 2.0; // thickness, mm
 const STEEL = { young_modulus: 210000, poisson_ratio: 0.3, thickness: t }; // MPa
 const VOLFRAC = 0.4;
 
-const Module = await loadEngine((line) => {
+const optimizer = await loadOptimizer((line) => {
   if (/it \d+:/.test(line)) process.stdout.write(`  ${line}\n`);
 });
 
@@ -49,7 +49,7 @@ console.log(
 );
 
 const { density, history, converged } = optimizeShell(
-  Module,
+  optimizer,
   mesh,
   STEEL,
   { fixed_dofs, point_loads },

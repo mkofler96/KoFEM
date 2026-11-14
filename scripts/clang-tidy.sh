@@ -63,7 +63,6 @@ if [ ! -f "$BUILD_DIR/compile_commands.json" ]; then
     echo "▶ no compile database — running emcmake configure…"
     export OCCT_WASM_ROOT="${OCCT_WASM_ROOT:-/opt/kofem-deps/occt}"
     export NETGEN_WASM_ROOT="${NETGEN_WASM_ROOT:-/opt/kofem-deps/netgen}"
-    export MFEM_WASM_ROOT="${MFEM_WASM_ROOT:-/opt/kofem-deps/mfem}"
     # emsdk_env.sh puts emcmake and emsdk's node on PATH; tolerate `set -u`.
     set +u
     # shellcheck disable=SC1091

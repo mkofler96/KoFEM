@@ -16,7 +16,8 @@
 # build actually needs straight from the ghcr.io layer blobs:
 #
 #   /emsdk           — the Emscripten SDK (self-contained: clang, node, sysroot)
-#   /opt/kofem-deps  — OCCT, Netgen and MFEM prebuilt as WASM static libs
+#   /opt/kofem-deps  — OCCT and Netgen prebuilt as WASM static libs (the image
+#                      also holds MFEM, which the engine no longer links)
 #
 # They are written to the same absolute paths the image uses, so the toolchain's
 # baked-in paths stay valid. Extraction is linear in the file union (~2 GB), not
@@ -26,7 +27,6 @@
 #   source /emsdk/emsdk_env.sh
 #   OCCT_WASM_ROOT=/opt/kofem-deps/occt \
 #   NETGEN_WASM_ROOT=/opt/kofem-deps/netgen \
-#   MFEM_WASM_ROOT=/opt/kofem-deps/mfem \
 #   bash scripts/build-wasm.sh
 #
 # (The SessionStart hook in .claude/hooks/session-start.sh runs this automatically
@@ -125,7 +125,7 @@ done
     echo "ERROR: emcc missing under ${EMSDK_DIR} after extract — image layout changed?"
     exit 1
 }
-for d in occt netgen mfem; do
+for d in occt netgen; do
     [ -d "$DEPS_DIR/$d/lib" ] || {
         echo "ERROR: ${DEPS_DIR}/${d}/lib missing after extract"
         exit 1
@@ -138,5 +138,4 @@ echo "==> WASM deps ready:"
 echo "    EMSDK            = ${EMSDK_DIR}"
 echo "    OCCT_WASM_ROOT   = ${DEPS_DIR}/occt"
 echo "    NETGEN_WASM_ROOT = ${DEPS_DIR}/netgen"
-echo "    MFEM_WASM_ROOT   = ${DEPS_DIR}/mfem"
 [ -f "$DEPS_DIR/versions.txt" ] && sed 's/^/    /' "$DEPS_DIR/versions.txt"

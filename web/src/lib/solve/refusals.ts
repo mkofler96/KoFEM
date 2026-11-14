@@ -54,3 +54,9 @@ export function shellCouplingRefusal(couplingCount: number): string {
     "Delete the coupling, or keep one body solid."
   );
 }
+
+// A solid model the Rust solver does not take (amgUnavailableReason). The C++
+// solvers that once took these left the engine (KOF-309).
+export function solidModelRefusal(reason: string): string {
+  return `The solver cannot solve this model: ${reason}.`;
+}

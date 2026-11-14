@@ -16,7 +16,7 @@ import type {
   Property,
   SurfaceLoad,
 } from "../../workers/solverTypes.js";
-import type { SolveMesh } from "../../wasm/pkg/kofem_wasm.js";
+import type { SolveMesh } from "./contracts.js";
 import {
   buildTie,
   remapElement,

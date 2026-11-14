@@ -8,7 +8,7 @@
 import { durationBucket, trackOnce } from "../lib/analytics";
 import { isFailureStage, WorkerTaskError } from "../lib/workerError";
 import { askCgContinuation, dismissCgContinuation } from "./cgContinuation";
-import type { CgLimitProgress } from "../wasm/pkg/kofem_wasm.js";
+import type { CgLimitProgress } from "../lib/solve/contracts.js";
 import {
   failureHint,
   useEngineStatus,

@@ -81,7 +81,7 @@ describe("uniaxial extension driven by a prescribed displacement", () => {
   let result = null;
   beforeAll(async () => {
     const solve = await loadSolver();
-    result = solve(
+    result = await solve(
       { vertices: mesh.vertices, hexahedra: mesh.hexahedra },
       { young_modulus: youngModulus, poisson_ratio: nu, density: 7850 },
       { fixed_vertices: [], fixed_dofs, prescribed_dofs, point_loads: [] },
@@ -119,9 +119,7 @@ describe("uniaxial extension driven by a prescribed displacement", () => {
   });
 
   // The transverse contraction is a SOLVED unknown (unlike ux, which the BC
-  // pins), so the engine's loose showcase CG tolerance (SetRelTol 1e-1) leaves
-  // it under-converged and noisy: the magnitude overshoots and uy ≠ uz despite
-  // W = H. We therefore assert direction, not tight magnitude: the prescribed
+  // pins). We assert direction, not tight magnitude: the prescribed
   // face must be FREE in y/z and contract under Poisson (more than half the
   // theoretical amount, correct sign), proving it is not over-pinned. This is
   // the same robust discriminator dof-constraint.test.mjs uses. Tight Poisson

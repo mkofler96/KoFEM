@@ -10,7 +10,7 @@ import type {
 import type {
   TopOptHistoryEntry,
   TopOptSettings,
-} from "../wasm/pkg/kofem_wasm.js";
+} from "../lib/solve/contracts.js";
 import { fmt, loadsSummary } from "../lib/modelDisplay";
 import { resultUnit } from "../lib/resultField";
 import {

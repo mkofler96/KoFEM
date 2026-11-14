@@ -8,7 +8,7 @@
 // (stalled) — the MFEM engine's continuation policy
 // (engine/cpp/cg_continuation.h). Shared by the solid (AMG) and shell solves.
 
-import type { CgLimitProgress } from "../../wasm/pkg/kofem_wasm.js";
+import type { CgLimitProgress } from "./contracts.js";
 
 // Asked when the iteration budget runs out while the residual is still
 // falling: resolves to the number of extra iterations, or 0 to stop. The

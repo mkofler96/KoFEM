@@ -9,7 +9,7 @@ import type {
   Constraint,
   Load,
 } from "../workers/solverTypes.js";
-import type { SolveMesh } from "../wasm/pkg/kofem_wasm.js";
+import type { SolveMesh } from "./solve/contracts.js";
 
 // The engine indexes vertices 0-based in the order they are added (mesh
 // vertices are emitted in node-array order). Stored node .id values are NOT

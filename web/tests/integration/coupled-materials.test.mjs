@@ -12,9 +12,14 @@
 // The check that matters is cross-validation: on a two-block cantilever that
 // BOTH solvers can handle, solve_coupled's per-material answer must equal
 // solve_linear_elastic's, which has carried per-element attributes since #353.
+//
+// Both run on the app's Rust paths (web/tests/support/rust-solvers.mjs): the
+// coupled entry is the mixed solid/shell solve (lib/solve/coupledRust.ts), the
+// linear-elastic entry the solid AMG solve (lib/solve/amg.ts) — two separate
+// assemblies of the same per-element materials.
 
 import { beforeAll, describe, expect, test } from "bun:test";
-import { loadEngine } from "../support/wasm.mjs";
+import { loadRustSolvers } from "../support/rust-solvers.mjs";
 
 const STEEL = { young_modulus: 210000, poisson_ratio: 0.3 };
 const ALU = { young_modulus: 70000, poisson_ratio: 0.3 };
@@ -73,7 +78,7 @@ for (let i = 0; i < nVerts; i++) {
   if (Math.abs(verts[3 * i]) < 1e-9) clamped.push(i);
   if (Math.abs(verts[3 * i] - NX * CELL) < 1e-9) tipNodes.push(i);
 }
-let Module = null;
+let solvers = null;
 const TIP_FORCE = -100;
 
 const maxU = (disp) => {
@@ -87,7 +92,7 @@ const maxU = (disp) => {
 };
 
 // solve_coupled: tets only, no shells, no couplings (solid-only rotations are
-// auto-fixed by the core).
+// auto-fixed by the core). Rejects with the Rust path's error on bad input.
 const coupled = (mats, attrs) => {
   const fixed = [],
     load_dofs = [],
@@ -104,17 +109,20 @@ const coupled = (mats, attrs) => {
     thicknesses: new Float64Array(0),
   };
   if (attrs) meshArg.attributes = Int32Array.from(attrs);
-  return Module.solve_coupled(
+  return solvers.solve_coupled(
     meshArg,
     {
       ref: new Int32Array(0),
       offsets: Int32Array.from([0]),
       solid: new Int32Array(0),
       mpc: new Int32Array(0),
+      dof_mask: new Int32Array(0),
       relaxation: 1.0,
     },
     {
       fixed_dofs: Int32Array.from(fixed),
+      prescribed_dofs: new Int32Array(0),
+      prescribed_vals: new Float64Array(0),
       load_dofs: Int32Array.from(load_dofs),
       load_vals: Float64Array.from(load_vals),
     },
@@ -123,8 +131,8 @@ const coupled = (mats, attrs) => {
 };
 
 // solve_linear_elastic: the reference per-element-attribute path (#353).
-const linear = (mats) => {
-  const solved = Module.solve_linear_elastic(
+const linear = async (mats) => {
+  const solved = await solvers.solve_linear_elastic(
     {
       vertices: Float64Array.from(verts),
       tetrahedra: Int32Array.from(tet),
@@ -141,25 +149,20 @@ const linear = (mats) => {
     }),
     1,
   );
-  if ("error" in solved)
-    throw new Error(`solve_linear_elastic: ${solved.error}`);
   return maxU(solved.displacements);
 };
 
 describe("per-body solid materials in the coupled solve", () => {
   beforeAll(async () => {
     // The refusal cases below EXPECT the solver to fail; their messages are
-    // asserted on from the returned error, so the engine log stays silent.
-    Module = await loadEngine({ solves: import.meta.url });
+    // asserted on from the rejected Error.
+    solvers = await loadRustSolvers();
   });
 
   // ── The legacy single-material contract is untouched ───────────────────────
-  test("a bare material object still means 'every tet uses this'", () => {
-    const legacy = coupled(STEEL, null);
-    const arrayOfOne = coupled([STEEL], null);
-    if ("error" in legacy) throw new Error(`legacy form: ${legacy.error}`);
-    if ("error" in arrayOfOne)
-      throw new Error(`array of one: ${arrayOfOne.error}`);
+  test("a bare material object still means 'every tet uses this'", async () => {
+    const legacy = await coupled(STEEL, null);
+    const arrayOfOne = await coupled([STEEL], null);
     const objectForm = maxU(legacy.displacements);
     const arrayForm = maxU(arrayOfOne.displacements);
     // toBe(NaN, NaN) would pass where the old === did not.
@@ -175,16 +178,15 @@ describe("per-body solid materials in the coupled solve", () => {
     ["tip block aluminium", [STEEL, ALU]],
     ["root block aluminium", [ALU, STEEL]],
   ])("%s", (name, mats) => {
-    test("coupled solves it", () => {
-      const solved = coupled(mats, attributes);
-      expect(solved.error, solved.error).toBeUndefined();
+    test("coupled solves it", async () => {
+      const solved = await coupled(mats, attributes);
+      expect(maxU(solved.displacements)).toBeGreaterThan(0);
     });
 
-    test("coupled matches solve_linear_elastic", () => {
-      const solved = coupled(mats, attributes);
-      if ("error" in solved) throw new Error(solved.error);
+    test("coupled matches solve_linear_elastic", async () => {
+      const solved = await coupled(mats, attributes);
       const got = maxU(solved.displacements);
-      const want = linear(mats);
+      const want = await linear(mats);
       expect(
         Math.abs(got / want - 1),
         `coupled ${got.toPrecision(6)} vs linear ${want.toPrecision(6)}`,
@@ -195,9 +197,11 @@ describe("per-body solid materials in the coupled solve", () => {
   // Softening only the tip half must move the answer — a solver that quietly
   // used material 1 everywhere would pass the "both steel" case and nothing
   // else.
-  test("the second material actually reaches the elements that select it", () => {
-    const stiff = maxU(coupled([STEEL, STEEL], attributes).displacements);
-    const soft = maxU(coupled([STEEL, ALU], attributes).displacements);
+  test("the second material actually reaches the elements that select it", async () => {
+    const stiff = maxU(
+      (await coupled([STEEL, STEEL], attributes)).displacements,
+    );
+    const soft = maxU((await coupled([STEEL, ALU], attributes)).displacements);
     expect(
       soft,
       `both steel ${stiff.toPrecision(4)}, tip aluminium ${soft.toPrecision(4)}`,
@@ -205,18 +209,17 @@ describe("per-body solid materials in the coupled solve", () => {
   });
 
   // ── Bad input is named, not absorbed ───────────────────────────────────────
-  test("an attribute with no material is refused, naming the tet and the range", () => {
+  test("an attribute with no material is refused, naming the tet and the range", async () => {
     const bad = attributes.slice();
     bad[0] = 3; // only two materials are supplied
-    const solved = coupled([STEEL, ALU], bad);
-    expect(solved, "the solve succeeded").toHaveProperty("error");
-    expect(solved.error).toMatch(/material 3/);
-    expect(solved.error).toMatch(/1\.\.2/);
+    const refusal = coupled([STEEL, ALU], bad);
+    await expect(refusal).rejects.toThrow(/tet 0 selects solid material 3/);
+    await expect(refusal).rejects.toThrow(/1\.\.2/);
   });
 
-  test("an attribute array that does not cover every tet is refused", () => {
-    const short = coupled([STEEL, ALU], attributes.slice(0, 5));
-    expect(short, "the solve succeeded").toHaveProperty("error");
-    expect(short.error).toMatch(/attributes/);
+  test("an attribute array that does not cover every tet is refused", async () => {
+    await expect(coupled([STEEL, ALU], attributes.slice(0, 5))).rejects.toThrow(
+      /5 mesh\.attributes for \d+ tets/,
+    );
   });
 });

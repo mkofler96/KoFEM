@@ -47,7 +47,7 @@ const mat = { young_modulus: YOUNG, poisson_ratio: POISSON, density: 7850 };
 const clamped = nodesWhere(box.vertices, (xCoord) => xCoord <= 1e-9);
 
 // Quad boundary faces of the x=L (tip) and z=H (top) planes, in the node
-// ordering the engine's generated boundary elements use: matching is by vertex
+// ordering the solver's boundary faces use: matching is by vertex
 // SET, so only the grouping matters.
 const tipFaces = [];
 for (let row = 0; row < cellsY; row++)
@@ -95,20 +95,21 @@ const DIFFERENT = 1e-2;
 const FZ = -1e6;
 const FY = -5e5;
 
-describe("multiple surface loads in one solve (solve_mfem.cpp apply_surface_loads)", () => {
+describe("multiple surface loads in one solve", () => {
   let run = null;
   beforeAll(async () => {
     const solve = await loadSolver();
-    run = (bcs) =>
-      solve(mesh, mat, { fixed_vertices: clamped, ...bcs }, 1).displacements;
+    run = async (bcs) =>
+      (await solve(mesh, mat, { fixed_vertices: clamped, ...bcs }, 1))
+        .displacements;
   });
 
-  test("two loads on DISJOINT faces both act (== superposition)", () => {
+  test("two loads on DISJOINT faces both act (== superposition)", async () => {
     const tipDown = { type: "force", faces: tipFaces, force: [0, 0, FZ] };
     const topSide = { type: "force", faces: topFaces, force: [0, FY, 0] };
-    const uTip = run({ surface_loads: [tipDown] });
-    const uTop = run({ surface_loads: [topSide] });
-    const uBoth = run({ surface_loads: [tipDown, topSide] });
+    const uTip = await run({ surface_loads: [tipDown] });
+    const uTop = await run({ surface_loads: [topSide] });
+    const uBoth = await run({ surface_loads: [tipDown, topSide] });
     const diff = relDiff(uBoth, sum(uTip, uTop));
     expect(
       diff,
@@ -119,11 +120,11 @@ describe("multiple surface loads in one solve (solve_mfem.cpp apply_surface_load
   // THE DISCRIMINATOR: two F/2 loads on the SAME faces must equal one F. The
   // buggy binary keeps only the last, giving exactly half, so this separates
   // "both applied" from "one silently dropped" by a factor of two.
-  test("two loads on the SAME faces both act (F/2 + F/2 == F)", () => {
+  test("two loads on the SAME faces both act (F/2 + F/2 == F)", async () => {
     const tipDown = { type: "force", faces: tipFaces, force: [0, 0, FZ] };
     const half = { type: "force", faces: tipFaces, force: [0, 0, FZ / 2] };
-    const uTip = run({ surface_loads: [tipDown] });
-    const uTwoHalves = run({ surface_loads: [half, half] });
+    const uTip = await run({ surface_loads: [tipDown] });
+    const uTwoHalves = await run({ surface_loads: [half, half] });
     const diff = relDiff(uTwoHalves, uTip);
     expect(
       diff,
@@ -133,12 +134,12 @@ describe("multiple surface loads in one solve (solve_mfem.cpp apply_surface_load
 
   // A pressure and a force on the same face is the everyday version of the same
   // overlap: both must survive.
-  test("a force and a pressure on the SAME faces both act", () => {
+  test("a force and a pressure on the SAME faces both act", async () => {
     const tipDown = { type: "force", faces: tipFaces, force: [0, 0, FZ] };
     const tipPressure = { type: "pressure", faces: tipFaces, pressure: 5e7 };
-    const uTip = run({ surface_loads: [tipDown] });
-    const uPressure = run({ surface_loads: [tipPressure] });
-    const uMixed = run({ surface_loads: [tipDown, tipPressure] });
+    const uTip = await run({ surface_loads: [tipDown] });
+    const uPressure = await run({ surface_loads: [tipPressure] });
+    const uMixed = await run({ surface_loads: [tipDown, tipPressure] });
     const diff = relDiff(uMixed, sum(uTip, uPressure));
     expect(
       diff,
@@ -155,10 +156,10 @@ describe("multiple surface loads in one solve (solve_mfem.cpp apply_surface_load
     const overlapA = { type: "force", faces: topFaces, force: [0, FY, 0] };
     const overlapB = { type: "force", faces: topOuter, force: [0, 0, FZ / 4] };
 
-    test("PARTIALLY overlapping loads both act in full", () => {
-      const uA = run({ surface_loads: [overlapA] });
-      const uB = run({ surface_loads: [overlapB] });
-      const uOverlap = run({ surface_loads: [overlapA, overlapB] });
+    test("PARTIALLY overlapping loads both act in full", async () => {
+      const uA = await run({ surface_loads: [overlapA] });
+      const uB = await run({ surface_loads: [overlapB] });
+      const uOverlap = await run({ surface_loads: [overlapA, overlapB] });
       const diff = relDiff(uOverlap, sum(uA, uB));
       expect(
         diff,
@@ -169,9 +170,9 @@ describe("multiple surface loads in one solve (solve_mfem.cpp apply_surface_load
     // The opposite failure mode: a fix that de-duplicated overlapping loads
     // into one would pass every check above and still be wrong. Listing B twice
     // must deliver twice B's force, so the answer has to MOVE.
-    test("overlapping loads are not silently merged (adding B twice changes the answer)", () => {
-      const uOverlap = run({ surface_loads: [overlapA, overlapB] });
-      const uDoubleB = run({
+    test("overlapping loads are not silently merged (adding B twice changes the answer)", async () => {
+      const uOverlap = await run({ surface_loads: [overlapA, overlapB] });
+      const uDoubleB = await run({
         surface_loads: [overlapA, overlapB, overlapB],
       });
       const diff = relDiff(uDoubleB, uOverlap);
@@ -185,7 +186,7 @@ describe("multiple surface loads in one solve (solve_mfem.cpp apply_surface_load
   // A prescribed displacement drives the model on its own, alongside any number
   // of homogeneous groups: a full clamp on x=0, a roller on y=0, and a
   // prescribed Ux on x=L, with no load anywhere.
-  test("three Dirichlet groups and NO load: the prescribed value drives the model", () => {
+  test("three Dirichlet groups and NO load: the prescribed value drives the model", async () => {
     const delta = 0.004;
     const rollers = nodesWhere(
       box.vertices,
@@ -198,7 +199,7 @@ describe("multiple surface loads in one solve (solve_mfem.cpp apply_surface_load
       box.vertices,
       (xCoord) => xCoord >= LENGTH - 1e-9,
     );
-    const uDirichlet = run({
+    const uDirichlet = await run({
       fixed_dofs: rollers,
       prescribed_dofs: driven.map((vertex) => ({
         vertex,

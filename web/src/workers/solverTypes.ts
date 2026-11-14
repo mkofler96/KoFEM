@@ -5,8 +5,8 @@ import type {
   SplitGeometryOptions,
   BooleanGeometryOptions,
   RepairHingesOptions,
-  TopOptSettings,
 } from "../wasm/pkg/kofem_wasm.js";
+import type { TopOptSettings } from "../lib/solve/contracts.js";
 import type { TieDefinition } from "../lib/tie.js";
 import type { CouplingDefinition } from "../lib/coupling.js";
 import type { SolverMethod } from "../lib/solve/amg.js";
