@@ -24,6 +24,7 @@
     "prevalidate:report": "bun run wasm:prepare",
     "validate:report": "bun ../examples/validation/run.mjs --report",
     "validate:pages": "bun ../examples/validation/run.mjs --pages",
+    "validate:oracle": "bun ../examples/validation/oracle.mjs",
     "examples:generate-crane-shell": "bun ../examples/unvalidated/crane-hook/generate-crane-shell.mjs",
     "examples:generate-mbb-topopt": "bun ../examples/gallery/generate-mbb-topopt.mjs",
     "coverage:report": "nyc report && bun scripts/coverage-dead-code.ts",

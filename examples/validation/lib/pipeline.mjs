@@ -192,6 +192,10 @@ function resolveOnTessellation(at, tess, where) {
  *                                        the static solve (null for an optimisation)
  * @property {{settings, density, history, seconds}} [optimization]
  *                                        the run, for a recipe with `optimize`
+ * @property {object} solvePayload        the payload the worker's solve or
+ *                                        optimize receives for this model
+ * @property {{spec, divideBy?}} [probe]  the recipe's probe, resolved (static
+ *                                        solves only), for evaluateProbe
  * @property {number} fe                  the probe's value (÷ divideBy), or the
  *                                        final compliance of an optimisation
  */
@@ -512,6 +516,7 @@ export async function buildFromRecipe(id, recipe) {
       handCheck: null,
       result: null,
       optimization,
+      solvePayload: payload,
       fe: optimization.history.at(-1).compliance,
     };
   }
@@ -570,7 +575,7 @@ export async function buildFromRecipe(id, recipe) {
     },
   };
 
-  return { ...model(), handCheck, result, fe };
+  return { ...model(), handCheck, result, solvePayload: payload, probe, fe };
 }
 
 /**
