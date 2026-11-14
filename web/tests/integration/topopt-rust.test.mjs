@@ -32,7 +32,7 @@ import { loadEngine, loadFem } from "../support/wasm.mjs";
 
 const NODE_OFFSET = 101;
 
-let fem;
+let fem = null;
 beforeAll(async () => {
   fem = await loadFem();
 });

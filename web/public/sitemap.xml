@@ -50,6 +50,21 @@
     <image:image><image:loc>https://kofem.org/examples/cooks-membrane.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/cooks-membrane/cooks-membrane-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/cooks-membrane/cooks-membrane-mesh-convergence.png</image:loc></image:image>
   </url>
   <url>
+    <loc>https://kofem.org/examples/tie-patch-test/</loc>
+    <priority>0.6</priority>
+    <image:image><image:loc>https://kofem.org/examples/tie-patch-test.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/tie-patch-test/tie-patch-test-diagram.png</image:loc></image:image>
+  </url>
+  <url>
+    <loc>https://kofem.org/examples/tie-lame-cylinder/</loc>
+    <priority>0.6</priority>
+    <image:image><image:loc>https://kofem.org/examples/tie-lame-cylinder.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/tie-lame-cylinder/tie-lame-cylinder-tie-lame-diagram.png</image:loc></image:image>
+  </url>
+  <url>
+    <loc>https://kofem.org/examples/tie-cantilever/</loc>
+    <priority>0.6</priority>
+    <image:image><image:loc>https://kofem.org/examples/tie-cantilever.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/tie-cantilever/tie-cantilever-diagram.png</image:loc></image:image>
+  </url>
+  <url>
     <loc>https://kofem.org/examples/mbb-beam-topopt/</loc>
     <priority>0.6</priority>
     <image:image><image:loc>https://kofem.org/examples/mbb-beam-topopt.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/mbb-beam-topopt/mbb-beam-topopt-diagram.png</image:loc></image:image><image:image><image:loc>https://kofem.org/examples/mbb-beam-topopt/mbb-beam-topopt-compliance-history.png</image:loc></image:image>

@@ -64,6 +64,9 @@ must be the case's own mesh), its id in `catalog.mjs`, and run
 | Plate with a hole          | Kt = 3.14 in a strip, 2a/W = 0.2 | Howland (1930), Peterson's    |
 | Plate with a hole (shells) | the same strip as a shell        | Howland (1930), Peterson's    |
 | Cook's membrane            | loaded-edge deflection ≈ 23.96   | Cook (1974), Belytschko 2014  |
+| Tie patch test             | uniform σ across a mortar tie    | patch test, Puso (2004)       |
+| Tied thick-walled cylinder | bore u(a), curved tie            | Lamé rings, tied              |
+| Tied cantilever beam       | tip deflection across a P2 tie   | Euler–Bernoulli, rigid gap    |
 
 See `REPORT.md` for the latest FE-vs-reference numbers.
 

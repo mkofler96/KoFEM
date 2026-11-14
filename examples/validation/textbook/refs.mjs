@@ -36,4 +36,12 @@ export const REF = {
     "K. Svanberg, “The method of moving asymptotes: a new method for structural optimization”, <cite>International Journal for Numerical Methods in Engineering</cite> 24 (1987) 359–373.",
   hughes:
     "T. J. R. Hughes, <cite>The Finite Element Method: Linear Static and Dynamic Finite Element Analysis</cite>, Dover, 2000.",
+  irons:
+    "B. M. Irons and A. Razzaque, “Experience with the patch test for convergence of finite elements”, in A. K. Aziz (ed.), <cite>The Mathematical Foundations of the Finite Element Method with Applications to Partial Differential Equations</cite>, Academic Press, 1972, 557–587.",
+  puso2004:
+    "M. A. Puso, “A 3D mortar method for solid mechanics”, <cite>International Journal for Numerical Methods in Engineering</cite> 59 (2004) 315–336.",
+  pusoLaursen:
+    "M. A. Puso and T. A. Laursen, “A mortar segment-to-segment contact method for large deformation solid mechanics”, <cite>Computer Methods in Applied Mechanics and Engineering</cite> 193 (2004) 601–629.",
+  wohlmuth:
+    "B. I. Wohlmuth, “A mortar finite element method using dual spaces for the Lagrange multiplier”, <cite>SIAM Journal on Numerical Analysis</cite> 38 (2000) 989–1012.",
 };

@@ -2,18 +2,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Tie slice: bonded connections between two picked surfaces (see lib/tie.ts).
-// A tie has no derived flat array: the weld it describes is applied to the mesh
-// at solve time (buildTie), and drawn from the same definition in the viewport
-// (tiedNodePairs).
+// A tie has no derived flat array: the weld or constraints it describes are
+// applied at solve time, and drawn from the same definition in the viewport
+// (useTiePairs).
 
 import type { SliceCreator } from "./modelStore";
-import type { TieDefinition, TieExtent } from "../lib/tie";
+import type { TieDefinition, TieExtent, TieMethod } from "../lib/tie";
 import { faceEntry, type BcFaceEntry } from "./boundaryGroups";
 
 // A bonded tie between two picked surfaces — the connector condition that
 // replaced the model-wide "tie distance" (see lib/tie.ts). `extent` says whether
 // the whole selected surface is coupled or only the part of it within
-// `searchDistance` of the other side.
+// `searchDistance` of the other side, `method` how the two are joined.
 export interface TieGroup extends TieDefinition {
   id: number;
   name: string; // e.g. "Tie1"
@@ -21,7 +21,12 @@ export interface TieGroup extends TieDefinition {
   facesB: BcFaceEntry[];
   extent: TieExtent;
   searchDistance: number;
+  method: TieMethod;
 }
+
+// How a new connection joins its surfaces unless the user chooses otherwise:
+// by constraint, which keeps the geometry (see lib/tie.ts).
+export const DEFAULT_TIE_METHOD: TieMethod = "mpc";
 
 // Which surface of a tie a pick session is currently filling.
 export type TieSide = "a" | "b";
@@ -45,13 +50,19 @@ export interface TieSlice {
     facesB: Omit<BcFaceEntry, "id">[],
     extent: TieExtent,
     searchDistance: number,
+    method: TieMethod,
   ): void;
   addFaceToTieGroup(
     groupId: number,
     side: TieSide,
     face: Omit<BcFaceEntry, "id">,
   ): void;
-  updateTieGroup(id: number, extent: TieExtent, searchDistance: number): void;
+  updateTieGroup(
+    id: number,
+    extent: TieExtent,
+    searchDistance: number,
+    method: TieMethod,
+  ): void;
   removeFaceFromTieGroup(groupId: number, side: TieSide, faceId: number): void;
   deleteTieGroup(id: number): void;
   clearTies(): void;
@@ -66,6 +77,7 @@ export const createTieSlice: SliceCreator<TieSlice> = (set) => ({
     facesB: Omit<BcFaceEntry, "id">[],
     extent: TieExtent,
     searchDistance: number,
+    method: TieMethod,
   ) =>
     set((s) => {
       const entries = (faces: Omit<BcFaceEntry, "id">[]) =>
@@ -77,6 +89,7 @@ export const createTieSlice: SliceCreator<TieSlice> = (set) => ({
         facesB: entries(facesB),
         extent,
         searchDistance,
+        method,
       });
       s.nextTieGroupId++;
       s.result = null;
@@ -94,12 +107,18 @@ export const createTieSlice: SliceCreator<TieSlice> = (set) => ({
       s.result = null;
     }),
 
-  updateTieGroup: (id: number, extent: TieExtent, searchDistance: number) =>
+  updateTieGroup: (
+    id: number,
+    extent: TieExtent,
+    searchDistance: number,
+    method: TieMethod,
+  ) =>
     set((s) => {
       const group = s.tieGroups.find((tie) => tie.id === id);
       if (!group) return;
       group.extent = extent;
       group.searchDistance = searchDistance;
+      group.method = method;
       s.result = null;
     }),
 

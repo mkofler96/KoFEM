@@ -25,6 +25,8 @@
 //!   least-squares rotation of it, so the tie stays local.
 //! * Shell footprint: a solid node on the footprint of a shell edge follows
 //!   that edge with Kirchhoff section kinematics, `u = Σ Nᵢ (uᵢ + θᵢ × r)`.
+//! * Tie: a solid node follows the surface it is tied to,
+//!   `u = Σ wᵢ uᵢ` with Σ wᵢ = 1, in its translations (see [`crate::tie`]).
 
 use std::collections::BTreeMap;
 
@@ -62,6 +64,12 @@ pub enum CouplingKind {
     /// section, `u = Σ wᵢ (uᵢ + θᵢ × (x − Σ wⱼ xⱼ))`. Its rotations are not
     /// tied: a solid node has none.
     ShellFootprint,
+    /// Constraint tie: the reference node is a tied (slave) node, and each
+    /// translation c with bit c of `dof_mask` set follows the coupled
+    /// (master) nodes, `u_c = Σ wᵢ uᵢ_c`, with the given `weights` (summing
+    /// to one; some may be negative, as dual mortar weights are). Its
+    /// rotations are not tied: a solid node has none.
+    Tie { dof_mask: u8 },
 }
 
 /// One coupling over node indices.
@@ -69,8 +77,8 @@ pub enum CouplingKind {
 pub struct Coupling {
     pub reference: usize,
     pub nodes: Vec<usize>,
-    /// One weight per coupled node; empty means equal weights. Only a
-    /// distributing coupling reads them.
+    /// One weight per coupled node; empty means equal weights. Read by the
+    /// distributing, relaxed MPC, shell footprint and tie kinds.
     pub weights: Vec<f64>,
     pub kind: CouplingKind,
 }
@@ -155,6 +163,9 @@ impl CouplingConstraints {
                 }
                 CouplingKind::ShellFootprint => {
                     constraints.add_shell_footprint(points, coupling, has_rotation, &fail)?;
+                }
+                CouplingKind::Tie { dof_mask } => {
+                    constraints.add_tie(coupling, dof_mask, &fail)?;
                 }
             }
         }
@@ -420,6 +431,42 @@ impl CouplingConstraints {
                     row.push((DOFS_PER_NODE * node + 3 + axis, -weight * entry));
                 }
             }
+            self.add_row(coupling.reference, component, row)?;
+        }
+        Ok(())
+    }
+
+    /// The tie (see [`CouplingKind::Tie`]): one row per tied translation.
+    fn add_tie(
+        &mut self,
+        coupling: &Coupling,
+        dof_mask: u8,
+        fail: &impl Fn(String) -> FemError,
+    ) -> Result<(), FemError> {
+        if coupling.nodes.is_empty() {
+            return Err(fail("a tie needs at least one master node".into()));
+        }
+        if coupling.weights.len() != coupling.nodes.len() {
+            return Err(fail(format!(
+                "{} tie weights for {} master nodes",
+                coupling.weights.len(),
+                coupling.nodes.len()
+            )));
+        }
+        if let Some(&weight) = coupling.weights.iter().find(|weight| !weight.is_finite()) {
+            return Err(fail(format!("tie weights must be finite, got {weight}")));
+        }
+        for component in 0..3 {
+            if dof_mask & (1 << component) == 0 {
+                continue;
+            }
+            let row = coupling
+                .nodes
+                .iter()
+                .zip(&coupling.weights)
+                .filter(|&(_, &weight)| weight != 0.0)
+                .map(|(&node, &weight)| (DOFS_PER_NODE * node + component, weight))
+                .collect();
             self.add_row(coupling.reference, component, row)?;
         }
         Ok(())

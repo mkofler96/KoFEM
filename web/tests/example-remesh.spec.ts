@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// An opened example re-meshes with every support and load on the same CAD
+// An opened example re-meshes with every support, load and tie on the same CAD
 // faces (KOF-322): every published example, and a throwaway whose recipe
 // splits the imported geometry.
 //
@@ -236,10 +236,13 @@ function exampleRecipe(id: string): Recipe {
 // Every support and load entry: its CAD face, and whether its nodes are
 // exactly that face's nodes on the current mesh (an Edge entry: the face's
 // rim on the shell).
+// The faces of every support, load and tie surface (a tie's two surfaces are
+// two entries), in the store's order.
 function groupEntries(snap: Snapshot) {
-  return [...snap.bcGroups, ...snap.loadGroups].map((group) =>
-    groupFaces(snap, group.faces),
-  );
+  return [
+    ...[...snap.bcGroups, ...snap.loadGroups].map((group) => group.faces),
+    ...snap.tieGroups.flatMap((tie) => [tie.facesA, tie.facesB]),
+  ].map((faces) => groupFaces(snap, faces));
 }
 
 function storeFlags(page: Page) {
@@ -287,7 +290,10 @@ for (const id of ORDER as string[]) {
 
     const before = await snapshot(page);
     const entries = groupEntries(before);
-    expect(entries.length).toBe(recipe.supports.length + recipe.loads.length);
+    const ties = recipe.ties?.length ?? 0;
+    expect(entries.length).toBe(
+      recipe.supports.length + recipe.loads.length + 2 * ties,
+    );
     for (const faces of entries)
       for (const face of faces) {
         expect(face.cadFaceId, "a whole CAD face").not.toBeNull();
@@ -307,7 +313,7 @@ for (const id of ORDER as string[]) {
       .toBe(true);
     await expect(page.getByTestId("meshing-error")).toHaveCount(0);
 
-    const groups = entries.length;
+    const groups = recipe.supports.length + recipe.loads.length + ties;
     expect((await storeFlags(page)).remeshNotice, "every group kept").toBe(
       `Kept ${groups} support/load/tie group${groups === 1 ? "" : "s"} on their CAD faces.`,
     );

@@ -86,10 +86,10 @@ export type {
 export { loadKind, loadComponents } from "./boundaryGroups";
 export type { Constraint, Load, SurfaceLoad } from "./boundaryRebuild";
 export type { TieGroup, TieSide } from "./tieSlice";
-export { tieFaces, DEFAULT_TIE_DISTANCE } from "./tieSlice";
+export { tieFaces, DEFAULT_TIE_DISTANCE, DEFAULT_TIE_METHOD } from "./tieSlice";
 export type { CouplingGroup } from "./couplingSlice";
 export type { FaceSelection, PickMode } from "./pickSlice";
-export type { TieExtent } from "../lib/tie";
+export type { TieExtent, TieMethod } from "../lib/tie";
 export type { PickGeometry } from "../lib/facePick";
 export type { CouplingKind, ReferencePointOption } from "../lib/coupling";
 export { ALL_DOFS, referencePointOptions } from "../lib/coupling";

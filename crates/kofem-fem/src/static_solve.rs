@@ -192,7 +192,7 @@ fn dof_number(node: usize, component: usize) -> u32 {
 
 /// Append to `dofs`/`values` the edge-node conditions implied by the given
 /// vertex conditions (see [`prepare_static`]). Nothing on a linear mesh.
-fn extend_to_edge_nodes(
+pub(crate) fn extend_to_edge_nodes(
     mesh: &TetMesh,
     fixed_dofs: &[u32],
     fixed_values: &[f64],

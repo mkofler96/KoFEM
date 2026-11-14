@@ -67,19 +67,24 @@ export function stepString(text) {
 }
 
 /**
- * The closed shell, solid, units, product and file envelope around the faces.
+ * The closed shells, solids, units, product and file envelope around the
+ * faces: one solid per face list, all in one part (several solids are several
+ * bodies in the app).
  *
  * @param {ReturnType<typeof stepEntities>} step
- * @param {number[]} faces        ADVANCED_FACE ids
+ * @param {number[] | number[][]} faces  ADVANCED_FACE ids of one solid, or one list per solid
  * @param {string} productName    product name written into the file (escaped)
  * @returns {string} the STEP file text
  */
 function stepFile({ lines, add, point, dir }, faces, productName) {
   const name = stepString(productName);
-  const shell = add(
-    `CLOSED_SHELL('',(${faces.map((f) => `#${f}`).join(",")}))`,
-  );
-  const solid = add(`MANIFOLD_SOLID_BREP('${name}',#${shell})`);
+  const shells = Array.isArray(faces[0]) ? faces : [faces];
+  const solids = shells.map((shellFaces) => {
+    const shell = add(
+      `CLOSED_SHELL('',(${shellFaces.map((f) => `#${f}`).join(",")}))`,
+    );
+    return add(`MANIFOLD_SOLID_BREP('${name}',#${shell})`);
+  });
   const origin = add(
     `AXIS2_PLACEMENT_3D('',#${point([0, 0, 0])},#${dir([0, 0, 1])},#${dir([1, 0, 0])})`,
   );
@@ -101,7 +106,7 @@ function stepFile({ lines, add, point, dir }, faces, productName) {
       `REPRESENTATION_CONTEXT('Context #1','3D Context with UNIT and UNCERTAINTY') )`,
   );
   const shapeRep = add(
-    `ADVANCED_BREP_SHAPE_REPRESENTATION('',(#${origin},#${solid}),#${context})`,
+    `ADVANCED_BREP_SHAPE_REPRESENTATION('',(#${origin},${solids.map((solid) => `#${solid}`).join(",")}),#${context})`,
   );
   const appContext = add(
     `APPLICATION_CONTEXT('core data for automotive mechanical design processes')`,
@@ -431,9 +436,39 @@ function real(v) {
  * @returns {string} the STEP file text
  */
 export function extrudedProfileStep(profile, depth, name) {
+  return extrudedProfilesStep([profile], depth, name);
+}
+
+/**
+ * STEP file of several extruded profiles, one solid each (see
+ * extrudedProfileStep), all from z = 0 to z = depth: separate bodies in the
+ * app. Solids that touch are imprinted on import and bonded; keep a gap
+ * between them for bodies that a tie is to join. Face order: the faces of
+ * each solid in turn, each as extrudedProfileStep orders them.
+ *
+ * @param {Profile[]} profiles
+ * @param {number} depth     extrusion length along +z (mm)
+ * @param {string} name      product name written into the file
+ * @returns {string} the STEP file text
+ */
+export function extrudedProfilesStep(profiles, depth, name) {
   if (!(depth > 0)) throw new Error(`depth must be positive, got ${depth}`);
-  const loops = profileLoops(profile);
+  if (profiles.length === 0) throw new Error("no profile to extrude");
   const step = stepEntities(real);
+  const shells = profiles.map((profile) => extrudedFaces(step, profile, depth));
+  return stepFile(step, shells, name);
+}
+
+/**
+ * The faces of one extruded profile, written into `step`.
+ *
+ * @param {ReturnType<typeof stepEntities>} step
+ * @param {Profile} profile
+ * @param {number} depth
+ * @returns {number[]} ADVANCED_FACE ids
+ */
+function extrudedFaces(step, profile, depth) {
+  const loops = profileLoops(profile);
   const { add, point, dir } = step;
   /** @param {number} e @param {boolean} forward */
   const oriented = (e, forward) =>
@@ -560,8 +595,7 @@ export function extrudedProfileStep(profile, depth, name) {
   };
   faces.push(cap(0, false));
   faces.push(cap(depth, true));
-
-  return stepFile(step, faces, name);
+  return faces;
 }
 
 // ── The curved stock of the examples ──────────────────────────────────────────

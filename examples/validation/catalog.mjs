@@ -35,6 +35,9 @@ export const ORDER = [
   "plate-with-hole",
   "plate-with-hole-shell",
   "cooks-membrane",
+  "tie-patch-test",
+  "tie-lame-cylinder",
+  "tie-cantilever",
   "mbb-beam-topopt",
 ];
 

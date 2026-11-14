@@ -656,3 +656,155 @@ export function mbbFigure() {
     parts.join("\n    "),
   );
 }
+
+// ── Tied bodies ──────────────────────────────────────────────────────────────
+
+/** Short dashed links across a gap from x1 to x2 at the heights `ys`. */
+const tieLinks = (x1, x2, ys) =>
+  ys.map((y) => line(x1, y, x2, y, "ext")).join("");
+
+/**
+ * Side view of the tie patch test: two blocks a small gap apart (drawn
+ * wider than to scale), symmetry rollers on x = 0 and y = 0, the tension σ on
+ * the far end, and the tie across the gap.
+ */
+export function tiePatchFigure() {
+  const x0 = 80,
+    xa = 250,
+    xb = 266,
+    x1 = 520,
+    top = 70,
+    bot = 160;
+  const parts = [
+    `<rect class="body" x="${x0}" y="${top}" width="${xa - x0}" height="${bot - top}"/>`,
+    `<rect class="body" x="${xb}" y="${top}" width="${x1 - xb}" height="${bot - top}"/>`,
+    tieLinks(
+      xa,
+      xb,
+      [0, 1, 2, 3, 4].map((k) => top + 10 + ((bot - top - 20) * k) / 4),
+    ),
+  ];
+  for (let k = 0; k < 3; k++)
+    parts.push(
+      `<circle class="hole" cx="${f(x0 - 6)}" cy="${f(top + 15 + ((bot - top - 30) * k) / 2)}" r="5"/>`,
+    );
+  for (const [from, to] of [
+    [x0, xa],
+    [xb, x1],
+  ])
+    for (let k = 0; k < 4; k++)
+      parts.push(
+        `<circle class="hole" cx="${f(from + 14 + ((to - from - 28) * k) / 3)}" cy="${f(bot + 6)}" r="5"/>`,
+      );
+  parts.push(
+    line(x0 - 12, top + 6, x0 - 12, bot - 6, "wall"),
+    line(x0 + 6, bot + 12, x1 - 6, bot + 12, "wall"),
+  );
+  for (let j = 0; j <= 4; j++) {
+    const y = top + 6 + ((bot - top - 12) * j) / 4;
+    parts.push(arrow(x1 + 2, y, x1 + 30, y));
+  }
+  parts.push(
+    sym(x1 + 38, (top + bot) / 2 + 5, "σ", "start"),
+    label((xa + xb) / 2, top - 22, "tie"),
+    dim(xa, top - 10, xb, top - 10),
+    sym((xa + xb) / 2, top - 36, "g"),
+    dim(x0, bot + 30, xa, bot + 30),
+    sym((x0 + xa) / 2, bot + 24, "L", "middle", "1"),
+    dim(xb, bot + 30, x1, bot + 30),
+    sym((xb + x1) / 2, bot + 24, "L", "middle", "2"),
+    triad(24, 232),
+  );
+  return svg(
+    600,
+    250,
+    "Two blocks a small gap apart, tied across the gap, with symmetry supports on the left end and the bottom and a uniform tension σ on the right end",
+    parts.join("\n    "),
+  );
+}
+
+/**
+ * The quarter cylinder in two rings with a radial gap (drawn wider than to
+ * scale): symmetry rollers on both cut edges, the pressure p in the bore, the
+ * tie across the gap and the measured radial displacement of the bore.
+ */
+export function tieLameFigure() {
+  const ox = 70,
+    oy = 250,
+    s = 1.9;
+  const [a, c, c2, b] = [50, 75, 83, 100].map((r) => r * s);
+  const ring = (r1, r2) =>
+    `<path class="body" d="M${f(ox + r1)} ${oy}H${f(ox + r2)}A${f(r2)} ${f(r2)} 0 0 0 ${ox} ${f(oy - r2)}V${f(oy - r1)}A${f(r1)} ${f(r1)} 0 0 1 ${f(ox + r1)} ${oy}Z"/>`;
+  const at = (r, angle) => [ox + r * Math.cos(angle), oy - r * Math.sin(angle)];
+  const parts = [ring(a, c), ring(c2, b)];
+  for (const angle of [0.3, 0.55, 0.8, 1.05, 1.3]) {
+    const [x1, y1] = at(c, angle);
+    const [x2, y2] = at(c2, angle);
+    parts.push(line(x1, y1, x2, y2, "ext"));
+  }
+  for (const angle of [0.2, 0.5, 0.8, 1.1, 1.4]) {
+    const [x1, y1] = at(a - 26, angle);
+    const [x2, y2] = at(a - 2, angle);
+    parts.push(arrow(x1, y1, x2, y2));
+  }
+  for (const [r1, r2] of [
+    [a, c],
+    [c2, b],
+  ])
+    for (let k = 0; k < 2; k++) {
+      const r = r1 + 8 + ((r2 - r1 - 16) * k) / 1;
+      parts.push(
+        `<circle class="hole" cx="${f(ox + r)}" cy="${f(oy + 6)}" r="4"/>`,
+        `<circle class="hole" cx="${f(ox - 6)}" cy="${f(oy - r)}" r="4"/>`,
+      );
+    }
+  parts.push(
+    line(ox + a, oy + 12, ox + b, oy + 12, "wall"),
+    line(ox - 12, oy - a, ox - 12, oy - b, "wall"),
+    sym(...at(a - 34, 0.8), "p"),
+    label(...at((c + c2) / 2 + 26, 1.25), "tie", { anchor: "start" }),
+    sym(ox + a / 2, oy + 26, "a"),
+    sym(ox + (a + c) / 2, oy + 26, "c"),
+    sym(ox + (c2 + b) / 2, oy + 26, "b"),
+    `<circle class="pt" cx="${f(ox + a)}" cy="${oy}" r="3.5"/>`,
+    triad(ox + b + 20, oy),
+  );
+  return svg(
+    330,
+    290,
+    "A quarter of a thick-walled cylinder made of two rings with a radial gap, tied across the gap, with symmetry supports on the cut edges and pressure p in the bore; the radial displacement is read where the bore meets the horizontal cut",
+    parts.join("\n    "),
+    { cls: "fig half", name: "tie-lame-diagram" },
+  );
+}
+
+/**
+ * The cantilever cut at mid-span into two bodies a small gap apart (drawn
+ * wider than to scale), tied across the gap: clamp, tip load and deflection.
+ */
+export function tieCantileverFigure() {
+  const x0 = 90,
+    xm = 280,
+    xn = 296,
+    x1 = 486,
+    yc = 92,
+    hh = 19;
+  const parts = [
+    `<rect class="body" x="${x0}" y="${yc - hh}" width="${xm - x0}" height="${2 * hh}"/>`,
+    `<rect class="body" x="${xn}" y="${yc - hh}" width="${x1 - xn}" height="${2 * hh}"/>`,
+    clamp(x0, yc - hh, yc + hh),
+    tieLinks(xm, xn, [yc - hh + 6, yc, yc + hh - 6]),
+    arrow(x1, yc - hh - 52, x1, yc - hh - 2),
+    sym(x1 + 10, yc - hh - 34, "P", "start"),
+    label((xm + xn) / 2, yc - hh - 10, "tie"),
+    dim(x0, yc + hh + 34, x1, yc + hh + 34),
+    sym((x0 + x1) / 2, yc + hh + 28, "L + g"),
+    triad(30, 196),
+  ];
+  return svg(
+    560,
+    214,
+    "Cantilever beam cut at mid-span into two bodies a small gap apart and tied across the gap, clamped at the left end with a downward tip load",
+    parts.join("\n    "),
+  );
+}

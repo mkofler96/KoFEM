@@ -432,7 +432,11 @@ pub fn prepare_mixed_static(
     let mut has_rotation = shell_used.clone();
     has_rotation.resize(mesh.node_count(), false);
     for coupling in couplings {
-        if coupling.kind == CouplingKind::ShellFootprint {
+        // A footprint's and a tie's reference is a solid node.
+        if matches!(
+            coupling.kind,
+            CouplingKind::ShellFootprint | CouplingKind::Tie { .. }
+        ) {
             continue;
         }
         if let Some(flag) = has_rotation.get_mut(coupling.reference) {
@@ -954,8 +958,9 @@ fn reduced_stiffness(
 
 /// On a quadratic mesh, each kinematic coupling with every edge node whose two
 /// ends it grips (see the module notes); an edge node the coupling already
-/// names keeps its place. Distributing couplings, and every coupling on a
-/// linear mesh, unchanged.
+/// names keeps its place. Every other coupling (a tie names its edge nodes
+/// itself, see [`crate::tie::node_ties`]), and every coupling on a linear
+/// mesh, unchanged.
 fn couplings_with_edge_nodes(mesh: &TetMesh, couplings: &[Coupling]) -> Vec<Coupling> {
     let edges = mesh.edges();
     if edges.is_empty() {
@@ -987,7 +992,7 @@ fn couplings_with_edge_nodes(mesh: &TetMesh, couplings: &[Coupling]) -> Vec<Coup
         .iter()
         .map(|coupling| {
             let mut extended = coupling.clone();
-            if coupling.kind == CouplingKind::Distributing {
+            if !matches!(coupling.kind, CouplingKind::Kinematic { .. }) {
                 return extended;
             }
             for &node in &coupling.nodes {

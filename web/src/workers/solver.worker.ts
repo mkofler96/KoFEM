@@ -9,8 +9,11 @@ import {
   Couplings,
   ElasticModel,
   MixedModel,
+  MortarSurface,
   ShellModel,
   SolveOptions,
+  Ties,
+  tieMortarWeights,
   TopologyRun,
   TopologySettings,
 } from "../wasm/fem/kofem_wasm.js";
@@ -66,6 +69,8 @@ import {
   solveSolidInRust,
   type SolverMethod,
 } from "../lib/solve/amg.js";
+import { constraintTieCount } from "../lib/tie.js";
+import { tieWeighting } from "../lib/solve/tieMortar.js";
 import {
   buildSolidEngineInputs,
   expandTiedDisplacements,
@@ -749,12 +754,12 @@ function amgReason(payload: SolvePayload): string | null {
   });
 }
 
-// All-solid static solve, with tie connections welded: the Rust solver with
-// the chosen preconditioner when it covers the model, otherwise the engine's
-// solve_linear_elastic.
+// All-solid static solve, with tie connections applied — node-merge ties
+// welded, constraint ties eliminated: the Rust solver with the chosen
+// preconditioner when it covers the model, otherwise the engine's
+// solve_linear_elastic, which takes no constraint tie.
 async function handleSolidSolve(id: number, payload: SolvePayload) {
   const { nodes, elements } = payload;
-  const tied = weldTies(nodes, elements, payload.tieGroups, logTo(id));
   // FE polynomial order, chosen in the frontend (Solver settings). Order 2
   // (quadratic / second-order) adds edge-midpoint DOFs that resolve bending
   // and stress gradients far better than linear tets, which lock in bending
@@ -764,10 +769,32 @@ async function handleSolidSolve(id: number, payload: SolvePayload) {
   // stay fully constrained. Defaults to 1 (linear) when the payload omits it.
   // eslint-disable-next-line kofem/no-silent-fallback -- elementOrder is optional in the solve message; the documented default is linear elements
   const order = payload.elementOrder ?? 1;
-  if (amgReason(payload) === null) {
+  const reason = amgReason(payload);
+  const constraintTies = constraintTieCount(payload.tieGroups);
+  if (reason !== null && constraintTies > 0)
+    throw new Error(
+      `This model has ${constraintTies} constraint (MPC) tie(s), which only the Rust ` +
+        `solver applies, and it cannot take this model: ${reason}. Change the ` +
+        "ties to node-merge, or make the model one the Rust solver takes.",
+    );
+  const tied = weldTies(
+    nodes,
+    elements,
+    payload.tieGroups,
+    logTo(id),
+    constraintTies > 0
+      ? tieWeighting(order, { MortarSurface, tieMortarWeights })
+      : null,
+  );
+  if (reason === null) {
     const result = await solveSolidInRust(
-      { ElasticModel, SolveOptions },
-      { ...payload, nodes: tied.solveNodes, elements: tied.tiedElements },
+      { ElasticModel, SolveOptions, Ties },
+      {
+        ...payload,
+        nodes: tied.solveNodes,
+        elements: tied.tiedElements,
+        constraintTies: tied.constraints,
+      },
       order,
       requestedSolver(payload),
       tied.vid,

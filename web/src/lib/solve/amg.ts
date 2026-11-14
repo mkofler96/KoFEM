@@ -7,8 +7,9 @@
 // amgUnavailableReason). The Rust module handles linear and quadratic
 // tetrahedra and hexahedra (alone or mixed) with per-body materials, supports
 // (fixed, roller, prescribed), nodal loads and surface loads on triangular and
-// quadrilateral faces, and surface-to-point couplings on linear and quadratic
-// tetrahedra. Shells mixed with tets take the Rust mixed solve
+// quadrilateral faces, surface-to-point couplings on linear and quadratic
+// tetrahedra, and constraint (MPC) ties on all of these (KOF-318; only Rust
+// solves them). Shells mixed with tets take the Rust mixed solve
 // (coupledRust.ts, linear tets only) with AMG too. Pure-shell models take the
 // Rust shell solve (shellRust.ts), and bodies solved as shells and couplings
 // AMG cannot take go to the coupled solver, both preconditioned with
@@ -34,7 +35,9 @@ import type {
   ElasticSolution,
   SolveOptions,
   SolveRun,
+  Ties,
 } from "../../wasm/fem/kofem_wasm.js";
+import type { TieConstraint } from "../tieConstraints.js";
 import {
   groupDirichlet,
   groupPointLoads,
@@ -43,6 +46,7 @@ import {
   type VertexIndexer,
 } from "../solveMeshPacking.js";
 import { surfaceLoadsToVertices } from "./bcs.js";
+import { rustTieTables } from "./solid.js";
 import { shellMarkedBodies } from "./autoShell.js";
 import type { EngineCoupledBcs, EngineCoupling } from "./coupled.js";
 import { iterateToConvergence, type ContinuationPrompt } from "./cgRun.js";
@@ -147,11 +151,16 @@ export const FALLBACK_PRECONDITIONER_LABEL: Record<
   "gauss-seidel": "Gauss–Seidel",
 };
 
-// The two classes of the Rust module the solve needs, passed in so the worker
-// and the node-side tests can each load the module their own way.
+// The classes of the Rust module the solve needs, passed in so the worker and
+// the node-side tests can each load the module their own way.
 export interface FemModule {
   ElasticModel: typeof ElasticModel;
   SolveOptions: typeof SolveOptions;
+}
+
+// The solid solve needs the tie tables too, for constraint ties.
+export interface SolidFemModule extends FemModule {
+  Ties: typeof Ties;
 }
 
 // The coupled solve needs the coupling set too.
@@ -167,6 +176,9 @@ export interface AmgSolidModel {
   constraints: Constraint[];
   loads: Load[];
   surfaceLoads?: SurfaceLoad[];
+  // The constraint-tie equations of the model's "mpc" connections
+  // (weldTies), in original node ids; absent or empty when it has none.
+  constraintTies?: TieConstraint[];
 }
 
 // The CG budget when the solve request names none — the MFEM path's cap. AMG
@@ -188,8 +200,10 @@ const RELATIVE_TOLERANCE = 1e-6;
 // element, tets first, then hexes — the same layout as the MFEM solve.
 // Quadratic elements add edge (and hex face and centre) nodes inside the Rust
 // module, as MFEM's order-2 space does; their displacements stay there.
+// Constraint ties (`model.constraintTies`) are eliminated in the same solve;
+// on quadratic elements their tied surface's edge and face nodes come along.
 export async function solveSolidInRust(
-  fem: FemModule,
+  fem: SolidFemModule,
   model: AmgSolidModel,
   elementOrder: number,
   method: SolverMethod,
@@ -232,11 +246,45 @@ export async function solveSolidInRust(
       log,
     );
 
+    const constraintTies = model.constraintTies ?? [];
+    const start =
+      constraintTies.length === 0
+        ? (options: SolveOptions) =>
+            elastic.startSolve(fixedDofs, fixedValues, forces, options)
+        : (options: SolveOptions) => {
+            const tables = rustTieTables(constraintTies, refVid);
+            const ties = new fem.Ties(
+              tables.slaves,
+              tables.offsets,
+              tables.masters,
+              tables.weights,
+              tables.interfaces,
+            );
+            try {
+              const run = elastic.startTiedSolve(
+                ties,
+                fixedDofs,
+                fixedValues,
+                forces,
+                options,
+              );
+              const prescribedNote =
+                run.tiePrescribed > 0
+                  ? `, ${run.tiePrescribed} tied DOF(s) also fixed or prescribed — the support applies there`
+                  : "";
+              log(
+                `Tie constraints: ${run.tiedNodes} tied node(s), ${run.tieEliminated} DOF(s) eliminated${prescribedNote}`,
+              );
+              return run;
+            } finally {
+              ties.free();
+            }
+          };
     return await runRustSolve(
       fem,
       method,
       iterationLimit,
-      (options) => elastic.startSolve(fixedDofs, fixedValues, forces, options),
+      start,
       started,
       askToContinue,
       log,
