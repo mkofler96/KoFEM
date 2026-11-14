@@ -57,7 +57,6 @@ test("solid packing remaps arbitrary ids in tet/hex connectivity and BCs", () =>
         { nodeId: 7, dof: 1, value: 2 },
         { nodeId: 7, dof: 1, value: -5 },
         { nodeId: 7, dof: 0, value: 8 },
-        { nodeId: 12, dof: 5, value: 100 },
       ],
       vid,
     ),
@@ -102,4 +101,31 @@ test("invalid connectivity and missing node references fail before WASM", () => 
       vid,
     ),
   ).toThrow(/CTETRA element 3 has 2 nodes/);
+});
+
+// A solid node has no rotational DOF (KOF-352). A zero rotation there restrains
+// nothing and may stay ignored — a face clamped in all six DOFs is a normal
+// clamp — but a driven rotation or a moment would be dropped, so both are
+// refused, as the coupled path refuses a driven rotation.
+test("a driven rotation on a solid node is refused; a zero rotation is ignored", () => {
+  expect(
+    groupDirichlet(
+      [0, 1, 2, 3, 4, 5].map((dof) => ({
+        nodeId: 99,
+        dof,
+        prescribedValue: 0,
+      })),
+      vid,
+    ),
+  ).toEqual({ fixed_vertices: [2], fixed_dofs: [], prescribed_dofs: [] });
+  expect(() =>
+    groupDirichlet([{ nodeId: 99, dof: 4, prescribedValue: 0.01 }], vid),
+  ).toThrow(/Node 99 prescribes a rotation \(DOF 4 = 0\.01\)/);
+});
+
+test("a moment on a solid node is refused", () => {
+  expect(() =>
+    groupPointLoads([{ nodeId: 12, dof: 5, value: 100 }], vid),
+  ).toThrow(/Node 12 carries a moment \(DOF 5 = 100\)/);
+  expect(groupPointLoads([{ nodeId: 12, dof: 5, value: 0 }], vid)).toEqual([]);
 });

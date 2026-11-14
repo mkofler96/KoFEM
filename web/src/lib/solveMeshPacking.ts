@@ -128,7 +128,10 @@ export function resolveMaterials(
 // in all three components is a full fix (fixed_vertices); a node constrained
 // in only some becomes a per-DOF constraint (fixed_dofs) so the unconstrained
 // directions stay free — e.g. a symmetry-plane roller. Rotational DOFs (3–5)
-// carry no stiffness for solid (H1 displacement) elements and are ignored.
+// carry no stiffness for solid (H1 displacement) elements: a zero rotation
+// restrains nothing and is ignored (a face clamped in all six DOFs is a plain
+// clamp), but a non-zero one would be dropped, so it is refused, as the
+// coupled path refuses it (coupledFixedDofs, KOF-352).
 //
 // A non-zero prescribed displacement is also a Dirichlet condition, but it
 // must reach the solver as an inhomogeneous essential BC (prescribed_dofs):
@@ -140,10 +143,19 @@ export function groupDirichlet(constraints: Constraint[], vid: VertexIndexer) {
   const dofsByNode = new Map<number, Set<number>>();
   const prescribed_dofs: { vertex: number; dof: number; value: number }[] = [];
   for (const c of constraints) {
-    if (c.dof > 2) continue;
-    const vertex = vid(c.nodeId, "constraint");
     // eslint-disable-next-line kofem/no-silent-fallback -- a constraint without prescribedValue is a homogeneous fixed BC, i.e. u = 0 by definition
     const value = c.prescribedValue ?? 0;
+    if (c.dof > 2) {
+      if (value !== 0)
+        throw new Error(
+          `Node ${c.nodeId} prescribes a rotation (DOF ${c.dof} = ${value}), but solid ` +
+            "nodes have no rotational DOF, so it would be dropped. Prescribe the " +
+            "translations instead, or couple the surface to a reference point and " +
+            "prescribe the rotation there.",
+        );
+      continue;
+    }
+    const vertex = vid(c.nodeId, "constraint");
     if (value === 0) {
       let dofs = dofsByNode.get(vertex);
       if (!dofs) {
@@ -164,11 +176,22 @@ export function groupDirichlet(constraints: Constraint[], vid: VertexIndexer) {
   return { fixed_vertices, fixed_dofs, prescribed_dofs };
 }
 
-// Group translational force loads by vertex index, accumulating [fx,fy,fz]
+// Group translational force loads by vertex index, accumulating [fx,fy,fz]. A
+// moment on a face reaches the solve as nodal forces (momentToNodalForces); one
+// still on a rotational DOF (3–5) has nowhere to act on a solid node and is
+// refused rather than dropped (KOF-352).
 export function groupPointLoads(loads: Load[], vid: VertexIndexer) {
   const loadMap = new Map<number, [number, number, number]>();
   for (const load of loads) {
-    if (load.dof > 2) continue;
+    if (load.dof > 2) {
+      if (load.value !== 0)
+        throw new Error(
+          `Node ${load.nodeId} carries a moment (DOF ${load.dof} = ${load.value}), but solid ` +
+            "nodes have no rotational DOF, so it would be dropped. Apply the moment " +
+            "to a face, or couple the surface to a reference point and apply it there.",
+        );
+      continue;
+    }
     const vertex = vid(load.nodeId, "load");
     let force = loadMap.get(vertex);
     if (!force) {

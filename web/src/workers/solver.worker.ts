@@ -46,8 +46,7 @@ import { dropSuppressedBodies } from "../lib/suppressBodies.js";
 import { inStage, splitStage } from "../lib/workerError.js";
 import {
   buildMeshTimeShellModel,
-  preparePureShellSolve,
-  prepareAutoCoupledSolve,
+  prepareAutoShellSolve,
 } from "../lib/solve/autoShell.js";
 import {
   buildCoupledEngineInputs,
@@ -709,32 +708,29 @@ async function handleMixedSolve(id: number, payload: SolvePayload) {
 }
 
 // A body marked Shell: solve it as shells or fail loudly — never fall through
-// to the all-solid path, which would silently ignore the choice. Coupled first
-// (shells tied to solid bodies); if there is no solid domain to couple to (a
-// single thin body, or an all-shell assembly), idealise the thin walls and solve
-// them with the pure Kirchhoff shell solver. Returns false when neither applies.
+// to the all-solid path, which would silently ignore the choice (KOF-352).
+// Coupled when the shell touches a solid body; a pure Kirchhoff shell when every
+// body is Shell. prepareAutoShellSolve throws, naming the body and the reason,
+// when neither applies.
 async function handleAutoShellSolve(
   id: number,
   payload: SolvePayload,
   shellBodyIds: Set<number>,
-): Promise<boolean> {
+): Promise<void> {
   // The auto-shell progress lines have always gone to the shared log (id 0).
   const log = logTo(0);
-  let fields: SolveResultFields | null = null;
-  const coupled = prepareAutoCoupledSolve(payload, shellBodyIds, log);
-  if (coupled) {
-    fields = coupled.mapResult(await solveMixed(coupled, payload, log));
-  } else {
-    const pure = preparePureShellSolve(payload, shellBodyIds, log);
-    if (pure) fields = pure.mapResult(await solveShell(pure, payload, log));
-  }
-  if (!fields) return false;
+  const prepared = prepareAutoShellSolve(payload, shellBodyIds, log);
+  const fields =
+    prepared.kind === "coupled"
+      ? prepared.solve.mapResult(await solveMixed(prepared.solve, payload, log))
+      : prepared.solve.mapResult(
+          await solveShell(prepared.solve, payload, log),
+        );
   self.postMessage({
     id,
     log: `Shell solve complete: ${fields.displacements.length / 3} vertex displacements`,
   });
   postSolveResult(id, fields);
-  return true;
 }
 
 // The solver the request asks for. The app always names one; a request without
@@ -874,14 +870,7 @@ async function handleSolve(id: number, payload: SolvePayload) {
       await handleMixedSolve(id, payload);
       return;
     case "auto-shell":
-      // Neither shell idealisation applies (e.g. no surface mesh): all-solid.
-      if (!(await handleAutoShellSolve(id, payload, route.shellBodyIds))) {
-        self.postMessage({
-          id,
-          log: "No shell idealisation applies — solving all-solid with Gauss–Seidel.",
-        });
-        await handleSolidSolve(id, payload);
-      }
+      await handleAutoShellSolve(id, payload, route.shellBodyIds);
       return;
     case "solid":
       await handleSolidSolve(id, payload);
