@@ -151,7 +151,7 @@ describe("kinematic coupling: force and moment through a reference point", () =>
   let moment = null;
 
   beforeAll(async () => {
-    const Module = await loadEngine();
+    const Module = await loadEngine({ solves: import.meta.url });
     const verts = [];
     const index = new Map();
     const tets = beam(verts, index, 0, LENGTH, HEIGHT, 20);
@@ -278,7 +278,7 @@ describe("point-to-point connection: the DOF mask switches the hinge off", () =>
   let bendHinge = null;
 
   beforeAll(async () => {
-    const Module = await loadEngine();
+    const Module = await loadEngine({ solves: import.meta.url });
     const verts = [];
     const index = new Map();
     // Two collinear beams meeting at x = LENGTH, meshed independently.

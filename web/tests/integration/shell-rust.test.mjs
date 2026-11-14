@@ -50,7 +50,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 let engine = null;
 let ShellModel = null;
 beforeAll(async () => {
-  engine = await loadEngine();
+  engine = await loadEngine({ solves: import.meta.url });
   // The shell idealisation (kofem-shellize) runs in the same Rust module.
   ({ ShellModel } = await loadFem());
 });

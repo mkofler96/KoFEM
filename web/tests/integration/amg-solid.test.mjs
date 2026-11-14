@@ -61,7 +61,7 @@ const maxDifference = (lhs, rhs) => {
 // Mesh the wall bracket at `maxElementSize` (mm) and build the store model on
 // it: the same bodies, supports and loads at any mesh size.
 async function bracketModel(maxElementSize) {
-  const mesher = await loadEngine();
+  const mesher = await loadEngine({ solves: import.meta.url });
   mesher.tessellate_step(
     new Uint8Array(
       readFileSync(join(here, "../../../test_files/Wall Bracket.stp")),
@@ -281,7 +281,7 @@ describe("wall bracket: Rust AMG against MFEM", () => {
     ({ model } = await bracketModel(20));
     vid = buildVertexIndexer(model.nodes);
     // MFEM engine: a fresh instance, as the worker does after meshing.
-    engine = await loadEngine();
+    engine = await loadEngine({ solves: import.meta.url });
     const inputs = buildSolidEngineInputs(model, vid);
     mfem = engine.solve_linear_elastic(
       inputs.mesh,

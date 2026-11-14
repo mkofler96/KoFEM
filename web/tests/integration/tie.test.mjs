@@ -103,7 +103,7 @@ describe("buildTie", () => {
 const STEEL = JSON.stringify({ young_modulus: 210000, poisson_ratio: 0.3 });
 
 async function solve(useTie) {
-  const Module = await loadEngine();
+  const Module = await loadEngine({ solves: import.meta.url });
   const applied = useTie ? tie : { nodes, repOf: new Map(), nWelded: 0 };
   const solveNodes = applied.nodes;
   const els = useTie ? tiedElements : elements;

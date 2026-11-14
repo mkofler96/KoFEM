@@ -11,7 +11,7 @@ import { loadEngine } from "../support/wasm.mjs";
 
 let Module = null;
 beforeAll(async () => {
-  Module = await loadEngine();
+  Module = await loadEngine({ solves: import.meta.url });
 });
 
 const mesh = {

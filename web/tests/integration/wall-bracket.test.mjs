@@ -27,7 +27,7 @@ describe("wall bracket pipeline", () => {
     // web/src/components/panel/LeftPanel.tsx). Sharing one module here left the
     // Netgen→MFEM hand-off sensitive to the binary's memory layout — an unrelated
     // engine.cpp change could shift it enough to trap in FinalizeTopology.
-    const Module = await loadEngine();
+    const Module = await loadEngine({ solves: import.meta.url });
 
     const stepBytes = new Uint8Array(
       readFileSync(join(here, "../../../test_files/Wall Bracket.stp")),
@@ -63,7 +63,7 @@ describe("wall bracket pipeline", () => {
     // 3. Solve in a fresh module — a clean WASM instance with no Netgen global
     // state, exactly as the browser does after resetWorker(). The mesh crosses
     // the boundary as flat typed arrays; the result comes back the same way.
-    const SolveModule = await loadEngine();
+    const SolveModule = await loadEngine({ solves: import.meta.url });
     result = SolveModule.solve_linear_elastic(
       {
         vertices: mesh.vertices,

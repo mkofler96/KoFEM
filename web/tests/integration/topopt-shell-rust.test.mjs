@@ -213,7 +213,10 @@ const WALL_SETTINGS = {
 async function inEngine(domain, args, settings) {
   const logs = [];
   const streamed = [];
-  const engine = await loadEngine({ print: (line) => logs.push(line) });
+  const engine = await loadEngine({
+    solves: import.meta.url,
+    print: (line) => logs.push(line),
+  });
   const onDensity = (iteration, density) =>
     streamed.push({ iteration, density: Array.from(density) });
   const json = JSON.stringify(settings);

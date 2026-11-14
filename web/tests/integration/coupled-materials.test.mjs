@@ -150,7 +150,7 @@ describe("per-body solid materials in the coupled solve", () => {
   beforeAll(async () => {
     // The refusal cases below EXPECT the solver to fail; their messages are
     // asserted on from the returned error, so the engine log stays silent.
-    Module = await loadEngine();
+    Module = await loadEngine({ solves: import.meta.url });
   });
 
   // ── The legacy single-material contract is untouched ───────────────────────

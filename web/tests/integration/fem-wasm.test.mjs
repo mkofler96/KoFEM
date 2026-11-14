@@ -115,7 +115,7 @@ function sideFaces(mesh, axis, value) {
 
 let engine = null;
 beforeAll(async () => {
-  engine = await loadEngine();
+  engine = await loadEngine({ solves: import.meta.url });
   await loadFem();
 });
 

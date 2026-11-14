@@ -29,8 +29,8 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { loadEngine } from "../support/wasm.mjs";
 import {
-  loadEngine,
   meshStep,
   extractThinWallShells,
   shellWallTets,
@@ -111,7 +111,7 @@ function facePieces(tets) {
 describe("the coupled crane assembly", () => {
   // Mesh once; both models are built from it.
   beforeAll(async () => {
-    Module = await loadEngine();
+    Module = await loadEngine({ solves: import.meta.url });
     mesh = meshStep(Module, STEP, { maxElementSize: 6 });
     shells = extractThinWallShells(mesh);
     const wallTets = shellWallTets(mesh, shells);

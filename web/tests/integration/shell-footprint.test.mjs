@@ -266,7 +266,7 @@ describe("footprint survives reload and passes the engine stress regression", ()
 
   beforeAll(async () => {
     await loadFem();
-    engine = await loadEngine();
+    engine = await loadEngine({ solves: import.meta.url });
   });
 
   const solve = (candidate, axis, optimize = false) => {

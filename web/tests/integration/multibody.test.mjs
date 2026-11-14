@@ -32,7 +32,7 @@ describe("two-box assembly", () => {
   // Mesh and solve run in separate module instances, mirroring production
   // (see wall-bracket.test.mjs for the Netgen-global-state rationale).
   beforeAll(async () => {
-    const Module = await loadEngine();
+    const Module = await loadEngine({ solves: import.meta.url });
     const stepBytes = new Uint8Array(
       readFileSync(
         new URL("../../../test_files/two_boxes.stp", import.meta.url),
@@ -184,7 +184,7 @@ describe("two-box assembly", () => {
     let vonMisesSoft = null;
 
     async function solveOnce(materials) {
-      const SolveModule = await loadEngine();
+      const SolveModule = await loadEngine({ solves: import.meta.url });
       const result = SolveModule.solve_linear_elastic(
         {
           vertices: mesh.vertices,
