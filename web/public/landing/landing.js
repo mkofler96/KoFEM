@@ -13,7 +13,7 @@ const analysisStages = {
   },
   results: {
     title: "Inspect the result",
-    subtitle: "Displacement and stress on the solved bracket.",
+    subtitle: "Easy evaluation of critical parts.",
   },
   optimization: {
     title: "Topology optimization",
