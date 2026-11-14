@@ -91,3 +91,18 @@ export async function lookFrom(page: Page, direction: Point): Promise<void> {
   );
   await settleViewport(page);
 }
+
+/**
+ * How many line segments the viewport draws in its visible objects named
+ * `name`, once it has settled — what an edge highlight shows on screen.
+ */
+export async function drawnSegments(page: Page, name: string): Promise<number> {
+  await settleViewport(page);
+  return page.evaluate(
+    (target) =>
+      (window as unknown as ViewportWindow).__kofemViewport.drawnSegments(
+        target,
+      ),
+    name,
+  );
+}

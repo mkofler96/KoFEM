@@ -11,6 +11,7 @@ import { useModelStore } from "../../store/modelStore";
 import type { Element, Node } from "../../store/modelStore";
 import { isCadBody } from "../../store/geometrySlice";
 import {
+  boundaryEdgesWithin,
   buildBoundaryMeshTopo,
   mapTrianglesToCadFaces,
 } from "../../lib/facePick";
@@ -156,6 +157,23 @@ export function buildFacePositions(
     positions.push(na.x, na.y, na.z, nb.x, nb.y, nb.z, nc.x, nc.y, nc.z);
   }
   return positions.length > 0 ? new Float32Array(positions) : null;
+}
+
+// Segment endpoints (in pairs) of the boundary edges an edge selection covers,
+// for EdgeOverlay; null when the node set covers no boundary edge.
+export function buildEdgePositions(
+  nodeIds: readonly number[],
+  topo: BoundaryMeshTopo,
+  nodeMap: NodeMap,
+): Vec3[] | null {
+  const points: Vec3[] = [];
+  for (const [a, b] of boundaryEdgesWithin(nodeIds, topo)) {
+    const na = nodeMap.get(a)?.n,
+      nb = nodeMap.get(b)?.n;
+    if (!na || !nb) continue;
+    points.push([na.x, na.y, na.z], [nb.x, nb.y, nb.z]);
+  }
+  return points.length > 0 ? points : null;
 }
 
 // ── Hook ──────────────────────────────────────────────────────────────────────

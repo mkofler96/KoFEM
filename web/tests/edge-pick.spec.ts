@@ -4,7 +4,7 @@
 import { test, expect } from "./coverage";
 import type { Page } from "@playwright/test";
 import { addBoundary, openTree } from "./fixtures/tree";
-import { clickViewportAt } from "./fixtures/viewport";
+import { clickViewportAt, drawnSegments } from "./fixtures/viewport";
 
 // End-to-end coverage for edge picking (#386): a flat shell sheet is one
 // face-pick region, so grabbing its rim (an edge load or a supported-edge BC)
@@ -161,6 +161,57 @@ test("edge picking a shell rim creates an edge BC and an edge load", async ({
   const loadFace =
     afterLoad.loadGroups[afterLoad.loadGroups.length - 1].faces[0];
   expect(loadFace.label.startsWith("Edge")).toBe(true);
+});
+
+// A picked edge spans no triangle, so the face overlay drew nothing for it and
+// only the node count said anything was picked (KOF-356). The viewport draws
+// the rim polyline of what the user is working on — the edge being picked, or
+// the support open in the tree — and no other support's or load's edges.
+test("only the edge being picked or edited is drawn as a highlighted line", async ({
+  page,
+}) => {
+  await page.goto("/app/?example=plate-with-hole-shell");
+  await expect(page.locator("nav")).toBeVisible();
+  await expect
+    .poll(async () => (await readPickState(page)).nodeCount)
+    .toBeGreaterThan(0);
+  const shippedBcIds = await page.evaluate(() =>
+    (
+      window as unknown as {
+        __kofemStore: { getState(): { bcGroups: { id: number }[] } };
+      }
+    ).__kofemStore
+      .getState()
+      .bcGroups.map((g) => g.id),
+  );
+  expect(shippedBcIds.length).toBeGreaterThan(1);
+
+  // Opening one of the example's edge supports draws its edge alone.
+  await page.getByTestId(`tree-bc-${shippedBcIds[0]}`).click();
+  const openedSupport = await drawnSegments(page, "bc-edge-highlight");
+  expect(openedSupport).toBeGreaterThan(0);
+  expect(await drawnSegments(page, "load-edge-highlight")).toBe(0);
+
+  // A new support draws nothing until an edge is picked.
+  await addBoundary(page, "bc");
+  await page.getByTestId("pick-geometry-edge").click();
+  expect(await drawnSegments(page, "pick-edge-highlight")).toBe(0);
+  expect(await drawnSegments(page, "bc-edge-highlight")).toBe(0);
+
+  await edgePickOnViewport(page);
+  const picked = (await readPickState(page)).selected;
+  if (!picked) throw new Error("edge pick did not set a selection");
+  // An open polyline of n nodes has n - 1 segments; a closed loop has n.
+  const drawn = await drawnSegments(page, "pick-edge-highlight");
+  expect(drawn).toBeGreaterThanOrEqual(picked.nodeIds.length - 1);
+  expect(drawn).toBeLessThanOrEqual(picked.nodeIds.length);
+  expect(await drawnSegments(page, "bc-edge-highlight")).toBe(0);
+
+  // Applied, the new support is the one open: its edge, and only its edge.
+  await page.getByRole("button", { name: "Apply BC" }).click();
+  expect(await drawnSegments(page, "pick-edge-highlight")).toBe(0);
+  expect(await drawnSegments(page, "bc-edge-highlight")).toBe(drawn);
+  expect(await drawnSegments(page, "load-edge-highlight")).toBe(0);
 });
 
 test("a coupling can grip a picked shell edge", async ({ page }) => {

@@ -20,12 +20,15 @@ export interface ViewportHooks {
   // frame. The test fixtures await it before they project a point or click, so
   // no test depends on how long the viewport takes to catch up.
   settled(): Promise<void>;
+  // How many line segments the visible objects named `name` draw, read from
+  // their `userData.segments` — an edge highlight's polyline (EdgeOverlay).
+  drawnSegments(name: string): number;
 }
 
 // Exposes the viewport camera to Playwright as window.__kofemViewport, beside
 // the store (__kofemStore) and the worker (__kofem) already exposed.
 export function ViewportTestHooks() {
-  const { camera, controls, gl, invalidate, get } = useThree();
+  const { camera, controls, gl, invalidate, get, scene } = useThree();
 
   useEffect(() => {
     const hooks: ViewportHooks = {
@@ -75,6 +78,17 @@ export function ViewportTestHooks() {
           });
         });
       },
+      drawnSegments(name) {
+        let total = 0;
+        scene.traverseVisible((object) => {
+          if (object.name !== name) return;
+          const segments: unknown = object.userData.segments;
+          if (typeof segments !== "number")
+            throw new Error(`drawnSegments: ${name} has no segment count`);
+          total += segments;
+        });
+        return total;
+      },
     };
     const host = window as Window & { __kofemViewport?: ViewportHooks };
     host.__kofemViewport = hooks;
@@ -83,7 +97,7 @@ export function ViewportTestHooks() {
     return () => {
       if (host.__kofemViewport === hooks) delete host.__kofemViewport;
     };
-  }, [camera, controls, gl, invalidate, get]);
+  }, [camera, controls, gl, invalidate, get, scene]);
 
   return null;
 }

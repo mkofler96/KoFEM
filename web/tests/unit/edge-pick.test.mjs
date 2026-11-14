@@ -12,6 +12,7 @@
 
 import { describe, expect, test } from "bun:test";
 import {
+  boundaryEdgesWithin,
   buildBoundaryMeshTopo,
   extractBoundaryEdges,
   pickEdgeNodeIds,
@@ -303,5 +304,34 @@ describe("real plate-with-hole shell mesh", () => {
       ),
     );
     expect(holeRimPick).toEqual(holeRim);
+  });
+});
+
+// ── Edge highlight segments (KOF-356) ───────────────────────────────────────
+//
+// A picked edge is a node set on the rim, which spans no triangle, so the face
+// overlay draws nothing for it. The viewport draws it as a line instead: the
+// boundary edges whose two nodes are both in the picked set.
+
+describe("edge highlight segments", () => {
+  test("a picked bottom rim draws exactly its rim segments", () => {
+    const segments = boundaryEdgesWithin([...bottomExpected], gridTopo);
+    expect(segments).toHaveLength(NX);
+    for (const [a, b] of segments) {
+      expect(bottomExpected.has(a) && bottomExpected.has(b)).toBe(true);
+    }
+  });
+
+  test("an interior edge between two picked nodes is not drawn", () => {
+    // nid(0,0)–nid(1,1) is an interior diagonal; nid(0,0)–nid(1,0) is rim.
+    const segments = boundaryEdgesWithin(
+      [nid(0, 0), nid(1, 0), nid(1, 1)],
+      gridTopo,
+    );
+    expect(segments).toEqual([[nid(0, 0), nid(1, 0)]]);
+  });
+
+  test("a node set with no rim edge draws nothing", () => {
+    expect(boundaryEdgesWithin([nid(2, 1)], gridTopo)).toEqual([]);
   });
 });

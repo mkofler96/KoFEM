@@ -361,6 +361,23 @@ export function extractBoundaryEdges(
   return edges;
 }
 
+/**
+ * The boundary edges whose two nodes are both in `nodeIds`, as `[min, max]`
+ * node-id pairs — the polyline an edge pick selected. The viewport draws an
+ * edge selection from these: a rim node set spans no triangle, so the face
+ * overlay has nothing to fill. Interior edges between two picked nodes are not
+ * part of the rim and are left out.
+ */
+export function boundaryEdgesWithin(
+  nodeIds: readonly number[],
+  topo: BoundaryMeshTopo,
+): [number, number][] {
+  const picked = new Set(nodeIds);
+  return extractBoundaryEdges(topo).filter(
+    ([a, b]) => picked.has(a) && picked.has(b),
+  );
+}
+
 function pointSegmentDistSq(p: Vec3, a: Vec3, b: Vec3): number {
   const ab: Vec3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
   const ap: Vec3 = [p[0] - a[0], p[1] - a[1], p[2] - a[2]];
