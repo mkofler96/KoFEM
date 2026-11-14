@@ -9,7 +9,7 @@ import type {
   Constraint,
   Load,
 } from "../workers/solverTypes.js";
-import type { SolveMesh } from "../wasm/pkg/kofem_wasm.js";
+import type { SolveMesh } from "./solve/contracts.js";
 
 // The engine indexes vertices 0-based in the order they are added (mesh
 // vertices are emitted in node-array order). Stored node .id values are NOT
@@ -44,7 +44,7 @@ export function packSolveMesh(
 ): SolveMesh & { hexahedra: Int32Array } {
   if (tetElements.length === 0 && hexElements.length === 0) {
     throw new Error(
-      "No supported elements found. MFEM requires CTETRA or CHEXA elements — " +
+      "No supported elements found. A solid solve needs CTETRA or CHEXA elements — " +
         'import a STEP file and click "Generate mesh" first.',
     );
   }

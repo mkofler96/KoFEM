@@ -3,7 +3,7 @@
 
 // Regression test for non-zero prescribed displacements on SHELL models (KOF-210).
 // Shell counterpart of prescribed-displacement.test.mjs, which covers the solid
-// (MFEM) path.
+// path.
 //
 // THE BUG THIS GUARDS: the shell formulation's boundary conditions used to be
 // homogeneous-only — ShellInput.fixed_dofs are "constrained to zero" and there
@@ -104,7 +104,7 @@ describe("shell membrane strip driven by a prescribed displacement", () => {
   let result = null;
   beforeAll(async () => {
     const solveShell = await loadShellSolver();
-    result = solveShell(
+    result = await solveShell(
       { vertices, triangles },
       { young_modulus: youngModulus, poisson_ratio: nu, thickness },
       { fixed_vertices: [], fixed_dofs, prescribed_dofs, point_loads: [] },

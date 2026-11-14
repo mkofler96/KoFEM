@@ -1,12 +1,13 @@
 # Shell & coupled topology optimization (KOF-237)
 
-Two Node showcases that drive the shipped WASM engine's Phase-B topology
-optimizers — the shell and coupled shell/solid design domains — the same way
+Two Node showcases that drive the app's Rust topology optimizer
+(`web/src/lib/solve/topOptRust.ts`) on the shell and coupled shell/solid design
+domains — the same way
 `examples/validation/topopt` drives the solid one. Each doubles as a verification
 gate (non-zero exit on failure).
 
-Both need the compiled engine in `web/src/wasm/pkg/` — run
-`./scripts/fetch-wasm-engine.sh` (or build it after editing `engine/cpp`).
+Both need the Rust module in `web/src/wasm/fem/` — run `cd web && bun run
+wasm:prepare` (or `bash scripts/build-fem-wasm.sh`).
 
 ## `thin-plate.mjs`
 
@@ -16,7 +17,7 @@ Kirchhoff/DKT **shell facets**; a sound run pulls material into a **rib layout**
 (solid stiffeners where the bending moment is largest, voids elsewhere).
 
 ```
-node examples/topopt-shell/thin-plate.mjs
+bun ../examples/topopt-shell/thin-plate.mjs
 ```
 
 ## `coupled-bracket.mjs`
@@ -30,8 +31,8 @@ respects the volume constraint, i.e. the interface is intact from the first solv
 to the last.
 
 ```
-node examples/topopt-shell/coupled-bracket.mjs
+bun ../examples/topopt-shell/coupled-bracket.mjs
 ```
 
-The engine sensitivities behind both (and their finite-difference verification)
-are covered natively by `just test-cpp-native -R topology_shell`.
+The sensitivities behind both (and their finite-difference verification) are
+covered natively by `just test-rust -p kofem-fem --test topology_mixed`.

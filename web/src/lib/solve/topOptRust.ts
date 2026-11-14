@@ -16,16 +16,13 @@
 // (createRustSolidModel, createShellModel, createMixedModel), and the settings keep
 // the TopOptSettings wire contract and the engine's defaults.
 
-import type {
-  TopOptHistoryEntry,
-  TopOptSettings,
-} from "../../wasm/pkg/kofem_wasm.js";
+import type { TopOptHistoryEntry, TopOptSettings } from "./contracts.js";
 import type {
   ElasticModel,
   TopologyRun,
   TopologySettings,
 } from "../../wasm/fem/kofem_wasm.js";
-import type { ShellMesh } from "../../wasm/pkg/kofem_wasm.js";
+import type { ShellMesh } from "./contracts.js";
 import type { TopOptPayload } from "../../workers/solverTypes.js";
 import { buildVertexIndexer } from "../solveMeshPacking.js";
 import {

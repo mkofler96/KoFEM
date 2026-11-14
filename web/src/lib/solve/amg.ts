@@ -15,7 +15,8 @@
 // AMG cannot take go to the coupled solver, both preconditioned with
 // incomplete Cholesky.
 //
-// The inputs are built by the same helpers as the MFEM payload
+// The inputs are built by the same helpers as the C++ engine's solve payload
+// was, so the stored C++ results still compare to them
 // (packSolveMesh, resolveMaterials, groupDirichlet, groupPointLoads,
 // surfaceLoadsToVertices for the solid solve; buildCoupledEngineInputs for a
 // model with couplings), so both solvers see an identical model.
@@ -173,11 +174,11 @@ export interface AmgSolidModel {
   constraintTies?: TieConstraint[];
 }
 
-// The CG budget when the solve request names none — the MFEM path's cap. AMG
-// converges in tens to a few hundred iterations, so reaching it is rare; when
-// it happens the user is asked whether to go on, as on the MFEM path.
+// The CG budget when the solve request names none (the former MFEM path's
+// cap). AMG converges in tens to a few hundred iterations, so reaching it is
+// rare; when it happens the user is asked whether to go on.
 const DEFAULT_ITERATION_LIMIT = 5000;
-// Progress is logged every this many iterations, as the MFEM path does.
+// Progress is logged every this many iterations.
 const LOG_EVERY = 10;
 // Stop on the force residual ‖f − K·u‖ / ‖f‖, which means the same accuracy
 // whatever the preconditioner (see StoppingRule in crates/kofem-fem/src/cg.rs).
@@ -189,9 +190,9 @@ const RELATIVE_TOLERANCE = 1e-6;
 // connectivity; `refVid` resolves constraint, load and surface-face node
 // references (a tie maps them to their representative first). Returns one
 // displacement triple per node of `model.nodes` and one von Mises stress per
-// element, tets first, then hexes — the same layout as the MFEM solve.
-// Quadratic elements add edge (and hex face and centre) nodes inside the Rust
-// module, as MFEM's order-2 space does; their displacements stay there.
+// element, tets first, then hexes. Quadratic elements add edge (and hex face
+// and centre) nodes inside the Rust module, as MFEM's order-2 space does;
+// their displacements stay there.
 // Constraint ties (`model.constraintTies`) are eliminated in the same solve;
 // on quadratic elements their tied surface's edge and face nodes come along.
 export async function solveSolidInRust(
@@ -295,7 +296,7 @@ export async function solveSolidInRust(
 }
 
 // The solid model of tetrahedra and hexahedra (tets first, then hexes, as
-// buildSolidEngineInputs packs them for MFEM) as a Rust ElasticModel with
+// buildSolidEngineInputs packs them) as a Rust ElasticModel with
 // elements of `elementOrder`. `vid` indexes element connectivity. The caller
 // frees the model.
 export function createRustSolidModel(
@@ -312,7 +313,7 @@ export function createRustSolidModel(
     model.materials,
     model.properties,
   );
-  // resolveMaterials numbers materials from 1 (the MFEM attribute contract);
+  // resolveMaterials numbers materials from 1 (the engine-input contract);
   // the Rust module indexes them from 0.
   const materialOfElement = Uint32Array.from(attributes, (index) => index - 1);
   const elastic = new fem.ElasticModel(
@@ -396,7 +397,7 @@ export function rustSolidBoundaryConditions(
 
 // What the Rust coupled solve reads: the coupled assembler's inputs
 // (CoupledEngineInputs, from buildCoupledEngineInputs) without the shell
-// fields, so the MFEM and the Rust solve take the identical model.
+// fields, as the engine's solve_coupled took them.
 export interface AmgCoupledInputs {
   mesh: {
     vertices: Float64Array;
@@ -415,14 +416,14 @@ export interface AmgCoupledInputs {
 }
 
 // Solve an all-solid model with surface-to-point couplings in Rust — what
-// the engine's solve_coupled does for it, with elements of `elementOrder` (1
+// the engine's solve_coupled did for it, with elements of `elementOrder` (1
 // linear, 2 quadratic) and CG preconditioned by `method`. Returns the same fields: three translations per pool
 // node and one von Mises stress per tet (no shell facets).
 //
-// The engine's coupled solve is linear only. At order 1 the forces are its
-// own nodal loads, surface loads lumped onto the corners, so both solvers take
-// the identical model. At order 2 a surface load must reach the edge nodes,
-// so Rust integrates it over the 6-node faces as the MFEM solid solve does;
+// At order 1 the forces are the coupled inputs' nodal loads, surface loads
+// lumped onto the corners, as the engine's linear-only coupled solve took
+// them. At order 2 a surface load must reach the edge nodes, so Rust
+// integrates it over the 6-node faces, as the solid solve does;
 // the couplings and supports name vertices, and the Rust module
 // (crates/kofem-fem/src/coupled_static.rs) extends kinematic couplings and
 // supports to the edge nodes; a distributing coupling keeps its corner nodes,
@@ -561,7 +562,7 @@ async function runRustSolve<T>(
   log: (line: string) => void,
   read: (solution: ElasticSolution) => T,
 ): Promise<T> {
-  // eslint-disable-next-line kofem/no-silent-fallback -- cgIterationLimit is optional in the solve message; absent means the solver's own budget, as for the MFEM path
+  // eslint-disable-next-line kofem/no-silent-fallback -- cgIterationLimit is optional in the solve message; absent means the solver's own budget
   const budget = iterationLimit ?? DEFAULT_ITERATION_LIMIT;
   const options = new fem.SolveOptions(
     RELATIVE_TOLERANCE,
@@ -662,9 +663,20 @@ function surfaceLoadValues(
       throw new Error(`Surface load ${index} (pressure) has no pressure value`);
     return Float64Array.of(surfaceLoad.pressure);
   }
-  if (surfaceLoad.force === undefined)
+  const force: unknown = surfaceLoad.force;
+  if (force === undefined)
     throw new Error(
       `Surface load ${index} (${surfaceLoad.type}) has no force vector`,
     );
-  return Float64Array.from(surfaceLoad.force);
+  // Exactly three finite numbers: Float64Array.from would read the string
+  // "123" as [1, 2, 3] and an object with a length as NaNs.
+  if (
+    !Array.isArray(force) ||
+    force.length !== 3 ||
+    !force.every((value) => typeof value === "number" && Number.isFinite(value))
+  )
+    throw new Error(
+      `Surface load ${index} (${surfaceLoad.type}): the force vector must be three finite numbers, got ${JSON.stringify(force)}`,
+    );
+  return Float64Array.from(force as number[]);
 }

@@ -14,7 +14,7 @@ import type {
   Property,
   SolvePayload,
 } from "../../workers/solverTypes.js";
-import type { ShellMesh } from "../../wasm/pkg/kofem_wasm.js";
+import type { ShellMesh } from "./contracts.js";
 import { coupledMaterials } from "../coupledMaterials.js";
 import { buildReferenceCouplings, referencePointIds } from "../coupling.js";
 import {

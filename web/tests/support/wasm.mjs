@@ -7,6 +7,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { withStoredSolves } from "./engine-solves.mjs";
 
 const ENGINE_JS = new URL(
   "../../src/wasm/pkg/kofem_wasm_emcc.js",
@@ -55,15 +56,36 @@ function readEngine() {
  * call returns a new instance with its own memory and geometry cache, so
  * tests that must not see each other's state call it once each. The engine's
  * log is dropped unless `print` / `printErr` are passed.
+ *
+ * With `solves: import.meta.url`, the C++ solver entries answer from that
+ * test file's stored results (engine-solves.mjs): the C++ solvers left the
+ * engine (KOF-309), which keeps CAD import and meshing.
  */
 export async function loadEngine(options = {}) {
   const { create, wasmBinary } = await readEngine();
-  return create({
+  const { solves, ...engineOptions } = options;
+  if (!solves)
+    return create({
+      wasmBinary,
+      print: silent,
+      printErr: silent,
+      ...engineOptions,
+    });
+  // The C++ solvers' results come from the test file's stored fixtures
+  // (engine-solves.mjs); while recording, the lines a solver call prints are
+  // captured into them.
+  const print = engineOptions.print;
+  const capture = { lines: null };
+  const engine = await create({
     wasmBinary,
-    print: silent,
     printErr: silent,
-    ...options,
+    ...engineOptions,
+    print: (line) => {
+      capture.lines?.push(line);
+      print?.(line);
+    },
   });
+  return withStoredSolves(engine, solves, { print, capture });
 }
 
 let femModule = null;

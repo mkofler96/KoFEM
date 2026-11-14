@@ -16,10 +16,7 @@
 // ONLY, so it is constrained in Ux alone and must contract by −ν·εx·W in y and
 // −ν·εx·H in z. A full-fixity bug would pin it and leave both at zero.
 //
-// Runs against the freshly built WASM in CI. On a binary built before the
-// engine's `fixed_dofs` support it is EXPECTED to fail: fixed_dofs is ignored,
-// the model is unconstrained, and the solve blows up. That failure is the
-// signal to rebuild the engine (scripts/build-wasm.sh).
+// Runs the app's Rust solve (examples/validation/lib/solver.mjs).
 
 import { beforeAll, describe, expect, test } from "bun:test";
 import { loadSolver } from "../../../examples/validation/lib/solver.mjs";
@@ -76,14 +73,14 @@ const discriminator = nodesWhere(
   (px, py, pz) => px <= 1e-9 && py >= WIDTH - 1e-9 && pz >= HEIGHT - 1e-9,
 )[0];
 
-describe("single-DOF constraints (engine fixed_dofs)", () => {
+describe("single-DOF constraints (fixed_dofs)", () => {
   let displacements = null;
   let uxFace = null;
   const disp = (vertex, component) => displacements[vertex * 3 + component];
 
   beforeAll(async () => {
     const solve = await loadSolver();
-    const result = solve(
+    const result = await solve(
       { vertices: mesh.vertices, hexahedra: mesh.hexahedra },
       { young_modulus: YOUNG, poisson_ratio: POISSON, density: 7850 },
       { fixed_vertices: [], fixed_dofs: fixedDofs, point_loads: pointLoads },

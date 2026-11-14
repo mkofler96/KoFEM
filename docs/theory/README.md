@@ -1,7 +1,8 @@
 # KoFEM Theory Guide
 
 The Theory Guide explains the mathematics and numerical choices behind the
-production C++/WASM solver. It is planned as short, linked articles rather than
+production solver: the Rust finite-element module compiled to WebAssembly, and
+the TypeScript that drives it. It is planned as short, linked articles rather than
 one long manual.
 
 - [`content-map.md`](content-map.md) owns the reading order, stable URL plan,
@@ -46,7 +47,9 @@ alt text and captions. Never copy measured results from the generated examples.
 Pages are read on the website and next to the app. Keep command lines,
 review dates, commit hashes and Linear issue references out of article text;
 they belong in this README, the PR and the Linear evidence comment. Source
-links may stay, pinned to the reviewed revision.
+links may stay, pinned to the reviewed revision: link solver code with
+`codeSource` from `web/theory/numerical-methods/sources.mjs`, which pins one
+reviewed revision for all chapters.
 
 ## Figures and result viewers
 
@@ -95,18 +98,18 @@ issue planning and architecture decision records (ADRs).
 Use the same PR for an implementation change and the descriptions of its final
 behavior. Review this mapping before deciding which articles to update:
 
-| Changed behavior                                              | Review these articles and evidence                                                                                       |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Changed behavior                                              | Review these articles and evidence                                                                                        |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | Formulation, strain/material law, geometry or unit convention | What is FEM?, notation, relevant operators, linear elasticity, equilibrium/weak form, and the bar’s reference assumptions |
-| Element family/order, quadrature or assembly                  | Reference mapping, elements/quadrature, assembly, affected mesh/order studies and DOF counts                             |
-| Loads, constraints or their defaults                          | Loads/constraints, reading-a-study, bar setup, source references and numerical bands                                     |
-| Solver method, tolerance, continuation or failure behavior    | Linear solve, benchmark solver settings, live numerical checks and reviewed engine identity                              |
-| Result arrays, sampling, field names, averaging or display    | Displacement/stress, interpretation/convergence, bar measurement, app readout and example reproduction                   |
-| A measured number or numerical default                        | Investigate the difference, rerun the affected case/studies, explain the trend and review all dependent pages            |
+| Element family/order, quadrature or assembly                  | Reference mapping, elements/quadrature, assembly, affected mesh/order studies and DOF counts                              |
+| Loads, constraints or their defaults                          | Loads/constraints, reading-a-study, bar setup, source references and numerical bands                                      |
+| Solver method, tolerance, continuation or failure behavior    | Linear solve, benchmark solver settings, live numerical checks and reviewed solver build                                  |
+| Result arrays, sampling, field names, averaging or display    | Displacement/stress, interpretation/convergence, bar measurement, app readout and example reproduction                    |
+| A measured number or numerical default                        | Investigate the difference, rerun the affected case/studies, explain the trend and review all dependent pages             |
 
 A source edit does not itself verify a numerical claim. Run the affected case
-through the production engine and preserve the command, engine ID and exact
-source revision in the evidence. Do not widen a band just to make a changed
+through the production solver and preserve the command, the Rust module ID and
+exact source revision in the evidence. Do not widen a band just to make a changed
 number pass. Tolerances belong to the measured quantity and reference model;
 the bar’s 2% extension band accommodates a fully clamped 3D end absent from the
 1D formula. Its 0.5% stress band applies to every unsmoothed centre sample in
@@ -114,18 +117,21 @@ the fixed 400–600 mm region. The Q2 hex row is diagnostic because the existing
 constraint extension leaves face-centre DOFs free; it is not evidence for order
 convergence with the same clamp.
 
-From the repository root, after fetching/building the matching engine:
+From the repository root, with the engine (for meshing the public case) and
+the Rust module built:
 
 ```sh
 bash scripts/fetch-wasm-engine.sh
+bash scripts/build-fem-wasm.sh
 bun examples/validation/run.mjs --case axial-bar
 bun examples/validation/axial-bar-study.mjs
 ```
 
-The study checks the engine source ID, all result lengths and finiteness, the
-reference bands, and the committed numerical snapshot. It reuses the public
-case's inputs, the structured hex adapter in `app-model.mjs`, mesh statistics
-and the real WASM loader. To update its snapshot, first commit the reviewed
+The study checks all result lengths and finiteness, the reference bands, and
+the committed numerical snapshot. It records the Rust module ID, a hash of the
+compiled module, but compares the numbers rather than the ID, as the example
+pages do. It reuses the public case's inputs, the structured hex adapter in
+`app-model.mjs`, mesh statistics and the app's Rust solid solve. To update its snapshot, first commit the reviewed
 code/measurement changes so the recorded revision contains the code that ran.
 Then run:
 
@@ -138,7 +144,7 @@ just check-web
 just test-e2e theory-page
 ```
 
-`--report` records that checkout’s HEAD, matching engine, timestamp, inputs,
+`--report` records that checkout’s HEAD, Rust module ID, timestamp, inputs,
 settings, full-precision results and command in
 `web/public/theory/axial-bar.json`. The Theory article renders that record;
 never type measured numbers into article prose. A later documentation-only
@@ -151,7 +157,7 @@ For changes to example inputs, textbook text or measured behavior, edit the
 case/generator sources and run `cd web && bun run validate:report`; review and
 commit the affected HTML, records and saved analyses. Never hand-edit generated
 pages or VTU results. Existing other benchmark studies may be linked without
-rerunning them, but name them as existing evidence and retain their own engine
+rerunning them, but name them as existing evidence and retain their own build
 record.
 
 The browser Theory suite checks every published page’s local main-content
@@ -170,21 +176,20 @@ explains the numerical limitation; Linear keeps its follow-up plan.
 
 ## Shell and coupling evidence
 
-Shell articles pin implementation links to the source revision in
-`web/public/theory/shells.json`. The native production-core checks feed that
-record directly; its compiler and printed precision are explicit. Run:
+`web/public/theory/shells.json` records the square-plate cases and the planar
+wall-on-block study as measured natively by KoFEM’s former C++ shell/coupling
+core, before the shell and coupled solves moved to the Rust module. That core
+and the program that recorded it have been removed, so the record is fixed;
+the articles say where their numbers come from. Shell
+articles link the record’s own sources at its revision and the Rust solver
+with `codeSource`. The Rust tests check the same plate cases against the same
+bands (`crates/kofem-fem/tests/shell.rs`) and the footprint motion and moment
+transfer (`crates/kofem-fem/tests/mixed.rs`); the planar transition study has
+no Rust counterpart yet. CAD extraction and the WebAssembly solve are checked
+separately:
 
 ```sh
-node web/theory/shells/capture-evidence.mjs
-```
-
-This checks the existing square-plate cases and the planar wall-on-block study
-at refinements 1 and 2 against the committed record. It uses `CXX` (default
-`g++`). For an intentional evidence update with reviewed, committed solver
-sources, use `--report`, regenerate the Theory pages and review the record.
-Keep native execution separate from CAD extraction and WASM wrapper evidence:
-
-```sh
+just test-rust -p kofem-fem
 cd web
 just test-web shell-footprint
 ```
@@ -193,16 +198,15 @@ Review both shell articles and the shared shell notation when changing section
 kinematics, thickness, materials, loads, extraction, or coupling. Re-run the
 affected comparisons, retaining their sampling regions and reference limits.
 Same-mesh planar transition agreement does not verify arbitrary junction-stress
-accuracy or general distributing coupling. The full shell-core suite and the
-app footprint check remain part of existing CI; the native record comparison
-above is an additional contributor check.
+accuracy or general distributing coupling.
 
 ## Topology optimization evidence
 
-Optimization articles pin source links to the revision in
-`web/public/theory/optimization.json`. The record comes from the existing MBB
-and cantilever mesh-independence benchmarks in `examples/validation/topopt/`,
-run through the real WASM `optimize_topology` entry. From `web/`:
+Optimization articles link the code with `codeSource`. The record in
+`web/public/theory/optimization.json` comes from the existing MBB and
+cantilever mesh-independence benchmarks in `examples/validation/topopt/`, run
+through the app's Rust optimizer (`optimizeSolidInRust`) in WebAssembly. From
+`web/`:
 
 ```sh
 bun theory/optimization/simp-example.mjs
@@ -211,9 +215,10 @@ bun theory/optimization/capture-evidence.mjs
 
 The first checks the two-bar worked calculation and its finite-difference
 sensitivities. The second re-runs both benchmarks, asserts their own checks and
-compares every recorded number with the fresh run; it fails if the engine
-identity changed. For an intentional update with committed engine and benchmark
-sources, use `--report`, regenerate the Theory pages and review the record.
+compares every recorded number with the fresh run. It records the Rust module
+ID but compares the numbers, not the ID. For an intentional update with
+committed optimizer and benchmark sources, use `--report`, regenerate the
+Theory pages and review the record.
 
 Review all three optimization articles when changing the SIMP interpolation,
 objectives, sensitivities, filter, MMA settings, stopping rules, stress

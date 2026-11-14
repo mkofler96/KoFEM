@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { equation, matrixEquation, tex } from "../operators/math.mjs";
-import { source, mfemSource, rustSource } from "./sources.mjs";
+import { codeSource, mfemSource } from "./sources.mjs";
 import { figure } from "../figures/index.mjs";
 
 export default {
@@ -226,7 +226,7 @@ export default {
       ${tex("(α, β, β, β)")} and permutations, with ${tex("α = (5 + 3\\sqrt{5})/20 \\approx 0.5854")} and
       ${tex("β = (5 - \\sqrt{5})/20 \\approx 0.1382")}. Too few points underestimate such terms and
       can leave non-rigid deformation modes with zero computed energy.</p>
-    <p>KoFEM uses MFEM’s default stiffness rule: degree ${tex("2(k - 1)")}
+    <p>KoFEM uses the stiffness rule MFEM chooses by default: degree ${tex("2(k - 1)")}
       on straight-edged tetrahedra of order ${tex("k")}, which is exact. For hexahedra
       the rule is a tensor product of Gauss points. It is exact for
       parallelepipeds; on a distorted hexahedron ${tex("J")} varies and the integrand
@@ -250,8 +250,9 @@ export default {
       Splitting a face force equally over all six nodes would not be
       work-equivalent. KoFEM converts a face force group into a uniform
       traction, the total force divided by the loaded area, and integrates it
-      this way. MFEM’s face rule has degree ${tex("2k")}: 3 points on an order-1
-      triangle and 6 points on an order-2 triangle. The static solid solve
+      this way. On a flat triangle with uniform traction these shares are
+      exact, so KoFEM applies them directly. Quadrilateral hexahedron faces
+      use a Gauss rule of 2 × 2 points at order 1 and 3 × 3 at order 2. The static solid solve
       applies no body force: density is stored but unused. How loads and
       supports enter the global system is covered in
       <a href="/theory/numerical-methods/loads-and-constraints/">Loads and constraints</a>.</p>
@@ -308,30 +309,25 @@ export default {
     <h2 id="implementation">KoFEM implementation</h2>
     <p>KoFEM’s solid solve runs in its own Rust finite-element module. It
       implements the tetrahedra and hexahedra above with the shape functions
-      and quadrature rules of MFEM 4.7. MFEM stays available as the other
-      solver choice and is the reference the Rust results are tested against.</p>
+      and quadrature rules of MFEM 4.7, from which these parts are ported.</p>
     <ul>
       <li>The app offers <em>Linear (1st order)</em> and
         <em>Quadratic (2nd order)</em>; the worker sends that order to the
         solid solve
-        (${source("web/src/workers/solver.worker.ts", 608, "solver.worker.ts")}).</li>
+        (${codeSource("web/src/workers/solver.worker.ts", 770, "solver.worker.ts")}).</li>
       <li>The Rust module adds the order-2 edge, face and centre nodes from the
-        vertices, as MFEM’s order-${tex("k")} H1 space does; element geometry comes
-        from vertex positions only
-        (${rustSource("crates/kofem-fem/src/mesh.rs", "mesh.rs")}).</li>
+        vertices; element geometry comes from vertex positions only
+        (${codeSource("crates/kofem-fem/src/mesh.rs", 278, "mesh.rs")}).</li>
       <li>Per-element ${tex("λ")} and ${tex("μ")} are computed from each body’s ${tex("E")} and ${tex("ν")}, and the
         element stiffness is integrated with the rules in the table above
-        (${rustSource("crates/kofem-fem/src/element.rs", "element.rs")};
+        (${codeSource("crates/kofem-fem/src/element.rs", 133, "element.rs")};
         ${mfemSource("fem/bilininteg.cpp", 3054, "MFEM default rule")}).</li>
-      <li>Surface loads on triangular and quadrilateral faces use MFEM’s face
-        rule
-        (${rustSource("crates/kofem-fem/src/surface.rs", "surface.rs")};
-        ${mfemSource("fem/lininteg.cpp", 387, "MFEM face rule")}).</li>
-      <li>The MFEM solve builds the same space and integrals
-        (${source("engine/cpp/solve_mfem.cpp", 258, "solve_mfem.cpp")}); tests compare the two
-        on tetrahedral, hexahedral and mixed meshes.</li>
-      <li>The mixed solid–shell path uses the same integrator at order 1
-        (${source("engine/cpp/solve_coupled.cpp", 59, "solve_coupled.cpp")}).</li>
+      <li>Surface loads on triangular and quadrilateral faces are integrated
+        as described above
+        (${codeSource("crates/kofem-fem/src/surface.rs", 229, "surface.rs")};
+        ${mfemSource("fem/lininteg.cpp", 387, "MFEM face rule")} for quadrilaterals).</li>
+      <li>The mixed solid–shell solve reuses this solid stiffness at order 1
+        (${codeSource("crates/kofem-fem/src/coupled_static.rs", 406, "coupled_static.rs")}).</li>
     </ul>
     <p>How these element contributions combine into one system is explained in
       <a href="/theory/numerical-methods/assembly/">Assembly</a>.</p>

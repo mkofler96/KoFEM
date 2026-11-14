@@ -33,7 +33,7 @@ export default {
     <p>Early iterations look gray and blurred: densities start uniform and
       move by at most the move limit per step. A shape that looks finished can
       still be reorganising, so judge the final result, not an early frame.</p>
-    <p><strong>Cancel</strong> terminates the engine worker. The partial run
+    <p><strong>Cancel</strong> terminates the solver worker. The partial run
       and its live density are discarded; there is no best-so-far design.
       Changing any optimization setting also clears an existing result. A
       saved analysis file keeps the optimization settings but not the density
@@ -102,8 +102,9 @@ export default {
       <li><strong>Stiffness, not strength.</strong> Without a stress limit, peak
         stress is not controlled. With one, a relaxed element-centre aggregate
         is controlled, not the stress of the rebuilt part.</li>
-      <li><strong>The design space and supports.</strong> Every element
-        is a design variable, including those at supports and loads. Check
+      <li><strong>The design space and supports.</strong> Every element of a
+        design region is a design variable, including those at supports and
+        loads. Check
         that the interpreted shape still carries each load into each support.</li>
       <li><strong>Discretisation and filter.</strong> The minimum member size
         follows from ${tex("r_{\\mathrm{min}}")} and the mesh; a different
@@ -122,8 +123,8 @@ export default {
       [
         [
           "Design domain",
-          "Every element is a design variable. The engine accepts element indices pinned solid or void, but the app sends none.",
-          "Keep-in and keep-out regions in the app.",
+          "Every element of a design region is a design variable. Regions can be kept solid or kept empty.",
+          "Keep-in and keep-out selections finer than a region.",
         ],
         [
           "Stress limit",
@@ -152,12 +153,13 @@ export default {
 
     <h2 id="references">Implementation and references</h2>
     <ol class="refs">
-      <li>${source("engine/cpp/topology_stream.h", 1, "density streaming")} and
-        ${source("web/src/hooks/useTopOpt.ts", 332, "cancellation")}.</li>
+      <li>${source("web/src/lib/solve/topOptRust.ts", 515, "density streaming")} and
+        ${source("web/src/hooks/useTopOpt.ts", 347, "cancellation")}.</li>
       <li>${source("web/src/store/viewSlice.ts", 24, "default threshold")},
-        ${source("web/src/lib/densityField.ts", 264, "thresholded STL export")} and
-        ${source("web/src/lib/analysisFile.ts", 95, "settings, not densities, in saved files")}.</li>
-      <li>${source("engine/cpp/topology_optimize.h", 84, "passive regions accepted by the engine")}.</li>
+        ${source("web/src/lib/densityField.ts", 253, "thresholded STL export")} and
+        ${source("web/src/lib/analysisFile.ts", 99, "settings, not densities, in saved files")}.</li>
+      <li>${source("web/src/lib/regions.ts", 143, "regions kept solid or empty")} and
+        ${source("crates/kofem-fem/src/topology/optimize.rs", 115, "how the optimizer holds them")}.</li>
       <li>Bendsøe and Sigmund, <cite>Topology Optimization: Theory, Methods and Applications</cite>, Springer (2003), on interpreting and post-processing density results.</li>
     </ol>`,
 };

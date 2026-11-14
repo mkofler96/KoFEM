@@ -3,11 +3,10 @@
 
 # One entry point for setup, checks and tests. `just` lists the recipes.
 #
-# Each test recipe is one native command (cargo, ctest, bun, playwright), and
+# Each test recipe is one native command (cargo, bun, playwright), and
 # whatever follows the recipe name goes straight to it:
 #
 #   just test-rust -p kofem-fem shell
-#   just test-cpp-native -R shell
 #   just test-web tie
 #   just test-e2e couplings --repeat-each 20
 #
@@ -55,8 +54,8 @@ check-web:
 check-cpp:
     bash scripts/clang-tidy.sh
 
-# Every suite: Rust, C++, node-side and browser.
-test: test-rust test-cpp test-web test-e2e
+# Every suite: Rust, node-side and browser.
+test: test-rust test-web test-e2e
 
 # Without arguments every crate; with them, what they select
 # (`just test-rust -p kofem-fem shell`).
@@ -64,28 +63,6 @@ test: test-rust test-cpp test-web test-e2e
 # Rust: elements, assembly, solvers, shell idealisation.
 test-rust *args:
     cargo test {{ if args == "" { "--workspace" } else { "" } }} "$@"
-
-# C++: the engine units that build on their own, native and with MFEM.
-test-cpp: test-cpp-native test-cpp-wasm
-
-# C++ with the host compiler: the units without MFEM.
-test-cpp-native *args:
-    @{{ just_executable() }} _ctest native "$@"
-
-# The SDK and MFEM are at /emsdk and /opt/kofem-deps/mfem in the dependency
-# image and after scripts/fetch-wasm-deps.sh; set EMSDK and MFEM_WASM_ROOT
-# when yours are elsewhere. emsdk_env.sh puts the SDK's node on PATH, where
-# CMake looks for it to run the test programs.
-
-# C++ through Emscripten and node: the units that link MFEM.
-test-cpp-wasm *args:
-    @export EMSDK="${EMSDK:-/emsdk}" MFEM_WASM_ROOT="${MFEM_WASM_ROOT:-/opt/kofem-deps/mfem}"; \
-    if [ ! -f "$EMSDK/emsdk_env.sh" ]; then \
-        echo "ERROR: no Emscripten SDK at $EMSDK. Set EMSDK or run: bash scripts/fetch-wasm-deps.sh" >&2; \
-        exit 1; \
-    fi; \
-    set +u; . "$EMSDK/emsdk_env.sh" >/dev/null 2>&1; set -u; \
-    {{ just_executable() }} _ctest wasm "$@"
 
 # TypeScript logic and both WebAssembly modules, without a browser.
 test-web *args: _wasm
@@ -102,12 +79,6 @@ coverage:
     cd web && rm -rf .nyc_output coverage
     -cd web && COVERAGE=1 NODE_OPTIONS=--max-old-space-size=6144 bunx playwright test
     cd web && bun run coverage:report
-
-# Configure, build and run one preset of engine/tests.
-_ctest preset *args:
-    cd engine/tests && cmake --preset "$1" --log-level=WARNING
-    cd engine/tests && cmake --build --preset "$1" --parallel {{ num_cpus() }}
-    cd engine/tests && ctest --preset "$1" "${@:2}"
 
 # The C++ engine (fetched) and the Rust module (built) under web/src/wasm.
 _wasm:

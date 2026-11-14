@@ -4,6 +4,7 @@
 import { equation, matrixEquation, tex } from "../operators/math.mjs";
 import { gradient, worked } from "./stress-example.mjs";
 import { source } from "./sources.mjs";
+import { codeSource } from "../numerical-methods/sources.mjs";
 import { figure } from "../figures/index.mjs";
 import { resultViewer } from "../viewers/index.mjs";
 
@@ -96,11 +97,12 @@ export default {
       pure-shear and reversed-sign checks.</p>
 
     <h2 id="sampling">What the solid solver returns</h2>
-    <p>The ordinary solid wrapper exports three translations per mesh vertex
-      in vertex order, and one von Mises scalar per element in element order.
-      It evaluates the full solved displacement gradient at the first point
-      of MFEM’s order-1 integration rule: the reference-element centre for
-      tetrahedra and hexahedra. It then applies that element’s material law.
+    <p>The ordinary solid solve exports three translations per mesh vertex
+      in vertex order, and one von Mises scalar per element in element order,
+      tetrahedra first, then hexahedra. It evaluates the full solved
+      displacement gradient at the reference-element centre of each
+      tetrahedron and hexahedron, the point of a one-point rule, and then
+      applies that element’s material law.
       This is a point sample, not a volume average or a search for the element’s
       maximum stress.</p>
     <p>On a straight-sided linear tetrahedron the displacement gradient is
@@ -145,7 +147,7 @@ export default {
     <h2 id="display">Fields, units and deformation scale</h2>
     <p>Displacement components keep their global-axis signs; magnitude is
       ${tex("|u| = \\sqrt{u_x^2+u_y^2+u_z^2}")}. The app labels them in mm and
-      von Mises in MPa (N/mm²). The engine does no dimensional conversion:
+      von Mises in MPa (N/mm²). The solver does no dimensional conversion:
       geometry, material inputs and loads must already be coherent. See
       <a href="/theory/foundations/consistent-units/#material-values">consistent units and modulus/stress conversion</a>.</p>
     <p>The shape uses original position plus scaled displacement. The UI’s
@@ -180,10 +182,10 @@ export default {
       before using a peak for a design decision.</p>
 
     <h2 id="sources">Implementation and references</h2>
-    <p>KoFEM uses MFEM 4.7 for the solid solve.</p>
+    <p>KoFEM’s solid solve runs in its Rust finite-element module.</p>
     <ul class="refs">
-      <li>${source("engine/cpp/solve_mfem.cpp", 52, "Vertex extraction and element-centre recovery")},
-        and ${source("engine/cpp/solve_mfem.cpp", 239, "result arrays after the linear solve")}.</li>
+      <li>${codeSource("crates/kofem-fem/src/stress.rs", 59, "Element-centre recovery")}
+        and ${codeSource("web/src/lib/solve/amg.ts", 283, "vertex displacements and result arrays after the linear solve")}.</li>
       <li>${source("web/src/lib/resultField.ts", 51, "Averaging weights, nodal field, extrema and units")},
         ${source("web/src/components/viewport/ResultsColormap.tsx", 90, "legend mapping and boundary colours")},
         ${source("web/src/components/viewport/MeshScene.tsx", 59, "automatic deformation scaling")},
@@ -191,8 +193,8 @@ export default {
         ${source("web/src/components/panel/ResultsPanel.tsx", 372, "summary and display controls")}
         and ${source("web/src/store/resultsSlice.ts", 12, "static result interface")}.</li>
       <li>Shells use membrane-plus-bending stress at the worse of their two
-        surfaces: ${source("engine/cpp/solve_shell.cpp", 195, "shell result")}
-        and ${source("engine/cpp/solve_coupled.cpp", 265, "coupled result")}. Auto-shell
+        surfaces: ${codeSource("crates/kofem-fem/src/shell/stress.rs", 20, "shell result")}
+        and ${codeSource("crates/kofem-wasm/src/mixed.rs", 228, "coupled result")}. Auto-shell
         additionally ${source("web/src/lib/solve/autoShell.ts", 363, "maps shell stresses onto original elements")}.
         These are different measures from solid centre samples; see the
         <a href="/theory/shells/formulation/">shell chapter</a>.</li>

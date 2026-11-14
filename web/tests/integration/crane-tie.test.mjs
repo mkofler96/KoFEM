@@ -23,14 +23,17 @@
 //      With the tie, couplings bridge the two. This is the invariant that broke,
 //      and it is a property of the model — no solve needed.
 //   2. SOLVE. The tied model converges to a plausible displacement and stress;
-//      the untied one does not converge at all.
-//
+//      the untied one does not converge at all. Both run on the app's Rust
+//      coupled solve (lib/solve/coupledRust.ts, through
+//      web/tests/support/rust-solvers.mjs) on AMG, as the app picks it for
+//      tets and shells; the engine only meshes the STEP.
 
 import { beforeAll, describe, expect, test } from "bun:test";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { loadEngine } from "../support/wasm.mjs";
+import { loadRustSolvers } from "../support/rust-solvers.mjs";
 import {
-  loadEngine,
   meshStep,
   extractThinWallShells,
   shellWallTets,
@@ -52,7 +55,7 @@ const TIE_HOOK_FACE = 65;
 const TIE_PIN_BODY = 2;
 const TIE_CLEARANCE = 3.0; // mm
 
-let Module = null;
+let solvers = null;
 let mesh = null;
 let shells = null;
 let pinVerts = null;
@@ -111,7 +114,10 @@ function facePieces(tets) {
 describe("the coupled crane assembly", () => {
   // Mesh once; both models are built from it.
   beforeAll(async () => {
-    Module = await loadEngine();
+    // The engine meshes; the Rust module is loaded before the shell
+    // idealisation and solves.
+    const Module = await loadEngine();
+    solvers = await loadRustSolvers();
     mesh = meshStep(Module, STEP, { maxElementSize: 6 });
     shells = extractThinWallShells(mesh);
     const wallTets = shellWallTets(mesh, shells);
@@ -209,7 +215,9 @@ describe("the coupled crane assembly", () => {
   });
 
   // ── Solve helper ──────────────────────────────────────────────────────────────
-  function solve(model) {
+  // Settles to the summary below, or { ok: false, error } with the Rust
+  // path's refusal (a CG breakdown or a spent iteration budget).
+  async function solve(model) {
     const fixedLocal = new Set();
     for (let t = 0; t < shells.shellTris.length / 3; t++)
       if (shells.shellTriSrc[t] === BC_FIXED_FACE)
@@ -240,37 +248,48 @@ describe("the coupled crane assembly", () => {
         load_vals.push(-1000 / ns.length);
       }
     }
-    // Resultant of what is actually handed to the engine. Splitting each face's
+    // Resultant of what is actually handed to the solver. Splitting each face's
     // 1000 N over "the nodes still in the solid pool" is only −2000 N in total if
     // none were lost — a node that fell out (shelled away, merged) would silently
-    // reduce the load rather than fail. The engine accumulates (F[dof] += val), so
+    // reduce the load rather than fail. The solver accumulates (F[dof] += val), so
     // a duplicated DOF would double its share instead of overwriting it.
     const resultant = [0, 0, 0];
     for (let i = 0; i < load_dofs.length; i++)
       resultant[load_dofs[i] % 6] += load_vals[i];
 
     const coupling = dropCouplingsOnFixedNodes(model.coupling, fixed);
-    const result = Module.solve_coupled(
-      {
-        vertices: Float64Array.from(model.pool),
-        tets: Int32Array.from(model.tets),
-        triangles: Int32Array.from(model.triangles),
-        thicknesses: Float64Array.from(model.thicknesses),
-      },
-      {
-        ref: Int32Array.from(coupling.ref),
-        offsets: Int32Array.from(coupling.offsets),
-        solid: Int32Array.from(coupling.solid),
-        mpc: Int32Array.from(coupling.mpc),
-      },
-      {
-        fixed_dofs: Int32Array.from(fixed),
-        load_dofs: Int32Array.from(load_dofs),
-        load_vals: Float64Array.from(load_vals),
-      },
-      JSON.stringify({ solid: STEEL, shell: STEEL }),
-    );
-    if ("error" in result) return { ok: false, error: result.error, resultant };
+    let result = null;
+    try {
+      result = await solvers.solve_coupled(
+        {
+          vertices: Float64Array.from(model.pool),
+          tets: Int32Array.from(model.tets),
+          triangles: Int32Array.from(model.triangles),
+          thicknesses: Float64Array.from(model.thicknesses),
+        },
+        {
+          ref: Int32Array.from(coupling.ref),
+          offsets: Int32Array.from(coupling.offsets),
+          solid: Int32Array.from(coupling.solid),
+          mpc: Int32Array.from(coupling.mpc),
+          // The engine's defaults for these, now explicit: all six DOFs tied,
+          // no relaxation.
+          dof_mask: Int32Array.from(coupling.ref, () => 0b111111),
+          relaxation: 1.0,
+        },
+        {
+          fixed_dofs: Int32Array.from(fixed),
+          prescribed_dofs: new Int32Array(0),
+          prescribed_vals: new Float64Array(0),
+          load_dofs: Int32Array.from(load_dofs),
+          load_vals: Float64Array.from(load_vals),
+        },
+        JSON.stringify({ solid: STEEL, shell: STEEL }),
+        "amg",
+      );
+    } catch (error) {
+      return { ok: false, error: error.message, resultant };
+    }
     let maxU = 0;
     const disp = result.displacements;
     for (let i = 0; i < model.pool.length / 3; i++)
@@ -294,9 +313,9 @@ describe("the coupled crane assembly", () => {
   describe("solve", () => {
     let tiedResult = null;
     let untiedResult = null;
-    beforeAll(() => {
-      tiedResult = solve(tied);
-      untiedResult = solve(untied);
+    beforeAll(async () => {
+      tiedResult = await solve(tied);
+      untiedResult = await solve(untied);
     });
 
     // 1000 N down on each of the two hook faces. Checked before the result is
@@ -337,6 +356,11 @@ describe("the coupled crane assembly", () => {
         untiedResult.ok,
         `converged in ${untiedResult.iterations} iterations — a mechanism must not solve`,
       ).toBe(false);
+      // Refused because K is singular (the KOF-214 CG breakdown), or because
+      // CG spent its budget without converging — not for malformed input.
+      expect(untiedResult.error).toMatch(
+        /not fully constrained|not positive definite|iteration budget ran out/,
+      );
     });
   });
 });

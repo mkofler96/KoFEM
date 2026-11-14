@@ -3,8 +3,8 @@
 
 // Where a test file lives decides whether anything runs it. bun finds
 // *.test.* under web/tests/unit and web/tests/integration; Playwright finds
-// *.spec.ts under web/tests; ctest runs what engine/tests/CMakeLists.txt
-// lists. A test file anywhere else, or one written as a standalone script
+// *.spec.ts under web/tests; cargo finds the Rust tests under crates/. A test
+// file anywhere else, or one written as a standalone script
 // the way the tests used to be, would exist and never run. These checks turn
 // that into a failure that says where the file belongs.
 
@@ -55,7 +55,7 @@ describe("every test file is where its runner looks", () => {
           /^web\/tests\/test_[^/]+\.mjs$/.test(file) ||
           /^scripts\/test-[^/]+\.sh$/.test(file),
       ),
-      "nothing runs script-style tests any more: write a bun test (web/tests/unit, web/tests/integration) or add a kofem_test() line to engine/tests/CMakeLists.txt",
+      "nothing runs script-style tests any more: write a bun test (web/tests/unit, web/tests/integration) or a Rust test (crates/<crate>/tests)",
     ).toEqual([]);
   });
 });

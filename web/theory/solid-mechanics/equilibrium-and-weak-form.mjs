@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { equation, tex } from "../operators/math.mjs";
-import { source, mfemSource } from "./sources.mjs";
+import { mfemSource } from "./sources.mjs";
+import { codeSource } from "../numerical-methods/sources.mjs";
 import { figure } from "../figures/index.mjs";
 
 export default {
@@ -195,33 +196,32 @@ export default {
       differently in each material near the interface, which this 1D model ignores.</p>
 
     <h2 id="implementation">KoFEM implementation</h2>
-    <p>KoFEM uses MFEM 4.7. The solid solver builds ${tex("a")} and ${tex("ℓ")} directly.</p>
+    <p>KoFEM’s Rust finite-element module builds ${tex("a")} and ${tex("ℓ")} directly.</p>
     <ul>
-      <li><strong>Bilinear form.</strong> MFEM’s elasticity integrator implements
-        exactly ${tex("a(\\mathbf{u}, \\mathbf{w})")} above
-        (${mfemSource("fem/bilininteg.hpp", 3009, "MFEM ElasticityIntegrator")}).
-        KoFEM passes it piecewise-constant ${tex("λ")} and ${tex("μ")}, one pair per body
-        (${source("engine/cpp/solve_mfem.cpp", 227, "solve_mfem.cpp")}). The mixed
-        solid–shell solve uses the same integrator for its solid part
-        (${source("engine/cpp/solve_coupled.cpp", 72, "solve_coupled.cpp")}).</li>
+      <li><strong>Bilinear form.</strong> The element stiffness implements
+        exactly ${tex("a(\\mathbf{u}, \\mathbf{w})")} above, ported from MFEM’s elasticity integrator
+        (${codeSource("crates/kofem-fem/src/element.rs", 5, "element.rs")};
+        ${mfemSource("fem/bilininteg.hpp", 3009, "MFEM ElasticityIntegrator")}).
+        It uses piecewise-constant ${tex("λ")} and ${tex("μ")}, one pair per body
+        (${codeSource("crates/kofem-fem/src/assembly.rs", 40, "assembly.rs")}). The mixed
+        solid–shell solve uses the same solid stiffness.</li>
       <li><strong>Linear form.</strong> Face forces become uniform tractions ${tex("\\mathbf{F}/A")},
-        tractions are applied directly, and pressures as ${tex("-p_{\\mathrm{load}}\\mathbf{n}")}
-        (${source("engine/cpp/fem_bc_io.cpp", 259, "fem_bc_io.cpp")}). They are integrated
-        against the test functions on the selected faces
-        (${source("engine/cpp/fem_bc_io.cpp", 340, "fem_bc_io.cpp")}). Nodal forces are added to
-        the load vector (${source("engine/cpp/fem_bc_io.cpp", 425, "fem_bc_io.cpp")}).
+        tractions are applied directly, and pressures as ${tex("-p_{\\mathrm{load}}\\mathbf{n}")};
+        they are integrated against the test functions on the selected faces
+        (${codeSource("crates/kofem-fem/src/surface.rs", 229, "surface.rs")}). Nodal forces are added to
+        the load vector (${codeSource("web/src/lib/solve/amg.ts", 380, "amg.ts")}).
         There is <strong>no body-force term</strong>: ${tex("\\mathbf{b} = \\mathbf{0}")}, so self-weight is not modelled.</li>
       <li><strong>Essential conditions.</strong> Fixed and prescribed translation
         components are collected
-        (${source("engine/cpp/solve_mfem.cpp", 203, "solve_mfem.cpp")}), their values are written
-        into the solution, and the constrained equations are eliminated
-        (${source("engine/cpp/solve_mfem.cpp", 235, "solve_mfem.cpp")}). This is how ${tex("\\mathbf{u} ∈ U")}
+        (${codeSource("web/src/lib/solve/amg.ts", 353, "amg.ts")}), and the constrained
+        equations are replaced by the prescribed values
+        (${codeSource("crates/kofem-fem/src/constraints.rs", 66, "constraints.rs")}). This is how ${tex("\\mathbf{u} ∈ U")}
         and ${tex("\\mathbf{w} ∈ W_0")} are enforced.</li>
     </ul>
     <p>The shell path solves a different weak form with rotations; see
       <a href="/theory/shells/formulation/">Shell formulation</a>. The
       <a href="/examples/axial-bar/">axial bar example</a> runs this complete
-      solid path in the browser engine.</p>
+      solid path in the browser.</p>
 
     <h2 id="decision">Decision: a displacement formulation</h2>
     <ul>
@@ -235,8 +235,9 @@ export default {
       <li><strong>Why it fits:</strong> it needs only first derivatives and two material
         constants, imposes tractions and material interfaces naturally, and
         yields a symmetric positive definite system suited to a conjugate
-        gradient solve in the browser. MFEM provides it as a standard,
-        well-tested integrator.</li>
+        gradient solve in the browser. It is the standard, well-tested
+        formulation of FEM libraries such as MFEM, from which KoFEM’s element
+        integrals are ported.</li>
       <li><strong>Tradeoffs:</strong> stress comes from derivatives of the solution and is
         less accurate than displacement; it is discontinuous between
         elements. Linear tetrahedra can lock in bending and with ${tex("ν")} near ½.</li>
@@ -244,9 +245,8 @@ export default {
         deformation, plasticity or contact become supported features, or when
         stress accuracy in thin sections needs a different element.</li>
     </ul>
-    <p>KoFEM’s architecture decision records cover the C++/WASM engine as the
-      production pipeline (ADR-0001), not this formulation. It is the standard
-      formulation for linear-elastic solid FEM and has no separate record.</p>
+    <p>It is the standard formulation for linear-elastic solid FEM and has no
+      separate decision record.</p>
 
     <h2 id="limitations">Limitations and practical consequences</h2>
     <ul>

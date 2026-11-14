@@ -68,7 +68,7 @@ export default {
         an optimized part.</li>
     </ul>
     <p>These links reuse the existing studies; they do not claim new runs of
-      those refinement sequences. See each example’s engine record. Claims
+      those refinement sequences. See each example’s build record. Claims
       beyond these cases about shells, coupling, optimization, singular stresses or physical
       strength need suitable evidence of their own.</p>
 

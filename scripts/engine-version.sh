@@ -17,7 +17,7 @@
 #   engine/                      C++ sources, headers and CMakeLists
 #   scripts/build-wasm.sh        compiler/link flags and the copy step
 #   scripts/fetch-wasm-deps.sh   pins the dependency image tag, and therefore the
-#                                Emscripten/OCCT/Netgen/MFEM baked into the binary
+#                                Emscripten/OCCT/Netgen baked into the binary
 #
 # Deliberately over-inclusive: a comment-only edit to any of these yields a new ID
 # and one extra build. Under-inclusion is the dangerous direction — it would map
@@ -49,16 +49,8 @@ sha256() {
 #
 # LC_ALL=C sort keeps the ordering locale-independent; without it the same tree
 # can hash differently on two machines.
-#
-# engine/tests/CMakeLists.txt and CMakePresets.json describe how the test
-# programs are built (`just test-cpp`). Nothing in them reaches the engine
-# binary, so they stay out of the ID: every published example and evidence
-# record names the ID it was computed with, and a change to how the tests are
-# built must not make those records stale.
 FILES="$(git ls-files --cached --others --exclude-standard -- \
-    engine scripts/build-wasm.sh scripts/fetch-wasm-deps.sh \
-    ':(exclude)engine/tests/CMakeLists.txt' \
-    ':(exclude)engine/tests/CMakePresets.json' | LC_ALL=C sort -u)"
+    engine scripts/build-wasm.sh scripts/fetch-wasm-deps.sh | LC_ALL=C sort -u)"
 
 [ -n "$FILES" ] || {
     echo "ERROR: no engine sources found under ${REPO_ROOT} — wrong directory, or a checkout without git metadata?" >&2

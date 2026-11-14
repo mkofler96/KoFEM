@@ -5,14 +5,14 @@
 // (crates/kofem-wasm SolveRun) to convergence: log progress, hand control back
 // to the worker's event loop now and then, and when the iteration budget runs
 // out either ask the user to continue (residual still falling) or fail
-// (stalled) — the MFEM engine's continuation policy
-// (engine/cpp/cg_continuation.h). Shared by the solid (AMG) and shell solves.
+// (stalled) — the continuation policy of the former C++ solvers. Shared by
+// the solid (AMG) and shell solves.
 
-import type { CgLimitProgress } from "../../wasm/pkg/kofem_wasm.js";
+import type { CgLimitProgress } from "./contracts.js";
 
 // Asked when the iteration budget runs out while the residual is still
 // falling: resolves to the number of extra iterations, or 0 to stop. The
-// worker routes it to the same "continue solving?" dialog as the MFEM path.
+// worker routes it to the "continue solving?" dialog.
 export type ContinuationPrompt = (progress: CgLimitProgress) => Promise<number>;
 
 // The part of the Rust module's SolveRun this loop drives.

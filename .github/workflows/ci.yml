@@ -125,45 +125,6 @@ jobs:
           retention-days: 7
           path: web/src/wasm/fem/
 
-  cpp-native:
-    name: C++ tests (native)
-    needs: [changes]
-    if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    env:
-      CXX: g++
-
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Install just (pinned)
-        run: bash scripts/install-tools.sh
-
-      - name: C++ tests, host compiler
-        run: just test-cpp-native
-
-  # These programs link the precompiled MFEM WASM library, so they need em++
-  # and node from the dependency image. Run independently of the engine build:
-  # a cached or published engine must never bypass numerical regression tests.
-  cpp-wasm:
-    name: C++ tests (MFEM/WASM)
-    needs: [changes]
-    if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    container:
-      image: ghcr.io/mkofler96/kofem-dependencies:0.0.2
-
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - name: Install just (pinned)
-        run: bash scripts/install-tools.sh
-
-      - name: C++ tests, Emscripten with MFEM
-        run: just test-cpp-wasm
-
   # In the dependency image, which already holds the Emscripten sysroot and
   # the engine's libraries. clang-tidy >= 20 is required to parse the emsdk
   # clang-22-era headers; the PyPI wheel is the one scripts/docker-clang-tidy.sh
@@ -292,7 +253,7 @@ jobs:
   # main would publish — main finds it and has nothing to do.
   publish-engine:
     name: Publish engine release
-    needs: [engine-id, wasm, cpp-native, cpp-wasm]
+    needs: [engine-id, wasm]
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -548,8 +509,6 @@ jobs:
       - changes
       - version
       - rust
-      - cpp-native
-      - cpp-wasm
       - clang-tidy
       - engine-id
       - wasm

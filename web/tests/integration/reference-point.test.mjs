@@ -366,7 +366,7 @@ describe("kinematic coupling on an all-solid cantilever", () => {
   beforeAll(async () => {
     // The shell idealisation runs in the Rust module (crates/kofem-shellize).
     await loadFem();
-    const Module = await loadEngine();
+    const Module = await loadEngine({ solves: import.meta.url });
 
     // The same total force, once through the reference point and once spread
     // straight over the coupled face.

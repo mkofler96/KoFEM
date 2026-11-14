@@ -13,18 +13,18 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
     <title>Axial-bar verification | KoFEM Theory Guide</title>
-    <meta name="description" content="Reproduce the axial-bar study with the production WASM engine: geometry, units, loads, constraints, solver settings, displacement and interior stress checks, mesh/order comparison and evidence limits." />
+    <meta name="description" content="Reproduce the axial-bar study with the production Rust/WASM solver: geometry, units, loads, constraints, solver settings, displacement and interior stress checks, mesh/order comparison and evidence limits." />
     <link rel="canonical" href="https://kofem.org/theory/verification/axial-bar/" />
     <meta name="robots" content="index, follow" />
 
     <meta property="og:type" content="article" />
     <meta property="og:title" content="Axial-bar verification | KoFEM Theory Guide" />
-    <meta property="og:description" content="Reproduce the axial-bar study with the production WASM engine: geometry, units, loads, constraints, solver settings, displacement and interior stress checks, mesh/order comparison and evidence limits." />
+    <meta property="og:description" content="Reproduce the axial-bar study with the production Rust/WASM solver: geometry, units, loads, constraints, solver settings, displacement and interior stress checks, mesh/order comparison and evidence limits." />
     <meta property="og:url" content="https://kofem.org/theory/verification/axial-bar/" />
     <meta property="og:image" content="https://kofem.org/og-image.png" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Axial-bar verification | KoFEM Theory Guide" />
-    <meta name="twitter:description" content="Reproduce the axial-bar study with the production WASM engine: geometry, units, loads, constraints, solver settings, displacement and interior stress checks, mesh/order comparison and evidence limits." />
+    <meta name="twitter:description" content="Reproduce the axial-bar study with the production Rust/WASM solver: geometry, units, loads, constraints, solver settings, displacement and interior stress checks, mesh/order comparison and evidence limits." />
     <meta name="twitter:image" content="https://kofem.org/og-image.png" />
 
     <!-- Self-hosted fonts (SIL OFL) — see public/fonts/README.md -->
@@ -37,7 +37,7 @@
         "@context": "https://schema.org",
         "@type": "TechArticle",
         "headline": "Axial-bar verification",
-        "description": "Reproduce the axial-bar study with the production WASM engine: geometry, units, loads, constraints, solver settings, displacement and interior stress checks, mesh/order comparison and evidence limits.",
+        "description": "Reproduce the axial-bar study with the production Rust/WASM solver: geometry, units, loads, constraints, solver settings, displacement and interior stress checks, mesh/order comparison and evidence limits.",
         "url": "https://kofem.org/theory/verification/axial-bar/",
         "isPartOf": {
           "@type": "CollectionPage",
@@ -815,7 +815,8 @@
     <p>The <a href="/theory/foundations/reading-a-study/">connected reading path</a>
       leads here from assumptions to results. This study solves the bar of the
       <a href="/examples/axial-bar/">public axial-bar example</a> on structured
-      hexahedral meshes with the real C++/WASM solid solver. It checks end
+      hexahedral meshes with the app’s own solid solver, compiled to
+      WebAssembly. It checks end
       extension and stress away from the support, with separate limits for
       each claim.</p>
 
@@ -849,30 +850,31 @@
 
     <h2 id="pipeline">Trace the complete solve</h2>
     <ol>
-      <li><a href="https://github.com/mkofler96/KoFEM/blob/cfef914866c455c2f7b464dab28de52cbc57ec19/examples/validation/cases/axial-bar.mjs#L29">The shared case builder</a>
-        makes a structured hex volume mesh, material, support and end-force group.
+      <li><a href="https://github.com/mkofler96/KoFEM/blob/b1f7b101f2713787e4afba17be57aead1ac2011c/examples/validation/axial-bar-study.mjs#L38">The study’s model builder</a>
+        takes the public case’s inputs and makes a structured hex volume mesh,
+        material, support and end-force group.
         The baseline is order 1 on a 20 × 4 × 4 grid: 320 elements,
         525 vertices and 1575 displacement DOFs before elimination. (The public
         example is now built from its STEP file, meshed by Netgen with
         tetrahedra, as a user builds it in the app.)</li>
-      <li><a href="https://github.com/mkofler96/KoFEM/blob/cfef914866c455c2f7b464dab28de52cbc57ec19/examples/validation/lib/app-model.mjs#L91">The app-model adapter</a>
+      <li><a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/examples/validation/lib/app-model.mjs#L96">The app-model adapter</a>
         selects the loaded boundary quads and sends a face-force group.
-        <a href="https://github.com/mkofler96/KoFEM/blob/cfef914866c455c2f7b464dab28de52cbc57ec19/engine/cpp/fem_bc_io.cpp#L259">Boundary assembly</a>
+        <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/surface.rs#L229">Boundary assembly</a>
         divides force by selected area and integrates
         <math><msub><mi>f</mi><mrow><mi>a</mi><mi>i</mi></mrow></msub><mo>=</mo></math>​<span class="math-nowrap"><math><msub><mo largeop="true">∫</mo><mrow><msub><mi>Γ</mi><mi>N</mi></msub></mrow></msub><msub><mi>N</mi><mi>a</mi></msub><msub><mi>t</mi><mi>i</mi></msub><mspace width="0.17em"/><mi>d</mi><mi>S</mi></math>.</span>
         Thus the traction is 100 MPa and nodal contributions sum to 1000000 N.
         See <a href="/theory/numerical-methods/loads-and-constraints/">loads and constraints</a>.</li>
-      <li><a href="https://github.com/mkofler96/KoFEM/blob/cfef914866c455c2f7b464dab28de52cbc57ec19/engine/cpp/solve_mfem.cpp#L192">The solid orchestrator</a>
-        creates an H1 displacement space, assembles isotropic elasticity and
-        forms the constrained system. The
+      <li><a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/web/src/lib/solve/amg.ts#L197">The solid solve</a>
+        builds the Rust model, assembles isotropic elasticity and eliminates
+        the fixed end. The
         <a href="/theory/operators/integration-by-parts/#weak-form">weak form</a>
         and <a href="/theory/numerical-methods/assembly/">assembly page</a>
         explain these steps.</li>
-      <li><a href="https://github.com/mkofler96/KoFEM/blob/cfef914866c455c2f7b464dab28de52cbc57ec19/engine/cpp/cg_mfem.cpp#L54">MFEM CG with symmetric Gauss–Seidel</a>
-        uses relative tolerance <span class="math-nowrap"><math><msup><mn>10</mn><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>6</mn></mrow></msup></math>,</span> absolute tolerance 0, and
-        an initial 5000-iteration budget. This small study does not request
+      <li><a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/cg.rs#L129">Conjugate gradients with AMG multigrid</a>,
+        the app’s default solver, stops when <math><mo stretchy="false" lspace="0" rspace="0">|</mo><mi mathvariant="bold" class="math-bold">r</mi><msub><mo stretchy="false" lspace="0" rspace="0">|</mo><mn>2</mn></msub><mo lspace="0" rspace="0">/</mo><mo stretchy="false" lspace="0" rspace="0">|</mo><mi mathvariant="bold" class="math-bold">b</mi><msub><mo stretchy="false" lspace="0" rspace="0">|</mo><mn>2</mn></msub><mo>≤</mo></math>​<span class="math-nowrap"><math><msup><mn>10</mn><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>6</mn></mrow></msup></math>,</span>
+        with an initial 5000-iteration budget. This small study does not request
         continuation. See <a href="/theory/numerical-methods/linear-solve/#residual">which residual is tested</a>.</li>
-      <li><a href="https://github.com/mkofler96/KoFEM/blob/cfef914866c455c2f7b464dab28de52cbc57ec19/engine/cpp/solve_mfem.cpp#L51">Recovery</a>
+      <li><a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/stress.rs#L59">Recovery</a>
         returns vertex translations and one von Mises sample per element centre.
         The study measures those arrays directly, before the app’s
         <a href="/theory/results/displacement-and-stress/#averaging">nodal averaging</a>.</li>
@@ -886,9 +888,9 @@
       cells, so the arithmetic stress mean is also a volume-weighted mean of
       these samples. The JSON records their minimum, maximum and count.</p>
     <div class="table-wrap" tabindex="0" role="region" aria-label="Axial-bar mesh and order comparison; scroll horizontally if needed">
-      <table><caption>Executed WASM solves; stress error is the worst sample in the middle region</caption>
+      <table><caption>Executed WebAssembly solves; stress error is the worst sample in the middle region</caption>
         <thead><tr><th scope="col">Grid</th><th scope="col">Order</th><th scope="col">DOFs</th><th scope="col">Extension<br />(mm)</th><th scope="col">Error<br />(%)</th><th scope="col">Mean von Mises<br />(MPa)</th><th scope="col">Worst stress<br />error (%)</th></tr></thead>
-        <tbody><tr><th scope="row">10 × 2 × 2</th><td>1</td><td>297</td><td>0.4717635</td><td>-0.9297</td><td>100.00109</td><td>0.003513</td></tr><tr><th scope="row">20 × 4 × 4<br /><small>baseline</small></th><td>1</td><td>1575</td><td>0.4735772</td><td>-0.5488</td><td>99.999991</td><td>0.002553</td></tr><tr><th scope="row">40 × 8 × 8</th><td>1</td><td>9963</td><td>0.4743261</td><td>-0.3915</td><td>100</td><td>0.0004388</td></tr><tr><th scope="row">10 × 2 × 2</th><td>2<br /><small>diagnostic</small></td><td>1575</td><td>0.4795495</td><td>0.7054</td><td>99.999959</td><td>0.002325</td></tr></tbody>
+        <tbody><tr><th scope="row">10 × 2 × 2</th><td>1</td><td>297</td><td>0.4717635</td><td>-0.9297</td><td>100.00109</td><td>0.003512</td></tr><tr><th scope="row">20 × 4 × 4<br /><small>baseline</small></th><td>1</td><td>1575</td><td>0.4735772</td><td>-0.5488</td><td>99.999992</td><td>0.00005298</td></tr><tr><th scope="row">40 × 8 × 8</th><td>1</td><td>9963</td><td>0.4743261</td><td>-0.3915</td><td>100</td><td>0.00001409</td></tr><tr><th scope="row">10 × 2 × 2</th><td>2<br /><small>diagnostic</small></td><td>1575</td><td>0.4795495</td><td>0.7054</td><td>99.999961</td><td>0.0001871</td></tr></tbody>
       </table>
     </div>
     <p>Displacement error is <span class="math-nowrap"><math><mn>100</mn><mo stretchy="false" lspace="0" rspace="0">(</mo><msub><mi>δ</mi><mi>h</mi></msub><mo>−</mo><mi>δ</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mo lspace="0" rspace="0">/</mo><mi>δ</mi></math>;</span> stress error is the largest
@@ -919,8 +921,8 @@
       need not remove the remaining discrepancy. These three levels do not
       establish an asymptotic rate or a continuum error bound.</p>
     <p><strong>The order-2 hex row is diagnostic.</strong> Currently,
-      <a href="https://github.com/mkofler96/KoFEM/blob/cfef914866c455c2f7b464dab28de52cbc57ec19/engine/cpp/fem_bc_io.cpp#L169">Dirichlet extension</a>
-      constrains vertices and edge DOFs but leaves Q2 face-centre DOFs free.
+      <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/static_solve.rs#L86">Dirichlet extension</a>
+      constrains vertices and edge nodes but leaves Q2 face-centre nodes free.
       That support differs from a fully clamped face. Its extension therefore
       cannot establish order convergence for the same boundary-value problem,
       even though both readouts fall inside the stated bands. The app’s
@@ -941,16 +943,16 @@
       end displacement. The middle-region stress statistic uses the
       unsmoothed element samples; the app’s global smoothed maximum is a
       different quantity.</p>
-    <p>KoFEM’s automated tests rerun all four mesh/order solves in the browser
-      engine, check the bands and compare the results with the published
-      record.</p>
+    <p>KoFEM’s automated tests rerun all four mesh/order solves with the
+      WebAssembly solver, check the bands and compare the results with the
+      published record.</p>
 
     <h2 id="sources">Run record and sources</h2>
     <p><a href="/theory/axial-bar.json">Download inputs, solver settings and full-precision results</a>
       of the four solves.</p>
-    <p><a href="https://github.com/mkofler96/KoFEM/blob/cfef914866c455c2f7b464dab28de52cbc57ec19/examples/validation/axial-bar-study.mjs#L1">Study and measurement source</a>
+    <p><a href="https://github.com/mkofler96/KoFEM/blob/b1f7b101f2713787e4afba17be57aead1ac2011c/examples/validation/axial-bar-study.mjs#L1">Study and measurement source</a>
       reuses the public case’s inputs and the solver wrapper. See also
-      <a href="https://github.com/mkofler96/KoFEM/blob/cfef914866c455c2f7b464dab28de52cbc57ec19/web/src/lib/resultField.ts#L83">app averaging and extrema</a>
+      <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/web/src/lib/resultField.ts#L84">app averaging and extrema</a>
       and the <a href="/theory/foundations/reading-a-study/">complete reading path</a>.</p>
     <ul class="refs"><li>Gere and Goodno, <cite>Mechanics of Materials</cite>, axially loaded members.</li>
       <li>Timoshenko and Goodier, <cite>Theory of Elasticity</cite>, third edition (1970), Saint-Venant’s principle and end effects.</li>

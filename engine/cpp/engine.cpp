@@ -3,7 +3,9 @@
 
 // KoFEM WASM engine — Embind entry point.
 //
-// Pipeline:  STEP/IGES bytes → OCCT tessellation (display) → Netgen OCC surface+volume mesh → MFEM FEM solve
+// Pipeline:  STEP/IGES bytes → OCCT tessellation (display) → Netgen OCC
+// surface + volume mesh. The finite-element solve runs in the Rust module
+// (crates/kofem-wasm), a separate WASM module the web app joins to this one.
 //
 // Each pipeline stage lives in its own translation unit (issue #290); this file
 // only wires those functions into the JS API. Bulk data (coordinates, indices,
@@ -16,7 +18,6 @@
 //   geometry_edit.cpp — split faces / bodies with a plane, Boolean-combine
 //                       bodies (both return STEP bytes)
 //   mesh_netgen.cpp   — Netgen OCC surface + tetrahedral volume meshing
-//   solve_mfem.cpp    — MFEM linear-elastic assembly, CG solve, post-processing
 //   json_util.cpp     — manual JSON in/out helpers
 //   wasm_util.cpp     — WASM memory diagnostics + typed-array returns
 //
@@ -28,12 +29,7 @@
 #include "geometry_cache.h"
 #include "geometry_edit.h"
 #include "mesh_netgen.h"
-#include "solve_coupled.h"
-#include "solve_mfem.h"
-#include "solve_shell.h"
 #include "tessellate.h"
-#include "topology_shell_entry.h"
-#include "topology_simp.h"
 
 // ── Embind registrations ──────────────────────────────────────────────────────
 
@@ -46,10 +42,4 @@ EMSCRIPTEN_BINDINGS(kofem) {
     emscripten::function("repair_hinges",          &repair_hinges);
     emscripten::function("split_cone_tips",        &split_cone_tips);
     emscripten::function("remove_faces",           &remove_faces);
-    emscripten::function("solve_linear_elastic",   &solve_linear_elastic);
-    emscripten::function("solve_shell",            &solve_shell);
-    emscripten::function("solve_coupled",          &solve_coupled);
-    emscripten::function("optimize_topology",         &optimize_topology);
-    emscripten::function("optimize_topology_shell",   &optimize_topology_shell);
-    emscripten::function("optimize_topology_coupled", &optimize_topology_coupled);
 }

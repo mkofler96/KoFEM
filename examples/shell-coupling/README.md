@@ -5,9 +5,11 @@ shells** coupled to the solid pin and hook — the model that fails to converge
 when everything is meshed as solid tets (issue #358), because the thin holder is
 ill-conditioned and the pin/hook contact is a near-hinge.
 
+From `web/` (the scripts import the app's TypeScript):
+
 ```bash
-node examples/shell-coupling/crane-holder-shell.mjs
-node examples/shell-coupling/crane-holder-shell.mjs --vtu /tmp/crane-shell.vtu   # + ParaView output
+bun ../examples/shell-coupling/crane-holder-shell.mjs
+bun ../examples/shell-coupling/crane-holder-shell.mjs --vtu /tmp/crane-shell.vtu   # + ParaView output
 ```
 
 Exits non-zero if the coupled solve does not converge, so it doubles as a
@@ -30,20 +32,19 @@ The pipeline is fully automatic from the STEP file:
 4. **Couple** the shell holder to the solid with a **distributing (RBE3)**
    constraint — transmits force *and* moment across the mid-surface offset,
    tolerant of the non-conforming interface (`buildCoupledModel`).
-5. **Solve** with `solve_coupled`: MFEM assembles the solid, the DKT shells and
-   the RBE3 couplings are added, and the combined system is solved.
+5. **Solve** with the app's coupled solve (`web/src/lib/solve/coupledRust.ts`):
+   the Rust module assembles the solid, the DKT shells and the RBE3 couplings
+   and solves the combined system.
 
-The reusable geometry steps live in `lib.mjs`; the engine solve is
-`Module.solve_coupled` (see `engine/cpp/solve_coupled.cpp`).
+The reusable geometry steps live in `lib.mjs`; meshing runs in the C++ engine.
 
 ## Underlying pieces (all unit-tested)
 
-- `engine/cpp/shell_core.cpp` — shell and coupled solve drivers over the DKT+CST
-  Kirchhoff shell (`shell_element.cpp`) and the RBE3 coupling
-  (`coupling_constraints.cpp`); validated against plate/membrane theory and clamped-cantilever moment transfer
-  by `just test-cpp-native -R shell_validation`.
-- `engine/cpp/solve_coupled.cpp` — Option A coupling: MFEM solid stiffness handed
-  to the shell/coupling assembler.
+- `crates/kofem-fem/src/shell` — the DKT+CST Kirchhoff shell; validated
+  against plate/membrane theory by `crates/kofem-fem/tests/shell.rs`.
+- `crates/kofem-fem/src/coupling.rs` and `coupled_static.rs` — the RBE2/RBE3
+  couplings and the coupled shell/solid solve (`crates/kofem-fem/tests/mixed.rs`,
+  `coupling.rs`).
 
 ## Caveats
 

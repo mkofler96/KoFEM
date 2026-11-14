@@ -1,12 +1,12 @@
 # KoFEM topology-optimization benchmark results
 
-Each case is optimized by the real WASM engine (the SIMP minimum-compliance
+Each case is optimized by the app's Rust optimizer (the SIMP minimum-compliance
 loop + MMA optimizer, KOF-230/231) and its converged compliance, volume
 fraction and layout are checked against a documented tolerance band.
 Regenerate with:
 
 ```bash
-node examples/validation/topopt/run.mjs --report
+cd web && bun ../examples/validation/topopt/run.mjs --report
 ```
 
 ## MBB beam (half-model)
@@ -49,7 +49,7 @@ node examples/validation/topopt/run.mjs --report
 - **compliance:** 616.6 → 188.5 (ratio 0.306)
 - **volume fraction:** 0.4000 (target 0.4)
 - **density:** 14 solid, 46 void, std 0.264
-- **z-mirror max |Δρ|:** 8.71e-9
+- **z-mirror max |Δρ|:** 4.90e-9
 
 ```
   #######:
@@ -73,10 +73,10 @@ node examples/validation/topopt/run.mjs --report
 10×5×5 vs 20×10×10, same r_min 0.4
 
 - **coarse:** 250 elems, 45 it, c = 188.5, vol 0.4000
-- **fine:** 2000 elems, 70 it, c = 190.1, vol 0.4000
-- **compliance difference:** 0.85 %
-- **density correlation:** 0.9939
-- **solid-region IoU @0.5:** 0.9485
+- **fine:** 2000 elems, 69 it, c = 190.5, vol 0.4000
+- **compliance difference:** 1.07 %
+- **density correlation:** 0.9940
+- **solid-region IoU @0.5:** 0.9278
 
 - ✅ both resolutions converged
 - ✅ compliance agrees within 5 %

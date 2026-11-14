@@ -458,10 +458,9 @@ export function remapElement<T extends TieElement>(
 // tie and the gap it bridged, before the engine sees the mesh:
 //
 //   collapsed   — the pair shares an element, which degenerates to zero volume.
-//   non-manifold — a triangle or quad ends up shared by three elements; MFEM
-//                  aborts on it ("Invalid mesh topology", KOF-298).
-//   inverted    — an element turns inside out. MFEM's orientation fix would
-//                  silently flip it back, leaving a tangled mesh and a wrong
+//   non-manifold — a triangle or quad ends up shared by three elements, which
+//                  no element assembly takes ("Invalid mesh topology", KOF-298).
+//   inverted    — an element turns inside out: a tangled mesh and a wrong
 //                  result instead of an error.
 //
 // Only elements that contain a welded node can change, so only they are checked.

@@ -1,13 +1,15 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Wall Bracket solve test — runs the full WASM pipeline in Node.js.
-// STEP → tessellate (OCC) → FEM mesh (Netgen) → linear-elastic solve (MFEM)
+// Wall Bracket solve test — runs the full pipeline in Node.js.
+// STEP → tessellate (OCC) → FEM mesh (Netgen) → linear-elastic solve (the
+// app's Rust path, through tests/support/rust-solvers.mjs)
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { beforeAll, describe, expect, test } from "bun:test";
+import { loadRustSolvers } from "../support/rust-solvers.mjs";
 import { loadEngine } from "../support/wasm.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -20,13 +22,6 @@ describe("wall bracket pipeline", () => {
   let result = null;
 
   beforeAll(async () => {
-    // Meshing and solving run in SEPARATE module instances, mirroring production:
-    // Netgen's Ng_Init installs global C++ state that contaminates the WASM runtime
-    // for a subsequent MFEM solve in the same module, so the browser tears the
-    // worker down between mesh and solve (resetWorker in
-    // web/src/components/panel/LeftPanel.tsx). Sharing one module here left the
-    // Netgen→MFEM hand-off sensitive to the binary's memory layout — an unrelated
-    // engine.cpp change could shift it enough to trap in FinalizeTopology.
     const Module = await loadEngine();
 
     const stepBytes = new Uint8Array(
@@ -60,11 +55,10 @@ describe("wall bracket pipeline", () => {
     const nodeCount = mesh.vertices.length / 3;
     Module.free_geometry_cache();
 
-    // 3. Solve in a fresh module — a clean WASM instance with no Netgen global
-    // state, exactly as the browser does after resetWorker(). The mesh crosses
-    // the boundary as flat typed arrays; the result comes back the same way.
-    const SolveModule = await loadEngine();
-    result = SolveModule.solve_linear_elastic(
+    // 3. Solve on the Rust module. The mesh crosses the boundary as flat typed
+    // arrays; the result comes back the same way.
+    const rust = await loadRustSolvers();
+    result = await rust.solve_linear_elastic(
       {
         vertices: mesh.vertices,
         tetrahedra: mesh.tetrahedra,

@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Per-body shell materials through the engine's entry points (issue #389).
+// Per-body shell materials through the shell and coupled solves (issue #389),
+// run on the app's Rust paths (web/tests/support/rust-solvers.mjs:
+// lib/solve/shellRust.ts and lib/solve/coupledRust.ts).
 //
 // solve_shell and solve_coupled used to read ONE shell (E, ν), so a steel shell
 // body joined to an aluminium one could not be solved. The shell material is
@@ -14,11 +16,11 @@
 // moves by σ·(L/2)·(1/E₁ + 1/E₂) and every facet carries σ.
 
 import { beforeAll, describe, expect, test } from "bun:test";
-import { loadEngine } from "../support/wasm.mjs";
+import { loadRustSolvers } from "../support/rust-solvers.mjs";
 
-let Module = null;
+let solvers = null;
 beforeAll(async () => {
-  Module = await loadEngine();
+  solvers = await loadRustSolvers();
 });
 
 // Relative tolerance, as the old close(): |got - ref| <= relTol * |ref|.
@@ -81,8 +83,9 @@ const shellBcs = JSON.stringify({
     force: [endForce(j), 0, 0],
   })),
 });
+// Resolves to the solution, or rejects with the Rust path's refusal.
 const solveShell = (mats, attrs) =>
-  Module.solve_shell(shellMesh(attrs), JSON.stringify(mats), shellBcs);
+  solvers.solve_shell(shellMesh(attrs), JSON.stringify(mats), shellBcs);
 
 const endUx = (disp) => {
   let sum = 0;
@@ -99,71 +102,81 @@ describe("solve_shell — per-triangle materials", () => {
   let single = null;
   let arrayOfOne = null;
   let allSecond = null;
-  beforeAll(() => {
-    series = solveShell([STEEL, ALU], attributes);
+  // Each solve settles to { ok, value } or { ok: false, error } so a refusal
+  // fails only the tests that read that solve.
+  const settle = (promise) =>
+    promise.then(
+      (value) => ({ ok: true, ...value }),
+      (error) => ({ ok: false, error: error.message }),
+    );
+  beforeAll(async () => {
+    series = await settle(solveShell([STEEL, ALU], attributes));
     // The array order must not matter — only what each attribute selects.
-    swapped = solveShell(
-      [ALU, STEEL],
-      attributes.map((a) => 3 - a),
+    swapped = await settle(
+      solveShell(
+        [ALU, STEEL],
+        attributes.map((a) => 3 - a),
+      ),
     );
     // Uniform cases: array-of-one, the single-object form, and a two-material
     // array whose attributes all select one entry must agree.
-    single = solveShell(STEEL);
-    arrayOfOne = solveShell([STEEL]);
-    allSecond = solveShell(
-      [STEEL, ALU],
-      attributes.map(() => 2),
+    single = await settle(solveShell(STEEL));
+    arrayOfOne = await settle(solveShell([STEEL]));
+    allSecond = await settle(
+      solveShell(
+        [STEEL, ALU],
+        attributes.map(() => 2),
+      ),
     );
   });
 
   test("two-material shell solves", () => {
-    expect(series.error, series.error).toBeUndefined();
+    expect(series.ok, series.error).toBe(true);
   });
 
   test("series strip extension matches σ·(L/2)·(1/E₁ + 1/E₂)", () => {
-    expect(series.error, series.error).toBeUndefined();
+    expect(series.ok, series.error).toBe(true);
     expectClose(endUx(series.displacements), SERIES, 1e-6);
   });
 
   test("every facet carries σ, whichever material it is", () => {
-    expect(series.error, series.error).toBeUndefined();
+    expect(series.ok, series.error).toBe(true);
     for (const stress of series.von_mises) expectClose(stress, SIGMA, 1e-6);
   });
 
   test("swapping the array order and the attributes gives the same answer", () => {
-    expect(swapped.error, swapped.error).toBeUndefined();
+    expect(swapped.ok, swapped.error).toBe(true);
     expectClose(endUx(swapped.displacements), SERIES, 1e-6);
   });
 
   test("single object still solves (uniform steel)", () => {
-    expect(single.error, single.error).toBeUndefined();
+    expect(single.ok, single.error).toBe(true);
     expectClose(endUx(single.displacements), uniform(210000), 1e-6);
   });
 
   test("array of one equals the single object", () => {
-    expect(arrayOfOne.error, arrayOfOne.error).toBeUndefined();
+    expect(arrayOfOne.ok, arrayOfOne.error).toBe(true);
     expectClose(endUx(arrayOfOne.displacements), uniform(210000), 1e-6);
   });
 
   test("attributes all selecting aluminium solve as uniform aluminium", () => {
-    expect(allSecond.error, allSecond.error).toBeUndefined();
+    expect(allSecond.ok, allSecond.error).toBe(true);
     expectClose(endUx(allSecond.displacements), uniform(70000), 1e-6);
   });
 });
 
 describe("solve_shell — invalid material payloads are refused", () => {
-  const refused = (result, pattern) =>
-    expect(result.error ?? "no error").toMatch(pattern);
+  const refused = (result, pattern) => expect(result).rejects.toThrow(pattern);
 
-  test("several materials without attributes", () => {
-    refused(
+  test("several materials without attributes", async () => {
+    await refused(
       solveShell([STEEL, ALU]),
       /2 shell materials were given but no mesh\.attributes/,
     );
   });
 
-  test("attribute outside the material array", () => {
-    refused(
+  test("attribute outside the material array", async () => {
+    await refused(
       solveShell(
         [STEEL, ALU],
         attributes.map((a, e) => (e === 3 ? 3 : a)),
@@ -172,91 +185,125 @@ describe("solve_shell — invalid material payloads are refused", () => {
     );
   });
 
-  test("attribute count differing from the triangle count", () => {
-    refused(
+  test("attribute count differing from the triangle count", async () => {
+    await refused(
       solveShell([STEEL, ALU], attributes.slice(1)),
       /mesh\.attributes has 31 entries for 32 triangles/,
     );
   });
 
-  test("empty material array", () => {
-    refused(solveShell([]), /materials array is empty/);
+  test("empty material array", async () => {
+    await refused(solveShell([]), /materials array is empty/);
   });
 
-  test("material missing its Poisson ratio", () => {
-    refused(
+  test("material missing its Poisson ratio", async () => {
+    await refused(
       solveShell([STEEL, { young_modulus: 70000 }], attributes),
       /shell material 2 is missing poisson_ratio/,
     );
   });
 });
 
-// solve_coupled with shell facets only (no tets, no couplings): the coupled
-// assembler must honour the same per-triangle shell materials.
+// solve_coupled with shell facets and no couplings: the coupled assembler must
+// honour the same per-triangle shell materials.
+//
+// The engine's solve_coupled took the strip alone. The Rust mixed solve needs
+// at least one solid element (MixedModel refuses an empty tet mesh with "the
+// mesh has no elements"; a model of shells only goes to the shell solve), so
+// the strip is solved beside one detached, fully clamped tet. Nothing joins
+// the two, so the tet adds no load, stiffness or stress to the strip; its
+// vertices follow the strip's, so the strip's node and facet numbering — and
+// every closed-form check below — is unchanged.
 describe("solve_coupled — per-triangle shell materials", () => {
+  const anchor = [200, 0, 0, 210, 0, 0, 200, 10, 0, 200, 0, 10];
+  const anchorNodes = [0, 1, 2, 3].map((k) => nNodes + k);
   const fixed = [];
   for (let v = 0; v < nNodes; v++)
     for (const d of fixedDofsOf(v)) fixed.push(6 * v + d);
-  const coupled = (shell, shellAttributes) =>
-    Module.solve_coupled(
-      {
-        vertices: Float64Array.from(vertices),
-        tets: new Int32Array(0),
-        triangles: Int32Array.from(triangles),
-        thicknesses: new Float64Array(nTris).fill(THICKNESS),
-        ...(shellAttributes
-          ? { shell_attributes: Int32Array.from(shellAttributes) }
-          : {}),
-      },
-      {
-        ref: new Int32Array(0),
-        offsets: Int32Array.from([0]),
-        solid: new Int32Array(0),
-        mpc: new Int32Array(0),
-        relaxation: 1.0,
-      },
-      {
-        fixed_dofs: Int32Array.from(fixed),
-        load_dofs: Int32Array.from(
-          Array.from({ length: NY + 1 }, (_, j) => 6 * id(NX, j)),
-        ),
-        load_vals: Float64Array.from(
-          Array.from({ length: NY + 1 }, (_, j) => endForce(j)),
-        ),
-      },
-      JSON.stringify({ solid: STEEL, shell }),
+  for (const v of anchorNodes)
+    for (let d = 0; d < 3; d++) fixed.push(6 * v + d);
+  const coupledArgs =
+    (tets, extraVertices, extraFixed) => (shell, shellAttributes) =>
+      solvers.solve_coupled(
+        {
+          vertices: Float64Array.from([...vertices, ...extraVertices]),
+          tets: Int32Array.from(tets),
+          triangles: Int32Array.from(triangles),
+          thicknesses: new Float64Array(nTris).fill(THICKNESS),
+          ...(shellAttributes
+            ? { shell_attributes: Int32Array.from(shellAttributes) }
+            : {}),
+        },
+        {
+          ref: new Int32Array(0),
+          offsets: Int32Array.from([0]),
+          solid: new Int32Array(0),
+          mpc: new Int32Array(0),
+          dof_mask: new Int32Array(0),
+          relaxation: 1.0,
+        },
+        {
+          fixed_dofs: Int32Array.from(extraFixed),
+          prescribed_dofs: new Int32Array(0),
+          prescribed_vals: new Float64Array(0),
+          load_dofs: Int32Array.from(
+            Array.from({ length: NY + 1 }, (_, j) => 6 * id(NX, j)),
+          ),
+          load_vals: Float64Array.from(
+            Array.from({ length: NY + 1 }, (_, j) => endForce(j)),
+          ),
+        },
+        JSON.stringify({ solid: STEEL, shell }),
+      );
+  const coupled = coupledArgs(anchorNodes, anchor, fixed);
+
+  // What the engine accepted and the Rust mixed solve does not: the strip with
+  // no tet at all. Documented here so the difference is a decision, not drift.
+  test("a coupled model with no solid element is refused", async () => {
+    const shellOnly = coupledArgs(
+      [],
+      [],
+      fixed.filter((dof) => dof < 6 * nNodes),
     );
+    await expect(shellOnly(STEEL)).rejects.toThrow(/the mesh has no elements/);
+  });
 
   let series = null;
   let single = null;
   let missing = null;
-  beforeAll(() => {
-    series = coupled([STEEL, ALU], attributes);
-    single = coupled(STEEL);
-    missing = coupled([STEEL, ALU]);
+  beforeAll(async () => {
+    const settle = (promise) =>
+      promise.then(
+        (value) => ({ ok: true, ...value }),
+        (error) => ({ ok: false, error: error.message }),
+      );
+    series = await settle(coupled([STEEL, ALU], attributes));
+    single = await settle(coupled(STEEL));
+    missing = await settle(coupled([STEEL, ALU]));
   });
 
   test("two-material coupled shell solves", () => {
-    expect(series.error, series.error).toBeUndefined();
+    expect(series.ok, series.error).toBe(true);
   });
 
   test("coupled series strip extension matches the closed form", () => {
-    expect(series.error, series.error).toBeUndefined();
+    expect(series.ok, series.error).toBe(true);
     expectClose(endUx(series.displacements), SERIES, 1e-6);
   });
 
   test("coupled shell facets carry σ", () => {
-    expect(series.error, series.error).toBeUndefined();
+    expect(series.ok, series.error).toBe(true);
     for (const stress of series.von_mises_tris)
       expectClose(stress, SIGMA, 1e-6);
   });
 
   test("single shell object still solves (uniform steel)", () => {
-    expect(single.error, single.error).toBeUndefined();
+    expect(single.ok, single.error).toBe(true);
     expectClose(endUx(single.displacements), uniform(210000), 1e-6);
   });
 
   test("several shell materials without shell_attributes are refused", () => {
-    expect(missing.error ?? "no error").toMatch(/no mesh\.shell_attributes/);
+    expect(missing.ok, "the solve succeeded").toBe(false);
+    expect(missing.error).toMatch(/no mesh\.shell_attributes/);
   });
 });

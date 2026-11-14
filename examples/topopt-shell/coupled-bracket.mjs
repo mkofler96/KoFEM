@@ -9,12 +9,12 @@
 // eliminated by the same master-slave reduction every iteration, so the
 // shell↔solid interface is intact from the first solve to the last.
 //
-//   node examples/topopt-shell/coupled-bracket.mjs
+//   (from web/) bun ../examples/topopt-shell/coupled-bracket.mjs
 //
 // Exits non-zero if the coupled run does not converge or leaves the volume
 // constraint — it verifies the interface survives the whole optimization.
 
-import { loadEngine, optimizeCoupled, densityStats } from "./lib.mjs";
+import { loadOptimizer, optimizeCoupled, densityStats } from "./lib.mjs";
 
 // ── Geometry: solid block [0,L]×[0,W]×[0,H] + shell wall on y = W/2 ────────────
 const L = 60,
@@ -115,14 +115,21 @@ console.log(
 );
 console.log(`min compliance s.t. volume ≤ ${VOLFRAC}; SIMP p=3`);
 
-const Module = await loadEngine((line) => {
+const optimizer = await loadOptimizer((line) => {
   if (/it \d+:/.test(line)) process.stdout.write(`  ${line}\n`);
 });
 
 const { density, history, converged } = optimizeCoupled(
-  Module,
+  optimizer,
   { vertices, tets, triangles, thicknesses },
-  { ref, offsets, solid, mpc: ref.map(() => 0) }, // 0 = distributing RBE3
+  {
+    ref,
+    offsets,
+    solid,
+    mpc: ref.map(() => 0), // 0 = distributing RBE3
+    dof_mask: ref.map(() => 0b111111), // all six reference DOFs
+    relaxation: 1,
+  },
   { fixed_dofs, load_dofs, load_vals },
   { solid: STEEL, shell: ALUM },
   {

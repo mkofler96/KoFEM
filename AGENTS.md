@@ -1,36 +1,31 @@
 # KoFEM
 
 Browser FEA: STEP → OCCT → Netgen → finite-element solve. Geometry and meshing
-are C++/WASM in `engine/cpp/` and stay there. The whole solver side is moving
-to Rust: `crates/kofem-fem` (elements, assembly, solvers, shells),
+are C++/WASM in `engine/cpp/` (OCCT and Netgen only). The whole solver side is
+Rust: `crates/kofem-fem` (elements, assembly, solvers, shells, topology),
 `crates/kofem-shellize` (shell idealisation) and `crates/kofem-wasm` (browser
 bindings, a separate WASM module joined to the engine in TS). The other crates
-are stubs. Build new finite-element features in Rust only; the C++ solver code
-that remains gets bug fixes only. The Roadmap in Linear lists which solver
-paths have moved.
+are stubs. Finite-element code goes in Rust only.
 The React/TypeScript/Three.js frontend is in `web/`. Use **bun**, not npm.
 
 ## Implementation
 
-- Solver paths are routed in `web/src/lib/solve/route.ts`. Solid models of
-  tetrahedra, hexahedra or both solve in Rust (`lib/solve/amg.ts`; couplings
-  take tetrahedra only) with either Solve-panel preconditioner, AMG or
-  Gauss–Seidel. MFEM (`solve_mfem.cpp`) takes only the solid models Rust does
-  not cover and is their test oracle. Pure shells solve in Rust
-  (`lib/solve/shellRust.ts`), with `solve_shell.cpp` as their test oracle.
-  Mixed shell/solid models solve in Rust (`lib/solve/coupledRust.ts`), with
-  `solve_coupled.cpp` as their test oracle; all-solid models with couplings
-  that AMG cannot take still use `solve_coupled.cpp`. SIMP topology
-  optimization runs in Rust (`lib/solve/topOptRust.ts`) on solid, shell and
-  coupled design domains, with `optimize_topology`, `optimize_topology_shell`
-  and `optimize_topology_coupled` as its test oracles; the level-set method is
-  still C++. Cover all applicable paths for
-  materials, BCs, loads, and solve payload changes, including per-body
-  materials.
+- Solver paths are routed in `web/src/lib/solve/route.ts`, which refuses a
+  model no path takes. Solid models of tetrahedra, hexahedra or both solve
+  with `lib/solve/amg.ts` (couplings take tetrahedra only) with either
+  Solve-panel preconditioner, AMG or Gauss–Seidel; pure shells with
+  `lib/solve/shellRust.ts`; mixed shell/solid models with
+  `lib/solve/coupledRust.ts`; topology optimization (SIMP on solid, shell and
+  coupled domains, the level-set method on solids) with
+  `lib/solve/topOptRust.ts`. What the removed C++ solvers computed is kept as
+  stored references: `web/tests/fixtures/engine-solves` for the Rust-vs-C++
+  tests and `examples/validation/oracle-reference.json` for the examples.
+  Cover all applicable paths for materials, BCs, loads, and solve payload
+  changes, including per-body materials.
 - Shell is an explicit per-body choice. Mid-surface and mixed-mesh assembly
   live in `crates/kofem-shellize` (one module per stage), reached through
   `web/src/lib/shellize.ts`; shell element math is in
-  `crates/kofem-fem/src/shell` and, for the C++ paths, `shell_core.cpp`.
+  `crates/kofem-fem/src/shell`.
 - Geometry tessellation is for display. Never call it a mesh; surface and
   volume meshes are FEM discretisations.
 - Use strict TypeScript without `any`, C++ `std::array` instead of C arrays,
@@ -57,15 +52,14 @@ cd web && bun run dev
 them; whatever follows a recipe name goes to its runner
 (`just test-e2e couplings --repeat-each 20`).
 
-| Command          | Runs                                                   | For changes to             |
-| ---------------- | ------------------------------------------------------ | -------------------------- |
-| `just check`     | `cargo fmt`, `clippy`, `tsc`, `eslint`, `prettier`     | anything                   |
-| `just check-cpp` | `clang-tidy` (`docker-clang-tidy.sh` without an emsdk) | `engine/cpp`               |
-| `just test-rust` | `cargo test --workspace`                               | `crates/`                  |
-| `just test-cpp`  | `ctest` on `engine/tests`, native and MFEM/WASM        | `engine/cpp`               |
-| `just test-web`  | `bun test`: `web/tests/unit`, `web/tests/integration`  | `web/src`, any solver path |
-| `just test-e2e`  | Playwright: `web/tests/*.spec.ts`                      | anything a user sees       |
-| `just test`      | all four                                               | several parts, before a PR |
+| Command          | Runs                                                   | For changes to                           |
+| ---------------- | ------------------------------------------------------ | ---------------------------------------- |
+| `just check`     | `cargo fmt`, `clippy`, `tsc`, `eslint`, `prettier`     | anything                                 |
+| `just check-cpp` | `clang-tidy` (`docker-clang-tidy.sh` without an emsdk) | `engine/cpp`                             |
+| `just test-rust` | `cargo test --workspace`                               | `crates/`                                |
+| `just test-web`  | `bun test`: `web/tests/unit`, `web/tests/integration`  | `web/src`, `engine/cpp`, any solver path |
+| `just test-e2e`  | Playwright: `web/tests/*.spec.ts`                      | anything a user sees                     |
+| `just test`      | all three                                              | several parts, before a PR               |
 
 Web scripts fetch the matching compiled engine and build the Rust module
 (`scripts/build-fem-wasm.sh`; needs Rust, the `wasm32-unknown-unknown` target
@@ -89,7 +83,9 @@ write the minimal code that makes it pass, then clean up with the suite green.
 - `cargo test` does not cover the `kofem-wasm` browser bindings, the C++
   engine, or how the app calls either module. A green `cargo test` alone is
   not coverage of a solver path; also run its Rust-vs-C++ check
-  (`web/tests/integration/{fem-wasm,amg-solid,amg-coupling,shell-rust,coupled-rust}.test.mjs`).
+  (`web/tests/integration/{fem-wasm,amg-solid,amg-coupling,shell-rust,coupled-rust}.test.mjs`),
+  which compares against the stored C++ results. Their inputs are part of the
+  stored record: a test that changes them has no C++ result left to compare.
 - A new test goes where its runner looks, and nowhere lists test files:
   - Rust numerics: `crates/<crate>/tests`.
   - TypeScript logic without WebAssembly: `web/tests/unit/<name>.test.ts`.
@@ -99,8 +95,6 @@ write the minimal code that makes it pass, then clean up with the suite green.
   - What a user sees: `web/tests/<name>.spec.ts`. End the title with
     `@pipeline` when the test imports real CAD, meshes a real part or runs a
     full flow.
-  - A C++ unit: `engine/tests/<name>.cpp` and one `kofem_test()` line in
-    `engine/tests/CMakeLists.txt`.
 - Prefer small, focused tests, so a failure pinpoints the broken unit.
 - Tests wait on state, never on time. Time budgets are set once per runner
   (`web/playwright.config.ts`, `web/tests/support/setup.mjs`); a spec sets no

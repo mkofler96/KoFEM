@@ -77,8 +77,8 @@ namespace nglib {
     extern int       Ng_GetNE(Ng_Mesh*);
     // Surface element queries (standard nglib API, Netgen v6.2+)
     extern int       Ng_GetNSE(Ng_Mesh*);
-    // Preserve the installed API's enum return type. Asyncify routes exception
-    // invokes through typed WASM trampolines, which enforce this signature.
+    // Preserve the installed API's enum return type: exception invokes go
+    // through typed WASM trampolines, which enforce this signature.
     extern ::Ng_Surface_Element_Type Ng_GetSurfaceElement(Ng_Mesh*, int, int*);
 }
 

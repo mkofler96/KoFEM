@@ -14,11 +14,10 @@ links the following C++ libraries. Pre-compiled WASM builds of these libraries l
 in the companion repository
 [KoFEM-Dependencies](https://github.com/mkofler96/KoFEM-Dependencies).
 
-| Library                           | Role in KoFEM                                    | License                               | Project                        |
-| --------------------------------- | ------------------------------------------------ | ------------------------------------- | ------------------------------ |
-| **OpenCASCADE Technology (OCCT)** | STEP geometry import and surface tessellation    | LGPL-2.1 with an additional exception | <https://dev.opencascade.org/> |
-| **Netgen / nglib**                | Tetrahedral volume mesh generation               | LGPL-2.1                              | <https://ngsolve.org/>         |
-| **MFEM**                          | Linear-elastic finite element assembly and solve | BSD-3-Clause                          | <https://mfem.org/>            |
+| Library                           | Role in KoFEM                                 | License                               | Project                        |
+| --------------------------------- | --------------------------------------------- | ------------------------------------- | ------------------------------ |
+| **OpenCASCADE Technology (OCCT)** | STEP geometry import and surface tessellation | LGPL-2.1 with an additional exception | <https://dev.opencascade.org/> |
+| **Netgen / nglib**                | Tetrahedral volume mesh generation            | LGPL-2.1                              | <https://ngsolve.org/>         |
 
 For the exact license terms of each library, refer to the `LICENSE`/`COPYING` file
 shipped in that library's own source distribution (and in the
@@ -27,10 +26,10 @@ where the WASM builds are produced).
 
 ### License compatibility
 
-OCCT and Netgen are distributed under the LGPL-2.1, and MFEM under the
-permissive BSD-3-Clause license. Both are compatible with KoFEM's
-AGPL-3.0-or-later license, which is why they can be combined into a single
-distributed binary. KoFEM as a whole is offered under the AGPL; the individual
+OCCT and Netgen are distributed under the LGPL-2.1, which is compatible with
+KoFEM's AGPL-3.0-or-later license, so they can be combined into a single
+distributed binary. The C++ engine no longer links MFEM (KOF-309); the
+MFEM-derived portions of the Rust module keep MFEM's BSD-3-Clause terms (below). KoFEM as a whole is offered under the AGPL; the individual
 libraries above continue to be available under their own terms.
 
 ## Web frontend
@@ -52,7 +51,7 @@ AGPL-3.0-or-later. Their Cargo dependencies, including `serde`, `thiserror`,
 ### MFEM attribution in the Rust finite-element module
 
 `kofem-fem` reimplements the linear-elastic formulation and iterative-solver
-approach used by KoFEM's MFEM-based engine. MFEM and its contributors are
+approach of KoFEM's former MFEM-based engine. MFEM and its contributors are
 credited as the upstream numerical implementation reference in the
 [module notice](crates/kofem-fem/NOTICE.md) and beside the element, CG, and
 Gauss-Seidel implementations. The notice links to the relevant MFEM v4.7

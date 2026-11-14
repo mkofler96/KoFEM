@@ -13,6 +13,8 @@
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { solveCoupledInRust } from "../../../web/src/lib/solve/coupledRust.ts";
+import { rustFem } from "../../validation/lib/solver.mjs";
 import {
   loadEngine,
   meshStep,
@@ -52,6 +54,8 @@ const LOAD_FACES = { 66: [0, -1000, 0], 67: [0, -1000, 0] };
 const TIE_FACES = [22, 24, 47, 65];
 
 const Module = await loadEngine();
+// Shell idealisation and the coupled solve run in the Rust module.
+await rustFem();
 const mesh = meshStep(Module, STEP, { maxElementSize: 6 });
 const shells = extractThinWallShells(mesh);
 // Only the holder's thin walls become shells; its thick base block stays solid
@@ -141,45 +145,54 @@ for (const [fid, F] of Object.entries(LOAD_FACES)) {
 // The clamped holder rim (face 7) sits next to the retained base solid; drop any
 // distributing coupling on those fixed nodes (a fixed RBE3 dependent is refused, #377).
 const coupling = dropCouplingsOnFixedNodes(model.coupling, fixed);
-const r = Module.solve_coupled(
+// The app's coupled solve (web/src/lib/solve/coupledRust.ts), on AMG as the
+// app picks it for tets and shells.
+const r = await solveCoupledInRust(
+  await rustFem(),
   {
-    vertices: Float64Array.from(model.pool),
-    tets: Int32Array.from(model.tets),
-    triangles: Int32Array.from(model.triangles),
-    thicknesses: Float64Array.from(model.thicknesses),
-    attributes: Int32Array.from(
-      model.tetBody.map((b) => {
-        const at = MATERIAL_OF_BODY[b];
-        if (!at) throw new Error(`no material assigned to STEP body ${b}`);
-        return at;
-      }),
-    ),
+    mesh: {
+      vertices: Float64Array.from(model.pool),
+      tets: Int32Array.from(model.tets),
+      triangles: Int32Array.from(model.triangles),
+      thicknesses: Float64Array.from(model.thicknesses),
+      attributes: Int32Array.from(
+        model.tetBody.map((b) => {
+          const at = MATERIAL_OF_BODY[b];
+          if (!at) throw new Error(`no material assigned to STEP body ${b}`);
+          return at;
+        }),
+      ),
+    },
+    coupling: {
+      ref: Int32Array.from(coupling.ref),
+      offsets: Int32Array.from(coupling.offsets),
+      solid: Int32Array.from(coupling.solid),
+      // Shell<->solid seam tied with the relaxed MPC coupling, exactly as the app
+      // does when this .vtu is loaded and re-solved (web/src/workers/solver.worker.ts).
+      mpc: Int32Array.from(coupling.mpc),
+      dof_mask: Int32Array.from(coupling.ref, () => 0b111111), // all six DOFs
+      ...(coupling.weights ? { weights: Float64Array.from(coupling.weights) } : {}),
+      relaxation: 1.0,
+    },
+    bcs: {
+      fixed_dofs: Int32Array.from(fixed),
+      prescribed_dofs: new Int32Array(0),
+      prescribed_vals: new Float64Array(0),
+      load_dofs: Int32Array.from(load_dofs),
+      load_vals: Float64Array.from(load_vals),
+    },
+    matJson: JSON.stringify({
+      solid: SOLID_MATERIALS,
+      shell: SOLID_MATERIALS[SHELL_MATERIAL - 1],
+    }),
   },
-  {
-    ref: Int32Array.from(coupling.ref),
-    offsets: Int32Array.from(coupling.offsets),
-    solid: Int32Array.from(coupling.solid),
-    // Shell<->solid seam tied with the relaxed MPC coupling, exactly as the app
-    // does when this .vtu is loaded and re-solved (web/src/workers/solver.worker.ts).
-    mpc: Int32Array.from(coupling.mpc ?? coupling.ref.map(() => 0)),
-    weights: Float64Array.from(coupling.weights ?? []),
-    relaxation: 1.0,
+  "amg",
+  undefined,
+  () => {
+    throw new Error("the CG iteration budget ran out");
   },
-  {
-    fixed_dofs: Int32Array.from(fixed),
-    load_dofs: Int32Array.from(load_dofs),
-    load_vals: Float64Array.from(load_vals),
-  },
-  JSON.stringify({
-    solid: SOLID_MATERIALS,
-    shell: SOLID_MATERIALS[SHELL_MATERIAL - 1],
-  }),
+  () => {},
 );
-if ("error" in r) throw new Error(r.error);
-if (!r.von_mises_tets || !r.von_mises_tris)
-  throw new Error(
-    "solve_coupled did not return per-element von Mises fields — rebuild the WASM engine",
-  );
 
 // ── Openable analysis (.vtu) — a MIXED CTRIA3 + CTETRA model ───────────────────
 //
@@ -188,7 +201,7 @@ if (!r.von_mises_tets || !r.von_mises_tris)
 // mid-surface facets become CTRIA3 elements (per-facet thickness on their PSHELL
 // property). This is what the card's "Open in KoFEM web" button loads, and the
 // app re-solves it through the worker's mixed shell/solid path (handleMixedSolve
-// → solve_coupled), which re-derives the RBE3 couplings from proximity exactly as
+// → the Rust coupled solve), which re-derives the RBE3 couplings from proximity exactly as
 // this generator does. The solved fields below are saved so the card opens
 // straight into results; re-solving reproduces them. Matches the schema in
 // web/src/lib/analysisFile.ts.

@@ -166,7 +166,10 @@ function tetCantilever() {
 async function optimizeInEngine(model, settings) {
   const logs = [];
   const streamed = [];
-  const engine = await loadEngine({ print: (line) => logs.push(line) });
+  const engine = await loadEngine({
+    solves: import.meta.url,
+    print: (line) => logs.push(line),
+  });
   const inputs = buildSolidEngineInputs(model, buildVertexIndexer(model.nodes));
   const result = engine.optimize_topology(
     inputs.mesh,

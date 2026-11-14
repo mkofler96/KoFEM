@@ -6,7 +6,8 @@
 // crane-hook pin/eye line contact. Box A is clamped; box B carries a load but
 // touches nothing. Without a connection the assembly is disconnected and the
 // solve cannot converge; a tie between the two facing surfaces welds their node
-// pairs so the solve succeeds and the load reaches box B.
+// pairs so the solve succeeds and the load reaches box B. The solve runs on the
+// app's Rust path (tests/support/rust-solvers.mjs).
 //
 // Covers both extents: "region" (only pairs within a search distance) and
 // "full" (the whole selected surface, whatever the gap).
@@ -20,7 +21,7 @@ import {
   expandToOriginalNodes,
 } from "../../src/lib/tie.ts";
 import { boxHexMesh } from "../../../examples/validation/lib/mesh.mjs";
-import { loadEngine } from "../support/wasm.mjs";
+import { loadRustSolvers } from "../support/rust-solvers.mjs";
 
 // ── Build two gapped boxes as store-shaped nodes/elements ─────────────────────
 const GAP = 0.5;
@@ -103,7 +104,7 @@ describe("buildTie", () => {
 const STEEL = JSON.stringify({ young_modulus: 210000, poisson_ratio: 0.3 });
 
 async function solve(useTie) {
-  const Module = await loadEngine();
+  const rust = await loadRustSolvers();
   const applied = useTie ? tie : { nodes, repOf: new Map(), nWelded: 0 };
   const solveNodes = applied.nodes;
   const els = useTie ? tiedElements : elements;
@@ -139,19 +140,15 @@ async function solve(useTie) {
 
   let result = null;
   try {
-    result = Module.solve_linear_elastic(
+    result = await rust.solve_linear_elastic(
       { vertices, tetrahedra: new Int32Array(0), hexahedra },
       STEEL,
       bcs,
       1,
     );
-  } catch (e) {
-    const dec = Module.getExceptionMessage
-      ? Module.getExceptionMessage(e)
-      : null;
-    return { ok: false, error: dec ? dec[1] : String(e) };
+  } catch (error) {
+    return { ok: false, error: error.message };
   }
-  if ("error" in result) return { ok: false, error: result.error };
 
   const disp = expandToOriginalNodes(
     nodes,

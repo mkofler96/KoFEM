@@ -226,9 +226,10 @@ export function useMesh() {
         model_type: modelType(meshElements),
         duration_bucket: elapsed(),
       });
-      // Netgen's Ng_Init() installs global C++ state that contaminates the WASM
-      // runtime for subsequent MFEM solves.  Resetting the worker here gives the
-      // solve a clean module instance, preventing an infinite loop on first call.
+      // Netgen's Ng_Init() installs global C++ state in the engine module.
+      // Resetting the worker after a mesh gives later engine calls a clean
+      // module instance (added when the MFEM solve shared this module and
+      // looped on its first call after meshing).
       resetWorker();
     } catch (err) {
       console.error("[meshing] volume mesh failed:", err);

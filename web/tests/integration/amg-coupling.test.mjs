@@ -43,7 +43,7 @@ let engine = null;
 let fem = null;
 beforeAll(async () => {
   fem = await loadFem();
-  engine = await loadEngine();
+  engine = await loadEngine({ solves: import.meta.url });
 });
 
 // The solver log is not needed for these checks.
@@ -404,7 +404,7 @@ function tiedAcrossGap() {
 // model with two materials (split halfway along its length), and the helpers
 // the cases pick nodes with.
 async function bracketModel(maxElementSize) {
-  const mesher = await loadEngine();
+  const mesher = await loadEngine({ solves: import.meta.url });
   mesher.tessellate_step(
     new Uint8Array(readFileSync(WALL_BRACKET_STEP)),
     JSON.stringify({ deflection_relative: 0.001, angular_deflection: 0.5 }),

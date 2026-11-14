@@ -1,7 +1,7 @@
 {
-  "generated": "2026-11-14T19:13:46.728Z",
-  "sourceRevision": "cfef914866c455c2f7b464dab28de52cbc57ec19",
-  "engine": "engine-d92699c9ed8f",
+  "generated": "2026-11-14T22:41:15.519Z",
+  "sourceRevision": "b1f7b101f2713787e4afba17be57aead1ac2011c",
+  "fem": "fem-b2ad04c7c44b",
   "command": "bun examples/validation/axial-bar-study.mjs --report",
   "setup": {
     "inputs": [
@@ -44,10 +44,10 @@
     "displacementTolerancePct": 2,
     "stressTolerancePct": 0.5,
     "solver": {
-      "method": "MFEM CG",
-      "preconditioner": "GSSmoother",
+      "method": "Rust preconditioned conjugate gradients (solveSolidInRust)",
+      "preconditioner": "Smoothed-aggregation algebraic multigrid, one V-cycle per iteration",
+      "stoppingRule": "‖f − K·u‖ / ‖f‖ ≤ relativeTolerance",
       "relativeTolerance": 0.000001,
-      "absoluteTolerance": 0,
       "initialIterationBudget": 5000
     }
   },
@@ -64,13 +64,13 @@
       "vertices": 99,
       "nodes": 99,
       "dofs": 297,
-      "displacementMm": 0.4717635290807476,
-      "displacementErrorPct": -0.9296588930430005,
+      "displacementMm": 0.47176352947990946,
+      "displacementErrorPct": -0.9296588092190078,
       "stressSamples": 8,
-      "stressMeanMpa": 100.00109059875294,
-      "stressMinMpa": 99.9986671371466,
-      "stressMaxMpa": 100.00351344044799,
-      "stressWorstErrorPct": 0.003513440447989069
+      "stressMeanMpa": 100.00109340735372,
+      "stressMinMpa": 99.99867450342217,
+      "stressMaxMpa": 100.00351231128647,
+      "stressWorstErrorPct": 0.0035123112864710038
     },
     {
       "grid": [
@@ -84,13 +84,13 @@
       "vertices": 525,
       "nodes": 525,
       "dofs": 1575,
-      "displacementMm": 0.47357718453249403,
-      "displacementErrorPct": -0.5487912481762475,
+      "displacementMm": 0.4735771845593622,
+      "displacementErrorPct": -0.5487912425339309,
       "stressSamples": 64,
-      "stressMeanMpa": 99.99999076118497,
-      "stressMinMpa": 99.997446777435,
-      "stressMaxMpa": 100.00253117309194,
-      "stressWorstErrorPct": 0.0025532225649982365
+      "stressMeanMpa": 99.99999223671587,
+      "stressMinMpa": 99.99994701564894,
+      "stressMaxMpa": 100.00000693351068,
+      "stressWorstErrorPct": 0.000052984351057716594
     },
     {
       "grid": [
@@ -104,13 +104,13 @@
       "vertices": 3321,
       "nodes": 3321,
       "dofs": 9963,
-      "displacementMm": 0.4743261397665007,
-      "displacementErrorPct": -0.39151064903485244,
+      "displacementMm": 0.47432613995048195,
+      "displacementErrorPct": -0.39151061039878476,
       "stressSamples": 512,
-      "stressMeanMpa": 99.99999982587467,
-      "stressMinMpa": 99.99956121902167,
-      "stressMaxMpa": 100.00043566563289,
-      "stressWorstErrorPct": 0.0004387809783281682
+      "stressMeanMpa": 99.99999987876757,
+      "stressMinMpa": 99.99998591089607,
+      "stressMaxMpa": 100.00001277024853,
+      "stressWorstErrorPct": 0.000014089103927972246
     },
     {
       "grid": [
@@ -124,13 +124,13 @@
       "vertices": 99,
       "nodes": 525,
       "dofs": 1575,
-      "displacementMm": 0.4795494602539422,
-      "displacementErrorPct": 0.7053866533278641,
+      "displacementMm": 0.4795494624291585,
+      "displacementErrorPct": 0.7053871101232956,
       "stressSamples": 8,
-      "stressMeanMpa": 99.99995924541777,
-      "stressMinMpa": 99.99767526691403,
-      "stressMaxMpa": 100.0019579528558,
-      "stressWorstErrorPct": 0.002324733085970365
+      "stressMeanMpa": 99.9999608897678,
+      "stressMinMpa": 99.9998129414492,
+      "stressMaxMpa": 100.00011044896343,
+      "stressWorstErrorPct": 0.00018705855079304
     }
   ]
 }

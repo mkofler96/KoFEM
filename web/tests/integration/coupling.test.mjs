@@ -9,7 +9,8 @@
 // DOF mask decides its character: translations alone are a spherical joint (the
 // parts can rotate about it), all six make it rigid.
 //
-// Checks, all against the real WASM engine:
+// Checks, all against the app's Rust coupled solve (lib/solve/coupledRust.ts,
+// through web/tests/support/rust-solvers.mjs):
 //   1. A force applied at the reference point reaches the beam — tip deflection
 //      matches the same force applied directly to the coupled face.
 //   2. A MOMENT applied at the reference point bends the beam, and matches the
@@ -22,7 +23,7 @@
 //      there to switch off.
 
 import { beforeAll, describe, expect, test } from "bun:test";
-import { loadEngine } from "../support/wasm.mjs";
+import { loadRustSolvers } from "../support/rust-solvers.mjs";
 
 // ── Tet beam ──────────────────────────────────────────────────────────────────
 // A box [x0, x0+L] × [0, h] × [0, h] of Kuhn tets, nx cells along the length.
@@ -79,8 +80,9 @@ const LENGTH = 60; // mm
 const HEIGHT = 6; // mm
 
 // Solve one coupled model. `couplings` is a list of
-// {ref, nodes, kind, dofMask}; kind 2 is kinematic.
-function solve(Module, verts, tets, couplings, fixedDofs, loads) {
+// {ref, nodes, kind, dofMask}; kind 2 is kinematic. Settles to { ok, disp } or
+// { ok: false, error } with the Rust path's refusal.
+async function solve(solvers, verts, tets, couplings, fixedDofs, loads) {
   const ref = [];
   const offsets = [0];
   const solid = [];
@@ -101,7 +103,7 @@ function solve(Module, verts, tets, couplings, fixedDofs, loads) {
   }
   let result = null;
   try {
-    result = Module.solve_coupled(
+    result = await solvers.solve_coupled(
       {
         vertices: Float64Array.from(verts),
         tets: Int32Array.from(tets),
@@ -118,6 +120,8 @@ function solve(Module, verts, tets, couplings, fixedDofs, loads) {
       },
       {
         fixed_dofs: Int32Array.from(fixedDofs),
+        prescribed_dofs: new Int32Array(0),
+        prescribed_vals: new Float64Array(0),
         load_dofs: Int32Array.from(loadDofs),
         load_vals: Float64Array.from(loadVals),
       },
@@ -126,13 +130,9 @@ function solve(Module, verts, tets, couplings, fixedDofs, loads) {
         shell: { young_modulus: YOUNG, poisson_ratio: POISSON },
       }),
     );
-  } catch (err) {
-    const decoded = Module.getExceptionMessage
-      ? Module.getExceptionMessage(err)
-      : null;
-    return { ok: false, error: decoded ? decoded[1] : String(err) };
+  } catch (error) {
+    return { ok: false, error: error.message };
   }
-  if ("error" in result) return { ok: false, error: result.error };
   return { ok: true, disp: result.displacements };
 }
 
@@ -151,7 +151,7 @@ describe("kinematic coupling: force and moment through a reference point", () =>
   let moment = null;
 
   beforeAll(async () => {
-    const Module = await loadEngine();
+    const solvers = await loadRustSolvers();
     const verts = [];
     const index = new Map();
     const tets = beam(verts, index, 0, LENGTH, HEIGHT, 20);
@@ -188,8 +188,8 @@ describe("kinematic coupling: force and moment through a reference point", () =>
     const fixed = root.flatMap((node) => [0, 1, 2].map((c) => 6 * node + c));
 
     // Same force, applied directly to the tip face nodes (no coupling).
-    direct = solve(
-      Module,
+    direct = await solve(
+      solvers,
       verts,
       tets,
       [],
@@ -198,8 +198,8 @@ describe("kinematic coupling: force and moment through a reference point", () =>
     );
 
     // The same force applied at the reference point instead.
-    viaPoint = solve(
-      Module,
+    viaPoint = await solve(
+      solvers,
       verts,
       tets,
       [{ ref: referencePoint, nodes: tipFace, kind: 2 }],
@@ -218,8 +218,8 @@ describe("kinematic coupling: force and moment through a reference point", () =>
     // (ML²/2EI)/(PL³/3EI) = 3M/(2PL), chosen here to be exactly 1 — so a correct
     // moment coupling must reproduce the force case's deflection.
     const MOMENT = (2 * Math.abs(FORCE) * LENGTH) / 3; // ⇒ same tip deflection
-    moment = solve(
-      Module,
+    moment = await solve(
+      solvers,
       verts,
       tets,
       [{ ref: referencePoint, nodes: tipFace, kind: 2 }],
@@ -278,7 +278,7 @@ describe("point-to-point connection: the DOF mask switches the hinge off", () =>
   let bendHinge = null;
 
   beforeAll(async () => {
-    const Module = await loadEngine();
+    const solvers = await loadRustSolvers();
     const verts = [];
     const index = new Map();
     // Two collinear beams meeting at x = LENGTH, meshed independently.
@@ -338,16 +338,16 @@ describe("point-to-point connection: the DOF mask switches the hinge off", () =>
     ]);
 
     // Axial pull: a hinge transmits force just as a rigid joint does.
-    axialRigid = solve(
-      Module,
+    axialRigid = await solve(
+      solvers,
       verts,
       tets,
       [...spiders, connector(RIGID)],
       fixed,
       axialLoad,
     );
-    axialHinge = solve(
-      Module,
+    axialHinge = await solve(
+      solvers,
       verts,
       tets,
       [...spiders, connector(HINGE)],
@@ -358,8 +358,8 @@ describe("point-to-point connection: the DOF mask switches the hinge off", () =>
     // Transverse load: the rigid joint carries the bending moment across, so the
     // pair acts as one 2L cantilever. The hinge cannot — beam B is free to rotate
     // about the joint, which is a mechanism, and the solve says so.
-    bendRigid = solve(
-      Module,
+    bendRigid = await solve(
+      solvers,
       verts,
       tets,
       [...spiders, connector(RIGID)],
@@ -380,8 +380,8 @@ describe("point-to-point connection: the DOF mask switches the hinge off", () =>
         if (predicate(solidVerts[3 * node])) out.push(node);
       return out;
     };
-    monolithic = solve(
-      Module,
+    monolithic = await solve(
+      solvers,
       solidVerts,
       solidTets,
       [],
@@ -394,8 +394,8 @@ describe("point-to-point connection: the DOF mask switches the hinge off", () =>
       ]),
     );
 
-    bendHinge = solve(
-      Module,
+    bendHinge = await solve(
+      solvers,
       verts,
       tets,
       [...spiders, connector(HINGE)],
@@ -443,5 +443,10 @@ describe("point-to-point connection: the DOF mask switches the hinge off", () =>
       bendHinge.ok,
       "the hinged pair should not have a bending solution",
     ).toBe(false);
+    // Refused for being a mechanism, not for malformed input: CG breaks down
+    // on the singular stiffness (or never converges and spends its budget).
+    expect(bendHinge.error).toMatch(
+      /not fully constrained|not positive definite|iteration budget ran out/,
+    );
   });
 });

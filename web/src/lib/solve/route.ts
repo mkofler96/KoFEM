@@ -7,25 +7,26 @@
 
 import type { SolveModel, TopOptPayload } from "../../workers/solverTypes.js";
 import { shellMarkedBodies, requireOneShellBody } from "./autoShell.js";
+import { amgUnavailableReason } from "./amg.js";
 import {
   shellCouplingRefusal,
+  solidModelRefusal,
   shellOrderRefusal,
   shellTieRefusal,
   topOptTieRefusal,
 } from "./refusals.js";
 
 export type SolveRoute =
-  // All CTRIA3 → the Kirchhoff shell solver (solve_shell).
+  // All CTRIA3 → the Kirchhoff shell solve (shellRust.ts).
   | { path: "shell" }
   // CTRIA3 mixed with solids, or any surface-to-point coupling → the coupled
-  // solid-shell solve: the Rust mixed solve (coupledRust.ts) for shells with
-  // solids, the Rust AMG or the engine's solve_coupled for an all-solid model
-  // with couplings; solve_coupled stays the test oracle.
+  // solve: the Rust mixed solve (coupledRust.ts) for shells with solids, the
+  // Rust solid solve with couplings for an all-solid model (tets only).
   | { path: "coupled" }
   // All solid with a body marked Shell → idealised at solve time, coupled to the
   // solid bodies or as a pure shell.
   | { path: "auto-shell"; shellBodyIds: Set<number> }
-  // All solid, no Shell body, no coupling → solve_linear_elastic.
+  // All solid, no Shell body, no coupling → the Rust solid solve (amg.ts).
   | { path: "solid" };
 
 export function routeSolve(payload: SolveModel): SolveRoute {
@@ -57,7 +58,17 @@ export function routeSolve(payload: SolveModel): SolveRoute {
   // An all-solid model that declares a surface-to-point coupling still needs the
   // coupled assembler — solve_linear_elastic has no notion of an RBE2/RBE3
   // constraint, and the reference point is not even a node it could carry.
-  if (nCouplings > 0) return { path: "coupled" };
+  if (nCouplings > 0) {
+    // The Rust solve takes these on tetrahedral meshes only.
+    const reason = amgUnavailableReason({
+      elements: payload.elements,
+      properties: payload.properties,
+      elementOrder,
+      couplingCount: nCouplings,
+    });
+    if (reason !== null) throw new Error(solidModelRefusal(reason));
+    return { path: "coupled" };
+  }
 
   // A body marked "Shell" is idealised as shells and solved coupled to the solid
   // bodies — this converges where the all-solid solve of the thin part stalls
@@ -71,6 +82,13 @@ export function routeSolve(payload: SolveModel): SolveRoute {
     if (orderRefusal !== null) throw new Error(orderRefusal);
     return { path: "auto-shell", shellBodyIds };
   }
+  const reason = amgUnavailableReason({
+    elements: payload.elements,
+    properties: payload.properties,
+    elementOrder,
+    couplingCount: 0,
+  });
+  if (reason !== null) throw new Error(solidModelRefusal(reason));
   return { path: "solid" };
 }
 

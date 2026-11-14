@@ -1,9 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Multibody assembly test (#317/#353) — runs the full WASM pipeline in Node.js
-// on test_files/two_boxes.stp: two 20×10×10 boxes written as independent
-// solids that touch on the full 10×10 face at x=20.
+// Multibody assembly test (#317/#353) — runs the pipeline in Node.js on
+// test_files/two_boxes.stp (import and meshing in the engine, the solve on the
+// app's Rust path through tests/support/rust-solvers.mjs): two 20×10×10
+// boxes written as independent solids that touch on the full 10×10 face at
+// x=20.
 //
 // Verifies:
 //   1. import reports two bodies (bodyCount) and one bonded interface between
@@ -16,6 +18,7 @@
 import { readFileSync } from "node:fs";
 import { beforeAll, describe, expect, test } from "bun:test";
 import { detectInterfaces } from "../../src/lib/interfaces.ts";
+import { loadRustSolvers } from "../support/rust-solvers.mjs";
 import { loadEngine } from "../support/wasm.mjs";
 
 describe("two-box assembly", () => {
@@ -29,8 +32,6 @@ describe("two-box assembly", () => {
   let tipLoads = null;
   let bcs = null;
 
-  // Mesh and solve run in separate module instances, mirroring production
-  // (see wall-bracket.test.mjs for the Netgen-global-state rationale).
   beforeAll(async () => {
     const Module = await loadEngine();
     const stepBytes = new Uint8Array(
@@ -184,8 +185,8 @@ describe("two-box assembly", () => {
     let vonMisesSoft = null;
 
     async function solveOnce(materials) {
-      const SolveModule = await loadEngine();
-      const result = SolveModule.solve_linear_elastic(
+      const rust = await loadRustSolvers();
+      const result = await rust.solve_linear_elastic(
         {
           vertices: mesh.vertices,
           tetrahedra: mesh.tetrahedra,
@@ -196,7 +197,6 @@ describe("two-box assembly", () => {
         bcs,
         1,
       );
-      if ("error" in result) throw new Error(result.error);
       let maxDefl = 0;
       for (let node = 0; node < nNodes; node++)
         maxDefl = Math.max(

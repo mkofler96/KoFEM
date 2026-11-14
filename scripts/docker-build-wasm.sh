@@ -8,7 +8,8 @@
 # Works on Apple Silicon Macs — the container runs linux/amd64 via Rosetta 2.
 #
 # Uses the pre-built kofem-dependencies image (same as CI), which already contains
-# Emscripten, OCCT, Netgen, and MFEM compiled for WASM — no lengthy first-run build.
+# Emscripten, OCCT and Netgen compiled for WASM — no lengthy first-run build.
+# (The image also carries MFEM, which the engine no longer links: KOF-309.)
 #
 # Usage:
 #   bash scripts/docker-build-wasm.sh
