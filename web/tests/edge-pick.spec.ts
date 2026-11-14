@@ -4,7 +4,7 @@
 import { test, expect } from "./coverage";
 import type { Page } from "@playwright/test";
 import { addBoundary, openTree } from "./fixtures/tree";
-import { clickViewportAt } from "./fixtures/viewport";
+import { clickViewportAt, drawnSegments } from "./fixtures/viewport";
 
 // End-to-end coverage for edge picking (#386): a flat shell sheet is one
 // face-pick region, so grabbing its rim (an edge load or a supported-edge BC)
@@ -161,6 +161,36 @@ test("edge picking a shell rim creates an edge BC and an edge load", async ({
   const loadFace =
     afterLoad.loadGroups[afterLoad.loadGroups.length - 1].faces[0];
   expect(loadFace.label.startsWith("Edge")).toBe(true);
+});
+
+// A picked edge spans no triangle, so the face overlay drew nothing for it and
+// only the node count said anything was picked (KOF-356). The viewport draws
+// the rim polyline instead, both while picking and once applied.
+test("a picked edge is drawn as a highlighted line", async ({ page }) => {
+  await page.goto("/app/?example=plate-with-hole-shell");
+  await expect(page.locator("nav")).toBeVisible();
+  await expect
+    .poll(async () => (await readPickState(page)).nodeCount)
+    .toBeGreaterThan(0);
+
+  await addBoundary(page, "bc");
+  await page.getByTestId("pick-geometry-edge").click();
+  expect(await drawnSegments(page, "pick-edge-highlight")).toBe(0);
+  const committedBefore = await drawnSegments(page, "bc-edge-highlight");
+
+  await edgePickOnViewport(page);
+  const picked = (await readPickState(page)).selected;
+  if (!picked) throw new Error("edge pick did not set a selection");
+  // An open polyline of n nodes has n - 1 segments; a closed loop has n.
+  const drawn = await drawnSegments(page, "pick-edge-highlight");
+  expect(drawn).toBeGreaterThanOrEqual(picked.nodeIds.length - 1);
+  expect(drawn).toBeLessThanOrEqual(picked.nodeIds.length);
+
+  await page.getByRole("button", { name: "Apply BC" }).click();
+  expect(await drawnSegments(page, "pick-edge-highlight")).toBe(0);
+  expect(await drawnSegments(page, "bc-edge-highlight")).toBe(
+    committedBefore + drawn,
+  );
 });
 
 test("a coupling can grip a picked shell edge", async ({ page }) => {

@@ -2,16 +2,18 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Committed BC and load face highlights: a persistent coloured overlay on every
-// face of every BC group (red) and load group (amber). The group a pick session
+// face of every BC group (red) and load group (amber), and a line along every
+// picked edge (whose nodes span no triangle to fill). The group a pick session
 // targets is drawn stronger.
 
 import { useMemo } from "react";
 import { useModelStore } from "../../store/modelStore";
 import type { BcFaceEntry } from "../../store/modelStore";
-import type { BoundaryMeshTopo } from "../../lib/facePick";
-import { buildFacePositions } from "./useMeshTopology";
+import type { BoundaryMeshTopo, Vec3 } from "../../lib/facePick";
+import { buildEdgePositions, buildFacePositions } from "./useMeshTopology";
 import type { MeshTopology, NodeMap } from "./useMeshTopology";
 import { FaceOverlay } from "./FaceOverlay";
+import { EdgeOverlay } from "./EdgeOverlay";
 
 interface FaceHighlight {
   groupId: number;
@@ -42,6 +44,31 @@ function groupFaceHighlights(
     .filter((h) => h.positions !== null) as FaceHighlight[];
 }
 
+interface EdgeHighlight {
+  groupId: number;
+  faceId: number;
+  points: Vec3[];
+}
+
+// One line per picked edge across all groups; entries picked as faces or
+// points are drawn by the face overlay and the node markers instead.
+function groupEdgeHighlights(
+  groups: readonly { id: number; faces: readonly BcFaceEntry[] }[],
+  boundaryMeshTopo: BoundaryMeshTopo | null,
+  nodeMap: NodeMap,
+): EdgeHighlight[] {
+  if (!boundaryMeshTopo) return [];
+  const highlights: EdgeHighlight[] = [];
+  for (const g of groups) {
+    for (const f of g.faces) {
+      if (f.geometry !== "edge") continue;
+      const points = buildEdgePositions(f.nodeIds, boundaryMeshTopo, nodeMap);
+      if (points) highlights.push({ groupId: g.id, faceId: f.id, points });
+    }
+  }
+  return highlights;
+}
+
 interface BcFaceHighlightsProps {
   topology: MeshTopology;
   showResult: boolean;
@@ -69,6 +96,15 @@ export function BcFaceHighlights({
     [loadGroups, boundaryMeshTopo, nodeMap],
   );
 
+  const bcEdgeHighlights = useMemo(
+    () => groupEdgeHighlights(bcGroups, boundaryMeshTopo, nodeMap),
+    [bcGroups, boundaryMeshTopo, nodeMap],
+  );
+  const loadEdgeHighlights = useMemo(
+    () => groupEdgeHighlights(loadGroups, boundaryMeshTopo, nodeMap),
+    [loadGroups, boundaryMeshTopo, nodeMap],
+  );
+
   if (showResult) return null;
   return (
     <>
@@ -90,6 +126,28 @@ export function BcFaceHighlights({
           positions={h.positions}
           color="#d97706"
           opacity={pickTargetGroupId === h.groupId ? 0.45 : 0.25}
+          renderOrder={1}
+        />
+      ))}
+
+      {bcEdgeHighlights.map((h) => (
+        <EdgeOverlay
+          key={`bc-edge-${h.groupId}-${h.faceId}`}
+          name="bc-edge-highlight"
+          points={h.points}
+          color="#dc2626"
+          opacity={pickTargetGroupId === h.groupId ? 0.75 : 0.5}
+          renderOrder={1}
+        />
+      ))}
+
+      {loadEdgeHighlights.map((h) => (
+        <EdgeOverlay
+          key={`load-edge-${h.groupId}-${h.faceId}`}
+          name="load-edge-highlight"
+          points={h.points}
+          color="#d97706"
+          opacity={pickTargetGroupId === h.groupId ? 0.75 : 0.5}
           renderOrder={1}
         />
       ))}
