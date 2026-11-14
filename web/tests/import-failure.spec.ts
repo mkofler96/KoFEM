@@ -76,5 +76,6 @@ test("a STEP file of only a tessellated mesh asks for a BRep export, not a crash
   );
   await expect(error).toContainText("Re-export it with exact (BRep) geometry.");
   await expect(error).not.toContainText("RuntimeError");
+  await expect(error).not.toContainText("std::");
   await expect(page.getByRole("button", { name: /Import STEP/ })).toBeEnabled();
 });
