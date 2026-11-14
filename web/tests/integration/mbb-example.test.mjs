@@ -16,6 +16,9 @@ import { loadFem } from "../support/wasm.mjs";
 
 const ID = "mbb-beam-topopt";
 
+// Drops what the optimizer reports while it runs.
+const ignore = () => undefined;
+
 let fem = null;
 let build = null;
 beforeAll(async () => {
@@ -36,8 +39,8 @@ describe("the MBB beam example", () => {
         ...build.solvePayload,
         settings: { ...settings, maxIterations: STEPS },
       },
-      () => {},
-      () => {},
+      ignore, // the optimizer's log lines
+      ignore, // the density it streams for display
     );
     expect(history.slice(0, STEPS)).toEqual(app.history);
   });
