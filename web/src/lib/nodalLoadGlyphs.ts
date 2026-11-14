@@ -8,6 +8,7 @@
 
 import type { Element, Node } from "../store/geometrySlice";
 import type { CouplingGroup } from "../store/couplingSlice";
+import { referencePointIds } from "./coupling";
 import {
   loadComponents,
   loadKind,
@@ -64,12 +65,20 @@ const faceKey = (ids: readonly number[]) =>
 interface MeshSurface {
   solid: ReadonlySet<string>;
   shell: ReadonlySet<string>;
+  // Nodes of the elements on screen, and the couplings' reference points.
+  visibleNodes: ReadonlySet<number>;
+  refPoints: ReadonlySet<number>;
 }
 
-function meshSurface(elements: readonly Element[]): MeshSurface {
+function meshSurface(
+  elements: readonly Element[],
+  couplingGroups: readonly CouplingGroup[],
+): MeshSurface {
   const solidCount = new Map<string, number>();
   const shell = new Set<string>();
+  const visibleNodes = new Set<number>();
   for (const el of elements) {
+    for (const id of el.nodeIds) visibleNodes.add(id);
     if (el.type === "CTRIA3") {
       shell.add(faceKey(el.nodeIds));
       continue;
@@ -83,7 +92,12 @@ function meshSurface(elements: readonly Element[]): MeshSurface {
   }
   const solid = new Set<string>();
   for (const [key, n] of solidCount) if (n === 1) solid.add(key);
-  return { solid, shell };
+  return {
+    solid,
+    shell,
+    visibleNodes,
+    refPoints: referencePointIds([...couplingGroups]),
+  };
 }
 
 // The work-equivalent force vector at every node of one force or pressure
@@ -115,6 +129,10 @@ function groupNodalForces(
     [...input.nodes],
     [...input.couplingGroups],
   )) {
+    // A point on a hidden body has nothing on screen to sit on; a coupling's
+    // reference point belongs to no element and is always drawn.
+    if (!surface.visibleNodes.has(l.nodeId) && !surface.refPoints.has(l.nodeId))
+      continue;
     const pointForce: Vec3 = [0, 0, 0];
     pointForce[l.dof] = l.value;
     add(l.nodeId, pointForce);
@@ -197,7 +215,7 @@ export function nodalLoadVectors(
   }
   for (let d = 0; d < 3; d++) centroid[d] /= input.nodes.length;
   const posOf = (id: number) => byId.get(id) ?? null;
-  const surface = meshSurface(input.elements);
+  const surface = meshSurface(input.elements, input.couplingGroups);
 
   for (const g of input.loadGroups) {
     for (const [id, f] of groupNodalForces(

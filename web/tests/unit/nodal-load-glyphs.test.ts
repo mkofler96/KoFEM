@@ -191,3 +191,48 @@ test("an interior solid face inside the selection takes no share", () => {
   // Node 4 is a corner of every loaded outer face: a third of the total.
   expect(out.get(4)?.mag).toBeCloseTo(2, 12);
 });
+
+test("a point load on a hidden body draws no glyph", () => {
+  // Node 5 is in the plate's facets; with the plate hidden no element on
+  // screen holds it, so its point load has nothing to be drawn on.
+  const out = nodalLoadVectors({
+    loadGroups: [
+      group({
+        kind: "force",
+        components: [0, 0, -40],
+        faces: [{ id: 1, label: "Point 1", nodeIds: [5], geometry: "point" }],
+      }),
+    ],
+    nodes: plateNodes,
+    elements: [],
+    couplingGroups: [],
+  });
+  expect(out.size).toBe(0);
+});
+
+test("a point load on a coupling reference point keeps its glyph", () => {
+  // Node 10 is a reference point: it belongs to no element.
+  const out = nodalLoadVectors({
+    loadGroups: [
+      group({
+        kind: "force",
+        components: [7, 0, 0],
+        faces: [{ id: 1, label: "RP", nodeIds: [10], geometry: "point" }],
+      }),
+    ],
+    nodes: [...plateNodes, { id: 10, x: 3, y: 0.5, z: 0 }],
+    elements: plate,
+    couplingGroups: [
+      {
+        id: 1,
+        name: "Coupling1",
+        kind: "distributing",
+        dofs: [],
+        refNodeId: 10,
+        faces: [{ id: 1, label: "Edge 1", nodeIds: [3, 6, 9] }],
+        point: [3, 0.5, 0],
+      },
+    ],
+  });
+  expect(out.get(10)?.mag).toBeCloseTo(7, 12);
+});
