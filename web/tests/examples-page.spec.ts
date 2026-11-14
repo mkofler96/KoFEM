@@ -26,6 +26,17 @@ type Published = {
 const published = (): Published =>
   JSON.parse(readFileSync("public/examples/results.json", "utf8")) as Published;
 
+// Developer tooling a public page must not ask readers for: the app is the
+// only way to reproduce an example. "node" alone is a finite-element word, so
+// only Node.js itself counts.
+const DEV_TOOLING =
+  /\b(git|bash|bun|npm|npx|curl)\b|Node\.js|\bnode\s+\S+\.m?js\b|\S+\.(sh|mjs)\b/i;
+
+async function expectNoDevTooling(page: Page) {
+  const text = await page.locator("main").innerText();
+  expect(text.match(DEV_TOOLING)?.[0] ?? null).toBeNull();
+}
+
 // The value the app's Result summary shows for `stat` (e.g. "Min Uy").
 function summaryValue(page: Page, stat: string) {
   return page
@@ -83,6 +94,9 @@ test("/examples/ lists every example, links its page and shows the results", asy
         .locator("table.results")
         .getByRole("link", { name: c.name, exact: true }),
     ).toHaveAttribute("href", `/examples/${c.id}/`);
+
+  // Reproducing means opening an example in the app, nothing to install.
+  await expectNoDevTooling(page);
 
   // Listed for crawlers: the index and every example page.
   const sitemap = await (await page.request.get("/sitemap.xml")).text();
@@ -163,12 +177,16 @@ test("every example has its own indexable page with figure, model and result", a
     await expect(page.locator("ol.refs li").first()).toBeVisible();
     await expect(page.getByTestId("disclaimer")).toBeVisible();
 
-    // A benchmark prints its line; its convergence study, where it has one.
-    const isCase = data.cases.some((c) => c.id === id);
-    if (isCase) {
+    // Reproduce says only how to see the result in the app.
+    await expect(page.getByTestId("reproduce-open")).toHaveAttribute(
+      "href",
+      `/app/?example=${id}`,
+    );
+    await expectNoDevTooling(page);
+
+    // A benchmark shows its value; its convergence study, where it has one.
+    if (data.cases.some((c) => c.id === id))
       await expect(page.getByTestId("fe-value")).not.toBeEmpty();
-      await expect(page.locator("pre").first()).toContainText(`--case ${id}`);
-    }
     const studies = data.convergence.filter((s) =>
       s.series.some((x) => x.caseId === id),
     );

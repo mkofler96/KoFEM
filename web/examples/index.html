@@ -1099,14 +1099,9 @@
       </p>
 
       <h2 id="reproduce">Reproduce</h2>
-      <p>The benchmarks run in CI on every change. To run them yourself
-      (Bun, bash, curl and Rust):</p>
-      <pre><code>git clone https://github.com/mkofler96/KoFEM.git &amp;&amp; cd KoFEM
-bash scripts/fetch-wasm-engine.sh
-cd web &amp;&amp; bun install &amp;&amp; bun run validate</code></pre>
-      <p>It prints one line per benchmark, for example:</p>
-      <pre class="console" data-testid="console-line"><code>Case                                  Quantity                                  FE   Reference     Err%  Tol%  Status
-Axial bar in tension                  tip extension δ                      0.47380     0.47619    -0.50     2  PASS</code></pre>
+      <p>Every page opens its model in the app with Open in KoFEM, ready to
+      solve; its Reproduce section says which value to read. The benchmarks
+      also run in CI on every change.</p>
       </main>
       <nav class="docs-toc" aria-label="On this page">
         <p>On this page</p>

@@ -1110,12 +1110,6 @@
         <li>Load “Tension”: force (2500, 0, 0) N on the face through (150, 25, 0.25).</li>
         <li>Run the static study. The Results panel compares stress concentration σmax/σ with Howland's Kt for 2a/W = 0.2.</li>
       </ol>
-      <p>From a clone (Bun, bash, curl and Rust), this builds and solves the model with the same engine and prints its line:</p>
-      <pre><code>git clone https://github.com/mkofler96/KoFEM.git &amp;&amp; cd KoFEM
-bash scripts/fetch-wasm-engine.sh
-cd web &amp;&amp; bun install &amp;&amp; bun run validate --case plate-with-hole</code></pre>
-      <pre class="console"><code>Case                                  Quantity                                  FE   Reference     Err%  Tol%  Status
-Plate with a hole                     stress-concentration factor Kt        3.1268      3.1400    -0.42     3  PASS</code></pre>
 
       <h2 id="references">References</h2>
       <ol class="refs">
