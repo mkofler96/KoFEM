@@ -1,6 +1,6 @@
 {
-  "sourceRevision": "03d009c32d5ac19da833dc333dd6e9df1413d9c4",
-  "recordedAt": "2026-11-14T22:36:09.525Z",
+  "sourceRevision": "b1f7b101f2713787e4afba17be57aead1ac2011c",
+  "recordedAt": "2026-11-14T22:41:25.948Z",
   "fem": "fem-b2ad04c7c44b",
   "execution": "The app's Rust optimizer in WebAssembly (optimizeSolidInRust: SIMP, MMA, sensitivity filter, multigrid CG) on the existing structured-hex benchmarks; normalized E = 1, ν = 0.3 and unit load",
   "commands": [
