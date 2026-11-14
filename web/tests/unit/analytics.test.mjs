@@ -244,6 +244,11 @@ describe("buckets and categories", () => {
       "empty_geometry",
     ],
     ["No geometry found.", "empty_geometry"],
+    // A STEP of only a tessellated mesh has no CAD solid to mesh (KOF-361).
+    [
+      "std::runtime_error: This STEP file contains only a tessellated mesh, no CAD solid. Re-export it with exact (BRep) geometry.",
+      "empty_geometry",
+    ],
     // Bodies of an assembly overlap, so they cannot be bonded on import.
     [
       "BOPAlgo_MakeConnected failed to imprint the assembly's touching faces — the bodies cannot be bonded for meshing. Check the CAD model for overlapping (interpenetrating) solids and re-export.",

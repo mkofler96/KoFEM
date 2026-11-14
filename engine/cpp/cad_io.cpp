@@ -17,6 +17,9 @@
 #include <ShapeFix_Shape.hxx>
 #include <ShapeFix_Solid.hxx>
 #include <STEPControl_Reader.hxx>
+#include <StepData_StepModel.hxx>
+#include <StepShape_Face.hxx>
+#include <StepVisual_TessellatedItem.hxx>
 #include <TopExp.hxx>
 #include <TopExp_Explorer.hxx>
 #include <TopTools_IndexedDataMapOfShapeListOfShape.hxx>
@@ -295,6 +298,22 @@ TopoDS_Shape read_cad_shape(const std::vector<uint8_t>& bytes,
     unlink(tmppath.data());
     if (status != IFSelect_RetDone)
         throw std::runtime_error("STEPControl_Reader::ReadFile failed — invalid STEP file");
+    // Some exporters write only a tessellated mesh (AP242 tessellated items)
+    // and no BRep face. There is nothing to mesh, and transferring those items
+    // crashes the reader, so refuse the file before TransferRoots (KOF-361).
+    // StepShape_Face is the base of advanced faces and faceted-BRep faces.
+    const Handle(StepData_StepModel) model = reader.StepModel();
+    bool has_brep_face = false, has_tessellation = false;
+    for (Standard_Integer i = 1; i <= model->NbEntities() && !has_brep_face; ++i) {
+        const Handle(Standard_Transient)& entity = model->Value(i);
+        has_brep_face = entity->IsKind(STANDARD_TYPE(StepShape_Face));
+        has_tessellation = has_tessellation ||
+                           entity->IsKind(STANDARD_TYPE(StepVisual_TessellatedItem));
+    }
+    if (!has_brep_face && has_tessellation)
+        throw std::runtime_error(
+            "This STEP file contains only a tessellated mesh, no CAD solid. "
+            "Re-export it with exact (BRep) geometry.");
     if (reader.TransferRoots() == 0 || reader.NbShapes() == 0)
         throw std::runtime_error("STEP file contains no transferable shapes");
     return reader.OneShape();

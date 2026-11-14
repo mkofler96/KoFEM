@@ -254,10 +254,10 @@ const ERROR_RULES: [ErrorCategory, RegExp][] = [
   ["unsupported_format", /unsupported|not a (STEP|IGES)/i],
   ["parse_error", /invalid (STEP|IGES) file|ReadFile failed|ISO-10303/i],
   // Before geometry_defect: an IGES file of free surfaces names the closed
-  // solid it lacks.
+  // solid it lacks, and a tessellated-only STEP the CAD solid (KOF-361).
   [
     "empty_geometry",
-    /no transferable shapes|no geometry with a measurable extent|No geometry found/i,
+    /no transferable shapes|no geometry with a measurable extent|No geometry found|only a tessellated mesh/i,
   ],
   // Before mesher_failure: Netgen's volume fill names the geometry as the cause.
   // BOPAlgo_MakeConnected fails on import when an assembly's bodies overlap.
