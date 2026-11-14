@@ -16,10 +16,7 @@
 import { beforeAll, describe, expect, test } from "bun:test";
 import { buildVertexIndexer } from "../../src/lib/solveMeshPacking.ts";
 import { buildSolidEngineInputs } from "../../src/lib/solve/solid.ts";
-import {
-  optimizeSolidInRust,
-  usesRustTopOpt,
-} from "../../src/lib/solve/topOptRust.ts";
+import { optimizeSolidInRust } from "../../src/lib/solve/topOptRust.ts";
 import { parseTopOptLogLine } from "../../src/lib/topOptProgress.ts";
 import { buildCantilever } from "../../../examples/validation/topopt/cases/cantilever-3d.mjs";
 import {
@@ -182,6 +179,7 @@ async function optimizeInEngine(model, settings) {
   if ("error" in result) throw new Error(result.error);
   return {
     density: Array.from(result.density),
+    ...(result.levelSet ? { levelSet: Array.from(result.levelSet) } : {}),
     history: result.history.map((entry) => ({ ...entry })),
     logs,
     streamed,
@@ -230,14 +228,6 @@ function compare(rust, engine, count) {
 }
 
 describe("solid topology optimization: Rust against the C++ engine", () => {
-  test("routes SIMP to Rust and keeps the level set with the engine", () => {
-    expect(usesRustTopOpt(MBB_SETTINGS)).toBe(true);
-    expect(usesRustTopOpt({ ...MBB_SETTINGS, method: undefined })).toBe(true);
-    expect(usesRustTopOpt({ ...MBB_SETTINGS, method: "level_set" })).toBe(
-      false,
-    );
-  });
-
   test("the MBB half-beam gives the engine's history and design", async () => {
     const model = mbb();
     const engine = await optimizeInEngine(model, MBB_SETTINGS);
@@ -389,5 +379,162 @@ describe("solid topology optimization: Rust against the C++ engine", () => {
         () => undefined,
       ),
     ).toThrow("does not support prescribed (non-zero) displacements");
+  });
+});
+
+// The level-set method (KOF-358): minimum compliance on a solid design
+// domain, a nodal φ alongside the element densities.
+const LEVEL_SET_SETTINGS = {
+  method: "level_set",
+  objective: "min_compliance",
+  constraints: { volumeFraction: 0.5 },
+  filterRadius: 0,
+  maxIterations: 60,
+  tolerance: 0.01,
+};
+
+// Largest absolute difference of two equally long arrays.
+const largestDifference = (lhs, rhs) =>
+  Math.max(...Array.from(lhs, (value, index) => Math.abs(value - rhs[index])));
+
+describe("level-set topology optimization: Rust against the C++ engine", () => {
+  // Both paths reach the same design; the bisection on the volume can flip a
+  // boundary element a few iterations earlier or later, so the histories are
+  // compared entry by entry up to the shorter one.
+  function expectEngineDesign(rust, engine) {
+    const count = Math.min(rust.history.length, engine.history.length);
+    expect(Math.abs(rust.history.length - engine.history.length)).toBeLessThan(
+      5,
+    );
+    const difference = compare(rust, engine, count);
+    expect(difference.compliance).toBeLessThan(1e-3);
+    expect(difference.volume).toBeLessThan(1e-3);
+    const last = (run) => run.history.at(-1);
+    expect(
+      Math.abs(last(rust).compliance - last(engine).compliance) /
+        last(engine).compliance,
+    ).toBeLessThan(1e-2);
+    expect(rust.levelSet).toBeInstanceOf(Float64Array);
+    expect(rust.levelSet.length).toBe(engine.levelSet.length);
+    // Store node order, not a renumbering: the viewport contours φ over the
+    // store's nodes.
+    const crossings = (levelSet) =>
+      levelSet.filter((phi) => phi > -1 && phi < 1).length;
+    expect(
+      Math.abs(crossings(rust.levelSet) - crossings(engine.levelSet)),
+    ).toBeLessThanOrEqual(0.05 * crossings(engine.levelSet) + 2);
+    const differing = Array.from(rust.density).filter(
+      (rho, element) => Math.abs(rho - engine.density[element]) > 0.1,
+    ).length;
+    expect(differing).toBeLessThanOrEqual(0.02 * engine.density.length);
+  }
+
+  test("the MBB half-beam (hexahedra) gives the engine's level set, densities and history", async () => {
+    const model = mbb();
+    const engine = await optimizeInEngine(model, LEVEL_SET_SETTINGS);
+    const rust = optimizeInRust(model, LEVEL_SET_SETTINGS);
+    expectEngineDesign(rust, engine);
+  });
+
+  // On this cantilever neither path settles: once the volume is met the
+  // design keeps flipping boundary elements (max|Δρ| stays near 1), so the
+  // runs drift apart after about 25 iterations. The 20 iterations before
+  // that carve out most of the material and must match.
+  test("a tet cantilever under pressure takes the engine's first 20 steps", async () => {
+    const model = tetCantilever();
+    const settings = {
+      ...LEVEL_SET_SETTINGS,
+      constraints: { volumeFraction: 0.4 },
+      maxIterations: 20,
+    };
+    const engine = await optimizeInEngine(model, settings);
+    const rust = optimizeInRust(model, settings);
+    expect(rust.history.length).toBe(20);
+    expect(engine.history.length).toBe(20);
+    const difference = compare(rust, engine, 20);
+    expect(difference.compliance).toBeLessThan(1e-4);
+    expect(difference.volume).toBeLessThan(1e-5);
+    expect(difference.density).toBeLessThan(1e-3);
+    expect(largestDifference(rust.levelSet, engine.levelSet)).toBeLessThan(
+      1e-3,
+    );
+  });
+
+  test("the first iterations match the engine closely, and the stream ends on the result", async () => {
+    const model = mbb();
+    const settings = {
+      ...LEVEL_SET_SETTINGS,
+      maxIterations: 6,
+      streamEvery: 4,
+    };
+    const engine = await optimizeInEngine(model, settings);
+    const rust = optimizeInRust(model, settings);
+    expect(rust.history.length).toBe(6);
+    expect(compare(rust, engine, 6).compliance).toBeLessThan(1e-5);
+    expect(largestDifference(rust.density, engine.density)).toBeLessThan(1e-4);
+    expect(largestDifference(rust.levelSet, engine.levelSet)).toBeLessThan(
+      1e-4,
+    );
+    expect(rust.streamed.map(({ iteration }) => iteration)).toEqual([4, 6]);
+    // Each streamed field is the design that iteration analysed, as the
+    // engine streams it — not the next one.
+    for (const [index, { density }] of rust.streamed.entries())
+      expect(
+        largestDifference(density, engine.streamed[index].density),
+      ).toBeLessThan(1e-4);
+    expect(Array.from(rust.streamed.at(-1).density)).toEqual(
+      Array.from(rust.density),
+    );
+    const points = rust.logs
+      .map((line) => parseTopOptLogLine(line))
+      .filter((point) => point !== null);
+    expect(points.map((point) => point.it)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(rust.logs.at(-1)).toContain(
+      `returning ${rust.density.length} densities and ${rust.levelSet.length} level-set values`,
+    );
+  });
+
+  test("passive regions stay pinned", () => {
+    const model = mbb();
+    const solid = [0, 1, 2, 36, 37, 38];
+    const result = optimizeInRust(model, {
+      ...LEVEL_SET_SETTINGS,
+      maxIterations: 20,
+      passive: { solid, void: [400, 401] },
+    });
+    for (const element of solid) expect(result.density[element]).toBe(1);
+    expect(result.density[400]).toBe(0);
+    expect(result.density[401]).toBe(0);
+  });
+
+  test("refuses what the engine refuses, with its messages", () => {
+    const model = mbb();
+    const run = (settings) => () => optimizeInRust(model, settings);
+    expect(
+      run({
+        ...LEVEL_SET_SETTINGS,
+        constraints: { volumeFraction: 0.5, maxStress: 10 },
+      }),
+    ).toThrow(
+      "the level-set method does not support the maximum-stress constraint",
+    );
+    expect(
+      run({
+        ...LEVEL_SET_SETTINGS,
+        objective: "min_volume",
+        constraints: { complianceLimit: 10 },
+      }),
+    ).toThrow(
+      "the level-set method supports the min_compliance objective only",
+    );
+    expect(run({ ...LEVEL_SET_SETTINGS, constraints: {} })).toThrow(
+      "requires constraints.volumeFraction",
+    );
+    expect(run({ ...LEVEL_SET_SETTINGS, maxIterations: 0 })).toThrow(
+      "maxIterations must be a positive integer",
+    );
+    expect(run({ ...LEVEL_SET_SETTINGS, method: "genetic" })).toThrow(
+      'unknown topology-optimization method "genetic"',
+    );
   });
 });

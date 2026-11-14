@@ -169,8 +169,14 @@ pub fn cantilever() -> Problem {
 /// right edge on a roller, and a downward unit load on the top of the
 /// symmetry edge (`topology_optimize_validation.cpp`).
 pub fn mbb() -> Problem {
+    mbb_with_cells(18, 6)
+}
+
+/// [`mbb`] on `nx`×`ny`×1 cubes; the level-set suite uses the 36×12 slab of
+/// `topology_levelset_validation.cpp`.
+pub fn mbb_with_cells(nx: usize, ny: usize) -> Problem {
     let (lx, ly) = (6.0, 2.0);
-    let (mesh, vertices) = slab([18, 6, 1], [lx, ly, 1.0 / 3.0], |_, _, _| true);
+    let (mesh, vertices) = slab([nx, ny, 1], [lx, ly, 1.0 / 3.0], |_, _, _| true);
     let mut fixed = Vec::new();
     let mut loaded = Vec::new();
     for (vertex, point) in vertices.iter().enumerate() {

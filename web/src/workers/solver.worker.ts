@@ -21,7 +21,6 @@ import { FemLoadError, loadFemModule } from "../lib/femModule.js";
 import type {
   EngineLoadProgress,
   KofemModule,
-  TopOptResult,
   CgLimitProgress,
 } from "../wasm/pkg/kofem_wasm.js";
 import type {
@@ -37,7 +36,6 @@ import type {
   SolvePayload,
   TopOptPayload,
 } from "./solverTypes.js";
-import { buildVertexIndexer } from "../lib/solveMeshPacking.js";
 import {
   thinWallFindings,
   type ThinWallCheckInput,
@@ -80,7 +78,7 @@ import {
   optimizeCoupledInRust,
   optimizeShellInRust,
   optimizeSolidInRust,
-  usesRustTopOpt,
+  type TopOptRunResult,
 } from "../lib/solve/topOptRust.js";
 
 let Module: KofemModule | null = null;
@@ -880,15 +878,10 @@ async function handleSolve(id: number, payload: SolvePayload) {
 
 // ── Topology optimization (solid / shell / coupled → optimize_topology*) ──────
 
-// The optimizer result the worker returns, whichever design domain produced it.
-// The density is one value per DESIGN element, in the canonical order the
-// viewport's densityField expects — solid tets, then hexes, then shell facets —
-// which is exactly the order each engine entry returns (KOF-237).
-type TopOptEngineResult = {
-  density: Float64Array;
-  levelSet?: Float64Array;
-  history: unknown[];
-};
+// The optimizer result the worker returns (TopOptRunResult), whichever design
+// domain produced it. The density is one value per DESIGN element, in the
+// canonical order the viewport's densityField expects — solid tets, then
+// hexes, then shell facets (KOF-237).
 
 // Live density streaming (KOF-240): the engine calls this synchronously from
 // inside the optimizer loop with a fresh Float64Array copy of the design density
@@ -901,13 +894,13 @@ function densityStreamer(id: number) {
   };
 }
 
-function postDensityResult(id: number, result: TopOptEngineResult) {
+function postDensityResult(id: number, result: TopOptRunResult) {
   self.postMessage({
     id,
     log: `Topology optimization complete: ${result.density.length} element densities over ${result.history.length} iteration(s)`,
   });
-  // The level set (method "level_set") is one value per engine vertex; the
-  // solid path indexes vertices in payload node order (buildVertexIndexer), so it
+  // The level set (method "level_set") is one value per vertex; the solid
+  // path indexes vertices in payload node order (buildVertexIndexer), so it
   // arrives aligned with the store's `nodes` array.
   const transfer = [result.density.buffer];
   if (result.levelSet) transfer.push(result.levelSet.buffer);
@@ -938,12 +931,11 @@ function postDensityResult(id: number, result: TopOptEngineResult) {
 // streamed live density is discarded with it — no best-so-far is kept.
 function handleTopOpt(id: number, payload: TopOptPayload) {
   const domain = routeTopOpt(payload);
-  const settingsJson = JSON.stringify(payload.settings);
   const onDensity = densityStreamer(id);
   const startLog = (nElems: number) =>
     self.postMessage({ id, log: topOptStartLog(payload, nElems, domain) });
 
-  let result: TopOptResult;
+  let result: TopOptRunResult;
   if (domain === "shell") {
     // SIMP on the shell and coupled domains runs in Rust (KOF-310) on the
     // engine's own inputs; routeTopOpt has refused the level-set method.
@@ -966,9 +958,9 @@ function handleTopOpt(id: number, payload: TopOptPayload) {
       logTo(id),
       onDensity,
     );
-  } else if (usesRustTopOpt(payload.settings)) {
-    // SIMP on a solid design domain runs in Rust too. routeTopOpt has
-    // refused a tied model already.
+  } else {
+    // SIMP and the level-set method on a solid design domain run in Rust
+    // too (KOF-358). routeTopOpt has refused a tied model already.
     startLog(payload.elements.length);
     result = optimizeSolidInRust(
       { ElasticModel, TopologySettings, TopologyRun },
@@ -976,22 +968,7 @@ function handleTopOpt(id: number, payload: TopOptPayload) {
       logTo(id),
       onDensity,
     );
-  } else {
-    // The level-set method is still the engine's.
-    const inp = buildSolidEngineInputs(
-      payload,
-      buildVertexIndexer(payload.nodes),
-    );
-    startLog(inp.elementCount);
-    result = m().optimize_topology(
-      inp.mesh,
-      inp.matJson,
-      inp.bcsJson,
-      settingsJson,
-      onDensity,
-    );
   }
-  if ("error" in result) throw new Error(result.error);
   postDensityResult(id, result);
 }
 
