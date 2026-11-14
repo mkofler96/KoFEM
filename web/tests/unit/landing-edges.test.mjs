@@ -7,6 +7,7 @@
 
 import { describe, expect, test } from "bun:test";
 import {
+  dropZigzagChains,
   parseTriangulatedStep,
   sharpEdges,
 } from "../../scripts/landing-edges.mjs";
@@ -81,5 +82,43 @@ describe("sharpEdges", () => {
     expect(() => sharpEdges(cubePoints, cubeTriangles.slice(1), 20)).toThrow(
       /not closed/,
     );
+  });
+});
+
+describe("dropZigzagChains", () => {
+  // Consecutive points as segments [[p0, p1], [p1, p2], ...].
+  const polyline = (points) =>
+    points.slice(1).map((point, i) => [points[i], point]);
+
+  test("drops a chain that turns sharply at most joints", () => {
+    const zigzag = polyline([
+      [0, 0, 0],
+      [10, 1, 0],
+      [0, 2, 0],
+      [10, 3, 0],
+    ]);
+    expect(dropZigzagChains(zigzag, 60)).toEqual([]);
+  });
+
+  test("keeps a smooth arc, a single corner and a lone segment", () => {
+    const arc = polyline(
+      Array.from({ length: 9 }, (_, i) => {
+        const angle = (i * Math.PI) / 8;
+        return [10 * Math.cos(angle), 10 * Math.sin(angle), 0];
+      }),
+    );
+    const corner = polyline([
+      [20, 0, 0],
+      [30, 0, 0],
+      [30, 10, 0],
+    ]);
+    const lone = [
+      [
+        [40, 0, 0],
+        [50, 0, 0],
+      ],
+    ];
+    const segments = [...arc, ...corner, ...lone];
+    expect(dropZigzagChains(segments, 60)).toEqual(segments);
   });
 });

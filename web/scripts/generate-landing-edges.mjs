@@ -12,13 +12,19 @@
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { gzipSync } from "node:zlib";
-import { parseTriangulatedStep, sharpEdges } from "./landing-edges.mjs";
+import {
+  dropZigzagChains,
+  parseTriangulatedStep,
+  sharpEdges,
+} from "./landing-edges.mjs";
 
 const landing = new URL("../public/landing/", import.meta.url);
 const SOURCE_SHA256 =
   "3659a39854373c9af14d814bdeac431ac212d3eda12b78c45f42350f8a164035";
 // Fillets bend by under 5° per tessellation edge, CAD edges by 40° or more.
 const MIN_ANGLE_DEG = 20;
+// A chain of edges turning more than this at most joints is an artefact.
+const MAX_TURN_DEG = 60;
 // Quantization step in mm: the bracket fits ±32767 × 0.005 mm = ±163 mm.
 const SCALE = 0.005;
 
@@ -69,7 +75,11 @@ const offset = [0, 1, 2].map(
 );
 const placed = mapped.map((p) => p.map((value, axis) => value + offset[axis]));
 
-const segments = sharpEdges(placed, triangles, MIN_ANGLE_DEG);
+// A fold between sliver triangles shows as a zig-zag chain, not a CAD edge.
+const segments = dropZigzagChains(
+  sharpEdges(placed, triangles, MIN_ANGLE_DEG),
+  MAX_TURN_DEG,
+);
 const quantized = Int16Array.from(segments.flat(2), (value) => {
   const level = Math.round(value / SCALE);
   if (Math.abs(level) > 32767)
@@ -86,6 +96,7 @@ writeFileSync(
       sourceSha256: SOURCE_SHA256,
       generator: "scripts/generate-landing-edges.mjs",
       minAngleDeg: MIN_ANGLE_DEG,
+      maxTurnDeg: MAX_TURN_DEG,
       segmentCount: segments.length,
       offsetMm: offset,
       layout: {

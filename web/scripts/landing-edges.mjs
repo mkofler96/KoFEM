@@ -146,3 +146,75 @@ export function sharpEdges(points, triangles, minAngleDeg) {
   }
   return segments;
 }
+
+// Drop chains of sharp edges that zig-zag: consecutive segments turning by
+// more than maxTurnDeg at more than half of a chain's joints (and at least
+// two joints). A CAD edge is a smooth line; a zig-zag is a fold between
+// sliver triangles of the tessellation. Chains split where three or more
+// edges meet, so a single corner is never dropped.
+export function dropZigzagChains(segments, maxTurnDeg) {
+  const key = (point) => point.join(",");
+  const atVertex = new Map();
+  segments.forEach(([from, to], index) => {
+    for (const point of [from, to]) {
+      const list = atVertex.get(key(point));
+      if (list) list.push(index);
+      else atVertex.set(key(point), [index]);
+    }
+  });
+  const used = new Set();
+  const dropped = new Set();
+  const minCos = Math.cos((maxTurnDeg * Math.PI) / 180);
+  const walk = (startKey, first) => {
+    const chain = [first];
+    used.add(first);
+    let vertex = startKey;
+    let current = first;
+    const points = [];
+    for (;;) {
+      const [from, to] = segments[current];
+      const next = key(from) === vertex ? to : from;
+      points.push(vertex === key(from) ? from : to);
+      vertex = key(next);
+      const onward = atVertex.get(vertex);
+      if (onward.length !== 2) {
+        points.push(next);
+        break;
+      }
+      const following = onward.find((index) => !used.has(index));
+      if (following === undefined) {
+        points.push(next);
+        break;
+      }
+      used.add(following);
+      chain.push(following);
+      current = following;
+    }
+    return { chain, points };
+  };
+  const judge = ({ chain, points }) => {
+    const joints = points.length - 2;
+    if (joints < 2) return;
+    let sharpTurns = 0;
+    for (let i = 1; i <= joints; i++) {
+      const before = points[i].map(
+        (value, axis) => value - points[i - 1][axis],
+      );
+      const after = points[i + 1].map((value, axis) => value - points[i][axis]);
+      const cos =
+        (before[0] * after[0] + before[1] * after[1] + before[2] * after[2]) /
+        (Math.hypot(...before) * Math.hypot(...after));
+      if (cos < minCos) sharpTurns++;
+    }
+    if (sharpTurns * 2 > joints) for (const index of chain) dropped.add(index);
+  };
+  for (const [vertex, list] of atVertex)
+    if (list.length !== 2)
+      for (const index of list)
+        if (!used.has(index)) judge(walk(vertex, index));
+  // What is left forms closed loops.
+  segments.forEach(([from], index) => {
+    if (!used.has(index)) judge(walk(key(from), index));
+  });
+  return segments.filter((_, index) => !dropped.has(index));
+}
