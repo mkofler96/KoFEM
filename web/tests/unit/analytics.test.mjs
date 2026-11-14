@@ -224,13 +224,43 @@ describe("buckets and categories", () => {
   });
 
   test.each([
+    // The file claims to be STEP or IGES, but the reader rejects it (KOF-347).
     [
-      "STEPControl_Reader::ReadFile failed — invalid STEP file",
-      "unsupported_format",
+      "std::runtime_error: STEPControl_Reader::ReadFile failed — invalid STEP file",
+      "parse_error",
+    ],
+    ["IGESControl_Reader::ReadFile failed — invalid IGES file", "parse_error"],
+    // The file reads, but holds nothing to show or mesh.
+    [
+      "std::runtime_error: STEP file contains no transferable shapes",
+      "empty_geometry",
     ],
     [
-      "IGESControl_Reader::ReadFile failed — invalid IGES file",
-      "unsupported_format",
+      "IGES file contains no transferable shapes. IGES often stores only free surfaces; a closed solid is required for volume meshing.",
+      "empty_geometry",
+    ],
+    [
+      "CAD file contains no geometry with a measurable extent (empty bounding box)",
+      "empty_geometry",
+    ],
+    ["No geometry found.", "empty_geometry"],
+    // Bodies of an assembly overlap, so they cannot be bonded on import.
+    [
+      "BOPAlgo_MakeConnected failed to imprint the assembly's touching faces — the bodies cannot be bonded for meshing. Check the CAD model for overlapping (interpenetrating) solids and re-export.",
+      "geometry_defect",
+    ],
+    [
+      "BOPAlgo_MakeConnected produced no solids from a multibody assembly — the imported geometry is inconsistent",
+      "geometry_defect",
+    ],
+    // The browser could not read the picked file (moved, or a cloud placeholder).
+    [
+      "NotReadableError: The requested file could not be read, typically due to permission problems that have occurred after a reference to a file was acquired.",
+      "file_unreadable",
+    ],
+    [
+      "NotFoundError: A requested file or directory could not be found at the time an operation was processed.",
+      "file_unreadable",
     ],
     [
       "CG solver did not converge: relative residual 1e-2 after 5000 iterations",
@@ -281,7 +311,6 @@ describe("buckets and categories", () => {
       "shape produced no triangles — try a smaller deflection_relative",
       "tessellation_failure",
     ],
-    ["No geometry found.", "invalid_input"],
     ["mixed solve: the model has no shell element", "invalid_input"],
     ["something nobody anticipated", "unknown"],
   ])("error category of %p is %s", (message, category) => {
@@ -297,6 +326,7 @@ describe("buckets and categories", () => {
     ["geometry_reload", "tessellation_failure"],
     ["meshing", "mesher_failure"],
     ["shell_idealisation", "shell_idealisation_failure"],
+    ["geometry_import", "import_failure"],
   ])("an unrecognised failure in step %s is %s", (stage, category) => {
     const err = new WorkerTaskError(
       "Standard_Failure: BRep_API: command not done",

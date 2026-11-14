@@ -268,8 +268,10 @@ function handleParseStep(id: number, payload: ParseStepPayload) {
   self.postMessage({
     id,
     ok: true,
-    // eslint-disable-next-line kofem/no-silent-fallback -- format is optional in the parse_step message; absent means STEP, the primary import path
-    ...loadGeometry(payload.bytes, payload.format ?? "step"),
+    ...inStage("geometry_import", () =>
+      // eslint-disable-next-line kofem/no-silent-fallback -- format is optional in the parse_step message; absent means STEP, the primary import path
+      loadGeometry(payload.bytes, payload.format ?? "step"),
+    ),
   });
 }
 
