@@ -6,6 +6,7 @@
 // responses back to the correct Promise via a pending-call map.
 
 import { durationBucket, trackOnce } from "../lib/analytics";
+import { isFailureStage, WorkerTaskError } from "../lib/workerError";
 import { askCgContinuation, dismissCgContinuation } from "./cgContinuation";
 import type { CgLimitProgress } from "../wasm/pkg/kofem_wasm.js";
 import {
@@ -169,7 +170,16 @@ function createWorker(): Worker {
       // eslint-disable-next-line kofem/no-silent-fallback -- fallback text for a failure that arrived without a message; this is the error path itself, not solver data
       const msg = (rest.error as string | undefined) ?? "Worker error";
       console.error("[worker] task failed:", msg);
-      pending.reject(new Error(msg));
+      const { stage } = rest;
+      if (stage === undefined || isFailureStage(stage))
+        pending.reject(new WorkerTaskError(msg, stage ?? null));
+      else
+        pending.reject(
+          new WorkerTaskError(
+            `${msg} (the worker also reported an unknown step "${String(stage)}")`,
+            null,
+          ),
+        );
     }
   };
 

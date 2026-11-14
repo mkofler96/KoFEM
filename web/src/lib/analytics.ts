@@ -15,6 +15,8 @@
 // workflow, error category, duration bucket) plus the public gallery example
 // id; raw error messages, file names, sizes and results never leave the page.
 
+import { WorkerTaskError, type FailureStage } from "./workerError";
+
 export type Workflow = "cad_import" | "example" | "saved_file" | "none";
 export type ErrorCategory =
   | "invalid_input"
@@ -22,7 +24,18 @@ export type ErrorCategory =
   | "resource_limit"
   | "numerical_failure"
   | "geometry_defect"
+  // Netgen gave up on the shape (KOF-311).
+  | "mesher_failure"
+  // OCCT could not triangulate the shape.
+  | "tessellation_failure"
+  | "shell_idealisation_failure"
+  // A WASM trap or abort: a code bug in the engine, not the visitor's model.
+  | "engine_crash"
+  // The worker itself died or answered nothing usable.
   | "worker_failure"
+  | "engine_unavailable"
+  // The visitor ended the task, e.g. New model while meshing.
+  | "cancelled"
   | "unknown";
 export type DurationBucket =
   "lt_1s" | "1_5s" | "5_15s" | "15_60s" | "1_5min" | "gt_5min";
@@ -208,32 +221,57 @@ export function startTimer(): () => DurationBucket {
 const ERROR_RULES: [ErrorCategory, RegExp][] = [
   [
     "resource_limit",
-    /out of memory|Aborted\(OOM\)|Cannot enlarge memory|memory allocation|Array buffer allocation failed|exceeds the limit|too many elements/i,
+    /out of memory|Aborted\(OOM\)|Cannot enlarge memory|memory allocation|Array buffer allocation failed|bad_alloc|exceeds the limit|too many elements/i,
+  ],
+  // resetWorker() rejects what was in flight: the visitor started over.
+  ["cancelled", /Worker reset/i],
+  ["engine_unavailable", /engine failed to load/i],
+  [
+    "engine_crash",
+    /WASM trap|RuntimeError|Aborted\(|memory access out of bounds|unreachable/i,
   ],
   [
     "worker_failure",
-    /Worker crashed|Worker error|worker .*terminated|WASM module not initialised|WASM trap|RuntimeError/i,
+    /Worker crashed|Worker error|worker .*terminated|WASM module not initialised/i,
   ],
   [
     "unsupported_format",
     /invalid (STEP|IGES) file|ReadFile failed|unsupported|not a (STEP|IGES)|ISO-10303/i,
   ],
+  // Before mesher_failure: Netgen's volume fill names the geometry as the cause.
+  [
+    "geometry_defect",
+    /self-intersecting|0 tetrahedra|no closed solid|watertight/i,
+  ],
+  [
+    "mesher_failure",
+    /Ng_\w+ failed|Ng_NewMesh|NgException|Geomsearch|hash-position|OCCGeometry construction failed/i,
+  ],
+  ["tessellation_failure", /BRepMesh\w* .*failed|produced no triangles/i],
   [
     "numerical_failure",
     /did not converge|diverg|singular|NaN|ill-conditioned|zero pivot|not positive definite|rigid[- ]body|unconstrained/i,
   ],
-  // The mesher refusing a shape is a geometry problem, not a crash.
   [
     "invalid_input",
-    /No geometry|must be|must not|no (solid|shell) element|no property|no material|degenerate|zero total|carries no|cannot be|missing|invalid|Ng_\w+ failed|BRepMesh\w* .*failed|OCCGeometry construction failed|cannot fill/i,
+    /No geometry|must be|must not|no (solid|shell) element|no property|no material|degenerate|zero total|carries no|cannot be|missing|invalid|cannot fill/i,
   ],
 ];
+
+// What a failure in each step is when its text matches no rule above.
+const STAGE_CATEGORY: Record<FailureStage, ErrorCategory> = {
+  geometry_reload: "tessellation_failure",
+  meshing: "mesher_failure",
+  shell_idealisation: "shell_idealisation_failure",
+};
 
 /** Map an error to a fixed category. The message itself stays in the browser. */
 export function categorizeError(err: unknown): ErrorCategory {
   const text =
     err instanceof Error ? `${err.name}: ${err.message}` : String(err);
   for (const [category, re] of ERROR_RULES) if (re.test(text)) return category;
+  if (err instanceof WorkerTaskError && err.stage !== null)
+    return STAGE_CATEGORY[err.stage];
   return "unknown";
 }
 

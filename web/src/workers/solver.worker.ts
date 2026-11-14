@@ -43,10 +43,10 @@ import {
   type ThinWallCheckInput,
 } from "../lib/solve/thinWall.js";
 import { dropSuppressedBodies } from "../lib/suppressBodies.js";
+import { inStage, splitStage } from "../lib/workerError.js";
 import {
   buildMeshTimeShellModel,
-  preparePureShellSolve,
-  prepareAutoCoupledSolve,
+  prepareAutoShellSolve,
 } from "../lib/solve/autoShell.js";
 import {
   buildCoupledEngineInputs,
@@ -418,13 +418,15 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
       id,
       log: "Reloading STEP geometry into the mesher…",
     });
-    m().tessellate_step(
-      bytes,
-      JSON.stringify({
-        deflection_relative: 0.001,
-        angular_deflection: 0.5,
-        format,
-      }),
+    inStage("geometry_reload", () =>
+      m().tessellate_step(
+        bytes,
+        JSON.stringify({
+          deflection_relative: 0.001,
+          angular_deflection: 0.5,
+          format,
+        }),
+      ),
     );
     geometryLoaded = true;
   }
@@ -455,7 +457,7 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
   // JSON.parse. surfaceTriangles/surfaceFaceIds are in Netgen
   // surface-element order (NOT tet boundary order); surfaceFaceIds holds
   // the 1-based OCC face index per surface triangle.
-  const dto = m().generate_fem_mesh(opts);
+  const dto = inStage("meshing", () => m().generate_fem_mesh(opts));
   if ("overlaps" in dto) {
     flushCoverage();
     self.postMessage({ id, ok: true, overlaps: dto.overlaps });
@@ -528,14 +530,16 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
   // collapsed to a mid-surface shell mesh here, so the stored model is the mixed
   // CTRIA3 + CTETRA model the user sees and solves — not an all-solid mesh whose
   // shells only ever existed transiently inside the solve.
-  const mixed = buildMeshTimeShellModel(
-    nodes,
-    elements,
-    surfaceTriangles,
-    surfaceFaceIds,
-    new Set(payload.shellBodyIds ?? []),
-    payload.properties ?? [],
-    (line: string) => self.postMessage({ id, log: line }),
+  const mixed = inStage("shell_idealisation", () =>
+    buildMeshTimeShellModel(
+      nodes,
+      elements,
+      surfaceTriangles,
+      surfaceFaceIds,
+      new Set(payload.shellBodyIds ?? []),
+      payload.properties ?? [],
+      (line: string) => self.postMessage({ id, log: line }),
+    ),
   );
   if (mixed) {
     flushCoverage();
@@ -700,32 +704,29 @@ async function handleMixedSolve(id: number, payload: SolvePayload) {
 }
 
 // A body marked Shell: solve it as shells or fail loudly — never fall through
-// to the all-solid path, which would silently ignore the choice. Coupled first
-// (shells tied to solid bodies); if there is no solid domain to couple to (a
-// single thin body, or an all-shell assembly), idealise the thin walls and solve
-// them with the pure Kirchhoff shell solver. Returns false when neither applies.
+// to the all-solid path, which would silently ignore the choice (KOF-352).
+// Coupled when the shell touches a solid body; a pure Kirchhoff shell when every
+// body is Shell. prepareAutoShellSolve throws, naming the body and the reason,
+// when neither applies.
 async function handleAutoShellSolve(
   id: number,
   payload: SolvePayload,
   shellBodyIds: Set<number>,
-): Promise<boolean> {
+): Promise<void> {
   // The auto-shell progress lines have always gone to the shared log (id 0).
   const log = logTo(0);
-  let fields: SolveResultFields | null = null;
-  const coupled = prepareAutoCoupledSolve(payload, shellBodyIds, log);
-  if (coupled) {
-    fields = coupled.mapResult(await solveMixed(coupled, payload, log));
-  } else {
-    const pure = preparePureShellSolve(payload, shellBodyIds, log);
-    if (pure) fields = pure.mapResult(await solveShell(pure, payload, log));
-  }
-  if (!fields) return false;
+  const prepared = prepareAutoShellSolve(payload, shellBodyIds, log);
+  const fields =
+    prepared.kind === "coupled"
+      ? prepared.solve.mapResult(await solveMixed(prepared.solve, payload, log))
+      : prepared.solve.mapResult(
+          await solveShell(prepared.solve, payload, log),
+        );
   self.postMessage({
     id,
     log: `Shell solve complete: ${fields.displacements.length / 3} vertex displacements`,
   });
   postSolveResult(id, fields);
-  return true;
 }
 
 // The solver the request asks for. The app always names one; a request without
@@ -860,14 +861,7 @@ async function handleSolve(id: number, payload: SolvePayload) {
       await handleMixedSolve(id, payload);
       return;
     case "auto-shell":
-      // Neither shell idealisation applies (e.g. no surface mesh): all-solid.
-      if (!(await handleAutoShellSolve(id, payload, route.shellBodyIds))) {
-        self.postMessage({
-          id,
-          log: "No shell idealisation applies — solving all-solid with Gauss–Seidel.",
-        });
-        await handleSolidSolve(id, payload);
-      }
+      await handleAutoShellSolve(id, payload, route.shellBodyIds);
       return;
     case "solid":
       await handleSolidSolve(id, payload);
@@ -1111,7 +1105,8 @@ function isWasmTrap(err: unknown): boolean {
   ].some((message) => err.message.includes(message));
 }
 
-function reportTaskError(id: number, type: string, err: unknown): void {
+function reportTaskError(id: number, type: string, failure: unknown): void {
+  const { stage, error: err } = splitStage(failure);
   const trap = isWasmTrap(err);
   const detail =
     err instanceof EngineLoadError
@@ -1126,7 +1121,12 @@ function reportTaskError(id: number, type: string, err: unknown): void {
       : `[solver.worker] ${type} failed:`,
     detail,
   );
-  self.postMessage({ id, ok: false, error: errorMessage });
+  self.postMessage({
+    id,
+    ok: false,
+    error: errorMessage,
+    ...(stage === null ? {} : { stage }),
+  });
 }
 
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {

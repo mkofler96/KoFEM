@@ -129,19 +129,52 @@ function extractShellsOrThrow(
   return shells;
 }
 
-// The all-tet model with a surface mesh the solve-time idealisation needs, or
-// null when it does not apply (no surface mesh, or non-tet elements).
-function tetShellizeInput(payload: SolvePayload): {
+// The surface arrays pair one CAD face id with each surface triangle. Arrays of
+// different lengths are corrupt data, not a model without shells.
+function requireMatchingSurface(
+  surfaceTriangles: [number, number, number][],
+  surfaceFaceIds: number[],
+): void {
+  if (surfaceFaceIds.length !== surfaceTriangles.length)
+    throw new Error(
+      `The surface mesh is inconsistent: ${surfaceTriangles.length} surface triangles but ` +
+        `${surfaceFaceIds.length} face ids. Re-mesh the model.`,
+    );
+}
+
+// "Body 2 is" / "Bodies 2, 3 are" — the Shell bodies an error is about.
+function shellBodiesAre(shellBodyIds: Set<number>): string {
+  const ids = [...shellBodyIds].join(", ");
+  return shellBodyIds.size === 1 ? `Body ${ids} is` : `Bodies ${ids} are`;
+}
+
+// The all-tet model with the surface mesh the solve-time idealisation needs.
+// A Shell body is never solved as solid, so a model the idealisation cannot
+// take is refused with the reason (KOF-352).
+function tetShellizeInput(
+  payload: SolvePayload,
+  shellBodyIds: Set<number>,
+): {
   tetElements: Element[];
   surfaceTriangles: [number, number, number][];
   surfaceFaceIds: number[];
-} | null {
+} {
   const { elements, surfaceTriangles, surfaceFaceIds } = payload;
+  const marked = `${shellBodiesAre(shellBodyIds)} marked "Shell"`;
   if (!surfaceTriangles || !surfaceFaceIds || surfaceTriangles.length === 0)
-    return null;
-  if (surfaceFaceIds.length !== surfaceTriangles.length) return null;
+    throw new Error(
+      `${marked}, but the model has no surface mesh to find thin walls in. ` +
+        "Re-mesh the model, or set the body to Solid.",
+    );
+  requireMatchingSurface(surfaceTriangles, surfaceFaceIds);
   const tetElements = elements.filter((e) => e.type === "CTETRA");
-  if (tetElements.length !== elements.length) return null; // tets-only idealisation
+  const others = elements.length - tetElements.length;
+  if (others > 0)
+    throw new Error(
+      `${marked}, but the mesh has ${others} hexahedral element(s), and shell ` +
+        "idealisation works on tetrahedral meshes only. Mesh with tetrahedra, or set " +
+        "the body to Solid.",
+    );
   return { tetElements, surfaceTriangles, surfaceFaceIds };
 }
 
@@ -162,8 +195,10 @@ export interface MeshTimeShellModel {
 // emitted per distinct wall thickness and each facet references its own (the same
 // scheme the offline crane generator uses). Solid bodies keep their existing
 // property ids, so material assignments survive the mesh. Returns null when the
-// idealisation does not apply (no Shell body, no surface mesh, or no thin wall
-// found), leaving the caller's all-solid mesh in place.
+// idealisation does not apply (no Shell body, no surface mesh, or non-tet
+// elements), leaving the caller's all-solid mesh in place; the solve then
+// refuses the Shell body with the reason (tetShellizeInput). Throws on surface
+// arrays of different lengths, and when the Shell body has no thin wall.
 export function buildMeshTimeShellModel(
   nodes: Node[],
   elements: Element[],
@@ -176,7 +211,7 @@ export function buildMeshTimeShellModel(
   if (shellBodyIds.size === 0) return null;
   requireOneShellBody(shellBodyIds);
   if (surfaceTriangles.length === 0) return null;
-  if (surfaceFaceIds.length !== surfaceTriangles.length) return null;
+  requireMatchingSurface(surfaceTriangles, surfaceFaceIds);
   const tetElements = elements.filter((e) => e.type === "CTETRA");
   if (tetElements.length !== elements.length) return null;
 
@@ -424,10 +459,11 @@ export interface AutoCoupledSolve {
 }
 
 // Build the coupled solve of an all-tet multibody model whose Shell body is
-// idealised at solve time. Returns null when this path does not apply — no
-// surface mesh, non-tet elements, a single body, no Shell body, or a shell that
-// does not couple to any solid — so the caller can try the pure-shell path.
-// Throws when a body is marked Shell but carries no detectable thin wall.
+// idealised at solve time. Returns null when this path does not apply — a
+// single body, no Shell body, or a shell that does not couple to any solid —
+// so the caller can try the pure-shell path. Throws when the model cannot be
+// idealised (tetShellizeInput) or a body is marked Shell but carries no
+// detectable thin wall.
 export function prepareAutoCoupledSolve(
   payload: SolvePayload,
   shellBodyIds: Set<number>,
@@ -442,8 +478,7 @@ export function prepareAutoCoupledSolve(
     loads,
     surfaceLoads,
   } = payload;
-  const input = tetShellizeInput(payload);
-  if (!input) return null;
+  const input = tetShellizeInput(payload, shellBodyIds);
   const { tetElements } = input;
   if (new Set(elements.map((e) => e.propertyId)).size < 2) return null; // need a multibody assembly
   if (shellBodyIds.size === 0) return null; // every body solid → all-solid path
@@ -594,25 +629,38 @@ export interface PureShellSolve {
 // thin walls to a mid-surface shell mesh and solve it directly with the
 // engine's Kirchhoff shell solver — the auto counterpart of the explicit
 // CTRIA3 shell path. BCs, loads and results map onto the collapsed mid-surface
-// by nearest node, exactly as the coupled path maps the shelled body. Returns
-// null when this path does not apply (a solid domain is present, or there is no
-// surface mesh); throws when a body is marked Shell but carries no detectable
-// thin wall — so the choice is never silently ignored — and when the model has
-// a tie, which the shell solver cannot apply.
+// by nearest node, exactly as the coupled path maps the shelled body. Throws
+// when a solid body is present (prepareAutoCoupledSolve takes those, so the
+// Shell body touches none of them), when the model cannot be idealised, when
+// a body is marked Shell but carries no detectable thin wall — so the choice
+// is never silently ignored — and when the model has a tie, which the shell
+// solver cannot apply.
 export function preparePureShellSolve(
   payload: SolvePayload,
   shellBodyIds: Set<number>,
   log: SolveLog,
-): PureShellSolve | null {
+): PureShellSolve {
   const { nodes, elements, materials, properties, constraints, loads } =
     payload;
-  const input = tetShellizeInput(payload);
-  if (!input) return null;
+  const input = tetShellizeInput(payload, shellBodyIds);
   const { tetElements } = input;
   // Only when there is NO solid domain to preserve: every body is idealised as a
   // shell. A mixed shell+solid assembly must go through the coupled path — pure
   // shells here would silently drop the solid bodies.
-  if (!tetElements.every((e) => shellBodyIds.has(e.propertyId))) return null;
+  const solidBodies = [
+    ...new Set(
+      tetElements
+        .map((e) => e.propertyId)
+        .filter((body) => !shellBodyIds.has(body)),
+    ),
+  ];
+  if (solidBodies.length > 0)
+    throw new Error(
+      `${shellBodiesAre(shellBodyIds)} marked "Shell", but the shell touches no solid ` +
+        `body, so it cannot be coupled to body ${solidBodies.join(", ")}, and a pure ` +
+        "shell solve would leave the solid bodies out. Tie the Shell body to a solid " +
+        "body, or set it to Solid.",
+    );
   // The shell solver applies no tie; refuse it by name rather than drop it.
   const tieRefusal = shellTieRefusal(payload.tieGroups);
   if (tieRefusal !== null) throw new Error(tieRefusal);
@@ -712,5 +760,28 @@ export function preparePureShellSolve(
         );
       return { displacements, vonMises };
     },
+  };
+}
+
+// ── Solve-time dispatch ───────────────────────────────────────────────────────
+
+export type AutoShellSolve =
+  | { kind: "coupled"; solve: AutoCoupledSolve }
+  | { kind: "pure"; solve: PureShellSolve };
+
+// The solve of an all-tet model with a body marked Shell: coupled to the solid
+// bodies it touches, or a pure shell when there is no solid body. Throws with
+// the body and the reason when neither applies — a Shell body is never solved
+// as solid (KOF-352).
+export function prepareAutoShellSolve(
+  payload: SolvePayload,
+  shellBodyIds: Set<number>,
+  log: SolveLog,
+): AutoShellSolve {
+  const coupled = prepareAutoCoupledSolve(payload, shellBodyIds, log);
+  if (coupled) return { kind: "coupled", solve: coupled };
+  return {
+    kind: "pure",
+    solve: preparePureShellSolve(payload, shellBodyIds, log),
   };
 }

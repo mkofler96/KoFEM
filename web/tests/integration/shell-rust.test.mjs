@@ -31,6 +31,7 @@ import { buildShellEngineInputs } from "../../src/lib/solve/shell.ts";
 import { solveShellInRust } from "../../src/lib/solve/shellRust.ts";
 import {
   prepareAutoCoupledSolve,
+  prepareAutoShellSolve,
   preparePureShellSolve,
 } from "../../src/lib/solve/autoShell.ts";
 import { rebuildSurfaceLoads } from "../../src/store/boundaryRebuild.ts";
@@ -671,50 +672,51 @@ describe("payloads both solvers refuse", () => {
   });
 });
 
+// A STEP file of test_files meshed by the engine as the app meshes it, as an
+// all-tet store model with `properties` and no boundary conditions.
+function meshModel(file, size, propertyOf, properties) {
+  const meshed = meshStep(engine, join(here, "../../../test_files", file), {
+    maxElementSize: size,
+  });
+  const nodes = [];
+  for (let i = 0; i < meshed.V.length / 3; i++)
+    nodes.push({
+      id: i + 1,
+      x: meshed.V[3 * i],
+      y: meshed.V[3 * i + 1],
+      z: meshed.V[3 * i + 2],
+    });
+  const elements = [];
+  for (let e = 0; e < meshed.tet.length / 4; e++)
+    elements.push({
+      id: e + 1,
+      type: "CTETRA",
+      nodeIds: meshed.tet.slice(4 * e, 4 * e + 4).map((vertex) => vertex + 1),
+      propertyId: propertyOf(meshed, e),
+    });
+  const surfaceTriangles = [];
+  for (let t = 0; t < meshed.surfTri.length / 3; t++)
+    surfaceTriangles.push([0, 1, 2].map((k) => meshed.surfTri[3 * t + k] + 1));
+  return {
+    nodes,
+    elements,
+    materials: [
+      { id: 1, name: "Steel", young: 210000, poisson: 0.3, density: 7.85e-9 },
+    ],
+    properties,
+    constraints: [],
+    loads: [],
+    surfaceTriangles,
+    surfaceFaceIds: Array.from(meshed.surfFace),
+  };
+}
+
 // ── A pressure on the auto-shell paths pushes into the solid ─────────────────
 // The surface-load faces come from the app's rebuildSurfaceLoads, wound as
 // their tets' local face lists (inward on some faces). Whatever the winding,
 // a pressure p on a face of outward normal n must add up to −p·A·n.
 describe("pressure on the auto-shell paths", () => {
   const pressure = 0.5;
-  const meshModel = (file, size, propertyOf, properties) => {
-    const meshed = meshStep(engine, join(here, "../../../test_files", file), {
-      maxElementSize: size,
-    });
-    const nodes = [];
-    for (let i = 0; i < meshed.V.length / 3; i++)
-      nodes.push({
-        id: i + 1,
-        x: meshed.V[3 * i],
-        y: meshed.V[3 * i + 1],
-        z: meshed.V[3 * i + 2],
-      });
-    const elements = [];
-    for (let e = 0; e < meshed.tet.length / 4; e++)
-      elements.push({
-        id: e + 1,
-        type: "CTETRA",
-        nodeIds: meshed.tet.slice(4 * e, 4 * e + 4).map((vertex) => vertex + 1),
-        propertyId: propertyOf(meshed, e),
-      });
-    const surfaceTriangles = [];
-    for (let t = 0; t < meshed.surfTri.length / 3; t++)
-      surfaceTriangles.push(
-        [0, 1, 2].map((k) => meshed.surfTri[3 * t + k] + 1),
-      );
-    return {
-      nodes,
-      elements,
-      materials: [
-        { id: 1, name: "Steel", young: 210000, poisson: 0.3, density: 7.85e-9 },
-      ],
-      properties,
-      constraints: [],
-      loads: [],
-      surfaceTriangles,
-      surfaceFaceIds: Array.from(meshed.surfFace),
-    };
-  };
   // A pressure group on the nodes `on` selects, as the app builds it, and
   // the area its faces cover.
   const pressureOn = (model, on) => {
@@ -861,5 +863,93 @@ describe("pressure on the auto-shell paths", () => {
       );
       coupledResultant((p) => inBody(2)(p) && p.y > yMax - 1e-6, [0, 1, 0]);
     });
+  });
+});
+
+// ── Which auto-shell path a Shell body takes, or why it takes none ───────────
+// A body marked Shell is solved as shells — coupled to the solid bodies it
+// touches, or as a pure shell when every body is Shell — or the solve fails
+// naming the body. It is never solved as solid (KOF-352).
+describe("auto-shell path choice", () => {
+  const quiet = () => {
+    /* auto-shell progress lines are not asserted on */
+  };
+  const finProperties = [{ id: 1, materialId: 1, discretization: "shell" }];
+
+  test("a single thin body marked Shell solves as a pure shell", () => {
+    const fin = meshModel("single_fin.step", 4, () => 1, finProperties);
+    expect(prepareAutoShellSolve(fin, new Set([1]), quiet).kind).toBe("pure");
+  });
+
+  test("a Shell body standing on a solid body solves coupled", () => {
+    const model = meshModel(
+      "fin_two_parts.step",
+      6,
+      (meshed, e) => meshed.body[e],
+      [
+        { id: 1, materialId: 1, discretization: "solid" },
+        { id: 2, materialId: 1, discretization: "shell" },
+      ],
+    );
+    expect(prepareAutoShellSolve(model, new Set([2]), quiet).kind).toBe(
+      "coupled",
+    );
+  });
+
+  // The fin of fin_two_parts (body 2, Shell) without its base, and a copy of
+  // it 500 mm away (body 1, Solid): the shell touches no solid body, and not
+  // every body is Shell.
+  test("a Shell body that touches no solid body is refused, naming the body", () => {
+    const parts = meshModel(
+      "fin_two_parts.step",
+      6,
+      (meshed, e) => meshed.body[e],
+      [],
+    );
+    const finElements = parts.elements.filter(
+      (element) => element.propertyId === 2,
+    );
+    const finIds = new Set(finElements.flatMap((element) => element.nodeIds));
+    const finNodes = parts.nodes.filter((point) => finIds.has(point.id));
+    const offset = Math.max(...parts.nodes.map((point) => point.id));
+    const finSurface = parts.surfaceTriangles
+      .map((tri, index) => ({ tri, face: parts.surfaceFaceIds[index] }))
+      .filter(({ tri }) => tri.every((id) => finIds.has(id)));
+    const faceOffset = Math.max(...parts.surfaceFaceIds) + 1;
+    const model = {
+      ...parts,
+      nodes: [
+        ...finNodes,
+        ...finNodes.map((point) => ({
+          ...point,
+          id: point.id + offset,
+          x: point.x + 500,
+        })),
+      ],
+      elements: [
+        ...finElements,
+        ...finElements.map((element) => ({
+          ...element,
+          id: element.id + parts.elements.length,
+          nodeIds: element.nodeIds.map((id) => id + offset),
+          propertyId: 1,
+        })),
+      ],
+      properties: [
+        { id: 1, materialId: 1, discretization: "solid" },
+        { id: 2, materialId: 1, discretization: "shell" },
+      ],
+      surfaceTriangles: [
+        ...finSurface.map(({ tri }) => tri),
+        ...finSurface.map(({ tri }) => tri.map((id) => id + offset)),
+      ],
+      surfaceFaceIds: [
+        ...finSurface.map(({ face }) => face),
+        ...finSurface.map(({ face }) => face + faceOffset),
+      ],
+    };
+    expect(() => prepareAutoShellSolve(model, new Set([2]), quiet)).toThrow(
+      /Body 2 is marked "Shell".*touches no solid body/,
+    );
   });
 });
