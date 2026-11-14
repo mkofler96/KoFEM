@@ -113,6 +113,7 @@ impl ShellModel {
             preconditioner,
             reduction: None,
             output: RunOutput::Translations,
+            tie_report: None,
         })
     }
 

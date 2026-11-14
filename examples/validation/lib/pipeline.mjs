@@ -68,6 +68,8 @@ import {
   weldTies,
 } from "../../../web/src/lib/solve/solid.ts";
 import { buildVertexIndexer } from "../../../web/src/lib/solveMeshPacking.ts";
+import { constraintTieCount } from "../../../web/src/lib/tie.ts";
+import { tieWeighting } from "../../../web/src/lib/solve/tieMortar.ts";
 import { nodeVonMisesField } from "../../../web/src/lib/resultField.ts";
 import { buildMeshTimeShellModel } from "../../../web/src/lib/solve/autoShell.ts";
 import { buildShellEngineInputs } from "../../../web/src/lib/solve/shell.ts";
@@ -182,6 +184,7 @@ function resolveOnTessellation(at, tess, where) {
  * @property {object[]} properties        one per CAD body
  * @property {object[]} bcGroups          NamedBcGroup[]
  * @property {object[]} loadGroups        NamedLoadGroup[]
+ * @property {object[]} tieGroups         TieGroup[] (the recipe's ties)
  * @property {number} nextFaceEntryId
  * @property {object | null} handCheck    the analysis file's handCheck block
  *                                        (null for an optimisation)
@@ -436,6 +439,28 @@ export async function buildFromRecipe(id, recipe) {
     };
   });
 
+  // Ties as the Constraints panel makes them (tieSlice addTieGroup): the two
+  // picked surfaces as face entries, numbered after the supports' and loads'.
+  const tieGroups = (recipe.ties ?? []).map((t, i) => {
+    const facesA = entries(
+      resolve(t.facesA, `${where}.ties[${i}].facesA`),
+      `${where}.ties[${i}].facesA`,
+    );
+    const facesB = entries(
+      resolve(t.facesB, `${where}.ties[${i}].facesB`),
+      `${where}.ties[${i}].facesB`,
+    );
+    return {
+      id: i + 1,
+      name: t.name,
+      facesA,
+      facesB,
+      extent: t.extent,
+      searchDistance: t.extent === "region" ? t.searchDistance : 0,
+      method: t.method,
+    };
+  });
+
   const elementOrder = recipe.mesh.order;
   const payload = {
     nodes,
@@ -445,7 +470,7 @@ export async function buildFromRecipe(id, recipe) {
     constraints: rebuildConstraints(bcGroups),
     loads: rebuildLoads(loadGroups, nodes, []),
     surfaceLoads: rebuildSurfaceLoads(loadGroups, elements, []),
-    tieGroups: [],
+    tieGroups,
     couplings: [],
     elementOrder,
     solverMethod: DEFAULT_SOLVER_METHOD,
@@ -471,6 +496,7 @@ export async function buildFromRecipe(id, recipe) {
     properties,
     bcGroups,
     loadGroups,
+    tieGroups,
     nextFaceEntryId,
   });
 
@@ -629,13 +655,27 @@ async function solveSolid(payload, where) {
       `${where}: the app would not use AMG for this model (${reason})`,
     );
   const log = () => {};
-  const tied = weldTies(nodes, elements, payload.tieGroups, log);
+  const fem = await rustFem();
+  const tied = weldTies(
+    nodes,
+    elements,
+    payload.tieGroups,
+    log,
+    constraintTieCount(payload.tieGroups) > 0
+      ? tieWeighting(elementOrder, fem)
+      : null,
+  );
   const neverAsk = () => {
     throw new Error(`${where}: the AMG solve reached its iteration limit`);
   };
   const solved = await solveSolidInRust(
-    await rustFem(),
-    { ...payload, nodes: tied.solveNodes, elements: tied.tiedElements },
+    fem,
+    {
+      ...payload,
+      nodes: tied.solveNodes,
+      elements: tied.tiedElements,
+      constraintTies: tied.constraints,
+    },
     elementOrder,
     "amg",
     tied.vid,

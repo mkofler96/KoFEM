@@ -3,10 +3,11 @@
 
 // Every example can be rebuilt from scratch in the GUI alone (KOF-322). For each
 // example on /examples/, this walks its recipe's steps with real clicks (fixtures/recipe.ts) — import the STEP file, split, mesh, material,
-// supports, loads, solve — and checks that:
+// supports, loads, ties, solve — and checks that:
 //
 //   - the geometry has the faces and bodies the splits should give;
-//   - every support and load sits on whole CAD faces, the ones the recipe names;
+//   - every support, load and tie sits on whole CAD faces, the ones the recipe
+//     names;
 //   - the mesh has no hexahedra, and is the very mesh the node-side build makes;
 //   - the read-out, computed from the solved model by the recipe's probe, is the
 //     number the example publishes.
@@ -149,6 +150,22 @@ async function checkBuild(
       recipeFaceIds(snap, load.faces),
     );
     for (const face of faces) expect(face.onMesh).toBe(true);
+  });
+  // Every tie: its two surfaces on whole CAD faces, its method and extent.
+  const ties = recipe.ties ?? [];
+  expect(snap.tieGroups).toHaveLength(ties.length);
+  ties.forEach((tie, i) => {
+    const group = snap.tieGroups[i];
+    expect(group.method, `tie "${tie.name}" method`).toBe(tie.method);
+    expect(group.extent, `tie "${tie.name}" extent`).toBe(tie.extent);
+    for (const [faces, refs] of [
+      [group.facesA, tie.facesA],
+      [group.facesB, tie.facesB],
+    ] as const) {
+      const picked = groupFaces(snap, faces);
+      expect(picked.map((f) => f.cadFaceId)).toEqual(recipeFaceIds(snap, refs));
+      for (const face of picked) expect(face.onMesh).toBe(true);
+    }
   });
 }
 

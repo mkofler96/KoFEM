@@ -3,8 +3,8 @@
 
 // The recipe of an example (KOF-322): the steps a user takes in the KoFEM GUI
 // to build it from one STEP file — import, optional splits, mesh, material,
-// supports, loads, solve — and the Results-panel read-out that gives the
-// number on its page. One recipe drives three things:
+// supports, loads, optional ties between bodies, solve — and the Results-panel
+// read-out that gives the number on its page. One recipe drives three things:
 //
 //   1. the node-side build (lib/pipeline.mjs): STEP → OCCT → split_geometry →
 //      Netgen → app BCs on whole CAD faces → solve, which writes the analysis
@@ -73,6 +73,18 @@
 //                                       kind "moment": N·mm about `axis`; non-zero
 // @property {0 | 1 | 2} [axis]          kind "moment"
 //
+// @typedef {object} Tie                 a tie connection between two bodies (the
+//                                       Constraints panel's Add → Tie): every
+//                                       face of A, then every face of B, picked
+//                                       with the other body hidden when it
+//                                       stands in front of the face
+// @property {string} name
+// @property {FaceRef[]} facesA
+// @property {FaceRef[]} facesB
+// @property {"full" | "region"} extent
+// @property {number} [searchDistance]   mm, extent "region" only, positive
+// @property {"mpc" | "merge"} method    constraint (MPC) or node merge
+//
 // @typedef {object} Probe               what the Results panel's hand check reads
 //   One of:
 //   { kind: "displacement", component: 0|1|2, faces: FaceRef[] }
@@ -125,6 +137,7 @@
 // @property {Material} material
 // @property {Support[]} supports
 // @property {Load[]} loads
+// @property {Tie[]} [ties]              absent: the model has no tie
 // @property {Optimize} [optimize]       a topology optimisation instead of the
 //                                       static solve; read out by "compliance"
 // @property {Readout} readout
@@ -339,6 +352,25 @@ export function validateRecipe(id, r) {
     if (!["force", "pressure", "moment"].includes(l.kind))
       throw new Error(`${w}: kind must be force, pressure or moment`);
   });
+  if (r.ties !== undefined) {
+    if (!Array.isArray(r.ties))
+      throw new Error(`${at}: ties must be an array (absent for none)`);
+    r.ties.forEach((t, i) => {
+      const w = `${at}.ties[${i}]`;
+      if (typeof t?.name !== "string" || !t.name)
+        throw new Error(`${w}: needs a name`);
+      faceRefs(t.facesA, `${w}.facesA`);
+      faceRefs(t.facesB, `${w}.facesB`);
+      if (t.extent !== "full" && t.extent !== "region")
+        throw new Error(`${w}: extent must be "full" or "region"`);
+      if (t.extent === "region" && !(t.searchDistance > 0))
+        throw new Error(`${w}: a region tie needs a positive searchDistance`);
+      if (t.extent === "full" && t.searchDistance !== undefined)
+        throw new Error(`${w}: a full tie takes no searchDistance`);
+      if (t.method !== "mpc" && t.method !== "merge")
+        throw new Error(`${w}: method must be "mpc" or "merge"`);
+    });
+  }
   const ro = r.readout;
   if (r.optimize !== undefined || ro?.probe?.kind === "compliance")
     return validateOptimization(at, r);

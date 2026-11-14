@@ -13,7 +13,9 @@
 //     a total volume within 0.5 % of the analytic volume;
 //   - prismStep still writes byte-identical files, and invalid profiles throw;
 //   - product names are escaped as ISO 10303-21 strings (an apostrophe written
-//     twice), and such a file still imports.
+//     twice), and such a file still imports;
+//   - several profiles in one file (extrudedProfilesStep) import and mesh as
+//     that many bodies, each with its own faces and elements.
 
 import { createHash } from "node:crypto";
 import { beforeAll, describe, expect, test } from "bun:test";
@@ -22,6 +24,7 @@ import {
   arc,
   circleLoop,
   extrudedProfileStep,
+  extrudedProfilesStep,
   line,
   plateWithHoleStep,
   prismStep,
@@ -570,3 +573,57 @@ const thickness = 500;
     4,
   );
 }
+
+// ── Several solids in one file ────────────────────────────────────────────────
+describe("two blocks 1 mm apart in one file", () => {
+  const block = (x0, x1) => ({
+    outer: [line([x1, 0]), line([x1, 10]), line([x0, 10]), line([x0, 0])],
+    holes: [],
+  });
+  const step = extrudedProfilesStep(
+    [block(0, 20), block(21, 41)],
+    10,
+    "Two blocks",
+  );
+  let tess = null;
+  let dto = null;
+
+  beforeAll(async () => {
+    const engine = await loadEngine();
+    tess = engine.tessellate_step(
+      new TextEncoder().encode(step),
+      TESSELLATION_OPTIONS,
+    );
+    dto = engine.generate_fem_mesh(
+      JSON.stringify({
+        max_element_size: 5,
+        min_element_size: 0.5,
+        grading: 0.3,
+        second_order: false,
+        elementsperedge: 2.0,
+        elementspercurve: 2.0,
+        optsteps_2d: 3,
+        optsteps_3d: 3,
+      }),
+    );
+  });
+
+  test("import as two bodies of six faces each", () => {
+    expect(tess.bodyCount).toBe(2);
+    const faces = new Set(tess.triangleFaceIds);
+    expect(faces.size).toBe(12);
+    // Each body owns its own six faces: the gap keeps them apart.
+    const bodiesOfFace = new Map();
+    tess.triangleFaceIds.forEach((face, triangle) => {
+      const set = bodiesOfFace.get(face) ?? new Set();
+      set.add(tess.triangleBodyIds[triangle]);
+      bodiesOfFace.set(face, set);
+    });
+    for (const owners of bodiesOfFace.values()) expect(owners.size).toBe(1);
+  });
+
+  test("mesh as two bodies with their elements on either side of the gap", () => {
+    const bodies = new Set(Array.from(dto.bodyIds));
+    expect([...bodies].sort()).toEqual([1, 2]);
+  });
+});

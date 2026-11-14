@@ -40,6 +40,7 @@ import {
 } from "./bcs.js";
 import {
   coupledTies,
+  logCoupledTieMethods,
   engineCoupledBcs,
   engineCoupling,
   reportTieCouplings,
@@ -472,6 +473,7 @@ export function prepareAutoCoupledSolve(
   });
   // Before the bail below: a dropped tie must not be hidden by falling through to
   // the pure-shell path, which would solve a different model entirely.
+  logCoupledTieMethods(payload.tieGroups, log);
   reportTieCouplings(model.tieReports, log);
   if (model.coupling.ref.length === 0 && couplings.length === 0) return null; // shell doesn't couple to the solid
 

@@ -14,7 +14,7 @@ import type {
   SurfaceLoad,
 } from "../../workers/solverTypes.js";
 import { mixedCoupledMaterials } from "../coupledMaterials.js";
-import { bodyMembership, tieLimit, tieSides } from "../tie.js";
+import { bodyMembership, tieLimit, tieMethod, tieSides } from "../tie.js";
 import type { TieDefinition } from "../tie.js";
 import {
   buildExplicitCoupledModel,
@@ -115,6 +115,22 @@ export function coupledTies(
       maxSeparation: tieLimit(tie),
     };
   });
+}
+
+// A coupled model (shells, or couplings) joins every tie connection by
+// distributing couplings, whatever its method: the constraint (MPC) tie is
+// solved by the all-solid path only (lib/solve/amg.ts). Say so for each
+// constraint tie, rather than change its formulation without a word.
+export function logCoupledTieMethods(
+  tieGroups: TieDefinition[] | undefined,
+  log: SolveLog,
+): void {
+  for (const tie of tieGroups ?? [])
+    if (tieMethod(tie) === "mpc")
+      log(
+        `Tie "${tie.name}": joined by distributing couplings, as every tie is in a model ` +
+          "with shells or couplings — the constraint (MPC) method applies to all-solid models",
+      );
 }
 
 // Say what each tie connection contributed to a coupled model, and refuse one
@@ -274,6 +290,7 @@ export function buildCoupledEngineInputs(
       ),
     },
   );
+  logCoupledTieMethods(payload.tieGroups, log);
   reportTieCouplings(model.tieReports, log);
 
   const poolOf = (nodeId: number): number => {

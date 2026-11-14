@@ -46,7 +46,7 @@
               "https://kofem.org/examples/cantilever-beam/cantilever-beam-diagram.png",
               "https://kofem.org/examples/cantilever-beam/cantilever-beam-mesh-convergence.png"
             ],
-            "dateModified": "2026-11-12",
+            "dateModified": "2026-11-13",
             "isPartOf": {
               "@type": "CollectionPage",
               "url": "https://kofem.org/examples/"
@@ -816,6 +816,9 @@
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
             <li><a href="/examples/plate-with-hole-shell/">Plate with a hole (shells)</a></li>
             <li><a href="/examples/cooks-membrane/">Cook's membrane</a></li>
+            <li><a href="/examples/tie-patch-test/">Tie patch test</a></li>
+            <li><a href="/examples/tie-lame-cylinder/">Tied thick-walled cylinder</a></li>
+            <li><a href="/examples/tie-cantilever/">Tied cantilever beam</a></li>
           </ul>
         </details>
         <details class="docs-group" data-section="examples">
@@ -843,6 +846,9 @@
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
             <li><a href="/examples/plate-with-hole-shell/">Plate with a hole (shells)</a></li>
             <li><a href="/examples/cooks-membrane/">Cook's membrane</a></li>
+            <li><a href="/examples/tie-patch-test/">Tie patch test</a></li>
+            <li><a href="/examples/tie-lame-cylinder/">Tied thick-walled cylinder</a></li>
+            <li><a href="/examples/tie-cantilever/">Tied cantilever beam</a></li>
           </ul>
         </details>
         <details class="docs-group" data-section="examples">
@@ -854,7 +860,7 @@
         <button type="button" class="theme-toggle" hidden>Dark theme</button>
         </div>
       </details>
-      <p class="crumbs"><a href="/examples/#validation">Validation</a> / 3 of 8</p>
+      <p class="crumbs"><a href="/examples/#validation">Validation</a> / 3 of 11</p>
       <h1>Cantilever beam under tip load</h1>
       <div class="lede">
         <p>A beam clamped at one end and loaded at the other is the standard
@@ -948,7 +954,7 @@
           <tr><th scope="row">Mesh</th><td>Netgen, 25 mm maximum element size: 2,991 quadratic 10-node tetrahedra (P2)</td></tr>
           <tr><th scope="row">Unknowns</th><td>5,532 nodes, 16,596 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build fem-b229cd7ba59c); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-3397ae8ea1eb</td></tr>
+          <tr><th scope="row">Solver</th><td>The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build fem-45b08a9e444e); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-3397ae8ea1eb</td></tr>
         </table>
       </div>
         <p>The beam is the STEP file a user imports, meshed by Netgen with a

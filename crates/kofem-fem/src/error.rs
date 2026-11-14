@@ -107,6 +107,8 @@ pub enum FemError {
     Coupling { coupling: usize, reason: String },
     #[error("coupling input is invalid: {reason}")]
     CouplingInput { reason: String },
+    #[error("tie constraints: {reason}")]
+    Tie { reason: String },
     #[error(
         "node {node} DOF {component} is eliminated by two couplings — a DOF can be eliminated \
          by only one constraint. Make one of them distributing, or pick surfaces that do not \
