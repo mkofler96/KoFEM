@@ -34,5 +34,5 @@ to the last.
 bun ../examples/topopt-shell/coupled-bracket.mjs
 ```
 
-The engine sensitivities behind both (and their finite-difference verification)
-are covered natively by `just test-cpp-native -R topology_shell`.
+The sensitivities behind both (and their finite-difference verification) are
+covered natively by `just test-rust -p kofem-fem --test topology_mixed`.

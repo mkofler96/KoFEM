@@ -241,5 +241,4 @@ just test-web shell-prescribed-displacement
 ```
 
 The element math behind it is also covered natively, without a WASM build, by
-`just test-cpp-native -R shell_validation` (the `shell-prescribed-*` and `coupled-prescribed-*`
-checks in `engine/tests/shell_validation.cpp`).
+the Rust shell and mixed tests (`just test-rust -p kofem-fem --test shell --test mixed`).
