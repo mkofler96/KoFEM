@@ -507,10 +507,10 @@ impl ElementCache {
     }
 }
 
-fn mean_point<const N: usize>(corners: &[[f64; 3]; N]) -> [f64; 3] {
+pub(super) fn mean_point<const N: usize>(corners: &[[f64; 3]; N]) -> [f64; 3] {
     #[allow(
         clippy::cast_precision_loss,
-        reason = "N is 4 or 8, exactly representable"
+        reason = "N is 3, 4 or 8, exactly representable"
     )]
     let count = N as f64;
     std::array::from_fn(|axis| corners.iter().map(|corner| corner[axis]).sum::<f64>() / count)
@@ -529,7 +529,7 @@ fn hex_volume(corners: &[[f64; 3]; 8]) -> f64 {
 
 /// Append, for every entry of an element stiffness over `nodes` (row-major,
 /// 3·node + component), its index in the values of `pattern`.
-fn push_positions(
+pub(super) fn push_positions(
     pattern: &CsrMatrix,
     neighbours: &[Vec<u32>],
     nodes: &[u32],

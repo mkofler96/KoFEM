@@ -1,15 +1,17 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// SIMP topology optimization of an all-solid model through the Rust module
-// (crates/kofem-fem/src/topology, ADR-0002): the same loop as the engine's
-// optimize_topology, step for step, with multigrid CG for the solves. The
+// SIMP topology optimization through the Rust module
+// (crates/kofem-fem/src/topology, ADR-0002), for all three design domains:
+// all-solid models (the engine's optimize_topology, multigrid CG), pure
+// shells and coupled shell/solid models (optimize_topology_shell and
+// optimize_topology_coupled, IC(0) CG), step for step as the engine. The
 // optimizer runs one iteration per TopologyRun.step(), so the "[topopt] it
 // N: …" progress lines and the live density stream (KOF-240) come from here
 // with the same wording and cadence as from the engine.
 //
-// The model reaches Rust through the same helpers as the Rust static solve
-// (createRustSolidModel, rustSolidBoundaryConditions), and the settings keep
+// The model reaches Rust through the same helpers as the Rust static solves
+// (createRustSolidModel, createShellModel, createMixedModel), and the settings keep
 // the TopOptSettings wire contract and the engine's defaults. The level-set
 // method is not ported yet and stays with the engine (usesRustTopOpt).
 
@@ -22,6 +24,7 @@ import type {
   TopologyRun,
   TopologySettings,
 } from "../../wasm/fem/kofem_wasm.js";
+import type { ShellMesh } from "../../wasm/pkg/kofem_wasm.js";
 import type { TopOptPayload } from "../../workers/solverTypes.js";
 import { buildVertexIndexer } from "../solveMeshPacking.js";
 import {
@@ -29,6 +32,12 @@ import {
   describeSolidElements,
   rustSolidBoundaryConditions,
 } from "./amg.js";
+import {
+  createMixedModel,
+  type CoupledEngineArgs,
+  type MixedFemModule,
+} from "./coupledRust.js";
+import { createShellModel, type ShellFemModule } from "./shellRust.js";
 
 // The classes of the Rust module the optimizer needs, passed in so the worker
 // and the node-side tests can each load the module their own way.
@@ -37,6 +46,22 @@ export interface TopologyFemModule {
   TopologySettings: typeof TopologySettings;
   TopologyRun: typeof TopologyRun;
 }
+
+// The classes the shell and coupled optimizers need.
+export interface ShellTopologyFemModule extends ShellFemModule {
+  TopologySettings: typeof TopologySettings;
+  TopologyRun: typeof TopologyRun;
+}
+export interface CoupledTopologyFemModule extends MixedFemModule {
+  TopologySettings: typeof TopologySettings;
+  TopologyRun: typeof TopologyRun;
+}
+
+// The engine's shell SIMP solves stop at ‖f − K·u‖/‖f‖ ≤ 1e-5
+// (ShellTopOptConfig::cg_rtol): as void regions form, a thin-wall system's
+// conditioning worsens until a tighter target runs the CG budget out
+// mid-run (KOF-245); the sensitivities stay accurate to about this.
+const SHELL_CG_TOLERANCE = 1e-5;
 
 // Whether an all-solid optimization with these settings runs in Rust. SIMP
 // does; the level-set method is still the engine's.
@@ -72,7 +97,7 @@ function requirePositiveInteger(value: number, name: string): number {
 // rules and messages for missing or contradictory fields. Returns the
 // settings and the run header the engine logs.
 function buildSettings(
-  fem: TopologyFemModule,
+  fem: { TopologySettings: typeof TopologySettings },
   settings: TopOptSettings,
 ): {
   rust: TopologySettings;
@@ -206,26 +231,150 @@ export function optimizeSolidInRust(
       vid,
       log,
     );
-    const { rust, header, penalty, moveLimit } = buildSettings(fem, settings);
-    let run: TopologyRun;
-    try {
-      run = new fem.TopologyRun(elastic, fixedDofs, fixedValues, forces, rust);
-    } finally {
-      rust.free();
-    }
-    try {
-      log(
+    return runRust(
+      fem,
+      settings,
+      (rust) =>
+        new fem.TopologyRun(elastic, fixedDofs, fixedValues, forces, rust),
+      (run, header, penalty, moveLimit) =>
         `[topopt] ${header}: ${describeSolidElements(tetCount, hexCount)}, ${run.dofCount} dofs, ` +
-          `p=${penalty.toFixed(2)}, r_min=${general(run.filterRadius, 4)}, ` +
-          `move=${moveLimit.toFixed(3)}, maxit=${settings.maxIterations}, ` +
-          `tol=${general(settings.tolerance, 4)} — solving with Rust multigrid CG`,
-      );
-      return runToCompletion(run, settings.objective, log, onDensity);
-    } finally {
-      run.free();
-    }
+        `${describeLoop(run, settings, penalty, moveLimit)} — solving with Rust multigrid CG`,
+      log,
+      onDensity,
+    );
   } finally {
     elastic.free();
+  }
+}
+
+// Build the run with `start`, log its header and step it to completion,
+// freeing the Rust settings and run on every path.
+function runRust(
+  fem: { TopologySettings: typeof TopologySettings },
+  settings: TopOptSettings,
+  start: (rust: TopologySettings) => TopologyRun,
+  describe: (
+    run: TopologyRun,
+    header: string,
+    penalty: number,
+    moveLimit: number,
+  ) => string,
+  log: (line: string) => void,
+  onDensity: (iteration: number, density: Float64Array) => void,
+): { density: Float64Array; history: TopOptHistoryEntry[] } {
+  const { rust, header, penalty, moveLimit } = buildSettings(fem, settings);
+  let run: TopologyRun;
+  try {
+    run = start(rust);
+  } finally {
+    rust.free();
+  }
+  try {
+    log(describe(run, header, penalty, moveLimit));
+    return runToCompletion(run, settings.objective, log, onDensity);
+  } finally {
+    run.free();
+  }
+}
+
+// The run header's tail: penalty, filter, move limit, cap and tolerance.
+function describeLoop(
+  run: TopologyRun,
+  settings: TopOptSettings,
+  penalty: number,
+  moveLimit: number,
+): string {
+  return (
+    `p=${penalty.toFixed(2)}, r_min=${general(run.filterRadius, 4)}, ` +
+    `move=${moveLimit.toFixed(3)}, maxit=${settings.maxIterations}, ` +
+    `tol=${general(settings.tolerance, 4)}`
+  );
+}
+
+// Optimize the facets of a pure-shell model (one design density per facet)
+// with SIMP in Rust. Takes the payload the engine's solve_shell and
+// optimize_topology_shell read (buildShellEngineInputs), so the engine stays
+// the test oracle. Several shell materials keep their stiffness ratios.
+// Throws on an ill-posed problem, with the engine's message where it has
+// one.
+export function optimizeShellInRust(
+  fem: ShellTopologyFemModule,
+  inputs: { mesh: ShellMesh; matJson: string; bcsJson: string },
+  settings: TopOptSettings,
+  log: (line: string) => void,
+  onDensity: (iteration: number, density: Float64Array) => void,
+): { density: Float64Array; history: TopOptHistoryEntry[] } {
+  const { model, bcs, forces, nodeCount, triangleCount } = createShellModel(
+    fem,
+    inputs,
+  );
+  try {
+    return runRust(
+      fem,
+      settings,
+      (rust) =>
+        fem.TopologyRun.shell(
+          model,
+          Uint32Array.from(bcs.fixedDofs),
+          Float64Array.from(bcs.fixedValues),
+          forces,
+          rust,
+          SHELL_CG_TOLERANCE,
+        ),
+      (run, header, penalty, moveLimit) =>
+        `[topopt] shell ${header}: ${triangleCount} facets, ${nodeCount} nodes, ` +
+        `${run.dofCount} dofs, ${describeLoop(run, settings, penalty, moveLimit)} — ` +
+        "solving with Rust IC(0) CG",
+      log,
+      onDensity,
+    );
+  } finally {
+    model.free();
+  }
+}
+
+// Optimize a coupled model — tets and shell facets over one node pool,
+// joined by couplings that are not design variables — with SIMP in Rust
+// (one density per element, tets first, then facets). Takes the arguments
+// the engine's solve_coupled and optimize_topology_coupled read
+// (buildCoupledEngineInputs). Throws on an ill-posed problem.
+export function optimizeCoupledInRust(
+  fem: CoupledTopologyFemModule,
+  args: CoupledEngineArgs,
+  settings: TopOptSettings,
+  log: (line: string) => void,
+  onDensity: (iteration: number, density: Float64Array) => void,
+): { density: Float64Array; history: TopOptHistoryEntry[] } {
+  const { model, couplings, fixedDofs, fixedValues, forces } = createMixedModel(
+    fem,
+    args,
+  );
+  try {
+    return runRust(
+      fem,
+      settings,
+      (rust) =>
+        fem.TopologyRun.coupled(
+          model,
+          couplings,
+          fixedDofs,
+          fixedValues,
+          forces,
+          rust,
+          SHELL_CG_TOLERANCE,
+          "incomplete-cholesky",
+        ),
+      (run, header, penalty, moveLimit) =>
+        `[topopt] coupled ${header}: ${args.mesh.tets.length / 4} tets + ` +
+        `${args.mesh.triangles.length / 3} facets, ${model.vertexCount} nodes, ` +
+        `${args.coupling.ref.length} couplings, ${run.dofCount} dofs, ` +
+        `${describeLoop(run, settings, penalty, moveLimit)} — solving with Rust IC(0) CG`,
+      log,
+      onDensity,
+    );
+  } finally {
+    couplings.free();
+    model.free();
   }
 }
 

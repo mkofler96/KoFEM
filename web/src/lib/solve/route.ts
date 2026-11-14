@@ -8,6 +8,7 @@
 import type { SolveModel, TopOptPayload } from "../../workers/solverTypes.js";
 import { shellMarkedBodies, requireOneShellBody } from "./autoShell.js";
 import {
+  shellCouplingRefusal,
   shellOrderRefusal,
   shellTieRefusal,
   topOptTieRefusal,
@@ -42,18 +43,10 @@ export function routeSolve(payload: SolveModel): SolveRoute {
   // model refuses order 2 rather than solve linear behind the user's back.
   const orderRefusal = shellOrderRefusal(elementOrder);
   if (nShells > 0) {
-    // A coupling is an RBE2/RBE3 constraint, and only the coupled assembler
-    // applies one — the pure Kirchhoff shell solver has no couplings, and the
-    // coupled assembler needs a solid domain to assemble. An all-shell model
-    // therefore cannot carry a coupling today; say so, rather than solve it
-    // as if the coupling were not there.
+    // An all-shell model cannot carry a coupling; say so, rather than solve
+    // it as if the coupling were not there.
     if (nShells === payload.elements.length && nCouplings > 0)
-      throw new Error(
-        `This model is all shell elements and declares ${nCouplings} surface-to-point ` +
-          "coupling(s), which the shell solver cannot apply — a coupling needs the " +
-          "coupled solid-shell assembler, and that needs at least one solid body. " +
-          "Delete the coupling, or keep one body solid.",
-      );
+      throw new Error(shellCouplingRefusal(nCouplings));
     if (orderRefusal !== null) throw new Error(orderRefusal);
     if (nShells < payload.elements.length) return { path: "coupled" };
     // The coupled assembler joins ties; the pure shell solver has none.
@@ -84,10 +77,11 @@ export function routeSolve(payload: SolveModel): SolveRoute {
 export type TopOptDomain = "shell" | "coupled" | "solid";
 
 // The topology optimizer's design domain follows the element mix, exactly as
-// the static solve routes: all CTRIA3 → optimize_topology_shell; mixed
-// shell/solid or any coupling → optimize_topology_coupled; all solid → the
-// Rust SIMP optimizer (topOptRust.ts), or optimize_topology for the level-set
-// method. Unlike the solve, the optimizer never idealises a Shell
+// the static solve routes: all CTRIA3 → shell; mixed shell/solid or any
+// coupling → coupled; all solid → solid. SIMP runs in Rust on all three
+// (topOptRust.ts); the level-set method runs in the engine's
+// optimize_topology, on solid models only. An all-shell model with a
+// coupling is refused, as by the solve. Unlike the solve, the optimizer never idealises a Shell
 // body itself, applies no tie, and runs the level-set method through the solid
 // entry only — all three are refused here rather than optimizing the wrong
 // model.
@@ -128,7 +122,9 @@ export function routeTopOpt(payload: TopOptPayload): TopOptDomain {
       `Topology optimization: the level-set method does not support couplings yet, but this model has ${couplings.length} — remove them or use SIMP.`,
     );
 
-  if (solidElements.length === 0 && couplings.length === 0) return "shell";
+  if (solidElements.length === 0 && couplings.length > 0)
+    throw new Error(shellCouplingRefusal(couplings.length));
+  if (solidElements.length === 0) return "shell";
   if (shellElements.length > 0 || couplings.length > 0) return "coupled";
   return "solid";
 }
