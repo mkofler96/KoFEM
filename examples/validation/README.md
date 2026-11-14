@@ -5,8 +5,9 @@ STEP file imported, optionally split, meshed by Netgen with tetrahedra (a body
 marked Shell is then collapsed to its mid-surface, as the app does), a
 material, supports and loads on whole CAD faces, the static solve, and the
 number the Results panel's hand check reads. The steps are the case's
-**recipe** (`lib/recipe.mjs`); `lib/pipeline.mjs` runs them through the real
-WASM engine and the app's own TypeScript (the load builders, the default AMG
+**recipe** (`lib/recipe.mjs`); `lib/pipeline.mjs` runs them through the C++
+engine (import and meshing), the Rust module (the solve) and the app's own
+TypeScript (the load builders, the default AMG
 solver, the nodal stress averaging), so nothing is re-implemented and solving
 the opened example in the app gives the number on its page. This doubles as a
 CI regression gate and as the source of the numbers on the public example
@@ -164,7 +165,7 @@ beam, a 3D cantilever, and a mesh-independence check — each locking a converge
 compliance/volume trajectory and the emergent layout to a tolerance band:
 
 ```bash
-node examples/validation/topopt/run.mjs
+cd web && bun ../examples/validation/topopt/run.mjs
 ```
 
 ## What shapes the tolerances
@@ -222,8 +223,8 @@ fails on purpose on the committed binary until `scripts/build-wasm.sh` runs.
 
 ## `shell-prescribed-displacement.test.mjs` — non-zero Dirichlet on shells
 
-The shell counterpart of the test above, guarding KOF-210. The solid path got
-inhomogeneous Dirichlet conditions from MFEM; the shell formulation's boundary
+The shell counterpart of the test above, guarding KOF-210. The solid path had
+inhomogeneous Dirichlet conditions; the shell formulation's boundary
 conditions were homogeneous-only, so a prescribed displacement on a shell model
 either refused to run or — on the auto-shell and coupled paths — silently pinned
 the value to zero and returned an all-zero field that looks converged. Thin

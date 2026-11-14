@@ -2,12 +2,14 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 // Topology-optimization benchmark runner (KOF-234): optimizes each canonical
-// case through the real WASM engine (the same SIMP/MMA loop the browser runs)
+// case through the app's Rust optimizer (the same SIMP/MMA loop the browser runs)
 // and checks the converged compliance, volume fraction and emergent layout
 // against a documented tolerance band.
 //
-//   node examples/validation/topopt/run.mjs            # run + print results
-//   node examples/validation/topopt/run.mjs --report   # also (re)write REPORT.md
+// Run with bun from web/ (it imports the app's TypeScript):
+//
+//   bun ../examples/validation/topopt/run.mjs            # run + print results
+//   bun ../examples/validation/topopt/run.mjs --report   # also (re)write REPORT.md
 //
 // Exits non-zero if any check fails, so it gates a solver regression. Unlike the
 // linear-elastic suite in ../, each case asserts several properties (a
@@ -53,13 +55,13 @@ if (process.argv.includes("--report")) {
   const lines = [
     "# KoFEM topology-optimization benchmark results",
     "",
-    "Each case is optimized by the real WASM engine (the SIMP minimum-compliance",
+    "Each case is optimized by the app's Rust optimizer (the SIMP minimum-compliance",
     "loop + MMA optimizer, KOF-230/231) and its converged compliance, volume",
     "fraction and layout are checked against a documented tolerance band.",
     "Regenerate with:",
     "",
     "```bash",
-    "node examples/validation/topopt/run.mjs --report",
+    "cd web && bun ../examples/validation/topopt/run.mjs --report",
     "```",
     "",
   ];

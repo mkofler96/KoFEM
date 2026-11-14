@@ -8,7 +8,7 @@
 // material into a rib layout — solid stiffeners where the bending moment is
 // largest, voids elsewhere — rather than a uniform gray sheet.
 //
-//   node examples/topopt-shell/thin-plate.mjs
+//   (from web/) bun ../examples/topopt-shell/thin-plate.mjs
 //
 // Exits non-zero if the run does not converge, leaves the volume constraint, or
 // fails to separate solid from void — so it doubles as a verification gate.

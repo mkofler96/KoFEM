@@ -9,7 +9,7 @@
 // eliminated by the same master-slave reduction every iteration, so the
 // shell↔solid interface is intact from the first solve to the last.
 //
-//   node examples/topopt-shell/coupled-bracket.mjs
+//   (from web/) bun ../examples/topopt-shell/coupled-bracket.mjs
 //
 // Exits non-zero if the coupled run does not converge or leaves the volume
 // constraint — it verifies the interface survives the whole optimization.

@@ -500,7 +500,7 @@ function markdownReport(rs) {
     "",
     "Each case is built as a user builds it in the app — a STEP file meshed by",
     "Netgen, supports and loads on whole CAD faces, solved by the app's own code",
-    "and the real WASM engine — and compared against its closed-form or published",
+    "and its Rust solver module — and compared against its closed-form or published",
     "reference. The same numbers are published at <https://kofem.org/examples/>,",
     "with one page per example (derivation, model, mesh convergence, discussion,",
     "how to reproduce). Regenerate them with:",

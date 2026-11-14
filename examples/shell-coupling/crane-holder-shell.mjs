@@ -8,7 +8,7 @@
 // bodies stay solid (assembled by MFEM); the two are joined by a distributing
 // (RBE3) coupling that transmits force and moment across the mid-surface offset.
 //
-//   node examples/shell-coupling/crane-holder-shell.mjs [--vtu out.vtu]
+//   (from web/) bun ../examples/shell-coupling/crane-holder-shell.mjs [--vtu out.vtu]
 //
 // Exits non-zero if the coupled solve does not converge, so it doubles as a
 // regression/verification check. Pass --vtu to write the deformed shell surface
