@@ -13,18 +13,18 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
     <title>Assembly | KoFEM Theory Guide</title>
-    <meta name="description" content="A two-element bar and two tetrahedra sharing a face show how element stiffness and loads are summed into one sparse global system, and how KoFEM and MFEM number solid DOFs." />
+    <meta name="description" content="A two-element bar and two tetrahedra sharing a face show how element stiffness and loads are summed into one sparse global system, and how KoFEM numbers solid DOFs." />
     <link rel="canonical" href="https://kofem.org/theory/numerical-methods/assembly/" />
     <meta name="robots" content="index, follow" />
 
     <meta property="og:type" content="article" />
     <meta property="og:title" content="Assembly | KoFEM Theory Guide" />
-    <meta property="og:description" content="A two-element bar and two tetrahedra sharing a face show how element stiffness and loads are summed into one sparse global system, and how KoFEM and MFEM number solid DOFs." />
+    <meta property="og:description" content="A two-element bar and two tetrahedra sharing a face show how element stiffness and loads are summed into one sparse global system, and how KoFEM numbers solid DOFs." />
     <meta property="og:url" content="https://kofem.org/theory/numerical-methods/assembly/" />
     <meta property="og:image" content="https://kofem.org/og-image.png" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Assembly | KoFEM Theory Guide" />
-    <meta name="twitter:description" content="A two-element bar and two tetrahedra sharing a face show how element stiffness and loads are summed into one sparse global system, and how KoFEM and MFEM number solid DOFs." />
+    <meta name="twitter:description" content="A two-element bar and two tetrahedra sharing a face show how element stiffness and loads are summed into one sparse global system, and how KoFEM numbers solid DOFs." />
     <meta name="twitter:image" content="https://kofem.org/og-image.png" />
 
     <!-- Self-hosted fonts (SIL OFL) — see public/fonts/README.md -->
@@ -37,7 +37,7 @@
         "@context": "https://schema.org",
         "@type": "TechArticle",
         "headline": "Assembly",
-        "description": "A two-element bar and two tetrahedra sharing a face show how element stiffness and loads are summed into one sparse global system, and how KoFEM and MFEM number solid DOFs.",
+        "description": "A two-element bar and two tetrahedra sharing a face show how element stiffness and loads are summed into one sparse global system, and how KoFEM numbers solid DOFs.",
         "url": "https://kofem.org/theory/numerical-methods/assembly/",
         "isPartOf": {
           "@type": "CollectionPage",
@@ -807,7 +807,7 @@
         </div></details>
         <nav class="crumbs" aria-label="Breadcrumb"><a href="/">KoFEM</a> / <a href="/theory/">Theory</a> / Numerical methods / Assembly</nav>
         <h1>Assembly</h1>
-        <details class="article-contents"><summary>On this page</summary><ul><li><a href="#local-global">Local and global degrees of freedom</a></li><li><a href="#bar-example">Worked example: two bar elements</a></li><li><a href="#scatter">Assembly as gather and scatter</a></li><li><a href="#shared-face">Two tetrahedra sharing a face</a></li><li><a href="#dof-ordering">DOF ordering</a></li><li><a href="#global-properties">Properties of the global matrix</a></li><li><a href="#implementation">KoFEM and MFEM responsibilities</a></li><li><a href="#references">Sources and further reading</a></li></ul></details>
+        <details class="article-contents"><summary>On this page</summary><ul><li><a href="#local-global">Local and global degrees of freedom</a></li><li><a href="#bar-example">Worked example: two bar elements</a></li><li><a href="#scatter">Assembly as gather and scatter</a></li><li><a href="#shared-face">Two tetrahedra sharing a face</a></li><li><a href="#dof-ordering">DOF ordering</a></li><li><a href="#global-properties">Properties of the global matrix</a></li><li><a href="#implementation">KoFEM implementation</a></li><li><a href="#references">Sources and further reading</a></li></ul></details>
 
     <p class="lede">How do element contributions become the global linear system?</p>
     <p>Each element knows only its own nodes. Assembly adds every element’s
@@ -873,16 +873,16 @@
     <h2 id="shared-face">Two tetrahedra sharing a face</h2>
     <p>Take five vertices, 0 to 4, and two order-1 tetrahedra: <math><msub><mi>T</mi><mn>1</mn></msub><mo>=</mo></math>​<math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>0</mn><mo>,</mo><mn>1</mn><mo>,</mo><mn>2</mn><mo>,</mo><mn>3</mn><mo stretchy="false" lspace="0" rspace="0">)</mo></math>
       and <math><msub><mi>T</mi><mn>2</mn></msub><mo>=</mo></math>​<span class="math-nowrap"><math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>1</mn><mo>,</mo><mn>2</mn><mo>,</mo><mn>3</mn><mo>,</mo><mn>4</mn><mo stretchy="false" lspace="0" rspace="0">)</mo></math>.</span> They share the face
-      <span class="math-nowrap"><math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>1</mn><mo>,</mo><mn>2</mn><mo>,</mo><mn>3</mn><mo stretchy="false" lspace="0" rspace="0">)</mo></math>.</span> With <math><msub><mi>n</mi><mi>b</mi></msub><mo>=</mo></math>​<span class="math-nowrap"><math><mn>5</mn></math>,</span> there are 15 global DOFs. Using the
-      component-blocked order explained below, component <math><mi>c</mi><mo>=</mo></math>​<math><mn>0</mn><mo>,</mo><mn>1</mn><mo>,</mo><mn>2</mn></math>
-      <span class="math-nowrap">(<math><mi>x</mi><mo>,</mo><mi>y</mi><mo>,</mo><mi>z</mi></math>)</span> of vertex <math><mi>v</mi></math> has global index <span class="math-nowrap"><math><mi>v</mi><mo>+</mo><mn>5</mn><mi>c</mi></math>:</span></p>
+      <span class="math-nowrap"><math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>1</mn><mo>,</mo><mn>2</mn><mo>,</mo><mn>3</mn><mo stretchy="false" lspace="0" rspace="0">)</mo></math>.</span> With <math><msub><mi>n</mi><mi>b</mi></msub><mo>=</mo></math>​<span class="math-nowrap"><math><mn>5</mn></math>,</span> there are 15 global DOFs. Using
+      KoFEM’s interleaved order explained below, component <math><mi>c</mi><mo>=</mo></math>​<math><mn>0</mn><mo>,</mo><mn>1</mn><mo>,</mo><mn>2</mn></math>
+      <span class="math-nowrap">(<math><mi>x</mi><mo>,</mo><mi>y</mi><mo>,</mo><mi>z</mi></math>)</span> of vertex <math><mi>v</mi></math> has global index <span class="math-nowrap"><math><mn>3</mn><mi>v</mi><mo>+</mo><mi>c</mi></math>:</span></p>
     <div class="table-wrap" tabindex="0" role="region" aria-label="Global DOF indices of two tetrahedra sharing a face; scroll horizontally if needed">
       <table>
         <caption>Global DOF indices per element</caption>
         <thead><tr><th scope="col">Element</th><th scope="col">x DOFs</th><th scope="col">y DOFs</th><th scope="col">z DOFs</th></tr></thead>
         <tbody>
-          <tr><th scope="row"><math><msub><mi>T</mi><mn>1</mn></msub></math> (0, 1, 2, 3)</th><td>0, 1, 2, 3</td><td>5, 6, 7, 8</td><td>10, 11, 12, 13</td></tr>
-          <tr><th scope="row"><math><msub><mi>T</mi><mn>2</mn></msub></math> (1, 2, 3, 4)</th><td>1, 2, 3, 4</td><td>6, 7, 8, 9</td><td>11, 12, 13, 14</td></tr>
+          <tr><th scope="row"><math><msub><mi>T</mi><mn>1</mn></msub></math> (0, 1, 2, 3)</th><td>0, 3, 6, 9</td><td>1, 4, 7, 10</td><td>2, 5, 8, 11</td></tr>
+          <tr><th scope="row"><math><msub><mi>T</mi><mn>2</mn></msub></math> (1, 2, 3, 4)</th><td>3, 6, 9, 12</td><td>4, 7, 10, 13</td><td>5, 8, 11, 14</td></tr>
         </tbody>
       </table>
     </div>
@@ -904,18 +904,18 @@
       <li><strong>Component-blocked</strong>: all <math><mi>x</mi></math> coefficients, then all <span class="math-nowrap"><math><mi>y</mi></math>,</span>
         then all <span class="math-nowrap"><math><mi>z</mi></math>,</span> index <span class="math-nowrap"><math><mi>v</mi><mo>+</mo><msub><mi>n</mi><mi>b</mi></msub><mi>c</mi></math>.</span></li>
     </ul>
-    <p>KoFEM’s solid solve uses MFEM’s default, component-blocked global order.
-      MFEM’s elasticity integrator also orders each element matrix by
-      component: local index <span class="math-nowrap"><math><mi>k</mi><mo>+</mo><msub><mi>n</mi><mi>e</mi></msub><mi>c</mi></math>.</span> The two orders differ only by a
+    <p>KoFEM’s solid solve uses the interleaved order for the global vector
+      and for each element matrix: local index <math><mn>3</mn><mi>a</mi><mo>+</mo><mi>i</mi></math> for component
+      <math><mi>i</mi></math> of element node <span class="math-nowrap"><math><mi>a</mi></math>.</span> The two orders differ only by a
       permutation matrix <span class="math-nowrap"><math><mi>P</mi></math>:</span> <math><msub><mi mathvariant="bold" class="math-bold">K</mi><mrow><mi mathvariant="normal">blocked</mi></mrow></msub><mo>=</mo></math>​<span class="math-nowrap"><math><mi>P</mi><msub><mi mathvariant="bold" class="math-bold">K</mi><mrow><mi mathvariant="normal">interleaved</mi></mrow></msub><msup><mi>P</mi><mi>T</mi></msup></math>.</span>
-      For the worked tetrahedron, exact arithmetic confirms that MFEM’s form
-      equals the permuted <math><msup><mi mathvariant="bold" class="math-bold">B</mi><mi>T</mi></msup><mi>C</mi><mi mathvariant="bold" class="math-bold">B</mi></math> matrix. The displacement field and
-      every physical result are unchanged; only array positions differ.</p>
-    <p>At order 1 the scalar index of a vertex DOF is the input vertex index,
-      so the <math><mi>x</mi><mo>,</mo><mi>y</mi><mo>,</mo><mi>z</mi></math> displacement of vertex <math><mi>v</mi></math> sits at <span class="math-nowrap"><math><mi>v</mi></math>,</span> <math><mi>v</mi><mo>+</mo><msub><mi>n</mi><mi>b</mi></msub></math> and
-      <span class="math-nowrap"><math><mi>v</mi><mo>+</mo><mn>2</mn><msub><mi>n</mi><mi>b</mi></msub></math>.</span> At order 2, edge functions follow all vertex
-      functions. When MFEM corrects a tetrahedron’s orientation it reorders
-      that element’s local corners; global vertex numbers do not change.</p>
+      Libraries such as MFEM use the component-blocked order. The displacement
+      field and every physical result are unchanged; only array positions differ.</p>
+    <p>At order 1 the node of a DOF is the input vertex, so the
+      <math><mi>x</mi><mo>,</mo><mi>y</mi><mo>,</mo><mi>z</mi></math> displacement of vertex <math><mi>v</mi></math> sits at <span class="math-nowrap"><math><mn>3</mn><mi>v</mi></math>,</span> <math><mn>3</mn><mi>v</mi><mo>+</mo><mn>1</mn></math> and
+      <span class="math-nowrap"><math><mn>3</mn><mi>v</mi><mo>+</mo><mn>2</mn></math>.</span> At order 2, nodes added on edges follow all vertices,
+      then hexahedron face nodes, then hexahedron centre nodes. They are
+      numbered from the mesh alone, so the same mesh always gives the same
+      numbering.</p>
 
     <h2 id="global-properties">Properties of the global matrix</h2>
     <ul>
@@ -938,47 +938,49 @@
       <figcaption>A small triangular mesh and the nonzero pattern of its plane-elasticity stiffness matrix, two DOFs per node. A node couples only to the nodes of its own elements (highlighted), so most entries are zero. Numbering the nodes from left to right keeps the nonzeros near the diagonal.</figcaption>
     </figure>
 
-    <h2 id="implementation">KoFEM and MFEM responsibilities</h2>
-    <p>KoFEM uses MFEM 4.7. The solid solve is
-      <a href="https://github.com/mkofler96/KoFEM/blob/41aa05f99bc99210995b21d1aded942d45ef4729/engine/cpp/solve_mfem.cpp#L182">solve_linear_elastic</a>.</p>
-    <div class="table-wrap" tabindex="0" role="region" aria-label="Map from textbook steps to the KoFEM and MFEM implementation; scroll horizontally if needed">
+    <h2 id="implementation">KoFEM implementation</h2>
+    <p>KoFEM’s solid solve runs in its Rust finite-element module; the
+      element integrals follow MFEM 4.7, from which they are ported. The app
+      drives the solve from
+      <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/web/src/lib/solve/amg.ts#L197">solveSolidInRust</a>.</p>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="Map from textbook steps to the KoFEM implementation; scroll horizontally if needed">
       <table class="responsibility-table">
         <caption>Textbook step to production code</caption>
-        <thead><tr><th scope="col">Step</th><th scope="col">Owner</th><th scope="col">What happens</th></tr></thead>
+        <thead><tr><th scope="col">Step</th><th scope="col">Where</th><th scope="col">What happens</th></tr></thead>
         <tbody>
-          <tr><th scope="row">Mesh and connectivity</th><td>KoFEM, MFEM</td><td>KoFEM adds vertices and tetrahedra/hexahedra with a material attribute per element
-            (<a href="https://github.com/mkofler96/KoFEM/blob/41aa05f99bc99210995b21d1aded942d45ef4729/engine/cpp/fem_mesh_io.cpp#L113">fem_mesh_io.cpp</a>); MFEM builds edges and faces and fixes element orientation.</td></tr>
-          <tr><th scope="row">Shape functions and DOF numbering</th><td>MFEM</td><td>An order-<math><mi>k</mi></math> H1 space with three components, component-blocked
-            (<a href="https://github.com/mkofler96/KoFEM/blob/41aa05f99bc99210995b21d1aded942d45ef4729/engine/cpp/solve_mfem.cpp#L259">solve_mfem.cpp</a>).</td></tr>
-          <tr><th scope="row">Material per element</th><td>KoFEM</td><td><math><mi>λ</mi></math> and <math><mi>μ</mi></math> from each body’s <math><mi>E</mi></math> and <span class="math-nowrap"><math><mi>ν</mi></math>,</span> selected by element attribute
-            (<a href="https://github.com/mkofler96/KoFEM/blob/41aa05f99bc99210995b21d1aded942d45ef4729/engine/cpp/solve_mfem.cpp#L288">solve_mfem.cpp</a>).</td></tr>
-          <tr><th scope="row">Element stiffness and quadrature</th><td>MFEM</td><td>Elasticity integrator with its default rule
-            (<a href="https://github.com/mfem/mfem/blob/v4.7/fem/bilininteg.cpp#L3033">bilininteg.cpp</a>).</td></tr>
-          <tr><th scope="row">Scatter-add into <math><mi mathvariant="bold" class="math-bold">K</mi></math></th><td>MFEM</td><td>Bilinear-form assembly into a sparse matrix
-            (<a href="https://github.com/mkofler96/KoFEM/blob/41aa05f99bc99210995b21d1aded942d45ef4729/engine/cpp/solve_mfem.cpp#L291">solve_mfem.cpp</a>).</td></tr>
-          <tr><th scope="row">Surface loads</th><td>KoFEM, MFEM</td><td>KoFEM builds the traction for each force, traction or pressure group and marks its faces; MFEM integrates <math><msub><mi>N</mi><mi>a</mi></msub><mi mathvariant="bold" class="math-bold">t</mi></math>
-            (<a href="https://github.com/mkofler96/KoFEM/blob/41aa05f99bc99210995b21d1aded942d45ef4729/engine/cpp/fem_bc_io.cpp#L340">fem_bc_io.cpp</a>).</td></tr>
-          <tr><th scope="row">Point loads</th><td>KoFEM</td><td>Added directly to the assembled load vector at a vertex’s three DOFs
-            (<a href="https://github.com/mkofler96/KoFEM/blob/41aa05f99bc99210995b21d1aded942d45ef4729/engine/cpp/fem_bc_io.cpp#L425">fem_bc_io.cpp</a>).</td></tr>
-          <tr><th scope="row">Supports</th><td>KoFEM, MFEM</td><td>KoFEM lists constrained DOFs, extending them to order-2 edge DOFs
-            (<a href="https://github.com/mkofler96/KoFEM/blob/41aa05f99bc99210995b21d1aded942d45ef4729/engine/cpp/fem_bc_io.cpp#L177">fem_bc_io.cpp</a>); MFEM eliminates them
-            (<a href="https://github.com/mkofler96/KoFEM/blob/41aa05f99bc99210995b21d1aded942d45ef4729/engine/cpp/solve_mfem.cpp#L297">solve_mfem.cpp</a>).</td></tr>
-          <tr><th scope="row">Mixed solid–shell</th><td>KoFEM, MFEM</td><td>The same order-1 MFEM solid matrix, renumbered into KoFEM’s coupled DOF list
-            (<a href="https://github.com/mkofler96/KoFEM/blob/41aa05f99bc99210995b21d1aded942d45ef4729/engine/cpp/solve_coupled.cpp#L71">solve_coupled.cpp</a>).</td></tr>
+          <tr><th scope="row">Mesh and connectivity</th><td>App, Rust</td><td>The app packs vertices and tetrahedra/hexahedra with a material index per element
+            (<a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/web/src/lib/solve/amg.ts#L301">amg.ts</a>); the Rust mesh checks every element and adds the order-2 nodes
+            (<a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/mesh.rs#L278">mesh.rs</a>).</td></tr>
+          <tr><th scope="row">DOF numbering</th><td>Rust</td><td>Three DOFs per node, interleaved, <math><mn>3</mn><mi>a</mi><mo>+</mo><mi>i</mi></math>
+            (<a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/mesh.rs#L99">mesh.rs</a>).</td></tr>
+          <tr><th scope="row">Material per element</th><td>Rust</td><td><math><mi>λ</mi></math> and <math><mi>μ</mi></math> from each body’s <math><mi>E</mi></math> and <math><mi>ν</mi></math>
+            (<a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/material.rs#L45">material.rs</a>).</td></tr>
+          <tr><th scope="row">Element stiffness and quadrature</th><td>Rust</td><td>The isotropic integrand with the rules of the elements page
+            (<a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/element.rs#L133">element.rs</a>).</td></tr>
+          <tr><th scope="row">Scatter-add into <math><mi mathvariant="bold" class="math-bold">K</mi></math></th><td>Rust</td><td>A sparse pattern from the node neighbours, then each element matrix added into it
+            (<a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/assembly.rs#L40">assembly.rs</a>).</td></tr>
+          <tr><th scope="row">Surface loads</th><td>App, Rust</td><td>The app sends each force, traction or pressure group’s faces; Rust matches them to boundary faces and integrates <math><msub><mi>N</mi><mi>a</mi></msub><mi mathvariant="bold" class="math-bold">t</mi></math>
+            (<a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/surface.rs#L229">surface.rs</a>).</td></tr>
+          <tr><th scope="row">Point loads</th><td>App</td><td>Added directly to the load vector at a vertex’s three DOFs
+            (<a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/web/src/lib/solve/amg.ts#L380">amg.ts</a>).</td></tr>
+          <tr><th scope="row">Supports</th><td>App, Rust</td><td>The app lists constrained DOFs; Rust extends them to order-2 edge nodes and eliminates them
+            (<a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/static_solve.rs#L102">static_solve.rs</a>).</td></tr>
+          <tr><th scope="row">Mixed solid–shell</th><td>Rust</td><td>The same order-1 solid matrix, combined with the shell facets through the coupling equations
+            (<a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/coupled_static.rs#L406">coupled_static.rs</a>).</td></tr>
         </tbody>
       </table>
     </div>
     <p>KoFEM-specific decisions are the element order offered, the material
       mapping, the conversion of face forces to tractions and the treatment of
-      supports. Shape functions, quadrature and the scatter-add are MFEM’s.
-      The <a href="/examples/axial-bar/">axial bar example</a> runs this
-      complete path in the browser engine; open it in the app and run it
+      supports. The <a href="/examples/axial-bar/">axial bar example</a> runs this
+      complete path in the browser; open it in the app and run it
       yourself.</p>
 
     <h2 id="references">Sources and further reading</h2>
     <ol class="refs">
       <li><a href="https://mfem.org/fem/">MFEM: Finite element methods</a>,
-        finite element spaces, bilinear forms and assembly.</li>
+        finite element spaces, bilinear forms and assembly; KoFEM’s element
+        integrals are ported from MFEM.</li>
       <li>Hughes, <cite>The Finite Element Method: Linear Static and Dynamic
         Finite Element Analysis</cite> (2000), the assembly operator and
         global DOF arrays.</li>
@@ -991,7 +993,7 @@
       <a class="prev" rel="prev" href="/theory/numerical-methods/elements-and-quadrature/"><small>Previous</small>← Elements and quadrature</a>
       <a class="next" rel="next" href="/theory/numerical-methods/loads-and-constraints/"><small>Next</small>Loads and constraints →</a></nav>
       </main>
-      <nav class="docs-toc" aria-label="On this page"><p>On this page</p><ul><li><a href="#local-global">Local and global degrees of freedom</a></li><li><a href="#bar-example">Worked example: two bar elements</a></li><li><a href="#scatter">Assembly as gather and scatter</a></li><li><a href="#shared-face">Two tetrahedra sharing a face</a></li><li><a href="#dof-ordering">DOF ordering</a></li><li><a href="#global-properties">Properties of the global matrix</a></li><li><a href="#implementation">KoFEM and MFEM responsibilities</a></li><li><a href="#references">Sources and further reading</a></li></ul></nav>
+      <nav class="docs-toc" aria-label="On this page"><p>On this page</p><ul><li><a href="#local-global">Local and global degrees of freedom</a></li><li><a href="#bar-example">Worked example: two bar elements</a></li><li><a href="#scatter">Assembly as gather and scatter</a></li><li><a href="#shared-face">Two tetrahedra sharing a face</a></li><li><a href="#dof-ordering">DOF ordering</a></li><li><a href="#global-properties">Properties of the global matrix</a></li><li><a href="#implementation">KoFEM implementation</a></li><li><a href="#references">Sources and further reading</a></li></ul></nav>
     </div><footer class="site-footer">
       <span>KoFEM — finite element analysis in your browser</span>
       <nav aria-label="Footer">

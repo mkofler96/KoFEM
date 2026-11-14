@@ -824,7 +824,7 @@
     <p>Early iterations look gray and blurred: densities start uniform and
       move by at most the move limit per step. A shape that looks finished can
       still be reorganising, so judge the final result, not an early frame.</p>
-    <p><strong>Cancel</strong> terminates the engine worker. The partial run
+    <p><strong>Cancel</strong> terminates the solver worker. The partial run
       and its live density are discarded; there is no best-so-far design.
       Changing any optimization setting also clears an existing result. A
       saved analysis file keeps the optimization settings but not the density
@@ -893,8 +893,9 @@
       <li><strong>Stiffness, not strength.</strong> Without a stress limit, peak
         stress is not controlled. With one, a relaxed element-centre aggregate
         is controlled, not the stress of the rebuilt part.</li>
-      <li><strong>The design space and supports.</strong> Every element
-        is a design variable, including those at supports and loads. Check
+      <li><strong>The design space and supports.</strong> Every element of a
+        design region is a design variable, including those at supports and
+        loads. Check
         that the interpreted shape still carries each load into each support.</li>
       <li><strong>Discretisation and filter.</strong> The minimum member size
         follows from <math><msub><mi>r</mi><mrow><mi mathvariant="normal">min</mi></mrow></msub></math> and the mesh; a different
@@ -909,18 +910,19 @@
     <h2 id="open-work">Current limits</h2>
     <div class="table-wrap" tabindex="0" role="region" aria-label="Optimization scope in KoFEM; scroll horizontally if needed"><table class="shell-table">
     <caption>Optimization scope in KoFEM</caption><thead><tr><th scope="col">Topic</th><th scope="col">Current behaviour</th><th scope="col">Not yet available</th></tr></thead>
-    <tbody><tr><th scope="row">Design domain</th><td>Every element is a design variable. The engine accepts element indices pinned solid or void, but the app sends none.</td><td>Keep-in and keep-out regions in the app.</td></tr><tr><th scope="row">Stress limit</th><td>All-solid SIMP models only.</td><td>Shell and coupled stress constraints.</td></tr><tr><th scope="row">Loads and supports</th><td>One load case; fixed supports with zero displacement; design-independent loads.</td><td>Multiple load cases, prescribed displacements, self-weight.</td></tr><tr><th scope="row">Materials</th><td>One material per solid domain and one per shell domain.</td><td>Per-body design materials.</td></tr><tr><th scope="row">Result and export</th><td>Density, history and STL of the thresholded surface. No automatic reanalysis or CAD output.</td><td>Re-analysis is a manual workflow.</td></tr></tbody></table></div>
+    <tbody><tr><th scope="row">Design domain</th><td>Every element of a design region is a design variable. Regions can be kept solid or kept empty.</td><td>Keep-in and keep-out selections finer than a region.</td></tr><tr><th scope="row">Stress limit</th><td>All-solid SIMP models only.</td><td>Shell and coupled stress constraints.</td></tr><tr><th scope="row">Loads and supports</th><td>One load case; fixed supports with zero displacement; design-independent loads.</td><td>Multiple load cases, prescribed displacements, self-weight.</td></tr><tr><th scope="row">Materials</th><td>One material per solid domain and one per shell domain.</td><td>Per-body design materials.</td></tr><tr><th scope="row">Result and export</th><td>Density, history and STL of the thresholded surface. No automatic reanalysis or CAD output.</td><td>Re-analysis is a manual workflow.</td></tr></tbody></table></div>
     <p><a href="/theory/verification/strategy/">Verification strategy</a>
       explains how evidence for the static solver is organised.</p>
 
     <h2 id="references">Implementation and references</h2>
     <ol class="refs">
-      <li><a href="https://github.com/mkofler96/KoFEM/blob/cfef914866c455c2f7b464dab28de52cbc57ec19/engine/cpp/topology_stream.h#L1">density streaming</a> and
-        <a href="https://github.com/mkofler96/KoFEM/blob/cfef914866c455c2f7b464dab28de52cbc57ec19/web/src/hooks/useTopOpt.ts#L332">cancellation</a>.</li>
-      <li><a href="https://github.com/mkofler96/KoFEM/blob/cfef914866c455c2f7b464dab28de52cbc57ec19/web/src/store/viewSlice.ts#L24">default threshold</a>,
-        <a href="https://github.com/mkofler96/KoFEM/blob/cfef914866c455c2f7b464dab28de52cbc57ec19/web/src/lib/densityField.ts#L264">thresholded STL export</a> and
-        <a href="https://github.com/mkofler96/KoFEM/blob/cfef914866c455c2f7b464dab28de52cbc57ec19/web/src/lib/analysisFile.ts#L95">settings, not densities, in saved files</a>.</li>
-      <li><a href="https://github.com/mkofler96/KoFEM/blob/cfef914866c455c2f7b464dab28de52cbc57ec19/engine/cpp/topology_optimize.h#L84">passive regions accepted by the engine</a>.</li>
+      <li><a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/web/src/lib/solve/topOptRust.ts#L515">density streaming</a> and
+        <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/web/src/hooks/useTopOpt.ts#L347">cancellation</a>.</li>
+      <li><a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/web/src/store/viewSlice.ts#L24">default threshold</a>,
+        <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/web/src/lib/densityField.ts#L253">thresholded STL export</a> and
+        <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/web/src/lib/analysisFile.ts#L99">settings, not densities, in saved files</a>.</li>
+      <li><a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/web/src/lib/regions.ts#L143">regions kept solid or empty</a> and
+        <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/topology/optimize.rs#L115">how the optimizer holds them</a>.</li>
       <li>Bendsøe and Sigmund, <cite>Topology Optimization: Theory, Methods and Applications</cite>, Springer (2003), on interpreting and post-processing density results.</li>
     </ol><nav class="pager" aria-label="Reading order">
       <a class="prev" rel="prev" href="/theory/optimization/constraints-and-convergence/"><small>Previous</small>← Constraints and convergence</a>

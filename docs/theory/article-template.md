@@ -22,7 +22,7 @@ Keep common unit-system comparisons on the separate
 
 **Reviewed solver revision (when applicable):** _Full Git commit SHA and review date for product-specific claims. Record these in the PR and the Linear evidence comment, and pin source links to the revision; never print them on the page._
 
-**Implementation (when applicable):** _Links to exact production C++/WASM and web source files._
+**Implementation (when applicable):** _Links to exact production Rust and web source files._
 
 ## Assumptions and scope
 
@@ -56,7 +56,7 @@ claims. Include it for articles explaining actual solver behaviour.
 Explain, with source links pinned to the reviewed revision:
 
 1. which UI/model input reaches the solver;
-2. how the production C++/WASM path represents or assembles it;
+2. how the production solver (the Rust module and the TypeScript that drives it) represents or assembles it;
 3. which result is returned and how the web app presents it; and
 4. any meaningful differences among solid, shell, and coupled paths.
 
@@ -98,7 +98,7 @@ Link an established Linear ADR when one exists; do not create a parallel ADR.
 - [ ] Product-specific claims trace to production sources at the recorded revision.
 - [ ] Limitations and practical consequences are specific.
 - [ ] Any worked example is reproducible and its reference is cited.
-- [ ] Numerical claims record executed commands, exact source revision, engine identity, quantity/location, units and justified tolerances in the evidence record, PR and Linear comment, not in the article text.
+- [ ] Numerical claims record executed commands, exact source revision, solver build identity, quantity/location, units and justified tolerances in the evidence record, PR and Linear comment, not in the article text.
 - [ ] The page has no command lines, review dates, commit hashes or Linear issue references.
 - [ ] Figures come from `web/theory/figures/`, with alt text and a caption.
 - [ ] Changed behavior updates affected pages and generated evidence using the [maintenance workflow](README.md#updating-behavior-pages-and-evidence).

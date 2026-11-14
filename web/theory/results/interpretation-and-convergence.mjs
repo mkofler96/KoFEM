@@ -3,6 +3,7 @@
 
 import { equation, tex } from "../operators/math.mjs";
 import { source } from "./sources.mjs";
+import { codeSource } from "../numerical-methods/sources.mjs";
 import { figure } from "../figures/index.mjs";
 
 export default {
@@ -150,7 +151,7 @@ export default {
     </dl>
 
     <h2 id="evidence">Evidence and further reading</h2>
-    <p>${source("engine/cpp/solve_mfem.cpp", 64, "Solid recovery")}
+    <p>${codeSource("crates/kofem-fem/src/stress.rs", 59, "Solid recovery")}
       supplies centre samples; ${source("web/src/lib/resultField.ts", 83, "nodal averaging and extrema")}
       defines the app’s summarized measure. The preceding
       <a href="/theory/results/displacement-and-stress/#sources">source inventory</a>

@@ -881,11 +881,12 @@
       pure-shear and reversed-sign checks.</p>
 
     <h2 id="sampling">What the solid solver returns</h2>
-    <p>The ordinary solid wrapper exports three translations per mesh vertex
-      in vertex order, and one von Mises scalar per element in element order.
-      It evaluates the full solved displacement gradient at the first point
-      of MFEM’s order-1 integration rule: the reference-element centre for
-      tetrahedra and hexahedra. It then applies that element’s material law.
+    <p>The ordinary solid solve exports three translations per mesh vertex
+      in vertex order, and one von Mises scalar per element in element order,
+      tetrahedra first, then hexahedra. It evaluates the full solved
+      displacement gradient at the reference-element centre of each
+      tetrahedron and hexahedron, the point of a one-point rule, and then
+      applies that element’s material law.
       This is a point sample, not a volume average or a search for the element’s
       maximum stress.</p>
     <p>On a straight-sided linear tetrahedron the displacement gradient is
@@ -933,7 +934,7 @@
     <h2 id="display">Fields, units and deformation scale</h2>
     <p>Displacement components keep their global-axis signs; magnitude is
       <math><mo stretchy="false" lspace="0" rspace="0">|</mo><mi>u</mi><mo stretchy="false" lspace="0" rspace="0">|</mo><mo>=</mo></math>​<span class="math-nowrap"><math><msqrt><mrow><msubsup><mi>u</mi><mi>x</mi><mn>2</mn></msubsup><mo>+</mo><msubsup><mi>u</mi><mi>y</mi><mn>2</mn></msubsup><mo>+</mo><msubsup><mi>u</mi><mi>z</mi><mn>2</mn></msubsup></mrow></msqrt></math>.</span> The app labels them in mm and
-      von Mises in MPa (N/mm²). The engine does no dimensional conversion:
+      von Mises in MPa (N/mm²). The solver does no dimensional conversion:
       geometry, material inputs and loads must already be coherent. See
       <a href="/theory/foundations/consistent-units/#material-values">consistent units and modulus/stress conversion</a>.</p>
     <p>The shape uses original position plus scaled displacement. The UI’s
@@ -977,10 +978,10 @@
       before using a peak for a design decision.</p>
 
     <h2 id="sources">Implementation and references</h2>
-    <p>KoFEM uses MFEM 4.7 for the solid solve.</p>
+    <p>KoFEM’s solid solve runs in its Rust finite-element module.</p>
     <ul class="refs">
-      <li><a href="https://github.com/mkofler96/KoFEM/blob/0db1e95ae2016d2c625932babf68d8ff672d9f69/engine/cpp/solve_mfem.cpp#L52">Vertex extraction and element-centre recovery</a>,
-        and <a href="https://github.com/mkofler96/KoFEM/blob/0db1e95ae2016d2c625932babf68d8ff672d9f69/engine/cpp/solve_mfem.cpp#L239">result arrays after the linear solve</a>.</li>
+      <li><a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/stress.rs#L59">Element-centre recovery</a>
+        and <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/web/src/lib/solve/amg.ts#L283">vertex displacements and result arrays after the linear solve</a>.</li>
       <li><a href="https://github.com/mkofler96/KoFEM/blob/0db1e95ae2016d2c625932babf68d8ff672d9f69/web/src/lib/resultField.ts#L51">Averaging weights, nodal field, extrema and units</a>,
         <a href="https://github.com/mkofler96/KoFEM/blob/0db1e95ae2016d2c625932babf68d8ff672d9f69/web/src/components/viewport/ResultsColormap.tsx#L90">legend mapping and boundary colours</a>,
         <a href="https://github.com/mkofler96/KoFEM/blob/0db1e95ae2016d2c625932babf68d8ff672d9f69/web/src/components/viewport/MeshScene.tsx#L59">automatic deformation scaling</a>,
@@ -988,8 +989,8 @@
         <a href="https://github.com/mkofler96/KoFEM/blob/0db1e95ae2016d2c625932babf68d8ff672d9f69/web/src/components/panel/ResultsPanel.tsx#L372">summary and display controls</a>
         and <a href="https://github.com/mkofler96/KoFEM/blob/0db1e95ae2016d2c625932babf68d8ff672d9f69/web/src/store/resultsSlice.ts#L12">static result interface</a>.</li>
       <li>Shells use membrane-plus-bending stress at the worse of their two
-        surfaces: <a href="https://github.com/mkofler96/KoFEM/blob/0db1e95ae2016d2c625932babf68d8ff672d9f69/engine/cpp/solve_shell.cpp#L195">shell result</a>
-        and <a href="https://github.com/mkofler96/KoFEM/blob/0db1e95ae2016d2c625932babf68d8ff672d9f69/engine/cpp/solve_coupled.cpp#L265">coupled result</a>. Auto-shell
+        surfaces: <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/shell/stress.rs#L20">shell result</a>
+        and <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-wasm/src/mixed.rs#L228">coupled result</a>. Auto-shell
         additionally <a href="https://github.com/mkofler96/KoFEM/blob/0db1e95ae2016d2c625932babf68d8ff672d9f69/web/src/lib/solve/autoShell.ts#L363">maps shell stresses onto original elements</a>.
         These are different measures from solid centre samples; see the
         <a href="/theory/shells/formulation/">shell chapter</a>.</li>

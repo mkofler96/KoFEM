@@ -1,9 +1,11 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Educational two-DOF bar, not a replacement for an engine regression test.
+// Educational two-DOF bar, not a replacement for a solver regression test.
 // Units: stiffness N/mm, load N, displacement mm. One forward/backward GS
 // pair applies inverse(M) = [[3/4, 1/2], [1/2, 1]] for K = [[2,-1],[-1,1]].
+// CG steps with the preconditioned product r·M⁻¹r and stops, as KoFEM does,
+// when ‖r‖ ≤ relative · ‖b‖.
 import assert from "node:assert/strict";
 import { pathToFileURL } from "node:url";
 
@@ -17,25 +19,26 @@ const precondition = ([first, second]) => [
 const add = (left, scale, right) =>
   left.map((value, i) => value + scale * right[i]);
 
-export function barSolve({ relative = 1e-6, absolute = 0, limit = 2 } = {}) {
+export function barSolve({ relative = 1e-6, limit = 2 } = {}) {
   const load = [1, 1];
   let displacement = [0, 0];
   let residual = [...load];
   let direction = precondition(residual);
   let squaredNorm = dot(residual, direction);
-  const initialSquaredNorm = squaredNorm;
-  const threshold = Math.max(initialSquaredNorm * relative ** 2, absolute ** 2);
+  const loadSquared = dot(load, load);
+  const threshold = relative ** 2 * loadSquared;
   const steps = [];
   for (let iteration = 0; iteration <= limit; iteration++) {
     const actualResidual = add(load, -1, multiply(displacement));
+    const residualSquared = dot(residual, residual);
     steps.push({
       iteration,
       displacement: [...displacement],
       residual: actualResidual,
       squaredNorm,
-      relativeResidual: Math.sqrt(squaredNorm / initialSquaredNorm),
+      relativeResidual: Math.sqrt(residualSquared / loadSquared),
     });
-    if (squaredNorm <= threshold) return { converged: true, steps };
+    if (residualSquared <= threshold) return { converged: true, steps };
     if (iteration === limit) return { converged: false, steps };
     const product = multiply(direction);
     const alpha = squaredNorm / dot(direction, product);
@@ -64,14 +67,17 @@ if (
   close(result.steps[1].displacement[0], 55 / 26);
   close(result.steps[1].displacement[1], 33 / 13);
   close(result.steps[1].squaredNorm, 99 / 338);
-  close(result.steps[1].relativeResidual, Math.sqrt(18 / 169));
+  result.steps[1].residual.forEach((value, i) =>
+    close(value, [-9 / 13, 15 / 26][i]),
+  );
+  close(result.steps[1].relativeResidual, Math.sqrt(549 / 1352));
   assert.equal(result.converged, true);
   close(result.steps[2].displacement[0], 2);
   close(result.steps[2].displacement[1], 3);
   result.steps[2].residual.forEach((value) => close(value, 0));
   assert.equal(barSolve({ limit: 1 }).converged, false);
-  assert.equal(barSolve({ relative: 0.5 }).steps.length, 2);
-  assert.equal(barSolve({ relative: 0.1, absolute: 0.6 }).steps.length, 2);
+  assert.equal(barSolve({ relative: 0.7 }).steps.length, 2);
+  assert.equal(barSolve({ relative: 0.6 }).steps.length, 3);
   console.table(
     result.steps.map((step) => ({
       iteration: step.iteration,
@@ -80,6 +86,6 @@ if (
     })),
   );
   console.log(
-    "PASS: exact bar values, preconditioned residual, relative/absolute stopping and budget failure.",
+    "PASS: exact bar values, preconditioned step, residual-norm stopping and budget failure.",
   );
 }

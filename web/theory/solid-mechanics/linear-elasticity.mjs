@@ -3,6 +3,7 @@
 
 import { equation, matrixEquation, tex } from "../operators/math.mjs";
 import { source } from "./sources.mjs";
+import { codeSource } from "../numerical-methods/sources.mjs";
 import { figure } from "../figures/index.mjs";
 
 export default {
@@ -239,15 +240,16 @@ export default {
         Density is stored but does not enter the static solve.</li>
       <li>The solid solver requires ${tex("E")} and ${tex("ν")} for every material and selects
         one material per element from the element’s body
-        (${source("engine/cpp/solve_mfem.cpp", 149, "solve_mfem.cpp")}). The engine
-        itself does not check their range; that check exists only in the app form.</li>
+        (${codeSource("web/src/lib/solve/amg.ts", 301, "amg.ts")}). It checks the same
+        ranges again and refuses a material outside them
+        (${codeSource("crates/kofem-fem/src/material.rs", 17, "material.rs")}).</li>
       <li>It converts each material to ${tex("λ")} and ${tex("μ")} with the formulas above
-        (${source("engine/cpp/solve_mfem.cpp", 180, "solve_mfem.cpp")}); the mixed
-        solid–shell solve does the same for its solid elements
-        (${source("engine/cpp/solve_coupled.cpp", 66, "solve_coupled.cpp")}).</li>
+        (${codeSource("crates/kofem-fem/src/material.rs", 45, "material.rs")}); the mixed
+        solid–shell solve uses the same solid elements.</li>
       <li>Stress for the von Mises result uses the same law,
-        ${tex("σ_{ij} = λε_{kk}δ_{ij} + 2με_{ij}")}
-        (${source("engine/cpp/solve_mfem.cpp", 93, "solve_mfem.cpp")}).
+        ${tex("σ_{ij} = λε_{kk}δ_{ij} + 2με_{ij}")}; only its deviatoric part
+        ${tex("2μ(ε_{ij} - ε_{kk}δ_{ij}/3)")} enters von Mises
+        (${codeSource("crates/kofem-fem/src/stress.rs", 59, "stress.rs")}).
         <a href="/theory/results/displacement-and-stress/">Displacement and stress</a>
         explains where it is sampled.</li>
     </ul>

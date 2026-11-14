@@ -1,9 +1,10 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Re-run the existing topology-optimization benchmarks through the real WASM
-// engine and compare them with the committed record; never transcribe measured
-// values into the articles. --report records a new snapshot.
+// Re-run the existing topology-optimization benchmarks through the app's Rust
+// optimizer (WebAssembly) and compare them with the committed record; never
+// transcribe measured values into the articles. --report records a new
+// snapshot.
 //
 //   bun theory/optimization/capture-evidence.mjs            # check (from web/)
 //   bun theory/optimization/capture-evidence.mjs --report   # record
@@ -11,6 +12,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { femModuleId } from "../../../examples/validation/lib/provenance.mjs";
 import { loadOptimizer } from "../../../examples/validation/topopt/lib/optimize.mjs";
 import mbbBeam from "../../../examples/validation/topopt/cases/mbb-beam.mjs";
 import meshIndependence from "../../../examples/validation/topopt/cases/cantilever-mesh-independence.mjs";
@@ -28,21 +30,11 @@ const output = new URL(
 );
 const git = (...args) =>
   execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
-const engine = readFileSync(
-  new URL("../../src/wasm/pkg/.engine-id", import.meta.url),
-  "utf8",
-).trim();
-const expectedEngine = execFileSync("bash", ["scripts/engine-version.sh"], {
-  cwd: root,
-  encoding: "utf8",
-}).trim();
-assert.equal(
-  engine,
-  expectedEngine,
-  "WASM does not match engine sources; fetch/build it before checking evidence",
-);
+// The Rust module build behind the numbers (lib/provenance.mjs): kept in the
+// record for reference; the check compares the numbers themselves.
+const fem = femModuleId();
 
-// Record every optimize_topology call a case makes, so the record keeps the
+// Record every optimizer call a case makes, so the record keeps the
 // raw iteration history rather than the case's formatted metric strings.
 const optimize = await loadOptimizer();
 let calls = [];
@@ -114,21 +106,22 @@ const measured = {
 assert.deepEqual(coarse.settings, cantilever.settings);
 
 if (process.argv.includes("--report")) {
-  // The linked revision must contain the engine and benchmark code that ran.
+  // The linked revision must contain the optimizer and benchmark code that ran.
   git(
     "diff",
     "--exit-code",
     "HEAD",
     "--",
-    "engine",
+    "crates",
+    "web/src/lib/solve",
     "examples/validation/topopt",
   );
   const record = {
     sourceRevision: git("rev-parse", "HEAD"),
     recordedAt: new Date().toISOString(),
-    engine,
+    fem,
     execution:
-      "Real WASM optimize_topology (SIMP, MMA, sensitivity filter) on the existing structured-hex benchmarks; normalized E = 1, ν = 0.3 and unit load",
+      "The app's Rust optimizer in WebAssembly (optimizeSolidInRust: SIMP, MMA, sensitivity filter, multigrid CG) on the existing structured-hex benchmarks; normalized E = 1, ν = 0.3 and unit load",
     commands: [
       "node examples/validation/topopt/run.mjs",
       "cd web && bun theory/optimization/capture-evidence.mjs --report",
@@ -136,15 +129,10 @@ if (process.argv.includes("--report")) {
     ...measured,
   };
   writeFileSync(output, `${JSON.stringify(record, null, 2)}\n`);
-  console.log(`Recorded topology-optimization evidence (${engine}).`);
+  console.log(`Recorded topology-optimization evidence (${fem}).`);
 } else {
   const record = JSON.parse(readFileSync(output, "utf8"));
-  assert.equal(
-    record.engine,
-    engine,
-    "engine changed; review and re-record evidence",
-  );
-  // The engine is deterministic; compare the measured values tightly.
+  // The optimizer is deterministic; compare the measured values tightly.
   const close = (actual, expected, key) =>
     assert.ok(
       Math.abs(actual - expected) <= 1e-9 * Math.max(Math.abs(expected), 1),

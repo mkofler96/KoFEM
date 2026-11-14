@@ -14,7 +14,7 @@ export default {
     "What happens in each SIMP iteration: reused analysis objects, the radius filter and mesh dependence, MMA updates and move limits, stress constraints, and what convergence does and does not establish, checked on the MBB and cantilever benchmarks.",
   sections: [
     ["iteration", "One iteration, step by step"],
-    ["in-engine", "Why the loop runs in the engine"],
+    ["in-engine", "Why the loop runs in the solver module"],
     ["filtering", "Filtering, radius and mesh dependence"],
     ["mma", "Updating densities with MMA"],
     ["stress-constraint", "Maximum-stress constraints"],
@@ -30,8 +30,8 @@ export default {
       explains what a reported “converged” run means.</p>
 
     <h2 id="iteration">One iteration, step by step</h2>
-    <p>Before the first iteration the engine builds, once per run: the order-1
-      finite element space, the supported degrees of freedom, the assembled
+    <p>Before the first iteration the optimizer builds, once per run: the order-1
+      finite element model, the supported degrees of freedom, the assembled
       load vector ${tex("\\mathbf{f}")}, every full-material element matrix
       ${tex("\\mathbf{K}_e^0")} with its volume and centroid, the filter’s
       neighbour weights, and the optimizer state. A minimum-compliance run
@@ -41,7 +41,9 @@ export default {
       <li><strong>Analyses</strong> the current design. It scales the cached
         ${tex("\\mathbf{K}_e^0")} by ${tex("s(ρ_e)")}, assembles
         ${tex("\\mathbf{K}(ρ)")} and solves ${tex("\\mathbf{K}\\mathbf{d}=\\mathbf{f}")}
-        with conjugate gradients. Nothing is re-meshed or re-integrated.</li>
+        with conjugate gradients. Nothing is re-meshed or re-integrated. On
+        solid models the multigrid hierarchy is rebuilt only every third
+        iteration; in between, only its finest matrix is replaced.</li>
       <li><strong>Evaluates</strong> compliance, volume and their
         sensitivities from that one displacement field.</li>
       <li><strong>Filters</strong> the compliance sensitivities over a radius
@@ -60,17 +62,17 @@ export default {
       The returned density, the last history entry and the returned
       displacements always describe the same analysed design.</p>
 
-    <h2 id="in-engine">Why the loop runs in the engine</h2>
-    <p>KoFEM’s solver is C++ compiled to WebAssembly and runs in a browser
-      worker. The whole optimization runs inside one engine call. Keeping the
-      loop there reuses the mesh, element matrices, supports, load and filter
-      weights for every iteration. A loop driven from JavaScript would instead
-      cross the JavaScript–WebAssembly boundary and rebuild or re-transfer that
-      data each iteration.</p>
-    <p>The tradeoff is control. A single blocking call cannot pause, so
-      cancelling a run terminates the worker and discards it. Progress is
-      visible because the engine logs one line per iteration and passes each
-      analysed density to an optional callback.</p>
+    <h2 id="in-engine">Why the loop runs in the solver module</h2>
+    <p>KoFEM’s optimizer is Rust compiled to WebAssembly and runs in a browser
+      worker. The run is one object inside that module, which the worker
+      advances one iteration per call. Keeping the state there reuses the
+      mesh, element matrices, supports, load, filter weights and optimizer
+      state for every iteration; only the iteration report and, when asked,
+      the density cross into JavaScript.</p>
+    <p>The tradeoff is control. The worker steps the run to its end without
+      pausing, so cancelling a run terminates the worker and discards it.
+      Progress is visible because each iteration is logged and its analysed
+      density is streamed to the viewport.</p>
 
     <h2 id="filtering">Filtering, radius and mesh dependence</h2>
     <p>Unfiltered SIMP has two well-known failures. Checkerboards — alternating
@@ -97,7 +99,7 @@ export default {
       (default 1.5, i.e. 1.5&nbsp;mm in the app’s mm units), not a multiple of
       element size. Compare it with your mesh size: a radius smaller than one
       element leaves each element as its own only neighbour and disables the
-      filter. Values of 1.5–3 element sizes are common. The engine’s own
+      filter. Values of 1.5–3 element sizes are common. The optimizer’s own
       fallback of 1.5 × the mean element size applies only when an API caller
       sends no positive radius.</p>
     <p>Keeping ${tex("r_{\\mathrm{min}}")} fixed while refining the mesh is
@@ -252,13 +254,14 @@ export default {
       <li>Sigmund (2001), <cite>A 99 line topology optimization code written in Matlab</cite>, Structural and Multidisciplinary Optimization 21, 120–127; and Andreassen et al. (2011), <cite>Efficient topology optimization in MATLAB using 88 lines of code</cite>, Structural and Multidisciplinary Optimization 43, 1–16.</li>
       <li>Svanberg (1987), <cite>The method of moving asymptotes — a new method for structural optimization</cite>, International Journal for Numerical Methods in Engineering 24, 359–373.</li>
       <li>Le, Norato, Bruns, Ha and Tortorelli (2010), <cite>Stress-based topology optimization for continua</cite>, Structural and Multidisciplinary Optimization 41, 605–620; and Bruggi (2008), <cite>On an alternative approach to stress constraints relaxation in topology optimization</cite>, Structural and Multidisciplinary Optimization 36, 125–141.</li>
-      <li>${source("engine/cpp/topology_optimize.cpp", 222, "iteration loop")},
-        ${source("engine/cpp/topology_optimize.cpp", 347, "stopping rule")},
-        ${source("engine/cpp/topology_filter.cpp", 69, "sensitivity filter")},
-        ${source("engine/cpp/topology_filter.cpp", 31, "default radius")},
-        ${source("engine/cpp/topology_mma.cpp", 284, "MMA optimizer")},
-        ${source("engine/cpp/topology_stress.cpp", 95, "relaxed, aggregated stress and adjoint")} and
-        ${source("engine/cpp/topology_simp.cpp", 320, "stress density floor")}.</li>
+      <li>${source("crates/kofem-fem/src/topology/optimize.rs", 553, "iteration loop")},
+        ${source("crates/kofem-fem/src/topology/optimize.rs", 732, "stopping rule")},
+        ${source("crates/kofem-fem/src/topology/filter.rs", 195, "sensitivity filter")},
+        ${source("crates/kofem-fem/src/topology/filter.rs", 57, "default radius")},
+        ${source("crates/kofem-fem/src/topology/mma.rs", 376, "MMA optimizer")},
+        ${source("crates/kofem-fem/src/topology/stress.rs", 271, "relaxed, aggregated stress and adjoint")},
+        ${source("web/src/lib/solve/topOptRust.ts", 75, "stress density floor")} and
+        ${source("web/src/lib/solve/topOptRust.ts", 489, "the worker’s step loop")}.</li>
       <li>${source("web/src/store/topOptSlice.ts", 72, "app defaults")} and
         ${source("examples/validation/topopt/README.md", 1, "benchmark descriptions and bands")}.</li>
     </ol>`,

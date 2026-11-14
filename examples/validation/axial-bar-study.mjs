@@ -6,8 +6,9 @@
 //
 // The study solves the bar of the public axial-bar example (cases/axial-bar.mjs
 // — same inputs, supports, load and measure) on structured hex meshes with the
-// MFEM engine, so a mesh/order sequence can halve the cell size exactly. The
-// public example itself is built from its STEP file with a Netgen tet mesh.
+// app's Rust solid solve (lib/solver.mjs → solveSolidInRust, AMG-preconditioned
+// CG), so a mesh/order sequence can halve the cell size exactly. The public
+// example itself is built from its STEP file with a Netgen tet mesh.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
@@ -15,6 +16,7 @@ import { fileURLToPath } from "node:url";
 import axialBar from "./cases/axial-bar.mjs";
 import { STEEL, solveModel } from "./lib/app-model.mjs";
 import { boxHexMesh, meshStats, nodesWhere } from "./lib/mesh.mjs";
+import { femModuleId } from "./lib/provenance.mjs";
 import { loadSolver } from "./lib/solver.mjs";
 
 const inputOf = (symbol) => {
@@ -64,19 +66,10 @@ const output = new URL(
   "../../web/public/theory/axial-bar.json",
   import.meta.url,
 );
-const engine = readFileSync(
-  new URL("../../web/src/wasm/pkg/.engine-id", import.meta.url),
-  "utf8",
-).trim();
-const expectedEngine = execFileSync("bash", ["scripts/engine-version.sh"], {
-  cwd: repo,
-  encoding: "utf8",
-}).trim();
-assert.equal(
-  engine,
-  expectedEngine,
-  "WASM does not match engine sources; fetch/build it before recording evidence",
-);
+// The Rust module build behind the numbers (lib/provenance.mjs). Like the
+// example pages, the record keeps it for reference; the staleness check
+// compares the numbers, so a rebuilt module that reproduces them passes.
+const fem = femModuleId();
 const solve = await loadSolver();
 const inputs = Object.fromEntries(
   axialBar.page.inputs.map(([symbol, value]) => [symbol, value]),
@@ -96,10 +89,11 @@ const setup = {
   displacementTolerancePct: axialBar.tolPct,
   stressTolerancePct: 0.5,
   solver: {
-    method: "MFEM CG",
-    preconditioner: "GSSmoother",
+    method: "Rust preconditioned conjugate gradients (solveSolidInRust)",
+    preconditioner:
+      "Smoothed-aggregation algebraic multigrid, one V-cycle per iteration",
+    stoppingRule: "‖f − K·u‖ / ‖f‖ ≤ relativeTolerance",
     relativeTolerance: 1e-6,
-    absoluteTolerance: 0,
     initialIterationBudget: 5000,
   },
 };
@@ -112,7 +106,7 @@ for (const [grid, order] of [
   [[10, 2, 2], 2],
 ]) {
   const model = axialBarModel(axialBar.name, grid, order);
-  const result = solveModel(solve, model);
+  const result = await solveModel(solve, model);
   assert.equal(result.displacements.length, 3 * model.mesh.vertices.length);
   assert.equal(result.von_mises.length, model.mesh.hexahedra.length);
   assert.ok(
@@ -203,7 +197,7 @@ if (process.argv.includes("--report")) {
       cwd: repo,
       encoding: "utf8",
     }).trim(),
-    engine,
+    fem,
     command: "bun examples/validation/axial-bar-study.mjs --report",
     setup,
     runs,
@@ -211,15 +205,10 @@ if (process.argv.includes("--report")) {
   mkdirSync(new URL(".", output), { recursive: true });
   writeFileSync(output, JSON.stringify(data, null, 2) + "\n");
   console.log(
-    `Recorded ${runs.length} axial-bar solves (${engine}). Regenerate Theory pages.`,
+    `Recorded ${runs.length} axial-bar solves (${fem}). Regenerate Theory pages.`,
   );
 } else {
   const published = JSON.parse(readFileSync(output, "utf8"));
-  assert.equal(
-    published.engine,
-    engine,
-    "engine changed; review and regenerate evidence",
-  );
   assert.deepEqual(
     published.setup,
     setup,

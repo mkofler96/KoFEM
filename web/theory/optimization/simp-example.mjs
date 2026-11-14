@@ -18,7 +18,7 @@ export const inputs = {
 // Full-material bar stiffness k0 = EA/L in N/mm.
 export const barStiffness = (inputs.young * inputs.area) / inputs.length;
 
-// The production interpolation (engine/cpp/topology_simp_core.cpp).
+// The production interpolation (crates/kofem-fem/src/topology/simp.rs).
 export const scale = (rho, p = inputs.penalty) =>
   inputs.eminRel + rho ** p * (1 - inputs.eminRel);
 export const scaleDerivative = (rho, p = inputs.penalty) =>

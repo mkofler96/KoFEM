@@ -900,12 +900,12 @@
       <li><a href="https://ocw.mit.edu/courses/2-080j-structural-mechanics-fall-2013/">MIT OpenCourseWare: Structural Mechanics</a>,
         infinitesimal strain and stress equilibrium.</li>
       <li>KoFEM’s
-        <a href="https://github.com/mkofler96/KoFEM/blob/77ff67ed76c724924decc8c2691f0f5fbd4aea5b/engine/cpp/solve_mfem.cpp#L127">solid stress recovery</a>
-        obtains a displacement gradient, symmetrises it and applies the Lamé
-        material law. The explicit
-        <a href="https://github.com/mkofler96/KoFEM/blob/77ff67ed76c724924decc8c2691f0f5fbd4aea5b/engine/cpp/tet_element.cpp#L139">coupled-solid gradient</a>
-        uses the same component convention. The calculations here verify the
-        operators, not a full solver or shell formulation.</li>
+        <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/stress.rs#L59">solid stress recovery</a>
+        obtains the displacement gradient <span class="math-nowrap"><math><mo lspace="0" rspace="0">∂</mo><msub><mi>u</mi><mi>i</mi></msub><mo lspace="0" rspace="0">/</mo><mo lspace="0" rspace="0">∂</mo><msub><mi>x</mi><mi>j</mi></msub></math>,</span> symmetrises it and
+        applies the deviatoric part of the Lamé law, which is all von Mises
+        needs. The mixed solid–shell solve uses the same recovery. The
+        calculations here verify the operators, not a full solver or shell
+        formulation.</li>
     </ol><nav class="pager" aria-label="Reading order">
       <a class="prev" rel="prev" href="/theory/notation/"><small>Previous</small>← Notation</a>
       <a class="next" rel="next" href="/theory/operators/tensor-products/"><small>Next</small>Tensor products and contractions →</a></nav>

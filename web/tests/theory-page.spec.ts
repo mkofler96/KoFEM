@@ -521,11 +521,11 @@ test("numerical-methods articles give checkable elements, assembly and planned l
     "1+1",
   );
   const t2 = page.getByRole("row").filter({
-    has: page.getByRole("cell", { name: "6, 7, 8, 9", exact: true }),
+    has: page.getByRole("cell", { name: "4, 7, 10, 13", exact: true }),
   });
   await expect(t2.locator("th math")).toBeVisible();
   await expect(t2.locator("th")).toContainText("(1, 2, 3, 4)");
-  await expect(t2.locator("td").last()).toHaveText("11, 12, 13, 14");
+  await expect(t2.locator("td").last()).toHaveText("5, 8, 11, 14");
   // Inline math is typeset, never plain text with <sub>/<sup> tags.
   for (const path of [
     ...NUMERICAL_PAGES,
@@ -557,14 +557,15 @@ test("loads and constraints give checkable worked examples and evidence", async 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(
     "Loads and constraints",
   );
-  // Nonzero prescribed displacement: the eliminated matrix keeps the diagonal.
+  // Nonzero prescribed displacement: constrained rows become identity rows,
+  // the free row keeps its stiffness.
   const eliminated = page.getByRole("region", {
     name: /^Eliminated system matrix/,
   });
   await expect(eliminated.locator("mtr")).toHaveCount(3);
   await expect(eliminated.locator("mtr").nth(1).locator("mtd")).toHaveText([
     "0",
-    "2",
+    "2k",
     "0",
   ]);
   // Force-to-traction: the nodal shares add back to the applied total.
@@ -604,19 +605,18 @@ test("linear solve links the residual calculation, settings and failure evidence
   const firstStep = calculation.getByRole("row").filter({
     has: page.getByRole("rowheader", { name: "1", exact: true }),
   });
-  await expect(firstStep.locator("td").last()).toHaveText("0.326357");
+  await expect(firstStep.locator("td").last()).toHaveText("0.637232");
   await expect(firstStep.locator("td").nth(2)).toHaveText("99/338");
-  const absolute = page.getByRole("row").filter({
+  const relative = page.getByRole("row").filter({
     has: page.getByRole("rowheader", {
-      name: "Absolute tolerance",
+      name: "Relative tolerance",
       exact: true,
     }),
   });
-  await expect(absolute.locator("td").first()).toHaveText("0");
-  await expect(page.locator('main a[href*="cg_mfem.cpp"]')).toHaveAttribute(
-    "href",
-    /blob\/8b542d8836f39ec4e9c7ae67c5896d39ce970078\//,
-  );
+  await expect(relative.locator("td").first()).toHaveText("1e-6");
+  await expect(
+    page.locator('main a[href*="crates/kofem-fem/src/cg.rs"]').first(),
+  ).toHaveAttribute("href", /blob\/[a-f0-9]{40}\/crates\/kofem-fem\//);
   await expect(page.locator("main")).toContainText(
     "successful continuation, Stop and an exhausted iteration budget",
   );
@@ -656,7 +656,7 @@ test("stress recovery separates solver samples from displayed averages", async (
   );
   await expect(page.locator("main")).toContainText("137.5 MPa");
   await expect(
-    page.locator('main a[href*="solve_mfem.cpp"]').first(),
+    page.locator('main a[href*="crates/kofem-fem/src/stress.rs"]').first(),
   ).toHaveAttribute("href", /blob\/[a-f0-9]{40}\//);
   await expect(
     page.locator('main a[href="/examples/plate-with-hole/"]'),
@@ -805,7 +805,7 @@ test("optimization chapter links theory, worked numbers, benchmarks and limits",
   await expect(
     simp.locator('a[href="/theory/notation/#design-density"]'),
   ).not.toHaveCount(0);
-  await expect(simp).toContainText("no keep-in/keep-out picker yet");
+  await expect(simp).toContainText("can keep it solid or empty");
 
   await page.goto("/theory/optimization/constraints-and-convergence/");
   const loop = page.locator("main");
@@ -825,7 +825,7 @@ test("optimization chapter links theory, worked numbers, benchmarks and limits",
   const interpret = page.locator("main");
   await expect(interpret.locator("#reanalysis")).toBeVisible();
   for (const limit of [
-    "Keep-in and keep-out regions in the app.",
+    "Keep-in and keep-out selections finer than a region.",
     "Shell and coupled stress constraints.",
   ])
     await expect(interpret).toContainText(limit);
