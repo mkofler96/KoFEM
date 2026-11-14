@@ -15,12 +15,22 @@
 // workflow, error category, duration bucket) plus the public gallery example
 // id; raw error messages, file names, sizes and results never leave the page.
 
+import type { CadFormat } from "./cadFormat";
 import { WorkerTaskError, type FailureStage } from "./workerError";
 
 export type Workflow = "cad_import" | "example" | "saved_file" | "none";
 export type ErrorCategory =
   | "invalid_input"
+  // Not a STEP or IGES file: refused before the engine sees it (KOF-347).
   | "unsupported_format"
+  // Named STEP or IGES, but the reader rejects it: corrupt or mislabelled.
+  | "parse_error"
+  // The file reads, but holds no shape to show or mesh.
+  | "empty_geometry"
+  // The browser could not read the picked file (moved, or a cloud placeholder).
+  | "file_unreadable"
+  // The engine's import failed in a way no rule above recognises.
+  | "import_failure"
   | "resource_limit"
   | "numerical_failure"
   | "geometry_defect"
@@ -41,7 +51,8 @@ export type DurationBucket =
   "lt_1s" | "1_5s" | "5_15s" | "15_60s" | "1_5min" | "gt_5min";
 export type ModelType = "solid" | "shell" | "mixed";
 export type AnalysisType = "static" | "topology";
-type CadFormat = "step" | "iges";
+// "other": a file refused for not being STEP or IGES.
+type ImportFormat = CadFormat | "other";
 
 export interface AnalyticsEvents {
   solver_opened: {
@@ -50,11 +61,13 @@ export interface AnalyticsEvents {
   };
   engine_ready: { duration_bucket: DurationBucket };
   geometry_import_success: {
+    workflow: "cad_import";
     format: CadFormat;
     duration_bucket: DurationBucket;
   };
   geometry_import_failed: {
-    format: CadFormat;
+    workflow: "cad_import";
+    format: ImportFormat;
     duration_bucket: DurationBucket;
     error_category: ErrorCategory;
   };
@@ -223,6 +236,10 @@ const ERROR_RULES: [ErrorCategory, RegExp][] = [
     "resource_limit",
     /out of memory|Aborted\(OOM\)|Cannot enlarge memory|memory allocation|Array buffer allocation failed|bad_alloc|exceeds the limit|too many elements/i,
   ],
+  [
+    "file_unreadable",
+    /NotReadableError|NotFoundError|requested file .*could not be/i,
+  ],
   // resetWorker() rejects what was in flight: the visitor started over.
   ["cancelled", /Worker reset/i],
   ["engine_unavailable", /engine failed to load/i],
@@ -234,14 +251,19 @@ const ERROR_RULES: [ErrorCategory, RegExp][] = [
     "worker_failure",
     /Worker crashed|Worker error|worker .*terminated|WASM module not initialised/i,
   ],
+  ["unsupported_format", /unsupported|not a (STEP|IGES)/i],
+  ["parse_error", /invalid (STEP|IGES) file|ReadFile failed|ISO-10303/i],
+  // Before geometry_defect: an IGES file of free surfaces names the closed
+  // solid it lacks.
   [
-    "unsupported_format",
-    /invalid (STEP|IGES) file|ReadFile failed|unsupported|not a (STEP|IGES)|ISO-10303/i,
+    "empty_geometry",
+    /no transferable shapes|no geometry with a measurable extent|No geometry found/i,
   ],
   // Before mesher_failure: Netgen's volume fill names the geometry as the cause.
+  // BOPAlgo_MakeConnected fails on import when an assembly's bodies overlap.
   [
     "geometry_defect",
-    /self-intersecting|0 tetrahedra|no closed solid|watertight/i,
+    /self-intersecting|0 tetrahedra|no closed solid|watertight|BOPAlgo_MakeConnected/i,
   ],
   [
     "mesher_failure",
@@ -263,6 +285,7 @@ const STAGE_CATEGORY: Record<FailureStage, ErrorCategory> = {
   geometry_reload: "tessellation_failure",
   meshing: "mesher_failure",
   shell_idealisation: "shell_idealisation_failure",
+  geometry_import: "import_failure",
 };
 
 /** Map an error to a fixed category. The message itself stays in the browser. */

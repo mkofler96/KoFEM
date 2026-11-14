@@ -9,6 +9,8 @@
 // WorkerTaskError that carries it.
 
 export const FAILURE_STAGES = [
+  // Reading, repairing and tessellating a CAD file on import (KOF-347).
+  "geometry_import",
   // Reloading the CAD shape from the original bytes before meshing.
   "geometry_reload",
   // Netgen's surface and volume meshing.

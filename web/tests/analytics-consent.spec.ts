@@ -302,13 +302,48 @@ test.describe("workflow events", () => {
     const failed = (await gaEvents(page)).find(
       (e) => e.name === "geometry_import_failed",
     );
-    expect(failed?.params.format).toBe("step");
-    expect(failed?.params.error_category).toBe("unsupported_format");
+    // Named STEP, but the reader rejects it: a parse error, not a format the
+    // app does not take (KOF-347).
+    expect(failed?.params).toMatchObject({
+      workflow: "cad_import",
+      format: "step",
+      error_category: "parse_error",
+    });
+
+    await expect(page.getByTestId("step-error")).toBeVisible();
+
+    // Not a CAD file at all: refused before the engine sees it.
+    await page
+      .locator('input[type="file"][accept=".stp,.step"]')
+      .setInputFiles({
+        name: "secret-bracket-rev7.stl",
+        mimeType: "application/octet-stream",
+        buffer: Buffer.from("solid bracket\n  facet normal 0 0 1\n"),
+      });
+    await expect
+      .poll(async () =>
+        (await gaEvents(page)).filter(
+          (e) => e.name === "geometry_import_failed",
+        ),
+      )
+      .toHaveLength(2);
+    const refused = (await gaEvents(page)).filter(
+      (e) => e.name === "geometry_import_failed",
+    )[1];
+    expect(refused?.params).toMatchObject({
+      workflow: "cad_import",
+      format: "other",
+      error_category: "unsupported_format",
+    });
 
     await importStep(page, "tests/fixtures/tube.stp");
     await expect
       .poll(() => eventNames(page))
       .toContain("geometry_import_success");
+    expect(
+      (await gaEvents(page)).find((e) => e.name === "geometry_import_success")
+        ?.params,
+    ).toMatchObject({ workflow: "cad_import", format: "step" });
 
     // A refused element size is a mesh failure caused by the input.
     const maxSize = page.getByTestId("max-element-size");
@@ -337,6 +372,6 @@ test.describe("workflow events", () => {
     });
 
     const everything = JSON.stringify(await gaCalls(page));
-    expect(everything).not.toMatch(/secret|bracket|tube|\.stp/i);
+    expect(everything).not.toMatch(/secret|bracket|tube|\.stp|\.stl/i);
   });
 });
