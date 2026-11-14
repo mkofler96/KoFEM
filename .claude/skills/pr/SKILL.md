@@ -122,11 +122,12 @@ on(save)
 
 ```text
 solver.worker onmessage("solve")
-  groupDirichlet
-  solve_mfem
-    collect_essential_dofs
-      add_fixed_dofs
-      add_prescribed_dofs
+  routeSolve
+  handleSolidSolve
+    weldTies
+    solveSolidInRust
+      rustSolidBoundaryConditions
+        groupDirichlet
 ```
 
 - Show UI structure as a component tree, including state and module boundaries that matter:
@@ -152,10 +153,10 @@ web/src/components/viewport/
 sequenceDiagram
     participant UI
     participant Worker as solver.worker
-    participant Engine as WASM engine
+    participant Fem as Rust module
     UI->>Worker: solve(model)
-    Worker->>Engine: solve_mfem(mesh, bcs, loads)
-    Engine-->>Worker: displacement, stress
+    Worker->>Fem: ElasticModel.startSolve(fixedDofs, forces)
+    Fem-->>Worker: displacement, stress
     Worker-->>UI: results
 ```
 
