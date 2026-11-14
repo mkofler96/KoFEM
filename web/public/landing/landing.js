@@ -9,11 +9,11 @@ const analysisCopy = document.querySelector(".analysis-copy");
 const analysisStages = {
   solve: {
     title: "Local Solve",
-    subtitle: "Apply loads and supports, then solve in your browser.",
+    subtitle: "No cloud, full control over your data.",
   },
   results: {
     title: "Inspect the result",
-    subtitle: "Displacement and stress on the solved bracket.",
+    subtitle: "Easy evaluation of critical parts.",
   },
   optimization: {
     title: "Topology optimization",
