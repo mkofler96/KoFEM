@@ -198,8 +198,17 @@ function resolveOnTessellation(at, tess, where) {
  *                                        solves only), for evaluateProbe
  * @property {number} fe                  the probe's value (÷ divideBy), or the
  *                                        final compliance of an optimisation
+ *                                        (undefined with skipOptimization)
+ *
+ * With `skipOptimization`, a recipe with `optimize` stops once the model is
+ * set up: no optimization runs, `optimization` and `fe` are left out, and the
+ * caller optimizes `solvePayload` itself.
  */
-export async function buildFromRecipe(id, recipe) {
+export async function buildFromRecipe(
+  id,
+  recipe,
+  { skipOptimization = false } = {},
+) {
   validateRecipe(id, recipe);
   const where = `recipe "${id}"`;
   const shell = recipe.discretization.kind === "shell";
@@ -505,6 +514,13 @@ export async function buildFromRecipe(id, recipe) {
   });
 
   // ── Optimize (the worker's handleTopOpt), in place of the static solve ─────
+  if (recipe.optimize && skipOptimization)
+    return {
+      ...model(),
+      handCheck: null,
+      result: null,
+      solvePayload: payload,
+    };
   if (recipe.optimize) {
     const optimization = await optimizeLikeTheApp(
       where,

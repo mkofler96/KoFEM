@@ -290,7 +290,11 @@ function topOptSettings(optimize, method) {
 }
 
 async function topOptRows(id, recipe) {
-  const build = await buildFromRecipe(id, recipe);
+  const build = await buildFromRecipe(id, recipe, {
+    // The comparison runs both optimizers below; the pipeline's own C++
+    // run would be redundant, and --check must not need the C++ optimizer.
+    skipOptimization: true,
+  });
   const rows = [];
   for (const method of ["simp", "level_set"]) {
     const settings = topOptSettings(recipe.optimize, method);
