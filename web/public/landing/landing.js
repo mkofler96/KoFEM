@@ -79,10 +79,20 @@ const bracketAssets = Promise.all([
   fetchBinary(asset("ge-engine-bracket-solution.bin")),
   fetchJson(asset("ge-engine-bracket-network.json")),
   fetchBinary(asset("ge-engine-bracket-network.bin")),
+  fetchJson(asset("ge-engine-bracket-edges.json")),
+  fetchBinary(asset("ge-engine-bracket-edges.bin")),
 ]);
 async function start() {
   const [
-    [solution, metadata, binary, network, travelBuffer],
+    [
+      solution,
+      metadata,
+      binary,
+      network,
+      travelBuffer,
+      cadEdges,
+      cadEdgeBuffer,
+    ],
     [{ ThreeDScene, ModelMobject, Arrow3D }, THREE],
   ] = await Promise.all([bracketAssets, libraries]);
   const center = metadata.min.map((v, j) => (v + metadata.max[j]) / 2);
@@ -149,7 +159,9 @@ async function start() {
     }
   }
   faceDirections();
-  const creaseDot = Math.cos(Math.PI / 4),
+  // Smooth shading across folds up to 60°: the FE surface bridges fillets with
+  // coarse triangles, which would otherwise shade as hard seams.
+  const creaseDot = Math.cos(Math.PI / 3),
     normalGroups = [];
   let sharpCorners = 0;
   for (let corner = 0; corner < triangles.length; corner++) {
@@ -204,6 +216,35 @@ async function start() {
   frontSurface.renderOrder = 2;
   const body = new THREE.Group();
   body.add(frontSurface);
+  // CAD feature edges: the sharp edges of the original CAD tessellation
+  // (scripts/generate-landing-edges.mjs), in the same frame as the FE surface.
+  const cadEdgePoints = typedArray(cadEdgeBuffer, cadEdges.layout.segments);
+  if (cadEdgePoints.length !== cadEdges.segmentCount * 6)
+    throw Error(
+      `ge-engine-bracket-edges holds ${cadEdgePoints.length / 6} segments, its JSON says ${cadEdges.segmentCount}`,
+    );
+  for (let i = 0; i < cadEdgePoints.length; i++)
+    cadEdgePoints[i] -= center[i % 3];
+  const featureGeometry = new THREE.BufferGeometry();
+  featureGeometry.setAttribute(
+    "position",
+    new THREE.BufferAttribute(cadEdgePoints, 3),
+  );
+  const featureMaterial = new THREE.LineBasicMaterial({
+    color: "#1b2733",
+    transparent: true,
+    opacity: 0.75,
+    depthWrite: false,
+  });
+  const featureObject = new THREE.LineSegments(
+    featureGeometry,
+    featureMaterial,
+  );
+  featureObject.renderOrder = 3;
+  body.add(featureObject);
+  const sceneData = document.querySelector("#scene").dataset;
+  sceneData.featureEdges = String(cadEdges.segmentCount);
+  sceneData.featureEdgesSource = "cad";
   const linePositions = new Float32Array(edgeIndices.length * 6);
   const lineGeometry = new THREE.BufferGeometry();
   const linePosition = new THREE.BufferAttribute(linePositions, 3).setUsage(
@@ -593,7 +634,8 @@ async function start() {
     const canvasWidth = sceneHost.clientWidth,
       canvasHeight = sceneHost.clientHeight;
     const horizontal = mobile.matches ? 0.5 : 0.7 - orientation * 0.4;
-    const vertical = mobile.matches ? 0.68 : 0.505;
+    const vertical = mobile.matches ? 0.55 : 0.505;
+    sceneHost.dataset.frameVertical = String(vertical);
     scene.camera3D
       .getCamera()
       .setViewOffset(
@@ -687,6 +729,9 @@ async function start() {
     frontMaterial.transparent = false;
     frontMaterial.depthWrite = true;
     lineMaterial.opacity = (0.6 - 0.35 * shownContour) * (1 - relax);
+    featureObject.visible = frontSurface.visible;
+    featureMaterial.opacity = 0.75 * (1 - 0.55 * edges);
+    sceneHost.dataset.featureEdgesVisible = String(featureObject.visible);
     lineMaterial.depthWrite = false;
     const orientation = still ? Number(progress >= 0.62) : turn;
     const optimizationTurn = still ? 0 : curve(topologyProgress);
