@@ -31,6 +31,7 @@ import {
   type ShellExtraction,
 } from "../shellize.js";
 import { buildVertexIndexer, type VertexIndexer } from "../solveMeshPacking.js";
+import { shellTieRefusal } from "./refusals.js";
 import {
   coupledFixedDofs,
   coupledLoads,
@@ -596,7 +597,8 @@ export interface PureShellSolve {
 // by nearest node, exactly as the coupled path maps the shelled body. Returns
 // null when this path does not apply (a solid domain is present, or there is no
 // surface mesh); throws when a body is marked Shell but carries no detectable
-// thin wall — so the choice is never silently ignored.
+// thin wall — so the choice is never silently ignored — and when the model has
+// a tie, which the shell solver cannot apply.
 export function preparePureShellSolve(
   payload: SolvePayload,
   shellBodyIds: Set<number>,
@@ -611,6 +613,9 @@ export function preparePureShellSolve(
   // shell. A mixed shell+solid assembly must go through the coupled path — pure
   // shells here would silently drop the solid bodies.
   if (!tetElements.every((e) => shellBodyIds.has(e.propertyId))) return null;
+  // The shell solver applies no tie; refuse it by name rather than drop it.
+  const tieRefusal = shellTieRefusal(payload.tieGroups);
+  if (tieRefusal !== null) throw new Error(tieRefusal);
 
   const vid = buildVertexIndexer(nodes);
   const mesh = buildShellizeMesh(

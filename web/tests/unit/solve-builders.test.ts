@@ -43,8 +43,12 @@ import {
   routeTopOpt,
   topOptStartLog,
 } from "../../src/lib/solve/route";
+import { topOptTieRefusal } from "../../src/lib/solve/refusals";
 import { buildVertexIndexer } from "../../src/lib/solveMeshPacking";
-import { amgUnavailableReason } from "../../src/lib/solve/amg";
+import {
+  amgFallbackPreconditioner,
+  amgUnavailableReason,
+} from "../../src/lib/solve/amg";
 
 const steel: Material = {
   id: 1,
@@ -694,4 +698,127 @@ test("topology optimization routing refuses models it would optimize wrongly", (
   expect(topOptStartLog(solid, 2, "solid")).toBe(
     "Starting solid topology optimization: 8 nodes, 2 elements (min_compliance, volume fraction 0.4, max 20 iterations)…",
   );
+});
+
+// KOF-353: a path that cannot apply a tie or element order 2 refuses the model
+// and names what it cannot apply, rather than solve a different model.
+const tie = (name: string): NonNullable<SolveModel["tieGroups"]>[number] => ({
+  name,
+  facesA: [{ nodeIds: [2, 3, 4] }],
+  facesB: [{ nodeIds: [5, 6, 7] }],
+  extent: "full",
+  searchDistance: 0,
+  method: "mpc",
+});
+
+test("topology optimization refuses tied models in every design domain", () => {
+  const settings: TopOptPayload["settings"] = {
+    objective: "min_compliance",
+    constraints: { volumeFraction: 0.4 },
+    filterRadius: 1,
+    maxIterations: 20,
+    tolerance: 0.01,
+  };
+  const solid: TopOptPayload = {
+    nodes: tetNodes,
+    elements: tetElements,
+    materials: [steel],
+    properties: twoBodies,
+    constraints: [],
+    loads: [],
+    tieGroups: [tie("Tie1")],
+    settings,
+  };
+  const shell: TopOptPayload = { ...solid, ...payload({}), settings };
+  const coupled: TopOptPayload = {
+    ...solid,
+    elements: [...tetElements, shellElements[0]],
+  };
+  for (const model of [
+    solid,
+    { ...solid, settings: { ...settings, method: "level_set" as const } },
+    { ...shell, tieGroups: [tie("Tie1")] },
+    coupled,
+  ])
+    expect(() => routeTopOpt(model)).toThrow(
+      /Topology optimization does not support ties yet.*tie "Tie1"/,
+    );
+  expect(() =>
+    routeTopOpt({ ...solid, tieGroups: [tie("Tie1"), tie("Pin")] }),
+  ).toThrow(/2 ties \("Tie1", "Pin"\)/);
+  expect(routeTopOpt({ ...solid, tieGroups: [] })).toBe("solid");
+  expect(topOptTieRefusal(undefined)).toBeNull();
+  expect(topOptTieRefusal([])).toBeNull();
+});
+
+test("shell and mixed shell/solid models refuse element order 2", () => {
+  const order2 = /linear elements only, but element order 2 is selected/;
+  // Pure shell (all CTRIA3).
+  expect(() => routeSolve(payload({ elementOrder: 2 }))).toThrow(order2);
+  // Explicit mixed shell/solid.
+  expect(() =>
+    routeSolve(
+      payload({
+        elements: [...shellElements, tetElements[0]],
+        elementOrder: 2,
+      }),
+    ),
+  ).toThrow(order2);
+  // A body marked Shell, idealised at solve time.
+  const solid = payload({
+    nodes: tetNodes,
+    elements: tetElements,
+    properties: twoBodies,
+  });
+  expect(() =>
+    routeSolve({
+      ...solid,
+      elementOrder: 2,
+      properties: [
+        { id: 1, materialId: 1, discretization: "shell" },
+        twoBodies[1],
+      ],
+    }),
+  ).toThrow(order2);
+  // Linear shell models and quadratic solid models still route.
+  expect(routeSolve(payload({ elementOrder: 1 }))).toEqual({ path: "shell" });
+  expect(routeSolve({ ...solid, elementOrder: 2 })).toEqual({ path: "solid" });
+});
+
+test("pure-shell models refuse ties", () => {
+  expect(() => routeSolve(payload({ tieGroups: [tie("Tie1")] }))).toThrow(
+    /shell solver does not support ties yet.*tie "Tie1"/,
+  );
+  expect(routeSolve(payload({ tieGroups: [] }))).toEqual({ path: "shell" });
+  // Mixed shell/solid and solid models carry ties as before.
+  expect(
+    routeSolve(
+      payload({
+        elements: [...shellElements, tetElements[0]],
+        tieGroups: [tie("Tie1")],
+      }),
+    ),
+  ).toEqual({ path: "coupled" });
+  expect(
+    routeSolve(
+      payload({
+        nodes: tetNodes,
+        elements: tetElements,
+        properties: twoBodies,
+        tieGroups: [tie("Tie1")],
+      }),
+    ),
+  ).toEqual({ path: "solid" });
+});
+
+test("the fallback preconditioner follows the solve route", () => {
+  // Only the all-solid path solves with Gauss–Seidel; the shell, coupled and
+  // auto-shell paths use incomplete Cholesky.
+  expect(amgFallbackPreconditioner({ path: "solid" })).toBe("gauss-seidel");
+  for (const route of [
+    { path: "shell" as const },
+    { path: "coupled" as const },
+    { path: "auto-shell" as const, shellBodyIds: new Set([1]) },
+  ])
+    expect(amgFallbackPreconditioner(route)).toBe("incomplete-cholesky");
 });

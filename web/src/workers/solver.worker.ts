@@ -608,8 +608,8 @@ function solveShell(
 // Solve a pure-shell (all-CTRIA3) model with the Kirchhoff shell solver. The
 // result matches the solid contract — three translations per node, one von
 // Mises surface stress per element — so the store and viewport consume it
-// unchanged. elementOrder and tie connections do not apply to shells (the DKT
-// facet is what it is; ties join solid bodies) and are ignored.
+// unchanged. The DKT facet is linear and the shell solver applies no tie, so
+// routeSolve refuses element order 2 and ties before this runs.
 async function handleShellSolve(id: number, payload: SolvePayload) {
   const { nodes, elements } = payload;
   const inputs = buildShellEngineInputs(payload);
@@ -657,8 +657,9 @@ function solveMixed(
 // all-solid model carrying a surface-to-point coupling through the Rust solid
 // solve (with the chosen preconditioner and element order) or, when Rust does
 // not cover it, the engine's coupled solver, all on the same inputs. The mixed
-// solve and the engine's coupled assembler are linear tets + DKT facets, so
-// elementOrder does not apply there, and the solve says so.
+// solve and the engine's coupled assembler are linear tets + DKT facets:
+// routeSolve refuses element order 2 on a model with shells, and the engine's
+// coupled solver says when it solves linear instead.
 async function handleMixedSolve(id: number, payload: SolvePayload) {
   const inp = buildCoupledEngineInputs(payload, logTo(id));
 
@@ -670,12 +671,7 @@ async function handleMixedSolve(id: number, payload: SolvePayload) {
   const order = payload.elementOrder ?? 1;
   const hasShells = inp.shellElements.length > 0;
   const inRust = amgReason(payload) === null;
-  if (hasShells && order !== 1)
-    self.postMessage({
-      id,
-      log: "[mixed] Shell and solid elements solve together with linear tetrahedra; quadratic elements apply to all-solid models.",
-    });
-  else if (!inRust && order !== 1)
+  if (!hasShells && !inRust && order !== 1)
     self.postMessage({
       id,
       log: `The coupled solver has linear elements only — solving with linear instead of order-${order} elements.`,
@@ -850,12 +846,7 @@ async function handleSolve(id: number, payload: SolvePayload) {
   const reason = amgReason(payload);
   const route = routeSolve(payload);
   if (requestedSolver(payload) === "amg" && reason !== null) {
-    const fallback = amgFallbackPreconditioner({
-      elements: payload.elements,
-      properties: payload.properties,
-      // eslint-disable-next-line kofem/no-silent-fallback -- `couplings` is optional in the solve message; a model with none is the ordinary case
-      couplingCount: payload.couplings?.length ?? 0,
-    });
+    const fallback = amgFallbackPreconditioner(route);
     self.postMessage({
       id,
       log: `AMG is not available for this model (${reason}) — solving with ${FALLBACK_PRECONDITIONER_LABEL[fallback]}.`,
@@ -977,8 +968,8 @@ function handleTopOpt(id: number, payload: TopOptPayload) {
       onDensity,
     );
   } else if (usesRustTopOpt(payload.settings)) {
-    // SIMP on a solid design domain runs in Rust (KOF-310). Ties are not
-    // applied to the solid design domain.
+    // SIMP on a solid design domain runs in Rust (KOF-310). routeTopOpt has
+    // refused a tied model already.
     startLog(payload.elements.length);
     result = optimizeSolidInRust(
       { ElasticModel, TopologySettings, TopologyRun },

@@ -31,6 +31,7 @@ import {
   suppressionMismatchMessage,
 } from "../store/geometrySlice";
 import { passiveElements, roleOf } from "../lib/regions";
+import { topOptTieRefusal } from "../lib/solve/refusals";
 
 export type FieldErrors = Partial<Record<TopOptNumericField, string>>;
 
@@ -175,8 +176,9 @@ export function useTopOpt() {
   const loads = useModelStore((s) => s.loads);
   const surfaceLoads = useModelStore((s) => s.surfaceLoads);
   const topOpt = useModelStore((s) => s.topOpt);
-  // Ties/couplings join solid bodies and idealised shells in the coupled TO path
-  // (KOF-237), exactly as the static solve consumes them.
+  // Couplings join solid bodies and idealised shells in the coupled TO path
+  // (KOF-237), exactly as the static solve consumes them. No optimizer applies
+  // a tie yet, so a tied model is refused (KOF-353).
   const tieGroups = useModelStore((s) => s.tieGroups);
   const couplingGroups = useModelStore((s) => s.couplingGroups);
   const isOptimizing = useModelStore((s) => s.isOptimizing);
@@ -262,7 +264,11 @@ export function useTopOpt() {
   const noDesignRegion = properties
     .filter((p) => isCadBody(p) && !p.suppressed)
     .every((p) => roleOf(p) !== "design");
+  // No optimizer applies a tie: the worker refuses a tied model (routeTopOpt)
+  // with the same words, so say so before the run.
+  const tieRefusal = topOptTieRefusal(tieGroups);
   const allOk =
+    tieRefusal === null &&
     !noDesignRegion &&
     !levelSetShellBlock &&
     !levelSetCouplingBlock &&
@@ -439,6 +445,7 @@ export function useTopOpt() {
         `Topology optimization uses one material per design domain — the solid domain spans ${solidMaterialIds.size} and the shell domain ${shellMaterialIds.size}; assign a single material to each`,
       ]);
   }
+  if (tieRefusal !== null) checks.push([false, tieRefusal]);
   if (noDesignRegion)
     checks.push([
       false,

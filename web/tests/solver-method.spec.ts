@@ -20,6 +20,7 @@ interface StoreWindow {
       elementOrder: number;
       properties: { id: number }[];
       setBodyDiscretization(propertyId: number, disc: "solid" | "shell"): void;
+      setElementOrder(order: number): void;
       setMode(mode: "solve"): void;
     };
   };
@@ -68,11 +69,20 @@ test("AMG is the recommended default and matches Gauss–Seidel", async ({
 
   // A body solved as a shell is outside AMG's reach: the panel says so before
   // the solve, and names the shell solver's incomplete Cholesky preconditioner.
+  // Shells are linear (a Shell body at order 2 is refused), so the check runs
+  // at order 1 and returns to the example's order 2 after.
   const setDiscretization = (disc: "solid" | "shell") =>
     page.evaluate((value) => {
       const state = (window as unknown as StoreWindow).__kofemStore.getState();
       state.setBodyDiscretization(state.properties[0].id, value);
     }, disc);
+  const setOrder = (order: number) =>
+    page.evaluate((value) => {
+      (window as unknown as StoreWindow).__kofemStore
+        .getState()
+        .setElementOrder(value);
+    }, order);
+  await setOrder(1);
   await setDiscretization("shell");
   await expect(page.getByTestId("solver-method-note")).toContainText(
     "does not support bodies solved as shells",
@@ -81,6 +91,7 @@ test("AMG is the recommended default and matches Gauss–Seidel", async ({
     "incomplete Cholesky preconditioner",
   );
   await setDiscretization("solid");
+  await setOrder(2);
 
   // The example opens with quadratic elements, which AMG covers: no note, and
   // the solve runs through it.

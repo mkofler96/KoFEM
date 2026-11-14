@@ -784,6 +784,27 @@ describe("pressure on the auto-shell paths", () => {
         if (force) for (let k = 0; k < 3; k++) resultant[k] += force[k];
       expectResultant(resultant, [0, -pressure * area, 0]);
     });
+
+    // KOF-353: the shell solver applies no tie, so a tie on the pure auto-shell
+    // path is refused by name rather than dropped.
+    test("a tie is refused by name", () => {
+      const nodeIds = finModel.elements[0].nodeIds.slice(0, 3);
+      const tie = {
+        name: "Tie1",
+        facesA: [{ nodeIds }],
+        facesB: [{ nodeIds }],
+        extent: "full",
+        searchDistance: 0,
+        method: "mpc",
+      };
+      expect(() =>
+        preparePureShellSolve(
+          { ...finModel, tieGroups: [tie] },
+          new Set([1]),
+          quiet,
+        ),
+      ).toThrow(/shell solver does not support ties yet.*tie "Tie1"/);
+    });
   });
 
   // Coupled auto-shell: fin_two_parts with the fin (body 2) marked Shell; a
