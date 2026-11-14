@@ -193,10 +193,11 @@ test("on a phone the headline sits lower and the bracket higher, with room betwe
   const scene = page.locator("#scene");
   await expect(scene).toHaveAttribute("data-loaded", "true");
   const intro = await page.locator(".intro").boundingBox();
+  if (!intro) throw new Error("The landing headline has no layout box");
   const vertical = Number(await scene.getAttribute("data-frame-vertical"));
-  expect(intro!.y / 844).toBeGreaterThanOrEqual(0.24);
+  expect(intro.y / 844).toBeGreaterThanOrEqual(0.24);
   expect(vertical).toBeLessThanOrEqual(0.56);
-  expect((intro!.y + intro!.height) / 844).toBeLessThan(vertical - 0.12);
+  expect((intro.y + intro.height) / 844).toBeLessThan(vertical - 0.12);
 });
 
 test("the landing Start Solver button is a quiet tinted button, not a solid fill", async ({
@@ -206,10 +207,10 @@ test("the landing Start Solver button is a quiet tinted button, not a solid fill
   const launch = page.getByRole("link", { name: /Start Solver/i });
   await expect(launch).toBeVisible();
   const alpha = await launch.evaluate((link) => {
-    const parts = getComputedStyle(link)
-      .backgroundColor.match(/[\d.]+/g)!
-      .map(Number);
-    return parts.length === 4 ? parts[3] : 1;
+    const color = getComputedStyle(link).backgroundColor;
+    const parts = color.match(/[\d.]+/g);
+    if (!parts) throw new Error(`Unreadable background colour: ${color}`);
+    return parts.length === 4 ? Number(parts[3]) : 1;
   });
   expect(alpha).toBeLessThan(0.3);
   await expect(launch).toHaveCSS("border-top-style", "solid");

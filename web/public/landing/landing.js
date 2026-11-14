@@ -149,7 +149,9 @@ async function start() {
     }
   }
   faceDirections();
-  const creaseDot = Math.cos(Math.PI / 4),
+  // Smooth shading across folds up to 60°: the FE surface bridges fillets with
+  // coarse triangles, which would otherwise shade as hard seams.
+  const creaseDot = Math.cos(Math.PI / 3),
     normalGroups = [];
   let sharpCorners = 0;
   for (let corner = 0; corner < triangles.length; corner++) {
@@ -204,8 +206,9 @@ async function start() {
   frontSurface.renderOrder = 2;
   const body = new THREE.Group();
   body.add(frontSurface);
-  // CAD feature edges: creases sharper than 40° between boundary faces.
-  const featureGeometry = new THREE.EdgesGeometry(surfaceGeometry, 40);
+  // CAD feature edges: creases sharper than 75° between boundary faces; filleted
+  // transitions fold at shallower angles on the FE surface and stay unlined.
+  const featureGeometry = new THREE.EdgesGeometry(surfaceGeometry, 75);
   const featureMaterial = new THREE.LineBasicMaterial({
     color: "#1b2733",
     transparent: true,
