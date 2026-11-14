@@ -187,14 +187,24 @@ function readBcs(bcs: EngineCoupledBcs, dofCount: number) {
   return { fixedDofs, fixedValues, forces };
 }
 
-export async function solveCoupledInRust(
+// A mixed model read from solve_coupled's arguments, not yet assembled,
+// with its couplings, supports and dense load vector (6 per vertex).
+export interface MixedModelInputs {
+  model: MixedModel;
+  couplings: Couplings;
+  fixedDofs: Uint32Array;
+  fixedValues: Float64Array;
+  forces: Float64Array;
+  solid: { count: number };
+  shell: { count: number };
+}
+
+// Read solve_coupled's arguments into a Rust mixed model and its couplings.
+// The caller frees both.
+export function createMixedModel(
   fem: MixedFemModule,
   args: CoupledEngineArgs,
-  preconditioner: MixedPreconditionerName,
-  iterationLimit: number | undefined,
-  askToContinue: ContinuationPrompt,
-  log: (line: string) => void,
-): Promise<CoupledSolveResult> {
+): MixedModelInputs {
   const { mesh, coupling, bcs } = args;
   if (
     mesh.vertices.length % 3 !== 0 ||
@@ -254,15 +264,7 @@ export async function solveCoupledInRust(
     shell.pairs,
   );
   try {
-    const started = performance.now();
-    const nonzeros = model.assemble();
     const { fixedDofs, fixedValues, forces } = readBcs(bcs, model.dofCount);
-    log(
-      `[coupled] Rust solve: ${nodeCount} nodes, ${tetCount} tets ` +
-        `(${solid.count} material${solid.count === 1 ? "" : "s"}), ${triangleCount} shell facets, ` +
-        `${coupling.ref.length} couplings, ${fixedDofs.length} constrained DOFs, ` +
-        `${bcs.load_dofs.length} loads; ${nonzeros} stiffness entries assembled`,
-    );
     const couplings = new fem.Couplings(
       requireIndices(coupling.ref, "coupling.ref", nodeCount),
       requireIndices(
@@ -277,61 +279,96 @@ export async function solveCoupledInRust(
       coupling.weights ?? new Float64Array(0),
       requireNumber(coupling.relaxation, "coupling.relaxation"),
     );
+    return {
+      model,
+      couplings,
+      fixedDofs,
+      fixedValues,
+      forces,
+      solid: { count: solid.count },
+      shell: { count: shell.count },
+    };
+  } catch (error) {
+    model.free();
+    throw error;
+  }
+}
+
+export async function solveCoupledInRust(
+  fem: MixedFemModule,
+  args: CoupledEngineArgs,
+  preconditioner: MixedPreconditionerName,
+  iterationLimit: number | undefined,
+  askToContinue: ContinuationPrompt,
+  log: (line: string) => void,
+): Promise<CoupledSolveResult> {
+  const { mesh, coupling, bcs } = args;
+  const { model, couplings, fixedDofs, fixedValues, forces, solid } =
+    createMixedModel(fem, args);
+  const nodeCount = model.vertexCount;
+  const tetCount = mesh.tets.length / 4;
+  const triangleCount = mesh.triangles.length / 3;
+  try {
+    const started = performance.now();
+    const nonzeros = model.assemble();
+    log(
+      `[coupled] Rust solve: ${nodeCount} nodes, ${tetCount} tets ` +
+        `(${solid.count} material${solid.count === 1 ? "" : "s"}), ${triangleCount} shell facets, ` +
+        `${coupling.ref.length} couplings, ${fixedDofs.length} constrained DOFs, ` +
+        `${bcs.load_dofs.length} loads; ${nonzeros} stiffness entries assembled`,
+    );
+    const run = model.startSolve(
+      couplings,
+      fixedDofs,
+      fixedValues,
+      forces,
+      RELATIVE_TOLERANCE,
+      preconditioner,
+    );
+    let finished = false;
     try {
-      const run = model.startSolve(
-        couplings,
-        fixedDofs,
-        fixedValues,
-        forces,
-        RELATIVE_TOLERANCE,
-        preconditioner,
+      log(`[coupled] preconditioner: ${run.preconditioner}`);
+      await iterateToConvergence(
+        run,
+        {
+          // cgIterationLimit is optional in the solve message; absent means
+          // the solver's own budget, as for the C++ coupled solve.
+          initialBudget:
+            iterationLimit === undefined
+              ? defaultShellIterationLimit(model.dofCount)
+              : iterationLimit,
+          logEvery: LOG_EVERY,
+          tag: "[coupled]",
+          started,
+        },
+        askToContinue,
+        log,
       );
-      let finished = false;
+      finished = true;
+      const solution = run.finish();
       try {
-        log(`[coupled] preconditioner: ${run.preconditioner}`);
-        await iterateToConvergence(
-          run,
-          {
-            // cgIterationLimit is optional in the solve message; absent means
-            // the solver's own budget, as for the C++ coupled solve.
-            initialBudget:
-              iterationLimit === undefined
-                ? defaultShellIterationLimit(model.dofCount)
-                : iterationLimit,
-            logEvery: LOG_EVERY,
-            tag: "[coupled]",
-            started,
-          },
-          askToContinue,
-          log,
+        const dofs = solution.displacements;
+        const result = {
+          displacements: Float64Array.from(model.translations(dofs)),
+          von_mises_tets: Float64Array.from(model.vonMisesTets(dofs)),
+          von_mises_tris: Float64Array.from(model.vonMisesTris(dofs)),
+          iterations: solution.iterations,
+        };
+        const seconds = (performance.now() - started) / 1000;
+        log(
+          `[coupled] converged: ${solution.iterations} iterations, relative residual ` +
+            `${solution.relativeResidual.toExponential(3)}, ${seconds.toFixed(2)} s`,
         );
-        finished = true;
-        const solution = run.finish();
-        try {
-          const dofs = solution.displacements;
-          const result = {
-            displacements: Float64Array.from(model.translations(dofs)),
-            von_mises_tets: Float64Array.from(model.vonMisesTets(dofs)),
-            von_mises_tris: Float64Array.from(model.vonMisesTris(dofs)),
-            iterations: solution.iterations,
-          };
-          const seconds = (performance.now() - started) / 1000;
-          log(
-            `[coupled] converged: ${solution.iterations} iterations, relative residual ` +
-              `${solution.relativeResidual.toExponential(3)}, ${seconds.toFixed(2)} s`,
-          );
-          return result;
-        } finally {
-          solution.free();
-        }
+        return result;
       } finally {
-        // finish() consumes the run; free it only when it was not reached.
-        if (!finished) run.free();
+        solution.free();
       }
     } finally {
-      couplings.free();
+      // finish() consumes the run; free it only when it was not reached.
+      if (!finished) run.free();
     }
   } finally {
+    couplings.free();
     model.free();
   }
 }

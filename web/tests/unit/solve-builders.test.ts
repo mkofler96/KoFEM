@@ -676,6 +676,23 @@ test("topology optimization routing refuses models it would optimize wrongly", (
   };
   expect(routeTopOpt(solid)).toBe("solid");
   expect(routeTopOpt({ ...solid, ...payload({}), settings })).toBe("shell");
+  // A coupling needs the coupled assembler, and that needs a solid body —
+  // the same rule, and words, as the static solve.
+  const coupling = {
+    name: "c",
+    kind: "kinematic",
+    referencePoint: 99,
+    nodes: [11],
+  } as unknown as NonNullable<TopOptPayload["couplings"]>[number];
+  expect(() =>
+    routeTopOpt({
+      ...solid,
+      ...payload({}),
+      couplings: [coupling],
+      settings,
+    }),
+  ).toThrow(/all shell elements and declares 1 surface-to-point coupling/);
+  expect(routeTopOpt({ ...solid, couplings: [coupling] })).toBe("coupled");
   expect(
     routeTopOpt({
       ...solid,

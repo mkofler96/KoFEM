@@ -164,6 +164,156 @@ test("optimize_topology worker: density field of element length + progress logs"
   );
 });
 
+// A plate of CTRIA3 facets, n×n cells of two each over [0, n]², and its
+// boundary and interior node ids.
+function makePlate(n: number) {
+  const id = (i: number, j: number) => i * (n + 1) + j + 1;
+  const nodes: { id: number; x: number; y: number; z: number }[] = [];
+  for (let i = 0; i <= n; i++)
+    for (let j = 0; j <= n; j++) nodes.push({ id: id(i, j), x: i, y: j, z: 0 });
+  const elements: {
+    id: number;
+    type: string;
+    nodeIds: number[];
+    propertyId: number;
+  }[] = [];
+  for (let i = 0; i < n; i++)
+    for (let j = 0; j < n; j++) {
+      const corners = [id(i, j), id(i + 1, j), id(i + 1, j + 1), id(i, j + 1)];
+      for (const facet of [
+        [0, 1, 2],
+        [0, 2, 3],
+      ])
+        elements.push({
+          id: elements.length + 1,
+          type: "CTRIA3",
+          nodeIds: facet.map((corner) => corners[corner]),
+          propertyId: 1,
+        });
+    }
+  const onEdge = (i: number, j: number) =>
+    i === 0 || j === 0 || i === n || j === n;
+  const edgeNodeIds: number[] = [];
+  const innerNodeIds: number[] = [];
+  for (let i = 0; i <= n; i++)
+    for (let j = 0; j <= n; j++)
+      (onEdge(i, j) ? edgeNodeIds : innerNodeIds).push(id(i, j));
+  return { nodes, elements, edgeNodeIds, innerNodeIds };
+}
+
+// The shell and coupled design domains optimize in the Rust module too
+// (KOF-310): a simply-supported plate of shells under a uniform load, and the
+// solid beam with a distributing coupling, each through the worker.
+test("optimize_topology worker: shell and coupled models optimize in Rust", async ({
+  page,
+}) => {
+  const logs: string[] = [];
+  page.on("console", (msg) => logs.push(msg.text()));
+  await gotoApp(page);
+  await page.waitForFunction(() =>
+    Boolean((window as unknown as KofemTestHooks).__kofem),
+  );
+
+  const result = await page.evaluate(
+    async ({ plate, beam }) => {
+      const kofem = (window as unknown as KofemTestHooks).__kofem;
+      if (!kofem)
+        throw new Error("window.__kofem test hooks are not installed");
+      const steel = {
+        id: 1,
+        name: "Steel",
+        young: 210000,
+        poisson: 0.3,
+        density: 7.85e-9,
+      };
+      const settings = {
+        method: "simp",
+        objective: "min_compliance",
+        constraints: { volumeFraction: 0.4 },
+        penalty: 3,
+        filterRadius: 1.5,
+        moveLimit: 0.2,
+        maxIterations: 6,
+        tolerance: 0.01,
+      };
+      const shell = (await kofem.sendToWorker("optimize_topology", {
+        nodes: plate.nodes,
+        elements: plate.elements,
+        materials: [steel],
+        properties: [{ id: 1, materialId: 1, thickness: 0.1 }],
+        constraints: plate.edgeNodeIds.flatMap((nodeId) =>
+          [0, 1, 2].map((dof) => ({ nodeId, dof })),
+        ),
+        loads: plate.innerNodeIds.map((nodeId) => ({
+          nodeId,
+          dof: 2,
+          value: -1,
+        })),
+        settings,
+      })) as {
+        density: Float64Array;
+        history: { compliance: number }[];
+      };
+      // A reference point one unit past the tip, carrying the load and
+      // tied to all four tip nodes.
+      const reference = 1000;
+      const coupled = (await kofem.sendToWorker("optimize_topology", {
+        nodes: [...beam.nodes, { id: reference, x: 5, y: 0.5, z: 0.5 }],
+        elements: beam.elements,
+        materials: [steel],
+        properties: [{ id: 1, materialId: 1 }],
+        constraints: beam.fixedNodeIds.flatMap((nodeId) =>
+          [0, 1, 2].map((dof) => ({ nodeId, dof })),
+        ),
+        loads: [{ nodeId: reference, dof: 2, value: -100 }],
+        couplings: [
+          {
+            name: "tip",
+            kind: "distributing",
+            dofs: [0, 1, 2, 3, 4, 5],
+            refNodeId: reference,
+            faces: [
+              { nodeIds: beam.loadedNodeIds.slice(0, 3) },
+              { nodeIds: beam.loadedNodeIds.slice(1, 4) },
+            ],
+          },
+        ],
+        settings,
+      })) as {
+        density: Float64Array;
+        history: { compliance: number }[];
+      };
+      return {
+        shell: {
+          densityLength: shell.density.length,
+          first: shell.history[0].compliance,
+          last: shell.history[shell.history.length - 1].compliance,
+        },
+        coupled: {
+          densityLength: coupled.density.length,
+          historyLength: coupled.history.length,
+        },
+      };
+    },
+    { plate: makePlate(8), beam: makeBeam(4, 1, 1) },
+  );
+
+  expect(result.shell.densityLength).toBe(2 * 8 * 8);
+  expect(result.shell.last).toBeLessThan(result.shell.first);
+  expect(result.coupled.densityLength).toBe(6 * 4);
+  expect(result.coupled.historyLength).toBeGreaterThanOrEqual(1);
+  expect(
+    logs.some((line) =>
+      /\[topopt\] shell min_compliance.*Rust IC\(0\) CG/.test(line),
+    ),
+  ).toBe(true);
+  expect(
+    logs.some((line) =>
+      /\[topopt\] coupled min_compliance.*Rust IC\(0\) CG/.test(line),
+    ),
+  ).toBe(true);
+});
+
 // A suppressed body is not in the mesh, so its element type no longer applies:
 // a Shell-marked body that is suppressed must not make the solve or the
 // optimizer of the remaining all-solid mesh ask for shell idealisation.

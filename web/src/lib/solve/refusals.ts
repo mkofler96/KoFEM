@@ -41,3 +41,16 @@ export function shellOrderRefusal(elementOrder: number): string | null {
   if (elementOrder === 1) return null;
   return `Shell and mixed shell/solid models solve with linear elements only, but element order ${elementOrder} is selected. Set Element order to Linear in the Mesh panel.`;
 }
+
+// A coupling is an RBE2/RBE3 constraint, and only the coupled assembler applies
+// one — the pure Kirchhoff shell solver has no couplings, and the coupled
+// assembler needs a solid domain to assemble. An all-shell model therefore
+// cannot carry a coupling, in the solve or the optimizer.
+export function shellCouplingRefusal(couplingCount: number): string {
+  return (
+    `This model is all shell elements and declares ${couplingCount} surface-to-point ` +
+    "coupling(s), which the shell solver cannot apply — a coupling needs the " +
+    "coupled solid-shell assembler, and that needs at least one solid body. " +
+    "Delete the coupling, or keep one body solid."
+  );
+}
