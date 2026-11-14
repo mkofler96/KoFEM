@@ -54,36 +54,8 @@ export async function solveShellInRust(
   askToContinue: ContinuationPrompt,
   log: (line: string) => void,
 ): Promise<ShellSolveResult> {
-  const { vertices, triangles } = inputs.mesh;
-  if (vertices.length % 3 !== 0)
-    throw new Error(
-      `mesh.vertices length ${vertices.length} is not divisible by 3 — expected flat xyz coordinates`,
-    );
-  if (triangles.length % 3 !== 0)
-    throw new Error(
-      `mesh.triangles length ${triangles.length} is not divisible by 3 — expected three vertex indices per triangle`,
-    );
-  const nodeCount = vertices.length / 3;
-  const triangleCount = triangles.length / 3;
-  if (nodeCount === 0 || triangleCount === 0)
-    throw new Error("shell mesh has no nodes or no triangles");
-
-  const section = readShellSection(
-    JSON.parse(inputs.matJson) as unknown,
-    inputs.mesh,
-    triangleCount,
-  );
-  const bcs = readShellBcs(JSON.parse(inputs.bcsJson) as unknown, nodeCount);
-
-  if (triangles.some((vertex) => vertex < 0))
-    throw new Error("mesh.triangles holds a negative vertex index");
-  const model = new fem.ShellModel(
-    vertices,
-    Uint32Array.from(triangles),
-    section.thicknesses,
-    section.materialOfTriangle,
-    section.materials,
-  );
+  const { model, section, bcs, forces, nodeCount, triangleCount } =
+    createShellModel(fem, inputs);
   try {
     const started = performance.now();
     const nonzeros = model.assemble();
@@ -92,8 +64,6 @@ export async function solveShellInRust(
         `${section.description}; ${bcs.fixedDofs.length} constrained DOFs, ` +
         `${bcs.loadCount} loads; ${nonzeros} stiffness entries assembled`,
     );
-    const forces = new Float64Array(model.dofCount);
-    for (const [dof, value] of bcs.loads) forces[dof] += value;
     const run = model.startSolve(
       Uint32Array.from(bcs.fixedDofs),
       Float64Array.from(bcs.fixedValues),
@@ -145,6 +115,57 @@ export async function solveShellInRust(
   } finally {
     model.free();
   }
+}
+
+// A shell model read from solve_shell's payload, not yet assembled, with
+// its supports and its dense load vector (forces and moments, 6 per vertex).
+export interface ShellModelInputs {
+  model: ShellModel;
+  section: ShellSection;
+  bcs: ShellBcs;
+  forces: Float64Array;
+  nodeCount: number;
+  triangleCount: number;
+}
+
+// Read solve_shell's payload into a Rust shell model. The caller frees it.
+export function createShellModel(
+  fem: ShellFemModule,
+  inputs: { mesh: ShellMesh; matJson: string; bcsJson: string },
+): ShellModelInputs {
+  const { vertices, triangles } = inputs.mesh;
+  if (vertices.length % 3 !== 0)
+    throw new Error(
+      `mesh.vertices length ${vertices.length} is not divisible by 3 — expected flat xyz coordinates`,
+    );
+  if (triangles.length % 3 !== 0)
+    throw new Error(
+      `mesh.triangles length ${triangles.length} is not divisible by 3 — expected three vertex indices per triangle`,
+    );
+  const nodeCount = vertices.length / 3;
+  const triangleCount = triangles.length / 3;
+  if (nodeCount === 0 || triangleCount === 0)
+    throw new Error("shell mesh has no nodes or no triangles");
+
+  const section = readShellSection(
+    JSON.parse(inputs.matJson) as unknown,
+    inputs.mesh,
+    triangleCount,
+  );
+  const bcs = readShellBcs(JSON.parse(inputs.bcsJson) as unknown, nodeCount);
+
+  if (triangles.some((vertex) => vertex < 0))
+    throw new Error("mesh.triangles holds a negative vertex index");
+  const model = new fem.ShellModel(
+    vertices,
+    Uint32Array.from(triangles),
+    section.thicknesses,
+    section.materialOfTriangle,
+    section.materials,
+  );
+  const forces = new Float64Array(model.dofCount);
+  for (const [dof, value] of bcs.loads) forces[dof] += value;
+  return { model, section, bcs, forces, nodeCount, triangleCount };
 }
 
 interface ShellSection {

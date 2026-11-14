@@ -211,8 +211,8 @@ export function useTopOpt() {
   // unlike the static solve, which a non-zero prescribed displacement drives.
   const loadOk = loads.length > 0 || surfaceLoads.length > 0;
 
-  // TO optimizes ONE design material per sub-domain: the engine reads a single
-  // (E, ν) for the solid tets and a single (E, ν) for the shell facets
+  // TO optimizes ONE design material per sub-domain, as the engine's entries
+  // read a single (E, ν) for the solid tets and one for the shell facets
   // (topology_simp.cpp / topology_shell_entry.cpp), so each sub-domain must
   // resolve to one material — otherwise the per-body assignments would be
   // silently discarded. Count the solid and shell domains separately, the way
@@ -238,9 +238,9 @@ export function useTopOpt() {
   // eslint-disable-next-line kofem/no-silent-fallback -- a constraint without prescribedValue is a homogeneous fixed BC, i.e. u = 0 by definition
   const hasPrescribed = constraints.some((c) => (c.prescribedValue ?? 0) !== 0);
 
-  // The stress constraint is implemented for the plain solid SIMP entry only.
+  // The stress constraint is implemented for the all-solid SIMP path only.
   // Shells, and any coupling (which routes even an all-solid model to the
-  // coupled optimizer), reach entries that reject it (topology_shell_entry.cpp),
+  // coupled optimizer), reach an optimizer that rejects it (topOptRust.ts),
   // so block the run in pre-flight rather than let it fail in the worker. The
   // level-set panel hides the constraint and does not send it.
   const stressOnShell =

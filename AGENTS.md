@@ -21,9 +21,10 @@ The React/TypeScript/Three.js frontend is in `web/`. Use **bun**, not npm.
   Mixed shell/solid models solve in Rust (`lib/solve/coupledRust.ts`), with
   `solve_coupled.cpp` as their test oracle; all-solid models with couplings
   that AMG cannot take still use `solve_coupled.cpp`. SIMP topology
-  optimization of solid models runs in Rust (`lib/solve/topOptRust.ts`), with
-  `optimize_topology` as its test oracle; the level-set method and the shell
-  and coupled design domains are still C++. Cover all applicable paths for
+  optimization runs in Rust (`lib/solve/topOptRust.ts`) on solid, shell and
+  coupled design domains, with `optimize_topology`, `optimize_topology_shell`
+  and `optimize_topology_coupled` as its test oracles; the level-set method is
+  still C++. Cover all applicable paths for
   materials, BCs, loads, and solve payload changes, including per-body
   materials.
 - Shell is an explicit per-body choice. Mid-surface and mixed-mesh assembly

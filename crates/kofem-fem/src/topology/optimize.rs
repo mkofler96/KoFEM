@@ -30,9 +30,66 @@ use super::formulation::{
     STRESS_LIMIT_SLACK, VOLUME_LIMIT_SLACK,
 };
 use super::mma::Mma;
-use super::simp::SimpModel;
+use super::simp::{ComplianceEvaluation, SimpModel};
 use super::stress::StressConstraint;
 use super::topology_error;
+
+/// A design domain the SIMP loop optimizes: one density per element, a
+/// penalized solve with its compliance sensitivity, and — for an all-solid
+/// model only — the stress constraint.
+pub trait DesignModel {
+    fn element_count(&self) -> usize;
+    /// Element measures: volume, or facet area × thickness.
+    fn volumes(&self) -> &[f64];
+    /// Element centres, for the filter.
+    fn centroids(&self) -> &[[f64; 3]];
+    /// Unknowns of each solve.
+    fn dof_count(&self) -> usize;
+    /// Solve K(ρ)·u = f and return the compliance and its sensitivities.
+    ///
+    /// # Errors
+    /// A density field that does not fit the model, or a failed solve.
+    fn evaluate_compliance(
+        &mut self,
+        rho: &[f64],
+        penalty: f64,
+        emin_rel: f64,
+    ) -> Result<ComplianceEvaluation, FemError>;
+    /// The all-solid model that evaluates the stress constraint, or `None`
+    /// where the constraint is not supported.
+    fn stress_model(&mut self) -> Option<&mut SimpModel>;
+}
+
+impl DesignModel for SimpModel {
+    fn element_count(&self) -> usize {
+        Self::element_count(self)
+    }
+
+    fn volumes(&self) -> &[f64] {
+        Self::volumes(self)
+    }
+
+    fn centroids(&self) -> &[[f64; 3]] {
+        Self::centroids(self)
+    }
+
+    fn dof_count(&self) -> usize {
+        self.mesh().dof_count()
+    }
+
+    fn evaluate_compliance(
+        &mut self,
+        rho: &[f64],
+        penalty: f64,
+        emin_rel: f64,
+    ) -> Result<ComplianceEvaluation, FemError> {
+        Self::evaluate_compliance(self, rho, penalty, emin_rel)
+    }
+
+    fn stress_model(&mut self) -> Option<&mut SimpModel> {
+        Some(self)
+    }
+}
 
 /// The settings of one run; [`SimpSettings::default`] holds the ADR-0002
 /// defaults.
@@ -135,8 +192,8 @@ pub struct SimpResult {
 ///
 /// # Errors
 /// As [`SimpOptimizer::new`] and [`SimpOptimizer::step`].
-pub fn optimize(
-    model: SimpModel,
+pub fn optimize<M: DesignModel>(
+    model: M,
     settings: &SimpSettings,
     mut on_density: impl FnMut(usize, &[f64]),
 ) -> Result<SimpResult, FemError> {
@@ -169,8 +226,8 @@ struct Feasible {
 }
 
 /// A SIMP run in progress.
-pub struct SimpOptimizer {
-    model: SimpModel,
+pub struct SimpOptimizer<M: DesignModel = SimpModel> {
+    model: M,
     settings: SimpSettings,
     pins: Vec<Pin>,
     active: Vec<usize>,
@@ -202,7 +259,7 @@ pub struct SimpOptimizer {
     converged: bool,
 }
 
-impl SimpOptimizer {
+impl<M: DesignModel> SimpOptimizer<M> {
     /// Check the settings against the model and set up the run: the design
     /// domain, the filter and MMA. Active elements start at the volume
     /// fraction (`min_compliance`) or at full material (`min_volume`, so the
@@ -215,7 +272,7 @@ impl SimpOptimizer {
         clippy::too_many_lines,
         reason = "the setting checks of the C++ loop, one after the other"
     )]
-    pub fn new(model: SimpModel, settings: &SimpSettings) -> Result<Self, FemError> {
+    pub fn new(mut model: M, settings: &SimpSettings) -> Result<Self, FemError> {
         let settings = settings.clone();
         let count = model.element_count();
         let min_volume = settings.objective == Objective::MinVolume;
@@ -264,6 +321,13 @@ impl SimpOptimizer {
         if !(positive(settings.emin_rel) && settings.emin_rel < 1.0) {
             return Err(topology_error(
                 "the stiffness floor emin_rel must be in (0, 1)",
+            ));
+        }
+        if settings.stress.is_some() && model.stress_model().is_none() {
+            return Err(topology_error(
+                "the maximum-stress constraint (constraints.maxStress) is supported for \
+                 all-solid models only — shell and coupled shell/solid models cannot be \
+                 stress-constrained yet. Remove the stress limit, or optimize an all-solid model",
             ));
         }
         if let Some(stress) = &settings.stress {
@@ -440,7 +504,7 @@ impl SimpOptimizer {
     /// Unknowns of each solve.
     #[must_use]
     pub fn dof_count(&self) -> usize {
-        self.model.mesh().dof_count()
+        self.model.dof_count()
     }
 
     /// The design the last step analysed (once finished: the returned one).
@@ -527,15 +591,19 @@ impl SimpOptimizer {
         // (1b) The relaxed stress, its aggregate and the adjoint sensitivity.
         let stress_state = match settings.stress {
             Some(stress) => {
-                let evaluated = self.model.evaluate_stress(
-                    &self.rho,
-                    &evaluation.displacements,
-                    penalty,
-                    emin,
-                    penalty - stress.relaxation,
-                    &stress,
-                    Some(&self.stress_excluded),
-                )?;
+                let evaluated = self
+                    .model
+                    .stress_model()
+                    .ok_or_else(|| topology_error("this model has no stress constraint"))?
+                    .evaluate_stress(
+                        &self.rho,
+                        &evaluation.displacements,
+                        penalty,
+                        emin,
+                        penalty - stress.relaxation,
+                        &stress,
+                        Some(&self.stress_excluded),
+                    )?;
                 let ratio = if evaluated.aggregate > 0.0 {
                     (evaluated.max_relaxed / stress.limit) / evaluated.aggregate
                 } else {

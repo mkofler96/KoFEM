@@ -77,6 +77,8 @@ import {
   weldTies,
 } from "../lib/solve/solid.js";
 import {
+  optimizeCoupledInRust,
+  optimizeShellInRust,
   optimizeSolidInRust,
   usesRustTopOpt,
 } from "../lib/solve/topOptRust.js";
@@ -923,9 +925,9 @@ function postDensityResult(id: number, result: TopOptEngineResult) {
 
 // SIMP / level-set topology optimization (KOF-226 epic, ADR-0002). The design
 // domain follows the element mix, exactly as the static solve routes
-// (routeTopOpt). SIMP on a solid domain runs in Rust (topOptRust.ts), one
-// iteration per call; the shell and coupled domains and the level-set method
-// run the whole loop inside an engine entry. Both stream "[topopt] it N: …"
+// (routeTopOpt). SIMP runs in Rust on every domain (topOptRust.ts), one
+// iteration per call; the level-set method runs its whole loop inside an
+// engine entry. Both stream "[topopt] it N: …"
 // progress lines over the log channel the solve uses, and the design density
 // per iteration as { id, progress: { it, density } } messages (KOF-240) so the
 // viewport can draw the shape emerging.
@@ -943,28 +945,29 @@ function handleTopOpt(id: number, payload: TopOptPayload) {
 
   let result: TopOptResult;
   if (domain === "shell") {
-    const { mesh, matJson, bcsJson } = buildShellEngineInputs(payload);
+    // SIMP on the shell and coupled domains runs in Rust (KOF-310) on the
+    // engine's own inputs; routeTopOpt has refused the level-set method.
+    const inputs = buildShellEngineInputs(payload);
     startLog(payload.elements.length);
-    result = m().optimize_topology_shell(
-      mesh,
-      matJson,
-      bcsJson,
-      settingsJson,
+    result = optimizeShellInRust(
+      { ShellModel, TopologySettings, TopologyRun },
+      inputs,
+      payload.settings,
+      logTo(id),
       onDensity,
     );
   } else if (domain === "coupled") {
     const inp = buildCoupledEngineInputs(payload, logTo(id));
     startLog(inp.solidElements.length + inp.shellElements.length);
-    result = m().optimize_topology_coupled(
-      inp.mesh,
-      inp.coupling,
-      inp.bcs,
-      inp.matJson,
-      settingsJson,
+    result = optimizeCoupledInRust(
+      { MixedModel, Couplings, TopologySettings, TopologyRun },
+      inp,
+      payload.settings,
+      logTo(id),
       onDensity,
     );
   } else if (usesRustTopOpt(payload.settings)) {
-    // SIMP on a solid design domain runs in Rust (KOF-310). routeTopOpt has
+    // SIMP on a solid design domain runs in Rust too. routeTopOpt has
     // refused a tied model already.
     startLog(payload.elements.length);
     result = optimizeSolidInRust(

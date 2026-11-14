@@ -19,8 +19,8 @@ use crate::{parse_materials, to_js, Couplings, RunOutput, SolveRun};
 /// shell facets (CST membrane + DKT bending) over the same vertices.
 #[wasm_bindgen]
 pub struct MixedModel {
-    solid: TetMesh,
-    shell: Option<ShellMesh>,
+    pub(crate) solid: TetMesh,
+    pub(crate) shell: Option<ShellMesh>,
     solid_stiffness: Option<CsrMatrix>,
     shell_stiffness: Option<CsrMatrix>,
 }
