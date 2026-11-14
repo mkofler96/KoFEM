@@ -204,6 +204,23 @@ async function start() {
   frontSurface.renderOrder = 2;
   const body = new THREE.Group();
   body.add(frontSurface);
+  // CAD feature edges: creases sharper than 40° between boundary faces.
+  const featureGeometry = new THREE.EdgesGeometry(surfaceGeometry, 40);
+  const featureMaterial = new THREE.LineBasicMaterial({
+    color: "#1b2733",
+    transparent: true,
+    opacity: 0.75,
+    depthWrite: false,
+  });
+  const featureObject = new THREE.LineSegments(
+    featureGeometry,
+    featureMaterial,
+  );
+  featureObject.renderOrder = 3;
+  body.add(featureObject);
+  document.querySelector("#scene").dataset.featureEdges = String(
+    featureGeometry.getAttribute("position").count / 2,
+  );
   const linePositions = new Float32Array(edgeIndices.length * 6);
   const lineGeometry = new THREE.BufferGeometry();
   const linePosition = new THREE.BufferAttribute(linePositions, 3).setUsage(
@@ -593,7 +610,8 @@ async function start() {
     const canvasWidth = sceneHost.clientWidth,
       canvasHeight = sceneHost.clientHeight;
     const horizontal = mobile.matches ? 0.5 : 0.7 - orientation * 0.4;
-    const vertical = mobile.matches ? 0.68 : 0.505;
+    const vertical = mobile.matches ? 0.55 : 0.505;
+    sceneHost.dataset.frameVertical = String(vertical);
     scene.camera3D
       .getCamera()
       .setViewOffset(
@@ -687,6 +705,9 @@ async function start() {
     frontMaterial.transparent = false;
     frontMaterial.depthWrite = true;
     lineMaterial.opacity = (0.6 - 0.35 * shownContour) * (1 - relax);
+    featureObject.visible = frontSurface.visible;
+    featureMaterial.opacity = 0.75 * (1 - 0.55 * edges);
+    sceneHost.dataset.featureEdgesVisible = String(featureObject.visible);
     lineMaterial.depthWrite = false;
     const orientation = still ? Number(progress >= 0.62) : turn;
     const optimizationTurn = still ? 0 : curve(topologyProgress);

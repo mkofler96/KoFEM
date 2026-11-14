@@ -171,3 +171,58 @@ test("social previews use the 1200×630 PNG card", async ({ page }) => {
   const png = await card.body();
   expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([1200, 630]);
 });
+
+test("landing page draws the mesh background behind the hero", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const image = await page
+    .locator("body")
+    .evaluate((body) => getComputedStyle(body).backgroundImage);
+  expect(image).toContain("/landing/background.webp");
+  const background = await page.request.get("/landing/background.webp");
+  expect(background.ok()).toBe(true);
+  expect(background.headers()["content-type"]).toBe("image/webp");
+});
+
+test("on a phone the headline sits lower and the bracket higher, with room between", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  const scene = page.locator("#scene");
+  await expect(scene).toHaveAttribute("data-loaded", "true");
+  const intro = await page.locator(".intro").boundingBox();
+  const vertical = Number(await scene.getAttribute("data-frame-vertical"));
+  expect(intro!.y / 844).toBeGreaterThanOrEqual(0.24);
+  expect(vertical).toBeLessThanOrEqual(0.56);
+  expect((intro!.y + intro!.height) / 844).toBeLessThan(vertical - 0.12);
+});
+
+test("the landing Start Solver button is a quiet tinted button, not a solid fill", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const launch = page.getByRole("link", { name: /Start Solver/i });
+  await expect(launch).toBeVisible();
+  const alpha = await launch.evaluate((link) => {
+    const parts = getComputedStyle(link)
+      .backgroundColor.match(/[\d.]+/g)!
+      .map(Number);
+    return parts.length === 4 ? parts[3] : 1;
+  });
+  expect(alpha).toBeLessThan(0.3);
+  await expect(launch).toHaveCSS("border-top-style", "solid");
+});
+
+test("the bracket shows its CAD feature edges before the mesh draws in", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const scene = page.locator("#scene");
+  await expect(scene).toHaveAttribute("data-loaded", "true");
+  expect(
+    Number(await scene.getAttribute("data-feature-edges")),
+  ).toBeGreaterThan(100);
+  await expect(scene).toHaveAttribute("data-feature-edges-visible", "true");
+});
