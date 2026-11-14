@@ -16,7 +16,7 @@
 // footer and palette are the public site's (web/site-layout.mjs,
 // web/public/site.css); article typography is web/public/case-page.css.
 
-import { consoleHeader, consoleRow, fmt } from "./format.mjs";
+import { fmt } from "./format.mjs";
 import { tex, texBlock } from "./tex.mjs";
 import { siteFooter, siteHeader } from "../../../web/site-layout.mjs";
 
@@ -420,12 +420,6 @@ function convergenceSection(study, def, row) {
 
 // ── Reproduction ──────────────────────────────────────────────────────────────
 
-const cloneSteps = (
-  command,
-) => `<pre><code>git clone ${REPO}.git &amp;&amp; cd KoFEM
-bash scripts/fetch-wasm-engine.sh
-${command}</code></pre>`;
-
 /** Open in KoFEM, solve, read the Result summary: what the app shows. */
 function inApp(e) {
   if (!e.readout)
@@ -561,12 +555,9 @@ export function renderIndexPage(data, allEntries) {
       ${DISCLAIMER}
 
       <h2 id="reproduce">Reproduce</h2>
-      <p>The benchmarks run in CI on every change. To run them yourself
-      (Bun, bash, curl and Rust):</p>
-      ${cloneSteps("cd web &amp;&amp; bun install &amp;&amp; bun run validate")}
-      <p>It prints one line per benchmark, for example:</p>
-      <pre class="console" data-testid="console-line"><code>${esc(consoleHeader())}
-${esc(consoleRow(benchmarks[0]))}</code></pre>`;
+      <p>Every page opens its model in the app with Open in KoFEM, ready to
+      solve; its Reproduce section says which value to read. The benchmarks
+      also run in CI on every change.</p>`;
 
   return layout({
     title: "Examples and validation | KoFEM",
@@ -740,12 +731,6 @@ function solverText(e, data) {
   return `The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build ${esc(fem)}); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: ${engine}`;
 }
 
-function reproduceCommand(e) {
-  if (e.kind === "case")
-    return `cd web &amp;&amp; bun install &amp;&amp; bun run validate --case ${e.id}`;
-  return `cd web &amp;&amp; bun install &amp;&amp; bun run ${esc(e.script)}`;
-}
-
 /**
  * One example page. `assets` (web/figure-assets.mjs) turns its diagrams and
  * charts into SVG and PNG files and records them for writing.
@@ -829,15 +814,7 @@ export function renderExamplePage(
       <h2 id="discussion">Discussion</h2>${text.discussion(ctx)}`);
   sections.push(`
       <h2 id="reproduce">Reproduce</h2>
-      ${inApp(e)}${byHand(e)}
-      <p>From a clone (${e.kind === "case" ? "Bun, bash, curl and Rust), this builds and solves the model with the same engine and prints its line" : "Bun, bash, curl), this rebuilds the model and its figure"}:</p>
-      ${cloneSteps(reproduceCommand(e))}${
-        e.kind === "case"
-          ? `
-      <pre class="console"><code>${esc(consoleHeader())}
-${esc(consoleRow(e))}</code></pre>`
-          : ""
-      }`);
+      ${inApp(e)}${byHand(e)}`);
   sections.push(`
       <h2 id="references">References</h2>
       <ol class="refs">${text.references.map((r) => `\n        <li>${r}</li>`).join("")}

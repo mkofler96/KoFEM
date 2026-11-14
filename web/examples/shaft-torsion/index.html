@@ -1128,12 +1128,6 @@
         <li>Load “Torque”: moment Mz = 2000000 N·mm on the face through (0, 40, 500).</li>
         <li>Run the static study. The Results panel compares angle of twist with θ = T·L / (G·J).</li>
       </ol>
-      <p>From a clone (Bun, bash, curl and Rust), this builds and solves the model with the same engine and prints its line:</p>
-      <pre><code>git clone https://github.com/mkofler96/KoFEM.git &amp;&amp; cd KoFEM
-bash scripts/fetch-wasm-engine.sh
-cd web &amp;&amp; bun install &amp;&amp; bun run validate --case shaft-torsion</code></pre>
-      <pre class="console"><code>Case                                  Quantity                                  FE   Reference     Err%  Tol%  Status
-Hollow shaft under torsion            angle of twist θ                   1.4774e-3   1.4489e-3    +1.97     5  PASS</code></pre>
 
       <h2 id="references">References</h2>
       <ol class="refs">

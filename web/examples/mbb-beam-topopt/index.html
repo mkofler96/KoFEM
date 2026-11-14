@@ -976,10 +976,6 @@
         <li>Load “Central load”: force (0, −1000, 0) N on the face through (150, 50, 5).</li>
         <li>Add an optimization study and run it: minimum compliance, volume fraction 0.5, penalty p = 3, filter r<sub>min</sub> = 10 mm; under Advanced, move limit 0.2, at most 100 iterations, tolerance 0.01. The Results panel's run summary shows the final compliance.</li>
       </ol>
-      <p>From a clone (Bun, bash, curl), this rebuilds the model and its figure:</p>
-      <pre><code>git clone https://github.com/mkofler96/KoFEM.git &amp;&amp; cd KoFEM
-bash scripts/fetch-wasm-engine.sh
-cd web &amp;&amp; bun install &amp;&amp; bun run examples:generate-mbb-topopt</code></pre>
 
       <h2 id="references">References</h2>
       <ol class="refs">

@@ -1074,12 +1074,6 @@
         <li>Load “Axial load”: force (1000000, 0, 0) N on the face through (1000, 50, 50).</li>
         <li>Run the static study. The Results panel compares tip extension with δ = P·L / (E·A).</li>
       </ol>
-      <p>From a clone (Bun, bash, curl and Rust), this builds and solves the model with the same engine and prints its line:</p>
-      <pre><code>git clone https://github.com/mkofler96/KoFEM.git &amp;&amp; cd KoFEM
-bash scripts/fetch-wasm-engine.sh
-cd web &amp;&amp; bun install &amp;&amp; bun run validate --case axial-bar</code></pre>
-      <pre class="console"><code>Case                                  Quantity                                  FE   Reference     Err%  Tol%  Status
-Axial bar in tension                  tip extension δ                      0.47380     0.47619    -0.50     2  PASS</code></pre>
 
       <h2 id="references">References</h2>
       <ol class="refs">
