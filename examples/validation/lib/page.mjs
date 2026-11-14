@@ -717,15 +717,15 @@ function meshRows(e) {
 // The solver line: every example is solved as the app solves it.
 function solverText(e, data) {
   const engine = esc(e.engine ?? data.engine);
-  if (e.recipe?.optimize)
-    return `The app's topology optimizer (SIMP with MMA, KoFEM engine); geometry, mesh and optimizer in the WebAssembly build the app runs: ${engine}`;
   // The Rust module's build (lib/provenance.mjs): a case's comes with the
   // results, a showcase's with its record.
   const fem = e.kind === "case" ? (e.fem ?? data.fem) : e.fem;
   if (!fem)
     throw new Error(
-      `${e.id}: solved by the Rust module, but the published data names no build of it (fem); regenerate with bun run validate:report`,
+      `${e.id}: solved by the Rust module, but the published data names no build of it (fem); regenerate with ${e.kind === "case" ? "bun run validate:report" : "its generator (examples/gallery/)"}`,
     );
+  if (e.recipe?.optimize)
+    return `The app's topology optimizer (SIMP with MMA, KoFEM's Rust module, build ${esc(fem)}); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: ${engine}`;
   if (e.mesh.elementType === "CTRIA3")
     return `The app's shell solver (conjugate gradients, KoFEM's Rust module, build ${esc(fem)}); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: ${engine}`;
   return `The app's default solver (conjugate gradients with algebraic multigrid, KoFEM's Rust module, build ${esc(fem)}); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: ${engine}`;

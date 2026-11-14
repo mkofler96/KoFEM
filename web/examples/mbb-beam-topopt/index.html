@@ -46,7 +46,7 @@
               "https://kofem.org/examples/mbb-beam-topopt/mbb-beam-topopt-diagram.png",
               "https://kofem.org/examples/mbb-beam-topopt/mbb-beam-topopt-compliance-history.png"
             ],
-            "dateModified": "2026-11-12",
+            "dateModified": "2026-11-14",
             "isPartOf": {
               "@type": "CollectionPage",
               "url": "https://kofem.org/examples/"
@@ -873,7 +873,7 @@
       
       <figure class="result">
         <img src="/examples/mbb-beam-topopt.png" width="1200" height="384" alt="MBB beam, topology optimization: element density on the undeformed shape" />
-        <div class="colorbar"><span>0.500</span><span class="bar" aria-hidden="true"></span><span>1.00</span></div>
+        <div class="colorbar"><span>0.502</span><span class="bar" aria-hidden="true"></span><span>1.00</span></div>
         <figcaption>Element density, undeformed shape. The result of running the model that Open in KoFEM loads.</figcaption>
       </figure>
       
@@ -930,7 +930,7 @@
           <tr><th scope="row">Mesh</th><td>Netgen, 5 mm maximum element size: 7,887 linear 4-node tetrahedra (P1)</td></tr>
           <tr><th scope="row">Unknowns</th><td>2,225 nodes, 6,675 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>The app's topology optimizer (SIMP with MMA, KoFEM engine); geometry, mesh and optimizer in the WebAssembly build the app runs: engine-3397ae8ea1eb</td></tr>
+          <tr><th scope="row">Solver</th><td>The app's topology optimizer (SIMP with MMA, KoFEM's Rust module, build fem-b2ad04c7c44b); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-3397ae8ea1eb</td></tr>
         </table>
       </div>
         <p>The block is a STEP file, cut with the app's split tool so that
@@ -938,16 +938,16 @@
         meshes it at 5&nbsp;mm. The whole beam is
         modelled rather than the symmetric half. The optimizer stops when no
         density changes by more than 0.01 between
-        iterations, or after 100. The figure shows
+        iterations, or after 200. The figure shows
         the elements with <math><mi>ρ</mi><mo>≥</mo><mn>0.5</mn></math>.</p>
 
       <h2 id="results">Results</h2>
       <div class="table-wrap">
         <table class="spec">
-          <tr><th scope="row">Iterations</th><td>88, converged (largest density change 6.1221&thinsp;×&thinsp;10<sup>−3</sup>)</td></tr>
-          <tr><th scope="row">Compliance</th><td>192.55&nbsp;N·mm at the start, <strong>47.499&nbsp;N·mm</strong> at the end</td></tr>
+          <tr><th scope="row">Iterations</th><td>104, converged (largest density change 9.6389&thinsp;×&thinsp;10<sup>−3</sup>)</td></tr>
+          <tr><th scope="row">Compliance</th><td>192.55&nbsp;N·mm at the start, <strong>47.450&nbsp;N·mm</strong> at the end</td></tr>
           <tr><th scope="row">Volume</th><td>0.500 of the block (target 0.5)</td></tr>
-          <tr><th scope="row">Elements</th><td>1,806 solid (ρ &gt; 0.9), 1,913 void (ρ &lt; 0.1)</td></tr>
+          <tr><th scope="row">Elements</th><td>1,814 solid (ρ &gt; 0.9), 1,925 void (ρ &lt; 0.1)</td></tr>
         </table>
       </div>
       <figure class="chart">
@@ -961,6 +961,10 @@
         stays at the target. The layout is the one in the literature: a
         chord along the top, a tie along the bottom and diagonals between
         them, as in Sigmund's 99-line and Andreassen's 88-line codes.</p>
+        <p>The design does not come fully to rest. Run past the tolerance,
+        nearly void elements beside the members rise and fall in bursts
+        about every 20 iterations, and between bursts the compliance returns
+        to the same value within 0.1&nbsp;%.</p>
         <p>The tetrahedral mesh leaves a ragged surface where the threshold
         cuts through elements. The layout is the result, not the final part:
         export it, smooth it and check it with a solve of the solid
@@ -980,7 +984,7 @@
         <li>Support “Pin”: Ux, Uy, Uz = 0 on the face through (2.5, 0, 5).</li>
         <li>Support “Roller”: Uy = 0 on the face through (297.5, 0, 5).</li>
         <li>Load “Central load”: force (0, −1000, 0) N on the face through (150, 50, 5).</li>
-        <li>Add an optimization study and run it: minimum compliance, volume fraction 0.5, penalty p = 3, filter r<sub>min</sub> = 10 mm; under Advanced, move limit 0.2, at most 100 iterations, tolerance 0.01. The Results panel's run summary shows the final compliance.</li>
+        <li>Add an optimization study and run it: minimum compliance, volume fraction 0.5, penalty p = 3, filter r<sub>min</sub> = 10 mm; under Advanced, move limit 0.2, at most 200 iterations, tolerance 0.01. The Results panel's run summary shows the final compliance.</li>
       </ol>
 
       <h2 id="references">References</h2>

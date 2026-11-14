@@ -199,6 +199,8 @@ writeShowcase(
     },
   },
   png,
+  // The pipeline optimizes in the Rust module, as the app does.
+  { solver: "rust" },
 );
 
 console.log(

@@ -101,8 +101,9 @@ from its recipe, `recipes/mbb-beam-topopt.mjs`, through
 3. **Mesh** at a 5 mm max element size (the app's mesher options → ~8k tets).
 4. **Constraints**: the left pad Ux Uy Uz, the right pad Uy; **Load**: Fy = −1000 N
    on the mid-span pad.
-5. **Optimize**: volume fraction 0.5, p = 3, r_min = 10 mm, at most 100
-   iterations; fails if it does not converge or no topology emerges.
+5. **Optimize**: volume fraction 0.5, p = 3, r_min = 10 mm, at most 200
+   iterations, with the app's own optimizer (the Rust module); fails if it
+   does not converge or no topology emerges.
 
 The page's number is the final compliance, which the Results panel's run
 summary shows after the run. An optimum has no closed form, so there is no
@@ -114,7 +115,15 @@ re-mesh.
 It ships `mbb-beam-topopt.step`, the plain block the page links, and
 `mbb-beam-topopt.model.step`, the block after the four splits, whose CAD faces
 the `.vtu`'s supports and load name. The example opens in the Optimize step,
-ready to run. The run converges 192.6 → 47.5 N·mm in 88 iterations.
+ready to run. The run converges 192.6 → 47.4 N·mm in 104 iterations.
+
+The design does not come to rest. Once the truss has formed, the nearly void
+elements beside its members rise together by the move limit and fall back,
+about every 20 iterations, and the run meets its tolerance in a quiet stretch
+between two such bursts. Round-off or a different mesh moves the first stretch
+that is quiet enough, so the cap of 200 iterations leaves room for several
+more, and the compliance is the same in every stretch within 0.1 %
+(`web/tests/integration/mbb-example.test.mjs`).
 
 Showcase recipes are listed in `recipes/index.mjs`, where the rule check
 (`examples/validation/rules.mjs`), the page and the GUI test find them.
