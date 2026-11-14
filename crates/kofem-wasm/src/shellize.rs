@@ -13,9 +13,9 @@ use kofem_shellize::coupled_model::{CoupledModel, ExplicitCoupledModel};
 use kofem_shellize::geometry::Vec3;
 use kofem_shellize::{
     build_coupled_model, build_explicit_coupled_model, build_shell_transition_model,
-    extract_thin_wall_shells, shell_body_tets, shell_wall_tets, CouplingOptions, CouplingSet,
-    ExtractOptions, ShellExtraction, ShellizeError, ShellizeMesh, TieCouplingDrop,
-    TieCouplingReport, TieSide, TieSurfaces, Wall,
+    detect_curved_walls, extract_thin_wall_shells, shell_body_tets, shell_wall_tets,
+    CouplingOptions, CouplingSet, ExtractOptions, ShellExtraction, ShellizeError, ShellizeMesh,
+    TieCouplingDrop, TieCouplingReport, TieSide, TieSurfaces, Wall,
 };
 use wasm_bindgen::prelude::*;
 
@@ -275,6 +275,36 @@ pub fn extract_shells(
     )
     .map_err(|error| to_js(&error))?;
     Ok(ShellSet { shells })
+}
+
+/// Curved thin walls (a tube, a sheet-metal bend), one entry per wall:
+/// measurement for the linear thin-wall check, not idealised as shells.
+#[wasm_bindgen]
+pub struct CurvedWallSet {
+    face: Vec<i32>,
+    partner: Vec<i32>,
+    thickness: Vec<f64>,
+    body: Vec<i32>,
+}
+
+getters!(CurvedWallSet {
+    "face" => face: Vec<i32>,
+    "partner" => partner: Vec<i32>,
+    "thickness" => thickness: Vec<f64>,
+    "body" => body: Vec<i32>,
+});
+
+/// The curved thin walls of every body, no thicker than `max_wall`.
+#[wasm_bindgen(js_name = detectCurvedWalls)]
+#[must_use]
+pub fn curved_walls(mesh: &ShellizeInput, max_wall: f64) -> CurvedWallSet {
+    let walls = detect_curved_walls(&mesh.mesh, max_wall);
+    CurvedWallSet {
+        face: walls.iter().map(|wall| wall.face).collect(),
+        partner: walls.iter().map(|wall| wall.partner).collect(),
+        thickness: walls.iter().map(|wall| wall.thickness).collect(),
+        body: walls.iter().map(|wall| wall.body).collect(),
+    }
 }
 
 /// The shelled body's tets that lie inside a detected wall.

@@ -10,6 +10,7 @@
 //! (KOF-297); the app reaches it through `web/src/lib/shellize.ts`.
 //! Stages, bottom-up:
 //!   [`walls`]          thin-wall detection (opposite planar CAD-face pairs)
+//!   [`curved_walls`]   curved thin walls, measured for the linear thin-wall check
 //!   [`mid_surface`]    collapse the walls to welded mid-surface facets
 //!   `junction`         imprint T-junctions into the wall they stand on
 //!   [`wall_tets`]      which solid tets the shell facets replace
@@ -30,6 +31,7 @@
 pub mod clip;
 pub mod coupled_model;
 pub mod coupling_set;
+pub mod curved_walls;
 pub mod error;
 pub mod footprint;
 pub mod geometry;
@@ -48,6 +50,7 @@ pub use coupled_model::{
     ExplicitCoupledModel, ShellNodeLocator,
 };
 pub use coupling_set::{CouplingKind, CouplingSet, ALL_DOF_MASK};
+pub use curved_walls::{detect_curved_walls, CurvedWall};
 pub use error::ShellizeError;
 pub use geometry::ShellizeMesh;
 pub use mid_surface::{extract_thin_wall_shells, ExtractOptions, ShellExtraction};

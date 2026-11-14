@@ -17,6 +17,7 @@ import {
   buildExplicitCoupledModel as rustExplicitCoupledModel,
   buildShellTransitionModel as rustShellTransition,
   CouplingInput,
+  detectCurvedWalls as rustCurvedWalls,
   extractThinWallShells as rustExtractShells,
   shellBodyTets as rustShellBodyTets,
   ShellSet,
@@ -343,6 +344,35 @@ export function extractThinWallShells(
       ),
       shellsFrom,
     ),
+  );
+}
+
+export interface CurvedWall {
+  face: number; // CAD face the wall was measured from
+  partner: number; // CAD face opposite it
+  thk: number; // mm
+  body: number;
+}
+
+// Curved thin walls (a tube, a sheet-metal bend) that the planar pairing of
+// extractThinWallShells cannot find. Measurement only: the shell idealisation
+// does not use them.
+export function detectCurvedWalls(
+  m: ShellizeMesh,
+  { maxWall = 15 }: { maxWall?: number } = {},
+): CurvedWall[] {
+  return using(meshInput(m), (mesh) =>
+    using(rustCurvedWalls(mesh, maxWall), (set) => {
+      const partner = set.partner;
+      const thickness = set.thickness;
+      const body = set.body;
+      return Array.from(set.face, (face, i) => ({
+        face,
+        partner: partner[i],
+        thk: thickness[i],
+        body: body[i],
+      }));
+    }),
   );
 }
 
