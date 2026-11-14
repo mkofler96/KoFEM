@@ -18,6 +18,13 @@ The generator gzips each `.bin` itself, so it arrives compressed from any static
 
 `landing.js` requests the libraries and the bracket data in parallel. The topology worker fetches and decodes the optimization sequence itself, starting once everything the bracket needs has arrived.
 
+The thin dark outlines on the bracket are the sharp edges of the original Onshape export (`GE_engine_bracket.step`, a tessellated AP242 file with no BRep). `ge-engine-bracket-edges.bin` holds only those line segments: tessellation edges whose triangles meet at more than 20°, which keeps fillets unlined, placed in the landing frame and quantized to 0.005 mm. The STEP itself is not published. Regenerate them from the original file, which must match the hash in `ge-engine-bracket-edges.json`:
+
+```bash
+cd web
+bun scripts/generate-landing-edges.mjs /path/to/GE_engine_bracket.step
+```
+
 Regenerate the static solve, connected mesh reveal, and level-set sequence with the matching engine installed:
 
 ```bash

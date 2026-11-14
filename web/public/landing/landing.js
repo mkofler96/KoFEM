@@ -79,10 +79,20 @@ const bracketAssets = Promise.all([
   fetchBinary(asset("ge-engine-bracket-solution.bin")),
   fetchJson(asset("ge-engine-bracket-network.json")),
   fetchBinary(asset("ge-engine-bracket-network.bin")),
+  fetchJson(asset("ge-engine-bracket-edges.json")),
+  fetchBinary(asset("ge-engine-bracket-edges.bin")),
 ]);
 async function start() {
   const [
-    [solution, metadata, binary, network, travelBuffer],
+    [
+      solution,
+      metadata,
+      binary,
+      network,
+      travelBuffer,
+      cadEdges,
+      cadEdgeBuffer,
+    ],
     [{ ThreeDScene, ModelMobject, Arrow3D }, THREE],
   ] = await Promise.all([bracketAssets, libraries]);
   const center = metadata.min.map((v, j) => (v + metadata.max[j]) / 2);
@@ -206,9 +216,20 @@ async function start() {
   frontSurface.renderOrder = 2;
   const body = new THREE.Group();
   body.add(frontSurface);
-  // CAD feature edges: creases sharper than 75° between boundary faces; filleted
-  // transitions fold at shallower angles on the FE surface and stay unlined.
-  const featureGeometry = new THREE.EdgesGeometry(surfaceGeometry, 75);
+  // CAD feature edges: the sharp edges of the original CAD tessellation
+  // (scripts/generate-landing-edges.mjs), in the same frame as the FE surface.
+  const cadEdgePoints = typedArray(cadEdgeBuffer, cadEdges.layout.segments);
+  if (cadEdgePoints.length !== cadEdges.segmentCount * 6)
+    throw Error(
+      `ge-engine-bracket-edges holds ${cadEdgePoints.length / 6} segments, its JSON says ${cadEdges.segmentCount}`,
+    );
+  for (let i = 0; i < cadEdgePoints.length; i++)
+    cadEdgePoints[i] -= center[i % 3];
+  const featureGeometry = new THREE.BufferGeometry();
+  featureGeometry.setAttribute(
+    "position",
+    new THREE.BufferAttribute(cadEdgePoints, 3),
+  );
   const featureMaterial = new THREE.LineBasicMaterial({
     color: "#1b2733",
     transparent: true,
@@ -221,9 +242,9 @@ async function start() {
   );
   featureObject.renderOrder = 3;
   body.add(featureObject);
-  document.querySelector("#scene").dataset.featureEdges = String(
-    featureGeometry.getAttribute("position").count / 2,
-  );
+  const sceneData = document.querySelector("#scene").dataset;
+  sceneData.featureEdges = String(cadEdges.segmentCount);
+  sceneData.featureEdgesSource = "cad";
   const linePositions = new Float32Array(edgeIndices.length * 6);
   const lineGeometry = new THREE.BufferGeometry();
   const linePosition = new THREE.BufferAttribute(linePositions, 3).setUsage(

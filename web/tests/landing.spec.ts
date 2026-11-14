@@ -222,8 +222,13 @@ test("the bracket shows its CAD feature edges before the mesh draws in", async (
   await page.goto("/");
   const scene = page.locator("#scene");
   await expect(scene).toHaveAttribute("data-loaded", "true");
-  expect(
-    Number(await scene.getAttribute("data-feature-edges")),
-  ).toBeGreaterThan(100);
+  const edges = await page.request.get("/landing/ge-engine-bracket-edges.json");
+  const { segmentCount } = (await edges.json()) as { segmentCount: number };
+  expect(segmentCount).toBeGreaterThan(1000);
+  await expect(scene).toHaveAttribute("data-feature-edges-source", "cad");
+  await expect(scene).toHaveAttribute(
+    "data-feature-edges",
+    String(segmentCount),
+  );
   await expect(scene).toHaveAttribute("data-feature-edges-visible", "true");
 });
