@@ -16,7 +16,7 @@
 //   4. Supports: the left pad Ux Uy Uz, the right pad Uy only (a roller).
 //      Load: Fy = −1000 N on the mid-span pad.
 //   5. Optimize: minimum compliance, volume fraction 0.5, p = 3, r_min = 10 mm,
-//      move limit 0.2, at most 100 iterations, tolerance 0.01.
+//      move limit 0.2, at most 200 iterations, tolerance 0.01.
 //
 // The read-out is the final compliance the Results panel shows after the run.
 // It has no closed form; the page publishes the app's own converged value.
@@ -84,12 +84,20 @@ export default {
     objective: "min_compliance",
     volumeFraction: 0.5,
     penalty: 3,
-    // Two element sizes. At 1.5 element sizes (the 88-line code's ratio) the
-    // tetrahedral design keeps flipping elements at the move limit and never
-    // meets the tolerance; at two it converges to the same truss.
+    // Two element sizes, for a truss with distinct members.
     filterRadius: 10,
     moveLimit: 0.2,
-    maxIterations: 100,
+    // The design does not come to rest (KOF-360). Once the truss has formed,
+    // the nearly void elements beside its members rise together by the move
+    // limit and fall back, about every 20 iterations, and the largest density
+    // change is below the tolerance only in the quiet stretch between two
+    // such bursts. Which stretch is the first one quiet enough changes with
+    // round-off and with the mesh: it came between iterations 81 and 110 on
+    // five meshes of 4.8 to 5.2 mm, so the cap leaves room for four more.
+    // The compliance is the same in every stretch within 0.1 % (14 of them in
+    // 400 iterations). A smaller move limit, a larger filter radius or a
+    // finer mesh does not stop the bursts.
+    maxIterations: 200,
     tolerance: 0.01,
   },
   readout: {

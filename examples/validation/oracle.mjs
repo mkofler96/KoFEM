@@ -58,8 +58,9 @@ const REFERENCE = join(here, "oracle-reference.json");
 // so their fields agree far closer than this; a real difference in the
 // assembly or the boundary conditions shows up orders of magnitude above it.
 const FIELD_TOLERANCE = 1e-3;
-// A topology optimization amplifies round-off over its iterations: the final
-// compliance must agree to this, and no more than this share of the
+// A topology optimization amplifies round-off over its iterations: the
+// compliance after the same number of steps must agree to this, and where
+// both runs stop at the same iteration, no more than this share of the
 // elements may differ in density by more than 0.1.
 const COMPLIANCE_TOLERANCE = 1e-3;
 const DESIGN_SHARE_TOLERANCE = 0.01;
@@ -306,11 +307,12 @@ async function topOptRows(id, recipe) {
       () => {},
     );
     const rowId = `${id} (${method === "simp" ? "SIMP" : "level set"})`;
-    const summary = (run) => ({
-      compliance: run.history.at(-1).compliance,
-      volume: run.history.at(-1).volume,
-      iterations: run.history.length,
+    const after = (run, steps) => ({
+      compliance: run.history[steps - 1].compliance,
+      volume: run.history[steps - 1].volume,
+      iterations: steps,
     });
+    const summary = (run) => after(run, run.history.length);
     const reference = stored
       ? stored.examples.find((r) => r.id === rowId)?.reference
       : null;
@@ -333,11 +335,27 @@ async function topOptRows(id, recipe) {
     } else if (!reference)
       throw new Error(`${REFERENCE} has no C++ reference for "${rowId}"`);
     const oracleSummary = oracle ? summary(oracle) : reference;
+    // The two are compared after the same number of steps: the last one both
+    // took. A design that does not come to rest (the MBB beam's SIMP run,
+    // KOF-360) meets its tolerance at an iteration that round-off moves, so
+    // the two runs can stop apart, and their last designs then differ by
+    // where each one stopped, not by how each one steps. The stored
+    // reference holds the engine's last step only: a Rust run that stops
+    // before it is compared end to end.
+    const steps = Math.min(rust.history.length, oracleSummary.iterations);
+    const [rustThere, oracleThere] =
+      steps === oracleSummary.iterations
+        ? [after(rust, steps), oracleSummary]
+        : oracle
+          ? [after(rust, steps), after(oracle, steps)]
+          : [summary(rust), oracleSummary];
     const differences = {
-      compliance: relative(summary(rust).compliance, oracleSummary.compliance),
-      volume: Math.abs(summary(rust).volume - oracleSummary.volume),
+      compliance: relative(rustThere.compliance, oracleThere.compliance),
+      volume: Math.abs(rustThere.volume - oracleThere.volume),
     };
-    if (oracle) {
+    // The designs are each run's last, so they compare only when both runs
+    // stopped at the same iteration.
+    if (oracle && rust.history.length === oracle.history.length) {
       const differing = Array.from(rust.density).filter(
         (rho, e) => Math.abs(rho - oracle.density[e]) > 0.1,
       ).length;
@@ -350,6 +368,7 @@ async function topOptRows(id, recipe) {
       order: 1,
       path: `Rust ${method === "simp" ? "SIMP" : "level set"}`,
       oracle: "C++ optimize_topology",
+      comparedAt: rustThere.iterations,
       rust: summary(rust),
       reference: oracleSummary,
       differences,

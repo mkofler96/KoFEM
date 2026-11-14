@@ -31,9 +31,9 @@
 //   read-out    the recipe's probe, evaluated as lib/recipe.mjs defines it.
 //
 // A recipe with an `optimize` step runs the topology optimisation in place of
-// the static solve, as the worker's handleTopOpt runs it: the app's solid
-// engine inputs (buildSolidEngineInputs) and the Optimize panel's settings, in
-// a fresh engine instance, read out by the final compliance.
+// the static solve, as the worker's handleTopOpt runs it: the app's optimizer
+// in the Rust module (optimizeSolidInRust) with the Optimize panel's settings,
+// read out by the final compliance.
 //
 // The app code is imported from web/src (bun runs TypeScript), so a change to
 // how the app builds a load changes the published number with it — the build
@@ -63,17 +63,16 @@ import {
   solveSolidInRust,
 } from "../../../web/src/lib/solve/amg.ts";
 import {
-  buildSolidEngineInputs,
   expandTiedDisplacements,
   weldTies,
 } from "../../../web/src/lib/solve/solid.ts";
-import { buildVertexIndexer } from "../../../web/src/lib/solveMeshPacking.ts";
 import { constraintTieCount } from "../../../web/src/lib/tie.ts";
 import { tieWeighting } from "../../../web/src/lib/solve/tieMortar.ts";
 import { nodeVonMisesField } from "../../../web/src/lib/resultField.ts";
 import { buildMeshTimeShellModel } from "../../../web/src/lib/solve/autoShell.ts";
 import { buildShellEngineInputs } from "../../../web/src/lib/solve/shell.ts";
 import { solveShellInRust } from "../../../web/src/lib/solve/shellRust.ts";
+import { optimizeSolidInRust } from "../../../web/src/lib/solve/topOptRust.ts";
 import { shellRimFaces } from "../../../web/src/lib/shellRim.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -597,10 +596,9 @@ export async function buildFromRecipe(
 /**
  * The topology optimisation as the app runs it (useTopOpt → the worker's
  * handleTopOpt): the settings object useTopOpt's parseSettings sends for a SIMP
- * minimum-compliance study, the solid design domain's engine inputs built by
- * the app's buildSolidEngineInputs, and optimize_topology in a fresh engine
- * instance (the app resets its worker after meshing). Throws unless the run
- * converges: a published optimum must be one.
+ * minimum-compliance study, and the app's own optimizer in the Rust module
+ * (optimizeSolidInRust), which is what the worker calls for a solid design
+ * domain. Throws unless the run converges: a published optimum must be one.
  *
  * @returns {Promise<{settings: object, density: number[], history: {it, objective, compliance, volume, max_change}[], seconds: number}>}
  */
@@ -632,25 +630,20 @@ async function optimizeLikeTheApp(where, payload, optimize) {
     throw new Error(
       `${where}: the app would optimize this model on the "${domain}" path; only solid design domains are built here`,
     );
-  const inputs = buildSolidEngineInputs(
-    topOptPayload,
-    buildVertexIndexer(topOptPayload.nodes),
-  );
-  const engine = await freshEngine();
+  const fem = await rustFem();
   const start = performance.now();
-  const result = engine.optimize_topology(
-    inputs.mesh,
-    inputs.matJson,
-    inputs.bcsJson,
-    JSON.stringify(settings),
-    null, // the app streams the density to the viewport; nothing to show here
+  const result = optimizeSolidInRust(
+    fem,
+    topOptPayload,
+    () => {}, // the app shows these lines in its log
+    () => {}, // the app streams the density to the viewport
   );
   const seconds = (performance.now() - start) / 1000;
-  if ("error" in result)
-    throw new Error(`${where}: the optimizer failed: ${result.error}`);
   const history = result.history.map((h) => ({ ...h }));
   const last = history.at(-1);
   if (!last) throw new Error(`${where}: the optimizer returned no iterations`);
+  // The optimizer's own rule for a minimum-compliance run: the largest
+  // density change of the last step is below the tolerance.
   if (!(last.max_change < optimize.tolerance))
     throw new Error(
       `${where}: the optimization did not converge in ${history.length} iterations (largest density change ${last.max_change}, tolerance ${optimize.tolerance})`,
