@@ -1,52 +1,44 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <link rel="icon" href="/favicon.ico" sizes="any" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
-    <link rel="icon" type="image/svg+xml" href="/kofem_logo.svg" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <title>
-      Online Finite Element Solver — Browser-Based FEM Analysis | KoFEM
-    </title>
-    <meta
-      name="description"
-      content="KoFEM is a free online finite element solver that runs entirely in your browser. Import STEP geometry, apply loads and boundary conditions, and run a direct static solve — no installation required."
-    />
-    <link rel="canonical" href="https://kofem.org/" />
-    <meta name="robots" content="index, follow" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+  <link rel="icon" type="image/svg+xml" href="/kofem_logo.svg" />
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
-    <!-- Open Graph / social -->
-    <meta property="og:type" content="website" />
-    <meta property="og:title" content="Online Finite Element Solver — KoFEM" />
-    <meta
-      property="og:description"
-      content="Browser-based FEM analysis. Import STEP geometry and run a direct static solve in your browser. No installation required."
-    />
-    <meta property="og:url" content="https://kofem.org/" />
-    <meta property="og:image" content="https://kofem.org/og-image.png" />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
-    <meta
-      property="og:image:alt"
-      content="A bracket's finite element mesh coloured by stress, solved in KoFEM"
-    />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Online Finite Element Solver — KoFEM" />
-    <meta
-      name="twitter:description"
-      content="Browser-based FEM analysis. Import STEP geometry and run a direct static solve in your browser. No installation required."
-    />
-    <meta name="twitter:image" content="https://kofem.org/og-image.png" />
+  <title>
+    Online Finite Element Solver — Browser-Based FEM Analysis | KoFEM
+  </title>
+  <meta name="description"
+    content="KoFEM is a free online finite element solver that runs entirely in your browser. Import STEP geometry, apply loads and boundary conditions, and run a direct static solve — no installation required." />
+  <link rel="canonical" href="https://kofem.org/" />
+  <meta name="robots" content="index, follow" />
 
-    <!-- Self-hosted fonts (SIL OFL) — see public/fonts/README.md -->
-    <link href="/fonts/ibm-plex.css" rel="stylesheet" />
+  <!-- Open Graph / social -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Online Finite Element Solver — KoFEM" />
+  <meta property="og:description"
+    content="Browser-based FEM analysis. Import STEP geometry and run a direct static solve in your browser. No installation required." />
+  <meta property="og:url" content="https://kofem.org/" />
+  <meta property="og:image" content="https://kofem.org/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="A bracket's finite element mesh coloured by stress, solved in KoFEM" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Online Finite Element Solver — KoFEM" />
+  <meta name="twitter:description"
+    content="Browser-based FEM analysis. Import STEP geometry and run a direct static solve in your browser. No installation required." />
+  <meta name="twitter:image" content="https://kofem.org/og-image.png" />
 
-    <!-- Structured data for rich results -->
-    <script type="application/ld+json">
+  <!-- Self-hosted fonts (SIL OFL) — see public/fonts/README.md -->
+  <link href="/fonts/ibm-plex.css" rel="stylesheet" />
+
+  <!-- Structured data for rich results -->
+  <script type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
@@ -58,57 +50,47 @@
       }
     </script>
 
-    <link rel="stylesheet" href="/site.css" />
-    <link rel="stylesheet" href="/landing/landing.css" />
-    <!-- landing.js imports these only after it has loaded itself -->
-    <link rel="modulepreload" href="/landing/vendor/manim-web.browser.js" />
-    <link rel="modulepreload" href="/landing/vendor/three.module.js" />
-    <link rel="modulepreload" href="/landing/vendor/three.core.js" />
-  </head>
-  <body>
-    <!-- site-header -->
-    <main
-      id="scroll-viewport"
-      class="scroll-viewport"
-      tabindex="0"
-      aria-label="Scroll to explore geometry, meshing, loads, results and optimization"
-    >
-      <section
-        id="top"
-        class="scroll-story"
-        aria-label="Bracket animation scroll range"
-      ></section>
-    </main>
-    <div class="stage">
-      <div class="intro">
-        <h1>Finite element analysis.<br />In your browser.</h1>
-        <p>Import a STEP file, apply supports and loads, and solve locally.</p>
-      </div>
-      <div class="mesh-copy" aria-hidden="true">
-        <h2>Generate a mesh</h2>
-        <p class="stage-subtitle">
-          From the part's geometry to a finite element model.
-        </p>
-      </div>
-      <div class="analysis-copy" aria-hidden="true">
-        <h2 id="analysis-title">Local Solve</h2>
-        <p class="stage-subtitle" id="analysis-detail">
-          No cloud, full control over your data.
-        </p>
-      </div>
-      <div class="model-wrap">
-        <div
-          id="scene"
-          role="img"
-          aria-label="KoFEM workflow: geometry, mesh, loads, results and topology optimization."
-        ></div>
-        <p class="load-status" id="load-status" role="status">
-          Loading the bracket…
-        </p>
-      </div>
-      <p class="model-caption">GE engine bracket</p>
-      <div class="progress" aria-hidden="true"><i></i></div>
+  <link rel="stylesheet" href="/site.css" />
+  <link rel="stylesheet" href="/landing/landing.css" />
+  <!-- landing.js imports these only after it has loaded itself -->
+  <link rel="modulepreload" href="/landing/vendor/manim-web.browser.js" />
+  <link rel="modulepreload" href="/landing/vendor/three.module.js" />
+  <link rel="modulepreload" href="/landing/vendor/three.core.js" />
+</head>
+
+<body>
+  <!-- site-header -->
+  <main id="scroll-viewport" class="scroll-viewport" tabindex="0"
+    aria-label="Scroll to explore geometry, meshing, loads, results and optimization">
+    <section id="top" class="scroll-story" aria-label="Bracket animation scroll range"></section>
+  </main>
+  <div class="stage">
+    <div class="intro">
+      <h1>Finite element analysis.<br />In your browser.</h1>
+      <p>Import a STEP file, apply supports and loads, and solve locally.</p>
     </div>
-    <script type="module" src="/landing/landing.js"></script>
-  </body>
+    <div class="mesh-copy" aria-hidden="true">
+      <h2>Generate a mesh</h2>
+      <p class="stage-subtitle">
+        From the part's geometry to a finite element model.
+      </p>
+    </div>
+    <div class="analysis-copy" aria-hidden="true">
+      <h2 id="analysis-title">Local Solve</h2>
+      <p class="stage-subtitle" id="analysis-detail">
+        No cloud, full control over your data.
+      </p>
+    </div>
+    <div class="model-wrap">
+      <div id="scene" role="img" aria-label="KoFEM workflow: geometry, mesh, loads, results and topology optimization.">
+      </div>
+      <p class="load-status" id="load-status" role="status">
+        Loading the bracket…
+      </p>
+    </div>
+    <div class="progress" aria-hidden="true"><i></i></div>
+  </div>
+  <script type="module" src="/landing/landing.js"></script>
+</body>
+
 </html>
