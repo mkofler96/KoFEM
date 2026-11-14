@@ -41,9 +41,9 @@ export interface Node {
   z: number;
 }
 
-// Solid elements from the live OCCT → Netgen → MFEM pipeline: tetrahedra
+// Solid elements from the OCCT → Netgen meshing pipeline: tetrahedra
 // (CTETRA) and hexahedra (CHEXA). CTRIA3 is a 3-node Kirchhoff shell triangle
-// (DKT bending + CST membrane, 6 DOF/node) solved by the engine's solve_shell;
+// (DKT bending + CST membrane, 6 DOF/node) solved by the Rust shell solve;
 // shell models currently enter the app via saved analyses (.vtu), not the
 // meshing pipeline. 1D (beam) elements are not modelled.
 export type ElementType = "CTETRA" | "CHEXA" | "CTRIA3";

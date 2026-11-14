@@ -5,8 +5,9 @@
 <h1 align="center">KoFEM</h1>
 
 KoFEM is Finite element analysis tool made to run in your browser, without installation and without sending data to any server or cloud. It runs the full pipeline — **STEP geometry → OCCT tessellation → Netgen
-volume mesh → MFEM FEM solve** — directly in the browser via a C++ engine
-compiled to WebAssembly, with a React + Three.js frontend. The software can be launched from the official website [kofem.org](https://kofem.org/) or run locally via docker.
+volume mesh → finite-element solve** — directly in the browser: geometry and
+meshing in a C++ engine and the solve in a Rust module, both compiled to
+WebAssembly, with a React + Three.js frontend. The software can be launched from the official website [kofem.org](https://kofem.org/) or run locally via docker.
 
 ## Examples
 
@@ -63,7 +64,7 @@ cd web && bun run dev
 [AGENTS.md](AGENTS.md) says which one covers what.
 
 `bun run dev` and `build` prepare both WebAssembly modules first. The
-compiled C++ engine (~34 MB) is a build output, so it is published as a GitHub
+compiled C++ engine (~28 MB) is a build output, so it is published as a GitHub
 Release rather than committed; they download the one matching your checkout via
 `scripts/fetch-wasm-engine.sh`. The Rust finite-element module (`crates/`) is
 built locally by `scripts/build-fem-wasm.sh` in a few seconds.
@@ -74,7 +75,7 @@ then on the fetch step sees your local build and leaves it alone. CI publishes t
 release for your sources once they land on `main`.
 
 > [!NOTE]
-> The wasm docker build is layered on top of [KoFEM-Dependencies](https://github.com/mkofler96/KoFEM-Dependencies), which contains the precompiled wasm OCCT, Netgen and MFEM libraries. KoFEM can be compiled without docker using the script `scripts/build-wasm.sh`, but then the OCCT, Netgen and MFEM source code must be downloaded and will be compiled during the KoFEM compilation. This will take some time.
+> The wasm docker build is layered on top of [KoFEM-Dependencies](https://github.com/mkofler96/KoFEM-Dependencies), which contains the precompiled wasm OCCT and Netgen libraries. KoFEM can be compiled without docker using the script `scripts/build-wasm.sh`, but then the OCCT and Netgen source code must be downloaded and will be compiled during the KoFEM compilation. This will take some time.
 
 ## Disclaimer
 
@@ -92,12 +93,11 @@ KoFEM is free and open-source software, licensed under the
 **[GNU Affero General Public License v3.0 or later](LICENSE)** (AGPL-3.0-or-later).
 
 KoFEM builds on third-party libraries — **OpenCASCADE** (LGPL-2.1 with an
-exception), **Netgen** (LGPL-2.1), and **MFEM** (BSD-3-Clause) — each retaining
-its own license. See [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) for the
+exception) and **Netgen** (LGPL-2.1) — each retaining its own license. See [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) for the
 full attribution and compatibility notes.
 
 The Rust finite-element module reimplements the formulation and solver
-approach of KoFEM's MFEM-based engine. We credit **MFEM and its contributors**
+approach of KoFEM's former MFEM-based engine. We credit **MFEM and its contributors**
 as the upstream numerical implementation reference. See the
 [module notice](crates/kofem-fem/NOTICE.md) for source references and the
 retained [MFEM BSD-3-Clause license](crates/kofem-fem/LICENSE-MFEM).

@@ -96,7 +96,7 @@ function onCgLimit(progress: CgLimitProgress): Promise<number> {
 
 // True once tessellate_step has loaded the OCCT STEP shape into THIS worker's
 // WASM module. The worker is torn down after every mesh (resetWorker in
-// LeftPanel) to keep Netgen's global state out of the MFEM solve, so a re-mesh
+// LeftPanel) to start from a clean module after Netgen, so a re-mesh
 // starts in a fresh module where this is false and the geometry must be
 // reloaded from the original STEP bytes before meshing.
 let geometryLoaded = false;
@@ -469,9 +469,8 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
     log: `Volume mesh complete: ${nNodes} nodes, ${nTets} tetrahedra`,
   });
 
-  // Release OCCT shape + STEP bytes from WASM heap — they are no longer
-  // needed once meshing is done, and freeing them before the solve gives
-  // MFEM more headroom for stiffness-matrix assembly.
+  // Release OCCT shape + STEP bytes from the engine's WASM heap — they are no
+  // longer needed once meshing is done.
   m().free_geometry_cache();
   geometryLoaded = false;
 

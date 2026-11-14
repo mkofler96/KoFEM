@@ -55,8 +55,8 @@ export function rebuildConstraints(bcGroups: NamedBcGroup[]): Constraint[] {
 }
 
 // Local vertex indices of each boundary face of a solid element, in the node
-// ordering used by both the .inp/fixture meshes and MFEM's AddTet/AddHex (and so
-// by the boundary elements the engine generates). Matching is by vertex set, so
+// ordering used by the .inp/fixture meshes and the solver's elements (CHEXA /
+// MFEM vertex order). Matching is by vertex set, so
 // only the grouping matters, not the winding.
 export const TET_FACE_INDICES = [
   [0, 1, 2],
