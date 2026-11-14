@@ -58,13 +58,13 @@ export function rebuildConstraints(bcGroups: NamedBcGroup[]): Constraint[] {
 // ordering used by both the .inp/fixture meshes and MFEM's AddTet/AddHex (and so
 // by the boundary elements the engine generates). Matching is by vertex set, so
 // only the grouping matters, not the winding.
-const TET_FACE_INDICES = [
+export const TET_FACE_INDICES = [
   [0, 1, 2],
   [0, 1, 3],
   [0, 2, 3],
   [1, 2, 3],
 ];
-const HEX_FACE_INDICES = [
+export const HEX_FACE_INDICES = [
   [0, 1, 2, 3],
   [4, 5, 6, 7],
   [0, 1, 5, 4],
