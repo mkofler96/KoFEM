@@ -1,19 +1,20 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// SIMP topology optimization through the Rust module
-// (crates/kofem-fem/src/topology, ADR-0002), for all three design domains:
-// all-solid models (the engine's optimize_topology, multigrid CG), pure
-// shells and coupled shell/solid models (optimize_topology_shell and
-// optimize_topology_coupled, IC(0) CG), step for step as the engine. The
-// optimizer runs one iteration per TopologyRun.step(), so the "[topopt] it
-// N: …" progress lines and the live density stream (KOF-240) come from here
-// with the same wording and cadence as from the engine.
+// Topology optimization through the Rust module
+// (crates/kofem-fem/src/topology, ADR-0002). SIMP runs on all three design
+// domains: all-solid models (the engine's optimize_topology, multigrid CG),
+// pure shells and coupled shell/solid models (optimize_topology_shell and
+// optimize_topology_coupled, IC(0) CG). The reaction–diffusion level-set
+// method runs on all-solid models (optimize_topology with method
+// "level_set", KOF-358). Both go step for step as the engine. The optimizer
+// runs one iteration per TopologyRun.step(), so the "[topopt] it N: …"
+// progress lines and the live density stream (KOF-240) come from here with
+// the same wording and cadence as from the engine.
 //
 // The model reaches Rust through the same helpers as the Rust static solves
 // (createRustSolidModel, createShellModel, createMixedModel), and the settings keep
-// the TopOptSettings wire contract and the engine's defaults. The level-set
-// method is not ported yet and stays with the engine (usesRustTopOpt).
+// the TopOptSettings wire contract and the engine's defaults.
 
 import type {
   TopOptHistoryEntry,
@@ -63,12 +64,6 @@ export interface CoupledTopologyFemModule extends MixedFemModule {
 // mid-run (KOF-245); the sensitivities stay accurate to about this.
 const SHELL_CG_TOLERANCE = 1e-5;
 
-// Whether an all-solid optimization with these settings runs in Rust. SIMP
-// does; the level-set method is still the engine's.
-export function usesRustTopOpt(settings: TopOptSettings): boolean {
-  return settings.method !== "level_set";
-}
-
 // The engine's defaults for the optional settings (topology_simp.cpp).
 const DEFAULT_PENALTY = 3;
 const DEFAULT_MOVE_LIMIT = 0.2;
@@ -93,6 +88,98 @@ function requirePositiveInteger(value: number, name: string): number {
   return value;
 }
 
+// The optimization method, with the engine's message for an unknown one.
+// SIMP is the default.
+function methodOf(settings: TopOptSettings): "simp" | "level_set" {
+  const { method } = settings;
+  if (method === undefined || method === "simp") return "simp";
+  if (method === "level_set") return method;
+  throw new Error(
+    `unknown topology-optimization method "${String(method)}" — expected "simp" or "level_set"`,
+  );
+}
+
+// The objective's bound, with the engine's messages for an unknown
+// objective and a missing bound. Shared by both methods, so a level-set run
+// is refused in the engine's order: objective, bound, then method rules.
+function objectiveBound(settings: TopOptSettings): number | undefined {
+  const { objective, constraints } = settings;
+  if (objective !== "min_compliance" && objective !== "min_volume")
+    throw new Error(
+      `unknown topology-optimization objective "${String(objective)}" — expected "min_compliance" or "min_volume"`,
+    );
+  const minVolume = objective === "min_volume";
+  const bound = minVolume
+    ? constraints.complianceLimit
+    : constraints.volumeFraction;
+  if (!present(bound) && !(minVolume && present(constraints.maxStress)))
+    throw new Error(
+      minVolume
+        ? "the min_volume objective requires constraints.complianceLimit (the compliance ceiling c_allow, > 0), constraints.maxStress (the von Mises limit sigma_allow, > 0), or both"
+        : "the min_compliance objective requires constraints.volumeFraction (the target material fraction, in (0, 1])",
+    );
+  return present(bound) ? bound : undefined;
+}
+
+// What a run returns: the element densities, and for the level-set method
+// φ per vertex in store node order (buildVertexIndexer), which the viewport
+// contours at φ = 0.
+export interface TopOptRunResult {
+  density: Float64Array;
+  levelSet?: Float64Array;
+  history: TopOptHistoryEntry[];
+}
+
+// The level-set run's arguments from the wire settings, refused with the
+// engine's messages: the method takes minimum compliance only, without a
+// stress limit (topology_simp.cpp).
+function levelSetArguments(settings: TopOptSettings): {
+  volumeFraction: number;
+  maxIterations: number;
+  streamEvery: number;
+  passiveSolid: Uint32Array;
+  passiveVoid: Uint32Array;
+} {
+  const bound = objectiveBound(settings);
+  if (present(settings.constraints.maxStress) || present(settings.stress))
+    throw new Error(
+      "the level-set method does not support the maximum-stress constraint (constraints.maxStress) — remove the stress limit, or use SIMP for a stress-constrained run",
+    );
+  if (settings.objective !== "min_compliance" || bound === undefined)
+    throw new Error(
+      "the level-set method supports the min_compliance objective only — switch the objective to minimum compliance, or use SIMP for min_volume",
+    );
+  const { passive } = settings;
+  return {
+    volumeFraction: bound,
+    maxIterations: requirePositiveInteger(
+      settings.maxIterations,
+      "maxIterations",
+    ),
+    streamEvery: requirePositiveInteger(
+      // eslint-disable-next-line kofem/no-silent-fallback -- streamEvery is optional in TopOptSettings; the documented default streams every iteration
+      settings.streamEvery ?? DEFAULT_STREAM_EVERY,
+      "streamEvery",
+    ),
+    passiveSolid: Uint32Array.from(passive?.solid ?? []),
+    passiveVoid: Uint32Array.from(passive?.void ?? []),
+  };
+}
+
+// The second header line of a level-set run, as the engine prints it.
+function describeLevelSetUpdate(run: TopologyRun): string {
+  const update = run.levelSetUpdate;
+  if (update === undefined)
+    throw new Error("The run is not a level-set optimization.");
+  const [timeStep, volumeStep, eminRel] = update;
+  const ell = run.filterRadius;
+  return (
+    `[topopt] level set: l=${general(ell, 4)} (tau=${general(ell * ell, 4)}), ` +
+    `dt=${general(timeStep, 3)}, volume step=${general(volumeStep, 3)}, ` +
+    `E_min/E0=${eminRel.toExponential(1)}`
+  );
+}
+
 // Translate the wire settings into the Rust settings, with the engine's
 // rules and messages for missing or contradictory fields. Returns the
 // settings and the run header the engine logs.
@@ -106,21 +193,13 @@ function buildSettings(
   moveLimit: number;
 } {
   const { objective, constraints } = settings;
-  if (objective !== "min_compliance" && objective !== "min_volume")
+  const bound = objectiveBound(settings);
+  if (methodOf(settings) !== "simp")
     throw new Error(
-      `unknown topology-optimization objective "${String(objective)}" — expected "min_compliance" or "min_volume"`,
+      "The level-set method runs on solid models only (optimizeSolidInRust).",
     );
   const minVolume = objective === "min_volume";
   const { maxStress } = constraints;
-  const bound = minVolume
-    ? constraints.complianceLimit
-    : constraints.volumeFraction;
-  if (!present(bound) && !(minVolume && present(maxStress)))
-    throw new Error(
-      minVolume
-        ? "the min_volume objective requires constraints.complianceLimit (the compliance ceiling c_allow, > 0), constraints.maxStress (the von Mises limit sigma_allow, > 0), or both"
-        : "the min_compliance objective requires constraints.volumeFraction (the target material fraction, in (0, 1])",
-    );
   if (!present(maxStress) && present(settings.stress))
     throw new Error(
       "the stress block (aggregation settings) needs constraints.maxStress — there is no stress limit to tune",
@@ -197,22 +276,22 @@ function iterationLine(entry: TopOptHistoryEntry): string {
 }
 
 // Optimize an all-solid model of linear tetrahedra and hexahedra (one design
-// density per element, tets first, then hexes) with SIMP in Rust. Ties are
-// not applied to the design domain, as on the engine path. `onDensity`
-// receives the design every `streamEvery` iterations and always on the
-// last, whose field is the returned density. Throws on an ill-posed problem,
-// with the engine's message.
+// density per element, tets first, then hexes) in Rust, with SIMP or, for
+// method "level_set", the level-set method, which also returns φ per store
+// node. Ties are not applied to the design domain, as on the engine path.
+// `onDensity` receives the design every `streamEvery` iterations and always
+// on the last, whose field is the returned density. Throws on an ill-posed
+// problem, with the engine's message.
 export function optimizeSolidInRust(
   fem: TopologyFemModule,
   payload: TopOptPayload,
   log: (line: string) => void,
   onDensity: (iteration: number, density: Float64Array) => void,
-): { density: Float64Array; history: TopOptHistoryEntry[] } {
+): TopOptRunResult {
   const { settings } = payload;
-  if (!usesRustTopOpt(settings))
-    throw new Error(
-      `The Rust optimizer does not run the "${String(settings.method)}" method.`,
-    );
+  const levelSet = methodOf(settings) === "level_set";
+  // Refuse the settings before the model is built, as the engine does.
+  const levelSetArgs = levelSet ? levelSetArguments(settings) : null;
   if (payload.elements.some((e) => e.type !== "CTETRA" && e.type !== "CHEXA"))
     throw new Error(
       "The Rust optimizer takes solid models of tetrahedra and hexahedra only.",
@@ -231,6 +310,33 @@ export function optimizeSolidInRust(
       vid,
       log,
     );
+    if (levelSetArgs !== null) {
+      const run = fem.TopologyRun.levelSetMethod(
+        elastic,
+        fixedDofs,
+        fixedValues,
+        forces,
+        levelSetArgs.volumeFraction,
+        settings.filterRadius,
+        levelSetArgs.maxIterations,
+        settings.tolerance,
+        levelSetArgs.streamEvery,
+        levelSetArgs.passiveSolid,
+        levelSetArgs.passiveVoid,
+      );
+      try {
+        log(
+          `[topopt] level_set min_compliance volfrac=${levelSetArgs.volumeFraction.toFixed(3)}: ` +
+            `${describeSolidElements(tetCount, hexCount)}, ${run.dofCount} dofs, ` +
+            `l=${general(run.filterRadius, 4)}, maxit=${levelSetArgs.maxIterations}, ` +
+            `tol=${general(settings.tolerance, 4)} — solving with Rust multigrid CG`,
+        );
+        log(describeLevelSetUpdate(run));
+        return runToCompletion(run, settings.objective, log, onDensity);
+      } finally {
+        run.free();
+      }
+    }
     return runRust(
       fem,
       settings,
@@ -261,7 +367,7 @@ function runRust(
   ) => string,
   log: (line: string) => void,
   onDensity: (iteration: number, density: Float64Array) => void,
-): { density: Float64Array; history: TopOptHistoryEntry[] } {
+): TopOptRunResult {
   const { rust, header, penalty, moveLimit } = buildSettings(fem, settings);
   let run: TopologyRun;
   try {
@@ -303,7 +409,7 @@ export function optimizeShellInRust(
   settings: TopOptSettings,
   log: (line: string) => void,
   onDensity: (iteration: number, density: Float64Array) => void,
-): { density: Float64Array; history: TopOptHistoryEntry[] } {
+): TopOptRunResult {
   const { model, bcs, forces, nodeCount, triangleCount } = createShellModel(
     fem,
     inputs,
@@ -344,7 +450,7 @@ export function optimizeCoupledInRust(
   settings: TopOptSettings,
   log: (line: string) => void,
   onDensity: (iteration: number, density: Float64Array) => void,
-): { density: Float64Array; history: TopOptHistoryEntry[] } {
+): TopOptRunResult {
   const { model, couplings, fixedDofs, fixedValues, forces } = createMixedModel(
     fem,
     args,
@@ -385,7 +491,7 @@ function runToCompletion(
   objective: TopOptSettings["objective"],
   log: (line: string) => void,
   onDensity: (iteration: number, density: Float64Array) => void,
-): { density: Float64Array; history: TopOptHistoryEntry[] } {
+): TopOptRunResult {
   const history: TopOptHistoryEntry[] = [];
   let converged = false;
   for (;;) {
@@ -419,8 +525,15 @@ function runToCompletion(
   // after it, as the engine's history does.
   history.length = run.historyLength;
   const density = run.density;
+  const levelSet = run.levelSet;
+  const returning =
+    levelSet === undefined
+      ? `${density.length} densities`
+      : `${density.length} densities and ${levelSet.length} level-set values`;
   log(
-    `[topopt] complete: ${history.length} iteration(s), ${converged ? "converged" : "hit max_iterations"}; returning ${density.length} densities`,
+    `[topopt] complete: ${history.length} iteration(s), ${converged ? "converged" : "hit max_iterations"}; returning ${returning}`,
   );
-  return { density, history };
+  return levelSet === undefined
+    ? { density, history }
+    : { density, levelSet, history };
 }

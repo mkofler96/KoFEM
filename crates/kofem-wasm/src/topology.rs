@@ -1,13 +1,14 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-//! SIMP topology optimization (`kofem_fem::topology`) of a solid, shell or
-//! coupled shell/solid model, as a run the caller advances one iteration at
-//! a time — to log each iteration and draw the emerging design between them.
+//! Topology optimization (`kofem_fem::topology`) — SIMP on a solid, shell or
+//! coupled shell/solid model, or the level-set method on a solid one — as a
+//! run the caller advances one iteration at a time, to log each iteration and
+//! draw the emerging design between them.
 
 use kofem_fem::topology::{
-    Aggregation, MixedSimpModel, MixedSolver, Objective, SimpModel, SimpOptimizer, SimpSettings,
-    SimpSolver, StepReport, StressConstraint,
+    Aggregation, LevelSetOptimizer, LevelSetSettings, MixedSimpModel, MixedSolver, Objective,
+    SimpModel, SimpOptimizer, SimpSettings, SimpSolver, StepReport, StressConstraint,
 };
 use kofem_fem::{AmgSettings, MixedPreconditioner, PreconditionerChoice};
 use wasm_bindgen::prelude::*;
@@ -133,6 +134,7 @@ impl TopologySettings {
 enum Optimizer {
     Solid(SimpOptimizer<SimpModel>),
     Mixed(SimpOptimizer<MixedSimpModel>),
+    LevelSet(Box<LevelSetOptimizer>),
 }
 
 /// A topology optimization in progress.
@@ -277,6 +279,64 @@ impl TopologyRun {
         Self::mixed(simp, settings)
     }
 
+    /// Optimize `model` (linear tetrahedra and hexahedra) with the
+    /// reaction–diffusion level-set method, minimum compliance at
+    /// `volumeFraction`. Supports and forces as for [`TopologyRun::new`].
+    /// `regularizationLength` ≤ 0 takes the mean element size. Elements
+    /// `passiveSolid` / `passiveVoid` (tets, then hexes) keep their vertices
+    /// at φ = +1 / −1.
+    ///
+    /// # Errors
+    /// As [`TopologyRun::new`], settings out of range, contradictory passive
+    /// regions, or a volume fraction they put out of reach.
+    #[wasm_bindgen(js_name = levelSetMethod)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "the load case and one argument per level-set setting of the wire contract"
+    )]
+    pub fn level_set(
+        model: &ElasticModel,
+        fixed_dofs: &[u32],
+        fixed_values: &[f64],
+        forces: Vec<f64>,
+        volume_fraction: f64,
+        regularization_length: f64,
+        max_iterations: usize,
+        tolerance: f64,
+        stream_every: usize,
+        passive_solid: &[u32],
+        passive_void: &[u32],
+    ) -> Result<TopologyRun, JsError> {
+        check_homogeneous(fixed_dofs, fixed_values)?;
+        let simp = SimpModel::new(
+            model.mesh.clone(),
+            fixed_dofs,
+            forces,
+            SimpSolver::default(),
+        )
+        .map_err(|error| to_js(&error))?;
+        let settings = LevelSetSettings {
+            volume_fraction,
+            regularization_length,
+            max_iterations,
+            tolerance,
+            stream_every,
+            passive_solid: passive_solid
+                .iter()
+                .map(|&element| element as usize)
+                .collect(),
+            passive_void: passive_void
+                .iter()
+                .map(|&element| element as usize)
+                .collect(),
+            ..LevelSetSettings::default()
+        };
+        let optimizer = LevelSetOptimizer::new(simp, &settings).map_err(|error| to_js(&error))?;
+        Ok(TopologyRun {
+            optimizer: Optimizer::LevelSet(Box::new(optimizer)),
+        })
+    }
+
     fn mixed(model: MixedSimpModel, settings: &TopologySettings) -> Result<TopologyRun, JsError> {
         let optimizer =
             SimpOptimizer::new(model, &settings.settings).map_err(|error| to_js(&error))?;
@@ -293,6 +353,7 @@ impl TopologyRun {
         let report = match &mut self.optimizer {
             Optimizer::Solid(optimizer) => optimizer.step(),
             Optimizer::Mixed(optimizer) => optimizer.step(),
+            Optimizer::LevelSet(optimizer) => optimizer.step(),
         }
         .map_err(|error| to_js(&error))?;
         Ok(TopologyStep { report })
@@ -305,6 +366,36 @@ impl TopologyRun {
         match &self.optimizer {
             Optimizer::Solid(optimizer) => optimizer.density().to_vec(),
             Optimizer::Mixed(optimizer) => optimizer.density().to_vec(),
+            Optimizer::LevelSet(optimizer) => optimizer.density().to_vec(),
+        }
+    }
+
+    /// φ per mesh vertex of the design in `density` (level-set runs only;
+    /// undefined for SIMP). The design boundary is φ = 0.
+    #[wasm_bindgen(getter, js_name = levelSet)]
+    #[must_use]
+    pub fn level_set_values(&self) -> Option<Vec<f64>> {
+        match &self.optimizer {
+            Optimizer::LevelSet(optimizer) => Some(optimizer.level_set().to_vec()),
+            Optimizer::Solid(_) | Optimizer::Mixed(_) => None,
+        }
+    }
+
+    /// The level-set update's settings the header logs: time step, volume
+    /// step and `E_min/E₀`, or undefined for SIMP.
+    #[wasm_bindgen(getter, js_name = levelSetUpdate)]
+    #[must_use]
+    pub fn level_set_update(&self) -> Option<Vec<f64>> {
+        match &self.optimizer {
+            Optimizer::LevelSet(optimizer) => {
+                let settings = optimizer.settings();
+                Some(vec![
+                    settings.time_step,
+                    settings.volume_step,
+                    settings.emin_rel,
+                ])
+            }
+            Optimizer::Solid(_) | Optimizer::Mixed(_) => None,
         }
     }
 
@@ -316,6 +407,7 @@ impl TopologyRun {
         match &self.optimizer {
             Optimizer::Solid(optimizer) => optimizer.history().len(),
             Optimizer::Mixed(optimizer) => optimizer.history().len(),
+            Optimizer::LevelSet(optimizer) => optimizer.history().len(),
         }
     }
 
@@ -325,6 +417,7 @@ impl TopologyRun {
         match &self.optimizer {
             Optimizer::Solid(optimizer) => optimizer.element_count(),
             Optimizer::Mixed(optimizer) => optimizer.element_count(),
+            Optimizer::LevelSet(optimizer) => optimizer.element_count(),
         }
     }
 
@@ -334,16 +427,19 @@ impl TopologyRun {
         match &self.optimizer {
             Optimizer::Solid(optimizer) => optimizer.dof_count(),
             Optimizer::Mixed(optimizer) => optimizer.dof_count(),
+            Optimizer::LevelSet(optimizer) => optimizer.dof_count(),
         }
     }
 
-    /// The filter radius in use (the default when the settings name none).
+    /// The filter radius in use (the default when the settings name none);
+    /// for the level-set method, the regularization length ℓ.
     #[wasm_bindgen(getter, js_name = filterRadius)]
     #[must_use]
     pub fn filter_radius(&self) -> f64 {
         match &self.optimizer {
             Optimizer::Solid(optimizer) => optimizer.filter_radius(),
             Optimizer::Mixed(optimizer) => optimizer.filter_radius(),
+            Optimizer::LevelSet(optimizer) => optimizer.regularization_length(),
         }
     }
 }
