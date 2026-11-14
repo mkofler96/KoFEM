@@ -161,8 +161,9 @@ export interface SolvePayload extends SolveModel {
 // Topology-optimization request: the same model the static solve takes (mesh +
 // materials + BCs/loads + ties/couplings) plus the TO settings block. The design
 // domain follows the element mix — all-solid, all-shell, or coupled shell/solid
-// (KOF-237). Ties and couplings join the coupled design domain exactly as they
-// do for the solve; element order does not apply (linear tets + DKT facets).
+// (KOF-237). Couplings join the coupled design domain exactly as they do for
+// the solve; a tie is refused in every domain (routeTopOpt). Element order does
+// not apply (linear tets + DKT facets).
 export interface TopOptPayload {
   nodes: Node[];
   elements: Element[];

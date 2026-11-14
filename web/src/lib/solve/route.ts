@@ -7,6 +7,11 @@
 
 import type { SolveModel, TopOptPayload } from "../../workers/solverTypes.js";
 import { shellMarkedBodies, requireOneShellBody } from "./autoShell.js";
+import {
+  shellOrderRefusal,
+  shellTieRefusal,
+  topOptTieRefusal,
+} from "./refusals.js";
 
 export type SolveRoute =
   // All CTRIA3 → the Kirchhoff shell solver (solve_shell).
@@ -31,6 +36,11 @@ export function routeSolve(payload: SolveModel): SolveRoute {
   const nShells = payload.elements.filter((e) => e.type === "CTRIA3").length;
   // eslint-disable-next-line kofem/no-silent-fallback -- `couplings` is optional in the solve message; a model with none is the ordinary case
   const nCouplings = payload.couplings?.length ?? 0;
+  // eslint-disable-next-line kofem/no-silent-fallback -- elementOrder is optional in the solve message; the documented default is linear elements
+  const elementOrder = payload.elementOrder ?? 1;
+  // Shell facets and the tets coupled to them are linear: a shell or mixed
+  // model refuses order 2 rather than solve linear behind the user's back.
+  const orderRefusal = shellOrderRefusal(elementOrder);
   if (nShells > 0) {
     // A coupling is an RBE2/RBE3 constraint, and only the coupled assembler
     // applies one — the pure Kirchhoff shell solver has no couplings, and the
@@ -44,9 +54,12 @@ export function routeSolve(payload: SolveModel): SolveRoute {
           "coupled solid-shell assembler, and that needs at least one solid body. " +
           "Delete the coupling, or keep one body solid.",
       );
-    return nShells === payload.elements.length
-      ? { path: "shell" }
-      : { path: "coupled" };
+    if (orderRefusal !== null) throw new Error(orderRefusal);
+    if (nShells < payload.elements.length) return { path: "coupled" };
+    // The coupled assembler joins ties; the pure shell solver has none.
+    const tieRefusal = shellTieRefusal(payload.tieGroups);
+    if (tieRefusal !== null) throw new Error(tieRefusal);
+    return { path: "shell" };
   }
   // An all-solid model that declares a surface-to-point coupling still needs the
   // coupled assembler — solve_linear_elastic has no notion of an RBE2/RBE3
@@ -62,6 +75,7 @@ export function routeSolve(payload: SolveModel): SolveRoute {
   );
   if (shellBodyIds.size > 0) {
     requireOneShellBody(shellBodyIds);
+    if (orderRefusal !== null) throw new Error(orderRefusal);
     return { path: "auto-shell", shellBodyIds };
   }
   return { path: "solid" };
@@ -74,13 +88,19 @@ export type TopOptDomain = "shell" | "coupled" | "solid";
 // shell/solid or any coupling → optimize_topology_coupled; all solid → the
 // Rust SIMP optimizer (topOptRust.ts), or optimize_topology for the level-set
 // method. Unlike the solve, the optimizer never idealises a Shell
-// body itself, and the level-set method runs through the solid entry only —
-// both are refused here rather than optimizing the wrong model.
+// body itself, applies no tie, and runs the level-set method through the solid
+// entry only — all three are refused here rather than optimizing the wrong
+// model.
 export function routeTopOpt(payload: TopOptPayload): TopOptDomain {
   const { elements, properties, settings } = payload;
   const shellElements = elements.filter((e) => e.type === "CTRIA3");
   const solidElements = elements.filter((e) => e.type !== "CTRIA3");
   const couplings = payload.couplings ?? [];
+
+  // No optimizer applies a tie (C++ or Rust, any design domain): a tied
+  // assembly would be optimized as separate parts.
+  const tieRefusal = topOptTieRefusal(payload.tieGroups);
+  if (tieRefusal !== null) throw new Error(tieRefusal);
 
   // A body marked "Shell" that has NOT been idealised into shell (CTRIA3)
   // elements would be turned into a mid-surface mesh only at solve time — the

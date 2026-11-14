@@ -31,6 +31,7 @@ import {
   type ShellExtraction,
 } from "../shellize.js";
 import { buildVertexIndexer, type VertexIndexer } from "../solveMeshPacking.js";
+import { shellTieRefusal } from "./refusals.js";
 import {
   coupledFixedDofs,
   coupledLoads,
@@ -630,9 +631,10 @@ export interface PureShellSolve {
 // CTRIA3 shell path. BCs, loads and results map onto the collapsed mid-surface
 // by nearest node, exactly as the coupled path maps the shelled body. Throws
 // when a solid body is present (prepareAutoCoupledSolve takes those, so the
-// Shell body touches none of them), when the model cannot be idealised, or when
+// Shell body touches none of them), when the model cannot be idealised, when
 // a body is marked Shell but carries no detectable thin wall — so the choice
-// is never silently ignored.
+// is never silently ignored — and when the model has a tie, which the shell
+// solver cannot apply.
 export function preparePureShellSolve(
   payload: SolvePayload,
   shellBodyIds: Set<number>,
@@ -659,6 +661,9 @@ export function preparePureShellSolve(
         "shell solve would leave the solid bodies out. Tie the Shell body to a solid " +
         "body, or set it to Solid.",
     );
+  // The shell solver applies no tie; refuse it by name rather than drop it.
+  const tieRefusal = shellTieRefusal(payload.tieGroups);
+  if (tieRefusal !== null) throw new Error(tieRefusal);
 
   const vid = buildVertexIndexer(nodes);
   const mesh = buildShellizeMesh(

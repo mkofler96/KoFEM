@@ -38,6 +38,7 @@ import type {
   Ties,
 } from "../../wasm/fem/kofem_wasm.js";
 import type { TieConstraint } from "../tieConstraints.js";
+import type { SolveRoute } from "./route.js";
 import {
   groupDirichlet,
   groupPointLoads,
@@ -102,8 +103,8 @@ export function amgUnavailableReason(model: {
   )
     return "it supports tetrahedral and hexahedral meshes only";
   // Shells mixed with tets take the Rust mixed solve (coupledRust.ts), which
-  // is linear tets + DKT facets with every coupling, whatever the element
-  // order (as the engine's solve_coupled).
+  // is linear tets + DKT facets with every coupling (as the engine's
+  // solve_coupled); routeSolve refuses element order 2 on these models.
   if (shellCount > 0)
     return model.elements.some((element) => element.type === "CHEXA")
       ? "it supports shells mixed with tetrahedra only"
@@ -121,25 +122,16 @@ export function amgUnavailableReason(model: {
 }
 
 // The preconditioner a solve uses when AMG is not chosen or cannot take the
-// model. Shell elements, bodies solved as shells and surface-to-point
-// couplings route to the shell or coupled solver, which use incomplete
-// Cholesky IC(0) (SSOR only if the factorisation breaks down); every other
-// model solves with the MFEM engine's Gauss–Seidel CG. Mirrors routeSolve
-// (route.ts).
+// model, decided by the route the model takes (routeSolve), so the two cannot
+// drift apart. The shell, coupled and auto-shell paths use incomplete
+// Cholesky IC(0) (SSOR only if the factorisation breaks down); the all-solid
+// path solves with Gauss–Seidel CG.
 export type FallbackPreconditioner = "incomplete-cholesky" | "gauss-seidel";
 
-export function amgFallbackPreconditioner(model: {
-  elements: Element[];
-  properties: Property[];
-  couplingCount: number;
-}): FallbackPreconditioner {
-  if (
-    model.elements.some((element) => element.type === "CTRIA3") ||
-    model.couplingCount > 0 ||
-    shellMarkedBodies(model.properties).length > 0
-  )
-    return "incomplete-cholesky";
-  return "gauss-seidel";
+export function amgFallbackPreconditioner(
+  route: SolveRoute,
+): FallbackPreconditioner {
+  return route.path === "solid" ? "gauss-seidel" : "incomplete-cholesky";
 }
 
 // The fallback preconditioner in words for the user.

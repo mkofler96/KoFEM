@@ -20,6 +20,7 @@ import { dirname, join } from "node:path";
 import { beforeAll, describe, expect, test } from "bun:test";
 import { buildVertexIndexer } from "../../src/lib/solveMeshPacking.ts";
 import { buildSolidEngineInputs } from "../../src/lib/solve/solid.ts";
+import { routeSolve } from "../../src/lib/solve/route.ts";
 import {
   amgFallbackPreconditioner,
   amgUnavailableReason,
@@ -336,48 +337,41 @@ describe("wall bracket: Rust AMG against MFEM", () => {
     });
 
     // Without AMG, a solid model solves with Gauss–Seidel; shells, bodies solved
-    // as shells and couplings take the shell/coupled solvers' incomplete Cholesky.
+    // as shells and couplings take the shell/coupled solvers' incomplete
+    // Cholesky. The fallback follows routeSolve, so the two cannot drift.
+    const fallbackFor = (over) =>
+      amgFallbackPreconditioner(routeSolve({ ...model, ...over }));
+
     test("a solid model falls back to Gauss–Seidel", () => {
-      expect(
-        amgFallbackPreconditioner({
-          elements: model.elements,
-          properties: model.properties,
-          couplingCount: 0,
-        }),
-      ).toBe("gauss-seidel");
+      expect(fallbackFor({})).toBe("gauss-seidel");
     });
 
     test("a model with a coupling falls back to incomplete Cholesky", () => {
       expect(
-        amgFallbackPreconditioner({
-          elements: model.elements,
-          properties: model.properties,
-          couplingCount: 1,
+        fallbackFor({
+          couplings: [
+            { name: "c", kind: "kinematic", referencePoint: 1, nodes: [2] },
+          ],
         }),
       ).toBe("incomplete-cholesky");
     });
 
     test("a body solved as a shell falls back to incomplete Cholesky", () => {
       expect(
-        amgFallbackPreconditioner({
-          elements: model.elements,
-          properties: model.properties.map((property) => ({
-            ...property,
-            discretization: "shell",
-          })),
-          couplingCount: 0,
+        fallbackFor({
+          properties: model.properties.map((property, index) =>
+            index === 0 ? { ...property, discretization: "shell" } : property,
+          ),
         }),
       ).toBe("incomplete-cholesky");
     });
 
     test("a shell-element model falls back to incomplete Cholesky", () => {
       expect(
-        amgFallbackPreconditioner({
+        fallbackFor({
           elements: [
             { id: 1, type: "CTRIA3", nodeIds: [1, 2, 3], propertyId: 1 },
           ],
-          properties: model.properties,
-          couplingCount: 0,
         }),
       ).toBe("incomplete-cholesky");
     });
