@@ -79,8 +79,8 @@ export type TopOptDomain = "shell" | "coupled" | "solid";
 // The topology optimizer's design domain follows the element mix, exactly as
 // the static solve routes: all CTRIA3 → shell; mixed shell/solid or any
 // coupling → coupled; all solid → solid. SIMP runs in Rust on all three
-// (topOptRust.ts); the level-set method runs in the engine's
-// optimize_topology, on solid models only. An all-shell model with a
+// (topOptRust.ts); the level-set method runs in Rust too, on solid models
+// only. An all-shell model with a
 // coupling is refused, as by the solve. Unlike the solve, the optimizer never idealises a Shell
 // body itself, applies no tie, and runs the level-set method through the solid
 // entry only — all three are refused here rather than optimizing the wrong

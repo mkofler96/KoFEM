@@ -192,10 +192,23 @@ function resolveOnTessellation(at, tess, where) {
  *                                        the static solve (null for an optimisation)
  * @property {{settings, density, history, seconds}} [optimization]
  *                                        the run, for a recipe with `optimize`
+ * @property {object} solvePayload        the payload the worker's solve or
+ *                                        optimize receives for this model
+ * @property {{spec, divideBy?}} [probe]  the recipe's probe, resolved (static
+ *                                        solves only), for evaluateProbe
  * @property {number} fe                  the probe's value (÷ divideBy), or the
  *                                        final compliance of an optimisation
+ *                                        (undefined with skipOptimization)
+ *
+ * With `skipOptimization`, a recipe with `optimize` stops once the model is
+ * set up: no optimization runs, `optimization` and `fe` are left out, and the
+ * caller optimizes `solvePayload` itself.
  */
-export async function buildFromRecipe(id, recipe) {
+export async function buildFromRecipe(
+  id,
+  recipe,
+  { skipOptimization = false } = {},
+) {
   validateRecipe(id, recipe);
   const where = `recipe "${id}"`;
   const shell = recipe.discretization.kind === "shell";
@@ -501,6 +514,13 @@ export async function buildFromRecipe(id, recipe) {
   });
 
   // ── Optimize (the worker's handleTopOpt), in place of the static solve ─────
+  if (recipe.optimize && skipOptimization)
+    return {
+      ...model(),
+      handCheck: null,
+      result: null,
+      solvePayload: payload,
+    };
   if (recipe.optimize) {
     const optimization = await optimizeLikeTheApp(
       where,
@@ -512,6 +532,7 @@ export async function buildFromRecipe(id, recipe) {
       handCheck: null,
       result: null,
       optimization,
+      solvePayload: payload,
       fe: optimization.history.at(-1).compliance,
     };
   }
@@ -570,7 +591,7 @@ export async function buildFromRecipe(id, recipe) {
     },
   };
 
-  return { ...model(), handCheck, result, fe };
+  return { ...model(), handCheck, result, solvePayload: payload, probe, fe };
 }
 
 /**
