@@ -58,3 +58,24 @@ test("a STEP file without an extension is recognised by its header @pipeline", a
   ).toBeVisible();
   await expect(page.getByTestId("step-error")).toBeHidden();
 });
+
+test("a STEP file of only a tessellated mesh asks for a BRep export, not a crash @pipeline", async ({
+  page,
+}) => {
+  await gotoApp(page);
+  const fs = await import("fs");
+  await page.locator('input[type="file"][accept=".stp,.step"]').setInputFiles({
+    name: "tessellated_only_tetra.step",
+    mimeType: "application/octet-stream",
+    buffer: fs.readFileSync("../test_files/tessellated_only_tetra.step"),
+  });
+
+  const error = page.getByTestId("step-error");
+  await expect(error).toContainText(
+    "This STEP file contains only a tessellated mesh, no CAD solid.",
+  );
+  await expect(error).toContainText("Re-export it with exact (BRep) geometry.");
+  await expect(error).not.toContainText("RuntimeError");
+  await expect(error).not.toContainText("std::");
+  await expect(page.getByRole("button", { name: /Import STEP/ })).toBeEnabled();
+});

@@ -61,5 +61,7 @@ export function importFailureMessage(
     return `This file type is not supported. KoFEM imports ${ACCEPTED_CAD_FORMATS} files.`;
   if (category === "parse_error" && format !== null)
     return `Could not read this file as ${LABEL[format]}. Export it again from your CAD program; KoFEM imports ${ACCEPTED_CAD_FORMATS} files.`;
+  // The engine words these for the user; the C++ exception type is noise.
+  if (category === "empty_geometry") return detail.replace(/^std::\w+: /, "");
   return detail;
 }

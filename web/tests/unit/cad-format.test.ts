@@ -81,6 +81,18 @@ describe("importFailureMessage", () => {
     expect(message).not.toContain("IGESControl_Reader");
   });
 
+  test("a file with nothing to mesh shows the engine's advice without the C++ type", () => {
+    expect(
+      importFailureMessage(
+        "empty_geometry",
+        "step",
+        "std::runtime_error: This STEP file contains only a tessellated mesh, no CAD solid. Re-export it with exact (BRep) geometry.",
+      ),
+    ).toBe(
+      "This STEP file contains only a tessellated mesh, no CAD solid. Re-export it with exact (BRep) geometry.",
+    );
+  });
+
   test("other failures keep the engine's own text", () => {
     expect(
       importFailureMessage(
