@@ -43,6 +43,7 @@ import {
   type ThinWallCheckInput,
 } from "../lib/solve/thinWall.js";
 import { dropSuppressedBodies } from "../lib/suppressBodies.js";
+import { inStage, splitStage } from "../lib/workerError.js";
 import {
   buildMeshTimeShellModel,
   preparePureShellSolve,
@@ -418,13 +419,15 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
       id,
       log: "Reloading STEP geometry into the mesher…",
     });
-    m().tessellate_step(
-      bytes,
-      JSON.stringify({
-        deflection_relative: 0.001,
-        angular_deflection: 0.5,
-        format,
-      }),
+    inStage("geometry_reload", () =>
+      m().tessellate_step(
+        bytes,
+        JSON.stringify({
+          deflection_relative: 0.001,
+          angular_deflection: 0.5,
+          format,
+        }),
+      ),
     );
     geometryLoaded = true;
   }
@@ -455,7 +458,7 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
   // JSON.parse. surfaceTriangles/surfaceFaceIds are in Netgen
   // surface-element order (NOT tet boundary order); surfaceFaceIds holds
   // the 1-based OCC face index per surface triangle.
-  const dto = m().generate_fem_mesh(opts);
+  const dto = inStage("meshing", () => m().generate_fem_mesh(opts));
   if ("overlaps" in dto) {
     flushCoverage();
     self.postMessage({ id, ok: true, overlaps: dto.overlaps });
@@ -528,14 +531,16 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
   // collapsed to a mid-surface shell mesh here, so the stored model is the mixed
   // CTRIA3 + CTETRA model the user sees and solves — not an all-solid mesh whose
   // shells only ever existed transiently inside the solve.
-  const mixed = buildMeshTimeShellModel(
-    nodes,
-    elements,
-    surfaceTriangles,
-    surfaceFaceIds,
-    new Set(payload.shellBodyIds ?? []),
-    payload.properties ?? [],
-    (line: string) => self.postMessage({ id, log: line }),
+  const mixed = inStage("shell_idealisation", () =>
+    buildMeshTimeShellModel(
+      nodes,
+      elements,
+      surfaceTriangles,
+      surfaceFaceIds,
+      new Set(payload.shellBodyIds ?? []),
+      payload.properties ?? [],
+      (line: string) => self.postMessage({ id, log: line }),
+    ),
   );
   if (mixed) {
     flushCoverage();
@@ -1120,7 +1125,8 @@ function isWasmTrap(err: unknown): boolean {
   ].some((message) => err.message.includes(message));
 }
 
-function reportTaskError(id: number, type: string, err: unknown): void {
+function reportTaskError(id: number, type: string, failure: unknown): void {
+  const { stage, error: err } = splitStage(failure);
   const trap = isWasmTrap(err);
   const detail =
     err instanceof EngineLoadError
@@ -1135,7 +1141,12 @@ function reportTaskError(id: number, type: string, err: unknown): void {
       : `[solver.worker] ${type} failed:`,
     detail,
   );
-  self.postMessage({ id, ok: false, error: errorMessage });
+  self.postMessage({
+    id,
+    ok: false,
+    error: errorMessage,
+    ...(stage === null ? {} : { stage }),
+  });
 }
 
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {

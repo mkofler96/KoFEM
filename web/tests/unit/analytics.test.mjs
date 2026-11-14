@@ -16,6 +16,7 @@ import {
   track,
   trackOnce,
 } from "../../src/lib/analytics.ts";
+import { WorkerTaskError } from "../../src/lib/workerError.ts";
 
 // A window with just what the loader and the utility touch.
 const sent = [];
@@ -238,12 +239,48 @@ describe("buckets and categories", () => {
     ["shell: singular 3×3 matrix", "numerical_failure"],
     ["RuntimeError: Aborted(OOM)", "resource_limit"],
     ["Cannot enlarge memory arrays to size 2147483648 bytes", "resource_limit"],
+    // Allocation failure inside the C++ engine, decoded by describeError.
+    ["std::bad_alloc: std::bad_alloc", "resource_limit"],
+    // A trap is a code bug in the engine; the worker survives it.
     [
       "WASM trap (code bug, not OOM): RuntimeError: memory access out of bounds",
-      "worker_failure",
+      "engine_crash",
     ],
+    ["Uncaught RuntimeError: unreachable", "engine_crash"],
+    ["RuntimeError: Aborted(Assertion failed)", "engine_crash"],
     ["Worker crashed", "worker_failure"],
-    ["Ng_GenerateVolumeMesh failed (code 1)", "invalid_input"],
+    // New model while meshing ends the task: the user stopped it.
+    ["Worker reset — restart your operation", "cancelled"],
+    [
+      "The solver engine failed to load: Failed to fetch Retry from the status bar.",
+      "engine_unavailable",
+    ],
+    // Netgen gave up on the shape.
+    ["Ng_OCC_GenerateSurfaceMesh failed (code 1)", "mesher_failure"],
+    ["Ng_GenerateVolumeMesh failed (code 1)", "mesher_failure"],
+    [
+      "netgen::NgException: illegal hash-position in Geomsearch",
+      "mesher_failure",
+    ],
+    [
+      "OCCGeometry construction failed — check STEP geometry validity",
+      "mesher_failure",
+    ],
+    // The geometry itself cannot make a valid volume mesh.
+    [
+      "Ng_GenerateVolumeMesh failed (code 1). The boundary mesh contains overlapping or self-intersecting elements that geometry healing could not repair",
+      "geometry_defect",
+    ],
+    [
+      "Volume meshing produced 0 tetrahedra: the geometry has surfaces but no closed solid to fill.",
+      "geometry_defect",
+    ],
+    // OCCT could not triangulate the shape.
+    ["BRepMesh_IncrementalMesh failed", "tessellation_failure"],
+    [
+      "shape produced no triangles — try a smaller deflection_relative",
+      "tessellation_failure",
+    ],
     ["No geometry found.", "invalid_input"],
     ["mixed solve: the model has no shell element", "invalid_input"],
     ["something nobody anticipated", "unknown"],
@@ -253,6 +290,35 @@ describe("buckets and categories", () => {
 
   test("non-Error rejections are categorised too", () => {
     expect(categorizeError("Worker error")).toBe("worker_failure");
+  });
+
+  // Text no rule knows still says which step of the task failed (KOF-311).
+  test.each([
+    ["geometry_reload", "tessellation_failure"],
+    ["meshing", "mesher_failure"],
+    ["shell_idealisation", "shell_idealisation_failure"],
+  ])("an unrecognised failure in step %s is %s", (stage, category) => {
+    const err = new WorkerTaskError(
+      "Standard_Failure: BRep_API: command not done",
+      stage,
+    );
+    expect(categorizeError(err)).toBe(category);
+  });
+
+  test("a recognised message wins over the step it failed in", () => {
+    const err = new WorkerTaskError(
+      "std::bad_alloc: std::bad_alloc",
+      "meshing",
+    );
+    expect(categorizeError(err)).toBe("resource_limit");
+  });
+
+  test("without a step, unrecognised text stays unknown", () => {
+    const err = new WorkerTaskError(
+      "Standard_Failure: BRep_API: command not done",
+      null,
+    );
+    expect(categorizeError(err)).toBe("unknown");
   });
 
   test("model type from element types", () => {
