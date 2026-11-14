@@ -7,7 +7,10 @@
 // wall-detection.test.mjs.
 
 import { beforeAll, describe, expect, test } from "bun:test";
-import { thinWallFindings } from "../../src/lib/solve/thinWall.ts";
+import {
+  thinWallFindings,
+  thinWallMessage,
+} from "../../src/lib/solve/thinWall.ts";
 import { loadFem } from "../support/wasm.mjs";
 
 const coincident = (left, right, tol = 1e-9) => Math.abs(left - right) < tol;
@@ -155,6 +158,14 @@ describe("linear thin-wall check", () => {
     expect(found).toHaveLength(1);
     expect(Math.abs(found[0].thickness - 2)).toBeLessThan(1e-6);
     expect(found[0].elementsThrough).toBeLessThan(4);
+  });
+
+  test("coarse mesh: a planar wall is not curved, and Shell is offered", () => {
+    const [finding] = thinWallFindings(
+      model(boxes([slab([60, 40], [6, 4, 1])]), 1),
+    );
+    expect(finding.curved).toBe(false);
+    expect(thinWallMessage(finding)).toContain("Shell");
   });
 
   test("fine mesh: no finding", () => {

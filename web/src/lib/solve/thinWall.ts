@@ -4,9 +4,10 @@
 // Linear tetrahedra lock in bending: with too few through a thin wall the
 // solve returns a result that is too stiff, and refining the linear mesh a
 // little barely moves it (KOF-274). This finds the thinnest wall of each solid
-// body and estimates how many elements span it, so the pre-flight can warn.
+// body (planar or curved) and estimates how many elements span it, so the
+// pre-flight can warn.
 
-import { extractThinWallShells } from "../shellize.js";
+import { detectCurvedWalls, extractThinWallShells } from "../shellize.js";
 import { buildVertexIndexer } from "../solveMeshPacking.js";
 import { buildShellizeMesh } from "./autoShell.js";
 import type { Element, Node, Property } from "../../workers/solverTypes.js";
@@ -20,6 +21,8 @@ export interface ThinWallFinding {
   bodyId: number;
   thickness: number; // mm
   elementsThrough: number; // estimated linear elements across the wall
+  // A tube or bend: Shell idealisation collapses planar walls only.
+  curved: boolean;
 }
 
 export interface ThinWallCheckInput {
@@ -94,13 +97,29 @@ export function thinWallFindings(input: ThinWallCheckInput): ThinWallFinding[] {
     const { walls } = extractThinWallShells(mesh, {
       shellBodyIds: new Set([property.id]),
     });
+    // Planar walls come from the shell detector; tubes and bends from the
+    // curved-wall pass (KOF-312).
+    const measured = [
+      ...walls.map((wall) => ({
+        body: wall.body,
+        face: wall.keep,
+        thk: wall.thk,
+        curved: false,
+      })),
+      ...detectCurvedWalls(mesh).map((wall) => ({ ...wall, curved: true })),
+    ];
     let worst: ThinWallFinding | null = null;
-    for (const wall of walls) {
+    for (const wall of measured) {
       if (wall.body !== property.id) continue;
-      const edge = meanFaceEdge(nodes, bodyTris, bodyFaces, wall.keep);
+      const edge = meanFaceEdge(nodes, bodyTris, bodyFaces, wall.face);
       const elementsThrough = wall.thk / edge;
       if (worst === null || elementsThrough < worst.elementsThrough)
-        worst = { bodyId: property.id, thickness: wall.thk, elementsThrough };
+        worst = {
+          bodyId: property.id,
+          thickness: wall.thk,
+          elementsThrough,
+          curved: wall.curved,
+        };
     }
     if (worst && worst.elementsThrough < MIN_LINEAR_ELEMENTS_THROUGH_WALL)
       findings.push(worst);
@@ -112,6 +131,8 @@ export function thinWallMessage(finding: ThinWallFinding): string {
   return (
     `Thin wall on body ${finding.bodyId}: about ${finding.elementsThrough.toFixed(1)} ` +
     `linear elements across ${finding.thickness.toFixed(1)} mm — results may be far too stiff. ` +
-    "Use quadratic elements (Mesh panel) or set the body to Shell."
+    (finding.curved
+      ? "Use quadratic elements (Mesh panel)."
+      : "Use quadratic elements (Mesh panel) or set the body to Shell.")
   );
 }
