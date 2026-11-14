@@ -14,6 +14,7 @@ mod mixed;
 mod shell;
 mod shellize;
 mod tie;
+mod topology;
 
 pub use mixed::MixedModel;
 pub use shell::ShellModel;
@@ -22,6 +23,7 @@ pub use shellize::{
     ShellizeInput,
 };
 pub use tie::{tie_mortar_weights, MortarSurface, MortarTies, Ties};
+pub use topology::{TopologyRun, TopologySettings, TopologyStep};
 
 use kofem_fem::{
     assemble_stiffness, prepare_coupled_static, prepare_static, prepare_tied_static, solve_static,

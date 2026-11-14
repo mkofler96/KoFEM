@@ -155,9 +155,13 @@ test("optimize_topology worker: density field of element length + progress logs"
   expect(result.allFinite).toBe(true);
   expect(result.inRange).toBe(true);
 
-  // At least one per-iteration progress line reached the log channel (the engine
-  // prints "[topopt] it N: c=… vol=… change=…" each iteration).
+  // At least one per-iteration progress line reached the log channel
+  // ("[topopt] it N: c=… vol=… change=…" each iteration), and a solid SIMP run
+  // optimizes in the Rust module (KOF-310), not in the engine.
   expect(logs.some((l) => l.includes("[topopt] it"))).toBe(true);
+  expect(logs.some((l) => l.includes("solving with Rust multigrid CG"))).toBe(
+    true,
+  );
 });
 
 // A suppressed body is not in the mesh, so its element type no longer applies:
