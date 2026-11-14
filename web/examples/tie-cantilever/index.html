@@ -990,12 +990,6 @@
         <li>Load “Tip load”: force (0, −10000, 0) N on the face through (1002, 50, 50).</li>
         <li>Run the static study. The Results panel compares tip deflection with −P/(3·E·I)·((L+g)³ − (L/2+g)³ + (L/2)³).</li>
       </ol>
-      <p>From a clone (Bun, bash, curl and Rust), this builds and solves the model with the same engine and prints its line:</p>
-      <pre><code>git clone https://github.com/mkofler96/KoFEM.git &amp;&amp; cd KoFEM
-bash scripts/fetch-wasm-engine.sh
-cd web &amp;&amp; bun install &amp;&amp; bun run validate --case tie-cantilever</code></pre>
-      <pre class="console"><code>Case                                  Quantity                                  FE   Reference     Err%  Tol%  Status
-Tied cantilever beam                  tip deflection δ                     -1.9045     -1.9133    -0.46     1  PASS</code></pre>
 
       <h2 id="references">References</h2>
       <ol class="refs">
