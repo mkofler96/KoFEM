@@ -97,16 +97,20 @@ export function parseTriangulatedStep(step) {
   return { points, triangles };
 }
 
-function unitNormal(points, [a, b, c]) {
-  const u = points[b].map((value, axis) => value - points[a][axis]);
-  const v = points[c].map((value, axis) => value - points[a][axis]);
-  const n = [
-    u[1] * v[2] - u[2] * v[1],
-    u[2] * v[0] - u[0] * v[2],
-    u[0] * v[1] - u[1] * v[0],
+function unitNormal(points, [first, second, third]) {
+  const along = points[second].map(
+    (value, axis) => value - points[first][axis],
+  );
+  const across = points[third].map(
+    (value, axis) => value - points[first][axis],
+  );
+  const normal = [
+    along[1] * across[2] - along[2] * across[1],
+    along[2] * across[0] - along[0] * across[2],
+    along[0] * across[1] - along[1] * across[0],
   ];
-  const length = Math.hypot(...n);
-  return length > 0 ? n.map((value) => value / length) : null;
+  const length = Math.hypot(...normal);
+  return length > 0 ? normal.map((value) => value / length) : null;
 }
 
 // Edges whose two triangles meet at more than minAngleDeg, as point pairs.
@@ -114,10 +118,10 @@ function unitNormal(points, [a, b, c]) {
 export function sharpEdges(points, triangles, minAngleDeg) {
   const faces = new Map();
   triangles.forEach((triangle, face) => {
-    for (let k = 0; k < 3; k++) {
-      const a = triangle[k],
-        b = triangle[(k + 1) % 3];
-      const key = a < b ? `${a},${b}` : `${b},${a}`;
+    for (let corner = 0; corner < 3; corner++) {
+      const from = triangle[corner],
+        to = triangle[(corner + 1) % 3];
+      const key = from < to ? `${from},${to}` : `${to},${from}`;
       const list = faces.get(key);
       if (list) list.push(face);
       else faces.set(key, [face]);
@@ -136,8 +140,8 @@ export function sharpEdges(points, triangles, minAngleDeg) {
     if (!n1 || !n2) continue;
     const cos = n1[0] * n2[0] + n1[1] * n2[1] + n1[2] * n2[2];
     if (cos < minCos) {
-      const [a, b] = key.split(",").map(Number);
-      segments.push([points[a], points[b]]);
+      const [from, to] = key.split(",").map(Number);
+      segments.push([points[from], points[to]]);
     }
   }
   return segments;

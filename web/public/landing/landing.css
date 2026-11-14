@@ -303,14 +303,16 @@ p {
 .site-links .site-launch {
   color: var(--text);
   background: rgba(131, 182, 237, 0.12);
-  border: 1px solid rgba(131, 182, 237, 0.38);
+  /* An inset shadow, not a border: the outline adds no width, so the header
+     still fits a 320 px screen. */
+  box-shadow: inset 0 0 0 1px rgba(131, 182, 237, 0.38);
   transition:
     background 0.15s,
-    border-color 0.15s;
+    box-shadow 0.15s;
 }
 .site-links .site-launch:hover {
   color: var(--text);
   opacity: 1;
   background: rgba(131, 182, 237, 0.22);
-  border-color: rgba(131, 182, 237, 0.6);
+  box-shadow: inset 0 0 0 1px rgba(131, 182, 237, 0.6);
 }

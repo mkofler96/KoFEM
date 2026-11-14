@@ -213,7 +213,9 @@ test("the landing Start Solver button is a quiet tinted button, not a solid fill
     return parts.length === 4 ? Number(parts[3]) : 1;
   });
   expect(alpha).toBeLessThan(0.3);
-  await expect(launch).toHaveCSS("border-top-style", "solid");
+  // The outline must not widen the button: the header has to fit 320 px.
+  await expect(launch).toHaveCSS("border-top-width", "0px");
+  await expect(launch).toHaveCSS("box-shadow", /inset/);
 });
 
 test("the bracket shows its CAD feature edges before the mesh draws in", async ({

@@ -42,8 +42,12 @@ const { points, triangles } = parseTriangulatedStep(source.toString("latin1"));
 const normalY = 0.662599371078666,
   normalZ = 0.748974013865739;
 const toLanding = ([x, y, z]) => {
-  const a = [normalY * y + normalZ * z, x + 74.0283, normalZ * y - normalY * z];
-  return [-a[2], a[1], a[0]];
+  const mounted = [
+    normalY * y + normalZ * z,
+    x + 74.0283,
+    normalZ * y - normalY * z,
+  ];
+  return [-mounted[2], mounted[1], mounted[0]];
 };
 const mapped = points.map(toLanding);
 
