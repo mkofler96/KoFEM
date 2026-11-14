@@ -245,10 +245,13 @@ pub struct LevelSetOptimizer {
     mass: CsrMatrix,
     /// The update operator M + Δt·τ·L.
     operator: CsrMatrix,
-    /// The level set and the design the next step analyses (after a finished
-    /// run: the returned ones).
+    /// The level set and the design the last step analysed (before the first:
+    /// the start; after a finished run: the returned ones).
     phi: Vec<f64>,
     rho: Vec<f64>,
+    /// The update the last step computed, applied when the next one starts,
+    /// so `density()` between steps is the design the report describes.
+    next: Option<(Vec<f64>, Vec<f64>)>,
     displacements: Vec<f64>,
     history: Vec<HistoryEntry>,
     finished: bool,
@@ -310,6 +313,7 @@ impl LevelSetOptimizer {
             operator: CsrMatrix::from_node_blocks(&[], 1),
             phi: Vec::new(),
             rho: Vec::new(),
+            next: None,
             displacements: Vec::new(),
             history: Vec::new(),
             finished: false,
@@ -384,6 +388,10 @@ impl LevelSetOptimizer {
     pub fn step(&mut self) -> Result<StepReport, FemError> {
         if self.finished {
             return Err(topology_error("the optimization has already finished"));
+        }
+        if let Some((phi, rho)) = self.next.take() {
+            self.phi = phi;
+            self.rho = rho;
         }
         let settings = self.settings.clone();
         let iteration = self.history.len() + 1;
@@ -515,8 +523,7 @@ impl LevelSetOptimizer {
             self.finished = true;
             self.converged = converged;
         } else {
-            self.phi = phi_next;
-            self.rho = rho_next;
+            self.next = Some((phi_next, rho_next));
         }
         Ok(StepReport {
             entry,

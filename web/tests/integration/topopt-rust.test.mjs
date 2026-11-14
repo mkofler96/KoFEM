@@ -476,6 +476,12 @@ describe("level-set topology optimization: Rust against the C++ engine", () => {
       1e-4,
     );
     expect(rust.streamed.map(({ iteration }) => iteration)).toEqual([4, 6]);
+    // Each streamed field is the design that iteration analysed, as the
+    // engine streams it — not the next one.
+    for (const [index, { density }] of rust.streamed.entries())
+      expect(
+        largestDifference(density, engine.streamed[index].density),
+      ).toBeLessThan(1e-4);
     expect(Array.from(rust.streamed.at(-1).density)).toEqual(
       Array.from(rust.density),
     );

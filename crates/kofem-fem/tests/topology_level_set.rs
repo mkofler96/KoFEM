@@ -272,6 +272,29 @@ fn streams_on_its_cadence_ends_on_the_result_and_is_deterministic() {
 }
 
 #[test]
+fn each_streamed_design_is_the_one_its_iteration_analysed() {
+    let settings = LevelSetSettings {
+        max_iterations: 8,
+        ..base_settings()
+    };
+    let mut streamed = Vec::new();
+    let result = optimize_level_set(
+        problem().model(SimpSolver::default()),
+        &settings,
+        |iteration, density| streamed.push((iteration, volume_fraction(density))),
+    )
+    .expect("a short run");
+    assert_eq!(streamed.len(), 8);
+    for (iteration, fraction) in streamed {
+        let reported = result.history[iteration - 1].volume;
+        assert!(
+            near(fraction, reported, 1e-12),
+            "iteration {iteration}: streamed volume {fraction}, reported {reported}"
+        );
+    }
+}
+
+#[test]
 fn ill_posed_settings_are_refused() {
     let problem = problem();
     let refused = |settings: LevelSetSettings| run(&settings).is_err();
