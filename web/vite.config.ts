@@ -14,8 +14,6 @@ import {
 } from "node:fs";
 import { extname, join } from "node:path";
 import react from "@vitejs/plugin-react";
-import wasm from "vite-plugin-wasm";
-import topLevelAwait from "vite-plugin-top-level-await";
 import istanbul from "vite-plugin-istanbul";
 import { injectSiteLayout } from "./site-layout.mjs";
 import {
@@ -245,8 +243,6 @@ export default defineConfig(({ mode }) => {
         },
       },
       react(),
-      wasm(),
-      topLevelAwait(),
       copyStaticPages(gaSnippet),
       serveGallery(),
       analyticsPlugin(gaSnippet),
@@ -254,7 +250,7 @@ export default defineConfig(({ mode }) => {
     ],
     worker: {
       format: "es",
-      plugins: () => [wasm(), topLevelAwait(), ...coveragePlugins],
+      plugins: () => [...coveragePlugins],
     },
     build: {
       target: "esnext",

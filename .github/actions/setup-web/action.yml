@@ -33,9 +33,9 @@ runs:
       id: bun
       shell: bash
       run: |
-        version="$(sed -n 's|^COPY --from=oven/bun:\([0-9][0-9.]*\)@sha256:.*|\1|p' web/Dockerfile)"
+        version="$(sed -n 's|^FROM oven/bun:\([0-9][0-9.]*\)@sha256:.*|\1|p' web/Dockerfile)"
         if [ -z "$version" ]; then
-          echo "ERROR: web/Dockerfile has no 'COPY --from=oven/bun:<version>@sha256:' line to read the Bun version from." >&2
+          echo "ERROR: web/Dockerfile has no 'FROM oven/bun:<version>@sha256:' line to read the Bun version from." >&2
           exit 1
         fi
         echo "version=$version" >> "$GITHUB_OUTPUT"
