@@ -16,7 +16,7 @@ checksum = "4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600"
 
 [[package]]
 name = "kofem-core"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "kofem-mesh",
  "log",
@@ -26,21 +26,21 @@ dependencies = [
 
 [[package]]
 name = "kofem-fem"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
 name = "kofem-geom"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
 name = "kofem-mesh"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "serde",
  "thiserror",
@@ -48,14 +48,14 @@ dependencies = [
 
 [[package]]
 name = "kofem-shellize"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
 name = "kofem-wasm"
-version = "0.6.0"
+version = "0.7.0"
 dependencies = [
  "kofem-fem",
  "kofem-shellize",
