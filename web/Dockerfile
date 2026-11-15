@@ -6,12 +6,9 @@
 #
 # Stage 1: Build the static frontend bundle.
 #
-# Base image is Node with the Bun binary copied in. Bun drives the
-# frozen-lockfile install, but `vite` must run under Node: the bun-only image
-# has no Node, so vite would run on Bun's runtime, which is incompatible with
-# vite-plugin-top-level-await (TypeError: virtualModule.require is not a
-# function). With Node present, the `#!/usr/bin/env node` shebang on the vite
-# binary resolves to Node and the build succeeds. This is an isolated,
+# Base image is Bun alone: Bun installs the frozen lockfile and runs `tsc` and
+# `vite build` on its own runtime (there is no Node in the image, so `bun run`
+# answers the `#!/usr/bin/env node` shebangs itself). This is an isolated,
 # production-mode build (no source maps), independent of whatever the CI test
 # step left in web/dist.
 #
@@ -23,8 +20,7 @@
 # from this line (.github/actions/setup-web) and `just setup` compares the
 # local Bun with it, so the image, CI and a developer's machine cannot drift
 # apart unnoticed.
-FROM node:26-bookworm-slim@sha256:bc0a2afd3b74ce12222fc8bab99271e66257f021078f5f4a5d687a77d280c1d9 AS builder
-COPY --from=oven/bun:1.4.4@sha256:1d22548f177f4ff38e0c15baa3c2c46c6c2060ba2d1bc573bb4720b407548f1d /usr/local/bin/bun /usr/local/bin/bun
+FROM oven/bun:1.4.4@sha256:1d22548f177f4ff38e0c15baa3c2c46c6c2060ba2d1bc573bb4720b407548f1d AS builder
 
 WORKDIR /app
 

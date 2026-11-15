@@ -57,9 +57,9 @@ installed_version() {
 # replaced.
 check_bun() {
     local pinned local_version
-    pinned="$(sed -n 's|^COPY --from=oven/bun:\([0-9][0-9.]*\)@sha256:.*|\1|p' "$REPO_ROOT/web/Dockerfile")"
+    pinned="$(sed -n 's|^FROM oven/bun:\([0-9][0-9.]*\)@sha256:.*|\1|p' "$REPO_ROOT/web/Dockerfile")"
     if [ -z "$pinned" ]; then
-        echo "ERROR: web/Dockerfile has no 'COPY --from=oven/bun:<version>@sha256:' line to read the Bun pin from." >&2
+        echo "ERROR: web/Dockerfile has no 'FROM oven/bun:<version>@sha256:' line to read the Bun pin from." >&2
         exit 1
     fi
     command -v bun >/dev/null 2>&1 || return 0
