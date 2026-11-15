@@ -21,11 +21,11 @@
     <meta property="og:title" content="Constraints and convergence | KoFEM Theory Guide" />
     <meta property="og:description" content="What happens in each SIMP iteration: reused analysis objects, the radius filter and mesh dependence, MMA updates and move limits, stress constraints, and what convergence does and does not establish, checked on the MBB and cantilever benchmarks." />
     <meta property="og:url" content="https://kofem.org/theory/optimization/constraints-and-convergence/" />
-    <meta property="og:image" content="https://kofem.org/kofem_logo.svg" />
-    <meta name="twitter:card" content="summary" />
+    <meta property="og:image" content="https://kofem.org/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Constraints and convergence | KoFEM Theory Guide" />
     <meta name="twitter:description" content="What happens in each SIMP iteration: reused analysis objects, the radius filter and mesh dependence, MMA updates and move limits, stress constraints, and what convergence does and does not establish, checked on the MBB and cantilever benchmarks." />
-    <meta name="twitter:image" content="https://kofem.org/kofem_logo.svg" />
+    <meta name="twitter:image" content="https://kofem.org/og-image.png" />
 
     <!-- Self-hosted fonts (SIL OFL) — see public/fonts/README.md -->
     <link href="/fonts/ibm-plex.css" rel="stylesheet" />
@@ -807,7 +807,7 @@
         </div></details>
         <nav class="crumbs" aria-label="Breadcrumb"><a href="/">KoFEM</a> / <a href="/theory/">Theory</a> / Optimization / Constraints and convergence</nav>
         <h1>Constraints and convergence</h1>
-        <details class="article-contents"><summary>On this page</summary><ul><li><a href="#iteration">One iteration, step by step</a></li><li><a href="#in-engine">Why the loop runs in the engine</a></li><li><a href="#filtering">Filtering, radius and mesh dependence</a></li><li><a href="#mma">Updating densities with MMA</a></li><li><a href="#stress-constraint">Maximum-stress constraints</a></li><li><a href="#termination">When a run stops</a></li><li><a href="#benchmarks">Check the MBB beam and mesh independence</a></li><li><a href="#references">Implementation and references</a></li></ul></details>
+        <details class="article-contents"><summary>On this page</summary><ul><li><a href="#iteration">One iteration, step by step</a></li><li><a href="#in-engine">Why the loop runs in the solver module</a></li><li><a href="#filtering">Filtering, radius and mesh dependence</a></li><li><a href="#mma">Updating densities with MMA</a></li><li><a href="#stress-constraint">Maximum-stress constraints</a></li><li><a href="#termination">When a run stops</a></li><li><a href="#benchmarks">Check the MBB beam and mesh independence</a></li><li><a href="#references">Implementation and references</a></li></ul></details>
 
     <p class="lede">How do filtering, constraints and convergence shape an optimized design?</p>
     <p><a href="/theory/optimization/simp/">SIMP</a> defines the design
@@ -816,8 +816,8 @@
       explains what a reported “converged” run means.</p>
 
     <h2 id="iteration">One iteration, step by step</h2>
-    <p>Before the first iteration the engine builds, once per run: the order-1
-      finite element space, the supported degrees of freedom, the assembled
+    <p>Before the first iteration the optimizer builds, once per run: the order-1
+      finite element model, the supported degrees of freedom, the assembled
       load vector <span class="math-nowrap"><math><mi mathvariant="bold" class="math-bold">f</mi></math>,</span> every full-material element matrix
       <math><msubsup><mi mathvariant="bold" class="math-bold">K</mi><mi>e</mi><mn>0</mn></msubsup></math> with its volume and centroid, the filter’s
       neighbour weights, and the optimizer state. A minimum-compliance run
@@ -827,7 +827,9 @@
       <li><strong>Analyses</strong> the current design. It scales the cached
         <math><msubsup><mi mathvariant="bold" class="math-bold">K</mi><mi>e</mi><mn>0</mn></msubsup></math> by <span class="math-nowrap"><math><mi>s</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><msub><mi>ρ</mi><mi>e</mi></msub><mo stretchy="false" lspace="0" rspace="0">)</mo></math>,</span> assembles
         <math><mi mathvariant="bold" class="math-bold">K</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><mi>ρ</mi><mo stretchy="false" lspace="0" rspace="0">)</mo></math> and solves <math><mi mathvariant="bold" class="math-bold">K</mi><mi mathvariant="bold" class="math-bold">d</mi><mo>=</mo></math>​<math><mi mathvariant="bold" class="math-bold">f</mi></math>
-        with conjugate gradients. Nothing is re-meshed or re-integrated.</li>
+        with conjugate gradients. Nothing is re-meshed or re-integrated. On
+        solid models the multigrid hierarchy is rebuilt only every third
+        iteration; in between, only its finest matrix is replaced.</li>
       <li><strong>Evaluates</strong> compliance, volume and their
         sensitivities from that one displacement field.</li>
       <li><strong>Filters</strong> the compliance sensitivities over a radius
@@ -846,17 +848,17 @@
       The returned density, the last history entry and the returned
       displacements always describe the same analysed design.</p>
 
-    <h2 id="in-engine">Why the loop runs in the engine</h2>
-    <p>KoFEM’s solver is C++ compiled to WebAssembly and runs in a browser
-      worker. The whole optimization runs inside one engine call. Keeping the
-      loop there reuses the mesh, element matrices, supports, load and filter
-      weights for every iteration. A loop driven from JavaScript would instead
-      cross the JavaScript–WebAssembly boundary and rebuild or re-transfer that
-      data each iteration.</p>
-    <p>The tradeoff is control. A single blocking call cannot pause, so
-      cancelling a run terminates the worker and discards it. Progress is
-      visible because the engine logs one line per iteration and passes each
-      analysed density to an optional callback.</p>
+    <h2 id="in-engine">Why the loop runs in the solver module</h2>
+    <p>KoFEM’s optimizer is Rust compiled to WebAssembly and runs in a browser
+      worker. The run is one object inside that module, which the worker
+      advances one iteration per call. Keeping the state there reuses the
+      mesh, element matrices, supports, load, filter weights and optimizer
+      state for every iteration; only the iteration report and, when asked,
+      the density cross into JavaScript.</p>
+    <p>The tradeoff is control. The worker steps the run to its end without
+      pausing, so cancelling a run terminates the worker and discards it.
+      Progress is visible because each iteration is logged and its analysed
+      density is streamed to the viewport.</p>
 
     <h2 id="filtering">Filtering, radius and mesh dependence</h2>
     <p>Unfiltered SIMP has two well-known failures. Checkerboards — alternating
@@ -886,7 +888,7 @@
       (default 1.5, i.e. 1.5&nbsp;mm in the app’s mm units), not a multiple of
       element size. Compare it with your mesh size: a radius smaller than one
       element leaves each element as its own only neighbour and disables the
-      filter. Values of 1.5–3 element sizes are common. The engine’s own
+      filter. Values of 1.5–3 element sizes are common. The optimizer’s own
       fallback of 1.5 × the mean element size applies only when an API caller
       sends no positive radius.</p>
     <p>Keeping <math><msub><mi>r</mi><mrow><mi mathvariant="normal">min</mi></mrow></msub></math> fixed while refining the mesh is
@@ -984,7 +986,7 @@
       on two grids with the same <math><msub><mi>r</mi><mrow><mi mathvariant="normal">min</mi></mrow></msub><mo>=</mo></math>​<span class="math-nowrap"><math><mn>0.4</mn></math>.</span></p>
     <div class="table-wrap" tabindex="0" role="region" aria-label="Executed topology-optimization benchmarks; scroll horizontally if needed"><table class="shell-table">
     <caption>Executed topology-optimization benchmarks</caption><thead><tr><th scope="col">Case</th><th scope="col">Elements</th><th scope="col">Iterations</th><th scope="col">Compliance: start → end</th><th scope="col">Final volume fraction</th></tr></thead>
-    <tbody><tr><th scope="row">MBB half-beam</th><td>432</td><td>50, converged</td><td>1802 → 413.1</td><td>0.5</td></tr><tr><th scope="row">Cantilever, 10 × 5 × 5</th><td>250</td><td>45, converged</td><td>616.6 → 188.5</td><td>0.4</td></tr><tr><th scope="row">Cantilever, 20 × 10 × 10</th><td>2,000</td><td>70, converged</td><td>650.7 → 190.1</td><td>0.4</td></tr></tbody></table></div>
+    <tbody><tr><th scope="row">MBB half-beam</th><td>432</td><td>50, converged</td><td>1802 → 413.1</td><td>0.5</td></tr><tr><th scope="row">Cantilever, 10 × 5 × 5</th><td>250</td><td>45, converged</td><td>616.6 → 188.5</td><td>0.4</td></tr><tr><th scope="row">Cantilever, 20 × 10 × 10</th><td>2,000</td><td>69, converged</td><td>650.7 → 190.5</td><td>0.4</td></tr></tbody></table></div>
     <figure class="theory-figure full" id="figure-mbb-half-beam-layout">
       <a href="/theory/figures/mbb-half-beam-layout.svg" class="figure-link"><picture class="figure-image"><source srcset="/theory/figures/mbb-half-beam-layout.svg" type="image/svg+xml" /><img src="/theory/figures/mbb-half-beam-layout.png" width="660" height="330" alt="The optimized density of the MBB half-beam on a 36 by 12 element grid. Dark elements form a top chord, a bottom tie and diagonal members; the symmetry plane is on the left, the load on the top left and a roller at the bottom right." loading="lazy" decoding="async" /></picture></a>
       <figcaption>The recorded MBB half-beam densities, one square per element: black above 0.5, grey 0.25–0.5, white below 0.25. The symmetry plane is on the left, the load at its top and the roller at bottom right.</figcaption>
@@ -997,9 +999,9 @@
       134 below 0.1. The rest are gray.</p>
     <p>For the cantilever, the fine grid’s density is averaged onto the coarse
       grid. The two converged compliances differ by
-      0.853%, the density fields
-      correlate at 0.9939, and the regions above
-      0.5 overlap with an intersection-over-union of 0.9485.
+      1.07%, the density fields
+      correlate at 0.994, and the regions above
+      0.5 overlap with an intersection-over-union of 0.9278.
       This shows the filter holding the layout fixed across one factor-2
       refinement of one problem on structured hexahedra. It does not establish
       mesh independence for unstructured Netgen tetrahedra, other filter radii,
@@ -1014,20 +1016,21 @@
       <li>Sigmund (2001), <cite>A 99 line topology optimization code written in Matlab</cite>, Structural and Multidisciplinary Optimization 21, 120–127; and Andreassen et al. (2011), <cite>Efficient topology optimization in MATLAB using 88 lines of code</cite>, Structural and Multidisciplinary Optimization 43, 1–16.</li>
       <li>Svanberg (1987), <cite>The method of moving asymptotes — a new method for structural optimization</cite>, International Journal for Numerical Methods in Engineering 24, 359–373.</li>
       <li>Le, Norato, Bruns, Ha and Tortorelli (2010), <cite>Stress-based topology optimization for continua</cite>, Structural and Multidisciplinary Optimization 41, 605–620; and Bruggi (2008), <cite>On an alternative approach to stress constraints relaxation in topology optimization</cite>, Structural and Multidisciplinary Optimization 36, 125–141.</li>
-      <li><a href="https://github.com/mkofler96/KoFEM/blob/6ba4db0ed963d6c8c0cb3263edf6737763994b6c/engine/cpp/topology_optimize.cpp#L222">iteration loop</a>,
-        <a href="https://github.com/mkofler96/KoFEM/blob/6ba4db0ed963d6c8c0cb3263edf6737763994b6c/engine/cpp/topology_optimize.cpp#L347">stopping rule</a>,
-        <a href="https://github.com/mkofler96/KoFEM/blob/6ba4db0ed963d6c8c0cb3263edf6737763994b6c/engine/cpp/topology_filter.cpp#L69">sensitivity filter</a>,
-        <a href="https://github.com/mkofler96/KoFEM/blob/6ba4db0ed963d6c8c0cb3263edf6737763994b6c/engine/cpp/topology_filter.cpp#L31">default radius</a>,
-        <a href="https://github.com/mkofler96/KoFEM/blob/6ba4db0ed963d6c8c0cb3263edf6737763994b6c/engine/cpp/topology_mma.cpp#L284">MMA optimizer</a>,
-        <a href="https://github.com/mkofler96/KoFEM/blob/6ba4db0ed963d6c8c0cb3263edf6737763994b6c/engine/cpp/topology_stress.cpp#L95">relaxed, aggregated stress and adjoint</a> and
-        <a href="https://github.com/mkofler96/KoFEM/blob/6ba4db0ed963d6c8c0cb3263edf6737763994b6c/engine/cpp/topology_simp.cpp#L320">stress density floor</a>.</li>
-      <li><a href="https://github.com/mkofler96/KoFEM/blob/6ba4db0ed963d6c8c0cb3263edf6737763994b6c/web/src/store/topOptSlice.ts#L72">app defaults</a> and
-        <a href="https://github.com/mkofler96/KoFEM/blob/6ba4db0ed963d6c8c0cb3263edf6737763994b6c/examples/validation/topopt/README.md#L1">benchmark descriptions and bands</a>.</li>
+      <li><a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/topology/optimize.rs#L553">iteration loop</a>,
+        <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/topology/optimize.rs#L732">stopping rule</a>,
+        <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/topology/filter.rs#L195">sensitivity filter</a>,
+        <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/topology/filter.rs#L57">default radius</a>,
+        <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/topology/mma.rs#L376">MMA optimizer</a>,
+        <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/topology/stress.rs#L271">relaxed, aggregated stress and adjoint</a>,
+        <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/web/src/lib/solve/topOptRust.ts#L75">stress density floor</a> and
+        <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/web/src/lib/solve/topOptRust.ts#L489">the worker’s step loop</a>.</li>
+      <li><a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/web/src/store/topOptSlice.ts#L72">app defaults</a> and
+        <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/examples/validation/topopt/README.md#L1">benchmark descriptions and bands</a>.</li>
     </ol><nav class="pager" aria-label="Reading order">
       <a class="prev" rel="prev" href="/theory/optimization/simp/"><small>Previous</small>← SIMP</a>
       <a class="next" rel="next" href="/theory/optimization/interpreting-designs/"><small>Next</small>Interpreting optimized designs →</a></nav>
       </main>
-      <nav class="docs-toc" aria-label="On this page"><p>On this page</p><ul><li><a href="#iteration">One iteration, step by step</a></li><li><a href="#in-engine">Why the loop runs in the engine</a></li><li><a href="#filtering">Filtering, radius and mesh dependence</a></li><li><a href="#mma">Updating densities with MMA</a></li><li><a href="#stress-constraint">Maximum-stress constraints</a></li><li><a href="#termination">When a run stops</a></li><li><a href="#benchmarks">Check the MBB beam and mesh independence</a></li><li><a href="#references">Implementation and references</a></li></ul></nav>
+      <nav class="docs-toc" aria-label="On this page"><p>On this page</p><ul><li><a href="#iteration">One iteration, step by step</a></li><li><a href="#in-engine">Why the loop runs in the solver module</a></li><li><a href="#filtering">Filtering, radius and mesh dependence</a></li><li><a href="#mma">Updating densities with MMA</a></li><li><a href="#stress-constraint">Maximum-stress constraints</a></li><li><a href="#termination">When a run stops</a></li><li><a href="#benchmarks">Check the MBB beam and mesh independence</a></li><li><a href="#references">Implementation and references</a></li></ul></nav>
     </div><footer class="site-footer">
       <span>KoFEM — finite element analysis in your browser</span>
       <nav aria-label="Footer">

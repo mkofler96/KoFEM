@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { equation, matrixEquation, tex } from "../operators/math.mjs";
-import { source, mfemSource } from "./sources.mjs";
+import { codeSource, source } from "./sources.mjs";
 import { figure } from "../figures/index.mjs";
 
 export default {
@@ -94,12 +94,13 @@ export default {
       right-hand side as an equivalent load, ${tex("-\\mathbf{K}_{\\mathrm{FC}}\\mathbf{d}_{\\mathrm{C}}")}. For a fixed support,
       ${tex("\\mathbf{d}_{\\mathrm{C}} = \\mathbf{0}")} and that term vanishes. The second equation recovers
       the support reactions afterwards.</p>
-    <p>MFEM, the finite element library KoFEM uses, keeps the full matrix
-      instead of deleting rows. It zeroes the off-diagonal entries in each
-      constrained row and column and keeps the diagonal. Each constrained row
-      then reads ${tex("K_{ii}d_i = K_{ii}g_i")}, where ${tex("g_i")} is the prescribed value of DOF ${tex("i")},
-      so ${tex("d_i = g_i")}. The free rows are exactly the first equation above. Two
-      consequences follow:</p>
+    <p>KoFEM keeps the full matrix instead of deleting rows. It moves each
+      prescribed column to the right-hand side, then replaces each constrained
+      row and column by the identity: the off-diagonal entries become zero and
+      the diagonal 1. Each constrained row then reads ${tex("d_i = g_i")}, where
+      ${tex("g_i")} is the prescribed value of DOF ${tex("i")}. The free rows are
+      exactly the first equation above, and the matrix stays symmetric
+      positive definite. Two consequences follow:</p>
     <ul>
       <li>A load on a constrained DOF has no effect on the displacement. It goes
         straight into the support. A force on a fully fixed face, for example,
@@ -124,18 +125,18 @@ export default {
       "Assembled bar stiffness: k times one, minus one, zero; minus one, two, minus one; zero, minus one, one",
     )}
     <p>Row 2 gives ${tex("2kd_2 = 0 - (-k)(0) - (-k)(0.1\\text{ mm})")}, so the prescribed value acts
-      as a load of ${tex("0.1k = 4.2 × 10^5\\text{ N}")} on node 2. After MFEM’s elimination:</p>
+      as a load of ${tex("0.1k = 4.2 × 10^5\\text{ N}")} on node 2. After KoFEM’s elimination:</p>
     ${matrixEquation(
-      "\\mathbf{K}_{\\mathrm{elim}} = k",
+      "\\mathbf{K}_{\\mathrm{elim}} =",
       [
         ["1", "0", "0"],
-        ["0", "2", "0"],
+        ["0", "2k", "0"],
         ["0", "0", "1"],
       ],
-      "Eliminated system matrix: k times one, zero, zero; zero, two, zero; zero, zero, one",
+      "Eliminated system matrix: one, zero, zero; zero, two k, zero; zero, zero, one",
     )}
-    <p>The right-hand side becomes ${tex("(k × 0, 0.1k, k × 0.1)")}: rows 1 and 3 restate the
-      prescribed values, row 2 carries their equivalent load. Solving gives
+    <p>The right-hand side becomes ${tex("(0, 0.1k, 0.1)")}: rows 1 and 3 restate the
+      prescribed values in mm, row 2 carries their equivalent load in N. Solving gives
       ${tex("d_2 = 0.1k/(2k) = 0.05\\text{ mm}")}, so ${tex("\\mathbf{d} = (0, 0.05, 0.1)\\text{ mm}")}.</p>
     <p>The reactions are ${tex("r_1 = k(d_1 - d_2) = -2.1 × 10^5\\text{ N}")} and
       ${tex("r_3 = k(d_3 - d_2) = 2.1 × 10^5\\text{ N}")}. They balance. As a check, a bar
@@ -175,9 +176,7 @@ export default {
     <p>Pull the 100 mm × 100 mm end face of the bar with ${tex("F = 10^6\\text{ N}")} in ${tex("x")}. The face
       area is ${tex("A = 10^4\\text{ mm}^2")}, so:</p>
     ${equation("t_x = \\frac{F}{A} = \\frac{10^6\\text{ N}}{10^4\\text{ mm}^2} = 100\\text{ N}/\\text{mm}^2 = 100\\text{ MPa}.", "Traction equals force over area: one million newtons over ten thousand square millimetres is 100 newtons per square millimetre, which is 100 megapascals")}
-    <p>The engine logs the same conversion for this case:
-      <code>force → traction [100 0 0] … (A=10000)</code>.
-      Now mesh the face with 2 × 2 bilinear quadrilaterals of 50 mm × 50 mm.
+    <p>Now mesh the face with 2 × 2 bilinear quadrilaterals of 50 mm × 50 mm.
       Each corner function of a quadrilateral integrates to a quarter of its
       area, ${tex("\\int N_a\\,dS = 2500/4\\text{ mm}^2 = 625\\text{ mm}^2")}, so every element gives
       ${tex("100 × 625\\text{ N} = 62500\\text{ N}")} to each of its four nodes. A node collects one
@@ -233,18 +232,23 @@ export default {
     <p>If any rigid mode remains, ${tex("\\mathbf{K}_{\\mathrm{FF}}")} is singular and the
       equations have no unique solution. KoFEM then either stops with an error, or returns a result that
       contains an arbitrary rigid motion. The second outcome is more dangerous,
-      because it looks like a success. Both occur on the bar with only Ux fixed
-      on its root face, which leaves Uy, Uz and the rotation about ${tex("x")} free:</p>
+      because it looks like a success. Take the bar with only Ux fixed on its
+      root face, which leaves Uy, Uz and the rotation about ${tex("x")} free:</p>
     <ul>
-      <li><strong>The load excites a free mode.</strong> A transverse force of
-        1000 N in ${tex("y")} has nothing to react against. The iterative solver
-        cannot converge, and the solve stops with “CG solver did not converge”
-        after 5000 iterations.</li>
-      <li><strong>The load is orthogonal to every free mode.</strong> The axial force
-        does no work in the free modes, so the solver converges. Elongation and
-        stress are correct, but the displacement contains an arbitrary rigid
-        part. Here the largest Uy was 0.0097 mm, against 0.0143 mm with a
-        3-2-1 support; that difference is a rigid shift, not deformation.</li>
+      <li><strong>With the default AMG solver</strong>, the solve stops before
+        the first iteration: building the multigrid preconditioner finds the
+        free modes and reports that the model is probably not fully
+        constrained. This happens whatever the load.</li>
+      <li><strong>With Gauss–Seidel, a load that excites a free mode</strong>,
+        such as a transverse force of 1000 N in ${tex("y")}, has nothing to
+        react against. Conjugate gradients breaks down and the solve stops
+        with the same hint.</li>
+      <li><strong>With Gauss–Seidel, a load orthogonal to every free mode</strong>,
+        such as the axial force, does no work in those modes, so the solver
+        converges. Elongation and stress are correct, but the displacement
+        contains an arbitrary rigid part. On a 20 × 4 × 4 hexahedral mesh the
+        largest Uy was 0.033 mm, against 0.0143 mm with a 3-2-1 support;
+        that difference is a rigid shift, not deformation.</li>
     </ul>
     <p>KoFEM requires at least one support before it solves, but it does not
       check that the supports remove all six modes. Common causes of a free
@@ -341,55 +345,51 @@ export default {
       how the solver reports failure.</p>
 
     <h2 id="implementation">KoFEM implementation and evidence</h2>
-    <p>KoFEM uses MFEM 4.7. The solid solve is
-      ${source("engine/cpp/solve_mfem.cpp", 182, "solve_linear_elastic")}.</p>
+    <p>KoFEM’s solid solve runs in its Rust finite-element module, driven by
+      ${codeSource("web/src/lib/solve/amg.ts", 197, "solveSolidInRust")}.</p>
     <ul>
       <li><strong>Groups to payload.</strong> Each node of a support group gets
         the group’s value per checked component
         (${source("web/src/store/boundaryRebuild.ts", 47, "boundaryRebuild.ts")}). The solid path sorts
         zero values into fully fixed vertices or single components and non-zero
-        values into prescribed DOFs, ignoring rotations
-        (${source("web/src/lib/solveMeshPacking.ts", 139, "solveMeshPacking.ts")}).
+        values into prescribed DOFs; fixed rotations are ignored and a
+        prescribed rotation is refused
+        (${codeSource("web/src/lib/solveMeshPacking.ts", 142, "solveMeshPacking.ts")}).
         Solve requires a support and a load or a non-zero prescribed value
         (${source("web/src/hooks/useSolver.ts", 58, "useSolver.ts")}).</li>
       <li><strong>Constraint collection.</strong> Fixed, per-component and
-        prescribed DOFs are collected, extended to order-2 edge DOFs, and
+        prescribed DOFs are collected
+        (${codeSource("web/src/lib/solve/amg.ts", 353, "amg.ts")}), extended to order-2 edge nodes
+        (${codeSource("crates/kofem-fem/src/static_solve.rs", 195, "edge extension")}) and
         checked for conflicts
-        (${source("engine/cpp/fem_bc_io.cpp", 76, "set_dirichlet")},
-        ${source("engine/cpp/fem_bc_io.cpp", 177, "edge extension")},
-        ${source("engine/cpp/bc_validation.h", 41, "conflict check")}).</li>
-      <li><strong>Elimination.</strong> Prescribed values are written into the
-        solution vector before
-        ${source("engine/cpp/solve_mfem.cpp", 297, "FormLinearSystem")}; MFEM keeps the diagonal
-        (${mfemSource("fem/bilinearform.cpp", 78, "default policy")}) and moves the known values to the
-        right-hand side
-        (${mfemSource("fem/bilinearform.cpp", 1103, "EliminateVDofsInRHS")}).</li>
+        (${codeSource("crates/kofem-fem/src/constraints.rs", 17, "conflict check")}).</li>
+      <li><strong>Elimination.</strong> Prescribed columns move to the
+        right-hand side and constrained rows become identity rows
+        (${codeSource("crates/kofem-fem/src/constraints.rs", 66, "apply_dirichlet")}).</li>
       <li><strong>Surface loads.</strong> One surface load per force or pressure
         group (${source("web/src/store/boundaryRebuild.ts", 238, "rebuildSurfaceLoads")});
-        the engine matches faces to boundary elements, warns or stops on
+        the solver matches faces to boundary faces, warns or stops on
         unmatched faces, divides a force by the matched area and integrates
         the traction
-        (${source("engine/cpp/fem_bc_io.cpp", 340, "apply_surface_loads")},
-        ${source("engine/cpp/fem_bc_io.cpp", 266, "traction coefficient")}).</li>
+        (${codeSource("web/src/lib/solve/amg.ts", 619, "addSurfaceLoads")},
+        ${codeSource("crates/kofem-fem/src/surface.rs", 229, "surface.rs")}).</li>
       <li><strong>Point loads and moments.</strong> Point picks share the group total; moments become nodal
         forces per face
         (${source("web/src/store/boundaryRebuild.ts", 161, "rebuildLoads")},
         ${source("web/src/store/momentLoad.ts", 20, "momentLoad.ts")}); nodal forces are added to
-        ${tex("\\mathbf{f}")} after assembly
-        (${source("engine/cpp/fem_bc_io.cpp", 425, "apply_point_loads")}).</li>
+        ${tex("\\mathbf{f}")} before the solve
+        (${codeSource("web/src/lib/solve/amg.ts", 380, "amg.ts")}).</li>
     </ul>
-    <p>Two public examples exercise these paths in the browser engine: the
+    <p>Two public examples exercise these paths in the browser: the
       <a href="/examples/axial-bar/">axial bar</a> checks a fixed face and a
       face force against ${tex("PL/(EA)")}, and the
       <a href="/examples/surface-pressure/">bar under end pressure</a> checks
       the pressure sign and its per-area scaling. Per-component supports,
       prescribed displacements, overlapping loads and conflicting constraints
-      are covered by KoFEM’s automated engine tests.</p>
+      are covered by KoFEM’s automated solver tests.</p>
 
     <h2 id="references">Sources and further reading</h2>
     <ol class="refs">
-      <li><a href="https://mfem.org/fem/">MFEM: Finite element methods</a>,
-        essential boundary conditions and linear forms.</li>
       <li>Hughes, <cite>The Finite Element Method: Linear Static and Dynamic
         Finite Element Analysis</cite> (2000), essential and natural boundary
         conditions, and prescribed displacements in the load vector.</li>

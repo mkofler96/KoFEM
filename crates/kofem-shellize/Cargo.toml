@@ -1,0 +1,13 @@
+[package]
+name = "kofem-shellize"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Solid-to-shell idealisation for KoFEM: thin-wall detection, mid-surface extraction and shell/solid coupling"
+
+[dependencies]
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

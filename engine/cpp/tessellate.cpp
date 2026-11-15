@@ -62,14 +62,15 @@ val tessellate_step(val bytes_val, const std::string& opts_json) {
     set_cached_shape(shape);
     const int n_bodies = count_solids(shape);
 
-    double diag = shape_bbox_diagonal(shape);
-    double linear_defl;
-    if (abs_defl_opt > 0.0)
-        linear_defl = abs_defl_opt;          // explicit absolute tolerance
-    else if (diag > 0.0)
-        linear_defl = diag * rel_defl;       // scale with model size (~0.1% of diagonal)
-    else
-        linear_defl = 0.1;                   // degenerate/empty bbox — fixed fallback
+    // An empty or zero-extent bounding box means the file holds no tessellable
+    // geometry; there is nothing to scale a tolerance to, so stop here.
+    const double diag = shape_bbox_diagonal(shape);
+    if (diag <= 0.0)
+        throw std::runtime_error(
+            "CAD file contains no geometry with a measurable extent (empty bounding box)");
+    const double linear_defl = abs_defl_opt > 0.0
+        ? abs_defl_opt          // explicit absolute tolerance
+        : diag * rel_defl;      // scale with model size (~0.1% of diagonal)
     printf("[occt] tessellate: bbox diag=%.3f mm -> linear_defl=%.4f mm\n", diag, linear_defl);
     fflush(stdout);
 

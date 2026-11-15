@@ -9,9 +9,8 @@ export const evidence = JSON.parse(
     "utf8",
   ),
 );
-export const revision = evidence.sourceRevision;
-export const source = (path, line, label) =>
-  `<a href="https://github.com/mkofler96/KoFEM/blob/${revision}/${path}#L${line}">${label}</a>`;
+// Code links point at the reviewed revision of the optimizer and the app.
+export { codeSource as source } from "../numerical-methods/sources.mjs";
 export const number = (value, digits = 4) =>
   Number(value.toPrecision(digits)).toString();
 export const table = (caption, headings, rows) =>

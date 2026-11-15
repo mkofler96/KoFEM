@@ -8,6 +8,7 @@ import { BcSection } from "./BcSection";
 import { LoadSection } from "./LoadSection";
 import { TieSection } from "./TieSection";
 import { CouplingSection } from "./CouplingSection";
+import { InterfaceSection } from "./InterfaceSection";
 import type { SectionFocus } from "./sectionFocus";
 import styles from "./Panel.module.css";
 
@@ -70,6 +71,9 @@ export function BoundaryConditionsPanel({ target }: { target: TreeTarget }) {
   const load = focusFor(target, "load");
   const tie = focusFor(target, "tie");
   const coupling = focusFor(target, "coupling");
+  // Interfaces come from the geometry, so they open with or without a mesh.
+  const interfaceId =
+    target.type === "item" && target.kind === "interface" ? target.id : null;
 
   return (
     <div className={styles.panel}>
@@ -80,7 +84,8 @@ export function BoundaryConditionsPanel({ target }: { target: TreeTarget }) {
             <button onClick={() => setError(null)}>×</button>
           </div>
         )}
-        {!meshOk && (
+        {interfaceId !== null && <InterfaceSection id={interfaceId} />}
+        {!meshOk && interfaceId === null && (
           <div className={styles.empty} data-testid="no-mesh-hint">
             Generate a mesh before adding boundary conditions.
           </div>

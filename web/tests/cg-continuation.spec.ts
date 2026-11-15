@@ -4,7 +4,7 @@
 import { test, expect } from "./coverage";
 import type { Page } from "@playwright/test";
 import { buildCantilever } from "./fixtures/cantilever";
-import type { SolvePayload } from "../src/workers/solverTypes";
+import type { SolveModel } from "../src/workers/solverTypes";
 
 type Fields = { displacements: number[]; vonMises: number[] };
 type Outcome = { fields: Fields } | { error: string };
@@ -25,14 +25,19 @@ type TestWindow = Window & {
 async function startSolve(
   page: Page,
   cap: number,
-  model: SolvePayload = buildCantilever(),
+  model: SolveModel = buildCantilever(),
+  solverMethod: "amg" | "gauss-seidel" = "gauss-seidel",
 ) {
   await page.evaluate(
-    ({ model, cap }) => {
+    ({ model, cap, solverMethod }) => {
       const scope = window as TestWindow;
       delete scope.__cgOutcome;
       scope.__kofem
-        .sendToWorker("solve", { ...model, cgIterationLimit: cap })
+        .sendToWorker("solve", {
+          ...model,
+          solverMethod,
+          cgIterationLimit: cap,
+        })
         .then(
           (result) => {
             scope.__cgOutcome = {
@@ -47,7 +52,7 @@ async function startSolve(
           },
         );
     },
-    { model, cap },
+    { model, cap, solverMethod },
   );
 }
 
@@ -77,22 +82,21 @@ function convergenceIterations(logs: string[], prefix: string): number {
 test("CG pauses, resumes repeatedly without changing results, and stops explicitly", async ({
   page,
 }, testInfo) => {
-  test.setTimeout(120_000);
   const logs: string[] = [];
   page.on("console", (message) => logs.push(message.text()));
   await page.goto("/app/");
   await page.waitForFunction(() => Boolean((window as TestWindow).__kofem));
   const baseline = await page.evaluate(async (model) => {
-    const result = await (window as TestWindow).__kofem.sendToWorker(
-      "solve",
-      model,
-    );
+    const result = await (window as TestWindow).__kofem.sendToWorker("solve", {
+      ...model,
+      solverMethod: "gauss-seidel",
+    });
     return {
       displacements: Array.from(result.displacements),
       vonMises: Array.from(result.vonMises),
     };
   }, buildCantilever());
-  const iterations = convergenceIterations(logs, "[mfem] CG converged:");
+  const iterations = convergenceIterations(logs, "Gauss–Seidel CG converged:");
   expect(iterations).toBeGreaterThan(10);
   const cap = iterations - 5;
   await startSolve(page, cap);
@@ -108,7 +112,7 @@ test("CG pauses, resumes repeatedly without changing results, and stops explicit
       dialog.getByRole("button", { name: "Continue" }),
     ).toBeDisabled();
   }
-  // A competing request must fail without entering the suspended WASM stack.
+  // A competing request must fail while the solve waits for the answer.
   const busy = await page.evaluate(() =>
     (window as TestWindow).__kofem.sendToWorker("init", {}).then(
       () => "unexpected success",
@@ -142,8 +146,8 @@ test("CG pauses, resumes repeatedly without changing results, and stops explicit
     error: expect.stringContaining("discarded"),
   });
 
-  // A malformed protocol reply must restore the WASM stack and report an
-  // error. Rejecting inside Asyncify's Promise would leave it paused forever.
+  // A malformed protocol reply must end the solve with an error rather than
+  // leave it paused forever.
   await page.evaluate(() => {
     const original = Worker.prototype.postMessage;
     let corruptNext = true;
@@ -163,7 +167,9 @@ test("CG pauses, resumes repeatedly without changing results, and stops explicit
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Continue" }).click();
   expect(await outcome(page)).toEqual({
-    error: expect.stringContaining("CG continuation failed"),
+    error: expect.stringContaining(
+      "Extra CG iterations must be an integer from 1 to 1000000",
+    ),
   });
 
   // Cancellation dismisses the prompt, rejects the pending solve, and frees
@@ -177,8 +183,8 @@ test("CG pauses, resumes repeatedly without changing results, and stops explicit
   await expect(dialog).toBeHidden();
 });
 
-function shellModel(coupled: boolean): SolvePayload {
-  const model: SolvePayload = {
+function shellModel(coupled: boolean): SolveModel {
+  const model: SolveModel = {
     nodes: [],
     elements: [],
     materials: buildCantilever().materials,
@@ -245,7 +251,6 @@ for (const path of ["shell", "coupled"] as const) {
   test(`${path} WASM solve resumes to identical fields and Stop rejects`, async ({
     page,
   }) => {
-    test.setTimeout(120_000);
     const logs: string[] = [];
     page.on("console", (message) => logs.push(message.text()));
     await page.goto("/app/");
@@ -254,7 +259,7 @@ for (const path of ["shell", "coupled"] as const) {
     const baseline = await page.evaluate(async (model) => {
       const result = await (window as TestWindow).__kofem.sendToWorker(
         "solve",
-        model,
+        { ...model, solverMethod: "gauss-seidel" },
       );
       return {
         displacements: Array.from(result.displacements),
@@ -276,3 +281,107 @@ for (const path of ["shell", "coupled"] as const) {
     });
   });
 }
+
+// A linear-tet cantilever (40×4×4 cubes, six tets each, ~3000 DOFs): large
+// enough that AMG builds a real hierarchy and needs more than a few iterations.
+function tetBeam(): SolveModel {
+  const nx = 40,
+    ny = 4,
+    nz = 4;
+  const id = (ix: number, iy: number, iz: number) =>
+    ix + (nx + 1) * (iy + (ny + 1) * iz);
+  const model: SolveModel = {
+    nodes: [],
+    elements: [],
+    materials: buildCantilever().materials,
+    properties: [{ id: 1, materialId: 1 }],
+    constraints: [],
+    loads: [],
+  };
+  for (let iz = 0; iz <= nz; iz++)
+    for (let iy = 0; iy <= ny; iy++)
+      for (let ix = 0; ix <= nx; ix++)
+        model.nodes.push({
+          id: id(ix, iy, iz),
+          x: ix / nx,
+          y: (0.1 * iy) / ny,
+          z: (0.1 * iz) / nz,
+        });
+  const kuhn = [
+    [0, 1, 3, 7],
+    [0, 3, 2, 7],
+    [0, 2, 6, 7],
+    [0, 6, 4, 7],
+    [0, 4, 5, 7],
+    [0, 5, 1, 7],
+  ];
+  for (let iz = 0; iz < nz; iz++)
+    for (let iy = 0; iy < ny; iy++)
+      for (let ix = 0; ix < nx; ix++) {
+        const corner = (bits: number) =>
+          id(ix + (bits & 1), iy + ((bits >> 1) & 1), iz + ((bits >> 2) & 1));
+        for (const tet of kuhn)
+          model.elements.push({
+            id: model.elements.length + 1,
+            type: "CTETRA",
+            nodeIds: tet.map(corner),
+            propertyId: 1,
+          });
+      }
+  for (const node of model.nodes) {
+    if (node.x === 0)
+      for (let dof = 0; dof < 3; dof++)
+        model.constraints.push({ nodeId: node.id, dof });
+    if (node.x === 1)
+      model.loads.push({ nodeId: node.id, dof: 1, value: -400 });
+  }
+  return model;
+}
+
+test("AMG solve logs progress, asks to continue, resumes to identical fields and Stop rejects", async ({
+  page,
+}) => {
+  const logs: string[] = [];
+  page.on("console", (message) => logs.push(message.text()));
+  await page.goto("/app/");
+  await page.waitForFunction(() => Boolean((window as TestWindow).__kofem));
+  const model = tetBeam();
+  const baseline = await page.evaluate(async (model) => {
+    const result = await (window as TestWindow).__kofem.sendToWorker("solve", {
+      ...model,
+      solverMethod: "amg",
+    });
+    return {
+      displacements: Array.from(result.displacements),
+      vonMises: Array.from(result.vonMises),
+    };
+  }, model);
+  const iterations = convergenceIterations(logs, "AMG CG converged:");
+  expect(iterations).toBeGreaterThan(10);
+  expect(
+    logs.some((line) =>
+      /\[amg\] CG iteration +10: relative residual/.test(line),
+    ),
+  ).toBe(true);
+
+  // A budget below the need: the same dialog as the MFEM path appears.
+  const cap = iterations - 5;
+  await startSolve(page, cap, model, "amg");
+  const dialog = page.getByRole("dialog", { name: "Keep solving?" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText(`${cap} iterations`);
+  await dialog.getByLabel("Extra iterations").fill("1000");
+  await dialog.getByRole("button", { name: "Continue" }).click();
+  expect(await outcome(page)).toEqual({ fields: baseline });
+  await expect(dialog).toBeHidden();
+
+  await startSolve(page, cap, model, "amg");
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Stop", exact: true }).click();
+  expect(await outcome(page)).toEqual({
+    error: expect.stringContaining(
+      "Solve stopped by user. The partial result was discarded.",
+    ),
+  });
+  await expect(dialog).toBeHidden();
+});

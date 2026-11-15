@@ -14,14 +14,16 @@ const AXES: SplitAxis[] = ["x", "y", "z"];
 const SPLIT_TIP =
   "Cut the geometry with a plane. Split faces to apply a support or a load to " +
   "part of a face — a bearing pad, a load patch: the cut becomes an edge and " +
-  "each piece is a face of its own, pickable in one click. Split bodies to cut " +
-  "a part into bodies that can take different materials; the pieces stay " +
-  "bonded at the cut.";
+  "each piece is a face of its own, pickable in one click. Split into regions " +
+  "to mesh or optimize part of a body differently: the body stays one piece, " +
+  "connected at the cut, and each region gets its own settings.";
 
 const MODE_HINT: Record<SplitMode, string> = {
   faces:
     "Click the faces to split in the viewport, then Split. The part stays one body.",
-  bodies: "Cuts this body into two bodies, bonded at the cut.",
+  bodies:
+    "Cuts this into two regions of the same body. They stay connected at the " +
+    "cut and start with these settings; change each region afterwards.",
 };
 
 // Plane position typed as text, like the mesh sizes: there is no range to clamp
@@ -194,7 +196,7 @@ export function SplitSection({ bodyId }: { bodyId: number }) {
                 aria-pressed={mode === m}
                 onClick={() => chooseMode(m)}
               >
-                {m === "faces" ? "Faces" : "Bodies"}
+                {m === "faces" ? "Faces" : "Regions"}
               </button>
             ))}
           </div>

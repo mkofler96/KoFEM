@@ -111,6 +111,10 @@ export default {
         stays at the target. The layout is the one in the literature: a
         chord along the top, a tie along the bottom and diagonals between
         them, as in Sigmund's 99-line and Andreassen's 88-line codes.</p>
+        <p>The design does not come fully to rest. Run past the tolerance,
+        nearly void elements beside the members rise and fall in bursts
+        about every 20 iterations, and between bursts the compliance returns
+        to the same value within 0.1&nbsp;%.</p>
         <p>The tetrahedral mesh leaves a ragged surface where the threshold
         cuts through elements. The layout is the result, not the final part:
         export it, smooth it and check it with a solve of the solid

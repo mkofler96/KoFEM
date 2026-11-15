@@ -10,10 +10,11 @@
 import type {
   Element,
   Property,
-  SolvePayload,
+  SolveModel,
+  SurfaceLoad,
 } from "../../workers/solverTypes.js";
 import { mixedCoupledMaterials } from "../coupledMaterials.js";
-import { bodyMembership, tieLimit, tieSides } from "../tie.js";
+import { bodyMembership, tieLimit, tieMethod, tieSides } from "../tie.js";
 import type { TieDefinition } from "../tie.js";
 import {
   buildExplicitCoupledModel,
@@ -30,6 +31,7 @@ import { buildVertexIndexer, type VertexIndexer } from "../solveMeshPacking.js";
 import {
   coupledFixedDofs,
   coupledLoads,
+  solidFacesOutward,
   type CoupledDirichlet,
 } from "./bcs.js";
 
@@ -115,6 +117,22 @@ export function coupledTies(
   });
 }
 
+// A coupled model (shells, or couplings) joins every tie connection by
+// distributing couplings, whatever its method: the constraint (MPC) tie is
+// solved by the all-solid path only (lib/solve/amg.ts). Say so for each
+// constraint tie, rather than change its formulation without a word.
+export function logCoupledTieMethods(
+  tieGroups: TieDefinition[] | undefined,
+  log: SolveLog,
+): void {
+  for (const tie of tieGroups ?? [])
+    if (tieMethod(tie) === "mpc")
+      log(
+        `Tie "${tie.name}": joined by distributing couplings, as every tie is in a model ` +
+          "with shells or couplings — the constraint (MPC) method applies to all-solid models",
+      );
+}
+
 // Say what each tie connection contributed to a coupled model, and refuse one
 // that contributed nothing. A declared connection that couples no node and shares
 // none leaves the assembly split: the solve still runs and returns a
@@ -172,14 +190,24 @@ export interface CoupledEngineInputs {
     triangles: Int32Array;
     thicknesses: Float64Array;
     attributes: Int32Array;
+    shell_attributes: Int32Array;
   };
   coupling: EngineCoupling;
   bcs: EngineCoupledBcs;
+  // The loads of `bcs` again, split for a solver that integrates surface loads
+  // itself (the Rust solve of quadratic elements): the point loads, with
+  // reference-point moments, as 6·pool+dof entries, and the surface loads with
+  // their faces as pool indices.
+  pointLoads: Pick<EngineCoupledBcs, "load_dofs" | "load_vals">;
+  poolSurfaceLoads: SurfaceLoad[];
   matJson: string;
+  // `mat.solid` of matJson: one material per 1-based `mesh.attributes` value.
+  solidMaterials: { young_modulus: number; poisson_ratio: number }[];
   model: ReturnType<typeof buildExplicitCoupledModel>;
   solidElements: Element[];
   shellElements: Element[];
   solidMaterialNames: string[];
+  shellMaterialNames: string[];
   couplingCount: number;
   declaredCouplings: number;
 }
@@ -196,7 +224,7 @@ export interface CoupledEngineInputs {
 // zero shell triangles. Nothing else about the path changes — the shell arrays
 // are simply empty.
 export function buildCoupledEngineInputs(
-  payload: SolvePayload,
+  payload: SolveModel,
   log: SolveLog,
 ): CoupledEngineInputs {
   const {
@@ -262,6 +290,7 @@ export function buildCoupledEngineInputs(
       ),
     },
   );
+  logCoupledTieMethods(payload.tieGroups, log);
   reportTieCouplings(model.tieReports, log);
 
   const poolOf = (nodeId: number): number => {
@@ -302,13 +331,31 @@ export function buildCoupledEngineInputs(
   );
   const nodalLoads = coupledLoads(
     loads,
-    surfaceLoads,
+    solidFacesOutward(surfaceLoads, elements, nodes, vid),
     poolOf,
     isRefPoint,
     nodes,
     vid,
   );
-  const { mat, solidAttributes, solidMaterialNames } = mixedCoupledMaterials(
+  const pointLoads = coupledLoads(
+    loads,
+    undefined,
+    poolOf,
+    isRefPoint,
+    nodes,
+    vid,
+  );
+  const poolSurfaceLoads = (surfaceLoads ?? []).map((surfaceLoad) => ({
+    ...surfaceLoad,
+    faces: surfaceLoad.faces.map((face) => face.map(poolOf)),
+  }));
+  const {
+    mat,
+    solidAttributes,
+    shellAttributes,
+    solidMaterialNames,
+    shellMaterialNames,
+  } = mixedCoupledMaterials(
     materials,
     properties,
     shellElements,
@@ -322,14 +369,22 @@ export function buildCoupledEngineInputs(
       triangles: Int32Array.from(model.triangles),
       thicknesses: Float64Array.from(model.thicknesses),
       attributes: Int32Array.from(solidAttributes),
+      shell_attributes: Int32Array.from(shellAttributes),
     },
     coupling: engineCoupling(coupling),
     bcs: engineCoupledBcs(dirichlet, nodalLoads),
+    pointLoads: {
+      load_dofs: Int32Array.from(pointLoads.load_dofs),
+      load_vals: Float64Array.from(pointLoads.load_vals),
+    },
+    poolSurfaceLoads,
     matJson: JSON.stringify(mat),
+    solidMaterials: mat.solid,
     model,
     solidElements,
     shellElements,
     solidMaterialNames,
+    shellMaterialNames,
     couplingCount: coupling.ref.length,
     declaredCouplings: couplings.length,
   };
@@ -342,7 +397,7 @@ export function buildCoupledEngineInputs(
 // shell triangles) — walk the original element list and pull from whichever
 // field the element type selects.
 export function mapMixedResult(
-  payload: Pick<SolvePayload, "nodes" | "elements">,
+  payload: Pick<SolveModel, "nodes" | "elements">,
   model: CoupledEngineInputs["model"],
   result: {
     displacements: Float64Array;

@@ -69,9 +69,34 @@ export function coupledMaterials(
   return { solid: engineMaterial(solid), shell: engineMaterial(shell) };
 }
 
-// Explicit mixed models select solid materials with 1-based per-tet attributes;
-// shells still require a single material. Pure-solid RBE2/RBE3 models have no
-// shell facets, so the engine's unused shell material comes from the solid.
+// The distinct materials a domain's elements use (in first-use order) plus one
+// 1-based index into them per element — the engine's attributes contract.
+function domainMaterials(
+  elements: Element[],
+  resolve: (propertyId: number, context: string) => Material,
+  context: string,
+) {
+  const order: Material[] = [];
+  const indexById = new Map<number, number>();
+  const attributes = elements.map((element) => {
+    const material = resolve(
+      element.propertyId,
+      `${context} element ${element.id}`,
+    );
+    let index = indexById.get(material.id);
+    if (index === undefined) {
+      index = order.push(material);
+      indexById.set(material.id, index);
+    }
+    return index;
+  });
+  return { order, attributes };
+}
+
+// Explicit mixed models select materials with 1-based attributes: one per tet
+// into `mat.solid` and one per shell facet into `mat.shell`, so each body keeps
+// its own material in both domains. Pure-solid RBE2/RBE3 models have no shell
+// facets, so the engine's unused shell material comes from the solid.
 export function mixedCoupledMaterials(
   materials: Material[],
   properties: Property[],
@@ -81,38 +106,19 @@ export function mixedCoupledMaterials(
   const resolve = materialResolver(materials, properties);
   if (solidElements.length === 0)
     throw new Error("mixed solve: the model has no solid element");
-  const solidOrder: Material[] = [];
-  const solidIndex = new Map<number, number>();
-  const solidAttributes = solidElements.map((element) => {
-    const material = resolve(
-      element.propertyId,
-      `mixed solve: solid element ${element.id}`,
-    );
-    let index = solidIndex.get(material.id);
-    if (index === undefined) {
-      index = solidOrder.push(material);
-      solidIndex.set(material.id, index);
-    }
-    return index;
-  });
-  const shell =
-    shellElements.length === 0
-      ? solidOrder[0]
-      : singleDomainMaterial(
-          shellElements.map((element) =>
-            resolve(
-              element.propertyId,
-              `mixed solve: shell element ${element.id}`,
-            ),
-          ),
-          "shell",
-        );
+  const solid = domainMaterials(solidElements, resolve, "mixed solve: solid");
+  const shell = domainMaterials(shellElements, resolve, "mixed solve: shell");
   return {
     mat: {
-      solid: solidOrder.map(engineMaterial),
-      shell: engineMaterial(shell),
+      solid: solid.order.map(engineMaterial),
+      shell:
+        shellElements.length === 0
+          ? [engineMaterial(solid.order[0])]
+          : shell.order.map(engineMaterial),
     },
-    solidAttributes,
-    solidMaterialNames: solidOrder.map((material) => material.name),
+    solidAttributes: solid.attributes,
+    shellAttributes: shell.attributes,
+    solidMaterialNames: solid.order.map((material) => material.name),
+    shellMaterialNames: shell.order.map((material) => material.name),
   };
 }

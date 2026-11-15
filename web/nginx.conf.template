@@ -71,11 +71,21 @@ server {
         try_files $uri $uri/ =404;
     }
 
-    # Static marketing landing fallback. Its /landing/ files keep their names
-    # across deploys, and each .json describes the layout of its .bin. Without
+    # Static marketing pages. Their /landing/ files keep their names across
+    # deploys, and each .json describes the layout of its .bin. Without
     # revalidation a browser can pair a cached .json with a newer .bin.
+    # An unknown address is a real 404, not the landing page with a 200:
+    # search engines index such "soft 404s" as duplicates of the homepage.
     location / {
         add_header Cache-Control "no-cache";
-        try_files $uri $uri/ /index.html;
+        try_files $uri $uri/ =404;
+    }
+
+    # Every 404 (unknown pages, unpublished theory slugs, /src/) gets the
+    # site's "Page not found" page. Requested directly, it is a 404 too.
+    error_page 404 /404.html;
+    location = /404.html {
+        internal;
+        add_header Cache-Control "no-cache" always;
     }
 }

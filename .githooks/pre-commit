@@ -30,11 +30,21 @@ if echo "$STAGED" | grep -q '^web/'; then
 fi
 
 # C++ engine lint — mirrors the DeepSource rules (see .clang-tidy) the same way
-# eslint mirrors them for web/. Anyone editing engine/ needs the WASM toolchain
-# to compile anyway, so requiring it here matches the web/node_modules check.
+# eslint mirrors them for web/. Uses the local Emscripten SDK when present;
+# machines that build the engine through Docker run the same check in the
+# kofem-dependencies image instead.
 if echo "$STAGED" | grep -q '^engine/'; then
-    echo "▶ clang-tidy…"
-    bash scripts/clang-tidy.sh
+    if [ -d "${EMSDK:-/emsdk}/upstream/emscripten/cache/sysroot" ]; then
+        echo "▶ clang-tidy…"
+        bash scripts/clang-tidy.sh
+    elif command -v docker >/dev/null && docker info >/dev/null 2>&1; then
+        echo "▶ clang-tidy (in Docker — no local Emscripten SDK)…"
+        bash scripts/docker-clang-tidy.sh
+    else
+        echo "✗ commit touches engine/ but clang-tidy cannot run: no Emscripten SDK at ${EMSDK:-/emsdk} and no running Docker daemon." >&2
+        echo "  Start Docker (runs scripts/docker-clang-tidy.sh), or install the local toolchain: bash scripts/fetch-wasm-deps.sh and clang-tidy >= 20." >&2
+        exit 1
+    fi
 fi
 
 echo "✓ pre-commit checks passed"

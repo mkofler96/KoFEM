@@ -1,0 +1,10 @@
+# The Rust toolchain for local builds and CI. A new stable release can add
+# clippy lints, and CI runs clippy with -D warnings, so an unpinned toolchain
+# broke CI on the day Rust 1.100 came out. rustup installs this toolchain, with
+# the components and target below, for every cargo command in the repository,
+# including in CI. Bump it deliberately, fixing any new lints in the same PR.
+[toolchain]
+channel = "1.100.0"
+components = ["clippy", "rustfmt"]
+targets = ["wasm32-unknown-unknown"]
+profile = "minimal"

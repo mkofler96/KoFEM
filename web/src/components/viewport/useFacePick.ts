@@ -6,12 +6,14 @@ import { useModelStore } from "../../store/modelStore";
 import {
   pickFaceNodeIds,
   pickEdgeNodeIds,
+  pickEdgeSeed,
   pickPointNodeId,
   nearestReferencePoint,
   toggleFaceSelection,
   SELECTION_NOUN,
 } from "../../lib/facePick";
 import type { BoundaryMeshTopo, Vec3 } from "../../lib/facePick";
+import { rimEdgeKey, type ShellRim } from "../../lib/shellRim";
 
 // Picking handler for the pickable boundary surfaces (undeformed solid and
 // deformed result surface). Returns undefined outside pick mode so the meshes
@@ -22,10 +24,14 @@ import type { BoundaryMeshTopo, Vec3 } from "../../lib/facePick";
 // otherwise a BFS flood-fill with normal-angle thresholds (parametric box mesh
 // or .inp import). Edge mode selects the boundary polyline near the click — the
 // only way to grab the rim of a flat shell, whose whole sheet is one region.
+// Where the rim came from a CAD face the shell idealisation collapsed (a
+// plate's side face, lib/shellRim), it selects that face's whole rim and
+// remembers the face, so the selection survives a re-mesh like a face pick.
 // Point mode selects the single nearest node of the clicked facet.
 export function useFacePick(
   boundaryMeshTopo: BoundaryMeshTopo | null,
   getPos: (id: number) => Vec3,
+  shellRim: ShellRim,
 ): ((e: ThreeEvent<MouseEvent>) => void) | undefined {
   const pickMode = useModelStore((s) => s.pickMode);
   const pickGeometry = useModelStore((s) => s.pickGeometry);
@@ -43,9 +49,19 @@ export function useFacePick(
     if (startIdx >= boundaryMeshTopo.triangles.length) return;
 
     const clickPoint: Vec3 = [e.point.x, e.point.y, e.point.z];
+    // The collapsed CAD face behind the rim edge an edge pick starts from.
+    let rimFace: number | undefined;
+    if (pickGeometry === "edge") {
+      const seed = pickEdgeSeed(clickPoint, startIdx, boundaryMeshTopo, getPos);
+      if (seed) rimFace = shellRim.faceOfEdge.get(rimEdgeKey(...seed));
+    }
+    const rimNodes =
+      rimFace !== undefined ? shellRim.nodesByFace.get(rimFace) : undefined;
     const picked =
       pickGeometry === "edge"
-        ? pickEdgeNodeIds(clickPoint, startIdx, boundaryMeshTopo, getPos)
+        ? rimNodes
+          ? new Set(rimNodes)
+          : pickEdgeNodeIds(clickPoint, startIdx, boundaryMeshTopo, getPos)
         : pickGeometry === "point"
           ? pickPointNodeId(clickPoint, startIdx, boundaryMeshTopo, getPos)
           : pickFaceNodeIds(startIdx, boundaryMeshTopo);
@@ -102,12 +118,15 @@ export function useFacePick(
       ? [...pendingFaces, selectedFace]
       : pendingFaces;
     // A face pick on a triangle with a CAD face behind it selected that whole
-    // face (pickFaceNodeIds' CAD face ID mode): remember which, so the entry
+    // face (pickFaceNodeIds' CAD face ID mode), and an edge pick on a
+    // collapsed face's rim that face's whole rim: remember which, so the entry
     // can be re-resolved on a new mesh.
     const cadFaceId =
       pickGeometry === "face"
         ? boundaryMeshTopo.faceIds?.[startIdx]
-        : undefined;
+        : pickGeometry === "edge" && rimNodes
+          ? rimFace
+          : undefined;
     const next = toggleFaceSelection(
       current,
       {

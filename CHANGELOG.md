@@ -11,6 +11,83 @@ Versions 0.1.0 to 0.3.0 were tagged after the fact, on the commits that complete
 each theme. kofem.org was deployed continuously from `main` throughout, so their
 dates are when the work landed, not when anything was shipped.
 
+## [0.7.0] - 2026-11-15
+
+Every solve and topology optimization now runs in Rust, with multigrid for
+solid models. Also new: constraint ties between bodies, regions, and per-body
+shell materials.
+
+### Added
+
+- Solid models solve with algebraic multigrid (AMG) by default. On the models
+  measured, this was 1.4 to 40 times faster than the previous solver. Gauss–Seidel stays
+  selectable in the Solve panel for models AMG refuses as not fully
+  constrained, such as a hinged mechanism.
+- **Constraint (MPC) ties** join bodies that touch without a shared face,
+  such as a pin in a hook eye, without moving any node. Three new validation
+  examples cover them: a patch test, a tied thick-walled cylinder and a tied
+  quadratic cantilever.
+- **Regions:** splitting a body makes regions that stay connected. Each
+  region has its own material, element type, maximum element size and
+  optimization role (_Design_, _Keep solid_ or _Keep empty_). A region can be
+  promoted to a separate body.
+- Pure-shell models whose bodies use different materials now solve.
+- Shell idealisation turns I-beams into the web and both flanges, welded at
+  the T-junctions. Before, only the web was kept.
+- A warning before solving when linear elements are too coarse for a thin
+  wall, including tubes and bends.
+- Edges being picked or edited are highlighted in the viewport.
+- Nodal loads are shown on shell edges, points and shell facets.
+- Body-to-body interfaces are listed as bonded.
+- Every example on `/examples/` links a STEP file and can be rebuilt in the
+  app with **Open in KoFEM**.
+- Problem reports can be emailed with a ZIP that reopens the model.
+
+### Changed
+
+- **All solving runs in Rust.** Solid, shell and mixed shell/solid solves and
+  topology optimization (SIMP and level set) run in KoFEM's Rust module.
+  MFEM and the C++ solvers are removed; the C++ engine now only imports CAD
+  and meshes. Every published example matches the previous solver within
+  1e-3, and most within 1e-6. Analysis files saved with v0.6.0 re-solve to
+  their saved results within 3.4e-4 in displacement. Saved results do not
+  update automatically, so re-solve models whose results you rely on.
+- Large models that did not converge before can now solve. For example, a
+  70,000-node crane hook converges in 146 AMG iterations, where the previous
+  solver stopped at a residual of 0.048 after 5,000 iterations.
+- A topology optimization whose design keeps oscillating can stop at a
+  different iteration than in v0.6.0. The MBB beam example is now built with
+  the app's optimizer, with an iteration cap of 200.
+- Models a solver cannot handle correctly are refused before the solve,
+  with the reason: ties or element order 2 on a path that cannot apply them,
+  and a Shell body that cannot be idealised. Previously some of these were
+  solved as solid, or with the tie or element order silently ignored. Change
+  the model as the message says, then re-mesh and re-solve.
+- The Theory Guide describes the Rust code the app runs and links to it.
+- Analytics, when you have opted in, record why a CAD import or mesh failed,
+  without model data or file names.
+
+### Fixed
+
+- STEP files that hold only a tessellated mesh, with no CAD solid, are
+  refused with an explanation instead of crashing the engine.
+- Viewport clicks no longer miss right after the camera or the scene
+  changes.
+- Tie welds that would break the mesh are refused.
+- Empty geometry and shell meshes with mismatched thicknesses are rejected
+  with an error.
+- Unknown URLs return a real 404 page.
+
+### Known limitations
+
+- Thin-walled models at element order 2 can need thousands of AMG
+  iterations and take minutes.
+- The thin-wall warning relies on the wall detection and can miss walls it
+  does not recognise.
+- Constraint ties on quadratic elements do not use a mortar formulation yet.
+- The level-set method can fail to converge on some designs, such as a
+  tetrahedral cantilever. Check the history before using the result.
+
 ## [0.6.0] - 2026-11-07
 
 Meshing diagnostics and repairs, continuation for slow solves, and a public

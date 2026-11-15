@@ -9,6 +9,7 @@
 
 import type {
   Constraint,
+  Element,
   Load,
   Node,
   SurfaceLoad,
@@ -207,6 +208,62 @@ export function coupledLoads(
     const node = nodes[vid(nodeId, "surface load face")];
     return [node.x, node.y, node.z];
   });
+}
+
+// Surface loads with every face of a solid (CTETRA) element wound outward, for
+// the coupled path, whose nodal-load packing (distributeSurfaceLoad) reads a
+// pressure's direction from the face winding. A store face carries the winding
+// of its tet's local face list, which points inward on some faces, so a
+// pressure there would pull instead of push. The solid solvers find the
+// outward side themselves; a shell facet (CTRIA3) has no outward side and
+// keeps its winding, as do faces of no tet (edges, stale selections).
+export function solidFacesOutward(
+  surfaceLoads: SurfaceLoad[] | undefined,
+  elements: Element[],
+  nodes: Node[],
+  vid: VertexIndexer,
+): SurfaceLoad[] | undefined {
+  if (!surfaceLoads || surfaceLoads.length === 0) return surfaceLoads;
+  const key = (ids: number[]) => [...ids].sort((a, b) => a - b).join(",");
+  // The fourth node of the tet owning each tet face (a boundary face has one).
+  const opposite = new Map<string, number>();
+  for (const element of elements) {
+    if (element.type !== "CTETRA") continue;
+    element.nodeIds.forEach((nodeId, corner) =>
+      opposite.set(
+        key(element.nodeIds.filter((_, other) => other !== corner)),
+        nodeId,
+      ),
+    );
+  }
+  // A shell facet lying on a solid face keeps the shell's meaning.
+  for (const element of elements)
+    if (element.type === "CTRIA3") opposite.delete(key(element.nodeIds));
+  const at = (nodeId: number): [number, number, number] => {
+    const node = nodes[vid(nodeId, "surface load face")];
+    return [node.x, node.y, node.z];
+  };
+  const outward = (face: number[]): number[] => {
+    if (face.length !== 3) return face;
+    const apex = opposite.get(key(face));
+    if (apex === undefined) return face;
+    // The face's winding normal (b − a) × (c − a) against the direction to
+    // the tet's fourth corner: positive means the winding points inward.
+    const [a, b, c] = face.map(at);
+    const top = at(apex);
+    const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    const ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+    const ad = [top[0] - a[0], top[1] - a[1], top[2] - a[2]];
+    const towardApex =
+      (ab[1] * ac[2] - ab[2] * ac[1]) * ad[0] +
+      (ab[2] * ac[0] - ab[0] * ac[2]) * ad[1] +
+      (ab[0] * ac[1] - ab[1] * ac[0]) * ad[2];
+    return towardApex > 0 ? [face[0], face[2], face[1]] : face;
+  };
+  return surfaceLoads.map((surfaceLoad) => ({
+    ...surfaceLoad,
+    faces: surfaceLoad.faces.map(outward),
+  }));
 }
 
 // Fold coupled-form (6·vertex+dof) essential BCs into solve_shell's form: a

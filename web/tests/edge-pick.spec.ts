@@ -3,7 +3,8 @@
 
 import { test, expect } from "./coverage";
 import type { Page } from "@playwright/test";
-import { addBoundary } from "./fixtures/tree";
+import { addBoundary, openTree } from "./fixtures/tree";
+import { clickViewportAt, drawnSegments } from "./fixtures/viewport";
 
 // End-to-end coverage for edge picking (#386): a flat shell sheet is one
 // face-pick region, so grabbing its rim (an edge load or a supported-edge BC)
@@ -78,7 +79,11 @@ async function edgePickOnViewport(page: Page): Promise<void> {
     [0.65, 0.6],
   ];
   for (const [fx, fy] of spots) {
-    await page.mouse.click(box.x + box.width * fx, box.y + box.height * fy);
+    await clickViewportAt(
+      page,
+      box.x + box.width * fx,
+      box.y + box.height * fy,
+    );
     const picked = await page
       .evaluate(
         () =>
@@ -92,7 +97,6 @@ async function edgePickOnViewport(page: Page): Promise<void> {
       )
       .catch(() => false);
     if (picked) return;
-    await page.waitForTimeout(150);
   }
   throw new Error(
     "no boundary edge was picked after trying every viewport spot",
@@ -102,17 +106,13 @@ async function edgePickOnViewport(page: Page): Promise<void> {
 test("edge picking a shell rim creates an edge BC and an edge load", async ({
   page,
 }) => {
-  test.setTimeout(90_000);
-
   await page.goto("/app/?example=plate-with-hole-shell");
   await expect(page.locator("nav")).toBeVisible();
   await page.waitForFunction(() =>
     Boolean((window as unknown as { __kofem?: unknown }).__kofem),
   );
   await expect
-    .poll(async () => (await readPickState(page)).nodeCount, {
-      timeout: 15_000,
-    })
+    .poll(async () => (await readPickState(page)).nodeCount)
     .toBeGreaterThan(0);
   const totalNodes = (await readPickState(page)).nodeCount;
 
@@ -163,18 +163,65 @@ test("edge picking a shell rim creates an edge BC and an edge load", async ({
   expect(loadFace.label.startsWith("Edge")).toBe(true);
 });
 
-test("a coupling can grip a picked shell edge", async ({ page }) => {
-  test.setTimeout(90_000);
+// A picked edge spans no triangle, so the face overlay drew nothing for it and
+// only the node count said anything was picked (KOF-356). The viewport draws
+// the rim polyline of what the user is working on — the edge being picked, or
+// the support open in the tree — and no other support's or load's edges.
+test("only the edge being picked or edited is drawn as a highlighted line", async ({
+  page,
+}) => {
+  await page.goto("/app/?example=plate-with-hole-shell");
+  await expect(page.locator("nav")).toBeVisible();
+  await expect
+    .poll(async () => (await readPickState(page)).nodeCount)
+    .toBeGreaterThan(0);
+  const shippedBcIds = await page.evaluate(() =>
+    (
+      window as unknown as {
+        __kofemStore: { getState(): { bcGroups: { id: number }[] } };
+      }
+    ).__kofemStore
+      .getState()
+      .bcGroups.map((g) => g.id),
+  );
+  expect(shippedBcIds.length).toBeGreaterThan(1);
 
+  // Opening one of the example's edge supports draws its edge alone.
+  await page.getByTestId(`tree-bc-${shippedBcIds[0]}`).click();
+  const openedSupport = await drawnSegments(page, "bc-edge-highlight");
+  expect(openedSupport).toBeGreaterThan(0);
+  expect(await drawnSegments(page, "load-edge-highlight")).toBe(0);
+
+  // A new support draws nothing until an edge is picked.
+  await addBoundary(page, "bc");
+  await page.getByTestId("pick-geometry-edge").click();
+  expect(await drawnSegments(page, "pick-edge-highlight")).toBe(0);
+  expect(await drawnSegments(page, "bc-edge-highlight")).toBe(0);
+
+  await edgePickOnViewport(page);
+  const picked = (await readPickState(page)).selected;
+  if (!picked) throw new Error("edge pick did not set a selection");
+  // An open polyline of n nodes has n - 1 segments; a closed loop has n.
+  const drawn = await drawnSegments(page, "pick-edge-highlight");
+  expect(drawn).toBeGreaterThanOrEqual(picked.nodeIds.length - 1);
+  expect(drawn).toBeLessThanOrEqual(picked.nodeIds.length);
+  expect(await drawnSegments(page, "bc-edge-highlight")).toBe(0);
+
+  // Applied, the new support is the one open: its edge, and only its edge.
+  await page.getByRole("button", { name: "Apply BC" }).click();
+  expect(await drawnSegments(page, "pick-edge-highlight")).toBe(0);
+  expect(await drawnSegments(page, "bc-edge-highlight")).toBe(drawn);
+  expect(await drawnSegments(page, "load-edge-highlight")).toBe(0);
+});
+
+test("a coupling can grip a picked shell edge", async ({ page }) => {
   await page.goto("/app/?example=plate-with-hole-shell");
   await expect(page.locator("nav")).toBeVisible();
   await page.waitForFunction(() =>
     Boolean((window as unknown as { __kofem?: unknown }).__kofem),
   );
   await expect
-    .poll(async () => (await readPickState(page)).nodeCount, {
-      timeout: 15_000,
-    })
+    .poll(async () => (await readPickState(page)).nodeCount)
     .toBeGreaterThan(0);
   const totalNodes = (await readPickState(page)).nodeCount;
 
@@ -201,4 +248,67 @@ test("a coupling can grip a picked shell edge", async ({ page }) => {
   expect(gripped.label.startsWith("Edge")).toBe(true);
   expect(gripped.count).toBeGreaterThan(2);
   expect(gripped.count).toBeLessThan(totalNodes * 0.5);
+});
+
+// The plate's side faces collapse to the shell's edges when the body is meshed
+// as a shell. An Edge pick there remembers the CAD face (lib/shellRim), so the
+// example's supports and load follow those faces onto a new mesh, as face
+// picks do on a solid.
+test("edges on a shell's collapsed side faces survive a re-mesh @pipeline", async ({
+  page,
+}) => {
+  type GroupState = {
+    faces: { geometry?: string; cadFaceId?: number; nodeIds: number[] }[];
+  };
+  const readGroups = () =>
+    page.evaluate(() => {
+      const state = (
+        window as unknown as {
+          __kofemStore: {
+            getState(): {
+              nodes: unknown[];
+              bcGroups: GroupState[];
+              loadGroups: GroupState[];
+            };
+          };
+        }
+      ).__kofemStore.getState();
+      return {
+        nodes: state.nodes.length,
+        faces: [...state.bcGroups, ...state.loadGroups].map((g) =>
+          g.faces.map((f) => ({
+            geometry: f.geometry,
+            cadFaceId: f.cadFaceId,
+            count: f.nodeIds.length,
+          })),
+        ),
+      };
+    });
+
+  await page.goto("/app/?example=plate-with-hole-shell");
+  await expect(page.locator("nav")).toBeVisible();
+  await expect.poll(async () => (await readGroups()).nodes).toBeGreaterThan(0);
+  const shipped = await readGroups();
+  expect(shipped.faces.flat().every((f) => f.geometry === "edge")).toBe(true);
+
+  await openTree(page, "mesh");
+  await page.getByTestId("max-element-size").fill("2");
+  await page.getByTestId("min-element-size").fill("0.2");
+  await page.getByTestId("mesh-generate").click();
+  await expect
+    .poll(async () => (await readGroups()).nodes)
+    .toBeLessThan(shipped.nodes);
+  const coarser = await readGroups();
+  // The same CAD faces, each re-resolved to the coarser mesh's rim.
+  const faceIds = (model: typeof shipped) =>
+    model.faces.map((g) => g.map((f) => [f.geometry, f.cadFaceId]));
+  expect(faceIds(coarser)).toEqual(faceIds(shipped));
+  const before = shipped.faces.flat();
+  coarser.faces.flat().forEach((f, i) => {
+    expect(f.count).toBeGreaterThan(2);
+    expect(f.count).toBeLessThan(before[i].count);
+  });
+  await expect(page.getByTestId("remesh-notice")).toContainText(
+    "Kept 3 support/load/tie groups on their CAD faces.",
+  );
 });

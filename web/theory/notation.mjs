@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { equation, tex } from "./operators/math.mjs";
+import { codeSource as code } from "./numerical-methods/sources.mjs";
 
 const revision = "141be83ea768df22cd7471409fb0f389d6de502f";
 const source = (path, label) =>
@@ -423,7 +424,7 @@ export default {
       ${tex("ρ = 7.85 × 10^{-9}\\text{ tonne}/\\text{mm}^3")}.</p>
     <p>The static solid, shell and coupled payloads pass numerical coordinates,
       stiffnesses, section sizes and loads without automatic unit conversion.
-      The engine does not attach units to those numbers. The current static
+      The solver does not attach units to those numbers. The current static
       payloads do not use stored mass density to generate gravity or inertia.
       Check imported geometry scale and enter compatible values; the fixed
       result labels do not prove that inputs were consistent.</p>
@@ -453,27 +454,27 @@ export default {
     <p>Textbook symbols describe mathematical roles; local variable names need
       their surrounding code. In particular:</p>
     <ul>
-      <li><code>vertices</code> stores xyz-interleaved positions. MFEM’s
-        <code>x</code> GridFunction stores displacement coefficients, not
+      <li><code>vertices</code> stores positions as ${tex("[x, y, z]")} per vertex.
+        <code>displacements</code> stores the displacement coefficients, not
         spatial coordinates. The guide calls those coefficients ${tex("\\mathbf{d}")}.</li>
-      <li><code>A_mat</code>, <code>X</code> and <code>B</code> in the solid
-        linear solve play the roles of stiffness, unknowns and right-hand side.
-        That <code>B</code> is not the guide’s strain–displacement matrix.</li>
+      <li><code>matrix</code>, <code>solution</code> and <code>rhs</code> in the solid
+        linear solve play the roles of stiffness, unknowns and right-hand side.</li>
       <li><code>young</code>/<code>young_modulus</code> and
         <code>poisson</code>/<code>poisson_ratio</code> mean ${tex("E")} and ${tex("ν")}.
-        <code>lam</code> and <code>mu</code> are the Lamé parameters.</li>
-      <li><code>eps</code> is tensor strain in solid recovery; its local
-        <code>s</code> array is full stress, although ${tex("s")} in the equation above
-        denotes deviatoric stress. Shell code also uses local <code>w</code>
-        for normal displacement; the guide reserves ${tex("\\mathbf{w}")} for a test field.</li>
+        <code>lambda</code> and <code>mu</code> are the Lamé parameters.</li>
+      <li>In solid stress recovery, <code>gradient</code> is the displacement
+        gradient ${tex("∇\\mathbf{u}")}, <code>strain</code> one entry of the tensor
+        strain and <code>deviator</code> one entry of the deviatoric stress
+        ${tex("s")}. Shell code names the normal displacement <code>w</code>;
+        the guide reserves ${tex("\\mathbf{w}")} for a test field.</li>
       <li><code>displacements</code> returns ${tex("[u_x, u_y, u_z]")} per vertex/node;
         the UI calls these <code>Ux</code>, <code>Uy</code>, <code>Uz</code>.
         Solid order-2 coefficient vectors also contain higher-order DOFs;
         returned corner samples do not contain the full vector. Shell/coupled
         internals group ${tex("[u_x, u_y, u_z, θ_x, θ_y, θ_z]")} at each node;
-        the displacement result returns translations. MFEM element coefficient
-        arrays use component-major order (all ${tex("x")}, then all ${tex("y")}, then all ${tex("z")}),
-        rather than the basis grouping used in the interpolation above.</li>
+        the displacement result returns translations. Solid coefficient
+        vectors and element matrices group the three components of each node,
+        index ${tex("3a + i")}, as in the interpolation above.</li>
       <li><code>von_mises</code> is a scalar per element, not a six-component
         stress array. The standard solid solve does not return a Voigt stress
         vector. <code>totalForce</code> can hold N, N·mm or MPa according to
@@ -483,6 +484,7 @@ export default {
     <h2 id="references">Sources and further reading</h2>
     <p>Product conventions reviewed on 2 November 2026 at
       <a href="https://github.com/mkofler96/KoFEM/tree/${revision}"><code>${revision}</code></a>.
+      Solver sources link the Rust module at a later revision.
       These sources establish storage, unit and sign conventions; they do not
       establish the accuracy of every model or stress concentration.</p>
     <ol class="refs">
@@ -495,14 +497,13 @@ export default {
         ${source("web/src/lib/solve/shell.ts", "shell")},
         ${source("web/src/lib/solve/coupled.ts", "coupled")} and
         ${source("web/src/lib/coupledMaterials.ts", "coupled materials")}.</li>
-      <li>${source("engine/cpp/solve_mfem.cpp", "Solid strain, stress and results")},
-        ${source("engine/cpp/fem_bc_io.cpp", "solid pressure and traction")},
-        ${source("engine/cpp/shell_element.cpp", "shell strain and local axes")},
+      <li>${code("crates/kofem-fem/src/stress.rs", 59, "Solid strain, stress and results")},
+        ${code("crates/kofem-fem/src/surface.rs", 4, "solid pressure and traction")},
+        ${code("crates/kofem-fem/src/shell/element.rs", 26, "shell strain and local axes")},
         ${source("web/src/lib/solveLoads.ts", "shell pressure orientation")},
-        ${source("engine/cpp/solve_shell.cpp", "shell outputs")},
-        ${source("engine/cpp/solve_coupled.cpp", "coupled outputs")},
-        ${source("engine/cpp/tet_element.cpp", "coupled solid stress")} and
-        ${source("engine/cpp/topology_stress.cpp", "six-component stress order")}.</li>
+        ${code("crates/kofem-fem/src/shell/stress.rs", 20, "shell outputs")},
+        ${code("crates/kofem-wasm/src/mixed.rs", 228, "coupled outputs")} and
+        ${code("crates/kofem-fem/src/topology/stress.rs", 29, "six-component stress order")}.</li>
       <li>Bathe, <cite>Finite Element Procedures</cite> (1996), continuum mechanics
         and displacement-based finite element formulations.</li>
       <li><a href="/theory/foundations/consistent-units/#references">Consistent-unit references</a>,

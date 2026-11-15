@@ -10,7 +10,7 @@ import type {
 import type {
   TopOptHistoryEntry,
   TopOptSettings,
-} from "../wasm/pkg/kofem_wasm.js";
+} from "../lib/solve/contracts.js";
 import { fmt, loadsSummary } from "../lib/modelDisplay";
 import { resultUnit } from "../lib/resultField";
 import {
@@ -26,9 +26,12 @@ import {
   track,
 } from "../lib/analytics";
 import {
+  isCadBody,
   suppressionMismatch,
   suppressionMismatchMessage,
 } from "../store/geometrySlice";
+import { passiveElements, roleOf } from "../lib/regions";
+import { topOptTieRefusal } from "../lib/solve/refusals";
 
 export type FieldErrors = Partial<Record<TopOptNumericField, string>>;
 
@@ -173,8 +176,9 @@ export function useTopOpt() {
   const loads = useModelStore((s) => s.loads);
   const surfaceLoads = useModelStore((s) => s.surfaceLoads);
   const topOpt = useModelStore((s) => s.topOpt);
-  // Ties/couplings join solid bodies and idealised shells in the coupled TO path
-  // (KOF-237), exactly as the static solve consumes them.
+  // Couplings join solid bodies and idealised shells in the coupled TO path
+  // (KOF-237), exactly as the static solve consumes them. No optimizer applies
+  // a tie yet, so a tied model is refused (KOF-353).
   const tieGroups = useModelStore((s) => s.tieGroups);
   const couplingGroups = useModelStore((s) => s.couplingGroups);
   const isOptimizing = useModelStore((s) => s.isOptimizing);
@@ -194,6 +198,7 @@ export function useTopOpt() {
   const meshSuppressedIds = useModelStore((s) => s.meshSuppressedIds);
   const suppressionStale = suppressionMismatchMessage(
     suppressionMismatch(properties, meshSuppressedIds, nodes.length > 0),
+    properties,
   );
   const meshOk = nodes.length > 0 && suppressionStale === null;
   // Every body must resolve to an existing material — same rule as the solve.
@@ -206,8 +211,8 @@ export function useTopOpt() {
   // unlike the static solve, which a non-zero prescribed displacement drives.
   const loadOk = loads.length > 0 || surfaceLoads.length > 0;
 
-  // TO optimizes ONE design material per sub-domain: the engine reads a single
-  // (E, ν) for the solid tets and a single (E, ν) for the shell facets
+  // TO optimizes ONE design material per sub-domain, as the engine's entries
+  // read a single (E, ν) for the solid tets and one for the shell facets
   // (topology_simp.cpp / topology_shell_entry.cpp), so each sub-domain must
   // resolve to one material — otherwise the per-body assignments would be
   // silently discarded. Count the solid and shell domains separately, the way
@@ -233,9 +238,9 @@ export function useTopOpt() {
   // eslint-disable-next-line kofem/no-silent-fallback -- a constraint without prescribedValue is a homogeneous fixed BC, i.e. u = 0 by definition
   const hasPrescribed = constraints.some((c) => (c.prescribedValue ?? 0) !== 0);
 
-  // The stress constraint is implemented for the plain solid SIMP entry only.
+  // The stress constraint is implemented for the all-solid SIMP path only.
   // Shells, and any coupling (which routes even an all-solid model to the
-  // coupled optimizer), reach entries that reject it (topology_shell_entry.cpp),
+  // coupled optimizer), reach an optimizer that rejects it (topOptRust.ts),
   // so block the run in pre-flight rather than let it fail in the worker. The
   // level-set panel hides the constraint and does not send it.
   const stressOnShell =
@@ -254,7 +259,17 @@ export function useTopOpt() {
   const levelSetCouplingBlock = levelSet && couplingGroups.length > 0;
   const levelSetObjectiveBlock =
     levelSet && topOpt.objective !== "min_compliance";
+  // Regions fixed as Keep solid / Keep empty (KOF-257) are left out of the
+  // design; with none left to shape there is nothing to optimize.
+  const noDesignRegion = properties
+    .filter((p) => isCadBody(p) && !p.suppressed)
+    .every((p) => roleOf(p) !== "design");
+  // No optimizer applies a tie: the worker refuses a tied model (routeTopOpt)
+  // with the same words, so say so before the run.
+  const tieRefusal = topOptTieRefusal(tieGroups);
   const allOk =
+    tieRefusal === null &&
+    !noDesignRegion &&
     !levelSetShellBlock &&
     !levelSetCouplingBlock &&
     !levelSetObjectiveBlock &&
@@ -299,7 +314,7 @@ export function useTopOpt() {
       surfaceLoads,
       tieGroups,
       couplings: couplingGroups,
-      settings,
+      settings: { ...settings, passive: passiveElements(elements, properties) },
     })
       .then(({ density, levelSet, history }) => {
         setDensityResult({ density, levelSet, history });
@@ -430,6 +445,12 @@ export function useTopOpt() {
         `Topology optimization uses one material per design domain — the solid domain spans ${solidMaterialIds.size} and the shell domain ${shellMaterialIds.size}; assign a single material to each`,
       ]);
   }
+  if (tieRefusal !== null) checks.push([false, tieRefusal]);
+  if (noDesignRegion)
+    checks.push([
+      false,
+      "Every region is set to Keep solid or Keep empty — set at least one to Design so the optimizer has material to shape",
+    ]);
   if (levelSetShellBlock)
     checks.push([
       false,

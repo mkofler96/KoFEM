@@ -41,6 +41,8 @@ export type TreeGroup =
 
 export type TreeItemKind =
   | "body"
+  | "region"
+  | "interface"
   | "material"
   | "mesh"
   | "bc"
@@ -192,6 +194,9 @@ export interface ViewSlice {
   // control and not drawn at all.
   highlightBodyId: number | null;
   hiddenBodyIds: number[];
+  // The body-to-body interface whose row the pointer rests on (transient): its
+  // shared faces are drawn on top of the geometry view, like a hovered body.
+  highlightInterfaceId: number | null;
 
   // Density cutoff for the topology-optimization result view (KOF-233): a
   // viewport-side visibility filter, transient (not persisted), hiding every
@@ -210,7 +215,10 @@ export interface ViewSlice {
   setSidebarWidth(v: number): void;
   selectTreeNode(selection: TreeSelection): void;
   setHighlightBodyId(id: number | null): void;
+  setHighlightInterfaceId(id: number | null): void;
   toggleBodyVisibility(id: number): void;
+  // Hide or show several CAD solids at once — the regions of one body.
+  setBodiesHidden(ids: number[], hidden: boolean): void;
   setAllBodiesVisible(): void;
   setDensityThreshold(v: number): void;
   setDensitySmooth(v: boolean): void;
@@ -228,6 +236,7 @@ export const createViewSlice: SliceCreator<ViewSlice> = (set) => ({
   treeSelection: addSelection("geometry"),
   highlightBodyId: null,
   hiddenBodyIds: [],
+  highlightInterfaceId: null,
   densityThreshold: DEFAULT_DENSITY_THRESHOLD,
   densitySmooth: true,
 
@@ -284,11 +293,20 @@ export const createViewSlice: SliceCreator<ViewSlice> = (set) => ({
     set((s) => {
       s.highlightBodyId = id;
     }),
+  setHighlightInterfaceId: (id) =>
+    set((s) => {
+      s.highlightInterfaceId = id;
+    }),
   toggleBodyVisibility: (id) =>
     set((s) => {
       s.hiddenBodyIds = s.hiddenBodyIds.includes(id)
         ? s.hiddenBodyIds.filter((b) => b !== id)
         : [...s.hiddenBodyIds, id];
+    }),
+  setBodiesHidden: (ids, hidden) =>
+    set((s) => {
+      const rest = s.hiddenBodyIds.filter((b) => !ids.includes(b));
+      s.hiddenBodyIds = hidden ? [...rest, ...ids] : rest;
     }),
   setAllBodiesVisible: () =>
     set((s) => {

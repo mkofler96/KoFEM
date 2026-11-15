@@ -4,18 +4,27 @@
 import tseslint from "typescript-eslint";
 import noSilentFallback from "./eslint-rules/no-silent-fallback.js";
 import minIdentifierLength from "./eslint-rules/min-identifier-length.js";
+import noTestTimeouts from "./eslint-rules/no-test-timeouts.js";
+import viewportThroughFixture from "./eslint-rules/viewport-through-fixture.js";
 
 const kofem = {
   rules: {
     "no-silent-fallback": noSilentFallback,
     "min-identifier-length": minIdentifierLength,
+    "no-test-timeouts": noTestTimeouts,
+    "viewport-through-fixture": viewportThroughFixture,
   },
 };
 
 export default [
   {
     // Generated Emscripten bundle and third-party output are not linted.
-    ignores: ["src/wasm/pkg/**", "dist/**", "node_modules/**"],
+    ignores: [
+      "src/wasm/pkg/**",
+      "src/wasm/fem/**",
+      "dist/**",
+      "node_modules/**",
+    ],
   },
   {
     files: ["src/**/*.{ts,tsx}"],
@@ -49,6 +58,23 @@ export default [
       "no-void": "error",
       "@typescript-eslint/no-non-null-assertion": "error",
     },
+  },
+  {
+    // What keeps the browser specs deterministic: time budgets live in
+    // playwright.config.ts only, and the 3D viewport is clicked through
+    // tests/fixtures/viewport.ts only, which waits for the settled view.
+    files: ["tests/**/*.spec.ts", "tests/fixtures/**/*.ts"],
+    languageOptions: { parser: tseslint.parser },
+    plugins: { kofem },
+    rules: {
+      "kofem/no-test-timeouts": "error",
+      "kofem/viewport-through-fixture": "error",
+    },
+  },
+  {
+    // The one file that may click the viewport: it waits first.
+    files: ["tests/fixtures/viewport.ts"],
+    rules: { "kofem/viewport-through-fixture": "off" },
   },
   {
     // Mirrors DeepSource JS-C1003 (issue #341). Covers tests/ as well —

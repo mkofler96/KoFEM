@@ -17,7 +17,7 @@
 #   engine/                      C++ sources, headers and CMakeLists
 #   scripts/build-wasm.sh        compiler/link flags and the copy step
 #   scripts/fetch-wasm-deps.sh   pins the dependency image tag, and therefore the
-#                                Emscripten/OCCT/Netgen/MFEM baked into the binary
+#                                Emscripten/OCCT/Netgen baked into the binary
 #
 # Deliberately over-inclusive: a comment-only edit to any of these yields a new ID
 # and one extra build. Under-inclusion is the dangerous direction — it would map

@@ -77,7 +77,7 @@ export default {
       and stress. The result below is one of the
       <a href="/examples/">public examples</a>, a cantilever beam clamped at one
       end and loaded at the other. Drag to rotate it.</p>
-    ${resultViewer("cantilever", {
+    ${resultViewer("cantilever-beam", {
       caption:
         "Displacement magnitude of the cantilever example, solved by KoFEM, on the deformed shape. The colour bar gives the range in mm.",
     })}

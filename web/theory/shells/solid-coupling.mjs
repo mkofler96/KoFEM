@@ -3,6 +3,7 @@
 
 import { equation, tex } from "../operators/math.mjs";
 import { evidence, number, percentError, source, table } from "./evidence.mjs";
+import { codeSource } from "../numerical-methods/sources.mjs";
 import { figure } from "../figures/index.mjs";
 
 const comparisons = evidence.transition.filter((row) => row.collar_mm === 6);
@@ -55,12 +56,13 @@ export default {
       Neither choice supplies the detailed stresses of a real bolt, weld or bearing.</p>
 
     <h2 id="reduction">Motion constraints also transfer loads</h2>
-    <p>The coupled solve uses six slots per pool node. Solid stiffness occupies
-      the three translational slots; shell stiffness occupies the shell node’s
-      translations and rotations. Unused rotations on solid-only nodes are
-      fixed, except at a coupling reference that needs them. MFEM assembles
-      linear tetrahedral solid stiffness, while the
-      <a href="/theory/shells/formulation/#stiffness">CST/DKT core</a> adds shells.</p>
+    <p>The coupled solve numbers six slots per pool node. Solid stiffness
+      occupies the three translational slots; shell stiffness occupies the
+      shell node’s translations and rotations. Rotations exist only on shell
+      nodes and coupling reference points; a solid-only node has none. The
+      app assembles the linear tetrahedral solid stiffness and the
+      <a href="/theory/shells/formulation/#stiffness">CST/DKT shells</a> in its
+      Rust solver module and solves the reduced system there.</p>
     <p>A constraint expresses dependent coefficients as linear combinations of
       independent coefficients. Write the full vector as
       ${tex("\\mathbf{d}=\\mathbf{T}\\mathbf{q}")}, where ${tex("\\mathbf{q}")}
@@ -83,7 +85,7 @@ export default {
       volume once. The placement is a current algorithmic choice, not a theorem
       that three thicknesses suffice for every geometry.</p>
     ${figure("solid-shell-transition", "Cross section, not to scale. The wall stays solid for three thicknesses above the block; above the cut it is a shell mid-surface. Rigid links make the solid section nodes S follow the shell edge node A: its translation plus its rotation crossed with the offset r.")}
-    <p>The <strong>physical-footprint</strong> constraint (engine kind 3)
+    <p>The <strong>physical-footprint</strong> constraint (coupling kind 3)
       makes each solid section node dependent on the two shell edge nodes.
       Let ${tex("N_1=1-s")} and ${tex("N_2=s")} be the linear edge weights
       at projected coordinate ${tex("0≤s≤1")}. Let ${tex("x_a")},
@@ -187,7 +189,7 @@ export default {
       a colour discontinuity across the transition as a stress continuity test.</p>
 
     <h2 id="verification">Check the planar wall-on-block case</h2>
-    <p>The existing native study uses a 60 × 40 × 6 mm block with a centred
+    <p>The study uses a 60 × 40 × 6 mm block with a centred
       60 mm long, 30 mm high, 2 mm thick wall. The block bottom is fixed in
       all translations. All material has ${tex("E=210000\\text{ MPa}")} and
       ${tex("ν=0.3")}. A total ${tex("P=100\\text{ N}")} acts along the wall
@@ -239,13 +241,15 @@ export default {
       ${tex("10^{-6}")}. The
       <a href="/theory/shells.json">full record</a> retains all four placements,
       peaks, gauge means and balance errors, rather than only the favorable rows.</p>
-    <p>The numerical table comes from the native production-core study with
-      a conforming planar footprint. Its separate asymmetric-patch checks concern
-      kinematic coupling rigid motions and six force/moment loads. The shell
-      suite also checks footprint rigid/affine motion and clamped-cantilever
-      moment transfer. The app fixture separately checks clipping, volume,
-      nonmatching edge interpolation and WASM solve behavior. These checks
-      exercise different layers; passing one does not substitute for the others.</p>
+    <p>The numerical table was recorded natively with KoFEM’s former C++
+      shell/coupling core, before the coupled solve moved to the Rust module
+      as a step-for-step port, with a conforming planar footprint. Its
+      separate asymmetric-patch checks concern kinematic coupling rigid
+      motions and six force/moment loads. The Rust tests check footprint
+      rigid/affine motion and clamped-cantilever moment transfer. The app
+      fixture separately checks clipping, volume, nonmatching edge
+      interpolation and WebAssembly solve behavior. These checks exercise
+      different layers; passing one does not substitute for the others.</p>
 
     <h2 id="limits">What this evidence establishes</h2>
     <p>The retained planar section reproduces the tested global motion and
@@ -259,8 +263,8 @@ export default {
       establish arbitrary three-dimensional junction stresses, curved cuts,
       general distributing coupling, out-of-plane joint response, or accurate
       extraction of every branched thin-walled section. The
-      <a href="/theory/shells/formulation/#supported-models">T-junction wall-extraction limitation</a>
-      is separate from retaining a solid root in a successfully detected wall.</p>
+      <a href="/theory/shells/formulation/#supported-models">wall-extraction limits</a>
+      are separate from retaining a solid root in a successfully detected wall.</p>
     <p>Choose a quantity and fixed sampling region before comparing models.
       Check reactions, motion, stress away from the artificial cut and sensitivity
       to both mesh and transition placement. Keep the region solid when those
@@ -270,21 +274,26 @@ export default {
 
     <h2 id="references">Implementation and references</h2>
     <ol class="refs">
-      <li>${source("web/src/lib/shellize/transition.ts", 23, "three-thickness retained section")},
-        ${source("web/src/lib/shellize/footprint.ts", 78, "physical footprint detection")},
-        ${source("engine/cpp/coupling_constraints.cpp", 43, "footprint equations")},
-        ${source("engine/cpp/shell_core.cpp", 92, "constraint reduction")} and
-        ${source("engine/cpp/solve_coupled.cpp", 1, "MFEM/WASM coupled assembler")}.</li>
-      <li>${source("engine/cpp/coupling_constraints.cpp", 149, "relaxed seam MPC and distributing equations")},
-        ${source("web/src/lib/shellize/ties.ts", 157, "coupled surface ties")},
+      <li>${source("crates/kofem-shellize/src/transition.rs", 79, "three-thickness retained section")},
+        ${source("crates/kofem-shellize/src/footprint.rs", 185, "physical footprint detection")},
+        ${codeSource("crates/kofem-fem/src/coupling.rs", 384, "footprint equations")},
+        ${codeSource("crates/kofem-fem/src/coupling.rs", 540, "chain resolution")} and
+        ${codeSource("crates/kofem-fem/src/coupled_static.rs", 851, "constraint reduction")}
+        in the Rust mixed solve, driven by
+        ${codeSource("web/src/lib/solve/coupledRust.ts", 1, "coupledRust.ts")}.</li>
+      <li>${codeSource("crates/kofem-fem/src/coupling.rs", 292, "relaxed seam MPC")},
+        ${codeSource("crates/kofem-fem/src/coupling.rs", 226, "distributing equations")},
+        ${source("crates/kofem-shellize/src/ties.rs", 153, "coupled surface ties")},
         ${source("web/src/lib/solve/solid.ts", 101, "solid tie welding")},
         ${source("web/src/lib/solve/coupled.ts", 39, "app relaxation setting")},
         ${source("web/src/lib/coupledMaterials.ts", 75, "mixed-model materials")},
         ${source("web/src/lib/solve/bcs.ts", 114, "coupled support rules")} and
         ${source("web/src/lib/solveLoads.ts", 156, "coupled loads")}.</li>
-      <li>${source("engine/tests/shell_solid_footprint_study.cpp", 1, "planar transition study and its limits")},
-        ${source("engine/tests/shell_validation.cpp", 555, "footprint motion checks")} and
-        ${source("web/tests/test_shell_footprint.mjs", 1, "app-pipeline and WASM fixture")}.</li>
+      <li>${codeSource("crates/kofem-fem/tests/mixed.rs", 442, "footprint motion checks")},
+        ${codeSource("crates/kofem-fem/tests/mixed.rs", 334, "moment transfer checks")} and
+        ${source("web/tests/integration/shell-footprint.test.mjs", 1, "app-pipeline and WASM fixture")}.
+        The planar transition study ran on the former C++ core and has no
+        Rust counterpart yet.</li>
       <li>Lu, Zhang and Yang (2023), <cite>A Relaxed MPC Method for Non-rigid Shell to Solid Coupling</cite>, Journal of Physics: Conference Series 2528, 012064. KoFEM’s centroid-weighted nonconforming seam is an implementation adaptation; it is not the paper’s coincident-node construction.</li>
     </ol>`,
 };

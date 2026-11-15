@@ -2,10 +2,12 @@
 
 **Status:** authoring plan
 
-**Solver reviewed:** `9274be29cfdd82ece266e63ac487358b2f551b57` (2026-11-02)
+**Solver reviewed:** `ae27e683fa8cb55c16103fdd398fc27a452daa76` (2026-11-14)
 
-**Production implementation:** `engine/cpp/` (C++ compiled to WASM), not the
-deferred Rust stubs in `crates/`
+**Production implementation:** the Rust finite-element module
+(`crates/kofem-fem`, `crates/kofem-shellize`, browser bindings in
+`crates/kofem-wasm`) compiled to WASM, driven from `web/src/lib/solve/`.
+`engine/cpp/` keeps geometry and meshing only.
 
 This map fixes the initial reading order and URLs. A page should answer its one
 main question; supporting topics belong on linked pages. Published URLs must
@@ -85,16 +87,16 @@ examples. Full-precision evidence lives in `web/public/theory/axial-bar.json`.
 The inventory below records what was supported at the reviewed revision. Each
 article must review its narrower claims again and update its own revision.
 
-| Formulation or behavior            | Production source                                                                                 | Scope at reviewed revision                                                                                                                                                                                    |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 3D isotropic linear-elastic solids | `engine/cpp/solve_mfem.cpp`, `engine/cpp/fem_mesh_io.cpp`, `engine/cpp/fem_bc_io.cpp`             | MFEM H1 displacement formulation on tetrahedra/hexahedra; order 1 or 2; per-body material attributes; fixed and prescribed translational DOFs; nodal and boundary loads; CG with Gauss-Seidel preconditioning |
-| Solid result recovery              | `engine/cpp/solve_mfem.cpp`                                                                       | Vertex translations and element-centre von Mises stress                                                                                                                                                       |
-| Flat-facet Kirchhoff shells        | `engine/cpp/solve_shell.cpp`, `engine/cpp/shell_core.cpp`, `engine/cpp/shell_element.cpp`         | Triangular surface discretisation, six DOFs per node internally, membrane and bending response, scalar or per-facet thickness, force/moment loads, prescribed DOFs, surface von Mises stress                  |
-| Mixed solid–shell analysis         | `engine/cpp/solve_coupled.cpp`, `engine/cpp/coupling_constraints.cpp`                             | MFEM solid stiffness plus shell assembly and distributing, relaxed, kinematic, or shell-footprint coupling constraints                                                                                        |
-| Shell idealisation pipeline        | `web/src/lib/shellize/`                                                                           | Browser-side mid-surface and mixed-discretisation construction feeding shell/coupled solves                                                                                                                   |
-| SIMP topology optimization         | `engine/cpp/topology_simp.cpp`, `engine/cpp/topology_optimize.cpp`, `engine/cpp/topology_mma.cpp` | Density-based optimization with filtering/MMA and optional stress handling; documented under `/theory/optimization/`                                                                                          |
-| Level-set and shell topology paths | `engine/cpp/topology_levelset.cpp`, `engine/cpp/topology_shell.cpp`                               | Separate later-guide topics; do not infer their equations from the SIMP page                                                                                                                                  |
-| Public examples and verification   | `examples/validation/`, `examples/gallery/`, `web/examples/`                                      | Real WASM solves compared with analytical or published references; generated static pages and app fixtures                                                                                                    |
+| Formulation or behavior            | Production source                                                                                                     | Scope at reviewed revision                                                                                                                                                                                                                 |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 3D isotropic linear-elastic solids | `crates/kofem-fem/src/{mesh,element,assembly,surface,constraints,static_solve,cg,amg}.rs`, `web/src/lib/solve/amg.ts` | H1 displacement formulation on tetrahedra/hexahedra (element integrals ported from MFEM); order 1 or 2; per-body materials; fixed and prescribed translational DOFs; nodal and boundary loads; CG with AMG or Gauss–Seidel preconditioning |
+| Solid result recovery              | `crates/kofem-fem/src/stress.rs`                                                                                      | Vertex translations and element-centre von Mises stress                                                                                                                                                                                    |
+| Flat-facet Kirchhoff shells        | `crates/kofem-fem/src/shell/`, `web/src/lib/solve/shellRust.ts`                                                       | Triangular surface discretisation, six DOFs per node internally, membrane and bending response, scalar or per-facet thickness, force/moment loads, prescribed DOFs, surface von Mises stress                                               |
+| Mixed solid–shell analysis         | `crates/kofem-fem/src/{coupling,coupled_static}.rs`, `web/src/lib/solve/coupledRust.ts`                               | Solid stiffness plus shell assembly and distributing, relaxed, kinematic, or shell-footprint coupling constraints                                                                                                                          |
+| Shell idealisation pipeline        | `crates/kofem-shellize/`, `web/src/lib/shellize.ts`                                                                   | Browser-side mid-surface and mixed-discretisation construction feeding shell/coupled solves                                                                                                                                                |
+| SIMP topology optimization         | `crates/kofem-fem/src/topology/`, `web/src/lib/solve/topOptRust.ts`                                                   | Density-based optimization with filtering/MMA and optional stress handling; documented under `/theory/optimization/`                                                                                                                       |
+| Level-set and shell topology paths | `crates/kofem-fem/src/topology/{level_set,mixed}.rs`                                                                  | Separate later-guide topics; do not infer their equations from the SIMP page                                                                                                                                                               |
+| Public examples and verification   | `examples/validation/`, `examples/gallery/`, `web/examples/`                                                          | Real WASM solves compared with analytical or published references; generated static pages and app fixtures                                                                                                                                 |
 
 Geometry display tessellation is not an FEM discretisation. The guide must call
 tetrahedral/hexahedral volume and triangular shell data the FEM discretisation,
@@ -116,7 +118,7 @@ The app's canonical coherent system at the reviewed revision is:
 The solver performs no dimensional conversion: coordinates, section sizes,
 material values, loads, and displayed results must already be coherent. CAD
 and mesh formats do not make inconsistent user inputs coherent. Articles must
-state units beside every dimensional input and must not describe the engine as
+state units beside every dimensional input and must not describe the solver as
 unit-aware. Density is currently stored for future gravity/inertial behavior
 and must not be presented as active in static equilibrium.
 

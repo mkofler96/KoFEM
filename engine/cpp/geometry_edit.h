@@ -29,8 +29,9 @@
 // solids themselves; the pieces are bonded again on reload, like any touching
 // bodies of an assembly (imprint_touching_solids).
 //
-// Returns { bytes: Uint8Array (STEP AP214 of the edited shape), faceCount,
-// bodyCount }. Every requested face or body must actually be split — a plane
+// Returns { bytes: Uint8Array (STEP AP214 of the edited shape), bodySources }.
+// bodySources[j] is the old id of new body j+1: a body cut in two appears twice,
+// so the app can carry its settings to both pieces. Every requested face or body must actually be split — a plane
 // that misses it, runs along its boundary or lies parallel to it is an error
 // naming the face or body, never a silent no-op.
 //

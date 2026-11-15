@@ -6,20 +6,21 @@
 #
 # Stage 1: Build the static frontend bundle.
 #
-# Base image is Node with the Bun binary copied in. Bun drives the
-# frozen-lockfile install, but `vite` must run under Node: the bun-only image
-# has no Node, so vite would run on Bun's runtime, which is incompatible with
-# vite-plugin-top-level-await (TypeError: virtualModule.require is not a
-# function). With Node present, the `#!/usr/bin/env node` shebang on the vite
-# binary resolves to Node and the build succeeds. This is an isolated,
+# Base image is Bun alone: Bun installs the frozen lockfile and runs `tsc` and
+# `vite build` on its own runtime (there is no Node in the image, so `bun run`
+# answers the `#!/usr/bin/env node` shebangs itself). This is an isolated,
 # production-mode build (no source maps), independent of whatever the CI test
 # step left in web/dist.
 #
 # Base images are pinned by digest (the tag is kept for readability): a
 # rebuilt tag upstream must not change what ships without a reviewable diff.
 # Dependabot proposes the bumps (.github/dependabot.yml).
-FROM node:26-bookworm-slim@sha256:bc0a2afd3b74ce12222fc8bab99271e66257f021078f5f4a5d687a77d280c1d9 AS builder
-COPY --from=oven/bun:1.3.6@sha256:f20d9cf365ab35529384f1717687c739c92e6f39157a35a95ef06f4049a10e4a /usr/local/bin/bun /usr/local/bin/bun
+#
+# The oven/bun tag below is the repository's one Bun pin: CI reads its version
+# from this line (.github/actions/setup-web) and `just setup` compares the
+# local Bun with it, so the image, CI and a developer's machine cannot drift
+# apart unnoticed.
+FROM oven/bun:1.4.4@sha256:1d22548f177f4ff38e0c15baa3c2c46c6c2060ba2d1bc573bb4720b407548f1d AS builder
 
 WORKDIR /app
 
@@ -30,14 +31,16 @@ COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
 
 # Copy the rest of the source. src/wasm/pkg must already hold the compiled engine
-# — it is a build output published as a GitHub Release rather than committed
-# (KOF-186), so populate it before building the image:
+# (a build output published as a GitHub Release rather than committed, KOF-186)
+# and src/wasm/fem the Rust finite-element module, so populate both first:
 #
-#   bash scripts/fetch-wasm-engine.sh && docker build --build-context gallery=./examples/gallery/site ./web
+#   bash scripts/fetch-wasm-engine.sh && bash scripts/build-fem-wasm.sh &&
+#     docker build --build-context gallery=./examples/gallery/site ./web
 #
-# The `bun run build` below would normally fetch it via its package.json pre-hook,
-# but the build context is web/ alone and the repo's scripts/ is not in it; the
-# hook detects that and leaves whatever was copied in place. No Emscripten needed.
+# The `bun run build` below would normally prepare them via its package.json
+# pre-hook, but the build context is web/ alone and the repo's scripts/ is not in
+# it; the hook detects that and uses what was copied in (and fails if the Rust
+# module is missing). No Emscripten or Rust needed inside the image.
 COPY . .
 # vite.config.ts reads the gallery from ../examples/gallery/site.
 COPY --from=gallery . /examples/gallery/site

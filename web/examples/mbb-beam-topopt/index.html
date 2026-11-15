@@ -46,7 +46,7 @@
               "https://kofem.org/examples/mbb-beam-topopt/mbb-beam-topopt-diagram.png",
               "https://kofem.org/examples/mbb-beam-topopt/mbb-beam-topopt-compliance-history.png"
             ],
-            "dateModified": "2026-11-01",
+            "dateModified": "2026-11-14",
             "isPartOf": {
               "@type": "CollectionPage",
               "url": "https://kofem.org/examples/"
@@ -810,14 +810,15 @@
           <ul>
             <li><a href="/examples/axial-bar/">Axial bar in tension</a></li>
             <li><a href="/examples/surface-pressure/">Bar under end pressure</a></li>
-            <li><a href="/examples/cantilever/">Cantilever beam, linear hexahedra</a></li>
-            <li><a href="/examples/cantilever-p2/">Cantilever beam, quadratic hexahedra</a></li>
-            <li><a href="/examples/cantilever-beam/">Cantilever beam from a STEP file</a></li>
+            <li><a href="/examples/cantilever-beam/">Cantilever beam under tip load</a></li>
             <li><a href="/examples/beam-torsion/">Square beam under torsion</a></li>
             <li><a href="/examples/shaft-torsion/">Hollow shaft under torsion</a></li>
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
-            <li><a href="/examples/plate-with-hole-shell/">Plate with a hole, shell elements</a></li>
+            <li><a href="/examples/plate-with-hole-shell/">Plate with a hole (shells)</a></li>
             <li><a href="/examples/cooks-membrane/">Cook's membrane</a></li>
+            <li><a href="/examples/tie-patch-test/">Tie patch test</a></li>
+            <li><a href="/examples/tie-lame-cylinder/">Tied thick-walled cylinder</a></li>
+            <li><a href="/examples/tie-cantilever/">Tied cantilever beam</a></li>
           </ul>
         </details>
         <details class="docs-group" data-section="examples" open>
@@ -839,14 +840,15 @@
           <ul>
             <li><a href="/examples/axial-bar/">Axial bar in tension</a></li>
             <li><a href="/examples/surface-pressure/">Bar under end pressure</a></li>
-            <li><a href="/examples/cantilever/">Cantilever beam, linear hexahedra</a></li>
-            <li><a href="/examples/cantilever-p2/">Cantilever beam, quadratic hexahedra</a></li>
-            <li><a href="/examples/cantilever-beam/">Cantilever beam from a STEP file</a></li>
+            <li><a href="/examples/cantilever-beam/">Cantilever beam under tip load</a></li>
             <li><a href="/examples/beam-torsion/">Square beam under torsion</a></li>
             <li><a href="/examples/shaft-torsion/">Hollow shaft under torsion</a></li>
             <li><a href="/examples/plate-with-hole/">Plate with a hole</a></li>
-            <li><a href="/examples/plate-with-hole-shell/">Plate with a hole, shell elements</a></li>
+            <li><a href="/examples/plate-with-hole-shell/">Plate with a hole (shells)</a></li>
             <li><a href="/examples/cooks-membrane/">Cook's membrane</a></li>
+            <li><a href="/examples/tie-patch-test/">Tie patch test</a></li>
+            <li><a href="/examples/tie-lame-cylinder/">Tied thick-walled cylinder</a></li>
+            <li><a href="/examples/tie-cantilever/">Tied cantilever beam</a></li>
           </ul>
         </details>
         <details class="docs-group" data-section="examples" open>
@@ -871,8 +873,8 @@
       
       <figure class="result">
         <img src="/examples/mbb-beam-topopt.png" width="1200" height="384" alt="MBB beam, topology optimization: element density on the undeformed shape" />
-        <div class="colorbar"><span>0.500</span><span class="bar" aria-hidden="true"></span><span>1.00</span></div>
-        <figcaption>Element density, undeformed shape. Drawn from the analysis file that Open in KoFEM loads.</figcaption>
+        <div class="colorbar"><span>0.502</span><span class="bar" aria-hidden="true"></span><span>1.00</span></div>
+        <figcaption>Element density, undeformed shape. The result of running the model that Open in KoFEM loads.</figcaption>
       </figure>
       
       <p class="actions"><a class="button" href="/app/?example=mbb-beam-topopt" data-testid="open-in-app">Open in KoFEM</a><span class="meta">Opens the model in the app, ready to optimize.</span></p>
@@ -928,7 +930,7 @@
           <tr><th scope="row">Mesh</th><td>Netgen, 5 mm maximum element size: 7,887 linear 4-node tetrahedra (P1)</td></tr>
           <tr><th scope="row">Unknowns</th><td>2,225 nodes, 6,675 degrees of freedom</td></tr>
           <tr><th scope="row">Material</th><td>Linear elastic, isotropic</td></tr>
-          <tr><th scope="row">Solver</th><td>KoFEM engine (MFEM), the WebAssembly build the app runs: engine-5ceb743373dd</td></tr>
+          <tr><th scope="row">Solver</th><td>The app's topology optimizer (SIMP with MMA, KoFEM's Rust module, build fem-b2ad04c7c44b); geometry and mesh by the KoFEM engine (OCCT, Netgen), the WebAssembly build the app runs: engine-3397ae8ea1eb</td></tr>
         </table>
       </div>
         <p>The block is a STEP file, cut with the app's split tool so that
@@ -936,16 +938,16 @@
         meshes it at 5&nbsp;mm. The whole beam is
         modelled rather than the symmetric half. The optimizer stops when no
         density changes by more than 0.01 between
-        iterations, or after 100. The figure shows
+        iterations, or after 200. The figure shows
         the elements with <math><mi>ρ</mi><mo>≥</mo><mn>0.5</mn></math>.</p>
 
       <h2 id="results">Results</h2>
       <div class="table-wrap">
         <table class="spec">
-          <tr><th scope="row">Iterations</th><td>88, converged (largest density change 6.1221&thinsp;×&thinsp;10<sup>−3</sup>)</td></tr>
-          <tr><th scope="row">Compliance</th><td>192.55&nbsp;N·mm at the start, <strong>47.499&nbsp;N·mm</strong> at the end</td></tr>
+          <tr><th scope="row">Iterations</th><td>104, converged (largest density change 9.6389&thinsp;×&thinsp;10<sup>−3</sup>)</td></tr>
+          <tr><th scope="row">Compliance</th><td>192.55&nbsp;N·mm at the start, <strong>47.450&nbsp;N·mm</strong> at the end</td></tr>
           <tr><th scope="row">Volume</th><td>0.500 of the block (target 0.5)</td></tr>
-          <tr><th scope="row">Elements</th><td>1,806 solid (ρ &gt; 0.9), 1,913 void (ρ &lt; 0.1)</td></tr>
+          <tr><th scope="row">Elements</th><td>1,814 solid (ρ &gt; 0.9), 1,925 void (ρ &lt; 0.1)</td></tr>
         </table>
       </div>
       <figure class="chart">
@@ -959,6 +961,10 @@
         stays at the target. The layout is the one in the literature: a
         chord along the top, a tie along the bottom and diagonals between
         them, as in Sigmund's 99-line and Andreassen's 88-line codes.</p>
+        <p>The design does not come fully to rest. Run past the tolerance,
+        nearly void elements beside the members rise and fall in bursts
+        about every 20 iterations, and between bursts the compliance returns
+        to the same value within 0.1&nbsp;%.</p>
         <p>The tetrahedral mesh leaves a ragged surface where the threshold
         cuts through elements. The layout is the result, not the final part:
         export it, smooth it and check it with a solve of the solid
@@ -966,10 +972,20 @@
 
       <h2 id="reproduce">Reproduce</h2>
       <p>In the app: <a href="/app/?example=mbb-beam-topopt" data-testid="reproduce-open">open the model</a>, with its supports, loads and settings.</p>
-      <p>From a clone (Node.js 20+, bash, curl), this rebuilds the model and its figure:</p>
-      <pre><code>git clone https://github.com/mkofler96/KoFEM.git &amp;&amp; cd KoFEM
-bash scripts/fetch-wasm-engine.sh
-cd web &amp;&amp; bun install &amp;&amp; bun run examples:generate-mbb-topopt</code></pre>
+      <p>Or build it yourself, as this page's number was built:</p>
+      <ol class="steps">
+        <li>Import <a href="/examples/mbb-beam-topopt.step" download>mbb-beam-topopt.step</a>.</li>
+        <li>Split the face through (150, 0, 5) with the plane x = 5 mm.</li>
+        <li>Split the face through (150, 0, 5) with the plane x = 295 mm.</li>
+        <li>Split the face through (100, 50, 5) with the plane x = 145 mm.</li>
+        <li>Split the face through (200, 50, 5) with the plane x = 155 mm.</li>
+        <li>Mesh with a 5 mm maximum element size, linear elements.</li>
+        <li>Material Steel: E = 210000 MPa, ν = 0.3.</li>
+        <li>Support “Pin”: Ux, Uy, Uz = 0 on the face through (2.5, 0, 5).</li>
+        <li>Support “Roller”: Uy = 0 on the face through (297.5, 0, 5).</li>
+        <li>Load “Central load”: force (0, −1000, 0) N on the face through (150, 50, 5).</li>
+        <li>Add an optimization study and run it: minimum compliance, volume fraction 0.5, penalty p = 3, filter r<sub>min</sub> = 10 mm; under Advanced, move limit 0.2, at most 200 iterations, tolerance 0.01. The Results panel's run summary shows the final compliance.</li>
+      </ol>
 
       <h2 id="references">References</h2>
       <ol class="refs">
@@ -985,7 +1001,7 @@ cd web &amp;&amp; bun install &amp;&amp; bun run examples:generate-mbb-topopt</c
       </p>
 
       <nav class="pager" aria-label="Other examples">
-        <a class="prev" href="/examples/cooks-membrane/"><small>Previous</small>Cook's membrane</a>
+        <a class="prev" href="/examples/tie-cantilever/"><small>Previous</small>Tied cantilever beam</a>
       </nav>
       </main>
       <nav class="docs-toc" aria-label="On this page">

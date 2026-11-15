@@ -5,12 +5,24 @@
 // Runs kofem-wasm off the main thread so heavy solves don't freeze the UI.
 
 import createModule, { EngineLoadError } from "../wasm/pkg/kofem_wasm.js";
+import {
+  Couplings,
+  ElasticModel,
+  MixedModel,
+  MortarSurface,
+  ShellModel,
+  SolveOptions,
+  Ties,
+  tieMortarWeights,
+  TopologyRun,
+  TopologySettings,
+} from "../wasm/fem/kofem_wasm.js";
+import { FemLoadError, loadFemModule } from "../lib/femModule.js";
 import type {
   EngineLoadProgress,
   KofemModule,
-  TopOptResult,
-  CgLimitProgress,
 } from "../wasm/pkg/kofem_wasm.js";
+import type { CgLimitProgress } from "../lib/solve/contracts.js";
 import type {
   Node,
   Element,
@@ -24,12 +36,15 @@ import type {
   SolvePayload,
   TopOptPayload,
 } from "./solverTypes.js";
-import { buildVertexIndexer } from "../lib/solveMeshPacking.js";
+import {
+  thinWallFindings,
+  type ThinWallCheckInput,
+} from "../lib/solve/thinWall.js";
 import { dropSuppressedBodies } from "../lib/suppressBodies.js";
+import { inStage, splitStage } from "../lib/workerError.js";
 import {
   buildMeshTimeShellModel,
-  preparePureShellSolve,
-  prepareAutoCoupledSolve,
+  prepareAutoShellSolve,
 } from "../lib/solve/autoShell.js";
 import {
   buildCoupledEngineInputs,
@@ -38,11 +53,30 @@ import {
 } from "../lib/solve/coupled.js";
 import { routeSolve, routeTopOpt, topOptStartLog } from "../lib/solve/route.js";
 import { buildShellEngineInputs } from "../lib/solve/shell.js";
+import { solveShellInRust } from "../lib/solve/shellRust.js";
 import {
-  buildSolidEngineInputs,
-  expandTiedDisplacements,
-  weldTies,
-} from "../lib/solve/solid.js";
+  solveCoupledInRust,
+  type MixedPreconditionerName,
+} from "../lib/solve/coupledRust.js";
+import {
+  amgFallbackPreconditioner,
+  amgUnavailableReason,
+  FALLBACK_PRECONDITIONER_LABEL,
+  isSolverMethod,
+  solveCoupledSolidInRust,
+  solveSolidInRust,
+  type SolverMethod,
+} from "../lib/solve/amg.js";
+import { constraintTieCount } from "../lib/tie.js";
+import { solidModelRefusal } from "../lib/solve/refusals.js";
+import { tieWeighting } from "../lib/solve/tieMortar.js";
+import { expandTiedDisplacements, weldTies } from "../lib/solve/solid.js";
+import {
+  optimizeCoupledInRust,
+  optimizeShellInRust,
+  optimizeSolidInRust,
+  type TopOptRunResult,
+} from "../lib/solve/topOptRust.js";
 
 let Module: KofemModule | null = null;
 let activeTask: number | null = null;
@@ -62,7 +96,7 @@ function onCgLimit(progress: CgLimitProgress): Promise<number> {
 
 // True once tessellate_step has loaded the OCCT STEP shape into THIS worker's
 // WASM module. The worker is torn down after every mesh (resetWorker in
-// LeftPanel) to keep Netgen's global state out of the MFEM solve, so a re-mesh
+// LeftPanel) to start from a clean module after Netgen, so a re-mesh
 // starts in a fresh module where this is false and the geometry must be
 // reloaded from the original STEP bytes before meshing.
 let geometryLoaded = false;
@@ -126,32 +160,50 @@ function isOverlapPairLine(text: string): boolean {
   return OVERLAP_PAIR_LINE.test(text);
 }
 
+// Load the engine and the Rust module (shell idealisation) together. Neither
+// is ready without the other, so "ready" is held back until both are, and a
+// failure of either is reported as the engine's failed status — the status
+// bar's Retry then replaces the worker and loads both again.
 async function initEngine() {
   const t0 = performance.now();
+  let engineReady: Extract<EngineLoadProgress, { phase: "ready" }> | undefined;
+  // The Rust module is small and can fail while the engine still downloads;
+  // its later progress must not paint over the failure.
+  let failed = false;
   try {
-    Module = await createModule({
-      onCgLimit,
-      print: (text: string) => {
-        if (!isOverlapPairLine(text))
-          self.postMessage({ id: 0, log: `[wasm] ${text}` });
-      },
-      printErr: (text: string) =>
-        self.postMessage({ id: 0, log: `[wasm:err] ${text}` }),
-      onProgress: (progress) =>
-        postEngineStatus(
-          progress.phase === "ready"
-            ? { ...progress, initMs: performance.now() - t0 }
-            : progress,
-        ),
-    });
+    // Promise.all, so a failure of either is caught here and the other's
+    // later rejection is still handled.
+    const [engine] = await Promise.all([
+      createModule({
+        print: (text: string) => {
+          if (!isOverlapPairLine(text))
+            self.postMessage({ id: 0, log: `[wasm] ${text}` });
+        },
+        printErr: (text: string) =>
+          self.postMessage({ id: 0, log: `[wasm:err] ${text}` }),
+        onProgress: (progress) => {
+          if (progress.phase === "ready") engineReady = progress;
+          else if (!failed) postEngineStatus(progress);
+        },
+      }),
+      loadFemModule(),
+    ]);
+    Module = engine;
+    if (!engineReady)
+      throw new Error("The engine finished loading without reporting ready");
   } catch (err) {
+    failed = true;
     postEngineStatus({
       phase: "failed",
-      stage: err instanceof EngineLoadError ? err.stage : "instantiate",
+      stage:
+        err instanceof EngineLoadError || err instanceof FemLoadError
+          ? err.stage
+          : "instantiate",
       detail: err instanceof Error ? err.message : String(err),
     });
     throw err;
   }
+  postEngineStatus({ ...engineReady, initMs: performance.now() - t0 });
 }
 function m(): KofemModule {
   if (!Module)
@@ -212,8 +264,10 @@ function handleParseStep(id: number, payload: ParseStepPayload) {
   self.postMessage({
     id,
     ok: true,
-    // eslint-disable-next-line kofem/no-silent-fallback -- format is optional in the parse_step message; absent means STEP, the primary import path
-    ...loadGeometry(payload.bytes, payload.format ?? "step"),
+    ...inStage("geometry_import", () =>
+      // eslint-disable-next-line kofem/no-silent-fallback -- format is optional in the parse_step message; absent means STEP, the primary import path
+      loadGeometry(payload.bytes, payload.format ?? "step"),
+    ),
   });
 }
 
@@ -227,12 +281,15 @@ function handleParseStep(id: number, payload: ParseStepPayload) {
 // loaded straight away, so the reply carries both the new file and its view.
 function handleSplitGeometry(id: number, payload: SplitGeometryPayload) {
   reloadForEdit(payload.bytes, payload.format);
-  const { bytes } = m().split_geometry(JSON.stringify(payload.split));
+  const { bytes, bodySources } = m().split_geometry(
+    JSON.stringify(payload.split),
+  );
   geometryLoaded = false; // split_geometry released the pre-edit shape
   self.postMessage({
     id,
     ok: true,
     bytes,
+    bodySources,
     ...loadGeometry(bytes, "step"),
   });
 }
@@ -359,13 +416,15 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
       id,
       log: "Reloading STEP geometry into the mesher…",
     });
-    m().tessellate_step(
-      bytes,
-      JSON.stringify({
-        deflection_relative: 0.001,
-        angular_deflection: 0.5,
-        format,
-      }),
+    inStage("geometry_reload", () =>
+      m().tessellate_step(
+        bytes,
+        JSON.stringify({
+          deflection_relative: 0.001,
+          angular_deflection: 0.5,
+          format,
+        }),
+      ),
     );
     geometryLoaded = true;
   }
@@ -373,6 +432,9 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
   const opts = JSON.stringify({
     max_element_size: maxElementSize,
     min_element_size: minSize,
+    ...(payload.solidMaxSizes
+      ? { solid_max_sizes: payload.solidMaxSizes }
+      : {}),
     grading: 0.3,
     second_order: false,
     elementsperedge: 2.0,
@@ -393,7 +455,7 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
   // JSON.parse. surfaceTriangles/surfaceFaceIds are in Netgen
   // surface-element order (NOT tet boundary order); surfaceFaceIds holds
   // the 1-based OCC face index per surface triangle.
-  const dto = m().generate_fem_mesh(opts);
+  const dto = inStage("meshing", () => m().generate_fem_mesh(opts));
   if ("overlaps" in dto) {
     flushCoverage();
     self.postMessage({ id, ok: true, overlaps: dto.overlaps });
@@ -407,9 +469,8 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
     log: `Volume mesh complete: ${nNodes} nodes, ${nTets} tetrahedra`,
   });
 
-  // Release OCCT shape + STEP bytes from WASM heap — they are no longer
-  // needed once meshing is done, and freeing them before the solve gives
-  // MFEM more headroom for stiffness-matrix assembly.
+  // Release OCCT shape + STEP bytes from the engine's WASM heap — they are no
+  // longer needed once meshing is done.
   m().free_geometry_cache();
   geometryLoaded = false;
 
@@ -466,14 +527,16 @@ function handleVolumeMesh(id: number, payload: VolumeMeshPayload) {
   // collapsed to a mid-surface shell mesh here, so the stored model is the mixed
   // CTRIA3 + CTETRA model the user sees and solves — not an all-solid mesh whose
   // shells only ever existed transiently inside the solve.
-  const mixed = buildMeshTimeShellModel(
-    nodes,
-    elements,
-    surfaceTriangles,
-    surfaceFaceIds,
-    new Set(payload.shellBodyIds ?? []),
-    payload.properties ?? [],
-    (line: string) => self.postMessage({ id, log: line }),
+  const mixed = inStage("shell_idealisation", () =>
+    buildMeshTimeShellModel(
+      nodes,
+      elements,
+      surfaceTriangles,
+      surfaceFaceIds,
+      new Set(payload.shellBodyIds ?? []),
+      payload.properties ?? [],
+      (line: string) => self.postMessage({ id, log: line }),
+    ),
   );
   if (mixed) {
     flushCoverage();
@@ -526,21 +589,37 @@ function logTo(id: number): SolveLog {
   return (line) => self.postMessage({ id, log: line });
 }
 
-// Solve a pure-shell (all-CTRIA3) model via the engine's Kirchhoff shell
-// solver. The result matches the solid contract — three translations per node,
-// one von Mises surface stress per element — so the store and viewport consume
-// it unchanged. elementOrder and tie connections do not apply to shells (the
-// DKT facet is what it is; ties join solid bodies) and are ignored.
+// The Kirchhoff shell solve of a { mesh, mat_json, bcs_json } payload, through
+// the Rust module (KOF-306). The C++ engine's solve_shell takes the same
+// payload and stays the test oracle (tests/integration/shell-rust.test.mjs).
+function solveShell(
+  inputs: Parameters<typeof solveShellInRust>[1],
+  payload: SolvePayload,
+  log: SolveLog,
+) {
+  return solveShellInRust(
+    { ShellModel },
+    inputs,
+    payload.cgIterationLimit,
+    onCgLimit,
+    log,
+  );
+}
+
+// Solve a pure-shell (all-CTRIA3) model with the Kirchhoff shell solver. The
+// result matches the solid contract — three translations per node, one von
+// Mises surface stress per element — so the store and viewport consume it
+// unchanged. The DKT facet is linear and the shell solver applies no tie, so
+// routeSolve refuses element order 2 and ties before this runs.
 async function handleShellSolve(id: number, payload: SolvePayload) {
   const { nodes, elements } = payload;
-  const { mesh, matJson, bcsJson } = buildShellEngineInputs(payload);
+  const inputs = buildShellEngineInputs(payload);
 
   self.postMessage({
     id,
     log: `Starting shell solve: ${nodes.length} nodes, ${elements.length} shell facets…`,
   });
-  const result = await m().solve_shell(mesh, matJson, bcsJson);
-  if ("error" in result) throw new Error(result.error);
+  const result = await solveShell(inputs, payload, logTo(id));
 
   self.postMessage({
     id,
@@ -552,24 +631,58 @@ async function handleShellSolve(id: number, payload: SolvePayload) {
   });
 }
 
-// Solve a hand-mixed shell+solid model, or an all-solid model carrying a
-// surface-to-point coupling, through the engine's coupled solid-shell solver.
-// elementOrder does not apply (the coupled assembler is linear tets + DKT facets).
+// The mixed (solid + shell) Rust solve of the coupled assembler's inputs,
+// with AMG when it was chosen and covers the model, otherwise the engine's
+// incomplete Cholesky preconditioner. The C++ engine's solve_coupled takes
+// the same inputs and stays the test oracle (tests/integration/coupled-rust.test.mjs).
+function solveMixed(
+  inputs: Parameters<typeof solveCoupledInRust>[1],
+  payload: SolvePayload,
+  log: SolveLog,
+) {
+  const preconditioner: MixedPreconditionerName =
+    requestedSolver(payload) === "amg" && amgReason(payload) === null
+      ? "amg"
+      : "incomplete-cholesky";
+  return solveCoupledInRust(
+    { MixedModel, Couplings },
+    inputs,
+    preconditioner,
+    payload.cgIterationLimit,
+    onCgLimit,
+    log,
+  );
+}
+
+// Solve a hand-mixed shell+solid model through the Rust mixed solve, or an
+// all-solid model carrying a surface-to-point coupling through the Rust solid
+// solve (with the chosen preconditioner and element order), both on the same
+// inputs. The mixed solve is linear tets + DKT facets: routeSolve refuses
+// element order 2 on a model with shells, and an all-solid coupled model the
+// Rust solid solve does not take.
 async function handleMixedSolve(id: number, payload: SolvePayload) {
   const inp = buildCoupledEngineInputs(payload, logTo(id));
 
   self.postMessage({
     id,
-    log: `[mixed] ${inp.solidElements.length} solid tets (${inp.solidMaterialNames.join(", ")}), ${inp.shellElements.length} shell facets → ${inp.model.pool.length / 3} pool nodes, ${inp.couplingCount} couplings (${inp.declaredCouplings} declared)…`,
+    log: `[mixed] ${inp.solidElements.length} solid tets (${inp.solidMaterialNames.join(", ")}), ${inp.shellElements.length} shell facets${inp.shellMaterialNames.length > 0 ? ` (${inp.shellMaterialNames.join(", ")})` : ""} → ${inp.model.pool.length / 3} pool nodes, ${inp.couplingCount} couplings (${inp.declaredCouplings} declared)…`,
   });
-
-  const result = await m().solve_coupled(
-    inp.mesh,
-    inp.coupling,
-    inp.bcs,
-    inp.matJson,
-  );
-  if ("error" in result) throw new Error(result.error);
+  // eslint-disable-next-line kofem/no-silent-fallback -- elementOrder is optional in the solve message; the documented default is linear elements
+  const order = payload.elementOrder ?? 1;
+  const hasShells = inp.shellElements.length > 0;
+  const reason = amgReason(payload);
+  if (!hasShells && reason !== null) throw new Error(solidModelRefusal(reason));
+  const result = hasShells
+    ? await solveMixed(inp, payload, logTo(id))
+    : await solveCoupledSolidInRust(
+        { ElasticModel, SolveOptions, Couplings },
+        inp,
+        order,
+        requestedSolver(payload),
+        payload.cgIterationLimit,
+        onCgLimit,
+        logTo(id),
+      );
   const fields = mapMixedResult(payload, inp.model, result);
 
   self.postMessage({
@@ -580,80 +693,95 @@ async function handleMixedSolve(id: number, payload: SolvePayload) {
 }
 
 // A body marked Shell: solve it as shells or fail loudly — never fall through
-// to the all-solid path, which would silently ignore the choice. Coupled first
-// (shells tied to solid bodies); if there is no solid domain to couple to (a
-// single thin body, or an all-shell assembly), idealise the thin walls and solve
-// them with the pure Kirchhoff shell solver. Returns false when neither applies.
+// to the all-solid path, which would silently ignore the choice (KOF-352).
+// Coupled when the shell touches a solid body; a pure Kirchhoff shell when every
+// body is Shell. prepareAutoShellSolve throws, naming the body and the reason,
+// when neither applies.
 async function handleAutoShellSolve(
   id: number,
   payload: SolvePayload,
   shellBodyIds: Set<number>,
-): Promise<boolean> {
+): Promise<void> {
   // The auto-shell progress lines have always gone to the shared log (id 0).
   const log = logTo(0);
-  let fields: SolveResultFields | null = null;
-  const coupled = prepareAutoCoupledSolve(payload, shellBodyIds, log);
-  if (coupled) {
-    const result = await m().solve_coupled(
-      coupled.mesh,
-      coupled.coupling,
-      coupled.bcs,
-      coupled.matJson,
-    );
-    if ("error" in result) throw new Error(result.error);
-    fields = coupled.mapResult(result);
-  } else {
-    const pure = preparePureShellSolve(payload, shellBodyIds, log);
-    if (pure) {
-      const result = await m().solve_shell(
-        pure.mesh,
-        pure.matJson,
-        pure.bcsJson,
-      );
-      if ("error" in result) throw new Error(result.error);
-      fields = pure.mapResult(result);
-    }
-  }
-  if (!fields) return false;
+  const prepared = prepareAutoShellSolve(payload, shellBodyIds, log);
+  const fields =
+    prepared.kind === "coupled"
+      ? prepared.solve.mapResult(await solveMixed(prepared.solve, payload, log))
+      : prepared.solve.mapResult(
+          await solveShell(prepared.solve, payload, log),
+        );
   self.postMessage({
     id,
     log: `Shell solve complete: ${fields.displacements.length / 3} vertex displacements`,
   });
   postSolveResult(id, fields);
-  return true;
 }
 
-// All-solid static solve (solve_linear_elastic), with tie connections welded.
+// The solver the request asks for. The app always names one; a request without
+// it is refused rather than guessed, since the two differ in method and speed.
+function requestedSolver(payload: SolvePayload): SolverMethod {
+  if (!isSolverMethod(payload.solverMethod))
+    throw new Error(
+      `solve: solverMethod must be "amg" or "gauss-seidel", got ${JSON.stringify(payload.solverMethod)}`,
+    );
+  return payload.solverMethod;
+}
+
+// Why AMG does not apply to this request, or null when it does.
+function amgReason(payload: SolvePayload): string | null {
+  return amgUnavailableReason({
+    elements: payload.elements,
+    properties: payload.properties,
+    // eslint-disable-next-line kofem/no-silent-fallback -- elementOrder is optional in the solve message; the documented default is linear elements
+    elementOrder: payload.elementOrder ?? 1,
+    // eslint-disable-next-line kofem/no-silent-fallback -- `couplings` is optional in the solve message; a model with none is the ordinary case
+    couplingCount: payload.couplings?.length ?? 0,
+  });
+}
+
+// All-solid static solve in Rust with the chosen preconditioner, with tie
+// connections applied: node-merge ties welded, constraint ties eliminated.
+// routeSolve has refused a model the Rust solver does not take.
 async function handleSolidSolve(id: number, payload: SolvePayload) {
   const { nodes, elements } = payload;
-  const tied = weldTies(nodes, elements, payload.tieGroups, logTo(id));
-  const { mesh, matJson, bcsJson } = buildSolidEngineInputs(
-    { ...payload, nodes: tied.solveNodes, elements: tied.tiedElements },
-    tied.vid,
-    tied.vidTied,
-  );
-
   // FE polynomial order, chosen in the frontend (Solver settings). Order 2
   // (quadratic / second-order) adds edge-midpoint DOFs that resolve bending
   // and stress gradients far better than linear tets, which lock in bending
   // and smear stress concentrations to a single constant value per element
-  // (issue #215), at the cost of a slower solve. The engine extends the
+  // (issue #215), at the cost of a slower solve. The solver extends the
   // vertex Dirichlet BCs to the new edge DOFs so clamped/prescribed faces
   // stay fully constrained. Defaults to 1 (linear) when the payload omits it.
   // eslint-disable-next-line kofem/no-silent-fallback -- elementOrder is optional in the solve message; the documented default is linear elements
   const order = payload.elementOrder ?? 1;
-  self.postMessage({
-    id,
-    log: `Starting static solve: ${nodes.length} nodes, ${elements.length} elements (order ${order})…`,
-  });
-  // Mesh as typed arrays; materials/BCs stay JSON (small). The result comes
-  // back as Float64Arrays whose buffers are handed to the main thread via
-  // the postMessage transfer list — zero-copy, no JSON round-trip.
-  const result = await m().solve_linear_elastic(mesh, matJson, bcsJson, order);
-  if ("error" in result) throw new Error(result.error);
-
-  // von Mises is per element; welding preserves element count and order, so it
-  // passes through unchanged.
+  const reason = amgReason(payload);
+  if (reason !== null) throw new Error(solidModelRefusal(reason));
+  const constraintTies = constraintTieCount(payload.tieGroups);
+  const tied = weldTies(
+    nodes,
+    elements,
+    payload.tieGroups,
+    logTo(id),
+    constraintTies > 0
+      ? tieWeighting(order, { MortarSurface, tieMortarWeights })
+      : null,
+  );
+  const result = await solveSolidInRust(
+    { ElasticModel, SolveOptions, Ties },
+    {
+      ...payload,
+      nodes: tied.solveNodes,
+      elements: tied.tiedElements,
+      constraintTies: tied.constraints,
+    },
+    order,
+    requestedSolver(payload),
+    tied.vid,
+    tied.vidTied,
+    payload.cgIterationLimit,
+    onCgLimit,
+    logTo(id),
+  );
   const displacements = expandTiedDisplacements(
     nodes,
     tied,
@@ -661,14 +789,21 @@ async function handleSolidSolve(id: number, payload: SolvePayload) {
   );
   self.postMessage({
     id,
-    log: `Solve complete: ${displacements.length / 3} vertex displacements, ${result.von_mises.length} element stresses`,
+    log: `Solve complete: ${displacements.length / 3} vertex displacements, ${result.vonMises.length} element stresses`,
   });
-  postSolveResult(id, { displacements, vonMises: result.von_mises });
+  postSolveResult(id, { displacements, vonMises: result.vonMises });
 }
 
 async function handleSolve(id: number, payload: SolvePayload) {
-  m().cgIterationLimit = payload.cgIterationLimit;
+  const reason = amgReason(payload);
   const route = routeSolve(payload);
+  if (requestedSolver(payload) === "amg" && reason !== null) {
+    const fallback = amgFallbackPreconditioner(route);
+    self.postMessage({
+      id,
+      log: `AMG is not available for this model (${reason}) — solving with ${FALLBACK_PRECONDITIONER_LABEL[fallback]}.`,
+    });
+  }
   switch (route.path) {
     case "shell":
       await handleShellSolve(id, payload);
@@ -677,9 +812,7 @@ async function handleSolve(id: number, payload: SolvePayload) {
       await handleMixedSolve(id, payload);
       return;
     case "auto-shell":
-      // Neither shell idealisation applies (e.g. no surface mesh): all-solid.
-      if (!(await handleAutoShellSolve(id, payload, route.shellBodyIds)))
-        await handleSolidSolve(id, payload);
+      await handleAutoShellSolve(id, payload, route.shellBodyIds);
       return;
     case "solid":
       await handleSolidSolve(id, payload);
@@ -694,15 +827,10 @@ async function handleSolve(id: number, payload: SolvePayload) {
 
 // ── Topology optimization (solid / shell / coupled → optimize_topology*) ──────
 
-// The optimizer result the worker returns, whichever design domain produced it.
-// The density is one value per DESIGN element, in the canonical order the
-// viewport's densityField expects — solid tets, then hexes, then shell facets —
-// which is exactly the order each engine entry returns (KOF-237).
-type TopOptEngineResult = {
-  density: Float64Array;
-  levelSet?: Float64Array;
-  history: unknown[];
-};
+// The optimizer result the worker returns (TopOptRunResult), whichever design
+// domain produced it. The density is one value per DESIGN element, in the
+// canonical order the viewport's densityField expects — solid tets, then
+// hexes, then shell facets (KOF-237).
 
 // Live density streaming (KOF-240): the engine calls this synchronously from
 // inside the optimizer loop with a fresh Float64Array copy of the design density
@@ -715,13 +843,13 @@ function densityStreamer(id: number) {
   };
 }
 
-function postDensityResult(id: number, result: TopOptEngineResult) {
+function postDensityResult(id: number, result: TopOptRunResult) {
   self.postMessage({
     id,
     log: `Topology optimization complete: ${result.density.length} element densities over ${result.history.length} iteration(s)`,
   });
-  // The level set (method "level_set") is one value per engine vertex; the
-  // solid path indexes vertices in payload node order (buildVertexIndexer), so it
+  // The level set (method "level_set") is one value per vertex; the solid
+  // path indexes vertices in payload node order (buildVertexIndexer), so it
   // arrives aligned with the store's `nodes` array.
   const transfer = [result.density.buffer];
   if (result.levelSet) transfer.push(result.levelSet.buffer);
@@ -739,61 +867,57 @@ function postDensityResult(id: number, result: TopOptEngineResult) {
 
 // SIMP / level-set topology optimization (KOF-226 epic, ADR-0002). The design
 // domain follows the element mix, exactly as the static solve routes
-// (routeTopOpt). Each engine entry runs the whole loop in C++ (crossing the
-// JS↔WASM boundary only twice) and streams "[topopt] it N: …" progress over the
-// same print→log channel the solve uses. The design density streams per
-// iteration as { id, progress: { it, density } } messages (KOF-240) so the
+// (routeTopOpt). SIMP runs in Rust on every domain (topOptRust.ts), one
+// iteration per call; the level-set method runs its whole loop inside an
+// engine entry. Both stream "[topopt] it N: …"
+// progress lines over the log channel the solve uses, and the design density
+// per iteration as { id, progress: { it, density } } messages (KOF-240) so the
 // viewport can draw the shape emerging.
 //
 // Cancellation is owned by the worker lifecycle, exactly as meshing is: the
-// optimize_topology* call is one blocking WASM call, so the app cancels it by
+// optimization runs synchronously in the worker, so the app cancels it by
 // calling resetWorker() (terminate), which discards the in-flight run; the
 // streamed live density is discarded with it — no best-so-far is kept.
 function handleTopOpt(id: number, payload: TopOptPayload) {
   const domain = routeTopOpt(payload);
-  const settingsJson = JSON.stringify(payload.settings);
   const onDensity = densityStreamer(id);
   const startLog = (nElems: number) =>
     self.postMessage({ id, log: topOptStartLog(payload, nElems, domain) });
 
-  let result: TopOptResult;
+  let result: TopOptRunResult;
   if (domain === "shell") {
-    const { mesh, matJson, bcsJson } = buildShellEngineInputs(payload);
+    // SIMP on the shell and coupled domains runs in Rust (KOF-310) on the
+    // engine's own inputs; routeTopOpt has refused the level-set method.
+    const inputs = buildShellEngineInputs(payload);
     startLog(payload.elements.length);
-    result = m().optimize_topology_shell(
-      mesh,
-      matJson,
-      bcsJson,
-      settingsJson,
+    result = optimizeShellInRust(
+      { ShellModel, TopologySettings, TopologyRun },
+      inputs,
+      payload.settings,
+      logTo(id),
       onDensity,
     );
   } else if (domain === "coupled") {
     const inp = buildCoupledEngineInputs(payload, logTo(id));
     startLog(inp.solidElements.length + inp.shellElements.length);
-    result = m().optimize_topology_coupled(
-      inp.mesh,
-      inp.coupling,
-      inp.bcs,
-      inp.matJson,
-      settingsJson,
+    result = optimizeCoupledInRust(
+      { MixedModel, Couplings, TopologySettings, TopologyRun },
+      inp,
+      payload.settings,
+      logTo(id),
       onDensity,
     );
   } else {
-    // Ties are not applied to the solid design domain.
-    const inp = buildSolidEngineInputs(
+    // SIMP and the level-set method on a solid design domain run in Rust
+    // too (KOF-358). routeTopOpt has refused a tied model already.
+    startLog(payload.elements.length);
+    result = optimizeSolidInRust(
+      { ElasticModel, TopologySettings, TopologyRun },
       payload,
-      buildVertexIndexer(payload.nodes),
-    );
-    startLog(inp.elementCount);
-    result = m().optimize_topology(
-      inp.mesh,
-      inp.matJson,
-      inp.bcsJson,
-      settingsJson,
+      logTo(id),
       onDensity,
     );
   }
-  if ("error" in result) throw new Error(result.error);
   postDensityResult(id, result);
 }
 
@@ -882,6 +1006,13 @@ function dispatchRequest({
       return null;
     case "solve":
       return handleSolve(id, payload as SolvePayload);
+    case "thin_wall_check":
+      self.postMessage({
+        id,
+        ok: true,
+        findings: thinWallFindings(payload as ThinWallCheckInput),
+      });
+      return null;
     case "optimize_topology":
       handleTopOpt(id, payload as TopOptPayload);
       return null;
@@ -905,7 +1036,8 @@ function isWasmTrap(err: unknown): boolean {
   ].some((message) => err.message.includes(message));
 }
 
-function reportTaskError(id: number, type: string, err: unknown): void {
+function reportTaskError(id: number, type: string, failure: unknown): void {
+  const { stage, error: err } = splitStage(failure);
   const trap = isWasmTrap(err);
   const detail =
     err instanceof EngineLoadError
@@ -920,7 +1052,12 @@ function reportTaskError(id: number, type: string, err: unknown): void {
       : `[solver.worker] ${type} failed:`,
     detail,
   );
-  self.postMessage({ id, ok: false, error: errorMessage });
+  self.postMessage({
+    id,
+    ok: false,
+    error: errorMessage,
+    ...(stage === null ? {} : { stage }),
+  });
 }
 
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {

@@ -38,16 +38,13 @@ async function setSizes(page: Page, max: string, min: string): Promise<void> {
 }
 
 async function mesh(page: Page): Promise<void> {
-  await page
-    .getByRole("button")
-    .filter({ hasText: "Mesh STEP volume" })
-    .click();
+  await page.getByRole("button").filter({ hasText: "Generate mesh" }).click();
 }
 
 async function expectMeshed(page: Page): Promise<void> {
   await expect(
-    page.getByRole("button").filter({ hasText: "Re-mesh STEP volume" }),
-  ).toBeVisible({ timeout: 120_000 });
+    page.getByRole("button").filter({ hasText: "Regenerate mesh" }),
+  ).toBeVisible();
   await expect(page.getByTestId("meshing-error")).toHaveCount(0);
   await expect(page.getByTestId("mesh-overlap-card")).toHaveCount(0);
 }
@@ -58,7 +55,6 @@ async function meshIntoHingeWarning(page: Page): Promise<void> {
   await mesh(page);
   await expect(page.getByTestId("hinge-warning")).toContainText(
     "Geometric singularity detected (hinge)",
-    { timeout: 120_000 },
   );
   await expect(page.getByTestId("meshing-error")).toHaveCount(0);
 }
@@ -66,15 +62,15 @@ async function meshIntoHingeWarning(page: Page): Promise<void> {
 test("a nearly collapsed spline end meshes instead of trapping", async ({
   page,
 }) => {
-  test.setTimeout(180_000);
   await importStep(page, COLLAPSED);
   await setSizes(page, "1", "0.1");
   await mesh(page);
   await expectMeshed(page);
 });
 
-test("connect repairs a hinge so the part meshes", async ({ page }) => {
-  test.setTimeout(300_000);
+test("connect repairs a hinge so the part meshes @pipeline", async ({
+  page,
+}) => {
   await meshIntoHingeWarning(page);
   const overlap = await page.evaluate(() => {
     const state = (
@@ -102,9 +98,7 @@ test("connect repairs a hinge so the part meshes", async ({ page }) => {
 
   await page.getByTestId("hinge-repair-width").fill("3");
   await page.getByTestId("hinge-connect").click();
-  await expect
-    .poll(async () => (await geometryCounts(page)).edits, { timeout: 60_000 })
-    .toBe(1);
+  await expect.poll(async () => (await geometryCounts(page)).edits).toBe(1);
   expect((await geometryCounts(page)).bodies).toBe(1);
   await expect(page.getByTestId("mesh-overlap-card")).toHaveCount(0);
 
@@ -112,26 +106,24 @@ test("connect repairs a hinge so the part meshes", async ({ page }) => {
   await expectMeshed(page);
 });
 
-test("connect repairs a hinge whose raw fuse is invalid", async ({ page }) => {
-  test.setTimeout(300_000);
+test("connect repairs a hinge whose raw fuse is invalid @pipeline", async ({
+  page,
+}) => {
   await importStep(page, HINGE_FREE_END);
   await setSizes(page, "2", "0.2");
   await mesh(page);
-  await expect(page.getByTestId("hinge-warning")).toBeVisible({
-    timeout: 120_000,
-  });
+  await expect(page.getByTestId("hinge-warning")).toBeVisible();
   await page.getByTestId("hinge-connect").click();
-  await expect
-    .poll(async () => (await geometryCounts(page)).edits, { timeout: 60_000 })
-    .toBe(1);
+  await expect.poll(async () => (await geometryCounts(page)).edits).toBe(1);
   await expect(page.getByTestId("mesh-overlap-error")).toHaveCount(0);
 
   await mesh(page);
   await expectMeshed(page);
 });
 
-test("splitting a sharp cone tip lets the part mesh", async ({ page }) => {
-  test.setTimeout(300_000);
+test("splitting a sharp cone tip lets the part mesh @pipeline", async ({
+  page,
+}) => {
   // The page must stay usable: Netgen prints four lines per overlapping pair.
   const pairLines: string[] = [];
   page.on("console", (message) => {
@@ -141,15 +133,11 @@ test("splitting a sharp cone tip lets the part mesh", async ({ page }) => {
   await importStep(page, CONE_TIP);
   await setSizes(page, "1", "0.1");
   await mesh(page);
-  await expect(page.getByTestId("cone-warning")).toBeVisible({
-    timeout: 120_000,
-  });
+  await expect(page.getByTestId("cone-warning")).toBeVisible();
   expect(pairLines).toEqual([]);
 
   await page.getByTestId("cone-split").click();
-  await expect
-    .poll(async () => (await geometryCounts(page)).edits, { timeout: 60_000 })
-    .toBe(1);
+  await expect.poll(async () => (await geometryCounts(page)).edits).toBe(1);
   await expect(page.getByTestId("mesh-overlap-card")).toHaveCount(0);
 
   await mesh(page);
@@ -158,21 +146,19 @@ test("splitting a sharp cone tip lets the part mesh", async ({ page }) => {
 
 // Netgen reported success with the ring unmeshed, and the volume fill ran on the
 // rest: a broken mesh, a Geomsearch trap or overlaps that aren't there (KOF-292).
-test("a face too narrow to mesh is named instead of volume-filled", async ({
+test("a face too narrow to mesh is named instead of volume-filled @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(180_000);
   await importStep(page, SLIVER_RING);
   await setSizes(page, "5", "0.5");
   await mesh(page);
   await expect(page.getByTestId("unmeshed-warning")).toContainText(
     "couldn't mesh 1 face, highlighted in the view (0.01 mm wide)",
-    { timeout: 120_000 },
   );
   await expect(page.getByTestId("meshing-error")).toHaveCount(0);
   await expect(page.getByTestId("surface-overlap-warning")).toHaveCount(0);
   await expect(
-    page.getByRole("button").filter({ hasText: "Re-mesh STEP volume" }),
+    page.getByRole("button").filter({ hasText: "Regenerate mesh" }),
   ).toHaveCount(0);
 
   // Narrower than the 0.5 mm minimum element size: removal is offered, with
@@ -181,40 +167,34 @@ test("a face too narrow to mesh is named instead of volume-filled", async ({
     "fix it in CAD",
   );
   await page.getByTestId("unmeshed-remove").click();
-  await expect
-    .poll(async () => (await geometryCounts(page)).edits, { timeout: 60_000 })
-    .toBe(1);
+  await expect.poll(async () => (await geometryCounts(page)).edits).toBe(1);
   await expect(page.getByTestId("mesh-overlap-card")).toHaveCount(0);
   await mesh(page);
   await expectMeshed(page);
 });
 
-test("a face wider than the minimum element size is not offered for removal", async ({
+test("a face wider than the minimum element size is not offered for removal @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(180_000);
   await importStep(page, SLIVER_RING);
   await setSizes(page, "5", "0.005");
   await mesh(page);
   await expect(page.getByTestId("unmeshed-warning")).toContainText(
     "Try a smaller element size",
-    { timeout: 120_000 },
   );
   await expect(page.getByTestId("unmeshed-remove")).toHaveCount(0);
 });
 
 // OCCT stored this part's contact as an edge the two faces share. Cutting through
 // it leaves invalid geometry, which must be refused rather than handed to the mesher.
-test("a separate that leaves invalid geometry is refused and changes nothing", async ({
+test("a separate that leaves invalid geometry is refused and changes nothing @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(300_000);
   await meshIntoHingeWarning(page);
   await page.getByTestId("hinge-repair-width").fill("3");
   await page.getByTestId("hinge-separate").click();
   await expect(page.getByTestId("mesh-overlap-error")).toContainText(
     "Separating here left invalid geometry",
-    { timeout: 60_000 },
   );
   expect((await geometryCounts(page)).edits).toBe(0);
   await expect(page.getByTestId("hinge-warning")).toBeVisible();
@@ -223,7 +203,6 @@ test("a separate that leaves invalid geometry is refused and changes nothing", a
 test("bodies keep their settings when a separate splits one of them", async ({
   page,
 }) => {
-  test.setTimeout(180_000);
   await importStep(page, path.resolve("..", "test_files", "two_boxes.stp"));
   await addMaterial(page);
   await page
@@ -264,9 +243,7 @@ test("bodies keep their settings when a separate splits one of them", async ({
   });
   await page.getByTestId("hinge-repair-width").fill("12");
   await page.getByTestId("hinge-separate").click();
-  await expect
-    .poll(async () => (await geometryCounts(page)).bodies, { timeout: 60_000 })
-    .toBe(3);
+  await expect.poll(async () => (await geometryCounts(page)).bodies).toBe(3);
 
   const bodies = await page.evaluate(
     () =>
@@ -298,7 +275,6 @@ test("bodies keep their settings when a separate splits one of them", async ({
 });
 
 test("a repair with no usable width is refused", async ({ page }) => {
-  test.setTimeout(180_000);
   await meshIntoHingeWarning(page);
   await page.getByTestId("hinge-repair-width").fill("0");
   await page.getByTestId("hinge-connect").click();

@@ -5,6 +5,7 @@ import { test, expect } from "./coverage";
 import type { Page } from "@playwright/test";
 import { addBoundary } from "./fixtures/tree";
 import { serveUnvalidatedExample } from "./fixtures/unvalidated-examples";
+import { clickViewportAt } from "./fixtures/viewport";
 
 // KOF-211: a face pick with no CAD face behind it is grown by the flood fill,
 // whose region depends on the clicked triangle. A second click on a selected
@@ -91,24 +92,19 @@ function readSelection(page: Page): Promise<SelectionShape> {
   });
 }
 
-test("clicking inside a selected curved region deselects it (KOF-211)", async ({
+test("clicking inside a selected curved region deselects it (KOF-211) @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(300_000);
-
   await serveUnvalidatedExample(page, "full-crane-hook");
   await page.goto("/app/?example=full-crane-hook");
   await expect(page.locator("nav")).toBeVisible();
   await expect
-    .poll(
-      () =>
-        page.evaluate(
-          () =>
-            (
-              window as unknown as { __kofemStore: Store }
-            ).__kofemStore.getState().nodes.length,
-        ),
-      { timeout: 90_000 },
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as unknown as { __kofemStore: Store }).__kofemStore.getState()
+            .nodes.length,
+      ),
     )
     .toBeGreaterThan(0);
 
@@ -127,7 +123,11 @@ test("clicking inside a selected curved region deselects it (KOF-211)", async ({
   let first: SelectionShape | null = null;
   for (let fy = 0.92; fy >= 0.3 && !first; fy -= 0.02) {
     for (let fx = 0.3; fx <= 0.7 && !first; fx += 0.02) {
-      await page.mouse.click(box.x + box.width * fx, box.y + box.height * fy);
+      await clickViewportAt(
+        page,
+        box.x + box.width * fx,
+        box.y + box.height * fy,
+      );
       const hit = await readSelection(page);
       if (hit.regions === 0) continue;
       if (hit.curved) {
@@ -152,7 +152,7 @@ test("clicking inside a selected curved region deselects it (KOF-211)", async ({
   // A second click inside the selected region, at its centroid on screen: a
   // different triangle from the first click, so its flood fill grows a
   // different region.
-  await page.mouse.click(first.centre.x, first.centre.y);
+  await clickViewportAt(page, first.centre.x, first.centre.y);
   const second = await readSelection(page);
   await page.screenshot({ path: test.info().outputPath("2-second-click.png") });
   expect(second.regions).toBe(0);

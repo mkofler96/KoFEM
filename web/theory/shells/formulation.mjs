@@ -3,6 +3,7 @@
 
 import { equation, matrixEquation, tex } from "../operators/math.mjs";
 import { evidence, number, percentError, source, table } from "./evidence.mjs";
+import { codeSource } from "../numerical-methods/sources.mjs";
 import { figure } from "../figures/index.mjs";
 import { resultViewer } from "../viewers/index.mjs";
 
@@ -149,11 +150,11 @@ export default {
         ],
         [
           "Materials and sections",
-          "Explicit all-CTRIA3 models may have several section properties and per-facet thicknesses, but must reference one material ID. Multiple shell material IDs are rejected. Mixed models also require one shell material; their explicit solid domain supports per-tet materials.",
+          "Explicit all-CTRIA3 models may have several section properties, each with its own thickness and material: every facet uses its own body’s E and ν in the stiffness and the stress recovery. Mixed models do the same for their shell facets, and their explicit solid domain supports per-tet materials. Topology optimization still needs one shell material.",
         ],
         [
           "Geometry extraction",
-          "Opposite planar faces are paired one to one, with planarity/area guards and a wall-separation cap of 15 in the app’s mm coordinates. Convex corners can share mid-surface nodes. Split faces and T-junctions, including I-section flanges, are not generally reconstructed; a converged web-only result does not establish a complete section.",
+          "Opposite planar faces are paired one to one, with planarity/area guards and a wall-separation cap of 15 in the app’s mm coordinates. A face whose opposite side is split by a wall standing on it, such as an I-section flange, pairs with the split pieces together. Convex corners share mid-surface nodes. At a planar T-junction the standing wall’s mid-surface is extended to the other wall’s mid-plane and imprinted into its facets. Curved walls and other branched sections are not reconstructed; check the reported wall count before trusting a section.",
         ],
         [
           "Surface loads",
@@ -173,7 +174,7 @@ export default {
       the quantity of interest changes.</p>
 
     <h2 id="plate-example">Check a uniformly loaded square plate</h2>
-    <p>The existing native production-core test uses a square of side
+    <p>The plate check uses a square of side
       ${tex("a=1")}, thickness ${tex("t=0.01")}, ${tex("E=10^7")},
       ${tex("ν=0.3")} and uniform transverse load ${tex("q=1")}.
       One coherent interpretation is m, N, Pa: ${tex("a=1\\text{ m}")},
@@ -192,8 +193,8 @@ export default {
       fix all six components. Simply supported edges fix normal translation
       and leave tangential bending rotations free; the test fixes in-plane
       translations and drilling everywhere to isolate bending. Facet area loads
-      are split equally over their three nodes. Native CG uses relative target
-      ${tex("10^{-10}")}.</p>
+      are split equally over their three nodes. CG stops at a relative
+      residual of ${tex("10^{-10}")}, as the app’s shell solve does.</p>
     ${table(
       "Executed square-plate comparison",
       ["Quantity", "Measured", "Reference", "Relative error", "Test band"],
@@ -219,8 +220,10 @@ export default {
       caused by large deflection; scale load down when a physical study needs
       deflection much smaller than thickness.</p>
     <p>The <a href="/theory/shells.json">numerical record</a> stores every
-      measured value. These runs exercise the production C++ core natively; they do not exercise
-      CAD extraction or the browser/WASM wrappers. The
+      measured value. It was recorded with KoFEM’s former C++ shell core,
+      before the shell solve moved to the Rust module as a step-for-step port.
+      The Rust tests check the same plates against the same references and
+      bands. Neither exercises CAD extraction or the browser wrappers. The
       <a href="/theory/shells/solid-coupling/#verification">transition comparison</a>
       addresses a separate load-transfer question.</p>
 
@@ -228,16 +231,16 @@ export default {
     <ol class="refs">
       <li>Batoz, Bathe and Ho (1980), <cite>A study of three-node triangular plate bending elements</cite>, International Journal for Numerical Methods in Engineering 15, 1771–1812. This is the DKT reference, not a validation of KoFEM’s complete shell workflow.</li>
       <li>Timoshenko and Woinowsky-Krieger, <cite>Theory of Plates and Shells</cite>, 2nd ed. (1959), uniformly loaded square plates.</li>
-      <li>${source("engine/cpp/shell_element.cpp", 30, "CST membrane")},
-        ${source("engine/cpp/shell_element.cpp", 65, "DKT interpolation and stiffness")},
-        ${source("engine/cpp/shell_element.cpp", 208, "local basis and drilling stabilization")},
-        ${source("engine/cpp/shell_element.cpp", 270, "surface stress recovery")} and
-        ${source("engine/cpp/solve_shell.cpp", 1, "WASM inputs and outputs")}.</li>
+      <li>${codeSource("crates/kofem-fem/src/shell/element.rs", 113, "CST membrane")},
+        ${codeSource("crates/kofem-fem/src/shell/element.rs", 223, "DKT interpolation and stiffness")},
+        ${codeSource("crates/kofem-fem/src/shell/element.rs", 24, "local basis and drilling stabilization")},
+        ${codeSource("crates/kofem-fem/src/shell/stress.rs", 20, "surface stress recovery")} and
+        ${codeSource("web/src/lib/solve/shellRust.ts", 50, "the app’s shell solve")}.</li>
       <li>${source("web/src/lib/solve/autoShell.ts", 72, "one-Shell-body guard")},
         ${source("web/src/lib/solve/shell.ts", 25, "shell material and thickness resolution")},
-        ${source("web/src/lib/shellize/walls.ts", 111, "wall pairing")},
-        ${source("web/src/lib/shellize/midSurface.ts", 72, "mid-surface construction")},
+        ${source("crates/kofem-shellize/src/walls.rs", 98, "wall pairing")},
+        ${source("crates/kofem-shellize/src/mid_surface.rs", 58, "mid-surface construction")},
         ${source("web/src/lib/solveLoads.ts", 20, "load distribution")} and
-        ${source("engine/tests/shell_validation.cpp", 635, "executed plate cases")}.</li>
+        ${codeSource("crates/kofem-fem/tests/shell.rs", 172, "the plate cases")}.</li>
     </ol>`,
 };

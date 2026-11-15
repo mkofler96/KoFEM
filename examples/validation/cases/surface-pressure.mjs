@@ -6,25 +6,35 @@
 //   Pressure acts along the inward normal, so a positive p shortens the bar:
 //   u(L) = −p·L/E, independent of the cross-section. Checks the sign of
 //   pressure loads and that p is a force per area, not a total force.
+//
+// Built as a user builds it in the GUI (lib/recipe.mjs): import the bar as a
+// STEP file, mesh it with Netgen (linear tetrahedra, 25 mm), fix the x = 0
+// face, put a pressure on the x = L face, solve, and read the mean
+// x-displacement of the loaded face in the Results panel's hand check. Same
+// bar and mesh as axial-bar, so the two errors must match.
+//
+// Reference: any mechanics-of-materials text (e.g. Gere & Goodno, "Mechanics of
+// Materials", axially loaded members).
 
-import { boxHexMesh, nodesWhere } from "../lib/mesh.mjs";
-import { STEEL } from "../lib/app-model.mjs";
+import { prismStep } from "../../gallery/step-prism.mjs";
+import { APP_STEEL } from "../lib/recipe.mjs";
 
-const E = STEEL.young_modulus; // MPa
-const nu = STEEL.poisson_ratio;
-const L = 1000; // mm
-const W = 100,
-  H = 100; // cross-section (mm)
+const E = APP_STEEL.young; // MPa
+const nu = APP_STEEL.poisson;
+const L = 1000; // mm, along x
+const W = 100, // mm, along z (the extrusion)
+  H = 100; // mm, along y
 const p = 1.0; // pressure (MPa) on the x = L face
-const DIV = [20, 4, 4]; // elements along x, y, z
+
+// A point in the middle of each end face: what a user clicks to pick it.
+const fixedEnd = { at: [0, H / 2, W / 2] };
+const loadedEnd = { at: [L, H / 2, W / 2] };
 
 export default {
   id: "surface-pressure",
   name: "Bar under end pressure",
   quantity: "tip displacement u",
   unit: "mm",
-  reference: -(p * L) / E, // u(L) = −p·L/E (compression)
-  referenceLabel: "u = −p·L / E",
   tolPct: 2,
   readout: { field: "Ux", stat: "Min" },
   page: {
@@ -41,34 +51,40 @@ export default {
     supports: "x = 0 face fixed (Ux, Uy, Uz).",
     loads: "Pressure p on the x = L face.",
     measured: "Mean x-displacement of the x = L face.",
-    mesh: `${DIV.join(" × ")} grid`,
     source: "Gere & Goodno, Mechanics of Materials",
-    grid: DIV,
   },
-  model() {
-    const m = boxHexMesh(L, W, H, ...DIV);
-    return {
-      title: this.name,
-      mesh: { vertices: m.vertices, hexahedra: m.hexahedra },
-      material: STEEL,
-      order: 1,
-      support: {
-        nodes: nodesWhere(m.vertices, (x) => x <= 1e-9),
-        label: "Fixed end x = 0",
+  recipe: {
+    step: () =>
+      prismStep(
+        [
+          [0, 0],
+          [L, 0],
+          [L, H],
+          [0, H],
+        ],
+        W,
+        "Pressure bar",
+      ),
+    splits: [],
+    discretization: { kind: "solid" },
+    mesh: { maxElementSize: 25, order: 1 },
+    material: APP_STEEL,
+    supports: [
+      { name: "Fixed end", faces: [fixedEnd], dofs: [0, 1, 2], value: 0 },
+    ],
+    loads: [
+      { name: "End pressure", kind: "pressure", faces: [loadedEnd], value: p },
+    ],
+    readout: {
+      quantity: "Tip displacement",
+      probe: {
+        kind: "displacement",
+        component: 0,
+        faces: [loadedEnd],
+        unit: "mm",
       },
-      load: {
-        kind: "pressure",
-        value: p,
-        nodes: nodesWhere(m.vertices, (x) => x >= L - 1e-9),
-        label: "End pressure",
-      },
-      resultType: "Ux",
-    };
-  },
-  measure(model, result) {
-    const nodes = model.load.nodes;
-    return (
-      nodes.reduce((s, v) => s + result.displacements[3 * v], 0) / nodes.length
-    );
+      formula: "u = −p·L / E",
+      reference: -(p * L) / E,
+    },
   },
 };

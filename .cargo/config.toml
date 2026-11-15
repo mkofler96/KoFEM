@@ -1,0 +1,5 @@
+# WebAssembly SIMD (fixed-width 128-bit) lets LLVM vectorise the solver's dot
+# products and sparse products. Every browser KoFEM supports has shipped it
+# since 2021 (Chrome 91, Firefox 89, Safari 16.4).
+[target.wasm32-unknown-unknown]
+rustflags = ["-C", "target-feature=+simd128"]

@@ -3,6 +3,7 @@
 
 import { equation, matrixEquation, tex } from "./math.mjs";
 import { figure } from "../figures/index.mjs";
+import { codeSource } from "../numerical-methods/sources.mjs";
 
 export default {
   slug: "operators/gradient-divergence",
@@ -129,11 +130,11 @@ export default {
       <li><a href="https://ocw.mit.edu/courses/2-080j-structural-mechanics-fall-2013/">MIT OpenCourseWare: Structural Mechanics</a>,
         infinitesimal strain and stress equilibrium.</li>
       <li>KoFEM’s
-        <a href="https://github.com/mkofler96/KoFEM/blob/77ff67ed76c724924decc8c2691f0f5fbd4aea5b/engine/cpp/solve_mfem.cpp#L127">solid stress recovery</a>
-        obtains a displacement gradient, symmetrises it and applies the Lamé
-        material law. The explicit
-        <a href="https://github.com/mkofler96/KoFEM/blob/77ff67ed76c724924decc8c2691f0f5fbd4aea5b/engine/cpp/tet_element.cpp#L139">coupled-solid gradient</a>
-        uses the same component convention. The calculations here verify the
-        operators, not a full solver or shell formulation.</li>
+        ${codeSource("crates/kofem-fem/src/stress.rs", 59, "solid stress recovery")}
+        obtains the displacement gradient ${tex("∂u_i/∂x_j")}, symmetrises it and
+        applies the deviatoric part of the Lamé law, which is all von Mises
+        needs. The mixed solid–shell solve uses the same recovery. The
+        calculations here verify the operators, not a full solver or shell
+        formulation.</li>
     </ol>`,
 };

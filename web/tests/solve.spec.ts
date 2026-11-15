@@ -2,10 +2,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { test, expect } from "./coverage";
-import path from "path";
-import fs from "fs";
 import { bootstrapCantilever } from "./fixtures/cantilever";
-import { gotoApp, importStep } from "./fixtures/app";
+import { fixturePath, gotoApp, importStep } from "./fixtures/app";
 import { openTree } from "./fixtures/tree";
 
 // Navigate to the "04 Solve" mode tab in the top navigation bar
@@ -96,6 +94,7 @@ test("results panel switches to von Mises stress", async ({ page }) => {
         };
       }
     ).__kofem.sendToWorker("solve", {
+      solverMethod: "gauss-seidel",
       nodes: state.nodes,
       elements: state.elements,
       materials: state.materials,
@@ -112,7 +111,7 @@ test("results panel switches to von Mises stress", async ({ page }) => {
   });
 
   await Promise.race([
-    expect(page.getByText(/Max \|U\|/)).toBeVisible({ timeout: 30_000 }),
+    expect(page.getByText(/Max \|U\|/)).toBeVisible(),
     fatal,
   ]);
 
@@ -135,11 +134,14 @@ test("solver log panel streams CG residuals and survives tab switches", async ({
 
   await bootstrapCantilever(page);
   await goToSolvePanel(page);
+  // AMG solves this small hex model in one step, leaving no residual history
+  // to stream; Gauss–Seidel iterates.
+  await page.getByTestId("solver-method").selectOption("gauss-seidel");
   await page.getByRole("button", { name: /Run static solve/ }).click();
 
   // A successful solve hands off to Results mode automatically.
   await Promise.race([
-    expect(page.getByText(/Max \|U\|/)).toBeVisible({ timeout: 30_000 }),
+    expect(page.getByText(/Max \|U\|/)).toBeVisible(),
     fatal,
   ]);
 
@@ -160,14 +162,13 @@ test("solver log panel streams CG residuals and survives tab switches", async ({
 
 // ── STEP → Volume mesh pipeline ───────────────────────────────────────────────
 // Wall Bracket solve regression (WASM trap / SetIntPoint DCE) is covered by
-// the Node.js script test_wall_bracket.mjs, which runs synchronously with no
+// the Node.js script wall-bracket.test.mjs, which runs synchronously with no
 // browser async layer and surfaces raw WASM errors directly.
 
-const STEP_FILE = path.resolve("..", "test_files", "tube.stp");
-
-test("vol mesh stores FEM nodes in the store for solving", async ({ page }) => {
-  test.setTimeout(180_000);
-  test.skip(!fs.existsSync(STEP_FILE), `STEP fixture not found: ${STEP_FILE}`);
+test("vol mesh stores FEM nodes in the store for solving @pipeline", async ({
+  page,
+}) => {
+  const STEP_FILE = fixturePath("tube.stp");
 
   const t0 = Date.now();
   const elapsed = () => `+${((Date.now() - t0) / 1000).toFixed(1)}s`;
@@ -179,22 +180,14 @@ test("vol mesh stores FEM nodes in the store for solving", async ({ page }) => {
   console.log(`[vol-mesh] ${elapsed()} STEP tessellation done`);
 
   // ── 2. Compute volume mesh (controls live in the Geometry panel) ──────────
-  await page
-    .getByRole("button")
-    .filter({ hasText: "Mesh STEP volume" })
-    .click();
-  console.log(`[vol-mesh] ${elapsed()} clicked Mesh STEP volume`);
+  await page.getByRole("button").filter({ hasText: "Generate mesh" }).click();
+  console.log(`[vol-mesh] ${elapsed()} clicked Generate mesh`);
 
   // "Meshing…" is a transient label that can vanish before Playwright polls for
   // it when the WASM worker completes very quickly.  Wait for the stable
   // post-mesh state instead: the status bar's "Mesh OK" chip only appears once
   // the store has nodes (nodes.length > 0), regardless of how fast meshing ran.
-  await Promise.race([
-    expect(page.getByText("Mesh OK")).toBeVisible({
-      timeout: 150_000,
-    }),
-    fatal,
-  ]);
+  await Promise.race([expect(page.getByText("Mesh OK")).toBeVisible(), fatal]);
   console.log(`[vol-mesh] ${elapsed()} meshing finished`);
 
   const meshErr = page.locator('[class*="errorBanner"]');
@@ -207,7 +200,7 @@ test("vol mesh stores FEM nodes in the store for solving", async ({ page }) => {
   console.log(`[vol-mesh] ${elapsed()} navigated to Solve panel`);
 
   await Promise.race([
-    expect(page.getByText(/Mesh ready/)).toBeVisible({ timeout: 10_000 }),
+    expect(page.getByText(/Mesh ready/)).toBeVisible(),
     fatal,
   ]);
   console.log(`[vol-mesh] ${elapsed()} Mesh ready visible — PASS`);

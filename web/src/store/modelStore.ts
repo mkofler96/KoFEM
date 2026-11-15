@@ -25,7 +25,15 @@ import type { StateCreator } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import type { AnalysisState } from "../lib/analysisFile";
 import { bodiesLeftOutOfMesh } from "../lib/suppressBodies";
-import { createGeometrySlice, type GeometrySlice } from "./geometrySlice";
+import {
+  DEFAULT_MAX_ELEMENT_SIZE,
+  DEFAULT_MIN_ELEMENT_SIZE,
+} from "../lib/meshSizing";
+import {
+  createGeometrySlice,
+  suggestSizes,
+  type GeometrySlice,
+} from "./geometrySlice";
 import {
   createMaterialSlice,
   DEFAULT_MATERIAL,
@@ -78,10 +86,10 @@ export type {
 export { loadKind, loadComponents } from "./boundaryGroups";
 export type { Constraint, Load, SurfaceLoad } from "./boundaryRebuild";
 export type { TieGroup, TieSide } from "./tieSlice";
-export { tieFaces, DEFAULT_TIE_DISTANCE } from "./tieSlice";
+export { tieFaces, DEFAULT_TIE_DISTANCE, DEFAULT_TIE_METHOD } from "./tieSlice";
 export type { CouplingGroup } from "./couplingSlice";
 export type { FaceSelection, PickMode } from "./pickSlice";
-export type { TieExtent } from "../lib/tie";
+export type { TieExtent, TieMethod } from "../lib/tie";
 export type { PickGeometry } from "../lib/facePick";
 export type { CouplingKind, ReferencePointOption } from "../lib/coupling";
 export { ALL_DOFS, referencePointOptions } from "../lib/coupling";
@@ -172,6 +180,11 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.nextFaceEntryId = a.nextFaceEntryId;
       s.nextMatId = a.nextMatId;
       s.stepSurface = a.stepSurface;
+      // The file does not record the sizes the mesh was made with.
+      s.meshSizes = null;
+      suggestSizes(s, a.stepSurface);
+      s.interfaces = a.interfaces;
+      s.highlightInterfaceId = null;
       // Saved analyses carry the tessellated surface but not the original STEP
       // file, so re-meshing a loaded analysis requires re-importing the STEP.
       s.stepBytes = null;
@@ -248,6 +261,9 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.materials = [DEFAULT_MATERIAL];
       s.properties = [{ id: 1, materialId: 1 }];
       s.meshSuppressedIds = [];
+      s.meshSizes = null;
+      s.maxElementSize = String(DEFAULT_MAX_ELEMENT_SIZE);
+      s.minElementSize = String(DEFAULT_MIN_ELEMENT_SIZE);
       s.bcGroups = [];
       s.loadGroups = [];
       s.tieGroups = [];
@@ -270,6 +286,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.densityResult = null;
       s.liveDensity = null;
       s.stepSurface = null;
+      s.interfaces = [];
       s.stepBytes = null;
       s.geometryFormat = "step";
       s.geometryHistory = [];
@@ -306,6 +323,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.isMeshing = false;
       s.hasStarted = false;
       s.highlightBodyId = null;
+      s.highlightInterfaceId = null;
       s.hiddenBodyIds = [];
     }),
 });

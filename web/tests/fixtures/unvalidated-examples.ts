@@ -14,14 +14,19 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 const CRANE_DIR = join(here, "../../../examples/unvalidated/crane-hook");
 
-// id → the files the loader asks for. The .step is optional in the app (a 404
-// just leaves the model non-re-meshable), so only list one where it exists.
-const FIXTURES: Record<string, { vtu: string; step?: string }> = {
-  "crane-hook-shell": {
-    vtu: join(CRANE_DIR, "crane-hook-shell.vtu"),
+// The coupled crane: thin holder as shells, pin and hook as solids. It carries
+// no geometry, which ?example= refuses, so a test opens it as a saved analysis
+// file instead.
+export const UNVALIDATED_CRANE_SHELL = join(CRANE_DIR, "crane-hook-shell.vtu");
+
+// id → the files the loader asks for: the .vtu, and the STEP it was saved
+// from, served as <id>.model.step (the geometry the .vtu's CAD faces refer
+// to). The app refuses an example without it.
+const FIXTURES: Record<string, { vtu: string; step: string }> = {
+  "full-crane-hook": {
+    vtu: join(CRANE_DIR, "full-crane-hook.vtu"),
     step: join(here, "../../../test_files/full-crane-hook.step"),
   },
-  "full-crane-hook": { vtu: join(CRANE_DIR, "full-crane-hook.vtu") },
 };
 
 export async function serveUnvalidatedExample(
@@ -35,12 +40,10 @@ export async function serveUnvalidatedExample(
       contentType: "application/xml",
     }),
   );
-  const step = files.step;
-  if (step)
-    await page.route(`**/examples/${id}.step`, async (route) =>
-      route.fulfill({
-        body: await readFile(step),
-        contentType: "application/octet-stream",
-      }),
-    );
+  await page.route(`**/examples/${id}.model.step`, async (route) =>
+    route.fulfill({
+      body: await readFile(files.step),
+      contentType: "application/octet-stream",
+    }),
+  );
 }

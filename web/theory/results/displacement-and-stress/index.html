@@ -21,11 +21,11 @@
     <meta property="og:title" content="Displacement and stress | KoFEM Theory Guide" />
     <meta property="og:description" content="Follow displacement through strain and stress to von Mises, then distinguish KoFEM's element-centre results from nodal averaging, contour colours and deformation scale." />
     <meta property="og:url" content="https://kofem.org/theory/results/displacement-and-stress/" />
-    <meta property="og:image" content="https://kofem.org/kofem_logo.svg" />
-    <meta name="twitter:card" content="summary" />
+    <meta property="og:image" content="https://kofem.org/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Displacement and stress | KoFEM Theory Guide" />
     <meta name="twitter:description" content="Follow displacement through strain and stress to von Mises, then distinguish KoFEM's element-centre results from nodal averaging, contour colours and deformation scale." />
-    <meta name="twitter:image" content="https://kofem.org/kofem_logo.svg" />
+    <meta name="twitter:image" content="https://kofem.org/og-image.png" />
 
     <!-- Self-hosted fonts (SIL OFL) — see public/fonts/README.md -->
     <link href="/fonts/ibm-plex.css" rel="stylesheet" />
@@ -881,11 +881,12 @@
       pure-shear and reversed-sign checks.</p>
 
     <h2 id="sampling">What the solid solver returns</h2>
-    <p>The ordinary solid wrapper exports three translations per mesh vertex
-      in vertex order, and one von Mises scalar per element in element order.
-      It evaluates the full solved displacement gradient at the first point
-      of MFEM’s order-1 integration rule: the reference-element centre for
-      tetrahedra and hexahedra. It then applies that element’s material law.
+    <p>The ordinary solid solve exports three translations per mesh vertex
+      in vertex order, and one von Mises scalar per element in element order,
+      tetrahedra first, then hexahedra. It evaluates the full solved
+      displacement gradient at the reference-element centre of each
+      tetrahedron and hexahedron, the point of a one-point rule, and then
+      applies that element’s material law.
       This is a point sample, not a volume average or a search for the element’s
       maximum stress.</p>
     <p>On a straight-sided linear tetrahedron the displacement gradient is
@@ -933,7 +934,7 @@
     <h2 id="display">Fields, units and deformation scale</h2>
     <p>Displacement components keep their global-axis signs; magnitude is
       <math><mo stretchy="false" lspace="0" rspace="0">|</mo><mi>u</mi><mo stretchy="false" lspace="0" rspace="0">|</mo><mo>=</mo></math>​<span class="math-nowrap"><math><msqrt><mrow><msubsup><mi>u</mi><mi>x</mi><mn>2</mn></msubsup><mo>+</mo><msubsup><mi>u</mi><mi>y</mi><mn>2</mn></msubsup><mo>+</mo><msubsup><mi>u</mi><mi>z</mi><mn>2</mn></msubsup></mrow></msqrt></math>.</span> The app labels them in mm and
-      von Mises in MPa (N/mm²). The engine does no dimensional conversion:
+      von Mises in MPa (N/mm²). The solver does no dimensional conversion:
       geometry, material inputs and loads must already be coherent. See
       <a href="/theory/foundations/consistent-units/#material-values">consistent units and modulus/stress conversion</a>.</p>
     <p>The shape uses original position plus scaled displacement. The UI’s
@@ -950,24 +951,23 @@
 
     <h2 id="verification">A public stress verification case</h2>
     <p>The <a href="/examples/plate-with-hole/">plate-with-hole verification case</a>
-      compares the largest element-centre von Mises sample in the first ring
-      around the hole, divided by nominal tension, with Kirsch’s infinite-plate
-      concentration factor of 3. At the free edge’s peak in that ideal problem,
-      the remaining tangential stress is uniaxial, so its magnitude equals von Mises.</p>
+      compares the largest nodal von Mises stress on the hole face, divided by
+      nominal tension, with the concentration factor of its strip, 3.14
+      (Kirsch’s infinite plate gives 3). At the free edge’s peak the remaining
+      tangential stress is uniaxial, so its magnitude equals von Mises.</p>
     <figure class="theory-figure full" id="figure-plate-hole-concentration">
       <a href="/theory/figures/plate-hole-concentration.svg" class="figure-link"><picture class="figure-image"><source srcset="/theory/figures/plate-hole-concentration.svg" type="image/svg+xml" /><img src="/theory/figures/plate-hole-concentration.png" width="700" height="350" alt="Left: a plate with a circular hole of radius a under remote tension sigma infinity. Right: the stress along the line above the hole falls from three times the remote stress at the hole edge towards the remote value further away." loading="lazy" decoding="async" /></picture></a>
       <figcaption>Kirsch’s solution for a circular hole in an infinite plate under remote tension. The stress along the line above the hole is three times the remote stress at the hole edge and falls quickly with distance.</figcaption>
     </figure>
-    <p>The finite plate, support and element-centre sampling differ from the
-      ideal boundary value. The public case explains sampling and discretization
-      errors; its tolerance applies to that benchmark. Its measured peak is
-      <em>unsmoothed</em>, whereas the app summary uses nodal averaging. Compare
-      like measures before interpreting a difference. Open the case in the
-      app to reproduce it.</p>
+    <p>Averaging centre samples to the nodes reads the boundary peak slightly
+      low. The public case explains this and its discretization error; its
+      tolerance applies to that benchmark. Its measured peak is the app’s
+      nodal average, the value the Results panel’s hand check shows, so you
+      compare like with like when you open the case in the app.</p>
     <figure class="result-viewer" data-viewer="/theory/viewers/plate-with-hole.json" id="viewer-plate-with-hole">
       <div class="viewer-stage">
         <img src="/examples/plate-with-hole.png" width="1200" height="720" alt="Plate with a hole: von mises stress on the solved model, coloured from blue (low) to red (high)." loading="lazy" decoding="async" />
-        <div class="viewer-legend" aria-hidden="true"><span>277 MPa</span><span class="viewer-bar"></span><span>24.3 MPa</span></div>
+        <div class="viewer-legend" aria-hidden="true"><span>313 MPa</span><span class="viewer-bar"></span><span>27.9 MPa</span></div>
         <p class="viewer-hint" hidden>Drag to rotate · scroll to zoom</p>
       </div>
       <figcaption>Von Mises stress of the plate-with-hole case, averaged at the nodes as the app displays it. The peak sits at the hole edge, on the line across the plate perpendicular to the load. Undeformed shape.
@@ -978,21 +978,19 @@
       before using a peak for a design decision.</p>
 
     <h2 id="sources">Implementation and references</h2>
-    <p>KoFEM uses MFEM 4.7 for the solid solve.</p>
+    <p>KoFEM’s solid solve runs in its Rust finite-element module.</p>
     <ul class="refs">
-      <li><a href="https://github.com/mkofler96/KoFEM/blob/0db1e95ae2016d2c625932babf68d8ff672d9f69/engine/cpp/solve_mfem.cpp#L52">Vertex extraction and element-centre recovery</a>,
-        and <a href="https://github.com/mkofler96/KoFEM/blob/0db1e95ae2016d2c625932babf68d8ff672d9f69/engine/cpp/solve_mfem.cpp#L239">result arrays after the linear solve</a>.</li>
+      <li><a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/stress.rs#L59">Element-centre recovery</a>
+        and <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/web/src/lib/solve/amg.ts#L283">vertex displacements and result arrays after the linear solve</a>.</li>
       <li><a href="https://github.com/mkofler96/KoFEM/blob/0db1e95ae2016d2c625932babf68d8ff672d9f69/web/src/lib/resultField.ts#L51">Averaging weights, nodal field, extrema and units</a>,
         <a href="https://github.com/mkofler96/KoFEM/blob/0db1e95ae2016d2c625932babf68d8ff672d9f69/web/src/components/viewport/ResultsColormap.tsx#L90">legend mapping and boundary colours</a>,
         <a href="https://github.com/mkofler96/KoFEM/blob/0db1e95ae2016d2c625932babf68d8ff672d9f69/web/src/components/viewport/MeshScene.tsx#L59">automatic deformation scaling</a>,
         <a href="https://github.com/mkofler96/KoFEM/blob/0db1e95ae2016d2c625932babf68d8ff672d9f69/web/src/components/viewport/useMeshTopology.ts#L170">model span</a>,
         <a href="https://github.com/mkofler96/KoFEM/blob/0db1e95ae2016d2c625932babf68d8ff672d9f69/web/src/components/panel/ResultsPanel.tsx#L372">summary and display controls</a>
         and <a href="https://github.com/mkofler96/KoFEM/blob/0db1e95ae2016d2c625932babf68d8ff672d9f69/web/src/store/resultsSlice.ts#L12">static result interface</a>.</li>
-      <li><a href="https://github.com/mkofler96/KoFEM/blob/0db1e95ae2016d2c625932babf68d8ff672d9f69/examples/validation/cases/plate-with-hole.mjs#L90">Benchmark measurement</a>
-        selects unsmoothed samples, not the app’s nodal extrema.</li>
       <li>Shells use membrane-plus-bending stress at the worse of their two
-        surfaces: <a href="https://github.com/mkofler96/KoFEM/blob/0db1e95ae2016d2c625932babf68d8ff672d9f69/engine/cpp/solve_shell.cpp#L195">shell result</a>
-        and <a href="https://github.com/mkofler96/KoFEM/blob/0db1e95ae2016d2c625932babf68d8ff672d9f69/engine/cpp/solve_coupled.cpp#L265">coupled result</a>. Auto-shell
+        surfaces: <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/shell/stress.rs#L20">shell result</a>
+        and <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-wasm/src/mixed.rs#L228">coupled result</a>. Auto-shell
         additionally <a href="https://github.com/mkofler96/KoFEM/blob/0db1e95ae2016d2c625932babf68d8ff672d9f69/web/src/lib/solve/autoShell.ts#L363">maps shell stresses onto original elements</a>.
         These are different measures from solid centre samples; see the
         <a href="/theory/shells/formulation/">shell chapter</a>.</li>

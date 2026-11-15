@@ -5,22 +5,31 @@
 // and the per-body Shell/Solid choice — shared by the static solve and the
 // topology optimizer so both route the same model the same way.
 
-import type { SolvePayload, TopOptPayload } from "../../workers/solverTypes.js";
+import type { SolveModel, TopOptPayload } from "../../workers/solverTypes.js";
 import { shellMarkedBodies, requireOneShellBody } from "./autoShell.js";
+import { amgUnavailableReason } from "./amg.js";
+import {
+  shellCouplingRefusal,
+  solidModelRefusal,
+  shellOrderRefusal,
+  shellTieRefusal,
+  topOptTieRefusal,
+} from "./refusals.js";
 
 export type SolveRoute =
-  // All CTRIA3 → the Kirchhoff shell solver (solve_shell).
+  // All CTRIA3 → the Kirchhoff shell solve (shellRust.ts).
   | { path: "shell" }
   // CTRIA3 mixed with solids, or any surface-to-point coupling → the coupled
-  // solid-shell assembler (solve_coupled).
+  // solve: the Rust mixed solve (coupledRust.ts) for shells with solids, the
+  // Rust solid solve with couplings for an all-solid model (tets only).
   | { path: "coupled" }
   // All solid with a body marked Shell → idealised at solve time, coupled to the
   // solid bodies or as a pure shell.
   | { path: "auto-shell"; shellBodyIds: Set<number> }
-  // All solid, no Shell body, no coupling → solve_linear_elastic.
+  // All solid, no Shell body, no coupling → the Rust solid solve (amg.ts).
   | { path: "solid" };
 
-export function routeSolve(payload: SolvePayload): SolveRoute {
+export function routeSolve(payload: SolveModel): SolveRoute {
   // Shell models route away from the all-solid path. A model that is ALL CTRIA3
   // solves via the Kirchhoff shell solver; a model that MIXES CTRIA3 shells with
   // solid elements solves via the coupled solid-shell solver (the shells are
@@ -29,27 +38,37 @@ export function routeSolve(payload: SolvePayload): SolveRoute {
   const nShells = payload.elements.filter((e) => e.type === "CTRIA3").length;
   // eslint-disable-next-line kofem/no-silent-fallback -- `couplings` is optional in the solve message; a model with none is the ordinary case
   const nCouplings = payload.couplings?.length ?? 0;
+  // eslint-disable-next-line kofem/no-silent-fallback -- elementOrder is optional in the solve message; the documented default is linear elements
+  const elementOrder = payload.elementOrder ?? 1;
+  // Shell facets and the tets coupled to them are linear: a shell or mixed
+  // model refuses order 2 rather than solve linear behind the user's back.
+  const orderRefusal = shellOrderRefusal(elementOrder);
   if (nShells > 0) {
-    // A coupling is an RBE2/RBE3 constraint, and only the coupled assembler
-    // applies one — the pure Kirchhoff shell solver has no couplings, and the
-    // coupled assembler needs a solid domain to assemble. An all-shell model
-    // therefore cannot carry a coupling today; say so, rather than solve it
-    // as if the coupling were not there.
+    // An all-shell model cannot carry a coupling; say so, rather than solve
+    // it as if the coupling were not there.
     if (nShells === payload.elements.length && nCouplings > 0)
-      throw new Error(
-        `This model is all shell elements and declares ${nCouplings} surface-to-point ` +
-          "coupling(s), which the shell solver cannot apply — a coupling needs the " +
-          "coupled solid-shell assembler, and that needs at least one solid body. " +
-          "Delete the coupling, or keep one body solid.",
-      );
-    return nShells === payload.elements.length
-      ? { path: "shell" }
-      : { path: "coupled" };
+      throw new Error(shellCouplingRefusal(nCouplings));
+    if (orderRefusal !== null) throw new Error(orderRefusal);
+    if (nShells < payload.elements.length) return { path: "coupled" };
+    // The coupled assembler joins ties; the pure shell solver has none.
+    const tieRefusal = shellTieRefusal(payload.tieGroups);
+    if (tieRefusal !== null) throw new Error(tieRefusal);
+    return { path: "shell" };
   }
   // An all-solid model that declares a surface-to-point coupling still needs the
   // coupled assembler — solve_linear_elastic has no notion of an RBE2/RBE3
   // constraint, and the reference point is not even a node it could carry.
-  if (nCouplings > 0) return { path: "coupled" };
+  if (nCouplings > 0) {
+    // The Rust solve takes these on tetrahedral meshes only.
+    const reason = amgUnavailableReason({
+      elements: payload.elements,
+      properties: payload.properties,
+      elementOrder,
+      couplingCount: nCouplings,
+    });
+    if (reason !== null) throw new Error(solidModelRefusal(reason));
+    return { path: "coupled" };
+  }
 
   // A body marked "Shell" is idealised as shells and solved coupled to the solid
   // bodies — this converges where the all-solid solve of the thin part stalls
@@ -60,24 +79,40 @@ export function routeSolve(payload: SolvePayload): SolveRoute {
   );
   if (shellBodyIds.size > 0) {
     requireOneShellBody(shellBodyIds);
+    if (orderRefusal !== null) throw new Error(orderRefusal);
     return { path: "auto-shell", shellBodyIds };
   }
+  const reason = amgUnavailableReason({
+    elements: payload.elements,
+    properties: payload.properties,
+    elementOrder,
+    couplingCount: 0,
+  });
+  if (reason !== null) throw new Error(solidModelRefusal(reason));
   return { path: "solid" };
 }
 
 export type TopOptDomain = "shell" | "coupled" | "solid";
 
 // The topology optimizer's design domain follows the element mix, exactly as
-// the static solve routes: all CTRIA3 → optimize_topology_shell; mixed
-// shell/solid or any coupling → optimize_topology_coupled; all solid →
-// optimize_topology. Unlike the solve, the optimizer never idealises a Shell
-// body itself, and the level-set method runs through the solid entry only —
-// both are refused here rather than optimizing the wrong model.
+// the static solve routes: all CTRIA3 → shell; mixed shell/solid or any
+// coupling → coupled; all solid → solid. SIMP runs in Rust on all three
+// (topOptRust.ts); the level-set method runs in Rust too, on solid models
+// only. An all-shell model with a
+// coupling is refused, as by the solve. Unlike the solve, the optimizer never idealises a Shell
+// body itself, applies no tie, and runs the level-set method through the solid
+// entry only — all three are refused here rather than optimizing the wrong
+// model.
 export function routeTopOpt(payload: TopOptPayload): TopOptDomain {
   const { elements, properties, settings } = payload;
   const shellElements = elements.filter((e) => e.type === "CTRIA3");
   const solidElements = elements.filter((e) => e.type !== "CTRIA3");
   const couplings = payload.couplings ?? [];
+
+  // No optimizer applies a tie (C++ or Rust, any design domain): a tied
+  // assembly would be optimized as separate parts.
+  const tieRefusal = topOptTieRefusal(payload.tieGroups);
+  if (tieRefusal !== null) throw new Error(tieRefusal);
 
   // A body marked "Shell" that has NOT been idealised into shell (CTRIA3)
   // elements would be turned into a mid-surface mesh only at solve time — the
@@ -105,7 +140,9 @@ export function routeTopOpt(payload: TopOptPayload): TopOptDomain {
       `Topology optimization: the level-set method does not support couplings yet, but this model has ${couplings.length} — remove them or use SIMP.`,
     );
 
-  if (solidElements.length === 0 && couplings.length === 0) return "shell";
+  if (solidElements.length === 0 && couplings.length > 0)
+    throw new Error(shellCouplingRefusal(couplings.length));
+  if (solidElements.length === 0) return "shell";
   if (shellElements.length > 0 || couplings.length > 0) return "coupled";
   return "solid";
 }

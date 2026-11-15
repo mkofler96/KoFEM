@@ -1,0 +1,8 @@
+# Single-letter names allowed by clippy::min_ident_chars — the same
+# conventional counters web/'s kofem/min-identifier-length exempts.
+allowed-idents-below-min-chars = ["i", "j", "k", "n"]
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+# Proper names clippy::doc_markdown would otherwise want in backticks.
+doc-valid-idents = ["KoFEM", "MFEM", "OCCT", "Netgen", "WebAssembly", ".."]

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useModelStore } from "../../store/modelStore";
 import { isCadBody } from "../../store/geometrySlice";
 import { useGeometryEdit, type BooleanOp } from "../../hooks/useGeometryEdit";
+import { solidName } from "../../lib/regions";
 import styles from "./Panel.module.css";
 
 const OPS: { op: BooleanOp; label: string; hint: string }[] = [
@@ -39,7 +40,9 @@ export function BooleanSection() {
   const { combine, undo, isSplitting, splitError, setSplitError } =
     useGeometryEdit();
 
-  // A suppressed body is as good as deleted — nothing to combine with.
+  // A suppressed body is as good as deleted — nothing to combine with. The
+  // engine combines CAD solids, so each choice is one solid, named as the tree
+  // names it: "Body 2", or "Body 1 · Region 2" for a region of a split body.
   const bodies = properties
     .filter((p) => isCadBody(p) && !p.suppressed)
     .map((p) => p.id);
@@ -132,7 +135,7 @@ export function BooleanSection() {
         >
           {bodies.map((id) => (
             <option key={id} value={id}>
-              Body {id}
+              {solidName(properties, id)}
             </option>
           ))}
         </select>
@@ -156,7 +159,9 @@ export function BooleanSection() {
               checked={tools.includes(id)}
               onChange={() => toggleTool(id)}
             />
-            <span className={styles.bodyLabel}>Body {id}</span>
+            <span className={styles.bodyLabel}>
+              {solidName(properties, id)}
+            </span>
           </label>
         ))}
 

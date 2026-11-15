@@ -18,8 +18,6 @@ const STEP_FILE = fileURLToPath(
 test("production bundle boots and runs the WASM pipeline end-to-end", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
-
   // Any 4xx/5xx or transport failure on a fingerprinted asset (JS chunk, CSS,
   // worker, or the .wasm binary) means the build is mis-wired — fail loudly.
   const badRequests: string[] = [];
@@ -35,9 +33,6 @@ test("production bundle boots and runs the WASM pipeline end-to-end", async ({
   await page.goto("/app/", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(
     () => !!(window as Window & { __kofem?: unknown }).__kofem,
-    {
-      timeout: 30_000,
-    },
   );
 
   // Drive the real pipeline in the worker: STEP bytes → OCCT tessellation →
@@ -60,4 +55,25 @@ test("production bundle boots and runs the WASM pipeline end-to-end", async ({
     badRequests,
     `Failed asset requests:\n${badRequests.join("\n")}`,
   ).toEqual([]);
+});
+
+// nginx answers an unknown address with a real 404 and the "Page not found"
+// page. Serving the landing page with a 200 instead makes search engines index
+// every mistyped or stale address as a duplicate of the homepage.
+test("unknown addresses return 404 with the Page not found page", async ({
+  request,
+}) => {
+  for (const path of [
+    "/this-page-does-not-exist",
+    "/theory/no-such-article/",
+  ]) {
+    const res = await request.get(path);
+    expect(res.status(), path).toBe(404);
+    const html = await res.text();
+    expect(html, path).toContain("<h1>Page not found</h1>");
+    expect(html, path).toContain('<meta name="robots" content="noindex" />');
+  }
+  for (const path of ["/", "/examples/", "/theory/", "/privacy/", "/app/"]) {
+    expect((await request.get(path)).status(), path).toBe(200);
+  }
 });

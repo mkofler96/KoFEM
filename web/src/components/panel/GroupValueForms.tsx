@@ -16,6 +16,7 @@ import type {
   NamedLoadGroup,
   TieExtent,
   TieGroup,
+  TieMethod,
 } from "../../store/modelStore";
 import {
   DOF_LABELS,
@@ -113,7 +114,7 @@ export function BcValueForm({
   );
 }
 
-// Inline editor for a tie connection's extent and search distance — opened by
+// Inline editor for a tie connection's method, extent and search distance — opened by
 // the connection's ✎ button. The picked surfaces are edited through the face
 // rows, exactly as for a BC or a load.
 export function TieValueForm({
@@ -122,21 +123,22 @@ export function TieValueForm({
   onCancel,
 }: {
   group: TieGroup;
-  onSave(extent: TieExtent, searchDistance: number): void;
+  onSave(extent: TieExtent, searchDistance: number, method: TieMethod): void;
   onCancel(): void;
 }) {
+  const [method, setMethod] = useState<TieMethod>(group.method);
   const [extent, setExtent] = useState<TieExtent>(group.extent);
   const [distance, setDistance] = useState(String(group.searchDistance));
   const [error, setError] = useState<string | null>(null);
 
   function handleSave() {
     if (extent === "full") {
-      onSave("full", 0);
+      onSave("full", 0, method);
       return;
     }
     const searchDistance = parseTieDistance(distance, setError);
     if (searchDistance === null) return;
-    onSave("region", searchDistance);
+    onSave("region", searchDistance, method);
   }
 
   return (
@@ -148,8 +150,10 @@ export function TieValueForm({
         </div>
       )}
       <TieExtentInputs
+        method={method}
         extent={extent}
         distance={distance}
+        onMethodChange={setMethod}
         onExtentChange={setExtent}
         onDistanceChange={setDistance}
       />

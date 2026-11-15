@@ -25,7 +25,6 @@ async function openExample(page: Page, example: string): Promise<LoadCounts> {
         }
       ).__kofemStore?.getState().surfaceLoads.length,
     null,
-    { timeout: 15_000 },
   );
   return page.evaluate(() => {
     const state = (

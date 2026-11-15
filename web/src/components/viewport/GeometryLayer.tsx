@@ -17,6 +17,8 @@ import { useMemo } from "react";
 import type { ThreeEvent } from "@react-three/fiber";
 import * as THREE from "three";
 import { useModelStore } from "../../store/modelStore";
+import type { BodyInterface } from "../../lib/interfaces";
+import { FaceOverlay } from "./FaceOverlay";
 import {
   cadFaceOutline,
   cadFaceTriangles,
@@ -31,6 +33,9 @@ interface GeometryLayerProps {
   // the same as "dim everything": an id no body carries must leave the assembly
   // fully lit, or the model reads as gone.
   highlightBodyId: number | null;
+  // Body-to-body interface to show: its shared faces are drawn on top (they lie
+  // inside the assembly) and every body outside the pair is dimmed.
+  highlightInterface: BodyInterface | null;
 }
 
 // Fallback body colour when a body has no material assignment yet (or an
@@ -46,6 +51,8 @@ const OUTLINE_ON_DARK = "#e5edf7";
 // BC/load pick (PickHighlights), so a pick reads as a pick everywhere.
 const SPLIT_PICK_COLOR = "#e05533";
 const SPLIT_PLANE_COLOR = "#2563eb";
+// An interface's shared faces — the interface marker colour of the model tree.
+const INTERFACE_COLOR = "#0891b2";
 
 function outlineColor(bodyColor: string): string {
   const hsl = { h: 0, s: 0, l: 0 };
@@ -68,6 +75,7 @@ interface BodyGeometry {
 export function GeometryLayer({
   wireframe,
   highlightBodyId,
+  highlightInterface,
 }: GeometryLayerProps) {
   const stepSurface = useModelStore((s) => s.stepSurface);
   const properties = useModelStore((s) => s.properties);
@@ -166,6 +174,13 @@ export function GeometryLayer({
         : null,
     [faced, splitFaceIds],
   );
+  const interfaceFaces = useMemo(
+    () =>
+      faced && highlightInterface
+        ? cadFaceTriangles(faced, highlightInterface.faceIds)
+        : null,
+    [faced, highlightInterface],
+  );
   const bounds = useMemo(
     () => (stepSurface ? tessellationBounds(stepSurface.points) : null),
     [stepSurface],
@@ -213,7 +228,11 @@ export function GeometryLayer({
             return null;
           // When a body is being assigned (highlightBodyId set), every other body
           // fades back so the one in question reads clearly against the assembly.
-          const dimmed = highlightBodyId !== null && highlightBodyId !== bodyId;
+          const dimmed =
+            (highlightBodyId !== null && highlightBodyId !== bodyId) ||
+            (highlightInterface !== null &&
+              bodyId !== highlightInterface.bodyA &&
+              bodyId !== highlightInterface.bodyB);
           return (
             <group key={bodyId}>
               <mesh
@@ -280,6 +299,14 @@ export function GeometryLayer({
             side={THREE.DoubleSide}
           />
         </mesh>
+      )}
+      {interfaceFaces && (
+        <FaceOverlay
+          positions={interfaceFaces}
+          color={INTERFACE_COLOR}
+          opacity={0.6}
+          renderOrder={1}
+        />
       )}
       {plane && (
         <mesh renderOrder={2}>

@@ -6,8 +6,9 @@
 // responses back to the correct Promise via a pending-call map.
 
 import { durationBucket, trackOnce } from "../lib/analytics";
+import { isFailureStage, WorkerTaskError } from "../lib/workerError";
 import { askCgContinuation, dismissCgContinuation } from "./cgContinuation";
-import type { CgLimitProgress } from "../wasm/pkg/kofem_wasm.js";
+import type { CgLimitProgress } from "../lib/solve/contracts.js";
 import {
   failureHint,
   useEngineStatus,
@@ -169,7 +170,16 @@ function createWorker(): Worker {
       // eslint-disable-next-line kofem/no-silent-fallback -- fallback text for a failure that arrived without a message; this is the error path itself, not solver data
       const msg = (rest.error as string | undefined) ?? "Worker error";
       console.error("[worker] task failed:", msg);
-      pending.reject(new Error(msg));
+      const { stage } = rest;
+      if (stage === undefined || isFailureStage(stage))
+        pending.reject(new WorkerTaskError(msg, stage ?? null));
+      else
+        pending.reject(
+          new WorkerTaskError(
+            `${msg} (the worker also reported an unknown step "${String(stage)}")`,
+            null,
+          ),
+        );
     }
   };
 
@@ -243,9 +253,9 @@ export function retryEngine(): void {
   resetWorker();
 }
 
-// Terminate and recreate the worker.  Call this after volume meshing so that
-// Netgen's Ng_Init() global C++ state does not contaminate the WASM runtime
-// for the subsequent MFEM solve.  Any in-flight requests are rejected. The
+// Terminate and recreate the worker. Call this after volume meshing so that
+// later engine calls start from a clean module, without Netgen's Ng_Init()
+// global C++ state. Any in-flight requests are rejected. The
 // replacement starts loading at once, so the next request — the solve after a
 // mesh — finds it compiled instead of waiting for it.
 export function resetWorker(): void {

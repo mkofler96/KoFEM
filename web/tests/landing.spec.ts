@@ -26,7 +26,6 @@ test("landing page renders and links to the solver app", async ({ page }) => {
 test("bracket turns 90 degrees during transfer and a full turn during optimization", async ({
   page,
 }) => {
-  test.setTimeout(60_000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/");
@@ -144,3 +143,94 @@ for (const path of ["/", "/examples/", "/examples/axial-bar/", "/privacy/"]) {
     expect(await page.content()).not.toContain("example.com");
   });
 }
+
+// Facebook, LinkedIn, X, Slack and Discord show no SVG previews: shared links
+// need a raster og:image, and the large card needs summary_large_image.
+test("social previews use the 1200×630 PNG card", async ({ page }) => {
+  for (const path of [
+    "/",
+    "/theory/",
+    "/theory/solid-mechanics/linear-elasticity/",
+  ]) {
+    await page.goto(path);
+    const og = await page
+      .locator('meta[property="og:image"]')
+      .getAttribute("content");
+    expect(og, path).toBe("https://kofem.org/og-image.png");
+    await expect(
+      page.locator('meta[name="twitter:image"]'),
+      path,
+    ).toHaveAttribute("content", og ?? "");
+    await expect(
+      page.locator('meta[name="twitter:card"]'),
+      path,
+    ).toHaveAttribute("content", "summary_large_image");
+  }
+  const card = await page.request.get("/og-image.png");
+  expect(card.headers()["content-type"]).toBe("image/png");
+  const png = await card.body();
+  expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([1200, 630]);
+});
+
+test("landing page draws the mesh background behind the hero", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const image = await page
+    .locator("body")
+    .evaluate((body) => getComputedStyle(body).backgroundImage);
+  expect(image).toContain("/landing/background.webp");
+  const background = await page.request.get("/landing/background.webp");
+  expect(background.ok()).toBe(true);
+  expect(background.headers()["content-type"]).toBe("image/webp");
+});
+
+test("on a phone the headline sits lower and the bracket higher, with room between", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  const scene = page.locator("#scene");
+  await expect(scene).toHaveAttribute("data-loaded", "true");
+  const intro = await page.locator(".intro").boundingBox();
+  if (!intro) throw new Error("The landing headline has no layout box");
+  const vertical = Number(await scene.getAttribute("data-frame-vertical"));
+  expect(intro.y / 844).toBeGreaterThanOrEqual(0.24);
+  expect(vertical).toBeLessThanOrEqual(0.56);
+  expect((intro.y + intro.height) / 844).toBeLessThan(vertical - 0.12);
+});
+
+test("the landing Start Solver button is a quiet tinted button, not a solid fill", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const launch = page.getByRole("link", { name: /Start Solver/i });
+  await expect(launch).toBeVisible();
+  const alpha = await launch.evaluate((link) => {
+    const color = getComputedStyle(link).backgroundColor;
+    const parts = color.match(/[\d.]+/g);
+    if (!parts) throw new Error(`Unreadable background colour: ${color}`);
+    return parts.length === 4 ? Number(parts[3]) : 1;
+  });
+  expect(alpha).toBeLessThan(0.3);
+  // The outline must not widen the button: the header has to fit 320 px.
+  await expect(launch).toHaveCSS("border-top-width", "0px");
+  await expect(launch).toHaveCSS("box-shadow", /inset/);
+});
+
+test("the bracket shows its CAD feature edges before the mesh draws in", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const scene = page.locator("#scene");
+  await expect(scene).toHaveAttribute("data-loaded", "true");
+  const edges = await page.request.get("/landing/ge-engine-bracket-edges.json");
+  const { segmentCount } = (await edges.json()) as { segmentCount: number };
+  expect(segmentCount).toBeGreaterThan(1000);
+  await expect(scene).toHaveAttribute("data-feature-edges-source", "cad");
+  await expect(scene).toHaveAttribute(
+    "data-feature-edges",
+    String(segmentCount),
+  );
+  await expect(scene).toHaveAttribute("data-feature-edges-visible", "true");
+});

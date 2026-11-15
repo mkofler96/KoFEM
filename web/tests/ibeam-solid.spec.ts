@@ -30,11 +30,9 @@ interface Node {
   z: number;
 }
 
-test("i-beam solid: import STEP, mesh, cantilever tip load, all-solid solve", async ({
+test("i-beam solid: import STEP, mesh, cantilever tip load, all-solid solve @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(240_000);
-
   const logs: string[] = [];
   page.on("console", (msg) => logs.push(msg.text()));
 
@@ -57,12 +55,11 @@ test("i-beam solid: import STEP, mesh, cantilever tip load, all-solid solve", as
               }
             ).__kofemStore.getState().properties.length,
         )) as number,
-      { timeout: 60_000 },
     )
     .toBe(1); // the I-beam is a single body
 
   // 2. Mesh the STEP volume.
-  await page.getByRole("button", { name: /Mesh STEP volume/i }).click();
+  await page.getByRole("button", { name: /Generate mesh/i }).click();
   await expect
     .poll(
       async () =>
@@ -74,7 +71,6 @@ test("i-beam solid: import STEP, mesh, cantilever tip load, all-solid solve", as
               }
             ).__kofemStore.getState().nodes.length,
         )) as number,
-      { timeout: 180_000 },
     )
     .toBeGreaterThan(0);
 
@@ -107,6 +103,7 @@ test("i-beam solid: import STEP, mesh, cantilever tip load, all-solid solve", as
       }));
 
       const res = (await win.__kofem.sendToWorker("solve", {
+        solverMethod: "gauss-seidel",
         nodes: st.nodes,
         elements: st.elements,
         materials: st.materials,

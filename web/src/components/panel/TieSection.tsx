@@ -6,8 +6,14 @@ import {
   useModelStore,
   tieFaces,
   DEFAULT_TIE_DISTANCE,
+  DEFAULT_TIE_METHOD,
 } from "../../store/modelStore";
-import type { TieExtent, TieGroup, TieSide } from "../../store/modelStore";
+import type {
+  TieExtent,
+  TieGroup,
+  TieMethod,
+  TieSide,
+} from "../../store/modelStore";
 import { usePickedFaces } from "../../hooks/usePickedFaces";
 import { useTiePairs } from "../../hooks/useTiePairs";
 import { parseTieDistance, toFaceEntries } from "./bcFormUtils";
@@ -33,14 +39,16 @@ export function isSelfSplitTie(group: TieGroup): boolean {
   return group.facesB.length === 0;
 }
 
-// One-line summary of what a connection couples and how far it reaches.
+// One-line summary of what a connection couples and how far it reaches: the
+// node pairs a node-merge welds, or the nodes a constraint ties.
 export function tieGroupMeta(group: TieGroup, nPaired: number): string {
   const extent =
     group.extent === "full"
       ? "full surface"
       : `within ${group.searchDistance} mm`;
   const split = isSelfSplitTie(group) ? " · split by body" : "";
-  return `${extent}${split} · ${nPaired} node pair${nPaired === 1 ? "" : "s"}`;
+  const joined = group.method === "merge" ? "node pair" : "tied node";
+  return `${extent}${split} · ${nPaired} ${joined}${nPaired === 1 ? "" : "s"}`;
 }
 
 // Tie connections section: pick the two surfaces a connection joins, choose
@@ -77,6 +85,7 @@ export function TieSection({
   const [editingTieId, setEditingTieId] = useState<number | null>(
     focusedId(focus),
   );
+  const [method, setMethod] = useState<TieMethod>(DEFAULT_TIE_METHOD);
   const [extent, setExtent] = useState<TieExtent>("full");
   const [distance, setDistance] = useState(String(DEFAULT_TIE_DISTANCE));
 
@@ -132,6 +141,7 @@ export function TieSection({
       toFaceEntries(facesB, 0),
       extent,
       searchDistance,
+      method,
     );
     endPick();
   }
@@ -188,15 +198,17 @@ export function TieSection({
           {!targetTieGroup && (
             <>
               <TieExtentInputs
+                method={method}
                 extent={extent}
                 distance={distance}
+                onMethodChange={setMethod}
                 onExtentChange={setExtent}
                 onDistanceChange={setDistance}
               />
               <div className={styles.pickNote}>
                 {extent === "full"
-                  ? "every node pair across the two surfaces is welded"
-                  : "only node pairs closer than the search distance are welded"}
+                  ? "the whole of the two surfaces is tied"
+                  : "only nodes within the search distance are tied"}
               </div>
               {pickedOf("b").length === 0 && (
                 <div className={styles.pickNote}>
@@ -249,8 +261,13 @@ export function TieSection({
             {editingTieId === group.id && (
               <TieValueForm
                 group={group}
-                onSave={(nextExtent, nextDistance) => {
-                  updateTieGroup(group.id, nextExtent, nextDistance);
+                onSave={(nextExtent, nextDistance, nextMethod) => {
+                  updateTieGroup(
+                    group.id,
+                    nextExtent,
+                    nextDistance,
+                    nextMethod,
+                  );
                   setEditingTieId(null);
                 }}
                 onCancel={() => setEditingTieId(null)}

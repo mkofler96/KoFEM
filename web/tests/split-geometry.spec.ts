@@ -7,12 +7,8 @@
 
 import { test, expect } from "./coverage";
 import type { Page } from "@playwright/test";
-import {
-  clickModelAt,
-  geometryCounts,
-  importStepText,
-  splitFaceAt,
-} from "./fixtures/split";
+import { geometryCounts, importStepText, splitFaceAt } from "./fixtures/split";
+import { clickModelAt } from "./fixtures/viewport";
 import { prismStep } from "../../examples/gallery/step-prism.mjs";
 import { openTree, addBoundary } from "./fixtures/tree";
 
@@ -32,7 +28,6 @@ const BLOCK = prismStep(
 test("split a face with a plane, see the error for a plane that misses, undo", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
   await importStepText(page, BLOCK);
   expect(await geometryCounts(page)).toEqual({ faces: 6, bodies: 1, edits: 0 });
 
@@ -63,27 +58,51 @@ test("split a face with a plane, see the error for a plane that misses, undo", a
   expect(await geometryCounts(page)).toEqual({ faces: 7, bodies: 1, edits: 1 });
 });
 
-test("split a body in two: the halves are separate bodies, bonded on mesh", async ({
+// Element count of each region of the current mesh, keyed by solid id.
+async function elementsPerRegion(page: Page): Promise<Record<number, number>> {
+  return page.evaluate(() => {
+    const state = (
+      window as unknown as {
+        __kofemStore: {
+          getState(): { elements: { propertyId: number }[] };
+        };
+      }
+    ).__kofemStore.getState();
+    const counts: Record<number, number> = {};
+    for (const e of state.elements)
+      counts[e.propertyId] = (counts[e.propertyId] ?? 0) + 1;
+    return counts;
+  });
+}
+
+// KOF-257: a body split makes regions of the same body — connected at the cut,
+// listed under the body, not as an interface — each with its own mesh size and
+// optimization role, and a region can be promoted to a body of its own.
+test("split a body into regions: one body, connected, each meshed at its own size @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(180_000);
   await importStepText(page, BLOCK);
   await openTree(page, "split");
   await page.getByTestId("split-open").click();
   await page.getByTestId("split-mode-bodies").click();
+  await expect(page.getByTestId("split-mode-bodies")).toHaveText("Regions");
   await page.getByTestId("split-axis").selectOption("x");
   await page.getByTestId("split-position").fill("150");
   await page.getByTestId("split-apply").click();
-  await expect
-    .poll(async () => (await geometryCounts(page)).bodies, { timeout: 30_000 })
-    .toBe(2);
+  await expect.poll(async () => (await geometryCounts(page)).bodies).toBe(2);
   // 2 × 5 faces of the halves plus the cut, which the reload imprints into one
-  // face shared by both — that shared face is what bonds them in the mesh.
+  // face shared by both — that shared face is what connects them in the mesh.
   expect((await geometryCounts(page)).faces).toBe(11);
-  await expect(page.getByTestId("tree-body-2")).toBeVisible();
+
+  // Still one body, now with two regions under it; the cut is not an interface.
+  await expect(page.getByTestId("tree-body-1")).toContainText("2 regions");
+  await expect(page.getByTestId("tree-region-1")).toHaveText(/Region 1/);
+  await expect(page.getByTestId("tree-region-2")).toHaveText(/Region 2/);
+  await expect(page.getByTestId("tree-body-2")).toHaveCount(0);
+  await expect(page.getByTestId("tree-interface-1")).toHaveCount(0);
 
   // Each half is drawn closed: the shared cut face is tessellated for both
-  // bodies, so hiding one leaves the other a solid rather than an open shell
+  // regions, so hiding one leaves the other a solid rather than an open shell
   // you can see into.
   const facesPerBody = await page.evaluate(() => {
     const surface = (
@@ -105,44 +124,91 @@ test("split a body in two: the halves are separate bodies, bonded on mesh", asyn
   });
   expect(facesPerBody).toEqual([6, 6]);
 
-  await page.getByRole("button", { name: "Close" }).click();
+  // The body's panel now lists its regions instead of the split tool.
+  await expect(page.getByTestId("body-region-2")).toBeVisible();
+
+  // Region 1 meshes finer than the rest; Region 2 is kept solid by the
+  // optimizer.
+  await page.getByTestId("tree-region-1").click();
+  await page.getByTestId("region-max-size-1").fill("6");
+  await page.getByTestId("tree-region-2").click();
+  await page.getByTestId("region-role-2").selectOption("solid");
+
   await openTree(page, "mesh");
   await page.getByTestId("max-element-size").fill("20");
-  await page.getByRole("button", { name: /mesh STEP volume/i }).click();
+  await page.getByTestId("min-element-size").fill("2");
+  await page.getByRole("button", { name: /generate mesh/i }).click();
   await expect
-    .poll(
-      () =>
-        page.evaluate(() => {
-          const state = (
-            window as unknown as {
-              __kofemStore: {
-                getState(): { elements: { propertyId: number }[] };
-              };
-            }
-          ).__kofemStore.getState();
-          return new Set(state.elements.map((e) => e.propertyId)).size;
-        }),
-      { timeout: 90_000 },
-    )
+    .poll(async () => Object.keys(await elementsPerRegion(page)).length)
     .toBe(2);
+  // Same volume on both sides of the cut, so the finer region has many more
+  // elements.
+  const counts = await elementsPerRegion(page);
+  expect(counts[1]).toBeGreaterThan(3 * counts[2]);
+  await expect(page.getByTestId("mesh-region-size-1")).toHaveText("max 6 mm");
+  // Its ✎ opens the region, where the size is edited (KOF-342).
+  await page.getByTestId("mesh-region-edit-1").click();
+  await expect(page.getByTestId("panel-title")).toHaveText("Region 1");
+  await expect(page.getByTestId("region-max-size-1")).toHaveValue("6");
+
+  // Changing the region size marks the mesh out of date.
+  await page.getByTestId("tree-region-1").click();
+  await page.getByTestId("region-max-size-1").fill("8");
+  await expect(page.getByTestId("tree-mesh-1")).toContainText("out of date");
+  await page.getByTestId("region-max-size-1").fill("6");
+  await expect(page.getByTestId("tree-mesh-1")).not.toContainText(
+    "out of date",
+  );
+
+  // Promoted, Region 2 is Body 2, and the cut becomes an interface.
+  await page.getByTestId("tree-region-2").click();
+  await page.getByTestId("region-promote-2").click();
+  await expect(page.getByTestId("tree-body-2")).toBeVisible();
+  await expect(page.getByTestId("panel-title")).toHaveText("Body 2");
+  await expect(page.getByTestId("tree-region-1")).toHaveCount(0);
+  await expect(page.getByTestId("tree-interface-1")).toHaveText(
+    /Body 1 ↔ Body 2/,
+  );
+  // It keeps its settings.
+  await expect(page.getByTestId("region-role-2")).toHaveValue("solid");
 });
 
 // The split answers after an await. Hold every split_geometry request in the
-// page for a while, so the user's next action provably lands while the worker
-// is still busy — a fast machine must not turn these into tests of nothing.
-async function delaySplits(page: Page, ms: number): Promise<void> {
-  await page.addInitScript((delay) => {
+// page until the test releases it, so the user's next action provably lands
+// while the split is still in flight, on any machine and however busy it is.
+// The returned function lets the held requests go, and later ones straight
+// through.
+async function holdSplits(page: Page): Promise<() => Promise<void>> {
+  await page.addInitScript(() => {
     const post = Worker.prototype.postMessage;
+    const held: (() => void)[] = [];
+    let released = false;
     Worker.prototype.postMessage = function (
       this: Worker,
       ...args: Parameters<Worker["postMessage"]>
     ) {
       const type = (args[0] as { type?: string } | null)?.type;
-      if (type === "split_geometry")
-        setTimeout(() => post.apply(this, args), delay);
+      if (type === "split_geometry" && !released)
+        held.push(() => post.apply(this, args));
       else post.apply(this, args);
     } as Worker["postMessage"];
-  }, ms);
+    (window as unknown as { __releaseSplits: () => number }).__releaseSplits =
+      () => {
+        released = true;
+        const count = held.length;
+        for (const send of held.splice(0)) send();
+        return count;
+      };
+  });
+  return async () => {
+    const count = await page.evaluate(() =>
+      (
+        window as unknown as { __releaseSplits: () => number }
+      ).__releaseSplits(),
+    );
+    // A test that released nothing raced nothing.
+    expect(count, "no split request was waiting to be released").toBe(1);
+  };
 }
 
 function storeState(page: Page) {
@@ -199,16 +265,16 @@ for (const [action, act] of MID_SPLIT) {
   test(`a split that lands after the user ${action} leaves picking off`, async ({
     page,
   }) => {
-    test.setTimeout(120_000);
-    await delaySplits(page, 6000);
+    const releaseSplit = await holdSplits(page);
     await importStepText(page, BLOCK);
     const before = await startSplit(page, 150);
     await act(page);
     // Still in flight: the action really raced the split.
     expect((await geometryCounts(page)).edits).toBe(before);
+    await releaseSplit();
     // The split itself still lands — the user only stopped looking at it.
     await expect
-      .poll(async () => (await geometryCounts(page)).edits, { timeout: 30_000 })
+      .poll(async () => (await geometryCounts(page)).edits)
       .toBe(before + 1);
     expect((await storeState(page)).splitPicking).toBe(false);
   });
@@ -217,15 +283,14 @@ for (const [action, act] of MID_SPLIT) {
 test("a split that fails after the tool was closed still reports why", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
-  await delaySplits(page, 6000);
+  const releaseSplit = await holdSplits(page);
   await importStepText(page, BLOCK);
   await startSplit(page, 500); // misses the 300 mm face
   await page.getByRole("button", { name: "Close" }).click();
   await expect(page.getByTestId("split-form")).toBeHidden();
+  await releaseSplit();
   await expect(page.getByTestId("split-error")).toContainText(
     "is not crossed by the plane x = 500 mm",
-    { timeout: 30_000 },
   );
   // Reopening shows the error until the next split or a dismissal.
   await openTree(page, "split");
@@ -236,26 +301,21 @@ test("a split that fails after the tool was closed still reports why", async ({
 test("a split that lands during a BC pick ends the pick session", async ({
   page,
 }) => {
-  test.setTimeout(180_000);
-  // Long enough for the BC pick below to finish before the split lands, even
-  // with every worker of a full run competing for the CPU.
-  await delaySplits(page, 6000);
+  const releaseSplit = await holdSplits(page);
   await importStepText(page, BLOCK);
   await page.getByTestId("max-element-size").fill("20");
   await page.getByTestId("min-element-size").fill("2");
-  await page.getByRole("button", { name: /mesh STEP volume/i }).click();
+  await page.getByRole("button", { name: /generate mesh/i }).click();
   await expect
-    .poll(
-      () =>
-        page.evaluate(
-          () =>
-            (
-              window as unknown as {
-                __kofemStore: { getState(): { nodes: unknown[] } };
-              }
-            ).__kofemStore.getState().nodes.length,
-        ),
-      { timeout: 90_000 },
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (
+            window as unknown as {
+              __kofemStore: { getState(): { nodes: unknown[] } };
+            }
+          ).__kofemStore.getState().nodes.length,
+      ),
     )
     .toBeGreaterThan(0);
 
@@ -268,8 +328,10 @@ test("a split that lands during a BC pick ends the pick session", async ({
   expect(await storeState(page)).toMatchObject({ pickMode: "bc", picked: 1 });
   expect((await geometryCounts(page)).edits).toBe(before);
 
+  // The pick is made; now the split lands.
+  await releaseSplit();
   await expect
-    .poll(async () => (await geometryCounts(page)).edits, { timeout: 30_000 })
+    .poll(async () => (await geometryCounts(page)).edits)
     .toBe(before + 1);
   // The mesh the pick was made on is gone, and with it the BC section that
   // could have cancelled the session.

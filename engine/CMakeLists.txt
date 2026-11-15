@@ -17,12 +17,11 @@ endif()
 # ── C++ library roots (set by build-wasm.sh / docker-build-wasm.sh) ──────────
 set(OCCT_ROOT    "$ENV{OCCT_WASM_ROOT}")
 set(NETGEN_ROOT  "$ENV{NETGEN_WASM_ROOT}")
-set(MFEM_ROOT    "$ENV{MFEM_WASM_ROOT}")
 
-foreach(V OCCT_ROOT NETGEN_ROOT MFEM_ROOT)
+foreach(V OCCT_ROOT NETGEN_ROOT)
     if(NOT ${V})
         message(FATAL_ERROR "${V} environment variable is not set.\n"
-            "Export OCCT_WASM_ROOT, NETGEN_WASM_ROOT, MFEM_WASM_ROOT before running emcmake.")
+            "Export OCCT_WASM_ROOT and NETGEN_WASM_ROOT before running emcmake.")
     endif()
 endforeach()
 
@@ -37,29 +36,6 @@ add_executable(kofem_wasm_emcc
     cpp/geometry_edit.cpp
     cpp/mesh_netgen.cpp
     cpp/mesh_overlap.cpp
-    cpp/fem_mesh_io.cpp
-    cpp/fem_bc_io.cpp
-    cpp/solve_mfem.cpp
-    cpp/solve_shell.cpp
-    cpp/solve_coupled.cpp
-    cpp/shell_core.cpp
-    cpp/shell_element.cpp
-    cpp/tet_element.cpp
-    cpp/coupling_constraints.cpp
-    cpp/sparse_cg.cpp
-    cpp/cg_browser.cpp
-    cpp/cg_mfem.cpp
-    cpp/spatial_grid.cpp
-    cpp/topology_simp_core.cpp
-    cpp/topology_filter.cpp
-    cpp/topology_mma.cpp
-    cpp/topology_formulation.cpp
-    cpp/topology_optimize.cpp
-    cpp/topology_stress.cpp
-    cpp/topology_levelset.cpp
-    cpp/topology_simp.cpp
-    cpp/topology_shell.cpp
-    cpp/topology_shell_entry.cpp
     cpp/json_util.cpp
     cpp/wasm_util.cpp
     cpp/netgen_glue.cpp
@@ -68,7 +44,6 @@ add_executable(kofem_wasm_emcc
 target_include_directories(kofem_wasm_emcc PRIVATE
     ${OCCT_ROOT}/include/opencascade
     ${NETGEN_ROOT}/include
-    ${MFEM_ROOT}/include
 )
 
 # Netgen internal headers (netgen_glue.cpp uses netgen::Mesh / netgen::OCCGeometry).
@@ -88,7 +63,6 @@ endforeach()
 target_link_directories(kofem_wasm_emcc PRIVATE
     ${OCCT_ROOT}/lib
     ${NETGEN_ROOT}/lib
-    ${MFEM_ROOT}/lib
 )
 
 
@@ -233,7 +207,6 @@ target_link_libraries(kofem_wasm_emcc PRIVATE
 
     nglib
     ngcore
-    mfem
 )
 
 # OCCGEOMETRY gates the OCC parts of Netgen's internal headers (occgeom.hpp).
@@ -261,21 +234,14 @@ target_link_options(kofem_wasm_emcc PRIVATE
     # what() text instead of showing an opaque number like "Error: 12190840".
     -sEXPORT_EXCEPTION_HANDLING_HELPERS=1
     -sMODULARIZE=1
-    -sASYNCIFY=1
-    -sASYNCIFY_STACK_SIZE=8388608
-    # Only static CG can suspend. Instrument its possible stack frames,
-    # including MFEM's virtual monitor and std::function/Embind trampolines.
-    # The default indirect-call analysis otherwise instruments OCCT/Netgen too.
-    # Browser continuation tests exercise each exported solver through this list.
-    "-sASYNCIFY_ONLY=['*solve_linear_elastic*','*solve_shell*','*solve_coupled*','*run_cg_solve*','*kofem::*','*browser_cg_control*','*std::__2::function*','*std::__2::__function::*','*std::__2::__invoke*','*emscripten::internal::Invoker*','*mfem::CGSolver::Mult*','*mfem::IterativeSolver::Monitor*','dynCall*']"
     -sEXPORT_ES6=1
     -sENVIRONMENT=web,worker
     -sINITIAL_MEMORY=134217728      # 128 MB starting heap
     -sALLOW_MEMORY_GROWTH=1
-    # 4 GB (the wasm32 limit): the coupled solid+shell solve of a fine assembly
-    # mesh peaks well past 2 GB during assembly + master-slave reduction.
+    # 4 GB (the wasm32 limit): no lower cap than the platform's on how large a
+    # model the engine may import and mesh.
     -sMAXIMUM_MEMORY=4294967296
-    -sSTACK_SIZE=8388608            # 8 MB stack for MFEM recursion
+    -sSTACK_SIZE=8388608            # 8 MB stack
     -sUSE_ZLIB=1
 )
 

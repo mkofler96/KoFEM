@@ -15,7 +15,7 @@ Record the last product tag reachable from `main`, its date, and the exact
 git fetch origin main develop --tags
 last_release=$(git describe --tags --abbrev=0 --match 'v[0-9]*' origin/main)
 git log --first-parent --format='%h %s' "$last_release"..origin/develop
-git diff --stat "$last_release"..origin/develop -- engine/cpp examples/validation
+git diff --stat "$last_release"..origin/develop -- engine/cpp crates web/src/lib/solve examples/validation
 ```
 
 Connected GitHub reads can supply the same evidence when local Git is
@@ -39,10 +39,13 @@ Breaking means a saved model, example link, or exported file no longer loads
 or reads the same, or results for an unchanged model move beyond validation
 tolerances. State what users must do, including re-solving or re-meshing.
 
-Treat changes to solver paths, `shell_core.cpp` and the `shell_element`,
-`tet_element`, `coupling_constraints` and `sparse_cg` units it drives, the
-mesher, solver defaults, and validation reference values or tolerances as
-numerical until inspected.
+Treat these as numerical until inspected: changes to solver paths in either
+engine, meaning the Rust solver crates (`crates/kofem-fem`,
+`crates/kofem-shellize`, `crates/kofem-wasm`), the routing in
+`web/src/lib/solve`, and `shell_core.cpp` with the `shell_element`,
+`tet_element`, `coupling_constraints` and `sparse_cg` units it drives; the
+mesher; solver defaults, including which engine solves a path; and validation
+reference values or tolerances.
 Record what changed, why, its measured effect when known, and validation
 evidence. An experiment or native study does not prove the production fix
 shipped. Every numerical change needs a **Changed** or **Breaking** note.

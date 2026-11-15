@@ -21,11 +21,11 @@
     <meta property="og:title" content="Linear elasticity | KoFEM Theory Guide" />
     <meta property="og:description" content="The small-strain, isotropic linear-elastic solid: displacement, strain, stress and traction, the relations between E, ν and the Lamé constants, a uniaxial check with units, and where the model stops applying." />
     <meta property="og:url" content="https://kofem.org/theory/solid-mechanics/linear-elasticity/" />
-    <meta property="og:image" content="https://kofem.org/kofem_logo.svg" />
-    <meta name="twitter:card" content="summary" />
+    <meta property="og:image" content="https://kofem.org/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Linear elasticity | KoFEM Theory Guide" />
     <meta name="twitter:description" content="The small-strain, isotropic linear-elastic solid: displacement, strain, stress and traction, the relations between E, ν and the Lamé constants, a uniaxial check with units, and where the model stops applying." />
-    <meta name="twitter:image" content="https://kofem.org/kofem_logo.svg" />
+    <meta name="twitter:image" content="https://kofem.org/og-image.png" />
 
     <!-- Self-hosted fonts (SIL OFL) — see public/fonts/README.md -->
     <link href="/fonts/ibm-plex.css" rel="stylesheet" />
@@ -1017,15 +1017,16 @@
         Density is stored but does not enter the static solve.</li>
       <li>The solid solver requires <math><mi>E</mi></math> and <math><mi>ν</mi></math> for every material and selects
         one material per element from the element’s body
-        (<a href="https://github.com/mkofler96/KoFEM/blob/6ba4db0ed963d6c8c0cb3263edf6737763994b6c/engine/cpp/solve_mfem.cpp#L149">solve_mfem.cpp</a>). The engine
-        itself does not check their range; that check exists only in the app form.</li>
+        (<a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/web/src/lib/solve/amg.ts#L301">amg.ts</a>). It checks the same
+        ranges again and refuses a material outside them
+        (<a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/material.rs#L17">material.rs</a>).</li>
       <li>It converts each material to <math><mi>λ</mi></math> and <math><mi>μ</mi></math> with the formulas above
-        (<a href="https://github.com/mkofler96/KoFEM/blob/6ba4db0ed963d6c8c0cb3263edf6737763994b6c/engine/cpp/solve_mfem.cpp#L180">solve_mfem.cpp</a>); the mixed
-        solid–shell solve does the same for its solid elements
-        (<a href="https://github.com/mkofler96/KoFEM/blob/6ba4db0ed963d6c8c0cb3263edf6737763994b6c/engine/cpp/solve_coupled.cpp#L66">solve_coupled.cpp</a>).</li>
+        (<a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/material.rs#L45">material.rs</a>); the mixed
+        solid–shell solve uses the same solid elements.</li>
       <li>Stress for the von Mises result uses the same law,
-        <math><msub><mi>σ</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub><mo>=</mo></math>​<math><mi>λ</mi><msub><mi>ε</mi><mrow><mi>k</mi><mi>k</mi></mrow></msub><msub><mi>δ</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub><mo>+</mo><mn>2</mn><mi>μ</mi><msub><mi>ε</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub></math>
-        (<a href="https://github.com/mkofler96/KoFEM/blob/6ba4db0ed963d6c8c0cb3263edf6737763994b6c/engine/cpp/solve_mfem.cpp#L93">solve_mfem.cpp</a>).
+        <math><msub><mi>σ</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub><mo>=</mo></math>​<span class="math-nowrap"><math><mi>λ</mi><msub><mi>ε</mi><mrow><mi>k</mi><mi>k</mi></mrow></msub><msub><mi>δ</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub><mo>+</mo><mn>2</mn><mi>μ</mi><msub><mi>ε</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub></math>;</span> only its deviatoric part
+        <math><mn>2</mn><mi>μ</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><msub><mi>ε</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub><mo>−</mo><msub><mi>ε</mi><mrow><mi>k</mi><mi>k</mi></mrow></msub><msub><mi>δ</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub><mo lspace="0" rspace="0">/</mo><mn>3</mn><mo stretchy="false" lspace="0" rspace="0">)</mo></math> enters von Mises
+        (<a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/stress.rs#L59">stress.rs</a>).
         <a href="/theory/results/displacement-and-stress/">Displacement and stress</a>
         explains where it is sampled.</li>
     </ul>

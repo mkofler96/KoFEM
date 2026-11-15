@@ -58,13 +58,13 @@ the holder's top, 1000 N at each cylinder end, materials called out per body.)_
 
 ### Per-body materials
 
-`mat.solid` handed to `solve_coupled` is an ARRAY, selected per tet by
+`mat.solid` handed to the coupled solve is an ARRAY, selected per tet by
 `mesh.attributes` (1-based), so the aluminium hook and the steel holder solve
 together. The shell side stays a single material: a solve idealises exactly one
 body as shells (#376), and here that body is the steel holder.
 
-This is why it had to be added. `solve_coupled` used to read one solid material,
-and `solve_linear_elastic` — which has taken a material array since #353 — does
+This is why it had to be added. The C++ `solve_coupled` used to read one solid
+material, and the C++ `solve_linear_elastic` — which took a material array since #353 — did
 not converge on models containing these 0.5 mm walls, running the full
 5000-iteration Gauss-Seidel PCG cap on both the assembly and the holder alone,
 the latter stalling at a relative residual of 8e-3. Per-body materials and

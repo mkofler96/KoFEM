@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Node-merge ("bonded tie") between two EXPLICITLY SELECTED surfaces — the
-// connector condition the user defines in the Constraints panel, alongside the
-// fixed displacements and the loads.
+// Bonded tie between two EXPLICITLY SELECTED surfaces — the connector condition
+// the user defines in the Constraints panel, alongside the fixed displacements
+// and the loads.
 //
 // It replaces the former model-wide "tie distance" (issue #359), which welded
 // every near-contact node pair of every pair of bodies at once: a single number
@@ -11,25 +11,28 @@
 // had joined. A tie is now a named object with two picked surfaces, so what is
 // connected to what is a modelling decision the user states and can see.
 //
-// Each connection welds pairs of nodes — one from surface A, one from surface B
-// — into one shared node, fusing the meshes over the contact patch so load
-// transfers and the assembly is solvable. Two extents:
+// A connection joins the two surfaces by one of two methods:
 //
-//   "full"   — every mutual-nearest pair across the two surfaces is welded,
-//              whatever the gap. The whole selected surface is coupled.
-//   "region" — only pairs closer than `searchDistance` are welded, so a tie can
-//              be limited to the part of the surface that actually touches
-//              (a pin resting in a hook eye touches along a tangent line, not
-//              over the whole cylinder).
+//   "mpc"   — each node of one surface is CONSTRAINED to follow the point of
+//             the other surface it projects onto (lib/tieConstraints.ts). No
+//             node moves, so the geometry is preserved (issue #357).
+//   "merge" — pairs of nodes, one from each surface, are WELDED into one
+//             shared node (this file). It pulls the two surfaces together
+//             within the pairing distance and stiffens the joint locally —
+//             adequate for the overall load path, not for local stress.
 //
-// This is an approximation — it pulls the two surfaces together within the
-// pairing distance and stiffens the joint locally — adequate for the overall
-// load path but not for accurate local contact stress. A geometry-preserving
-// MPC tie is the accurate follow-up (issue tracked separately).
+// and over one of two extents:
+//
+//   "full"   — the whole selected surface is coupled, whatever the gap.
+//   "region" — only what lies within `searchDistance` of the other side, so a
+//              tie can be limited to the part of the surface that actually
+//              touches (a pin resting in a hook eye touches along a tangent
+//              line, not over the whole cylinder).
 
 import { SpatialGrid } from "./spatialGrid.js";
 
 export type TieExtent = "full" | "region";
+export type TieMethod = "mpc" | "merge";
 
 export interface TieNode {
   id: number;
@@ -51,11 +54,29 @@ export interface TieDefinition {
   facesB: { nodeIds: number[] }[];
   extent: TieExtent;
   searchDistance: number;
+  // Absent on connections defined before the constraint tie existed (saved
+  // analyses, hand-built payloads): those were node-merge ties and stay so.
+  method?: TieMethod;
+}
+
+// How a connection joins its surfaces (see the header).
+export function tieMethod(tie: TieDefinition): TieMethod {
+  // eslint-disable-next-line kofem/no-silent-fallback -- a connection without a method predates the constraint tie and was defined as a node-merge
+  return tie.method ?? "merge";
+}
+
+// How many of a model's connections are constraint ties — the ones only the
+// Rust solid solve carries (crates/kofem-fem/src/tie.rs).
+export function constraintTieCount(ties: TieDefinition[] | undefined): number {
+  if (!ties) return 0;
+  return ties.filter((tie) => tieMethod(tie) === "mpc").length;
 }
 
 // One welded node pair, in ORIGINAL node ids — what the viewport draws to show
 // which nodes a connection actually joined.
 export interface TiePair {
+  // Name of the connection that welded the pair.
+  tie: string;
   aId: number;
   bId: number;
   distance: number;
@@ -64,6 +85,7 @@ export interface TiePair {
 // Per-connection outcome, for the solver log and for the panel's summary.
 export interface TieReport {
   name: string;
+  // Node pairs welded (merge) or nodes constrained (mpc).
   nPaired: number;
   // Nodes the two surfaces already have in common (a conforming interface):
   // they need no weld, and a connection that finds only these is not an error.
@@ -253,9 +275,11 @@ function nearestInGrid(
 //
 // Pairing is by MUTUAL nearest neighbour (a↔b only when each is the other's
 // nearest across the interface), which makes every weld a disjoint 1:1 pair
-// rather than a chain — so two nodes of the same element can never collapse
-// onto one representative. (Welding every in-range pair would chain a node
-// reachable from two others of one element into a zero-volume tet.)
+// rather than a chain. (Welding every in-range pair would chain a node
+// reachable from two others of one element into a zero-volume tet.) A disjoint
+// pair can still damage the mesh when it bridges a wide gap — both sides may
+// belong to one element, or the midpoint may tangle its neighbours — which
+// assertValidTiedMesh refuses after the weld.
 function pairOneTie(
   tie: TieDefinition,
   nodeById: Map<number, TieNode>,
@@ -309,7 +333,12 @@ function pairOneTie(
       sideA[ia].z - sideB[ib].z,
     );
     maxDistance = Math.max(maxDistance, distance);
-    pairs.push({ aId: sideA[ia].id, bId: sideB[ib].id, distance });
+    pairs.push({
+      tie: tie.name,
+      aId: sideA[ia].id,
+      bId: sideB[ib].id,
+      distance,
+    });
   }
 
   return {
@@ -322,9 +351,8 @@ function pairOneTie(
 // viewport draws exactly this — the nodes each tie joined, and to what — without
 // needing the collapsed solve mesh.
 //
-// A node already welded by an earlier connection is not welded again: keeping
-// every weld a disjoint pair preserves the guarantee that no element can
-// collapse (see pairOneTie).
+// A node already welded by an earlier connection is not welded again, so every
+// weld stays a disjoint pair across connections too (see pairOneTie).
 export function tiedNodePairs(
   nodes: TieNode[],
   elements: TieElement[],
@@ -421,19 +449,185 @@ export function remapElement<T extends TieElement>(
   return { ...el, nodeIds: el.nodeIds.map((id) => tiedId(repOf, id)) };
 }
 
-// A tie whose pairing distance exceeds an element edge can pull two nodes of the
-// same element onto one representative, collapsing it to zero volume. Detect
-// that so the solve fails with an actionable message instead of a silent bad
-// result.
-export function assertNoCollapsedElements(elements: TieElement[]): void {
-  for (const el of elements) {
-    if (new Set(el.nodeIds).size !== el.nodeIds.length)
-      throw new Error(
-        "A tie connection merged two nodes of the same element, collapsing it " +
-          "to zero volume. Reduce the connection's search distance, or limit it " +
-          "to the region that actually touches.",
-      );
+// ── Post-weld mesh check ──────────────────────────────────────────────────────
+//
+// Mutual-nearest pairing keeps every weld a disjoint 1:1 pair, but it does not
+// keep the mesh valid: a weld moves both nodes to their midpoint, so a pair that
+// bridges a gap wider than the local element size drags the elements beside it
+// out of shape. Three failures are possible, and each is refused here with the
+// tie and the gap it bridged, before the engine sees the mesh:
+//
+//   collapsed   — the pair shares an element, which degenerates to zero volume.
+//   non-manifold — a triangle or quad ends up shared by three elements, which
+//                  no element assembly takes ("Invalid mesh topology", KOF-298).
+//   inverted    — an element turns inside out: a tangled mesh and a wrong
+//                  result instead of an error.
+//
+// Only elements that contain a welded node can change, so only they are checked.
+
+// Corner tets whose signed volume tracks an element's orientation: the tet
+// itself, or each hex corner with its three edge neighbours (CHEXA order, 0–3
+// bottom, 4–7 top).
+const TET_CORNERS: readonly (readonly [number, number, number, number])[] = [
+  [0, 1, 2, 3],
+];
+const HEX_CORNERS: readonly (readonly [number, number, number, number])[] = [
+  [0, 1, 3, 4],
+  [1, 2, 0, 5],
+  [2, 3, 1, 6],
+  [3, 0, 2, 7],
+  [4, 7, 5, 0],
+  [5, 4, 6, 1],
+  [6, 5, 7, 2],
+  [7, 6, 4, 3],
+];
+const TET_FACES: readonly (readonly number[])[] = [
+  [0, 1, 2],
+  [0, 1, 3],
+  [0, 2, 3],
+  [1, 2, 3],
+];
+const HEX_FACES: readonly (readonly number[])[] = [
+  [0, 1, 2, 3],
+  [4, 5, 6, 7],
+  [0, 1, 5, 4],
+  [1, 2, 6, 5],
+  [2, 3, 7, 6],
+  [3, 0, 4, 7],
+];
+
+function elementShape(el: TieElement): {
+  corners: readonly (readonly [number, number, number, number])[];
+  faces: readonly (readonly number[])[];
+} {
+  if (el.nodeIds.length === 4)
+    return { corners: TET_CORNERS, faces: TET_FACES };
+  if (el.nodeIds.length === 8)
+    return { corners: HEX_CORNERS, faces: HEX_FACES };
+  throw new Error(
+    `tie: cannot check an element with ${el.nodeIds.length} nodes next to a ` +
+      "weld — ties support 4-node tetrahedra and 8-node hexahedra",
+  );
+}
+
+function signedVolume(
+  nodeIds: number[],
+  corner: readonly [number, number, number, number],
+  positionOf: (id: number) => TieNode,
+): number {
+  const [p, q, r, s] = corner.map((k) => positionOf(nodeIds[k]));
+  const ux = q.x - p.x,
+    uy = q.y - p.y,
+    uz = q.z - p.z;
+  const vx = r.x - p.x,
+    vy = r.y - p.y,
+    vz = r.z - p.z;
+  const wx = s.x - p.x,
+    wy = s.y - p.y,
+    wz = s.z - p.z;
+  return (
+    ux * (vy * wz - vz * wy) -
+    uy * (vx * wz - vz * wx) +
+    uz * (vx * wy - vy * wx)
+  );
+}
+
+// Refuse a weld that leaves the solve mesh invalid (see above). `nodes` and
+// `elements` are the mesh before the weld, `tie` the result of buildTie on it.
+export function assertValidTiedMesh(
+  nodes: TieNode[],
+  elements: TieElement[],
+  tie: TieResult,
+): void {
+  if (tie.repOf.size === 0) return;
+
+  // Which connection each welded node belongs to, to name it in the error.
+  const tieOfNode = new Map<number, string>();
+  const pairsOfTie = new Map<string, TiePair[]>();
+  for (const pair of tie.pairs) {
+    tieOfNode.set(pair.aId, pair.tie);
+    tieOfNode.set(pair.bId, pair.tie);
+    let list = pairsOfTie.get(pair.tie);
+    if (!list) pairsOfTie.set(pair.tie, (list = []));
+    list.push(pair);
   }
+
+  const before = new Map<number, TieNode>();
+  for (const node of nodes) before.set(node.id, node);
+  const after = new Map<number, TieNode>();
+  for (const node of tie.nodes) after.set(node.id, node);
+  const lookup = (positions: Map<number, TieNode>) => (id: number) => {
+    const node = positions.get(id);
+    if (!node) throw new Error(`tie: element node ${id} is not in the mesh`);
+    return node;
+  };
+  const positionBefore = lookup(before);
+  const positionAfter = lookup(after);
+
+  const refuse = (tieName: string, problem: string): never => {
+    const gap = Math.max(
+      0,
+      ...(pairsOfTie.get(tieName) ?? []).map((pair) => pair.distance),
+    );
+    throw new Error(
+      `Tie "${tieName}" pulls nodes up to ${gap.toFixed(2)} mm apart together, ` +
+        `which ${problem}. Tie surfaces that touch or nearly touch, or set the ` +
+        "connection to a region with a search distance below the element size.",
+    );
+  };
+
+  const touched: { original: TieElement; tied: TieElement; tieName: string }[] =
+    [];
+  for (const el of elements) {
+    const welded = el.nodeIds.find((id) => tieOfNode.has(id));
+    if (welded === undefined) continue;
+    touched.push({
+      original: el,
+      tied: remapElement(el, tie.repOf),
+      tieName: tieOfNode.get(welded) ?? "",
+    });
+  }
+
+  for (const { tied, tieName } of touched)
+    if (new Set(tied.nodeIds).size !== tied.nodeIds.length)
+      refuse(
+        tieName,
+        "merges two nodes of one element and collapses it to zero volume",
+      );
+
+  const faceUse = new Map<string, { count: number; tieName: string }>();
+  for (const { tied, tieName } of touched)
+    for (const face of elementShape(tied).faces) {
+      const key = face
+        .map((k) => tied.nodeIds[k])
+        .sort((first, second) => first - second)
+        .join(",");
+      const use = faceUse.get(key);
+      if (use) use.count++;
+      else faceUse.set(key, { count: 1, tieName });
+    }
+  for (const use of faceUse.values())
+    if (use.count > 2)
+      refuse(
+        use.tieName,
+        "leaves an element face shared by three elements, so the mesh is no " +
+          "longer a valid solid",
+      );
+
+  for (const { original, tied, tieName } of touched)
+    for (const corner of elementShape(original).corners) {
+      const volumeBefore = signedVolume(
+        original.nodeIds,
+        corner,
+        positionBefore,
+      );
+      const volumeAfter = signedVolume(tied.nodeIds, corner, positionAfter);
+      if (
+        volumeBefore !== 0 &&
+        Math.sign(volumeAfter) !== Math.sign(volumeBefore)
+      )
+        refuse(tieName, "turns elements next to the weld inside out");
+    }
 }
 
 // Expand a solve result indexed by tied (representative) node back to one value

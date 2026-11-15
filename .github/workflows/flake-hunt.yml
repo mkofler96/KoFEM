@@ -1,0 +1,134 @@
+name: Flake hunt
+
+# The browser suite repeated, with retries off: a test that fails once in a
+# while fails this run, with its trace in the report.
+#
+# CI lets a test that passes on retry through and reports it as flaky. This
+# workflow is where such a test gets found, and fixed, before it costs a pull
+# request a red run:
+#
+# - every night on develop: the whole suite, each test five times;
+# - on a pull request that changes what every viewport test waits on (the
+#   viewport's test hooks, the pointer-event wiring, the viewport fixture, the
+#   Playwright config or this file): the tests that pick or click, each 25
+#   times;
+# - on demand, with a test filter and a repeat count. With a filter the run is
+#   one job, so a filter that matches no test fails instead of passing empty.
+#
+# It is not a merge gate. A red run means: fix the test, or the race it found.
+# Re-running until it passes only hides it again.
+
+on:
+  schedule:
+    - cron: "23 2 * * *"
+  workflow_dispatch:
+    inputs:
+      grep:
+        description: Only tests whose title matches this regular expression (empty for all)
+        default: ""
+      repeat:
+        description: How often each test runs (a job stops after two hours; without a filter that is about 30 repeats)
+        default: "5"
+  pull_request:
+    paths:
+      - web/src/components/viewport/ViewportTestHooks.tsx
+      - web/src/components/viewport/pickingEvents.ts
+      - web/tests/fixtures/viewport.ts
+      - web/playwright.config.ts
+      - .github/workflows/flake-hunt.yml
+
+# A newer push to a pull request replaces its hunt. Nightly and on-demand runs
+# each stand alone: starting one must not cancel another.
+concurrency:
+  group: flake-hunt-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  hunt:
+    name: Repeat (${{ matrix.slice }})
+    runs-on: ubuntu-24.04
+    # A watchdog for a hung job: the nightly slices take about 20 minutes.
+    timeout-minutes: 120
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # A pull request runs one job over the tests that pick or click, and
+        # so does an on-demand run with a filter. The nightly run, and an
+        # on-demand run of everything, split the suite by project, three ways.
+        include: ${{ fromJSON((github.event_name == 'pull_request' || inputs.grep != '')
+          && '[{"slice":"selected tests","select":""}]'
+          || '[{"slice":"ui 1/3","select":"--project=ui --shard=1/3"},{"slice":"ui 2/3","select":"--project=ui --shard=2/3"},{"slice":"ui 3/3","select":"--project=ui --shard=3/3"},{"slice":"pipeline 1/3","select":"--project=pipeline --shard=1/3"},{"slice":"pipeline 2/3","select":"--project=pipeline --shard=2/3"},{"slice":"pipeline 3/3","select":"--project=pipeline --shard=3/3"}]') }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # rustup reads the version, components and targets from
+      # rust-toolchain.toml; the Rust module is built from source here.
+      - name: Install the pinned Rust toolchain
+        run: |
+          rustup toolchain install || rustup show active-toolchain
+          rustc --version
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          shared-key: fem-wasm
+
+      - name: Set up the web app (Bun, dependencies, just, wasm-bindgen)
+        uses: ./.github/actions/setup-web
+        with:
+          wasm-artifacts: "false"
+
+      # The published engine for these engine sources, and the Rust module
+      # built from this checkout. A pull request that also changes engine/ has
+      # no published engine yet; the nightly run covers it after the merge.
+      # Anywhere else a missing engine is an error: a hunt that ran no test
+      # must not look like a hunt that found nothing.
+      - name: Prepare both WebAssembly modules
+        id: wasm
+        run: |
+          bash scripts/fetch-wasm-engine.sh --optional
+          if [ ! -s web/src/wasm/pkg/kofem_wasm_emcc.wasm ]; then
+            if [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+              echo "::error title=No published engine::No engine release exists for these engine sources, so no test ran. CI publishes one from develop and main once the C++ jobs pass there."
+              exit 1
+            fi
+            echo "::notice title=Flake hunt skipped::No published engine for these engine sources yet. The nightly run on develop covers this change after it merges."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          (cd web && bun run wasm:prepare)
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Playwright Chromium
+        if: steps.wasm.outputs.ready == 'true'
+        uses: ./.github/actions/setup-playwright
+        timeout-minutes: 5
+
+      - name: Repeat the browser tests
+        if: steps.wasm.outputs.ready == 'true'
+        env:
+          SELECT: ${{ matrix.select }}
+          GREP: ${{ github.event_name == 'pull_request' && 'pick|click' || inputs.grep }}
+          REPEAT: ${{ github.event_name == 'pull_request' && '25' || inputs.repeat || '5' }}
+        run: |
+          read -r -a select <<< "$SELECT"
+          if [ -n "$GREP" ]; then select+=(--grep "$GREP"); fi
+          just test-e2e "${select[@]}" --repeat-each="$REPEAT" --retries=0 --trace=retain-on-failure
+
+      - name: Upload the Playwright report
+        if: ${{ !cancelled() && steps.wasm.outputs.ready == 'true' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: flake-hunt-${{ strategy.job-index }}
+          path: |
+            web/playwright-report/
+            web/playwright-results/
+          retention-days: 14
+          if-no-files-found: ignore
+          # A re-run of this job replaces the report of the attempt before it.
+          overwrite: true

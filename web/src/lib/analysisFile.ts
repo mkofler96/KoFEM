@@ -22,6 +22,8 @@ import type {
 } from "../store/modelStore";
 import { DEFAULT_TOPOPT_SETTINGS, RESULT_TYPES } from "../store/modelStore";
 import { parseHandCheck, type HandCheck } from "./handCheck";
+import { tieMethod, type TieMethod } from "./tie";
+import { restoreInterfaces, type BodyInterface } from "./interfaces";
 
 // ── KoFEM analysis file format (.vtu) ─────────────────────────────────────────
 //
@@ -86,6 +88,9 @@ export interface AnalysisState {
   nextFaceEntryId: number;
   nextMatId: number;
   stepSurface: StepTessellation | null;
+  // Body-to-body interfaces of stepSurface (lib/interfaces); null when the
+  // tessellation carries no face ids to find them by.
+  interfaces: BodyInterface[] | null;
   volMesh: VolMesh | null;
   surfaceTriangles: [number, number, number][] | null;
   surfaceFaceIds: number[] | null;
@@ -118,8 +123,9 @@ interface KofemFieldDataV1 {
   bcGroups: NamedBcGroup[];
   loadGroups: NamedLoadGroup[];
   // Tie (connector) conditions. Absent in files written before connections
-  // became a named model object — such a file simply has no ties.
-  tieGroups?: TieGroup[];
+  // became a named model object — such a file simply has no ties. A tie's
+  // `method` is absent in files written before the constraint tie existed.
+  tieGroups?: (Omit<TieGroup, "method"> & { method?: TieMethod })[];
   // Surface-to-point couplings. Absent in files written before couplings
   // existed — such a file simply has none. The reference points themselves need
   // no separate entry: they are nodes, and travel in the VTU point list.
@@ -131,6 +137,11 @@ interface KofemFieldDataV1 {
   nextFaceEntryId: number;
   nextMatId: number;
   stepSurface: StepTessellation | null;
+  // The body-to-body interfaces and their types. Written only when the
+  // geometry has some, so single-body files are unchanged; absent in files
+  // written before interfaces existed (all bonded, as re-detection yields).
+  // Validated against the interfaces re-detected from stepSurface on load.
+  interfaces?: BodyInterface[];
   volMesh: VolMesh | null;
   surfaceTriangles: [number, number, number][] | null;
   surfaceFaceIds: number[] | null;
@@ -278,6 +289,9 @@ export function serializeAnalysis(state: AnalysisState): string {
     nextFaceEntryId: state.nextFaceEntryId,
     nextMatId: state.nextMatId,
     stepSurface: state.stepSurface,
+    ...(state.interfaces && state.interfaces.length > 0
+      ? { interfaces: state.interfaces }
+      : {}),
     volMesh: state.volMesh,
     surfaceTriangles: state.surfaceTriangles,
     surfaceFaceIds: state.surfaceFaceIds,
@@ -529,6 +543,7 @@ function parseMetadata(xml: string): KofemFieldDataV1 {
     throw new Error(
       `Invalid analysis file: "elementOrder" must be 1 or 2, got ${JSON.stringify(meta.elementOrder)}`,
     );
+  // Legacy: a block in the v0.5.0 / v0.6.0 shape is migrated by parseHandCheck.
   if (meta.handCheck !== undefined)
     meta.handCheck = parseHandCheck(meta.handCheck);
 
@@ -647,7 +662,11 @@ export function parseAnalysisFile(text: string): AnalysisState {
   // A file written before ties existed carries none. The counter is then not
   // guessed but derived from the ties actually present, so an id can never be
   // reused whatever the file contained.
-  const tieGroups = meta.tieGroups ?? [];
+  // A tie saved before the constraint method existed was a node-merge.
+  const tieGroups = (meta.tieGroups ?? []).map((tie) => ({
+    ...tie,
+    method: tieMethod(tie),
+  }));
   const nextTieGroupId =
     meta.nextTieGroupId ??
     tieGroups.reduce((highest, tie) => Math.max(highest, tie.id), 0) + 1;
@@ -675,6 +694,7 @@ export function parseAnalysisFile(text: string): AnalysisState {
     nextFaceEntryId: meta.nextFaceEntryId,
     nextMatId: meta.nextMatId,
     stepSurface: meta.stepSurface,
+    interfaces: restoreInterfaces(meta.stepSurface, meta.interfaces),
     volMesh: meta.volMesh,
     surfaceTriangles: meta.surfaceTriangles,
     surfaceFaceIds: meta.surfaceFaceIds,

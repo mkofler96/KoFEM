@@ -102,6 +102,7 @@ test.describe("small screens", () => {
     expect(width).toBeLessThan(360);
 
     // The drawer opens from the right; the backdrop is the strip left of it.
+    // eslint-disable-next-line kofem/viewport-through-fixture -- the drawer's backdrop, a strip of the page left of the drawer; not the viewport
     await page.mouse.click(15, 400);
     await expect(page.locator("aside")).toBeHidden();
   });

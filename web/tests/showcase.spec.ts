@@ -4,31 +4,26 @@
 import { test, expect } from "./coverage";
 import path from "path";
 import fs from "fs";
-import { gotoApp } from "./fixtures/app";
+import { fixturePath, gotoApp } from "./fixtures/app";
 import { bootstrapCantilever } from "./fixtures/cantilever";
 import { openTree } from "./fixtures/tree";
+import { settleViewport } from "./fixtures/viewport";
 
 const OUT_DIR = path.join("playwright-results", "screenshots", "showcase");
-const STEP_FILES_DIR = path.resolve("..", "test_files");
 // tube.stp produces ~760 tets / 274 nodes — small enough for a fast CI solve.
 // Wall Bracket produces ~50K tets regardless of element size (geometry-driven)
 // which overloads the CI runner's disk and memory budget.
-const TUBE = path.join(STEP_FILES_DIR, "tube.stp");
+const TUBE_FIXTURE = "tube.stp";
 
 test.describe("Full workflow showcase", () => {
   test.beforeAll(() => {
     fs.mkdirSync(OUT_DIR, { recursive: true });
   });
 
-  test("tube: import → geometry → mesh → constraints → results", async ({
+  test("tube: import → geometry → mesh → constraints → results @pipeline", async ({
     page,
   }) => {
-    test.setTimeout(600_000);
-
-    if (!fs.existsSync(TUBE)) {
-      test.skip();
-      return;
-    }
+    const TUBE = fixturePath(TUBE_FIXTURE);
 
     const t0 = Date.now();
     const elapsed = () => `+${((Date.now() - t0) / 1000).toFixed(1)}s`;
@@ -72,8 +67,8 @@ test.describe("Full workflow showcase", () => {
       .setInputFiles(TUBE);
     await Promise.race([
       expect(
-        page.getByRole("button").filter({ hasText: "Mesh STEP volume" }),
-      ).toBeVisible({ timeout: 60_000 }),
+        page.getByRole("button").filter({ hasText: "Generate mesh" }),
+      ).toBeVisible(),
       fatalError,
     ]);
     console.log(`[showcase] ${elapsed()} tessellation done`);
@@ -85,7 +80,7 @@ test.describe("Full workflow showcase", () => {
       );
     }
 
-    await page.waitForTimeout(600);
+    await settleViewport(page);
 
     // 2. Geometry panel
     await page.screenshot({
@@ -95,26 +90,19 @@ test.describe("Full workflow showcase", () => {
 
     // 3. Mesh — trigger volume meshing (controls live in the Geometry panel)
     await expect(
-      page.getByRole("button").filter({ hasText: "Mesh STEP volume" }),
+      page.getByRole("button").filter({ hasText: "Generate mesh" }),
     ).toBeVisible();
-    console.log(`[showcase] ${elapsed()} 03 clicking Mesh STEP volume…`);
-    await page
-      .getByRole("button")
-      .filter({ hasText: "Mesh STEP volume" })
-      .click();
+    console.log(`[showcase] ${elapsed()} 03 clicking Generate mesh…`);
+    await page.getByRole("button").filter({ hasText: "Generate mesh" }).click();
 
     const meshingErrorBanner = page.getByTestId("meshing-error");
     await Promise.race([
-      expect(page.getByText("Mesh OK")).toBeVisible({
-        timeout: 60_000,
+      expect(page.getByText("Mesh OK")).toBeVisible(),
+      meshingErrorBanner.waitFor({ state: "visible" }).then(async () => {
+        throw new Error(
+          `Volume meshing failed: ${await meshingErrorBanner.textContent()}`,
+        );
       }),
-      meshingErrorBanner
-        .waitFor({ state: "visible", timeout: 60_000 })
-        .then(async () => {
-          throw new Error(
-            `Volume meshing failed: ${await meshingErrorBanner.textContent()}`,
-          );
-        }),
       fatalError,
     ]);
     console.log(`[showcase] ${elapsed()} 03 volume mesh complete`);
@@ -203,9 +191,7 @@ test.describe("Full workflow showcase", () => {
 
     await page.locator('[data-testid^="tree-load-"]').first().click();
     await Promise.race([
-      expect(page.getByTitle("Delete load")).toBeVisible({
-        timeout: 15_000,
-      }),
+      expect(page.getByTitle("Delete load")).toBeVisible(),
       fatalError,
     ]);
     await page.screenshot({
@@ -224,7 +210,6 @@ test.describe("Full workflow showcase", () => {
         () =>
           typeof (window as unknown as { __kofemTriggerSolve?: () => void })
             .__kofemTriggerSolve === "function",
-        { timeout: 15_000 },
       ),
       fatalError,
     ]);
@@ -271,9 +256,7 @@ test.describe("Full workflow showcase", () => {
     console.log(`[showcase] ${elapsed()} solver started…`);
 
     await Promise.race([
-      expect(page.getByText("Result summary")).toBeVisible({
-        timeout: 120_000,
-      }),
+      expect(page.getByText("Result summary")).toBeVisible(),
       fatalError,
     ]);
 
@@ -288,11 +271,9 @@ test.describe("Full workflow showcase", () => {
   // on the solid cantilever fixture instead — a fast, deterministic minimum-
   // compliance run — to show the density field, threshold and convergence plot.
   // Mirrors optimize-panel.spec.ts so it stays as robust as that passing test.
-  test("optimize: density field, threshold and convergence plot", async ({
+  test("optimize: density field, threshold and convergence plot @pipeline", async ({
     page,
   }) => {
-    test.setTimeout(180_000);
-
     page.on("pageerror", (err) =>
       console.error(`[showcase] page exception: ${err.message}`),
     );
@@ -309,9 +290,7 @@ test.describe("Full workflow showcase", () => {
     await page.getByRole("button", { name: /Run optimization/ }).click();
 
     // Hand-off to the density Results view.
-    await expect(page.getByText("Density threshold")).toBeVisible({
-      timeout: 120_000,
-    });
+    await expect(page.getByText("Density threshold")).toBeVisible();
     await expect(page.getByTestId("density-colorbar")).toBeVisible();
     await expect(page.getByTestId("convergence-plot")).toBeVisible();
 
@@ -329,7 +308,7 @@ test.describe("Full workflow showcase", () => {
         .setDensityThreshold(0.4);
     });
     // Let the viewport rebuild the thresholded surface before capturing.
-    await page.waitForTimeout(400);
+    await settleViewport(page);
 
     await page.screenshot({ path: path.join(OUT_DIR, "06-optimization.png") });
   });

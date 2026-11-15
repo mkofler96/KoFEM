@@ -1,5 +1,5 @@
 name: Set up Playwright Chromium
-description: Cache headless Chromium and use bounded Ubuntu package downloads
+description: Cache and install the headless Chromium that the Playwright version pins
 
 runs:
   using: composite
@@ -16,30 +16,13 @@ runs:
         path: ~/.cache/ms-playwright
         key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.version.outputs.version }}-headless
 
-    - name: Configure Ubuntu package downloads
-      shell: bash
-      run: |
-        # The hosted runner's Azure mirror took >11 minutes for 24 MB of fonts
-        # and libraries. Keep Playwright's complete dependency list, using the
-        # signed main archive and bounded retries instead of that mirror.
-        cat > "$RUNNER_TEMP/playwright.sources" <<'EOF'
-        Types: deb
-        URIs: https://archive.ubuntu.com/ubuntu
-        Suites: noble noble-updates noble-security
-        Components: main universe
-        Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
-        EOF
-        sudo tee /etc/apt/apt.conf.d/99-kofem-playwright > /dev/null <<EOF
-        Dir::Etc::sourcelist "$RUNNER_TEMP/playwright.sources";
-        Dir::Etc::sourceparts "-";
-        Acquire::Retries "2";
-        Acquire::http::Timeout "30";
-        Acquire::https::Timeout "30";
-        EOF
-
-    - name: Install headless Chromium and system dependencies
+    # No `--with-deps`: the hosted runner image already has every library
+    # Chromium links, so that flag only installed fallback fonts for scripts
+    # the app does not use, through an `apt-get update` that stalled for
+    # minutes on bad days and failed whole runs. The installer checks the
+    # browser revision itself, so a cache hit downloads nothing. If a future
+    # runner image lacks a library, Chromium names it when it fails to launch.
+    - name: Install headless Chromium
       shell: bash
       working-directory: web
-      # The installer checks the browser revision itself, so cache hits avoid
-      # downloading it. The suites use headless mode, without a browser channel.
-      run: bunx playwright install --with-deps --only-shell chromium
+      run: bunx playwright install --only-shell chromium

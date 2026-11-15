@@ -5,6 +5,14 @@ import { useEffect, useState } from "react";
 import { useModelStore } from "../store/modelStore";
 import { fmt, loadsSummary } from "../lib/modelDisplay";
 import { sendToWorker } from "../workers/sharedWorker";
+import type { SolvePayload } from "../workers/solverTypes";
+import {
+  amgFallbackPreconditioner,
+  amgUnavailableReason,
+  FALLBACK_PRECONDITIONER_LABEL,
+} from "../lib/solve/amg";
+import { routeSolve, type SolveRoute } from "../lib/solve/route";
+import { thinWallMessage, type ThinWallFinding } from "../lib/solve/thinWall";
 import { useWorkerLogs } from "./useWorkerLogs";
 import {
   categorizeError,
@@ -34,6 +42,8 @@ export function useSolver() {
   const setResult = useModelStore((s) => s.setResult);
   const setMode = useModelStore((s) => s.setMode);
   const elementOrder = useModelStore((s) => s.elementOrder);
+  const solverMethod = useModelStore((s) => s.solverMethod);
+  const setSolverMethod = useModelStore((s) => s.setSolverMethod);
   const tieGroups = useModelStore((s) => s.tieGroups);
   const couplingGroups = useModelStore((s) => s.couplingGroups);
   // Surface mesh + CAD face ids drive auto-shell idealisation of thin bodies
@@ -42,12 +52,14 @@ export function useSolver() {
   const surfaceFaceIds = useModelStore((s) => s.surfaceFaceIds);
   const [error, setError] = useState<string | null>(null);
   const { logs, clearLogs } = useWorkerLogs("solve");
+  const [thinWalls, setThinWalls] = useState<ThinWallFinding[]>([]);
 
   // A body suppressed or restored after meshing makes the mesh a different
   // assembly from the model — solving it would analyse the wrong one.
   const meshSuppressedIds = useModelStore((s) => s.meshSuppressedIds);
   const suppressionStale = suppressionMismatchMessage(
     suppressionMismatch(properties, meshSuppressedIds, nodes.length > 0),
+    properties,
   );
   const meshOk = nodes.length > 0 && suppressionStale === null;
   // Every body must resolve to an existing material — a body left pointing at
@@ -65,7 +77,62 @@ export function useSolver() {
   // eslint-disable-next-line kofem/no-silent-fallback -- a constraint without prescribedValue is a homogeneous fixed BC, i.e. u = 0 by definition
   const prescribedOk = constraints.some((c) => (c.prescribedValue ?? 0) !== 0);
   const drivingOk = loadOk || prescribedOk;
-  const allOk = meshOk && matOk && bcOk && drivingOk;
+  // The route the solve will take, or why no path takes this model (a tie or
+  // element order the path cannot apply, KOF-353) — the worker refuses it with
+  // the same words, so say so before the solve. Only with a mesh: before one
+  // there is no model.
+  const { route, routeRefusal } = solveRoute(
+    nodes.length > 0
+      ? {
+          nodes,
+          elements,
+          materials,
+          properties,
+          constraints,
+          loads,
+          surfaceLoads,
+          elementOrder,
+          tieGroups,
+          couplings: couplingGroups,
+        }
+      : null,
+  );
+  const allOk = meshOk && matOk && bcOk && drivingOk && routeRefusal === null;
+
+  // Linear tets on a thin wall give too-stiff results (KOF-274): check the
+  // meshed model for walls spanned by too few elements.
+  useEffect(() => {
+    let current = true;
+    if (nodes.length === 0 || elementOrder !== 1) {
+      setThinWalls([]);
+      return;
+    }
+    sendToWorker<{ findings: ThinWallFinding[] }>("thin_wall_check", {
+      nodes,
+      elements,
+      properties,
+      surfaceTriangles,
+      surfaceFaceIds,
+      elementOrder,
+    })
+      .then(({ findings }) => {
+        if (current) setThinWalls(findings);
+      })
+      .catch((err: Error) => {
+        console.error("[thin-wall check] failed:", err.message);
+        if (current) setThinWalls([]);
+      });
+    return () => {
+      current = false;
+    };
+  }, [
+    nodes,
+    elements,
+    properties,
+    surfaceTriangles,
+    surfaceFaceIds,
+    elementOrder,
+  ]);
 
   function solve() {
     setRunning(true);
@@ -73,24 +140,26 @@ export function useSolver() {
     const workflow = currentWorkflow();
     const elapsed = startTimer();
     track("solve_started", { workflow, analysis_type: "static" });
+    const payload: SolvePayload = {
+      nodes,
+      elements,
+      materials,
+      properties,
+      constraints,
+      loads,
+      surfaceLoads,
+      elementOrder,
+      solverMethod,
+      tieGroups,
+      couplings: couplingGroups,
+      surfaceTriangles,
+      surfaceFaceIds,
+    };
     // The worker transfers the solver's Float64Array buffers here zero-copy
     // (issue #166) — store them as-is, no per-element copy.
     sendToWorker<{ displacements: Float64Array; vonMises: Float64Array }>(
       "solve",
-      {
-        nodes,
-        elements,
-        materials,
-        properties,
-        constraints,
-        loads,
-        surfaceLoads,
-        elementOrder,
-        tieGroups,
-        couplings: couplingGroups,
-        surfaceTriangles,
-        surfaceFaceIds,
-      },
+      payload,
     )
       .then(({ displacements, vonMises }) => {
         setResult({ displacements, vonMises });
@@ -153,7 +222,30 @@ export function useSolver() {
           ? "Prescribed displacement drives the model"
           : "No loads or prescribed displacement",
     ],
+    ...thinWalls.map((f): [boolean, string] => [false, thinWallMessage(f)]),
+    ...(routeRefusal === null
+      ? []
+      : [[false, routeRefusal] satisfies [boolean, string]]),
   ];
+
+  // Why the chosen AMG solver will not take this model and what the solve uses
+  // instead (shown under the solver choice), or null. Only computed with a
+  // mesh: before one there is no model.
+  const amgModel = {
+    elements,
+    properties,
+    elementOrder,
+    couplingCount: couplingGroups.length,
+  };
+  const amgReason = route !== null ? amgUnavailableReason(amgModel) : null;
+  const amgUnavailable =
+    amgReason === null || route === null
+      ? null
+      : {
+          reason: amgReason,
+          fallback:
+            FALLBACK_PRECONDITIONER_LABEL[amgFallbackPreconditioner(route)],
+        };
 
   return {
     solve,
@@ -163,6 +255,24 @@ export function useSolver() {
     allOk,
     checks,
     elementOrder,
+    solverMethod,
+    setSolverMethod,
+    amgUnavailable,
     logs,
   };
+}
+
+// routeSolve on the panel's model: the route it takes, or the reason it is
+// refused. Null model (no mesh yet): neither.
+function solveRoute(model: Parameters<typeof routeSolve>[0] | null): {
+  route: SolveRoute | null;
+  routeRefusal: string | null;
+} {
+  if (model === null) return { route: null, routeRefusal: null };
+  try {
+    return { route: routeSolve(model), routeRefusal: null };
+  } catch (err) {
+    if (!(err instanceof Error)) throw err;
+    return { route: null, routeRefusal: err.message };
+  }
 }

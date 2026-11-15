@@ -90,8 +90,6 @@ function makeMbb(nx: number, ny: number) {
 test("optimize_topology worker: MBB beam converges to a stiffened bimodal layout", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
-
   const logs: string[] = [];
   page.on("console", (msg) => logs.push(msg.text()));
   page.on("pageerror", (e) =>

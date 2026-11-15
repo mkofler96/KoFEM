@@ -1,0 +1,21 @@
+{
+  "source": "GE_engine_bracket.step (Onshape tessellated AP242 export)",
+  "sourceSha256": "3659a39854373c9af14d814bdeac431ac212d3eda12b78c45f42350f8a164035",
+  "generator": "scripts/generate-landing-edges.mjs",
+  "minAngleDeg": 20,
+  "maxTurnDeg": 60,
+  "segmentCount": 3995,
+  "offsetMm": [
+    -0.018095760419239326,
+    2.8533939655517315e-7,
+    -0.01234215654855575
+  ],
+  "layout": {
+    "segments": {
+      "offset": 0,
+      "length": 23970,
+      "type": "Int16Array",
+      "scale": 0.005
+    }
+  }
+}

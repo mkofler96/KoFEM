@@ -67,7 +67,7 @@ export default {
       gray element is not a validated porous material.</p>
     ${figure("simp-interpolation", "SIMP stiffness against density for several penalties. With p = 3, half density gives only one eighth of the stiffness, so intermediate densities are poor value and the optimizer drives elements towards 0 or 1.")}
     <p>The <a href="/theory/notation/#stiffness-floor">stiffness floor</a>
-      ${tex("E_{\\mathrm{min}}/E_0=10^{-9}")} is fixed in the engine and is
+      ${tex("E_{\\mathrm{min}}/E_0=10^{-9}")} is fixed in the optimizer and is
       not a user input. Without it a void element would contribute zero
       stiffness, and a node surrounded by void would leave the global
       stiffness matrix singular. The floor keeps it positive definite for
@@ -98,12 +98,12 @@ export default {
       The compliance limit ${tex("c_{\\mathrm{allow}}")} is in the model’s
       own work units, so it has no universal default. A minimum-volume run
       starts from full material; if even that design exceeds
-      ${tex("c_{\\mathrm{allow}}")}, the engine stops with an explicit error.
+      ${tex("c_{\\mathrm{allow}}")}, the optimizer stops with an explicit error.
       Either formulation can also carry a maximum von Mises stress limit on
       all-solid models; <a href="/theory/optimization/constraints-and-convergence/#stress-constraint">stress-constrained runs</a>
       change several details of the loop.</p>
     <p>Both formulations need a load and at least one fixed support. The
-      engine rejects non-zero prescribed displacements, for the reason given
+      optimizer rejects non-zero prescribed displacements, for the reason given
       in the next section.</p>
 
     <h2 id="sensitivities">Compliance sensitivity without an extra solve</h2>
@@ -126,10 +126,12 @@ export default {
       it rejects such models rather than follow a wrong gradient. Body loads
       that scale with density, such as self-weight, are not part of the
       current formulation.</p>
-    <p class="note">The solid loop solves every SIMP analysis with conjugate
-      gradients to a relative residual of ${tex("10^{-8}")}, tighter than the
-      static solid solve. The sensitivity is quadratic in the displacement,
-      so a loose solve would bias it.</p>
+    <p class="note">The solid loop solves every SIMP analysis with multigrid
+      conjugate gradients to a relative residual ${tex("|\\mathbf{r}|_2/|\\mathbf{f}|_2")}
+      of ${tex("10^{-8}")}, tighter than the static solid solve. The
+      sensitivity is quadratic in the displacement, so a loose solve would
+      bias it. Shell and coupled runs stop at ${tex("10^{-5}")}, because thin-wall
+      systems with void regions condition poorly.</p>
 
     <h2 id="worked-example">Two bars sharing one load</h2>
     <p>Two parallel bars connect a fixed support to one loaded node, so they
@@ -197,7 +199,7 @@ export default {
       [
         [
           "All solid",
-          "One density per tetrahedron or hexahedron, order 1. One design material: the run uses a single E and ν. Optional maximum-stress constraint. A separate level-set method is also available for minimum compliance; it is not described here.",
+          "One density per tetrahedron or hexahedron, order 1. The app requires one design material, a single E and ν. Optional maximum-stress constraint. A separate level-set method is also available for minimum compliance; it is not described here.",
         ],
         [
           "All shell",
@@ -214,25 +216,26 @@ export default {
       element and coupling mechanics are explained in
       <a href="/theory/shells/formulation/">shell formulation</a> and
       <a href="/theory/shells/solid-coupling/">solid–shell coupling</a>.
-      Supported and loaded elements are design variables too: the app does not
-      yet pin any element solid or void. The engine already accepts such
-      passive regions, but the app has no keep-in/keep-out picker yet.</p>
+      A region’s optimization role can keep it solid or empty. Its elements
+      are then not design variables, but they count toward the volume and
+      take part in the filter. Supported and loaded elements in a design
+      region are design variables too.</p>
 
     <h2 id="references">Implementation and references</h2>
     <ol class="refs">
       <li>Bendsøe and Sigmund, <cite>Topology Optimization: Theory, Methods and Applications</cite>, Springer (2003); and Bendsøe and Sigmund (1999), <cite>Material interpolation schemes in topology optimization</cite>, Archive of Applied Mechanics 69, 635–654.</li>
       <li>Andreassen, Clausen, Schevenels, Lazarov and Sigmund (2011), <cite>Efficient topology optimization in MATLAB using 88 lines of code</cite>, Structural and Multidisciplinary Optimization 43, 1–16. Source of the modified SIMP form used here.</li>
-      <li>${source("engine/cpp/topology_simp_core.cpp", 72, "interpolation and slope")},
-        ${source("engine/cpp/topology_simp_core.cpp", 80, "once-per-run element stiffness cache")},
-        ${source("engine/cpp/topology_simp_core.cpp", 148, "compliance and self-adjoint sensitivity")},
-        ${source("engine/cpp/topology_formulation.h", 1, "objective and constraint rows")} and
-        ${source("engine/cpp/topology_simp.cpp", 192, "order-1 design space")} with its
-        ${source("engine/cpp/topology_simp.cpp", 204, "prescribed-displacement guard")}.</li>
-      <li>${source("engine/cpp/topology_shell.h", 1, "shell and coupled SIMP")},
-        ${source("web/src/lib/solve/route.ts", 76, "design-domain routing")} and
-        ${source("web/src/hooks/useTopOpt.ts", 227, "one-material-per-domain check")}.</li>
-      <li>Native checks of the per-iteration math, including finite-difference
-        sensitivities: ${source("engine/tests/topology_simp_validation.cpp", 1, "solid SIMP core")} and
-        ${source("engine/tests/topology_shell_validation.cpp", 1, "shell and coupled core")}.</li>
+      <li>${source("crates/kofem-fem/src/topology/simp.rs", 34, "interpolation and slope")},
+        ${source("crates/kofem-fem/src/topology/simp.rs", 155, "once-per-run element stiffness cache")},
+        ${source("crates/kofem-fem/src/topology/simp.rs", 425, "compliance and self-adjoint sensitivity")},
+        ${source("crates/kofem-fem/src/topology/formulation.rs", 108, "objective and constraint rows")} and
+        ${source("crates/kofem-wasm/src/topology.rs", 147, "prescribed-displacement guard")}.</li>
+      <li>${source("crates/kofem-fem/src/topology/mixed.rs", 81, "shell and coupled SIMP")},
+        ${source("web/src/lib/solve/route.ts", 88, "design-domain routing")},
+        ${source("web/src/hooks/useTopOpt.ts", 232, "one-material-per-domain check")} and
+        ${source("web/src/lib/regions.ts", 143, "solid and empty regions")}.</li>
+      <li>Checks of the per-iteration math, including finite-difference
+        sensitivities: ${source("crates/kofem-fem/tests/topology_simp.rs", 123, "solid SIMP")} and
+        ${source("crates/kofem-fem/tests/topology_mixed.rs", 119, "shell and coupled SIMP")}.</li>
     </ol>`,
 };

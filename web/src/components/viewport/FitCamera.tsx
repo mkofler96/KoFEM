@@ -10,7 +10,7 @@ import { useModelStore } from "../../store/modelStore";
 const ISO_DIR = new THREE.Vector3(1, 1, 1).normalize();
 
 export function FitCamera() {
-  const { camera, controls } = useThree();
+  const { camera, controls, invalidate } = useThree();
   const fitViewTrigger = useModelStore((s) => s.fitViewTrigger);
 
   useEffect(() => {
@@ -64,7 +64,10 @@ export function FitCamera() {
     const oc = controls as unknown as { target: THREE.Vector3; update(): void };
     oc.target.copy(center);
     oc.update();
-  }, [fitViewTrigger, controls]); // deps intentionally omit scene state — refit only on trigger
+    // The canvas renders on demand: a fit that only changes near/far fires no
+    // controls change event, so ask for the frame explicitly.
+    invalidate();
+  }, [fitViewTrigger, controls, invalidate]); // deps intentionally omit scene state — refit only on trigger
 
   return null;
 }

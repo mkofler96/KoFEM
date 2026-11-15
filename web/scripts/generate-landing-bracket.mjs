@@ -5,6 +5,12 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { gzipSync } from "node:zlib";
 import createModule from "../src/wasm/pkg/kofem_wasm_emcc.js";
+import { optimizeSolidInRust } from "../src/lib/solve/topOptRust.ts";
+import {
+  loadSolver,
+  rustFem,
+  storeModel,
+} from "../../examples/validation/lib/solver.mjs";
 
 const directory = new URL("../public/landing/", import.meta.url);
 const readJson = (name) => JSON.parse(readFileSync(new URL(name, directory)));
@@ -86,7 +92,12 @@ function compactTetrahedra(tetrahedra, nodeCount) {
   return Uint16Array.from(rows.flat());
 }
 const sourceForce = [0, 0, 1000];
-const material = JSON.stringify({ young_modulus: 210000, poisson_ratio: 0.3 });
+const material = { young_modulus: 210000, poisson_ratio: 0.3 };
+// Flat engine arrays as the nested vertices/tetrahedra solver.mjs takes.
+const nested = (flat, width) =>
+  Array.from({ length: flat.length / width }, (_, i) =>
+    Array.from(flat.subarray(i * width, (i + 1) * width)),
+  );
 const normalY = 0.662599371078666,
   normalZ = 0.748974013865739;
 // Rigid mounting frame: X is the mounting normal; Y follows the lug-bore axis.
@@ -233,14 +244,17 @@ const coarse = {
 const boundary = Uint32Array.from(dto.surfaceTriangles);
 mesher.free_geometry_cache();
 const loads = boundaryConditions(vertices, boundary);
-const solver = await engine();
-const solved = solver.solve_linear_elastic(
-  coarse,
+// The app's Rust solve (examples/validation/lib/solver.mjs → solveSolidInRust).
+const solve = await loadSolver();
+const solved = await solve(
+  {
+    vertices: nested(coarse.vertices, 3),
+    tetrahedra: nested(coarse.tetrahedra, 4),
+  },
   material,
-  JSON.stringify(loads.bcs),
+  loads.bcs,
   1,
 );
-if ("error" in solved) throw Error(solved.error);
 const displacements = Float32Array.from(solved.displacements);
 const magnitudes = Float32Array.from({ length: vertices.length / 3 }, (_, i) =>
   Math.hypot(...displacements.subarray(i * 3, i * 3 + 3)),
@@ -447,16 +461,21 @@ for (let e = 0; e < nElements; e++)
 const frames = [0],
   fields = [new Float32Array(nNodes).fill(1)],
   retained = [nElements];
-const optimizer = await engine();
-const optimized = optimizer.optimize_topology(
+// The app's Rust optimizer (topOptRust.ts → optimizeSolidInRust).
+const optimized = optimizeSolidInRust(
+  await rustFem(),
   {
-    vertices: Float64Array.from(fine.positions),
-    tetrahedra: Int32Array.from(fine.tetrahedra),
-    hexahedra: new Int32Array(0),
+    ...storeModel(
+      {
+        vertices: nested(Float64Array.from(fine.positions), 3),
+        tetrahedra: nested(Int32Array.from(fine.tetrahedra), 4),
+      },
+      material,
+      fineLoads.bcs,
+    ),
+    settings,
   },
-  material,
-  JSON.stringify(fineLoads.bcs),
-  JSON.stringify(settings),
+  console.log,
   (iteration, density) => {
     const sums = new Float64Array(nNodes);
     for (let e = 0; e < nElements; e++)
@@ -474,7 +493,6 @@ const optimized = optimizer.optimize_topology(
     );
   },
 );
-if ("error" in optimized) throw Error(optimized.error);
 if (
   settings.passive.solid.some(
     (element) => optimized.density[element] < 1 - 1e-8,
@@ -520,7 +538,7 @@ const topologyData = pack({
 });
 const topologyMetadata = {
   ...topology,
-  generator: "KoFEM optimize_topology / reaction-diffusion level set",
+  generator: "KoFEM Rust optimizer / reaction-diffusion level set",
   rendering:
     "Interpolated volume-weighted nodal densities; final surface is the engine level-set phi = 0 boundary",
   nodes: nNodes,

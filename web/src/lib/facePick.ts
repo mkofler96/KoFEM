@@ -361,6 +361,23 @@ export function extractBoundaryEdges(
   return edges;
 }
 
+/**
+ * The boundary edges whose two nodes are both in `nodeIds`, as `[min, max]`
+ * node-id pairs — the polyline an edge pick selected. The viewport draws an
+ * edge selection from these: a rim node set spans no triangle, so the face
+ * overlay has nothing to fill. Interior edges between two picked nodes are not
+ * part of the rim and are left out.
+ */
+export function boundaryEdgesWithin(
+  nodeIds: readonly number[],
+  topo: BoundaryMeshTopo,
+): [number, number][] {
+  const picked = new Set(nodeIds);
+  return extractBoundaryEdges(topo).filter(
+    ([a, b]) => picked.has(a) && picked.has(b),
+  );
+}
+
 function pointSegmentDistSq(p: Vec3, a: Vec3, b: Vec3): number {
   const ab: Vec3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
   const ap: Vec3 = [p[0] - a[0], p[1] - a[1], p[2] - a[2]];
@@ -373,6 +390,62 @@ function pointSegmentDistSq(p: Vec3, a: Vec3, b: Vec3): number {
     ap[2] - proj * ab[2],
   ];
   return dot(perp, perp);
+}
+
+// The boundary edge a click seeds an edge pick from: the nearest of the
+// clicked triangle's boundary edges, else the globally nearest boundary edge.
+function seedEdge(
+  clickPoint: Vec3,
+  startTriIdx: number,
+  topo: BoundaryMeshTopo,
+  getPos: (id: number) => Vec3,
+  boundaryEdges: [number, number][],
+  keyToIdx: Map<string, number>,
+): number {
+  const [ta, tb, tc] = topo.triangles[startTriIdx];
+  const triEdges = [
+    keyToIdx.get(edgeKey(ta, tb)),
+    keyToIdx.get(edgeKey(tb, tc)),
+    keyToIdx.get(edgeKey(tc, ta)),
+  ].filter((i): i is number => i !== undefined);
+  const candidates =
+    triEdges.length > 0 ? triEdges : boundaryEdges.map((_, i) => i);
+
+  let seed = candidates[0];
+  let best = Infinity;
+  for (const i of candidates) {
+    const dist = pointSegmentDistSq(
+      clickPoint,
+      getPos(boundaryEdges[i][0]),
+      getPos(boundaryEdges[i][1]),
+    );
+    if (dist < best) {
+      best = dist;
+      seed = i;
+    }
+  }
+  return seed;
+}
+
+/**
+ * The boundary edge an edge pick at this click starts from, as its two node
+ * ids, or null when the mesh has no boundary edge. On a shell whose rim edges
+ * know the CAD face they came from (lib/shellRim), this edge names the face
+ * the click selects whole.
+ */
+export function pickEdgeSeed(
+  clickPoint: Vec3,
+  startTriIdx: number,
+  topo: BoundaryMeshTopo,
+  getPos: (id: number) => Vec3,
+): [number, number] | null {
+  const boundaryEdges = extractBoundaryEdges(topo);
+  if (boundaryEdges.length === 0) return null;
+  const keyToIdx = new Map<string, number>();
+  boundaryEdges.forEach((e, i) => keyToIdx.set(edgeKey(e[0], e[1]), i));
+  return boundaryEdges[
+    seedEdge(clickPoint, startTriIdx, topo, getPos, boundaryEdges, keyToIdx)
+  ];
 }
 
 /**
@@ -402,29 +475,15 @@ export function pickEdgeNodeIds(
   const keyToIdx = new Map<string, number>();
   boundaryEdges.forEach((e, i) => keyToIdx.set(edgeKey(e[0], e[1]), i));
 
-  // Seed candidates: the boundary edges of the clicked triangle, else all edges.
-  const [ta, tb, tc] = topo.triangles[startTriIdx];
-  const triEdges = [
-    keyToIdx.get(edgeKey(ta, tb)),
-    keyToIdx.get(edgeKey(tb, tc)),
-    keyToIdx.get(edgeKey(tc, ta)),
-  ].filter((i): i is number => i !== undefined);
-  const candidates =
-    triEdges.length > 0 ? triEdges : boundaryEdges.map((_, i) => i);
-
-  let seed = candidates[0];
-  let best = Infinity;
-  for (const i of candidates) {
-    const dist = pointSegmentDistSq(
-      clickPoint,
-      getPos(boundaryEdges[i][0]),
-      getPos(boundaryEdges[i][1]),
-    );
-    if (dist < best) {
-      best = dist;
-      seed = i;
-    }
-  }
+  // Seed: the boundary edges of the clicked triangle, else all edges.
+  const seed = seedEdge(
+    clickPoint,
+    startTriIdx,
+    topo,
+    getPos,
+    boundaryEdges,
+    keyToIdx,
+  );
 
   const vertexToEdges = new Map<number, number[]>();
   for (let i = 0; i < boundaryEdges.length; i++) {

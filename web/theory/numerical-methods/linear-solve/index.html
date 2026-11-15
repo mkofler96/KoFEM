@@ -13,19 +13,19 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
     <title>Linear solve | KoFEM Theory Guide</title>
-    <meta name="description" content="How conjugate gradients solves the constrained solid system, what KoFEM's residual and tolerances measure, and how conditioning, rigid modes and iteration limits affect convergence." />
+    <meta name="description" content="How conjugate gradients with multigrid or Gauss–Seidel preconditioning solves the constrained solid system, what KoFEM's residual and tolerance measure, and how conditioning, rigid modes and iteration limits affect convergence." />
     <link rel="canonical" href="https://kofem.org/theory/numerical-methods/linear-solve/" />
     <meta name="robots" content="index, follow" />
 
     <meta property="og:type" content="article" />
     <meta property="og:title" content="Linear solve | KoFEM Theory Guide" />
-    <meta property="og:description" content="How conjugate gradients solves the constrained solid system, what KoFEM's residual and tolerances measure, and how conditioning, rigid modes and iteration limits affect convergence." />
+    <meta property="og:description" content="How conjugate gradients with multigrid or Gauss–Seidel preconditioning solves the constrained solid system, what KoFEM's residual and tolerance measure, and how conditioning, rigid modes and iteration limits affect convergence." />
     <meta property="og:url" content="https://kofem.org/theory/numerical-methods/linear-solve/" />
-    <meta property="og:image" content="https://kofem.org/kofem_logo.svg" />
-    <meta name="twitter:card" content="summary" />
+    <meta property="og:image" content="https://kofem.org/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Linear solve | KoFEM Theory Guide" />
-    <meta name="twitter:description" content="How conjugate gradients solves the constrained solid system, what KoFEM's residual and tolerances measure, and how conditioning, rigid modes and iteration limits affect convergence." />
-    <meta name="twitter:image" content="https://kofem.org/kofem_logo.svg" />
+    <meta name="twitter:description" content="How conjugate gradients with multigrid or Gauss–Seidel preconditioning solves the constrained solid system, what KoFEM's residual and tolerance measure, and how conditioning, rigid modes and iteration limits affect convergence." />
+    <meta name="twitter:image" content="https://kofem.org/og-image.png" />
 
     <!-- Self-hosted fonts (SIL OFL) — see public/fonts/README.md -->
     <link href="/fonts/ibm-plex.css" rel="stylesheet" />
@@ -37,7 +37,7 @@
         "@context": "https://schema.org",
         "@type": "TechArticle",
         "headline": "Linear solve",
-        "description": "How conjugate gradients solves the constrained solid system, what KoFEM's residual and tolerances measure, and how conditioning, rigid modes and iteration limits affect convergence.",
+        "description": "How conjugate gradients with multigrid or Gauss–Seidel preconditioning solves the constrained solid system, what KoFEM's residual and tolerance measure, and how conditioning, rigid modes and iteration limits affect convergence.",
         "url": "https://kofem.org/theory/numerical-methods/linear-solve/",
         "isPartOf": {
           "@type": "CollectionPage",
@@ -831,8 +831,8 @@
       <a href="/theory/notation/#load-vector">load vector</a>, including prescribed-displacement
       contributions. This local <math><mi mathvariant="bold" class="math-bold">b</mi></math> is a discrete vector, not the
       continuum body-force field. In the N–mm system, their units are N/mm, mm
-      and N. MFEM retains constrained rows with their diagonal entries; the
-      free rows express force balance.</p>
+      and N. KoFEM keeps each constrained row as an identity row that restates
+      its prescribed value; the free rows express force balance.</p>
 
     <h2 id="method">Conjugate gradients and preconditioning</h2>
     <p>Conjugate gradients (CG) uses sparse matrix–vector products and a few
@@ -843,7 +843,7 @@
       impractical iteration budget.</p>
     <figure class="theory-figure full" id="figure-cg-convergence">
       <a href="/theory/figures/cg-convergence.svg" class="figure-link"><picture class="figure-image"><source srcset="/theory/figures/cg-convergence.svg" type="image/svg+xml" /><img src="/theory/figures/cg-convergence.png" width="640" height="345" alt="Relative residual against iteration on a logarithmic scale for a small plane-elasticity problem. Conjugate gradients without a preconditioner needs many more iterations to reach the 10 to the minus 6 tolerance than conjugate gradients preconditioned with symmetric Gauss–Seidel." loading="lazy" decoding="async" /></picture></a>
-      <figcaption>Conjugate gradients on the plane-elasticity system of a small triangular mesh, clamped at one end and loaded at the other. Symmetric Gauss–Seidel preconditioning, as in KoFEM, reaches the 10<sup>−6</sup> relative tolerance in far fewer iterations. Computed for this figure; the residual is the preconditioned norm relative to its initial value.</figcaption>
+      <figcaption>Conjugate gradients on the plane-elasticity system of a small triangular mesh, clamped at one end and loaded at the other. Symmetric Gauss–Seidel preconditioning, one of KoFEM’s two choices, reaches a 10<sup>−6</sup> relative tolerance in far fewer iterations. Computed for this figure; the plotted residual is the preconditioned norm relative to its initial value.</figcaption>
     </figure>
     <p>CG assumes a <strong>symmetric positive-definite</strong> matrix:
       <math><msup><mi mathvariant="bold" class="math-bold">v</mi><mrow><mi>T</mi></mrow></msup><mi mathvariant="bold" class="math-bold">A</mi><mi mathvariant="bold" class="math-bold">v</mi><mo>&gt;</mo></math>​<math><mn>0</mn></math> for every nonzero vector <span class="math-nowrap"><math><mi mathvariant="bold" class="math-bold">v</mi></math>.</span>
@@ -855,9 +855,21 @@
       of <span class="math-nowrap"><math><mi mathvariant="bold" class="math-bold">A</mi></math>.</span> Call its matrix <span class="math-nowrap"><math><mi mathvariant="bold" class="math-bold">M</mi></math>;</span> applying it means
       solving approximately with <span class="math-nowrap"><math><mi mathvariant="bold" class="math-bold">M</mi></math>,</span> not explicitly inverting it.
       Preconditioned CG also requires a fixed, symmetric positive-definite
-      preconditioner. KoFEM uses MFEM’s symmetric Gauss–Seidel: one forward and
-      one backward sweep per application. These local sweeps reduce error
-      cheaply but can remove long-range, slowly varying errors poorly.</p>
+      preconditioner. The Solve panel offers two:</p>
+    <ul>
+      <li><strong>AMG multigrid</strong> (the default): smoothed-aggregation
+        algebraic multigrid. It groups neighbouring nodes into aggregates,
+        builds coarser versions of the system that still contain the six
+        rigid-body motions, and applies one V-cycle per CG step, with a
+        forward Gauss–Seidel sweep before and a backward sweep after each
+        coarse correction. The coarsest level is solved directly when it
+        is small enough.</li>
+      <li><strong>Gauss–Seidel</strong>: one symmetric Gauss–Seidel sweep,
+        a forward and a backward pass, per application. These local sweeps
+        reduce error cheaply but remove long-range, slowly varying errors
+        poorly, so they need many more iterations on large or thin-walled
+        models.</li>
+    </ul>
 
     <h2 id="residual">Which residual does the solver measure?</h2>
     <p id="algebraic-residual">At iteration <span class="math-nowrap"><math><mi>k</mi></math>,</span> the estimate <math><msub><mi mathvariant="bold" class="math-bold">x</mi><mi>k</mi></msub></math>
@@ -865,45 +877,44 @@
     <div class="equation" tabindex="0" role="region" aria-label="The residual is the modified load vector minus the constrained stiffness matrix times the current displacement estimate; scroll horizontally if needed"><math display="block"><msub><mi mathvariant="bold" class="math-bold">r</mi><mi>k</mi></msub><mo>=</mo><mi mathvariant="bold" class="math-bold">b</mi><mo>−</mo><mi mathvariant="bold" class="math-bold">A</mi><msub><mi mathvariant="bold" class="math-bold">x</mi><mi>k</mi></msub><mo lspace="0" rspace="0">.</mo></math></div>
     <p>On free solid rows this is the remaining nodal force imbalance, in N.
       Constrained rows enforce prescribed values; their residual is not a
-      support reaction. The scalar in KoFEM’s solid log and continuation dialog
-      uses a <strong>preconditioned norm</strong>:</p>
-    <div class="equation" tabindex="0" role="region" aria-label="Eta is the square root of residual transpose times the preconditioner inverse times the residual; the reported relative residual rho is eta divided by its initial value; scroll horizontally if needed"><math display="block"><msub><mi>η</mi><mi>k</mi></msub><mo>=</mo><msqrt><mrow><msubsup><mi mathvariant="bold" class="math-bold">r</mi><mi>k</mi><mrow><mi>T</mi></mrow></msubsup><msup><mi mathvariant="bold" class="math-bold">M</mi><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>1</mn></mrow></msup><msub><mi mathvariant="bold" class="math-bold">r</mi><mi>k</mi></msub></mrow></msqrt><mo>,</mo><mspace width="1em"/><msub><mi>ρ</mi><mi>k</mi></msub><mo>=</mo><mfrac><mrow><msub><mi>η</mi><mi>k</mi></msub></mrow><mrow><msub><mi>η</mi><mn>0</mn></msub></mrow></mfrac><mo lspace="0" rspace="0">.</mo></math></div>
-    <p><math><msub><mi>η</mi><mn>0</mn></msub></math> is the norm at the start of this solve, before the first CG
-      step. The displayed <math><msub><mi>ρ</mi><mi>k</mi></msub></math> is dimensionless. It is neither a maximum
-      force imbalance nor the ordinary Euclidean residual divided by the load
-      norm. With stiffness units for <span class="math-nowrap"><math><mi mathvariant="bold" class="math-bold">M</mi></math>,</span> <math><msubsup><mi>η</mi><mi>k</mi><mn>2</mn></msubsup></math> has energy
-      units, N·mm. MFEM updates the residual recursively during CG; the wrapper
-      does not independently recompute the final force imbalance or estimate a
-      condition number.</p>
+      support reaction. KoFEM measures the Euclidean norm of the residual
+      relative to the load:</p>
+    <div class="equation" tabindex="0" role="region" aria-label="The relative residual rho is the Euclidean norm of the residual divided by the Euclidean norm of the modified load vector; scroll horizontally if needed"><math display="block"><msub><mi>ρ</mi><mi>k</mi></msub><mo>=</mo><mfrac><mrow><mo stretchy="false" lspace="0" rspace="0">|</mo><msub><mi mathvariant="bold" class="math-bold">r</mi><mi>k</mi></msub><msub><mo stretchy="false" lspace="0" rspace="0">|</mo><mn>2</mn></msub></mrow><mrow><mo stretchy="false" lspace="0" rspace="0">|</mo><mi mathvariant="bold" class="math-bold">b</mi><msub><mo stretchy="false" lspace="0" rspace="0">|</mo><mn>2</mn></msub></mrow></mfrac><mo lspace="0" rspace="0">.</mo></math></div>
+    <p>The solve log calls <math><msub><mi>ρ</mi><mi>k</mi></msub></math> the force residual. It is
+      dimensionless and means the same accuracy whichever preconditioner is
+      chosen. It is the ratio of two vector norms, not the largest nodal
+      force imbalance. Constrained rows, which hold prescribed values, enter
+      both norms; for fixed supports they are zero. CG updates the residual
+      recursively during the iteration; the solve does not independently
+      recompute the final force imbalance or estimate a condition number.</p>
 
     <h2 id="stopping">Tolerances and stopping</h2>
-    <p>The relative tolerance <math><msub><mi>τ</mi><mrow><mi mathvariant="normal">rel</mi></mrow></msub></math> asks for a reduction from
-      the initial norm. The absolute tolerance <math><msub><mi>τ</mi><mrow><mi mathvariant="normal">abs</mi></mrow></msub></math> sets a
-      floor in the same units as <span class="math-nowrap"><math><msub><mi>η</mi><mi>k</mi></msub></math>.</span> MFEM tests the squared quantities:</p>
-    <div class="equation" tabindex="0" role="region" aria-label="Stop when the squared preconditioned residual norm is no greater than the larger of relative tolerance squared times the initial squared norm and absolute tolerance squared; scroll horizontally if needed"><math display="block"><msubsup><mi>η</mi><mi>k</mi><mn>2</mn></msubsup><mo>≤</mo><mi mathvariant="normal">max</mi><mo stretchy="false" lspace="0" rspace="0">(</mo><msubsup><mi>τ</mi><mrow><mi mathvariant="normal">rel</mi></mrow><mn>2</mn></msubsup><msubsup><mi>η</mi><mn>0</mn><mn>2</mn></msubsup><mo>,</mo><msubsup><mi>τ</mi><mrow><mi mathvariant="normal">abs</mi></mrow><mn>2</mn></msubsup><mo stretchy="false" lspace="0" rspace="0">)</mo><mo lspace="0" rspace="0">.</mo></math></div>
-    <p>Thus either tolerance can allow stopping. A relative tolerance of
-      <math><msup><mn>10</mn><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>6</mn></mrow></msup></math> asks for a millionfold norm reduction, or a factor of
-      <math><msup><mn>10</mn><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>12</mn></mrow></msup></math> in the squared test. It does not promise six correct
-      digits of displacement or stress.</p>
+    <p>The relative tolerance <math><msub><mi>τ</mi><mrow><mi mathvariant="normal">rel</mi></mrow></msub></math> asks for a reduction of
+      the residual relative to the load. KoFEM tests the squared quantities
+      after every step:</p>
+    <div class="equation" tabindex="0" role="region" aria-label="Stop when the squared residual norm is no greater than the relative tolerance squared times the squared load norm; scroll horizontally if needed"><math display="block"><mo stretchy="false" lspace="0" rspace="0">|</mo><msub><mi mathvariant="bold" class="math-bold">r</mi><mi>k</mi></msub><msubsup><mo stretchy="false" lspace="0" rspace="0">|</mo><mn>2</mn><mn>2</mn></msubsup><mo>≤</mo><msubsup><mi>τ</mi><mrow><mi mathvariant="normal">rel</mi></mrow><mn>2</mn></msubsup><mo stretchy="false" lspace="0" rspace="0">|</mo><mi mathvariant="bold" class="math-bold">b</mi><msubsup><mo stretchy="false" lspace="0" rspace="0">|</mo><mn>2</mn><mn>2</mn></msubsup><mo lspace="0" rspace="0">.</mo></math></div>
+    <p>A relative tolerance of <math><msup><mn>10</mn><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>6</mn></mrow></msup></math> asks for a residual a million
+      times smaller than the load, or a factor of <math><msup><mn>10</mn><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>12</mn></mrow></msup></math> in the
+      squared test. It does not promise six correct digits of displacement or
+      stress. There is no absolute tolerance.</p>
     <div class="table-wrap" tabindex="0" role="region" aria-label="Solid solver settings and user controls; scroll horizontally if needed">
       <table>
         <caption>Ordinary solid solve in KoFEM</caption>
         <thead><tr><th scope="col">Setting</th><th scope="col">Value</th><th scope="col">Control</th></tr></thead>
         <tbody>
-          <tr><th scope="row">Relative tolerance</th><td><code>1e-6</code></td><td>Fixed internally by <code>SetRelTol</code></td></tr>
-          <tr><th scope="row">Absolute tolerance</th><td><code>0</code></td><td>Inherited from MFEM; KoFEM does not call <code>SetAbsTol</code></td></tr>
-          <tr><th scope="row">Initial budget</th><td>5000 iterations</td><td>Internal default; callers can supply <code>cgIterationLimit</code> (1–1 000 000), not an ordinary solver-settings input</td></tr>
+          <tr><th scope="row">Preconditioner</th><td>AMG multigrid or Gauss–Seidel</td><td>“Solver” on the Solve panel; AMG is the default</td></tr>
+          <tr><th scope="row">Relative tolerance</th><td><code>1e-6</code></td><td>Fixed internally</td></tr>
+          <tr><th scope="row">Stopping measure</th><td><math><mo stretchy="false" lspace="0" rspace="0">|</mo><msub><mi mathvariant="bold" class="math-bold">r</mi><mi>k</mi></msub><msub><mo stretchy="false" lspace="0" rspace="0">|</mo><mn>2</mn></msub><mo lspace="0" rspace="0">/</mo><mo stretchy="false" lspace="0" rspace="0">|</mo><mi mathvariant="bold" class="math-bold">b</mi><msub><mo stretchy="false" lspace="0" rspace="0">|</mo><mn>2</mn></msub></math></td><td>Fixed internally</td></tr>
+          <tr><th scope="row">Initial budget</th><td>5000 iterations</td><td>Internal default; callers can supply <code>cgIterationLimit</code>, not an ordinary solver-settings input</td></tr>
           <tr><th scope="row">Additional budget</th><td>1–1 000 000 per continuation</td><td>User enters “Extra iterations” in “Keep solving?”</td></tr>
         </tbody>
       </table>
     </div>
-    <p>The app exposes continuation, not an ordinary solid-tolerance control.
-      Optimization tolerance inputs belong to another solver path. With zero
-      absolute tolerance, there is no positive absolute stopping floor. If
-      <math><msub><mi>η</mi><mn>0</mn></msub><mo>=</mo></math>​<span class="math-nowrap"><math><mn>0</mn></math>,</span> MFEM accepts the initial iterate immediately; the ratio
-      <math><msub><mi>η</mi><mi>k</mi></msub><mo lspace="0" rspace="0">/</mo><msub><mi>η</mi><mn>0</mn></msub></math> is undefined. The progress monitor substitutes zero in
-      that case, while the final MFEM ratio can be non-finite. Treat it as a
-      zero-initial-residual edge case, not a numerical accuracy estimate.</p>
+    <p>The app exposes the preconditioner and continuation, not a solid
+      tolerance control. Optimization tolerance inputs belong to another
+      solver path. With no load and nothing prescribed,
+      <math><mi mathvariant="bold" class="math-bold">b</mi><mo>=</mo></math>​<span class="math-nowrap"><math><mi mathvariant="bold" class="math-bold">0</mi></math>:</span> the solution is exactly zero and the
+      solve accepts it before the first step.</p>
 
     <h2 id="worked-example">Worked example: two free bar DOFs</h2>
     <p>Take two axial bar elements of stiffness 1 N/mm each. Fix the left node
@@ -916,28 +927,29 @@
       pair, the inverse action is:</p>
     <div class="equation" tabindex="0" role="region" aria-label="Inverse symmetric Gauss–Seidel preconditioner in millimetres per newton: three quarters, one half; one half, one; scroll horizontally if needed"><math display="block"><msup><mi mathvariant="bold" class="math-bold">M</mi><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>1</mn></mrow></msup><mo>=</mo><mrow><mo stretchy="true">[</mo><mtable><mtr><mtd><mn>3</mn><mo lspace="0" rspace="0">/</mo><mn>4</mn></mtd><mtd><mn>1</mn><mo lspace="0" rspace="0">/</mo><mn>2</mn></mtd></mtr><mtr><mtd><mn>1</mn><mo lspace="0" rspace="0">/</mo><mn>2</mn></mtd><mtd><mn>1</mn></mtd></mtr></mtable><mo stretchy="true">]</mo></mrow></math></div>
     <p>Initially <math><msup><mi mathvariant="bold" class="math-bold">M</mi><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>1</mn></mrow></msup><msub><mi mathvariant="bold" class="math-bold">r</mi><mn>0</mn></msub><mo>=</mo></math>​<math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>5</mn><mo lspace="0" rspace="0">/</mo><mn>4</mn><mo>,</mo><mn>3</mn><mo lspace="0" rspace="0">/</mo><mn>2</mn><msup><mo stretchy="false" lspace="0" rspace="0">)</mo><mrow><mi>T</mi></mrow></msup><mtext> mm</mtext></math>
-      and <math><msubsup><mi>η</mi><mn>0</mn><mn>2</mn></msubsup><mo>=</mo></math>​<span class="math-nowrap"><math><mn>11</mn><mo lspace="0" rspace="0">/</mo><mn>4</mn><mtext> N·mm</mtext></math>.</span> The first CG step length is
-      <span class="math-nowrap"><math><mn>22</mn><mo lspace="0" rspace="0">/</mo><mn>13</mn></math>.</span> The resulting iterates are:</p>
+      and <math><msubsup><mi mathvariant="bold" class="math-bold">r</mi><mn>0</mn><mrow><mi>T</mi></mrow></msubsup><msup><mi mathvariant="bold" class="math-bold">M</mi><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>1</mn></mrow></msup><msub><mi mathvariant="bold" class="math-bold">r</mi><mn>0</mn></msub><mo>=</mo></math>​<span class="math-nowrap"><math><mn>11</mn><mo lspace="0" rspace="0">/</mo><mn>4</mn><mtext> N·mm</mtext></math>.</span> CG uses this
+      preconditioned product for its step lengths; the first is
+      <span class="math-nowrap"><math><mn>22</mn><mo lspace="0" rspace="0">/</mo><mn>13</mn></math>.</span> The stopping test uses the plain residual norm. The
+      resulting iterates are:</p>
     <div class="table-wrap" tabindex="0" role="region" aria-label="Two-DOF bar residual and stopping calculation; scroll horizontally if needed">
       <table>
         <caption>Exact arithmetic, symmetric Gauss–Seidel preconditioning</caption>
-        <thead><tr><th scope="col">Iteration</th><th scope="col">Displacement (mm)</th><th scope="col">Residual (N)</th><th scope="col">Squared norm (N·mm)</th><th scope="col">Relative residual</th></tr></thead>
+        <thead><tr><th scope="col">Iteration</th><th scope="col">Displacement (mm)</th><th scope="col">Residual (N)</th><th scope="col"><math><msup><mi mathvariant="bold" class="math-bold">r</mi><mrow><mi>T</mi></mrow></msup><msup><mi mathvariant="bold" class="math-bold">M</mi><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>1</mn></mrow></msup><mi mathvariant="bold" class="math-bold">r</mi></math> (N·mm)</th><th scope="col">Relative residual</th></tr></thead>
         <tbody>
           <tr><th scope="row">0</th><td><math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>0</mn><mo>,</mo><mn>0</mn><mo stretchy="false" lspace="0" rspace="0">)</mo></math></td><td><math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>1</mn><mo>,</mo><mn>1</mn><mo stretchy="false" lspace="0" rspace="0">)</mo></math></td><td><math><mn>11</mn><mo lspace="0" rspace="0">/</mo><mn>4</mn></math></td><td>1</td></tr>
-          <tr><th scope="row">1</th><td><math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>55</mn><mo lspace="0" rspace="0">/</mo><mn>26</mn><mo>,</mo><mn>33</mn><mo lspace="0" rspace="0">/</mo><mn>13</mn><mo stretchy="false" lspace="0" rspace="0">)</mo></math></td><td><math><mo stretchy="false" lspace="0" rspace="0">(</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mn>9</mn><mo lspace="0" rspace="0">/</mo><mn>13</mn><mo>,</mo><mn>15</mn><mo lspace="0" rspace="0">/</mo><mn>26</mn><mo stretchy="false" lspace="0" rspace="0">)</mo></math></td><td><math><mn>99</mn><mo lspace="0" rspace="0">/</mo><mn>338</mn></math></td><td>0.326357</td></tr>
+          <tr><th scope="row">1</th><td><math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>55</mn><mo lspace="0" rspace="0">/</mo><mn>26</mn><mo>,</mo><mn>33</mn><mo lspace="0" rspace="0">/</mo><mn>13</mn><mo stretchy="false" lspace="0" rspace="0">)</mo></math></td><td><math><mo stretchy="false" lspace="0" rspace="0">(</mo><mo form="prefix" lspace="0" rspace="0">−</mo><mn>9</mn><mo lspace="0" rspace="0">/</mo><mn>13</mn><mo>,</mo><mn>15</mn><mo lspace="0" rspace="0">/</mo><mn>26</mn><mo stretchy="false" lspace="0" rspace="0">)</mo></math></td><td><math><mn>99</mn><mo lspace="0" rspace="0">/</mo><mn>338</mn></math></td><td>0.637232</td></tr>
           <tr><th scope="row">2</th><td><math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>2</mn><mo>,</mo><mn>3</mn><mo stretchy="false" lspace="0" rspace="0">)</mo></math></td><td><math><mo stretchy="false" lspace="0" rspace="0">(</mo><mn>0</mn><mo>,</mo><mn>0</mn><mo stretchy="false" lspace="0" rspace="0">)</mo></math></td><td>0</td><td>0</td></tr>
         </tbody>
       </table>
     </div>
-    <p>At iteration 1, <math><msub><mi>ρ</mi><mn>1</mn></msub><mo>=</mo></math>​<math><msqrt><mrow><mn>18</mn><mo lspace="0" rspace="0">/</mo><mn>169</mn></mrow></msqrt><mo>≈</mo></math>​<span class="math-nowrap"><math><mn>0.326357</mn></math>,</span> so the
-      current <math><msup><mn>10</mn><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>6</mn></mrow></msup></math> target requires the second step. A one-step
+    <p>At iteration 1, <math><mo stretchy="false" lspace="0" rspace="0">|</mo><msub><mi mathvariant="bold" class="math-bold">r</mi><mn>1</mn></msub><msubsup><mo stretchy="false" lspace="0" rspace="0">|</mo><mn>2</mn><mn>2</mn></msubsup><mo>=</mo></math>​<math><mn>549</mn><mo lspace="0" rspace="0">/</mo><mn>676</mn><msup><mtext> N</mtext><mn>2</mn></msup></math> and
+      <math><mo stretchy="false" lspace="0" rspace="0">|</mo><mi mathvariant="bold" class="math-bold">b</mi><msubsup><mo stretchy="false" lspace="0" rspace="0">|</mo><mn>2</mn><mn>2</mn></msubsup><mo>=</mo></math>​<span class="math-nowrap"><math><mn>2</mn><msup><mtext> N</mtext><mn>2</mn></msup></math>,</span> so
+      <math><msub><mi>ρ</mi><mn>1</mn></msub><mo>=</mo></math>​<math><msqrt><mrow><mn>549</mn><mo lspace="0" rspace="0">/</mo><mn>1352</mn></mrow></msqrt><mo>≈</mo></math>​<span class="math-nowrap"><math><mn>0.637232</mn></math>.</span> The current
+      <math><msup><mn>10</mn><mrow><mo form="prefix" lspace="0" rspace="0">−</mo><mn>6</mn></mrow></msup></math> target requires the second step, and a one-step
       budget fails to converge. For illustration, a looser relative tolerance
-      of 0.5 would accept step 1; a relative tolerance of 0.1 with an absolute
-      tolerance of <math><mn>0.6</mn><msqrt><mrow><mtext>N·mm</mtext></mrow></msqrt></math>
-      would also accept it, because <math><msub><mi>η</mi><mn>1</mn></msub><mo>≈</mo></math>​<math><mn>0.5412</mn><msqrt><mrow><mtext>N·mm</mtext></mrow></msqrt></math>
-      lies below the absolute floor. These illustrative tolerances are not app
-      settings. The linked calculation below reproduces the steps in floating
-      point, where roundoff can leave a small nonzero final residual.</p>
+      of 0.7 would accept step 1; that tolerance is not an app setting. The
+      linked calculation below reproduces the steps in floating point, where
+      roundoff can leave a small nonzero final residual.</p>
 
     <h2 id="conditioning">Conditioning, scaling and rigid modes</h2>
     <p><strong>Conditioning</strong> describes how strongly a solution responds
@@ -952,8 +964,9 @@
       the algebraic error. Then <math><mi mathvariant="bold" class="math-bold">A</mi><msub><mi mathvariant="bold" class="math-bold">e</mi><mi>k</mi></msub><mo>=</mo></math>​<span class="math-nowrap"><math><msub><mi mathvariant="bold" class="math-bold">r</mi><mi>k</mi></msub></math>.</span> For nonzero
       load and solution, ordinary Euclidean norms satisfy:</p>
     <div class="equation" tabindex="0" role="region" aria-label="Relative displacement error in the Euclidean norm is bounded by the condition number times the Euclidean residual divided by the load norm; scroll horizontally if needed"><math display="block"><mfrac><mrow><mo stretchy="false" lspace="0" rspace="0">|</mo><msub><mi mathvariant="bold" class="math-bold">e</mi><mi>k</mi></msub><msub><mo stretchy="false" lspace="0" rspace="0">|</mo><mn>2</mn></msub></mrow><mrow><mo stretchy="false" lspace="0" rspace="0">|</mo><mi mathvariant="bold" class="math-bold">x</mi><msub><mo stretchy="false" lspace="0" rspace="0">|</mo><mn>2</mn></msub></mrow></mfrac><mo>≤</mo><msub><mi>κ</mi><mn>2</mn></msub><mo stretchy="false" lspace="0" rspace="0">(</mo><mi mathvariant="bold" class="math-bold">A</mi><mo stretchy="false" lspace="0" rspace="0">)</mo><mfrac><mrow><mo stretchy="false" lspace="0" rspace="0">|</mo><msub><mi mathvariant="bold" class="math-bold">r</mi><mi>k</mi></msub><msub><mo stretchy="false" lspace="0" rspace="0">|</mo><mn>2</mn></msub></mrow><mrow><mo stretchy="false" lspace="0" rspace="0">|</mo><mi mathvariant="bold" class="math-bold">b</mi><msub><mo stretchy="false" lspace="0" rspace="0">|</mo><mn>2</mn></msub></mrow></mfrac><mo lspace="0" rspace="0">.</mo></math></div>
-    <p>This bound uses different norms from the reported <span class="math-nowrap"><math><msub><mi>ρ</mi><mi>k</mi></msub></math>;</span> inserting
-      the log value into it would be unjustified. In practice:</p>
+    <p>The right-hand factor is the reported <span class="math-nowrap"><math><msub><mi>ρ</mi><mi>k</mi></msub></math>,</span> but the condition
+      number of a real stiffness matrix is large and unknown, so the bound
+      gives no useful error estimate. In practice:</p>
     <ul>
       <li><strong>Rigid modes:</strong> missing supports or disconnected bodies
         make the matrix singular. Even a zero residual cannot establish
@@ -976,7 +989,7 @@
         scaling keep magnitudes manageable. Coherent unit conversion preserves
         the physical solution; changing only the modulus or coordinates changes
         the model. Multiplying a matrix by one scalar does not change its
-        condition number. KoFEM’s solid wrapper adds no separate equilibration
+        condition number. KoFEM’s solid solve adds no separate equilibration
         step beyond preconditioning.</li>
     </ul>
 
@@ -985,21 +998,22 @@
       5000-step solid budget, KoFEM can pause at <strong>Keep solving?</strong>
       when a recent residual window shows progress. The policy checks both
       window endpoints and the geometric means of its two halves; it tolerates
-      oscillations but requires improvement beyond roundoff. The default
-      window is 100 observations. This heuristic predicts neither eventual
-      convergence nor the validity of the model.</p>
+      oscillations but requires improvement beyond roundoff. The window is
+      half the initial budget, at most 100 iterations. This heuristic predicts
+      neither eventual convergence nor the validity of the model.</p>
     <p><strong>Continue</strong> adds the requested number of iterations to the
       live loop. It preserves the iterate, residual, search direction,
       preconditioner and original convergence target. The prompt may recur.
       <strong>Stop</strong>, including Escape, raises an explicit error and
-      discards the partial result. Without a callback, or when the progress
-      policy rejects continuation, exhausting the budget fails.</p>
-    <p>The solid wrapper checks <code>GetConverged()</code> before recovering
-      results. Failure reports the relative residual, iteration count and
-      <code>target 1e-6</code>, with “The partial result was discarded”. MFEM can
-      also warn about a non-positive preconditioner or operator during a
-      breakdown. A non-convergence message alone does not diagnose singularity;
-      a constrained but poorly conditioned model can also fail.</p>
+      discards the partial result. When the residual no longer falls, the
+      budget ends the solve with an error.</p>
+    <p>That error reports the relative residual, iteration count and
+      <code>target 1e-6</code>, with “The partial result was discarded”.
+      Two other errors stop a solve early and say the model is probably not
+      fully constrained: a multigrid setup whose coarsest system is singular,
+      and a CG breakdown, where a search direction meets zero or negative
+      stiffness. A non-convergence message alone does not diagnose
+      singularity; a constrained but poorly conditioned model can also fail.</p>
     <p>Check body connectivity and supports first, then material values and
       <a href="/theory/foundations/consistent-units/">units</a>, element quality
       and stiffness contrasts. Inspect the displacement pattern and residual
@@ -1027,51 +1041,49 @@
       develops these checks further.</p>
 
     <h2 id="implementation">KoFEM implementation</h2>
-    <p>KoFEM uses MFEM 4.7 for the solid solve.</p>
+    <p>KoFEM’s solid solve runs in its Rust finite-element module.</p>
     <ul>
-      <li><a href="https://github.com/mkofler96/KoFEM/blob/8b542d8836f39ec4e9c7ae67c5896d39ce970078/engine/cpp/solve_mfem.cpp#L229">FormLinearSystem → CG → RecoverFEMSolution</a>
-        connects assembly to the solid solve.
-        <a href="https://github.com/mkofler96/KoFEM/blob/8b542d8836f39ec4e9c7ae67c5896d39ce970078/engine/cpp/cg_mfem.cpp#L51">solve_mfem_cg</a>
-        chooses CG, the smoother and relative tolerance; its monitor reports
-        progress every ten iterations and on completion.</li>
-      <li>MFEM’s <a href="https://github.com/mfem/mfem/blob/v4.7/linalg/sparsesmoothers.hpp#L38">GSSmoother defaults</a>
-        and <a href="https://github.com/mfem/mfem/blob/v4.7/linalg/sparsesmoothers.cpp#L36">forward/backward application</a>
-        establish the preconditioner. The
-        <a href="https://github.com/mfem/mfem/blob/v4.7/linalg/solvers.cpp#L25">base constructor</a>
-        initializes absolute tolerance to zero;
-        <a href="https://github.com/mfem/mfem/blob/v4.7/linalg/solvers.cpp#L720">CGSolver::Mult</a>
-        defines the preconditioned norm and squared stopping test.
-        <a href="https://github.com/mfem/mfem/blob/v4.7/linalg/solvers.hpp#L280">GetFinalRelNorm</a>
-        returns the final-to-initial norm ratio.</li>
-      <li><a href="https://github.com/mkofler96/KoFEM/blob/8b542d8836f39ec4e9c7ae67c5896d39ce970078/engine/cpp/cg_continuation.h#L45">CgContinuation</a>
-        owns the progress policy and budgets;
-        <a href="https://github.com/mkofler96/KoFEM/blob/8b542d8836f39ec4e9c7ae67c5896d39ce970078/engine/cpp/cg_browser.cpp#L7">browser controls</a>,
-        <a href="https://github.com/mkofler96/KoFEM/blob/8b542d8836f39ec4e9c7ae67c5896d39ce970078/web/src/workers/solver.worker.ts#L53">worker request</a>
-        and <a href="https://github.com/mkofler96/KoFEM/blob/8b542d8836f39ec4e9c7ae67c5896d39ce970078/web/src/components/CgContinuationDialog.tsx#L47">continuation dialog</a>
+      <li><a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/static_solve.rs#L102">prepare_static</a>
+        eliminates the constraints and builds the chosen preconditioner;
+        <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/amg.rs#L4">the multigrid</a> and
+        <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/amg.rs#L87">the Gauss–Seidel sweep</a>
+        apply them.</li>
+      <li><a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/cg.rs#L129">Preconditioned CG</a>
+        runs in resumable steps and tests the
+        <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/cg.rs#L26">residual-norm stopping rule</a>.
+        <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/web/src/lib/solve/amg.ts#L184">amg.ts</a> sets the tolerance
+        and the default budget.</li>
+      <li><a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/web/src/lib/solve/cgRun.ts#L42">iterateToConvergence</a>
+        logs progress every ten iterations and owns the budgets; the
+        <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/crates/kofem-fem/src/cg.rs#L218">progress policy</a>
+        decides whether to offer more.
+        <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/web/src/workers/solver.worker.ts#L90">The worker</a>
+        and <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/web/src/components/CgContinuationDialog.tsx#L48">continuation dialog</a>
         connect it to the app. The worker
-        <a href="https://github.com/mkofler96/KoFEM/blob/8b542d8836f39ec4e9c7ae67c5896d39ce970078/web/src/workers/solver.worker.ts#L907">returns errors to the caller</a>
+        <a href="https://github.com/mkofler96/KoFEM/blob/ae27e683fa8cb55c16103fdd398fc27a452daa76/web/src/workers/solver.worker.ts#L1131">returns errors to the caller</a>
         rather than returning a partial field.</li>
     </ul>
     <p>The worked example above was checked independently of the
       production solver; it illustrates the equations, not KoFEM’s code path.
-      KoFEM’s automated tests drive the real solid solver through successful
-      continuation, Stop and an exhausted iteration budget, and check that a
+      KoFEM’s automated tests drive the real solid solver through
+      successful continuation, Stop and an exhausted iteration budget, and check that a
       continued solve gives the same final field as an uninterrupted one.</p>
 
     <h2 id="decision">Why KoFEM uses this method</h2>
-    <p><strong>Choice and rationale.</strong> Sparse CG with symmetric
-      Gauss–Seidel suits a constrained, positive-definite elastic system and
-      keeps storage and per-step work modest in the browser. The implementation
+    <p><strong>Choice and rationale.</strong> Sparse CG suits a constrained,
+      positive-definite elastic system and keeps storage and per-step work
+      modest in the browser. Smoothed-aggregation multigrid uses the six
+      rigid-body motions to correct the long-range errors that local sweeps
+      leave, so it needs far fewer iterations on large and thin-walled
+      models. Gauss–Seidel remains as the simpler choice. The implementation
       has a fixed accuracy target, checks convergence and lets a progressing
       solve continue without restarting.</p>
-    <p><strong>Tradeoff and alternatives.</strong> Local smoothing
-      gives no mesh-independent iteration guarantee. Algebraic
-      multigrid with elasticity near-null-space information, geometric
-      multigrid and stronger smoothing are alternatives, at the cost of
-      extra WebAssembly dependencies or a mesh hierarchy. Sparse direct factorization is another general
-      option, with fill-in and memory costs; the current solid path does not
-      select it as a fallback. These are options, not evidence of a completed
-      comparative benchmark.</p>
+    <p><strong>Tradeoff and alternatives.</strong> Multigrid costs a setup
+      step and extra memory for its coarse levels, and an under-constrained
+      model fails already in that setup. Geometric multigrid and other
+      algebraic multigrid variants are alternatives. Sparse direct
+      factorization is another general option, with fill-in and memory
+      costs; the current solid path does not select it as a fallback.</p>
     <p><strong>Limits.</strong> A correctly constrained but very large or
       poorly conditioned model may still stagnate or need many extensions.
       Continuation cannot repair a rigid mode or make a wrong physical model
@@ -1079,10 +1091,9 @@
 
     <h2 id="references">Sources and further reading</h2>
     <ol class="refs">
-      <li>MFEM 4.7 production-library source linked above; the class API’s
-        <code>SetRelTol</code> takes a norm tolerance. The separate free
-        <code>CG</code>/<code>PCG</code> functions use squared tolerance arguments;
-        KoFEM calls the class.</li>
+      <li>Vaněk, Mandel and Brezina, “Algebraic multigrid by smoothed
+        aggregation for second and fourth order elliptic problems”,
+        <cite>Computing</cite> 56 (1996), the multigrid preconditioner.</li>
       <li><a href="https://www.cs.cmu.edu/~quake-papers/painless-conjugate-gradient.pdf">Shewchuk,
         <cite>An Introduction to the Conjugate Gradient Method Without the Agonizing Pain</cite></a>
         (1994), conjugacy, conditioning and preconditioning.</li>

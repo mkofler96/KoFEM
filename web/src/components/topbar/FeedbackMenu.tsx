@@ -13,13 +13,23 @@ import {
   type Diagnostics,
   type WebGlSupport,
 } from "../../lib/feedback";
+import {
+  REPORT_EMAIL,
+  buildReport,
+  reportFileName,
+  reportMailtoUrl,
+} from "../../lib/bugReport";
+import { workerLogLines } from "../../hooks/useWorkerLogs";
 import { lastShownError, watchShownErrors } from "./shownErrors";
 import styles from "./Feedback.module.css";
 
-// Top-bar entry to the two GitHub issue forms. Neither path sends anything
-// from KoFEM: both are links the user follows, and the report exists only once
-// they submit it on GitHub. rel="noreferrer" keeps the app URL (which may name
-// a gallery example) out of GitHub's referrer as well.
+// Top-bar entry for feedback. "Report a problem" saves a report ZIP
+// (lib/bugReport) and opens the user's email program to send it to
+// REPORT_EMAIL (KOF-202); a public GitHub issue stays available from the same
+// dialog. "Suggest an improvement" opens the GitHub form. No path sends
+// anything from KoFEM: the user sends the email or submits the issue.
+// rel="noreferrer" keeps the app URL (which may name a gallery example) out of
+// GitHub's referrer as well.
 
 let webGl: WebGlSupport | null = null;
 function webGlSupport(): WebGlSupport {
@@ -135,7 +145,9 @@ export function FeedbackMenu() {
           >
             Suggest an improvement
           </a>
-          <p className={styles.menuNote}>Opens a public GitHub issue.</p>
+          <p className={styles.menuNote}>
+            Problems go by email, suggestions to a public GitHub issue.
+          </p>
         </div>
       )}
 
@@ -146,6 +158,52 @@ export function FeedbackMenu() {
   );
 }
 
+type ReportState =
+  | { phase: "choose"; error: string | null }
+  | { phase: "saving" }
+  | { phase: "saved"; fileName: string; mailto: string; withCad: boolean };
+
+function downloadBytes(bytes: Uint8Array, fileName: string) {
+  const url = URL.createObjectURL(
+    new Blob([new Uint8Array(bytes)], { type: "application/zip" }),
+  );
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  // Some browsers start the download after the click returns.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+function openMail(mailto: string) {
+  const anchor = document.createElement("a");
+  anchor.href = mailto;
+  anchor.click();
+}
+
+async function saveReport(withCad: boolean, diagnostics: Diagnostics) {
+  const state = useModelStore.getState();
+  if (withCad && state.stepBytes === null)
+    throw new Error("there is no CAD file to include");
+  const created = new Date();
+  const zip = await buildReport({
+    analysis: state,
+    cad:
+      withCad && state.stepBytes
+        ? { bytes: state.stepBytes, format: state.geometryFormat }
+        : null,
+    diagnostics,
+    lastError: lastShownError(),
+    logs: workerLogLines(),
+    created,
+  });
+  const fileName = reportFileName(state.modelName, created);
+  const mailto = reportMailtoUrl(fileName, diagnostics.appVersion);
+  downloadBytes(zip, fileName);
+  openMail(mailto);
+  return { fileName, mailto };
+}
+
 function ReportDialog({
   diagnostics,
   onClose,
@@ -154,8 +212,13 @@ function ReportDialog({
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement | null>(null);
-  // Opt-in: the report is a public issue, so diagnostics go in only when the
-  // user ticks the box after reading them.
+  const hasCad = useModelStore((s) => s.stepBytes !== null);
+  const [state, setState] = useState<ReportState>({
+    phase: "choose",
+    error: null,
+  });
+  // Opt-in: a GitHub report is a public issue, so diagnostics go in only when
+  // the user ticks the box after reading them.
   const [include, setInclude] = useState(false);
   const url = feedbackIssueUrl("problem", include ? diagnostics : null);
 
@@ -165,6 +228,21 @@ function ReportDialog({
     // StrictMode runs this twice; the dialog closes with its unmount.
     if (!dialog.open) dialog.showModal();
   }, []);
+
+  function save(withCad: boolean) {
+    setState({ phase: "saving" });
+    saveReport(withCad, diagnostics).then(
+      ({ fileName, mailto }) =>
+        setState({ phase: "saved", fileName, mailto, withCad }),
+      (err: unknown) =>
+        setState({
+          phase: "choose",
+          error: `Could not save the report: ${(err as Error).message}`,
+        }),
+    );
+  }
+
+  const close = () => dialogRef.current?.close();
 
   return (
     <dialog
@@ -183,49 +261,125 @@ function ReportDialog({
         <h2 id="feedback-report-title" className={styles.title}>
           Report a problem
         </h2>
-        <p className={styles.text}>
-          Opens a public GitHub issue. KoFEM sends nothing itself.{" "}
-          <a href="/privacy/#feedback" target="_blank" rel="noopener">
-            Privacy
-          </a>
-        </p>
 
-        <label className={styles.optIn}>
-          <input
-            type="checkbox"
-            checked={include}
-            onChange={(e) => setInclude(e.target.checked)}
-            data-testid="feedback-include"
-          />
-          Include diagnostics (no geometry, file names or results)
-        </label>
-        <pre
-          className={`${styles.preview} ${include ? styles.previewOn : ""}`}
-          data-testid="feedback-diagnostics"
-          aria-label="Diagnostics preview"
-        >
-          {formatDiagnostics(diagnostics)}
-        </pre>
+        {state.phase === "saved" ? (
+          <div data-testid="report-saved">
+            <p className={styles.text}>
+              Attach <strong>{state.fileName}</strong> from your downloads to
+              the email and send it.
+            </p>
+            <p className={styles.text}>
+              Email did not open? Write to{" "}
+              <a href={state.mailto} data-testid="report-mailto">
+                {REPORT_EMAIL}
+              </a>
+              .
+            </p>
+            <div className={styles.actions}>
+              <button type="button" className={styles.primary} onClick={close}>
+                Done
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <p className={styles.text}>
+              Save a report and email it to <strong>{REPORT_EMAIL}</strong>.
+              KoFEM sends nothing itself.{" "}
+              <a href="/privacy/#feedback" target="_blank" rel="noopener">
+                Privacy
+              </a>
+            </p>
+            <p className={styles.listTitle}>The report contains</p>
+            <ul className={styles.contents} data-testid="report-contents">
+              <li>
+                Your analysis: settings, supports, loads, mesh and results
+              </li>
+              <li>
+                {hasCad
+                  ? "Your CAD file — choose Without CAD for a confidential model"
+                  : "No CAD file: this analysis has none loaded"}
+              </li>
+              <li>
+                App and engine versions, browser, the recent log and the last
+                error shown
+              </li>
+            </ul>
+            {state.phase === "choose" && state.error && (
+              <p
+                className={styles.error}
+                role="alert"
+                data-testid="report-error"
+              >
+                {state.error}
+              </p>
+            )}
+            <div className={styles.actions}>
+              <button
+                type="button"
+                className={styles.secondary}
+                onClick={close}
+              >
+                Cancel
+              </button>
+              {hasCad && (
+                <button
+                  type="button"
+                  className={styles.secondary}
+                  disabled={state.phase === "saving"}
+                  data-testid="report-without-cad"
+                  onClick={() => save(false)}
+                >
+                  Without CAD
+                </button>
+              )}
+              <button
+                type="button"
+                className={styles.primary}
+                disabled={state.phase === "saving"}
+                data-testid="report-save"
+                onClick={() => save(hasCad)}
+              >
+                {state.phase === "saving" ? "Saving…" : "Save and email"}
+              </button>
+            </div>
 
-        <div className={styles.actions}>
-          <button
-            type="button"
-            className={styles.secondary}
-            onClick={() => dialogRef.current?.close()}
-          >
-            Cancel
-          </button>
-          <a
-            className={styles.primary}
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            data-testid="feedback-continue"
-            onClick={() => dialogRef.current?.close()}
-          >
-            Continue on GitHub ↗
-          </a>
-        </div>
+            <details className={styles.github} data-testid="feedback-github">
+              <summary>Report publicly on GitHub instead</summary>
+              <p className={styles.text}>
+                Opens a public GitHub issue without your model.
+              </p>
+              <label className={styles.optIn}>
+                <input
+                  type="checkbox"
+                  checked={include}
+                  onChange={(e) => setInclude(e.target.checked)}
+                  data-testid="feedback-include"
+                />
+                Include diagnostics (no geometry, file names or results)
+              </label>
+              <pre
+                className={`${styles.preview} ${include ? styles.previewOn : ""}`}
+                data-testid="feedback-diagnostics"
+                aria-label="Diagnostics preview"
+              >
+                {formatDiagnostics(diagnostics)}
+              </pre>
+              <div className={styles.actions}>
+                <a
+                  className={styles.secondary}
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="feedback-continue"
+                  onClick={close}
+                >
+                  Continue on GitHub ↗
+                </a>
+              </div>
+            </details>
+          </>
+        )}
       </div>
     </dialog>
   );

@@ -3,6 +3,7 @@
 
 import { equation, tex } from "../operators/math.mjs";
 import { source } from "./sources.mjs";
+import { codeSource } from "../numerical-methods/sources.mjs";
 import { figure } from "../figures/index.mjs";
 
 export default {
@@ -44,7 +45,7 @@ export default {
       <strong>stress concentration</strong>. Refinement should resolve the
       geometry and stress gradient until the chosen measure stabilizes. The
       <a href="/examples/plate-with-hole/">plate-with-hole case</a> shows how
-      centre sampling alone can miss a finite boundary peak.</p>
+      nodal averages of centre samples read a finite boundary peak slightly low.</p>
     <p>An ideal point force in a 3D continuum, a sharp re-entrant corner, or
       an abrupt change between fixed and free boundary conditions can produce
       a <strong>stress singularity</strong>: the ideal elastic stress grows
@@ -150,14 +151,13 @@ export default {
     </dl>
 
     <h2 id="evidence">Evidence and further reading</h2>
-    <p>${source("engine/cpp/solve_mfem.cpp", 64, "Solid recovery")}
+    <p>${codeSource("crates/kofem-fem/src/stress.rs", 59, "Solid recovery")}
       supplies centre samples; ${source("web/src/lib/resultField.ts", 83, "nodal averaging and extrema")}
       defines the app’s summarized measure. The preceding
       <a href="/theory/results/displacement-and-stress/#sources">source inventory</a>
       traces the display and shell/coupled distinctions.</p>
-    <p>The hole benchmark and its
-      ${source("examples/validation/cases/plate-with-hole.mjs", 90, "measurement code")}
-      provide a comparison you can reproduce in the app. A smooth hole is a finite concentration;
+    <p>The hole benchmark reads the app’s own nodal field, so its result
+      is a comparison you can reproduce in the app. A smooth hole is a finite concentration;
       this case does not verify singular stresses, plasticity, arbitrary
       material interfaces or every recovery method.</p>
     <ul class="refs">

@@ -1,0 +1,166 @@
+{
+  "note": "What the C++ engine computed for each published example, on the model the app builds (examples/validation/oracle.mjs). Kept so the Rust path stays checked against it after the engine's solvers are removed (KOF-309).",
+  "engine": "engine-3397ae8ea1eb",
+  "femModule": "fem-b2ad04c7c44b",
+  "tolerances": {
+    "field": 0.001,
+    "compliance": 0.001,
+    "designShare": 0.01
+  },
+  "examples": [
+    {
+      "id": "axial-bar",
+      "nodes": 911,
+      "elements": 2991,
+      "order": 1,
+      "path": "Rust AMG CG",
+      "oracle": "MFEM solve_linear_elastic",
+      "reference": {
+        "fe": 0.47379890124243124,
+        "maxDisplacement": 0.4740765979608696,
+        "maxVonMises": 104.05561274574929
+      }
+    },
+    {
+      "id": "surface-pressure",
+      "nodes": 911,
+      "elements": 2991,
+      "order": 1,
+      "path": "Rust AMG CG",
+      "oracle": "MFEM solve_linear_elastic",
+      "reference": {
+        "fe": -0.004737989012420506,
+        "maxDisplacement": 0.004740765979600622,
+        "maxVonMises": 1.0405561274497608
+      }
+    },
+    {
+      "id": "cantilever-beam",
+      "nodes": 911,
+      "elements": 2991,
+      "order": 2,
+      "path": "Rust AMG CG",
+      "oracle": "MFEM solve_linear_elastic",
+      "reference": {
+        "fe": -1.9040270177518843,
+        "maxDisplacement": 1.9094451841042084,
+        "maxVonMises": 52.96529984005891
+      }
+    },
+    {
+      "id": "beam-torsion",
+      "nodes": 6423,
+      "elements": 28470,
+      "order": 2,
+      "path": "Rust AMG CG",
+      "oracle": "MFEM solve_linear_elastic",
+      "reference": {
+        "fe": 0.0008856128667283268,
+        "maxDisplacement": 0.0647060587067554,
+        "maxVonMises": 13.303537640166196
+      }
+    },
+    {
+      "id": "plate-with-hole",
+      "nodes": 4733,
+      "elements": 13522,
+      "order": 2,
+      "path": "Rust AMG CG",
+      "oracle": "MFEM solve_linear_elastic",
+      "reference": {
+        "fe": 3.126849444292817,
+        "maxDisplacement": 0.07413951535408261,
+        "maxVonMises": 312.6849444292817
+      }
+    },
+    {
+      "id": "plate-with-hole-shell",
+      "nodes": 8843,
+      "elements": 17283,
+      "order": 1,
+      "path": "Rust DKT shell",
+      "oracle": "C++ solve_shell",
+      "reference": {
+        "fe": 3.1766020602643383,
+        "maxDisplacement": 0.0741306253691673,
+        "maxVonMises": 317.66020602643385
+      }
+    },
+    {
+      "id": "shaft-torsion",
+      "nodes": 3144,
+      "elements": 9570,
+      "order": 2,
+      "path": "Rust AMG CG",
+      "oracle": "MFEM solve_linear_elastic",
+      "reference": {
+        "fe": 0.001477397558232997,
+        "maxDisplacement": 0.07500335664305295,
+        "maxVonMises": 33.49296799919616
+      }
+    },
+    {
+      "id": "cooks-membrane",
+      "nodes": 1006,
+      "elements": 2697,
+      "order": 2,
+      "path": "Rust AMG CG",
+      "oracle": "MFEM solve_linear_elastic",
+      "reference": {
+        "fe": 23.935836466217676,
+        "maxDisplacement": 31.41772059889586,
+        "maxVonMises": 0.516548056935426
+      }
+    },
+    {
+      "id": "tie-patch-test",
+      "nodes": 276,
+      "elements": 742,
+      "order": 1,
+      "path": "Rust AMG CG, MPC tie",
+      "oracle": "none — MPC ties are Rust-only (KOF-318); closed form in run.mjs"
+    },
+    {
+      "id": "tie-lame-cylinder",
+      "nodes": 1088,
+      "elements": 2862,
+      "order": 1,
+      "path": "Rust AMG CG, MPC tie",
+      "oracle": "none — MPC ties are Rust-only (KOF-318); closed form in run.mjs"
+    },
+    {
+      "id": "tie-cantilever",
+      "nodes": 949,
+      "elements": 3036,
+      "order": 2,
+      "path": "Rust AMG CG, MPC tie",
+      "oracle": "none — MPC ties are Rust-only (KOF-318); closed form in run.mjs"
+    },
+    {
+      "id": "mbb-beam-topopt (SIMP)",
+      "nodes": 2225,
+      "elements": 7887,
+      "order": 1,
+      "path": "Rust SIMP",
+      "oracle": "C++ optimize_topology",
+      "reference": {
+        "compliance": 47.498789910258985,
+        "volume": 0.4999984430204334,
+        "iterations": 88
+      }
+    },
+    {
+      "id": "mbb-beam-topopt (level set)",
+      "nodes": 2225,
+      "elements": 7887,
+      "order": 1,
+      "path": "Rust level set",
+      "oracle": "C++ optimize_topology",
+      "reference": {
+        "compliance": 35.22510415007212,
+        "volume": 0.4999999454752083,
+        "iterations": 46
+      }
+    }
+  ]
+}

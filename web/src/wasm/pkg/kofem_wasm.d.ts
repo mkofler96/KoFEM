@@ -93,131 +93,8 @@ export interface FemMesh {
   surfaceFaceIds: Int32Array
 }
 
-/** Volume-mesh input to the solver: flat typed arrays, same layout as FemMesh.
- *  `hexahedra` is eight 0-based vertex indices per hex and may be omitted.
- *  `attributes` is one 1-based material index per element (tets first, then
- *  hexs) for multi-material models (issue #353); omitted means every element
- *  uses material 1. */
-export interface SolveMesh {
-  vertices: Float64Array
-  tetrahedra: Int32Array
-  hexahedra?: Int32Array
-  attributes?: Int32Array
-}
-
-/** Solve output as flat typed arrays: three displacement components per vertex
- *  (length 3·nNodes) and one von Mises value per element (length nElems).
- *  Incomplete material inputs yield `{error}` instead (issue #344). */
-export type StaticSolveResult =
-  | { displacements: Float64Array; von_mises: Float64Array }
-  | { error: string }
-
-/** Topology-optimization settings — the object the worker JSON-stringifies into
- *  the `topopt_json` argument of `optimize_topology`. This is the KOF-227 design
- *  contract (ADR-0002) the Phase-A sub-issues build against; the shape is fixed
- *  here so the engine loop (KOF-228…) and the setup panel (KOF-232) agree.
- *  In v1 the design domain is automatic (the whole solid mesh, supports/loads
- *  kept solid); `passive` is reserved for the Phase-B keep-in/keep-out picker. */
-export interface TopOptSettings {
-  /** "simp" (default): per-element densities, MMA. "level_set": nodal level set
-   *  φ updated by a reaction–diffusion equation (Yamada et al. 2010) — solid
-   *  models and min_compliance only; `filterRadius` is then the regularization
-   *  length ℓ, and `penalty`/`moveLimit` are unused. */
-  method?: "simp" | "level_set"
-  objective: "min_compliance" | "min_volume"
-  /** `volumeFraction` bounds a min_compliance run; `complianceLimit` and/or
-   *  `maxStress` bound a min_volume run. `maxStress` (KOF-236) is the von Mises
-   *  limit σ_allow in the material's stress units, on the qp-relaxed element
-   *  stress; it can also be added to a min_compliance run. All-solid models
-   *  only — the shell/coupled entries reject it. */
-  constraints: {
-    volumeFraction?: number
-    complianceLimit?: number
-    maxStress?: number
-  }
-  /** Aggregation of the stress constraint (only with `maxStress`): P-norm or KS,
-   *  the parameter P (default 8 for pnorm, 40 for ks) and the qp-relaxation
-   *  exponent q, 0 ≤ q < penalty (default penalty − 0.5, i.e. the ρ^½ stress
-   *  interpolation; 2.5 at the default p = 3). */
-  stress?: { aggregation?: "pnorm" | "ks"; p?: number; q?: number }
-  penalty?: number // SIMP penalty p, default 3 (SIMP only)
-  filterRadius: number // r_min, model length units
-  moveLimit?: number // MMA move limit, default 0.2 (SIMP only)
-  maxIterations: number
-  tolerance: number // convergence on max |Δρ|, default 0.01
-  passive?: { solid?: number[]; void?: number[] } // reserved, element indices
-  streamEvery?: number // live density every N iterations (KOF-240), default 1
-}
-
-/** Per-iteration density observer (KOF-240) passed to the optimize_topology*
- *  entries, or `null` to stream nothing. Called synchronously from inside the
- *  optimizer loop with the iteration number and a fresh Float64Array copy of the
- *  design density that iteration analysed (same order as the final `density`),
- *  every `streamEvery` iterations and always on the last one — whose field is
- *  identical to the returned density. The array is owned by the receiver. */
-export type TopOptDensityCallback =
-  | ((it: number, density: Float64Array) => void)
-  | null
-
-/** One optimizer iteration in the returned history. `objective` is the value
- *  being minimized (compliance for min_compliance, volume fraction for
- *  min_volume); `compliance` is always the structural compliance c = fᵀu (the
- *  constraint of a min_volume run); `volume` is the current volume fraction;
- *  `max_change` is max |Δρ| over the design variables. With a stress constraint
- *  (KOF-236) `stress` is the normalized aggregate the constraint bounds and
- *  `max_stress` the true max relaxed von Mises it tracks; both are absent
- *  otherwise. */
-export interface TopOptHistoryEntry {
-  it: number
-  objective: number
-  compliance: number
-  volume: number
-  max_change: number
-  stress?: number
-  max_stress?: number
-}
-
-/** Topology-optimization output: the final per-element density (Float64Array,
- *  one per element in solve/element order — binary transfer, no JSON text,
- *  issue #166) plus the iteration history. Incomplete inputs or an ill-posed
- *  problem yield `{error}` instead, matching the static-solve contract. */
-export type TopOptResult =
-  | {
-      density: Float64Array
-      /** method "level_set" only: φ per mesh vertex, in the solve's vertex
-       *  order; the design boundary is φ = 0. */
-      levelSet?: Float64Array
-      history: TopOptHistoryEntry[]
-    }
-  | { error: string }
-
-/** Triangle SURFACE mesh input to the Kirchhoff shell solver: `vertices` is xyz
- *  interleaved (length 3·nNodes); `triangles` is three 0-based vertex indices
- *  per triangle (length 3·nTris). `thicknesses` is an optional per-triangle
- *  thickness field (length nTris) for walls of differing gauge; when omitted the
- *  scalar thickness in the material JSON is used. */
-export interface ShellMesh {
-  vertices: Float64Array
-  triangles: Int32Array
-  thicknesses?: Float64Array
-}
-
-/** Shell solve output: three translation components (u,v,w) per vertex
- *  (length 3·nNodes), one von Mises surface stress per triangle (length nTris),
- *  and the CG iteration count. Bad input / non-convergence yields `{error}`
- *  instead. */
-export type ShellSolveResult =
-  | {
-      displacements: Float64Array
-      von_mises: Float64Array
-      iterations: number
-    }
-  | { error: string }
-
 /** Runtime interface of the initialised Emscripten/Embind module. */
 export interface KofemModule {
-  /** Optional initial static CG budget; absent uses each solver's usual cap. */
-  cgIterationLimit?: number
   /** Load a STEP or IGES file and tessellate it for display.
    *  @param cad_bytes Raw STEP/IGES file bytes.
    *  @param opts_json JSON `{ deflection_relative?, linear_deflection?, angular_deflection?, format?: "step" | "iges" }`.
@@ -237,7 +114,11 @@ export interface KofemModule {
    *  requested one whole. Releases the cached shape: load the returned bytes
    *  with tessellate_step before meshing or splitting again.
    *  @param opts_json JSON-stringified {@link SplitGeometryOptions}. */
-  split_geometry(opts_json: string): { bytes: Uint8Array }
+  split_geometry(opts_json: string): {
+    bytes: Uint8Array
+    /** Entry j is the old id of new body j+1: a body cut in two appears twice. */
+    bodySources: number[]
+  }
   /** Combine bodies of the loaded shape with a Boolean (see
    *  {@link BooleanGeometryOptions}) and return the edited geometry as STEP
    *  AP214 bytes. Throws, naming the bodies, when the operation would change
@@ -262,149 +143,10 @@ export interface KofemModule {
    *  @param opts_json JSON-stringified `{ faceIds: number[] }`. */
   remove_faces(opts_json: string): { bytes: Uint8Array }
   /** Release the OCCT shape + STEP byte cache from WASM heap.
-   *  Call this after meshing is complete and before solving to free ~10–30 MB
-   *  of WASM memory that is no longer needed.
+   *  Call this after meshing is complete to free ~10–30 MB of WASM memory
+   *  that is no longer needed.
    */
   free_geometry_cache(): void
-  /** Linear-elastic solve. The mesh crosses the boundary as flat typed arrays;
-   *  materials and boundary conditions stay JSON (small payloads). `mat_json`
-   *  is an array of materials — `mesh.attributes` selects per element, 1-based —
-   *  or a single material object (legacy single-material contract). */
-  solve_linear_elastic(
-    mesh: SolveMesh,
-    mat_json: string,
-    bcs_json: string,
-    order: number,
-  ): StaticSolveResult | Promise<StaticSolveResult>
-  /** Kirchhoff flat-facet shell solve on a triangle surface mesh. `mat_json` is
-   *  `{ young_modulus, poisson_ratio, thickness }`; `bcs_json` is
-   *  `{ fixed_vertices?, fixed_dofs?, prescribed_dofs?, point_loads? }` with DOF
-   *  components 0..5 = (u,v,w,θx,θy,θz). `fixed_*` always mean u = 0;
-   *  `prescribed_dofs: [{vertex, dof, value}]` drives a DOF to a non-zero value
-   *  (inhomogeneous essential BC). Returns three translations per node plus one
-   *  von Mises surface stress per triangle. */
-  solve_shell(
-    mesh: ShellMesh,
-    mat_json: string,
-    bcs_json: string,
-  ): ShellSolveResult | Promise<ShellSolveResult>
-  /** Coupled solid(tet)+shell solve. MFEM assembles the solid; DKT shells and
-   *  RBE3 distributing couplings are added and solved together.
-   *   mesh:     { vertices, tets, triangles, thicknesses?, attributes? }
-   *             `attributes` is one 1-based solid-material index per TET, into
-   *             the `mat_json.solid` array; omitted means every tet uses the
-   *             first material.
-   *   coupling: { ref, offsets, solid, mpc?, weights?, dof_mask?, relaxation? }  CSR-style:
-   *             reference node ref[k] ties to solid[offsets[k]..offsets[k+1]).
-   *             Optional mpc[k] = 1 selects the relaxed shell-to-solid MPC
-   *             coupling (rigid translation tie + relaxation-scaled rotation),
-   *             2 the kinematic RBE2 coupling (the coupled nodes follow the
-   *             reference point rigidly, leaving the point independent), and
-   *             0/absent keeps the distributing RBE3 coupling; relaxation is the
-   *             shared ψ ∈ [0.5,1] used by the MPC couplings. dof_mask[k] selects
-   *             which of a kinematic coupling's six DOFs are tied (bits 0..5,
-   *             all six when absent). Kind 3 is a physical shell footprint:
-   *             solid ref[k] translations follow two shell edge partners with
-   *             per-partner `weights` interpolating their motion and rotation.
-   *   bcs:      { fixed_dofs, load_dofs, load_vals, prescribed_dofs?,
-   *               prescribed_vals? }  (DOF = 6·node+component). fixed_dofs are
-   *               constrained to ZERO; prescribed_dofs[k] is driven to
-   *               prescribed_vals[k] (inhomogeneous essential BC).
-   *   mat_json: { solid, shell:{young_modulus,poisson_ratio} } — `solid` is
-   *             either one material object (every tet uses it) or an ARRAY of
-   *             materials selected per tet by `mesh.attributes`. The shell side
-   *             stays single: a solve idealises one body as shells (#376). */
-  solve_coupled(
-    mesh: {
-      vertices: Float64Array
-      tets: Int32Array
-      triangles: Int32Array
-      thicknesses?: Float64Array
-      attributes?: Int32Array
-    },
-    coupling: {
-      weights?: Float64Array
-      ref: Int32Array
-      offsets: Int32Array
-      solid: Int32Array
-      mpc?: Int32Array
-      dof_mask?: Int32Array
-      relaxation?: number
-    },
-    bcs: {
-      fixed_dofs: Int32Array
-      load_dofs: Int32Array
-      load_vals: Float64Array
-      prescribed_dofs?: Int32Array
-      prescribed_vals?: Float64Array
-    },
-    mat_json: string,
-  ): CoupledSolveResult | Promise<CoupledSolveResult>
-  /** SIMP topology optimization (KOF-226 epic, ADR-0002). Takes the same
-   *  mesh/material/BC inputs as `solve_linear_elastic` plus a `topopt_json` TO
-   *  settings block (see {@link TopOptSettings}); iterates a per-element density
-   *  field inside the engine and returns the final density plus the iteration
-   *  history. Per-iteration progress streams over the same `print`→worker log
-   *  channel the solve uses, and the design density itself streams through
-   *  `on_density` (KOF-240). Implements both the `min_compliance` (KOF-230/231)
-   *  and `min_volume` (KOF-235) objectives, each optionally bounded by the
-   *  `maxStress` constraint (KOF-236).
-   *  This is the SOLID (tet/hex) design domain; shell and coupled models use the
-   *  two entries below (KOF-237). */
-  optimize_topology(
-    mesh: SolveMesh,
-    mat_json: string,
-    bcs_json: string,
-    topopt_json: string,
-    on_density: TopOptDensityCallback,
-  ): TopOptResult
-  /** SIMP topology optimization of a PURE-SHELL (all-CTRIA3) design domain
-   *  (KOF-237). Same mesh/material/BC payloads as {@link solve_shell} plus the
-   *  `topopt_json` settings block; each shell facet carries a design density that
-   *  penalizes its membrane+bending stiffness. Returns one density per facet (in
-   *  triangle order) plus the iteration history, or `{error}`. */
-  optimize_topology_shell(
-    mesh: ShellMesh,
-    mat_json: string,
-    bcs_json: string,
-    topopt_json: string,
-    on_density: TopOptDensityCallback,
-  ): TopOptResult
-  /** SIMP topology optimization of a COUPLED shell/solid design domain (KOF-237).
-   *  Same mesh/coupling/BC/material payloads as {@link solve_coupled} plus the
-   *  `topopt_json` settings block. A single density field spans the solid tets and
-   *  the shell facets; the RBE3/RBE2/MPC couplings are constraints, not design
-   *  variables, so the interface stays intact across iterations. Returns one
-   *  density per design element — solid tets first (tet order), then shell facets
-   *  (triangle order) — plus the iteration history, or `{error}`. */
-  optimize_topology_coupled(
-    mesh: {
-      vertices: Float64Array
-      tets: Int32Array
-      triangles: Int32Array
-      thicknesses?: Float64Array
-      attributes?: Int32Array
-    },
-    coupling: {
-      weights?: Float64Array
-      ref: Int32Array
-      offsets: Int32Array
-      solid: Int32Array
-      mpc?: Int32Array
-      dof_mask?: Int32Array
-      relaxation?: number
-    },
-    bcs: {
-      fixed_dofs: Int32Array
-      load_dofs: Int32Array
-      load_vals: Float64Array
-      prescribed_dofs?: Int32Array
-      prescribed_vals?: Float64Array
-    },
-    mat_json: string,
-    topopt_json: string,
-    on_density: TopOptDensityCallback,
-  ): TopOptResult
 }
 
 /** Progress of init(): bytes are the uncompressed engine size. */
@@ -433,31 +175,10 @@ export class EngineLoadError extends Error {
   readonly stage: EngineLoadStage
 }
 
-export type CoupledSolveResult =
-  | {
-      displacements: Float64Array
-      von_mises_tets: Float64Array
-      von_mises_tris: Float64Array
-      iterations: number
-    }
-  | { error: string }
-
 export interface ModuleOverrides {
-  /** Initial static-solve budget. Omitted: each solver's built-in cap. */
-  cgIterationLimit?: number
-  /** Zero stops and discards; a positive integer extends the live CG loop. */
-  onCgLimit?: (progress: CgLimitProgress) => Promise<number>
   print?: (text: string) => void
   printErr?: (text: string) => void
   onProgress?: (progress: EngineLoadProgress) => void
-}
-
-export interface CgLimitProgress {
-  iterations: number
-  relativeResidual: number
-  target: number
-  elapsedSeconds: number
-  suggestedIterations: number
 }
 
 /** Initialise the WASM module and return it. Must be awaited before using any function. */

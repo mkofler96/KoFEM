@@ -1,8 +1,8 @@
 # KoFEM topology-optimization benchmarks
 
 Canonical minimum-compliance benchmarks for the SIMP + MMA topology optimizer
-(KOF-230/231, ADR-0002). Each case is optimized by the **real WASM engine** —
-the same `optimize_topology` loop the browser worker drives — and its converged
+(KOF-230/231, ADR-0002). Each case is optimized by the **app's Rust optimizer**
+(`optimizeSolidInRust`, the loop the browser worker drives) — and its converged
 compliance, volume fraction and emergent layout are checked against a documented
 tolerance band. This locks the result to known references so a future change
 can't silently regress it (KOF-234); it is also the correctness reference that
@@ -16,9 +16,11 @@ with a pass/fail line per check.
 
 ## Run
 
+From `web/` (the runner imports the app's TypeScript):
+
 ```bash
-node examples/validation/topopt/run.mjs            # run all cases, print results
-node examples/validation/topopt/run.mjs --report   # also (re)write REPORT.md
+bun ../examples/validation/topopt/run.mjs            # run all cases, print results
+bun ../examples/validation/topopt/run.mjs --report   # also (re)write REPORT.md
 ```
 
 It exits non-zero if any check fails. The whole suite takes ~25 s against the
@@ -95,24 +97,21 @@ stiffest design (the returned compliance is the minimum of the whole history).
 
 ## Relationship to the other TO checks
 
-- **`engine/tests/topology_optimize_validation.cpp`** (KOF-230) is the native C++
-  check of the loop's trajectory on a tiny MBB. It links MFEM and runs under node
-  via Emscripten (`scripts/test-topology-optimize.sh`); like the other
-  `engine/tests/`, CI does not run it yet (KOF-207). These `examples/` cases are
-  the web-side counterpart: they run against the fetched engine with no build
-  step, and lock the visual "textbook truss" layout the native test defers here.
-- **`engine/tests/topology_stress_validation.cpp`** (KOF-236) is the native check
-  of the maximum-stress constraint (`scripts/test-topology-stress.sh`, not run by
-  CI either): a finite-difference check of the aggregated-stress adjoint (P-norm
+- **`crates/kofem-fem/tests/topology_optimize.rs`** (KOF-230) is the native Rust
+  check of the loop's trajectory on a tiny MBB (`just test-rust -p kofem-fem
+  topology`). These `examples/` cases are the web-side counterpart: they run the
+  Rust module the app loads, and lock the visual "textbook truss" layout the
+  native test defers here.
+- **`crates/kofem-fem/tests/topology_stress.rs`** (KOF-236) is the native check
+  of the maximum-stress constraint: a finite-difference check of the aggregated-stress adjoint (P-norm
   and KS), and the L-bracket stress-concentration benchmark — the
   compliance-only design peaks at the re-entrant corner, and minimizing volume
   subject to σ ≤ σ_allow meets the limit with a peak ≥ 10 % below a
   compliance-only design of the same volume.
-- **`engine/tests/topology_levelset_validation.cpp`** checks the reaction–diffusion
+- **`crates/kofem-fem/tests/topology_level_set.rs`** checks the reaction–diffusion
   level-set optimizer (`method: "level_set"`) on the same MBB: exact element volume
   fractions of φ > 0, volume constraint, convergence, a crisper design than SIMP at
-  comparable compliance, passive regions and streaming
-  (`scripts/test-topology-levelset.sh`; not run by CI either).
+  comparable compliance, passive regions and streaming.
 - **`web/tests/topology-benchmark.spec.ts`** is a fast Playwright guard that runs
   a small MBB through the solver worker and asserts the same trajectory shape, so
   the Playwright suite catches a regression on every CI run without the full

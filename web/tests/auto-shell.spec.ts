@@ -29,8 +29,6 @@ type Summary = {
 test("auto-shell: thin plate on a block solves through the coupled path", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
-
   const logs: string[] = [];
   page.on("console", (msg) => logs.push(msg.text()));
 
@@ -217,6 +215,7 @@ test("auto-shell: thin plate on a block solves through the coupled path", async 
       };
     };
     const res = (await win.__kofem.sendToWorker("solve", {
+      solverMethod: "gauss-seidel",
       nodes,
       elements,
       materials: [
@@ -273,6 +272,8 @@ test("auto-shell: thin plate on a block solves through the coupled path", async 
   expect(autoShell).toBeTruthy();
   expect(autoShell).toContain("body 1: 1 thin walls");
   expect(autoShell).toContain("384 solid tets");
+  // …through the Rust mixed solve (KOF-308), not the engine's solve_coupled.
+  expect(logs.some((l) => l.includes("[coupled] Rust solve"))).toBe(true);
 
   expect(summary.dispLen).toBe(3 * summary.nNodes);
   expect(summary.vmLen).toBe(summary.nElements);
@@ -292,4 +293,72 @@ test("auto-shell: thin plate on a block solves through the coupled path", async 
   expect(summary.maxPlateVm).toBeGreaterThan(0);
   expect(summary.maxBlockVm).toBeGreaterThan(0);
   expect(summary.maxPlateVm).toBeGreaterThan(summary.maxBlockVm);
+});
+
+// A Shell body that cannot be idealised fails the solve, naming the body and
+// the reason (KOF-352). The hexahedron here is clamped and loaded, so the
+// all-solid path this used to fall through to would solve it without a word.
+test("auto-shell: a Shell body on a hexahedral mesh is refused, not solved as solid", async ({
+  page,
+}) => {
+  await page.goto("/app/");
+  await expect(page.locator("nav")).toBeVisible();
+  await page.waitForFunction(() =>
+    Boolean((window as unknown as { __kofem?: unknown }).__kofem),
+  );
+
+  const outcome = await page.evaluate(async (): Promise<string> => {
+    const corners = [
+      [0, 0, 0],
+      [1, 0, 0],
+      [1, 1, 0],
+      [0, 1, 0],
+      [0, 0, 1],
+      [1, 0, 1],
+      [1, 1, 1],
+      [0, 1, 1],
+    ];
+    const nodes = corners.map(([x, y, z], i) => ({ id: i + 1, x, y, z }));
+    const win = window as unknown as {
+      __kofem: {
+        sendToWorker(name: string, payload: object): Promise<unknown>;
+      };
+    };
+    try {
+      await win.__kofem.sendToWorker("solve", {
+        solverMethod: "gauss-seidel",
+        nodes,
+        elements: [
+          {
+            id: 1,
+            type: "CHEXA",
+            nodeIds: [1, 2, 3, 4, 5, 6, 7, 8],
+            propertyId: 1,
+          },
+        ],
+        materials: [
+          {
+            id: 1,
+            name: "steel",
+            young: 210000,
+            poisson: 0.3,
+            density: 7.85e-9,
+          },
+        ],
+        properties: [{ id: 1, materialId: 1, discretization: "shell" }],
+        constraints: [1, 2, 3, 4].flatMap((nodeId) =>
+          [0, 1, 2].map((dof) => ({ nodeId, dof })),
+        ),
+        loads: [5, 6, 7, 8].map((nodeId) => ({ nodeId, dof: 0, value: 25 })),
+        surfaceLoads: [],
+        surfaceTriangles: [[5, 6, 7]],
+        surfaceFaceIds: [1],
+      });
+      return "solved";
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+  });
+
+  expect(outcome).toMatch(/Body 1 is marked "Shell".*1 hexahedral element/);
 });

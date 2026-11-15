@@ -23,11 +23,9 @@ const STEP_PATH = join(here, "../../test_files/fin_two_parts.step");
 const WALL_THICKNESS = 2; // fin walls at y = 49 / y = 51
 const MID_SURFACE_Y = 50;
 
-test("mesh-time auto-shell: the fin is stored as a mid-surface shell mesh", async ({
+test("mesh-time auto-shell: the fin is stored as a mid-surface shell mesh @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(240_000);
-
   const logs: string[] = [];
   page.on("console", (msg) => logs.push(msg.text()));
 
@@ -49,14 +47,13 @@ test("mesh-time auto-shell: the fin is stored as a mid-surface shell mesh", asyn
               }
             ).__kofemStore.getState().properties.length,
         )) as number,
-      { timeout: 60_000 },
     )
     .toBeGreaterThan(0);
 
   // Body 2 is the fin; the user marks it Shell.
   await setElementType(page, 2, "shell");
   await openTree(page, "mesh");
-  await page.getByRole("button", { name: /Mesh STEP volume/i }).click();
+  await page.getByRole("button", { name: /Generate mesh/i }).click();
   await expect
     .poll(
       async () =>
@@ -68,7 +65,6 @@ test("mesh-time auto-shell: the fin is stored as a mid-surface shell mesh", asyn
               }
             ).__kofemStore.getState().nodes.length,
         )) as number,
-      { timeout: 180_000 },
     )
     .toBeGreaterThan(0);
 
@@ -170,6 +166,8 @@ test("mesh-time auto-shell: the fin is stored as a mid-surface shell mesh", asyn
     for (const n of tip)
       loads.push({ nodeId: n.id, dof: 1, value: 500 / tip.length });
     const result = (await win.__kofem.sendToWorker("solve", {
+      // The app's default solver: AMG takes mixed shell/solid models.
+      solverMethod: "amg",
       nodes: state.nodes,
       elements: state.elements,
       materials: state.materials,
@@ -194,4 +192,11 @@ test("mesh-time auto-shell: the fin is stored as a mid-surface shell mesh", asyn
   expect(solved.allFinite).toBe(true);
   expect(solved.maxMag).toBeGreaterThan(0);
   expect(logs.some((l) => l.includes("[coupled] converged"))).toBe(true);
+  // The Rust mixed solve (KOF-308) carried it, with AMG, the default solver.
+  expect(logs.some((l) => l.includes("[coupled] Rust solve"))).toBe(true);
+  expect(
+    logs.some((l) =>
+      l.includes("[coupled] preconditioner: smoothed-aggregation AMG"),
+    ),
+  ).toBe(true);
 });

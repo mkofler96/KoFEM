@@ -23,34 +23,28 @@ type Store = {
   };
 };
 
-test("a crane holder marked Shell whole is refused: its thick block is not a wall", async ({
+test("a crane holder marked Shell whole is refused: its thick block is not a wall @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(240_000);
-
   await page.goto("/app/");
   await expect(page.locator("nav")).toBeVisible();
   await page.setInputFiles('input[accept=".stp,.step"]', STEP_PATH);
   await expect
-    .poll(
-      () =>
-        page.evaluate(
-          () =>
-            (window as unknown as Store).__kofemStore.getState().properties
-              .length,
-        ),
-      { timeout: 60_000 },
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as unknown as Store).__kofemStore.getState().properties
+            .length,
+      ),
     )
     .toBe(3);
 
   await setElementType(page, 1, "shell");
   await openTree(page, "mesh");
-  await page.getByRole("button", { name: /Mesh STEP volume/i }).click();
+  await page.getByRole("button", { name: /Generate mesh/i }).click();
 
   const error = page.getByTestId("meshing-error");
-  await expect(error).toContainText('Body 1 is marked "Shell"', {
-    timeout: 180_000,
-  });
+  await expect(error).toContainText('Body 1 is marked "Shell"');
   await expect(error).toContainText("% of its volume");
   await expect(error).toContainText("Split that part into a body of its own");
   // Nothing was stored: no mesh with the block missing.

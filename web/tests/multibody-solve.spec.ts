@@ -108,7 +108,6 @@ function twoGappedBoxes() {
 test("a tie connection makes a disconnected two-body solve converge", async ({
   page,
 }) => {
-  test.setTimeout(60_000);
   await gotoApp(page);
   await page.waitForFunction(
     () => !!(window as unknown as { __kofem?: unknown }).__kofem,
@@ -116,7 +115,7 @@ test("a tie connection makes a disconnected two-body solve converge", async ({
 
   const { tieSurfaces, ...model } = twoGappedBoxes();
   // A connection between the two facing surfaces, or none at all.
-  const tieGroups = (searchDistance: number | null) =>
+  const tieGroups = (searchDistance: number | null, method: "merge" | "mpc") =>
     searchDistance === null
       ? []
       : [
@@ -127,12 +126,17 @@ test("a tie connection makes a disconnected two-body solve converge", async ({
             facesB: tieSurfaces.b,
             extent: "region" as const,
             searchDistance,
+            method,
           },
         ];
 
-  const solve = (searchDistance: number | null) =>
+  const solve = (
+    searchDistance: number | null,
+    method: "merge" | "mpc" = "merge",
+    solverMethod: "gauss-seidel" | "amg" = "gauss-seidel",
+  ) =>
     page.evaluate(
-      async ({ model, ties }) => {
+      async ({ model, ties, solverMethod }) => {
         const win = window as unknown as {
           __kofem: {
             sendToWorker(name: string, payload: object): Promise<unknown>;
@@ -141,6 +145,7 @@ test("a tie connection makes a disconnected two-body solve converge", async ({
         try {
           const result = (await win.__kofem.sendToWorker("solve", {
             ...model,
+            solverMethod,
             tieGroups: ties,
           })) as { displacements: Float64Array };
           return { ok: true as const, nDisp: result.displacements.length };
@@ -148,7 +153,7 @@ test("a tie connection makes a disconnected two-body solve converge", async ({
           return { ok: false as const, error: (err as Error).message };
         }
       },
-      { model, ties: tieGroups(searchDistance) },
+      { model, ties: tieGroups(searchDistance, method), solverMethod },
     );
 
   // Without a connection, box B is disconnected → the solve cannot converge.
@@ -166,20 +171,30 @@ test("a tie connection makes a disconnected two-body solve converge", async ({
   const tied = await solve(0.6);
   expect(tied.ok).toBe(true);
   if (tied.ok) expect(tied.nDisp).toBe(model.nodes.length * 3);
+
+  // The same connection as a constraint (MPC) tie joins the bodies without
+  // merging a node, and is refused the same way when it reaches nothing.
+  const constrained = await solve(0.6, "mpc");
+  expect(constrained.ok).toBe(true);
+  if (constrained.ok) expect(constrained.nDisp).toBe(model.nodes.length * 3);
+  const constrainedTooShort = await solve(0.1, "mpc");
+  expect(constrainedTooShort.ok).toBe(false);
+  if (!constrainedTooShort.ok)
+    expect(constrainedTooShort.error).toContain("connected no nodes");
+
+  // The Rust solver carries a constraint tie with either preconditioner.
+  const constrainedAmg = await solve(0.6, "mpc", "amg");
+  expect(constrainedAmg.ok).toBe(true);
 });
 
-test("meshing a two-body part and toggling a body's visibility", async ({
+test("meshing a two-body part and toggling a body's visibility @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(90_000);
   await importStep(page, TWO_BOXES);
 
   // Mesh the assembly so the FEM surface exists (exercises applyMeshResult's
   // per-body property backfill and the mesh render layers).
-  await page
-    .getByRole("button")
-    .filter({ hasText: "Mesh STEP volume" })
-    .click();
+  await page.getByRole("button").filter({ hasText: "Generate mesh" }).click();
   await page.waitForFunction(
     () =>
       ((
@@ -187,7 +202,6 @@ test("meshing a two-body part and toggling a body's visibility", async ({
           __kofemStore: { getState(): { nodes: unknown[] } };
         }
       ).__kofemStore.getState().nodes.length ?? 0) > 0,
-    { timeout: 60_000 },
   );
 
   const readHidden = () =>

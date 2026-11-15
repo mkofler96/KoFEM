@@ -8,6 +8,7 @@ import type {
   PickGeometry,
   ReferencePointOption,
   TieExtent,
+  TieMethod,
 } from "../../store/modelStore";
 import {
   DOF_LABELS,
@@ -167,23 +168,47 @@ export function LoadKindSelect({
   );
 }
 
-// Extent of a tie connection: couple the two picked surfaces whole, or only
-// where they come within a search distance of each other. The distance input
-// appears only for the region extent — for a full coupling there is nothing to
-// tune, and a stale number left visible reads as if it still applied.
+// What each tie method does to the model, in one line under the select.
+export const TIE_METHOD_HINT: Record<TieMethod, string> = {
+  mpc: "nodes follow the opposite surface; the mesh is not changed",
+  merge: "node pairs are welded into one; the surfaces are pulled together",
+};
+
+// Method and extent of a tie connection: join the surfaces by constraint or by
+// node-merge, and couple them whole or only where they come within a search
+// distance of each other. The distance input appears only for the region
+// extent — for a full coupling there is nothing to tune, and a stale number
+// left visible reads as if it still applied.
 export function TieExtentInputs({
+  method,
   extent,
   distance,
+  onMethodChange,
   onExtentChange,
   onDistanceChange,
 }: {
+  method: TieMethod;
   extent: TieExtent;
   distance: string;
+  onMethodChange(method: TieMethod): void;
   onExtentChange(extent: TieExtent): void;
   onDistanceChange(distance: string): void;
 }) {
   return (
     <>
+      <div className={styles.formRow}>
+        <span className={styles.formLabel}>Method</span>
+        <select
+          className={styles.formSelect}
+          data-testid="tie-method"
+          value={method}
+          onChange={(e) => onMethodChange(e.target.value as TieMethod)}
+        >
+          <option value="mpc">Constraint (MPC)</option>
+          <option value="merge">Node merge</option>
+        </select>
+      </div>
+      <div className={styles.pickNote}>{TIE_METHOD_HINT[method]}</div>
       <div className={styles.formRow}>
         <span className={styles.formLabel}>Extent</span>
         <select

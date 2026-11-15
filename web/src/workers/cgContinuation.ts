@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { create } from "zustand";
-import type { CgLimitProgress } from "../wasm/pkg/kofem_wasm.js";
+import type { CgLimitProgress } from "../lib/solve/contracts.js";
 
 export interface CgPrompt {
   progress: CgLimitProgress;

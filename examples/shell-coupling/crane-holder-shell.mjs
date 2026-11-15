@@ -8,7 +8,7 @@
 // bodies stay solid (assembled by MFEM); the two are joined by a distributing
 // (RBE3) coupling that transmits force and moment across the mid-surface offset.
 //
-//   node examples/shell-coupling/crane-holder-shell.mjs [--vtu out.vtu]
+//   (from web/) bun ../examples/shell-coupling/crane-holder-shell.mjs [--vtu out.vtu]
 //
 // Exits non-zero if the coupled solve does not converge, so it doubles as a
 // regression/verification check. Pass --vtu to write the deformed shell surface
@@ -17,6 +17,8 @@
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { solveCoupledInRust } from "../../web/src/lib/solve/coupledRust.ts";
+import { rustFem } from "../validation/lib/solver.mjs";
 import { loadEngine, meshStep, extractThinWallShells, shellWallTets, buildCoupledModel, dropCouplingsOnFixedNodes, surfaceVertices } from "./lib.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -112,31 +114,52 @@ console.log(`BCs: ${fixed.length / 6} fixed shell nodes (face ${BC_FIXED_FACE});
 const coupling = dropCouplingsOnFixedNodes(model.coupling, fixed);
 console.log("solving coupled crane…");
 const t0 = Date.now();
-const r = Module.solve_coupled(
-  {
-    vertices: Float64Array.from(model.pool),
-    tets: Int32Array.from(model.tets),
-    triangles: Int32Array.from(model.triangles),
-    thicknesses: Float64Array.from(model.thicknesses),
-  },
-  {
-    ref: Int32Array.from(coupling.ref),
-    offsets: Int32Array.from(coupling.offsets),
-    solid: Int32Array.from(coupling.solid),
-    // Per-coupling kind: the shell/solid seam is continuous material (relaxed
-    // MPC), the pin/eye tie spans a clearance (distributing). Dropping this
-    // silently solved the seam as distributing.
-    mpc: Int32Array.from(coupling.mpc),
-  },
-  { fixed_dofs: Int32Array.from(fixed), load_dofs: Int32Array.from(load_dofs), load_vals: Float64Array.from(load_vals) },
-  JSON.stringify({ solid: STEEL, shell: STEEL }),
-);
-const secs = ((Date.now() - t0) / 1000).toFixed(1);
-
-if ("error" in r) {
-  console.error(`\n✗ ${r.error}  (${secs}s)`);
+// The app's coupled solve (web/src/lib/solve/coupledRust.ts), on AMG as the
+// app picks it for tets and shells.
+let r;
+try {
+  r = await solveCoupledInRust(
+    await rustFem(),
+    {
+      mesh: {
+        vertices: Float64Array.from(model.pool),
+        tets: Int32Array.from(model.tets),
+        triangles: Int32Array.from(model.triangles),
+        thicknesses: Float64Array.from(model.thicknesses),
+      },
+      coupling: {
+        ref: Int32Array.from(coupling.ref),
+        offsets: Int32Array.from(coupling.offsets),
+        solid: Int32Array.from(coupling.solid),
+        // Per-coupling kind: the shell/solid seam is continuous material (relaxed
+        // MPC), the pin/eye tie spans a clearance (distributing). Dropping this
+        // silently solved the seam as distributing.
+        mpc: Int32Array.from(coupling.mpc),
+        dof_mask: Int32Array.from(coupling.ref, () => 0b111111), // all six DOFs
+        relaxation: 1,
+      },
+      bcs: {
+        fixed_dofs: Int32Array.from(fixed),
+        prescribed_dofs: new Int32Array(0),
+        prescribed_vals: new Float64Array(0),
+        load_dofs: Int32Array.from(load_dofs),
+        load_vals: Float64Array.from(load_vals),
+      },
+      matJson: JSON.stringify({ solid: STEEL, shell: STEEL }),
+    },
+    "amg",
+    undefined,
+    () => {
+      throw new Error("the CG iteration budget ran out");
+    },
+    () => {},
+  );
+} catch (error) {
+  console.error(`\n✗ ${error.message}  (${((Date.now() - t0) / 1000).toFixed(1)}s)`);
   process.exit(1);
 }
+const secs = ((Date.now() - t0) / 1000).toFixed(1);
+
 const nPool = model.pool.length / 3;
 let maxU = 0, maxNode = 0;
 for (let i = 0; i < nPool; i++) {

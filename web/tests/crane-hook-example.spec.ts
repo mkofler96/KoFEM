@@ -56,18 +56,16 @@ function readStore(
   });
 }
 
-test("?example=full-crane-hook restores the multibody analysis", async ({
+test("?example=full-crane-hook restores the multibody analysis @pipeline", async ({
   page,
 }) => {
-  test.setTimeout(120_000);
-
   await serveUnvalidatedExample(page, "full-crane-hook");
   await page.goto("/app/?example=full-crane-hook");
   await expect(page.locator("nav")).toBeVisible();
 
   // The 20 MB example .vtu is fetched, parsed and loaded into the store.
   await expect
-    .poll(async () => (await readStore(page)).nodes, { timeout: 60_000 })
+    .poll(async () => (await readStore(page)).nodes)
     .toBeGreaterThan(0);
 
   const snap = await readStore(page);

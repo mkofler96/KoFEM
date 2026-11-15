@@ -1,3 +1,4 @@
 # Generated artifacts — never reformat
 src/wasm/pkg/
+src/wasm/fem/
 dist/

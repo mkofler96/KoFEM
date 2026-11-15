@@ -27,12 +27,17 @@ the Evidence, and judge the risk from Merge Danger, before opening the diff.
 3. Make the change, then run the repo checks for the areas you touched
    (`AGENTS.md` → Build and checks). Re-run the step-2 test and save the green
    output.
-4. For visual changes, take before/after screenshots with Playwright (the
-   `run` skill, or `web/tests/*.spec.ts` patterns). Upload them to the Linear
-   issue's evidence comment, editing one comment in place, and link that
-   comment from the PR.
+4. **UI changes: screenshots before the PR, not after review.** If a user can
+   see the change, take before/after screenshots with Playwright (the `run`
+   skill, or `web/tests/*.spec.ts` patterns) at desktop and phone width (about
+   1440 and 390 px). Take the "before" from `develop`. Upload them to the
+   Linear issue's evidence comment, editing one comment in place. GitHub does
+   not always accept images, so Linear is the record: the PR links to that
+   comment and needs no images of its own. Look at each screenshot; they have
+   found layout bugs that the tests did not.
 5. Write the body with the template below and open the PR against `develop`.
    Title: imperative, user-facing, no issue key. Do not touch `CHANGELOG.md`.
+   For a UI change, do not open the PR until step 4 is done.
 
 ## Template
 
@@ -47,7 +52,7 @@ Fixes KOF-nn
 
 ## Evidence
 
-**Before** (`develop` @ <short sha>): <failing test / wrong output / screenshot link>
+**Before** (`develop` @ <short sha>): <failing test / wrong output>
 
 ```text
 <command>
@@ -61,7 +66,9 @@ Fixes KOF-nn
 <trimmed output showing the pass>
 ```
 
-<checks run: e.g. `bun run typecheck && bun run lint && bun run test` — pass>
+<UI change: link to the Linear evidence comment with before/after screenshots at desktop and phone width>
+
+<checks run: e.g. `just check && just test-web && just test-e2e` — pass>
 
 ## Key Changes
 
@@ -83,6 +90,7 @@ Fixes KOF-nn
 - [ ] **No silent fallbacks** — no code path substitutes a plausible default when data is missing, invalid, or mismatched, instead of raising a clear error.
 - [ ] Every input accepted by the UI or an API is actually consumed downstream
 - [ ] All applicable solver paths covered (solid / shell / coupled), or N/A
+- [ ] **UI change:** before/after screenshots (desktop and phone width) are on the Linear issue and linked above, or N/A
 ~~~
 
 Keep `Fixes KOF-nn` only when the PR resolves that issue; otherwise write
@@ -114,11 +122,12 @@ on(save)
 
 ```text
 solver.worker onmessage("solve")
-  groupDirichlet
-  solve_mfem
-    collect_essential_dofs
-      add_fixed_dofs
-      add_prescribed_dofs
+  routeSolve
+  handleSolidSolve
+    weldTies
+    solveSolidInRust
+      rustSolidBoundaryConditions
+        groupDirichlet
 ```
 
 - Show UI structure as a component tree, including state and module boundaries that matter:
@@ -144,10 +153,10 @@ web/src/components/viewport/
 sequenceDiagram
     participant UI
     participant Worker as solver.worker
-    participant Engine as WASM engine
+    participant Fem as Rust module
     UI->>Worker: solve(model)
-    Worker->>Engine: solve_mfem(mesh, bcs, loads)
-    Engine-->>Worker: displacement, stress
+    Worker->>Fem: ElasticModel.startSolve(fixedDofs, forces)
+    Fem-->>Worker: displacement, stress
     Worker-->>UI: results
 ```
 
@@ -232,8 +241,9 @@ of them. Use your judgement and don't overwhelm the reviewer.
 Concrete evidence that the change works. Always show a before and after, and
 name the base commit the "before" ran on.
 
-Screenshots are S-tier when the change is visual. Put them on the Linear
-issue's evidence comment and link it.
+Screenshots are S-tier when the change is visual, and required for any UI
+change. Put them on the Linear issue's evidence comment and link it; do not
+rely on images in the PR body.
 
 Execution-based evidence is A-tier: test results, console output, solver logs.
 Show the exact test that failed on `develop` and passes on the branch. Trim

@@ -79,6 +79,25 @@ justification:
 /* eslint-disable kofem/min-identifier-length -- symbols from the Euler–Bernoulli formula above: δ = P·L³/(3·E·I), I = b·h³/12 */
 ```
 
+### Rust
+
+Crates that opt in with `[lints] workspace = true` (the finite-element crates)
+get the same rules through Clippy, configured in the root `Cargo.toml` and
+`clippy.toml`, and CI denies every warning:
+
+- `clippy::min_ident_chars` mirrors `kofem/min-identifier-length` (only `i`,
+  `j`, `k`, `n` may be one letter).
+- `clippy::unwrap_used`, `expect_used` and `panic` keep failures explicit:
+  return a typed error (`FemError`) instead. Tests are exempt.
+- `clippy::allow_attributes_without_reason` makes every exception state why,
+  like an ESLint disable comment needs a `-- justification`:
+
+```rust
+#[allow(clippy::float_cmp, reason = "a DOF prescribed twice is consistent only with the identical value")]
+```
+
+- `unsafe_code` is forbidden, and the `clippy::pedantic` group is on.
+
 ## Issues live in Linear
 
 Work is tracked in Linear (team `KOF`), not in GitHub Issues. Pick up or file
@@ -97,7 +116,7 @@ has its own rules in `web/public/landing/landing.css`.
 Theory pages at `/theory/` use the examples' shared reading styles and theme
 in `web/docs-layout.mjs`, plus `web/public/theory.css`. Edit the sources in
 `web/theory/`, then run `cd web && bun run theory:generate` and commit the
-generated HTML and sitemap. `bun run test:theory` checks that they match their
+generated HTML and sitemap. `just test-web theory` checks that they match their
 sources and that the navigation follows `docs/theory/content-map.md`.
 
 ## Pull requests

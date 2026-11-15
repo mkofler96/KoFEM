@@ -5,10 +5,11 @@ import type {
   SplitGeometryOptions,
   BooleanGeometryOptions,
   RepairHingesOptions,
-  TopOptSettings,
 } from "../wasm/pkg/kofem_wasm.js";
+import type { TopOptSettings } from "../lib/solve/contracts.js";
 import type { TieDefinition } from "../lib/tie.js";
 import type { CouplingDefinition } from "../lib/coupling.js";
+import type { SolverMethod } from "../lib/solve/amg.js";
 
 export interface Node {
   id: number;
@@ -108,6 +109,9 @@ export interface VolumeMeshPayload {
   format?: string;
   maxElementSize?: number;
   minElementSize?: number;
+  // Per-region sizes (KOF-257): entry k is the max element size of CAD solid
+  // k+1. Absent: every solid meshes at maxElementSize.
+  solidMaxSizes?: number[];
   // Bodies marked Shell (Property.discretization === "shell") and the current
   // property table. With these, meshing idealises those bodies' thin walls to a
   // mid-surface shell mesh and stores the MIXED CTRIA3 + CTETRA model, instead of
@@ -118,7 +122,9 @@ export interface VolumeMeshPayload {
   suppressedBodyIds?: number[];
   properties?: Property[];
 }
-export interface SolvePayload {
+// The model a solve (or a topology optimization) works on — everything in the
+// solve request except the choice of solver.
+export interface SolveModel {
   /** Optional initial CG budget; absent uses each solver's built-in cap. */
   cgIterationLimit?: number;
   nodes: Node[];
@@ -144,11 +150,20 @@ export interface SolvePayload {
   surfaceFaceIds?: number[] | null;
 }
 
+export interface SolvePayload extends SolveModel {
+  // Which CG preconditioner to use: smoothed-aggregation multigrid or
+  // symmetric Gauss–Seidel. Both solve in the Rust module the all-solid tet and
+  // hex models of order 1 or 2 it covers (amgUnavailableReason); others solve
+  // with the preconditioner amgFallbackPreconditioner names and say so.
+  solverMethod: SolverMethod;
+}
+
 // Topology-optimization request: the same model the static solve takes (mesh +
 // materials + BCs/loads + ties/couplings) plus the TO settings block. The design
 // domain follows the element mix — all-solid, all-shell, or coupled shell/solid
-// (KOF-237). Ties and couplings join the coupled design domain exactly as they
-// do for the solve; element order does not apply (linear tets + DKT facets).
+// (KOF-237). Couplings join the coupled design domain exactly as they do for
+// the solve; a tie is refused in every domain (routeTopOpt). Element order does
+// not apply (linear tets + DKT facets).
 export interface TopOptPayload {
   nodes: Node[];
   elements: Element[];
