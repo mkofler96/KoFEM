@@ -57,11 +57,12 @@ const DIGEST_A = `sha256:${"a".repeat(64)}`;
 const DIGEST_B = `sha256:${"b".repeat(64)}`;
 const DIGEST_LATEST = `sha256:${"f".repeat(64)}`;
 
-let dir;
-let work;
-let registry;
-let log;
-let bin;
+// Set by beforeEach for each test.
+let dir = "";
+let work = "";
+let registry = "";
+let log = "";
+let bin = "";
 
 function run(cmd, cwd, env = {}) {
   const result = spawnSync(cmd, { cwd, env: { ...process.env, ...env } });
