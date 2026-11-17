@@ -442,6 +442,8 @@ function dropAnalysis(s: ModelState): void {
   s.nextCouplingGroupId = 1;
   s.nextFaceEntryId = 1;
   s.result = null;
+  // The study's levels were meshes of the geometry that is gone.
+  s.refinementStudy = null;
   // New/edited geometry drops the element set a density was computed over
   // (KOF-233): clear it so the Optimize/Results steps don't read as complete
   // against a mesh that no longer exists.

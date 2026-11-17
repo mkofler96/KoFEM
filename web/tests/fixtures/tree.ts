@@ -7,7 +7,7 @@ import { expect, type Page } from "@playwright/test";
 // entries under them open their editor in the properties panel, and each group
 // ends in "+ Add".
 
-type StudyKind = "static" | "topopt";
+type StudyKind = "static" | "topopt" | "refinement";
 
 // The id of the first study of `kind`, or null.
 function studyId(page: Page, kind: StudyKind): Promise<number | null> {
@@ -24,23 +24,24 @@ function studyId(page: Page, kind: StudyKind): Promise<number | null> {
 }
 
 // Open a study of `kind`, adding it through Studies → + Add when the model has
-// none yet — an optimization on the first static study, added first if needed.
+// none yet — an optimization or a refinement study on the first static study,
+// added first if needed.
 async function openStudy(page: Page, kind: StudyKind): Promise<void> {
   const existing = await studyId(page, kind);
   if (existing !== null) {
     await page.getByTestId(`tree-study-${existing}`).click();
     return;
   }
-  if (kind === "topopt" && (await studyId(page, "static")) === null)
+  if (kind !== "static" && (await studyId(page, "static")) === null)
     await openStudy(page, "static");
   await page.getByTestId("tree-add-studies").click();
   if (kind === "static") await page.getByTestId("add-study-static").click();
   else {
-    await page.getByTestId("add-study-topopt").click();
+    await page.getByTestId(`add-study-${kind}`).click();
     await page.getByTestId("add-study-create").click();
   }
   await expect(page.getByTestId("panel-title")).toHaveText(
-    /^(Static|Optimization) \d+$/,
+    /^(Static|Optimization|Mesh refinement) \d+$/,
   );
 }
 
