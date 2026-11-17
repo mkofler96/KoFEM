@@ -1219,3 +1219,13 @@
   line-height: 1.5;
   color: var(--ink-2);
 }
+
+/* A result probe's row (KOF-389): the point and the displacement vector show
+   on hover or keyboard focus, so the list stays one line per probe. */
+.probeDetails {
+  display: none;
+}
+.probeRow:hover .probeDetails,
+.probeRow:focus-within .probeDetails {
+  display: block;
+}

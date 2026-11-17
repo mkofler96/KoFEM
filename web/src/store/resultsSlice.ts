@@ -6,6 +6,7 @@
 
 import type { SliceCreator } from "./modelStore";
 import type { HandCheck } from "../lib/handCheck";
+import type { ResultProbe } from "../lib/resultProbe";
 import { modeSelection, applyTreeSelection } from "./viewSlice";
 import { ensurePlot } from "./studySlice";
 import { DEFAULT_SOLVER_METHOD, type SolverMethod } from "../lib/solve/amg";
@@ -64,6 +65,15 @@ export interface ResultsSlice {
   // The closed-form check the loaded example carries (KOF-261), shown beside
   // its result. Null for any model the user built or imported.
   handCheck: HandCheck | null;
+  // Points the user clicked on the result to read it (KOF-389). A probe on a
+  // CAD face is kept through a re-mesh and read on the new mesh; one on a
+  // triangle without a CAD face goes with its mesh.
+  probes: ResultProbe[];
+  nextProbeId: number;
+  // Whether a click on the result places a probe.
+  probing: boolean;
+  // Whether the min and max probes mark where the plotted field peaks.
+  showExtremeProbes: boolean;
 
   setResult(result: SolverResult): void;
   setResultType(t: ResultType): void;
@@ -71,6 +81,13 @@ export interface ResultsSlice {
   setElementOrder(order: number): void;
   setSolverMethod(method: SolverMethod): void;
   setLegendRange(range: LegendRange | null): void;
+  setProbing(on: boolean): void;
+  setShowExtremeProbes(on: boolean): void;
+  addProbe(
+    point: [number, number, number],
+    anchor: { cadFaceId: number } | { triangle: [number, number, number] },
+  ): void;
+  removeProbe(id: number): void;
 
   // Mode navigation
   setMode(mode: AppMode): void;
@@ -89,6 +106,10 @@ export const createResultsSlice: SliceCreator<ResultsSlice> = (set) => ({
   mode: "geometry",
   hasStarted: false,
   handCheck: null,
+  probes: [],
+  nextProbeId: 1,
+  probing: false,
+  showExtremeProbes: true,
 
   setResult: (result) =>
     set((s) => {
@@ -135,9 +156,37 @@ export const createResultsSlice: SliceCreator<ResultsSlice> = (set) => ({
       s.legendRange = range;
     }),
 
+  setProbing: (on) =>
+    set((s) => {
+      s.probing = on;
+    }),
+  setShowExtremeProbes: (on) =>
+    set((s) => {
+      s.showExtremeProbes = on;
+    }),
+  addProbe: (point, anchor) =>
+    set((s) => {
+      if (!point.every(Number.isFinite))
+        throw new Error(`probe point must be finite, got ${point.join(", ")}`);
+      const id = s.nextProbeId++;
+      s.probes.push(
+        "cadFaceId" in anchor
+          ? { id, point, cadFaceId: anchor.cadFaceId }
+          : { id, point, triangle: anchor.triangle },
+      );
+    }),
+  removeProbe: (id) =>
+    set((s) => {
+      const at = s.probes.findIndex((p) => p.id === id);
+      if (at < 0) throw new Error(`no probe P${id} to remove`);
+      s.probes.splice(at, 1);
+    }),
+
   setMode: (mode) =>
     set((s) => {
       s.mode = mode;
+      // Clicks place probes only on the result they read.
+      if (mode !== "results") s.probing = false;
       applyTreeSelection(s, modeSelection(mode, s));
     }),
 });
