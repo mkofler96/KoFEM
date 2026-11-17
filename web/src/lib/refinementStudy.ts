@@ -148,3 +148,46 @@ export function assessConvergence(levels: StudyLevel[]): ConvergenceAssessment {
     stressRising,
   };
 }
+
+// The physical model a study holds fixed across its levels: materials, the CAD
+// bodies' settings, the supports, loads and ties, the element order and the
+// solver. The node ids of the groups and the sections a mesh derived are left
+// out — those change with every mesh. Comparing two fingerprints tells whether
+// the user edited the model while the study ran.
+export interface StudyModel {
+  materials: unknown[];
+  properties: { sourceBodyId?: number }[];
+  bcGroups: unknown[];
+  loadGroups: unknown[];
+  tieGroups: unknown[];
+  elementOrder: number;
+  solverMethod: string;
+}
+
+export function studyFingerprint(model: StudyModel): string {
+  return JSON.stringify(
+    {
+      materials: model.materials,
+      // A derived section has a source body; a CAD body has none (isCadBody).
+      properties: model.properties.filter((p) => p.sourceBodyId === undefined),
+      bcGroups: model.bcGroups,
+      loadGroups: model.loadGroups,
+      tieGroups: model.tieGroups,
+      elementOrder: model.elementOrder,
+      solverMethod: model.solverMethod,
+    },
+    (key, value: unknown) => (key === "nodeIds" ? undefined : value),
+  );
+}
+
+// A level whose solve moved nothing has no displacement to converge: the loads
+// act only where the supports hold the part. Refused with the level's size.
+export function checkLevelDisplacement(
+  maxDisplacement: number,
+  size: number,
+): void {
+  if (maxDisplacement === 0)
+    throw new Error(
+      `The solve at ${sizeLabel(size)} mm moved nothing (max displacement 0): the loads act only where the supports hold the part. Check the supports and loads.`,
+    );
+}

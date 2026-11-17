@@ -15,9 +15,11 @@ import type { MeshSizes } from "../store/geometrySlice";
 import type { RefinementStudyRun } from "../store/studySlice";
 import {
   levelSizes,
+  checkLevelDisplacement,
   nextLevelNodes,
   REFINEMENT_LEVELS,
   sizeLabel,
+  studyFingerprint,
   STUDY_NODE_BUDGET,
   type StudyLevel,
 } from "../lib/refinementStudy";
@@ -215,6 +217,15 @@ export function useRefinementStudy() {
       throw new Error("The study needs the geometry to re-mesh");
     const stepBytes = s0.stepBytes;
     const { sizes: base, remesh } = studyBase(s0);
+    // The editors stay open while the study runs: a level solved after an
+    // edit would mix two models into one verdict, so the study stops instead.
+    const fingerprint = studyFingerprint(s0);
+    const assertUnchanged = () => {
+      if (studyFingerprint(get()) !== fingerprint)
+        throw new Error(
+          "The model changed while the study ran (a material, body, support, load or solver setting). Run the study again to compare levels of one model.",
+        );
+    };
 
     let current: RefinementStudyRun = {
       status: "running",
@@ -253,6 +264,7 @@ export function useRefinementStudy() {
             break;
           }
         }
+        assertUnchanged();
         if (k > 0 || remesh) {
           publish({ step: `${label} · meshing at ${sizeLabel(sizes.max)} mm` });
           get().setMeshing(true);
@@ -289,7 +301,10 @@ export function useRefinementStudy() {
           vonMises: Float64Array;
         }>("solve", solvePayload(model));
         get().setResult({ displacements, vonMises });
-        publish({ levels: [...current.levels, levelMetrics(get(), sizes)] });
+        assertUnchanged();
+        const level = levelMetrics(get(), sizes);
+        checkLevelDisplacement(level.maxDisplacement, sizes.max);
+        publish({ levels: [...current.levels, level] });
       }
       publish({ status: "done", step: null });
       get().showRefinementResult();

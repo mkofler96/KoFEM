@@ -8,10 +8,12 @@
 import { describe, expect, test } from "bun:test";
 import {
   assessConvergence,
+  checkLevelDisplacement,
   CONVERGED_TOLERANCE,
   levelSizes,
   nextLevelNodes,
   REFINEMENT_RATIO,
+  studyFingerprint,
   type StudyLevel,
 } from "../../src/lib/refinementStudy";
 
@@ -190,5 +192,81 @@ describe("assessConvergence", () => {
     ]);
     expect(assessment.stressChanges).toEqual([null, null]);
     expect(assessment.stressRising).toBe(false);
+  });
+});
+
+// What the study holds fixed across its levels: the materials, the bodies'
+// assignments and the supports and loads, but not the mesh they sit on.
+describe("studyFingerprint", () => {
+  const model = {
+    materials: [{ id: 1, name: "Steel", young: 210000, poisson: 0.3 }],
+    properties: [{ id: 1, materialId: 1, discretization: "solid" }],
+    bcGroups: [
+      {
+        id: 1,
+        dofs: [0, 1, 2],
+        value: 0,
+        faces: [{ cadFaceId: 3, nodeIds: [1, 2] }],
+      },
+    ],
+    loadGroups: [
+      {
+        id: 2,
+        dof: 1,
+        totalForce: -1000,
+        faces: [{ cadFaceId: 7, nodeIds: [9] }],
+      },
+    ],
+    tieGroups: [],
+    elementOrder: 1,
+    solverMethod: "amg",
+  };
+
+  test("a re-mesh, which moves the groups onto new nodes, keeps it", () => {
+    const remeshed = structuredClone(model);
+    remeshed.bcGroups[0].faces[0].nodeIds = [11, 12, 13];
+    remeshed.loadGroups[0].faces[0].nodeIds = [19, 20];
+    expect(studyFingerprint(remeshed)).toBe(studyFingerprint(model));
+  });
+
+  test("a different material changes it", () => {
+    const edited = structuredClone(model);
+    edited.materials[0].young = 70000;
+    expect(studyFingerprint(edited)).not.toBe(studyFingerprint(model));
+  });
+
+  test("a different load changes it", () => {
+    const edited = structuredClone(model);
+    edited.loadGroups[0].totalForce = -2000;
+    expect(studyFingerprint(edited)).not.toBe(studyFingerprint(model));
+  });
+
+  test("a different element order changes it", () => {
+    expect(studyFingerprint({ ...model, elementOrder: 2 })).not.toBe(
+      studyFingerprint(model),
+    );
+  });
+
+  // A shell mesh adds the PSHELL sections it derived; the CAD bodies are what
+  // the user set.
+  test("sections a mesh derived do not change it", () => {
+    const meshed = structuredClone(model);
+    meshed.properties.push({
+      id: 101,
+      materialId: 1,
+      discretization: "shell",
+      sourceBodyId: 1,
+    });
+    expect(studyFingerprint(meshed)).toBe(studyFingerprint(model));
+  });
+});
+
+describe("checkLevelDisplacement", () => {
+  test("a level that moves passes", () => {
+    expect(() => checkLevelDisplacement(1.2, 8)).not.toThrow();
+  });
+
+  test("a level that moves nothing is refused with its size", () => {
+    expect(() => checkLevelDisplacement(0, 8)).toThrow(/8 mm.*moved nothing/);
   });
 });
