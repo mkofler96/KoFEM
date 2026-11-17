@@ -87,3 +87,56 @@ test("the colorbar limits can be pinned, rejected when inverted, and reset (#390
   expect(await readLegendRange(page)).toBeNull();
   await expect(page.getByTestId("colorbar-manual")).toHaveCount(0);
 });
+
+test("the colorbar limits apply as you type, without Enter (KOF-384)", async ({
+  page,
+}) => {
+  await page.goto("/app/?example=axial-bar");
+  await expect(page.locator("nav")).toBeVisible();
+  const run = page.getByRole("button", { name: /Run static solve/ });
+  await expect(run).toBeEnabled();
+  await run.click();
+  await expect(page.getByTestId("colorbar")).toBeVisible();
+  const fieldMax = await tickValue(page, 0);
+  expect(fieldMax).toBeGreaterThan(0);
+
+  // A valid value applies with no Enter and no blur, and the text the user
+  // typed stays as typed: trailing zeros are not reformatted away.
+  const pinnedMax = Number((fieldMax / 2).toPrecision(2));
+  const typed = `${pinnedMax.toFixed(6)}0`;
+  const max = page.getByTestId("legend-max");
+  await max.fill(typed);
+  await expect(page.getByTestId("colorbar-manual")).toBeVisible();
+  await expect
+    .poll(async () => (await readLegendRange(page))?.max)
+    .toBeCloseTo(pinnedMax, 6);
+  await expect(max).toBeFocused();
+  await expect(max).toHaveValue(typed);
+  expect(await tickValue(page, 0)).toBeCloseTo(pinnedMax, 6);
+
+  // An emptied field is partial input: no error, the applied limits stay.
+  await max.fill("");
+  await expect(max).toHaveValue("");
+  const kept = await readLegendRange(page);
+  if (kept === null) throw new Error("clearing the field dropped the limits");
+  expect(kept.max).toBeCloseTo(pinnedMax, 6);
+  await expect(page.getByTestId("legend-error")).toHaveCount(0);
+
+  // Leaving the field with an invalid value shows the error.
+  await max.blur();
+  await expect(page.getByTestId("legend-error")).toContainText(
+    "Both limits must be numbers",
+  );
+
+  // A valid value typed afterwards clears the error and applies.
+  await max.fill(String(fieldMax));
+  await expect(page.getByTestId("legend-error")).toHaveCount(0);
+  await expect
+    .poll(async () => (await readLegendRange(page))?.max)
+    .toBeCloseTo(fieldMax, 6);
+
+  // "Auto" still hands the range back to the field.
+  await page.getByTestId("legend-auto").click();
+  expect(await readLegendRange(page)).toBeNull();
+  await expect(page.getByTestId("colorbar-manual")).toHaveCount(0);
+});
