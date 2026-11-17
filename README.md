@@ -33,6 +33,28 @@ Option A — Pull the published image (recommended)
 docker run ghcr.io/mkofler96/kofem-web:latest
 ```
 
+Each [release](https://github.com/mkofler96/KoFEM/releases) `vX.Y.Z` has an
+image tag of the same name that never moves, so you can pin a version or roll
+back to one:
+
+```bash
+docker run ghcr.io/mkofler96/kofem-web:v0.7.0
+```
+
+The tag is the same image as `vX.Y.Z-<commit>`, built and tested from the
+commit the Git tag `vX.Y.Z` points to. To check which image you have and that
+CI built it:
+
+```bash
+git rev-list -n 1 v0.7.0   # the release commit; its first 7 characters are <commit>
+docker buildx imagetools inspect ghcr.io/mkofler96/kofem-web:v0.7.0   # Digest: sha256:...
+gh attestation verify oci://ghcr.io/mkofler96/kofem-web@sha256:<digest> \
+  --repo mkofler96/KoFEM --signer-workflow mkofler96/KoFEM/.github/workflows/ci.yml \
+  --source-ref refs/heads/main --deny-self-hosted-runners
+```
+
+`latest` follows `main` and `dev` follows `develop`.
+
 Option B — Build it yourself
 
 ```bash
