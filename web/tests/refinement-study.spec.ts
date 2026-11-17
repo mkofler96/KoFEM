@@ -146,7 +146,10 @@ test("one click solves three ever finer meshes and judges convergence @pipeline"
   await page.getByTestId("max-element-size").fill(String(MESH));
   await page.getByTestId("min-element-size").fill(String(MESH / 10));
   const before = await studyState(page);
-  expect(before.groupFaces.flat()).not.toContain(undefined);
+  expect(
+    before.groupFaces.flat().every((id) => id !== undefined),
+    "every support and load entry is a whole CAD face",
+  ).toBe(true);
 
   // Studies → + Add → Mesh refinement, on the example's static study.
   await openTree(page, "refinement");

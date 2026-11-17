@@ -57,7 +57,7 @@ function LevelTable({ levels }: { levels: StudyLevel[] }) {
       <tbody>
         {levels.map((l, i) => (
           <tr
-            key={i}
+            key={l.sizes.max}
             data-testid="refinement-study-level"
             data-size={l.sizes.max}
             data-elements={l.elements}
@@ -157,7 +157,7 @@ export function RefinementStudyPanel({
           data-testid="refinement-study-run"
           disabled={!allOk || isRunning || engine.blocked || blocked !== null}
           title={engine.reason}
-          onClick={() => void start()}
+          onClick={start}
         >
           {running ? "Running study…" : "▶  Run mesh refinement study"}
         </button>
