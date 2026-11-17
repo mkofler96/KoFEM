@@ -3,8 +3,10 @@
 
 // Manual colorbar limits for the displayed result field (#390). Editing either
 // limit pins both; "Auto" hands the range back to the field's own min/max.
+// A valid pair applies as the user types (KOF-384); an invalid one is reported
+// on Enter or blur only, so partial input ("-", "") never flashes an error.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useModelStore } from "../../store/modelStore";
 import type { ResultRange } from "../../lib/resultField";
 import styles from "./Panel.module.css";
@@ -14,6 +16,26 @@ interface LegendRangeControlsProps {
   // point when the user pins the limits.
   fieldRange: ResultRange;
   unit: string;
+}
+
+type Parsed = { range: ResultRange } | { error: string };
+
+function parse(minText: string, maxText: string): Parsed {
+  const min = Number(minText);
+  const max = Number(maxText);
+  if (
+    minText.trim() === "" ||
+    maxText.trim() === "" ||
+    Number.isNaN(min) ||
+    Number.isNaN(max)
+  ) {
+    return { error: "Both limits must be numbers" };
+  }
+  if (!Number.isFinite(min) || !Number.isFinite(max)) {
+    return { error: "Limits must be finite" };
+  }
+  if (max <= min) return { error: "Max must be greater than min" };
+  return { range: { min, max } };
 }
 
 // Short enough to edit by hand, precise enough to not visibly move the limits.
@@ -33,36 +55,47 @@ export function LegendRangeControls({
   const [maxText, setMaxText] = useState(() => format(active.max));
   const [error, setError] = useState<string | null>(null);
 
+  // The range this control last applied from the user's own text. Its echo
+  // through the store must not rewrite the text under the cursor.
+  const applied = useRef<ResultRange | null>(null);
+
   // The active range changes under the inputs whenever the user switches result
   // type or a new solve lands (both clear the override) — follow it.
   useEffect(() => {
+    const own = applied.current;
+    if (own !== null && own.min === active.min && own.max === active.max) {
+      return;
+    }
+    applied.current = null;
     setMinText(format(active.min));
     setMaxText(format(active.max));
     setError(null);
   }, [active.min, active.max]);
 
+  const commit = (range: ResultRange) => {
+    applied.current = range;
+    setLegendRange(range);
+  };
+
+  // Enter and blur: apply, or report the problem right away.
   const apply = () => {
-    const min = Number(minText);
-    const max = Number(maxText);
-    if (
-      minText.trim() === "" ||
-      maxText.trim() === "" ||
-      Number.isNaN(min) ||
-      Number.isNaN(max)
-    ) {
-      setError("Both limits must be numbers");
-      return;
-    }
-    if (!Number.isFinite(min) || !Number.isFinite(max)) {
-      setError("Limits must be finite");
-      return;
-    }
-    if (max <= min) {
-      setError("Max must be greater than min");
+    const parsed = parse(minText, maxText);
+    if ("error" in parsed) {
+      setError(parsed.error);
       return;
     }
     setError(null);
-    setLegendRange({ min, max });
+    commit(parsed.range);
+  };
+
+  // Typing: apply a valid pair at once and keep the last valid range
+  // otherwise; a half-typed number is not an error until Enter or blur.
+  const edit = (nextMin: string, nextMax: string) => {
+    setMinText(nextMin);
+    setMaxText(nextMax);
+    setError(null);
+    const parsed = parse(nextMin, nextMax);
+    if ("range" in parsed) commit(parsed.range);
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -81,7 +114,7 @@ export function LegendRangeControls({
           data-testid="legend-min"
           type="number"
           value={minText}
-          onChange={(e) => setMinText(e.target.value)}
+          onChange={(e) => edit(e.target.value, maxText)}
           onBlur={apply}
           onKeyDown={onKeyDown}
           aria-label="Legend minimum"
@@ -95,7 +128,7 @@ export function LegendRangeControls({
           data-testid="legend-max"
           type="number"
           value={maxText}
-          onChange={(e) => setMaxText(e.target.value)}
+          onChange={(e) => edit(minText, e.target.value)}
           onBlur={apply}
           onKeyDown={onKeyDown}
           aria-label="Legend maximum"
@@ -118,6 +151,7 @@ export function LegendRangeControls({
         style={{ marginBottom: 12 }}
         disabled={!legendRange}
         onClick={() => {
+          applied.current = null;
           setLegendRange(null);
           setError(null);
         }}
