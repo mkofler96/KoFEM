@@ -1,6 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+// JS-0455 checks DOM attributes; these are Three.js objects whose properties
+// are checked by React Three Fiber's TypeScript types. Annotate only those props.
+
 // Result probes in the viewport (KOF-389): a marker at each probe on the
 // deformed surface and a label with its name and value; the point and the
 // displacement vector show when the label is hovered. The min and max probes
@@ -57,9 +60,18 @@ function ProbeMarker({
   const color =
     kind === "min" ? "#2563eb" : kind === "max" ? "#dc2626" : "#0d1117";
   return (
-    <group position={position}>
-      <mesh raycast={() => null}>
-        <sphereGeometry args={[radius, 12, 8]} />
+    <group
+      // skipcq: JS-0455 -- typed React Three Fiber property
+      position={position}
+    >
+      <mesh
+        // skipcq: JS-0455 -- typed React Three Fiber property
+        raycast={() => null}
+      >
+        <sphereGeometry
+          // skipcq: JS-0455 -- typed React Three Fiber property
+          args={[radius, 12, 8]}
+        />
         <meshBasicMaterial color={color} />
       </mesh>
       <Html zIndexRange={[20, 0]}>
