@@ -10,8 +10,10 @@
 //   BoundaryConditionLayer — BC/load face highlights, markers and load arrows
 //   SampleGuideTargets     — the faces the sample guide asks to pick
 //   MeshOverlapLayer       — where the last mesh attempt found an overlap
+//   ProbeLayer             — result probes: markers and value labels
 
 import { useMemo } from "react";
+import type { ThreeEvent } from "@react-three/fiber";
 import { useModelStore } from "../../store/modelStore";
 import { resolveHighlightedBody } from "../../lib/bodyHighlight";
 import { isInterfaceActive } from "../../lib/interfaces";
@@ -25,6 +27,8 @@ import { BoundaryConditionLayer } from "./BoundaryConditionLayer";
 import { SampleGuideTargets } from "./SampleGuideTargets";
 import { MeshOverlapLayer } from "./MeshOverlapLayer";
 import { useDisplayedDensity } from "./useDisplayedDensity";
+import { ProbeLayer } from "./ProbeLayer";
+import { undeformedPoint } from "../../lib/resultProbe";
 
 const TARGET_DEFORM_FRACTION = 0.2;
 
@@ -37,6 +41,8 @@ export function MeshScene() {
   const viewRepr = useModelStore((s) => s.viewRepr);
   const highlightBodyId = useModelStore((s) => s.highlightBodyId);
   const properties = useModelStore((s) => s.properties);
+  const probing = useModelStore((s) => s.probing);
+  const addProbe = useModelStore((s) => s.addProbe);
   // The interface to show: the hovered row, else the one open in the panel —
   // unless one of its bodies is suppressed: its faces are then out of the
   // model, and drawing them would show geometry the analysis excludes.
@@ -88,6 +94,50 @@ export function MeshScene() {
     if (maxDisp < 1e-30) return deformScaleFactor;
     return ((TARGET_DEFORM_FRACTION * modelSize) / maxDisp) * deformScaleFactor;
   }, [result, modelSize, deformScaleFactor]);
+
+  // A click on the deformed result places a probe (KOF-389): at the point of
+  // the undeformed triangle the click stands for, on that triangle's CAD face
+  // when the mesh has one behind it, else on the triangle itself. The result
+  // surface draws the pickable boundary triangles in the same order, so the
+  // face index maps into them.
+  const onProbePick = (e: ThreeEvent<MouseEvent>) => {
+    const topo = topology.boundaryMeshTopo;
+    if (!result || e.faceIndex == null || !topo) return;
+    const tri = topo.triangles[e.faceIndex];
+    if (!tri)
+      throw new Error(
+        `Probe pick hit triangle ${e.faceIndex} of a surface with ${topo.triangles.length}`,
+      );
+    e.stopPropagation();
+    const disp = result.displacements;
+    const corner = (id: number) => {
+      const entry = nodeMap.get(id);
+      if (!entry)
+        throw new Error(
+          `Probe pick referenced node id ${id} missing from nodeMap — mesh/topology desync`,
+        );
+      const { n, i } = entry;
+      return {
+        undeformed: [n.x, n.y, n.z] as [number, number, number],
+        deformed: [
+          n.x + disp[3 * i] * deformScale,
+          n.y + disp[3 * i + 1] * deformScale,
+          n.z + disp[3 * i + 2] * deformScale,
+        ] as [number, number, number],
+      };
+    };
+    const [a, b, c] = tri.map(corner);
+    const point = undeformedPoint(
+      [a.deformed, b.deformed, c.deformed],
+      [a.undeformed, b.undeformed, c.undeformed],
+      [e.point.x, e.point.y, e.point.z],
+    );
+    const cadFaceId = topo.faceIds?.[e.faceIndex];
+    addProbe(
+      point,
+      cadFaceId !== undefined ? { cadFaceId } : { triangle: [...tri] },
+    );
+  };
 
   const hasStepTessellation = !!stepSurface && stepSurface.triangles.length > 0;
   if (nodes.length === 0 && !hasStepTessellation) {
@@ -154,8 +204,11 @@ export function MeshScene() {
         <ResultsColormap
           topology={topology}
           deformScale={deformScale}
-          onFacePick={onFacePick}
+          onFacePick={probing ? onProbePick : onFacePick}
         />
+      )}
+      {showResult && (
+        <ProbeLayer deformScale={deformScale} modelSize={modelSize} />
       )}
       <BoundaryConditionLayer topology={topology} showResult={showResult} />
       {!showResult && repr !== "geometry" && (

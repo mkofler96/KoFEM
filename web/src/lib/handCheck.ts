@@ -400,12 +400,9 @@ function sameLoad(group: NamedLoadGroup, load: AssumedLoad): boolean {
   }
 }
 
-export interface HandCheckModel {
+export interface HandCheckModel extends CadFacedMesh {
   nodes: Node[];
   elements: Element[];
-  // The current mesh's surface triangles (node ids) and the CAD face of each.
-  surfaceTriangles: [number, number, number][] | null;
-  surfaceFaceIds: number[] | null;
   loadGroups: NamedLoadGroup[];
   bcGroups: NamedBcGroup[];
   materials: Material[];
@@ -413,45 +410,72 @@ export interface HandCheckModel {
   result: SolverResult;
 }
 
+// The current mesh's surface triangles (node ids) and the CAD face of each.
+export interface CadFacedMesh {
+  surfaceTriangles: [number, number, number][] | null;
+  surfaceFaceIds: number[] | null;
+}
+
+// The surface triangles of these CAD faces on the current mesh. Shell
+// mid-surface facets carry the CAD face of the wall they were collapsed from,
+// so a wall face resolves to its mid-surface facets; a face the mesh no longer
+// has on its surface (e.g. a wall's thin side face) is an error. Shared by the
+// hand check and the result probes (lib/resultProbe), so both follow a CAD
+// face onto a new mesh the same way.
+export function meshCadFaceTriangles(
+  cadFaceIds: number[],
+  mesh: CadFacedMesh,
+): [number, number, number][] {
+  const { surfaceTriangles, surfaceFaceIds } = mesh;
+  if (!surfaceTriangles || !surfaceFaceIds)
+    throw new Error(
+      "the mesh has no CAD face numbering, so its CAD faces cannot be found",
+    );
+  if (surfaceTriangles.length !== surfaceFaceIds.length)
+    throw new Error(
+      `the mesh has ${surfaceTriangles.length} surface triangles but ${surfaceFaceIds.length} CAD face ids`,
+    );
+  const wanted = new Set(cadFaceIds);
+  const found = new Set<number>();
+  const out: [number, number, number][] = [];
+  surfaceTriangles.forEach((tri, t) => {
+    const face = surfaceFaceIds[t];
+    if (!wanted.has(face)) return;
+    found.add(face);
+    out.push(tri);
+  });
+  const missing = cadFaceIds.filter((id) => !found.has(id));
+  if (missing.length > 0)
+    throw new Error(
+      `CAD face${missing.length === 1 ? "" : "s"} ${missing.join(", ")} ${missing.length === 1 ? "is" : "are"} not on the current mesh's surface`,
+    );
+  return out;
+}
+
 // Indices (into `nodes`) of the nodes of these CAD faces on the current mesh.
-// Shell mid-surface facets carry the CAD face of the wall they were collapsed
-// from, so a wall face resolves to its mid-surface nodes; a face the mesh no
-// longer has on its surface (e.g. a wall's thin side face) is an error.
 function cadFaceNodes(
   cadFaceIds: number[],
   model: HandCheckModel,
   index: Map<number, number>,
 ): number[] {
-  const { surfaceTriangles, surfaceFaceIds } = model;
-  if (!surfaceTriangles || !surfaceFaceIds)
+  let triangles: [number, number, number][];
+  try {
+    triangles = meshCadFaceTriangles(cadFaceIds, model);
+  } catch (err) {
     throw new Error(
-      "Hand check: the mesh has no CAD face numbering, so its probe faces cannot be found",
+      `Hand check: ${err instanceof Error ? err.message : String(err)}`,
     );
-  if (surfaceTriangles.length !== surfaceFaceIds.length)
-    throw new Error(
-      `Hand check: the mesh has ${surfaceTriangles.length} surface triangles but ${surfaceFaceIds.length} CAD face ids`,
-    );
-  const wanted = new Set(cadFaceIds);
-  const found = new Set<number>();
+  }
   const out = new Set<number>();
-  surfaceTriangles.forEach((tri, t) => {
-    const face = surfaceFaceIds[t];
-    if (!wanted.has(face)) return;
-    found.add(face);
+  for (const tri of triangles)
     for (const nodeId of tri) {
       const i = index.get(nodeId);
       if (i === undefined)
         throw new Error(
-          `Hand check: CAD face ${face} references node ${nodeId}, which is not in the mesh`,
+          `Hand check: a probe face references node ${nodeId}, which is not in the mesh`,
         );
       out.add(i);
     }
-  });
-  const missing = cadFaceIds.filter((id) => !found.has(id));
-  if (missing.length > 0)
-    throw new Error(
-      `Hand check: CAD face${missing.length === 1 ? "" : "s"} ${missing.join(", ")} ${missing.length === 1 ? "is" : "are"} not on the current mesh's surface`,
-    );
   return [...out].sort((a, b) => a - b);
 }
 
