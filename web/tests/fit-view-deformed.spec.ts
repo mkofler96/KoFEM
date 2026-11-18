@@ -26,14 +26,14 @@ function undeformedNodes(page: Page): Promise<Point[]> {
   );
 }
 
-// Solve the cantilever and draw it at three times the automatic scale: the
-// tip drawn 600 mm down.
+// Solve the cantilever and draw it at factor 320, about three times the
+// automatic one: the 1.9 mm tip deflection drawn about 610 mm down.
 async function solveAtLargeScale(page: Page): Promise<void> {
   const run = page.getByRole("button", { name: /Run static solve/ });
   await expect(run).toBeEnabled();
   await run.click();
   await expect(page.getByTestId("colorbar")).toBeVisible();
-  await page.getByLabel("Deformation scale").fill("3");
+  await page.getByLabel("Deformation factor").fill("320");
 }
 
 // After Fit view: the deformed shape and the undeformed overlay lie inside
