@@ -1,9 +1,10 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Bug reports and suggestions go to public GitHub issue forms
-// (.github/ISSUE_TEMPLATE/). KoFEM sends nothing itself: it builds a link to a
-// prefilled form, and the user reviews and submits it on GitHub.
+// Problems and ideas go by email to REPORT_EMAIL or to the public GitHub
+// issue forms (.github/ISSUE_TEMPLATE/), as the user chooses (KOF-380). KoFEM
+// sends nothing itself: it builds a mailto: link or a link to a prefilled
+// form, and the user reviews and sends the email or submits the issue.
 //
 // Everything a report can carry from the app passes through buildDiagnostics,
 // and its output type is the complete list: versions, browser, the WebAssembly
@@ -29,6 +30,13 @@ export const MAX_ERROR_CHARS = 400;
 export const TRUNCATION_MARKER = " … [truncated]";
 // GitHub answers 414 above roughly 8 KB of URL; stay well clear of it.
 export const MAX_ISSUE_URL_LENGTH = 6000;
+
+// Where emailed reports go. Public: the app shows it and puts it in the link.
+export const REPORT_EMAIL = "support@kofem.org";
+// Windows hands a mailto: link to the mail program only up to about 2,000
+// characters (INTERNET_MAX_URL_LENGTH, 2083), so the link stays within this.
+export const MAX_MAILTO_LENGTH = 2000;
+const EMAIL_RE = /^[^\s@<>()[\]\\,;:"]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+$/iu;
 
 export type WebGlSupport = "WebGL 2" | "WebGL 1" | "unavailable";
 
@@ -269,4 +277,56 @@ export function feedbackIssueUrl(
       `feedbackIssueUrl: the prefilled URL is ${url.length} characters, over the ${MAX_ISSUE_URL_LENGTH} kept clear of GitHub's limit — the error text cap (MAX_ERROR_CHARS) no longer bounds it`,
     );
   return url;
+}
+
+function mailtoUrl(address: string, d: Diagnostics): string {
+  const subject = `KoFEM report (${d.appVersion})`;
+  const body = [
+    "What happened, or what would you like KoFEM to do?",
+    "",
+    "",
+    "Steps to reproduce (for a problem):",
+    "",
+    "",
+    "Diagnostics from KoFEM (edit or delete as you like):",
+    formatDiagnostics(d),
+  ].join("\n");
+  // encodeURIComponent, not URLSearchParams: mail programs show a "+" from
+  // form encoding literally instead of as a space.
+  return `mailto:${address}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+/**
+ * The mailto: link that opens the user's email program addressed to the
+ * report address, with a subject naming the version and a body that asks what
+ * happened and carries the diagnostics. Only the error text can make it long
+ * (up to 12 encoded characters per character); when the link would pass
+ * MAX_MAILTO_LENGTH, that text is cut further, with the visible marker.
+ */
+export function reportMailtoUrl(
+  diagnostics: Diagnostics,
+  address: string = REPORT_EMAIL,
+): string {
+  if (!EMAIL_RE.test(address))
+    throw new Error(
+      `reportMailtoUrl: "${address}" is not an email address — set REPORT_EMAIL in lib/feedback.ts`,
+    );
+  const full = mailtoUrl(address, diagnostics);
+  if (full.length <= MAX_MAILTO_LENGTH) return full;
+  const error = diagnostics.lastError ?? "";
+  const chars = Array.from(
+    error.endsWith(TRUNCATION_MARKER)
+      ? error.slice(0, -TRUNCATION_MARKER.length)
+      : error,
+  );
+  for (let keep = chars.length - 1; keep >= 0; keep--) {
+    const url = mailtoUrl(address, {
+      ...diagnostics,
+      lastError: chars.slice(0, keep).join("") + TRUNCATION_MARKER,
+    });
+    if (url.length <= MAX_MAILTO_LENGTH) return url;
+  }
+  throw new Error(
+    `reportMailtoUrl: the link is ${full.length} characters and stays over ${MAX_MAILTO_LENGTH} even without the error text`,
+  );
 }

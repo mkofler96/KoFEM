@@ -5,7 +5,8 @@
 // diagnostics and nothing else: no geometry, file names, coordinates, mesh or
 // results, however much of the model the builder is handed. The prefilled
 // GitHub URL stays well under GitHub's length limit and matches the issue
-// forms in .github/ISSUE_TEMPLATE. The dialog itself is exercised in the
+// forms in .github/ISSUE_TEMPLATE. The email link (KOF-380) carries the same
+// diagnostics in its body and stays short enough for mail programs. The dialog itself is exercised in the
 // browser by tests/feedback.spec.ts.
 
 import { describe, expect, test } from "bun:test";
@@ -15,12 +16,15 @@ import {
   FEEDBACK_TEMPLATES,
   MAX_ERROR_CHARS,
   MAX_ISSUE_URL_LENGTH,
+  MAX_MAILTO_LENGTH,
+  REPORT_EMAIL,
   TRUNCATION_MARKER,
   buildDiagnostics,
   describeBrowser,
   feedbackIssueUrl,
   formatDiagnostics,
   redactErrorText,
+  reportMailtoUrl,
 } from "../../src/lib/feedback.ts";
 
 const CHROME_LINUX =
@@ -316,6 +320,95 @@ describe("the prefilled issue URL", () => {
   test("a suggestion refuses diagnostics", () => {
     expect(() => feedbackIssueUrl("improvement", diag)).toThrow();
   });
+});
+
+// ── The email link (KOF-380) ─────────────────────────────────────────────────
+describe("the email link", () => {
+  const diag = buildDiagnostics(env, storeLike());
+  const mail = new URL(reportMailtoUrl(diag));
+  const body = mail.searchParams.get("body") ?? "";
+
+  test("the report address is support@kofem.org", () => {
+    expect(REPORT_EMAIL).toBe("support@kofem.org");
+  });
+
+  test("it goes to the report address", () => {
+    expect(mail.protocol).toBe("mailto:");
+    expect(mail.pathname).toBe(REPORT_EMAIL);
+  });
+
+  test("the subject names the version", () => {
+    expect(mail.searchParams.get("subject")).toBe(
+      "KoFEM report (v0.4.0-dev-26a1531)",
+    );
+  });
+
+  test("the body asks what happened and carries the diagnostics verbatim", () => {
+    expect(body).toMatch(/^What happened, or what would you like/);
+    expect(body.endsWith(`\n${formatDiagnostics(diag)}`), body).toBe(true);
+  });
+
+  test("the body names no report file: the ZIP is optional", () => {
+    expect(body).not.toMatch(/\.zip|attach/i);
+  });
+
+  test("the link carries only the subject and the body", () => {
+    expect([...mail.searchParams.keys()]).toEqual(["subject", "body"]);
+  });
+
+  test("spaces are encoded as %20, not +", () => {
+    expect(reportMailtoUrl(diag)).not.toContain("+");
+  });
+
+  test("no model name, group name, coordinate, load or result reaches it", () => {
+    const leaky = buildDiagnostics(
+      {
+        ...env,
+        lastShownError: `${SECRET_NAME}.step failed at (123.456, 0, 1)`,
+      },
+      storeLike(),
+    );
+    const text = decodeURIComponent(reportMailtoUrl(leaky));
+    expect(text).not.toContain(SECRET_NAME);
+    expect(text).not.toMatch(/ACME|Bolt hole|Pump pressure|Burst case/);
+    for (const n of SECRET_NUMBERS) expect(text).not.toContain(n);
+  });
+
+  test(`an ordinary report stays under ${MAX_MAILTO_LENGTH} characters`, () => {
+    const long = buildDiagnostics(
+      { ...env, lastShownError: "Meshing failed: ".repeat(100) },
+      storeLike(),
+    );
+    const url = reportMailtoUrl(long);
+    expect(url.length, String(url.length)).toBeLessThanOrEqual(
+      MAX_MAILTO_LENGTH,
+    );
+    expect(new URL(url).searchParams.get("body")).toContain(
+      formatDiagnostics(long),
+    );
+  });
+
+  test(`the worst-case error is cut, with the marker, to fit ${MAX_MAILTO_LENGTH} characters`, () => {
+    const worst = buildDiagnostics(
+      { ...env, lastShownError: "\u{1F4A5}".repeat(5000) },
+      storeLike(),
+    );
+    const url = reportMailtoUrl(worst);
+    expect(url.length, String(url.length)).toBeLessThanOrEqual(
+      MAX_MAILTO_LENGTH,
+    );
+    const lastLine = (new URL(url).searchParams.get("body") ?? "")
+      .split("\n")
+      .at(-1);
+    expect(lastLine).toMatch(/^Last error: \u{1F4A5}+ … \[truncated\]$/u);
+  });
+
+  test.each(["", "support at kofem.org", "support@", "a@b"])(
+    'refuses to build a link to "%s"',
+    (bad) => {
+      expect(() => reportMailtoUrl(diag, bad)).toThrow(/not an email address/);
+    },
+  );
 });
 
 // ── The forms exist and have the field the URL fills ─────────────────────────

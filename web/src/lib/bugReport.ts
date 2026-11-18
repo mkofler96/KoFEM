@@ -1,10 +1,9 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-// Problem reports (KOF-202): a ZIP the user downloads and emails to the
-// maintainer. KoFEM sends nothing itself — it saves the file and opens the
-// user's email program with the address, a subject and a short body filled in;
-// the user attaches the ZIP and sends it.
+// Problem reports (KOF-202): a ZIP the user may download and attach to the
+// email they send to REPORT_EMAIL (lib/feedback). KoFEM sends nothing itself,
+// and saves the file only when the user asks for it (KOF-380).
 //
 // A report holds everything needed to reproduce the problem:
 //
@@ -32,9 +31,6 @@ import type { TreeGroup } from "../store/viewSlice";
 import type { Diagnostics } from "./feedback";
 import { createZip, readZip, type ZipEntry } from "./zip";
 
-// Where reports go. Public: the app shows it and puts it in the mail link.
-export const REPORT_EMAIL = "support@kofem.org";
-
 export const REPORT_FORMAT = "kofem-report";
 export const REPORT_VERSION = 1;
 export const REPORT_MANIFEST = "report.json";
@@ -46,8 +42,6 @@ const CAD_FILES: Record<GeometryFormat, string> = {
 };
 // The newest log lines kept per log (mesh, solve, optimize).
 export const MAX_LOG_LINES = 500;
-
-const EMAIL_RE = /^[^\s@<>()[\]\\,;:"]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+$/iu;
 
 export interface ReportManifest {
   readonly format: typeof REPORT_FORMAT;
@@ -161,38 +155,6 @@ export function reportFileName(modelName: string, created: Date): string {
   return base === ""
     ? `kofem-report-${stamp}.zip`
     : `kofem-report-${base}-${stamp}.zip`;
-}
-
-/**
- * The mailto: link that opens the user's email program with the report
- * address, a subject and a body that asks for the steps and names the file to
- * attach. Refuses to build a link without a usable address.
- */
-export function reportMailtoUrl(
-  fileName: string,
-  appVersion: string,
-  address: string = REPORT_EMAIL,
-): string {
-  if (!EMAIL_RE.test(address))
-    throw new Error(
-      `reportMailtoUrl: "${address}" is not an email address — set REPORT_EMAIL in lib/bugReport.ts`,
-    );
-  const subject = `KoFEM problem report (${appVersion})`;
-  const body = [
-    "What happened:",
-    "",
-    "",
-    "What did you expect instead:",
-    "",
-    "",
-    "Steps to reproduce:",
-    "",
-    "",
-    `Please attach the report: ${fileName} (saved to your downloads).`,
-  ].join("\n");
-  // encodeURIComponent, not URLSearchParams: mail programs show a "+" from
-  // form encoding literally instead of as a space.
-  return `mailto:${address}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
 export interface OpenedReport {
