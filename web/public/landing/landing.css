@@ -279,12 +279,11 @@ p {
    clicks. */
 .intro-local {
   pointer-events: auto;
-  text-decoration: underline;
-  text-decoration-color: rgba(131, 182, 237, 0.4);
+  color: var(--accent);
   text-underline-offset: 3px;
 }
 .intro-local:hover {
-  color: var(--text);
+  text-decoration: underline;
 }
 @media (max-width: 700px) {
   /* The lede wraps to a third line on a phone: tighter, so the hero keeps
