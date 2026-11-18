@@ -21,6 +21,13 @@
   flex-shrink: 0;
 }
 
+.home {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+}
+
 .mark {
   width: 24px;
   height: 24px;

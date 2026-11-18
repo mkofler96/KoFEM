@@ -1,0 +1,84 @@
+/* Top-bar site menu: the links back to the public site. Same quiet text button
+   and popover as the Feedback entry. */
+
+.wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 5px;
+  background: none;
+  border: none;
+  color: #6b7280;
+  font-family: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition:
+    background 100ms ease,
+    color 100ms ease;
+}
+
+.trigger:hover,
+.trigger[aria-expanded="true"] {
+  background: #f0f2f5;
+  color: #0d1117;
+}
+
+.menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 220px;
+  max-width: calc(100vw - 24px);
+  padding: 6px;
+  background: #ffffff;
+  border: 1px solid #e2e5ea;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(13, 17, 23, 0.12);
+  z-index: 30;
+}
+
+.item {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: #0d1117;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.item:hover,
+.item:focus-visible {
+  background: #f0f2f5;
+  outline: none;
+}
+
+/* "Back to <example>" heads the list, set apart from the site's pages. */
+.back {
+  margin-bottom: 4px;
+  border-bottom: 1px solid #eef0f4;
+  border-radius: 6px 6px 0 0;
+  color: #1f5fd0;
+}
+
+/* Phones: the trigger sits left of the other buttons, too far left for a menu
+   aligned to its right edge; pin the menu under the bar's right edge instead. */
+@media (max-width: 768px) {
+  .triggerLabel {
+    display: none;
+  }
+
+  .menu {
+    position: fixed;
+    top: 52px;
+    right: 12px;
+  }
+}
