@@ -11,6 +11,7 @@
 //   SampleGuideTargets     — the faces the sample guide asks to pick
 //   MeshOverlapLayer       — where the last mesh attempt found an overlap
 //   ProbeLayer             — result probes: markers and value labels
+//   FitCamera              — Fit view, framing the scene as drawn
 
 import { useMemo } from "react";
 import type { ThreeEvent } from "@react-three/fiber";
@@ -20,6 +21,7 @@ import { isInterfaceActive } from "../../lib/interfaces";
 import { useMeshTopology } from "./useMeshTopology";
 import { useFacePick } from "./useFacePick";
 import { GeometryLayer } from "./GeometryLayer";
+import { FitCamera } from "./FitCamera";
 import { FemMeshLayer } from "./FemMeshLayer";
 import { ResultsColormap } from "./ResultsColormap";
 import { DensityField } from "./DensityField";
@@ -183,9 +185,22 @@ export function MeshScene() {
   // The density view stands alone: its own boundary surface replaces the neutral
   // FEM surface, the deformed colormap and the BC/load overlays, so the emerged
   // structure reads without the undeformed mesh drawn behind it.
+  // Fit view frames the shape as drawn: the deformed result at deformScale.
+  // First in both groups below, so switching views keeps it mounted.
+  const fitCamera = (
+    <FitCamera
+      result={
+        showResult
+          ? { displacements: result.displacements, scale: deformScale }
+          : null
+      }
+    />
+  );
+
   if (density !== null) {
     return (
       <group>
+        {fitCamera}
         <DensityField density={density} />
       </group>
     );
@@ -193,6 +208,7 @@ export function MeshScene() {
 
   return (
     <group>
+      {fitCamera}
       <FemMeshLayer
         topology={topology}
         repr={repr}

@@ -4,7 +4,6 @@
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, GizmoHelper, GizmoViewport } from "@react-three/drei";
 import { MeshScene } from "./MeshScene";
-import { FitCamera } from "./FitCamera";
 import { ViewportTestHooks } from "./ViewportTestHooks";
 import { pickingEvents } from "./pickingEvents";
 import { ColorBar } from "./ColorBar";
@@ -69,7 +68,6 @@ export function Viewport() {
         <directionalLight position={[-5, 5, -5]} intensity={0.3} />
         <MeshScene />
         <OrbitControls makeDefault />
-        <FitCamera />
         <ViewportTestHooks />
         <GizmoHelper alignment="bottom-right" margin={[72, 72]}>
           <GizmoViewport labelColor="#374151" axisHeadScale={1} />
