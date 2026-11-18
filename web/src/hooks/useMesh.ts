@@ -3,13 +3,14 @@
 
 import { useMemo, useState } from "react";
 import { useModelStore } from "../store/modelStore";
-import type { Node, Element, Property } from "../store/modelStore";
-import type { MeshOverlap } from "../wasm/pkg/kofem_wasm";
-import { isCadBody, MESH_KIND_LABEL, meshKind } from "../store/geometrySlice";
-import { sendToWorker, resetWorker } from "../workers/sharedWorker";
+import { isCadBody, type MeshSizes } from "../store/geometrySlice";
+import {
+  applyVolumeMesh,
+  parseMeshSizes,
+  runVolumeMesh,
+} from "../lib/volumeMesh";
 import { useWorkerLogs } from "./useWorkerLogs";
 import { measureTessellation } from "../lib/meshSizing";
-import { regionMaxSizes, solidName } from "../lib/regions";
 import {
   categorizeError,
   currentWorkflow,
@@ -103,134 +104,38 @@ export function useMesh() {
       return;
     }
 
-    const maxSize = parseFloat(maxElementSize);
-    const minSize = parseFloat(minElementSize);
-    if (!Number.isFinite(maxSize) || maxSize <= 0) {
-      rejectInput(
-        `Max element size must be a positive number of mm — got "${maxElementSize}".`,
-      );
-      return;
-    }
-    if (!Number.isFinite(minSize) || minSize < 0) {
-      rejectInput(
-        `Min element size must be 0 or a positive number of mm — got "${minElementSize}".`,
-      );
-      return;
-    }
-    if (minSize > maxSize) {
-      rejectInput(
-        `Min element size (${minSize} mm) must not exceed max element size (${maxSize} mm).`,
-      );
-      return;
-    }
-    // Regions with a size of their own (KOF-257). The min size stays global —
-    // Netgen has one — so no region may go below it.
-    let regionSizes: Map<number, number>;
+    let sizes: MeshSizes;
     try {
-      regionSizes = regionMaxSizes(properties);
+      sizes = parseMeshSizes(maxElementSize, minElementSize, properties);
     } catch (err) {
       rejectInput(err instanceof Error ? err.message : String(err));
       return;
     }
-    for (const [id, size] of regionSizes)
-      if (minSize > size) {
-        rejectInput(
-          `Min element size (${minSize} mm) must not exceed the max element size of ${solidName(properties, id)} (${size} mm).`,
-        );
-        return;
-      }
-    // One size per CAD solid, in solid order: the region's own, else the global.
-    const solidIds = properties
-      .filter(isCadBody)
-      .map((p) => p.id)
-      .sort((a, b) => a - b);
-    const solidMaxSizes =
-      regionSizes.size > 0
-        ? solidIds.map((id) => {
-            const own = regionSizes.get(id);
-            return own === undefined ? maxSize : own;
-          })
-        : undefined;
 
     setMeshError(null);
     setMeshOverlaps([]);
     setMeshing(true);
     clearLogs();
     const elapsed = startTimer();
-    // Captured at request time: the mesh records what it left out, even if the
-    // user toggles a body while Netgen runs.
-    const suppressedBodyIds = properties
-      .filter((p) => isCadBody(p) && p.suppressed)
-      .map((p) => p.id);
     try {
-      const reply = await sendToWorker<
-        | {
-            nodes: Node[];
-            elements: Element[];
-            properties?: Property[];
-            surfaceTriangles: [number, number, number][] | null;
-            surfaceFaceIds: number[] | null;
-          }
-        | { overlaps: MeshOverlap[] }
-      >("volume_mesh", {
-        bytes: stepBytes,
-        format: geometryFormat,
-        maxElementSize: maxSize,
-        minElementSize: minSize,
-        solidMaxSizes,
-        // Bodies the user marked Shell, plus the property table: meshing
-        // idealises them to a mid-surface
-        // shell mesh and returns the mixed CTRIA3 + CTETRA model (#397). Only CAD
-        // bodies can be idealised — the PSHELLs a previous mesh derived are
-        // shells already, and passing their ids would send the thin-wall
-        // extraction hunting for bodies the fresh mesh has never heard of.
-        shellBodyIds: properties
-          .filter(
-            (p) =>
-              isCadBody(p) && p.discretization === "shell" && !p.suppressed,
-          )
-          .map((p) => p.id),
-        suppressedBodyIds,
+      const reply = await runVolumeMesh({
+        stepBytes,
+        geometryFormat,
         properties,
+        sizes,
       });
-      // Same reason for the reset as after a mesh, below.
-      if ("overlaps" in reply) {
-        resetWorker();
+      if (reply.kind === "overlaps") {
         setMeshOverlaps(reply.overlaps);
         trackMeshFailed("geometry_defect", elapsed());
         return;
       }
-      const {
-        nodes: meshNodes,
-        elements: meshElements,
-        properties: meshProperties,
-        surfaceTriangles,
-        surfaceFaceIds,
-      } = reply;
-      applyMeshResult(
-        meshNodes,
-        meshElements,
-        MESH_KIND_LABEL[meshKind(meshElements)],
-        {
-          max: maxSize,
-          min: minSize,
-          regions: Object.fromEntries(regionSizes),
-        },
-        surfaceTriangles,
-        surfaceFaceIds,
-        meshProperties,
-        suppressedBodyIds,
-      );
+      const { mesh } = reply;
+      applyVolumeMesh(applyMeshResult, mesh, sizes);
       track("mesh_completed", {
         workflow: currentWorkflow(),
-        model_type: modelType(meshElements),
+        model_type: modelType(mesh.elements),
         duration_bucket: elapsed(),
       });
-      // Netgen's Ng_Init() installs global C++ state in the engine module.
-      // Resetting the worker after a mesh gives later engine calls a clean
-      // module instance (added when the MFEM solve shared this module and
-      // looped on its first call after meshing).
-      resetWorker();
     } catch (err) {
       console.error("[meshing] volume mesh failed:", err);
       const detail = err instanceof Error ? err.message : String(err);

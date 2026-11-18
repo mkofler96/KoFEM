@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { useModelStore } from "../store/modelStore";
 import { fmt, loadsSummary } from "../lib/modelDisplay";
 import { sendToWorker } from "../workers/sharedWorker";
-import type { SolvePayload } from "../workers/solverTypes";
+import { solvePayload } from "../lib/solve/payload";
 import {
   amgFallbackPreconditioner,
   amgUnavailableReason,
@@ -140,7 +140,7 @@ export function useSolver() {
     const workflow = currentWorkflow();
     const elapsed = startTimer();
     track("solve_started", { workflow, analysis_type: "static" });
-    const payload: SolvePayload = {
+    const payload = solvePayload({
       nodes,
       elements,
       materials,
@@ -151,10 +151,10 @@ export function useSolver() {
       elementOrder,
       solverMethod,
       tieGroups,
-      couplings: couplingGroups,
+      couplingGroups,
       surfaceTriangles,
       surfaceFaceIds,
-    };
+    });
     // The worker transfers the solver's Float64Array buffers here zero-copy
     // (issue #166) — store them as-is, no per-element copy.
     sendToWorker<{ displacements: Float64Array; vonMises: Float64Array }>(
