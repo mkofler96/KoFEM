@@ -4,16 +4,20 @@
 import { useState } from "react";
 import { useModelStore } from "../../store/modelStore";
 import type { TreeTarget } from "../../store/viewSlice";
+import type { DerivedStudyKind } from "../../store/studySlice";
 import { SolvePanel } from "./SolvePanel";
 import { OptimizePanel } from "./OptimizePanel";
+import { RefinementStudyPanel } from "./RefinementStudy";
 import styles from "./Panel.module.css";
 
-// Studies → + Add: a static solve, or a topology optimization of a static case.
+// Studies → + Add: a static solve, or a topology optimization or a mesh
+// refinement study of a static case.
 function AddStudy() {
   const studies = useModelStore((s) => s.studies);
   const addStudy = useModelStore((s) => s.addStudy);
   const statics = studies.filter((st) => st.kind === "static");
-  const [optimizing, setOptimizing] = useState(false);
+  // The kind of study built on a static case whose case picker is open.
+  const [derived, setDerived] = useState<DerivedStudyKind | null>(null);
   // eslint-disable-next-line kofem/no-silent-fallback -- preselects the first static case in the picker; with none the optimization choice is disabled and this is never read
   const [staticId, setStaticId] = useState(statics[0]?.id ?? 0);
 
@@ -30,11 +34,11 @@ function AddStudy() {
         </span>
       </button>
       <button
-        className={`${styles.addChoice} ${optimizing ? styles.addChoiceActive : ""}`}
+        className={`${styles.addChoice} ${derived === "topopt" ? styles.addChoiceActive : ""}`}
         data-testid="add-study-topopt"
         disabled={statics.length === 0}
-        aria-expanded={optimizing}
-        onClick={() => setOptimizing(true)}
+        aria-expanded={derived === "topopt"}
+        onClick={() => setDerived("topopt")}
       >
         <span className={styles.addChoiceLabel}>Topology optimization</span>
         <span className={styles.addChoiceHint}>
@@ -43,7 +47,21 @@ function AddStudy() {
             : "Material layout that best carries a static case"}
         </span>
       </button>
-      {optimizing && statics.length > 0 && (
+      <button
+        className={`${styles.addChoice} ${derived === "refinement" ? styles.addChoiceActive : ""}`}
+        data-testid="add-study-refinement"
+        disabled={statics.length === 0}
+        aria-expanded={derived === "refinement"}
+        onClick={() => setDerived("refinement")}
+      >
+        <span className={styles.addChoiceLabel}>Mesh refinement</span>
+        <span className={styles.addChoiceHint}>
+          {statics.length === 0
+            ? "Add a static study first — a refinement study checks a static case"
+            : "Solve a static case on finer meshes to check the result settles"}
+        </span>
+      </button>
+      {derived !== null && statics.length > 0 && (
         <div className={styles.inlineForm}>
           <div className={styles.formRow}>
             <span className={styles.formLabel}>Static case</span>
@@ -63,16 +81,18 @@ function AddStudy() {
           <div className={styles.formBtns}>
             <button
               className={styles.cancelBtn}
-              onClick={() => setOptimizing(false)}
+              onClick={() => setDerived(null)}
             >
               Cancel
             </button>
             <button
               className={styles.primaryBtn}
               data-testid="add-study-create"
-              onClick={() => addStudy("topopt", staticId)}
+              onClick={() => addStudy(derived, staticId)}
             >
-              Add optimization
+              {derived === "topopt"
+                ? "Add optimization"
+                : "Add refinement study"}
             </button>
           </div>
         </div>
@@ -82,7 +102,7 @@ function AddStudy() {
 }
 
 // One study, opened from the tree: its solver panel, plus — for an
-// optimization — the static case it works on.
+// optimization or a refinement study — the static case it works on.
 function StudyDetail({ id }: { id: number }) {
   const studies = useModelStore((s) => s.studies);
   const setStudyStatic = useModelStore((s) => s.setStudyStatic);
@@ -122,6 +142,14 @@ function StudyDetail({ id }: { id: number }) {
       </select>
     </div>
   );
+  if (study.kind === "refinement")
+    return (
+      <RefinementStudyPanel
+        staticCase={staticCase}
+        header={header}
+        footer={footer}
+      />
+    );
   return (
     <OptimizePanel staticCase={staticCase} header={header} footer={footer} />
   );

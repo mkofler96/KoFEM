@@ -14,6 +14,7 @@ import type { SyntheticEvent } from "react";
 import { Html } from "@react-three/drei";
 import { useProbeReadings } from "../../hooks/useProbeReadings";
 import { useModelStore } from "../../store/modelStore";
+import { refinementChartVisible } from "../../store/studySlice";
 import { probeLabel } from "../../lib/resultProbe";
 import { formatHandCheckValue } from "../../lib/handCheck";
 import { resultUnit } from "../../lib/resultField";
@@ -106,8 +107,11 @@ export function ProbeLayer({
 }) {
   const { placed, extremes } = useProbeReadings();
   const resultType = useModelStore((s) => s.resultType);
+  // The refinement chart covers the 3D view; its labels would float over it.
+  const chartShown = useModelStore(refinementChartVisible);
   const unit = resultUnit(resultType);
   const common = { unit, deformScale, radius: 0.008 * modelSize };
+  if (chartShown) return null;
   return (
     <group name="result-probes">
       {extremes?.kind === "value" &&
