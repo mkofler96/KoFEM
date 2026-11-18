@@ -125,7 +125,6 @@ export function TopBar() {
 
       {/* Right */}
       <div className={styles.right}>
-        <SiteMenu />
         <input
           ref={loadInputRef}
           type="file"
@@ -228,7 +227,7 @@ export function TopBar() {
             />
           </svg>
         </button>
-        <div className={styles.avatar}>K</div>
+        <SiteMenu />
       </div>
     </header>
   );

@@ -5,9 +5,10 @@ import { test, expect } from "./coverage";
 import type { Page } from "@playwright/test";
 import { gotoApp } from "./fixtures/app";
 
-// The way out of the app (KOF-381): the logo goes home, and the top-bar menu
-// links to the public site and, after `?example=<id>`, back to that example's
-// page. Leaving with an analysis open asks first, like "New analysis".
+// The way out of the app (KOF-381): the logo goes home, and the "K" button
+// at the right of the top bar opens a menu with the examples, the theory and,
+// after `?example=<id>`, that example's page. Leaving with an analysis open
+// asks first, like "New analysis".
 
 function siteMenu(page: Page) {
   return page.getByRole("menu", { name: "Site" });
@@ -43,10 +44,18 @@ test("the logo links to the home page", async ({ page }) => {
   ).toHaveAttribute("href", "/");
 });
 
-test("the site menu links to the examples, the theory and home", async ({
+test("the K button opens the site menu: examples and theory", async ({
   page,
 }) => {
   await gotoApp(page);
+  // The avatar is the menu, not an extra button beside it.
+  const trigger = page.getByRole("banner").getByRole("button", {
+    name: "Site menu",
+  });
+  await expect(trigger).toHaveText("K");
+  await expect(
+    page.getByRole("banner").locator("button, a").last(),
+  ).toHaveAccessibleName("Site menu");
   await openSiteMenu(page);
   const menu = siteMenu(page);
   await expect(
@@ -55,9 +64,8 @@ test("the site menu links to the examples, the theory and home", async ({
   await expect(
     menu.getByRole("menuitem", { name: "Theory", exact: true }),
   ).toHaveAttribute("href", "/theory/");
-  await expect(
-    menu.getByRole("menuitem", { name: "Home", exact: true }),
-  ).toHaveAttribute("href", "/");
+  // Home is the logo's job.
+  await expect(menu.getByRole("menuitem")).toHaveCount(2);
   // Opened without an example: no way back to one.
   await expect(menu.getByRole("menuitem", { name: /^Back to/ })).toHaveCount(0);
 });
@@ -123,10 +131,11 @@ for (const width of [320, 390]) {
   test(`the site menu fits a ${width}px screen`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
     await openExample(page, "plate-with-hole");
-    for (const button of ["Site menu", "Save analysis", "Load analysis"])
-      await expect(page.getByRole("button", { name: button })).toBeInViewport({
-        ratio: 1,
-      });
+    // Every control of the top bar, the logo through the K button.
+    const controls = await page.getByRole("banner").locator("button, a").all();
+    expect(controls.length).toBeGreaterThan(5);
+    for (const control of controls)
+      await expect(control).toBeInViewport({ ratio: 1 });
     await openSiteMenu(page);
     for (const item of await siteMenu(page).getByRole("menuitem").all())
       await expect(item).toBeInViewport({ ratio: 1 });

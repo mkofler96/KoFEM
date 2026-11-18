@@ -7,9 +7,10 @@ import { useExampleLoad } from "../../lib/examples";
 import { SITE_PAGES } from "../../lib/siteLinks";
 import styles from "./SiteMenu.module.css";
 
-// The way back to the public site (KOF-381): its main pages and, when the app
-// was opened from an example, that example's page. The links leave in the
-// same tab, so an open analysis asks first, as "New analysis" does; a click
+// The way back to the public site (KOF-381), behind the "K" button at the
+// right of the top bar: the examples, the theory and, when the app was opened
+// from an example, that example's page. Home is the logo's link (TopBar). The
+// links leave in the same tab, so an open analysis asks first, as "New analysis" does; a click
 // that opens a new tab (Ctrl/Cmd/Shift, or the middle button, which fires no
 // click) keeps the analysis and needs no question.
 
@@ -57,18 +58,10 @@ export function SiteMenu() {
         aria-label="Site menu"
         aria-haspopup="menu"
         aria-expanded={open}
-        title="Examples, theory and home"
+        title="Examples and theory"
         onClick={() => setOpen((o) => !o)}
       >
-        <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-          <path
-            d="M2.5 4h11M2.5 8h11M2.5 12h11"
-            stroke="currentColor"
-            strokeWidth="1.4"
-            strokeLinecap="round"
-          />
-        </svg>
-        <span className={styles.triggerLabel}>Menu</span>
+        K
       </button>
 
       {open && (
@@ -83,7 +76,7 @@ export function SiteMenu() {
               Back to {example.name}
             </a>
           )}
-          {SITE_PAGES.map((page) => (
+          {SITE_PAGES.filter((page) => page.section !== "home").map((page) => (
             <a
               key={page.href}
               className={styles.item}

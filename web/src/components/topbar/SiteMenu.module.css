@@ -1,5 +1,5 @@
-/* Top-bar site menu: the links back to the public site. Same quiet text button
-   and popover as the Feedback entry. */
+/* Top-bar site menu: the "K" button at the right end of the bar and its
+   popover of links back to the public site. */
 
 .wrap {
   position: relative;
@@ -8,32 +8,34 @@
 }
 
 .trigger {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 8px;
-  border-radius: 5px;
-  background: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
   border: none;
-  color: #6b7280;
-  font-family: inherit;
-  font-size: 12.5px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1f5fd0, #1750b3);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 600;
   cursor: pointer;
-  transition:
-    background 100ms ease,
-    color 100ms ease;
+  transition: box-shadow 100ms ease;
 }
 
 .trigger:hover,
+.trigger:focus-visible,
 .trigger[aria-expanded="true"] {
-  background: #f0f2f5;
-  color: #0d1117;
+  box-shadow: 0 0 0 3px rgba(31, 95, 208, 0.25);
+  outline: none;
 }
 
+/* Under the K button, flush with the bar's right edge: the button is the
+   last control, so the menu stays on screen at phone width too. */
 .menu {
   position: absolute;
-  top: calc(100% + 8px);
+  top: calc(100% + 9px);
   right: 0;
   width: 220px;
   max-width: calc(100vw - 24px);
@@ -67,18 +69,4 @@
   border-bottom: 1px solid #eef0f4;
   border-radius: 6px 6px 0 0;
   color: #1f5fd0;
-}
-
-/* Phones: the trigger sits left of the other buttons, too far left for a menu
-   aligned to its right edge; pin the menu under the bar's right edge instead. */
-@media (max-width: 768px) {
-  .triggerLabel {
-    display: none;
-  }
-
-  .menu {
-    position: fixed;
-    top: 52px;
-    right: 12px;
-  }
 }
