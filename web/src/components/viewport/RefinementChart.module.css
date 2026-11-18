@@ -1,0 +1,158 @@
+/* The mesh refinement chart (KOF-401), in place of the 3D view. Colours come
+   from the panel's tokens (Panel.module.css, on :root). */
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--bg);
+}
+
+.card {
+  width: 100%;
+  max-width: 760px;
+  padding: 18px 20px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(13, 17, 23, 0.06);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.status {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+
+.toggleOn,
+.toggleOff {
+  padding: 4px 10px;
+  border: none;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.toggleOn {
+  background: var(--accent);
+  color: #fff;
+}
+
+.toggleOff {
+  background: var(--surface);
+  color: var(--ink-2);
+}
+
+.toggleOff:hover {
+  background: var(--hover);
+}
+
+.empty {
+  padding: 80px 0;
+  text-align: center;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: 8px;
+  font-family: inherit;
+}
+
+.grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.tick,
+.tickSub,
+.value,
+.axisTitle,
+.bandLabel {
+  font-size: 12px;
+  fill: var(--muted);
+}
+
+.tickSub {
+  font-size: 11px;
+  fill: var(--muted-2);
+}
+
+.value {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  fill: var(--ink-2);
+}
+
+.axisTitle {
+  font-weight: 600;
+  fill: var(--ink-2);
+}
+
+.band {
+  fill: var(--ok-soft);
+  opacity: 0.8;
+}
+
+.reference {
+  stroke: var(--ok);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 4;
+}
+
+.bandLabel {
+  fill: var(--ok);
+}
+
+.line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.5;
+}
+
+.point circle,
+.pointOpen circle {
+  fill: var(--accent);
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
+.pointOpen {
+  cursor: pointer;
+}
+
+.pointOpen:hover circle {
+  r: 8;
+}
+
+@media (max-width: 640px) {
+  .overlay {
+    padding: 12px;
+    align-items: flex-start;
+  }
+
+  .card {
+    padding: 12px;
+  }
+}

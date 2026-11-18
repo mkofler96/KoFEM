@@ -17,10 +17,16 @@ export function isExampleId(id: string): boolean {
   return EXAMPLE_ID_PATTERN.test(id);
 }
 
+export type OpenedExample = { readonly id: string; readonly name: string };
+
 // The example being fetched, so the empty viewport does not offer the sample
-// meanwhile.
-export const useExampleLoad = create<{ loading: string | null }>(() => ({
+// meanwhile, and the last one opened, so the site menu leads back to its page.
+export const useExampleLoad = create<{
+  loading: string | null;
+  opened: OpenedExample | null;
+}>(() => ({
   loading: null,
+  opened: null,
 }));
 
 // Fetches and loads the example; a failure is reported to the user. Aborting
@@ -72,6 +78,7 @@ export async function openExample(
     store.setGeometryFormat("step");
     store.setStepBytes(stepBytes);
     clearWorkerLogs();
+    useExampleLoad.setState({ opened: { id, name: analysis.modelName } });
     setWorkflow("example");
     track("example_loaded", {
       example_id: id,

@@ -54,6 +54,24 @@ export async function projectPoint(
 }
 
 /**
+ * Where each model-space point lands on the page, in client pixels, once the
+ * viewport has settled: projectPoint for many points in one round trip.
+ */
+export async function projectPoints(
+  page: Page,
+  points: Point[],
+): Promise<({ x: number; y: number } | null)[]> {
+  await settleViewport(page);
+  return page.evaluate(
+    (targets) =>
+      targets.map((target) =>
+        (window as unknown as ViewportWindow).__kofemViewport.project(target),
+      ),
+    points,
+  );
+}
+
+/**
  * Click the page at (x, y), a pixel of the viewport canvas, once the viewport
  * has settled, and wait until it has drawn what the click changed.
  */
@@ -93,6 +111,24 @@ export async function lookFrom(page: Page, direction: Point): Promise<void> {
 }
 
 /**
+ * The vertex positions (x, y, z, …, in mm) of the viewport's visible meshes
+ * named `name`, once it has settled — where the surface is drawn.
+ */
+export async function drawnPositions(
+  page: Page,
+  name: string,
+): Promise<number[]> {
+  await settleViewport(page);
+  return page.evaluate(
+    (target) =>
+      (window as unknown as ViewportWindow).__kofemViewport.drawnPositions(
+        target,
+      ),
+    name,
+  );
+}
+
+/**
  * How many line segments the viewport draws in its visible objects named
  * `name`, once it has settled — what an edge highlight shows on screen.
  */
@@ -105,4 +141,38 @@ export async function drawnSegments(page: Page, name: string): Promise<number> {
       ),
     name,
   );
+}
+
+/**
+ * Drag across the viewport with the left button from `from` to `to` (client
+ * pixels) in `steps` moves, as a user turns the view, and wait for the view
+ * the drag left.
+ */
+export async function dragViewport(
+  page: Page,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  steps = 10,
+): Promise<void> {
+  await settleViewport(page);
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  await page.mouse.move(to.x, to.y, { steps });
+  await page.mouse.up();
+  await settleViewport(page);
+}
+
+/**
+ * Turn the mouse wheel by `deltaY` with the cursor at `at` (client pixels),
+ * as a user zooms, and wait for the view the zoom left.
+ */
+export async function wheelViewportAt(
+  page: Page,
+  at: { x: number; y: number },
+  deltaY: number,
+): Promise<void> {
+  await settleViewport(page);
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.wheel(0, deltaY);
+  await settleViewport(page);
 }

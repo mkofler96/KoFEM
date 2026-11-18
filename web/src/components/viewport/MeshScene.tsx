@@ -11,6 +11,7 @@
 //   SampleGuideTargets     — the faces the sample guide asks to pick
 //   MeshOverlapLayer       — where the last mesh attempt found an overlap
 //   ProbeLayer             — result probes: markers and value labels
+//   FitCamera              — Fit view, framing the scene as drawn
 
 import { useMemo } from "react";
 import type { ThreeEvent } from "@react-three/fiber";
@@ -20,6 +21,7 @@ import { isInterfaceActive } from "../../lib/interfaces";
 import { useMeshTopology } from "./useMeshTopology";
 import { useFacePick } from "./useFacePick";
 import { GeometryLayer } from "./GeometryLayer";
+import { FitCamera } from "./FitCamera";
 import { FemMeshLayer } from "./FemMeshLayer";
 import { ResultsColormap } from "./ResultsColormap";
 import { DensityField } from "./DensityField";
@@ -29,15 +31,13 @@ import { MeshOverlapLayer } from "./MeshOverlapLayer";
 import { useDisplayedDensity } from "./useDisplayedDensity";
 import { ProbeLayer } from "./ProbeLayer";
 import { undeformedPoint } from "../../lib/resultProbe";
-
-const TARGET_DEFORM_FRACTION = 0.2;
+import { useDeformFactor } from "../../hooks/useDeformFactor";
 
 export function MeshScene() {
   const nodes = useModelStore((s) => s.nodes);
   const result = useModelStore((s) => s.result);
   const mode = useModelStore((s) => s.mode);
   const stepSurface = useModelStore((s) => s.stepSurface);
-  const deformScaleFactor = useModelStore((s) => s.deformScale);
   const viewRepr = useModelStore((s) => s.viewRepr);
   const highlightBodyId = useModelStore((s) => s.highlightBodyId);
   const properties = useModelStore((s) => s.properties);
@@ -81,19 +81,10 @@ export function MeshScene() {
     topology.shellRim,
   );
 
-  // Automatic fit-to-view scale (max displacement → TARGET_DEFORM_FRACTION of the
-  // model size) multiplied by the user-controlled deformScaleFactor. A factor of
-  // 0 yields the undeformed shape coloured by the result field.
-  const deformScale = useMemo(() => {
-    if (!result) return 1;
-    let maxDisp = 0;
-    for (let i = 0; i < result.displacements.length; i++) {
-      const mag = Math.abs(result.displacements[i]);
-      if (mag > maxDisp) maxDisp = mag;
-    }
-    if (maxDisp < 1e-30) return deformScaleFactor;
-    return ((TARGET_DEFORM_FRACTION * modelSize) / maxDisp) * deformScaleFactor;
-  }, [result, modelSize, deformScaleFactor]);
+  // The factor the displacements are drawn at (KOF-383): the automatic one or
+  // the user's, the same number the Results panel shows. 0 yields the
+  // undeformed shape coloured by the result field.
+  const deformScale = useDeformFactor().factor;
 
   // A click on the deformed result places a probe (KOF-389): at the point of
   // the undeformed triangle the click stands for, on that triangle's CAD face
@@ -183,9 +174,22 @@ export function MeshScene() {
   // The density view stands alone: its own boundary surface replaces the neutral
   // FEM surface, the deformed colormap and the BC/load overlays, so the emerged
   // structure reads without the undeformed mesh drawn behind it.
+  // Fit view frames the shape as drawn: the deformed result at deformScale.
+  // First in both groups below, so switching views keeps it mounted.
+  const fitCamera = (
+    <FitCamera
+      result={
+        showResult
+          ? { displacements: result.displacements, scale: deformScale }
+          : null
+      }
+    />
+  );
+
   if (density !== null) {
     return (
       <group>
+        {fitCamera}
         <DensityField density={density} />
       </group>
     );
@@ -193,6 +197,7 @@ export function MeshScene() {
 
   return (
     <group>
+      {fitCamera}
       <FemMeshLayer
         topology={topology}
         repr={repr}

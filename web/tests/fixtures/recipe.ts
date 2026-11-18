@@ -177,8 +177,14 @@ export interface Snapshot {
     materialId: number;
   }[];
   materials: { id: number; young: number; poisson: number }[];
-  bcGroups: { dofs: number[]; value: number; faces: StoreFace[] }[];
+  bcGroups: {
+    name: string;
+    dofs: number[];
+    value: number;
+    faces: StoreFace[];
+  }[];
   loadGroups: {
+    name: string;
     kind?: string;
     dof: number;
     totalForce: number;
@@ -828,6 +834,14 @@ async function addSupport(page: Page, support: Support): Promise<void> {
     .fill(String(support.value));
   await page.getByRole("button", { name: "Apply BC" }).click();
   await expect(page.getByTestId("panel-title")).toHaveText(/^BC\d+$/);
+  await nameGroup(page, support.name);
+}
+
+// Give the group just applied the recipe's name, in its panel's Name field, as
+// the example page names it.
+async function nameGroup(page: Page, name: string): Promise<void> {
+  await page.getByTestId("group-name").fill(name);
+  await expect(page.getByTestId("panel-title")).toHaveText(name);
 }
 
 const VECTOR_LABELS = {
@@ -868,6 +882,7 @@ async function addLoad(page: Page, load: Load): Promise<void> {
   }
   await page.getByRole("button", { name: "Apply Load" }).click();
   await expect(page.getByTestId("panel-title")).toHaveText(/^Load\d+$/);
+  await nameGroup(page, load.name);
 }
 
 // The CAD body a face belongs to: the body of an element at one of its mesh

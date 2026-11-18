@@ -14,6 +14,7 @@ import { resetWorker } from "../../workers/sharedWorker";
 import { setWorkflow } from "../../lib/analytics";
 import { clearWorkerLogs } from "../../hooks/useWorkerLogs";
 import { FeedbackMenu } from "./FeedbackMenu";
+import { SiteMenu, confirmLeave } from "./SiteMenu";
 import styles from "./TopBar.module.css";
 
 // A development deployment is marked at container start with
@@ -90,14 +91,21 @@ export function TopBar() {
     <header className={styles.bar}>
       {/* Brand */}
       <div className={styles.brand}>
-        <img
-          className={styles.mark}
-          src="/kofem_logo.svg"
-          alt="KoFEM logo"
-          width={24}
-          height={24}
-        />
-        <span className={styles.name}>KoFEM</span>
+        <a
+          className={styles.home}
+          href="/"
+          aria-label="KoFEM home"
+          onClick={confirmLeave}
+        >
+          <img
+            className={styles.mark}
+            src="/kofem_logo.svg"
+            alt=""
+            width={24}
+            height={24}
+          />
+          <span className={styles.name}>KoFEM</span>
+        </a>
         {DEV_CHANNEL && (
           <span
             className={styles.devBadge}
@@ -219,7 +227,7 @@ export function TopBar() {
             />
           </svg>
         </button>
-        <div className={styles.avatar}>K</div>
+        <SiteMenu />
       </div>
     </header>
   );

@@ -97,10 +97,12 @@ export interface AnalyticsEvents {
     error_category: ErrorCategory;
   };
   results_viewed: { workflow: Workflow };
-  // A feedback path was opened from the top bar. No parameters, so nothing to
-  // register in GA4; what the user then writes stays on GitHub.
+  // The feedback dialog was opened from the top bar, then the email or the
+  // GitHub path taken. No parameters, so nothing to register in GA4; what the
+  // user then writes stays in their email or on GitHub.
   feedback_report_opened: Record<string, never>;
-  feedback_suggestion_opened: Record<string, never>;
+  feedback_email_opened: Record<string, never>;
+  feedback_github_opened: Record<string, never>;
 }
 export type AnalyticsEventName = keyof AnalyticsEvents;
 

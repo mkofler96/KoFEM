@@ -25,6 +25,7 @@ import type { StateCreator } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import type { AnalysisState } from "../lib/analysisFile";
 import { bodiesLeftOutOfMesh } from "../lib/suppressBodies";
+import { AUTO_DEFORM_SCALE } from "../lib/deformScale";
 import {
   DEFAULT_MAX_ELEMENT_SIZE,
   DEFAULT_MIN_ELEMENT_SIZE,
@@ -219,7 +220,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.densityResult = null;
       s.liveDensity = null;
       s.viewRepr = a.viewRepr;
-      s.deformScale = 1;
+      s.deformScale = AUTO_DEFORM_SCALE;
       s.densityThreshold = DEFAULT_DENSITY_THRESHOLD;
       // Studies and plots are not saved. A meshed analysis reopens with the
       // static study its supports and loads describe — and with the
@@ -241,6 +242,8 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
         ? [{ id: 1, source: "static", field: a.resultType }]
         : [];
       s.nextPlotId = s.resultPlots.length + 1;
+      s.refinementStudy = null;
+      s.refinementLevelShown = null;
       s.mode = a.mode;
       applyTreeSelection(s, modeSelection(a.mode, s));
       s.stepImportError = null;
@@ -303,7 +306,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.surfaceTriangles = null;
       s.surfaceFaceIds = null;
       s.viewRepr = "surface";
-      s.deformScale = 1;
+      s.deformScale = AUTO_DEFORM_SCALE;
       s.densityThreshold = DEFAULT_DENSITY_THRESHOLD;
       s.elementOrder = 1;
       s.handCheck = null;
@@ -314,6 +317,8 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.nextStudyId = 1;
       s.resultPlots = [];
       s.nextPlotId = 1;
+      s.refinementStudy = null;
+      s.refinementLevelShown = null;
       s.nextMatId = 2;
       s.selectedFace = null;
       s.pendingFaces = [];

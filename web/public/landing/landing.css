@@ -337,3 +337,67 @@ p {
   background: rgba(131, 182, 237, 0.22);
   box-shadow: inset 0 0 0 1px rgba(131, 182, 237, 0.6);
 }
+
+/* The overview below the scroll story: plain text that scrolls normally.
+   landing.js moves the fixed stage up out of its way. */
+.overview {
+  position: relative;
+  padding: 96px 9vw 72px;
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+}
+.overview h2 {
+  max-width: 760px;
+  font-size: clamp(26px, 2.6vw, 36px);
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  margin: 0 0 14px;
+}
+.overview p {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--body);
+}
+.overview-lede {
+  max-width: 560px;
+}
+.overview-points {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 32px;
+  margin: 48px 0;
+}
+.overview h3 {
+  font-size: 16px;
+  font-weight: 500;
+  margin: 0 0 8px;
+}
+.overview-links a {
+  color: var(--accent);
+}
+.overview-links a:hover {
+  text-decoration: underline;
+}
+.overview-links a:focus-visible {
+  outline-offset: 3px;
+}
+/* The header is transparent over the animation; over the text it needs a fill. */
+html[data-past-story] .site-navigation {
+  background: var(--bg);
+}
+@media (max-width: 1000px) {
+  .overview-points {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 700px) {
+  .overview {
+    padding: 64px 8vw 56px;
+  }
+  .overview-points {
+    grid-template-columns: 1fr;
+    gap: 24px;
+    margin: 32px 0;
+  }
+}

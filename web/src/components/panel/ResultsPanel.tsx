@@ -32,7 +32,9 @@ import {
 } from "../../lib/densityField";
 import { ConvergencePlot } from "./ConvergencePlot";
 import { DensityThresholdControl } from "./DensityThresholdControl";
+import { DeformScaleControl } from "./DeformScaleControl";
 import { LegendRangeControls } from "./LegendRangeControls";
+import { RefinementResult } from "./RefinementStudy";
 import styles from "./Panel.module.css";
 
 // The density-field result view (KOF-233): the threshold slider that filters the
@@ -214,6 +216,9 @@ function fieldSlug(field: ResultType): string {
 function AddResultPlot() {
   const hasStatic = useModelStore((s) => s.result !== null);
   const hasDensity = useModelStore((s) => s.densityResult !== null);
+  const hasRefinement = useModelStore(
+    (s) => s.refinementStudy?.status === "done",
+  );
   const addResultPlot = useModelStore((s) => s.addResultPlot);
   return (
     <div className={styles.addChooser}>
@@ -244,6 +249,19 @@ function AddResultPlot() {
           {hasDensity
             ? "Topology optimization · material layout"
             : "Run a topology optimization first"}
+        </span>
+      </button>
+      <button
+        className={styles.addChoice}
+        data-testid="add-plot-refinement"
+        disabled={!hasRefinement}
+        onClick={() => addResultPlot("refinement", null)}
+      >
+        <span className={styles.addChoiceLabel}>Mesh refinement</span>
+        <span className={styles.addChoiceHint}>
+          {hasRefinement
+            ? "Mesh refinement study · convergence"
+            : "Run a mesh refinement study first"}
         </span>
       </button>
     </div>
@@ -493,11 +511,10 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
   const densityResult = useModelStore((s) => s.densityResult);
   const setPlotField = useModelStore((s) => s.setPlotField);
   const deleteResultPlot = useModelStore((s) => s.deleteResultPlot);
-  const deformScale = useModelStore((s) => s.deformScale);
-  const setDeformScale = useModelStore((s) => s.setDeformScale);
   const nodes = useModelStore((s) => s.nodes);
   const elements = useModelStore((s) => s.elements);
   const handCheck = useModelStore((s) => s.handCheck);
+  const refinementStudy = useModelStore((s) => s.refinementStudy);
 
   const footer = (
     <button
@@ -508,6 +525,21 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
       Delete plot
     </button>
   );
+
+  if (plot.source === "refinement")
+    return refinementStudy ? (
+      <div className={styles.panel}>
+        <div className={styles.tabContent}>
+          <RefinementResult run={refinementStudy} />
+          {footer}
+        </div>
+      </div>
+    ) : (
+      <Empty
+        text="No refinement study — run the mesh refinement study"
+        footer={footer}
+      />
+    );
 
   if (plot.source === "density")
     return densityResult ? (
@@ -548,32 +580,7 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
           ))}
         </select>
 
-        <div className={styles.sectionLabel}>Deformation scale</div>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            marginBottom: 12,
-          }}
-        >
-          <input
-            type="range"
-            min={0}
-            max={3}
-            step={0.05}
-            value={deformScale}
-            onChange={(e) => setDeformScale(parseFloat(e.target.value))}
-            style={{ flex: 1 }}
-            aria-label="Deformation scale"
-          />
-          <span
-            className={styles.statVal}
-            style={{ minWidth: 38, textAlign: "right" }}
-          >
-            {deformScale.toFixed(2)}×
-          </span>
-        </div>
+        <DeformScaleControl />
 
         {stats && (
           <>
