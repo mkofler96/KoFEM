@@ -38,6 +38,20 @@ const analysisPanels = Object.values(analysisStages).map((stage, index) => {
 });
 analysisCopy.replaceChildren(...analysisPanels.map(({ panel }) => panel));
 const progressBar = document.querySelector(".progress i");
+const stage = document.querySelector(".stage");
+// The animation spans the scroll story; the overview below it scrolls normally.
+const storyEnd = () =>
+  Math.max(1, track.offsetHeight - scrollViewport.clientHeight);
+// Past the story, the fixed stage moves up with the page so the overview is
+// not drawn under the bracket. This runs without the bracket having loaded.
+function placeStage() {
+  const past = Math.max(0, scrollViewport.scrollTop - storyEnd());
+  stage.style.translate = past > 0 ? `0 ${-past}px` : "";
+  document.documentElement.toggleAttribute("data-past-story", past > 0);
+}
+scrollViewport.addEventListener("scroll", placeStage, { passive: true });
+window.addEventListener("resize", placeStage);
+placeStage();
 const reduced = matchMedia("(prefers-reduced-motion: reduce)");
 const mobile = matchMedia("(max-width:700px)");
 const clamp = (value) => Math.max(0, Math.min(1, value));
@@ -702,10 +716,7 @@ async function start() {
   }
   function update() {
     raf = 0;
-    const distance = scrollViewport.scrollHeight - scrollViewport.clientHeight;
-    const overallProgress = clamp(
-      scrollViewport.scrollTop / Math.max(1, distance),
-    );
+    const overallProgress = clamp(scrollViewport.scrollTop / storyEnd());
     const progress = clamp(overallProgress / 0.7),
       relax = curve((overallProgress - 0.7) / 0.06),
       topologyProgress = clamp((overallProgress - 0.76) / 0.24);

@@ -49,9 +49,11 @@ test("bracket turns 90 degrees during transfer and a full turn during optimizati
   const scrollTo = async (amount: number) => {
     await page.locator("#scroll-viewport").evaluate((element, value) => {
       const viewport = element as HTMLElement;
+      const story = viewport.querySelector<HTMLElement>(".scroll-story");
+      if (!story) throw new Error("The landing page has no scroll story");
       viewport.style.scrollBehavior = "auto";
-      viewport.scrollTop =
-        value * (viewport.scrollHeight - viewport.clientHeight);
+      // The animation spans the story; the overview below it scrolls normally.
+      viewport.scrollTop = value * (story.offsetHeight - viewport.clientHeight);
     }, amount);
     await expect
       .poll(async () => Number(await scene.getAttribute("data-progress")))
@@ -128,6 +130,77 @@ test("bracket turns 90 degrees during transfer and a full turn during optimizati
   await expect(scene).toHaveAttribute("data-front-lift-degrees", "0");
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
   expect(errors).toEqual([]);
+});
+
+const OVERVIEW = "Online FEM without installing anything";
+
+test.describe("without JavaScript", () => {
+  test.use({ javaScriptEnabled: false });
+
+  test("the served homepage says what KoFEM does and links into the site", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const overview = page.getByRole("region", { name: OVERVIEW });
+    await expect(
+      overview.getByRole("heading", { level: 2, name: OVERVIEW }),
+    ).toBeAttached();
+    await expect(overview).toContainText(
+      "finite element analysis in the browser",
+    );
+    await expect(overview.getByRole("heading", { level: 3 })).toHaveText([
+      "Import STEP and IGES",
+      "Solve on your device",
+      "Shells and mixed models",
+      "Topology optimization",
+    ]);
+    const links = {
+      "benchmarks with known answers": "/examples/",
+      "theory guide": "/theory/",
+      "open the solver": "/app/",
+    };
+    for (const [name, href] of Object.entries(links))
+      await expect(
+        overview.getByRole("link", { name, exact: true }),
+      ).toHaveAttribute("href", href);
+  });
+});
+
+test("scrolling past the animation lifts the bracket away and shows the overview", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const scene = page.locator("#scene");
+  await expect(scene).toHaveAttribute("data-loaded", "true");
+  await page.locator("#scroll-viewport").evaluate((element) => {
+    const viewport = element as HTMLElement;
+    viewport.style.scrollBehavior = "auto";
+    viewport.scrollTop = viewport.scrollHeight;
+  });
+  const overview = page.getByRole("region", { name: OVERVIEW });
+  await expect(overview.getByRole("heading", { level: 2 })).toBeInViewport();
+  await expect(scene).toHaveAttribute("data-progress", "1.000");
+  // The fixed bracket stage moves up with the page instead of covering the text.
+  await expect
+    .poll(async () => {
+      const stage = await page.locator(".stage").boundingBox();
+      const section = await overview.boundingBox();
+      if (!stage || !section) throw new Error("No layout box");
+      return stage.y + stage.height - section.y;
+    })
+    .toBeLessThanOrEqual(0);
+  const link = overview.getByRole("link", { name: "theory guide" });
+  await expect(link).toBeInViewport();
+  expect(
+    await link.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      const hit = document.elementFromPoint(
+        box.left + box.width / 2,
+        box.top + box.height / 2,
+      );
+      return hit === element || element.contains(hit);
+    }),
+  ).toBe(true);
 });
 
 const SITE_ORIGIN = "https://kofem.org";
