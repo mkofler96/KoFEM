@@ -21,8 +21,8 @@ import { workerLogLines } from "../../hooks/useWorkerLogs";
 import { lastShownError, watchShownErrors } from "./shownErrors";
 import styles from "./Feedback.module.css";
 
-// Top-bar entry for feedback: one "Report a problem" dialog for problems and
-// ideas alike (KOF-380). The user picks how to send it:
+// Top-bar "Report a problem" button. One click opens the dialog, for problems
+// and ideas alike (KOF-380). The user picks how to send it:
 //   - "Send an email" opens their email program addressed to REPORT_EMAIL with
 //     the diagnostics in the body. A report ZIP with the model (lib/bugReport,
 //     KOF-202) downloads only if they ask for it, to attach themselves.
@@ -66,41 +66,28 @@ function collectDiagnostics(): Diagnostics {
   );
 }
 
+// The top-bar "Report a problem" button: one click opens the dialog. (The
+// component keeps its old name so TopBar.tsx needs no change.)
 export function FeedbackMenu() {
-  const [menuOpen, setMenuOpen] = useState(false);
   // The diagnostics of an open report, taken when the user chose to report:
   // the state they are about to describe.
   const [report, setReport] = useState<Diagnostics | null>(null);
-  const wrapRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => watchShownErrors(), []);
 
-  useEffect(() => {
-    if (!menuOpen) return undefined;
-    function onPointerDown(e: PointerEvent) {
-      if (!wrapRef.current?.contains(e.target as Node)) setMenuOpen(false);
-    }
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") setMenuOpen(false);
-    }
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [menuOpen]);
-
   return (
-    <div className={styles.wrap} ref={wrapRef}>
+    <div className={styles.wrap}>
       <button
+        type="button"
         className={styles.trigger}
-        aria-label="Feedback"
-        aria-haspopup="menu"
-        aria-expanded={menuOpen}
+        aria-label="Report a problem"
+        aria-haspopup="dialog"
         title="Report a problem or an idea"
         data-testid="feedback-button"
-        onClick={() => setMenuOpen((open) => !open)}
+        onClick={() => {
+          setReport(collectDiagnostics());
+          track("feedback_report_opened", {});
+        }}
       >
         <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
           <path
@@ -110,33 +97,8 @@ export function FeedbackMenu() {
             strokeLinejoin="round"
           />
         </svg>
-        <span className={styles.triggerLabel}>Feedback</span>
+        <span className={styles.triggerLabel}>Report a problem</span>
       </button>
-
-      {menuOpen && (
-        <div
-          className={styles.menu}
-          role="menu"
-          aria-label="Feedback"
-          data-testid="feedback-menu"
-        >
-          <button
-            className={styles.item}
-            role="menuitem"
-            data-testid="feedback-report"
-            onClick={() => {
-              setMenuOpen(false);
-              setReport(collectDiagnostics());
-              track("feedback_report_opened", {});
-            }}
-          >
-            Report a problem
-          </button>
-          <p className={styles.menuNote}>
-            Bugs and ideas, by email or on GitHub.
-          </p>
-        </div>
-      )}
 
       {report && (
         <ReportDialog diagnostics={report} onClose={() => setReport(null)} />

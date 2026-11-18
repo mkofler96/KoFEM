@@ -7,14 +7,14 @@ import { test, expect } from "./coverage";
 import { gotoApp } from "./fixtures/app";
 import { readZip } from "../src/lib/zip";
 
-// KOF-265: the top bar's Feedback entry leads to the GitHub issue forms. KoFEM
+// KOF-265: the top bar's report entry leads to the GitHub issue forms. KoFEM
 // sends nothing itself; a public report carries diagnostics only when the user
 // ticks them in, and never geometry, file names or results. github.com is
 // stubbed, so the test only inspects the URL the app opens. The diagnostics
 // builder is unit-tested in tests/unit/feedback.test.mjs.
 //
-// KOF-202, KOF-380: "Report a problem" is the one entry, for problems and
-// ideas alike. The user picks "Send an email", which opens the email program
+// KOF-202, KOF-380: the top bar's "Report a problem" button opens the dialog in
+// one click, for problems and ideas alike. The user picks "Send an email", which opens the email program
 // addressed to support@kofem.org with the diagnostics in the body, or "Open a
 // GitHub issue". In the email path a report ZIP (analysis, CAD file unless left
 // out, versions, log, last error) downloads only when asked for; the Load
@@ -59,9 +59,15 @@ function nodeCount(page: Page): Promise<number> {
   );
 }
 
+// The top bar's "Report a problem" button: one click opens the dialog.
+function reportButton(page: Page) {
+  return page
+    .getByRole("banner")
+    .getByRole("button", { name: "Report a problem" });
+}
+
 async function openReport(page: Page) {
-  await page.getByTestId("feedback-button").click();
-  await page.getByRole("menuitem", { name: /Report a problem/ }).click();
+  await reportButton(page).click();
   await expect(page.getByTestId("feedback-dialog")).toBeVisible();
 }
 
@@ -203,21 +209,37 @@ test("an error shown in the UI reaches the preview with names and coordinates re
   await expect(page.getByTestId("feedback-dialog")).toBeHidden();
 });
 
-test("the Feedback menu has one entry, and an idea opens the feature form with nothing else attached", async ({
+test("one click on Report a problem in the top bar opens the dialog, with no menu in between", async ({
+  page,
+}) => {
+  await gotoApp(page);
+  const banner = page.getByRole("banner");
+  await expect(banner.getByRole("button", { name: "Feedback" })).toHaveCount(0);
+  await expect(reportButton(page)).toHaveText("Report a problem");
+
+  await reportButton(page).click();
+  await expect(page.getByTestId("feedback-dialog")).toBeVisible();
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await expect(page.getByText("Suggest an improvement")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("feedback-dialog")).toBeHidden();
+});
+
+test("on a 320px phone the Report a problem button is on screen and opens the dialog", async ({
+  page,
+}) => {
+  await gotoApp(page);
+  await page.setViewportSize({ width: 320, height: 640 });
+  // The label may give way to the icon; the accessible name stays.
+  await expect(reportButton(page)).toBeInViewport({ ratio: 1 });
+  await openReport(page);
+});
+
+test("an idea opens the feature form with nothing else attached", async ({
   page,
 }) => {
   await stubGitHub(page);
   await gotoApp(page);
-  const button = page.getByRole("button", { name: "Feedback" });
-  await expect(button).toBeVisible();
-
-  await button.click();
-  await expect(page.getByTestId("feedback-menu")).toBeVisible();
-  await expect(page.getByRole("menuitem")).toHaveText(["Report a problem"]);
-  await expect(page.getByText("Suggest an improvement")).toHaveCount(0);
-  await page.keyboard.press("Escape");
-  await expect(page.getByTestId("feedback-menu")).toBeHidden();
-
   await openReport(page);
   await showGitHub(page);
   await page.getByRole("radio", { name: "An idea" }).check();

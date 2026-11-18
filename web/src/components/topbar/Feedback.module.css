@@ -1,8 +1,7 @@
-/* Top-bar Feedback entry: a quiet text button, its menu, and the report dialog
+/* Top-bar "Report a problem": a quiet text button and the dialog it opens
    (a choice of email or a public GitHub issue, then that path). */
 
 .wrap {
-  position: relative;
   display: flex;
   align-items: center;
 }
@@ -25,55 +24,9 @@
     color 100ms ease;
 }
 
-.trigger:hover,
-.trigger[aria-expanded="true"] {
+.trigger:hover {
   background: #f0f2f5;
   color: #0d1117;
-}
-
-/* ── Menu ──────────────────────────────────────────────────── */
-
-.menu {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  width: 220px;
-  padding: 6px;
-  background: #ffffff;
-  border: 1px solid #e2e5ea;
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(13, 17, 23, 0.12);
-  z-index: 30;
-}
-
-.item {
-  display: block;
-  width: 100%;
-  padding: 8px 10px;
-  border: none;
-  border-radius: 6px;
-  background: none;
-  color: #0d1117;
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  text-align: left;
-  text-decoration: none;
-  cursor: pointer;
-}
-
-.item:hover,
-.item:focus-visible {
-  background: #f0f2f5;
-  outline: none;
-}
-
-.menuNote {
-  margin: 4px 0 0;
-  padding: 8px 10px 4px;
-  border-top: 1px solid #eef0f4;
-  font-size: 11px;
-  color: #6b7280;
 }
 
 .text a {
@@ -299,15 +252,9 @@
   padding: 0;
 }
 
+/* On a phone the button shows its icon only; its aria-label keeps the name. */
 @media (max-width: 768px) {
   .triggerLabel {
     display: none;
-  }
-
-  /* The entry sits mid-bar on a phone; pin the menu to the screen edge. */
-  .menu {
-    position: fixed;
-    top: 50px;
-    right: 8px;
   }
 }
