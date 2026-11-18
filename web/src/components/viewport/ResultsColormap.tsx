@@ -157,7 +157,7 @@ export function ResultsColormap({
   if (!deformedSurface) return null;
 
   return (
-    <mesh onClick={onFacePick}>
+    <mesh name="result-surface" onClick={onFacePick}>
       <bufferGeometry>
         <bufferAttribute
           attach="attributes-position"

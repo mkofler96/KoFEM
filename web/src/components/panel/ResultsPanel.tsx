@@ -32,6 +32,7 @@ import {
 } from "../../lib/densityField";
 import { ConvergencePlot } from "./ConvergencePlot";
 import { DensityThresholdControl } from "./DensityThresholdControl";
+import { DeformScaleControl } from "./DeformScaleControl";
 import { LegendRangeControls } from "./LegendRangeControls";
 import { RefinementResult } from "./RefinementStudy";
 import styles from "./Panel.module.css";
@@ -510,8 +511,6 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
   const densityResult = useModelStore((s) => s.densityResult);
   const setPlotField = useModelStore((s) => s.setPlotField);
   const deleteResultPlot = useModelStore((s) => s.deleteResultPlot);
-  const deformScale = useModelStore((s) => s.deformScale);
-  const setDeformScale = useModelStore((s) => s.setDeformScale);
   const nodes = useModelStore((s) => s.nodes);
   const elements = useModelStore((s) => s.elements);
   const handCheck = useModelStore((s) => s.handCheck);
@@ -581,32 +580,7 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
           ))}
         </select>
 
-        <div className={styles.sectionLabel}>Deformation scale</div>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            marginBottom: 12,
-          }}
-        >
-          <input
-            type="range"
-            min={0}
-            max={3}
-            step={0.05}
-            value={deformScale}
-            onChange={(e) => setDeformScale(parseFloat(e.target.value))}
-            style={{ flex: 1 }}
-            aria-label="Deformation scale"
-          />
-          <span
-            className={styles.statVal}
-            style={{ minWidth: 38, textAlign: "right" }}
-          >
-            {deformScale.toFixed(2)}×
-          </span>
-        </div>
+        <DeformScaleControl />
 
         {stats && (
           <>

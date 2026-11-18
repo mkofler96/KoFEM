@@ -590,7 +590,7 @@ test("capture screenshots of all examples @capture", async ({ page }) => {
     await page.evaluate(() => {
       const store = (window as Window & { __kofemStore: typeof useModelStore })
         .__kofemStore;
-      store.getState().setDeformScale(0);
+      store.getState().setDeformScale({ mode: "manual", factor: 0 });
     });
     await settleViewport(page);
     await page.screenshot({

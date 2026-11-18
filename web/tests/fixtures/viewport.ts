@@ -93,6 +93,24 @@ export async function lookFrom(page: Page, direction: Point): Promise<void> {
 }
 
 /**
+ * The vertex positions (x, y, z, …, in mm) of the viewport's visible meshes
+ * named `name`, once it has settled — where the surface is drawn.
+ */
+export async function drawnPositions(
+  page: Page,
+  name: string,
+): Promise<number[]> {
+  await settleViewport(page);
+  return page.evaluate(
+    (target) =>
+      (window as unknown as ViewportWindow).__kofemViewport.drawnPositions(
+        target,
+      ),
+    name,
+  );
+}
+
+/**
  * How many line segments the viewport draws in its visible objects named
  * `name`, once it has settled — what an edge highlight shows on screen.
  */
