@@ -37,8 +37,11 @@ test("landing results stage → committed social image @capture", async ({
 
   await page.locator("#scroll-viewport").evaluate((element) => {
     const viewport = element as HTMLElement;
+    const story = viewport.querySelector<HTMLElement>(".scroll-story");
+    if (!story) throw new Error("The landing page has no scroll story");
     viewport.style.scrollBehavior = "auto";
-    viewport.scrollTop = 0.65 * (viewport.scrollHeight - viewport.clientHeight);
+    // The animation spans the story, not the overview below it.
+    viewport.scrollTop = 0.65 * (story.offsetHeight - viewport.clientHeight);
   });
   await expect
     .poll(async () => Number(await scene.getAttribute("data-progress")))
