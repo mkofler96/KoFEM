@@ -49,19 +49,13 @@ export function OrbitPivot() {
       return null;
     }
 
-    function endDrag() {
-      if (!drag) return;
-      const { pointerId } = drag;
-      drag = null;
-      if (element.hasPointerCapture(pointerId))
-        element.releasePointerCapture(pointerId);
-    }
-
     function onPointerDown(event: PointerEvent) {
       pointers.add(event.pointerId);
       // A second finger is a pinch or a pan: the orbit controls take it.
+      // The first finger keeps its capture, so its release still reaches
+      // this canvas and leaves `pointers`, wherever it lifts.
       if (pointers.size > 1) {
-        endDrag();
+        drag = null;
         return;
       }
       if (!orbit.enabled || event.button !== 0) return;
@@ -76,6 +70,7 @@ export function OrbitPivot() {
       // The drag goes on, and ends, wherever the cursor goes (KOF-404):
       // without capture the canvas sees no move or release outside it, so
       // the turn stopped at its edge and went on after a release outside.
+      // The browser releases the capture after the pointer is released.
       element.setPointerCapture(event.pointerId);
     }
 
@@ -102,7 +97,7 @@ export function OrbitPivot() {
 
     function onPointerUp(event: PointerEvent) {
       pointers.delete(event.pointerId);
-      if (drag?.pointerId === event.pointerId) endDrag();
+      if (drag?.pointerId === event.pointerId) drag = null;
     }
 
     // The browser drops the capture on its own, e.g. when the canvas leaves
@@ -124,7 +119,8 @@ export function OrbitPivot() {
       element.removeEventListener("pointerup", onPointerUp);
       element.removeEventListener("pointercancel", onPointerUp);
       element.removeEventListener("lostpointercapture", onLostPointerCapture);
-      endDrag();
+      if (drag && element.hasPointerCapture(drag.pointerId))
+        element.releasePointerCapture(drag.pointerId);
     };
   }, [camera, controls, gl, scene, invalidate]);
 

@@ -12,6 +12,7 @@ import {
   dragViewport,
   hoverViewport,
   projectPoint,
+  touchViewport,
   wheelViewportAt,
   type Point,
 } from "./fixtures/viewport";
@@ -173,6 +174,47 @@ test("releasing the button outside the viewport ends the drag", async ({
   );
 
   expectSamePixel(await screenOf(page, FAR_CORNER), corner);
+});
+
+test.describe("touch", () => {
+  test.use({ hasTouch: true });
+
+  // A second finger hands the gesture to the orbit controls. The first finger
+  // may then lift anywhere: outside the canvas too, and a one-finger drag
+  // afterwards still turns the view.
+  test("a one-finger drag turns the view after a two-finger gesture that ends outside the viewport", async ({
+    page,
+  }) => {
+    await openBox(page);
+    const canvas = await canvasBox(page);
+    const midY = canvas.y + canvas.height / 2;
+    const first = { id: 1, x: canvas.x + 30, y: midY };
+    const second = { id: 2, x: canvas.x + canvas.width - 30, y: midY };
+    const firstOutside = { ...first, x: canvas.x - 100 };
+    await touchViewport(page, [
+      { type: "start", fingers: [first] },
+      { type: "start", fingers: [first, second] },
+      { type: "move", fingers: [firstOutside, second] },
+      { type: "end", fingers: [second] },
+      { type: "end", fingers: [] },
+    ]);
+    const before = await screenOf(page, FAR_CORNER);
+
+    const finger = { id: 3, x: canvas.x + 30, y: midY + 40 };
+    await touchViewport(page, [
+      { type: "start", fingers: [finger] },
+      ...[1, 2, 3, 4, 5].map((i) => ({
+        type: "move" as const,
+        fingers: [{ ...finger, x: finger.x + 30 * i }],
+      })),
+      { type: "end", fingers: [] },
+    ]);
+
+    const after = await screenOf(page, FAR_CORNER);
+    expect(Math.hypot(after.x - before.x, after.y - before.y)).toBeGreaterThan(
+      20,
+    );
+  });
 });
 
 test("the mouse wheel zooms toward the point under the cursor", async ({

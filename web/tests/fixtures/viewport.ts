@@ -179,6 +179,35 @@ export async function hoverViewport(
   await settleViewport(page);
 }
 
+/** One finger on the screen: its id and where it is, in client pixels. */
+export type Finger = { id: number; x: number; y: number };
+
+/**
+ * Touch the page as a phone does: each frame is a touch event, `start`,
+ * `move` or `end`, and lists every finger still on the screen after it (for
+ * `end`, the fingers left). Waits for the view the touches left. Needs a
+ * page with touch (`test.use({ hasTouch: true })`).
+ */
+export async function touchViewport(
+  page: Page,
+  frames: { type: "start" | "move" | "end"; fingers: Finger[] }[],
+): Promise<void> {
+  await settleViewport(page);
+  const cdp = await page.context().newCDPSession(page);
+  const types = {
+    start: "touchStart",
+    move: "touchMove",
+    end: "touchEnd",
+  } as const;
+  for (const frame of frames)
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: types[frame.type],
+      touchPoints: frame.fingers,
+    });
+  await cdp.detach();
+  await settleViewport(page);
+}
+
 /**
  * Turn the mouse wheel by `deltaY` with the cursor at `at` (client pixels),
  * as a user zooms, and wait for the view the zoom left.
