@@ -7,7 +7,7 @@
 //
 //   - the geometry has the faces and bodies the splits should give;
 //   - every support, load and tie sits on whole CAD faces, the ones the recipe
-//     names;
+//     names, and every support and load carries the example's name;
 //   - the mesh has no hexahedra, and is the very mesh the node-side build makes;
 //   - the read-out, computed from the solved model by the recipe's probe, is the
 //     number the example publishes.
@@ -125,6 +125,9 @@ async function checkBuild(
   expect(snap.bcGroups).toHaveLength(recipe.supports.length);
   recipe.supports.forEach((support, i) => {
     const group = snap.bcGroups[i];
+    expect(group.name, "support named as on the example page").toBe(
+      support.name,
+    );
     expect(group.dofs, `support "${support.name}" DOFs`).toEqual(support.dofs);
     expect(group.value).toBe(support.value);
     const faces = groupFaces(snap, group.faces);
@@ -136,6 +139,7 @@ async function checkBuild(
   expect(snap.loadGroups).toHaveLength(recipe.loads.length);
   recipe.loads.forEach((load, i) => {
     const group = snap.loadGroups[i];
+    expect(group.name, "load named as on the example page").toBe(load.name);
     expect(group.kind, `load "${load.name}" kind`).toBe(load.kind);
     if (load.kind === "pressure") expect(group.totalForce).toBe(load.value);
     else if (load.kind === "force")

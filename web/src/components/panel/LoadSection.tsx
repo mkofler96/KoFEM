@@ -62,6 +62,7 @@ export function LoadSection({
     (s) => s.removeFaceFromLoadGroup,
   );
   const deleteLoadGroup = useModelStore((s) => s.deleteLoadGroup);
+  const renameLoadGroup = useModelStore((s) => s.renameLoadGroup);
   const updateLoadGroup = useModelStore((s) => s.updateLoadGroup);
   const {
     pickTargetGroupId,
@@ -297,6 +298,7 @@ export function LoadSection({
             }
             onDelete={() => deleteLoadGroup(group.id)}
             onRemoveFace={(faceId) => removeFaceFromLoadGroup(group.id, faceId)}
+            onRename={(name) => renameLoadGroup(group.id, name)}
           />
         ))}
     </>

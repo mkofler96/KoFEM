@@ -189,6 +189,12 @@ test("an example with a split re-meshes with its groups on the same CAD faces @p
   expect(padNodes(opened, "left")).toEqual(opened.groups[0].nodeIds);
   expect(padNodes(opened, "right")).toEqual(opened.groups[1].nodeIds);
 
+  // A support renamed in its panel keeps its new name through the re-mesh
+  // (KOF-339).
+  await page.locator('[data-testid^="tree-bc-"]').click();
+  await page.getByTestId("group-name").fill("Clamped pad");
+  await expect(page.getByTestId("panel-title")).toHaveText("Clamped pad");
+
   // Re-mesh finer, as a user would in the Mesh panel.
   await openTree(page, "mesh");
   await page.getByTestId("max-element-size").fill(String(REMESH));
@@ -206,8 +212,15 @@ test("an example with a split re-meshes with its groups on the same CAD faces @p
   expect(remeshed.remeshNotice, "both groups kept, none cleared").toBe(
     "Kept 2 support/load/tie groups on their CAD faces.",
   );
-  expect(remeshed.groups.map((g) => [g.name, g.cadFaceIds])).toEqual(
-    opened.groups.map((g) => [g.name, g.cadFaceIds]),
+  expect(remeshed.groups.map((g) => g.cadFaceIds)).toEqual(
+    opened.groups.map((g) => g.cadFaceIds),
+  );
+  expect(remeshed.groups.map((g) => g.name)).toEqual([
+    "Clamped pad",
+    "Right pad",
+  ]);
+  await expect(page.locator('[data-testid^="tree-bc-"]')).toHaveText(
+    "Clamped pad",
   );
   // Each group sits on its own piece of the bottom face, the whole piece and
   // nothing else, on the new mesh.
