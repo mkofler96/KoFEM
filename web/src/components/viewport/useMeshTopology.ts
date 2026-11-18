@@ -17,6 +17,7 @@ import {
 } from "../../lib/facePick";
 import type { BoundaryMeshTopo, Tri, Vec3 } from "../../lib/facePick";
 import { modelShellRim, type ShellRim } from "../../lib/shellRim";
+import { modelExtent } from "../../lib/deformScale";
 
 export type NodeMap = Map<number, { n: Node; i: number }>;
 
@@ -190,24 +191,7 @@ export function useMeshTopology(): MeshTopology {
     [nodes],
   );
 
-  const modelSize = useMemo(() => {
-    if (nodes.length === 0) return 1;
-    let minX = Infinity,
-      maxX = -Infinity,
-      minY = Infinity,
-      maxY = -Infinity,
-      minZ = Infinity,
-      maxZ = -Infinity;
-    for (const n of nodes) {
-      if (n.x < minX) minX = n.x;
-      if (n.x > maxX) maxX = n.x;
-      if (n.y < minY) minY = n.y;
-      if (n.y > maxY) maxY = n.y;
-      if (n.z < minZ) minZ = n.z;
-      if (n.z > maxZ) maxZ = n.z;
-    }
-    return Math.max(maxX - minX, maxY - minY, maxZ - minZ, 1e-9);
-  }, [nodes]);
+  const modelSize = useMemo(() => modelExtent(nodes), [nodes]);
 
   // Bodies hidden via the Bodies panel eye toggle (#353) are dropped from the
   // mesh here, so the eye hides a body in the FEM surface / volume views just

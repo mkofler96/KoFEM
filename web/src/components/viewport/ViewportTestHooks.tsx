@@ -3,7 +3,7 @@
 
 import { useEffect } from "react";
 import { addTail, useThree } from "@react-three/fiber";
-import { Vector3 } from "three";
+import { Mesh, Vector3, type BufferGeometry } from "three";
 import { applyPendingSceneCommits } from "./pickingEvents";
 
 export interface ViewportHooks {
@@ -23,6 +23,9 @@ export interface ViewportHooks {
   // How many line segments the visible objects named `name` draw, read from
   // their `userData.segments` — an edge highlight's polyline (EdgeOverlay).
   drawnSegments(name: string): number;
+  // The vertex positions (x, y, z, …) of the visible meshes named `name`, in
+  // model space — where the result surface is drawn (ResultsColormap).
+  drawnPositions(name: string): number[];
 }
 
 // Exposes the viewport camera to Playwright as window.__kofemViewport, beside
@@ -88,6 +91,27 @@ export function ViewportTestHooks() {
           total += segments;
         });
         return total;
+      },
+      drawnPositions(name) {
+        const out: number[] = [];
+        let found = false;
+        scene.traverseVisible((object) => {
+          if (object.name !== name || !(object instanceof Mesh)) return;
+          found = true;
+          object.updateMatrixWorld();
+          const position = (object.geometry as BufferGeometry).getAttribute(
+            "position",
+          );
+          const vertex = new Vector3();
+          for (let i = 0; i < position.count; i++) {
+            vertex
+              .fromBufferAttribute(position, i)
+              .applyMatrix4(object.matrixWorld);
+            out.push(vertex.x, vertex.y, vertex.z);
+          }
+        });
+        if (!found) throw new Error(`drawnPositions: no visible mesh ${name}`);
+        return out;
       },
     };
     const host = window as Window & { __kofemViewport?: ViewportHooks };

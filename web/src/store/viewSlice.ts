@@ -6,6 +6,11 @@
 
 import type { AppMode, ModelState, SliceCreator } from "./modelStore";
 import { showPlot, studyOf, type Study, type StudyKind } from "./studySlice";
+import {
+  AUTO_DEFORM_SCALE,
+  checkDeformFactor,
+  type DeformScale,
+} from "../lib/deformScale";
 
 // How load glyphs are drawn in the viewport. "resultant" shows one arrow per
 // force/pressure group at the centroid of its loaded nodes (the statically
@@ -174,9 +179,10 @@ export interface ViewSlice {
   // Whether load glyphs are drawn as a single resultant per group or as one
   // arrow per loaded node (issue #196). A transient view setting, not persisted.
   loadDisplay: LoadDisplay;
-  // Deformation magnification applied to the result on top of the automatic
-  // fit-to-view scale. 1 = the default visible deformation, 0 = undeformed.
-  deformScale: number;
+  // Deformation scale of the result view (KOF-383): the automatic factor, or a
+  // manual one (1 = true scale, 0 = undeformed). Transient, not persisted. The
+  // factor drawn is appliedDeformFactor (lib/deformScale, useDeformFactor).
+  deformScale: DeformScale;
   fitViewTrigger: number;
   // Sidebar layout (issue #339): collapsed on small screens so the viewport
   // gets the full width, resizable on desktop.
@@ -209,7 +215,7 @@ export interface ViewSlice {
   setViewRepr(v: ViewRepr): void;
   setShowUndeformedOverlay(v: boolean): void;
   setLoadDisplay(v: LoadDisplay): void;
-  setDeformScale(v: number): void;
+  setDeformScale(v: DeformScale): void;
   triggerFitView(): void;
   setSidebarOpen(v: boolean): void;
   setSidebarWidth(v: number): void;
@@ -229,7 +235,7 @@ export const createViewSlice: SliceCreator<ViewSlice> = (set) => ({
   meshRepr: "surface",
   showUndeformedOverlay: true,
   loadDisplay: "resultant",
-  deformScale: 1,
+  deformScale: AUTO_DEFORM_SCALE,
   fitViewTrigger: 0,
   sidebarOpen: !window.matchMedia(SMALL_SCREEN_QUERY).matches,
   sidebarWidth: initialSidebarWidth(),
@@ -255,6 +261,7 @@ export const createViewSlice: SliceCreator<ViewSlice> = (set) => ({
     }),
   setDeformScale: (v) =>
     set((s) => {
+      if (v.mode === "manual") checkDeformFactor(v.factor);
       s.deformScale = v;
     }),
   triggerFitView: () =>
