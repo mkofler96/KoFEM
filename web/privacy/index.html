@@ -307,8 +307,8 @@
           and sent only if you accept.
         </li>
         <li>
-          That a feedback form was opened from the solver — not what you write
-          in it.
+          That the feedback dialog was opened from the solver, and whether you
+          chose email or GitHub — not what you write.
         </li>
         <li>
           Approximate location (country / region), derived by Google from your
@@ -344,31 +344,35 @@
 
       <h2 id="feedback">Feedback and bug reports</h2>
       <p>
-        <em>Report a problem</em> in the solver's <em>Feedback</em> menu saves a
-        report file to your computer and opens your email program addressed to
-        <a href="mailto:support@kofem.org">support@kofem.org</a>. You attach the
-        file and send it yourself. KoFEM sends nothing.
+        <em>Report a problem</em> in the solver's <em>Feedback</em> menu is for
+        bugs and ideas alike. You choose how to send it. KoFEM sends nothing
+        itself.
       </p>
       <p>
-        The report contains your analysis (settings, supports, loads, mesh and
-        results), your CAD file, the KoFEM and engine version, browser and OS,
-        the recent log and the last error message. Choose
-        <em>Without CAD</em> to leave the CAD file out.
+        <em>Send an email</em> opens your email program addressed to
+        <a href="mailto:support@kofem.org">support@kofem.org</a>, with
+        diagnostics in the text: the KoFEM and engine version, browser and OS,
+        WebAssembly and WebGL support, model size as counts, the current step,
+        and the last error message with names, file names and coordinates
+        removed. You can edit them before you send the email yourself.
       </p>
       <p>
-        You can instead open a public
+        If you want, you can also download a report file and attach it. It
+        contains your analysis (settings, supports, loads, mesh and results),
+        your CAD file, the KoFEM and engine version, browser and OS, the recent
+        log and the last error message. Choose <em>Without CAD</em> to leave the
+        CAD file out. Nothing downloads unless you ask.
+      </p>
+      <p>
+        <em>Open a GitHub issue</em> opens a public
         <a
           href="https://github.com/mkofler96/KoFEM/issues"
           rel="noopener"
           target="_blank"
           >GitHub issue</a
         >
-        from the same dialog, and suggestions always go there. A GitHub issue
-        never includes your model. Diagnostics are off unless you tick them, and
-        you see them first: the KoFEM and engine version, browser and OS,
-        WebAssembly and WebGL support, model size as counts, the current step,
-        and the last error message with names, file names and coordinates
-        removed.
+        form instead. A GitHub issue never includes your model. Diagnostics are
+        off unless you tick them, and you see them first.
       </p>
 
       <h2>Other storage</h2>

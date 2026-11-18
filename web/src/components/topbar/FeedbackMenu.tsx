@@ -7,29 +7,30 @@ import { APP_VERSION } from "../../lib/version";
 import { ENGINE_ID } from "../../lib/engineId";
 import { track } from "../../lib/analytics";
 import {
+  REPORT_EMAIL,
   buildDiagnostics,
   feedbackIssueUrl,
   formatDiagnostics,
+  reportMailtoUrl,
   type Diagnostics,
+  type FeedbackKind,
   type WebGlSupport,
 } from "../../lib/feedback";
-import {
-  REPORT_EMAIL,
-  buildReport,
-  reportFileName,
-  reportMailtoUrl,
-} from "../../lib/bugReport";
+import { buildReport, reportFileName } from "../../lib/bugReport";
 import { workerLogLines } from "../../hooks/useWorkerLogs";
 import { lastShownError, watchShownErrors } from "./shownErrors";
 import styles from "./Feedback.module.css";
 
-// Top-bar entry for feedback. "Report a problem" saves a report ZIP
-// (lib/bugReport) and opens the user's email program to send it to
-// REPORT_EMAIL (KOF-202); a public GitHub issue stays available from the same
-// dialog. "Suggest an improvement" opens the GitHub form. No path sends
-// anything from KoFEM: the user sends the email or submits the issue.
-// rel="noreferrer" keeps the app URL (which may name a gallery example) out of
-// GitHub's referrer as well.
+// Top-bar entry for feedback: one "Report a problem" dialog for problems and
+// ideas alike (KOF-380). The user picks how to send it:
+//   - "Send an email" opens their email program addressed to REPORT_EMAIL with
+//     the diagnostics in the body. A report ZIP with the model (lib/bugReport,
+//     KOF-202) downloads only if they ask for it, to attach themselves.
+//   - "Open a GitHub issue" opens the bug or feature form, with diagnostics
+//     only when they tick them in.
+// No path sends anything from KoFEM: the user sends the email or submits the
+// issue. rel="noreferrer" keeps the app URL (which may name a gallery example)
+// out of GitHub's referrer as well.
 
 let webGl: WebGlSupport | null = null;
 function webGlSupport(): WebGlSupport {
@@ -97,7 +98,7 @@ export function FeedbackMenu() {
         aria-label="Feedback"
         aria-haspopup="menu"
         aria-expanded={menuOpen}
-        title="Report a problem or suggest an improvement"
+        title="Report a problem or an idea"
         data-testid="feedback-button"
         onClick={() => setMenuOpen((open) => !open)}
       >
@@ -131,22 +132,8 @@ export function FeedbackMenu() {
           >
             Report a problem
           </button>
-          <a
-            className={styles.item}
-            role="menuitem"
-            data-testid="feedback-suggest"
-            href={feedbackIssueUrl("improvement", null)}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => {
-              setMenuOpen(false);
-              track("feedback_suggestion_opened", {});
-            }}
-          >
-            Suggest an improvement
-          </a>
           <p className={styles.menuNote}>
-            Problems go by email, suggestions to a public GitHub issue.
+            Bugs and ideas, by email or on GitHub.
           </p>
         </div>
       )}
@@ -158,10 +145,13 @@ export function FeedbackMenu() {
   );
 }
 
-type ReportState =
-  | { phase: "choose"; error: string | null }
+// The dialog's steps: the choice, then the email path or the GitHub path.
+type Step = "choose" | "email" | "github";
+
+type ZipState =
+  | { phase: "idle"; error: string | null }
   | { phase: "saving" }
-  | { phase: "saved"; fileName: string; mailto: string; withCad: boolean };
+  | { phase: "saved"; fileName: string };
 
 function downloadBytes(bytes: Uint8Array, fileName: string) {
   const url = URL.createObjectURL(
@@ -181,7 +171,7 @@ function openMail(mailto: string) {
   anchor.click();
 }
 
-async function saveReport(withCad: boolean, diagnostics: Diagnostics) {
+async function downloadReport(withCad: boolean, diagnostics: Diagnostics) {
   const state = useModelStore.getState();
   if (withCad && state.stepBytes === null)
     throw new Error("there is no CAD file to include");
@@ -198,10 +188,8 @@ async function saveReport(withCad: boolean, diagnostics: Diagnostics) {
     created,
   });
   const fileName = reportFileName(state.modelName, created);
-  const mailto = reportMailtoUrl(fileName, diagnostics.appVersion);
   downloadBytes(zip, fileName);
-  openMail(mailto);
-  return { fileName, mailto };
+  return fileName;
 }
 
 function ReportDialog({
@@ -212,15 +200,8 @@ function ReportDialog({
   onClose: () => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement | null>(null);
-  const hasCad = useModelStore((s) => s.stepBytes !== null);
-  const [state, setState] = useState<ReportState>({
-    phase: "choose",
-    error: null,
-  });
-  // Opt-in: a GitHub report is a public issue, so diagnostics go in only when
-  // the user ticks the box after reading them.
-  const [include, setInclude] = useState(false);
-  const url = feedbackIssueUrl("problem", include ? diagnostics : null);
+  const [step, setStep] = useState<Step>("choose");
+  const mailto = reportMailtoUrl(diagnostics);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -229,20 +210,8 @@ function ReportDialog({
     if (!dialog.open) dialog.showModal();
   }, []);
 
-  function save(withCad: boolean) {
-    setState({ phase: "saving" });
-    saveReport(withCad, diagnostics).then(
-      ({ fileName, mailto }) =>
-        setState({ phase: "saved", fileName, mailto, withCad }),
-      (err: unknown) =>
-        setState({
-          phase: "choose",
-          error: `Could not save the report: ${(err as Error).message}`,
-        }),
-    );
-  }
-
   const close = () => dialogRef.current?.close();
+  const back = () => setStep("choose");
 
   return (
     <dialog
@@ -262,58 +231,42 @@ function ReportDialog({
           Report a problem
         </h2>
 
-        {state.phase === "saved" ? (
-          <div data-testid="report-saved">
-            <p className={styles.text}>
-              Attach <strong>{state.fileName}</strong> from your downloads to
-              the email and send it.
-            </p>
-            <p className={styles.text}>
-              Email did not open? Write to{" "}
-              <a href={state.mailto} data-testid="report-mailto">
-                {REPORT_EMAIL}
-              </a>
-              .
-            </p>
-            <div className={styles.actions}>
-              <button type="button" className={styles.primary} onClick={close}>
-                Done
-              </button>
-            </div>
-          </div>
-        ) : (
+        {step === "choose" && (
           <>
             <p className={styles.text}>
-              Save a report and email it to <strong>{REPORT_EMAIL}</strong>.
-              KoFEM sends nothing itself.{" "}
+              A bug or an idea: tell us either way. KoFEM sends nothing itself.{" "}
               <a href="/privacy/#feedback" target="_blank" rel="noopener">
                 Privacy
               </a>
             </p>
-            <p className={styles.listTitle}>The report contains</p>
-            <ul className={styles.contents} data-testid="report-contents">
-              <li>
-                Your analysis: settings, supports, loads, mesh and results
-              </li>
-              <li>
-                {hasCad
-                  ? "Your CAD file — choose Without CAD for a confidential model"
-                  : "No CAD file: this analysis has none loaded"}
-              </li>
-              <li>
-                App and engine versions, browser, the recent log and the last
-                error shown
-              </li>
-            </ul>
-            {state.phase === "choose" && state.error && (
-              <p
-                className={styles.error}
-                role="alert"
-                data-testid="report-error"
+            <div className={styles.choices}>
+              <button
+                type="button"
+                className={styles.choice}
+                data-testid="report-email"
+                onClick={() => {
+                  openMail(mailto);
+                  setStep("email");
+                  track("feedback_email_opened", {});
+                }}
               >
-                {state.error}
-              </p>
-            )}
+                <span className={styles.choiceTitle}>Send an email</span>
+                <span className={styles.choiceText}>
+                  Private, to {REPORT_EMAIL}. No account needed.
+                </span>
+              </button>
+              <button
+                type="button"
+                className={styles.choice}
+                data-testid="report-github"
+                onClick={() => setStep("github")}
+              >
+                <span className={styles.choiceTitle}>Open a GitHub issue</span>
+                <span className={styles.choiceText}>
+                  Public. Needs a GitHub account.
+                </span>
+              </button>
+            </div>
             <div className={styles.actions}>
               <button
                 type="button"
@@ -322,65 +275,220 @@ function ReportDialog({
               >
                 Cancel
               </button>
-              {hasCad && (
-                <button
-                  type="button"
-                  className={styles.secondary}
-                  disabled={state.phase === "saving"}
-                  data-testid="report-without-cad"
-                  onClick={() => save(false)}
-                >
-                  Without CAD
-                </button>
-              )}
-              <button
-                type="button"
-                className={styles.primary}
-                disabled={state.phase === "saving"}
-                data-testid="report-save"
-                onClick={() => save(hasCad)}
-              >
-                {state.phase === "saving" ? "Saving…" : "Save and email"}
-              </button>
             </div>
-
-            <details className={styles.github} data-testid="feedback-github">
-              <summary>Report publicly on GitHub instead</summary>
-              <p className={styles.text}>
-                Opens a public GitHub issue without your model.
-              </p>
-              <label className={styles.optIn}>
-                <input
-                  type="checkbox"
-                  checked={include}
-                  onChange={(e) => setInclude(e.target.checked)}
-                  data-testid="feedback-include"
-                />
-                Include diagnostics (no geometry, file names or results)
-              </label>
-              <pre
-                className={`${styles.preview} ${include ? styles.previewOn : ""}`}
-                data-testid="feedback-diagnostics"
-                aria-label="Diagnostics preview"
-              >
-                {formatDiagnostics(diagnostics)}
-              </pre>
-              <div className={styles.actions}>
-                <a
-                  className={styles.secondary}
-                  href={url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  data-testid="feedback-continue"
-                  onClick={close}
-                >
-                  Continue on GitHub ↗
-                </a>
-              </div>
-            </details>
           </>
+        )}
+
+        {step === "email" && (
+          <EmailStep
+            diagnostics={diagnostics}
+            mailto={mailto}
+            onBack={back}
+            onDone={close}
+          />
+        )}
+
+        {step === "github" && (
+          <GitHubStep
+            diagnostics={diagnostics}
+            onBack={back}
+            onContinue={close}
+          />
         )}
       </div>
     </dialog>
+  );
+}
+
+function EmailStep({
+  diagnostics,
+  mailto,
+  onBack,
+  onDone,
+}: {
+  diagnostics: Diagnostics;
+  mailto: string;
+  onBack: () => void;
+  onDone: () => void;
+}) {
+  const hasCad = useModelStore((s) => s.stepBytes !== null);
+  const [zip, setZip] = useState<ZipState>({ phase: "idle", error: null });
+
+  function download(withCad: boolean) {
+    setZip({ phase: "saving" });
+    downloadReport(withCad, diagnostics).then(
+      (fileName) => setZip({ phase: "saved", fileName }),
+      (err: unknown) =>
+        setZip({
+          phase: "idle",
+          error: `Could not save the report: ${(err as Error).message}`,
+        }),
+    );
+  }
+
+  return (
+    <div data-testid="report-email-sent">
+      <p className={styles.text}>
+        Your email program opened with these diagnostics. Describe the problem
+        or idea and send it. No email? Write to{" "}
+        <a href={mailto} data-testid="report-mailto">
+          {REPORT_EMAIL}
+        </a>
+        .
+      </p>
+      <pre
+        className={`${styles.preview} ${styles.previewOn}`}
+        data-testid="email-diagnostics"
+        aria-label="Diagnostics in the email"
+      >
+        {formatDiagnostics(diagnostics)}
+      </pre>
+
+      <div className={styles.section}>
+        <p className={styles.listTitle}>Attach your model (optional)</p>
+        <p className={styles.text}>
+          Download a report to attach to the email. It contains:
+        </p>
+        <ul className={styles.contents} data-testid="report-contents">
+          <li>Your analysis: settings, supports, loads, mesh and results</li>
+          <li>
+            {hasCad
+              ? "Your CAD file — choose Without CAD for a confidential model"
+              : "No CAD file: this analysis has none loaded"}
+          </li>
+          <li>
+            App and engine versions, browser, the recent log and the last error
+            shown
+          </li>
+        </ul>
+        {zip.phase === "idle" && zip.error && (
+          <p className={styles.error} role="alert" data-testid="report-error">
+            {zip.error}
+          </p>
+        )}
+        {zip.phase === "saved" && (
+          <p className={styles.text} data-testid="report-saved">
+            Saved <strong>{zip.fileName}</strong> to your downloads. Attach it
+            to the email.
+          </p>
+        )}
+        <div className={styles.actions}>
+          {hasCad && (
+            <button
+              type="button"
+              className={styles.secondary}
+              disabled={zip.phase === "saving"}
+              data-testid="report-without-cad"
+              onClick={() => download(false)}
+            >
+              Without CAD
+            </button>
+          )}
+          <button
+            type="button"
+            className={styles.secondary}
+            disabled={zip.phase === "saving"}
+            data-testid="report-download"
+            onClick={() => download(hasCad)}
+          >
+            {zip.phase === "saving" ? "Saving…" : "Download report (ZIP)"}
+          </button>
+        </div>
+      </div>
+
+      <div className={`${styles.actions} ${styles.footer}`}>
+        <button type="button" className={styles.secondary} onClick={onBack}>
+          Back
+        </button>
+        <button type="button" className={styles.primary} onClick={onDone}>
+          Done
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function GitHubStep({
+  diagnostics,
+  onBack,
+  onContinue,
+}: {
+  diagnostics: Diagnostics;
+  onBack: () => void;
+  onContinue: () => void;
+}) {
+  const [kind, setKind] = useState<FeedbackKind>("problem");
+  // Opt-in: a GitHub report is a public issue, so diagnostics go in only when
+  // the user ticks the box after reading them. The feature form has no field
+  // for them.
+  const [include, setInclude] = useState(false);
+  const url = feedbackIssueUrl(
+    kind,
+    kind === "problem" && include ? diagnostics : null,
+  );
+
+  return (
+    <div data-testid="feedback-github">
+      <p className={styles.text}>A public issue, without your model.</p>
+      <fieldset className={styles.kind}>
+        <legend className={styles.listTitle}>What is it?</legend>
+        <label className={styles.optIn}>
+          <input
+            type="radio"
+            name="feedback-kind"
+            checked={kind === "problem"}
+            onChange={() => setKind("problem")}
+          />
+          A problem
+        </label>
+        <label className={styles.optIn}>
+          <input
+            type="radio"
+            name="feedback-kind"
+            checked={kind === "improvement"}
+            onChange={() => setKind("improvement")}
+          />
+          An idea
+        </label>
+      </fieldset>
+      {kind === "problem" && (
+        <>
+          <label className={styles.optIn}>
+            <input
+              type="checkbox"
+              checked={include}
+              onChange={(e) => setInclude(e.target.checked)}
+              data-testid="feedback-include"
+            />
+            Include diagnostics (no geometry, file names or results)
+          </label>
+          <pre
+            className={`${styles.preview} ${include ? styles.previewOn : ""}`}
+            data-testid="feedback-diagnostics"
+            aria-label="Diagnostics preview"
+          >
+            {formatDiagnostics(diagnostics)}
+          </pre>
+        </>
+      )}
+      <div className={`${styles.actions} ${styles.footer}`}>
+        <button type="button" className={styles.secondary} onClick={onBack}>
+          Back
+        </button>
+        <a
+          className={styles.primary}
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          data-testid="feedback-continue"
+          onClick={() => {
+            track("feedback_github_opened", {});
+            onContinue();
+          }}
+        >
+          Continue on GitHub ↗
+        </a>
+      </div>
+    </div>
   );
 }

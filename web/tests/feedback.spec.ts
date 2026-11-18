@@ -13,10 +13,14 @@ import { readZip } from "../src/lib/zip";
 // stubbed, so the test only inspects the URL the app opens. The diagnostics
 // builder is unit-tested in tests/unit/feedback.test.mjs.
 //
-// KOF-202: "Report a problem" saves a report ZIP (analysis, CAD file unless
-// left out, versions, log, last error) and opens the email program addressed
-// to support@kofem.org; the Load button opens the ZIP again. The ZIP format is
-// unit-tested in tests/integration/bug-report.test.mjs.
+// KOF-202, KOF-380: "Report a problem" is the one entry, for problems and
+// ideas alike. The user picks "Send an email", which opens the email program
+// addressed to support@kofem.org with the diagnostics in the body, or "Open a
+// GitHub issue". In the email path a report ZIP (analysis, CAD file unless left
+// out, versions, log, last error) downloads only when asked for; the Load
+// button opens it again. The ZIP format is unit-tested in
+// tests/integration/bug-report.test.mjs, the email link in
+// tests/unit/feedback.test.mjs.
 
 const TUBE = readFileSync(new URL("./fixtures/tube.stp", import.meta.url));
 // The tube, imported under a name that must not reach the report.
@@ -61,10 +65,16 @@ async function openReport(page: Page) {
   await expect(page.getByTestId("feedback-dialog")).toBeVisible();
 }
 
-// The public GitHub path is folded below the email report.
+// The public GitHub path, one of the dialog's two choices.
 async function showGitHub(page: Page) {
-  await page.getByText("Report publicly on GitHub instead").click();
+  await page.getByRole("button", { name: /Open a GitHub issue/ }).click();
   await expect(page.getByTestId("feedback-include")).toBeVisible();
+}
+
+// The email path: opens the email program at once.
+async function sendEmail(page: Page) {
+  await page.getByRole("button", { name: /Send an email/ }).click();
+  await expect(page.getByTestId("report-email-sent")).toBeVisible();
 }
 
 // Follow a link that opens in a new tab and return the URL it opened.
@@ -193,7 +203,7 @@ test("an error shown in the UI reaches the preview with names and coordinates re
   await expect(page.getByTestId("feedback-dialog")).toBeHidden();
 });
 
-test("Suggest an improvement opens the feature form with nothing else attached", async ({
+test("the Feedback menu has one entry, and an idea opens the feature form with nothing else attached", async ({
   page,
 }) => {
   await stubGitHub(page);
@@ -203,13 +213,19 @@ test("Suggest an improvement opens the feature form with nothing else attached",
 
   await button.click();
   await expect(page.getByTestId("feedback-menu")).toBeVisible();
+  await expect(page.getByRole("menuitem")).toHaveText(["Report a problem"]);
+  await expect(page.getByText("Suggest an improvement")).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("feedback-menu")).toBeHidden();
 
-  await button.click();
-  const url = await urlOpenedBy(page, "feedback-suggest");
+  await openReport(page);
+  await showGitHub(page);
+  await page.getByRole("radio", { name: "An idea" }).check();
+  // The feature form has no field for diagnostics.
+  await expect(page.getByTestId("feedback-include")).toBeHidden();
+  const url = await urlOpenedBy(page, "feedback-continue");
   expect(url.href).toBe(`${ISSUE_PAGE}?template=feature_request.yml`);
-  await expect(page.getByTestId("feedback-menu")).toBeHidden();
+  await expect(page.getByTestId("feedback-dialog")).toBeHidden();
 });
 
 // The mail link the app hands to the email program, recorded instead of
@@ -232,6 +248,13 @@ function mailtoOpened(page: Page): Promise<string[]> {
   );
 }
 
+// Every download the page starts, so a test can see that none started.
+function recordDownloads(page: Page): string[] {
+  const names: string[] = [];
+  page.on("download", (d) => names.push(d.suggestedFilename()));
+  return names;
+}
+
 async function saveReport(page: Page, testId: string) {
   const [download] = await Promise.all([
     page.waitForEvent("download"),
@@ -245,7 +268,40 @@ async function saveReport(page: Page, testId: string) {
   };
 }
 
-test("Report a problem saves a report with the CAD file, opens the email to support, and the report reopens", async ({
+test("Send an email opens the email program with the diagnostics and downloads nothing", async ({
+  page,
+}) => {
+  await gotoApp(page);
+  await recordMailto(page);
+  const downloads = recordDownloads(page);
+
+  await openReport(page);
+  await expect(
+    page.getByRole("button", { name: /Send an email/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /Open a GitHub issue/ }),
+  ).toBeVisible();
+  await sendEmail(page);
+
+  const mailto = await page.getByTestId("report-mailto").getAttribute("href");
+  expect(await mailtoOpened(page)).toEqual([mailto]);
+  const mail = new URL(mailto ?? "");
+  expect(mail.protocol).toBe("mailto:");
+  expect(mail.pathname).toBe("support@kofem.org");
+  const shown = (
+    await page.getByTestId("email-diagnostics").innerText()
+  ).trim();
+  expect(shown.split("\n").map((line) => line.split(":")[0])).toEqual(
+    LINE_LABELS,
+  );
+  expect(mail.searchParams.get("body")).toContain(shown);
+  expect(downloads).toEqual([]);
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page.getByTestId("feedback-dialog")).toBeHidden();
+});
+
+test("in the email path the report ZIP downloads on request, with or without the CAD file, and reopens", async ({
   page,
 }) => {
   await gotoApp(page);
@@ -260,13 +316,11 @@ test("Report a problem saves a report with the CAD file, opens the email to supp
   await recordMailto(page);
 
   await openReport(page);
-  await expect(page.getByTestId("feedback-dialog")).toContainText(
-    "support@kofem.org",
-  );
+  await sendEmail(page);
   await expect(page.getByTestId("report-contents")).toContainText(
     "Your CAD file",
   );
-  const report = await saveReport(page, "report-save");
+  const report = await saveReport(page, "report-download");
   expect(report.name).toMatch(/^kofem-report-(?:[\w-]+-)?\d{8}-\d{4}\.zip$/);
   expect(report.entries.map((e) => e.name)).toEqual([
     "report.json",
@@ -287,20 +341,11 @@ test("Report a problem saves a report with the CAD file, opens the email to supp
     cad: { file: "geometry.step", format: "step" },
   });
 
-  // The email program opens addressed to support, naming the file to attach.
-  const saved = page.getByTestId("report-saved");
-  await expect(saved).toContainText(report.name);
-  const mailto = await page.getByTestId("report-mailto").getAttribute("href");
-  expect(await mailtoOpened(page)).toEqual([mailto]);
-  const mail = new URL(mailto ?? "");
-  expect(mail.protocol).toBe("mailto:");
-  expect(mail.pathname).toBe("support@kofem.org");
-  expect(mail.searchParams.get("body")).toContain(report.name);
-  await page.getByRole("button", { name: "Done" }).click();
-  await expect(page.getByTestId("feedback-dialog")).toBeHidden();
+  // The dialog names the file to attach; the email opened only once, before.
+  await expect(page.getByTestId("report-saved")).toContainText(report.name);
+  expect(await mailtoOpened(page)).toHaveLength(1);
 
   // Without CAD: the same report minus the CAD file.
-  await openReport(page);
   const bare = await saveReport(page, "report-without-cad");
   expect(bare.entries.map((e) => e.name)).toEqual([
     "report.json",
@@ -390,7 +435,8 @@ test("a report carries only the current model's log, not one from before New ana
     new TextDecoder().decode(entries.find((e) => e.name === "log.txt")?.data);
 
   await openReport(page);
-  const meshed = await saveReport(page, "report-save");
+  await sendEmail(page);
+  const meshed = await saveReport(page, "report-download");
   expect(logOf(meshed.entries)).toContain("== mesh ==");
   await page.getByRole("button", { name: "Done" }).click();
 
@@ -401,6 +447,7 @@ test("a report carries only the current model's log, not one from before New ana
     {},
   );
   await openReport(page);
-  const fresh = await saveReport(page, "report-save");
+  await sendEmail(page);
+  const fresh = await saveReport(page, "report-download");
   expect(logOf(fresh.entries)).toBe("(no log)\n");
 });

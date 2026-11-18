@@ -1,5 +1,5 @@
 /* Top-bar Feedback entry: a quiet text button, its menu, and the report dialog
-   (email report first, the public GitHub issue folded below). */
+   (a choice of email or a public GitHub issue, then that path). */
 
 .wrap {
   position: relative;
@@ -228,25 +228,75 @@
   overflow-wrap: anywhere;
 }
 
-/* The public alternative, folded away below the email report. */
-.github {
+/* The two ways to send: email or a public GitHub issue. */
+.choices {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.choice {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  border: 1px solid #e2e5ea;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0d1117;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.choice:hover,
+.choice:focus-visible {
+  border-color: #1f5fd0;
+  background: #f5f8fe;
+  outline: none;
+}
+
+.choiceTitle {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.choiceText {
+  font-size: 12.5px;
+  color: #6b7280;
+  overflow-wrap: anywhere;
+}
+
+/* The optional report ZIP, set apart from the email it goes with. */
+.section {
+  padding-top: 12px;
+  border-top: 1px solid #eef0f4;
+}
+
+.section .text {
+  margin-bottom: 6px;
+}
+
+.footer {
   margin-top: 16px;
   padding-top: 12px;
   border-top: 1px solid #eef0f4;
 }
 
-.github summary {
-  font-size: 12.5px;
-  color: #6b7280;
-  cursor: pointer;
+.kind {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+  margin: 0 0 12px;
+  padding: 0;
+  border: none;
 }
 
-.github[open] summary {
-  margin-bottom: 10px;
-}
-
-.github .text {
-  margin-bottom: 10px;
+.kind legend {
+  float: left;
+  margin: 0;
+  padding: 0;
 }
 
 @media (max-width: 768px) {

@@ -5,8 +5,9 @@
 // report ZIP carries the analysis, the CAD file unless left out, the versions,
 // the log and the last error; it opens again to the same analysis and CAD
 // bytes; anything that is not a report KoFEM wrote is refused with a reason;
-// and the mail link goes to the report address with the file name in its
-// body. The dialog is exercised in the browser by tests/feedback.spec.ts.
+// and its file name carries the model and the time. The email link is
+// unit-tested in tests/unit/feedback.test.mjs; the dialog is exercised in the
+// browser by tests/feedback.spec.ts.
 
 import { beforeAll, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
@@ -40,12 +41,10 @@ globalThis.window ??= {
 };
 const {
   MAX_LOG_LINES,
-  REPORT_EMAIL,
   buildReport,
   formatReportLog,
   parseReport,
   reportFileName,
-  reportMailtoUrl,
 } = await import("../../src/lib/bugReport.ts");
 const { parseAnalysisFile, serializeAnalysis } =
   await import("../../src/lib/analysisFile.ts");
@@ -352,15 +351,11 @@ describe("problem report", () => {
   });
 });
 
-describe("mail", () => {
-  const fileName = reportFileName("Wall bracket", created);
-
-  test("the report address is support@kofem.org", () => {
-    expect(REPORT_EMAIL).toBe("support@kofem.org");
-  });
-
-  test("file name carries the model and local time", () => {
-    expect(fileName).toBe("kofem-report-Wall_bracket-20261110-2114.zip");
+describe("file name", () => {
+  test("it carries the model and local time", () => {
+    expect(reportFileName("Wall bracket", created)).toBe(
+      "kofem-report-Wall_bracket-20261110-2114.zip",
+    );
   });
 
   test("an unnamed model gets a plain name", () => {
@@ -368,30 +363,4 @@ describe("mail", () => {
       "kofem-report-20261110-2114.zip",
     );
   });
-
-  test("the mail link goes to the report address", () => {
-    const mailto = reportMailtoUrl(fileName, "v0.6.0");
-    const mail = new URL(mailto);
-    expect(mail.protocol).toBe("mailto:");
-    expect(mail.pathname).toBe("support@kofem.org");
-  });
-
-  test("subject names the version; body names the file to attach", () => {
-    const mailto = reportMailtoUrl(fileName, "v0.6.0");
-    const mail = new URL(mailto);
-    expect(decodeURIComponent(mail.searchParams.get("subject") ?? "")).toBe(
-      "KoFEM problem report (v0.6.0)",
-    );
-    expect(mailto).toContain(encodeURIComponent(fileName));
-    expect(mailto).not.toContain("+");
-  });
-
-  test.each(["", "support at kofem.org", "support@", "a@b"])(
-    'refuses to build a link to "%s"',
-    (bad) => {
-      expect(() => reportMailtoUrl(fileName, "v0.6.0", bad)).toThrow(
-        /not an email address/,
-      );
-    },
-  );
 });
