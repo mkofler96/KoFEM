@@ -1,0 +1,72 @@
+/* Top-bar site menu: the "K" button at the right end of the bar and its
+   popover of links back to the public site. */
+
+.wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.trigger {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #1f5fd0, #1750b3);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: box-shadow 100ms ease;
+}
+
+.trigger:hover,
+.trigger:focus-visible,
+.trigger[aria-expanded="true"] {
+  box-shadow: 0 0 0 3px rgba(31, 95, 208, 0.25);
+  outline: none;
+}
+
+/* Under the K button, flush with the bar's right edge: the button is the
+   last control, so the menu stays on screen at phone width too. */
+.menu {
+  position: absolute;
+  top: calc(100% + 9px);
+  right: 0;
+  width: 220px;
+  max-width: calc(100vw - 24px);
+  padding: 6px;
+  background: #ffffff;
+  border: 1px solid #e2e5ea;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(13, 17, 23, 0.12);
+  z-index: 30;
+}
+
+.item {
+  display: block;
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: #0d1117;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.item:hover,
+.item:focus-visible {
+  background: #f0f2f5;
+  outline: none;
+}
+
+/* "Back to <example>" heads the list, set apart from the site's pages. */
+.back {
+  margin-bottom: 4px;
+  border-bottom: 1px solid #eef0f4;
+  border-radius: 6px 6px 0 0;
+  color: #1f5fd0;
+}

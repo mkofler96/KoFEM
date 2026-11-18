@@ -21,6 +21,13 @@
   flex-shrink: 0;
 }
 
+.home {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+}
+
 .mark {
   width: 24px;
   height: 24px;
@@ -84,19 +91,6 @@
 .iconBtn:hover {
   background: #f0f2f5;
   color: #0d1117;
-}
-
-.avatar {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #1f5fd0, #1750b3);
-  color: #fff;
-  display: grid;
-  place-items: center;
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  font-size: 11px;
-  font-weight: 600;
 }
 
 /* Dev deployment marker (KOFEM_CHANNEL=dev). */

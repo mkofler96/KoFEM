@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
+import { SITE_PAGES } from "./src/lib/siteLinks.ts";
+
 // The light/dark switch, on pages that have both themes (the example pages).
 // Hidden until the page's script wires it up.
 const THEME_BUTTON = `<button type="button" class="site-theme" hidden aria-label="Switch to the dark theme">
@@ -14,8 +16,9 @@ export function siteHeader(current = "", { themeSwitch = false } = {}) {
   return `<header class="site-navigation">
       <a class="site-wordmark" href="/" aria-label="KoFEM home">KoFEM<span class="site-brand-dot">.</span></a>
       <nav class="site-links" aria-label="Main navigation">
-        <a href="/examples/"${active("examples")}>Examples</a>
-        <a href="/theory/"${active("theory")}>Theory</a>
+        ${SITE_PAGES.filter((page) => page.section !== "home")
+          .map((page) => `<a href="${page.href}"${active(page.section)}>${page.label}</a>`)
+          .join("\n        ")}
         <details class="site-more">
           <summary>More</summary>
           <div>
@@ -36,9 +39,7 @@ export function siteFooter() {
   return `<footer class="site-footer">
       <span>KoFEM — finite element analysis in your browser</span>
       <nav aria-label="Footer">
-        <a href="/">Home</a>
-        <a href="/examples/">Examples</a>
-        <a href="/theory/">Theory</a>
+        ${SITE_PAGES.map((page) => `<a href="${page.href}">${page.label}</a>`).join("\n        ")}
         <a href="/privacy/">Privacy</a>
         <a href="https://github.com/mkofler96/KoFEM">GitHub</a>
       </nav>
