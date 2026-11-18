@@ -471,6 +471,23 @@ function parseMetadata(xml: string): KofemFieldDataV1 {
         `Invalid analysis file: "${field}" must be an array, got ${typeof meta[field]}`,
       );
 
+  // A support or load is told apart by its name alone (KOF-339): the Name
+  // field refuses a blank one, and so does the file.
+  for (const [field, what] of [
+    ["bcGroups", "support"],
+    ["loadGroups", "load"],
+  ] as const)
+    for (const group of meta[field] as Record<string, unknown>[]) {
+      if (typeof group.name !== "string")
+        throw new Error(
+          `Invalid analysis file: ${what} ${String(group.id)} has no name`,
+        );
+      if (group.name.trim() === "")
+        throw new Error(
+          `Invalid analysis file: ${what} ${String(group.id)} has a blank name`,
+        );
+    }
+
   // Ties postdate the first analysis files, so absence is legitimate — but a
   // present entry of the wrong shape is not.
   if (meta.tieGroups !== undefined && !Array.isArray(meta.tieGroups))
