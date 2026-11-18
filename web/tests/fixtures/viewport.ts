@@ -163,6 +163,23 @@ export async function dragViewport(
 }
 
 /**
+ * Move the mouse from `from` to `to` (client pixels) in `steps` moves with no
+ * button pressed, as a user's cursor passes over the viewport, and wait for
+ * whatever view that leaves.
+ */
+export async function hoverViewport(
+  page: Page,
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  steps = 10,
+): Promise<void> {
+  await settleViewport(page);
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.move(to.x, to.y, { steps });
+  await settleViewport(page);
+}
+
+/**
  * Turn the mouse wheel by `deltaY` with the cursor at `at` (client pixels),
  * as a user zooms, and wait for the view the zoom left.
  */
