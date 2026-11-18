@@ -444,6 +444,7 @@ function dropAnalysis(s: ModelState): void {
   s.result = null;
   // The study's levels were meshes of the geometry that is gone.
   s.refinementStudy = null;
+  s.refinementLevelShown = null;
   // New or edited geometry renumbers the CAD faces the probes are on.
   s.probes = [];
   s.probing = false;
@@ -819,6 +820,8 @@ export const createGeometrySlice: SliceCreator<GeometrySlice> = (set) => ({
       s.surfaceLoads = rebuildSurfaceLoads(carried.loadGroups, elements, []);
       s.remeshNotice = remeshNotice(carried);
       s.result = null;
+      // A mesh of its own is no refinement level.
+      s.refinementLevelShown = null;
       // Probes on CAD faces follow them onto the new mesh (lib/resultProbe);
       // one on a triangle without a CAD face is gone with its mesh.
       s.probes = s.probes.filter((p) => p.cadFaceId !== undefined);

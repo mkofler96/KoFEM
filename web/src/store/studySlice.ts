@@ -8,7 +8,7 @@
 
 import type { ModelState, SliceCreator } from "./modelStore";
 import type { ActiveResult, ResultType } from "./resultsSlice";
-import type { StudyLevel } from "../lib/refinementStudy";
+import { studyFingerprint, type StudyLevel } from "../lib/refinementStudy";
 
 export type StudyKind = "static" | "topopt" | "refinement";
 
@@ -85,15 +85,62 @@ export function showPlot(s: ModelState, plot: ResultPlot): void {
 // A mesh refinement study (KOF-401): the levels solved so far and how the run
 // ended. It is a record of meshes that are gone once the model is re-meshed,
 // so it stays until the next study or a new geometry.
+// Everything that makes a level the model's mesh and result again: the mesh,
+// the supports and loads resolved on its nodes, and its solve. The arrays are
+// the ones the store held at that level, shared, not copied.
+export type RefinementLevelSnapshot = Pick<
+  ModelState,
+  | "nodes"
+  | "elements"
+  | "properties"
+  | "surfaceTriangles"
+  | "surfaceFaceIds"
+  | "meshSizes"
+  | "meshSuppressedIds"
+  | "bcGroups"
+  | "loadGroups"
+  | "tieGroups"
+  | "constraints"
+  | "loads"
+  | "surfaceLoads"
+  | "result"
+>;
+
 export interface RefinementStudyRun {
   status: "running" | "done" | "failed";
   // What the study is doing right now; null once it has ended.
   step: string | null;
+  // What the level being worked on is at, for its row; null once ended.
+  phase: "meshing" | "solving" | null;
+  // The max element size of each planned level, so the levels still to come
+  // can be listed while the study runs.
+  plannedSizes: number[];
   levels: StudyLevel[];
+  // One per solved level, in level order.
+  snapshots: RefinementLevelSnapshot[];
+  // The physical model the levels solved (studyFingerprint). A level can only
+  // be opened while the model still matches it.
+  fingerprint: string;
   // Why the study solved fewer levels than planned (the next mesh would be too
   // large for the browser), or null.
   stopNote: string | null;
   error: string | null;
+}
+
+// The centre shows the convergence chart in place of the 3D view: Results →
+// Mesh refinement is open, with no level of it opened.
+export function refinementChartVisible(s: ModelState): boolean {
+  if (
+    s.mode !== "results" ||
+    s.refinementStudy === null ||
+    s.refinementLevelShown !== null
+  )
+    return false;
+  const { target } = s.treeSelection;
+  if (target.type !== "item" || target.kind !== "plot") return false;
+  return s.resultPlots.some(
+    (p) => p.id === target.id && p.source === "refinement",
+  );
 }
 
 export interface StudySlice {
@@ -102,6 +149,8 @@ export interface StudySlice {
   resultPlots: ResultPlot[];
   nextPlotId: number;
   refinementStudy: RefinementStudyRun | null;
+  // The level the centre shows in 3D, or null for the convergence chart.
+  refinementLevelShown: number | null;
 
   addStudy(kind: StudyKind, staticId?: number): number;
   setStudyStatic(id: number, staticId: number): void;
@@ -113,6 +162,9 @@ export interface StudySlice {
   // Open the refinement study's result under Results, adding its plot when
   // there is none yet.
   showRefinementResult(): void;
+  // Show a level — make its mesh and solve the model's again — or, with null,
+  // the convergence chart.
+  showRefinementLevel(level: number | null): void;
 }
 
 export const createStudySlice: SliceCreator<StudySlice> = (set, get) => ({
@@ -121,6 +173,7 @@ export const createStudySlice: SliceCreator<StudySlice> = (set, get) => ({
   resultPlots: [],
   nextPlotId: 1,
   refinementStudy: null,
+  refinementLevelShown: null,
 
   addStudy: (kind, staticId) => {
     if (isDerivedKind(kind)) {
@@ -186,7 +239,43 @@ export const createStudySlice: SliceCreator<StudySlice> = (set, get) => ({
   setRefinementStudy: (run) =>
     set((s) => {
       s.refinementStudy = run;
+      s.refinementLevelShown = null;
     }),
+  showRefinementLevel: (level) => {
+    const run = get().refinementStudy;
+    if (run === null) throw new Error("There is no refinement study to show");
+    if (level === null) {
+      set((s) => {
+        s.refinementLevelShown = null;
+      });
+      return;
+    }
+    if (run.status === "running")
+      throw new Error("The study's levels open once it has finished");
+    const snapshot = run.snapshots[level];
+    if (snapshot === undefined)
+      throw new Error(
+        `The study has no level ${level + 1} — it solved ${run.snapshots.length}`,
+      );
+    if (studyFingerprint(get()) !== run.fingerprint)
+      throw new Error(
+        "The model changed since the study ran, so its levels are another model's. Run the study again.",
+      );
+    set((s) => {
+      Object.assign(s, snapshot);
+      s.refinementLevelShown = level;
+      // Probes on CAD faces read the level's mesh; others belonged to the old.
+      s.probes = s.probes.filter((p) => p.cadFaceId !== undefined);
+      s.probing = false;
+      s.remeshNotice = null;
+      s.densityResult = null;
+      s.selectedFace = null;
+      s.pendingFaces = [];
+      s.pickMode = null;
+      s.activeResult = "static";
+      s.legendRange = null;
+    });
+  },
   showRefinementResult: () =>
     set((s) => {
       const plot = ensurePlot(s, "refinement");

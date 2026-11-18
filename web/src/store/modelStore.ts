@@ -242,6 +242,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
         : [];
       s.nextPlotId = s.resultPlots.length + 1;
       s.refinementStudy = null;
+      s.refinementLevelShown = null;
       s.mode = a.mode;
       applyTreeSelection(s, modeSelection(a.mode, s));
       s.stepImportError = null;
@@ -316,6 +317,7 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.resultPlots = [];
       s.nextPlotId = 1;
       s.refinementStudy = null;
+      s.refinementLevelShown = null;
       s.nextMatId = 2;
       s.selectedFace = null;
       s.pendingFaces = [];

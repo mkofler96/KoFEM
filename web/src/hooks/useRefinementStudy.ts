@@ -12,7 +12,10 @@
 import { useMemo } from "react";
 import { useModelStore, type ModelState } from "../store/modelStore";
 import type { MeshSizes } from "../store/geometrySlice";
-import type { RefinementStudyRun } from "../store/studySlice";
+import type {
+  RefinementLevelSnapshot,
+  RefinementStudyRun,
+} from "../store/studySlice";
 import {
   levelSizes,
   checkLevelDisplacement,
@@ -118,6 +121,25 @@ function entryCount(s: StudySource): number {
 // about seven per vertex on a Netgen mesh.
 function solverNodes(vertices: number, elementOrder: number): number {
   return elementOrder === 2 ? 8 * vertices : vertices;
+}
+
+function levelSnapshot(s: ModelState): RefinementLevelSnapshot {
+  return {
+    nodes: s.nodes,
+    elements: s.elements,
+    properties: s.properties,
+    surfaceTriangles: s.surfaceTriangles,
+    surfaceFaceIds: s.surfaceFaceIds,
+    meshSizes: s.meshSizes,
+    meshSuppressedIds: s.meshSuppressedIds,
+    bcGroups: s.bcGroups,
+    loadGroups: s.loadGroups,
+    tieGroups: s.tieGroups,
+    constraints: s.constraints,
+    loads: s.loads,
+    surfaceLoads: s.surfaceLoads,
+    result: s.result,
+  };
 }
 
 function levelMetrics(s: ModelState, sizes: MeshSizes): StudyLevel {
@@ -230,7 +252,14 @@ export function useRefinementStudy() {
     let current: RefinementStudyRun = {
       status: "running",
       step: null,
+      phase: null,
+      plannedSizes: Array.from(
+        { length: REFINEMENT_LEVELS },
+        (_, k) => levelSizes(base, k).max,
+      ),
       levels: [],
+      snapshots: [],
+      fingerprint,
       stopNote: null,
       error: null,
     };
@@ -239,6 +268,9 @@ export function useRefinementStudy() {
       get().setRefinementStudy(current);
     };
     publish({});
+    // Straight to the result: the chart fills the centre and the levels land
+    // on the right as they finish.
+    get().showRefinementResult();
     s0.setRunning(true);
     try {
       for (let k = 0; k < REFINEMENT_LEVELS; k++) {
@@ -266,7 +298,10 @@ export function useRefinementStudy() {
         }
         assertUnchanged();
         if (k > 0 || remesh) {
-          publish({ step: `${label} · meshing at ${sizeLabel(sizes.max)} mm` });
+          publish({
+            step: `${label} · meshing at ${sizeLabel(sizes.max)} mm`,
+            phase: "meshing",
+          });
           get().setMeshing(true);
           let reply;
           try {
@@ -295,6 +330,7 @@ export function useRefinementStudy() {
         const model = get();
         publish({
           step: `${label} · solving ${model.nodes.length.toLocaleString("en-US")} nodes`,
+          phase: "solving",
         });
         const { displacements, vonMises } = await sendToWorker<{
           displacements: Float64Array;
@@ -304,15 +340,18 @@ export function useRefinementStudy() {
         assertUnchanged();
         const level = levelMetrics(get(), sizes);
         checkLevelDisplacement(level.maxDisplacement, sizes.max);
-        publish({ levels: [...current.levels, level] });
+        publish({
+          levels: [...current.levels, level],
+          snapshots: [...current.snapshots, levelSnapshot(get())],
+        });
       }
-      publish({ status: "done", step: null });
-      get().showRefinementResult();
+      publish({ status: "done", step: null, phase: null });
     } catch (err) {
       console.error("[refinement study] failed:", err);
       publish({
         status: "failed",
         step: null,
+        phase: null,
         error: err instanceof Error ? err.message : String(err),
       });
     } finally {

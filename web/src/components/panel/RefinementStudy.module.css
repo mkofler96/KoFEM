@@ -1,8 +1,11 @@
-/* Mesh refinement study card (KOF-401). Colours come from the panel's tokens
-   (Panel.module.css), which the card inherits. */
+/* Mesh refinement study (KOF-401): the result's verdict and its list — the
+   convergence chart and each level. Colours come from the panel's tokens
+   (Panel.module.css). */
 
-.card {
-  margin-top: 16px;
+.result {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .hint,
@@ -17,48 +20,12 @@
   color: var(--warn);
 }
 
-.table {
-  width: 100%;
-  margin-top: 10px;
-  border-collapse: collapse;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-
-.table th {
-  text-align: right;
-  font-weight: 600;
-  color: var(--muted);
-  padding: 2px 4px;
-  border-bottom: 1px solid var(--border);
-  white-space: nowrap;
-}
-
-.table td {
-  text-align: right;
-  padding: 3px 4px;
-  font-family: "IBM Plex Mono", ui-monospace, monospace;
-  color: var(--ink-2);
-  vertical-align: top;
-}
-
-.table th:first-child,
-.table td:first-child {
-  text-align: left;
-}
-
-.change {
-  display: block;
-  font-size: 10px;
-  color: var(--muted);
-}
-
 .converged,
 .notConverged {
-  margin-top: 10px;
   padding: 8px 10px;
   border-radius: var(--r-md);
   font-size: 12px;
+  font-weight: 600;
   line-height: 1.4;
 }
 
@@ -70,4 +37,75 @@
 .notConverged {
   color: var(--warn);
   background: var(--warn-soft);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: none;
+  border-top: 1px solid var(--border);
+  font-family: inherit;
+  font-size: 12.5px;
+  color: var(--ink);
+  text-align: left;
+}
+
+.row:first-child {
+  border-top: none;
+}
+
+button.row {
+  cursor: pointer;
+}
+
+button.row:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+button.row:disabled {
+  cursor: default;
+}
+
+.rowShown,
+button.rowShown:hover:not(:disabled) {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.rowPending {
+  color: var(--muted-2);
+}
+
+.rowMain,
+.rowValue {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.rowValue {
+  align-items: flex-end;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rowSub {
+  font-family: inherit;
+  font-size: 10.5px;
+  color: var(--muted);
 }

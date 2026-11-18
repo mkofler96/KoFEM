@@ -191,3 +191,19 @@ export function checkLevelDisplacement(
       `The solve at ${sizeLabel(size)} mm moved nothing (max displacement 0): the loads act only where the supports hold the part. Check the supports and loads.`,
     );
 }
+
+// The verdict in one line, for the panel and the chart.
+export function verdictLine(levels: StudyLevel[]): {
+  converged: boolean;
+  text: string;
+} {
+  const assessment = assessConvergence(levels);
+  // One decimal: an error below 0.1 % reads as "within 0.1 %", a true bound.
+  const error = `${Math.max(assessment.estimatedError * 100, 0.1).toFixed(1)} %`;
+  return assessment.converged
+    ? { converged: true, text: `Converged: max |U| within ${error}` }
+    : {
+        converged: false,
+        text: `Not converged: max |U| still ${error} off (target ${(CONVERGED_TOLERANCE * 100).toFixed(0)} %)`,
+      };
+}

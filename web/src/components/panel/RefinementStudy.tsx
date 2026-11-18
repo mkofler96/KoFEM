@@ -4,12 +4,14 @@
 import type { ReactNode } from "react";
 import {
   assessConvergence,
-  CONVERGED_TOLERANCE,
   REFINEMENT_LEVELS,
   sizeLabel,
-  type StudyLevel,
+  studyFingerprint,
+  verdictLine,
 } from "../../lib/refinementStudy";
 import type { RefinementStudyRun, Study } from "../../store/studySlice";
+import { RESULT_TYPES, useModelStore } from "../../store/modelStore";
+import type { ResultType } from "../../store/resultsSlice";
 import { useEngineGate } from "../../store/engineStore";
 import { useSolver } from "../../hooks/useSolver";
 import { useRefinementStudy } from "../../hooks/useRefinementStudy";
@@ -19,7 +21,8 @@ import styles from "./Panel.module.css";
 import own from "./RefinementStudy.module.css";
 
 // Mesh refinement study (KOF-401): the study's panel under Studies, which runs
-// it, and its result under Results — the levels and the convergence verdict.
+// it, and its result under Results — the verdict, the convergence chart (drawn
+// in the centre, RefinementChart) and the levels, each of which opens in 3D.
 
 // "25, 17.7 and 12.5"
 function listSizes(sizes: number[]): string {
@@ -34,84 +37,8 @@ function percent(fraction: number): string {
   return `${pct > 0 ? "+" : pct < 0 ? "−" : "±"}${Math.abs(pct).toFixed(1)} %`;
 }
 
-function Change({ value }: { value: number | null }) {
-  if (value === null) return null;
-  return <span className={own.change}>{percent(value)}</span>;
-}
-
-function LevelTable({ levels }: { levels: StudyLevel[] }) {
-  const changes =
-    levels.length >= 2
-      ? assessConvergence(levels)
-      : { displacementChanges: [null], stressChanges: [null] };
-  return (
-    <table className={own.table} data-testid="refinement-study-table">
-      <thead>
-        <tr>
-          <th>Size mm</th>
-          <th>Elements</th>
-          <th>Max |U| mm</th>
-          <th>Max σ_vm MPa</th>
-        </tr>
-      </thead>
-      <tbody>
-        {levels.map((l, i) => (
-          <tr
-            key={l.sizes.max}
-            data-testid="refinement-study-level"
-            data-size={l.sizes.max}
-            data-elements={l.elements}
-            data-max-displacement={l.maxDisplacement}
-          >
-            <td>{sizeLabel(l.sizes.max)}</td>
-            <td>{l.elements.toLocaleString("en-US")}</td>
-            <td>
-              {l.maxDisplacement.toExponential(3)}
-              <Change value={changes.displacementChanges[i]} />
-            </td>
-            <td>
-              {l.maxVonMises === null ? "—" : l.maxVonMises.toPrecision(4)}
-              <Change value={changes.stressChanges[i]} />
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-}
-
-function Verdict({ levels }: { levels: StudyLevel[] }) {
-  const assessment = assessConvergence(levels);
-  // One decimal: an error below 0.1 % reads as "within 0.1 %", a true bound.
-  const error = `${Math.max(assessment.estimatedError * 100, 0.1).toFixed(1)} %`;
-  const how =
-    assessment.method === "richardson"
-      ? "estimated error of the finest mesh"
-      : "change on the last refinement";
-  return (
-    <>
-      <div
-        className={assessment.converged ? own.converged : own.notConverged}
-        data-testid="refinement-study-verdict"
-      >
-        {assessment.converged
-          ? `Converged: max displacement within ${error} (${how}).`
-          : `Not converged: max displacement ${error} off (${how}, target ${(CONVERGED_TOLERANCE * 100).toFixed(0)} %). Refine further or use quadratic elements.`}
-      </div>
-      {assessment.stressRising && (
-        <div className={own.note} data-testid="refinement-study-stress-note">
-          The peak stress keeps rising as the mesh refines: it likely sits at a
-          sharp corner, a support or a point load, where the exact stress is
-          infinite. Judge the stress away from that spot.
-        </div>
-      )}
-    </>
-  );
-}
-
 // The study under Studies: the static case's readiness, the plan and the one
-// button. While it runs it shows each level as it lands; when it is done the
-// app opens the result under Results.
+// button. Run hands off to Results, where the study's progress shows.
 export function RefinementStudyPanel({
   staticCase,
   header,
@@ -174,20 +101,6 @@ export function RefinementStudyPanel({
             </div>
           )
         )}
-        {run?.step && (
-          <div className={own.hint} data-testid="refinement-study-step">
-            {run.step}
-          </div>
-        )}
-        {run?.error && (
-          <div
-            className={styles.errorBanner}
-            data-testid="refinement-study-error"
-          >
-            <span>{run.error}</span>
-          </div>
-        )}
-        {running && run.levels.length > 0 && <LevelTable levels={run.levels} />}
 
         <LogSection logs={logs} busy={isRunning} />
         {footer}
@@ -196,21 +109,169 @@ export function RefinementStudyPanel({
   );
 }
 
-// The study's result under Results: each level, the verdict, and what the
-// model shows now.
-export function RefinementResult({ run }: { run: RefinementStudyRun }) {
+// One planned level: solved (a button that opens it), being worked on, or
+// still to come.
+function LevelRow({
+  index,
+  run,
+  shown,
+  current,
+  locked,
+  onOpen,
+}: {
+  index: number;
+  run: RefinementStudyRun;
+  shown: boolean;
+  current: boolean;
+  locked: boolean;
+  onOpen: () => void;
+}) {
+  const size = `${sizeLabel(run.plannedSizes[index])} mm`;
+  const level = run.levels[index];
+  if (level === undefined) {
+    const working = run.status === "running" && index === run.levels.length;
+    const status = working
+      ? run.phase === "meshing"
+        ? "Meshing…"
+        : "Solving…"
+      : run.status === "running"
+        ? "Waiting"
+        : "—";
+    return (
+      <div className={`${own.row} ${own.rowPending}`}>
+        <span className={own.rowMain}>{size}</span>
+        <span className={own.rowValue}>{status}</span>
+      </div>
+    );
+  }
+  const previous = run.levels[index - 1];
+  const change =
+    previous === undefined
+      ? null
+      : (level.maxDisplacement - previous.maxDisplacement) /
+        previous.maxDisplacement;
   return (
-    <div className={own.card}>
-      {run.levels.length > 0 && <LevelTable levels={run.levels} />}
-      {run.status === "done" && run.levels.length >= 2 && (
-        <Verdict levels={run.levels} />
+    <button
+      className={`${own.row} ${shown ? own.rowShown : ""}`}
+      data-testid="refinement-study-level"
+      data-size={level.sizes.max}
+      data-elements={level.elements}
+      data-nodes={level.nodes}
+      data-max-displacement={level.maxDisplacement}
+      aria-current={shown}
+      disabled={locked}
+      title={locked ? undefined : "Open this level in 3D"}
+      onClick={onOpen}
+    >
+      <span className={own.rowMain}>
+        {size}
+        <span className={own.rowSub}>
+          {level.elements.toLocaleString("en-US")} elements
+          {current && !shown && " · current mesh"}
+        </span>
+      </span>
+      <span className={own.rowValue}>
+        {level.maxDisplacement.toPrecision(4)} mm
+        {change !== null && (
+          <span className={own.rowSub}>{percent(change)}</span>
+        )}
+      </span>
+    </button>
+  );
+}
+
+// The study's result under Results: the verdict, then the chart and the levels
+// to choose from. The chart or the opened level fills the centre.
+export function RefinementResult({ run }: { run: RefinementStudyRun }) {
+  const shown = useModelStore((s) => s.refinementLevelShown);
+  const showLevel = useModelStore((s) => s.showRefinementLevel);
+  const nodes = useModelStore((s) => s.nodes);
+  const resultType = useModelStore((s) => s.resultType);
+  const setResultType = useModelStore((s) => s.setResultType);
+  // The levels are of the model the study solved; an edit since makes them
+  // another model's.
+  const stale = useModelStore(
+    (s) => run.status !== "running" && studyFingerprint(s) !== run.fingerprint,
+  );
+  const done = run.status === "done" && run.levels.length >= 2;
+  const assessment = done ? assessConvergence(run.levels) : null;
+  const line = done ? verdictLine(run.levels) : null;
+
+  return (
+    <div className={own.result}>
+      {run.error && (
+        <div
+          className={styles.errorBanner}
+          data-testid="refinement-study-error"
+        >
+          <span>{run.error}</span>
+        </div>
+      )}
+      {line && (
+        <div
+          className={line.converged ? own.converged : own.notConverged}
+          data-testid="refinement-study-verdict"
+        >
+          {line.text}
+        </div>
+      )}
+      {assessment?.stressRising && (
+        <div className={own.note} data-testid="refinement-study-stress-note">
+          The peak stress keeps rising as the mesh refines: a sharp corner,
+          support or point load. Judge the stress away from it.
+        </div>
       )}
       {run.stopNote && <div className={own.note}>{run.stopNote}</div>}
-      {run.status === "done" && (
-        <div className={own.hint}>
-          The model now shows the finest mesh and its solve. Generate the mesh
-          again to return to your settings.
+
+      <div className={own.list}>
+        <button
+          className={`${own.row} ${shown === null ? own.rowShown : ""}`}
+          data-testid="refinement-chart-row"
+          aria-current={shown === null}
+          onClick={() => showLevel(null)}
+        >
+          <span className={own.rowMain}>Convergence chart</span>
+        </button>
+        {run.plannedSizes.map((size, i) => (
+          <LevelRow
+            key={size}
+            index={i}
+            run={run}
+            shown={shown === i}
+            current={run.snapshots[i]?.nodes === nodes}
+            locked={run.status === "running" || stale}
+            onOpen={() => showLevel(i)}
+          />
+        ))}
+      </div>
+
+      {stale ? (
+        <div className={own.note} data-testid="refinement-study-stale">
+          The model changed since this study, so its levels no longer match it.
+          Run the study again to open them.
         </div>
+      ) : (
+        run.status === "done" && (
+          <div className={own.hint}>
+            Opening a level makes it the model&apos;s mesh.
+          </div>
+        )
+      )}
+
+      {shown !== null && (
+        <select
+          className={styles.formSelect}
+          style={{ marginTop: 12 }}
+          data-testid="refinement-level-field"
+          value={resultType}
+          onChange={(e) => setResultType(e.target.value as ResultType)}
+        >
+          {RESULT_TYPES.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
       )}
     </div>
   );

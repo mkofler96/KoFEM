@@ -156,16 +156,22 @@ test("one click solves three ever finer meshes and judges convergence @pipeline"
   await expect(page.getByTestId("study-static-case")).toHaveValue("1");
   await page.getByTestId("refinement-study-run").click();
 
-  // The finished study opens its result under Results.
+  // Run hands off to Results → Mesh refinement straight away: the convergence
+  // chart fills the centre while the levels land one after the other on the
+  // right.
   await expect(page.getByTestId("panel-title")).toHaveText("Mesh refinement");
   // The study is "Mesh refinement 1"; its result is "Mesh refinement".
   await expect(
     page.locator("nav").getByText("Mesh refinement", { exact: true }),
   ).toBeVisible();
+  const chart = page.getByTestId("refinement-chart");
+  await expect(chart).toBeVisible();
   const rows = page.getByTestId("refinement-study-level");
   await expect(rows).toHaveCount(3);
   const verdict = page.getByTestId("refinement-study-verdict");
   await expect(verdict).toBeVisible();
+  // Every level is a point on the chart.
+  await expect(chart.getByTestId("refinement-chart-point")).toHaveCount(3);
   await expect(page.getByTestId("refinement-study-error")).toHaveCount(0);
 
   // Each level is finer than the one before: a smaller size, more elements.
@@ -185,9 +191,7 @@ test("one click solves three ever finer meshes and judges convergence @pipeline"
   // Linear tets are too stiff and soften as they refine.
   expect(levels[1].maxDisplacement).toBeGreaterThan(levels[0].maxDisplacement);
   expect(levels[2].maxDisplacement).toBeGreaterThan(levels[1].maxDisplacement);
-  await expect(verdict).toHaveText(
-    /^(Converged|Not converged): max displacement/,
-  );
+  await expect(verdict).toHaveText(/^(Converged|Not converged): max \|U\|/);
 
   // The model ends on the finest mesh with its result, the supports and loads
   // on the same CAD faces, and the mesh settings as the user typed them.
@@ -199,6 +203,38 @@ test("one click solves three ever finer meshes and judges convergence @pipeline"
     "Kept 2 support/load/tie groups on their CAD faces.",
   );
   expect(after.maxElementSize).toBe(before.maxElementSize);
+
+  // Opening a level shows its mesh and result in 3D in place of the chart: it
+  // becomes the model's mesh, with the supports and loads on it.
+  const coarse = await rows.nth(0).getAttribute("data-nodes");
+  await rows.nth(0).click();
+  await expect(chart).toBeHidden();
+  await expect(rows.nth(0)).toHaveAttribute("aria-current", "true");
+  const opened = await studyState(page);
+  expect(String(opened.nodes)).toBe(coarse);
+  expect(opened.hasResult).toBe(true);
+  expect(opened.groupFaces).toEqual(before.groupFaces);
+  // Back to the chart.
+  await page.getByTestId("refinement-chart-row").click();
+  await expect(chart).toBeVisible();
+
+  // An edit after the study makes its levels another model's: they lock, and
+  // the panel says to run the study again.
+  await page.evaluate(() =>
+    (
+      window as unknown as {
+        __kofemStore: {
+          getState(): {
+            updateMaterial(id: number, patch: { young: number }): void;
+          };
+        };
+      }
+    ).__kofemStore
+      .getState()
+      .updateMaterial(1, { young: 70000 }),
+  );
+  await expect(page.getByTestId("refinement-study-stale")).toBeVisible();
+  await expect(rows.nth(1)).toBeDisabled();
 });
 
 // A model without its geometry cannot be re-meshed: the study says why before
