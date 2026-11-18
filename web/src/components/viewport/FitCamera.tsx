@@ -1,46 +1,48 @@
 // SPDX-FileCopyrightText: 2026 Michael Kofler
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { useModelStore } from "../../store/modelStore";
+import { fitViewBox } from "../../lib/fitView";
 
 // [1,1,1] normalized — standard isometric direction
 const ISO_DIR = new THREE.Vector3(1, 1, 1).normalize();
 
-export function FitCamera() {
+export interface DrawnResult {
+  displacements: ArrayLike<number>;
+  // The factor the scene multiplies the displacements by.
+  scale: number;
+}
+
+// Fit view frames what the scene draws (KOF-385), so MeshScene mounts it and
+// passes the deformed result as drawn: null when no result is shown deformed.
+export function FitCamera({ result }: { result: DrawnResult | null }) {
   const { camera, controls, invalidate } = useThree();
   const fitViewTrigger = useModelStore((s) => s.fitViewTrigger);
+  // Read at fit time: a new result or scale does not refit by itself.
+  const resultRef = useRef(result);
+  useEffect(() => {
+    resultRef.current = result;
+  }, [result]);
 
   useEffect(() => {
     // Controls may not be registered yet on the initial mount — skip and wait
     // for the effect to re-fire once OrbitControls registers via makeDefault.
     if (!controls) return;
 
-    const { nodes, stepSurface } = useModelStore.getState();
-
-    const pts: [number, number, number][] = [];
-    for (const n of nodes) pts.push([n.x, n.y, n.z]);
-    if (stepSurface) {
-      for (const p of stepSurface.points) pts.push(p);
-    }
-    if (pts.length === 0) return;
-
-    let minX = Infinity,
-      maxX = -Infinity;
-    let minY = Infinity,
-      maxY = -Infinity;
-    let minZ = Infinity,
-      maxZ = -Infinity;
-    for (const [x, y, z] of pts) {
-      if (x < minX) minX = x;
-      if (x > maxX) maxX = x;
-      if (y < minY) minY = y;
-      if (y > maxY) maxY = y;
-      if (z < minZ) minZ = z;
-      if (z > maxZ) maxZ = z;
-    }
+    const { nodes, stepSurface, showUndeformedOverlay } =
+      useModelStore.getState();
+    const drawn = resultRef.current;
+    const box = fitViewBox({
+      nodes,
+      stepSurface,
+      deformed: drawn && { ...drawn, showUndeformed: showUndeformedOverlay },
+    });
+    if (box === null) return;
+    const [minX, minY, minZ] = box.min;
+    const [maxX, maxY, maxZ] = box.max;
 
     const center = new THREE.Vector3(
       (minX + maxX) / 2,
@@ -52,11 +54,13 @@ export function FitCamera() {
     );
     const radius = Math.max(diagonal / 2, 1e-6);
 
-    const fovRad = ((camera as THREE.PerspectiveCamera).fov * Math.PI) / 180;
-    const distance = radius / Math.tan(fovRad / 2);
+    // Fit the narrower of the two angles of view: the horizontal one on a
+    // phone held upright.
+    const cam = camera as THREE.PerspectiveCamera;
+    const halfTan = Math.tan((cam.fov * Math.PI) / 360);
+    const distance = radius / (halfTan * Math.min(1, cam.aspect));
 
     camera.position.copy(center).addScaledVector(ISO_DIR, distance);
-    const cam = camera as THREE.PerspectiveCamera;
     cam.near = Math.max(distance * 0.001, 1e-4);
     cam.far = distance * 100;
     cam.updateProjectionMatrix();

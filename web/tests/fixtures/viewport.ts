@@ -54,6 +54,24 @@ export async function projectPoint(
 }
 
 /**
+ * Where each model-space point lands on the page, in client pixels, once the
+ * viewport has settled: projectPoint for many points in one round trip.
+ */
+export async function projectPoints(
+  page: Page,
+  points: Point[],
+): Promise<({ x: number; y: number } | null)[]> {
+  await settleViewport(page);
+  return page.evaluate(
+    (targets) =>
+      targets.map((target) =>
+        (window as unknown as ViewportWindow).__kofemViewport.project(target),
+      ),
+    points,
+  );
+}
+
+/**
  * Click the page at (x, y), a pixel of the viewport canvas, once the viewport
  * has settled, and wait until it has drawn what the click changed.
  */
