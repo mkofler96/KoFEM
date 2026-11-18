@@ -44,6 +44,7 @@ export function BcSection({
   const addFaceToBcGroup = useModelStore((s) => s.addFaceToBcGroup);
   const removeFaceFromBcGroup = useModelStore((s) => s.removeFaceFromBcGroup);
   const deleteBcGroup = useModelStore((s) => s.deleteBcGroup);
+  const renameBcGroup = useModelStore((s) => s.renameBcGroup);
   const updateBcGroup = useModelStore((s) => s.updateBcGroup);
   const {
     pickTargetGroupId,
@@ -220,6 +221,7 @@ export function BcSection({
             }
             onDelete={() => deleteBcGroup(group.id)}
             onRemoveFace={(faceId) => removeFaceFromBcGroup(group.id, faceId)}
+            onRename={(name) => renameBcGroup(group.id, name)}
           />
         ))}
     </>

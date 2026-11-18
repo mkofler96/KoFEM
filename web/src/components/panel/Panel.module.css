@@ -836,6 +836,12 @@
   white-space: nowrap;
 }
 
+/* A group's Name field, between its header and its face rows. */
+.groupNameRow {
+  padding: 8px 8px 0;
+  border-top: 1px solid var(--border);
+}
+
 .bcFaceRow {
   display: flex;
   align-items: center;

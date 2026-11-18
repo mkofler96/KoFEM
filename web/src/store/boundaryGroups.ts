@@ -107,3 +107,12 @@ export function faceEntry(
 ): BcFaceEntry {
   return { ...face, id: nextId() };
 }
+
+// A name the user gave a group (KOF-339), trimmed. A blank name is refused:
+// the model tree, the panel title and the saved analysis file would have
+// nothing to tell the group by.
+export function validGroupName(raw: string): string {
+  const name = raw.trim();
+  if (name === "") throw new Error("A name can't be blank");
+  return name;
+}

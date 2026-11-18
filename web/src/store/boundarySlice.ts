@@ -13,6 +13,7 @@ import type { CouplingGroup } from "./couplingSlice";
 import {
   faceEntry,
   summarizeComponents,
+  validGroupName,
   type BcFaceEntry,
   type LoadKind,
   type NamedBcGroup,
@@ -50,6 +51,8 @@ export interface BoundarySlice {
   ): void;
   addFaceToBcGroup(groupId: number, face: Omit<BcFaceEntry, "id">): void;
   updateBcGroup(id: number, dofs: number[], value: number): void;
+  // Throws on a blank name (validGroupName).
+  renameBcGroup(id: number, name: string): void;
   removeFaceFromBcGroup(groupId: number, faceId: number): void;
   deleteBcGroup(id: number): void;
   clearConstraints(): void;
@@ -69,6 +72,8 @@ export interface BoundarySlice {
     totalForce: number,
     components?: [number, number, number],
   ): void;
+  // Throws on a blank name (validGroupName).
+  renameLoadGroup(id: number, name: string): void;
   removeFaceFromLoadGroup(groupId: number, faceId: number): void;
   deleteLoadGroup(id: number): void;
   clearLoads(): void;
@@ -144,6 +149,16 @@ export const createBoundarySlice: SliceCreator<BoundarySlice> = (set) => ({
       s.constraints = rebuildConstraints(s.bcGroups);
       s.result = null;
     }),
+
+  // A name is not physics: the constraints and the result stand.
+  renameBcGroup: (id: number, name: string) => {
+    const valid = validGroupName(name);
+    set((s) => {
+      const group = s.bcGroups.find((g) => g.id === id);
+      if (!group) return;
+      group.name = valid;
+    });
+  },
 
   removeFaceFromBcGroup: (groupId: number, faceId: number) =>
     set((s) => {
@@ -234,6 +249,16 @@ export const createBoundarySlice: SliceCreator<BoundarySlice> = (set) => ({
       rebuildAllLoads(s);
       s.result = null;
     }),
+
+  // A name is not physics: the loads and the result stand.
+  renameLoadGroup: (id: number, name: string) => {
+    const valid = validGroupName(name);
+    set((s) => {
+      const group = s.loadGroups.find((g) => g.id === id);
+      if (!group) return;
+      group.name = valid;
+    });
+  },
 
   removeFaceFromLoadGroup: (groupId: number, faceId: number) =>
     set((s) => {
