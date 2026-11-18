@@ -205,6 +205,9 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.elementOrder = a.elementOrder;
       s.handCheck = a.handCheck;
       s.legendRange = null;
+      s.probes = [];
+      s.nextProbeId = 1;
+      s.probing = false;
       // A saved analysis restores its static result (density is not persisted).
       s.activeResult = "static";
       // TO settings persist with the analysis; the density result does not, so a
@@ -305,6 +308,9 @@ const createAnalysisActions: SliceCreator<AnalysisActions> = (set) => ({
       s.densityThreshold = DEFAULT_DENSITY_THRESHOLD;
       s.elementOrder = 1;
       s.handCheck = null;
+      s.probes = [];
+      s.nextProbeId = 1;
+      s.probing = false;
       s.studies = [];
       s.nextStudyId = 1;
       s.resultPlots = [];

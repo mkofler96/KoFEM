@@ -1,0 +1,36 @@
+/* Result probe labels over the viewport (KOF-389). */
+.label {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #c9ced6;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font:
+    500 11px "IBM Plex Mono",
+    ui-monospace,
+    monospace;
+  color: #0d1117;
+  white-space: nowrap;
+  transform: translate(6px, -50%);
+  cursor: default;
+  user-select: none;
+}
+.label:focus-visible {
+  outline: 2px solid #1a5fd6;
+}
+.min {
+  border-color: #2563eb;
+}
+.max {
+  border-color: #dc2626;
+}
+
+/* The point and the displacement vector, on hover or focus only. */
+.details {
+  display: none;
+  font-weight: 400;
+  color: #4b5563;
+}
+.label:hover .details,
+.label:focus .details {
+  display: block;
+}

@@ -21,6 +21,8 @@ import {
   type HandCheck,
 } from "../../lib/handCheck";
 import type { ConvergencePoint } from "../../lib/topOptProgress";
+import { probeLabel } from "../../lib/resultProbe";
+import { useProbeReadings } from "../../hooks/useProbeReadings";
 import {
   buildDensityStl,
   buildSmoothDensityStl,
@@ -341,6 +343,155 @@ function HandCheckNote({
   );
 }
 
+// A vector in mm as the probe details show it: "(x, y, z) mm".
+const formatVector = (v: readonly number[]) =>
+  `(${v.map((c) => formatHandCheckValue(c, "")).join(", ")}) mm`;
+
+// One probe row: name, field value and, for a placed probe, its remove button.
+// The point and the displacement vector show on hover or focus.
+function ProbeRow({
+  testId,
+  label,
+  symbol,
+  unit,
+  reading,
+  onRemove,
+}: {
+  testId: string;
+  label: string;
+  symbol: string;
+  unit: "mm" | "MPa";
+  reading:
+    | { kind: "value"; at: number[]; displacement: number[]; value: number }
+    | { kind: "unreadable"; reason: string }
+    | null;
+  onRemove?: () => void;
+}) {
+  return (
+    <div
+      className={styles.probeRow}
+      data-testid={`probe-row-${testId}`}
+      tabIndex={0}
+    >
+      <div className={styles.statRow}>
+        <span className={styles.statKey}>
+          {label} · {symbol}
+        </span>
+        <span className={styles.statValWithAction}>
+          {reading?.kind === "value" ? (
+            <span
+              className={styles.statVal}
+              data-testid={`probe-value-${testId}`}
+              data-value={String(reading.value)}
+            >
+              {formatHandCheckValue(reading.value, unit)}
+            </span>
+          ) : (
+            <span className={styles.statVal}>—</span>
+          )}
+          {onRemove && (
+            <button
+              className={`${styles.iconBtn} ${styles.iconBtnDanger}`}
+              data-testid={`probe-remove-${testId}`}
+              aria-label={`Remove ${label}`}
+              title={`Remove ${label}`}
+              onClick={onRemove}
+            >
+              ✕
+            </button>
+          )}
+        </span>
+      </div>
+      {reading === null ? (
+        <div className={styles.formNote}>Solve to read this probe.</div>
+      ) : reading.kind === "unreadable" ? (
+        <div className={styles.formNote}>
+          Cannot be read on this mesh. {reading.reason}
+        </div>
+      ) : (
+        <div
+          className={`${styles.formNote} ${styles.probeDetails}`}
+          data-testid={`probe-vector-${testId}`}
+        >
+          at {formatVector(reading.at)}
+          <br />U = {formatVector(reading.displacement)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Result probes (KOF-389): the min and max of the plotted field, the tool that
+// places probes by clicking the model, and a row per probe.
+function ProbeSection({ field }: { field: ResultType }) {
+  const probing = useModelStore((s) => s.probing);
+  const setProbing = useModelStore((s) => s.setProbing);
+  const removeProbe = useModelStore((s) => s.removeProbe);
+  const showExtremes = useModelStore((s) => s.showExtremeProbes);
+  const setShowExtremes = useModelStore((s) => s.setShowExtremeProbes);
+  const { placed, extremes } = useProbeReadings();
+  const unit = resultUnit(field);
+  const symbol = resultFieldSymbol(field);
+  return (
+    <>
+      <div className={styles.sectionLabel}>Probes</div>
+      <label className={styles.statRow} style={{ justifyContent: "start" }}>
+        <input
+          type="checkbox"
+          data-testid="probe-extremes"
+          checked={showExtremes}
+          onChange={(e) => setShowExtremes(e.target.checked)}
+        />
+        <span className={styles.statKey} style={{ marginLeft: 6 }}>
+          Show min and max
+        </span>
+      </label>
+      {extremes?.kind === "unreadable" && (
+        <div className={styles.formNote}>
+          Min and max cannot be read. {extremes.reason}
+        </div>
+      )}
+      {extremes?.kind === "value" &&
+        (["min", "max"] as const).map((end) => (
+          <ProbeRow
+            key={end}
+            testId={end}
+            label={end === "min" ? "Min" : "Max"}
+            symbol={symbol}
+            unit={unit}
+            reading={{ kind: "value", ...extremes[end] }}
+          />
+        ))}
+      <button
+        className={styles.outlineBtn}
+        data-testid="probe-toggle"
+        aria-pressed={probing}
+        onClick={() => setProbing(!probing)}
+      >
+        {probing ? "Stop placing probes" : "Place probes"}
+      </button>
+      {probing && (
+        <div className={styles.formNote} style={{ marginTop: 6 }}>
+          Click the model to read {symbol} there.
+        </div>
+      )}
+      <div style={{ marginTop: 8, marginBottom: 12 }}>
+        {placed.map(({ probe, reading }) => (
+          <ProbeRow
+            key={probe.id}
+            testId={String(probe.id)}
+            label={probeLabel(probe)}
+            symbol={symbol}
+            unit={unit}
+            reading={reading}
+            onRemove={() => removeProbe(probe.id)}
+          />
+        ))}
+      </div>
+    </>
+  );
+}
+
 function Empty({ text, footer }: { text: string; footer: ReactNode }) {
   return (
     <div className={styles.panel}>
@@ -487,6 +638,9 @@ function PlotDetail({ plot }: { plot: ResultPlot }) {
               : "No nodal data"}
           </div>
         )}
+        <div style={{ marginTop: 12 }}>
+          <ProbeSection field={resultType} />
+        </div>
         {footer}
       </div>
     </div>
