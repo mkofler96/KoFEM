@@ -275,33 +275,25 @@ p {
   color: var(--body);
 }
 
-/* The privacy line (KOF-392): the one hero element that takes clicks. */
-.intro .intro-local {
-  margin-top: 14px;
-  font-size: 14px;
-}
-.intro-local a {
+/* The privacy link in the lede (KOF-392): the one hero element that takes
+   clicks. */
+.intro-local {
   pointer-events: auto;
-  color: var(--muted);
   text-decoration: underline;
   text-decoration-color: rgba(131, 182, 237, 0.4);
   text-underline-offset: 3px;
 }
-.intro-local a:hover {
+.intro-local:hover {
   color: var(--text);
 }
 @media (max-width: 700px) {
-  /* Tighter on a phone, so the hero keeps its room above the bracket. */
+  /* The lede wraps to a third line on a phone: tighter, so the hero keeps
+     its room above the bracket. */
   .intro {
     top: 24.5%;
   }
   .intro h1 {
     margin-bottom: 12px;
-  }
-  .intro .intro-local {
-    margin-top: 8px;
-    font-size: 13px;
-    line-height: 1.3;
   }
 }
 

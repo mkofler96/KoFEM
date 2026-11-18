@@ -18,8 +18,15 @@ test("the homepage hero says CAD stays on the device and links to the privacy pa
   page,
 }) => {
   await page.goto("/");
-  const intro = page.locator(".intro");
-  const claim = intro.getByRole("link", { name: CLAIM });
+  // One sentence with the lede, after an em dash, not a line of its own.
+  const lede = page.locator(".intro p");
+  await expect(lede).toHaveCount(1);
+  await expect(lede).toHaveText(
+    "Import a STEP file, apply supports and loads, and solve locally — your CAD never leaves your device.",
+  );
+  const claim = lede.getByRole("link", {
+    name: "your CAD never leaves your device",
+  });
   await expect(claim).toBeVisible();
   await expect(claim).toHaveAttribute("href", "/privacy/");
   // Clickable although the stage around it lets pointer events through.
